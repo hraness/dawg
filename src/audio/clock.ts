@@ -1,7 +1,7 @@
 export class TransportClock {
   private startedAtMs: number | undefined;
   private pausedBeat = 0;
-  private readonly bpm: number;
+  private bpm: number;
 
   constructor(bpm = 120) {
     this.bpm = bpm;
@@ -29,6 +29,15 @@ export class TransportClock {
 
   get playing(): boolean {
     return this.startedAtMs !== undefined;
+  }
+
+  setTempo(bpm: number, nowMs = performance.now()): void {
+    if (!Number.isFinite(bpm) || bpm <= 0) return;
+    const beat = this.beatAt(nowMs);
+    this.bpm = bpm;
+    if (this.startedAtMs !== undefined)
+      this.startedAtMs = nowMs - this.beatToMs(beat);
+    else this.pausedBeat = beat;
   }
 
   /** Converge to a timestamped transport event from another TUI process. */

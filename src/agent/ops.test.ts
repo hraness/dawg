@@ -10,10 +10,41 @@ describe("parsePrompt", () => {
       duration: 0.5,
       velocity: 0.8,
     });
+    expect(parsePrompt("add C4 at 0 for 1 with extra text")).toBeUndefined();
   });
 
   test("parses transport requests", () => {
     expect(parsePrompt("play")).toEqual({ type: "transport", action: "play" });
     expect(parsePrompt("stop")).toEqual({ type: "transport", action: "pause" });
+  });
+
+  test("parses composition controls", () => {
+    expect(parsePrompt("tempo 132")).toEqual({
+      type: "set-tempo",
+      tempoBpm: 132,
+    });
+    expect(parsePrompt("instrument piano")).toEqual({
+      type: "track",
+      patch: { instrument: "piano" },
+    });
+    expect(parsePrompt("volume 0.6")).toEqual({
+      type: "track",
+      patch: { volume: 0.6 },
+    });
+    expect(parsePrompt("clear")).toEqual({ type: "clear-track" });
+    expect(parsePrompt("remove note lead-1")).toEqual({
+      type: "remove-note",
+      noteId: "lead-1",
+    });
+    expect(parsePrompt("move note lead-1 to 2.5")).toEqual({
+      type: "update-note",
+      noteId: "lead-1",
+      patch: { start: 2.5 },
+    });
+    expect(parsePrompt("duration note lead-1 0.25")).toEqual({
+      type: "update-note",
+      noteId: "lead-1",
+      patch: { duration: 0.25 },
+    });
   });
 });

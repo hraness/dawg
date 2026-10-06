@@ -63,3 +63,15 @@ test("queue, cancellation, and mode toggle are explicit actions", () => {
   model.handle("CTRL+Q");
   expect(model.snapshot.mode).toBe("queue");
 });
+
+test("prompt history recalls submissions and restores the draft", () => {
+  const model = new PromptModel({ width: 20, maxChars: 100 });
+  model.handle("first");
+  model.handle("ENTER");
+  model.handle("second");
+  model.handle("ENTER");
+  expect(model.handle("UP").state.text).toBe("second");
+  expect(model.handle("UP").state.text).toBe("first");
+  expect(model.handle("DOWN").state.text).toBe("second");
+  expect(model.handle("DOWN").state.text).toBe("");
+});

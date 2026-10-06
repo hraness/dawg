@@ -58,7 +58,7 @@ export async function planComposition(options: {
         {
           role: "system",
           content:
-            'You edit a local loop. Return JSON only: {"operations":[{"type":"addNote","note":{"id":"short unique id","trackId":"track","start":0,"duration":1,"pitch":60,"velocity":0.8}}],"explanation":"brief"}. Use beats for start/duration. Never return prose outside JSON.',
+            'You edit a local loop. Return JSON only. Operations may be addNote, removeNote, updateNote, setTempo, updateTrack, or clearTrack. Example: {"operations":[{"type":"addNote","note":{"id":"short unique id","trackId":"track","start":0,"duration":1,"pitch":60,"velocity":0.8}}],"explanation":"brief"}. Use beats for note start/duration. Never return prose outside JSON.',
         },
         {
           role: "user",
@@ -84,6 +84,57 @@ function parseOperation(value: unknown): ScoreOperation {
     value.noteId.length <= 64
   ) {
     return { type: "removeNote", noteId: value.noteId };
+  }
+  if (
+    value.type === "setTempo" &&
+    typeof value.tempoBpm === "number" &&
+    Number.isFinite(value.tempoBpm)
+  ) {
+    return { type: "setTempo", tempoBpm: value.tempoBpm };
+  }
+  if (
+    value.type === "clearTrack" &&
+    typeof value.trackId === "string" &&
+    value.trackId.length <= 64
+  ) {
+    return { type: "clearTrack", trackId: value.trackId };
+  }
+  if (
+    value.type === "updateTrack" &&
+    typeof value.trackId === "string" &&
+    value.trackId.length <= 64 &&
+    isRecord(value.patch)
+  ) {
+    const patch = value.patch;
+    const safe: Record<string, unknown> = {};
+    if (typeof patch.name === "string") safe.name = patch.name.slice(0, 96);
+    if (typeof patch.instrument === "string")
+      safe.instrument = patch.instrument.slice(0, 64);
+    if (typeof patch.muted === "boolean") safe.muted = patch.muted;
+    if (typeof patch.volume === "number" && Number.isFinite(patch.volume))
+      safe.volume = patch.volume;
+    if (typeof patch.pan === "number" && Number.isFinite(patch.pan))
+      safe.pan = patch.pan;
+    return { type: "updateTrack", trackId: value.trackId, patch: safe };
+  }
+  if (
+    value.type === "updateNote" &&
+    typeof value.noteId === "string" &&
+    value.noteId.length <= 64 &&
+    isRecord(value.patch)
+  ) {
+    const patch = value.patch;
+    const safe: Record<string, number> = {};
+    for (const key of [
+      "startTick",
+      "durationTicks",
+      "pitch",
+      "velocity",
+    ] as const) {
+      if (typeof patch[key] === "number" && Number.isFinite(patch[key]))
+        safe[key] = patch[key];
+    }
+    return { type: "updateNote", noteId: value.noteId, patch: safe };
   }
   if (value.type === "addNote" && isRecord(value.note)) {
     const note = value.note;

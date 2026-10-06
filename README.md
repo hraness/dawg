@@ -25,6 +25,17 @@ The first steel thread understands direct requests:
 add C4 at 0 for 1
 play
 pause
+tempo 128
+instrument piano
+volume 0.7
+pan -0.4
+mute
+clear
+undo
+move note <id> to 2.5
+duration note <id> 0.25
+/export loop.track.json
+/import loop.track.json
 /model opus-5.5
 ```
 
@@ -32,17 +43,17 @@ Press Space on an empty prompt to toggle playback. Enter submits a request. Shif
 
 Set `TRACK_AI=1` to send unrecognized requests to the Vercel AI Gateway. Keep the key local in `AI_GATEWAY_API_KEY`. Choose the friendly model label with `TRACK_MODEL=opus-5.5` or `TRACK_MODEL=sol-6.1`, or switch it with `/model`. Map those labels to the model IDs available in your gateway account with `TRACK_OPUS_MODEL` and `TRACK_SOL_MODEL`.
 
-Playback renders a short mono PCM WAV and uses `afplay` on macOS or `ffplay` elsewhere. Set `TRACK_AUDIO=0` for a headless session. `TRACK_DEMO=1 bun run src/main.ts` prints a deterministic renderer frame for development.
+Playback renders a short mono PCM WAV with deterministic sine, piano, pluck, bass, saw, square, and triangle voices, applies per-track volume and pan compensation, and uses `afplay` on macOS or `ffplay` elsewhere. Set `TRACK_AUDIO=0` for a headless session. `track --export file.track.json` and `track --import file.track.json` exchange the bounded `track.loop/v1` document. `TRACK_DEMO=1 bun run src/main.ts` prints a deterministic renderer frame for development.
 
 ## Architecture
 
 - `core/` defines the bounded immutable `track.loop/v1` score and operations.
 - `src/session/` provides an append-only local event log, atomic snapshots, and cross-window writer conflict handling.
 - `src/agent/` validates operation plans and speaks the Vercel AI Gateway protocol.
-- `src/audio/` owns the transport clock, deterministic WAV rendering, and per-session playback lock.
+- `src/audio/` owns the transport clock, deterministic instrument-bank WAV rendering, and per-session playback lock.
 - `tui/` owns terminal capability detection, semantic colors, animation phases, piano-roll rendering, and the multiline prompt editor.
 
-The runtime is intentionally adapter-shaped. The first release uses the deterministic local synthesizer so the TUI and agent protocol can be developed without a sound device. Richer instruments and effects can replace the player behind the same score boundary.
+The runtime is intentionally adapter-shaped. The local synthesizer is deterministic and works without a sound device; native or sample-backed players can replace it behind the same score boundary.
 
 See [TRACK.md](./TRACK.md) for the detailed command and interaction contract.
 

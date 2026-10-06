@@ -451,6 +451,9 @@ export function renderPrompt(
 export class PromptModel {
   private state: PromptState;
   private options: Required<PromptOptions>;
+  private history: string[] = [];
+  private historyIndex = -1;
+  private draftBeforeHistory = "";
 
   public constructor(options: PromptOptions, initial = "") {
     this.options = optionsWithDefaults(options);
@@ -467,8 +470,39 @@ export class PromptModel {
     this.options = optionsWithDefaults({ ...this.options, width });
   }
   public handle(key: PromptKey): PromptAction {
+    if (typeof key === "string" && (key === "UP" || key === "DOWN")) {
+      const atBoundary = this.state.cursor === points(this.state.text).length;
+      if (atBoundary && (this.history.length > 0 || this.historyIndex >= 0)) {
+        if (key === "UP") {
+          if (this.historyIndex < 0) this.draftBeforeHistory = this.state.text;
+          this.historyIndex = Math.min(
+            this.history.length - 1,
+            this.historyIndex + 1,
+          );
+        } else if (this.historyIndex >= 0) {
+          this.historyIndex -= 1;
+        }
+        const recalled =
+          this.historyIndex < 0
+            ? this.draftBeforeHistory
+            : (this.history[this.history.length - 1 - this.historyIndex] ?? "");
+        this.state = createPromptState(recalled, this.state.mode, this.options);
+        return { kind: "edit", state: this.state };
+      }
+    }
     const action = applyPromptKey(this.state, key, this.options);
     this.state = action.state;
+    if (action.kind === "submit" || action.kind === "queue") {
+      const value = action.value?.trim();
+      if (value) {
+        this.history = [
+          ...this.history.filter((entry) => entry !== value),
+          value,
+        ].slice(-100);
+      }
+      this.historyIndex = -1;
+      this.draftBeforeHistory = "";
+    }
     return action;
   }
   public render(prefix?: string): string[] {

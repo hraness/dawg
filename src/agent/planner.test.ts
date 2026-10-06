@@ -27,4 +27,22 @@ describe("composition planner", () => {
     expect(plan.operations).toEqual([]);
     expect(calls).toHaveLength(1);
   });
+
+  test("accepts bounded score control operations", () => {
+    const plan = parseCompositionPlan(
+      JSON.stringify({
+        operations: [
+          { type: "setTempo", tempoBpm: 128 },
+          {
+            type: "updateTrack",
+            trackId: "main",
+            patch: { instrument: "piano", volume: 0.8 },
+          },
+          { type: "clearTrack", trackId: "main" },
+        ],
+      }),
+    );
+    expect(plan.operations).toHaveLength(3);
+    expect(plan.operations[0]).toEqual({ type: "setTempo", tempoBpm: 128 });
+  });
 });

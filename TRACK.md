@@ -21,12 +21,24 @@ The local command path understands requests such as:
 add C4 at 0 for 1
 play
 pause
+tempo 128
+instrument piano
+volume 0.7
+pan -0.4
+mute
+clear
+undo
+move note <id> to 2.5
+duration note <id> 0.25
+/tracks
+/export loop.track.json
+/import loop.track.json
 /model opus-5.5
 ```
 
 Set `TRACK_AI=1` to send unrecognized prompts to the Vercel AI Gateway. The key stays local in `AI_GATEWAY_API_KEY`; `TRACK_MODEL=opus-5.5` or `TRACK_MODEL=sol-6.1` selects the initial friendly model label, and `/model opus-5.5` or `/model sol-6.1` switches it during a session. `TRACK_OPUS_MODEL` / `TRACK_SOL_MODEL` can map those labels to the provider IDs available in the account. The model must return a bounded JSON operation plan, which is validated before it can touch the score.
 
-Playback renders the score to a short mono PCM WAV and uses `afplay` on macOS or `ffplay` elsewhere. A per-session audio lock keeps multiple TUI windows from starting duplicate voices. The renderer is deterministic and independently testable; a richer instrument backend can replace it behind the same player port.
+Playback renders the score to a short mono PCM WAV with deterministic sine, piano, pluck, bass, saw, square, and triangle voices. Track volume and pan are applied before mixing. A per-session audio lock keeps multiple TUI windows from starting duplicate voices. The renderer is deterministic and independently testable; a native or sample-backed instrument backend can replace it behind the same player port.
 Set `TRACK_AUDIO=0` for headless sessions.
 
 Use `TRACK_DEMO=1 bun run src/main.ts` for a deterministic non-interactive frame stream while developing the renderer.
