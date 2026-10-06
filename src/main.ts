@@ -481,6 +481,36 @@ async function submit(prompt: string): Promise<string> {
     });
     return `removed · ${parsed.noteId}`;
   }
+  if (parsed.type === "update-note") {
+    const patch = {
+      ...(typeof parsed.patch.start === "number"
+        ? { startTick: Math.round(parsed.patch.start * score.ticksPerBeat) }
+        : {}),
+      ...(typeof parsed.patch.duration === "number"
+        ? {
+            durationTicks: Math.max(
+              1,
+              Math.round(parsed.patch.duration * score.ticksPerBeat),
+            ),
+          }
+        : {}),
+      ...(typeof parsed.patch.pitch === "number"
+        ? { pitch: parsed.patch.pitch }
+        : {}),
+      ...(typeof parsed.patch.velocity === "number"
+        ? { velocity: parsed.patch.velocity }
+        : {}),
+    };
+    const next = applyScoreOperation(score, {
+      type: "updateNote",
+      noteId: parsed.noteId,
+      patch,
+    });
+    await commitScore(next, "score.note", {
+      operation: { type: "updateNote", noteId: parsed.noteId, patch },
+    });
+    return `updated · ${parsed.noteId}`;
+  }
   if (parsed.type !== "add-note") return "queued";
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const latest =

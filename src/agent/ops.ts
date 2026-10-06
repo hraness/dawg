@@ -7,6 +7,16 @@ export type AgentOperation =
       velocity: number;
     }
   | { type: "remove-note"; noteId: string }
+  | {
+      type: "update-note";
+      noteId: string;
+      patch: {
+        start?: number;
+        duration?: number;
+        pitch?: number;
+        velocity?: number;
+      };
+    }
   | { type: "set-tempo"; tempoBpm: number }
   | {
       type: "track";
@@ -52,6 +62,33 @@ export function parsePrompt(prompt: string): AgentOperation | undefined {
     /^(?:remove|delete)(?:\s+note)?\s+([a-z0-9._-]{1,64})$/,
   );
   if (remove) return { type: "remove-note", noteId: remove[1]! };
+  const move = text.match(
+    /^(?:move|shift)\s+(?:note\s+)?([a-z0-9._-]{1,64})\s+(?:to|at)\s+(\d+(?:\.\d+)?)$/,
+  );
+  if (move)
+    return {
+      type: "update-note",
+      noteId: move[1]!,
+      patch: { start: Number(move[2]) },
+    };
+  const length = text.match(
+    /^(?:length|duration)\s+(?:note\s+)?([a-z0-9._-]{1,64})\s+(\d+(?:\.\d+)?)$/,
+  );
+  if (length)
+    return {
+      type: "update-note",
+      noteId: length[1]!,
+      patch: { duration: Number(length[2]) },
+    };
+  const velocity = text.match(
+    /^(?:velocity|vel)\s+(?:note\s+)?([a-z0-9._-]{1,64})\s+(0(?:\.\d+)?|1(?:\.0+)?)$/,
+  );
+  if (velocity)
+    return {
+      type: "update-note",
+      noteId: velocity[1]!,
+      patch: { velocity: Number(velocity[2]) },
+    };
   const match = text.match(
     /^(?:add|put)\s+(?:note\s+)?([a-g](?:#|b)?-?\d+)\s+(?:at\s+)?(\d+(?:\.\d+)?)\s*(?:for|dur|duration)?\s*(\d+(?:\.\d+)?)?/,
   );

@@ -35,5 +35,15 @@ describe("parsePrompt", () => {
       type: "remove-note",
       noteId: "lead-1",
     });
+    expect(parsePrompt("move note lead-1 to 2.5")).toEqual({
+      type: "update-note",
+      noteId: "lead-1",
+      patch: { start: 2.5 },
+    });
+    expect(parsePrompt("duration note lead-1 0.25")).toEqual({
+      type: "update-note",
+      noteId: "lead-1",
+      patch: { duration: 0.25 },
+    });
   });
 });

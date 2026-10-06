@@ -28,6 +28,8 @@ pan -0.4
 mute
 clear
 undo
+move note <id> to 2.5
+duration note <id> 0.25
 /tracks
 /export loop.track.json
 /import loop.track.json
