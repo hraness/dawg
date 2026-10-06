@@ -22,6 +22,7 @@ import {
   ProtocolError,
   type ApplyResult,
   chooseTrack,
+  claimOrDraft,
   type ClientMessage,
   type PresenceEntry,
   type ServerMessage,
@@ -32,6 +33,7 @@ import {
   loadSession,
   SessionConflictError,
   sessionPaths,
+  updateSessionMeta,
   type SessionPaths,
   type SessionRecord,
 } from "./store.ts";
@@ -261,13 +263,23 @@ export class TrackDaemon {
       for (const other of this.clients)
         if (other !== client && other.presence?.focusedTrackId)
           taken.add(other.presence.focusedTrackId);
-      const trackId = chooseTrack(
-        this.score.tracks.map((track) => track.id),
-        taken,
-        message.preferred,
-      );
-      if (trackId !== null) client.presence!.focusedTrackId = trackId;
-      this.send(client, { v: 1, type: "claimed", id: message.id, trackId });
+      const trackIds = this.score.tracks.map((track) => track.id);
+      const claim = message.draft
+        ? claimOrDraft(trackIds, taken, message.preferred)
+        : {
+            trackId: chooseTrack(trackIds, taken, message.preferred),
+            draft: false,
+          };
+      if (claim.trackId !== null)
+        client.presence!.focusedTrackId = claim.trackId;
+      const reply: ServerMessage = {
+        v: 1,
+        type: "claimed",
+        id: message.id,
+        trackId: claim.trackId,
+      };
+      if (claim.draft) reply.draft = true;
+      this.send(client, reply);
       this.broadcastPresence();
       return;
     }
@@ -291,6 +303,55 @@ export class TrackDaemon {
           status: "accepted",
           revision: this.record.revision,
         });
+      });
+      return;
+    }
+    if (message.type === "meta") {
+      // Queued with score writes so a rename never interleaves an append.
+      this.enqueue(async () => {
+        const result = await updateSessionMeta<Composition>(
+          this.paths,
+          message.patch,
+          message.expect,
+        );
+        if (result.record.revision !== this.record.revision) {
+          // A file-fallback window wrote the score too; adopt everything.
+          const previousTempo = this.score.tempoBpm;
+          await this.reload();
+          this.broadcast({
+            v: 1,
+            type: "snapshot",
+            record: this.record,
+            digest: this.digest,
+          });
+          this.afterScoreChange(previousTempo);
+        } else {
+          this.record = { ...this.record, meta: result.record.meta };
+          this.diskMtime = await this.recordMtime();
+        }
+        // Meta goes out before the result so the requester sees it first.
+        if (result.status === "applied")
+          this.broadcast({ v: 1, type: "meta", meta: this.record.meta });
+        else this.send(client, { v: 1, type: "meta", meta: this.record.meta });
+        this.send(
+          client,
+          result.status === "applied"
+            ? {
+                v: 1,
+                type: "result",
+                id: message.id,
+                status: "accepted",
+                revision: this.record.revision,
+              }
+            : {
+                v: 1,
+                type: "result",
+                id: message.id,
+                status: "rejected",
+                code: "stale-meta",
+                message: "session name changed since the request began",
+              },
+        );
       });
       return;
     }
@@ -492,7 +553,18 @@ export class TrackDaemon {
         () => undefined,
       );
       this.diskMtime = await this.recordMtime();
-      if (!latest || latest.revision <= this.record.revision) return;
+      if (!latest) return;
+      if (latest.revision <= this.record.revision) {
+        // A file-fallback rename changes only metadata.
+        if (
+          latest.revision === this.record.revision &&
+          latest.meta.version > this.record.meta.version
+        ) {
+          this.record = { ...this.record, meta: latest.meta };
+          this.broadcast({ v: 1, type: "meta", meta: latest.meta });
+        }
+        return;
+      }
       const previousTempo = this.score.tempoBpm;
       await this.reload();
       this.broadcast({

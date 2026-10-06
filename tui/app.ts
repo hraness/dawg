@@ -50,6 +50,10 @@ export interface AppView {
   beat?: number | undefined;
   model?: string | undefined;
   sync?: SyncState | undefined;
+  /** Human session name; replaces the short id in the header when set. */
+  sessionName?: string | undefined;
+  /** Live windows on this session (presence); shown when more than one. */
+  windows?: number | undefined;
 }
 
 export interface UiState {
@@ -272,11 +276,19 @@ function paintHeader(
   ];
   if (score.key)
     left.push({ text: score.key, style: roles.muted, priority: 5 });
-  if (score.sessionId)
+  if (view.sessionName)
+    left.push({ text: view.sessionName, style: roles.muted, priority: 3 });
+  else if (score.sessionId)
     left.push({
       text: `session ${score.sessionId.slice(0, 8)}`,
       style: roles.muted,
       priority: 3,
+    });
+  if (view.windows !== undefined && view.windows > 1)
+    left.push({
+      text: `${view.windows} windows`,
+      style: roles.muted,
+      priority: 4,
     });
   const right: Segment[] = [];
   if (view.model)

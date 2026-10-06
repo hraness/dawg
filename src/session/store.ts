@@ -2,6 +2,17 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { acquireSessionLock } from "./lock.ts";
+import {
+  applyMetaPatch,
+  defaultSessionMeta,
+  metaMatches,
+  MetaValidationError,
+  normalizeSessionName,
+  parseSessionMeta,
+  type MetaExpect,
+  type MetaPatch,
+  type SessionMeta,
+} from "./meta.ts";
 
 const MAX_EVENT_BYTES = 64 * 1024;
 const MAX_EVENTS = 2_000;
@@ -31,6 +42,8 @@ export type SessionRecord<T> = {
   updatedAt: string;
   composition: T;
   events: SessionEvent[];
+  /** Name and lineage. Versioned separately so renames keep the revision. */
+  meta: SessionMeta;
 };
 
 export type SessionPaths = {
@@ -85,6 +98,8 @@ export async function ensureSession<T>(
     workspace?: string;
     sessionId?: string;
     setCurrent?: boolean;
+    /** Name for a newly created session; ignored when it already exists. */
+    name?: string;
   } = {},
 ): Promise<{ paths: SessionPaths; record: SessionRecord<T> }> {
   const workspace = options.workspace ?? process.cwd();
@@ -111,12 +126,19 @@ export async function ensureSession<T>(
     if (options.setCurrent !== false)
       await writeAtomic(paths.pointer, `${sessionId}`);
     try {
+      const at = new Date().toISOString();
       const record: SessionRecord<T> = {
         sessionId,
         revision: 0,
-        updatedAt: new Date().toISOString(),
+        updatedAt: at,
         composition: initial,
         events: [],
+        meta: defaultSessionMeta(
+          at,
+          options.name === undefined
+            ? undefined
+            : normalizeSessionName(options.name),
+        ),
       };
       const validated = validateSessionRecord<T>(record);
       await writeAtomic(paths.record, JSON.stringify(validated, null, 2));
@@ -178,6 +200,9 @@ export async function appendSessionEvent<T>(
           at,
         },
       ],
+      // Metadata always comes from disk so a rename written by another window
+      // between this caller's read and its write is never reverted.
+      meta: disk.meta,
     };
     const validated = validateSessionRecord<T>(next);
     await writeAtomic(paths.record, JSON.stringify(validated, null, 2));
@@ -185,6 +210,77 @@ export async function appendSessionEvent<T>(
   } finally {
     await release();
   }
+}
+
+export type MetaUpdate<T> =
+  | { status: "applied"; record: SessionRecord<T> }
+  | { status: "stale"; record: SessionRecord<T> };
+
+/**
+ * Conditional metadata write under the session lock. It applies only when
+ * `expect` still matches the record on disk, so the latest user rename wins
+ * and an in-flight auto-name computed against an older name is dropped.
+ * The score revision and event log are untouched.
+ */
+export async function updateSessionMeta<T>(
+  paths: SessionPaths,
+  patch: MetaPatch,
+  expect?: MetaExpect,
+): Promise<MetaUpdate<T>> {
+  const release = await acquireSessionLock(paths.lock);
+  try {
+    const disk = await readRecord<T>(paths.record);
+    if (!metaMatches(disk.meta, expect))
+      return { status: "stale", record: disk };
+    const next: SessionRecord<T> = {
+      ...disk,
+      meta: applyMetaPatch(disk.meta, patch, new Date().toISOString()),
+    };
+    const validated = validateSessionRecord<T>(next);
+    await writeAtomic(paths.record, JSON.stringify(validated, null, 2));
+    return { status: "applied", record: validated };
+  } finally {
+    await release();
+  }
+}
+
+/**
+ * Creates a new session holding a snapshot of `source` at its current
+ * revision: the composition only, not the event log, with `forkOf` lineage.
+ */
+export async function createForkSession<T>(
+  workspace: string,
+  source: SessionRecord<T>,
+  name: string,
+): Promise<SessionRecord<T>> {
+  const sessionId = randomUUID();
+  const paths = sessionPaths(workspace, sessionId);
+  await mkdir(dirname(paths.record), { recursive: true });
+  const at = new Date().toISOString();
+  const record = validateSessionRecord<T>({
+    sessionId,
+    revision: 0,
+    updatedAt: at,
+    composition: source.composition,
+    events: [],
+    meta: {
+      ...defaultSessionMeta(at, normalizeSessionName(name)),
+      nameSource: source.meta.nameSource,
+      forkOf: { sessionId: source.sessionId, revision: source.revision },
+    },
+  });
+  await writeAtomic(paths.record, JSON.stringify(record, null, 2));
+  return record;
+}
+
+/** Points `.track/session` at `sessionId` so plain `track` resumes it. */
+export async function setCurrentSession(
+  workspace: string,
+  sessionId: string,
+): Promise<void> {
+  const paths = sessionPaths(workspace, sessionId);
+  await mkdir(paths.root, { recursive: true });
+  await writeAtomic(paths.pointer, sessionId);
 }
 
 export async function loadSession<T>(
@@ -285,12 +381,24 @@ function validateSessionRecord<T>(value: unknown): SessionRecord<T> {
       );
     return candidate as unknown as SessionEvent;
   });
+  let meta: SessionMeta;
+  try {
+    meta = parseSessionMeta(record.meta, {
+      sessionId: record.sessionId,
+      updatedAt: record.updatedAt,
+    });
+  } catch (error) {
+    if (error instanceof MetaValidationError)
+      throw new SessionValidationError(error.message);
+    throw error;
+  }
   return {
     sessionId: record.sessionId,
     revision: record.revision as number,
     updatedAt: record.updatedAt,
     composition: record.composition as T,
     events,
+    meta,
   };
 }
 

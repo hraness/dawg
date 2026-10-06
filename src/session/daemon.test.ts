@@ -7,7 +7,12 @@ import { createScore } from "../../core/score.ts";
 import { DaemonClient } from "./client.ts";
 import { FilePresence } from "./presence.ts";
 import { daemonLockPath, daemonSocketPath } from "./protocol.ts";
-import { ensureSession, loadSession, type SessionPaths } from "./store.ts";
+import {
+  ensureSession,
+  loadSession,
+  sessionPaths,
+  type SessionPaths,
+} from "./store.ts";
 
 const WORKER = join(import.meta.dir, "fixtures", "client-worker.ts");
 const DAEMON_ARGS = ["--grace-ms", "300"];
@@ -326,3 +331,123 @@ describe("file presence fallback", () => {
     }
   });
 });
+
+describe("multi-window attach", () => {
+  const CLAIM_WORKER = join(import.meta.dir, "fixtures", "claim-worker.ts");
+  type Attached = { mode: string; trackId: string; draft: boolean };
+
+  async function windows(
+    workspace: string,
+    sessionId: string,
+    count: number,
+    env: Record<string, string> = {},
+  ) {
+    const procs = Array.from({ length: count }, () =>
+      Bun.spawn([process.execPath, CLAIM_WORKER, workspace, sessionId], {
+        stdin: "pipe",
+        stdout: "pipe",
+        env: { ...process.env, ...env },
+      }),
+    );
+    const readers = procs.map((proc) => {
+      const reader = proc.stdout.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      return async (): Promise<string> => {
+        for (;;) {
+          const newline = buffer.indexOf("\n");
+          if (newline >= 0) {
+            const line = buffer.slice(0, newline);
+            buffer = buffer.slice(newline + 1);
+            return line;
+          }
+          const chunk = await reader.read();
+          if (chunk.done) throw new Error(`worker exited: ${buffer}`);
+          buffer += decoder.decode(chunk.value, { stream: true });
+        }
+      };
+    });
+    for (const next of readers) expect(await next()).toBe("ready");
+    for (const proc of procs) {
+      proc.stdin.write("go\n");
+      void proc.stdin.flush();
+    }
+    const attached = await Promise.all(
+      readers.map(async (next) => JSON.parse(await next()) as Attached),
+    );
+    return { procs, readers, attached };
+  }
+
+  async function quit(
+    procs: Array<{
+      stdin: { write(s: string): void; end(): void };
+      exited: Promise<number>;
+    }>,
+  ) {
+    for (const proc of procs) {
+      proc.stdin.write("quit\n");
+      proc.stdin.end();
+    }
+    await Promise.all(procs.map((proc) => proc.exited));
+  }
+
+  for (const [label, env] of [
+    ["trackd", {}],
+    ["file fallback", { TRACK_DAEMON: "0" }],
+  ] as const) {
+    test(`${label}: three windows restore three tracks, a fourth gets a draft`, async () => {
+      const { workspace, sessionId } = await session(["drums", "bass", "keys"]);
+      const first = await windows(workspace, sessionId, 3, env);
+      try {
+        const modes = new Set(first.attached.map((a) => a.mode));
+        expect(modes).toEqual(
+          new Set([label === "trackd" ? "daemon" : "file"]),
+        );
+        expect(new Set(first.attached.map((a) => a.trackId))).toEqual(
+          new Set(["drums", "bass", "keys"]),
+        );
+        expect(first.attached.every((a) => !a.draft)).toBe(true);
+        const fourth = await windows(workspace, sessionId, 1, env);
+        try {
+          const [draft] = fourth.attached;
+          expect(draft).toEqual({
+            mode: draft!.mode,
+            trackId: "track-4",
+            draft: true,
+          });
+          // The draft is not in the score until the first edit.
+          const before = await loadSession<{ tracks: Array<{ id: string }> }>(
+            pathsOf(workspace, sessionId),
+          );
+          expect(before.composition.tracks.map((t) => t.id)).not.toContain(
+            "track-4",
+          );
+          fourth.procs[0]!.stdin.write("edit\n");
+          void fourth.procs[0]!.stdin.flush();
+          expect(await fourth.readers[0]!()).toMatch(/^edited \d+$/);
+          const after = await loadSession<{
+            tracks: Array<{ id: string }>;
+            notes: Array<{ trackId: string }>;
+          }>(pathsOf(workspace, sessionId));
+          expect(after.composition.tracks.map((t) => t.id)).toEqual([
+            "drums",
+            "bass",
+            "keys",
+            "track-4",
+          ]);
+          expect(after.composition.notes.map((n) => n.trackId)).toEqual([
+            "track-4",
+          ]);
+        } finally {
+          await quit(fourth.procs);
+        }
+      } finally {
+        await quit(first.procs);
+      }
+    }, 20_000);
+  }
+});
+
+function pathsOf(workspace: string, sessionId: string): SessionPaths {
+  return sessionPaths(workspace, sessionId);
+}

@@ -10,6 +10,9 @@ export type SessionSummary = {
   current: boolean;
   daemonPid: number | null;
   tracks: number | null;
+  name: string;
+  nameSource: "auto" | "user";
+  forkOf?: { sessionId: string; revision: number };
   error?: string;
 };
 
@@ -47,6 +50,9 @@ export async function listSessions(
         tracks: Array.isArray(record.composition?.tracks)
           ? record.composition.tracks.length
           : null,
+        name: record.meta.name,
+        nameSource: record.meta.nameSource,
+        ...(record.meta.forkOf ? { forkOf: record.meta.forkOf } : {}),
       });
     } catch (error) {
       summaries.push({
@@ -56,6 +62,8 @@ export async function listSessions(
         current: sessionId === current,
         daemonPid,
         tracks: null,
+        name: "",
+        nameSource: "auto",
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -80,8 +88,79 @@ export async function printSessions(
     const daemon = session.daemonPid
       ? ` · trackd pid ${session.daemonPid}`
       : "";
-    out.write(`${marker} ${session.sessionId}  ${detail}${daemon}\n`);
+    out.write(`${marker} ${formatSessionLine(session, sessions)}${daemon}\n`);
   }
+}
+
+/** One `/sessions` row: name, short id, tracks, revision, age, fork parent. */
+export function formatSessionLine(
+  session: SessionSummary,
+  all: readonly SessionSummary[] = [],
+  now = Date.now(),
+): string {
+  const id = session.sessionId.slice(0, 8);
+  if (session.error) return `${id}  unreadable · ${session.error}`;
+  const parent = session.forkOf
+    ? all.find((entry) => entry.sessionId === session.forkOf!.sessionId)
+    : undefined;
+  const fork = session.forkOf
+    ? ` · fork of ${parent?.name || session.forkOf.sessionId.slice(0, 8)}@${session.forkOf.revision}`
+    : "";
+  return `${session.name.padEnd(24)} ${id}  ${session.tracks ?? "?"} tracks · rev ${session.revision} · ${relativeTime(session.updatedAt, now)}${fork}`;
+}
+
+export function relativeTime(iso: string, now = Date.now()): string {
+  const at = Date.parse(iso);
+  if (!Number.isFinite(at)) return "unknown";
+  const seconds = Math.max(0, Math.round((now - at) / 1000));
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86_400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86_400)}d ago`;
+}
+
+export type SessionResolution =
+  | { status: "found"; session: SessionSummary }
+  | { status: "missing" }
+  | { status: "ambiguous"; candidates: SessionSummary[] };
+
+/**
+ * Resolves `--session <name|id>`: an exact id, then an exact name
+ * (case-insensitive), then a unique id prefix of at least 4 characters.
+ */
+export function resolveSession(
+  sessions: readonly SessionSummary[],
+  query: string,
+): SessionResolution {
+  const readable = sessions.filter((session) => !session.error);
+  const byId = readable.find((session) => session.sessionId === query);
+  if (byId) return { status: "found", session: byId };
+  const lower = query.trim().toLowerCase();
+  const byName = readable.filter(
+    (session) => session.name.toLowerCase() === lower,
+  );
+  if (byName.length === 1) return { status: "found", session: byName[0]! };
+  if (byName.length > 1) return { status: "ambiguous", candidates: byName };
+  if (query.length >= 4) {
+    const byPrefix = readable.filter((session) =>
+      session.sessionId.startsWith(query),
+    );
+    if (byPrefix.length === 1)
+      return { status: "found", session: byPrefix[0]! };
+    if (byPrefix.length > 1)
+      return { status: "ambiguous", candidates: byPrefix };
+  }
+  return { status: "missing" };
+}
+
+export function ambiguousSessionMessage(
+  query: string,
+  candidates: readonly SessionSummary[],
+): string {
+  return [
+    `session "${query}" is ambiguous; use an id:`,
+    ...candidates.map((session) => `  ${formatSessionLine(session)}`),
+  ].join("\n");
 }
 
 async function liveDaemonPid(lockPath: string): Promise<number | null> {

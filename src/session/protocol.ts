@@ -1,6 +1,15 @@
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  MetaValidationError,
+  parseMetaExpect,
+  parseMetaPatch,
+  parseSessionMeta,
+  type MetaExpect,
+  type MetaPatch,
+  type SessionMeta,
+} from "./meta.ts";
 import type { SessionEvent, SessionPaths, SessionRecord } from "./store.ts";
 
 /**
@@ -51,7 +60,10 @@ export type ClientMessage =
       focusedTrackId: string | null;
     }
   | { v: 1; type: "focus"; id: string; trackId: string | null }
-  | { v: 1; type: "claim"; id: string; preferred?: string }
+  /** `draft` asks trackd to reserve a new `track-N` id when all are open. */
+  | { v: 1; type: "claim"; id: string; preferred?: string; draft?: boolean }
+  /** Conditional metadata write (rename, auto-name); never bumps the revision. */
+  | { v: 1; type: "meta"; id: string; patch: MetaPatch; expect?: MetaExpect }
   | {
       v: 1;
       type: "apply";
@@ -110,7 +122,15 @@ export type ServerMessage =
     }
   | ({ v: 1; type: "transport" } & TransportState)
   | { v: 1; type: "presence"; clients: PresenceEntry[] }
-  | { v: 1; type: "claimed"; id: string; trackId: string | null }
+  | { v: 1; type: "meta"; meta: SessionMeta }
+  | {
+      v: 1;
+      type: "claimed";
+      id: string;
+      trackId: string | null;
+      /** True when `trackId` is a reserved draft not yet in the score. */
+      draft?: boolean;
+    }
   | ({ v: 1; type: "result"; id: string } & ApplyResult)
   | { v: 1; type: "pong"; id: string }
   | { v: 1; type: "error"; code: string; message: string };
@@ -196,7 +216,26 @@ export function parseClientMessage(line: string): ClientMessage {
     };
     const preferred = optionalTrackId(value.preferred);
     if (preferred !== null) message.preferred = preferred;
+    if (value.draft === true) message.draft = true;
     return message;
+  }
+  if (type === "meta") {
+    const id = requireId(value.id, "request id");
+    try {
+      const message: ClientMessage = {
+        v: 1,
+        type,
+        id,
+        patch: parseMetaPatch(value.patch),
+      };
+      const expect = parseMetaExpect(value.expect);
+      if (expect) message.expect = expect;
+      return message;
+    } catch (error) {
+      if (error instanceof MetaValidationError)
+        throw new ProtocolError("invalid", error.message);
+      throw error;
+    }
   }
   if (type === "apply") {
     const id = requireId(value.id, "request id");
@@ -355,13 +394,18 @@ export function parseServerMessage(line: string): ServerMessage {
       throw new ProtocolError("invalid", "presence is invalid");
     return { v: 1, type, clients: value.clients.map(requirePresence) };
   }
-  if (type === "claimed")
-    return {
+  if (type === "meta")
+    return { v: 1, type, meta: requireMeta(value.meta, undefined) };
+  if (type === "claimed") {
+    const message: ServerMessage = {
       v: 1,
       type,
       id: requireId(value.id, "request id"),
       trackId: optionalTrackId(value.trackId),
     };
+    if (value.draft === true) message.draft = true;
+    return message;
+  }
   if (type === "pong")
     return { v: 1, type, id: requireId(value.id, "request id") };
   if (type === "error")
@@ -466,6 +510,32 @@ export function chooseTrack(
   return trackIds.find((id) => !taken.has(id)) ?? null;
 }
 
+/**
+ * Claim with draft fallback: the first unfocused track in score order, else
+ * a fresh `track-N` id that is neither in the score nor focused by another
+ * window (so two late windows reserve different drafts).
+ */
+export function claimOrDraft(
+  trackIds: readonly string[],
+  taken: ReadonlySet<string>,
+  preferred?: string,
+): { trackId: string; draft: boolean } {
+  const trackId = chooseTrack(trackIds, taken, preferred);
+  if (trackId !== null) return { trackId, draft: false };
+  return { trackId: draftTrackId(trackIds, taken), draft: true };
+}
+
+export function draftTrackId(
+  trackIds: readonly string[],
+  taken: ReadonlySet<string>,
+): string {
+  const used = new Set([...trackIds, ...taken]);
+  for (let n = trackIds.length + 1; ; n += 1) {
+    const id = `track-${n}`;
+    if (!used.has(id)) return id;
+  }
+}
+
 function requireDigest(value: unknown): string {
   if (typeof value !== "string" || !/^[0-9a-f]{1,64}$/.test(value))
     throw new ProtocolError("invalid", "digest is invalid");
@@ -485,7 +555,31 @@ function requireRecord(value: unknown): SessionRecord<unknown> {
     record.composition === undefined
   )
     throw new ProtocolError("invalid", "record is invalid");
-  return record as unknown as SessionRecord<unknown>;
+  return {
+    ...(record as unknown as SessionRecord<unknown>),
+    meta: requireMeta(record.meta, {
+      sessionId: record.sessionId,
+      updatedAt: record.updatedAt,
+    }),
+  };
+}
+
+function requireMeta(
+  value: unknown,
+  fallback: { sessionId: string; updatedAt: string } | undefined,
+): SessionMeta {
+  if (fallback === undefined && (value === undefined || value === null))
+    throw new ProtocolError("invalid", "meta is missing");
+  try {
+    return parseSessionMeta(
+      value,
+      fallback ?? { sessionId: "unknown", updatedAt: "" },
+    );
+  } catch (error) {
+    if (error instanceof MetaValidationError)
+      throw new ProtocolError("invalid", error.message);
+    throw error;
+  }
 }
 
 function requireTransport(value: unknown): TransportState {
