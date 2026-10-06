@@ -15,8 +15,18 @@ import { applyMusicCommand, parseMusicCommand } from "./commands/music.ts";
 import { historyTarget, REDO_KIND, UNDO_KIND } from "./commands/history.ts";
 import { drumSnapshotFields } from "../tui/drums.ts";
 import { isDrumInstrument } from "../core/drums.ts";
-import { planComposition } from "./agent/planner.ts";
-import type { GatewayModel } from "./agent/gateway.ts";
+import {
+  describeAgentEvent,
+  runAgentTurn,
+  StaleRevisionError,
+  type AgentEvent,
+  type AgentHost,
+} from "./agent/agent.ts";
+import {
+  createGatewayClient,
+  type GatewayClient,
+  type GatewayModel,
+} from "./agent/gateway.ts";
 import { TransportClock } from "./audio/clock.ts";
 import { LoopPlayer } from "./audio/player.ts";
 import {
@@ -27,7 +37,6 @@ import {
   SCORE_LIMITS,
   type TrackScore,
   type ScoreOperation,
-  type NoteInput,
 } from "../core/score.ts";
 import { decodeLoop, encodeLoop } from "../core/loop.ts";
 import {
@@ -137,6 +146,10 @@ const audio = new LoopPlayer(`${session.paths.record}.audio.lock`);
 let selectedModel: GatewayModel =
   process.env.TRACK_MODEL === "opus-5.5" ? "opus-5.5" : "sol-6.1";
 const prompt = new PromptModel({ width: 72, maxVisualRows: 8 });
+/** The in-flight agent turn: Esc aborts it, Enter steers it. */
+let agentTurn: { controller: AbortController; steering: string[] } | undefined;
+let reportAgentActivity: (text: string) => void = () => undefined;
+let gatewayClient: GatewayClient | undefined;
 if (demo) {
   if (score.notes.length === 0) score = seedDemo(score, requestedTrack);
   if (exportPath)
@@ -307,6 +320,20 @@ async function runInteractive(): Promise<void> {
       prompt.render("› "),
     );
   };
+  let streamed = "";
+  reportAgentActivity = (text) => {
+    activity = text;
+  };
+  agentEventSink = (event) => {
+    if (event.type === "step") streamed = "";
+    if (event.type === "text-delta") {
+      streamed = (streamed + event.delta).replace(/\s+/g, " ").slice(-120);
+      activity = `… ${streamed.trim()}`;
+      return;
+    }
+    const line = describeAgentEvent(event);
+    if (line) activity = line;
+  };
   const timer = setInterval(tick, 100);
   const sync = async (): Promise<void> => {
     if (syncing) return;
@@ -405,9 +432,17 @@ async function runInteractive(): Promise<void> {
             exiting = true;
             break;
           }
-          if (action?.kind === "submit" && action.value) {
+          if (action?.kind === "cancel" && agentTurn) {
+            agentTurn.controller.abort();
+            activity = "cancelling…";
+          } else if (action?.kind === "submit" && action.value && agentTurn) {
+            // Enter during a turn steers it; Alt-Enter still queues a follow-up.
+            agentTurn.steering.push(action.value);
+            activity = "steering · applied at the next step";
+          } else if (action?.kind === "submit" && action.value) {
             queuedPrompts.unshift(action.value);
-            await drainQueue();
+            // Do not await: the input loop must stay live so Esc can cancel.
+            void drainQueue();
           } else if (action?.kind === "queue" && action.value) {
             queuedPrompts.push(action.value);
             activity = `queued · ${queuedPrompts.length}`;
@@ -498,24 +533,7 @@ async function submit(prompt: string): Promise<string> {
   const parsed = parsePrompt(prompt);
   if (!parsed) {
     if (process.env.TRACK_AI !== "1") return `unrecognized request: ${prompt}`;
-    try {
-      const plan = await planComposition({
-        prompt,
-        score,
-        trackId: requestedTrack,
-        model: selectedModel,
-      });
-      if (plan.operations.length === 0)
-        return plan.explanation ?? "agent made no changes";
-      const next = applyAgentPlan(score, plan.operations);
-      await commitScore(next, "agent.plan", { plan });
-      return (
-        plan.explanation ??
-        `applied ${plan.operations.length} agent operation${plan.operations.length === 1 ? "" : "s"}`
-      );
-    } catch (error) {
-      return `agent error: ${error instanceof Error ? error.message : String(error)}`;
-    }
+    return runAgent(prompt);
   }
   if (parsed.type === "transport") {
     await setTransport(parsed.action);
@@ -772,35 +790,85 @@ async function setTransport(
   }
 }
 
-function applyAgentPlan(
-  value: TrackScore,
-  operations: readonly ScoreOperation[],
-): TrackScore {
-  let next = value;
-  for (const operation of operations) {
-    if (operation.type !== "addNote") {
-      next = applyScoreOperation(next, operation);
-      continue;
-    }
-    const note = operation.note;
-    const start = "start" in note ? note.start : undefined;
-    const duration = "duration" in note ? note.duration : undefined;
-    const normalized: NoteInput = {
-      ...note,
-      trackId: note.trackId || requestedTrack,
-      ...(typeof start === "number"
-        ? { startTick: Math.round(start * next.ticksPerBeat) }
-        : {}),
-      ...(typeof duration === "number"
-        ? {
-            durationTicks: Math.max(
-              1,
-              Math.round(duration * next.ticksPerBeat),
-            ),
-          }
-        : {}),
-    };
-    next = applyScoreOperation(next, { type: "addNote", note: normalized });
+let agentEventSink: (event: AgentEvent) => void = () => undefined;
+
+/**
+ * Run one streaming tool-calling turn. Each validated tool call commits its
+ * own revision through `agentHost`, so cancelling keeps every accepted change
+ * and never leaves a half-applied call.
+ */
+async function runAgent(text: string): Promise<string> {
+  if (agentTurn) return "agent busy";
+  gatewayClient ??= createGatewayClient();
+  const turn = { controller: new AbortController(), steering: [] as string[] };
+  agentTurn = turn;
+  reportAgentActivity(`${selectedModel} · thinking…`);
+  try {
+    const result = await runAgentTurn({
+      prompt: text,
+      model: selectedModel,
+      client: gatewayClient,
+      host: agentHost(turn),
+      signal: turn.controller.signal,
+      onEvent: (event) => agentEventSink(event),
+    });
+    return describeAgentEvent(result) ?? "agent finished";
+  } finally {
+    if (agentTurn === turn) agentTurn = undefined;
   }
-  return next;
+}
+
+function agentHost(turn: { steering: string[] }): AgentHost {
+  return {
+    snapshot: () => ({
+      score,
+      revision: record.revision,
+      focusedTrackId: requestedTrack,
+      recentOperations: record.events.slice(-8).map((event) => {
+        const payload = event.payload as { summary?: unknown } | null;
+        return typeof payload?.summary === "string"
+          ? `${event.kind}: ${payload.summary}`
+          : event.kind;
+      }),
+    }),
+    async commit(change) {
+      if (change.baseRevision !== record.revision)
+        throw new StaleRevisionError(change.baseRevision, record.revision);
+      try {
+        await commitScore(change.next, "agent.tool", {
+          tool: change.toolName,
+          callId: change.callId,
+          summary: change.summary,
+          operations: change.operations,
+        });
+      } catch (error) {
+        if (error instanceof SessionConflictError)
+          throw new StaleRevisionError(
+            change.baseRevision,
+            record.revision + 1,
+          );
+        throw error;
+      }
+      if (change.operations.some((operation) => operation.type === "setTempo"))
+        clock.setTempo(score.tempoBpm);
+      return { revision: record.revision };
+    },
+    async transport(action) {
+      await setTransport(action);
+      try {
+        record = await appendSessionEvent(
+          session.paths,
+          record,
+          {
+            kind: "transport",
+            payload: { action, playing: clock.playing, beat: clock.beatAt() },
+          },
+          score.toJSON(),
+        );
+      } catch (error) {
+        if (!(error instanceof SessionConflictError)) throw error;
+      }
+    },
+    takeSteering: () => turn.steering.splice(0),
+  };
 }

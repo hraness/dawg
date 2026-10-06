@@ -153,7 +153,7 @@ export function parsePrompt(prompt: string): AgentOperation | undefined {
   return { type: "add-note", pitch, start, duration, velocity: 0.8 };
 }
 
-function pitchToMidi(value: string): number {
+export function pitchToMidi(value: string): number {
   const match = value.match(/^([a-g])([#b]?)(-?\d+)$/);
   if (!match) return Number.NaN;
   const semitones: Record<string, number> = {
