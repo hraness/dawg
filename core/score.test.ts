@@ -116,7 +116,17 @@ describe("TrackScore", () => {
       tempoBpm: 128,
       bars: 8,
       key: "Am",
-      tracks: [{ id: "lead", name: "Lead", instrument: "saw" }],
+      tracks: [
+        {
+          id: "lead",
+          name: "Lead",
+          instrument: "saw",
+          volumeAutomation: [
+            { tick: 1_920, value: 0.2 },
+            { tick: 0, value: 0.8 },
+          ],
+        },
+      ],
     }).addNote({
       id: "n1",
       trackId: "lead",
