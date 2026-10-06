@@ -10,6 +10,7 @@ describe("parsePrompt", () => {
       duration: 0.5,
       velocity: 0.8,
     });
+    expect(parsePrompt("add C4 at 0 for 1 with extra text")).toBeUndefined();
   });
 
   test("parses transport requests", () => {

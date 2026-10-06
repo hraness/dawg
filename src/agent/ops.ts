@@ -90,7 +90,7 @@ export function parsePrompt(prompt: string): AgentOperation | undefined {
       patch: { velocity: Number(velocity[2]) },
     };
   const match = text.match(
-    /^(?:add|put)\s+(?:note\s+)?([a-g](?:#|b)?-?\d+)\s+(?:at\s+)?(\d+(?:\.\d+)?)\s*(?:for|dur|duration)?\s*(\d+(?:\.\d+)?)?/,
+    /^(?:add|put)\s+(?:note\s+)?([a-g](?:#|b)?-?\d+)\s+(?:at\s+)?(\d+(?:\.\d+)?)\s*(?:for|dur|duration)?\s*(\d+(?:\.\d+)?)?$/,
   );
   if (!match) return undefined;
   const pitch = pitchToMidi(match[1] ?? "c4");
