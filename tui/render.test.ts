@@ -27,6 +27,7 @@ test("capability fallbacks keep semantic colors deterministic", () => {
   expect(detectTerminalCapabilities({ TERM: "dumb" })).toEqual({
     colorDepth: "none",
     unicode: false,
+    attributes: false,
   });
   expect(
     semanticColor("hit", "x", { colorDepth: "none", unicode: false }),

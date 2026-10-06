@@ -1,5 +1,7 @@
 /** A bounded, dependency-free multiline prompt model for the Track TUI. */
 
+import { graphemes, type Grapheme } from "./text.ts";
+
 export type PromptMode = "steer" | "queue";
 
 export interface PromptOptions {
@@ -21,9 +23,14 @@ export interface PromptState {
 
 export interface PromptVisualLine {
   text: string;
+  /** Code-point offsets into the logical text. */
   start: number;
   end: number;
   logicalLine: number;
+  /** Display width in terminal cells. */
+  width: number;
+  /** True when the row ends at a soft wrap rather than a newline or EOF. */
+  soft: boolean;
 }
 
 export type PromptKey = string | { type: "text" | "paste"; text: string };
@@ -81,51 +88,104 @@ export function createPromptState(
   };
 }
 
-/** Return visual rows with offsets into the logical code-point sequence. */
+/**
+ * Return visual rows with offsets into the logical code-point sequence.
+ * Wrapping is grapheme- and width-aware: a wide CJK character or an emoji ZWJ
+ * sequence is never split, and rows prefer to break after whitespace.
+ */
 export function wrapPrompt(
   stateOrText: PromptState | string,
   width: number,
 ): PromptVisualLine[] {
   const text = typeof stateOrText === "string" ? stateOrText : stateOrText.text;
   const maxWidth = Math.max(1, Math.floor(width));
-  const chars = points(text);
   const result: PromptVisualLine[] = [];
   let logicalStart = 0;
   let logicalLine = 0;
-  const logical = text.split("\n");
-  for (const segment of logical) {
-    const segmentChars = points(segment);
-    if (segmentChars.length === 0)
-      result.push({
-        text: "",
-        start: logicalStart,
-        end: logicalStart,
-        logicalLine,
-      });
-    else {
-      for (let offset = 0; offset < segmentChars.length; offset += maxWidth) {
-        const end = Math.min(segmentChars.length, offset + maxWidth);
-        result.push({
-          text: segmentChars.slice(offset, end).join(""),
-          start: logicalStart + offset,
-          end: logicalStart + end,
-          logicalLine,
-        });
+  const push = (row: Grapheme[], start: number, soft: boolean): void => {
+    const last = row[row.length - 1];
+    result.push({
+      text: row.map((cluster) => cluster.text).join(""),
+      start,
+      end: last ? last.start + last.length : start,
+      logicalLine,
+      width: row.reduce((sum, cluster) => sum + cluster.width, 0),
+      soft,
+    });
+  };
+  for (const segment of text.split("\n")) {
+    const clusters = graphemes(segment).map((cluster) => ({
+      ...cluster,
+      start: cluster.start + logicalStart,
+      width: Math.min(cluster.width, maxWidth),
+    }));
+    let row: Grapheme[] = [];
+    let used = 0;
+    let rowStart = logicalStart;
+    for (const cluster of clusters) {
+      if (used + cluster.width > maxWidth && row.length > 0) {
+        // Prefer a word boundary when one exists past the row's first cell.
+        let breakAt = row.length;
+        for (let index = row.length - 1; index > 0; index -= 1) {
+          if (/\s/.test(row[index]!.text)) {
+            breakAt = index + 1;
+            break;
+          }
+        }
+        if (/\s/.test(cluster.text)) breakAt = row.length;
+        const carry = row.slice(breakAt);
+        push(row.slice(0, breakAt), rowStart, true);
+        row = carry;
+        used = carry.reduce((sum, item) => sum + item.width, 0);
+        rowStart = carry[0]?.start ?? cluster.start;
       }
+      row.push(cluster);
+      used += cluster.width;
     }
-    logicalStart += segmentChars.length + 1;
+    push(row, rowStart, false);
+    logicalStart += Array.from(segment).length + 1;
     logicalLine += 1;
   }
-  // `split` always creates one row, but this protects callers that pass odd
-  // string-like state adapters and makes the function's contract explicit.
-  if (result.length === 0)
-    result.push({
-      text: "",
-      start: chars.length,
-      end: chars.length,
-      logicalLine: 0,
-    });
   return result;
+}
+
+function boundaryBefore(text: string, cursor: number): number {
+  let previous = 0;
+  for (const cluster of graphemes(text)) {
+    if (cluster.start >= cursor) break;
+    previous = cluster.start;
+  }
+  return previous;
+}
+
+function boundaryAfter(text: string, cursor: number): number {
+  for (const cluster of graphemes(text)) {
+    const end = cluster.start + cluster.length;
+    if (end > cursor) return end;
+  }
+  return points(text).length;
+}
+
+/** Display column of a code-point offset within a visual row. */
+function columnOf(line: PromptVisualLine, cursor: number): number {
+  let column = 0;
+  for (const cluster of graphemes(line.text)) {
+    if (line.start + cluster.start >= cursor) break;
+    column += cluster.width;
+  }
+  return column;
+}
+
+/** Code-point offset nearest to (not past) a display column in a row. */
+function offsetAt(line: PromptVisualLine, column: number): number {
+  let used = 0;
+  for (const cluster of graphemes(line.text)) {
+    if (used + cluster.width > column) return line.start + cluster.start;
+    used += cluster.width;
+  }
+  // A soft-wrapped row's end belongs to the next row; stay before its last
+  // trailing space so vertical movement never jumps rows unexpectedly.
+  return line.soft ? Math.max(line.start, line.end - 1) : line.end;
 }
 
 function normalized(
@@ -148,20 +208,16 @@ function visualCursor(
   let row = lines.length - 1;
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index]!;
-    if (state.cursor >= line.start && state.cursor <= line.end) {
+    const inside = line.soft
+      ? state.cursor >= line.start && state.cursor < line.end
+      : state.cursor >= line.start && state.cursor <= line.end;
+    if (inside) {
       row = index;
       break;
     }
   }
   const line = lines[row]!;
-  return {
-    row,
-    column: Math.max(
-      0,
-      Math.min(points(line.text).length, state.cursor - line.start),
-    ),
-    lines,
-  };
+  return { row, column: columnOf(line, state.cursor), lines };
 }
 
 function stateWithCursor(
@@ -260,7 +316,8 @@ export function applyPromptKey(
   }
   switch (keyInput.toUpperCase()) {
     case "ENTER":
-      return submit(state, "submit");
+      // The mode pill decides what Enter does: STEER runs now, QUEUE waits.
+      return submit(state, state.mode === "queue" ? "queue" : "submit");
     case "ALT+ENTER":
       return submit(state, "queue");
     case "SHIFT+ENTER":
@@ -279,15 +336,12 @@ export function applyPromptKey(
     case "LEFT":
       return {
         kind: "edit",
-        state: stateWithCursor(state, Math.max(0, state.cursor - 1)),
+        state: stateWithCursor(state, boundaryBefore(state.text, state.cursor)),
       };
     case "RIGHT":
       return {
         kind: "edit",
-        state: stateWithCursor(
-          state,
-          Math.min(points(state.text).length, state.cursor + 1),
-        ),
+        state: stateWithCursor(state, boundaryAfter(state.text, state.cursor)),
       };
     case "ALT+LEFT":
     case "CTRL+LEFT":
@@ -308,8 +362,8 @@ export function applyPromptKey(
         kind: "edit",
         state: stateWithCursor(
           state,
-          lines[row]!.end,
-          points(lines[row]!.text).length,
+          offsetAt(lines[row]!, Number.POSITIVE_INFINITY),
+          lines[row]!.width,
         ),
       };
     }
@@ -327,11 +381,7 @@ export function applyPromptKey(
       const target = current.lines[targetRow]!;
       return {
         kind: "edit",
-        state: stateWithCursor(
-          state,
-          target.start + Math.min(desired, points(target.text).length),
-          desired,
-        ),
+        state: stateWithCursor(state, offsetAt(target, desired), desired),
       };
     }
     case "DOWN": {
@@ -341,21 +391,20 @@ export function applyPromptKey(
       const target = current.lines[targetRow]!;
       return {
         kind: "edit",
-        state: stateWithCursor(
-          state,
-          target.start + Math.min(desired, points(target.text).length),
-          desired,
-        ),
+        state: stateWithCursor(state, offsetAt(target, desired), desired),
       };
     }
     case "BACKSPACE": {
       if (state.cursor === 0) return { kind: "noop", state };
       return {
         kind: "edit",
-        state: editAtCursor(state, (chars, cursor) => ({
-          chars: [...chars.slice(0, cursor - 1), ...chars.slice(cursor)],
-          cursor: cursor - 1,
-        })),
+        state: editAtCursor(state, (chars, cursor) => {
+          const from = boundaryBefore(state.text, cursor);
+          return {
+            chars: [...chars.slice(0, from), ...chars.slice(cursor)],
+            cursor: from,
+          };
+        }),
       };
     }
     case "DELETE": {
@@ -364,7 +413,10 @@ export function applyPromptKey(
       return {
         kind: "edit",
         state: editAtCursor(state, (all, cursor) => ({
-          chars: [...all.slice(0, cursor), ...all.slice(cursor + 1)],
+          chars: [
+            ...all.slice(0, cursor),
+            ...all.slice(boundaryAfter(state.text, cursor)),
+          ],
           cursor,
         })),
       };
@@ -420,30 +472,57 @@ export interface PromptRenderOptions extends PromptOptions {
   cursorGlyph?: string;
 }
 
+export interface PromptLayout {
+  /** Visible rows after internal scrolling. */
+  rows: PromptVisualLine[];
+  /** Index of the first visible row within all wrapped rows. */
+  first: number;
+  /** Total wrapped rows before scrolling. */
+  total: number;
+  /** Cursor row relative to `rows`, and its display column. */
+  cursorRow: number;
+  cursorColumn: number;
+}
+
+/** Wrap and scroll the prompt so the cursor row is always visible. */
+export function layoutPrompt(
+  stateInput: PromptState,
+  optionsInput: PromptOptions,
+): PromptLayout {
+  const options = optionsWithDefaults(optionsInput);
+  const state = normalized(stateInput, options);
+  const cursor = visualCursor(state, options);
+  const lines = cursor.lines;
+  const first = Math.min(
+    Math.max(0, cursor.row - options.maxVisualRows + 1),
+    Math.max(0, lines.length - options.maxVisualRows),
+  );
+  return {
+    rows: lines.slice(first, first + options.maxVisualRows),
+    first,
+    total: lines.length,
+    cursorRow: cursor.row - first,
+    cursorColumn: cursor.column,
+  };
+}
+
 /** Render wrapped rows, keeping the cursor visible and scrolling only the editor. */
 export function renderPrompt(
   stateInput: PromptState,
   optionsInput: PromptRenderOptions,
 ): string[] {
-  const options = optionsWithDefaults(optionsInput);
-  const state = normalized(stateInput, options);
   const prefix = optionsInput.prefix ?? "> ";
   const cursorGlyph = optionsInput.cursorGlyph ?? "▌";
-  const lines = wrapPrompt(state, options.width);
-  const cursor = visualCursor(state, options);
-  const first = Math.min(
-    Math.max(0, cursor.row - options.maxVisualRows + 1),
-    Math.max(0, lines.length - options.maxVisualRows),
-  );
-  const visible = lines.slice(first, first + options.maxVisualRows);
-  return visible.map((line, index) => {
-    const absolute = first + index;
+  const state = normalized(stateInput, optionsWithDefaults(optionsInput));
+  const layout = layoutPrompt(state, optionsInput);
+  return layout.rows.map((line, index) => {
     const lineChars = points(line.text);
+    const split = Math.max(0, state.cursor - line.start);
     const text =
-      absolute === cursor.row
-        ? `${lineChars.slice(0, cursor.column).join("")}${cursorGlyph}${lineChars.slice(cursor.column).join("")}`
+      index === layout.cursorRow
+        ? `${lineChars.slice(0, split).join("")}${cursorGlyph}${lineChars.slice(split).join("")}`
         : line.text;
-    return `${absolute === first ? prefix : "  "}${text}`;
+    return `${index === 0 ? prefix : "  "}${text}`;
   });
 }
 
@@ -465,6 +544,16 @@ export class PromptModel {
   }
   public get snapshot(): PromptState {
     return { ...this.state };
+  }
+  public get width(): number {
+    return this.options.width;
+  }
+  public layout(maxVisualRows = this.options.maxVisualRows): PromptLayout {
+    return layoutPrompt(this.state, { ...this.options, maxVisualRows });
+  }
+  /** Number of wrapped rows the current draft needs at the current width. */
+  public get wrappedRows(): number {
+    return wrapPrompt(this.state, this.options.width).length;
   }
   public setWidth(width: number): void {
     this.options = optionsWithDefaults({ ...this.options, width });

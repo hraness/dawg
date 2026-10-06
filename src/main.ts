@@ -39,13 +39,18 @@ import {
   type ScoreOperation,
 } from "../core/score.ts";
 import { decodeLoop, encodeLoop } from "../core/loop.ts";
-import {
-  detectTerminalCapabilities,
-  renderHighway,
-  type TrackScoreSnapshot,
-} from "../tui/render.ts";
-import { PromptModel, type PromptAction } from "../tui/prompt.ts";
+import type { TrackScoreSnapshot } from "../tui/render.ts";
+import { PromptModel } from "../tui/prompt.ts";
 import { TerminalInputDecoder } from "../tui/input.ts";
+import {
+  composeFrame,
+  TuiApp,
+  type AppView,
+  type SyncState,
+} from "../tui/app.ts";
+import { receiptTone } from "../tui/activity.ts";
+import { encodeBuffer } from "../tui/screen.ts";
+import { parseThemeName } from "../tui/theme.ts";
 
 const ESC = "\u001b[";
 const HELP_TEXT = `track · local-first terminal music workstation
@@ -55,9 +60,14 @@ Usage:
   track --import <file> --export <file>
   track sessions
 
+Usage flags:
+  --reduce-motion   static hit/sustain states (also TRACK_REDUCE_MOTION=1)
+  --theme <name>    default | high-contrast | mono (NO_COLOR forces mono)
+
 Prompt:
   Enter submit · Shift-Enter newline · Alt-Enter queue · Ctrl-Q toggle queue
-  Space on an empty prompt toggles playback · Ctrl-C exits
+  Ctrl-Z undo · Ctrl-Y redo · Ctrl-O transcript · Esc cancel/close · Ctrl-C exit
+  Space on an empty prompt toggles playback
 
 Commands:
   play, pause, tempo <bpm>, instrument <name>, volume <0..1>, pan <-1..1>
@@ -66,6 +76,7 @@ Commands:
   instrument kit, hit <voice> at <beat>, pattern <voice> <beats...>|every <step>
   track <name>, bars <count>, extend <count> bars
   /tracks, /export <file>, /import <file>, /model opus-5.5|sol-6.1
+  /log, /theme default|high-contrast|mono, /motion on|off
 
 AI is opt-in with TRACK_AI=1 and a local AI_GATEWAY_API_KEY.`;
 const args = new Set(process.argv.slice(2));
@@ -155,6 +166,18 @@ const audio = port.player;
 let selectedModel: GatewayModel =
   process.env.TRACK_MODEL === "opus-5.5" ? "opus-5.5" : "sol-6.1";
 const prompt = new PromptModel({ width: 72, maxVisualRows: 8 });
+const tui = new TuiApp({
+  io: {
+    write: (data) => stdout.write(data),
+    columns: () => stdout.columns ?? 80,
+    rows: () => stdout.rows ?? 24,
+  },
+  prompt,
+  theme: parseThemeName(optionValue("--theme") ?? process.env.TRACK_THEME),
+  reducedMotion:
+    args.has("--reduce-motion") || process.env.TRACK_REDUCE_MOTION === "1",
+});
+let syncState: SyncState = port.mode === "daemon" ? "synced" : "local";
 /** The in-flight agent turn: Esc aborts it, Enter steers it. */
 let agentTurn: { controller: AbortController; steering: string[] } | undefined;
 let reportAgentActivity: (text: string) => void = () => undefined;
@@ -169,7 +192,7 @@ if (demo) {
     score,
     clock.beatAt(),
     "demo · press space to play",
-    ["> add C4 at 0 for 1"],
+    "add C4 at 0 for 1",
     0,
   );
   process.exit(0);
@@ -245,6 +268,7 @@ function snapshot(
     bpm: value.tempoBpm,
     key: value.key ?? undefined,
     loopBeats: value.bars * value.beatsPerBar,
+    beatsPerBar: value.beatsPerBar,
     laneCount: 24,
     currentBeat: beat,
     playing: clock.playing,
@@ -260,91 +284,115 @@ function renderOnce(
   value: TrackScore,
   transportBeat: number,
   activity?: string,
-  promptLines = ["> "],
+  draft = "",
   nowMs = Date.now(),
 ): void {
-  const width = Math.max(24, stdout.columns ?? 80);
-  prompt.setWidth(Math.max(12, width - 4));
-  const capabilities = detectTerminalCapabilities();
-  const rows = Math.max(6, (stdout.rows ?? 24) - promptLines.length - 4);
-  const highway = renderHighway(snapshot(value, transportBeat, activity), {
-    width,
-    height: rows,
-    clock: () => nowMs,
-    capabilities,
-  });
-  const promptFrame = renderPromptPanel(
-    promptLines,
-    width,
-    capabilities.colorDepth !== "none",
+  if (activity) tui.activity.pushCard(activity, { tone: "info" });
+  if (draft) tui.input({ type: "paste", text: draft });
+  const frame = composeFrame(
+    appView(value, transportBeat),
+    tui.ui,
+    { width: Math.max(24, stdout.columns ?? 80), height: 20 },
+    nowMs,
   );
-  stdout.write(`${highway}\n${promptFrame}\n`);
+  stdout.write(`${encodeBuffer(frame.buffer, tui.capabilities)}\n`);
 }
 
-function renderPromptPanel(
-  lines: readonly string[],
-  width: number,
-  color: boolean,
-): string {
-  const inner = Math.max(1, width - 2);
-  const bg = color ? `${ESC}48;2;27;32;42m${ESC}38;2;225;231;239m` : "";
-  const reset = color ? `${ESC}0m` : "";
-  const top = `╭─ prompt · enter send · shift-enter newline ${"─".repeat(Math.max(0, inner - 42))}╮`;
-  const bottom = `╰${"─".repeat(inner)}╯`;
-  const body = lines.map(
-    (line) =>
-      `│ ${line.slice(0, Math.max(0, inner - 2)).padEnd(Math.max(0, inner - 2))} │`,
-  );
-  return [top, ...body, bottom]
-    .map((line) => `${bg}${line.padEnd(width).slice(0, width)}${reset}`)
-    .join("\n");
+function appView(value: TrackScore, beat: number): AppView {
+  return {
+    score: snapshot(value, beat),
+    beat,
+    model: process.env.TRACK_AI === "1" ? selectedModel : undefined,
+    sync: syncState,
+  };
+}
+
+/** Show a command receipt in the activity strip with a tone and undo hint. */
+function receipt(message: string, baseRevision?: number): void {
+  const tone = receiptTone(message);
+  const changed =
+    baseRevision !== undefined && record.revision !== baseRevision;
+  if (tone === "error") tui.activity.pushError(message);
+  else
+    tui.activity.pushCard(message, {
+      tone,
+      baseRevision: changed ? baseRevision : undefined,
+      resultRevision: changed ? record.revision : undefined,
+      hint: changed
+        ? message.startsWith("undid")
+          ? "^y redo"
+          : "^z undo"
+        : undefined,
+      trackId: requestedTrack,
+    });
+}
+
+function truncateForCard(value: string): string {
+  const line = value.replace(/\s+/g, " ").trim();
+  return line.length > 32 ? `${line.slice(0, 31)}…` : line;
 }
 
 async function runInteractive(): Promise<void> {
   stdin.setRawMode?.(true);
   stdin.resume();
-  stdout.write(`${ESC}?25l${ESC}?2004h${ESC}2J`);
-  let activity = "ready";
+  // Alternate screen, hidden cursor, bracketed paste.
+  stdout.write(`${ESC}?1049h${ESC}?25l${ESC}?2004h${ESC}2J`);
   const inputDecoder = new TerminalInputDecoder();
   const queuedPrompts: string[] = [];
   let processingQueue = false;
+  const runPrompt = async (text: string): Promise<void> => {
+    const ui = tui.command(text);
+    if (ui !== undefined) {
+      tui.activity.pushCard(ui, { tone: "info" });
+      return;
+    }
+    tui.activity.pushRequest(text);
+    const base = record.revision;
+    try {
+      const message = await submit(text);
+      // Agent turns report through agentEventSink; skip a duplicate receipt.
+      if (!agentReported) receipt(message, base);
+    } catch (error) {
+      tui.activity.pushError(
+        `error · ${error instanceof Error ? error.message : String(error)}`,
+      );
+    } finally {
+      agentReported = false;
+    }
+  };
+  let agentReported = false;
   const drainQueue = async (): Promise<void> => {
     if (processingQueue) return;
     processingQueue = true;
     try {
       while (queuedPrompts.length > 0) {
         const nextPrompt = queuedPrompts.shift()!;
-        activity = `queued · ${queuedPrompts.length} remaining`;
-        activity = await submit(nextPrompt);
+        tui.activity.setQueueDepth(queuedPrompts.length);
+        await runPrompt(nextPrompt);
+        tick(true);
       }
     } finally {
       processingQueue = false;
+      tui.activity.setQueueDepth(queuedPrompts.length);
     }
   };
-  const tick = () => {
-    stdout.write(`${ESC}H`);
-    renderOnce(
-      score,
-      clock.beatAt(),
-      `${activity} · rev ${record.revision}`,
-      prompt.render("› "),
-    );
+  const tick = (force = false) => {
+    tui.render(appView(score, clock.beatAt()), { force });
   };
-  let streamed = "";
-  reportAgentActivity = (text) => {
-    activity = text;
+  reportAgentActivity = () => {
+    tui.activity.applyAgentEvent({ type: "start", model: selectedModel });
   };
   agentEventSink = (event) => {
-    if (event.type === "step") streamed = "";
-    if (event.type === "text-delta") {
-      streamed = (streamed + event.delta).replace(/\s+/g, " ").slice(-120);
-      activity = `… ${streamed.trim()}`;
-      return;
-    }
-    const line = describeAgentEvent(event);
-    if (line) activity = line;
+    tui.activity.applyAgentEvent(event);
+    if (event.type === "done" || event.type === "error") agentReported = true;
   };
-  const timer = setInterval(tick, 100);
+  // ~30 fps cap; the differential writer only emits changed rows.
+  const timer = setInterval(tick, tui.frameIntervalMs);
+  const onResize = () => {
+    tui.invalidate();
+    tick(true);
+  };
+  stdout.on("resize", onResize);
   let applying: Promise<void> = Promise.resolve();
   const applyLatest = (latest: typeof record): Promise<void> =>
     (applying = applying.then(() => applyRecord(latest)));
@@ -385,7 +433,11 @@ async function runInteractive(): Promise<void> {
           else if (payload.action === "pause") await setTransport("pause");
           else if (payload.action === "toggle") await setTransport("toggle");
         }
-        activity = `synced · rev ${record.revision}`;
+        tui.activity.pushCard("synced from another window", {
+          tone: "info",
+          baseRevision: previousRevision,
+          resultRevision: record.revision,
+        });
       }
     } catch {
       // An invalid composition is skipped; the next update retries.
@@ -398,26 +450,38 @@ async function runInteractive(): Promise<void> {
       const { playing, beat, bpm, atMs } = update.transport;
       clock.setTempo(bpm);
       clock.sync(beat, playing, atMs, monotonicEpochMs());
-    } else if (update.type === "status") activity = update.message;
+    } else if (update.type === "status") {
+      syncState = /unavailable|disconnect|lost|offline|reconnect/i.test(
+        update.message,
+      )
+        ? "offline"
+        : port.mode === "daemon"
+          ? "synced"
+          : "local";
+      tui.activity.pushCard(update.message, {
+        tone: syncState === "offline" ? "warning" : "info",
+      });
+    }
   });
-  if (port.status !== "file session") activity = port.status;
-  tick();
+  if (port.status !== "file session")
+    tui.activity.pushCard(port.status, { tone: "info" });
+  tick(true);
   try {
     let exiting = false;
     for await (const chunk of stdin) {
-      const values = inputDecoder.push(String(chunk));
+      const text = String(chunk);
+      // A read that is exactly ESC is the Esc key, not the start of a sequence.
+      const values = [
+        ...inputDecoder.push(text),
+        ...(text === "\u001b" ? inputDecoder.flush() : []),
+      ];
       for (const value of values) {
-        const terminalValue = typeof value === "string" ? value : undefined;
         // The prompt is always focused, so ordinary `q` must remain typeable in
         // requests (for example, "quiet hi-hat"). Ctrl-C is the unambiguous
         // shell exit key; Ctrl-Q is reserved for prompt mode switching.
-        if (terminalValue === "\u0003") {
-          exiting = true;
-          break;
-        }
         // Keep the empty-prompt space shortcut for transport, while allowing
         // ordinary spaces once a request is being composed.
-        if (terminalValue === " " && prompt.value.length === 0) {
+        if (value === " " && prompt.value.length === 0) {
           await setTransport("toggle");
           try {
             record = await port.append(
@@ -434,77 +498,62 @@ async function runInteractive(): Promise<void> {
             );
           } catch (error) {
             if (error instanceof SessionConflictError)
-              activity = "transport changed in another window";
+              tui.activity.pushCard("transport changed in another window", {
+                tone: "warning",
+              });
             else throw error;
           }
-          activity = clock.playing ? "playing" : "paused";
         } else {
-          const action =
-            typeof value === "string"
-              ? handleTerminalInput(value)
-              : prompt.handle({ type: "paste", text: value.text });
-          if (action?.kind === "exit") {
-            exiting = true;
-            break;
-          }
-          if (action?.kind === "cancel" && agentTurn) {
+          const input = tui.input(value);
+          const action = input.type === "action" ? input.action : undefined;
+          if (input.type === "ui") {
+            if (input.command === "quit") exiting = true;
+            else if (
+              (input.command === "undo" || input.command === "redo") &&
+              !agentTurn
+            ) {
+              const base = record.revision;
+              receipt(await stepHistory(input.command), base);
+            }
+          } else if (action?.kind === "exit") exiting = true;
+          else if (action?.kind === "cancel" && agentTurn) {
             agentTurn.controller.abort();
-            activity = "cancelling…";
+            tui.activity.setSpinner("cancelling");
           } else if (action?.kind === "submit" && action.value && agentTurn) {
             // Enter during a turn steers it; Alt-Enter still queues a follow-up.
             agentTurn.steering.push(action.value);
-            activity = "steering · applied at the next step";
+            tui.activity.pushCard(
+              `steering · ${truncateForCard(action.value)}`,
+              { tone: "agent", hint: "next step" },
+            );
           } else if (action?.kind === "submit" && action.value) {
             queuedPrompts.unshift(action.value);
             // Do not await: the input loop must stay live so Esc can cancel.
             void drainQueue();
           } else if (action?.kind === "queue" && action.value) {
             queuedPrompts.push(action.value);
-            activity = `queued · ${queuedPrompts.length}`;
+            tui.activity.setQueueDepth(queuedPrompts.length);
+            tui.activity.pushCard(`queued · ${truncateForCard(action.value)}`, {
+              tone: "info",
+            });
             void drainQueue();
           }
         }
-        tick();
+        if (exiting) break;
+        tick(true);
       }
       if (exiting) break;
     }
   } finally {
     clearInterval(timer);
+    stdout.off("resize", onResize);
     unsubscribe();
     audio.stop();
     await port.close();
     stdin.setRawMode?.(false);
     stdin.pause();
-    stdout.write(`${ESC}?25h${ESC}?2004l${ESC}0m\n`);
+    stdout.write(`${ESC}0m${ESC}?2004l${ESC}?25h${ESC}?1049l`);
   }
-}
-
-function handleTerminalInput(value: string): PromptAction | undefined {
-  if (value === "\u001b[13;2u" || value === "\u001b[27;2;13~")
-    return prompt.handle("SHIFT+ENTER");
-  if (value === "\u001b\r") return prompt.handle("ALT+ENTER");
-  if (value.startsWith("\u001b[200~") && value.endsWith("\u001b[201~")) {
-    return prompt.handle({ type: "paste", text: value.slice(6, -6) });
-  }
-  if (value === "\u0011") return prompt.handle("CTRL+Q");
-  if (value === "\u007f") return prompt.handle("BACKSPACE");
-  if (value === "\r" || value === "\n") return prompt.handle("ENTER");
-  if (value === "\u001b[A") return prompt.handle("UP");
-  if (value === "\u001b[B") return prompt.handle("DOWN");
-  if (value === "\u001b[C") return prompt.handle("RIGHT");
-  if (value === "\u001b[D") return prompt.handle("LEFT");
-  if (value === "\u001b[H" || value === "\u001b[1~")
-    return prompt.handle("HOME");
-  if (value === "\u001b[F" || value === "\u001b[4~")
-    return prompt.handle("END");
-  if (value === "\u001b[3~") return prompt.handle("DELETE");
-  if (value === "\u001b[1;5D") return prompt.handle("CTRL+LEFT");
-  if (value === "\u001b[1;5C") return prompt.handle("CTRL+RIGHT");
-  if (value === "\u001b") return prompt.handle("ESC");
-  if (value.startsWith("\u001b")) return undefined;
-  let action: PromptAction | undefined;
-  for (const character of Array.from(value)) action = prompt.handle(character);
-  return action;
 }
 
 async function submit(prompt: string): Promise<string> {

@@ -49,6 +49,10 @@ export class TerminalInputDecoder {
   private readEscapeSequence(): string | undefined {
     if (this.buffer.length === 1) return undefined;
     if (this.buffer.startsWith("\u001b\r")) return "\u001b\r";
+    // ESC followed by another control key (or ESC) is a lone Esc press that
+    // shared a read with the next key, e.g. Esc then Ctrl+Z.
+    const next = this.buffer.charCodeAt(1);
+    if (next < 0x20 || next === 0x7f) return "\u001b";
     const final = this.buffer.match(/^\u001b\[[\x20-?]*[\x40-~]/)?.[0];
     if (final !== undefined) return final;
     // An unrecognised Alt-prefixed character is still one complete event.

@@ -27,3 +27,10 @@ describe("TerminalInputDecoder", () => {
     expect(decoder.flush()).toEqual(["\u001b"]);
   });
 });
+
+test("Esc sharing a read with a control key stays a separate Esc", () => {
+  const decoder = new TerminalInputDecoder();
+  expect(decoder.push("\u001b\u001a")).toEqual(["\u001b", "\u001a"]);
+  expect(decoder.push("\u001b")).toEqual([]);
+  expect(decoder.flush()).toEqual(["\u001b"]);
+});
