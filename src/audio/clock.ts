@@ -31,6 +31,28 @@ export class TransportClock {
     return this.startedAtMs !== undefined;
   }
 
+  /** Converge to a timestamped transport event from another TUI process. */
+  sync(
+    beat: number,
+    playing: boolean,
+    eventAtMs = Date.now(),
+    nowWallMs = Date.now(),
+    nowMonotonicMs = performance.now(),
+  ): void {
+    if (!Number.isFinite(beat) || beat < 0) return;
+    if (!Number.isFinite(eventAtMs) || !Number.isFinite(nowWallMs)) return;
+    const elapsed = playing
+      ? Math.max(0, nowWallMs - eventAtMs) / this.beatToMs(1)
+      : 0;
+    const currentBeat = beat + elapsed;
+    if (playing) {
+      this.startedAtMs = nowMonotonicMs - this.beatToMs(currentBeat);
+    } else {
+      this.pausedBeat = currentBeat;
+      this.startedAtMs = undefined;
+    }
+  }
+
   private beatToMs(beats: number): number {
     return (beats * 60_000) / this.bpm;
   }
