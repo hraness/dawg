@@ -18,16 +18,19 @@ import { drumSnapshotFields } from "../tui/drums.ts";
 import { isDrumInstrument } from "../core/drums.ts";
 import {
   describeAgentEvent,
-  runAgentTurn,
   StaleRevisionError,
   type AgentEvent,
   type AgentHost,
 } from "./agent/agent.ts";
+import { type GatewayModel } from "./agent/gateway.ts";
 import {
-  createGatewayClient,
-  type GatewayClient,
-  type GatewayModel,
-} from "./agent/gateway.ts";
+  providerLabel,
+  runProviderTurn,
+  selectProvider,
+  type ProviderSelection,
+} from "./agent/provider.ts";
+import { runAuthCommand } from "./auth/cli.ts";
+import { tuiAuthCommand } from "./auth/tui.ts";
 import { TransportClock } from "./audio/clock.ts";
 import {
   addNote,
@@ -77,14 +80,21 @@ Commands:
   track <name>, bars <count>, extend <count> bars
   /tracks, /export <file>, /import <file>, /model opus-5.5|sol-6.1
   /log, /theme default|high-contrast|mono, /motion on|off
+  /login [--xcb], /logout, /auth [--check]
 
-AI is opt-in with TRACK_AI=1 and a local AI_GATEWAY_API_KEY.`;
+Auth:
+  track login [--gateway|--key|--xcb] [--budget <dollars>]
+  track logout · track auth status [--check]
+Unrecognized requests go to the agent once a provider is configured
+(TRACK_PROVIDER=gateway|xcb|auto; TRACK_AI=0 disables the agent).`;
 const args = new Set(process.argv.slice(2));
 const requestedSession = optionValue("--session");
 const requestedTrack = optionValue("--track") ?? "main";
 const initialInstrument = isDrumInstrument(requestedTrack) ? "kit" : "sine";
 const importPath = optionValue("--import");
 const exportPath = optionValue("--export");
+if (["login", "logout", "auth"].includes(process.argv[2] ?? ""))
+  process.exit(await runAuthCommand(process.argv.slice(2)));
 if (args.has("--help") || args.has("-h")) {
   stdout.write(`${HELP_TEXT}\n`);
   process.exit(0);
@@ -183,7 +193,9 @@ let agentTurn: { controller: AbortController; steering: string[] } | undefined;
 let reportAgentActivity: (text: string) => void = () => undefined;
 // Declared before `await runInteractive()` runs, or assigning it is a TDZ error.
 let agentEventSink: (event: AgentEvent) => void = () => undefined;
-let gatewayClient: GatewayClient | undefined;
+/** Resolved lazily (and again after /login); `undefined` until first needed. */
+let provider: Promise<ProviderSelection> | undefined;
+let providerName = "";
 if (demo) {
   if (score.notes.length === 0) score = seedDemo(score, requestedTrack);
   if (exportPath)
@@ -302,7 +314,9 @@ function appView(value: TrackScore, beat: number): AppView {
   return {
     score: snapshot(value, beat),
     beat,
-    model: process.env.TRACK_AI === "1" ? selectedModel : undefined,
+    // `opus-5.5 · gateway`, `claude/sonnet · xcb`; hidden when offline.
+    model:
+      providerName && providerName !== "offline" ? providerName : undefined,
     sync: syncState,
   };
 }
@@ -380,7 +394,7 @@ async function runInteractive(): Promise<void> {
     tui.render(appView(score, clock.beatAt()), { force });
   };
   reportAgentActivity = () => {
-    tui.activity.applyAgentEvent({ type: "start", model: selectedModel });
+    tui.activity.applyAgentEvent({ type: "start", model: providerName });
   };
   agentEventSink = (event) => {
     tui.activity.applyAgentEvent(event);
@@ -465,6 +479,7 @@ async function runInteractive(): Promise<void> {
   });
   if (port.status !== "file session")
     tui.activity.pushCard(port.status, { tone: "info" });
+  void currentProvider().then(() => tick(true));
   tick(true);
   try {
     let exiting = false;
@@ -593,11 +608,25 @@ async function submit(prompt: string): Promise<string> {
   const modelCommand = prompt.trim().match(/^\/model\s+(opus-5\.5|sol-6\.1)$/i);
   if (modelCommand) {
     selectedModel = modelCommand[1]!.toLowerCase() as GatewayModel;
+    if (provider) void currentProvider();
     return `model · ${selectedModel}`;
+  }
+  if (/^\/(login|logout|auth)\b/i.test(prompt.trim())) {
+    tui.activity.setSpinner(prompt.trim().split(/\s+/)[0]!.slice(1));
+    try {
+      const lines = await tuiAuthCommand(prompt.trim(), selectedModel);
+      provider = undefined;
+      await currentProvider();
+      for (const line of lines.slice(0, -1))
+        tui.activity.pushCard(line, { tone: authTone(line) });
+      return lines.at(-1) ?? "auth · done";
+    } finally {
+      tui.activity.setSpinner(undefined);
+    }
   }
   const parsed = parsePrompt(prompt);
   if (!parsed) {
-    if (process.env.TRACK_AI !== "1") return `unrecognized request: ${prompt}`;
+    if (process.env.TRACK_AI === "0") return `unrecognized request: ${prompt}`;
     return runAgent(prompt);
   }
   if (parsed.type === "transport") {
@@ -860,15 +889,17 @@ async function setTransport(
  */
 async function runAgent(text: string): Promise<string> {
   if (agentTurn) return "agent busy";
-  gatewayClient ??= createGatewayClient();
+  const selection = await currentProvider();
+  if (selection.kind === "offline")
+    return `unrecognized request · ${selection.reason}`;
   const turn = { controller: new AbortController(), steering: [] as string[] };
   agentTurn = turn;
-  reportAgentActivity(`${selectedModel} · thinking…`);
+  reportAgentActivity(`${providerName} · thinking…`);
   try {
-    const result = await runAgentTurn({
+    const result = await runProviderTurn({
+      selection,
       prompt: text,
       model: selectedModel,
-      client: gatewayClient,
       host: agentHost(turn),
       signal: turn.controller.signal,
       onEvent: (event) => agentEventSink(event),
@@ -877,6 +908,24 @@ async function runAgent(text: string): Promise<string> {
   } finally {
     if (agentTurn === turn) agentTurn = undefined;
   }
+}
+
+function authTone(line: string): "success" | "warning" | "info" {
+  if (line.startsWith("✓")) return "success";
+  if (/^(✗|\?)|not |no |could not|failed/i.test(line)) return "warning";
+  return "info";
+}
+
+function currentProvider(): Promise<ProviderSelection> {
+  provider ??= selectProvider().catch((): ProviderSelection => ({
+    kind: "offline",
+    choice: "auto",
+    reason: "provider unavailable; run `track login`",
+  }));
+  return provider.then((selection) => {
+    providerName = providerLabel(selection, selectedModel);
+    return selection;
+  });
 }
 
 function agentHost(turn: { steering: string[] }): AgentHost {
