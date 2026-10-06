@@ -26,6 +26,9 @@ describe("composition planner", () => {
     });
     expect(plan.operations).toEqual([]);
     expect(calls).toHaveLength(1);
+    const request = calls[0] as { messages: Array<{ content: string }> };
+    expect(request.messages[0]?.content).toContain("Available instruments:");
+    expect(request.messages[1]?.content).toContain('"tracks"');
   });
 
   test("accepts bounded score control operations", () => {

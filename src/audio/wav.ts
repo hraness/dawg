@@ -2,6 +2,17 @@ import type { TrackScore } from "../../core/score.ts";
 
 export type WavOptions = Readonly<{ sampleRate?: number; maxSeconds?: number }>;
 
+/** Names understood by the deterministic local voice bank and the agent. */
+export const AVAILABLE_INSTRUMENTS = Object.freeze([
+  "sine",
+  "piano",
+  "pluck",
+  "bass",
+  "saw",
+  "square",
+  "triangle",
+] as const);
+
 /** Render the bounded score to a mono 16-bit PCM WAV for local playback. */
 export function renderScoreWav(
   score: TrackScore,
