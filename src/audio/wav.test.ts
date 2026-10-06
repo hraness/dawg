@@ -56,4 +56,43 @@ describe("score WAV renderer", () => {
       pcm(renderScoreWav(muted, { sampleRate: 8_000, maxSeconds: 2 })),
     ).toBe(0);
   });
+
+  test("renders piecewise-linear volume automation", () => {
+    const steady = createScore({
+      ticksPerBeat: 480,
+      tracks: [{ id: "main", volume: 1 }],
+      notes: [
+        {
+          id: "a",
+          trackId: "main",
+          start: 0,
+          durationTicks: 960,
+          pitch: 60,
+          velocity: 1,
+        },
+      ],
+    });
+    const fading = steady.withTracks([
+      {
+        id: "main",
+        volume: 1,
+        volumeAutomation: [
+          { tick: 0, value: 1 },
+          { tick: 960, value: 0 },
+        ],
+      },
+    ]);
+    const pcm = (wav: Uint8Array) => {
+      const view = new DataView(wav.buffer, wav.byteOffset, wav.byteLength);
+      let energy = 0;
+      for (let offset = 44; offset + 1 < wav.byteLength; offset += 2)
+        energy += Math.abs(view.getInt16(offset, true));
+      return energy;
+    };
+    expect(
+      pcm(renderScoreWav(fading, { sampleRate: 8_000, maxSeconds: 2 })),
+    ).toBeLessThan(
+      pcm(renderScoreWav(steady, { sampleRate: 8_000, maxSeconds: 2 })),
+    );
+  });
 });

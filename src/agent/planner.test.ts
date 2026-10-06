@@ -42,10 +42,22 @@ describe("composition planner", () => {
             patch: { instrument: "piano", volume: 0.8 },
           },
           { type: "clearTrack", trackId: "main" },
+          {
+            type: "setAutomation",
+            trackId: "main",
+            parameter: "volume",
+            points: [{ tick: 0, value: 0.25 }],
+          },
         ],
       }),
     );
-    expect(plan.operations).toHaveLength(3);
+    expect(plan.operations).toHaveLength(4);
     expect(plan.operations[0]).toEqual({ type: "setTempo", tempoBpm: 128 });
+    expect(plan.operations[3]).toEqual({
+      type: "setAutomation",
+      trackId: "main",
+      parameter: "volume",
+      points: [{ tick: 0, value: 0.25 }],
+    });
   });
 });

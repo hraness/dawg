@@ -31,13 +31,34 @@ import {
   type TrackScoreSnapshot,
 } from "../tui/render.ts";
 import { PromptModel, type PromptAction } from "../tui/prompt.ts";
+import { TerminalInputDecoder } from "../tui/input.ts";
 
 const ESC = "\u001b[";
+const HELP_TEXT = `track · local-first terminal music workstation
+
+Usage:
+  track [--new] [--session <id>] [--track <name>]
+  track --import <file> --export <file>
+
+Prompt:
+  Enter submit · Shift-Enter newline · Alt-Enter queue · Ctrl-Q toggle queue
+  Space on an empty prompt toggles playback · Ctrl-C exits
+
+Commands:
+  play, pause, tempo <bpm>, instrument <name>, volume <0..1>, pan <-1..1>
+  automate volume at <beat> <0..1>, clear automation, mute, clear, undo
+  /tracks, /export <file>, /import <file>, /model opus-5.5|sol-6.1
+
+AI is opt-in with TRACK_AI=1 and a local AI_GATEWAY_API_KEY.`;
 const args = new Set(process.argv.slice(2));
 const requestedSession = optionValue("--session");
 const requestedTrack = optionValue("--track") ?? "main";
 const importPath = optionValue("--import");
 const exportPath = optionValue("--export");
+if (args.has("--help") || args.has("-h")) {
+  stdout.write(`${HELP_TEXT}\n`);
+  process.exit(0);
+}
 const demo =
   args.has("--demo") || process.env.TRACK_DEMO === "1" || !stdin.isTTY;
 
@@ -105,9 +126,13 @@ if (demo) {
   if (score.notes.length === 0) score = seedDemo(score, requestedTrack);
   if (exportPath)
     await writeFile(resolve(exportPath), encodeLoop(score), "utf8");
-  renderOnce(score, clock.beatAt(), "demo · press space to play", [
-    "> add C4 at 0 for 1",
-  ]);
+  renderOnce(
+    score,
+    clock.beatAt(),
+    "demo · press space to play",
+    ["> add C4 at 0 for 1"],
+    0,
+  );
   process.exit(0);
 }
 
@@ -192,6 +217,7 @@ function renderOnce(
   transportBeat: number,
   activity?: string,
   promptLines = ["> "],
+  nowMs = Date.now(),
 ): void {
   const width = Math.max(24, stdout.columns ?? 80);
   prompt.setWidth(Math.max(12, width - 4));
@@ -200,7 +226,7 @@ function renderOnce(
   const highway = renderHighway(snapshot(value, transportBeat, activity), {
     width,
     height: rows,
-    clock: () => 0,
+    clock: () => nowMs,
     capabilities,
   });
   const promptFrame = renderPromptPanel(
@@ -236,6 +262,7 @@ async function runInteractive(): Promise<void> {
   stdout.write(`${ESC}?25l${ESC}?2004h${ESC}2J`);
   let activity = "ready";
   let syncing = false;
+  const inputDecoder = new TerminalInputDecoder();
   const queuedPrompts: string[] = [];
   let processingQueue = false;
   const drainQueue = async (): Promise<void> => {
@@ -313,49 +340,63 @@ async function runInteractive(): Promise<void> {
   }, 200);
   tick();
   try {
+    let exiting = false;
     for await (const chunk of stdin) {
-      const value = String(chunk);
-      // The prompt is always focused, so ordinary `q` must remain typeable in
-      // requests (for example, "quiet hi-hat"). Ctrl-C is the unambiguous
-      // shell exit key; Ctrl-Q is reserved for prompt mode switching.
-      if (value === "\u0003") break;
-      // Keep the empty-prompt space shortcut for transport, while allowing
-      // ordinary spaces once a request is being composed.
-      if (value === " " && prompt.value.length === 0) {
-        await setTransport("toggle");
-        try {
-          record = await appendSessionEvent(
-            session.paths,
-            record,
-            {
-              kind: "transport",
-              payload: {
-                action: "toggle",
-                playing: clock.playing,
-                beat: clock.beatAt(),
+      const values = inputDecoder.push(String(chunk));
+      for (const value of values) {
+        const terminalValue = typeof value === "string" ? value : undefined;
+        // The prompt is always focused, so ordinary `q` must remain typeable in
+        // requests (for example, "quiet hi-hat"). Ctrl-C is the unambiguous
+        // shell exit key; Ctrl-Q is reserved for prompt mode switching.
+        if (terminalValue === "\u0003") {
+          exiting = true;
+          break;
+        }
+        // Keep the empty-prompt space shortcut for transport, while allowing
+        // ordinary spaces once a request is being composed.
+        if (terminalValue === " " && prompt.value.length === 0) {
+          await setTransport("toggle");
+          try {
+            record = await appendSessionEvent(
+              session.paths,
+              record,
+              {
+                kind: "transport",
+                payload: {
+                  action: "toggle",
+                  playing: clock.playing,
+                  beat: clock.beatAt(),
+                },
               },
-            },
-            score.toJSON(),
-          );
-        } catch (error) {
-          if (error instanceof SessionConflictError)
-            activity = "transport changed in another window";
-          else throw error;
+              score.toJSON(),
+            );
+          } catch (error) {
+            if (error instanceof SessionConflictError)
+              activity = "transport changed in another window";
+            else throw error;
+          }
+          activity = clock.playing ? "playing" : "paused";
+        } else {
+          const action =
+            typeof value === "string"
+              ? handleTerminalInput(value)
+              : prompt.handle({ type: "paste", text: value.text });
+          if (action?.kind === "exit") {
+            exiting = true;
+            break;
+          }
+          if (action?.kind === "submit" && action.value) {
+            queuedPrompts.unshift(action.value);
+            await drainQueue();
+          } else if (action?.kind === "queue" && action.value) {
+            queuedPrompts.push(action.value);
+            activity = `queued · ${queuedPrompts.length}`;
+            void drainQueue();
+          }
         }
-        activity = clock.playing ? "playing" : "paused";
-      } else {
-        const action = handleTerminalInput(value);
-        if (action?.kind === "exit") break;
-        if (action?.kind === "submit" && action.value) {
-          queuedPrompts.unshift(action.value);
-          await drainQueue();
-        } else if (action?.kind === "queue" && action.value) {
-          queuedPrompts.push(action.value);
-          activity = `queued · ${queuedPrompts.length}`;
-          void drainQueue();
-        }
+        tick();
       }
-      tick();
+      if (exiting) break;
     }
   } finally {
     clearInterval(timer);
@@ -381,6 +422,13 @@ function handleTerminalInput(value: string): PromptAction | undefined {
   if (value === "\u001b[B") return prompt.handle("DOWN");
   if (value === "\u001b[C") return prompt.handle("RIGHT");
   if (value === "\u001b[D") return prompt.handle("LEFT");
+  if (value === "\u001b[H" || value === "\u001b[1~")
+    return prompt.handle("HOME");
+  if (value === "\u001b[F" || value === "\u001b[4~")
+    return prompt.handle("END");
+  if (value === "\u001b[3~") return prompt.handle("DELETE");
+  if (value === "\u001b[1;5D") return prompt.handle("CTRL+LEFT");
+  if (value === "\u001b[1;5C") return prompt.handle("CTRL+RIGHT");
   if (value === "\u001b") return prompt.handle("ESC");
   if (value.startsWith("\u001b")) return undefined;
   let action: PromptAction | undefined;
@@ -391,7 +439,7 @@ function handleTerminalInput(value: string): PromptAction | undefined {
 async function submit(prompt: string): Promise<string> {
   const command = prompt.trim();
   if (/^\/?help$|^\/?\?$/.test(command.toLowerCase()))
-    return "commands · play pause tempo <bpm> instrument <name> volume <0..1> pan <-1..1> mute clear undo export <file> import <file>";
+    return "commands · play pause tempo <bpm> instrument <name> volume <0..1> pan <-1..1> automate volume at <beat> <0..1> clear automation mute clear undo export <file> import <file>";
   if (/^\/?tracks?$/i.test(command))
     return score.tracks
       .map(
@@ -479,6 +527,35 @@ async function submit(prompt: string): Promise<string> {
       patch: parsed.patch,
     });
     return `track · ${requestedTrack}`;
+  }
+  if (parsed.type === "automation") {
+    const points = parsed.points.map((point) => ({
+      tick: Math.max(0, Math.round(point.beat * score.ticksPerBeat)),
+      value: point.value,
+    }));
+    const current =
+      score.tracks.find((track) => track.id === requestedTrack)
+        ?.volumeAutomation ?? [];
+    const merged =
+      points.length === 0
+        ? []
+        : Array.from(
+            new Map(
+              [...current, ...points].map((point) => [point.tick, point]),
+            ).values(),
+          ).sort((left, right) => left.tick - right.tick);
+    const next = applyScoreOperation(score, {
+      type: "setAutomation",
+      trackId: requestedTrack,
+      parameter: "volume",
+      points: merged,
+    });
+    await commitScore(next, "score.automation", {
+      trackId: requestedTrack,
+      parameter: "volume",
+      points: merged,
+    });
+    return `automation · volume ${merged.length} point${merged.length === 1 ? "" : "s"}`;
   }
   if (parsed.type === "clear-track") {
     const next = applyScoreOperation(score, {

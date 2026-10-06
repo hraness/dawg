@@ -29,6 +29,9 @@ tempo 128
 instrument piano
 volume 0.7
 pan -0.4
+automate volume at 0 0.2
+automate volume at 4 1
+clear automation
 mute
 clear
 undo

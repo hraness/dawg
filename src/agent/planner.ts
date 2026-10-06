@@ -1,4 +1,8 @@
-import type { TrackScore, ScoreOperation } from "../../core/score.ts";
+import {
+  SCORE_LIMITS,
+  type TrackScore,
+  type ScoreOperation,
+} from "../../core/score.ts";
 import {
   createGatewayClient,
   type GatewayClient,
@@ -58,7 +62,7 @@ export async function planComposition(options: {
       messages: [
         {
           role: "system",
-          content: `You edit a local loop. Return JSON only. Operations may be addNote, removeNote, updateNote, setTempo, updateTrack, or clearTrack. Example: {"operations":[{"type":"addNote","note":{"id":"short unique id","trackId":"track","start":0,"duration":1,"pitch":60,"velocity":0.8}}],"explanation":"brief"}. Use beats for note start/duration. Available instruments: ${AVAILABLE_INSTRUMENTS.join(", ")}. Keep changes inside the requested track unless the user asks otherwise. Never return prose outside JSON.`,
+          content: `You edit a local loop. Return JSON only. Operations may be addNote, removeNote, updateNote, setTempo, updateTrack, setAutomation, or clearTrack. Example: {"operations":[{"type":"addNote","note":{"id":"short unique id","trackId":"track","start":0,"duration":1,"pitch":60,"velocity":0.8}}],"explanation":"brief"}. Use beats for note start/duration. For volume automation, use setAutomation with parameter "volume" and integer tick points like {"tick":0,"value":0.2}. Available instruments: ${AVAILABLE_INSTRUMENTS.join(", ")}. Keep changes inside the requested track unless the user asks otherwise. Never return prose outside JSON.`,
         },
         {
           role: "user",
@@ -116,6 +120,38 @@ function parseOperation(value: unknown): ScoreOperation {
     if (typeof patch.pan === "number" && Number.isFinite(patch.pan))
       safe.pan = patch.pan;
     return { type: "updateTrack", trackId: value.trackId, patch: safe };
+  }
+  if (
+    value.type === "setAutomation" &&
+    typeof value.trackId === "string" &&
+    value.trackId.length <= SCORE_LIMITS.maxIdLength &&
+    value.parameter === "volume" &&
+    Array.isArray(value.points) &&
+    value.points.length <= SCORE_LIMITS.maxAutomationPoints
+  ) {
+    const points = value.points.map((candidate) => {
+      if (!isRecord(candidate))
+        throw new Error("agent automation point is malformed");
+      if (
+        typeof candidate.tick !== "number" ||
+        !Number.isInteger(candidate.tick) ||
+        candidate.tick < 0 ||
+        candidate.tick > SCORE_LIMITS.maxTick ||
+        typeof candidate.value !== "number" ||
+        !Number.isFinite(candidate.value) ||
+        candidate.value < 0 ||
+        candidate.value > SCORE_LIMITS.maxVolume
+      ) {
+        throw new Error("agent automation point is invalid");
+      }
+      return { tick: candidate.tick, value: candidate.value };
+    });
+    return {
+      type: "setAutomation",
+      trackId: value.trackId,
+      parameter: "volume",
+      points,
+    };
   }
   if (
     value.type === "updateNote" &&

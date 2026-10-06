@@ -1,4 +1,4 @@
-import type { TrackScore } from "../../core/score.ts";
+import type { AutomationPoint, TrackScore } from "../../core/score.ts";
 
 export type WavOptions = Readonly<{ sampleRate?: number; maxSeconds?: number }>;
 
@@ -35,6 +35,7 @@ export function renderScoreWav(
     if (track?.muted) continue;
     const instrument = track?.instrument ?? "sine";
     const trackGain = Math.max(0, Math.min(1, track?.volume ?? 1));
+    const volumeAutomation = track?.volumeAutomation ?? [];
     // Mono output cannot place a voice in a stereo field, but pan still
     // behaves predictably as a small center-compensation gain. This keeps
     // exported loops stable while making the control audible in the mix.
@@ -54,17 +55,25 @@ export function renderScoreWav(
       ),
     );
     const end = Math.min(samples, start + length);
+    const samplesPerTick =
+      (sampleRate * 60) / (score.tempoBpm * score.ticksPerBeat);
     const frequency = 440 * 2 ** ((note.pitch - 69) / 12);
     for (let index = start; index < end; index += 1) {
       const elapsed = index - start;
       const remaining = end - index;
       const attack = Math.min(1, elapsed / Math.max(1, sampleRate * 0.012));
       const release = Math.min(1, remaining / Math.max(1, sampleRate * 0.09));
+      const automatedGain = interpolateAutomation(
+        volumeAutomation,
+        note.startTick + elapsed / samplesPerTick,
+        1,
+      );
       const envelope =
         Math.min(attack, release) *
         Math.max(0, Math.min(1, note.velocity)) *
         0.28 *
         trackGain *
+        automatedGain *
         panGain;
       const phase = (frequency * elapsed) / sampleRate;
       const sample =
@@ -73,6 +82,28 @@ export function renderScoreWav(
     }
   }
   return encodeWav(pcm, sampleRate);
+}
+
+/** Resolve a piecewise-linear automation lane, holding the static value before its first point. */
+function interpolateAutomation(
+  points: readonly AutomationPoint[],
+  tick: number,
+  fallback: number,
+): number {
+  if (points.length === 0 || !Number.isFinite(tick)) return fallback;
+  const first = points[0]!;
+  if (tick < first.tick) return fallback;
+  const last = points[points.length - 1]!;
+  if (tick >= last.tick) return last.value;
+  for (let index = 1; index < points.length; index += 1) {
+    const right = points[index]!;
+    if (tick > right.tick) continue;
+    const left = points[index - 1]!;
+    const span = right.tick - left.tick;
+    const ratio = span <= 0 ? 1 : (tick - left.tick) / span;
+    return left.value + (right.value - left.value) * ratio;
+  }
+  return last.value;
 }
 
 /** A tiny deterministic instrument bank. Names come from the score's track metadata. */
