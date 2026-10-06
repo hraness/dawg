@@ -1,0 +1,90 @@
+/**
+ * Minimal, bounded Server-Sent Events reader for streamed chat completions.
+ *
+ * It yields the `data:` payload of each event (multi-line data is joined with
+ * `\n`), skips comments and other fields, and stops at `[DONE]`. Every byte
+ * read counts against `maxBytes`, and an abort signal cancels the underlying
+ * reader even when the fetch implementation does not observe the signal.
+ */
+
+export class SseBudgetError extends Error {
+  constructor(readonly maxBytes: number) {
+    super(`agent response exceeded ${maxBytes} bytes`);
+    this.name = "SseBudgetError";
+  }
+}
+
+export async function* readSseData(
+  body: ReadableStream<Uint8Array>,
+  options: { maxBytes: number; signal?: AbortSignal },
+): AsyncGenerator<string> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let data: string[] = [];
+  let total = 0;
+  const signal = options.signal;
+  let onAbort: (() => void) | undefined;
+  const aborted =
+    signal === undefined
+      ? undefined
+      : new Promise<never>((_, reject) => {
+          onAbort = () => reject(abortReason(signal));
+          if (signal.aborted) onAbort();
+          else signal.addEventListener("abort", onAbort, { once: true });
+        });
+  // Avoid an unhandled rejection when the stream finishes before an abort.
+  aborted?.catch(() => undefined);
+  try {
+    while (true) {
+      const chunk = aborted
+        ? await Promise.race([reader.read(), aborted])
+        : await reader.read();
+      if (chunk.done) break;
+      total += chunk.value.byteLength;
+      if (total > options.maxBytes) throw new SseBudgetError(options.maxBytes);
+      buffer += decoder.decode(chunk.value, { stream: true });
+      let newline = buffer.search(/\r\n|\r|\n/);
+      while (newline >= 0) {
+        const line = buffer.slice(0, newline);
+        const width =
+          buffer[newline] === "\r" && buffer[newline + 1] === "\n" ? 2 : 1;
+        buffer = buffer.slice(newline + width);
+        if (line === "") {
+          if (data.length > 0) {
+            const payload = data.join("\n");
+            data = [];
+            if (payload === "[DONE]") return;
+            yield payload;
+          }
+        } else if (line.startsWith("data:")) {
+          data.push(line.slice(line[5] === " " ? 6 : 5));
+        }
+        newline = buffer.search(/\r\n|\r|\n/);
+      }
+    }
+    buffer += decoder.decode();
+    if (buffer.startsWith("data:"))
+      data.push(buffer.slice(buffer[5] === " " ? 6 : 5));
+    if (data.length > 0) {
+      const payload = data.join("\n");
+      if (payload !== "[DONE]") yield payload;
+    }
+  } finally {
+    if (signal && onAbort) signal.removeEventListener("abort", onAbort);
+    await reader.cancel().catch(() => undefined);
+    try {
+      reader.releaseLock();
+    } catch {
+      // A pending read is rejected by cancel(); the lock is already moot.
+    }
+  }
+}
+
+function abortReason(signal: AbortSignal): Error {
+  const reason: unknown = signal.reason;
+  if (reason instanceof Error) return reason;
+  const error = new Error("agent request was aborted");
+  error.name = "AbortError";
+  return error;
+}

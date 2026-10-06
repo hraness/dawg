@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createScore } from "../../core/score.ts";
-import { parseCompositionPlan, planComposition } from "./planner.ts";
+import { parseCompositionPlan, validateAgentOperation } from "./planner.ts";
 
 describe("composition planner", () => {
   test("accepts bounded fenced JSON and rejects prose", () => {
@@ -9,26 +8,6 @@ describe("composition planner", () => {
     );
     expect(plan.operations).toHaveLength(1);
     expect(() => parseCompositionPlan("make it funky")).toThrow("valid JSON");
-  });
-
-  test("sends score context through the gateway and parses its response", async () => {
-    const calls: unknown[] = [];
-    const plan = await planComposition({
-      prompt: "add a kick",
-      score: createScore({ tracks: [{ id: "main" }] }),
-      trackId: "main",
-      gateway: {
-        complete: (request) => {
-          calls.push(request);
-          return Promise.resolve(JSON.stringify({ operations: [] }));
-        },
-      },
-    });
-    expect(plan.operations).toEqual([]);
-    expect(calls).toHaveLength(1);
-    const request = calls[0] as { messages: Array<{ content: string }> };
-    expect(request.messages[0]?.content).toContain("Available instruments:");
-    expect(request.messages[1]?.content).toContain('"tracks"');
   });
 
   test("accepts bounded score control operations", () => {
@@ -97,5 +76,18 @@ describe("composition planner", () => {
         }),
       ),
     ).not.toThrow();
+  });
+});
+
+describe("agent operation validator", () => {
+  test("rejects unsupported and malformed operations", () => {
+    expect(() => validateAgentOperation({ type: "dropTable" })).toThrow(
+      "unsupported",
+    );
+    expect(() => validateAgentOperation(null)).toThrow("malformed");
+    expect(validateAgentOperation({ type: "setBars", bars: 4 })).toEqual({
+      type: "setBars",
+      bars: 4,
+    });
   });
 });

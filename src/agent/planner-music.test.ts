@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createScore } from "../../core/score.ts";
-import { parseCompositionPlan, planComposition } from "./planner.ts";
+import { parseCompositionPlan } from "./planner.ts";
+import { chatTools } from "./tools.ts";
 
 const plan = (operations: unknown[]) =>
   parseCompositionPlan(JSON.stringify({ operations }));
@@ -90,22 +91,11 @@ describe("planner music operations", () => {
       type: "addTrack",
       track: { instrument: "kit" },
     });
-    let system = "";
-    await planComposition({
-      prompt: "add a beat",
-      score: createScore({ tracks: [{ id: "main" }] }),
-      trackId: "main",
-      gateway: {
-        complete: (request) => {
-          system = request.messages[0]!.content;
-          return Promise.resolve('{"operations":[]}');
-        },
-      },
-    });
-    expect(system).toContain("kick=36");
-    expect(system).toContain("kit");
-    expect(system).toContain('"filter"');
-    expect(system).toContain("delay");
-    expect(system).toContain("solo");
+    const tools = JSON.stringify(chatTools());
+    expect(tools).toContain("kick");
+    expect(tools).toContain("kit");
+    expect(tools).toContain('"filter"');
+    expect(tools).toContain("delay");
+    expect(tools).toContain("solo");
   });
 });

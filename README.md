@@ -69,7 +69,9 @@ A track named `drums` (or `kit`) starts with the `kit` instrument; `instrument k
 
 Press Space on an empty prompt to toggle playback. Enter submits a request. Ctrl+Q switches to queue mode so prompts run in order; a normal submit steers ahead of queued work. Shift+Enter or Alt+Enter inserts a newline. Bracketed paste preserves multiline input. Ctrl+C exits.
 
-Set `TRACK_AI=1` to send unrecognized requests to the Vercel AI Gateway. Keep the key local in `AI_GATEWAY_API_KEY`. Choose the friendly model label with `TRACK_MODEL=opus-5.5` or `TRACK_MODEL=sol-6.1`, or switch it with `/model`. Map those labels to the model IDs available in your gateway account with `TRACK_OPUS_MODEL` and `TRACK_SOL_MODEL`.
+Set `TRACK_AI=1` to send unrecognized requests to a streaming, tool-calling agent on the Vercel AI Gateway. Keep the key local in `AI_GATEWAY_API_KEY`. Choose `TRACK_MODEL=opus-5.5` or `TRACK_MODEL=sol-6.1`, or switch with `/model`. By default these labels map to `anthropic/claude-opus-5.5` and `openai/gpt-6.1-sol` from the gateway catalog. Override them with `TRACK_OPUS_MODEL` and `TRACK_SOL_MODEL`. Other labels are rejected.
+
+The agent edits the score only through typed tools: `add_notes`, `add_drums`, `remove_notes`, `update_notes`, `set_instrument`, `set_mix` (with solo), `set_effects` (filter and delay), `set_automation` (volume, pan and filter), `extend_loop`, `set_tempo`, `create_track`, `transport` and `explain`. Each call is validated, then committed as its own revision, and the status line shows its result (for example `✓ +8 bass notes`). While the agent is working, Esc cancels and keeps every change accepted so far. Enter sends a steering message that the agent reads at its next step. A queued submit (Ctrl+Q queue mode) waits until the turn ends.
 
 Playback renders a short mono PCM WAV with deterministic sine, piano, pluck, bass, saw, square, and triangle voices plus a synthesized drum kit (pitch-swept sine kick, seeded-noise snare and hats), applies per-track volume, pan, low-pass filter, and delay, honors mute and solo, and uses `afplay` on macOS or `ffplay` elsewhere. Pan values run from -1 (left) to 1 (right); the current mono export uses centre compensation so automation remains audible and deterministic. Set `TRACK_AUDIO=0` for a headless session. `track --export file.track.json` and `track --import file.track.json` exchange the bounded `track.loop/v1` document. `TRACK_DEMO=1 bun run src/main.ts` prints a deterministic renderer frame for development.
 
@@ -77,7 +79,7 @@ Playback renders a short mono PCM WAV with deterministic sine, piano, pluck, bas
 
 - `core/` defines the bounded immutable `track.loop/v1` score and operations.
 - `src/session/` provides an append-only local event log, atomic snapshots, and cross-window writer conflict handling.
-- `src/agent/` validates operation plans and speaks the Vercel AI Gateway protocol.
+- `src/agent/` runs the bounded streaming tool-calling agent: the SSE gateway client, the tool registry, the composition brief, and operation validation.
 - `src/audio/` owns the transport clock, deterministic instrument-bank WAV rendering, and per-session playback lock.
 - `tui/` owns terminal capability detection, semantic colors, animation phases, piano-roll rendering, and the multiline prompt editor.
 

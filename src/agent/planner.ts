@@ -3,15 +3,8 @@ import {
   normalizeDelay,
   normalizeFilter,
   scoreFromJSON,
-  type TrackScore,
   type ScoreOperation,
 } from "../../core/score.ts";
-import {
-  createGatewayClient,
-  type GatewayClient,
-  type GatewayModel,
-} from "./gateway.ts";
-import { AVAILABLE_EFFECTS, AVAILABLE_INSTRUMENTS } from "../audio/wav.ts";
 import { DRUM_VOICES } from "../../core/drums.ts";
 
 const MAX_RESPONSE_BYTES = 64 * 1024;
@@ -50,37 +43,12 @@ export function parseCompositionPlan(text: string): CompositionPlan {
     : { operations, explanation };
 }
 
-export async function planComposition(options: {
-  prompt: string;
-  score: TrackScore;
-  trackId: string;
-  model?: GatewayModel;
-  gateway?: GatewayClient;
-  signal?: AbortSignal;
-}): Promise<CompositionPlan> {
-  const gateway = options.gateway ?? createGatewayClient();
-  const model = options.model ?? "sol-6.1";
-  const response = await gateway.complete(
-    {
-      model,
-      messages: [
-        {
-          role: "system",
-          content: `You edit a local loop. Return JSON only. Operations may be addTrack, addNote, removeNote, updateNote, setTempo, setBars, updateTrack, setAutomation, or clearTrack. Example: {"operations":[{"type":"addNote","note":{"id":"short unique id","trackId":"track","start":0,"duration":1,"pitch":60,"velocity":0.8}}],"explanation":"brief"}. Use beats for note start/duration. To create a track, use addTrack with a track object containing a unique id, name, and instrument, then add notes to that id. To resize or extend the loop, use setBars with the desired total bars (integer 1..256); this preserves notes and automation. For automation, use setAutomation with parameter "volume" (values 0..1), "pan" (values -1..1, left to right), or "filter" (low-pass cutoff Hz ${SCORE_LIMITS.minFilterCutoff}..${SCORE_LIMITS.maxFilterCutoff}), and integer tick points like {"tick":0,"value":0.2}. Automation replaces that parameter's lane; preserve any existing points you want to keep. Available instruments: ${AVAILABLE_INSTRUMENTS.join(", ")}. A track with instrument "kit" is a drum track: each note's pitch selects a drum voice (${drumVoiceGuide()}); use short durations. Effects are set with updateTrack patch fields: filter {"cutoff":hz,"resonance":0..1}, delay {"beats":${SCORE_LIMITS.minDelayBeats}..${SCORE_LIMITS.maxDelayBeats},"feedback":0..${SCORE_LIMITS.maxDelayFeedback},"mix":0..1}, null to remove; solo true|false isolates tracks in playback. Available effects: ${AVAILABLE_EFFECTS.join("; ")}. Keep changes inside the requested track unless the user asks otherwise. Never return prose outside JSON.`,
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            request: options.prompt,
-            trackId: options.trackId,
-            score: options.score.toJSON(),
-          }),
-        },
-      ],
-    },
-    options.signal,
-  );
-  return parseCompositionPlan(response);
+/**
+ * Validate one foreign operation against the bounded planner contract. Every
+ * tool call and legacy JSON plan passes through here before the reducer sees it.
+ */
+export function validateAgentOperation(value: unknown): ScoreOperation {
+  return parseOperation(value);
 }
 
 function parseOperation(value: unknown): ScoreOperation {
@@ -208,9 +176,11 @@ function parseOperation(value: unknown): ScoreOperation {
     ) {
       throw new Error("agent note is malformed");
     }
-    const start = typeof note.start === "number" ? note.start : note.startTick;
-    const duration =
-      typeof note.duration === "number" ? note.duration : note.durationTicks;
+    const ticks =
+      typeof note.startTick === "number" &&
+      typeof note.durationTicks === "number";
+    const start = ticks ? note.startTick : note.start;
+    const duration = ticks ? note.durationTicks : note.duration;
     if (typeof start !== "number" || typeof duration !== "number")
       throw new Error("agent note timing is malformed");
     if (
@@ -227,8 +197,9 @@ function parseOperation(value: unknown): ScoreOperation {
       note: {
         id: note.id.slice(0, 64),
         trackId: note.trackId.slice(0, 64),
-        start,
-        duration,
+        ...(ticks
+          ? { startTick: start, durationTicks: duration }
+          : { start, duration }),
         pitch: note.pitch,
         velocity: note.velocity,
       },
