@@ -1,0 +1,27 @@
+{
+  "name": "@hraness/track",
+  "version": "0.1.0",
+  "license": "MIT",
+  "repository": "https://github.com/hraness/track",
+  "description": "A local-first terminal music workstation with an agent-driven piano-roll interface.",
+  "type": "module",
+  "bin": {
+    "track": "./src/main.ts"
+  },
+  "scripts": {
+    "track": "bun run src/main.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "check": "bun test && bun run typecheck && bun run format",
+    "format": "prettier --check ."
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "bun-types": "1.3.14",
+    "prettier": "3.9.6",
+    "typescript": "6.0.3"
+  },
+  "engines": {
+    "bun": ">=1.3.14"
+  }
+}
