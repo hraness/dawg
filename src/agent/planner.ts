@@ -4,6 +4,7 @@ import {
   type GatewayClient,
   type GatewayModel,
 } from "./gateway.ts";
+import { AVAILABLE_INSTRUMENTS } from "../audio/wav.ts";
 
 const MAX_RESPONSE_BYTES = 64 * 1024;
 const MAX_OPERATIONS = 32;
@@ -57,8 +58,7 @@ export async function planComposition(options: {
       messages: [
         {
           role: "system",
-          content:
-            'You edit a local loop. Return JSON only. Operations may be addNote, removeNote, updateNote, setTempo, updateTrack, or clearTrack. Example: {"operations":[{"type":"addNote","note":{"id":"short unique id","trackId":"track","start":0,"duration":1,"pitch":60,"velocity":0.8}}],"explanation":"brief"}. Use beats for note start/duration. Never return prose outside JSON.',
+          content: `You edit a local loop. Return JSON only. Operations may be addNote, removeNote, updateNote, setTempo, updateTrack, or clearTrack. Example: {"operations":[{"type":"addNote","note":{"id":"short unique id","trackId":"track","start":0,"duration":1,"pitch":60,"velocity":0.8}}],"explanation":"brief"}. Use beats for note start/duration. Available instruments: ${AVAILABLE_INSTRUMENTS.join(", ")}. Keep changes inside the requested track unless the user asks otherwise. Never return prose outside JSON.`,
         },
         {
           role: "user",
