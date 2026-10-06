@@ -4,12 +4,13 @@ import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { stdin, stdout } from "node:process";
 import {
-  appendSessionEvent,
   ensureSession,
-  loadSession,
   SessionConflictError,
   type SessionRecord,
 } from "./session/store.ts";
+import { openSessionPort } from "./session/port.ts";
+import { monotonicEpochMs } from "./session/protocol.ts";
+import { printSessions } from "./session/list.ts";
 import { parsePrompt } from "./agent/ops.ts";
 import { applyMusicCommand, parseMusicCommand } from "./commands/music.ts";
 import { historyTarget, REDO_KIND, UNDO_KIND } from "./commands/history.ts";
@@ -28,7 +29,6 @@ import {
   type GatewayModel,
 } from "./agent/gateway.ts";
 import { TransportClock } from "./audio/clock.ts";
-import { LoopPlayer } from "./audio/player.ts";
 import {
   addNote,
   applyScoreOperation,
@@ -53,6 +53,7 @@ const HELP_TEXT = `track · local-first terminal music workstation
 Usage:
   track [--new] [--session <id>] [--track <name>]
   track --import <file> --export <file>
+  track sessions
 
 Prompt:
   Enter submit · Shift-Enter newline · Alt-Enter queue · Ctrl-Q toggle queue
@@ -77,6 +78,10 @@ if (args.has("--help") || args.has("-h")) {
   stdout.write(`${HELP_TEXT}\n`);
   process.exit(0);
 }
+if (process.argv[2] === "sessions") {
+  await printSessions(process.cwd(), stdout);
+  process.exit(0);
+}
 const demo =
   args.has("--demo") || process.env.TRACK_DEMO === "1" || !stdin.isTTY;
 
@@ -91,13 +96,21 @@ const sessionOptions: { sessionId?: string; setCurrent: boolean } = {
 const selectedSession = args.has("--new") ? randomUUID() : requestedSession;
 if (selectedSession !== undefined) sessionOptions.sessionId = selectedSession;
 const session = await ensureSession(initial.toJSON(), sessionOptions);
-let record: SessionRecord<ReturnType<TrackScore["toJSON"]>> = session.record;
+// trackd when connected, the file-lock path otherwise (see src/session/port.ts).
+const port = await openSessionPort<ReturnType<TrackScore["toJSON"]>>({
+  paths: session.paths,
+  sessionId: session.record.sessionId,
+  label: requestedTrack,
+  focusedTrackId: requestedTrack,
+  daemon: !demo,
+});
+let record: SessionRecord<ReturnType<TrackScore["toJSON"]>> =
+  port.mode === "daemon" ? await port.load() : session.record;
 let score = scoreFromJSON(record.composition);
 if (importPath) {
   const imported = decodeLoop(await readLoopFile(importPath));
   score = imported;
-  record = await appendSessionEvent(
-    session.paths,
+  record = await port.append(
     record,
     {
       kind: "score.import",
@@ -108,10 +121,7 @@ if (importPath) {
 }
 if (!score.tracks.some((track) => track.id === requestedTrack)) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const latest =
-      attempt === 0
-        ? record
-        : await loadSession<typeof record.composition>(session.paths);
+    const latest = attempt === 0 ? record : await port.load();
     const latestScore = scoreFromJSON(latest.composition);
     if (latestScore.tracks.some((track) => track.id === requestedTrack)) {
       record = latest;
@@ -127,8 +137,7 @@ if (!score.tracks.some((track) => track.id === requestedTrack)) {
       },
     ]);
     try {
-      record = await appendSessionEvent(
-        session.paths,
+      record = await port.append(
         latest,
         { kind: "track.attach", payload: { trackId: requestedTrack } },
         next.toJSON(),
@@ -142,13 +151,15 @@ if (!score.tracks.some((track) => track.id === requestedTrack)) {
 }
 
 const clock = new TransportClock(score.tempoBpm);
-const audio = new LoopPlayer(`${session.paths.record}.audio.lock`);
+const audio = port.player;
 let selectedModel: GatewayModel =
   process.env.TRACK_MODEL === "opus-5.5" ? "opus-5.5" : "sol-6.1";
 const prompt = new PromptModel({ width: 72, maxVisualRows: 8 });
 /** The in-flight agent turn: Esc aborts it, Enter steers it. */
 let agentTurn: { controller: AbortController; steering: string[] } | undefined;
 let reportAgentActivity: (text: string) => void = () => undefined;
+// Declared before `await runInteractive()` runs, or assigning it is a TDZ error.
+let agentEventSink: (event: AgentEvent) => void = () => undefined;
 let gatewayClient: GatewayClient | undefined;
 if (demo) {
   if (score.notes.length === 0) score = seedDemo(score, requestedTrack);
@@ -294,7 +305,6 @@ async function runInteractive(): Promise<void> {
   stdin.resume();
   stdout.write(`${ESC}?25l${ESC}?2004h${ESC}2J`);
   let activity = "ready";
-  let syncing = false;
   const inputDecoder = new TerminalInputDecoder();
   const queuedPrompts: string[] = [];
   let processingQueue = false;
@@ -335,20 +345,21 @@ async function runInteractive(): Promise<void> {
     if (line) activity = line;
   };
   const timer = setInterval(tick, 100);
-  const sync = async (): Promise<void> => {
-    if (syncing) return;
-    syncing = true;
+  let applying: Promise<void> = Promise.resolve();
+  const applyLatest = (latest: typeof record): Promise<void> =>
+    (applying = applying.then(() => applyRecord(latest)));
+  const applyRecord = async (latest: typeof record): Promise<void> => {
     try {
-      const latest = await loadSession<typeof record.composition>(
-        session.paths,
-      );
       if (latest.revision > record.revision) {
         const previousRevision = record.revision;
         record = latest;
         score = scoreFromJSON(record.composition);
         clock.setTempo(score.tempoBpm);
         if (clock.playing) void audio.play(score);
-        for (const event of latest.events.slice(previousRevision)) {
+        // Connected windows follow trackd's transport frames instead.
+        const replay =
+          port.mode === "file" ? latest.events.slice(previousRevision) : [];
+        for (const event of replay) {
           if (
             event.kind !== "transport" ||
             typeof event.payload !== "object" ||
@@ -377,14 +388,19 @@ async function runInteractive(): Promise<void> {
         activity = `synced · rev ${record.revision}`;
       }
     } catch {
-      // A partially written or concurrently replaced snapshot is retried next tick.
-    } finally {
-      syncing = false;
+      // An invalid composition is skipped; the next update retries.
     }
   };
-  const syncTimer = setInterval(() => {
-    void sync();
-  }, 200);
+  const unsubscribe = port.subscribe((update) => {
+    if (update.type === "record") void applyLatest(update.record);
+    else if (update.type === "transport") {
+      // Every window renders the same hit line from trackd's timestamp.
+      const { playing, beat, bpm, atMs } = update.transport;
+      clock.setTempo(bpm);
+      clock.sync(beat, playing, atMs, monotonicEpochMs());
+    } else if (update.type === "status") activity = update.message;
+  });
+  if (port.status !== "file session") activity = port.status;
   tick();
   try {
     let exiting = false;
@@ -404,8 +420,7 @@ async function runInteractive(): Promise<void> {
         if (terminalValue === " " && prompt.value.length === 0) {
           await setTransport("toggle");
           try {
-            record = await appendSessionEvent(
-              session.paths,
+            record = await port.append(
               record,
               {
                 kind: "transport",
@@ -455,8 +470,9 @@ async function runInteractive(): Promise<void> {
     }
   } finally {
     clearInterval(timer);
-    clearInterval(syncTimer);
+    unsubscribe();
     audio.stop();
+    await port.close();
     stdin.setRawMode?.(false);
     stdin.pause();
     stdout.write(`${ESC}?25h${ESC}?2004l${ESC}0m\n`);
@@ -538,8 +554,7 @@ async function submit(prompt: string): Promise<string> {
   if (parsed.type === "transport") {
     await setTransport(parsed.action);
     try {
-      record = await appendSessionEvent(
-        session.paths,
+      record = await port.append(
         record,
         {
           kind: "transport",
@@ -682,10 +697,7 @@ async function submit(prompt: string): Promise<string> {
   }
   if (parsed.type !== "add-note") return "queued";
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const latest =
-      attempt === 0
-        ? record
-        : await loadSession<typeof record.composition>(session.paths);
+    const latest = attempt === 0 ? record : await port.load();
     const latestScore = scoreFromJSON(latest.composition);
     const note = {
       id: `${requestedTrack}-${latest.revision + 1}-${randomUUID().slice(0, 6)}`,
@@ -701,8 +713,7 @@ async function submit(prompt: string): Promise<string> {
     const operation: ScoreOperation = { type: "addNote", note };
     const next = applyScoreOperation(latestScore, operation);
     try {
-      record = await appendSessionEvent(
-        session.paths,
+      record = await port.append(
         latest,
         {
           kind: "score.operation",
@@ -733,8 +744,7 @@ async function commitScore(
   payload: Record<string, unknown> = {},
 ): Promise<void> {
   if (next === score) return;
-  record = await appendSessionEvent(
-    session.paths,
+  record = await port.append(
     record,
     { kind, payload: { ...payload, before: record.composition } },
     next.toJSON(),
@@ -744,13 +754,12 @@ async function commitScore(
 }
 
 async function stepHistory(direction: "undo" | "redo"): Promise<string> {
-  const latest = await loadSession<typeof record.composition>(session.paths);
+  const latest = await port.load();
   const target = historyTarget(latest.events, direction);
   if (!target) return `nothing to ${direction}`;
   try {
     const restored = scoreFromJSON(target.composition);
-    record = await appendSessionEvent(
-      session.paths,
+    record = await port.append(
       latest,
       {
         kind: direction === "undo" ? UNDO_KIND : REDO_KIND,
@@ -775,6 +784,11 @@ async function stepHistory(direction: "undo" | "redo"): Promise<string> {
 async function setTransport(
   action: "play" | "pause" | "toggle",
 ): Promise<void> {
+  if (port.mode === "daemon") {
+    // trackd owns the only transport; its broadcast updates `clock`.
+    await port.transport(action);
+    return;
+  }
   if (action === "play") {
     clock.play();
     await audio.play(score);
@@ -789,8 +803,6 @@ async function setTransport(
     await audio.play(score);
   }
 }
-
-let agentEventSink: (event: AgentEvent) => void = () => undefined;
 
 /**
  * Run one streaming tool-calling turn. Each validated tool call commits its
@@ -856,8 +868,7 @@ function agentHost(turn: { steering: string[] }): AgentHost {
     async transport(action) {
       await setTransport(action);
       try {
-        record = await appendSessionEvent(
-          session.paths,
+        record = await port.append(
           record,
           {
             kind: "transport",
