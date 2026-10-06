@@ -561,7 +561,20 @@ function parseOperation(value: unknown): ScoreOperation {
 /** Entry point used by `src/daemon.ts`. Exits the process when done. */
 export async function runDaemon(options: DaemonOptions): Promise<never> {
   const daemon = new TrackDaemon(options);
+  // Install signal handlers before listening: a client can connect, finish,
+  // and send SIGTERM before start() has returned.
   let started = false;
+  let pendingSignal: string | undefined;
+  const exit = (signal: string) => {
+    if (!started) {
+      pendingSignal = signal;
+      return;
+    }
+    void daemon.stop(signal).finally(() => process.exit(0));
+  };
+  process.on("SIGTERM", () => exit("SIGTERM"));
+  process.on("SIGINT", () => exit("SIGINT"));
+  process.on("SIGHUP", () => exit("SIGHUP"));
   try {
     started = await daemon.start();
   } catch (error) {
@@ -569,11 +582,7 @@ export async function runDaemon(options: DaemonOptions): Promise<never> {
     process.exit(1);
   }
   if (!started) process.exit(0); // Another daemon owns the session.
-  const exit = (signal: string) =>
-    void daemon.stop(signal).finally(() => process.exit(0));
-  process.on("SIGTERM", () => exit("SIGTERM"));
-  process.on("SIGINT", () => exit("SIGINT"));
-  process.on("SIGHUP", () => exit("SIGHUP"));
+  if (pendingSignal) exit(pendingSignal);
   await daemon.stopped;
   process.exit(0);
 }
