@@ -158,6 +158,8 @@ const prompt = new PromptModel({ width: 72, maxVisualRows: 8 });
 /** The in-flight agent turn: Esc aborts it, Enter steers it. */
 let agentTurn: { controller: AbortController; steering: string[] } | undefined;
 let reportAgentActivity: (text: string) => void = () => undefined;
+// Declared before `await runInteractive()` runs, or assigning it is a TDZ error.
+let agentEventSink: (event: AgentEvent) => void = () => undefined;
 let gatewayClient: GatewayClient | undefined;
 if (demo) {
   if (score.notes.length === 0) score = seedDemo(score, requestedTrack);
@@ -801,8 +803,6 @@ async function setTransport(
     await audio.play(score);
   }
 }
-
-let agentEventSink: (event: AgentEvent) => void = () => undefined;
 
 /**
  * Run one streaming tool-calling turn. Each validated tool call commits its
