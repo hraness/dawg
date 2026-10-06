@@ -20,6 +20,7 @@ import {
   applyScoreOperation,
   createScore,
   scoreFromJSON,
+  SCORE_LIMITS,
   type TrackScore,
   type ScoreOperation,
   type NoteInput,
@@ -46,7 +47,8 @@ Prompt:
 
 Commands:
   play, pause, tempo <bpm>, instrument <name>, volume <0..1>, pan <-1..1>
-  automate volume at <beat> <0..1>, clear automation, mute, clear, undo
+  automate volume|pan at <beat> <value>, clear automation, mute, clear, undo
+  track <name>, bars <count>, extend <count> bars
   /tracks, /export <file>, /import <file>, /model opus-5.5|sol-6.1
 
 AI is opt-in with TRACK_AI=1 and a local AI_GATEWAY_API_KEY.`;
@@ -439,7 +441,7 @@ function handleTerminalInput(value: string): PromptAction | undefined {
 async function submit(prompt: string): Promise<string> {
   const command = prompt.trim();
   if (/^\/?help$|^\/?\?$/.test(command.toLowerCase()))
-    return "commands · play pause tempo <bpm> instrument <name> volume <0..1> pan <-1..1> automate volume at <beat> <0..1> clear automation mute clear undo export <file> import <file>";
+    return "commands · play pause tempo <bpm> instrument <name> volume <0..1> pan <-1..1> automate volume|pan at <beat> <value> clear automation track <name> bars <count> extend <count> bars mute clear undo export <file> import <file>";
   if (/^\/?tracks?$/i.test(command))
     return score.tracks
       .map(
@@ -516,6 +518,25 @@ async function submit(prompt: string): Promise<string> {
     clock.setTempo?.(next.tempoBpm);
     return `tempo · ${next.tempoBpm} BPM`;
   }
+  if (parsed.type === "add-track") {
+    if (score.tracks.some((track) => track.id === parsed.trackId))
+      return `track exists · ${parsed.trackId}`;
+    const next = applyScoreOperation(score, {
+      type: "addTrack",
+      track: { id: parsed.trackId, name: parsed.trackId, instrument: "sine" },
+    });
+    await commitScore(next, "track.create", { trackId: parsed.trackId });
+    return `track created · ${parsed.trackId}`;
+  }
+  if (parsed.type === "set-bars" || parsed.type === "extend-bars") {
+    const bars =
+      parsed.type === "set-bars"
+        ? parsed.bars
+        : Math.min(SCORE_LIMITS.maxBars, score.bars + parsed.bars);
+    const next = applyScoreOperation(score, { type: "setBars", bars });
+    await commitScore(next, "score.bars", { bars });
+    return `bars · ${bars}`;
+  }
   if (parsed.type === "track") {
     const next = applyScoreOperation(score, {
       type: "updateTrack",
@@ -533,9 +554,13 @@ async function submit(prompt: string): Promise<string> {
       tick: Math.max(0, Math.round(point.beat * score.ticksPerBeat)),
       value: point.value,
     }));
+    const track = score.tracks.find(
+      (candidate) => candidate.id === requestedTrack,
+    );
     const current =
-      score.tracks.find((track) => track.id === requestedTrack)
-        ?.volumeAutomation ?? [];
+      parsed.parameter === "pan"
+        ? (track?.panAutomation ?? [])
+        : (track?.volumeAutomation ?? []);
     const merged =
       points.length === 0
         ? []
@@ -547,15 +572,15 @@ async function submit(prompt: string): Promise<string> {
     const next = applyScoreOperation(score, {
       type: "setAutomation",
       trackId: requestedTrack,
-      parameter: "volume",
+      parameter: parsed.parameter,
       points: merged,
     });
     await commitScore(next, "score.automation", {
       trackId: requestedTrack,
-      parameter: "volume",
+      parameter: parsed.parameter,
       points: merged,
     });
-    return `automation · volume ${merged.length} point${merged.length === 1 ? "" : "s"}`;
+    return `automation · ${parsed.parameter} ${merged.length} point${merged.length === 1 ? "" : "s"}`;
   }
   if (parsed.type === "clear-track") {
     const next = applyScoreOperation(score, {

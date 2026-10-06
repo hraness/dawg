@@ -31,6 +31,11 @@ volume 0.7
 pan -0.4
 automate volume at 0 0.2
 automate volume at 4 1
+automate pan at 0 -1
+automate pan at 4 1
+track drums
+bars 8
+extend 4 bars
 clear automation
 mute
 clear
@@ -46,7 +51,7 @@ Press Space on an empty prompt to toggle playback. Enter submits a request. Ctrl
 
 Set `TRACK_AI=1` to send unrecognized requests to the Vercel AI Gateway. Keep the key local in `AI_GATEWAY_API_KEY`. Choose the friendly model label with `TRACK_MODEL=opus-5.5` or `TRACK_MODEL=sol-6.1`, or switch it with `/model`. Map those labels to the model IDs available in your gateway account with `TRACK_OPUS_MODEL` and `TRACK_SOL_MODEL`.
 
-Playback renders a short mono PCM WAV with deterministic sine, piano, pluck, bass, saw, square, and triangle voices, applies per-track volume and pan compensation, and uses `afplay` on macOS or `ffplay` elsewhere. Set `TRACK_AUDIO=0` for a headless session. `track --export file.track.json` and `track --import file.track.json` exchange the bounded `track.loop/v1` document. `TRACK_DEMO=1 bun run src/main.ts` prints a deterministic renderer frame for development.
+Playback renders a short mono PCM WAV with deterministic sine, piano, pluck, bass, saw, square, and triangle voices, applies per-track volume and pan lanes, and uses `afplay` on macOS or `ffplay` elsewhere. Pan values run from -1 (left) to 1 (right); the current mono export uses centre compensation so automation remains audible and deterministic. Set `TRACK_AUDIO=0` for a headless session. `track --export file.track.json` and `track --import file.track.json` exchange the bounded `track.loop/v1` document. `TRACK_DEMO=1 bun run src/main.ts` prints a deterministic renderer frame for development.
 
 ## Architecture
 

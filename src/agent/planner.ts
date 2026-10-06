@@ -1,5 +1,6 @@
 import {
   SCORE_LIMITS,
+  scoreFromJSON,
   type TrackScore,
   type ScoreOperation,
 } from "../../core/score.ts";
@@ -62,7 +63,7 @@ export async function planComposition(options: {
       messages: [
         {
           role: "system",
-          content: `You edit a local loop. Return JSON only. Operations may be addNote, removeNote, updateNote, setTempo, updateTrack, setAutomation, or clearTrack. Example: {"operations":[{"type":"addNote","note":{"id":"short unique id","trackId":"track","start":0,"duration":1,"pitch":60,"velocity":0.8}}],"explanation":"brief"}. Use beats for note start/duration. For volume automation, use setAutomation with parameter "volume" and integer tick points like {"tick":0,"value":0.2}. Available instruments: ${AVAILABLE_INSTRUMENTS.join(", ")}. Keep changes inside the requested track unless the user asks otherwise. Never return prose outside JSON.`,
+          content: `You edit a local loop. Return JSON only. Operations may be addTrack, addNote, removeNote, updateNote, setTempo, setBars, updateTrack, setAutomation, or clearTrack. Example: {"operations":[{"type":"addNote","note":{"id":"short unique id","trackId":"track","start":0,"duration":1,"pitch":60,"velocity":0.8}}],"explanation":"brief"}. Use beats for note start/duration. To create a track, use addTrack with a track object containing a unique id, name, and instrument, then add notes to that id. To resize or extend the loop, use setBars with the desired total bars (integer 1..256); this preserves notes and automation. For automation, use setAutomation with parameter "volume" (values 0..1) or "pan" (values -1..1, left to right), and integer tick points like {"tick":0,"value":0.2}. Automation replaces that parameter's lane; preserve any existing points you want to keep. Available instruments: ${AVAILABLE_INSTRUMENTS.join(", ")}. Keep changes inside the requested track unless the user asks otherwise. Never return prose outside JSON.`,
         },
         {
           role: "user",
@@ -82,6 +83,19 @@ export async function planComposition(options: {
 function parseOperation(value: unknown): ScoreOperation {
   if (!isRecord(value) || typeof value.type !== "string")
     throw new Error("agent operation is malformed");
+  if (value.type === "addTrack") {
+    const track = scoreFromJSON({ tracks: [value.track] }).tracks[0]!;
+    return { type: "addTrack", track };
+  }
+  if (
+    value.type === "setBars" &&
+    typeof value.bars === "number" &&
+    Number.isInteger(value.bars) &&
+    value.bars >= 1 &&
+    value.bars <= SCORE_LIMITS.maxBars
+  ) {
+    return { type: "setBars", bars: value.bars };
+  }
   if (
     value.type === "removeNote" &&
     typeof value.noteId === "string" &&
@@ -125,7 +139,7 @@ function parseOperation(value: unknown): ScoreOperation {
     value.type === "setAutomation" &&
     typeof value.trackId === "string" &&
     value.trackId.length <= SCORE_LIMITS.maxIdLength &&
-    value.parameter === "volume" &&
+    (value.parameter === "volume" || value.parameter === "pan") &&
     Array.isArray(value.points) &&
     value.points.length <= SCORE_LIMITS.maxAutomationPoints
   ) {
@@ -139,8 +153,8 @@ function parseOperation(value: unknown): ScoreOperation {
         candidate.tick > SCORE_LIMITS.maxTick ||
         typeof candidate.value !== "number" ||
         !Number.isFinite(candidate.value) ||
-        candidate.value < 0 ||
-        candidate.value > SCORE_LIMITS.maxVolume
+        candidate.value < (value.parameter === "pan" ? -1 : 0) ||
+        candidate.value > 1
       ) {
         throw new Error("agent automation point is invalid");
       }
@@ -149,7 +163,7 @@ function parseOperation(value: unknown): ScoreOperation {
     return {
       type: "setAutomation",
       trackId: value.trackId,
-      parameter: "volume",
+      parameter: value.parameter,
       points,
     };
   }
