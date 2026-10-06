@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { acquireSessionLock } from "./lock.ts";
 import {
   chooseTrack,
+  claimOrDraft,
   requirePresence,
   type PresenceEntry,
 } from "./protocol.ts";
@@ -71,6 +72,25 @@ export class FilePresence {
       const trackId = chooseTrack(trackIds, taken, preferred);
       if (trackId !== null) await this.focus(trackId);
       return trackId;
+    } finally {
+      await release();
+    }
+  }
+
+  /** Claim with draft fallback, serialized by the same lock as `claim`. */
+  public async claimOrDraft(
+    trackIds: readonly string[],
+    preferred?: string,
+  ): Promise<{ trackId: string; draft: boolean }> {
+    const release = await acquireSessionLock(this.lock);
+    try {
+      const taken = new Set<string>();
+      for (const other of await this.list())
+        if (other.clientId !== this.entry.clientId && other.focusedTrackId)
+          taken.add(other.focusedTrackId);
+      const claim = claimOrDraft(trackIds, taken, preferred);
+      await this.focus(claim.trackId);
+      return claim;
     } finally {
       await release();
     }

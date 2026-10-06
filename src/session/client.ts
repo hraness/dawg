@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { connect, type Socket } from "node:net";
 import { join } from "node:path";
+import type { MetaExpect, MetaPatch, SessionMeta } from "./meta.ts";
 import {
   daemonSocketPath,
   encodeFrame,
@@ -25,6 +26,7 @@ export type DaemonClientUpdate =
   | { type: "record"; record: SessionRecord<unknown>; digest: string }
   | { type: "transport"; transport: TransportState }
   | { type: "presence"; clients: PresenceEntry[] }
+  | { type: "meta"; meta: SessionMeta }
   | { type: "status"; connected: boolean; message: string };
 
 export type DaemonClientOptions = {
@@ -163,6 +165,48 @@ export class DaemonClient {
     const trackId = reply.type === "claimed" ? reply.trackId : null;
     if (trackId !== null) this.focusedTrackId = trackId;
     return trackId;
+  }
+
+  /** Like `claimTrack`, but reserves a draft `track-N` when all are open. */
+  public async claimOrDraft(
+    preferred?: string,
+  ): Promise<{ trackId: string; draft: boolean }> {
+    const message: ClientMessage = {
+      v: 1,
+      type: "claim",
+      id: randomUUID(),
+      draft: true,
+    };
+    if (preferred) message.preferred = preferred;
+    const reply = await this.request(message);
+    if (reply.type !== "claimed" || reply.trackId === null)
+      throw new Error("trackd did not reserve a track");
+    this.focusedTrackId = reply.trackId;
+    return { trackId: reply.trackId, draft: reply.draft === true };
+  }
+
+  /**
+   * Conditional metadata write. `stale` means `expect` no longer matched
+   * (for example a user rename landed first); `record.meta` is then current.
+   */
+  public async updateMeta(
+    patch: MetaPatch,
+    expect?: MetaExpect,
+  ): Promise<"applied" | "stale"> {
+    const message: ClientMessage = {
+      v: 1,
+      type: "meta",
+      id: randomUUID(),
+      patch,
+    };
+    if (expect) message.expect = expect;
+    const result = this.result(await this.request(message));
+    if (result.status === "accepted") return "applied";
+    if (result.status === "rejected" && result.code === "stale-meta")
+      return "stale";
+    throw new Error(
+      result.status === "rejected" ? result.message : "trackd meta failed",
+    );
   }
 
   public close(): void {
@@ -358,6 +402,7 @@ export class DaemonClient {
         updatedAt: message.event.at,
         composition: message.composition,
         events: [...this.record.events, message.event as SessionEvent],
+        meta: this.record.meta,
       };
       this.digest = message.digest;
       this.emit({ type: "record", record: this.record, digest: this.digest });
@@ -367,16 +412,26 @@ export class DaemonClient {
       const changed =
         message.record.revision !== this.record.revision ||
         message.digest !== this.digest;
+      const metaChanged =
+        message.record.meta.version !== this.record.meta.version;
       this.record = message.record;
       this.digest = message.digest;
       if (changed)
         this.emit({ type: "record", record: this.record, digest: this.digest });
+      if (metaChanged) this.emit({ type: "meta", meta: this.record.meta });
       return;
     }
     if (message.type === "transport") {
       const { v: _v, type: _type, ...state } = message;
       this.transport = state;
       this.emit({ type: "transport", transport: state });
+      return;
+    }
+    if (message.type === "meta") {
+      // Metadata has its own version; never regress to an older one.
+      if (message.meta.version < this.record.meta.version) return;
+      this.record = { ...this.record, meta: message.meta };
+      this.emit({ type: "meta", meta: message.meta });
       return;
     }
     if (message.type === "presence") {

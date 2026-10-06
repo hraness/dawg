@@ -30,12 +30,18 @@ interface PtyTerminal {
   close(): void;
 }
 
-async function launch(cols: number, rows: number, env: Record<string, string>) {
-  const cwd = await mkdtemp(join(tmpdir(), "track-pty-"));
-  dirs.push(cwd);
+async function launch(
+  cols: number,
+  rows: number,
+  env: Record<string, string>,
+  argv: string[] = ["--track", "bass"],
+  dir?: string,
+) {
+  const cwd = dir ?? (await mkdtemp(join(tmpdir(), "track-pty-")));
+  if (!dir) dirs.push(cwd);
   const vt = new VirtualTerminal(cols, rows);
   const decoder = new TextDecoder();
-  const proc = Bun.spawn([process.execPath, MAIN, "--track", "bass"], {
+  const proc = Bun.spawn([process.execPath, MAIN, ...argv], {
     cwd,
     env: {
       PATH: process.env.PATH ?? "",
@@ -67,7 +73,7 @@ async function launch(cols: number, rows: number, env: Record<string, string>) {
     terminal.write(data);
     await Bun.sleep(60);
   };
-  return { proc, terminal, vt, until, send };
+  return { proc, terminal, vt, until, send, cwd };
 }
 
 test.skipIf(!supported)(
@@ -163,4 +169,51 @@ test.skipIf(!supported)(
     }
   },
   20_000,
+);
+
+test.skipIf(!supported)(
+  "real PTY: /rename, /fork, /sessions and auto-claimed tracks",
+  async () => {
+    const t = await launch(100, 30, {});
+    await t.until(() => t.vt.text().includes("STEER"), "prompt");
+    await t.send("/rename night drive\r");
+    await t.until(
+      () => t.vt.text().includes("renamed · night drive"),
+      "rename",
+    );
+    expect(t.vt.lines()[0]).toContain("night drive");
+    await t.send("/fork\r");
+    await t.until(() => t.vt.text().includes("forked · night drive 2"), "fork");
+    await t.until(() => t.vt.lines()[0]!.includes("night drive 2"), "header");
+    await t.send("/sessions\r");
+    await t.until(() => t.vt.text().includes("2 sessions"), "sessions");
+    await t.send("\u0003");
+    expect(await t.proc.exited).toBe(0);
+    t.terminal.close();
+
+    // Plain `track` resumes the fork and claims its only track; a second
+    // window on the same session gets a draft track.
+    const one = await launch(100, 30, {}, [], t.cwd);
+    await one.until(() => one.vt.text().includes("STEER"), "first window");
+    expect(one.vt.lines()[0]).toContain("night drive 2");
+    expect(one.vt.lines()[0]).toContain("bass");
+    const two = await launch(
+      100,
+      30,
+      {},
+      ["--session", "night drive 2"],
+      t.cwd,
+    );
+    await two.until(
+      () => two.vt.text().includes("all tracks open"),
+      "draft hint",
+    );
+    expect(two.vt.lines()[0]).toContain("track-2");
+    for (const w of [one, two]) {
+      w.terminal.write("\u0003");
+      expect(await w.proc.exited).toBe(0);
+      w.terminal.close();
+    }
+  },
+  30_000,
 );

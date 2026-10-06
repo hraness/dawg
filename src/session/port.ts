@@ -9,10 +9,12 @@ import type {
   TransportAction,
   TransportState,
 } from "./protocol.ts";
+import type { MetaExpect, MetaPatch, SessionMeta } from "./meta.ts";
 import {
   appendSessionEvent,
   loadSession,
   SessionConflictError,
+  updateSessionMeta,
   type SessionEvent,
   type SessionPaths,
   type SessionRecord,
@@ -22,7 +24,25 @@ export type PortUpdate<T> =
   | { type: "record"; record: SessionRecord<T> }
   | { type: "transport"; transport: TransportState }
   | { type: "presence"; clients: PresenceEntry[] }
+  /** Name or lineage changed; the score revision did not. */
+  | { type: "meta"; meta: SessionMeta }
+  /** Structured sync state for the header; no activity card. */
+  | { type: "sync"; sync: SyncStatus }
   | { type: "status"; message: string };
+
+/**
+ * `synced` connected and idle, `syncing` a write is in flight, `conflict` the
+ * last write raced another window and must rebase, `offline` trackd dropped
+ * and is reconnecting, `local` file-lock fallback (no daemon).
+ */
+export type SyncStatus =
+  "synced" | "syncing" | "conflict" | "offline" | "local";
+
+export type MetaWriteResult = {
+  status: "applied" | "stale";
+  /** The metadata now in effect (the winner's, when stale). */
+  meta: SessionMeta;
+};
 
 /** What a window plays locally. Connected windows never start audio. */
 export type WindowPlayer = {
@@ -40,6 +60,7 @@ export interface SessionPort<T> {
   /** Human-readable status for the activity line. */
   readonly status: string;
   readonly player: WindowPlayer;
+  readonly sync: SyncStatus;
   /** Appends an event at `current.revision`; throws SessionConflictError when stale. */
   append(
     current: SessionRecord<T>,
@@ -59,7 +80,20 @@ export interface SessionPort<T> {
     trackIds: readonly string[],
     preferred?: string,
   ): Promise<string | null>;
+  /**
+   * `claimTrack` with a draft fallback: when every track is focused, reserve
+   * a new `track-N` id (not yet in the score) for this window.
+   */
+  claimOrDraft(
+    trackIds: readonly string[],
+    preferred?: string,
+  ): Promise<{ trackId: string; draft: boolean }>;
   presence(): Promise<PresenceEntry[]>;
+  /**
+   * Conditional metadata write: applies only while `expect` matches the
+   * stored metadata, so a user rename always beats an in-flight auto-name.
+   */
+  updateMeta(patch: MetaPatch, expect?: MetaExpect): Promise<MetaWriteResult>;
   close(): Promise<void>;
 }
 
@@ -109,9 +143,17 @@ class DaemonPort<T> implements SessionPort<T> {
   public readonly mode = "daemon" as const;
   public readonly player = silentPlayer;
   public status: string;
+  public sync: SyncStatus = "synced";
+  private readonly syncListeners = new Set<(sync: SyncStatus) => void>();
 
   public constructor(private readonly client: DaemonClient) {
     this.status = `trackd pid ${client.daemonPid}`;
+  }
+
+  private setSync(sync: SyncStatus): void {
+    if (this.sync === sync) return;
+    this.sync = sync;
+    for (const listener of this.syncListeners) listener(sync);
   }
 
   public async append(
@@ -121,16 +163,29 @@ class DaemonPort<T> implements SessionPort<T> {
   ): Promise<SessionRecord<T>> {
     // Transport lives in trackd's clock, not in the event log, when connected.
     if (event.kind === "transport") return this.record();
-    const result = await this.client.apply({
-      base: current.revision,
-      kind: event.kind,
-      payload: event.payload,
-      composition,
-      key: randomUUID(),
-    });
-    if (result.status === "accepted" || result.status === "duplicate")
+    if (this.client.connected) this.setSync("syncing");
+    let result;
+    try {
+      result = await this.client.apply({
+        base: current.revision,
+        kind: event.kind,
+        payload: event.payload,
+        composition,
+        key: randomUUID(),
+      });
+    } catch (error) {
+      this.setSync(this.client.connected ? "synced" : "offline");
+      throw error;
+    }
+    if (result.status === "accepted" || result.status === "duplicate") {
+      this.setSync("synced");
       return this.record();
-    if (result.status === "rebase") throw new SessionConflictError();
+    }
+    if (result.status === "rebase") {
+      this.setSync("conflict");
+      throw new SessionConflictError();
+    }
+    this.setSync("synced");
     throw new Error(`trackd rejected ${event.kind}: ${result.message}`);
   }
 
@@ -148,14 +203,23 @@ class DaemonPort<T> implements SessionPort<T> {
 
   public subscribe(listener: (update: PortUpdate<T>) => void): () => void {
     listener({ type: "transport", transport: this.client.transport });
-    return this.client.subscribe((update) => {
-      if (update.type === "record")
+    const onSync = (sync: SyncStatus) => listener({ type: "sync", sync });
+    this.syncListeners.add(onSync);
+    const unsubscribe = this.client.subscribe((update) => {
+      if (update.type === "record") {
+        // A fresh record means this window has caught up after a conflict.
+        if (this.sync === "conflict") this.setSync("synced");
         listener({ type: "record", record: update.record as SessionRecord<T> });
-      else if (update.type === "status") {
+      } else if (update.type === "status") {
         this.status = update.message;
+        this.setSync(update.connected ? "synced" : "offline");
         listener({ type: "status", message: update.message });
       } else listener(update);
     });
+    return () => {
+      this.syncListeners.delete(onSync);
+      unsubscribe();
+    };
   }
 
   public focus(trackId: string | null): Promise<void> {
@@ -170,8 +234,23 @@ class DaemonPort<T> implements SessionPort<T> {
     return this.client.claimTrack(preferred);
   }
 
+  public claimOrDraft(
+    _trackIds: readonly string[],
+    preferred?: string,
+  ): Promise<{ trackId: string; draft: boolean }> {
+    return this.client.claimOrDraft(preferred);
+  }
+
   public async presence(): Promise<PresenceEntry[]> {
     return this.client.presence;
+  }
+
+  public async updateMeta(
+    patch: MetaPatch,
+    expect?: MetaExpect,
+  ): Promise<MetaWriteResult> {
+    const status = await this.client.updateMeta(patch, expect);
+    return { status, meta: this.client.record.meta };
   }
 
   public async close(): Promise<void> {
@@ -186,6 +265,7 @@ class DaemonPort<T> implements SessionPort<T> {
 class FilePort<T> implements SessionPort<T> {
   public readonly mode = "file" as const;
   public status = "file session";
+  public readonly sync = "local" as const;
   public readonly player: WindowPlayer;
   private readonly presenceStore: FilePresence;
 
@@ -224,6 +304,7 @@ class FilePort<T> implements SessionPort<T> {
 
   public subscribe(listener: (update: PortUpdate<T>) => void): () => void {
     let revision = -1;
+    let metaVersion = -1;
     let busy = false;
     const timer = setInterval(() => {
       if (busy) return;
@@ -231,7 +312,10 @@ class FilePort<T> implements SessionPort<T> {
       void this.load()
         .then((record) => {
           if (record.revision > revision) listener({ type: "record", record });
+          else if (metaVersion >= 0 && record.meta.version > metaVersion)
+            listener({ type: "meta", meta: record.meta });
           revision = Math.max(revision, record.revision);
+          metaVersion = Math.max(metaVersion, record.meta.version);
         })
         // A partially written or concurrently replaced snapshot is retried next tick.
         .catch(() => undefined)
@@ -253,8 +337,27 @@ class FilePort<T> implements SessionPort<T> {
     return this.presenceStore.claim(trackIds, preferred);
   }
 
+  public claimOrDraft(
+    trackIds: readonly string[],
+    preferred?: string,
+  ): Promise<{ trackId: string; draft: boolean }> {
+    return this.presenceStore.claimOrDraft(trackIds, preferred);
+  }
+
   public presence(): Promise<PresenceEntry[]> {
     return this.presenceStore.list();
+  }
+
+  public async updateMeta(
+    patch: MetaPatch,
+    expect?: MetaExpect,
+  ): Promise<MetaWriteResult> {
+    const result = await updateSessionMeta<T>(
+      this.options.paths,
+      patch,
+      expect,
+    );
+    return { status: result.status, meta: result.record.meta };
   }
 
   public async close(): Promise<void> {

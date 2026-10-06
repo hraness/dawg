@@ -10,7 +10,23 @@ import {
 } from "./session/store.ts";
 import { openSessionPort } from "./session/port.ts";
 import { monotonicEpochMs } from "./session/protocol.ts";
-import { printSessions } from "./session/list.ts";
+import {
+  formatSessionLine,
+  listSessions,
+  printSessions,
+} from "./session/list.ts";
+import {
+  ALL_TRACKS_OPEN_HINT,
+  attachTrack,
+  forkSession,
+  namingTarget,
+  pickerLines,
+  resolveSessionArg,
+  SessionLookupError,
+  withTrack,
+} from "./session/attach.ts";
+import { AutoNamer, providerNameGenerator } from "./session/naming.ts";
+import { normalizeSessionName } from "./session/meta.ts";
 import { parsePrompt } from "./agent/ops.ts";
 import { applyMusicCommand, parseMusicCommand } from "./commands/music.ts";
 import { historyTarget, REDO_KIND, UNDO_KIND } from "./commands/history.ts";
@@ -59,7 +75,7 @@ const ESC = "\u001b[";
 const HELP_TEXT = `track · local-first terminal music workstation
 
 Usage:
-  track [--new] [--session <id>] [--track <name>]
+  track [--new] [--session <name|id>] [--track <name>]
   track --import <file> --export <file>
   track sessions
 
@@ -79,6 +95,7 @@ Commands:
   instrument kit, hit <voice> at <beat>, pattern <voice> <beats...>|every <step>
   track <name>, bars <count>, extend <count> bars
   /tracks, /export <file>, /import <file>, /model opus-5.5|sol-6.1
+  /sessions, /resume [n|name|id], /rename <name>|--auto, /fork [name]
   /log, /theme default|high-contrast|mono, /motion on|off
   /login [--xcb], /logout, /auth [--check]
 
@@ -89,7 +106,9 @@ Unrecognized requests go to the agent once a provider is configured
 (TRACK_PROVIDER=gateway|xcb|auto; TRACK_AI=0 disables the agent).`;
 const args = new Set(process.argv.slice(2));
 const requestedSession = optionValue("--session");
-const requestedTrack = optionValue("--track") ?? "main";
+const explicitTrack = optionValue("--track");
+/** The focused track; claimed at startup unless `--track` is given. */
+let requestedTrack = explicitTrack ?? "main";
 const initialInstrument = isDrumInstrument(requestedTrack) ? "kit" : "sine";
 const importPath = optionValue("--import");
 const exportPath = optionValue("--export");
@@ -114,15 +133,25 @@ const initial = createScore({
 const sessionOptions: { sessionId?: string; setCurrent: boolean } = {
   setCurrent: !requestedSession || args.has("--new"),
 };
-const selectedSession = args.has("--new") ? randomUUID() : requestedSession;
+const selectedSession = args.has("--new")
+  ? randomUUID()
+  : requestedSession === undefined
+    ? undefined
+    : await resolveSessionArg(process.cwd(), requestedSession).catch(
+        (error: unknown) => {
+          if (!(error instanceof SessionLookupError)) throw error;
+          process.stderr.write(`${error.message}\n`);
+          process.exit(1);
+        },
+      );
 if (selectedSession !== undefined) sessionOptions.sessionId = selectedSession;
 const session = await ensureSession(initial.toJSON(), sessionOptions);
 // trackd when connected, the file-lock path otherwise (see src/session/port.ts).
-const port = await openSessionPort<ReturnType<TrackScore["toJSON"]>>({
+let port = await openSessionPort<ReturnType<TrackScore["toJSON"]>>({
   paths: session.paths,
   sessionId: session.record.sessionId,
-  label: requestedTrack,
-  focusedTrackId: requestedTrack,
+  label: explicitTrack ?? "window",
+  focusedTrackId: explicitTrack ?? null,
   daemon: !demo,
 });
 let record: SessionRecord<ReturnType<TrackScore["toJSON"]>> =
@@ -140,39 +169,24 @@ if (importPath) {
     score.toJSON(),
   );
 }
-if (!score.tracks.some((track) => track.id === requestedTrack)) {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const latest = attempt === 0 ? record : await port.load();
-    const latestScore = scoreFromJSON(latest.composition);
-    if (latestScore.tracks.some((track) => track.id === requestedTrack)) {
-      record = latest;
-      score = latestScore;
-      break;
-    }
-    const next = latestScore.withTracks([
-      ...latestScore.tracks,
-      {
-        id: requestedTrack,
-        name: requestedTrack,
-        instrument: initialInstrument,
-      },
-    ]);
-    try {
-      record = await port.append(
-        latest,
-        { kind: "track.attach", payload: { trackId: requestedTrack } },
-        next.toJSON(),
-      );
-      score = next;
-      break;
-    } catch (error) {
-      if (!(error instanceof SessionConflictError)) throw error;
-    }
-  }
-}
+/** True while the focused track is a reserved draft not yet in the score. */
+let draftTrack = false;
+let attachNotice = "";
+if (!demo) {
+  const attached = await attachTrack(port, score, explicitTrack);
+  requestedTrack = attached.trackId;
+  draftTrack = attached.draft;
+  attachNotice = attached.draft
+    ? ALL_TRACKS_OPEN_HINT
+    : attached.reason === "claimed" && score.tracks.length > 1
+      ? `opened · ${requestedTrack}`
+      : "";
+} else if (explicitTrack === undefined)
+  requestedTrack = score.tracks[0]?.id ?? requestedTrack;
+if (!draftTrack) await ensureFocusedTrack();
 
 const clock = new TransportClock(score.tempoBpm);
-const audio = port.player;
+let audio = port.player;
 let selectedModel: GatewayModel =
   process.env.TRACK_MODEL === "opus-5.5" ? "opus-5.5" : "sol-6.1";
 const prompt = new PromptModel({ width: 72, maxVisualRows: 8 });
@@ -187,7 +201,12 @@ const tui = new TuiApp({
   reducedMotion:
     args.has("--reduce-motion") || process.env.TRACK_REDUCE_MOTION === "1",
 });
-let syncState: SyncState = port.mode === "daemon" ? "synced" : "local";
+let syncState: SyncState = port.sync;
+let windowCount = 1;
+let announcedName = record.meta.name;
+let namer = makeNamer();
+/** Re-subscribes the TUI after /fork or /resume replaces `port`. */
+let rebindPort: () => void = () => undefined;
 /** The in-flight agent turn: Esc aborts it, Enter steers it. */
 let agentTurn: { controller: AbortController; steering: string[] } | undefined;
 let reportAgentActivity: (text: string) => void = () => undefined;
@@ -318,6 +337,8 @@ function appView(value: TrackScore, beat: number): AppView {
     model:
       providerName && providerName !== "offline" ? providerName : undefined,
     sync: syncState,
+    sessionName: record.meta.name,
+    windows: windowCount,
   };
 }
 
@@ -362,10 +383,18 @@ async function runInteractive(): Promise<void> {
     }
     tui.activity.pushRequest(text);
     const base = record.revision;
+    const baseSession = record.sessionId;
     try {
       const message = await submit(text);
       // Agent turns report through agentEventSink; skip a duplicate receipt.
       if (!agentReported) receipt(message, base);
+      // Naming runs later on a timer; it never delays the next prompt.
+      if (record.sessionId === baseSession)
+        namer.noteTurn({
+          score,
+          prompt: text,
+          accepted: record.revision !== base,
+        });
     } catch (error) {
       tui.activity.pushError(
         `error · ${error instanceof Error ? error.message : String(error)}`,
@@ -457,26 +486,50 @@ async function runInteractive(): Promise<void> {
       // An invalid composition is skipped; the next update retries.
     }
   };
-  const unsubscribe = port.subscribe((update) => {
-    if (update.type === "record") void applyLatest(update.record);
+  const onUpdate: Parameters<typeof port.subscribe>[0] = (update) => {
+    if (update.type === "record") {
+      void applyLatest(update.record);
+      adoptMeta(update.record.meta);
+    } else if (update.type === "meta") adoptMeta(update.meta);
+    else if (update.type === "presence") windowCount = update.clients.length;
+    else if (update.type === "sync") syncState = update.sync;
     else if (update.type === "transport") {
       // Every window renders the same hit line from trackd's timestamp.
       const { playing, beat, bpm, atMs } = update.transport;
       clock.setTempo(bpm);
       clock.sync(beat, playing, atMs, monotonicEpochMs());
     } else if (update.type === "status") {
-      syncState = /unavailable|disconnect|lost|offline|reconnect/i.test(
-        update.message,
-      )
-        ? "offline"
-        : port.mode === "daemon"
-          ? "synced"
-          : "local";
+      syncState = port.sync;
       tui.activity.pushCard(update.message, {
         tone: syncState === "offline" ? "warning" : "info",
       });
     }
-  });
+  };
+  let unsubscribe = port.subscribe(onUpdate);
+  const refreshPresence = () =>
+    void port
+      .presence()
+      .then((clients) => {
+        windowCount = Math.max(1, clients.length);
+      })
+      .catch(() => undefined);
+  // File-lock windows have no presence push; poll the heartbeat files.
+  const presenceTimer = setInterval(() => {
+    if (port.mode === "file") refreshPresence();
+  }, 2_000);
+  refreshPresence();
+  rebindPort = () => {
+    unsubscribe();
+    syncState = port.sync;
+    unsubscribe = port.subscribe(onUpdate);
+    refreshPresence();
+  };
+  if (attachNotice)
+    tui.activity.pushCard(attachNotice, {
+      tone: "info",
+      trackId: requestedTrack,
+      hint: draftTrack ? "first edit creates it" : undefined,
+    });
   if (port.status !== "file session")
     tui.activity.pushCard(port.status, { tone: "info" });
   void currentProvider().then(() => tick(true));
@@ -561,6 +614,8 @@ async function runInteractive(): Promise<void> {
     }
   } finally {
     clearInterval(timer);
+    clearInterval(presenceTimer);
+    namer.dispose();
     stdout.off("resize", onResize);
     unsubscribe();
     audio.stop();
@@ -584,8 +639,11 @@ async function submit(prompt: string): Promise<string> {
       .join("  ");
   if (/^\/?undo$/i.test(command)) return stepHistory("undo");
   if (/^\/?redo$/i.test(command)) return stepHistory("redo");
+  const sessionReply = await sessionCommand(command);
+  if (sessionReply !== undefined) return sessionReply;
   const music = parseMusicCommand(command);
   if (music) {
+    await materializeDraft();
     const result = applyMusicCommand(score, requestedTrack, music, () =>
       randomUUID().slice(0, 12),
     );
@@ -601,6 +659,7 @@ async function submit(prompt: string): Promise<string> {
   }
   const importCommand = command.match(/^\/?import\s+([^\s]+)$/i);
   if (importCommand) {
+    await materializeDraft();
     const imported = decodeLoop(await readLoopFile(importCommand[1]!));
     await commitScore(imported, "score.import", { path: importCommand[1] });
     return `imported · ${importCommand[1]}`;
@@ -627,8 +686,10 @@ async function submit(prompt: string): Promise<string> {
   const parsed = parsePrompt(prompt);
   if (!parsed) {
     if (process.env.TRACK_AI === "0") return `unrecognized request: ${prompt}`;
+    await materializeDraft();
     return runAgent(prompt);
   }
+  if (parsed.type !== "transport") await materializeDraft();
   if (parsed.type === "transport") {
     await setTransport(parsed.action);
     try {
@@ -814,6 +875,153 @@ async function readLoopFile(path: string): Promise<string> {
   if (contents.byteLength > 512 * 1024)
     throw new Error("loop import exceeds 512 KiB");
   return contents.toString("utf8");
+}
+
+/**
+ * Adds the focused track to the score when it is missing (an explicit
+ * `--track`, or a draft on its first edit), retrying past concurrent writes.
+ */
+async function ensureFocusedTrack(): Promise<void> {
+  if (score.tracks.some((track) => track.id === requestedTrack)) return;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const latest = attempt === 0 ? record : await port.load();
+    const latestScore = scoreFromJSON(latest.composition);
+    if (latestScore.tracks.some((track) => track.id === requestedTrack)) {
+      record = latest;
+      score = latestScore;
+      return;
+    }
+    const next = withTrack(latestScore, requestedTrack);
+    try {
+      record = await port.append(
+        latest,
+        { kind: "track.attach", payload: { trackId: requestedTrack } },
+        next.toJSON(),
+      );
+      score = next;
+      return;
+    } catch (error) {
+      if (!(error instanceof SessionConflictError)) throw error;
+    }
+  }
+}
+
+/** A draft track becomes real on the window's first edit. */
+async function materializeDraft(): Promise<void> {
+  if (!draftTrack) return;
+  await ensureFocusedTrack();
+  draftTrack = false;
+}
+
+function adoptMeta(meta: typeof record.meta): void {
+  if (meta.version < record.meta.version) return;
+  record = { ...record, meta };
+  if (meta.name !== announcedName) {
+    announcedName = meta.name;
+    tui.activity.pushCard(`session · ${meta.name}`, { tone: "info" });
+  }
+}
+
+function makeNamer(): AutoNamer {
+  return new AutoNamer({
+    target: namingTarget(
+      process.cwd(),
+      () => ({ port, record }),
+      (meta) => adoptMeta(meta),
+    ),
+    // TRACK_AI=0 keeps naming local; an offline provider falls back too.
+    generator:
+      process.env.TRACK_AI === "0"
+        ? undefined
+        : providerNameGenerator(currentProvider),
+  });
+}
+
+/** `/sessions`, `/resume`, `/rename`, `/fork`; undefined when not one. */
+async function sessionCommand(command: string): Promise<string | undefined> {
+  const match = command.match(/^\/(sessions|resume|rename|fork)(?:\s+(.*))?$/i);
+  if (!match) return undefined;
+  const verb = match[1]!.toLowerCase();
+  const arg = (match[2] ?? "").trim();
+  const workspace = process.cwd();
+  if (verb === "rename") {
+    if (!arg)
+      return `session · ${record.meta.name} (${record.meta.nameSource}) · /rename <name> | --auto`;
+    if (arg === "--auto") {
+      const result = await port.updateMeta({
+        nameSource: "auto",
+        namedFingerprint: null,
+        namedStructure: null,
+      });
+      adoptMeta(result.meta);
+      namer.request(score);
+      return "auto-naming on";
+    }
+    const name = normalizeSessionName(arg);
+    // Unconditional: the latest user rename wins over any in-flight auto-name.
+    const result = await port.updateMeta({ name, nameSource: "user" });
+    announcedName = result.meta.name;
+    adoptMeta(result.meta);
+    return `renamed · ${result.meta.name}`;
+  }
+  const sessions = await listSessions(workspace);
+  if (verb === "sessions" || (verb === "resume" && !arg)) {
+    const lines = pickerLines(sessions, record.sessionId, (session) =>
+      formatSessionLine(session, sessions),
+    );
+    for (const line of lines) tui.activity.pushCard(line, { tone: "info" });
+    return verb === "resume"
+      ? "resume · /resume <n|name|id>"
+      : `${lines.length} sessions`;
+  }
+  if (agentTurn) return "agent busy; finish or Esc first";
+  if (verb === "fork") {
+    const forked = await forkSession(workspace, record, arg || undefined);
+    await switchSession(forked.sessionId);
+    return `forked · ${forked.meta.name}`;
+  }
+  const readable = sessions.filter((session) => !session.error);
+  const index = /^[1-9]$/.test(arg) ? Number(arg) - 1 : -1;
+  const sessionId =
+    readable[index]?.sessionId ??
+    (await resolveSessionArg(workspace, arg, sessions));
+  if (!sessions.some((session) => session.sessionId === sessionId))
+    return `no session named "${arg}"`;
+  if (sessionId === record.sessionId) return `already in ${record.meta.name}`;
+  await switchSession(sessionId);
+  return `resumed · ${record.meta.name} · ${requestedTrack}${draftTrack ? " (new)" : ""}`;
+}
+
+/** Leaves the current session and attaches this window to `sessionId`. */
+async function switchSession(sessionId: string): Promise<void> {
+  if (clock.playing) await setTransport("pause");
+  namer.dispose();
+  await port.close();
+  const next = await ensureSession(initial.toJSON(), {
+    sessionId,
+    setCurrent: true,
+  });
+  port = await openSessionPort<ReturnType<TrackScore["toJSON"]>>({
+    paths: next.paths,
+    sessionId,
+    label: "window",
+    focusedTrackId: null,
+  });
+  audio = port.player;
+  record = port.mode === "daemon" ? await port.load() : next.record;
+  score = scoreFromJSON(record.composition);
+  clock.setTempo(score.tempoBpm);
+  const attached = await attachTrack(port, score, undefined);
+  requestedTrack = attached.trackId;
+  draftTrack = attached.draft;
+  announcedName = record.meta.name;
+  namer = makeNamer();
+  rebindPort();
+  if (attached.draft)
+    tui.activity.pushCard(ALL_TRACKS_OPEN_HINT, {
+      tone: "info",
+      trackId: requestedTrack,
+    });
 }
 
 async function commitScore(
