@@ -107,7 +107,7 @@ if (demo) {
     await writeFile(resolve(exportPath), encodeLoop(score), "utf8");
   renderOnce(score, clock.beatAt(), "demo · press space to play", [
     "> add C4 at 0 for 1",
-  ]);
+  ], 0);
   process.exit(0);
 }
 
@@ -192,6 +192,7 @@ function renderOnce(
   transportBeat: number,
   activity?: string,
   promptLines = ["> "],
+  nowMs = Date.now(),
 ): void {
   const width = Math.max(24, stdout.columns ?? 80);
   prompt.setWidth(Math.max(12, width - 4));
@@ -200,7 +201,7 @@ function renderOnce(
   const highway = renderHighway(snapshot(value, transportBeat, activity), {
     width,
     height: rows,
-    clock: () => 0,
+    clock: () => nowMs,
     capabilities,
   });
   const promptFrame = renderPromptPanel(
