@@ -31,12 +31,30 @@ automate pan at 0 -1
 automate pan at 4 1
 clear pan automation
 track drums
+instrument kit
+hit kick at 0
+hit snare at 1 vel 0.7
+pattern kick 0 1 2 3
+pattern hat every 0.5 from 0.25
+clear hat
+filter 1200
+filter 800 0.6
+filter off
+delay 0.375 0.3
+delay 0.75 0.4 0.5
+delay off
+automate filter at 0 400
+automate filter at 4 6000
+clear filter automation
 bars 8
 extend 4 bars
 clear automation
 mute
+solo
+unsolo
 clear
 undo
+redo
 move note <id> to 2.5
 duration note <id> 0.25
 /tracks
@@ -45,9 +63,25 @@ duration note <id> 0.25
 /model opus-5.5
 ```
 
+Drum tracks use the `kit` instrument (a track named `drums` gets it automatically). Notes on a kit track keep the score's MIDI pitch field, using General MIDI percussion numbers (kick 36, rim 37, snare 38, clap 39, closed hat 42, tom 45, open hat 46), so drum hits round-trip through `track.loop/v1` unchanged and the highway draws them in one lane per voice. Grammar, one command per prompt, beats in score beats:
+
+```text
+hit <voice> [at] <beat> [vel <0..1>]
+pattern <voice> <beat> [<beat> ...] [vel <0..1>]        up to 64 beats
+pattern <voice> every <step> [from <beat>] [vel <0..1>]  step >= 0.125, fills the loop, at most 256 hits
+clear <voice>
+filter <cutoff 20..20000> [<resonance 0..1>] | filter off
+delay <beats 0.0625..4> [<feedback 0..0.9> [<mix 0..1>]] | delay off
+automate filter at <beat> <cutoff> | clear filter automation
+solo | unsolo
+undo | redo
+```
+
+Effects live on the track as optional `filter {cutoff, resonance}`, `delay {beats, feedback, mix}`, `filterAutomation`, and `solo` fields. Documents written before these fields existed still parse; out-of-range or non-finite values are rejected. Undo and redo append ordinary session events, so history is shared by every window and a new edit clears the redo stack.
+
 Set `TRACK_AI=1` to send unrecognized prompts to the Vercel AI Gateway. The key stays local in `AI_GATEWAY_API_KEY`; `TRACK_MODEL=opus-5.5` or `TRACK_MODEL=sol-6.1` selects the initial friendly model label, and `/model opus-5.5` or `/model sol-6.1` switches it during a session. `TRACK_OPUS_MODEL` / `TRACK_SOL_MODEL` can map those labels to the provider IDs available in the account. The model must return a bounded JSON operation plan, which is validated before it can touch the score.
 
-Playback renders the score to a short mono PCM WAV with deterministic sine, piano, pluck, bass, saw, square, and triangle voices. Track volume and pan automation are applied before mixing. Pan lanes use -1 to 1 and are rendered with deterministic mono centre compensation. A per-session audio lock keeps multiple TUI windows from starting duplicate voices. The renderer is deterministic and independently testable; a native or sample-backed instrument backend can replace it behind the same player port.
+Playback renders the score to a short mono PCM WAV with deterministic sine, piano, pluck, bass, saw, square, and triangle voices and a synthesized kit whose noise comes from a PRNG seeded by each note, so every render is byte-identical. Track volume and pan automation, the low-pass filter (with its cutoff lane), and the delay send are applied before mixing; mute always silences a track and any solo silences unsoloed tracks. Pan lanes use -1 to 1 and are rendered with deterministic mono centre compensation. A per-session audio lock keeps multiple TUI windows from starting duplicate voices. The renderer is deterministic and independently testable; a native or sample-backed instrument backend can replace it behind the same player port.
 Set `TRACK_AUDIO=0` for headless sessions.
 
 Use `TRACK_DEMO=1 bun run src/main.ts` for a deterministic non-interactive frame stream while developing the renderer.
