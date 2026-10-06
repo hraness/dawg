@@ -236,6 +236,21 @@ async function runInteractive(): Promise<void> {
   stdout.write(`${ESC}?25l${ESC}?2004h${ESC}2J`);
   let activity = "ready";
   let syncing = false;
+  const queuedPrompts: string[] = [];
+  let processingQueue = false;
+  const drainQueue = async (): Promise<void> => {
+    if (processingQueue) return;
+    processingQueue = true;
+    try {
+      while (queuedPrompts.length > 0) {
+        const nextPrompt = queuedPrompts.shift()!;
+        activity = `queued · ${queuedPrompts.length} remaining`;
+        activity = await submit(nextPrompt);
+      }
+    } finally {
+      processingQueue = false;
+    }
+  };
   const tick = () => {
     stdout.write(`${ESC}H`);
     renderOnce(
@@ -331,11 +346,13 @@ async function runInteractive(): Promise<void> {
       } else {
         const action = handleTerminalInput(value);
         if (action?.kind === "exit") break;
-        if (
-          (action?.kind === "submit" || action?.kind === "queue") &&
-          action.value
-        ) {
-          activity = await submit(action.value);
+        if (action?.kind === "submit" && action.value) {
+          queuedPrompts.unshift(action.value);
+          await drainQueue();
+        } else if (action?.kind === "queue" && action.value) {
+          queuedPrompts.push(action.value);
+          activity = `queued · ${queuedPrompts.length}`;
+          void drainQueue();
         }
       }
       tick();

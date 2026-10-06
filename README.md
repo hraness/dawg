@@ -39,7 +39,7 @@ duration note <id> 0.25
 /model opus-5.5
 ```
 
-Press Space on an empty prompt to toggle playback. Enter submits a request. Shift+Enter or Alt+Enter inserts a newline. Bracketed paste preserves multiline input. Ctrl+C exits.
+Press Space on an empty prompt to toggle playback. Enter submits a request. Ctrl+Q switches to queue mode so prompts run in order; a normal submit steers ahead of queued work. Shift+Enter or Alt+Enter inserts a newline. Bracketed paste preserves multiline input. Ctrl+C exits.
 
 Set `TRACK_AI=1` to send unrecognized requests to the Vercel AI Gateway. Keep the key local in `AI_GATEWAY_API_KEY`. Choose the friendly model label with `TRACK_MODEL=opus-5.5` or `TRACK_MODEL=sol-6.1`, or switch it with `/model`. Map those labels to the model IDs available in your gateway account with `TRACK_OPUS_MODEL` and `TRACK_SOL_MODEL`.
 
