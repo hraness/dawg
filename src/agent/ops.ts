@@ -1,4 +1,7 @@
+import { SCORE_LIMITS } from "../../core/score.ts";
+
 export type AgentOperation =
+  | { type: "add-track"; trackId: string }
   | {
       type: "add-note";
       pitch: number;
@@ -18,6 +21,8 @@ export type AgentOperation =
       };
     }
   | { type: "set-tempo"; tempoBpm: number }
+  | { type: "set-bars"; bars: number }
+  | { type: "extend-bars"; bars: number }
   | {
       type: "track";
       patch: {
@@ -30,7 +35,7 @@ export type AgentOperation =
     }
   | {
       type: "automation";
-      parameter: "volume";
+      parameter: "volume" | "pan";
       points: readonly { beat: number; value: number }[];
     }
   | { type: "clear-track" }
@@ -43,6 +48,15 @@ export function parsePrompt(prompt: string): AgentOperation | undefined {
   if (/^(pause|stop)\b/.test(text))
     return { type: "transport", action: "pause" };
   if (/^toggle\b/.test(text)) return { type: "transport", action: "toggle" };
+  const track = text.match(/^(?:add\s+)?track\s+([a-z0-9._-]{1,64})$/);
+  if (track) return { type: "add-track", trackId: track[1]! };
+  const bars = text.match(/^bars\s+(\d+)$/);
+  const extension = text.match(/^extend\s+(\d+)\s+bars?$/);
+  if (bars || extension) {
+    const count = Number((bars ?? extension)![1]);
+    if (Number.isInteger(count) && count >= 1 && count <= SCORE_LIMITS.maxBars)
+      return { type: bars ? "set-bars" : "extend-bars", bars: count };
+  }
   const tempo = text.match(/^(?:tempo|bpm)\s+(\d+(?:\.\d+)?)\s*$/);
   if (tempo) {
     const tempoBpm = Number(tempo[1]);
@@ -61,18 +75,31 @@ export function parsePrompt(prompt: string): AgentOperation | undefined {
     return { type: "track", patch: { muted: false } };
   const volume = text.match(/^(?:volume|vol)\s+(0(?:\.\d+)?|1(?:\.0+)?)$/);
   if (volume) return { type: "track", patch: { volume: Number(volume[1]) } };
-  if (/^(?:clear|reset)\s+(?:volume\s+)?automation$/.test(text))
-    return { type: "automation", parameter: "volume", points: [] };
+  const clearAutomation = text.match(
+    /^(?:clear|reset)\s+(?:(volume|pan)\s+)?automation$/,
+  );
+  if (clearAutomation)
+    return {
+      type: "automation",
+      parameter:
+        (clearAutomation[1] as "volume" | "pan" | undefined) ?? "volume",
+      points: [],
+    };
   const automation = text.match(
-    /^(?:automate|automation)\s+volume\s+at\s+(\d+(?:\.\d+)?)\s+(0(?:\.\d+)?|1(?:\.0+)?)$/,
+    /^(?:automate|automation)\s+(volume|pan)\s+at\s+(\d+(?:\.\d+)?)\s+(-?(?:0(?:\.\d+)?|1(?:\.0+)?))$/,
   );
   if (automation) {
-    const beat = Number(automation[1]);
-    const value = Number(automation[2]);
-    if (Number.isFinite(beat) && Number.isFinite(value))
+    const parameter = automation[1] as "volume" | "pan";
+    const beat = Number(automation[2]);
+    const value = Number(automation[3]);
+    if (
+      Number.isFinite(beat) &&
+      Number.isFinite(value) &&
+      (parameter === "pan" ? value >= -1 : value >= 0)
+    )
       return {
         type: "automation",
-        parameter: "volume",
+        parameter,
         points: [{ beat, value }],
       };
   }

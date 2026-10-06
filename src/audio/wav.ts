@@ -39,7 +39,7 @@ export function renderScoreWav(
     // Mono output cannot place a voice in a stereo field, but pan still
     // behaves predictably as a small center-compensation gain. This keeps
     // exported loops stable while making the control audible in the mix.
-    const panGain = 1 - Math.abs(track?.pan ?? 0) * 0.12;
+    const panAutomation = track?.panAutomation ?? [];
     const start = Math.max(
       0,
       Math.floor(
@@ -68,6 +68,16 @@ export function renderScoreWav(
         note.startTick + elapsed / samplesPerTick,
         1,
       );
+      const automatedPan = interpolateAutomation(
+        panAutomation,
+        note.startTick + elapsed / samplesPerTick,
+        track?.pan ?? 0,
+      );
+      // The current WAV contract is mono. Preserve the perceived level while
+      // making pan automation audible through a deterministic centre-compensation
+      // curve, ready for a future stereo writer without changing exports.
+      const panGain =
+        1 - Math.abs(Math.max(-1, Math.min(1, automatedPan))) * 0.12;
       const envelope =
         Math.min(attack, release) *
         Math.max(0, Math.min(1, note.velocity)) *

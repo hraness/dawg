@@ -95,4 +95,39 @@ describe("score WAV renderer", () => {
       pcm(renderScoreWav(steady, { sampleRate: 8_000, maxSeconds: 2 })),
     );
   });
+
+  test("renders piecewise-linear pan automation without changing the WAV contract", () => {
+    const steady = createScore({
+      ticksPerBeat: 480,
+      tracks: [{ id: "main", volume: 1, pan: 0 }],
+      notes: [
+        {
+          id: "a",
+          trackId: "main",
+          start: 0,
+          durationTicks: 960,
+          pitch: 60,
+          velocity: 1,
+        },
+      ],
+    });
+    const automated = steady.withTracks([
+      {
+        id: "main",
+        volume: 1,
+        pan: 0,
+        panAutomation: [
+          { tick: 0, value: 0 },
+          { tick: 960, value: 1 },
+        ],
+      },
+    ]);
+    expect(
+      renderScoreWav(automated, { sampleRate: 8_000, maxSeconds: 2 }),
+    ).not.toEqual(renderScoreWav(steady, { sampleRate: 8_000, maxSeconds: 2 }));
+    const header = new DataView(
+      renderScoreWav(automated, { sampleRate: 8_000, maxSeconds: 2 }).buffer,
+    );
+    expect(header.getUint16(22, true)).toBe(1);
+  });
 });

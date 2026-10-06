@@ -56,5 +56,34 @@ describe("parsePrompt", () => {
       parameter: "volume",
       points: [],
     });
+    expect(parsePrompt("automate pan at 0 -1")).toEqual({
+      type: "automation",
+      parameter: "pan",
+      points: [{ beat: 0, value: -1 }],
+    });
+    expect(parsePrompt("clear pan automation")).toEqual({
+      type: "automation",
+      parameter: "pan",
+      points: [],
+    });
+    expect(parsePrompt("automate volume at 1 -0.2")).toBeUndefined();
+  });
+
+  test("parses track creation and bounded loop sizing requests", () => {
+    expect(parsePrompt("track bass")).toEqual({
+      type: "add-track",
+      trackId: "bass",
+    });
+    expect(parsePrompt("add track pads")).toEqual({
+      type: "add-track",
+      trackId: "pads",
+    });
+    expect(parsePrompt("bars 8")).toEqual({ type: "set-bars", bars: 8 });
+    expect(parsePrompt("extend 4 bars")).toEqual({
+      type: "extend-bars",
+      bars: 4,
+    });
+    expect(parsePrompt("bars 0")).toBeUndefined();
+    expect(parsePrompt("extend 257 bars")).toBeUndefined();
   });
 });

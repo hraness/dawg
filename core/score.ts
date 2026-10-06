@@ -53,6 +53,8 @@ export type Track = Readonly<{
   pan: number;
   /** Volume control points in score ticks, sorted by tick. */
   volumeAutomation: readonly AutomationPoint[];
+  /** Pan control points in score ticks, sorted by tick. */
+  panAutomation: readonly AutomationPoint[];
 }>;
 
 export type AutomationPoint = Readonly<{
@@ -203,6 +205,11 @@ export class TrackScore {
     });
   }
 
+  /** Resize the loop without discarding notes or automation outside its bounds. */
+  withBars(bars: number): TrackScore {
+    return new TrackScore({ ...this.toJSON(), bars });
+  }
+
   toJSON(): TrackScoreData & { version: typeof SCORE_VERSION } {
     return {
       version: SCORE_VERSION,
@@ -223,6 +230,12 @@ export function createScore(data: TrackScoreData = {}): TrackScore {
 
 export function emptyScore(): TrackScore {
   return new TrackScore();
+}
+
+export function addTrack(score: TrackScore, input: TrackInput): TrackScore {
+  if (!(score instanceof TrackScore))
+    throw new ScoreValidationError("addTrack requires a TrackScore");
+  return score.withTracks([...score.tracks, input]);
 }
 
 export function addNote(score: TrackScore, input: NoteInput): TrackScore {
@@ -319,7 +332,13 @@ export function updateTrack(
     Partial<
       Pick<
         Track,
-        "name" | "instrument" | "muted" | "volume" | "pan" | "volumeAutomation"
+        | "name"
+        | "instrument"
+        | "muted"
+        | "volume"
+        | "pan"
+        | "volumeAutomation"
+        | "panAutomation"
       >
     >
   >,
@@ -340,7 +359,19 @@ export function setVolumeAutomation(
   return updateTrack(score, trackId, { volumeAutomation: points });
 }
 
+export function setPanAutomation(
+  score: TrackScore,
+  trackId: string,
+  points: readonly AutomationPoint[],
+): TrackScore {
+  return updateTrack(score, trackId, { panAutomation: points });
+}
+
 export type ScoreOperation =
+  | Readonly<{
+      type: "addTrack";
+      track: TrackInput;
+    }>
   | Readonly<{
       type: "addNote";
       note: NoteInput;
@@ -363,6 +394,10 @@ export type ScoreOperation =
       tempoBpm: number;
     }>
   | Readonly<{
+      type: "setBars";
+      bars: number;
+    }>
+  | Readonly<{
       type: "updateTrack";
       trackId: string;
       patch: Readonly<
@@ -375,6 +410,7 @@ export type ScoreOperation =
             | "volume"
             | "pan"
             | "volumeAutomation"
+            | "panAutomation"
           >
         >
       >;
@@ -382,7 +418,7 @@ export type ScoreOperation =
   | Readonly<{
       type: "setAutomation";
       trackId: string;
-      parameter: "volume";
+      parameter: "volume" | "pan";
       points: readonly AutomationPoint[];
     }>
   | Readonly<{
@@ -394,16 +430,20 @@ export function applyScoreOperation(
   score: TrackScore,
   operation: ScoreOperation,
 ): TrackScore {
+  if (operation.type === "addTrack") return addTrack(score, operation.track);
   if (operation.type === "addNote") return addNote(score, operation.note);
   if (operation.type === "removeNote")
     return removeNote(score, operation.noteId);
   if (operation.type === "updateNote")
     return updateNote(score, operation.noteId, operation.patch);
   if (operation.type === "setTempo") return score.withTempo(operation.tempoBpm);
+  if (operation.type === "setBars") return score.withBars(operation.bars);
   if (operation.type === "updateTrack")
     return updateTrack(score, operation.trackId, operation.patch);
   if (operation.type === "setAutomation")
-    return setVolumeAutomation(score, operation.trackId, operation.points);
+    return operation.parameter === "volume"
+      ? setVolumeAutomation(score, operation.trackId, operation.points)
+      : setPanAutomation(score, operation.trackId, operation.points);
   if (operation.type === "clearTrack")
     return clearTrack(score, operation.trackId);
   return assertNever(operation);
@@ -517,6 +557,14 @@ function normalizeTrack(input: unknown): Track {
   const volumeAutomation = normalizeAutomation(
     input.volumeAutomation,
     "volumeAutomation",
+    0,
+    SCORE_LIMITS.maxVolume,
+  );
+  const panAutomation = normalizeAutomation(
+    input.panAutomation,
+    "panAutomation",
+    -1,
+    1,
   );
   return Object.freeze({
     id,
@@ -526,12 +574,15 @@ function normalizeTrack(input: unknown): Track {
     volume,
     pan,
     volumeAutomation,
+    panAutomation,
   });
 }
 
 function normalizeAutomation(
   input: unknown,
   label: string,
+  minValue: number,
+  maxValue: number,
 ): readonly AutomationPoint[] {
   if (input === undefined) return Object.freeze([]);
   if (!Array.isArray(input) || input.length > SCORE_LIMITS.maxAutomationPoints)
@@ -560,11 +611,11 @@ function normalizeAutomation(
     if (
       typeof value !== "number" ||
       !Number.isFinite(value) ||
-      value < 0 ||
-      value > SCORE_LIMITS.maxVolume
+      value < minValue ||
+      value > maxValue
     )
       throw new ScoreValidationError(
-        `${label} point value must be between 0 and ${SCORE_LIMITS.maxVolume}`,
+        `${label} point value must be between ${minValue} and ${maxValue}`,
         "invalid-track",
       );
     return Object.freeze({ tick, value });

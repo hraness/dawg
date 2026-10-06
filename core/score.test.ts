@@ -9,7 +9,9 @@ import {
   SCORE_LIMITS,
   ScoreValidationError,
   TrackScore,
+  addTrack,
   addNote,
+  applyScoreOperation,
   createScore,
   removeNote,
   scoreFromJSON,
@@ -17,6 +19,7 @@ import {
   updateTrack,
   clearTrack,
   setVolumeAutomation,
+  setPanAutomation,
 } from "./score.ts";
 
 describe("TrackScore", () => {
@@ -125,6 +128,10 @@ describe("TrackScore", () => {
             { tick: 1_920, value: 0.2 },
             { tick: 0, value: 0.8 },
           ],
+          panAutomation: [
+            { tick: 1_920, value: 1 },
+            { tick: 0, value: -1 },
+          ],
         },
       ],
     }).addNote({
@@ -216,5 +223,98 @@ describe("TrackScore", () => {
         { tick: 0, value: 0.8 },
       ]),
     ).toThrow("cannot share a tick");
+  });
+
+  test("normalizes independent bounded pan automation", () => {
+    const score = createScore({ tracks: [{ id: "lead" }] });
+    expect(score.tracks[0]?.panAutomation).toEqual([]);
+    const automated = applyScoreOperation(score, {
+      type: "setAutomation",
+      trackId: "lead",
+      parameter: "pan",
+      points: [
+        { tick: 960, value: 1 },
+        { tick: 0, value: -1 },
+      ],
+    });
+    expect(automated.tracks[0]?.panAutomation).toEqual([
+      { tick: 0, value: -1 },
+      { tick: 960, value: 1 },
+    ]);
+    expect(automated.tracks[0]?.volumeAutomation).toEqual([]);
+    expect(Object.isFrozen(automated.tracks[0]?.panAutomation)).toBe(true);
+    for (const value of [-1.1, 1.1, Number.NaN]) {
+      expect(() =>
+        setPanAutomation(score, "lead", [{ tick: 0, value }]),
+      ).toThrow("between -1 and 1");
+    }
+    expect(() =>
+      setPanAutomation(score, "lead", [
+        { tick: 0, value: -1 },
+        { tick: 0, value: 1 },
+      ]),
+    ).toThrow("cannot share a tick");
+    expect(() =>
+      setPanAutomation(
+        score,
+        "lead",
+        Array.from(
+          { length: SCORE_LIMITS.maxAutomationPoints + 1 },
+          (_, tick) => ({
+            tick,
+            value: 0,
+          }),
+        ),
+      ),
+    ).toThrow("at most");
+  });
+
+  test("adds tracks immutably and enforces IDs and track budgets", () => {
+    const score = createScore({ tracks: [{ id: "main" }] });
+    const expanded = applyScoreOperation(score, {
+      type: "addTrack",
+      track: { id: "bass", instrument: "bass" },
+    });
+    expect(score.tracks).toHaveLength(1);
+    expect(expanded.tracks).toHaveLength(2);
+    expect(expanded.tracks[1]).toMatchObject({
+      id: "bass",
+      name: "bass",
+      instrument: "bass",
+      panAutomation: [],
+    });
+    expect(() => addTrack(expanded, { id: "bass" })).toThrow("already exists");
+    expect(() => addTrack(score, { id: "" })).toThrow("track id");
+    const full = createScore({
+      tracks: Array.from({ length: SCORE_LIMITS.maxTracks }, (_, index) => ({
+        id: `track-${index}`,
+      })),
+    });
+    expect(() => addTrack(full, { id: "extra" })).toThrow("more than");
+  });
+
+  test("resizes loop bounds without deleting score data", () => {
+    const score = createScore({
+      tracks: [{ id: "main", panAutomation: [{ tick: 4_000, value: 1 }] }],
+      notes: [
+        {
+          id: "late",
+          trackId: "main",
+          start: 4_000,
+          duration: 480,
+          pitch: 60,
+          velocity: 1,
+        },
+      ],
+    });
+    const longer = applyScoreOperation(score, { type: "setBars", bars: 8 });
+    expect(longer.bars).toBe(8);
+    expect(score.bars).toBe(4);
+    const shorter = longer.withBars(1);
+    expect(shorter.notes).toEqual(score.notes);
+    expect(shorter.tracks).toEqual(score.tracks);
+    expect(shorter.withBars(8)).toEqual(longer);
+    for (const bars of [0, 1.5, SCORE_LIMITS.maxBars + 1, Number.NaN])
+      expect(() => score.withBars(bars)).toThrow("bars must be an integer");
   });
 });

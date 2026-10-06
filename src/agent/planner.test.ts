@@ -36,6 +36,8 @@ describe("composition planner", () => {
       JSON.stringify({
         operations: [
           { type: "setTempo", tempoBpm: 128 },
+          { type: "setBars", bars: 8 },
+          { type: "addTrack", track: { id: "bass", instrument: "bass" } },
           {
             type: "updateTrack",
             trackId: "main",
@@ -48,16 +50,52 @@ describe("composition planner", () => {
             parameter: "volume",
             points: [{ tick: 0, value: 0.25 }],
           },
+          {
+            type: "setAutomation",
+            trackId: "main",
+            parameter: "pan",
+            points: [{ tick: 480, value: -0.5 }],
+          },
         ],
       }),
     );
-    expect(plan.operations).toHaveLength(4);
+    expect(plan.operations).toHaveLength(7);
     expect(plan.operations[0]).toEqual({ type: "setTempo", tempoBpm: 128 });
-    expect(plan.operations[3]).toEqual({
+    expect(plan.operations[5]).toEqual({
       type: "setAutomation",
       trackId: "main",
       parameter: "volume",
       points: [{ tick: 0, value: 0.25 }],
     });
+    expect(plan.operations[6]).toEqual({
+      type: "setAutomation",
+      trackId: "main",
+      parameter: "pan",
+      points: [{ tick: 480, value: -0.5 }],
+    });
+  });
+
+  test("rejects out-of-range pan automation and malformed tracks", () => {
+    expect(() =>
+      parseCompositionPlan(
+        JSON.stringify({
+          operations: [
+            {
+              type: "setAutomation",
+              trackId: "main",
+              parameter: "pan",
+              points: [{ tick: 0, value: -1.1 }],
+            },
+          ],
+        }),
+      ),
+    ).toThrow("agent automation point is invalid");
+    expect(() =>
+      parseCompositionPlan(
+        JSON.stringify({
+          operations: [{ type: "addTrack", track: { id: "bad" } }],
+        }),
+      ),
+    ).not.toThrow();
   });
 });
