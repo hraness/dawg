@@ -46,5 +46,15 @@ describe("parsePrompt", () => {
       noteId: "lead-1",
       patch: { duration: 0.25 },
     });
+    expect(parsePrompt("automate volume at 2 0.4")).toEqual({
+      type: "automation",
+      parameter: "volume",
+      points: [{ beat: 2, value: 0.4 }],
+    });
+    expect(parsePrompt("clear automation")).toEqual({
+      type: "automation",
+      parameter: "volume",
+      points: [],
+    });
   });
 });

@@ -28,6 +28,11 @@ export type AgentOperation =
         name?: string;
       };
     }
+  | {
+      type: "automation";
+      parameter: "volume";
+      points: readonly { beat: number; value: number }[];
+    }
   | { type: "clear-track" }
   | { type: "transport"; action: "play" | "pause" | "toggle" };
 
@@ -43,7 +48,7 @@ export function parsePrompt(prompt: string): AgentOperation | undefined {
     const tempoBpm = Number(tempo[1]);
     if (Number.isFinite(tempoBpm)) return { type: "set-tempo", tempoBpm };
   }
-  if (/^(?:clear|clear\s+track|remove\s+all)\b/.test(text))
+  if (/^(?:clear|clear\s+track|remove\s+all)$/.test(text))
     return { type: "clear-track" };
   const instrument = text.match(
     /^(?:instrument|sound|voice)\s+([a-z0-9._ -]{1,64})$/,
@@ -56,6 +61,21 @@ export function parsePrompt(prompt: string): AgentOperation | undefined {
     return { type: "track", patch: { muted: false } };
   const volume = text.match(/^(?:volume|vol)\s+(0(?:\.\d+)?|1(?:\.0+)?)$/);
   if (volume) return { type: "track", patch: { volume: Number(volume[1]) } };
+  if (/^(?:clear|reset)\s+(?:volume\s+)?automation$/.test(text))
+    return { type: "automation", parameter: "volume", points: [] };
+  const automation = text.match(
+    /^(?:automate|automation)\s+volume\s+at\s+(\d+(?:\.\d+)?)\s+(0(?:\.\d+)?|1(?:\.0+)?)$/,
+  );
+  if (automation) {
+    const beat = Number(automation[1]);
+    const value = Number(automation[2]);
+    if (Number.isFinite(beat) && Number.isFinite(value))
+      return {
+        type: "automation",
+        parameter: "volume",
+        points: [{ beat, value }],
+      };
+  }
   const pan = text.match(/^(?:pan)\s+(-?1(?:\.0+)?|-?0(?:\.\d+)?)$/);
   if (pan) return { type: "track", patch: { pan: Number(pan[1]) } };
   const remove = text.match(

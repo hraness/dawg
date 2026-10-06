@@ -16,6 +16,7 @@ import {
   updateNote,
   updateTrack,
   clearTrack,
+  setVolumeAutomation,
 } from "./score.ts";
 
 describe("TrackScore", () => {
@@ -186,5 +187,24 @@ describe("TrackScore", () => {
       muted: true,
     });
     expect(clearTrack(controlled, "lead").notes).toHaveLength(0);
+  });
+
+  test("normalizes bounded volume automation while preserving old tracks", () => {
+    const score = createScore({ tracks: [{ id: "lead" }] });
+    expect(score.tracks[0]?.volumeAutomation).toEqual([]);
+    const automated = setVolumeAutomation(score, "lead", [
+      { tick: 960, value: 0.8 },
+      { tick: 0, value: 0.2 },
+    ]);
+    expect(automated.tracks[0]?.volumeAutomation).toEqual([
+      { tick: 0, value: 0.2 },
+      { tick: 960, value: 0.8 },
+    ]);
+    expect(() =>
+      setVolumeAutomation(score, "lead", [
+        { tick: 0, value: 0.2 },
+        { tick: 0, value: 0.8 },
+      ]),
+    ).toThrow("cannot share a tick");
   });
 });

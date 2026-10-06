@@ -15,6 +15,7 @@ export const SCORE_LIMITS = Object.freeze({
   maxIdLength: 64,
   maxNameLength: 96,
   maxInstrumentLength: 64,
+  maxAutomationPoints: 256,
   maxVolume: 1,
   maxTempoBpm: 300,
   minTempoBpm: 20,
@@ -50,6 +51,13 @@ export type Track = Readonly<{
   muted: boolean;
   volume: number;
   pan: number;
+  /** Volume control points in score ticks, sorted by tick. */
+  volumeAutomation: readonly AutomationPoint[];
+}>;
+
+export type AutomationPoint = Readonly<{
+  tick: number;
+  value: number;
 }>;
 
 /** A note's start and duration are integer ticks, never floating-point beats. */
@@ -308,7 +316,12 @@ export function updateTrack(
   score: TrackScore,
   trackId: string,
   patch: Readonly<
-    Partial<Pick<Track, "name" | "instrument" | "muted" | "volume" | "pan">>
+    Partial<
+      Pick<
+        Track,
+        "name" | "instrument" | "muted" | "volume" | "pan" | "volumeAutomation"
+      >
+    >
   >,
 ): TrackScore {
   if (!score.tracks.some((track) => track.id === trackId)) return score;
@@ -317,6 +330,14 @@ export function updateTrack(
       track.id === trackId ? { ...track, ...patch } : track,
     ),
   );
+}
+
+export function setVolumeAutomation(
+  score: TrackScore,
+  trackId: string,
+  points: readonly AutomationPoint[],
+): TrackScore {
+  return updateTrack(score, trackId, { volumeAutomation: points });
 }
 
 export type ScoreOperation =
@@ -345,8 +366,24 @@ export type ScoreOperation =
       type: "updateTrack";
       trackId: string;
       patch: Readonly<
-        Partial<Pick<Track, "name" | "instrument" | "muted" | "volume" | "pan">>
+        Partial<
+          Pick<
+            Track,
+            | "name"
+            | "instrument"
+            | "muted"
+            | "volume"
+            | "pan"
+            | "volumeAutomation"
+          >
+        >
       >;
+    }>
+  | Readonly<{
+      type: "setAutomation";
+      trackId: string;
+      parameter: "volume";
+      points: readonly AutomationPoint[];
     }>
   | Readonly<{
       type: "clearTrack";
@@ -365,6 +402,8 @@ export function applyScoreOperation(
   if (operation.type === "setTempo") return score.withTempo(operation.tempoBpm);
   if (operation.type === "updateTrack")
     return updateTrack(score, operation.trackId, operation.patch);
+  if (operation.type === "setAutomation")
+    return setVolumeAutomation(score, operation.trackId, operation.points);
   if (operation.type === "clearTrack")
     return clearTrack(score, operation.trackId);
   return assertNever(operation);
@@ -475,7 +514,70 @@ function normalizeTrack(input: unknown): Track {
       "track pan must be between -1 and 1",
       "invalid-track",
     );
-  return Object.freeze({ id, name, instrument, muted, volume, pan });
+  const volumeAutomation = normalizeAutomation(
+    input.volumeAutomation,
+    "volumeAutomation",
+  );
+  return Object.freeze({
+    id,
+    name,
+    instrument,
+    muted,
+    volume,
+    pan,
+    volumeAutomation,
+  });
+}
+
+function normalizeAutomation(
+  input: unknown,
+  label: string,
+): readonly AutomationPoint[] {
+  if (input === undefined) return Object.freeze([]);
+  if (!Array.isArray(input) || input.length > SCORE_LIMITS.maxAutomationPoints)
+    throw new ScoreValidationError(
+      `${label} must contain at most ${SCORE_LIMITS.maxAutomationPoints} points`,
+      "score-limit",
+    );
+  const points = input.map((candidate) => {
+    if (!isRecord(candidate))
+      throw new ScoreValidationError(
+        `${label} point must be an object`,
+        "invalid-track",
+      );
+    const tick = candidate.tick;
+    const value = candidate.value;
+    if (
+      typeof tick !== "number" ||
+      !Number.isInteger(tick) ||
+      tick < 0 ||
+      tick > SCORE_LIMITS.maxTick
+    )
+      throw new ScoreValidationError(
+        `${label} point tick must be an integer between 0 and ${SCORE_LIMITS.maxTick}`,
+        "invalid-track",
+      );
+    if (
+      typeof value !== "number" ||
+      !Number.isFinite(value) ||
+      value < 0 ||
+      value > SCORE_LIMITS.maxVolume
+    )
+      throw new ScoreValidationError(
+        `${label} point value must be between 0 and ${SCORE_LIMITS.maxVolume}`,
+        "invalid-track",
+      );
+    return Object.freeze({ tick, value });
+  });
+  points.sort((a, b) => a.tick - b.tick);
+  for (let index = 1; index < points.length; index += 1) {
+    if (points[index]!.tick === points[index - 1]!.tick)
+      throw new ScoreValidationError(
+        `${label} points cannot share a tick`,
+        "invalid-track",
+      );
+  }
+  return freezeArray(points);
 }
 
 function normalizeNotes(inputs: readonly unknown[]): Note[] {
