@@ -1,5 +1,7 @@
 import {
   SCORE_LIMITS,
+  normalizeDelay,
+  normalizeFilter,
   scoreFromJSON,
   type TrackScore,
   type ScoreOperation,
@@ -9,7 +11,8 @@ import {
   type GatewayClient,
   type GatewayModel,
 } from "./gateway.ts";
-import { AVAILABLE_INSTRUMENTS } from "../audio/wav.ts";
+import { AVAILABLE_EFFECTS, AVAILABLE_INSTRUMENTS } from "../audio/wav.ts";
+import { DRUM_VOICES } from "../../core/drums.ts";
 
 const MAX_RESPONSE_BYTES = 64 * 1024;
 const MAX_OPERATIONS = 32;
@@ -63,7 +66,7 @@ export async function planComposition(options: {
       messages: [
         {
           role: "system",
-          content: `You edit a local loop. Return JSON only. Operations may be addTrack, addNote, removeNote, updateNote, setTempo, setBars, updateTrack, setAutomation, or clearTrack. Example: {"operations":[{"type":"addNote","note":{"id":"short unique id","trackId":"track","start":0,"duration":1,"pitch":60,"velocity":0.8}}],"explanation":"brief"}. Use beats for note start/duration. To create a track, use addTrack with a track object containing a unique id, name, and instrument, then add notes to that id. To resize or extend the loop, use setBars with the desired total bars (integer 1..256); this preserves notes and automation. For automation, use setAutomation with parameter "volume" (values 0..1) or "pan" (values -1..1, left to right), and integer tick points like {"tick":0,"value":0.2}. Automation replaces that parameter's lane; preserve any existing points you want to keep. Available instruments: ${AVAILABLE_INSTRUMENTS.join(", ")}. Keep changes inside the requested track unless the user asks otherwise. Never return prose outside JSON.`,
+          content: `You edit a local loop. Return JSON only. Operations may be addTrack, addNote, removeNote, updateNote, setTempo, setBars, updateTrack, setAutomation, or clearTrack. Example: {"operations":[{"type":"addNote","note":{"id":"short unique id","trackId":"track","start":0,"duration":1,"pitch":60,"velocity":0.8}}],"explanation":"brief"}. Use beats for note start/duration. To create a track, use addTrack with a track object containing a unique id, name, and instrument, then add notes to that id. To resize or extend the loop, use setBars with the desired total bars (integer 1..256); this preserves notes and automation. For automation, use setAutomation with parameter "volume" (values 0..1), "pan" (values -1..1, left to right), or "filter" (low-pass cutoff Hz ${SCORE_LIMITS.minFilterCutoff}..${SCORE_LIMITS.maxFilterCutoff}), and integer tick points like {"tick":0,"value":0.2}. Automation replaces that parameter's lane; preserve any existing points you want to keep. Available instruments: ${AVAILABLE_INSTRUMENTS.join(", ")}. A track with instrument "kit" is a drum track: each note's pitch selects a drum voice (${drumVoiceGuide()}); use short durations. Effects are set with updateTrack patch fields: filter {"cutoff":hz,"resonance":0..1}, delay {"beats":${SCORE_LIMITS.minDelayBeats}..${SCORE_LIMITS.maxDelayBeats},"feedback":0..${SCORE_LIMITS.maxDelayFeedback},"mix":0..1}, null to remove; solo true|false isolates tracks in playback. Available effects: ${AVAILABLE_EFFECTS.join("; ")}. Keep changes inside the requested track unless the user asks otherwise. Never return prose outside JSON.`,
         },
         {
           role: "user",
@@ -133,16 +136,25 @@ function parseOperation(value: unknown): ScoreOperation {
       safe.volume = patch.volume;
     if (typeof patch.pan === "number" && Number.isFinite(patch.pan))
       safe.pan = patch.pan;
+    if (typeof patch.solo === "boolean") safe.solo = patch.solo;
+    // Effects reuse the score's bounded validators; null removes an effect.
+    if (patch.filter !== undefined)
+      safe.filter = normalizeFilter(patch.filter) ?? null;
+    if (patch.delay !== undefined)
+      safe.delay = normalizeDelay(patch.delay) ?? null;
     return { type: "updateTrack", trackId: value.trackId, patch: safe };
   }
   if (
     value.type === "setAutomation" &&
     typeof value.trackId === "string" &&
     value.trackId.length <= SCORE_LIMITS.maxIdLength &&
-    (value.parameter === "volume" || value.parameter === "pan") &&
+    (value.parameter === "volume" ||
+      value.parameter === "pan" ||
+      value.parameter === "filter") &&
     Array.isArray(value.points) &&
     value.points.length <= SCORE_LIMITS.maxAutomationPoints
   ) {
+    const [minValue, maxValue] = AUTOMATION_RANGES[value.parameter];
     const points = value.points.map((candidate) => {
       if (!isRecord(candidate))
         throw new Error("agent automation point is malformed");
@@ -153,8 +165,8 @@ function parseOperation(value: unknown): ScoreOperation {
         candidate.tick > SCORE_LIMITS.maxTick ||
         typeof candidate.value !== "number" ||
         !Number.isFinite(candidate.value) ||
-        candidate.value < (value.parameter === "pan" ? -1 : 0) ||
-        candidate.value > 1
+        candidate.value < minValue ||
+        candidate.value > maxValue
       ) {
         throw new Error("agent automation point is invalid");
       }
@@ -227,4 +239,15 @@ function parseOperation(value: unknown): ScoreOperation {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const AUTOMATION_RANGES = Object.freeze({
+  volume: [0, 1],
+  pan: [-1, 1],
+  filter: [SCORE_LIMITS.minFilterCutoff, SCORE_LIMITS.maxFilterCutoff],
+} as const);
+
+/** "kick=36, snare=38, ..." for the model's drum vocabulary. */
+export function drumVoiceGuide(): string {
+  return DRUM_VOICES.map((info) => `${info.voice}=${info.pitch}`).join(", ");
 }

@@ -56,6 +56,8 @@ export interface TrackScoreSnapshot {
   key?: string | undefined;
   loopBeats?: number | undefined;
   laneCount?: number | undefined;
+  /** Optional lane legend (drum voices) drawn just below the hit line. */
+  laneLabels?: readonly string[] | undefined;
   /** Static transport position when the score is paused. */
   transportBeat?: number | undefined;
   /** Alias accepted by adapters that call this value currentBeat. */
@@ -332,6 +334,9 @@ export function renderHighway(
     roles[hitRow]![column] = "border";
   }
 
+  // Lane legend sits under the hit line; passing notes draw over it.
+  drawLaneLabels(score, grid, roles, hitRow + 1, contentWidth, laneCount);
+
   for (const note of score.notes) {
     if (!Number.isFinite(note.startBeat)) continue;
     const duration = Math.max(0, note.durationBeats ?? 0);
@@ -398,6 +403,30 @@ export function renderHighway(
     : " ready · [u] undo · [space] pause · [o] inspect";
   rows.push(styledFit("muted", activity, width, capabilities));
   return rows.map((row) => padStyled(row, width)).join("\n");
+}
+
+function drawLaneLabels(
+  score: TrackScoreSnapshot,
+  grid: string[][],
+  roles: Array<Array<SemanticRole | undefined>>,
+  row: number,
+  contentWidth: number,
+  laneCount: number,
+): void {
+  const labels = score.laneLabels;
+  if (!labels || row >= grid.length) return;
+  const slot = Math.floor(contentWidth / Math.max(1, laneCount));
+  labels.slice(0, laneCount).forEach((label, lane) => {
+    const x = Math.round(
+      (lane / Math.max(1, laneCount - 1)) * (contentWidth - 1),
+    );
+    const text = label.slice(0, Math.max(1, slot - 1));
+    const start = Math.max(0, Math.min(contentWidth - text.length, x));
+    for (let offset = 0; offset < text.length; offset += 1) {
+      grid[row]![start + offset] = text[offset]!;
+      roles[row]![start + offset] = "muted";
+    }
+  });
 }
 
 /** Alias kept for adapters that call the surface a piano roll. */

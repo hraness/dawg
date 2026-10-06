@@ -11,6 +11,10 @@ import {
   type SessionRecord,
 } from "./session/store.ts";
 import { parsePrompt } from "./agent/ops.ts";
+import { applyMusicCommand, parseMusicCommand } from "./commands/music.ts";
+import { historyTarget, REDO_KIND, UNDO_KIND } from "./commands/history.ts";
+import { drumSnapshotFields } from "../tui/drums.ts";
+import { isDrumInstrument } from "../core/drums.ts";
 import { planComposition } from "./agent/planner.ts";
 import type { GatewayModel } from "./agent/gateway.ts";
 import { TransportClock } from "./audio/clock.ts";
@@ -47,7 +51,9 @@ Prompt:
 
 Commands:
   play, pause, tempo <bpm>, instrument <name>, volume <0..1>, pan <-1..1>
-  automate volume|pan at <beat> <value>, clear automation, mute, clear, undo
+  automate volume|pan|filter at <beat> <value>, clear automation, mute, clear
+  undo, redo, solo, unsolo, filter <hz> [res], delay <beats> [fb] [mix]
+  instrument kit, hit <voice> at <beat>, pattern <voice> <beats...>|every <step>
   track <name>, bars <count>, extend <count> bars
   /tracks, /export <file>, /import <file>, /model opus-5.5|sol-6.1
 
@@ -55,6 +61,7 @@ AI is opt-in with TRACK_AI=1 and a local AI_GATEWAY_API_KEY.`;
 const args = new Set(process.argv.slice(2));
 const requestedSession = optionValue("--session");
 const requestedTrack = optionValue("--track") ?? "main";
+const initialInstrument = isDrumInstrument(requestedTrack) ? "kit" : "sine";
 const importPath = optionValue("--import");
 const exportPath = optionValue("--export");
 if (args.has("--help") || args.has("-h")) {
@@ -65,7 +72,9 @@ const demo =
   args.has("--demo") || process.env.TRACK_DEMO === "1" || !stdin.isTTY;
 
 const initial = createScore({
-  tracks: [{ id: requestedTrack, name: requestedTrack, instrument: "sine" }],
+  tracks: [
+    { id: requestedTrack, name: requestedTrack, instrument: initialInstrument },
+  ],
 });
 const sessionOptions: { sessionId?: string; setCurrent: boolean } = {
   setCurrent: !requestedSession || args.has("--new"),
@@ -102,7 +111,11 @@ if (!score.tracks.some((track) => track.id === requestedTrack)) {
     }
     const next = latestScore.withTracks([
       ...latestScore.tracks,
-      { id: requestedTrack, name: requestedTrack, instrument: "sine" },
+      {
+        id: requestedTrack,
+        name: requestedTrack,
+        instrument: initialInstrument,
+      },
     ]);
     try {
       record = await appendSessionEvent(
@@ -187,17 +200,18 @@ function snapshot(
   beat: number,
   activity?: string,
 ): TrackScoreSnapshot {
+  const notes = value.notes
+    .filter((note) => note.trackId === requestedTrack)
+    .map((note) => ({
+      id: note.id,
+      startBeat: note.startTick / value.ticksPerBeat,
+      durationBeats: note.durationTicks / value.ticksPerBeat,
+      pitch: note.pitch,
+      velocity: note.velocity,
+      muted: value.tracks.find((track) => track.id === requestedTrack)?.muted,
+    }));
   return {
-    notes: value.notes
-      .filter((note) => note.trackId === requestedTrack)
-      .map((note) => ({
-        id: note.id,
-        startBeat: note.startTick / value.ticksPerBeat,
-        durationBeats: note.durationTicks / value.ticksPerBeat,
-        pitch: note.pitch,
-        velocity: note.velocity,
-        muted: value.tracks.find((track) => track.id === requestedTrack)?.muted,
-      })),
+    notes,
     trackName:
       value.tracks.find((track) => track.id === requestedTrack)?.name ??
       requestedTrack,
@@ -211,6 +225,10 @@ function snapshot(
     currentBeat: beat,
     playing: clock.playing,
     activity,
+    ...drumSnapshotFields(
+      value.tracks.find((track) => track.id === requestedTrack)?.instrument,
+      notes,
+    ),
   };
 }
 
@@ -441,15 +459,25 @@ function handleTerminalInput(value: string): PromptAction | undefined {
 async function submit(prompt: string): Promise<string> {
   const command = prompt.trim();
   if (/^\/?help$|^\/?\?$/.test(command.toLowerCase()))
-    return "commands · play pause tempo <bpm> instrument <name> volume <0..1> pan <-1..1> automate volume|pan at <beat> <value> clear automation track <name> bars <count> extend <count> bars mute clear undo export <file> import <file>";
+    return "commands · play pause tempo <bpm> instrument <name> volume <0..1> pan <-1..1> automate volume|pan|filter at <beat> <value> clear automation track <name> bars <count> extend <count> bars mute solo unsolo filter <hz> [res] delay <beats> [fb] [mix] hit <voice> at <beat> pattern <voice> <beats...>|every <step> clear <voice> clear undo redo export <file> import <file>";
   if (/^\/?tracks?$/i.test(command))
     return score.tracks
       .map(
         (track) =>
-          `${track.id}${track.muted ? " [muted]" : ""} · ${track.instrument}`,
+          `${track.id}${track.muted ? " [muted]" : ""}${track.solo ? " [solo]" : ""} · ${track.instrument}`,
       )
       .join("  ");
-  if (/^\/?undo$/i.test(command)) return undoLast();
+  if (/^\/?undo$/i.test(command)) return stepHistory("undo");
+  if (/^\/?redo$/i.test(command)) return stepHistory("redo");
+  const music = parseMusicCommand(command);
+  if (music) {
+    const result = applyMusicCommand(score, requestedTrack, music, () =>
+      randomUUID().slice(0, 12),
+    );
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.message;
+  }
   const exportCommand = command.match(/^\/?export\s+([^\s]+)$/i);
   if (exportCommand) {
     const path = resolve(exportCommand[1]!);
@@ -523,7 +551,11 @@ async function submit(prompt: string): Promise<string> {
       return `track exists · ${parsed.trackId}`;
     const next = applyScoreOperation(score, {
       type: "addTrack",
-      track: { id: parsed.trackId, name: parsed.trackId, instrument: "sine" },
+      track: {
+        id: parsed.trackId,
+        name: parsed.trackId,
+        instrument: isDrumInstrument(parsed.trackId) ? "kit" : "sine",
+      },
     });
     await commitScore(next, "track.create", { trackId: parsed.trackId });
     return `track created · ${parsed.trackId}`;
@@ -693,34 +725,32 @@ async function commitScore(
   if (clock.playing) void audio.play(score);
 }
 
-async function undoLast(): Promise<string> {
+async function stepHistory(direction: "undo" | "redo"): Promise<string> {
   const latest = await loadSession<typeof record.composition>(session.paths);
-  const event = [...latest.events].reverse().find((candidate) => {
-    if (!candidate.payload || typeof candidate.payload !== "object")
-      return false;
-    return "before" in candidate.payload;
-  });
-  if (!event || !event.payload || typeof event.payload !== "object")
-    return "nothing to undo";
-  const before = (event.payload as { before?: unknown }).before;
+  const target = historyTarget(latest.events, direction);
+  if (!target) return `nothing to ${direction}`;
   try {
-    const previous = scoreFromJSON(before);
+    const restored = scoreFromJSON(target.composition);
     record = await appendSessionEvent(
       session.paths,
       latest,
       {
-        kind: "score.undo",
-        payload: { undoneRevision: event.revision, before: latest.composition },
+        kind: direction === "undo" ? UNDO_KIND : REDO_KIND,
+        payload: {
+          [direction === "undo" ? "undoneRevision" : "redoneRevision"]:
+            target.revision,
+          before: latest.composition,
+        },
       },
-      previous.toJSON(),
+      restored.toJSON(),
     );
-    score = previous;
+    score = restored;
     if (clock.playing) void audio.play(score);
-    return `undid · rev ${event.revision}`;
+    return `${direction === "undo" ? "undid" : "redid"} · rev ${target.revision}`;
   } catch (error) {
     if (error instanceof SessionConflictError)
-      return "session changed; retry undo";
-    return `undo error · ${error instanceof Error ? error.message : String(error)}`;
+      return `session changed; retry ${direction}`;
+    return `${direction} error · ${error instanceof Error ? error.message : String(error)}`;
   }
 }
 

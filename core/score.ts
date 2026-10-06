@@ -23,6 +23,13 @@ export const SCORE_LIMITS = Object.freeze({
   maxBeatsPerBar: 16,
   maxTicksPerBeat: 4096,
   maxTick: 1_000_000,
+  minFilterCutoff: 20,
+  maxFilterCutoff: 20_000,
+  maxFilterResonance: 1,
+  minDelayBeats: 0.0625,
+  maxDelayBeats: 4,
+  maxDelayFeedback: 0.9,
+  maxDelayMix: 1,
 } as const);
 
 export class ScoreValidationError extends Error {
@@ -55,7 +62,58 @@ export type Track = Readonly<{
   volumeAutomation: readonly AutomationPoint[];
   /** Pan control points in score ticks, sorted by tick. */
   panAutomation: readonly AutomationPoint[];
+  /**
+   * Optional fields below are omitted when at their default so documents
+   * written before they existed encode byte-for-byte the same.
+   */
+  /** When any track is soloed, only soloed (unmuted) tracks are audible. */
+  solo?: boolean;
+  /** Low-pass filter applied to the track before its delay send. */
+  filter?: TrackFilter;
+  /** Tempo-synced feedback delay send, mixed after the filter. */
+  delay?: TrackDelay;
+  /** Filter cutoff (Hz) control points in score ticks, sorted by tick. */
+  filterAutomation?: readonly AutomationPoint[];
 }>;
+
+export type TrackFilter = Readonly<{
+  /** Cutoff frequency in Hz, 20..20000. */
+  cutoff: number;
+  /** Resonance 0..1, mapped to a bounded biquad Q. */
+  resonance: number;
+}>;
+
+export type TrackDelay = Readonly<{
+  /** Delay time in beats, 0.0625..4, so echoes follow the tempo. */
+  beats: number;
+  /** Fraction of each echo fed back, 0..0.9. */
+  feedback: number;
+  /** Wet level added to the dry signal, 0..1. */
+  mix: number;
+}>;
+
+export type AutomationParameter = "volume" | "pan" | "filter";
+
+/** Track fields that score operations may patch; `null` clears an effect. */
+export type TrackPatch = Readonly<
+  Partial<
+    Pick<
+      Track,
+      | "name"
+      | "instrument"
+      | "muted"
+      | "volume"
+      | "pan"
+      | "volumeAutomation"
+      | "panAutomation"
+      | "solo"
+      | "filterAutomation"
+    >
+  > & {
+    filter?: TrackFilter | null;
+    delay?: TrackDelay | null;
+  }
+>;
 
 export type AutomationPoint = Readonly<{
   tick: number;
@@ -72,7 +130,13 @@ export type Note = Readonly<{
   velocity: number;
 }>;
 
-export type TrackInput = Readonly<Partial<Track> & Pick<Track, "id">>;
+export type TrackInput = Readonly<
+  Omit<Partial<Track>, "filter" | "delay"> &
+    Pick<Track, "id"> & {
+      filter?: TrackFilter | null;
+      delay?: TrackDelay | null;
+    }
+>;
 
 /**
  * Input accepts `start`/`duration` as a convenience for callers that use the
@@ -328,20 +392,7 @@ export function clearTrack(score: TrackScore, trackId: string): TrackScore {
 export function updateTrack(
   score: TrackScore,
   trackId: string,
-  patch: Readonly<
-    Partial<
-      Pick<
-        Track,
-        | "name"
-        | "instrument"
-        | "muted"
-        | "volume"
-        | "pan"
-        | "volumeAutomation"
-        | "panAutomation"
-      >
-    >
-  >,
+  patch: TrackPatch,
 ): TrackScore {
   if (!score.tracks.some((track) => track.id === trackId)) return score;
   return score.withTracks(
@@ -365,6 +416,22 @@ export function setPanAutomation(
   points: readonly AutomationPoint[],
 ): TrackScore {
   return updateTrack(score, trackId, { panAutomation: points });
+}
+
+export function setFilterAutomation(
+  score: TrackScore,
+  trackId: string,
+  points: readonly AutomationPoint[],
+): TrackScore {
+  return updateTrack(score, trackId, { filterAutomation: points });
+}
+
+/** Mute always silences a track; any solo silences every unsoloed track. */
+export function isTrackAudible(score: TrackScore, trackId: string): boolean {
+  const track = score.tracks.find((candidate) => candidate.id === trackId);
+  if (track?.muted) return false;
+  const soloing = score.tracks.some((candidate) => candidate.solo === true);
+  return !soloing || track?.solo === true;
 }
 
 export type ScoreOperation =
@@ -400,25 +467,12 @@ export type ScoreOperation =
   | Readonly<{
       type: "updateTrack";
       trackId: string;
-      patch: Readonly<
-        Partial<
-          Pick<
-            Track,
-            | "name"
-            | "instrument"
-            | "muted"
-            | "volume"
-            | "pan"
-            | "volumeAutomation"
-            | "panAutomation"
-          >
-        >
-      >;
+      patch: TrackPatch;
     }>
   | Readonly<{
       type: "setAutomation";
       trackId: string;
-      parameter: "volume" | "pan";
+      parameter: AutomationParameter;
       points: readonly AutomationPoint[];
     }>
   | Readonly<{
@@ -443,7 +497,9 @@ export function applyScoreOperation(
   if (operation.type === "setAutomation")
     return operation.parameter === "volume"
       ? setVolumeAutomation(score, operation.trackId, operation.points)
-      : setPanAutomation(score, operation.trackId, operation.points);
+      : operation.parameter === "pan"
+        ? setPanAutomation(score, operation.trackId, operation.points)
+        : setFilterAutomation(score, operation.trackId, operation.points);
   if (operation.type === "clearTrack")
     return clearTrack(score, operation.trackId);
   return assertNever(operation);
@@ -566,6 +622,20 @@ function normalizeTrack(input: unknown): Track {
     -1,
     1,
   );
+  const solo = input.solo ?? false;
+  if (typeof solo !== "boolean")
+    throw new ScoreValidationError(
+      "track solo must be boolean",
+      "invalid-track",
+    );
+  const filter = normalizeFilter(input.filter);
+  const delay = normalizeDelay(input.delay);
+  const filterAutomation = normalizeAutomation(
+    input.filterAutomation,
+    "filterAutomation",
+    SCORE_LIMITS.minFilterCutoff,
+    SCORE_LIMITS.maxFilterCutoff,
+  );
   return Object.freeze({
     id,
     name,
@@ -575,7 +645,80 @@ function normalizeTrack(input: unknown): Track {
     pan,
     volumeAutomation,
     panAutomation,
+    ...(solo ? { solo } : {}),
+    ...(filter ? { filter } : {}),
+    ...(delay ? { delay } : {}),
+    ...(filterAutomation.length > 0 ? { filterAutomation } : {}),
   });
+}
+
+export function normalizeFilter(input: unknown): TrackFilter | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (!isRecord(input))
+    throw new ScoreValidationError(
+      "track filter must be an object or null",
+      "invalid-track",
+    );
+  const cutoff = boundedNumber(
+    input.cutoff,
+    "track filter cutoff",
+    SCORE_LIMITS.minFilterCutoff,
+    SCORE_LIMITS.maxFilterCutoff,
+  );
+  const resonance = boundedNumber(
+    input.resonance ?? 0,
+    "track filter resonance",
+    0,
+    SCORE_LIMITS.maxFilterResonance,
+  );
+  return Object.freeze({ cutoff, resonance });
+}
+
+export function normalizeDelay(input: unknown): TrackDelay | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (!isRecord(input))
+    throw new ScoreValidationError(
+      "track delay must be an object or null",
+      "invalid-track",
+    );
+  const beats = boundedNumber(
+    input.beats,
+    "track delay beats",
+    SCORE_LIMITS.minDelayBeats,
+    SCORE_LIMITS.maxDelayBeats,
+  );
+  const feedback = boundedNumber(
+    input.feedback ?? 0.3,
+    "track delay feedback",
+    0,
+    SCORE_LIMITS.maxDelayFeedback,
+  );
+  const mix = boundedNumber(
+    input.mix ?? 0.35,
+    "track delay mix",
+    0,
+    SCORE_LIMITS.maxDelayMix,
+  );
+  return Object.freeze({ beats, feedback, mix });
+}
+
+function boundedNumber(
+  value: unknown,
+  label: string,
+  min: number,
+  max: number,
+): number {
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value < min ||
+    value > max
+  )
+    throw new ScoreValidationError(
+      `${label} must be between ${min} and ${max}`,
+      "invalid-track",
+    );
+  return value;
 }
 
 function normalizeAutomation(
