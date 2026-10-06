@@ -13,7 +13,7 @@ bun run track
 
 Run `track` from any directory. It creates `.track/session` on first use and reuses that session in later terminal windows. Use `track --new` for a separate composition, `track --session <id>` to attach explicitly, and `track --track bass` to focus a named track. Every window reads the same snapshot; score writes are locked and stale writers retry against the latest revision.
 
-The highway sits above the prompt. Notes stream toward the hit line, sustain bars show duration, hit flashes follow transport time, and the prompt grows for wrapped multiline input. `Space` toggles playback, `Enter` submits, modified Enter sequences (`Shift+Enter` or `Alt+Enter`, depending on the terminal) insert a newline, bracketed paste keeps multiline text intact, and `Ctrl+C` exits. Color falls back through truecolor, 256-color, 16-color, and monochrome; `NO_COLOR` and `TERM=dumb` are supported.
+The highway sits above the prompt. Notes stream toward the hit line, sustain bars show duration, hit flashes follow transport time, and the prompt grows for wrapped multiline input. `Space` toggles playback, `Enter` submits, `Ctrl+Q` switches to queue mode, modified Enter sequences (`Shift+Enter` or `Alt+Enter`, depending on the terminal) insert a newline, bracketed paste keeps multiline text intact, and `Ctrl+C` exits. Color falls back through truecolor, 256-color, 16-color, and monochrome; `NO_COLOR` and `TERM=dumb` are supported.
 
 The local command path understands requests such as:
 
