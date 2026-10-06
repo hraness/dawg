@@ -67,7 +67,24 @@ duration note <id> 0.25
 
 A track named `drums` (or `kit`) starts with the `kit` instrument; `instrument kit` turns any track into a drum track. Drum voices are `kick` (`bd`), `snare` (`sd`), `clap` (`cp`), `rim` (`perc`), `tom`, `hat` (`hh`), and `openhat` (`oh`); the highway shows one lane per voice. `pattern <voice> <beats...>` takes up to 64 beats, `pattern <voice> every <step>` (step ≥ 0.125) fills the loop, `vel <0..1>` sets velocity, and `clear <voice>` removes only that voice. `filter <hz> [resonance]` is a per-track low-pass (20–20000 Hz, resonance 0–1), `delay <beats> [feedback] [mix]` is a tempo-synced echo send (0.0625–4 beats, feedback ≤ 0.9, mix 0–1), and `automate filter at <beat> <hz>` writes the cutoff lane. `solo` isolates the focused track in playback across every window; `redo` re-applies the last undone edit.
 
-Press Space on an empty prompt to toggle playback. Enter submits a request. Ctrl+Q switches to queue mode so prompts run in order; a normal submit steers ahead of queued work. Shift+Enter or Alt+Enter inserts a newline. Bracketed paste preserves multiline input. Ctrl+C exits.
+The screen has four parts. A one-line header shows track · session · ▶/⏸ BPM · key · model · revision · sync state. The highway streams notes toward the hit line, with a stable accent per track. Below it, an activity strip shows operation cards (`✓ +8 bass notes · rev 41→42 · ^z undo`), queue depth, a braille spinner while the agent works, and errors in red with an `✗` prefix. The prompt panel is filled with a background color. It wraps by grapheme, grows from 1 to 8 rows (capped at 30% of the screen, then scrolls internally) and keeps the draft when the terminal is resized. Narrow terminals collapse the header and hints, and below 24×8 the screen shows a resize hint.
+
+| Key                  | Action                                                       |
+| -------------------- | ------------------------------------------------------------ |
+| Space (empty prompt) | play / pause                                                 |
+| Enter                | submit (STEER) or queue (QUEUE mode)                         |
+| Shift+Enter, Ctrl+J  | newline                                                      |
+| Alt+Enter            | queue this prompt                                            |
+| Ctrl+Q               | toggle the STEER / QUEUE mode pill                           |
+| Ctrl+Z / Ctrl+Y      | undo / redo                                                  |
+| Ctrl+O or `/log`     | transcript overlay (requests, ops, revisions, errors)        |
+| Esc                  | cancel the agent turn, close the overlay, or clear the draft |
+| Ctrl+L               | full redraw                                                  |
+| Ctrl+C               | exit                                                         |
+
+A STEER submit runs ahead of queued work. Bracketed paste preserves multiline input.
+
+`/theme default|high-contrast|mono` and `--theme <name>` (or `TRACK_THEME`) pick a theme. Semantic color tokens map to truecolor, 256, 16 or no color. `NO_COLOR` and `TERM=dumb` force monochrome. `/motion off`, `--reduce-motion` or `TRACK_REDUCE_MOTION=1` replace animations with static states in the same positions. Every color has a non-color cue as well: glyph density, `✓`/`✗`/`!` prefixes, the mode pill text and `▶`/`⏸`.
 
 Set `TRACK_AI=1` to send unrecognized requests to a streaming, tool-calling agent on the Vercel AI Gateway. Keep the key local in `AI_GATEWAY_API_KEY`. Choose `TRACK_MODEL=opus-5.5` or `TRACK_MODEL=sol-6.1`, or switch with `/model`. By default these labels map to `anthropic/claude-opus-5.5` and `openai/gpt-6.1-sol` from the gateway catalog. Override them with `TRACK_OPUS_MODEL` and `TRACK_SOL_MODEL`. Other labels are rejected.
 
