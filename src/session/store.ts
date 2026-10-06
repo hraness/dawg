@@ -72,32 +72,42 @@ export async function ensureSession<T>(
   } = {},
 ): Promise<{ paths: SessionPaths; record: SessionRecord<T> }> {
   const workspace = options.workspace ?? process.cwd();
-  const sessionId =
-    options.sessionId ??
-    (await readCurrentSessionId(workspace)) ??
-    randomUUID();
-  const paths = sessionPaths(workspace, sessionId);
-  await mkdir(dirname(paths.record), { recursive: true });
-  await mkdir(paths.root, { recursive: true });
-  if (options.setCurrent !== false)
-    await writeFile(paths.pointer, `${sessionId}\n`, "utf8");
+  const root = join(workspace, ".track");
+  await mkdir(root, { recursive: true });
+  // Serialize pointer selection and first-record creation. Without this,
+  // two windows launched together can each choose a different random session
+  // and race to overwrite `.track/session`.
+  const initLock = join(root, ".init.lock");
+  await acquireLock(initLock);
   try {
-    return {
-      paths,
-      record: JSON.parse(
-        await readFile(paths.record, "utf8"),
-      ) as SessionRecord<T>,
-    };
-  } catch {
-    const record: SessionRecord<T> = {
-      sessionId,
-      revision: 0,
-      updatedAt: new Date().toISOString(),
-      composition: initial,
-      events: [],
-    };
-    await writeAtomic(paths.record, JSON.stringify(record, null, 2));
-    return { paths, record };
+    const sessionId =
+      options.sessionId ??
+      (await readCurrentSessionId(workspace)) ??
+      randomUUID();
+    const paths = sessionPaths(workspace, sessionId);
+    await mkdir(dirname(paths.record), { recursive: true });
+    if (options.setCurrent !== false)
+      await writeFile(paths.pointer, `${sessionId}\n`, "utf8");
+    try {
+      return {
+        paths,
+        record: JSON.parse(
+          await readFile(paths.record, "utf8"),
+        ) as SessionRecord<T>,
+      };
+    } catch {
+      const record: SessionRecord<T> = {
+        sessionId,
+        revision: 0,
+        updatedAt: new Date().toISOString(),
+        composition: initial,
+        events: [],
+      };
+      await writeAtomic(paths.record, JSON.stringify(record, null, 2));
+      return { paths, record };
+    }
+  } finally {
+    await rm(initLock, { recursive: true, force: true });
   }
 }
 

@@ -14,6 +14,11 @@ export class LoopPlayer {
     this.lockPath = lockPath;
   }
 
+  /** Whether this process currently owns the session's shared audio lock. */
+  public get ownsPlaybackLock(): boolean {
+    return this.ownsLock;
+  }
+
   public async play(score: TrackScore): Promise<void> {
     await this.stopAsync();
     if (process.env.TRACK_AUDIO === "0") return;
