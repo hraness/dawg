@@ -242,8 +242,17 @@ async function runInteractive(): Promise<void> {
           const payload = event.payload as {
             action?: string;
             playing?: boolean;
+            beat?: number;
           };
-          if (typeof payload.playing === "boolean")
+          if (
+            typeof payload.playing === "boolean" &&
+            typeof payload.beat === "number" &&
+            Number.isFinite(payload.beat)
+          ) {
+            clock.sync(payload.beat, payload.playing, Date.parse(event.at));
+            if (payload.playing) void audio.play(score);
+            else audio.stop();
+          } else if (typeof payload.playing === "boolean")
             await setTransport(payload.playing ? "play" : "pause");
           else if (payload.action === "play") await setTransport("play");
           else if (payload.action === "pause") await setTransport("pause");
@@ -278,7 +287,11 @@ async function runInteractive(): Promise<void> {
             record,
             {
               kind: "transport",
-              payload: { action: "toggle", playing: clock.playing },
+              payload: {
+                action: "toggle",
+                playing: clock.playing,
+                beat: clock.beatAt(),
+              },
             },
             score.toJSON(),
           );
@@ -374,7 +387,11 @@ async function submit(prompt: string): Promise<string> {
         record,
         {
           kind: "transport",
-          payload: { action: parsed.action, playing: clock.playing },
+          payload: {
+            action: parsed.action,
+            playing: clock.playing,
+            beat: clock.beatAt(),
+          },
         },
         score.toJSON(),
       );
