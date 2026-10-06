@@ -18,7 +18,16 @@ export function renderScoreWav(
   );
   const samples = Math.max(1, Math.ceil(loopSeconds * sampleRate));
   const pcm = new Int16Array(samples);
+  const tracks = new Map(score.tracks.map((track) => [track.id, track]));
   for (const note of score.notes) {
+    const track = tracks.get(note.trackId);
+    if (track?.muted) continue;
+    const instrument = track?.instrument ?? "sine";
+    const trackGain = Math.max(0, Math.min(1, track?.volume ?? 1));
+    // Mono output cannot place a voice in a stereo field, but pan still
+    // behaves predictably as a small center-compensation gain. This keeps
+    // exported loops stable while making the control audible in the mix.
+    const panGain = 1 - Math.abs(track?.pan ?? 0) * 0.12;
     const start = Math.max(
       0,
       Math.floor(
@@ -43,13 +52,47 @@ export function renderScoreWav(
       const envelope =
         Math.min(attack, release) *
         Math.max(0, Math.min(1, note.velocity)) *
-        0.28;
+        0.28 *
+        trackGain *
+        panGain;
+      const phase = (frequency * elapsed) / sampleRate;
       const sample =
-        Math.sin((2 * Math.PI * frequency * elapsed) / sampleRate) * envelope;
+        synthSample(instrument, phase, frequency, sampleRate) * envelope;
       pcm[index] = clamp16(pcm[index]! + sample * 32767);
     }
   }
   return encodeWav(pcm, sampleRate);
+}
+
+/** A tiny deterministic instrument bank. Names come from the score's track metadata. */
+function synthSample(
+  instrument: string,
+  phase: number,
+  frequency: number,
+  sampleRate: number,
+): number {
+  const name = instrument.trim().toLowerCase();
+  const cycle = phase - Math.floor(phase);
+  const sine = Math.sin(2 * Math.PI * phase);
+  if (name.includes("square")) return cycle < 0.5 ? 1 : -1;
+  if (name.includes("saw")) return 2 * cycle - 1;
+  if (name.includes("triangle")) return 1 - 4 * Math.abs(cycle - 0.5);
+  if (name.includes("bass")) {
+    // A rounded fundamental plus a quiet octave gives bass tracks useful weight.
+    return Math.tanh(
+      0.9 * Math.sin(2 * Math.PI * phase) +
+        0.25 * Math.sin(4 * Math.PI * phase),
+    );
+  }
+  if (name.includes("piano") || name.includes("pluck")) {
+    // Add stable harmonics; the envelope above supplies the note decay.
+    const harmonic =
+      Math.sin(4 * Math.PI * phase) * 0.28 +
+      Math.sin(6 * Math.PI * phase) * 0.12;
+    return Math.tanh(sine + harmonic);
+  }
+  // Unknown instruments deliberately fall back to the original sine voice.
+  return sine;
 }
 
 function encodeWav(pcm: Int16Array, sampleRate: number): Uint8Array {

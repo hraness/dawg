@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 import { randomUUID } from "node:crypto";
+import { readFile, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { stdin, stdout } from "node:process";
 import {
   appendSessionEvent,
@@ -22,6 +24,7 @@ import {
   type ScoreOperation,
   type NoteInput,
 } from "../core/score.ts";
+import { decodeLoop, encodeLoop } from "../core/loop.ts";
 import {
   detectTerminalCapabilities,
   renderHighway,
@@ -33,6 +36,8 @@ const ESC = "\u001b[";
 const args = new Set(process.argv.slice(2));
 const requestedSession = optionValue("--session");
 const requestedTrack = optionValue("--track") ?? "main";
+const importPath = optionValue("--import");
+const exportPath = optionValue("--export");
 const demo =
   args.has("--demo") || process.env.TRACK_DEMO === "1" || !stdin.isTTY;
 
@@ -47,6 +52,19 @@ if (selectedSession !== undefined) sessionOptions.sessionId = selectedSession;
 const session = await ensureSession(initial.toJSON(), sessionOptions);
 let record: SessionRecord<ReturnType<TrackScore["toJSON"]>> = session.record;
 let score = scoreFromJSON(record.composition);
+if (importPath) {
+  const imported = decodeLoop(await readLoopFile(importPath));
+  score = imported;
+  record = await appendSessionEvent(
+    session.paths,
+    record,
+    {
+      kind: "score.import",
+      payload: { path: importPath, before: record.composition },
+    },
+    score.toJSON(),
+  );
+}
 if (!score.tracks.some((track) => track.id === requestedTrack)) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const latest =
@@ -85,10 +103,17 @@ let selectedModel: GatewayModel =
 const prompt = new PromptModel({ width: 72, maxVisualRows: 8 });
 if (demo) {
   if (score.notes.length === 0) score = seedDemo(score, requestedTrack);
+  if (exportPath)
+    await writeFile(resolve(exportPath), encodeLoop(score), "utf8");
   renderOnce(score, clock.beatAt(), "demo · press space to play", [
     "> add C4 at 0 for 1",
   ]);
   process.exit(0);
+}
+
+if (exportPath) {
+  await writeFile(resolve(exportPath), encodeLoop(score), "utf8");
+  if (!stdin.isTTY) process.exit(0);
 }
 
 await runInteractive();
@@ -144,6 +169,7 @@ function snapshot(
         durationBeats: note.durationTicks / value.ticksPerBeat,
         pitch: note.pitch,
         velocity: note.velocity,
+        muted: value.tracks.find((track) => track.id === requestedTrack)?.muted,
       })),
     trackName:
       value.tracks.find((track) => track.id === requestedTrack)?.name ??
@@ -231,6 +257,7 @@ async function runInteractive(): Promise<void> {
         const previousRevision = record.revision;
         record = latest;
         score = scoreFromJSON(record.composition);
+        clock.setTempo(score.tempoBpm);
         if (clock.playing) void audio.play(score);
         for (const event of latest.events.slice(previousRevision)) {
           if (
@@ -345,6 +372,29 @@ function handleTerminalInput(value: string): PromptAction | undefined {
 }
 
 async function submit(prompt: string): Promise<string> {
+  const command = prompt.trim();
+  if (/^\/?help$|^\/?\?$/.test(command.toLowerCase()))
+    return "commands · play pause tempo <bpm> instrument <name> volume <0..1> pan <-1..1> mute clear undo export <file> import <file>";
+  if (/^\/?tracks?$/i.test(command))
+    return score.tracks
+      .map(
+        (track) =>
+          `${track.id}${track.muted ? " [muted]" : ""} · ${track.instrument}`,
+      )
+      .join("  ");
+  if (/^\/?undo$/i.test(command)) return undoLast();
+  const exportCommand = command.match(/^\/?export\s+([^\s]+)$/i);
+  if (exportCommand) {
+    const path = resolve(exportCommand[1]!);
+    await writeFile(path, encodeLoop(score), "utf8");
+    return `exported · ${exportCommand[1]}`;
+  }
+  const importCommand = command.match(/^\/?import\s+([^\s]+)$/i);
+  if (importCommand) {
+    const imported = decodeLoop(await readLoopFile(importCommand[1]!));
+    await commitScore(imported, "score.import", { path: importCommand[1] });
+    return `imported · ${importCommand[1]}`;
+  }
   const modelCommand = prompt.trim().match(/^\/model\s+(opus-5\.5|sol-6\.1)$/i);
   if (modelCommand) {
     selectedModel = modelCommand[1]!.toLowerCase() as GatewayModel;
@@ -363,14 +413,7 @@ async function submit(prompt: string): Promise<string> {
       if (plan.operations.length === 0)
         return plan.explanation ?? "agent made no changes";
       const next = applyAgentPlan(score, plan.operations);
-      record = await appendSessionEvent(
-        session.paths,
-        record,
-        { kind: "agent.plan", payload: plan },
-        next.toJSON(),
-      );
-      score = next;
-      if (clock.playing) void audio.play(score);
+      await commitScore(next, "agent.plan", { plan });
       return (
         plan.explanation ??
         `applied ${plan.operations.length} agent operation${plan.operations.length === 1 ? "" : "s"}`
@@ -402,6 +445,42 @@ async function submit(prompt: string): Promise<string> {
     }
     return parsed.action;
   }
+  if (parsed.type === "set-tempo") {
+    const next = score.withTempo(parsed.tempoBpm);
+    await commitScore(next, "score.tempo", { tempoBpm: parsed.tempoBpm });
+    clock.setTempo?.(next.tempoBpm);
+    return `tempo · ${next.tempoBpm} BPM`;
+  }
+  if (parsed.type === "track") {
+    const next = applyScoreOperation(score, {
+      type: "updateTrack",
+      trackId: requestedTrack,
+      patch: parsed.patch,
+    });
+    await commitScore(next, "score.track", {
+      trackId: requestedTrack,
+      patch: parsed.patch,
+    });
+    return `track · ${requestedTrack}`;
+  }
+  if (parsed.type === "clear-track") {
+    const next = applyScoreOperation(score, {
+      type: "clearTrack",
+      trackId: requestedTrack,
+    });
+    await commitScore(next, "score.clear", { trackId: requestedTrack });
+    return `cleared · ${requestedTrack}`;
+  }
+  if (parsed.type === "remove-note") {
+    const next = applyScoreOperation(score, {
+      type: "removeNote",
+      noteId: parsed.noteId,
+    });
+    await commitScore(next, "score.operation", {
+      operation: { type: "removeNote", noteId: parsed.noteId },
+    });
+    return `removed · ${parsed.noteId}`;
+  }
   if (parsed.type !== "add-note") return "queued";
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const latest =
@@ -426,7 +505,10 @@ async function submit(prompt: string): Promise<string> {
       record = await appendSessionEvent(
         session.paths,
         latest,
-        { kind: "score.operation", payload: operation },
+        {
+          kind: "score.operation",
+          payload: { operation, before: latest.composition },
+        },
         next.toJSON(),
       );
       score = next;
@@ -437,6 +519,60 @@ async function submit(prompt: string): Promise<string> {
     }
   }
   return "session busy; retry the note";
+}
+
+async function readLoopFile(path: string): Promise<string> {
+  const contents = await readFile(resolve(path));
+  if (contents.byteLength > 512 * 1024)
+    throw new Error("loop import exceeds 512 KiB");
+  return contents.toString("utf8");
+}
+
+async function commitScore(
+  next: TrackScore,
+  kind: string,
+  payload: Record<string, unknown> = {},
+): Promise<void> {
+  if (next === score) return;
+  record = await appendSessionEvent(
+    session.paths,
+    record,
+    { kind, payload: { ...payload, before: record.composition } },
+    next.toJSON(),
+  );
+  score = next;
+  if (clock.playing) void audio.play(score);
+}
+
+async function undoLast(): Promise<string> {
+  const latest = await loadSession<typeof record.composition>(session.paths);
+  const event = [...latest.events].reverse().find((candidate) => {
+    if (!candidate.payload || typeof candidate.payload !== "object")
+      return false;
+    return "before" in candidate.payload;
+  });
+  if (!event || !event.payload || typeof event.payload !== "object")
+    return "nothing to undo";
+  const before = (event.payload as { before?: unknown }).before;
+  try {
+    const previous = scoreFromJSON(before);
+    record = await appendSessionEvent(
+      session.paths,
+      latest,
+      {
+        kind: "score.undo",
+        payload: { undoneRevision: event.revision, before: latest.composition },
+      },
+      previous.toJSON(),
+    );
+    score = previous;
+    if (clock.playing) void audio.play(score);
+    return `undid · rev ${event.revision}`;
+  } catch (error) {
+    if (error instanceof SessionConflictError)
+      return "session changed; retry undo";
+    return `undo error · ${error instanceof Error ? error.message : String(error)}`;
+  }
 }
 
 async function setTransport(
@@ -463,7 +599,7 @@ function applyAgentPlan(
 ): TrackScore {
   let next = value;
   for (const operation of operations) {
-    if (operation.type === "removeNote") {
+    if (operation.type !== "addNote") {
       next = applyScoreOperation(next, operation);
       continue;
     }

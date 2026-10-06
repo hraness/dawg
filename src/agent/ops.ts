@@ -7,6 +7,18 @@ export type AgentOperation =
       velocity: number;
     }
   | { type: "remove-note"; noteId: string }
+  | { type: "set-tempo"; tempoBpm: number }
+  | {
+      type: "track";
+      patch: {
+        instrument?: string;
+        muted?: boolean;
+        volume?: number;
+        pan?: number;
+        name?: string;
+      };
+    }
+  | { type: "clear-track" }
   | { type: "transport"; action: "play" | "pause" | "toggle" };
 
 export function parsePrompt(prompt: string): AgentOperation | undefined {
@@ -16,6 +28,30 @@ export function parsePrompt(prompt: string): AgentOperation | undefined {
   if (/^(pause|stop)\b/.test(text))
     return { type: "transport", action: "pause" };
   if (/^toggle\b/.test(text)) return { type: "transport", action: "toggle" };
+  const tempo = text.match(/^(?:tempo|bpm)\s+(\d+(?:\.\d+)?)\s*$/);
+  if (tempo) {
+    const tempoBpm = Number(tempo[1]);
+    if (Number.isFinite(tempoBpm)) return { type: "set-tempo", tempoBpm };
+  }
+  if (/^(?:clear|clear\s+track|remove\s+all)\b/.test(text))
+    return { type: "clear-track" };
+  const instrument = text.match(
+    /^(?:instrument|sound|voice)\s+([a-z0-9._ -]{1,64})$/,
+  );
+  if (instrument)
+    return { type: "track", patch: { instrument: instrument[1]!.trim() } };
+  if (/^(?:mute|silence)\b/.test(text))
+    return { type: "track", patch: { muted: true } };
+  if (/^(?:unmute|unsilence)\b/.test(text))
+    return { type: "track", patch: { muted: false } };
+  const volume = text.match(/^(?:volume|vol)\s+(0(?:\.\d+)?|1(?:\.0+)?)$/);
+  if (volume) return { type: "track", patch: { volume: Number(volume[1]) } };
+  const pan = text.match(/^(?:pan)\s+(-?1(?:\.0+)?|-?0(?:\.\d+)?)$/);
+  if (pan) return { type: "track", patch: { pan: Number(pan[1]) } };
+  const remove = text.match(
+    /^(?:remove|delete)(?:\s+note)?\s+([a-z0-9._-]{1,64})$/,
+  );
+  if (remove) return { type: "remove-note", noteId: remove[1]! };
   const match = text.match(
     /^(?:add|put)\s+(?:note\s+)?([a-g](?:#|b)?-?\d+)\s+(?:at\s+)?(\d+(?:\.\d+)?)\s*(?:for|dur|duration)?\s*(\d+(?:\.\d+)?)?/,
   );

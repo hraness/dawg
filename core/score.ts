@@ -15,6 +15,7 @@ export const SCORE_LIMITS = Object.freeze({
   maxIdLength: 64,
   maxNameLength: 96,
   maxInstrumentLength: 64,
+  maxVolume: 1,
   maxTempoBpm: 300,
   minTempoBpm: 20,
   maxBars: 256,
@@ -47,6 +48,8 @@ export type Track = Readonly<{
   name: string;
   instrument: string;
   muted: boolean;
+  volume: number;
+  pan: number;
 }>;
 
 /** A note's start and duration are integer ticks, never floating-point beats. */
@@ -180,6 +183,18 @@ export class TrackScore {
     });
   }
 
+  withTempo(tempoBpm: number): TrackScore {
+    return new TrackScore({
+      tempoBpm,
+      beatsPerBar: this.beatsPerBar,
+      bars: this.bars,
+      ticksPerBeat: this.ticksPerBeat,
+      key: this.key,
+      tracks: this.tracks,
+      notes: this.notes,
+    });
+  }
+
   toJSON(): TrackScoreData & { version: typeof SCORE_VERSION } {
     return {
       version: SCORE_VERSION,
@@ -254,6 +269,56 @@ export function removeNote(score: TrackScore, noteId: string): TrackScore {
   });
 }
 
+export function updateNote(
+  score: TrackScore,
+  noteId: string,
+  patch: Readonly<
+    Partial<Pick<Note, "startTick" | "durationTicks" | "pitch" | "velocity">>
+  >,
+): TrackScore {
+  const current = score.notes.find((note) => note.id === noteId);
+  if (!current) return score;
+  return new TrackScore({
+    tempoBpm: score.tempoBpm,
+    beatsPerBar: score.beatsPerBar,
+    bars: score.bars,
+    ticksPerBeat: score.ticksPerBeat,
+    key: score.key,
+    tracks: score.tracks,
+    notes: score.notes.map((note) =>
+      note.id === noteId ? { ...note, ...patch } : note,
+    ),
+  });
+}
+
+export function clearTrack(score: TrackScore, trackId: string): TrackScore {
+  if (!score.notes.some((note) => note.trackId === trackId)) return score;
+  return new TrackScore({
+    tempoBpm: score.tempoBpm,
+    beatsPerBar: score.beatsPerBar,
+    bars: score.bars,
+    ticksPerBeat: score.ticksPerBeat,
+    key: score.key,
+    tracks: score.tracks,
+    notes: score.notes.filter((note) => note.trackId !== trackId),
+  });
+}
+
+export function updateTrack(
+  score: TrackScore,
+  trackId: string,
+  patch: Readonly<
+    Partial<Pick<Track, "name" | "instrument" | "muted" | "volume" | "pan">>
+  >,
+): TrackScore {
+  if (!score.tracks.some((track) => track.id === trackId)) return score;
+  return score.withTracks(
+    score.tracks.map((track) =>
+      track.id === trackId ? { ...track, ...patch } : track,
+    ),
+  );
+}
+
 export type ScoreOperation =
   | Readonly<{
       type: "addNote";
@@ -262,6 +327,30 @@ export type ScoreOperation =
   | Readonly<{
       type: "removeNote";
       noteId: string;
+    }>
+  | Readonly<{
+      type: "updateNote";
+      noteId: string;
+      patch: Readonly<
+        Partial<
+          Pick<Note, "startTick" | "durationTicks" | "pitch" | "velocity">
+        >
+      >;
+    }>
+  | Readonly<{
+      type: "setTempo";
+      tempoBpm: number;
+    }>
+  | Readonly<{
+      type: "updateTrack";
+      trackId: string;
+      patch: Readonly<
+        Partial<Pick<Track, "name" | "instrument" | "muted" | "volume" | "pan">>
+      >;
+    }>
+  | Readonly<{
+      type: "clearTrack";
+      trackId: string;
     }>;
 
 export function applyScoreOperation(
@@ -271,6 +360,13 @@ export function applyScoreOperation(
   if (operation.type === "addNote") return addNote(score, operation.note);
   if (operation.type === "removeNote")
     return removeNote(score, operation.noteId);
+  if (operation.type === "updateNote")
+    return updateNote(score, operation.noteId, operation.patch);
+  if (operation.type === "setTempo") return score.withTempo(operation.tempoBpm);
+  if (operation.type === "updateTrack")
+    return updateTrack(score, operation.trackId, operation.patch);
+  if (operation.type === "clearTrack")
+    return clearTrack(score, operation.trackId);
   return assertNever(operation);
 }
 
@@ -362,7 +458,24 @@ function normalizeTrack(input: unknown): Track {
       "track muted must be boolean",
       "invalid-track",
     );
-  return Object.freeze({ id, name, instrument, muted });
+  const volume = input.volume ?? 1;
+  const pan = input.pan ?? 0;
+  if (
+    typeof volume !== "number" ||
+    !Number.isFinite(volume) ||
+    volume < 0 ||
+    volume > 1
+  )
+    throw new ScoreValidationError(
+      "track volume must be between 0 and 1",
+      "invalid-track",
+    );
+  if (typeof pan !== "number" || !Number.isFinite(pan) || pan < -1 || pan > 1)
+    throw new ScoreValidationError(
+      "track pan must be between -1 and 1",
+      "invalid-track",
+    );
+  return Object.freeze({ id, name, instrument, muted, volume, pan });
 }
 
 function normalizeNotes(inputs: readonly unknown[]): Note[] {

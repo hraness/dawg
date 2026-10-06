@@ -13,6 +13,9 @@ import {
   createScore,
   removeNote,
   scoreFromJSON,
+  updateNote,
+  updateTrack,
+  clearTrack,
 } from "./score.ts";
 
 describe("TrackScore", () => {
@@ -148,5 +151,40 @@ describe("TrackScore", () => {
       }),
     ).toThrow(ScoreValidationError);
     expect(() => scoreFromJSON("not an object")).toThrow(ScoreValidationError);
+  });
+
+  test("supports bounded tempo, note, and track mutations", () => {
+    const score = createScore({
+      tracks: [{ id: "lead", instrument: "sine" }],
+      notes: [
+        {
+          id: "n",
+          trackId: "lead",
+          start: 0,
+          duration: 120,
+          pitch: 60,
+          velocity: 0.5,
+        },
+      ],
+    });
+    const edited = updateNote(score.withTempo(140), "n", {
+      pitch: 64,
+      velocity: 0.8,
+    });
+    const controlled = updateTrack(edited, "lead", {
+      instrument: "piano",
+      volume: 0.7,
+      pan: -0.5,
+      muted: true,
+    });
+    expect(controlled.tempoBpm).toBe(140);
+    expect(controlled.notes[0]).toMatchObject({ pitch: 64, velocity: 0.8 });
+    expect(controlled.tracks[0]).toMatchObject({
+      instrument: "piano",
+      volume: 0.7,
+      pan: -0.5,
+      muted: true,
+    });
+    expect(clearTrack(controlled, "lead").notes).toHaveLength(0);
   });
 });
