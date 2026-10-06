@@ -373,7 +373,7 @@ export async function runAgentTurn(
       revision: currentRevision(),
     });
   } catch (error) {
-    const { code, message } = classify(error, signal, options.signal);
+    const { code, message } = classifyAgentError(error, signal, options.signal);
     return finish({
       type: "error",
       code,
@@ -386,7 +386,7 @@ export async function runAgentTurn(
   }
 }
 
-type CallOutcome =
+export type CallOutcome =
   | {
       ok: true;
       mutated: boolean;
@@ -396,7 +396,7 @@ type CallOutcome =
     }
   | { ok: false; content: string; diagnostic: string };
 
-async function executeCall(
+export async function executeCall(
   call: { id: string; name: string; arguments: string },
   context: {
     tools: readonly AgentTool[];
@@ -512,14 +512,14 @@ async function executeCall(
   }
 }
 
-class AgentTimeoutError extends Error {
+export class AgentTimeoutError extends Error {
   constructor(readonly timeoutMs: number) {
     super(`agent turn timed out after ${Math.round(timeoutMs / 1000)}s`);
     this.name = "TimeoutError";
   }
 }
 
-function classify(
+export function classifyAgentError(
   error: unknown,
   signal: AbortSignal,
   userSignal: AbortSignal | undefined,
@@ -540,6 +540,9 @@ function classify(
     return { code: "budget", message: error.message };
   if (error instanceof GatewayError)
     return { code: "provider", message: error.message };
+  // XcbError (src/agent/xcb.ts); matched by name to keep this module provider-neutral.
+  if (error instanceof Error && error.name === "XcbError")
+    return { code: "provider", message: errorMessage(error) };
   if (error instanceof Error && error.name === "AbortError")
     return { code: "aborted", message: "cancelled" };
   return { code: "internal", message: errorMessage(error) };
@@ -549,7 +552,7 @@ function errorMessage(error: unknown): string {
   return (error instanceof Error ? error.message : String(error)).slice(0, 300);
 }
 
-function tighten(value: number | undefined, ceiling: number): number {
+export function tighten(value: number | undefined, ceiling: number): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0
     ? Math.min(value, ceiling)
     : ceiling;

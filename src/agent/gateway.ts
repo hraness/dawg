@@ -41,6 +41,12 @@ export function resolveModelId(
   return id;
 }
 
+function checkedModelId(id: string): string {
+  if (!MODEL_ID_PATTERN.test(id))
+    throw new Error("model ID must look like provider/model");
+  return id;
+}
+
 export type ChatToolCall = {
   id: string;
   type: "function";
@@ -66,6 +72,9 @@ export type ChatStreamRequest = {
   messages: readonly ChatMessage[];
   tools?: readonly ChatTool[];
   temperature?: number;
+  /** Exact provider model ID, bypassing the alias (e.g. a small model for naming). */
+  modelId?: string;
+  maxTokens?: number;
   maxResponseBytes: number;
 };
 
@@ -131,10 +140,13 @@ export function createGatewayClient(
   return {
     modelId: (model) => resolveModelId(model, overrides),
     async *stream(request, signal) {
-      const model = resolveModelId(request.model, overrides);
+      const model =
+        request.modelId !== undefined
+          ? checkedModelId(request.modelId)
+          : resolveModelId(request.model, overrides);
       if (!apiKey)
         throw new GatewayError(
-          "AI_GATEWAY_API_KEY is required for agent requests",
+          "no AI Gateway key; run `track login` or set AI_GATEWAY_API_KEY",
         );
       const body: Record<string, unknown> = {
         model,
@@ -147,6 +159,12 @@ export function createGatewayClient(
       }
       if (request.temperature !== undefined)
         body.temperature = request.temperature;
+      if (
+        request.maxTokens !== undefined &&
+        Number.isInteger(request.maxTokens) &&
+        request.maxTokens > 0
+      )
+        body.max_tokens = Math.min(request.maxTokens, 4096);
       const init: RequestInit = {
         method: "POST",
         headers: {
