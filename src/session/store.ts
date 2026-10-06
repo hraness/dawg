@@ -137,9 +137,12 @@ export async function ensureSession<T>(
 export async function appendSessionEvent<T>(
   paths: SessionPaths,
   current: SessionRecord<T>,
-  event: Omit<SessionEvent, "id" | "revision" | "at">,
+  event: Omit<SessionEvent, "id" | "revision" | "at"> & { id?: string },
   composition: T,
 ): Promise<SessionRecord<T>> {
+  // trackd passes the client's idempotency key as the durable event id so a
+  // retried intent stays a no-op across daemon restarts.
+  if (event.id !== undefined) assertSessionId(event.id);
   const payloadJson = stringifyJson(event.payload, "session event payload");
   const payloadBytes = Buffer.byteLength(payloadJson, "utf8");
   if (payloadBytes > MAX_EVENT_BYTES)
@@ -165,7 +168,16 @@ export async function appendSessionEvent<T>(
       revision,
       updatedAt: at,
       composition,
-      events: [...disk.events, { ...event, id: randomUUID(), revision, at }],
+      events: [
+        ...disk.events,
+        {
+          kind: event.kind,
+          payload: event.payload,
+          id: event.id ?? randomUUID(),
+          revision,
+          at,
+        },
+      ],
     };
     const validated = validateSessionRecord<T>(next);
     await writeAtomic(paths.record, JSON.stringify(validated, null, 2));
@@ -282,7 +294,7 @@ function validateSessionRecord<T>(value: unknown): SessionRecord<T> {
   };
 }
 
-function assertSessionId(value: unknown): asserts value is string {
+export function assertSessionId(value: unknown): asserts value is string {
   if (
     typeof value !== "string" ||
     value.length === 0 ||

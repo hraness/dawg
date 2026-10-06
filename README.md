@@ -78,9 +78,9 @@ Playback renders a short mono PCM WAV with deterministic sine, piano, pluck, bas
 ## Architecture
 
 - `core/` defines the bounded immutable `track.loop/v1` score and operations.
-- `src/session/` provides an append-only local event log, atomic snapshots, and cross-window writer conflict handling.
+- `src/session/` provides an append-only local event log, atomic snapshots, and `trackd`: one local daemon per session (`src/daemon.ts`), started automatically by the first window. Windows connect over a Unix socket, send idempotent intents, and receive accepted changes, presence, and one shared transport clock. If the daemon cannot start, windows fall back to the file-lock path and say so in the status line. `track sessions` lists the workspace's sessions with revision, update time, and live daemon.
 - `src/agent/` runs the bounded streaming tool-calling agent: the SSE gateway client, the tool registry, the composition brief, and operation validation.
-- `src/audio/` owns the transport clock, deterministic instrument-bank WAV rendering, and per-session playback lock.
+- `src/audio/` owns the transport clock, deterministic instrument-bank WAV rendering, and per-session playback lock. When `trackd` is running it is the only process that plays audio.
 - `tui/` owns terminal capability detection, semantic colors, animation phases, piano-roll rendering, and the multiline prompt editor.
 
 The runtime is intentionally adapter-shaped. The local synthesizer is deterministic and works without a sound device; native or sample-backed players can replace it behind the same score boundary.
