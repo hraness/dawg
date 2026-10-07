@@ -194,6 +194,7 @@ export const KEYS = {
         ["r · R", "record · record replacing"],
         ["m", "metronome click"],
         ["q", "chord mode: auto ⇄ manual"],
+        ["/", "type a command, still in play mode"],
         ["ctrl-k", "menu"],
         ["esc", "leave play mode"],
       ],

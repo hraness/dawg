@@ -267,7 +267,7 @@ test.skipIf(!supported)(
     // /help opens the grouped overlay; Esc closes it.
     await t.send("/help\r");
     await t.until(() => t.vt.text().includes("── music"), "help overlay");
-    expect(t.vt.text()).toContain("help · esc closes");
+    expect(t.vt.text()).toContain("esc back");
     await t.send("\u001b[F"); // End: the last page holds window + keys
     await t.until(() => t.vt.text().includes("── keys"), "help end");
     expect(t.vt.text()).toContain("/auth [--check]");

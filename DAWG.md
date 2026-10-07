@@ -706,6 +706,8 @@ SDK. `chord("Cm7", start, length, opts)` and `progression("ii7 V7 Imaj7", { key,
 | `Shift-R`               | replace: bars you play over are cleared first (default: overdub)   |
 | `M`                     | click on/off                                                       |
 | `Space`                 | play/stop; with record armed and stopped, counts in, then records  |
+| `?`                     | the play-mode keys and current settings (any key closes)           |
+| `/`                     | type a slash command without leaving (`/click 40%`)                |
 | `Esc`                   | leave play mode                                                    |
 
 ### Chord mode
@@ -727,9 +729,9 @@ Terminals send no key releases, so the Orchid's held left-hand buttons are latch
 | `-` / `=` | voicing dial down / up (-12..12; walks inversions)                              |
 | `9`       | next perform mode (block, strum-up, strum-down, arp-up, …, harp, slop, pattern) |
 | `B`       | next bass mode: off, chords, unison, single, solo (bass in C2–B2)               |
-| `N`       | play the suggested next chord (the `→` chord in the header)                     |
+| `N`       | play the suggested next chord (the `next` chord in the header)                  |
 
-The header gains `AUTO C major · Dm (ii) → G · min+m7 · inv +1 · pattern 3 offbeat · bass chords`: mode, key (`?` when the score has none and C major is assumed), the last chord with its numeral, the suggested next chord, the latches and any non-default settings. The suggestion comes from the progression engine: the next chord of the chosen preset when the last chord is in it, otherwise a seeded step of the style's transition graph.
+The header gains `AUTO C major · Dm (ii) · next G`: mode, key (`(assumed)` when the score has none and C major is used), the last chord with its numeral, and the suggested next chord. A legend row under the keyboard strip lists the number-row latches (`1 dim  2 min  3 maj  4 sus  5 6  6 m7  7 M7  8 9  0 clear  -= voicing 0  9 block  b bass off  n next  q auto`), with latched ones lit; at 80 columns the row ends where it fits. The full chord state (latches, voicing, perform and bass settings) is in the `?` panel. The suggestion comes from the progression engine: the next chord of the chosen preset when the last chord is in it, otherwise a seeded step of the style's transition graph.
 
 Each chord is voice-led from the previous one and sounds through the live voice path. Recording quantizes the press like a note and lays the chord out with the perform mode over its held length (arpeggios at `rate`, `grid` by default; patterns from the press's quantized start), plus the bass note. Under `unison`, `single` and `solo` a single note in manual mode also records its bass (and, for `unison`, the note itself); `solo` records chords as bass only; each bar is still one revision and one undo step.
 
@@ -737,7 +739,7 @@ Each chord is voice-led from the previous one and sounds through the live voice 
 
 The base octave follows the instrument: C3 (MIDI 48) by default, C2 for bass instruments or tracks named bass, C4 for saw/square/triangle/pluck leads. Kits start at C2, so `A` is the GM kick, `S` the snare, `T` the closed hat. On a one-shot sampler track the keys walk the voices in name order from slot 36 (`A` the first voice, `W` the second, chromatically), and the strip shows voice names; a keyed sampler starts at the C below its lowest root and repitches from it.
 
-The header reads `PLAY  C3–F4  vel 100  ● REC  click ✓  grid 1/16` with a beat flash, and the row under it is the keyboard with sounding keys lit. Both repaint in place; nothing scrolls per note.
+The header reads `PLAY  C3–F4  ● REC` with a beat flash and ends in `? keys · esc leave`; velocity, grid, click and count-in are in the `?` panel, and a key that changes one (`C`, `V`, `M`) says so in the header's status for a moment. The row under it is the keyboard with sounding keys lit. Both repaint in place; nothing scrolls per note.
 
 Notes sound through the track's own instrument, effects and volume, rendered by the same per-instrument voice code as the loop, and mix into the stream about 60 ms ahead of now (play mode lowers the queue lead from 200 ms and restores it on exit). That works over silence and over the playing loop. A muted or unsoloed track still sounds while you play it. With audio backend `none` the keys still record.
 
@@ -780,30 +782,49 @@ Sample kits from packs (`/kit 909` and the rest, see **Sample packs**) sit in th
 
 ## Menus
 
-`/menu` or `Ctrl-K` (on an empty prompt, in play mode too) opens the edit menu, drawn with the same overlay as the model picker. Every edit the agent can make is reachable from it with keys alone, and each row shows its current value and the command it runs, so the menu teaches the commands. `/menu effects` opens a section directly.
+`/menu` or `Ctrl-K` (on an empty prompt, in play mode too) opens the edit menu, drawn with the same overlay as the model picker. Every edit the agent can make is reachable from it with keys alone. Each row shows a plain label and the current value with its unit (s, Hz, oct, st, dB, BPM, bars); the line under the list describes the focused row and shows, dimmed, the prompt command the row runs, so the menu teaches the commands. `/menu <section>` opens a section directly (`/menu effects`); the old names `parameters`, `sounds`, `track`, `automation` and `transport` still work.
 
-| Section    | Rows                                                                                                                                                                                                           |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Track      | name, instrument, mute, solo, volume, pan                                                                                                                                                                      |
-| Parameters | instrument; a synth's preset, ADSR, filter, detune, vibrato and FM, then **advanced** with every synth parameter; a wavetable track's table picker and wavetable parameters first; a sampler's mode and voices |
-| Sounds     | drum kits (`/kit`, synth then samples), drum patterns (`/pattern`), instruments (piano, `gm_*` soundfonts), use a pack sound, packs                                                                            |
-| Effects    | the core effects with presets and simple parameters, **more effects**, and **advanced** per effect (see Effects)                                                                                               |
-| Automation | each `AUTOMATION_LANES` lane: its points as `beat N  value` rows, add points, ramp, clear lane                                                                                                                 |
-| Mix        | every track's volume, pan, mute and solo; choosing another track focuses it first                                                                                                                              |
-| Transport  | play, tempo, beats per bar, loop bars, grid, click, count-in                                                                                                                                                   |
-| Chords     | play-mode chord mode, key tonic and mode, voicing, spread, bass, sevenths, perform, rate, octaves, preset, style                                                                                               |
+| Section          | Rows (most used first)                                                                                                                                                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Sound            | instrument, preset; a synth's attack, decay, sustain, release, filter cutoff/res/env, detune, vibrato, FM amount, then **advanced** with every synth parameter; a wavetable track's table and wavetable parameters; a sampler's mode and voices; **browse sounds** (instruments, wavetables, packs) |
+| Effects          | the core effects (filter, auto filter, distortion, tremolo, compressor, chorus, delay, reverb) with presets and simple parameters, **more effects** (dj filter, vowel, bitcrush, phaser, leslie, post gain, orbit, duck), and **advanced** per effect (see Effects) |
+| Rhythm           | the euclid editor (`/euclid`), drum patterns (`/pattern`), drum kits (`/kit`, synth then samples)                                                                                                                                    |
+| Chords           | play-mode chord mode, key tonic and mode, voicing, spread, bass, sevenths, perform, pattern, arp rate, arp octaves, progression, style                                                                                                |
+| Mix & automation | the focused track's name, mute, solo, volume, pan; **all tracks** (choosing one focuses it); **automation**: each `AUTOMATION_LANES` lane with its points as `beat N  value` rows, add points, ramp, clear lane                   |
+| Project          | play, tempo, beats per bar, loop length, grid, click, count-in bars                                                                                                                                                                  |
 
-| Key                         | Does                                                                       |
-| --------------------------- | -------------------------------------------------------------------------- |
-| `↑` `↓` / `k` `j`           | move                                                                       |
-| `Enter` / `Space`           | open a section, toggle, pick from a list, or start typing a value          |
-| `→` `←` / `l` `h` / `+` `-` | nudge a number by its step (cutoff moves 25%), cycle a choice, open / back |
-| digits                      | type a value; `Enter` sets it, `Esc` cancels                               |
-| `/`                         | filter the current list by name, value or command                          |
-| `x` / `Delete`              | remove the selected automation point                                       |
-| `Esc`                       | clear the filter, then back one level, then close                          |
+Every list, picker and editor uses the same keys (see **Keys** below). In the menu:
+
+| Key                         | Does                                                                         |
+| --------------------------- | ---------------------------------------------------------------------------- |
+| `↑` `↓` / `k` `j`           | move                                                                         |
+| `Enter` / `→` / `l`         | open a section, pick from a list, or start typing a value                    |
+| `←` `→` / `h` `l` / `-` `+` | adjust a value by its step (cutoff moves 25%) or cycle a choice              |
+| `Space`                     | toggle on/off                                                                |
+| digits                      | type a value on a focused value row; `Enter` sets it, `Esc` cancels          |
+| `/`                         | filter the current list by name, value or command                            |
+| `x` / `Delete`              | reset the focused value to its default; on an automation point, remove it    |
+| `Esc` / `←` / `h`           | clear the filter, then back one level, then close                            |
+| `?`                         | the keys for this screen                                                     |
 
 Automation rows take `beat:value` pairs (`2:800` or `0:200 4:8000`); a ramp is two pairs, start and end, and the renderer interpolates between points. Turning an effect's first field up switches it on with defaults. Each change runs the command it shows through the normal prompt path, so it is one `ScoreOperation`, one receipt, one undo step, and it syncs to other windows and the project files.
+
+## Keys
+
+One grammar for every picker (`/model`, `/pattern`, `/kit`, `/resume`, the wavetable and pack lists), the menu, the `/euclid` editor and the text panels (`/help`, `/tracks`, the transcript):
+
+| Key                        | Does                                                                |
+| -------------------------- | ------------------------------------------------------------------- |
+| `↑` `↓` / `j` `k`          | move (scroll in a text panel); PgUp/PgDn/Home/End page              |
+| `←` `→` / `h` `l` / `-` `+` | adjust the focused value                                            |
+| `Enter`                    | open or confirm                                                     |
+| `Space`                    | audition or toggle                                                  |
+| `/`                        | filter; typing then narrows the list                                |
+| `Esc`                      | back one level: clears the filter or a typed value first            |
+| `?`                        | the keys for the current screen, drawn over it; any key closes      |
+| digits                     | type a value, only where a value is focused                         |
+
+Every screen ends in a one-line footer of its keys that fits 80 columns (parts drop from the middle when narrower; `esc` and `? keys` stay). `?` on an empty prompt lists the prompt keys and the three ways in. Play mode is the one exception: its letters and number row are piano keys and chord latches (the GarageBand "Musical Typing" convention); its `?` panel says so.
 
 ## Release
 

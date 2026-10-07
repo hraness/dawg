@@ -93,9 +93,17 @@ dawg projects are now plain TypeScript files that you, an agent or another windo
 
 ### Menus
 
-- **`/menu [section]` or Ctrl-K** opens Track, Parameters, Effects, Automation, Mix and Transport. Arrows or `j k` move, Enter opens or toggles, `← →` or `+ -` nudge, digits type a value, `/` filters, `x` deletes an automation point, Esc steps back.
-- Each row shows its current value and the command it runs; every change is one receipt and one undo step.
+- **`/menu [section]` or Ctrl-K** opens six plain sections, most used first: **Sound**, **Effects**, **Rhythm**, **Chords**, **Mix & automation** and **Project**. The old section names (`parameters`, `sounds`, `track`, `automation`, `transport`) still open the matching place.
+- Rows show a plain label and the value with its unit (s, Hz, oct, st, dB, BPM, bars); a line under the list describes the focused row and shows, dimmed, the prompt command it runs. Every change is one receipt and one undo step; `x` resets a value to its default.
 - New prompt commands behind the menu: `automate <lane> points <b:v>...`, `automate <lane> remove <beat>`, `track name <text>` and `meter <n>`.
+
+### One key grammar
+
+- **Every picker, menu, editor and panel uses the same keys**: `↑↓`/`j k` move, `←→`/`h l`/`- +` adjust, Enter opens or confirms, Space auditions or toggles, `/` filters, Esc goes back one level (filter or typed value first), `?` shows the keys for the current screen. Digits type a value only where one is focused.
+- **A one-line key footer on every screen** that fits 80 columns; when narrower it drops the middle and keeps `esc` and `? keys`.
+- **`?` panel**: the keys for the screen underneath, drawn over it; on an empty prompt it lists the prompt keys and the three ways in (type a request, Ctrl-P, Ctrl-K). In play mode it also holds velocity, grid, click, count-in and the chord settings.
+- **Play mode header** keeps range, record state and the chord at a glance (`AUTO C major · Dm (ii) · next G`); chord mode adds a legend row for the number-row latches.
+- The `/euclid` editor is titled **rhythm** and its rows use the shared keys; pickers report the highlighted row on every move (`pick-move`), the hook live previews (and a future audition controller) listen on.
 
 ### Performance
 

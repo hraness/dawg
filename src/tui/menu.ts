@@ -1375,7 +1375,7 @@ function transportNodes(context: MenuContext): MenuNode[] {
     },
     {
       kind: "choice",
-      label: "count-in",
+      label: "count-in bars",
       help: "bars of click before recording starts",
       value: String(context.countInBars),
       options: ["0", "1", "2"],
