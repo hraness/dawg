@@ -7,9 +7,10 @@
  *   int, `sowt`, `fl32`) decode natively in TypeScript.
  * - Anything else (mp3, flac, ogg, m4a, …) decodes through `ffmpeg` when it is
  *   on PATH; dawg never installs it.
- * - Decoded PCM is cached content-addressed at `.dawg/assets/<sha256>.pcm`
- *   (and in memory), least recently used first out, bounded by
- *   `SCORE_LIMITS.maxSampleCacheBytes`.
+ * - Decoded PCM is cached content-addressed at `.dawg/assets/<sha256>.pcm`,
+ *   least recently used first out, bounded by `DAWG_ASSETS_CACHE_MAX`
+ *   (default 1 GiB, see `cache.ts`); files the loaded score uses are never
+ *   evicted. In memory, decoded voices share a 512 MiB LRU.
  *
  * Loading never throws for project problems: a voice that cannot load is
  * reported as a `<what> · <why> · <next step>` problem and renders silent.
@@ -17,11 +18,9 @@
 import { createHash } from "node:crypto";
 import {
   mkdir,
-  readdir,
   readFile,
   rename,
   stat,
-  unlink,
   utimes,
   writeFile,
 } from "node:fs/promises";
@@ -34,6 +33,14 @@ import {
   type TrackScore,
 } from "../../core/score.ts";
 import { PackError, PackStore } from "./packs.ts";
+import {
+  DEFAULT_MEMORY_CACHE_BYTES,
+  assetsCacheMax,
+  cacheUsage,
+  pruneLru,
+  type CacheUsage,
+  type PruneResult,
+} from "./cache.ts";
 import { trackDirectories } from "../../core/sdk/print.ts";
 import { WavFormatError, parseWav } from "../media/vendor/wav.ts";
 import { WorkspaceError, resolveReadPath } from "../agent/workspace.ts";
@@ -412,37 +419,25 @@ export function decodeCachedPcm(bytes: Uint8Array): PcmData | undefined {
   return { sampleRate, channels, frames: data.length / channels, data };
 }
 
-/** Delete least recently used `.pcm` files until the directory fits `maxBytes`. */
+const ASSET_FILE = /^[0-9a-f]{64}\.pcm$/;
+
+/**
+ * Delete least recently used `.pcm` files until the directory fits
+ * `maxBytes`, never the ones `keep` names (a sha256 or a set of them).
+ * Returns how many files went.
+ */
 export async function pruneAssetCache(
   dir: string,
   maxBytes: number,
-  keep?: string,
+  keep?: string | ReadonlySet<string>,
 ): Promise<number> {
-  let names: string[];
-  try {
-    names = await readdir(dir);
-  } catch {
-    return 0;
-  }
-  const entries: { path: string; bytes: number; used: number }[] = [];
-  for (const name of names) {
-    if (!/^[0-9a-f]{64}\.pcm$/.test(name)) continue;
-    const path = join(dir, name);
-    const info = await stat(path).catch(() => undefined);
-    if (info?.isFile())
-      entries.push({ path, bytes: info.size, used: info.mtimeMs });
-  }
-  let total = entries.reduce((sum, entry) => sum + entry.bytes, 0);
-  entries.sort((a, b) => a.used - b.used || a.path.localeCompare(b.path));
-  let removed = 0;
-  for (const entry of entries) {
-    if (total <= maxBytes) break;
-    if (keep && entry.path.endsWith(`${keep}.pcm`)) continue;
-    await unlink(entry.path).catch(() => undefined);
-    total -= entry.bytes;
-    removed += 1;
-  }
-  return removed;
+  const kept =
+    keep === undefined
+      ? () => false
+      : typeof keep === "string"
+        ? (name: string) => name === `${keep}.pcm`
+        : (name: string) => keep.has(name.slice(0, 64));
+  return (await pruneLru(dir, ASSET_FILE, maxBytes, kept)).removed;
 }
 
 // ---------------------------------------------------------------------------
@@ -453,7 +448,10 @@ export type SampleLibraryOptions = Readonly<{
   projectRoot: string;
   /** Default `<projectRoot>/.dawg/assets`. */
   cacheDir?: string;
-  /** Disk and memory cache budget; default `SCORE_LIMITS.maxSampleCacheBytes`. */
+  /**
+   * Disk cache budget; default `assetsCacheMax()` (`DAWG_ASSETS_CACHE_MAX`,
+   * 1 GiB). Memory uses the smaller of this and 512 MiB.
+   */
   maxCacheBytes?: number;
   /** ffmpeg binary, `null` for none; default `Bun.which("ffmpeg")`. */
   ffmpeg?: string | null;
@@ -471,7 +469,10 @@ type MemoryEntry = { sample: DecodedSample; bytes: number };
 export class SampleLibrary implements SampleSource {
   public readonly projectRoot: string;
   public readonly cacheDir: string;
-  private readonly maxCacheBytes: number;
+  public readonly maxCacheBytes: number;
+  private readonly maxMemoryBytes: number;
+  /** Content hashes the last loaded score uses; pruning skips them. */
+  private inUse = new Set<string>();
   private readonly ffmpeg: string | null;
   private readonly runFfmpeg: FfmpegRunner | undefined;
   private readonly memory = new Map<string, MemoryEntry>();
@@ -484,9 +485,10 @@ export class SampleLibrary implements SampleSource {
     this.projectRoot = options.projectRoot;
     this.cacheDir =
       options.cacheDir ?? join(options.projectRoot, ".dawg", "assets");
-    this.maxCacheBytes = Math.max(
-      0,
-      options.maxCacheBytes ?? SCORE_LIMITS.maxSampleCacheBytes,
+    this.maxCacheBytes = Math.max(0, options.maxCacheBytes ?? assetsCacheMax());
+    this.maxMemoryBytes = Math.min(
+      this.maxCacheBytes,
+      DEFAULT_MEMORY_CACHE_BYTES,
     );
     this.ffmpeg =
       options.ffmpeg === undefined
@@ -512,10 +514,41 @@ export class SampleLibrary implements SampleSource {
     return { ...this.stats };
   }
 
+  /** Decoded asset files on disk and the cap. */
+  public async cacheStatus(): Promise<CacheUsage & { max: number }> {
+    return {
+      ...(await cacheUsage(this.cacheDir, ASSET_FILE)),
+      max: this.maxCacheBytes,
+    };
+  }
+
+  /**
+   * Prunes decoded assets down to `maxBytes` (default the cap), keeping the
+   * ones the last loaded score uses.
+   */
+  public pruneCache(maxBytes = this.maxCacheBytes): Promise<PruneResult> {
+    const inUse = this.inUse;
+    return pruneLru(this.cacheDir, ASSET_FILE, maxBytes, (name) =>
+      inUse.has(name.slice(0, 64)),
+    );
+  }
+
   public async load(score: TrackScore): Promise<SampleBank> {
     const voices = new Map<string, DecodedSample>();
     const problems: SampleProblem[] = [];
     let dirs: ReadonlyMap<string, string> | undefined;
+    // The score's pins are this project's working set: neither cache evicts
+    // them while it is open.
+    this.inUse = new Set();
+    const urls: string[] = [];
+    for (const track of score.tracks) {
+      if (!isSamplerInstrument(track.instrument) || !track.sampler) continue;
+      for (const ref of Object.values(track.sampler.voices)) {
+        if (ref.sha256) this.inUse.add(ref.sha256);
+        if (ref.url) urls.push(ref.url);
+      }
+    }
+    if (urls.length) this.packs.protect(urls);
     for (const track of score.tracks) {
       if (!isSamplerInstrument(track.instrument) || !track.sampler) continue;
       const names = Object.keys(track.sampler.voices).sort();
@@ -525,6 +558,7 @@ export class SampleLibrary implements SampleSource {
         if (src.startsWith(PACK_PREFIX)) {
           try {
             const loaded = await this.loadPack(ref);
+            this.inUse.add(loaded.sample.sha256);
             voices.set(sampleKey(track.id, voice), loaded.sample);
             if (loaded.warning)
               problems.push({
@@ -562,6 +596,7 @@ export class SampleLibrary implements SampleSource {
           });
         try {
           const loaded = await this.loadFile(src);
+          this.inUse.add(loaded.sha256);
           if (ref.sha256 && ref.sha256 !== loaded.sha256)
             report(
               "warning",
@@ -707,7 +742,7 @@ export class SampleLibrary implements SampleSource {
     this.memory.set(sample.sha256, { sample, bytes });
     this.memoryBytes += bytes;
     for (const [sha, entry] of this.memory) {
-      if (this.memoryBytes <= this.maxCacheBytes) break;
+      if (this.memoryBytes <= this.maxMemoryBytes) break;
       if (sha === sample.sha256) continue;
       this.memory.delete(sha);
       this.memoryBytes -= entry.bytes;
@@ -736,7 +771,8 @@ export class SampleLibrary implements SampleSource {
       const temporary = `${path}.${process.pid}.tmp`;
       await writeFile(temporary, encodeCachedPcm(pcm));
       await rename(temporary, path);
-      await pruneAssetCache(this.cacheDir, this.maxCacheBytes, sha256);
+      const inUse = new Set(this.inUse).add(sha256);
+      await pruneAssetCache(this.cacheDir, this.maxCacheBytes, inUse);
     } catch {
       /* the cache is an optimisation; a read-only project still renders */
     }

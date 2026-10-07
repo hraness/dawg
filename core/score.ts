@@ -49,7 +49,11 @@ export const SCORE_LIMITS = Object.freeze({
   /** Per sample file, enforced by the decoder and the import tool. */
   maxSampleFileBytes: 50 * 1024 * 1024,
   maxSampleSeconds: 600,
-  /** Decoded PCM cache under `.dawg/assets`, LRU. */
+  /**
+   * In-memory decoded-sample budget. The disk caps (`.dawg/assets`, pack
+   * downloads) live in `src/audio/cache.ts` and follow
+   * `DAWG_ASSETS_CACHE_MAX` / `DAWG_PACKS_CACHE_MAX`.
+   */
   maxSampleCacheBytes: 512 * 1024 * 1024,
 } as const);
 

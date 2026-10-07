@@ -99,6 +99,8 @@ import { renderAudition } from "./audio/audition.ts";
 import { rhythmVoicePitch } from "../core/rhythm.ts";
 import { applyChordsCommand, defaultChordSettings } from "./tui/play-chords.ts";
 import {
+  cacheLines,
+  kitListLines,
   kitTarget,
   packListLines,
   parseKitCommand,
@@ -109,6 +111,7 @@ import {
   type PackCommand,
 } from "./commands/pack.ts";
 import {
+  ALIASED_PACK,
   DEFAULT_KITS,
   PackError,
   PackStore,
@@ -1501,7 +1504,10 @@ async function sampleProblems(
   value: TrackScore,
 ): Promise<readonly SampleProblem[]> {
   if (!hasSamplerTracks(value)) return [];
-  sampleLibrary ??= new SampleLibrary({ projectRoot: process.cwd() });
+  sampleLibrary ??= new SampleLibrary({
+    projectRoot: process.cwd(),
+    packs: packs(),
+  });
   try {
     const bank = await sampleLibrary.load(value);
     liveSampleBank = bank;
@@ -1655,6 +1661,28 @@ async function packCommand(command: PackCommand): Promise<Receipt> {
       tui.openText("packs", lines);
       return ok(`${lines.length} packs · /pack info <name> · esc closes`);
     }
+    if (command.kind === "cache") {
+      const library = (sampleLibrary ??= new SampleLibrary({
+        projectRoot: process.cwd(),
+        packs: packs(),
+      }));
+      let freed: { files: number; bytes: number } | undefined;
+      if (command.pruneTo !== undefined) {
+        const to = (cap: number) =>
+          command.pruneTo === "cap" ? cap : (command.pruneTo as number);
+        const store = packs();
+        const a = await store.pruneCache(to(store.maxFileCacheBytes));
+        const b = await library.pruneCache(to(library.maxCacheBytes));
+        freed = { files: a.removed + b.removed, bytes: a.freed + b.freed };
+      }
+      const lines = cacheLines({
+        packs: await packs().cacheStatus(),
+        assets: await library.cacheStatus(),
+        ...(freed ? { freed } : {}),
+      });
+      tui.openText("cache", lines);
+      return ok(lines[0]!);
+    }
     if (command.kind === "add") {
       const added = await packs().add(
         command.source,
@@ -1726,14 +1754,9 @@ async function packCommand(command: PackCommand): Promise<Receipt> {
 
 async function kitCommand(command: KitCommand): Promise<Receipt> {
   if (command.kind === "list") {
-    const lines = Object.entries(DEFAULT_KITS).map(
-      ([name, kit]) => `${name} · ${kit.bank || "(whole pack)"} · ${kit.pack}`,
-    );
-    lines.push(
-      "any bank of a pack also works: /kit RolandTR727, /kit AkaiMPC60, …",
-    );
+    const lines = kitListLines(await packs().bankAliases(ALIASED_PACK));
     tui.openText("kits", lines);
-    return ok("kits · /kit <name> on the focused drum track");
+    return ok("kits · /kit <name or nickname> on the focused drum track");
   }
   await materializeDraft();
   const trackId = kitTarget(score, requestedTrack);

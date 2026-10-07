@@ -4,7 +4,25 @@
  * commits ordinary score operations so it is one undo step like any edit.
  */
 import { SCORE_LIMITS } from "../../core/score.ts";
-import { PackError, PackStore, banksOf } from "../audio/packs.ts";
+import {
+  PackError,
+  PackStore,
+  banksOf,
+  type Manifest,
+} from "../audio/packs.ts";
+
+/** `RolandTR909 (TR909)`: banks with their Strudel nickname, if any. */
+async function kitsWithNicknames(
+  packs: PackStore,
+  pack: string,
+  manifest: Manifest,
+): Promise<string[]> {
+  const aliases = await packs.bankAliases(pack);
+  return banksOf(manifest).map((bank) => {
+    const nickname = aliases.nicknames.get(bank);
+    return nickname ? `${bank} (${nickname})` : bank;
+  });
+}
 import { useSound } from "../commands/pack.ts";
 import type { AgentTool } from "./tools.ts";
 
@@ -88,7 +106,7 @@ export const PACK_TOOLS: readonly AgentTool[] = Object.freeze([
               pack: info.name,
               license: info.license,
               ...(info.attribution ? { attribution: info.attribution } : {}),
-              kits: banksOf(manifest),
+              kits: await kitsWithNicknames(packs, info.name, manifest),
               sounds,
               total: manifest.sounds.size,
             }),
@@ -140,7 +158,7 @@ export const PACK_TOOLS: readonly AgentTool[] = Object.freeze([
   {
     name: "use_sound",
     description:
-      'Put a pack sound on a track through the sampler. sound is <pack>/<sound>[:<n>] (n picks a file, like Strudel s("bd:3")), a kit/bank name (909, 808, linn, RolandTR909, tidal-drum-machines/RolandTR707) to load a whole drum kit, or a keyed instrument such as gm/gm_acoustic_grand_piano or piano/piano. The file is fetched and pinned by sha256 so renders stay reproducible. Drum hits on the track keep playing the matching kit voice.',
+      'Put a pack sound on a track through the sampler. sound is <pack>/<sound>[:<n>] (n picks a file, like Strudel s("bd:3")), a kit/bank name or Strudel bank nickname (909, 808, linn, TR909, tr808, sp12, dmx, RolandTR909, tidal-drum-machines/RolandTR707) to load a whole drum kit, or a keyed instrument such as gm/gm_acoustic_grand_piano or piano/piano. The file is fetched and pinned by sha256 so renders stay reproducible. Drum hits on the track keep playing the matching kit voice.',
     parameters: {
       type: "object",
       properties: {

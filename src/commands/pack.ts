@@ -18,16 +18,18 @@ import {
 } from "../../core/score.ts";
 import { drumVoiceForPitch, isDrumInstrument } from "../../core/drums.ts";
 import {
+  ALIASED_PACK,
   DEFAULT_KIT,
   DEFAULT_KITS,
   PackError,
-  banksOf,
   kitFromBank,
   pinInstrument,
   pinKit,
+  type BankAliases,
   type PackInfo,
   type PackStore,
 } from "../audio/packs.ts";
+import { formatBytes, parseByteSize, type CacheUsage } from "../audio/cache.ts";
 
 export type PackCommand =
   | Readonly<{ kind: "list" }>
@@ -35,10 +37,12 @@ export type PackCommand =
   | Readonly<{ kind: "info"; name: string }>
   | Readonly<{ kind: "remove"; name: string }>
   | Readonly<{ kind: "use"; sound: string; voice?: string }>
+  /** Show cache usage; with `pruneTo`, evict down to that many bytes. */
+  | Readonly<{ kind: "cache"; pruneTo?: number | "cap" }>
   | Readonly<{ kind: "usage"; message: string }>;
 
 export const PACK_USAGE =
-  "/pack list · /pack add <url|github:user/repo[/branch]> [as <name>] · /pack info <name> · /pack remove <name> · /pack use <pack>/<sound>[:<n>] [as <voice>]";
+  "/pack list · /pack add <url|github:user/repo[/branch]> [as <name>] · /pack info <name> · /pack remove <name> · /pack use <pack>/<sound>[:<n>] [as <voice>] · /pack cache [prune [size]|clear]";
 
 /** Parses `/pack …`; undefined when the command is not `/pack`. */
 export function parsePackCommand(command: string): PackCommand | undefined {
@@ -82,6 +86,21 @@ export function parsePackCommand(command: string): PackCommand | undefined {
         message: `pack · remove needs a pack name · ${PACK_USAGE}`,
       };
     return { kind: "remove", name: rest[0] };
+  }
+  if (verb === "cache") {
+    const action = (rest[0] ?? "").toLowerCase();
+    if (!action) return { kind: "cache" };
+    if (action === "clear") return { kind: "cache", pruneTo: 0 };
+    if (action === "prune") {
+      if (!rest[1]) return { kind: "cache", pruneTo: "cap" };
+      const bytes = parseByteSize(rest[1]);
+      if (bytes !== undefined) return { kind: "cache", pruneTo: bytes };
+    }
+    return {
+      kind: "usage",
+      message:
+        "pack · cache shows usage · /pack cache prune [size, e.g. 500M] · /pack cache clear (keeps this project's sounds)",
+    };
   }
   if (verb === "use") {
     const { value, as } = named();
@@ -274,18 +293,11 @@ export async function useSound(
   if (!ref)
     throw new PackError(`${sound.slice(0, 80)} · use <pack>/<sound>[:<n>]`);
   const manifest = await store.manifest(ref.pack);
-  const entry =
-    manifest.sounds.get(ref.sound) ??
-    [...manifest.sounds].find(
-      ([key]) => key.toLowerCase() === ref.sound.toLowerCase(),
-    )?.[1];
-  if (!entry) {
-    if (
-      banksOf(manifest).some(
-        (bank) => bank.toLowerCase() === ref.sound.toLowerCase(),
-      )
-    )
-      return useKit(store, score, trackId, ref.sound, ref.pack);
+  const key = await store.soundKey(ref.pack, manifest, ref.sound);
+  const entry = key === undefined ? undefined : manifest.sounds.get(key);
+  if (!entry || key === undefined) {
+    const bank = await store.bankKey(ref.pack, manifest, ref.sound);
+    if (bank) return useKit(store, score, trackId, bank, ref.pack);
     throw new PackError(
       `${ref.pack} has no sound ${ref.sound} · search_sounds or /pack info ${ref.pack}`,
     );
@@ -295,11 +307,11 @@ export async function useSound(
     options.mode === "keyed" ||
     (options.mode !== "oneshot" && entry.kind === "zones");
   if (keyed) {
-    const sampler = await pinInstrument(ref.pack, ref.sound, store);
+    const sampler = await pinInstrument(ref.pack, key, store);
     return {
-      operations: samplerOperations(score, trackId, sampler, ref.sound),
+      operations: samplerOperations(score, trackId, sampler, key),
       trackId,
-      summary: `${trackId} plays ${ref.pack}/${ref.sound} · ${Object.keys(sampler.voices).length} zones · ${pack.license}`,
+      summary: `${trackId} plays ${ref.pack}/${key} · ${Object.keys(sampler.voices).length} zones · ${pack.license}`,
       license: pack.license,
     };
   }
@@ -333,7 +345,7 @@ export async function useKit(
   );
   if (!kit || (packName && kit.pack !== packName))
     throw new PackError(
-      `no kit ${bank.slice(0, 40)} · /kit list shows banks (909, 808, linn, RolandTR909, …)`,
+      `no kit ${bank.slice(0, 40)} · /kit list shows banks and nicknames (909, TR808, sp12, RolandTR909, …)`,
     );
   const sampler = await pinKit(kit, store);
   const missing = ["kick", "snare", "hat"].filter(
@@ -345,6 +357,56 @@ export async function useKit(
     summary: `kit ${kit.bank || kit.pack} on ${trackId} · ${kit.voices.size} voices${missing.length ? ` · no ${missing.join("/")}` : ""} · ${kit.pack} (${kit.license})`,
     license: kit.license,
   };
+}
+
+/**
+ * Lines for `/kit list`: dawg's short names, then every Strudel bank
+ * nickname (`TR909 · RolandTR909`), then a hint for full bank names.
+ */
+export function kitListLines(aliases: BankAliases): string[] {
+  const lines = Object.entries(DEFAULT_KITS).map(
+    ([name, kit]) => `${name} · ${kit.bank || "(whole pack)"} · ${kit.pack}`,
+  );
+  const nicknames = [...aliases.nicknames].sort(([, a], [, b]) =>
+    a.toLowerCase() < b.toLowerCase() ? -1 : 1,
+  );
+  if (nicknames.length) {
+    lines.push(`Strudel nicknames (${nicknames.length}, any case):`);
+    for (const [bank, nickname] of nicknames)
+      lines.push(`${nickname} · ${bank} · ${ALIASED_PACK}`);
+  }
+  lines.push(
+    "any bank of a pack also works: /kit RolandTR727, /kit AkaiMPC60, …",
+  );
+  return lines;
+}
+
+export type CacheReport = Readonly<{
+  packs: CacheUsage & { max: number };
+  assets: CacheUsage & { max: number };
+  freed?: Readonly<{ files: number; bytes: number }>;
+}>;
+
+/** Lines for `/pack cache`. */
+export function cacheLines(report: CacheReport): string[] {
+  const row = (
+    label: string,
+    usage: CacheUsage & { max: number },
+    env: string,
+  ) =>
+    `${label} · ${formatBytes(usage.bytes)} of ${formatBytes(usage.max)} · ${usage.files} file${usage.files === 1 ? "" : "s"} · ${env}`;
+  return [
+    ...(report.freed
+      ? [
+          `pruned · ${report.freed.files} file${report.freed.files === 1 ? "" : "s"} · ${formatBytes(report.freed.bytes)} freed`,
+        ]
+      : []),
+    row("pack downloads", report.packs, "DAWG_PACKS_CACHE_MAX"),
+    row("decoded audio (this project)", report.assets, "DAWG_ASSETS_CACHE_MAX"),
+    "least recently used files go first; this project's sounds are never evicted",
+    "evicted sounds re-fetch by their pinned sha256 on next use",
+    "/pack cache prune [size] · /pack cache clear",
+  ];
 }
 
 /** Lines for `/pack list`. */
