@@ -125,7 +125,13 @@ export function playLayoutFor(track: Track | undefined): PlayLayout {
     const lowest = roots.length > 0 ? Math.min(...roots) : 60;
     return { base: clampBase(Math.floor(lowest / 12) * 12), labels };
   }
-  return { base: defaultBaseFor(track?.instrument), labels };
+  // A plain instrument takes its range from the track's name (`bass`, `lead`).
+  const byInstrument = defaultBaseFor(track?.instrument);
+  const base =
+    byInstrument === DEFAULT_BASE && track
+      ? defaultBaseFor(track.name || track.id)
+      : byInstrument;
+  return { base, labels };
 }
 
 export function clampBase(base: number): number {

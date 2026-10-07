@@ -270,7 +270,7 @@ test.skipIf(!supported)(
     expect(t.vt.text()).toContain("help · esc closes");
     await t.send("\u001b[F"); // End: the last page holds window + keys
     await t.until(() => t.vt.text().includes("── keys"), "help end");
-    expect(t.vt.text()).toContain("/track <name>");
+    expect(t.vt.text()).toContain("/auth [--check]");
     await t.send("\u001b");
     await t.until(() => !t.vt.text().includes("── keys"), "help closed");
     await t.send("/status\r");

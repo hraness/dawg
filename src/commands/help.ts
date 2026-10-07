@@ -103,6 +103,11 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "forget keys and the saved choice",
       },
       { command: "/auth [--check]", summary: "provider and audio status" },
+      { command: "/play [on|off]", summary: "keyboard play mode · Ctrl-P" },
+      {
+        command: "/click on|off|<volume>",
+        summary: "metronome · /count-in 0-2 · /grid 1/16",
+      },
       { command: "/help", summary: "this list · ?" },
     ],
   },
@@ -117,6 +122,10 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       { command: "Ctrl-O", summary: "transcript" },
       { command: "Esc", summary: "cancel the agent · close an overlay" },
       { command: "Space", summary: "play/pause on an empty prompt" },
+      {
+        command: "Ctrl-P",
+        summary: "play mode: A–' W–P keys · Z/X octave · R rec · M click",
+      },
       { command: "Ctrl-C", summary: "exit" },
     ],
   },
@@ -158,6 +167,9 @@ export function helpText(): string {
 
 /** Usage for a known verb, shown instead of sending a near-miss to the agent. */
 const USAGE: Readonly<Record<string, string>> = {
+  click: "/click on|off|<volume> · /click 50%",
+  "count-in": "/count-in 0|1|2",
+  grid: "/grid 1/4|1/8|1/8T|1/16|1/16T|1/32",
   tempo: "tempo takes 20…300 · tempo 120",
   bpm: "tempo takes 20…300 · tempo 120",
   add: "add <note> at <beat> [for <beats>] · add C4 at 0",

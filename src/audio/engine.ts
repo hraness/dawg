@@ -278,7 +278,7 @@ type PlayRequest = {
 export class AudioEngine {
   public readonly info: AudioBackendInfo;
   private readonly lock: PlaybackLock;
-  private readonly sampleRate: number;
+  public readonly sampleRate: number;
   private leadFrames: number;
   private readonly defaultLeadFrames: number;
   private readonly tickMs: number;

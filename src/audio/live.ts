@@ -46,6 +46,10 @@ export class LiveSynth {
 
   public constructor(private readonly sampleRate: number) {}
 
+  public get rate(): number {
+    return this.sampleRate;
+  }
+
   public get cached(): number {
     return this.cache.size;
   }
