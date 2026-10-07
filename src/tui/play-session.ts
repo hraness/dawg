@@ -135,6 +135,8 @@ export type RecordedChord = Readonly<{
   rate: number;
   octaves: number;
   seed: number;
+  /** CHORD_PATTERNS name when `mode` is `pattern`. */
+  pattern?: string;
 }>;
 
 /** A chord sounding live: its voices start and stop from `tick()`. */
@@ -379,6 +381,16 @@ export class PlaySession {
           this.status = played.name;
           return { type: "handled" };
         }
+        // Bass modes that sound bass under single notes (unison, single, solo).
+        const single = this.chords.single(action.note.pitch);
+        if (single) {
+          this.startChord(action.note, single, "block");
+          this.record(
+            action.note,
+            this.recordedChord(single, action.note.id, "block"),
+          );
+          return { type: "handled" };
+        }
         this.sound(action.note.id, action.note);
         this.record(action.note);
         return { type: "handled" };
@@ -484,35 +496,47 @@ export class PlaySession {
     });
   }
 
-  private recordedChord(played: PlayedChord, seed: number): RecordedChord {
+  private recordedChord(
+    played: PlayedChord,
+    seed: number,
+    mode: PerformMode = this.chords.settings.perform,
+  ): RecordedChord {
     const settings = this.chords.settings;
     return {
       pitches: played.pitches,
       bass: played.bass,
-      mode: settings.perform,
+      mode,
       rate: this.chords.rateBeats(this.gridStep),
       octaves: settings.octaves,
       seed,
+      ...(mode === "pattern" ? { pattern: settings.pattern } : {}),
     };
   }
 
   // ── live chords ──────────────────────────────────────────────────────
 
-  private startChord(note: PlayedNote, played: PlayedChord): void {
+  private startChord(
+    note: PlayedNote,
+    played: PlayedChord,
+    mode: PerformMode = this.chords.settings.perform,
+  ): void {
     const settings = this.chords.settings;
+    // Velocity 1: pattern hits carry their own accents, scaled by the press.
     const plan = perform(played.pitches, 0, LIVE_PLAN_BEATS, {
-      mode: settings.perform,
+      mode,
       rate: this.chords.rateBeats(this.gridStep),
       octaves: settings.octaves,
-      strum: settings.perform === "harp" ? DEFAULT_STRUM * 2 : DEFAULT_STRUM,
+      strum: mode === "harp" ? DEFAULT_STRUM * 2 : DEFAULT_STRUM,
       seed: note.id,
+      pattern: settings.pattern,
+      velocity: 1,
     });
     if (played.bass !== undefined)
       plan.push({
         pitch: played.bass,
         start: 0,
         length: LIVE_PLAN_BEATS,
-        velocity: 0.8,
+        velocity: 1,
       });
     plan.sort((a, b) => a.start - b.start);
     this.liveChords.set(note.id, {
@@ -567,7 +591,7 @@ export class PlaySession {
         this.soundVoice(
           voice,
           live,
-          planned.pitch,
+          planned,
           atMs,
           own ? endMs : live.releaseAtMs,
         );
@@ -585,28 +609,22 @@ export class PlaySession {
     for (const [voice, state] of live.sounding)
       if (!Number.isFinite(state.endMs)) {
         const planned = live.plan[state.index]!;
-        this.soundVoice(
-          voice,
-          live,
-          planned.pitch,
-          state.atMs,
-          live.releaseAtMs,
-        );
+        this.soundVoice(voice, live, planned, state.atMs, live.releaseAtMs);
       }
   }
 
   private soundVoice(
     voice: number,
     live: LiveChord,
-    pitch: number,
+    planned: Readonly<{ pitch: number; velocity: number }>,
     atMs: number,
     endMs: number,
   ): void {
     this.sound(voice, {
       id: voice,
       key: "",
-      pitch,
-      velocity: live.velocity,
+      pitch: planned.pitch,
+      velocity: scaleVelocity(live.velocity, planned.velocity),
       atMs,
       releaseAtMs: endMs,
       sustain: !Number.isFinite(endMs),
@@ -837,6 +855,11 @@ export type RecordedNote = Readonly<{
   exact?: boolean;
 }>;
 
+/** A press velocity (1..127) times a pattern accent (0..1), at least 1. */
+function scaleVelocity(velocity: number, accent: number): number {
+  return accent >= 1 ? velocity : Math.max(1, Math.round(velocity * accent));
+}
+
 /**
  * A recorded chord press as notes: the press snaps to `grid`, its held
  * length rounds to whole grid steps (at least one), and `perform` lays the
@@ -859,9 +882,11 @@ export function chordNotes(
     octaves: chord.octaves,
     strum: chord.mode === "harp" ? DEFAULT_STRUM * 2 : DEFAULT_STRUM,
     seed: chord.seed,
+    ...(chord.pattern !== undefined ? { pattern: chord.pattern } : {}),
+    velocity: 1,
   }).map((note) => ({
     pitch: note.pitch,
-    velocity: press.velocity,
+    velocity: scaleVelocity(press.velocity, note.velocity),
     beat: note.start,
     beats: note.length,
     exact: true,

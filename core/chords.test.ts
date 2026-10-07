@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  BASS_MODES,
+  CHORD_PATTERNS,
+  findChordPattern,
+  routeBass,
   bassNote,
   chordName,
   chordPitchClasses,
@@ -370,6 +374,89 @@ describe("perform", () => {
     const notes = perform(chord, 0, 2, { mode: "harp", octaves: 2 });
     expect(notes).toHaveLength(6);
     expect(notes.every((n) => n.start + n.length === 2)).toBe(true);
+  });
+});
+
+describe("rhythm patterns", () => {
+  test("thirteen named patterns, each inside its own span", () => {
+    expect(CHORD_PATTERNS).toHaveLength(13);
+    expect(new Set(CHORD_PATTERNS.map((p) => p.name)).size).toBe(13);
+    for (const p of CHORD_PATTERNS)
+      for (const hit of p.hits) {
+        expect(hit.at).toBeGreaterThanOrEqual(0);
+        expect(hit.at).toBeLessThan(p.beats);
+        expect(hit.velocity).toBeGreaterThan(0);
+        expect(hit.velocity).toBeLessThanOrEqual(1);
+      }
+  });
+
+  test("patterns resolve by name, number or default", () => {
+    expect(findChordPattern("Offbeat")?.name).toBe("offbeat");
+    expect(findChordPattern(1)?.name).toBe("eighths");
+    expect(findChordPattern("13")?.name).toBe("pick");
+    expect(findChordPattern(14)).toBeUndefined();
+    expect(findChordPattern("waltz")).toBeUndefined();
+  });
+
+  test("offbeat lands on the and of every beat", () => {
+    const notes = perform([60, 64, 67], 0, 4, {
+      mode: "pattern",
+      pattern: "offbeat",
+      velocity: 1,
+    });
+    expect([...new Set(notes.map((n) => n.start))]).toEqual([
+      0.5, 1.5, 2.5, 3.5,
+    ]);
+    expect(notes.every((n) => n.velocity === 0.9)).toBe(true);
+  });
+
+  test("a pattern repeats past its span and is cut at the held length", () => {
+    const notes = perform([60, 64, 67], 1, 3, {
+      mode: "pattern",
+      pattern: "charleston",
+    });
+    // Charleston (4 beats) from beat 1: hits at 1 and 2.5; the next bar
+    // (beat 5) is outside the 3-beat hold.
+    expect([...new Set(notes.map((n) => n.start))]).toEqual([1, 2.5]);
+    for (const n of notes) expect(n.start + n.length).toBeLessThanOrEqual(4);
+  });
+
+  test("bass-and-upper patterns split the voicing", () => {
+    const notes = perform([60, 64, 67], 0, 2, {
+      mode: "pattern",
+      pattern: "oom-pah",
+      velocity: 1,
+    });
+    expect(notes.map((n) => [n.start, n.pitch])).toEqual([
+      [0, 48],
+      [1, 64],
+      [1, 67],
+    ]);
+  });
+});
+
+describe("bass modes", () => {
+  const c = makeChord(0, "maj");
+  const slash = { ...c, bass: 7 };
+  test("five modes route treble and bass as the Orchid manual describes", () => {
+    expect(BASS_MODES).toEqual(["off", "chords", "unison", "single", "solo"]);
+    expect(routeBass("off", c, 60)).toEqual({ treble: true, bass: undefined });
+    expect(routeBass("chords", undefined, 64)).toEqual({
+      treble: true,
+      bass: undefined,
+    });
+    expect(routeBass("chords", c, 60)).toEqual({ treble: true, bass: 36 });
+    expect(routeBass("chords", slash, 60)).toEqual({ treble: true, bass: 43 });
+    expect(routeBass("unison", undefined, 64)).toEqual({
+      treble: true,
+      bass: 40,
+    });
+    expect(routeBass("single", undefined, 64)).toEqual({
+      treble: false,
+      bass: 40,
+    });
+    expect(routeBass("single", c, 60)).toEqual({ treble: true, bass: 36 });
+    expect(routeBass("solo", c, 60)).toEqual({ treble: false, bass: 36 });
   });
 });
 

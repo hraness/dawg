@@ -604,7 +604,7 @@ From Orchid's documentation and reviews:
 - Four chord-type buttons, `dim min maj sus`, and four extension buttons, `6 m7 M7 9`. Hold a type and press a root for the chord; extensions add notes on top of a type (or of a Key-mode chord) and any number of them combine (Maj + M7 + C = Cmaj7). Extensions never play alone.
 - Key mode: once a key is set, every key plays the chord that fits the key (C major: D plays Dm). Type and extension buttons still work on top for less obvious choices.
 - Voicing dial: each click moves the chord's lowest note up an octave, or its highest note down, walking through inversions and up or down the keyboard.
-- Bass: an optional engine that plays a bass note under every chord.
+- Bass: an optional engine that plays the chord's root under every chord. Its menu (manual 10.2, "How to use Bass on Orchid") has Chords Only (bass only under chords), Unison (single notes play bass and treble together), Single Notes (single notes play only bass; the treble sounds only for chords) and Solo (the treble is muted, even for chords).
 - Performance modes: Strum (and 2-octave), Slop (random timing per note for a humanised feel that varies with every press), Arpeggiator (and 2-octave, tempo-synced; more chord notes make a longer pattern), Pattern (fixed rhythms) and Harp (a sweep across several octaves).
 - "Secret chords" (firmware 3.84+, Orchid manual section 14.8): two type buttons held together play extra chords. dim+sus is a power chord (C5), maj+sus augmented (C+), min+sus Cm(add4); min+dim with the 6 button is Cm(b6), maj+dim with 6 is C(b6), and maj+min with m7 is C7♯9. dawg's `COMBINED_TYPES` is this table.
 - Orchid has no generator that writes a progression for you. Key mode is its "easy chord progressions" feature: you pick the order, every key is in key.
@@ -614,13 +614,14 @@ dawg's own design:
 - Secret chords play without their listed extension, since a latched pair is already deliberate; the listed extension is part of the chord and is not stacked again. Other extensions add on top (`Cm(add4,7)`). With three types latched, the first two in `dim min maj sus` order count.
 - Key-mode chords are the diatonic triads (sevenths when asked) of `major`, `minor`, `dorian`, `phrygian`, `lydian`, `mixolydian`, `locrian` and `harmonic-minor`. A key outside the scale plays the chord borrowed from the parallel major or minor when that scale has the note (C major: E♭, A♭, B♭), otherwise a passing diminished seventh.
 - Voice leading: a voicing is the chord in root position from C4, rotated by the dial. When there is a previous chord, every rotation within one octave of the dial is scored by movement (each new voice's distance to the nearest old voice, plus the reverse, so common tones are free), kept within C3–G5 where it fits, and the cheapest wins; ties go to the rotation nearest the dial. Spread `open` drops the second voice from the top an octave (drop 2), `wide` also the fourth.
-- Bass is the root (or slash bass) in C2–B2, one sustained note per chord.
+- Bass is the root (or slash bass) in C2–B2, one sustained note per chord. The five bass modes `off`, `chords`, `unison`, `single` and `solo` follow Orchid's menu; under `unison` the agent and SDK use the chord's root and ignore a slash bass, and in play mode a single note's bass is the same pitch class two octaves under the pressed octave.
+- Pattern perform mode: Orchid ships fixed rhythm patterns but does not publish them, so dawg's thirteen are its own (`eighths`, `sixteenths`, `offbeat`, `pop`, `charleston`, `bossa`, `skank`, `gallop`, `half-time`, `tresillo`, `oom-pah`, `roll`, `pick`), chosen by name or number 1–13. Each is a list of hits (beat, length, accent, which voices: all, the upper voices, the root an octave down, or chosen chord tones) over one or two bars, repeated over the held length and cut at its end. Accents scale the press velocity.
 - Perform modes `block`, `strum-up`, `strum-down` (1/32-beat gap), `arp-up`, `arp-down`, `arp-updown`, `arp-random` (seeded) with a grid-aligned `rate` and 1–4 `octaves`, `harp` (a 1/16-beat upward sweep across the octaves that rings to the end of the chord), and `slop` (Orchid's humanised block chord: each voice lands up to 1/16 beat late, chosen by the press's seed, so repeats differ but a recording replays exactly).
 - Progressions (dawg's "auto"): eleven presets (`axis` I–V–vi–IV, `sad-pop` vi–IV–I–V, `fifties` I–vi–IV–V, `ii-v-i`, `turnaround` I–vi–ii–V, `canon`, `aeolian` i–VI–III–VII, `andalusian` i–VII–VI–V, `minor-ii-v`, `dorian-vamp`, `mixolydian-rock` I–♭VII–IV–I) and four styles, `pop`, `jazz`, `modal` and `classical`, that walk a weighted graph of scale-degree transitions (tonic → predominant → dominant → tonic, with plagal and vi–IV moves for pop and the cycle of fifths for jazz) from I with a seeded PRNG. A progression of four or more chords ends on a dominant-function chord (V or vii°; IV or vii in modal) so the loop leads home. The same key, style, length and seed always give the same chords.
 
-Agent. `suggest_progression {key?, chords? | style?, length?, seed?, sevenths?, inversion?, spread?}` (read-only) returns each chord's name, roman numeral, voicing and bass. `write_chords {trackId?, chords, key?, start?, beatsPerChord?, perform?, rate?, octaves?, strum?, velocity?, bass?, bassTrackId?, inversion?, spread?}` writes them as one revision. `chords` takes roman numerals in the key (`ii7`, `bVII`, `V/V`) or symbols (`Cm7`, `F/A`). The system prompt tells the agent to use these tools for chord parts, so its chords are diatonic and voice-led rather than hand-stacked.
+Agent. `suggest_progression {key?, chords? | style?, length?, seed?, sevenths?, inversion?, spread?}` (read-only) returns each chord's name, roman numeral, voicing and bass. `write_chords {trackId?, chords, key?, start?, beatsPerChord?, perform?, pattern?, rate?, octaves?, strum?, velocity?, bass?, bassMode?, bassTrackId?, inversion?, spread?}` writes them as one revision. `chords` takes roman numerals in the key (`ii7`, `bVII`, `V/V`) or symbols (`Cm7`, `F/A`). The system prompt tells the agent to use these tools for chord parts, so its chords are diatonic and voice-led rather than hand-stacked.
 
-SDK. `chord("Cm7", start, length, opts)` and `progression("ii7 V7 Imaj7", { key, from, each, perform, rate, octaves, strum, seed, voicing, spread, part })` expand to notes at evaluation; see [docs/project-format.md](./docs/project-format.md). The vendored SDK stays one import-free file: `core/sdk/v1.ts` carries a generated copy of the engine (`bun core/sdk/sync-chords.ts`, checked by a test).
+SDK. `chord("Cm7", start, length, opts)` and `progression("ii7 V7 Imaj7", { key, from, each, perform, pattern, rate, octaves, strum, seed, voicing, spread, part, bass })` expand to notes at evaluation; see [docs/project-format.md](./docs/project-format.md). The vendored SDK stays one import-free file: `core/sdk/v1.ts` carries a generated copy of the engine (`bun core/sdk/sync-chords.ts`, checked by a test).
 
 ## Play mode (computer keyboard)
 
@@ -650,22 +651,22 @@ Play mode has a chord sub-mode modelled on the Orchid's Key mode. It is `auto` b
 
 Terminals send no key releases, so the Orchid's held left-hand buttons are latches here: press once to latch, again to release, `0` clears them all.
 
-| Key       | Does (chord mode on)                                                           |
-| --------- | ------------------------------------------------------------------------------ |
-| `Q`       | auto ⇄ manual                                                                  |
-| `1 2 3 4` | latch chord type dim / min / maj / sus (two latched make a combined chord)     |
-| `5 6 7 8` | latch extension 6 / m7 / M7 / 9 (any number; on top of the type or auto chord) |
-| `0`       | clear every latch                                                              |
-| `-` / `=` | voicing dial down / up (-12..12; walks inversions)                             |
-| `9`       | next perform mode (block, strum-up, strum-down, arp-up, …, harp, slop)         |
-| `B`       | bass on/off (root in C2–B2 under each chord)                                   |
-| `N`       | play the suggested next chord (the `→` chord in the header)                    |
+| Key       | Does (chord mode on)                                                            |
+| --------- | ------------------------------------------------------------------------------- |
+| `Q`       | auto ⇄ manual                                                                   |
+| `1 2 3 4` | latch chord type dim / min / maj / sus (two latched make a combined chord)      |
+| `5 6 7 8` | latch extension 6 / m7 / M7 / 9 (any number; on top of the type or auto chord)  |
+| `0`       | clear every latch                                                               |
+| `-` / `=` | voicing dial down / up (-12..12; walks inversions)                              |
+| `9`       | next perform mode (block, strum-up, strum-down, arp-up, …, harp, slop, pattern) |
+| `B`       | next bass mode: off, chords, unison, single, solo (bass in C2–B2)               |
+| `N`       | play the suggested next chord (the `→` chord in the header)                     |
 
-The header gains `AUTO C major · Dm (ii) → G · min+m7 · inv +1 · arp-up · bass`: mode, key (`?` when the score has none and C major is assumed), the last chord with its numeral, the suggested next chord, the latches and any non-default settings. The suggestion comes from the progression engine: the next chord of the chosen preset when the last chord is in it, otherwise a seeded step of the style's transition graph.
+The header gains `AUTO C major · Dm (ii) → G · min+m7 · inv +1 · pattern 3 offbeat · bass chords`: mode, key (`?` when the score has none and C major is assumed), the last chord with its numeral, the suggested next chord, the latches and any non-default settings. The suggestion comes from the progression engine: the next chord of the chosen preset when the last chord is in it, otherwise a seeded step of the style's transition graph.
 
-Each chord is voice-led from the previous one and sounds through the live voice path. Recording quantizes the press like a note and lays the chord out with the perform mode over its held length (arpeggios at `rate`, `grid` by default), plus the bass note; each bar is still one revision and one undo step.
+Each chord is voice-led from the previous one and sounds through the live voice path. Recording quantizes the press like a note and lays the chord out with the perform mode over its held length (arpeggios at `rate`, `grid` by default; patterns from the press's quantized start), plus the bass note. Under `unison`, `single` and `solo` a single note in manual mode also records its bass (and, for `unison`, the note itself); `solo` records chords as bass only; each bar is still one revision and one undo step.
 
-`/chords` with no argument prints the settings; `/chords auto|manual|off`, `voicing <n>`, `spread close|open|wide`, `bass on|off`, `sevenths on|off`, `perform <mode>`, `rate grid|1/4|1/8|1/16|1/32`, `octaves 1..4`, `preset <name>|none`, `style pop|jazz|modal|classical`. `key <tonic> <mode>` (`key A minor`, `key F# dorian`, `key none`) sets the song key as one score edit. The same settings and the key are in `/menu` under Chords.
+`/chords` with no argument prints the settings; `/chords auto|manual|off`, `voicing <n>`, `spread close|open|wide`, `bass off|chords|unison|single|solo` (`on` means `chords`), `sevenths on|off`, `perform <mode>`, `pattern <1..13|name>` (also selects the pattern perform mode), `rate grid|1/4|1/8|1/16|1/32`, `octaves 1..4`, `preset <name>|none`, `style pop|jazz|modal|classical`. `key <tonic> <mode>` (`key A minor`, `key F# dorian`, `key none`) sets the song key as one score edit. The same settings and the key are in `/menu` under Chords.
 
 The base octave follows the instrument: C3 (MIDI 48) by default, C2 for bass instruments or tracks named bass, C4 for saw/square/triangle/pluck leads. Kits start at C2, so `A` is the GM kick, `S` the snare, `T` the closed hat. On a one-shot sampler track the keys walk the voices in name order from slot 36 (`A` the first voice, `W` the second, chromatically), and the strip shows voice names; a keyed sampler starts at the C below its lowest root and repitches from it.
 

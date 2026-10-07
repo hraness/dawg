@@ -399,6 +399,50 @@ describe("PlaySession chord mode", () => {
     expect(first.slice(0, 3).map((note) => note.pitch)).toEqual([48, 52, 55]);
   });
 
+  test("pattern perform records the offbeat rhythm on the grid", async () => {
+    const { notes, state } = await recordChords(
+      keyedScore(),
+      { mode: "auto", explicit: true, perform: "pattern", pattern: "offbeat" },
+      (at, press) => {
+        at(0);
+        press("\t");
+        press("a"); // C major, held for the bar
+        at(1_990);
+        press("\t");
+      },
+    );
+    const beats = [...new Set(notes.map((note) => note.beat))];
+    expect(beats).toEqual([0.5, 1.5, 2.5, 3.5]);
+    expect(notes.every((note) => note.beats === 0.25)).toBe(true);
+    const recorded = state.score.notes.filter((n) => n.trackId === "lead");
+    // Offbeat accents are 0.9 of the press velocity.
+    expect(new Set(recorded.map((n) => n.velocity)).size).toBe(1);
+  });
+
+  test("bass solo records only the bass under a chord", async () => {
+    const { notes } = await recordChords(
+      keyedScore(),
+      { mode: "auto", explicit: true, bass: "solo" },
+      (at, press) => {
+        at(0);
+        press("s"); // Dm → bass D2
+      },
+    );
+    expect(notes.map((note) => note.pitch)).toEqual([26]);
+  });
+
+  test("bass unison doubles a manual single note two octaves down", async () => {
+    const { notes } = await recordChords(
+      leadScore(),
+      { mode: "manual", explicit: true, bass: "unison" },
+      (at, press) => {
+        at(0);
+        press("d"); // E4
+      },
+    );
+    expect(notes.map((note) => note.pitch)).toEqual([28, 52]);
+  });
+
   test("n plays the suggested next chord through its root's key", async () => {
     const { session } = harness(keyedScore(), "lead", {
       mode: "auto",
