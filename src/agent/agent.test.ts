@@ -20,6 +20,8 @@ import {
 } from "./agent.ts";
 import type { FetchLike } from "../web/http.ts";
 import { createGatewayClient } from "./gateway.ts";
+import { scriptedRunner } from "../auth/runner.ts";
+import { ffprobeJson, syntheticWav } from "../media/media-fixtures.ts";
 import {
   finishChunk,
   scriptedFetch,
@@ -798,5 +800,109 @@ describe("workspace and web tools in the loop", () => {
       "localhost is not a public host",
       "query must be a non-empty string",
     ]);
+  });
+});
+
+describe("media tools in the loop", () => {
+  test("runs past the turn deadline while a helper works, streams progress, reports outputs", async () => {
+    const root = await realpath(
+      await mkdtemp(join(tmpdir(), "dawg-media-loop-")),
+    );
+    try {
+      await mkdir(join(root, "tracks/main/downloads"), { recursive: true });
+      await writeFile(
+        join(root, "tracks/main/downloads/loop.wav"),
+        syntheticWav(2, (t) => 0.4 * Math.sin(2 * Math.PI * 220 * t)),
+      );
+      const script = scriptedFetch([
+        [
+          ...toolCallChunks(0, "m1", "analyze_audio", { file: "loop.wav" }),
+          finishChunk("tool_calls"),
+        ],
+        [textChunk("Analyzed the loop."), finishChunk("stop")],
+      ]);
+      const runner = scriptedRunner(
+        [
+          {
+            match: (command) => command === "ffprobe",
+            respond: async () => {
+              // Longer than the whole turn budget: the deadline is suspended.
+              await Bun.sleep(150);
+              return { stdout: ffprobeJson(2) };
+            },
+          },
+        ],
+        ["ffprobe"],
+      );
+      const { host } = memoryHost();
+      const events: AgentEvent[] = [];
+      const result = await runAgentTurn({
+        prompt: "what tempo is loop.wav",
+        model: "opus-5.5",
+        client: client(script.fetcher),
+        host: { ...host, workspace: { root }, media: { runner } },
+        budget: { timeoutMs: 100 },
+        onEvent: (event) => events.push(event),
+      });
+      expect(result).toMatchObject({
+        type: "done",
+        reason: "stop",
+        applied: 0,
+      });
+      const progress = events.flatMap((event) =>
+        event.type === "tool-progress" ? [event.line] : [],
+      );
+      expect(progress).toEqual([
+        "ffprobe",
+        "decoding",
+        "tempo",
+        "key",
+        "waveform",
+      ]);
+      expect(
+        describeAgentEvent(events.find((e) => e.type === "tool-progress")!),
+      ).toContain("ffprobe");
+      const followUp = script.requests[1]!.body as {
+        messages: { role: string; content: string }[];
+      };
+      const toolMessage = followUp.messages.find((m) => m.role === "tool")!;
+      const content = JSON.parse(toolMessage.content) as Record<
+        string,
+        unknown
+      >;
+      expect(content.ok).toBe(true);
+      expect(content.outputs).toEqual([
+        "tracks/main/downloads/loop.analysis.json",
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("media tools are rejected without a media host or workspace", async () => {
+    const script = scriptedFetch([
+      [
+        ...toolCallChunks(0, "m1", "split_stems", { file: "song.wav" }),
+        finishChunk("tool_calls"),
+      ],
+      [textChunk("No stems."), finishChunk("stop")],
+    ]);
+    const { host } = memoryHost();
+    const events: AgentEvent[] = [];
+    const result = await runAgentTurn({
+      prompt: "split song.wav",
+      model: "opus-5.5",
+      client: client(script.fetcher),
+      host,
+      onEvent: (event) => events.push(event),
+    });
+    expect(result).toMatchObject({ type: "done", rejected: 1 });
+    expect(
+      events.some(
+        (event) =>
+          event.type === "tool-rejected" &&
+          event.diagnostic === "media tools are unavailable in this host",
+      ),
+    ).toBe(true);
   });
 });

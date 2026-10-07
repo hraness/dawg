@@ -34,6 +34,10 @@ The agent can now work with the project directory and the web. `list_files` and 
 - Score: optional `sampler` on tracks (validated, rendered silent for now) and `removeTrack`, `moveTrack`, `setKey`, `setMeter` operations. The format stays `track.loop/v1`.
 - `typescript` is now a runtime dependency; the package ships `core/sdk/**`.
 
+### Local media tools
+
+Six agent tools and `dawg media <verb>` turn reference audio into track material under `tracks/<slug>/downloads/`: `download_audio` (YouTube via yt-dlp or StemDeck, with a sidecar and reuse), `split_stems` (six stems via StemDeck or demucs), `analyze_audio` (tempo, key, beat grid, waveform), `transcribe_notes` (drums via a vendored classifier, pitched stems via basic-pitch, quantized to `note()`/`hit()` snippets), `import_sample` (48 kHz stereo `samples/<name>.wav` and a `sampler()` snippet) and `transcribe_lyrics` (whisper-cli). StemDeck at `DAWG_STEMDECK_URL` is preferred when it answers; dawg never installs a binary and `dawg media doctor` names the install commands. Helpers report progress on the activity card, are bounded in time and output, are stopped with SIGTERM then SIGKILL on Esc, and pause the turn deadline while they run.
+
 ## 0.2.0
 
 The first tagged release. Open a session in several terminals, give each window its own instrument, let an agent write parts, and every window stays on the same song.

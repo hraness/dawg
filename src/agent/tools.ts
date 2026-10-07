@@ -7,6 +7,8 @@ import {
 } from "../../core/score.ts";
 import { AVAILABLE_INSTRUMENTS } from "../audio/wav.ts";
 import type { ChatTool } from "./gateway.ts";
+import { MEDIA_TOOLS } from "../media/tools.ts";
+import type { MediaResult, MediaRunContext } from "../media/types.ts";
 import { pitchToMidi } from "./ops.ts";
 import {
   DRUM_VOICES,
@@ -59,6 +61,12 @@ export type ToolPlan =
       summary: string;
       /** Side effects outside the score (files, network); bounded and async. */
       run: (context: ActionContext) => Promise<ActionResult>;
+    }>
+  /** A long-running local media job (download, stems, analysis, …). */
+  | Readonly<{
+      kind: "media";
+      summary: string;
+      run: (context: MediaRunContext) => Promise<MediaResult>;
     }>;
 
 /** The project directory the workspace tools operate in. */
@@ -1141,6 +1149,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
       };
     },
   },
+  ...MEDIA_TOOLS,
 ] satisfies AgentTool[]);
 
 /** Errors an `action` plan may raise that are safe to show to the model. */

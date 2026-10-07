@@ -1,11 +1,12 @@
 import { compositionBrief } from "./brief.ts";
 import {
   AGENT_LIMITS,
-  AgentTimeoutError,
+  MEDIA_PROMPT,
   classifyAgentError,
   executeCall,
   hostProjectOutline,
   tighten,
+  turnDeadline,
   WORKSPACE_PROMPT,
   type AgentBudget,
   type AgentEvent,
@@ -49,6 +50,8 @@ export const TEXT_AGENT_SYSTEM_PROMPT = [
   'Set "done":false only if you need to see the results of these ops before continuing; you will then get each op\'s result and can send more ops.',
   "If an op was rejected, read its diagnostic and either send a corrected op or stop with done:true.",
   WORKSPACE_PROMPT,
+  MEDIA_PROMPT,
+  'Media tools return their outputs in the op result; send them alone with "done":false and chain on the result.',
 ].join(" ");
 
 /** Render the tool registry as a compact op catalog for a text-only model. */
@@ -103,14 +106,10 @@ export async function runTextAgentTurn(
     ((trackId: string, revision: number, index: number) =>
       `${trackId.slice(0, 40)}-${revision}-${nonce}${index}`);
   const startedAt = Date.now();
-  const timeout = new AbortController();
-  const timer = setTimeout(
-    () => timeout.abort(new AgentTimeoutError(limits.timeoutMs)),
-    limits.timeoutMs,
-  );
+  const deadline = turnDeadline(limits.timeoutMs);
   const signal = options.signal
-    ? AbortSignal.any([options.signal, timeout.signal])
-    : timeout.signal;
+    ? AbortSignal.any([options.signal, deadline.signal])
+    : deadline.signal;
 
   let applied = 0;
   let rejected = 0;
@@ -121,7 +120,7 @@ export async function runTextAgentTurn(
   let feedback = "";
   const currentRevision = () => options.host.snapshot().revision;
   const finish = (result: AgentTurnResult): AgentTurnResult => {
-    clearTimeout(timer);
+    deadline.clear();
     emit(result);
     return result;
   };
@@ -215,7 +214,15 @@ export async function runTextAgentTurn(
         emit({ type: "tool-start", callId, name: op.tool, step });
         const outcome = await executeCall(
           { id: callId, name: op.tool, arguments: JSON.stringify(op.args) },
-          { tools, host: options.host, newNoteId, signal },
+          {
+            tools,
+            host: options.host,
+            newNoteId,
+            signal,
+            suspendTimeout: deadline.suspend,
+            onProgress: (line) =>
+              emit({ type: "tool-progress", callId, name: op.tool, line }),
+          },
         );
         if (outcome.ok) {
           applied += outcome.mutated ? 1 : 0;
@@ -250,6 +257,6 @@ export async function runTextAgentTurn(
       revision: currentRevision(),
     });
   } finally {
-    clearTimeout(timer);
+    deadline.clear();
   }
 }
