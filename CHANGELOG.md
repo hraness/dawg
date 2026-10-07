@@ -4,6 +4,31 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ## Unreleased
 
+## 0.3.0
+
+dawg projects are now plain TypeScript files that you, an agent or another window can edit, with sampler tracks, local media tools, a computer-keyboard play mode and menus for every edit by hand.
+
+### Play mode (computer keyboard)
+
+- **`/play` or Ctrl-P** turns the computer keyboard into a MIDI keyboard for the focused track: `A S D F G H J K L ; '` are white keys from C, `W E T Y U O P` the black keys, `Z`/`X` move an octave, `C`/`V` change velocity, Shift sustains and Tab latches sustain. Esc leaves.
+- Bass tracks start an octave lower and leads an octave higher; the header shows the range, velocity, record state, click and grid.
+- **Recording.** `R` arms overdub and `Shift-R` replaces the bar; notes are quantized to `/grid` and land as ordinary score edits, so other windows, undo and `track.ts` all see them. One undo step per recorded bar.
+- **Click track.** `M` or `/click on|off|<volume>` toggles a tempo-synced metronome that never reaches renders or exports; `/count-in 0|1|2` sets the count-in before recording.
+- Sampler tracks play their voices from the keyboard: oneshot voices from MIDI 36, keyed samplers repitched from their root.
+- Terminals send no key-up, so held notes last one grid step and extend while the key auto-repeats.
+
+### Menus
+
+- **`/menu [section]` or Ctrl-K** opens Track, Parameters, Effects, Automation, Mix and Transport. Arrows or `j k` move, Enter opens or toggles, `← →` or `+ -` nudge, digits type a value, `/` filters, `x` deletes an automation point, Esc steps back.
+- Each row shows its current value and the command it runs; every change is one receipt and one undo step.
+- New prompt commands behind the menu: `automate <lane> points <b:v>...`, `automate <lane> remove <beat>`, `track name <text>` and `meter <n>`.
+
+### Performance
+
+- Session records store reverse deltas instead of whole compositions, so a session reaches the 2000-event cap instead of failing around edit 70 (or on the first edit of a 16-bar loop).
+- Audio renders run off the main thread with a per-track stem cache: a one-note edit re-renders in about 44 ms instead of blocking for 165–190 ms.
+- AI Gateway and OpenRouter requests retry and time out when no response arrives; transport keys no longer wait on the daemon.
+
 ### Sample playback
 
 - **Sampler tracks play.** `sampler({...})` voices now render in playback, `dawg render` and exports, with Strudel's semantics: `begin`/`end` windows, `speed` (negative reverses), `loop` for the note's length, `gain`, `choke` groups (Strudel's `cut`), keyed repitching from `root`, and oneshot voices on pitch slots from 36. Starts, stops and cuts fade over a few milliseconds. Volume, pan, automation, filter, delay and reverb apply as on any track, and sampler tracks are cached stems keyed by the files' sha256.
