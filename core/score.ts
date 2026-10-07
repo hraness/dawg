@@ -97,7 +97,10 @@ export const BUILTIN_TABLE_PREFIX = "builtin:" as const;
  * field but `table` is omitted at its default.
  */
 export type TrackWavetable = Readonly<{
-  /** `builtin:<name>` or a pinned pack sound (`pack:uzu-wavetables/wt_digital:1`). */
+  /**
+   * `builtin:<name>`, a pinned pack sound (`pack:uzu-wavetables/wt_digital:1`)
+   * or a project WAV (`tracks/<slug>/wavetables/vox.wav`, sha256-pinned).
+   */
   table: SampleRef;
   /** Position in the table, 0..1 (default 0). */
   wt?: number;
@@ -134,6 +137,19 @@ export const WAVETABLE_PARAMS = Object.freeze({
 export type WavetableParam = keyof typeof WAVETABLE_PARAMS;
 
 const BUILTIN_TABLE = /^builtin:[a-z][a-z0-9_-]{0,31}$/;
+
+/**
+ * A project wavetable file: a project-relative `.wav` path (dawg writes them
+ * to `tracks/<slug>/wavetables/<name>.wav`).
+ */
+export function isLocalTableSrc(src: string): boolean {
+  return (
+    !src.startsWith(PACK_PREFIX) &&
+    !src.startsWith(BUILTIN_TABLE_PREFIX) &&
+    /\.wav$/i.test(src) &&
+    isSafeRelativePath(src)
+  );
+}
 
 export function isWavetableInstrument(instrument: string | undefined): boolean {
   return (
@@ -173,9 +189,9 @@ export function normalizeWavetable(input: unknown): TrackWavetable | undefined {
     ref = Object.freeze({ src: table.src });
   } else {
     ref = normalizeSampleRef(table, "wavetable table");
-    if (!isPackRef(ref.src))
+    if (!isPackRef(ref.src) && !isLocalTableSrc(ref.src))
       throw new ScoreValidationError(
-        "wavetable table must be builtin:<name> or pack:<pack>/<sound>[:<n>]",
+        "wavetable table must be builtin:<name>, pack:<pack>/<sound>[:<n>] or a project .wav path",
         "invalid-track",
       );
   }

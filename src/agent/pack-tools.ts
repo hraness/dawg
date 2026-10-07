@@ -77,6 +77,7 @@ async function wavetableOps(
   trackId: string,
   table: string | undefined,
   fields: Partial<Record<WavetableParam, number>> & { warpmode?: string },
+  projectRoot?: string,
 ): Promise<{ operations: ScoreOperation[]; summary: string }> {
   const track = score.tracks.find((item) => item.id === trackId);
   let base: TrackWavetable = track
@@ -85,7 +86,13 @@ async function wavetableOps(
   let summary = "wavetable";
   if (table) {
     // pickWavetable pins the table; take its settings, keep the score as is.
-    const picked = await pickWavetable(packs, score, trackId, table);
+    const picked = await pickWavetable(
+      packs,
+      score,
+      trackId,
+      table,
+      projectRoot,
+    );
     summary = picked.summary;
     const op = picked.operation;
     const patched =
@@ -286,7 +293,7 @@ export const PACK_TOOLS: readonly AgentTool[] = Object.freeze([
   {
     name: "set_wavetable",
     description:
-      "Make a track a wavetable synth and shape it (Strudel names). table: basic (sine>tri>saw>square), pwm, formant, harmonics (offline), wt_digital:0-4, wt_vgame:0-10 (Strudel uzu-wavetables) or pack:<pack>/<sound>[:n]; omit to keep. wt: position 0..1. wtenv/wtattack/wtdecay/wtsustain/wtrelease: position envelope (amount -1..1, seconds). wtrate Hz/wtdepth: position LFO. warp+warpmode bend the phase. wtphaserand: start phase spread. Automate position with set_automation wt.",
+      "Make a track a wavetable synth and shape it (Strudel names). table: basic (sine>tri>saw>square), pwm, formant, harmonics (offline), wt_digital:0-4, wt_vgame:0-10 (Strudel uzu-wavetables), pack:<pack>/<sound>[:n], or a project table from make_wavetable (tracks/<slug>/wavetables/<name>.wav); omit to keep. wt: position 0..1. wtenv/wtattack/wtdecay/wtsustain/wtrelease: position envelope (amount -1..1, seconds). wtrate Hz/wtdepth: position LFO. warp+warpmode bend the phase. wtphaserand: start phase spread. Automate position with set_automation wt.",
     parameters: {
       type: "object",
       properties: {
@@ -347,6 +354,7 @@ export const PACK_TOOLS: readonly AgentTool[] = Object.freeze([
               trackId,
               table,
               fields,
+              action.workspace?.root,
             );
             return { kind: "score", ...result, trackId };
           } catch (error) {

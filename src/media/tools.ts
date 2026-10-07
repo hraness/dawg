@@ -1,5 +1,5 @@
 /**
- * The six media tools as `AgentTool`s. `plan()` validates arguments from
+ * The seven media tools as `AgentTool`s. `plan()` validates arguments from
  * `unknown` and returns a `media` plan whose `run()` the agent loop executes
  * with the host's `MediaHost` (project root, focused slug, runner, fetch),
  * a cancellation signal and a progress sink. `dawg media <verb>` reuses the
@@ -9,6 +9,14 @@ import type { AgentTool, ToolPlan } from "../agent/tools.ts";
 import { analyzeAudio } from "./analyze.ts";
 import { downloadAudio } from "./download.ts";
 import { importSample } from "./import.ts";
+import { makeWavetableFile } from "./wavetable.ts";
+import {
+  MAKE_MAX_FRAMES,
+  MAKE_METHODS,
+  MAKE_NORMALIZE,
+  type MakeMethod,
+  type MakeNormalize,
+} from "../audio/wavetable-maker.ts";
 import { transcribeLyrics } from "./lyrics.ts";
 import { NOTE_KINDS, transcribeNotes, type NoteKind } from "./notes.ts";
 import { MAX_NAME_LENGTH, trackSlug } from "./paths.ts";
@@ -253,6 +261,103 @@ export const MEDIA_TOOLS: readonly AgentTool[] = Object.freeze([
             ...(begin !== undefined ? { begin } : {}),
             ...(end !== undefined ? { end } : {}),
             ...(root ? { root } : {}),
+          },
+          context,
+        ),
+      );
+    },
+  },
+  {
+    name: "make_wavetable",
+    description:
+      "Make a wavetable from any audio file in the project (download, stem, imported sample): writes tracks/<slug>/wavetables/<name>.wav (float32, 2048-sample frames) and reports the detected pitch, method and how the timbre moves across the frames. Region defaults to the most stable tonal 2 s; method auto picks slice (pitched single cycles) or spectral (vocals, pads, noise). Then set_wavetable with that path as table.",
+    parameters: {
+      type: "object",
+      properties: {
+        file: fileSchema,
+        name: {
+          type: "string",
+          maxLength: MAX_NAME_LENGTH,
+          description: "Table name: lowercase identifier such as vox or growl.",
+        },
+        frames: {
+          type: "integer",
+          minimum: 1,
+          maximum: MAKE_MAX_FRAMES,
+          description: "Frame count (default 64).",
+        },
+        start: {
+          type: "number",
+          minimum: 0,
+          description: "Region start, seconds.",
+        },
+        end: {
+          type: "number",
+          minimum: 0,
+          description: "Region end, seconds.",
+        },
+        method: { type: "string", enum: [...MAKE_METHODS] },
+        smooth: {
+          type: "number",
+          minimum: 0,
+          maximum: 1,
+          description: "Blend frames with neighbours for a smoother morph.",
+        },
+        normalize: { type: "string", enum: [...MAKE_NORMALIZE] },
+      },
+      required: ["file", "name"],
+      additionalProperties: false,
+    },
+    plan: (args) => {
+      const file = text(args, "file", 1024);
+      const name = sampleName(args);
+      const frames = args.frames;
+      if (
+        frames !== undefined &&
+        (typeof frames !== "number" ||
+          !Number.isInteger(frames) ||
+          frames < 1 ||
+          frames > MAKE_MAX_FRAMES)
+      )
+        throw new MediaArgumentError(
+          `frames must be an integer 1..${MAKE_MAX_FRAMES}`,
+        );
+      const seconds = (key: "start" | "end") => {
+        const value = args[key];
+        if (value === undefined) return undefined;
+        if (typeof value !== "number" || !Number.isFinite(value) || value < 0)
+          throw new MediaArgumentError(`${key} must be seconds ≥ 0`);
+        return value;
+      };
+      const start = seconds("start");
+      const end = seconds("end");
+      if (start !== undefined && end !== undefined && end <= start)
+        throw new MediaArgumentError("end must be greater than start");
+      const method = optionalText(args, "method", 16);
+      if (method !== undefined && !MAKE_METHODS.includes(method as MakeMethod))
+        throw new MediaArgumentError(
+          `method must be ${MAKE_METHODS.join(", ")}`,
+        );
+      const normalize = optionalText(args, "normalize", 16);
+      if (
+        normalize !== undefined &&
+        !MAKE_NORMALIZE.includes(normalize as MakeNormalize)
+      )
+        throw new MediaArgumentError(
+          `normalize must be ${MAKE_NORMALIZE.join(", ")}`,
+        );
+      const smooth = optionalFraction(args, "smooth");
+      return media(`make wavetable ${name} from ${file}`, (context) =>
+        makeWavetableFile(
+          {
+            file,
+            name,
+            ...(frames !== undefined ? { frames: frames as number } : {}),
+            ...(start !== undefined ? { start } : {}),
+            ...(end !== undefined ? { end } : {}),
+            ...(method ? { method: method as MakeMethod } : {}),
+            ...(smooth !== undefined ? { smooth } : {}),
+            ...(normalize ? { normalize: normalize as MakeNormalize } : {}),
           },
           context,
         ),

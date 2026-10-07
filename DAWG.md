@@ -141,13 +141,14 @@ All limits live in `WORKSPACE_LIMITS`, `SEARCH_LIMITS` and `FETCH_LIMITS`. Searc
 
 ### Media tools
 
-Six more `AGENT_TOOLS` entries (`src/media/`) turn reference audio into material for a track. They work on files under the focused track's `tracks/<slug>/downloads/` (the same slug and write scope as `write_file`), return project-relative output paths so the model can chain them, and never install anything: a missing binary is reported with its install command. `dawg media <verb>` runs the same code from the shell, and `dawg media doctor` lists the backend, each binary, how it runs and how to install it.
+Seven more `AGENT_TOOLS` entries (`src/media/`) turn reference audio into material for a track. They work on files under the focused track's `tracks/<slug>/downloads/` (the same slug and write scope as `write_file`), return project-relative output paths so the model can chain them, and never install anything: a missing binary is reported with its install command. `dawg media <verb>` runs the same code from the shell, and `dawg media doctor` lists the backend, each binary, how it runs and how to install it.
 
 - `download_audio {url, name?}`: YouTube only (`youtube.com`, `youtu.be`, `music.youtube.com`). Writes `<name>.wav` plus a `<name>.json` sidecar (title, duration, source URL, backend, sha256, time). The same source URL is reused instead of downloaded again. yt-dlp runs with `--no-playlist`, `--max-filesize 500m` and a 15 min budget.
 - `split_stems {file}`: six stems (vocals, drums, bass, guitar, piano, other) into `<base>.stems/`, cached once present. 20 min budget.
 - `analyze_audio {file}`: ffprobe metadata, then tempo, key, a beat grid and 240 waveform peaks computed in TypeScript, written to `<base>.analysis.json`; the model sees 48 peaks.
 - `transcribe_notes {file, kind?, from?, to?}`: drums use a vendored onset classifier mapped to dawg kit voices (kick, snare, clap, tom, hat, openhat, rim); pitched stems run `basic-pitch`. Notes are quantized onto the analysis beat grid (run first when missing) and returned as a `note()`/`hit()` snippet plus `<base>.<kind>.notes.json`, at most 2048 notes.
 - `import_sample {file, name, begin?, end?, root?}`: ffmpeg converts the file (or a trimmed window) to 48 kHz stereo PCM16 at `tracks/<slug>/samples/<name>.wav` and returns its sha256, duration and a `sampler({ name: "samples/<name>.wav" })` snippet (`{src, root, begin, end}` when given; `begin`/`end` are fractions of the file, `root` defaults to C4; a root adds `{ mode: "keyed" }`).
+- `make_wavetable {file, name, frames?, start?, end?, method?, smooth?, normalize?}`: reads the file (WAV directly, anything else through ffmpeg as 48 kHz mono, at most 10 minutes) and writes a float32 wavetable of `frames` (default 64, at most 256) 2048-sample frames with a `clm ` chunk to `tracks/<slug>/wavetables/<name>.wav`. See [Wavetables from audio](#wavetables-from-audio).
 - `transcribe_lyrics {file, lang?}`: whisper-cli on a 16 kHz mono copy, writing `<base>.lyrics.json` (segments with seconds) and `.lyrics.txt`. The `ggml-base.en.bin` model (about 141 MiB) is announced and then downloaded once into `~/.cache/dawg/whisper/`.
 
 **Backends.** When StemDeck answers `GET /api/health` at `DAWG_STEMDECK_URL` (default `http://127.0.0.1:8000`, no credentials or query allowed in the URL), downloads and stems go through its job API and the job id is kept in the sidecar so `analyze_audio` reuses StemDeck's beat grid. Otherwise dawg runs the binaries directly: `yt-dlp`, `ffmpeg`, `ffprobe`, `whisper-cli` (`brew install yt-dlp ffmpeg whisper-cpp`), and `demucs`/`basic-pitch` through `uv tool run` when `uv tool list` shows them (`uv tool install demucs`, `uv tool install basic-pitch`). demucs downloads its model on first run.
@@ -572,14 +573,25 @@ The wavetable is an oscillator of the synth voice (see [Synth](#synth)): a wavet
 instrument: wavetable("wt_digital:2", { wt: 0.3, wtenv: 0.5, wtdecay: 0.4, warp: 0.2, warpmode: "bendp" }),
 ```
 
-| Command                                    | Does                                                                       |
-| ------------------------------------------ | -------------------------------------------------------------------------- |
-| `/wt` · `/wt list`                         | the focused track's wavetable · built-in tables and the `wt_` sets         |
-| `/wt <table>`                              | make the focused track a wavetable track (`basic`, `wt_vgame:3`, `pack:…`) |
-| `/wt <0..1>`                               | set the position                                                           |
-| `/wtenv`, `/wtattack` … `/wtphaserand <n>` | set one parameter; `/warpmode <mode>` sets the warp mode                   |
+| Command                                    | Does                                                                                            |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `/wt` · `/wt list`                         | the focused track's wavetable · built-in tables and the `wt_` sets                              |
+| `/wt <table>`                              | make the focused track a wavetable track (`basic`, `wt_vgame:3`, `pack:…`, a project `vox.wav`) |
+| `/wt <0..1>`                               | set the position                                                                                |
+| `/wtenv`, `/wtattack` … `/wtphaserand <n>` | set one parameter; `/warpmode <mode>` sets the warp mode                                        |
 
 The menu's **Parameters** section lists the table picker and every wavetable parameter for a wavetable track, and **Sounds** has a "wavetable synth" row. The agent's `set_wavetable` tool takes the same table names and parameters.
+
+### Wavetables from audio
+
+The agent's `make_wavetable` tool (`src/audio/wavetable-maker.ts`, `src/media/wavetable.ts`; `dawg media wavetable <file> <name>`) builds a table from any audio file in the project:
+
+- **Region.** `start`/`end` in seconds, or automatic: the most stable tonal stretch of up to 2 s (high YIN clarity, steady pitch, enough level), else the loudest 2 s.
+- **Method.** `slice` reads one pitch period at each frame's time (YIN-style pitch detection through the FFT), resamples it to 2048 samples with cubic interpolation and spreads the loop-point mismatch over the cycle so it does not click. `spectral` takes, for each frame, the source's magnitude around each harmonic of the reference pitch and uses a fixed phase per harmonic, so frames morph without phase cancellation; it suits vocals, pads and noise. `auto` (the default) picks `slice` when the region is clearly periodic.
+- **Clean-up.** DC removed, fundamental rotated to start as a rising sine (so neighbouring frames line up), optional `smooth` across neighbours, and per-frame (default), whole-table or no normalisation to 0.98 peak.
+- **Report.** The result gives the path, sha256, frame count, method, region, detected pitch and a short sweep description (spectral centroid per frame span, how smooth the morph is), and the `set_wavetable` call that plays it.
+
+All arithmetic is float64 in a fixed order with no randomness, so the same input and options give the same bytes. Project tables live under `tracks/<slug>/wavetables/`; `/wt list` and the menu's table picker list them, `/wt vox.wav` (or a full `tracks/…` path) picks one for the focused track, and `track.ts` refers to it as `wavetable("./wavetables/vox.wav")`. The score keeps the project path and its sha256; evaluation re-hashes it like sampler files. A file that changed since it was picked plays with a warning; a missing one is a load problem naming `make_wavetable`.
 
 ## Rhythm (Euclidean rows)
 

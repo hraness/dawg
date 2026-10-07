@@ -680,6 +680,7 @@ describe("tool plans", () => {
       "analyze_audio",
       "transcribe_notes",
       "import_sample",
+      "make_wavetable",
       "transcribe_lyrics",
     ];
     for (const name of names) {

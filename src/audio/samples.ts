@@ -29,6 +29,7 @@ import {
   PACK_PREFIX,
   SCORE_LIMITS,
   isSamplerInstrument,
+  isLocalTableSrc,
   isWavetableInstrument,
   type SampleRef,
   type TrackScore,
@@ -89,8 +90,18 @@ export function hasSamplerTracks(score: TrackScore): boolean {
       (isSamplerInstrument(track.instrument) &&
         track.sampler !== undefined &&
         Object.keys(track.sampler.voices).length > 0) ||
-      packWavetable(track) !== undefined,
+      packWavetable(track) !== undefined ||
+      localWavetable(track) !== undefined,
   );
+}
+
+/** The project WAV a wavetable track plays, if any. */
+export function localWavetable(
+  track: TrackScore["tracks"][number],
+): SampleRef | undefined {
+  if (!isWavetableInstrument(track.instrument)) return undefined;
+  const table = track.wavetable?.table;
+  return table && isLocalTableSrc(table.src) ? table : undefined;
 }
 
 /** The pinned pack table a wavetable track plays, if any. */
@@ -601,6 +612,34 @@ export class SampleLibrary implements SampleSource {
       }
     }
     for (const track of score.tracks) {
+      const ref = localWavetable(track);
+      if (!ref) continue;
+      try {
+        const loaded = await this.loadLocalWavetable(ref.src);
+        wavetables.set(track.id, loaded);
+        if (ref.sha256 && ref.sha256 !== loaded.id)
+          problems.push({
+            trackId: track.id,
+            voice: "wavetable",
+            src: ref.src,
+            level: "warning",
+            message: `wavetable · ${ref.src} changed since it was picked (sha256 ${loaded.id.slice(0, 12)}… ≠ ${ref.sha256.slice(0, 12)}…) · playing the file on disk; re-pick it with /wt to pin it`,
+          });
+      } catch (error) {
+        problems.push({
+          trackId: track.id,
+          voice: "wavetable",
+          src: ref.src,
+          level: "error",
+          message:
+            error instanceof WorkspaceError &&
+            /no such file/.test(error.message)
+              ? `wavetable · ${ref.src} · file is missing · remake it with make_wavetable or /wt another table`
+              : `wavetable · ${ref.src} · ${error instanceof Error ? error.message : String(error)} · /wt pick another table`,
+        });
+      }
+    }
+    for (const track of score.tracks) {
       if (!isSamplerInstrument(track.instrument) || !track.sampler) continue;
       const names = Object.keys(track.sampler.voices).sort();
       for (const voice of names.slice(0, SCORE_LIMITS.maxSamplerVoices)) {
@@ -693,6 +732,34 @@ export class SampleLibrary implements SampleSource {
         this.tables.delete(this.tables.keys().next().value!);
     }
     return { table, ...(warning ? { warning } : {}) };
+  }
+
+  /**
+   * A project wavetable WAV, read within the project root (symlinks that
+   * leave it are refused) and memoized by content hash.
+   */
+  private async loadLocalWavetable(src: string): Promise<Wavetable> {
+    const resolved = await resolveReadPath(
+      { root: this.projectRoot, trackSlug: "" },
+      src,
+      "wavetable",
+    );
+    const info = await stat(resolved.real);
+    if (!info.isFile()) throw new SampleDecodeError("not a regular file");
+    if (info.size > SCORE_LIMITS.maxSampleFileBytes)
+      throw new SampleLimitError(
+        `${formatMiB(info.size)} is over the ${formatMiB(SCORE_LIMITS.maxSampleFileBytes)} file limit`,
+      );
+    const bytes = new Uint8Array(await readFile(resolved.real));
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    let table = this.tables.get(sha256);
+    if (!table) {
+      table = wavetableFromWav(src, sha256, bytes);
+      this.tables.set(sha256, table);
+      if (this.tables.size > MAX_MEMORY_WAVETABLES)
+        this.tables.delete(this.tables.keys().next().value!);
+    }
+    return table;
   }
 
   /**
