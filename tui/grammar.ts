@@ -72,7 +72,7 @@ export const HINTS = {
   preview: " ↑↓ preview · enter apply · / filter · esc back · ? keys ",
   hover: " ↑↓ hear · enter choose · a A/B · c context · esc back · ? keys ",
   audition:
-    " ↑↓ hear · enter keep · space loop · a A/B · c mix · esc cancel · ? keys ",
+    " ↑↓ hear · enter keep · space loop · a A/B · c mix · / filter · esc back · ? keys ",
   filtering: " type to filter · enter choose · esc clear · ? keys ",
   menu: " ↑↓ move · enter open · / filter · esc back · ? keys ",
   value: " ←→ adjust · enter type · x reset · esc back · ? keys ",
@@ -132,7 +132,7 @@ export const KEYS = {
         ["c", "solo ↔ in context (the whole mix)"],
         ["enter", "keep it (one undo step)"],
         ["esc", "back; nothing changes"],
-        ["/", "filter"],
+        ["/", "filter (type, then enter or esc)"],
       ],
     },
   ],
