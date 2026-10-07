@@ -1,5 +1,9 @@
 import type { TrackScore } from "../../core/score.ts";
-import { AVAILABLE_EFFECTS, AVAILABLE_INSTRUMENTS } from "../audio/wav.ts";
+import {
+  AVAILABLE_EFFECTS,
+  AVAILABLE_FX_PRESETS,
+  AVAILABLE_INSTRUMENTS,
+} from "../audio/wav.ts";
 import type { ProjectOutline } from "./workspace.ts";
 
 export const MAX_BRIEF_BYTES = 12 * 1024;
@@ -69,6 +73,17 @@ export function compositionBrief(options: {
         ? { filterAutomation: track.filterAutomation!.length }
         : {}),
       ...(track.reverb ? { reverb: track.reverb } : {}),
+      ...(track.fx ? { fx: track.fx } : {}),
+      ...(track.fxAutomation
+        ? {
+            fxAutomation: Object.fromEntries(
+              Object.entries(track.fxAutomation).map(([lane, points]) => [
+                lane,
+                points?.length ?? 0,
+              ]),
+            ),
+          }
+        : {}),
       ...((track.resonanceAutomation?.length ?? 0) > 0
         ? { resonanceAutomation: track.resonanceAutomation!.length }
         : {}),
@@ -104,6 +119,7 @@ export function compositionBrief(options: {
     noteLimit: number,
     trackLimit: number,
     projectLevel: number,
+    presets: boolean,
   ) => {
     const visible = focusedNotes.slice(0, noteLimit);
     return JSON.stringify({
@@ -128,6 +144,7 @@ export function compositionBrief(options: {
       recentOperations: recent,
       instruments: AVAILABLE_INSTRUMENTS,
       effects: AVAILABLE_EFFECTS,
+      ...(presets ? { fxPresets: AVAILABLE_FX_PRESETS } : {}),
       ...(project && projectLevel > 0 && project.tree.length > 0
         ? {
             project: {
@@ -144,13 +161,17 @@ export function compositionBrief(options: {
   let noteLimit = Math.min(MAX_FOCUSED_NOTES, focusedNotes.length);
   let trackLimit = tracks.length;
   let projectLevel = 2;
-  let brief = build(noteLimit, trackLimit, projectLevel);
+  // Preset names are a convenience (`set_fx` lists them on a miss), so
+  // the brief carries them only when the score already uses effects.
+  let presets = score.tracks.some((track) => track.fx !== undefined);
+  let brief = build(noteLimit, trackLimit, projectLevel, presets);
   while (encoder.encode(brief).byteLength > maxBytes) {
-    if (noteLimit > 0) noteLimit = Math.floor(noteLimit / 2);
+    if (presets) presets = false;
+    else if (noteLimit > 0) noteLimit = Math.floor(noteLimit / 2);
     else if (projectLevel > 0) projectLevel -= 1;
     else if (trackLimit > 1) trackLimit = Math.floor(trackLimit / 2);
     else break;
-    brief = build(noteLimit, trackLimit, projectLevel);
+    brief = build(noteLimit, trackLimit, projectLevel, presets);
   }
   return brief;
 }

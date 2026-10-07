@@ -9,12 +9,28 @@
  * Rendering reuses the TUI's picker overlay: `view()` returns a picker.
  */
 import {
-  AUTOMATION_LANES,
+  AUTOMATION_PARAMETERS,
+  automationPoints,
+  automationRange,
   SCORE_LIMITS,
+  isTrackAutomationParameter,
   type AutomationParameter,
   type Track,
+  type TrackAutomationParameter,
   type TrackScore,
 } from "../../core/score.ts";
+import {
+  CORE_EFFECTS,
+  EFFECT_NAMES,
+  FX_LANES,
+  effectPresetNames,
+  effectSpec,
+  type EffectName,
+  type FxLane,
+  type NumberParam,
+  type ParamSpec,
+} from "../../core/fx.ts";
+import { effectValues } from "../commands/fx.ts";
 import { AVAILABLE_INSTRUMENTS } from "../audio/wav.ts";
 import {
   DEFAULT_KITS,
@@ -164,8 +180,8 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-const LANE_STEP: Readonly<
-  Record<AutomationParameter, (value: number, direction: 1 | -1) => number>
+const TRACK_LANE_STEP: Readonly<
+  Record<TrackAutomationParameter, (value: number, direction: 1 | -1) => number>
 > = {
   volume: linear(0.05, 0, SCORE_LIMITS.maxVolume),
   pan: linear(0.1, -1, 1),
@@ -175,7 +191,7 @@ const LANE_STEP: Readonly<
   "delay-mix": linear(0.05, 0, SCORE_LIMITS.maxDelayMix),
 };
 
-const LANE_LABEL: Readonly<Record<AutomationParameter, string>> = {
+const TRACK_LANE_LABEL: Readonly<Record<TrackAutomationParameter, string>> = {
   volume: "volume",
   pan: "pan",
   filter: "filter cutoff (Hz)",
@@ -184,9 +200,50 @@ const LANE_LABEL: Readonly<Record<AutomationParameter, string>> = {
   "delay-mix": "delay mix",
 };
 
+const FX_LANE_INFO = new Map(FX_LANES.map((entry) => [entry.lane, entry]));
+
+/** Nudge for a number spec: linear by its step, or a sixth of an octave. */
+function specStep(
+  spec: NumberParam,
+): (value: number, direction: 1 | -1) => number {
+  if (spec.step === "log")
+    return (value, direction) => {
+      const next = Math.max(value, 1) * 2 ** (direction / 6);
+      return clamp(
+        next >= 100 ? Math.round(next) : Math.round(next * 10) / 10,
+        spec.min,
+        spec.max,
+      );
+    };
+  const size = spec.step;
+  return (value, direction) => {
+    const next = Math.round((value + size * direction) / size) * size;
+    return clamp(Number(next.toFixed(6)), spec.min, spec.max);
+  };
+}
+
+function laneStep(
+  lane: AutomationParameter,
+): (value: number, direction: 1 | -1) => number {
+  if (isTrackAutomationParameter(lane)) return TRACK_LANE_STEP[lane];
+  const info = FX_LANE_INFO.get(lane);
+  return info ? specStep(info.spec) : linear(0.05, 0, 1);
+}
+
+function laneLabel(lane: AutomationParameter): string {
+  if (isTrackAutomationParameter(lane)) return TRACK_LANE_LABEL[lane];
+  const info = FX_LANE_INFO.get(lane);
+  if (!info) return lane;
+  const unit = info.spec.unit ? ` (${info.spec.unit})` : "";
+  return `${effectSpec(info.effect).label} ${info.param}${unit}`;
+}
+
 /** `volume 0.8`, `pan -0.3`: the command that sets a lane's static value. */
 function laneFormat(lane: AutomationParameter, value: number): string {
-  return lane === "filter" ? `${Math.round(value)}` : num(value);
+  if (lane === "filter") return `${Math.round(value)}`;
+  const info = FX_LANE_INFO.get(lane as FxLane);
+  if (info?.spec.step === "log" && value >= 100) return `${Math.round(value)}`;
+  return num(value);
 }
 
 // ── the tree ──────────────────────────────────────────────────────────
@@ -198,14 +255,10 @@ function focused(context: MenuContext): Track | undefined {
 export function rootNodes(context: MenuContext): MenuNode[] {
   const track = focused(context);
   const name = track?.name ?? context.trackId;
-  const effects = [
-    track?.filter ? "filter" : undefined,
-    track?.delay ? "delay" : undefined,
-    track?.reverb ? "reverb" : undefined,
-  ].filter(Boolean);
-  const automated = (Object.keys(AUTOMATION_LANES) as AutomationParameter[])
-    .filter((lane) => (track?.[AUTOMATION_LANES[lane].field]?.length ?? 0) > 0)
-    .join(" ");
+  const effects = EFFECT_NAMES.filter((effect) => effectValues(track, effect));
+  const automated = AUTOMATION_PARAMETERS.filter(
+    (lane) => automationPoints(track, lane).length > 0,
+  ).join(" ");
   return [
     {
       kind: "menu",
@@ -442,7 +495,7 @@ function volumeNode(track: Track): MenuNode {
     value: track.volume,
     min: 0,
     max: SCORE_LIMITS.maxVolume,
-    step: LANE_STEP.volume,
+    step: TRACK_LANE_STEP.volume,
     format: num,
     command: (value) => `volume ${num(value)}`,
   };
@@ -455,7 +508,7 @@ function panNode(track: Track): MenuNode {
     value: track.pan,
     min: -1,
     max: 1,
-    step: LANE_STEP.pan,
+    step: TRACK_LANE_STEP.pan,
     format: num,
     command: (value) => `pan ${num(value)}`,
   };
@@ -499,177 +552,183 @@ function parameterNodes(context: MenuContext): MenuNode[] {
   return nodes;
 }
 
+/** Effects in chain order; each opens on its presets and simple params. */
 function effectNodes(context: MenuContext): MenuNode[] {
   const track = focused(context);
   if (!track) return [];
-  const filter = track.filter;
-  const delay = track.delay;
-  const reverb = track.reverb;
+  const node = (effect: EffectName): MenuNode => {
+    const spec = effectSpec(effect);
+    const values = effectValues(track, effect);
+    return {
+      kind: "menu",
+      id: effect,
+      label: spec.label[0]!.toUpperCase() + spec.label.slice(1),
+      detail: values ? effectSummary(effect, values) : "off",
+      build: (inner) => effectParamNodes(inner, effect, false),
+    };
+  };
+  const more = EFFECT_NAMES.filter((effect) => !CORE_EFFECTS.includes(effect));
+  const moreOn = more.filter((effect) => effectValues(track, effect));
   return [
+    ...CORE_EFFECTS.map(node),
     {
       kind: "menu",
-      id: "filter",
-      label: "Filter",
-      detail: filter
-        ? `${Math.round(filter.cutoff)} Hz · res ${num(filter.resonance)}`
-        : "off",
-      build: () => [
-        {
-          kind: "toggle",
-          label: "on",
-          value: filter !== undefined,
-          command: (on) => (on ? "filter 2000 0.2" : "filter off"),
-        },
-        {
-          kind: "number",
-          label: "cutoff Hz",
-          value: filter?.cutoff,
-          start: 2000,
-          off: "off",
-          min: SCORE_LIMITS.minFilterCutoff,
-          max: SCORE_LIMITS.maxFilterCutoff,
-          step: cutoffStep,
-          format: (value) => `${Math.round(value)}`,
-          command: (value) =>
-            `filter ${Math.round(value)} ${num(filter?.resonance ?? 0)}`,
-        },
-        {
-          kind: "number",
-          label: "resonance",
-          value: filter?.resonance,
-          start: 0.2,
-          off: "off",
-          min: 0,
-          max: SCORE_LIMITS.maxFilterResonance,
-          step: LANE_STEP.resonance,
-          format: num,
-          command: (value) =>
-            `filter ${Math.round(filter?.cutoff ?? 2000)} ${num(value)}`,
-        },
-      ],
-    },
-    {
-      kind: "menu",
-      id: "delay",
-      label: "Delay",
-      detail: delay
-        ? `${num(delay.beats)} beats · fb ${num(delay.feedback)} · mix ${num(delay.mix)}`
-        : "off",
-      build: () => {
-        const beats = delay?.beats ?? 0.5;
-        const feedback = delay?.feedback ?? 0.3;
-        const mix = delay?.mix ?? 0.35;
-        return [
-          {
-            kind: "toggle",
-            label: "on",
-            value: delay !== undefined,
-            command: (on) => (on ? "delay 0.5 0.3 0.35" : "delay off"),
-          },
-          {
-            kind: "number",
-            label: "time beats",
-            value: delay?.beats,
-            start: 0.5,
-            off: "off",
-            min: SCORE_LIMITS.minDelayBeats,
-            max: SCORE_LIMITS.maxDelayBeats,
-            step: delayStep,
-            format: num,
-            command: (value) =>
-              `delay ${num(value)} ${num(feedback)} ${num(mix)}`,
-          },
-          {
-            kind: "number",
-            label: "feedback",
-            value: delay?.feedback,
-            start: 0.3,
-            off: "off",
-            min: 0,
-            max: SCORE_LIMITS.maxDelayFeedback,
-            step: LANE_STEP["delay-feedback"],
-            format: num,
-            command: (value) => `delay ${num(beats)} ${num(value)} ${num(mix)}`,
-          },
-          {
-            kind: "number",
-            label: "mix",
-            value: delay?.mix,
-            start: 0.35,
-            off: "off",
-            min: 0,
-            max: SCORE_LIMITS.maxDelayMix,
-            step: LANE_STEP["delay-mix"],
-            format: num,
-            command: (value) =>
-              `delay ${num(beats)} ${num(feedback)} ${num(value)}`,
-          },
-        ];
-      },
-    },
-    {
-      kind: "menu",
-      id: "reverb",
-      label: "Reverb",
-      detail: reverb
-        ? `mix ${num(reverb.mix)} · size ${num(reverb.size)}`
-        : "off",
-      build: () => [
-        {
-          kind: "toggle",
-          label: "on",
-          value: reverb !== undefined,
-          command: (on) => (on ? "reverb 0.3 0.5" : "reverb off"),
-        },
-        {
-          kind: "number",
-          label: "mix",
-          value: reverb?.mix,
-          start: 0.3,
-          off: "off",
-          min: 0,
-          max: SCORE_LIMITS.maxReverbMix,
-          step: linear(0.05, 0, SCORE_LIMITS.maxReverbMix),
-          format: num,
-          command: (value) =>
-            `reverb ${num(value)} ${num(reverb?.size ?? 0.5)}`,
-        },
-        {
-          kind: "number",
-          label: "size",
-          value: reverb?.size,
-          start: 0.5,
-          off: "off",
-          min: SCORE_LIMITS.minReverbSize,
-          max: SCORE_LIMITS.maxReverbSize,
-          step: linear(
-            0.05,
-            SCORE_LIMITS.minReverbSize,
-            SCORE_LIMITS.maxReverbSize,
-          ),
-          format: num,
-          command: (value) => `reverb ${num(reverb?.mix ?? 0.3)} ${num(value)}`,
-        },
-      ],
+      id: "more effects",
+      label: "more effects",
+      detail:
+        moreOn.length > 0
+          ? `on: ${moreOn.map((effect) => effectSpec(effect).label).join(", ")}`
+          : more.map((effect) => effectSpec(effect).label).join(", "),
+      build: () => more.map(node),
     },
   ];
+}
+
+function effectSummary(
+  effect: EffectName,
+  values: Readonly<Record<string, number | string | boolean>>,
+): string {
+  const spec = effectSpec(effect);
+  return spec.simple
+    .filter((key) => values[key] !== undefined)
+    .map((key) => {
+      const value = values[key]!;
+      const param = spec.params[key]!;
+      return `${key} ${typeof value === "number" ? formatParam(param, value) : String(value)}`;
+    })
+    .join(" · ");
+}
+
+function formatParam(spec: ParamSpec, value: number): string {
+  if (spec.kind !== "number") return num(value);
+  return spec.step === "log" && value >= 100
+    ? `${Math.round(value)}`
+    : num(value);
+}
+
+/**
+ * One effect's rows: on/off, presets, then its simple parameters; the
+ * `advanced` submenu holds every parameter with its Strudel names.
+ */
+function effectParamNodes(
+  context: MenuContext,
+  effect: EffectName,
+  advanced: boolean,
+): MenuNode[] {
+  const track = focused(context);
+  if (!track) return [];
+  const spec = effectSpec(effect);
+  const values = effectValues(track, effect);
+  const nodes: MenuNode[] = [];
+  if (!advanced) {
+    nodes.push({
+      kind: "toggle",
+      label: "on",
+      value: values !== undefined,
+      command: (on) => `fx ${effect} ${on ? "on" : "off"}`,
+    });
+    const presets = effectPresetNames(effect);
+    if (presets.length > 0)
+      nodes.push({
+        kind: "choice",
+        label: "preset",
+        value: "—",
+        options: presets,
+        command: (preset) => `fx ${effect} preset ${preset}`,
+      });
+  }
+  const keys = advanced ? Object.keys(spec.params) : spec.simple;
+  for (const key of keys) {
+    const param = spec.params[key]!;
+    const current = values?.[key];
+    const label =
+      advanced && param.strudel?.length
+        ? `${key} (${param.strudel.filter((name) => !name.includes(" ")).join("/")})`
+        : key;
+    if (param.kind === "number") {
+      nodes.push({
+        kind: "number",
+        label: param.unit ? `${label} ${param.unit}` : label,
+        value: typeof current === "number" ? current : undefined,
+        start: param.default,
+        off: values ? `${formatParam(param, param.default)}` : "off",
+        min: param.min,
+        max: param.max,
+        step: specStep(param),
+        format: (value) => formatParam(param, value),
+        command: (value) => `fx ${effect} ${key} ${formatParam(param, value)}`,
+      });
+    } else if (param.kind === "enum") {
+      nodes.push({
+        kind: "choice",
+        label,
+        value: typeof current === "string" ? current : param.default,
+        options: param.values,
+        command: (option) => `fx ${effect} ${key} ${option}`,
+      });
+    } else {
+      nodes.push({
+        kind: "toggle",
+        label,
+        value: typeof current === "boolean" ? current : param.default,
+        command: (on) => `fx ${effect} ${key} ${on ? "on" : "off"}`,
+      });
+    }
+  }
+  if (!advanced) {
+    nodes.push({
+      kind: "menu",
+      id: `${effect}:advanced`,
+      label: "advanced",
+      detail: `${Object.keys(spec.params).length} params · ${spec.strudel}`,
+      build: (inner) => effectParamNodes(inner, effect, true),
+    });
+    if (values)
+      nodes.push({
+        kind: "action",
+        label: "reset to defaults",
+        command: `fx ${effect} reset`,
+      });
+  }
+  return nodes;
 }
 
 function automationNodes(context: MenuContext): MenuNode[] {
   const track = focused(context);
   if (!track) return [];
-  return (Object.keys(AUTOMATION_LANES) as AutomationParameter[]).map(
-    (lane) => {
-      const count = track[AUTOMATION_LANES[lane].field]?.length ?? 0;
-      return {
-        kind: "menu",
-        id: `lane:${lane}`,
-        label: LANE_LABEL[lane],
-        detail: `${count} point${count === 1 ? "" : "s"}`,
-        build: (inner) => laneNodes(inner, lane),
-      };
-    },
-  );
+  // Track lanes, the lanes of effects that are on, and any lane with
+  // points; every other effect lane is under "all lanes".
+  const shown = AUTOMATION_PARAMETERS.filter((lane) => {
+    if (isTrackAutomationParameter(lane)) return true;
+    if (automationPoints(track, lane).length > 0) return true;
+    const info = FX_LANE_INFO.get(lane as FxLane);
+    return info !== undefined && effectValues(track, info.effect) !== undefined;
+  });
+  const hidden = AUTOMATION_PARAMETERS.filter((lane) => !shown.includes(lane));
+  const nodes = shown.map((lane) => laneMenu(track, lane));
+  if (hidden.length > 0)
+    nodes.push({
+      kind: "menu",
+      id: "lanes:all",
+      label: "all lanes",
+      detail: `${hidden.length} more effect lanes`,
+      build: (inner) => {
+        const current = focused(inner);
+        return current ? hidden.map((lane) => laneMenu(current, lane)) : [];
+      },
+    });
+  return nodes;
+}
+
+function laneMenu(track: Track, lane: AutomationParameter): MenuNode {
+  const count = automationPoints(track, lane).length;
+  return {
+    kind: "menu",
+    id: `lane:${lane}`,
+    label: laneLabel(lane),
+    detail: `${count} point${count === 1 ? "" : "s"}`,
+    build: (inner) => laneNodes(inner, lane),
+  };
 }
 
 /** `4:0.5 8:1` → `automate <lane> points 4:0.5 8:1`, when every pair parses. */
@@ -684,7 +743,7 @@ function pointsCommand(
     .filter(Boolean);
   if (pairs.length === 0 || (exactly !== undefined && pairs.length !== exactly))
     return undefined;
-  const { min, max } = AUTOMATION_LANES[lane];
+  const { min, max } = automationRange(lane);
   for (const pair of pairs) {
     const match = pair.match(/^(\d+(?:\.\d+)?):(-?\d+(?:\.\d+)?)$/);
     if (!match) return undefined;
@@ -700,9 +759,9 @@ function laneNodes(
 ): MenuNode[] {
   const track = focused(context);
   if (!track) return [];
-  const { min, max, field } = AUTOMATION_LANES[lane];
+  const { min, max } = automationRange(lane);
   const range = `${laneFormat(lane, min)}…${laneFormat(lane, max)}`;
-  const points = track[field] ?? [];
+  const points = automationPoints(track, lane);
   const nodes: MenuNode[] = [
     {
       kind: "entry",
@@ -1178,8 +1237,8 @@ export class EditMenu {
       return { type: "run", command: node.command(next) };
     }
     if (node.kind === "point") {
-      const { min, max } = AUTOMATION_LANES[node.lane];
-      const next = clamp(LANE_STEP[node.lane](node.value, direction), min, max);
+      const { min, max } = automationRange(node.lane);
+      const next = clamp(laneStep(node.lane)(node.value, direction), min, max);
       if (Math.abs(next - node.value) < 1e-9) return { type: "handled" };
       return {
         type: "run",
@@ -1290,7 +1349,7 @@ function entryCommand(node: MenuNode, text: string): string | undefined {
   }
   if (node.kind === "point") {
     // `0.8` sets the value; `6:0.8` moves to beat 6.
-    const { min, max } = AUTOMATION_LANES[node.lane];
+    const { min, max } = automationRange(node.lane);
     const match = trimmed.match(/^(?:(\d+(?:\.\d+)?):)?(-?\d+(?:\.\d+)?)$/);
     if (!match) return undefined;
     const value = Number(match[2]);

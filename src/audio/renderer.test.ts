@@ -83,6 +83,85 @@ describe("loop renderer", () => {
   });
 });
 
+const fxScore = (drive: number) =>
+  createScore({
+    tempoBpm: 120,
+    bars: 1,
+    tracks: [
+      {
+        id: "lead",
+        name: "lead",
+        instrument: "saw",
+        filter: { cutoff: 3000, resonance: 0.3, type: "bpf", ftype: "24db" },
+        delay: { beats: 0.75, feedback: 0.35, mix: 0.25, pingpong: true },
+        reverb: { mix: 0.3, size: 0.5, predelay: 0.02, fade: 1 },
+        fx: {
+          djf: { value: 0.4 },
+          autofilter: { shape: "random" },
+          vowel: { vowel: "o", mix: 0.5 },
+          crush: { bits: 10 },
+          distort: { drive },
+          tremolo: {},
+          compressor: {},
+          phaser: {},
+          chorus: {},
+          leslie: { mix: 0.3 },
+          postgain: { gain: 0.9 },
+        },
+        fxAutomation: {
+          "distort-drive": [
+            { tick: 0, value: drive },
+            { tick: 1920, value: 6 },
+          ],
+        },
+      },
+      { id: "bass", name: "bass", instrument: "bass", fx: { compressor: {} } },
+    ],
+    notes: [
+      {
+        id: "a",
+        trackId: "lead",
+        pitch: 64,
+        startTick: 0,
+        durationTicks: 960,
+        velocity: 0.8,
+      },
+      {
+        id: "b",
+        trackId: "bass",
+        pitch: 40,
+        startTick: 480,
+        durationTicks: 480,
+        velocity: 0.9,
+      },
+    ],
+  });
+
+describe("loop renderer with the full effects chain", () => {
+  test("worker, inline (cached) and cold renders are byte-identical", async () => {
+    const worker = new LoopRenderer({ sampleRate: 8_000 });
+    const inline = new LoopRenderer({ sampleRate: 8_000, worker: false });
+    try {
+      for (const drive of [2, 4, 2]) {
+        const cold = renderScorePcm(fxScore(drive), {
+          sampleRate: 8_000,
+          loop: true,
+        });
+        const [a, b] = await Promise.all([
+          worker.render(fxScore(drive)),
+          inline.render(fxScore(drive)),
+        ]);
+        expect(a.pcm).toEqual(cold.pcm);
+        expect(b.pcm).toEqual(cold.pcm);
+        expect(cold.pcm.some((v) => v !== 0)).toBe(true);
+      }
+    } finally {
+      worker.dispose();
+      inline.dispose();
+    }
+  });
+});
+
 describe("loop renderer with sampler tracks", () => {
   test("worker, inline and cold renders agree, and a replaced file re-renders", async () => {
     const root = await mkdtemp(join(tmpdir(), "dawg-renderer-"));

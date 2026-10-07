@@ -1,11 +1,27 @@
 import {
-  AUTOMATION_LANES,
+  AUTOMATION_PARAMETERS,
+  automationPoints,
+  automationRange,
   SCORE_LIMITS,
   type AutomationParameter,
   type ScoreOperation,
   type TrackScore,
 } from "../../core/score.ts";
 import { AVAILABLE_INSTRUMENTS } from "../audio/wav.ts";
+import {
+  EFFECT_NAMES,
+  FX_PRESETS,
+  effectSpec,
+  type EffectName,
+} from "../../core/fx.ts";
+import {
+  applyFxCommand,
+  effectPatch,
+  effectValues,
+  parseEffectName,
+  parseParamName,
+  type FxCommand,
+} from "../commands/fx.ts";
 import type { ChatTool } from "./gateway.ts";
 import { MEDIA_TOOLS } from "../media/tools.ts";
 import { PACK_TOOLS, PackToolError } from "./pack-tools.ts";
@@ -161,10 +177,6 @@ export class ToolArgumentError extends Error {
     this.name = "ToolArgumentError";
   }
 }
-
-const AUTOMATION_PARAMETERS = Object.keys(
-  AUTOMATION_LANES,
-) as AutomationParameter[];
 
 const MAX_NOTES_PER_CALL = 128;
 const MAX_EXPLAIN_CHARS = 2_000;
@@ -445,12 +457,16 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   },
   {
     name: "set_automation",
-    description: `Write an automation lane: volume (0..1), pan (-1..1), filter cutoff (${SCORE_LIMITS.minFilterCutoff}..${SCORE_LIMITS.maxFilterCutoff} Hz low-pass), resonance (0..${SCORE_LIMITS.maxFilterResonance}), delay-feedback (0..${SCORE_LIMITS.maxDelayFeedback}) or delay-mix (0..${SCORE_LIMITS.maxDelayMix}). Delay lanes need a delay on the track (set_effects) to be heard. mode=replace (default) rewrites the lane; merge keeps existing points at other beats. An empty replace clears it.`,
+    description: `Write an automation lane: volume 0..1, pan -1..1, filter (cutoff Hz), resonance 0..${SCORE_LIMITS.maxFilterResonance}, delay-feedback 0..${SCORE_LIMITS.maxDelayFeedback}, delay-mix, or <effect>-<param> (the param's range). The effect must be on to be heard. mode=replace (default) rewrites the lane; merge keeps other beats. An empty replace clears it.`,
     parameters: {
       type: "object",
       properties: {
         trackId: trackIdSchema,
-        parameter: { type: "string", enum: AUTOMATION_PARAMETERS },
+        parameter: {
+          type: "string",
+          description:
+            "volume, pan, filter, resonance, delay-feedback, delay-mix, or <effect>-<param>",
+        },
         mode: { type: "string", enum: ["replace", "merge"] },
         points: {
           type: "array",
@@ -461,8 +477,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
               beat: beatSchema("Beat position"),
               value: {
                 type: "number",
-                description:
-                  "volume 0..1, pan -1..1, filter cutoff in Hz, resonance 0..1, delay-feedback 0..0.9, delay-mix 0..1",
+                description: "in the lane's range",
               },
             },
             required: ["beat", "value"],
@@ -484,7 +499,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
         args.mode === undefined
           ? "replace"
           : oneOf(args.mode, ["replace", "merge"], "mode");
-      const { min, max } = AUTOMATION_LANES[parameter];
+      const { min, max } = automationRange(parameter);
       const tpb = context.score.ticksPerBeat;
       const points = list(
         args,
@@ -499,7 +514,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
         };
       });
       const track = context.score.tracks.find((t) => t.id === trackId)!;
-      const existing = track[AUTOMATION_LANES[parameter].field] ?? [];
+      const existing = automationPoints(track, parameter);
       const merged = Array.from(
         new Map(
           [...(mode === "merge" ? existing : []), ...points].map((point) => [
@@ -522,8 +537,60 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
     },
   },
   {
+    name: "set_fx",
+    description:
+      "Turn an effect on/off, load a preset, or set params by dawg or Strudel name (lpq, delayfeedback…). on:true uses good defaults; effects and presets are in the brief.",
+    parameters: {
+      type: "object",
+      properties: {
+        trackId: trackIdSchema,
+        effect: { type: "string", description: "see the brief's effects" },
+        on: { type: "boolean" },
+        preset: { type: "string" },
+        params: {
+          type: "object",
+          additionalProperties: { type: ["number", "string", "boolean"] },
+        },
+      },
+      required: ["effect"],
+      additionalProperties: false,
+    },
+    plan(args, context) {
+      const trackId = targetTrack(args, context);
+      const effect =
+        typeof args.effect === "string"
+          ? parseEffectName(args.effect)
+          : undefined;
+      if (!effect)
+        throw new ToolArgumentError(
+          `effect must be one of ${EFFECT_NAMES.join(", ")}`,
+        );
+      const command = fxToolCommand(effect, args);
+      const result = applyFxCommand(context.score, trackId, command);
+      if (!result.ok || !result.next)
+        throw new ToolArgumentError(result.message);
+      const track = context.score.tracks.find((t) => t.id === trackId)!;
+      const values = effectValues(
+        result.next.tracks.find((t) => t.id === trackId),
+        effect,
+      );
+      return {
+        kind: "score",
+        operations: [
+          {
+            type: "updateTrack",
+            trackId,
+            patch: effectPatch(track, effect, values ?? null),
+          },
+        ],
+        trackId,
+        summary: `${trackId} ${result.message}`,
+      };
+    },
+  },
+  {
     name: "set_effects",
-    description: `Set or remove a track's low-pass filter, tempo-synced stereo delay, and stereo reverb send. Pass null to remove an effect. filter: cutoff ${SCORE_LIMITS.minFilterCutoff}..${SCORE_LIMITS.maxFilterCutoff} Hz, resonance 0..${SCORE_LIMITS.maxFilterResonance}. delay: beats ${SCORE_LIMITS.minDelayBeats}..${SCORE_LIMITS.maxDelayBeats}, feedback 0..${SCORE_LIMITS.maxDelayFeedback}, mix 0..${SCORE_LIMITS.maxDelayMix}. reverb: mix 0..${SCORE_LIMITS.maxReverbMix} (0.15..0.35 is a natural room), size ${SCORE_LIMITS.minReverbSize}..${SCORE_LIMITS.maxReverbSize} (default 0.5; higher is a longer, darker tail).`,
+    description: `Shorthand: low-pass filter, delay (beats) and reverb (mix 0.15..0.35 is a room); null removes one. Prefer set_fx.`,
     parameters: {
       type: "object",
       properties: {
@@ -1277,6 +1344,47 @@ export function chatTools(
       parameters: tool.parameters,
     },
   }));
+}
+
+function fxToolCommand(
+  effect: EffectName,
+  args: Record<string, unknown>,
+): FxCommand {
+  if (args.on === false) return { type: "fx-off", effect };
+  if (args.preset !== undefined) {
+    if (
+      typeof args.preset !== "string" ||
+      !Object.prototype.hasOwnProperty.call(
+        FX_PRESETS[effect] ?? {},
+        args.preset,
+      )
+    )
+      throw new ToolArgumentError(
+        `${effect} presets: ${Object.keys(FX_PRESETS[effect] ?? {}).join(", ") || "none"}`,
+      );
+    return { type: "fx-preset", effect, preset: args.preset };
+  }
+  if (args.params === undefined) {
+    if (args.on === true) return { type: "fx-on", effect };
+    throw new ToolArgumentError("set_fx needs on, preset, or params");
+  }
+  const params = record(args.params, "params");
+  const values: Record<string, number | string | boolean> = {};
+  for (const [name, value] of Object.entries(params)) {
+    const param = parseParamName(effect, name);
+    if (!param)
+      throw new ToolArgumentError(
+        `${effect} has no parameter ${name}; it takes ${Object.keys(effectSpec(effect).params).join(", ")}`,
+      );
+    if (
+      typeof value !== "number" &&
+      typeof value !== "string" &&
+      typeof value !== "boolean"
+    )
+      throw new ToolArgumentError(`${effect} ${name} must be a value`);
+    values[param] = value;
+  }
+  return { type: "fx-set", effect, values };
 }
 
 function targetTrack(args: Record<string, unknown>, context: ToolContext) {

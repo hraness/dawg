@@ -4,6 +4,16 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ## Unreleased
 
+### Effects
+
+- **A full effects chain on every track**, in a fixed order: filter → dj filter → auto filter → vowel → bitcrush → distortion → tremolo → compressor → pan → phaser → chorus → leslie → post gain → delay → reverb. Each effect turns on with a good default and has a few simple parameters, with the rest under **advanced**.
+- **Filter** gains `type` lpf/hpf/bpf and a 12 dB, 24 dB or ladder slope. **Auto filter** sweeps the cutoff with a tempo-synced or free LFO (sine, triangle, square, saw, ramp, sample-and-hold) and can follow the input's envelope.
+- **Delay** turns on as a dotted-eighth stereo ping-pong with gentle feedback and a high-cut on the repeats. **Reverb** adds decay time, damping and pre-delay.
+- **Distortion** (ten curves, tone, mix, automatic gain compensation), **compressor** (threshold, ratio, knee, attack, release, make-up), **chorus**, **tremolo**, plus Strudel's dj filter, vowel, bitcrush/coarse, phaser, leslie and post gain.
+- Parameter names follow Strudel's (`lpq`, `delayfeedback`, `room`, `tremolodepth`…), and every numeric parameter can be automated (`automate distort-drive points 0:1 8:6`).
+- **`fx` prompt command**: `fx delay mix 0.3`, `fx filter type hpf cutoff 300`, `fx chorus preset wide`, `fx tremolo off`. The Effects menu lists the core effects first, with presets. The agent's new `set_fx` tool sets the same parameters.
+- Older projects and sessions load and sound exactly as before. The `dawg` SDK is 1.5.0 (additive).
+
 ### Rhythm (Euclidean rows)
 
 - **Drum parts as generators.** A kit or oneshot sampler track can carry `rhythm` rows: `euclid("kick", 4, 16)`, `euclid("hat", 7, 16, 2, { swing: 0.15 })`, `grid("snare", "....X.......x...")`. dawg expands them into ordinary notes, so you and the agent edit four numbers instead of sixteen hits, and rendering, sync and diffs are unchanged. Patterns and rotation match Strudel's `euclid`/`euclidRot`.

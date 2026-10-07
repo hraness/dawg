@@ -154,7 +154,7 @@ describe("edit menu", () => {
     expect(menu.view(ctx).items[menu.view(ctx).index]!.label).toContain("off");
     expect(menu.key(RIGHT, ctx)).toEqual({
       type: "run",
-      command: "filter 2000 0",
+      command: "fx filter cutoff 2000",
     });
     const on = score().toJSON();
     const filtered = createScore({
@@ -168,12 +168,12 @@ describe("edit menu", () => {
     const next = context(filtered);
     expect(menu.key(RIGHT, next)).toEqual({
       type: "run",
-      command: "filter 2500 0.2",
+      command: "fx filter cutoff 2245",
     });
     select(menu, next, "resonance");
     expect(menu.key(RIGHT, next)).toEqual({
       type: "run",
-      command: "filter 2000 0.25",
+      command: "fx filter resonance 0.25",
     });
   });
 

@@ -11,6 +11,7 @@ type SessionTrack = {
   id: string;
   filter?: { cutoff: number; resonance: number };
   filterAutomation?: { tick: number; value: number }[];
+  fx?: Record<string, Record<string, number | string | boolean>>;
 };
 
 /** Tracks in the newest composition record under `.dawg/`. */
@@ -110,6 +111,50 @@ test.skipIf(!supported)(
       await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
       await t.send("abc");
       await t.until(() => t.vt.text().includes("abc"), "typing");
+    } finally {
+      t.terminal.write("\u0003");
+      await t.proc.exited;
+    }
+  },
+  30_000,
+);
+
+test.skipIf(!supported)(
+  "real PTY: menu turns tremolo on and sets its depth",
+  async () => {
+    const t = await launch(100, 30, {});
+    const bass = async () =>
+      (await sessionTracks(t.cwd)).find((track) => track.id === "bass");
+    try {
+      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.send("\u000b");
+      await t.until(() => t.vt.text().includes("Transport"), "menu root");
+      await t.send("/effects");
+      await t.send("\r");
+      await t.until(() => t.vt.text().includes("menu › Effects"), "effects");
+      // The core effects lead; the Strudel extras are one level down.
+      expect(t.vt.text()).toContain("Tremolo");
+      expect(t.vt.text()).toContain("more effects");
+      await t.send("/tremolo");
+      await t.send("\r");
+      await t.until(() => t.vt.text().includes("› Tremolo"), "tremolo");
+      expect(t.vt.text()).toContain("advanced");
+      // Enter on "on" turns the effect on with its defaults.
+      await t.send("\r");
+      await waitFor(
+        async () => (await bass())?.fx?.tremolo?.depth === 0.5,
+        "tremolo on in session",
+      );
+      await t.send("/depth");
+      await t.send("\r");
+      for (const key of "0.8") await t.send(key);
+      await t.send("\r");
+      await waitFor(
+        async () => (await bass())?.fx?.tremolo?.depth === 0.8,
+        "tremolo depth in session",
+      );
+      for (let i = 0; i < 4; i++) await t.send("\u001b");
+      await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
     } finally {
       t.terminal.write("\u0003");
       await t.proc.exited;

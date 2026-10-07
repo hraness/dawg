@@ -1,6 +1,7 @@
+import { normalizeFx } from "../../core/fx.ts";
 import {
   SCORE_LIMITS,
-  AUTOMATION_LANES,
+  automationRange,
   isAutomationParameter,
   normalizeDelay,
   normalizeFilter,
@@ -163,6 +164,7 @@ function parseOperation(value: unknown): ScoreOperation {
       const kit = synthKit(patch.kit);
       if (kit) safe.kit = kit.name;
     }
+    if (patch.fx !== undefined) safe.fx = normalizeFx(patch.fx) ?? null;
     return { type: "updateTrack", trackId: value.trackId, patch: safe };
   }
   if (
@@ -173,7 +175,7 @@ function parseOperation(value: unknown): ScoreOperation {
     Array.isArray(value.points) &&
     value.points.length <= SCORE_LIMITS.maxAutomationPoints
   ) {
-    const { min: minValue, max: maxValue } = AUTOMATION_LANES[value.parameter];
+    const { min: minValue, max: maxValue } = automationRange(value.parameter);
     const points = value.points.map((candidate) => {
       if (!isRecord(candidate))
         throw new Error("agent automation point is malformed");

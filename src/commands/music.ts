@@ -26,7 +26,9 @@ import {
   createScore,
   updateTrack,
   setTrackAutomation,
-  AUTOMATION_LANES,
+  automationPoints,
+  automationRange,
+  isAutomationParameter,
   type AutomationParameter,
   type NoteInput,
   type TrackScore,
@@ -96,8 +98,11 @@ const LANE_ALIASES: Readonly<Record<string, EffectAutomationParameter>> =
 export function parseEffectLane(
   name: string,
 ): EffectAutomationParameter | undefined {
-  return Object.prototype.hasOwnProperty.call(LANE_ALIASES, name)
-    ? LANE_ALIASES[name]
+  if (Object.prototype.hasOwnProperty.call(LANE_ALIASES, name))
+    return LANE_ALIASES[name];
+  // `fx` lanes by name: `distort-drive`, `autofilter-cutoff`, `reverb-mix`.
+  return isAutomationParameter(name) && name !== "volume" && name !== "pan"
+    ? name
     : undefined;
 }
 
@@ -248,7 +253,7 @@ export function parseMusicCommand(prompt: string): MusicCommand | undefined {
     const beat = Number(automate[2]);
     const value = Number(automate[3]);
     if (!parameter || !validBeat(beat)) return undefined;
-    const { min, max } = AUTOMATION_LANES[parameter];
+    const { min, max } = automationRange(parameter);
     if (!Number.isFinite(value) || value < min || value > max) return undefined;
     return { type: "effect-automation", parameter, beat, value };
   }
@@ -332,10 +337,7 @@ export function applyMusicCommand(
     if (command.type === "effect-automation") {
       const tick = Math.round(command.beat * score.ticksPerBeat);
       const merged = new Map(
-        (track[AUTOMATION_LANES[parameter].field] ?? []).map((point) => [
-          point.tick,
-          point,
-        ]),
+        automationPoints(track, parameter).map((point) => [point.tick, point]),
       );
       merged.set(tick, { tick, value: command.value });
       points = [...merged.values()].sort((a, b) => a.tick - b.tick);

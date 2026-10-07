@@ -89,13 +89,15 @@ export function musicalFingerprint(score: TrackScore): Fingerprint {
     if (track.filter) effects.add("filter");
     if (track.delay) effects.add("delay");
     if (track.reverb) effects.add("reverb");
+    for (const name of Object.keys(track.fx ?? {})) effects.add(name);
     if (track.volumeAutomation.length || track.panAutomation.length)
       effects.add("automation");
     if (
       track.filterAutomation?.length ||
       track.resonanceAutomation?.length ||
       track.delayFeedbackAutomation?.length ||
-      track.delayMixAutomation?.length
+      track.delayMixAutomation?.length ||
+      Object.keys(track.fxAutomation ?? {}).length
     )
       effects.add("sweep");
     const instrument = track.instrument.toLowerCase().slice(0, 24);
