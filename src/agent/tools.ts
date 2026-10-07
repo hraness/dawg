@@ -8,6 +8,8 @@ import {
 import { AVAILABLE_INSTRUMENTS } from "../audio/wav.ts";
 import type { ChatTool } from "./gateway.ts";
 import { MEDIA_TOOLS } from "../media/tools.ts";
+import { PACK_TOOLS, PackToolError } from "./pack-tools.ts";
+import { PackError, type PackStore } from "../audio/packs.ts";
 import type { MediaResult, MediaRunContext } from "../media/types.ts";
 import { pitchToMidi } from "./ops.ts";
 import {
@@ -43,6 +45,13 @@ import {
 } from "../web/search.ts";
 
 /** What a validated tool call asks the host to do. */
+export type ScorePlan = Readonly<{
+  kind: "score";
+  operations: readonly ScoreOperation[];
+  summary: string;
+  trackId?: string;
+}>;
+
 export type ToolPlan =
   | Readonly<{
       kind: "score";
@@ -61,6 +70,15 @@ export type ToolPlan =
       summary: string;
       /** Side effects outside the score (files, network); bounded and async. */
       run: (context: ActionContext) => Promise<ActionResult>;
+    }>
+  /**
+   * Score edits that need async work first (fetching a pack sound); `run`
+   * returns the score plan, committed like any other.
+   */
+  | Readonly<{
+      kind: "prepare";
+      summary: string;
+      run: (context: ActionContext) => Promise<ScorePlan>;
     }>
   /** A long-running local media job (download, stems, analysis, …). */
   | Readonly<{
@@ -105,6 +123,8 @@ export type ActionContext = Readonly<{
   onWorkspaceWrite?: (path: string) => Promise<string | void> | string | void;
   web?: WebHost;
   signal?: AbortSignal;
+  /** Sample packs for list_packs/search_sounds/use_sound; default the user cache. */
+  packs?: PackStore;
 }>;
 
 export type ActionResult = Readonly<{
@@ -1149,6 +1169,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
     },
   },
   ...MEDIA_TOOLS,
+  ...PACK_TOOLS,
 ] satisfies AgentTool[]);
 
 /** Errors an `action` plan may raise that are safe to show to the model. */
@@ -1156,7 +1177,9 @@ export function isActionDiagnostic(error: unknown): boolean {
   return (
     error instanceof WorkspaceError ||
     error instanceof WebError ||
-    error instanceof ToolArgumentError
+    error instanceof ToolArgumentError ||
+    error instanceof PackToolError ||
+    error instanceof PackError
   );
 }
 

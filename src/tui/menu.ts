@@ -16,6 +16,7 @@ import {
   type TrackScore,
 } from "../../core/score.ts";
 import { AVAILABLE_INSTRUMENTS } from "../audio/wav.ts";
+import { DEFAULT_KITS, GM_INSTRUMENTS, PACK_CATALOG } from "../audio/packs.ts";
 import type { PickerItem } from "../../tui/app.ts";
 
 /** What the menu needs to know beyond the score. */
@@ -214,6 +215,13 @@ export function rootNodes(context: MenuContext): MenuNode[] {
       label: "Mix",
       detail: `${context.score.tracks.length} track${context.score.tracks.length === 1 ? "" : "s"}`,
       build: mixNodes,
+    },
+    {
+      kind: "menu",
+      id: "sounds",
+      label: "Sounds",
+      detail: soundsDetail(track),
+      build: soundNodes,
     },
     {
       kind: "menu",
@@ -590,6 +598,84 @@ function mixNodes(context: MenuContext): MenuNode[] {
           command: `/track ${track.id}`,
         };
   });
+}
+
+// ── sounds (sample packs) ──────────────────────────────────────────────
+
+function soundsDetail(track: Track | undefined): string {
+  const packs = new Set<string>();
+  for (const ref of Object.values(track?.sampler?.voices ?? {}))
+    if (ref.src.startsWith("pack:")) packs.add(ref.src.slice(5).split("/")[0]!);
+  return packs.size ? [...packs].join(" · ") : "kits, instruments, packs";
+}
+
+/**
+ * The instrument browser: drum kits and soundfont instruments from the
+ * built-in packs (fetched on first use), and the pack list.
+ */
+function soundNodes(): MenuNode[] {
+  return [
+    {
+      kind: "menu",
+      id: "kits",
+      label: "Drum kits",
+      detail: Object.keys(DEFAULT_KITS).join(" "),
+      build: () =>
+        Object.entries(DEFAULT_KITS).map(([name, kit]): MenuNode => ({
+          kind: "action",
+          label: `${name}  ${kit.bank || kit.pack} · ${kit.pack}`,
+          command: `/kit ${name}`,
+        })),
+    },
+    {
+      kind: "menu",
+      id: "instruments",
+      label: "Instruments",
+      detail: "General MIDI soundfont, piano",
+      build: () => [
+        {
+          kind: "action",
+          label: "piano  Salamander grand · piano",
+          command: "/pack use piano/piano",
+        },
+        ...GM_INSTRUMENTS.map((name): MenuNode => ({
+          kind: "action",
+          label: `${name.replace(/^gm_/, "").replace(/_/g, " ")} · gm`,
+          command: `/pack use gm/${name}`,
+        })),
+      ],
+    },
+    {
+      kind: "entry",
+      label: "use a sound",
+      value: "",
+      placeholder: "<pack>/<sound>[:<n>]",
+      command: (text) => (text.trim() ? `/pack use ${text.trim()}` : undefined),
+      example: "/pack use dirt-samples/bd:3",
+    },
+    {
+      kind: "menu",
+      id: "packs",
+      label: "Packs",
+      detail: `${PACK_CATALOG.length} built in`,
+      build: () => [
+        ...PACK_CATALOG.map((pack): MenuNode => ({
+          kind: "action",
+          label: `${pack.name}  ${pack.license}`,
+          command: `/pack info ${pack.name}`,
+        })),
+        {
+          kind: "entry",
+          label: "add a pack",
+          value: "",
+          placeholder: "manifest URL or github:user/repo",
+          command: (text) =>
+            text.trim() ? `/pack add ${text.trim()}` : undefined,
+          example: "/pack add github:yaxu/clean-breaks",
+        },
+      ],
+    },
+  ];
 }
 
 function transportNodes(context: MenuContext): MenuNode[] {
@@ -1079,5 +1165,6 @@ export const MENU_SECTIONS = [
   "effects",
   "automation",
   "mix",
+  "sounds",
   "transport",
 ] as const;

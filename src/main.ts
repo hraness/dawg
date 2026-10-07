@@ -94,6 +94,24 @@ import {
 } from "./tui/play-session.ts";
 import { EditMenu, MENU_SECTIONS, type MenuContext } from "./tui/menu.ts";
 import {
+  kitTarget,
+  packListLines,
+  parseKitCommand,
+  parsePackCommand,
+  useKit,
+  useSound,
+  type KitCommand,
+  type PackCommand,
+} from "./commands/pack.ts";
+import {
+  DEFAULT_KITS,
+  PackError,
+  PackStore,
+  banksOf,
+  packCredits,
+  writeCredits,
+} from "./audio/packs.ts";
+import {
   addNote,
   applyScoreOperation,
   createScore,
@@ -351,6 +369,9 @@ let syncState: SyncState = port.sync;
 let windowCount = 1;
 /** Project file sync when `dawg.json` is in the working directory. */
 let projectSync: ProjectSync | undefined;
+let packStore: PackStore | undefined;
+let reportedSampleProblems = "";
+let sampleLibrary: SampleLibrary | undefined;
 let typesIndicator: TypesIndicator | undefined;
 let announcedName = record.meta.name;
 let namer = makeNamer();
@@ -1091,6 +1112,10 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (trackCommand) return focusTrack(trackCommand[1]!.toLowerCase());
   const sample = parseSampleCommand(command);
   if (sample) return sampleCommand(sample);
+  const pack = parsePackCommand(command);
+  if (pack) return packCommand(pack);
+  const kit = parseKitCommand(command);
+  if (kit) return kitCommand(kit);
   const sessionReply = await sessionCommand(command);
   if (sessionReply !== undefined) return sessionReply;
   const edit = parseEditCommand(command);
@@ -1405,9 +1430,6 @@ async function focusTrack(trackId: string): Promise<Receipt> {
   return ok(exists ? `track · ${trackId}` : `track created · ${trackId}`);
 }
 
-let sampleLibrary: SampleLibrary | undefined;
-let reportedSampleProblems = "";
-
 /** Decode every sampler voice (cached) and return what failed to load. */
 async function sampleProblems(
   value: TrackScore,
@@ -1513,6 +1535,162 @@ async function sampleCommand(
   return ok(
     `${result.message}${placed.copied ? ` · copied to ${placed.src}` : ""}`,
   );
+}
+
+function packs(): PackStore {
+  packStore ??= new PackStore();
+  return packStore;
+}
+
+/** Keeps CREDITS.md in step with the CC-BY packs the score uses (quietly). */
+async function updateCredits(value: TrackScore): Promise<void> {
+  const refs = value.tracks.flatMap((track) =>
+    Object.values(track.sampler?.voices ?? {}),
+  );
+  if (!refs.some((ref) => ref.src.startsWith("pack:"))) return;
+  // Only a dawg project gets CREDITS.md; a bare session directory does not.
+  if (!projectSync) return;
+  try {
+    await writeCredits(process.cwd(), packCredits(refs, await packs().list()));
+  } catch {
+    /* credits are best effort; render metadata carries them too */
+  }
+}
+
+/** Applies a pack edit as one undo step and focuses its track. */
+async function commitPackEdit(
+  operations: readonly ScoreOperation[],
+  trackId: string,
+  kind: string,
+  payload: Record<string, unknown>,
+): Promise<Receipt | undefined> {
+  let next = score;
+  for (const operation of operations)
+    next = applyScoreOperation(next, operation);
+  const problems = (await sampleProblems(next)).filter(
+    (problem) => problem.trackId === trackId && problem.level === "error",
+  );
+  if (problems.length > 0) return fail(`sound · ${problems[0]!.message}`);
+  await commitScore(next, kind, payload);
+  if (trackId !== requestedTrack) {
+    await port.focus(trackId);
+    requestedTrack = trackId;
+    draftTrack = false;
+  }
+  await projectSync?.flushScore();
+  return undefined;
+}
+
+async function packCommand(command: PackCommand): Promise<Receipt> {
+  try {
+    if (command.kind === "usage") return warn(command.message);
+    if (command.kind === "list") {
+      const lines = packListLines(await packs().list());
+      tui.openText("packs", lines);
+      return ok(`${lines.length} packs · /pack info <name> · esc closes`);
+    }
+    if (command.kind === "add") {
+      const added = await packs().add(
+        command.source,
+        command.name ? { name: command.name } : {},
+      );
+      return ok(
+        `pack added · ${added.pack.name} · ${added.sounds} sounds · /pack info ${added.pack.name}`,
+      );
+    }
+    if (command.kind === "info") {
+      const info = await packs().info(command.name);
+      if (!info)
+        return fail(
+          `pack · no pack named ${command.name.slice(0, 40)} · /pack list`,
+        );
+      const manifest = await packs().manifest(info.name);
+      const banks = banksOf(manifest);
+      const names = [...manifest.sounds.keys()];
+      const lines = [
+        `${info.name} · ${info.title}`,
+        `license · ${info.license}${info.attribution ? ` · ${info.attribution}` : ""}`,
+        `manifest · ${info.manifestUrl}`,
+        ...(info.homepage ? [`home · ${info.homepage}`] : []),
+        `${names.length} sounds${banks.length ? ` · ${banks.length} kits` : ""}`,
+        ...(banks.length ? [`kits · ${banks.join(" ")}`] : []),
+        ...names.slice(0, 400).map((name) => {
+          const sound = manifest.sounds.get(name)!;
+          return `${name} · ${sound.kind === "zones" ? `${sound.zones.length} notes (keyed)` : `${sound.files.length} file${sound.files.length === 1 ? "" : "s"}`}`;
+        }),
+      ];
+      tui.openText(`pack · ${info.name}`, lines);
+      return ok(
+        `${info.name} · ${names.length} sounds · /pack use ${info.name}/<sound>`,
+      );
+    }
+    if (command.kind === "remove") {
+      const known = await packs().remove(command.name);
+      return known
+        ? ok(`pack removed · ${command.name}`)
+        : fail(
+            `pack · no pack named ${command.name.slice(0, 40)} · /pack list`,
+          );
+    }
+    await materializeDraft();
+    const result = await useSound(
+      packs(),
+      score,
+      requestedTrack,
+      command.sound,
+      {
+        ...(command.voice ? { voice: command.voice } : {}),
+      },
+    );
+    const failed = await commitPackEdit(
+      result.operations,
+      result.trackId,
+      "pack.use",
+      {
+        trackId: result.trackId,
+        sound: command.sound,
+      },
+    );
+    return failed ?? ok(`sound · ${result.summary}`);
+  } catch (error) {
+    if (error instanceof PackError) return fail(`pack · ${error.message}`);
+    throw error;
+  }
+}
+
+async function kitCommand(command: KitCommand): Promise<Receipt> {
+  if (command.kind === "list") {
+    const lines = Object.entries(DEFAULT_KITS).map(
+      ([name, kit]) => `${name} · ${kit.bank || "(whole pack)"} · ${kit.pack}`,
+    );
+    lines.push(
+      "any bank of a pack also works: /kit RolandTR727, /kit AkaiMPC60, …",
+    );
+    tui.openText("kits", lines);
+    return ok("kits · /kit <name> on the focused drum track");
+  }
+  await materializeDraft();
+  const trackId = kitTarget(score, requestedTrack);
+  if (!trackId)
+    return fail(
+      `kit · ${requestedTrack} is a melodic track · focus a drum track (/track drums) and retry`,
+    );
+  try {
+    const result = await useKit(packs(), score, trackId, command.bank);
+    const failed = await commitPackEdit(
+      result.operations,
+      trackId,
+      "pack.kit",
+      {
+        trackId,
+        bank: command.bank,
+      },
+    );
+    return failed ?? ok(result.summary);
+  } catch (error) {
+    if (error instanceof PackError) return fail(`kit · ${error.message}`);
+    throw error;
+  }
 }
 
 async function readLoopFile(path: string): Promise<string> {
@@ -1888,6 +2066,7 @@ async function commitScore(
   if (clock.playing) void audio.play(score);
   projectSync?.scoreChanged(score);
   reportSampleProblems(score);
+  void updateCredits(score);
 }
 
 /** The window's side of the project file sync (see src/project/sync.ts). */

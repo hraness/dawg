@@ -12,6 +12,13 @@ import { scoreFromJSON, type TrackScore } from "../core/score.ts";
 import { decodeLoop } from "../core/loop.ts";
 import { renderScoreWav } from "./audio/wav.ts";
 import { SampleLibrary, hasSamplerTracks } from "./audio/samples.ts";
+import {
+  PackStore,
+  creditsLine,
+  packCredits,
+  withWavComment,
+  writeCredits,
+} from "./audio/packs.ts";
 import { evaluateProject, formatDiagnostic } from "../core/sdk/eval.ts";
 import { isProject } from "./project/init.ts";
 import { resolveSessionArg } from "./session/attach.ts";
@@ -76,13 +83,27 @@ export async function runRenderCommand(
     for (const problem of samples.problems)
       stderr.write(`sample ${problem.level} · ${problem.message}\n`);
   }
-  const wav = renderScoreWav(score, { samples });
+  let wav = renderScoreWav(score, { samples });
+  // Pack sounds: name the packs (and CC-BY attributions) in the WAV's INFO
+  // comment and on stdout; CREDITS.md in a project keeps the attributions.
+  const refs = score.tracks.flatMap((track) =>
+    Object.values(track.sampler?.voices ?? {}),
+  );
+  let credits: string | undefined;
+  if (refs.some((ref) => ref.src.startsWith("pack:"))) {
+    const list = packCredits(refs, await new PackStore().list());
+    credits = creditsLine(list);
+    if (credits) wav = withWavComment(wav, `samples: ${credits}`);
+    if (await isProject(workspace).catch(() => false))
+      await writeCredits(workspace, list).catch(() => undefined);
+  }
   const path = resolve(workspace, target);
   const temporary = `${path}.${process.pid}.tmp`;
   await writeFile(temporary, wav);
   await rename(temporary, path);
   const sha = createHash("sha256").update(wav).digest("hex");
   stdout.write(`rendered · ${target} · ${wav.byteLength} bytes · ${sha}\n`);
+  if (credits) stdout.write(`credits · ${credits}\n`);
   return 0;
 }
 

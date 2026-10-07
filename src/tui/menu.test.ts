@@ -45,7 +45,7 @@ function select(menu: EditMenu, ctx: MenuContext, label: string): void {
 }
 
 describe("edit menu", () => {
-  test("root lists the six sections with current values", () => {
+  test("root lists the seven sections with current values", () => {
     const menu = new EditMenu();
     const ctx = context();
     menu.show(ctx);
@@ -56,9 +56,10 @@ describe("edit menu", () => {
       "Effects",
       "Automation",
       "Mix",
+      "Sounds",
       "Transport",
     ]);
-    expect(menu.view(ctx).items[5]!.label).toContain("120 BPM");
+    expect(menu.view(ctx).items[6]!.label).toContain("120 BPM");
   });
 
   test("Enter opens, Esc backs out one level, Esc at the root closes", () => {
