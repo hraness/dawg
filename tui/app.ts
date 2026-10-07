@@ -123,6 +123,8 @@ export interface PickerState {
   /** Current filter text; `items` is then the matching subset of `all`. */
   query?: string | undefined;
   all?: readonly PickerItem[] | undefined;
+  /** Footer keys, replacing the default move/choose/cancel hint. */
+  hint?: string | undefined;
 }
 
 export interface PickerItem {
@@ -853,9 +855,11 @@ function paintPicker(
     onBackground({ ...roles.text, bold: true }, panel),
     boxWidth - 4,
   );
-  const hint = ui.capabilities.unicode
-    ? " ↑↓ move · enter choose · esc cancel "
-    : " up/dn move · enter choose · esc cancel ";
+  const hint =
+    picker.hint ??
+    (ui.capabilities.unicode
+      ? " ↑↓ move · enter choose · esc cancel "
+      : " up/dn move · enter choose · esc cancel ");
   if (boxWidth > hint.length + 4)
     buffer.text(
       left + boxWidth - 2 - hint.length,

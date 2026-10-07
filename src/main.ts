@@ -30,6 +30,7 @@ import { AutoNamer, providerNameGenerator } from "./session/naming.ts";
 import { normalizeSessionName } from "./session/meta.ts";
 import { parsePrompt } from "./agent/ops.ts";
 import { applyMusicCommand, parseMusicCommand } from "./commands/music.ts";
+import { applyEditCommand, parseEditCommand } from "./commands/edit.ts";
 import { helpLines, helpText, usageHint } from "./commands/help.ts";
 import { historyTarget, REDO_KIND, UNDO_KIND } from "./commands/history.ts";
 import {
@@ -85,7 +86,13 @@ import {
 } from "./auth/tui.ts";
 import { TransportClock } from "./audio/clock.ts";
 import { AudioEngine } from "./audio/engine.ts";
-import { PlaySession, type LiveEngine } from "./tui/play-session.ts";
+import {
+  DEFAULT_GRID,
+  GRIDS,
+  PlaySession,
+  type LiveEngine,
+} from "./tui/play-session.ts";
+import { EditMenu, MENU_SECTIONS, type MenuContext } from "./tui/menu.ts";
 import {
   addNote,
   applyScoreOperation,
@@ -351,6 +358,8 @@ let namer = makeNamer();
 let rebindPort: () => void = () => undefined;
 /** Play mode's controller; kept across entries so settings persist. */
 let play: PlaySession | undefined;
+/** The hand-editing menu (`/menu`, Ctrl-K), drawn as the picker overlay. */
+const menu = new EditMenu();
 /** Daemon windows play no loop; play mode monitors through its own engine. */
 let monitorEngine: AudioEngine | undefined;
 /** The decoded sampler voices, for play mode's live voices. */
@@ -699,6 +708,8 @@ async function runInteractive(): Promise<void> {
   const tick = (force = false) => {
     if (screenSuspended) return;
     play?.tick();
+    // Values in the menu follow the score as edits land.
+    if (menu.open) refreshMenu();
     tui.render(appView(score, clock.beatAt()), { force });
   };
   reportAgentActivity = () => {
@@ -878,6 +889,35 @@ async function runInteractive(): Promise<void> {
         ...(text === "\u001b" ? inputDecoder.flush() : []),
       ];
       for (const value of values) {
+        // The edit menu owns every key while it is up (Esc backs out).
+        if (typeof value === "string" && menu.open) {
+          if (tui.ui.overlay !== "picker" || tui.ui.picker?.id !== "menu")
+            menu.close();
+          else {
+            const result = menu.key(value, menuContext());
+            if (result.type === "close") tui.closePicker();
+            else if (result.type === "run") {
+              queuedPrompts.unshift(result.command);
+              void drainQueue();
+            }
+            if (result.type !== "pass") {
+              refreshMenu();
+              tick(true);
+              continue;
+            }
+          }
+        }
+        // Ctrl-K opens the menu on an empty prompt (in play mode too); with
+        // text it keeps its kill-to-end-of-line meaning.
+        if (
+          value === "\u000b" &&
+          prompt.value.length === 0 &&
+          tui.ui.overlay === undefined
+        ) {
+          openMenu();
+          tick(true);
+          continue;
+        }
         if (typeof value === "string" && play?.on && playKey(value)) {
           tick(true);
           continue;
@@ -1024,6 +1064,14 @@ async function submit(prompt: string): Promise<string | Receipt> {
   }
   const countIn = command.match(/^\/count-?in\s+([0-2])$/i);
   if (countIn) return ok(playSession().setCountIn(Number(countIn[1])));
+  const menuCommand = command.match(/^\/menu(?:\s+(\S+))?$/i);
+  if (menuCommand) {
+    const section = menuCommand[1]?.toLowerCase();
+    if (section && !(MENU_SECTIONS as readonly string[]).includes(section))
+      return fail(`/menu [${MENU_SECTIONS.join("|")}]`);
+    openMenu(section);
+    return ok("menu · esc closes");
+  }
   const gridCommand = command.match(/^\/grid\s+(\S+)$/i);
   if (gridCommand) {
     const message = playSession().setGrid(gridCommand[1]!);
@@ -1045,6 +1093,14 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (sample) return sampleCommand(sample);
   const sessionReply = await sessionCommand(command);
   if (sessionReply !== undefined) return sessionReply;
+  const edit = parseEditCommand(command);
+  if (edit) {
+    await materializeDraft();
+    const result = applyEditCommand(score, requestedTrack, edit);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
   const music = parseMusicCommand(command);
   if (music) {
     await materializeDraft();
@@ -1657,6 +1713,43 @@ function liveEngine(): LiveEngine | undefined {
 }
 
 /** The play session for the focused track (re-made when focus moves). */
+function menuContext(): MenuContext {
+  const session = play;
+  return {
+    score,
+    trackId: requestedTrack,
+    playing: clock.playing,
+    grid: session?.grid ?? DEFAULT_GRID,
+    grids: GRIDS.map((grid) => grid.label),
+    clickOn: session?.clickOn ?? false,
+    countInBars: session?.countInBars ?? 1,
+  };
+}
+
+function openMenu(section?: string): void {
+  menu.show(menuContext(), section);
+  refreshMenu();
+}
+
+function refreshMenu(): void {
+  if (!menu.open) return;
+  if (tui.ui.overlay !== undefined && tui.ui.picker?.id !== "menu") {
+    // Another overlay (help, a picker) replaced the menu.
+    menu.close();
+    return;
+  }
+  const view = menu.view(menuContext());
+  tui.openPicker({
+    id: "menu",
+    title: view.title,
+    items: view.items.length
+      ? view.items
+      : [{ label: "no matches", value: "none" }],
+    index: view.index,
+    hint: view.hint,
+  });
+}
+
 function playSession(): PlaySession {
   if (play && play.track === requestedTrack) return play;
   const previous = play;

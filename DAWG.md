@@ -107,6 +107,10 @@ automate filter at <beat> <cutoff> | clear filter automation
 automate resonance at <beat> <0..1> | clear resonance automation
 automate delay-feedback at <beat> <0..0.9> | clear delay-feedback automation
 automate delay-mix at <beat> <0..1> | clear delay-mix automation
+automate <lane> points <beat:value> [<beat:value> ...]   merge points into a lane
+automate <lane> remove <beat>                            drop one point
+track name <text>                                       rename the focused track
+meter <beats per bar 1..16>
 solo | unsolo
 undo | redo
 ```
@@ -292,6 +296,31 @@ Recording: with record armed and the transport running, each note is quantized t
 ## Click track
 
 `/click on|off|<volume>` (`/click 40%`, `/click 0.4`) or `M` in play mode. An accented downbeat and lighter beats at the transport tempo and the score's meter, mixed as a separate monitoring bus. It is never part of a loop render, a stem, `dawg render`, or `/export`; tests compare those byte for byte with the click on. `/count-in 0|1|2` sets how many bars of click play before recording starts (default 1); the header counts down and flashes the beat, so it also works with backend `none`.
+
+## Menus
+
+`/menu` or `Ctrl-K` (on an empty prompt, in play mode too) opens the edit menu, drawn with the same overlay as the model picker. Every edit the agent can make is reachable from it with keys alone, and each row shows its current value and the command it runs, so the menu teaches the commands. `/menu effects` opens a section directly.
+
+| Section    | Rows                                                                                           |
+| ---------- | ---------------------------------------------------------------------------------------------- |
+| Track      | name, instrument, mute, solo, volume, pan                                                      |
+| Parameters | instrument; a sampler's mode and voices (synths have no knobs beyond the instrument)           |
+| Effects    | filter (on, cutoff, resonance), delay (on, beats, feedback, mix), reverb (on, mix, size)       |
+| Automation | each `AUTOMATION_LANES` lane: its points as `beat N  value` rows, add points, ramp, clear lane |
+| Mix        | every track's volume, pan, mute and solo; choosing another track focuses it first              |
+| Transport  | play, tempo, beats per bar, loop bars, grid, click, count-in                                   |
+
+| Key                         | Does                                                                       |
+| --------------------------- | -------------------------------------------------------------------------- |
+| `↑` `↓` / `k` `j`           | move                                                                       |
+| `Enter` / `Space`           | open a section, toggle, pick from a list, or start typing a value          |
+| `→` `←` / `l` `h` / `+` `-` | nudge a number by its step (cutoff moves 25%), cycle a choice, open / back |
+| digits                      | type a value; `Enter` sets it, `Esc` cancels                               |
+| `/`                         | filter the current list by name, value or command                          |
+| `x` / `Delete`              | remove the selected automation point                                       |
+| `Esc`                       | clear the filter, then back one level, then close                          |
+
+Automation rows take `beat:value` pairs (`2:800` or `0:200 4:8000`); a ramp is two pairs, start and end, and the renderer interpolates between points. Turning an effect's first field up switches it on with defaults. Each change runs the command it shows through the normal prompt path, so it is one `ScoreOperation`, one receipt, one undo step, and it syncs to other windows and the project files.
 
 ## Release
 
