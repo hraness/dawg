@@ -88,9 +88,8 @@ export type WebHost = Readonly<{
   openRouterBaseUrl?: string;
   /**
    * Billed searches (gateway tools, OpenRouter web plugin) are reported here
-   * so the host can add them to its spend ledger.
-   * TODO(sign-in lane): wire to `recordUsage` in `src/agent/usage.ts` once
-   * the `~/.config/dawg/usage.json` ledger lands on main.
+   * so the host can add them to its spend ledger (`webHostFor` in
+   * `src/agent/usage.ts`).
    */
   onSpend?: (spend: SearchSpend) => void;
 }>;

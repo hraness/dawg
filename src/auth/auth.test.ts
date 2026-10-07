@@ -17,8 +17,10 @@ import {
   login,
   logout,
   safeHostname,
+  saveModelChoice,
   type LoginIO,
 } from "./login.ts";
+import { selectProvider } from "../agent/provider.ts";
 import {
   scriptedRunner,
   systemRunner,
@@ -273,7 +275,7 @@ describe("dawg login (gateway)", () => {
     ]);
     expect(out.lines.join("\n")).not.toContain(KEY);
     expect(out.lines).toContain("Vercel: ben (team hraness)");
-    expect(out.lines.at(-1)).toContain("✓ AI Gateway accepted the key");
+    expect(out.lines.join("\n")).toContain("✓ AI Gateway accepted the key");
     expect((await resolveGatewayKey(env(runner)))?.key).toBe(KEY);
     expect((await readConfig(env(runner))).provider).toBe("gateway");
   });
@@ -301,7 +303,7 @@ describe("dawg login (gateway)", () => {
       runner.calls.find((call) => call.args[0] === "login")?.options.inherit,
     ).toBe(true);
     expect(out.lines).toContain(
-      "Not logged in to Vercel; starting `vercel login`…",
+      "Not logged in to Vercel; starting `vercel login` (opens your browser)…",
     );
   });
 
@@ -391,7 +393,7 @@ describe("dawg login (gateway)", () => {
         fetcher: offlineFetch,
       }),
     ).toBe(0);
-    expect(out.lines.at(-1)).toContain("Could not reach AI Gateway");
+    expect(out.lines.join("\n")).toContain("Could not reach AI Gateway");
   });
 
   test("hostname is sanitized for the key name", () => {
@@ -410,16 +412,17 @@ describe("logout and status", () => {
       { verify: true },
     );
     expect(lines.join("\n")).not.toContain(KEY);
-    expect(lines[0]).toBe("provider: opus-5.5 · gateway (auto)");
-    expect(lines[1]).toBe("ai gateway key: vck_…WXYZ (file) · valid");
-    expect(lines[2]).toBe("xcb: not installed");
+    expect(lines[0]).toBe("active: opus-5.5 · gateway (auto)");
+    expect(lines[1]).toMatch(/^● Vercel AI Gateway .*vck_…WXYZ.* · valid$/);
+    expect(lines.at(-1)).toStartWith("xcb: not installed");
   });
 
   test("status with nothing configured points at dawg login", async () => {
     const lines = await authStatus({ auth: env(scriptedRunner([])) });
     expect(lines[0]).toContain("offline");
     expect(lines[0]).toContain("dawg login");
-    expect(lines[1]).toBe("ai gateway key: none");
+    expect(lines[1]).toContain("not set up");
+    expect(lines).toHaveLength(6);
   });
 
   test("logout clears key and provider choice", async () => {
@@ -465,5 +468,57 @@ describe("system runner", () => {
       timeoutMs: 50,
     });
     expect(result.killed).toBe(true);
+  });
+});
+
+describe("saved provider and model", () => {
+  test("a valid saved choice is reused silently, without discovery", async () => {
+    const runner = scriptedRunner([]);
+    const auth = env(runner);
+    await storeGatewayKey(auth, KEY);
+    await saveModelChoice(auth, await selectProvider(auth), "sol-6.1");
+    const out = io();
+    expect(await login("auto", { auth, io: out, hostname: "h" })).toBe(0);
+    expect(out.lines.join("\n")).toContain("Signed in · sol-6.1 · gateway");
+    expect(out.lines.join("\n")).not.toContain("Looking for existing setups");
+    const raw = await readFile(join(dir, "config.json"), "utf8");
+    expect(raw).not.toContain(KEY);
+    expect(JSON.parse(raw)).toMatchObject({
+      provider: "gateway",
+      gatewayModel: "openai/gpt-6.1-sol",
+    });
+    expect((await stat(join(dir, "config.json"))).mode & 0o777).toBe(0o600);
+  });
+
+  test("a revoked saved choice is reported once and never swapped", async () => {
+    const auth = env(scriptedRunner([]));
+    await writeConfig(auth, {
+      provider: "gateway",
+      gatewayModel: "openai/gpt-6.1-sol",
+    });
+    const selection = await selectProvider(auth);
+    expect(selection).toMatchObject({ kind: "offline", invalidSaved: true });
+    const out = io([], false);
+    await login("auto", { auth, io: out, hostname: "h" });
+    expect(out.lines.join("\n")).toContain(
+      "Your saved sign-in stopped working",
+    );
+  });
+
+  test("logout clears the saved model; logout <other> keeps the active choice", async () => {
+    const auth = env(scriptedRunner([]));
+    await storeGatewayKey(auth, KEY);
+    await writeConfig(auth, {
+      provider: "gateway",
+      gatewayModel: "openai/gpt-6.1-sol",
+      openrouterModel: "anthropic/claude-opus-5.5",
+    });
+    await logout({ auth, io: io() }, "openrouter");
+    expect(await readConfig(auth)).toEqual({
+      provider: "gateway",
+      gatewayModel: "openai/gpt-6.1-sol",
+    });
+    await logout({ auth, io: io() });
+    expect(await readConfig(auth)).toEqual({});
   });
 });

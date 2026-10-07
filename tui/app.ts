@@ -56,6 +56,13 @@ export interface AppView {
   windows?: number | undefined;
   /** Project typecheck result; `types ✓` or `types ✗ N` beside sync. */
   types?: TypesIndicator | undefined;
+  /**
+   * The line under the prompt: `$0.12 session · $0.48 today · opus-5.5 ·
+   * gateway`, or `no model · dawg login`. The caller sizes it to the width.
+   */
+  spend?: string | undefined;
+  /** No agent provider: the placeholder teaches commands, no STEER pill. */
+  agentOffline?: boolean | undefined;
 }
 
 export type TypesIndicator = Readonly<{ ok: boolean; errors: number }>;
@@ -104,6 +111,11 @@ export interface PickerState {
   title: string;
   items: readonly PickerItem[];
   index: number;
+  /** Type-to-filter on label and detail (`/model`). */
+  filterable?: boolean | undefined;
+  /** Current filter text; `items` is then the matching subset of `all`. */
+  query?: string | undefined;
+  all?: readonly PickerItem[] | undefined;
 }
 
 export interface PickerItem {
@@ -111,6 +123,8 @@ export interface PickerItem {
   /** Opaque value returned on Enter. */
   value: string;
   detail?: string | undefined;
+  /** Marked with ● (the current model). */
+  current?: boolean | undefined;
 }
 
 /** Most picker rows kept; longer lists are truncated by the caller's order. */
@@ -524,9 +538,10 @@ function paintPrompt(
   const mode = prompt.snapshot.mode;
   const pillStyle = mode === "queue" ? roles.pillQueue : roles.pillSteer;
   let x = 2;
-  x += buffer.text(x, top, pill(mode), pillStyle);
+  if (!view.agentOffline) x += buffer.text(x, top, pill(mode), pillStyle);
   const status: string[] = [];
-  if (view.model) status.push(view.model);
+  // The model shows once, in the header; the spend line carries it here.
+  if (view.spend && !layout.footer) status.push(view.spend);
   if (activity.queueDepth > 0) status.push(`queue ${activity.queueDepth}`);
   const layoutInfo = prompt.layout(rows);
   if (layoutInfo.total > rows)
@@ -565,8 +580,9 @@ function paintPrompt(
       buffer.text(width - 3, y, capabilities.unicode ? "↓" : "v", faint);
   }
   if (prompt.value.length === 0) {
-    const placeholder =
-      mode === "queue"
+    const placeholder = view.agentOffline
+      ? "try: tempo 96 · add C4 at 0 · /help  (dawg login enables the agent)"
+      : mode === "queue"
         ? "queue a request for after the current one…"
         : "describe a change — “add a walking bass in A minor”";
     buffer.text(5, top + 1, truncate(placeholder, editorWidth - 1), faint);
@@ -587,8 +603,19 @@ function paintPrompt(
           : width >= 44
             ? " enter · ^q queue · ^z undo · ^o log "
             : "";
-    const shown = hints;
+    const spend = view.spend ? ` ${view.spend} ` : "";
+    const spendWidth = displayWidth(spend);
+    // Spend wins over hints when both do not fit.
+    const shown =
+      hints && displayWidth(hints) + spendWidth + 6 <= width ? hints : "";
     if (shown) buffer.text(2, y, shown, onBackground(roles.muted, panel));
+    if (spend && spendWidth + 4 <= width)
+      buffer.text(
+        width - 2 - spendWidth,
+        y,
+        spend,
+        onBackground(roles.muted, panel),
+      );
   }
 
   // Cursor: shown as a reverse cell and as the real terminal cursor.
@@ -800,7 +827,7 @@ function paintPicker(
   const roles = ui.theme.roles;
   const left = width >= 60 ? 2 : 0;
   const boxWidth = width - left * 2;
-  const height = Math.min(region.height, picker.items.length + 2);
+  const height = Math.min(region.height, Math.max(1, picker.items.length) + 2);
   if (height < 3 || boxWidth < 10) return;
   const panel = paintBox(buffer, ui, {
     left,
@@ -811,7 +838,7 @@ function paintPicker(
   buffer.text(
     left + 2,
     region.y,
-    ` ${picker.title} `,
+    ` ${picker.title}${picker.query ? ` · ${picker.query}` : picker.filterable ? " · type to filter" : ""} `,
     onBackground({ ...roles.text, bold: true }, panel),
     boxWidth - 4,
   );
@@ -830,6 +857,16 @@ function paintPicker(
     0,
     Math.min(picker.items.length - inner, picker.index - inner + 1),
   );
+  const marks = (picker.all ?? picker.items).some(
+    (item) => item.current !== undefined,
+  );
+  if (picker.items.length === 0)
+    buffer.text(
+      left + 4,
+      region.y + 1,
+      "no matches",
+      onBackground(roles.muted, panel),
+    );
   picker.items.slice(first, first + inner).forEach((item, offset) => {
     const index = first + offset;
     const y = region.y + 1 + offset;
@@ -839,11 +876,25 @@ function paintPicker(
       ? onBackground({ ...roles.borderFocus, bold: true }, panel)
       : onBackground(roles.text, panel);
     buffer.text(left + 2, y, marker, style);
-    const room = boxWidth - 6;
-    const used = buffer.text(left + 4, y, truncate(item.label, room), style);
+    // A column for the current-item mark only when the picker uses one.
+    const pad = marks ? 2 : 0;
+    if (item.current)
+      buffer.text(
+        left + 4,
+        y,
+        ui.capabilities.unicode ? "●" : "*",
+        onBackground(roles.success, panel),
+      );
+    const room = boxWidth - 6 - pad;
+    const used = buffer.text(
+      left + 4 + pad,
+      y,
+      truncate(item.label, room),
+      style,
+    );
     if (item.detail && used + 3 < room)
       buffer.text(
-        left + 4 + used + 2,
+        left + 4 + pad + used + 2,
         y,
         truncate(item.detail, room - used - 2),
         onBackground(roles.muted, panel),
@@ -1060,6 +1111,18 @@ export class TuiApp {
         this.closePicker();
         return { type: "pick-cancel", picker: picker.id };
       }
+      if (picker.filterable && (value === "\u007f" || value === "\b")) {
+        this.filterPicker((picker.query ?? "").slice(0, -1));
+        return { type: "overlay" };
+      }
+      if (
+        picker.filterable &&
+        key.type === "text" &&
+        (picker.query || !/^[1-9]$/.test(key.text))
+      ) {
+        this.filterPicker(((picker.query ?? "") + key.text).slice(0, 40));
+        return { type: "overlay" };
+      }
       if (key.type === "text" && /^[1-9]$/.test(key.text)) {
         const index = Number(key.text) - 1;
         if (index < picker.items.length) {
@@ -1185,6 +1248,26 @@ export class TuiApp {
       index: Math.max(0, Math.min(items.length - 1, picker.index ?? 0)),
     };
     this.overlay = "picker";
+  }
+
+  /** Narrow a filterable picker to rows matching `query`. */
+  private filterPicker(query: string): void {
+    const picker = this.picker;
+    if (!picker) return;
+    const all = picker.all ?? picker.items;
+    const needle = query.toLowerCase();
+    const items = all.filter(
+      (item) =>
+        !needle ||
+        item.label.toLowerCase().includes(needle) ||
+        (item.detail ?? "").toLowerCase().includes(needle),
+    );
+    const keep = picker.items[picker.index]?.value;
+    const index = Math.max(
+      0,
+      items.findIndex((item) => item.value === keep),
+    );
+    this.picker = { ...picker, all, query, items, index };
   }
 
   closePicker(): void {

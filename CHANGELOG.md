@@ -4,6 +4,17 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ## Unreleased
 
+### Sign-in, model picker and spend
+
+- **One sign-in picker.** `dawg login` (and the first `dawg` with no provider) finds what is already set up, in parallel within 4 s: `AI_GATEWAY_API_KEY`, `OPENROUTER_API_KEY`, stored keys, a logged-in Vercel CLI, `VERCEL_OIDC_TOKEN`, and xcb Codex and Claude accounts. It then shows one Codex-style picker (arrows, numbers, Enter), with the first detected option as the default. When one option is ready, it asks `Use <it>? [Y/n]`. Non-interactive runs pick the best detected option or exit with a hint.
+- **OpenRouter** is a fourth provider. Sign-in is OpenRouter's OAuth PKCE flow (browser plus a `127.0.0.1` callback with a state check, URL printed as a fallback, 5 min timeout), or a pasted key with hidden input. Turns stream with tool calls through the same agent tools as the gateway.
+- **Subscriptions** (`dawg login codex`, `dawg login claude`) go through xcb 0.20+: pick the account and model, and dawg runs `xcb setup <family>` when none is ready. An account is usable iff xcb reports `available`. Pending admission works, with a longer first call (the child timeout is `timeoutMs + 75 s`) and `busy` retried with backoff. Accounts reporting `models_unavailable` are refreshed once, and `dawg auth status` prints the xcb version with an upgrade hint below 0.20.0.
+- **The choice sticks.** The provider, model and account are saved in `~/.config/dawg/config.json` (0600, atomic, no keys) and reused silently. `dawg logout [provider]`/`/logout`, `dawg login <provider>` and `/model` change it. A saved provider that stops working is reported once and reopens the picker, never swapped.
+- **`/login` in the TUI** suspends the screen, runs the same flow (browser and `vercel login` included) and redraws, replacing "run dawg login in a shell".
+- **Model picker.** `/model` or `dawg model` lists frontier (Opus 5.5, Fable 5.1, GPT-6.1 Sol, Gemini 3.1 Pro), fast (Sonnet 5.5, Haiku 4.5, GPT-5.4 mini, Gemini 3.8 Flash) and open-weight models (DeepSeek V4 Pro, Kimi K3, Qwen3.8 27B, GLM-5.3, Llama 4 Maverick). Only tool-calling models the provider serves are listed. Each row shows an estimated `~$0.004/prompt` from models.dev pricing (cached 24 h; OpenRouter's own prices on OpenRouter), and subscriptions list xcb's models as `included`. Type to filter; the current model is marked. `DAWG_MODEL=<unknown>` is now an error listing the choices.
+- **Spend under the prompt.** `$0.12 session · $0.48 today · opus-5.5 · gateway`, from the usage each response reports (`include_usage`; the provider's cost when given). Today's total is shared across windows through `~/.config/dawg/usage.json`. Billed web searches count too. Subscriptions show `subscription`; with no provider it reads `no model · dawg login`, the placeholder teaches direct commands and the STEER pill hides. The model shows once, in the header.
+- `dawg auth status` lists all four options with detected, active and validated state.
+
 ### npm
 
 `@hraness/dawg` is on npm: `npm i -g @hraness/dawg` or `bun add -g @hraness/dawg`, alongside the install script and the GitHub Release tarball.

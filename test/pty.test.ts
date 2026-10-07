@@ -9,7 +9,7 @@
 import { afterAll, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { VirtualTerminal } from "./vt.ts";
 
 const MAIN = resolve(import.meta.dir, "../src/main.ts");
@@ -50,6 +50,11 @@ async function launch(
       COLORTERM: "truecolor",
       DAWG_DAEMON: "0",
       DAWG_AUDIO: "0",
+      // A configured (fake) provider: the agent prompt and STEER pill show,
+      // and the first-run sign-in picker stays out of the way.
+      AI_GATEWAY_API_KEY: "vck_ptytest0000000000000000",
+      DAWG_CREDENTIAL_STORE: "file",
+      DAWG_CONFIG_DIR: join(cwd, ".config", "dawg"),
       ...env,
     },
     terminal: {
@@ -298,4 +303,91 @@ test.skipIf(!supported)(
     }
   },
   30_000,
+);
+
+test.skipIf(!supported)(
+  "real PTY: spend line under the prompt, /model opens the picker offline",
+  async () => {
+    const dead = "http://127.0.0.1:9";
+    const t = await launch(
+      100,
+      30,
+      {
+        AI_GATEWAY_BASE_URL: `${dead}/v1`,
+        DAWG_MODELS_DEV_URL: `${dead}/api.json`,
+      },
+      [],
+    );
+    await t.until(() => t.vt.text().includes("STEER"), "prompt");
+    await t.until(
+      () => /\$0 session · \$0 today · opus-5\.5 · gateway/.test(t.vt.text()),
+      "spend line",
+    );
+    await t.send("/model\r");
+    await t.until(() => t.vt.text().includes("Claude Sonnet 5.5"), "picker");
+    expect(t.vt.text()).toContain("Claude Opus 5.5");
+    // Type-to-filter narrows the list.
+    await t.send("haiku");
+    await t.until(() => !t.vt.text().includes("Claude Sonnet 5.5"), "filter");
+    expect(t.vt.text()).toContain("Claude Haiku 4.5");
+    await t.send("\r");
+    await t.until(() => t.vt.text().includes("haiku-4.5 · gateway"), "saved");
+    await t.send("\u0003");
+    await Promise.race([t.proc.exited, Bun.sleep(5000)]);
+    t.proc.kill();
+    t.terminal.close();
+  },
+  20_000,
+);
+
+test.skipIf(!supported)(
+  "real PTY: no provider shows the offline spend line and hides STEER",
+  async () => {
+    const t = await launch(
+      100,
+      30,
+      { AI_GATEWAY_API_KEY: "", DAWG_AI: "0" },
+      [],
+    );
+    await t.until(() => t.vt.text().includes("dawg login"), "offline hint");
+    expect(t.vt.text()).toContain("no model · dawg login");
+    expect(t.vt.text()).not.toContain("STEER");
+    await t.send("\u0003");
+    await Promise.race([t.proc.exited, Bun.sleep(5000)]);
+    t.proc.kill();
+    t.terminal.close();
+  },
+);
+
+test.skipIf(!supported)(
+  "real PTY: /login leaves the alternate screen, runs the flow, then redraws",
+  async () => {
+    const t = await launch(
+      100,
+      30,
+      {
+        PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
+        XCB_BIN: "/nonexistent/xcb",
+        AI_GATEWAY_BASE_URL: "http://127.0.0.1:9/v1",
+      },
+      [],
+    );
+    await t.until(() => t.vt.text().includes("STEER"), "prompt");
+    expect(t.vt.altScreen).toBe(true);
+    await t.send("/login\r");
+    await t.until(() => !t.vt.altScreen, "left the alternate screen");
+    await t.until(
+      () => t.vt.text().includes("found AI_GATEWAY_API_KEY"),
+      "picker on the main screen",
+    );
+    await t.until(() => /\[Y\/n\]|Enter/.test(t.vt.text()), "a prompt");
+    await t.send("\r");
+    await t.until(() => t.vt.altScreen, "back on the alternate screen");
+    await t.until(() => t.vt.text().includes("STEER"), "redrawn TUI");
+    await t.send("\u0003");
+    await Promise.race([t.proc.exited, Bun.sleep(5000)]);
+    t.proc.kill();
+    t.terminal.close();
+  },
+  20_000,
 );

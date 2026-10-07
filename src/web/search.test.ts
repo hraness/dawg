@@ -540,3 +540,46 @@ describe("helpers", () => {
     expect(() => parseCompletionResults("junk", 5)).toThrow(/no message/);
   });
 });
+
+describe("spend ledger", () => {
+  test("a billed gateway search lands in the meter and usage.json", async () => {
+    const { mkdtemp, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { SpendMeter, readLedger, dayKey, webHostFor } =
+      await import("../agent/usage.ts");
+    const dir = await mkdtemp(join(tmpdir(), "dawg-websp-"));
+    try {
+      const body = JSON.parse(
+        await fixture("gateway-exa-search.json"),
+      ) as unknown;
+      const fetcher = scripted({ [GATEWAY_BASE_URL]: () => json(body) });
+      const meter = new SpendMeter(dir);
+      let ticks = 0;
+      const web = webHostFor(
+        { kind: "gateway", apiKey: "gw-secret" },
+        meter,
+        () => void (ticks += 1),
+      );
+      expect(web.gatewayApiKey).toBe("gw-secret");
+      expect(web.openRouterApiKey).toBeUndefined();
+      const outcome = await webSearch("freeverb comb filters", {
+        fetch: fetcher,
+        ...web,
+      });
+      expect(outcome.provider).toBe("gateway");
+      await meter.flush();
+      expect(meter.sessionUsd).toBeGreaterThan(0);
+      expect(ticks).toBe(1);
+      const ledger = await readLedger(dir);
+      expect(ledger.days[dayKey()]?.usd).toBeCloseTo(meter.sessionUsd, 9);
+      expect(
+        webHostFor({ kind: "openrouter", apiKey: "or-k" }, meter)
+          .openRouterApiKey,
+      ).toBe("or-k");
+      expect(webHostFor({ kind: "xcb" }, meter).gatewayApiKey).toBeUndefined();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
