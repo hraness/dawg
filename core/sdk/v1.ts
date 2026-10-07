@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.4.0";
+export const SDK_VERSION = "1.5.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -1831,7 +1831,19 @@ const EXTENSIONS = ["6", "m7", "M7", "9"] as const;
 type Extension = (typeof EXTENSIONS)[number];
 
 /** Triad qualities: the four buttons plus dawg's two-button combinations. */
-const QUALITIES = ["maj", "min", "dim", "sus4", "aug", "sus2", "5"] as const;
+const QUALITIES = [
+  "maj",
+  "min",
+  "dim",
+  "sus4",
+  "aug",
+  "sus2",
+  "5",
+  "madd4",
+  "mb6",
+  "b6",
+  "7#9",
+] as const;
 type Quality = (typeof QUALITIES)[number];
 
 const QUALITY_INTERVALS: Readonly<Record<Quality, readonly number[]>> =
@@ -1843,7 +1855,18 @@ const QUALITY_INTERVALS: Readonly<Record<Quality, readonly number[]>> =
     aug: [0, 4, 8],
     sus2: [0, 2, 7],
     "5": [0, 7],
+    madd4: [0, 3, 5, 7],
+    mb6: [0, 3, 7, 8],
+    b6: [0, 4, 7, 8],
+    "7#9": [0, 4, 7, 10, 15],
   });
+
+/**
+ * The extension button a secret chord is built with: it is part of the
+ * chord, so `makeChord` drops it rather than stacking it again.
+ */
+const SECRET_EXTENSION: Readonly<Partial<Record<Quality, Extension>>> =
+  Object.freeze({ mb6: "6", b6: "6", "7#9": "m7" });
 
 const EXTENSION_INTERVAL: Readonly<Record<Extension, number>> = Object.freeze({
   "6": 9,
@@ -1853,16 +1876,17 @@ const EXTENSION_INTERVAL: Readonly<Record<Extension, number>> = Object.freeze({
 });
 
 /**
- * dawg's resolution of two chord-type buttons held together (Orchid has
- * "secret chords" from button combinations; its table is not published).
+ * Two chord-type buttons held together: Orchid's "secret chords" (manual
+ * section 14.8). min+dim and maj+dim are listed with the 6 button and
+ * maj+min with m7; dawg plays them without it too.
  */
 const COMBINED_TYPES: Readonly<Record<string, Quality>> = Object.freeze({
-  "dim+maj": "aug",
-  "maj+sus": "sus2",
-  "maj+min": "5",
-  "dim+min": "dim",
-  "dim+sus": "sus2",
-  "min+sus": "sus2",
+  "dim+sus": "5",
+  "maj+sus": "aug",
+  "min+sus": "madd4",
+  "dim+min": "mb6",
+  "dim+maj": "b6",
+  "maj+min": "7#9",
 });
 
 /** Quality for a set of held chord-type buttons, or undefined for none. */
@@ -1889,7 +1913,9 @@ function makeChord(
   extensions: Iterable<Extension> = [],
   bass?: number,
 ): Chord {
-  const ext = EXTENSIONS.filter((value) => new Set(extensions).has(value));
+  const held = new Set(extensions);
+  const own = SECRET_EXTENSION[quality];
+  const ext = EXTENSIONS.filter((value) => held.has(value) && value !== own);
   const pc = mod12(root);
   const slash = bass === undefined ? undefined : mod12(bass);
   return Object.freeze({
@@ -1950,6 +1976,10 @@ function noteName(pc: number, flats = false): string {
   return (flats ? FLAT_NAMES : SHARP_NAMES)[mod12(pc)]!;
 }
 
+const SECRET_SUFFIX: Readonly<Partial<Record<Quality, string>>> = Object.freeze(
+  { madd4: "m(add4)", mb6: "m(b6)", b6: "(b6)", "7#9": "7#9" },
+);
+
 /** Chord symbol suffix: `m7`, `maj9`, `7sus4`, `dim7`, `m7b5`, `6/9`. */
 function chordSuffix(chord: Chord): string {
   const ext = new Set(chord.extensions);
@@ -1962,6 +1992,18 @@ function chordSuffix(chord: Chord): string {
     parts.length === 0 ? base : `${base}(${parts.join(",")})`;
   const extras: string[] = [];
   let base: string;
+  const secret = SECRET_SUFFIX[q];
+  if (secret !== undefined) {
+    const names: Readonly<Record<Extension, string>> = {
+      "6": "6",
+      m7: "7",
+      M7: "maj7",
+      "9": "9",
+    };
+    const parts = chord.extensions.map((e) => names[e]);
+    if (parts.length === 0 || !secret.endsWith(")")) return add(secret, parts);
+    return `${secret.slice(0, -1)},${parts.join(",")})`;
+  }
   if (q === "dim" && six && !b7 && !M7) {
     base = "dim7";
     if (nine) extras.push("add9");
@@ -2000,6 +2042,8 @@ function chordSuffix(chord: Chord): string {
         base = `${seventh}(no3)`;
         if (nine) extras.push("9");
         break;
+      default:
+        base = seventh; // secret qualities returned above
     }
     if (six) extras.push("13");
     return add(base, b7 && M7 ? extras : extras.filter((e) => e !== "maj7"));
@@ -2012,6 +2056,10 @@ function chordSuffix(chord: Chord): string {
     aug: "aug",
     sus2: "sus2",
     "5": "5",
+    madd4: "m(add4)",
+    mb6: "m(b6)",
+    b6: "(b6)",
+    "7#9": "7#9",
   };
   base = triad[q];
   if (six && nine && (q === "maj" || q === "min")) return `${base}6/9`;
@@ -2089,6 +2137,13 @@ const SUFFIXES: readonly (readonly [string, Quality, readonly Extension[]])[] =
     ["9sus4", "sus4", ["m7", "9"]],
     ["7sus2", "sus2", ["m7"]],
     ["maj7sus4", "sus4", ["M7"]],
+    ["m(add4)", "madd4", []],
+    ["madd4", "madd4", []],
+    ["m(b6)", "mb6", []],
+    ["mb6", "mb6", []],
+    ["(b6)", "b6", []],
+    ["addb6", "b6", []],
+    ["7#9", "7#9", []],
   ];
 const SUFFIX_TABLE = new Map(
   SUFFIXES.map(([suffix, quality, ext]) => [suffix, { quality, ext }]),
@@ -2342,9 +2397,11 @@ function romanOf(key: Key, chord: Chord): string {
     }
   }
   const lower =
-    chord.quality === "min" || chord.quality === "dim" || chord.quality === "5"
-      ? true
-      : false;
+    chord.quality === "min" ||
+    chord.quality === "dim" ||
+    chord.quality === "5" ||
+    chord.quality === "madd4" ||
+    chord.quality === "mb6";
   const numeral = NUMERALS[degree]!;
   const body = lower ? numeral : numeral.toUpperCase();
   const ext = new Set(chord.extensions);
@@ -2580,6 +2637,7 @@ const PERFORM_MODES = [
   "arp-updown",
   "arp-random",
   "harp",
+  "slop",
 ] as const;
 type PerformMode = (typeof PERFORM_MODES)[number];
 
@@ -2591,8 +2649,10 @@ type PerformOptions = Readonly<{
   octaves?: number;
   /** Strum gap between voices in beats, default 1/32 beat. */
   strum?: number;
-  /** Seed for arp-random. */
+  /** Seed for arp-random and slop. */
   seed?: number;
+  /** Slop amount 0..1: each voice lands up to `slop` × 1/8 beat late. */
+  slop?: number;
   /** 0..1. */
   velocity?: number;
 }>;
@@ -2607,13 +2667,18 @@ type PerformedNote = Readonly<{
 
 const DEFAULT_ARP_RATE = 0.25;
 const DEFAULT_STRUM = 1 / 32;
+const DEFAULT_SLOP = 0.5;
+/** Latest a slopped voice can land, in beats, at slop 1. */
+const MAX_SLOP = 1 / 8;
 
 /**
  * Lay a voiced chord out in time over [start, start + length). Block holds
  * every voice; strums offset voices by `strum` beats and hold to the end;
  * arpeggios step one voice per `rate` beats across `octaves`, aligned to
  * multiples of `rate` from `start`; harp is an upward strum across the
- * octaves that rings to the end.
+ * octaves that rings to the end; slop (Orchid's humanised timing) holds
+ * every voice like block but delays each by a seeded random fraction of
+ * `slop` × MAX_SLOP, so each seed lands differently.
  */
 function perform(
   pitches: readonly number[],
@@ -2649,6 +2714,12 @@ function perform(
           at(pitch, Math.min(end - gap, start + index * gap), end),
         )
         .filter((note) => note.length > 0);
+    }
+    case "slop": {
+      const amount = Math.min(1, Math.max(0, options.slop ?? DEFAULT_SLOP));
+      const random = mulberry32(options.seed ?? 0);
+      const late = Math.min(amount * MAX_SLOP, length / 2);
+      return notes.map((pitch) => at(pitch, start + random() * late, end));
     }
     case "harp": {
       const gap = Math.max(0, options.strum ?? DEFAULT_STRUM * 2);
