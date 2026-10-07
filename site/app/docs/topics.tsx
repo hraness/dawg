@@ -391,9 +391,7 @@ export const docsTopics: readonly DocsTopic[] = [
         <h2 id="storage">Where it lives</h2>
         <p>
           Session state lives in <code>.dawg/</code> in the folder you ran{" "}
-          <code>dawg</code> in. Config lives in <code>~/.config/dawg</code>. A
-          workspace that only has a <code>.track/</code> folder from before the
-          rename keeps working; <code>mv .track .dawg</code> switches it over.
+          <code>dawg</code> in. Config lives in <code>~/.config/dawg</code>.
         </p>
       </>
     ),
