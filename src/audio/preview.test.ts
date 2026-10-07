@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createScore, type TrackScore } from "../../core/score.ts";
 import {
   analyzePcm,
+  levelOf,
   defaultPhrase,
   describeSound,
   meterBar,
@@ -270,5 +271,20 @@ describe("analysis", () => {
     expect(meterBar(-60, 8)).not.toContain("█");
     expect(meterBar(0, 8, true)).toContain("!");
     expect([...meterBar(-6, 8)].length).toBe(8);
+  });
+});
+
+describe("levelOf", () => {
+  test("matches analyzePcm's level fields without the spectrum", () => {
+    const pcm = new Int16Array(4_000);
+    for (let i = 0; i < pcm.length; i += 1)
+      pcm[i] = Math.round(16_000 * Math.sin(i / 7));
+    pcm[10] = 32767;
+    const full = analyzePcm(pcm, RATE);
+    expect(levelOf(pcm)).toEqual({
+      rmsDb: full.rmsDb,
+      peakDb: full.peakDb,
+      clipped: 1,
+    });
   });
 });

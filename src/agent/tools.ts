@@ -36,6 +36,11 @@ import {
 import type { ChatTool } from "./gateway.ts";
 import { MEDIA_TOOLS } from "../media/tools.ts";
 import { PACK_TOOLS, PackToolError } from "./pack-tools.ts";
+import {
+  PreviewToolError,
+  previewSoundTool,
+  type PreviewHost,
+} from "./preview-tool.ts";
 import { PackError, type PackStore } from "../audio/packs.ts";
 import { RHYTHM_TOOLS } from "./rhythm-tools.ts";
 import { CHORD_TOOLS } from "./chord-tools.ts";
@@ -155,6 +160,8 @@ export type ActionContext = Readonly<{
   signal?: AbortSignal;
   /** Sample packs for list_packs/search_sounds/use_sound; default the user cache. */
   packs?: PackStore;
+  /** Render and play hooks for preview_sound; absent renders in-thread, silent. */
+  preview?: PreviewHost;
 }>;
 
 export type ActionResult = Readonly<{
@@ -1346,6 +1353,8 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   ...DRUM_TOOLS,
   ...MEDIA_TOOLS,
   ...PACK_TOOLS,
+  // Looks tools up at call time, so it can plan any of the above.
+  previewSoundTool((name) => findAgentTool(name)),
 ] satisfies AgentTool[]);
 
 /** Errors an `action` plan may raise that are safe to show to the model. */
@@ -1355,6 +1364,7 @@ export function isActionDiagnostic(error: unknown): boolean {
     error instanceof WebError ||
     error instanceof ToolArgumentError ||
     error instanceof PackToolError ||
+    error instanceof PreviewToolError ||
     error instanceof PackError
   );
 }

@@ -29,7 +29,12 @@
  * its trailing edge.
  */
 import type { TrackScore } from "../../core/score.ts";
-import { previewScore, type Preview } from "../audio/preview.ts";
+import {
+  meterBar,
+  previewScore,
+  type Preview,
+  type SoundLevel,
+} from "../audio/preview.ts";
 
 /** What applying one command to a score (without committing) produced. */
 export type StageResult = Readonly<{
@@ -54,6 +59,8 @@ export type AuditionHost = {
   clearTimer?(handle: unknown): void;
   /** Called after any state change the screen should redraw for. */
   changed?(): void;
+  /** Level of the loop now playing, for the title's meter. */
+  level?(): SoundLevel | undefined;
 };
 
 export type AuditionOptions = Readonly<{
@@ -444,6 +451,8 @@ export class Audition {
       );
     if (this.looping && this.lastLatencyMs !== undefined)
       parts.push(`${Math.round(this.lastLatencyMs)} ms`);
+    const level = this.looping ? this.host.level?.() : undefined;
+    if (level) parts.push(levelMeter(level));
     return parts.join(" · ");
   }
 
@@ -454,6 +463,15 @@ export class Audition {
       ? ` ${loop} · a A/B · c context · enter keep · esc revert · ? keys `
       : ` ${loop} · ←→ adjust · c context · esc back · ? keys `;
   }
+}
+
+/**
+ * `█████··· -9 dB`: RMS as an 8-cell bar over -48..0 dBFS, the peak as a
+ * number, and `!` in the last cell when the loop clips.
+ */
+export function levelMeter(level: SoundLevel): string {
+  const peak = level.peakDb <= -119 ? "-∞" : String(Math.round(level.peakDb));
+  return `${meterBar(level.rmsDb, 8, level.clipped > 0)} ${peak} dB`;
 }
 
 /** What an audition key does in a screen that hosts the controller. */

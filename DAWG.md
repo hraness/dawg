@@ -861,6 +861,14 @@ Kept changes are one `ScoreOperation` (`preview.commit`, listing the commands), 
 
 **Try a prompt command.** `/try <sound command>` stages one command on the loop instead of committing it: `/try fx reverb mix 0.6`, `/try synth cutoff 800`, `/try wt pwm`. A small panel offers keep or revert; `a` flips A/B, `Enter` on keep commits it as one undo step, `Esc` drops it. Only sound commands can be tried (fx, synth, wt, kit, pattern, pack use, volume, pan and similar).
 
+**What you see.** While the loop plays, the menu title adds a level meter of the looping track or mix: RMS as an eight-cell bar over -48..0 dBFS, the peak in dB, and `!` in the last cell when the loop clips (`♪ solo · B staged 2 · 64 ms · █████··· -9 dB`; the `ms` is the last key-to-swap time). A focused cutoff row draws its low- or high-pass curve on a log axis, an attack/decay/sustain/release row draws the envelope with the other stages, and the wavetable position row marks its place in the table:
+
+```text
+│ cutoff (lpf/hpf) or centre (bpf) frequency  ▇▇▇▇▇▇▇▇▇▇▇▅▂▁▁▁  › fx filt… │
+```
+
+**The agent can listen too.** The `preview_sound {trackId?, changes?, bars?, context?, play?}` tool renders the same loop score for a track, or for candidate sound tool calls (`changes: [{tool: "set_wavetable", args: {...}}]`, any of `set_fx`, `set_synth`, `set_wavetable`, `set_instrument`, `set_sample`, `set_effects`, `set_mix`, `set_automation`, `set_drum_kit`, `use_sound`) applied to a copy of the score. Nothing is committed. It returns RMS and peak dBFS, the spectral centroid and a one-line description for the current and the candidate sound, plus a comparison (`3.0 dB louder, brighter (×2.00 centroid)`). When the window is quiet (no song or audition loop playing) it plays the candidate once, so the agent can say how it sounds before committing with the normal tools. `/try agent off` keeps agent previews silent (numbers only), `/try agent on` turns them back on; `DAWG_AGENT_PREVIEW=off` starts with them off.
+
 The preview renders through the same path as the song, so filters, automation, shared orbit buses, impulse responses and ZzFX voices sound the same as those bars of the full mix. With no audio device (tests, CI, SSH) the loop does nothing audible and everything else works.
 
 ## Keys

@@ -120,6 +120,8 @@ import { Audition, SUPERSEDED, isStageable } from "./tui/audition.ts";
 import { EuclidEditor } from "./tui/euclid.ts";
 import { HINTS, KEYS, keyLines, type KeySection } from "../tui/grammar.ts";
 import { renderAudition } from "./audio/audition.ts";
+import { renderScorePcm } from "./audio/wav.ts";
+import type { PreviewHost } from "./agent/preview-tool.ts";
 import { rhythmVoicePitch } from "../core/rhythm.ts";
 import { applyChordsCommand, defaultChordSettings } from "./tui/play-chords.ts";
 import {
@@ -457,7 +459,11 @@ let monitorEngine: AudioEngine | undefined;
 let auditionLoop: Audition | undefined;
 /** Pickers that host the audition loop (Space, `a`, `c`, hover). */
 const AUDITION_PICKERS = new Set(["kit", "pattern", "try"]);
-const TRY_USAGE = "/try <sound command> · /try fx reverb mix 0.6";
+const TRY_USAGE =
+  "/try <sound command> · /try fx reverb mix 0.6 · /try agent on|off";
+/** Whether the agent's preview_sound plays its snippet in this window. */
+let agentPreviewPlays = process.env.DAWG_AGENT_PREVIEW !== "off";
+const AGENT_PREVIEW_VOICE = 0x7fff_0002;
 /**
  * Set while a staged command runs: `commitScore` hands its result here
  * instead of appending, and a remote revision that lands meanwhile waits in
@@ -2486,6 +2492,7 @@ function auditionController(): Audition {
       setTimer: (callback, ms) => setTimeout(callback, ms),
       clearTimer: (handle) => clearTimeout(handle as Timer),
       changed: () => requestFrame(),
+      level: () => previewEngine().level,
     },
     score,
     requestedTrack,
@@ -2627,6 +2634,13 @@ function refreshAuditionPicker(): void {
  */
 async function tryPrompt(command: string): Promise<Receipt> {
   if (!command) return fail(TRY_USAGE);
+  const agentToggle = command.match(/^agent\s+(on|off)$/i);
+  if (agentToggle) {
+    agentPreviewPlays = agentToggle[1]!.toLowerCase() === "on";
+    return ok(
+      `try · agent previews ${agentPreviewPlays ? "play once here" : "stay silent (numbers only)"}`,
+    );
+  }
   if (!isStageable(command))
     return fail(`try · only sound changes can be tried · ${TRY_USAGE}`);
   if (menu.open || euclid.open)
@@ -3157,6 +3171,39 @@ function mediaServices(): MediaServices {
   return { runner: systemRunner, env: process.env };
 }
 
+/**
+ * How the agent's preview_sound renders (with this window's decoded
+ * samples, at the engine's rate) and plays: once, over silence, unless the
+ * song or the audition loop is already sounding or `/try agent off`.
+ */
+function agentPreviewHost(): PreviewHost {
+  return {
+    render: async (value) => {
+      await sampleProblems(value);
+      return renderScorePcm(value, {
+        sampleRate: previewEngine().sampleRate,
+        ...(liveSampleBank ? { samples: liveSampleBank } : {}),
+      });
+    },
+    play: async (rendered) => {
+      if (!agentPreviewPlays || clock.playing || auditionLoop?.looping)
+        return false;
+      const engine = liveEngine();
+      if (!engine?.canMonitor || rendered.frames === 0) return false;
+      try {
+        await engine.monitor(true);
+        engine.noteOn(AGENT_PREVIEW_VOICE, {
+          pcm: rendered.pcm,
+          frames: rendered.frames,
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  };
+}
+
 function agentHost(
   turn: { steering: string[] },
   selection: ProviderSelection,
@@ -3174,6 +3221,7 @@ function agentHost(
       }),
     }),
     media: mediaServices(),
+    preview: agentPreviewHost(),
     async commit(change) {
       // dawgd rebases operation intents onto newer revisions when nothing
       // they touch changed; the file port keeps the strict base check.

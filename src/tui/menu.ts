@@ -8,6 +8,7 @@
  *
  * Rendering reuses the TUI's picker overlay: `view()` returns a picker.
  */
+import { commandParam, sketchFor } from "./sketch.ts";
 import { HINTS } from "../../tui/grammar.ts";
 import { auditionKey, isStageable, type AuditionKey } from "./audition.ts";
 import {
@@ -1945,6 +1946,9 @@ export class EditMenu {
     const command = selected ? commandText(selected) : undefined;
     const note = [
       selected ? describe(selected) : "",
+      selected?.kind === "number" && command
+        ? rowSketch(selected, command, nodes)
+        : "",
       command ? `› ${command}` : "",
     ]
       .filter(Boolean)
@@ -2047,6 +2051,40 @@ function valueText(node: MenuNode): string {
 }
 
 /** The command a row stands for, shown so the menu teaches commands. */
+/** A filter curve, envelope or table position for a focused number row. */
+function rowSketch(
+  node: Extract<MenuNode, { kind: "number" }>,
+  command: string,
+  nodes: readonly MenuNode[],
+): string {
+  const value = node.value ?? node.start ?? node.min;
+  return (
+    sketchFor(
+      command,
+      value,
+      (param) => {
+        for (const sibling of nodes) {
+          if (sibling.kind !== "number") continue;
+          const text = commandText(sibling);
+          if (text && commandParam(text) === param)
+            return sibling.value ?? sibling.start;
+        }
+        return undefined;
+      },
+      filterTypeOf(nodes),
+    ) ?? ""
+  );
+}
+
+function filterTypeOf(nodes: readonly MenuNode[]): string | undefined {
+  const row = nodes.find(
+    (node) => node.kind === "choice" && node.label === "type",
+  );
+  return row?.kind === "choice" && typeof row.value === "string"
+    ? row.value
+    : undefined;
+}
+
 function commandText(node: MenuNode): string | undefined {
   switch (node.kind) {
     case "number":

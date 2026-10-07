@@ -347,24 +347,31 @@ function toDb(linear: number): number {
  */
 export function analyzePcm(pcm: Int16Array, sampleRate: number): SoundStats {
   const frames = Math.floor(pcm.length / RENDER_CHANNELS);
+  return {
+    ...levelOf(pcm),
+    centroidHz: spectralCentroid(pcm, frames, sampleRate),
+    seconds: frames / sampleRate,
+  };
+}
+
+/** RMS and peak dBFS and the clipped sample count (no spectrum; cheap). */
+export type SoundLevel = Pick<SoundStats, "rmsDb" | "peakDb" | "clipped">;
+
+export function levelOf(pcm: Int16Array): SoundLevel {
+  const samples = Math.floor(pcm.length / RENDER_CHANNELS) * RENDER_CHANNELS;
   let sum = 0;
   let peak = 0;
   let clipped = 0;
-  for (let index = 0; index < frames * RENDER_CHANNELS; index += 1) {
-    const value = pcm[index]! / 32768;
+  for (let index = 0; index < samples; index += 1) {
+    const sample = pcm[index]!;
+    const value = sample / 32768;
     sum += value * value;
     const magnitude = Math.abs(value);
     if (magnitude > peak) peak = magnitude;
-    if (pcm[index]! >= 32767 || pcm[index]! <= -32768) clipped += 1;
+    if (sample >= 32767 || sample <= -32768) clipped += 1;
   }
-  const rms = frames > 0 ? Math.sqrt(sum / (frames * RENDER_CHANNELS)) : 0;
-  return {
-    rmsDb: toDb(rms),
-    peakDb: toDb(peak),
-    centroidHz: spectralCentroid(pcm, frames, sampleRate),
-    clipped,
-    seconds: frames / sampleRate,
-  };
+  const rms = samples > 0 ? Math.sqrt(sum / samples) : 0;
+  return { rmsDb: toDb(rms), peakDb: toDb(peak), clipped };
 }
 
 const FFT_SIZE = 1024;
