@@ -1,0 +1,58 @@
+{
+  "id": "gen_01M4B85XSNCCAP9XPXRX71RNZG",
+  "object": "chat.completion",
+  "created": 1791379048,
+  "model": "anthropic/claude-haiku-4.5",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "```json\n[\n  {\n    \"title\": \"Freeverb\",\n    \"url\": \"https://ccrma.stanford.edu/~jos/Reverb/Freeverb.html\",\n    \"snippet\": \"Freeverb uses four Schroeder diffusion allpasses in series and eight parallel Schroeder-Moorer lowpass-feedback-comb-filters.\"\n  },\n  {\n    \"title\": \"Freeverb Allpass Approximation\",\n    \"url\": \"https://ccrma.stanford.edu/%7Ejos/pasp/Freeverb_Allpass_Approximation.html\",\n    \"snippet\": \"Freeverb implements an allpass approximation as a feedback comb-filter in series with a feedforward comb-filter, with a default value of 0.5 for the feedback coefficient.\"\n  },\n  {\n    \"title\": \"Freeverb readme.txt\",\n    \"url\": \"https://ccrma.stanford.edu/~nando/clm/freeverb/readme.txt\",\n    \"snippet\": \"Freeverb is a simple implementation of the standard Schroeder/Moorer reverb model using 8 comb filters and 4 allpass filters on both left and right channels.\"\n  }\n]\n```",
+        "provider_metadata": {
+          "gateway": {
+            "cost": "0.013273",
+            "marketCost": "0.013273",
+            "surchargeCost": "0",
+            "gatewayCost": "0.013273",
+            "inferenceCost": "0.006273",
+            "inputInferenceCost": "0.004463",
+            "outputInferenceCost": "0.00181",
+            "generationId": "gen_01M4B85XSNCCAP9XPXRX71RNZG",
+            "gatewayToolCalls": {
+              "exa_search": 1
+            }
+          }
+        }
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 4463,
+    "completion_tokens": 362,
+    "total_tokens": 4825,
+    "cost": 0.013273,
+    "is_byok": false,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "audio_tokens": 0,
+      "video_tokens": 0
+    },
+    "cost_details": {
+      "upstream_inference_cost": null,
+      "upstream_inference_prompt_cost": 0,
+      "upstream_inference_completions_cost": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "image_tokens": 0
+    },
+    "cache_creation_input_tokens": 0,
+    "market_cost": 0.013273,
+    "gateway_cost": 0.013273
+  },
+  "system_fingerprint": "fp_xmye2wa4vq",
+  "generationId": "gen_01M4B85XSNCCAP9XPXRX71RNZG"
+}

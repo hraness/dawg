@@ -195,7 +195,7 @@ describe("gateway search", () => {
           "A library implementing Freeverb and related reverb algorithms.",
       },
     ]);
-    expect(spends).toEqual([{ provider: "gateway", tool: "exa", usd: 0.0091 }]);
+    expect(spends).toEqual([{ provider: "gateway", tool: "exa", usd: 0.0021 }]);
     expect(fetcher.calls).toHaveLength(1);
     const call = fetcher.calls[0]!;
     expect(call.url).toBe(`${GATEWAY_BASE_URL}/chat/completions`);
@@ -217,6 +217,45 @@ describe("gateway search", () => {
     expect(formatSearchResults(outcome, "freeverb comb filters")).toMatch(
       /^2 results via gateway · exa\n1\. Freeverb – Physical Audio Signal Processing\n {3}https:\/\/ccrma/,
     );
+  });
+
+  test("parses a captured live gateway Exa response without double-counting the fee", async () => {
+    const body = JSON.parse(
+      await fixture("gateway-exa-search-live.json"),
+    ) as unknown;
+    const fetcher = scripted({ [GATEWAY_BASE_URL]: () => json(body) });
+    const spends: SearchSpend[] = [];
+    const outcome = await webSearch("Freeverb reverb algorithm comb allpass", {
+      fetch: fetcher,
+      gatewayApiKey: "gw-secret",
+      count: 3,
+      onSpend: (spend) => spends.push(spend),
+    });
+    expect(outcome.provider).toBe("gateway");
+    expect(outcome.results).toHaveLength(3);
+    expect(outcome.results[0]).toEqual({
+      title: "Freeverb",
+      url: "https://ccrma.stanford.edu/~jos/Reverb/Freeverb.html",
+      snippet:
+        "Freeverb uses four Schroeder diffusion allpasses in series and eight parallel Schroeder-Moorer lowpass-feedback-comb-filters.",
+    });
+    expect(spends).toEqual([
+      { provider: "gateway", tool: "exa", usd: 0.013273 },
+    ]);
+  });
+
+  test("estimates the tool fee when the gateway reports no cost", async () => {
+    const fetcher = scripted({
+      [GATEWAY_BASE_URL]: () =>
+        json({ choices: [{ message: { role: "assistant", content: "[]" } }] }),
+    });
+    const spends: SearchSpend[] = [];
+    await webSearch("x", {
+      fetch: fetcher,
+      gatewayApiKey: "gw-secret",
+      onSpend: (spend) => spends.push(spend),
+    });
+    expect(spends).toEqual([{ provider: "gateway", tool: "exa", usd: 0.007 }]);
   });
 
   test("honours DAWG_WEB_SEARCH via searchTool and a custom base URL", async () => {
