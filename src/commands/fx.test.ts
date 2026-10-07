@@ -49,6 +49,37 @@ describe("fx grammar", () => {
     expect(parseFxCommand("filter 800")).toBeUndefined();
   });
 
+  test("one number sets the first numeric parameter: orbit, duck, hpf", () => {
+    expect(parseFxCommand("fx orbit 2")).toEqual({
+      type: "fx-set",
+      effect: "orbit",
+      values: { orbit: 2 },
+    });
+    expect(parseFxCommand("fx duckorbit 3")).toEqual({
+      type: "fx-set",
+      effect: "duck",
+      values: { orbit: 3 },
+    });
+    expect(parseFxCommand("fx hpf 300")).toEqual({
+      type: "fx-set",
+      effect: "filter",
+      values: { type: "hpf", cutoff: 300 },
+    });
+    expect(parseFxCommand("fx orbit 17")).toBeUndefined();
+    expect(parseFxCommand("fx duck duckdepth 0.5")?.type).toBe("fx-set");
+    const result = run("fx duck preset pump");
+    expect(result.ok).toBe(true);
+    expect(result.next!.tracks[0]!.fx?.duck).toMatchObject({
+      orbit: 2,
+      depth: 0.85,
+      attack: 0.25,
+    });
+    const orbit = run("fx orbit 4");
+    expect(orbit.next!.tracks[0]!.fx?.orbit).toEqual({ orbit: 4 });
+    const json = JSON.parse(JSON.stringify(orbit.next!.toJSON()));
+    expect(scoreFromJSON(json).tracks[0]!.fx?.orbit).toEqual({ orbit: 4 });
+  });
+
   test("on uses the documented defaults; delay is a ping-pong", () => {
     const result = run("fx delay on");
     expect(result.ok).toBe(true);

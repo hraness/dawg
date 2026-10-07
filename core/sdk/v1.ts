@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.8.0";
+export const SDK_VERSION = "1.9.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -1283,8 +1283,10 @@ export type EffectParams = Readonly<Record<string, number | string | boolean>>;
  * filter → djf → autofilter → vowel → crush → distort → tremolo →
  * compressor → pan → phaser → chorus → leslie → postgain → delay → reverb.
  * Keys here: djf, autofilter, vowel, crush, distort, tremolo, compressor,
- * phaser, chorus, leslie, postgain. See docs/project-format.md for every
- * parameter, its range and its Strudel name.
+ * phaser, chorus, leslie, postgain, plus the mix-bus keys `orbit`
+ * (`{ orbit: 2 }`, SDK 1.9.0) and `duck` (`{ orbit: 2, depth: 0.85 }`:
+ * this track's onsets duck every other track on that orbit). See
+ * docs/project-format.md for every parameter, its range and its Strudel name.
  */
 export type FxInput = Readonly<Record<string, EffectParams>>;
 

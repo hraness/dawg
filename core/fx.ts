@@ -36,7 +36,11 @@ export {
   type ParamSpec,
 };
 
-/** Fixed processing order; mono stages run before pan, stereo after. */
+/**
+ * Fixed processing order; mono stages run before pan, stereo after. The
+ * last two act at the mix rather than inside the track: `orbit` names the
+ * bus the track plays on and `duck` lowers another orbit at each note.
+ */
 export const FX_CHAIN = Object.freeze([
   "filter",
   "djf",
@@ -53,6 +57,8 @@ export const FX_CHAIN = Object.freeze([
   "postgain",
   "delay",
   "reverb",
+  "orbit",
+  "duck",
 ] as const);
 
 export type EffectSpec = Readonly<{
@@ -64,6 +70,9 @@ export type EffectSpec = Readonly<{
   /** One-line Strudel equivalent, for the mapping table. */
   strudel: string;
 }>;
+
+/** Highest orbit number (`orbit`, `duck.orbit`). */
+export const MAX_ORBIT = 16;
 
 const LFO_SHAPES = ["sine", "tri", "square", "saw", "ramp", "random"] as const;
 export type LfoShape = (typeof LFO_SHAPES)[number];
@@ -528,6 +537,71 @@ export const FX_SPECS = Object.freeze({
       },
     },
   },
+  orbit: {
+    label: "orbit",
+    doc: "the bus this track plays on (1 when off); another track's duck targets it",
+    simple: ["orbit"],
+    strudel: "orbit(n)",
+    params: {
+      orbit: {
+        kind: "number",
+        min: 1,
+        max: MAX_ORBIT,
+        default: 2,
+        step: 1,
+        integer: true,
+        doc: "orbit number; tracks without this effect are on orbit 1",
+        strudel: ["orbit", "o"],
+      },
+    },
+  },
+  duck: {
+    label: "duck",
+    doc: "sidechain ducking: each note of this track dips the target orbit, then it recovers",
+    simple: ["orbit", "depth", "attack"],
+    strudel: "duckorbit(n) duckdepth(0..1) duckattack(s)",
+    params: {
+      orbit: {
+        kind: "number",
+        min: 1,
+        max: MAX_ORBIT,
+        default: 1,
+        step: 1,
+        integer: true,
+        doc: "target orbit to duck (never this track itself)",
+        strudel: ["duckorbit", "duck"],
+      },
+      depth: {
+        kind: "number",
+        min: 0,
+        max: 1,
+        default: 1,
+        step: 0.05,
+        doc: "how far the target dips: 1 to silence, 0 not at all",
+        strudel: ["duckdepth"],
+      },
+      attack: {
+        kind: "number",
+        min: 0.001,
+        max: 4,
+        default: 0.1,
+        step: 0.01,
+        unit: "s",
+        doc: "time the target takes to come back to full level",
+        strudel: ["duckattack", "duckatt", "datt"],
+      },
+      onset: {
+        kind: "number",
+        min: 0,
+        max: 0.5,
+        default: 0.003,
+        step: 0.001,
+        unit: "s",
+        doc: "time the dip takes to reach full depth",
+        strudel: ["duckonset"],
+      },
+    },
+  },
 } satisfies Record<string, EffectSpec>);
 
 /**
@@ -972,6 +1046,11 @@ export const FX_PRESETS: Readonly<
       lowpass: 5000,
       dim: 2500,
     },
+  },
+  duck: {
+    pump: { orbit: 2, depth: 0.85, attack: 0.25 },
+    subtle: { orbit: 2, depth: 0.4, attack: 0.12 },
+    gate: { orbit: 2, depth: 1, attack: 0.05 },
   },
 } satisfies Partial<Record<EffectName, Record<string, FxValues>>>);
 

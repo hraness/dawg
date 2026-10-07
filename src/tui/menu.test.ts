@@ -116,6 +116,27 @@ describe("edit menu", () => {
     expect(menu.key(ESC, ctx)).toEqual({ type: "close" });
   });
 
+  test("orbit and duck live under more effects and run fx commands", () => {
+    const menu = new EditMenu();
+    const ctx = context();
+    menu.show(ctx);
+    select(menu, ctx, "Effects");
+    menu.key("\r", ctx);
+    select(menu, ctx, "more effects");
+    menu.key("\r", ctx);
+    select(menu, ctx, "Duck");
+    menu.key("\r", ctx);
+    expect(menu.view(ctx).title).toBe("menu › Effects › more effects › Duck");
+    const labels = menu.view(ctx).items.map((row) => row.label);
+    expect(labels.some((label) => label.startsWith("orbit"))).toBe(true);
+    expect(labels.some((label) => label.startsWith("depth"))).toBe(true);
+    select(menu, ctx, "orbit");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "fx duck orbit 1",
+    });
+  });
+
   test("nudges run the command the row shows, with the field's step", () => {
     const menu = new EditMenu();
     const ctx = context();

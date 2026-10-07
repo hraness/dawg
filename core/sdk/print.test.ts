@@ -74,6 +74,8 @@ const rich = createScore({
         chorus: {},
         distort: { drive: 3, type: "fold" },
         autofilter: { shape: "random", sync: 0.25 },
+        orbit: { orbit: 4 },
+        duck: { orbit: 3, depth: 0.7 },
       },
       synth: { attack: 0.01, lpf: 1200, lpenv: 2, fm: 1.5, partials: [1, 0.5] },
       fxAutomation: {
@@ -246,6 +248,8 @@ describe("printer", () => {
     );
     expect(lead).toContain("    chorus: {},");
     expect(lead).toContain('    distort: { drive: 3, type: "fold" },');
+    expect(lead).toContain("    orbit: { orbit: 4 },");
+    expect(lead).toContain("    duck: { orbit: 3, depth: 0.7 },");
     expect(lead).toContain('      "autofilter-cutoff": [');
     expect(lead).toContain('      "reverb-mix": [[0, 0.2]],');
     expect(lead).toContain(
