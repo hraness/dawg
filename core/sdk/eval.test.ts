@@ -64,6 +64,25 @@ describe("evaluateProject", () => {
     }
   });
 
+  test("a track using chord() and progression() from the vendored SDK evaluates", async () => {
+    await writeAtomic(
+      join(dir, "tracks/bass/track.ts"),
+      `import { track, chord, progression } from "dawg";\nexport default track({ name: "bass", instrument: "piano", notes: [...progression("ii7 V7 Imaj7", { key: "C major" }), ...chord("Am", 12, 4)] });\n`,
+    );
+    try {
+      const result = await evaluateProject(dir);
+      if (!result.ok) throw new Error(JSON.stringify(result.diagnostics));
+      const pitches = result.score.notes
+        .filter((n) => n.startTick === 0)
+        .map((n) => n.pitch)
+        .sort((a, b) => a - b);
+      expect(pitches).toEqual([62, 65, 69, 72]);
+      expect(result.score.notes.length).toBe(15);
+    } finally {
+      await writeAtomic(join(dir, "tracks/bass/track.ts"), BASS);
+    }
+  });
+
   test("reports a syntax error with its position", async () => {
     await writeAtomic(
       join(dir, "tracks/bass/track.ts"),

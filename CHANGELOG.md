@@ -13,6 +13,13 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - The agent's new `set_rhythm` tool takes the same rows, and the agent prefers it to hand-placed drum hits.
 - Editing a generated lane by hand freezes that row into plain notes. Changing the loop length regenerates rows.
 
+### Chords
+
+- **Chord engine (`core/chords.ts`)** modelled on the Telepathic Instruments Orchid: four chord types (dim, min, maj, sus) with combinable 6, m7, M7 and 9 extensions, Key-mode diatonic chords for major, minor and the church modes, a voicing dial, voice leading to the nearest inversion, bass, and block, strum, arpeggio and harp performance.
+- **Progressions.** Eleven presets (I–V–vi–IV, ii–V–I, i–VI–III–VII, the Andalusian cadence, …) and pop, jazz, modal and classical styles that walk a weighted functional-harmony graph with a seed, so the same request always gives the same chords.
+- **Agent tools.** `suggest_progression` returns voice-led chords with names, numerals and bass; `write_chords` writes them to a track (and its bass to another) as block chords, strums, arpeggios or harp sweeps.
+- **SDK 1.3.0.** `chord("Cm7")` and `progression(["ii7", "V7", "Imaj7"], { key, perform })` expand to notes in `track.ts` files.
+
 ### Fixed
 
 - Gateway web searches no longer count the search fee twice in the spend line and ledger. The gateway's reported cost already includes it. A real Exa search response is now a test fixture.
