@@ -12,10 +12,18 @@
  */
 import { afterAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { VirtualTerminal } from "./vt.ts";
+import { wavBytes } from "../src/audio/sample-fixtures.ts";
 
 const MAIN = resolve(import.meta.dir, "../src/main.ts");
 const supported =
@@ -563,4 +571,85 @@ test.skipIf(!supported)(
     await close(a);
   },
   120_000,
+);
+
+test.skipIf(process.platform === "win32")(
+  "samples: init, import_sample-shaped WAV, sampler() track, dawg render hits",
+  async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "dawg-sampler-"));
+    workspaces.push(workspace);
+    const cli = async (argv: string[]) => {
+      const proc = Bun.spawn([process.execPath, MAIN, ...argv], {
+        cwd: workspace,
+        env: env(workspace),
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [code, stdout, stderr] = await Promise.all([
+        proc.exited,
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
+      return { code, stdout, stderr };
+    };
+    expect((await cli(["init"])).code).toBe(0);
+    // What media tools' import_sample writes: 48 kHz stereo PCM16.
+    const frames = 4_800;
+    const kick: number[] = [];
+    for (let i = 0; i < frames; i += 1) {
+      const v =
+        Math.sin((2 * Math.PI * 60 * i) / 48_000) * Math.exp(-i / 1_500);
+      kick.push(v * 0.9, v * 0.9);
+    }
+    await mkdir(join(workspace, "tracks/drums/samples"), { recursive: true });
+    await writeFile(
+      join(workspace, "tracks/drums/samples/kick.wav"),
+      wavBytes(kick, { channels: 2, sampleRate: 48_000 }),
+    );
+    await writeFile(
+      join(workspace, "tracks/drums/track.ts"),
+      `import { track, sampler, hits } from "dawg";
+
+export default track({
+  name: "drums",
+  instrument: sampler({ kick: "samples/kick.wav" }),
+  notes: [...hits("kick", [0, 2])],
+});
+`,
+    );
+    await writeFile(
+      join(workspace, "song.ts"),
+      `import { song } from "dawg";
+import drums from "./tracks/drums/track.ts";
+
+export default song({ tempo: 120, meter: [4, 4], bars: 1, tracks: [drums] });
+`,
+    );
+    const first = await cli(["render", "out.wav"]);
+    expect(first.stderr).toBe("");
+    expect(first.code).toBe(0);
+    const bytes = await readFile(join(workspace, "out.wav"));
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const rate = view.getUint32(24, true);
+    const peak = (from: number, to: number) => {
+      let max = 0;
+      for (let f = Math.floor(from * rate); f < to * rate; f += 1)
+        max = Math.max(max, Math.abs(view.getInt16(44 + f * 4, true)));
+      return max;
+    };
+    // Hits on beats 0 and 2 at 120 BPM: 0 s and 1 s; silence between.
+    expect(peak(0, 0.05)).toBeGreaterThan(2_000);
+    expect(peak(1, 1.05)).toBeGreaterThan(2_000);
+    expect(peak(0.3, 0.9)).toBe(0);
+    expect(peak(1.3, 1.9)).toBe(0);
+    // The decoded PCM is cached content-addressed; a second render is identical.
+    const assets = await readdir(join(workspace, ".dawg/assets"));
+    expect(assets).toHaveLength(1);
+    expect(assets[0]).toMatch(/^[0-9a-f]{64}\.pcm$/);
+    const second = await cli(["render", "again.wav"]);
+    expect(second.code).toBe(0);
+    expect(await readFile(join(workspace, "again.wav"))).toEqual(bytes);
+  },
+  30_000,
 );

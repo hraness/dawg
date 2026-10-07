@@ -4,12 +4,15 @@
  * it touched while the daemon loop keeps serving windows and pumping audio.
  */
 import { scoreFromJSON } from "../../core/score.ts";
+import { SampleLibrary, hasSamplerTracks } from "./samples.ts";
 import { StemRenderer } from "./wav.ts";
 
 export type RenderRequest = Readonly<{
   id: number;
   score: unknown;
   sampleRate: number;
+  /** Project root sampler voices resolve under; omitted = samplers silent. */
+  projectRoot?: string;
 }>;
 
 export type RenderReply =
@@ -27,14 +30,23 @@ export type RenderReply =
 declare const self: Worker;
 
 const renderer = new StemRenderer();
+let library: SampleLibrary | undefined;
 
-self.onmessage = (event: MessageEvent<RenderRequest>) => {
-  const { id, score, sampleRate } = event.data;
+self.onmessage = async (event: MessageEvent<RenderRequest>) => {
+  const { id, score, sampleRate, projectRoot } = event.data;
   try {
     const started = performance.now();
-    const audio = renderer.render(scoreFromJSON(score), {
+    const parsed = scoreFromJSON(score);
+    let samples;
+    if (projectRoot !== undefined && hasSamplerTracks(parsed)) {
+      if (library?.projectRoot !== projectRoot)
+        library = new SampleLibrary({ projectRoot });
+      samples = await library.load(parsed);
+    }
+    const audio = renderer.render(parsed, {
       sampleRate,
       loop: true,
+      samples,
     });
     const reply: RenderReply = {
       id,

@@ -32,7 +32,22 @@ import { parsePrompt } from "./agent/ops.ts";
 import { applyMusicCommand, parseMusicCommand } from "./commands/music.ts";
 import { helpLines, helpText, usageHint } from "./commands/help.ts";
 import { historyTarget, REDO_KIND, UNDO_KIND } from "./commands/history.ts";
-import { drumSnapshotFields } from "../tui/drums.ts";
+import {
+  SamplePlacementError,
+  addSampleVoice,
+  freeVoiceName,
+  listSampleVoices,
+  parseSampleCommand,
+  placeSampleFile,
+  samplerTarget,
+  voiceNameFrom,
+} from "./commands/sample.ts";
+import {
+  SampleLibrary,
+  hasSamplerTracks,
+  type SampleProblem,
+} from "./audio/samples.ts";
+import { drumSnapshotFields, samplerSnapshotFields } from "../tui/drums.ts";
 import { highwayLayers } from "../tui/layers.ts";
 import { drumVoicePitch, isDrumInstrument } from "../core/drums.ts";
 import {
@@ -518,6 +533,10 @@ function snapshot(
       value.tracks.find((track) => track.id === requestedTrack)?.instrument,
       notes,
     ),
+    ...samplerSnapshotFields(
+      value.tracks.find((track) => track.id === requestedTrack),
+      notes,
+    ),
     layers:
       tui.highwayView === "all"
         ? highwayLayers(
@@ -791,6 +810,7 @@ async function runInteractive(): Promise<void> {
     projectSync = startProjectSync(syncHost());
   void currentProvider().then(() => tick(true));
   tickUi = () => tick(true);
+  reportSampleProblems(score);
   // Input arrives through a detachable listener (not `for await`), so /login
   // can hand the terminal to an interactive shell flow and take it back.
   const inbox: string[] = [];
@@ -945,10 +965,19 @@ async function submit(prompt: string): Promise<string | Receipt> {
     return ok("help · esc closes");
   }
   if (/^\/?tracks$/i.test(command)) {
-    const lines = score.tracks.map(
-      (track) =>
-        `${track.id === requestedTrack ? "*" : " "} ${track.id} · ${track.instrument}${track.muted ? " · muted" : ""}${track.solo ? " · solo" : ""}`,
-    );
+    const problems = await sampleProblems(score);
+    const lines = score.tracks.map((track) => {
+      const voices = track.sampler
+        ? Object.keys(track.sampler.voices).length
+        : 0;
+      const missing = problems.filter(
+        (problem) => problem.trackId === track.id && problem.level === "error",
+      ).length;
+      const samples = track.sampler
+        ? ` · ${voices} sample${voices === 1 ? "" : "s"}${missing ? ` · ${missing} missing` : ""}`
+        : "";
+      return `${track.id === requestedTrack ? "*" : " "} ${track.id} · ${track.instrument}${samples}${track.muted ? " · muted" : ""}${track.solo ? " · solo" : ""}`;
+    });
     tui.openText("tracks · * focused", lines);
     return ok(
       `${lines.length} track${lines.length === 1 ? "" : "s"} · esc closes`,
@@ -964,6 +993,8 @@ async function submit(prompt: string): Promise<string | Receipt> {
     /^\/?(?:add\s+)?track\s+([a-z0-9._-]{1,64})$/i,
   );
   if (trackCommand) return focusTrack(trackCommand[1]!.toLowerCase());
+  const sample = parseSampleCommand(command);
+  if (sample) return sampleCommand(sample);
   const sessionReply = await sessionCommand(command);
   if (sessionReply !== undefined) return sessionReply;
   const music = parseMusicCommand(command);
@@ -1270,6 +1301,114 @@ async function focusTrack(trackId: string): Promise<Receipt> {
   return ok(exists ? `track · ${trackId}` : `track created · ${trackId}`);
 }
 
+let sampleLibrary: SampleLibrary | undefined;
+let reportedSampleProblems = "";
+
+/** Decode every sampler voice (cached) and return what failed to load. */
+async function sampleProblems(
+  value: TrackScore,
+): Promise<readonly SampleProblem[]> {
+  if (!hasSamplerTracks(value)) return [];
+  sampleLibrary ??= new SampleLibrary({ projectRoot: process.cwd() });
+  try {
+    return (await sampleLibrary.load(value)).problems;
+  } catch (error) {
+    return [
+      {
+        trackId: "",
+        voice: "",
+        src: "",
+        level: "error",
+        message: `samples · ${error instanceof Error ? error.message : String(error)} · check the sample files`,
+      },
+    ];
+  }
+}
+
+/** Surface sample load problems once per distinct set, as receipts. */
+function reportSampleProblems(value: TrackScore): void {
+  if (!hasSamplerTracks(value)) return;
+  void sampleProblems(value).then((problems) => {
+    const key = problems.map((problem) => problem.message).join("\n");
+    if (key === reportedSampleProblems) return;
+    reportedSampleProblems = key;
+    for (const problem of problems.slice(0, 3))
+      tui.activity.pushCard(`sample ${problem.voice} · ${problem.message}`, {
+        tone: problem.level === "error" ? "error" : "warning",
+        trackId: problem.trackId || undefined,
+      });
+    if (problems.length > 3)
+      tui.activity.pushCard(
+        `${problems.length - 3} more sample problems · /tracks`,
+        {
+          tone: "warning",
+        },
+      );
+    tickUi();
+  });
+}
+
+async function sampleCommand(
+  command: NonNullable<ReturnType<typeof parseSampleCommand>>,
+): Promise<Receipt> {
+  if (command.kind === "list") {
+    const track = score.tracks.find((item) => item.id === requestedTrack);
+    const lines = listSampleVoices(track);
+    if (lines.length === 0)
+      return warn(
+        `sample · ${requestedTrack} has no samples · /sample <path> [as <voice>]`,
+      );
+    tui.openText(`samples · ${requestedTrack}`, lines);
+    return ok(
+      `${lines.length} sample${lines.length === 1 ? "" : "s"} · esc closes`,
+    );
+  }
+  await materializeDraft();
+  const trackId = samplerTarget(score, requestedTrack);
+  const voice =
+    command.voice ?? freeVoiceName(score, trackId, voiceNameFrom(command.path));
+  let placed;
+  try {
+    placed = await placeSampleFile({
+      projectRoot: process.cwd(),
+      cwd: process.cwd(),
+      input: command.path,
+      score,
+      trackId,
+      voice,
+    });
+  } catch (error) {
+    if (error instanceof SamplePlacementError)
+      return fail(`sample · ${error.message} · check the path and retry`);
+    throw error;
+  }
+  const result = addSampleVoice(score, trackId, voice, {
+    src: placed.src,
+    sha256: placed.sha256,
+  });
+  if (!result.ok) return fail(result.message);
+  // Decode before committing so a bad file is a receipt, not a silent voice.
+  const problems = (await sampleProblems(result.next)).filter(
+    (problem) => problem.trackId === trackId && problem.voice === voice,
+  );
+  if (problems.some((problem) => problem.level === "error"))
+    return fail(`sample · ${problems[0]!.message}`);
+  await commitScore(result.next, "sample.add", {
+    trackId,
+    voice,
+    src: placed.src,
+  });
+  if (trackId !== requestedTrack) {
+    await port.focus(trackId);
+    requestedTrack = trackId;
+    draftTrack = false;
+  }
+  await projectSync?.flushScore();
+  return ok(
+    `${result.message}${placed.copied ? ` · copied to ${placed.src}` : ""}`,
+  );
+}
+
 async function readLoopFile(path: string): Promise<string> {
   const contents = await readFile(resolve(path));
   if (contents.byteLength > 512 * 1024)
@@ -1468,6 +1607,7 @@ async function commitScore(
   score = next;
   if (clock.playing) void audio.play(score);
   projectSync?.scoreChanged(score);
+  reportSampleProblems(score);
 }
 
 /** The window's side of the project file sync (see src/project/sync.ts). */
@@ -1489,6 +1629,7 @@ function syncHost(): SyncHost {
       score = scoreFromJSON(record.composition);
       clock.setTempo(score.tempoBpm);
       if (clock.playing) void audio.play(score);
+      reportSampleProblems(score);
       void baseRevision;
       return score;
     },

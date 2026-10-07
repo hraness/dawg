@@ -95,6 +95,7 @@ export class DawgDaemon {
     this.graceMs = options.graceMs ?? DEFAULT_GRACE_MS;
     this.audio = new AudioEngine({
       lockPath: `${this.paths.record}.audio.lock`,
+      projectRoot: options.workspace,
       onStatus: (status) => {
         void this.log(`audio: ${status.message}`);
         // A player that keeps dying must not leave a silent "playing" transport.

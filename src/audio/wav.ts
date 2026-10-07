@@ -8,6 +8,12 @@ import {
   type TrackScore,
 } from "../../core/score.ts";
 import { drumVoiceForPitch, isDrumInstrument } from "../../core/drums.ts";
+import {
+  planSamplerVoices,
+  renderSamplerVoices,
+  samplerTailSeconds,
+} from "./sampler.ts";
+import { EMPTY_SAMPLE_BANK, sampleKey, type SampleBank } from "./samples.ts";
 
 export type WavOptions = Readonly<{ sampleRate?: number; maxSeconds?: number }>;
 
@@ -19,6 +25,11 @@ export type RenderOptions = WavOptions &
      * what the streaming engine plays; exports keep the default one-shot.
      */
     loop?: boolean;
+    /**
+     * Decoded sampler voices (`SampleLibrary.load`). Without it sampler
+     * tracks render silent; scores without samplers are unaffected.
+     */
+    samples?: SampleBank;
   }>;
 
 /** Interleaved stereo 16-bit PCM plus its frame count. */
@@ -84,7 +95,7 @@ export function clampSampleRate(sampleRate?: number): number {
 /** Render the bounded score to a stereo 16-bit PCM WAV. */
 export function renderScoreWav(
   score: TrackScore,
-  options: WavOptions = {},
+  options: WavOptions & Pick<RenderOptions, "samples"> = {},
 ): Uint8Array {
   const audio = renderScorePcm(score, options);
   return encodeWav(audio.pcm, audio.sampleRate, RENDER_CHANNELS);
@@ -163,6 +174,12 @@ export class StemRenderer {
         track.reverb && track.reverb.mix > 0 ? 1 + 3 * track.reverb.size : 0,
       ),
     );
+    const bank = options.samples ?? EMPTY_SAMPLE_BANK;
+    // Zero without sampler voices, so synth-only renders are unchanged.
+    const samplerTail = Math.min(
+      MAX_LOOP_TAIL_SECONDS,
+      samplerTailSeconds(score, bank, sampleRate),
+    );
     let frames: number;
     let samples: number;
     if (options.loop) {
@@ -175,13 +192,16 @@ export class StemRenderer {
       );
       const tailSeconds = Math.min(
         MAX_LOOP_TAIL_SECONDS,
-        MAX_DRUM_SECONDS + 0.1 + reverbTail + delayTailSeconds(score),
+        Math.max(MAX_DRUM_SECONDS, samplerTail) +
+          0.1 +
+          reverbTail +
+          delayTailSeconds(score),
       );
       samples = frames + Math.ceil(tailSeconds * sampleRate);
     } else {
       const seconds = Math.min(
         maxSeconds,
-        loopSeconds + ONE_SHOT_TAIL_SECONDS + reverbTail,
+        loopSeconds + Math.max(ONE_SHOT_TAIL_SECONDS, samplerTail) + reverbTail,
       );
       frames = Math.max(1, Math.ceil(seconds * sampleRate));
       samples = frames;
@@ -208,9 +228,8 @@ export class StemRenderer {
     for (const [trackId, notes] of groups) {
       if (!isTrackAudible(score, trackId)) continue;
       const track = tracks.get(trackId);
-      // Sampler tracks (score v2) are silent until the sample renderer lands.
-      if (isSamplerInstrument(track?.instrument)) continue;
-      const key = stemKey(track, notes, context);
+      const sampler = isSamplerInstrument(track?.instrument);
+      const key = stemKey(track, notes, context, sampler ? bank : undefined);
       let stem = this.stems.get(trackId);
       if (stem?.key === key) stem.used = this.renders;
       else {
@@ -222,10 +241,14 @@ export class StemRenderer {
             }
           : { left, right };
         dry.fill(0);
-        const drums = isDrumInstrument(track?.instrument);
-        for (const note of notes) {
-          if (drums) renderDrumNote(dry, note, track, context);
-          else renderToneNote(dry, note, track, context);
+        if (sampler) {
+          if (track) renderSamplerNotes(dry, notes, track, context, bank);
+        } else {
+          const drums = isDrumInstrument(track?.instrument);
+          for (const note of notes) {
+            if (drums) renderDrumNote(dry, note, track, context);
+            else renderToneNote(dry, note, track, context);
+          }
         }
         if (track) applyLowPass(dry, track, context);
         applyPan(dry, target.left, target.right, track, context);
@@ -329,6 +352,7 @@ function stemKey(
   track: Track | undefined,
   notes: readonly Note[],
   context: RenderContext,
+  bank?: SampleBank,
 ): string {
   let settings: Record<string, unknown> | null = null;
   if (track) {
@@ -342,7 +366,38 @@ function stemKey(
     context.score.ticksPerBeat,
     context.sampleRate,
     context.samples,
+    // Sampler stems also depend on the decoded files: a replaced or missing
+    // sample changes the key even when the score did not change.
+    ...(bank && track?.sampler ? [samplerVoiceDigest(track, bank)] : []),
   ]);
+}
+
+function samplerVoiceDigest(track: Track, bank: SampleBank): string[] {
+  return Object.keys(track.sampler?.voices ?? {})
+    .sort()
+    .map((voice) => {
+      const sample = bank.voices.get(sampleKey(track.id, voice));
+      return sample
+        ? `${voice}:${sample.sha256}:${sample.sampleRate}:${sample.frames}`
+        : `${voice}:-`;
+    });
+}
+
+/** Sample voices of a sampler track into its mono dry buffer. */
+function renderSamplerNotes(
+  target: Float64Array,
+  notes: readonly Note[],
+  track: Track,
+  context: RenderContext,
+  bank: SampleBank,
+): void {
+  const timing = { score: context.score, sampleRate: context.sampleRate };
+  renderSamplerVoices(
+    target,
+    planSamplerVoices(track, notes, bank, timing),
+    timing,
+    (tick) => trackGainAt(track, tick),
+  );
 }
 
 /** Seconds until the slowest delay decays below -60 dB, bounded. */
