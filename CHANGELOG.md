@@ -57,7 +57,7 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 - **`make_wavetable`**, a new agent media tool (`dawg media wavetable <file> <name>` from the shell): turns any audio in the project (a download, a stem, an imported sample) into a 2048-sample-frame wavetable at `tracks/<slug>/wavetables/<name>.wav`. Pitched material is sliced into single cycles at the detected pitch; vocals, pads and noise become spectral snapshots. It picks the most stable tonal region by default, phase-aligns and normalises the frames, and tells the agent how the timbre moves across the table (for example "brightens, very smooth morph") so it can choose a position or envelope. Output is deterministic.
 - **Project tables play like any other table**: `/wt vox.wav`, the menu's table picker (project tables are listed first), `set_wavetable` with the path, and `wavetable("./wavetables/vox.wav")` in `track.ts`. They are pinned by sha256; a changed file plays with a warning, a missing one is reported with a fix.
-- SDK 1.10.0 (additive): `wavetable()` accepts a project `.wav` path.
+- SDK 1.11.0 (additive): `wavetable()` accepts a project `.wav` path.
 
 ### Sample packs: bank nicknames and cache sizes
 
