@@ -15,6 +15,13 @@
  * network. Every pinned sound records its pack and license.
  */
 import { createHash } from "node:crypto";
+import {
+  cacheUsage,
+  packsCacheMax,
+  pruneLru,
+  type CacheUsage,
+  type PruneResult,
+} from "./cache.ts";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
@@ -49,8 +56,6 @@ export const PACK_LIMITS = Object.freeze({
   maxFileNameLength: 512,
   fetchTimeoutMs: 30_000,
   maxRedirects: 4,
-  /** Raw downloaded files; decoded PCM lives in the project asset cache. */
-  maxFileCacheBytes: SCORE_LIMITS.maxSampleCacheBytes,
   /** Zones a keyed instrument keeps (the sampler voice limit). */
   maxZones: SCORE_LIMITS.maxSamplerVoices,
 });
@@ -75,6 +80,11 @@ export type PackInfo = Readonly<{
   homepage?: string;
   kind: PackKind;
   builtin: boolean;
+  /**
+   * Bank nicknames (`{"RolandTR909": "TR909"}`, Strudel's `aliasBank` file),
+   * fetched with the manifest when the pack has them.
+   */
+  aliasesUrl?: string;
 }>;
 
 /** `github:user/repo[/branch]` (Strudel's shorthand). */
@@ -82,6 +92,134 @@ const GITHUB =
   /^github:([A-Za-z0-9_.-]{1,100})\/([A-Za-z0-9_.-]{1,100})(?:\/([A-Za-z0-9_./-]{1,200}))?\/?$/;
 
 const DOUGH = "https://raw.githubusercontent.com/felixroos/dough-samples/main";
+
+// ---------------------------------------------------------------------------
+// Bank nicknames
+
+/**
+ * The bank alias file Strudel's REPL registers at startup with
+ * `aliasBank(".../tidal-drum-machines-alias.json")`: full bank name →
+ * nickname. dawg ships the snapshot below (fetched 2026-10-07, sha256
+ * 2de712d3…797e) so nicknames work offline, and refreshes it from this URL
+ * whenever it fetches the tidal-drum-machines manifest.
+ */
+export const BANK_ALIASES_URL =
+  "https://strudel.b-cdn.net/tidal-drum-machines-alias.json";
+
+export const STRUDEL_BANK_ALIASES: Readonly<Record<string, string>> =
+  Object.freeze({
+    AJKPercusyn: "Percysyn",
+    AkaiLinn: "Linn",
+    AkaiMPC60: "MPC60",
+    AkaiXR10: "XR10",
+    AlesisHR16: "HR16",
+    AlesisSR16: "SR16",
+    BossDR110: "DR110",
+    BossDR220: "DR220",
+    BossDR55: "DR55",
+    BossDR550: "DR550",
+    CasioRZ1: "RZ1",
+    CasioSK1: "SK1",
+    CasioVL1: "VL1",
+    DoepferMS404: "MS404",
+    EmuDrumulator: "Drumulator",
+    EmuSP12: "SP12",
+    KorgDDM110: "DDM110",
+    KorgKPR77: "KPR77",
+    KorgKR55: "KR55",
+    KorgKRZ: "KRZ",
+    KorgM1: "M1",
+    KorgMinipops: "Minipops",
+    KorgPoly800: "Poly800",
+    KorgT3: "T3",
+    Linn9000: "9000",
+    LinnLM1: "LM1",
+    LinnLM2: "LM2",
+    MoogConcertMateMG1: "ConcertMateMG1",
+    OberheimDMX: "DMX",
+    RhodesPolaris: "Polaris",
+    RhythmAce: "Ace",
+    RolandCompurhythm1000: "Compurhythm1000",
+    RolandCompurhythm78: "Compurhythm78",
+    RolandCompurhythm8000: "Compurhythm8000",
+    RolandD110: "D110",
+    RolandD70: "D70",
+    RolandDDR30: "DDR30",
+    RolandJD990: "JD990",
+    RolandMC202: "MC202",
+    RolandMC303: "MC303",
+    RolandMT32: "MT32",
+    RolandR8: "R8",
+    RolandS50: "S50",
+    RolandSH09: "SH09",
+    RolandSystem100: "System100",
+    RolandTR505: "TR505",
+    RolandTR606: "TR606",
+    RolandTR626: "TR626",
+    RolandTR707: "TR707",
+    RolandTR727: "TR727",
+    RolandTR808: "TR808",
+    RolandTR909: "TR909",
+    SakataDPM48: "DPM48",
+    SequentialCircuitsDrumtracks: "CircuitsDrumtracks",
+    SequentialCircuitsTom: "CircuitsTom",
+    SimmonsSDS400: "SDS400",
+    SimmonsSDS5: "SDS5",
+    SoundmastersR88: "R88",
+    UnivoxMicroRhythmer12: "MicroRhythmer12",
+    ViscoSpaceDrum: "SpaceDrum",
+    XdrumLM8953: "LM8953",
+    YamahaRM50: "RM50",
+    YamahaRX21: "RX21",
+    YamahaRX5: "RX5",
+    YamahaRY30: "RY30",
+    YamahaTG33: "TG33",
+  });
+
+/** Lowercased nickname or bank → bank, plus exact-case nicknames. */
+export type BankAliases = Readonly<{
+  exact: ReadonlyMap<string, string>;
+  folded: ReadonlyMap<string, string>;
+  /** bank → nickname, for listings. */
+  nicknames: ReadonlyMap<string, string>;
+}>;
+
+/** Builds the lookup for a `{bank: nickname}` map; ignores malformed entries. */
+export function bankAliasIndex(
+  ...maps: readonly Readonly<Record<string, unknown>>[]
+): BankAliases {
+  const exact = new Map<string, string>();
+  const folded = new Map<string, string>();
+  const nicknames = new Map<string, string>();
+  for (const map of maps)
+    for (const [bank, alias] of Object.entries(map).slice(0, 4096)) {
+      if (typeof alias !== "string" || !SOUND_NAME.test(bank)) continue;
+      if (!SOUND_NAME.test(alias)) continue;
+      exact.set(alias, bank);
+      folded.set(alias.toLowerCase(), bank);
+      nicknames.set(bank, alias);
+    }
+  return Object.freeze({ exact, folded, nicknames });
+}
+
+let builtinAliases: BankAliases | undefined;
+/** The shipped snapshot's lookup. */
+export function builtinBankAliases(): BankAliases {
+  builtinAliases ??= bankAliasIndex(STRUDEL_BANK_ALIASES);
+  return builtinAliases;
+}
+
+/**
+ * The bank a nickname names, Strudel-style: an exact nickname (`TR909`,
+ * `Linn`) first, then the same case-insensitively (`tr909`, `sp12`).
+ * Undefined when `name` is no nickname.
+ */
+export function resolveBankAlias(
+  name: string,
+  aliases: BankAliases = builtinBankAliases(),
+): string | undefined {
+  return aliases.exact.get(name) ?? aliases.folded.get(name.toLowerCase());
+}
 
 /**
  * Packs dawg knows without `/pack add`. Manifest URLs are the ones Strudel's
@@ -99,6 +237,7 @@ export const PACK_CATALOG: readonly PackInfo[] = Object.freeze(
         license: NO_LICENSE,
         homepage: "https://github.com/ritchse/tidal-drum-machines",
         kind: "strudel",
+        aliasesUrl: BANK_ALIASES_URL,
       },
       {
         name: "dirt-samples",
@@ -116,6 +255,7 @@ export const PACK_CATALOG: readonly PackInfo[] = Object.freeze(
         homepage: "https://github.com/tidalcycles/uzu-drumkit",
         kind: "strudel",
       },
+
       {
         name: "vcsl",
         title: "Versilian Community Sample Library",
@@ -546,6 +686,12 @@ export type PackStoreOptions = Readonly<{
   /** Never touch the network; only cached manifests and files. */
   offline?: boolean;
   timeoutMs?: number;
+  /**
+   * Cap on raw downloaded files; default `packsCacheMax()`
+   * (`DAWG_PACKS_CACHE_MAX`, 2 GiB). Decoded PCM lives in the project's
+   * asset cache.
+   */
+  maxFileCacheBytes?: number;
 }>;
 
 /** A pack sound resolved to one concrete file. */
@@ -616,6 +762,17 @@ export class PackStore {
   private readonly timeoutMs: number;
   private readonly manifests = new Map<string, Promise<Manifest>>();
   private readonly inflight = new Map<string, Promise<FetchedFile>>();
+  private readonly aliases = new Map<string, BankAliases>();
+  public readonly maxFileCacheBytes: number;
+  /**
+   * Cache file names (`<sha256(url)>.bin`) the open project pins, shared by
+   * every store on the same directory in this process.
+   */
+  private get protectedFiles(): Set<string> {
+    let set = PROTECTED.get(this.dir);
+    if (!set) PROTECTED.set(this.dir, (set = new Set()));
+    return set;
+  }
 
   public constructor(options: PackStoreOptions = {}) {
     this.dir = options.dir ?? defaultPackDir();
@@ -625,6 +782,50 @@ export class PackStore {
       process.env.DAWG_PACKS_ALLOW_LOOPBACK_HTTP === "1";
     this.offline = options.offline ?? false;
     this.timeoutMs = options.timeoutMs ?? PACK_LIMITS.fetchTimeoutMs;
+    this.maxFileCacheBytes = Math.max(
+      0,
+      options.maxFileCacheBytes ?? packsCacheMax(),
+    );
+  }
+
+  // -- file cache -----------------------------------------------------------
+
+  private filePath(url: string): string {
+    return join(this.dir, "files", `${sha256Hex(url)}.bin`);
+  }
+
+  /**
+   * Marks pinned URLs as the open project's working set: LRU pruning never
+   * evicts them. Replaces the previous set.
+   */
+  public protect(urls: Iterable<string>): void {
+    this.protectedFiles.clear();
+    for (const url of urls) this.protectedFiles.add(`${sha256Hex(url)}.bin`);
+  }
+
+  /** Raw file cache usage and its cap. */
+  public async cacheStatus(): Promise<CacheUsage & { max: number }> {
+    return {
+      ...(await cacheUsage(join(this.dir, "files"), PACK_FILE)),
+      max: this.maxFileCacheBytes,
+    };
+  }
+
+  /**
+   * Prunes raw files down to `maxBytes` (default the cap), least recently
+   * used first, keeping protected files. `0` clears everything unprotected.
+   */
+  public pruneCache(
+    maxBytes = this.maxFileCacheBytes,
+    keep?: string,
+  ): Promise<PruneResult> {
+    const keepName = keep ? keep.slice(keep.lastIndexOf("/") + 1) : undefined;
+    return pruneLru(
+      join(this.dir, "files"),
+      PACK_FILE,
+      maxBytes,
+      (name) => name === keepName || this.protectedFiles.has(name),
+    );
   }
 
   // -- registry -------------------------------------------------------------
@@ -822,6 +1023,7 @@ export class PackStore {
         throw new PackError(`${pack.name} · ${error.message}`);
       throw new PackError(`${pack.name} · manifest is not valid JSON`);
     }
+    if (pack.aliasesUrl) await this.fetchAliases(pack);
     try {
       await mkdir(join(this.dir, "manifests"), { recursive: true });
       const temporary = `${path}.${process.pid}.tmp`;
@@ -840,6 +1042,65 @@ export class PackStore {
     return manifest;
   }
 
+  // -- bank nicknames -------------------------------------------------------
+
+  private aliasesPath(name: string): string {
+    return join(this.dir, "manifests", `${name}.aliases.json`);
+  }
+
+  /** Best effort: a missing or broken alias file keeps the snapshot. */
+  private async fetchAliases(pack: PackInfo): Promise<void> {
+    if (!pack.aliasesUrl || this.offline) return;
+    try {
+      const bytes = await fetchBounded(pack.aliasesUrl, {
+        maxBytes: 256 * 1024,
+        timeoutMs: this.timeoutMs,
+        allowLoopbackHttp: this.allowLoopbackHttp,
+        ...(this.fetchImpl ? { fetch: this.fetchImpl } : {}),
+      });
+      const json: unknown = JSON.parse(new TextDecoder().decode(bytes));
+      if (!json || typeof json !== "object" || Array.isArray(json)) return;
+      const path = this.aliasesPath(pack.name);
+      await mkdir(join(this.dir, "manifests"), { recursive: true });
+      const temporary = `${path}.${process.pid}.tmp`;
+      await writeFile(temporary, JSON.stringify(json));
+      await rename(temporary, path);
+      this.aliases.delete(pack.name);
+    } catch {
+      /* the shipped snapshot still answers */
+    }
+  }
+
+  /**
+   * A pack's bank nicknames: the shipped Strudel snapshot for packs that use
+   * Strudel's alias file, overlaid with the copy fetched with the manifest.
+   * Packs without nicknames get an empty lookup.
+   */
+  public async bankAliases(name: string): Promise<BankAliases> {
+    const memo = this.aliases.get(name);
+    if (memo) return memo;
+    const pack = await this.info(name);
+    let result = bankAliasIndex();
+    if (pack?.aliasesUrl) {
+      let fetched: Record<string, unknown> = {};
+      try {
+        const json: unknown = JSON.parse(
+          await readFile(this.aliasesPath(name), "utf8"),
+        );
+        if (json && typeof json === "object" && !Array.isArray(json))
+          fetched = json as Record<string, unknown>;
+      } catch {
+        /* not fetched yet */
+      }
+      result = bankAliasIndex(
+        pack.aliasesUrl === BANK_ALIASES_URL ? STRUDEL_BANK_ALIASES : {},
+        fetched,
+      );
+    }
+    this.aliases.set(name, result);
+    return result;
+  }
+
   // -- sounds ---------------------------------------------------------------
 
   /** Resolves `pack:<pack>/<sound>[:<n>]` to one file URL (fetches the manifest if needed). */
@@ -855,15 +1116,13 @@ export class PackStore {
         `no pack named ${ref.pack} · /pack list shows the packs`,
       );
     const manifest = await this.loadManifest(pack);
+    const soundName = await this.soundKey(pack.name, manifest, ref.sound);
     const sound =
-      manifest.sounds.get(ref.sound) ?? caseInsensitive(manifest, ref.sound);
-    if (!sound)
+      soundName === undefined ? undefined : manifest.sounds.get(soundName);
+    if (!sound || soundName === undefined)
       throw new PackError(
         `${ref.pack} has no sound ${ref.sound} · /pack info ${ref.pack} lists them`,
       );
-    const soundName = manifest.sounds.has(ref.sound)
-      ? ref.sound
-      : caseKey(manifest, ref.sound)!;
     let file: string;
     let root: number | undefined;
     if (sound.kind === "list") {
@@ -893,6 +1152,49 @@ export class PackStore {
   }
 
   /**
+   * The manifest key for `sound`: exact, then case-insensitive, then with a
+   * bank nickname expanded (`TR909_bd` → `RolandTR909_bd`).
+   */
+  public async soundKey(
+    pack: string,
+    manifest: Manifest,
+    sound: string,
+  ): Promise<string | undefined> {
+    if (manifest.sounds.has(sound)) return sound;
+    const folded = caseKey(manifest, sound);
+    if (folded !== undefined) return folded;
+    const at = sound.lastIndexOf("_");
+    if (at <= 0) return undefined;
+    const bank = resolveBankAlias(
+      sound.slice(0, at),
+      await this.bankAliases(pack),
+    );
+    if (!bank) return undefined;
+    const expanded = `${bank}${sound.slice(at)}`;
+    return manifest.sounds.has(expanded)
+      ? expanded
+      : caseKey(manifest, expanded);
+  }
+
+  /**
+   * The bank `name` means in `pack`: a manifest bank (any case) or a
+   * nickname of one. Undefined when neither.
+   */
+  public async bankKey(
+    pack: string,
+    manifest: Manifest,
+    name: string,
+  ): Promise<string | undefined> {
+    const banks = banksOf(manifest);
+    const lower = name.toLowerCase();
+    const direct = banks.find((bank) => bank.toLowerCase() === lower);
+    if (direct) return direct;
+    const aliased = resolveBankAlias(name, await this.bankAliases(pack));
+    if (!aliased) return undefined;
+    return banks.find((bank) => bank.toLowerCase() === aliased.toLowerCase());
+  }
+
+  /**
    * The bytes of one sample file: from `files/` when cached, else fetched
    * (once, even when many voices ask at the same time). Enforces the sample
    * file size limit. A pinned `sha256` that no longer matches is an error.
@@ -914,7 +1216,7 @@ export class PackStore {
   ): Promise<FetchedFile> {
     checkFetchUrl(url, this.allowLoopbackHttp);
     const filesDir = join(this.dir, "files");
-    const path = join(filesDir, `${sha256Hex(url)}.bin`);
+    const path = this.filePath(url);
     try {
       const bytes = new Uint8Array(await readFile(path));
       const sha256 = sha256Hex(bytes);
@@ -946,7 +1248,7 @@ export class PackStore {
       const temporary = `${path}.${process.pid}.tmp`;
       await writeFile(temporary, bytes);
       await rename(temporary, path);
-      await pruneFiles(filesDir, PACK_LIMITS.maxFileCacheBytes, path);
+      await this.pruneCache(this.maxFileCacheBytes, path);
     } catch {
       /* read-only cache: still usable this once from memory */
     }
@@ -1034,14 +1336,6 @@ function caseKey(manifest: Manifest, sound: string): string | undefined {
   return undefined;
 }
 
-function caseInsensitive(
-  manifest: Manifest,
-  sound: string,
-): ManifestSound | undefined {
-  const key = caseKey(manifest, sound);
-  return key === undefined ? undefined : manifest.sounds.get(key);
-}
-
 function nearestZone(
   zones: readonly ManifestZone[],
   note: number,
@@ -1066,29 +1360,8 @@ function encodePath(file: string): string {
     .join("/");
 }
 
-async function pruneFiles(
-  dir: string,
-  maxBytes: number,
-  keep: string,
-): Promise<void> {
-  const names = await readdir(dir).catch(() => [] as string[]);
-  const entries: { path: string; bytes: number; used: number }[] = [];
-  for (const name of names) {
-    if (!/^[0-9a-f]{64}\.bin$/.test(name)) continue;
-    const path = join(dir, name);
-    const info = await stat(path).catch(() => undefined);
-    if (info?.isFile())
-      entries.push({ path, bytes: info.size, used: info.mtimeMs });
-  }
-  let total = entries.reduce((sum, entry) => sum + entry.bytes, 0);
-  entries.sort((a, b) => a.used - b.used || a.path.localeCompare(b.path));
-  for (const entry of entries) {
-    if (total <= maxBytes) break;
-    if (entry.path === keep) continue;
-    await unlink(entry.path).catch(() => undefined);
-    total -= entry.bytes;
-  }
-}
+const PACK_FILE = /^[0-9a-f]{64}\.bin$/;
+const PROTECTED = new Map<string, Set<string>>();
 
 // ---------------------------------------------------------------------------
 // Kits and instruments
@@ -1133,6 +1406,9 @@ export const GM_INSTRUMENTS: readonly string[] = Object.freeze([
 /** The kit `/kit` uses with no bank. */
 export const DEFAULT_KIT = "909";
 
+/** The pack Strudel's bank nicknames point into. */
+export const ALIASED_PACK = "tidal-drum-machines";
+
 export type Kit = Readonly<{
   pack: string;
   /** Manifest bank prefix (`RolandTR909`), empty for bank-less packs. */
@@ -1155,9 +1431,12 @@ const KIT_SOUNDS: Readonly<Record<DrumVoice, readonly string[]>> =
   });
 
 /**
- * A drum kit from a Strudel-style bank (`RolandTR909`, `tr909`, `909`,
- * `uzu`, …): the pack sound each dawg drum voice plays. Banks match the
- * `<bank>_<sound>` manifest keys case-insensitively, by full name or suffix;
+ * A drum kit from a Strudel-style bank (`RolandTR909`, `TR909`, `tr909`,
+ * `909`, `sp12`, `uzu`, …): the pack sound each dawg drum voice plays.
+ * Resolution order: a Strudel nickname in its exact case (`TR909`, `Linn` →
+ * AkaiLinn), dawg's short names (`909`, `linn` → LinnDrum), then per pack a
+ * bank name in any case, a nickname in any case (`sp12` → EmuSP12), and a
+ * bank suffix. Banks match the `<bank>_<sound>` manifest keys;
  * `bank("RolandTR909")` in Strudel and `/kit RolandTR909` pick the same files.
  * Undefined when no pack has the bank.
  */
@@ -1167,7 +1446,16 @@ export async function kitFromBank(
   options: Readonly<{ pack?: string }> = {},
 ): Promise<Kit | undefined> {
   const wanted = bank.trim();
-  const preset = options.pack ? undefined : DEFAULT_KITS[wanted.toLowerCase()];
+  // Strudel nicknames in their exact case (`TR909`, `Linn`) name the same
+  // bank they do in Strudel; then dawg's short names (`909`, `linn`).
+  const exactAlias = options.pack
+    ? undefined
+    : (await store.bankAliases(ALIASED_PACK)).exact.get(wanted);
+  const preset = options.pack
+    ? undefined
+    : exactAlias
+      ? { pack: ALIASED_PACK, bank: exactAlias }
+      : DEFAULT_KITS[wanted.toLowerCase()];
   const packs = await store.list();
   const ordered = options.pack
     ? packs.filter((p) => p.name === options.pack)
@@ -1194,7 +1482,8 @@ export async function kitFromBank(
       ? preset.bank
       : wanted.toLowerCase() === pack.name && !banksOf(manifest).length
         ? ""
-        : findBank(manifest, wanted);
+        : ((await store.bankKey(pack.name, manifest, wanted)) ??
+          findBank(manifest, wanted));
     if (prefix === undefined) continue;
     const voices = new Map<DrumVoice, string>();
     for (const info of DRUM_VOICES) {

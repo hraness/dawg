@@ -15,7 +15,11 @@ import {
 } from "../../core/score.ts";
 import { dc, wavBytes } from "./sample-fixtures.ts";
 import {
+  BANK_ALIASES_URL,
   NO_LICENSE,
+  STRUDEL_BANK_ALIASES,
+  bankAliasIndex,
+  resolveBankAlias,
   PACK_CATALOG,
   PackError,
   PackStore,
@@ -31,7 +35,21 @@ import {
   type FetchLike,
 } from "./packs.ts";
 import { SampleLibrary, sampleKey } from "./samples.ts";
-import { useKit, useSound } from "../commands/pack.ts";
+import {
+  DEFAULT_ASSETS_CACHE_BYTES,
+  DEFAULT_PACKS_CACHE_BYTES,
+  assetsCacheMax,
+  formatBytes,
+  packsCacheMax,
+  parseByteSize,
+} from "./cache.ts";
+import {
+  kitListLines,
+  parseKitCommand,
+  parsePackCommand,
+  useKit,
+  useSound,
+} from "../commands/pack.ts";
 import { PACK_TOOLS } from "../agent/pack-tools.ts";
 
 const dirs: string[] = [];
@@ -85,6 +103,13 @@ beforeAll(() => {
           piano: { A0: "A0.wav", C4: "C4.wav", A4: "A4.wav" },
         });
       if (path === "/gm/names.json") return json(["acoustic_grand_piano"]);
+      if (path === "/alias.json")
+        return json({
+          RolandTR909: "TR909",
+          RolandTR808: "TR808",
+          LinnDrum: "LD",
+          junk: 7,
+        });
       if (path === "/big.wav")
         return new Response(new Uint8Array(70 * 1024 * 1024));
       if (path === "/slow.json")
@@ -123,7 +148,9 @@ const redirect: FetchLike = (input, init) => {
       "https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/",
       `${origin}/gm/`,
     )
-    .replace("https://raw.githubusercontent.com/", `${origin}/`);
+    .replace("https://raw.githubusercontent.com/", `${origin}/`)
+    .replace(BANK_ALIASES_URL, `${origin}/alias.json`);
+  if (!url.startsWith(origin)) throw new Error(`test fetched ${url}`);
   return fetch(url, init);
 };
 
@@ -422,6 +449,198 @@ describe("kits and instruments", () => {
     )!;
     expect(Object.keys(track.sampler!.voices)).toEqual(["bd_1"]);
     expect(track.sampler!.voices.bd_1!.src).toBe("pack:kit/bd:1");
+  });
+});
+
+describe("bank nicknames", () => {
+  test("Strudel's alias snapshot resolves nicknames like Strudel", () => {
+    expect(resolveBankAlias("TR909")).toBe("RolandTR909");
+    expect(resolveBankAlias("tr909")).toBe("RolandTR909");
+    expect(resolveBankAlias("TR808")).toBe("RolandTR808");
+    expect(resolveBankAlias("Linn")).toBe("AkaiLinn");
+    expect(resolveBankAlias("DMX")).toBe("OberheimDMX");
+    expect(resolveBankAlias("sp12")).toBe("EmuSP12");
+    expect(resolveBankAlias("MPC60")).toBe("AkaiMPC60");
+    expect(resolveBankAlias("RolandTR909")).toBeUndefined();
+    expect(Object.keys(STRUDEL_BANK_ALIASES).length).toBe(66);
+    // Every nickname is distinct, so resolution never depends on order.
+    const lower = Object.values(STRUDEL_BANK_ALIASES).map((v) =>
+      v.toLowerCase(),
+    );
+    expect(new Set(lower).size).toBe(lower.length);
+    // Malformed entries in a fetched file are dropped.
+    const index = bankAliasIndex({ Good: "G", "bad name": "B", n: 3 });
+    expect([...index.exact]).toEqual([["G", "Good"]]);
+  });
+
+  test("/kit, /pack use and pinned refs accept nicknames; short names still work", async () => {
+    const packs = await store();
+    // Exact-case Strudel nickname, any-case nickname, dawg short name.
+    for (const name of ["TR909", "tr909", "909", "RolandTR909"])
+      expect((await kitFromBank(name, packs))?.bank).toBe("RolandTR909");
+    expect((await kitFromBank("TR808", packs))?.bank).toBe("RolandTR808");
+    expect(await kitFromBank("TR707", packs)).toBeUndefined();
+
+    // Bank nickname inside a pack ref, and as a sound prefix.
+    const kit = await useSound(
+      packs,
+      drumScore(),
+      "drums",
+      "tidal-drum-machines/TR909",
+    );
+    expect(kit.summary).toContain("kit RolandTR909 on drums");
+    const one = await useSound(
+      packs,
+      drumScore(),
+      "perc",
+      "tidal-drum-machines/tr808_sd",
+    );
+    const perc = apply(drumScore(), one.operations).tracks.find(
+      (t) => t.id === "perc",
+    )!;
+    // Pins are canonical, so the document never depends on alias data.
+    expect(perc.sampler!.voices.sd!.src).toBe(
+      "pack:tidal-drum-machines/RolandTR808_sd",
+    );
+    const resolved = await packs.resolve("pack:tidal-drum-machines/TR909_hh:1");
+    expect(resolved.src).toBe("pack:tidal-drum-machines/RolandTR909_hh:1");
+
+    // The fetched alias file overlays the snapshot.
+    const aliases = await packs.bankAliases("tidal-drum-machines");
+    expect(resolveBankAlias("LD", aliases)).toBe("LinnDrum");
+    expect(aliases.nicknames.get("RolandTR909")).toBe("TR909");
+    expect((await packs.bankAliases("dirt-samples")).exact.size).toBe(0);
+  });
+
+  test("/kit list shows nicknames", async () => {
+    const packs = await store();
+    const lines = kitListLines(await packs.bankAliases("tidal-drum-machines"));
+    expect(lines).toContain("909 · RolandTR909 · tidal-drum-machines");
+    expect(lines).toContain("TR909 · RolandTR909 · tidal-drum-machines");
+    expect(lines).toContain("SP12 · EmuSP12 · tidal-drum-machines");
+    expect(parseKitCommand("/kit list")).toEqual({ kind: "list" });
+    expect(parseKitCommand("/kit tr909")).toEqual({
+      kind: "set",
+      bank: "tr909",
+    });
+  });
+});
+
+describe("cache caps", () => {
+  test("sizes parse with binary units; env overrides the defaults", () => {
+    expect(parseByteSize("2GiB")).toBe(2 * 1024 ** 3);
+    expect(parseByteSize("512M")).toBe(512 * 1024 ** 2);
+    expect(parseByteSize("1.5g")).toBe(1.5 * 1024 ** 3);
+    expect(parseByteSize("4096")).toBe(4096);
+    expect(parseByteSize("-1")).toBeUndefined();
+    expect(parseByteSize("lots")).toBeUndefined();
+    expect(packsCacheMax({})).toBe(DEFAULT_PACKS_CACHE_BYTES);
+    expect(DEFAULT_PACKS_CACHE_BYTES).toBe(2 * 1024 ** 3);
+    expect(assetsCacheMax({})).toBe(DEFAULT_ASSETS_CACHE_BYTES);
+    expect(DEFAULT_ASSETS_CACHE_BYTES).toBe(1024 ** 3);
+    expect(packsCacheMax({ DAWG_PACKS_CACHE_MAX: "300M" })).toBe(
+      300 * 1024 ** 2,
+    );
+    expect(assetsCacheMax({ DAWG_ASSETS_CACHE_MAX: "junk" })).toBe(
+      DEFAULT_ASSETS_CACHE_BYTES,
+    );
+    expect(formatBytes(1.5 * 1024 ** 3)).toBe("1.5 GiB");
+    expect(parsePackCommand("/pack cache")).toEqual({ kind: "cache" });
+    expect(parsePackCommand("/pack cache prune")).toEqual({
+      kind: "cache",
+      pruneTo: "cap",
+    });
+    expect(parsePackCommand("/pack cache prune 100M")).toEqual({
+      kind: "cache",
+      pruneTo: 100 * 1024 ** 2,
+    });
+    expect(parsePackCommand("/pack cache clear")).toEqual({
+      kind: "cache",
+      pruneTo: 0,
+    });
+  });
+
+  test("LRU eviction never evicts the open project's pins; evicted files re-fetch by sha256", async () => {
+    const dir = await temp("dawg-packs-lru-");
+    const packs = new PackStore({
+      dir,
+      allowLoopbackHttp: true,
+      fetch: redirect,
+      timeoutMs: 1_000,
+      // Room for about two of the fixture files.
+      maxFileCacheBytes: WAV.byteLength * 2 + 10,
+    });
+    const kit = await useKit(packs, drumScore(), "drums", "909");
+    const score = apply(drumScore(), kit.operations);
+    const projectRoot = await temp("dawg-packs-lru-project-");
+    const library = new SampleLibrary({ projectRoot, packs });
+    expect((await library.load(score)).problems).toEqual([]);
+    const pinned = Object.values(
+      score.tracks.find((t) => t.id === "drums")!.sampler!.voices,
+    );
+    const pinnedFiles = new Set(
+      pinned.map(
+        (ref) => `${createHash("sha256").update(ref.url!).digest("hex")}.bin`,
+      ),
+    );
+    expect(pinnedFiles.size).toBe(4);
+    // Make every pinned file present (pinning a kit over a tiny cap may
+    // already have evicted some; protected now, they come back and stay).
+    for (const ref of pinned) await packs.fetchFile(ref.url!, ref.sha256);
+    const present = async () => new Set(await readdir(join(dir, "files")));
+    for (const name of pinnedFiles)
+      expect((await present()).has(name)).toBe(true);
+
+    // Fetching other sounds goes over the cap: only unpinned files go.
+    await packs.pin("pack:tidal-drum-machines/RolandTR808_bd");
+    await packs.pin("pack:tidal-drum-machines/RolandTR808_sd");
+    const files = await present();
+    for (const name of pinnedFiles) expect(files.has(name)).toBe(true);
+    expect(files.size).toBeLessThanOrEqual(pinnedFiles.size + 1);
+
+    // A prune to zero clears everything but the pins.
+    const status = await packs.cacheStatus();
+    expect(status.max).toBe(WAV.byteLength * 2 + 10);
+    const pruned = await packs.pruneCache(0);
+    expect(await present()).toEqual(pinnedFiles);
+    expect(pruned.bytes).toBe(WAV.byteLength * 4);
+
+    // Once another project opens, the old pins can go; a re-render then
+    // re-fetches them transparently and checks the pinned sha256.
+    packs.protect([]);
+    expect((await packs.pruneCache(0)).removed).toBe(4);
+    hits.length = 0;
+    const fresh = await temp("dawg-packs-lru-fresh-");
+    const again = await new SampleLibrary({ projectRoot: fresh, packs }).load(
+      score,
+    );
+    expect(again.problems).toEqual([]);
+    // Every voice decodes to the same fixture PCM, so one fetch suffices.
+    expect(
+      hits.filter((h) => h.startsWith("/tdm/909/")).length,
+    ).toBeGreaterThan(0);
+    expect((await present()).size).toBeGreaterThan(0);
+  });
+
+  test("decoded assets in use survive pruning", async () => {
+    const packs = await store();
+    const kit = await useKit(packs, drumScore(), "drums", "909");
+    const score = apply(drumScore(), kit.operations);
+    const projectRoot = await temp("dawg-packs-assets-");
+    // Room for one decoded fixture file (16-byte header + 480 floats).
+    const library = new SampleLibrary({
+      projectRoot,
+      packs,
+      maxCacheBytes: 16 + 480 * 4,
+    });
+    expect((await library.load(score)).problems).toEqual([]);
+    const assets = join(projectRoot, ".dawg", "assets");
+    // Four pins, one unique PCM (the fixture serves the same WAV bytes).
+    const before = await readdir(assets);
+    expect(before.length).toBeGreaterThan(0);
+    expect((await library.pruneCache(0)).removed).toBe(0);
+    expect(await readdir(assets)).toEqual(before);
+    expect((await library.cacheStatus()).files).toBe(before.length);
   });
 });
 

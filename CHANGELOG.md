@@ -22,6 +22,12 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - **Chord mode in play mode**, on by default (`auto`) for chord-capable tracks: every note key plays the song key's diatonic chord, voice-led from the last one. `1`–`4` latch dim/min/maj/sus, `5`–`8` latch 6/m7/M7/9, `0` clears, `-`/`=` turn the voicing dial, `9` cycles the perform mode, `B` toggles bass, `N` plays the suggested next chord and `Q` switches auto ⇄ manual. The header shows the mode, key, current chord and the suggestion. Recorded chords keep their strum or arpeggio and stay one undo step per bar.
 - **`/chords`** and a Chords section in `/menu` edit the same settings; **`key <tonic> <mode>`** sets the song key.
 
+### Sample packs: bank nicknames and cache sizes
+
+- **Bank nicknames.** Strudel's drum-machine nicknames (`TR909`, `tr808`, `Linn`, `DMX`, `SP12`, `MPC60`, … from its `tidal-drum-machines-alias.json`) work in `/kit`, `/pack use`, `pack:` refs in `track.ts`, the agent's `use_sound` and a new **Strudel banks** list in the menu's drum kits. dawg ships a snapshot and refreshes it with the manifest. `909`, `808`, `linn` and the other short names work as before, and pins keep the full bank name.
+- **`/pack cache`** shows disk used by pack downloads and decoded audio against their caps; `/pack cache prune [size]` and `/pack cache clear` evict least recently used files and keep the open project's sounds.
+- Pack downloads are now capped at 2 GiB (they were uncapped) and decoded audio at 1 GiB per project (was 512 MiB), overridable with `DAWG_PACKS_CACHE_MAX` and `DAWG_ASSETS_CACHE_MAX`. Eviction never removes a file the open project uses; an evicted pack file re-fetches by its pinned sha256.
+
 ### Fixed
 
 - Gateway web searches no longer count the search fee twice in the spend line and ledger. The gateway's reported cost already includes it. A real Exa search response is now a test fixture.

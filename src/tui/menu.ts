@@ -16,7 +16,12 @@ import {
   type TrackScore,
 } from "../../core/score.ts";
 import { AVAILABLE_INSTRUMENTS } from "../audio/wav.ts";
-import { DEFAULT_KITS, GM_INSTRUMENTS, PACK_CATALOG } from "../audio/packs.ts";
+import {
+  DEFAULT_KITS,
+  GM_INSTRUMENTS,
+  PACK_CATALOG,
+  STRUDEL_BANK_ALIASES,
+} from "../audio/packs.ts";
 import type { PickerItem } from "../../tui/app.ts";
 import {
   MAX_VOICING_STEP,
@@ -770,12 +775,29 @@ function soundNodes(): MenuNode[] {
       id: "kits",
       label: "Drum kits",
       detail: Object.keys(DEFAULT_KITS).join(" "),
-      build: () =>
-        Object.entries(DEFAULT_KITS).map(([name, kit]): MenuNode => ({
+      build: () => [
+        ...Object.entries(DEFAULT_KITS).map(([name, kit]): MenuNode => ({
           kind: "action",
           label: `${name}  ${kit.bank || kit.pack} · ${kit.pack}`,
           command: `/kit ${name}`,
         })),
+        {
+          kind: "menu",
+          id: "kit-nicknames",
+          label: "Strudel banks",
+          detail: `${Object.keys(STRUDEL_BANK_ALIASES).length} drum machines by nickname`,
+          build: () =>
+            Object.entries(STRUDEL_BANK_ALIASES)
+              .sort(([, a], [, b]) =>
+                a.toLowerCase() < b.toLowerCase() ? -1 : 1,
+              )
+              .map(([bank, nickname]): MenuNode => ({
+                kind: "action",
+                label: `${nickname}  ${bank}`,
+                command: `/kit ${nickname}`,
+              })),
+        },
+      ],
     },
     {
       kind: "menu",
