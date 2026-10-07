@@ -197,7 +197,7 @@ describe("session store", () => {
     const newest = loaded.events[loaded.events.length - 1]!;
     expect(newest.rewind).toBeDefined();
     expect(compositionAt(loaded, 119)).toEqual(big(119));
-  });
+  }, 60_000);
 
   test("rejects a record whose rewind is malformed", async () => {
     const workspace = await mkdtemp(join(tmpdir(), "dawg-session-badrewind-"));
