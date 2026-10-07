@@ -1,7 +1,7 @@
 /**
- * Frame composition and UI state for the interactive Track TUI.
+ * Frame composition and UI state for the interactive dawg TUI.
  *
- *   ┌ header: track · session · ▶ BPM · model · rev · sync ┐
+ *   ┌ header: dawg · track · session · ▶ BPM · model · rev · sync ┐
  *   │ highway (notes fall toward the hit line)              │
  *   │ activity strip: spinner, operation cards, queue depth │
  *   └ prompt panel: bg fill, mode pill, wrapped draft       ┘
@@ -313,7 +313,7 @@ function paintHeader(
   const transport = `${playing ? (unicode ? "▶" : ">") : unicode ? "⏸" : "||"} ${score.bpm ?? 120} BPM`;
   const name = score.trackName ?? score.trackId ?? "track";
   const left: Segment[] = [
-    { text: "track", style: { ...roles.muted, bold: true }, priority: 6 },
+    { text: "dawg", style: { ...roles.muted, bold: true }, priority: 6 },
     {
       text: name,
       style: { ...accentStyle(theme, score.trackId ?? name), bold: true },

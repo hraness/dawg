@@ -18,7 +18,7 @@ export async function acquireSessionLock(
       if (!hasCode(error, "EEXIST")) throw error;
       await reclaimDeadOwner(path);
       if (Date.now() - started >= timeoutMs)
-        throw new Error("timed out waiting for the Track session lock");
+        throw new Error("timed out waiting for the dawg session lock");
       await new Promise((resolve) => setTimeout(resolve, 8));
       continue;
     }
@@ -68,7 +68,7 @@ async function readOwner(path: string): Promise<LockOwner | undefined> {
     const text = await readFile(join(path, "owner"), "utf8");
     if (text.length > 256) return undefined;
     const value: unknown = JSON.parse(text);
-    // Read locks left by earlier Track versions, which stored only a PID.
+    // Read locks left by earlier versions (Track 0.1), which stored only a PID.
     if (Number.isSafeInteger(value) && (value as number) > 0)
       return { pid: value as number, token: "legacy" };
     if (

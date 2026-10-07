@@ -1,5 +1,5 @@
 /**
- * Incremental decoder for the small set of terminal sequences Track accepts.
+ * Incremental decoder for the small set of terminal sequences dawg accepts.
  * PTYs may split one CSI sequence across reads or combine several key events
  * into one read, so the main loop must consume framed events rather than raw
  * chunks.

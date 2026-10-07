@@ -1,6 +1,11 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { readCurrentSessionId, sessionPaths, loadSession } from "./store.ts";
+import {
+  readCurrentSessionId,
+  sessionPaths,
+  loadSession,
+  stateDir,
+} from "./store.ts";
 import { daemonLockPath } from "./protocol.ts";
 
 export type SessionSummary = {
@@ -16,13 +21,13 @@ export type SessionSummary = {
   error?: string;
 };
 
-/** Lists sessions under `<workspace>/.track/sessions`, newest first. */
+/** Lists sessions under `<workspace>/.dawg/sessions` (or the legacy `.track/sessions`), newest first. */
 export async function listSessions(
   workspace: string,
 ): Promise<SessionSummary[]> {
   let names: string[];
   try {
-    names = await readdir(join(workspace, ".track", "sessions"));
+    names = await readdir(join(stateDir(workspace), "sessions"));
   } catch {
     return [];
   }
@@ -77,7 +82,7 @@ export async function printSessions(
 ): Promise<void> {
   const sessions = await listSessions(workspace);
   if (sessions.length === 0) {
-    out.write("no sessions in .track (run `track` to create one)\n");
+    out.write("no sessions in .dawg (run `dawg` to create one)\n");
     return;
   }
   for (const session of sessions) {
@@ -85,9 +90,7 @@ export async function printSessions(
     const detail = session.error
       ? `unreadable · ${session.error}`
       : `rev ${session.revision} · ${session.tracks ?? "?"} tracks · updated ${session.updatedAt}`;
-    const daemon = session.daemonPid
-      ? ` · trackd pid ${session.daemonPid}`
-      : "";
+    const daemon = session.daemonPid ? ` · dawgd pid ${session.daemonPid}` : "";
     out.write(`${marker} ${formatSessionLine(session, sessions)}${daemon}\n`);
   }
 }

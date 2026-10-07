@@ -1,3 +1,4 @@
+import { envValue } from "../env.ts";
 import {
   clearGatewayKey,
   isValidKey,
@@ -42,7 +43,7 @@ export type LoginDeps = Readonly<{
 export type LoginMode = "gateway" | "xcb" | "key";
 export type KeyCheck = "valid" | "rejected" | "unverified";
 
-/** `track login [--gateway|--xcb|--key] [--budget <dollars>]` → exit code. */
+/** `dawg login [--gateway|--xcb|--key] [--budget <dollars>]` → exit code. */
 export async function login(
   mode: LoginMode,
   deps: LoginDeps,
@@ -71,7 +72,7 @@ async function loginGateway(
   if (!who) {
     if (!io.interactive) {
       io.print(
-        "Not logged in to Vercel. Run `vercel login` first, or re-run `track login` in a terminal.",
+        "Not logged in to Vercel. Run `vercel login` first, or re-run `dawg login` in a terminal.",
       );
       return 1;
     }
@@ -91,7 +92,7 @@ async function loginGateway(
     }
   }
   io.print(`Vercel: ${who}`);
-  const name = `track-${safeHostname(deps.hostname)}`;
+  const name = `dawg-${safeHostname(deps.hostname)}`;
   const args = [
     "ai-gateway",
     "api-keys",
@@ -119,7 +120,7 @@ async function loginGateway(
     io.print(
       `Could not create a key${detail ? `: ${redactKeys(detail)}` : ` (exit ${created.code})`}.`,
     );
-    io.print("You can paste one instead with `track login --key`.");
+    io.print("You can paste one instead with `dawg login --key`.");
     return 1;
   }
   return saveAndReport(deps, key, "created");
@@ -200,14 +201,14 @@ async function saveAndReport(
   const where = await storeGatewayKey(auth, key);
   await writeConfig(auth, { provider: "gateway" });
   io.print(
-    `Saved ${how} key ${maskKey(key)} to ${where === "keychain" ? "the macOS Keychain" : "~/.config/track/credentials.json"}.`,
+    `Saved ${how} key ${maskKey(key)} to ${where === "keychain" ? "the macOS Keychain" : "~/.config/dawg/credentials.json"}.`,
   );
   const check = knownCheck ?? (await checkKey(deps, key));
   io.print(
     check === "valid"
-      ? "✓ AI Gateway accepted the key. Run `track` and type a request."
+      ? "✓ AI Gateway accepted the key. Run `dawg` and type a request."
       : check === "rejected"
-        ? "✗ AI Gateway rejected the key (new keys can take a moment; check with `track auth status`)."
+        ? "✗ AI Gateway rejected the key (new keys can take a moment; check with `dawg auth status`)."
         : "? Could not reach AI Gateway to verify the key; it is saved and will be used when online.",
   );
   if (auth.env.AI_GATEWAY_API_KEY)
@@ -270,13 +271,11 @@ async function loginXcb(deps: LoginDeps, preset?: XcbPreset): Promise<number> {
   const bin = resolveXcbBin(auth.env, auth.runner);
   if (!bin) {
     io.print(
-      "xcb is not installed. It routes Track's requests to your Claude, Codex or Devin subscription.",
+      "xcb is not installed. It routes dawg's requests to your Claude, Codex or Devin subscription.",
     );
     io.print(`  Install: ${XCB_INSTALL}`);
     io.print(`  Docs:    ${XCB_DOC_URL}`);
-    io.print(
-      "Then run `track login --xcb` again (or set XCB_BIN to its path).",
-    );
+    io.print("Then run `dawg login --xcb` again (or set XCB_BIN to its path).");
     return 1;
   }
   let accounts: readonly XcbAccount[];
@@ -294,7 +293,7 @@ async function loginXcb(deps: LoginDeps, preset?: XcbPreset): Promise<number> {
   if (choices.length === 0) {
     io.print("No xcb account is available for applications yet.");
     io.print(
-      "An account must pass xcb's application qualification before apps like Track can use it:",
+      "An account must pass xcb's application qualification before apps like dawg can use it:",
     );
     io.print(`  ${XCB_DOC_URL}#application-checks-and-expiry`);
     const connected = accounts
@@ -354,12 +353,12 @@ async function loginXcb(deps: LoginDeps, preset?: XcbPreset): Promise<number> {
       "xcb admits this account on its first request, so the first turn takes longer.",
     );
   io.print(
-    "Saved to ~/.config/track/config.json (no secrets). Run `track` and type a request.",
+    "Saved to ~/.config/dawg/config.json (no secrets). Run `dawg` and type a request.",
   );
   return 0;
 }
 
-/** `track logout`: remove stored keys and the saved provider choice. */
+/** `dawg logout`: remove stored keys and the saved provider choice. */
 export async function logout(
   deps: Pick<LoginDeps, "auth" | "io">,
 ): Promise<number> {
@@ -376,7 +375,7 @@ export async function logout(
   return 0;
 }
 
-/** `track auth status` / `/auth`. Never prints a key, only its mask. */
+/** `dawg auth status` / `/auth`. Never prints a key, only its mask. */
 export async function authStatus(
   deps: Pick<LoginDeps, "auth" | "fetcher">,
   options: { verify?: boolean; gatewayModel?: "opus-5.5" | "sol-6.1" } = {},
@@ -387,8 +386,8 @@ export async function authStatus(
   const config = await readConfig(auth);
   lines.push(
     `provider: ${providerLabel(selection, options.gatewayModel ?? "opus-5.5")} (${selection.choice}${
-      auth.env.TRACK_PROVIDER
-        ? " from TRACK_PROVIDER"
+      envValue("PROVIDER", auth.env)
+        ? " from DAWG_PROVIDER"
         : config.provider
           ? " saved"
           : ""
@@ -405,7 +404,7 @@ export async function authStatus(
     lines.push(`xcb: ${selection.accountLabel} · ${selection.model}`);
   else if (config.xcb)
     lines.push(`xcb: saved ${config.xcb.account} · ${config.xcb.model}`);
-  else lines.push("xcb: installed, no account chosen (`track login --xcb`)");
+  else lines.push("xcb: installed, no account chosen (`dawg login --xcb`)");
   return lines;
 }
 

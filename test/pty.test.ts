@@ -1,5 +1,5 @@
 /**
- * End-to-end keyboard replay against the real `track` binary in a PTY.
+ * End-to-end keyboard replay against the real `dawg` binary in a PTY.
  *
  * Bun 1.3's `Bun.spawn({ terminal })` allocates a pseudo-terminal, so this
  * exercises raw mode, bracketed paste, the alternate screen, resize, and the
@@ -37,7 +37,7 @@ async function launch(
   argv: string[] = ["--track", "bass"],
   dir?: string,
 ) {
-  const cwd = dir ?? (await mkdtemp(join(tmpdir(), "track-pty-")));
+  const cwd = dir ?? (await mkdtemp(join(tmpdir(), "dawg-pty-")));
   if (!dir) dirs.push(cwd);
   const vt = new VirtualTerminal(cols, rows);
   const decoder = new TextDecoder();
@@ -48,8 +48,8 @@ async function launch(
       HOME: cwd,
       TERM: "xterm-256color",
       COLORTERM: "truecolor",
-      TRACK_DAEMON: "0",
-      TRACK_AUDIO: "0",
+      DAWG_DAEMON: "0",
+      DAWG_AUDIO: "0",
       ...env,
     },
     terminal: {
@@ -191,7 +191,7 @@ test.skipIf(!supported)(
     expect(await t.proc.exited).toBe(0);
     t.terminal.close();
 
-    // Plain `track` resumes the fork and claims its only track; a second
+    // Plain `dawg` resumes the fork and claims its only track; a second
     // window on the same session gets a draft track.
     const one = await launch(100, 30, {}, [], t.cwd);
     await one.until(() => one.vt.text().includes("STEER"), "first window");

@@ -1,5 +1,5 @@
 /**
- * The one place Track starts helper CLIs (`vercel`, `security`, `xcb`).
+ * The one place dawg starts helper CLIs (`vercel`, `security`, `xcb`).
  * Everything above it takes a `CommandRunner`, so tests script the
  * subprocesses instead of touching real accounts or the keychain.
  */

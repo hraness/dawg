@@ -1,25 +1,32 @@
 {
-  "name": "@hraness/track",
+  "name": "@hraness/dawg",
   "version": "0.2.0",
   "license": "MIT",
-  "repository": "https://github.com/hraness/track",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hraness/dawg.git"
+  },
+  "homepage": "https://dawg.sh",
+  "bugs": "https://github.com/hraness/dawg/issues",
   "description": "A local-first terminal music workstation with an agent-driven piano-roll interface.",
   "type": "module",
   "files": [
     "src/**/*.ts",
     "!src/**/*.test.ts",
     "!src/**/fixtures/**",
+    "!src/**/*-fixtures.ts",
     "core/**/*.ts",
     "!core/**/*.test.ts",
     "tui/**/*.ts",
     "!tui/**/*.test.ts",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "DAWG.md"
   ],
   "bin": {
-    "track": "./src/main.ts"
+    "dawg": "./src/main.ts"
   },
   "scripts": {
-    "track": "bun run src/main.ts",
+    "dawg": "bun run src/main.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "check": "bun test && bun run typecheck && bun run format",

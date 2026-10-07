@@ -1,8 +1,8 @@
 /**
- * `track render <out.wav>`: renders a session (or a `track.loop/v1` file) to
+ * `dawg render <out.wav>`: renders a session (or a `track.loop/v1` file) to
  * a stereo 16-bit PCM WAV through the same deterministic renderer playback
  * uses, so two renders of one score are byte-identical. It reads the session
- * record from disk and never starts trackd or plays audio.
+ * record from disk and never starts dawgd or plays audio.
  */
 import { createHash } from "node:crypto";
 import { readFile, rename, writeFile } from "node:fs/promises";
@@ -18,7 +18,7 @@ import {
 } from "./session/store.ts";
 
 export const RENDER_USAGE =
-  "usage: track render <out.wav> [--session <name|id>] [--import <file.track.json>]";
+  "usage: dawg render <out.wav> [--session <name|id>] [--import <file.track.json>]";
 
 const MAX_LOOP_FILE_BYTES = 512 * 1024;
 
@@ -89,7 +89,7 @@ async function loadScore(
       ? await readCurrentSessionId(workspace)
       : await resolveSessionArg(workspace, query);
   if (sessionId === undefined)
-    throw new Error("no session here; run `track` first or pass --import");
+    throw new Error("no session here; run `dawg` first or pass --import");
   const record = await loadSession<unknown>(
     sessionPaths(workspace, sessionId),
   ).catch(() => {

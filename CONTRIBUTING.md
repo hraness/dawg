@@ -1,6 +1,6 @@
 # Contributing
 
-Track is developed as a small, local-first terminal application. Keep changes focused and preserve the user-visible command contract in `README.md` and `TRACK.md`.
+dawg is developed as a small, local-first terminal application. Keep changes focused and preserve the user-visible command contract in `README.md` and `DAWG.md`.
 
 Before opening a pull request:
 

@@ -2,7 +2,7 @@
  * Server-side rebase of agent operation intents.
  *
  * An agent validates its operations against the score at `base`. When other
- * windows committed in the meantime, trackd replays the operations on the
+ * windows committed in the meantime, dawgd replays the operations on the
  * current score instead of rejecting, but only when nothing they touch
  * changed since `base`: the notes they update or remove, the tracks whose
  * settings or contents they rewrite, the tracks they add notes to, and the

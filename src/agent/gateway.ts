@@ -1,6 +1,7 @@
+import { envValue } from "../env.ts";
 import { readSseData } from "./sse.ts";
 
-/** The only model labels Track accepts. Provider IDs are local configuration. */
+/** The only model labels dawg accepts. Provider IDs are local configuration. */
 export const GATEWAY_MODELS = Object.freeze(["opus-5.5", "sol-6.1"] as const);
 export type GatewayModel = (typeof GATEWAY_MODELS)[number];
 
@@ -130,8 +131,8 @@ export function createGatewayClient(
   ).replace(/\/$/, "");
   const apiKey = options.apiKey ?? process.env.AI_GATEWAY_API_KEY;
   const overrides: Partial<Record<GatewayModel, string | undefined>> = {
-    "opus-5.5": process.env.TRACK_OPUS_MODEL || undefined,
-    "sol-6.1": process.env.TRACK_SOL_MODEL || undefined,
+    "opus-5.5": envValue("OPUS_MODEL") || undefined,
+    "sol-6.1": envValue("SOL_MODEL") || undefined,
     ...options.modelIds,
   };
   const redact = (text: string): string =>
@@ -146,7 +147,7 @@ export function createGatewayClient(
           : resolveModelId(request.model, overrides);
       if (!apiKey)
         throw new GatewayError(
-          "no AI Gateway key; run `track login` or set AI_GATEWAY_API_KEY",
+          "no AI Gateway key; run `dawg login` or set AI_GATEWAY_API_KEY",
         );
       const body: Record<string, unknown> = {
         model,

@@ -1,13 +1,13 @@
 /**
- * End-to-end qualification: real `track` processes in real PTYs, a real
- * trackd daemon, a temp workspace, and no network.
+ * End-to-end qualification: real `dawg` processes in real PTYs, a real
+ * dawgd daemon, a temp workspace, and no network.
  *
  * One scenario walks the multi-window workflow: three windows build drums,
  * bass and keys on a new session and converge on one revision and digest;
  * transport is shared; /rename propagates; reopened windows auto-claim the
  * three tracks and a fourth gets a draft; undo/redo stay consistent across
- * windows; /fork numbers the new session; a `kill -9` of trackd recovers
- * with the same digest on the next edit; and `track render` is
+ * windows; /fork numbers the new session; a `kill -9` of dawgd recovers
+ * with the same digest on the next edit; and `dawg render` is
  * byte-for-byte deterministic.
  */
 import { afterAll, expect, test } from "bun:test";
@@ -48,11 +48,11 @@ function env(workspace: string): Record<string, string> {
     TERM: "xterm-256color",
     COLORTERM: "truecolor",
     NO_COLOR: "1",
-    TRACK_AUDIO: "0",
-    TRACK_AI: "0",
-    TRACK_PROVIDER: "gateway",
-    TRACK_CREDENTIAL_STORE: "file",
-    TRACK_CONFIG_DIR: join(workspace, ".config"),
+    DAWG_AUDIO: "0",
+    DAWG_AI: "0",
+    DAWG_PROVIDER: "gateway",
+    DAWG_CREDENTIAL_STORE: "file",
+    DAWG_CONFIG_DIR: join(workspace, ".config"),
   };
 }
 
@@ -202,9 +202,9 @@ function alive(pid: number): boolean {
   }
 }
 
-/** Live trackd pids for every session in a workspace, from their locks. */
+/** Live dawgd pids for every session in a workspace, from their locks. */
 async function daemonPids(workspace: string): Promise<number[]> {
-  const dir = join(workspace, ".track", "sessions");
+  const dir = join(workspace, ".dawg", "sessions");
   const names = await readdir(dir).catch(() => [] as string[]);
   const pids: number[] = [];
   for (const name of names.filter((n) => n.endsWith(".daemon.lock"))) {
@@ -256,9 +256,9 @@ async function render(workspace: string, out: string): Promise<string> {
 }
 
 test.skipIf(!supported)(
-  "e2e: three windows, trackd, rename, auto-claim, undo/redo, fork, kill -9, render",
+  "e2e: three windows, dawgd, rename, auto-claim, undo/redo, fork, kill -9, render",
   async () => {
-    const workspace = await mkdtemp(join(tmpdir(), "track-e2e-"));
+    const workspace = await mkdtemp(join(tmpdir(), "dawg-e2e-"));
     workspaces.push(workspace);
 
     // 1. Three windows on a new session, one per instrument.
@@ -354,11 +354,11 @@ test.skipIf(!supported)(
       () => four.vt.text(),
     );
 
-    // 3. kill -9 trackd mid-session: the next edit recovers the same state.
+    // 3. kill -9 dawgd mid-session: the next edit recovers the same state.
     const [pid] = await daemonPids(workspace);
     expect(pid).toBeNumber();
     process.kill(pid!, "SIGKILL");
-    await until(() => !alive(pid!), "trackd exit");
+    await until(() => !alive(pid!), "dawgd exit");
     const recovered = await edit(one, "pattern clap 1 3 vel 0.6");
     expect(recovered).toBe(redone.revision + 1);
     const afterCrash = await converged(quad);
@@ -402,13 +402,13 @@ test.skipIf(!supported)(
 );
 
 test("demo --track drums seeds a drum pattern, not melodic notes", async () => {
-  const workspace = await mkdtemp(join(tmpdir(), "track-demo-"));
+  const workspace = await mkdtemp(join(tmpdir(), "dawg-demo-"));
   workspaces.push(workspace);
   const proc = Bun.spawn(
     [process.execPath, MAIN, "--track", "drums", "--export", "demo.json"],
     {
       cwd: workspace,
-      env: { ...env(workspace), TRACK_DEMO: "1" },
+      env: { ...env(workspace), DAWG_DEMO: "1" },
       stdin: "ignore",
       stdout: "ignore",
       stderr: "pipe",

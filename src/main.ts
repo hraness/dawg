@@ -8,6 +8,7 @@ import {
   SessionConflictError,
   type SessionRecord,
 } from "./session/store.ts";
+import { envValue } from "./env.ts";
 import { openSessionPort } from "./session/port.ts";
 import { compositionDigest, monotonicEpochMs } from "./session/protocol.ts";
 import {
@@ -75,16 +76,16 @@ import { encodeBuffer } from "../tui/screen.ts";
 import { parseThemeName } from "../tui/theme.ts";
 
 const ESC = "\u001b[";
-const HELP_TEXT = `track · local-first terminal music workstation
+const HELP_TEXT = `dawg · local-first terminal music workstation
 
 Usage:
-  track [--new] [--session <name|id>] [--track <name>]
-  track --import <file> --export <file>
-  track sessions
-  track render <out.wav> [--session <name|id>] [--import <file>]
+  dawg [--new] [--session <name|id>] [--track <name>]
+  dawg --import <file> --export <file>
+  dawg sessions
+  dawg render <out.wav> [--session <name|id>] [--import <file>]
 
 Usage flags:
-  --reduce-motion   static hit/sustain states (also TRACK_REDUCE_MOTION=1)
+  --reduce-motion   static hit/sustain states (also DAWG_REDUCE_MOTION=1)
   --theme <name>    default | high-contrast | mono (NO_COLOR forces mono)
 
 Prompt:
@@ -106,10 +107,10 @@ Commands:
   /login [--xcb], /logout, /auth [--check]
 
 Auth:
-  track login [--gateway|--key|--xcb] [--budget <dollars>]
-  track logout · track auth status [--check]
+  dawg login [--gateway|--key|--xcb] [--budget <dollars>]
+  dawg logout · dawg auth status [--check]
 Unrecognized requests go to the agent once a provider is configured
-(TRACK_PROVIDER=gateway|xcb|auto; TRACK_AI=0 disables the agent).`;
+(DAWG_PROVIDER=gateway|xcb|auto; DAWG_AI=0 disables the agent).`;
 const args = new Set(process.argv.slice(2));
 const requestedSession = optionValue("--session");
 const explicitTrack = optionValue("--track");
@@ -139,8 +140,7 @@ if (process.argv[2] === "render") {
     ),
   );
 }
-const demo =
-  args.has("--demo") || process.env.TRACK_DEMO === "1" || !stdin.isTTY;
+const demo = args.has("--demo") || envValue("DEMO") === "1" || !stdin.isTTY;
 
 const initial = createScore({
   tracks: [
@@ -163,7 +163,7 @@ const selectedSession = args.has("--new")
       );
 if (selectedSession !== undefined) sessionOptions.sessionId = selectedSession;
 const session = await ensureSession(initial.toJSON(), sessionOptions);
-// trackd when connected, the file-lock path otherwise (see src/session/port.ts).
+// dawgd when connected, the file-lock path otherwise (see src/session/port.ts).
 let port = await openSessionPort<ReturnType<TrackScore["toJSON"]>>({
   paths: session.paths,
   sessionId: session.record.sessionId,
@@ -205,7 +205,7 @@ if (!draftTrack) await ensureFocusedTrack();
 const clock = new TransportClock(score.tempoBpm);
 let audio = port.player;
 let selectedModel: GatewayModel =
-  process.env.TRACK_MODEL === "opus-5.5" ? "opus-5.5" : "sol-6.1";
+  envValue("MODEL") === "opus-5.5" ? "opus-5.5" : "sol-6.1";
 const prompt = new PromptModel({ width: 72, maxVisualRows: 8 });
 const tui = new TuiApp({
   io: {
@@ -214,9 +214,9 @@ const tui = new TuiApp({
     rows: () => stdout.rows ?? 24,
   },
   prompt,
-  theme: parseThemeName(optionValue("--theme") ?? process.env.TRACK_THEME),
+  theme: parseThemeName(optionValue("--theme") ?? envValue("THEME")),
   reducedMotion:
-    args.has("--reduce-motion") || process.env.TRACK_REDUCE_MOTION === "1",
+    args.has("--reduce-motion") || envValue("REDUCE_MOTION") === "1",
 });
 let syncState: SyncState = port.sync;
 let windowCount = 1;
@@ -504,7 +504,7 @@ async function runInteractive(): Promise<void> {
         score = scoreFromJSON(record.composition);
         clock.setTempo(score.tempoBpm);
         if (clock.playing) void audio.play(score);
-        // Connected windows follow trackd's transport frames instead.
+        // Connected windows follow dawgd's transport frames instead.
         const replay =
           port.mode === "file" ? latest.events.slice(previousRevision) : [];
         for (const event of replay) {
@@ -551,7 +551,7 @@ async function runInteractive(): Promise<void> {
     else if (update.type === "presence") windowCount = update.clients.length;
     else if (update.type === "sync") syncState = update.sync;
     else if (update.type === "transport") {
-      // Every window renders the same hit line from trackd's timestamp.
+      // Every window renders the same hit line from dawgd's timestamp.
       const { playing, beat, bpm, atMs } = update.transport;
       clock.setTempo(bpm);
       clock.sync(beat, playing, atMs, monotonicEpochMs());
@@ -769,7 +769,7 @@ async function submit(prompt: string): Promise<string> {
   }
   const parsed = parsePrompt(prompt);
   if (!parsed) {
-    if (process.env.TRACK_AI === "0") return `unrecognized request: ${prompt}`;
+    if (envValue("AI") === "0") return `unrecognized request: ${prompt}`;
     await materializeDraft();
     return runAgent(prompt);
   }
@@ -1013,9 +1013,9 @@ function makeNamer(): AutoNamer {
       () => ({ port, record }),
       (meta) => adoptMeta(meta),
     ),
-    // TRACK_AI=0 keeps naming local; an offline provider falls back too.
+    // DAWG_AI=0 keeps naming local; an offline provider falls back too.
     generator:
-      process.env.TRACK_AI === "0"
+      envValue("AI") === "0"
         ? undefined
         : providerNameGenerator(currentProvider),
   });
@@ -1174,7 +1174,7 @@ async function setTransport(
   action: "play" | "pause" | "toggle",
 ): Promise<void> {
   if (port.mode === "daemon") {
-    // trackd owns the only transport; its broadcast updates `clock`.
+    // dawgd owns the only transport; its broadcast updates `clock`.
     await port.transport(action);
     return;
   }
@@ -1238,7 +1238,7 @@ function authTone(line: string): "success" | "warning" | "info" {
 }
 
 /**
- * The cached provider, re-resolved when `~/.config/track` config or
+ * The cached provider, re-resolved when `~/.config/dawg` config or
  * credentials change (two stats per call) and, while offline, at most every
  * 30 s so an account admitted elsewhere is picked up without a restart.
  */
@@ -1253,7 +1253,7 @@ function currentProvider(): Promise<ProviderSelection> {
     provider = selectProvider().catch((): ProviderSelection => ({
       kind: "offline",
       choice: "auto",
-      reason: "provider unavailable; run `track login`",
+      reason: "provider unavailable; run `dawg login`",
     }));
   }
   return provider.then((selection) => {
@@ -1277,7 +1277,7 @@ function agentHost(turn: { steering: string[] }): AgentHost {
       }),
     }),
     async commit(change) {
-      // trackd rebases operation intents onto newer revisions when nothing
+      // dawgd rebases operation intents onto newer revisions when nothing
       // they touch changed; the file port keeps the strict base check.
       if (port.mode !== "daemon" && change.baseRevision !== record.revision)
         throw new StaleRevisionError(change.baseRevision, record.revision);

@@ -6,7 +6,7 @@ const HEARTBEAT_MS = 5_000;
 
 /**
  * The per-session audio lock: one directory that at most one process (a
- * window in file mode, or trackd) holds while it is making sound. Its mtime
+ * window in file mode, or dawgd) holds while it is making sound. Its mtime
  * is a heartbeat so a crashed owner is reclaimed after STALE_LOCK_MS.
  */
 export class PlaybackLock {

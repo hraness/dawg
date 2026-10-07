@@ -1,4 +1,4 @@
-/** A bounded, dependency-free multiline prompt model for the Track TUI. */
+/** A bounded, dependency-free multiline prompt model for the dawg TUI. */
 
 import { graphemes, type Grapheme } from "./text.ts";
 

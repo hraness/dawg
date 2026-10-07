@@ -13,14 +13,14 @@ import { systemRunner } from "./runner.ts";
 import { audioStatusLine } from "../audio/engine.ts";
 
 export const AUTH_USAGE = `Usage:
-  track login            create an AI Gateway key with the Vercel CLI (default)
-  track login --key      paste an existing AI Gateway key (hidden input)
-  track login --xcb      use a Claude/Codex/Devin subscription through xcb
-  track login --budget <dollars>   spend limit for the created key
-  track logout           remove the stored key and provider choice
-  track auth status [--check]      show provider, key, xcb account, audio backend`;
+  dawg login            create an AI Gateway key with the Vercel CLI (default)
+  dawg login --key      paste an existing AI Gateway key (hidden input)
+  dawg login --xcb      use a Claude/Codex/Devin subscription through xcb
+  dawg login --budget <dollars>   spend limit for the created key
+  dawg logout           remove the stored key and provider choice
+  dawg auth status [--check]      show provider, key, xcb account, audio backend`;
 
-/** Entry for `track login|logout|auth`. Returns the process exit code. */
+/** Entry for `dawg login|logout|auth`. Returns the process exit code. */
 export async function runAuthCommand(argv: readonly string[]): Promise<number> {
   const [command, ...rest] = argv;
   const io = terminalIO();
