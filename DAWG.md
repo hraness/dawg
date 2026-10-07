@@ -332,7 +332,9 @@ Strudel mapping notes: Strudel's `lpf`/`hpf`/`bpf` each set a separate filter; d
 
 A synth track's voice is shaped by `track.synth`, a map of Strudel (superdough) parameter names to values. Parameter names are Strudel's wherever one means the same thing, and every Strudel alias is accepted on input (`att`, `lpe`, `fmi`, `vmod`…); the stored and printed form is the canonical name in the table. Only the parameters a document sets are stored, and an unset one takes its default, as in Strudel. A track with no `synth` and one of dawg's original instruments (`sine piano pluck bass saw square triangle`) renders byte-for-byte as before.
 
-Sounds (`instrument`): `sine`, `sawtooth` (`saw` stays the legacy voice until `synth` is set), `square`, `triangle`, `supersaw`, `pulse`, `user` (additive, from `partials`/`phases`), and noise `white`, `pink`, `brown`, `crackle`. Aliases: `sin`, `tri`, `sqr`, `noise`/`whitenoise`, `pinknoise`, `brownnoise`. Any oscillator can be mixed with noise (`noise`, and `density` for crackle), detuned into a unison stack (`unison`, `detune`, `spread`), pulse-width modulated (`pw`, `pwrate`, `pwsweep`), and frequency-modulated by up to eight operators (`fm`…`fm8`, each with `fmh`, an ADSR, `fmenv` lin/exp and `fmwave`). The operators modulate the carrier's phase in parallel, each at its own ratio `fmh`. The pitch envelope (`penv` semitones with `pattack/pdecay/psustain/prelease`, `pcurve`, `panchor`) and vibrato (`vib` Hz, `vibmod` semitones) bend pitch. Three per-voice filters (`lpf`, `hpf`, `bpf`, in that order) each have `q`, an envelope depth in octaves (`lpenv`…) and their own ADSR; `ftype` chooses 12 dB, 24 dB or ladder for the low-pass and `fanchor` sets where the envelope sits relative to the cutoff. A filter whose cutoff is unset is off.
+Sounds (`instrument`): `sine`, `sawtooth` (`saw` stays the legacy voice until `synth` is set), `square`, `triangle`, `supersaw`, `pulse`, `user` (additive, from `partials`/`phases`), and noise `white`, `pink`, `brown`, `crackle`, plus the ZzFX sounds `z_sine`, `z_triangle`, `z_sawtooth`, `z_square`, `z_tan`, `z_noise`. Aliases: `sin`, `tri`, `sqr`, `noise`/`whitenoise`, `pinknoise`, `brownnoise`. Any oscillator can be mixed with noise (`noise`, and `density` for crackle), detuned into a unison stack (`unison`, `detune`, `spread`), pulse-width modulated (`pw`, `pwrate`, `pwsweep`), and frequency-modulated by up to eight operators (`fm`…`fm8`, each with `fmh`, an ADSR, `fmenv` lin/exp and `fmwave`). The operators modulate the carrier's phase in parallel, each at its own ratio `fmh`. The pitch envelope (`penv` semitones with `pattack/pdecay/psustain/prelease`, `pcurve`, `panchor`) and vibrato (`vib` Hz, `vibmod` semitones) bend pitch. Three per-voice filters (`lpf`, `hpf`, `bpf`, in that order) each have `q`, an envelope depth in octaves (`lpenv`…) and their own ADSR; `ftype` chooses 12 dB, 24 dB or ladder for the low-pass and `fanchor` sets where the envelope sits relative to the cutoff. A filter whose cutoff is unset is off.
+
+ZzFX sounds (`z_*`) run their own small procedural generator (`src/audio/synth/zzfx.ts`) and then the same ADSR and per-voice filters: frequency = note·(1 ± `zrand`) + 500·`slide` Hz/s + 250·`deltaSlide`·t² Hz, plus `pitchJump` Hz once `pitchJumpTime` seconds have passed; `lfo` (seconds) restarts slide and pitch jump every period and sets the period of `tremolo` (volume modulation amount); `zmod` is an FM rate in Hz at ±50 % depth; `noise` jitters the phase increment (on other sounds it mixes pink noise); `curve` bends the wave (sign·|x|^curve, 0 squares it); `zcrush` holds samples (0..1 → 1..100 samples at 44.1 kHz); `zdelay` adds one echo at half level. Strudel documents names and intent, not units, so these units are dawg's.
 
 The oscillator is chosen in one place, `resolveOscillator()` in `src/audio/synth/oscillators.ts`, which maps a sound name to an oscillator factory that can read the track's synth parameters. Another module can add sounds with `registerOscillatorResolver()` and reuse the voice's ADSR, filter envelopes, unison and FM.
 
@@ -349,98 +351,111 @@ synth reset                              unset everything
 automate synth-lpf points 0:400 8:4000   numeric parameters have lanes
 ```
 
-Presets: `pad` (supersaw: slow, wide detuned saws through a soft low-pass), `lead` (sawtooth: bright saw with a short filter blip and delayed vibrato feel), `pluck` (pulse: short percussive pulse with a fast filter envelope), `bass` (sawtooth: round saw bass, 24 dB low-pass with a little bite), `sub` (sine: clean sine sub with a tiny pitch drop on each note), `acid` (sawtooth: ladder low-pass with high resonance and a snappy envelope), `keys` (sine: electric-piano style 1:1 FM with a decaying modulator), `bell` (sine: inharmonic FM bell with a long ring), `organ` (user: drawbar-style additive organ with a gentle vibrato), `strings` (supersaw: softer ensemble: slow attack, gentle vibrato, darker filter), `brass` (sawtooth: filter swell on attack like a brass section), `wind` (pink: breathy band-passed noise that swells and fades), `chip` (pulse: 8-bit square lead with slow pulse-width motion).
+Presets: `pad` (supersaw: slow, wide detuned saws through a soft low-pass), `lead` (sawtooth: bright saw with a short filter blip and delayed vibrato feel), `pluck` (pulse: short percussive pulse with a fast filter envelope), `bass` (sawtooth: round saw bass, 24 dB low-pass with a little bite), `sub` (sine: clean sine sub with a tiny pitch drop on each note), `acid` (sawtooth: ladder low-pass with high resonance and a snappy envelope), `keys` (sine: electric-piano style 1:1 FM with a decaying modulator), `bell` (sine: inharmonic FM bell with a long ring), `organ` (user: drawbar-style additive organ with a gentle vibrato), `strings` (supersaw: softer ensemble: slow attack, gentle vibrato, darker filter), `brass` (sawtooth: filter swell on attack like a brass section), `wind` (pink: breathy band-passed noise that swells and fades), `chip` (pulse: 8-bit square lead with slow pulse-width motion), `zap` (z_square: ZzFX laser zap: a square that dives in pitch).
 
-The menu's **Parameters** section shows the instrument, preset and the simple parameters (ADSR, lpf/lpq/lpenv, detune, vib, fm); **advanced** groups every parameter (amplitude, oscillator, vibrato, pitch envelope, the three filters, FM 1–8, partials) with its Strudel aliases. The agent's `set_synth` tool takes the same names and presets.
+The menu's **Parameters** section shows the instrument, preset and the simple parameters (ADSR, lpf/lpq/lpenv, detune, vib, fm); **advanced** groups every parameter (amplitude, oscillator, vibrato, pitch envelope, the three filters, FM 1–8, ZzFX, partials) with its Strudel aliases. The agent's `set_synth` tool takes the same names and presets.
 
 Automation lanes `synth-<param>` are read at each note's onset, as Strudel reads a patterned control once per event. Note velocity scales the voice as Strudel's `velocity` does, and `gain` is the voice gain before the effects chain.
 
 The DSP is dawg's own, clean-room from public documentation and standard literature (PolyBLEP oscillators, Paul Kellet's pink-noise filter, leaky-integrated brown noise, RBJ biquads and a Stilson/Smith-style ladder, linear and exponential ADSRs, phase-modulation FM), not from Strudel or superdough source (AGPL-3.0). Noise comes from a PRNG seeded by each note, so renders stay byte-identical across cold, cached and worker paths.
 
-| Param       | Range                               | Default | Strudel names                | Lane              |
-| ----------- | ----------------------------------- | ------- | ---------------------------- | ----------------- |
-| **attack**  | 0..10 s                             | 0.003   | `attack`, `att`              | `synth-attack`    |
-| **decay**   | 0..10 s                             | 0.05    | `decay`, `dec`               | `synth-decay`     |
-| **sustain** | 0..1                                | 1       | `sustain`, `sus`             | `synth-sustain`   |
-| **release** | 0..10 s                             | 0.05    | `release`, `rel`             | `synth-release`   |
-| gain        | 0..4                                | 1       | `gain`                       | `synth-gain`      |
-| noise       | 0..1                                | 0       | `noise`                      | `synth-noise`     |
-| density     | 0..1                                | 0.03    | `density`                    | `synth-density`   |
-| unison      | 1..16                               | 1       | `unison`                     |                   |
-| **detune**  | 0..12 st                            | 0.2     | `detune`                     | `synth-detune`    |
-| spread      | 0..1                                | 0.6     | `spread`                     | `synth-spread`    |
-| pw          | 0..1                                | 0.5     | `pw`                         | `synth-pw`        |
-| pwrate      | 0..40 Hz                            | 1       | `pwrate`                     | `synth-pwrate`    |
-| pwsweep     | 0..1                                | 0       | `pwsweep`                    | `synth-pwsweep`   |
-| **vib**     | 0..64 Hz                            | 0       | `vib`, `vibrato`, `v`        | `synth-vib`       |
-| vibmod      | 0..24 st                            | 0.5     | `vibmod`, `vmod`             | `synth-vibmod`    |
-| penv        | -48..48 st                          | 0       | `penv`                       | `synth-penv`      |
-| pattack     | 0..10 s                             | 0.2     | `pattack`, `patt`            | `synth-pattack`   |
-| pdecay      | 0..10 s                             | 0       | `pdecay`, `pdec`             | `synth-pdecay`    |
-| psustain    | 0..1                                | 1       | `psustain`, `psus`           | `synth-psustain`  |
-| prelease    | 0..10 s                             | 0       | `prelease`, `prel`           | `synth-prelease`  |
-| pcurve      | 0..1                                | 0       | `pcurve`                     |                   |
-| panchor     | 0..1                                | 0       | `panchor`                    |                   |
-| **lpf**     | 20..20000 Hz                        | 2000    | `lpf`, `cutoff`, `ctf`, `lp` | `synth-lpf`       |
-| **lpq**     | 0..50                               | 1       | `lpq`, `resonance`           | `synth-lpq`       |
-| **lpenv**   | -10..10 oct                         | 0       | `lpenv`, `lpe`               | `synth-lpenv`     |
-| lpattack    | 0..10 s                             | 0.005   | `lpattack`, `lpa`            | `synth-lpattack`  |
-| lpdecay     | 0..10 s                             | 0.15    | `lpdecay`, `lpd`             | `synth-lpdecay`   |
-| lpsustain   | 0..1                                | 0       | `lpsustain`, `lps`           | `synth-lpsustain` |
-| lprelease   | 0..10 s                             | 0.1     | `lprelease`, `lpr`           | `synth-lprelease` |
-| hpf         | 20..20000 Hz                        | 200     | `hpf`, `hcutoff`, `hp`       | `synth-hpf`       |
-| hpq         | 0..50                               | 1       | `hpq`, `hresonance`          | `synth-hpq`       |
-| hpenv       | -10..10 oct                         | 0       | `hpenv`, `hpe`               | `synth-hpenv`     |
-| hpattack    | 0..10 s                             | 0.005   | `hpattack`, `hpa`            | `synth-hpattack`  |
-| hpdecay     | 0..10 s                             | 0.15    | `hpdecay`, `hpd`             | `synth-hpdecay`   |
-| hpsustain   | 0..1                                | 0       | `hpsustain`, `hps`           | `synth-hpsustain` |
-| hprelease   | 0..10 s                             | 0.1     | `hprelease`, `hpr`           | `synth-hprelease` |
-| bpf         | 20..20000 Hz                        | 1000    | `bpf`, `bandf`, `bp`         | `synth-bpf`       |
-| bpq         | 0..50                               | 1       | `bpq`, `bandq`               | `synth-bpq`       |
-| bpenv       | -10..10 oct                         | 0       | `bpenv`, `bpe`               | `synth-bpenv`     |
-| bpattack    | 0..10 s                             | 0.005   | `bpattack`, `bpa`            | `synth-bpattack`  |
-| bpdecay     | 0..10 s                             | 0.15    | `bpdecay`, `bpd`             | `synth-bpdecay`   |
-| bpsustain   | 0..1                                | 0       | `bpsustain`, `bps`           | `synth-bpsustain` |
-| bprelease   | 0..10 s                             | 0.1     | `bprelease`, `bpr`           | `synth-bprelease` |
-| ftype       | 12db / 24db / ladder                | 12db    | `ftype`                      |                   |
-| fanchor     | 0..1                                | 0       | `fanchor`                    | `synth-fanchor`   |
-| **fm**      | 0..64                               | 0       | `fm`, `fmi`                  | `synth-fm`        |
-| fmh         | 0..32                               | 1       | `fmh`                        | `synth-fmh`       |
-| fmattack    | 0..10 s                             | 0       | `fmattack`, `fmatt`          | `synth-fmattack`  |
-| fmdecay     | 0..10 s                             | 0       | `fmdecay`, `fmdec`           | `synth-fmdecay`   |
-| fmsustain   | 0..1                                | 1       | `fmsustain`, `fmsus`         | `synth-fmsustain` |
-| fmrelease   | 0..10 s                             | 0       | `fmrelease`, `fmrel`         | `synth-fmrelease` |
-| fmenv       | lin / exp                           | lin     | `fmenv`, `fme`               |                   |
-| fmwave      | sine / sawtooth / square / triangle | sine    | `fmwave`                     |                   |
-| partials    | up to 64 numbers -1..1              | —       | `partials`                   |                   |
-| phases      | up to 64 numbers 0..1               | —       | `phases`                     |                   |
+| Param         | Range                               | Default | Strudel names                | Lane                  |
+| ------------- | ----------------------------------- | ------- | ---------------------------- | --------------------- |
+| **attack**    | 0..10 s                             | 0.003   | `attack`, `att`              | `synth-attack`        |
+| **decay**     | 0..10 s                             | 0.05    | `decay`, `dec`               | `synth-decay`         |
+| **sustain**   | 0..1                                | 1       | `sustain`, `sus`             | `synth-sustain`       |
+| **release**   | 0..10 s                             | 0.05    | `release`, `rel`             | `synth-release`       |
+| gain          | 0..4                                | 1       | `gain`                       | `synth-gain`          |
+| noise         | 0..1                                | 0       | `noise`                      | `synth-noise`         |
+| density       | 0..1                                | 0.03    | `density`                    | `synth-density`       |
+| unison        | 1..16                               | 1       | `unison`                     |                       |
+| **detune**    | 0..12 st                            | 0.2     | `detune`                     | `synth-detune`        |
+| spread        | 0..1                                | 0.6     | `spread`                     | `synth-spread`        |
+| pw            | 0..1                                | 0.5     | `pw`                         | `synth-pw`            |
+| pwrate        | 0..40 Hz                            | 1       | `pwrate`                     | `synth-pwrate`        |
+| pwsweep       | 0..1                                | 0       | `pwsweep`                    | `synth-pwsweep`       |
+| **vib**       | 0..64 Hz                            | 0       | `vib`, `vibrato`, `v`        | `synth-vib`           |
+| vibmod        | 0..24 st                            | 0.5     | `vibmod`, `vmod`             | `synth-vibmod`        |
+| penv          | -48..48 st                          | 0       | `penv`                       | `synth-penv`          |
+| pattack       | 0..10 s                             | 0.2     | `pattack`, `patt`            | `synth-pattack`       |
+| pdecay        | 0..10 s                             | 0       | `pdecay`, `pdec`             | `synth-pdecay`        |
+| psustain      | 0..1                                | 1       | `psustain`, `psus`           | `synth-psustain`      |
+| prelease      | 0..10 s                             | 0       | `prelease`, `prel`           | `synth-prelease`      |
+| pcurve        | 0..1                                | 0       | `pcurve`                     |                       |
+| panchor       | 0..1                                | 0       | `panchor`                    |                       |
+| **lpf**       | 20..20000 Hz                        | 2000    | `lpf`, `cutoff`, `ctf`, `lp` | `synth-lpf`           |
+| **lpq**       | 0..50                               | 1       | `lpq`, `resonance`           | `synth-lpq`           |
+| **lpenv**     | -10..10 oct                         | 0       | `lpenv`, `lpe`               | `synth-lpenv`         |
+| lpattack      | 0..10 s                             | 0.005   | `lpattack`, `lpa`            | `synth-lpattack`      |
+| lpdecay       | 0..10 s                             | 0.15    | `lpdecay`, `lpd`             | `synth-lpdecay`       |
+| lpsustain     | 0..1                                | 0       | `lpsustain`, `lps`           | `synth-lpsustain`     |
+| lprelease     | 0..10 s                             | 0.1     | `lprelease`, `lpr`           | `synth-lprelease`     |
+| hpf           | 20..20000 Hz                        | 200     | `hpf`, `hcutoff`, `hp`       | `synth-hpf`           |
+| hpq           | 0..50                               | 1       | `hpq`, `hresonance`          | `synth-hpq`           |
+| hpenv         | -10..10 oct                         | 0       | `hpenv`, `hpe`               | `synth-hpenv`         |
+| hpattack      | 0..10 s                             | 0.005   | `hpattack`, `hpa`            | `synth-hpattack`      |
+| hpdecay       | 0..10 s                             | 0.15    | `hpdecay`, `hpd`             | `synth-hpdecay`       |
+| hpsustain     | 0..1                                | 0       | `hpsustain`, `hps`           | `synth-hpsustain`     |
+| hprelease     | 0..10 s                             | 0.1     | `hprelease`, `hpr`           | `synth-hprelease`     |
+| bpf           | 20..20000 Hz                        | 1000    | `bpf`, `bandf`, `bp`         | `synth-bpf`           |
+| bpq           | 0..50                               | 1       | `bpq`, `bandq`               | `synth-bpq`           |
+| bpenv         | -10..10 oct                         | 0       | `bpenv`, `bpe`               | `synth-bpenv`         |
+| bpattack      | 0..10 s                             | 0.005   | `bpattack`, `bpa`            | `synth-bpattack`      |
+| bpdecay       | 0..10 s                             | 0.15    | `bpdecay`, `bpd`             | `synth-bpdecay`       |
+| bpsustain     | 0..1                                | 0       | `bpsustain`, `bps`           | `synth-bpsustain`     |
+| bprelease     | 0..10 s                             | 0.1     | `bprelease`, `bpr`           | `synth-bprelease`     |
+| ftype         | 12db / 24db / ladder                | 12db    | `ftype`                      |                       |
+| fanchor       | 0..1                                | 0       | `fanchor`                    | `synth-fanchor`       |
+| **fm**        | 0..64                               | 0       | `fm`, `fmi`                  | `synth-fm`            |
+| fmh           | 0..32                               | 1       | `fmh`                        | `synth-fmh`           |
+| fmattack      | 0..10 s                             | 0       | `fmattack`, `fmatt`          | `synth-fmattack`      |
+| fmdecay       | 0..10 s                             | 0       | `fmdecay`, `fmdec`           | `synth-fmdecay`       |
+| fmsustain     | 0..1                                | 1       | `fmsustain`, `fmsus`         | `synth-fmsustain`     |
+| fmrelease     | 0..10 s                             | 0       | `fmrelease`, `fmrel`         | `synth-fmrelease`     |
+| fmenv         | lin / exp                           | lin     | `fmenv`, `fme`               |                       |
+| fmwave        | sine / sawtooth / square / triangle | sine    | `fmwave`                     |                       |
+| zrand         | 0..1                                | 0       | `zrand`                      | `synth-zrand`         |
+| curve         | 0..3                                | 1       | `curve`                      | `synth-curve`         |
+| slide         | -20..20                             | 0       | `slide`                      | `synth-slide`         |
+| deltaSlide    | -20..20                             | 0       | `deltaSlide`                 | `synth-deltaSlide`    |
+| pitchJump     | -2000..2000 Hz                      | 0       | `pitchJump`                  | `synth-pitchJump`     |
+| pitchJumpTime | 0..10 s                             | 0       | `pitchJumpTime`              | `synth-pitchJumpTime` |
+| lfo           | 0..10 s                             | 0       | `lfo`                        | `synth-lfo`           |
+| zmod          | 0..1000 Hz                          | 0       | `zmod`                       | `synth-zmod`          |
+| zcrush        | 0..1                                | 0       | `zcrush`                     | `synth-zcrush`        |
+| zdelay        | 0..1 s                              | 0       | `zdelay`                     | `synth-zdelay`        |
+| tremolo       | 0..1                                | 0       | `tremolo`                    | `synth-tremolo`       |
+| partials      | up to 64 numbers -1..1              | —       | `partials`                   |                       |
+| phases        | up to 64 numbers 0..1               | —       | `phases`                     |                       |
 
 FM operators 2–8 repeat the `fm` rows with a suffix (`fm2`, `fmh2`, `fmattack2` … `fmwave8`), each with its lane.
 
 ### Strudel parity
 
-| Strudel                                                                                          | dawg                                                           | Status                                                    |
-| ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- | --------------------------------------------------------- |
-| `s`/`sound` sine, sawtooth, square, triangle, supersaw, pulse, user, white, pink, brown, crackle | `instrument`                                                   | done                                                      |
-| `noise`, `density`                                                                               | `synth.noise`, `synth.density`                                 | done                                                      |
-| `unison`, `spread`, `detune`                                                                     | `synth.*`                                                      | done                                                      |
-| `pw`, `pwrate`, `pwsweep`                                                                        | `synth.*`                                                      | done                                                      |
-| `fm`/`fmi`, `fmh`, `fmattack/fmdecay/fmsustain/fmrelease`, `fmenv`, `fmwave`, operators 2–8      | `synth.*`                                                      | done                                                      |
-| `attack/decay/sustain/release`, `adsr`, `gain`, `velocity`                                       | `synth.*`; `adsr` is command shorthand; velocity is the note's | done                                                      |
-| `penv`, `pattack/pdecay/psustain/prelease`, `pcurve`, `panchor`                                  | `synth.*`                                                      | done                                                      |
-| `vib`/`vibrato`, `vibmod`                                                                        | `synth.*`                                                      | done                                                      |
-| `lpf/hpf/bpf`, `lpq/hpq/bpq`, `lpenv/hpenv/bpenv` and their ADSRs, `ftype`, `fanchor`            | `synth.*` (per voice); also the track `filter` effect          | done                                                      |
-| `partials`, `phases`                                                                             | `synth.partials`, `synth.phases`                               | done                                                      |
-| `vowel`, `coarse`, `crush`, `shape`, `distort`, `djf`                                            | effects `vowel`, `crush`, `distort`, `djf`                     | done (see Effects)                                        |
-| `phaser*`, `tremolo*`, `leslie`/`lrate`/`lsize`, `compressor*`, `postgain`                       | effects of the same names                                      | done                                                      |
-| `room`, `size`, `roomfade`, `roomlp`, `roomdim`                                                  | `reverb`                                                       | done                                                      |
-| `delay`, `delaytime`, `delayfeedback`                                                            | `delay`                                                        | done                                                      |
-| `pan`                                                                                            | track `pan`                                                    | done                                                      |
-| `orbit`, `duckorbit`/`duckdepth`/`duckattack`/`duckonset`                                        | effects `orbit`, `duck`                                        | done (per-track delay/reverb, no shared send)             |
-| `iresponse`/`ir`                                                                                 | none                                                           | gap: convolution with a sample; belongs with sample packs |
-| `zzfx` and its `z*` parameters                                                                   | none                                                           | gap: a separate procedural synth; planned follow-up       |
-| soundfonts `gm_*`, drum banks, dirt-samples                                                      | sampler and sample packs                                       | not this engine: hosted samples, see Sample packs         |
-| sample controls (`begin`, `end`, `speed`, `loop`, `cut`, `squiz`…)                               | sampler voices                                                 | sampler                                                   |
+| Strudel                                                                                                                                          | dawg                                                           | Status                                                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `s`/`sound` sine, sawtooth, square, triangle, supersaw, pulse, user, white, pink, brown, crackle                                                 | `instrument`                                                   | done                                                                   |
+| `noise`, `density`                                                                                                                               | `synth.noise`, `synth.density`                                 | done                                                                   |
+| `unison`, `spread`, `detune`                                                                                                                     | `synth.*`                                                      | done                                                                   |
+| `pw`, `pwrate`, `pwsweep`                                                                                                                        | `synth.*`                                                      | done                                                                   |
+| `fm`/`fmi`, `fmh`, `fmattack/fmdecay/fmsustain/fmrelease`, `fmenv`, `fmwave`, operators 2–8                                                      | `synth.*`                                                      | done                                                                   |
+| `attack/decay/sustain/release`, `adsr`, `gain`, `velocity`                                                                                       | `synth.*`; `adsr` is command shorthand; velocity is the note's | done                                                                   |
+| `penv`, `pattack/pdecay/psustain/prelease`, `pcurve`, `panchor`                                                                                  | `synth.*`                                                      | done                                                                   |
+| `vib`/`vibrato`, `vibmod`                                                                                                                        | `synth.*`                                                      | done                                                                   |
+| `lpf/hpf/bpf`, `lpq/hpq/bpq`, `lpenv/hpenv/bpenv` and their ADSRs, `ftype`, `fanchor`                                                            | `synth.*` (per voice); also the track `filter` effect          | done                                                                   |
+| `partials`, `phases`                                                                                                                             | `synth.partials`, `synth.phases`                               | done                                                                   |
+| `vowel`, `coarse`, `crush`, `shape`, `distort`, `djf`                                                                                            | effects `vowel`, `crush`, `distort`, `djf`                     | done (see Effects)                                                     |
+| `phaser*`, `tremolo*`, `leslie`/`lrate`/`lsize`, `compressor*`, `postgain`                                                                       | effects of the same names                                      | done                                                                   |
+| `room`, `size`, `roomfade`, `roomlp`, `roomdim`                                                                                                  | `reverb`                                                       | done                                                                   |
+| `delay`, `delaytime`, `delayfeedback`                                                                                                            | `delay`                                                        | done                                                                   |
+| `pan`                                                                                                                                            | track `pan`                                                    | done                                                                   |
+| `orbit`, `duckorbit`/`duckdepth`/`duckattack`/`duckonset`                                                                                        | effects `orbit`, `duck`                                        | done (per-track delay/reverb, no shared send)                          |
+| `iresponse`/`ir`                                                                                                                                 | none                                                           | gap: convolution with a sample; belongs with sample packs              |
+| `z_sine`…`z_noise`; `zrand`, `curve`, `slide`, `deltaSlide`, `pitchJump`, `pitchJumpTime`, `lfo`, `noise`, `zmod`, `zcrush`, `zdelay`, `tremolo` | ZzFX sounds, `synth.*`                                         | done (clean-room; units documented above)                              |
+| zzfx `duration`                                                                                                                                  | note length                                                    | done: a note's length is its duration                                  |
+| raw `zzfx([...])` parameter array                                                                                                                | none                                                           | gap: positional array of an unspecified layout; use the named controls |
+| soundfonts `gm_*`, drum banks, dirt-samples                                                                                                      | sampler and sample packs                                       | not this engine: hosted samples, see Sample packs                      |
+| sample controls (`begin`, `end`, `speed`, `loop`, `cut`, `squiz`…)                                                                               | sampler voices                                                 | sampler                                                                |
 
 ## Samples
 

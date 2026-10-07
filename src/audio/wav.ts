@@ -92,6 +92,13 @@ export const AVAILABLE_INSTRUMENTS = Object.freeze([
   "pink",
   "brown",
   "crackle",
+  // ZzFX sounds (src/audio/synth/zzfx.ts).
+  "z_sine",
+  "z_triangle",
+  "z_sawtooth",
+  "z_square",
+  "z_tan",
+  "z_noise",
 ] as const);
 
 /** Per-track effects understood by the renderer and the agent, in chain

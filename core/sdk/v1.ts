@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.9.0";
+export const SDK_VERSION = "1.10.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -1352,6 +1352,18 @@ export type SynthInput = Readonly<{
   /** Harmonic amplitudes for `user` (or any basic waveform). */
   partials?: readonly number[];
   phases?: readonly number[];
+  /** ZzFX controls for `z_*` sounds (units: DAWG.md "Synth"). */
+  zrand?: number;
+  curve?: number;
+  slide?: number;
+  deltaSlide?: number;
+  pitchJump?: number;
+  pitchJumpTime?: number;
+  lfo?: number;
+  zmod?: number;
+  zcrush?: number;
+  zdelay?: number;
+  tremolo?: number;
   /** Any other Strudel synth parameter, e.g. `lpattack`, `fmh3`. */
   [param: string]: number | string | boolean | readonly number[] | undefined;
 }>;
@@ -1365,7 +1377,8 @@ export type TrackInput = Readonly<{
   /**
    * Synth voice (`sine`, `piano`, `pluck`, `bass`, `saw`, `square`,
    * `triangle`, and Strudel's `sawtooth`, `supersaw`, `pulse`, `user`,
-   * `white`, `pink`, `brown`, `crackle`), `kit` for drums,
+   * `white`, `pink`, `brown`, `crackle`, and the ZzFX sounds `z_sine`,
+   * `z_triangle`, `z_sawtooth`, `z_square`, `z_tan`, `z_noise`), `kit` for drums,
    * `sampler(...)` or `wavetable(...)`. Default `sine`.
    */
   instrument?: string | SamplerSpec | WavetableSpec;

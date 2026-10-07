@@ -35,6 +35,12 @@ export const SYNTH_SOUNDS = Object.freeze([
   "pink",
   "brown",
   "crackle",
+  "z_sine",
+  "z_triangle",
+  "z_sawtooth",
+  "z_square",
+  "z_tan",
+  "z_noise",
 ] as const);
 
 /** dawg's original voices, kept byte-identical while `synth` is unset. */
@@ -256,7 +262,11 @@ export const SYNTH_PARAMS: Readonly<Record<string, ParamSpec>> = Object.freeze({
     doc: "voice gain before the effects chain (track volume follows the chain)",
     strudel: ["gain"],
   },
-  noise: level(0, "pink noise mixed into the oscillator", ["noise"]),
+  noise: level(
+    0,
+    "pink noise mixed into the oscillator (z_* sounds: phase jitter)",
+    ["noise"],
+  ),
   density: level(0.03, "crackle density (impulses ≈ density·1000/s)", [
     "density",
   ]),
@@ -367,6 +377,79 @@ export const SYNTH_PARAMS: Readonly<Record<string, ParamSpec>> = Object.freeze({
     ["fanchor"],
   ),
   ...fmParams(),
+  // ZzFX controls (z_* sounds only; src/audio/synth/zzfx.ts).
+  zrand: level(0, "z_*: random pitch offset per note, ± fraction", ["zrand"]),
+  curve: {
+    kind: "number",
+    min: 0,
+    max: 3,
+    default: 1,
+    step: 0.1,
+    automate: true,
+    doc: "z_*: wave shape exponent (0 squares the wave off, >1 thins it)",
+    strudel: ["curve"],
+  },
+  slide: {
+    kind: "number",
+    min: -20,
+    max: 20,
+    default: 0,
+    step: 0.1,
+    automate: true,
+    doc: "z_*: pitch slide, 500·slide Hz per second",
+    strudel: ["slide"],
+  },
+  deltaSlide: {
+    kind: "number",
+    min: -20,
+    max: 20,
+    default: 0,
+    step: 0.1,
+    automate: true,
+    doc: "z_*: slide acceleration, 500·deltaSlide Hz per second²",
+    strudel: ["deltaSlide", "deltaslide"],
+  },
+  pitchJump: {
+    kind: "number",
+    min: -2000,
+    max: 2000,
+    default: 0,
+    step: 10,
+    unit: "Hz",
+    automate: true,
+    doc: "z_*: pitch change applied after pitchJumpTime",
+    strudel: ["pitchJump", "pitchjump"],
+  },
+  pitchJumpTime: seconds(0, "z_*: time before pitchJump applies (0: never)", [
+    "pitchJumpTime",
+    "pitchjumptime",
+  ]),
+  lfo: seconds(
+    0,
+    "z_*: repeat period: restarts slide and pitchJump, sets the tremolo period",
+    ["lfo"],
+  ),
+  zmod: {
+    kind: "number",
+    min: 0,
+    max: 1000,
+    default: 0,
+    step: 1,
+    unit: "Hz",
+    automate: true,
+    doc: "z_*: frequency-modulation speed (±50 % depth)",
+    strudel: ["zmod"],
+  },
+  zcrush: level(0, "z_*: sample-hold bit crush, 0..1", ["zcrush"]),
+  zdelay: seconds(
+    0,
+    "z_*: one echo this many seconds later, half level",
+    ["zdelay"],
+    1,
+  ),
+  tremolo: level(0, "z_*: volume modulation amount at the lfo period", [
+    "tremolo",
+  ]),
 });
 
 /** Additive harmonics (`partials`, `phases`): arrays, not knobs. */
@@ -482,6 +565,23 @@ export const SYNTH_GROUPS: readonly Readonly<{
       ],
     };
   }),
+  {
+    id: "zzfx",
+    label: "ZzFX (z_* sounds)",
+    params: [
+      "zrand",
+      "curve",
+      "slide",
+      "deltaSlide",
+      "pitchJump",
+      "pitchJumpTime",
+      "lfo",
+      "zmod",
+      "zcrush",
+      "zdelay",
+      "tremolo",
+    ],
+  },
 ]);
 
 export function isSynthParam(name: string): boolean {
@@ -795,6 +895,18 @@ export const SYNTH_PRESETS: Readonly<
       pw: 0.25,
       pwrate: 0.8,
       pwsweep: 0.2,
+    },
+  },
+  zap: {
+    instrument: "z_square",
+    doc: "ZzFX laser zap: a square that dives in pitch",
+    synth: {
+      attack: 0.001,
+      decay: 0.12,
+      sustain: 0.2,
+      release: 0.08,
+      slide: -4,
+      curve: 0.6,
     },
   },
 });

@@ -12,6 +12,7 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - **Distortion** (ten curves, tone, mix, automatic gain compensation), **compressor** (threshold, ratio, knee, attack, release, make-up), **chorus**, **tremolo**, plus Strudel's dj filter, vowel, bitcrush/coarse, phaser, leslie and post gain.
 - Parameter names follow Strudel's (`lpq`, `delayfeedback`, `room`, `tremolodepth`…), and every numeric parameter can be automated (`automate distort-drive points 0:1 8:6`).
 - **`fx` prompt command**: `fx delay mix 0.3`, `fx filter type hpf cutoff 300`, `fx chorus preset wide`, `fx tremolo off`. The Effects menu lists the core effects first, with presets. The agent's new `set_fx` tool sets the same parameters.
+- **ZzFX sounds**: `instrument z_square` (and `z_sine`, `z_triangle`, `z_sawtooth`, `z_tan`, `z_noise`) with Strudel's ZzFX controls as synth parameters: `synth slide -4 pitchJump 300 pitchJumpTime 0.1 lfo 0.25 zcrush 0.3`, plus `zrand`, `curve`, `deltaSlide`, `zmod`, `zdelay`, `tremolo` and the `zap` preset. Clean-room, deterministic. SDK 1.10.0 (additive).
 - **Orbits and sidechain ducking**: `fx orbit 2` puts a track on orbit 2; `fx duck preset pump` on a kick dips every track on that orbit at each hit and lets it swell back (Strudel's `orbit`, `duckorbit`, `duckdepth`, `duckattack`, `duckonset`). SDK 1.9.0 (additive).
 - Older projects and sessions load and sound exactly as before. The `dawg` SDK is 1.5.0 (additive).
 
