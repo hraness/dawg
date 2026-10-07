@@ -1,3 +1,4 @@
+import { normalizeSynth } from "../../core/synth.ts";
 import { normalizeFx } from "../../core/fx.ts";
 import {
   SCORE_LIMITS,
@@ -165,6 +166,8 @@ function parseOperation(value: unknown): ScoreOperation {
       if (kit) safe.kit = kit.name;
     }
     if (patch.fx !== undefined) safe.fx = normalizeFx(patch.fx) ?? null;
+    if (patch.synth !== undefined)
+      safe.synth = normalizeSynth(patch.synth) ?? null;
     return { type: "updateTrack", trackId: value.trackId, patch: safe };
   }
   if (

@@ -33,6 +33,7 @@ const EFFECTS = [
   "sampler",
   "fx",
   "fxAutomation",
+  "synth",
 ] as const;
 const LANES = [
   "volumeAutomation",

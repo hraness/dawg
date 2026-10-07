@@ -43,6 +43,7 @@ import {
 import { kitCatalog } from "./audio/kits.ts";
 import { applyEditCommand, parseEditCommand } from "./commands/edit.ts";
 import { applyFxCommand, parseFxCommand } from "./commands/fx.ts";
+import { applySynthCommand, parseSynthCommand } from "./commands/synth.ts";
 import { helpLines, helpText, usageHint } from "./commands/help.ts";
 import { historyTarget, REDO_KIND, UNDO_KIND } from "./commands/history.ts";
 import {
@@ -1222,6 +1223,14 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (fx) {
     if (fx.type !== "fx-list") await materializeDraft();
     const result = applyFxCommand(score, requestedTrack, fx);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
+  const synth = parseSynthCommand(command);
+  if (synth) {
+    if (synth.type !== "synth-list") await materializeDraft();
+    const result = applySynthCommand(score, requestedTrack, synth);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);

@@ -41,6 +41,14 @@ import {
 import { kitCatalog } from "../audio/kits.ts";
 import { SYNTH_KIT_NAMES } from "../../core/kits.ts";
 import { DRUM_PATTERNS } from "../../core/sdk/v1.ts";
+import { isDrumInstrument } from "../../core/drums.ts";
+import {
+  SYNTH_GROUPS,
+  SYNTH_PARAMS,
+  SYNTH_PRESETS,
+  SYNTH_SIMPLE,
+  normalizeSynth,
+} from "../../core/synth.ts";
 import type { PickerItem } from "../../tui/app.ts";
 import {
   MAX_VOICING_STEP,
@@ -235,7 +243,9 @@ function laneLabel(lane: AutomationParameter): string {
   const info = FX_LANE_INFO.get(lane);
   if (!info) return lane;
   const unit = info.spec.unit ? ` (${info.spec.unit})` : "";
-  return `${effectSpec(info.effect).label} ${info.param}${unit}`;
+  const owner =
+    info.effect === "synth" ? "synth" : effectSpec(info.effect).label;
+  return `${owner} ${info.param}${unit}`;
 }
 
 /** `volume 0.8`, `pan -0.3`: the command that sets a lane's static value. */
@@ -541,14 +551,118 @@ function parameterNodes(context: MenuContext): MenuNode[] {
       label: "add a voice",
       value: "/sample <path> [as <voice>]",
     });
-  } else {
+  } else if (!isDrumInstrument(track.instrument)) {
+    nodes.push(...synthNodes(track, SYNTH_SIMPLE));
     nodes.push({
-      kind: "info",
-      label: "voice",
-      value:
-        "the synth has no knobs beyond the instrument; shape it with Effects",
+      kind: "menu",
+      id: "synth:advanced",
+      label: "advanced",
+      detail: `${Object.keys(SYNTH_PARAMS).length} params · Strudel names`,
+      build: synthAdvancedNodes,
     });
+    if (track.synth)
+      nodes.push({
+        kind: "action",
+        label: "reset to defaults",
+        command: "synth reset",
+      });
   }
+  return nodes;
+}
+
+/** Synth preset first, then one row per parameter. */
+/** The preset this track's voice still matches exactly, if any. */
+function matchingSynthPreset(track: Track): string | undefined {
+  if (!track.synth) return undefined;
+  const current = JSON.stringify(track.synth);
+  return Object.entries(SYNTH_PRESETS).find(
+    ([, preset]) =>
+      preset.instrument === track.instrument &&
+      JSON.stringify(normalizeSynth(preset.synth)) === current,
+  )?.[0];
+}
+
+function synthNodes(track: Track, keys: readonly string[]): MenuNode[] {
+  const nodes: MenuNode[] = [];
+  if (keys === SYNTH_SIMPLE)
+    nodes.push({
+      kind: "choice",
+      label: "preset",
+      value: matchingSynthPreset(track) ?? "—",
+      options: Object.keys(SYNTH_PRESETS),
+      command: (preset) => `synth preset ${preset}`,
+    });
+  for (const key of keys)
+    nodes.push(synthParamNode(track, key, keys !== SYNTH_SIMPLE));
+  return nodes;
+}
+
+function synthParamNode(track: Track, key: string, named: boolean): MenuNode {
+  const param = SYNTH_PARAMS[key]!;
+  const current = track.synth?.[key];
+  const aliases = (param.strudel ?? []).filter((name) => name !== key);
+  const label = named && aliases.length ? `${key} (${aliases.join("/")})` : key;
+  if (param.kind === "number")
+    return {
+      kind: "number",
+      label: param.unit ? `${label} ${param.unit}` : label,
+      value: typeof current === "number" ? current : undefined,
+      start: param.default,
+      // An unset filter cutoff means no filter, not the default cutoff.
+      off: /^(lpf|hpf|bpf)$/.test(key)
+        ? "off"
+        : `${formatParam(param, param.default)}`,
+      min: param.min,
+      max: param.max,
+      step: specStep(param),
+      format: (value) => formatParam(param, value),
+      command: (value) => `synth ${key} ${formatParam(param, value)}`,
+    };
+  if (param.kind === "enum")
+    return {
+      kind: "choice",
+      label,
+      value: typeof current === "string" ? current : param.default,
+      options: param.values,
+      command: (option) => `synth ${key} ${option}`,
+    };
+  return {
+    kind: "toggle",
+    label,
+    value: typeof current === "boolean" ? current : param.default,
+    command: (on) => `synth ${key} ${on ? "on" : "off"}`,
+  };
+}
+
+/** Every synth parameter, grouped (amplitude, oscillator, FM 1..8, …). */
+function synthAdvancedNodes(context: MenuContext): MenuNode[] {
+  const track = focused(context);
+  if (!track) return [];
+  const nodes: MenuNode[] = SYNTH_GROUPS.map((group) => {
+    const set = group.params.filter((key) => track.synth?.[key] !== undefined);
+    return {
+      kind: "menu",
+      id: `synth:${group.id}`,
+      label: group.label,
+      detail: set.length
+        ? set.map((key) => `${key} ${String(track.synth![key])}`).join(" · ")
+        : "defaults",
+      build: (inner) => {
+        const current = focused(inner);
+        return current ? synthNodes(current, group.params) : [];
+      },
+    };
+  });
+  const partials = track.synth?.partials;
+  nodes.push({
+    kind: "entry",
+    label: "partials",
+    value: Array.isArray(partials) ? partials.join(" ") : "—",
+    placeholder: "harmonic amplitudes, e.g. 1 0.5 0.33",
+    command: (text) =>
+      text.trim() ? `synth partials ${text.trim()}` : "synth partials off",
+    example: "synth partials 1 0.5 0.33 0.25",
+  });
   return nodes;
 }
 
@@ -702,6 +816,8 @@ function automationNodes(context: MenuContext): MenuNode[] {
     if (isTrackAutomationParameter(lane)) return true;
     if (automationPoints(track, lane).length > 0) return true;
     const info = FX_LANE_INFO.get(lane as FxLane);
+    if (info?.effect === "synth")
+      return track.synth?.[info.param] !== undefined;
     return info !== undefined && effectValues(track, info.effect) !== undefined;
   });
   const hidden = AUTOMATION_PARAMETERS.filter((lane) => !shown.includes(lane));

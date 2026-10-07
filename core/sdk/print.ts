@@ -280,6 +280,18 @@ export function printTrack(score: TrackScore, track: Track): string {
     });
     entries.push(`fx: {\n${body.join("\n")}\n${INDENT}}`);
   }
+  if (track.synth) {
+    const params = Object.entries(track.synth).map(
+      ([key, v]) =>
+        [
+          key,
+          Array.isArray(v)
+            ? `[${(v as readonly number[]).map(num).join(", ")}]`
+            : value(v as number | string | boolean),
+        ] as const,
+    );
+    entries.push(`synth: ${obj(params, INDENT, "synth: ".length, 1)}`);
+  }
   const lanes: [string, readonly AutomationPoint[] | undefined][] = [
     ["volume", track.volumeAutomation],
     ["pan", track.panAutomation],

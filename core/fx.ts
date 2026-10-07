@@ -12,6 +12,30 @@
  * under `track.fx.<name>` with every parameter stored once enabled.
  */
 
+import { SYNTH_LANE_PARAMS } from "./synth.ts";
+import {
+  FxValidationError,
+  normalizeParam,
+  normalizeParams,
+  isRecord,
+  type BooleanParam,
+  type EnumParam,
+  type FxValues,
+  type NumberParam,
+  type ParamSpec,
+} from "./params.ts";
+
+export {
+  FxValidationError,
+  normalizeParam,
+  normalizeParams,
+  type BooleanParam,
+  type EnumParam,
+  type FxValues,
+  type NumberParam,
+  type ParamSpec,
+};
+
 /** Fixed processing order; mono stages run before pan, stereo after. */
 export const FX_CHAIN = Object.freeze([
   "filter",
@@ -30,44 +54,6 @@ export const FX_CHAIN = Object.freeze([
   "delay",
   "reverb",
 ] as const);
-
-export type NumberParam = Readonly<{
-  kind: "number";
-  min: number;
-  max: number;
-  default: number;
-  /** Menu nudge step; `"log"` nudges by a sixth of an octave. */
-  step: number | "log";
-  unit?: string;
-  /** Round stored values to an integer. */
-  integer?: boolean;
-  /** Not filled with the default when absent (absent keeps legacy behaviour). */
-  optional?: boolean;
-  /** A lane `<effect>-<param>` exists for this parameter. */
-  automate?: boolean;
-  doc: string;
-  /** Strudel names (and aliases) that mean this parameter. */
-  strudel?: readonly string[];
-}>;
-
-export type EnumParam = Readonly<{
-  kind: "enum";
-  values: readonly string[];
-  default: string;
-  optional?: boolean;
-  doc: string;
-  strudel?: readonly string[];
-}>;
-
-export type BooleanParam = Readonly<{
-  kind: "boolean";
-  default: boolean;
-  optional?: boolean;
-  doc: string;
-  strudel?: readonly string[];
-}>;
-
-export type ParamSpec = NumberParam | EnumParam | BooleanParam;
 
 export type EffectSpec = Readonly<{
   label: string;
@@ -801,7 +787,6 @@ export const FX_NAMES = Object.freeze(
 );
 
 /** One enabled effect's stored parameters. */
-export type FxValues = Readonly<Record<string, number | string | boolean>>;
 /** `track.fx`: only enabled effects appear. */
 export type TrackFx = Readonly<Partial<Record<FxName, FxValues>>>;
 
@@ -817,67 +802,6 @@ export function fxSpec(name: FxName): EffectSpec {
 }
 
 /** Thrown by the normalizers; the score wraps it in its own error type. */
-export class FxValidationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "FxValidationError";
-  }
-}
-
-/** Validates one parameter value against its spec. */
-export function normalizeParam(
-  spec: ParamSpec,
-  value: unknown,
-  label: string,
-): number | string | boolean {
-  if (spec.kind === "enum") {
-    if (typeof value !== "string" || !spec.values.includes(value))
-      throw new FxValidationError(
-        `${label} must be one of ${spec.values.join(", ")}`,
-      );
-    return value;
-  }
-  if (spec.kind === "boolean") {
-    if (typeof value !== "boolean")
-      throw new FxValidationError(`${label} must be true or false`);
-    return value;
-  }
-  if (typeof value !== "number" || !Number.isFinite(value))
-    throw new FxValidationError(`${label} must be a finite number`);
-  if (value < spec.min || value > spec.max)
-    throw new FxValidationError(
-      `${label} must be between ${spec.min} and ${spec.max}`,
-    );
-  return spec.integer ? Math.round(value) : value;
-}
-
-/**
- * Validates a parameter record against `params`, filling defaults for
- * absent keys. Unknown keys are rejected so typos never pass silently.
- */
-export function normalizeParams(
-  params: Readonly<Record<string, ParamSpec>>,
-  input: unknown,
-  label: string,
-  fill = true,
-): FxValues {
-  if (!isRecord(input))
-    throw new FxValidationError(`${label} must be an object`);
-  for (const key of Object.keys(input))
-    if (!Object.prototype.hasOwnProperty.call(params, key))
-      throw new FxValidationError(`${label} has no parameter "${key}"`);
-  const out: Record<string, number | string | boolean> = {};
-  for (const [key, spec] of Object.entries(params)) {
-    const value = input[key];
-    if (value === undefined) {
-      if (fill && !spec.optional) out[key] = spec.default;
-      continue;
-    }
-    out[key] = normalizeParam(spec, value, `${label} ${key}`);
-  }
-  return Object.freeze(out);
-}
-
 /** Validates `track.fx`; `undefined`/`null`/`{}` means none. */
 export function normalizeFx(input: unknown): TrackFx | undefined {
   if (input === undefined || input === null) return undefined;
@@ -899,16 +823,16 @@ export function normalizeFx(input: unknown): TrackFx | undefined {
 }
 
 /** Automation lane name of an `fx` parameter, e.g. `distort-drive`. */
-export type FxLane = `${FxName | "reverb"}-${string}`;
+export type FxLane = `${FxName | "reverb" | "synth"}-${string}`;
 
 /** Every automatable `fx` parameter as `{ lane, effect, param, spec }`. */
 export const FX_LANES: readonly Readonly<{
   lane: FxLane;
-  effect: FxName | "reverb";
+  effect: FxName | "reverb" | "synth";
   param: string;
   spec: NumberParam;
-}>[] = Object.freeze(
-  [...FX_NAMES, "reverb" as const].flatMap((effect) =>
+}>[] = Object.freeze([
+  ...[...FX_NAMES, "reverb" as const].flatMap((effect) =>
     Object.entries(effectSpec(effect).params)
       .filter(
         (entry): entry is [string, NumberParam] =>
@@ -923,11 +847,16 @@ export const FX_LANES: readonly Readonly<{
         }),
       ),
   ),
-);
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+  // Synth voice parameters (core/synth.ts), read at each note's onset.
+  ...SYNTH_LANE_PARAMS.map(({ param, spec }) =>
+    Object.freeze({
+      lane: `synth-${param}` as FxLane,
+      effect: "synth" as const,
+      param,
+      spec,
+    }),
+  ),
+]);
 
 /**
  * Named starting points, shown first in the menu (`fx <effect> preset
