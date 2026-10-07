@@ -198,8 +198,9 @@ export const docsTopics: readonly DocsTopic[] = [
         </p>
         <CodeBlock code={`$ ${installCommand}`} />
         <p>
-          Until the first release is published the script stops with a note
-          instead of installing. To run from source today:
+          Each <a href="https://github.com/hraness/dawg/releases">release</a>{" "}
+          also ships the tarball on its own, so <code>bun add -g</code> with the
+          tarball&rsquo;s URL works too. To run from source instead:
         </p>
         <CodeBlock
           code={sourceInstallCommands.map((line) => `$ ${line}`).join("\n")}
