@@ -345,7 +345,7 @@ export class DaemonClient {
             v: 1,
             type: "hello",
             pid: process.pid,
-            label: (this.options.label ?? "track").slice(0, 128),
+            label: (this.options.label ?? "dawg").slice(0, 128),
             clientId: this.clientId,
             focusedTrackId: this.focusedTrackId,
           }),

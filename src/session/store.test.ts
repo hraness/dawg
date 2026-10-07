@@ -1,13 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  mkdir,
-  mkdtemp,
-  readdir,
-  readFile,
-  rename,
-  utimes,
-} from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { mkdtemp, readFile, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -17,9 +9,7 @@ import {
   readCurrentSessionId,
   SessionValidationError,
   SessionConflictError,
-  stateDir,
 } from "./store.ts";
-import { listSessions } from "./list.ts";
 import { acquireSessionLock } from "./lock.ts";
 
 describe("session store", () => {
@@ -126,61 +116,5 @@ describe("session store", () => {
     await release();
     const releaseAgain = await acquireSessionLock(lockPath, 30);
     await releaseAgain();
-  });
-
-  test("reads a legacy .track workspace when .dawg is missing and never moves it", async () => {
-    const workspace = await mkdtemp(join(tmpdir(), "dawg-legacy-state-"));
-    const legacy = join(workspace, ".track");
-    // A workspace written before the rename: build one, then move it to .track/.
-    const seeded = await ensureSession(
-      { notes: [] as number[] },
-      { workspace, sessionId: "old" },
-    );
-    await appendSessionEvent(
-      seeded.paths,
-      seeded.record,
-      { kind: "seed", payload: {} },
-      { notes: [7] },
-    );
-    await rename(join(workspace, ".dawg"), legacy);
-    const before = await readFile(join(legacy, "sessions", "old.json"), "utf8");
-
-    expect(stateDir(workspace)).toBe(legacy);
-    expect(await readCurrentSessionId(workspace)).toBe("old");
-    const opened = await ensureSession(
-      { notes: [] as number[] },
-      { workspace },
-    );
-    expect(opened.record.sessionId).toBe("old");
-    expect(opened.record.revision).toBe(1);
-    expect(opened.record.composition).toEqual({ notes: [7] });
-    expect(opened.paths.root).toBe(legacy);
-    expect((await listSessions(workspace)).map((s) => s.sessionId)).toEqual([
-      "old",
-    ]);
-    // Nothing was created under .dawg, and the legacy record is intact.
-    expect(existsSync(join(workspace, ".dawg"))).toBe(false);
-    expect(await readFile(join(legacy, "sessions", "old.json"), "utf8")).toBe(
-      before,
-    );
-  });
-
-  test("prefers .dawg when both exist and creates .dawg in a fresh workspace", async () => {
-    const both = await mkdtemp(join(tmpdir(), "dawg-both-state-"));
-    await mkdir(join(both, ".track", "sessions"), { recursive: true });
-    await Bun.write(join(both, ".track", "session"), "old\n");
-    await mkdir(join(both, ".dawg"), { recursive: true });
-    expect(stateDir(both)).toBe(join(both, ".dawg"));
-    expect(await readCurrentSessionId(both)).toBeUndefined();
-    await ensureSession({ value: 1 }, { workspace: both, sessionId: "new" });
-    expect(await readdir(join(both, ".track", "sessions"))).toEqual([]);
-    expect(
-      (await readFile(join(both, ".track", "session"), "utf8")).trim(),
-    ).toBe("old");
-
-    const fresh = await mkdtemp(join(tmpdir(), "dawg-fresh-state-"));
-    await ensureSession({ value: 1 }, { workspace: fresh, sessionId: "a" });
-    expect(existsSync(join(fresh, ".dawg", "sessions", "a.json"))).toBe(true);
-    expect(existsSync(join(fresh, ".track"))).toBe(false);
   });
 });

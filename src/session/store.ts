@@ -1,4 +1,3 @@
-import { statSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -65,28 +64,10 @@ export class SessionConflictError extends Error {
 
 /** Per-workspace state directory. */
 export const STATE_DIR = ".dawg";
-/** Pre-rename state directory, still used when it is the only one present. */
-export const LEGACY_STATE_DIR = ".track";
 
-/**
- * The workspace state directory: `.dawg/`, or the legacy `.track/` when
- * `.dawg/` is missing and `.track/` exists, so sessions created before the
- * rename keep working. Neither directory is ever moved or deleted; run
- * `mv .track .dawg` to switch over explicitly.
- */
+/** The workspace state directory, `<workspace>/.dawg`. */
 export function stateDir(workspace = process.cwd()): string {
-  const current = join(workspace, STATE_DIR);
-  if (isDirectory(current)) return current;
-  const legacy = join(workspace, LEGACY_STATE_DIR);
-  return isDirectory(legacy) ? legacy : current;
-}
-
-function isDirectory(path: string): boolean {
-  try {
-    return statSync(path).isDirectory();
-  } catch {
-    return false;
-  }
+  return join(workspace, STATE_DIR);
 }
 
 export function sessionPaths(

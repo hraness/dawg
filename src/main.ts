@@ -8,7 +8,6 @@ import {
   SessionConflictError,
   type SessionRecord,
 } from "./session/store.ts";
-import { envValue } from "./env.ts";
 import { openSessionPort } from "./session/port.ts";
 import { compositionDigest, monotonicEpochMs } from "./session/protocol.ts";
 import {
@@ -140,7 +139,8 @@ if (process.argv[2] === "render") {
     ),
   );
 }
-const demo = args.has("--demo") || envValue("DEMO") === "1" || !stdin.isTTY;
+const demo =
+  args.has("--demo") || process.env.DAWG_DEMO === "1" || !stdin.isTTY;
 
 const initial = createScore({
   tracks: [
@@ -205,7 +205,7 @@ if (!draftTrack) await ensureFocusedTrack();
 const clock = new TransportClock(score.tempoBpm);
 let audio = port.player;
 let selectedModel: GatewayModel =
-  envValue("MODEL") === "opus-5.5" ? "opus-5.5" : "sol-6.1";
+  process.env.DAWG_MODEL === "opus-5.5" ? "opus-5.5" : "sol-6.1";
 const prompt = new PromptModel({ width: 72, maxVisualRows: 8 });
 const tui = new TuiApp({
   io: {
@@ -214,9 +214,9 @@ const tui = new TuiApp({
     rows: () => stdout.rows ?? 24,
   },
   prompt,
-  theme: parseThemeName(optionValue("--theme") ?? envValue("THEME")),
+  theme: parseThemeName(optionValue("--theme") ?? process.env.DAWG_THEME),
   reducedMotion:
-    args.has("--reduce-motion") || envValue("REDUCE_MOTION") === "1",
+    args.has("--reduce-motion") || process.env.DAWG_REDUCE_MOTION === "1",
 });
 let syncState: SyncState = port.sync;
 let windowCount = 1;
@@ -769,7 +769,7 @@ async function submit(prompt: string): Promise<string> {
   }
   const parsed = parsePrompt(prompt);
   if (!parsed) {
-    if (envValue("AI") === "0") return `unrecognized request: ${prompt}`;
+    if (process.env.DAWG_AI === "0") return `unrecognized request: ${prompt}`;
     await materializeDraft();
     return runAgent(prompt);
   }
@@ -1015,7 +1015,7 @@ function makeNamer(): AutoNamer {
     ),
     // DAWG_AI=0 keeps naming local; an offline provider falls back too.
     generator:
-      envValue("AI") === "0"
+      process.env.DAWG_AI === "0"
         ? undefined
         : providerNameGenerator(currentProvider),
   });

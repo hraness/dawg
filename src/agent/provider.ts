@@ -1,4 +1,3 @@
-import { envValue } from "../env.ts";
 import { statSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -65,7 +64,7 @@ export function providerChoice(
   env: Readonly<Record<string, string | undefined>>,
   saved: ProviderChoice | undefined,
 ): ProviderChoice {
-  const fromEnv = envValue("PROVIDER", env)?.trim().toLowerCase();
+  const fromEnv = env.DAWG_PROVIDER?.trim().toLowerCase();
   if (fromEnv && (PROVIDER_CHOICES as readonly string[]).includes(fromEnv))
     return fromEnv as ProviderChoice;
   return saved ?? "auto";
@@ -180,7 +179,7 @@ export function providerFingerprint(
   // Presence only: a process's environment cannot change under it, and the
   // fingerprint must never carry secret material.
   parts.push(
-    `env:${envValue("PROVIDER", env) ?? "-"}:${env.AI_GATEWAY_API_KEY ? 1 : 0}`,
+    `env:${env.DAWG_PROVIDER ?? "-"}:${env.AI_GATEWAY_API_KEY ? 1 : 0}`,
   );
   return parts.join("|");
 }

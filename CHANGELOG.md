@@ -8,7 +8,7 @@ The first tagged release. Open a session in several terminals, give each window 
 
 ### Renamed from Track to dawg
 
-The project, CLI and package are now **dawg**: the command is `dawg`, the daemon `dawgd`, the package `@hraness/dawg` and the repository [hraness/dawg](https://github.com/hraness/dawg) (the old `hraness/track` URLs redirect). Environment variables are `DAWG_*`; for this release a legacy `TRACK_*` name is still read when the `DAWG_*` one is unset. Workspace state lives in `.dawg/`, config in `~/.config/dawg`, and gateway keys in the Keychain service `dawg` (new keys are named `dawg-<host>`). When the new location is missing, an existing `.track/`, `~/.config/track` or `track` Keychain item is read instead; none of them is moved or deleted automatically. Run `mv .track .dawg` in a workspace to switch it over.
+The project, CLI and package are now **dawg**: the command is `dawg`, the daemon `dawgd`, the package `@hraness/dawg` and the repository [hraness/dawg](https://github.com/hraness/dawg) (the old `hraness/track` URLs redirect). Environment variables are `DAWG_*`, workspace state lives in `.dawg/`, config in `~/.config/dawg`, and gateway keys in the Keychain service `dawg` (new keys are named `dawg-<host>`).
 
 ### Install
 

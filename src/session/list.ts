@@ -21,7 +21,7 @@ export type SessionSummary = {
   error?: string;
 };
 
-/** Lists sessions under `<workspace>/.dawg/sessions` (or the legacy `.track/sessions`), newest first. */
+/** Lists sessions under `<workspace>/.dawg/sessions`, newest first. */
 export async function listSessions(
   workspace: string,
 ): Promise<SessionSummary[]> {

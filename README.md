@@ -39,14 +39,6 @@ bun run dawg
 
 Running `dawg` creates `.dawg/session` when needed and attaches to that session on later launches. Use `dawg --new` for a new composition, `dawg --session <name|id>` to attach explicitly, or `dawg --track bass` to focus a named track.
 
-### Coming from Track
-
-dawg was called Track before 0.2.0. Existing state keeps working without a migration step, and nothing old is moved or deleted:
-
-- A workspace with `.track/` and no `.dawg/` keeps using `.track/`. Run `mv .track .dawg` to switch it over.
-- `~/.config/track` is used while `~/.config/dawg` does not exist, and a gateway key stored under the old Keychain service `track` is still read. A new `dawg login` writes to the new locations; `dawg logout` removes the key from both Keychain services.
-- Legacy `TRACK_*` environment variables are read when the matching `DAWG_*` one is unset. This fallback is planned to go away in a later release.
-
 ### Sessions
 
 Every window you open on a session takes the first track no other window has focused, in score order. Open three terminals on a three-track session and each one restores a different instrument. A fourth window gets a draft track (`track-4`, "all tracks open · new track") that is added to the score on its first edit, so idle windows never clutter the song. `--track` always wins over auto-claim.
