@@ -13,8 +13,8 @@
  *   one step moves the lowest note up an octave, or the highest down.
  *   Bass plays one note under each chord. Those behaviours come from the
  *   Orchid support articles and reviews (see DAWG.md, Chords).
- * - dawg's own design. Orchid documents that two chord types held together
- *   make "secret chords" but not which ones, so the combinations below
+ * - dawg's own design. Orchid documents that some type/extension button
+ *   combinations make "secret chords" but not which ones, so the combinations below
  *   (`COMBINED_TYPES`) are dawg's. Non-scale keys in key mode, the voice
  *   leader (minimal movement from the previous chord), spread, the
  *   perform timings and the progression graph are dawg's too.
@@ -62,8 +62,8 @@ const EXTENSION_INTERVAL: Readonly<Record<Extension, number>> = Object.freeze({
 });
 
 /**
- * dawg's resolution of two chord-type buttons held together (Orchid's
- * "secret chords" exist, their table is not published).
+ * dawg's resolution of two chord-type buttons held together (Orchid has
+ * "secret chords" from button combinations; its table is not published).
  */
 export const COMBINED_TYPES: Readonly<Record<string, Quality>> = Object.freeze({
   "dim+maj": "aug",

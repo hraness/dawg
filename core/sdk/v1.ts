@@ -1314,8 +1314,8 @@ const EXTENSION_INTERVAL: Readonly<Record<Extension, number>> = Object.freeze({
 });
 
 /**
- * dawg's resolution of two chord-type buttons held together (Orchid's
- * "secret chords" exist, their table is not published).
+ * dawg's resolution of two chord-type buttons held together (Orchid has
+ * "secret chords" from button combinations; its table is not published).
  */
 const COMBINED_TYPES: Readonly<Record<string, Quality>> = Object.freeze({
   "dim+maj": "aug",
