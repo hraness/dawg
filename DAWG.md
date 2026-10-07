@@ -423,6 +423,33 @@ SDK. `chord("Cm7", start, length, opts)` and `progression("ii7 V7 Imaj7", { key,
 | `Space`                 | play/stop; with record armed and stopped, counts in, then records  |
 | `Esc`                   | leave play mode                                                    |
 
+### Chord mode
+
+Play mode has a chord sub-mode modelled on the Orchid's Key mode. It is `auto` by default when the focused track can play chords (pitched synths, piano, soundfonts, keyed samplers; not tracks whose instrument, name or id says bass, kit, drum or perc), otherwise `manual`. Choosing a mode by hand (`Q`, `/chords`, the menu) sticks for the session.
+
+- `auto`: each note key plays the diatonic chord of the song key on that root (C major: `S` plays Dm, `G` plays G). Keys outside the scale borrow from the parallel major or minor. The strip labels every white and black key with its chord.
+- `manual`: note keys play single notes as before; latch a chord type or extension and they play that chord on the pressed root.
+- `off`: plain play mode; the chord keys below go back to being unmapped.
+
+Terminals send no key releases, so the Orchid's held left-hand buttons are latches here: press once to latch, again to release, `0` clears them all.
+
+| Key       | Does (chord mode on)                                                           |
+| --------- | ------------------------------------------------------------------------------ |
+| `Q`       | auto ⇄ manual                                                                  |
+| `1 2 3 4` | latch chord type dim / min / maj / sus (two latched make a combined chord)     |
+| `5 6 7 8` | latch extension 6 / m7 / M7 / 9 (any number; on top of the type or auto chord) |
+| `0`       | clear every latch                                                              |
+| `-` / `=` | voicing dial down / up (-12..12; walks inversions)                             |
+| `9`       | next perform mode (block, strum-up, strum-down, arp-up, …, harp)               |
+| `B`       | bass on/off (root in C2–B2 under each chord)                                   |
+| `N`       | play the suggested next chord (the `→` chord in the header)                    |
+
+The header gains `AUTO C major · Dm (ii) → G · min+m7 · inv +1 · arp-up · bass`: mode, key (`?` when the score has none and C major is assumed), the last chord with its numeral, the suggested next chord, the latches and any non-default settings. The suggestion comes from the progression engine: the next chord of the chosen preset when the last chord is in it, otherwise a seeded step of the style's transition graph.
+
+Each chord is voice-led from the previous one and sounds through the live voice path. Recording quantizes the press like a note and lays the chord out with the perform mode over its held length (arpeggios at `rate`, `grid` by default), plus the bass note; each bar is still one revision and one undo step.
+
+`/chords` with no argument prints the settings; `/chords auto|manual|off`, `voicing <n>`, `spread close|open|wide`, `bass on|off`, `sevenths on|off`, `perform <mode>`, `rate grid|1/4|1/8|1/16|1/32`, `octaves 1..4`, `preset <name>|none`, `style pop|jazz|modal|classical`. `key <tonic> <mode>` (`key A minor`, `key F# dorian`, `key none`) sets the song key as one score edit. The same settings and the key are in `/menu` under Chords.
+
 The base octave follows the instrument: C3 (MIDI 48) by default, C2 for bass instruments or tracks named bass, C4 for saw/square/triangle/pluck leads. Kits start at C2, so `A` is the GM kick, `S` the snare, `T` the closed hat. On a one-shot sampler track the keys walk the voices in name order from slot 36 (`A` the first voice, `W` the second, chromatically), and the strip shows voice names; a keyed sampler starts at the C below its lowest root and repitches from it.
 
 The header reads `PLAY  C3–F4  vel 100  ● REC  click ✓  grid 1/16` with a beat flash, and the row under it is the keyboard with sounding keys lit. Both repaint in place; nothing scrolls per note.
@@ -441,15 +468,16 @@ Recording: with record armed and the transport running, each note is quantized t
 
 `/menu` or `Ctrl-K` (on an empty prompt, in play mode too) opens the edit menu, drawn with the same overlay as the model picker. Every edit the agent can make is reachable from it with keys alone, and each row shows its current value and the command it runs, so the menu teaches the commands. `/menu effects` opens a section directly.
 
-| Section    | Rows                                                                                           |
-| ---------- | ---------------------------------------------------------------------------------------------- |
-| Track      | name, instrument, mute, solo, volume, pan                                                      |
-| Parameters | instrument; a sampler's mode and voices (synths have no knobs beyond the instrument)           |
-| Sounds     | drum kits (`/kit`), instruments (piano, `gm_*` soundfonts), use a pack sound, packs            |
-| Effects    | filter (on, cutoff, resonance), delay (on, beats, feedback, mix), reverb (on, mix, size)       |
-| Automation | each `AUTOMATION_LANES` lane: its points as `beat N  value` rows, add points, ramp, clear lane |
-| Mix        | every track's volume, pan, mute and solo; choosing another track focuses it first              |
-| Transport  | play, tempo, beats per bar, loop bars, grid, click, count-in                                   |
+| Section    | Rows                                                                                                             |
+| ---------- | ---------------------------------------------------------------------------------------------------------------- |
+| Track      | name, instrument, mute, solo, volume, pan                                                                        |
+| Parameters | instrument; a sampler's mode and voices (synths have no knobs beyond the instrument)                             |
+| Sounds     | drum kits (`/kit`), instruments (piano, `gm_*` soundfonts), use a pack sound, packs                              |
+| Effects    | filter (on, cutoff, resonance), delay (on, beats, feedback, mix), reverb (on, mix, size)                         |
+| Automation | each `AUTOMATION_LANES` lane: its points as `beat N  value` rows, add points, ramp, clear lane                   |
+| Mix        | every track's volume, pan, mute and solo; choosing another track focuses it first                                |
+| Transport  | play, tempo, beats per bar, loop bars, grid, click, count-in                                                     |
+| Chords     | play-mode chord mode, key tonic and mode, voicing, spread, bass, sevenths, perform, rate, octaves, preset, style |
 
 | Key                         | Does                                                                       |
 | --------------------------- | -------------------------------------------------------------------------- |

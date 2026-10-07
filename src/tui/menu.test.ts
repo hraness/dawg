@@ -59,8 +59,42 @@ describe("edit menu", () => {
       "Sounds",
       "Rhythm",
       "Transport",
+      "Chords",
     ]);
     expect(menu.view(ctx).items[7]!.label).toContain("120 BPM");
+    expect(menu.view(ctx).items[8]!.label).toContain("manual");
+  });
+
+  test("Chords edits play-mode chord settings and the song key", () => {
+    const menu = new EditMenu();
+    const ctx = context();
+    menu.show(ctx, "chords");
+    expect(menu.view(ctx).title).toBe("menu › Chords");
+    select(menu, ctx, "mode");
+    expect(menu.key(LEFT, ctx)).toEqual({
+      type: "run",
+      command: "/chords auto",
+    });
+    select(menu, ctx, "key mode");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "key C minor",
+    });
+    select(menu, ctx, "voicing");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "/chords voicing 1",
+    });
+    select(menu, ctx, "bass");
+    expect(menu.key("\r", ctx)).toEqual({
+      type: "run",
+      command: "/chords bass on",
+    });
+    select(menu, ctx, "perform");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "/chords perform strum-up",
+    });
   });
 
   test("Enter opens, Esc backs out one level, Esc at the root closes", () => {
@@ -298,5 +332,23 @@ describe("edit commands", () => {
       beat: 1,
     });
     expect(missing.ok).toBe(false);
+  });
+});
+
+describe("key command", () => {
+  test("key sets, normalises and clears the song key in one operation", () => {
+    expect(parseEditCommand("key a minor")).toEqual({
+      type: "key",
+      key: "A minor",
+    });
+    expect(parseEditCommand("/key Bb dorian")).toEqual({
+      type: "key",
+      key: "Bb dorian",
+    });
+    expect(parseEditCommand("key none")).toEqual({ type: "key", key: null });
+    expect(parseEditCommand("key H major")).toBeUndefined();
+    const set = applyEditCommand(score(), "keys", parseEditCommand("key Am")!);
+    expect(set.next!.key).toBe("A minor");
+    expect(set.kind).toBe("score.key");
   });
 });

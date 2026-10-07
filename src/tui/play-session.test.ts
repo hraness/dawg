@@ -9,6 +9,7 @@ import {
   type LiveEngine,
   type PlayHost,
 } from "./play-session.ts";
+import { defaultChordSettings, type ChordSettings } from "./play-chords.ts";
 
 class FakeEngine implements LiveEngine {
   readonly sampleRate = 22_050;
@@ -40,7 +41,11 @@ class FakeEngine implements LiveEngine {
   }
 }
 
-function harness(score: TrackScore, trackId = "lead") {
+function harness(
+  score: TrackScore,
+  trackId = "lead",
+  chords: Partial<ChordSettings> = { mode: "manual", explicit: true },
+) {
   const state = {
     score,
     now: 0,
@@ -78,7 +83,13 @@ function harness(score: TrackScore, trackId = "lead") {
     card: (text) => state.cards.push(text),
     newNoteId: () => `rec-${++ids}`,
   };
-  return { state, engine, host, session: new PlaySession(host) };
+  const settings = { ...defaultChordSettings(), ...chords };
+  return {
+    state,
+    engine,
+    host,
+    session: new PlaySession(host, { chords: settings }),
+  };
 }
 
 function leadScore(): TrackScore {
@@ -106,7 +117,7 @@ describe("PlaySession", () => {
     expect(session.press("a")).toEqual({ type: "handled" });
     expect(engine.on.size).toBe(1);
     expect(session.lastLatencyMs).toBe(60);
-    expect(session.press("q")).toEqual({ type: "unmapped" });
+    expect(session.press("i")).toEqual({ type: "unmapped" });
     expect(session.press("\u001b")).toEqual({
       type: "command",
       command: "exit",
@@ -255,5 +266,164 @@ describe("recordOperations", () => {
   test("quantize snaps to the nearest step", () => {
     expect(quantize(1.13, 0.25)).toBe(1.25);
     expect(quantize(1.12, 0.25)).toBe(1);
+  });
+
+  test("pitched tracks default to auto chords; bass tracks to manual", () => {
+    expect(harness(leadScore(), "lead", {}).session.chords.settings.mode).toBe(
+      "auto",
+    );
+    const bass = harness(
+      createScore({ tracks: [{ id: "lead", name: "b", instrument: "bass" }] }),
+      "lead",
+      {},
+    );
+    expect(bass.session.chords.settings.mode).toBe("manual");
+  });
+});
+
+function keyedScore(key = "C major"): TrackScore {
+  return createScore({
+    tempoBpm: 120,
+    bars: 2,
+    key,
+    tracks: [{ id: "lead", name: "keys", instrument: "piano" }],
+  });
+}
+
+/** Run a recording: `play` presses keys at times (ms after the downbeat). */
+async function recordChords(
+  score: TrackScore,
+  chords: Partial<ChordSettings>,
+  play: (at: (ms: number) => void, press: (key: string) => void) => void,
+) {
+  const h = harness(score, "lead", chords);
+  await h.session.enter();
+  h.session.setCountIn(0);
+  h.session.press("r");
+  h.session.startWithCountIn();
+  h.session.tick();
+  const at = (ms: number) => {
+    h.state.now = ms;
+    h.session.tick();
+  };
+  play(at, (key) => h.session.press(key));
+  at(4_010);
+  await h.session.stopRecording();
+  const notes = h.state.score.notes
+    .filter((note) => note.trackId === "lead")
+    .map((note) => ({
+      pitch: note.pitch,
+      beat: note.startTick / h.state.score.ticksPerBeat,
+      beats: note.durationTicks / h.state.score.ticksPerBeat,
+    }))
+    .sort((a, b) => a.beat - b.beat || a.pitch - b.pitch);
+  return { ...h, notes };
+}
+
+describe("PlaySession chord mode", () => {
+  test("auto: a note key plays and records the key's diatonic chord", async () => {
+    const { notes, engine, session, state } = await recordChords(
+      keyedScore(),
+      { mode: "auto", explicit: true },
+      (at, press) => {
+        at(0);
+        press("s"); // D in C major → Dm
+      },
+    );
+    expect(notes.map((note) => note.pitch)).toEqual([50, 53, 57]);
+    expect(notes.every((note) => note.beat === 0)).toBe(true);
+    // All three voices sounded live.
+    expect(engine.on.size).toBeGreaterThanOrEqual(3);
+    expect(session.chords.last?.name).toBe("Dm");
+    expect(state.commits).toHaveLength(1);
+    expect(state.commits[0]!.kind).toBe("score.record");
+    expect(session.header().chords).toContain("AUTO C major");
+    expect(session.header().chords).toContain("Dm (ii)");
+  });
+
+  test("consecutive chords voice-lead (G after C stays close)", async () => {
+    const { notes } = await recordChords(
+      keyedScore(),
+      { mode: "auto", explicit: true },
+      (at, press) => {
+        at(0);
+        press("a");
+        at(1_000);
+        press("g");
+      },
+    );
+    const second = notes.filter((note) => note.beat === 2).map((n) => n.pitch);
+    // Root position G would be 55,59,62; voice-led from C-E-G it is B-D-G
+    // (moves of 1, 2 and 0 semitones).
+    expect(second.sort()).toEqual([47, 50, 55]);
+  });
+
+  test("manual: single notes until a chord type is latched", async () => {
+    const { notes } = await recordChords(
+      leadScore(),
+      { mode: "manual", explicit: true },
+      (at, press) => {
+        at(0);
+        press("a");
+        at(1_000);
+        press("2"); // min
+        press("6"); // m7
+        press("s");
+      },
+    );
+    expect(notes.filter((n) => n.beat === 0).map((n) => n.pitch)).toEqual([48]);
+    const chord = notes.filter((n) => n.beat === 2).map((n) => n.pitch);
+    expect(
+      chord.map((pitch) => (pitch - 50 + 120) % 12).sort((a, b) => a - b),
+    ).toEqual([0, 3, 7, 10]);
+  });
+
+  test("arp-up records one voice per grid step inside the held length", async () => {
+    const { notes } = await recordChords(
+      keyedScore(),
+      { mode: "auto", explicit: true, perform: "arp-up", rate: "1/8" },
+      (at, press) => {
+        at(0);
+        press("\t"); // sustain latch: the chord holds until Tab again
+        press("a");
+        at(1_000);
+        press("\t");
+      },
+    );
+    const first = notes.filter((note) => note.beat < 2);
+    expect(first.length).toBeGreaterThan(1);
+    for (const note of first) {
+      expect((note.beat * 2) % 1).toBe(0);
+      expect(note.beats).toBe(0.5);
+    }
+    expect(first.slice(0, 3).map((note) => note.pitch)).toEqual([48, 52, 55]);
+  });
+
+  test("n plays the suggested next chord through its root's key", async () => {
+    const { session } = harness(keyedScore(), "lead", {
+      mode: "auto",
+      explicit: true,
+      preset: "axis",
+    });
+    await session.enter();
+    session.press("a"); // C
+    const suggested = session.header().chords!;
+    expect(suggested).toContain("→ G");
+    session.press("n");
+    expect(session.chords.last?.name).toBe("G");
+  });
+
+  test("the strip labels keys with the chord they play in auto", async () => {
+    const { session } = harness(keyedScore("A minor"), "lead", {
+      mode: "auto",
+      explicit: true,
+    });
+    await session.enter();
+    const labels = new Map(
+      session.header().keys.map((key) => [key.key, key.label]),
+    );
+    expect(
+      ["a", "s", "d", "f", "g", "h", "j"].map((key) => labels.get(key)),
+    ).toEqual(["C", "Dm", "Em", "F", "G", "Am", "Bdim"]);
   });
 });
