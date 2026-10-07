@@ -18,8 +18,13 @@ jobs:
       contents: write
       id-token: write
       attestations: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      sha256: ${{ steps.pack.outputs.sha256 }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.14
@@ -35,10 +40,22 @@ jobs:
           fi
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
+      - name: Check the tag commit is on main
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          git fetch --no-tags origin "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}"
+          tag_commit="$(git rev-parse --verify "${GITHUB_SHA}^{commit}")"
+          if ! git merge-base --is-ancestor "${tag_commit}" "origin/${DEFAULT_BRANCH}"; then
+            echo "::error::tag ${GITHUB_REF_NAME} (${tag_commit}) is not on ${DEFAULT_BRANCH}"
+            exit 1
+          fi
+
       - run: bun install --frozen-lockfile
       - run: bun run check
 
       - name: Pack tarball and checksums
+        id: pack
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -48,6 +65,7 @@ jobs:
           test -f "hraness-dawg-${VERSION}.tgz"
           sha256sum "hraness-dawg-${VERSION}.tgz" > SHA256SUMS
           cat SHA256SUMS
+          echo "sha256=$(cut -d' ' -f1 SHA256SUMS)" >> "${GITHUB_OUTPUT}"
 
       - name: Smoke-test the packed install
         env:
@@ -92,3 +110,114 @@ jobs:
             --draft
           gh release edit "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --draft=false --latest
           gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" --json isImmutable,assets
+
+  # npm receives the exact tarball attached to the published Release, through
+  # npm trusted publishing (OIDC) with provenance. This job runs after the
+  # Release is published and only reads it, so a failure here leaves the
+  # GitHub Release intact; rerun the failed job once the cause is fixed.
+  npm:
+    name: Publish to npm
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: npm-release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      VERSION: ${{ needs.release.outputs.version }}
+      EXPECTED_SHA256: ${{ needs.release.outputs.sha256 }}
+      PACKAGE: "@hraness/dawg"
+    steps:
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.19.0"
+          registry-url: https://registry.npmjs.org
+
+      - name: Require npm 11.5.1 or newer for trusted publishing
+        run: |
+          npm_version="$(npm --version)"
+          if ! printf '11.5.1\n%s\n' "${npm_version}" | sort -V -C; then
+            echo "::error::npm ${npm_version} is older than 11.5.1"
+            exit 1
+          fi
+          echo "npm ${npm_version}"
+
+      - name: Download the published Release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir dist
+          gh release download "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --pattern "hraness-dawg-${VERSION}.tgz" \
+            --pattern SHA256SUMS \
+            --dir dist
+
+      - name: Verify the tarball against SHA256SUMS and the release build
+        id: bytes
+        working-directory: dist
+        run: |
+          sha256sum -c SHA256SUMS
+          actual="$(sha256sum "hraness-dawg-${VERSION}.tgz" | cut -d' ' -f1)"
+          if [ -z "${EXPECTED_SHA256}" ] || [ "${actual}" != "${EXPECTED_SHA256}" ]; then
+            echo "::error::release asset sha256 ${actual} does not match the release build ${EXPECTED_SHA256}"
+            exit 1
+          fi
+          integrity="sha512-$(openssl dgst -sha512 -binary "hraness-dawg-${VERSION}.tgz" | base64 -w0)"
+          echo "integrity=${integrity}" >> "${GITHUB_OUTPUT}"
+          echo "tarball=${PWD}/hraness-dawg-${VERSION}.tgz" >> "${GITHUB_OUTPUT}"
+
+      - name: Publish unless npm already has these exact bytes
+        env:
+          INTEGRITY: ${{ steps.bytes.outputs.integrity }}
+          TARBALL: ${{ steps.bytes.outputs.tarball }}
+        run: |
+          # Prints the published integrity for VERSION, nothing when the
+          # package or version is absent, and fails on any other response.
+          registry_integrity() {
+            local body status
+            body="$(mktemp)"
+            status="$(curl -sS -o "${body}" -w '%{http_code}' \
+              -H 'Accept: application/json' \
+              "https://registry.npmjs.org/@hraness%2fdawg")" || return 1
+            case "${status}" in
+              404) return 0 ;;
+              200)
+                node -e '
+                  const doc = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+                  const integrity = doc.versions?.[process.argv[2]]?.dist?.integrity;
+                  if (typeof integrity === "string") process.stdout.write(integrity);
+                ' "${body}" "${VERSION}" ;;
+              *)
+                echo "::error::npm registry returned HTTP ${status}" >&2
+                return 1 ;;
+            esac
+          }
+
+          current="$(registry_integrity)"
+          if [ "${current}" = "${INTEGRITY}" ]; then
+            echo "${PACKAGE}@${VERSION} is already published with these exact bytes; nothing to do."
+            exit 0
+          fi
+          if [ -n "${current}" ]; then
+            echo "::error::${PACKAGE}@${VERSION} is on npm with different bytes (${current}, release has ${INTEGRITY})"
+            exit 1
+          fi
+
+          npm publish "${TARBALL}" --provenance --access public
+
+          for _ in $(seq 1 40); do
+            current="$(registry_integrity || true)"
+            if [ "${current}" = "${INTEGRITY}" ]; then
+              echo "${PACKAGE}@${VERSION} is live with integrity ${INTEGRITY}"
+              exit 0
+            fi
+            if [ -n "${current}" ]; then
+              echo "::error::npm reports integrity ${current} for ${PACKAGE}@${VERSION}, expected ${INTEGRITY}"
+              exit 1
+            fi
+            sleep 15
+          done
+          echo "::error::${PACKAGE}@${VERSION} did not appear on npm within 10 minutes"
+          exit 1

@@ -1,0 +1,20 @@
+# Weekly dependency update proposals. Every update arrives as a pull request
+# that auto-merges once the required `check` passes
+# (workflows/dependabot-auto-merge.yml); this file grants no release authority.
+version: 2
+updates:
+  # bun.lock is the lockfile and the npm ecosystem cannot update it; the bun
+  # ecosystem updates package.json and bun.lock together.
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      bun-minor-and-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5

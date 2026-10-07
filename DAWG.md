@@ -136,3 +136,7 @@ Audio engine. With `dawgd` running only the daemon plays audio; on the file-lock
 Set `DAWG_AUDIO=0` for headless sessions.
 
 Use `DAWG_DEMO=1 bun run src/main.ts` for a deterministic non-interactive frame stream while developing the renderer.
+
+## Release
+
+Bump `version` in `package.json` and add its section to `CHANGELOG.md` in a pull request, then merge it. When Check passes on `main`, the annotated `v<version>` tag, the immutable GitHub Release (tarball, `SHA256SUMS` and a provenance attestation) and the npm publish of `@hraness/dawg` follow automatically. See [docs/publishing.md](./docs/publishing.md).
