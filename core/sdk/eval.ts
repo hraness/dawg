@@ -11,6 +11,7 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { decodeLoopDocument } from "../loop.ts";
+import { refreshRhythm } from "../rhythm.ts";
 import { ScoreValidationError, TrackScore } from "../score.ts";
 
 export const EVAL_TIMEOUT_MS = 10_000;
@@ -158,7 +159,9 @@ export function parseChildOutput(
     return failure(started, [diagnostic]);
   }
   try {
-    const score = decodeLoopDocument(record.score);
+    // Rhythm rows are generators: their lanes are expanded here, on the
+    // host, so `song.ts` stores parameters and the score stores notes.
+    const score = refreshRhythm(decodeLoopDocument(record.score));
     return { ok: true, score, ms: elapsed(started) };
   } catch (error) {
     return failure(started, [

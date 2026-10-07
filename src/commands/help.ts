@@ -71,6 +71,15 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "pattern kick every 1",
       },
       { command: "clear <voice>", summary: "remove one drum voice" },
+      {
+        command: "euclid <voice> <pulses> [<steps>] [rotate <n>]",
+        summary: "generated rhythm · euclid hat 7 16 rotate 2",
+      },
+      {
+        command: "euclid <voice> <field> <value> | off | freeze",
+        summary: "repeats pace accent prob swing …",
+      },
+      { command: "grid <voice> <x.X.>", summary: "explicit steps · X accent" },
       { command: "undo", summary: "step back · Ctrl-Z" },
       { command: "redo", summary: "step forward · Ctrl-Y" },
     ],
@@ -114,6 +123,10 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       },
       { command: "/auth [--check]", summary: "provider and audio status" },
       { command: "/play [on|off]", summary: "keyboard play mode · Ctrl-P" },
+      {
+        command: "/euclid [voice]",
+        summary: "T-1 style rhythm editor · Rhythm in /menu",
+      },
       {
         command: "/menu [section]",
         summary: "edit by hand · Ctrl-K · track effects automation …",

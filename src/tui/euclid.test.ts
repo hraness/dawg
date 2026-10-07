@@ -1,0 +1,118 @@
+import { describe, expect, test } from "bun:test";
+import { createScore } from "../../core/score.ts";
+import { applyRhythmCommand, parseRhythmCommand } from "../commands/rhythm.ts";
+import { EuclidEditor, ringText } from "./euclid.ts";
+
+const RIGHT = "\u001b[C";
+const LEFT = "\u001b[D";
+const DOWN = "\u001b[B";
+
+function kit() {
+  return createScore({ bars: 1, tracks: [{ id: "drums", instrument: "kit" }] });
+}
+
+/** Run an editor result through the prompt grammar like main.ts does. */
+function run(score: ReturnType<typeof kit>, command: string) {
+  const parsed = parseRhythmCommand(command);
+  expect(parsed).toBeDefined();
+  const result = applyRhythmCommand(score, "drums", parsed!);
+  expect(result.ok).toBe(true);
+  return result.next!;
+}
+
+describe("euclid editor", () => {
+  test("lists one lane per drum voice and adds E(4,16) on enter", () => {
+    const editor = new EuclidEditor();
+    let score = kit();
+    const ctx = () => ({ score, trackId: "drums" });
+    editor.show(ctx());
+    const view = editor.view(ctx());
+    expect(view.items.map((item) => item.label.split(" ")[0])).toEqual([
+      "kick",
+      "snare",
+      "clap",
+      "rim",
+      "tom",
+      "hat",
+      "open",
+    ]);
+    const added = editor.key("\r", ctx());
+    expect(added).toEqual({
+      type: "run",
+      command: "euclid kick 4 16",
+      audition: "kick",
+    });
+    score = run(score, "euclid kick 4 16");
+    expect(editor.view(ctx()).items[0]!.label).toContain("x···x···x···x···");
+  });
+
+  test("nudges, tabs between parameters, types digits and wraps rotate", () => {
+    const editor = new EuclidEditor();
+    let score = run(kit(), "euclid hat 3 8");
+    const ctx = () => ({ score, trackId: "drums" });
+    editor.show(ctx(), "hat");
+    expect(editor.selectedVoice(ctx())).toBe("hat");
+    expect(editor.key(RIGHT, ctx())).toMatchObject({
+      command: "euclid hat pulses 4",
+    });
+    expect(editor.key(LEFT, ctx())).toMatchObject({
+      command: "euclid hat pulses 2",
+    });
+    editor.key("\t", ctx());
+    editor.key("\t", ctx());
+    expect(editor.selectedParam).toBe("rotate");
+    // Rotate wraps backwards around the ring.
+    expect(editor.key(LEFT, ctx())).toMatchObject({
+      command: "euclid hat rotate 7",
+    });
+    editor.key("5", ctx());
+    expect(editor.view(ctx()).title).toContain("rotate: 5");
+    const typed = editor.key("\r", ctx());
+    expect(typed).toMatchObject({ command: "euclid hat rotate 5" });
+    score = run(score, "euclid hat rotate 5");
+    expect(ringText(score.tracks[0]!.rhythm![0])).toBe("x··x·x··");
+    // Division cycles through note values.
+    editor.key("\t", ctx());
+    expect(editor.key(RIGHT, ctx())).toMatchObject({
+      command: "euclid hat division 1/8t",
+    });
+    // Shift-tab walks backwards and wraps past pulses to the last one.
+    for (let i = 0; i < 4; i++) editor.key("\u001b[Z", ctx());
+    expect(editor.selectedParam).toBe("nudge");
+  });
+
+  test("x removes a row, f freezes it, esc closes, other keys are swallowed", () => {
+    const editor = new EuclidEditor();
+    const score = run(kit(), "euclid snare 2 8 rotate 2");
+    const ctx = { score, trackId: "drums" };
+    editor.show(ctx);
+    // Opens on the first voice that has a row.
+    expect(editor.selectedVoice(ctx)).toBe("snare");
+    expect(editor.key("x", ctx)).toEqual({
+      type: "run",
+      command: "euclid snare off",
+    });
+    expect(editor.key("f", ctx)).toEqual({
+      type: "run",
+      command: "euclid snare freeze",
+    });
+    expect(editor.key("q", ctx)).toEqual({ type: "handled" });
+    expect(editor.key(" ", ctx)).toEqual({ type: "audition", voice: "snare" });
+    editor.key(DOWN, ctx);
+    expect(editor.selectedVoice(ctx)).toBe("clap");
+    expect(editor.key("x", ctx)).toEqual({ type: "handled" });
+    expect(editor.key("\u0003", ctx)).toEqual({ type: "pass" });
+    expect(editor.key("\u001b", ctx)).toEqual({ type: "close" });
+  });
+
+  test("a grid row's shape nudges back into a Euclidean row", () => {
+    const editor = new EuclidEditor();
+    const score = run(kit(), "grid kick x..x..x.");
+    const ctx = { score, trackId: "drums" };
+    editor.show(ctx, "kick");
+    expect(editor.view(ctx).items[0]!.label).toContain("x··x··x·");
+    expect(editor.key(RIGHT, ctx)).toMatchObject({
+      command: "euclid kick 3 8",
+    });
+  });
+});

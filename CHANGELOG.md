@@ -4,6 +4,15 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ## Unreleased
 
+### Rhythm (Euclidean rows)
+
+- **Drum parts as generators.** A kit or oneshot sampler track can carry `rhythm` rows: `euclid("kick", 4, 16)`, `euclid("hat", 7, 16, 2, { swing: 0.15 })`, `grid("snare", "....X.......x...")`. dawg expands them into ordinary notes, so you and the agent edit four numbers instead of sixteen hits, and rendering, sync and diffs are unchanged. Patterns and rotation match Strudel's `euclid`/`euclidRot`.
+- **Torso T-1 parameters**: steps, pulses, rotate, division, repeats with time/pace/ramp (rolls that speed up, slow down, build or fade), velocity, accent, gate/legato, seeded probability, swing, nudge and per-pass cycles. The same seed always gives the same hits.
+- **`/euclid` editor** (also Rhythm in `/menu`): one row per voice with its step grid. Arrows nudge the selected parameter, Tab moves between parameters, digits type a value, Space auditions. Every change is one undo step.
+- **Prompt grammar**: `euclid kick 4 16`, `euclid hat 7 16 rotate 2`, `euclid hat swing 0.2`, `euclid snare off|freeze`, `grid snare ....X.......x...`.
+- The agent's new `set_rhythm` tool takes the same rows, and the agent prefers it to hand-placed drum hits.
+- Editing a generated lane by hand freezes that row into plain notes. Changing the loop length regenerates rows.
+
 ### Fixed
 
 - Gateway web searches no longer count the search fee twice in the spend line and ledger. The gateway's reported cost already includes it. A real Exa search response is now a test fixture.

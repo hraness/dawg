@@ -13,6 +13,8 @@ import {
   type GatewayClient,
   type GatewayModel,
 } from "./gateway.ts";
+import { diffScores } from "../../core/diff.ts";
+import { reconcileRhythm } from "../../core/rhythm.ts";
 import { validateAgentOperation } from "./planner.ts";
 import { SseBudgetError } from "./sse.ts";
 import {
@@ -191,7 +193,7 @@ export const AGENT_SYSTEM_PROMPT = [
   "Edit the score only by calling the provided tools; every call is validated and applied immediately, and its result tells you the new revision.",
   "Times are in beats from the loop start (0-based). Keep notes inside loopBeats unless you extend the loop first.",
   "Prefer a few well-formed calls (one add_notes call per track part) over many tiny ones.",
-  'For drums, create a track with instrument "kit" and use add_drums; drum pitches select voices, so do not use add_notes for beats.',
+  'For drums, create a track with instrument "kit" and prefer set_rhythm (Euclidean rows: pulses over steps, rotate, repeats for rolls, accent, probability, swing) so the beat stays editable as parameters; use add_drums only for one-off fills. Drum pitches select voices, so do not use add_notes for beats.',
   "Effects (set_effects, set_automation): low-pass filter cutoff 20..20000 Hz and resonance 0..1; stereo delay beats 0.0625..4, feedback 0..0.9, mix 0..1; stereo reverb mix 0..1 (0.15..0.35 is a natural room) and size 0..1; pan -1..1 is equal-power stereo. Automatable lanes: volume, pan, filter, resonance, delay-feedback, delay-mix.",
   "If a call is rejected, read the diagnostic and either fix the arguments or stop.",
   WORKSPACE_PROMPT,
@@ -657,6 +659,13 @@ export async function executeCall(
       const operation = validateAgentOperation(candidate);
       next = applyScoreOperation(next, operation);
       operations.push(operation);
+    }
+    // Keep rhythm rows and their lanes consistent (regenerate after a loop
+    // resize, freeze a row whose lane the tool edited by hand).
+    const reconciled = reconcileRhythm(snapshot.score, next);
+    if (reconciled !== next) {
+      operations.push(...diffScores(next, reconciled));
+      next = reconciled;
     }
   } catch (error) {
     return reject(`rejected by score validation: ${errorMessage(error)}`);

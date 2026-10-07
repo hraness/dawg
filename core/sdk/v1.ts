@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.1.0";
+export const SDK_VERSION = "1.2.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -306,6 +306,185 @@ export function every(step: number, options: EveryOptions = {}): number[] {
 }
 
 // ---------------------------------------------------------------------------
+// Rhythm rows (Euclidean generators, Torso T-1 style)
+
+/** Per-pass variation of a rhythm row (T-1 Cycles). */
+export type RhythmCycleSpec = Readonly<{
+  pulses?: number;
+  rotate?: number;
+  repeats?: number;
+  probability?: number;
+  velocity?: number;
+}>;
+
+/**
+ * Parameters of one generated voice. Every field is optional; dawg checks
+ * ranges when the song loads. Note values are strings: `"1/16"`, `"1/8t"`.
+ */
+export type RhythmOptions = Readonly<{
+  /** Steps 1..64, default 16. */
+  steps?: number;
+  /** Hits 0..steps spread as evenly as possible, default 4. */
+  pulses?: number;
+  /** Shift the pattern later by this many steps (negative: earlier), like Strudel's `euclidRot`. */
+  rotate?: number;
+  /** Length of a step, default `"1/16"`. */
+  division?: string;
+  /** Explicit steps instead of a Euclidean pattern: `x` hit, `X` accent, `.` rest. */
+  grid?: string;
+  /** Extra triggers after each pulse, 0..16 (T-1 Repeats). Cut off by the next pulse. */
+  repeats?: number;
+  /** Spacing of the repeats as a note value, default the step (T-1 Time). */
+  time?: string;
+  /** -1..1: repeats accelerate (<0) or decelerate (>0) (T-1 Pace). */
+  pace?: number;
+  /** -1..1: repeats fade out (<0) or build up (>0). */
+  ramp?: number;
+  /** Base velocity 0..1, default 0.8. */
+  velocity?: number;
+  /** 0..1: how far accented pulses rise toward full velocity. */
+  accent?: number;
+  /** Accented pulses as E(accents, pulses); default 1 (the first). */
+  accents?: number;
+  /** Note length in steps, 0.05..4 (T-1 Sustain), default 1. */
+  gate?: number;
+  /** Every pulse lasts until the next one, like Strudel's `euclidLegato`. */
+  legato?: boolean;
+  /** Chance 0..1 that a pulse plays; deterministic for a given `seed`. */
+  probability?: number;
+  /** Integer 0..1000000 choosing which pulses `probability` drops. */
+  seed?: number;
+  /** -0.5..0.5 of a step: every second step later (>0) or earlier. */
+  swing?: number;
+  /** -0.5..0.5 of a step: the whole row later or earlier. */
+  nudge?: number;
+  /** Variations applied on successive passes of the row (T-1 Cycles). */
+  cycles?: readonly RhythmCycleSpec[];
+}>;
+
+/** One generated voice on a track's `rhythm` list. Build with `euclid()` or `grid()`. */
+export type RhythmSpec = Readonly<
+  RhythmOptions & {
+    kind: "rhythm";
+    voice: string;
+  }
+>;
+
+/**
+ * A Euclidean rhythm row: `pulses` hits spread over `steps`, rotated later
+ * by `rotate` steps. Same patterns and rotation direction as Strudel's
+ * `euclid`/`euclidRot` (`euclid("kick", 3, 8)` is `x..x..x.`). dawg expands
+ * the row into hits when the song loads, so you edit the parameters, not
+ * the notes; the row repeats every `steps` steps to the end of the loop.
+ *
+ * ```ts
+ * rhythm: [
+ *   euclid("kick", 4, 16),
+ *   euclid("hat", 7, 16, 2, { velocity: 0.5, accent: 0.6, accents: 3 }),
+ *   euclid({ voice: "snare", pulses: 2, steps: 16, rotate: 4 }),
+ * ]
+ * ```
+ */
+export function euclid(
+  voice: string | (RhythmOptions & { voice: string }),
+  pulses?: number,
+  steps?: number,
+  rotate?: number,
+  options: RhythmOptions = {},
+): RhythmSpec {
+  if (isRecord(voice)) {
+    const input = voice as RhythmOptions & { voice: string };
+    return rhythmSpec(input.voice, input);
+  }
+  const fields: Record<string, unknown> = { ...options };
+  if (pulses !== undefined) fields.pulses = pulses;
+  if (steps !== undefined) fields.steps = steps;
+  if (rotate !== undefined) fields.rotate = rotate;
+  return rhythmSpec(voice, fields as RhythmOptions);
+}
+
+/** `euclid(voice, pulses, steps, rotate)` under Strudel's name. */
+export function euclidRot(
+  voice: string,
+  pulses: number,
+  steps: number,
+  rotate: number,
+  options: RhythmOptions = {},
+): RhythmSpec {
+  return euclid(voice, pulses, steps, rotate, options);
+}
+
+/** A Euclidean row whose hits last until the next one (Strudel `euclidLegato`). */
+export function euclidLegato(
+  voice: string,
+  pulses: number,
+  steps: number,
+  rotate = 0,
+  options: RhythmOptions = {},
+): RhythmSpec {
+  return euclid(voice, pulses, steps, rotate, { ...options, legato: true });
+}
+
+/**
+ * An explicit step row: `grid("snare", "....x.......x...")`. `X` is an
+ * accented hit; the string's length is the step count.
+ */
+export function grid(
+  voice: string,
+  steps: string,
+  options: RhythmOptions = {},
+): RhythmSpec {
+  return rhythmSpec(voice, { ...options, grid: steps });
+}
+
+function rhythmSpec(voice: unknown, options: RhythmOptions): RhythmSpec {
+  if (
+    typeof voice !== "string" ||
+    voice.trim().length === 0 ||
+    voice.length > 32
+  )
+    throw new DawgSdkError("rhythm voice must be a short name");
+  if (!isRecord(options))
+    throw new DawgSdkError("rhythm options must be an object");
+  const out: Record<string, unknown> = { kind: "rhythm", voice: voice.trim() };
+  for (const [key, value] of Object.entries(options)) {
+    if (key === "voice" || key === "kind" || value === undefined) continue;
+    if (!RHYTHM_KEYS.includes(key))
+      throw new DawgSdkError(
+        `rhythm ${voice}: unknown option "${key}" (${RHYTHM_KEYS.join(" ")})`,
+      );
+    out[key] =
+      key === "cycles" && Array.isArray(value)
+        ? Object.freeze(value.map((cycle) => Object.freeze({ ...cycle })))
+        : value;
+  }
+  return Object.freeze(out) as RhythmSpec;
+}
+
+/** Row fields in the order dawg stores and prints them. */
+export const RHYTHM_KEYS: readonly string[] = Object.freeze([
+  "steps",
+  "pulses",
+  "rotate",
+  "division",
+  "grid",
+  "repeats",
+  "time",
+  "pace",
+  "ramp",
+  "velocity",
+  "accent",
+  "accents",
+  "gate",
+  "legato",
+  "probability",
+  "seed",
+  "swing",
+  "nudge",
+  "cycles",
+]);
+
+// ---------------------------------------------------------------------------
 // Sampler
 
 /** One sample voice. A bare string is `{ src }`. */
@@ -500,6 +679,12 @@ export type TrackInput = Readonly<{
   automation?: AutomationInput;
   /** `note()`/`seq()` for pitched tracks, `hit()`/`hits()` for kits and one-shot samplers. */
   notes?: readonly (NoteSpec | HitSpec)[];
+  /**
+   * Generated voices, one row per voice: `euclid()`/`grid()`. dawg expands
+   * them into hits when the song loads; a row owns its voice, so `notes`
+   * on the same voice are replaced.
+   */
+  rhythm?: readonly RhythmSpec[];
 }>;
 
 /** Frozen track built by `track()`; `song()` consumes it. Beats, not ticks. */
@@ -520,6 +705,8 @@ export type TrackSpec = Readonly<{
   automation: Readonly<Required<AutomationInput>>;
   /** Every hit resolved to its pitch slot. */
   notes: readonly NoteSpec[];
+  /** Rhythm rows in order (voice names as written). */
+  rhythm: readonly RhythmSpec[];
 }>;
 
 /**
@@ -594,6 +781,15 @@ export function track(input: TrackInput): TrackSpec {
   });
   if (notes.length > 4096)
     throw new DawgSdkError(`track ${name}: at most 4096 notes`);
+  const rhythm = input.rhythm ?? [];
+  if (!Array.isArray(rhythm) || rhythm.length > 16)
+    throw new DawgSdkError(`track ${name}: rhythm must be at most 16 rows`);
+  rhythm.forEach((row, index) => {
+    if (!isRecord(row) || row.kind !== "rhythm")
+      throw new DawgSdkError(
+        `track ${name}: rhythm[${index}] must come from euclid() or grid()`,
+      );
+  });
   const automation = input.automation ?? {};
   if (!isRecord(automation))
     throw new DawgSdkError(`track ${name}: automation must be an object`);
@@ -673,6 +869,7 @@ export function track(input: TrackInput): TrackSpec {
       delayMix: lane("delayMix"),
     }),
     notes: Object.freeze(notes),
+    rhythm: Object.freeze([...rhythm]),
   });
 }
 
@@ -796,6 +993,8 @@ export type ScoreTrack = Readonly<{
     voices: Readonly<Record<string, ScoreSampleRef>>;
     mode: "oneshot" | "keyed";
   }>;
+  /** Rhythm rows without `kind`; dawg validates and expands them. */
+  rhythm?: readonly Readonly<Record<string, unknown>>[];
 }>;
 
 /**
@@ -888,6 +1087,13 @@ export function song(input: SongInput): Song {
         voices: t.sampler.voices,
         mode: t.sampler.mode,
       });
+    if (t.rhythm && t.rhythm.length > 0)
+      stored.rhythm = Object.freeze(
+        t.rhythm.map((row) => {
+          const { kind: _kind, ...fields } = row;
+          return Object.freeze(fields);
+        }),
+      );
     tracks.push(Object.freeze(stored) as ScoreTrack);
     const ids = new Set<string>();
     for (const n of t.notes) {

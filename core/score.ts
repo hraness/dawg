@@ -6,6 +6,10 @@
  * without rewriting the score.
  */
 
+import { normalizeRhythmRow, RHYTHM_LIMITS, type RhythmRow } from "./euclid.ts";
+
+export type { RhythmRow } from "./euclid.ts";
+
 export const SCORE_VERSION = 1 as const;
 export const DEFAULT_TICKS_PER_BEAT = 480 as const;
 
@@ -110,6 +114,12 @@ export type Track = Readonly<{
    * `"sampler"`. Documents without it decode unchanged.
    */
   sampler?: Sampler;
+  /**
+   * Generated drum rows (Euclidean or grid, see `core/euclid.ts`). The notes
+   * they generate are stored as ordinary notes; the rows are the editable
+   * source for those voices. Absent when empty.
+   */
+  rhythm?: readonly RhythmRow[];
 }>;
 
 /**
@@ -250,6 +260,7 @@ export type TrackPatch = Readonly<
     delay?: TrackDelay | null;
     reverb?: TrackReverb | null;
     sampler?: Sampler | null;
+    rhythm?: readonly RhythmRow[] | null;
   }
 >;
 
@@ -269,12 +280,13 @@ export type Note = Readonly<{
 }>;
 
 export type TrackInput = Readonly<
-  Omit<Partial<Track>, "filter" | "delay" | "reverb" | "sampler"> &
+  Omit<Partial<Track>, "filter" | "delay" | "reverb" | "sampler" | "rhythm"> &
     Pick<Track, "id"> & {
       filter?: TrackFilter | null;
       delay?: TrackDelay | null;
       reverb?: TrackReverb | null;
       sampler?: Sampler | null;
+      rhythm?: readonly RhythmRow[] | null;
     }
 >;
 
@@ -892,6 +904,7 @@ function normalizeTrack(input: unknown): Track {
   const delayMixAutomation = lane("delay-mix");
   const reverb = normalizeReverb(input.reverb);
   const sampler = normalizeSampler(input.sampler);
+  const rhythm = normalizeRhythm(input.rhythm, id);
   if (isSamplerInstrument(instrument) && !sampler)
     throw new ScoreValidationError(
       `track ${id} instrument "sampler" needs a sampler`,
@@ -920,7 +933,38 @@ function normalizeTrack(input: unknown): Track {
     ...(delayMixAutomation.length > 0 ? { delayMixAutomation } : {}),
     ...(reverb ? { reverb } : {}),
     ...(sampler ? { sampler } : {}),
+    ...(rhythm ? { rhythm } : {}),
   });
+}
+
+export function normalizeRhythm(
+  input: unknown,
+  trackId: string,
+): readonly RhythmRow[] | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (!Array.isArray(input) || input.length > RHYTHM_LIMITS.maxRows)
+    throw new ScoreValidationError(
+      `track ${trackId} rhythm must be an array of at most ${RHYTHM_LIMITS.maxRows} rows`,
+      "invalid-track",
+    );
+  if (input.length === 0) return undefined;
+  const rows = input.map((row: unknown, index) => {
+    try {
+      return normalizeRhythmRow(row, `track ${trackId} rhythm[${index}]`);
+    } catch (error) {
+      throw new ScoreValidationError(
+        error instanceof Error ? error.message : String(error),
+        "invalid-track",
+      );
+    }
+  });
+  const voices = new Set(rows.map((row) => row.voice));
+  if (voices.size !== rows.length)
+    throw new ScoreValidationError(
+      `track ${trackId} rhythm has two rows for one voice`,
+      "invalid-track",
+    );
+  return Object.freeze(rows);
 }
 
 const VOICE_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
