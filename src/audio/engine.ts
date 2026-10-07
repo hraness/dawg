@@ -198,6 +198,8 @@ export type AudioEngineOptions = Readonly<{
   spawn?: (command: readonly string[]) => PlayerProcess;
   /** Set false to render on the calling thread instead of a worker. */
   worker?: boolean;
+  /** Project root for sampler voices; without it samplers render silent. */
+  projectRoot?: string;
   /** Base delay before a dead player is respawned; doubles per attempt. */
   respawnMs?: number;
   /** Player lifecycle notices worth a status line. */
@@ -296,9 +298,12 @@ export class AudioEngine {
     this.renderer = new LoopRenderer({
       sampleRate: this.sampleRate,
       ...(options.worker === undefined ? {} : { worker: options.worker }),
+      ...(options.projectRoot === undefined
+        ? {}
+        : { projectRoot: options.projectRoot }),
     });
     if (this.info.backend === "afplay")
-      this.fallback = new LoopPlayer(options.lockPath);
+      this.fallback = new LoopPlayer(options.lockPath, options.projectRoot);
   }
 
   /** Whether a streaming player process is currently running. */

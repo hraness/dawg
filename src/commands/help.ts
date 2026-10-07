@@ -75,6 +75,10 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       { command: "/status", summary: "name · revision · digest · storage" },
       { command: "/export <file>", summary: "write track.loop/v1 JSON" },
       { command: "/import <file>", summary: "replace the score from a file" },
+      {
+        command: "/sample [<path> [as <voice>]]",
+        summary: "add a sample voice · list voices",
+      },
     ],
   },
   {
@@ -188,6 +192,8 @@ const USAGE: Readonly<Record<string, string>> = {
   status: "/status",
   export: "/export <file> · /export loop.track.json",
   import: "/import <file> · /import loop.track.json",
+  sample: "/sample <path> [as <voice>] · /sample kick.wav as kick",
+  samples: "/sample · lists the focused track's voices",
   view: "/view focus | all",
   transcript: "/transcript",
   log: "/transcript",

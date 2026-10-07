@@ -1,5 +1,6 @@
 import type { TrackScore } from "../../core/score.ts";
 import type { RenderReply, RenderRequest } from "./render-worker.ts";
+import { SampleLibrary, hasSamplerTracks } from "./samples.ts";
 import { StemRenderer } from "./wav.ts";
 
 export type LoopRender = Readonly<{
@@ -14,6 +15,11 @@ export type LoopRendererOptions = Readonly<{
   sampleRate: number;
   /** Set false to render on the calling thread (tests, diagnostics). */
   worker?: boolean;
+  /**
+   * Project root sampler voices resolve under (decoded in the worker, or
+   * inline on fallback). Without it sampler tracks render silent.
+   */
+  projectRoot?: string;
 }>;
 
 /**
@@ -28,6 +34,8 @@ export class LoopRenderer {
   private worker: Bun.Worker | undefined;
   private workerBroken = false;
   private inline: StemRenderer | undefined;
+  private library: SampleLibrary | undefined;
+  private readonly projectRoot: string | undefined;
   private nextId = 1;
   private readonly pending = new Map<
     number,
@@ -38,6 +46,7 @@ export class LoopRenderer {
   public constructor(options: LoopRendererOptions) {
     this.sampleRate = options.sampleRate;
     this.useWorker = options.worker ?? true;
+    this.projectRoot = options.projectRoot;
   }
 
   /** True while renders run in the worker. */
@@ -63,12 +72,18 @@ export class LoopRenderer {
     this.failWorker(new WorkerLostError("renderer disposed"));
   }
 
-  private renderInline(score: TrackScore): LoopRender {
+  private async renderInline(score: TrackScore): Promise<LoopRender> {
     this.inline ??= new StemRenderer();
     const started = performance.now();
+    let samples;
+    if (this.projectRoot !== undefined && hasSamplerTracks(score)) {
+      this.library ??= new SampleLibrary({ projectRoot: this.projectRoot });
+      samples = await this.library.load(score);
+    }
     const audio = this.inline.render(score, {
       sampleRate: this.sampleRate,
       loop: true,
+      samples,
     });
     return {
       pcm: audio.pcm,
@@ -88,6 +103,9 @@ export class LoopRenderer {
         id,
         score: score.toJSON(),
         sampleRate: this.sampleRate,
+        ...(this.projectRoot === undefined
+          ? {}
+          : { projectRoot: this.projectRoot }),
       };
       try {
         worker.postMessage(request);

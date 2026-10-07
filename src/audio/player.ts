@@ -1,6 +1,7 @@
 import { unlink } from "node:fs/promises";
 import type { TrackScore } from "../../core/score.ts";
 import { PlaybackLock } from "./lock.ts";
+import { SampleLibrary, hasSamplerTracks, type SampleBank } from "./samples.ts";
 import { RENDER_CHANNELS, encodeWav, renderScorePcm } from "./wav.ts";
 
 /** Small best-effort local player. The score and transport remain testable without a sound device. */
@@ -10,7 +11,12 @@ export class LoopPlayer {
   private readonly lock: PlaybackLock;
   private readonly lockPath: string | undefined;
 
-  public constructor(lockPath?: string) {
+  private library: SampleLibrary | undefined;
+
+  public constructor(
+    lockPath?: string,
+    private readonly projectRoot?: string,
+  ) {
     this.lockPath = lockPath;
     this.lock = new PlaybackLock(lockPath);
   }
@@ -33,8 +39,13 @@ export class LoopPlayer {
     await this.stopAsync();
     if (process.env.DAWG_AUDIO === "0") return;
     if (this.lockPath && !(await this.acquireLock())) return;
+    let samples: SampleBank | undefined;
+    if (this.projectRoot !== undefined && hasSamplerTracks(score)) {
+      this.library ??= new SampleLibrary({ projectRoot: this.projectRoot });
+      samples = await this.library.load(score).catch(() => undefined);
+    }
     const path = `/tmp/dawg-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.wav`;
-    await Bun.write(path, renderLoopWav(score, beat));
+    await Bun.write(path, renderLoopWav(score, beat, samples));
     this.file = path;
     this.spawn(path);
   }
@@ -102,8 +113,12 @@ export class LoopPlayer {
 }
 
 /** A loop-folded WAV whose first frame is `beat` into the loop. */
-export function renderLoopWav(score: TrackScore, beat = 0): Uint8Array {
-  const audio = renderScorePcm(score, { loop: true });
+export function renderLoopWav(
+  score: TrackScore,
+  beat = 0,
+  samples?: SampleBank,
+): Uint8Array {
+  const audio = renderScorePcm(score, { loop: true, samples });
   const framesPerBeat = (60 * audio.sampleRate) / score.tempoBpm;
   const start =
     ((Math.round(Math.max(0, beat) * framesPerBeat) % audio.frames) +

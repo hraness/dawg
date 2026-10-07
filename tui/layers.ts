@@ -9,6 +9,8 @@ import {
   MAX_LAYER_NOTES,
   type HighwayLayer,
 } from "./highway.ts";
+import { samplerLanes } from "./drums.ts";
+import type { Sampler } from "../core/score.ts";
 
 export interface LayerTrack {
   id: string;
@@ -16,6 +18,7 @@ export interface LayerTrack {
   instrument: string;
   muted: boolean;
   solo?: boolean | undefined;
+  sampler?: Sampler | undefined;
 }
 
 export interface LayerNote {
@@ -43,17 +46,24 @@ export function highwayLayers(
   let budget = MAX_LAYER_NOTES;
   return audible.map((track) => {
     const drum = isDrumInstrument(track.instrument);
+    const sampled = drum ? undefined : samplerLanes(track);
     const own = [];
     for (const note of notes) {
       if (note.trackId !== track.id) continue;
       if (budget <= 0) break;
+      const lane = drum
+        ? drumLane(note.pitch)
+        : sampled
+          ? sampled.laneOf(note.pitch)
+          : undefined;
+      if (sampled && lane === undefined) continue;
       budget -= 1;
       own.push({
         startBeat: note.startTick / tpb,
         durationBeats: note.durationTicks / tpb,
         pitch: note.pitch,
         velocity: note.velocity,
-        ...(drum ? { lane: drumLane(note.pitch) } : {}),
+        ...(lane !== undefined ? { lane } : {}),
       });
     }
     return {
@@ -62,7 +72,9 @@ export function highwayLayers(
       notes: own,
       projection: drum
         ? drumLaneProjection(DRUM_VOICES.map((info) => info.label))
-        : undefined,
+        : sampled
+          ? drumLaneProjection(sampled.labels)
+          : undefined,
     };
   });
 }

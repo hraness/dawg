@@ -216,7 +216,50 @@ The printer (`core/sdk/print.ts`) is deterministic and Prettier-stable (`prettie
 
 `dawg check` typechecks and evaluates the project, prints diagnostics to stderr and `ok · 3 tracks, 12 notes · types 26 ms · eval 21 ms` on success, and exits 1 on any problem or outside a project.
 
-Score format. The score stays `track.loop/v1` with `version: 1`: every addition is an optional field, so older documents still parse and older dawg versions reject only documents that use the new fields. Tracks may carry `sampler: {mode: "oneshot" | "keyed", voices: {name: {src, sha256?, root?, begin?, end?, gain?, speed?, loop?, choke?}}}` with bounds in `SCORE_LIMITS` (64 voices, 256-character relative `src`, gain ≤ 2, speed ≤ 8). One-shot voices map to pitches from 36 in voice-name order. The renderer treats sampler tracks as silent until sample playback lands. `diffScores` uses four operations added alongside: `removeTrack`, `moveTrack`, `setKey` and `setMeter`, which dawgd rebases and the planner accepts.
+Score format. The score stays `track.loop/v1` with `version: 1`: every addition is an optional field, so older documents still parse and older dawg versions reject only documents that use the new fields. Tracks may carry `sampler: {mode: "oneshot" | "keyed", voices: {name: {src, sha256?, root?, begin?, end?, gain?, speed?, loop?, choke?}}}` with bounds in `SCORE_LIMITS` (64 voices, 256-character relative `src`, gain ≤ 2, speed ≤ 8). One-shot voices map to pitches from 36 in voice-name order. Sampler tracks play their samples; see [Samples](#samples). `diffScores` uses four operations added alongside: `removeTrack`, `moveTrack`, `setKey` and `setMeter`, which dawgd rebases and the planner accepts.
+
+## Samples
+
+A track whose instrument is `sampler(...)` plays audio files instead of a synth. Voices live in `tracks/<slug>/samples/` and `src` is relative to the track directory (`samples/kick.wav`); a project-relative `tracks/<slug>/samples/kick.wav` works too.
+
+```ts
+// tracks/drums/track.ts
+import { track, sampler, hits } from "dawg";
+
+export default track({
+  name: "drums",
+  instrument: sampler({
+    kick: "samples/kick.wav",
+    hat: { src: "samples/hat.wav", choke: "hats", gain: 0.6 },
+    open: { src: "samples/open.wav", choke: "hats" },
+  }),
+  notes: [
+    ...hits("kick", [0, 1, 2, 3]),
+    ...hits("hat", [0.5, 1.5]),
+    ...hits("open", [3.5]),
+  ],
+});
+```
+
+Semantics follow Strudel's sampler:
+
+| Strudel                         | dawg                                                       | Behaviour                                                                                                  |
+| ------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `samples({ kick: "kick.wav" })` | `sampler({ kick: "samples/kick.wav" })`                    | one voice per name                                                                                         |
+| `s("kick hat")`                 | `hits("kick", …)`, `hit("hat", …)` (oneshot mode)          | voices take pitch slots 36, 37, … in name order; a hit plays the whole sample, whatever the note length    |
+| `note("c4 e4").s("vox")`        | `sampler({ vox: { src, root: "C4" } }, { mode: "keyed" })` | rate = 2^((pitch − root)/12); the note's length holds it, then a 10 ms release; several roots multi-sample |
+| `.begin(0.25)` / `.end(0.5)`    | `begin: 0.25`, `end: 0.5`                                  | 0..1 fractions of the file                                                                                 |
+| `.speed(2)` / `.speed(-1)`      | `speed: 2` / `speed: -1`                                   | rate and pitch together; negative plays the window backwards                                               |
+| `.loop(1)`                      | `loop: true`                                               | repeats begin..end (5 ms crossfade) for the note's length, oneshot or keyed                                |
+| `.cut(1)`                       | `choke: "hats"`                                            | a new hit in the group stops the sounding voice with a 5 ms fade                                           |
+| `.gain(0.8)`                    | `gain: 0.8`                                                | 0..2, times velocity and the track volume                                                                  |
+| `.slice(8, …)` / `.chop(8)`     | `slices("samples/break.wav", 8)`                           | eight voices with begin/end windows                                                                        |
+
+Every voice starts and stops with a 1–3 ms fade, so cuts do not click. There is no time-stretch, as in Strudel's default. A sampler track goes through the same volume and pan automation, filter, delay and reverb as any other track and is a cached stem like any other; the stem's cache key includes each voice's sha256, so replacing a file re-renders it.
+
+Decoding: WAV (PCM 16/24/32-bit integer and 32-bit float, any channel count and rate) and AIFF/AIFF-C (8/16/24/32-bit) decode natively, mixed to mono and resampled to the engine rate on the fly with linear interpolation. MP3, FLAC, Ogg, M4A and anything else decode through `ffmpeg` when it is on `PATH` (dawg never installs it); without it the voice is skipped with `<voice> · <path> · not WAV/AIFF and ffmpeg is not on PATH · convert it to WAV, or install ffmpeg (e.g. brew install ffmpeg) and reload`. Decoded PCM is cached at `.dawg/assets/<sha256>.pcm`, least recently used first out past 512 MiB. Files over 50 MiB or 10 minutes, paths that leave the project (including through a symlink), and more than 64 voices are rejected. A `sha256` that no longer matches the file is a warning and the file still plays. Problems appear as receipts in the TUI and on stderr from `dawg render`; the track renders without the missing voices and nothing crashes.
+
+In the TUI, oneshot sampler tracks show one highway lane per voice, labelled by name; keyed tracks use the pitch axis. `/tracks` shows each sampler's sample count and how many failed to load. `/sample <path> [as <voice>]` adds a voice to the focused track: a file outside the track directory is copied into `tracks/<slug>/samples/`, the voice name defaults to the file name, and a focused synth track that already has notes gets a new `samples` track instead. Existing hits keep their voice when the new name shifts the slots. `/sample` alone lists the voices. The agent's `import_sample` media tool writes 48 kHz stereo WAVs to the same folder.
 
 ## Release
 

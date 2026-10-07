@@ -320,6 +320,7 @@ class FilePort<T> implements SessionPort<T> {
   private constructor(private readonly options: OpenPortOptions) {
     this.player = new AudioEngine({
       lockPath: `${options.paths.record}.audio.lock`,
+      projectRoot: dirname(options.paths.root),
       onStatus: (status) => {
         for (const listener of this.statusListeners)
           listener({ type: "status", message: status.message });

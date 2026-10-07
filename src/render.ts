@@ -1,5 +1,6 @@
 /**
- * `dawg render <out.wav>`: renders a session (or a `track.loop/v1` file) to
+ * `dawg render <out.wav>`: renders a session, the project files (`song.ts`,
+ * in a project with no `--session`), or a `track.loop/v1` file to
  * a stereo 16-bit PCM WAV through the same deterministic renderer playback
  * uses, so two renders of one score are byte-identical. It reads the session
  * record from disk and never starts dawgd or plays audio.
@@ -10,6 +11,9 @@ import { resolve } from "node:path";
 import { scoreFromJSON, type TrackScore } from "../core/score.ts";
 import { decodeLoop } from "../core/loop.ts";
 import { renderScoreWav } from "./audio/wav.ts";
+import { SampleLibrary, hasSamplerTracks } from "./audio/samples.ts";
+import { evaluateProject, formatDiagnostic } from "../core/sdk/eval.ts";
+import { isProject } from "./project/init.ts";
 import { resolveSessionArg } from "./session/attach.ts";
 import {
   loadSession,
@@ -66,7 +70,13 @@ export async function runRenderCommand(
     );
     return 1;
   }
-  const wav = renderScoreWav(score);
+  let samples;
+  if (hasSamplerTracks(score)) {
+    samples = await new SampleLibrary({ projectRoot: workspace }).load(score);
+    for (const problem of samples.problems)
+      stderr.write(`sample ${problem.level} · ${problem.message}\n`);
+  }
+  const wav = renderScoreWav(score, { samples });
   const path = resolve(workspace, target);
   const temporary = `${path}.${process.pid}.tmp`;
   await writeFile(temporary, wav);
@@ -88,6 +98,14 @@ async function loadScore(
     return decodeLoop(contents.toString("utf8"));
   }
   const query = options.get("--session");
+  if (query === undefined && (await isProject(workspace))) {
+    const evaluated = await evaluateProject(workspace);
+    if (!evaluated.ok)
+      throw new Error(
+        `${evaluated.diagnostics.map(formatDiagnostic).join("; ").slice(0, 400)} · fix song.ts and retry (dawg check)`,
+      );
+    return evaluated.score;
+  }
   const sessionId =
     query === undefined
       ? await readCurrentSessionId(workspace)

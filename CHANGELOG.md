@@ -4,6 +4,13 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ## Unreleased
 
+### Sample playback
+
+- **Sampler tracks play.** `sampler({...})` voices now render in playback, `dawg render` and exports, with Strudel's semantics: `begin`/`end` windows, `speed` (negative reverses), `loop` for the note's length, `gain`, `choke` groups (Strudel's `cut`), keyed repitching from `root`, and oneshot voices on pitch slots from 36. Starts, stops and cuts fade over a few milliseconds. Volume, pan, automation, filter, delay and reverb apply as on any track, and sampler tracks are cached stems keyed by the files' sha256.
+- **Decoding.** WAV (PCM 16/24/32-bit and float32) and AIFF decode natively and resample to the engine rate; MP3, FLAC, Ogg and M4A decode through `ffmpeg` when it is on `PATH`, otherwise the voice is skipped with a diagnostic. Decoded audio is cached at `.dawg/assets/<sha256>.pcm` (512 MiB LRU). Files over 50 MiB or 10 minutes and paths that escape the project, symlinks included, are rejected; a stale `sha256` warns and still plays.
+- **`/sample <path> [as <voice>]`** adds a voice to the focused track (copying the file into `tracks/<slug>/samples/` and reprinting `track.ts`); `/sample` lists voices. Oneshot samplers get one highway lane per voice, `/tracks` shows sample counts and missing files, and load problems are receipts.
+- `dawg render` in a project with no `--session` renders the project files (`song.ts`).
+
 ### Sign-in, model picker and spend
 
 - **One sign-in picker.** `dawg login` (and the first `dawg` with no provider) finds what is already set up, in parallel within 4 s: `AI_GATEWAY_API_KEY`, `OPENROUTER_API_KEY`, stored keys, a logged-in Vercel CLI, `VERCEL_OIDC_TOKEN`, and xcb Codex and Claude accounts. It then shows one Codex-style picker (arrows, numbers, Enter), with the first detected option as the default. When one option is ready, it asks `Use <it>? [Y/n]`. Non-interactive runs pick the best detected option or exit with a hint.
