@@ -3,3 +3,5 @@ site/.next/
 site/next-env.d.ts
 site/public/theme-bootstrap.js
 site/public/demo/
+# Verbatim web fixtures (HTML and provider responses) used by src/web tests.
+src/web/fixtures/

@@ -169,6 +169,7 @@ Playback renders deterministic stereo PCM with sine, piano, pluck, bass, saw, sq
 - `core/` defines the bounded immutable `track.loop/v1` score and operations.
 - `src/session/` provides an append-only local event log, atomic snapshots, and `dawgd`: one local daemon per session (`src/daemon.ts`), started automatically by the first window. Windows connect over a Unix socket, send idempotent intents, and receive accepted changes, presence, and one shared transport clock. If the daemon cannot start, windows fall back to the file-lock path and say so in the status line. `dawg sessions` lists the workspace's sessions with revision, update time, and live daemon.
 - `src/agent/` runs the bounded streaming tool-calling agent: the SSE gateway client, the tool registry, the composition brief, and operation validation.
+- `src/agent/workspace.ts` and `src/web/` give the agent bounded project file access (writes scoped to `song.ts` and the focused `tracks/<slug>/`) and web search and fetch with injectable network.
 - `src/audio/` owns the transport clock, deterministic instrument-bank WAV rendering, and per-session playback lock. When `dawgd` is running it is the only process that plays audio.
 - `tui/` owns terminal capability detection, semantic colors, animation phases, piano-roll rendering, and the multiline prompt editor.
 

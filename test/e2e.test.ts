@@ -53,6 +53,9 @@ function env(workspace: string): Record<string, string> {
     DAWG_PROVIDER: "gateway",
     DAWG_CREDENTIAL_STORE: "file",
     DAWG_CONFIG_DIR: join(workspace, ".config"),
+    // Bun caches transpiled large modules under $HOME (macOS: Library/Caches/bun);
+    // keep that out of the workspace the tests inspect.
+    BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0",
   };
 }
 

@@ -4,7 +4,9 @@ import {
   AgentTimeoutError,
   classifyAgentError,
   executeCall,
+  hostProjectOutline,
   tighten,
+  WORKSPACE_PROMPT,
   type AgentBudget,
   type AgentEvent,
   type AgentHost,
@@ -46,6 +48,7 @@ export const TEXT_AGENT_SYSTEM_PROMPT = [
   'Reply with exactly one JSON object and nothing else, shaped {"ops":[{"tool":"<tool name>","args":{...}}],"say":"<one short sentence describing the musical change>","done":true}.',
   'Set "done":false only if you need to see the results of these ops before continuing; you will then get each op\'s result and can send more ops.',
   "If an op was rejected, read its diagnostic and either send a corrected op or stop with done:true.",
+  WORKSPACE_PROMPT,
 ].join(" ");
 
 /** Render the tool registry as a compact op catalog for a text-only model. */
@@ -141,10 +144,15 @@ export async function runTextAgentTurn(
       const remainingBytes = limits.maxResponseBytes - bytesUsed;
       if (remainingBytes <= 0)
         throw new SseBudgetError(limits.maxResponseBytes);
+      const snapshot = options.host.snapshot();
+      const brief = compositionBrief({
+        ...snapshot,
+        project: await hostProjectOutline(options.host, snapshot),
+      });
       const prompt = [
         TEXT_AGENT_SYSTEM_PROMPT,
         `Tools:\n${catalog}`,
-        `Composition brief (JSON): ${compositionBrief(options.host.snapshot())}`,
+        `Composition brief (JSON): ${brief}`,
         `User request: ${options.prompt.slice(0, MAX_PROMPT_CHARS)}`,
         ...steering.map((text) => `Steering from the user mid-turn: ${text}`),
         feedback
@@ -207,7 +215,7 @@ export async function runTextAgentTurn(
         emit({ type: "tool-start", callId, name: op.tool, step });
         const outcome = await executeCall(
           { id: callId, name: op.tool, arguments: JSON.stringify(op.args) },
-          { tools, host: options.host, newNoteId },
+          { tools, host: options.host, newNoteId, signal },
         );
         if (outcome.ok) {
           applied += outcome.mutated ? 1 : 0;

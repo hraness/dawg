@@ -688,3 +688,85 @@ describe("provider selection", () => {
     ).rejects.toThrow("nope");
   });
 });
+
+describe("text agent workspace tools", () => {
+  test("the op catalog stays well under the xcb input budget and names the file tools", async () => {
+    const { renderToolCatalog } = await import("./xcb-agent.ts");
+    const catalog = renderToolCatalog();
+    expect(catalog.length).toBeLessThan(16_000);
+    for (const name of [
+      "list_files",
+      "read_file",
+      "write_file",
+      "edit_file",
+      "web_search",
+      "fetch_url",
+    ])
+      expect(catalog).toContain(`- ${name}:`);
+  });
+
+  test("JSON ops reach the workspace tools and feed their text back", async () => {
+    const { mkdir, mkdtemp, readFile, realpath, rm, writeFile } =
+      await import("node:fs/promises");
+    const root = await realpath(await mkdtemp(join(tmpdir(), "dawg-xcb-ws-")));
+    try {
+      await mkdir(join(root, "tracks/main"), { recursive: true });
+      await writeFile(join(root, "tracks/main/notes.md"), "todo: swing\n");
+      const { state, host } = memoryHost();
+      const events: AgentEvent[] = [];
+      const { generate, prompts } = scriptedGenerate([
+        JSON.stringify({
+          ops: [{ tool: "read_file", args: { path: "tracks/main/notes.md" } }],
+          done: false,
+        }),
+        JSON.stringify({
+          ops: [
+            {
+              tool: "edit_file",
+              args: {
+                path: "tracks/main/notes.md",
+                old: "todo: swing",
+                new: "done: swing 55%",
+              },
+            },
+          ],
+          say: "Noted.",
+          done: true,
+        }),
+      ]);
+      const result = await runTextAgentTurn({
+        prompt: "check the notes",
+        generate,
+        host: { ...host, workspace: { root } },
+        onEvent: (e) => events.push(e),
+      });
+      expect(result).toMatchObject({
+        type: "done",
+        reason: "stop",
+        applied: 1,
+        rejected: 0,
+        revision: 3,
+      });
+      expect(state.commits).toBe(0);
+      expect(prompts).toHaveLength(2);
+      expect(prompts[0]).toContain("tracks/main/ (focused) 1 file 12 B");
+      expect(prompts[0]).toContain("todo: swing");
+      expect(prompts[1]).toContain(
+        "ops[0] read_file: tracks/main/notes.md · lines 1-1 of 1\ntodo: swing",
+      );
+      expect(await readFile(join(root, "tracks/main/notes.md"), "utf8")).toBe(
+        "done: swing 55%\n",
+      );
+      expect(
+        events
+          .filter((e) => e.type === "tool-applied")
+          .map((e) => e.type === "tool-applied" && e.summary),
+      ).toEqual([
+        "read tracks/main/notes.md (1 line)",
+        "edited tracks/main/notes.md",
+      ]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});

@@ -1,0 +1,30 @@
+{
+  "_note": "Shape derived from vercel.com/docs/ai-gateway/models-and-providers/web-search (Chat Completions server tools, 2026-10-06): the gateway runs the search, the model relays results as text, finish_reason is stop and there are no client-facing tool_calls. Replace with a captured response once one is recorded.",
+  "id": "chatcmpl-fixture",
+  "object": "chat.completion",
+  "created": 1791302400,
+  "model": "anthropic/claude-haiku-4.5",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "[{\"title\":\"Freeverb – Physical Audio Signal Processing\",\"url\":\"https://ccrma.stanford.edu/~jos/pasp/Freeverb.html\",\"snippet\":\"Freeverb uses eight parallel Schroeder-Moorer comb filters followed by four series allpass filters.\"},{\"title\":\"Freeverb3 Signal Processing Library\",\"url\":\"https://freeverb3.sourceforge.net/?utm_source=exa\",\"snippet\":\"A library implementing Freeverb and related reverb algorithms.\"},{\"title\":\"ignored\",\"url\":\"ftp://example.org/x\",\"snippet\":\"not http\"}]",
+        "provider_metadata": {
+          "gateway": {
+            "gatewayToolCalls": [
+              { "type": "vercel:exa_search", "status": "success" }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1540,
+    "completion_tokens": 160,
+    "total_tokens": 1700,
+    "cost": 0.0021
+  }
+}
