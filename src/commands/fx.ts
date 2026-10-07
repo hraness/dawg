@@ -5,6 +5,7 @@
  *   fx <effect> on|off|reset             enable with defaults, remove, reset
  *   fx <effect> preset <name>            load a named preset (FX_PRESETS)
  *   fx <effect> <param> <value>          set one parameter (enables it)
+ *   fx <effect> <number>                 set its first parameter (`fx orbit 2`)
  *   fx <effect> <param> <value> <param> <value>…   several at once
  *
  * Effects are every `FX_CHAIN` stage except pan (see core/fx.ts), plus
@@ -71,6 +72,10 @@ const EFFECT_ALIASES: Readonly<Record<string, EffectName>> = Object.freeze({
   rotary: "leslie",
   gain: "postgain",
   echo: "delay",
+  bus: "orbit",
+  o: "orbit",
+  sidechain: "duck",
+  duckorbit: "duck",
   room: "reverb",
   verb: "reverb",
 });
@@ -139,12 +144,26 @@ export function parseFxCommand(prompt: string): FxCommand | undefined {
     )
       ? { type: "fx-preset", effect, preset: rest[1]! }
       : undefined;
-  if (rest.length === 0 || rest.length % 2 !== 0) return undefined;
-  const values: Record<string, number | string | boolean> = {};
   // `fx hpf cutoff 300` picks the filter type from the alias.
   const alias = words[1]!.toLowerCase();
-  if (effect === "filter" && (alias === "hpf" || alias === "bpf"))
-    values.type = alias;
+  const typed: Record<string, string> =
+    effect === "filter" && (alias === "hpf" || alias === "bpf")
+      ? { type: alias }
+      : {};
+  if (rest.length === 1) {
+    // `fx orbit 2`, `fx duck 3`, `fx hpf 300`: the first numeric parameter.
+    const params = effectSpec(effect).params;
+    const first = effectSpec(effect).simple.find(
+      (key) => params[key]?.kind === "number",
+    );
+    if (!first) return undefined;
+    const value = parseParamValue(params[first]!, rest[0]!);
+    return value === undefined
+      ? undefined
+      : { type: "fx-set", effect, values: { ...typed, [first]: value } };
+  }
+  if (rest.length === 0 || rest.length % 2 !== 0) return undefined;
+  const values: Record<string, number | string | boolean> = { ...typed };
   for (let index = 0; index < rest.length; index += 2) {
     const param = parseParamName(effect, rest[index]!);
     if (!param) return undefined;

@@ -36,6 +36,12 @@ import {
   reverbTailFor,
 } from "./effects/chain.ts";
 import { tableFor, wavetableOscillator } from "./wavetable.ts";
+import {
+  duckGains,
+  duckSettings,
+  orbitOf,
+  type Ducker,
+} from "./effects/duck.ts";
 
 export type WavOptions = Readonly<{ sampleRate?: number; maxSeconds?: number }>;
 
@@ -274,6 +280,24 @@ export class StemRenderer {
       if (group) group.push(note);
       else groups.set(note.trackId, [note]);
     }
+    // Orbit ducking is a gain on finished stems (src/audio/effects/duck.ts).
+    const duckers: Ducker[] = [];
+    for (const [trackId, notes] of groups) {
+      const settings = duckSettings(tracks.get(trackId));
+      if (settings && isTrackAudible(score, trackId))
+        duckers.push({
+          trackId,
+          ...settings,
+          onsets: notes.map((note) => noteSpan(note, context).start),
+        });
+    }
+    const ducked = duckGains(
+      [...groups.keys()].map((id) => ({ id, orbit: orbitOf(tracks.get(id)) })),
+      duckers,
+      samples,
+      sampleRate,
+      options.loop ? frames : undefined,
+    );
     // Tracks render one at a time; the sum order (first note per track) is
     // part of the output, so cached and cold renders keep it.
     for (const [trackId, notes] of groups) {
@@ -353,10 +377,17 @@ export class StemRenderer {
         };
         if (caching) this.store(trackId, stem);
       }
-      for (let index = 0; index < samples; index += 1) {
-        mixL[index]! += stem.left[index]!;
-        mixR[index]! += stem.right[index]!;
-      }
+      const gain = ducked.get(trackId);
+      if (gain)
+        for (let index = 0; index < samples; index += 1) {
+          mixL[index]! += stem.left[index]! * gain[index]!;
+          mixR[index]! += stem.right[index]! * gain[index]!;
+        }
+      else
+        for (let index = 0; index < samples; index += 1) {
+          mixL[index]! += stem.left[index]!;
+          mixR[index]! += stem.right[index]!;
+        }
     }
     // Stems of tracks that left the score are not worth keeping; muted and
     // unsoloed tracks keep theirs so toggling them back is free.
