@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.6.0";
+export const SDK_VERSION = "1.7.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -1919,7 +1919,7 @@ export type ChordOptions = Readonly<{
   voicing?: number;
   /** `close` (default), `open` (drop 2) or `wide` (drop 2 and 4). */
   spread?: "close" | "open" | "wide";
-  /** `block` (default), `strum-up`, `strum-down`, `arp-up`, `arp-down`, `arp-updown`, `arp-random`, `harp`, `slop`, `pattern` (SDK 1.6.0). */
+  /** `block` (default), `strum-up`, `strum-down`, `arp-up`, `arp-down`, `arp-updown`, `arp-random`, `harp`, `slop`, `pattern` (SDK 1.7.0). */
   perform?:
     | "block"
     | "strum-up"
@@ -1933,7 +1933,7 @@ export type ChordOptions = Readonly<{
     | "pattern";
   /**
    * With `perform: "pattern"`: a rhythm pattern by name or 1-based number
-   * (SDK 1.6.0): `eighths`, `sixteenths`, `offbeat`, `pop`, `charleston`,
+   * (SDK 1.7.0): `eighths`, `sixteenths`, `offbeat`, `pop`, `charleston`,
    * `bossa`, `skank`, `gallop`, `half-time`, `tresillo`, `oom-pah`, `roll`,
    * `pick`. Default 1.
    */
@@ -1953,7 +1953,7 @@ export type ChordOptions = Readonly<{
   /** `chords` (default), `bass` (root or slash bass in octave 2, one per chord) or `both`. */
   part?: "chords" | "bass" | "both";
   /**
-   * Orchid bass mode (SDK 1.6.0; overrides `part`): `off` (chords only),
+   * Orchid bass mode (SDK 1.7.0; overrides `part`): `off` (chords only),
    * `chords` and `single` (chords plus root or slash bass), `unison`
    * (chords plus the chord's root, ignoring a slash) or `solo` (bass only).
    */
