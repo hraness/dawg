@@ -498,16 +498,19 @@ function printRow(row: RhythmRow, indent: string): string {
 
 function printSampler(sampler: Sampler, indent: string): string {
   const inner = indent + INDENT;
-  const voices = Object.keys(sampler.voices)
-    .sort()
-    .map((name) => {
-      const key = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : str(name);
-      return `${inner}${key}: ${printSample(sampler.voices[name]!, inner, `${key}: `.length)},`;
-    });
-  const body = `{\n${voices.join("\n")}\n${indent}}`;
-  if (sampler.mode === "oneshot") return `sampler(${body})`;
-  // Prettier breaks every argument out when an earlier one contains a break.
-  const shifted = `{\n${voices.map((line) => INDENT + line).join("\n")}\n${inner}}`;
+  const voices = (at: string) =>
+    Object.keys(sampler.voices)
+      .sort()
+      .map((name) => {
+        const key = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : str(name);
+        return `${at}${key}: ${printSample(sampler.voices[name]!, at, `${key}: `.length)},`;
+      })
+      .join("\n");
+  if (sampler.mode === "oneshot")
+    return `sampler({\n${voices(inner)}\n${indent}})`;
+  // Prettier breaks every argument out when an earlier one contains a break,
+  // so the voices sit one level deeper (multi-line voices included).
+  const shifted = `{\n${voices(inner + INDENT)}\n${inner}}`;
   return `sampler(\n${inner}${shifted},\n${inner}{ mode: ${str(sampler.mode)} },\n${indent})`;
 }
 
@@ -558,6 +561,15 @@ function printSample(ref: SampleRef, indent: string, prefix: number): string {
   if (ref.speed !== undefined) entries.push(["speed", num(ref.speed)]);
   if (ref.loop !== undefined) entries.push(["loop", String(ref.loop)]);
   if (ref.choke !== undefined) entries.push(["choke", str(ref.choke)]);
+  if (ref.loopBegin !== undefined)
+    entries.push(["loopBegin", num(ref.loopBegin)]);
+  if (ref.loopEnd !== undefined) entries.push(["loopEnd", num(ref.loopEnd)]);
+  if (ref.clip !== undefined) entries.push(["clip", num(ref.clip)]);
+  if (ref.unit !== undefined) entries.push(["unit", str(ref.unit)]);
+  if (ref.fit !== undefined) entries.push(["fit", String(ref.fit)]);
+  if (ref.accelerate !== undefined)
+    entries.push(["accelerate", num(ref.accelerate)]);
+  if (ref.squiz !== undefined) entries.push(["squiz", num(ref.squiz)]);
   if (entries.length === 1) return str(ref.src);
   return obj(entries, indent, prefix, 1);
 }

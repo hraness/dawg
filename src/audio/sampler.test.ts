@@ -270,3 +270,143 @@ describe("sampler tracks in the renderer", () => {
     expect(after.pcm).not.toEqual(cold.pcm);
   });
 });
+
+describe("Strudel sample controls", () => {
+  const flat = (n: number, value = 0.5) => new Array(n).fill(value);
+
+  test("clip (legato) cuts a oneshot at the note length times the factor", () => {
+    const whole = mono(
+      scoreOf({ v: { src: "a.wav" } }, [hit("a", 36, 0, 0.25)]),
+      bank({ v: sample(flat(3_000)) }),
+    );
+    const clipped = mono(
+      scoreOf({ v: { src: "a.wav", clip: 1 } }, [hit("a", 36, 0, 0.25)]),
+      bank({ v: sample(flat(3_000)) }),
+    );
+    // A quarter beat is 1000 frames; the release fade is 80 frames at 8 kHz.
+    expect(whole[2_000]!).toBeGreaterThan(0);
+    expect(clipped[900]!).toBeGreaterThan(0);
+    expect(energy(clipped, 1_100, 3_000)).toBe(0);
+    const doubled = mono(
+      scoreOf({ v: { src: "a.wav", clip: 2 } }, [hit("a", 36, 0, 0.25)]),
+      bank({ v: sample(flat(3_000)) }),
+    );
+    expect(doubled[1_900]!).toBeGreaterThan(0);
+    expect(energy(doubled, 2_100, 3_000)).toBe(0);
+  });
+
+  test("fit stretches the window to the note; unit c to bars; unit s to seconds", () => {
+    const data = flat(1_000);
+    const fit = mono(
+      scoreOf({ v: { src: "a.wav", fit: true } }, [hit("a", 36, 0, 1)]),
+      bank({ v: sample(data) }),
+    );
+    expect(fit[BEAT - 50]!).toBeGreaterThan(0);
+    expect(fit[BEAT + 10]).toBe(0);
+    // unit c, speed 1: one bar (4 beats) per window.
+    const bar = mono(
+      scoreOf({ v: { src: "a.wav", unit: "c" } }, [hit("a", 36, 0)]),
+      bank({ v: sample(data) }),
+      5 * BEAT,
+    );
+    expect(bar[4 * BEAT - 50]!).toBeGreaterThan(0);
+    expect(bar[4 * BEAT + 10]).toBe(0);
+    // unit s, speed 0.25: the window lasts a quarter second (2000 frames).
+    const secs = mono(
+      scoreOf({ v: { src: "a.wav", unit: "s", speed: 0.25 } }, [
+        hit("a", 36, 0),
+      ]),
+      bank({ v: sample(data) }),
+    );
+    expect(secs[1_950]!).toBeGreaterThan(0);
+    expect(secs[2_010]).toBe(0);
+  });
+
+  test("loopBegin/loopEnd loop only that part of the window", () => {
+    // First half 0.2, second half 0.8: looping the second half never
+    // returns to 0.2 after the first pass.
+    const data = [...flat(500, 0.2), ...flat(500, 0.8)];
+    const out = mono(
+      scoreOf({ v: { src: "a.wav", loop: true, loopBegin: 0.5 } }, [
+        hit("a", 36, 0, 1),
+      ]),
+      bank({ v: sample(data) }),
+    );
+    expect(out[100]!).toBeCloseTo(0.2 * 0.7, 2);
+    for (const frame of [1_200, 2_100, 3_300])
+      expect(out[frame]!).toBeCloseTo(0.8 * 0.7, 2);
+  });
+
+  test("accelerate ramps the rate; squiz raises pitch", () => {
+    const data = flat(4_000);
+    const plain = mono(
+      scoreOf({ v: { src: "a.wav" } }, [hit("a", 36, 0)]),
+      bank({ v: sample(data) }),
+    );
+    const faster = mono(
+      scoreOf({ v: { src: "a.wav", accelerate: 1 } }, [hit("a", 36, 0)]),
+      bank({ v: sample(data) }),
+    );
+    const last = (pcm: Float64Array) => {
+      let at = 0;
+      for (let i = 0; i < pcm.length; i += 1) if (pcm[i] !== 0) at = i;
+      return at;
+    };
+    expect(last(faster)).toBeLessThan(last(plain) * 0.9);
+    // A 100 Hz sine squizzed by 2 has twice as many zero crossings.
+    const sine = Array.from({ length: 4_000 }, (_, i) =>
+      Math.sin((2 * Math.PI * 100 * i) / RATE),
+    );
+    const crossings = (pcm: Float64Array, to: number) => {
+      let count = 0;
+      for (let i = 101; i < to; i += 1)
+        if (Math.sign(pcm[i]!) !== Math.sign(pcm[i - 1]!)) count += 1;
+      return count;
+    };
+    const base = mono(
+      scoreOf({ v: { src: "a.wav" } }, [hit("a", 36, 0)]),
+      bank({ v: sample(sine) }),
+    );
+    const squizzed = mono(
+      scoreOf({ v: { src: "a.wav", squiz: 2 } }, [hit("a", 36, 0)]),
+      bank({ v: sample(sine) }),
+    );
+    expect(crossings(squizzed, 1_900)).toBeGreaterThan(
+      crossings(base, 1_900) * 1.7,
+    );
+  });
+
+  test("new controls render byte-identically cold and cached", () => {
+    const voices = {
+      a: {
+        src: "a.wav",
+        clip: 0.5,
+        accelerate: -0.3,
+        squiz: 1.5,
+        loop: true,
+        loopBegin: 0.25,
+        unit: "c" as const,
+        speed: 2,
+      },
+    };
+    const s = scoreOf(voices, [hit("a", 36, 0, 1), hit("b", 36, 2, 0.5)]);
+    const samples = bank({
+      a: sample(Array.from({ length: 2_000 }, (_, i) => Math.sin(i / 7))),
+    });
+    const cold = renderScorePcm(s, { sampleRate: RATE, loop: true, samples });
+    const stems = new StemRenderer();
+    stems.render(s, { sampleRate: RATE, loop: true, samples });
+    const warm = stems.render(s, { sampleRate: RATE, loop: true, samples });
+    expect(warm.pcm).toEqual(cold.pcm);
+    // unit c depends on bar length: a meter change re-renders the stem.
+    const threeFour = createScore({ ...s.toJSON(), beatsPerBar: 3 });
+    const meter = stems.render(threeFour, {
+      sampleRate: RATE,
+      loop: true,
+      samples,
+    });
+    expect(meter.pcm).toEqual(
+      renderScorePcm(threeFour, { sampleRate: RATE, loop: true, samples }).pcm,
+    );
+  });
+});

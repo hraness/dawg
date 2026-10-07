@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.12.0";
+export const SDK_VERSION = "1.13.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -1036,6 +1036,28 @@ export type SampleSpec = Readonly<{
   loop?: boolean;
   /** Choke group, like Strudel `cut`: a new hit stops the previous one in the group. */
   choke?: string;
+  /** Looped part, like Strudel `loopBegin`/`loopb` (fraction, ≥ begin). */
+  loopBegin?: number;
+  /** Alias of `loopBegin` (Strudel `loopb`). */
+  loopb?: number;
+  /** Looped part end, like Strudel `loopEnd`/`loope` (fraction, ≤ end). */
+  loopEnd?: number;
+  /** Alias of `loopEnd` (Strudel `loope`). */
+  loope?: number;
+  /** Like Strudel `clip`: the voice lasts note length × clip (0 < clip ≤ 16), cutting the sample. */
+  clip?: number;
+  /** Alias of `clip` (Strudel `legato`). */
+  legato?: number;
+  /** Like Tidal `unit`: `"r"` rate (default), `"c"` speed in cycles (bars), `"s"` speed in seconds. */
+  unit?: "r" | "c" | "s";
+  /** Like Strudel `fit`: the window lasts exactly the note's length. */
+  fit?: boolean;
+  /** Like Strudel `loopAt(n)`: the window lasts n bars (stored as `speed: 1/n, unit: "c"`). */
+  loopAt?: number;
+  /** Like Tidal `accelerate`: rate ramps by this × the start rate over the voice (−8..8). */
+  accelerate?: number;
+  /** Like Tidal `squiz`: pitch-raise ratio per zero-crossing cycle (1..32). */
+  squiz?: number;
 }>;
 
 /** Result of `sampler()`; pass it as a track's `instrument`. */
@@ -1235,6 +1257,13 @@ function sample(value: string | SampleSpec, name: string): SampleSpec {
     speed?: number;
     loop?: boolean;
     choke?: string;
+    loopBegin?: number;
+    loopEnd?: number;
+    clip?: number;
+    unit?: "r" | "c" | "s";
+    fit?: boolean;
+    accelerate?: number;
+    squiz?: number;
   } = { src: spec.src };
   if (spec.src.startsWith("pack:")) {
     if (spec.sha256 !== undefined)
@@ -1258,6 +1287,32 @@ function sample(value: string | SampleSpec, name: string): SampleSpec {
       throw new DawgSdkError(`${name} choke must be a group name`);
     out.choke = spec.choke;
   }
+  const loopBegin = spec.loopBegin ?? spec.loopb;
+  if (loopBegin !== undefined)
+    out.loopBegin = unit(loopBegin, `${name} loopBegin`);
+  const loopEnd = spec.loopEnd ?? spec.loope;
+  if (loopEnd !== undefined) out.loopEnd = unit(loopEnd, `${name} loopEnd`);
+  const clip = spec.clip ?? spec.legato;
+  if (clip !== undefined) out.clip = finite(clip, `${name} clip`);
+  if (spec.unit !== undefined) {
+    if (spec.unit !== "r" && spec.unit !== "c" && spec.unit !== "s")
+      throw new DawgSdkError(`${name} unit must be "r", "c" or "s"`);
+    out.unit = spec.unit;
+  }
+  if (spec.loopAt !== undefined) {
+    const bars = finite(spec.loopAt, `${name} loopAt`);
+    if (bars <= 0) throw new DawgSdkError(`${name} loopAt must be positive`);
+    out.speed = (out.speed ?? 1) / bars;
+    out.unit = "c";
+  }
+  if (spec.fit !== undefined) {
+    if (typeof spec.fit !== "boolean")
+      throw new DawgSdkError(`${name} fit must be boolean`);
+    out.fit = spec.fit;
+  }
+  if (spec.accelerate !== undefined)
+    out.accelerate = finite(spec.accelerate, `${name} accelerate`);
+  if (spec.squiz !== undefined) out.squiz = finite(spec.squiz, `${name} squiz`);
   return Object.freeze(out);
 }
 
@@ -2001,6 +2056,13 @@ export type ScoreSampleRef = Readonly<{
   speed?: number;
   loop?: boolean;
   choke?: string;
+  loopBegin?: number;
+  loopEnd?: number;
+  clip?: number;
+  unit?: "r" | "c" | "s";
+  fit?: boolean;
+  accelerate?: number;
+  squiz?: number;
 }>;
 
 /** A stored track; optional fields are present only when set. */

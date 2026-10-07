@@ -7,6 +7,12 @@
  * - `gain` scales the voice; velocity and track volume apply as for synths.
  * - `choke` is Strudel's `cut`: a new hit in the same group stops the sounding
  *   voice with a short fade.
+ * - `loopBegin`/`loopEnd` loop a part of the window; `clip` (`legato`) cuts
+ *   the voice at the note's length times the factor; `unit` "c"/"s" and
+ *   `fit` turn `speed` into a duration (cycles = bars, seconds, the note);
+ *   `accelerate` ramps the rate; `squiz` raises pitch per zero-crossing
+ *   cycle (described in Tidal/SuperDirt docs; implemented here from that
+ *   description).
  * - keyed mode repitches from `root` (rate × 2^((pitch − root)/12)) and holds
  *   for the note's length; oneshot mode maps voices to pitch slots from 36 in
  *   voice-name order and plays the whole window unless `loop` is set.
@@ -61,7 +67,33 @@ export type SamplerVoice = {
   readonly regionEnd: number;
   readonly gain: number;
   readonly choke: string | undefined;
+  /** Loop part as travel offsets from the playback start (begin, or end reversed). */
+  readonly loopStart: number;
+  readonly loopSpan: number;
+  /** Rate ramp per output frame (`accelerate` / reference length); 0 is off. */
+  readonly ramp: number;
+  /** `squiz` ratio; 1 is off. */
+  readonly squiz: number;
 };
+
+/**
+ * Source frames travelled after `elapsed` output frames: `step·(e + k·e²/2)`
+ * with the rate held at zero once a negative ramp reaches it.
+ */
+function travelAt(elapsed: number, step: number, ramp: number): number {
+  if (ramp === 0) return elapsed * step;
+  const e = ramp < 0 ? Math.min(elapsed, -1 / ramp) : elapsed;
+  return step * (e + (ramp * e * e) / 2);
+}
+
+/** Output frames until `distance` source frames are travelled (Infinity if never). */
+function framesToTravel(distance: number, step: number, ramp: number): number {
+  if (ramp === 0) return distance / step;
+  const d = distance / step;
+  const disc = 1 + 2 * ramp * d;
+  if (disc < 0) return Infinity;
+  return (Math.sqrt(disc) - 1) / ramp;
+}
 
 function noteStartFrame(note: Note, timing: SamplerTiming): number {
   const { score, sampleRate } = timing;
@@ -148,26 +180,64 @@ export function planSamplerVoices(
     const sample = bank.voices.get(sampleKey(track.id, target.voice));
     if (!ref || !sample) continue;
     const speed = ref.speed ?? 1;
-    const step =
-      ((Math.abs(speed) * sample.sampleRate) / sampleRate) * target.ratio;
     const regionStart = (ref.begin ?? 0) * sample.frames;
     const regionEnd = (ref.end ?? 1) * sample.frames;
-    const natural = Math.max(1, Math.floor((regionEnd - regionStart) / step));
     const held = noteLengthFrames(note, timing);
+    // `fit`, `unit: "c"` and `unit: "s"` give the window a duration; the
+    // keyed ratio still repitches on top.
+    const unit = ref.unit ?? "r";
+    const seconds = ref.fit
+      ? held / sampleRate
+      : unit === "c"
+        ? (timing.score.beatsPerBar * 60) /
+          timing.score.tempoBpm /
+          Math.abs(speed)
+        : unit === "s"
+          ? Math.abs(speed)
+          : undefined;
+    const step =
+      seconds === undefined
+        ? ((Math.abs(speed) * sample.sampleRate) / sampleRate) * target.ratio
+        : ((regionEnd - regionStart) / (seconds * sampleRate)) * target.ratio;
+    const natural = Math.max(1, Math.floor((regionEnd - regionStart) / step));
     const release = Math.max(1, Math.round(RELEASE_SECONDS * sampleRate));
     const loop = ref.loop === true;
+    const clipped =
+      ref.clip === undefined ? held : Math.max(1, Math.floor(held * ref.clip));
     let length: number;
     let fade: number;
     if (loop) {
-      length = held + release;
+      length = clipped + release;
       fade = release;
-    } else if (sampler.mode === "keyed" && held + release < natural) {
-      length = held + release;
+    } else if (
+      (sampler.mode === "keyed" || ref.clip !== undefined) &&
+      clipped + release < natural
+    ) {
+      length = clipped + release;
       fade = release;
     } else {
       length = natural;
       fade = Math.max(1, Math.round(END_FADE_SECONDS * sampleRate));
     }
+    // accelerate: the rate ramps by `accelerate`× over the planned length;
+    // a non-looping voice ends where the ramped read runs out (or stops).
+    const accelerate = ref.accelerate ?? 0;
+    const ramp = accelerate === 0 ? 0 : accelerate / length;
+    if (ramp !== 0 && !loop) {
+      const reach = Math.min(
+        framesToTravel(regionEnd - regionStart, step, ramp),
+        ramp < 0 ? -1 / ramp : Infinity,
+      );
+      const until = Math.max(1, Math.floor(reach));
+      if (until < length) {
+        length = until;
+        fade = Math.max(1, Math.round(END_FADE_SECONDS * sampleRate));
+      }
+    }
+    const loopFrom =
+      ref.loopBegin === undefined ? regionStart : ref.loopBegin * sample.frames;
+    const loopTo =
+      ref.loopEnd === undefined ? regionEnd : ref.loopEnd * sample.frames;
     const start = noteStartFrame(note, timing);
     const voice: SamplerVoice = {
       voice: target.voice,
@@ -183,6 +253,10 @@ export function planSamplerVoices(
       regionEnd,
       gain: (ref.gain ?? 1) * Math.max(0, Math.min(1, note.velocity)),
       choke: ref.choke,
+      loopStart: speed < 0 ? regionEnd - loopTo : loopFrom - regionStart,
+      loopSpan: loopTo - loopFrom,
+      ramp,
+      squiz: ref.squiz ?? 1,
     };
     if (voice.choke !== undefined) {
       const previous = lastInGroup.get(voice.choke);
@@ -225,38 +299,44 @@ export function renderSamplerVoices(
   const attack = Math.max(1, ATTACK_SECONDS * sampleRate);
   for (const voice of voices) {
     const { sample, step, regionStart, regionEnd, reverse, loop } = voice;
+    const { loopStart, loopSpan, ramp } = voice;
     const mono = sample.mono;
     const span = regionEnd - regionStart;
     const crossfade = loop
-      ? Math.min(LOOP_CROSSFADE_SECONDS * sample.sampleRate, span / 4)
+      ? Math.min(LOOP_CROSSFADE_SECONDS * sample.sampleRate, loopSpan / 4)
       : 0;
-    const period = span - crossfade;
+    const period = loopSpan - crossfade;
     const end = Math.min(target.length, voice.end);
     const fadeFrom = voice.end - voice.fade;
     const level = SAMPLE_LEVEL * voice.gain;
+    const at = (offset: number) =>
+      readAt(mono, reverse ? regionEnd - 1 - offset : regionStart + offset);
+    // The raw read at an elapsed frame, or undefined past a one-shot's end.
+    const read = (elapsed: number): number | undefined => {
+      const travelled =
+        ramp === 0 ? elapsed * step : travelAt(elapsed, step, ramp);
+      if (!loop) return travelled >= span ? undefined : at(travelled);
+      if (travelled < loopStart) return at(travelled);
+      const into = travelled - loopStart;
+      const phase =
+        into < crossfade || period <= 0
+          ? into % Math.max(loopSpan, 1e-9)
+          : crossfade + ((into - crossfade) % period);
+      let value = at(loopStart + phase);
+      if (crossfade > 0 && phase >= period) {
+        const mix = (phase - period) / crossfade;
+        value = value * (1 - mix) + at(loopStart + phase - period) * mix;
+      }
+      return value;
+    };
+    const squizzed =
+      voice.squiz > 1
+        ? squizBuffer(read, end - voice.start, voice.squiz)
+        : undefined;
     for (let index = voice.start; index < end; index += 1) {
       const elapsed = index - voice.start;
-      const travelled = elapsed * step;
-      let value: number;
-      if (!loop) {
-        if (travelled >= span) break;
-        value = readAt(
-          mono,
-          reverse ? regionEnd - 1 - travelled : regionStart + travelled,
-        );
-      } else {
-        const phase =
-          travelled < crossfade || period <= 0
-            ? travelled % Math.max(span, 1e-9)
-            : crossfade + ((travelled - crossfade) % period);
-        const at = (offset: number) =>
-          readAt(mono, reverse ? regionEnd - 1 - offset : regionStart + offset);
-        value = at(phase);
-        if (crossfade > 0 && phase >= period) {
-          const mix = (phase - period) / crossfade;
-          value = value * (1 - mix) + at(phase - period) * mix;
-        }
-      }
+      const value = squizzed ? squizzed[elapsed]! : read(elapsed);
+      if (value === undefined) break;
       let envelope = Math.min(1, elapsed / attack);
       if (index >= fadeFrom) envelope *= (voice.end - index) / voice.fade;
       target[index]! +=
@@ -266,6 +346,54 @@ export function renderSamplerVoices(
         gainAt(voice.startTick + elapsed / samplesPerTick);
     }
   }
+}
+
+/** Longest zero-crossing cycle `squiz` treats as one (longer runs split). */
+const SQUIZ_MAX_CYCLE = 4096;
+
+/**
+ * Squiz (Tidal/SuperDirt's description: a simplistic pitch raiser): cut the
+ * voice at its upward zero crossings and play each cycle `ratio`× faster,
+ * repeating it to fill the cycle's original length. Length is kept, the
+ * pitch rises, and the timbre turns buzzy, as documented.
+ */
+export function squizBuffer(
+  read: (elapsed: number) => number | undefined,
+  length: number,
+  ratio: number,
+): Float64Array {
+  const raw = new Float64Array(Math.max(0, length));
+  let filled = raw.length;
+  for (let i = 0; i < raw.length; i += 1) {
+    const value = read(i);
+    if (value === undefined) {
+      filled = i;
+      break;
+    }
+    raw[i] = value;
+  }
+  const out = new Float64Array(raw.length);
+  let start = 0;
+  while (start < filled) {
+    let stop = start + 1;
+    while (
+      stop < filled &&
+      stop - start < SQUIZ_MAX_CYCLE &&
+      !(raw[stop - 1]! < 0 && raw[stop]! >= 0)
+    )
+      stop += 1;
+    const size = stop - start;
+    for (let i = 0; i < size; i += 1) {
+      const position = (i * ratio) % size;
+      const base = Math.floor(position);
+      const next = base + 1 < size ? base + 1 : 0;
+      const frac = position - base;
+      out[start + i] =
+        raw[start + base]! + (raw[start + next]! - raw[start + base]!) * frac;
+    }
+    start = stop;
+  }
+  return out;
 }
 
 /**

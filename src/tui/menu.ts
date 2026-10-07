@@ -14,6 +14,7 @@ import {
   automationPoints,
   automationRange,
   REVERB_IR_BUILTINS,
+  SAMPLE_UNITS,
   SCORE_LIMITS,
   isTrackAutomationParameter,
   WARP_MODES,
@@ -38,6 +39,7 @@ import {
   type ParamSpec,
 } from "../../core/fx.ts";
 import { effectValues } from "../commands/fx.ts";
+import { SAMPLE_CONTROLS, type SampleControl } from "../commands/sample.ts";
 import { AVAILABLE_INSTRUMENTS } from "../audio/wav.ts";
 import {
   DEFAULT_KITS,
@@ -664,9 +666,12 @@ function parameterNodes(context: MenuContext): MenuNode[] {
         ref.speed !== undefined ? `speed ${num(ref.speed)}` : "",
       ].filter(Boolean);
       nodes.push({
-        kind: "info",
+        kind: "menu",
+        id: `sample:${voice}`,
         label: voice,
-        value: [ref.src.split("/").at(-1), ...extras].join(" · "),
+        detail: [ref.src.split("/").at(-1), ...extras].join(" · "),
+        help: "this voice's sample controls (Strudel names)",
+        build: (context) => sampleVoiceNodes(context, voice),
       });
     }
     nodes.push({
@@ -692,6 +697,96 @@ function parameterNodes(context: MenuContext): MenuNode[] {
         help: "clear every voice setting on this track",
       });
   }
+  return nodes;
+}
+
+/** Number rows for `/sample set`: [control, min, max, step, default]. */
+const SAMPLE_NUMBER_ROWS: readonly (readonly [
+  SampleControl,
+  number,
+  number,
+  number,
+  number,
+])[] = [
+  ["begin", 0, 0.99, 0.01, 0],
+  ["end", 0.01, 1, 0.01, 1],
+  ["gain", 0, SCORE_LIMITS.maxSampleGain, 0.05, 1],
+  ["speed", -SCORE_LIMITS.maxSampleSpeed, SCORE_LIMITS.maxSampleSpeed, 0.05, 1],
+  ["loopBegin", 0, 0.99, 0.01, 0],
+  ["loopEnd", 0.01, 1, 0.01, 1],
+  ["clip", 0.05, SCORE_LIMITS.maxSampleClip, 0.05, 1],
+  [
+    "accelerate",
+    -SCORE_LIMITS.maxSampleAccelerate,
+    SCORE_LIMITS.maxSampleAccelerate,
+    0.1,
+    0,
+  ],
+  ["squiz", 1, SCORE_LIMITS.maxSampleSquiz, 0.5, 1],
+];
+
+/** One sampler voice: every sample control, run through `/sample set`. */
+function sampleVoiceNodes(context: MenuContext, voice: string): MenuNode[] {
+  const track = context.score.tracks.find(
+    (item) => item.id === context.trackId,
+  );
+  const ref = track?.sampler?.voices[voice];
+  if (!ref) return [];
+  const set = (rest: string) => `/sample set ${voice} ${rest}`;
+  const nodes: MenuNode[] = [{ kind: "info", label: "file", value: ref.src }];
+  for (const [control, min, max, step, start] of SAMPLE_NUMBER_ROWS) {
+    const current = (ref as Record<string, unknown>)[control];
+    nodes.push({
+      kind: "number",
+      label: control,
+      value: typeof current === "number" ? current : undefined,
+      start,
+      off: num(start),
+      min,
+      max,
+      step:
+        control === "speed"
+          ? (value, direction) => {
+              // Speed 0 is invalid: step over it.
+              const next = linear(step, min, max)(value, direction);
+              return next === 0 ? step * direction : next;
+            }
+          : linear(step, min, max),
+      format: num,
+      command: (value) => set(`${control} ${num(value)}`),
+      reset: set(`${control} off`),
+      help: SAMPLE_CONTROLS[control],
+    });
+  }
+  nodes.push(
+    {
+      kind: "choice",
+      label: "unit",
+      value: ref.unit ?? "r",
+      options: SAMPLE_UNITS,
+      command: (option) => set(`unit ${option}`),
+      help: SAMPLE_CONTROLS.unit,
+    },
+    {
+      kind: "toggle",
+      label: "loop",
+      value: ref.loop === true,
+      command: (on) => set(`loop ${on ? "on" : "off"}`),
+      help: SAMPLE_CONTROLS.loop,
+    },
+    {
+      kind: "toggle",
+      label: "fit",
+      value: ref.fit === true,
+      command: (on) => set(`fit ${on ? "on" : "off"}`),
+      help: SAMPLE_CONTROLS.fit,
+    },
+    {
+      kind: "info",
+      label: "cut / loopAt",
+      value: `/sample set ${voice} cut hats · loopAt 2`,
+    },
+  );
   return nodes;
 }
 

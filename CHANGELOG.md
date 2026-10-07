@@ -17,6 +17,7 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - **Convolution reverb** (Strudel `ir`/`iresponse`): `fx reverb ir hall` (also `room`, `plate`, a pack sound or a project WAV), with FFT convolution; `fx ir off` returns to the algorithmic tail. SDK 1.12.0 (additive).
 - **Shared orbit buses**: `fx orbit shared on` sends a track to one delay and one reverb shared by its orbit, as Strudel orbits do.
 - **Raw ZzFX arrays**: `synth zzfx ,,129,.01,,.15,2`, SDK `zzfx([...])` and `set_synth { zzfx }` map ZzFX's positional array to the named controls.
+- **Strudel sample controls** on sampler voices: `loopBegin`/`loopEnd`, `clip` (`legato`), `fit`, `unit` "c"/"s", `loopAt`, `accelerate` and `squiz`, beside `begin`/`end`/`speed`/`loop`/`cut`. `/sample set brk fit on clip 1`, the per-voice menu and the agent's `set_sample` tool edit them. SDK 1.13.0 (additive).
 - Older projects and sessions load and sound exactly as before. The `dawg` SDK is 1.5.0 (additive).
 
 ### Synth

@@ -20,6 +20,7 @@ import {
   TrackScore,
   addTrack,
   isSamplerInstrument,
+  normalizeSampleRef,
   samplerVoiceSlots,
   type Sampler,
   type SampleRef,
@@ -29,19 +30,178 @@ import { trackDirectories } from "../../core/sdk/print.ts";
 
 export type SampleCommand =
   | Readonly<{ kind: "list" }>
-  | Readonly<{ kind: "add"; path: string; voice?: string }>;
+  | Readonly<{ kind: "add"; path: string; voice?: string }>
+  | Readonly<{
+      kind: "set";
+      voice: string;
+      values: Readonly<Record<string, SampleControlValue>>;
+    }>;
 
-/** `/sample`, `/sample <path>`, `/sample <path> as <voice>`; else undefined. */
+/** A sample control value: a number, a switch, a unit, or null to unset. */
+export type SampleControlValue = number | string | boolean | null;
+
+/**
+ * Per-voice sample controls `/sample set` and `set_sample` change, by
+ * Strudel name. Aliases resolve to the stored field.
+ */
+export const SAMPLE_CONTROLS = Object.freeze({
+  begin: "fraction 0..1 of the file where playback starts",
+  end: "fraction 0..1 where it stops",
+  gain: "linear 0..2",
+  speed: "rate (negative reverses); with unit c/s a duration",
+  unit: "r (rate), c (speed in cycles = bars), s (speed in seconds)",
+  loop: "on/off: sustain by looping",
+  loopBegin: "fraction where the loop starts (≥ begin); alias loopb",
+  loopEnd: "fraction where the loop ends (≤ end); alias loope",
+  clip: "voice lasts note length × clip, cutting the sample; alias legato",
+  fit: "on/off: the window lasts the note's length",
+  loopAt: "the window lasts n bars (sets speed 1/n, unit c)",
+  accelerate: "rate ramps by this × over the voice (−8..8)",
+  squiz: "pitch-raise ratio per zero-crossing cycle (1..32)",
+  cut: "choke group name: a new hit stops the previous one",
+});
+export type SampleControl = keyof typeof SAMPLE_CONTROLS;
+
+const SAMPLE_ALIASES: Readonly<Record<string, string>> = {
+  loopb: "loopBegin",
+  loope: "loopEnd",
+  legato: "clip",
+  choke: "cut",
+};
+
+function controlName(raw: string): SampleControl | undefined {
+  const lower = raw.toLowerCase();
+  const name =
+    Object.keys(SAMPLE_CONTROLS).find((key) => key.toLowerCase() === lower) ??
+    SAMPLE_ALIASES[lower];
+  return name as SampleControl | undefined;
+}
+
+/** `/sample`, `/sample <path>`, `/sample <path> as <voice>`, `/sample set <voice> <control> <value>…`; else undefined. */
 export function parseSampleCommand(command: string): SampleCommand | undefined {
   const match = command.trim().match(/^\/samples?(?:\s+(.+?))?\s*$/i);
   if (!match) return undefined;
   const rest = match[1];
   if (!rest) return { kind: "list" };
+  const set = rest.match(/^set\s+([A-Za-z][A-Za-z0-9_]*)\s+(.+)$/i);
+  if (set) {
+    const tokens = set[2]!.split(/\s+/);
+    const values: Record<string, SampleControlValue> = {};
+    for (let i = 0; i < tokens.length; i += 2)
+      values[tokens[i]!] = parseControlToken(tokens[i + 1]);
+    return { kind: "set", voice: set[1]!, values };
+  }
   const named = rest.match(/^(.+?)\s+as\s+(\S+)$/i);
   const path = unquote((named ? named[1]! : rest).trim());
   return named
     ? { kind: "add", path, voice: named[2]! }
     : { kind: "add", path };
+}
+
+function parseControlToken(token: string | undefined): SampleControlValue {
+  if (token === undefined) return "";
+  const lower = token.toLowerCase();
+  if (lower === "on" || lower === "true") return true;
+  if (lower === "off" || lower === "false") return false;
+  if (lower === "none" || lower === "unset" || lower === "default") return null;
+  const value = Number(token);
+  return token.trim() !== "" && Number.isFinite(value) ? value : token;
+}
+
+export type SetSampleResult =
+  | Readonly<{ ok: true; next: TrackScore; message: string }>
+  | Readonly<{ ok: false; message: string }>;
+
+/**
+ * Set or unset (`null`, or `off` for numbers) per-voice sample controls on
+ * `trackId`'s voice. Validation is the score's: limits and window rules.
+ */
+export function setSampleControls(
+  score: TrackScore,
+  trackId: string,
+  voice: string,
+  values: Readonly<Record<string, SampleControlValue>>,
+): SetSampleResult {
+  const track = score.tracks.find((item) => item.id === trackId);
+  const sampler = track?.sampler;
+  if (!track || !sampler || !isSamplerInstrument(track.instrument))
+    return {
+      ok: false,
+      message: `sample · ${trackId} is not a sampler track · /sample <path> first`,
+    };
+  const ref = sampler.voices[voice];
+  if (!ref)
+    return {
+      ok: false,
+      message: `sample · ${trackId} has no voice "${voice}" · /sample lists them`,
+    };
+  const keys = Object.keys(values);
+  if (keys.length === 0)
+    return {
+      ok: false,
+      message: `sample · set needs a control · ${Object.keys(SAMPLE_CONTROLS).join(" ")}`,
+    };
+  const next: Record<string, unknown> = { ...ref };
+  const changed: string[] = [];
+  for (const raw of keys) {
+    const name = controlName(raw);
+    if (!name)
+      return {
+        ok: false,
+        message: `sample · unknown control "${raw.slice(0, 40)}" · ${Object.keys(SAMPLE_CONTROLS).join(" ")}`,
+      };
+    let value: SampleControlValue = values[raw] ?? null;
+    if (value === "")
+      return { ok: false, message: `sample · ${raw} needs a value` };
+    const field = name === "cut" ? "choke" : name;
+    // `off` unsets a control (back to its default): numbers, switches, cut.
+    if (value === false && name !== "unit") value = null;
+    if (name === "loopAt") {
+      if (value === null) {
+        delete next.speed;
+        delete next.unit;
+      } else if (typeof value !== "number" || value <= 0)
+        return {
+          ok: false,
+          message: "sample · loopAt needs a positive number of bars",
+        };
+      else {
+        next.speed = 1 / value;
+        next.unit = "c";
+      }
+      changed.push(value === null ? "loopAt off" : `loopAt ${value}`);
+      continue;
+    }
+    if (name === "cut" && typeof value === "number") value = `cut${value}`;
+    if (value === null) delete next[field];
+    else next[field] = value;
+    changed.push(`${raw} ${value === null ? "off" : String(value)}`);
+  }
+  let updated: TrackScore;
+  try {
+    const voices = {
+      ...sampler.voices,
+      [voice]: normalizeSampleRef(next, voice),
+    };
+    updated = new TrackScore({
+      ...score.toJSON(),
+      tracks: score.tracks.map((item) =>
+        item.id === trackId
+          ? { ...item, sampler: { ...sampler, voices } }
+          : item,
+      ),
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      message: `sample · ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+  return {
+    ok: true,
+    next: updated,
+    message: `sample · ${trackId}/${voice} · ${changed.join(" · ")}`,
+  };
 }
 
 function unquote(value: string): string {

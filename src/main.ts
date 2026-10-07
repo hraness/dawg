@@ -58,6 +58,7 @@ import {
   freeVoiceName,
   listSampleVoices,
   parseSampleCommand,
+  setSampleControls,
   placeSampleFile,
   samplerTarget,
   voiceNameFrom,
@@ -1656,6 +1657,21 @@ async function sampleCommand(
       );
     tui.openText(`samples · ${requestedTrack}`, lines);
     return ok(`${lines.length} sample${lines.length === 1 ? "" : "s"}`);
+  }
+  if (command.kind === "set") {
+    const result = setSampleControls(
+      score,
+      requestedTrack,
+      command.voice,
+      command.values,
+    );
+    if (!result.ok) return fail(result.message);
+    await commitScore(result.next, "sample.set", {
+      trackId: requestedTrack,
+      voice: command.voice,
+    });
+    await projectSync?.flushScore();
+    return ok(result.message);
   }
   await materializeDraft();
   const trackId = samplerTarget(score, requestedTrack);
