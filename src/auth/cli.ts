@@ -10,6 +10,7 @@ import {
   type LoginMode,
 } from "./login.ts";
 import { systemRunner } from "./runner.ts";
+import { audioStatusLine } from "../audio/engine.ts";
 
 export const AUTH_USAGE = `Usage:
   track login            create an AI Gateway key with the Vercel CLI (default)
@@ -17,7 +18,7 @@ export const AUTH_USAGE = `Usage:
   track login --xcb      use a Claude/Codex/Devin subscription through xcb
   track login --budget <dollars>   spend limit for the created key
   track logout           remove the stored key and provider choice
-  track auth status [--check]      show provider, masked key, and xcb account`;
+  track auth status [--check]      show provider, key, xcb account, audio backend`;
 
 /** Entry for `track login|logout|auth`. Returns the process exit code. */
 export async function runAuthCommand(argv: readonly string[]): Promise<number> {
@@ -42,6 +43,7 @@ export async function runAuthCommand(argv: readonly string[]): Promise<number> {
       verify: rest.includes("--check"),
     }))
       io.print(line);
+    io.print(audioStatusLine());
     return 0;
   }
   const flags = new Set(rest.filter((arg) => arg.startsWith("--")));

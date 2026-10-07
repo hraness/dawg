@@ -91,8 +91,10 @@ Prompt:
 
 Commands:
   play, pause, tempo <bpm>, instrument <name>, volume <0..1>, pan <-1..1>
-  automate volume|pan|filter at <beat> <value>, clear automation, mute, clear
+  automate <lane> at <beat> <value>, clear automation, mute, clear
+    lanes: volume pan filter resonance delay-feedback delay-mix
   undo, redo, solo, unsolo, filter <hz> [res], delay <beats> [fb] [mix]
+  reverb <mix> [size], reverb off
   instrument kit, hit <voice> at <beat>, pattern <voice> <beats...>|every <step>
   track <name>, bars <count>, extend <count> bars
   /tracks, /status, /export <file>, /import <file>, /model opus-5.5|sol-6.1
@@ -510,7 +512,7 @@ async function runInteractive(): Promise<void> {
             Number.isFinite(payload.beat)
           ) {
             clock.sync(payload.beat, payload.playing, Date.parse(event.at));
-            if (payload.playing) void audio.play(score);
+            if (payload.playing) void audio.play(score, clock.beatAt());
             else audio.stop();
           } else if (typeof payload.playing === "boolean")
             await setTransport(payload.playing ? "play" : "pause");
@@ -671,7 +673,7 @@ async function runInteractive(): Promise<void> {
 async function submit(prompt: string): Promise<string> {
   const command = prompt.trim();
   if (/^\/?help$|^\/?\?$/.test(command.toLowerCase()))
-    return "commands · play pause tempo <bpm> instrument <name> volume <0..1> pan <-1..1> automate volume|pan|filter at <beat> <value> clear automation track <name> bars <count> extend <count> bars mute solo unsolo filter <hz> [res] delay <beats> [fb] [mix] hit <voice> at <beat> pattern <voice> <beats...>|every <step> clear <voice> clear undo redo export <file> import <file>";
+    return "commands · play pause tempo <bpm> instrument <name> volume <0..1> pan <-1..1> automate volume|pan|filter|resonance|delay-feedback|delay-mix at <beat> <value> clear automation track <name> bars <count> extend <count> bars mute solo unsolo filter <hz> [res] delay <beats> [fb] [mix] reverb <mix> [size] hit <voice> at <beat> pattern <voice> <beats...>|every <step> clear <voice> clear undo redo export <file> import <file>";
   if (/^\/?tracks?$/i.test(command))
     return score.tracks
       .map(
@@ -1121,7 +1123,7 @@ async function setTransport(
   }
   if (action === "play") {
     clock.play();
-    await audio.play(score);
+    await audio.play(score, clock.beatAt());
   } else if (action === "pause") {
     clock.pause();
     audio.stop();
@@ -1130,7 +1132,7 @@ async function setTransport(
     audio.stop();
   } else {
     clock.play();
-    await audio.play(score);
+    await audio.play(score, clock.beatAt());
   }
 }
 

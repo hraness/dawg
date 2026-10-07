@@ -65,19 +65,61 @@ describe("music command parser", () => {
     });
     expect(parseMusicCommand("delay off")).toEqual({ type: "delay-off" });
     expect(parseMusicCommand("automate filter at 0 400")).toEqual({
-      type: "filter-automation",
+      type: "effect-automation",
+      parameter: "filter",
       beat: 0,
-      cutoff: 400,
+      value: 400,
     });
     expect(parseMusicCommand("clear filter automation")).toEqual({
-      type: "filter-automation-clear",
+      type: "effect-automation-clear",
+      parameter: "filter",
     });
+    expect(parseMusicCommand("automate delay-mix at 2 0.8")).toEqual({
+      type: "effect-automation",
+      parameter: "delay-mix",
+      beat: 2,
+      value: 0.8,
+    });
+    expect(parseMusicCommand("automate delay-feedback at 1 0.6")).toEqual({
+      type: "effect-automation",
+      parameter: "delay-feedback",
+      beat: 1,
+      value: 0.6,
+    });
+    expect(parseMusicCommand("automate res at 0.5 0.9")).toEqual({
+      type: "effect-automation",
+      parameter: "resonance",
+      beat: 0.5,
+      value: 0.9,
+    });
+    expect(parseMusicCommand("clear delay-mix automation")).toEqual({
+      type: "effect-automation-clear",
+      parameter: "delay-mix",
+    });
+    expect(parseMusicCommand("reverb 0.4")).toEqual({
+      type: "reverb",
+      mix: 0.4,
+      size: 0.5,
+    });
+    expect(parseMusicCommand("reverb 0.3 0.9")).toEqual({
+      type: "reverb",
+      mix: 0.3,
+      size: 0.9,
+    });
+    expect(parseMusicCommand("reverb off")).toEqual({ type: "reverb-off" });
     expect(parseMusicCommand("solo")).toEqual({ type: "solo", solo: true });
     expect(parseMusicCommand("UNSOLO")).toEqual({ type: "solo", solo: false });
   });
 
   test("rejects out-of-range and unrelated input", () => {
     for (const prompt of [
+      "reverb 1.5",
+      "reverb 0.5 2",
+      "automate delay-feedback at 0 0.95",
+      "automate delay-mix at 0 1.5",
+      "automate resonance at 0 2",
+      "automate wobble at 0 1",
+      "clear wobble automation",
       "hit cowbell at 0",
       "hit kick at 0 vel 2",
       "pattern hat every 0.01",
@@ -181,5 +223,47 @@ describe("music command reducer", () => {
     expect(reset.filter).toBeUndefined();
     expect(reset.delay).toBeUndefined();
     expect(isTrackAudible(score, "keys")).toBe(true);
+  });
+
+  test("sets reverb and the delay and resonance automation lanes", () => {
+    let score = createScore({ tracks: [{ id: "keys" }] });
+    for (const prompt of [
+      "reverb 0.4 0.8",
+      "automate delay-mix at 0 0.1",
+      "automate delay-mix at 2 0.9",
+      "automate delay-feedback at 1 0.7",
+      "automate resonance at 0 0.6",
+    ]) {
+      const result = applyMusicCommand(
+        score,
+        "keys",
+        parseMusicCommand(prompt)!,
+        ids("n"),
+      );
+      expect(result.next).toBeDefined();
+      score = result.next!;
+    }
+    let track = score.tracks[0]!;
+    expect(track.reverb).toEqual({ mix: 0.4, size: 0.8 });
+    expect(track.delayMixAutomation).toEqual([
+      { tick: 0, value: 0.1 },
+      { tick: 2 * score.ticksPerBeat, value: 0.9 },
+    ]);
+    expect(track.delayFeedbackAutomation).toEqual([
+      { tick: score.ticksPerBeat, value: 0.7 },
+    ]);
+    expect(track.resonanceAutomation).toEqual([{ tick: 0, value: 0.6 }]);
+    for (const prompt of ["reverb off", "clear delay-mix automation"])
+      score = applyMusicCommand(
+        score,
+        "keys",
+        parseMusicCommand(prompt)!,
+        ids("n"),
+      ).next!;
+    track = score.tracks[0]!;
+    expect(track.reverb).toBeUndefined();
+    expect(track.delayMixAutomation).toBeUndefined();
+    // Round-trips through the persisted JSON shape.
+    expect(createScore(score.toJSON()).tracks[0]).toEqual(track);
   });
 });

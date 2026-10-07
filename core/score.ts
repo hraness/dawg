@@ -30,6 +30,9 @@ export const SCORE_LIMITS = Object.freeze({
   maxDelayBeats: 4,
   maxDelayFeedback: 0.9,
   maxDelayMix: 1,
+  maxReverbMix: 1,
+  minReverbSize: 0,
+  maxReverbSize: 1,
 } as const);
 
 export class ScoreValidationError extends Error {
@@ -74,6 +77,21 @@ export type Track = Readonly<{
   delay?: TrackDelay;
   /** Filter cutoff (Hz) control points in score ticks, sorted by tick. */
   filterAutomation?: readonly AutomationPoint[];
+  /** Filter resonance (0..1) control points; overrides the static resonance. */
+  resonanceAutomation?: readonly AutomationPoint[];
+  /** Delay feedback (0..0.9) control points; overrides the static feedback. */
+  delayFeedbackAutomation?: readonly AutomationPoint[];
+  /** Delay wet mix (0..1) control points; overrides the static mix. */
+  delayMixAutomation?: readonly AutomationPoint[];
+  /** Algorithmic stereo reverb send, mixed after the delay. */
+  reverb?: TrackReverb;
+}>;
+
+export type TrackReverb = Readonly<{
+  /** Wet level added to the dry signal, 0..1. */
+  mix: number;
+  /** Room size 0..1: longer comb feedback and a darker, longer tail. */
+  size: number;
 }>;
 
 export type TrackFilter = Readonly<{
@@ -92,7 +110,58 @@ export type TrackDelay = Readonly<{
   mix: number;
 }>;
 
-export type AutomationParameter = "volume" | "pan" | "filter";
+export type AutomationParameter =
+  "volume" | "pan" | "filter" | "resonance" | "delay-feedback" | "delay-mix";
+
+/** Track field and value range for every automation lane. */
+export const AUTOMATION_LANES: Readonly<
+  Record<
+    AutomationParameter,
+    Readonly<{
+      field:
+        | "volumeAutomation"
+        | "panAutomation"
+        | "filterAutomation"
+        | "resonanceAutomation"
+        | "delayFeedbackAutomation"
+        | "delayMixAutomation";
+      min: number;
+      max: number;
+    }>
+  >
+> = Object.freeze({
+  volume: { field: "volumeAutomation", min: 0, max: SCORE_LIMITS.maxVolume },
+  pan: { field: "panAutomation", min: -1, max: 1 },
+  filter: {
+    field: "filterAutomation",
+    min: SCORE_LIMITS.minFilterCutoff,
+    max: SCORE_LIMITS.maxFilterCutoff,
+  },
+  resonance: {
+    field: "resonanceAutomation",
+    min: 0,
+    max: SCORE_LIMITS.maxFilterResonance,
+  },
+  "delay-feedback": {
+    field: "delayFeedbackAutomation",
+    min: 0,
+    max: SCORE_LIMITS.maxDelayFeedback,
+  },
+  "delay-mix": {
+    field: "delayMixAutomation",
+    min: 0,
+    max: SCORE_LIMITS.maxDelayMix,
+  },
+});
+
+export function isAutomationParameter(
+  value: unknown,
+): value is AutomationParameter {
+  return (
+    typeof value === "string" &&
+    Object.prototype.hasOwnProperty.call(AUTOMATION_LANES, value)
+  );
+}
 
 /** Track fields that score operations may patch; `null` clears an effect. */
 export type TrackPatch = Readonly<
@@ -108,10 +177,14 @@ export type TrackPatch = Readonly<
       | "panAutomation"
       | "solo"
       | "filterAutomation"
+      | "resonanceAutomation"
+      | "delayFeedbackAutomation"
+      | "delayMixAutomation"
     >
   > & {
     filter?: TrackFilter | null;
     delay?: TrackDelay | null;
+    reverb?: TrackReverb | null;
   }
 >;
 
@@ -131,10 +204,11 @@ export type Note = Readonly<{
 }>;
 
 export type TrackInput = Readonly<
-  Omit<Partial<Track>, "filter" | "delay"> &
+  Omit<Partial<Track>, "filter" | "delay" | "reverb"> &
     Pick<Track, "id"> & {
       filter?: TrackFilter | null;
       delay?: TrackDelay | null;
+      reverb?: TrackReverb | null;
     }
 >;
 
@@ -426,6 +500,23 @@ export function setFilterAutomation(
   return updateTrack(score, trackId, { filterAutomation: points });
 }
 
+/** Replace any automation lane by parameter name. */
+export function setTrackAutomation(
+  score: TrackScore,
+  trackId: string,
+  parameter: AutomationParameter,
+  points: readonly AutomationPoint[],
+): TrackScore {
+  if (!isAutomationParameter(parameter))
+    throw new ScoreValidationError(
+      `unknown automation parameter: ${String(parameter)}`,
+      "invalid-track",
+    );
+  return updateTrack(score, trackId, {
+    [AUTOMATION_LANES[parameter].field]: points,
+  });
+}
+
 /** Mute always silences a track; any solo silences every unsoloed track. */
 export function isTrackAudible(score: TrackScore, trackId: string): boolean {
   const track = score.tracks.find((candidate) => candidate.id === trackId);
@@ -495,11 +586,12 @@ export function applyScoreOperation(
   if (operation.type === "updateTrack")
     return updateTrack(score, operation.trackId, operation.patch);
   if (operation.type === "setAutomation")
-    return operation.parameter === "volume"
-      ? setVolumeAutomation(score, operation.trackId, operation.points)
-      : operation.parameter === "pan"
-        ? setPanAutomation(score, operation.trackId, operation.points)
-        : setFilterAutomation(score, operation.trackId, operation.points);
+    return setTrackAutomation(
+      score,
+      operation.trackId,
+      operation.parameter,
+      operation.points,
+    );
   if (operation.type === "clearTrack")
     return clearTrack(score, operation.trackId);
   return assertNever(operation);
@@ -636,6 +728,14 @@ function normalizeTrack(input: unknown): Track {
     SCORE_LIMITS.minFilterCutoff,
     SCORE_LIMITS.maxFilterCutoff,
   );
+  const lane = (parameter: AutomationParameter) => {
+    const { field, min, max } = AUTOMATION_LANES[parameter];
+    return normalizeAutomation(input[field], field, min, max);
+  };
+  const resonanceAutomation = lane("resonance");
+  const delayFeedbackAutomation = lane("delay-feedback");
+  const delayMixAutomation = lane("delay-mix");
+  const reverb = normalizeReverb(input.reverb);
   return Object.freeze({
     id,
     name,
@@ -649,7 +749,33 @@ function normalizeTrack(input: unknown): Track {
     ...(filter ? { filter } : {}),
     ...(delay ? { delay } : {}),
     ...(filterAutomation.length > 0 ? { filterAutomation } : {}),
+    ...(resonanceAutomation.length > 0 ? { resonanceAutomation } : {}),
+    ...(delayFeedbackAutomation.length > 0 ? { delayFeedbackAutomation } : {}),
+    ...(delayMixAutomation.length > 0 ? { delayMixAutomation } : {}),
+    ...(reverb ? { reverb } : {}),
   });
+}
+
+export function normalizeReverb(input: unknown): TrackReverb | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (!isRecord(input))
+    throw new ScoreValidationError(
+      "track reverb must be an object or null",
+      "invalid-track",
+    );
+  const mix = boundedNumber(
+    input.mix,
+    "track reverb mix",
+    0,
+    SCORE_LIMITS.maxReverbMix,
+  );
+  const size = boundedNumber(
+    input.size ?? 0.5,
+    "track reverb size",
+    SCORE_LIMITS.minReverbSize,
+    SCORE_LIMITS.maxReverbSize,
+  );
+  return Object.freeze({ mix, size });
 }
 
 export function normalizeFilter(input: unknown): TrackFilter | undefined {

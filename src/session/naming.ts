@@ -101,9 +101,16 @@ export function musicalFingerprint(score: TrackScore): Fingerprint {
     if (notes.length > 0) roles.push(role);
     if (track.filter) effects.add("filter");
     if (track.delay) effects.add("delay");
+    if (track.reverb) effects.add("reverb");
     if (track.volumeAutomation.length || track.panAutomation.length)
       effects.add("automation");
-    if (track.filterAutomation?.length) effects.add("sweep");
+    if (
+      track.filterAutomation?.length ||
+      track.resonanceAutomation?.length ||
+      track.delayFeedbackAutomation?.length ||
+      track.delayMixAutomation?.length
+    )
+      effects.add("sweep");
     const instrument = track.instrument.toLowerCase().slice(0, 24);
     parts.push(
       drums

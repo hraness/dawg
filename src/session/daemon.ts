@@ -7,7 +7,7 @@ import {
   type TrackScore,
 } from "../../core/score.ts";
 import { TransportClock } from "../audio/clock.ts";
-import { LoopPlayer } from "../audio/player.ts";
+import { AudioEngine } from "../audio/engine.ts";
 import { acquireSessionLock } from "./lock.ts";
 import {
   compositionDigest,
@@ -71,7 +71,7 @@ export class TrackDaemon {
   private readonly clients = new Set<Client>();
   private readonly keys = new Map<string, number>();
   private readonly clock = new TransportClock();
-  private readonly audio: LoopPlayer;
+  private readonly audio: AudioEngine;
   private record!: SessionRecord<Composition>;
   private score!: TrackScore;
   private digest = "";
@@ -88,7 +88,9 @@ export class TrackDaemon {
     this.paths = sessionPaths(options.workspace, options.sessionId);
     this.socketPath = daemonSocketPath(this.paths);
     this.graceMs = options.graceMs ?? DEFAULT_GRACE_MS;
-    this.audio = new LoopPlayer(`${this.paths.record}.audio.lock`);
+    this.audio = new AudioEngine({
+      lockPath: `${this.paths.record}.audio.lock`,
+    });
   }
 
   /** Returns false when another live daemon already owns this session. */
@@ -119,7 +121,9 @@ export class TrackDaemon {
       });
       this.diskTimer = setInterval(() => void this.pollDisk(), DISK_POLL_MS);
       this.armGrace();
-      await this.log(`started pid ${process.pid} socket ${this.socketPath}`);
+      await this.log(
+        `started pid ${process.pid} socket ${this.socketPath} audio ${this.audio.info.backend}`,
+      );
       return true;
     } catch (error) {
       await this.releaseLock?.();
@@ -149,7 +153,7 @@ export class TrackDaemon {
   private async shutdown(reason: string): Promise<void> {
     if (this.graceTimer) clearTimeout(this.graceTimer);
     if (this.diskTimer) clearInterval(this.diskTimer);
-    this.audio.stop();
+    await this.audio.stopAsync();
     for (const client of this.clients) client.socket.destroy();
     this.clients.clear();
     await this.queue.catch(() => undefined);
@@ -461,7 +465,10 @@ export class TrackDaemon {
       this.clock.setTempo(this.score.tempoBpm);
       this.broadcastTransport();
     }
-    if (this.clock.playing) void this.audio.play(this.score).catch(() => {});
+    // Gapless: a streaming engine swaps the loop at the current beat
+    // without restarting the player.
+    if (this.clock.playing)
+      void this.audio.play(this.score, this.clock.beatAt()).catch(() => {});
   }
 
   private transport(
@@ -475,13 +482,14 @@ export class TrackDaemon {
       action === "pause" || (action === "toggle" && this.clock.playing);
     if (play && !this.clock.playing) {
       this.clock.play();
-      void this.audio.play(this.score).catch(() => {});
+      void this.audio.play(this.score, this.clock.beatAt()).catch(() => {});
     } else if (pause && this.clock.playing) {
       this.clock.pause();
       this.audio.stop();
     } else if (action === "seek" && beat !== undefined) {
       const now = Date.now();
       this.clock.sync(beat, this.clock.playing, now, now);
+      this.audio.seek(this.clock.beatAt());
     } else if (action === "tempo" && bpm !== undefined) {
       this.clock.setTempo(bpm);
     }

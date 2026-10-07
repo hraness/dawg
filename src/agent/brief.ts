@@ -1,5 +1,5 @@
 import type { TrackScore } from "../../core/score.ts";
-import { AVAILABLE_INSTRUMENTS } from "../audio/wav.ts";
+import { AVAILABLE_EFFECTS, AVAILABLE_INSTRUMENTS } from "../audio/wav.ts";
 
 export const MAX_BRIEF_BYTES = 12 * 1024;
 const MAX_FOCUSED_NOTES = 96;
@@ -65,6 +65,16 @@ export function compositionBrief(options: {
       ...((track.filterAutomation?.length ?? 0) > 0
         ? { filterAutomation: track.filterAutomation!.length }
         : {}),
+      ...(track.reverb ? { reverb: track.reverb } : {}),
+      ...((track.resonanceAutomation?.length ?? 0) > 0
+        ? { resonanceAutomation: track.resonanceAutomation!.length }
+        : {}),
+      ...((track.delayFeedbackAutomation?.length ?? 0) > 0
+        ? { delayFeedbackAutomation: track.delayFeedbackAutomation!.length }
+        : {}),
+      ...((track.delayMixAutomation?.length ?? 0) > 0
+        ? { delayMixAutomation: track.delayMixAutomation!.length }
+        : {}),
     };
   });
   const focusedNotes = score.notes
@@ -109,6 +119,7 @@ export function compositionBrief(options: {
       },
       recentOperations: recent,
       instruments: AVAILABLE_INSTRUMENTS,
+      effects: AVAILABLE_EFFECTS,
     });
   };
   const encoder = new TextEncoder();

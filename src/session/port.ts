@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { dirname } from "node:path";
 import type { TrackScore } from "../../core/score.ts";
-import { LoopPlayer } from "../audio/player.ts";
+import { AudioEngine } from "../audio/engine.ts";
 import { DaemonClient, type DaemonClientOptions } from "./client.ts";
 import { FilePresence } from "./presence.ts";
 import type {
@@ -46,7 +46,8 @@ export type MetaWriteResult = {
 
 /** What a window plays locally. Connected windows never start audio. */
 export type WindowPlayer = {
-  play(score: TrackScore): Promise<void>;
+  /** Start at `beat`, or swap a playing loop in place (gapless engine). */
+  play(score: TrackScore, beat?: number): Promise<void>;
   stop(): void;
 };
 
@@ -270,7 +271,9 @@ class FilePort<T> implements SessionPort<T> {
   private readonly presenceStore: FilePresence;
 
   private constructor(private readonly options: OpenPortOptions) {
-    this.player = new LoopPlayer(`${options.paths.record}.audio.lock`);
+    this.player = new AudioEngine({
+      lockPath: `${options.paths.record}.audio.lock`,
+    });
     this.presenceStore = new FilePresence(options.paths, {
       clientId: randomUUID(),
       pid: process.pid,

@@ -499,6 +499,54 @@ describe("drum, effects, solo, and filter tools", () => {
     expect(diagnostics[0]).toContain("not a drum kit");
   });
 
+  test("sets reverb and automates delay mix, feedback, and resonance", async () => {
+    const script = scriptedFetch([
+      [
+        ...toolCallChunks(0, "r0", "set_effects", {
+          delay: { beats: 0.5 },
+          reverb: { mix: 0.25, size: 0.8 },
+        }),
+        ...toolCallChunks(1, "r1", "set_automation", {
+          parameter: "delay-mix",
+          points: [
+            { beat: 0, value: 0 },
+            { beat: 4, value: 0.9 },
+          ],
+        }),
+        ...toolCallChunks(2, "r2", "set_automation", {
+          parameter: "delay-feedback",
+          points: [{ beat: 2, value: 0.7 }],
+        }),
+        ...toolCallChunks(3, "r3", "set_automation", {
+          parameter: "resonance",
+          points: [{ beat: 1, value: 0.5 }],
+        }),
+        ...toolCallChunks(4, "r4", "set_automation", {
+          parameter: "delay-feedback",
+          points: [{ beat: 0, value: 0.95 }],
+        }),
+        ...toolCallChunks(5, "r5", "set_effects", { reverb: { mix: 3 } }),
+        finishChunk("tool_calls"),
+      ],
+      [finishChunk("stop")],
+    ]);
+    const { state, host } = memoryHost();
+    const result = await runAgentTurn({
+      prompt: "space",
+      model: "sol-6.1",
+      client: client(script.fetcher),
+      host,
+    });
+    expect(result).toMatchObject({ type: "done", applied: 4, rejected: 2 });
+    const main = state.score.tracks.find((t) => t.id === "main")!;
+    expect(main.reverb).toEqual({ mix: 0.25, size: 0.8 });
+    expect(main.delayMixAutomation?.map((p) => p.value)).toEqual([0, 0.9]);
+    expect(main.delayFeedbackAutomation).toEqual([
+      { tick: 2 * state.score.ticksPerBeat, value: 0.7 },
+    ]);
+    expect(main.resonanceAutomation?.map((p) => p.value)).toEqual([0.5]);
+  });
+
   test("removes effects with null", async () => {
     const base = createScore({
       tracks: [
@@ -506,6 +554,7 @@ describe("drum, effects, solo, and filter tools", () => {
           id: "main",
           filter: { cutoff: 500, resonance: 0 },
           delay: { beats: 1, feedback: 0.2, mix: 0.2 },
+          reverb: { mix: 0.3, size: 0.5 },
         },
       ],
     });
@@ -514,6 +563,7 @@ describe("drum, effects, solo, and filter tools", () => {
         ...toolCallChunks(0, "n0", "set_effects", {
           filter: null,
           delay: null,
+          reverb: null,
         }),
         finishChunk("tool_calls"),
       ],
@@ -529,5 +579,6 @@ describe("drum, effects, solo, and filter tools", () => {
     const main = state.score.tracks[0]!;
     expect(main.filter).toBeUndefined();
     expect(main.delay).toBeUndefined();
+    expect(main.reverb).toBeUndefined();
   });
 });

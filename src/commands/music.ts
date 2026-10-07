@@ -9,7 +9,10 @@
  *   clear <voice>                                          drum hits only
  *   filter <cutoff hz> [<resonance 0..1>] | filter off
  *   delay <beats> [<feedback 0..0.9> [<mix 0..1>]] | delay off
- *   automate filter at <beat> <cutoff hz> | clear filter automation
+ *   reverb <mix 0..1> [<size 0..1>] | reverb off
+ *   automate <lane> at <beat> <value> | clear <lane> automation
+ *     lanes: filter (cutoff hz), resonance (0..1), delay-feedback (0..0.9),
+ *     delay-mix (0..1); volume and pan lanes live in the core prompt parser
  *   solo | unsolo
  *
  * Voices: kick (bd), snare (sd), clap (cp), rim (perc), tom, hat (hh),
@@ -22,7 +25,9 @@ import {
   SCORE_LIMITS,
   createScore,
   updateTrack,
-  setFilterAutomation,
+  setTrackAutomation,
+  AUTOMATION_LANES,
+  type AutomationParameter,
   type NoteInput,
   type TrackScore,
 } from "../../core/score.ts";
@@ -58,9 +63,43 @@ export type MusicCommand =
   | { type: "filter-off" }
   | { type: "delay"; beats: number; feedback: number; mix: number }
   | { type: "delay-off" }
-  | { type: "filter-automation"; beat: number; cutoff: number }
-  | { type: "filter-automation-clear" }
+  | { type: "reverb"; mix: number; size: number }
+  | { type: "reverb-off" }
+  | {
+      type: "effect-automation";
+      parameter: EffectAutomationParameter;
+      beat: number;
+      value: number;
+    }
+  | { type: "effect-automation-clear"; parameter: EffectAutomationParameter }
   | { type: "solo"; solo: boolean };
+
+/** Automation lanes owned by the effect grammar (volume/pan are core). */
+export type EffectAutomationParameter = Exclude<
+  AutomationParameter,
+  "volume" | "pan"
+>;
+
+const LANE_ALIASES: Readonly<Record<string, EffectAutomationParameter>> =
+  Object.freeze({
+    filter: "filter",
+    cutoff: "filter",
+    resonance: "resonance",
+    res: "resonance",
+    "filter-resonance": "resonance",
+    "delay-feedback": "delay-feedback",
+    "delay-fb": "delay-feedback",
+    feedback: "delay-feedback",
+    "delay-mix": "delay-mix",
+  });
+
+export function parseEffectLane(
+  name: string,
+): EffectAutomationParameter | undefined {
+  return Object.prototype.hasOwnProperty.call(LANE_ALIASES, name)
+    ? LANE_ALIASES[name]
+    : undefined;
+}
 
 export type MusicResult = Readonly<{
   message: string;
@@ -177,16 +216,39 @@ export function parseMusicCommand(prompt: string): MusicCommand | undefined {
     return { type: "delay", beats, feedback, mix };
   }
 
-  if (/^(?:clear|reset) filter automation$/.test(text))
-    return { type: "filter-automation-clear" };
+  if (/^reverb off$/.test(text)) return { type: "reverb-off" };
+  const reverb = text.match(new RegExp(`^reverb ${NUMBER}(?: ${NUMBER})?$`));
+  if (reverb) {
+    const mix = Number(reverb[1]);
+    const size = reverb[2] === undefined ? 0.5 : Number(reverb[2]);
+    if (
+      !Number.isFinite(mix) ||
+      mix > SCORE_LIMITS.maxReverbMix ||
+      !Number.isFinite(size) ||
+      size > SCORE_LIMITS.maxReverbSize
+    )
+      return undefined;
+    return { type: "reverb", mix, size };
+  }
+
+  const clearLane = text.match(/^(?:clear|reset) ([a-z-]+) automation$/);
+  if (clearLane) {
+    const parameter = parseEffectLane(clearLane[1]!);
+    return parameter
+      ? { type: "effect-automation-clear", parameter }
+      : undefined;
+  }
   const automate = text.match(
-    new RegExp(`^(?:automate|automation) filter at ${NUMBER} ${NUMBER}$`),
+    new RegExp(`^(?:automate|automation) ([a-z-]+) at ${NUMBER} ${NUMBER}$`),
   );
   if (automate) {
-    const beat = Number(automate[1]);
-    const cutoff = Number(automate[2]);
-    if (!validBeat(beat) || !validCutoff(cutoff)) return undefined;
-    return { type: "filter-automation", beat, cutoff };
+    const parameter = parseEffectLane(automate[1]!);
+    const beat = Number(automate[2]);
+    const value = Number(automate[3]);
+    if (!parameter || !validBeat(beat)) return undefined;
+    const { min, max } = AUTOMATION_LANES[parameter];
+    if (!Number.isFinite(value) || value < min || value > max) return undefined;
+    return { type: "effect-automation", parameter, beat, value };
   }
   return undefined;
 }
@@ -241,26 +303,44 @@ export function applyMusicCommand(
       payload: { trackId, effect: "delay", value: delay },
     };
   }
+  if (command.type === "reverb" || command.type === "reverb-off") {
+    const reverb =
+      command.type === "reverb"
+        ? { mix: command.mix, size: command.size }
+        : null;
+    return {
+      message: reverb
+        ? `reverb · mix ${reverb.mix} size ${reverb.size}`
+        : "reverb · off",
+      next: updateTrack(score, trackId, { reverb }),
+      kind: "score.effect",
+      payload: { trackId, effect: "reverb", value: reverb },
+    };
+  }
   if (
-    command.type === "filter-automation" ||
-    command.type === "filter-automation-clear"
+    command.type === "effect-automation" ||
+    command.type === "effect-automation-clear"
   ) {
+    const { parameter } = command;
     let points: { tick: number; value: number }[] = [];
-    if (command.type === "filter-automation") {
+    if (command.type === "effect-automation") {
       const tick = Math.round(command.beat * score.ticksPerBeat);
       const merged = new Map(
-        (track.filterAutomation ?? []).map((point) => [point.tick, point]),
+        (track[AUTOMATION_LANES[parameter].field] ?? []).map((point) => [
+          point.tick,
+          point,
+        ]),
       );
-      merged.set(tick, { tick, value: command.cutoff });
+      merged.set(tick, { tick, value: command.value });
       points = [...merged.values()].sort((a, b) => a.tick - b.tick);
       if (points.length > SCORE_LIMITS.maxAutomationPoints)
-        return { message: "filter automation is full" };
+        return { message: `${parameter} automation is full` };
     }
     return {
-      message: `automation · filter ${points.length} point${points.length === 1 ? "" : "s"}`,
-      next: setFilterAutomation(score, trackId, points),
+      message: `automation · ${parameter} ${points.length} point${points.length === 1 ? "" : "s"}`,
+      next: setTrackAutomation(score, trackId, parameter, points),
       kind: "score.automation",
-      payload: { trackId, parameter: "filter", points },
+      payload: { trackId, parameter, points },
     };
   }
 

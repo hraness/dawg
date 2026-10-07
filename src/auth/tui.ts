@@ -3,6 +3,7 @@ import { defaultAuthEnv } from "./credentials.ts";
 import { authStatus, login, logout, type LoginIO } from "./login.ts";
 import { systemRunner, type CommandRunner } from "./runner.ts";
 import type { GatewayModel } from "../agent/gateway.ts";
+import { audioStatusLine } from "../audio/engine.ts";
 
 /**
  * `/login [--xcb]`, `/logout` and `/auth` inside the TUI. The terminal is in
@@ -31,6 +32,7 @@ export async function tuiAuthCommand(
           verify: rest.includes("--check"),
           gatewayModel,
         })),
+        audioStatusLine(),
       );
     else if (rest.includes("--xcb")) await login("xcb", deps);
     else if (rest.includes("--key"))
