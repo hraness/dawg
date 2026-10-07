@@ -51,7 +51,7 @@ export type XcbAccount = Readonly<{
   models: readonly XcbModel[];
   /**
    * xcb's per-account application admission, when it reports one. `pending`
-   * means xcb admits the account on first use (that call is slower); Track
+   * means xcb admits the account on first use (that call is slower); it
    * treats it as usable. Absent on xcb builds without automatic admission.
    */
   admission?: "pending" | "admitted" | "denied" | undefined;
