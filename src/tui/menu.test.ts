@@ -369,6 +369,69 @@ describe("edit menu", () => {
   });
 });
 
+describe("auditioning in the menu", () => {
+  const auditioning = (
+    value: TrackScore,
+    committed: TrackScore,
+    dirty: boolean,
+  ): MenuContext => ({
+    ...context(value),
+    audition: {
+      looping: true,
+      dirty,
+      committed,
+      hint: " space stop · a A/B · c context · enter keep · esc revert · ? keys ",
+      status: dirty ? "♪ solo · B staged 1" : "♪ solo",
+    },
+  });
+
+  test("Space, a and c reach the audition; a toggle row still switches on Space", () => {
+    const menu = new EditMenu();
+    const ctx = auditioning(score(), score(), false);
+    menu.show(ctx, "mix");
+    select(menu, ctx, "volume");
+    expect(menu.key(" ", ctx)).toEqual({ type: "audition", key: "loop" });
+    expect(menu.key("a", ctx)).toEqual({ type: "audition", key: "ab" });
+    expect(menu.key("c", ctx)).toEqual({ type: "audition", key: "context" });
+    // Nudges still run their command; the window decides to stage it.
+    expect(menu.key("-", ctx)).toEqual({ type: "run", command: "volume 0.95" });
+    select(menu, ctx, "mute");
+    expect(menu.key(" ", ctx)).toEqual({ type: "run", command: "mute" });
+    // Without an audition host the keys keep their old meaning.
+    const plain = new EditMenu();
+    plain.show(context(), "mix");
+    expect(plain.key("a", context())).toEqual({ type: "handled" });
+  });
+
+  test("staged rows show staged ← committed; Enter keeps; Esc reverts first", () => {
+    const committed = score();
+    const staged = committed.withTracks(
+      committed.tracks.map((track) =>
+        track.id === "keys" ? { ...track, volume: 0.8 } : track,
+      ),
+    );
+    const menu = new EditMenu();
+    const ctx = auditioning(staged, committed, true);
+    menu.show(ctx, "mix");
+    select(menu, ctx, "volume");
+    const view = menu.view(ctx);
+    expect(view.items[view.index]!.label).toContain("0.8");
+    expect(view.items[view.index]!.label).toContain(" ← 1");
+    // Unchanged rows show one value.
+    expect(
+      view.items.find((row) => row.label.startsWith("pan"))!.label,
+    ).not.toContain("←");
+    expect(view.title).toStartWith("● ");
+    expect(view.title).toContain("B staged 1");
+    expect(view.hint).toContain("enter keep");
+    expect(menu.key("\r", ctx)).toEqual({ type: "keep" });
+    expect(menu.key(ESC, ctx)).toEqual({ type: "revert" });
+    // Once reverted, Esc goes back as usual.
+    const clean = auditioning(committed, committed, false);
+    expect(menu.key(ESC, clean)).toEqual({ type: "handled" });
+  });
+});
+
 describe("edit commands", () => {
   test("parse names, meter, points and removal; reject bad input", () => {
     expect(parseEditCommand("track name Lead Line")).toEqual({

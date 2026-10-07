@@ -308,6 +308,8 @@ export class AudioEngine {
   private respawnTimer: ReturnType<typeof setTimeout> | undefined;
   /** Play mode: keep a player running without a loop for live voices. */
   private monitoring = false;
+  /** A lead set by `setLeadMs` (play mode, auditions) is not adapted. */
+  private leadPinned = false;
   private readonly voices = new Map<number, LiveVoice>();
   private click: ClickBus | undefined;
   private clickVoices: { sound: Float32Array; position: number }[] = [];
@@ -359,6 +361,7 @@ export class AudioEngine {
    * after it is pressed); `undefined` restores the constructed lead.
    */
   public setLeadMs(ms: number | undefined): void {
+    this.leadPinned = ms !== undefined;
     this.leadFrames =
       ms === undefined
         ? this.defaultLeadFrames
@@ -451,10 +454,10 @@ export class AudioEngine {
 
   /** Frames kept queued ahead of the clock right now. */
   public get lead(): number {
-    // Play mode keeps its short lead: renders run off-thread, so a slow
-    // render delays the swap, not the stream.
+    // Play mode and auditions keep their short lead: renders run
+    // off-thread, so a slow render delays the swap, not the stream.
     const adaptive =
-      this.monitoring && this.renderer.offThread
+      (this.monitoring || this.leadPinned) && this.renderer.offThread
         ? 0
         : Math.round(
             (LEAD_RENDER_FACTOR * this.lastRenderMs * this.sampleRate) / 1000,

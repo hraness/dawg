@@ -9,6 +9,7 @@
  * Rendering reuses the TUI's picker overlay: `view()` returns a picker.
  */
 import { HINTS } from "../../tui/grammar.ts";
+import { auditionKey, type AuditionKey } from "./audition.ts";
 import {
   AUTOMATION_PARAMETERS,
   automationPoints,
@@ -98,6 +99,25 @@ export type MenuContext = Readonly<{
   chords?: ChordSettings;
   /** Project root, for the project's own wavetables (none when absent). */
   projectRoot?: string;
+  /**
+   * The audition loop (src/tui/audition.ts), when the window hosts one.
+   * `score` above is then the staged score; changed rows show the
+   * committed value beside the staged one.
+   */
+  audition?: MenuAudition;
+}>;
+
+/** What the menu needs from the audition controller. */
+export type MenuAudition = Readonly<{
+  looping: boolean;
+  /** Edits are staged (an Enter keeps them, Esc reverts them). */
+  dirty: boolean;
+  /** The committed score, for `staged ← committed` on changed rows. */
+  committed: TrackScore;
+  /** The footer while auditioning. */
+  hint: string;
+  /** `♪ solo · B staged 2 · 42 ms`, shown in the title. */
+  status?: string | undefined;
 }>;
 
 type NumberField = Readonly<{
@@ -172,6 +192,12 @@ export type MenuResult =
   | { type: "handled" }
   | { type: "close" }
   | { type: "run"; command: string }
+  /** Space (loop), `a` (A/B) or `c` (context) for the audition loop. */
+  | { type: "audition"; key: AuditionKey }
+  /** Commit the staged edits as one operation. */
+  | { type: "keep" }
+  /** Drop the staged edits. */
+  | { type: "revert" }
   | { type: "pass" };
 
 export type MenuView = Readonly<{
@@ -1645,6 +1671,8 @@ export class EditMenu {
         frame.query = "";
         return { type: "handled" };
       }
+      // Esc reverts staged edits first, then goes back as usual.
+      if (context.audition?.dirty) return { type: "revert" };
       this.stack.pop();
       return this.stack.length ? { type: "handled" } : { type: "close" };
     }
@@ -1667,7 +1695,21 @@ export class EditMenu {
       frame.index = Math.max(0, nodes.length - 1);
       return { type: "handled" };
     }
+    // Space hears the focused track (it still switches a toggle row);
+    // `a` and `c` are A/B and context while the window hosts an audition.
+    const audition = context.audition ? auditionKey(value) : undefined;
+    if (audition && !(audition === "loop" && node?.kind === "toggle"))
+      return { type: "audition", key: audition };
     if (!node) return { type: "handled" };
+    if (
+      KEY_ENTER.has(value) &&
+      context.audition?.dirty &&
+      (node.kind === "number" ||
+        node.kind === "toggle" ||
+        node.kind === "point" ||
+        node.kind === "info")
+    )
+      return { type: "keep" };
     if (KEY_LEFT.has(value) || KEY_RIGHT.has(value)) {
       const direction = KEY_RIGHT.has(value) ? 1 : -1;
       return this.nudge(node, direction);
@@ -1839,10 +1881,26 @@ export class EditMenu {
     if (frame?.query || this.filtering) title += ` · /${frame?.query ?? ""}`;
     if (this.entry)
       title += ` · ${this.entry.label}: ${this.entry.buffer || placeholderFor(selected)}▏`;
-    const items = nodes.map((node, at) => ({
-      label: `${node.label.padEnd(LABEL_WIDTH)} ${valueText(node)}`.trimEnd(),
-      value: String(at),
-    }));
+    const audition = context.audition;
+    if (audition?.dirty) title = `● ${title}`;
+    if (audition?.status && !this.entry) title += ` · ${audition.status}`;
+    // Changed rows show `staged ← committed` (Elektron's compare, inline).
+    const before = new Map<string, string>();
+    if (audition?.dirty && frame && !frame.query)
+      for (const node of frame.build({
+        ...context,
+        score: audition.committed,
+      }))
+        before.set(node.label, valueText(node));
+    const items = nodes.map((node, at) => {
+      const now = valueText(node);
+      const was = node.kind === "menu" ? undefined : before.get(node.label);
+      const shown = was !== undefined && was !== now ? `${now} ← ${was}` : now;
+      return {
+        label: `${node.label.padEnd(LABEL_WIDTH)} ${shown}`.trimEnd(),
+        value: String(at),
+      };
+    });
     const command = selected ? commandText(selected) : undefined;
     const note = [
       selected ? describe(selected) : "",
@@ -1854,15 +1912,17 @@ export class EditMenu {
       ? HINTS.typing
       : this.filtering
         ? HINTS.filtering
-        : selected?.kind === "point"
-          ? HINTS.point
-          : selected?.kind === "number" ||
-              selected?.kind === "toggle" ||
-              selected?.kind === "choice"
-            ? HINTS.value
-            : selected?.kind === "action"
-              ? HINTS.action
-              : HINTS.menu;
+        : audition && (audition.looping || audition.dirty)
+          ? audition.hint
+          : selected?.kind === "point"
+            ? HINTS.point
+            : selected?.kind === "number" ||
+                selected?.kind === "toggle" ||
+                selected?.kind === "choice"
+              ? HINTS.value
+              : selected?.kind === "action"
+                ? HINTS.action
+                : HINTS.menu;
     return { title, items, index, hint, note };
   }
 }

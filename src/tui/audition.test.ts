@@ -1,0 +1,333 @@
+import { describe, expect, test } from "bun:test";
+import { createScore, type TrackScore } from "../../core/score.ts";
+import {
+  Audition,
+  auditionKey,
+  isStageable,
+  type AuditionHost,
+  type StageResult,
+} from "./audition.ts";
+
+function base(): TrackScore {
+  return createScore({
+    tempoBpm: 120,
+    bars: 2,
+    tracks: [
+      { id: "lead", name: "lead", instrument: "saw", pan: 0 },
+      { id: "bass", name: "bass", instrument: "sine" },
+    ],
+    notes: [
+      {
+        id: "n",
+        trackId: "lead",
+        pitch: 60,
+        startTick: 0,
+        durationTicks: 480,
+        velocity: 0.8,
+      },
+    ],
+  } as never);
+}
+
+/**
+ * `pan <track> <value>` and `vol <track> <value>` edit a track; a command on
+ * a missing track fails, like a real command would.
+ */
+function applyFake(score: TrackScore, command: string): StageResult {
+  const [field, trackId, raw] = command.split(" ");
+  const value = Number(raw);
+  if (!score.tracks.some((track) => track.id === trackId))
+    return { ok: false, message: `no track ${trackId}` };
+  const key = field === "vol" ? "volume" : "pan";
+  return {
+    ok: true,
+    message: command,
+    next: score.withTracks(
+      score.tracks.map((track) =>
+        track.id === trackId ? { ...track, [key]: value } : track,
+      ),
+    ),
+  };
+}
+
+function harness(score = base(), debounceMs = 40) {
+  const clock = { ms: 0 };
+  const played: TrackScore[] = [];
+  const timers: { at: number; run: () => void }[] = [];
+  let stops = 0;
+  let renderMs = 0;
+  const host: AuditionHost = {
+    apply: async (from, command) => applyFake(from, command),
+    play: async (preview) => {
+      if (renderMs > 0) await Bun.sleep(5);
+      clock.ms += renderMs;
+      played.push(preview);
+    },
+    stop: () => void (stops += 1),
+    leadMs: () => 60,
+    now: () => clock.ms,
+    setTimer: (run, ms) => {
+      const timer = { at: clock.ms + ms, run };
+      timers.push(timer);
+      return timer;
+    },
+    clearTimer: (handle) => {
+      const index = timers.indexOf(handle as (typeof timers)[number]);
+      if (index >= 0) timers.splice(index, 1);
+    },
+  };
+  const audition = new Audition(host, score, "lead", { debounceMs });
+  /** Advance the clock, firing due timers, and let renders settle. */
+  const advance = async (ms: number) => {
+    clock.ms += ms;
+    for (const timer of [...timers])
+      if (timer.at <= clock.ms) {
+        timers.splice(timers.indexOf(timer), 1);
+        timer.run();
+      }
+    await audition.settled();
+    await Bun.sleep(0);
+  };
+  const pan = (score: TrackScore | undefined) =>
+    score?.tracks.find((track) => track.id === "lead")?.pan;
+  return {
+    audition,
+    clock,
+    played,
+    advance,
+    pan,
+    stops: () => stops,
+    setRenderMs: (ms: number) => void (renderMs = ms),
+  };
+}
+
+describe("audition loop", () => {
+  test("Space starts the track solo; c switches to the mix; Space stops", async () => {
+    const h = harness();
+    expect(h.audition.staging).toBe(false);
+    h.audition.start();
+    await h.advance(0);
+    expect(h.audition.looping).toBe(true);
+    expect(h.played).toHaveLength(1);
+    expect(h.played[0]!.tracks.map((track) => track.id)).toEqual(["lead"]);
+    h.audition.toggleContext();
+    await h.advance(50);
+    expect(h.played.at(-1)!.tracks.map((track) => track.id)).toEqual([
+      "lead",
+      "bass",
+    ]);
+    expect(h.audition.status()).toContain("in context");
+    h.audition.toggle();
+    expect(h.audition.looping).toBe(false);
+    expect(h.stops()).toBe(1);
+    expect(h.audition.status()).toBeUndefined();
+  });
+
+  test("an empty track plays its default phrase", async () => {
+    const h = harness();
+    h.audition.focus("bass");
+    h.audition.start();
+    await h.advance(0);
+    expect(h.audition.lastPreview?.source).toBe("phrase");
+    expect(h.audition.lastPreview?.role).toBe("riff");
+  });
+});
+
+describe("staging", () => {
+  test("edits stage on the loop without touching the committed score", async () => {
+    const h = harness();
+    const committed = h.audition.committed;
+    h.audition.start();
+    await h.advance(0);
+    await h.audition.stage("pan lead 0.5");
+    await h.advance(50);
+    await h.audition.stage("vol lead 0.4");
+    await h.advance(50);
+    expect(h.audition.committed).toBe(committed);
+    expect(h.pan(h.audition.committed)).toBe(0);
+    expect(h.pan(h.audition.score)).toBe(0.5);
+    expect(h.audition.commands).toEqual(["pan lead 0.5", "vol lead 0.4"]);
+    expect(h.audition.dirtyEdits).toBe(true);
+    expect(h.audition.status()).toContain("B staged 2");
+    expect(h.pan(h.played.at(-1))).toBe(0.5);
+  });
+
+  test("a failed command is not staged", async () => {
+    const h = harness();
+    h.audition.start();
+    const result = await h.audition.stage("pan ghost 1");
+    expect(result.ok).toBe(false);
+    expect(h.audition.dirtyEdits).toBe(false);
+  });
+
+  test("A/B flips between the committed and staged sound", async () => {
+    const h = harness();
+    h.audition.start();
+    await h.advance(0);
+    // Nothing staged: A/B stays on B.
+    h.audition.toggleAB();
+    expect(h.audition.showing).toBe("B");
+    await h.audition.stage("pan lead 0.5");
+    await h.advance(50);
+    h.audition.toggleAB();
+    await h.advance(50);
+    expect(h.audition.showing).toBe("A");
+    expect(h.pan(h.audition.sounding)).toBe(0);
+    expect(h.pan(h.played.at(-1))).toBe(0);
+    expect(h.audition.status()).toContain("A committed");
+    h.audition.toggleAB();
+    await h.advance(50);
+    expect(h.pan(h.played.at(-1))).toBe(0.5);
+    // A new edit always plays B.
+    h.audition.toggleAB();
+    await h.audition.stage("pan lead 0.7");
+    expect(h.audition.showing).toBe("B");
+  });
+
+  test("keep takes every staged edit as one score; nothing stays staged", async () => {
+    const h = harness();
+    h.audition.start();
+    for (const value of [0.1, 0.2, 0.3])
+      await h.audition.stage(`pan lead ${value}`);
+    const taken = h.audition.take()!;
+    expect(taken.commands).toHaveLength(3);
+    expect(h.pan(taken.score)).toBe(0.3);
+    expect(h.audition.dirtyEdits).toBe(false);
+    h.audition.committedNow(taken.score);
+    expect(h.audition.committed).toBe(taken.score);
+    expect(h.audition.take()).toBeUndefined();
+  });
+
+  test("revert drops staged edits and the loop plays the committed sound", async () => {
+    const h = harness();
+    h.audition.start();
+    await h.advance(0);
+    await h.audition.stage("pan lead 0.9");
+    await h.advance(50);
+    h.audition.revert();
+    await h.advance(50);
+    expect(h.audition.dirtyEdits).toBe(false);
+    expect(h.audition.score).toBe(h.audition.committed);
+    expect(h.pan(h.played.at(-1))).toBe(0);
+  });
+
+  test("hovering a picker replaces its previous hover instead of stacking", async () => {
+    const h = harness();
+    h.audition.start();
+    await h.audition.stage("vol lead 0.5");
+    await h.audition.stage("pan lead 0.1", { replaceKey: "picker" });
+    await h.audition.stage("pan lead 0.2", { replaceKey: "picker" });
+    await h.audition.stage("pan lead 0.3", { replaceKey: "picker" });
+    expect(h.audition.commands).toEqual(["vol lead 0.5", "pan lead 0.3"]);
+    expect(h.pan(h.audition.score)).toBe(0.3);
+  });
+
+  test("another window's edit rebases the staged diff; a vanished target drops it", async () => {
+    const h = harness();
+    h.audition.start();
+    await h.audition.stage("pan lead 0.5");
+    // Another window changes the lead's volume and the bass's pan.
+    const remote = applyFake(
+      applyFake(base(), "vol lead 0.2").next!,
+      "pan bass -1",
+    ).next!;
+    const result = await h.audition.rebase(remote);
+    expect(result.dropped).toEqual([]);
+    expect(h.audition.committed).toBe(remote);
+    const staged = h.audition.score;
+    expect(h.pan(staged)).toBe(0.5);
+    expect(staged.tracks.find((t) => t.id === "lead")?.volume).toBe(0.2);
+    expect(staged.tracks.find((t) => t.id === "bass")?.pan).toBe(-1);
+    // Then the lead is deleted elsewhere: its staged edit cannot apply.
+    const gone = remote.withTracks(
+      remote.tracks.filter((t) => t.id !== "lead"),
+    );
+    const after = await h.audition.rebase(gone);
+    expect(after.dropped).toEqual(["pan lead 0.5"]);
+    expect(h.audition.dirtyEdits).toBe(false);
+    expect(h.audition.score).toBe(gone);
+  });
+});
+
+describe("rendering", () => {
+  test("a burst of nudges renders on the trailing edge, once", async () => {
+    const h = harness();
+    h.audition.start();
+    await h.advance(0);
+    const before = h.audition.renders;
+    // Ten repeats 10 ms apart, like a held arrow key.
+    for (let i = 1; i <= 10; i += 1) {
+      await h.audition.stage(`pan lead ${i / 10}`);
+      await h.advance(10);
+    }
+    await h.advance(100);
+    // Inside the 40 ms window repeats coalesce: far fewer renders than keys.
+    expect(h.audition.renders - before).toBeLessThanOrEqual(3);
+    expect(h.pan(h.played.at(-1))).toBe(1);
+  });
+
+  test("a key while a render runs coalesces into one follow-up render", async () => {
+    const h = harness(base(), 0);
+    h.setRenderMs(30);
+    h.audition.start();
+    const first = h.audition.stage("pan lead 0.1");
+    const second = h.audition.stage("pan lead 0.2");
+    const third = h.audition.stage("pan lead 0.3");
+    await Promise.all([first, second, third]);
+    await Bun.sleep(30);
+    expect(h.pan(h.played.at(-1))).toBe(0.3);
+    // The start render, then one follow-up for all three keys.
+    expect(h.audition.renders).toBe(2);
+  });
+
+  test("latency is key to scheduled audio: render time plus the lead", async () => {
+    const h = harness(base(), 0);
+    h.setRenderMs(12);
+    h.audition.start();
+    await h.advance(0);
+    await Bun.sleep(10);
+    await h.audition.stage("pan lead 0.4");
+    await Bun.sleep(10);
+    expect(h.audition.lastLatencyMs).toBe(72);
+    expect(h.audition.status()).toContain("72 ms");
+  });
+
+  test("the loop stays off until Space: staging alone renders nothing", async () => {
+    const h = harness();
+    await h.audition.stage("pan lead 0.4");
+    expect(h.played).toHaveLength(0);
+    expect(h.audition.staging).toBe(true);
+  });
+});
+
+describe("keys and commands", () => {
+  test("Space, a and c are the audition keys", () => {
+    expect(auditionKey(" ")).toBe("loop");
+    expect(auditionKey("a")).toBe("ab");
+    expect(auditionKey("c")).toBe("context");
+    expect(auditionKey("x")).toBeUndefined();
+  });
+
+  test("sound commands stage; transport, notes and listings do not", () => {
+    for (const command of [
+      "fx reverb mix 0.6",
+      "/fx delay feedback 0.4",
+      "synth cutoff 1200",
+      "wt preset pwm",
+      "kit 808",
+      "vol 0.5",
+      "pattern four-on-floor",
+    ])
+      expect(isStageable(command)).toBe(true);
+    for (const command of [
+      "play",
+      "tempo 100",
+      "add a bassline",
+      "fx",
+      "fx list",
+      "kit list",
+      "undo",
+    ])
+      expect(isStageable(command)).toBe(false);
+  });
+});
