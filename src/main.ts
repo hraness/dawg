@@ -284,7 +284,7 @@ if (importPath) {
     record,
     {
       kind: "score.import",
-      payload: { path: importPath, before: record.composition },
+      payload: { path: importPath },
     },
     score.toJSON(),
   );
@@ -1224,7 +1224,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
         latest,
         {
           kind: "score.operation",
-          payload: { operation, before: latest.composition },
+          payload: { operation },
         },
         next.toJSON(),
       );
@@ -1466,11 +1466,7 @@ async function commitScore(
   payload: Record<string, unknown> = {},
 ): Promise<void> {
   if (next === score) return;
-  record = await port.append(
-    record,
-    { kind, payload: { ...payload, before: record.composition } },
-    next.toJSON(),
-  );
+  record = await port.append(record, { kind, payload }, next.toJSON());
   score = next;
   if (clock.playing) void audio.play(score);
   projectSync?.scoreChanged(score);
@@ -1517,6 +1513,7 @@ async function stepHistory(direction: "undo" | "redo"): Promise<Receipt> {
   const latest = await port.load();
   // A fork's undo continues into its parent's history past the fork point.
   const target = historyTarget(
+    latest.composition,
     await historyEvents(process.cwd(), latest),
     direction,
   );
@@ -1530,7 +1527,6 @@ async function stepHistory(direction: "undo" | "redo"): Promise<Receipt> {
         payload: {
           [direction === "undo" ? "undoneRevision" : "redoneRevision"]:
             target.revision,
-          before: latest.composition,
         },
       },
       restored.toJSON(),
@@ -1708,7 +1704,6 @@ function agentHost(
               callId: change.callId,
               summary: change.summary,
               operations: change.operations,
-              before: record.composition,
             },
           },
           change.operations,

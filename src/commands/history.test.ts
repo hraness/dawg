@@ -1,17 +1,22 @@
 import { describe, expect, test } from "bun:test";
+import { diffRewind, IDENTITY_REWIND } from "../session/delta.ts";
 import { historyTarget, REDO_KIND, UNDO_KIND } from "./history.ts";
 
-type Event = { revision: number; kind: string; payload: unknown };
+type Event = {
+  revision: number;
+  kind: string;
+  rewind?: ReturnType<typeof diffRewind>;
+};
 
-/** Simulate the session log: each append records the state it replaced. */
+/** Simulate the session log: each append records how to rewind it. */
 function harness() {
   const events: Event[] = [];
-  let state = "s0";
-  const append = (kind: string, next: string, extra = {}) => {
+  let state: unknown = "s0";
+  const append = (kind: string, next: unknown) => {
     events.push({
       revision: events.length + 1,
       kind,
-      payload: { ...extra, before: state },
+      rewind: diffRewind(state, next),
     });
     state = next;
   };
@@ -20,14 +25,11 @@ function harness() {
     get state() {
       return state;
     },
-    edit: (next: string) => append("score.note", next),
+    edit: (next: unknown) => append("score.note", next),
     step: (direction: "undo" | "redo") => {
-      const target = historyTarget(events, direction);
+      const target = historyTarget(state, events, direction);
       if (!target) return false;
-      append(
-        direction === "undo" ? UNDO_KIND : REDO_KIND,
-        target.composition as string,
-      );
+      append(direction === "undo" ? UNDO_KIND : REDO_KIND, target.composition);
       return true;
     },
   };
@@ -64,27 +66,50 @@ describe("undo/redo history", () => {
     expect(h.state).toBe("s1");
   });
 
-  test("events without before are ignored", () => {
+  test("events that did not change the composition are ignored", () => {
     const h = harness();
     h.edit("s1");
+    h.events.push({ revision: 2, kind: "transport", rewind: IDENTITY_REWIND });
     h.events.push({
-      revision: 99,
+      revision: 3,
       kind: "transport",
-      payload: { action: "play" },
+      rewind: diffRewind("s1", "s1"),
     });
-    expect(historyTarget(h.events, "undo")).toEqual({
+    expect(historyTarget(h.state, h.events, "undo")).toEqual({
       revision: 1,
       composition: "s0",
     });
   });
 
-  test("legacy undo events without a redo stack still undo once", () => {
+  test("structured compositions rewind through nested edits", () => {
+    const h = harness();
+    const base = { tempoBpm: 120, notes: [{ id: "a", pitch: 60 }] };
+    h.edit(base);
+    h.edit({ ...base, notes: [...base.notes, { id: "b", pitch: 64 }] });
+    h.edit({ tempoBpm: 90, notes: [{ id: "b", pitch: 64 }] });
+    expect(h.step("undo")).toBe(true);
+    expect(h.state).toEqual({
+      tempoBpm: 120,
+      notes: [
+        { id: "a", pitch: 60 },
+        { id: "b", pitch: 64 },
+      ],
+    });
+    expect(h.step("undo")).toBe(true);
+    expect(h.state).toEqual(base);
+    expect(h.step("redo")).toBe(true);
+    expect(h.step("redo")).toBe(true);
+    expect(h.state).toEqual({ tempoBpm: 90, notes: [{ id: "b", pitch: 64 }] });
+  });
+
+  test("a compacted edit ends the reachable history", () => {
     const events: Event[] = [
-      { revision: 1, kind: "score.note", payload: { before: "a" } },
-      { revision: 2, kind: "score.note", payload: { before: "b" } },
-      { revision: 3, kind: UNDO_KIND, payload: { before: "c" } },
+      { revision: 1, kind: "score.note" },
+      { revision: 2, kind: "score.note", rewind: diffRewind("b", "c") },
+      { revision: 3, kind: UNDO_KIND, rewind: diffRewind("c", "b") },
     ];
-    expect(historyTarget(events, "undo")?.composition).toBe("a");
-    expect(historyTarget(events, "redo")?.composition).toBe("c");
+    // The undo at rev 3 popped rev 2; rev 1 has no rewind, so nothing is left.
+    expect(historyTarget("b", events, "undo")).toBeUndefined();
+    expect(historyTarget("b", events, "redo")?.composition).toBe("c");
   });
 });

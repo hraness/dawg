@@ -7,6 +7,7 @@ import { createScore } from "../../core/score.ts";
 import { DaemonClient } from "./client.ts";
 import { FilePresence } from "./presence.ts";
 import { daemonLockPath, daemonSocketPath } from "./protocol.ts";
+import { compositionAt } from "./rebase.ts";
 import {
   ensureSession,
   loadSession,
@@ -270,10 +271,10 @@ describe("dawgd", () => {
     );
     const event = disk.events[2]!;
     expect(event.payload).toMatchObject({ rebasedFrom: 1 });
-    // `before` is the score the operations were replayed on (rev 2), so undo
-    // drops only the agent's change.
-    const before = (event.payload as { before: typeof disk.composition })
-      .before;
+    expect(event.payload).not.toHaveProperty("before");
+    // The event rewinds to the score the operations were replayed on (rev 2),
+    // so undo drops only the agent's change.
+    const before = compositionAt(disk, 2) as typeof disk.composition;
     expect(before.tracks.find((t) => t.id === "bass")?.volume).toBe(0.5);
     expect(before.notes.map((note) => note.id)).toEqual(["a1"]);
 
