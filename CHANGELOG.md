@@ -4,6 +4,12 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ## Unreleased
 
+### Security
+
+- **A security policy.** `SECURITY.md` and `https://dawg.sh/.well-known/security.txt` say how to report a vulnerability privately.
+- **dawg.sh sends security headers** on every route: a Content Security Policy limited to the site's own origin and its analytics hosts, HSTS, `nosniff`, `DENY` framing, a strict referrer policy and a permissions policy that turns off camera, microphone and location.
+- Dependabot also watches the site's dependencies (minor and patch updates, grouped).
+
 ## 0.4.0
 
 dawg now has a full sound engine with Strudel's synth, effect and sample parameters, Strudel sample packs, wavetables (including ones made from your own audio), Euclidean drum rows and a pattern library, Orchid-style chords, sound previews with A/B, and one consistent set of keys across every screen. Projects from 0.3.0 open and sound the same, and the `dawg` SDK is 1.13.0 (every step additive within v1).
