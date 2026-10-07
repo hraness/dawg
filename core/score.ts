@@ -37,6 +37,7 @@ export const SCORE_LIMITS = Object.freeze({
   maxSamplerVoices: 64,
   maxSamplerVoiceNameLength: 32,
   maxSamplePathLength: 256,
+  maxSampleUrlLength: 1024,
   maxSampleGain: 2,
   /** |speed| bound; negative speeds play in reverse. */
   maxSampleSpeed: 8,
@@ -123,10 +124,17 @@ export type Sampler = Readonly<{
 }>;
 
 export type SampleRef = Readonly<{
-  /** Project-relative path, normally `tracks/<slug>/samples/<file>`. */
+  /**
+   * Project-relative path, normally `tracks/<slug>/samples/<file>`, or a
+   * pack sound `pack:<pack>/<sound>[:<n>]` (`pack:tidal-drum-machines/RolandTR909_bd:0`).
+   */
   src: string;
   /** Content hash (64 hex) when known; the decoded cache is keyed by it. */
   sha256?: string;
+  /** Pack sounds: the pinned HTTPS file the sound resolved to. */
+  url?: string;
+  /** Pack sounds: the pack's license (SPDX id or `none stated`). */
+  license?: string;
   /** MIDI note the file plays at in keyed mode, default 60. */
   root?: number;
   /** Start fraction 0..1 of the file. */
@@ -966,19 +974,24 @@ export function normalizeSampleRef(input: unknown, name: string): SampleRef {
       "invalid-track",
     );
   const src = input.src;
+  const packRef = typeof src === "string" && src.startsWith(PACK_PREFIX);
   if (
     typeof src !== "string" ||
     src.length === 0 ||
     src.length > SCORE_LIMITS.maxSamplePathLength ||
-    !isSafeRelativePath(src)
+    (packRef ? !isPackRef(src) : !isSafeRelativePath(src))
   )
     throw new ScoreValidationError(
-      `${label} src must be a project-relative path without "..", at most ${SCORE_LIMITS.maxSamplePathLength} characters`,
+      packRef
+        ? `${label} src must be pack:<pack>/<sound>[:<n>], at most ${SCORE_LIMITS.maxSamplePathLength} characters`
+        : `${label} src must be a project-relative path without "..", at most ${SCORE_LIMITS.maxSamplePathLength} characters`,
       "invalid-track",
     );
   const ref: {
     src: string;
     sha256?: string;
+    url?: string;
+    license?: string;
     root?: number;
     begin?: number;
     end?: number;
@@ -994,6 +1007,25 @@ export function normalizeSampleRef(input: unknown, name: string): SampleRef {
         "invalid-track",
       );
     ref.sha256 = input.sha256;
+  }
+  if (input.url !== undefined) {
+    if (!packRef || !isPinnedSampleUrl(input.url))
+      throw new ScoreValidationError(
+        `${label} url must be an https URL without credentials, at most ${SCORE_LIMITS.maxSampleUrlLength} characters, on a pack: sound`,
+        "invalid-track",
+      );
+    ref.url = input.url;
+  }
+  if (input.license !== undefined) {
+    if (
+      typeof input.license !== "string" ||
+      !/^[\x20-\x7e]{1,64}$/.test(input.license)
+    )
+      throw new ScoreValidationError(
+        `${label} license must be a short label such as CC0-1.0`,
+        "invalid-track",
+      );
+    ref.license = input.license;
   }
   if (input.root !== undefined) {
     if (
@@ -1068,6 +1100,69 @@ export function normalizeSampleRef(input: unknown, name: string): SampleRef {
     ref.choke = input.choke;
   }
   return Object.freeze(ref);
+}
+
+/** Prefix of a pack sound reference in `SampleRef.src`. */
+export const PACK_PREFIX = "pack:";
+
+/**
+ * `pack:<pack>/<sound>[:<n>]`: pack is a lowercase slug, sound a manifest
+ * key, `n` an index (wrapping, like Strudel `s("bd:3")`) or a note name for
+ * pitched packs (`pack:gm/gm_piano:C4`).
+ */
+const PACK_REF =
+  /^pack:([a-z0-9][a-z0-9._-]{0,63})\/([A-Za-z0-9][A-Za-z0-9_.~+-]{0,127})(?::([0-9]{1,4}|[A-Ga-g](?:#|s|b)?-?[0-9]))?$/;
+
+export type PackRef = Readonly<{
+  pack: string;
+  sound: string;
+  /** Index into the sound's files (wraps), or a note-zone name. */
+  n: number | string;
+}>;
+
+export function isPackRef(src: string): boolean {
+  return PACK_REF.test(src);
+}
+
+/** Splits `pack:<pack>/<sound>[:<n>]`; undefined for anything else. */
+export function parsePackRef(src: string): PackRef | undefined {
+  const match = PACK_REF.exec(src);
+  if (!match) return undefined;
+  const n = match[3];
+  return Object.freeze({
+    pack: match[1]!,
+    sound: match[2]!,
+    n: n === undefined ? 0 : /^[0-9]+$/.test(n) ? Number(n) : n,
+  });
+}
+
+export function formatPackRef(ref: PackRef): string {
+  return `${PACK_PREFIX}${ref.pack}/${ref.sound}${ref.n === 0 ? "" : `:${ref.n}`}`;
+}
+
+/** HTTPS (or loopback HTTP), no credentials, bounded: the URLs a score may pin. */
+export function isPinnedSampleUrl(value: unknown): value is string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > SCORE_LIMITS.maxSampleUrlLength ||
+    /[\u0000-\u0020]/.test(value)
+  )
+    return false;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.username !== "" || url.password !== "") return false;
+  // Plain HTTP only to loopback (local fixture servers); fetches still refuse
+  // it unless the pack store allows loopback.
+  return (
+    url.protocol === "https:" ||
+    (url.protocol === "http:" &&
+      ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname))
+  );
 }
 
 /** Relative, forward-slash, no empty/dot segments, no control characters. */

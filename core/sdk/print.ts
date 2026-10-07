@@ -321,6 +321,12 @@ function printSampler(sampler: Sampler, indent: string): string {
 
 function printSample(ref: SampleRef, indent: string, prefix: number): string {
   const entries: [string, string][] = [["src", str(ref.src)]];
+  // Pack sounds keep their pin in the file; local files are hashed on eval.
+  if (ref.src.startsWith("pack:")) {
+    if (ref.sha256 !== undefined) entries.push(["sha256", str(ref.sha256)]);
+    if (ref.url !== undefined) entries.push(["url", str(ref.url)]);
+    if (ref.license !== undefined) entries.push(["license", str(ref.license)]);
+  }
   if (ref.root !== undefined)
     entries.push(["root", str(midiToPitch(ref.root))]);
   if (ref.begin !== undefined) entries.push(["begin", num(ref.begin)]);

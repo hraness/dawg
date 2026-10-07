@@ -92,7 +92,11 @@ async function withSampleHashes(
     for (const voice of Object.values(voices as Record<string, unknown>)) {
       if (typeof voice !== "object" || voice === null) continue;
       const ref = voice as Record<string, unknown>;
-      if (typeof ref.src !== "string" || typeof ref.sha256 === "string")
+      if (
+        typeof ref.src !== "string" ||
+        typeof ref.sha256 === "string" ||
+        ref.src.startsWith("pack:")
+      )
         continue;
       const path = resolve(project, ref.src);
       if (relative(project, path).startsWith("..")) continue;

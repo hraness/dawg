@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.0.0";
+export const SDK_VERSION = "1.1.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -310,8 +310,19 @@ export function every(step: number, options: EveryOptions = {}): number[] {
 
 /** One sample voice. A bare string is `{ src }`. */
 export type SampleSpec = Readonly<{
-  /** Audio file: track-relative (`samples/kick.wav`) or project-relative (`tracks/x/samples/kick.wav`). */
+  /**
+   * Audio file: track-relative (`samples/kick.wav`) or project-relative
+   * (`tracks/x/samples/kick.wav`), or a pack sound
+   * `pack:<pack>/<sound>[:<n>]` such as `pack:tidal-drum-machines/RolandTR909_bd:0`
+   * (fetched once into the cache; see `/pack`).
+   */
   src: string;
+  /** Pack sounds: content hash dawg pinned when the sound was first used. */
+  sha256?: string;
+  /** Pack sounds: the pinned HTTPS file. */
+  url?: string;
+  /** Pack sounds: the pack's license, recorded for credits. */
+  license?: string;
   /** Pitch the file plays at, keyed mode only; default C4. */
   root?: Pitch;
   /** Start fraction 0..1 of the file, like Strudel `begin`. */
@@ -404,6 +415,9 @@ function sample(value: string | SampleSpec, name: string): SampleSpec {
     throw new DawgSdkError(`sampler voice ${name} needs a src path`);
   const out: {
     src: string;
+    sha256?: string;
+    url?: string;
+    license?: string;
     root?: number;
     begin?: number;
     end?: number;
@@ -412,6 +426,13 @@ function sample(value: string | SampleSpec, name: string): SampleSpec {
     loop?: boolean;
     choke?: string;
   } = { src: spec.src };
+  if (spec.src.startsWith("pack:")) {
+    if (spec.sha256 !== undefined)
+      out.sha256 = text(spec.sha256, `${name} sha256`);
+    if (spec.url !== undefined) out.url = text(spec.url, `${name} url`);
+    if (spec.license !== undefined)
+      out.license = text(spec.license, `${name} license`);
+  }
   if (spec.root !== undefined) out.root = midi(spec.root);
   if (spec.begin !== undefined) out.begin = unit(spec.begin, `${name} begin`);
   if (spec.end !== undefined) out.end = unit(spec.end, `${name} end`);
@@ -697,7 +718,10 @@ function localizeSampler(spec: SamplerSpec, slug: string): SamplerSpec {
     const src = voice.src.replace(/^\.\//, "");
     voices[name] = Object.freeze({
       ...voice,
-      src: src.startsWith("tracks/") ? src : `tracks/${slug}/${src}`,
+      src:
+        src.startsWith("tracks/") || src.startsWith("pack:")
+          ? src
+          : `tracks/${slug}/${src}`,
     });
   }
   return Object.freeze({ ...spec, voices: Object.freeze(voices) });
@@ -739,6 +763,8 @@ export type ScorePoint = Readonly<{ tick: number; value: number }>;
 export type ScoreSampleRef = Readonly<{
   src: string;
   sha256?: string;
+  url?: string;
+  license?: string;
   root?: number;
   begin?: number;
   end?: number;
@@ -908,6 +934,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function finite(value: unknown, label: string): number {
   if (typeof value !== "number" || !Number.isFinite(value))
     throw new DawgSdkError(`${label} must be a finite number`);
+  return value;
+}
+
+function text(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 1024)
+    throw new DawgSdkError(`${label} must be a short string`);
   return value;
 }
 

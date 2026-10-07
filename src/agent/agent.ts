@@ -4,6 +4,7 @@ import {
   type TrackScore,
 } from "../../core/score.ts";
 import type { MediaServices } from "../media/types.ts";
+import type { PackStore } from "../audio/packs.ts";
 import { compositionBrief } from "./brief.ts";
 import {
   GatewayError,
@@ -155,6 +156,8 @@ export type AgentHost = Readonly<{
   web?: WebHost;
   /** Runner and env for the media tools (root and slug come from `workspace`); absent → rejected. */
   media?: MediaServices;
+  /** Sample packs for the pack tools; default the user cache. */
+  packs?: PackStore;
 }>;
 
 export type AgentTurnOptions = Readonly<{
@@ -551,6 +554,18 @@ export async function executeCall(
       event: appliedEvent(plan.summary, snapshot.revision),
     };
   }
+  if (plan.kind === "prepare") {
+    try {
+      plan = await plan.run({
+        ...(context.host.packs ? { packs: context.host.packs } : {}),
+        ...(context.signal ? { signal: context.signal } : {}),
+      });
+    } catch (error) {
+      if (context.signal?.aborted) throw context.signal.reason;
+      if (isActionDiagnostic(error)) return reject(errorMessage(error));
+      return reject(`${call.name} failed: ${errorMessage(error)}`);
+    }
+  }
   if (plan.kind === "action") {
     const action: ActionContext = {
       ...(context.host.workspace ? { workspace: context.host.workspace } : {}),
@@ -561,6 +576,7 @@ export async function executeCall(
           }
         : {}),
       ...(context.host.web ? { web: context.host.web } : {}),
+      ...(context.host.packs ? { packs: context.host.packs } : {}),
       ...(context.signal ? { signal: context.signal } : {}),
     };
     try {

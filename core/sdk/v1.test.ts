@@ -109,6 +109,27 @@ describe("sdk v1 builders", () => {
     expect(voiceSlots(keyed).size).toBe(0);
   });
 
+  test("pack sounds keep their pinned src, sha256, url and license", () => {
+    const sha = "a".repeat(64);
+    const s = sampler({
+      kick: {
+        src: "pack:tidal-drum-machines/RolandTR909_bd",
+        sha256: sha,
+        url: "https://example.com/909/bd.wav",
+        license: "none stated",
+      },
+      hat: "pack:vcsl/hihat:2",
+    });
+    const t = track({ name: "Beat", instrument: s });
+    expect(t.sampler?.voices.kick).toEqual({
+      src: "pack:tidal-drum-machines/RolandTR909_bd",
+      sha256: sha,
+      url: "https://example.com/909/bd.wav",
+      license: "none stated",
+    });
+    expect(t.sampler?.voices.hat?.src).toBe("pack:vcsl/hihat:2");
+  });
+
   test("slices divides a file into equal voices", () => {
     const v = slices("samples/break.wav", 4, "brk");
     expect(Object.keys(v)).toEqual(["brk0", "brk1", "brk2", "brk3"]);

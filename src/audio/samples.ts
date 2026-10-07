@@ -27,10 +27,13 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  PACK_PREFIX,
   SCORE_LIMITS,
   isSamplerInstrument,
+  type SampleRef,
   type TrackScore,
 } from "../../core/score.ts";
+import { PackError, PackStore } from "./packs.ts";
 import { trackDirectories } from "../../core/sdk/print.ts";
 import { WavFormatError, parseWav } from "../media/vendor/wav.ts";
 import { WorkspaceError, resolveReadPath } from "../agent/workspace.ts";
@@ -455,6 +458,8 @@ export type SampleLibraryOptions = Readonly<{
   /** ffmpeg binary, `null` for none; default `Bun.which("ffmpeg")`. */
   ffmpeg?: string | null;
   runFfmpeg?: FfmpegRunner;
+  /** Resolves `pack:` voices; default a `PackStore` on the user cache. */
+  packs?: PackStore;
 }>;
 
 type MemoryEntry = { sample: DecodedSample; bytes: number };
@@ -488,6 +493,14 @@ export class SampleLibrary implements SampleSource {
         ? (Bun.which("ffmpeg") ?? null)
         : options.ffmpeg;
     this.runFfmpeg = options.runFfmpeg;
+    this.packStore = options.packs;
+  }
+
+  private packStore: PackStore | undefined;
+
+  private get packs(): PackStore {
+    this.packStore ??= new PackStore();
+    return this.packStore;
   }
 
   /** Decode/cache counters, for tests and diagnostics. */
@@ -509,6 +522,32 @@ export class SampleLibrary implements SampleSource {
       for (const voice of names.slice(0, SCORE_LIMITS.maxSamplerVoices)) {
         const ref = track.sampler.voices[voice]!;
         let src = ref.src;
+        if (src.startsWith(PACK_PREFIX)) {
+          try {
+            const loaded = await this.loadPack(ref);
+            voices.set(sampleKey(track.id, voice), loaded.sample);
+            if (loaded.warning)
+              problems.push({
+                trackId: track.id,
+                voice,
+                src,
+                level: "warning",
+                message: `${voice} · ${src} · ${loaded.warning}`,
+              });
+          } catch (error) {
+            problems.push({
+              trackId: track.id,
+              voice,
+              src,
+              level: "error",
+              message:
+                error instanceof PackError
+                  ? `${voice} · ${src} · ${error.message}`
+                  : describeFailure(voice, src, error, this.ffmpeg),
+            });
+          }
+          continue;
+        }
         if (!src.startsWith("tracks/")) {
           dirs ??= trackDirectories(score);
           src = `tracks/${dirs.get(track.id) ?? track.id}/${src.replace(/^\.\//, "")}`;
@@ -535,6 +574,68 @@ export class SampleLibrary implements SampleSource {
       }
     }
     return Object.freeze({ voices, problems: Object.freeze(problems) });
+  }
+
+  /**
+   * A `pack:` voice. With a pinned sha256 the decoded asset cache answers
+   * without the network; otherwise the file comes from the pack store
+   * (its file cache, then a download) and is checked against the pin.
+   */
+  private async loadPack(
+    ref: SampleRef,
+  ): Promise<{ sample: DecodedSample; warning?: string }> {
+    if (ref.sha256) {
+      const hit = this.fromMemory(ref.sha256);
+      if (hit) return { sample: hit };
+      const pcm = await this.fromDisk(ref.sha256);
+      if (pcm) {
+        this.stats.diskHits += 1;
+        return { sample: this.admit(ref.sha256, pcm) };
+      }
+    }
+    let url = ref.url;
+    let warning: string | undefined;
+    if (!url) {
+      url = (await this.packs.resolve(ref.src)).url;
+      if (!ref.sha256)
+        warning =
+          "not pinned · re-pick it with /kit, /pack or use_sound so renders stay reproducible";
+    }
+    const file = await this.packs.fetchFile(url, ref.sha256);
+    if (file.bytes.byteLength > SCORE_LIMITS.maxSampleFileBytes)
+      throw new SampleLimitError(
+        `${formatMiB(file.bytes.byteLength)} is over the ${formatMiB(SCORE_LIMITS.maxSampleFileBytes)} sample file limit`,
+      );
+    const hit = this.fromMemory(file.sha256);
+    if (hit) return { sample: hit, ...(warning ? { warning } : {}) };
+    let pcm = await this.fromDisk(file.sha256);
+    if (pcm) this.stats.diskHits += 1;
+    else {
+      pcm = await this.decode(file.bytes, file.path);
+      this.stats.decodes += 1;
+      await this.toDisk(file.sha256, pcm);
+    }
+    return {
+      sample: this.admit(file.sha256, pcm),
+      ...(warning ? { warning } : {}),
+    };
+  }
+
+  private admit(sha256: string, pcm: PcmData): DecodedSample {
+    if (pcm.frames / pcm.sampleRate > SCORE_LIMITS.maxSampleSeconds)
+      throw new SampleLimitError(
+        `${Math.round(pcm.frames / pcm.sampleRate)} s is over the ${SCORE_LIMITS.maxSampleSeconds / 60} minute sample limit`,
+      );
+    if (pcm.frames === 0) throw new SampleDecodeError("it contains no audio");
+    const sample: DecodedSample = Object.freeze({
+      sha256,
+      sampleRate: pcm.sampleRate,
+      channels: pcm.channels,
+      frames: pcm.frames,
+      mono: monoMix(pcm),
+    });
+    this.remember(sample);
+    return sample;
   }
 
   private async loadFile(src: string): Promise<DecodedSample> {

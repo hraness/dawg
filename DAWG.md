@@ -220,7 +220,7 @@ The printer (`core/sdk/print.ts`) is deterministic and Prettier-stable (`prettie
 
 `dawg check` typechecks and evaluates the project, prints diagnostics to stderr and `ok · 3 tracks, 12 notes · types 26 ms · eval 21 ms` on success, and exits 1 on any problem or outside a project.
 
-Score format. The score stays `track.loop/v1` with `version: 1`: every addition is an optional field, so older documents still parse and older dawg versions reject only documents that use the new fields. Tracks may carry `sampler: {mode: "oneshot" | "keyed", voices: {name: {src, sha256?, root?, begin?, end?, gain?, speed?, loop?, choke?}}}` with bounds in `SCORE_LIMITS` (64 voices, 256-character relative `src`, gain ≤ 2, speed ≤ 8). One-shot voices map to pitches from 36 in voice-name order. Sampler tracks play their samples; see [Samples](#samples). `diffScores` uses four operations added alongside: `removeTrack`, `moveTrack`, `setKey` and `setMeter`, which dawgd rebases and the planner accepts.
+Score format. The score stays `track.loop/v1` with `version: 1`: every addition is an optional field, so older documents still parse and older dawg versions reject only documents that use the new fields. Tracks may carry `sampler: {mode: "oneshot" | "keyed", voices: {name: {src, sha256?, url?, license?, root?, begin?, end?, gain?, speed?, loop?, choke?}}}` with bounds in `SCORE_LIMITS` (64 voices, 256-character relative `src`, gain ≤ 2, speed ≤ 8). One-shot voices map to pitches from 36 in voice-name order. Sampler tracks play their samples; see [Samples](#samples). `diffScores` uses four operations added alongside: `removeTrack`, `moveTrack`, `setKey` and `setMeter`, which dawgd rebases and the planner accepts.
 
 ## Samples
 
@@ -265,6 +265,50 @@ Decoding: WAV (PCM 16/24/32-bit integer and 32-bit float, any channel count and 
 
 In the TUI, oneshot sampler tracks show one highway lane per voice, labelled by name; keyed tracks use the pitch axis. `/tracks` shows each sampler's sample count and how many failed to load. `/sample <path> [as <voice>]` adds a voice to the focused track: a file outside the track directory is copied into `tracks/<slug>/samples/`, the voice name defaults to the file name, and a focused synth track that already has notes gets a new `samples` track instead. Existing hits keep their voice when the new name shifts the slots. `/sample` alone lists the voices. The agent's `import_sample` media tool writes 48 kHz stereo WAVs to the same folder.
 
+## Sample packs
+
+dawg reads Strudel's sample-pack manifests, so the packs Strudel users know work here, without any Strudel code (Strudel is AGPL; dawg's loader in `src/audio/packs.ts` is written from the documented manifest format only). A manifest is JSON: `{"_base": "<url>/", "<sound>": ["a.wav", "b.wav"] | {"c4": "c4.wav"}}`. A list is a set of variations addressed `<sound>:<n>`; a note map is a keyed instrument. `github:<user>/<repo>[/<branch>]` means `https://raw.githubusercontent.com/<user>/<repo>/<branch or main>/strudel.json`, the rule Strudel documents. General MIDI soundfonts load from gleitz/midi-js-soundfonts' `names.json` and become keyed samplers with one zone per sampled note.
+
+Fetching is lazy. Adding a pack fetches only its manifest. A sample file is fetched the first time a track uses it, decoded, and stored in the existing `.dawg/assets/<sha256>.pcm` cache (with a copy of the raw file in the pack cache), so a pack never lands in the repo or the npm package. Only HTTPS is accepted (loopback HTTP only under `DAWG_PACKS_ALLOW_LOOPBACK_HTTP=1`, for tests), URLs may not carry credentials, every fetch has a timeout, and files keep the same size and duration limits as local samples. Manifests and files are cached under `$XDG_CACHE_HOME/dawg/packs` (default `~/.cache/dawg/packs`; `DAWG_PACKS_DIR` overrides), so a pack sound used once plays offline afterwards.
+
+A sampler voice references a pack sound as `pack:<pack>/<sound>[:<n>]`, like Strudel's `s("bd:3")`; banks follow Strudel's `bank("RolandTR909")` naming (`RolandTR909_bd`). When the sound is first used dawg pins it in the track: `{src: "pack:tidal-drum-machines/RolandTR909_bd", sha256, url, license}`. Renders load the pinned sha256, so they stay reproducible even if the pack changes upstream; a pin whose file no longer matches is reported, not silently replaced. This is an additive field set on `SampleRef`, and older documents decode unchanged.
+
+```ts
+instrument: sampler({
+  kick: "pack:tidal-drum-machines/RolandTR909_bd",
+  hat: "pack:vcsl/hihat:2",
+}),
+```
+
+| Command                                                    | Does                                                                                                                                                                                                   |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/pack` or `/pack list`                                    | the built-in catalog and your added packs, with licenses                                                                                                                                               |
+| `/pack add <url \| github:user/repo[/branch]> [as <name>]` | register a manifest (fetches the manifest only)                                                                                                                                                        |
+| `/pack info <name>`                                        | license, source, sound names                                                                                                                                                                           |
+| `/pack remove <name>`                                      | forget an added pack (built-ins stay)                                                                                                                                                                  |
+| `/pack use <pack>/<sound>[:<n>] [as <voice>]`              | add one pack sound as a voice on the focused track                                                                                                                                                     |
+| `/kit [<bank>]`                                            | turn the focused drum track into a sampler on a bank (`909` by default; `808`, `707`, `606`, `linn`, `lm1`, `dmx`, `cr78`, `uzu`, `dirt`, or any bank name like `RolandTR909`); `/kit list` lists them |
+
+`/menu` (Ctrl-K) has a **Sounds** section: drum kits, instruments (the Salamander piano and `gm_*` soundfonts, Strudel naming), "use a sound", and packs. The agent has `list_packs`, `search_sounds {query}` and `use_sound {sound, track?, voice?}`. A pack sound plays from keyboard play mode like any sampler voice. `kitFromBank(bank)` in `src/audio/packs.ts` returns the voice map for a bank (kick, snare, hat, …) for other kit lists.
+
+Every pack is fully supported, whatever its license; dawg records each sample's pack and license (or `none stated`) in the pinned voice. A render that uses pack sounds names the packs in the WAV's INFO comment and prints a `credits ·` line, and a project that uses a CC-BY or CC-BY-SA pack gets a `CREDITS.md` with the required attribution (dawg leaves a hand-written `CREDITS.md` alone).
+
+Built-in catalog (manifests are the GitHub-raw equivalents of the files Strudel's REPL loads from its CDN; licenses read from each repository on 2026-10-07):
+
+| Pack                  | Manifest                                                                                                           | Samples from                                                          | License                       |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- | ----------------------------- |
+| `tidal-drum-machines` | `https://raw.githubusercontent.com/felixroos/dough-samples/main/tidal-drum-machines.json`                          | ritchse/tidal-drum-machines (684 sounds: TR-808, TR-909, LinnDrum, …) | none stated                   |
+| `dirt-samples`        | `github:tidalcycles/dirt-samples` → `https://raw.githubusercontent.com/tidalcycles/dirt-samples/main/strudel.json` | tidalcycles/Dirt-Samples (219 sounds)                                 | none stated                   |
+| `uzu-drumkit`         | `github:tidalcycles/uzu-drumkit`                                                                                   | tidalcycles/uzu-drumkit                                               | Unlicense                     |
+| `vcsl`                | `https://raw.githubusercontent.com/felixroos/dough-samples/main/vcsl.json`                                         | sgossner/VCSL (fetched per file; the repo is ~4 GB)                   | CC0-1.0                       |
+| `piano`               | `https://raw.githubusercontent.com/felixroos/dough-samples/main/piano.json`                                        | Salamander Grand Piano V3, Alexander Holm                             | CC-BY-3.0                     |
+| `mridangam`           | `https://raw.githubusercontent.com/felixroos/dough-samples/main/mridangam.json`                                    | yaxu/mrid, Arthur Carabott 2022                                       | CC-BY-SA-4.0 (per its README) |
+| `emu-sp12`            | `https://raw.githubusercontent.com/felixroos/dough-samples/main/EmuSP12.json`                                      | ritchse/tidal-drum-machines                                           | none stated                   |
+| `gm`                  | `https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/names.json`                                                | FluidR3_GM via gleitz/midi-js-soundfonts (code MIT)                   | CC-BY-3.0                     |
+| `gm-musyngkite`       | `https://gleitz.github.io/midi-js-soundfonts/MusyngKite/names.json`                                                | Musyng Kite via gleitz/midi-js-soundfonts                             | CC-BY-SA-3.0                  |
+
+felixroos/dough-samples, the manifest host, has no license file. Strudel's own `gm_*` sounds come from a different soundfont set; dawg uses FluidR3_GM with the same names.
+
 ## Play mode (computer keyboard)
 
 `Ctrl-P` or `/play` turns the computer keyboard into a piano for the focused track, using the "musical typing" layout GarageBand, Logic, BandLab, FL Studio and Ableton share. `Esc` or `/play off` leaves it and every normal binding is back. Typing `/` starts a slash command without leaving the mode (`/click 40%`, `/play off`).
@@ -305,6 +349,7 @@ Recording: with record armed and the transport running, each note is quantized t
 | ---------- | ---------------------------------------------------------------------------------------------- |
 | Track      | name, instrument, mute, solo, volume, pan                                                      |
 | Parameters | instrument; a sampler's mode and voices (synths have no knobs beyond the instrument)           |
+| Sounds     | drum kits (`/kit`), instruments (piano, `gm_*` soundfonts), use a pack sound, packs            |
 | Effects    | filter (on, cutoff, resonance), delay (on, beats, feedback, mix), reverb (on, mix, size)       |
 | Automation | each `AUTOMATION_LANES` lane: its points as `beat N  value` rows, add points, ramp, clear lane |
 | Mix        | every track's volume, pan, mute and solo; choosing another track focuses it first              |
