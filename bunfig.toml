@@ -1,0 +1,3 @@
+[test]
+# site/ is the dawg.sh marketing site; it has its own tests and CI job.
+pathIgnorePatterns = ["site/**"]

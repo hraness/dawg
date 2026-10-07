@@ -1,0 +1,5 @@
+# Build output and generated files of the dawg.sh site (site/.gitignore).
+site/.next/
+site/next-env.d.ts
+site/public/theme-bootstrap.js
+site/public/demo/
