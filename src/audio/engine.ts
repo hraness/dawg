@@ -4,6 +4,7 @@ import { LoopPlayer } from "./player.ts";
 import { LoopRenderer, type LoopRender } from "./renderer.ts";
 import { clickSounds, clicksIn, type ClickLevel } from "./click.ts";
 import type { LiveNotePcm } from "./live.ts";
+import { levelOf, type SoundLevel } from "./preview.ts";
 import { DEFAULT_SAMPLE_RATE, RENDER_CHANNELS } from "./wav.ts";
 
 /**
@@ -304,6 +305,9 @@ export class AudioEngine {
   private queued: PlayRequest | undefined;
   private draining = false;
   private lastRenderMs = 0;
+  /** The loop last swapped in, for `level` (measured on demand, once). */
+  private lastLoopPcm: Int16Array | undefined;
+  private measured: { pcm: Int16Array; level: SoundLevel } | undefined;
   private respawns = 0;
   private respawnTimer: ReturnType<typeof setTimeout> | undefined;
   /** Play mode: keep a player running without a loop for live voices. */
@@ -374,6 +378,19 @@ export class AudioEngine {
   }
 
   /** Whether live voices and the click can sound (a streaming backend). */
+  /**
+   * RMS, peak and clips of the loop now playing (the audition meter);
+   * measured once per render, on first read. Undefined before any render
+   * or with no audio device.
+   */
+  public get level(): SoundLevel | undefined {
+    const pcm = this.lastLoopPcm;
+    if (!pcm) return undefined;
+    if (this.measured?.pcm !== pcm)
+      this.measured = { pcm, level: levelOf(pcm) };
+    return this.measured.level;
+  }
+
   public get canMonitor(): boolean {
     return this.info.backend !== "none" && !this.fallback;
   }
@@ -502,8 +519,10 @@ export class AudioEngine {
           const render = await this.renderer.render(request.score);
           this.lastRenderMs = render.renderMs;
           // Stopped while rendering: the result is stale, not an error.
-          if (request.generation === this.generation)
+          if (request.generation === this.generation) {
             await this.apply(this.toLoop(render, request.score), request);
+            this.lastLoopPcm = render.pcm;
+          }
           for (const waiter of request.waiters) waiter.resolve();
         } catch (error) {
           for (const waiter of request.waiters)
@@ -572,6 +591,7 @@ export class AudioEngine {
 
   public async stopAsync(): Promise<void> {
     this.generation += 1;
+    this.lastLoopPcm = undefined;
     this.respawns = 0;
     if (this.respawnTimer) clearTimeout(this.respawnTimer);
     this.respawnTimer = undefined;

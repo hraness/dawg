@@ -6,6 +6,7 @@ import {
 import { CHORD_PROCESS } from "../../core/chords.ts";
 import type { MediaServices } from "../media/types.ts";
 import type { PackStore } from "../audio/packs.ts";
+import type { PreviewHost } from "./preview-tool.ts";
 import { compositionBrief } from "./brief.ts";
 import {
   GatewayError,
@@ -161,6 +162,8 @@ export type AgentHost = Readonly<{
   media?: MediaServices;
   /** Sample packs for the pack tools; default the user cache. */
   packs?: PackStore;
+  /** How preview_sound renders and plays (the TUI plays it once). */
+  preview?: PreviewHost;
 }>;
 
 export type AgentTurnOptions = Readonly<{
@@ -199,6 +202,7 @@ export const AGENT_SYSTEM_PROMPT = [
   "Synth voices: set_synth shapes a synth track with Strudel params (ADSR, lpf/lpenv filter envelopes, fm/fmh, supersaw unison/detune, vib, penv, noise; z_* ZzFX sounds take slide/pitchJump/lfo/zcrush…) or a preset (pad lead pluck bass keys bell…).",
   "Sampler voices: set_sample sets Strudel sample controls per voice (begin end speed unit loop loopBegin loopEnd clip/legato fit loopAt accelerate squiz cut); splice = slices with fit.",
   "Effects (set_fx; set_effects and set_automation): the brief's effects list is the fixed chain order with each effect's simple params. set_fx turns an effect on with good defaults, loads a preset or sets params by dawg or Strudel name. Lanes: volume, pan, filter, resonance, delay-feedback, delay-mix, wt and <effect>-<param> (e.g. autofilter-cutoff). Sidechain: put pads/bass on `orbit` 2 and give the kick `duck` (orbit 2, preset pump); a ducker never ducks itself.",
+  "Previewing: preview_sound renders a track, or candidate sound tool calls (changes: [{tool, args}]), without committing, returns loudness, brightness and a comparison, and plays it once in the user's window. Use it when choosing between sounds (tables, presets, effect amounts), say how it sounds, then commit with the normal tools.",
   "Wavetable synth: set_wavetable picks a table (built-ins offline, Strudel wt_ sets fetched once) and scans it by position wt.",
   "If a call is rejected, read the diagnostic and either fix the arguments or stop.",
   WORKSPACE_PROMPT,
@@ -584,6 +588,7 @@ export async function executeCall(
         : {}),
       ...(context.host.web ? { web: context.host.web } : {}),
       ...(context.host.packs ? { packs: context.host.packs } : {}),
+      ...(context.host.preview ? { preview: context.host.preview } : {}),
       ...(context.signal ? { signal: context.signal } : {}),
     };
     try {
