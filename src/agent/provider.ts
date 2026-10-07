@@ -6,9 +6,12 @@ import {
   PROVIDER_CHOICES,
   readConfig,
   resolveGatewayKey,
+  resolveOpenRouterKey,
   type AuthEnv,
   type CredentialSource,
+  type DawgConfig,
   type ProviderChoice,
+  type SubscriptionSlot,
 } from "../auth/credentials.ts";
 import { systemRunner } from "../auth/runner.ts";
 import {
@@ -20,45 +23,83 @@ import {
 } from "./agent.ts";
 import {
   createGatewayClient,
+  createOpenRouterClient,
+  type ApiProvider,
   type GatewayClient,
-  type GatewayModel,
 } from "./gateway.ts";
+import {
+  defaultModelId,
+  MODEL_CATALOG,
+  modelAlias,
+  resolveModelChoice,
+} from "./models.ts";
 import { runTextAgentTurn } from "./xcb-agent.ts";
 import {
+  describeReason,
   readCapabilities,
   resolveXcbBin,
   shortModelLabel,
-  xcbGenerate,
+  type XcbAccount,
+  xcbGenerateWithRetry,
   type XcbCapabilities,
 } from "./xcb.ts";
 
 /**
- * Which model backend a turn uses. `gateway` is the streaming tool-calling
- * loop on the Vercel AI Gateway; `xcb` emulates tools over `xcb --json
- * generate` with an AI subscription; `offline` means only direct commands.
+ * Which model backend a turn uses. `gateway` and `openrouter` run the
+ * streaming tool-calling loop on an OpenAI-compatible API; `xcb` emulates
+ * tools over `xcb --json generate` with a Codex or Claude subscription;
+ * `offline` means only direct commands.
  */
+export type ApiSelection = Readonly<{
+  kind: ApiProvider;
+  choice: ProviderChoice;
+  apiKey: string;
+  source: CredentialSource;
+  /** The exact provider model ID (`anthropic/claude-opus-5.5`). */
+  modelId: string;
+}>;
+export type XcbSelection = Readonly<{
+  kind: "xcb";
+  choice: ProviderChoice;
+  /** `codex` or `claude` (or another xcb provider for `--xcb`). */
+  family: string;
+  bin: string;
+  account: string;
+  accountLabel: string;
+  model: string;
+  /** xcb admits this account on its first call, which takes longer. */
+  admissionPending?: boolean;
+}>;
 export type ProviderSelection =
+  | ApiSelection
+  | XcbSelection
   | Readonly<{
-      kind: "gateway";
+      kind: "offline";
       choice: ProviderChoice;
-      apiKey: string;
-      source: CredentialSource;
-    }>
-  | Readonly<{
-      kind: "xcb";
-      choice: ProviderChoice;
-      bin: string;
-      account: string;
-      accountLabel: string;
-      model: string;
-      /** xcb admits this account on its first call, which takes longer. */
-      admissionPending?: boolean;
-    }>
-  | Readonly<{ kind: "offline"; choice: ProviderChoice; reason: string }>;
+      reason: string;
+      /**
+       * Set when a saved choice stopped working (key revoked, account gone):
+       * the host says so once and offers the picker, never another provider.
+       */
+      invalidSaved?: boolean;
+    }>;
+
+export function isApiSelection(
+  selection: ProviderSelection,
+): selection is ApiSelection {
+  return selection.kind === "gateway" || selection.kind === "openrouter";
+}
 
 export const LOGIN_HINT = "run `dawg login` to enable the agent";
 /** The small, cheap model used for one-line helpers such as session names. */
 export const GATEWAY_SMALL_MODEL = "anthropic/claude-haiku-4.5";
+export const OPENROUTER_SMALL_MODEL = "anthropic/claude-haiku-4.5";
+
+export function apiClient(selection: ApiSelection): GatewayClient {
+  return selection.kind === "openrouter"
+    ? createOpenRouterClient({ apiKey: selection.apiKey })
+    : createGatewayClient({ apiKey: selection.apiKey });
+}
 
 export function providerChoice(
   env: Readonly<Record<string, string | undefined>>,
@@ -71,9 +112,41 @@ export function providerChoice(
 }
 
 /**
+ * The model for a key-based provider: `DAWG_MODEL`, then the model saved by
+ * `/model` or `dawg login`, then Opus 5.5. Throws on an unknown `DAWG_MODEL`.
+ */
+export function apiModelId(
+  service: ApiProvider,
+  env: Readonly<Record<string, string | undefined>>,
+  config: DawgConfig,
+): string {
+  const fromEnv = env.DAWG_MODEL?.trim();
+  if (fromEnv) {
+    const id = resolveModelChoice(service, fromEnv);
+    if (!id)
+      throw new Error(
+        `unknown DAWG_MODEL "${fromEnv.slice(0, 40)}"; use one of ${MODEL_CATALOG.map((row) => row.alias).join(", ")} or a vendor/model ID`,
+      );
+    return id;
+  }
+  return (
+    (service === "openrouter" ? config.openrouterModel : config.gatewayModel) ??
+    defaultModelId(service)
+  );
+}
+
+const FAMILY_NAMES: Readonly<Record<string, string>> = Object.freeze({
+  codex: "ChatGPT/Codex subscription",
+  claude: "Claude subscription",
+  xcb: "xcb account",
+});
+
+/**
  * Resolve the provider: `DAWG_PROVIDER`, then the choice saved by `dawg
- * login`, then `auto` (gateway when a key exists, else an available xcb
- * account, else offline).
+ * login` or `/model`, then `auto` (AI Gateway key, then OpenRouter key, then
+ * a ready Codex or Claude subscription). A saved choice that stops working
+ * resolves to `offline` with `invalidSaved`; it never falls through to a
+ * different provider.
  */
 export async function selectProvider(
   auth: AuthEnv = defaultAuthEnv(systemRunner),
@@ -81,82 +154,129 @@ export async function selectProvider(
 ): Promise<ProviderSelection> {
   const config = await readConfig(auth);
   const choice = providerChoice(auth.env, config.provider);
-  if (choice === "gateway" || choice === "auto") {
-    const key = await resolveGatewayKey(auth);
-    if (key)
-      return { kind: "gateway", choice, apiKey: key.key, source: key.source };
-    if (choice === "gateway")
+  const explicit = choice !== "auto";
+  const offline = (reason: string): ProviderSelection => ({
+    kind: "offline",
+    choice,
+    reason,
+    ...(explicit && config.provider === choice && !auth.env.DAWG_PROVIDER
+      ? { invalidSaved: true }
+      : {}),
+  });
+  for (const service of ["gateway", "openrouter"] as const) {
+    if (choice !== service && choice !== "auto") continue;
+    const key =
+      service === "gateway"
+        ? await resolveGatewayKey(auth)
+        : await resolveOpenRouterKey(auth);
+    if (key) {
+      let modelId: string;
+      try {
+        modelId = apiModelId(service, auth.env, config);
+      } catch (error) {
+        return offline((error as Error).message);
+      }
       return {
-        kind: "offline",
+        kind: service,
         choice,
-        reason: `no AI Gateway key; ${LOGIN_HINT}`,
+        apiKey: key.key,
+        source: key.source,
+        modelId,
       };
+    }
+    if (choice === service)
+      return offline(
+        `no ${service === "gateway" ? "AI Gateway" : "OpenRouter"} key any more; run \`dawg login ${service}\``,
+      );
   }
   const bin = resolveXcbBin(auth.env, auth.runner);
   if (!bin)
-    return {
-      kind: "offline",
-      choice,
-      reason:
-        choice === "xcb"
-          ? "xcb is not installed; see `dawg login --xcb`"
-          : `no model configured; ${LOGIN_HINT}`,
-    };
+    return offline(
+      explicit
+        ? `xcb is not installed; run \`dawg login ${choice === "xcb" ? "--xcb" : choice}\``
+        : `no model configured; ${LOGIN_HINT}`,
+    );
   let capabilities: XcbCapabilities;
   try {
     capabilities =
       options.capabilities ?? (await readCapabilities(bin, auth.runner));
   } catch {
-    return {
-      kind: "offline",
-      choice,
-      reason: `xcb capabilities unavailable; ${LOGIN_HINT}`,
-    };
+    return offline(`xcb capabilities unavailable; ${LOGIN_HINT}`);
   }
-  const saved = config.xcb;
-  if (saved) {
-    const account = capabilities.accounts.find(
-      (row) => row.id === saved.account,
-    );
-    if (
-      account?.available &&
-      account.models.some((model) => model.key === saved.model)
-    )
-      return {
-        kind: "xcb",
-        choice,
-        bin,
-        account: account.id,
-        accountLabel: account.label,
-        model: saved.model,
-        ...(account.admission === "pending" ? { admissionPending: true } : {}),
-      };
-    if (choice === "xcb")
-      return {
-        kind: "offline",
-        choice,
-        reason: `xcb account ${saved.account.slice(0, 12)} is ${account?.reason ?? "missing"}; run \`dawg login --xcb\``,
-      };
-  }
-  const account = capabilities.accounts.find((row) => row.available);
-  if (account)
-    return {
-      kind: "xcb",
-      choice,
-      bin,
-      account: account.id,
-      accountLabel: account.label,
-      model: account.models[0]!.key,
-      ...(account.admission === "pending" ? { admissionPending: true } : {}),
-    };
-  return {
-    kind: "offline",
+  const toSelection = (
+    family: string,
+    account: XcbAccount,
+    model: string,
+  ): XcbSelection => ({
+    kind: "xcb",
     choice,
-    reason:
-      choice === "xcb"
-        ? "no xcb account is qualified for applications; run `dawg login --xcb`"
-        : `no model configured; ${LOGIN_HINT}`,
-  };
+    family,
+    bin,
+    account: account.id,
+    accountLabel: account.label,
+    model,
+    ...(account.admission === "pending" ? { admissionPending: true } : {}),
+  });
+  const families: SubscriptionSlot[] =
+    choice === "auto"
+      ? ["codex", "claude"]
+      : explicit
+        ? [choice as SubscriptionSlot]
+        : [];
+  for (const family of families) {
+    const saved = config[family];
+    const inFamily = (account: XcbAccount) =>
+      family === "xcb" || account.provider === family;
+    if (saved) {
+      const account = capabilities.accounts.find(
+        (row) => row.id === saved.account,
+      );
+      if (
+        account?.available &&
+        account.models.some((model) => model.key === saved.model)
+      )
+        return toSelection(
+          family === "xcb" ? account.provider : family,
+          account,
+          saved.model,
+        );
+      if (choice === family)
+        return offline(
+          `your ${FAMILY_NAMES[family]} (${account?.label ?? saved.account.slice(0, 12)}) is ${
+            !account
+              ? "no longer listed by xcb"
+              : account.available
+                ? `missing model ${saved.model}`
+                : describeReason(account.reason).replace(
+                    "<account>",
+                    account.id,
+                  )
+          }; run \`dawg login ${family === "xcb" ? "--xcb" : family}\``,
+        );
+    }
+    // No saved pick: the first usable account, ready before admission pending.
+    const usable = capabilities.accounts
+      .filter(
+        (account) =>
+          account.available && inFamily(account) && account.models.length > 0,
+      )
+      .sort(
+        (a, b) =>
+          Number(a.admission === "pending") - Number(b.admission === "pending"),
+      );
+    const account = usable[0];
+    if (account)
+      return toSelection(
+        family === "xcb" ? account.provider : family,
+        account,
+        account.models[0]!.key,
+      );
+  }
+  return offline(
+    explicit
+      ? `no ${FAMILY_NAMES[choice] ?? choice} is ready; run \`dawg login ${choice === "xcb" ? "--xcb" : choice}\``
+      : `no model configured; ${LOGIN_HINT}`,
+  );
 }
 
 /**
@@ -179,26 +299,35 @@ export function providerFingerprint(
   // Presence only: a process's environment cannot change under it, and the
   // fingerprint must never carry secret material.
   parts.push(
-    `env:${env.DAWG_PROVIDER ?? "-"}:${env.AI_GATEWAY_API_KEY ? 1 : 0}`,
+    `env:${env.DAWG_PROVIDER ?? "-"}:${env.AI_GATEWAY_API_KEY ? 1 : 0}:${env.OPENROUTER_API_KEY ? 1 : 0}`,
   );
   return parts.join("|");
 }
 
-/** `opus-5.5 · gateway`, `claude/sonnet · xcb`, or `offline`. */
-export function providerLabel(
-  selection: ProviderSelection,
-  gatewayModel: GatewayModel,
-): string {
-  if (selection.kind === "gateway") return `${gatewayModel} · gateway`;
+/** `opus-5.5 · gateway`, `sonnet · claude`, or `offline`. */
+export function providerLabel(selection: ProviderSelection): string {
+  if (isApiSelection(selection))
+    return `${modelAlias(selection.kind, selection.modelId)} · ${selection.kind}`;
   if (selection.kind === "xcb")
-    return `${shortModelLabel(selection.model)} · xcb`;
+    return `${shortModelLabel(selection.model)} · ${selection.family}`;
   return "offline";
+}
+
+/** The model half of the label, for the header and spend line. */
+export function selectionModel(
+  selection: ProviderSelection,
+): string | undefined {
+  if (isApiSelection(selection))
+    return modelAlias(selection.kind, selection.modelId);
+  if (selection.kind === "xcb") return shortModelLabel(selection.model);
+  return undefined;
 }
 
 export type ProviderTurnOptions = Readonly<{
   selection: ProviderSelection;
   prompt: string;
-  model: GatewayModel;
+  /** Overrides the selection's model (tests); normally unset. */
+  model?: string;
   host: AgentHost;
   onEvent?: (event: AgentEvent) => void;
   signal?: AbortSignal;
@@ -220,20 +349,18 @@ export async function runProviderTurn(
     ...(options.signal ? { signal: options.signal } : {}),
     ...(options.budget ? { budget: options.budget } : {}),
   };
-  if (selection.kind === "gateway")
+  if (isApiSelection(selection))
     return runAgentTurn({
       ...common,
-      model: options.model,
-      client:
-        options.gatewayClient ??
-        createGatewayClient({ apiKey: selection.apiKey }),
+      model: options.model ?? selection.modelId,
+      client: options.gatewayClient ?? apiClient(selection),
     });
   if (selection.kind === "xcb") {
     const runner = options.runner ?? systemRunner;
     return runTextAgentTurn({
       ...common,
       generate: (prompt, call) =>
-        xcbGenerate({
+        xcbGenerateWithRetry({
           bin: selection.bin,
           runner,
           account: selection.account,
@@ -289,15 +416,16 @@ export async function generateText(
     ? AbortSignal.any([options.signal, timeout])
     : timeout;
   const input = prompt.slice(0, 16_000);
-  if (selection.kind === "gateway") {
-    const client =
-      options.gatewayClient ??
-      createGatewayClient({ apiKey: selection.apiKey });
+  if (isApiSelection(selection)) {
+    const client = options.gatewayClient ?? apiClient(selection);
     let text = "";
     for await (const event of client.stream(
       {
         model: "opus-5.5",
-        modelId: GATEWAY_SMALL_MODEL,
+        modelId:
+          selection.kind === "openrouter"
+            ? OPENROUTER_SMALL_MODEL
+            : GATEWAY_SMALL_MODEL,
         maxTokens,
         messages: [{ role: "user", content: input }],
         maxResponseBytes: 16 * 1024,
@@ -310,7 +438,7 @@ export async function generateText(
     return text.trim().slice(0, 512);
   }
   if (selection.kind === "xcb") {
-    const text = await xcbGenerate({
+    const text = await xcbGenerateWithRetry({
       bin: selection.bin,
       runner: options.runner ?? systemRunner,
       account: selection.account,

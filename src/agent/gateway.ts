@@ -1,6 +1,9 @@
 import { readSseData } from "./sse.ts";
 
-/** The only model labels dawg accepts. Provider IDs are local configuration. */
+/**
+ * The two original model aliases. A model is either one of these or an exact
+ * `vendor/model` ID chosen from the model picker (see `models.ts`).
+ */
 export const GATEWAY_MODELS = Object.freeze(["opus-5.5", "sol-6.1"] as const);
 export type GatewayModel = (typeof GATEWAY_MODELS)[number];
 
@@ -26,15 +29,20 @@ export function isGatewayModel(value: unknown): value is GatewayModel {
   );
 }
 
-/** Resolve an allowlisted alias to its provider ID, rejecting anything else. */
+/**
+ * Resolve an alias (`opus-5.5`) or an exact `vendor/model` ID to the ID sent
+ * to the provider, rejecting anything else.
+ */
 export function resolveModelId(
   alias: string,
   overrides: Partial<Record<GatewayModel, string | undefined>> = {},
 ): string {
-  if (!isGatewayModel(alias))
+  if (!isGatewayModel(alias)) {
+    if (MODEL_ID_PATTERN.test(alias)) return alias;
     throw new Error(
-      `unknown model "${alias.slice(0, 32)}"; use ${GATEWAY_MODELS.join(" or ")}`,
+      `unknown model "${alias.slice(0, 32)}"; use ${GATEWAY_MODELS.join(" or ")} or a vendor/model ID`,
     );
+  }
   const id = overrides[alias] ?? DEFAULT_MODEL_IDS[alias];
   if (!MODEL_ID_PATTERN.test(id))
     throw new Error(`model ID for ${alias} must look like provider/model`);
@@ -68,7 +76,8 @@ export type ChatTool = {
 };
 
 export type ChatStreamRequest = {
-  model: GatewayModel;
+  /** An alias (`opus-5.5`) or an exact `vendor/model` ID. */
+  model: string;
   messages: readonly ChatMessage[];
   tools?: readonly ChatTool[];
   temperature?: number;
@@ -88,11 +97,25 @@ export type ChatStreamEvent =
       name?: string;
       arguments?: string;
     }
-  | { type: "finish"; reason: string };
+  | { type: "finish"; reason: string }
+  /**
+   * Token usage for one request, from the final chunk when the request asked
+   * for `stream_options.include_usage`. `costUsd` is the provider's own
+   * charge when it reports one (OpenRouter's `usage.cost`).
+   */
+  | {
+      type: "usage";
+      inputTokens: number;
+      outputTokens: number;
+      cachedInputTokens?: number;
+      costUsd?: number;
+    };
 
 export type GatewayClient = {
+  /** Which service this client talks to. */
+  readonly provider?: ApiProvider;
   /** The provider model ID that a turn will use (for diagnostics only). */
-  modelId(model: GatewayModel): string;
+  modelId(model: string): string;
   stream(
     request: ChatStreamRequest,
     signal?: AbortSignal,
@@ -114,21 +137,54 @@ type GatewayFetcher = (
   init?: RequestInit,
 ) => Promise<Response>;
 
+/** The two OpenAI-compatible, key-based services. */
+export type ApiProvider = "gateway" | "openrouter";
+export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+export const GATEWAY_BASE_URL = "https://ai-gateway.vercel.sh/v1";
+/** OpenRouter's app attribution headers (https://openrouter.ai/docs/app-attribution). */
+const OPENROUTER_HEADERS = Object.freeze({
+  "http-referer": "https://dawg.sh",
+  "x-title": "dawg",
+});
+
+export type ApiClientOptions = {
+  apiKey?: string;
+  baseUrl?: string;
+  modelIds?: Partial<Record<GatewayModel, string>>;
+  fetcher?: GatewayFetcher;
+};
+
+/** The streaming tool-calling client for OpenRouter's OpenAI-compatible API. */
+export function createOpenRouterClient(
+  options: ApiClientOptions = {},
+): GatewayClient {
+  return createApiClient("openrouter", {
+    ...options,
+    baseUrl:
+      options.baseUrl ?? process.env.OPENROUTER_BASE_URL ?? OPENROUTER_BASE_URL,
+    apiKey: options.apiKey ?? process.env.OPENROUTER_API_KEY,
+  });
+}
+
 export function createGatewayClient(
-  options: {
-    apiKey?: string;
-    baseUrl?: string;
-    modelIds?: Partial<Record<GatewayModel, string>>;
-    fetcher?: GatewayFetcher;
-  } = {},
+  options: ApiClientOptions = {},
+): GatewayClient {
+  return createApiClient("gateway", {
+    ...options,
+    baseUrl:
+      options.baseUrl ?? process.env.AI_GATEWAY_BASE_URL ?? GATEWAY_BASE_URL,
+    apiKey: options.apiKey ?? process.env.AI_GATEWAY_API_KEY,
+  });
+}
+
+function createApiClient(
+  provider: ApiProvider,
+  options: ApiClientOptions,
 ): GatewayClient {
   const fetcher = options.fetcher ?? fetch;
-  const baseUrl = (
-    options.baseUrl ??
-    process.env.AI_GATEWAY_BASE_URL ??
-    "https://ai-gateway.vercel.sh/v1"
-  ).replace(/\/$/, "");
-  const apiKey = options.apiKey ?? process.env.AI_GATEWAY_API_KEY;
+  const name = provider === "openrouter" ? "OpenRouter" : "AI Gateway";
+  const baseUrl = (options.baseUrl ?? GATEWAY_BASE_URL).replace(/\/$/, "");
+  const apiKey = options.apiKey;
   const overrides: Partial<Record<GatewayModel, string | undefined>> = {
     "opus-5.5": process.env.DAWG_OPUS_MODEL || undefined,
     "sol-6.1": process.env.DAWG_SOL_MODEL || undefined,
@@ -138,6 +194,7 @@ export function createGatewayClient(
     apiKey && apiKey.length > 0 ? text.split(apiKey).join("[redacted]") : text;
 
   return {
+    provider,
     modelId: (model) => resolveModelId(model, overrides),
     async *stream(request, signal) {
       const model =
@@ -146,13 +203,18 @@ export function createGatewayClient(
           : resolveModelId(request.model, overrides);
       if (!apiKey)
         throw new GatewayError(
-          "no AI Gateway key; run `dawg login` or set AI_GATEWAY_API_KEY",
+          provider === "openrouter"
+            ? "no OpenRouter key; run `dawg login openrouter` or set OPENROUTER_API_KEY"
+            : "no AI Gateway key; run `dawg login` or set AI_GATEWAY_API_KEY",
         );
       const body: Record<string, unknown> = {
         model,
         messages: request.messages,
         stream: true,
+        // The final chunk then carries token usage (and OpenRouter's cost).
+        stream_options: { include_usage: true },
       };
+      if (provider === "openrouter") body.usage = { include: true };
       if (request.tools && request.tools.length > 0) {
         body.tools = request.tools;
         body.tool_choice = "auto";
@@ -171,6 +233,7 @@ export function createGatewayClient(
           authorization: `Bearer ${apiKey}`,
           "content-type": "application/json",
           accept: "text/event-stream",
+          ...(provider === "openrouter" ? OPENROUTER_HEADERS : {}),
         },
         body: JSON.stringify(body),
       };
@@ -179,12 +242,12 @@ export function createGatewayClient(
       if (!response.ok) {
         const detail = redact(await boundedErrorDetail(response));
         throw new GatewayError(
-          `AI Gateway request failed (${response.status})${detail ? `: ${detail}` : ""}`,
+          `${name} request failed (${response.status})${detail ? `: ${detail}` : ""}`,
           response.status,
         );
       }
       if (!response.body)
-        throw new GatewayError("AI Gateway returned an empty stream");
+        throw new GatewayError(`${name} returned an empty stream`);
       const streamOptions: { maxBytes: number; signal?: AbortSignal } = {
         maxBytes: request.maxResponseBytes,
       };
@@ -194,9 +257,9 @@ export function createGatewayClient(
         try {
           chunk = JSON.parse(data);
         } catch {
-          throw new GatewayError("AI Gateway sent a malformed stream chunk");
+          throw new GatewayError(`${name} sent a malformed stream chunk`);
         }
-        yield* normalizeChunk(chunk, redact);
+        yield* normalizeChunk(chunk, redact, name);
       }
     },
   };
@@ -205,6 +268,7 @@ export function createGatewayClient(
 function* normalizeChunk(
   chunk: unknown,
   redact: (text: string) => string,
+  name = "AI Gateway",
 ): Generator<ChatStreamEvent> {
   if (!isRecord(chunk)) return;
   if (isRecord(chunk.error)) {
@@ -212,8 +276,10 @@ function* normalizeChunk(
       typeof chunk.error.message === "string"
         ? chunk.error.message.slice(0, 300)
         : "unknown provider error";
-    throw new GatewayError(`AI Gateway stream error: ${redact(message)}`);
+    throw new GatewayError(`${name} stream error: ${redact(message)}`);
   }
+  const usage = parseUsage(chunk.usage);
+  if (usage) yield usage;
   const choice = Array.isArray(chunk.choices) ? chunk.choices[0] : undefined;
   if (!isRecord(choice)) return;
   const delta = isRecord(choice.delta) ? choice.delta : undefined;
@@ -240,6 +306,45 @@ function* normalizeChunk(
   }
   if (typeof choice.finish_reason === "string")
     yield { type: "finish", reason: choice.finish_reason };
+}
+
+/** Bounded, non-negative token counts; anything else is ignored. */
+function count(value: unknown): number | undefined {
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value < 1e9
+    ? Math.floor(value)
+    : undefined;
+}
+
+export function parseUsage(
+  value: unknown,
+): Extract<ChatStreamEvent, { type: "usage" }> | undefined {
+  if (!isRecord(value)) return undefined;
+  const inputTokens = count(value.prompt_tokens);
+  const outputTokens = count(value.completion_tokens);
+  if (inputTokens === undefined || outputTokens === undefined) return undefined;
+  const event: Extract<ChatStreamEvent, { type: "usage" }> = {
+    type: "usage",
+    inputTokens,
+    outputTokens,
+  };
+  const details = isRecord(value.prompt_tokens_details)
+    ? value.prompt_tokens_details
+    : undefined;
+  const cached = count(details?.cached_tokens);
+  if (cached !== undefined) event.cachedInputTokens = cached;
+  const rawCost =
+    typeof value.cost === "string" ? Number(value.cost) : value.cost;
+  if (
+    typeof rawCost === "number" &&
+    Number.isFinite(rawCost) &&
+    rawCost >= 0 &&
+    rawCost < 1000
+  )
+    event.costUsd = rawCost;
+  return event;
 }
 
 async function boundedErrorDetail(response: Response): Promise<string> {

@@ -51,6 +51,14 @@ export type AgentBudget = Partial<{
  */
 export type AgentEvent =
   | { type: "step"; step: number }
+  /** Token usage of one model request, as the provider reported it. */
+  | {
+      type: "usage";
+      inputTokens: number;
+      outputTokens: number;
+      cachedInputTokens?: number;
+      costUsd?: number;
+    }
   | { type: "text-delta"; delta: string }
   | { type: "tool-start"; callId: string; name: string; step: number }
   /** A progress line from a long-running (media) tool, e.g. "demucs 42%". */
@@ -144,7 +152,8 @@ export type AgentHost = Readonly<{
 
 export type AgentTurnOptions = Readonly<{
   prompt: string;
-  model: GatewayModel;
+  /** An alias (`opus-5.5`) or an exact `vendor/model` ID. */
+  model: GatewayModel | string;
   client: GatewayClient;
   host: AgentHost;
   onEvent?: (event: AgentEvent) => void;
@@ -273,7 +282,10 @@ export async function runAgentTurn(
         },
         signal,
       )) {
-        if (event.type === "text") {
+        if (event.type === "usage") {
+          const { type: _type, ...usage } = event;
+          emit({ type: "usage", ...usage });
+        } else if (event.type === "text") {
           streamBytes += event.delta.length;
           if (text.length < AGENT_LIMITS.maxTextChars) {
             const delta = event.delta.slice(

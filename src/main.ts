@@ -41,16 +41,32 @@ import {
   type AgentEvent,
   type AgentHost,
 } from "./agent/agent.ts";
-import { type GatewayModel } from "./agent/gateway.ts";
 import {
+  isApiSelection,
   providerFingerprint,
   providerLabel,
   runProviderTurn,
   selectProvider,
   type ProviderSelection,
 } from "./agent/provider.ts";
-import { runAuthCommand } from "./auth/cli.ts";
-import { tuiAuthCommand, xcbPickerItems } from "./auth/tui.ts";
+import {
+  MODEL_CATALOG,
+  priceForModel,
+  resolveModelChoice,
+} from "./agent/models.ts";
+import {
+  SpendMeter,
+  spendLine as formatSpendLine,
+  webHostFor,
+} from "./agent/usage.ts";
+import { configDir } from "./auth/credentials.ts";
+import { runAuthCommand, runFirstRunLogin, runTuiLogin } from "./auth/cli.ts";
+import {
+  modelPickerItems,
+  tuiAuthCommand,
+  tuiLoginArgs,
+  tuiSetModel,
+} from "./auth/tui.ts";
 import { TransportClock } from "./audio/clock.ts";
 import {
   addNote,
@@ -134,11 +150,14 @@ Prompt:
 Commands (bare music words; app commands take a slash):
 ${helpText()}
 
-Auth:
-  dawg login [--gateway|--key|--xcb] [--budget <dollars>]
-  dawg logout · dawg auth status [--check]
+Sign in (the choice is saved and reused until you log out):
+  dawg login                   find existing setups and pick a provider
+  dawg login gateway|openrouter|codex|claude
+  dawg model [alias]           pick a model, with the estimated cost per prompt
+  dawg logout [provider] · dawg auth status [--check]
 Unrecognized requests go to the agent once a provider is configured
-(DAWG_PROVIDER=gateway|xcb|auto; DAWG_AI=0 disables the agent).`;
+(DAWG_PROVIDER=gateway|openrouter|codex|claude|auto, DAWG_MODEL=<alias>;
+DAWG_AI=0 disables the agent).`;
 const args = new Set(process.argv.slice(2));
 const requestedSession = optionValue("--session");
 const explicitTrack = optionValue("--track");
@@ -147,8 +166,18 @@ let requestedTrack = explicitTrack ?? "main";
 const initialInstrument = isDrumInstrument(requestedTrack) ? "kit" : "sine";
 const importPath = optionValue("--import");
 const exportPath = optionValue("--export");
-if (["login", "logout", "auth"].includes(process.argv[2] ?? ""))
+if (["login", "logout", "auth", "model"].includes(process.argv[2] ?? ""))
   process.exit(await runAuthCommand(process.argv.slice(2)));
+{
+  // An unknown DAWG_MODEL is an error, never a silent fallback.
+  const fromEnv = process.env.DAWG_MODEL?.trim();
+  if (fromEnv && !resolveModelChoice("gateway", fromEnv)) {
+    process.stderr.write(
+      `dawg: unknown DAWG_MODEL "${fromEnv.slice(0, 40)}"; use one of ${MODEL_CATALOG.map((row) => row.alias).join(", ")} or a vendor/model ID\n`,
+    );
+    process.exit(2);
+  }
+}
 if (process.argv[2] === "sessions") {
   if (args.has("--help") || args.has("-h"))
     stdout.write(
@@ -206,6 +235,10 @@ if (args.has("--help") || args.has("-h")) {
 }
 const demo =
   args.has("--demo") || process.env.DAWG_DEMO === "1" || !stdin.isTTY;
+// First run with no provider (or a saved one that stopped working): the
+// sign-in picker, in the shell, before the TUI takes the screen.
+if (!demo && process.env.DAWG_AI !== "0" && stdout.isTTY)
+  await runFirstRunLogin();
 
 const initial = createScore({
   tracks: [
@@ -274,8 +307,9 @@ if (!draftTrack) await ensureFocusedTrack();
 
 const clock = new TransportClock(score.tempoBpm);
 let audio = port.player;
-let selectedModel: GatewayModel =
-  process.env.DAWG_MODEL === "opus-5.5" ? "opus-5.5" : "sol-6.1";
+/** Session and today's spend, from the usage each response reports. */
+const meter = new SpendMeter(configDir());
+void meter.load().catch(() => undefined);
 const prompt = new PromptModel({ width: 72, maxVisualRows: 8 });
 const tui = new TuiApp({
   io: {
@@ -309,6 +343,32 @@ let providerName = "";
 /** Undo/redo key hints shown so far; only the first few receipts carry one. */
 let undoHintsShown = 0;
 const MAX_UNDO_HINTS = 3;
+let invalidNoticeShown = false;
+/** True while /login has handed the terminal to a shell flow. */
+let screenSuspended = false;
+/** Redraw from outside the input loop (usage arrives asynchronously). */
+let tickUi: () => void = () => undefined;
+/** Suspend the TUI around an interactive shell flow (set by runInteractive). */
+let handoff: <T>(flow: () => Promise<T>) => Promise<T> = (flow) => flow();
+
+/** `$0.12 session · $0.48 today · opus-5.5 · gateway`, sized to the width. */
+function spendLine(): string {
+  const width = stdout.columns ?? 80;
+  if (!providerName || providerName === "offline")
+    return width >= 40 ? "no model · dawg login" : "";
+  const [model, provider] = providerName.split(" · ");
+  return formatSpendLine(
+    {
+      kind: providerSnapshot?.kind === "xcb" ? "subscription" : "api",
+      ...(model ? { model } : {}),
+      ...(provider ? { provider } : {}),
+      sessionUsd: meter.sessionUsd,
+      todayUsd: meter.todayUsd,
+    },
+    Math.max(0, width - 8),
+  );
+}
+let providerSnapshot: ProviderSelection | undefined;
 if (demo) {
   if (score.notes.length === 0) score = seedDemo(score, requestedTrack);
   if (exportPath)
@@ -492,9 +552,11 @@ function appView(value: TrackScore, beat: number): AppView {
   return {
     score: snapshot(value, beat),
     beat,
-    // `opus-5.5 · gateway`, `claude/sonnet · xcb`; hidden when offline.
+    // `opus-5.5 · gateway`, `sonnet · claude`; hidden when offline.
     model:
       providerName && providerName !== "offline" ? providerName : undefined,
+    spend: spendLine(),
+    agentOffline: providerName === "offline" || process.env.DAWG_AI === "0",
     sync: syncState,
     sessionName: record.meta.name,
     windows: windowCount,
@@ -606,17 +668,19 @@ async function runInteractive(): Promise<void> {
     }
   };
   const tick = (force = false) => {
+    if (screenSuspended) return;
     tui.render(appView(score, clock.beatAt()), { force });
   };
   reportAgentActivity = () => {
     tui.activity.applyAgentEvent({ type: "start", model: providerName });
   };
   agentEventSink = (event) => {
+    if (event.type === "usage") return;
     tui.activity.applyAgentEvent(event);
     if (event.type === "done" || event.type === "error") agentReported = true;
   };
   // ~30 fps cap; the differential writer only emits changed rows.
-  const timer = setInterval(tick, tui.frameIntervalMs);
+  let timer = setInterval(tick, tui.frameIntervalMs);
   const onResize = () => {
     tui.invalidate();
     tick(true);
@@ -726,11 +790,57 @@ async function runInteractive(): Promise<void> {
   if (await isProject(process.cwd()))
     projectSync = startProjectSync(syncHost());
   void currentProvider().then(() => tick(true));
+  tickUi = () => tick(true);
+  // Input arrives through a detachable listener (not `for await`), so /login
+  // can hand the terminal to an interactive shell flow and take it back.
+  const inbox: string[] = [];
+  let wake: (() => void) | undefined;
+  const onData = (chunk: Buffer | string) => {
+    inbox.push(String(chunk));
+    wake?.();
+  };
+  const onEnd = () => {
+    inbox.push("\u0000eof");
+    wake?.();
+  };
+  stdin.on("data", onData);
+  stdin.on("end", onEnd);
+  async function* chunks(): AsyncGenerator<string> {
+    for (;;) {
+      while (inbox.length === 0)
+        await new Promise<void>((resolve) => (wake = resolve));
+      wake = undefined;
+      const next = inbox.shift()!;
+      if (next === "\u0000eof") return;
+      yield next;
+    }
+  }
+  handoff = async <T>(flow: () => Promise<T>): Promise<T> => {
+    if (screenSuspended) return flow();
+    screenSuspended = true;
+    clearInterval(timer);
+    stdin.off("data", onData);
+    stdin.pause();
+    stdin.setRawMode?.(false);
+    // Leave the alternate screen; restore the cursor and plain paste.
+    stdout.write(`${ESC}0m${ESC}?2004l${ESC}?25h${ESC}?1049l`);
+    try {
+      return await flow();
+    } finally {
+      stdout.write(`${ESC}?1049h${ESC}?25l${ESC}?2004h${ESC}2J`);
+      stdin.setRawMode?.(true);
+      stdin.on("data", onData);
+      stdin.resume();
+      screenSuspended = false;
+      timer = setInterval(tick, tui.frameIntervalMs);
+      tui.invalidate();
+      tick(true);
+    }
+  };
   tick(true);
   try {
     let exiting = false;
-    for await (const chunk of stdin) {
-      const text = String(chunk);
+    for await (const text of chunks()) {
       // A read that is exactly ESC is the Esc key, not the start of a sequence.
       const values = [
         ...inputDecoder.push(text),
@@ -814,6 +924,8 @@ async function runInteractive(): Promise<void> {
       if (exiting) break;
     }
   } finally {
+    stdin.off("data", onData);
+    stdin.off("end", onEnd);
     clearInterval(timer);
     clearInterval(presenceTimer);
     await projectSync?.stop();
@@ -879,33 +991,56 @@ async function submit(prompt: string): Promise<string | Receipt> {
     await commitScore(imported, "score.import", { path: importCommand[1] });
     return `imported · ${importCommand[1]}`;
   }
-  const modelCommand = prompt.trim().match(/^\/model\s+(opus-5\.5|sol-6\.1)$/i);
-  if (modelCommand) {
-    selectedModel = modelCommand[1]!.toLowerCase() as GatewayModel;
-    if (provider) void currentProvider();
-    return `model · ${selectedModel}`;
-  }
-  if (/^\/login\s+--xcb$/i.test(prompt.trim())) {
-    tui.activity.setSpinner("xcb accounts");
-    try {
-      const items = await xcbPickerItems();
-      if (items && items.length > 1) {
+  const modelMatch = prompt.trim().match(/^\/model(?:\s+(\S+))?\s*$/i);
+  if (modelMatch) {
+    const selection = await currentProvider();
+    if (!modelMatch[1]) {
+      if (selection.kind === "offline")
+        return `model · none · ${selection.reason}`;
+      tui.activity.setSpinner("models");
+      try {
+        const items = await modelPickerItems(selection);
+        if (items.length === 0)
+          return `model · ${providerName} · no other models listed`;
         tui.openPicker({
-          id: "xcb",
-          title: "xcb account · model · ↑/↓ Enter · Esc",
+          id: "model",
+          title: `model · ${providerName}`,
           items,
+          filterable: true,
+          index: Math.max(
+            0,
+            items.findIndex((item) => item.current),
+          ),
         });
-        return `xcb · ${items.length} choices`;
+        return `model · ${providerName} · pick one (or /model <alias>)`;
+      } finally {
+        tui.activity.setSpinner(undefined);
       }
-    } finally {
-      tui.activity.setSpinner(undefined);
     }
-    // Zero or one choice: the plain flow saves it or prints guidance.
+    const receiptText = await tuiSetModel(modelMatch[1]);
+    provider = undefined;
+    await currentProvider();
+    return receiptText;
   }
-  if (/^\/(login|logout|auth)\b/i.test(prompt.trim())) {
+  if (/^\/login\b/i.test(prompt.trim())) {
+    const parsed = tuiLoginArgs(prompt.trim());
+    if (typeof parsed === "string") return `login · ${parsed}`;
+    await handoff(() =>
+      runTuiLogin(
+        parsed.target === "auto" ? "pick" : parsed.target,
+        parsed.options,
+      ),
+    );
+    provider = undefined;
+    await currentProvider();
+    return providerName === "offline"
+      ? "login · not signed in · direct commands still work"
+      : `signed in · ${providerName}`;
+  }
+  if (/^\/(logout|auth)\b/i.test(prompt.trim())) {
     tui.activity.setSpinner(prompt.trim().split(/\s+/)[0]!.slice(1));
     try {
-      const lines = await tuiAuthCommand(prompt.trim(), selectedModel);
+      const lines = await tuiAuthCommand(prompt.trim());
       provider = undefined;
       await currentProvider();
       for (const line of lines.slice(0, -1))
@@ -1459,7 +1594,6 @@ async function runAgent(text: string): Promise<string | Receipt> {
     const result = await runProviderTurn({
       selection,
       prompt: text,
-      model: selectedModel,
       host: agentHost(turn, selection),
       signal: turn.controller.signal,
       onEvent: (event) => {
@@ -1467,6 +1601,22 @@ async function runAgent(text: string): Promise<string | Receipt> {
         if (admitting) {
           admitting = false;
           provider = undefined; // Re-read capabilities: now admitted.
+        }
+        if (event.type === "usage") {
+          // Subscriptions are included; API responses are priced once.
+          if (isApiSelection(selection)) {
+            const { type: _type, ...usage } = event;
+            void priceForModel(selection.kind, selection.modelId, {
+              configDir: configDir(),
+              apiKey: selection.apiKey,
+            })
+              .catch(() => undefined)
+              .then((price) => {
+                meter.add(usage, price);
+                tickUi();
+              });
+          }
+          return;
         }
         agentEventSink(event);
       },
@@ -1503,7 +1653,19 @@ function currentProvider(): Promise<ProviderSelection> {
     }));
   }
   return provider.then((selection) => {
-    providerName = providerLabel(selection, selectedModel);
+    providerSnapshot = selection;
+    providerName = providerLabel(selection);
+    if (
+      selection.kind === "offline" &&
+      selection.invalidSaved &&
+      !invalidNoticeShown
+    ) {
+      invalidNoticeShown = true;
+      tui.activity.pushCard(`sign-in stopped working · ${selection.reason}`, {
+        tone: "warning",
+        hint: "/login",
+      });
+    }
     providerStamp.offline = selection.kind === "offline";
     return selection;
   });
@@ -1597,10 +1759,12 @@ function agentHost(
         ...errors,
       ].join("\n");
     },
-    // web_search tries the gateway's server-side search tools when the turn
-    // runs on the gateway; Brave, OpenRouter and the search tool come from
-    // the environment inside the tool.
-    web:
-      selection.kind === "gateway" ? { gatewayApiKey: selection.apiKey } : {},
+    // web_search uses the turn's own gateway or OpenRouter key; billed
+    // searches go to the spend meter and daily ledger.
+    web: webHostFor(
+      isApiSelection(selection) ? selection : { kind: selection.kind },
+      meter,
+      tickUi,
+    ),
   };
 }

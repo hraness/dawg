@@ -28,6 +28,7 @@ import {
 } from "./provider.ts";
 import { runTextAgentTurn, type TextGenerate } from "./xcb-agent.ts";
 import {
+  describeReason,
   extractFirstJsonObject,
   parseCapabilities,
   parseTextReply,
@@ -37,6 +38,7 @@ import {
 } from "./xcb.ts";
 
 const ACCOUNT = "a_9ddef4bdeded45468148d4c6502f27c2";
+/** xcb 0.20+ shape: `available` decides; `admission` is null with a reason. */
 const capabilities = (available: boolean) => ({
   version: 1,
   supported: true,
@@ -45,23 +47,47 @@ const capabilities = (available: boolean) => ({
     {
       id: "a_014c386628b94953bb36b39668ca210a",
       name: "slop@pm.me",
+      provider: "claude",
+      connected: true,
+      available: false,
+      reason: "application_disabled",
+      admission: null,
+      models: [{ key: "claude/sonnet", admission: null }],
+    },
+    {
+      id: ACCOUNT,
+      name: "work@codex",
+      provider: "codex",
+      connected: true,
+      available,
+      reason: available ? null : "admission_failed",
+      admission: available ? "pending" : null,
+      models: [
+        {
+          key: "codex/gpt-6.1",
+          label: "GPT-6.1",
+          admission: available ? "pending" : null,
+        },
+      ],
+    },
+  ],
+});
+/** xcb 0.17 shape: no admission fields, the old qualification reason. */
+const legacyCapabilities = {
+  version: 1,
+  supported: true,
+  accounts: [
+    {
+      id: ACCOUNT,
+      name: "work@codex",
       provider: "codex",
       connected: true,
       available: false,
       reason: "application_not_qualified",
-      models: [],
-    },
-    {
-      id: ACCOUNT,
-      name: "devin/a_9ddef4bd",
-      provider: "devin",
-      connected: true,
-      available,
-      reason: available ? null : "application_not_qualified",
-      models: available ? [{ key: "devin/swe-2-high", label: "SWE-2" }] : [],
+      models: [{ key: "codex/gpt-6.1" }],
     },
   ],
-});
+};
 
 const capsCall = (available: boolean): ScriptedCall => ({
   match: (_c, args) => args.includes("--capabilities"),
@@ -75,14 +101,36 @@ describe("xcb capabilities", () => {
     expect(parsed.accounts).toHaveLength(2);
     expect(parsed.accounts[1]).toEqual({
       id: ACCOUNT,
-      label: "devin/a_9ddef4bd",
-      provider: "devin",
+      label: "work@codex",
+      provider: "codex",
       available: true,
+      admission: "pending",
       connected: true,
       reason: null,
-      models: [{ key: "devin/swe-2-high", label: "SWE-2" }],
+      models: [
+        { key: "codex/gpt-6.1", label: "GPT-6.1", admission: "pending" },
+      ],
     });
-    expect(parsed.accounts[0]?.reason).toBe("application_not_qualified");
+    // Models with a null admission are not listed for that account.
+    expect(parsed.accounts[0]).toMatchObject({
+      available: false,
+      reason: "application_disabled",
+      models: [],
+    });
+    expect(describeReason("application_disabled")).toContain(
+      "xcb application enable",
+    );
+    expect(describeReason("admission_failed")).toContain("15 minutes");
+    expect(describeReason("something_new")).toContain("unavailable");
+  });
+
+  test("the xcb 0.17 shape parses but is never usable", () => {
+    const parsed = parseCapabilities(legacyCapabilities);
+    expect(parsed.accounts[0]).toMatchObject({
+      available: false,
+      reason: "application_not_qualified",
+    });
+    expect(parsed.accounts[0] && "admission" in parsed.accounts[0]).toBe(false);
   });
 
   test("drops malformed rows and never trusts available without models", () => {
@@ -103,35 +151,37 @@ describe("xcb capabilities", () => {
     expect(() => parseCapabilities("nope")).toThrow(XcbError);
   });
 
-  test("a pending automatic admission is usable; denied never is", () => {
+  test("usable iff available === true; admission alone never is", () => {
     const row = (extra: Record<string, unknown>) => ({
       id: "acct",
-      provider: "devin",
+      provider: "codex",
       connected: true,
-      available: false,
-      reason: "application_not_qualified",
-      models: [{ key: "devin/swe-2-high" }],
+      available: true,
+      reason: null,
+      models: [{ key: "codex/gpt-6.1", admission: "pending" }],
       ...extra,
     });
     const parsed = parseCapabilities({
       version: 1,
       accounts: [
         row({ id: "p", admission: "pending" }),
-        row({ id: "o", admission: { state: "pending" } }),
-        row({ id: "d", available: true, admission: "denied" }),
+        row({ id: "q", admission: "qualified" }),
+        row({ id: "f", available: false, admission: "pending" }),
+        row({ id: "r", reason: "sandbox_unproven", admission: null }),
         row({ id: "x", admission: "weird" }),
-        row({ id: "n" }),
         row({ id: "e", admission: "pending", models: [] }),
+        row({ id: "m", models: [{ key: "codex/gpt-6.1", admission: null }] }),
       ],
     });
     const by = Object.fromEntries(parsed.accounts.map((a) => [a.id, a]));
     expect(by.p).toMatchObject({ available: true, admission: "pending" });
-    expect(by.o).toMatchObject({ available: true, admission: "pending" });
-    expect(by.d).toMatchObject({ available: false, admission: "denied" });
-    expect(by.x?.available).toBe(false);
+    expect(by.q).toMatchObject({ available: true, admission: "qualified" });
+    expect(by.f?.available).toBe(false);
+    expect(by.r?.available).toBe(false);
+    expect(by.x?.available).toBe(true);
     expect(by.x && "admission" in by.x).toBe(false);
-    expect(by.n?.available).toBe(false);
     expect(by.e?.available).toBe(false);
+    expect(by.m?.available).toBe(false);
   });
 
   test("readCapabilities surfaces non-JSON and failures", async () => {
@@ -423,7 +473,8 @@ describe("text agent loop", () => {
     const result = await runProviderTurn({
       selection: {
         kind: "xcb",
-        choice: "xcb",
+        choice: "codex",
+        family: "devin",
         bin: "/bin/xcb",
         account: ACCOUNT,
         accountLabel: "devin",
@@ -474,7 +525,7 @@ describe("provider selection", () => {
       source: "env",
       choice: "auto",
     });
-    expect(providerLabel(selection, "sol-6.1")).toBe("sol-6.1 · gateway");
+    expect(providerLabel(selection)).toBe("opus-5.5 · gateway");
   });
 
   test("auto falls back to an available xcb account, then offline", async () => {
@@ -483,12 +534,12 @@ describe("provider selection", () => {
     );
     expect(xcbSelection).toMatchObject({
       kind: "xcb",
+      family: "codex",
       account: ACCOUNT,
-      model: "devin/swe-2-high",
+      model: "codex/gpt-6.1",
+      admissionPending: true,
     });
-    expect(providerLabel(xcbSelection, "opus-5.5")).toBe(
-      "devin/swe-2-high · xcb",
-    );
+    expect(providerLabel(xcbSelection)).toEndWith(" · codex");
     const none = await selectProvider(
       auth(scriptedRunner([capsCall(false)], ["xcb"])),
     );
@@ -520,15 +571,15 @@ describe("provider selection", () => {
 
   test("a saved xcb account that lost qualification is reported, not swapped", async () => {
     await writeConfig(auth(scriptedRunner([])), {
-      provider: "xcb",
-      xcb: { account: ACCOUNT, model: "devin/swe-2-high" },
+      provider: "codex",
+      codex: { account: ACCOUNT, model: "codex/gpt-6.1" },
     });
     const selection = await selectProvider(
       auth(scriptedRunner([capsCall(false)], ["xcb"])),
     );
-    expect(selection).toMatchObject({ kind: "offline", choice: "xcb" });
+    expect(selection).toMatchObject({ kind: "offline", choice: "codex" });
     expect(selection.kind === "offline" && selection.reason).toContain(
-      "application_not_qualified",
+      "retry after 15 minutes",
     );
   });
 
@@ -547,10 +598,9 @@ describe("provider selection", () => {
         hostname: "h",
       }),
     ).toBe(1);
-    expect(lines.join("\n")).toContain("application qualification");
-    expect(lines.join("\n")).toContain(
-      `qualify-application --inspect --account ${ACCOUNT}`,
-    );
+    expect(lines.join("\n")).toContain("No xcb account is available");
+    expect(lines.join("\n")).toContain("xcb application enable");
+    expect(lines.join("\n")).not.toContain("qualify-application");
     lines.length = 0;
     expect(
       await login("xcb", {
@@ -559,15 +609,11 @@ describe("provider selection", () => {
         hostname: "h",
       }),
     ).toBe(0);
-    expect(lines[0]).toContain("devin/swe-2-high");
+    expect(lines.join("\n")).toContain("gpt-6.1");
     const selection = await selectProvider(
       auth(scriptedRunner([capsCall(true)], ["xcb"])),
     );
-    expect(selection).toMatchObject({
-      kind: "xcb",
-      choice: "xcb",
-      account: ACCOUNT,
-    });
+    expect(selection).toMatchObject({ kind: "xcb", account: ACCOUNT });
     lines.length = 0;
     expect(
       await login("xcb", { auth: auth(scriptedRunner([])), io, hostname: "h" }),
@@ -587,15 +633,19 @@ describe("provider selection", () => {
           name: "first",
           provider: "claude",
           available: true,
-          models: [{ key: "claude/sonnet" }, { key: "claude/opus" }],
+          admission: "qualified",
+          models: [
+            { key: "claude/sonnet", admission: "qualified" },
+            { key: "claude/opus", admission: "qualified" },
+          ],
         },
         {
           id: ACCOUNT,
-          name: "devin",
-          provider: "devin",
-          available: false,
+          name: "work",
+          provider: "codex",
+          available: true,
           admission: "pending",
-          models: [{ key: "devin/swe-2-high" }],
+          models: [{ key: "codex/gpt-6.1", admission: "pending" }],
         },
       ],
     };
@@ -617,7 +667,7 @@ describe("provider selection", () => {
     });
     expect(
       await login("xcb", deps(), {
-        xcb: { account: ACCOUNT, model: "devin/swe-2-high" },
+        xcb: { account: ACCOUNT, model: "codex/gpt-6.1" },
       }),
     ).toBe(0);
     expect(lines.join("\n")).toContain("first request");
@@ -626,6 +676,7 @@ describe("provider selection", () => {
     );
     expect(selection).toMatchObject({
       kind: "xcb",
+      family: "codex",
       account: ACCOUNT,
       admissionPending: true,
     });
@@ -672,6 +723,7 @@ describe("provider selection", () => {
       selection: {
         kind: "xcb",
         choice: "auto",
+        family: "codex",
         bin: "xcb",
         account: ACCOUNT,
         accountLabel: "d",

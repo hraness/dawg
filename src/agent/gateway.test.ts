@@ -164,15 +164,16 @@ describe("Vercel AI Gateway client", () => {
 });
 
 describe("model alias allowlist", () => {
-  test("maps only the two friendly labels", () => {
+  test("maps the two friendly labels; passes vendor/model IDs through", () => {
     expect(resolveModelId("opus-5.5")).toBe(DEFAULT_MODEL_IDS["opus-5.5"]);
     expect(DEFAULT_MODEL_IDS["opus-5.5"]).toBe("anthropic/claude-opus-5.5");
     expect(resolveModelId("sol-6.1")).toBe("openai/gpt-6.1-sol");
     expect(resolveModelId("sol-6.1", { "sol-6.1": "openai/gpt-6-sol" })).toBe(
       "openai/gpt-6-sol",
     );
-    expect(() => resolveModelId("anthropic/claude-opus-5.5")).toThrow(
-      "unknown model",
+    // The model picker saves full vendor/model IDs; bare names stay unknown.
+    expect(resolveModelId("anthropic/claude-opus-5.5")).toBe(
+      "anthropic/claude-opus-5.5",
     );
     expect(() => resolveModelId("gpt-4")).toThrow("unknown model");
     expect(() =>
