@@ -14,6 +14,8 @@ import {
   samplerTailSeconds,
 } from "./sampler.ts";
 import { EMPTY_SAMPLE_BANK, sampleKey, type SampleBank } from "./samples.ts";
+import { synthKit } from "../../core/kits.ts";
+import { kitDrumSample, kitTailSeconds, newKitVoiceState } from "./kits.ts";
 
 export type WavOptions = Readonly<{ sampleRate?: number; maxSeconds?: number }>;
 
@@ -192,7 +194,7 @@ export class StemRenderer {
       );
       const tailSeconds = Math.min(
         MAX_LOOP_TAIL_SECONDS,
-        Math.max(MAX_DRUM_SECONDS, samplerTail) +
+        Math.max(MAX_DRUM_SECONDS, samplerTail, kitTailSeconds(score)) +
           0.1 +
           reverbTail +
           delayTailSeconds(score),
@@ -495,9 +497,13 @@ function renderDrumNote(
 ): void {
   const { sampleRate, samples, samplesPerTick } = context;
   const { start } = noteSpan(note, context);
+  // A track `kit` swaps in a synthesized kit (src/audio/kits.ts); without
+  // one the voices below render exactly as they always have.
+  const kit = synthKit(track?.kit);
+  const kitState = kit ? newKitVoiceState() : undefined;
   const end = Math.min(
     samples,
-    start + Math.ceil(MAX_DRUM_SECONDS * sampleRate),
+    start + Math.ceil((kit?.seconds ?? MAX_DRUM_SECONDS) * sampleRate),
   );
   const voice = drumVoiceForPitch(note.pitch);
   const random = seededRandom(`${note.id}:${note.startTick}`);
@@ -512,7 +518,17 @@ function renderDrumNote(
     const bright = noise - previousNoise;
     previousNoise = noise;
     let sample = 0;
-    if (voice === "kick") {
+    if (kit && kitState)
+      sample = kitDrumSample(
+        kit,
+        voice,
+        t,
+        noise,
+        bright,
+        kitState,
+        sampleRate,
+      );
+    else if (voice === "kick") {
       const frequency = 45 + 105 * Math.exp(-t * 28);
       phase += frequency / sampleRate;
       sample =

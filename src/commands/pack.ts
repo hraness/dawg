@@ -169,7 +169,12 @@ export function samplerOperations(
     {
       type: "updateTrack",
       trackId,
-      patch: { instrument: SAMPLER_INSTRUMENT, sampler: next },
+      // A synth kit name does not apply to a sampler track.
+      patch: {
+        instrument: SAMPLER_INSTRUMENT,
+        sampler: next,
+        ...(track.kit ? { kit: null } : {}),
+      },
     },
   ];
   if (next.mode !== "oneshot") return operations;

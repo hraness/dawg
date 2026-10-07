@@ -584,6 +584,52 @@ describe("drum, effects, solo, and filter tools", () => {
     expect(diagnostic).toContain("pulses");
   });
 
+  test("drum pattern tools: list, apply with tempo, and set a synth kit", async () => {
+    const script = scriptedFetch([
+      [
+        ...toolCallChunks(0, "p0", "list_drum_patterns", { filter: "hip hop" }),
+        ...toolCallChunks(1, "p1", "apply_drum_pattern", {
+          name: "boom-bap",
+          trackId: "drums",
+        }),
+        ...toolCallChunks(2, "p2", "set_drum_kit", {
+          kit: "lofi",
+          trackId: "drums",
+        }),
+        ...toolCallChunks(3, "p3", "apply_drum_pattern", {
+          name: "no-such-groove",
+          trackId: "drums",
+        }),
+        finishChunk("tool_calls"),
+      ],
+      [finishChunk("stop")],
+    ]);
+    const { state, host } = memoryHost();
+    const events: AgentEvent[] = [];
+    const result = await runAgentTurn({
+      prompt: "boom bap beat",
+      model: "sol-6.1",
+      client: client(script.fetcher),
+      host,
+      onEvent: (e) => events.push(e),
+    });
+    expect(result).toMatchObject({ rejected: 1 });
+    const drums = state.score.tracks.find((t) => t.id === "drums")!;
+    expect(drums.instrument).toBe("kit");
+    expect(drums.kit).toBe("lofi");
+    expect(drums.rhythm?.map((row) => row.voice)).toEqual([
+      "kick",
+      "snare",
+      "hat",
+    ]);
+    expect(state.score.tempoBpm).toBe(90);
+    expect(state.score.notes.some((n) => n.trackId === "drums")).toBe(true);
+    const listed = events.flatMap((e) =>
+      e.type === "tool-applied" ? [e.summary] : [],
+    );
+    expect(listed.some((summary) => /patterns/.test(summary))).toBe(true);
+  });
+
   test("rejects drums on a melodic track and out-of-range effects", async () => {
     const script = scriptedFetch([
       [

@@ -222,6 +222,7 @@ export function printTrack(score: TrackScore, track: Track): string {
   if (track.sampler) {
     entries.push(`instrument: ${printSampler(track.sampler, INDENT)}`);
   } else entries.push(`instrument: ${str(track.instrument)}`);
+  if (track.kit) entries.push(`kit: ${str(track.kit)}`);
   if (track.muted) entries.push("muted: true");
   if (track.solo) entries.push("solo: true");
   if (track.volume !== 1) entries.push(`volume: ${num(track.volume)}`);
@@ -402,6 +403,9 @@ function printRow(row: RhythmRow, indent: string): string {
             : num(value as number),
       ]);
   }
+  // Options are euclid's fifth argument, so rotate 0 is spelled out before them.
+  if (row.grid === undefined && !row.rotate && fields.length > 0)
+    args.push("0");
   const name = row.grid !== undefined ? "grid" : "euclid";
   const head = `${name}(${args.join(", ")}`;
   if (fields.length === 0) return `${head})`;

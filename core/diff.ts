@@ -149,7 +149,7 @@ function trackPatch(a: Track, b: Track): TrackPatch | undefined {
   if ((a.solo ?? false) !== (b.solo ?? false)) patch.solo = b.solo ?? false;
   for (const key of EFFECTS)
     if (!deepEqual(a[key], b[key])) patch[key] = b[key] ?? null;
-  for (const key of ["rhythm"] as const)
+  for (const key of ["rhythm", "kit"] as const)
     if (!deepEqual(a[key], b[key])) patch[key] = b[key] ?? null;
   for (const key of LANES)
     if (!deepEqual(a[key] ?? [], b[key] ?? [])) patch[key] = b[key] ?? [];
