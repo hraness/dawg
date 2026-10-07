@@ -123,6 +123,14 @@ import {
   type PackCommand,
 } from "./commands/pack.ts";
 import {
+  describeWavetable,
+  parseWavetableCommand,
+  pickWavetable,
+  wavetableListLines,
+  wavetableParamEdit,
+  type WavetableCommand,
+} from "./commands/wavetable.ts";
+import {
   ALIASED_PACK,
   DEFAULT_KITS,
   PackError,
@@ -1201,6 +1209,8 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (pattern) return patternCommand(pattern);
   const kit = parseKitCommand(command);
   if (kit) return kitCommand(kit, /^\/kit\s*$/i.test(command.trim()));
+  const wavetable = parseWavetableCommand(command);
+  if (wavetable) return wavetableCommand(wavetable);
   const sessionReply = await sessionCommand(command);
   if (sessionReply !== undefined) return sessionReply;
   const edit = parseEditCommand(command);
@@ -1923,6 +1933,34 @@ async function kitCommand(command: KitCommand, bare = false): Promise<Receipt> {
     return failed ?? ok(result.summary);
   } catch (error) {
     if (error instanceof PackError) return fail(`kit · ${error.message}`);
+    throw error;
+  }
+}
+
+async function wavetableCommand(command: WavetableCommand): Promise<Receipt> {
+  if (command.kind === "usage") return warn(command.message);
+  if (command.kind === "show")
+    return ok(describeWavetable(score, requestedTrack));
+  if (command.kind === "list") {
+    tui.openText("wavetables", await wavetableListLines(packs()));
+    return ok("wavetables · wt <table> on the focused track · esc closes");
+  }
+  await materializeDraft();
+  const trackId = requestedTrack;
+  try {
+    const edit =
+      command.kind === "table"
+        ? await pickWavetable(packs(), score, trackId, command.table)
+        : wavetableParamEdit(score, trackId, command);
+    const failed = await commitPackEdit(
+      [edit.operation],
+      trackId,
+      "track.wavetable",
+      { trackId, ...command },
+    );
+    return failed ?? ok(edit.summary);
+  } catch (error) {
+    if (error instanceof PackError) return fail(`wavetable · ${error.message}`);
     throw error;
   }
 }

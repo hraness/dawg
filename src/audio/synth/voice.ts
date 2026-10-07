@@ -38,6 +38,7 @@ import {
   makePinkNoise,
   resolveOscillator,
   type Oscillator,
+  type OscillatorFactory,
 } from "./oscillators.ts";
 
 /** Same base level as the legacy voice, so switching keeps loudness. */
@@ -71,6 +72,11 @@ export type VoiceContext = Readonly<{
   samplesPerTick: number;
   tempoBpm: number;
   ticksPerBeat: number;
+  /**
+   * Wavetable hook: a note's oscillator when the track supplies its own
+   * (a wavetable track's table); otherwise the sound's resolver is used.
+   */
+  oscillatorFor?: (note: Note) => OscillatorFactory | undefined;
 }>;
 
 /** Track gain at a tick (volume × volume lane), supplied by the renderer. */
@@ -385,7 +391,10 @@ export function renderSynthNote(
   const unisonGain = 1 / Math.sqrt(unison);
 
   // Oscillators (one per unison voice) through the seam.
-  const factory = resolveOscillator(sound) ?? resolveOscillator("sine")!;
+  const factory =
+    context.oscillatorFor?.(note) ??
+    resolveOscillator(sound) ??
+    resolveOscillator("sine")!;
   const pw = c.number("pw");
   const pwrate = c.number("pwrate");
   const pwsweep = c.number("pwsweep");

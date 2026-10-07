@@ -34,6 +34,7 @@ const EFFECTS = [
   "fx",
   "fxAutomation",
   "synth",
+  "wavetable",
 ] as const;
 const LANES = [
   "volumeAutomation",
@@ -42,6 +43,7 @@ const LANES = [
   "resonanceAutomation",
   "delayFeedbackAutomation",
   "delayMixAutomation",
+  "wtAutomation",
 ] as const;
 
 /** Operations turning `a` into `b`; empty when they are equal. */

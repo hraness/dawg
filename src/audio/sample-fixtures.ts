@@ -97,3 +97,20 @@ export function dc(frames: number, level = 0.5): number[] {
 export function ramp(frames: number): number[] {
   return Array.from({ length: frames }, (_, i) => i / Math.max(1, frames - 1));
 }
+
+/** Inserts a Serum-style `clm ` chunk after `fmt `. */
+export function withClm(bytes: Uint8Array, frame: number): Uint8Array {
+  const text = new TextEncoder().encode(`<!>${frame} 10000000 wavetable dawg`);
+  const chunk = new Uint8Array(8 + text.length + (text.length & 1));
+  chunk.set(new TextEncoder().encode("clm "), 0);
+  new DataView(chunk.buffer).setUint32(4, text.length, true);
+  chunk.set(text, 8);
+  const out = new Uint8Array(bytes.length + chunk.length);
+  // RIFF header (12) + fmt chunk (8 + 16) for the fixture's PCM16 output.
+  const split = 12 + 8 + new DataView(bytes.buffer).getUint32(16, true);
+  out.set(bytes.subarray(0, split), 0);
+  out.set(chunk, split);
+  out.set(bytes.subarray(split), split + chunk.length);
+  new DataView(out.buffer).setUint32(4, out.length - 8, true);
+  return out;
+}

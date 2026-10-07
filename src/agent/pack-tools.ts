@@ -3,7 +3,7 @@
  * `use_sound` resolves and fetches the sound first (a `prepare` plan), then
  * commits ordinary score operations so it is one undo step like any edit.
  */
-import { SCORE_LIMITS } from "../../core/score.ts";
+import { SCORE_LIMITS, type TrackScore } from "../../core/score.ts";
 import {
   PackError,
   PackStore,
@@ -24,6 +24,15 @@ async function kitsWithNicknames(
   });
 }
 import { useSound } from "../commands/pack.ts";
+import { pickWavetable, wavetableOperation } from "../commands/wavetable.ts";
+import {
+  WARP_MODES,
+  WAVETABLE_PARAMS,
+  wavetableOf,
+  type ScoreOperation,
+  type TrackWavetable,
+  type WavetableParam,
+} from "../../core/score.ts";
 import type { AgentTool } from "./tools.ts";
 
 /** Thrown for arguments the pack tools refuse. */
@@ -49,6 +58,56 @@ function defaultStore(): PackStore {
 function bounded(value: unknown): string {
   const text = JSON.stringify(value);
   return text.length <= 24_000 ? text : `${text.slice(0, 24_000)}…`;
+}
+
+const wavetableParamSchema = Object.fromEntries(
+  (Object.keys(WAVETABLE_PARAMS) as WavetableParam[]).map((name) => [
+    name,
+    {
+      type: "number",
+      minimum: WAVETABLE_PARAMS[name][0],
+      maximum: WAVETABLE_PARAMS[name][1],
+    },
+  ]),
+);
+
+async function wavetableOps(
+  packs: PackStore,
+  score: TrackScore,
+  trackId: string,
+  table: string | undefined,
+  fields: Partial<Record<WavetableParam, number>> & { warpmode?: string },
+): Promise<{ operations: ScoreOperation[]; summary: string }> {
+  const track = score.tracks.find((item) => item.id === trackId);
+  let base: TrackWavetable = track
+    ? wavetableOf(track)
+    : { table: { src: "builtin:basic" } };
+  let summary = "wavetable";
+  if (table) {
+    // pickWavetable pins the table; take its settings, keep the score as is.
+    const picked = await pickWavetable(packs, score, trackId, table);
+    summary = picked.summary;
+    const op = picked.operation;
+    const patched =
+      op.type === "addTrack"
+        ? op.track.wavetable
+        : op.type === "updateTrack"
+          ? op.patch.wavetable
+          : undefined;
+    if (patched) base = patched;
+  }
+  const changed = Object.entries(fields);
+  if (changed.length)
+    summary += ` · ${changed.map(([key, value]) => `${key} ${String(value)}`).join(" · ")}`;
+  return {
+    operations: [
+      wavetableOperation(score, trackId, {
+        ...base,
+        ...fields,
+      } as TrackWavetable),
+    ],
+    summary,
+  };
 }
 
 export const PACK_TOOLS: readonly AgentTool[] = Object.freeze([
@@ -215,6 +274,81 @@ export const PACK_TOOLS: readonly AgentTool[] = Object.freeze([
               summary: result.summary,
               trackId: result.trackId,
             };
+          } catch (error) {
+            if (error instanceof PackError)
+              throw new PackToolError(error.message);
+            throw error;
+          }
+        },
+      };
+    },
+  },
+  {
+    name: "set_wavetable",
+    description:
+      "Make a track a wavetable synth and shape it (Strudel names). table: basic (sine>tri>saw>square), pwm, formant, harmonics (offline), wt_digital:0-4, wt_vgame:0-10 (Strudel uzu-wavetables) or pack:<pack>/<sound>[:n]; omit to keep. wt: position 0..1. wtenv/wtattack/wtdecay/wtsustain/wtrelease: position envelope (amount -1..1, seconds). wtrate Hz/wtdepth: position LFO. warp+warpmode bend the phase. wtphaserand: start phase spread. Automate position with set_automation wt.",
+    parameters: {
+      type: "object",
+      properties: {
+        trackId: {
+          type: "string",
+          maxLength: SCORE_LIMITS.maxIdLength,
+          description:
+            "Target track (created when missing). Defaults to the focused track.",
+        },
+        table: { type: "string", minLength: 1, maxLength: 200 },
+        ...wavetableParamSchema,
+        warpmode: { type: "string", enum: [...WARP_MODES] },
+      },
+      additionalProperties: false,
+    },
+    plan(args, context) {
+      const trackId =
+        typeof args.trackId === "string" && args.trackId
+          ? args.trackId
+          : context.focusedTrackId;
+      if (!ID_PATTERN.test(trackId))
+        throw new PackToolError(
+          "trackId must be 1-64 letters, digits, dot, dash, or underscore",
+        );
+      const table =
+        typeof args.table === "string" && args.table.trim()
+          ? args.table.trim()
+          : undefined;
+      const fields: Partial<Record<WavetableParam, number>> & {
+        warpmode?: string;
+      } = {};
+      for (const name of Object.keys(WAVETABLE_PARAMS) as WavetableParam[]) {
+        const value = args[name];
+        if (value === undefined) continue;
+        const [min, max] = WAVETABLE_PARAMS[name];
+        if (
+          typeof value !== "number" ||
+          !Number.isFinite(value) ||
+          value < min ||
+          value > max
+        )
+          throw new PackToolError(`${name} must be ${min}..${max}`);
+        fields[name] = value;
+      }
+      if (args.warpmode !== undefined) {
+        if (!WARP_MODES.includes(args.warpmode as never))
+          throw new PackToolError(`warpmode must be ${WARP_MODES.join(", ")}`);
+        fields.warpmode = args.warpmode as string;
+      }
+      return {
+        kind: "prepare",
+        summary: table ? `wavetable ${table}` : "shape wavetable",
+        run: async (action) => {
+          try {
+            const result = await wavetableOps(
+              store(action),
+              context.score,
+              trackId,
+              table,
+              fields,
+            );
+            return { kind: "score", ...result, trackId };
           } catch (error) {
             if (error instanceof PackError)
               throw new PackToolError(error.message);

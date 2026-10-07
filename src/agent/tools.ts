@@ -464,7 +464,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   },
   {
     name: "set_automation",
-    description: `Write an automation lane: volume 0..1, pan -1..1, filter (cutoff Hz), resonance 0..${SCORE_LIMITS.maxFilterResonance}, delay-feedback 0..${SCORE_LIMITS.maxDelayFeedback}, delay-mix, or <effect>-<param> (the param's range). The effect must be on to be heard. mode=replace (default) rewrites the lane; merge keeps other beats. An empty replace clears it.`,
+    description: `Write an automation lane: volume 0..1, pan -1..1, filter (cutoff Hz), resonance 0..${SCORE_LIMITS.maxFilterResonance}, delay-feedback 0..${SCORE_LIMITS.maxDelayFeedback}, delay-mix, wt (wavetable position 0..1), or <effect>-<param> (the param's range). The effect must be on to be heard. mode=replace (default) rewrites the lane; merge keeps other beats. An empty replace clears it.`,
     parameters: {
       type: "object",
       properties: {

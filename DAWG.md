@@ -526,6 +526,38 @@ Built-in catalog (manifests are the GitHub-raw equivalents of the files Strudel'
 
 felixroos/dough-samples, the manifest host, has no license file. Strudel's own `gm_*` sounds come from a different soundfont set; dawg uses FluidR3_GM with the same names.
 
+## Wavetable synth
+
+`instrument: "wavetable"` turns a track into a wavetable oscillator. A wavetable is a stack of single-cycle frames; the position `wt` (0..1) scans across them, mixing neighbouring frames smoothly. Parameter names and meanings follow Strudel's documented controls (`packages/core/controls.mjs` JSDoc on strudel.cc); the oscillator in `src/audio/wavetable.ts` is dawg's own, written from those docs and the WAV format, with no Strudel code.
+
+| Parameter                                    | Range          | Default           | Meaning                                                                   |
+| -------------------------------------------- | -------------- | ----------------- | ------------------------------------------------------------------------- |
+| `wt`                                         | 0..1           | 0                 | position in the table (automatable: `automate wt points 0:0 4:1`)         |
+| `wtenv`                                      | -1..1          | 0                 | position envelope amount, added to `wt`                                   |
+| `wtattack` `wtdecay` `wtsustain` `wtrelease` | s, s, 0..1, s  | 0.01, 0.1, 1, 0.1 | position envelope shape                                                   |
+| `wtrate` `wtdepth`                           | 0..50 Hz, 0..1 | 0, 0              | sine LFO on the position                                                  |
+| `warp` `warpmode`                            | 0..1, mode     | 0, `none`         | bends the read phase: `asym`, `bendp`, `bendm`, `bendmp`, `sync`, `quant` |
+| `wtphaserand`                                | 0..1           | 0                 | start phase randomness, seeded per note so renders stay reproducible      |
+
+Tables. Four built-ins are generated in code and work offline: `basic` (sine → triangle → saw → square), `pwm` (pulse 50% → 5%), `formant` (vowels a → e → i → o → u) and `harmonics` (1 → 32 harmonics). Strudel's `wt_` sounds come from the `uzu-wavetables` pack (`github:tidalcycles/uzu-wavetables`, Unlicense) through the normal pack path: `wt_digital:2` means `pack:uzu-wavetables/wt_digital:2`, fetched once, pinned by sha256 and cached like any pack sound. Any other pack sound works too. Frames follow the Serum/Vital WAV convention: a `clm ` chunk reading `<!>2048 …` gives the frame length; otherwise a file whose length is a multiple of 2048 samples is 2048-sample frames, and anything else is one single-cycle frame (the AKWF convention).
+
+Band-limiting. Each frame is kept as its harmonic spectrum and rendered into one table per octave holding only the harmonics below Nyquist for that octave, so a high note never aliases. Tables are oversampled and read with 4-point Hermite interpolation. The arithmetic is plain float64 in a fixed order, so inline, worker and cold or warm cache renders are byte-identical (a renderer parity test checks it).
+
+The wavetable is an oscillator of the synth voice (see [Synth](#synth)): a wavetable track also takes every `synth` parameter, so `attack`/`release`, the `lpf`/`lpenv` filter envelopes, `fm`, `unison`/`detune`/`spread`, `vib` and `penv` shape it as they shape a saw. The band-limit level follows the instantaneous pitch, so vibrato, pitch envelopes and detuned unison voices stay alias-free. Live play mode plays wavetable tracks.
+
+```ts
+instrument: wavetable("wt_digital:2", { wt: 0.3, wtenv: 0.5, wtdecay: 0.4, warp: 0.2, warpmode: "bendp" }),
+```
+
+| Command                                    | Does                                                                       |
+| ------------------------------------------ | -------------------------------------------------------------------------- |
+| `/wt` · `/wt list`                         | the focused track's wavetable · built-in tables and the `wt_` sets         |
+| `/wt <table>`                              | make the focused track a wavetable track (`basic`, `wt_vgame:3`, `pack:…`) |
+| `/wt <0..1>`                               | set the position                                                           |
+| `/wtenv`, `/wtattack` … `/wtphaserand <n>` | set one parameter; `/warpmode <mode>` sets the warp mode                   |
+
+The menu's **Parameters** section lists the table picker and every wavetable parameter for a wavetable track, and **Sounds** has a "wavetable synth" row. The agent's `set_wavetable` tool takes the same table names and parameters.
+
 ## Rhythm (Euclidean rows)
 
 A drum part can be stored as generators instead of notes: each row owns one voice of a `kit` or oneshot `sampler` track and dawg expands it into ordinary notes, so rendering, diffs and sync are unchanged while you, the agent and `track.ts` edit four numbers instead of sixteen hits. The model follows the Torso T-1's Shape and Groove sections; the Euclidean patterns and rotation match Strudel's `euclid`/`euclidRot` exactly (`E(3,8)` is `x..x..x.`, a positive rotate moves the pattern later).
@@ -715,16 +747,16 @@ Sample kits from packs (`/kit 909` and the rest, see **Sample packs**) sit in th
 
 `/menu` or `Ctrl-K` (on an empty prompt, in play mode too) opens the edit menu, drawn with the same overlay as the model picker. Every edit the agent can make is reachable from it with keys alone, and each row shows its current value and the command it runs, so the menu teaches the commands. `/menu effects` opens a section directly.
 
-| Section    | Rows                                                                                                                                          |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Track      | name, instrument, mute, solo, volume, pan                                                                                                     |
-| Parameters | instrument; a synth's preset, ADSR, filter, detune, vibrato and FM, then **advanced** with every synth parameter; a sampler's mode and voices |
-| Sounds     | drum kits (`/kit`, synth then samples), drum patterns (`/pattern`), instruments (piano, `gm_*` soundfonts), use a pack sound, packs           |
-| Effects    | the core effects with presets and simple parameters, **more effects**, and **advanced** per effect (see Effects)                              |
-| Automation | each `AUTOMATION_LANES` lane: its points as `beat N  value` rows, add points, ramp, clear lane                                                |
-| Mix        | every track's volume, pan, mute and solo; choosing another track focuses it first                                                             |
-| Transport  | play, tempo, beats per bar, loop bars, grid, click, count-in                                                                                  |
-| Chords     | play-mode chord mode, key tonic and mode, voicing, spread, bass, sevenths, perform, rate, octaves, preset, style                              |
+| Section    | Rows                                                                                                                                                                                                           |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Track      | name, instrument, mute, solo, volume, pan                                                                                                                                                                      |
+| Parameters | instrument; a synth's preset, ADSR, filter, detune, vibrato and FM, then **advanced** with every synth parameter; a wavetable track's table picker and wavetable parameters first; a sampler's mode and voices |
+| Sounds     | drum kits (`/kit`, synth then samples), drum patterns (`/pattern`), instruments (piano, `gm_*` soundfonts), use a pack sound, packs                                                                            |
+| Effects    | the core effects with presets and simple parameters, **more effects**, and **advanced** per effect (see Effects)                                                                                               |
+| Automation | each `AUTOMATION_LANES` lane: its points as `beat N  value` rows, add points, ramp, clear lane                                                                                                                 |
+| Mix        | every track's volume, pan, mute and solo; choosing another track focuses it first                                                                                                                              |
+| Transport  | play, tempo, beats per bar, loop bars, grid, click, count-in                                                                                                                                                   |
+| Chords     | play-mode chord mode, key tonic and mode, voicing, spread, bass, sevenths, perform, rate, octaves, preset, style                                                                                               |
 
 | Key                         | Does                                                                       |
 | --------------------------- | -------------------------------------------------------------------------- |

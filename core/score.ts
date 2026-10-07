@@ -71,6 +71,148 @@ export const SCORE_LIMITS = Object.freeze({
   maxSampleCacheBytes: 512 * 1024 * 1024,
 } as const);
 
+/** Instrument name that selects a track's `wavetable` oscillator. */
+export const WAVETABLE_INSTRUMENT = "wavetable" as const;
+
+/**
+ * Warp modes (Strudel's documented `warpmode` names). Each bends the read
+ * phase of the table; see `src/audio/wavetable.ts` for the exact maps.
+ */
+export const WARP_MODES = Object.freeze([
+  "none",
+  "asym",
+  "bendp",
+  "bendm",
+  "bendmp",
+  "sync",
+  "quant",
+] as const);
+export type WarpMode = (typeof WARP_MODES)[number];
+
+/** Prefix of a table generated in code (`builtin:basic`). */
+export const BUILTIN_TABLE_PREFIX = "builtin:" as const;
+
+/**
+ * A track's wavetable oscillator, with Strudel's parameter names. Every
+ * field but `table` is omitted at its default.
+ */
+export type TrackWavetable = Readonly<{
+  /** `builtin:<name>` or a pinned pack sound (`pack:uzu-wavetables/wt_digital:1`). */
+  table: SampleRef;
+  /** Position in the table, 0..1 (default 0). */
+  wt?: number;
+  /** Position envelope amount, -1..1 (default 0 = off). */
+  wtenv?: number;
+  /** Position envelope times in seconds and sustain level 0..1. */
+  wtattack?: number;
+  wtdecay?: number;
+  wtsustain?: number;
+  wtrelease?: number;
+  /** Position LFO rate in Hz (0..50) and depth 0..1 (default 0 = off). */
+  wtrate?: number;
+  wtdepth?: number;
+  /** Warp amount 0..1 and mode (default none). */
+  warp?: number;
+  warpmode?: WarpMode;
+  /** Randomness of each note's start phase, 0..1 (seeded by the note). */
+  wtphaserand?: number;
+}>;
+
+/** Strudel parameter name → [min, max, default] for wavetable numbers. */
+export const WAVETABLE_PARAMS = Object.freeze({
+  wt: [0, 1, 0],
+  wtenv: [-1, 1, 0],
+  wtattack: [0, 10, 0.01],
+  wtdecay: [0, 10, 0.1],
+  wtsustain: [0, 1, 1],
+  wtrelease: [0, 10, 0.1],
+  wtrate: [0, 50, 0],
+  wtdepth: [0, 1, 0],
+  warp: [0, 1, 0],
+  wtphaserand: [0, 1, 0],
+} as const satisfies Record<string, readonly [number, number, number]>);
+export type WavetableParam = keyof typeof WAVETABLE_PARAMS;
+
+const BUILTIN_TABLE = /^builtin:[a-z][a-z0-9_-]{0,31}$/;
+
+export function isWavetableInstrument(instrument: string | undefined): boolean {
+  return (
+    typeof instrument === "string" &&
+    instrument.trim().toLowerCase() === WAVETABLE_INSTRUMENT
+  );
+}
+
+/** The table a wavetable track plays: its own, else the built-in `basic`. */
+export function wavetableOf(track: Track): TrackWavetable {
+  return track.wavetable ?? DEFAULT_WAVETABLE;
+}
+
+export const DEFAULT_WAVETABLE: TrackWavetable = Object.freeze({
+  table: Object.freeze({ src: `${BUILTIN_TABLE_PREFIX}basic` }),
+});
+
+export function normalizeWavetable(input: unknown): TrackWavetable | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (!isRecord(input))
+    throw new ScoreValidationError(
+      "track wavetable must be an object or null",
+      "invalid-track",
+    );
+  const table = input.table;
+  let ref: SampleRef;
+  if (
+    isRecord(table) &&
+    typeof table.src === "string" &&
+    table.src.startsWith(BUILTIN_TABLE_PREFIX)
+  ) {
+    if (!BUILTIN_TABLE.test(table.src) || Object.keys(table).length !== 1)
+      throw new ScoreValidationError(
+        "wavetable table builtin:<name> takes no other fields",
+        "invalid-track",
+      );
+    ref = Object.freeze({ src: table.src });
+  } else {
+    ref = normalizeSampleRef(table, "wavetable table");
+    if (!isPackRef(ref.src))
+      throw new ScoreValidationError(
+        "wavetable table must be builtin:<name> or pack:<pack>/<sound>[:<n>]",
+        "invalid-track",
+      );
+  }
+  const out: Record<string, unknown> = { table: ref };
+  for (const name of Object.keys(WAVETABLE_PARAMS) as WavetableParam[]) {
+    const value = input[name];
+    if (value === undefined) continue;
+    const [min, max, fallback] = WAVETABLE_PARAMS[name];
+    if (typeof value !== "number" || !Number.isFinite(value))
+      throw new ScoreValidationError(
+        `wavetable ${name} must be a number ${min}..${max}`,
+        "invalid-track",
+      );
+    const clamped = Math.max(min, Math.min(max, value));
+    if (clamped !== fallback) out[name] = clamped;
+  }
+  if (input.warpmode !== undefined) {
+    if (!WARP_MODES.includes(input.warpmode as WarpMode))
+      throw new ScoreValidationError(
+        `wavetable warpmode must be one of ${WARP_MODES.join(", ")}`,
+        "invalid-track",
+      );
+    if (input.warpmode !== "none") out.warpmode = input.warpmode;
+  }
+  for (const key of Object.keys(input))
+    if (
+      key !== "table" &&
+      key !== "warpmode" &&
+      !Object.prototype.hasOwnProperty.call(WAVETABLE_PARAMS, key)
+    )
+      throw new ScoreValidationError(
+        `wavetable has an unknown field ${key.slice(0, 32)}`,
+        "invalid-track",
+      );
+  return Object.freeze(out) as TrackWavetable;
+}
+
 /** Instrument name that selects a track's `sampler`. */
 export const SAMPLER_INSTRUMENT = "sampler" as const;
 
@@ -140,6 +282,14 @@ export type Track = Readonly<{
    * `fxAutomation["synth-<param>"]`, read at note onsets.
    */
   synth?: TrackSynth;
+  /**
+   * Wavetable oscillator settings (Strudel names). Used when `instrument`
+   * is `"wavetable"`; kept when the instrument changes so switching back
+   * restores them. Absent means the built-in `basic` table at position 0.
+   */
+  wavetable?: TrackWavetable;
+  /** Wavetable position (`wt`, 0..1) control points; overrides the static `wt`. */
+  wtAutomation?: readonly AutomationPoint[];
   /**
    * Score v2: sample voices; present exactly when `instrument` is
    * `"sampler"`. Documents without it decode unchanged.
@@ -240,7 +390,13 @@ export type TrackDelay = Readonly<{
 
 /** The lanes stored in their own track fields (`AUTOMATION_LANES`). */
 export type TrackAutomationParameter =
-  "volume" | "pan" | "filter" | "resonance" | "delay-feedback" | "delay-mix";
+  | "volume"
+  | "pan"
+  | "filter"
+  | "resonance"
+  | "delay-feedback"
+  | "delay-mix"
+  | "wt";
 
 /** Every automation lane: the track-field lanes plus `fx` lanes. */
 export type AutomationParameter = TrackAutomationParameter | FxLane;
@@ -256,7 +412,8 @@ export const AUTOMATION_LANES: Readonly<
         | "filterAutomation"
         | "resonanceAutomation"
         | "delayFeedbackAutomation"
-        | "delayMixAutomation";
+        | "delayMixAutomation"
+        | "wtAutomation";
       min: number;
       max: number;
     }>
@@ -284,6 +441,7 @@ export const AUTOMATION_LANES: Readonly<
     min: 0,
     max: SCORE_LIMITS.maxDelayMix,
   },
+  wt: { field: "wtAutomation", min: 0, max: 1 },
 });
 
 const FX_LANE_RANGES: ReadonlyMap<
@@ -363,6 +521,7 @@ export type TrackPatch = Readonly<
       | "resonanceAutomation"
       | "delayFeedbackAutomation"
       | "delayMixAutomation"
+      | "wtAutomation"
     >
   > & {
     filter?: TrackFilter | null;
@@ -374,6 +533,7 @@ export type TrackPatch = Readonly<
     fx?: TrackFx | null;
     fxAutomation?: Track["fxAutomation"] | null;
     synth?: TrackSynth | null;
+    wavetable?: TrackWavetable | null;
   }
 >;
 
@@ -404,6 +564,7 @@ export type TrackInput = Readonly<
     | "fx"
     | "fxAutomation"
     | "synth"
+    | "wavetable"
   > &
     Pick<Track, "id"> & {
       filter?: TrackFilter | null;
@@ -415,6 +576,7 @@ export type TrackInput = Readonly<
       fx?: TrackFx | null;
       fxAutomation?: Track["fxAutomation"] | null;
       synth?: TrackSynth | null;
+      wavetable?: TrackWavetable | null;
     }
 >;
 
@@ -1039,10 +1201,12 @@ function normalizeTrack(input: unknown): Track {
   const resonanceAutomation = lane("resonance");
   const delayFeedbackAutomation = lane("delay-feedback");
   const delayMixAutomation = lane("delay-mix");
+  const wtAutomation = lane("wt");
   const reverb = normalizeReverb(input.reverb);
   const fx = fxOrThrow(() => normalizeFx(input.fx));
   const fxAutomation = normalizeFxAutomation(input.fxAutomation);
   const synth = fxOrThrow(() => normalizeSynth(input.synth));
+  const wavetable = normalizeWavetable(input.wavetable);
   const sampler = normalizeSampler(input.sampler);
   const rhythm = normalizeRhythm(input.rhythm, id);
   let kit: string | undefined;
@@ -1091,6 +1255,8 @@ function normalizeTrack(input: unknown): Track {
     ...(fx ? { fx } : {}),
     ...(fxAutomation ? { fxAutomation } : {}),
     ...(synth ? { synth } : {}),
+    ...(wavetable ? { wavetable } : {}),
+    ...(wtAutomation.length > 0 ? { wtAutomation } : {}),
     ...(sampler ? { sampler } : {}),
     ...(rhythm ? { rhythm } : {}),
     ...(kit ? { kit } : {}),

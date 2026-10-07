@@ -154,6 +154,87 @@ async function writeProject(dir: string, score: TrackScore): Promise<void> {
     await writeAtomic(join(dir, file.path), file.text);
 }
 
+const tables = createScore({
+  tempoBpm: 110,
+  bars: 1,
+  tracks: [
+    {
+      id: "pad",
+      name: "pad",
+      instrument: "wavetable",
+      wavetable: {
+        table: { src: "builtin:formant" },
+        wt: 0.25,
+        wtenv: -0.5,
+        warp: 0.3,
+        warpmode: "bendmp",
+      },
+      wtAutomation: [
+        { tick: 0, value: 0.25 },
+        { tick: 960, value: 0.75 },
+      ],
+    },
+    {
+      id: "lead",
+      name: "lead",
+      instrument: "wavetable",
+      wavetable: {
+        table: {
+          src: "pack:uzu-wavetables/wt_digital:2",
+          sha256: "b".repeat(64),
+          url: "https://example.com/wt_digital/c.wav",
+        },
+        wtphaserand: 1,
+      },
+    },
+  ],
+  notes: [
+    {
+      id: "n1",
+      trackId: "pad",
+      startTick: 0,
+      durationTicks: 960,
+      pitch: 48,
+      velocity: 0.7,
+    },
+  ],
+} as never);
+
+describe("wavetable tracks", () => {
+  test("print as wavetable(...) and survive print → eval unchanged", async () => {
+    const pad = printTrack(tables, tables.tracks[0]!);
+    expect(pad).toContain('import { track, note, wavetable } from "dawg";');
+    expect(pad).toContain('instrument: wavetable("formant", {');
+    expect(pad).toContain("wt: [");
+    const lead = printTrack(tables, tables.tracks[1]!);
+    expect(lead).toContain("pack:uzu-wavetables/wt_digital:2");
+    expect(lead).toContain("b".repeat(64));
+    for (const file of printProject(tables).files)
+      expect(await prettier.format(file.text, { parser: "typescript" })).toBe(
+        file.text,
+      );
+    const dir = await mkdtemp(join(tmpdir(), "dawg-print-wt-"));
+    try {
+      await initProject(dir);
+      await writeProject(dir, tables);
+      const evaluated = await evaluateProject(dir);
+      if (!evaluated.ok) throw new Error(JSON.stringify(evaluated.diagnostics));
+      const ops = diffScores(tables, evaluated.score).filter(
+        (op) => op.type !== "addNote" && op.type !== "removeNote",
+      );
+      expect(ops).toEqual([]);
+      expect(evaluated.score.tracks[0]!.wavetable).toEqual(
+        tables.tracks[0]!.wavetable,
+      );
+      expect(printProject(evaluated.score).files).toEqual(
+        printProject(tables).files,
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("printer", () => {
   test("effects print their set fields and non-default fx params", () => {
     const lead = printTrack(rich, rich.tracks.at(-1)!);

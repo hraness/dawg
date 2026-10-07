@@ -93,6 +93,10 @@ export function compositionBrief(options: {
       ...((track.delayMixAutomation?.length ?? 0) > 0
         ? { delayMixAutomation: track.delayMixAutomation!.length }
         : {}),
+      ...(track.wavetable ? { wavetable: track.wavetable } : {}),
+      ...((track.wtAutomation?.length ?? 0) > 0
+        ? { wtAutomation: track.wtAutomation!.length }
+        : {}),
     };
   });
   const focusedNotes = score.notes

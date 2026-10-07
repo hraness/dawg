@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createScore } from "../../core/score.ts";
+import { createScore, type TrackScore } from "../../core/score.ts";
 import { LoopRenderer } from "./renderer.ts";
 import { renderScorePcm } from "./wav.ts";
 import { SampleLibrary } from "./samples.ts";
@@ -154,6 +154,71 @@ describe("loop renderer with the full effects chain", () => {
         expect(a.pcm).toEqual(cold.pcm);
         expect(b.pcm).toEqual(cold.pcm);
         expect(cold.pcm.some((v) => v !== 0)).toBe(true);
+      }
+    } finally {
+      worker.dispose();
+      inline.dispose();
+    }
+  });
+});
+
+function wavetableScore(wt: number): TrackScore {
+  return createScore({
+    tempoBpm: 120,
+    bars: 1,
+    tracks: [
+      {
+        id: "pad",
+        name: "pad",
+        instrument: "wavetable",
+        wavetable: {
+          table: { src: "builtin:formant" },
+          wt,
+          wtenv: 0.4,
+          wtrate: 3,
+          wtdepth: 0.3,
+          warp: 0.4,
+          warpmode: "asym",
+          wtphaserand: 1,
+        },
+        wtAutomation: [
+          { tick: 0, value: wt },
+          { tick: 1_920, value: 1 },
+        ],
+      },
+    ],
+    notes: [0, 480, 960, 1_440].map((startTick, i) => ({
+      id: `n${i}`,
+      trackId: "pad",
+      pitch: 48 + i * 7,
+      startTick,
+      durationTicks: 400,
+      velocity: 0.8,
+    })),
+  } as never);
+}
+
+describe("loop renderer with wavetable tracks", () => {
+  test("worker, inline (cached) and cold renders are byte-identical", async () => {
+    const worker = new LoopRenderer({ sampleRate: 8_000 });
+    const inline = new LoopRenderer({ sampleRate: 8_000, worker: false });
+    try {
+      let previous: Int16Array | undefined;
+      for (const wt of [0, 0.5, 0]) {
+        const cold = renderScorePcm(wavetableScore(wt), {
+          sampleRate: 8_000,
+          loop: true,
+        });
+        const [a, b] = await Promise.all([
+          worker.render(wavetableScore(wt)),
+          inline.render(wavetableScore(wt)),
+        ]);
+        expect(a.pcm).toEqual(cold.pcm);
+        expect(b.pcm).toEqual(cold.pcm);
+        expect(cold.pcm.some((v) => v !== 0)).toBe(true);
+        // A position change must not reuse the cached stem.
+        if (previous) expect(cold.pcm).not.toEqual(previous);
+        previous = cold.pcm;
       }
     } finally {
       worker.dispose();

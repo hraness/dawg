@@ -35,7 +35,7 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       { command: "extend <count> bars", summary: "lengthen the loop" },
       {
         command: "instrument <name>",
-        summary: "sine piano pluck bass saw square triangle kit",
+        summary: "sine piano pluck bass saw square triangle wavetable kit",
       },
       { command: "volume <0..1>", summary: "track level" },
       { command: "pan <-1..1>", summary: "left … right" },
@@ -44,12 +44,20 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       { command: "solo", summary: "only this track" },
       { command: "unsolo", summary: "every track again" },
       { command: "clear", summary: "remove this track's notes" },
+      {
+        command: "wt <table> | wt <0..1> | wt list",
+        summary: "wavetable synth · wt basic · wt wt_digital:2 · wt 0.5",
+      },
+      {
+        command: "wtenv|wtattack|wtdecay|wtrate|wtdepth|warp <n>",
+        summary: "scan the table · warpmode bendp",
+      },
       { command: "filter <hz> [res]", summary: "low-pass · filter off" },
       { command: "delay <beats> [fb] [mix]", summary: "ping-pong · delay off" },
       { command: "reverb <mix> [size]", summary: "room · reverb off" },
       {
         command: "automate <lane> at <beat> <value>",
-        summary: "volume pan filter resonance delay-feedback delay-mix",
+        summary: "volume pan filter resonance delay-feedback delay-mix wt",
       },
       {
         command: "automate <lane> points <b:v>...",
@@ -225,10 +233,13 @@ const USAGE: Readonly<Record<string, string>> = {
   bars: "bars takes 1…256 · bars 8",
   extend: "extend <count> bars · extend 4 bars",
   instrument:
-    "instrument <name> · sine piano pluck bass saw square triangle kit",
+    "instrument <name> · sine piano pluck bass saw square triangle wavetable kit",
   volume: "volume takes 0…1 · volume 0.8",
   vol: "volume takes 0…1 · volume 0.8",
   pan: "pan takes -1…1 · pan -0.5",
+  wt: "wt <table> | wt <0..1> | wt list · wt basic · wt wt_digital:2",
+  wavetable: "wt <table> | wt <0..1> | wt list · wt basic · wt wt_digital:2",
+  warpmode: "warpmode none|asym|bendp|bendm|bendmp|sync|quant",
   filter: "filter <hz> [res] · filter 800 0.3 · filter off",
   delay: "delay <beats> [fb] [mix] · delay 0.75 0.4 0.3 · delay off",
   reverb: "reverb <mix> [size] · reverb 0.3 0.6 · reverb off",

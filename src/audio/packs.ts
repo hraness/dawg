@@ -257,6 +257,14 @@ export const PACK_CATALOG: readonly PackInfo[] = Object.freeze(
       },
 
       {
+        name: "uzu-wavetables",
+        title: "uzu wavetables (Strudel's wt_ tables)",
+        source: "github:tidalcycles/uzu-wavetables",
+        license: "Unlicense",
+        homepage: "https://github.com/tidalcycles/uzu-wavetables",
+        kind: "strudel",
+      },
+      {
         name: "vcsl",
         title: "Versilian Community Sample Library",
         source: `${DOUGH}/vcsl.json`,
