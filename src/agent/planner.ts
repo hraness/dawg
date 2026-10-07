@@ -5,6 +5,7 @@ import {
   normalizeDelay,
   normalizeFilter,
   normalizeReverb,
+  normalizeSampler,
   scoreFromJSON,
   type ScoreOperation,
 } from "../../core/score.ts";
@@ -92,6 +93,41 @@ function parseOperation(value: unknown): ScoreOperation {
     return { type: "clearTrack", trackId: value.trackId };
   }
   if (
+    value.type === "removeTrack" &&
+    typeof value.trackId === "string" &&
+    value.trackId.length <= 64
+  ) {
+    return { type: "removeTrack", trackId: value.trackId };
+  }
+  if (
+    value.type === "moveTrack" &&
+    typeof value.trackId === "string" &&
+    value.trackId.length <= 64 &&
+    typeof value.index === "number" &&
+    Number.isInteger(value.index) &&
+    value.index >= 0 &&
+    value.index < SCORE_LIMITS.maxTracks
+  ) {
+    return { type: "moveTrack", trackId: value.trackId, index: value.index };
+  }
+  if (
+    value.type === "setKey" &&
+    (value.key === null ||
+      (typeof value.key === "string" &&
+        value.key.length <= SCORE_LIMITS.maxNameLength))
+  ) {
+    return { type: "setKey", key: value.key };
+  }
+  if (
+    value.type === "setMeter" &&
+    typeof value.beatsPerBar === "number" &&
+    Number.isInteger(value.beatsPerBar) &&
+    value.beatsPerBar >= 1 &&
+    value.beatsPerBar <= SCORE_LIMITS.maxBeatsPerBar
+  ) {
+    return { type: "setMeter", beatsPerBar: value.beatsPerBar };
+  }
+  if (
     value.type === "updateTrack" &&
     typeof value.trackId === "string" &&
     value.trackId.length <= 64 &&
@@ -115,6 +151,8 @@ function parseOperation(value: unknown): ScoreOperation {
       safe.delay = normalizeDelay(patch.delay) ?? null;
     if (patch.reverb !== undefined)
       safe.reverb = normalizeReverb(patch.reverb) ?? null;
+    if (patch.sampler !== undefined)
+      safe.sampler = normalizeSampler(patch.sampler) ?? null;
     return { type: "updateTrack", trackId: value.trackId, patch: safe };
   }
   if (

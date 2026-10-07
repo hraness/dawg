@@ -70,16 +70,33 @@ import {
   TuiApp,
   type AppView,
   type SyncState,
+  type TypesIndicator,
 } from "../tui/app.ts";
 import { fail, ok, toneOf, warn, type Receipt } from "../tui/activity.ts";
 import { encodeBuffer } from "../tui/screen.ts";
 import { parseThemeName } from "../tui/theme.ts";
+import { formatDiagnostic } from "../core/sdk/eval.ts";
+import { isProject } from "./project/init.ts";
+import { typecheckProject } from "./project/typecheck.ts";
+import {
+  startProjectSync,
+  type ProjectSync,
+  type SyncHost,
+} from "./project/sync.ts";
 
 const ESC = "\u001b[";
 /** `/sessions` rows shown in the overlay. */
 const MAX_LISTED_SESSIONS = 64;
 
-const SUBCOMMANDS = ["login", "logout", "auth", "sessions", "render"];
+const SUBCOMMANDS = [
+  "login",
+  "logout",
+  "auth",
+  "sessions",
+  "render",
+  "init",
+  "check",
+];
 const VALUE_FLAGS = ["--session", "--track", "--import", "--export", "--theme"];
 const FLAGS = [
   ...VALUE_FLAGS,
@@ -98,6 +115,8 @@ Usage:
   dawg --import <file> --export <file>
   dawg sessions
   dawg render <out.wav> [--session <name|id>] [--import <file>]
+  dawg init [dir]      project files: song.ts, tracks/<slug>/track.ts, .dawg/sdk
+  dawg check           typecheck + evaluate the project; exit 1 on problems
   dawg --version
 
 Usage flags:
@@ -134,6 +153,15 @@ if (process.argv[2] === "sessions") {
     );
   else await printSessions(process.cwd(), stdout);
   process.exit(0);
+}
+if (process.argv[2] === "init" || process.argv[2] === "check") {
+  const command =
+    process.argv[2] === "init"
+      ? (await import("./project/init.ts")).runInitCommand
+      : (await import("./project/check.ts")).runCheckCommand;
+  process.exit(
+    await command(process.argv.slice(2), process.cwd(), stdout, process.stderr),
+  );
 }
 if (process.argv[2] === "render") {
   const { runRenderCommand } = await import("./render.ts");
@@ -248,6 +276,9 @@ const tui = new TuiApp({
 });
 let syncState: SyncState = port.sync;
 let windowCount = 1;
+/** Project file sync when `dawg.json` is in the working directory. */
+let projectSync: ProjectSync | undefined;
+let typesIndicator: TypesIndicator | undefined;
 let announcedName = record.meta.name;
 let namer = makeNamer();
 /** Re-subscribes the TUI after /fork or /resume replaces `port`. */
@@ -453,6 +484,7 @@ function appView(value: TrackScore, beat: number): AppView {
     sync: syncState,
     sessionName: record.meta.name,
     windows: windowCount,
+    types: typesIndicator,
   };
 }
 
@@ -616,6 +648,7 @@ async function runInteractive(): Promise<void> {
           else if (payload.action === "pause") await setTransport("pause");
           else if (payload.action === "toggle") await setTransport("toggle");
         }
+        projectSync?.scoreChanged(score);
         tui.activity.pushCard("synced from another window", {
           tone: "info",
           baseRevision: previousRevision,
@@ -676,6 +709,8 @@ async function runInteractive(): Promise<void> {
     });
   if (port.status !== "file session")
     tui.activity.pushCard(port.status, { tone: "info" });
+  if (await isProject(process.cwd()))
+    projectSync = startProjectSync(syncHost());
   void currentProvider().then(() => tick(true));
   tick(true);
   try {
@@ -767,6 +802,7 @@ async function runInteractive(): Promise<void> {
   } finally {
     clearInterval(timer);
     clearInterval(presenceTimer);
+    await projectSync?.stop();
     namer.dispose();
     stdout.off("resize", onResize);
     unsubscribe();
@@ -1288,6 +1324,44 @@ async function commitScore(
   );
   score = next;
   if (clock.playing) void audio.play(score);
+  projectSync?.scoreChanged(score);
+}
+
+/** The window's side of the project file sync (see src/project/sync.ts). */
+function syncHost(): SyncHost {
+  return {
+    project: process.cwd(),
+    current: () => score,
+    async commit(plan, summary) {
+      const baseRevision = record.revision;
+      record = await port.appendOperations(
+        record,
+        {
+          kind: "files.apply",
+          payload: { summary, before: record.composition },
+        },
+        plan.operations,
+        plan.next.toJSON(),
+      );
+      score = scoreFromJSON(record.composition);
+      clock.setTempo(score.tempoBpm);
+      if (clock.playing) void audio.play(score);
+      void baseRevision;
+      return score;
+    },
+    card(text, tone, hint) {
+      if (tone === "error") tui.activity.pushError(text);
+      else
+        tui.activity.pushCard(text, {
+          tone,
+          hint,
+          resultRevision: tone === "success" ? record.revision : undefined,
+        });
+    },
+    types(state) {
+      typesIndicator = state;
+    },
+  };
 }
 
 async function stepHistory(direction: "undo" | "redo"): Promise<Receipt> {
@@ -1490,6 +1564,19 @@ function agentHost(
     },
     takeSteering: () => turn.steering.splice(0),
     workspace: { root: process.cwd() },
+    // A written project source is applied before the tool result returns,
+    // so the model reads the outcome and any type errors in the same step.
+    async onWorkspaceWrite(path) {
+      if (!projectSync || !/\.ts$/.test(path)) return;
+      const outcome = await projectSync.checkFiles();
+      const types = await typecheckProject(process.cwd());
+      const errors = types.diagnostics.slice(0, 8).map(formatDiagnostic);
+      return [
+        outcome,
+        types.ok ? "types ✓" : `types ✗ ${types.diagnostics.length}`,
+        ...errors,
+      ].join("\n");
+    },
     // web_search tries the gateway's server-side search tools when the turn
     // runs on the gateway; Brave, OpenRouter and the search tool come from
     // the environment inside the tool.

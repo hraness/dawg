@@ -54,7 +54,11 @@ export interface AppView {
   sessionName?: string | undefined;
   /** Live windows on this session (presence); shown when more than one. */
   windows?: number | undefined;
+  /** Project typecheck result; `types ✓` or `types ✗ N` beside sync. */
+  types?: TypesIndicator | undefined;
 }
+
+export type TypesIndicator = Readonly<{ ok: boolean; errors: number }>;
 
 export interface UiState {
   prompt: PromptModel;
@@ -361,6 +365,14 @@ function paintHeader(
       text: `rev ${score.revision}`,
       style: roles.text,
       priority: 1,
+    });
+  if (view.types)
+    right.push({
+      text: view.types.ok
+        ? `types ${unicode ? "✓" : "ok"}`
+        : `types ${unicode ? "✗" : "x"} ${view.types.errors}`,
+      style: view.types.ok ? roles.success : roles.error,
+      priority: 4,
     });
   const sync = syncSegment(view.sync, theme, unicode);
   if (sync) right.push(sync);

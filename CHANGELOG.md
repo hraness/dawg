@@ -26,6 +26,14 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 The agent can now work with the project directory and the web. `list_files` and `read_file` cover the whole project except `.dawg/`; `write_file` and `edit_file` are limited to `song.ts` and the focused track's `tracks/<slug>/` directory, write atomically and cap sizes. `web_search` answers through the AI Gateway's server-side search tools when a gateway key is configured (`DAWG_WEB_SEARCH` picks `exa`, `perplexity`, `parallel` or `browserbase`), through OpenRouter's `web` plugin when an OpenRouter key exists, and otherwise through DuckDuckGo; `BRAVE_SEARCH_API_KEY` overrides the chain. `fetch_url` reads one public page with private-address blocking and bounded output. The composition brief includes a bounded project tree and the head of the focused track's `notes.md`. New `trackSlug()` in `core/slug.ts` and an optional `onWorkspaceWrite` host hook.
 
+### Project files
+
+- `dawg init [dir]` creates a project: `dawg.json`, `tsconfig.json`, `song.ts`, `tracks/`, a vendored typed SDK in `.dawg/sdk/v1.ts` and `.gitignore` lines. It is idempotent and refreshes the SDK only for a newer 1.x.
+- Every window keeps `song.ts` and `tracks/<slug>/track.ts` in two-way sync with the session: file edits apply as one `files.apply` revision (`applied from files · …`, or `files rejected · <file:line:col …>`), and score edits reprint only the files that changed.
+- `dawg check` typechecks (native TypeScript 7, incremental) and evaluates the project; the header shows `types ✓` or `types ✗ N`. Agent writes to project sources report the apply outcome and type errors in the tool result.
+- Score: optional `sampler` on tracks (validated, rendered silent for now) and `removeTrack`, `moveTrack`, `setKey`, `setMeter` operations. The format stays `track.loop/v1`.
+- `typescript` is now a runtime dependency; the package ships `core/sdk/**`.
+
 ## 0.2.0
 
 The first tagged release. Open a session in several terminals, give each window its own instrument, let an agent write parts, and every window stays on the same song.

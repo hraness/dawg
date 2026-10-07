@@ -33,7 +33,26 @@ export const SCORE_LIMITS = Object.freeze({
   maxReverbMix: 1,
   minReverbSize: 0,
   maxReverbSize: 1,
+  /** Sampler voices per track (score v2, `sampler` field). */
+  maxSamplerVoices: 64,
+  maxSamplerVoiceNameLength: 32,
+  maxSamplePathLength: 256,
+  maxSampleGain: 2,
+  /** |speed| bound; negative speeds play in reverse. */
+  maxSampleSpeed: 8,
+  maxChokeGroupLength: 32,
+  /** Per sample file, enforced by the decoder and the import tool. */
+  maxSampleFileBytes: 50 * 1024 * 1024,
+  maxSampleSeconds: 600,
+  /** Decoded PCM cache under `.dawg/assets`, LRU. */
+  maxSampleCacheBytes: 512 * 1024 * 1024,
 } as const);
+
+/** Instrument name that selects a track's `sampler`. */
+export const SAMPLER_INSTRUMENT = "sampler" as const;
+
+/** First pitch slot assigned to one-shot sampler voices (GM kick). */
+export const SAMPLER_FIRST_SLOT = 36;
 
 export class ScoreValidationError extends Error {
   readonly code:
@@ -85,6 +104,43 @@ export type Track = Readonly<{
   delayMixAutomation?: readonly AutomationPoint[];
   /** Algorithmic stereo reverb send, mixed after the delay. */
   reverb?: TrackReverb;
+  /**
+   * Score v2: sample voices; present exactly when `instrument` is
+   * `"sampler"`. Documents without it decode unchanged.
+   */
+  sampler?: Sampler;
+}>;
+
+/**
+ * A track's sample voices (Strudel-aligned). In `oneshot` mode every voice is
+ * a drum-like hit addressed by the pitch slot `samplerVoiceSlots` assigns
+ * (36, 37, … in voice-name order); in `keyed` mode notes are ordinary pitches
+ * and a voice is resampled from its `root`.
+ */
+export type Sampler = Readonly<{
+  voices: Readonly<Record<string, SampleRef>>;
+  mode: "oneshot" | "keyed";
+}>;
+
+export type SampleRef = Readonly<{
+  /** Project-relative path, normally `tracks/<slug>/samples/<file>`. */
+  src: string;
+  /** Content hash (64 hex) when known; the decoded cache is keyed by it. */
+  sha256?: string;
+  /** MIDI note the file plays at in keyed mode, default 60. */
+  root?: number;
+  /** Start fraction 0..1 of the file. */
+  begin?: number;
+  /** End fraction 0..1 of the file, greater than `begin`. */
+  end?: number;
+  /** Linear gain 0..2. */
+  gain?: number;
+  /** Playback rate; negative reverses. |speed| ≤ 8, never 0. */
+  speed?: number;
+  /** Sustain by looping begin..end. */
+  loop?: boolean;
+  /** Choke group: a new hit in the group stops the previous one. */
+  choke?: string;
 }>;
 
 export type TrackReverb = Readonly<{
@@ -185,6 +241,7 @@ export type TrackPatch = Readonly<
     filter?: TrackFilter | null;
     delay?: TrackDelay | null;
     reverb?: TrackReverb | null;
+    sampler?: Sampler | null;
   }
 >;
 
@@ -204,11 +261,12 @@ export type Note = Readonly<{
 }>;
 
 export type TrackInput = Readonly<
-  Omit<Partial<Track>, "filter" | "delay" | "reverb"> &
+  Omit<Partial<Track>, "filter" | "delay" | "reverb" | "sampler"> &
     Pick<Track, "id"> & {
       filter?: TrackFilter | null;
       delay?: TrackDelay | null;
       reverb?: TrackReverb | null;
+      sampler?: Sampler | null;
     }
 >;
 
@@ -348,6 +406,15 @@ export class TrackScore {
     return new TrackScore({ ...this.toJSON(), bars });
   }
 
+  withKey(key: string | null): TrackScore {
+    return new TrackScore({ ...this.toJSON(), key });
+  }
+
+  /** Change the meter; ticks are per beat, so notes keep their positions. */
+  withMeter(beatsPerBar: number): TrackScore {
+    return new TrackScore({ ...this.toJSON(), beatsPerBar });
+  }
+
   toJSON(): TrackScoreData & { version: typeof SCORE_VERSION } {
     return {
       version: SCORE_VERSION,
@@ -476,6 +543,62 @@ export function updateTrack(
   );
 }
 
+/** Removes a track and every note on it; unknown ids are a no-op. */
+export function removeTrack(score: TrackScore, trackId: string): TrackScore {
+  if (!score.tracks.some((track) => track.id === trackId)) return score;
+  return new TrackScore({
+    ...score.toJSON(),
+    tracks: score.tracks.filter((track) => track.id !== trackId),
+    notes: score.notes.filter((note) => note.trackId !== trackId),
+  });
+}
+
+/** Moves a track to position `index` (clamped) in score order. */
+export function moveTrack(
+  score: TrackScore,
+  trackId: string,
+  index: number,
+): TrackScore {
+  const from = score.tracks.findIndex((track) => track.id === trackId);
+  if (from < 0 || !Number.isInteger(index))
+    throw new ScoreValidationError(
+      "moveTrack needs an existing track and an integer index",
+      "invalid-track",
+    );
+  const to = Math.max(0, Math.min(score.tracks.length - 1, index));
+  if (from === to) return score;
+  const tracks = [...score.tracks];
+  const [moved] = tracks.splice(from, 1);
+  tracks.splice(to, 0, moved!);
+  return score.withTracks(tracks);
+}
+
+export function isSamplerInstrument(instrument: string | undefined): boolean {
+  return (
+    typeof instrument === "string" &&
+    instrument.trim().toLowerCase() === SAMPLER_INSTRUMENT
+  );
+}
+
+/**
+ * One-shot voices are addressed by pitch slots so the drum-lane projection
+ * and note tools keep working: voice names sorted by code point, slots from
+ * `SAMPLER_FIRST_SLOT` upward. Keyed samplers have no slots.
+ */
+export function samplerVoiceSlots(
+  sampler: Sampler,
+): ReadonlyMap<string, number> {
+  const slots = new Map<string, number>();
+  if (sampler.mode !== "oneshot") return slots;
+  const names = Object.keys(sampler.voices).sort(compareCodePoints);
+  names.forEach((name, index) => slots.set(name, SAMPLER_FIRST_SLOT + index));
+  return slots;
+}
+
+function compareCodePoints(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 export function setVolumeAutomation(
   score: TrackScore,
   trackId: string,
@@ -569,12 +692,36 @@ export type ScoreOperation =
   | Readonly<{
       type: "clearTrack";
       trackId: string;
+    }>
+  | Readonly<{
+      type: "removeTrack";
+      trackId: string;
+    }>
+  | Readonly<{
+      type: "moveTrack";
+      trackId: string;
+      index: number;
+    }>
+  | Readonly<{
+      type: "setKey";
+      key: string | null;
+    }>
+  | Readonly<{
+      type: "setMeter";
+      beatsPerBar: number;
     }>;
 
 export function applyScoreOperation(
   score: TrackScore,
   operation: ScoreOperation,
 ): TrackScore {
+  if (operation.type === "removeTrack")
+    return removeTrack(score, operation.trackId);
+  if (operation.type === "moveTrack")
+    return moveTrack(score, operation.trackId, operation.index);
+  if (operation.type === "setKey") return score.withKey(operation.key);
+  if (operation.type === "setMeter")
+    return score.withMeter(operation.beatsPerBar);
   if (operation.type === "addTrack") return addTrack(score, operation.track);
   if (operation.type === "addNote") return addNote(score, operation.note);
   if (operation.type === "removeNote")
@@ -736,6 +883,17 @@ function normalizeTrack(input: unknown): Track {
   const delayFeedbackAutomation = lane("delay-feedback");
   const delayMixAutomation = lane("delay-mix");
   const reverb = normalizeReverb(input.reverb);
+  const sampler = normalizeSampler(input.sampler);
+  if (isSamplerInstrument(instrument) && !sampler)
+    throw new ScoreValidationError(
+      `track ${id} instrument "sampler" needs a sampler`,
+      "invalid-track",
+    );
+  if (sampler && !isSamplerInstrument(instrument))
+    throw new ScoreValidationError(
+      `track ${id} has a sampler but its instrument is "${instrument}"`,
+      "invalid-track",
+    );
   return Object.freeze({
     id,
     name,
@@ -753,7 +911,172 @@ function normalizeTrack(input: unknown): Track {
     ...(delayFeedbackAutomation.length > 0 ? { delayFeedbackAutomation } : {}),
     ...(delayMixAutomation.length > 0 ? { delayMixAutomation } : {}),
     ...(reverb ? { reverb } : {}),
+    ...(sampler ? { sampler } : {}),
   });
+}
+
+const VOICE_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
+const SHA256_HEX = /^[0-9a-f]{64}$/;
+
+/** Validates a `Sampler` from unknown; `undefined`/`null` means none. */
+export function normalizeSampler(input: unknown): Sampler | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (!isRecord(input))
+    throw new ScoreValidationError(
+      "track sampler must be an object or null",
+      "invalid-track",
+    );
+  const mode = input.mode ?? "oneshot";
+  if (mode !== "oneshot" && mode !== "keyed")
+    throw new ScoreValidationError(
+      'sampler mode must be "oneshot" or "keyed"',
+      "invalid-track",
+    );
+  if (!isRecord(input.voices))
+    throw new ScoreValidationError(
+      "sampler voices must be an object of name → sample",
+      "invalid-track",
+    );
+  const names = Object.keys(input.voices);
+  if (names.length === 0 || names.length > SCORE_LIMITS.maxSamplerVoices)
+    throw new ScoreValidationError(
+      `sampler must have between 1 and ${SCORE_LIMITS.maxSamplerVoices} voices`,
+      "score-limit",
+    );
+  const voices: Record<string, SampleRef> = {};
+  for (const name of names.sort(compareCodePoints)) {
+    if (
+      name.length > SCORE_LIMITS.maxSamplerVoiceNameLength ||
+      !VOICE_NAME.test(name)
+    )
+      throw new ScoreValidationError(
+        `sampler voice name "${name.slice(0, 40)}" must match ${VOICE_NAME.source} and be at most ${SCORE_LIMITS.maxSamplerVoiceNameLength} characters`,
+        "invalid-track",
+      );
+    voices[name] = normalizeSampleRef(input.voices[name], name);
+  }
+  return Object.freeze({ voices: Object.freeze(voices), mode });
+}
+
+export function normalizeSampleRef(input: unknown, name: string): SampleRef {
+  const label = `sampler voice ${name}`;
+  if (!isRecord(input))
+    throw new ScoreValidationError(
+      `${label} must be an object`,
+      "invalid-track",
+    );
+  const src = input.src;
+  if (
+    typeof src !== "string" ||
+    src.length === 0 ||
+    src.length > SCORE_LIMITS.maxSamplePathLength ||
+    !isSafeRelativePath(src)
+  )
+    throw new ScoreValidationError(
+      `${label} src must be a project-relative path without "..", at most ${SCORE_LIMITS.maxSamplePathLength} characters`,
+      "invalid-track",
+    );
+  const ref: {
+    src: string;
+    sha256?: string;
+    root?: number;
+    begin?: number;
+    end?: number;
+    gain?: number;
+    speed?: number;
+    loop?: boolean;
+    choke?: string;
+  } = { src };
+  if (input.sha256 !== undefined) {
+    if (typeof input.sha256 !== "string" || !SHA256_HEX.test(input.sha256))
+      throw new ScoreValidationError(
+        `${label} sha256 must be 64 lowercase hex characters`,
+        "invalid-track",
+      );
+    ref.sha256 = input.sha256;
+  }
+  if (input.root !== undefined) {
+    if (
+      typeof input.root !== "number" ||
+      !Number.isInteger(input.root) ||
+      input.root < 0 ||
+      input.root > 127
+    )
+      throw new ScoreValidationError(
+        `${label} root must be a MIDI integer between 0 and 127`,
+        "invalid-track",
+      );
+    ref.root = input.root;
+  }
+  const begin = input.begin === undefined ? 0 : input.begin;
+  const end = input.end === undefined ? 1 : input.end;
+  if (
+    typeof begin !== "number" ||
+    typeof end !== "number" ||
+    !Number.isFinite(begin) ||
+    !Number.isFinite(end) ||
+    begin < 0 ||
+    end > 1 ||
+    begin >= end
+  )
+    throw new ScoreValidationError(
+      `${label} begin/end must be fractions with 0 ≤ begin < end ≤ 1`,
+      "invalid-track",
+    );
+  if (input.begin !== undefined) ref.begin = begin;
+  if (input.end !== undefined) ref.end = end;
+  if (input.gain !== undefined)
+    ref.gain = boundedNumber(
+      input.gain,
+      `${label} gain`,
+      0,
+      SCORE_LIMITS.maxSampleGain,
+    );
+  if (input.speed !== undefined) {
+    const speed = boundedNumber(
+      input.speed,
+      `${label} speed`,
+      -SCORE_LIMITS.maxSampleSpeed,
+      SCORE_LIMITS.maxSampleSpeed,
+    );
+    if (speed === 0)
+      throw new ScoreValidationError(
+        `${label} speed cannot be 0`,
+        "invalid-track",
+      );
+    ref.speed = speed;
+  }
+  if (input.loop !== undefined) {
+    if (typeof input.loop !== "boolean")
+      throw new ScoreValidationError(
+        `${label} loop must be boolean`,
+        "invalid-track",
+      );
+    ref.loop = input.loop;
+  }
+  if (input.choke !== undefined) {
+    if (
+      typeof input.choke !== "string" ||
+      input.choke.length === 0 ||
+      input.choke.length > SCORE_LIMITS.maxChokeGroupLength ||
+      !VOICE_NAME.test(input.choke)
+    )
+      throw new ScoreValidationError(
+        `${label} choke must be a short group name`,
+        "invalid-track",
+      );
+    ref.choke = input.choke;
+  }
+  return Object.freeze(ref);
+}
+
+/** Relative, forward-slash, no empty/dot segments, no control characters. */
+function isSafeRelativePath(path: string): boolean {
+  if (path.startsWith("/") || /[\\\u0000-\u001f]/.test(path)) return false;
+  if (/^[A-Za-z]:/.test(path)) return false;
+  return path
+    .split("/")
+    .every((segment) => segment !== "" && segment !== "." && segment !== "..");
 }
 
 export function normalizeReverb(input: unknown): TrackReverb | undefined {

@@ -82,3 +82,48 @@ describe("rebaseOperations", () => {
     ).toBeUndefined();
   });
 });
+
+describe("rebaseOperations: project-file operations", () => {
+  test("setKey, setMeter, removeTrack and moveTrack replay or conflict", () => {
+    const ops: ScoreOperation[] = [
+      { type: "setKey", key: "A minor" },
+      { type: "setMeter", beatsPerBar: 3 },
+      { type: "moveTrack", trackId: "b", index: 0 },
+      { type: "removeTrack", trackId: "a" },
+    ];
+    const replayed = rebaseOperations(base, base.withTempo(90), ops);
+    expect(replayed.ok).toBe(true);
+    if (replayed.ok) {
+      expect(replayed.next.key).toBe("A minor");
+      expect(replayed.next.beatsPerBar).toBe(3);
+      expect(replayed.next.tracks.map((t) => t.id)).toEqual(["b"]);
+      expect(replayed.next.notes).toEqual([]);
+    }
+    expect(
+      rebaseOperations(base, base.withKey("C"), [
+        { type: "setKey", key: null },
+      ]),
+    ).toMatchObject({ ok: false, reason: "key changed" });
+    expect(
+      rebaseOperations(base, base.withMeter(5), [
+        { type: "setMeter", beatsPerBar: 3 },
+      ]),
+    ).toMatchObject({ ok: false, reason: "meter changed" });
+    const added = rebaseOperations(base, base, [note("n9")]);
+    if (!added.ok) throw new Error("expected ok");
+    expect(
+      rebaseOperations(base, added.next, [
+        { type: "removeTrack", trackId: "a" },
+      ]),
+    ).toMatchObject({ ok: false, reason: "track a changed" });
+    const moved = rebaseOperations(base, base, [
+      { type: "moveTrack", trackId: "b", index: 0 },
+    ]);
+    if (!moved.ok) throw new Error("expected ok");
+    expect(
+      rebaseOperations(base, moved.next, [
+        { type: "moveTrack", trackId: "a", index: 1 },
+      ]),
+    ).toMatchObject({ ok: false, reason: "track order changed" });
+  });
+});
