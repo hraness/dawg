@@ -119,9 +119,48 @@ export function convolveStereo(
   gain: number,
   gainAt?: (index: number) => number,
 ): void {
+  const rawL = new Float64Array(input.length);
+  const rawR = new Float64Array(input.length);
+  const scale = convolveRaw(input, impulse, rawL, rawR);
+  if (scale === 0) return;
+  addConvolved(rawL, rawR, scale, outL, outR, gain, gainAt);
+}
+
+/**
+ * Adds the unscaled convolution from `convolveRaw` at `gain` (or `gainAt`
+ * per sample): `out += raw · (gain · scale)`, the order `convolveStereo`
+ * always used, so a cached raw signal mixes to the same samples.
+ */
+export function addConvolved(
+  rawL: Float64Array,
+  rawR: Float64Array,
+  scale: number,
+  outL: Float64Array,
+  outR: Float64Array,
+  gain: number,
+  gainAt?: (index: number) => number,
+): void {
+  for (let index = 0; index < rawL.length; index += 1) {
+    const g = (gainAt ? gainAt(index) : gain) * scale;
+    outL[index]! += rawL[index]! * g;
+    outR[index]! += rawR[index]! * g;
+  }
+}
+
+/**
+ * The convolution input ∗ impulse into `rawL`/`rawR` before its inverse-FFT
+ * scale, which it returns. Samples past the input are left as they were
+ * (zero for fresh arrays), as is everything when the impulse is empty.
+ */
+export function convolveRaw(
+  input: Float64Array,
+  impulse: Impulse,
+  rawL: Float64Array,
+  rawR: Float64Array,
+): number {
   const length = input.length;
   const irLength = impulse.left.length;
-  if (length === 0 || irLength === 0) return;
+  if (length === 0 || irLength === 0) return 0;
   const block = partitionSize(irLength);
   const n = block * 2;
   const partitions = Math.ceil(irLength / block);
@@ -179,12 +218,11 @@ export function convolveStereo(
     const outStart = k * block;
     const count = Math.min(block, length - outStart);
     for (let i = 0; i < count; i += 1) {
-      const index = outStart + i;
-      const g = (gainAt ? gainAt(index) : gain) * scale;
-      outL[index]! += accRe[block + i]! * g;
-      outR[index]! += accIm[block + i]! * g;
+      rawL[outStart + i] = accRe[block + i]!;
+      rawR[outStart + i] = accIm[block + i]!;
     }
   }
+  return scale;
 }
 
 /** Built-in impulse names (`builtin:<name>`). */

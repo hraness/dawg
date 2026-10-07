@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { createScore, type TrackScore } from "../../core/score.ts";
 import {
   AudioEngine,
+  SWAP_FADE_SECONDS,
   detectAudioBackend,
   type AudioBackendInfo,
 } from "./engine.ts";
@@ -224,9 +225,118 @@ describe("gapless streaming engine", () => {
     expect(engine.playerStarts).toBe(1);
     const stream = fake.bytes();
     const next = renderScorePcm(score(64), { sampleRate: RATE, loop: true });
-    // Frames after the swap continue from the same loop position in the new render.
-    const after = stream.subarray(before * 2, before * 2 + 4000 * 2);
-    expect(after).toEqual(next.pcm.subarray(before * 2, before * 2 + 4000 * 2));
+    // Frames after the swap continue from the same loop position in the new
+    // render: exactly the new loop once the 20 ms crossfade (160 frames) ends.
+    const fade = Math.round(SWAP_FADE_SECONDS * RATE);
+    const from = (before + fade) * 2;
+    expect(stream.subarray(from, from + 3000 * 2)).toEqual(
+      next.pcm.subarray(from, from + 3000 * 2),
+    );
+    await engine.stopAsync();
+  });
+
+  test("swaps crossfade at the same beat instead of cutting", async () => {
+    // A sustained tone across the whole loop, so every swap point is loud.
+    const tone = (pitch: number): TrackScore =>
+      createScore({
+        tempoBpm: 120,
+        bars: 1,
+        tracks: [{ id: "t", name: "t", instrument: "sine" }],
+        notes: [
+          {
+            id: "n",
+            trackId: "t",
+            pitch,
+            startTick: 0,
+            durationTicks: 1_920,
+            velocity: 1,
+          },
+        ],
+      });
+    const maxStep = (pcm: Int16Array, from: number, to: number): number => {
+      let max = 0;
+      for (let frame = Math.max(1, from); frame < to; frame += 1)
+        for (let side = 0; side < 2; side += 1)
+          max = Math.max(
+            max,
+            Math.abs(pcm[frame * 2 + side]! - pcm[(frame - 1) * 2 + side]!),
+          );
+      return max;
+    };
+    const old = renderScorePcm(tone(48), { sampleRate: RATE, loop: true });
+    const next = renderScorePcm(tone(61), { sampleRate: RATE, loop: true });
+    // The largest step either loop takes on its own, mid-note.
+    const natural = Math.max(
+      maxStep(old.pcm, 2_000, 6_000),
+      maxStep(next.pcm, 2_000, 6_000),
+    );
+    const steps: { cut: number; faded: number }[] = [];
+    for (const ms of [500, 520, 560, 610]) {
+      const clock = { ms: 0 };
+      const fake = fakeSpawn();
+      const engine = engineAt(clock, fake.spawn);
+      await engine.play(tone(48), 0);
+      clock.ms = ms;
+      engine.pump();
+      const at = fake.bytes().length / 2;
+      await engine.play(tone(61), (ms - 0) / 500);
+      clock.ms = ms + 200;
+      engine.pump();
+      const stream = fake.bytes();
+      // A hard cut would put next[at] right after old[at - 1].
+      const cut = Math.max(
+        Math.abs(next.pcm[at * 2]! - old.pcm[(at - 1) * 2]!),
+        Math.abs(next.pcm[at * 2 + 1]! - old.pcm[(at - 1) * 2 + 1]!),
+      );
+      const faded = maxStep(stream, at - 10, at + 400);
+      steps.push({ cut, faded });
+      // Past the fade the stream is the new loop byte for byte.
+      const fade = Math.round(SWAP_FADE_SECONDS * RATE);
+      expect(stream.subarray((at + fade) * 2, (at + fade + 400) * 2)).toEqual(
+        next.pcm.subarray((at + fade) * 2, (at + fade + 400) * 2),
+      );
+      await engine.stopAsync();
+    }
+    // No step across the swap exceeds 1.25x the tones' own largest step,
+    // while a hard cut at the same points jumps several times further.
+    for (const { faded } of steps) expect(faded).toBeLessThan(natural * 1.25);
+    expect(Math.max(...steps.map((step) => step.cut))).toBeGreaterThan(
+      natural * 3,
+    );
+  });
+
+  test("back-to-back swaps mid-fade stay smooth", async () => {
+    const clock = { ms: 0 };
+    const fake = fakeSpawn();
+    const engine = engineAt(clock, fake.spawn);
+    const pitches = [48, 61, 52, 66, 50];
+    await engine.play(score(pitches[0]), 0);
+    clock.ms = 100;
+    engine.pump();
+    const at = fake.bytes().length / 2;
+    // A new render every 5 ms: each swap lands inside the previous fade.
+    for (const pitch of pitches.slice(1)) {
+      await engine.play(score(pitch), clock.ms / 500);
+      clock.ms += 5;
+      engine.pump();
+    }
+    clock.ms += 200;
+    engine.pump();
+    const stream = fake.bytes();
+    let max = 0;
+    for (let frame = at; frame < at + 600; frame += 1)
+      max = Math.max(
+        max,
+        Math.abs(stream[frame * 2]! - stream[frame * 2 - 2]!),
+      );
+    const own = renderScorePcm(score(66), { sampleRate: RATE, loop: true });
+    let natural = 0;
+    for (let frame = 1; frame < 4_000; frame += 1)
+      natural = Math.max(
+        natural,
+        Math.abs(own.pcm[frame * 2]! - own.pcm[frame * 2 - 2]!),
+      );
+    expect(max).toBeLessThan(natural * 1.5);
     await engine.stopAsync();
   });
 

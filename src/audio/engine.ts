@@ -170,6 +170,17 @@ function parseCommand(value: string): string[] {
   return parts;
 }
 
+/**
+ * Swaps crossfade old to new over this window with equal-power gains
+ * (cos/sin), reading both loops at the same beat. 20 ms is long enough that
+ * the step a hard cut makes is spread below ~50 Hz (no click, even on a
+ * full-scale low bass), short enough to sit inside the transport's 30 ms
+ * resync tolerance and below the shortest audible echo (~30-50 ms), so an
+ * edit never sounds smeared or doubled. Playback only: renders, exports and
+ * the loop buffers themselves never pass through it.
+ */
+export const SWAP_FADE_SECONDS = 0.02;
+
 /** Swaps re-anchor to the transport only past this disagreement. */
 const RESYNC_SECONDS = 0.03;
 
@@ -227,6 +238,16 @@ type Loop = Readonly<{
   frames: number;
   framesPerBeat: number;
 }>;
+
+/** A loop fading out after a swap, read on from where it was. */
+type FadeOut = {
+  loop: Loop;
+  cursor: number;
+  /** Its gain when the fade began (below 1 when swapped out mid-fade). */
+  from: number;
+  /** Frames of the fade already written. */
+  done: number;
+};
 
 /**
  * The click bus: the engine asks `beatAt` for the transport beat at a stream
@@ -293,6 +314,11 @@ export class AudioEngine {
   private child: PlayerProcess | undefined;
   private timer: ReturnType<typeof setInterval> | undefined;
   private loop: Loop | undefined;
+  /** Loops fading out after swaps (see `SWAP_FADE_SECONDS`). */
+  private fades: FadeOut[] = [];
+  /** Frames of the current loop's fade-in already written, while fading. */
+  private fadeIn: number | undefined;
+  private readonly fadeFrames: number;
   /** Monotonic ms that stream frame 0 belongs to. */
   private startMs = 0;
   /** Stream frames written since `startMs`. */
@@ -328,6 +354,10 @@ export class AudioEngine {
       ((options.leadMs ?? 200) * this.sampleRate) / 1000,
     );
     this.defaultLeadFrames = this.leadFrames;
+    this.fadeFrames = Math.max(
+      1,
+      Math.round(SWAP_FADE_SECONDS * this.sampleRate),
+    );
     this.tickMs = options.tickMs ?? 20;
     this.now = options.now ?? (() => performance.now());
     this.useTimer = options.timer ?? true;
@@ -603,6 +633,7 @@ export class AudioEngine {
     if (this.monitoring && this.child) {
       // Play mode: the transport stopped, the live player keeps running.
       this.loop = undefined;
+      this.endFades();
       return;
     }
     if (this.timer) clearInterval(this.timer);
@@ -610,6 +641,7 @@ export class AudioEngine {
     const child = this.child;
     this.child = undefined;
     this.loop = undefined;
+    this.endFades();
     if (child) {
       try {
         child.stdin.end?.();
@@ -646,6 +678,7 @@ export class AudioEngine {
     if (remaining > this.sampleRate) {
       const skipped = remaining - this.sampleRate;
       if (loop) this.cursor = (this.cursor + skipped) % loop.frames;
+      this.endFades();
       this.written += skipped;
       remaining = this.sampleRate;
     }
@@ -663,6 +696,7 @@ export class AudioEngine {
       offset += take;
       this.cursor = (this.cursor + take) % loop.frames;
     }
+    if (loop) this.crossfade(out, remaining);
     this.mixLive(out, this.written, remaining);
     this.written += remaining;
     try {
@@ -671,6 +705,49 @@ export class AudioEngine {
     } catch {
       /* the exit handler decides whether to restart */
     }
+  }
+
+  /** Equal-power gain of a fade-in `done` frames along (0 to 1). */
+  private rampGain(done: number): number {
+    return Math.sin((Math.PI / 2) * Math.min(1, done / this.fadeFrames));
+  }
+
+  /**
+   * Blend the start of a block (already the current loop) with the loops
+   * fading out: new·sin + old·cos over `fadeFrames`, both read at the same
+   * beat, so a swap never steps the waveform.
+   */
+  private crossfade(out: Int16Array, frames: number): void {
+    if (this.fadeIn === undefined) return;
+    const start = this.fadeIn;
+    const count = Math.min(frames, this.fadeFrames - start);
+    for (let index = 0; index < count; index += 1) {
+      const gain = this.rampGain(start + index);
+      const at = index * RENDER_CHANNELS;
+      let left = out[at]! * gain;
+      let right = out[at + 1]! * gain;
+      for (const fade of this.fades) {
+        if (fade.done >= this.fadeFrames) continue;
+        const g =
+          fade.from * Math.cos((Math.PI / 2) * (fade.done / this.fadeFrames));
+        const from = fade.cursor * RENDER_CHANNELS;
+        left += fade.loop.pcm[from]! * g;
+        right += fade.loop.pcm[from + 1]! * g;
+        fade.cursor = (fade.cursor + 1) % fade.loop.frames;
+        fade.done += 1;
+      }
+      out[at] = clamp16(left);
+      out[at + 1] = clamp16(right);
+    }
+    this.fadeIn = start + count;
+    // Older fades that began earlier finish before the newest fade-in does.
+    this.fades = this.fades.filter((fade) => fade.done < this.fadeFrames);
+    if (this.fadeIn >= this.fadeFrames) this.endFades();
+  }
+
+  private endFades(): void {
+    this.fades = [];
+    this.fadeIn = undefined;
   }
 
   /** Wall time (monotonic ms) stream frame `frame` sounds at. */
@@ -763,6 +840,13 @@ export class AudioEngine {
       if (!previous || wrapped > this.sampleRate * RESYNC_SECONDS)
         cursor = anchored;
     }
+    if (previous && this.child) {
+      // The outgoing loop keeps its current gain (below 1 when it was
+      // itself still fading in) and fades from there.
+      const from = this.fadeIn === undefined ? 1 : this.rampGain(this.fadeIn);
+      this.fades.push({ loop: previous, cursor: this.cursor, from, done: 0 });
+      this.fadeIn = 0;
+    }
     this.cursor = cursor;
     this.loop = next;
   }
@@ -784,6 +868,7 @@ export class AudioEngine {
     this.spawns += 1;
     this.child = child;
     this.loop = loop;
+    this.endFades();
     this.startMs = this.now();
     this.written = 0;
     this.cursor = loop ? this.frameForBeat(loop, beat) : 0;
