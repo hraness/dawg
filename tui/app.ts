@@ -541,7 +541,11 @@ function paintPrompt(
   if (!view.agentOffline) x += buffer.text(x, top, pill(mode), pillStyle);
   const status: string[] = [];
   // The model shows once, in the header; the spend line carries it here.
-  if (view.spend && !layout.footer) status.push(view.spend);
+  // Views without a spend line (embedders such as the site demo) keep the
+  // model label.
+  if (view.spend) {
+    if (!layout.footer) status.push(view.spend);
+  } else if (view.model) status.push(view.model);
   if (activity.queueDepth > 0) status.push(`queue ${activity.queueDepth}`);
   const layoutInfo = prompt.layout(rows);
   if (layoutInfo.total > rows)
