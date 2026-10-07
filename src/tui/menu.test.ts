@@ -432,6 +432,73 @@ describe("auditioning in the menu", () => {
   });
 });
 
+describe("hovering lists in the menu", () => {
+  const looping = (on: boolean): MenuContext => ({
+    ...context(),
+    audition: {
+      looping: on,
+      dirty: false,
+      committed: score(),
+      hint: "",
+      status: on ? "♪ solo" : "",
+    },
+  });
+
+  test("while looping, moving hears the row; Enter chooses; Esc and ← drop the hover", () => {
+    const menu = new EditMenu();
+    const ctx = looping(true);
+    menu.show(ctx, "sound");
+    select(menu, ctx, "browse sounds");
+    expect(menu.key("\r", ctx)).toEqual({ type: "handled" });
+    select(menu, ctx, "instruments");
+    expect(menu.key("\r", ctx)).toEqual({ type: "handled" });
+    const moved = menu.key(DOWN, ctx);
+    expect(moved).toEqual({
+      type: "hover",
+      command: expect.stringMatching(/^\/pack use gm\//),
+      key: "menu:instruments",
+    });
+    expect(menu.key("\r", ctx)).toMatchObject({
+      type: "choose",
+      key: "menu:instruments",
+    });
+    menu.key(DOWN, ctx);
+    expect(menu.key(ESC, ctx)).toEqual({
+      type: "unhover",
+      key: "menu:instruments",
+    });
+    // Back in "browse sounds"; ← from a hovered list drops it as well.
+    select(menu, ctx, "instruments");
+    menu.key("\r", ctx);
+    menu.key(DOWN, ctx);
+    expect(menu.key(LEFT, ctx)).toEqual({
+      type: "unhover",
+      key: "menu:instruments",
+    });
+  });
+
+  test("with the loop off, lists move and Enter runs as before", () => {
+    const menu = new EditMenu();
+    const ctx = looping(false);
+    menu.show(ctx, "sound");
+    select(menu, ctx, "browse sounds");
+    menu.key("\r", ctx);
+    select(menu, ctx, "instruments");
+    menu.key("\r", ctx);
+    expect(menu.key(DOWN, ctx)).toEqual({ type: "handled" });
+    expect(menu.key("\r", ctx)).toMatchObject({ type: "run" });
+    // Non-sound rows (pack info) never hover.
+    const on = looping(true);
+    const browse = new EditMenu();
+    browse.show(on, "sound");
+    select(browse, on, "browse sounds");
+    browse.key("\r", on);
+    select(browse, on, "sample packs");
+    browse.key("\r", on);
+    expect(browse.key(DOWN, on)).toEqual({ type: "handled" });
+  });
+});
+
 describe("edit commands", () => {
   test("parse names, meter, points and removal; reject bad input", () => {
     expect(parseEditCommand("track name Lead Line")).toEqual({

@@ -133,6 +133,11 @@ export interface PickerState {
   hint?: string | undefined;
   /** A dim line under the rows: what the focused row does. */
   note?: string | undefined;
+  /**
+   * Hosts the audition loop (src/tui/audition.ts): Space, `a` and `c` are
+   * returned as `pick-audition` instead of being swallowed.
+   */
+  audition?: boolean | undefined;
 }
 
 export interface PickerItem {
@@ -1089,6 +1094,8 @@ export type AppInput =
    * Pickers raise `pick-move` → `pick` (commit) or `pick-cancel` (cancel).
    */
   | { type: "pick-move"; picker: string; value: string }
+  /** Space, `a` or `c` on a picker that hosts the audition loop. */
+  | { type: "pick-audition"; picker: string; key: "loop" | "ab" | "context" }
   /** Consumed by an overlay (scroll, filter, move). */
   | { type: "overlay" }
   | { type: "none" };
@@ -1230,6 +1237,18 @@ export class TuiApp {
           this.filterPicker(((picker.query ?? "") + key.text).slice(0, 40));
           return { type: "overlay" };
         }
+      }
+      if (picker.audition && !picker.filtering) {
+        const audition =
+          value === " "
+            ? "loop"
+            : value === "a"
+              ? "ab"
+              : value === "c"
+                ? "context"
+                : undefined;
+        if (audition)
+          return { type: "pick-audition", picker: picker.id, key: audition };
       }
       if (picker.filterable && key.type === "text" && key.text === "/") {
         picker.filtering = true;

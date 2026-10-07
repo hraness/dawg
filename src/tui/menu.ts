@@ -9,7 +9,7 @@
  * Rendering reuses the TUI's picker overlay: `view()` returns a picker.
  */
 import { HINTS } from "../../tui/grammar.ts";
-import { auditionKey, type AuditionKey } from "./audition.ts";
+import { auditionKey, isStageable, type AuditionKey } from "./audition.ts";
 import {
   AUTOMATION_PARAMETERS,
   automationPoints,
@@ -198,6 +198,15 @@ export type MenuResult =
   | { type: "keep" }
   /** Drop the staged edits. */
   | { type: "revert" }
+  /**
+   * The cursor moved in a list while the loop plays: audition `command`
+   * in place of the previous hover of `key` (one per list).
+   */
+  | { type: "hover"; command: string; key: string }
+  /** Left a list without choosing: drop its hover (`key`). */
+  | { type: "unhover"; key: string }
+  /** Chose a list item while the loop plays: stage it for good. */
+  | { type: "choose"; command: string; key: string }
   | { type: "pass" };
 
 export type MenuView = Readonly<{
@@ -1536,6 +1545,12 @@ type Frame = {
   build: (context: MenuContext) => MenuNode[];
   index: number;
   query: string;
+  /**
+   * Lists audition the item under the cursor while the loop plays: the
+   * hover key, and whether this frame has staged a hover yet.
+   */
+  hover?: string;
+  hovering?: boolean;
 };
 
 const KEY_UP = new Set(["\u001b[A", "\u001bOA", "k"]);
@@ -1559,6 +1574,7 @@ function childFrame(
     title: node.label,
     index: 0,
     query: "",
+    hover: `menu:${node.id}`,
     build: (context) => {
       const fresh = parent
         .build(context)
@@ -1671,7 +1687,12 @@ export class EditMenu {
         frame.query = "";
         return { type: "handled" };
       }
-      // Esc reverts staged edits first, then goes back as usual.
+      // In a list, Esc drops the hovered item and goes back; elsewhere it
+      // reverts staged edits first, then goes back as usual.
+      if (frame.hover && frame.hovering && context.audition) {
+        this.stack.pop();
+        return { type: "unhover", key: frame.hover };
+      }
       if (context.audition?.dirty) return { type: "revert" };
       this.stack.pop();
       return this.stack.length ? { type: "handled" } : { type: "close" };
@@ -1685,15 +1706,15 @@ export class EditMenu {
       const step = KEY_UP.has(value) ? -1 : 1;
       if (nodes.length)
         frame.index = (frame.index + step + nodes.length) % nodes.length;
-      return { type: "handled" };
+      return this.hovered(frame, context);
     }
     if (value === "\u001b[5~" || value === "\u001b[H") {
       frame.index = 0;
-      return { type: "handled" };
+      return this.hovered(frame, context);
     }
     if (value === "\u001b[6~" || value === "\u001b[F") {
       frame.index = Math.max(0, nodes.length - 1);
-      return { type: "handled" };
+      return this.hovered(frame, context);
     }
     // Space hears the focused track (it still switches a toggle row);
     // `a` and `c` are A/B and context while the window hosts an audition.
@@ -1752,13 +1773,19 @@ export class EditMenu {
       }
       if (node.kind === "toggle")
         return { type: "run", command: node.command(!node.value) };
-      if (node.kind === "action") return { type: "run", command: node.command };
+      if (node.kind === "action")
+        return frame.hover &&
+          context.audition?.looping &&
+          isStageable(node.command)
+          ? { type: "choose", command: node.command, key: frame.hover }
+          : { type: "run", command: node.command };
       if (node.kind === "choice") {
         const current = node.options.indexOf(node.value);
         this.stack.push({
           title: node.label,
           index: Math.max(0, current),
           query: "",
+          hover: node.label,
           build: (fresh) => {
             const parent = this.stack.at(-2);
             const live =
@@ -1788,6 +1815,16 @@ export class EditMenu {
       }
     }
     return { type: "handled" };
+  }
+
+  /** After a move: audition the item under the cursor in a list. */
+  private hovered(frame: Frame, context: MenuContext): MenuResult {
+    if (!frame.hover || !context.audition?.looping) return { type: "handled" };
+    const node = this.selected(context);
+    if (node?.kind !== "action" || !isStageable(node.command))
+      return { type: "handled" };
+    frame.hovering = true;
+    return { type: "hover", command: node.command, key: frame.hover };
   }
 
   private nudge(node: MenuNode, direction: 1 | -1): MenuResult {
@@ -1831,7 +1868,11 @@ export class EditMenu {
         ? { type: "handled" }
         : { type: "run", command: node.command(next) };
     }
-    if (direction < 0 && this.stack.length > 1) this.stack.pop();
+    if (direction < 0 && this.stack.length > 1) {
+      const left = this.stack.pop();
+      if (left?.hover && left.hovering)
+        return { type: "unhover", key: left.hover };
+    }
     return { type: "handled" };
   }
 
@@ -1912,17 +1953,19 @@ export class EditMenu {
       ? HINTS.typing
       : this.filtering
         ? HINTS.filtering
-        : audition && (audition.looping || audition.dirty)
-          ? audition.hint
-          : selected?.kind === "point"
-            ? HINTS.point
-            : selected?.kind === "number" ||
-                selected?.kind === "toggle" ||
-                selected?.kind === "choice"
-              ? HINTS.value
-              : selected?.kind === "action"
-                ? HINTS.action
-                : HINTS.menu;
+        : audition?.looping && frame?.hover && selected?.kind === "action"
+          ? HINTS.hover
+          : audition && (audition.looping || audition.dirty)
+            ? audition.hint
+            : selected?.kind === "point"
+              ? HINTS.point
+              : selected?.kind === "number" ||
+                  selected?.kind === "toggle" ||
+                  selected?.kind === "choice"
+                ? HINTS.value
+                : selected?.kind === "action"
+                  ? HINTS.action
+                  : HINTS.menu;
     return { title, items, index, hint, note };
   }
 }

@@ -164,6 +164,10 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "every setting by hand · Ctrl-K",
       },
       {
+        command: "/try <sound command>",
+        summary: "hear it on a loop first · a A/B · enter keep",
+      },
+      {
         command: "/click on|off|<volume>",
         summary: "metronome · /count-in 0-2 · /grid 1/16",
       },
@@ -254,6 +258,7 @@ export const HELP_GUIDE: readonly HelpSection[] = [
       },
       { command: "ctrl-k › Effects", summary: "delay, reverb, distortion …" },
       { command: "fx delay mix 0.3", summary: "the same from the prompt" },
+      { command: "/try fx reverb mix 0.6", summary: "hear it before keeping" },
     ],
   },
   {
@@ -423,6 +428,7 @@ const USAGE: Readonly<Record<string, string>> = {
   kit: "/kit [name] · /kit syn909",
   euclid: "/euclid [voice] · euclid hat 7 16",
   menu: "/menu [sound|effects|rhythm|chords|mix|project]",
+  try: "/try <sound command> · /try fx reverb mix 0.6",
   play: "/play [on|off] · Ctrl-P",
   meter: "meter <1..16> · meter 3",
   undo: "undo · Ctrl-Z",

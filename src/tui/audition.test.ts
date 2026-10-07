@@ -222,6 +222,60 @@ describe("staging", () => {
     expect(h.pan(h.audition.score)).toBe(0.3);
   });
 
+  test("moving fast through a list plays only the latest hover", async () => {
+    const h = harness();
+    h.audition.start();
+    const results = await Promise.all([
+      h.audition.hover("pan lead 0.1", "picker:kit"),
+      h.audition.hover("pan lead 0.2", "picker:kit"),
+      h.audition.hover("pan lead 0.3", "picker:kit"),
+    ]);
+    expect(results.map((result) => result.message)).toEqual([
+      "superseded",
+      "superseded",
+      "pan lead 0.3",
+    ]);
+    expect(h.audition.commands).toEqual(["pan lead 0.3"]);
+  });
+
+  test("a slow hover (a pack fetch) overtaken mid-flight is dropped", async () => {
+    const h = harness();
+    let release: () => void = () => undefined;
+    const slow = new Promise<void>((resolve) => (release = resolve));
+    const host = (h.audition as unknown as { host: AuditionHost }).host;
+    const apply = host.apply;
+    host.apply = async (from, command) => {
+      if (command === "pan lead 0.9") await slow;
+      return apply(from, command);
+    };
+    h.audition.start();
+    const first = h.audition.hover("pan lead 0.9", "picker:kit");
+    h.clock.ms += 300;
+    expect(h.audition.fetching).toBe(true);
+    const second = h.audition.hover("pan lead 0.4", "picker:kit");
+    release();
+    expect((await first).message).toBe("superseded");
+    expect((await second).ok).toBe(true);
+    expect(h.audition.commands).toEqual(["pan lead 0.4"]);
+    expect(h.audition.fetching).toBe(false);
+  });
+
+  test("leaving a list drops its hover; choosing keeps it", async () => {
+    const h = harness();
+    h.audition.start();
+    await h.audition.stage("vol lead 0.5");
+    await h.audition.hover("pan lead 0.2", "menu:kits");
+    await h.audition.unhover("menu:kits");
+    expect(h.audition.commands).toEqual(["vol lead 0.5"]);
+    expect(h.pan(h.audition.score)).toBe(0);
+    await h.audition.hover("pan lead 0.7", "menu:kits");
+    h.audition.settle("menu:kits");
+    // A later hover in the same list stacks on the chosen one.
+    await h.audition.hover("vol lead 0.9", "menu:kits");
+    await h.audition.unhover("menu:kits");
+    expect(h.audition.commands).toEqual(["vol lead 0.5", "pan lead 0.7"]);
+  });
+
   test("another window's edit rebases the staged diff; a vanished target drops it", async () => {
     const h = harness();
     h.audition.start();
@@ -317,6 +371,7 @@ describe("keys and commands", () => {
       "kit 808",
       "vol 0.5",
       "pattern four-on-floor",
+      "/pack use gm/gm_acoustic_bass",
     ])
       expect(isStageable(command)).toBe(true);
     for (const command of [
@@ -326,6 +381,7 @@ describe("keys and commands", () => {
       "fx",
       "fx list",
       "kit list",
+      "pack info gm",
       "undo",
     ])
       expect(isStageable(command)).toBe(false);
