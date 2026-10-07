@@ -19,6 +19,7 @@ import {
   ALL_TRACKS_OPEN_HINT,
   attachTrack,
   forkSession,
+  historyEvents,
   namingTarget,
   pickerLines,
   resolveSessionArg,
@@ -1139,7 +1140,11 @@ async function commitScore(
 
 async function stepHistory(direction: "undo" | "redo"): Promise<string> {
   const latest = await port.load();
-  const target = historyTarget(latest.events, direction);
+  // A fork's undo continues into its parent's history past the fork point.
+  const target = historyTarget(
+    await historyEvents(process.cwd(), latest),
+    direction,
+  );
   if (!target) return `nothing to ${direction}`;
   try {
     const restored = scoreFromJSON(target.composition);
@@ -1272,15 +1277,29 @@ function agentHost(turn: { steering: string[] }): AgentHost {
       }),
     }),
     async commit(change) {
-      if (change.baseRevision !== record.revision)
+      // trackd rebases operation intents onto newer revisions when nothing
+      // they touch changed; the file port keeps the strict base check.
+      if (port.mode !== "daemon" && change.baseRevision !== record.revision)
         throw new StaleRevisionError(change.baseRevision, record.revision);
       try {
-        await commitScore(change.next, "agent.tool", {
-          tool: change.toolName,
-          callId: change.callId,
-          summary: change.summary,
-          operations: change.operations,
-        });
+        record = await port.appendOperations(
+          { ...record, revision: change.baseRevision },
+          {
+            kind: "agent.tool",
+            payload: {
+              tool: change.toolName,
+              callId: change.callId,
+              summary: change.summary,
+              operations: change.operations,
+              before: record.composition,
+            },
+          },
+          change.operations,
+          change.next.toJSON(),
+        );
+        // A rebased commit lands on a newer score than `change.next`.
+        score = scoreFromJSON(record.composition);
+        if (clock.playing) void audio.play(score);
       } catch (error) {
         if (error instanceof SessionConflictError)
           throw new StaleRevisionError(

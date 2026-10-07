@@ -5,10 +5,12 @@ import { join } from "node:path";
 import { createScore } from "../../core/score.ts";
 import {
   forkSession,
+  historyEvents,
   resolveSessionArg,
   SessionLookupError,
 } from "./attach.ts";
 import { DaemonClient } from "./client.ts";
+import { openSessionPort } from "./port.ts";
 import { listSessions, resolveSession } from "./list.ts";
 import {
   forkName,
@@ -18,8 +20,11 @@ import {
   parseSessionMeta,
   uniqueName,
 } from "./meta.ts";
+import { historyTarget, UNDO_KIND } from "../commands/history.ts";
 import {
+  appendSessionEvent,
   ensureSession,
+  inheritedEvents,
   loadSession,
   readCurrentSessionId,
   updateSessionMeta,
@@ -131,6 +136,86 @@ describe("session names", () => {
     );
   });
 
+  test("undo in a fork steps back past the fork point into the parent", async () => {
+    const dir = await workspace();
+    const base = await ensureSession<unknown>({ v: 0 }, { workspace: dir });
+    let parent = base.record;
+    for (const v of [1, 2])
+      parent = await appendSessionEvent(
+        base.paths,
+        parent,
+        { kind: "score.edit", payload: { before: { v: v - 1 } } },
+        { v },
+      );
+    const fork = await forkSession(dir, parent, "f");
+    // The parent keeps editing after the fork; the fork must not see it.
+    parent = await appendSessionEvent(
+      base.paths,
+      parent,
+      { kind: "score.edit", payload: { before: { v: 2 } } },
+      { v: 99 },
+    );
+    expect(fork.events).toHaveLength(0);
+    const events = await historyEvents(dir, fork);
+    expect(events).toHaveLength(2);
+    // Undo restores the composition before the parent's last pre-fork edit.
+    expect(historyTarget(events, "undo")).toEqual({
+      revision: 2,
+      composition: { v: 1 },
+    });
+    // After one undo in the fork, the next undo reaches the parent's first edit.
+    const undone = [
+      ...events,
+      {
+        id: "u",
+        revision: 1,
+        kind: UNDO_KIND,
+        payload: { before: { v: 2 } },
+        at: "",
+      },
+    ];
+    expect(historyTarget(undone, "undo")?.composition).toEqual({ v: 0 });
+    // A fork of a fork walks the whole chain.
+    const grand = await forkSession(dir, fork, "g");
+    expect(await historyEvents(dir, grand)).toHaveLength(2);
+  });
+
+  test("inherited history is bounded and tolerates bad lineage", async () => {
+    const dir = await workspace();
+    const self = "self-id";
+    // Missing parent: empty.
+    expect(
+      await inheritedEvents(
+        dir,
+        {
+          ...(await ensureSession<unknown>({}, { workspace: dir })).record.meta,
+          forkOf: { sessionId: "missing", revision: 3 },
+        },
+        self,
+      ),
+    ).toEqual([]);
+    // Forked past the parent's revision: inconsistent, ignored.
+    const parent = await ensureSession<unknown>(
+      {},
+      { workspace: dir, sessionId: "p1", setCurrent: false },
+    );
+    expect(
+      await inheritedEvents(
+        dir,
+        { ...parent.record.meta, forkOf: { sessionId: "p1", revision: 5 } },
+        self,
+      ),
+    ).toEqual([]);
+    // A cycle back to itself stops.
+    expect(
+      await inheritedEvents(
+        dir,
+        { ...parent.record.meta, forkOf: { sessionId: self, revision: 0 } },
+        self,
+      ),
+    ).toEqual([]);
+  });
+
   test("--session resolves names, ids, and reports ambiguity", async () => {
     const dir = await workspace();
     const a = await ensureSession(initial, {
@@ -206,6 +291,44 @@ describe("rename", () => {
       { name: "mine", nameSource: "auto" },
     );
     expect(next.status).toBe("applied");
+  });
+
+  test("file sessions see renames from another window without polling delay", async () => {
+    const dir = await workspace();
+    const { paths, record } = await ensureSession(initial, { workspace: dir });
+    const open = (label: string) =>
+      openSessionPort({
+        paths,
+        sessionId: record.sessionId,
+        label,
+        focusedTrackId: null,
+        daemon: false,
+      });
+    const a = await open("a");
+    const b = await open("b");
+    const seen: { name: string; at: number }[] = [];
+    let baseline = false;
+    const stop = b.subscribe((update) => {
+      if (update.type === "record") baseline = true;
+      if (update.type === "meta")
+        seen.push({ name: update.meta.name, at: Date.now() });
+    });
+    try {
+      const ready = Date.now() + 2_000;
+      while (!baseline && Date.now() < ready) await Bun.sleep(5);
+      expect(baseline).toBe(true);
+      const renamedAt = Date.now();
+      await a.updateMeta({ name: "watched", nameSource: "user" });
+      const deadline = Date.now() + 3_000;
+      while (seen.length === 0 && Date.now() < deadline) await Bun.sleep(5);
+      expect(seen[0]?.name).toBe("watched");
+      // fs.watch delivers well inside the 1 s backstop poll.
+      expect(seen[0]!.at - renamedAt).toBeLessThan(800);
+    } finally {
+      stop();
+      await a.close();
+      await b.close();
+    }
   });
 
   test("trackd: renames broadcast to every window and stale auto-names drop", async () => {

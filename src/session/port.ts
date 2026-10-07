@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { dirname } from "node:path";
+import { watch, type FSWatcher } from "node:fs";
+import { basename, dirname } from "node:path";
 import type { TrackScore } from "../../core/score.ts";
 import { AudioEngine } from "../audio/engine.ts";
 import { DaemonClient, type DaemonClientOptions } from "./client.ts";
@@ -19,6 +20,12 @@ import {
   type SessionPaths,
   type SessionRecord,
 } from "./store.ts";
+
+/** File-port polling: without fs.watch, and as a backstop with it. */
+const POLL_MS = 200;
+const WATCHED_POLL_MS = 1_000;
+/** Mirrors the protocol's per-intent operation cap. */
+const MAX_INTENT_OPERATIONS = 256;
 
 export type PortUpdate<T> =
   | { type: "record"; record: SessionRecord<T> }
@@ -66,6 +73,18 @@ export interface SessionPort<T> {
   append(
     current: SessionRecord<T>,
     event: Omit<SessionEvent, "id" | "revision" | "at">,
+    composition: T,
+  ): Promise<SessionRecord<T>>;
+  /**
+   * Commits score operations validated against `current`. trackd replays them
+   * on a newer score when nothing they touch changed (so a stale base is not
+   * a conflict); the file port commits `composition` exactly like `append`.
+   * The returned record may therefore be ahead of `composition`.
+   */
+  appendOperations(
+    current: SessionRecord<T>,
+    event: Omit<SessionEvent, "id" | "revision" | "at">,
+    operations: readonly unknown[],
     composition: T,
   ): Promise<SessionRecord<T>>;
   load(): Promise<SessionRecord<T>>;
@@ -164,6 +183,25 @@ class DaemonPort<T> implements SessionPort<T> {
   ): Promise<SessionRecord<T>> {
     // Transport lives in trackd's clock, not in the event log, when connected.
     if (event.kind === "transport") return this.record();
+    return this.applyIntent(current, event, { composition });
+  }
+
+  public async appendOperations(
+    current: SessionRecord<T>,
+    event: Omit<SessionEvent, "id" | "revision" | "at">,
+    operations: readonly unknown[],
+    composition: T,
+  ): Promise<SessionRecord<T>> {
+    if (operations.length === 0 || operations.length > MAX_INTENT_OPERATIONS)
+      return this.append(current, event, composition);
+    return this.applyIntent(current, event, { operations: [...operations] });
+  }
+
+  private async applyIntent(
+    current: SessionRecord<T>,
+    event: Omit<SessionEvent, "id" | "revision" | "at">,
+    body: { composition: T } | { operations: unknown[] },
+  ): Promise<SessionRecord<T>> {
     if (this.client.connected) this.setSync("syncing");
     let result;
     try {
@@ -171,7 +209,7 @@ class DaemonPort<T> implements SessionPort<T> {
         base: current.revision,
         kind: event.kind,
         payload: event.payload,
-        composition,
+        ...body,
         key: randomUUID(),
       });
     } catch (error) {
@@ -297,6 +335,16 @@ class FilePort<T> implements SessionPort<T> {
     return appendSessionEvent(this.options.paths, current, event, composition);
   }
 
+  /** No daemon to rebase against: commit the full composition. */
+  public appendOperations(
+    current: SessionRecord<T>,
+    event: Omit<SessionEvent, "id" | "revision" | "at">,
+    _operations: readonly unknown[],
+    composition: T,
+  ): Promise<SessionRecord<T>> {
+    return this.append(current, event, composition);
+  }
+
   public load(): Promise<SessionRecord<T>> {
     return loadSession<T>(this.options.paths);
   }
@@ -305,15 +353,29 @@ class FilePort<T> implements SessionPort<T> {
     throw new Error("file sessions drive transport locally");
   }
 
+  /**
+   * Without trackd, changes arrive by watching the session directory (the
+   * record is replaced by atomic rename, so the file itself cannot be watched)
+   * and re-reading on each event: renames and edits from other windows show up
+   * immediately. Polling stays on as the fallback, fast when fs.watch is
+   * unavailable and slow as a backstop for filesystems that drop events.
+   */
   public subscribe(listener: (update: PortUpdate<T>) => void): () => void {
     let revision = -1;
     let metaVersion = -1;
     let busy = false;
-    const timer = setInterval(() => {
-      if (busy) return;
+    let again = false;
+    let closed = false;
+    const check = (): void => {
+      if (closed) return;
+      if (busy) {
+        again = true;
+        return;
+      }
       busy = true;
       void this.load()
         .then((record) => {
+          if (closed) return;
           if (record.revision > revision) listener({ type: "record", record });
           else if (metaVersion >= 0 && record.meta.version > metaVersion)
             listener({ type: "meta", meta: record.meta });
@@ -324,9 +386,38 @@ class FilePort<T> implements SessionPort<T> {
         .catch(() => undefined)
         .finally(() => {
           busy = false;
+          if (again) {
+            again = false;
+            check();
+          }
         });
-    }, 200);
-    return () => clearInterval(timer);
+    };
+    const recordName = basename(this.options.paths.record);
+    let watcher: FSWatcher | undefined;
+    try {
+      watcher = watch(dirname(this.options.paths.record), (_event, file) => {
+        // macOS coalesces the temp write and the rename into events named
+        // after the temp file (`<record>.<pid>.tmp`), so match the prefix and
+        // re-check shortly after in case the event preceded the rename.
+        if (file !== null && !String(file).startsWith(recordName)) return;
+        check();
+        setTimeout(check, 40).unref?.();
+      });
+      watcher.on("error", () => {
+        watcher?.close();
+        watcher = undefined;
+      });
+      watcher.unref?.();
+    } catch {
+      watcher = undefined;
+    }
+    const timer = setInterval(check, watcher ? WATCHED_POLL_MS : POLL_MS);
+    check();
+    return () => {
+      closed = true;
+      clearInterval(timer);
+      watcher?.close();
+    };
   }
 
   public focus(trackId: string | null): Promise<void> {

@@ -273,6 +273,51 @@ export async function createForkSession<T>(
   return record;
 }
 
+/** Fork ancestry walked for undo, and the inherited event budget. */
+export const MAX_FORK_DEPTH = 8;
+export const MAX_INHERITED_EVENTS = MAX_EVENTS;
+
+/**
+ * The event log a fork inherits for undo: each ancestor's events up to the
+ * revision it was forked at, oldest ancestor first, via the `forkOf` chain.
+ * Nothing is copied at fork time; the parent prefix is append-only, so it is
+ * immutable and safe to read later. Bounded by depth, by total events (the
+ * oldest are dropped first) and by cycle detection. A missing, unreadable or
+ * inconsistent ancestor (forked past its own revision) ends the chain there.
+ */
+export async function inheritedEvents(
+  workspace: string,
+  meta: SessionMeta,
+  selfId: string,
+): Promise<SessionEvent[]> {
+  const chunks: SessionEvent[][] = [];
+  const seen = new Set([selfId]);
+  let fork = meta.forkOf;
+  let total = 0;
+  for (
+    let depth = 0;
+    fork && depth < MAX_FORK_DEPTH && total < MAX_INHERITED_EVENTS;
+    depth += 1
+  ) {
+    if (seen.has(fork.sessionId)) break;
+    seen.add(fork.sessionId);
+    let parent: SessionRecord<unknown> | undefined;
+    try {
+      parent = await readRecordIfPresent<unknown>(
+        sessionPaths(workspace, fork.sessionId).record,
+      );
+    } catch {
+      break;
+    }
+    if (!parent || fork.revision > parent.events.length) break;
+    const prefix = parent.events.slice(0, fork.revision);
+    chunks.unshift(prefix.slice(-(MAX_INHERITED_EVENTS - total)));
+    total += prefix.length;
+    fork = parent.meta.forkOf;
+  }
+  return chunks.flat().slice(-MAX_INHERITED_EVENTS);
+}
+
 /** Points `.track/session` at `sessionId` so plain `track` resumes it. */
 export async function setCurrentSession(
   workspace: string,
