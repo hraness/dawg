@@ -25,7 +25,7 @@
     "@hraness/site-footer": "https://github.com/hraness/site-footer/releases/download/v0.20.9/hraness-site-footer-0.20.9.tgz",
     "@hraness/ui": "github:hraness/ui#v0.5.25",
     "@hraness/web-discovery": "github:hraness/web-discovery#v0.13.1",
-    "next": "16.3.6",
+    "next": "16.3.8",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
@@ -36,7 +36,7 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.3.6",
+    "eslint-config-next": "16.3.8",
     "postcss": "8.5.28",
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3"
