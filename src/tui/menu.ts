@@ -119,6 +119,13 @@ export type MenuAudition = Readonly<{
   hint: string;
   /** `♪ solo · B staged 2 · 42 ms`, shown in the title. */
   status?: string | undefined;
+  /**
+   * Which commands stage while auditioning (default `isStageable`); the
+   * chord settings screen also stages `/chords …` and `key …`.
+   */
+  stageable?: (command: string) => boolean;
+  /** The committed chord settings, for `staged ← committed` on Chords rows. */
+  committedChords?: ChordSettings;
 }>;
 
 type NumberField = Readonly<{
@@ -1543,6 +1550,8 @@ function transportNodes(context: MenuContext): MenuNode[] {
 
 type Frame = {
   title: string;
+  /** The submenu's node id (`chords`), for `EditMenu.section`. */
+  id?: string;
   build: (context: MenuContext) => MenuNode[];
   index: number;
   query: string;
@@ -1573,6 +1582,7 @@ function childFrame(
 ): Frame {
   return {
     title: node.label,
+    id: node.id,
     index: 0,
     query: "",
     hover: `menu:${node.id}`,
@@ -1601,6 +1611,11 @@ export class EditMenu {
   /** True while the menu takes typed text (a filter or a value). */
   get typing(): boolean {
     return this.filtering || this.entry !== undefined;
+  }
+
+  /** The root section open now (`chords`), or undefined at the root. */
+  get section(): string | undefined {
+    return this.stack[1]?.id;
   }
 
   /** Open at the root, or at a section id (`effects`, `automation`). */
@@ -1777,7 +1792,7 @@ export class EditMenu {
       if (node.kind === "action")
         return frame.hover &&
           context.audition?.looping &&
-          isStageable(node.command)
+          (context.audition.stageable ?? isStageable)(node.command)
           ? { type: "choose", command: node.command, key: frame.hover }
           : { type: "run", command: node.command };
       if (node.kind === "choice") {
@@ -1822,7 +1837,8 @@ export class EditMenu {
   private hovered(frame: Frame, context: MenuContext): MenuResult {
     if (!frame.hover || !context.audition?.looping) return { type: "handled" };
     const node = this.selected(context);
-    if (node?.kind !== "action" || !isStageable(node.command))
+    const stageable = context.audition?.stageable ?? isStageable;
+    if (node?.kind !== "action" || !stageable(node.command))
       return { type: "handled" };
     frame.hovering = true;
     return { type: "hover", command: node.command, key: frame.hover };
@@ -1932,6 +1948,9 @@ export class EditMenu {
       for (const node of frame.build({
         ...context,
         score: audition.committed,
+        ...(audition.committedChords
+          ? { chords: audition.committedChords }
+          : {}),
       }))
         before.set(node.label, valueText(node));
     const items = nodes.map((node, at) => {

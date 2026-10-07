@@ -116,14 +116,24 @@ import {
   type LiveEngine,
 } from "./tui/play-session.ts";
 import { EditMenu, MENU_SECTIONS, type MenuContext } from "./tui/menu.ts";
-import { Audition, SUPERSEDED, isStageable } from "./tui/audition.ts";
-import { EuclidEditor } from "./tui/euclid.ts";
+import {
+  Audition,
+  SUPERSEDED,
+  isChordStageable,
+  isStageable,
+} from "./tui/audition.ts";
+import { EuclidEditor, type EuclidContext } from "./tui/euclid.ts";
 import { HINTS, KEYS, keyLines, type KeySection } from "../tui/grammar.ts";
 import { renderAudition } from "./audio/audition.ts";
 import { renderScorePcm } from "./audio/wav.ts";
 import type { PreviewHost } from "./agent/preview-tool.ts";
 import { rhythmVoicePitch } from "../core/rhythm.ts";
-import { applyChordsCommand, defaultChordSettings } from "./tui/play-chords.ts";
+import {
+  applyChordsCommand,
+  chordPhrase,
+  defaultChordSettings,
+  type ChordSettings,
+} from "./tui/play-chords.ts";
 import {
   cacheLines,
   kitListLines,
@@ -469,6 +479,10 @@ const AGENT_PREVIEW_VOICE = 0x7fff_0002;
  * instead of appending, and a remote revision that lands meanwhile waits in
  * `committed` (the window's `score` is the staged base until it finishes).
  */
+/** A `/chords …` settings command (staged as window state, not a score edit). */
+const CHORDS_COMMAND = /^\/chords\s+(.+)$/i;
+/** Whether the chord settings screen was open at the last menu redraw. */
+let chordScreenWas = false;
 let stageCapture: { next?: TrackScore; committed?: TrackScore } | undefined;
 /** Redraw soon (the audition reports renders between frames). */
 let requestFrame: () => void = () => undefined;
@@ -1032,11 +1046,23 @@ async function runInteractive(): Promise<void> {
               euclid.close();
               tui.closePicker();
               if (back === "menu") openMenu();
+              else leaveAuditionScreen();
             } else if (result.type === "run") {
-              queuedPrompts.unshift(result.command);
-              if (result.audition) pendingAudition = result.audition;
-              void drainQueue();
+              if (!stageIfAuditioning(result.command)) {
+                queuedPrompts.unshift(result.command);
+                if (result.audition) pendingAudition = result.audition;
+                void drainQueue();
+              }
             } else if (result.type === "audition") audition(result.voice);
+            else if (result.type === "loop") auditionKeyPressed(result.key);
+            else if (result.type === "revert") revertStaged();
+            else if (result.type === "keep")
+              void keepStaged()
+                .then((outcome) => receipt(outcome))
+                .catch((error) =>
+                  tui.activity.pushError(describeError("keep", error)),
+                )
+                .finally(() => tick(true));
             if (result.type !== "pass") {
               refreshEuclid();
               tick(true);
@@ -2369,6 +2395,8 @@ function menuContext(): MenuContext {
       committed: score,
       hint: loop.hint(),
       status: loop.status(),
+      stageable: stageableNow,
+      committedChords: chordSettings,
     },
     trackId: requestedTrack,
     playing: clock.playing,
@@ -2376,7 +2404,7 @@ function menuContext(): MenuContext {
     grids: GRIDS.map((grid) => grid.label),
     clickOn: session?.clickOn ?? false,
     countInBars: session?.countInBars ?? 1,
-    chords: session?.chords.settings ?? chordSettings,
+    chords: stagedChordSettings() ?? session?.chords.settings ?? chordSettings,
     projectRoot: process.cwd(),
   };
 }
@@ -2415,8 +2443,20 @@ function openMenu(section?: string): void {
   refreshMenu();
 }
 
-function euclidContext() {
-  return { score, trackId: requestedTrack };
+function euclidContext(): EuclidContext {
+  const loop = auditionController();
+  loop.focus(requestedTrack);
+  return {
+    score: loop.staging ? loop.score : score,
+    trackId: requestedTrack,
+    audition: {
+      looping: loop.looping,
+      dirty: loop.dirtyEdits,
+      committed: score,
+      hint: loop.hint(),
+      status: loop.status(),
+    },
+  };
 }
 
 function openEuclid(voice?: string, origin?: string): void {
@@ -2493,11 +2533,55 @@ function auditionController(): Audition {
       clearTimer: (handle) => clearTimeout(handle as Timer),
       changed: () => requestFrame(),
       level: () => previewEngine().level,
+      // The chord settings screen loops a progression with its settings.
+      phrase: (showing) => {
+        if (!chordScreenOpen()) return undefined;
+        const settings =
+          showing === "A"
+            ? chordSettings
+            : (stagedChordSettings() ?? chordSettings);
+        return (base, track, bars) => chordPhrase(settings, base, track, bars);
+      },
     },
     score,
     requestedTrack,
   );
   return auditionLoop;
+}
+
+/** True while the menu's Chords section (`/menu chords`) is open. */
+function chordScreenOpen(): boolean {
+  return menu.open && menu.section === "chords";
+}
+
+/** What stages while auditioning on the screen open now. */
+function stageableNow(command: string): boolean {
+  return (
+    isStageable(command) || (chordScreenOpen() && isChordStageable(command))
+  );
+}
+
+/**
+ * The chord settings with the staged `/chords …` commands applied, or
+ * undefined while none are staged. Chord settings are window state (not in
+ * the score), so the staged ones are derived from the staged commands.
+ */
+function stagedChordSettings(): ChordSettings | undefined {
+  const commands = auditionLoop?.dirtyEdits ? auditionLoop.commands : [];
+  const chords = commands.filter((command) => CHORDS_COMMAND.test(command));
+  if (chords.length === 0) return undefined;
+  const settings = { ...chordSettings };
+  for (const command of chords)
+    applyChordsCommand(settings, command.match(CHORDS_COMMAND)![1]!);
+  return settings;
+}
+
+/** Re-render the loop when the chord screen opens or closes. */
+function noteChordScreen(): void {
+  const now = chordScreenOpen();
+  if (now === chordScreenWas) return;
+  chordScreenWas = now;
+  auditionLoop?.request();
 }
 
 /**
@@ -2542,6 +2626,12 @@ async function applyStaged(
   base: TrackScore,
   command: string,
 ): Promise<{ next?: TrackScore; ok: boolean; message: string }> {
+  const chords = command.trim().match(CHORDS_COMMAND);
+  if (chords) {
+    // Window state: checked on a copy; kept settings apply on Enter.
+    const result = applyChordsCommand({ ...chordSettings }, chords[1]!);
+    return { next: base, ok: result.ok, message: result.message };
+  }
   await prefetchStaged(base, command);
   // Staged commands run one at a time, between queued prompts.
   while (stageCapture) await Bun.sleep(1);
@@ -2709,7 +2799,7 @@ function pickerAuditionKey(key: "loop" | "ab" | "context"): void {
 /** Stage a menu command while auditioning; undefined when it should run. */
 function stageIfAuditioning(command: string): boolean {
   const loop = auditionLoop;
-  if (!loop?.staging || !isStageable(command)) return false;
+  if (!loop?.staging || !stageableNow(command)) return false;
   void loop.stage(command).then((result) => {
     if (!result.ok)
       tui.activity.pushCard(result.message, {
@@ -2727,12 +2817,21 @@ async function keepStaged(): Promise<Receipt> {
   const taken = loop?.take();
   if (!loop || !taken) return warn("nothing staged");
   await materializeDraft();
+  // Chord settings are window state: they apply here, outside the revision.
+  const chordCommands = taken.commands.filter((command) =>
+    CHORDS_COMMAND.test(command),
+  );
+  for (const command of chordCommands)
+    applyChordsCommand(chordSettings, command.match(CHORDS_COMMAND)![1]!);
+  const scoreCommands = taken.commands.filter(
+    (command) => !CHORDS_COMMAND.test(command),
+  );
   let next = taken.score;
-  for (let attempt = 0; ; attempt += 1) {
+  for (let attempt = 0; scoreCommands.length && next !== score; attempt += 1) {
     try {
       await commitScore(next, "preview.commit", {
         trackId: loop.trackId,
-        commands: taken.commands,
+        commands: scoreCommands,
       });
       break;
     } catch (error) {
@@ -2741,7 +2840,7 @@ async function keepStaged(): Promise<Receipt> {
       record = await port.load();
       score = scoreFromJSON(record.composition);
       next = score;
-      for (const command of taken.commands) {
+      for (const command of scoreCommands) {
         const result = await applyStaged(next, command);
         if (result.next) next = result.next;
       }
@@ -2749,8 +2848,11 @@ async function keepStaged(): Promise<Receipt> {
   }
   loop.committedNow(score);
   await projectSync?.flushScore();
+  const kept = `kept ${taken.commands.length} change${taken.commands.length === 1 ? "" : "s"}`;
   return ok(
-    `kept ${taken.commands.length} change${taken.commands.length === 1 ? "" : "s"} · one undo step`,
+    scoreCommands.length
+      ? `${kept} · one undo step`
+      : `${kept} · chord settings (window state, no revision)`,
   );
 }
 
@@ -2772,6 +2874,7 @@ function leaveAuditionScreen(): void {
 }
 
 function refreshMenu(): void {
+  noteChordScreen();
   if (!menu.open) return;
   if (tui.ui.overlay !== undefined && tui.ui.picker?.id !== "menu") {
     // Another overlay (help, a picker) replaced the menu.

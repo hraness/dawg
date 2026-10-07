@@ -25,6 +25,11 @@
 import {
   BASS_MODES,
   CHORD_PATTERNS,
+  DEFAULT_ARP_RATE,
+  DEFAULT_STRUM,
+  generateProgression,
+  presetChords,
+  renderProgression,
   CHORD_TYPES,
   EXTENSIONS,
   MAX_VOICING_STEP,
@@ -56,7 +61,12 @@ import {
   type ProgressionStyle,
   type Spread,
 } from "../../core/chords.ts";
-import { isSamplerInstrument, type Track } from "../../core/score.ts";
+import {
+  isSamplerInstrument,
+  type NoteInput,
+  type Track,
+  type TrackScore,
+} from "../../core/score.ts";
 
 export const CHORD_MODES = ["auto", "manual", "off"] as const;
 export type ChordMode = (typeof CHORD_MODES)[number];
@@ -535,4 +545,86 @@ export function chordsSummary(settings: ChordSettings): string {
     `preset ${s.preset}`,
     `style ${s.style}`,
   ].join(" · ");
+}
+
+/** Chords in the chord settings screen's audition phrase. */
+const PHRASE_CHORDS = 4;
+
+/**
+ * What the chord settings sound like, for the audition loop: the chosen
+ * progression (the preset, or four chords of the style's seeded walk) in the
+ * song key, voiced and performed with `settings` (voicing, spread, sevenths,
+ * perform mode, pattern, arp rate and octaves, bass mode), one chord per bar
+ * or two per bar in a one-bar loop. With chords `off` it plays each chord's
+ * root alone, as play mode would. Deterministic: the same settings and key
+ * always give the same notes.
+ */
+export function chordPhrase(
+  settings: ChordSettings,
+  score: TrackScore,
+  track: Track,
+  bars: number,
+): NoteInput[] {
+  const key = parseKey(score.key) ?? { tonic: 0, mode: "major" as const };
+  const preset =
+    settings.preset === "none" ? undefined : findPreset(settings.preset);
+  const progression = preset
+    ? presetChords(key, preset)
+    : generateProgression({
+        key,
+        length: PHRASE_CHORDS,
+        style: settings.style,
+        seed: 1,
+        sevenths: settings.sevenths,
+      });
+  const tpb = score.ticksPerBeat;
+  const totalBeats = Math.max(1, bars) * score.beatsPerBar;
+  const count = Math.max(2, Math.max(1, bars));
+  const span = totalBeats / count;
+  const chords = Array.from(
+    { length: count },
+    (_, index) => progression[index % progression.length]!,
+  );
+  const mode = settings.perform;
+  const rendered = renderProgression({
+    key,
+    chords,
+    beatsPerChord: span,
+    inversion: settings.inversion,
+    spread: settings.spread,
+    bassMode: settings.mode === "off" ? "solo" : settings.bass,
+    perform: {
+      mode,
+      rate:
+        settings.rate === "grid" ? DEFAULT_ARP_RATE : RATE_BEATS[settings.rate],
+      octaves: settings.octaves,
+      strum: mode === "harp" ? DEFAULT_STRUM * 2 : DEFAULT_STRUM,
+      seed: 1,
+      velocity: 0.8,
+      ...(mode === "pattern" ? { pattern: settings.pattern } : {}),
+    },
+  });
+  // With chords off a key plays one note: the root, in the chord's octave.
+  const performed =
+    settings.mode === "off"
+      ? rendered.bass.map((note) => ({ ...note, pitch: note.pitch + 24 }))
+      : [...rendered.notes, ...rendered.bass];
+  const end = totalBeats * tpb;
+  const notes: NoteInput[] = [];
+  for (const note of performed) {
+    const startTick = Math.round(note.start * tpb);
+    if (startTick >= end) continue;
+    notes.push({
+      id: `chords-${notes.length + 1}`,
+      trackId: track.id,
+      startTick,
+      durationTicks: Math.max(
+        1,
+        Math.min(Math.round(note.length * tpb), end - startTick),
+      ),
+      pitch: note.pitch,
+      velocity: note.velocity,
+    });
+  }
+  return notes;
 }

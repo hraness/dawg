@@ -10,8 +10,13 @@
  * one undo step and the row's detail teaches the command.
  *
  * Keys: ↑↓ voice · ←→ (h l + -) nudge · tab / shift-tab (] [) parameter ·
- * digits type a value · enter add/edit · space audition · x off · f freeze ·
+ * digits type a value · enter add/edit · space loop · x off · f freeze ·
  * esc back.
+ *
+ * Auditioning (src/tui/audition.ts) works as in the menu: `Space` loops the
+ * track, and while it plays every change is staged (heard, not committed);
+ * `a` flips A/B, `c` solo ↔ in context, Enter keeps the staged changes as
+ * one undo step and Esc reverts them.
  */
 import { HINTS } from "../../tui/grammar.ts";
 import { DRUM_VOICES, isDrumInstrument } from "../../core/drums.ts";
@@ -30,15 +35,30 @@ import {
   type TrackScore,
 } from "../../core/score.ts";
 import type { PickerItem } from "../../tui/app.ts";
+import { auditionKey, type AuditionKey } from "./audition.ts";
+import type { MenuAudition } from "./menu.ts";
 
-export type EuclidContext = Readonly<{ score: TrackScore; trackId: string }>;
+export type EuclidContext = Readonly<{
+  /** The score shown: the staged one while auditioning. */
+  score: TrackScore;
+  trackId: string;
+  /** The audition loop, when the window hosts one (as in the menu). */
+  audition?: MenuAudition;
+}>;
 
 export type EuclidResult =
   | { type: "handled" }
   | { type: "close" }
   /** Run `command`; `audition` names the voice to play once it lands. */
   | { type: "run"; command: string; audition?: string }
+  /** Play `voice` once (no audition loop in this window). */
   | { type: "audition"; voice: string }
+  /** Space (loop), `a` (A/B) or `c` (context) for the audition loop. */
+  | { type: "loop"; key: AuditionKey }
+  /** Commit the staged edits as one operation. */
+  | { type: "keep" }
+  /** Drop the staged edits. */
+  | { type: "revert" }
   | { type: "pass" };
 
 export type EuclidView = Readonly<{
@@ -362,7 +382,11 @@ export class EuclidEditor {
         this.entry = (this.entry + value).slice(0, 12);
       return { type: "handled" };
     }
-    if (value === "\u001b") return { type: "close" };
+    const audition = context.audition;
+    if (value === "\u001b")
+      return audition?.dirty ? { type: "revert" } : { type: "close" };
+    const loopKey = audition ? auditionKey(value) : undefined;
+    if (loopKey) return { type: "loop", key: loopKey };
     if (KEY_UP.has(value) || KEY_DOWN.has(value)) {
       if (lanes.length)
         this.lane =
@@ -403,6 +427,7 @@ export class EuclidEditor {
       return { type: "handled" };
     }
     if (KEY_ENTER.has(value)) {
+      if (audition?.dirty) return { type: "keep" };
       if (!lane.row)
         return {
           type: "run",
@@ -429,6 +454,12 @@ export class EuclidEditor {
     const index = Math.max(0, Math.min(this.lane, lanes.length - 1));
     const param = EUCLID_PARAMS[this.param]!;
     const width = Math.max(5, ...lanes.map((lane) => lane.label.length));
+    const audition = context.audition;
+    // Changed rows show `staged ← committed`, as in the menu.
+    const before = new Map<string, string>();
+    if (audition?.dirty)
+      for (const lane of this.lanes({ ...context, score: audition.committed }))
+        before.set(lane.voice, lane.row ? rowSummary(lane.row) : "off");
     const items: PickerItem[] = lanes.map((lane, at) => {
       const row = lane.row;
       const shown = row
@@ -436,11 +467,16 @@ export class EuclidEditor {
           ? "grid"
           : formatValue(param.value(row))
         : "—";
+      const now = row ? rowSummary(row) : "off";
+      const was = before.get(lane.voice);
+      const changed = was !== undefined && was !== now ? ` ← ${was}` : "";
       return {
         label: `${lane.label.padEnd(width)} ${ringText(row)}`,
         detail: row
-          ? `${rowSummary(row)} · ${param.label} ${shown}`
-          : "enter adds E(4,16)",
+          ? `${now}${changed} · ${param.label} ${shown}`
+          : changed
+            ? `off${changed}`
+            : "enter adds E(4,16)",
         value: String(at),
         current: row !== undefined,
       };
@@ -450,7 +486,15 @@ export class EuclidEditor {
     const value = row ? formatValue(param.value(row)) : "—";
     let title = `rhythm › ${context.trackId}${voice ? ` · ${voice}` : ""} · ${param.label} ${value}`;
     if (this.entry !== undefined) title += ` · ${param.label}: ${this.entry}▏`;
-    const hint = this.entry !== undefined ? HINTS.typing : HINTS.euclid;
+    if (audition?.dirty) title = `● ${title}`;
+    if (audition?.status && this.entry === undefined)
+      title += ` · ${audition.status}`;
+    const hint =
+      this.entry !== undefined
+        ? HINTS.typing
+        : audition && (audition.looping || audition.dirty)
+          ? audition.hint
+          : HINTS.euclid;
     return {
       title,
       items: items.length

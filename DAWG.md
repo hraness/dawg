@@ -678,10 +678,11 @@ Prompt grammar: `euclid kick 4 16`, `euclid hat 7 16 rotate 2`, `euclid hat swin
 | `← →` / `h l` / `- +`       | nudge the selected parameter                      |
 | `Tab` / `Shift-Tab` (`] [`) | next / previous parameter                         |
 | digits, `.`, `-`, Backspace | type a value, Enter applies                       |
-| Enter                       | add a row for a voice without one                 |
-| Space                       | audition the voice                                |
+| Enter                       | add a row for a voice without one; keep (looping) |
+| Space                       | start or stop the audition loop (staging)         |
+| `a` / `c`                   | A/B / solo ↔ in context, while the loop plays     |
 | `x` / Delete, `f`           | remove the row and its notes / freeze it to notes |
-| Esc                         | back (cancels typing, then closes)                |
+| Esc                         | cancel typing, revert staged changes, then close  |
 
 ## Chords
 
@@ -849,6 +850,8 @@ While the loop plays, each change you make is **staged**, not committed. The loo
 | `?`     | the keys for this screen                                     |
 
 Kept changes are one `ScoreOperation` (`preview.commit`, listing the commands), so `Ctrl-Z` takes them all back at once, and they sync to other windows and the project files like any edit. If the score changes underneath (another window, the agent, an undo), the staged commands are re-applied on top of the new score; any that no longer apply are dropped, with a notice. Leaving the menu reverts anything staged. With the loop off, the menu behaves as before: each change is committed right away.
+
+**The rhythm editor and the chord settings stage too.** `/euclid` and the chord settings (the menu's Chords section, `/menu chords`) use the same loop and keys. In `/euclid`, `Space` loops the drum track; pulses, steps, rotate, typed values, a new row, `off` and `freeze` are staged, the title shows `●` and `B staged N`, and a changed lane shows `E(5,16) ← E(4,16)`. Chord settings are window settings rather than score edits, so while the Chords section is open the loop plays the focused track's chord phrase (two bars of the song key's progression, voiced and performed by the current settings: inversion, spread, bass, sevenths, block/strum/arp, pattern); a staged setting changes the B phrase, and `a` flips back to the committed settings. `Enter` keeps every staged change as one undo step: rhythm edits as one `preview.commit` revision, and chord settings applied at once (a key change, the only one stored in the score, as one revision). `Esc` reverts with nothing written. With the loop off, both screens commit each change at once, as before.
 
 **Lists audition on hover.** With the loop on, moving the cursor through a list plays the highlighted item on the loop: the wavetable list (built-in, pack and project tables), instruments, drum kits and patterns, and every choice list (filter type, warp mode, presets). It is the browser-preview model of Ableton and Bitwig, applied to the loop you are already hearing. Each move replaces the previous hover, so the staged count stays at one, and fast moves skip straight to the latest item. A pack item that has to be fetched shows `fetching…` in the title; the cursor keeps moving and the item plays once it arrives. `Enter` chooses the item (it stays staged until you keep), `Esc` or `←` leaves the list and drops the hover. The `/kit` and `/pattern` pickers work the same way: `Space` starts the loop, moving hears each kit or groove, `Enter` keeps it, `Esc` cancels.
 

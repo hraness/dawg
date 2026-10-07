@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { createScore } from "../../core/score.ts";
 import {
   ChordPad,
   applyChordsCommand,
   chordCapable,
+  chordPhrase,
   defaultChordSettings,
 } from "./play-chords.ts";
 
@@ -167,5 +169,48 @@ describe("chord settings", () => {
     expect(chordCapable(track("piano"))).toBe(true);
     expect(chordCapable(track("bass"))).toBe(false);
     expect(chordCapable(track("drums", "kit"))).toBe(false);
+  });
+});
+
+describe("chordPhrase", () => {
+  const score = createScore({
+    bars: 2,
+    key: "A minor",
+    tracks: [{ id: "keys", instrument: "saw" }],
+  } as never);
+  const track = score.tracks[0]!;
+
+  test("is deterministic and follows the voicing, perform mode and key", () => {
+    const settings = defaultChordSettings();
+    const a = chordPhrase(settings, score, track, 2);
+    expect(chordPhrase(settings, score, track, 2)).toEqual(a);
+    expect(a.length).toBeGreaterThan(0);
+    expect(a.every((note) => note.trackId === "keys")).toBe(true);
+    // Every note ends inside the two bars.
+    const end = 2 * score.beatsPerBar * score.ticksPerBeat;
+    for (const note of a)
+      expect(note.startTick! + note.durationTicks!).toBeLessThanOrEqual(end);
+    const up = chordPhrase({ ...settings, inversion: 2 }, score, track, 2);
+    expect(up.map((n) => n.pitch)).not.toEqual(a.map((n) => n.pitch));
+    const arp = chordPhrase(
+      { ...settings, perform: "arp-up" },
+      score,
+      track,
+      2,
+    );
+    expect(arp.length).toBeGreaterThan(a.length);
+    const other = chordPhrase(settings, score.withKey("D major"), track, 2);
+    expect(other.map((n) => n.pitch)).not.toEqual(a.map((n) => n.pitch));
+  });
+
+  test("chords off plays one root per chord", () => {
+    const off = chordPhrase(
+      { ...defaultChordSettings(), mode: "off" },
+      score,
+      track,
+      2,
+    );
+    const starts = new Set(off.map((note) => note.startTick));
+    expect(off.length).toBe(starts.size);
   });
 });

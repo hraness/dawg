@@ -387,3 +387,44 @@ describe("keys and commands", () => {
       expect(isStageable(command)).toBe(false);
   });
 });
+
+describe("phrase hook", () => {
+  test("the loop plays the host's phrase for A or B in place of the track's notes", async () => {
+    const h = harness();
+    const asked: ("A" | "B")[] = [];
+    const host = (h.audition as unknown as { host: AuditionHost }).host;
+    host.phrase = (showing) => {
+      asked.push(showing);
+      return (_score, track) => [
+        {
+          id: "p",
+          trackId: track.id,
+          pitch: showing === "A" ? 48 : 50,
+          startTick: 0,
+          durationTicks: 240,
+          velocity: 0.8,
+        },
+      ];
+    };
+    h.audition.start();
+    await h.advance(0);
+    const pitches = () => h.played.at(-1)!.notes.map((note) => note.pitch);
+    // Nothing staged: the committed (A) phrase plays.
+    expect(asked.at(-1)).toBe("A");
+    expect(pitches()).toEqual([48]);
+    await h.audition.stage("pan lead 0.5");
+    await h.advance(100);
+    expect(asked.at(-1)).toBe("B");
+    expect(pitches()).toEqual([50]);
+    h.audition.toggleAB();
+    await h.advance(100);
+    expect(asked.at(-1)).toBe("A");
+    expect(pitches()).toEqual([48]);
+  });
+
+  test("euclid commands stage like other sound edits", () => {
+    expect(isStageable("euclid kick pulses 5")).toBe(true);
+    expect(isStageable("euclid hat freeze")).toBe(true);
+    expect(isStageable("/chords voicing 1")).toBe(false);
+  });
+});

@@ -33,6 +33,7 @@ import {
   meterBar,
   previewScore,
   type Preview,
+  type PreviewOptions,
   type SoundLevel,
 } from "../audio/preview.ts";
 
@@ -61,6 +62,12 @@ export type AuditionHost = {
   changed?(): void;
   /** Level of the loop now playing, for the title's meter. */
   level?(): SoundLevel | undefined;
+  /**
+   * A phrase that replaces the track's notes for the sound now playing (A:
+   * committed, B: staged), or undefined for the usual loop. The chord
+   * settings screen plays a progression with its settings this way.
+   */
+  phrase?(showing: "A" | "B"): PreviewOptions["phrase"];
 };
 
 export type AuditionOptions = Readonly<{
@@ -404,9 +411,11 @@ export class Audition {
   private async flush(): Promise<void> {
     if (!this.looping || this.rendering) return;
     this.cancelTimer();
+    const phrase = this.host.phrase?.(this.dirtyEdits ? this.showing : "A");
     const preview = previewScore(this.sounding, this.trackId, {
       context: this.context,
       beat: this.host.beat?.() ?? 0,
+      ...(phrase ? { phrase } : {}),
     });
     if (!preview) return;
     this.rendering = true;
@@ -491,11 +500,22 @@ export function auditionKey(value: string): AuditionKey | undefined {
  * before.
  */
 const STAGEABLE =
-  /^\/?(?:(fx|effects|filter|lowpass|synth|wt|wavetable|kit|instrument|vol|volume|pan|gain|speed|warpmode|root|pattern)\s+\S|pack\s+use\s+\S)/i;
+  /^\/?(?:(fx|effects|filter|lowpass|synth|wt|wavetable|kit|instrument|vol|volume|pan|gain|speed|warpmode|root|pattern|euclid)\s+\S|pack\s+use\s+\S)/i;
 /** Subcommands that list or show instead of changing the sound. */
 const READ_ONLY = /^\/?\S+\s+(list|show|info|help)\s*$/i;
 
 export function isStageable(command: string): boolean {
   const text = command.trim();
   return STAGEABLE.test(text) && !READ_ONLY.test(text);
+}
+
+/**
+ * Chord settings and the song key, which stage only in the chord settings
+ * screen: its loop plays a progression with them (`AuditionHost.phrase`),
+ * while elsewhere they would change nothing audible.
+ */
+export function isChordStageable(command: string): boolean {
+  return (
+    /^\/chords\s+\S/i.test(command.trim()) || /^key\s+\S/i.test(command.trim())
+  );
 }
