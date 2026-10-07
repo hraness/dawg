@@ -53,6 +53,12 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - It runs through the new synth voice, so ADSR, filter envelopes, FM, unison/detune and vibrato apply to wavetable tracks too.
 - SDK 1.8.0 (additive): `wavetable("basic", { wt: 0.4 })` as a track's `instrument`, and `automation: { wt: [...] }`.
 
+### Wavetables from audio
+
+- **`make_wavetable`**, a new agent media tool (`dawg media wavetable <file> <name>` from the shell): turns any audio in the project (a download, a stem, an imported sample) into a 2048-sample-frame wavetable at `tracks/<slug>/wavetables/<name>.wav`. Pitched material is sliced into single cycles at the detected pitch; vocals, pads and noise become spectral snapshots. It picks the most stable tonal region by default, phase-aligns and normalises the frames, and tells the agent how the timbre moves across the table (for example "brightens, very smooth morph") so it can choose a position or envelope. Output is deterministic.
+- **Project tables play like any other table**: `/wt vox.wav`, the menu's table picker (project tables are listed first), `set_wavetable` with the path, and `wavetable("./wavetables/vox.wav")` in `track.ts`. They are pinned by sha256; a changed file plays with a warning, a missing one is reported with a fix.
+- SDK 1.11.0 (additive): `wavetable()` accepts a project `.wav` path.
+
 ### Sample packs: bank nicknames and cache sizes
 
 - **Bank nicknames.** Strudel's drum-machine nicknames (`TR909`, `tr808`, `Linn`, `DMX`, `SP12`, `MPC60`, … from its `tidal-drum-machines-alias.json`) work in `/kit`, `/pack use`, `pack:` refs in `track.ts`, the agent's `use_sound` and a new **Strudel banks** list in the menu's drum kits. dawg ships a snapshot and refreshes it with the manifest. `909`, `808`, `linn` and the other short names work as before, and pins keep the full bank name.

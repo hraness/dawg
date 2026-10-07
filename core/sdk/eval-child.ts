@@ -76,39 +76,47 @@ function diagnostic(error: unknown, project: string): Diagnostic {
   return out;
 }
 
-/** Adds `sha256` to sampler voices whose file exists and is within the size limit. */
+/**
+ * Adds `sha256` to sampler voices and project wavetable files that exist
+ * and are within the size limit.
+ */
 async function withSampleHashes(
   song: object,
   project: string,
 ): Promise<unknown> {
   const plain = JSON.parse(JSON.stringify(song)) as Record<string, unknown>;
   const tracks = Array.isArray(plain.tracks) ? plain.tracks : [];
+  const refs: Record<string, unknown>[] = [];
+  const isObject = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null;
   for (const track of tracks) {
-    if (typeof track !== "object" || track === null) continue;
-    const sampler = (track as Record<string, unknown>).sampler;
-    if (typeof sampler !== "object" || sampler === null) continue;
-    const voices = (sampler as Record<string, unknown>).voices;
-    if (typeof voices !== "object" || voices === null) continue;
-    for (const voice of Object.values(voices as Record<string, unknown>)) {
-      if (typeof voice !== "object" || voice === null) continue;
-      const ref = voice as Record<string, unknown>;
-      if (
-        typeof ref.src !== "string" ||
-        typeof ref.sha256 === "string" ||
-        ref.src.startsWith("pack:")
-      )
-        continue;
-      const path = resolve(project, ref.src);
-      if (relative(project, path).startsWith("..")) continue;
-      try {
-        const info = await stat(path);
-        if (!info.isFile() || info.size > MAX_SAMPLE_FILE_BYTES) continue;
-        ref.sha256 = createHash("sha256")
-          .update(await readFile(path))
-          .digest("hex");
-      } catch {
-        // Missing sample: left for `dawg check` to report.
-      }
+    if (!isObject(track)) continue;
+    const sampler = track.sampler;
+    if (isObject(sampler) && isObject(sampler.voices))
+      for (const voice of Object.values(sampler.voices))
+        if (isObject(voice)) refs.push(voice);
+    const wavetable = track.wavetable;
+    if (isObject(wavetable) && isObject(wavetable.table))
+      refs.push(wavetable.table);
+  }
+  for (const ref of refs) {
+    if (
+      typeof ref.src !== "string" ||
+      typeof ref.sha256 === "string" ||
+      ref.src.startsWith("pack:") ||
+      ref.src.startsWith("builtin:")
+    )
+      continue;
+    const path = resolve(project, ref.src);
+    if (relative(project, path).startsWith("..")) continue;
+    try {
+      const info = await stat(path);
+      if (!info.isFile() || info.size > MAX_SAMPLE_FILE_BYTES) continue;
+      ref.sha256 = createHash("sha256")
+        .update(await readFile(path))
+        .digest("hex");
+    } catch {
+      // Missing file: left for `dawg check` to report.
     }
   }
   return plain;

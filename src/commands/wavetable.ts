@@ -4,8 +4,10 @@
  *   wt                      show the focused track's table and parameters
  *   wt list                 built-in tables and the uzu-wavetables sets
  *   wt <table>              play a table: basic, pwm, formant, harmonics,
- *                           wt_digital:2 (Strudel's uzu-wavetables), or any
- *                           pack:<pack>/<sound>[:<n>]
+ *                           wt_digital:2 (Strudel's uzu-wavetables), any
+ *                           pack:<pack>/<sound>[:<n>], or a project WAV
+ *                           (vox.wav, wavetables/vox.wav, tracks/x/…/vox.wav;
+ *                           the agent's make_wavetable writes these)
  *   wt <0..1>               position
  *   wtenv|wtattack|wtdecay|wtsustain|wtrelease|wtrate|wtdepth|warp|wtphaserand <n>
  *   warpmode <none|asym|bendp|bendm|bendmp|sync|quant>
@@ -18,6 +20,8 @@ import {
   WARP_MODES,
   WAVETABLE_INSTRUMENT,
   WAVETABLE_PARAMS,
+  SCORE_LIMITS,
+  isLocalTableSrc,
   isWavetableInstrument,
   normalizeWavetable,
   wavetableOf,
@@ -27,8 +31,18 @@ import {
   type WarpMode,
   type WavetableParam,
 } from "../../core/score.ts";
+import { createHash } from "node:crypto";
+import { readdirSync } from "node:fs";
+import { readFile, stat } from "node:fs/promises";
+import { join } from "node:path";
+import { trackDirectories } from "../../core/sdk/print.ts";
+import { resolveReadPath } from "../agent/workspace.ts";
 import { PackError, type PackStore } from "../audio/packs.ts";
-import { BUILTIN_TABLES, BUILTIN_TABLE_NAMES } from "../audio/wavetable.ts";
+import {
+  BUILTIN_TABLES,
+  BUILTIN_TABLE_NAMES,
+  wavetableFromWav,
+} from "../audio/wavetable.ts";
 
 /** The pack Strudel's `wt_` sounds come from. */
 export const WAVETABLE_PACK = "uzu-wavetables";
@@ -178,13 +192,108 @@ export function wavetableParamEdit(
   };
 }
 
+/** Directory project tables live in, under a track's directory. */
+export const LOCAL_TABLE_DIR = "wavetables";
+/** Most project tables `wt list` and the menu show. */
+const MAX_LISTED_TABLES = 200;
+
+/**
+ * Project wavetables: `tracks/<dir>/wavetables/*.wav`, sorted. Sync and
+ * bounded, so the menu can call it while it builds.
+ */
+export function listLocalWavetables(projectRoot: string | undefined): string[] {
+  if (!projectRoot) return [];
+  const out: string[] = [];
+  let dirs: string[];
+  try {
+    dirs = readdirSync(join(projectRoot, "tracks")).sort();
+  } catch {
+    return [];
+  }
+  for (const dir of dirs) {
+    if (dir.startsWith(".")) continue;
+    let files: string[];
+    try {
+      files = readdirSync(join(projectRoot, "tracks", dir, LOCAL_TABLE_DIR));
+    } catch {
+      continue;
+    }
+    for (const file of files.sort())
+      if (/\.wav$/i.test(file) && !file.startsWith("."))
+        out.push(`tracks/${dir}/${LOCAL_TABLE_DIR}/${file}`);
+    if (out.length >= MAX_LISTED_TABLES) break;
+  }
+  return out.slice(0, MAX_LISTED_TABLES);
+}
+
+/** True when a `wt` argument names a project WAV rather than a table name. */
+export function isLocalTableName(name: string): boolean {
+  return /\.wav$/i.test(name.trim()) && !name.trim().startsWith("pack:");
+}
+
+/**
+ * The project path for a local table argument: `tracks/…` as is, otherwise
+ * relative to the track's directory (`vox.wav` → its `wavetables/vox.wav`),
+ * falling back to the only project table with that file name.
+ */
+export function localTablePath(
+  score: TrackScore,
+  trackId: string,
+  name: string,
+  projectRoot?: string,
+): string {
+  const bare = name.trim().replace(/^\.\//, "");
+  if (bare.startsWith("tracks/")) return bare;
+  const dir = trackDirectories(score).get(trackId) ?? trackId;
+  const own = `tracks/${dir}/${bare.includes("/") ? bare : `${LOCAL_TABLE_DIR}/${bare}`}`;
+  if (bare.includes("/")) return own;
+  const all = listLocalWavetables(projectRoot);
+  if (all.includes(own)) return own;
+  const matches = all.filter((path) => path.endsWith(`/${bare}`));
+  return matches.length === 1 ? matches[0]! : own;
+}
+
 /** Resolves and pins a table name; pack tables are fetched once to pin them. */
 export async function pickWavetable(
   store: PackStore,
   score: TrackScore,
   trackId: string,
   name: string,
+  projectRoot?: string,
 ): Promise<{ operation: ScoreOperation; summary: string }> {
+  if (isLocalTableName(name)) {
+    if (!projectRoot)
+      throw new PackError("project tables need an open project");
+    const src = localTablePath(score, trackId, name, projectRoot);
+    let sha256: string;
+    try {
+      const resolved = await resolveReadPath(
+        { root: projectRoot, trackSlug: "" },
+        src,
+        "wavetable",
+      );
+      const info = await stat(resolved.real);
+      if (!info.isFile()) throw new Error("not a file");
+      if (info.size > SCORE_LIMITS.maxSampleFileBytes)
+        throw new Error("over the 50 MiB file limit");
+      const bytes = new Uint8Array(await readFile(resolved.real));
+      wavetableFromWav(src, "check", bytes);
+      sha256 = createHash("sha256").update(bytes).digest("hex");
+    } catch (error) {
+      const why = error instanceof Error ? error.message : String(error);
+      throw new PackError(
+        `${src.slice(0, 80)} · ${why.slice(0, 120)} · wt list shows the project's tables`,
+      );
+    }
+    const base = current(score, trackId);
+    return {
+      operation: wavetableOperation(score, trackId, {
+        ...base,
+        table: { src, sha256 },
+      }),
+      summary: `wavetable · ${describeTable(src)}`,
+    };
+  }
   const src = wavetableSource(name);
   if (!src)
     throw new PackError(
@@ -205,6 +314,7 @@ export function describeTable(src: string): string {
     const name = src.slice(BUILTIN_TABLE_PREFIX.length);
     return `${name} (${BUILTIN_TABLES[name]?.title ?? "built-in"})`;
   }
+  if (isLocalTableSrc(src)) return `${src.split("/").pop()} (project)`;
   return src.replace(`pack:${WAVETABLE_PACK}/`, "");
 }
 
@@ -224,10 +334,18 @@ export function describeWavetable(score: TrackScore, trackId: string): string {
 /** Lines for `wt list`: built-ins, then each uzu set with its table count. */
 export async function wavetableListLines(
   store: PackStore | undefined,
+  projectRoot?: string,
 ): Promise<string[]> {
   const lines = ["built-in (offline):"];
   for (const name of BUILTIN_TABLE_NAMES)
     lines.push(`  ${name.padEnd(10)} ${BUILTIN_TABLES[name]!.title}`);
+  const local = listLocalWavetables(projectRoot);
+  lines.push("", "project (tracks/<slug>/wavetables/, made by the agent):");
+  if (local.length === 0)
+    lines.push(
+      "  none yet · ask the agent to make_wavetable from any audio file",
+    );
+  for (const path of local) lines.push(`  wt ${path}`);
   lines.push("", `${WAVETABLE_PACK} (Strudel wt_ sounds, fetched on use):`);
   try {
     if (!store) throw new PackError("offline");

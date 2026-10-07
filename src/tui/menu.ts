@@ -60,6 +60,7 @@ import {
   UZU_WAVETABLES,
   WAVETABLE_PACK,
   describeTable,
+  listLocalWavetables,
 } from "../commands/wavetable.ts";
 import {
   BASS_MODES,
@@ -91,6 +92,8 @@ export type MenuContext = Readonly<{
   countInBars: number;
   /** Play mode's chord settings (defaults when absent). */
   chords?: ChordSettings;
+  /** Project root, for the project's own wavetables (none when absent). */
+  projectRoot?: string;
 }>;
 
 type NumberField = Readonly<{
@@ -553,7 +556,7 @@ function parameterNodes(context: MenuContext): MenuNode[] {
   const nodes: MenuNode[] = [instrumentNode(track)];
   // A wavetable track also has the synth voice's envelope, filters and FM.
   if (isWavetableInstrument(track.instrument))
-    nodes.push(...wavetableNodes(track));
+    nodes.push(...wavetableNodes(track, context.projectRoot));
   if (track.sampler) {
     nodes.push({
       kind: "info",
@@ -719,9 +722,15 @@ const WAVETABLE_STEP: Readonly<Record<WavetableParam, number>> = {
   wtphaserand: 0.1,
 };
 
-function wavetableNodes(track: Track): MenuNode[] {
+function wavetableNodes(track: Track, projectRoot?: string): MenuNode[] {
   const settings = wavetableOf(track);
+  const local = listLocalWavetables(projectRoot);
   const tables: MenuNode[] = [
+    ...local.map((path): MenuNode => ({
+      kind: "action",
+      label: `${path.split("/").pop()}  project · ${path.split("/")[1]}`,
+      command: `wt ${path}`,
+    })),
     ...BUILTIN_TABLE_NAMES.map((name): MenuNode => ({
       kind: "action",
       label: `${name}  ${BUILTIN_TABLES[name]!.title} · built-in`,

@@ -187,7 +187,7 @@ export const WORKSPACE_PROMPT = [
 ].join(" ");
 /** Shared by both agent loops: how the media tools fit the composition flow. */
 export const MEDIA_PROMPT =
-  "Media tools (download_audio, split_stems, analyze_audio, transcribe_notes, import_sample, transcribe_lyrics) work on files under tracks/<slug>/downloads/ and report project-relative paths; the brief's project tree lists what is already there (read_file reports a wav's type and size), so never download the same video twice. They can run for minutes, so call them one at a time and chain on their outputs (download → stems → analyze → notes).";
+  "Media tools (download_audio, split_stems, analyze_audio, transcribe_notes, import_sample, make_wavetable, transcribe_lyrics) work on files under tracks/<slug>/downloads/ and report project-relative paths; the brief's project tree lists what is already there (read_file reports a wav's type and size), so never download the same video twice. They can run for minutes, so call them one at a time and chain on their outputs (download → stems → analyze → notes). make_wavetable turns a download, stem or sample into tracks/<slug>/wavetables/<name>.wav and describes its sweep; play it with set_wavetable table <that path>.";
 
 export const AGENT_SYSTEM_PROMPT = [
   "You are dawg, a loop composer inside a terminal music workstation.",

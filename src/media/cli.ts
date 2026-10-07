@@ -7,7 +7,9 @@
  *   dawg media analyze <file>
  *   dawg media notes <file> [--kind drums|bass|vocals|guitar|piano|other] [--from s] [--to s]
  *   dawg media sample <file> <name> [--begin 0..1] [--end 0..1] [--root C4]
- *   dawg media lyrics <file> [--lang en]
+ *   dawg media wavetable <file> <name> [--frames 64] [--start s] [--end s] [--method auto|slice|spectral] [--smooth 0..1]
+                                         2048-sample frames → tracks/<slug>/wavetables/<name>.wav
+  dawg media lyrics <file> [--lang en]
  *
  * Progress goes to stderr, the JSON result to stdout. Ctrl-C sends SIGTERM to
  * the helper (SIGKILL after 15 s) and exits 130.
@@ -32,6 +34,8 @@ export const MEDIA_HELP = `dawg media — local media tools (see DAWG.md "Media 
                                          notes/hits + quantized snippet → <file>.<kind>.notes.json
   dawg media sample <file> <name> [--begin f] [--end f] [--root C4]
                                          48 kHz wav → tracks/<slug>/samples/<name>.wav + sampler snippet
+  dawg media wavetable <file> <name> [--frames 64] [--start s] [--end s] [--method auto|slice|spectral] [--smooth 0..1]
+                                         2048-sample frames → tracks/<slug>/wavetables/<name>.wav
   dawg media lyrics <file> [--lang en]   whisper transcript → <file>.lyrics.json/.txt
 
 Options: --track <name> picks the track folder (default main); --json prints only the result.
@@ -44,9 +48,18 @@ const VERBS: Record<string, { tool: string; positional: string[] }> = {
   notes: { tool: "transcribe_notes", positional: ["file"] },
   sample: { tool: "import_sample", positional: ["file", "name"] },
   lyrics: { tool: "transcribe_lyrics", positional: ["file"] },
+  wavetable: { tool: "make_wavetable", positional: ["file", "name"] },
 };
 
-const NUMERIC = new Set(["from", "to", "begin", "end"]);
+const NUMERIC = new Set([
+  "from",
+  "to",
+  "begin",
+  "end",
+  "frames",
+  "start",
+  "smooth",
+]);
 
 export function parseMediaArgv(argv: readonly string[]): {
   verb: string | undefined;

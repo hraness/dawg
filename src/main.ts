@@ -1942,7 +1942,10 @@ async function wavetableCommand(command: WavetableCommand): Promise<Receipt> {
   if (command.kind === "show")
     return ok(describeWavetable(score, requestedTrack));
   if (command.kind === "list") {
-    tui.openText("wavetables", await wavetableListLines(packs()));
+    tui.openText(
+      "wavetables",
+      await wavetableListLines(packs(), process.cwd()),
+    );
     return ok("wavetables · wt <table> on the focused track · esc closes");
   }
   await materializeDraft();
@@ -1950,7 +1953,13 @@ async function wavetableCommand(command: WavetableCommand): Promise<Receipt> {
   try {
     const edit =
       command.kind === "table"
-        ? await pickWavetable(packs(), score, trackId, command.table)
+        ? await pickWavetable(
+            packs(),
+            score,
+            trackId,
+            command.table,
+            process.cwd(),
+          )
         : wavetableParamEdit(score, trackId, command);
     const failed = await commitPackEdit(
       [edit.operation],
@@ -2174,6 +2183,7 @@ function menuContext(): MenuContext {
     clickOn: session?.clickOn ?? false,
     countInBars: session?.countInBars ?? 1,
     chords: session?.chords.settings ?? chordSettings,
+    projectRoot: process.cwd(),
   };
 }
 

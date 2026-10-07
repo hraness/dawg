@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.10.0";
+export const SDK_VERSION = "1.11.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -1129,11 +1129,14 @@ const WAVETABLE_KEYS = Object.freeze([
 /**
  * A wavetable instrument. `table` is a built-in (`basic`, `pwm`,
  * `formant`, `harmonics`), a Strudel `wt_` sound (`wt_digital:2` plays
- * `pack:uzu-wavetables/wt_digital:2`), any `pack:` ref, or a pinned
- * `{ src, sha256, url }` that dawg writes back after resolving it.
+ * `pack:uzu-wavetables/wt_digital:2`), any `pack:` ref, a project WAV
+ * (`./wavetables/vox.wav`, relative to the track's directory, as the agent's
+ * make_wavetable writes it), or a pinned `{ src, sha256, url }` that dawg
+ * writes back after resolving it.
  *
  * ```ts
  * instrument: wavetable("basic", { wt: 0.4 })
+ * instrument: wavetable("./wavetables/vox.wav", { wtenv: 0.5 })
  * instrument: wavetable("wt_vgame:3", { wtenv: 0.6, wtdecay: 0.4, warp: 0.3, warpmode: "bendp" })
  * ```
  */
@@ -1147,13 +1150,25 @@ export function wavetable(
   if (!isRecord(spec) || typeof spec.src !== "string" || spec.src.length === 0)
     throw new DawgSdkError("wavetable needs a table name");
   let src = spec.src.trim();
-  if (!src.includes(":") || /^wt_[A-Za-z0-9_]+:[0-9]+$/.test(src))
+  if (/\.wav$/i.test(src) && !src.startsWith("pack:")) {
+    // A project table (make_wavetable writes tracks/<slug>/wavetables/x.wav);
+    // `./wavetables/x.wav` is relative to the track's directory.
+    if (
+      src.includes("..") ||
+      src.includes(":") ||
+      src.startsWith("/") ||
+      src.includes("\\")
+    )
+      throw new DawgSdkError(
+        `wavetable file "${src.slice(0, 60)}" must be a project-relative path without ".."`,
+      );
+  } else if (!src.includes(":") || /^wt_[A-Za-z0-9_]+:[0-9]+$/.test(src))
     src = src.startsWith("wt_")
       ? `pack:uzu-wavetables/${src}`
       : `builtin:${src.toLowerCase()}`;
   else if (!/^(?:pack|builtin):/.test(src))
     throw new DawgSdkError(
-      `wavetable table "${src.slice(0, 40)}" must be a built-in, wt_<set>:<n> or pack:<pack>/<sound>`,
+      `wavetable table "${src.slice(0, 40)}" must be a built-in, wt_<set>:<n>, pack:<pack>/<sound> or a .wav file`,
     );
   const out: Record<string, unknown> = {
     kind: "wavetable",
@@ -1504,7 +1519,7 @@ export function track(input: TrackInput): TrackSpec {
       : null;
   const wavetableSpec =
     isRecord(rawInstrument) && rawInstrument.kind === "wavetable"
-      ? (rawInstrument as WavetableSpec)
+      ? localizeWavetable(rawInstrument as WavetableSpec, slug)
       : null;
   const instrument = samplerSpec
     ? SAMPLER_INSTRUMENT
@@ -1797,6 +1812,20 @@ export function voiceSlots(spec: SamplerSpec): ReadonlyMap<string, number> {
     .sort()
     .forEach((voice, index) => slots.set(voice, SAMPLER_FIRST_SLOT + index));
   return slots;
+}
+
+/** `./wavetables/x.wav` → `tracks/<slug>/wavetables/x.wav`, like sampler files. */
+function localizeWavetable(spec: WavetableSpec, slug: string): WavetableSpec {
+  const src = spec.table.src;
+  if (!/\.wav$/i.test(src) || src.startsWith("pack:")) return spec;
+  const bare = src.replace(/^\.\//, "");
+  return Object.freeze({
+    ...spec,
+    table: Object.freeze({
+      ...spec.table,
+      src: bare.startsWith("tracks/") ? bare : `tracks/${slug}/${bare}`,
+    }),
+  });
 }
 
 function localizeSampler(spec: SamplerSpec, slug: string): SamplerSpec {
