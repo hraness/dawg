@@ -45,6 +45,7 @@ import {
 import {
   SampleLibrary,
   hasSamplerTracks,
+  type SampleBank,
   type SampleProblem,
 } from "./audio/samples.ts";
 import { drumSnapshotFields, samplerSnapshotFields } from "../tui/drums.ts";
@@ -83,6 +84,8 @@ import {
   tuiSetModel,
 } from "./auth/tui.ts";
 import { TransportClock } from "./audio/clock.ts";
+import { AudioEngine } from "./audio/engine.ts";
+import { PlaySession, type LiveEngine } from "./tui/play-session.ts";
 import {
   addNote,
   applyScoreOperation,
@@ -346,6 +349,12 @@ let announcedName = record.meta.name;
 let namer = makeNamer();
 /** Re-subscribes the TUI after /fork or /resume replaces `port`. */
 let rebindPort: () => void = () => undefined;
+/** Play mode's controller; kept across entries so settings persist. */
+let play: PlaySession | undefined;
+/** Daemon windows play no loop; play mode monitors through its own engine. */
+let monitorEngine: AudioEngine | undefined;
+/** The decoded sampler voices, for play mode's live voices. */
+let liveSampleBank: SampleBank | undefined;
 /** The in-flight agent turn: Esc aborts it, Enter steers it. */
 let agentTurn: { controller: AbortController; steering: string[] } | undefined;
 let reportAgentActivity: (text: string) => void = () => undefined;
@@ -580,6 +589,7 @@ function appView(value: TrackScore, beat: number): AppView {
     sessionName: record.meta.name,
     windows: windowCount,
     types: typesIndicator,
+    play: play?.on ? play.header() : undefined,
   };
 }
 
@@ -688,6 +698,7 @@ async function runInteractive(): Promise<void> {
   };
   const tick = (force = false) => {
     if (screenSuspended) return;
+    play?.tick();
     tui.render(appView(score, clock.beatAt()), { force });
   };
   reportAgentActivity = () => {
@@ -867,6 +878,18 @@ async function runInteractive(): Promise<void> {
         ...(text === "\u001b" ? inputDecoder.flush() : []),
       ];
       for (const value of values) {
+        if (typeof value === "string" && play?.on && playKey(value)) {
+          tick(true);
+          continue;
+        }
+        // Ctrl-P enters play mode. A bare `p` would steal the first letter of
+        // `pan`, `pattern`, `play` and every prose request starting with p.
+        if (value === "\u0010" && tui.ui.overlay === undefined) {
+          void enterPlay()
+            .then((outcome) => receipt(outcome))
+            .finally(() => tick(true));
+          continue;
+        }
         // The prompt is always focused, so ordinary `q` must remain typeable in
         // requests (for example, "quiet hi-hat"). Ctrl-C is the unambiguous
         // shell exit key; Ctrl-Q is reserved for prompt mode switching.
@@ -950,6 +973,8 @@ async function runInteractive(): Promise<void> {
     namer.dispose();
     stdout.off("resize", onResize);
     unsubscribe();
+    await play?.exit().catch(() => undefined);
+    await monitorEngine?.dispose().catch(() => undefined);
     audio.stop();
     await port.close();
     stdin.setRawMode?.(false);
@@ -982,6 +1007,29 @@ async function submit(prompt: string): Promise<string | Receipt> {
     return ok(
       `${lines.length} track${lines.length === 1 ? "" : "s"} · esc closes`,
     );
+  }
+  const playCommand = command.match(/^\/play(?:\s+(on|off))?$/i);
+  if (playCommand) {
+    const wanted = playCommand[1]?.toLowerCase();
+    if (wanted === "off" || (wanted === undefined && play?.on))
+      return exitPlay();
+    return enterPlay();
+  }
+  const clickCommand = command.match(/^\/click(?:\s+(.+))?$/i);
+  if (clickCommand) {
+    const message = playSession().clickCommand(clickCommand[1] ?? "");
+    return message.startsWith("usage") || message.startsWith("click volume")
+      ? fail(message)
+      : ok(message);
+  }
+  const countIn = command.match(/^\/count-?in\s+([0-2])$/i);
+  if (countIn) return ok(playSession().setCountIn(Number(countIn[1])));
+  const gridCommand = command.match(/^\/grid\s+(\S+)$/i);
+  if (gridCommand) {
+    const message = playSession().setGrid(gridCommand[1]!);
+    return message
+      ? ok(message)
+      : fail("usage: /grid 1/4|1/8|1/8T|1/16|1/16T|1/32");
   }
   if (/^\/status$/i.test(command))
     return ok(
@@ -1311,7 +1359,9 @@ async function sampleProblems(
   if (!hasSamplerTracks(value)) return [];
   sampleLibrary ??= new SampleLibrary({ projectRoot: process.cwd() });
   try {
-    return (await sampleLibrary.load(value)).problems;
+    const bank = await sampleLibrary.load(value);
+    liveSampleBank = bank;
+    return bank.problems;
   } catch (error) {
     return [
       {
@@ -1567,6 +1617,9 @@ async function sessionCommand(
 
 /** Leaves the current session and attaches this window to `sessionId`. */
 async function switchSession(sessionId: string): Promise<void> {
+  // Play mode belongs to the old session's engine and track.
+  await play?.exit();
+  play = undefined;
   if (clock.playing) await setTransport("pause");
   namer.dispose();
   await port.close();
@@ -1595,6 +1648,140 @@ async function switchSession(sessionId: string): Promise<void> {
       tone: "info",
       trackId: requestedTrack,
     });
+}
+
+function liveEngine(): LiveEngine | undefined {
+  if (audio instanceof AudioEngine) return audio;
+  monitorEngine ??= new AudioEngine({ projectRoot: process.cwd() });
+  return monitorEngine;
+}
+
+/** The play session for the focused track (re-made when focus moves). */
+function playSession(): PlaySession {
+  if (play && play.track === requestedTrack) return play;
+  const previous = play;
+  play = new PlaySession(playHost(), {
+    clickOn: previous?.clickOn,
+    clickVolume: previous?.clickVolume,
+  });
+  if (previous) {
+    play.countInBars = previous.countInBars;
+    play.grid = previous.grid;
+  }
+  return play;
+}
+
+async function enterPlay(): Promise<Receipt> {
+  if (play?.on) return ok(`play · ${play.track} · esc leaves`);
+  await materializeDraft();
+  const session = playSession();
+  await session.enter();
+  if (hasSamplerTracks(score)) void sampleProblems(score);
+  return ok(
+    `play · ${session.track} · ${session.keyboard.range} · z/x octave · r record · m click · esc leaves`,
+  );
+}
+
+async function exitPlay(): Promise<Receipt> {
+  if (!play?.on) return ok("play mode is off");
+  await play.exit();
+  return ok("play off");
+}
+
+/**
+ * One key in play mode. True when play mode consumed it; false sends it on
+ * to the normal bindings (overlays, a command being typed, Ctrl-C, arrows).
+ */
+function playKey(value: string): boolean {
+  const session = play;
+  if (!session?.on) return false;
+  if (tui.ui.overlay !== undefined) return false;
+  // `/play off`, `/click 50%`: once a command is being typed, keys are text.
+  if (prompt.value.length > 0) return false;
+  if (value === "/") return false;
+  if (value === "\u0003") return false;
+  const result = session.press(value);
+  if (result.type === "handled") return true;
+  if (result.type === "command") {
+    if (result.command === "exit")
+      void exitPlay().then((outcome) => receipt(outcome));
+    else if (result.command === "transport") {
+      if (!session.startWithCountIn())
+        void toggleTransport().catch((error: unknown) =>
+          tui.activity.pushError(
+            `transport failed · ${error instanceof Error ? error.message : String(error)}`,
+          ),
+        );
+    } else if (result.command === "menu") return false;
+    return true;
+  }
+  // Unmapped: printable keys are swallowed so a stray letter never lands in
+  // the prompt; control keys (Enter, arrows, Ctrl-Z) keep their bindings.
+  return value.length === 1 && value >= " " && value !== "\u007f";
+}
+
+function playHost() {
+  return {
+    score: () => score,
+    trackId: () => requestedTrack,
+    now: () => performance.now(),
+    playing: () => clock.playing,
+    beatAt: (ms: number) => clock.beatAt(ms),
+    engine: liveEngine,
+    samples: () => liveSampleBank,
+    async commit(
+      next: TrackScore,
+      kind: string,
+      payload: Record<string, unknown>,
+    ): Promise<void> {
+      const operations = (payload.operations ?? []) as ScoreOperation[];
+      let target = next;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          record = await port.appendOperations(
+            record,
+            { kind, payload },
+            operations,
+            target.toJSON(),
+          );
+          score = scoreFromJSON(record.composition);
+          if (clock.playing) void audio.play(score);
+          projectSync?.scoreChanged(score);
+          return;
+        } catch (error) {
+          if (!(error instanceof SessionConflictError)) throw error;
+          record = await port.load();
+          score = scoreFromJSON(record.composition);
+          target = operations.reduce(
+            (value, operation) => applyScoreOperation(value, operation),
+            score,
+          );
+        }
+      }
+      throw new Error("session busy");
+    },
+    async startTransport(beat: number): Promise<void> {
+      if (port.mode === "daemon") {
+        await port.transport("play", { beat });
+        return;
+      }
+      clock.sync(beat, false);
+      await setTransport("play");
+    },
+    async stopTransport(): Promise<void> {
+      await setTransport("pause");
+    },
+    card(text: string, tone: "info" | "success" | "warning" | "error") {
+      if (tone === "error") tui.activity.pushError(text);
+      else
+        tui.activity.pushCard(text, {
+          tone,
+          trackId: requestedTrack,
+          resultRevision: tone === "success" ? record.revision : undefined,
+        });
+    },
+    newNoteId: () => randomUUID().slice(0, 12),
+  };
 }
 
 async function commitScore(

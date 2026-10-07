@@ -261,6 +261,38 @@ Decoding: WAV (PCM 16/24/32-bit integer and 32-bit float, any channel count and 
 
 In the TUI, oneshot sampler tracks show one highway lane per voice, labelled by name; keyed tracks use the pitch axis. `/tracks` shows each sampler's sample count and how many failed to load. `/sample <path> [as <voice>]` adds a voice to the focused track: a file outside the track directory is copied into `tracks/<slug>/samples/`, the voice name defaults to the file name, and a focused synth track that already has notes gets a new `samples` track instead. Existing hits keep their voice when the new name shifts the slots. `/sample` alone lists the voices. The agent's `import_sample` media tool writes 48 kHz stereo WAVs to the same folder.
 
+## Play mode (computer keyboard)
+
+`Ctrl-P` or `/play` turns the computer keyboard into a piano for the focused track, using the "musical typing" layout GarageBand, Logic, BandLab, FL Studio and Ableton share. `Esc` or `/play off` leaves it and every normal binding is back. Typing `/` starts a slash command without leaving the mode (`/click 40%`, `/play off`).
+
+| Key                     | Does                                                               |
+| ----------------------- | ------------------------------------------------------------------ |
+| `A S D F G H J K L ; '` | white keys C D E F G A B C D E F from the base octave              |
+| `W E T Y U O P`         | black keys C♯ D♯ F♯ G♯ A♯ C♯ D♯ (none on `R` or `I`, like a piano) |
+| `Z` / `X`               | octave down / up (clamped to the score's pitch range)              |
+| `C` / `V`               | velocity down / up in steps of 16 (1–127, shown in the header)     |
+| Shift + note            | sustained note: rings until a plain key or `Tab`                   |
+| `Tab`                   | sustain latch on/off (off releases every sustained note)           |
+| `R`                     | record arm on/off                                                  |
+| `Shift-R`               | replace: bars you play over are cleared first (default: overdub)   |
+| `M`                     | click on/off                                                       |
+| `Space`                 | play/stop; with record armed and stopped, counts in, then records  |
+| `Esc`                   | leave play mode                                                    |
+
+The base octave follows the instrument: C3 (MIDI 48) by default, C2 for bass instruments or tracks named bass, C4 for saw/square/triangle/pluck leads. Kits start at C2, so `A` is the GM kick, `S` the snare, `T` the closed hat. On a one-shot sampler track the keys walk the voices in name order from slot 36 (`A` the first voice, `W` the second, chromatically), and the strip shows voice names; a keyed sampler starts at the C below its lowest root and repitches from it.
+
+The header reads `PLAY  C3–F4  vel 100  ● REC  click ✓  grid 1/16` with a beat flash, and the row under it is the keyboard with sounding keys lit. Both repaint in place; nothing scrolls per note.
+
+Notes sound through the track's own instrument, effects and volume, rendered by the same per-instrument voice code as the loop, and mix into the stream about 60 ms ahead of now (play mode lowers the queue lead from 200 ms and restores it on exit). That works over silence and over the playing loop. A muted or unsoloed track still sounds while you play it. With audio backend `none` the keys still record.
+
+Terminals send key presses and auto-repeats, never key releases, so held notes are synthesized. A press sounds for one grid step; holding the key keeps it sounding while the OS auto-repeats it (after its repeat delay, usually 250–700 ms), and it ends about 120 ms after the last repeat. Hold notes shorter than the repeat delay come out one grid step long. Use Shift or the `Tab` latch for long notes.
+
+Recording: with record armed and the transport running, each note is quantized to the grid (`/grid 1/16` by default; `1/4 1/8 1/8T 1/16 1/16T 1/32`), wrapped into the loop, and appended to the focused track as `addNote` operations when the playhead leaves the bar, so each recorded bar is one revision: one `Ctrl-Z` undoes a bar, other windows and the project files see it like any edit. Stopping commits the rest. The same pitch on the same step twice is one note. Replace removes the bar's earlier notes in the same revision. No agent and no network are involved.
+
+## Click track
+
+`/click on|off|<volume>` (`/click 40%`, `/click 0.4`) or `M` in play mode. An accented downbeat and lighter beats at the transport tempo and the score's meter, mixed as a separate monitoring bus. It is never part of a loop render, a stem, `dawg render`, or `/export`; tests compare those byte for byte with the click on. `/count-in 0|1|2` sets how many bars of click play before recording starts (default 1); the header counts down and flashes the beat, so it also works with backend `none`.
+
 ## Release
 
 Bump `version` in `package.json` and add its section to `CHANGELOG.md` in a pull request, then merge it. When Check passes on `main`, the annotated `v<version>` tag, the immutable GitHub Release (tarball, `SHA256SUMS` and a provenance attestation) and the npm publish of `@hraness/dawg` follow automatically. See [docs/publishing.md](./docs/publishing.md).

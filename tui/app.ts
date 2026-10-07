@@ -26,6 +26,11 @@ import {
 } from "./highway.ts";
 import { classifyKey, overlayKey, type UiCommand } from "./keys.ts";
 import { PromptModel, type PromptAction, type PromptMode } from "./prompt.ts";
+import {
+  paintPlayHeader,
+  paintPlayStrip,
+  type PlayHeaderView,
+} from "./play-strip.ts";
 import { CellBuffer, ScreenWriter, type CursorPosition } from "./screen.ts";
 import { displayWidth, truncate } from "./text.ts";
 import {
@@ -63,6 +68,8 @@ export interface AppView {
   spend?: string | undefined;
   /** No agent provider: the placeholder teaches commands, no STEER pill. */
   agentOffline?: boolean | undefined;
+  /** Play mode: replaces the header and adds the keyboard strip row. */
+  play?: PlayHeaderView | undefined;
 }
 
 export type TypesIndicator = Readonly<{ ok: boolean; errors: number }>;
@@ -942,7 +949,23 @@ export function composeFrame(
     paintTooSmall(buffer, ui, { width, height });
     return { buffer, cursor: undefined, promptRows: 0, layout };
   }
-  paintHeader(buffer, view, ui, width);
+  if (view.play) {
+    paintPlayHeader(
+      buffer,
+      layout.header,
+      width,
+      view.play,
+      ui.theme,
+      ui.capabilities.unicode,
+    );
+    if (layout.highway.height > 1) {
+      paintPlayStrip(buffer, layout.highway.y, width, view.play.keys, ui.theme);
+      layout.highway = {
+        y: layout.highway.y + 1,
+        height: layout.highway.height - 1,
+      };
+    }
+  } else paintHeader(buffer, view, ui, width);
   const beat = view.beat ?? resolveBeat(view.score, nowMs);
   if (layout.highway.height > 0) {
     if (ui.overlay === "log") paintOverlay(buffer, ui, layout.highway, width);
