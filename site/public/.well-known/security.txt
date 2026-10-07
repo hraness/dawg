@@ -1,0 +1,6 @@
+Contact: mailto:hraness@pm.me
+Contact: https://github.com/hraness/dawg/security/advisories/new
+Expires: 2027-10-07T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://dawg.sh/.well-known/security.txt
+Policy: https://github.com/hraness/dawg/blob/main/SECURITY.md
