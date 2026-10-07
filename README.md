@@ -6,7 +6,23 @@ The highway sits above a multiline prompt. Notes stream toward a hit line, susta
 
 ## Install
 
-Track requires [Bun](https://bun.sh) 1.3.14 or newer.
+Track requires [Bun](https://bun.sh) 1.3.14 or newer. Install the release tarball from GitHub:
+
+```sh
+bun add -g https://github.com/hraness/track/releases/download/v0.2.0/hraness-track-0.2.0.tgz
+track --help
+```
+
+Each [release](https://github.com/hraness/track/releases) is immutable and ships the tarball, a `SHA256SUMS` file and a build provenance attestation. To check a download before installing it:
+
+```sh
+gh release download v0.2.0 --repo hraness/track
+shasum -a 256 -c SHA256SUMS
+gh attestation verify hraness-track-0.2.0.tgz --repo hraness/track
+bun add -g "$PWD/hraness-track-0.2.0.tgz"
+```
+
+Track is not published to npm yet. To run from source instead:
 
 ```sh
 git clone https://github.com/hraness/track.git
@@ -107,7 +123,7 @@ On the gateway, unrecognized requests go to a streaming, tool-calling agent. Cho
 
 The agent edits the score only through typed tools: `add_notes`, `add_drums`, `remove_notes`, `update_notes`, `set_instrument`, `set_mix` (with solo), `set_effects` (filter and delay), `set_automation` (volume, pan and filter), `extend_loop`, `set_tempo`, `create_track`, `transport` and `explain`. Each call is validated, then committed as its own revision, and the status line shows its result (for example `✓ +8 bass notes`). While the agent is working, Esc cancels and keeps every change accepted so far. Enter sends a steering message that the agent reads at its next step. A queued submit (Ctrl+Q queue mode) waits until the turn ends.
 
-Playback renders a short mono PCM WAV with deterministic sine, piano, pluck, bass, saw, square, and triangle voices plus a synthesized drum kit (pitch-swept sine kick, seeded-noise snare and hats), applies per-track volume, pan, low-pass filter, and delay, honors mute and solo, and uses `afplay` on macOS or `ffplay` elsewhere. Pan values run from -1 (left) to 1 (right); the current mono export uses centre compensation so automation remains audible and deterministic. Set `TRACK_AUDIO=0` for a headless session. `track --export file.track.json` and `track --import file.track.json` exchange the bounded `track.loop/v1` document. `TRACK_DEMO=1 bun run src/main.ts` prints a deterministic renderer frame for development.
+Playback renders a short mono PCM WAV with deterministic sine, piano, pluck, bass, saw, square, and triangle voices plus a synthesized drum kit (pitch-swept sine kick, seeded-noise snare and hats), applies per-track volume, pan, low-pass filter, and delay, honors mute and solo, and uses `afplay` on macOS or `ffplay` elsewhere. Pan values run from -1 (left) to 1 (right); the current mono export uses centre compensation so automation remains audible and deterministic. Set `TRACK_AUDIO=0` for a headless session. `track --export file.track.json` and `track --import file.track.json` exchange the bounded `track.loop/v1` document. `track render out.wav` writes the current session (or `--session <name|id>`, or `--import file.track.json`) to a WAV through the same renderer, without starting trackd or playing audio; the same score always produces the same bytes, and the command prints the file's sha256. `/status` prints the session name, revision, composition digest and connection mode. `TRACK_DEMO=1 bun run src/main.ts` prints a deterministic renderer frame for development.
 
 ## Architecture
 
@@ -127,5 +143,7 @@ See [TRACK.md](./TRACK.md) for the detailed command and interaction contract.
 bun install --frozen-lockfile
 bun run check
 ```
+
+`bun run check` includes `test/e2e.test.ts`, which drives real `track` processes in real PTYs against a temporary workspace and a live trackd: three windows converging on one revision and digest, shared transport, rename, auto-claim and drafts, undo and redo across windows, fork, `kill -9` recovery and a deterministic render. It needs no network or credentials. See [CHANGELOG.md](./CHANGELOG.md) for release history.
 
 Track is MIT licensed. Contributions should preserve bounded inputs, deterministic score operations, local session safety, and a working terminal fallback when color or animation is unavailable.

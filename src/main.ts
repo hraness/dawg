@@ -9,7 +9,7 @@ import {
   type SessionRecord,
 } from "./session/store.ts";
 import { openSessionPort } from "./session/port.ts";
-import { monotonicEpochMs } from "./session/protocol.ts";
+import { compositionDigest, monotonicEpochMs } from "./session/protocol.ts";
 import {
   formatSessionLine,
   listSessions,
@@ -31,7 +31,7 @@ import { parsePrompt } from "./agent/ops.ts";
 import { applyMusicCommand, parseMusicCommand } from "./commands/music.ts";
 import { historyTarget, REDO_KIND, UNDO_KIND } from "./commands/history.ts";
 import { drumSnapshotFields } from "../tui/drums.ts";
-import { isDrumInstrument } from "../core/drums.ts";
+import { drumVoicePitch, isDrumInstrument } from "../core/drums.ts";
 import {
   describeAgentEvent,
   StaleRevisionError,
@@ -78,6 +78,7 @@ Usage:
   track [--new] [--session <name|id>] [--track <name>]
   track --import <file> --export <file>
   track sessions
+  track render <out.wav> [--session <name|id>] [--import <file>]
 
 Usage flags:
   --reduce-motion   static hit/sustain states (also TRACK_REDUCE_MOTION=1)
@@ -94,7 +95,7 @@ Commands:
   undo, redo, solo, unsolo, filter <hz> [res], delay <beats> [fb] [mix]
   instrument kit, hit <voice> at <beat>, pattern <voice> <beats...>|every <step>
   track <name>, bars <count>, extend <count> bars
-  /tracks, /export <file>, /import <file>, /model opus-5.5|sol-6.1
+  /tracks, /status, /export <file>, /import <file>, /model opus-5.5|sol-6.1
   /sessions, /resume [n|name|id], /rename <name>|--auto, /fork [name]
   /log, /theme default|high-contrast|mono, /motion on|off
   /login [--xcb], /logout, /auth [--check]
@@ -121,6 +122,17 @@ if (args.has("--help") || args.has("-h")) {
 if (process.argv[2] === "sessions") {
   await printSessions(process.cwd(), stdout);
   process.exit(0);
+}
+if (process.argv[2] === "render") {
+  const { runRenderCommand } = await import("./render.ts");
+  process.exit(
+    await runRenderCommand(
+      process.argv.slice(2),
+      process.cwd(),
+      stdout,
+      process.stderr,
+    ),
+  );
 }
 const demo =
   args.has("--demo") || process.env.TRACK_DEMO === "1" || !stdin.isTTY;
@@ -243,6 +255,10 @@ function optionValue(name: string): string | undefined {
 }
 
 function seedDemo(value: TrackScore, trackId: string): TrackScore {
+  const instrument = value.tracks.find(
+    (track) => track.id === trackId,
+  )?.instrument;
+  if (isDrumInstrument(instrument)) return seedDemoDrums(value, trackId);
   return addNote(
     addNote(
       addNote(value, {
@@ -270,6 +286,32 @@ function seedDemo(value: TrackScore, trackId: string): TrackScore {
       pitch: 67,
       velocity: 0.85,
     },
+  );
+}
+
+/** A one-bar kick/snare/hat groove for a drum track in demo mode. */
+function seedDemoDrums(value: TrackScore, trackId: string): TrackScore {
+  const hits: Array<["kick" | "snare" | "hat", number, number]> = [
+    ["kick", 0, 0.95],
+    ["hat", 0.5, 0.6],
+    ["snare", 1, 0.85],
+    ["hat", 1.5, 0.6],
+    ["kick", 2, 0.9],
+    ["hat", 2.5, 0.6],
+    ["snare", 3, 0.85],
+    ["hat", 3.5, 0.6],
+  ];
+  return hits.reduce(
+    (next, [voice, beat, velocity], index) =>
+      addNote(next, {
+        id: `demo-${index + 1}`,
+        trackId,
+        startTick: Math.round(beat * next.ticksPerBeat),
+        durationTicks: Math.round(next.ticksPerBeat / 4),
+        pitch: drumVoicePitch(voice),
+        velocity,
+      }),
+    value,
   );
 }
 
@@ -637,6 +679,8 @@ async function submit(prompt: string): Promise<string> {
           `${track.id}${track.muted ? " [muted]" : ""}${track.solo ? " [solo]" : ""} · ${track.instrument}`,
       )
       .join("  ");
+  if (/^\/status$/i.test(command))
+    return `status · ${record.meta.name} · rev ${record.revision} · ${compositionDigest(record.composition)} · ${port.mode}`;
   if (/^\/?undo$/i.test(command)) return stepHistory("undo");
   if (/^\/?redo$/i.test(command)) return stepHistory("redo");
   const sessionReply = await sessionCommand(command);
