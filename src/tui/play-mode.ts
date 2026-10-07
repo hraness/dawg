@@ -21,6 +21,12 @@
  *
  * Everything here is pure: callers pass the monotonic time of each key.
  */
+import {
+  SAMPLER_FIRST_SLOT,
+  isSamplerInstrument,
+  samplerVoiceSlots,
+  type Track,
+} from "../../core/score.ts";
 import { pitchName } from "../../tui/highway.ts";
 
 /** Semitone offset from the base C for each note key. */
@@ -90,6 +96,36 @@ export function defaultBaseFor(instrument: string | undefined): number {
   if (/^(kit|drums?|drumkit)$/.test(name)) return 36;
   if (/^(saw|square|triangle|pluck|lead)/.test(name)) return DEFAULT_BASE + 12;
   return DEFAULT_BASE;
+}
+
+/**
+ * How the keyboard sits on a track: its default base C and, for one-shot
+ * samplers, the voice name each pitch slot plays (slots from 36 in
+ * voice-name order, as `samplerVoiceSlots` assigns them, so A plays the
+ * first voice, W the second, S the third and so on chromatically). Keyed
+ * samplers start at the C at or below the lowest root.
+ */
+export type PlayLayout = Readonly<{
+  base: number;
+  /** Pitch → label (voice names on one-shot samplers). */
+  labels: ReadonlyMap<number, string>;
+}>;
+
+export function playLayoutFor(track: Track | undefined): PlayLayout {
+  const labels = new Map<number, string>();
+  if (track && isSamplerInstrument(track.instrument) && track.sampler) {
+    if (track.sampler.mode === "oneshot") {
+      for (const [voice, slot] of samplerVoiceSlots(track.sampler))
+        labels.set(slot, voice);
+      return { base: SAMPLER_FIRST_SLOT, labels };
+    }
+    const roots = Object.values(track.sampler.voices).map(
+      (ref) => ref.root ?? 60,
+    );
+    const lowest = roots.length > 0 ? Math.min(...roots) : 60;
+    return { base: clampBase(Math.floor(lowest / 12) * 12), labels };
+  }
+  return { base: defaultBaseFor(track?.instrument), labels };
 }
 
 export function clampBase(base: number): number {
@@ -384,10 +420,12 @@ export const STRIP_ORDER: readonly string[] = Object.freeze([
 export function stripCells(
   keyboard: PlayKeyboard,
   lit: ReadonlySet<string>,
+  labels: ReadonlyMap<number, string> = new Map(),
 ): StripCell[] {
   return STRIP_ORDER.map((key) => {
     const pitch = keyboard.pitchFor(key)!;
-    const name = pitchName(pitch);
+    const name =
+      labels.size > 0 ? (labels.get(pitch) ?? "·") : pitchName(pitch);
     return {
       key,
       label: name,

@@ -2,6 +2,8 @@ import type { TrackScore } from "../../core/score.ts";
 import { PlaybackLock } from "./lock.ts";
 import { LoopPlayer } from "./player.ts";
 import { LoopRenderer, type LoopRender } from "./renderer.ts";
+import { clickSounds, clicksIn, type ClickLevel } from "./click.ts";
+import type { LiveNotePcm } from "./live.ts";
 import { DEFAULT_SAMPLE_RATE, RENDER_CHANNELS } from "./wav.ts";
 
 /**
@@ -225,6 +227,29 @@ type Loop = Readonly<{
   framesPerBeat: number;
 }>;
 
+/**
+ * The click bus: the engine asks `beatAt` for the transport beat at a stream
+ * frame's wall time (undefined while the transport is stopped; negative
+ * during a count-in) and mixes a click on every step it crosses. It is a
+ * monitoring bus only, never part of a loop render or an export.
+ */
+export type ClickBus = Readonly<{
+  volume: number;
+  beatsPerBar: number;
+  subdivision: number;
+  beatAt: (monotonicMs: number) => number | undefined;
+}>;
+
+type LiveVoice = {
+  pcm: Int16Array;
+  frames: number;
+  /** Frames of this voice already mixed. */
+  position: number;
+  /** Fade-out frames left once released early; undefined while sounding. */
+  fadeLeft: number | undefined;
+  fadeFrames: number;
+};
+
 type PlayRequest = {
   score: TrackScore;
   beat: number | undefined;
@@ -254,7 +279,8 @@ export class AudioEngine {
   public readonly info: AudioBackendInfo;
   private readonly lock: PlaybackLock;
   private readonly sampleRate: number;
-  private readonly leadFrames: number;
+  private leadFrames: number;
+  private readonly defaultLeadFrames: number;
   private readonly tickMs: number;
   private readonly now: () => number;
   private readonly useTimer: boolean;
@@ -280,6 +306,12 @@ export class AudioEngine {
   private lastRenderMs = 0;
   private respawns = 0;
   private respawnTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Play mode: keep a player running without a loop for live voices. */
+  private monitoring = false;
+  private readonly voices = new Map<number, LiveVoice>();
+  private click: ClickBus | undefined;
+  private clickVoices: { sound: Float32Array; position: number }[] = [];
+  private sounds: Readonly<Record<ClickLevel, Float32Array>> | undefined;
 
   public constructor(options: AudioEngineOptions = {}) {
     this.sampleRate = options.sampleRate ?? DEFAULT_SAMPLE_RATE;
@@ -289,6 +321,7 @@ export class AudioEngine {
     this.leadFrames = Math.round(
       ((options.leadMs ?? 200) * this.sampleRate) / 1000,
     );
+    this.defaultLeadFrames = this.leadFrames;
     this.tickMs = options.tickMs ?? 20;
     this.now = options.now ?? (() => performance.now());
     this.useTimer = options.timer ?? true;
@@ -321,11 +354,111 @@ export class AudioEngine {
     return this.lastRenderMs;
   }
 
+  /**
+   * Set the queue lead (play mode drops it to ~60 ms so a key sounds soon
+   * after it is pressed); `undefined` restores the constructed lead.
+   */
+  public setLeadMs(ms: number | undefined): void {
+    this.leadFrames =
+      ms === undefined
+        ? this.defaultLeadFrames
+        : Math.max(1, Math.round((ms * this.sampleRate) / 1000));
+  }
+
+  /** Lead in milliseconds: how far ahead of now a new live voice sounds. */
+  public get leadMs(): number {
+    return (this.lead * 1000) / this.sampleRate;
+  }
+
+  /** Whether live voices and the click can sound (a streaming backend). */
+  public get canMonitor(): boolean {
+    return this.info.backend !== "none" && !this.fallback;
+  }
+
+  /**
+   * Play mode: keep the player running while the transport is stopped so
+   * live notes and the click sound over silence. Off stops a loopless player.
+   */
+  public async monitor(on: boolean): Promise<void> {
+    if (!this.canMonitor) return;
+    this.monitoring = on;
+    if (on) {
+      if (this.child || this.starting) return;
+      this.starting = this.start(undefined, 0).finally(() => {
+        this.starting = undefined;
+      });
+      await this.starting;
+      return;
+    }
+    this.voices.clear();
+    this.clickVoices = [];
+    if (!this.loop) await this.stopAsync();
+  }
+
+  public get monitoringLive(): boolean {
+    return this.monitoring;
+  }
+
+  /**
+   * Start a live voice at the write head: it sounds `leadMs` from now, and
+   * the return value is the monotonic ms its first frame is scheduled at
+   * (before the device's own output latency). A
+   * voice with the same id is replaced in place (a re-rendered, longer or
+   * released note keeps its position, so the swap is seamless).
+   */
+  public noteOn(id: number, note: LiveNotePcm): number {
+    const existing = this.voices.get(id);
+    if (existing) {
+      existing.pcm = note.pcm;
+      existing.frames = note.frames;
+      existing.fadeLeft = undefined;
+    } else
+      this.voices.set(id, {
+        pcm: note.pcm,
+        frames: note.frames,
+        position: 0,
+        fadeLeft: undefined,
+        fadeFrames: Math.max(1, Math.round(this.sampleRate * 0.01)),
+      });
+    // Write what is due now so the voice joins the very next chunk.
+    const first = this.written;
+    this.pump();
+    return this.frameMs(first);
+  }
+
+  /** Fade a live voice out over ~10 ms (sustain lifted, mode left). */
+  public noteOff(id: number): void {
+    const voice = this.voices.get(id);
+    if (voice && voice.fadeLeft === undefined)
+      voice.fadeLeft = voice.fadeFrames;
+  }
+
+  /** Frames of live voice `id` already mixed, or undefined once finished. */
+  public voicePosition(id: number): number | undefined {
+    return this.voices.get(id)?.position;
+  }
+
+  public get liveVoices(): number {
+    return this.voices.size;
+  }
+
+  /** Mix the click bus into the stream (undefined turns it off). */
+  public setClick(click: ClickBus | undefined): void {
+    this.click = click;
+    if (!click) this.clickVoices = [];
+    else this.sounds ??= clickSounds(this.sampleRate);
+  }
+
   /** Frames kept queued ahead of the clock right now. */
   public get lead(): number {
-    const adaptive = Math.round(
-      (LEAD_RENDER_FACTOR * this.lastRenderMs * this.sampleRate) / 1000,
-    );
+    // Play mode keeps its short lead: renders run off-thread, so a slow
+    // render delays the swap, not the stream.
+    const adaptive =
+      this.monitoring && this.renderer.offThread
+        ? 0
+        : Math.round(
+            (LEAD_RENDER_FACTOR * this.lastRenderMs * this.sampleRate) / 1000,
+          );
     // The pump never queues more than a second, so the lead stays under it.
     return Math.min(
       Math.max(this.leadFrames, adaptive),
@@ -444,6 +577,11 @@ export class AudioEngine {
       return;
     }
     await this.starting?.catch(() => undefined);
+    if (this.monitoring && this.child) {
+      // Play mode: the transport stopped, the live player keeps running.
+      this.loop = undefined;
+      return;
+    }
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
     const child = this.child;
@@ -463,6 +601,7 @@ export class AudioEngine {
 
   /** Stops playback and releases the render worker. */
   public async dispose(): Promise<void> {
+    this.monitoring = false;
     await this.stopAsync();
     this.renderer.dispose();
   }
@@ -474,7 +613,7 @@ export class AudioEngine {
   public pump(): void {
     const child = this.child;
     const loop = this.loop;
-    if (!child || !loop) return;
+    if (!child || (!loop && !this.monitoring)) return;
     const due =
       Math.floor(((this.now() - this.startMs) * this.sampleRate) / 1000) +
       this.lead;
@@ -483,13 +622,13 @@ export class AudioEngine {
     // Never queue more than one second at once, e.g. after a stalled loop.
     if (remaining > this.sampleRate) {
       const skipped = remaining - this.sampleRate;
-      this.cursor = (this.cursor + skipped) % loop.frames;
+      if (loop) this.cursor = (this.cursor + skipped) % loop.frames;
       this.written += skipped;
       remaining = this.sampleRate;
     }
     const out = new Int16Array(remaining * RENDER_CHANNELS);
     let offset = 0;
-    while (offset < remaining) {
+    while (loop && offset < remaining) {
       const take = Math.min(remaining - offset, loop.frames - this.cursor);
       out.set(
         loop.pcm.subarray(
@@ -501,6 +640,7 @@ export class AudioEngine {
       offset += take;
       this.cursor = (this.cursor + take) % loop.frames;
     }
+    this.mixLive(out, this.written, remaining);
     this.written += remaining;
     try {
       child.stdin.write(new Uint8Array(out.buffer));
@@ -508,6 +648,68 @@ export class AudioEngine {
     } catch {
       /* the exit handler decides whether to restart */
     }
+  }
+
+  /** Wall time (monotonic ms) stream frame `frame` sounds at. */
+  private frameMs(frame: number): number {
+    return this.startMs + (frame * 1000) / this.sampleRate;
+  }
+
+  /** Add live voices and the click bus to a block about to be written. */
+  private mixLive(out: Int16Array, firstFrame: number, frames: number): void {
+    if (this.voices.size === 0 && !this.click && this.clickVoices.length === 0)
+      return;
+    for (const [id, voice] of this.voices) {
+      let index = 0;
+      for (; index < frames && voice.position < voice.frames; index += 1) {
+        let gain = 1;
+        if (voice.fadeLeft !== undefined) {
+          if (voice.fadeLeft <= 0) break;
+          gain = voice.fadeLeft / voice.fadeFrames;
+          voice.fadeLeft -= 1;
+        }
+        const at = index * RENDER_CHANNELS;
+        const from = voice.position * RENDER_CHANNELS;
+        out[at] = clamp16(out[at]! + voice.pcm[from]! * gain);
+        out[at + 1] = clamp16(out[at + 1]! + voice.pcm[from + 1]! * gain);
+        voice.position += 1;
+      }
+      if (
+        voice.position >= voice.frames ||
+        (voice.fadeLeft !== undefined && voice.fadeLeft <= 0)
+      )
+        this.voices.delete(id);
+    }
+    const click = this.click;
+    if (click && this.sounds) {
+      const from = click.beatAt(this.frameMs(firstFrame));
+      const to = click.beatAt(this.frameMs(firstFrame + frames));
+      // A stopped transport, a seek or a loop wrap fires no click.
+      if (from !== undefined && to !== undefined && to > from && to - from < 2)
+        for (const event of clicksIn(from, to, frames, click)) {
+          this.clickVoices.push({
+            sound: this.sounds[event.level],
+            position: -event.offset,
+          });
+        }
+    }
+    if (this.clickVoices.length === 0) return;
+    const level = 32767 * Math.max(0, Math.min(1, click?.volume ?? 0)) * 0.5;
+    for (const voice of this.clickVoices) {
+      for (let index = 0; index < frames; index += 1) {
+        const position = voice.position + index;
+        if (position < 0) continue;
+        if (position >= voice.sound.length) break;
+        const value = voice.sound[position]! * level;
+        const at = index * RENDER_CHANNELS;
+        out[at] = clamp16(out[at]! + value);
+        out[at + 1] = clamp16(out[at + 1]! + value);
+      }
+      voice.position += frames;
+    }
+    this.clickVoices = this.clickVoices.filter(
+      (voice) => voice.position < voice.sound.length,
+    );
   }
 
   private toLoop(render: LoopRender, score: TrackScore): Loop {
@@ -542,7 +744,7 @@ export class AudioEngine {
     this.loop = next;
   }
 
-  private async start(loop: Loop, beat: number): Promise<void> {
+  private async start(loop: Loop | undefined, beat: number): Promise<void> {
     const generation = this.generation;
     if (!(await this.lock.acquire())) return;
     if (generation !== this.generation) {
@@ -561,7 +763,7 @@ export class AudioEngine {
     this.loop = loop;
     this.startMs = this.now();
     this.written = 0;
-    this.cursor = this.frameForBeat(loop, beat);
+    this.cursor = loop ? this.frameForBeat(loop, beat) : 0;
     void child.exited.then(() => {
       if (this.child !== child) return;
       this.onPlayerExit(generation);
@@ -590,7 +792,7 @@ export class AudioEngine {
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
     void this.lock.release().then(() => {
-      if (!loop || generation !== this.generation) return;
+      if ((!loop && !this.monitoring) || generation !== this.generation) return;
       if (ranMs >= RESPAWN_RESET_MS) this.respawns = 0;
       if (this.respawns >= MAX_RESPAWNS) {
         this.onStatus?.({
@@ -610,11 +812,10 @@ export class AudioEngine {
         if (generation !== this.generation || this.child || this.starting)
           return;
         const frame = heard + ((this.now() - diedAt) * this.sampleRate) / 1000;
-        this.starting = this.start(loop, frame / loop.framesPerBeat).finally(
-          () => {
-            this.starting = undefined;
-          },
-        );
+        const beat = loop ? frame / loop.framesPerBeat : 0;
+        this.starting = this.start(loop, beat).finally(() => {
+          this.starting = undefined;
+        });
       }, delay);
     });
   }
@@ -633,4 +834,8 @@ function spawnStdinPlayer(command: readonly string[]): PlayerProcess {
     exited: child.exited,
     kill: () => child.kill(),
   };
+}
+
+function clamp16(value: number): number {
+  return Math.max(-32768, Math.min(32767, Math.round(value)));
 }
