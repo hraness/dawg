@@ -4,6 +4,11 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ## Unreleased
 
+### Previewing changes
+
+- **Edits crossfade instead of clicking.** When the loop (audition or song) swaps to a new render, the old and new buffers crossfade over 20 ms with equal-power gains at the same beat, so a change no longer steps the waveform. Playback only: renders and exports are byte-identical.
+- **Reverb changes are heard faster.** The stem cache keeps each track's reverb input and tail apart from its dry signal, so a reverb mix (or mix lane) change re-mixes the cached tail instead of re-rendering the voice and the room. Key to audio scheduled on a 4-track song: reverb mix on a wavetable pad in context 140 → 64 ms median (p90 151 → 68 ms); a filter change in context 100 → 74 ms. The bus mix loops also moved out of the large render function, which the JIT optimized late. Renders stay byte-identical (a new test checks cached re-mixes against cold renders and recorded digests).
+
 ### Security
 
 - **A security policy.** `SECURITY.md` and `https://dawg.sh/.well-known/security.txt` say how to report a vulnerability privately.

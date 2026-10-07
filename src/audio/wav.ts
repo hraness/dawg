@@ -34,12 +34,16 @@ import {
 import { synthKit } from "../../core/kits.ts";
 import { kitDrumSample, kitTailSeconds, newKitVoiceState } from "./kits.ts";
 import {
+  addReverbWet,
   applyMonoChain,
   applyStereoChain,
   delayTailFor,
   interpolateAutomation,
+  reverbActive,
   reverbImpulse,
   reverbTailFor,
+  reverbWet,
+  type ReverbWet,
 } from "./effects/chain.ts";
 import {
   createOrbitBus,
@@ -193,8 +197,16 @@ type Stem = {
   key: string;
   left: Float64Array;
   right: Float64Array;
+  /** Stem, pre-reverb pair and tail (counted in the cache budget). */
   bytes: number;
   used: number;
+  /** For a track with a reverb: its stem before the reverb, and the tail. */
+  room?: Readonly<{
+    /** `stemKey` of the track with its reverb mix and mix lane left out. */
+    key: string;
+    pre: Readonly<{ left: Float64Array; right: Float64Array }>;
+    wet: ReverbWet;
+  }>;
 };
 
 /**
@@ -351,9 +363,38 @@ export class StemRenderer {
         track ? reverbImpulse(track, sampleRate, bank.irs)?.id : undefined,
       );
       let stem = this.stems.get(trackId);
+      const caching = this.maxCacheBytes > 0;
+      // A cached track with a reverb also keeps its pre-reverb pair and the
+      // tail before its mix gain, keyed without the mix: a mix-only edit
+      // re-adds the tail instead of re-running the voices and the room.
+      const room =
+        caching && track && busOrbit === undefined && reverbActive(track)
+          ? stemKey(
+              roomTrack(track),
+              notes,
+              context,
+              sampler ? bank : undefined,
+              wavetable?.id,
+              reverbImpulse(track, sampleRate, bank.irs)?.id,
+            )
+          : undefined;
       if (stem?.key === key) stem.used = this.renders;
-      else {
-        const caching = this.maxCacheBytes > 0;
+      else if (track && room !== undefined && stem?.room?.key === room) {
+        const { pre, wet } = stem.room;
+        const target = {
+          left: Float64Array.from(pre.left),
+          right: Float64Array.from(pre.right),
+        };
+        addReverbWet(target.left, target.right, wet, track, context);
+        stem = {
+          ...stem,
+          key,
+          left: target.left,
+          right: target.right,
+          used: this.renders,
+        };
+        this.store(trackId, stem);
+      } else {
         const target = caching
           ? {
               left: new Float64Array(samples),
@@ -403,7 +444,27 @@ export class StemRenderer {
           context,
           stereo ? dryR : undefined,
         );
-        if (track)
+        let saved: Stem["room"];
+        if (track && room !== undefined) {
+          // Same chain, the reverb split in two (see `applyReverb`).
+          applyStereoChain(
+            target.left,
+            target.right,
+            track,
+            context,
+            true,
+            false,
+          );
+          const pre = {
+            left: Float64Array.from(target.left),
+            right: Float64Array.from(target.right),
+          };
+          const wet = reverbWet(target.left, target.right, track, context);
+          if (wet) {
+            addReverbWet(target.left, target.right, wet, track, context);
+            saved = { key: room, pre, wet };
+          }
+        } else if (track)
           applyStereoChain(
             target.left,
             target.right,
@@ -415,8 +476,9 @@ export class StemRenderer {
           key,
           left: target.left,
           right: target.right,
-          bytes: target.left.byteLength + target.right.byteLength,
+          bytes: target.left.byteLength * (saved ? 6 : 2),
           used: this.renders,
+          ...(saved ? { room: saved } : {}),
         };
         if (caching) this.store(trackId, stem);
       }
@@ -426,17 +488,7 @@ export class StemRenderer {
           buses.set(busOrbit, (bus = createOrbitBus(busOrbit, samples)));
         sendToBus(bus, track, stem.left, stem.right, context, key);
       }
-      const gain = ducked.get(trackId);
-      if (gain)
-        for (let index = 0; index < samples; index += 1) {
-          mixL[index]! += stem.left[index]! * gain[index]!;
-          mixR[index]! += stem.right[index]! * gain[index]!;
-        }
-      else
-        for (let index = 0; index < samples; index += 1) {
-          mixL[index]! += stem.left[index]!;
-          mixR[index]! += stem.right[index]!;
-        }
+      addStem(mixL, mixR, stem.left, stem.right, samples, ducked.get(trackId));
     }
     // Bus returns join after every stem, in orbit order; the orbit's ducking
     // applies to them as to its tracks.
@@ -455,12 +507,15 @@ export class StemRenderer {
         wet = { key, ...renderOrbitBus(bus, context) };
         if (this.maxCacheBytes > 0) this.buses.set(orbit, wet);
       }
-      const gain = busGains.get(`bus:${orbit}`);
-      for (let index = 0; index < samples; index += 1) {
-        const g = gain ? gain[index]! : 1;
-        mixL[index]! += wet.left[index]! * g;
-        mixR[index]! += wet.right[index]! * g;
-      }
+      // (x * 1 === x, so an unducked bus adds its plain samples.)
+      addStem(
+        mixL,
+        mixR,
+        wet.left,
+        wet.right,
+        samples,
+        busGains.get(`bus:${orbit}`),
+      );
     }
     for (const orbit of [...this.buses.keys()])
       if (!buses.has(orbit)) this.buses.delete(orbit);
@@ -468,19 +523,10 @@ export class StemRenderer {
     // unsoloed tracks keep theirs so toggling them back is free.
     for (const trackId of [...this.stems.keys()])
       if (!groups.has(trackId)) this.evict(trackId);
-    if (samples > frames) {
-      // Linear effects superpose, so folding the tail onto the start yields
-      // the steady state of the loop playing forever.
-      for (let index = frames; index < samples; index += 1) {
-        mixL[index % frames]! += mixL[index]!;
-        mixR[index % frames]! += mixR[index]!;
-      }
-    }
-    const pcm = new Int16Array(frames * RENDER_CHANNELS);
-    for (let index = 0; index < frames; index += 1) {
-      pcm[index * 2] = clamp16(mixL[index]! * 32767);
-      pcm[index * 2 + 1] = clamp16(mixR[index]! * 32767);
-    }
+    // Linear effects superpose, so folding the tail onto the start yields
+    // the steady state of the loop playing forever.
+    if (samples > frames) foldTail(mixL, mixR, frames, samples);
+    const pcm = toPcm(mixL, mixR, frames);
     return Object.freeze({
       sampleRate,
       channels: RENDER_CHANNELS,
@@ -543,7 +589,75 @@ export class StemRenderer {
   }
 }
 
+/*
+ * The mix loops live in small functions of their own: inside `render` (a
+ * large function the JIT optimizes late) they ran several times slower.
+ * Same operations in the same order, so the output is unchanged.
+ */
+
+/** Add a stem (times its ducking gain, if any) into the mix. */
+function addStem(
+  mixL: Float64Array,
+  mixR: Float64Array,
+  left: Float64Array,
+  right: Float64Array,
+  samples: number,
+  gain: Float64Array | undefined,
+): void {
+  if (gain)
+    for (let index = 0; index < samples; index += 1) {
+      mixL[index]! += left[index]! * gain[index]!;
+      mixR[index]! += right[index]! * gain[index]!;
+    }
+  else
+    for (let index = 0; index < samples; index += 1) {
+      mixL[index]! += left[index]!;
+      mixR[index]! += right[index]!;
+    }
+}
+
+/** Fold everything past `frames` back onto the loop start. */
+function foldTail(
+  mixL: Float64Array,
+  mixR: Float64Array,
+  frames: number,
+  samples: number,
+): void {
+  for (let index = frames; index < samples; index += 1) {
+    mixL[index % frames]! += mixL[index]!;
+    mixR[index % frames]! += mixR[index]!;
+  }
+}
+
+/** Interleaved 16-bit PCM of the first `frames` mix samples. */
+function toPcm(
+  mixL: Float64Array,
+  mixR: Float64Array,
+  frames: number,
+): Int16Array {
+  const pcm = new Int16Array(frames * RENDER_CHANNELS);
+  for (let index = 0; index < frames; index += 1) {
+    pcm[index * 2] = clamp16(mixL[index]! * 32767);
+    pcm[index * 2 + 1] = clamp16(mixR[index]! * 32767);
+  }
+  return pcm;
+}
+
 /** Everything a track's stem depends on, except mute and solo. */
+/**
+ * The track as its reverb tail sees it: everything but the reverb's mix
+ * and mix lane, which only scale the tail.
+ */
+function roomTrack(track: Track): Track {
+  const lanes = { ...track.fxAutomation };
+  delete lanes["reverb-mix"];
+  return {
+    ...track,
+    reverb: { ...track.reverb!, mix: 1 },
+    fxAutomation: lanes,
+  } as Track;
+}
+
 function stemKey(
   track: Track | undefined,
   notes: readonly Note[],
