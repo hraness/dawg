@@ -254,6 +254,11 @@ test.skipIf(!supported)(
       () => t.vt.text().includes("unknown command /foo · /help"),
       "unknown",
     );
+    await t.send("/clik on\r");
+    await t.until(
+      () => t.vt.text().includes("did you mean /click?"),
+      "nearest command",
+    );
     await t.send("pan 3\r");
     await t.until(() => t.vt.text().includes("pan takes -1…1"), "usage");
     await t.send("/export\r");
@@ -264,13 +269,18 @@ test.skipIf(!supported)(
       "enoent",
     );
 
-    // /help opens the grouped overlay; Esc closes it.
+    // /help opens the short task guide; /help all is the full reference.
     await t.send("/help\r");
-    await t.until(() => t.vt.text().includes("── music"), "help overlay");
+    await t.until(() => t.vt.text().includes("── start here"), "help guide");
+    expect(t.vt.text()).toContain("ctrl-k");
     expect(t.vt.text()).toContain("esc back");
+    await t.send("\u001b");
+    await t.until(() => !t.vt.text().includes("── start here"), "guide closed");
+    await t.send("/help all\r");
+    await t.until(() => t.vt.text().includes("── music"), "help overlay");
     await t.send("\u001b[F"); // End: the last page holds window + keys
     await t.until(() => t.vt.text().includes("── keys"), "help end");
-    expect(t.vt.text()).toContain("/auth [--check]");
+    expect(t.vt.text()).toContain("/help [topic]");
     await t.send("\u001b");
     await t.until(() => !t.vt.text().includes("── keys"), "help closed");
     await t.send("/status\r");

@@ -52,6 +52,14 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         command: "wtenv|wtattack|wtdecay|wtrate|wtdepth|warp <n>",
         summary: "scan the table · warpmode bendp",
       },
+      {
+        command: "fx <effect> <param> <value> | on | off | preset <name>",
+        summary: "effects · fx delay mix 0.3 · fx reverb on · fx lists them",
+      },
+      {
+        command: "synth <param> <value> | preset <name>",
+        summary: "synth voice · synth lpf 1200 · synth lists every param",
+      },
       { command: "filter <hz> [res]", summary: "low-pass · filter off" },
       { command: "delay <beats> [fb] [mix]", summary: "ping-pong · delay off" },
       { command: "reverb <mix> [size]", summary: "room · reverb off" },
@@ -136,12 +144,24 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       { command: "/auth [--check]", summary: "provider and audio status" },
       { command: "/play [on|off]", summary: "keyboard play mode · Ctrl-P" },
       {
+        command: "/pattern [name]",
+        summary: "drum groove picker · moving previews",
+      },
+      {
+        command: "/kit [name]",
+        summary: "drum kit picker · synth kits, then samples",
+      },
+      {
+        command: "/pack list|info|use|add",
+        summary: "sample packs · /pack use 909/bd",
+      },
+      {
         command: "/euclid [voice]",
         summary: "T-1 style rhythm editor · Rhythm in /menu",
       },
       {
         command: "/menu [section]",
-        summary: "edit by hand · Ctrl-K · track effects automation …",
+        summary: "every setting by hand · Ctrl-K",
       },
       {
         command: "/click on|off|<volume>",
@@ -149,9 +169,12 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       },
       {
         command: "/chords auto|manual|off",
-        summary: "play-mode chords · voicing spread bass perform rate preset",
+        summary: "play-mode chords · /chords for settings",
       },
-      { command: "/help", summary: "this list · ?" },
+      {
+        command: "/help [topic]",
+        summary: "start here · /help all for everything",
+      },
     ],
   },
   {
@@ -163,20 +186,144 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       { command: "Ctrl-Q", summary: "toggle queue mode" },
       { command: "Ctrl-Z / Ctrl-Y", summary: "undo / redo" },
       { command: "Ctrl-O", summary: "transcript" },
-      { command: "Esc", summary: "cancel the agent · close an overlay" },
+      { command: "Esc", summary: "cancel the agent · back one level" },
+      { command: "?", summary: "keys for the screen you are on" },
       { command: "Space", summary: "play/pause on an empty prompt" },
       {
         command: "Ctrl-P",
-        summary: "play mode: A–' W–P keys · Z/X octave · R rec · M click",
+        summary: "play mode · Z/X octave · R record · Q chords",
       },
       {
         command: "Ctrl-K",
-        summary: "menu: ↑↓/jk move · enter · ←→/+- nudge · / filter",
+        summary: "menu · ←→ adjust · / filter · x reset",
       },
       { command: "Ctrl-C", summary: "exit" },
     ],
   },
 ];
+
+/**
+ * `/help` with no topic: a short, task-first guide. Each row is something to
+ * type or press, then what it does. The full reference is `/help all` (or one
+ * group: `/help music`).
+ */
+export const HELP_GUIDE: readonly HelpSection[] = [
+  {
+    group: "start here" as HelpGroup,
+    entries: [
+      { command: "type a request", summary: "“add a walking bass in A minor”" },
+      { command: "ctrl-p", summary: "play notes on the computer keyboard" },
+      {
+        command: "ctrl-k",
+        summary: "menu: every sound, effect, rhythm, chord",
+      },
+      { command: "?", summary: "keys for the screen you are on" },
+      {
+        command: "ctrl-z · ctrl-y",
+        summary: "undo · redo (every change is one)",
+      },
+    ],
+  },
+  {
+    group: "play notes" as HelpGroup,
+    entries: [
+      {
+        command: "ctrl-p, a s d f …",
+        summary: "piano keys · z x octave · esc leave",
+      },
+      {
+        command: "r, then space",
+        summary: "record over the loop (one undo a bar)",
+      },
+    ],
+  },
+  {
+    group: "make drums" as HelpGroup,
+    entries: [
+      { command: "/pattern", summary: "pick a groove · moving previews it" },
+      { command: "/kit", summary: "pick a drum kit" },
+      { command: "/euclid", summary: "rhythm editor: pulses, steps, rotation" },
+    ],
+  },
+  {
+    group: "shape the sound" as HelpGroup,
+    entries: [
+      {
+        command: "ctrl-k › Sound",
+        summary: "instrument, envelope, filter, wavetable",
+      },
+      { command: "ctrl-k › Effects", summary: "delay, reverb, distortion …" },
+      { command: "fx delay mix 0.3", summary: "the same from the prompt" },
+    ],
+  },
+  {
+    group: "chords" as HelpGroup,
+    entries: [
+      { command: "key A minor", summary: "set the song key" },
+      {
+        command: "ctrl-p, then q",
+        summary: "chord mode: one key plays a chord",
+      },
+      {
+        command: "1–4 · 5–8 · n",
+        summary: "chord type · extension · next chord",
+      },
+    ],
+  },
+  {
+    group: "more" as HelpGroup,
+    entries: [
+      { command: "/help all", summary: "every command and key" },
+      { command: "/help music", summary: "or session, window, keys" },
+    ],
+  },
+];
+
+/** Topics `/help <topic>` takes, besides `all`. */
+export const HELP_TOPICS = ["music", "session", "window", "keys"] as const;
+
+/**
+ * Rows for `/help [topic]`: the guide with no topic, the full reference for
+ * `all`, one group for its name; undefined for an unknown topic.
+ */
+export function helpTopicLines(
+  topic: string | undefined,
+  width = 80,
+): string[] | undefined {
+  const name = topic?.trim().toLowerCase().replace(/^\//, "");
+  if (!name) return sectionLines(HELP_GUIDE, width, 20);
+  if (name === "all" || name === "commands" || name === "reference")
+    return helpLines(width);
+  const group = HELP_SECTIONS.find((section) => section.group === name);
+  return group ? sectionLines([group], width) : undefined;
+}
+
+function sectionLines(
+  sections: readonly HelpSection[],
+  width: number,
+  fixedColumn?: number,
+): string[] {
+  const lines: string[] = [];
+  const column =
+    fixedColumn ??
+    Math.min(
+      40,
+      Math.max(
+        ...sections.flatMap((s) => s.entries.map((e) => e.command.length)),
+      ) + 2,
+    );
+  for (const section of sections) {
+    if (lines.length > 0) lines.push("");
+    lines.push(`── ${section.group}`);
+    for (const entry of section.entries) {
+      const pad = Math.max(1, column - entry.command.length);
+      lines.push(
+        `${entry.command}${" ".repeat(pad)}${entry.summary}`.slice(0, width),
+      );
+    }
+  }
+  return lines;
+}
 
 /** Overlay rows: a heading per group, then `command  summary` lines. */
 export function helpLines(width = 80): string[] {
@@ -268,8 +415,71 @@ const USAGE: Readonly<Record<string, string>> = {
   login: "/login [gateway | openrouter | codex | claude]",
   logout: "/logout [provider]",
   auth: "/auth [--check]",
-  help: "/help",
+  help: "/help [topic] · /help all · /help music|session|window|keys",
+  fx: "fx <effect> <param> <value> | on | off | preset <name> · fx delay mix 0.3",
+  synth: "synth <param> <value> | preset <name> · synth lpf 1200",
+  pack: "/pack list | info <name> | use <pack>/<sound> | add <url>",
+  kit: "/kit [name] · /kit syn909",
+  euclid: "/euclid [voice] · euclid hat 7 16",
+  menu: "/menu [sound|effects|rhythm|chords|mix|project]",
+  play: "/play [on|off] · Ctrl-P",
+  meter: "meter <1..16> · meter 3",
+  undo: "undo · Ctrl-Z",
+  redo: "redo · Ctrl-Y",
 };
+
+/** Verbs a typo can be matched against, slash or bare as they are typed. */
+const KNOWN_VERBS: readonly string[] = [
+  ...new Set(
+    [
+      ...HELP_SECTIONS.flatMap((section) =>
+        section.group === "keys"
+          ? []
+          : section.entries.map((entry) => entry.command.split(/[\s|[]/)[0]!),
+      ),
+      ...Object.values(USAGE).map((usage) => usage.split(/[\s|[]/)[0]!),
+    ].filter((verb) => /^\/?[a-z][\w-]*$/i.test(verb)),
+  ),
+];
+
+function editDistance(a: string, b: string): number {
+  const row = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    let previous = row[0]!;
+    row[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const current = row[j]!;
+      row[j] = Math.min(
+        row[j]! + 1,
+        row[j - 1]! + 1,
+        previous + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+      previous = current;
+    }
+  }
+  return row[b.length]!;
+}
+
+/**
+ * The known command nearest to the first word of `command` (`/clik` →
+ * `/click`, `/fx` → `fx`), or undefined when nothing is close.
+ */
+export function nearestCommand(command: string): string | undefined {
+  const word = command.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+  const bare = word.replace(/^\//, "");
+  if (!bare) return undefined;
+  let best: { verb: string; distance: number; score: number } | undefined;
+  for (const verb of KNOWN_VERBS) {
+    const distance = editDistance(bare, verb.replace(/^\//, ""));
+    if (distance === 0 && verb === word) continue;
+    // Ties go to the form typed: `/patern` → `/pattern`, not `pattern`.
+    const sameForm = verb.startsWith("/") === word.startsWith("/");
+    const score = distance * 2 + (sameForm ? 0 : 1);
+    if (!best || score < best.score) best = { verb, distance, score };
+  }
+  const limit = bare.length <= 4 ? 1 : 2;
+  return best && best.distance <= limit ? best.verb : undefined;
+}
 
 /**
  * A usage hint when `command` starts with a known verb but did not parse
