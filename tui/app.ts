@@ -62,10 +62,22 @@ export interface UiState {
   theme: Theme;
   capabilities: TerminalCapabilities;
   reducedMotion: boolean;
-  overlay: "log" | "picker" | undefined;
+  overlay: Overlay;
   /** Transcript scroll (entries up from the newest) and filter. */
   log?: LogView | undefined;
   picker?: PickerState | undefined;
+  text?: TextView | undefined;
+}
+
+/** `log` is the transcript, `picker` an arrow-key list, `text` static lines. */
+export type Overlay = "log" | "picker" | "text" | undefined;
+
+/** A scrollable read-only panel (`/help`, `/sessions`, `/tracks`). */
+export interface TextView {
+  title: string;
+  lines: readonly string[];
+  /** Rows scrolled down from the top. */
+  scroll: number;
 }
 
 export type LogFilter = "all" | "requests" | "ops" | "errors";
@@ -678,6 +690,67 @@ function paintOverlay(
   });
 }
 
+/** Static lines in a bordered panel; the title sits on the top border. */
+function paintText(
+  buffer: CellBuffer,
+  ui: UiState,
+  region: { y: number; height: number },
+  width: number,
+): void {
+  const text = ui.text;
+  if (!text) return;
+  const roles = ui.theme.roles;
+  const left = width >= 60 ? 2 : 0;
+  const boxWidth = width - left * 2;
+  const height = region.height;
+  if (height < 3 || boxWidth < 10) return;
+  const panel = paintBox(buffer, ui, {
+    left,
+    top: region.y,
+    width: boxWidth,
+    height,
+  });
+  const inner = height - 2;
+  const maxScroll = Math.max(0, text.lines.length - inner);
+  const scroll = Math.max(0, Math.min(maxScroll, text.scroll));
+  const position =
+    maxScroll > 0
+      ? ` · ${scroll + 1}-${scroll + inner}/${text.lines.length}`
+      : "";
+  buffer.text(
+    left + 2,
+    region.y,
+    ` ${text.title}${position} `,
+    onBackground({ ...roles.text, bold: true }, panel),
+    boxWidth - 4,
+  );
+  const hint = ui.capabilities.unicode
+    ? " ↑↓ pgup pgdn scroll · esc close "
+    : " up dn pgup pgdn scroll · esc close ";
+  if (boxWidth > hint.length + 4)
+    buffer.text(
+      left + boxWidth - 2 - hint.length,
+      region.y + height - 1,
+      hint,
+      onBackground(roles.muted, panel),
+    );
+  text.lines.slice(scroll, scroll + inner).forEach((line, index) => {
+    const heading = line.startsWith("── ");
+    buffer.text(
+      left + 2,
+      region.y + 1 + index,
+      truncate(
+        heading && !ui.capabilities.unicode ? line.replace("── ", "-- ") : line,
+        boxWidth - 4,
+      ),
+      onBackground(
+        heading ? { ...roles.borderFocus, bold: true } : roles.text,
+        panel,
+      ),
+    );
+  });
+}
+
 function paintBox(
   buffer: CellBuffer,
   ui: UiState,
@@ -808,6 +881,8 @@ export function composeFrame(
     if (ui.overlay === "log") paintOverlay(buffer, ui, layout.highway, width);
     else if (ui.overlay === "picker" && ui.picker)
       paintPicker(buffer, ui, layout.highway, width);
+    else if (ui.overlay === "text" && ui.text)
+      paintText(buffer, ui, layout.highway, width);
     else
       paintHighway(
         buffer,
@@ -864,9 +939,10 @@ export class TuiApp {
   capabilities: TerminalCapabilities;
   themeName: ThemeName;
   reducedMotion: boolean;
-  overlay: "log" | "picker" | undefined;
+  overlay: Overlay;
   log: LogView = { scroll: 0, filter: "all" };
   picker: PickerState | undefined;
+  text: TextView | undefined;
   /** `/view all` overlays every unmuted track; `/view focus` shows one. */
   highwayView: "all" | "focus" = "all";
   private writer: ScreenWriter;
@@ -902,6 +978,7 @@ export class TuiApp {
       overlay: this.overlay,
       log: this.log,
       picker: this.picker,
+      text: this.text,
     };
   }
 
@@ -990,6 +1067,30 @@ export class TuiApp {
       }
       return { type: "overlay" };
     }
+    if (this.overlay === "text" && this.text) {
+      const nav = overlayKey(value);
+      const page = Math.max(1, this.io.rows() - 10);
+      if (nav && nav !== "enter") {
+        const step =
+          nav === "down"
+            ? 1
+            : nav === "up"
+              ? -1
+              : nav === "pgdn"
+                ? page
+                : nav === "pgup"
+                  ? -page
+                  : 0;
+        const total = this.text.lines.length;
+        this.text.scroll =
+          nav === "home"
+            ? 0
+            : nav === "end"
+              ? total
+              : Math.max(0, Math.min(total, this.text.scroll + step));
+        return { type: "overlay" };
+      }
+    }
     if (this.overlay === "log") {
       const nav = overlayKey(value);
       const page = Math.max(1, this.io.rows() - 10);
@@ -1041,8 +1142,13 @@ export class TuiApp {
         }
         if (key.command === "redraw") this.invalidate();
         return { type: "ui", command: key.command };
-      case "prompt":
-        return { type: "action", action: this.prompt.handle(key.key) };
+      case "prompt": {
+        const action = this.prompt.handle(key.key);
+        // Submitting from under a text panel closes it so the receipt shows.
+        if (action.kind === "submit" && this.overlay === "text")
+          this.closeText();
+        return { type: "action", action };
+      }
       case "text": {
         let action: PromptAction = {
           kind: "noop",
@@ -1072,6 +1178,17 @@ export class TuiApp {
   closePicker(): void {
     this.picker = undefined;
     if (this.overlay === "picker") this.overlay = undefined;
+  }
+
+  /** Show static lines over the highway (`/help`, lists); replaces any overlay. */
+  openText(title: string, lines: readonly string[]): void {
+    this.text = { title, lines: lines.slice(0, 512), scroll: 0 };
+    this.overlay = "text";
+  }
+
+  closeText(): void {
+    this.text = undefined;
+    if (this.overlay === "text") this.overlay = undefined;
   }
 
   /**

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { randomUUID } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { readFile, stat, writeFile } from "node:fs/promises";
+import { join, relative, resolve } from "node:path";
 import { stdin, stdout } from "node:process";
 import {
   ensureSession,
@@ -30,6 +30,7 @@ import { AutoNamer, providerNameGenerator } from "./session/naming.ts";
 import { normalizeSessionName } from "./session/meta.ts";
 import { parsePrompt } from "./agent/ops.ts";
 import { applyMusicCommand, parseMusicCommand } from "./commands/music.ts";
+import { helpLines, helpText, usageHint } from "./commands/help.ts";
 import { historyTarget, REDO_KIND, UNDO_KIND } from "./commands/history.ts";
 import { drumSnapshotFields } from "../tui/drums.ts";
 import { highwayLayers } from "../tui/layers.ts";
@@ -70,11 +71,26 @@ import {
   type AppView,
   type SyncState,
 } from "../tui/app.ts";
-import { receiptTone } from "../tui/activity.ts";
+import { fail, ok, toneOf, warn, type Receipt } from "../tui/activity.ts";
 import { encodeBuffer } from "../tui/screen.ts";
 import { parseThemeName } from "../tui/theme.ts";
 
 const ESC = "\u001b[";
+/** `/sessions` rows shown in the overlay. */
+const MAX_LISTED_SESSIONS = 64;
+
+const SUBCOMMANDS = ["login", "logout", "auth", "sessions", "render"];
+const VALUE_FLAGS = ["--session", "--track", "--import", "--export", "--theme"];
+const FLAGS = [
+  ...VALUE_FLAGS,
+  "--new",
+  "--demo",
+  "--help",
+  "-h",
+  "--version",
+  "-v",
+  "--reduce-motion",
+];
 const HELP_TEXT = `dawg · local-first terminal music workstation
 
 Usage:
@@ -82,6 +98,7 @@ Usage:
   dawg --import <file> --export <file>
   dawg sessions
   dawg render <out.wav> [--session <name|id>] [--import <file>]
+  dawg --version
 
 Usage flags:
   --reduce-motion   static hit/sustain states (also DAWG_REDUCE_MOTION=1)
@@ -92,18 +109,8 @@ Prompt:
   Ctrl-Z undo · Ctrl-Y redo · Ctrl-O transcript · Esc cancel/close · Ctrl-C exit
   Space on an empty prompt toggles playback
 
-Commands:
-  play, pause, tempo <bpm>, instrument <name>, volume <0..1>, pan <-1..1>
-  automate <lane> at <beat> <value>, clear automation, mute, clear
-    lanes: volume pan filter resonance delay-feedback delay-mix
-  undo, redo, solo, unsolo, filter <hz> [res], delay <beats> [fb] [mix]
-  reverb <mix> [size], reverb off
-  instrument kit, hit <voice> at <beat>, pattern <voice> <beats...>|every <step>
-  track <name>, bars <count>, extend <count> bars
-  /tracks, /status, /export <file>, /import <file>, /model opus-5.5|sol-6.1
-  /sessions, /resume [n|name|id], /rename <name>|--auto, /fork [name]
-  /log, /view focus|all, /theme default|high-contrast|mono, /motion on|off
-  /login [--xcb], /logout, /auth [--check]
+Commands (bare music words; app commands take a slash):
+${helpText()}
 
 Auth:
   dawg login [--gateway|--key|--xcb] [--budget <dollars>]
@@ -120,12 +127,12 @@ const importPath = optionValue("--import");
 const exportPath = optionValue("--export");
 if (["login", "logout", "auth"].includes(process.argv[2] ?? ""))
   process.exit(await runAuthCommand(process.argv.slice(2)));
-if (args.has("--help") || args.has("-h")) {
-  stdout.write(`${HELP_TEXT}\n`);
-  process.exit(0);
-}
 if (process.argv[2] === "sessions") {
-  await printSessions(process.cwd(), stdout);
+  if (args.has("--help") || args.has("-h"))
+    stdout.write(
+      "usage: dawg sessions · lists this workspace's sessions, newest first (* marks the current one)\n",
+    );
+  else await printSessions(process.cwd(), stdout);
   process.exit(0);
 }
 if (process.argv[2] === "render") {
@@ -138,6 +145,22 @@ if (process.argv[2] === "render") {
       process.stderr,
     ),
   );
+}
+if (args.has("--version") || args.has("-v")) {
+  stdout.write(`dawg ${await packageVersion()}\n`);
+  process.exit(0);
+}
+if (args.has("--help") || args.has("-h")) {
+  stdout.write(`${HELP_TEXT}\n`);
+  process.exit(0);
+}
+// Argument mistakes are rejected here, before `.dawg/` could be created.
+{
+  const problem = argumentProblem(process.argv.slice(2));
+  if (problem) {
+    process.stderr.write(`${problem} · dawg --help\n`);
+    process.exit(2);
+  }
 }
 const demo =
   args.has("--demo") || process.env.DAWG_DEMO === "1" || !stdin.isTTY;
@@ -162,6 +185,11 @@ const selectedSession = args.has("--new")
         },
       );
 if (selectedSession !== undefined) sessionOptions.sessionId = selectedSession;
+/** True when this launch creates `.dawg/`; the strip says so once. */
+const freshWorkspace = !(await stat(join(process.cwd(), ".dawg")).then(
+  () => true,
+  () => false,
+));
 const session = await ensureSession(initial.toJSON(), sessionOptions);
 // dawgd when connected, the file-lock path otherwise (see src/session/port.ts).
 let port = await openSessionPort<ReturnType<TrackScore["toJSON"]>>({
@@ -233,6 +261,9 @@ let agentEventSink: (event: AgentEvent) => void = () => undefined;
 let provider: Promise<ProviderSelection> | undefined;
 let providerStamp = { fingerprint: "", at: 0, offline: false };
 let providerName = "";
+/** Undo/redo key hints shown so far; only the first few receipts carry one. */
+let undoHintsShown = 0;
+const MAX_UNDO_HINTS = 3;
 if (demo) {
   if (score.notes.length === 0) score = seedDemo(score, requestedTrack);
   if (exportPath)
@@ -253,6 +284,32 @@ if (exportPath) {
 }
 
 await runInteractive();
+
+/** Describes an unknown subcommand or option in `argv`, or undefined. */
+function argumentProblem(argv: readonly string[]): string | undefined {
+  if (argv[0] && !argv[0].startsWith("-") && !SUBCOMMANDS.includes(argv[0]))
+    return `unknown command · ${argv[0]}`;
+  if (argv[0] && SUBCOMMANDS.includes(argv[0])) return undefined;
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]!;
+    if (VALUE_FLAGS.includes(arg)) {
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("-") && !FLAGS.includes(arg))
+      return `unknown option · ${arg}`;
+    if (!arg.startsWith("-")) return `unknown command · ${arg}`;
+  }
+  return undefined;
+}
+
+async function packageVersion(): Promise<string> {
+  const raw = await readFile(
+    new URL("../package.json", import.meta.url),
+    "utf8",
+  );
+  return (JSON.parse(raw) as { version?: string }).version ?? "0.0.0";
+}
 
 function optionValue(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -399,24 +456,52 @@ function appView(value: TrackScore, beat: number): AppView {
   };
 }
 
-/** Show a command receipt in the activity strip with a tone and undo hint. */
-function receipt(message: string, baseRevision?: number): void {
-  const tone = receiptTone(message);
-  const changed =
-    baseRevision !== undefined && record.revision !== baseRevision;
-  if (tone === "error") tui.activity.pushError(message);
-  else
-    tui.activity.pushCard(message, {
-      tone,
-      baseRevision: changed ? baseRevision : undefined,
-      resultRevision: changed ? record.revision : undefined,
-      hint: changed
-        ? message.startsWith("undid")
-          ? "^y redo"
-          : "^z undo"
-        : undefined,
-      trackId: requestedTrack,
-    });
+/** What the strip compares a receipt against: the revision and score before. */
+type Baseline = { revision: number; score: TrackScore };
+function baseline(): Baseline {
+  return { revision: record.revision, score };
+}
+
+/**
+ * Show a command receipt in the activity strip. The tone comes from the
+ * receipt itself (strings fall back to a legacy regex); the revision label
+ * appears when the revision moved, and the undo hint only when the score
+ * changed in this session (not for forks, resumes or transport).
+ */
+function receipt(result: string | Receipt, base?: Baseline): void {
+  const message = typeof result === "string" ? result : result.text;
+  const tone = toneOf(result);
+  const changed = base !== undefined && record.revision !== base.revision;
+  const scoreChanged =
+    changed && record.sessionId !== undefined && score !== base.score;
+  if (tone === "error") {
+    tui.activity.pushError(message);
+    return;
+  }
+  const hint =
+    scoreChanged && undoHintsShown < MAX_UNDO_HINTS
+      ? message.startsWith("undid")
+        ? "^y redo"
+        : "^z undo"
+      : undefined;
+  if (hint) undoHintsShown += 1;
+  tui.activity.pushCard(message, {
+    tone,
+    baseRevision: changed ? base.revision : undefined,
+    resultRevision: changed ? record.revision : undefined,
+    hint,
+    trackId: requestedTrack,
+  });
+}
+
+/** One shape for thrown errors: `<what> · <why> · <next step>`. */
+function describeError(command: string, error: unknown): string {
+  const detail = error as { code?: unknown; path?: unknown } | undefined;
+  const message = error instanceof Error ? error.message : String(error);
+  if (detail?.code === "ENOENT" && typeof detail.path === "string")
+    return `no such file · ${relative(process.cwd(), detail.path)}`;
+  const verb = command.trim().split(/\s+/)[0]?.replace(/^\//, "") || "command";
+  return `${verb} failed · ${message}`;
 }
 
 function truncateForCard(value: string): string {
@@ -439,7 +524,7 @@ async function runInteractive(): Promise<void> {
       return;
     }
     tui.activity.pushRequest(text);
-    const base = record.revision;
+    const base = baseline();
     const baseSession = record.sessionId;
     try {
       const message = await submit(text);
@@ -450,12 +535,10 @@ async function runInteractive(): Promise<void> {
         namer.noteTurn({
           score,
           prompt: text,
-          accepted: record.revision !== base,
+          accepted: record.revision !== base.revision,
         });
     } catch (error) {
-      tui.activity.pushError(
-        `error · ${error instanceof Error ? error.message : String(error)}`,
-      );
+      tui.activity.pushError(describeError(text, error));
     } finally {
       agentReported = false;
     }
@@ -581,6 +664,10 @@ async function runInteractive(): Promise<void> {
     unsubscribe = port.subscribe(onUpdate);
     refreshPresence();
   };
+  if (freshWorkspace)
+    tui.activity.pushCard("created .dawg/ · add it to .gitignore", {
+      tone: "info",
+    });
   if (attachNotice)
     tui.activity.pushCard(attachNotice, {
       tone: "info",
@@ -637,7 +724,7 @@ async function runInteractive(): Promise<void> {
               (input.command === "undo" || input.command === "redo") &&
               !agentTurn
             ) {
-              const base = record.revision;
+              const base = baseline();
               receipt(await stepHistory(input.command), base);
             }
           } else if (input.type === "pick") {
@@ -691,21 +778,32 @@ async function runInteractive(): Promise<void> {
   }
 }
 
-async function submit(prompt: string): Promise<string> {
+async function submit(prompt: string): Promise<string | Receipt> {
   const command = prompt.trim();
-  if (/^\/?help$|^\/?\?$/.test(command.toLowerCase()))
-    return "commands · play pause tempo <bpm> instrument <name> volume <0..1> pan <-1..1> automate volume|pan|filter|resonance|delay-feedback|delay-mix at <beat> <value> clear automation track <name> bars <count> extend <count> bars mute solo unsolo filter <hz> [res] delay <beats> [fb] [mix] reverb <mix> [size] hit <voice> at <beat> pattern <voice> <beats...>|every <step> clear <voice> clear undo redo export <file> import <file>";
-  if (/^\/?tracks?$/i.test(command))
-    return score.tracks
-      .map(
-        (track) =>
-          `${track.id}${track.muted ? " [muted]" : ""}${track.solo ? " [solo]" : ""} · ${track.instrument}`,
-      )
-      .join("  ");
+  if (/^\/?help$|^\/?\?$/.test(command.toLowerCase())) {
+    tui.openText("help", helpLines(Math.max(40, (stdout.columns ?? 80) - 8)));
+    return ok("help · esc closes");
+  }
+  if (/^\/?tracks$/i.test(command)) {
+    const lines = score.tracks.map(
+      (track) =>
+        `${track.id === requestedTrack ? "*" : " "} ${track.id} · ${track.instrument}${track.muted ? " · muted" : ""}${track.solo ? " · solo" : ""}`,
+    );
+    tui.openText("tracks · * focused", lines);
+    return ok(
+      `${lines.length} track${lines.length === 1 ? "" : "s"} · esc closes`,
+    );
+  }
   if (/^\/status$/i.test(command))
-    return `status · ${record.meta.name} · rev ${record.revision} · ${compositionDigest(record.composition)} · ${port.mode}`;
+    return ok(
+      `status · ${record.meta.name} · rev ${record.revision} · ${compositionDigest(record.composition)} · ${port.mode === "daemon" ? "shared via dawgd" : "saved locally · no daemon"}`,
+    );
   if (/^\/?undo$/i.test(command)) return stepHistory("undo");
   if (/^\/?redo$/i.test(command)) return stepHistory("redo");
+  const trackCommand = command.match(
+    /^\/?(?:add\s+)?track\s+([a-z0-9._-]{1,64})$/i,
+  );
+  if (trackCommand) return focusTrack(trackCommand[1]!.toLowerCase());
   const sessionReply = await sessionCommand(command);
   if (sessionReply !== undefined) return sessionReply;
   const music = parseMusicCommand(command);
@@ -716,7 +814,7 @@ async function submit(prompt: string): Promise<string> {
     );
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
-    return result.message;
+    return result.ok ? ok(result.message) : fail(result.message);
   }
   const exportCommand = command.match(/^\/?export\s+([^\s]+)$/i);
   if (exportCommand) {
@@ -767,9 +865,23 @@ async function submit(prompt: string): Promise<string> {
       tui.activity.setSpinner(undefined);
     }
   }
+  // `/model` belongs to its own handler above; every other slash word that
+  // reached here is unknown or misused, and never a question for the agent.
+  if (command.startsWith("/") && !/^\/model\b/i.test(command)) {
+    const hint = usageHint(command);
+    return fail(
+      hint
+        ? `${truncateForCard(command)} · ${hint}`
+        : `unknown command ${command.split(/\s+/)[0]} · /help`,
+    );
+  }
   const parsed = parsePrompt(prompt);
   if (!parsed) {
-    if (process.env.DAWG_AI === "0") return `unrecognized request: ${prompt}`;
+    // A known verb with bad arguments gets usage, not a model call.
+    const hint = usageHint(command);
+    if (hint) return fail(`${truncateForCard(command)} · ${hint}`);
+    if (process.env.DAWG_AI === "0")
+      return fail(`unrecognized · ${truncateForCard(command)} · /help`);
     await materializeDraft();
     return runAgent(prompt);
   }
@@ -791,7 +903,7 @@ async function submit(prompt: string): Promise<string> {
       );
     } catch (error) {
       if (error instanceof SessionConflictError)
-        return "transport changed in another window";
+        return warn("transport changed in another window");
       throw error;
     }
     return parsed.action;
@@ -802,20 +914,7 @@ async function submit(prompt: string): Promise<string> {
     clock.setTempo?.(next.tempoBpm);
     return `tempo · ${next.tempoBpm} BPM`;
   }
-  if (parsed.type === "add-track") {
-    if (score.tracks.some((track) => track.id === parsed.trackId))
-      return `track exists · ${parsed.trackId}`;
-    const next = applyScoreOperation(score, {
-      type: "addTrack",
-      track: {
-        id: parsed.trackId,
-        name: parsed.trackId,
-        instrument: isDrumInstrument(parsed.trackId) ? "kit" : "sine",
-      },
-    });
-    await commitScore(next, "track.create", { trackId: parsed.trackId });
-    return `track created · ${parsed.trackId}`;
-  }
+  if (parsed.type === "add-track") return focusTrack(parsed.trackId);
   if (parsed.type === "set-bars" || parsed.type === "extend-bars") {
     const bars =
       parsed.type === "set-bars"
@@ -951,7 +1050,41 @@ async function submit(prompt: string): Promise<string> {
       if (!(error instanceof SessionConflictError)) throw error;
     }
   }
-  return "session busy; retry the note";
+  return warn("session busy · retry the note");
+}
+
+/**
+ * `/track <name>`: focus `trackId` in this window, creating it when it is
+ * not in the score yet. A track another live window has focused stays
+ * theirs; focus goes through the port so presence is right everywhere.
+ */
+async function focusTrack(trackId: string): Promise<Receipt> {
+  if (trackId === requestedTrack && !draftTrack)
+    return warn(`already on ${trackId}`);
+  const clients = await port.presence().catch(() => []);
+  if (
+    clients.some(
+      (client) =>
+        client.clientId !== port.clientId && client.focusedTrackId === trackId,
+    )
+  )
+    return warn(`${trackId} is open in another window`);
+  const exists = score.tracks.some((track) => track.id === trackId);
+  if (!exists) {
+    const next = applyScoreOperation(score, {
+      type: "addTrack",
+      track: {
+        id: trackId,
+        name: trackId,
+        instrument: isDrumInstrument(trackId) ? "kit" : "sine",
+      },
+    });
+    await commitScore(next, "track.create", { trackId });
+  }
+  await port.focus(trackId);
+  requestedTrack = trackId;
+  draftTrack = false;
+  return ok(exists ? `track · ${trackId}` : `track created · ${trackId}`);
 }
 
 async function readLoopFile(path: string): Promise<string> {
@@ -1002,7 +1135,12 @@ function adoptMeta(meta: typeof record.meta): void {
   record = { ...record, meta };
   if (meta.name !== announcedName) {
     announcedName = meta.name;
-    tui.activity.pushCard(`session · ${meta.name}`, { tone: "info" });
+    tui.activity.pushCard(
+      meta.nameSource === "auto"
+        ? `${meta.name} (auto-named) · rename with /rename <name>`
+        : `session · ${meta.name}`,
+      { tone: "info" },
+    );
   }
 }
 
@@ -1022,7 +1160,9 @@ function makeNamer(): AutoNamer {
 }
 
 /** `/sessions`, `/resume`, `/rename`, `/fork`; undefined when not one. */
-async function sessionCommand(command: string): Promise<string | undefined> {
+async function sessionCommand(
+  command: string,
+): Promise<string | Receipt | undefined> {
   const match = command.match(/^\/(sessions|resume|rename|fork)(?:\s+(.*))?$/i);
   if (!match) return undefined;
   const verb = match[1]!.toLowerCase();
@@ -1030,7 +1170,9 @@ async function sessionCommand(command: string): Promise<string | undefined> {
   const workspace = process.cwd();
   if (verb === "rename") {
     if (!arg)
-      return `session · ${record.meta.name} (${record.meta.nameSource}) · /rename <name> | --auto`;
+      return record.meta.nameSource === "auto"
+        ? `${record.meta.name} (auto-named) · rename with /rename <name>`
+        : `${record.meta.name} (named by you) · /rename --auto to auto-name`;
     if (arg === "--auto") {
       const result = await port.updateMeta({
         nameSource: "auto",
@@ -1051,7 +1193,7 @@ async function sessionCommand(command: string): Promise<string | undefined> {
   const sessions = await listSessions(workspace);
   if (verb === "resume" && !arg) {
     const readable = sessions.filter((session) => !session.error).slice(0, 64);
-    if (readable.length === 0) return "no sessions to resume";
+    if (readable.length === 0) return warn("no sessions to resume");
     const current = readable.findIndex(
       (session) => session.sessionId === record.sessionId,
     );
@@ -1064,29 +1206,39 @@ async function sessionCommand(command: string): Promise<string | undefined> {
       })),
       index: Math.max(0, current),
     });
-    return "resume · pick a session (or /resume <n|name|id>)";
+    return "resume · 1-9 shown · /resume <name|id>";
   }
   if (verb === "sessions") {
-    const lines = pickerLines(sessions, record.sessionId, (session) =>
-      formatSessionLine(session, sessions),
+    const lines = pickerLines(
+      sessions,
+      record.sessionId,
+      (session) => formatSessionLine(session, sessions),
+      MAX_LISTED_SESSIONS,
     );
-    for (const line of lines) tui.activity.pushCard(line, { tone: "info" });
-    return `${lines.length} sessions`;
+    tui.openText("sessions · * current · /resume <n>", lines);
+    return ok(
+      `${lines.length} session${lines.length === 1 ? "" : "s"} · esc closes`,
+    );
   }
-  if (agentTurn) return "agent busy; finish or Esc first";
+  if (agentTurn) return warn("agent busy · finish or Esc first");
   if (verb === "fork") {
     const forked = await forkSession(workspace, record, arg || undefined);
     await switchSession(forked.sessionId);
     return `forked · ${forked.meta.name}`;
   }
   const readable = sessions.filter((session) => !session.error);
-  const index = /^[1-9]$/.test(arg) ? Number(arg) - 1 : -1;
-  const sessionId =
-    readable[index]?.sessionId ??
-    (await resolveSessionArg(workspace, arg, sessions));
-  if (!sessions.some((session) => session.sessionId === sessionId))
-    return `no session named "${arg}"`;
-  if (sessionId === record.sessionId) return `already in ${record.meta.name}`;
+  // Any list index works, not only the digits the picker binds.
+  const index = /^\d+$/.test(arg) ? Number(arg) - 1 : -1;
+  let sessionId = readable[index]?.sessionId;
+  if (sessionId === undefined)
+    try {
+      sessionId = await resolveSessionArg(workspace, arg, sessions);
+    } catch (error) {
+      if (!(error instanceof SessionLookupError)) throw error;
+      return fail(error.message.replace(" · dawg sessions", " · /sessions"));
+    }
+  if (sessionId === record.sessionId)
+    return warn(`already in ${record.meta.name}`);
   await switchSession(sessionId);
   return `resumed · ${record.meta.name} · ${requestedTrack}${draftTrack ? " (new)" : ""}`;
 }
@@ -1138,14 +1290,14 @@ async function commitScore(
   if (clock.playing) void audio.play(score);
 }
 
-async function stepHistory(direction: "undo" | "redo"): Promise<string> {
+async function stepHistory(direction: "undo" | "redo"): Promise<Receipt> {
   const latest = await port.load();
   // A fork's undo continues into its parent's history past the fork point.
   const target = historyTarget(
     await historyEvents(process.cwd(), latest),
     direction,
   );
-  if (!target) return `nothing to ${direction}`;
+  if (!target) return warn(`nothing to ${direction}`);
   try {
     const restored = scoreFromJSON(target.composition);
     record = await port.append(
@@ -1162,11 +1314,15 @@ async function stepHistory(direction: "undo" | "redo"): Promise<string> {
     );
     score = restored;
     if (clock.playing) void audio.play(score);
-    return `${direction === "undo" ? "undid" : "redid"} · rev ${target.revision}`;
+    return ok(
+      `${direction === "undo" ? "undid" : "redid"} · rev ${target.revision}`,
+    );
   } catch (error) {
     if (error instanceof SessionConflictError)
-      return `session changed; retry ${direction}`;
-    return `${direction} error · ${error instanceof Error ? error.message : String(error)}`;
+      return warn(`session changed · retry ${direction}`);
+    return fail(
+      `${direction} failed · ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
 
@@ -1198,11 +1354,13 @@ async function setTransport(
  * own revision through `agentHost`, so cancelling keeps every accepted change
  * and never leaves a half-applied call.
  */
-async function runAgent(text: string): Promise<string> {
-  if (agentTurn) return "agent busy";
+async function runAgent(text: string): Promise<string | Receipt> {
+  if (agentTurn) return warn("agent busy · Esc cancels");
   const selection = await currentProvider();
   if (selection.kind === "offline")
-    return `unrecognized request · ${selection.reason}`;
+    return fail(
+      `unrecognized · ${truncateForCard(text)} · ${selection.reason}`,
+    );
   const turn = { controller: new AbortController(), steering: [] as string[] };
   agentTurn = turn;
   reportAgentActivity(`${providerName} · thinking…`);

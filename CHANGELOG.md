@@ -2,6 +2,26 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## Unreleased
+
+### npm
+
+`@hraness/dawg` is on npm: `npm i -g @hraness/dawg` or `bun add -g @hraness/dawg`, alongside the install script and the GitHub Release tarball.
+
+### UX review fixes
+
+- `/track <name>` (and bare `track <name>`) focuses the track in this window, creating it when new; a track another window has open answers `<name> is open in another window`. The quickstart `track drums` → `pattern kick …` now works.
+- Receipts carry their outcome structurally, so `main is not a drum track`, `no kick hits`, `score is full` and friends render as errors instead of green checks.
+- An unknown `/word` is rejected locally and a known verb with bad arguments (`pan 3`, `volume 2`, `add H4 at 0`, `/export` with no file) gets usage; neither reaches the model.
+- `/help` (or `?`) opens a grouped, scrollable overlay listing every command once; `/sessions` and `/tracks` open the same overlay and leave one summary card.
+- `dawg --version`; unknown subcommands and options are rejected before `.dawg/` is created; the launch that creates `.dawg/` says `created .dawg/ · add it to .gitignore`; `dawg --session <typo>` is an error instead of a silent new session; `render --help` and `sessions --help`.
+- `/resume <n>` accepts any list index as well as a name or id prefix.
+- Errors share one shape, `<what> · <why> · <next step>` (`no such file · nope.json`).
+- The `^z undo` hint rides only on receipts that changed the score, and only the first three in a session.
+- An empty track shows `main · empty · add C4 at 0 to start` instead of stray lane labels.
+- `/status` says `shared via dawgd` or `saved locally · no daemon`; auto-names announce as `<name> (auto-named) · rename with /rename <name>`.
+- Docs: header order frozen in a test and corrected, render is stereo, the `meta` frame is listed, one environment table.
+
 ## 0.2.0
 
 The first tagged release. Open a session in several terminals, give each window its own instrument, let an agent write parts, and every window stays on the same song.

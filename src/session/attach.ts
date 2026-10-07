@@ -38,8 +38,8 @@ export class SessionLookupError extends Error {
 }
 
 /**
- * Maps `--session <name|id>` to a session id. Unknown values pass through
- * unchanged when they are valid ids (a new session with that id is created);
+ * Maps `--session <name|id>` to the id of an existing session. An unknown
+ * value throws (a typo must not create a new session; `--new` does that);
  * an ambiguous name throws with the candidate list.
  */
 export async function resolveSessionArg(
@@ -54,8 +54,7 @@ export async function resolveSessionArg(
     throw new SessionLookupError(
       ambiguousSessionMessage(query, result.candidates),
     );
-  if (/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(query)) return query;
-  throw new SessionLookupError(`no session named "${query}"`);
+  throw new SessionLookupError(`no session named "${query}" · dawg sessions`);
 }
 
 export type TrackAttachment = {

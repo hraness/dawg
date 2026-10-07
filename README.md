@@ -28,7 +28,15 @@ gh attestation verify hraness-dawg-0.2.0.tgz --repo hraness/dawg
 bun add -g "$PWD/hraness-dawg-0.2.0.tgz"
 ```
 
-dawg is not published to npm yet. To run from source instead:
+dawg is also on npm as [`@hraness/dawg`](https://www.npmjs.com/package/@hraness/dawg):
+
+```sh
+npm i -g @hraness/dawg
+# or
+bun add -g @hraness/dawg
+```
+
+To run from source instead:
 
 ```sh
 git clone https://github.com/hraness/dawg.git
@@ -37,13 +45,13 @@ bun install --frozen-lockfile
 bun run dawg
 ```
 
-Running `dawg` creates `.dawg/session` when needed and attaches to that session on later launches. Use `dawg --new` for a new composition, `dawg --session <name|id>` to attach explicitly, or `dawg --track bass` to focus a named track.
+Running `dawg` creates `.dawg/session` when needed (the first launch says `created .dawg/ · add it to .gitignore`) and attaches to that session on later launches. Use `dawg --new` for a new composition, `dawg --session <name|id>` to attach explicitly (an unknown name or id is an error, `no session named "…" · dawg sessions`, never a new session), or `dawg --track bass` to focus a named track. `dawg --version` prints the version; an unknown subcommand or option is rejected with usage before anything is written, and `dawg sessions --help`, `dawg render --help` and `dawg auth --help` print their own usage.
 
 ### Sessions
 
 Every window you open on a session takes the first track no other window has focused, in score order. Open three terminals on a three-track session and each one restores a different instrument. A fourth window gets a draft track (`track-4`, "all tracks open · new track") that is added to the score on its first edit, so idle windows never clutter the song. `--track` always wins over auto-claim.
 
-Sessions have names. A new session starts as `untitled` and is named automatically from what you play (`a minor bass groove`, `dusty basement funk`). `/rename <name>` sets your own name and stops auto-naming for good; `/rename --auto` hands it back. A user rename always beats an auto-name that was still in flight, and every window updates. `/fork [name]` snapshots the current song into a new session (`night drive` → `night drive 2` → `night drive 3`; a fork of `night drive 2` is `night drive 3`) and switches this window to it. `/sessions` lists recent sessions, `/resume` opens a picker (↑/↓, Enter, Esc) and `/resume <n|name|id>` switches directly. Undo in a fork steps back past the fork point into the parent's history. `dawg sessions` prints the same list from the shell.
+Sessions have names. A new session starts as `untitled` and is named automatically from what you play (`a minor bass groove`, `dusty basement funk`). `/rename <name>` sets your own name and stops auto-naming for good; `/rename --auto` hands it back. A user rename always beats an auto-name that was still in flight, and every window updates. `/fork [name]` snapshots the current song into a new session (`night drive` → `night drive 2` → `night drive 3`; a fork of `night drive 2` is `night drive 3`) and switches this window to it. `/sessions` lists sessions in an overlay (one summary card stays in the strip), `/resume` opens a picker (↑/↓, Enter or a digit, Esc) and `/resume <n|name|id>` switches directly by any list index, name or id prefix. Undo in a fork steps back past the fork point into the parent's history. `dawg sessions` prints the same list from the shell.
 
 Auto-naming is cheap. dawg keeps a local musical fingerprint (tempo, key estimate, instruments, register, density and effects) and only asks a model when the music actually changed, at most once every few turns, after three quiet seconds. The request is about 120 tokens in and 12 out through the configured provider (gateway `anthropic/claude-haiku-4.5`, or xcb), runs in the background so it never blocks the prompt, and falls back to a local name such as `96 bpm drums` when offline or with `DAWG_AI=0`. In tests a typical 10-prompt session makes 2–3 naming calls.
 
@@ -63,7 +71,7 @@ automate volume at 0 0.2
 automate volume at 4 1
 automate pan at 0 -1
 automate pan at 4 1
-track drums
+/track drums
 instrument kit
 hit kick at 0
 hit snare at 1 vel 0.7
@@ -101,22 +109,24 @@ duration note <id> 0.25
 /model opus-5.5
 ```
 
+`/help` (or `?`) opens the command reference in an overlay, grouped as music, session, window and keys, with every command listed once in its canonical form: music words are bare (`tempo 96`, `pattern kick every 1`), app commands take a slash (`/tracks`, `/export`); bare `tracks`, `export`, `import` and `track` keep working as aliases. An unknown `/word` is rejected locally (`unknown command /foo · /help`), and a known verb with bad arguments gets usage (`pan 3 · pan takes -1…1 · pan -0.5`) instead of a model call. `/track <name>` focuses a track in this window, creating it when it is new; a track another live window has open stays theirs (`drums is open in another window`).
+
 A track named `drums` (or `kit`) starts with the `kit` instrument; `instrument kit` turns any track into a drum track. Drum voices are `kick` (`bd`), `snare` (`sd`), `clap` (`cp`), `rim` (`perc`), `tom`, `hat` (`hh`), and `openhat` (`oh`); the highway shows one lane per voice. `pattern <voice> <beats...>` takes up to 64 beats, `pattern <voice> every <step>` (step ≥ 0.125) fills the loop, `vel <0..1>` sets velocity, and `clear <voice>` removes only that voice. `filter <hz> [resonance]` is a per-track low-pass (20–20000 Hz, resonance 0–1), `delay <beats> [feedback] [mix]` is a tempo-synced stereo ping-pong echo send (0.0625–4 beats, feedback ≤ 0.9, mix 0–1), `reverb <mix> [size]` is an algorithmic stereo reverb send (mix 0–1, size 0–1, default 0.5; `reverb off` removes it), and `automate filter|resonance|delay-feedback|delay-mix at <beat> <value>` writes the cutoff (Hz), resonance (0–1), delay feedback (0–0.9) and delay mix (0–1) lanes. `solo` isolates the focused track in playback across every window; `redo` re-applies the last undone edit.
 
-The screen has four parts. A one-line header shows track · session · ▶/⏸ BPM · key · model · revision · sync state. The highway overlays every unmuted track, each in its own stable accent, with the focused track bright and the others dimmed; `/view focus` shows only the focused track and `/view all` (the default) brings the rest back. Below it, an activity strip shows operation cards (`✓ +8 bass notes · rev 41→42 · ^z undo`), queue depth, a braille spinner while the agent works, and errors in red with an `✗` prefix. The prompt panel is filled with a background color. It wraps by grapheme, grows from 1 to 8 rows (capped at 30% of the screen, then scrolls internally) and keeps the draft when the terminal is resized. Narrow terminals collapse the header and hints, and below 24×8 the screen shows a resize hint.
+The screen has four parts. A one-line header shows `dawg` · track · ▶/⏸ BPM · key · session · window count (when more than one) on the left and model · rev · sync state on the right; narrower terminals drop the least important segments first. The highway overlays every unmuted track, each in its own stable accent, with the focused track bright and the others dimmed; `/view focus` shows only the focused track and `/view all` (the default) brings the rest back. A track with no hits shows `main · empty · add C4 at 0 to start` in place of lane labels. Below it, an activity strip shows operation cards (`✓ +8 bass notes · rev 41→42 · ^z undo`; the undo hint accompanies the first three score edits), queue depth, a braille spinner while the agent works, and errors in red with an `✗` prefix in one shape, `<what> · <why> · <next step>` (`no such file · nope.json`). The prompt panel is filled with a background color. It wraps by grapheme, grows from 1 to 8 rows (capped at 30% of the screen, then scrolls internally) and keeps the draft when the terminal is resized. Narrow terminals collapse the header and hints, and below 24×8 the screen shows a resize hint.
 
-| Key                  | Action                                                                       |
-| -------------------- | ---------------------------------------------------------------------------- |
-| Space (empty prompt) | play / pause                                                                 |
-| Enter                | submit (STEER) or queue (QUEUE mode)                                         |
-| Shift+Enter, Ctrl+J  | newline                                                                      |
-| Alt+Enter            | queue this prompt                                                            |
-| Ctrl+Q               | toggle the STEER / QUEUE mode pill                                           |
-| Ctrl+Z / Ctrl+Y      | undo / redo                                                                  |
-| Ctrl+O or `/log`     | transcript overlay: ↑/↓, PgUp/PgDn scroll, `/` filters requests, ops, errors |
-| Esc                  | cancel the agent turn, close the overlay, or clear the draft                 |
-| Ctrl+L               | full redraw                                                                  |
-| Ctrl+C               | exit                                                                         |
+| Key                   | Action                                                                       |
+| --------------------- | ---------------------------------------------------------------------------- |
+| Space (empty prompt)  | play / pause                                                                 |
+| Enter                 | submit (STEER) or queue (QUEUE mode)                                         |
+| Shift+Enter, Ctrl+J   | newline                                                                      |
+| Alt+Enter             | queue this prompt                                                            |
+| Ctrl+Q                | toggle the STEER / QUEUE mode pill                                           |
+| Ctrl+Z / Ctrl+Y       | undo / redo                                                                  |
+| Ctrl+O, `/transcript` | transcript overlay: ↑/↓, PgUp/PgDn scroll, `/` filters requests, ops, errors |
+| Esc                   | cancel the agent turn, close the overlay, or clear the draft                 |
+| Ctrl+L                | full redraw                                                                  |
+| Ctrl+C                | exit                                                                         |
 
 A STEER submit runs ahead of queued work. Bracketed paste preserves multiline input.
 
@@ -127,7 +137,7 @@ A STEER submit runs ahead of queued work. Bracketed paste preserves multiline in
 Run `dawg login` once to give the agent a model. With the Vercel CLI it signs you in (if needed) and creates an AI Gateway key named `dawg-<hostname>`; `--budget <dollars>` sets its spend limit. Without the CLI it prints `bun add -g vercel` and lets you paste a key instead (`dawg login --key`, hidden input, Enter opens the key page).
 
 - `dawg login --xcb` uses a Claude, Codex or Devin subscription through [xcb](https://github.com/hraness/xcb) (`curl -fsSL https://xcb.sh/install.sh | sh`). It lists the accounts that `xcb --json generate --capabilities` reports as available and saves your pick; inside the TUI, `/login --xcb` opens the same choice as a picker of accounts and models. An account whose admission xcb reports as `pending` counts as available, and its first turn shows `admitting account…` while xcb admits it. The provider is re-resolved when `~/.config/dawg` credentials or config change, so a login in another terminal applies on the next turn. An account only appears after xcb's [application qualification](https://github.com/hraness/xcb/blob/main/docs/application-api.md); if none qualify, the command prints the read-only `xcb --json qualify-application --inspect` line for each connected account.
-- `dawg auth status` (or `/auth` in the TUI; `--check` verifies the key online) shows the provider, a masked key such as `vck_…abcd` and its source, plus the audio backend. `dawg logout` removes the stored key and the provider choice. `/login` works in the TUI too; flows that need hidden input or a browser tell you to use a shell.
+- `dawg auth status` (also `dawg auth --check`, or `/auth [--check]` in the TUI; `--check` verifies the key online) shows the provider, a masked key such as `vck_…abcd` and its source, plus the audio backend. `dawg logout` removes the stored key and the provider choice. `/login` works in the TUI too; flows that need hidden input or a browser tell you to use a shell.
 - Keys go to the macOS Keychain (service `dawg`, account `ai-gateway`, passed to `security -i` on stdin so the key never appears in a process list) or to `~/.config/dawg/credentials.json` (0600, directory 0700). They are never written to `.dawg/`. `AI_GATEWAY_API_KEY` in the environment always wins. `DAWG_CREDENTIAL_STORE=file` skips the Keychain and `DAWG_CONFIG_DIR` moves the config directory.
 - `DAWG_PROVIDER=gateway|xcb|auto` overrides the saved choice. `auto` (the default) uses the gateway when a key exists, then an available xcb account, otherwise direct commands only with a hint to run `dawg login`. `DAWG_AI=0` turns the agent off. The header shows the active provider, for example `opus-5.5 · gateway` or `devin/swe-2-high · xcb`.
 
@@ -135,7 +145,24 @@ On the gateway, unrecognized requests go to a streaming, tool-calling agent. Cho
 
 The agent edits the score only through typed tools: `add_notes`, `add_drums`, `remove_notes`, `update_notes`, `set_instrument`, `set_mix` (with solo), `set_effects` (filter, delay and reverb), `set_automation` (volume, pan, filter cutoff and resonance, delay feedback and mix), `extend_loop`, `set_tempo`, `create_track`, `transport` and `explain`. Each call is validated, then committed as its own revision, and the status line shows its result (for example `✓ +8 bass notes`). While the agent is working, Esc cancels and keeps every change accepted so far. Enter sends a steering message that the agent reads at its next step. A queued submit (Ctrl+Q queue mode) waits until the turn ends.
 
-Playback renders deterministic stereo PCM with sine, piano, pluck, bass, saw, square, and triangle voices plus a synthesized drum kit (pitch-swept sine kick, seeded-noise snare and hats), applies per-track volume, equal-power pan (-1 left to 1 right), low-pass filter, ping-pong delay, and a Freeverb-style reverb, and honors mute and solo. Renders are byte-identical across runs. Playback is gapless: one long-lived player (`ffplay`, else SoX `play`) reads a seamless loop as raw PCM on stdin, and edits, tempo changes and seeks swap the buffer in place at the current position without restarting it, so the transport stays aligned with what you hear. On macOS without either, `afplay` replays a re-rendered loop on each edit. `dawg auth status` shows the backend; `DAWG_AUDIO_BACKEND=ffplay|sox|afplay|none` forces one, `DAWG_AUDIO_PLAYER="cmd {rate} {channels}"` streams to any stdin player, and `DAWG_AUDIO=0` runs headless. `dawg --export file.track.json` and `dawg --import file.track.json` exchange the bounded `track.loop/v1` document. `dawg render out.wav` writes the current session (or `--session <name|id>`, or `--import file.track.json`) to a WAV through the same renderer, without starting dawgd or playing audio; the same score always produces the same bytes, and the command prints the file's sha256. `/status` prints the session name, revision, composition digest and connection mode. `DAWG_DEMO=1 bun run src/main.ts` prints a deterministic renderer frame for development.
+Playback renders deterministic stereo PCM with sine, piano, pluck, bass, saw, square, and triangle voices plus a synthesized drum kit (pitch-swept sine kick, seeded-noise snare and hats), applies per-track volume, equal-power pan (-1 left to 1 right), low-pass filter, ping-pong delay, and a Freeverb-style reverb, and honors mute and solo. Renders are byte-identical across runs. Playback is gapless: one long-lived player (`ffplay`, else SoX `play`) reads a seamless loop as raw PCM on stdin, and edits, tempo changes and seeks swap the buffer in place at the current position without restarting it, so the transport stays aligned with what you hear. On macOS without either, `afplay` replays a re-rendered loop on each edit. `dawg auth status` shows the backend; `DAWG_AUDIO=0` runs headless (see Environment for the other switches). `dawg --export file.track.json` and `dawg --import file.track.json` exchange the bounded `track.loop/v1` document. `dawg render out.wav` writes the current session (or `--session <name|id>`, or `--import file.track.json`) to a WAV through the same renderer, without starting dawgd or playing audio; the same score always produces the same bytes, and the command prints the file's sha256. `/status` prints the session name, revision, composition digest and storage (`shared via dawgd` or `saved locally · no daemon`).
+
+## Environment
+
+| Variable                                        | Effect                                                                                                                                  |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `DAWG_AUDIO=0`                                  | no sound; the transport still runs (the one audio kill switch)                                                                          |
+| `DAWG_AUDIO_BACKEND=ffplay\|sox\|afplay`        | force a player (`none` is still accepted and means the same as `DAWG_AUDIO=0`)                                                          |
+| `DAWG_AUDIO_PLAYER="cmd {rate} {channels}"`     | stream raw PCM to any stdin player                                                                                                      |
+| `DAWG_AI=0`                                     | agent off; unrecognized requests are rejected locally and naming stays local                                                            |
+| `DAWG_PROVIDER=gateway\|xcb\|auto`              | provider choice (default `auto`)                                                                                                        |
+| `DAWG_MODEL=opus-5.5\|sol-6.1`                  | initial model label; `DAWG_OPUS_MODEL` and `DAWG_SOL_MODEL` map labels to provider ids                                                  |
+| `AI_GATEWAY_API_KEY`                            | wins over any stored key                                                                                                                |
+| `DAWG_CREDENTIAL_STORE=file`, `DAWG_CONFIG_DIR` | skip the Keychain; move `~/.config/dawg`                                                                                                |
+| `DAWG_DAEMON=0`                                 | file-lock path, no dawgd                                                                                                                |
+| `DAWG_DEMO=1`                                   | print one deterministic frame and exit (also `--demo`, or a non-TTY stdin); `DAWG_DEMO=1 bun run src/main.ts` is the development render |
+| `DAWG_THEME`, `DAWG_REDUCE_MOTION=1`            | theme (`default\|high-contrast\|mono`) and static motion                                                                                |
+| `NO_COLOR`, `TERM=dumb`                         | monochrome                                                                                                                              |
 
 ## Architecture
 

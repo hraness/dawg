@@ -87,7 +87,7 @@ const questions = [
   },
   {
     q: "Is it on npm?",
-    a: "Not yet. Install with the script or from the GitHub Release tarball until a trusted publisher is configured for @hraness/dawg.",
+    a: "Yes: npm i -g @hraness/dawg or bun add -g @hraness/dawg. The install script and the GitHub Release tarball work too.",
   },
   {
     q: "What does it cost?",

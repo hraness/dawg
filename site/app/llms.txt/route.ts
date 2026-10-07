@@ -32,7 +32,7 @@ dawg is a free, MIT-licensed, local-first music workstation for the terminal, bu
 ## Install
 
 ${installLines}
-- dawg is not published to npm yet.
+- npm: \`npm i -g @hraness/dawg\` or \`bun add -g @hraness/dawg\`.
 - Source: ${repoUrl}
 
 ## What ships

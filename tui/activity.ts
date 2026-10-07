@@ -310,8 +310,30 @@ export class ActivityFeed {
 }
 
 /**
+ * A command receipt with its outcome carried structurally: `ok: true` is a
+ * success, `false` a failure, `"warn"` a no-op or conflict. Handlers return
+ * these so the strip never infers failure from prose.
+ */
+export type Receipt = Readonly<{ ok: boolean | "warn"; text: string }>;
+
+export const ok = (text: string): Receipt => ({ ok: true, text });
+export const fail = (text: string): Receipt => ({ ok: false, text });
+export const warn = (text: string): Receipt => ({ ok: "warn", text });
+
+/** Tone of a structured receipt; strings fall back to `receiptTone`. */
+export function toneOf(receipt: string | Receipt): CardTone {
+  if (typeof receipt === "string") return receiptTone(receipt);
+  return receipt.ok === true
+    ? "success"
+    : receipt.ok === "warn"
+      ? "warning"
+      : "error";
+}
+
+/**
  * Classify a legacy command receipt string (e.g. "undid · rev 41",
- * "tempo error · …") into a card tone so existing handlers need no rewrite.
+ * "tempo error · …") into a card tone. Fallback for handlers that still
+ * return plain strings; new handlers return a `Receipt`.
  */
 export function receiptTone(message: string): CardTone {
   const lower = message.toLowerCase();

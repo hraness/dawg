@@ -148,6 +148,7 @@ describe("music command reducer", () => {
       parseMusicCommand("pattern kick 0 1 2 3")!,
       ids("k"),
     );
+    expect(one.ok).toBe(true);
     expect(one.message).toBe("+4 kick hits");
     expect(one.kind).toBe("score.drums");
     expect(one.next!.notes.map((note) => note.pitch)).toEqual([36, 36, 36, 36]);
@@ -158,6 +159,9 @@ describe("music command reducer", () => {
       ids("x"),
     );
     expect(again.next).toBeUndefined();
+    // A no-op is a failure the strip must not paint green.
+    expect(again.ok).toBe(false);
+    expect(again.message).toBe("kick already there");
     const hats = applyMusicCommand(
       one.next!,
       "drums",
@@ -184,6 +188,7 @@ describe("music command reducer", () => {
       ids("k"),
     );
     expect(result.next).toBeUndefined();
+    expect(result.ok).toBe(false);
     expect(result.message).toContain("instrument kit");
   });
 

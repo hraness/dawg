@@ -217,3 +217,85 @@ test.skipIf(!supported)(
   },
   30_000,
 );
+
+test.skipIf(!supported)(
+  "real PTY: /track focuses, failures are red, /help is an overlay, slash typos stay local",
+  async () => {
+    const t = await launch(100, 30, {}, []);
+    await t.until(() => t.vt.text().includes("STEER"), "prompt");
+    expect(t.vt.text()).toContain("created .dawg/ · add it to .gitignore");
+    expect(t.vt.text()).toContain("main · empty · add C4 at 0 to start");
+
+    // A drum command on a melodic track is a failure, drawn in the error role.
+    await t.send("pattern kick 0 1\r");
+    await t.until(
+      () => t.vt.text().includes("✗ main is not a drum track"),
+      "drum failure",
+    );
+
+    // The quickstart path: bare `track drums` creates and focuses the track.
+    await t.send("track drums\r");
+    await t.until(() => t.vt.text().includes("track created · drums"), "track");
+    await t.until(() => t.vt.lines()[0]!.includes("drums"), "focus");
+    expect(t.vt.text()).toContain("^z undo");
+    await t.send("pattern kick 0 1 2 3\r");
+    await t.until(() => t.vt.text().includes("✓ +4 kick hits"), "hits");
+    await t.send("pattern kick 0\r");
+    await t.until(() => t.vt.text().includes("✗ kick already there"), "no-op");
+
+    // Unknown slash words and near-misses never leave the process.
+    await t.send("/foo\r");
+    await t.until(
+      () => t.vt.text().includes("unknown command /foo · /help"),
+      "unknown",
+    );
+    await t.send("pan 3\r");
+    await t.until(() => t.vt.text().includes("pan takes -1…1"), "usage");
+    await t.send("/export\r");
+    await t.until(() => t.vt.text().includes("/export <file>"), "export usage");
+    await t.send("/import nope.json\r");
+    await t.until(
+      () => t.vt.text().includes("no such file · nope.json"),
+      "enoent",
+    );
+
+    // /help opens the grouped overlay; Esc closes it.
+    await t.send("/help\r");
+    await t.until(() => t.vt.text().includes("── music"), "help overlay");
+    expect(t.vt.text()).toContain("help · esc closes");
+    await t.send("\u001b[F"); // End: the last page holds window + keys
+    await t.until(() => t.vt.text().includes("── keys"), "help end");
+    expect(t.vt.text()).toContain("/track <name>");
+    await t.send("\u001b");
+    await t.until(() => !t.vt.text().includes("── keys"), "help closed");
+    await t.send("/status\r");
+    await t.until(
+      () => t.vt.text().includes("saved locally · no daemon"),
+      "status",
+    );
+    await t.send("/rename\r");
+    await t.until(
+      () => t.vt.text().includes("(auto-named) · rename with /rename <name>"),
+      "rename hint",
+    );
+
+    // A second window claims `main`; drums stays with the first window.
+    const two = await launch(100, 30, {}, [], t.cwd);
+    await two.until(() => two.vt.text().includes("STEER"), "second window");
+    expect(two.vt.lines()[0]).toContain("main");
+    await two.send("/track drums\r");
+    await two.until(
+      () => two.vt.text().includes("drums is open in another window"),
+      "claimed elsewhere",
+    );
+    expect(two.vt.lines()[0]).toContain("main");
+    await two.send("/track drums\r");
+    await Bun.sleep(100);
+    for (const w of [two, t]) {
+      w.terminal.write("\u0003");
+      expect(await w.proc.exited).toBe(0);
+      w.terminal.close();
+    }
+  },
+  30_000,
+);

@@ -423,3 +423,79 @@ test("composeFrame is deterministic for a fixed clock", () => {
   );
   expect(a).toBe(b);
 });
+
+test("header order is dawg · track · transport · key · session · windows ··· model · rev · sync", () => {
+  const h = harness(120, 24);
+  h.frame(0, { sessionName: "night drive", windows: 3, sync: "synced" });
+  const line = h.vt.lines()[0]!;
+  const order = [
+    "dawg",
+    "bass",
+    "▶ 120 BPM",
+    "Am",
+    "night drive",
+    "3 windows",
+    "sol-6.1",
+    "rev 42",
+    "synced",
+  ];
+  const positions = order.map((segment) => line.indexOf(segment));
+  expect(positions.every((position) => position >= 0)).toBe(true);
+  expect(positions).toEqual([...positions].sort((a, b) => a - b));
+  // One window hides the count; a short id stands in for a missing name.
+  h.frame(0, { sessionName: undefined, windows: 1 });
+  expect(h.vt.lines()[0]).not.toContain("windows");
+  expect(h.vt.lines()[0]).toContain("session 7f3a91c2");
+});
+
+test("an empty track shows a start hint instead of lane and bar labels", () => {
+  const h = harness(80, 24, MONO);
+  const empty: TrackScoreSnapshot = { ...score, trackName: "main", notes: [] };
+  h.app.render({ score: empty, beat: 0 }, { force: true });
+  const text = h.vt.text();
+  expect(text).toContain("main · empty · add C4 at 0 to start");
+  // No pitch legend row (C3 … C6) and no bar numbers in the gutter.
+  expect(text.replace("add C4 at 0", "")).not.toMatch(/\bC[3-6]\b/);
+  expect(h.vt.lines().some((line) => /^ *[12] /.test(line))).toBe(false);
+  // The hit line and its transport marker stay.
+  expect(h.vt.lines().some((line) => /[▶⏸] ━/.test(line))).toBe(true);
+  const drums: TrackScoreSnapshot = {
+    ...empty,
+    trackName: "drums",
+    trackId: "drums",
+    ...drumSnapshotFields("kit", []),
+  };
+  h.app.render({ score: drums, beat: 0 }, { force: true });
+  expect(h.vt.text()).toContain("drums · empty · hit kick at 0 to start");
+  expect(h.vt.text()).not.toContain("snare");
+});
+
+test("text overlay shows titled lines, scrolls, closes on Esc and on submit", () => {
+  const h = harness(80, 16, MONO);
+  const lines = Array.from({ length: 30 }, (_, index) =>
+    index % 10 === 0 ? `── group ${index / 10}` : `line ${index}`,
+  );
+  h.app.openText("help", lines);
+  h.frame(0);
+  let text = h.vt.text();
+  expect(text).toContain(" help · 1-");
+  expect(text).toContain("── group 0");
+  expect(text).toContain("line 1");
+  expect(text).not.toContain("line 29");
+  h.app.input("\u001b[6~"); // PgDn
+  h.frame(0);
+  expect(h.vt.text()).toContain("line 6");
+  expect(h.vt.text()).not.toContain("line 1\n");
+  h.app.input("\u001b[F"); // End
+  h.frame(0);
+  expect(h.vt.text()).toContain("line 29");
+  h.app.input("\u001b");
+  h.frame(0);
+  expect(h.vt.text()).not.toContain("line 29");
+  expect(h.app.overlay).toBeUndefined();
+  h.app.openText("tracks", ["* bass · sine"]);
+  h.type("tempo 100");
+  expect(h.app.overlay).toBe("text");
+  h.app.input("\r");
+  expect(h.app.overlay).toBeUndefined();
+});
