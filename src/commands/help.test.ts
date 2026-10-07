@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { HELP_SECTIONS, helpLines, helpText, usageHint } from "./help.ts";
+import {
+  HELP_SECTIONS,
+  helpLines,
+  helpText,
+  helpTopicLines,
+  nearestCommand,
+  usageHint,
+} from "./help.ts";
 
 describe("help reference", () => {
   test("groups music, session, window and keys, each command exactly once", () => {
@@ -14,7 +21,7 @@ describe("help reference", () => {
     );
     expect(new Set(commands).size).toBe(commands.length);
     for (const required of [
-      "/help",
+      "/help [topic]",
       "/transcript",
       "/track <name>",
       "/view focus|all",
@@ -65,5 +72,32 @@ describe("help reference", () => {
     );
     expect(usageHint("/foo")).toBeUndefined();
     expect(usageHint("make it swing")).toBeUndefined();
+  });
+
+  test("/help is a short task guide; /help all and /help <group> are the reference", () => {
+    const guide = helpTopicLines(undefined, 72)!;
+    expect(guide.filter((line) => line.startsWith("── "))).toEqual([
+      "── start here",
+      "── play notes",
+      "── make drums",
+      "── shape the sound",
+      "── chords",
+      "── more",
+    ]);
+    expect(guide.length).toBeLessThanOrEqual(30);
+    expect(guide.every((line) => line.length <= 72)).toBe(true);
+    expect(guide.join("\n")).toContain("ctrl-k");
+    expect(helpTopicLines("all", 72)).toEqual(helpLines(72));
+    expect(helpTopicLines("keys", 72)?.[0]).toBe("── keys");
+    expect(helpTopicLines("/Music", 72)?.[0]).toBe("── music");
+    expect(helpTopicLines("nope", 72)).toBeUndefined();
+  });
+
+  test("typos get the nearest command", () => {
+    expect(nearestCommand("/clik on")).toBe("/click");
+    expect(nearestCommand("/patern")).toBe("/pattern");
+    expect(nearestCommand("/fx delay on")).toBe("fx");
+    expect(nearestCommand("/chrods")).toBe("/chords");
+    expect(nearestCommand("/zzzzzzz")).toBeUndefined();
   });
 });

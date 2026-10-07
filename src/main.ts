@@ -44,7 +44,13 @@ import { kitCatalog } from "./audio/kits.ts";
 import { applyEditCommand, parseEditCommand } from "./commands/edit.ts";
 import { applyFxCommand, parseFxCommand } from "./commands/fx.ts";
 import { applySynthCommand, parseSynthCommand } from "./commands/synth.ts";
-import { helpLines, helpText, usageHint } from "./commands/help.ts";
+import {
+  HELP_TOPICS,
+  helpText,
+  helpTopicLines,
+  nearestCommand,
+  usageHint,
+} from "./commands/help.ts";
 import { historyTarget, REDO_KIND, UNDO_KIND } from "./commands/history.ts";
 import {
   SamplePlacementError,
@@ -1130,11 +1136,34 @@ async function runInteractive(): Promise<void> {
   }
 }
 
+/** `unknown command /clik · did you mean /click? · /help`. */
+function unknownCommand(command: string): string {
+  const word = command.split(/\s+/)[0] ?? command;
+  const near = nearestCommand(command);
+  return near
+    ? `unknown command ${word} · did you mean ${near}? · /help`
+    : `unknown command ${word} · /help`;
+}
+
 async function submit(prompt: string): Promise<string | Receipt> {
   const command = prompt.trim();
-  if (/^\/?help$|^\/?\?$/.test(command.toLowerCase())) {
-    tui.openText("help", helpLines(Math.max(40, (stdout.columns ?? 80) - 8)));
-    return ok("help");
+  const helpCommand = command.match(/^\/?(?:help|\?)(?:\s+(\S+))?$/i);
+  if (helpCommand) {
+    const topic = helpCommand[1];
+    const lines = helpTopicLines(
+      topic,
+      Math.max(40, (stdout.columns ?? 80) - 10),
+    );
+    if (!lines)
+      return fail(
+        `no help topic ${topic} · /help all · ${HELP_TOPICS.join(" ")}`,
+      );
+    tui.openText(topic ? `help · ${topic.toLowerCase()}` : "help", lines);
+    return ok(
+      topic
+        ? `help · ${topic.toLowerCase()}`
+        : "help · /help all for every command",
+    );
   }
   if (/^\/?tracks$/i.test(command)) {
     const problems = await sampleProblems(score);
@@ -1351,9 +1380,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (command.startsWith("/") && !/^\/model\b/i.test(command)) {
     const hint = usageHint(command);
     return fail(
-      hint
-        ? `${truncateForCard(command)} · ${hint}`
-        : `unknown command ${command.split(/\s+/)[0]} · /help`,
+      hint ? `${truncateForCard(command)} · ${hint}` : unknownCommand(command),
     );
   }
   const parsed = parsePrompt(prompt);
@@ -2333,7 +2360,7 @@ async function enterPlay(): Promise<Receipt> {
   await session.enter();
   if (hasSamplerTracks(score)) void sampleProblems(score);
   return ok(
-    `play · ${session.track} · ${session.keyboard.range} · z/x octave · r record · m click · esc leaves`,
+    `play · ${session.track} · ${session.keyboard.range} · ? keys · esc leaves`,
   );
 }
 

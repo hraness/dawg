@@ -108,6 +108,12 @@ dawg projects are now plain TypeScript files that you, an agent or another windo
 - **Play mode header** keeps range, record state and the chord at a glance (`AUTO C major · Dm (ii) · next G`); chord mode adds a legend row for the number-row latches.
 - The `/euclid` editor is titled **rhythm** and its rows use the shared keys; pickers report the highlighted row on every move (`pick-move`), the hook live previews (and a future audition controller) listen on.
 
+### Help and first run
+
+- **`/help` is a short task guide** (start here, play notes, make drums, shape the sound, chords) pointing to Ctrl-K, Ctrl-P and `?`; `/help all` is the full reference and `/help music|session|window|keys` shows one group. The reference now lists `fx`, `synth`, `/pattern`, `/kit` and `/pack`.
+- **An empty project names the three ways in**: `type a request · ctrl-p play · ctrl-k menu`.
+- **Typos get the nearest command**: `/clik on` answers `unknown command /clik · did you mean /click? · /help` instead of a bare "unknown". Entering play mode says `? keys · esc leaves` instead of listing four keys.
+
 ### Performance
 
 - Session records store reverse deltas instead of whole compositions, so a session reaches the 2000-event cap instead of failing around edit 70 (or on the first edit of a 16-bar loop).
