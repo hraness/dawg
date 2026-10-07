@@ -116,3 +116,59 @@ describe("euclid editor", () => {
     });
   });
 });
+
+describe("euclid editor while auditioning", () => {
+  const audition = (committed: ReturnType<typeof kit>, dirty: boolean) => ({
+    looping: true,
+    dirty,
+    committed,
+    hint: " space stop · a A/B · c context · enter keep · esc revert · ? keys ",
+    status: dirty ? "♪ solo · B staged 1" : "♪ solo",
+  });
+
+  test("space, a and c drive the loop; Enter keeps and Esc reverts staged edits", () => {
+    const editor = new EuclidEditor();
+    const committed = run(kit(), "euclid kick 4 16");
+    const staged = run(committed, "euclid kick pulses 5");
+    const clean = {
+      score: committed,
+      trackId: "drums",
+      audition: audition(committed, false),
+    };
+    const dirty = {
+      score: staged,
+      trackId: "drums",
+      audition: audition(committed, true),
+    };
+    editor.show(clean);
+    expect(editor.key(" ", clean)).toEqual({ type: "loop", key: "loop" });
+    expect(editor.key("a", clean)).toEqual({ type: "loop", key: "ab" });
+    expect(editor.key("c", clean)).toEqual({ type: "loop", key: "context" });
+    // A nudge is still the command it stands for (main stages it).
+    expect(editor.key(RIGHT, clean)).toMatchObject({
+      type: "run",
+      command: "euclid kick pulses 5",
+    });
+    expect(editor.key("\r", dirty)).toEqual({ type: "keep" });
+    expect(editor.key("\u001b", dirty)).toEqual({ type: "revert" });
+    expect(editor.key("\u001b", clean)).toEqual({ type: "close" });
+  });
+
+  test("the view marks staged rows and carries the loop status and grammar", () => {
+    const editor = new EuclidEditor();
+    const committed = run(kit(), "euclid kick 4 16");
+    const staged = run(committed, "euclid kick pulses 5");
+    const ctx = {
+      score: staged,
+      trackId: "drums",
+      audition: audition(committed, true),
+    };
+    editor.show(ctx);
+    const view = editor.view(ctx);
+    expect(view.title.startsWith("● rhythm")).toBe(true);
+    expect(view.title).toContain("B staged 1");
+    expect(view.items[0]!.detail).toContain("E(5,16) ← E(4,16)");
+    expect(view.items[1]!.detail).toBe("enter adds E(4,16)");
+    expect(view.hint).toContain("enter keep");
+  });
+});

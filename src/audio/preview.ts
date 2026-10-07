@@ -50,6 +50,12 @@ export type PreviewOptions = Readonly<{
   beat?: number;
   /** Overrides the region choice (tests, the agent tool). */
   region?: PreviewRegion;
+  /**
+   * Replaces the focused track's notes with this phrase (from tick 0 of the
+   * region). The chord settings screen plays a progression performed with
+   * the staged settings this way, so a voicing or arp change is audible.
+   */
+  phrase?: (score: TrackScore, track: Track, bars: number) => NoteInput[];
 }>;
 
 export type Preview = Readonly<{
@@ -288,17 +294,22 @@ export function previewScore(
         ...(context && anySolo ? { solo: true } : {}),
       };
     });
-  const own = score.notes.some((note) => note.trackId === trackId);
+  const replaced = options.phrase !== undefined;
+  const own = !replaced && score.notes.some((note) => note.trackId === trackId);
   const notes: NoteInput[] = score.notes
     .filter(
       (note) =>
         (context || note.trackId === trackId) &&
+        !(replaced && note.trackId === trackId) &&
         note.startTick >= start &&
         note.startTick < end,
     )
     .map((note) => ({ ...note, startTick: note.startTick - start }));
   let role: PhraseRole | undefined;
-  if (!own) {
+  if (options.phrase) {
+    role = "chord";
+    notes.push(...options.phrase(score, track, bars));
+  } else if (!own) {
     role = phraseRole(track);
     notes.push(...defaultPhrase(score, track, bars, role));
   }

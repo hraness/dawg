@@ -80,13 +80,34 @@ export const HINTS = {
   action: " ↑↓ move · enter apply · / filter · esc back · ? keys ",
   typing: " type a value · enter apply · esc cancel ",
   euclid:
-    " ↑↓ voice · ←→ adjust · tab field · space hear · x off · esc back · ? keys ",
+    " ↑↓ voice · ←→ adjust · tab field · space loop · x off · esc back · ? keys ",
   text: " ↑↓ scroll · pgup pgdn page · esc back · ? keys ",
   log: " ↑↓ scroll · / filter · esc back · ? keys ",
   keys: " any key closes ",
 } as const;
 
 // ── the `?` panel ─────────────────────────────────────────────────────
+
+/** The audition loop's keys, shared by the menu and the rhythm editor. */
+const AUDITIONING: readonly KeySection[] = [
+  {
+    title: "auditioning",
+    rows: [
+      ["space", "loop the focused track · again stops"],
+      ["c", "solo ↔ in context (the whole mix)"],
+      ["a", "A/B: committed ↔ staged"],
+      ["enter", "keep staged changes (one undo step)"],
+      ["esc", "revert staged changes"],
+    ],
+  },
+  {
+    title: "every change",
+    rows: [
+      ["", "while looping, stages; otherwise runs the command shown"],
+      ["ctrl-z", "undoes it"],
+    ],
+  },
+];
 
 const LIST: readonly KeyRow[] = [
   ["↑ ↓  j k", "move"],
@@ -166,23 +187,7 @@ export const KEYS = {
         ["x  delete", "reset to default (deletes an automation point)"],
       ],
     },
-    {
-      title: "auditioning",
-      rows: [
-        ["space", "loop the focused track · again stops"],
-        ["c", "solo ↔ in context (the whole mix)"],
-        ["a", "A/B: committed ↔ staged"],
-        ["enter", "keep staged changes (one undo step)"],
-        ["esc", "revert staged changes"],
-      ],
-    },
-    {
-      title: "every change",
-      rows: [
-        ["", "while looping, stages; otherwise runs the command shown"],
-        ["ctrl-z", "undoes it"],
-      ],
-    },
+    ...AUDITIONING,
   ],
   euclid: [
     {
@@ -193,12 +198,12 @@ export const KEYS = {
         ["tab shift-tab  ] [", "next / previous field"],
         ["0-9", "type a value, enter applies"],
         ["enter", "add a row (or type a value)"],
-        ["space", "hear the voice"],
         ["x", "turn the row off"],
         ["f", "freeze into plain hits"],
         ["esc", "back"],
       ],
     },
+    ...AUDITIONING,
   ],
   text: [
     {

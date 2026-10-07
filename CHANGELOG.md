@@ -7,6 +7,7 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 ### Previewing changes
 
 - **Edits crossfade instead of clicking.** When the loop (audition or song) swaps to a new render, the old and new buffers crossfade over 20 ms with equal-power gains at the same beat, so a change no longer steps the waveform. Playback only: renders and exports are byte-identical.
+- **`/euclid` and the chord settings stage while the loop plays.** `Space` in the rhythm editor or the menu's Chords section (`/menu chords`) starts the audition loop; changes are then staged and heard (`●`, `B staged N`, `E(5,16) ← E(4,16)`, `Db ← C`), `a` flips A/B, `Enter` keeps them as one undo step and `Esc` reverts with nothing written. In the Chords section the loop plays the track's chord phrase under the current settings. With the loop off, both commit at once as before; their key footers and `?` panels use the shared audition keys.
 - **Reverb changes are heard faster.** The stem cache keeps each track's reverb input and tail apart from its dry signal, so a reverb mix (or mix lane) change re-mixes the cached tail instead of re-rendering the voice and the room. Key to audio scheduled on a 4-track song: reverb mix on a wavetable pad in context 140 → 64 ms median (p90 151 → 68 ms); a filter change in context 100 → 74 ms. The bus mix loops also moved out of the large render function, which the JIT optimized late. Renders stay byte-identical (a new test checks cached re-mixes against cold renders and recorded digests).
 
 ### Security
