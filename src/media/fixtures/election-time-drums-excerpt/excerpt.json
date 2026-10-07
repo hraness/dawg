@@ -1,0 +1,21 @@
+{
+  "_attribution": "Beat grid for a 9.9-second excerpt of the StemDeck htdemucs_6s \"drums\" stem of \"Election Time, Funky Brass Instrumentals for Podcasts and Quiz Games\" by Kjartan Abel, https://www.youtube.com/watch?v=VpFi3D_EB0c, published under the YouTube Creative Commons Attribution license (CC BY). Beats come from StemDeck's Beat This! grid measured on 2026-09-03, shifted so 0 is the start of the excerpt.",
+  "sourceStartSeconds": 2.4,
+  "durationSeconds": 9.9,
+  "sampleRate": 22050,
+  "channels": 1,
+  "bitsPerSample": 16,
+  "bpm": 101.975,
+  "beats": [
+    0.205318, 0.794492, 1.382357, 1.970948, 2.558313, 3.147096, 3.73485,
+    4.322959, 4.911453, 5.499815, 6.088428, 6.676649, 7.264149, 7.853376,
+    8.444574, 9.029042, 9.617885
+  ],
+  "bars": [
+    {
+      "beat": 0,
+      "beatsPerBar": 4
+    }
+  ],
+  "completeBars": 4
+}

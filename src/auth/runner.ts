@@ -14,6 +14,11 @@ export type RunOptions = Readonly<{
   /** Bound on captured stdout/stderr; excess is dropped. */
   maxOutputBytes?: number;
   env?: Readonly<Record<string, string | undefined>>;
+  /**
+   * Called with each decoded chunk as it arrives (progress parsing). Chunks
+   * keep flowing past `maxOutputBytes`; only the captured text is bounded.
+   */
+  onOutput?: (stream: "stdout" | "stderr", chunk: string) => void;
 }>;
 
 export type RunResult = Readonly<{
@@ -73,9 +78,18 @@ export const systemRunner: CommandRunner = {
           // The child may exit before reading its input; its exit code reports why.
         }
       }
+      const tap = options.onOutput;
       const [stdout, stderr, code] = await Promise.all([
-        readBounded(child.stdout, maxBytes),
-        readBounded(child.stderr, maxBytes),
+        readBounded(
+          child.stdout,
+          maxBytes,
+          tap && ((chunk) => tap("stdout", chunk)),
+        ),
+        readBounded(
+          child.stderr,
+          maxBytes,
+          tap && ((chunk) => tap("stderr", chunk)),
+        ),
         child.exited,
       ]);
       return { code, stdout, stderr, killed: stop.killed() };
@@ -127,12 +141,21 @@ function watchKill(
 async function readBounded(
   stream: ReadableStream<Uint8Array> | undefined | null,
   maxBytes: number,
+  tap?: (chunk: string) => void,
 ): Promise<string> {
   if (!stream) return "";
   const decoder = new TextDecoder();
+  const tapDecoder = tap ? new TextDecoder() : undefined;
   let text = "";
   let bytes = 0;
   for await (const chunk of stream) {
+    if (tap && tapDecoder) {
+      try {
+        tap(tapDecoder.decode(chunk, { stream: true }));
+      } catch {
+        // A progress parser must never stop the drain.
+      }
+    }
     if (bytes >= maxBytes) continue; // Keep draining so the child never blocks.
     const room = maxBytes - bytes;
     const part = chunk.byteLength > room ? chunk.subarray(0, room) : chunk;

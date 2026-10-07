@@ -73,6 +73,8 @@ import {
   type TypesIndicator,
 } from "../tui/app.ts";
 import { fail, ok, toneOf, warn, type Receipt } from "../tui/activity.ts";
+import { systemRunner } from "./auth/runner.ts";
+import type { MediaServices } from "./media/types.ts";
 import { encodeBuffer } from "../tui/screen.ts";
 import { parseThemeName } from "../tui/theme.ts";
 import { formatDiagnostic } from "../core/sdk/eval.ts";
@@ -117,6 +119,7 @@ Usage:
   dawg render <out.wav> [--session <name|id>] [--import <file>]
   dawg init [dir]      project files: song.ts, tracks/<slug>/track.ts, .dawg/sdk
   dawg check           typecheck + evaluate the project; exit 1 on problems
+  dawg media doctor|download|stems|analyze|notes|sample|lyrics …  (dawg media --help)
   dawg --version
 
 Usage flags:
@@ -161,6 +164,17 @@ if (process.argv[2] === "init" || process.argv[2] === "check") {
       : (await import("./project/check.ts")).runCheckCommand;
   process.exit(
     await command(process.argv.slice(2), process.cwd(), stdout, process.stderr),
+  );
+}
+if (process.argv[2] === "media") {
+  const { runMediaCommand } = await import("./media/cli.ts");
+  process.exit(
+    await runMediaCommand(
+      process.argv.slice(2),
+      process.cwd(),
+      stdout,
+      process.stderr,
+    ),
   );
 }
 if (process.argv[2] === "render") {
@@ -1495,6 +1509,11 @@ function currentProvider(): Promise<ProviderSelection> {
   });
 }
 
+/** Media tools write under the workspace's `tracks/<slug>/downloads/`. */
+function mediaServices(): MediaServices {
+  return { runner: systemRunner, env: process.env };
+}
+
 function agentHost(
   turn: { steering: string[] },
   selection: ProviderSelection,
@@ -1511,6 +1530,7 @@ function agentHost(
           : event.kind;
       }),
     }),
+    media: mediaServices(),
     async commit(change) {
       // dawgd rebases operation intents onto newer revisions when nothing
       // they touch changed; the file port keeps the strict base check.

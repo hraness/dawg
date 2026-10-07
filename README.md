@@ -151,6 +151,8 @@ The agent edits the score only through typed tools: `add_notes`, `add_drums`, `r
 
 Playback renders deterministic stereo PCM with sine, piano, pluck, bass, saw, square, and triangle voices plus a synthesized drum kit (pitch-swept sine kick, seeded-noise snare and hats), applies per-track volume, equal-power pan (-1 left to 1 right), low-pass filter, ping-pong delay, and a Freeverb-style reverb, and honors mute and solo. Renders are byte-identical across runs. Playback is gapless: one long-lived player (`ffplay`, else SoX `play`) reads a seamless loop as raw PCM on stdin, and edits, tempo changes and seeks swap the buffer in place at the current position without restarting it, so the transport stays aligned with what you hear. On macOS without either, `afplay` replays a re-rendered loop on each edit. `dawg auth status` shows the backend; `DAWG_AUDIO=0` runs headless (see Environment for the other switches). `dawg --export file.track.json` and `dawg --import file.track.json` exchange the bounded `track.loop/v1` document. `dawg render out.wav` writes the current session (or `--session <name|id>`, or `--import file.track.json`) to a WAV through the same renderer, without starting dawgd or playing audio; the same score always produces the same bytes, and the command prints the file's sha256. `/status` prints the session name, revision, composition digest and storage (`shared via dawgd` or `saved locally · no daemon`).
 
+The agent can download a YouTube reference, split stems, analyze tempo and key, transcribe notes and lyrics, and import samples into `tracks/<slug>/`; `dawg media doctor` shows which local binaries or StemDeck it will use (see [DAWG.md](./DAWG.md#media-tools)).
+
 ## Environment
 
 | Variable                                        | Effect                                                                                                                                  |
@@ -163,6 +165,7 @@ Playback renders deterministic stereo PCM with sine, piano, pluck, bass, saw, sq
 | `DAWG_MODEL=opus-5.5\|sol-6.1`                  | initial model label; `DAWG_OPUS_MODEL` and `DAWG_SOL_MODEL` map labels to provider ids                                                  |
 | `AI_GATEWAY_API_KEY`                            | wins over any stored key                                                                                                                |
 | `DAWG_CREDENTIAL_STORE=file`, `DAWG_CONFIG_DIR` | skip the Keychain; move `~/.config/dawg`                                                                                                |
+| `DAWG_STEMDECK_URL`                             | StemDeck for the media tools (default `http://127.0.0.1:8000`; else local yt-dlp, demucs, basic-pitch, whisper-cli)                     |
 | `DAWG_DAEMON=0`                                 | file-lock path, no dawgd                                                                                                                |
 | `DAWG_DEMO=1`                                   | print one deterministic frame and exit (also `--demo`, or a non-TTY stdin); `DAWG_DEMO=1 bun run src/main.ts` is the development render |
 | `DAWG_THEME`, `DAWG_REDUCE_MOTION=1`            | theme (`default\|high-contrast\|mono`) and static motion                                                                                |

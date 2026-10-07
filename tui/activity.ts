@@ -46,6 +46,7 @@ export type AgentActivityEvent =
   | { type: "step"; step: number }
   | { type: "text-delta"; delta?: string; text?: string }
   | { type: "tool-start"; name: string; callId?: string; step?: number }
+  | { type: "tool-progress"; line: string; name?: string; callId?: string }
   | {
       type: "tool-applied";
       summary: string;
@@ -249,15 +250,27 @@ export class ActivityFeed {
       case "tool-start":
         this.setSpinner(`${event.name.replace(/_/g, " ")}…`);
         return;
-      case "tool-applied":
+      case "tool-progress":
+        this.setSpinner(
+          event.name
+            ? `${event.name.replace(/_/g, " ")} · ${event.line}`
+            : event.line,
+        );
+        return;
+      case "tool-applied": {
+        // A media or explain result leaves the revision alone: nothing to undo.
+        const unchanged =
+          event.baseRevision !== undefined &&
+          event.baseRevision === event.resultRevision;
         this.pushCard(event.summary, {
           tone: "success",
           baseRevision: event.baseRevision,
           resultRevision: event.resultRevision,
           trackId: event.trackId,
-          hint: "^z undo",
+          hint: unchanged ? undefined : "^z undo",
         });
         return;
+      }
       case "tool-rejected": {
         const what = event.summary ?? event.name?.replace(/_/g, " ");
         const why = event.reason ?? event.diagnostic;
