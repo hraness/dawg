@@ -482,11 +482,25 @@ export function nearestCommand(command: string): string | undefined {
 }
 
 /**
+ * True for a sentence that merely starts with a command verb (`add a walking
+ * bass in A minor`, `pan the hats left`): three or more words and no number
+ * or note name with an octave. Those are requests for the agent, not
+ * malformed commands. Slash words are never prose.
+ */
+export function looksLikeProse(command: string): boolean {
+  const text = command.trim();
+  if (text.startsWith("/")) return false;
+  const words = text.split(/\s+/);
+  return words.length >= 3 && !/\d/.test(text);
+}
+
+/**
  * A usage hint when `command` starts with a known verb but did not parse
  * (`pan 3`, `volume 2`, `add H4 at 0`, `/export` with no file); undefined for
  * free text that should go to the agent.
  */
 export function usageHint(command: string): string | undefined {
+  if (looksLikeProse(command)) return undefined;
   const verb = command.trim().toLowerCase().replace(/^\//, "").split(/\s+/)[0];
   return verb ? USAGE[verb] : undefined;
 }

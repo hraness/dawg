@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   HELP_SECTIONS,
+  looksLikeProse,
   helpLines,
   helpText,
   helpTopicLines,
@@ -100,4 +101,19 @@ describe("help reference", () => {
     expect(nearestCommand("/chrods")).toBe("/chords");
     expect(nearestCommand("/zzzzzzz")).toBeUndefined();
   });
+});
+
+test("a sentence starting with a command verb is a request, not a usage error", () => {
+  for (const text of [
+    "add a walking bass in A minor",
+    "pan the hats left",
+    "remove the busy hats",
+  ]) {
+    expect(looksLikeProse(text)).toBe(true);
+    expect(usageHint(text)).toBeUndefined();
+  }
+  for (const text of ["pan 3", "add H4 at 0", "volume loud", "/export"])
+    expect(looksLikeProse(text)).toBe(false);
+  expect(usageHint("pan 3")).toBe("pan takes -1…1 · pan -0.5");
+  expect(usageHint("/export")).toBeDefined();
 });
