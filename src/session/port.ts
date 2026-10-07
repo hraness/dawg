@@ -56,6 +56,8 @@ export type WindowPlayer = {
   /** Start at `beat`, or swap a playing loop in place (gapless engine). */
   play(score: TrackScore, beat?: number): Promise<void>;
   stop(): void;
+  /** Stops and releases the render worker; the player is done for good. */
+  dispose(): Promise<void>;
 };
 
 /**
@@ -159,6 +161,7 @@ export async function openSessionPort<T>(
 const silentPlayer: WindowPlayer = {
   play: async () => undefined,
   stop: () => undefined,
+  dispose: async () => undefined,
 };
 
 class DaemonPort<T> implements SessionPort<T> {
@@ -312,10 +315,15 @@ class FilePort<T> implements SessionPort<T> {
   public readonly sync = "local" as const;
   public readonly player: WindowPlayer;
   private readonly presenceStore: FilePresence;
+  private readonly statusListeners = new Set<(update: PortUpdate<T>) => void>();
 
   private constructor(private readonly options: OpenPortOptions) {
     this.player = new AudioEngine({
       lockPath: `${options.paths.record}.audio.lock`,
+      onStatus: (status) => {
+        for (const listener of this.statusListeners)
+          listener({ type: "status", message: status.message });
+      },
     });
     this.presenceStore = new FilePresence(options.paths, {
       clientId: this.clientId,
@@ -398,13 +406,17 @@ class FilePort<T> implements SessionPort<T> {
         });
     };
     const recordName = basename(this.options.paths.record);
+    // macOS coalesces the temp write and the rename into events named after
+    // the temp file (`<record>.<pid>.tmp`), so match that too, but not the
+    // sibling `.audio.lock` / `.daemon.log` files that share the prefix.
+    const recordFile = new RegExp(
+      `^${recordName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\.\\d+\\.tmp)?$`,
+    );
     let watcher: FSWatcher | undefined;
     try {
       watcher = watch(dirname(this.options.paths.record), (_event, file) => {
-        // macOS coalesces the temp write and the rename into events named
-        // after the temp file (`<record>.<pid>.tmp`), so match the prefix and
-        // re-check shortly after in case the event preceded the rename.
-        if (file !== null && !String(file).startsWith(recordName)) return;
+        // Re-check shortly after in case the event preceded the rename.
+        if (file !== null && !recordFile.test(String(file))) return;
         check();
         setTimeout(check, 40).unref?.();
       });
@@ -417,9 +429,11 @@ class FilePort<T> implements SessionPort<T> {
       watcher = undefined;
     }
     const timer = setInterval(check, watcher ? WATCHED_POLL_MS : POLL_MS);
+    this.statusListeners.add(listener);
     check();
     return () => {
       closed = true;
+      this.statusListeners.delete(listener);
       clearInterval(timer);
       watcher?.close();
     };
@@ -460,7 +474,7 @@ class FilePort<T> implements SessionPort<T> {
   }
 
   public async close(): Promise<void> {
-    this.player.stop();
+    void this.player.dispose();
     await this.presenceStore.stop();
   }
 }

@@ -1,22 +1,32 @@
 /**
  * Undo/redo over the shared session event log.
  *
- * Every score edit records `before`, the composition it replaced. Undo and
- * redo append ordinary events (`score.undo` / `score.redo`) whose `before` is
- * the composition they replaced, so history is linear, shared by every
- * window, and survives restarts. Replaying the log rebuilds two stacks:
+ * Every event carries a `rewind` (see `src/session/delta.ts`): how to turn
+ * the composition it produced back into the one it replaced. Undo and redo
+ * append ordinary events (`score.undo` / `score.redo`), so history is linear,
+ * shared by every window, and survives restarts. Replaying the log rebuilds
+ * two stacks over the events that changed the composition:
  *
  *   edit  -> push onto undo, clear redo
  *   undo  -> pop undo, push the undo event onto redo
  *   redo  -> pop redo, push the redo event onto undo
  *
- * Undoing restores the top undo entry's `before`; redoing restores the top
- * redo entry's `before` (the composition the undo replaced).
+ * Undoing restores the composition before the top undo entry; redoing
+ * restores the composition before the top redo entry (the one the undo
+ * replaced). Both are recovered by rewinding the current composition through
+ * every newer event. Events whose rewind was compacted away, and events that
+ * did not change the composition (transport), take no part.
  */
+import {
+  isIdentityRewind,
+  rewindComposition,
+  type Rewind,
+} from "../session/delta.ts";
+
 export type HistoryEvent = Readonly<{
   revision: number;
   kind: string;
-  payload: unknown;
+  rewind?: Rewind | undefined;
 }>;
 
 export type HistoryTarget = Readonly<{
@@ -30,27 +40,30 @@ export const UNDO_KIND = "score.undo";
 export const REDO_KIND = "score.redo";
 
 export function historyTarget(
+  composition: unknown,
   events: readonly HistoryEvent[],
   direction: "undo" | "redo",
 ): HistoryTarget | undefined {
-  const undo: HistoryEvent[] = [];
-  const redo: HistoryEvent[] = [];
-  for (const event of events) {
-    if (!hasBefore(event.payload)) continue;
+  const undo: number[] = [];
+  const redo: number[] = [];
+  events.forEach((event, index) => {
+    if (!changesComposition(event)) return;
     if (event.kind === UNDO_KIND) {
-      if (undo.pop()) redo.push(event);
+      if (undo.pop() !== undefined) redo.push(index);
     } else if (event.kind === REDO_KIND) {
-      if (redo.pop()) undo.push(event);
+      if (redo.pop() !== undefined) undo.push(index);
     } else {
-      undo.push(event);
+      undo.push(index);
       redo.length = 0;
     }
-  }
+  });
   const top = (direction === "undo" ? undo : redo).at(-1);
-  if (!top || !hasBefore(top.payload)) return undefined;
-  return { revision: top.revision, composition: top.payload.before };
+  if (top === undefined) return undefined;
+  const restored = rewindComposition(composition, events, top);
+  if (restored === undefined) return undefined;
+  return { revision: events[top]!.revision, composition: restored };
 }
 
-function hasBefore(payload: unknown): payload is { before: unknown } {
-  return typeof payload === "object" && payload !== null && "before" in payload;
+function changesComposition(event: HistoryEvent): boolean {
+  return event.rewind !== undefined && !isIdentityRewind(event.rewind);
 }

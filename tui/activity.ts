@@ -45,6 +45,7 @@ export type AgentActivityEvent =
   | { type: "start"; prompt?: string | undefined; model?: string | undefined }
   | { type: "step"; step: number }
   | { type: "text-delta"; delta?: string; text?: string }
+  | { type: "activity"; message: string }
   | { type: "tool-start"; name: string; callId?: string; step?: number }
   | { type: "tool-progress"; line: string; name?: string; callId?: string }
   | {
@@ -238,6 +239,9 @@ export class ActivityFeed {
         this.setSpinner(
           event.step <= 1 ? "thinking" : `thinking · step ${event.step}`,
         );
+        return;
+      case "activity":
+        this.setSpinner(event.message);
         return;
       case "text-delta": {
         const chunk = event.delta ?? event.text ?? "";

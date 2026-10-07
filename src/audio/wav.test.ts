@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createScore } from "../../core/score.ts";
-import { renderScoreWav } from "./wav.ts";
+import { renderScorePcm, renderScoreWav, StemRenderer } from "./wav.ts";
 
 describe("score WAV renderer", () => {
   test("emits a bounded PCM WAV with audible note data", () => {
@@ -131,5 +131,119 @@ describe("score WAV renderer", () => {
     expect(header.getUint16(22, true)).toBe(2);
     expect(header.getUint32(28, true)).toBe(8_000 * 4);
     expect(header.getUint16(32, true)).toBe(4);
+  });
+
+  test("cached stems render byte-identical to a cold render", () => {
+    const instruments = ["kit", "sine", "saw", "bass", "piano", "square"];
+    const base = {
+      tempoBpm: 120,
+      bars: 2,
+      tracks: instruments.map((instrument, t) => ({
+        id: `t${t}`,
+        name: instrument,
+        instrument,
+        pan: (t - 2) / 3,
+        volume: 0.9,
+        ...(t % 2 ? { filter: { cutoff: 3000, resonance: 0.4 } } : {}),
+        ...(t % 3 === 0
+          ? { delay: { beats: 0.5, feedback: 0.4, mix: 0.3 } }
+          : {}),
+        ...(t === 1 ? { reverb: { mix: 0.3, size: 0.5 } } : {}),
+      })),
+      notes: instruments.flatMap((_, t) =>
+        Array.from({ length: 8 }, (_, i) => ({
+          id: `t${t}-${i}`,
+          trackId: `t${t}`,
+          pitch: t === 0 ? 36 + (i % 3) : 48 + ((i * 5 + t) % 12),
+          startTick: i * 480,
+          durationTicks: 360,
+          velocity: 0.8,
+        })),
+      ),
+    };
+    const options = { sampleRate: 8_000, loop: true } as const;
+    const cold = (data: typeof base) =>
+      renderScorePcm(createScore(data), options).pcm;
+    const cached = new StemRenderer();
+    const warm = (data: typeof base) =>
+      cached.render(createScore(data), options).pcm;
+    expect(warm(base)).toEqual(cold(base));
+    expect(cached.cache.stems).toBe(instruments.length);
+    // One note edit, a mute, a solo, a track setting and a tempo change each
+    // match a cold render exactly, re-rendering only what they touched.
+    const edited = {
+      ...base,
+      notes: base.notes.map((note, i) =>
+        i === 10 ? { ...note, pitch: note.pitch + 3 } : note,
+      ),
+    };
+    expect(warm(edited)).toEqual(cold(edited));
+    const muted = {
+      ...edited,
+      tracks: edited.tracks.map((track, t) =>
+        t === 2 ? { ...track, muted: true } : track,
+      ),
+    };
+    expect(warm(muted)).toEqual(cold(muted));
+    const soloed = {
+      ...muted,
+      tracks: muted.tracks.map((track, t) =>
+        t === 4 ? { ...track, solo: true } : track,
+      ),
+    };
+    expect(warm(soloed)).toEqual(cold(soloed));
+    const panned = {
+      ...edited,
+      tracks: edited.tracks.map((track, t) =>
+        t === 3 ? { ...track, pan: 0.8 } : track,
+      ),
+    };
+    expect(warm(panned)).toEqual(cold(panned));
+    const faster = { ...panned, tempoBpm: 140 };
+    expect(warm(faster)).toEqual(cold(faster));
+    // Toggling back to a cached state and removing a track stay exact.
+    expect(warm(panned)).toEqual(cold(panned));
+    const fewer = {
+      ...panned,
+      tracks: panned.tracks.slice(1),
+      notes: panned.notes.filter((note) => note.trackId !== "t0"),
+    };
+    expect(warm(fewer)).toEqual(cold(fewer));
+    expect(cached.cache.stems).toBe(instruments.length - 1);
+    // One-shot exports take the same path.
+    expect(
+      cached.render(createScore(fewer), { sampleRate: 8_000 }).pcm,
+    ).toEqual(renderScorePcm(createScore(fewer), { sampleRate: 8_000 }).pcm);
+  });
+
+  test("the stem cache stays within its byte budget", () => {
+    const data = {
+      tempoBpm: 120,
+      bars: 1,
+      tracks: ["a", "b", "c"].map((id) => ({
+        id,
+        name: id,
+        instrument: "sine",
+      })),
+      notes: ["a", "b", "c"].map((id) => ({
+        id: `${id}1`,
+        trackId: id,
+        pitch: 60,
+        startTick: 0,
+        durationTicks: 480,
+        velocity: 0.8,
+      })),
+    };
+    const score = createScore(data);
+    const options = { sampleRate: 8_000, loop: true } as const;
+    const oneStem = new StemRenderer().render(score, options);
+    const unbounded = new StemRenderer();
+    unbounded.render(score, options);
+    const perStem = unbounded.cache.bytes / 3;
+    const small = new StemRenderer({ maxCacheBytes: perStem * 2 });
+    expect(small.render(score, options).pcm).toEqual(oneStem.pcm);
+    expect(small.cache.stems).toBeLessThanOrEqual(2);
+    expect(small.cache.bytes).toBeLessThanOrEqual(perStem * 2);
+    expect(small.render(score, options).pcm).toEqual(oneStem.pcm);
   });
 });

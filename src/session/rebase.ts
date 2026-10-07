@@ -15,6 +15,7 @@ import {
   type ScoreOperation,
   type TrackScore,
 } from "../../core/score.ts";
+import { rewindComposition, type Rewind } from "./delta.ts";
 
 /** How far behind a base may be and still be rebased. */
 export const MAX_REBASE_DISTANCE = 64;
@@ -147,16 +148,21 @@ export function rebaseOperations(
 }
 
 /**
- * The composition at revision `revision`, recovered from the `before` of the
- * event that replaced it. Undefined when the log cannot vouch for it.
+ * The composition at revision `revision`, recovered by rewinding the current
+ * composition through every later event's `rewind`. Undefined when the log
+ * cannot vouch for it (a gap in revisions, or a rewind compacted away).
  */
 export function compositionAt(
-  events: readonly { revision: number; payload: unknown }[],
+  record: {
+    composition: unknown;
+    events: readonly { revision: number; rewind?: Rewind | undefined }[];
+  },
   revision: number,
 ): unknown {
-  const event = events[revision];
-  if (event === undefined || event.revision !== revision + 1) return undefined;
-  const payload = event.payload;
-  if (typeof payload !== "object" || payload === null) return undefined;
-  return (payload as { before?: unknown }).before;
+  const { events } = record;
+  if (!Number.isSafeInteger(revision) || revision < 0) return undefined;
+  if (revision >= events.length) return undefined;
+  for (let index = revision; index < events.length; index += 1)
+    if (events[index]!.revision !== index + 1) return undefined;
+  return rewindComposition(record.composition, events, revision);
 }

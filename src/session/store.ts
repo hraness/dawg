@@ -1,7 +1,8 @@
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { acquireSessionLock } from "./lock.ts";
+import { diffRewind, parseRewind, type Rewind } from "./delta.ts";
 import {
   applyMetaPatch,
   defaultSessionMeta,
@@ -14,9 +15,14 @@ import {
   type SessionMeta,
 } from "./meta.ts";
 
+/** Caller payloads; the store keeps history separately in each event's `rewind`. */
 const MAX_EVENT_BYTES = 64 * 1024;
+/** A rewind larger than this (a wholesale import) is not kept; the edit still lands. */
+const MAX_REWIND_BYTES = 1024 * 1024;
 const MAX_EVENTS = 2_000;
-const MAX_RECORD_BYTES = 4 * 1024 * 1024;
+export const MAX_RECORD_BYTES = 4 * 1024 * 1024;
+/** Oldest rewinds are dropped in batches of this size when the record fills up. */
+const COMPACT_BATCH = 64;
 const MAX_SESSION_ID_LENGTH = 64;
 const MAX_EVENT_KIND_LENGTH = 128;
 const MAX_TIMESTAMP_LENGTH = 64;
@@ -34,6 +40,14 @@ export type SessionEvent = {
   kind: string;
   payload: unknown;
   at: string;
+  /**
+   * How to recover the composition this event replaced from the one it
+   * produced (see `delta.ts`). Absent once compacted away: the store drops
+   * the oldest rewinds first when the record would exceed its size cap, so
+   * an edit never fails because of history, and undo reaches as far back as
+   * the remaining rewinds form a contiguous suffix.
+   */
+  rewind?: Rewind;
 };
 
 export type SessionRecord<T> = {
@@ -149,7 +163,7 @@ export async function ensureSession<T>(
         ),
       };
       const validated = validateSessionRecord<T>(record);
-      await writeAtomic(paths.record, JSON.stringify(validated, null, 2));
+      await writeAtomic(paths.record, JSON.stringify(validated));
       return { paths, record: validated };
     } catch (error) {
       if (!isCode(error, "ENOENT")) throw error;
@@ -167,13 +181,18 @@ export async function ensureSession<T>(
 export async function appendSessionEvent<T>(
   paths: SessionPaths,
   current: SessionRecord<T>,
-  event: Omit<SessionEvent, "id" | "revision" | "at"> & { id?: string },
+  event: Omit<SessionEvent, "id" | "revision" | "at" | "rewind"> & {
+    id?: string;
+  },
   composition: T,
 ): Promise<SessionRecord<T>> {
   // dawgd passes the client's idempotency key as the durable event id so a
   // retried intent stays a no-op across daemon restarts.
   if (event.id !== undefined) assertSessionId(event.id);
-  const payloadJson = stringifyJson(event.payload, "session event payload");
+  // History is the store's job: a `before` composition in the payload (the
+  // pre-rewind convention) is dropped rather than persisted in full.
+  const payload = stripBefore(event.payload);
+  const payloadJson = stringifyJson(payload, "session event payload");
   const payloadBytes = Buffer.byteLength(payloadJson, "utf8");
   if (payloadBytes > MAX_EVENT_BYTES)
     throw new Error(`session event exceeds ${MAX_EVENT_BYTES} bytes`);
@@ -183,6 +202,7 @@ export async function appendSessionEvent<T>(
     event.kind.length > MAX_EVENT_KIND_LENGTH
   )
     throw new SessionValidationError("session event kind is invalid");
+  stringifyJson(composition, "session composition");
   const release = await acquireSessionLock(paths.lock);
   try {
     const disk = await readRecord<T>(paths.record);
@@ -193,31 +213,77 @@ export async function appendSessionEvent<T>(
       throw new Error(`session event limit ${MAX_EVENTS} reached`);
     const revision = disk.revision + 1;
     const at = new Date().toISOString();
+    const appended: SessionEvent = {
+      kind: event.kind,
+      payload,
+      id: event.id ?? randomUUID(),
+      revision,
+      at,
+    };
+    const rewind = diffRewind(disk.composition, composition);
+    if (Buffer.byteLength(JSON.stringify(rewind), "utf8") <= MAX_REWIND_BYTES)
+      appended.rewind = rewind;
     const next: SessionRecord<T> = {
       sessionId: disk.sessionId,
       revision,
       updatedAt: at,
       composition,
-      events: [
-        ...disk.events,
-        {
-          kind: event.kind,
-          payload: event.payload,
-          id: event.id ?? randomUUID(),
-          revision,
-          at,
-        },
-      ],
+      events: [...disk.events, appended],
       // Metadata always comes from disk so a rename written by another window
       // between this caller's read and its write is never reverted.
       meta: disk.meta,
     };
     const validated = validateSessionRecord<T>(next);
-    await writeAtomic(paths.record, JSON.stringify(validated, null, 2));
-    return validated;
+    const { record, json } = compactRecord(validated);
+    await writeAtomic(paths.record, json);
+    return record;
   } finally {
     await release();
   }
+}
+
+/**
+ * Keeps the record under its size cap by dropping the oldest events'
+ * rewinds, oldest first, so the rewinds that remain are always the newest
+ * contiguous run. Only the composition and the bounded payloads are
+ * irreducible; a record that still does not fit is rejected as before.
+ */
+function compactRecord<T>(record: SessionRecord<T>): {
+  record: SessionRecord<T>;
+  json: string;
+} {
+  let current = record;
+  let json = JSON.stringify(current);
+  while (Buffer.byteLength(json, "utf8") > MAX_RECORD_BYTES) {
+    const first = current.events.findIndex(
+      (event) => event.rewind !== undefined,
+    );
+    if (first < 0)
+      throw new SessionValidationError(
+        `session record exceeds ${MAX_RECORD_BYTES} bytes`,
+      );
+    const events = current.events.map((event, index) => {
+      if (index < first || index >= first + COMPACT_BATCH || !event.rewind)
+        return event;
+      const { rewind: _rewind, ...rest } = event;
+      return rest;
+    });
+    current = { ...current, events };
+    json = JSON.stringify(current);
+  }
+  return { record: current, json };
+}
+
+function stripBefore(payload: unknown): unknown {
+  if (
+    typeof payload !== "object" ||
+    payload === null ||
+    Array.isArray(payload) ||
+    !("before" in payload)
+  )
+    return payload;
+  const { before: _before, ...rest } = payload as Record<string, unknown>;
+  return rest;
 }
 
 export type MetaUpdate<T> =
@@ -245,7 +311,7 @@ export async function updateSessionMeta<T>(
       meta: applyMetaPatch(disk.meta, patch, new Date().toISOString()),
     };
     const validated = validateSessionRecord<T>(next);
-    await writeAtomic(paths.record, JSON.stringify(validated, null, 2));
+    await writeAtomic(paths.record, JSON.stringify(validated));
     return { status: "applied", record: validated };
   } finally {
     await release();
@@ -277,7 +343,7 @@ export async function createForkSession<T>(
       forkOf: { sessionId: source.sessionId, revision: source.revision },
     },
   });
-  await writeAtomic(paths.record, JSON.stringify(record, null, 2));
+  await writeAtomic(paths.record, JSON.stringify(record));
   return record;
 }
 
@@ -348,7 +414,18 @@ async function writeAtomic(path: string, contents: string): Promise<void> {
       `session record exceeds ${MAX_RECORD_BYTES} bytes`,
     );
   const temporary = `${path}.${process.pid}.tmp`;
-  await writeFile(temporary, `${contents}\n`, "utf8");
+  // Durable before it is visible: the data reaches the disk before the
+  // rename publishes it, so a crash never leaves a truncated record behind.
+  const handle = await open(temporary, "w", 0o644);
+  try {
+    await handle.writeFile(`${contents}\n`, "utf8");
+    await handle.sync();
+  } catch (error) {
+    await handle.close().catch(() => undefined);
+    await rm(temporary, { force: true }).catch(() => undefined);
+    throw error;
+  }
+  await handle.close();
   await rename(temporary, path);
 }
 
@@ -432,7 +509,25 @@ function validateSessionRecord<T>(value: unknown): SessionRecord<T> {
       throw new SessionValidationError(
         `session event exceeds ${MAX_EVENT_BYTES} bytes`,
       );
-    return candidate as unknown as SessionEvent;
+    let rewind: Rewind | undefined;
+    try {
+      rewind = parseRewind(candidate.rewind);
+    } catch (error) {
+      throw new SessionValidationError(
+        error instanceof Error
+          ? error.message
+          : "session event rewind is invalid",
+      );
+    }
+    const parsed: SessionEvent = {
+      id: candidate.id,
+      revision: candidate.revision,
+      kind: candidate.kind,
+      payload: candidate.payload,
+      at: candidate.at,
+    };
+    if (rewind !== undefined) parsed.rewind = rewind;
+    return parsed;
   });
   let meta: SessionMeta;
   try {

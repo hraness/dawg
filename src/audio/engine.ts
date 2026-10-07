@@ -1,7 +1,8 @@
 import type { TrackScore } from "../../core/score.ts";
 import { PlaybackLock } from "./lock.ts";
 import { LoopPlayer } from "./player.ts";
-import { DEFAULT_SAMPLE_RATE, RENDER_CHANNELS, renderScorePcm } from "./wav.ts";
+import { LoopRenderer, type LoopRender } from "./renderer.ts";
+import { DEFAULT_SAMPLE_RATE, RENDER_CHANNELS } from "./wav.ts";
 
 /**
  * How dawgd (or a file-mode window) makes sound.
@@ -195,7 +196,26 @@ export type AudioEngineOptions = Readonly<{
   /** Set false to drive `pump()` manually (tests). */
   timer?: boolean;
   spawn?: (command: readonly string[]) => PlayerProcess;
+  /** Set false to render on the calling thread instead of a worker. */
+  worker?: boolean;
+  /** Base delay before a dead player is respawned; doubles per attempt. */
+  respawnMs?: number;
+  /** Player lifecycle notices worth a status line. */
+  onStatus?: (status: AudioStatus) => void;
 }>;
+
+export type AudioStatus = Readonly<{
+  /** `restarting`: the player died and is being respawned; `stopped`: gave up. */
+  state: "restarting" | "stopped";
+  message: string;
+}>;
+
+/** Respawns of a dying player before playback is declared stopped. */
+const MAX_RESPAWNS = 3;
+/** A player that ran this long before dying resets the respawn budget. */
+const RESPAWN_RESET_MS = 10_000;
+/** Lead grows to this multiple of the last render time. */
+const LEAD_RENDER_FACTOR = 1.5;
 
 type Loop = Readonly<{
   pcm: Int16Array;
@@ -203,18 +223,30 @@ type Loop = Readonly<{
   framesPerBeat: number;
 }>;
 
+type PlayRequest = {
+  score: TrackScore;
+  beat: number | undefined;
+  /** Monotonic ms when `beat` was observed. */
+  atMs: number;
+  generation: number;
+  waiters: { resolve: () => void; reject: (error: Error) => void }[];
+};
+
 /**
  * The gapless audio engine. It renders the score into one seamless loop
  * (tails folded onto the start) and streams it to a long-lived stdin player.
  *
  * Timing: the engine is paced by the same monotonic clock as the transport.
  * Frame `n` of the stream belongs to wall time `start + n / rate`, and the
- * engine keeps exactly `leadMs` of audio queued ahead of now. The device
+ * engine keeps a lead of audio queued ahead of now: at least `leadMs`, and
+ * 1.5x the last render time when renders are slower than that. The device
  * plays the queue at its own rate, so what you hear trails the transport by
  * the player's fixed output latency and never accumulates drift from
- * re-renders. An edit re-renders and swaps the buffer for every frame not
- * yet written, mapping the current beat into the new loop, so tempo and
- * length changes keep the musical position.
+ * re-renders. Renders run in a worker; an edit re-renders off-thread and
+ * swaps the buffer for every frame not yet written, mapping the current beat
+ * into the new loop, so tempo and length changes keep the musical position.
+ * Edits that arrive while a render is in flight coalesce into one render of
+ * the newest score.
  */
 export class AudioEngine {
   public readonly info: AudioBackendInfo;
@@ -225,6 +257,9 @@ export class AudioEngine {
   private readonly now: () => number;
   private readonly useTimer: boolean;
   private readonly spawnPlayer: (command: readonly string[]) => PlayerProcess;
+  private readonly renderer: LoopRenderer;
+  private readonly respawnMs: number;
+  private readonly onStatus: ((status: AudioStatus) => void) | undefined;
   private fallback: LoopPlayer | undefined;
   private child: PlayerProcess | undefined;
   private timer: ReturnType<typeof setInterval> | undefined;
@@ -238,6 +273,11 @@ export class AudioEngine {
   private starting: Promise<void> | undefined;
   private generation = 0;
   private spawns = 0;
+  private queued: PlayRequest | undefined;
+  private draining = false;
+  private lastRenderMs = 0;
+  private respawns = 0;
+  private respawnTimer: ReturnType<typeof setTimeout> | undefined;
 
   public constructor(options: AudioEngineOptions = {}) {
     this.sampleRate = options.sampleRate ?? DEFAULT_SAMPLE_RATE;
@@ -251,6 +291,12 @@ export class AudioEngine {
     this.now = options.now ?? (() => performance.now());
     this.useTimer = options.timer ?? true;
     this.spawnPlayer = options.spawn ?? spawnStdinPlayer;
+    this.respawnMs = options.respawnMs ?? 250;
+    this.onStatus = options.onStatus;
+    this.renderer = new LoopRenderer({
+      sampleRate: this.sampleRate,
+      ...(options.worker === undefined ? {} : { worker: options.worker }),
+    });
     if (this.info.backend === "afplay")
       this.fallback = new LoopPlayer(options.lockPath);
   }
@@ -265,14 +311,80 @@ export class AudioEngine {
     return this.spawns;
   }
 
+  /** Milliseconds the most recent loop render took. */
+  public get renderMs(): number {
+    return this.lastRenderMs;
+  }
+
+  /** Frames kept queued ahead of the clock right now. */
+  public get lead(): number {
+    const adaptive = Math.round(
+      (LEAD_RENDER_FACTOR * this.lastRenderMs * this.sampleRate) / 1000,
+    );
+    // The pump never queues more than a second, so the lead stays under it.
+    return Math.min(
+      Math.max(this.leadFrames, adaptive),
+      Math.floor(this.sampleRate * 0.9),
+    );
+  }
+
   /**
    * Start playback at `beat`, or, when already playing, swap in the new
-   * score at the current position without restarting the player.
+   * score at the current position without restarting the player. Resolves
+   * once the render has been applied (or superseded by a newer one).
    */
-  public async play(score: TrackScore, beat?: number): Promise<void> {
-    if (this.info.backend === "none") return;
+  public play(score: TrackScore, beat?: number): Promise<void> {
+    if (this.info.backend === "none") return Promise.resolve();
     if (this.fallback) return this.fallback.play(score, beat);
-    const loop = this.render(score);
+    return new Promise<void>((resolve, reject) => {
+      const waiters = this.queued?.waiters ?? [];
+      waiters.push({ resolve, reject });
+      this.queued = {
+        score,
+        beat,
+        atMs: this.now(),
+        generation: this.generation,
+        waiters,
+      };
+      void this.drain();
+    });
+  }
+
+  private async drain(): Promise<void> {
+    if (this.draining) return;
+    this.draining = true;
+    try {
+      while (this.queued) {
+        const request = this.queued;
+        this.queued = undefined;
+        try {
+          const render = await this.renderer.render(request.score);
+          this.lastRenderMs = render.renderMs;
+          // Stopped while rendering: the result is stale, not an error.
+          if (request.generation === this.generation)
+            await this.apply(this.toLoop(render, request.score), request);
+          for (const waiter of request.waiters) waiter.resolve();
+        } catch (error) {
+          for (const waiter of request.waiters)
+            waiter.reject(
+              error instanceof Error ? error : new Error(String(error)),
+            );
+        }
+      }
+    } finally {
+      this.draining = false;
+    }
+  }
+
+  private async apply(loop: Loop, request: PlayRequest): Promise<void> {
+    // The transport kept moving while the render ran.
+    const beat =
+      request.beat === undefined
+        ? undefined
+        : request.beat +
+          ((this.now() - request.atMs) * this.sampleRate) /
+            1000 /
+            loop.framesPerBeat;
     if (this.child) {
       this.swap(loop, beat);
       return;
@@ -303,10 +415,14 @@ export class AudioEngine {
    * by adding it.
    */
   private queuedBeats(loop: Loop): number {
+    return this.queuedFrames() / loop.framesPerBeat;
+  }
+
+  private queuedFrames(): number {
     const elapsed = Math.floor(
       ((this.now() - this.startMs) * this.sampleRate) / 1000,
     );
-    return Math.max(0, this.written - elapsed) / loop.framesPerBeat;
+    return Math.max(0, this.written - elapsed);
   }
 
   public stop(): void {
@@ -315,6 +431,9 @@ export class AudioEngine {
 
   public async stopAsync(): Promise<void> {
     this.generation += 1;
+    this.respawns = 0;
+    if (this.respawnTimer) clearTimeout(this.respawnTimer);
+    this.respawnTimer = undefined;
     if (this.fallback) {
       this.fallback.stop();
       return;
@@ -337,6 +456,12 @@ export class AudioEngine {
     await this.lock.release();
   }
 
+  /** Stops playback and releases the render worker. */
+  public async dispose(): Promise<void> {
+    await this.stopAsync();
+    this.renderer.dispose();
+  }
+
   /**
    * Write every frame due by now plus the lead. Called by the timer; tests
    * call it directly with an injected clock.
@@ -347,7 +472,7 @@ export class AudioEngine {
     if (!child || !loop) return;
     const due =
       Math.floor(((this.now() - this.startMs) * this.sampleRate) / 1000) +
-      this.leadFrames;
+      this.lead;
     let remaining = due - this.written;
     if (remaining <= 0) return;
     // Never queue more than one second at once, e.g. after a stalled loop.
@@ -380,14 +505,10 @@ export class AudioEngine {
     }
   }
 
-  private render(score: TrackScore): Loop {
-    const audio = renderScorePcm(score, {
-      sampleRate: this.sampleRate,
-      loop: true,
-    });
+  private toLoop(render: LoopRender, score: TrackScore): Loop {
     return {
-      pcm: audio.pcm,
-      frames: audio.frames,
+      pcm: render.pcm,
+      frames: render.frames,
       framesPerBeat: (60 * this.sampleRate) / score.tempoBpm,
     };
   }
@@ -438,16 +559,59 @@ export class AudioEngine {
     this.cursor = this.frameForBeat(loop, beat);
     void child.exited.then(() => {
       if (this.child !== child) return;
-      // The player died while we still want sound: stop cleanly rather than
-      // spin; the next play() starts a fresh player.
-      this.child = undefined;
-      this.loop = undefined;
-      if (this.timer) clearInterval(this.timer);
-      this.timer = undefined;
-      void this.lock.release();
+      this.onPlayerExit(generation);
     });
     this.pump();
     if (this.useTimer) this.timer = setInterval(() => this.pump(), this.tickMs);
+  }
+
+  /**
+   * The player died while we still want sound. Respawn it a bounded number
+   * of times, resuming from the frame the listener last heard, and report
+   * each attempt; after that, stop cleanly rather than show a silent
+   * "playing" transport.
+   */
+  private onPlayerExit(generation: number): void {
+    const loop = this.loop;
+    const ranMs = this.now() - this.startMs;
+    // Frame the device was playing when the stream ended.
+    const heard = loop
+      ? (((this.cursor - this.queuedFrames()) % loop.frames) + loop.frames) %
+        loop.frames
+      : 0;
+    const diedAt = this.now();
+    this.child = undefined;
+    this.loop = undefined;
+    if (this.timer) clearInterval(this.timer);
+    this.timer = undefined;
+    void this.lock.release().then(() => {
+      if (!loop || generation !== this.generation) return;
+      if (ranMs >= RESPAWN_RESET_MS) this.respawns = 0;
+      if (this.respawns >= MAX_RESPAWNS) {
+        this.onStatus?.({
+          state: "stopped",
+          message: `audio player exited ${MAX_RESPAWNS} times; playback stopped`,
+        });
+        return;
+      }
+      this.respawns += 1;
+      const delay = this.respawnMs * 2 ** (this.respawns - 1);
+      this.onStatus?.({
+        state: "restarting",
+        message: `audio player exited; restarting (${this.respawns}/${MAX_RESPAWNS})`,
+      });
+      this.respawnTimer = setTimeout(() => {
+        this.respawnTimer = undefined;
+        if (generation !== this.generation || this.child || this.starting)
+          return;
+        const frame = heard + ((this.now() - diedAt) * this.sampleRate) / 1000;
+        this.starting = this.start(loop, frame / loop.framesPerBeat).finally(
+          () => {
+            this.starting = undefined;
+          },
+        );
+      }, delay);
+    });
   }
 }
 

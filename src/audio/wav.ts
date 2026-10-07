@@ -99,94 +99,250 @@ export function renderScorePcm(
   score: TrackScore,
   options: RenderOptions = {},
 ): RenderedAudio {
-  const sampleRate = clampSampleRate(options.sampleRate);
-  const maxSeconds = Math.max(1, Math.min(60, options.maxSeconds ?? 30));
-  const loopSeconds = (score.bars * score.beatsPerBar * 60) / score.tempoBpm;
-  const reverbTail = Math.max(
-    0,
-    ...score.tracks.map((track) =>
-      track.reverb && track.reverb.mix > 0 ? 1 + 3 * track.reverb.size : 0,
-    ),
-  );
-  let frames: number;
-  let samples: number;
-  if (options.loop) {
-    frames = Math.max(
-      1,
-      Math.min(
-        Math.round(loopFrames(score, sampleRate)),
-        Math.ceil(maxSeconds * sampleRate),
+  return new StemRenderer({ maxCacheBytes: 0 }).render(score, options);
+}
+
+/** Default byte budget for cached per-track stems. */
+export const DEFAULT_STEM_CACHE_BYTES = 256 * 1024 * 1024;
+
+type Stem = {
+  key: string;
+  left: Float64Array;
+  right: Float64Array;
+  bytes: number;
+  used: number;
+};
+
+/**
+ * The renderer behind `renderScorePcm`, with a per-track stem cache. Each
+ * track's stereo stem (after its own effects) is keyed by everything that
+ * shapes it: the track settings, its notes, tempo, tick resolution, sample
+ * rate and buffer length. Edits re-render only the tracks whose key changed
+ * and sum the cached rest in the original order, so the result is
+ * byte-identical to a cold render; mute and solo only pick which stems are
+ * summed. Scratch buffers are reused across renders.
+ */
+export class StemRenderer {
+  private readonly maxCacheBytes: number;
+  private readonly stems = new Map<string, Stem>();
+  private cacheBytes = 0;
+  private renders = 0;
+  private scratch: {
+    dry: Float64Array;
+    left: Float64Array;
+    right: Float64Array;
+    mixL: Float64Array;
+    mixR: Float64Array;
+  } = {
+    dry: new Float64Array(0),
+    left: new Float64Array(0),
+    right: new Float64Array(0),
+    mixL: new Float64Array(0),
+    mixR: new Float64Array(0),
+  };
+
+  public constructor(options: Readonly<{ maxCacheBytes?: number }> = {}) {
+    this.maxCacheBytes = Math.max(
+      0,
+      options.maxCacheBytes ?? DEFAULT_STEM_CACHE_BYTES,
+    );
+  }
+
+  /** Cached stems and their total size, for tests and diagnostics. */
+  public get cache(): Readonly<{ stems: number; bytes: number }> {
+    return { stems: this.stems.size, bytes: this.cacheBytes };
+  }
+
+  public render(score: TrackScore, options: RenderOptions = {}): RenderedAudio {
+    const sampleRate = clampSampleRate(options.sampleRate);
+    const maxSeconds = Math.max(1, Math.min(60, options.maxSeconds ?? 30));
+    const loopSeconds = (score.bars * score.beatsPerBar * 60) / score.tempoBpm;
+    const reverbTail = Math.max(
+      0,
+      ...score.tracks.map((track) =>
+        track.reverb && track.reverb.mix > 0 ? 1 + 3 * track.reverb.size : 0,
       ),
     );
-    const tailSeconds = Math.min(
-      MAX_LOOP_TAIL_SECONDS,
-      MAX_DRUM_SECONDS + 0.1 + reverbTail + delayTailSeconds(score),
-    );
-    samples = frames + Math.ceil(tailSeconds * sampleRate);
-  } else {
-    const seconds = Math.min(
-      maxSeconds,
-      loopSeconds + ONE_SHOT_TAIL_SECONDS + reverbTail,
-    );
-    frames = Math.max(1, Math.ceil(seconds * sampleRate));
-    samples = frames;
-  }
-  const context: RenderContext = {
-    score,
-    sampleRate,
-    samples,
-    samplesPerTick: (sampleRate * 60) / (score.tempoBpm * score.ticksPerBeat),
-  };
-  // Tracks render one at a time into reused scratch buffers so per-track
-  // effects stay bounded in memory regardless of the track count.
-  const mixL = new Float64Array(samples);
-  const mixR = new Float64Array(samples);
-  const dry = new Float64Array(samples);
-  const left = new Float64Array(samples);
-  const right = new Float64Array(samples);
-  const tracks = new Map(score.tracks.map((track) => [track.id, track]));
-  const groups = new Map<string, Note[]>();
-  for (const note of score.notes) {
-    const group = groups.get(note.trackId);
-    if (group) group.push(note);
-    else groups.set(note.trackId, [note]);
-  }
-  for (const [trackId, notes] of groups) {
-    if (!isTrackAudible(score, trackId)) continue;
-    const track = tracks.get(trackId);
-    // Sampler tracks (score v2) are silent until the sample renderer lands.
-    if (isSamplerInstrument(track?.instrument)) continue;
-    dry.fill(0);
-    const drums = isDrumInstrument(track?.instrument);
-    for (const note of notes) {
-      if (drums) renderDrumNote(dry, note, track, context);
-      else renderToneNote(dry, note, track, context);
+    let frames: number;
+    let samples: number;
+    if (options.loop) {
+      frames = Math.max(
+        1,
+        Math.min(
+          Math.round(loopFrames(score, sampleRate)),
+          Math.ceil(maxSeconds * sampleRate),
+        ),
+      );
+      const tailSeconds = Math.min(
+        MAX_LOOP_TAIL_SECONDS,
+        MAX_DRUM_SECONDS + 0.1 + reverbTail + delayTailSeconds(score),
+      );
+      samples = frames + Math.ceil(tailSeconds * sampleRate);
+    } else {
+      const seconds = Math.min(
+        maxSeconds,
+        loopSeconds + ONE_SHOT_TAIL_SECONDS + reverbTail,
+      );
+      frames = Math.max(1, Math.ceil(seconds * sampleRate));
+      samples = frames;
     }
-    if (track) applyLowPass(dry, track, context);
-    applyPan(dry, left, right, track, context);
-    if (track) {
-      applyDelay(left, right, track, context);
-      applyReverb(left, right, track, context);
+    const context: RenderContext = {
+      score,
+      sampleRate,
+      samples,
+      samplesPerTick: (sampleRate * 60) / (score.tempoBpm * score.ticksPerBeat),
+    };
+    this.renders += 1;
+    const { dry, left, right, mixL, mixR } = this.scratchFor(samples);
+    mixL.fill(0);
+    mixR.fill(0);
+    const tracks = new Map(score.tracks.map((track) => [track.id, track]));
+    const groups = new Map<string, Note[]>();
+    for (const note of score.notes) {
+      const group = groups.get(note.trackId);
+      if (group) group.push(note);
+      else groups.set(note.trackId, [note]);
     }
-    for (let index = 0; index < samples; index += 1) {
-      mixL[index]! += left[index]!;
-      mixR[index]! += right[index]!;
+    // Tracks render one at a time; the sum order (first note per track) is
+    // part of the output, so cached and cold renders keep it.
+    for (const [trackId, notes] of groups) {
+      if (!isTrackAudible(score, trackId)) continue;
+      const track = tracks.get(trackId);
+      // Sampler tracks (score v2) are silent until the sample renderer lands.
+      if (isSamplerInstrument(track?.instrument)) continue;
+      const key = stemKey(track, notes, context);
+      let stem = this.stems.get(trackId);
+      if (stem?.key === key) stem.used = this.renders;
+      else {
+        const caching = this.maxCacheBytes > 0;
+        const target = caching
+          ? {
+              left: new Float64Array(samples),
+              right: new Float64Array(samples),
+            }
+          : { left, right };
+        dry.fill(0);
+        const drums = isDrumInstrument(track?.instrument);
+        for (const note of notes) {
+          if (drums) renderDrumNote(dry, note, track, context);
+          else renderToneNote(dry, note, track, context);
+        }
+        if (track) applyLowPass(dry, track, context);
+        applyPan(dry, target.left, target.right, track, context);
+        if (track) {
+          applyDelay(target.left, target.right, track, context);
+          applyReverb(target.left, target.right, track, context);
+        }
+        stem = {
+          key,
+          left: target.left,
+          right: target.right,
+          bytes: target.left.byteLength + target.right.byteLength,
+          used: this.renders,
+        };
+        if (caching) this.store(trackId, stem);
+      }
+      for (let index = 0; index < samples; index += 1) {
+        mixL[index]! += stem.left[index]!;
+        mixR[index]! += stem.right[index]!;
+      }
     }
-  }
-  if (samples > frames) {
-    // Linear effects superpose, so folding the tail onto the start yields
-    // the steady state of the loop playing forever.
-    for (let index = frames; index < samples; index += 1) {
-      mixL[index % frames]! += mixL[index]!;
-      mixR[index % frames]! += mixR[index]!;
+    // Stems of tracks that left the score are not worth keeping; muted and
+    // unsoloed tracks keep theirs so toggling them back is free.
+    for (const trackId of [...this.stems.keys()])
+      if (!groups.has(trackId)) this.evict(trackId);
+    if (samples > frames) {
+      // Linear effects superpose, so folding the tail onto the start yields
+      // the steady state of the loop playing forever.
+      for (let index = frames; index < samples; index += 1) {
+        mixL[index % frames]! += mixL[index]!;
+        mixR[index % frames]! += mixR[index]!;
+      }
     }
+    const pcm = new Int16Array(frames * RENDER_CHANNELS);
+    for (let index = 0; index < frames; index += 1) {
+      pcm[index * 2] = clamp16(mixL[index]! * 32767);
+      pcm[index * 2 + 1] = clamp16(mixR[index]! * 32767);
+    }
+    return Object.freeze({
+      sampleRate,
+      channels: RENDER_CHANNELS,
+      frames,
+      pcm,
+    });
   }
-  const pcm = new Int16Array(frames * RENDER_CHANNELS);
-  for (let index = 0; index < frames; index += 1) {
-    pcm[index * 2] = clamp16(mixL[index]! * 32767);
-    pcm[index * 2 + 1] = clamp16(mixR[index]! * 32767);
+
+  private scratchFor(samples: number) {
+    if (this.scratch.dry.length < samples) {
+      this.scratch = {
+        dry: new Float64Array(samples),
+        left: new Float64Array(samples),
+        right: new Float64Array(samples),
+        mixL: new Float64Array(samples),
+        mixR: new Float64Array(samples),
+      };
+    }
+    const view = (buffer: Float64Array) => buffer.subarray(0, samples);
+    return {
+      dry: view(this.scratch.dry),
+      left: view(this.scratch.left),
+      right: view(this.scratch.right),
+      mixL: view(this.scratch.mixL),
+      mixR: view(this.scratch.mixR),
+    };
   }
-  return Object.freeze({ sampleRate, channels: RENDER_CHANNELS, frames, pcm });
+
+  private store(trackId: string, stem: Stem): void {
+    this.evict(trackId);
+    // Make room by dropping the least recently used stems from other
+    // renders; a score whose stems exceed the budget is simply not cached.
+    while (
+      this.cacheBytes + stem.bytes > this.maxCacheBytes &&
+      this.stems.size > 0
+    ) {
+      let oldest: string | undefined;
+      for (const [id, candidate] of this.stems)
+        if (
+          candidate.used !== this.renders &&
+          (oldest === undefined ||
+            candidate.used < this.stems.get(oldest)!.used)
+        )
+          oldest = id;
+      if (oldest === undefined) break;
+      this.evict(oldest);
+    }
+    if (this.cacheBytes + stem.bytes > this.maxCacheBytes) return;
+    this.stems.set(trackId, stem);
+    this.cacheBytes += stem.bytes;
+  }
+
+  private evict(trackId: string): void {
+    const stem = this.stems.get(trackId);
+    if (!stem) return;
+    this.stems.delete(trackId);
+    this.cacheBytes -= stem.bytes;
+  }
+}
+
+/** Everything a track's stem depends on, except mute and solo. */
+function stemKey(
+  track: Track | undefined,
+  notes: readonly Note[],
+  context: RenderContext,
+): string {
+  let settings: Record<string, unknown> | null = null;
+  if (track) {
+    const { muted: _muted, solo: _solo, ...rest } = track;
+    settings = rest;
+  }
+  return JSON.stringify([
+    settings,
+    notes,
+    context.score.tempoBpm,
+    context.score.ticksPerBeat,
+    context.sampleRate,
+    context.samples,
+  ]);
 }
 
 /** Seconds until the slowest delay decays below -60 dB, bounded. */

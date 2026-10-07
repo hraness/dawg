@@ -90,6 +90,8 @@ export type ChatStreamRequest = {
 /** Normalized stream events; provider chunk shapes never leave this module. */
 export type ChatStreamEvent =
   | { type: "text"; delta: string }
+  /** Progress worth a status line, such as a retry; never model output. */
+  | { type: "activity"; message: string }
   | {
       type: "tool-delta";
       index: number;
@@ -137,6 +139,24 @@ type GatewayFetcher = (
   init?: RequestInit,
 ) => Promise<Response>;
 
+/** Retries after a failed request that has not yet produced a byte. */
+export const GATEWAY_RETRIES = 2;
+/** Base backoff; each retry doubles it, with +-50% jitter. */
+const RETRY_BASE_MS = 500;
+/** Response headers must arrive within this long, per attempt. */
+export const GATEWAY_HEADER_TIMEOUT_MS = 15_000;
+
+export type GatewayRetryOptions = Readonly<{
+  retries?: number;
+  baseMs?: number;
+  sleep?: (ms: number) => Promise<void>;
+  random?: () => number;
+}>;
+
+function retryableStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500;
+}
+
 /** The two OpenAI-compatible, key-based services. */
 export type ApiProvider = "gateway" | "openrouter";
 export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
@@ -152,6 +172,8 @@ export type ApiClientOptions = {
   baseUrl?: string;
   modelIds?: Partial<Record<GatewayModel, string>>;
   fetcher?: GatewayFetcher;
+  retry?: GatewayRetryOptions;
+  headerTimeoutMs?: number;
 };
 
 /** The streaming tool-calling client for OpenRouter's OpenAI-compatible API. */
@@ -185,6 +207,11 @@ function createApiClient(
   const name = provider === "openrouter" ? "OpenRouter" : "AI Gateway";
   const baseUrl = (options.baseUrl ?? GATEWAY_BASE_URL).replace(/\/$/, "");
   const apiKey = options.apiKey;
+  const retries = options.retry?.retries ?? GATEWAY_RETRIES;
+  const retryBaseMs = options.retry?.baseMs ?? RETRY_BASE_MS;
+  const sleep = options.retry?.sleep ?? ((ms: number) => Bun.sleep(ms));
+  const random = options.retry?.random ?? Math.random;
+  const headerTimeoutMs = options.headerTimeoutMs ?? GATEWAY_HEADER_TIMEOUT_MS;
   const overrides: Partial<Record<GatewayModel, string | undefined>> = {
     "opus-5.5": process.env.DAWG_OPUS_MODEL || undefined,
     "sol-6.1": process.env.DAWG_SOL_MODEL || undefined,
@@ -227,24 +254,58 @@ function createApiClient(
         request.maxTokens > 0
       )
         body.max_tokens = Math.min(request.maxTokens, 4096);
-      const init: RequestInit = {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${apiKey}`,
-          "content-type": "application/json",
-          accept: "text/event-stream",
-          ...(provider === "openrouter" ? OPENROUTER_HEADERS : {}),
-        },
-        body: JSON.stringify(body),
-      };
-      if (signal !== undefined) init.signal = signal;
-      const response = await fetcher(`${baseUrl}/chat/completions`, init);
-      if (!response.ok) {
-        const detail = redact(await boundedErrorDetail(response));
-        throw new GatewayError(
-          `${name} request failed (${response.status})${detail ? `: ${detail}` : ""}`,
-          response.status,
-        );
+      const encoded = JSON.stringify(body);
+      // Retry only before any byte of a response has been consumed: a
+      // network failure, a header-phase timeout, or 408/429/5xx. Once the
+      // stream is flowing, a failure surfaces as-is (replaying could repeat
+      // tool calls the model already made).
+      let response: Response | undefined;
+      for (let attempt = 0; ; attempt += 1) {
+        if (signal?.aborted) throw abortError(signal);
+        const headerSignal = AbortSignal.any([
+          ...(signal === undefined ? [] : [signal]),
+          AbortSignal.timeout(headerTimeoutMs),
+        ]);
+        const init: RequestInit = {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${apiKey}`,
+            "content-type": "application/json",
+            accept: "text/event-stream",
+            ...(provider === "openrouter" ? OPENROUTER_HEADERS : {}),
+          },
+          body: encoded,
+          signal: headerSignal,
+        };
+        let reason: string;
+        try {
+          const candidate = await fetcher(`${baseUrl}/chat/completions`, init);
+          if (candidate.ok) {
+            response = candidate;
+            break;
+          }
+          const detail = redact(await boundedErrorDetail(candidate));
+          const error = new GatewayError(
+            `${name} request failed (${candidate.status})${detail ? `: ${detail}` : ""}`,
+            candidate.status,
+          );
+          if (!retryableStatus(candidate.status) || attempt >= retries)
+            throw error;
+          reason = String(candidate.status);
+        } catch (error) {
+          if (error instanceof GatewayError) throw error;
+          if (signal?.aborted) throw abortError(signal);
+          if (attempt >= retries)
+            throw new GatewayError(
+              headerSignal.aborted
+                ? `${name} did not respond within ${headerTimeoutMs} ms`
+                : `${name} request failed: ${redact(error instanceof Error ? error.message : String(error))}`,
+            );
+          reason = headerSignal.aborted ? "timeout" : "network";
+        }
+        yield { type: "activity", message: `retrying (${reason})…` };
+        const backoff = retryBaseMs * 2 ** attempt;
+        await sleep(Math.round(backoff * (0.5 + random())));
       }
       if (!response.body)
         throw new GatewayError(`${name} returned an empty stream`);
@@ -345,6 +406,14 @@ export function parseUsage(
   )
     event.costUsd = rawCost;
   return event;
+}
+
+function abortError(signal: AbortSignal): Error {
+  const reason: unknown = signal.reason;
+  if (reason instanceof Error) return reason;
+  const error = new Error("agent request was aborted");
+  error.name = "AbortError";
+  return error;
 }
 
 async function boundedErrorDetail(response: Response): Promise<string> {

@@ -44,12 +44,16 @@ export async function* readSseData(
       total += chunk.value.byteLength;
       if (total > options.maxBytes) throw new SseBudgetError(options.maxBytes);
       buffer += decoder.decode(chunk.value, { stream: true });
-      let newline = buffer.search(/\r\n|\r|\n/);
-      while (newline >= 0) {
-        const line = buffer.slice(0, newline);
-        const width =
-          buffer[newline] === "\r" && buffer[newline + 1] === "\n" ? 2 : 1;
-        buffer = buffer.slice(newline + width);
+      // Scan forward with indexOf and slice the consumed prefix once per
+      // chunk. A trailing "\r" is held back: it may be the first half of a
+      // "\r\n" split across chunks, and dispatching it early would double
+      // an empty line and end the event too soon.
+      let start = 0;
+      while (true) {
+        const next = lineBreak(buffer, start);
+        if (next === undefined) break;
+        const line = buffer.slice(start, next.index);
+        start = next.index + next.width;
         if (line === "") {
           if (data.length > 0) {
             const payload = data.join("\n");
@@ -60,10 +64,11 @@ export async function* readSseData(
         } else if (line.startsWith("data:")) {
           data.push(line.slice(line[5] === " " ? 6 : 5));
         }
-        newline = buffer.search(/\r\n|\r|\n/);
       }
+      if (start > 0) buffer = buffer.slice(start);
     }
     buffer += decoder.decode();
+    if (buffer.endsWith("\r")) buffer = buffer.slice(0, -1);
     if (buffer.startsWith("data:"))
       data.push(buffer.slice(buffer[5] === " " ? 6 : 5));
     if (data.length > 0) {
@@ -79,6 +84,25 @@ export async function* readSseData(
       // A pending read is rejected by cancel(); the lock is already moot.
     }
   }
+}
+
+/**
+ * The next line terminator at or after `from`: "\n", "\r\n", or a lone
+ * "\r" that is already followed by another character. A "\r" at the very
+ * end of the buffer is not a terminator yet.
+ */
+function lineBreak(
+  buffer: string,
+  from: number,
+): { index: number; width: number } | undefined {
+  const newline = buffer.indexOf("\n", from);
+  const carriage = buffer.indexOf("\r", from);
+  if (carriage < 0 || (newline >= 0 && newline < carriage))
+    return newline < 0 ? undefined : { index: newline, width: 1 };
+  if (carriage === buffer.length - 1) return undefined;
+  return buffer[carriage + 1] === "\n"
+    ? { index: carriage, width: 2 }
+    : { index: carriage, width: 1 };
 }
 
 function abortReason(signal: AbortSignal): Error {

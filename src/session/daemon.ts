@@ -95,6 +95,20 @@ export class DawgDaemon {
     this.graceMs = options.graceMs ?? DEFAULT_GRACE_MS;
     this.audio = new AudioEngine({
       lockPath: `${this.paths.record}.audio.lock`,
+      onStatus: (status) => {
+        void this.log(`audio: ${status.message}`);
+        // A player that keeps dying must not leave a silent "playing" transport.
+        if (status.state === "stopped" && this.clock.playing) {
+          this.clock.pause();
+          this.broadcastTransport();
+        }
+        this.broadcast({
+          v: 1,
+          type: "error",
+          code: "audio",
+          message: status.message,
+        });
+      },
     });
   }
 
@@ -158,7 +172,7 @@ export class DawgDaemon {
   private async shutdown(reason: string): Promise<void> {
     if (this.graceTimer) clearTimeout(this.graceTimer);
     if (this.diskTimer) clearInterval(this.diskTimer);
-    await this.audio.stopAsync();
+    await this.audio.dispose();
     for (const client of this.clients) client.socket.destroy();
     this.clients.clear();
     await this.queue.catch(() => undefined);
@@ -427,18 +441,16 @@ export class DawgDaemon {
         message: error instanceof Error ? error.message : String(error),
       };
     }
-    // Every event records the score it replaced (`before`) so undo and later
-    // rebases can recover it; after a rebase that is the score replayed on.
+    // The store records how to rewind every event, so undo and later rebases
+    // can recover the score it replaced; a rebased event also notes its base.
     const payload =
+      rebased &&
       typeof message.payload === "object" &&
       message.payload !== null &&
       !Array.isArray(message.payload)
         ? {
             ...(message.payload as Record<string, unknown>),
-            ...(rebased || !("before" in message.payload)
-              ? { before: this.record.composition }
-              : {}),
-            ...(rebased ? { rebasedFrom: message.base } : {}),
+            rebasedFrom: message.base,
           }
         : message.payload;
     const previousTempo = this.score.tempoBpm;
@@ -506,7 +518,7 @@ export class DawgDaemon {
       this.record.revision - revision > MAX_REBASE_DISTANCE
     )
       return undefined;
-    const composition = compositionAt(this.record.events, revision);
+    const composition = compositionAt(this.record, revision);
     if (composition === undefined) return undefined;
     try {
       return scoreFromJSON(composition);

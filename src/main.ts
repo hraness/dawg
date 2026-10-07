@@ -284,7 +284,7 @@ if (importPath) {
     record,
     {
       kind: "score.import",
-      payload: { path: importPath, before: record.composition },
+      payload: { path: importPath },
     },
     score.toJSON(),
   );
@@ -853,27 +853,16 @@ async function runInteractive(): Promise<void> {
         // Keep the empty-prompt space shortcut for transport, while allowing
         // ordinary spaces once a request is being composed.
         if (value === " " && prompt.value.length === 0) {
-          await setTransport("toggle");
-          try {
-            record = await port.append(
-              record,
-              {
-                kind: "transport",
-                payload: {
-                  action: "toggle",
-                  playing: clock.playing,
-                  beat: clock.beatAt(),
-                },
-              },
-              score.toJSON(),
-            );
-          } catch (error) {
-            if (error instanceof SessionConflictError)
-              tui.activity.pushCard("transport changed in another window", {
-                tone: "warning",
-              });
-            else throw error;
-          }
+          // Never await a daemon round trip here: the key loop must stay
+          // live for Esc, quit and redraws while the toggle is in flight.
+          void toggleTransport()
+            .catch((error: unknown) => {
+              tui.activity.pushCard(
+                `transport failed · ${error instanceof Error ? error.message : String(error)}`,
+                { tone: "error" },
+              );
+            })
+            .finally(() => tick(true));
         } else {
           const input = tui.input(value);
           const action = input.type === "action" ? input.action : undefined;
@@ -884,7 +873,16 @@ async function runInteractive(): Promise<void> {
               !agentTurn
             ) {
               const base = baseline();
-              receipt(await stepHistory(input.command), base);
+              const command = input.command;
+              void stepHistory(command)
+                .then((outcome) => receipt(outcome, base))
+                .catch((error: unknown) => {
+                  tui.activity.pushCard(
+                    `${command} failed · ${error instanceof Error ? error.message : String(error)}`,
+                    { tone: "error" },
+                  );
+                })
+                .finally(() => tick(true));
             }
           } else if (input.type === "pick") {
             // Picker choices run as the command they stand for.
@@ -1224,7 +1222,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
         latest,
         {
           kind: "score.operation",
-          payload: { operation, before: latest.composition },
+          payload: { operation },
         },
         next.toJSON(),
       );
@@ -1466,11 +1464,7 @@ async function commitScore(
   payload: Record<string, unknown> = {},
 ): Promise<void> {
   if (next === score) return;
-  record = await port.append(
-    record,
-    { kind, payload: { ...payload, before: record.composition } },
-    next.toJSON(),
-  );
+  record = await port.append(record, { kind, payload }, next.toJSON());
   score = next;
   if (clock.playing) void audio.play(score);
   projectSync?.scoreChanged(score);
@@ -1487,7 +1481,7 @@ function syncHost(): SyncHost {
         record,
         {
           kind: "files.apply",
-          payload: { summary, before: record.composition },
+          payload: { summary },
         },
         plan.operations,
         plan.next.toJSON(),
@@ -1517,6 +1511,7 @@ async function stepHistory(direction: "undo" | "redo"): Promise<Receipt> {
   const latest = await port.load();
   // A fork's undo continues into its parent's history past the fork point.
   const target = historyTarget(
+    latest.composition,
     await historyEvents(process.cwd(), latest),
     direction,
   );
@@ -1530,7 +1525,6 @@ async function stepHistory(direction: "undo" | "redo"): Promise<Receipt> {
         payload: {
           [direction === "undo" ? "undoneRevision" : "redoneRevision"]:
             target.revision,
-          before: latest.composition,
         },
       },
       restored.toJSON(),
@@ -1546,6 +1540,31 @@ async function stepHistory(direction: "undo" | "redo"): Promise<Receipt> {
     return fail(
       `${direction} failed · ${error instanceof Error ? error.message : String(error)}`,
     );
+  }
+}
+
+/** The space-bar toggle: flip the transport, then record it for other windows. */
+async function toggleTransport(): Promise<void> {
+  await setTransport("toggle");
+  try {
+    record = await port.append(
+      record,
+      {
+        kind: "transport",
+        payload: {
+          action: "toggle",
+          playing: clock.playing,
+          beat: clock.beatAt(),
+        },
+      },
+      score.toJSON(),
+    );
+  } catch (error) {
+    if (error instanceof SessionConflictError)
+      tui.activity.pushCard("transport changed in another window", {
+        tone: "warning",
+      });
+    else throw error;
   }
 }
 
@@ -1708,7 +1727,6 @@ function agentHost(
               callId: change.callId,
               summary: change.summary,
               operations: change.operations,
-              before: record.composition,
             },
           },
           change.operations,

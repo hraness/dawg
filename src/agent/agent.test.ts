@@ -15,6 +15,7 @@ import {
   describeAgentEvent,
   runAgentTurn,
   StaleRevisionError,
+  summarizeToolResult,
   type AgentEvent,
   type AgentHost,
 } from "./agent.ts";
@@ -357,6 +358,60 @@ describe("streaming agent turn", () => {
       budget: { maxResponseBytes: 512 },
     });
     expect(result).toMatchObject({ type: "error", code: "budget" });
+  });
+
+  test("older tool results collapse to summaries and the request budget is enforced", async () => {
+    const steps = Array.from({ length: 5 }, (_, i) => [
+      ...toolCallChunks(0, `c${i}`, "set_tempo", { bpm: 100 + i }),
+      finishChunk("tool_calls"),
+    ]);
+    const script = scriptedFetch([
+      ...steps,
+      [textChunk("done"), finishChunk("stop")],
+    ]);
+    const { host } = memoryHost();
+    const result = await runAgentTurn({
+      prompt: "x",
+      model: "sol-6.1",
+      client: client(script.fetcher),
+      host,
+    });
+    expect(result).toMatchObject({ type: "done", reason: "stop", applied: 5 });
+    const last = script.requests.at(-1)!.body as {
+      messages: { role: string; content: string }[];
+    };
+    const tools = last.messages.filter((m) => m.role === "tool");
+    expect(tools).toHaveLength(5);
+    // Results from steps 1-3 are one-liners by step 6; steps 4-5 are verbatim.
+    expect(
+      tools.slice(0, 3).every((m) => m.content.startsWith("(earlier result)")),
+    ).toBe(true);
+    expect(tools.slice(3).every((m) => m.content.startsWith("{"))).toBe(true);
+    expect(
+      summarizeToolResult(
+        JSON.stringify({ ok: true, revision: 9, summary: "tempo 120" }),
+      ),
+    ).toBe("(earlier result) ok · rev 9 · tempo 120");
+    expect(summarizeToolResult("x".repeat(500)).length).toBeLessThanOrEqual(
+      180,
+    );
+
+    // A turn whose requests outgrow 512 KiB in total ends with a budget error.
+    const big = scriptedFetch(
+      Array.from({ length: 8 }, (_, i) => [
+        ...toolCallChunks(0, `b${i}`, "explain", { text: "y".repeat(30_000) }),
+        finishChunk("tool_calls"),
+      ]),
+    );
+    const capped = await runAgentTurn({
+      prompt: "x",
+      model: "sol-6.1",
+      client: client(big.fetcher),
+      host: memoryHost().host,
+    });
+    expect(capped).toMatchObject({ type: "error", code: "budget" });
+    expect((capped as { message: string }).message).toContain("request budget");
+    expect(big.requests.length).toBeLessThan(8);
   });
 
   test("stops at the tool-call and step budgets", async () => {

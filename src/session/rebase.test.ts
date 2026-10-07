@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createScore, type ScoreOperation } from "../../core/score.ts";
+import { diffRewind } from "./delta.ts";
 import { compositionAt, rebaseOperations } from "./rebase.ts";
 
 const base = createScore({
@@ -69,16 +70,31 @@ describe("rebaseOperations", () => {
     ).toBe(true);
   });
 
-  test("compositionAt trusts only well-formed log entries", () => {
-    const events = [
-      { revision: 1, payload: { before: "r0" } },
-      { revision: 2, payload: {} },
-    ];
-    expect(compositionAt(events, 0)).toBe("r0");
-    expect(compositionAt(events, 1)).toBeUndefined();
-    expect(compositionAt(events, 5)).toBeUndefined();
+  test("compositionAt rewinds through well-formed log entries only", () => {
+    const record = {
+      composition: { v: 3 },
+      events: [
+        { revision: 1, rewind: diffRewind({ v: 0 }, { v: 1 }) },
+        { revision: 2, rewind: diffRewind({ v: 1 }, { v: 2 }) },
+        { revision: 3, rewind: diffRewind({ v: 2 }, { v: 3 }) },
+      ],
+    };
+    expect(compositionAt(record, 0)).toEqual({ v: 0 });
+    expect(compositionAt(record, 2)).toEqual({ v: 2 });
+    expect(compositionAt(record, 3)).toBeUndefined();
+    expect(compositionAt(record, 5)).toBeUndefined();
+    // A compacted (rewind-less) event blocks everything older than it.
+    const compacted = {
+      ...record,
+      events: [{ revision: 1 }, ...record.events.slice(1)],
+    };
+    expect(compositionAt(compacted, 1)).toEqual({ v: 1 });
+    expect(compositionAt(compacted, 0)).toBeUndefined();
     expect(
-      compositionAt([{ revision: 7, payload: { before: 1 } }], 0),
+      compositionAt(
+        { composition: 1, events: [{ revision: 7, rewind: { set: 0 } }] },
+        0,
+      ),
     ).toBeUndefined();
   });
 });

@@ -27,6 +27,7 @@ import {
   inheritedEvents,
   loadSession,
   readCurrentSessionId,
+  sessionPaths,
   updateSessionMeta,
 } from "./store.ts";
 
@@ -144,7 +145,7 @@ describe("session names", () => {
       parent = await appendSessionEvent(
         base.paths,
         parent,
-        { kind: "score.edit", payload: { before: { v: v - 1 } } },
+        { kind: "score.edit", payload: {} },
         { v },
       );
     const fork = await forkSession(dir, parent, "f");
@@ -152,29 +153,31 @@ describe("session names", () => {
     parent = await appendSessionEvent(
       base.paths,
       parent,
-      { kind: "score.edit", payload: { before: { v: 2 } } },
+      { kind: "score.edit", payload: {} },
       { v: 99 },
     );
     expect(fork.events).toHaveLength(0);
     const events = await historyEvents(dir, fork);
     expect(events).toHaveLength(2);
     // Undo restores the composition before the parent's last pre-fork edit.
-    expect(historyTarget(events, "undo")).toEqual({
+    expect(historyTarget(fork.composition, events, "undo")).toEqual({
       revision: 2,
       composition: { v: 1 },
     });
     // After one undo in the fork, the next undo reaches the parent's first edit.
-    const undone = [
-      ...events,
-      {
-        id: "u",
-        revision: 1,
-        kind: UNDO_KIND,
-        payload: { before: { v: 2 } },
-        at: "",
-      },
-    ];
-    expect(historyTarget(undone, "undo")?.composition).toEqual({ v: 0 });
+    const undone = await appendSessionEvent(
+      sessionPaths(dir, fork.sessionId),
+      fork,
+      { kind: UNDO_KIND, payload: { undoneRevision: 2 } },
+      { v: 1 },
+    );
+    expect(
+      historyTarget(
+        undone.composition,
+        await historyEvents(dir, undone),
+        "undo",
+      )?.composition,
+    ).toEqual({ v: 0 });
     // A fork of a fork walks the whole chain.
     const grand = await forkSession(dir, fork, "g");
     expect(await historyEvents(dir, grand)).toHaveLength(2);
