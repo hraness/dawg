@@ -65,6 +65,8 @@ export type WindowPlayer = {
  */
 export interface SessionPort<T> {
   readonly mode: "daemon" | "file";
+  /** This window's presence id, to exclude itself from `presence()`. */
+  readonly clientId: string;
   /** Human-readable status for the activity line. */
   readonly status: string;
   readonly player: WindowPlayer;
@@ -161,6 +163,7 @@ const silentPlayer: WindowPlayer = {
 
 class DaemonPort<T> implements SessionPort<T> {
   public readonly mode = "daemon" as const;
+  public readonly clientId: string;
   public readonly player = silentPlayer;
   public status: string;
   public sync: SyncStatus = "synced";
@@ -168,6 +171,7 @@ class DaemonPort<T> implements SessionPort<T> {
 
   public constructor(private readonly client: DaemonClient) {
     this.status = `dawgd pid ${client.daemonPid}`;
+    this.clientId = client.clientId;
   }
 
   private setSync(sync: SyncStatus): void {
@@ -303,6 +307,7 @@ class DaemonPort<T> implements SessionPort<T> {
 
 class FilePort<T> implements SessionPort<T> {
   public readonly mode = "file" as const;
+  public readonly clientId = randomUUID();
   public status = "file session";
   public readonly sync = "local" as const;
   public readonly player: WindowPlayer;
@@ -313,7 +318,7 @@ class FilePort<T> implements SessionPort<T> {
       lockPath: `${options.paths.record}.audio.lock`,
     });
     this.presenceStore = new FilePresence(options.paths, {
-      clientId: randomUUID(),
+      clientId: this.clientId,
       pid: process.pid,
       label: options.label.slice(0, 128),
       focusedTrackId: options.focusedTrackId,

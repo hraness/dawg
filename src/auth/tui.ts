@@ -55,7 +55,7 @@ export async function tuiAuthCommand(
     else await login("gateway", deps);
   } catch (error) {
     lines.push(
-      `auth failed: ${error instanceof Error ? error.message : String(error)}`,
+      `auth failed · ${error instanceof Error ? error.message : String(error)} · dawg login in a shell`,
     );
   }
   return lines.map((line) => line.slice(0, 240));

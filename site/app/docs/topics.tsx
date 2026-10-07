@@ -206,8 +206,10 @@ export const docsTopics: readonly DocsTopic[] = [
           code={sourceInstallCommands.map((line) => `$ ${line}`).join("\n")}
         />
         <p>
-          dawg is not on npm yet. For sound, install <code>ffplay</code>{" "}
-          (FFmpeg) or SoX; macOS falls back to <code>afplay</code>.
+          dawg is also on npm: <code>npm i -g @hraness/dawg</code> or{" "}
+          <code>bun add -g @hraness/dawg</code>. For sound, install{" "}
+          <code>ffplay</code> (FFmpeg) or SoX; macOS falls back to{" "}
+          <code>afplay</code>.
         </p>
         <h2 id="first-loop">Make a loop</h2>
         <p>Open a terminal in any project folder and run:</p>
@@ -222,11 +224,11 @@ export const docsTopics: readonly DocsTopic[] = [
           copy={false}
           code={[
             "tempo 96",
-            "track drums",
+            "/track drums",
             "pattern kick 0 2.5 4 6.5",
             "pattern snare 1 3 5 7",
             "pattern hat every 0.5",
-            "track bass",
+            "/track bass",
             "instrument bass",
             "add A2 at 0 for 0.75",
             "reverb 0.2",

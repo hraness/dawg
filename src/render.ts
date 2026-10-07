@@ -31,6 +31,10 @@ export async function runRenderCommand(
   stderr: Output,
 ): Promise<number> {
   const rest = argv.slice(1);
+  if (rest.includes("--help") || rest.includes("-h")) {
+    stdout.write(`${RENDER_USAGE}\n`);
+    return 0;
+  }
   const options = new Map<string, string>();
   const positional: string[] = [];
   for (let index = 0; index < rest.length; index += 1) {
@@ -38,13 +42,13 @@ export async function runRenderCommand(
     if (arg === "--session" || arg === "--import") {
       const value = rest[index + 1];
       if (value === undefined || value.startsWith("--")) {
-        stderr.write(`${arg} needs a value\n${RENDER_USAGE}\n`);
+        stderr.write(`${arg} needs a value · ${RENDER_USAGE}\n`);
         return 2;
       }
       options.set(arg, value);
       index += 1;
     } else if (arg.startsWith("--")) {
-      stderr.write(`unknown option ${arg}\n${RENDER_USAGE}\n`);
+      stderr.write(`unknown option · ${arg} · ${RENDER_USAGE}\n`);
       return 2;
     } else positional.push(arg);
   }
@@ -89,11 +93,11 @@ async function loadScore(
       ? await readCurrentSessionId(workspace)
       : await resolveSessionArg(workspace, query);
   if (sessionId === undefined)
-    throw new Error("no session here; run `dawg` first or pass --import");
+    throw new Error("no session here · run dawg first or pass --import");
   const record = await loadSession<unknown>(
     sessionPaths(workspace, sessionId),
   ).catch(() => {
-    throw new Error(`no session named "${query ?? sessionId}"`);
+    throw new Error(`no session named "${query ?? sessionId}" · dawg sessions`);
   });
   return scoreFromJSON(record.composition);
 }

@@ -5,7 +5,7 @@ dawg is a free, MIT-licensed, local-first music workstation for the terminal, bu
 ## Platform
 
 - Repository: [hraness/dawg](https://github.com/hraness/dawg), MIT.
-- CLI: `dawg`. Package: `@hraness/dawg`, distributed as a GitHub Release tarball with `SHA256SUMS` and a build provenance attestation. It is not on npm yet.
+- CLI: `dawg`. Package: `@hraness/dawg`, distributed as a GitHub Release tarball with `SHA256SUMS` and a build provenance attestation, and published to npm (`npm i -g @hraness/dawg`, `bun add -g @hraness/dawg`).
 - Runtime: Bun 1.3.14 or newer. The CLI has no runtime dependencies.
 - Site: [dawg.sh](https://dawg.sh), this `site/` directory, deployed by Vercel project `dawg` with root directory `site/`.
 
@@ -51,7 +51,7 @@ Only what `README.md`, `DAWG.md` and `CHANGELOG.md` on `main` describe:
 
 ## Constraints
 
-- No npm install line until `@hraness/dawg` is published.
+- Install lines, in order: the dawg.sh script, then `npm i -g @hraness/dawg` / `bun add -g @hraness/dawg`, then the release tarball.
 - Until a GitHub Release exists, the install script exits with “the first release of dawg is coming soon” and the site shows the source install instead of a tarball link.
 - No MIDI, plugin, DAW-export or sample claims; dawg has none of them.
 - No comparison table against other music tools until it can be sourced; dawg's terminal-and-agent combination has no like-for-like peer worth a table.

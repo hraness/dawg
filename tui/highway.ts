@@ -11,6 +11,7 @@
  */
 
 import { CellBuffer } from "./screen.ts";
+import { truncate } from "./text.ts";
 import {
   accentStyle,
   onBackground,
@@ -472,6 +473,11 @@ export function paintHighway(
   const rowBeat = (row: number): number => beat + (hitRow - row) / rowsPerBeat;
   const legendRow = layout.legendRow;
   const lastNoteRow = (legendRow ?? region.height) - 1;
+  // Nothing to label yet: bar numbers and the lane legend stay off and a
+  // centred hint says how to start. The hit line and grid still draw.
+  const empty =
+    score.notes.length === 0 &&
+    !(score.layers ?? []).some((layer) => layer.notes.length > 0);
 
   // Beat, bar, and loop rules of increasing strength.
   for (let row = 0; row <= lastNoteRow; row += 1) {
@@ -497,7 +503,7 @@ export function paintHighway(
       if (!isBar && !isLoop && (column - gutter) % 2 === 1) continue;
       painter.put(column, row, glyph, style);
     }
-    if (gutter > 0 && (isBar || isLoop)) {
+    if (gutter > 0 && (isBar || isLoop) && !empty) {
       const label = isLoop
         ? glyphs.loop
         : String(Math.floor(inLoop / beatsPerBar) + 1);
@@ -553,8 +559,18 @@ export function paintHighway(
     }
   }
 
+  if (empty) {
+    const name = score.trackName ?? score.trackId ?? "track";
+    const start = projection.kind === "pitch" ? "add C4 at 0" : "hit kick at 0";
+    const text = truncate(`${name} · empty · ${start} to start`, areaWidth);
+    const x = gutter + Math.max(0, Math.floor((areaWidth - text.length) / 2));
+    const y = Math.max(0, Math.floor(hitRow / 2));
+    for (let index = 0; index < text.length; index += 1)
+      painter.put(x + index, y, text[index]!, roles.muted);
+  }
+
   // Legend for drum voices (or C-octave markers for pitch lanes).
-  if (legendRow !== undefined && projection.label) {
+  if (legendRow !== undefined && projection.label && !empty) {
     let nextFree = 0;
     for (let lane = 0; lane < layout.laneCount; lane += 1) {
       const label = projection.label(lane);

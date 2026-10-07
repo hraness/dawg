@@ -234,7 +234,10 @@ describe("session names", () => {
       a.record.sessionId,
     );
     expect(await resolveSessionArg(dir, "b-id")).toBe("b-id");
-    expect(await resolveSessionArg(dir, "brand-new")).toBe("brand-new");
+    // An id-shaped typo is an error, never a silently created session.
+    await expect(resolveSessionArg(dir, "brand-new")).rejects.toThrow(
+      'no session named "brand-new" · dawg sessions',
+    );
     // Duplicate names (e.g. two legacy records) need an id.
     await ensureSession(initial, {
       workspace: dir,

@@ -102,6 +102,8 @@ export function parseEffectLane(
 }
 
 export type MusicResult = Readonly<{
+  /** `true` when the command applied; `false` carries a failure message. */
+  ok: boolean;
   message: string;
   next?: TrackScore;
   kind?: string;
@@ -264,11 +266,12 @@ export function applyMusicCommand(
   newId: (index: number) => string,
 ): MusicResult {
   const track = score.tracks.find((candidate) => candidate.id === trackId);
-  if (!track) return { message: `no track · ${trackId}` };
+  if (!track) return { ok: false, message: `no track · ${trackId}` };
 
   if (command.type === "solo") {
     const next = updateTrack(score, trackId, { solo: command.solo });
     return {
+      ok: true,
       message: `${command.solo ? "solo" : "unsolo"} · ${trackId}`,
       next,
       kind: "score.track",
@@ -281,6 +284,7 @@ export function applyMusicCommand(
         ? { cutoff: command.cutoff, resonance: command.resonance }
         : null;
     return {
+      ok: true,
       message: filter
         ? `filter · ${filter.cutoff} Hz res ${filter.resonance}`
         : "filter · off",
@@ -295,6 +299,7 @@ export function applyMusicCommand(
         ? { beats: command.beats, feedback: command.feedback, mix: command.mix }
         : null;
     return {
+      ok: true,
       message: delay
         ? `delay · ${delay.beats} beats fb ${delay.feedback} mix ${delay.mix}`
         : "delay · off",
@@ -309,6 +314,7 @@ export function applyMusicCommand(
         ? { mix: command.mix, size: command.size }
         : null;
     return {
+      ok: true,
       message: reverb
         ? `reverb · mix ${reverb.mix} size ${reverb.size}`
         : "reverb · off",
@@ -334,9 +340,10 @@ export function applyMusicCommand(
       merged.set(tick, { tick, value: command.value });
       points = [...merged.values()].sort((a, b) => a.tick - b.tick);
       if (points.length > SCORE_LIMITS.maxAutomationPoints)
-        return { message: `${parameter} automation is full` };
+        return { ok: false, message: `${parameter} automation is full` };
     }
     return {
+      ok: true,
       message: `automation · ${parameter} ${points.length} point${points.length === 1 ? "" : "s"}`,
       next: setTrackAutomation(score, trackId, parameter, points),
       kind: "score.automation",
@@ -345,7 +352,10 @@ export function applyMusicCommand(
   }
 
   if (!isDrumInstrument(track.instrument))
-    return { message: `${trackId} is not a drum track · try instrument kit` };
+    return {
+      ok: false,
+      message: `${trackId} is not a drum track · try instrument kit`,
+    };
 
   if (command.type === "drum-clear") {
     const removed = score.notes.filter(
@@ -353,12 +363,14 @@ export function applyMusicCommand(
         note.trackId === trackId &&
         drumVoiceForPitch(note.pitch) === command.voice,
     );
-    if (removed.length === 0) return { message: `no ${command.voice} hits` };
+    if (removed.length === 0)
+      return { ok: false, message: `no ${command.voice} hits` };
     const next = createScore({
       ...score.toJSON(),
       notes: score.notes.filter((note) => !removed.includes(note)),
     });
     return {
+      ok: true,
       message: `cleared ${removed.length} ${command.voice} hit${removed.length === 1 ? "" : "s"}`,
       next,
       kind: "score.drums",
@@ -371,7 +383,7 @@ export function applyMusicCommand(
       ? command.beats
       : everyBeats(command.from, command.step, score.bars * score.beatsPerBar);
   if (beats.length > MAX_PATTERN_HITS)
-    return { message: `pattern exceeds ${MAX_PATTERN_HITS} hits` };
+    return { ok: false, message: `pattern exceeds ${MAX_PATTERN_HITS} hits` };
   const pitch = drumVoicePitch(command.voice);
   const existing = new Set(
     score.notes
@@ -393,14 +405,19 @@ export function applyMusicCommand(
       velocity: command.velocity,
     });
   }
-  if (hits.length === 0) return { message: `${command.voice} already there` };
+  if (hits.length === 0)
+    return { ok: false, message: `${command.voice} already there` };
   if (score.notes.length + hits.length > SCORE_LIMITS.maxNotes)
-    return { message: `score is full (${SCORE_LIMITS.maxNotes} notes)` };
+    return {
+      ok: false,
+      message: `score is full (${SCORE_LIMITS.maxNotes} notes)`,
+    };
   const next = createScore({
     ...score.toJSON(),
     notes: [...score.notes, ...hits],
   });
   return {
+    ok: true,
     message: `+${hits.length} ${command.voice} hit${hits.length === 1 ? "" : "s"}`,
     next,
     kind: "score.drums",

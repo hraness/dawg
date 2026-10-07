@@ -132,7 +132,8 @@ type Status = { name: string; revision: number; digest: string; mode: string };
  * first match whose revision equals the header's is the current reading.
  */
 async function status(w: Window): Promise<Status> {
-  const marker = /status · (.+?) · rev (\d+) · ([0-9a-f]{16}) · (daemon|file)/;
+  const marker =
+    /status · (.+?) · rev (\d+) · ([0-9a-f]{16}) · (shared via dawgd|saved locally · no daemon)/;
   await send(w, "/status");
   let found: RegExpMatchArray | null = null;
   await until(
@@ -172,7 +173,7 @@ async function converged(ws: readonly Window[]): Promise<Status> {
   const statuses: Status[] = [];
   for (const w of ws) statuses.push(await status(w));
   for (const s of statuses) {
-    expect(s.mode).toBe("daemon");
+    expect(s.mode).toBe("shared via dawgd");
     expect(s.revision).toBe(statuses[0]!.revision);
     expect(s.digest).toBe(statuses[0]!.digest);
     expect(s.name).toBe(statuses[0]!.name);
@@ -400,6 +401,45 @@ test.skipIf(!supported)(
   },
   120_000,
 );
+
+test("argument mistakes and --version never create .dawg/", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "dawg-args-"));
+  workspaces.push(workspace);
+  const run = async (argv: string[]) => {
+    const proc = Bun.spawn([process.execPath, MAIN, ...argv], {
+      cwd: workspace,
+      env: env(workspace),
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [code, stdout, stderr] = await Promise.all([
+      proc.exited,
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
+    return { code, stdout, stderr };
+  };
+  const version = await run(["--version"]);
+  expect(version.code).toBe(0);
+  expect(version.stdout).toMatch(/^dawg \d+\.\d+\.\d+/);
+  const bogus = await run(["bogus"]);
+  expect(bogus.code).toBe(2);
+  expect(bogus.stderr).toBe("unknown command · bogus · dawg --help\n");
+  const typo = await run(["--sesion", "x"]);
+  expect(typo.code).toBe(2);
+  expect(typo.stderr).toContain("unknown option · --sesion");
+  const missing = await run(["--session", "nope"]);
+  expect(missing.code).toBe(1);
+  expect(missing.stderr).toBe('no session named "nope" · dawg sessions\n');
+  const renderHelp = await run(["render", "--help"]);
+  expect(renderHelp.code).toBe(0);
+  expect(renderHelp.stdout).toContain("usage: dawg render <out.wav>");
+  const sessionsHelp = await run(["sessions", "--help"]);
+  expect(sessionsHelp.code).toBe(0);
+  expect(sessionsHelp.stdout).toContain("usage: dawg sessions");
+  expect(await readdir(workspace)).toEqual([]);
+});
 
 test("demo --track drums seeds a drum pattern, not melodic notes", async () => {
   const workspace = await mkdtemp(join(tmpdir(), "dawg-demo-"));
