@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.5.0";
+export const SDK_VERSION = "1.6.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -1190,6 +1190,72 @@ export type EffectParams = Readonly<Record<string, number | string | boolean>>;
  */
 export type FxInput = Readonly<Record<string, EffectParams>>;
 
+/**
+ * Synth voice parameters by Strudel name; only the ones given are stored
+ * and the rest take dawg's defaults. Lanes go under `automation.fx` as
+ * `"synth-<param>"` (e.g. `"synth-lpf"`), read at each note's onset.
+ * Every parameter, range and default: **Synth** in DAWG.md.
+ */
+export type SynthInput = Readonly<{
+  attack?: number;
+  decay?: number;
+  sustain?: number;
+  release?: number;
+  gain?: number;
+  /** Pink noise mixed into the oscillator, 0..1. */
+  noise?: number;
+  /** Crackle impulse density. */
+  density?: number;
+  /** Unison voices (supersaw defaults to 5). */
+  unison?: number;
+  /** Unison detune spread in semitones. */
+  detune?: number;
+  /** Stereo spread of the unison voices, 0..1. */
+  spread?: number;
+  /** Pulse width 0..1 (`pulse`). */
+  pw?: number;
+  pwrate?: number;
+  pwsweep?: number;
+  /** Vibrato rate (Hz) and depth (semitones). */
+  vib?: number;
+  vibmod?: number;
+  /** Pitch envelope depth (semitones) and shape. */
+  penv?: number;
+  pattack?: number;
+  pdecay?: number;
+  psustain?: number;
+  prelease?: number;
+  pcurve?: number;
+  panchor?: number;
+  lpf?: number;
+  lpq?: number;
+  lpenv?: number;
+  hpf?: number;
+  hpq?: number;
+  hpenv?: number;
+  bpf?: number;
+  bpq?: number;
+  bpenv?: number;
+  /** `12db`, `24db` or `ladder`. */
+  ftype?: string;
+  /** FM index and harmonicity ratio; `fm2`…`fm8` add operators. */
+  fm?: number;
+  fmh?: number;
+  fmattack?: number;
+  fmdecay?: number;
+  fmsustain?: number;
+  fmrelease?: number;
+  /** `lin` or `exp`. */
+  fmenv?: string;
+  /** `sine`, `sawtooth`, `square` or `triangle`. */
+  fmwave?: string;
+  /** Harmonic amplitudes for `user` (or any basic waveform). */
+  partials?: readonly number[];
+  phases?: readonly number[];
+  /** Any other Strudel synth parameter, e.g. `lpattack`, `fmh3`. */
+  [param: string]: number | string | boolean | readonly number[] | undefined;
+}>;
+
 /** Input to `track()`. Omitted fields keep dawg's defaults. */
 export type TrackInput = Readonly<{
   /** Stable id dawg assigned; defaults to the slug of `name`. Keep it when editing. */
@@ -1198,7 +1264,9 @@ export type TrackInput = Readonly<{
   name: string;
   /**
    * Synth voice (`sine`, `piano`, `pluck`, `bass`, `saw`, `square`,
-   * `triangle`), `kit` for drums, or `sampler(...)`. Default `sine`.
+   * `triangle`, and Strudel's `sawtooth`, `supersaw`, `pulse`, `user`,
+   * `white`, `pink`, `brown`, `crackle`), `kit` for drums, or
+   * `sampler(...)`. Default `sine`.
    */
   instrument?: string | SamplerSpec;
   /**
@@ -1207,6 +1275,8 @@ export type TrackInput = Readonly<{
    * voices.
    */
   kit?: string;
+  /** Synth voice parameters, Strudel names (`{ attack: 0.01, lpf: 800 }`). */
+  synth?: SynthInput;
   muted?: boolean;
   /** When any track is soloed only soloed tracks play. */
   solo?: boolean;
@@ -1286,6 +1356,7 @@ export type TrackSpec = Readonly<{
   > | null;
   reverb: Readonly<{ mix: number; size: number } & Partial<ReverbInput>> | null;
   fx: FxInput | null;
+  synth: SynthInput | null;
   sampler: SamplerSpec | null;
   automation: Readonly<Required<AutomationInput>>;
   /** Every hit resolved to its pitch slot. */
@@ -1454,6 +1525,7 @@ export function track(input: TrackInput): TrackSpec {
           ),
         });
   const fx = fxInput(input.fx, name);
+  const synth = synthInput(input.synth, name);
   return Object.freeze({
     kind: "track",
     id,
@@ -1468,6 +1540,7 @@ export function track(input: TrackInput): TrackSpec {
     delay,
     reverb,
     fx,
+    synth,
     sampler: samplerSpec,
     automation: Object.freeze({
       volume: lane("volume"),
@@ -1527,6 +1600,22 @@ function fxInput(input: unknown, name: string): FxInput | null {
     for (const [key, value] of Object.entries(params))
       values[key] = effectValue(value, `${name} fx.${effect}.${key}`);
     out[effect] = Object.freeze(values);
+  }
+  return Object.keys(out).length > 0 ? Object.freeze(out) : null;
+}
+
+function synthInput(input: unknown, name: string): SynthInput | null {
+  if (input === undefined || input === null) return null;
+  if (!isRecord(input))
+    throw new DawgSdkError(`track ${name}: synth must be an object`);
+  const out: Record<string, EffectValue | readonly number[]> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value === undefined) continue;
+    out[key] = Array.isArray(value)
+      ? Object.freeze(
+          value.map((n, index) => finite(n, `${name} synth.${key}[${index}]`)),
+        )
+      : effectValue(value, `${name} synth.${key}`);
   }
   return Object.keys(out).length > 0 ? Object.freeze(out) : null;
 }
@@ -1669,6 +1758,7 @@ export type ScoreTrack = Readonly<{
   reverb?: TrackSpec["reverb"] & object;
   fx?: FxInput;
   fxAutomation?: Readonly<Record<string, readonly ScorePoint[]>>;
+  synth?: SynthInput;
   sampler?: Readonly<{
     voices: Readonly<Record<string, ScoreSampleRef>>;
     mode: "oneshot" | "keyed";
@@ -1765,6 +1855,7 @@ export function song(input: SongInput): Song {
       stored.delayMixAutomation = delayMixAutomation;
     if (t.reverb) stored.reverb = t.reverb;
     if (t.fx) stored.fx = t.fx;
+    if (t.synth) stored.synth = t.synth;
     const fxLaneEntries = Object.entries(t.automation.fx ?? {})
       .map(([key, lane]) => [key, points(lane)] as const)
       .filter(([, lane]) => lane.length > 0);

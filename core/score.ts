@@ -20,6 +20,7 @@ import {
   type FxLane,
   type TrackFx,
 } from "./fx.ts";
+import { normalizeSynth, type TrackSynth } from "./synth.ts";
 
 export const SCORE_VERSION = 1 as const;
 export const DEFAULT_TICKS_PER_BEAT = 480 as const;
@@ -133,6 +134,12 @@ export type Track = Readonly<{
   fx?: TrackFx;
   /** Optional: automation for `fx` parameters, keyed `<effect>-<param>`. */
   fxAutomation?: Readonly<Partial<Record<FxLane, readonly AutomationPoint[]>>>;
+  /**
+   * Optional: synth voice parameters (`core/synth.ts`), Strudel names.
+   * Only the parameters a document sets are stored; lanes are
+   * `fxAutomation["synth-<param>"]`, read at note onsets.
+   */
+  synth?: TrackSynth;
   /**
    * Score v2: sample voices; present exactly when `instrument` is
    * `"sampler"`. Documents without it decode unchanged.
@@ -366,6 +373,7 @@ export type TrackPatch = Readonly<
     kit?: string | null;
     fx?: TrackFx | null;
     fxAutomation?: Track["fxAutomation"] | null;
+    synth?: TrackSynth | null;
   }
 >;
 
@@ -395,6 +403,7 @@ export type TrackInput = Readonly<
     | "kit"
     | "fx"
     | "fxAutomation"
+    | "synth"
   > &
     Pick<Track, "id"> & {
       filter?: TrackFilter | null;
@@ -405,6 +414,7 @@ export type TrackInput = Readonly<
       kit?: string | null;
       fx?: TrackFx | null;
       fxAutomation?: Track["fxAutomation"] | null;
+      synth?: TrackSynth | null;
     }
 >;
 
@@ -1032,6 +1042,7 @@ function normalizeTrack(input: unknown): Track {
   const reverb = normalizeReverb(input.reverb);
   const fx = fxOrThrow(() => normalizeFx(input.fx));
   const fxAutomation = normalizeFxAutomation(input.fxAutomation);
+  const synth = fxOrThrow(() => normalizeSynth(input.synth));
   const sampler = normalizeSampler(input.sampler);
   const rhythm = normalizeRhythm(input.rhythm, id);
   let kit: string | undefined;
@@ -1079,6 +1090,7 @@ function normalizeTrack(input: unknown): Track {
     ...(reverb ? { reverb } : {}),
     ...(fx ? { fx } : {}),
     ...(fxAutomation ? { fxAutomation } : {}),
+    ...(synth ? { synth } : {}),
     ...(sampler ? { sampler } : {}),
     ...(rhythm ? { rhythm } : {}),
     ...(kit ? { kit } : {}),

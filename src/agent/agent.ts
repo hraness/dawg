@@ -196,6 +196,7 @@ export const AGENT_SYSTEM_PROMPT = [
   "Prefer a few well-formed calls (one add_notes call per track part) over many tiny ones.",
   'For drums, create a track with instrument "kit" and prefer set_rhythm (Euclidean rows: pulses over steps, rotate, repeats for rolls, accent, probability, swing) so the beat stays editable as parameters; for a genre groove start from apply_drum_pattern (list_drum_patterns) and pick a sound with set_drum_kit; use add_drums only for one-off fills. Drum pitches select voices, so do not use add_notes for beats.',
   CHORD_PROCESS,
+  "Synth voices: set_synth shapes a synth track with Strudel params (ADSR, lpf/lpenv filter envelopes, fm/fmh, supersaw unison/detune, vib, penv, noise) or a preset (pad lead pluck bass keys bell…).",
   "Effects (set_fx; set_effects and set_automation): the brief's effects list is the fixed chain order with each effect's simple params. set_fx turns an effect on with good defaults, loads a preset or sets params by dawg or Strudel name. Lanes: volume, pan, filter, resonance, delay-feedback, delay-mix and <effect>-<param> (e.g. autofilter-cutoff).",
   "If a call is rejected, read the diagnostic and either fix the arguments or stop.",
   WORKSPACE_PROMPT,

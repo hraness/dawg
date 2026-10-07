@@ -75,7 +75,12 @@ const rich = createScore({
         distort: { drive: 3, type: "fold" },
         autofilter: { shape: "random", sync: 0.25 },
       },
+      synth: { attack: 0.01, lpf: 1200, lpenv: 2, fm: 1.5, partials: [1, 0.5] },
       fxAutomation: {
+        "synth-lpf": [
+          { tick: 0, value: 600 },
+          { tick: 1920, value: 3000 },
+        ],
         "autofilter-cutoff": [
           { tick: 0, value: 400 },
           { tick: 1920, value: 4000 },
@@ -162,6 +167,10 @@ describe("printer", () => {
     expect(lead).toContain('    distort: { drive: 3, type: "fold" },');
     expect(lead).toContain('      "autofilter-cutoff": [');
     expect(lead).toContain('      "reverb-mix": [[0, 0.2]],');
+    expect(lead).toContain(
+      "  synth: { attack: 0.01, lpf: 1200, lpenv: 2, fm: 1.5, partials: [1, 0.5] },",
+    );
+    expect(lead).toContain('      "synth-lpf": [');
   });
 
   test("output is prettier-stable", async () => {

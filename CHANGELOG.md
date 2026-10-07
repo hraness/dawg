@@ -14,6 +14,13 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - **`fx` prompt command**: `fx delay mix 0.3`, `fx filter type hpf cutoff 300`, `fx chorus preset wide`, `fx tremolo off`. The Effects menu lists the core effects first, with presets. The agent's new `set_fx` tool sets the same parameters.
 - Older projects and sessions load and sound exactly as before. The `dawg` SDK is 1.5.0 (additive).
 
+### Synth
+
+- **A full synth voice with Strudel's parameters.** `synth` on a track takes Strudel's names and aliases: sine, sawtooth, square, triangle, supersaw, pulse, additive `user` and white/pink/brown/crackle noise; `noise`/`density`; `unison`/`detune`/`spread`; pulse width with `pwrate`/`pwsweep`; eight FM operators (`fm`, `fmh`, an ADSR, `fmenv`, `fmwave`); ADSR; a pitch envelope (`penv`…); vibrato; and low-, high- and band-pass filters with envelopes and `ftype`.
+- **Presets**: pad, lead, pluck, bass, sub, acid, keys, bell, organ, strings, brass, wind, chip.
+- **`synth` prompt command**: `synth preset pad`, `synth lpf 800 lpenv 3`, `synth fm 4 fmh 1.5`, `synth reset`. The menu's Parameters section shows the preset and simple parameters, with every parameter under **advanced**. The agent's new `set_synth` tool sets the same parameters. Every numeric parameter has a `synth-<param>` automation lane.
+- Older projects and sessions load and sound exactly as before. The `dawg` SDK is 1.6.0 (additive).
+
 ### Rhythm (Euclidean rows)
 
 - **Drum parts as generators.** A kit or oneshot sampler track can carry `rhythm` rows: `euclid("kick", 4, 16)`, `euclid("hat", 7, 16, 2, { swing: 0.15 })`, `grid("snare", "....X.......x...")`. dawg expands them into ordinary notes, so you and the agent edit four numbers instead of sixteen hits, and rendering, sync and diffs are unchanged. Patterns and rotation match Strudel's `euclid`/`euclidRot`.

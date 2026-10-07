@@ -14,6 +14,14 @@ import {
   samplerTailSeconds,
 } from "./sampler.ts";
 import { EFFECT_NAMES, FX_PRESETS, effectSpec } from "../../core/fx.ts";
+import { seededRandom } from "./random.ts";
+import {
+  isStereoVoice,
+  renderSynthNote,
+  synthTailSeconds,
+  usesSynthVoice,
+} from "./synth/voice.ts";
+import { legacyWave } from "./synth/oscillators.ts";
 import { EMPTY_SAMPLE_BANK, sampleKey, type SampleBank } from "./samples.ts";
 import { synthKit } from "../../core/kits.ts";
 import { kitDrumSample, kitTailSeconds, newKitVoiceState } from "./kits.ts";
@@ -64,6 +72,15 @@ export const AVAILABLE_INSTRUMENTS = Object.freeze([
   "square",
   "triangle",
   "kit",
+  // Synth-voice sounds (core/synth.ts), Strudel names; `synth` shapes them.
+  "sawtooth",
+  "supersaw",
+  "pulse",
+  "user",
+  "white",
+  "pink",
+  "brown",
+  "crackle",
 ] as const);
 
 /** Per-track effects understood by the renderer and the agent, in chain
@@ -164,12 +181,14 @@ export class StemRenderer {
   private renders = 0;
   private scratch: {
     dry: Float64Array;
+    dryR: Float64Array;
     left: Float64Array;
     right: Float64Array;
     mixL: Float64Array;
     mixR: Float64Array;
   } = {
     dry: new Float64Array(0),
+    dryR: new Float64Array(0),
     left: new Float64Array(0),
     right: new Float64Array(0),
     mixL: new Float64Array(0),
@@ -195,9 +214,13 @@ export class StemRenderer {
     const reverbTail = Math.max(0, ...score.tracks.map(reverbTailFor));
     const bank = options.samples ?? EMPTY_SAMPLE_BANK;
     // Zero without sampler voices, so synth-only renders are unchanged.
+    // Zero without synth-voice tracks, so legacy renders are unchanged.
     const samplerTail = Math.min(
       MAX_LOOP_TAIL_SECONDS,
-      samplerTailSeconds(score, bank, sampleRate),
+      Math.max(
+        samplerTailSeconds(score, bank, sampleRate),
+        ...score.tracks.map(synthTailSeconds),
+      ),
     );
     let frames: number;
     let samples: number;
@@ -236,7 +259,7 @@ export class StemRenderer {
       tempoBpm: score.tempoBpm,
     };
     this.renders += 1;
-    const { dry, left, right, mixL, mixR } = this.scratchFor(samples);
+    const { dry, dryR, left, right, mixL, mixR } = this.scratchFor(samples);
     mixL.fill(0);
     mixR.fill(0);
     const tracks = new Map(score.tracks.map((track) => [track.id, track]));
@@ -264,8 +287,27 @@ export class StemRenderer {
             }
           : { left, right };
         dry.fill(0);
+        const synthVoice = !sampler && usesSynthVoice(track);
+        const stereo = synthVoice && isStereoVoice(track);
+        if (stereo) dryR.fill(0);
         if (sampler) {
           if (track) renderSamplerNotes(dry, notes, track, context, bank);
+        } else if (synthVoice && track) {
+          const gainAt = (tick: number) => trackGainAt(track, tick);
+          const voice = { ...context, ticksPerBeat: score.ticksPerBeat };
+          for (const note of notes) {
+            const { start, length } = noteSpan(note, context);
+            renderSynthNote(
+              dry,
+              stereo ? dryR : undefined,
+              note,
+              track,
+              start,
+              length,
+              voice,
+              gainAt,
+            );
+          }
         } else {
           const drums = isDrumInstrument(track?.instrument);
           for (const note of notes) {
@@ -274,7 +316,15 @@ export class StemRenderer {
           }
         }
         if (track) applyMonoChain(dry, track, context);
-        applyPan(dry, target.left, target.right, track, context);
+        if (stereo && track) applyMonoChain(dryR, track, context);
+        applyPan(
+          dry,
+          target.left,
+          target.right,
+          track,
+          context,
+          stereo ? dryR : undefined,
+        );
         if (track) applyStereoChain(target.left, target.right, track, context);
         stem = {
           key,
@@ -319,6 +369,7 @@ export class StemRenderer {
     if (this.scratch.dry.length < samples) {
       this.scratch = {
         dry: new Float64Array(samples),
+        dryR: new Float64Array(samples),
         left: new Float64Array(samples),
         right: new Float64Array(samples),
         mixL: new Float64Array(samples),
@@ -328,6 +379,7 @@ export class StemRenderer {
     const view = (buffer: Float64Array) => buffer.subarray(0, samples);
     return {
       dry: view(this.scratch.dry),
+      dryR: view(this.scratch.dryR),
       left: view(this.scratch.left),
       right: view(this.scratch.right),
       mixL: view(this.scratch.mixL),
@@ -476,8 +528,7 @@ function renderToneNote(
       0.28 *
       trackGainAt(track, note.startTick + elapsed / samplesPerTick);
     const phase = (frequency * elapsed) / sampleRate;
-    target[index]! +=
-      synthSample(instrument, phase, frequency, sampleRate) * envelope;
+    target[index]! += legacyWave(instrument, phase) * envelope;
   }
 }
 
@@ -584,6 +635,7 @@ function applyPan(
   right: Float64Array,
   track: Track | undefined,
   context: RenderContext,
+  dryRight?: Float64Array,
 ): void {
   const lane = track?.panAutomation ?? [];
   const staticPan = track?.pan ?? 0;
@@ -599,55 +651,9 @@ function applyPan(
       );
     const sample = dry[index]!;
     left[index] = sample * gainL;
-    right[index] = sample * gainR;
+    // A stereo voice pans its own right channel the same way.
+    right[index] = (dryRight ? dryRight[index]! : sample) * gainR;
   }
-}
-
-/** FNV-1a seeded mulberry32: integer-only, so identical on every platform. */
-function seededRandom(seed: string): () => number {
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < seed.length; index += 1) {
-    hash ^= seed.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193) >>> 0;
-  }
-  let state = hash;
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0;
-    let value = Math.imul(state ^ (state >>> 15), 1 | state);
-    value = (value + Math.imul(value ^ (value >>> 7), 61 | value)) ^ value;
-    return ((value ^ (value >>> 14)) >>> 0) / 4_294_967_296;
-  };
-}
-
-/** A tiny deterministic instrument bank. Names come from the score's track metadata. */
-function synthSample(
-  instrument: string,
-  phase: number,
-  frequency: number,
-  sampleRate: number,
-): number {
-  const name = instrument.trim().toLowerCase();
-  const cycle = phase - Math.floor(phase);
-  const sine = Math.sin(2 * Math.PI * phase);
-  if (name.includes("square")) return cycle < 0.5 ? 1 : -1;
-  if (name.includes("saw")) return 2 * cycle - 1;
-  if (name.includes("triangle")) return 1 - 4 * Math.abs(cycle - 0.5);
-  if (name.includes("bass")) {
-    // A rounded fundamental plus a quiet octave gives bass tracks useful weight.
-    return Math.tanh(
-      0.9 * Math.sin(2 * Math.PI * phase) +
-        0.25 * Math.sin(4 * Math.PI * phase),
-    );
-  }
-  if (name.includes("piano") || name.includes("pluck")) {
-    // Add stable harmonics; the envelope above supplies the note decay.
-    const harmonic =
-      Math.sin(4 * Math.PI * phase) * 0.28 +
-      Math.sin(6 * Math.PI * phase) * 0.12;
-    return Math.tanh(sine + harmonic);
-  }
-  // Unknown instruments deliberately fall back to the original sine voice.
-  return sine;
 }
 
 export function encodeWav(

@@ -177,6 +177,37 @@ describe("edit menu", () => {
     });
   });
 
+  test("Parameters: synth preset first, simple params, then advanced groups", () => {
+    const menu = new EditMenu();
+    const ctx = context();
+    menu.show(ctx);
+    select(menu, ctx, "Parameters");
+    menu.key("\r", ctx);
+    const labels = menu.view(ctx).items.map((row) => row.label.split(" ")[0]);
+    expect(labels.slice(0, 3)).toEqual(["instrument", "preset", "attack"]);
+    expect(labels.at(-1)).toBe("advanced");
+    select(menu, ctx, "attack");
+    expect(menu.key(RIGHT, ctx)).toMatchObject({ type: "run" });
+    select(menu, ctx, "lpf");
+    expect(menu.view(ctx).items[menu.view(ctx).index]!.label).toContain("off");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "synth lpf 2000",
+    });
+    select(menu, ctx, "advanced");
+    menu.key("\r", ctx);
+    const groups = menu.view(ctx).items.map((row) => row.label);
+    expect(groups.some((label) => label.startsWith("FM 8"))).toBe(true);
+    select(menu, ctx, "pitch envelope");
+    menu.key("\r", ctx);
+    select(menu, ctx, "penv");
+    // Unset → the first nudge writes the default, as effects do.
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "synth penv 0",
+    });
+  });
+
   test("choices open a list; ←/→ cycle without opening", () => {
     const menu = new EditMenu();
     const ctx = context();

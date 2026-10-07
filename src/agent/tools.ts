@@ -9,6 +9,13 @@ import {
 } from "../../core/score.ts";
 import { AVAILABLE_INSTRUMENTS } from "../audio/wav.ts";
 import {
+  SYNTH_PRESETS,
+  SYNTH_SIMPLE,
+  isSynthPreset,
+  synthParamName,
+} from "../../core/synth.ts";
+import { applySynthCommand, type SynthCommand } from "../commands/synth.ts";
+import {
   EFFECT_NAMES,
   FX_PRESETS,
   effectSpec,
@@ -581,6 +588,46 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
             type: "updateTrack",
             trackId,
             patch: effectPatch(track, effect, values ?? null),
+          },
+        ],
+        trackId,
+        summary: `${trackId} ${result.message}`,
+      };
+    },
+  },
+  {
+    name: "set_synth",
+    description:
+      "Shape a synth track's voice with Strudel synth params (attack decay sustain release, lpf lpq lpenv, fm fmh, unison detune spread, vib vibmod, penv, noise, pw…); null unsets one. preset loads a voice (instrument + params); reset clears all.",
+    parameters: {
+      type: "object",
+      properties: {
+        trackId: trackIdSchema,
+        preset: { type: "string", enum: Object.keys(SYNTH_PRESETS) },
+        reset: { type: "boolean" },
+        params: {
+          type: "object",
+          additionalProperties: {
+            type: ["number", "string", "boolean", "array", "null"],
+          },
+        },
+      },
+      additionalProperties: false,
+    },
+    plan(args, context) {
+      const trackId = targetTrack(args, context);
+      const command = synthToolCommand(args);
+      const result = applySynthCommand(context.score, trackId, command);
+      if (!result.ok || !result.next)
+        throw new ToolArgumentError(result.message);
+      const next = result.next.tracks.find((t) => t.id === trackId)!;
+      return {
+        kind: "score",
+        operations: [
+          {
+            type: "updateTrack",
+            trackId,
+            patch: { instrument: next.instrument, synth: next.synth ?? null },
           },
         ],
         trackId,
@@ -1385,6 +1432,41 @@ function fxToolCommand(
     values[param] = value;
   }
   return { type: "fx-set", effect, values };
+}
+
+function synthToolCommand(args: Record<string, unknown>): SynthCommand {
+  if (args.reset === true) return { type: "synth-reset" };
+  if (args.preset !== undefined) {
+    if (typeof args.preset !== "string" || !isSynthPreset(args.preset))
+      throw new ToolArgumentError(
+        `synth presets: ${Object.keys(SYNTH_PRESETS).join(", ")}`,
+      );
+    return { type: "synth-preset", preset: args.preset };
+  }
+  if (args.params === undefined)
+    throw new ToolArgumentError("set_synth needs preset, reset, or params");
+  const params = record(args.params, "params");
+  const values: Record<
+    string,
+    number | string | boolean | readonly number[] | null
+  > = {};
+  for (const [name, value] of Object.entries(params)) {
+    const param = synthParamName(name);
+    if (!param)
+      throw new ToolArgumentError(
+        `synth has no parameter ${name}; basics: ${SYNTH_SIMPLE.join(", ")} (DAWG.md lists all)`,
+      );
+    if (
+      value !== null &&
+      typeof value !== "number" &&
+      typeof value !== "string" &&
+      typeof value !== "boolean" &&
+      !(Array.isArray(value) && value.every((n) => typeof n === "number"))
+    )
+      throw new ToolArgumentError(`synth ${name} must be a value`);
+    values[param] = value as number;
+  }
+  return { type: "synth-set", values };
 }
 
 function targetTrack(args: Record<string, unknown>, context: ToolContext) {

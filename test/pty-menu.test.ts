@@ -12,6 +12,8 @@ type SessionTrack = {
   filter?: { cutoff: number; resonance: number };
   filterAutomation?: { tick: number; value: number }[];
   fx?: Record<string, Record<string, number | string | boolean>>;
+  instrument?: string;
+  synth?: Record<string, number | string | boolean | number[]>;
 };
 
 /** Tracks in the newest composition record under `.dawg/`. */
@@ -152,6 +154,56 @@ test.skipIf(!supported)(
       await waitFor(
         async () => (await bass())?.fx?.tremolo?.depth === 0.8,
         "tremolo depth in session",
+      );
+      for (let i = 0; i < 4; i++) await t.send("\u001b");
+      await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
+    } finally {
+      t.terminal.write("\u0003");
+      await t.proc.exited;
+    }
+  },
+  30_000,
+);
+
+test.skipIf(!supported)(
+  "real PTY: menu loads a synth preset and sets a synth parameter",
+  async () => {
+    const t = await launch(100, 30, {});
+    const bass = async () =>
+      (await sessionTracks(t.cwd)).find((track) => track.id === "bass");
+    try {
+      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.send("\u000b");
+      await t.until(() => t.vt.text().includes("Transport"), "menu root");
+      await t.send("/parameters");
+      await t.send("\r");
+      await t.until(
+        () => t.vt.text().includes("menu › Parameters"),
+        "parameters",
+      );
+      await t.send("/preset");
+      await t.send("\r");
+      await t.until(() => t.vt.text().includes("acid"), "preset list");
+      await t.send("/acid");
+      await t.send("\r");
+      await waitFor(
+        async () => (await bass())?.synth?.lpenv !== undefined,
+        "acid preset in session",
+      );
+      // The choice list stays open (menu convention): Esc clears its
+      // filter, backs out to Parameters, then clears that filter too.
+      for (let i = 0; i < 3; i++) await t.send("\u001b");
+      await t.until(
+        () => t.vt.text().includes("preset           acid"),
+        "parameters shows the preset",
+      );
+      await t.send("/attack");
+      await t.send("\r");
+      for (const key of "0.2") await t.send(key);
+      await t.send("\r");
+      await waitFor(
+        async () => (await bass())?.synth?.attack === 0.2,
+        "synth attack in session",
       );
       for (let i = 0; i < 4; i++) await t.send("\u001b");
       await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
