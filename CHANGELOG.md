@@ -21,6 +21,7 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - An empty track shows `main · empty · add C4 at 0 to start` instead of stray lane labels.
 - `/status` says `shared via dawgd` or `saved locally · no daemon`; auto-names announce as `<name> (auto-named) · rename with /rename <name>`.
 - Docs: header order frozen in a test and corrected, render is stereo, the `meta` frame is listed, one environment table.
+
 ### Agent workspace and web tools
 
 The agent can now work with the project directory and the web. `list_files` and `read_file` cover the whole project except `.dawg/`; `write_file` and `edit_file` are limited to `song.ts` and the focused track's `tracks/<slug>/` directory, write atomically and cap sizes. `web_search` answers through the AI Gateway's server-side search tools when a gateway key is configured (`DAWG_WEB_SEARCH` picks `exa`, `perplexity`, `parallel` or `browserbase`), through OpenRouter's `web` plugin when an OpenRouter key exists, and otherwise through DuckDuckGo; `BRAVE_SEARCH_API_KEY` overrides the chain. `fetch_url` reads one public page with private-address blocking and bounded output. The composition brief includes a bounded project tree and the head of the focused track's `notes.md`. New `trackSlug()` in `core/slug.ts` and an optional `onWorkspaceWrite` host hook.

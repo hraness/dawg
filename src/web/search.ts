@@ -1,6 +1,8 @@
 /**
  * Web search for the agent. Provider chain, first match wins:
  *
+ * 0. `DAWG_WEB_SEARCH` names a backend (`duckduckgo`, `openrouter`, `gateway`,
+ *    `brave`) whose credentials exist → that backend.
  * 1. `BRAVE_SEARCH_API_KEY` set → Brave Web Search API (explicit override).
  * 2. An AI Gateway key → one non-streaming Chat Completions call on a small
  *    model with a gateway server-side search tool (`vercel:exa_search` by
@@ -88,7 +90,7 @@ export type SearchOptions = Readonly<{
   /** AI Gateway key; enables the gateway search tools. */
   gatewayApiKey?: string;
   gatewayBaseUrl?: string;
-  /** `DAWG_WEB_SEARCH`; defaults to `exa`. */
+  /** `DAWG_WEB_SEARCH`: a gateway tool (`exa`, default) or a pinned backend (`duckduckgo`, `openrouter`, `gateway`, `brave`). */
   searchTool?: string;
   /** OpenRouter key; enables the `web` plugin. */
   openRouterApiKey?: string;
@@ -117,17 +119,57 @@ export function parseSearchTool(value: unknown): GatewaySearchTool {
     : "exa";
 }
 
-/** Which provider a search would try first for the given credentials. */
+const PINNABLE: readonly SearchProvider[] = [
+  "brave",
+  "gateway",
+  "openrouter",
+  "duckduckgo",
+];
+
+/** A backend named by `DAWG_WEB_SEARCH` (`duckduckgo`, `openrouter`, ...), if any. */
+export function pinnedSearchProvider(
+  value: unknown,
+): SearchProvider | undefined {
+  const name = typeof value === "string" ? value.trim().toLowerCase() : "";
+  return PINNABLE.find((provider) => provider === name);
+}
+
+/**
+ * Which provider a search tries first: a backend pinned by `searchTool`
+ * when its credentials exist, else Brave (override), gateway, OpenRouter,
+ * DuckDuckGo.
+ */
 export function searchProvider(
   options: Pick<
     SearchOptions,
-    "braveApiKey" | "gatewayApiKey" | "openRouterApiKey"
+    "braveApiKey" | "gatewayApiKey" | "openRouterApiKey" | "searchTool"
   >,
 ): SearchProvider {
+  const pinned = pinnedSearchProvider(options.searchTool);
+  if (pinned && hasCredentials(pinned, options)) return pinned;
   if (present(options.braveApiKey)) return "brave";
   if (present(options.gatewayApiKey)) return "gateway";
   if (present(options.openRouterApiKey)) return "openrouter";
   return "duckduckgo";
+}
+
+function hasCredentials(
+  provider: SearchProvider,
+  options: Pick<
+    SearchOptions,
+    "braveApiKey" | "gatewayApiKey" | "openRouterApiKey"
+  >,
+): boolean {
+  switch (provider) {
+    case "brave":
+      return present(options.braveApiKey);
+    case "gateway":
+      return present(options.gatewayApiKey);
+    case "openrouter":
+      return present(options.openRouterApiKey);
+    default:
+      return true;
+  }
 }
 
 function present(value: string | undefined): value is string {
@@ -569,10 +611,7 @@ export function cleanResultUrl(raw: string): string | undefined {
   } catch {
     return undefined;
   }
-  if (
-    url.hostname.endsWith("duckduckgo.com") &&
-    url.pathname.startsWith("/l/")
-  ) {
+  if (isDuckDuckGoHost(url.hostname) && url.pathname.startsWith("/l/")) {
     const target = url.searchParams.get("uddg");
     if (!target) return undefined;
     return cleanResultUrl(target);
@@ -583,6 +622,12 @@ export function cleanResultUrl(raw: string): string | undefined {
   url.hash = "";
   const cleaned = url.toString();
   return cleaned.length > SEARCH_LIMITS.maxUrlChars ? undefined : cleaned;
+}
+
+/** Exactly `duckduckgo.com` or one of its subdomains; never a lookalike host. */
+function isDuckDuckGoHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return host === "duckduckgo.com" || host.endsWith(".duckduckgo.com");
 }
 
 function makeResult(

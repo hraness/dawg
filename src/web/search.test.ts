@@ -83,6 +83,28 @@ describe("provider chain", () => {
     expect(searchProvider({})).toBe("duckduckgo");
   });
 
+  test("DAWG_WEB_SEARCH pins a backend when its credentials exist", () => {
+    const keys = {
+      braveApiKey: "b",
+      gatewayApiKey: "g",
+      openRouterApiKey: "o",
+    };
+    expect(searchProvider({ ...keys, searchTool: "duckduckgo" })).toBe(
+      "duckduckgo",
+    );
+    expect(searchProvider({ ...keys, searchTool: "openrouter" })).toBe(
+      "openrouter",
+    );
+    expect(searchProvider({ ...keys, searchTool: "gateway" })).toBe("gateway");
+    expect(searchProvider({ ...keys, searchTool: "exa" })).toBe("brave");
+    expect(
+      searchProvider({ gatewayApiKey: "g", searchTool: "openrouter" }),
+    ).toBe("gateway");
+    expect(
+      searchProvider({ gatewayApiKey: "g", searchTool: " DuckDuckGo " }),
+    ).toBe("duckduckgo");
+  });
+
   test("parses DAWG_WEB_SEARCH and defaults to exa", () => {
     expect(parseSearchTool(undefined)).toBe("exa");
     expect(parseSearchTool(" Perplexity ")).toBe("perplexity");
@@ -460,6 +482,17 @@ describe("helpers", () => {
     expect(cleanResultUrl("javascript:void(0)")).toBeUndefined();
     expect(cleanResultUrl("ftp://a.example/")).toBeUndefined();
     expect(cleanResultUrl("//duckduckgo.com/l/?rut=1")).toBeUndefined();
+    expect(
+      cleanResultUrl(
+        "https://html.duckduckgo.com/l/?uddg=https%3A%2F%2Fb.example%2F",
+      ),
+    ).toBe("https://b.example/");
+    // A lookalike host is an ordinary result URL, never unwrapped.
+    expect(
+      cleanResultUrl(
+        "https://evilduckduckgo.com/l/?uddg=https%3A%2F%2Fphish.example%2F",
+      ),
+    ).toBe("https://evilduckduckgo.com/l/?uddg=https%3A%2F%2Fphish.example%2F");
     expect(
       cleanResultUrl(`https://a.example/${"x".repeat(600)}`),
     ).toBeUndefined();
