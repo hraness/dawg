@@ -1,6 +1,8 @@
 name: Dependabot auto-merge
 
-# Dependabot pull requests merge themselves once the required `check` passes.
+# Minor and patch Dependabot updates merge themselves once the required checks
+# pass. Major updates stay open for review: they can break tooling that the
+# update's own package does not cover (TypeScript 7 broke typescript-eslint).
 # The workflow only flips auto-merge on; branch policy still decides.
 on:
   pull_request_target:
@@ -23,7 +25,13 @@ jobs:
       contents: write
       pull-requests: write
     steps:
+      - name: Read update metadata
+        id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Enable squash auto-merge
+        if: steps.meta.outputs.update-type != 'version-update:semver-major'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
