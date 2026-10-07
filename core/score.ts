@@ -7,6 +7,8 @@
  */
 
 import { normalizeRhythmRow, RHYTHM_LIMITS, type RhythmRow } from "./euclid.ts";
+import { isDrumInstrument } from "./drums.ts";
+import { synthKit, SYNTH_KIT_NAMES } from "./kits.ts";
 
 export type { RhythmRow } from "./euclid.ts";
 
@@ -124,6 +126,11 @@ export type Track = Readonly<{
    * source for those voices. Absent when empty.
    */
   rhythm?: readonly RhythmRow[];
+  /**
+   * Synthesized drum kit for an `instrument: "kit"` track (`syn808`,
+   * `lofi`, … see `core/kits.ts`). Absent plays the default voices.
+   */
+  kit?: string;
 }>;
 
 /**
@@ -265,6 +272,7 @@ export type TrackPatch = Readonly<
     reverb?: TrackReverb | null;
     sampler?: Sampler | null;
     rhythm?: readonly RhythmRow[] | null;
+    kit?: string | null;
   }
 >;
 
@@ -284,13 +292,17 @@ export type Note = Readonly<{
 }>;
 
 export type TrackInput = Readonly<
-  Omit<Partial<Track>, "filter" | "delay" | "reverb" | "sampler" | "rhythm"> &
+  Omit<
+    Partial<Track>,
+    "filter" | "delay" | "reverb" | "sampler" | "rhythm" | "kit"
+  > &
     Pick<Track, "id"> & {
       filter?: TrackFilter | null;
       delay?: TrackDelay | null;
       reverb?: TrackReverb | null;
       sampler?: Sampler | null;
       rhythm?: readonly RhythmRow[] | null;
+      kit?: string | null;
     }
 >;
 
@@ -909,6 +921,22 @@ function normalizeTrack(input: unknown): Track {
   const reverb = normalizeReverb(input.reverb);
   const sampler = normalizeSampler(input.sampler);
   const rhythm = normalizeRhythm(input.rhythm, id);
+  let kit: string | undefined;
+  if (input.kit !== undefined && input.kit !== null) {
+    const found =
+      typeof input.kit === "string" ? synthKit(input.kit) : undefined;
+    if (!found)
+      throw new ScoreValidationError(
+        `track ${id} kit must be one of ${SYNTH_KIT_NAMES.join(", ")}`,
+        "invalid-track",
+      );
+    if (!isDrumInstrument(instrument))
+      throw new ScoreValidationError(
+        `track ${id} has a kit but its instrument is "${instrument}"`,
+        "invalid-track",
+      );
+    kit = found.name;
+  }
   if (isSamplerInstrument(instrument) && !sampler)
     throw new ScoreValidationError(
       `track ${id} instrument "sampler" needs a sampler`,
@@ -938,6 +966,7 @@ function normalizeTrack(input: unknown): Track {
     ...(reverb ? { reverb } : {}),
     ...(sampler ? { sampler } : {}),
     ...(rhythm ? { rhythm } : {}),
+    ...(kit ? { kit } : {}),
   });
 }
 

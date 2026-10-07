@@ -28,8 +28,17 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - **`/pack cache`** shows disk used by pack downloads and decoded audio against their caps; `/pack cache prune [size]` and `/pack cache clear` evict least recently used files and keep the open project's sounds.
 - Pack downloads are now capped at 2 GiB (they were uncapped) and decoded audio at 1 GiB per project (was 512 MiB), overridable with `DAWG_PACKS_CACHE_MAX` and `DAWG_ASSETS_CACHE_MAX`. Eviction never removes a file the open project uses; an evicted pack file re-fetches by its pinned sha256.
 
+### Drum patterns and kits
+
+- **Pattern library.** 31 starting grooves (house, techno, boom bap, trap, drill, dnb, reggaeton, afrobeats, bossa nova, samba, garage, jersey club, footwork, funk and more), each a set of rhythm rows you keep editing as parameters. `/pattern` opens a picker that plays one bar of the pattern under the cursor; `/pattern <name> [keep-tempo|tempo]` applies one and moves the tempo into the pattern's range when needed. Also under Sounds → Drum patterns in `/menu`, and `pattern("boom-bap")` in `track.ts`.
+- **Synthesized kits.** `kit: "syn808" | "syn909" | "acoustic" | "lofi" | "electro" | "trap"` on a drum track, or `/kit <name>`, chooses an offline drum synth sound. Tracks without a kit sound exactly as before.
+- **One kit picker.** A bare `/kit` now opens a picker of every kit, synth kits first and then the sample kits from packs (it used to apply the 909 sample kit directly; `/kit 909` still does). `/kit syn909` on a sampler kit turns it back into a synth kit.
+- The agent's new `list_drum_patterns`, `apply_drum_pattern` and `set_drum_kit` tools, and it starts genre grooves from a pattern.
+- SDK 1.4.0.
+
 ### Fixed
 
+- Rhythm rows with options but no rotate printed as `euclid("hat", 8, 16, { … })`, which the SDK read as a rotate and rejected. The printer now writes rotate 0, and the SDK accepts options in that position.
 - Gateway web searches no longer count the search fee twice in the spend line and ledger. The gateway's reported cost already includes it. A real Exa search response is now a test fixture.
 
 ## 0.3.0

@@ -22,6 +22,9 @@ import {
   PACK_CATALOG,
   STRUDEL_BANK_ALIASES,
 } from "../audio/packs.ts";
+import { kitCatalog } from "../audio/kits.ts";
+import { SYNTH_KIT_NAMES } from "../../core/kits.ts";
+import { DRUM_PATTERNS } from "../../core/sdk/v1.ts";
 import type { PickerItem } from "../../tui/app.ts";
 import {
   MAX_VOICING_STEP,
@@ -774,12 +777,16 @@ function soundNodes(): MenuNode[] {
       kind: "menu",
       id: "kits",
       label: "Drum kits",
-      detail: Object.keys(DEFAULT_KITS).join(" "),
+      detail: `synth ${SYNTH_KIT_NAMES.join(" ")} · samples ${Object.keys(DEFAULT_KITS).join(" ")}`,
+      // Synth kits first (offline), then the pack sample kits.
       build: () => [
-        ...Object.entries(DEFAULT_KITS).map(([name, kit]): MenuNode => ({
+        ...kitCatalog().map((entry): MenuNode => ({
           kind: "action",
-          label: `${name}  ${kit.bank || kit.pack} · ${kit.pack}`,
-          command: `/kit ${name}`,
+          label:
+            entry.kind === "synth"
+              ? `${entry.label} · ${entry.detail}`
+              : `${entry.label} · ${DEFAULT_KITS[entry.name]?.pack ?? entry.detail}`,
+          command: entry.command,
         })),
         {
           kind: "menu",
@@ -798,6 +805,18 @@ function soundNodes(): MenuNode[] {
               })),
         },
       ],
+    },
+    {
+      kind: "menu",
+      id: "patterns",
+      label: "Drum patterns",
+      detail: `${DRUM_PATTERNS.length} grooves`,
+      build: () =>
+        DRUM_PATTERNS.map((entry): MenuNode => ({
+          kind: "action",
+          label: `${entry.label}  ${entry.tempo.bpm} BPM · ${entry.tags.join(", ")}`,
+          command: `/pattern ${entry.name}`,
+        })),
     },
     {
       kind: "menu",

@@ -31,6 +31,16 @@ import { normalizeSessionName } from "./session/meta.ts";
 import { parsePrompt } from "./agent/ops.ts";
 import { applyMusicCommand, parseMusicCommand } from "./commands/music.ts";
 import { applyRhythmCommand, parseRhythmCommand } from "./commands/rhythm.ts";
+import {
+  applyDrumPattern,
+  applySynthKit,
+  DRUM_PATTERNS,
+  isSynthKitName,
+  parsePatternCommand,
+  patternLine,
+  type PatternCommand,
+} from "./commands/drums.ts";
+import { kitCatalog } from "./audio/kits.ts";
 import { applyEditCommand, parseEditCommand } from "./commands/edit.ts";
 import { helpLines, helpText, usageHint } from "./commands/help.ts";
 import { historyTarget, REDO_KIND, UNDO_KIND } from "./commands/history.ts";
@@ -398,6 +408,8 @@ const euclid = new EuclidEditor();
 const AUDITION_VOICE = 0x7fff_0001;
 /** A voice to audition once the editor's queued command lands. */
 let pendingAudition: string | undefined;
+/** The pattern the /pattern picker last previewed. */
+let patternPreview: string | undefined;
 /** Daemon windows play no loop; play mode monitors through its own engine. */
 let monitorEngine: AudioEngine | undefined;
 /** The decoded sampler voices, for play mode's live voices. */
@@ -1034,6 +1046,14 @@ async function runInteractive(): Promise<void> {
                 })
                 .finally(() => tick(true));
             }
+          } else if (
+            input.type === "overlay" &&
+            tui.ui.picker?.id === "pattern"
+          ) {
+            // Moving through /pattern previews the row under the cursor.
+            const picker = tui.ui.picker;
+            const value = picker.items[picker.index]?.value;
+            previewPattern(value?.replace(/^\/pattern\s+/, ""));
           } else if (input.type === "pick") {
             // Picker choices run as the command they stand for.
             queuedPrompts.unshift(
@@ -1175,8 +1195,10 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (sample) return sampleCommand(sample);
   const pack = parsePackCommand(command);
   if (pack) return packCommand(pack);
+  const pattern = parsePatternCommand(command);
+  if (pattern) return patternCommand(pattern);
   const kit = parseKitCommand(command);
-  if (kit) return kitCommand(kit);
+  if (kit) return kitCommand(kit, /^\/kit\s*$/i.test(command.trim()));
   const sessionReply = await sessionCommand(command);
   if (sessionReply !== undefined) return sessionReply;
   const edit = parseEditCommand(command);
@@ -1752,9 +1774,114 @@ async function packCommand(command: PackCommand): Promise<Receipt> {
   }
 }
 
-async function kitCommand(command: KitCommand): Promise<Receipt> {
+async function patternCommand(command: PatternCommand): Promise<Receipt> {
   if (command.kind === "list") {
-    const lines = kitListLines(await packs().bankAliases(ALIASED_PACK));
+    tui.openText("patterns", DRUM_PATTERNS.map(patternLine));
+    return ok(`patterns · ${DRUM_PATTERNS.length} · /pattern <name>`);
+  }
+  if (command.kind === "browse") {
+    tui.openPicker({
+      id: "pattern",
+      title: "patterns · ↑/↓ preview · Enter applies · Esc",
+      items: DRUM_PATTERNS.map((entry) => ({
+        label: `${entry.label.padEnd(22)} ${entry.tempo.bpm} BPM · ${entry.tags.join(", ")}`,
+        value: `/pattern ${entry.name}`,
+      })),
+      filterable: true,
+      index: 0,
+    });
+    patternPreview = undefined;
+    previewPattern(DRUM_PATTERNS[0]?.name);
+    return ok("patterns · ↑/↓ preview · Enter applies on the focused track");
+  }
+  await materializeDraft();
+  const result = applyDrumPattern(
+    score,
+    requestedTrack,
+    command.name,
+    command.tempo,
+  );
+  if (result.next && result.kind)
+    await commitScore(result.next, result.kind, result.payload);
+  return result.ok ? ok(result.message) : fail(result.message);
+}
+
+/**
+ * Play one bar of the pattern under the picker cursor, on a scratch copy
+ * of the focused track (or a fresh kit track when the focus is melodic).
+ * Silent while the loop plays, like the Euclidean editor's audition.
+ */
+function previewPattern(name: string | undefined): void {
+  if (!name || name === patternPreview) return;
+  patternPreview = name;
+  if (clock.playing) return;
+  const entry = DRUM_PATTERNS.find((candidate) => candidate.name === name);
+  if (!entry) return;
+  let result = applyDrumPattern(score, requestedTrack, entry.name, "set");
+  let trackId = requestedTrack;
+  if (!result.next) {
+    trackId = "pattern-preview";
+    result = applyDrumPattern(score, trackId, entry.name, "set");
+  }
+  if (!result.next) return;
+  const engine = liveEngine();
+  if (!engine?.canMonitor) return;
+  const pcm = renderAudition({
+    score: result.next,
+    trackId,
+    bars: 1,
+    sampleRate: engine.sampleRate,
+    ...(liveSampleBank ? { samples: liveSampleBank } : {}),
+  });
+  if (!pcm) return;
+  void engine
+    .monitor(true)
+    .then(() => engine.noteOn(AUDITION_VOICE, pcm))
+    .catch(() => undefined);
+}
+
+/** `/kit` with no name: one picker with the synth kits and the sample kits. */
+function openKitPicker(): Receipt {
+  const current = score.tracks.find((track) => track.id === requestedTrack);
+  const items = kitCatalog().map((entry) => ({
+    label: `${entry.kind === "synth" ? "synth " : "sample"}  ${entry.label.padEnd(18)} ${entry.detail}`,
+    value: entry.command,
+    current:
+      entry.kind === "synth" &&
+      isDrumInstrumentTrack(current) &&
+      (current?.kit ?? "default") === entry.name,
+  }));
+  tui.openPicker({
+    id: "kit",
+    title: "kits · ↑/↓ Enter · Esc",
+    items,
+    filterable: true,
+    index: Math.max(
+      0,
+      items.findIndex((item) => item.current),
+    ),
+  });
+  return ok("kits · synth kits work offline · sample kits are fetched once");
+}
+
+function isDrumInstrumentTrack(track: { instrument: string } | undefined) {
+  return track !== undefined && isDrumInstrument(track.instrument);
+}
+
+async function kitCommand(command: KitCommand, bare = false): Promise<Receipt> {
+  if (bare) return openKitPicker();
+  if (command.kind === "set" && isSynthKitName(command.bank)) {
+    await materializeDraft();
+    const result = applySynthKit(score, requestedTrack, command.bank);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
+  if (command.kind === "list") {
+    const lines = kitCatalog()
+      .filter((entry) => entry.kind === "synth")
+      .map((entry) => `${entry.name} · synth · ${entry.detail}`);
+    lines.push(...kitListLines(await packs().bankAliases(ALIASED_PACK)));
     tui.openText("kits", lines);
     return ok("kits · /kit <name or nickname> on the focused drum track");
   }

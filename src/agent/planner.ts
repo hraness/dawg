@@ -11,6 +11,7 @@ import {
   type ScoreOperation,
 } from "../../core/score.ts";
 import { DRUM_VOICES } from "../../core/drums.ts";
+import { synthKit } from "../../core/kits.ts";
 
 const MAX_RESPONSE_BYTES = 64 * 1024;
 const MAX_OPERATIONS = 32;
@@ -156,6 +157,12 @@ function parseOperation(value: unknown): ScoreOperation {
       safe.sampler = normalizeSampler(patch.sampler) ?? null;
     if (patch.rhythm !== undefined)
       safe.rhythm = normalizeRhythm(patch.rhythm, value.trackId) ?? null;
+    // Only synth kit names pass; anything else leaves the kit unchanged.
+    if (patch.kit === null) safe.kit = null;
+    else if (typeof patch.kit === "string") {
+      const kit = synthKit(patch.kit);
+      if (kit) safe.kit = kit.name;
+    }
     return { type: "updateTrack", trackId: value.trackId, patch: safe };
   }
   if (

@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.3.0";
+export const SDK_VERSION = "1.4.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -389,12 +389,17 @@ export function euclid(
   voice: string | (RhythmOptions & { voice: string }),
   pulses?: number,
   steps?: number,
-  rotate?: number,
+  rotate?: number | RhythmOptions,
   options: RhythmOptions = {},
 ): RhythmSpec {
   if (isRecord(voice)) {
     const input = voice as RhythmOptions & { voice: string };
     return rhythmSpec(input.voice, input);
+  }
+  // `euclid("hat", 7, 16, { velocity: 0.5 })`: options without a rotate.
+  if (isRecord(rotate)) {
+    options = { ...(rotate as RhythmOptions), ...options };
+    rotate = undefined;
   }
   const fields: Record<string, unknown> = { ...options };
   if (pulses !== undefined) fields.pulses = pulses;
@@ -483,6 +488,521 @@ export const RHYTHM_KEYS: readonly string[] = Object.freeze([
   "nudge",
   "cycles",
 ]);
+
+// ---------------------------------------------------------------------------
+// Drum pattern library
+
+/**
+ * A named starting groove: one rhythm row per voice, ready for a
+ * `instrument: "kit"` track. Rows are Euclidean where the part is
+ * Euclidean and explicit grids otherwise. All patterns are 4/4; `swing`
+ * is already applied to the rows.
+ */
+export type DrumPattern = Readonly<{
+  name: string;
+  label: string;
+  tags: readonly string[];
+  /** Usual tempo range and a suggested tempo, BPM. */
+  tempo: Readonly<{ min: number; max: number; bpm: number }>;
+  beatsPerBar: number;
+  /** Swing of the 16th rows, -0.5..0.5 of a step. */
+  swing: number;
+  /** A synthesized kit that suits it (see `kit` on `track()`). */
+  kit: string;
+  rows: readonly RhythmSpec[];
+}>;
+
+function drumPattern(
+  name: string,
+  label: string,
+  tags: readonly string[],
+  tempo: readonly [number, number, number],
+  kit: string,
+  swing: number,
+  rows: readonly RhythmSpec[],
+): DrumPattern {
+  return Object.freeze({
+    name,
+    label,
+    tags: Object.freeze([...tags]),
+    tempo: Object.freeze({ min: tempo[0], max: tempo[1], bpm: tempo[2] }),
+    beatsPerBar: 4,
+    swing,
+    kit,
+    rows: Object.freeze(
+      rows.map((row) =>
+        swing !== 0 && row.swing === undefined && row.division === undefined
+          ? Object.freeze({ ...row, swing })
+          : row,
+      ),
+    ),
+  });
+}
+
+/**
+ * The library. Written for dawg from common knowledge of each style (no
+ * transcriptions): the defining placements of kick, snare and hats, kept
+ * short so they are easy to vary.
+ */
+export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
+  drumPattern(
+    "house",
+    "House four-on-the-floor",
+    ["house", "dance", "four-on-the-floor"],
+    [118, 128, 124],
+    "syn909",
+    0,
+    [
+      euclid("kick", 4, 16),
+      grid("clap", "....x.......x..."),
+      euclid("openhat", 4, 16, 2, { velocity: 0.6 }),
+      euclid("hat", 16, 16, 0, { velocity: 0.35, accent: 0.4, accents: 4 }),
+    ],
+  ),
+  drumPattern(
+    "disco",
+    "Disco",
+    ["disco", "dance", "four-on-the-floor"],
+    [110, 125, 118],
+    "acoustic",
+    0,
+    [
+      euclid("kick", 4, 16),
+      grid("snare", "....x.......x..."),
+      euclid("openhat", 4, 16, 2, { velocity: 0.65 }),
+      euclid("hat", 8, 16, 0, { velocity: 0.45 }),
+    ],
+  ),
+  drumPattern(
+    "techno",
+    "Techno",
+    ["techno", "dance", "four-on-the-floor"],
+    [125, 140, 132],
+    "syn909",
+    0,
+    [
+      euclid("kick", 4, 16),
+      euclid("openhat", 4, 16, 2, { velocity: 0.55 }),
+      euclid("hat", 16, 16, 0, {
+        velocity: 0.4,
+        accent: 0.5,
+        accents: 4,
+        probability: 0.9,
+        seed: 7,
+      }),
+      euclid("rim", 3, 8, 3, { velocity: 0.55 }),
+      grid("clap", "............x...", { velocity: 0.7 }),
+    ],
+  ),
+  drumPattern(
+    "minimal",
+    "Minimal Euclidean",
+    ["minimal", "techno", "euclidean"],
+    [120, 130, 124],
+    "electro",
+    0,
+    [
+      euclid("kick", 4, 16),
+      euclid("rim", 5, 16, 3, { velocity: 0.6 }),
+      euclid("hat", 7, 16, 2, { velocity: 0.45, accent: 0.5, accents: 3 }),
+      euclid("tom", 3, 16, 6, { velocity: 0.5 }),
+    ],
+  ),
+  drumPattern(
+    "electro",
+    "Electro",
+    ["electro", "breaks"],
+    [120, 135, 128],
+    "electro",
+    0,
+    [
+      grid("kick", "x.....x..x......"),
+      grid("snare", "....x.......x..."),
+      euclid("hat", 16, 16, 0, { velocity: 0.4, accent: 0.5, accents: 4 }),
+      grid("clap", "....x.......x..x", { velocity: 0.6 }),
+    ],
+  ),
+  drumPattern(
+    "breakbeat",
+    "Breakbeat",
+    ["breaks", "big beat"],
+    [120, 140, 130],
+    "acoustic",
+    0,
+    [
+      grid("kick", "x.........x.x...x.x.......x....."),
+      grid("snare", "....x.......x.......x..x....x..."),
+      euclid("hat", 8, 16, 0, { velocity: 0.5 }),
+    ],
+  ),
+  drumPattern(
+    "amen-style",
+    "Amen-style break",
+    ["breaks", "jungle", "drum and bass"],
+    [160, 176, 170],
+    "acoustic",
+    0,
+    [
+      grid("kick", "x.x.......xx....x.x.......x....."),
+      grid("snare", "....X..x.x..X..x....X..x.x....X.", {
+        velocity: 0.55,
+        accent: 0.4,
+      }),
+      euclid("hat", 8, 16, 0, { velocity: 0.45 }),
+    ],
+  ),
+  drumPattern(
+    "dnb",
+    "Drum & bass two-step",
+    ["drum and bass", "jungle"],
+    [168, 178, 174],
+    "syn909",
+    0,
+    [
+      grid("kick", "x.........x....."),
+      grid("snare", "....x.......x..."),
+      euclid("hat", 8, 16, 1, { velocity: 0.45 }),
+      grid("openhat", "..............x.", { velocity: 0.4 }),
+    ],
+  ),
+  drumPattern(
+    "halftime",
+    "Halftime",
+    ["halftime", "drum and bass", "dubstep"],
+    [140, 175, 170],
+    "syn909",
+    0,
+    [
+      grid("kick", "x.........x.....x......x.x......"),
+      grid("snare", "........x.......", { velocity: 0.95 }),
+      euclid("hat", 8, 16, 0, { velocity: 0.4, probability: 0.85, seed: 3 }),
+    ],
+  ),
+  drumPattern(
+    "boom-bap",
+    "Boom bap",
+    ["hip hop", "boom bap"],
+    [84, 96, 90],
+    "lofi",
+    0.12,
+    [
+      grid("kick", "x......x..x.....x.x....x..x....."),
+      grid("snare", "....x.......x..."),
+      euclid("hat", 8, 16, 0, { velocity: 0.5, accent: 0.4, accents: 4 }),
+    ],
+  ),
+  drumPattern(
+    "lofi",
+    "Lo-fi hip hop",
+    ["hip hop", "lo-fi", "chill"],
+    [70, 90, 80],
+    "lofi",
+    0.18,
+    [
+      grid("kick", "x.........x.....x......x..x....."),
+      grid("snare", "....x.......x..."),
+      euclid("hat", 8, 16, 0, { velocity: 0.4, probability: 0.9, seed: 11 }),
+      grid("rim", "...............x", { velocity: 0.4 }),
+    ],
+  ),
+  drumPattern(
+    "trap",
+    "Trap with hat rolls",
+    ["trap", "hip hop"],
+    [130, 160, 140],
+    "trap",
+    0,
+    [
+      grid("kick", "x......x..x.....x.x....x......x."),
+      grid("snare", "........x......."),
+      grid("hat", "x.x.x.x.x.x.x.x.x.x.x.x.x.xxxxxx", {
+        division: "1/32",
+        velocity: 0.45,
+      }),
+      grid("openhat", "..............x.", { velocity: 0.35 }),
+    ],
+  ),
+  drumPattern("drill", "Drill", ["drill", "trap"], [138, 146, 142], "trap", 0, [
+    grid("kick", "x.....x.........x..x......x....."),
+    grid("snare", "........x..........x....x......."),
+    grid("hat", "x..x..x.x..x..x.", { velocity: 0.45 }),
+  ]),
+  drumPattern(
+    "reggaeton",
+    "Reggaeton / dembow",
+    ["reggaeton", "dembow", "latin"],
+    [88, 100, 95],
+    "syn808",
+    0,
+    [
+      euclid("kick", 4, 16),
+      grid("snare", "...x..x....x..x."),
+      euclid("hat", 8, 16, 0, { velocity: 0.45 }),
+    ],
+  ),
+  drumPattern(
+    "dancehall",
+    "Dancehall",
+    ["dancehall", "caribbean"],
+    [90, 110, 100],
+    "syn808",
+    0,
+    [
+      euclid("kick", 3, 8),
+      grid("snare", "....x.......x..."),
+      euclid("rim", 5, 16, 2, { velocity: 0.5 }),
+      euclid("hat", 8, 16, 0, { velocity: 0.4 }),
+    ],
+  ),
+  drumPattern(
+    "one-drop",
+    "Reggae one drop",
+    ["reggae", "dub"],
+    [66, 80, 74],
+    "acoustic",
+    0.1,
+    [
+      grid("kick", "........x......."),
+      grid("rim", "........x......."),
+      euclid("hat", 8, 16, 0, { velocity: 0.45, accent: 0.4, accents: 2 }),
+    ],
+  ),
+  drumPattern(
+    "afrobeat",
+    "Afrobeat",
+    ["afrobeat", "african", "funk"],
+    [100, 120, 110],
+    "acoustic",
+    0.05,
+    [
+      grid("kick", "x.....x...x.....x.....x...x..x.."),
+      grid("snare", "....x..x....x..x", { velocity: 0.6 }),
+      euclid("openhat", 4, 16, 2, { velocity: 0.45 }),
+      euclid("hat", 12, 16, 0, { velocity: 0.4 }),
+      grid("rim", "x.x.xx.x.x.x....", { velocity: 0.5 }),
+    ],
+  ),
+  drumPattern(
+    "afrobeats",
+    "Afrobeats / afro-pop",
+    ["afrobeats", "afro-pop", "african"],
+    [100, 115, 106],
+    "syn808",
+    0.06,
+    [
+      euclid("kick", 4, 16),
+      grid("rim", "...x..x...x..x..", { velocity: 0.6 }),
+      euclid("hat", 8, 16, 0, { velocity: 0.4 }),
+      grid("clap", "............x...", { velocity: 0.6 }),
+    ],
+  ),
+  drumPattern(
+    "bembe",
+    "Bembé 12/8 bell",
+    ["afro-cuban", "african", "euclidean"],
+    [100, 130, 112],
+    "acoustic",
+    0,
+    [
+      euclid("kick", 4, 12, 0, { division: "1/8t" }),
+      euclid("rim", 7, 12, 9, { division: "1/8t", velocity: 0.6 }),
+      euclid("hat", 12, 12, 0, {
+        division: "1/8t",
+        velocity: 0.35,
+        accent: 0.4,
+        accents: 4,
+      }),
+    ],
+  ),
+  drumPattern(
+    "tresillo",
+    "Tresillo",
+    ["latin", "euclidean", "habanera"],
+    [90, 120, 100],
+    "syn808",
+    0,
+    [
+      euclid("kick", 3, 8),
+      grid("snare", "....x.......x..."),
+      euclid("hat", 8, 16, 0, { velocity: 0.4 }),
+    ],
+  ),
+  drumPattern(
+    "son-clave",
+    "Son clave groove",
+    ["afro-cuban", "salsa", "latin"],
+    [90, 120, 100],
+    "acoustic",
+    0,
+    [
+      grid("rim", "x..x..x...x.x...", { velocity: 0.65 }),
+      grid("kick", "...x.......x....", { velocity: 0.7 }),
+      euclid("hat", 8, 16, 0, { velocity: 0.35 }),
+    ],
+  ),
+  drumPattern(
+    "bossa-nova",
+    "Bossa nova",
+    ["bossa nova", "brazilian", "latin"],
+    [120, 145, 132],
+    "acoustic",
+    0,
+    [
+      grid("kick", "x..xx..xx..xx..x", { velocity: 0.6 }),
+      grid("rim", "x..x..x...x..x..", { velocity: 0.55 }),
+      euclid("hat", 16, 16, 0, { velocity: 0.3, accent: 0.4, accents: 4 }),
+    ],
+  ),
+  drumPattern(
+    "samba",
+    "Samba",
+    ["samba", "brazilian", "latin"],
+    [92, 110, 100],
+    "acoustic",
+    0.04,
+    [
+      grid("kick", "x..xX..xx..xX..x", { velocity: 0.6, accent: 0.5 }),
+      grid("rim", "x.x..x.x.x.x..x.", { velocity: 0.5 }),
+      euclid("hat", 16, 16, 0, { velocity: 0.35, accent: 0.5, accents: 4 }),
+    ],
+  ),
+  drumPattern(
+    "cumbia",
+    "Cumbia",
+    ["cumbia", "latin"],
+    [85, 105, 95],
+    "acoustic",
+    0,
+    [
+      grid("kick", "x.......x......."),
+      grid("rim", "....x.......x...", { velocity: 0.6 }),
+      euclid("hat", 12, 16, 0, { velocity: 0.35, accent: 0.5, accents: 4 }),
+      euclid("openhat", 4, 16, 2, { velocity: 0.4 }),
+    ],
+  ),
+  drumPattern(
+    "garage",
+    "UK garage 2-step",
+    ["uk garage", "2-step", "dance"],
+    [128, 136, 132],
+    "syn909",
+    0.15,
+    [
+      grid("kick", "x.........x..x..x.......x.x....."),
+      grid("snare", "....x.......x..."),
+      euclid("hat", 12, 16, 0, { velocity: 0.4 }),
+      euclid("openhat", 4, 16, 2, { velocity: 0.35 }),
+    ],
+  ),
+  drumPattern(
+    "jersey-club",
+    "Jersey club",
+    ["jersey club", "club"],
+    [135, 145, 140],
+    "syn808",
+    0,
+    [
+      grid("kick", "x...x...x..x.x..x...x...x.x.x.x."),
+      grid("clap", "....x.......x..."),
+      euclid("hat", 8, 16, 0, { velocity: 0.4 }),
+    ],
+  ),
+  drumPattern(
+    "footwork",
+    "Footwork / juke",
+    ["footwork", "juke", "chicago"],
+    [155, 165, 160],
+    "syn808",
+    0,
+    [
+      grid("kick", "x..x..x...x..x..x..x..x...x.x.x."),
+      grid("clap", "............x..."),
+      euclid("hat", 6, 16, 2, { velocity: 0.45 }),
+      euclid("tom", 3, 16, 8, { velocity: 0.5 }),
+    ],
+  ),
+  drumPattern(
+    "rock",
+    "Rock basic",
+    ["rock", "pop"],
+    [100, 140, 120],
+    "acoustic",
+    0,
+    [
+      grid("kick", "x.......x.x....."),
+      grid("snare", "....x.......x..."),
+      euclid("hat", 8, 16, 0, { velocity: 0.55, accent: 0.3, accents: 4 }),
+    ],
+  ),
+  drumPattern(
+    "funk",
+    "Funk with ghost notes",
+    ["funk", "soul"],
+    [95, 110, 102],
+    "acoustic",
+    0.08,
+    [
+      grid("kick", "x.x.......x..x.."),
+      grid("snare", ".x..X..x.x..X..x", { velocity: 0.4, accent: 0.9 }),
+      euclid("hat", 16, 16, 0, { velocity: 0.35, accent: 0.4, accents: 4 }),
+    ],
+  ),
+  drumPattern(
+    "shuffle",
+    "Shuffle",
+    ["blues", "shuffle", "rock"],
+    [90, 130, 110],
+    "acoustic",
+    0.33,
+    [
+      grid("kick", "x.......x......."),
+      grid("snare", "....x.......x..."),
+      euclid("hat", 16, 16, 0, { velocity: 0.35, accent: 0.5, accents: 8 }),
+    ],
+  ),
+  drumPattern(
+    "euclid-poly",
+    "Euclidean polymeter",
+    ["euclidean", "experimental", "polymeter"],
+    [110, 130, 120],
+    "electro",
+    0,
+    [
+      euclid("kick", 5, 16),
+      euclid("snare", 3, 8, 2, { velocity: 0.7 }),
+      euclid("hat", 7, 12, 0, { velocity: 0.45, accent: 0.5, accents: 3 }),
+      euclid("rim", 4, 10, 1, { velocity: 0.5, probability: 0.8, seed: 21 }),
+    ],
+  ),
+]);
+
+/** The pattern named `name` (case-insensitive), if any. */
+export function findPattern(name: string): DrumPattern | undefined {
+  const key = String(name)
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, "-");
+  return DRUM_PATTERNS.find((entry) => entry.name === key);
+}
+
+/**
+ * A library pattern's rows, for a kit track's `rhythm`:
+ *
+ * ```ts
+ * track({ name: "drums", instrument: "kit", kit: "lofi", rhythm: pattern("boom-bap") })
+ * ```
+ *
+ * Spread it to change or add rows: `[...pattern("house"), euclid("rim", 5, 16)]`.
+ * Rows with the same voice must not repeat, so drop the original first.
+ */
+export function pattern(name: string): readonly RhythmSpec[] {
+  const found = findPattern(name);
+  if (!found)
+    throw new DawgSdkError(
+      `unknown drum pattern "${String(name).slice(0, 40)}" (${DRUM_PATTERNS.map((entry) => entry.name).join(" ")})`,
+    );
+  return found.rows;
+}
 
 // ---------------------------------------------------------------------------
 // Sampler
@@ -663,6 +1183,12 @@ export type TrackInput = Readonly<{
    * `triangle`), `kit` for drums, or `sampler(...)`. Default `sine`.
    */
   instrument?: string | SamplerSpec;
+  /**
+   * Synthesized drum kit for an `instrument: "kit"` track: `syn808`,
+   * `syn909`, `acoustic`, `lofi`, `electro` or `trap`. Omit for the default
+   * voices.
+   */
+  kit?: string;
   muted?: boolean;
   /** When any track is soloed only soloed tracks play. */
   solo?: boolean;
@@ -707,6 +1233,7 @@ export type TrackSpec = Readonly<{
   notes: readonly NoteSpec[];
   /** Rhythm rows in order (voice names as written). */
   rhythm: readonly RhythmSpec[];
+  kit: string | null;
 }>;
 
 /**
@@ -790,6 +1317,14 @@ export function track(input: TrackInput): TrackSpec {
         `track ${name}: rhythm[${index}] must come from euclid() or grid()`,
       );
   });
+  const drumKit = input.kit ?? null;
+  if (
+    drumKit !== null &&
+    (typeof drumKit !== "string" || drumKit.trim().length === 0 || !kit)
+  )
+    throw new DawgSdkError(
+      `track ${name}: kit needs instrument "kit" and a kit name`,
+    );
   const automation = input.automation ?? {};
   if (!isRecord(automation))
     throw new DawgSdkError(`track ${name}: automation must be an object`);
@@ -870,6 +1405,7 @@ export function track(input: TrackInput): TrackSpec {
     }),
     notes: Object.freeze(notes),
     rhythm: Object.freeze([...rhythm]),
+    kit: drumKit === null ? null : drumKit.trim(),
   });
 }
 
@@ -995,6 +1531,8 @@ export type ScoreTrack = Readonly<{
   }>;
   /** Rhythm rows without `kind`; dawg validates and expands them. */
   rhythm?: readonly Readonly<Record<string, unknown>>[];
+  /** Synth kit name; dawg validates it. */
+  kit?: string;
 }>;
 
 /**
@@ -1087,6 +1625,7 @@ export function song(input: SongInput): Song {
         voices: t.sampler.voices,
         mode: t.sampler.mode,
       });
+    if (t.kit) stored.kit = t.kit;
     if (t.rhythm && t.rhythm.length > 0)
       stored.rhythm = Object.freeze(
         t.rhythm.map((row) => {

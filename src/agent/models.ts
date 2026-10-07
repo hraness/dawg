@@ -486,17 +486,17 @@ export async function loadLiveCatalog(
  * and `chatTools()` serialized, plus `compositionBrief` of a 3-track, 48-note
  * loop; see models.test.ts, which keeps these in step with the code):
  *
- * - system prompt ≈ 1.9 KB, tool schemas ≈ 15.2 KB, brief ≈ 1.2 KB typical
- *   (capped at 12 KiB), user request ≈ 0.1 KB → ≈ 18.4 KB ≈ 4,600 tokens
+ * - system prompt ≈ 2.8 KB, tool schemas ≈ 21.9 KB, brief ≈ 1.2 KB typical
+ *   (capped at 12 KiB), user request ≈ 0.1 KB → ≈ 26 KB ≈ 6,500 tokens
  *   per request at ~4 bytes per token;
  * - about 2 requests per prompt (tool calls, then a short reply), the second
  *   also carrying the first step's tool calls and results (≈ 0.6 KB);
  * - output ≈ 450 tokens of tool-call arguments and ≈ 150 of reply.
  *
- * So ≈ 9,400 input and ≈ 600 output tokens per prompt.
+ * So ≈ 13,200 input and ≈ 600 output tokens per prompt.
  */
 export const TYPICAL_PROMPT = Object.freeze({
-  inputTokens: 9_400,
+  inputTokens: 13_200,
   outputTokens: 600,
 });
 

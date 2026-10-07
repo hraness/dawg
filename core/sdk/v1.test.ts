@@ -3,6 +3,7 @@ import { decodeLoopDocument } from "../loop.ts";
 import { trackSlug } from "../slug.ts";
 import {
   DawgSdkError,
+  euclid,
   every,
   hit,
   hits,
@@ -206,5 +207,16 @@ describe("sdk v1 builders", () => {
       "Ünder Wörld",
     ])
       expect(slugify(name)).toBe(trackSlug(name));
+  });
+});
+
+describe("euclid options", () => {
+  test("options may follow steps directly", () => {
+    expect(euclid("hat", 8, 16, { velocity: 0.5 })).toEqual(
+      euclid("hat", 8, 16, undefined, { velocity: 0.5 }),
+    );
+    expect(euclid("hat", 8, 16, { velocity: 0.5 })).not.toHaveProperty(
+      "rotate",
+    );
   });
 });
