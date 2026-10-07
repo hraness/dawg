@@ -452,7 +452,7 @@ describe("PlaySession chord mode", () => {
     await session.enter();
     session.press("a"); // C
     const suggested = session.header().chords!;
-    expect(suggested).toContain("→ G");
+    expect(suggested).toContain("next G");
     session.press("n");
     expect(session.chords.last?.name).toBe("G");
   });

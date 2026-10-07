@@ -8,6 +8,7 @@
  *
  * Rendering reuses the TUI's picker overlay: `view()` returns a picker.
  */
+import { HINTS } from "../../tui/grammar.ts";
 import {
   AUTOMATION_PARAMETERS,
   automationPoints,
@@ -111,9 +112,11 @@ type NumberField = Readonly<{
   off?: string;
   /** Starting value for a nudge while off. */
   start?: number;
+  /** The command `x` runs to put the value back to its default. */
+  reset?: string;
 }>;
 
-export type MenuNode =
+export type MenuNode = (
   | Readonly<{
       kind: "menu";
       id: string;
@@ -154,7 +157,12 @@ export type MenuNode =
       beat: number;
       value: number;
     }>
-  | Readonly<{ kind: "info"; label: string; value: string }>;
+  | Readonly<{ kind: "info"; label: string; value: string }>
+) &
+  Readonly<{
+    /** One line on what the focused row does, shown under the list. */
+    help?: string;
+  }>;
 
 /** What a key did; `run` carries the command to execute. */
 export type MenuResult =
@@ -168,6 +176,8 @@ export type MenuView = Readonly<{
   items: PickerItem[];
   index: number;
   hint: string;
+  /** What the focused row does, and the prompt command it stands for. */
+  note: string;
 }>;
 
 // ── formatting and steps ──────────────────────────────────────────────
@@ -286,68 +296,127 @@ export function rootNodes(context: MenuContext): MenuNode[] {
   const effects = EFFECT_NAMES.filter((effect) => effectValues(track, effect));
   const automated = AUTOMATION_PARAMETERS.filter(
     (lane) => automationPoints(track, lane).length > 0,
-  ).join(" ");
+  ).length;
+  const tracks = context.score.tracks.length;
   return [
     {
       kind: "menu",
-      id: "track",
-      label: "Track",
+      id: "sound",
+      label: "Sound",
       detail: `${name} · ${track?.instrument ?? "?"}`,
-      build: trackNodes,
-    },
-    {
-      kind: "menu",
-      id: "parameters",
-      label: "Parameters",
-      detail: `${track?.instrument ?? "?"}`,
-      build: parameterNodes,
+      help: "the focused track's instrument and its voice",
+      build: soundSectionNodes,
     },
     {
       kind: "menu",
       id: "effects",
       label: "Effects",
-      detail: effects.length ? effects.join(" · ") : "none",
+      detail: effects.length ? effects.join(" · ") : "none on",
+      help: "filter, delay, reverb and more on the focused track",
       build: effectNodes,
     },
     {
       kind: "menu",
-      id: "automation",
-      label: "Automation",
-      detail: automated || "no lanes",
-      build: automationNodes,
-    },
-    {
-      kind: "menu",
-      id: "mix",
-      label: "Mix",
-      detail: `${context.score.tracks.length} track${context.score.tracks.length === 1 ? "" : "s"}`,
-      build: mixNodes,
-    },
-    {
-      kind: "menu",
-      id: "sounds",
-      label: "Sounds",
-      detail: soundsDetail(track),
-      build: soundNodes,
-    },
-    {
-      kind: "action",
+      id: "rhythm",
       label: "Rhythm",
-      command: "/euclid",
-    },
-    {
-      kind: "menu",
-      id: "transport",
-      label: "Transport",
-      detail: `${num(context.score.tempoBpm)} BPM · ${context.score.beatsPerBar}/4 · ${context.score.bars} bars · grid ${context.grid}`,
-      build: transportNodes,
+      detail: "euclid editor · patterns · kits",
+      help: "drum hits per voice, ready-made grooves and drum kits",
+      build: rhythmNodes,
     },
     {
       kind: "menu",
       id: "chords",
       label: "Chords",
       detail: chordsDetail(context),
+      help: "song key and how chords play in play mode (Ctrl-P)",
       build: chordNodes,
+    },
+    {
+      kind: "menu",
+      id: "mix",
+      label: "Mix & automation",
+      detail: `${tracks} track${tracks === 1 ? "" : "s"} · ${automated} lane${automated === 1 ? "" : "s"} moving`,
+      help: "volume, pan, mute and solo per track; values that change over time",
+      build: mixSectionNodes,
+    },
+    {
+      kind: "menu",
+      id: "project",
+      label: "Project",
+      detail: `${num(context.score.tempoBpm)} BPM · ${context.score.beatsPerBar}/4 · ${context.score.bars} bars`,
+      help: "tempo, meter, loop length, play, click and count-in",
+      build: transportNodes,
+    },
+  ];
+}
+
+/** Old section names still open the menu where that content now lives. */
+const SECTION_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  sound: ["sound"],
+  parameters: ["sound"],
+  sounds: ["sound", "browse"],
+  effects: ["effects"],
+  rhythm: ["rhythm"],
+  chords: ["chords"],
+  mix: ["mix"],
+  track: ["mix"],
+  automation: ["mix", "automation"],
+  project: ["project"],
+  transport: ["project"],
+};
+
+/** Sound: instrument and voice first, then the sound browser. */
+function soundSectionNodes(context: MenuContext): MenuNode[] {
+  return [
+    ...parameterNodes(context),
+    {
+      kind: "menu",
+      id: "browse",
+      label: "browse sounds",
+      detail: soundsDetail(focused(context)),
+      help: "instruments, wavetables, sample packs",
+      build: soundNodes,
+    },
+  ];
+}
+
+/** Rhythm: the euclid editor, then grooves and kits. */
+function rhythmNodes(): MenuNode[] {
+  return [
+    {
+      kind: "action",
+      label: "euclid editor",
+      command: "/euclid",
+      help: "hits, steps and rotation per drum voice",
+    },
+    patternsMenu(),
+    kitsMenu(),
+  ];
+}
+
+/** Mix & automation: this track, every track, then automation lanes. */
+function mixSectionNodes(context: MenuContext): MenuNode[] {
+  const track = focused(context);
+  const automated = AUTOMATION_PARAMETERS.filter(
+    (lane) => automationPoints(track, lane).length > 0,
+  ).join(" ");
+  return [
+    ...trackNodes(context),
+    {
+      kind: "menu",
+      id: "tracks",
+      label: "all tracks",
+      detail: `${context.score.tracks.length} · focus another track`,
+      help: "pick a track to edit; ● is the focused one",
+      build: mixNodes,
+    },
+    {
+      kind: "menu",
+      id: "automation",
+      label: "automation",
+      detail: automated || "no lanes yet",
+      help: "points that move a value over the loop",
+      build: automationNodes,
     },
   ];
 }
@@ -369,6 +438,7 @@ function chordNodes(context: MenuContext): MenuNode[] {
     {
       kind: "choice",
       label: "mode",
+      help: "auto: keys play chords in the song key · manual: latch 1–8 · off",
       value: chords.mode,
       options: CHORD_MODES,
       command: (option) => `/chords ${option}`,
@@ -376,6 +446,7 @@ function chordNodes(context: MenuContext): MenuNode[] {
     {
       kind: "choice",
       label: "key tonic",
+      help: "the song key; auto chord mode follows it",
       value: tonic,
       options: TONICS,
       command: (option) => `key ${option} ${mode}`,
@@ -383,6 +454,7 @@ function chordNodes(context: MenuContext): MenuNode[] {
     {
       kind: "choice",
       label: "key mode",
+      help: "major, minor or a church mode",
       value: mode,
       options: MODE_NAMES,
       command: (option) => `key ${tonic} ${option}`,
@@ -390,6 +462,7 @@ function chordNodes(context: MenuContext): MenuNode[] {
     {
       kind: "number",
       label: "voicing",
+      help: "inversion steps up or down (play mode: - =)",
       value: chords.inversion,
       min: -MAX_VOICING_STEP,
       max: MAX_VOICING_STEP,
@@ -400,6 +473,7 @@ function chordNodes(context: MenuContext): MenuNode[] {
     {
       kind: "choice",
       label: "spread",
+      help: "close, open or wide chord voicing",
       value: chords.spread,
       options: SPREADS,
       command: (option) => `/chords spread ${option}`,
@@ -407,6 +481,7 @@ function chordNodes(context: MenuContext): MenuNode[] {
     {
       kind: "choice",
       label: "bass",
+      help: "what the left hand plays under the chord (play mode: b)",
       value: chords.bass,
       options: BASS_MODES,
       command: (option) => `/chords bass ${option}`,
@@ -414,12 +489,14 @@ function chordNodes(context: MenuContext): MenuNode[] {
     {
       kind: "toggle",
       label: "sevenths",
+      help: "auto mode plays sevenths instead of triads",
       value: chords.sevenths,
       command: (on) => `/chords sevenths ${on ? "on" : "off"}`,
     },
     {
       kind: "choice",
       label: "perform",
+      help: "block, strum, arpeggio or a rhythm pattern (play mode: 9)",
       value: chords.perform,
       options: PERFORM_MODES,
       command: (option) => `/chords perform ${option}`,
@@ -427,6 +504,7 @@ function chordNodes(context: MenuContext): MenuNode[] {
     {
       kind: "choice",
       label: "pattern",
+      help: "the rhythm used when perform is pattern",
       value: chords.pattern,
       options: CHORD_PATTERNS.map((pattern) => pattern.name),
       command: (option) => `/chords pattern ${option}`,
@@ -434,6 +512,7 @@ function chordNodes(context: MenuContext): MenuNode[] {
     {
       kind: "choice",
       label: "arp rate",
+      help: "arpeggio step length",
       value: chords.rate,
       options: ARP_RATES,
       command: (option) => `/chords rate ${option}`,
@@ -441,16 +520,18 @@ function chordNodes(context: MenuContext): MenuNode[] {
     {
       kind: "number",
       label: "arp octaves",
+      help: "how many octaves an arpeggio climbs",
       value: chords.octaves,
       min: 1,
       max: 4,
       step: linear(1, 1, 4),
-      format: num,
+      format: (value) => `${num(value)} oct`,
       command: (value) => `/chords octaves ${Math.round(value)}`,
     },
     {
       kind: "choice",
       label: "progression",
+      help: "a preset the n key walks through",
       value: chords.preset,
       options: ["none", ...presets],
       command: (option) => `/chords preset ${option}`,
@@ -458,6 +539,7 @@ function chordNodes(context: MenuContext): MenuNode[] {
     {
       kind: "choice",
       label: "style",
+      help: "the style n suggests next chords in",
       value: chords.style,
       options: PROGRESSION_STYLES,
       command: (option) => `/chords style ${option}`,
@@ -493,19 +575,21 @@ function trackNodes(context: MenuContext): MenuNode[] {
       command: (text) =>
         text.trim() ? `track name ${text.trim()}` : undefined,
       example: `track name ${track.name}`,
+      help: "rename the focused track",
     },
-    instrumentNode(track),
     {
       kind: "toggle",
       label: "mute",
       value: track.muted,
       command: (on) => (on ? "mute" : "unmute"),
+      help: "silence this track",
     },
     {
       kind: "toggle",
       label: "solo",
       value: track.solo === true,
       command: (on) => (on ? "solo" : "unsolo"),
+      help: "hear only soloed tracks",
     },
     volumeNode(track),
     panNode(track),
@@ -521,6 +605,7 @@ function instrumentNode(track: Track): MenuNode {
     value: track.instrument,
     options,
     command: (option) => `instrument ${option}`,
+    help: "the sound source; drums use kit",
   };
 }
 
@@ -532,8 +617,11 @@ function volumeNode(track: Track): MenuNode {
     min: 0,
     max: SCORE_LIMITS.maxVolume,
     step: TRACK_LANE_STEP.volume,
-    format: num,
+    format: (value) =>
+      `${num(value)} · ${value > 0 ? `${(20 * Math.log10(value)).toFixed(1)} dB` : "silent"}`,
     command: (value) => `volume ${num(value)}`,
+    reset: "volume 1",
+    help: "track gain; 1 is unity (0 dB) · x resets",
   };
 }
 
@@ -545,8 +633,13 @@ function panNode(track: Track): MenuNode {
     min: -1,
     max: 1,
     step: TRACK_LANE_STEP.pan,
-    format: num,
+    format: (value) =>
+      value === 0
+        ? "center"
+        : `${num(Math.abs(value))} ${value < 0 ? "L" : "R"}`,
     command: (value) => `pan ${num(value)}`,
+    reset: "pan 0",
+    help: "-1 left … 1 right · x centres",
   };
 }
 
@@ -586,7 +679,8 @@ function parameterNodes(context: MenuContext): MenuNode[] {
       kind: "menu",
       id: "synth:advanced",
       label: "advanced",
-      detail: `${Object.keys(SYNTH_PARAMS).length} params · Strudel names`,
+      detail: `all ${Object.keys(SYNTH_PARAMS).length} params`,
+      help: "every voice parameter, grouped, under its Strudel name",
       build: synthAdvancedNodes,
     });
     if (track.synth)
@@ -594,6 +688,7 @@ function parameterNodes(context: MenuContext): MenuNode[] {
         kind: "action",
         label: "reset to defaults",
         command: "synth reset",
+        help: "clear every voice setting on this track",
       });
   }
   return nodes;
@@ -620,6 +715,7 @@ function synthNodes(track: Track, keys: readonly string[]): MenuNode[] {
       value: matchingSynthPreset(track) ?? "—",
       options: Object.keys(SYNTH_PRESETS),
       command: (preset) => `synth preset ${preset}`,
+      help: "a starting voice; every value stays editable",
     });
   for (const key of keys)
     nodes.push(synthParamNode(track, key, keys !== SYNTH_SIMPLE));
@@ -630,22 +726,28 @@ function synthParamNode(track: Track, key: string, named: boolean): MenuNode {
   const param = SYNTH_PARAMS[key]!;
   const current = track.synth?.[key];
   const aliases = (param.strudel ?? []).filter((name) => name !== key);
-  const label = named && aliases.length ? `${key} (${aliases.join("/")})` : key;
+  const label = named
+    ? aliases.length
+      ? `${key} (${aliases.join("/")})`
+      : key
+    : (SYNTH_LABEL[key] ?? key);
   if (param.kind === "number")
     return {
       kind: "number",
-      label: param.unit ? `${label} ${param.unit}` : label,
+      label,
       value: typeof current === "number" ? current : undefined,
       start: param.default,
       // An unset filter cutoff means no filter, not the default cutoff.
       off: /^(lpf|hpf|bpf)$/.test(key)
         ? "off"
-        : `${formatParam(param, param.default)}`,
+        : withUnit(formatParam(param, param.default), param.unit),
       min: param.min,
       max: param.max,
       step: specStep(param),
-      format: (value) => formatParam(param, value),
+      format: (value) => withUnit(formatParam(param, value), param.unit),
       command: (value) => `synth ${key} ${formatParam(param, value)}`,
+      reset: `synth ${key} off`,
+      help: param.doc,
     };
   if (param.kind === "enum")
     return {
@@ -654,14 +756,25 @@ function synthParamNode(track: Track, key: string, named: boolean): MenuNode {
       value: typeof current === "string" ? current : param.default,
       options: param.values,
       command: (option) => `synth ${key} ${option}`,
+      help: param.doc,
     };
   return {
     kind: "toggle",
     label,
     value: typeof current === "boolean" ? current : param.default,
     command: (on) => `synth ${key} ${on ? "on" : "off"}`,
+    help: param.doc,
   };
 }
+
+/** Plain names for the simple synth rows; the note shows the command name. */
+const SYNTH_LABEL: Readonly<Record<string, string>> = {
+  lpf: "filter cutoff",
+  lpq: "filter res",
+  lpenv: "filter env",
+  vib: "vibrato",
+  fm: "FM amount",
+};
 
 /** Every synth parameter, grouped (amplitude, oscillator, FM 1..8, …). */
 function synthAdvancedNodes(context: MenuContext): MenuNode[] {
@@ -769,6 +882,7 @@ function wavetableNodes(track: Track, projectRoot?: string): MenuNode[] {
       step: linear(WAVETABLE_STEP[name], min, max),
       format: num,
       command: (value) => `${name} ${num(value)}`,
+      reset: `${name} ${num(fallback)}`,
     });
   }
   nodes.push({
@@ -799,6 +913,7 @@ function effectNodes(context: MenuContext): MenuNode[] {
       id: effect,
       label: spec.label[0]!.toUpperCase() + spec.label.slice(1),
       detail: values ? effectSummary(effect, values) : "off",
+      help: spec.doc,
       build: (inner) => effectParamNodes(inner, effect, false),
     };
   };
@@ -810,6 +925,7 @@ function effectNodes(context: MenuContext): MenuNode[] {
       kind: "menu",
       id: "more effects",
       label: "more effects",
+      help: "less common effects, each with the same controls",
       detail:
         moreOn.length > 0
           ? `on: ${moreOn.map((effect) => effectSpec(effect).label).join(", ")}`
@@ -832,6 +948,11 @@ function effectSummary(
       return `${key} ${typeof value === "number" ? formatParam(param, value) : String(value)}`;
     })
     .join(" · ");
+}
+
+/** `800 Hz`, `0.2 s`: a value with its unit, when it has one. */
+function withUnit(text: string, unit: string | undefined): string {
+  return unit ? `${text} ${unit}` : text;
 }
 
 function formatParam(spec: ParamSpec, value: number): string {
@@ -861,6 +982,7 @@ function effectParamNodes(
       label: "on",
       value: values !== undefined,
       command: (on) => `fx ${effect} ${on ? "on" : "off"}`,
+      help: `switch the ${spec.label} on or off (settings are kept)`,
     });
     const presets = effectPresetNames(effect);
     if (presets.length > 0)
@@ -870,6 +992,7 @@ function effectParamNodes(
         value: "—",
         options: presets,
         command: (preset) => `fx ${effect} preset ${preset}`,
+        help: "a starting point; every value stays editable",
       });
   }
   const keys = advanced ? Object.keys(spec.params) : spec.simple;
@@ -883,15 +1006,23 @@ function effectParamNodes(
     if (param.kind === "number") {
       nodes.push({
         kind: "number",
-        label: param.unit ? `${label} ${param.unit}` : label,
+        label,
         value: typeof current === "number" ? current : undefined,
         start: param.default,
-        off: values ? `${formatParam(param, param.default)}` : "off",
+        off: values
+          ? withUnit(formatParam(param, param.default), param.unit)
+          : "off",
         min: param.min,
         max: param.max,
         step: specStep(param),
-        format: (value) => formatParam(param, value),
+        format: (value) => withUnit(formatParam(param, value), param.unit),
         command: (value) => `fx ${effect} ${key} ${formatParam(param, value)}`,
+        help: param.doc,
+        ...(values
+          ? {
+              reset: `fx ${effect} ${key} ${formatParam(param, param.default)}`,
+            }
+          : {}),
       });
     } else if (param.kind === "enum") {
       nodes.push({
@@ -900,6 +1031,7 @@ function effectParamNodes(
         value: typeof current === "string" ? current : param.default,
         options: param.values,
         command: (option) => `fx ${effect} ${key} ${option}`,
+        help: param.doc,
       });
     } else {
       nodes.push({
@@ -907,6 +1039,7 @@ function effectParamNodes(
         label,
         value: typeof current === "boolean" ? current : param.default,
         command: (on) => `fx ${effect} ${key} ${on ? "on" : "off"}`,
+        help: param.doc,
       });
     }
   }
@@ -915,7 +1048,8 @@ function effectParamNodes(
       kind: "menu",
       id: `${effect}:advanced`,
       label: "advanced",
-      detail: `${Object.keys(spec.params).length} params · ${spec.strudel}`,
+      detail: `all ${Object.keys(spec.params).length} params`,
+      help: `Strudel: ${spec.strudel}`,
       build: (inner) => effectParamNodes(inner, effect, true),
     });
     if (values)
@@ -923,6 +1057,7 @@ function effectParamNodes(
         kind: "action",
         label: "reset to defaults",
         command: `fx ${effect} reset`,
+        help: `put every ${spec.label} value back to its default`,
       });
   }
   return nodes;
@@ -1067,62 +1202,72 @@ function soundsDetail(track: Track | undefined): string {
  * The instrument browser: drum kits and soundfont instruments from the
  * built-in packs (fetched on first use), and the pack list.
  */
+function kitsMenu(): MenuNode {
+  return {
+    kind: "menu",
+    id: "kits",
+    label: "drum kits",
+    help: "make this a drum track with a synth or sample kit",
+    detail: `synth ${SYNTH_KIT_NAMES.join(" ")} · samples ${Object.keys(DEFAULT_KITS).join(" ")}`,
+    // Synth kits first (offline), then the pack sample kits.
+    build: () => [
+      ...kitCatalog().map((entry): MenuNode => ({
+        kind: "action",
+        label:
+          entry.kind === "synth"
+            ? `${entry.label} · ${entry.detail}`
+            : `${entry.label} · ${DEFAULT_KITS[entry.name]?.pack ?? entry.detail}`,
+        command: entry.command,
+      })),
+      {
+        kind: "menu",
+        id: "kit-nicknames",
+        label: "Strudel banks",
+        detail: `${Object.keys(STRUDEL_BANK_ALIASES).length} drum machines by nickname`,
+        build: () =>
+          Object.entries(STRUDEL_BANK_ALIASES)
+            .sort(([, a], [, b]) =>
+              a.toLowerCase() < b.toLowerCase() ? -1 : 1,
+            )
+            .map(([bank, nickname]): MenuNode => ({
+              kind: "action",
+              label: `${nickname}  ${bank}`,
+              command: `/kit ${nickname}`,
+            })),
+      },
+    ],
+  };
+}
+
+function patternsMenu(): MenuNode {
+  return {
+    kind: "menu",
+    id: "patterns",
+    label: "drum patterns",
+    detail: `${DRUM_PATTERNS.length} grooves`,
+    help: "replace the drum part with a ready-made groove",
+    build: () =>
+      DRUM_PATTERNS.map((entry): MenuNode => ({
+        kind: "action",
+        label: `${entry.label}  ${entry.tempo.bpm} BPM · ${entry.tags.join(", ")}`,
+        command: `/pattern ${entry.name}`,
+      })),
+  };
+}
+
 function soundNodes(): MenuNode[] {
   return [
-    {
-      kind: "menu",
-      id: "kits",
-      label: "Drum kits",
-      detail: `synth ${SYNTH_KIT_NAMES.join(" ")} · samples ${Object.keys(DEFAULT_KITS).join(" ")}`,
-      // Synth kits first (offline), then the pack sample kits.
-      build: () => [
-        ...kitCatalog().map((entry): MenuNode => ({
-          kind: "action",
-          label:
-            entry.kind === "synth"
-              ? `${entry.label} · ${entry.detail}`
-              : `${entry.label} · ${DEFAULT_KITS[entry.name]?.pack ?? entry.detail}`,
-          command: entry.command,
-        })),
-        {
-          kind: "menu",
-          id: "kit-nicknames",
-          label: "Strudel banks",
-          detail: `${Object.keys(STRUDEL_BANK_ALIASES).length} drum machines by nickname`,
-          build: () =>
-            Object.entries(STRUDEL_BANK_ALIASES)
-              .sort(([, a], [, b]) =>
-                a.toLowerCase() < b.toLowerCase() ? -1 : 1,
-              )
-              .map(([bank, nickname]): MenuNode => ({
-                kind: "action",
-                label: `${nickname}  ${bank}`,
-                command: `/kit ${nickname}`,
-              })),
-        },
-      ],
-    },
     {
       kind: "action",
       label: "wavetable synth  basic shapes morph · built-in",
       command: "wt basic",
-    },
-    {
-      kind: "menu",
-      id: "patterns",
-      label: "Drum patterns",
-      detail: `${DRUM_PATTERNS.length} grooves`,
-      build: () =>
-        DRUM_PATTERNS.map((entry): MenuNode => ({
-          kind: "action",
-          label: `${entry.label}  ${entry.tempo.bpm} BPM · ${entry.tags.join(", ")}`,
-          command: `/pattern ${entry.name}`,
-        })),
+      help: "switch this track to the morphing wavetable synth",
     },
     {
       kind: "menu",
       id: "instruments",
-      label: "Instruments",
+      label: "instruments",
+      help: "sampled piano and General MIDI instruments",
       detail: "General MIDI soundfont, piano",
       build: () => [
         {
@@ -1141,6 +1286,7 @@ function soundNodes(): MenuNode[] {
       kind: "entry",
       label: "use a sound",
       value: "",
+      help: "type a pack sound name, e.g. dirt-samples/bd:3",
       placeholder: "<pack>/<sound>[:<n>]",
       command: (text) => (text.trim() ? `/pack use ${text.trim()}` : undefined),
       example: "/pack use dirt-samples/bd:3",
@@ -1148,7 +1294,8 @@ function soundNodes(): MenuNode[] {
     {
       kind: "menu",
       id: "packs",
-      label: "Packs",
+      label: "sample packs",
+      help: "browse built-in packs or add one by URL",
       detail: `${PACK_CATALOG.length} built in`,
       build: () => [
         ...PACK_CATALOG.map((pack): MenuNode => ({
@@ -1177,20 +1324,23 @@ function transportNodes(context: MenuContext): MenuNode[] {
       kind: "action",
       label: context.playing ? "pause" : "play",
       command: context.playing ? "pause" : "play",
+      help: "start or stop the loop (space on an empty prompt)",
     },
     {
       kind: "number",
-      label: "tempo BPM",
+      label: "tempo",
+      help: "beats per minute",
       value: score.tempoBpm,
       min: SCORE_LIMITS.minTempoBpm,
       max: SCORE_LIMITS.maxTempoBpm,
       step: linear(1, SCORE_LIMITS.minTempoBpm, SCORE_LIMITS.maxTempoBpm),
-      format: num,
+      format: (value) => `${num(value)} BPM`,
       command: (value) => `tempo ${num(value)}`,
     },
     {
       kind: "number",
       label: "beats per bar",
+      help: "the meter",
       value: score.beatsPerBar,
       min: 1,
       max: SCORE_LIMITS.maxBeatsPerBar,
@@ -1200,17 +1350,19 @@ function transportNodes(context: MenuContext): MenuNode[] {
     },
     {
       kind: "number",
-      label: "loop bars",
+      label: "loop length",
+      help: "how long the loop is",
       value: score.bars,
       min: 1,
       max: SCORE_LIMITS.maxBars,
       step: linear(1, 1, SCORE_LIMITS.maxBars),
-      format: num,
+      format: (value) => `${num(value)} bar${value === 1 ? "" : "s"}`,
       command: (value) => `bars ${Math.round(value)}`,
     },
     {
       kind: "choice",
       label: "grid",
+      help: "the step play-mode recording and the euclid editor snap to",
       value: context.grid,
       options: context.grids,
       command: (option) => `/grid ${option}`,
@@ -1218,12 +1370,14 @@ function transportNodes(context: MenuContext): MenuNode[] {
     {
       kind: "toggle",
       label: "click",
+      help: "metronome while playing and recording",
       value: context.clickOn,
       command: (on) => `/click ${on ? "on" : "off"}`,
     },
     {
       kind: "choice",
       label: "count-in bars",
+      help: "bars of click before recording starts",
       value: String(context.countInBars),
       options: ["0", "1", "2"],
       command: (option) => `/count-in ${option}`,
@@ -1283,21 +1437,29 @@ export class EditMenu {
     return this.stack.length > 0;
   }
 
+  /** True while the menu takes typed text (a filter or a value). */
+  get typing(): boolean {
+    return this.filtering || this.entry !== undefined;
+  }
+
   /** Open at the root, or at a section id (`effects`, `automation`). */
   show(context: MenuContext, section?: string): void {
     this.stack = [{ title: "menu", build: rootNodes, index: 0, query: "" }];
     this.filtering = false;
     this.entry = undefined;
-    if (section) {
-      const nodes = rootNodes(context);
+    // Walk the section path (`automation` is Mix & automation › automation).
+    for (const id of section
+      ? (SECTION_ALIASES[section.toLowerCase()] ?? [])
+      : []) {
+      const frame = this.stack.at(-1)!;
+      const nodes = frame.build(context);
       const index = nodes.findIndex(
-        (node) => node.kind === "menu" && node.id === section.toLowerCase(),
+        (node) => node.kind === "menu" && node.id === id,
       );
       const node = nodes[index];
-      if (node?.kind === "menu") {
-        this.stack[0]!.index = index;
-        this.stack.push(childFrame(this.stack[0]!, node));
-      }
+      if (node?.kind !== "menu") break;
+      frame.index = index;
+      this.stack.push(childFrame(frame, node));
     }
   }
 
@@ -1391,6 +1553,14 @@ export class EditMenu {
     if (KEY_LEFT.has(value) || KEY_RIGHT.has(value)) {
       const direction = KEY_RIGHT.has(value) ? 1 : -1;
       return this.nudge(node, direction);
+    }
+    if (KEY_DELETE.has(value) && node.kind === "number") {
+      const reset =
+        node.reset ??
+        (node.start !== undefined && node.value !== undefined
+          ? node.command(node.start)
+          : undefined);
+      return reset ? { type: "run", command: reset } : { type: "handled" };
     }
     if (KEY_DELETE.has(value) && node.kind === "point")
       return {
@@ -1553,21 +1723,50 @@ export class EditMenu {
       title += ` · ${this.entry.label}: ${this.entry.buffer || placeholderFor(selected)}▏`;
     const items = nodes.map((node, at) => ({
       label: `${node.label.padEnd(LABEL_WIDTH)} ${valueText(node)}`.trimEnd(),
-      detail: commandText(node),
       value: String(at),
     }));
+    const command = selected ? commandText(selected) : undefined;
+    const note = [
+      selected ? describe(selected) : "",
+      command ? `› ${command}` : "",
+    ]
+      .filter(Boolean)
+      .join("  ");
     const hint = this.entry
-      ? " type a value · enter apply · esc cancel "
+      ? HINTS.typing
       : this.filtering
-        ? " type to filter · enter choose · esc clear "
+        ? HINTS.filtering
         : selected?.kind === "point"
-          ? " ←→ nudge · digits set · x delete · esc back "
+          ? HINTS.point
           : selected?.kind === "number" ||
               selected?.kind === "toggle" ||
               selected?.kind === "choice"
-            ? " ←→/+- nudge · digits set · enter edit · / filter · esc back "
-            : " ↑↓ move · enter open · / filter · esc back ";
-    return { title, items, index, hint };
+            ? HINTS.value
+            : selected?.kind === "action"
+              ? HINTS.action
+              : HINTS.menu;
+    return { title, items, index, hint, note };
+  }
+}
+
+/** The focused row's one-line description. */
+function describe(node: MenuNode): string {
+  if (node.help) return node.help;
+  switch (node.kind) {
+    case "number":
+      return node.reset || node.start !== undefined
+        ? "←→ adjust · type a number · x resets"
+        : "←→ adjust · type a number";
+    case "toggle":
+      return "space or enter switches it";
+    case "choice":
+      return `${node.options.length} choices · enter lists them`;
+    case "point":
+      return "←→ change · type beat:value · x deletes";
+    case "entry":
+      return "enter, then type";
+    default:
+      return "";
   }
 }
 
@@ -1652,12 +1851,16 @@ function nodeText(node: MenuNode): string {
 
 /** Root sections, for `/menu <section>`. */
 export const MENU_SECTIONS = [
-  "track",
-  "parameters",
+  "sound",
   "effects",
-  "automation",
-  "mix",
-  "sounds",
-  "transport",
+  "rhythm",
   "chords",
+  "mix",
+  "project",
+  // Older names, still accepted.
+  "parameters",
+  "sounds",
+  "track",
+  "automation",
+  "transport",
 ] as const;

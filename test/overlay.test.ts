@@ -156,7 +156,35 @@ test("picker moves with arrows, picks with Enter, cancels with Esc", () => {
       { label: "b", value: "b" },
     ],
   });
-  expect(h.app.input("2")).toEqual({ type: "pick", picker: "n", value: "b" });
+  // Digits never pick (rows are not numbered); j/k move like arrows.
+  expect(h.app.input("2")).toEqual({ type: "overlay" });
+  // Each move names the highlighted row (the live-preview hook).
+  expect(h.app.input("j")).toEqual({
+    type: "pick-move",
+    picker: "n",
+    value: "b",
+  });
+  expect(h.app.input("\r")).toEqual({ type: "pick", picker: "n", value: "b" });
+  // `/` starts the filter, Esc clears it first, then closes.
+  h.app.openPicker({
+    id: "f",
+    title: "f",
+    filterable: true,
+    items: [
+      { label: "kick", value: "k" },
+      { label: "snare", value: "s" },
+    ],
+  });
+  expect(h.app.input("s").type).toBe("overlay");
+  expect(h.app.picker?.items).toHaveLength(2);
+  h.app.input("/");
+  h.app.input("s");
+  h.app.input("n");
+  expect(h.app.picker?.items.map((item) => item.value)).toEqual(["s"]);
+  expect(h.frame().some((line) => line.includes("f · /sn"))).toBe(true);
+  expect(h.app.input(ESC)).toEqual({ type: "overlay" });
+  expect(h.app.picker?.items).toHaveLength(2);
+  expect(h.app.input(ESC)).toEqual({ type: "pick-cancel", picker: "f" });
   // An empty list never opens.
   h.app.openPicker({ id: "e", title: "e", items: [] });
   expect(h.app.overlay).toBeUndefined();

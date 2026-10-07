@@ -24,9 +24,11 @@ import {
   resolveBeat,
   type TrackScoreSnapshot,
 } from "./highway.ts";
+import { asciiHint, fitHint, HINTS } from "./grammar.ts";
 import { classifyKey, overlayKey, type UiCommand } from "./keys.ts";
 import { PromptModel, type PromptAction, type PromptMode } from "./prompt.ts";
 import {
+  paintChordLegend,
   paintPlayHeader,
   paintPlayStrip,
   type PlayHeaderView,
@@ -85,6 +87,8 @@ export interface UiState {
   log?: LogView | undefined;
   picker?: PickerState | undefined;
   text?: TextView | undefined;
+  /** The `?` panel: keys for the screen underneath, drawn over it. */
+  keys?: TextView | undefined;
 }
 
 /** `log` is the transcript, `picker` an arrow-key list, `text` static lines. */
@@ -122,9 +126,13 @@ export interface PickerState {
   filterable?: boolean | undefined;
   /** Current filter text; `items` is then the matching subset of `all`. */
   query?: string | undefined;
+  /** `/` was pressed: printable keys type into the filter. */
+  filtering?: boolean | undefined;
   all?: readonly PickerItem[] | undefined;
   /** Footer keys, replacing the default move/choose/cancel hint. */
   hint?: string | undefined;
+  /** A dim line under the rows: what the focused row does. */
+  note?: string | undefined;
 }
 
 export interface PickerItem {
@@ -701,11 +709,10 @@ function paintOverlay(
     onBackground({ ...roles.text, bold: true }, panel),
     boxWidth - 4,
   );
-  const hint = " ↑↓ pgup pgdn scroll · / filter · esc close ";
-  const hintText = capabilities.unicode ? hint : hint.replace("↑↓", "up dn");
-  if (boxWidth > hintText.length + 4)
+  const hintText = footerHint(HINTS.log, boxWidth - 4, capabilities.unicode);
+  if (hintText)
     buffer.text(
-      left + boxWidth - 2 - hintText.length,
+      left + boxWidth - 2 - displayWidth(hintText),
       top + height - 1,
       hintText,
       onBackground(roles.muted, panel),
@@ -748,8 +755,9 @@ function paintText(
   ui: UiState,
   region: { y: number; height: number },
   width: number,
+  options: { text?: TextView | undefined; hint?: string } = {},
 ): void {
-  const text = ui.text;
+  const text = options.text ?? ui.text;
   if (!text) return;
   const roles = ui.theme.roles;
   const left = width >= 60 ? 2 : 0;
@@ -776,12 +784,14 @@ function paintText(
     onBackground({ ...roles.text, bold: true }, panel),
     boxWidth - 4,
   );
-  const hint = ui.capabilities.unicode
-    ? " ↑↓ pgup pgdn scroll · esc close "
-    : " up dn pgup pgdn scroll · esc close ";
-  if (boxWidth > hint.length + 4)
+  const hint = footerHint(
+    options.hint ?? HINTS.text,
+    boxWidth - 4,
+    ui.capabilities.unicode,
+  );
+  if (hint)
     buffer.text(
-      left + boxWidth - 2 - hint.length,
+      left + boxWidth - 2 - displayWidth(hint),
       region.y + height - 1,
       hint,
       onBackground(roles.muted, panel),
@@ -840,7 +850,11 @@ function paintPicker(
   const roles = ui.theme.roles;
   const left = width >= 60 ? 2 : 0;
   const boxWidth = width - left * 2;
-  const height = Math.min(region.height, Math.max(1, picker.items.length) + 2);
+  const noteRows = picker.note && region.height >= 6 ? 1 : 0;
+  const height = Math.min(
+    region.height,
+    Math.max(1, picker.items.length) + 2 + noteRows,
+  );
   if (height < 3 || boxWidth < 10) return;
   const panel = paintBox(buffer, ui, {
     left,
@@ -851,23 +865,35 @@ function paintPicker(
   buffer.text(
     left + 2,
     region.y,
-    ` ${picker.title}${picker.query ? ` · ${picker.query}` : picker.filterable ? " · type to filter" : ""} `,
+    ` ${picker.title}${picker.filtering || picker.query ? ` · /${picker.query ?? ""}${picker.filtering ? "▏" : ""}` : ""} `,
     onBackground({ ...roles.text, bold: true }, panel),
     boxWidth - 4,
   );
-  const hint =
-    picker.hint ??
-    (ui.capabilities.unicode
-      ? " ↑↓ move · enter choose · esc cancel "
-      : " up/dn move · enter choose · esc cancel ");
-  if (boxWidth > hint.length + 4)
+  const hint = footerHint(
+    picker.filtering
+      ? HINTS.filtering
+      : (picker.hint ??
+          (picker.filterable
+            ? HINTS.list
+            : HINTS.list.replace(" · / filter", ""))),
+    boxWidth - 4,
+    ui.capabilities.unicode,
+  );
+  if (hint)
     buffer.text(
-      left + boxWidth - 2 - hint.length,
+      left + boxWidth - 2 - displayWidth(hint),
       region.y + height - 1,
       hint,
       onBackground(roles.muted, panel),
     );
-  const inner = height - 2;
+  const inner = height - 2 - noteRows;
+  if (noteRows && picker.note)
+    buffer.text(
+      left + 2,
+      region.y + height - 2,
+      truncate(picker.note, boxWidth - 4),
+      onBackground(roles.muted, panel),
+    );
   const first = Math.max(
     0,
     Math.min(picker.items.length - inner, picker.index - inner + 1),
@@ -915,6 +941,24 @@ function paintPicker(
         onBackground(roles.muted, panel),
       );
   });
+}
+
+/** The `?` panel sits at the bottom of the highway, as tall as it needs. */
+function keysRegion(
+  region: { y: number; height: number },
+  keys: TextView,
+): { y: number; height: number } {
+  const height = Math.min(region.height, keys.lines.length + 2);
+  return { y: region.y + region.height - height, height };
+}
+
+/** A footer hint fitted to `width`, spelled in ASCII when needed. */
+export function footerHint(
+  hint: string,
+  width: number,
+  unicode: boolean,
+): string {
+  return fitHint(unicode ? hint : asciiHint(hint), width);
 }
 
 // ---------------------------------------------------------------------------
@@ -969,6 +1013,19 @@ export function composeFrame(
         height: layout.highway.height - 1,
       };
     }
+    if (view.play.legend && layout.highway.height > 4) {
+      paintChordLegend(
+        buffer,
+        layout.highway.y,
+        width,
+        view.play.legend,
+        ui.theme,
+      );
+      layout.highway = {
+        y: layout.highway.y + 1,
+        height: layout.highway.height - 1,
+      };
+    }
   } else paintHeader(buffer, view, ui, width);
   const beat = view.beat ?? resolveBeat(view.score, nowMs);
   if (layout.highway.height > 0) {
@@ -990,6 +1047,11 @@ export function composeFrame(
         },
       );
   }
+  if (ui.keys && layout.highway.height > 0)
+    paintText(buffer, ui, keysRegion(layout.highway, ui.keys), width, {
+      text: ui.keys,
+      hint: HINTS.keys,
+    });
   paintActivity(buffer, layout.activity, ui, width, nowMs);
   const prompt = paintPrompt(buffer, view, ui, layout, width);
   return { buffer, cursor: prompt.cursor, promptRows: prompt.rows, layout };
@@ -1021,6 +1083,12 @@ export type AppInput =
   | { type: "pick"; picker: string; value: string }
   /** Esc on a picker. */
   | { type: "pick-cancel"; picker: string }
+  /**
+   * The highlighted row changed (move, page, filter): the hook for live
+   * previews (/pattern today; an audition controller can listen here too).
+   * Pickers raise `pick-move` → `pick` (commit) or `pick-cancel` (cancel).
+   */
+  | { type: "pick-move"; picker: string; value: string }
   /** Consumed by an overlay (scroll, filter, move). */
   | { type: "overlay" }
   | { type: "none" };
@@ -1073,6 +1141,7 @@ export class TuiApp {
       log: this.log,
       picker: this.picker,
       text: this.text,
+      keys: this.keys,
     };
   }
 
@@ -1121,15 +1190,17 @@ export class TuiApp {
       if (nav === "up" || nav === "down" || nav === "pgup" || nav === "pgdn") {
         const step =
           nav === "up" ? -1 : nav === "down" ? 1 : nav === "pgup" ? -8 : 8;
+        // Moving ends typing into the filter; the filter itself stays.
+        picker.filtering = false;
         picker.index = Math.max(
           0,
           Math.min(picker.items.length - 1, picker.index + step),
         );
-        return { type: "overlay" };
+        return this.pickerMoved(picker);
       }
       if (nav === "home" || nav === "end") {
         picker.index = nav === "home" ? 0 : picker.items.length - 1;
-        return { type: "overlay" };
+        return this.pickerMoved(picker);
       }
       if (nav === "enter") {
         const item = picker.items[picker.index];
@@ -1139,29 +1210,38 @@ export class TuiApp {
           : { type: "pick-cancel", picker: picker.id };
       }
       if (key.type === "ui" && key.command === "close-overlay") {
+        // Esc clears the filter first, then closes.
+        if (picker.query || picker.filtering) {
+          this.filterPicker("");
+          if (this.picker) this.picker.filtering = false;
+          return { type: "overlay" };
+        }
         this.closePicker();
         return { type: "pick-cancel", picker: picker.id };
       }
-      if (picker.filterable && (value === "\u007f" || value === "\b")) {
-        this.filterPicker((picker.query ?? "").slice(0, -1));
-        return { type: "overlay" };
-      }
-      if (
-        picker.filterable &&
-        key.type === "text" &&
-        (picker.query || !/^[1-9]$/.test(key.text))
-      ) {
-        this.filterPicker(((picker.query ?? "") + key.text).slice(0, 40));
-        return { type: "overlay" };
-      }
-      if (key.type === "text" && /^[1-9]$/.test(key.text)) {
-        const index = Number(key.text) - 1;
-        if (index < picker.items.length) {
-          const item = picker.items[index]!;
-          this.closePicker();
-          return { type: "pick", picker: picker.id, value: item.value };
+      if (picker.filterable && picker.filtering) {
+        if (value === "\u007f" || value === "\b") {
+          const query = (picker.query ?? "").slice(0, -1);
+          this.filterPicker(query);
+          if (!query && this.picker) this.picker.filtering = false;
+          return { type: "overlay" };
         }
+        if (key.type === "text") {
+          this.filterPicker(((picker.query ?? "") + key.text).slice(0, 40));
+          return { type: "overlay" };
+        }
+      }
+      if (picker.filterable && key.type === "text" && key.text === "/") {
+        picker.filtering = true;
         return { type: "overlay" };
+      }
+      if (key.type === "text" && (key.text === "j" || key.text === "k")) {
+        const step = key.text === "k" ? -1 : 1;
+        picker.index = Math.max(
+          0,
+          Math.min(picker.items.length - 1, picker.index + step),
+        );
+        return this.pickerMoved(picker);
       }
       // Quit and redraw still work; everything else is swallowed.
       if (
@@ -1270,6 +1350,14 @@ export class TuiApp {
   }
 
   /** Show an arrow-key picker over the highway; replaces any overlay. */
+  /** `pick-move` for the row now highlighted, or a plain overlay input. */
+  private pickerMoved(picker: PickerState): AppInput {
+    const item = picker.items[picker.index];
+    return item
+      ? { type: "pick-move", picker: picker.id, value: item.value }
+      : { type: "overlay" };
+  }
+
   openPicker(picker: Omit<PickerState, "index"> & { index?: number }): void {
     const items = picker.items.slice(0, MAX_PICKER_ITEMS);
     if (items.length === 0) return;
@@ -1310,6 +1398,21 @@ export class TuiApp {
   openText(title: string, lines: readonly string[]): void {
     this.text = { title, lines: lines.slice(0, 512), scroll: 0 };
     this.overlay = "text";
+  }
+
+  /** The `?` panel over the current screen; any key closes it. */
+  keys: TextView | undefined;
+  showKeys(title: string, lines: readonly string[]): void {
+    this.keys = { title, lines, scroll: 0 };
+  }
+
+  closeKeys(): void {
+    this.keys = undefined;
+  }
+
+  /** True while a picker's `/` filter is taking typed text. */
+  get pickerTyping(): boolean {
+    return this.overlay === "picker" && this.picker?.filtering === true;
   }
 
   closeText(): void {

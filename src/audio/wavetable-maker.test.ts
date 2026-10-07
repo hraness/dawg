@@ -316,7 +316,7 @@ describe("project wavetables", () => {
       if (!node || node.kind !== "menu") throw new Error(`no ${id}`);
       return node.build(ctx);
     };
-    const tables = open(open(rootNodes(ctx), "parameters"), "wavetables");
+    const tables = open(open(rootNodes(ctx), "sound"), "wavetables");
     const actions = tables.filter(
       (node): node is Extract<MenuNode, { kind: "action" }> =>
         node.kind === "action",

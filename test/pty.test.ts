@@ -267,7 +267,7 @@ test.skipIf(!supported)(
     // /help opens the grouped overlay; Esc closes it.
     await t.send("/help\r");
     await t.until(() => t.vt.text().includes("── music"), "help overlay");
-    expect(t.vt.text()).toContain("help · esc closes");
+    expect(t.vt.text()).toContain("esc back");
     await t.send("\u001b[F"); // End: the last page holds window + keys
     await t.until(() => t.vt.text().includes("── keys"), "help end");
     expect(t.vt.text()).toContain("/auth [--check]");
@@ -326,8 +326,8 @@ test.skipIf(!supported)(
     await t.send("/model\r");
     await t.until(() => t.vt.text().includes("Claude Sonnet 5.5"), "picker");
     expect(t.vt.text()).toContain("Claude Opus 5.5");
-    // Type-to-filter narrows the list.
-    await t.send("haiku");
+    // `/` filters the list, as in every picker.
+    await t.send("/haiku");
     await t.until(() => !t.vt.text().includes("Claude Sonnet 5.5"), "filter");
     expect(t.vt.text()).toContain("Claude Haiku 4.5");
     await t.send("\r");

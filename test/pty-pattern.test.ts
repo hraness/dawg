@@ -71,10 +71,15 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("drums"), "drums track");
 
       await t.send("/pattern\r");
-      await t.until(() => t.vt.text().includes("patterns ·"), "picker");
+      await t.until(() => t.vt.text().includes("drum patterns"), "picker");
       expect(t.vt.text()).toContain("House four-on-the-floor");
-      await t.send("boom");
-      await t.until(() => t.vt.text().includes("Boom bap"), "filtered");
+      // `/` filters, as in every picker; the footer says so.
+      expect(t.vt.text()).toContain("/ filter");
+      await t.send("/boom");
+      await t.until(
+        () => t.vt.text().includes("drum patterns · /boom"),
+        "filtered",
+      );
       await t.send("\r");
       await waitFor(
         async () => (await drums())?.rhythm?.length === 3,

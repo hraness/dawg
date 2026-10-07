@@ -338,6 +338,56 @@ export class ChordPad {
   }
 
   /** `AUTO C major · Dm7 (ii7) → G7 · min+m7 · inv +1 · arp-up · bass`. */
+  /** The header at a glance: mode, key, last chord, next, latches. */
+  public glance(keySet: boolean): string {
+    const s = this.settings;
+    if (s.mode === "off") return "";
+    const key = this.key;
+    const flats = keyUsesFlats(key);
+    const parts = [
+      `${s.mode.toUpperCase()} ${keyName(key)}${keySet ? "" : " (assumed)"}`,
+    ];
+    if (this.last)
+      parts.push(`${this.last.name} (${romanOf(key, this.last.chord)})`);
+    parts.push(`next ${chordName(this.next(), flats)}`);
+    return parts.join(" · ");
+  }
+
+  /** The number-row legend, in key order, with latches marked. */
+  public legend(): {
+    key: string;
+    label: string;
+    on: boolean;
+  }[] {
+    const s = this.settings;
+    const types = Object.entries(TYPE_KEYS).map(([key, type]) => ({
+      key,
+      label: type,
+      on: this.types.has(type),
+    }));
+    const extensions = Object.entries(EXTENSION_KEYS).map(
+      ([key, extension]) => ({
+        key,
+        label: extension,
+        on: this.extensions.has(extension),
+      }),
+    );
+    const perform =
+      s.perform === "pattern"
+        ? `pattern ${patternLabel(s.pattern)}`
+        : s.perform;
+    return [
+      ...types,
+      ...extensions,
+      { key: "0", label: "clear", on: false },
+      { key: "-=", label: `voicing ${signed(s.inversion)}`, on: false },
+      { key: "9", label: perform, on: false },
+      { key: "b", label: `bass ${s.bass}`, on: false },
+      { key: "n", label: "next", on: false },
+      { key: "q", label: s.mode === "auto" ? "auto" : "manual", on: false },
+    ];
+  }
+
   public headerText(keySet: boolean): string {
     const s = this.settings;
     if (s.mode === "off") return "";

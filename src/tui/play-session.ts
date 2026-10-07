@@ -811,10 +811,20 @@ export class PlaySession {
       countIn,
       beat,
       grid: `grid ${this.grid}`,
-      chords: this.chords.headerText(songKey(this.host.score().key).set),
+      chords: this.chords.glance(songKey(this.host.score().key).set),
       status: this.status,
       keys: this.strip(now),
+      legend: this.chords.on ? this.chords.legend() : undefined,
     };
+  }
+
+  /** Secondary state for the `?` panel (kept out of the header). */
+  public details(): string[] {
+    const keySet = songKey(this.host.score().key).set;
+    return [
+      `velocity ${this.keyboard.velocity} · grid ${this.grid} · click ${this.clickOn ? "on" : "off"} · count-in ${this.countInBars} bar${this.countInBars === 1 ? "" : "s"}`,
+      ...(this.chords.on ? [`chords ${this.chords.headerText(keySet)}`] : []),
+    ];
   }
 
   public strip(now = this.host.now()): PlayStripKey[] {

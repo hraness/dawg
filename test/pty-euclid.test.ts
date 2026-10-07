@@ -78,7 +78,7 @@ test.skipIf(!supported)(
         "kit instrument",
       );
       await t.send("/euclid\r");
-      await t.until(() => t.vt.text().includes("euclid ›"), "editor");
+      await t.until(() => t.vt.text().includes("rhythm ›"), "editor");
       // Every drum voice has a lane; the empty kick lane offers E(4,16).
       expect(t.vt.text()).toContain("openhat".slice(0, 4));
       expect(t.vt.text()).toContain("enter adds E(4,16)");
@@ -109,7 +109,7 @@ test.skipIf(!supported)(
 
       // Esc closes the editor; the prompt takes text again.
       await t.send("\u001b");
-      await t.until(() => !t.vt.text().includes("euclid ›"), "editor closed");
+      await t.until(() => !t.vt.text().includes("rhythm ›"), "editor closed");
       // Ctrl-Z undoes the rotate as one step.
       await t.send("\u001a");
       await waitFor(

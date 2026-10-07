@@ -59,18 +59,24 @@ test.skipIf(!supported)(
     try {
       await t.until(() => t.vt.text().includes("STEER"), "prompt");
       await t.send("\u000b");
-      await t.until(() => t.vt.text().includes("Transport"), "menu root");
-      expect(t.vt.text()).toContain("Automation");
+      await t.until(() => t.vt.text().includes("Project"), "menu root");
+      expect(t.vt.text()).toContain("Mix & automation");
+      // The footer names the keys for this screen.
+      expect(t.vt.text()).toContain("enter open");
 
       // Effects › Filter › cutoff, typed as digits.
-      await t.send("jj");
+      await t.send("j");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("menu › Effects"), "effects");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("› Filter"), "filter");
-      // Every row shows its command, and `/` filters the list.
+      // `/` filters the list; the focused row's command shows under it.
       await t.send("/cutoff");
       await t.until(() => t.vt.text().includes("Filter · /cutoff"), "filtered");
+      await t.until(
+        () => t.vt.text().includes("› fx filter cutoff"),
+        "command under the list",
+      );
       await t.send("\r");
       for (const key of "1200") await t.send(key);
       await t.until(() => t.vt.text().includes("1200"), "typed value");
@@ -80,18 +86,24 @@ test.skipIf(!supported)(
         "filter in session",
       );
 
-      // Back out to the root with Esc, then Automation › filter cutoff.
+      // Back out to the root with Esc, one level each,
+      // then Mix & automation › automation › filter cutoff.
       await t.send("\u001b");
       await t.send("\u001b");
       await t.until(
-        () => t.vt.text().includes("Parameters"),
+        () => t.vt.text().includes("Mix & automation"),
         "back at the root",
       );
-      // The root remembers Effects; `/` jumps to Automation by name.
+      await t.send("/mix");
+      await t.send("\r");
+      await t.until(
+        () => t.vt.text().includes("menu › Mix & automation"),
+        "mix",
+      );
       await t.send("/automation");
       await t.send("\r");
       await t.until(
-        () => t.vt.text().includes("menu › Automation"),
+        () => t.vt.text().includes("Mix & automation › automation"),
         "automation",
       );
       await t.send("/cutoff");
@@ -109,7 +121,7 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("beat 2"), "point row");
 
       // Esc closes the menu; the prompt takes text again.
-      for (let i = 0; i < 3; i++) await t.send("\u001b");
+      for (let i = 0; i < 8; i++) await t.send("\u001b");
       await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
       await t.send("abc");
       await t.until(() => t.vt.text().includes("abc"), "typing");
@@ -130,7 +142,7 @@ test.skipIf(!supported)(
     try {
       await t.until(() => t.vt.text().includes("STEER"), "prompt");
       await t.send("\u000b");
-      await t.until(() => t.vt.text().includes("Transport"), "menu root");
+      await t.until(() => t.vt.text().includes("Project"), "menu root");
       await t.send("/effects");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("menu › Effects"), "effects");
@@ -174,13 +186,10 @@ test.skipIf(!supported)(
     try {
       await t.until(() => t.vt.text().includes("STEER"), "prompt");
       await t.send("\u000b");
-      await t.until(() => t.vt.text().includes("Transport"), "menu root");
-      await t.send("/parameters");
+      await t.until(() => t.vt.text().includes("Project"), "menu root");
+      await t.send("/sound");
       await t.send("\r");
-      await t.until(
-        () => t.vt.text().includes("menu › Parameters"),
-        "parameters",
-      );
+      await t.until(() => t.vt.text().includes("menu › Sound"), "sound");
       await t.send("/preset");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("acid"), "preset list");
@@ -191,7 +200,7 @@ test.skipIf(!supported)(
         "acid preset in session",
       );
       // The choice list stays open (menu convention): Esc clears its
-      // filter, backs out to Parameters, then clears that filter too.
+      // filter, backs out to Sound, then clears that filter too.
       for (let i = 0; i < 3; i++) await t.send("\u001b");
       await t.until(
         () => t.vt.text().includes("preset           acid"),

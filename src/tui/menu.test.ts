@@ -45,24 +45,40 @@ function select(menu: EditMenu, ctx: MenuContext, label: string): void {
 }
 
 describe("edit menu", () => {
-  test("root lists the sections and the rhythm editor with current values", () => {
+  test("root lists six plain sections with a summary and a description", () => {
     const menu = new EditMenu();
     const ctx = context();
     menu.show(ctx);
-    const labels = menu.view(ctx).items.map((row) => row.label.split(" ")[0]);
+    const labels = menu
+      .view(ctx)
+      .items.map((row) => row.label.slice(0, 16).trim());
     expect(labels).toEqual([
-      "Track",
-      "Parameters",
+      "Sound",
       "Effects",
-      "Automation",
-      "Mix",
-      "Sounds",
       "Rhythm",
-      "Transport",
       "Chords",
+      "Mix & automation",
+      "Project",
     ]);
-    expect(menu.view(ctx).items[7]!.label).toContain("120 BPM");
-    expect(menu.view(ctx).items[8]!.label).toContain("manual");
+    expect(menu.view(ctx).items[3]!.label).toContain("manual");
+    expect(menu.view(ctx).items[5]!.label).toContain("120 BPM");
+    // The focused row is described under the list.
+    expect(menu.view(ctx).note).toContain("instrument");
+  });
+
+  test("old section names open where that content lives now", () => {
+    const menu = new EditMenu();
+    const ctx = context();
+    for (const [section, title] of [
+      ["parameters", "menu › Sound"],
+      ["sounds", "menu › Sound › browse sounds"],
+      ["track", "menu › Mix & automation"],
+      ["automation", "menu › Mix & automation › automation"],
+      ["transport", "menu › Project"],
+    ] as const) {
+      menu.show(ctx, section);
+      expect(menu.view(ctx).title).toBe(title);
+    }
   });
 
   test("Chords edits play-mode chord settings and the song key", () => {
@@ -140,11 +156,13 @@ describe("edit menu", () => {
   test("nudges run the command the row shows, with the field's step", () => {
     const menu = new EditMenu();
     const ctx = context();
-    menu.show(ctx, "track");
+    menu.show(ctx, "mix");
     select(menu, ctx, "volume");
     const row = menu.view(ctx).items[menu.view(ctx).index]!;
-    expect(row.label).toContain("1");
-    expect(row.detail).toBe("volume 1");
+    expect(row.label).toContain("1 · 0.0 dB");
+    // The row hides command syntax; the note under the list teaches it.
+    expect(row.detail).toBeUndefined();
+    expect(menu.view(ctx).note).toEndWith("› volume 1");
     // Clamped at the top of the range; down steps by 0.05.
     expect(menu.key(RIGHT, ctx)).toEqual({ type: "handled" });
     expect(menu.key("-", ctx)).toEqual({ type: "run", command: "volume 0.95" });
@@ -157,11 +175,14 @@ describe("edit menu", () => {
   test("typed digits set a value; out-of-range input runs nothing", () => {
     const menu = new EditMenu();
     const ctx = context();
-    menu.show(ctx, "transport");
+    menu.show(ctx, "project");
     select(menu, ctx, "tempo");
+    expect(menu.view(ctx).items[menu.view(ctx).index]!.label).toContain(
+      "120 BPM",
+    );
     menu.key("9", ctx);
     menu.key("5", ctx);
-    expect(menu.view(ctx).title).toContain("tempo BPM: 95");
+    expect(menu.view(ctx).title).toContain("tempo: 95");
     expect(menu.key("\r", ctx)).toEqual({ type: "run", command: "tempo 95" });
     menu.key("9", ctx);
     menu.key("9", ctx);
@@ -203,18 +224,23 @@ describe("edit menu", () => {
     });
   });
 
-  test("Parameters: synth preset first, simple params, then advanced groups", () => {
+  test("Sound: instrument, synth preset, simple params, advanced, browse", () => {
     const menu = new EditMenu();
     const ctx = context();
     menu.show(ctx);
-    select(menu, ctx, "Parameters");
+    select(menu, ctx, "Sound");
     menu.key("\r", ctx);
-    const labels = menu.view(ctx).items.map((row) => row.label.split(" ")[0]);
+    const labels = menu
+      .view(ctx)
+      .items.map((row) => row.label.slice(0, 16).trim());
     expect(labels.slice(0, 3)).toEqual(["instrument", "preset", "attack"]);
-    expect(labels.at(-1)).toBe("advanced");
+    expect(labels.at(-2)).toBe("advanced");
+    expect(labels.at(-1)).toBe("browse sounds");
     select(menu, ctx, "attack");
     expect(menu.key(RIGHT, ctx)).toMatchObject({ type: "run" });
-    select(menu, ctx, "lpf");
+    // Plain label; the note names the prompt command.
+    select(menu, ctx, "filter cutoff");
+    expect(menu.view(ctx).note).toContain("› synth lpf 2000");
     expect(menu.view(ctx).items[menu.view(ctx).index]!.label).toContain("off");
     expect(menu.key(RIGHT, ctx)).toEqual({
       type: "run",
@@ -237,14 +263,14 @@ describe("edit menu", () => {
   test("choices open a list; ←/→ cycle without opening", () => {
     const menu = new EditMenu();
     const ctx = context();
-    menu.show(ctx, "track");
+    menu.show(ctx, "sound");
     select(menu, ctx, "instrument");
     expect(menu.key(RIGHT, ctx)).toEqual({
       type: "run",
       command: "instrument pluck",
     });
     menu.key("\r", ctx);
-    expect(menu.view(ctx).title).toBe("menu › Track › instrument");
+    expect(menu.view(ctx).title).toBe("menu › Sound › instrument");
     select(menu, ctx, "saw");
     expect(menu.key("\r", ctx)).toEqual({
       type: "run",
@@ -309,23 +335,25 @@ describe("edit menu", () => {
   test("/ filters the current list; Esc clears the filter first", () => {
     const menu = new EditMenu();
     const ctx = context();
-    menu.show(ctx, "transport");
+    menu.show(ctx, "project");
     menu.key("/", ctx);
     for (const ch of "grid") menu.key(ch, ctx);
     const rows = menu.view(ctx).items;
     expect(rows).toHaveLength(1);
     expect(rows[0]!.label).toStartWith("grid");
-    expect(rows[0]!.detail).toBe("/grid 1/16");
+    expect(menu.view(ctx).note).toEndWith("› /grid 1/16");
     expect(menu.view(ctx).title).toContain("/grid");
     menu.key(ESC, ctx);
     expect(menu.view(ctx).items.length).toBeGreaterThan(1);
-    expect(menu.view(ctx).title).toBe("menu › Transport");
+    expect(menu.view(ctx).title).toBe("menu › Project");
   });
 
   test("mix focuses another track before editing it", () => {
     const menu = new EditMenu();
     const ctx = context();
     menu.show(ctx, "mix");
+    select(menu, ctx, "all tracks");
+    menu.key("\r", ctx);
     select(menu, ctx, "bass");
     expect(menu.key("\r", ctx)).toEqual({
       type: "run",
