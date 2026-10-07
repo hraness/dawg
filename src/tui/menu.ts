@@ -14,6 +14,11 @@ import {
   automationRange,
   SCORE_LIMITS,
   isTrackAutomationParameter,
+  WARP_MODES,
+  WAVETABLE_PARAMS,
+  isWavetableInstrument,
+  wavetableOf,
+  type WavetableParam,
   type AutomationParameter,
   type Track,
   type TrackAutomationParameter,
@@ -50,6 +55,12 @@ import {
   normalizeSynth,
 } from "../../core/synth.ts";
 import type { PickerItem } from "../../tui/app.ts";
+import { BUILTIN_TABLES, BUILTIN_TABLE_NAMES } from "../audio/wavetable.ts";
+import {
+  UZU_WAVETABLES,
+  WAVETABLE_PACK,
+  describeTable,
+} from "../commands/wavetable.ts";
 import {
   BASS_MODES,
   CHORD_PATTERNS,
@@ -199,6 +210,7 @@ const TRACK_LANE_STEP: Readonly<
   resonance: linear(0.05, 0, SCORE_LIMITS.maxFilterResonance),
   "delay-feedback": linear(0.05, 0, SCORE_LIMITS.maxDelayFeedback),
   "delay-mix": linear(0.05, 0, SCORE_LIMITS.maxDelayMix),
+  wt: linear(0.05, 0, 1),
 };
 
 const TRACK_LANE_LABEL: Readonly<Record<TrackAutomationParameter, string>> = {
@@ -208,6 +220,7 @@ const TRACK_LANE_LABEL: Readonly<Record<TrackAutomationParameter, string>> = {
   resonance: "filter resonance",
   "delay-feedback": "delay feedback",
   "delay-mix": "delay mix",
+  wt: "wavetable position",
 };
 
 const FX_LANE_INFO = new Map(FX_LANES.map((entry) => [entry.lane, entry]));
@@ -538,6 +551,9 @@ function parameterNodes(context: MenuContext): MenuNode[] {
   const track = focused(context);
   if (!track) return [];
   const nodes: MenuNode[] = [instrumentNode(track)];
+  // A wavetable track also has the synth voice's envelope, filters and FM.
+  if (isWavetableInstrument(track.instrument))
+    nodes.push(...wavetableNodes(track));
   if (track.sampler) {
     nodes.push({
       kind: "info",
@@ -673,6 +689,92 @@ function synthAdvancedNodes(context: MenuContext): MenuNode[] {
       text.trim() ? `synth partials ${text.trim()}` : "synth partials off",
     example: "synth partials 1 0.5 0.33 0.25",
   });
+  return nodes;
+}
+
+/** Short help for each wavetable parameter row. */
+const WAVETABLE_LABELS: Readonly<Record<WavetableParam, string>> = {
+  wt: "position (wt)",
+  wtenv: "position env amount",
+  wtattack: "position env attack s",
+  wtdecay: "position env decay s",
+  wtsustain: "position env sustain",
+  wtrelease: "position env release s",
+  wtrate: "position LFO Hz",
+  wtdepth: "position LFO depth",
+  warp: "warp",
+  wtphaserand: "phase randomness",
+};
+
+const WAVETABLE_STEP: Readonly<Record<WavetableParam, number>> = {
+  wt: 0.05,
+  wtenv: 0.1,
+  wtattack: 0.01,
+  wtdecay: 0.05,
+  wtsustain: 0.05,
+  wtrelease: 0.05,
+  wtrate: 0.25,
+  wtdepth: 0.05,
+  warp: 0.05,
+  wtphaserand: 0.1,
+};
+
+function wavetableNodes(track: Track): MenuNode[] {
+  const settings = wavetableOf(track);
+  const tables: MenuNode[] = [
+    ...BUILTIN_TABLE_NAMES.map((name): MenuNode => ({
+      kind: "action",
+      label: `${name}  ${BUILTIN_TABLES[name]!.title} · built-in`,
+      command: `wt ${name}`,
+    })),
+    ...Object.entries(UZU_WAVETABLES).map(([set, names]): MenuNode => ({
+      kind: "menu",
+      id: `wt-${set}`,
+      label: set,
+      detail: `${names.length} tables · ${WAVETABLE_PACK}`,
+      build: () =>
+        names.map((name, index): MenuNode => ({
+          kind: "action",
+          label: `${set}:${index}  ${name}`,
+          command: `wt ${set}:${index}`,
+        })),
+    })),
+  ];
+  const nodes: MenuNode[] = [
+    {
+      kind: "menu",
+      id: "wavetables",
+      label: "table",
+      detail: describeTable(settings.table.src),
+      build: () => tables,
+    },
+  ];
+  for (const name of Object.keys(WAVETABLE_PARAMS) as WavetableParam[]) {
+    const [min, max, fallback] = WAVETABLE_PARAMS[name];
+    nodes.push({
+      kind: "number",
+      label: WAVETABLE_LABELS[name],
+      value: settings[name] ?? fallback,
+      min,
+      max,
+      step: linear(WAVETABLE_STEP[name], min, max),
+      format: num,
+      command: (value) => `${name} ${num(value)}`,
+    });
+  }
+  nodes.push({
+    kind: "choice",
+    label: "warp mode",
+    value: settings.warpmode ?? "none",
+    options: WARP_MODES,
+    command: (option) => `warpmode ${option}`,
+  });
+  if ((track.wtAutomation?.length ?? 0) > 0)
+    nodes.push({
+      kind: "info",
+      label: "position automation",
+      value: `${track.wtAutomation!.length} points · Automation › wavetable position`,
+    });
   return nodes;
 }
 
@@ -990,6 +1092,11 @@ function soundNodes(): MenuNode[] {
               })),
         },
       ],
+    },
+    {
+      kind: "action",
+      label: "wavetable synth  basic shapes morph · built-in",
+      command: "wt basic",
     },
     {
       kind: "menu",

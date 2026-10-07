@@ -16,6 +16,7 @@ import {
   song,
   track,
   voiceSlots,
+  wavetable,
 } from "./v1.ts";
 
 describe("sdk v1 builders", () => {
@@ -108,6 +109,36 @@ describe("sdk v1 builders", () => {
     );
     expect(keyed.voices.vox?.root).toBe(60);
     expect(voiceSlots(keyed).size).toBe(0);
+  });
+
+  test("wavetable() maps built-ins, wt_ sets and pack refs, and checks params", () => {
+    expect(wavetable("Basic").table).toEqual({ src: "builtin:basic" });
+    expect(wavetable("wt_digital:2").table.src).toBe(
+      "pack:uzu-wavetables/wt_digital:2",
+    );
+    expect(wavetable("pack:my/tables:1").table.src).toBe("pack:my/tables:1");
+    const t = track({
+      name: "pad",
+      instrument: wavetable("pwm", { wt: 0.4, warpmode: "sync" }),
+      automation: {
+        wt: [
+          [0, 0],
+          [4, 1],
+        ],
+      },
+      notes: [note("C3", 0, 2)],
+    });
+    expect(t.instrument).toBe("wavetable");
+    expect(t.wavetable?.wt).toBe(0.4);
+    const s = song({ tracks: [t] });
+    expect(s.tracks[0]?.wavetable).toEqual({
+      table: { src: "builtin:pwm" },
+      wt: 0.4,
+      warpmode: "sync",
+    });
+    expect(s.tracks[0]?.wtAutomation?.length).toBe(2);
+    expect(() => wavetable("x", { nope: 1 } as never)).toThrow(DawgSdkError);
+    expect(() => wavetable("https://x/y.wav")).toThrow(DawgSdkError);
   });
 
   test("pack sounds keep their pinned src, sha256, url and license", () => {

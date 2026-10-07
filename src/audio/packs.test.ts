@@ -13,7 +13,7 @@ import {
   scoreFromJSON,
   type TrackScore,
 } from "../../core/score.ts";
-import { dc, wavBytes } from "./sample-fixtures.ts";
+import { dc, wavBytes, withClm } from "./sample-fixtures.ts";
 import {
   BANK_ALIASES_URL,
   NO_LICENSE,
@@ -51,6 +51,8 @@ import {
   useSound,
 } from "../commands/pack.ts";
 import { PACK_TOOLS } from "../agent/pack-tools.ts";
+import { pickWavetable } from "../commands/wavetable.ts";
+import { renderScorePcm } from "./wav.ts";
 
 const dirs: string[] = [];
 async function temp(prefix: string): Promise<string> {
@@ -64,6 +66,18 @@ let origin = "";
 const hits: string[] = [];
 const WAV = wavBytes(dc(480, 0.25));
 const WAV2 = wavBytes(dc(960, 0.5));
+/** Three 256-sample cycles: harmonics 1, 2 and 5. */
+const TABLE = withClm(
+  wavBytes(
+    [1, 2, 5].flatMap((h) =>
+      Array.from(
+        { length: 256 },
+        (_, i) => 0.7 * Math.sin((2 * Math.PI * h * i) / 256),
+      ),
+    ),
+  ),
+  256,
+);
 let swapped = false;
 
 beforeAll(() => {
@@ -102,6 +116,13 @@ beforeAll(() => {
           _base: `${origin}/piano/`,
           piano: { A0: "A0.wav", C4: "C4.wav", A4: "A4.wav" },
         });
+      if (path === "/tidalcycles/uzu-wavetables/main/strudel.json")
+        return json({
+          _base: `${origin}/uzu-wt/`,
+          wt_digital: ["wt_digital/a.wav", "wt_digital/b.wav"],
+        });
+      if (path.startsWith("/uzu-wt/"))
+        return new Response(TABLE as unknown as BodyInit);
       if (path === "/gm/names.json") return json(["acoustic_grand_piano"]);
       if (path === "/alias.json")
         return json({
@@ -710,6 +731,60 @@ describe("rendering and credits", () => {
       ),
     );
     await expect(readFile(join(none, "CREDITS.md"), "utf8")).rejects.toThrow();
+  });
+});
+
+describe("pack wavetables", () => {
+  test("wt_ tables pin through the PackStore, slice by clm, render, and replay offline", async () => {
+    const packs = await store();
+    const base = createScore({
+      tempoBpm: 120,
+      bars: 1,
+      tracks: [{ id: "lead", name: "lead", instrument: "saw" }],
+      notes: [
+        {
+          id: "n",
+          trackId: "lead",
+          pitch: 60,
+          startTick: 0,
+          durationTicks: 960,
+          velocity: 1,
+        },
+      ],
+    });
+    const picked = await pickWavetable(packs, base, "lead", "wt_digital:1");
+    const score = apply(base, [picked.operation]);
+    const table = score.tracks[0]!.wavetable!.table;
+    expect(score.tracks[0]!.instrument).toBe("wavetable");
+    expect(table.src).toBe("pack:uzu-wavetables/wt_digital:1");
+    expect(table.sha256).toBe(createHash("sha256").update(TABLE).digest("hex"));
+    expect(table.url).toContain("/uzu-wt/wt_digital/b.wav");
+
+    const projectRoot = await temp("dawg-packs-wt-");
+    const bank = await new SampleLibrary({ projectRoot, packs }).load(score);
+    expect(bank.problems).toEqual([]);
+    expect(bank.wavetables?.get("lead")?.frames).toBe(3);
+    const audio = renderScorePcm(score, { sampleRate: 8_000, samples: bank });
+    expect(audio.pcm.some((value) => value !== 0)).toBe(true);
+
+    // A new process, offline, with the pack cache intact: no fetches, same PCM.
+    hits.length = 0;
+    const offline = await new SampleLibrary({
+      projectRoot,
+      packs: await store({ offline: true, dir: packs.dir }),
+    }).load(score);
+    expect(offline.problems).toEqual([]);
+    expect(hits).toEqual([]);
+    expect(
+      renderScorePcm(score, { sampleRate: 8_000, samples: offline }).pcm,
+    ).toEqual(audio.pcm);
+
+    // Offline with an empty cache reports the table and renders silence.
+    const missing = await new SampleLibrary({
+      projectRoot: await temp("dawg-packs-wt-"),
+      packs: await store({ offline: true }),
+    }).load(score);
+    expect(missing.problems[0]?.message).toContain("wavetable");
   });
 });
 

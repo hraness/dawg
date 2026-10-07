@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.7.0";
+export const SDK_VERSION = "1.8.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -1081,6 +1081,102 @@ export function sampler(
   return Object.freeze({ kind: "sampler", voices: Object.freeze(out), mode });
 }
 
+/** Instrument name that selects a track's wavetable oscillator. */
+export const WAVETABLE_INSTRUMENT = "wavetable";
+
+/** Strudel's `warpmode` names. */
+export type WarpMode =
+  "none" | "asym" | "bendp" | "bendm" | "bendmp" | "sync" | "quant";
+
+/** Wavetable parameters, with Strudel's names. Omitted means default. */
+export type WavetableParams = Readonly<{
+  /** Position 0..1 (default 0). */
+  wt?: number;
+  /** Position envelope amount -1..1 and its ADSR (seconds, sustain 0..1). */
+  wtenv?: number;
+  wtattack?: number;
+  wtdecay?: number;
+  wtsustain?: number;
+  wtrelease?: number;
+  /** Position LFO rate (Hz) and depth 0..1. */
+  wtrate?: number;
+  wtdepth?: number;
+  /** Phase warp amount 0..1 and mode. */
+  warp?: number;
+  warpmode?: WarpMode;
+  /** Start phase randomness 0..1 (seeded per note). */
+  wtphaserand?: number;
+}>;
+
+/** Result of `wavetable()`; pass it as a track's `instrument`. */
+export type WavetableSpec = Readonly<
+  { kind: "wavetable"; table: SampleSpec } & WavetableParams
+>;
+
+const WAVETABLE_KEYS = Object.freeze([
+  "wt",
+  "wtenv",
+  "wtattack",
+  "wtdecay",
+  "wtsustain",
+  "wtrelease",
+  "wtrate",
+  "wtdepth",
+  "warp",
+  "wtphaserand",
+] as const);
+
+/**
+ * A wavetable instrument. `table` is a built-in (`basic`, `pwm`,
+ * `formant`, `harmonics`), a Strudel `wt_` sound (`wt_digital:2` plays
+ * `pack:uzu-wavetables/wt_digital:2`), any `pack:` ref, or a pinned
+ * `{ src, sha256, url }` that dawg writes back after resolving it.
+ *
+ * ```ts
+ * instrument: wavetable("basic", { wt: 0.4 })
+ * instrument: wavetable("wt_vgame:3", { wtenv: 0.6, wtdecay: 0.4, warp: 0.3, warpmode: "bendp" })
+ * ```
+ */
+export function wavetable(
+  table: string | SampleSpec,
+  params: WavetableParams = {},
+): WavetableSpec {
+  if (!isRecord(params))
+    throw new DawgSdkError("wavetable params must be an object");
+  const spec = typeof table === "string" ? { src: table } : table;
+  if (!isRecord(spec) || typeof spec.src !== "string" || spec.src.length === 0)
+    throw new DawgSdkError("wavetable needs a table name");
+  let src = spec.src.trim();
+  if (!src.includes(":") || /^wt_[A-Za-z0-9_]+:[0-9]+$/.test(src))
+    src = src.startsWith("wt_")
+      ? `pack:uzu-wavetables/${src}`
+      : `builtin:${src.toLowerCase()}`;
+  else if (!/^(?:pack|builtin):/.test(src))
+    throw new DawgSdkError(
+      `wavetable table "${src.slice(0, 40)}" must be a built-in, wt_<set>:<n> or pack:<pack>/<sound>`,
+    );
+  const out: Record<string, unknown> = {
+    kind: "wavetable",
+    table: Object.freeze(
+      src.startsWith("builtin:") ? { src } : { ...spec, src },
+    ),
+  };
+  for (const key of Object.keys(params)) {
+    const value = (params as Record<string, unknown>)[key];
+    if (key === "warpmode") {
+      if (typeof value !== "string")
+        throw new DawgSdkError("wavetable warpmode must be a string");
+      out.warpmode = value;
+    } else if ((WAVETABLE_KEYS as readonly string[]).includes(key))
+      out[key] = finite(value, `wavetable ${key}`);
+    else
+      throw new DawgSdkError(
+        `wavetable has no parameter "${key}" (${WAVETABLE_KEYS.join(" ")} warpmode)`,
+      );
+  }
+  return Object.freeze(out) as WavetableSpec;
+}
+
 /**
  * `count` equal slices of one file as voices `prefix0 … prefixN-1`, for
  * chopped breaks: `sampler(slices("samples/break.wav", 8, "brk"))`, then
@@ -1175,6 +1271,8 @@ export type AutomationInput = Readonly<{
    * `"autofilter-cutoff"`, `"distort-drive"`, `"reverb-mix"` (needs the effect).
    */
   fx?: Readonly<Record<string, readonly Point[]>>;
+  /** Wavetable position 0..1 (needs `wavetable()`). */
+  wt?: readonly Point[];
 }>;
 
 /** One effect's parameters; omitted ones take dawg's defaults. */
@@ -1265,10 +1363,10 @@ export type TrackInput = Readonly<{
   /**
    * Synth voice (`sine`, `piano`, `pluck`, `bass`, `saw`, `square`,
    * `triangle`, and Strudel's `sawtooth`, `supersaw`, `pulse`, `user`,
-   * `white`, `pink`, `brown`, `crackle`), `kit` for drums, or
-   * `sampler(...)`. Default `sine`.
+   * `white`, `pink`, `brown`, `crackle`), `kit` for drums,
+   * `sampler(...)` or `wavetable(...)`. Default `sine`.
    */
-  instrument?: string | SamplerSpec;
+  instrument?: string | SamplerSpec | WavetableSpec;
   /**
    * Synthesized drum kit for an `instrument: "kit"` track: `syn808`,
    * `syn909`, `acoustic`, `lofi`, `electro` or `trap`. Omit for the default
@@ -1358,6 +1456,7 @@ export type TrackSpec = Readonly<{
   fx: FxInput | null;
   synth: SynthInput | null;
   sampler: SamplerSpec | null;
+  wavetable: WavetableSpec | null;
   automation: Readonly<Required<AutomationInput>>;
   /** Every hit resolved to its pitch slot. */
   notes: readonly NoteSpec[];
@@ -1388,18 +1487,24 @@ export function track(input: TrackInput): TrackSpec {
     isRecord(rawInstrument) && rawInstrument.kind === "sampler"
       ? localizeSampler(rawInstrument as SamplerSpec, slug)
       : null;
+  const wavetableSpec =
+    isRecord(rawInstrument) && rawInstrument.kind === "wavetable"
+      ? (rawInstrument as WavetableSpec)
+      : null;
   const instrument = samplerSpec
     ? SAMPLER_INSTRUMENT
-    : typeof rawInstrument === "string"
-      ? rawInstrument
-      : undefined;
+    : wavetableSpec
+      ? WAVETABLE_INSTRUMENT
+      : typeof rawInstrument === "string"
+        ? rawInstrument
+        : undefined;
   if (
     instrument === undefined ||
     instrument.length === 0 ||
     instrument.length > 64
   )
     throw new DawgSdkError(
-      `track ${name}: instrument must be a voice name, "kit" or sampler(...)`,
+      `track ${name}: instrument must be a voice name, "kit", sampler(...) or wavetable(...)`,
     );
   if (instrument === SAMPLER_INSTRUMENT && !samplerSpec)
     throw new DawgSdkError(
@@ -1542,6 +1647,7 @@ export function track(input: TrackInput): TrackSpec {
     fx,
     synth,
     sampler: samplerSpec,
+    wavetable: wavetableSpec,
     automation: Object.freeze({
       volume: lane("volume"),
       pan: lane("pan"),
@@ -1550,6 +1656,7 @@ export function track(input: TrackInput): TrackSpec {
       delayFeedback: lane("delayFeedback"),
       delayMix: lane("delayMix"),
       fx: fxLanes(automation.fx, name),
+      wt: lane("wt"),
     }),
     notes: Object.freeze(notes),
     rhythm: Object.freeze([...rhythm]),
@@ -1565,6 +1672,7 @@ const AUTOMATION_KEYS: readonly (keyof AutomationInput)[] = Object.freeze([
   "delayFeedback",
   "delayMix",
   "fx",
+  "wt",
 ]);
 
 type EffectValue = number | string | boolean;
@@ -1767,6 +1875,8 @@ export type ScoreTrack = Readonly<{
   rhythm?: readonly Readonly<Record<string, unknown>>[];
   /** Synth kit name; dawg validates it. */
   kit?: string;
+  wavetable?: Readonly<{ table: ScoreSampleRef } & WavetableParams>;
+  wtAutomation?: readonly ScorePoint[];
 }>;
 
 /**
@@ -1833,6 +1943,7 @@ export function song(input: SongInput): Song {
     const resonanceAutomation = points(t.automation.resonance);
     const delayFeedbackAutomation = points(t.automation.delayFeedback);
     const delayMixAutomation = points(t.automation.delayMix);
+    const wtAutomation = points(t.automation.wt ?? []);
     const stored: Record<string, unknown> = {
       id: t.id,
       name: t.name,
@@ -1861,6 +1972,11 @@ export function song(input: SongInput): Song {
       .filter(([, lane]) => lane.length > 0);
     if (fxLaneEntries.length > 0)
       stored.fxAutomation = Object.freeze(Object.fromEntries(fxLaneEntries));
+    if (t.wavetable) {
+      const { kind: _kind, ...fields } = t.wavetable;
+      stored.wavetable = Object.freeze(fields);
+    }
+    if (wtAutomation.length > 0) stored.wtAutomation = wtAutomation;
     if (t.sampler)
       stored.sampler = Object.freeze({
         voices: t.sampler.voices,

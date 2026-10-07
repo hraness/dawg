@@ -13,8 +13,14 @@ import { FX_LANES, fxSpec, type FxName, type FxValues } from "../fx.ts";
 import { midiToPitch } from "../pitch.ts";
 import { rhythmVoicePitch, rowInSync } from "../rhythm.ts";
 import {
+  BUILTIN_TABLE_PREFIX,
+  WAVETABLE_PARAMS,
   isSamplerInstrument,
+  isWavetableInstrument,
   samplerVoiceSlots,
+  wavetableOf,
+  type TrackWavetable,
+  type WavetableParam,
   TrackScore,
   type AutomationPoint,
   type Note,
@@ -124,6 +130,7 @@ const RESERVED = new Set([
   "hits",
   "every",
   "sampler",
+  "wavetable",
   "slices",
   "euclid",
   "euclidRot",
@@ -215,6 +222,10 @@ export function printTrack(score: TrackScore, track: Track): string {
     return printNote(score, note, !kit && !slots);
   });
   if (track.sampler) used.add("sampler");
+  const wavetable = isWavetableInstrument(track.instrument)
+    ? wavetableOf(track)
+    : undefined;
+  if (wavetable) used.add("wavetable");
 
   const entries: string[] = [
     `id: ${str(track.id)}`,
@@ -222,6 +233,8 @@ export function printTrack(score: TrackScore, track: Track): string {
   ];
   if (track.sampler) {
     entries.push(`instrument: ${printSampler(track.sampler, INDENT)}`);
+  } else if (wavetable) {
+    entries.push(`instrument: ${printWavetable(wavetable, INDENT)}`);
   } else entries.push(`instrument: ${str(track.instrument)}`);
   if (track.kit) entries.push(`kit: ${str(track.kit)}`);
   if (track.muted) entries.push("muted: true");
@@ -299,6 +312,7 @@ export function printTrack(score: TrackScore, track: Track): string {
     ["resonance", track.resonanceAutomation],
     ["delayFeedback", track.delayFeedbackAutomation],
     ["delayMix", track.delayMixAutomation],
+    ["wt", track.wtAutomation],
   ];
   const automation = lanes.filter(([, points]) => points && points.length > 0);
   const fxLanes = FX_LANES.filter(
@@ -358,6 +372,7 @@ export function printTrack(score: TrackScore, track: Track): string {
     "hits",
     "every",
     "sampler",
+    "wavetable",
     "euclid",
     "grid",
   ]
@@ -477,6 +492,37 @@ function printSampler(sampler: Sampler, indent: string): string {
   return `sampler(\n${inner}${shifted},\n${inner}{ mode: ${str(sampler.mode)} },\n${indent})`;
 }
 
+/** `wavetable("basic", { wt: 0.5 })`; pack tables keep their pin. */
+function printWavetable(settings: TrackWavetable, indent: string): string {
+  const src = settings.table.src;
+  const name = src.startsWith(BUILTIN_TABLE_PREFIX)
+    ? str(src.slice(BUILTIN_TABLE_PREFIX.length))
+    : printSample(settings.table, indent, "wavetable(".length);
+  const params: [string, string][] = [];
+  for (const key of Object.keys(WAVETABLE_PARAMS) as WavetableParam[])
+    if (settings[key] !== undefined) params.push([key, num(settings[key])]);
+  if (settings.warpmode) params.push(["warpmode", str(settings.warpmode)]);
+  if (params.length === 0) return `wavetable(${name})`;
+  const inline = `wavetable(${name}, { ${params.map(([k, v]) => `${k}: ${v}`).join(", ")} })`;
+  if (
+    !inline.includes("\n") &&
+    indent.length + "instrument: ".length + inline.length + 1 <= WIDTH
+  )
+    return inline;
+  const inner = indent + INDENT;
+  if (
+    !name.includes("\n") &&
+    indent.length + "instrument: wavetable(".length + name.length + 4 <= WIDTH
+  )
+    return `wavetable(${name}, {\n${params.map(([k, v]) => `${inner}${k}: ${v},`).join("\n")}\n${indent}})`;
+  // Prettier breaks every argument out when the first one breaks.
+  const deeper = inner + INDENT;
+  const table = src.startsWith(BUILTIN_TABLE_PREFIX)
+    ? name
+    : printSample(settings.table, inner, 0);
+  return `wavetable(\n${inner}${table},\n${inner}{\n${params.map(([k, v]) => `${deeper}${k}: ${v},`).join("\n")}\n${inner}},\n${indent})`;
+}
+
 function printSample(ref: SampleRef, indent: string, prefix: number): string {
   const entries: [string, string][] = [["src", str(ref.src)]];
   // Pack sounds keep their pin in the file; local files are hashed on eval.
@@ -507,7 +553,18 @@ function obj(
   const inline = `{ ${entries.map(([k, v]) => `${k}: ${v}`).join(", ")} }`;
   if (indent.length + prefix + inline.length + trailing <= WIDTH) return inline;
   const inner = indent + INDENT;
-  return `{\n${entries.map(([k, v]) => `${inner}${k}: ${v},`).join("\n")}\n${indent}}`;
+  return `{\n${entries.map(([k, v]) => property(k, v, inner)).join("\n")}\n${indent}}`;
+}
+
+/**
+ * One expanded `key: value,` line. Like prettier, a string too long for the
+ * line moves under its key (a 64-hex sha256 pin in a nested object does).
+ */
+function property(key: string, value: string, indent: string): string {
+  const line = `${indent}${key}: ${value},`;
+  if (line.length <= WIDTH || !value.startsWith('"') || value.includes("\n"))
+    return line;
+  return `${indent}${key}:\n${indent}${INDENT}${value},`;
 }
 
 /** Array literal: inline when the line fits (and no forced break), else one item per line. */

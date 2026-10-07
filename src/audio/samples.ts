@@ -29,6 +29,7 @@ import {
   PACK_PREFIX,
   SCORE_LIMITS,
   isSamplerInstrument,
+  isWavetableInstrument,
   type SampleRef,
   type TrackScore,
 } from "../../core/score.ts";
@@ -41,6 +42,7 @@ import {
   type CacheUsage,
   type PruneResult,
 } from "./cache.ts";
+import { Wavetable, wavetableFromWav } from "./wavetable.ts";
 import { trackDirectories } from "../../core/sdk/print.ts";
 import { WavFormatError, parseWav } from "../media/vendor/wav.ts";
 import { WorkspaceError, resolveReadPath } from "../agent/workspace.ts";
@@ -68,6 +70,8 @@ export type SampleProblem = Readonly<{
 export type SampleBank = Readonly<{
   voices: ReadonlyMap<string, DecodedSample>;
   problems: readonly SampleProblem[];
+  /** Pack wavetables keyed by track id (built-in tables need no loading). */
+  wavetables?: ReadonlyMap<string, Wavetable>;
 }>;
 
 export const EMPTY_SAMPLE_BANK: SampleBank = Object.freeze({
@@ -75,15 +79,31 @@ export const EMPTY_SAMPLE_BANK: SampleBank = Object.freeze({
   problems: Object.freeze([]),
 });
 
-/** True when any track of the score is a sampler with voices. */
+/**
+ * True when the score needs the sample library: a sampler with voices, or a
+ * wavetable track playing a pack table.
+ */
 export function hasSamplerTracks(score: TrackScore): boolean {
   return score.tracks.some(
     (track) =>
-      isSamplerInstrument(track.instrument) &&
-      track.sampler !== undefined &&
-      Object.keys(track.sampler.voices).length > 0,
+      (isSamplerInstrument(track.instrument) &&
+        track.sampler !== undefined &&
+        Object.keys(track.sampler.voices).length > 0) ||
+      packWavetable(track) !== undefined,
   );
 }
+
+/** The pinned pack table a wavetable track plays, if any. */
+export function packWavetable(
+  track: TrackScore["tracks"][number],
+): SampleRef | undefined {
+  if (!isWavetableInstrument(track.instrument)) return undefined;
+  const table = track.wavetable?.table;
+  return table?.src.startsWith(PACK_PREFIX) ? table : undefined;
+}
+
+/** Parsed pack wavetables kept in memory (they are small). */
+const MAX_MEMORY_WAVETABLES = 32;
 
 export function sampleKey(trackId: string, voice: string): string {
   return `${trackId}\u0000${voice}`;
@@ -479,6 +499,7 @@ export class SampleLibrary implements SampleSource {
   private memoryBytes = 0;
   /** `real:size:mtime` → sha256, so unchanged files are not re-hashed. */
   private readonly hashes = new Map<string, string>();
+  private readonly tables = new Map<string, Wavetable>();
   private stats = { decodes: 0, diskHits: 0, memoryHits: 0 };
 
   public constructor(options: SampleLibraryOptions) {
@@ -548,7 +569,37 @@ export class SampleLibrary implements SampleSource {
         if (ref.url) urls.push(ref.url);
       }
     }
+    for (const track of score.tracks) {
+      const table = packWavetable(track);
+      if (table?.sha256) this.inUse.add(table.sha256);
+      if (table?.url) urls.push(table.url);
+    }
     if (urls.length) this.packs.protect(urls);
+    const wavetables = new Map<string, Wavetable>();
+    for (const track of score.tracks) {
+      const ref = packWavetable(track);
+      if (!ref) continue;
+      try {
+        const loaded = await this.loadWavetable(ref);
+        wavetables.set(track.id, loaded.table);
+        if (loaded.warning)
+          problems.push({
+            trackId: track.id,
+            voice: "wavetable",
+            src: ref.src,
+            level: "warning",
+            message: `wavetable · ${ref.src} · ${loaded.warning}`,
+          });
+      } catch (error) {
+        problems.push({
+          trackId: track.id,
+          voice: "wavetable",
+          src: ref.src,
+          level: "error",
+          message: `wavetable · ${ref.src} · ${error instanceof Error ? error.message : String(error)} · /wt pick another table`,
+        });
+      }
+    }
     for (const track of score.tracks) {
       if (!isSamplerInstrument(track.instrument) || !track.sampler) continue;
       const names = Object.keys(track.sampler.voices).sort();
@@ -608,7 +659,40 @@ export class SampleLibrary implements SampleSource {
         }
       }
     }
-    return Object.freeze({ voices, problems: Object.freeze(problems) });
+    return Object.freeze({
+      voices,
+      problems: Object.freeze(problems),
+      ...(wavetables.size ? { wavetables } : {}),
+    });
+  }
+
+  /**
+   * A pack wavetable: the raw WAV from the pack file cache (or the network,
+   * checked against the pin), sliced into frames. Tables stay WAV on disk
+   * because the frame layout lives in the file's `clm ` chunk.
+   */
+  private async loadWavetable(
+    ref: SampleRef,
+  ): Promise<{ table: Wavetable; warning?: string }> {
+    const memo = ref.sha256 ? this.tables.get(ref.sha256) : undefined;
+    if (memo) return { table: memo };
+    let url = ref.url;
+    let warning: string | undefined;
+    if (!url) {
+      url = (await this.packs.resolve(ref.src)).url;
+      if (!ref.sha256)
+        warning =
+          "not pinned · re-pick it with /wt so renders stay reproducible";
+    }
+    const file = await this.packs.fetchFile(url, ref.sha256);
+    let table = this.tables.get(file.sha256);
+    if (!table) {
+      table = wavetableFromWav(ref.src, file.sha256, file.bytes);
+      this.tables.set(file.sha256, table);
+      if (this.tables.size > MAX_MEMORY_WAVETABLES)
+        this.tables.delete(this.tables.keys().next().value!);
+    }
+    return { table, ...(warning ? { warning } : {}) };
   }
 
   /**

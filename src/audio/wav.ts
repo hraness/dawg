@@ -2,6 +2,8 @@ import {
   SCORE_LIMITS,
   isSamplerInstrument,
   isTrackAudible,
+  isWavetableInstrument,
+  wavetableOf,
   type AutomationPoint,
   type Note,
   type Track,
@@ -20,6 +22,7 @@ import {
   renderSynthNote,
   synthTailSeconds,
   usesSynthVoice,
+  type VoiceContext,
 } from "./synth/voice.ts";
 import { legacyWave } from "./synth/oscillators.ts";
 import { EMPTY_SAMPLE_BANK, sampleKey, type SampleBank } from "./samples.ts";
@@ -32,6 +35,7 @@ import {
   interpolateAutomation,
   reverbTailFor,
 } from "./effects/chain.ts";
+import { tableFor, wavetableOscillator } from "./wavetable.ts";
 
 export type WavOptions = Readonly<{ sampleRate?: number; maxSeconds?: number }>;
 
@@ -71,6 +75,7 @@ export const AVAILABLE_INSTRUMENTS = Object.freeze([
   "saw",
   "square",
   "triangle",
+  "wavetable",
   "kit",
   // Synth-voice sounds (core/synth.ts), Strudel names; `synth` shapes them.
   "sawtooth",
@@ -275,7 +280,16 @@ export class StemRenderer {
       if (!isTrackAudible(score, trackId)) continue;
       const track = tracks.get(trackId);
       const sampler = isSamplerInstrument(track?.instrument);
-      const key = stemKey(track, notes, context, sampler ? bank : undefined);
+      // Wavetable hook: the oscillator factory for a wavetable track (its
+      // table id joins the stem key), undefined for every other instrument.
+      const wavetable = track ? wavetableHook(track, bank, context) : undefined;
+      const key = stemKey(
+        track,
+        notes,
+        context,
+        sampler ? bank : undefined,
+        wavetable?.id,
+      );
       let stem = this.stems.get(trackId);
       if (stem?.key === key) stem.used = this.renders;
       else {
@@ -294,7 +308,11 @@ export class StemRenderer {
           if (track) renderSamplerNotes(dry, notes, track, context, bank);
         } else if (synthVoice && track) {
           const gainAt = (tick: number) => trackGainAt(track, tick);
-          const voice = { ...context, ticksPerBeat: score.ticksPerBeat };
+          const voice = {
+            ...context,
+            ticksPerBeat: score.ticksPerBeat,
+            ...(wavetable ? { oscillatorFor: wavetable.oscillatorFor } : {}),
+          };
           for (const note of notes) {
             const { start, length } = noteSpan(note, context);
             renderSynthNote(
@@ -425,6 +443,7 @@ function stemKey(
   notes: readonly Note[],
   context: RenderContext,
   bank?: SampleBank,
+  wavetableId?: string,
 ): string {
   let settings: Record<string, unknown> | null = null;
   if (track) {
@@ -441,6 +460,7 @@ function stemKey(
     // Sampler stems also depend on the decoded files: a replaced or missing
     // sample changes the key even when the score did not change.
     ...(bank && track?.sampler ? [samplerVoiceDigest(track, bank)] : []),
+    ...(wavetableId ? [wavetableId] : []),
   ]);
 }
 
@@ -654,6 +674,48 @@ function applyPan(
     // A stereo voice pans its own right channel the same way.
     right[index] = (dryRight ? dryRight[index]! : sample) * gainR;
   }
+}
+
+type WavetableHook = Readonly<{
+  /** Joins the stem key: a different or missing table re-renders. */
+  id: string;
+  oscillatorFor: NonNullable<VoiceContext["oscillatorFor"]>;
+}>;
+
+/**
+ * Wavetable hook: for a wavetable track, each note's oscillator reads the
+ * track's table (`src/audio/wavetable.ts`); the synth voice does the rest.
+ */
+function wavetableHook(
+  track: Track,
+  bank: SampleBank,
+  context: RenderContext,
+): WavetableHook | undefined {
+  if (!isWavetableInstrument(track.instrument)) return undefined;
+  const settings = wavetableOf(track);
+  const table = tableFor(track, settings, bank.wavetables);
+  // A pack table that failed to load renders silent (the problem is reported).
+  if (!table)
+    return {
+      id: `missing:${settings.table.src}`,
+      oscillatorFor: () => () => () => 0,
+    };
+  const lane = track.wtAutomation ?? [];
+  const positionAt =
+    lane.length > 0
+      ? (tick: number) => interpolateAutomation(lane, tick, settings.wt ?? 0)
+      : undefined;
+  return {
+    id: table.id,
+    oscillatorFor: (note) =>
+      wavetableOscillator(table, settings, note, {
+        sampleRate: context.sampleRate,
+        samplesPerTick: context.samplesPerTick,
+        secondsPerTick: context.samplesPerTick / context.sampleRate,
+        gate: noteSpan(note, context).length / context.sampleRate,
+        positionAt,
+      }),
+  };
 }
 
 export function encodeWav(

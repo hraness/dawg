@@ -43,6 +43,14 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - **Chord mode in play mode**, on by default (`auto`) for chord-capable tracks: every note key plays the song key's diatonic chord, voice-led from the last one. `1`–`4` latch dim/min/maj/sus, `5`–`8` latch 6/m7/M7/9, `0` clears, `-`/`=` turn the voicing dial, `9` cycles the perform mode, `B` toggles bass, `N` plays the suggested next chord and `Q` switches auto ⇄ manual. The header shows the mode, key, current chord and the suggestion. Recorded chords keep their strum or arpeggio and stay one undo step per bar.
 - **`/chords`** and a Chords section in `/menu` edit the same settings; **`key <tonic> <mode>`** sets the song key.
 
+### Wavetable synth
+
+- **`instrument: "wavetable"`**: a band-limited wavetable oscillator (per-octave mipmaps, smooth frame interpolation) with Strudel's parameter names: position `wt`, a position envelope (`wtenv`, `wtattack`, `wtdecay`, `wtsustain`, `wtrelease`), a position LFO (`wtrate`, `wtdepth`), `warp`/`warpmode` (`asym`, `bendp`, `bendm`, `bendmp`, `sync`, `quant`) and `wtphaserand`. `wt` is automatable.
+- **Tables**: four built-ins that work offline (`basic`, `pwm`, `formant`, `harmonics`) and Strudel's `wt_` sounds (`wt_digital:2`) from the new `uzu-wavetables` pack, fetched once and pinned by sha256 like any pack sound.
+- **`/wt <table|0..1|list>`**, one command per parameter (`/wtenv 0.5`, `/warpmode bendp`), the table picker and parameters in the menu's Parameters section, and the agent's `set_wavetable` tool. Play mode plays wavetable tracks.
+- It runs through the new synth voice, so ADSR, filter envelopes, FM, unison/detune and vibrato apply to wavetable tracks too.
+- SDK 1.8.0 (additive): `wavetable("basic", { wt: 0.4 })` as a track's `instrument`, and `automation: { wt: [...] }`.
+
 ### Sample packs: bank nicknames and cache sizes
 
 - **Bank nicknames.** Strudel's drum-machine nicknames (`TR909`, `tr808`, `Linn`, `DMX`, `SP12`, `MPC60`, … from its `tidal-drum-machines-alias.json`) work in `/kit`, `/pack use`, `pack:` refs in `track.ts`, the agent's `use_sound` and a new **Strudel banks** list in the menu's drum kits. dawg ships a snapshot and refreshes it with the manifest. `909`, `808`, `linn` and the other short names work as before, and pins keep the full bank name.
