@@ -4,6 +4,20 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ## Unreleased
 
+## 0.4.0
+
+dawg now has a full sound engine with Strudel's synth, effect and sample parameters, Strudel sample packs, wavetables (including ones made from your own audio), Euclidean drum rows and a pattern library, Orchid-style chords, sound previews with A/B, and one consistent set of keys across every screen. Projects from 0.3.0 open and sound the same, and the `dawg` SDK is 1.13.0 (every step additive within v1).
+
+### Previewing changes
+
+- **Audition loop in the edit menu.** `Space` loops the focused track (solo, or the whole mix with `c`), using its own notes over a region of at most four bars, or a short phrase by role when it has none (chord, riff, groove, or one held wavetable note).
+- **Staged edits with A/B.** While the loop plays, menu changes are staged and heard within about 100 ms (only the changed track re-renders, off-thread). `a` flips between the committed and the staged sound, `Enter` keeps all staged changes as one revision and one undo step, `Esc` reverts. Changed rows show `staged ← committed`. Edits from another window are re-applied under the staged ones.
+- The audition controller (`src/tui/audition.ts`) and the preview score builder (`src/audio/preview.ts`) are reusable by any screen; a preview renders byte-identical to the same bars of a full render.
+- **Hover to hear lists.** With the loop on, moving through a list (wavetables, instruments, drum kits, patterns, choice lists in `/menu`, and the `/kit` and `/pattern` pickers) plays the highlighted item on the loop. Hovers replace each other, fast moves skip straight to the latest item, and a pack sound that needs fetching shows `fetching…` without blocking the cursor. Enter chooses, Esc leaves with nothing changed.
+- **The agent can hear before it commits.** `preview_sound` renders a track, or candidate `set_fx`/`set_synth`/`set_wavetable`/… calls applied to a copy, over the audition loop's bars, and returns RMS/peak dBFS, spectral centroid, a description and a comparison with the current sound. It plays once in a quiet window; `/try agent off` keeps it silent.
+- **Audition visuals.** The menu title shows a level meter with a clip mark while the loop plays, and the focused cutoff, envelope or wavetable position row draws a one-line sketch of its response.
+- **`/try <sound command>`** hears a prompt command on the loop first: `/try fx reverb mix 0.6`, then `a` for A/B, Enter to keep (one undo step) or Esc to drop it.
+
 ### Effects
 
 - **A full effects chain on every track**, in a fixed order: filter → dj filter → auto filter → vowel → bitcrush → distortion → tremolo → compressor → pan → phaser → chorus → leslie → post gain → delay → reverb. Each effect turns on with a good default and has a few simple parameters, with the rest under **advanced**.
@@ -63,6 +77,13 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - **Project tables play like any other table**: `/wt vox.wav`, the menu's table picker (project tables are listed first), `set_wavetable` with the path, and `wavetable("./wavetables/vox.wav")` in `track.ts`. They are pinned by sha256; a changed file plays with a warning, a missing one is reported with a fix.
 - SDK 1.11.0 (additive): `wavetable()` accepts a project `.wav` path.
 
+### Sample packs
+
+- **Strudel's sample ecosystem, read through its public manifest format** (clean-room, no Strudel code). Built-in catalog: tidal-drum-machines, dirt-samples, uzu-drumkit, VCSL, piano, mridangam, emu-sp12 and two General MIDI soundfonts, each with its license.
+- Files download lazily on first use over HTTPS and are cached offline. A sampler voice can point at `pack:<pack>/<sound>[:<n>]`, and first use pins its sha256, URL and license. SDK 1.1.0 (additive).
+- `/pack list|add|info|remove|use`, `/kit <bank>`, a sounds list in the menu, and agent tools `list_packs`, `search_sounds` and `use_sound`.
+- Renders credit the packs they use, and projects using CC-BY or CC-BY-SA packs get a `CREDITS.md`.
+
 ### Sample packs: bank nicknames and cache sizes
 
 - **Bank nicknames.** Strudel's drum-machine nicknames (`TR909`, `tr808`, `Linn`, `DMX`, `SP12`, `MPC60`, … from its `tidal-drum-machines-alias.json`) work in `/kit`, `/pack use`, `pack:` refs in `track.ts`, the agent's `use_sound` and a new **Strudel banks** list in the menu's drum kits. dawg ships a snapshot and refreshes it with the manifest. `909`, `808`, `linn` and the other short names work as before, and pins keep the full bank name.
@@ -77,35 +98,7 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - The agent's new `list_drum_patterns`, `apply_drum_pattern` and `set_drum_kit` tools, and it starts genre grooves from a pattern.
 - SDK 1.4.0.
 
-### Fixed
-
-- Rhythm rows with options but no rotate printed as `euclid("hat", 8, 16, { … })`, which the SDK read as a rotate and rejected. The printer now writes rotate 0, and the SDK accepts options in that position.
-- Gateway web searches no longer count the search fee twice in the spend line and ledger. The gateway's reported cost already includes it. A real Exa search response is now a test fixture.
-
-## 0.3.0
-
-dawg projects are now plain TypeScript files that you, an agent or another window can edit, with sampler tracks, local media tools, a computer-keyboard play mode and menus for every edit by hand.
-
-### Play mode (computer keyboard)
-
-- **`/play` or Ctrl-P** turns the computer keyboard into a MIDI keyboard for the focused track: `A S D F G H J K L ; '` are white keys from C, `W E T Y U O P` the black keys, `Z`/`X` move an octave, `C`/`V` change velocity, Shift sustains and Tab latches sustain. Esc leaves.
-- Bass tracks start an octave lower and leads an octave higher; the header shows the range, velocity, record state, click and grid.
-- **Recording.** `R` arms overdub and `Shift-R` replaces the bar; notes are quantized to `/grid` and land as ordinary score edits, so other windows, undo and `track.ts` all see them. One undo step per recorded bar.
-- **Click track.** `M` or `/click on|off|<volume>` toggles a tempo-synced metronome that never reaches renders or exports; `/count-in 0|1|2` sets the count-in before recording.
-- Sampler tracks play their voices from the keyboard: oneshot voices from MIDI 36, keyed samplers repitched from their root.
-- Terminals send no key-up, so held notes last one grid step and extend while the key auto-repeats.
-
-### Previewing changes
-
-- **Audition loop in the edit menu.** `Space` loops the focused track (solo, or the whole mix with `c`), using its own notes over a region of at most four bars, or a short phrase by role when it has none (chord, riff, groove, or one held wavetable note).
-- **Staged edits with A/B.** While the loop plays, menu changes are staged and heard within about 100 ms (only the changed track re-renders, off-thread). `a` flips between the committed and the staged sound, `Enter` keeps all staged changes as one revision and one undo step, `Esc` reverts. Changed rows show `staged ← committed`. Edits from another window are re-applied under the staged ones.
-- The audition controller (`src/tui/audition.ts`) and the preview score builder (`src/audio/preview.ts`) are reusable by any screen; a preview renders byte-identical to the same bars of a full render.
-- **Hover to hear lists.** With the loop on, moving through a list (wavetables, instruments, drum kits, patterns, choice lists in `/menu`, and the `/kit` and `/pattern` pickers) plays the highlighted item on the loop. Hovers replace each other, fast moves skip straight to the latest item, and a pack sound that needs fetching shows `fetching…` without blocking the cursor. Enter chooses, Esc leaves with nothing changed.
-- **The agent can hear before it commits.** `preview_sound` renders a track, or candidate `set_fx`/`set_synth`/`set_wavetable`/… calls applied to a copy, over the audition loop's bars, and returns RMS/peak dBFS, spectral centroid, a description and a comparison with the current sound. It plays once in a quiet window; `/try agent off` keeps it silent.
-- **Audition visuals.** The menu title shows a level meter with a clip mark while the loop plays, and the focused cutoff, envelope or wavetable position row draws a one-line sketch of its response.
-- **`/try <sound command>`** hears a prompt command on the loop first: `/try fx reverb mix 0.6`, then `a` for A/B, Enter to keep (one undo step) or Esc to drop it.
-
-### Menus
+### Menus (reorganised)
 
 - **`/menu [section]` or Ctrl-K** opens six plain sections, most used first: **Sound**, **Effects**, **Rhythm**, **Chords**, **Mix & automation** and **Project**. The old section names (`parameters`, `sounds`, `track`, `automation`, `transport`) still open the matching place.
 - Rows show a plain label and the value with its unit (s, Hz, oct, st, dB, BPM, bars); a line under the list describes the focused row and shows, dimmed, the prompt command it runs. Every change is one receipt and one undo step; `x` resets a value to its default.
@@ -127,6 +120,30 @@ dawg projects are now plain TypeScript files that you, an agent or another windo
 - **Bare-word slips are caught too**: `tempoo 90` answers `did you mean tempo 90?` without a model call when the rest parses as that command's arguments; sentences still go to the agent.
 - **First run names the three ways in**: an empty track reads `<track> · empty · type a request · ctrl-p play · ctrl-k menu` (narrow windows keep `add C4 at 0 to start`).
 - **The play `?` panel's chord line uses the header's words** (`next G`, `(assumed)`, `voicing +1`) instead of `→`, `?` and `inv`.
+
+### Fixed
+
+- Rhythm rows with options but no rotate printed as `euclid("hat", 8, 16, { … })`, which the SDK read as a rotate and rejected. The printer now writes rotate 0, and the SDK accepts options in that position.
+- Gateway web searches no longer count the search fee twice in the spend line and ledger. The gateway's reported cost already includes it. A real Exa search response is now a test fixture.
+
+## 0.3.0
+
+dawg projects are now plain TypeScript files that you, an agent or another window can edit, with sampler tracks, local media tools, a computer-keyboard play mode and menus for every edit by hand.
+
+### Play mode (computer keyboard)
+
+- **`/play` or Ctrl-P** turns the computer keyboard into a MIDI keyboard for the focused track: `A S D F G H J K L ; '` are white keys from C, `W E T Y U O P` the black keys, `Z`/`X` move an octave, `C`/`V` change velocity, Shift sustains and Tab latches sustain. Esc leaves.
+- Bass tracks start an octave lower and leads an octave higher; the header shows the range, velocity, record state, click and grid.
+- **Recording.** `R` arms overdub and `Shift-R` replaces the bar; notes are quantized to `/grid` and land as ordinary score edits, so other windows, undo and `track.ts` all see them. One undo step per recorded bar.
+- **Click track.** `M` or `/click on|off|<volume>` toggles a tempo-synced metronome that never reaches renders or exports; `/count-in 0|1|2` sets the count-in before recording.
+- Sampler tracks play their voices from the keyboard: oneshot voices from MIDI 36, keyed samplers repitched from their root.
+- Terminals send no key-up, so held notes last one grid step and extend while the key auto-repeats.
+
+### Menus
+
+- **`/menu [section]` or Ctrl-K** opens Track, Parameters, Effects, Automation, Mix and Transport. Arrows or `j k` move, Enter opens or toggles, `← →` or `+ -` nudge, digits type a value, `/` filters, `x` deletes an automation point, Esc steps back.
+- Each row shows its current value and the command it runs; every change is one receipt and one undo step.
+- New prompt commands behind the menu: `automate <lane> points <b:v>...`, `automate <lane> remove <beat>`, `track name <text>` and `meter <n>`.
 
 ### Performance
 
