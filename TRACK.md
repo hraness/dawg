@@ -63,8 +63,14 @@ filter off
 delay 0.375 0.3
 delay 0.75 0.4 0.5
 delay off
+reverb 0.3
+reverb 0.4 0.8
+reverb off
 automate filter at 0 400
 automate filter at 4 6000
+automate resonance at 0 0.2
+automate delay-feedback at 0 0.6
+automate delay-mix at 4 0
 clear filter automation
 bars 8
 extend 4 bars
@@ -93,12 +99,16 @@ pattern <voice> every <step> [from <beat>] [vel <0..1>]  step >= 0.125, fills th
 clear <voice>
 filter <cutoff 20..20000> [<resonance 0..1>] | filter off
 delay <beats 0.0625..4> [<feedback 0..0.9> [<mix 0..1>]] | delay off
+reverb <mix 0..1> [<size 0..1>] | reverb off     size defaults to 0.5
 automate filter at <beat> <cutoff> | clear filter automation
+automate resonance at <beat> <0..1> | clear resonance automation
+automate delay-feedback at <beat> <0..0.9> | clear delay-feedback automation
+automate delay-mix at <beat> <0..1> | clear delay-mix automation
 solo | unsolo
 undo | redo
 ```
 
-Effects live on the track as optional `filter {cutoff, resonance}`, `delay {beats, feedback, mix}`, `filterAutomation`, and `solo` fields. Documents written before these fields existed still parse; out-of-range or non-finite values are rejected. Undo and redo append ordinary session events, so history is shared by every window and a new edit clears the redo stack.
+Effects live on the track as optional `filter {cutoff, resonance}`, `delay {beats, feedback, mix}`, `reverb {mix, size}`, `filterAutomation`, `resonanceAutomation`, `delayFeedbackAutomation`, `delayMixAutomation`, and `solo` fields. Effect lanes modulate an existing effect: a resonance lane needs a filter and the delay lanes need a delay. Documents written before these fields existed still parse; out-of-range or non-finite values are rejected. Undo and redo append ordinary session events, so history is shared by every window and a new edit clears the redo stack.
 
 Unrecognized prompts go to the agent whenever a provider is configured (`TRACK_AI=0` disables it). `track login` creates and stores an AI Gateway key; see **Providers and auth** below. `TRACK_MODEL=opus-5.5` or `TRACK_MODEL=sol-6.1` selects the initial friendly model label, and `/model opus-5.5` or `/model sol-6.1` switches it during a session. `TRACK_OPUS_MODEL` / `TRACK_SOL_MODEL` can map those labels to the provider IDs available in the account. By default the labels map to `anthropic/claude-opus-5.5` and `openai/gpt-6.1-sol`. Both IDs were checked against `GET https://ai-gateway.vercel.sh/v1/models` and are tagged `tool-use`. Labels outside the allowlist are rejected before any request is sent.
 
@@ -120,7 +130,9 @@ The xcb provider (`src/agent/xcb.ts`, `src/agent/xcb-agent.ts`) calls `xcb --jso
 
 `generateText(prompt, {maxTokens, signal?, timeoutMs?, selection?})` from `src/agent/provider.ts` is a tool-free one-shot completion for helpers like session naming. On the gateway it uses `anthropic/claude-haiku-4.5` with `max_tokens`. On xcb it uses the selected account with `maxOutputBytes ≈ 8 × maxTokens`. It returns at most 512 trimmed characters of untrusted text and throws when offline, so callers should fall back to a local default.
 
-Playback renders the score to a short mono PCM WAV with deterministic sine, piano, pluck, bass, saw, square, and triangle voices and a synthesized kit whose noise comes from a PRNG seeded by each note, so every render is byte-identical. Track volume and pan automation, the low-pass filter (with its cutoff lane), and the delay send are applied before mixing; mute always silences a track and any solo silences unsoloed tracks. Pan lanes use -1 to 1 and are rendered with deterministic mono centre compensation. With `trackd` running only the daemon plays audio; on the file-lock fallback a per-session audio lock keeps multiple TUI windows from starting duplicate voices. The renderer is deterministic and independently testable; a native or sample-backed instrument backend can replace it behind the same player port.
+Playback renders the score to interleaved stereo 16-bit PCM with deterministic sine, piano, pluck, bass, saw, square, and triangle voices and a synthesized kit whose noise comes from a PRNG seeded by each note, so every render is byte-identical. Track volume and pan automation, the low-pass filter (with cutoff and resonance lanes), the delay send (with feedback and mix lanes), and the reverb send are applied per track; mute always silences a track and any solo silences unsoloed tracks. Pan uses an equal-power law (-1 left, 1 right). The delay is a stereo ping-pong (first repeat on the panned side, later repeats alternate) and the reverb is a Freeverb-style network of eight parallel damped combs and four series allpasses per channel, with the right channel's delay lines offset for width; both use only integer delay lengths and fixed coefficients, so renders stay deterministic.
+
+Audio engine. With `trackd` running only the daemon plays audio; on the file-lock fallback a per-session audio lock keeps multiple TUI windows from starting duplicate voices. The engine renders one loop with every tail (release, delay, reverb) folded back onto the loop start, so the buffer repeats seamlessly, and streams it as raw s16le stereo into one long-lived player process, paced by the wall clock with about 200 ms queued. An edit renders the new loop and swaps it in at the current loop position without restarting the player; a tempo change keeps the musical beat; a seek or a drift above 30 ms re-anchors the write position to the shared transport clock, offset by the queued audio, so the transport matches what you hear. Backends, in order: `ffplay -f s16le -i -`, then SoX `play -t raw -`, then (macOS) `afplay` re-rendering a loop-folded WAV rotated to the current beat on each edit, the only backend that restarts. `TRACK_AUDIO_BACKEND=ffplay|sox|afplay|none` forces one, `TRACK_AUDIO_PLAYER="cmd {rate} {channels}"` streams into any stdin player, and `TRACK_AUDIO=0` disables sound. `track auth status` and `/auth` print the detected backend. The renderer is deterministic and independently testable; a native or sample-backed instrument backend can replace it behind the same player port.
 Set `TRACK_AUDIO=0` for headless sessions.
 
 Use `TRACK_DEMO=1 bun run src/main.ts` for a deterministic non-interactive frame stream while developing the renderer.

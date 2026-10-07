@@ -23,11 +23,13 @@ function drumNotes(trackId: string) {
   }));
 }
 
+/** Summed |sample| over both channels for frames [from, to). */
 function energy(wav: Uint8Array, from = 0, to = Infinity): number {
   const pcm = new Int16Array(wav.buffer.slice(44));
+  const frames = pcm.length / 2;
   let total = 0;
-  for (let i = from; i < Math.min(to, pcm.length); i += 1)
-    total += Math.abs(pcm[i]!);
+  for (let i = from; i < Math.min(to, frames); i += 1)
+    total += Math.abs(pcm[i * 2]!) + Math.abs(pcm[i * 2 + 1]!);
   return total;
 }
 

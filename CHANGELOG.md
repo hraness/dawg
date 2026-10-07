@@ -2,6 +2,15 @@
 
 All notable changes to Track are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## Unreleased
+
+### Added
+
+- **Stereo renderer.** Renders and `track render` WAVs are now interleaved stereo with equal-power pan, a ping-pong stereo delay and a stereo reverb, and stay byte-identical across runs.
+- **Reverb send.** `reverb <mix> [size]` / `reverb off` per track, a deterministic Freeverb-style network (eight damped combs and four allpasses per channel). The agent's `set_effects` tool takes `reverb {mix, size}` or `null`.
+- **More automation lanes.** `automate resonance|delay-feedback|delay-mix at <beat> <value>` (and `clear <lane> automation`), validated by the planner and available to the agent's `set_automation` tool.
+- **Gapless audio engine.** Playback streams a seamless loop as raw PCM into one long-lived `ffplay` (or SoX `play`) process. Edits, tempo changes and seeks swap the buffer in place without restarting playback, and the write position stays anchored to the shared transport clock. On macOS without either, `afplay` replays a re-rendered loop. `track auth status` and `/auth` show the backend; `TRACK_AUDIO_BACKEND` and `TRACK_AUDIO_PLAYER` override it.
+
 ## 0.2.0
 
 The first tagged release. Open a session in several terminals, give each window its own instrument, let an agent write parts, and every window stays on the same song.

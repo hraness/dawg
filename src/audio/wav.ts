@@ -10,6 +10,28 @@ import { drumVoiceForPitch, isDrumInstrument } from "../../core/drums.ts";
 
 export type WavOptions = Readonly<{ sampleRate?: number; maxSeconds?: number }>;
 
+export type RenderOptions = WavOptions &
+  Readonly<{
+    /**
+     * Render exactly one loop and fold every tail (release, delay, reverb)
+     * back onto the loop start, so the buffer repeats seamlessly. This is
+     * what the streaming engine plays; exports keep the default one-shot.
+     */
+    loop?: boolean;
+  }>;
+
+/** Interleaved stereo 16-bit PCM plus its frame count. */
+export type RenderedAudio = Readonly<{
+  sampleRate: number;
+  channels: 2;
+  frames: number;
+  pcm: Int16Array;
+}>;
+
+/** Output channel count for every render and export. */
+export const RENDER_CHANNELS = 2 as const;
+export const DEFAULT_SAMPLE_RATE = 22_050;
+
 /** Names understood by the deterministic local voice bank and the agent. */
 export const AVAILABLE_INSTRUMENTS = Object.freeze([
   "sine",
@@ -24,14 +46,20 @@ export const AVAILABLE_INSTRUMENTS = Object.freeze([
 
 /** Per-track effects understood by the renderer and the agent. */
 export const AVAILABLE_EFFECTS = Object.freeze([
-  "filter (low-pass: cutoff 20..20000 Hz, resonance 0..1, automatable)",
-  "delay (send: beats 0.0625..4, feedback 0..0.9, mix 0..1)",
+  "pan (equal-power stereo: -1 left .. 1 right, automatable)",
+  "filter (low-pass: cutoff 20..20000 Hz and resonance 0..1, both automatable)",
+  "delay (stereo send: beats 0.0625..4, feedback 0..0.9 and mix 0..1 automatable)",
+  "reverb (stereo send: mix 0..1, size 0..1)",
 ] as const);
 
 /** Longest drum one-shot, in seconds; hits ring past their note length. */
 const MAX_DRUM_SECONDS = 0.6;
-/** Filter coefficients are refreshed at this sample interval when automated. */
-const FILTER_CONTROL_SAMPLES = 32;
+/** Effect parameters are refreshed at this sample interval when automated. */
+const CONTROL_SAMPLES = 32;
+/** One-shot renders keep this much ring-out after the last bar. */
+const ONE_SHOT_TAIL_SECONDS = 0.35;
+/** Loop renders fold at most this much tail back onto the loop start. */
+const MAX_LOOP_TAIL_SECONDS = 8;
 
 type RenderContext = Readonly<{
   score: TrackScore;
@@ -40,31 +68,81 @@ type RenderContext = Readonly<{
   samplesPerTick: number;
 }>;
 
-/** Render the bounded score to a mono 16-bit PCM WAV for local playback. */
+/** Exact (fractional) loop length in frames at a sample rate. */
+export function loopFrames(score: TrackScore, sampleRate: number): number {
+  return (score.bars * score.beatsPerBar * 60 * sampleRate) / score.tempoBpm;
+}
+
+export function clampSampleRate(sampleRate?: number): number {
+  return Math.max(
+    8_000,
+    Math.min(48_000, Math.floor(sampleRate ?? DEFAULT_SAMPLE_RATE)),
+  );
+}
+
+/** Render the bounded score to a stereo 16-bit PCM WAV. */
 export function renderScoreWav(
   score: TrackScore,
   options: WavOptions = {},
 ): Uint8Array {
-  const sampleRate = Math.max(
-    8_000,
-    Math.min(48_000, Math.floor(options.sampleRate ?? 22_050)),
-  );
+  const audio = renderScorePcm(score, options);
+  return encodeWav(audio.pcm, audio.sampleRate, RENDER_CHANNELS);
+}
+
+/**
+ * Render the score to interleaved stereo PCM. Every step is plain float64
+ * arithmetic in a fixed order with seeded noise, so identical scores render
+ * byte-identical buffers on every run.
+ */
+export function renderScorePcm(
+  score: TrackScore,
+  options: RenderOptions = {},
+): RenderedAudio {
+  const sampleRate = clampSampleRate(options.sampleRate);
   const maxSeconds = Math.max(1, Math.min(60, options.maxSeconds ?? 30));
-  const loopSeconds = Math.min(
-    maxSeconds,
-    (score.bars * score.beatsPerBar * 60) / score.tempoBpm + 0.35,
+  const loopSeconds = (score.bars * score.beatsPerBar * 60) / score.tempoBpm;
+  const reverbTail = Math.max(
+    0,
+    ...score.tracks.map((track) =>
+      track.reverb && track.reverb.mix > 0 ? 1 + 3 * track.reverb.size : 0,
+    ),
   );
-  const samples = Math.max(1, Math.ceil(loopSeconds * sampleRate));
+  let frames: number;
+  let samples: number;
+  if (options.loop) {
+    frames = Math.max(
+      1,
+      Math.min(
+        Math.round(loopFrames(score, sampleRate)),
+        Math.ceil(maxSeconds * sampleRate),
+      ),
+    );
+    const tailSeconds = Math.min(
+      MAX_LOOP_TAIL_SECONDS,
+      MAX_DRUM_SECONDS + 0.1 + reverbTail + delayTailSeconds(score),
+    );
+    samples = frames + Math.ceil(tailSeconds * sampleRate);
+  } else {
+    const seconds = Math.min(
+      maxSeconds,
+      loopSeconds + ONE_SHOT_TAIL_SECONDS + reverbTail,
+    );
+    frames = Math.max(1, Math.ceil(seconds * sampleRate));
+    samples = frames;
+  }
   const context: RenderContext = {
     score,
     sampleRate,
     samples,
     samplesPerTick: (sampleRate * 60) / (score.tempoBpm * score.ticksPerBeat),
   };
-  // Tracks render one at a time into a reused scratch buffer so per-track
+  // Tracks render one at a time into reused scratch buffers so per-track
   // effects stay bounded in memory regardless of the track count.
-  const mix = new Float64Array(samples);
-  const scratch = new Float64Array(samples);
+  const mixL = new Float64Array(samples);
+  const mixR = new Float64Array(samples);
+  const dry = new Float64Array(samples);
+  const left = new Float64Array(samples);
+  const right = new Float64Array(samples);
   const tracks = new Map(score.tracks.map((track) => [track.id, track]));
   const groups = new Map<string, Note[]>();
   for (const note of score.notes) {
@@ -75,26 +153,61 @@ export function renderScoreWav(
   for (const [trackId, notes] of groups) {
     if (!isTrackAudible(score, trackId)) continue;
     const track = tracks.get(trackId);
-    scratch.fill(0);
+    dry.fill(0);
     const drums = isDrumInstrument(track?.instrument);
     for (const note of notes) {
-      if (drums) renderDrumNote(scratch, note, track, context);
-      else renderToneNote(scratch, note, track, context);
+      if (drums) renderDrumNote(dry, note, track, context);
+      else renderToneNote(dry, note, track, context);
     }
+    if (track) applyLowPass(dry, track, context);
+    applyPan(dry, left, right, track, context);
     if (track) {
-      applyLowPass(scratch, track, context);
-      applyDelay(scratch, track, context);
+      applyDelay(left, right, track, context);
+      applyReverb(left, right, track, context);
     }
-    for (let index = 0; index < samples; index += 1)
-      mix[index]! += scratch[index]!;
+    for (let index = 0; index < samples; index += 1) {
+      mixL[index]! += left[index]!;
+      mixR[index]! += right[index]!;
+    }
   }
-  const pcm = new Int16Array(samples);
-  for (let index = 0; index < samples; index += 1)
-    pcm[index] = clamp16(mix[index]! * 32767);
-  return encodeWav(pcm, sampleRate);
+  if (samples > frames) {
+    // Linear effects superpose, so folding the tail onto the start yields
+    // the steady state of the loop playing forever.
+    for (let index = frames; index < samples; index += 1) {
+      mixL[index % frames]! += mixL[index]!;
+      mixR[index % frames]! += mixR[index]!;
+    }
+  }
+  const pcm = new Int16Array(frames * RENDER_CHANNELS);
+  for (let index = 0; index < frames; index += 1) {
+    pcm[index * 2] = clamp16(mixL[index]! * 32767);
+    pcm[index * 2 + 1] = clamp16(mixR[index]! * 32767);
+  }
+  return Object.freeze({ sampleRate, channels: RENDER_CHANNELS, frames, pcm });
 }
 
-/** Track volume, volume automation, and pan compensation at a score tick. */
+/** Seconds until the slowest delay decays below -60 dB, bounded. */
+function delayTailSeconds(score: TrackScore): number {
+  let longest = 0;
+  for (const track of score.tracks) {
+    if (!track.delay) continue;
+    const feedback = Math.max(
+      track.delay.feedback,
+      ...(track.delayFeedbackAutomation ?? []).map((point) => point.value),
+    );
+    const repeats =
+      feedback <= 0.001
+        ? 1
+        : Math.min(64, Math.log(0.001) / Math.log(feedback));
+    longest = Math.max(
+      longest,
+      ((track.delay.beats * 60) / score.tempoBpm) * (repeats + 1),
+    );
+  }
+  return longest;
+}
+
+/** Track volume and volume automation at a score tick (pan is applied in stereo). */
 function trackGainAt(track: Track | undefined, tick: number): number {
   const trackGain = Math.max(0, Math.min(1, track?.volume ?? 1));
   const automatedGain = interpolateAutomation(
@@ -102,16 +215,7 @@ function trackGainAt(track: Track | undefined, tick: number): number {
     tick,
     1,
   );
-  const automatedPan = interpolateAutomation(
-    track?.panAutomation ?? [],
-    tick,
-    track?.pan ?? 0,
-  );
-  // The current WAV contract is mono. Preserve the perceived level while
-  // making pan automation audible through a deterministic centre-compensation
-  // curve, ready for a future stereo writer without changing exports.
-  const panGain = 1 - Math.abs(Math.max(-1, Math.min(1, automatedPan))) * 0.12;
-  return trackGain * automatedGain * panGain;
+  return trackGain * automatedGain;
 }
 
 function noteSpan(
@@ -243,9 +347,9 @@ function renderDrumNote(
 }
 
 /**
- * RBJ biquad low-pass with a static or automated cutoff. Resonance 0..1 maps
- * to Q 0.707..8 and the cutoff is kept under 45% of the sample rate, so the
- * filter is stable for every value the score accepts.
+ * RBJ biquad low-pass with static or automated cutoff and resonance.
+ * Resonance 0..1 maps to Q 0.707..8 and the cutoff is kept under 45% of the
+ * sample rate, so the filter is stable for every value the score accepts.
  */
 function applyLowPass(
   buffer: Float64Array,
@@ -253,10 +357,13 @@ function applyLowPass(
   context: RenderContext,
 ): void {
   const automation = track.filterAutomation ?? [];
-  if (!track.filter && automation.length === 0) return;
+  const resonanceLane = track.resonanceAutomation ?? [];
+  if (!track.filter && automation.length === 0 && resonanceLane.length === 0)
+    return;
   const { sampleRate, samplesPerTick } = context;
   const staticCutoff = track.filter?.cutoff ?? SCORE_LIMITS.maxFilterCutoff;
-  const q = 0.707 + (track.filter?.resonance ?? 0) * 7.293;
+  const staticResonance = track.filter?.resonance ?? 0;
+  const automated = automation.length > 0 || resonanceLane.length > 0;
   let b0 = 0;
   let b1 = 0;
   let b2 = 0;
@@ -264,7 +371,8 @@ function applyLowPass(
   let a2 = 0;
   let z1 = 0;
   let z2 = 0;
-  const update = (cutoff: number) => {
+  const update = (cutoff: number, resonance: number) => {
+    const q = 0.707 + Math.max(0, Math.min(1, resonance)) * 7.293;
     const frequency = Math.max(
       SCORE_LIMITS.minFilterCutoff,
       Math.min(cutoff, sampleRate * 0.45),
@@ -279,12 +387,15 @@ function applyLowPass(
     a1 = (-2 * cos) / a0;
     a2 = (1 - alpha) / a0;
   };
-  update(staticCutoff);
+  update(staticCutoff, staticResonance);
   for (let index = 0; index < buffer.length; index += 1) {
-    if (automation.length > 0 && index % FILTER_CONTROL_SAMPLES === 0)
+    if (automated && index % CONTROL_SAMPLES === 0) {
+      const tick = index / samplesPerTick;
       update(
-        interpolateAutomation(automation, index / samplesPerTick, staticCutoff),
+        interpolateAutomation(automation, tick, staticCutoff),
+        interpolateAutomation(resonanceLane, tick, staticResonance),
       );
+    }
     const input = buffer[index]!;
     const output = b0 * input + z1;
     z1 = b1 * input - a1 * output + z2;
@@ -293,26 +404,143 @@ function applyLowPass(
   }
 }
 
-/** Tempo-synced feedback delay; echoes past the render window are dropped. */
+/**
+ * Equal-power pan of the mono track into the stereo pair: left = cos(θ),
+ * right = sin(θ) with θ = (pan + 1)·π/4, so the summed power is constant
+ * and a centred track sits 3 dB down in each channel.
+ */
+function applyPan(
+  dry: Float64Array,
+  left: Float64Array,
+  right: Float64Array,
+  track: Track | undefined,
+  context: RenderContext,
+): void {
+  const lane = track?.panAutomation ?? [];
+  const staticPan = track?.pan ?? 0;
+  const gains = (pan: number): [number, number] => {
+    const theta = ((Math.max(-1, Math.min(1, pan)) + 1) * Math.PI) / 4;
+    return [Math.cos(theta), Math.sin(theta)];
+  };
+  let [gainL, gainR] = gains(staticPan);
+  for (let index = 0; index < dry.length; index += 1) {
+    if (lane.length > 0 && index % CONTROL_SAMPLES === 0)
+      [gainL, gainR] = gains(
+        interpolateAutomation(lane, index / context.samplesPerTick, staticPan),
+      );
+    const sample = dry[index]!;
+    left[index] = sample * gainL;
+    right[index] = sample * gainR;
+  }
+}
+
+/**
+ * Tempo-synced stereo feedback delay. Each side echoes its own input and
+ * feeds back into the opposite side, so repeats ping-pong across the field.
+ * Feedback and mix follow their automation lanes when present.
+ */
 function applyDelay(
-  buffer: Float64Array,
+  left: Float64Array,
+  right: Float64Array,
   track: Track,
   context: RenderContext,
 ): void {
   const delay = track.delay;
-  if (!delay || delay.mix <= 0) return;
-  const { score, sampleRate } = context;
+  if (!delay) return;
+  const feedbackLane = track.delayFeedbackAutomation ?? [];
+  const mixLane = track.delayMixAutomation ?? [];
+  if (delay.mix <= 0 && mixLane.length === 0) return;
+  const { score, sampleRate, samplesPerTick } = context;
   const length = Math.max(
     1,
     Math.round(((delay.beats * 60) / score.tempoBpm) * sampleRate),
   );
-  const line = new Float64Array(length);
-  for (let index = 0; index < buffer.length; index += 1) {
+  const lineL = new Float64Array(length);
+  const lineR = new Float64Array(length);
+  let feedback = delay.feedback;
+  let mix = delay.mix;
+  const automated = feedbackLane.length > 0 || mixLane.length > 0;
+  for (let index = 0; index < left.length; index += 1) {
+    if (automated && index % CONTROL_SAMPLES === 0) {
+      const tick = index / samplesPerTick;
+      feedback = interpolateAutomation(feedbackLane, tick, delay.feedback);
+      mix = interpolateAutomation(mixLane, tick, delay.mix);
+    }
     const slot = index % length;
-    const wet = line[slot]!;
-    const dry = buffer[index]!;
-    line[slot] = dry + wet * delay.feedback;
-    buffer[index] = dry + wet * delay.mix;
+    const wetL = lineL[slot]!;
+    const wetR = lineR[slot]!;
+    const dryL = left[index]!;
+    const dryR = right[index]!;
+    lineL[slot] = dryL + wetR * feedback;
+    lineR[slot] = dryR + wetL * feedback;
+    left[index] = dryL + wetL * mix;
+    right[index] = dryR + wetR * mix;
+  }
+}
+
+/** Freeverb comb and allpass tunings at 44.1 kHz; the right side is spread. */
+const COMB_TUNING = [1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617] as const;
+const ALLPASS_TUNING = [556, 441, 341, 225] as const;
+const STEREO_SPREAD = 23;
+const REVERB_INPUT_GAIN = 0.015;
+const REVERB_WET_SCALE = 3;
+
+/**
+ * Schroeder/Freeverb-style stereo reverb send: eight damped feedback combs
+ * in parallel, then four series allpasses, per channel. Size sets the comb
+ * feedback (0.7..0.98) and darkens the tail; the wet signal is added to the
+ * dry stereo pair at `mix`.
+ */
+function applyReverb(
+  left: Float64Array,
+  right: Float64Array,
+  track: Track,
+  context: RenderContext,
+): void {
+  const reverb = track.reverb;
+  if (!reverb || reverb.mix <= 0) return;
+  const scale = context.sampleRate / 44_100;
+  const feedback = 0.7 + 0.28 * reverb.size;
+  const damp = 0.2 + 0.3 * reverb.size;
+  const wet = reverb.mix * REVERB_WET_SCALE;
+  const channel = (spread: number) => ({
+    combs: COMB_TUNING.map((tuning) => ({
+      buffer: new Float64Array(
+        Math.max(1, Math.round((tuning + spread) * scale)),
+      ),
+      index: 0,
+      store: 0,
+    })),
+    allpasses: ALLPASS_TUNING.map((tuning) => ({
+      buffer: new Float64Array(
+        Math.max(1, Math.round((tuning + spread) * scale)),
+      ),
+      index: 0,
+    })),
+  });
+  const sides = [channel(0), channel(STEREO_SPREAD)] as const;
+  const process = (side: (typeof sides)[number], input: number): number => {
+    let output = 0;
+    for (const comb of side.combs) {
+      const delayed = comb.buffer[comb.index]!;
+      comb.store = delayed * (1 - damp) + comb.store * damp;
+      comb.buffer[comb.index] = input + comb.store * feedback;
+      comb.index = comb.index + 1 === comb.buffer.length ? 0 : comb.index + 1;
+      output += delayed;
+    }
+    for (const allpass of side.allpasses) {
+      const delayed = allpass.buffer[allpass.index]!;
+      allpass.buffer[allpass.index] = output + delayed * 0.5;
+      output = delayed - output;
+      allpass.index =
+        allpass.index + 1 === allpass.buffer.length ? 0 : allpass.index + 1;
+    }
+    return output;
+  };
+  for (let index = 0; index < left.length; index += 1) {
+    const input = (left[index]! + right[index]!) * REVERB_INPUT_GAIN;
+    left[index]! += process(sides[0], input) * wet;
+    right[index]! += process(sides[1], input) * wet;
   }
 }
 
@@ -385,7 +613,11 @@ function synthSample(
   return sine;
 }
 
-function encodeWav(pcm: Int16Array, sampleRate: number): Uint8Array {
+export function encodeWav(
+  pcm: Int16Array,
+  sampleRate: number,
+  channels = 1,
+): Uint8Array {
   const dataBytes = pcm.byteLength;
   const bytes = new Uint8Array(44 + dataBytes);
   const view = new DataView(bytes.buffer);
@@ -394,10 +626,10 @@ function encodeWav(pcm: Int16Array, sampleRate: number): Uint8Array {
   writeAscii(bytes, 8, "WAVEfmt ");
   view.setUint32(16, 16, true);
   view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
+  view.setUint16(22, channels, true);
   view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);
+  view.setUint32(28, sampleRate * 2 * channels, true);
+  view.setUint16(32, 2 * channels, true);
   view.setUint16(34, 16, true);
   writeAscii(bytes, 36, "data");
   view.setUint32(40, dataBytes, true);

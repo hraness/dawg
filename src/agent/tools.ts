@@ -1,5 +1,7 @@
 import {
+  AUTOMATION_LANES,
   SCORE_LIMITS,
+  type AutomationParameter,
   type ScoreOperation,
   type TrackScore,
 } from "../../core/score.ts";
@@ -51,6 +53,10 @@ export class ToolArgumentError extends Error {
     this.name = "ToolArgumentError";
   }
 }
+
+const AUTOMATION_PARAMETERS = Object.keys(
+  AUTOMATION_LANES,
+) as AutomationParameter[];
 
 const MAX_NOTES_PER_CALL = 128;
 const MAX_EXPLAIN_CHARS = 2_000;
@@ -331,12 +337,12 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   },
   {
     name: "set_automation",
-    description: `Write a volume (0..1), pan (-1..1), or filter cutoff (${SCORE_LIMITS.minFilterCutoff}..${SCORE_LIMITS.maxFilterCutoff} Hz low-pass) automation lane. mode=replace (default) rewrites the lane; merge keeps existing points at other beats. An empty replace clears it.`,
+    description: `Write an automation lane: volume (0..1), pan (-1..1), filter cutoff (${SCORE_LIMITS.minFilterCutoff}..${SCORE_LIMITS.maxFilterCutoff} Hz low-pass), resonance (0..${SCORE_LIMITS.maxFilterResonance}), delay-feedback (0..${SCORE_LIMITS.maxDelayFeedback}) or delay-mix (0..${SCORE_LIMITS.maxDelayMix}). Delay lanes need a delay on the track (set_effects) to be heard. mode=replace (default) rewrites the lane; merge keeps existing points at other beats. An empty replace clears it.`,
     parameters: {
       type: "object",
       properties: {
         trackId: trackIdSchema,
-        parameter: { type: "string", enum: ["volume", "pan", "filter"] },
+        parameter: { type: "string", enum: AUTOMATION_PARAMETERS },
         mode: { type: "string", enum: ["replace", "merge"] },
         points: {
           type: "array",
@@ -347,7 +353,8 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
               beat: beatSchema("Beat position"),
               value: {
                 type: "number",
-                description: "volume 0..1, pan -1..1, filter cutoff in Hz",
+                description:
+                  "volume 0..1, pan -1..1, filter cutoff in Hz, resonance 0..1, delay-feedback 0..0.9, delay-mix 0..1",
               },
             },
             required: ["beat", "value"],
@@ -362,17 +369,14 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
       const trackId = targetTrack(args, context);
       const parameter = oneOf(
         args.parameter,
-        ["volume", "pan", "filter"],
+        AUTOMATION_PARAMETERS,
         "parameter",
       );
       const mode =
         args.mode === undefined
           ? "replace"
           : oneOf(args.mode, ["replace", "merge"], "mode");
-      const [min, max] =
-        parameter === "filter"
-          ? [SCORE_LIMITS.minFilterCutoff, SCORE_LIMITS.maxFilterCutoff]
-          : [parameter === "pan" ? -1 : 0, 1];
+      const { min, max } = AUTOMATION_LANES[parameter];
       const tpb = context.score.ticksPerBeat;
       const points = list(
         args,
@@ -387,12 +391,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
         };
       });
       const track = context.score.tracks.find((t) => t.id === trackId)!;
-      const existing =
-        parameter === "pan"
-          ? track.panAutomation
-          : parameter === "filter"
-            ? (track.filterAutomation ?? [])
-            : track.volumeAutomation;
+      const existing = track[AUTOMATION_LANES[parameter].field] ?? [];
       const merged = Array.from(
         new Map(
           [...(mode === "merge" ? existing : []), ...points].map((point) => [
@@ -416,7 +415,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   },
   {
     name: "set_effects",
-    description: `Set or remove a track's low-pass filter and tempo-synced delay. Pass null to remove an effect. filter: cutoff ${SCORE_LIMITS.minFilterCutoff}..${SCORE_LIMITS.maxFilterCutoff} Hz, resonance 0..${SCORE_LIMITS.maxFilterResonance}. delay: beats ${SCORE_LIMITS.minDelayBeats}..${SCORE_LIMITS.maxDelayBeats}, feedback 0..${SCORE_LIMITS.maxDelayFeedback}, mix 0..${SCORE_LIMITS.maxDelayMix}.`,
+    description: `Set or remove a track's low-pass filter, tempo-synced stereo delay, and stereo reverb send. Pass null to remove an effect. filter: cutoff ${SCORE_LIMITS.minFilterCutoff}..${SCORE_LIMITS.maxFilterCutoff} Hz, resonance 0..${SCORE_LIMITS.maxFilterResonance}. delay: beats ${SCORE_LIMITS.minDelayBeats}..${SCORE_LIMITS.maxDelayBeats}, feedback 0..${SCORE_LIMITS.maxDelayFeedback}, mix 0..${SCORE_LIMITS.maxDelayMix}. reverb: mix 0..${SCORE_LIMITS.maxReverbMix} (0.15..0.35 is a natural room), size ${SCORE_LIMITS.minReverbSize}..${SCORE_LIMITS.maxReverbSize} (default 0.5; higher is a longer, darker tail).`,
     parameters: {
       type: "object",
       properties: {
@@ -470,6 +469,28 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
             { type: "null" },
           ],
         },
+        reverb: {
+          anyOf: [
+            {
+              type: "object",
+              properties: {
+                mix: {
+                  type: "number",
+                  minimum: 0,
+                  maximum: SCORE_LIMITS.maxReverbMix,
+                },
+                size: {
+                  type: "number",
+                  minimum: SCORE_LIMITS.minReverbSize,
+                  maximum: SCORE_LIMITS.maxReverbSize,
+                },
+              },
+              required: ["mix"],
+              additionalProperties: false,
+            },
+            { type: "null" },
+          ],
+        },
       },
       additionalProperties: false,
     },
@@ -478,6 +499,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
       const patch: {
         filter?: { cutoff: number; resonance: number } | null;
         delay?: { beats: number; feedback: number; mix: number } | null;
+        reverb?: { mix: number; size: number } | null;
       } = {};
       const parts: string[] = [];
       if (args.filter === null) {
@@ -521,8 +543,28 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
         };
         parts.push(`delay ${patch.delay.beats} beats`);
       }
+      if (args.reverb === null) {
+        patch.reverb = null;
+        parts.push("reverb off");
+      } else if (args.reverb !== undefined) {
+        const reverb = record(args.reverb, "reverb");
+        patch.reverb = {
+          mix: number(reverb, "mix", {
+            min: 0,
+            max: SCORE_LIMITS.maxReverbMix,
+          }),
+          size:
+            optionalNumber(reverb, "size", {
+              min: SCORE_LIMITS.minReverbSize,
+              max: SCORE_LIMITS.maxReverbSize,
+            }) ?? 0.5,
+        };
+        parts.push(`reverb ${patch.reverb.mix}`);
+      }
       if (parts.length === 0)
-        throw new ToolArgumentError("set_effects needs filter or delay");
+        throw new ToolArgumentError(
+          "set_effects needs filter, delay, or reverb",
+        );
       return {
         kind: "score",
         operations: [{ type: "updateTrack", trackId, patch }],

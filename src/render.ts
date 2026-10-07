@@ -1,6 +1,6 @@
 /**
  * `track render <out.wav>`: renders a session (or a `track.loop/v1` file) to
- * a mono 16-bit PCM WAV through the same deterministic renderer playback
+ * a stereo 16-bit PCM WAV through the same deterministic renderer playback
  * uses, so two renders of one score are byte-identical. It reads the session
  * record from disk and never starts trackd or plays audio.
  */

@@ -96,7 +96,7 @@ describe("score WAV renderer", () => {
     );
   });
 
-  test("renders piecewise-linear pan automation without changing the WAV contract", () => {
+  test("renders piecewise-linear pan automation into the stereo field", () => {
     const steady = createScore({
       ticksPerBeat: 480,
       tracks: [{ id: "main", volume: 1, pan: 0 }],
@@ -128,6 +128,8 @@ describe("score WAV renderer", () => {
     const header = new DataView(
       renderScoreWav(automated, { sampleRate: 8_000, maxSeconds: 2 }).buffer,
     );
-    expect(header.getUint16(22, true)).toBe(1);
+    expect(header.getUint16(22, true)).toBe(2);
+    expect(header.getUint32(28, true)).toBe(8_000 * 4);
+    expect(header.getUint16(32, true)).toBe(4);
   });
 });

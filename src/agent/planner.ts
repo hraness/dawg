@@ -1,7 +1,10 @@
 import {
   SCORE_LIMITS,
+  AUTOMATION_LANES,
+  isAutomationParameter,
   normalizeDelay,
   normalizeFilter,
+  normalizeReverb,
   scoreFromJSON,
   type ScoreOperation,
 } from "../../core/score.ts";
@@ -110,19 +113,19 @@ function parseOperation(value: unknown): ScoreOperation {
       safe.filter = normalizeFilter(patch.filter) ?? null;
     if (patch.delay !== undefined)
       safe.delay = normalizeDelay(patch.delay) ?? null;
+    if (patch.reverb !== undefined)
+      safe.reverb = normalizeReverb(patch.reverb) ?? null;
     return { type: "updateTrack", trackId: value.trackId, patch: safe };
   }
   if (
     value.type === "setAutomation" &&
     typeof value.trackId === "string" &&
     value.trackId.length <= SCORE_LIMITS.maxIdLength &&
-    (value.parameter === "volume" ||
-      value.parameter === "pan" ||
-      value.parameter === "filter") &&
+    isAutomationParameter(value.parameter) &&
     Array.isArray(value.points) &&
     value.points.length <= SCORE_LIMITS.maxAutomationPoints
   ) {
-    const [minValue, maxValue] = AUTOMATION_RANGES[value.parameter];
+    const { min: minValue, max: maxValue } = AUTOMATION_LANES[value.parameter];
     const points = value.points.map((candidate) => {
       if (!isRecord(candidate))
         throw new Error("agent automation point is malformed");
@@ -211,12 +214,6 @@ function parseOperation(value: unknown): ScoreOperation {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-
-const AUTOMATION_RANGES = Object.freeze({
-  volume: [0, 1],
-  pan: [-1, 1],
-  filter: [SCORE_LIMITS.minFilterCutoff, SCORE_LIMITS.maxFilterCutoff],
-} as const);
 
 /** "kick=36, snare=38, ..." for the model's drum vocabulary. */
 export function drumVoiceGuide(): string {

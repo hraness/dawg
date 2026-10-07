@@ -15,6 +15,15 @@ import {
 } from "./store.ts";
 
 const WORKER = join(import.meta.dir, "fixtures", "client-worker.ts");
+const FAKE_PLAYER = join(
+  import.meta.dir,
+  "..",
+  "audio",
+  "fixtures",
+  "fake-player.ts",
+);
+// Spawned daemons inherit this: no test ever reaches a real sound device.
+process.env.TRACK_AUDIO = "0";
 const DAEMON_ARGS = ["--grace-ms", "300"];
 const clients: DaemonClient[] = [];
 const workspaces: string[] = [];
@@ -224,6 +233,45 @@ describe("trackd", () => {
     expect(first.transport.playing).toBe(false);
     expect(first.transport).toEqual(second.transport);
     expect(seen).toEqual([...seen].sort((a, b) => a - b));
+  });
+
+  test("streams gapless audio: edits never restart the player", async () => {
+    const { workspace, sessionId } = await session();
+    const out = join(workspace, "player");
+    process.env.TRACK_AUDIO_PLAYER = `${process.execPath} ${FAKE_PLAYER} ${out}`;
+    delete process.env.TRACK_AUDIO;
+    try {
+      const connected = await client(workspace, sessionId);
+      await connected.setTransport("play");
+      await until(() => existsSync(`${out}.starts`));
+      for (let index = 0; index < 3; index += 1) {
+        await connected.sync();
+        const result = await connected.apply({
+          base: connected.record.revision,
+          kind: "score.operation",
+          payload: {},
+          operations: [addNote(`live-${index}`, index * 240)],
+        });
+        expect(result.status).toBe("accepted");
+        await Bun.sleep(80);
+      }
+      await connected.setTransport("seek", { beat: 1 });
+      await Bun.sleep(80);
+      const size = (await readFile(`${out}.pcm`)).length;
+      expect(size).toBeGreaterThan(0);
+      await until(async () => (await readFile(`${out}.pcm`)).length > size);
+      await connected.setTransport("pause");
+      const starts = (await readFile(`${out}.starts`, "utf8"))
+        .trim()
+        .split("\n");
+      expect(starts).toHaveLength(1);
+      // Pausing closes the player's stdin, so the fake player exits.
+      await until(() => !alive(Number(starts[0])));
+      expect((await readFile(`${out}.pcm`)).length % 4).toBe(0);
+    } finally {
+      delete process.env.TRACK_AUDIO_PLAYER;
+      process.env.TRACK_AUDIO = "0";
+    }
   });
 
   test("kill -9 then restart recovers the same digest and reclaims the socket", async () => {

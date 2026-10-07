@@ -73,6 +73,7 @@ describe("composition brief", () => {
     ]);
     expect(parsed.focusedNotes.rows.map((row) => row[0])).toEqual(["n1", "n2"]);
     expect(parsed.instruments).toContain("bass");
+    expect(JSON.stringify(parsed.effects)).toContain("reverb");
   });
 
   test("stays within the byte budget and never includes the environment key", () => {

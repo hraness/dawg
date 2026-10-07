@@ -1,17 +1,22 @@
-import { mkdir, rm, stat, unlink, utimes } from "node:fs/promises";
+import { unlink } from "node:fs/promises";
 import type { TrackScore } from "../../core/score.ts";
-import { renderScoreWav } from "./wav.ts";
+import { PlaybackLock } from "./lock.ts";
+import { RENDER_CHANNELS, encodeWav, renderScorePcm } from "./wav.ts";
 
 /** Small best-effort local player. The score and transport remain testable without a sound device. */
 export class LoopPlayer {
   private process: { kill: () => void; exited?: Promise<number> } | undefined;
   private file: string | undefined;
-  private ownsLock = false;
-  private lockHeartbeat: ReturnType<typeof setInterval> | undefined;
+  private readonly lock: PlaybackLock;
   private readonly lockPath: string | undefined;
 
   public constructor(lockPath?: string) {
     this.lockPath = lockPath;
+    this.lock = new PlaybackLock(lockPath);
+  }
+
+  private get ownsLock(): boolean {
+    return this.lockPath !== undefined && this.lock.held;
   }
 
   /** Whether this process currently owns the session's shared audio lock. */
@@ -19,12 +24,17 @@ export class LoopPlayer {
     return this.ownsLock;
   }
 
-  public async play(score: TrackScore): Promise<void> {
+  /**
+   * Render one seamless loop (tails folded onto the start), rotated so the
+   * file begins at `beat`, then (re)start the one-shot player on it. This is
+   * the last-resort backend; streaming players never restart on edits.
+   */
+  public async play(score: TrackScore, beat = 0): Promise<void> {
     await this.stopAsync();
     if (process.env.TRACK_AUDIO === "0") return;
     if (this.lockPath && !(await this.acquireLock())) return;
     const path = `/tmp/track-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.wav`;
-    await Bun.write(path, renderScoreWav(score));
+    await Bun.write(path, renderLoopWav(score, beat));
     this.file = path;
     this.spawn(path);
   }
@@ -76,43 +86,11 @@ export class LoopPlayer {
   }
 
   private async acquireLock(): Promise<boolean> {
-    if (!this.lockPath) return true;
-    try {
-      await mkdir(this.lockPath);
-      await Bun.write(`${this.lockPath}/owner`, `${process.pid}\n`);
-      this.ownsLock = true;
-      // The lock is also the crash-recovery signal. Keep its mtime fresh while
-      // playback is alive so a second window cannot reclaim an active player
-      // after the stale threshold elapses.
-      this.lockHeartbeat = setInterval(() => {
-        if (!this.lockPath || !this.ownsLock) return;
-        void utimes(this.lockPath, new Date(), new Date()).catch(
-          () => undefined,
-        );
-      }, 5_000);
-      return true;
-    } catch (error) {
-      if ((error as { code?: string }).code !== "EEXIST") throw error;
-      try {
-        if (Date.now() - (await stat(this.lockPath)).mtimeMs > 15_000) {
-          await rm(this.lockPath, { recursive: true, force: true });
-          return this.acquireLock();
-        }
-      } catch {
-        /* another window released between stat and retry */
-      }
-      return false;
-    }
+    return this.lock.acquire();
   }
 
   private async releaseLock(): Promise<void> {
-    if (!this.ownsLock || !this.lockPath) return;
-    this.ownsLock = false;
-    if (this.lockHeartbeat) {
-      clearInterval(this.lockHeartbeat);
-      this.lockHeartbeat = undefined;
-    }
-    await rm(this.lockPath, { recursive: true, force: true });
+    await this.lock.release();
   }
 
   private async cleanup(): Promise<void> {
@@ -121,4 +99,21 @@ export class LoopPlayer {
     this.file = undefined;
     await unlink(path).catch(() => undefined);
   }
+}
+
+/** A loop-folded WAV whose first frame is `beat` into the loop. */
+export function renderLoopWav(score: TrackScore, beat = 0): Uint8Array {
+  const audio = renderScorePcm(score, { loop: true });
+  const framesPerBeat = (60 * audio.sampleRate) / score.tempoBpm;
+  const start =
+    ((Math.round(Math.max(0, beat) * framesPerBeat) % audio.frames) +
+      audio.frames) %
+    audio.frames;
+  const rotated = new Int16Array(audio.pcm.length);
+  rotated.set(audio.pcm.subarray(start * RENDER_CHANNELS));
+  rotated.set(
+    audio.pcm.subarray(0, start * RENDER_CHANNELS),
+    (audio.frames - start) * RENDER_CHANNELS,
+  );
+  return encodeWav(rotated, audio.sampleRate, RENDER_CHANNELS);
 }
