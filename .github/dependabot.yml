@@ -1,5 +1,5 @@
 # Weekly dependency update proposals. Every update arrives as a pull request
-# that auto-merges once the required `check` passes
+# that auto-merges once the required checks pass (minor and patch only)
 # (workflows/dependabot-auto-merge.yml); this file grants no release authority.
 version: 2
 updates:
