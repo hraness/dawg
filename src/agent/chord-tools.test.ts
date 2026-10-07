@@ -96,6 +96,50 @@ describe("chord tools", () => {
     expect(starts).toEqual([0, 240, 480, 720]);
   });
 
+  test("write_chords plays a rhythm pattern and an Orchid bass mode", () => {
+    const plan = tool("write_chords").plan(
+      {
+        chords: ["C"],
+        perform: "pattern",
+        pattern: "offbeat",
+        bassMode: "solo",
+        bassTrackId: "bass",
+      },
+      context(score),
+    );
+    if (plan.kind !== "score") throw new Error("expected score");
+    const notes = plan.operations.flatMap((op) =>
+      op.type === "addNote" ? [op.note] : [],
+    );
+    // Solo: bass only, no treble pattern.
+    expect(notes.map((n) => [n.trackId, n.pitch])).toEqual([["bass", 36]]);
+    const pattern = tool("write_chords").plan(
+      { chords: ["C"], perform: "pattern", pattern: "offbeat" },
+      context(score),
+    );
+    if (pattern.kind !== "score") throw new Error("expected score");
+    const starts = [
+      ...new Set(
+        pattern.operations.map((op) =>
+          op.type === "addNote" ? op.note.startTick : -1,
+        ),
+      ),
+    ];
+    expect(starts).toEqual([240, 720, 1200, 1680]);
+    expect(() =>
+      tool("write_chords").plan(
+        { chords: ["C"], perform: "pattern", pattern: "waltz" },
+        context(score),
+      ),
+    ).toThrow(/pattern/);
+    expect(() =>
+      tool("write_chords").plan(
+        { chords: ["C"], bassMode: "loud" },
+        context(score),
+      ),
+    ).toThrow(/bassMode/);
+  });
+
   test("rejects bad arguments", () => {
     expect(() =>
       tool("write_chords").plan({ chords: ["Q7"] }, context(score)),

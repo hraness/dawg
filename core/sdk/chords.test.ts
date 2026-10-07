@@ -42,6 +42,25 @@ describe("sdk chord helpers", () => {
     expect(() => progression("I zz")).toThrow(/zz/);
   });
 
+  test("progression() takes a rhythm pattern and an Orchid bass mode", () => {
+    const off = progression("I", { perform: "pattern", pattern: "offbeat" });
+    expect([...new Set(off.map((n) => n.start))]).toEqual([0.5, 1.5, 2.5, 3.5]);
+    expect(progression("I", { perform: "pattern", pattern: 3 })).toEqual(off);
+    const solo = progression("I IV", { bass: "solo" });
+    expect(solo.map((n) => n.pitch)).toEqual([36, 41]);
+    const unison = progression(["C/G"], { bass: "unison" });
+    expect(unison.some((n) => n.pitch === 36)).toBe(true);
+    expect(
+      progression(["C/G"], { bass: "chords" }).some((n) => n.pitch === 43),
+    ).toBe(true);
+    expect(() =>
+      progression("I", { perform: "pattern", pattern: "waltz" }),
+    ).toThrow(/pattern/);
+    expect(() =>
+      progression("I", { bass: "loud" as unknown as "solo" }),
+    ).toThrow(/bass/);
+  });
+
   test("a song built from progression() evaluates to a valid score", () => {
     const keys = track({
       name: "keys",

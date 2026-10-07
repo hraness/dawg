@@ -53,6 +53,64 @@ describe("ChordPad", () => {
     const played = p.voice(p.chordFor(48)!, 48);
     expect(played.bass).toBe(24);
     expect(p.headerText(true)).toContain("strum-up");
+    expect(p.headerText(true)).toContain("bass chords");
+  });
+
+  test("b cycles the Orchid bass modes and each routes as documented", () => {
+    const p = pad("C major", "manual");
+    const seen: string[] = [];
+    for (let i = 0; i < 5; i += 1) {
+      const result = p.press("b");
+      if (result.type === "status") seen.push(result.status);
+    }
+    expect(seen).toEqual([
+      "bass chords",
+      "bass unison",
+      "bass single",
+      "bass solo",
+      "bass off",
+    ]);
+    const route = (mode: typeof p.settings.bass) => {
+      p.settings.bass = mode;
+      p.types.clear();
+      const single = p.single(52);
+      p.press("3"); // maj latch: E major chord
+      const chord = p.voice(p.chordFor(52)!, 52);
+      return {
+        single: single && { pitches: single.pitches, bass: single.bass },
+        chord: { treble: chord.pitches.length > 0, bass: chord.bass },
+      };
+    };
+    // E4 = 52 pressed in octave C4 (48): bass octave C2 (24), E2 = 28.
+    expect(route("off")).toEqual({
+      single: undefined,
+      chord: { treble: true, bass: undefined },
+    });
+    expect(route("chords")).toEqual({
+      single: undefined,
+      chord: { treble: true, bass: 28 },
+    });
+    expect(route("unison")).toEqual({
+      single: { pitches: [52], bass: 28 },
+      chord: { treble: true, bass: 28 },
+    });
+    expect(route("single")).toEqual({
+      single: { pitches: [], bass: 28 },
+      chord: { treble: true, bass: 28 },
+    });
+    expect(route("solo")).toEqual({
+      single: { pitches: [], bass: 28 },
+      chord: { treble: false, bass: 28 },
+    });
+  });
+
+  test("9 reaches pattern mode and the header names the pattern", () => {
+    const p = pad();
+    for (let i = 0; i < 9; i += 1) p.press("9");
+    expect(p.settings.perform).toBe("pattern");
+    expect(p.headerText(true)).toContain("pattern 1 eighths");
+    p.press("9");
+    expect(p.settings.perform).toBe("block");
   });
 
   test("the header names the key, the chord and the suggestion", () => {
@@ -78,7 +136,7 @@ describe("chord settings", () => {
     expect(s).toMatchObject({
       inversion: -2,
       spread: "wide",
-      bass: true,
+      bass: "chords",
       perform: "arp-updown",
       rate: "1/8",
       octaves: 2,
@@ -86,6 +144,18 @@ describe("chord settings", () => {
     });
     expect(applyChordsCommand(s, "voicing 99").ok).toBe(false);
     expect(applyChordsCommand(s, "perform waltz").ok).toBe(false);
+    expect(applyChordsCommand(s, "bass unison").ok).toBe(true);
+    expect(s.bass).toBe("unison");
+    expect(applyChordsCommand(s, "bass loud").ok).toBe(false);
+    expect(applyChordsCommand(s, "pattern 3")).toEqual({
+      ok: true,
+      message: "chords pattern 3 offbeat",
+    });
+    expect(s).toMatchObject({ perform: "pattern", pattern: "offbeat" });
+    expect(applyChordsCommand(s, "pattern tresillo").ok).toBe(true);
+    expect(s.pattern).toBe("tresillo");
+    expect(applyChordsCommand(s, "pattern 14").ok).toBe(false);
+    expect(applyChordsCommand(s, "pattern waltz").ok).toBe(false);
     expect(applyChordsCommand(s, "").message).toContain("chords auto");
   });
 

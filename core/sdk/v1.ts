@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.6.0";
+export const SDK_VERSION = "1.7.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -1919,7 +1919,7 @@ export type ChordOptions = Readonly<{
   voicing?: number;
   /** `close` (default), `open` (drop 2) or `wide` (drop 2 and 4). */
   spread?: "close" | "open" | "wide";
-  /** `block` (default), `strum-up`, `strum-down`, `arp-up`, `arp-down`, `arp-updown`, `arp-random`, `harp`. */
+  /** `block` (default), `strum-up`, `strum-down`, `arp-up`, `arp-down`, `arp-updown`, `arp-random`, `harp`, `slop`, `pattern` (SDK 1.7.0). */
   perform?:
     | "block"
     | "strum-up"
@@ -1928,7 +1928,16 @@ export type ChordOptions = Readonly<{
     | "arp-down"
     | "arp-updown"
     | "arp-random"
-    | "harp";
+    | "harp"
+    | "slop"
+    | "pattern";
+  /**
+   * With `perform: "pattern"`: a rhythm pattern by name or 1-based number
+   * (SDK 1.7.0): `eighths`, `sixteenths`, `offbeat`, `pop`, `charleston`,
+   * `bossa`, `skank`, `gallop`, `half-time`, `tresillo`, `oom-pah`, `roll`,
+   * `pick`. Default 1.
+   */
+  pattern?: string | number;
   /** Arpeggio step in beats, default 0.25. */
   rate?: number;
   /** Arpeggio/harp octaves 1..4, default 1. */
@@ -1943,6 +1952,12 @@ export type ChordOptions = Readonly<{
   anchor?: Pitch;
   /** `chords` (default), `bass` (root or slash bass in octave 2, one per chord) or `both`. */
   part?: "chords" | "bass" | "both";
+  /**
+   * Orchid bass mode (SDK 1.7.0; overrides `part`): `off` (chords only),
+   * `chords` and `single` (chords plus root or slash bass), `unison`
+   * (chords plus the chord's root, ignoring a slash) or `solo` (bass only).
+   */
+  bass?: "off" | "chords" | "unison" | "single" | "solo";
 }>;
 
 /** Options for `progression()`. */
@@ -2024,7 +2039,25 @@ export function progression(
   const mode = options.perform ?? "block";
   if (!(PERFORM_MODES as readonly string[]).includes(mode))
     throw new DawgSdkError(`unknown chord perform ${JSON.stringify(mode)}`);
-  const part = options.part ?? "chords";
+  if (
+    options.bass !== undefined &&
+    !(BASS_MODES as readonly string[]).includes(options.bass)
+  )
+    throw new DawgSdkError(
+      `chord bass must be one of ${BASS_MODES.map((m) => JSON.stringify(m)).join(", ")}`,
+    );
+  if (options.pattern !== undefined && !findChordPattern(options.pattern))
+    throw new DawgSdkError(
+      `unknown chord pattern ${JSON.stringify(options.pattern)} (1..${CHORD_PATTERNS.length} or ${CHORD_PATTERNS.map((p) => p.name).join(", ")})`,
+    );
+  const part =
+    options.bass === undefined
+      ? (options.part ?? "chords")
+      : options.bass === "off"
+        ? "chords"
+        : options.bass === "solo"
+          ? "bass"
+          : "both";
   if (part !== "chords" && part !== "bass" && part !== "both")
     throw new DawgSdkError('chord part must be "chords", "bass" or "both"');
   const rendered = renderProgression({
@@ -2035,6 +2068,7 @@ export function progression(
     inversion: voicing,
     spread,
     bass: part !== "chords",
+    ...(options.bass === "unison" ? { bassMode: "unison" as const } : {}),
     lead: options.lead ?? true,
     anchor: midi(options.anchor ?? 60),
     perform: {
@@ -2045,6 +2079,7 @@ export function progression(
         ? { strum: beat(options.strum, "chord strum") }
         : {}),
       seed: finite(options.seed ?? 0, "chord seed"),
+      ...(options.pattern !== undefined ? { pattern: options.pattern } : {}),
       velocity: vel,
     },
   });
@@ -2866,6 +2901,73 @@ function bassNote(chord: Chord, low = 36): number {
   return low + mod12((chord.bass ?? chord.root) - low);
 }
 
+/**
+ * Orchid's bass behaviours (manual 10.2 and the "How to use Bass" article),
+ * plus `off`. Labels in BASS_MODE_TEXT; `chords` is Orchid's default
+ * "Chords Only".
+ */
+const BASS_MODES = ["off", "chords", "unison", "single", "solo"] as const;
+type BassMode = (typeof BASS_MODES)[number];
+
+const BASS_MODE_TEXT: Readonly<Record<BassMode, string>> = {
+  off: "no bass",
+  chords: "bass root under chords only",
+  unison: "bass doubles single notes; root under chords",
+  single: "single notes play bass only; chords play treble and root",
+  solo: "bass only: the treble is muted, even for chords",
+};
+
+/** What one key press sounds once the bass mode has routed it. */
+type BassRoute = Readonly<{
+  /** Whether the treble (chord or single note) sounds. */
+  treble: boolean;
+  /** Bass pitch, or undefined for none. */
+  bass: number | undefined;
+}>;
+
+/**
+ * Route a key press through a bass mode. `chord` is the chord the key
+ * played (undefined for a single note); `pitch` the pressed key; `low` the
+ * bottom of the bass octave. Sourced semantics (Orchid manual 10.2, support
+ * article "How to use Bass on Orchid"): `chords` adds the chord's root only
+ * when a chord plays; `unison` plays bass and treble together on single
+ * notes; `single` plays only bass on single notes and the treble only on
+ * chords; `solo` mutes the treble entirely, even for chords. dawg's
+ * reading where the sources are silent: every mode that sounds bass under
+ * a chord uses the chord's root (or slash bass), and a single note's bass
+ * is the pressed pitch class in the bass octave.
+ */
+function routeBass(
+  mode: BassMode,
+  chord: Chord | undefined,
+  pitch: number,
+  low = 36,
+): BassRoute {
+  const under = chord ? bassNote(chord, low) : low + mod12(pitch - low);
+  switch (mode) {
+    case "off":
+      return { treble: true, bass: undefined };
+    case "chords":
+      return { treble: true, bass: chord ? under : undefined };
+    case "unison":
+      return { treble: true, bass: under };
+    case "single":
+      return { treble: chord !== undefined, bass: under };
+    case "solo":
+      return { treble: false, bass: under };
+  }
+}
+
+function parseBassMode(value: string | undefined): BassMode | undefined {
+  const text = (value ?? "").trim().toLowerCase();
+  if (text === "on" || text === "true") return "chords";
+  if (text === "false" || text === "none") return "off";
+  if (text === "single-notes" || text === "singles") return "single";
+  return (BASS_MODES as readonly string[]).includes(text)
+    ? (text as BassMode)
+    : undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Performance
 
@@ -2879,6 +2981,7 @@ const PERFORM_MODES = [
   "arp-random",
   "harp",
   "slop",
+  "pattern",
 ] as const;
 type PerformMode = (typeof PERFORM_MODES)[number];
 
@@ -2894,6 +2997,8 @@ type PerformOptions = Readonly<{
   seed?: number;
   /** Slop amount 0..1: each voice lands up to `slop` × 1/8 beat late. */
   slop?: number;
+  /** Pattern mode: a CHORD_PATTERNS name or 1-based number, default 1. */
+  pattern?: string | number;
   /** 0..1. */
   velocity?: number;
 }>;
@@ -2912,6 +3017,237 @@ const DEFAULT_SLOP = 0.5;
 /** Latest a slopped voice can land, in beats, at slop 1. */
 const MAX_SLOP = 1 / 8;
 
+// ---------------------------------------------------------------------------
+// Patterns
+
+/**
+ * One hit of a chord pattern. `voices` picks chord tones by index, low to
+ * high: `all`, `upper` (all but the lowest), or a list where an index past
+ * the top wraps an octave up (index 3 of a triad is the root +12) and a
+ * negative index counts down from the top (-1 is the highest voice).
+ */
+type PatternHit = Readonly<{
+  /** Beats from the cycle start. */
+  at: number;
+  /** Beats. */
+  length: number;
+  voices: "all" | "upper" | readonly number[];
+  /** 0..1, scaled by the press velocity. */
+  velocity: number;
+  /** Octave shift for these voices (the bass half of oom-pah is -1). */
+  octave?: number;
+}>;
+
+type ChordPattern = Readonly<{
+  name: string;
+  description: string;
+  /** Cycle length in beats; the pattern repeats from the press. */
+  beats: number;
+  hits: readonly PatternHit[];
+}>;
+
+const everyStep = (
+  step: number,
+  beats: number,
+  hit: (index: number) => Omit<PatternHit, "at">,
+): PatternHit[] =>
+  Array.from({ length: Math.round(beats / step) }, (_, index) => ({
+    at: index * step,
+    ...hit(index),
+  }));
+
+/**
+ * Pattern mode. Orchid's own patterns are not published (manual 7.2: "Plays
+ * chord notes in pre-determined rhythmic patterns", tempo-synced, the
+ * rhythm independent of the chord's note count, with per-note velocities
+ * scaled by the press; 11 at launch and two more in firmware 3.84). These
+ * 13 are dawg's own design in that spirit: each hit names voices by index
+ * so the rhythm holds for triads and 9th chords alike.
+ */
+const CHORD_PATTERNS: readonly ChordPattern[] = Object.freeze([
+  {
+    name: "eighths",
+    description: "straight 8ths, beats accented",
+    beats: 4,
+    hits: everyStep(0.5, 4, (i) => ({
+      length: 0.45,
+      voices: "all",
+      velocity: i % 2 === 0 ? 1 : 0.7,
+    })),
+  },
+  {
+    name: "sixteenths",
+    description: "straight 16ths, 1-e-&-a accents",
+    beats: 4,
+    hits: everyStep(0.25, 4, (i) => ({
+      length: 0.2,
+      voices: "all",
+      velocity: [1, 0.55, 0.8, 0.55][i % 4]!,
+    })),
+  },
+  {
+    name: "offbeat",
+    description: "short stabs on every &",
+    beats: 4,
+    hits: everyStep(1, 4, () => ({
+      length: 0.25,
+      voices: "all",
+      velocity: 0.9,
+    })).map((hit) => ({ ...hit, at: hit.at + 0.5 })),
+  },
+  {
+    name: "pop",
+    description: "syncopated pop comp with 16th pushes",
+    beats: 4,
+    hits: [
+      { at: 0, length: 0.5, voices: "all", velocity: 1 },
+      { at: 0.75, length: 0.5, voices: "upper", velocity: 0.7 },
+      { at: 1.5, length: 0.75, voices: "all", velocity: 0.85 },
+      { at: 2.5, length: 0.5, voices: "upper", velocity: 0.7 },
+      { at: 3, length: 0.25, voices: "all", velocity: 0.6 },
+      { at: 3.5, length: 0.5, voices: "all", velocity: 0.85 },
+    ],
+  },
+  {
+    name: "charleston",
+    description: "dotted quarter, then the & of 2",
+    beats: 4,
+    hits: [
+      { at: 0, length: 0.75, voices: "all", velocity: 1 },
+      { at: 1.5, length: 0.5, voices: "all", velocity: 0.85 },
+    ],
+  },
+  {
+    name: "bossa",
+    description: "two-bar bossa comp over a root-fifth pulse",
+    beats: 8,
+    hits: [
+      ...everyStep(2, 8, () => ({
+        length: 1.5,
+        voices: [0],
+        velocity: 0.85,
+        octave: -1,
+      })),
+      ...[0, 1.5, 3, 4.5, 6].map((at) => ({
+        at,
+        length: 0.5,
+        voices: "upper" as const,
+        velocity: at === 0 ? 0.9 : 0.75,
+      })),
+    ],
+  },
+  {
+    name: "skank",
+    description: "reggae skank: short upper stabs on 2 and 4",
+    beats: 4,
+    hits: [1, 3].map((at) => ({
+      at,
+      length: 0.2,
+      voices: "upper" as const,
+      velocity: 0.95,
+    })),
+  },
+  {
+    name: "gallop",
+    description: "gallop: an 8th and two 16ths per beat",
+    beats: 4,
+    hits: everyStep(1, 4, () => ({
+      length: 0.4,
+      voices: "all",
+      velocity: 1,
+    })).flatMap((hit) => [
+      hit,
+      { ...hit, at: hit.at + 0.5, length: 0.2, velocity: 0.7 },
+      { ...hit, at: hit.at + 0.75, length: 0.2, velocity: 0.75 },
+    ]),
+  },
+  {
+    name: "half-time",
+    description: "half-time: a long hit and a pickup per two bars",
+    beats: 8,
+    hits: [
+      { at: 0, length: 3.5, voices: "all", velocity: 1 },
+      { at: 4, length: 1.5, voices: "all", velocity: 0.8 },
+      { at: 7.5, length: 0.5, voices: "upper", velocity: 0.65 },
+    ],
+  },
+  {
+    name: "tresillo",
+    description: "tresillo 3+3+2",
+    beats: 4,
+    hits: [
+      { at: 0, length: 1.25, voices: "all", velocity: 1 },
+      { at: 1.5, length: 1.25, voices: "all", velocity: 0.8 },
+      { at: 3, length: 0.75, voices: "all", velocity: 0.9 },
+    ],
+  },
+  {
+    name: "oom-pah",
+    description: "alternating bass and chord: low root, upper chord",
+    beats: 4,
+    hits: everyStep(1, 4, (i) =>
+      i % 2 === 0
+        ? { length: 0.9, voices: [0], velocity: 1, octave: -1 }
+        : { length: 0.8, voices: "upper", velocity: 0.75 },
+    ),
+  },
+  {
+    name: "roll",
+    description: "broken-chord roll up in 16ths, ringing to the half bar",
+    beats: 4,
+    hits: [0, 2].flatMap((bar) =>
+      [0, 1, 2, 3].map((step) => ({
+        at: bar + step * 0.25,
+        length: 2 - step * 0.25,
+        voices: [step],
+        velocity: 0.7 + step * 0.08,
+      })),
+    ),
+  },
+  {
+    name: "pick",
+    description: "broken-chord picking: low, high, middle, high in 8ths",
+    beats: 4,
+    hits: everyStep(0.5, 4, (i) => ({
+      length: 0.5,
+      voices: [[0, -1, 1, -1][i % 4]!],
+      velocity: i % 4 === 0 ? 0.95 : 0.7,
+    })),
+  },
+]);
+
+/** A pattern by name or 1-based number, or undefined. */
+function findChordPattern(
+  value: string | number | undefined,
+): ChordPattern | undefined {
+  if (value === undefined) return undefined;
+  const text = String(value).trim().toLowerCase();
+  const number = Number(text);
+  if (/^\d+$/.test(text)) return CHORD_PATTERNS[number - 1];
+  return CHORD_PATTERNS.find((pattern) => pattern.name === text);
+}
+
+function patternVoices(notes: readonly number[], hit: PatternHit): number[] {
+  const n = notes.length;
+  const indices =
+    hit.voices === "all"
+      ? notes.map((_, i) => i)
+      : hit.voices === "upper"
+        ? n > 1
+          ? notes.slice(1).map((_, i) => i + 1)
+          : [0]
+        : hit.voices;
+  const shift = 12 * (hit.octave ?? 0);
+  const out = new Set<number>();
+  for (const index of indices) {
+    const i = index < 0 ? ((index % n) + n) % n : index;
+    const wrapped = ((i % n) + n) % n;
+    const pitch = notes[wrapped]! + 12 * Math.floor(i / n) + shift;
+    if (pitch >= 0 && pitch <= 127) out.add(pitch);
+  }
+  return [...out].sort((a, b) => a - b);
+}
+
 /**
  * Lay a voiced chord out in time over [start, start + length). Block holds
  * every voice; strums offset voices by `strum` beats and hold to the end;
@@ -2919,7 +3255,9 @@ const MAX_SLOP = 1 / 8;
  * multiples of `rate` from `start`; harp is an upward strum across the
  * octaves that rings to the end; slop (Orchid's humanised timing) holds
  * every voice like block but delays each by a seeded random fraction of
- * `slop` × MAX_SLOP, so each seed lands differently.
+ * `slop` × MAX_SLOP, so each seed lands differently; pattern repeats a
+ * CHORD_PATTERNS rhythm from `start`, each hit's velocity scaled by
+ * `velocity`.
  */
 function perform(
   pitches: readonly number[],
@@ -2961,6 +3299,23 @@ function perform(
       const random = mulberry32(options.seed ?? 0);
       const late = Math.min(amount * MAX_SLOP, length / 2);
       return notes.map((pitch) => at(pitch, start + random() * late, end));
+    }
+    case "pattern": {
+      const pattern =
+        findChordPattern(options.pattern ?? 1) ?? CHORD_PATTERNS[0]!;
+      const out: PerformedNote[] = [];
+      for (let cycle = start; cycle < end - 1e-9; cycle += pattern.beats)
+        for (const hit of pattern.hits) {
+          const from = cycle + hit.at;
+          if (from >= end - 1e-9) continue;
+          const to = Math.min(end, from + hit.length);
+          for (const pitch of patternVoices(notes, hit))
+            out.push({
+              ...at(pitch, from, to),
+              velocity: round6(velocity * hit.velocity),
+            });
+        }
+      return out.sort((a, b) => a.start - b.start || a.pitch - b.pitch);
     }
     case "harp": {
       const gap = Math.max(0, options.strum ?? DEFAULT_STRUM * 2);
@@ -3329,6 +3684,13 @@ type RenderOptions = Readonly<{
   spread?: Spread;
   /** Add a bass note under each chord. */
   bass?: boolean;
+  /**
+   * Bass behaviour (overrides `bass`). Every progression step is a chord,
+   * so `chords` and `single` add the root (or slash bass), `unison` the
+   * chord's root (the key a player would press), and `solo` drops the
+   * treble and keeps only that bass.
+   */
+  bassMode?: BassMode;
   /** Voice-lead chord to chord (default true). */
   lead?: boolean;
   anchor?: number;
@@ -3364,26 +3726,36 @@ function renderProgression(options: RenderOptions): RenderedProgression {
   const notes: PerformedNote[] = [];
   const bass: PerformedNote[] = [];
   const velocity = options.perform?.velocity ?? 0.8;
+  const mode: BassMode = options.bassMode ?? (options.bass ? "chords" : "off");
   voiced.forEach((chord, index) => {
     const at = start + index * span;
-    notes.push(
-      ...perform(chord.pitches, at, span, {
-        ...options.perform,
-        seed: (options.perform?.seed ?? 0) + index,
-      }),
-    );
-    if (options.bass && chord.bass !== undefined)
+    if (mode !== "solo")
+      notes.push(
+        ...perform(chord.pitches, at, span, {
+          ...options.perform,
+          seed: (options.perform?.seed ?? 0) + index,
+        }),
+      );
+    const source = options.chords[index]!;
+    const under =
+      mode === "off"
+        ? undefined
+        : mode === "unison"
+          ? bassNote({ ...source, bass: undefined })
+          : chord.bass;
+    if (under !== undefined)
       bass.push({
-        pitch: chord.bass,
+        pitch: under,
         start: round6(at),
         length: round6(span),
         velocity,
       });
   });
   return {
-    voiced: options.bass
-      ? voiced
-      : voiced.map(({ bass: _bass, ...rest }) => Object.freeze(rest)),
+    voiced:
+      mode !== "off"
+        ? voiced
+        : voiced.map(({ bass: _bass, ...rest }) => Object.freeze(rest)),
     notes,
     bass,
   };

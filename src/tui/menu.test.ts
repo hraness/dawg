@@ -86,14 +86,19 @@ describe("edit menu", () => {
       command: "/chords voicing 1",
     });
     select(menu, ctx, "bass");
-    expect(menu.key("\r", ctx)).toEqual({
+    expect(menu.key(RIGHT, ctx)).toEqual({
       type: "run",
-      command: "/chords bass on",
+      command: "/chords bass chords",
     });
     select(menu, ctx, "perform");
     expect(menu.key(RIGHT, ctx)).toEqual({
       type: "run",
       command: "/chords perform strum-up",
+    });
+    select(menu, ctx, "pattern");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "/chords pattern sixteenths",
     });
   });
 

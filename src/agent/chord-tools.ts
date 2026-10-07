@@ -5,6 +5,10 @@
  */
 
 import {
+  BASS_MODES,
+  CHORD_PATTERNS,
+  findChordPattern,
+  type BassMode,
   generateProgression,
   keyName,
   parseKey,
@@ -175,7 +179,7 @@ export const CHORD_TOOLS: readonly AgentTool[] = Object.freeze([
   },
   {
     name: "write_chords",
-    description: `Write voice-led chords to a track (one bar each by default), with optional bass here or on bassTrackId. ≤${MAX_CHORD_NOTES} notes.`,
+    description: `Write voice-led chords to a track (one bar each by default), with optional bass here or on bassTrackId. perform pattern uses pattern ${CHORD_PATTERNS.map((p) => p.name).join("|")}. bassMode ${BASS_MODES.join("|")} (solo: bass only). ≤${MAX_CHORD_NOTES} notes.`,
     parameters: {
       type: "object",
       properties: {
@@ -190,7 +194,9 @@ export const CHORD_TOOLS: readonly AgentTool[] = Object.freeze([
         octaves: int,
         strum: num,
         velocity: num,
+        pattern: { type: "string", enum: CHORD_PATTERNS.map((p) => p.name) },
         bass: bool,
+        bassMode: { type: "string", enum: [...BASS_MODES] },
         bassTrackId: str,
       },
       required: ["chords"],
@@ -219,6 +225,22 @@ export const CHORD_TOOLS: readonly AgentTool[] = Object.freeze([
       const rate = finite(args, "rate", 0.0625, 4);
       const strum = finite(args, "strum", 0, 1);
       const octaves = integer(args, "octaves", 1, 4);
+      const pattern = args.pattern;
+      if (
+        pattern !== undefined &&
+        (typeof pattern !== "string" || !findChordPattern(pattern))
+      )
+        throw new ChordToolError(
+          `pattern must be one of ${CHORD_PATTERNS.map((p) => p.name).join(", ")}`,
+        );
+      const bassMode = args.bassMode;
+      if (
+        bassMode !== undefined &&
+        !(BASS_MODES as readonly unknown[]).includes(bassMode)
+      )
+        throw new ChordToolError(
+          `bassMode must be one of ${BASS_MODES.join(", ")}`,
+        );
       const rendered = renderProgression({
         key,
         chords,
@@ -227,6 +249,7 @@ export const CHORD_TOOLS: readonly AgentTool[] = Object.freeze([
           finite(args, "beatsPerChord", 1e-3, 64) ?? context.score.beatsPerBar,
         ...voicingOf(args),
         bass: args.bass === true || bassTrackId !== undefined,
+        ...(bassMode !== undefined ? { bassMode: bassMode as BassMode } : {}),
         perform: {
           mode: (mode as PerformMode | undefined) ?? "block",
           ...(rate !== undefined ? { rate } : {}),
@@ -234,6 +257,7 @@ export const CHORD_TOOLS: readonly AgentTool[] = Object.freeze([
           ...(octaves !== undefined ? { octaves } : {}),
           ...(velocity !== undefined ? { velocity } : {}),
           seed: integer(args, "seed", 0, 2 ** 31) ?? 0,
+          ...(typeof pattern === "string" ? { pattern } : {}),
         },
       });
       const total = rendered.notes.length + rendered.bass.length;

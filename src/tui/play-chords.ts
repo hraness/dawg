@@ -14,7 +14,8 @@
  *   1 2 3 4   dim min maj sus       toggle a chord type (two make a combined
  *   5 6 7 8   6 m7 M7 9             chord); toggle extensions (any number)
  *   0         clear the latches     - / =   voicing dial down / up
- *   9         next perform mode     b       bass on/off
+ *   9         next perform mode     b       next bass mode (off, chords,
+ *                                             unison, single, solo)
  *   n         play the suggested next chord (dawg's progression engine;
  *             the session routes it through the root's note key)
  *   q         auto ⇄ manual
@@ -22,6 +23,8 @@
  * Pure: the session asks for a chord per note key and owns sound and time.
  */
 import {
+  BASS_MODES,
+  CHORD_PATTERNS,
   CHORD_TYPES,
   EXTENSIONS,
   MAX_VOICING_STEP,
@@ -29,8 +32,13 @@ import {
   PROGRESSION_PRESETS,
   PROGRESSION_STYLES,
   SPREADS,
-  bassNote,
   chordName,
+  findChordPattern,
+  makeChord,
+  noteName,
+  parseBassMode,
+  routeBass,
+  type BassMode,
   findPreset,
   keyModeChord,
   keyName,
@@ -70,8 +78,11 @@ export type ChordSettings = {
   explicit: boolean;
   inversion: number;
   spread: Spread;
-  bass: boolean;
+  /** Orchid bass behaviour (core/chords.ts BASS_MODES). */
+  bass: BassMode;
   perform: PerformMode;
+  /** CHORD_PATTERNS name for the `pattern` perform mode. */
+  pattern: string;
   rate: ArpRate;
   octaves: number;
   sevenths: boolean;
@@ -86,8 +97,9 @@ export function defaultChordSettings(): ChordSettings {
     explicit: false,
     inversion: 0,
     spread: "close",
-    bass: false,
+    bass: "off",
     perform: "block",
+    pattern: CHORD_PATTERNS[0]!.name,
     rate: "grid",
     octaves: 1,
     sevenths: false,
@@ -214,8 +226,9 @@ export class ChordPad {
       return { type: "status", status: `perform ${s.perform}` };
     }
     if (value === "b") {
-      s.bass = !s.bass;
-      return { type: "status", status: `bass ${s.bass ? "on" : "off"}` };
+      const index = BASS_MODES.indexOf(s.bass);
+      s.bass = BASS_MODES[(index + 1) % BASS_MODES.length]!;
+      return { type: "status", status: `bass ${s.bass}` };
     }
     return { type: "pass" };
   }
@@ -277,15 +290,35 @@ export class ChordPad {
       low: anchor - 12,
       high: anchor + 19,
     });
-    const played: PlayedChord = {
+    // Bass two octaves under the pressed octave (C2–B2 from C4).
+    const route = routeBass(this.settings.bass, chord, pitch, anchor - 24);
+    const voiced: PlayedChord = {
       chord,
       name: chordName(chord, keyUsesFlats(this.key)),
       pitches,
-      // Two octaves under the pressed octave (C2–B2 from C4).
-      bass: this.settings.bass ? bassNote(chord, anchor - 24) : undefined,
+      bass: route.bass,
     };
-    this.last = played;
-    return played;
+    // Solo mutes the treble but keeps voice leading on the full voicing.
+    this.last = voiced;
+    return route.treble ? voiced : { ...voiced, pitches: [] };
+  }
+
+  /**
+   * A single note (manual mode, no latch) routed through the bass mode:
+   * undefined when it plays as a plain note (bass off or chords-only),
+   * else the treble note (unison) or none (single, solo) plus its bass.
+   */
+  public single(pitch: number): PlayedChord | undefined {
+    if (this.settings.mode === "off") return undefined;
+    const anchor = Math.max(24, Math.min(96, pitch - mod12(pitch)));
+    const route = routeBass(this.settings.bass, undefined, pitch, anchor - 24);
+    if (route.bass === undefined) return undefined;
+    return {
+      chord: makeChord(mod12(pitch), "maj"),
+      name: noteName(mod12(pitch), keyUsesFlats(this.key)),
+      pitches: route.treble ? [pitch] : [],
+      bass: route.bass,
+    };
   }
 
   /** The chord the progression engine suggests after the last one. */
@@ -320,8 +353,10 @@ export class ChordPad {
     if (latches) parts.push(latches);
     if (s.inversion !== 0) parts.push(`inv ${signed(s.inversion)}`);
     if (s.spread !== "close") parts.push(s.spread);
-    if (s.perform !== "block") parts.push(s.perform);
-    if (s.bass) parts.push("bass");
+    if (s.perform === "pattern")
+      parts.push(`pattern ${patternLabel(s.pattern)}`);
+    else if (s.perform !== "block") parts.push(s.perform);
+    if (s.bass !== "off") parts.push(`bass ${s.bass}`);
     return parts.join(" · ");
   }
 }
@@ -330,13 +365,20 @@ function mod12(value: number): number {
   return ((value % 12) + 12) % 12;
 }
 
+/** `3 offbeat`: a pattern's 1-based number and name. */
+export function patternLabel(name: string): string {
+  const pattern = findChordPattern(name) ?? CHORD_PATTERNS[0]!;
+  return `${CHORD_PATTERNS.indexOf(pattern) + 1} ${pattern.name}`;
+}
+
 function signed(value: number): string {
   return value > 0 ? `+${value}` : String(value);
 }
 
 /**
  * `/chords …`: `auto|manual|off`, `voicing <-12..12>`, `spread <close|open|
- * wide>`, `bass on|off`, `perform <mode>`, `rate <grid|1/8…>`, `octaves
+ * wide>`, `bass off|chords|unison|single|solo` (`on` = chords), `perform
+ * <mode>`, `pattern <1..13|name>`, `rate <grid|1/8…>`, `octaves
  * <1..4>`, `sevenths on|off`, `preset <name|none>`, `style <pop|jazz|…>`.
  * Mutates `settings`; returns the receipt or an error.
  */
@@ -374,7 +416,22 @@ export function applyChordsCommand(
         return bad(`spread takes ${SPREADS.join("|")}`);
       settings.spread = value as Spread;
       return done(`chords spread ${value}`);
-    case "bass":
+    case "bass": {
+      const mode = parseBassMode(value);
+      if (!mode) return bad(`bass takes ${BASS_MODES.join("|")}`);
+      settings.bass = mode;
+      return done(`chords bass ${mode}`);
+    }
+    case "pattern": {
+      const pattern = findChordPattern(value);
+      if (!pattern)
+        return bad(
+          `pattern takes 1..${CHORD_PATTERNS.length} or ${CHORD_PATTERNS.map((p) => p.name).join("|")}`,
+        );
+      settings.pattern = pattern.name;
+      settings.perform = "pattern";
+      return done(`chords pattern ${patternLabel(pattern.name)}`);
+    }
     case "sevenths": {
       const on = onOff(value);
       if (on === undefined) return bad(`${head} takes on|off`);
@@ -412,7 +469,7 @@ export function applyChordsCommand(
       return done(`chords style ${value}`);
     default:
       return bad(
-        "/chords auto|manual|off · voicing · spread · bass · perform · rate · octaves · sevenths · preset · style",
+        "/chords auto|manual|off · voicing · spread · bass · perform · pattern · rate · octaves · sevenths · preset · style",
       );
   }
 }
@@ -424,9 +481,10 @@ export function chordsSummary(settings: ChordSettings): string {
     `voicing ${signed(s.inversion)}`,
     s.spread,
     s.perform,
+    `pattern ${patternLabel(s.pattern)}`,
     `rate ${s.rate}`,
     `octaves ${s.octaves}`,
-    `bass ${s.bass ? "on" : "off"}`,
+    `bass ${s.bass}`,
     `sevenths ${s.sevenths ? "on" : "off"}`,
     `preset ${s.preset}`,
     `style ${s.style}`,

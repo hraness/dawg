@@ -51,6 +51,8 @@ import {
 } from "../../core/synth.ts";
 import type { PickerItem } from "../../tui/app.ts";
 import {
+  BASS_MODES,
+  CHORD_PATTERNS,
   MAX_VOICING_STEP,
   MODE_NAMES,
   PERFORM_MODES,
@@ -387,10 +389,11 @@ function chordNodes(context: MenuContext): MenuNode[] {
       command: (option) => `/chords spread ${option}`,
     },
     {
-      kind: "toggle",
+      kind: "choice",
       label: "bass",
       value: chords.bass,
-      command: (on) => `/chords bass ${on ? "on" : "off"}`,
+      options: BASS_MODES,
+      command: (option) => `/chords bass ${option}`,
     },
     {
       kind: "toggle",
@@ -404,6 +407,13 @@ function chordNodes(context: MenuContext): MenuNode[] {
       value: chords.perform,
       options: PERFORM_MODES,
       command: (option) => `/chords perform ${option}`,
+    },
+    {
+      kind: "choice",
+      label: "pattern",
+      value: chords.pattern,
+      options: CHORD_PATTERNS.map((pattern) => pattern.name),
+      command: (option) => `/chords pattern ${option}`,
     },
     {
       kind: "choice",
