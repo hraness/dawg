@@ -196,7 +196,7 @@ export const AGENT_SYSTEM_PROMPT = [
   "Prefer a few well-formed calls (one add_notes call per track part) over many tiny ones.",
   'For drums, create a track with instrument "kit" and prefer set_rhythm (Euclidean rows: pulses over steps, rotate, repeats for rolls, accent, probability, swing) so the beat stays editable as parameters; for a genre groove start from apply_drum_pattern (list_drum_patterns) and pick a sound with set_drum_kit; use add_drums only for one-off fills. Drum pitches select voices, so do not use add_notes for beats.',
   CHORD_PROCESS,
-  "Effects (set_effects, set_automation): low-pass filter cutoff 20..20000 Hz and resonance 0..1; stereo delay beats 0.0625..4, feedback 0..0.9, mix 0..1; stereo reverb mix 0..1 (0.15..0.35 is a natural room) and size 0..1; pan -1..1 is equal-power stereo. Automatable lanes: volume, pan, filter, resonance, delay-feedback, delay-mix.",
+  "Effects (set_fx; set_effects and set_automation): the brief's effects list is the fixed chain order with each effect's simple params. set_fx turns an effect on with good defaults, loads a preset or sets params by dawg or Strudel name. Lanes: volume, pan, filter, resonance, delay-feedback, delay-mix and <effect>-<param> (e.g. autofilter-cutoff).",
   "If a call is rejected, read the diagnostic and either fix the arguments or stop.",
   WORKSPACE_PROMPT,
   MEDIA_PROMPT,

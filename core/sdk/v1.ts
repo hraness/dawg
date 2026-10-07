@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.4.0";
+export const SDK_VERSION = "1.5.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -1170,7 +1170,25 @@ export type AutomationInput = Readonly<{
   delayFeedback?: readonly Point[];
   /** 0..1 (needs `delay`). */
   delayMix?: readonly Point[];
+  /**
+   * Effect parameter lanes keyed `<effect>-<param>`, e.g.
+   * `"autofilter-cutoff"`, `"distort-drive"`, `"reverb-mix"` (needs the effect).
+   */
+  fx?: Readonly<Record<string, readonly Point[]>>;
 }>;
+
+/** One effect's parameters; omitted ones take dawg's defaults. */
+export type EffectParams = Readonly<Record<string, number | string | boolean>>;
+
+/**
+ * Insert effects by name, rendered in the fixed chain order
+ * filter → djf → autofilter → vowel → crush → distort → tremolo →
+ * compressor → pan → phaser → chorus → leslie → postgain → delay → reverb.
+ * Keys here: djf, autofilter, vowel, crush, distort, tremolo, compressor,
+ * phaser, chorus, leslie, postgain. See docs/project-format.md for every
+ * parameter, its range and its Strudel name.
+ */
+export type FxInput = Readonly<Record<string, EffectParams>>;
 
 /** Input to `track()`. Omitted fields keep dawg's defaults. */
 export type TrackInput = Readonly<{
@@ -1196,12 +1214,14 @@ export type TrackInput = Readonly<{
   volume?: number;
   /** -1 (left) .. 1 (right), default 0. */
   pan?: number;
-  /** Low-pass filter; `null` or omitted means none. */
-  filter?: Readonly<{ cutoff: number; resonance?: number }> | null;
-  /** Tempo-synced ping-pong delay send in beats. */
-  delay?: Readonly<{ beats: number; feedback?: number; mix?: number }> | null;
+  /** Filter (low-pass unless `type`); `null` or omitted means none. */
+  filter?: FilterInput | null;
+  /** Tempo-synced delay send in beats. */
+  delay?: DelayInput | null;
   /** Stereo reverb send. */
-  reverb?: Readonly<{ mix: number; size?: number }> | null;
+  reverb?: ReverbInput | null;
+  /** Insert effects by name (`{ distort: { drive: 3 }, chorus: {} }`). */
+  fx?: FxInput;
   automation?: AutomationInput;
   /** `note()`/`seq()` for pitched tracks, `hit()`/`hits()` for kits and one-shot samplers. */
   notes?: readonly (NoteSpec | HitSpec)[];
@@ -1211,6 +1231,40 @@ export type TrackInput = Readonly<{
    * on the same voice are replaced.
    */
   rhythm?: readonly RhythmSpec[];
+}>;
+
+export type FilterInput = Readonly<{
+  cutoff: number;
+  resonance?: number;
+  /** `lpf` (default), `hpf` or `bpf`. */
+  type?: "lpf" | "hpf" | "bpf";
+  /** Slope: `12db` (default), `24db` or `ladder`. */
+  ftype?: "12db" | "24db" | "ladder";
+}>;
+
+export type DelayInput = Readonly<{
+  beats: number;
+  feedback?: number;
+  mix?: number;
+  /** Seconds; overrides `beats` when set (Strudel `delaytime`). */
+  time?: number;
+  /** Repeats alternate left/right. */
+  pingpong?: boolean;
+  /** Low-pass on the repeats, Hz. */
+  highcut?: number;
+}>;
+
+export type ReverbInput = Readonly<{
+  mix: number;
+  size?: number;
+  /** Decay to -60 dB in seconds (Strudel `roomfade`). */
+  fade?: number;
+  /** Low-pass on the input, Hz (Strudel `roomlp`). */
+  lowpass?: number;
+  /** Damping toward this Hz as the tail decays (Strudel `roomdim`). */
+  dim?: number;
+  /** Seconds before the tail. */
+  predelay?: number;
 }>;
 
 /** Frozen track built by `track()`; `song()` consumes it. Beats, not ticks. */
@@ -1224,9 +1278,14 @@ export type TrackSpec = Readonly<{
   solo: boolean;
   volume: number;
   pan: number;
-  filter: Readonly<{ cutoff: number; resonance: number }> | null;
-  delay: Readonly<{ beats: number; feedback: number; mix: number }> | null;
-  reverb: Readonly<{ mix: number; size: number }> | null;
+  filter: Readonly<
+    { cutoff: number; resonance: number } & Partial<FilterInput>
+  > | null;
+  delay: Readonly<
+    { beats: number; feedback: number; mix: number } & Partial<DelayInput>
+  > | null;
+  reverb: Readonly<{ mix: number; size: number } & Partial<ReverbInput>> | null;
+  fx: FxInput | null;
   sampler: SamplerSpec | null;
   automation: Readonly<Required<AutomationInput>>;
   /** Every hit resolved to its pitch slot. */
@@ -1328,7 +1387,9 @@ export function track(input: TrackInput): TrackSpec {
   const automation = input.automation ?? {};
   if (!isRecord(automation))
     throw new DawgSdkError(`track ${name}: automation must be an object`);
-  const lane = (key: keyof AutomationInput): readonly Point[] => {
+  const lane = (
+    key: Exclude<keyof AutomationInput, "fx">,
+  ): readonly Point[] => {
     const points = (automation as Record<string, unknown>)[key];
     if (points === undefined) return Object.freeze([]);
     if (!Array.isArray(points) || points.length > 256)
@@ -1362,6 +1423,7 @@ export function track(input: TrackInput): TrackSpec {
             input.filter.resonance ?? 0,
             `${name} filter.resonance`,
           ),
+          ...extras(input.filter, ["type", "ftype"], `${name} filter`),
         });
   const delay =
     input.delay === undefined || input.delay === null
@@ -1373,6 +1435,11 @@ export function track(input: TrackInput): TrackSpec {
             `${name} delay.feedback`,
           ),
           mix: finite(input.delay.mix ?? 0.35, `${name} delay.mix`),
+          ...extras(
+            input.delay,
+            ["time", "pingpong", "highcut"],
+            `${name} delay`,
+          ),
         });
   const reverb =
     input.reverb === undefined || input.reverb === null
@@ -1380,7 +1447,13 @@ export function track(input: TrackInput): TrackSpec {
       : Object.freeze({
           mix: finite(input.reverb.mix, `${name} reverb.mix`),
           size: finite(input.reverb.size ?? 0.5, `${name} reverb.size`),
+          ...extras(
+            input.reverb,
+            ["fade", "lowpass", "dim", "predelay"],
+            `${name} reverb`,
+          ),
         });
+  const fx = fxInput(input.fx, name);
   return Object.freeze({
     kind: "track",
     id,
@@ -1394,6 +1467,7 @@ export function track(input: TrackInput): TrackSpec {
     filter,
     delay,
     reverb,
+    fx,
     sampler: samplerSpec,
     automation: Object.freeze({
       volume: lane("volume"),
@@ -1402,6 +1476,7 @@ export function track(input: TrackInput): TrackSpec {
       resonance: lane("resonance"),
       delayFeedback: lane("delayFeedback"),
       delayMix: lane("delayMix"),
+      fx: fxLanes(automation.fx, name),
     }),
     notes: Object.freeze(notes),
     rhythm: Object.freeze([...rhythm]),
@@ -1416,7 +1491,74 @@ const AUTOMATION_KEYS: readonly (keyof AutomationInput)[] = Object.freeze([
   "resonance",
   "delayFeedback",
   "delayMix",
+  "fx",
 ]);
+
+type EffectValue = number | string | boolean;
+
+function effectValue(value: unknown, label: string): EffectValue {
+  if (typeof value === "string" || typeof value === "boolean") return value;
+  return finite(value, label);
+}
+
+/** The optional effect fields that are set; dawg validates their ranges. */
+function extras(
+  input: object,
+  keys: readonly string[],
+  label: string,
+): Record<string, EffectValue> {
+  const out: Record<string, EffectValue> = {};
+  for (const key of keys) {
+    const value = (input as Record<string, unknown>)[key];
+    if (value !== undefined) out[key] = effectValue(value, `${label}.${key}`);
+  }
+  return out;
+}
+
+function fxInput(input: unknown, name: string): FxInput | null {
+  if (input === undefined || input === null) return null;
+  if (!isRecord(input))
+    throw new DawgSdkError(`track ${name}: fx must be an object of effects`);
+  const out: Record<string, EffectParams> = {};
+  for (const [effect, params] of Object.entries(input)) {
+    if (!isRecord(params))
+      throw new DawgSdkError(`track ${name}: fx.${effect} must be an object`);
+    const values: Record<string, EffectValue> = {};
+    for (const [key, value] of Object.entries(params))
+      values[key] = effectValue(value, `${name} fx.${effect}.${key}`);
+    out[effect] = Object.freeze(values);
+  }
+  return Object.keys(out).length > 0 ? Object.freeze(out) : null;
+}
+
+function fxLanes(
+  input: unknown,
+  name: string,
+): Readonly<Record<string, readonly Point[]>> {
+  if (input === undefined) return Object.freeze({});
+  if (!isRecord(input))
+    throw new DawgSdkError(`track ${name}: automation.fx must be an object`);
+  const out: Record<string, readonly Point[]> = {};
+  for (const [key, points] of Object.entries(input)) {
+    if (!Array.isArray(points) || points.length > 256)
+      throw new DawgSdkError(
+        `track ${name}: automation.fx["${key}"] must be an array of at most 256 [beat, value] points`,
+      );
+    out[key] = Object.freeze(
+      points.map((point: unknown, index: number): Point => {
+        if (!Array.isArray(point) || point.length !== 2)
+          throw new DawgSdkError(
+            `track ${name}: automation.fx["${key}"][${index}] must be [beat, value]`,
+          );
+        return Object.freeze([
+          beat(point[0], `automation.fx["${key}"][${index}] beat`),
+          finite(point[1], `automation.fx["${key}"][${index}] value`),
+        ] as const);
+      }),
+    );
+  }
+  return Object.freeze(out);
+}
 
 /**
  * Directory name for a track: lowercase, spaces and runs of punctuation
@@ -1518,13 +1660,15 @@ export type ScoreTrack = Readonly<{
   volumeAutomation: readonly ScorePoint[];
   panAutomation: readonly ScorePoint[];
   solo?: boolean;
-  filter?: Readonly<{ cutoff: number; resonance: number }>;
-  delay?: Readonly<{ beats: number; feedback: number; mix: number }>;
+  filter?: TrackSpec["filter"] & object;
+  delay?: TrackSpec["delay"] & object;
   filterAutomation?: readonly ScorePoint[];
   resonanceAutomation?: readonly ScorePoint[];
   delayFeedbackAutomation?: readonly ScorePoint[];
   delayMixAutomation?: readonly ScorePoint[];
-  reverb?: Readonly<{ mix: number; size: number }>;
+  reverb?: TrackSpec["reverb"] & object;
+  fx?: FxInput;
+  fxAutomation?: Readonly<Record<string, readonly ScorePoint[]>>;
   sampler?: Readonly<{
     voices: Readonly<Record<string, ScoreSampleRef>>;
     mode: "oneshot" | "keyed";
@@ -1620,6 +1764,12 @@ export function song(input: SongInput): Song {
     if (delayMixAutomation.length > 0)
       stored.delayMixAutomation = delayMixAutomation;
     if (t.reverb) stored.reverb = t.reverb;
+    if (t.fx) stored.fx = t.fx;
+    const fxLaneEntries = Object.entries(t.automation.fx ?? {})
+      .map(([key, lane]) => [key, points(lane)] as const)
+      .filter(([, lane]) => lane.length > 0);
+    if (fxLaneEntries.length > 0)
+      stored.fxAutomation = Object.freeze(Object.fromEntries(fxLaneEntries));
     if (t.sampler)
       stored.sampler = Object.freeze({
         voices: t.sampler.voices,

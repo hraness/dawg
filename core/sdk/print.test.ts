@@ -63,6 +63,26 @@ const rich = createScore({
         voices: { vox: { src: "tracks/vox/samples/vox.wav", root: 60 } },
       },
     },
+    {
+      id: "lead",
+      name: "lead",
+      instrument: "saw",
+      filter: { cutoff: 300, resonance: 0.1, type: "hpf", ftype: "24db" },
+      delay: { beats: 0.75, feedback: 0.35, mix: 0.25, pingpong: true },
+      reverb: { mix: 0.3, size: 0.6, fade: 3, predelay: 0.02 },
+      fx: {
+        chorus: {},
+        distort: { drive: 3, type: "fold" },
+        autofilter: { shape: "random", sync: 0.25 },
+      },
+      fxAutomation: {
+        "autofilter-cutoff": [
+          { tick: 0, value: 400 },
+          { tick: 1920, value: 4000 },
+        ],
+        "reverb-mix": [{ tick: 0, value: 0.2 }],
+      },
+    },
   ],
   notes: [
     ...Array.from({ length: 24 }, (_, i) => ({
@@ -130,6 +150,20 @@ async function writeProject(dir: string, score: TrackScore): Promise<void> {
 }
 
 describe("printer", () => {
+  test("effects print their set fields and non-default fx params", () => {
+    const lead = printTrack(rich, rich.tracks.at(-1)!);
+    expect(lead).toContain(
+      '  filter: { cutoff: 300, resonance: 0.1, type: "hpf", ftype: "24db" },',
+    );
+    expect(lead).toContain(
+      '  fx: {\n    autofilter: { sync: 0.25, shape: "random" },',
+    );
+    expect(lead).toContain("    chorus: {},");
+    expect(lead).toContain('    distort: { drive: 3, type: "fold" },');
+    expect(lead).toContain('      "autofilter-cutoff": [');
+    expect(lead).toContain('      "reverb-mix": [[0, 0.2]],');
+  });
+
   test("output is prettier-stable", async () => {
     for (const file of printProject(rich).files) {
       const formatted = await prettier.format(file.text, {
@@ -193,7 +227,7 @@ describe("printer", () => {
     );
     expect(text).toContain('import drums_2 from "./tracks/drums-2/track.ts";');
     expect(text).toContain(
-      "tracks: [bass, drums_2, track_default, beat, vox],",
+      "tracks: [bass, drums_2, track_default, beat, vox, lead],",
     );
     expect(text).toContain('key: "A minor",');
     expect(text).not.toContain("ticksPerBeat");

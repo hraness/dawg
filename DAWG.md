@@ -222,6 +222,104 @@ The printer (`core/sdk/print.ts`) is deterministic and Prettier-stable (`prettie
 
 Score format. The score stays `track.loop/v1` with `version: 1`: every addition is an optional field, so older documents still parse and older dawg versions reject only documents that use the new fields. Tracks may carry `sampler: {mode: "oneshot" | "keyed", voices: {name: {src, sha256?, url?, license?, root?, begin?, end?, gain?, speed?, loop?, choke?}}}` with bounds in `SCORE_LIMITS` (64 voices, 256-character relative `src`, gain ≤ 2, speed ≤ 8). One-shot voices map to pitches from 36 in voice-name order. Sampler tracks play their samples; see [Samples](#samples). `diffScores` uses four operations added alongside: `removeTrack`, `moveTrack`, `setKey` and `setMeter`, which dawgd rebases and the planner accepts.
 
+## Effects
+
+Every track has one fixed effects chain (`FX_CHAIN` in `core/fx.ts`, DSP in `src/audio/effects/`):
+
+```text
+filter → djf → autofilter → vowel → crush → distort → tremolo → compressor → pan → phaser → chorus → leslie → postgain → delay → reverb
+```
+
+Stages before `pan` run on the track's mono voice sum; pan spreads it to stereo with the equal-power law; the rest run on the stereo pair. An effect that is off costs nothing. The core set — **filter, auto filter, distortion, tremolo, compressor, chorus, delay, reverb** — leads the Effects menu and the agent brief; dj filter, vowel, bitcrush, phaser, leslie and post gain are under **more effects** for Strudel parity.
+
+`filter`, `delay` and `reverb` stay where they were on the track (older documents decode and render byte-for-byte as before; the new fields `filter.type`/`ftype`, `delay.time`/`pingpong`/`highcut` and `reverb.fade`/`lowpass`/`dim`/`predelay` are optional). The other effects live in `track.fx` keyed by name, and their parameter lanes in `track.fxAutomation` keyed `<effect>-<param>` (`autofilter-cutoff`, `distort-drive`, `reverb-mix`…). Omitted parameters take the defaults below, and turning an effect on with no parameters gives a good starting sound: the delay is a 3/16 (dotted-eighth) stereo ping-pong with feedback 0.35, mix 0.25 and a 5 kHz high-cut on the repeats.
+
+Prompt grammar (one undo step per command; parameter names are dawg's or any Strudel name in the table):
+
+```text
+fx                                       list the focused track's effects
+fx <effect> on|off|reset                 on with defaults, remove, back to defaults
+fx <effect> preset <name>                load a preset
+fx <effect> <param> <value> [<param> <value> …]
+fx delay mix 0.3                         fx filter type hpf cutoff 300
+fx distort drive 4 tone 5000             fx autofilter shape random sync 0.25
+fx tremolo depth 0.8                     fx delay delayfeedback 0.4
+automate distort-drive points 0:1 8:6    every numeric fx param has a lane
+```
+
+Aliases: `dist`, `comp`, `room`, `bitcrush`, `trem`, `auto-filter`, `lpf`/`hpf`/`bpf` (filter with that type). The menu's Effects section opens each effect on its on/off toggle, presets and simple parameters; **advanced** lists every parameter with its Strudel names. The agent's `set_fx` tool takes the same names and presets.
+
+Presets: filter `warm dark acid thin telephone`; autofilter `slow-sweep wobble s&h hpf-rise env-follow`; distort `warm crunch fuzz fold shape`; tremolo `gentle eighth-chop pulse`; compressor `gentle punch squash`; chorus `subtle wide seasick`; delay `ping-pong dotted-eighth slapback dub`; reverb `room hall plate ambient`; djf `dark thin`; vowel `a o ee`; crush `8-bit lofi destroy`; phaser `slow fast`; leslie `fast slow`.
+
+The DSP is clean-room, written from public documentation of the parameters and standard literature (RBJ biquads, a Stilson/Smith-style ladder, Freeverb-style combs and allpasses, the Giannoulis–Massberg–Reiss compressor), not from Strudel or superdough source (AGPL). Renders stay deterministic: the random S&H shape hashes the cycle index, so cold, cached and worker renders are byte-identical (`src/audio/renderer.test.ts`).
+
+Parameters (**bold** effect = shown in the simple menu; Lane = automation lane):
+
+| Effect         | Param               | Range                                                                             | Default | Strudel                                                        | Lane                   |
+| -------------- | ------------------- | --------------------------------------------------------------------------------- | ------- | -------------------------------------------------------------- | ---------------------- |
+| **filter**     | type (optional)     | lpf / hpf / bpf                                                                   | lpf     | `lpf`, `hpf`, `bpf`                                            |                        |
+| filter         | ftype (optional)    | 12db / 24db / ladder                                                              | 12db    | `ftype`                                                        |                        |
+| **filter**     | cutoff              | 20..20000 Hz                                                                      | 2000    | `lpf`, `cutoff`, `ctf`, `lp`, `hpf`, `hcutoff`, `bpf`, `bandf` | `filter`               |
+| **filter**     | resonance           | 0..1                                                                              | 0       | `lpq`, `resonance`, `hpq`, `hresonance`, `bpq`, `bandq`        | `resonance`            |
+| **djf**        | value               | 0..1                                                                              | 0.5     | `djf`                                                          | `djf-value`            |
+| **autofilter** | type                | lpf / hpf / bpf                                                                   | lpf     | `ftype-like: lpf/hpf/bpf`                                      |                        |
+| **autofilter** | cutoff              | 20..20000 Hz                                                                      | 1200    | `lpf`, `cutoff`                                                | `autofilter-cutoff`    |
+| autofilter     | resonance           | 0..1                                                                              | 0.3     | `lpq`, `resonance`                                             | `autofilter-resonance` |
+| **autofilter** | depth               | 0..6 oct                                                                          | 2       |                                                                | `autofilter-depth`     |
+| **autofilter** | sync                | 0..64 beats                                                                       | 4       |                                                                |                        |
+| autofilter     | rate                | 0.01..40 Hz                                                                       | 0.5     |                                                                | `autofilter-rate`      |
+| **autofilter** | shape               | sine / tri / square / saw / ramp / random                                         | sine    |                                                                |                        |
+| autofilter     | phase               | 0..1                                                                              | 0       |                                                                |                        |
+| autofilter     | follow              | -6..6 oct                                                                         | 0       | `lpenv (per note, see synth)`                                  | `autofilter-follow`    |
+| **vowel**      | vowel               | a / e / i / o / u / ae / aa / oe / ue / y / uh / un / en / an / on                | a       | `vowel`                                                        |                        |
+| **vowel**      | mix                 | 0..1                                                                              | 1       |                                                                | `vowel-mix`            |
+| **crush**      | bits                | 1..16                                                                             | 8       | `crush`                                                        | `crush-bits`           |
+| **crush**      | coarse              | 1..64                                                                             | 1       | `coarse`                                                       |                        |
+| **crush**      | mix                 | 0..1                                                                              | 1       |                                                                | `crush-mix`            |
+| **distort**    | drive               | 0..10                                                                             | 2       | `distort`, `dist`                                              | `distort-drive`        |
+| distort        | type                | soft / hard / cubic / diode / asym / fold / sinefold / chebyshev / scurve / shape | soft    | `distort type (3rd field)`, `shape → type shape`               |                        |
+| **distort**    | tone                | 200..20000 Hz                                                                     | 8000    |                                                                | `distort-tone`         |
+| **distort**    | mix                 | 0..1                                                                              | 1       |                                                                | `distort-mix`          |
+| distort        | postgain            | 0..2                                                                              | 1       | `distort postgain`                                             |                        |
+| **tremolo**    | sync                | 0..64 beats                                                                       | 0.5     | `tremolosync`, `tremsync`                                      |                        |
+| tremolo        | rate                | 0.01..40 Hz                                                                       | 4       | `tremolo`                                                      | `tremolo-rate`         |
+| **tremolo**    | depth               | 0..1                                                                              | 0.5     | `tremolodepth`, `tremdepth`                                    | `tremolo-depth`        |
+| **tremolo**    | shape               | sine / tri / square / saw / ramp                                                  | sine    | `tremoloshape`, `tremshape`                                    |                        |
+| tremolo        | skew                | 0..1                                                                              | 0.5     | `tremoloskew`, `tremskew`                                      |                        |
+| tremolo        | phase               | 0..1                                                                              | 0       | `tremolophase`, `tremphase`                                    |                        |
+| **compressor** | threshold           | -60..0 dB                                                                         | -18     | `compressor threshold`                                         | `compressor-threshold` |
+| **compressor** | ratio               | 1..20                                                                             | 4       | `compressorRatio`                                              |                        |
+| compressor     | knee                | 0..24 dB                                                                          | 6       | `compressorKnee`                                               |                        |
+| compressor     | attack              | 0.0001..1 s                                                                       | 0.01    | `compressorAttack`                                             |                        |
+| compressor     | release             | 0.01..2 s                                                                         | 0.15    | `compressorRelease`                                            |                        |
+| **compressor** | makeup              | 0..24 dB                                                                          | 5       |                                                                | `compressor-makeup`    |
+| **phaser**     | rate                | 0.01..40 Hz                                                                       | 0.5     | `phaser`, `ph`                                                 | `phaser-rate`          |
+| phaser         | sync                | 0..64 beats                                                                       | 0       |                                                                |                        |
+| **phaser**     | depth               | 0..1                                                                              | 0.75    | `phaserdepth`, `phd`, `phasdp`                                 | `phaser-depth`         |
+| phaser         | center              | 100..10000 Hz                                                                     | 1000    | `phasercenter`, `phc`                                          |                        |
+| phaser         | sweep               | 0..8000 Hz                                                                        | 2000    | `phasersweep`, `phs`                                           |                        |
+| **chorus**     | rate                | 0.01..40 Hz                                                                       | 0.8     |                                                                | `chorus-rate`          |
+| **chorus**     | depth               | 0..1                                                                              | 0.4     |                                                                | `chorus-depth`         |
+| **chorus**     | mix                 | 0..1                                                                              | 0.5     |                                                                | `chorus-mix`           |
+| **leslie**     | mix                 | 0..1                                                                              | 1       | `leslie`                                                       | `leslie-mix`           |
+| **leslie**     | rate                | 0.01..40 Hz                                                                       | 6.7     | `lrate`                                                        | `leslie-rate`          |
+| leslie         | size                | 0..1                                                                              | 0.5     | `lsize`                                                        |                        |
+| **postgain**   | gain                | 0..4                                                                              | 1       | `postgain`, `post`                                             | `postgain-gain`        |
+| **delay**      | beats               | 0.0625..4 beats                                                                   | 0.75    | `delaytime (seconds = beats·60/bpm)`                           |                        |
+| **delay**      | feedback            | 0..0.9                                                                            | 0.35    | `delayfeedback`, `delayfb`, `dfb`                              | `delay-feedback`       |
+| **delay**      | mix                 | 0..1                                                                              | 0.25    | `delay`                                                        | `delay-mix`            |
+| delay          | time (optional)     | 0..4 s                                                                            | 0       | `delaytime`, `delayt`, `dt`                                    |                        |
+| delay          | pingpong (optional) | on/off                                                                            | true    |                                                                |                        |
+| delay          | highcut (optional)  | 500..20000 Hz                                                                     | 5000    |                                                                |                        |
+| **reverb**     | mix                 | 0..1                                                                              | 0.3     | `room`                                                         | `reverb-mix`           |
+| **reverb**     | size                | 0..1                                                                              | 0.5     | `roomsize`, `rsize`, `sz`, `size`                              |                        |
+| reverb         | fade (optional)     | 0.1..20 s                                                                         | 2       | `roomfade`, `rfade`                                            |                        |
+| reverb         | lowpass (optional)  | 200..20000 Hz                                                                     | 8000    | `roomlp`, `rlp`                                                |                        |
+| reverb         | dim (optional)      | 200..20000 Hz                                                                     | 3000    | `roomdim`, `rdim`                                              |                        |
+| reverb         | predelay (optional) | 0..0.5 s                                                                          | 0.02    |                                                                |                        |
+
+Strudel mapping notes: Strudel's `lpf`/`hpf`/`bpf` each set a separate filter; dawg has one track filter whose `type` selects the response, so `lpf(800)` is `filter {type: "lpf", cutoff: 800}` and `lpq`/`hpq`/`bpq` map to `resonance`. `delay` in Strudel is the wet level (dawg `delay.mix`), `delaytime` is seconds (dawg `delay.time`; `beats` is the tempo-synced form), `delayfeedback` is `delay.feedback`. `room` is `reverb.mix`, `size`/`roomsize` is `reverb.size`, `roomfade`/`roomlp`/`roomdim` are `fade`/`lowpass`/`dim`. `distort` and `shape` are the distortion drive with `type: "shape"` for Strudel's `shape` curve; `crush` is bits and `coarse` is the sample-hold factor. `phaser`/`phaserdepth`/`phasercenter`/`phasersweep`, `tremolo*`, `leslie`/`lrate`/`lsize`, `postgain` and `compressor` keep their names. `orbit` (shared bus) is not modelled; each track is its own orbit.
+
 ## Samples
 
 A track whose instrument is `sampler(...)` plays audio files instead of a synth. Voices live in `tracks/<slug>/samples/` and `src` is relative to the track directory (`samples/kick.wav`); a project-relative `tracks/<slug>/samples/kick.wav` works too.

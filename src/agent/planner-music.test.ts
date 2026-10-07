@@ -151,8 +151,9 @@ describe("planner music operations", () => {
     expect(tools).toContain("delay");
     expect(tools).toContain("solo");
     expect(tools).toContain("reverb");
-    expect(tools).toContain('"delay-mix"');
-    expect(tools).toContain('"delay-feedback"');
-    expect(tools).toContain('"resonance"');
+    expect(tools).toContain("delay-mix");
+    expect(tools).toContain("delay-feedback");
+    expect(tools).toContain("resonance");
+    expect(tools).toContain("set_fx");
   });
 });

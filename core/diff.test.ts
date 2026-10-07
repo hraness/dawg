@@ -57,6 +57,22 @@ function randomScore(random: () => number): TrackScore {
       filterAutomation: chance(0.2)
         ? [{ tick: 0, value: pick([500, 1000]) }]
         : [],
+      ...(chance(0.3)
+        ? {
+            fx: {
+              ...(chance(0.6) ? { distort: { drive: pick([2, 4]) } } : {}),
+              ...(chance(0.6) ? { chorus: {} } : {}),
+              tremolo: { depth: pick([0.3, 0.6]) },
+            },
+          }
+        : {}),
+      ...(chance(0.2)
+        ? {
+            fxAutomation: {
+              "tremolo-depth": [{ tick: 0, value: pick([0.2, 0.8]) }],
+            },
+          }
+        : {}),
       ...(sampler
         ? {
             sampler: {

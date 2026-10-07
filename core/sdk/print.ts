@@ -9,6 +9,7 @@
 
 import { DRUM_VOICES, isDrumInstrument } from "../drums.ts";
 import type { RhythmRow } from "../euclid.ts";
+import { FX_LANES, fxSpec, type FxName, type FxValues } from "../fx.ts";
 import { midiToPitch } from "../pitch.ts";
 import { rhythmVoicePitch, rowInSync } from "../rhythm.ts";
 import {
@@ -233,6 +234,7 @@ export function printTrack(score: TrackScore, track: Track): string {
         [
           ["cutoff", num(track.filter.cutoff)],
           ["resonance", num(track.filter.resonance)],
+          ...optional(track.filter, ["type", "ftype"]),
         ],
         INDENT,
         "filter: ".length,
@@ -246,6 +248,7 @@ export function printTrack(score: TrackScore, track: Track): string {
           ["beats", num(track.delay.beats)],
           ["feedback", num(track.delay.feedback)],
           ["mix", num(track.delay.mix)],
+          ...optional(track.delay, ["time", "pingpong", "highcut"]),
         ],
         INDENT,
         "delay: ".length,
@@ -258,12 +261,25 @@ export function printTrack(score: TrackScore, track: Track): string {
         [
           ["mix", num(track.reverb.mix)],
           ["size", num(track.reverb.size)],
+          ...optional(track.reverb, ["fade", "lowpass", "dim", "predelay"]),
         ],
         INDENT,
         "reverb: ".length,
         1,
       )}`,
     );
+  if (track.fx) {
+    const effects = Object.entries(track.fx) as [FxName, FxValues][];
+    const inner = INDENT + INDENT;
+    const body = effects.map(([effect, values]) => {
+      // Only values that differ from the default: decoding fills the rest.
+      const params = Object.entries(fxSpec(effect).params)
+        .filter(([key, spec]) => values[key] !== spec.default)
+        .map(([key]) => [key, value(values[key]!)] as const);
+      return `${inner}${effect}: ${params.length === 0 ? "{}" : obj(params, inner, `${effect}: `.length, 1)},`;
+    });
+    entries.push(`fx: {\n${body.join("\n")}\n${INDENT}}`);
+  }
   const lanes: [string, readonly AutomationPoint[] | undefined][] = [
     ["volume", track.volumeAutomation],
     ["pan", track.panAutomation],
@@ -273,16 +289,33 @@ export function printTrack(score: TrackScore, track: Track): string {
     ["delayMix", track.delayMixAutomation],
   ];
   const automation = lanes.filter(([, points]) => points && points.length > 0);
-  if (automation.length > 0) {
+  const fxLanes = FX_LANES.filter(
+    ({ lane }) => (track.fxAutomation?.[lane]?.length ?? 0) > 0,
+  ).map(({ lane }) => [lane, track.fxAutomation![lane]!] as const);
+  const laneLine = (
+    name: string,
+    points: readonly AutomationPoint[],
+    indent: string,
+  ) => {
+    const items = points.map(
+      (point) =>
+        `[${num(point.tick / score.ticksPerBeat)}, ${num(point.value)}]`,
+    );
+    // Prettier forces a break on arrays of 2+ arrays that each hold 2+ items.
+    return `${indent}${name}: ${list(items, indent, `${name}: `.length, 1, items.length > 1)},`;
+  };
+  if (automation.length > 0 || fxLanes.length > 0) {
     const inner = INDENT + INDENT;
-    const body = automation.map(([lane, points]) => {
-      const items = points!.map(
-        (point) =>
-          `[${num(point.tick / score.ticksPerBeat)}, ${num(point.value)}]`,
+    const body = automation.map(([lane, points]) =>
+      laneLine(lane, points!, inner),
+    );
+    if (fxLanes.length > 0) {
+      const deeper = inner + INDENT;
+      const fxBody = fxLanes.map(([lane, points]) =>
+        laneLine(str(lane), points, deeper),
       );
-      // Prettier forces a break on arrays of 2+ arrays that each hold 2+ items.
-      return `${inner}${lane}: ${list(items, inner, `${lane}: `.length, 1, items.length > 1)},`;
-    });
+      body.push(`${inner}fx: {\n${fxBody.join("\n")}\n${inner}},`);
+    }
     entries.push(`automation: {\n${body.join("\n")}\n${INDENT}}`);
   }
   if (rows.length > 0) {
@@ -483,6 +516,30 @@ function list(
     return inline;
   const inner = indent + INDENT;
   return `[\n${items.map((item) => `${inner}${item},`).join("\n")}\n${indent}]`;
+}
+
+/** Effect parameter literal. */
+function value(v: number | string | boolean): string {
+  return typeof v === "number"
+    ? num(v)
+    : typeof v === "string"
+      ? str(v)
+      : `${v}`;
+}
+
+/** `[key, literal]` for each optional effect field that is set. */
+function optional(
+  record: object,
+  keys: readonly string[],
+): (readonly [string, string])[] {
+  const out: (readonly [string, string])[] = [];
+  for (const key of keys) {
+    const v = (record as Record<string, number | string | boolean | undefined>)[
+      key
+    ];
+    if (v !== undefined) out.push([key, value(v)]);
+  }
+  return out;
 }
 
 /** Number the way prettier normalizes literals. */

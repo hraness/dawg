@@ -13,7 +13,8 @@
  * score and the session event, leaving persistence to the caller.
  */
 import {
-  AUTOMATION_LANES,
+  automationPoints,
+  automationRange,
   SCORE_LIMITS,
   applyScoreOperation,
   type AutomationParameter,
@@ -72,7 +73,7 @@ export function parseEditCommand(prompt: string): EditCommand | undefined {
   if (points) {
     const parameter = parseLane(points[1]!);
     if (!parameter) return undefined;
-    const { min, max } = AUTOMATION_LANES[parameter];
+    const { min, max } = automationRange(parameter);
     const parsed: { beat: number; value: number }[] = [];
     for (const pair of points[2]!.trim().split(" ")) {
       const [beatText, valueText, extra] = pair.split(":");
@@ -150,8 +151,10 @@ export function applyEditCommand(
       payload: { trackId, patch },
     };
   }
-  const field = AUTOMATION_LANES[command.parameter].field;
-  const current: readonly AutomationPoint[] = track[field] ?? [];
+  const current: readonly AutomationPoint[] = automationPoints(
+    track,
+    command.parameter,
+  );
   let points: AutomationPoint[];
   if (command.type === "automation-points") {
     const byTick = new Map(current.map((point) => [point.tick, point]));

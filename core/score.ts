@@ -11,6 +11,15 @@ import { isDrumInstrument } from "./drums.ts";
 import { synthKit, SYNTH_KIT_NAMES } from "./kits.ts";
 
 export type { RhythmRow } from "./euclid.ts";
+import {
+  FX_LANES,
+  FxValidationError,
+  normalizeFx,
+  normalizeParams,
+  TRACK_EFFECT_SPECS,
+  type FxLane,
+  type TrackFx,
+} from "./fx.ts";
 
 export const SCORE_VERSION = 1 as const;
 export const DEFAULT_TICKS_PER_BEAT = 480 as const;
@@ -39,6 +48,8 @@ export const SCORE_LIMITS = Object.freeze({
   maxReverbMix: 1,
   minReverbSize: 0,
   maxReverbSize: 1,
+  /** Automation lanes kept in `fxAutomation` per track. */
+  maxFxLanes: 64,
   /** Sampler voices per track (score v2, `sampler` field). */
   maxSamplerVoices: 64,
   maxSamplerVoiceNameLength: 32,
@@ -116,6 +127,13 @@ export type Track = Readonly<{
   /** Algorithmic stereo reverb send, mixed after the delay. */
   reverb?: TrackReverb;
   /**
+   * Optional: insert effects by name (`core/fx.ts`), each with every
+   * parameter stored. Rendered in `FX_CHAIN` order.
+   */
+  fx?: TrackFx;
+  /** Optional: automation for `fx` parameters, keyed `<effect>-<param>`. */
+  fxAutomation?: Readonly<Partial<Record<FxLane, readonly AutomationPoint[]>>>;
+  /**
    * Score v2: sample voices; present exactly when `instrument` is
    * `"sampler"`. Documents without it decode unchanged.
    */
@@ -177,6 +195,14 @@ export type TrackReverb = Readonly<{
   mix: number;
   /** Room size 0..1: longer comb feedback and a darker, longer tail. */
   size: number;
+  /** Optional: decay time to -60 dB in seconds; overrides the size-derived decay. */
+  fade?: number;
+  /** Optional: low-pass on the reverb input, Hz. */
+  lowpass?: number;
+  /** Optional: the tail darkens toward this frequency (Hz) as it decays. */
+  dim?: number;
+  /** Optional: seconds before the tail starts. */
+  predelay?: number;
 }>;
 
 export type TrackFilter = Readonly<{
@@ -184,6 +210,10 @@ export type TrackFilter = Readonly<{
   cutoff: number;
   /** Resonance 0..1, mapped to a bounded biquad Q. */
   resonance: number;
+  /** Optional: filter type; absent is the original low-pass. */
+  type?: "lpf" | "hpf" | "bpf";
+  /** Optional: slope; absent is the original 12 dB/oct biquad. */
+  ftype?: "12db" | "24db" | "ladder";
 }>;
 
 export type TrackDelay = Readonly<{
@@ -193,15 +223,25 @@ export type TrackDelay = Readonly<{
   feedback: number;
   /** Wet level added to the dry signal, 0..1. */
   mix: number;
+  /** Optional: delay time in seconds; 0/absent follows `beats`. */
+  time?: number;
+  /** Optional: repeats alternate left/right; absent is the original cross-fed stereo. */
+  pingpong?: boolean;
+  /** Optional: low-pass (Hz) inside the feedback loop. */
+  highcut?: number;
 }>;
 
-export type AutomationParameter =
+/** The lanes stored in their own track fields (`AUTOMATION_LANES`). */
+export type TrackAutomationParameter =
   "volume" | "pan" | "filter" | "resonance" | "delay-feedback" | "delay-mix";
+
+/** Every automation lane: the track-field lanes plus `fx` lanes. */
+export type AutomationParameter = TrackAutomationParameter | FxLane;
 
 /** Track field and value range for every automation lane. */
 export const AUTOMATION_LANES: Readonly<
   Record<
-    AutomationParameter,
+    TrackAutomationParameter,
     Readonly<{
       field:
         | "volumeAutomation"
@@ -239,13 +279,64 @@ export const AUTOMATION_LANES: Readonly<
   },
 });
 
-export function isAutomationParameter(
+const FX_LANE_RANGES: ReadonlyMap<
+  string,
+  Readonly<{ min: number; max: number }>
+> = new Map(
+  FX_LANES.map(({ lane, spec }) => [lane, { min: spec.min, max: spec.max }]),
+);
+
+export function isTrackAutomationParameter(
   value: unknown,
-): value is AutomationParameter {
+): value is TrackAutomationParameter {
   return (
     typeof value === "string" &&
     Object.prototype.hasOwnProperty.call(AUTOMATION_LANES, value)
   );
+}
+
+export function isAutomationParameter(
+  value: unknown,
+): value is AutomationParameter {
+  return (
+    isTrackAutomationParameter(value) ||
+    (typeof value === "string" && FX_LANE_RANGES.has(value))
+  );
+}
+
+/** Every automation lane name, track-field lanes first. */
+export const AUTOMATION_PARAMETERS: readonly AutomationParameter[] =
+  Object.freeze([
+    ...(Object.keys(AUTOMATION_LANES) as TrackAutomationParameter[]),
+    ...FX_LANES.map(({ lane }) => lane),
+  ]);
+
+/** Value range of any lane. */
+export function automationRange(
+  parameter: AutomationParameter,
+): Readonly<{ min: number; max: number }> {
+  if (isTrackAutomationParameter(parameter)) {
+    const { min, max } = AUTOMATION_LANES[parameter];
+    return { min, max };
+  }
+  const range = FX_LANE_RANGES.get(parameter);
+  if (!range)
+    throw new ScoreValidationError(
+      `unknown automation parameter: ${String(parameter)}`,
+      "invalid-track",
+    );
+  return range;
+}
+
+/** A track's points on any lane (empty when it has none). */
+export function automationPoints(
+  track: Track | undefined,
+  parameter: AutomationParameter,
+): readonly AutomationPoint[] {
+  if (!track) return [];
+  if (isTrackAutomationParameter(parameter))
+    return track[AUTOMATION_LANES[parameter].field] ?? [];
+  return track.fxAutomation?.[parameter as FxLane] ?? [];
 }
 
 /** Track fields that score operations may patch; `null` clears an effect. */
@@ -273,6 +364,8 @@ export type TrackPatch = Readonly<
     sampler?: Sampler | null;
     rhythm?: readonly RhythmRow[] | null;
     kit?: string | null;
+    fx?: TrackFx | null;
+    fxAutomation?: Track["fxAutomation"] | null;
   }
 >;
 
@@ -294,7 +387,14 @@ export type Note = Readonly<{
 export type TrackInput = Readonly<
   Omit<
     Partial<Track>,
-    "filter" | "delay" | "reverb" | "sampler" | "rhythm" | "kit"
+    | "filter"
+    | "delay"
+    | "reverb"
+    | "sampler"
+    | "rhythm"
+    | "kit"
+    | "fx"
+    | "fxAutomation"
   > &
     Pick<Track, "id"> & {
       filter?: TrackFilter | null;
@@ -303,6 +403,8 @@ export type TrackInput = Readonly<
       sampler?: Sampler | null;
       rhythm?: readonly RhythmRow[] | null;
       kit?: string | null;
+      fx?: TrackFx | null;
+      fxAutomation?: Track["fxAutomation"] | null;
     }
 >;
 
@@ -671,9 +773,18 @@ export function setTrackAutomation(
       `unknown automation parameter: ${String(parameter)}`,
       "invalid-track",
     );
-  return updateTrack(score, trackId, {
-    [AUTOMATION_LANES[parameter].field]: points,
-  });
+  if (isTrackAutomationParameter(parameter))
+    return updateTrack(score, trackId, {
+      [AUTOMATION_LANES[parameter].field]: points,
+    });
+  const track = score.tracks.find((candidate) => candidate.id === trackId);
+  if (!track) return score;
+  const lanes: Partial<Record<FxLane, readonly AutomationPoint[]>> = {
+    ...track.fxAutomation,
+  };
+  if (points.length > 0) lanes[parameter] = points;
+  else delete lanes[parameter];
+  return updateTrack(score, trackId, { fxAutomation: lanes });
 }
 
 /** Mute always silences a track; any solo silences every unsoloed track. */
@@ -911,7 +1022,7 @@ function normalizeTrack(input: unknown): Track {
     SCORE_LIMITS.minFilterCutoff,
     SCORE_LIMITS.maxFilterCutoff,
   );
-  const lane = (parameter: AutomationParameter) => {
+  const lane = (parameter: TrackAutomationParameter) => {
     const { field, min, max } = AUTOMATION_LANES[parameter];
     return normalizeAutomation(input[field], field, min, max);
   };
@@ -919,6 +1030,8 @@ function normalizeTrack(input: unknown): Track {
   const delayFeedbackAutomation = lane("delay-feedback");
   const delayMixAutomation = lane("delay-mix");
   const reverb = normalizeReverb(input.reverb);
+  const fx = fxOrThrow(() => normalizeFx(input.fx));
+  const fxAutomation = normalizeFxAutomation(input.fxAutomation);
   const sampler = normalizeSampler(input.sampler);
   const rhythm = normalizeRhythm(input.rhythm, id);
   let kit: string | undefined;
@@ -964,6 +1077,8 @@ function normalizeTrack(input: unknown): Track {
     ...(delayFeedbackAutomation.length > 0 ? { delayFeedbackAutomation } : {}),
     ...(delayMixAutomation.length > 0 ? { delayMixAutomation } : {}),
     ...(reverb ? { reverb } : {}),
+    ...(fx ? { fx } : {}),
+    ...(fxAutomation ? { fxAutomation } : {}),
     ...(sampler ? { sampler } : {}),
     ...(rhythm ? { rhythm } : {}),
     ...(kit ? { kit } : {}),
@@ -998,6 +1113,74 @@ export function normalizeRhythm(
       "invalid-track",
     );
   return Object.freeze(rows);
+}
+
+function fxOrThrow<T>(run: () => T): T {
+  try {
+    return run();
+  } catch (error) {
+    if (error instanceof FxValidationError)
+      throw new ScoreValidationError(error.message, "invalid-track");
+    throw error;
+  }
+}
+
+/** Validates `fxAutomation`; empty lanes are dropped, keys in lane order. */
+function normalizeFxAutomation(
+  input: unknown,
+): Track["fxAutomation"] | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (!isRecord(input))
+    throw new ScoreValidationError(
+      "track fxAutomation must be an object",
+      "invalid-track",
+    );
+  const keys = Object.keys(input);
+  if (keys.length > SCORE_LIMITS.maxFxLanes)
+    throw new ScoreValidationError(
+      `track fxAutomation holds at most ${SCORE_LIMITS.maxFxLanes} lanes`,
+      "score-limit",
+    );
+  for (const key of keys)
+    if (!FX_LANE_RANGES.has(key))
+      throw new ScoreValidationError(
+        `unknown fx automation lane "${key}"`,
+        "invalid-track",
+      );
+  const out: Partial<Record<FxLane, readonly AutomationPoint[]>> = {};
+  for (const { lane, spec } of FX_LANES) {
+    if (input[lane] === undefined) continue;
+    const points = normalizeAutomation(
+      input[lane],
+      `fxAutomation ${lane}`,
+      spec.min,
+      spec.max,
+    );
+    if (points.length > 0) out[lane] = points;
+  }
+  return Object.keys(out).length > 0 ? Object.freeze(out) : undefined;
+}
+
+/** The optional parameters of a track effect; absent keys stay absent. */
+function trackEffectExtras(
+  name: keyof typeof TRACK_EFFECT_SPECS,
+  input: Record<string, unknown>,
+  keys: readonly string[],
+): Record<string, unknown> {
+  const params = TRACK_EFFECT_SPECS[name].params as Record<
+    string,
+    Parameters<typeof normalizeParams>[0][string]
+  >;
+  const subset: Record<string, Parameters<typeof normalizeParams>[0][string]> =
+    {};
+  const values: Record<string, unknown> = {};
+  for (const key of keys) {
+    subset[key] = params[key]!;
+    if (input[key] !== undefined) values[key] = input[key];
+  }
+  return {
+    ...fxOrThrow(() => normalizeParams(subset, values, `track ${name}`)),
+  };
 }
 
 const VOICE_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
@@ -1270,7 +1453,13 @@ export function normalizeReverb(input: unknown): TrackReverb | undefined {
     SCORE_LIMITS.minReverbSize,
     SCORE_LIMITS.maxReverbSize,
   );
-  return Object.freeze({ mix, size });
+  const extras = trackEffectExtras("reverb", input, [
+    "fade",
+    "lowpass",
+    "dim",
+    "predelay",
+  ]);
+  return Object.freeze({ mix, size, ...extras });
 }
 
 export function normalizeFilter(input: unknown): TrackFilter | undefined {
@@ -1292,7 +1481,12 @@ export function normalizeFilter(input: unknown): TrackFilter | undefined {
     0,
     SCORE_LIMITS.maxFilterResonance,
   );
-  return Object.freeze({ cutoff, resonance });
+  const extras = trackEffectExtras("filter", input, ["type", "ftype"]);
+  if (extras.ftype === "12db") delete extras.ftype;
+  // `lpf` is the original filter; store it as absent so v1 documents and
+  // explicit `lpf` encode the same.
+  if (extras.type === "lpf") delete extras.type;
+  return Object.freeze({ cutoff, resonance, ...extras });
 }
 
 export function normalizeDelay(input: unknown): TrackDelay | undefined {
@@ -1320,7 +1514,13 @@ export function normalizeDelay(input: unknown): TrackDelay | undefined {
     0,
     SCORE_LIMITS.maxDelayMix,
   );
-  return Object.freeze({ beats, feedback, mix });
+  const extras = trackEffectExtras("delay", input, [
+    "time",
+    "pingpong",
+    "highcut",
+  ]);
+  if (extras.time === 0) delete extras.time;
+  return Object.freeze({ beats, feedback, mix, ...extras });
 }
 
 function boundedNumber(

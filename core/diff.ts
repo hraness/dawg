@@ -26,7 +26,14 @@ export class DiffError extends Error {
   }
 }
 
-const EFFECTS = ["filter", "delay", "reverb", "sampler"] as const;
+const EFFECTS = [
+  "filter",
+  "delay",
+  "reverb",
+  "sampler",
+  "fx",
+  "fxAutomation",
+] as const;
 const LANES = [
   "volumeAutomation",
   "panAutomation",

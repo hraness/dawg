@@ -42,6 +42,7 @@ import {
 } from "./commands/drums.ts";
 import { kitCatalog } from "./audio/kits.ts";
 import { applyEditCommand, parseEditCommand } from "./commands/edit.ts";
+import { applyFxCommand, parseFxCommand } from "./commands/fx.ts";
 import { helpLines, helpText, usageHint } from "./commands/help.ts";
 import { historyTarget, REDO_KIND, UNDO_KIND } from "./commands/history.ts";
 import {
@@ -1213,6 +1214,14 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (rhythm) {
     await materializeDraft();
     const result = applyRhythmCommand(score, requestedTrack, rhythm);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
+  const fx = parseFxCommand(command);
+  if (fx) {
+    if (fx.type !== "fx-list") await materializeDraft();
+    const result = applyFxCommand(score, requestedTrack, fx);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
