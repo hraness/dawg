@@ -1,3 +1,4 @@
+import { statSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -56,9 +57,35 @@ export type SessionPaths = {
 export class SessionConflictError extends Error {
   public constructor() {
     super(
-      "session changed in another Track window; retry against the latest revision",
+      "session changed in another dawg window; retry against the latest revision",
     );
     this.name = "SessionConflictError";
+  }
+}
+
+/** Per-workspace state directory. */
+export const STATE_DIR = ".dawg";
+/** Pre-rename state directory, still used when it is the only one present. */
+export const LEGACY_STATE_DIR = ".track";
+
+/**
+ * The workspace state directory: `.dawg/`, or the legacy `.track/` when
+ * `.dawg/` is missing and `.track/` exists, so sessions created before the
+ * rename keep working. Neither directory is ever moved or deleted; run
+ * `mv .track .dawg` to switch over explicitly.
+ */
+export function stateDir(workspace = process.cwd()): string {
+  const current = join(workspace, STATE_DIR);
+  if (isDirectory(current)) return current;
+  const legacy = join(workspace, LEGACY_STATE_DIR);
+  return isDirectory(legacy) ? legacy : current;
+}
+
+function isDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
   }
 }
 
@@ -67,7 +94,7 @@ export function sessionPaths(
   sessionId: string,
 ): SessionPaths {
   assertSessionId(sessionId);
-  const root = join(workspace, ".track");
+  const root = stateDir(workspace);
   return {
     root,
     pointer: join(root, "session"),
@@ -81,7 +108,7 @@ export async function readCurrentSessionId(
 ): Promise<string | undefined> {
   try {
     const id = (
-      await readFile(join(workspace, ".track", "session"), "utf8")
+      await readFile(join(stateDir(workspace), "session"), "utf8")
     ).trim();
     if (id.length === 0) return undefined;
     assertSessionId(id);
@@ -103,11 +130,11 @@ export async function ensureSession<T>(
   } = {},
 ): Promise<{ paths: SessionPaths; record: SessionRecord<T> }> {
   const workspace = options.workspace ?? process.cwd();
-  const root = join(workspace, ".track");
+  const root = stateDir(workspace);
   await mkdir(root, { recursive: true });
   // Serialize pointer selection and first-record creation. Without this,
   // two windows launched together can each choose a different random session
-  // and race to overwrite `.track/session`.
+  // and race to overwrite `.dawg/session`.
   const initLock = join(root, ".init.lock");
   const release = await acquireSessionLock(initLock);
   try {
@@ -162,7 +189,7 @@ export async function appendSessionEvent<T>(
   event: Omit<SessionEvent, "id" | "revision" | "at"> & { id?: string },
   composition: T,
 ): Promise<SessionRecord<T>> {
-  // trackd passes the client's idempotency key as the durable event id so a
+  // dawgd passes the client's idempotency key as the durable event id so a
   // retried intent stays a no-op across daemon restarts.
   if (event.id !== undefined) assertSessionId(event.id);
   const payloadJson = stringifyJson(event.payload, "session event payload");
@@ -318,7 +345,7 @@ export async function inheritedEvents(
   return chunks.flat().slice(-MAX_INHERITED_EVENTS);
 }
 
-/** Points `.track/session` at `sessionId` so plain `track` resumes it. */
+/** Points `.dawg/session` at `sessionId` so plain `dawg` resumes it. */
 export async function setCurrentSession(
   workspace: string,
   sessionId: string,

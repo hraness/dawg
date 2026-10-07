@@ -1,45 +1,59 @@
-# Track
+# dawg
 
-Track is a local-first terminal music workstation with an agent-driven piano roll. Run `track` in a project directory, open it in more than one terminal window, and each window can focus on a different track in the same composition.
+dawg is a local-first terminal music workstation with an agent-driven piano roll. Run `dawg` in a project directory, open it in more than one terminal window, and each window can focus on a different track in the same composition.
 
-The highway sits above a multiline prompt. Notes stream toward a hit line, sustains stretch across beats, and transport controls stay live while you ask the agent to add or reshape music. The session is stored locally in `.track`, so there is no account, login, hosted session, or required service for the core workflow.
+The highway sits above a multiline prompt. Notes stream toward a hit line, sustains stretch across beats, and transport controls stay live while you ask the agent to add or reshape music. The session is stored locally in `.dawg`, so there is no account, login, hosted session, or required service for the core workflow.
 
 ## Install
 
-Track requires [Bun](https://bun.sh) 1.3.14 or newer. Install the release tarball from GitHub:
+dawg requires [Bun](https://bun.sh) 1.3.14 or newer. Install it with the script from [dawg.sh](https://dawg.sh):
 
 ```sh
-bun add -g https://github.com/hraness/track/releases/download/v0.2.0/hraness-track-0.2.0.tgz
-track --help
+curl -fsSL https://dawg.sh/install | sh
 ```
 
-Each [release](https://github.com/hraness/track/releases) is immutable and ships the tarball, a `SHA256SUMS` file and a build provenance attestation. To check a download before installing it:
+or install the release tarball from GitHub directly:
 
 ```sh
-gh release download v0.2.0 --repo hraness/track
+bun add -g https://github.com/hraness/dawg/releases/download/v0.2.0/hraness-dawg-0.2.0.tgz
+dawg --help
+```
+
+Each [release](https://github.com/hraness/dawg/releases) is immutable and ships the tarball, a `SHA256SUMS` file and a build provenance attestation. To check a download before installing it:
+
+```sh
+gh release download v0.2.0 --repo hraness/dawg
 shasum -a 256 -c SHA256SUMS
-gh attestation verify hraness-track-0.2.0.tgz --repo hraness/track
-bun add -g "$PWD/hraness-track-0.2.0.tgz"
+gh attestation verify hraness-dawg-0.2.0.tgz --repo hraness/dawg
+bun add -g "$PWD/hraness-dawg-0.2.0.tgz"
 ```
 
-Track is not published to npm yet. To run from source instead:
+dawg is not published to npm yet. To run from source instead:
 
 ```sh
-git clone https://github.com/hraness/track.git
-cd track
+git clone https://github.com/hraness/dawg.git
+cd dawg
 bun install --frozen-lockfile
-bun run track
+bun run dawg
 ```
 
-Running `track` creates `.track/session` when needed and attaches to that session on later launches. Use `track --new` for a new composition, `track --session <name|id>` to attach explicitly, or `track --track bass` to focus a named track.
+Running `dawg` creates `.dawg/session` when needed and attaches to that session on later launches. Use `dawg --new` for a new composition, `dawg --session <name|id>` to attach explicitly, or `dawg --track bass` to focus a named track.
+
+### Coming from Track
+
+dawg was called Track before 0.2.0. Existing state keeps working without a migration step, and nothing old is moved or deleted:
+
+- A workspace with `.track/` and no `.dawg/` keeps using `.track/`. Run `mv .track .dawg` to switch it over.
+- `~/.config/track` is used while `~/.config/dawg` does not exist, and a gateway key stored under the old Keychain service `track` is still read. A new `dawg login` writes to the new locations; `dawg logout` removes the key from both Keychain services.
+- Legacy `TRACK_*` environment variables are read when the matching `DAWG_*` one is unset. This fallback is planned to go away in a later release.
 
 ### Sessions
 
 Every window you open on a session takes the first track no other window has focused, in score order. Open three terminals on a three-track session and each one restores a different instrument. A fourth window gets a draft track (`track-4`, "all tracks open · new track") that is added to the score on its first edit, so idle windows never clutter the song. `--track` always wins over auto-claim.
 
-Sessions have names. A new session starts as `untitled` and is named automatically from what you play (`a minor bass groove`, `dusty basement funk`). `/rename <name>` sets your own name and stops auto-naming for good; `/rename --auto` hands it back. A user rename always beats an auto-name that was still in flight, and every window updates. `/fork [name]` snapshots the current song into a new session (`night drive` → `night drive 2` → `night drive 3`; a fork of `night drive 2` is `night drive 3`) and switches this window to it. `/sessions` lists recent sessions, `/resume` opens a picker (↑/↓, Enter, Esc) and `/resume <n|name|id>` switches directly. Undo in a fork steps back past the fork point into the parent's history. `track sessions` prints the same list from the shell.
+Sessions have names. A new session starts as `untitled` and is named automatically from what you play (`a minor bass groove`, `dusty basement funk`). `/rename <name>` sets your own name and stops auto-naming for good; `/rename --auto` hands it back. A user rename always beats an auto-name that was still in flight, and every window updates. `/fork [name]` snapshots the current song into a new session (`night drive` → `night drive 2` → `night drive 3`; a fork of `night drive 2` is `night drive 3`) and switches this window to it. `/sessions` lists recent sessions, `/resume` opens a picker (↑/↓, Enter, Esc) and `/resume <n|name|id>` switches directly. Undo in a fork steps back past the fork point into the parent's history. `dawg sessions` prints the same list from the shell.
 
-Auto-naming is cheap. Track keeps a local musical fingerprint (tempo, key estimate, instruments, register, density and effects) and only asks a model when the music actually changed, at most once every few turns, after three quiet seconds. The request is about 120 tokens in and 12 out through the configured provider (gateway `anthropic/claude-haiku-4.5`, or xcb), runs in the background so it never blocks the prompt, and falls back to a local name such as `96 bpm drums` when offline or with `TRACK_AI=0`. In tests a typical 10-prompt session makes 2–3 naming calls.
+Auto-naming is cheap. dawg keeps a local musical fingerprint (tempo, key estimate, instruments, register, density and effects) and only asks a model when the music actually changed, at most once every few turns, after three quiet seconds. The request is about 120 tokens in and 12 out through the configured provider (gateway `anthropic/claude-haiku-4.5`, or xcb), runs in the background so it never blocks the prompt, and falls back to a local name such as `96 bpm drums` when offline or with `DAWG_AI=0`. In tests a typical 10-prompt session makes 2–3 naming calls.
 
 ## Use
 
@@ -114,34 +128,34 @@ The screen has four parts. A one-line header shows track · session · ▶/⏸ B
 
 A STEER submit runs ahead of queued work. Bracketed paste preserves multiline input.
 
-`/theme default|high-contrast|mono` and `--theme <name>` (or `TRACK_THEME`) pick a theme. Semantic color tokens map to truecolor, 256, 16 or no color. `NO_COLOR` and `TERM=dumb` force monochrome. `/motion off`, `--reduce-motion` or `TRACK_REDUCE_MOTION=1` replace animations with static states in the same positions. Every color has a non-color cue as well: glyph density, `✓`/`✗`/`!` prefixes, the mode pill text and `▶`/`⏸`.
+`/theme default|high-contrast|mono` and `--theme <name>` (or `DAWG_THEME`) pick a theme. Semantic color tokens map to truecolor, 256, 16 or no color. `NO_COLOR` and `TERM=dumb` force monochrome. `/motion off`, `--reduce-motion` or `DAWG_REDUCE_MOTION=1` replace animations with static states in the same positions. Every color has a non-color cue as well: glyph density, `✓`/`✗`/`!` prefixes, the mode pill text and `▶`/`⏸`.
 
 ## Auth
 
-Run `track login` once to give the agent a model. With the Vercel CLI it signs you in (if needed) and creates an AI Gateway key named `track-<hostname>`; `--budget <dollars>` sets its spend limit. Without the CLI it prints `bun add -g vercel` and lets you paste a key instead (`track login --key`, hidden input, Enter opens the key page).
+Run `dawg login` once to give the agent a model. With the Vercel CLI it signs you in (if needed) and creates an AI Gateway key named `dawg-<hostname>`; `--budget <dollars>` sets its spend limit. Without the CLI it prints `bun add -g vercel` and lets you paste a key instead (`dawg login --key`, hidden input, Enter opens the key page).
 
-- `track login --xcb` uses a Claude, Codex or Devin subscription through [xcb](https://github.com/hraness/xcb) (`curl -fsSL https://xcb.sh/install.sh | sh`). It lists the accounts that `xcb --json generate --capabilities` reports as available and saves your pick; inside the TUI, `/login --xcb` opens the same choice as a picker of accounts and models. An account whose admission xcb reports as `pending` counts as available, and its first turn shows `admitting account…` while xcb admits it. The provider is re-resolved when `~/.config/track` credentials or config change, so a login in another terminal applies on the next turn. An account only appears after xcb's [application qualification](https://github.com/hraness/xcb/blob/main/docs/application-api.md); if none qualify, the command prints the read-only `xcb --json qualify-application --inspect` line for each connected account.
-- `track auth status` (or `/auth` in the TUI; `--check` verifies the key online) shows the provider, a masked key such as `vck_…abcd` and its source, plus the audio backend. `track logout` removes the stored key and the provider choice. `/login` works in the TUI too; flows that need hidden input or a browser tell you to use a shell.
-- Keys go to the macOS Keychain (service `track`, account `ai-gateway`, passed to `security -i` on stdin so the key never appears in a process list) or to `~/.config/track/credentials.json` (0600, directory 0700). They are never written to `.track/`. `AI_GATEWAY_API_KEY` in the environment always wins. `TRACK_CREDENTIAL_STORE=file` skips the Keychain and `TRACK_CONFIG_DIR` moves the config directory.
-- `TRACK_PROVIDER=gateway|xcb|auto` overrides the saved choice. `auto` (the default) uses the gateway when a key exists, then an available xcb account, otherwise direct commands only with a hint to run `track login`. `TRACK_AI=0` turns the agent off. The header shows the active provider, for example `opus-5.5 · gateway` or `devin/swe-2-high · xcb`.
+- `dawg login --xcb` uses a Claude, Codex or Devin subscription through [xcb](https://github.com/hraness/xcb) (`curl -fsSL https://xcb.sh/install.sh | sh`). It lists the accounts that `xcb --json generate --capabilities` reports as available and saves your pick; inside the TUI, `/login --xcb` opens the same choice as a picker of accounts and models. An account whose admission xcb reports as `pending` counts as available, and its first turn shows `admitting account…` while xcb admits it. The provider is re-resolved when `~/.config/dawg` credentials or config change, so a login in another terminal applies on the next turn. An account only appears after xcb's [application qualification](https://github.com/hraness/xcb/blob/main/docs/application-api.md); if none qualify, the command prints the read-only `xcb --json qualify-application --inspect` line for each connected account.
+- `dawg auth status` (or `/auth` in the TUI; `--check` verifies the key online) shows the provider, a masked key such as `vck_…abcd` and its source, plus the audio backend. `dawg logout` removes the stored key and the provider choice. `/login` works in the TUI too; flows that need hidden input or a browser tell you to use a shell.
+- Keys go to the macOS Keychain (service `dawg`, account `ai-gateway`, passed to `security -i` on stdin so the key never appears in a process list) or to `~/.config/dawg/credentials.json` (0600, directory 0700). They are never written to `.dawg/`. `AI_GATEWAY_API_KEY` in the environment always wins. `DAWG_CREDENTIAL_STORE=file` skips the Keychain and `DAWG_CONFIG_DIR` moves the config directory.
+- `DAWG_PROVIDER=gateway|xcb|auto` overrides the saved choice. `auto` (the default) uses the gateway when a key exists, then an available xcb account, otherwise direct commands only with a hint to run `dawg login`. `DAWG_AI=0` turns the agent off. The header shows the active provider, for example `opus-5.5 · gateway` or `devin/swe-2-high · xcb`.
 
-On the gateway, unrecognized requests go to a streaming, tool-calling agent. Choose `TRACK_MODEL=opus-5.5` or `TRACK_MODEL=sol-6.1`, or switch with `/model`. By default these labels map to `anthropic/claude-opus-5.5` and `openai/gpt-6.1-sol` from the gateway catalog. Override them with `TRACK_OPUS_MODEL` and `TRACK_SOL_MODEL`. Other labels are rejected. xcb has no tool calling, so Track asks for one JSON object of ops per call and runs each op through the same checks; it retries with diagnostics up to 3 calls per turn.
+On the gateway, unrecognized requests go to a streaming, tool-calling agent. Choose `DAWG_MODEL=opus-5.5` or `DAWG_MODEL=sol-6.1`, or switch with `/model`. By default these labels map to `anthropic/claude-opus-5.5` and `openai/gpt-6.1-sol` from the gateway catalog. Override them with `DAWG_OPUS_MODEL` and `DAWG_SOL_MODEL`. Other labels are rejected. xcb has no tool calling, so dawg asks for one JSON object of ops per call and runs each op through the same checks; it retries with diagnostics up to 3 calls per turn.
 
 The agent edits the score only through typed tools: `add_notes`, `add_drums`, `remove_notes`, `update_notes`, `set_instrument`, `set_mix` (with solo), `set_effects` (filter, delay and reverb), `set_automation` (volume, pan, filter cutoff and resonance, delay feedback and mix), `extend_loop`, `set_tempo`, `create_track`, `transport` and `explain`. Each call is validated, then committed as its own revision, and the status line shows its result (for example `✓ +8 bass notes`). While the agent is working, Esc cancels and keeps every change accepted so far. Enter sends a steering message that the agent reads at its next step. A queued submit (Ctrl+Q queue mode) waits until the turn ends.
 
-Playback renders deterministic stereo PCM with sine, piano, pluck, bass, saw, square, and triangle voices plus a synthesized drum kit (pitch-swept sine kick, seeded-noise snare and hats), applies per-track volume, equal-power pan (-1 left to 1 right), low-pass filter, ping-pong delay, and a Freeverb-style reverb, and honors mute and solo. Renders are byte-identical across runs. Playback is gapless: one long-lived player (`ffplay`, else SoX `play`) reads a seamless loop as raw PCM on stdin, and edits, tempo changes and seeks swap the buffer in place at the current position without restarting it, so the transport stays aligned with what you hear. On macOS without either, `afplay` replays a re-rendered loop on each edit. `track auth status` shows the backend; `TRACK_AUDIO_BACKEND=ffplay|sox|afplay|none` forces one, `TRACK_AUDIO_PLAYER="cmd {rate} {channels}"` streams to any stdin player, and `TRACK_AUDIO=0` runs headless. `track --export file.track.json` and `track --import file.track.json` exchange the bounded `track.loop/v1` document. `track render out.wav` writes the current session (or `--session <name|id>`, or `--import file.track.json`) to a WAV through the same renderer, without starting trackd or playing audio; the same score always produces the same bytes, and the command prints the file's sha256. `/status` prints the session name, revision, composition digest and connection mode. `TRACK_DEMO=1 bun run src/main.ts` prints a deterministic renderer frame for development.
+Playback renders deterministic stereo PCM with sine, piano, pluck, bass, saw, square, and triangle voices plus a synthesized drum kit (pitch-swept sine kick, seeded-noise snare and hats), applies per-track volume, equal-power pan (-1 left to 1 right), low-pass filter, ping-pong delay, and a Freeverb-style reverb, and honors mute and solo. Renders are byte-identical across runs. Playback is gapless: one long-lived player (`ffplay`, else SoX `play`) reads a seamless loop as raw PCM on stdin, and edits, tempo changes and seeks swap the buffer in place at the current position without restarting it, so the transport stays aligned with what you hear. On macOS without either, `afplay` replays a re-rendered loop on each edit. `dawg auth status` shows the backend; `DAWG_AUDIO_BACKEND=ffplay|sox|afplay|none` forces one, `DAWG_AUDIO_PLAYER="cmd {rate} {channels}"` streams to any stdin player, and `DAWG_AUDIO=0` runs headless. `dawg --export file.track.json` and `dawg --import file.track.json` exchange the bounded `track.loop/v1` document. `dawg render out.wav` writes the current session (or `--session <name|id>`, or `--import file.track.json`) to a WAV through the same renderer, without starting dawgd or playing audio; the same score always produces the same bytes, and the command prints the file's sha256. `/status` prints the session name, revision, composition digest and connection mode. `DAWG_DEMO=1 bun run src/main.ts` prints a deterministic renderer frame for development.
 
 ## Architecture
 
 - `core/` defines the bounded immutable `track.loop/v1` score and operations.
-- `src/session/` provides an append-only local event log, atomic snapshots, and `trackd`: one local daemon per session (`src/daemon.ts`), started automatically by the first window. Windows connect over a Unix socket, send idempotent intents, and receive accepted changes, presence, and one shared transport clock. If the daemon cannot start, windows fall back to the file-lock path and say so in the status line. `track sessions` lists the workspace's sessions with revision, update time, and live daemon.
+- `src/session/` provides an append-only local event log, atomic snapshots, and `dawgd`: one local daemon per session (`src/daemon.ts`), started automatically by the first window. Windows connect over a Unix socket, send idempotent intents, and receive accepted changes, presence, and one shared transport clock. If the daemon cannot start, windows fall back to the file-lock path and say so in the status line. `dawg sessions` lists the workspace's sessions with revision, update time, and live daemon.
 - `src/agent/` runs the bounded streaming tool-calling agent: the SSE gateway client, the tool registry, the composition brief, and operation validation.
-- `src/audio/` owns the transport clock, deterministic instrument-bank WAV rendering, and per-session playback lock. When `trackd` is running it is the only process that plays audio.
+- `src/audio/` owns the transport clock, deterministic instrument-bank WAV rendering, and per-session playback lock. When `dawgd` is running it is the only process that plays audio.
 - `tui/` owns terminal capability detection, semantic colors, animation phases, piano-roll rendering, and the multiline prompt editor.
 
 The runtime is intentionally adapter-shaped. The local synthesizer is deterministic and works without a sound device; native or sample-backed players can replace it behind the same score boundary.
 
-See [TRACK.md](./TRACK.md) for the detailed command and interaction contract.
+See [DAWG.md](./DAWG.md) for the detailed command and interaction contract.
 
 ## Development
 
@@ -150,6 +164,6 @@ bun install --frozen-lockfile
 bun run check
 ```
 
-`bun run check` includes `test/e2e.test.ts`, which drives real `track` processes in real PTYs against a temporary workspace and a live trackd: three windows converging on one revision and digest, shared transport, rename, auto-claim and drafts, undo and redo across windows, fork, `kill -9` recovery and a deterministic render. It needs no network or credentials. See [CHANGELOG.md](./CHANGELOG.md) for release history.
+`bun run check` includes `test/e2e.test.ts`, which drives real `dawg` processes in real PTYs against a temporary workspace and a live dawgd: three windows converging on one revision and digest, shared transport, rename, auto-claim and drafts, undo and redo across windows, fork, `kill -9` recovery and a deterministic render. It needs no network or credentials. See [CHANGELOG.md](./CHANGELOG.md) for release history.
 
-Track is MIT licensed. Contributions should preserve bounded inputs, deterministic score operations, local session safety, and a working terminal fallback when color or animation is unavailable.
+dawg is MIT licensed. Contributions should preserve bounded inputs, deterministic score operations, local session safety, and a working terminal fallback when color or animation is unavailable.

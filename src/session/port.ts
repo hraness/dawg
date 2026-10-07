@@ -1,3 +1,4 @@
+import { envValue } from "../env.ts";
 import { randomUUID } from "node:crypto";
 import { watch, type FSWatcher } from "node:fs";
 import { basename, dirname } from "node:path";
@@ -39,7 +40,7 @@ export type PortUpdate<T> =
 
 /**
  * `synced` connected and idle, `syncing` a write is in flight, `conflict` the
- * last write raced another window and must rebase, `offline` trackd dropped
+ * last write raced another window and must rebase, `offline` dawgd dropped
  * and is reconnecting, `local` file-lock fallback (no daemon).
  */
 export type SyncStatus =
@@ -59,7 +60,7 @@ export type WindowPlayer = {
 };
 
 /**
- * The seam between the TUI and session persistence. `daemon` talks to trackd
+ * The seam between the TUI and session persistence. `daemon` talks to dawgd
  * (single writer, single transport, pushed updates); `file` is the original
  * file-lock path with snapshot polling, kept as the never-break fallback.
  */
@@ -76,7 +77,7 @@ export interface SessionPort<T> {
     composition: T,
   ): Promise<SessionRecord<T>>;
   /**
-   * Commits score operations validated against `current`. trackd replays them
+   * Commits score operations validated against `current`. dawgd replays them
    * on a newer score when nothing they touch changed (so a stale base is not
    * a conflict); the file port commits `composition` exactly like `append`.
    * The returned record may therefore be ahead of `composition`.
@@ -88,7 +89,7 @@ export interface SessionPort<T> {
     composition: T,
   ): Promise<SessionRecord<T>>;
   load(): Promise<SessionRecord<T>>;
-  /** Daemon mode only: asks trackd to change the shared transport. */
+  /** Daemon mode only: asks dawgd to change the shared transport. */
   transport(
     action: TransportAction,
     value?: { beat?: number; bpm?: number },
@@ -122,16 +123,16 @@ export type OpenPortOptions = {
   sessionId: string;
   label: string;
   focusedTrackId: string | null;
-  /** Set false for one-shot commands (demo, export) that must not spawn trackd. */
+  /** Set false for one-shot commands (demo, export) that must not spawn dawgd. */
   daemon?: boolean;
   daemonArgs?: string[];
 };
 
-/** Connects to (or starts) trackd, falling back to the file-lock path. */
+/** Connects to (or starts) dawgd, falling back to the file-lock path. */
 export async function openSessionPort<T>(
   options: OpenPortOptions,
 ): Promise<SessionPort<T>> {
-  if (options.daemon !== false && process.env.TRACK_DAEMON !== "0") {
+  if (options.daemon !== false && envValue("DAEMON") !== "0") {
     try {
       const clientOptions: DaemonClientOptions = {
         workspace: dirname(options.paths.root),
@@ -145,7 +146,7 @@ export async function openSessionPort<T>(
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       const port = await FilePort.open<T>(options);
-      port.status = `trackd unavailable (${reason}); using file lock`;
+      port.status = `dawgd unavailable (${reason}); using file lock`;
       return port;
     }
   }
@@ -167,7 +168,7 @@ class DaemonPort<T> implements SessionPort<T> {
   private readonly syncListeners = new Set<(sync: SyncStatus) => void>();
 
   public constructor(private readonly client: DaemonClient) {
-    this.status = `trackd pid ${client.daemonPid}`;
+    this.status = `dawgd pid ${client.daemonPid}`;
   }
 
   private setSync(sync: SyncStatus): void {
@@ -181,7 +182,7 @@ class DaemonPort<T> implements SessionPort<T> {
     event: Omit<SessionEvent, "id" | "revision" | "at">,
     composition: T,
   ): Promise<SessionRecord<T>> {
-    // Transport lives in trackd's clock, not in the event log, when connected.
+    // Transport lives in dawgd's clock, not in the event log, when connected.
     if (event.kind === "transport") return this.record();
     return this.applyIntent(current, event, { composition });
   }
@@ -225,7 +226,7 @@ class DaemonPort<T> implements SessionPort<T> {
       throw new SessionConflictError();
     }
     this.setSync("synced");
-    throw new Error(`trackd rejected ${event.kind}: ${result.message}`);
+    throw new Error(`dawgd rejected ${event.kind}: ${result.message}`);
   }
 
   public async load(): Promise<SessionRecord<T>> {
@@ -269,7 +270,7 @@ class DaemonPort<T> implements SessionPort<T> {
     _trackIds: readonly string[],
     preferred?: string,
   ): Promise<string | null> {
-    // trackd claims against its own authoritative score order.
+    // dawgd claims against its own authoritative score order.
     return this.client.claimTrack(preferred);
   }
 
@@ -354,7 +355,7 @@ class FilePort<T> implements SessionPort<T> {
   }
 
   /**
-   * Without trackd, changes arrive by watching the session directory (the
+   * Without dawgd, changes arrive by watching the session directory (the
    * record is replaced by atomic rename, so the file itself cannot be watched)
    * and re-reading on each event: renames and edits from other windows show up
    * immediately. Polling stays on as the fallback, fast when fs.watch is

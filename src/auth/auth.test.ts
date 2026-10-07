@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   clearGatewayKey,
+  configDir,
   maskKey,
   parseConfig,
   readConfig,
@@ -31,7 +32,7 @@ const OTHER = "vck_other0000000000000zzzz";
 let dir: string;
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), "track-auth-"));
+  dir = await mkdtemp(join(tmpdir(), "dawg-auth-"));
 });
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
@@ -166,11 +167,11 @@ describe("credentials", () => {
     expect(JSON.parse(await readFile(file, "utf8")).aiGateway).toBe(KEY);
   });
 
-  test("TRACK_CREDENTIAL_STORE=file skips the keychain", async () => {
+  test("DAWG_CREDENTIAL_STORE=file skips the keychain", async () => {
     const runner = scriptedRunner([], ["security"]);
     const auth = env(runner, {
       platform: "darwin",
-      env: { TRACK_CREDENTIAL_STORE: "file" },
+      env: { DAWG_CREDENTIAL_STORE: "file" },
     });
     expect(await storeGatewayKey(auth, KEY)).toBe("file");
     expect(runner.calls).toHaveLength(0);
@@ -225,7 +226,7 @@ describe("credentials", () => {
   });
 });
 
-describe("track login (gateway)", () => {
+describe("dawg login (gateway)", () => {
   const whoami = (code = 0): ScriptedCall => ({
     match: is("vercel", "whoami"),
     result:
@@ -266,7 +267,7 @@ describe("track login (gateway)", () => {
       "api-keys",
       "create",
       "--name",
-      "track-bens-mbp",
+      "dawg-bens-mbp",
       "--non-interactive",
       "--limit",
       "25",
@@ -415,10 +416,10 @@ describe("logout and status", () => {
     expect(lines[2]).toBe("xcb: not installed");
   });
 
-  test("status with nothing configured points at track login", async () => {
+  test("status with nothing configured points at dawg login", async () => {
     const lines = await authStatus({ auth: env(scriptedRunner([])) });
     expect(lines[0]).toContain("offline");
-    expect(lines[0]).toContain("track login");
+    expect(lines[0]).toContain("dawg login");
     expect(lines[1]).toBe("ai gateway key: none");
   });
 
@@ -465,5 +466,112 @@ describe("system runner", () => {
       timeoutMs: 50,
     });
     expect(result.killed).toBe(true);
+  });
+});
+
+describe("migration from Track", () => {
+  /** A fake keychain with one item per service name. */
+  function services(initial: Record<string, string>) {
+    const items = new Map(Object.entries(initial));
+    const step: ScriptedCall = {
+      match: is("security"),
+      respond: (_command, args, options) => {
+        if (args[0] === "-i") {
+          const service = options.stdin?.match(/-s (\S+)/)?.[1];
+          const value = options.stdin?.match(/-w "([^"]+)"/)?.[1];
+          if (service && value) items.set(service, value);
+          return { code: 0 };
+        }
+        const service = args[args.indexOf("-s") + 1]!;
+        if (args[0] === "find-generic-password") {
+          const value = items.get(service);
+          return value ? { code: 0, stdout: `${value}\n` } : { code: 44 };
+        }
+        if (args[0] === "delete-generic-password")
+          return { code: items.delete(service) ? 0 : 44 };
+        return { code: 1 };
+      },
+    };
+    return {
+      runner: scriptedRunner(
+        Array.from({ length: 20 }, () => step),
+        ["security"],
+      ),
+      items,
+    };
+  }
+
+  test("reads a key from the legacy `track` Keychain service when `dawg` has none", async () => {
+    const chain = services({ track: OTHER });
+    const auth = env(chain.runner, { platform: "darwin" });
+    expect(await resolveGatewayKey(auth)).toEqual({
+      key: OTHER,
+      source: "keychain",
+    });
+    // The legacy item is read, not moved or rewritten.
+    expect(chain.items.get("track")).toBe(OTHER);
+    expect(chain.items.has("dawg")).toBe(false);
+    expect(
+      chain.runner.calls.every(
+        (call) => call.args[0] === "find-generic-password",
+      ),
+    ).toBe(true);
+  });
+
+  test("the `dawg` Keychain service wins over the legacy one", async () => {
+    const chain = services({ dawg: KEY, track: OTHER });
+    const auth = env(chain.runner, { platform: "darwin" });
+    expect(await resolveGatewayKey(auth)).toEqual({
+      key: KEY,
+      source: "keychain",
+    });
+    expect(chain.runner.calls).toHaveLength(1);
+    expect(chain.runner.calls[0]!.args).toContain("dawg");
+  });
+
+  test("a new login writes the `dawg` service and logout clears both", async () => {
+    const chain = services({ track: OTHER });
+    const auth = env(chain.runner, { platform: "darwin" });
+    expect(await storeGatewayKey(auth, KEY)).toBe("keychain");
+    expect(chain.items.get("dawg")).toBe(KEY);
+    expect(chain.items.get("track")).toBe(OTHER);
+    expect(await clearGatewayKey(auth)).toEqual(["keychain"]);
+    expect(chain.items.size).toBe(0);
+    expect(await resolveGatewayKey(auth)).toBeUndefined();
+  });
+
+  test("uses ~/.config/track when ~/.config/dawg is missing, without moving it", async () => {
+    const base = join(dir, "xdg");
+    const legacy = join(base, "track");
+    await mkdir(legacy, { recursive: true });
+    await Bun.write(join(legacy, "credentials.json"), "{}");
+    const lookup = { XDG_CONFIG_HOME: base };
+    expect(configDir(lookup)).toBe(legacy);
+    // Reading never creates the new directory or touches the old one.
+    expect(await readdir(base)).toEqual(["track"]);
+
+    await mkdir(join(base, "dawg"));
+    expect(configDir(lookup)).toBe(join(base, "dawg"));
+    expect((await readdir(base)).sort()).toEqual(["dawg", "track"]);
+  });
+
+  test("defaults to ~/.config/dawg in a fresh home and honors DAWG_CONFIG_DIR, then TRACK_CONFIG_DIR", async () => {
+    const base = join(dir, "fresh");
+    expect(configDir({ XDG_CONFIG_HOME: base })).toBe(join(base, "dawg"));
+    expect(configDir({ HOME: dir })).toBe(join(dir, ".config", "dawg"));
+    expect(configDir({ DAWG_CONFIG_DIR: "/a", TRACK_CONFIG_DIR: "/b" })).toBe(
+      "/a",
+    );
+    expect(configDir({ TRACK_CONFIG_DIR: "/b" })).toBe("/b");
+  });
+
+  test("legacy TRACK_CREDENTIAL_STORE=file still skips the keychain", async () => {
+    const chain = services({});
+    const auth = env(chain.runner, {
+      platform: "darwin",
+      env: { TRACK_CREDENTIAL_STORE: "file" },
+    });
+    expect(await storeGatewayKey(auth, KEY)).toBe("file");
+    expect(chain.runner.calls).toHaveLength(0);
   });
 });

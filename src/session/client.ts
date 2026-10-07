@@ -60,7 +60,7 @@ export class DaemonUnavailableError extends Error {
 }
 
 /**
- * A trackd session client. It keeps the latest record, digest, transport and
+ * A dawgd session client. It keeps the latest record, digest, transport and
  * presence; reconnects (respawning the daemon) when the socket drops; and
  * resends unanswered requests after reconnecting. Requests carry idempotency
  * keys, so a resend of an already-committed apply is reported as duplicate.
@@ -180,7 +180,7 @@ export class DaemonClient {
     if (preferred) message.preferred = preferred;
     const reply = await this.request(message);
     if (reply.type !== "claimed" || reply.trackId === null)
-      throw new Error("trackd did not reserve a track");
+      throw new Error("dawgd did not reserve a track");
     this.focusedTrackId = reply.trackId;
     return { trackId: reply.trackId, draft: reply.draft === true };
   }
@@ -205,7 +205,7 @@ export class DaemonClient {
     if (result.status === "rejected" && result.code === "stale-meta")
       return "stale";
     throw new Error(
-      result.status === "rejected" ? result.message : "trackd meta failed",
+      result.status === "rejected" ? result.message : "dawgd meta failed",
     );
   }
 
@@ -213,7 +213,7 @@ export class DaemonClient {
     this.closed = true;
     for (const [id, pending] of this.pending) {
       clearTimeout(pending.timer);
-      pending.reject(new Error("trackd client closed"));
+      pending.reject(new Error("dawgd client closed"));
       this.pending.delete(id);
     }
     this.socket?.destroy();
@@ -223,7 +223,7 @@ export class DaemonClient {
 
   private result(message: ServerMessage): ApplyResult {
     if (message.type !== "result")
-      throw new Error(`unexpected trackd reply ${message.type}`);
+      throw new Error(`unexpected dawgd reply ${message.type}`);
     if (message.status === "accepted" || message.status === "duplicate")
       return { status: message.status, revision: message.revision };
     if (message.status === "rebase")
@@ -239,12 +239,12 @@ export class DaemonClient {
   private request(
     message: ClientMessage & { id: string },
   ): Promise<ServerMessage> {
-    if (this.closed) return Promise.reject(new Error("trackd client closed"));
+    if (this.closed) return Promise.reject(new Error("dawgd client closed"));
     const frame = encodeFrame(message);
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(message.id);
-        reject(new DaemonUnavailableError("trackd did not answer in time"));
+        reject(new DaemonUnavailableError("dawgd did not answer in time"));
       }, this.options.requestTimeoutMs ?? 10_000);
       this.pending.set(message.id, { frame, resolve, reject, timer });
       if (this.connected) this.socket!.write(frame);
@@ -263,7 +263,7 @@ export class DaemonClient {
         if (this.closed) throw error;
         if (Date.now() >= deadline)
           throw new DaemonUnavailableError(
-            `trackd unavailable: ${error instanceof Error ? error.message : String(error)}`,
+            `dawgd unavailable: ${error instanceof Error ? error.message : String(error)}`,
           );
         // No listener (ENOENT) or a stale socket from a crashed daemon
         // (ECONNREFUSED): start one. A losing spawn exits on its own because
@@ -295,7 +295,7 @@ export class DaemonClient {
         stdin: "ignore",
         stdout: "ignore",
         stderr: "ignore",
-        env: { ...process.env, TRACK_DAEMON_CHILD: "1" },
+        env: { ...process.env, DAWG_DAEMON_CHILD: "1" },
       },
     );
     child.unref();
@@ -328,7 +328,7 @@ export class DaemonClient {
           socket.off("error", fail);
           socket.on("error", () => undefined);
           this.socket = socket;
-          // As in trackd, "end" alone may be all Bun reports for a hang-up.
+          // As in dawgd, "end" alone may be all Bun reports for a hang-up.
           socket.on("close", () => this.onClose(socket));
           socket.on("end", () => {
             socket.destroy();
@@ -443,7 +443,7 @@ export class DaemonClient {
       this.emit({
         type: "status",
         connected: this.connected,
-        message: `trackd error · ${message.code}`,
+        message: `dawgd error · ${message.code}`,
       });
       return;
     }
@@ -461,7 +461,7 @@ export class DaemonClient {
     this.emit({
       type: "status",
       connected: false,
-      message: "trackd reconnecting",
+      message: "dawgd reconnecting",
     });
     this.reconnecting ??= this.reconnect().finally(() => {
       this.reconnecting = undefined;
@@ -476,7 +476,7 @@ export class DaemonClient {
         this.emit({
           type: "status",
           connected: true,
-          message: "trackd reconnected",
+          message: "dawgd reconnected",
         });
         return;
       } catch {

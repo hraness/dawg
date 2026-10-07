@@ -65,11 +65,11 @@ export type DaemonOptions = {
 };
 
 /**
- * trackd: the single writer and the single audio transport for one session.
+ * dawgd: the single writer and the single audio transport for one session.
  * Clients send intents; the daemon applies them through the core reducer,
  * persists them with the existing atomic store, and broadcasts the result.
  */
-export class TrackDaemon {
+export class DawgDaemon {
   private readonly paths: SessionPaths;
   private readonly socketPath: string;
   private readonly graceMs: number;
@@ -695,7 +695,7 @@ function parseOperation(value: unknown): ScoreOperation {
 
 /** Entry point used by `src/daemon.ts`. Exits the process when done. */
 export async function runDaemon(options: DaemonOptions): Promise<never> {
-  const daemon = new TrackDaemon(options);
+  const daemon = new DawgDaemon(options);
   // Install signal handlers before listening: a client can connect, finish,
   // and send SIGTERM before start() has returned.
   let started = false;
@@ -713,7 +713,7 @@ export async function runDaemon(options: DaemonOptions): Promise<never> {
   try {
     started = await daemon.start();
   } catch (error) {
-    process.stderr.write(`trackd: ${String(error)}\n`);
+    process.stderr.write(`dawgd: ${String(error)}\n`);
     process.exit(1);
   }
   if (!started) process.exit(0); // Another daemon owns the session.

@@ -45,8 +45,8 @@ jobs:
           mkdir dist
           bun pm pack --destination dist
           cd dist
-          test -f "hraness-track-${VERSION}.tgz"
-          sha256sum "hraness-track-${VERSION}.tgz" > SHA256SUMS
+          test -f "hraness-dawg-${VERSION}.tgz"
+          sha256sum "hraness-dawg-${VERSION}.tgz" > SHA256SUMS
           cat SHA256SUMS
 
       - name: Smoke-test the packed install
@@ -54,8 +54,8 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           prefix="$(mktemp -d)"
-          BUN_INSTALL="${prefix}" bun add -g "${PWD}/dist/hraness-track-${VERSION}.tgz"
-          "${prefix}/bin/track" --help
+          BUN_INSTALL="${prefix}" bun add -g "${PWD}/dist/hraness-dawg-${VERSION}.tgz"
+          "${prefix}/bin/dawg" --help
 
       - name: Extract release notes from CHANGELOG.md
         env:
@@ -73,7 +73,7 @@ jobs:
 
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: dist/hraness-track-${{ steps.version.outputs.version }}.tgz
+          subject-path: dist/hraness-dawg-${{ steps.version.outputs.version }}.tgz
 
       # Assets are attached to a draft first, then the release is published in
       # one step so it becomes immutable with both assets in place.
@@ -83,7 +83,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           gh release create "${GITHUB_REF_NAME}" \
-            "dist/hraness-track-${VERSION}.tgz" \
+            "dist/hraness-dawg-${VERSION}.tgz" \
             dist/SHA256SUMS \
             --repo "${GITHUB_REPOSITORY}" \
             --title "${GITHUB_REF_NAME}" \

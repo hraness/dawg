@@ -4,7 +4,7 @@ import { openSessionPort } from "../port.ts";
 import { ensureSession } from "../store.ts";
 
 /**
- * Test worker: opens a session window in its own process the way `track`
+ * Test worker: opens a session window in its own process the way `dawg`
  * does (session port, then an atomic claim), prints what it got, and on
  * "edit" materializes a draft track with one note. Stays open until stdin
  * closes so its presence keeps the track focused.

@@ -3,7 +3,7 @@
 - `core/` – immutable score and loop encoding.
 - `src/` – local session, agent gateway, audio, and CLI runtime.
 - `tui/` – terminal rendering and prompt editing.
-- `TRACK.md` – detailed interaction contract.
+- `DAWG.md` – detailed interaction contract.
 
 # Guidelines
 

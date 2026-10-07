@@ -14,7 +14,7 @@ import { audioStatusLine } from "../audio/engine.ts";
 /**
  * `/login [--xcb]`, `/logout` and `/auth` inside the TUI. The terminal is in
  * raw mode, so there is no hidden input or `vercel login` handoff here: those
- * flows tell the user to run `track login` in a shell instead.
+ * flows tell the user to run `dawg login` in a shell instead.
  */
 export async function tuiAuthCommand(
   command: string,
@@ -50,7 +50,7 @@ export async function tuiAuthCommand(
       );
     } else if (rest.includes("--key"))
       lines.push(
-        "Paste a key from a shell: `track login --key` (input is hidden there).",
+        "Paste a key from a shell: `dawg login --key` (input is hidden there).",
       );
     else await login("gateway", deps);
   } catch (error) {

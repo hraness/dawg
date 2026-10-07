@@ -151,17 +151,17 @@ describe("backend detection", () => {
     ]);
   });
 
-  test("honors TRACK_AUDIO=0, TRACK_AUDIO_PLAYER, and TRACK_AUDIO_BACKEND", () => {
+  test("honors DAWG_AUDIO=0, DAWG_AUDIO_PLAYER, and DAWG_AUDIO_BACKEND", () => {
     const all = which(["ffplay", "play", "afplay"]);
     expect(
       detectAudioBackend({
-        env: { TRACK_AUDIO: "0", TRACK_AUDIO_PLAYER: "x" },
+        env: { DAWG_AUDIO: "0", DAWG_AUDIO_PLAYER: "x" },
         which: all,
       }).backend,
     ).toBe("none");
     expect(
       detectAudioBackend({
-        env: { TRACK_AUDIO_PLAYER: "rec '/tmp/a b' {rate} {channels}" },
+        env: { DAWG_AUDIO_PLAYER: "rec '/tmp/a b' {rate} {channels}" },
         which: all,
         sampleRate: 8000,
       }),
@@ -170,12 +170,12 @@ describe("backend detection", () => {
       command: ["rec", "/tmp/a b", "8000", "2"],
     });
     expect(
-      detectAudioBackend({ env: { TRACK_AUDIO_BACKEND: "sox" }, which: all })
+      detectAudioBackend({ env: { DAWG_AUDIO_BACKEND: "sox" }, which: all })
         .backend,
     ).toBe("sox");
     expect(
       detectAudioBackend({
-        env: { TRACK_AUDIO_BACKEND: "afplay" },
+        env: { DAWG_AUDIO_BACKEND: "afplay" },
         which: all,
         platform: "darwin",
       }).backend,
@@ -267,7 +267,7 @@ describe("gapless streaming engine", () => {
   });
 
   test("respects the session audio lock", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "track-engine-"));
+    const dir = await mkdtemp(join(tmpdir(), "dawg-engine-"));
     try {
       const lockPath = join(dir, "audio.lock");
       const a = fakeSpawn();
@@ -312,11 +312,11 @@ describe("real player process", () => {
   });
 
   test("a long-lived stdin player records one continuous stream across edits", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "track-player-"));
+    const dir = await mkdtemp(join(tmpdir(), "dawg-player-"));
     dirs.push(dir);
     const out = join(dir, "out");
     const info = detectAudioBackend({
-      env: { TRACK_AUDIO_PLAYER: `${process.execPath} ${FAKE_PLAYER} ${out}` },
+      env: { DAWG_AUDIO_PLAYER: `${process.execPath} ${FAKE_PLAYER} ${out}` },
       sampleRate: RATE,
     });
     const engine = new AudioEngine({

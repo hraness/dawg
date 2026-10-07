@@ -13,7 +13,7 @@ import {
 import type { SessionEvent, SessionPaths, SessionRecord } from "./store.ts";
 
 /**
- * trackd wire protocol: newline-delimited JSON over a Unix domain socket.
+ * dawgd wire protocol: newline-delimited JSON over a Unix domain socket.
  * Every frame carries `v`; every inbound frame is parsed from `unknown` and
  * bounded before it can reach the reducer, the store, or the transport.
  */
@@ -42,7 +42,7 @@ export type TransportState = {
   atMs: number;
 };
 
-/** One live window. trackd drops the entry when the client disconnects. */
+/** One live window. dawgd drops the entry when the client disconnects. */
 export type PresenceEntry = {
   clientId: string;
   pid: number;
@@ -60,7 +60,7 @@ export type ClientMessage =
       focusedTrackId: string | null;
     }
   | { v: 1; type: "focus"; id: string; trackId: string | null }
-  /** `draft` asks trackd to reserve a new `track-N` id when all are open. */
+  /** `draft` asks dawgd to reserve a new `track-N` id when all are open. */
   | { v: 1; type: "claim"; id: string; preferred?: string; draft?: boolean }
   /** Conditional metadata write (rename, auto-name); never bumps the revision. */
   | { v: 1; type: "meta"; id: string; patch: MetaPatch; expect?: MetaExpect }
@@ -418,7 +418,7 @@ export function parseServerMessage(line: string): ServerMessage {
   throw new ProtocolError("unknown-type", "unknown message type");
 }
 
-/** Stable digest of a composition as stored and broadcast by trackd. */
+/** Stable digest of a composition as stored and broadcast by dawgd. */
 export function compositionDigest(composition: unknown): string {
   return createHash("sha256")
     .update(JSON.stringify(composition) ?? "null")
@@ -435,7 +435,7 @@ export function daemonSocketPath(paths: SessionPaths): string {
   if (Buffer.byteLength(local, "utf8") <= MAX_SOCKET_PATH_BYTES) return local;
   const hash = createHash("sha256").update(local).digest("hex").slice(0, 24);
   const uid = typeof process.getuid === "function" ? process.getuid() : 0;
-  return join(tmpdir(), `trackd-${uid}-${hash}.sock`);
+  return join(tmpdir(), `dawgd-${uid}-${hash}.sock`);
 }
 
 export function daemonLockPath(paths: SessionPaths): string {
@@ -496,7 +496,7 @@ export function requirePresence(value: unknown): PresenceEntry {
 }
 
 /**
- * Atomic claim rule shared by trackd and the file fallback: the preferred
+ * Atomic claim rule shared by dawgd and the file fallback: the preferred
  * track when it exists and is free, otherwise the first free track in score
  * order, otherwise none. `taken` excludes the claimant's own entry.
  */

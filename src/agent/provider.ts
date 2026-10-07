@@ -1,3 +1,4 @@
+import { envValue } from "../env.ts";
 import { statSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -56,7 +57,7 @@ export type ProviderSelection =
     }>
   | Readonly<{ kind: "offline"; choice: ProviderChoice; reason: string }>;
 
-export const LOGIN_HINT = "run `track login` to enable the agent";
+export const LOGIN_HINT = "run `dawg login` to enable the agent";
 /** The small, cheap model used for one-line helpers such as session names. */
 export const GATEWAY_SMALL_MODEL = "anthropic/claude-haiku-4.5";
 
@@ -64,14 +65,14 @@ export function providerChoice(
   env: Readonly<Record<string, string | undefined>>,
   saved: ProviderChoice | undefined,
 ): ProviderChoice {
-  const fromEnv = env.TRACK_PROVIDER?.trim().toLowerCase();
+  const fromEnv = envValue("PROVIDER", env)?.trim().toLowerCase();
   if (fromEnv && (PROVIDER_CHOICES as readonly string[]).includes(fromEnv))
     return fromEnv as ProviderChoice;
   return saved ?? "auto";
 }
 
 /**
- * Resolve the provider: `TRACK_PROVIDER`, then the choice saved by `track
+ * Resolve the provider: `DAWG_PROVIDER`, then the choice saved by `dawg
  * login`, then `auto` (gateway when a key exists, else an available xcb
  * account, else offline).
  */
@@ -99,7 +100,7 @@ export async function selectProvider(
       choice,
       reason:
         choice === "xcb"
-          ? "xcb is not installed; see `track login --xcb`"
+          ? "xcb is not installed; see `dawg login --xcb`"
           : `no model configured; ${LOGIN_HINT}`,
     };
   let capabilities: XcbCapabilities;
@@ -135,7 +136,7 @@ export async function selectProvider(
       return {
         kind: "offline",
         choice,
-        reason: `xcb account ${saved.account.slice(0, 12)} is ${account?.reason ?? "missing"}; run \`track login --xcb\``,
+        reason: `xcb account ${saved.account.slice(0, 12)} is ${account?.reason ?? "missing"}; run \`dawg login --xcb\``,
       };
   }
   const account = capabilities.accounts.find((row) => row.available);
@@ -154,7 +155,7 @@ export async function selectProvider(
     choice,
     reason:
       choice === "xcb"
-        ? "no xcb account is qualified for applications; run `track login --xcb`"
+        ? "no xcb account is qualified for applications; run `dawg login --xcb`"
         : `no model configured; ${LOGIN_HINT}`,
   };
 }
@@ -179,7 +180,7 @@ export function providerFingerprint(
   // Presence only: a process's environment cannot change under it, and the
   // fingerprint must never carry secret material.
   parts.push(
-    `env:${env.TRACK_PROVIDER ?? "-"}:${env.AI_GATEWAY_API_KEY ? 1 : 0}`,
+    `env:${envValue("PROVIDER", env) ?? "-"}:${env.AI_GATEWAY_API_KEY ? 1 : 0}`,
   );
   return parts.join("|");
 }

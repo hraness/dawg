@@ -23,13 +23,13 @@ const FAKE_PLAYER = join(
   "fake-player.ts",
 );
 // Spawned daemons inherit this: no test ever reaches a real sound device.
-process.env.TRACK_AUDIO = "0";
+process.env.DAWG_AUDIO = "0";
 const DAEMON_ARGS = ["--grace-ms", "300"];
 const clients: DaemonClient[] = [];
 const workspaces: string[] = [];
 
 async function session(tracks = ["main"]) {
-  const workspace = await mkdtemp(join(tmpdir(), "trackd-"));
+  const workspace = await mkdtemp(join(tmpdir(), "dawgd-"));
   workspaces.push(workspace);
   const initial = createScore({
     tracks: tracks.map((id) => ({ id, name: id, instrument: "sine" })),
@@ -97,7 +97,7 @@ afterEach(async () => {
   for (const connected of clients.splice(0)) connected.close();
   for (const workspace of workspaces.splice(0)) {
     // Never leave a daemon behind, even when a test fails midway.
-    const sessions = join(workspace, ".track", "sessions");
+    const sessions = join(workspace, ".dawg", "sessions");
     const glob = new Bun.Glob("*.daemon.lock/owner");
     for await (const owner of glob.scan(sessions)) {
       try {
@@ -115,7 +115,7 @@ afterEach(async () => {
   }
 });
 
-describe("trackd", () => {
+describe("dawgd", () => {
   test("two client processes converge on one revision and digest", async () => {
     const { workspace, paths, sessionId } = await session();
     const spawnWorker = (prefix: string) =>
@@ -326,8 +326,8 @@ describe("trackd", () => {
   test("streams gapless audio: edits never restart the player", async () => {
     const { workspace, sessionId } = await session();
     const out = join(workspace, "player");
-    process.env.TRACK_AUDIO_PLAYER = `${process.execPath} ${FAKE_PLAYER} ${out}`;
-    delete process.env.TRACK_AUDIO;
+    process.env.DAWG_AUDIO_PLAYER = `${process.execPath} ${FAKE_PLAYER} ${out}`;
+    delete process.env.DAWG_AUDIO;
     try {
       const connected = await client(workspace, sessionId);
       await connected.setTransport("play");
@@ -357,8 +357,8 @@ describe("trackd", () => {
       await until(() => !alive(Number(starts[0])));
       expect((await readFile(`${out}.pcm`)).length % 4).toBe(0);
     } finally {
-      delete process.env.TRACK_AUDIO_PLAYER;
-      process.env.TRACK_AUDIO = "0";
+      delete process.env.DAWG_AUDIO_PLAYER;
+      process.env.DAWG_AUDIO = "0";
     }
   });
 
@@ -528,17 +528,15 @@ describe("multi-window attach", () => {
   }
 
   for (const [label, env] of [
-    ["trackd", {}],
-    ["file fallback", { TRACK_DAEMON: "0" }],
+    ["dawgd", {}],
+    ["file fallback", { DAWG_DAEMON: "0" }],
   ] as const) {
     test(`${label}: three windows restore three tracks, a fourth gets a draft`, async () => {
       const { workspace, sessionId } = await session(["drums", "bass", "keys"]);
       const first = await windows(workspace, sessionId, 3, env);
       try {
         const modes = new Set(first.attached.map((a) => a.mode));
-        expect(modes).toEqual(
-          new Set([label === "trackd" ? "daemon" : "file"]),
-        );
+        expect(modes).toEqual(new Set([label === "dawgd" ? "daemon" : "file"]));
         expect(new Set(first.attached.map((a) => a.trackId))).toEqual(
           new Set(["drums", "bass", "keys"]),
         );

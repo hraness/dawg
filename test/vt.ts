@@ -1,7 +1,7 @@
 /**
  * Minimal virtual terminal for tests.
  *
- * Interprets the subset of VT/xterm output Track emits (printable graphemes,
+ * Interprets the subset of VT/xterm output dawg emits (printable graphemes,
  * CR/LF, CUP, ED, EL, SGR, DEC private modes) into a cell grid that records
  * each cell's character and SGR attributes.  Tests assert on what a user
  * would see rather than on escape-sequence strings.

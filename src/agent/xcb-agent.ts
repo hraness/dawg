@@ -37,7 +37,7 @@ export type TextAgentTurnOptions = Readonly<{
 }>;
 
 export const TEXT_AGENT_SYSTEM_PROMPT = [
-  "You are Track, a loop composer inside a terminal music workstation.",
+  "You are dawg, a loop composer inside a terminal music workstation.",
   "You edit the score by returning operations. Each op is validated and applied immediately, in order, as its own revision.",
   "Times are in beats from the loop start (0-based). Keep notes inside loopBeats unless you extend the loop first.",
   "Prefer a few well-formed ops (one add_notes op per track part) over many tiny ones.",

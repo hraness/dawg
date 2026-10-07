@@ -1,5 +1,5 @@
 /**
- * The small, JSON-safe score model shared by the Track daemon and clients.
+ * The small, JSON-safe score model shared by the dawg daemon and clients.
  *
  * Score time is expressed in integer ticks. A loop uses `ticksPerBeat` ticks
  * per beat; keeping this unit explicit means a transport can change tempo

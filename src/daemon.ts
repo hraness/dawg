@@ -3,8 +3,10 @@ import { resolve } from "node:path";
 import { runDaemon } from "./session/daemon.ts";
 import { assertSessionId } from "./session/store.ts";
 
+process.title = "dawgd";
+
 /**
- * trackd entry point. `track` spawns this detached when no daemon is alive:
+ * dawgd entry point. `dawg` spawns this detached when no daemon is alive:
  *   bun src/daemon.ts --workspace <dir> --session <id> [--grace-ms <ms>]
  */
 function option(name: string): string | undefined {
@@ -19,7 +21,7 @@ assertSessionId(sessionId);
 const graceText = option("--grace-ms");
 const graceMs = graceText === undefined ? undefined : Number(graceText);
 if (graceMs !== undefined && (!Number.isFinite(graceMs) || graceMs < 0)) {
-  process.stderr.write("trackd: --grace-ms must be a non-negative number\n");
+  process.stderr.write("dawgd: --grace-ms must be a non-negative number\n");
   process.exit(2);
 }
 await runDaemon(

@@ -22,7 +22,7 @@ const PROMPT_SEQUENCES: Record<string, string> = {
   "\u001b[13;2u": "SHIFT+ENTER",
   "\u001b[27;2;13~": "SHIFT+ENTER",
   // Many terminals send ESC CR (Alt+Enter) for Shift+Enter when configured;
-  // Track treats Alt+Enter as "queue this prompt".
+  // dawg treats Alt+Enter as "queue this prompt".
   "\u001b\r": "ALT+ENTER",
   "\u0011": "CTRL+Q",
   "\u007f": "BACKSPACE",

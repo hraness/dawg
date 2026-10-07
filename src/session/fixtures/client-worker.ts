@@ -1,7 +1,7 @@
 import { DaemonClient } from "../client.ts";
 
 /**
- * Test worker: connects to trackd in its own process, applies `count` addNote
+ * Test worker: connects to dawgd in its own process, applies `count` addNote
  * operations (rebasing on stale revisions), then reports what it observed.
  */
 const [workspace, sessionId, prefix, countText] = process.argv.slice(2);

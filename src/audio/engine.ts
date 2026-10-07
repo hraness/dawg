@@ -1,10 +1,11 @@
+import { envValue } from "../env.ts";
 import type { TrackScore } from "../../core/score.ts";
 import { PlaybackLock } from "./lock.ts";
 import { LoopPlayer } from "./player.ts";
 import { DEFAULT_SAMPLE_RATE, RENDER_CHANNELS, renderScorePcm } from "./wav.ts";
 
 /**
- * How trackd (or a file-mode window) makes sound.
+ * How dawgd (or a file-mode window) makes sound.
  *
  * - `ffplay` and `sox` are streaming backends: one long-lived player reads
  *   raw interleaved s16le stereo PCM from stdin, and the engine writes the
@@ -12,7 +13,7 @@ import { DEFAULT_SAMPLE_RATE, RENDER_CHANNELS, renderScorePcm } from "./wav.ts";
  *   current phase, so playback never restarts and stays sample-continuous.
  * - `afplay` is the last fallback: re-render a WAV and restart the one-shot
  *   player on every edit (the pre-engine behavior), so edits cause a gap.
- * - `command` is an explicit TRACK_AUDIO_PLAYER override that also reads
+ * - `command` is an explicit DAWG_AUDIO_PLAYER override that also reads
  *   s16le from stdin; tests use it to record the exact byte stream.
  * - `none` makes no sound; the transport clock still runs.
  */
@@ -84,8 +85,8 @@ export function streamingCommand(
 }
 
 /**
- * Pick the audio backend. Order: TRACK_AUDIO=0 (none), TRACK_AUDIO_PLAYER
- * (explicit stdin command), TRACK_AUDIO_BACKEND (forced name), then ffplay,
+ * Pick the audio backend. Order: DAWG_AUDIO=0 (none), DAWG_AUDIO_PLAYER
+ * (explicit stdin command), DAWG_AUDIO_BACKEND (forced name), then ffplay,
  * sox `play`, and afplay (macOS) in that order.
  */
 export function detectAudioBackend(
@@ -95,9 +96,9 @@ export function detectAudioBackend(
   const which: Which = options.which ?? ((binary) => Bun.which(binary));
   const platform = options.platform ?? process.platform;
   const sampleRate = options.sampleRate ?? DEFAULT_SAMPLE_RATE;
-  if (env.TRACK_AUDIO === "0")
-    return { backend: "none", streaming: false, detail: "TRACK_AUDIO=0" };
-  const custom = env.TRACK_AUDIO_PLAYER?.trim();
+  if (envValue("AUDIO", env) === "0")
+    return { backend: "none", streaming: false, detail: "DAWG_AUDIO=0" };
+  const custom = envValue("AUDIO_PLAYER", env)?.trim();
   if (custom) {
     const command = parseCommand(custom).map((part) =>
       part
@@ -109,10 +110,10 @@ export function detectAudioBackend(
         backend: "command",
         streaming: true,
         command,
-        detail: "TRACK_AUDIO_PLAYER",
+        detail: "DAWG_AUDIO_PLAYER",
       };
   }
-  const forced = env.TRACK_AUDIO_BACKEND?.trim().toLowerCase();
+  const forced = envValue("AUDIO_BACKEND", env)?.trim().toLowerCase();
   const candidates: AudioBackend[] =
     forced === "ffplay" ||
     forced === "sox" ||
@@ -125,7 +126,7 @@ export function detectAudioBackend(
       return {
         backend: "none",
         streaming: false,
-        detail: "TRACK_AUDIO_BACKEND",
+        detail: "DAWG_AUDIO_BACKEND",
       };
     if (candidate === "ffplay" || candidate === "sox") {
       const binary = which(candidate === "ffplay" ? "ffplay" : "play");
@@ -152,7 +153,7 @@ export function detectAudioBackend(
   };
 }
 
-/** One status line for `track auth status` and the header. */
+/** One status line for `dawg auth status` and the header. */
 export function audioStatusLine(info = detectAudioBackend()): string {
   return `audio: ${info.backend} · ${info.detail}`;
 }

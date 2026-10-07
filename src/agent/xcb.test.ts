@@ -449,7 +449,7 @@ describe("text agent loop", () => {
 describe("provider selection", () => {
   let dir: string;
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), "track-provider-"));
+    dir = await mkdtemp(join(tmpdir(), "dawg-provider-"));
   });
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
@@ -493,17 +493,17 @@ describe("provider selection", () => {
       auth(scriptedRunner([capsCall(false)], ["xcb"])),
     );
     expect(none).toMatchObject({ kind: "offline" });
-    expect(none.kind === "offline" && none.reason).toContain("track login");
+    expect(none.kind === "offline" && none.reason).toContain("dawg login");
     expect(await selectProvider(auth(scriptedRunner([])))).toMatchObject({
       kind: "offline",
     });
   });
 
-  test("TRACK_PROVIDER and the saved choice override auto", async () => {
+  test("DAWG_PROVIDER and the saved choice override auto", async () => {
     const runner = scriptedRunner([capsCall(true)], ["xcb"]);
     await storeGatewayKey(auth(runner), KEY);
     expect(
-      await selectProvider(auth(runner, { TRACK_PROVIDER: "xcb" })),
+      await selectProvider(auth(runner, { DAWG_PROVIDER: "xcb" })),
     ).toMatchObject({ kind: "xcb" });
     await writeConfig(auth(runner), { provider: "gateway" });
     expect(
@@ -512,7 +512,7 @@ describe("provider selection", () => {
     // Explicit gateway without a key never silently uses xcb.
     expect(
       await selectProvider({
-        ...auth(scriptedRunner([], ["xcb"]), { TRACK_PROVIDER: "gateway" }),
+        ...auth(scriptedRunner([], ["xcb"]), { DAWG_PROVIDER: "gateway" }),
         dir: join(dir, "empty"),
       }),
     ).toMatchObject({ kind: "offline", choice: "gateway" });
@@ -532,7 +532,7 @@ describe("provider selection", () => {
     );
   });
 
-  test("track login --xcb saves the account or explains qualification", async () => {
+  test("dawg login --xcb saves the account or explains qualification", async () => {
     const lines: string[] = [];
     const io: LoginIO = {
       interactive: true,

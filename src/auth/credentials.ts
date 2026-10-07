@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { statSync } from "node:fs";
 import {
   chmod,
   mkdir,
@@ -10,14 +11,23 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { envValue } from "../env.ts";
 import type { CommandRunner } from "./runner.ts";
 
 /**
  * Local credentials and provider choice. Secrets live in the macOS Keychain
- * or `~/.config/track/credentials.json` (0600 under a 0700 directory), never in
- * the project's `.track/` directory. `AI_GATEWAY_API_KEY` always wins.
+ * or `~/.config/dawg/credentials.json` (0600 under a 0700 directory), never in
+ * the project's `.dawg/` directory. `AI_GATEWAY_API_KEY` always wins.
+ *
+ * Migration from Track: when `~/.config/dawg` is missing and `~/.config/track`
+ * exists, the legacy directory is used, and a key stored under the legacy
+ * Keychain service `track` is still read. Nothing legacy is moved or deleted
+ * automatically; only an explicit `dawg logout` removes the legacy key.
  */
-export const KEYCHAIN_SERVICE = "track";
+export const KEYCHAIN_SERVICE = "dawg";
+export const LEGACY_KEYCHAIN_SERVICE = "track";
+export const CONFIG_DIR_NAME = "dawg";
+export const LEGACY_CONFIG_DIR_NAME = "track";
 export const KEYCHAIN_ACCOUNT = "ai-gateway";
 const MAX_CONFIG_BYTES = 16 * 1024;
 /** Gateway keys are opaque tokens; restricting the alphabet keeps them quote-safe. */
@@ -32,7 +42,7 @@ export const PROVIDER_CHOICES = Object.freeze([
 ] as const);
 export type ProviderChoice = (typeof PROVIDER_CHOICES)[number];
 
-export type TrackConfig = Readonly<{
+export type DawgConfig = Readonly<{
   provider?: ProviderChoice;
   xcb?: Readonly<{ account: string; model: string }>;
 }>;
@@ -51,9 +61,20 @@ export type AuthEnv = Readonly<{
 export function configDir(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): string {
-  if (env.TRACK_CONFIG_DIR) return env.TRACK_CONFIG_DIR;
+  const explicit = envValue("CONFIG_DIR", env);
+  if (explicit) return explicit;
   const base = env.XDG_CONFIG_HOME || join(env.HOME || homedir(), ".config");
-  return join(base, "track");
+  const current = join(base, CONFIG_DIR_NAME);
+  const legacy = join(base, LEGACY_CONFIG_DIR_NAME);
+  return !isDirectory(current) && isDirectory(legacy) ? legacy : current;
+}
+
+function isDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 export function defaultAuthEnv(runner: CommandRunner): AuthEnv {
@@ -81,7 +102,7 @@ export function maskKey(key: string): string {
 function useKeychain(auth: AuthEnv): boolean {
   return (
     auth.platform === "darwin" &&
-    auth.env.TRACK_CREDENTIAL_STORE !== "file" &&
+    envValue("CREDENTIAL_STORE", auth.env) !== "file" &&
     auth.runner.which("security") !== undefined
   );
 }
@@ -93,22 +114,10 @@ export async function resolveGatewayKey(
   const fromEnv = auth.env.AI_GATEWAY_API_KEY?.trim();
   if (fromEnv) return { key: fromEnv, source: "env" };
   if (useKeychain(auth)) {
-    const result = await auth.runner
-      .run(
-        "security",
-        [
-          "find-generic-password",
-          "-s",
-          KEYCHAIN_SERVICE,
-          "-a",
-          KEYCHAIN_ACCOUNT,
-          "-w",
-        ],
-        { timeoutMs: 10_000, maxOutputBytes: 4096 },
-      )
-      .catch(() => undefined);
-    const key = result?.code === 0 ? result.stdout.trim() : "";
-    if (isValidKey(key)) return { key, source: "keychain" };
+    for (const service of [KEYCHAIN_SERVICE, LEGACY_KEYCHAIN_SERVICE]) {
+      const key = (await readKeychain(auth, service)) ?? "";
+      if (isValidKey(key)) return { key, source: "keychain" };
+    }
   }
   const file = await readJsonObject(join(auth.dir, "credentials.json"));
   const key = file?.aiGateway;
@@ -128,7 +137,7 @@ export async function storeGatewayKey(
     // in any process's argv. KEY_PATTERN guarantees it needs no escaping.
     const result = await auth.runner
       .run("security", ["-i"], {
-        stdin: `add-generic-password -U -s ${KEYCHAIN_SERVICE} -a ${KEYCHAIN_ACCOUNT} -l "Track AI Gateway key" -w "${key}"\n`,
+        stdin: `add-generic-password -U -s ${KEYCHAIN_SERVICE} -a ${KEYCHAIN_ACCOUNT} -l "dawg AI Gateway key" -w "${key}"\n`,
         timeoutMs: 15_000,
         maxOutputBytes: 4096,
       })
@@ -154,41 +163,43 @@ export async function storeGatewayKey(
 async function resolveFromKeychainOnly(
   auth: AuthEnv,
 ): Promise<string | undefined> {
+  return readKeychain(auth, KEYCHAIN_SERVICE);
+}
+
+async function readKeychain(
+  auth: AuthEnv,
+  service: string,
+): Promise<string | undefined> {
   const result = await auth.runner
     .run(
       "security",
-      [
-        "find-generic-password",
-        "-s",
-        KEYCHAIN_SERVICE,
-        "-a",
-        KEYCHAIN_ACCOUNT,
-        "-w",
-      ],
+      ["find-generic-password", "-s", service, "-a", KEYCHAIN_ACCOUNT, "-w"],
       { timeoutMs: 10_000, maxOutputBytes: 4096 },
     )
     .catch(() => undefined);
   return result?.code === 0 ? result.stdout.trim() : undefined;
 }
 
-/** Remove stored keys from both backends. Env keys are left to the user. */
+/**
+ * Remove stored keys from both backends, including the legacy `track`
+ * Keychain item (otherwise the read fallback would keep finding it after an
+ * explicit logout). Env keys are left to the user.
+ */
 export async function clearGatewayKey(auth: AuthEnv): Promise<string[]> {
   const removed: string[] = [];
   if (useKeychain(auth)) {
-    const result = await auth.runner
-      .run(
-        "security",
-        [
-          "delete-generic-password",
-          "-s",
-          KEYCHAIN_SERVICE,
-          "-a",
-          KEYCHAIN_ACCOUNT,
-        ],
-        { timeoutMs: 10_000, maxOutputBytes: 4096 },
-      )
-      .catch(() => undefined);
-    if (result?.code === 0) removed.push("keychain");
+    let any = false;
+    for (const service of [KEYCHAIN_SERVICE, LEGACY_KEYCHAIN_SERVICE]) {
+      const result = await auth.runner
+        .run(
+          "security",
+          ["delete-generic-password", "-s", service, "-a", KEYCHAIN_ACCOUNT],
+          { timeoutMs: 10_000, maxOutputBytes: 4096 },
+        )
+        .catch(() => undefined);
+      if (result?.code === 0) any = true;
+    }
+    if (any) removed.push("keychain");
   }
   if (await removeFileKey(auth)) removed.push("file");
   return removed;
@@ -207,11 +218,11 @@ async function removeFileKey(auth: AuthEnv): Promise<boolean> {
 
 export async function readConfig(
   auth: Pick<AuthEnv, "dir">,
-): Promise<TrackConfig> {
+): Promise<DawgConfig> {
   return parseConfig(await readJsonObject(join(auth.dir, "config.json")));
 }
 
-export function parseConfig(value: unknown): TrackConfig {
+export function parseConfig(value: unknown): DawgConfig {
   if (typeof value !== "object" || value === null || Array.isArray(value))
     return {};
   const record = value as Record<string, unknown>;
@@ -239,9 +250,9 @@ export async function writeConfig(
   auth: Pick<AuthEnv, "dir">,
   patch: Partial<{
     provider: ProviderChoice | undefined;
-    xcb: TrackConfig["xcb"] | undefined;
+    xcb: DawgConfig["xcb"] | undefined;
   }>,
-): Promise<TrackConfig> {
+): Promise<DawgConfig> {
   const next: Record<string, unknown> = { ...(await readConfig(auth)) };
   for (const [key, value] of Object.entries(patch)) {
     if (value === undefined) delete next[key];

@@ -1,5 +1,5 @@
 /**
- * Semantic theme tokens for the Track TUI.
+ * Semantic theme tokens for the dawg TUI.
  *
  * Components ask for a role ("hit", "promptBg", "error") and never write raw
  * escape colors.  A theme maps every role to a `Style`; the capability layer

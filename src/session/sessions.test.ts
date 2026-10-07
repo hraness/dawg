@@ -34,7 +34,7 @@ const workspaces: string[] = [];
 const clients: DaemonClient[] = [];
 
 async function workspace(): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), "track-sessions-"));
+  const dir = await mkdtemp(join(tmpdir(), "dawg-sessions-"));
   workspaces.push(dir);
   return dir;
 }
@@ -42,7 +42,7 @@ async function workspace(): Promise<string> {
 afterEach(async () => {
   for (const client of clients.splice(0)) client.close();
   for (const dir of workspaces.splice(0)) {
-    const sessions = join(dir, ".track", "sessions");
+    const sessions = join(dir, ".dawg", "sessions");
     for await (const owner of new Bun.Glob("*.daemon.lock/owner").scan(
       sessions,
     )) {
@@ -331,7 +331,7 @@ describe("rename", () => {
     }
   });
 
-  test("trackd: renames broadcast to every window and stale auto-names drop", async () => {
+  test("dawgd: renames broadcast to every window and stale auto-names drop", async () => {
     const dir = await workspace();
     const { record } = await ensureSession(initial, { workspace: dir });
     const connect = async (label: string) => {

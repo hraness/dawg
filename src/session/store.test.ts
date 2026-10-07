@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, utimes } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rename,
+  utimes,
+} from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -9,12 +17,14 @@ import {
   readCurrentSessionId,
   SessionValidationError,
   SessionConflictError,
+  stateDir,
 } from "./store.ts";
+import { listSessions } from "./list.ts";
 import { acquireSessionLock } from "./lock.ts";
 
 describe("session store", () => {
   test("creates a current session and atomically appends bounded events", async () => {
-    const workspace = await mkdtemp(join(tmpdir(), "track-session-"));
+    const workspace = await mkdtemp(join(tmpdir(), "dawg-session-"));
     const first = await ensureSession(
       { tracks: [] },
       { workspace, sessionId: "demo" },
@@ -30,12 +40,12 @@ describe("session store", () => {
       (await loadSession<typeof next.composition>(first.paths)).composition,
     ).toEqual({ tracks: ["bass"] });
     expect(
-      (await readFile(join(workspace, ".track", "session"), "utf8")).trim(),
+      (await readFile(join(workspace, ".dawg", "session"), "utf8")).trim(),
     ).toBe("demo");
   });
 
   test("rejects a stale writer instead of losing another window's event", async () => {
-    const workspace = await mkdtemp(join(tmpdir(), "track-session-conflict-"));
+    const workspace = await mkdtemp(join(tmpdir(), "dawg-session-conflict-"));
     const first = await ensureSession(
       { notes: [] },
       { workspace, sessionId: "shared" },
@@ -66,7 +76,7 @@ describe("session store", () => {
   });
 
   test("explicit session attachment does not move the workspace pointer", async () => {
-    const workspace = await mkdtemp(join(tmpdir(), "track-pointer-"));
+    const workspace = await mkdtemp(join(tmpdir(), "dawg-pointer-"));
     const first = await ensureSession({ value: 1 }, { workspace });
     const second = await ensureSession(
       { value: 2 },
@@ -77,7 +87,7 @@ describe("session store", () => {
   });
 
   test("rejects unsafe ids before they can escape the session directory", async () => {
-    const workspace = await mkdtemp(join(tmpdir(), "track-unsafe-id-"));
+    const workspace = await mkdtemp(join(tmpdir(), "dawg-unsafe-id-"));
     await expect(
       // Deliberately exercise a foreign CLI value at the path boundary.
       ensureSession({}, { workspace, sessionId: "../outside" }),
@@ -85,9 +95,9 @@ describe("session store", () => {
   });
 
   test("does not replace a corrupt record while ensuring a session", async () => {
-    const workspace = await mkdtemp(join(tmpdir(), "track-corrupt-record-"));
-    const path = join(workspace, ".track", "sessions", "broken.json");
-    await Bun.write(join(workspace, ".track", "session"), "broken\n");
+    const workspace = await mkdtemp(join(tmpdir(), "dawg-corrupt-record-"));
+    const path = join(workspace, ".dawg", "sessions", "broken.json");
+    await Bun.write(join(workspace, ".dawg", "session"), "broken\n");
     await Bun.write(path, "{ this is not a session }\n");
     await expect(ensureSession({ safe: true }, { workspace })).rejects.toThrow(
       "invalid JSON",
@@ -96,7 +106,7 @@ describe("session store", () => {
   });
 
   test("concurrent first launches converge on one local session", async () => {
-    const workspace = await mkdtemp(join(tmpdir(), "track-concurrent-init-"));
+    const workspace = await mkdtemp(join(tmpdir(), "dawg-concurrent-init-"));
     const [one, two] = await Promise.all([
       ensureSession({ source: "one" }, { workspace }),
       ensureSession({ source: "two" }, { workspace }),
@@ -107,7 +117,7 @@ describe("session store", () => {
   });
 
   test("does not reclaim an old-looking lock owned by a live process", async () => {
-    const workspace = await mkdtemp(join(tmpdir(), "track-live-lock-"));
+    const workspace = await mkdtemp(join(tmpdir(), "dawg-live-lock-"));
     const lockPath = join(workspace, "session.lock");
     const release = await acquireSessionLock(lockPath);
     const old = new Date(Date.now() - 60_000);
@@ -116,5 +126,61 @@ describe("session store", () => {
     await release();
     const releaseAgain = await acquireSessionLock(lockPath, 30);
     await releaseAgain();
+  });
+
+  test("reads a legacy .track workspace when .dawg is missing and never moves it", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "dawg-legacy-state-"));
+    const legacy = join(workspace, ".track");
+    // A workspace written before the rename: build one, then move it to .track/.
+    const seeded = await ensureSession(
+      { notes: [] as number[] },
+      { workspace, sessionId: "old" },
+    );
+    await appendSessionEvent(
+      seeded.paths,
+      seeded.record,
+      { kind: "seed", payload: {} },
+      { notes: [7] },
+    );
+    await rename(join(workspace, ".dawg"), legacy);
+    const before = await readFile(join(legacy, "sessions", "old.json"), "utf8");
+
+    expect(stateDir(workspace)).toBe(legacy);
+    expect(await readCurrentSessionId(workspace)).toBe("old");
+    const opened = await ensureSession(
+      { notes: [] as number[] },
+      { workspace },
+    );
+    expect(opened.record.sessionId).toBe("old");
+    expect(opened.record.revision).toBe(1);
+    expect(opened.record.composition).toEqual({ notes: [7] });
+    expect(opened.paths.root).toBe(legacy);
+    expect((await listSessions(workspace)).map((s) => s.sessionId)).toEqual([
+      "old",
+    ]);
+    // Nothing was created under .dawg, and the legacy record is intact.
+    expect(existsSync(join(workspace, ".dawg"))).toBe(false);
+    expect(await readFile(join(legacy, "sessions", "old.json"), "utf8")).toBe(
+      before,
+    );
+  });
+
+  test("prefers .dawg when both exist and creates .dawg in a fresh workspace", async () => {
+    const both = await mkdtemp(join(tmpdir(), "dawg-both-state-"));
+    await mkdir(join(both, ".track", "sessions"), { recursive: true });
+    await Bun.write(join(both, ".track", "session"), "old\n");
+    await mkdir(join(both, ".dawg"), { recursive: true });
+    expect(stateDir(both)).toBe(join(both, ".dawg"));
+    expect(await readCurrentSessionId(both)).toBeUndefined();
+    await ensureSession({ value: 1 }, { workspace: both, sessionId: "new" });
+    expect(await readdir(join(both, ".track", "sessions"))).toEqual([]);
+    expect(
+      (await readFile(join(both, ".track", "session"), "utf8")).trim(),
+    ).toBe("old");
+
+    const fresh = await mkdtemp(join(tmpdir(), "dawg-fresh-state-"));
+    await ensureSession({ value: 1 }, { workspace: fresh, sessionId: "a" });
+    expect(existsSync(join(fresh, ".dawg", "sessions", "a.json"))).toBe(true);
+    expect(existsSync(join(fresh, ".track"))).toBe(false);
   });
 });
