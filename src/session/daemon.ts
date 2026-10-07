@@ -95,6 +95,20 @@ export class DawgDaemon {
     this.graceMs = options.graceMs ?? DEFAULT_GRACE_MS;
     this.audio = new AudioEngine({
       lockPath: `${this.paths.record}.audio.lock`,
+      onStatus: (status) => {
+        void this.log(`audio: ${status.message}`);
+        // A player that keeps dying must not leave a silent "playing" transport.
+        if (status.state === "stopped" && this.clock.playing) {
+          this.clock.pause();
+          this.broadcastTransport();
+        }
+        this.broadcast({
+          v: 1,
+          type: "error",
+          code: "audio",
+          message: status.message,
+        });
+      },
     });
   }
 
@@ -158,7 +172,7 @@ export class DawgDaemon {
   private async shutdown(reason: string): Promise<void> {
     if (this.graceTimer) clearTimeout(this.graceTimer);
     if (this.diskTimer) clearInterval(this.diskTimer);
-    await this.audio.stopAsync();
+    await this.audio.dispose();
     for (const client of this.clients) client.socket.destroy();
     this.clients.clear();
     await this.queue.catch(() => undefined);

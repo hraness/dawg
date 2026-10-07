@@ -304,6 +304,84 @@ describe("gapless streaming engine", () => {
   });
 });
 
+describe("engine resilience", () => {
+  test("renders in flight coalesce and the newest score wins", async () => {
+    const clock = { ms: 0 };
+    const fake = fakeSpawn();
+    const engine = new AudioEngine({
+      info: INFO,
+      sampleRate: RATE,
+      leadMs: 100,
+      timer: false,
+      now: () => clock.ms,
+      spawn: fake.spawn,
+      worker: false,
+    });
+    await engine.play(score(60), 0);
+    clock.ms = 500;
+    engine.pump();
+    const before = fake.bytes().length / 2;
+    // Three edits before the first re-render lands: one render of the last.
+    const edits = [62, 64, 67].map((pitch) => engine.play(score(pitch), 1));
+    await Promise.all(edits);
+    clock.ms = 1_000;
+    engine.pump();
+    expect(engine.playerStarts).toBe(1);
+    const next = renderScorePcm(score(67), { sampleRate: RATE, loop: true });
+    const after = fake.bytes().subarray(before * 2, before * 2 + 4000 * 2);
+    expect(after).toEqual(next.pcm.subarray(before * 2, before * 2 + 4000 * 2));
+    expect(engine.lead).toBe(800);
+    await engine.dispose();
+  });
+
+  test("a dying player is respawned with backoff, then playback stops", async () => {
+    const clock = { ms: 0 };
+    const exits: ((code: number) => void)[] = [];
+    const starts: number[] = [];
+    const spawn = () => {
+      starts.push(starts.length);
+      return {
+        pid: 1,
+        stdin: { write: () => undefined },
+        exited: new Promise<number>((resolve) => exits.push(resolve)),
+        kill: () => exits[starts.length - 1]?.(0),
+      };
+    };
+    const statuses: string[] = [];
+    const engine = new AudioEngine({
+      info: INFO,
+      sampleRate: RATE,
+      timer: false,
+      now: () => clock.ms,
+      spawn,
+      worker: false,
+      respawnMs: 1,
+      onStatus: (status) => statuses.push(`${status.state}: ${status.message}`),
+    });
+    const until = async (ready: () => boolean) => {
+      for (let i = 0; i < 200 && !ready(); i += 1) await Bun.sleep(2);
+      expect(ready()).toBe(true);
+    };
+    await engine.play(score(), 0);
+    expect(starts.length).toBe(1);
+    for (let death = 1; death <= 3; death += 1) {
+      exits[death - 1]!(1);
+      await until(() => starts.length === death + 1);
+      expect(engine.streaming).toBe(true);
+      expect(statuses.at(-1)).toContain(`restarting (${death}/3)`);
+    }
+    exits[3]!(1);
+    await until(() => statuses.length === 4);
+    expect(statuses.at(-1)).toContain("playback stopped");
+    expect(engine.streaming).toBe(false);
+    expect(starts.length).toBe(4);
+    // A later play starts fresh with a new budget.
+    await engine.play(score(), 0);
+    expect(starts.length).toBe(5);
+    await engine.dispose();
+  });
+});
+
 describe("real player process", () => {
   const dirs: string[] = [];
   afterEach(async () => {
