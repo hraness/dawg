@@ -132,6 +132,10 @@ A STEER submit runs ahead of queued work. Bracketed paste preserves multiline in
 
 `/theme default|high-contrast|mono` and `--theme <name>` (or `DAWG_THEME`) pick a theme. Semantic color tokens map to truecolor, 256, 16 or no color. `NO_COLOR` and `TERM=dumb` force monochrome. `/motion off`, `--reduce-motion` or `DAWG_REDUCE_MOTION=1` replace animations with static states in the same positions. Every color has a non-color cue as well: glyph density, `✓`/`✗`/`!` prefixes, the mode pill text and `▶`/`⏸`.
 
+### Project files
+
+`dawg init` turns the current directory into a project: `song.ts` and one `tracks/<slug>/track.ts` per track, written with a small typed SDK (`import { track, note, hit } from "dawg"`). Edit them in any editor (or let the agent edit them) and every open window applies the change as one revision; edit in the TUI and the affected file is reprinted. `dawg check` typechecks and evaluates the files and exits 1 with `file:line:col` diagnostics. See **Project files and SDK** in [DAWG.md](./DAWG.md).
+
 ## Auth
 
 Run `dawg login` once to give the agent a model. With the Vercel CLI it signs you in (if needed) and creates an AI Gateway key named `dawg-<hostname>`; `--budget <dollars>` sets its spend limit. Without the CLI it prints `bun add -g vercel` and lets you paste a key instead (`dawg login --key`, hidden input, Enter opens the key page).
@@ -170,6 +174,7 @@ Playback renders deterministic stereo PCM with sine, piano, pluck, bass, saw, sq
 - `src/session/` provides an append-only local event log, atomic snapshots, and `dawgd`: one local daemon per session (`src/daemon.ts`), started automatically by the first window. Windows connect over a Unix socket, send idempotent intents, and receive accepted changes, presence, and one shared transport clock. If the daemon cannot start, windows fall back to the file-lock path and say so in the status line. `dawg sessions` lists the workspace's sessions with revision, update time, and live daemon.
 - `src/agent/` runs the bounded streaming tool-calling agent: the SSE gateway client, the tool registry, the composition brief, and operation validation.
 - `src/agent/workspace.ts` and `src/web/` give the agent bounded project file access (writes scoped to `song.ts` and the focused `tracks/<slug>/`) and web search and fetch with injectable network.
+- `core/sdk/` and `src/project/` make a directory with `dawg.json` a project of typechecked TypeScript files (`song.ts`, `tracks/<slug>/track.ts`) kept in two-way sync with the session.
 - `src/audio/` owns the transport clock, deterministic instrument-bank WAV rendering, and per-session playback lock. When `dawgd` is running it is the only process that plays audio.
 - `tui/` owns terminal capability detection, semantic colors, animation phases, piano-roll rendering, and the multiline prompt editor.
 

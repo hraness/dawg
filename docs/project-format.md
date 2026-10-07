@@ -1,0 +1,166 @@
+# dawg project format, SDK, workspace tools and sampling (design, 2026-10-06)
+
+Status: sections 1 to 3 and the sampler schema from section 6 are implemented. Where the shipped code differs from this design (manifest shape, `dawg init` instead of initializing on launch, per-check incremental `tsc` instead of a watch program, sync in every window), the **Project files and SDK** section of [DAWG.md](../DAWG.md) is the contract.
+
+Owner direction: agents should edit the session directly as typechecked TypeScript on Bun through a versioned SDK; every track gets a directory the agent can download into, read, write and edit, and agents may read every other track's directory; add web search, local YouTube download, stem splitting and transcription (soundfish tools); pave the road for audio sampling the way Strudel does it.
+
+## 1. Project layout (the directory you run `dawg` in)
+
+```
+dawg.json                  project manifest, 1 line of JSON: {"dawg":1,"sdk":"1"}
+tsconfig.json              extends .dawg/sdk/tsconfig.json (paths map "dawg" → vendored SDK)
+song.ts                    tempo, meter, bars, key, track order; imports tracks/*/track.ts
+tracks/
+  bass/
+    track.ts               the track: instrument, mix, effects, automation, notes
+    samples/               audio the track's sampler references (relative paths)
+    notes.md               free scratch for the agent and the user (never parsed)
+    downloads/             yt-dlp output, stems, transcripts (gitignored by default)
+  drums/
+    track.ts
+.dawg/                     runtime state owned by dawg
+  session                  pointer (existing)
+  sessions/<id>.json       event log + snapshot (existing; still the sync substrate)
+  sdk/v1.ts                vendored SDK copy, refreshed by dawg on start when newer
+  sdk/tsconfig.json        generated: strict, noEmit, paths {"dawg": ["./sdk/v1.ts"]}
+  assets/<sha256>.pcm      decoded sample cache (f32 interleaved + header), rebuildable
+  tsbuild/                 tsc incremental state
+.gitignore                 adds .dawg/assets, .dawg/tsbuild, tracks/*/downloads
+```
+
+- `dawg` in a directory without `dawg.json` initializes the project (same moment it creates `.dawg/` today) and prints what it wrote. Nothing outside the cwd is touched.
+- A track directory name is the track's slug (`bass`, `drums`, `keys 2` → `keys-2`). The track id in the score stays the stable id; `track.ts` carries `id`. Renaming a track renames the directory via `track.ts`.
+- Sessions: one project = one song. `/fork` copies `song.ts` + `tracks/` into `../<name>/`? No. Keep forks inside the project: `.dawg/sessions/*` remain, and the working files mirror the _current_ session (the pointer). `/resume <other>` rewrites the working files from that session's snapshot after confirming the current files are committed (evaluate-equals-snapshot). This keeps one set of files per project and avoids two sources of truth.
+
+## 2. SDK v1 (`core/sdk/v1.ts`, published as `@hraness/dawg/sdk` and vendored to `.dawg/sdk/v1.ts`)
+
+Zero-dependency, pure builders over the existing score model. Everything is in beats (numbers) for the author; the SDK converts to integer ticks with `ticksPerBeat` from the song. Types are strict and documented, because the type signatures and JSDoc are what the coding agent reads.
+
+```ts
+// tracks/bass/track.ts
+import { track, note, seq, every } from "dawg";
+
+export default track({
+  id: "t-bass", // stable; dawg assigns on create
+  name: "bass",
+  instrument: "bass", // synth voice name, "kit", or sampler(...)
+  volume: 0.8,
+  pan: 0,
+  filter: { cutoff: 800, resonance: 0.2 },
+  delay: null,
+  automation: {
+    filter: [
+      [0, 400],
+      [8, 2000],
+    ],
+  }, // [beat, value]
+  notes: [
+    note("A1", 0, 1), // pitch, start beat, length beats, velocity = 0.8
+    note("A1", 1.5, 0.5, 0.6),
+    ...seq("E2 G2 A2", { from: 4, step: 0.5, len: 0.5 }),
+  ],
+});
+```
+
+```ts
+// song.ts
+import { song } from "dawg";
+import bass from "./tracks/bass/track.ts";
+import drums from "./tracks/drums/track.ts";
+
+export default song({
+  tempo: 120,
+  meter: [4, 4],
+  bars: 4,
+  key: "A minor",
+  tracks: [bass, drums],
+});
+```
+
+- `song()`/`track()` return plain frozen data (`SongSpec`, `TrackSpec`), no classes, no I/O; the SDK is importable by tsc and by Bun.
+- Drum tracks: `instrument: "kit"` and `hit("kick", 0)`/`hits("kick", every(1))` helpers; GM pitches stay the storage form.
+- Sampler (section 5): `instrument: sampler({ kick: "samples/kick.wav", vox: { src: "samples/vox.wav", root: "C4", begin: 0.1, end: 0.6 } })`.
+- Versioning: the import specifier is `"dawg"`, resolved by the generated tsconfig to `.dawg/sdk/v1.ts`. `dawg.json.sdk` is the major. A dawg release may add fields and helpers to v1 (additive, defaults preserve old files byte-for-byte on reprint); a breaking change is `v2.ts` plus a `dawg migrate` that rewrites files. dawg refuses to run a project whose `sdk` major it does not ship and says which dawg version does.
+- Evaluation contract: `song.ts` must default-export a `SongSpec`; the evaluator runs `bun --no-install --smol .dawg/sdk/eval.ts <project>` in a subprocess with env scrubbed to `PATH`/`HOME`, cwd = project, 10 s timeout, 1 MiB stdout, and the result is parsed from `unknown` by the existing `scoreFromJSON` (never trusted because it came from TS). No network, no `Bun.spawn` reachable: the subprocess runs with `--no-addons`; a file that does I/O is not prevented but is documented as unsupported and is caught by the budget.
+- Typecheck: `typescript` becomes a real dependency (installed by `bun add -g` and `npm i -g`). The daemon keeps one `ts.createWatchProgram` warm over the project (incremental, `.dawg/tsbuild`), so a check after the first takes ~100–300 ms. Errors are returned as `file:line:col message` and are what the agent sees as a tool result. The TUI shows `types ✓`/`types ✗ 2` in the header's sync slot.
+
+## 3. Two-way sync (files ⇄ score ⇄ daemon)
+
+Canonical rule: **the evaluated files are the content; the session event log is the history and the multi-window sync substrate.**
+
+- files → score: on save (fs.watch on `song.ts`, `tracks/**/track.ts`, debounced 150 ms) or on the agent's `apply_files` tool, dawg typechecks, evaluates, diffs the new score against the current revision and commits the diff as one `files.apply` revision (ops list computed by `core/diff.ts`: track add/remove/patch, note add/remove/update, tempo/meter/key). Through the daemon this is an `apply` pinned to the base revision like any other edit; other windows receive the commit and their highways update. Undo works per apply.
+- score → files: when a revision arrives from anywhere other than this project's files (TUI command, tool call, another window, undo), dawg reprints only the affected `track.ts`/`song.ts` with the deterministic printer (`core/sdk/print.ts`). A file whose evaluation already equals the score is never rewritten, so the author's layout and comments survive until someone else edits that track. Reprint output is prettier-stable and round-trips (`print(eval(print(x))) === print(x)`, tested).
+- Loop prevention: writes carry a content hash recorded in `.dawg/sync.json`; a watch event whose file hash matches a hash we just wrote is ignored.
+- Conflicts: if the file's base revision (recorded per file in `.dawg/sync.json`) is behind and the evaluated diff touches a track changed since, dawg still applies (last writer wins at the note level, same as today's rebase), and posts an activity card naming the track.
+- Legacy: a project with `.dawg/sessions/*` and no `song.ts` is printed once on first start. No other migration (the owner has never run earlier versions).
+
+## 4. Workspace and web tools (agent)
+
+Tools added to `AGENT_TOOLS` and to the xcb JSON-ops catalog. Scope is the project directory; every path is resolved, must stay under the project after `realpath`, symlinks that leave it are rejected, and `.dawg/` is read-only except through dawg.
+
+| tool                        | scope                                | notes                                                                                                                                                   |
+| --------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_files(path?)`         | whole project                        | sizes, mtimes, 500 entries max                                                                                                                          |
+| `read_file(path, range?)`   | whole project                        | 256 KiB cap, text only; binary reports size/type                                                                                                        |
+| `write_file(path, content)` | own track dir, `song.ts`, `notes.md` | atomic, 1 MiB cap                                                                                                                                       |
+| `edit_file(path, old, new)` | same as write                        | exact single match, like Claude Code's Edit                                                                                                             |
+| `apply_files()`             | —                                    | typecheck + evaluate + commit; returns diagnostics or the applied summary; also runs automatically after any `write_file`/`edit_file` on a `*.ts`       |
+| `web_search(query)`         | —                                    | provider chain: `BRAVE_SEARCH_API_KEY` → OpenRouter `web` plugin when provider is OpenRouter → DuckDuckGo lite HTML; 8 results, title/url/snippet, 10 s |
+| `fetch_url(url)`            | —                                    | http(s) only, 2 MiB cap, HTML → readable text, 20 s, no private ranges                                                                                  |
+
+"Own track dir" is the focused track's `tracks/<slug>/`. Agents in other windows may read it. A write outside scope returns a diagnostic naming the allowed roots. The brief gains a 30-line project tree (names and sizes) and the focused track's `notes.md` head (1 KiB).
+
+## 5. Media tools (local only; soundfish lineage)
+
+What soundfish actually has (`/Users/bg/Documents/soundfish`, private, same owner): a song importer `scripts/soundfish-import-song.ts` + `lib/song-import/` that takes a YouTube URL → **StemDeck** (a local HTTP service at `127.0.0.1:8000` that runs yt-dlp, ffmpeg, Demucs `htdemucs_6s` and beat/downbeat detection) → per-stem **Basic Pitch** (Python CLI, audio → MIDI) for pitched stems and a pure-TS drum classifier (`lib/song-import/drums.ts`, nine GM classes) for the drum stem → quantized loops. "Transcription" there means audio → notes, not speech. Pure-TS helpers worth vendoring with attribution: `drums.ts`, `grid.ts` (beat grid, `secondsToBeat`), `basic-pitch.ts` (CSV parsing, per-stem parameters), `lib/audio-media/{wav,waveform}.ts`. The injected `SongImportRuntime` is the same shape as our `CommandRunner`.
+
+All dawg media tools run locally, report progress cards, write under `tracks/<slug>/downloads/`, and are budgeted (time and bytes). Each tool probes its backend at first use and, if missing, returns the exact install command instead of failing silently; nothing is auto-installed. Media backend (`src/media/backend.ts`): `stemdeck` when `GET http://127.0.0.1:8000/api/health` (or `DAWG_STEMDECK_URL`) answers, because it does download + stems + beat grid in one job and the owner already runs it; otherwise `direct`: `yt-dlp`, `ffmpeg/ffprobe`, `uv tool run demucs`, `uv tool run basic-pitch`. Both produce the same files.
+
+| tool                                                                    | backend                                                                                                                                           | output                                                                                                                                         |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `download_audio(url, name?)`                                            | yt-dlp (`-x --audio-format wav`) or StemDeck job; YouTube hosts only, credentials and fragment stripped (soundfish `validateYoutubeUrl`)          | `downloads/<slug>.wav` + `<slug>.json` (title, duration, source url, sha256)                                                                   |
+| `split_stems(file)`                                                     | `demucs -n htdemucs_6s` via uv, or the StemDeck job's stems                                                                                       | `downloads/<slug>.stems/{vocals,drums,bass,guitar,piano,other}.wav`                                                                            |
+| `analyze_audio(file)`                                                   | `ffprobe` + StemDeck beat grid when available, else TS onset autocorrelation tempo; key from a pitch-class estimate (reuse `naming.ts` scale fit) | `<file>.analysis.json`: `{duration, sampleRate, tempo?, beats[]?, downbeats[]?, key?, peaks[240]}`                                             |
+| `transcribe_notes(file, {kind: "pitched"\|"drums", from?, to?, bars?})` | pitched: Basic Pitch CLI with soundfish's per-stem parameters; drums: vendored TS classifier                                                      | `<file>.notes.json` (`TimedNote[]` in seconds) plus a quantized `track.ts`-ready snippet aligned to the song grid using the analysis beat grid |
+| `import_sample(file, name, {begin?, end?, root?})`                      | `ffmpeg` to 48 kHz wav when needed                                                                                                                | copies into `tracks/<slug>/samples/<name>.wav`, returns the `sampler` snippet to add to `track.ts`                                             |
+| `transcribe_lyrics(file, {lang?})`                                      | `whisper-cli` (whisper.cpp, installed here; model `ggml-base.en` under `~/.cache/dawg/whisper/`, fetched on first use after a card says so)       | `<file>.lyrics.json` (segments with times) + `.txt` — lowest priority, lands last                                                              |
+
+The composite the owner will actually type is "pull this YouTube track in and give me its bass line": `download_audio` → `split_stems` → `analyze_audio` → `transcribe_notes(bass)` → the agent writes `tracks/bass/track.ts`. Each tool is separately callable so the agent can stop early, and the brief lists the files already in `downloads/` so it never redoes work.
+
+## 6. Sampling in the score (Strudel-aligned)
+
+Score v2 adds one optional track field; everything else is unchanged and v1 documents decode as v2 with the field absent.
+
+```ts
+type Sampler = Readonly<{
+  /** Map of voice name → sample ref. Notes address voices by pitch (keyed mode) or by voice (one-shot mode). */
+  voices: Readonly<Record<string, SampleRef>>;
+  /** "oneshot": each voice is a drum-like hit at its own pitch slot; "keyed": one voice is pitch-shifted across the keyboard from `root`. */
+  mode: "oneshot" | "keyed";
+}>;
+type SampleRef = Readonly<{
+  src: string; // project-relative path, inside tracks/<slug>/samples/
+  sha256: string; // content hash; renders are deterministic because the cache is keyed by it
+  root?: number; // MIDI note the file plays at (keyed mode), default 60
+  begin?: number; // 0..1 fraction, like Strudel begin
+  end?: number; // 0..1 fraction, like Strudel end
+  gain?: number; // 0..2
+  speed?: number; // playback rate, like Strudel speed; negative reverses
+  loop?: boolean; // sustain by looping begin..end
+  choke?: string; // choke group, like Strudel cut
+}>;
+```
+
+- Storage: `instrument: "sampler"` and `sampler: Sampler` on the track. Oneshot voices are assigned pitch slots in name order starting at 36 so the drum lane projection and `add_drums`-style tools keep working; the SDK hides the slot numbers.
+- Renderer: decodes WAV (PCM 16/24/32/f32) in TS; other formats go through `ffmpeg -f f32le` into `.dawg/assets/<sha256>.pcm` once. Playback is linear-interpolated resampling with `speed`, pitch shift by rate in keyed mode, `begin/end`, `loop` with a 5 ms crossfade, per-voice choke, and it feeds the same filter/delay/reverb chain. No time-stretch in v1 (same as Strudel's default).
+- Highway: sampler tracks use the drum lane projection in oneshot mode and the pitch projection in keyed mode; the legend shows voice names.
+- Strudel road: `voices` maps 1:1 to `samples({name: url})`, and `begin/end/speed/loop/choke` map to `.begin().end().speed().loop().cut()`. A future `dawg export strudel` emits `s("kick snare").bank(...)` from the oneshot track and `note(...).s("vox")` from keyed tracks. Slicing (`slice`, `chop`, `fit`) is expressed as derived voices in the SDK (`slices(ref, 8)` → eight voices with begin/end), so the score never needs a slice op.
+- Limits: ≤ 64 voices per track, ≤ 50 MiB per sample file, ≤ 10 minutes per file, ≤ 512 MiB decoded cache (LRU).
+
+## 7. Delivery plan (lanes, in dependency order)
+
+A. **format + SDK + sync** (`core/sdk/v1.ts`, `core/sdk/print.ts`, `core/sdk/eval.ts`, `core/diff.ts`, score v2 sampler schema (validation only), project init, tsc watch program in the daemon, fs.watch apply, `dawg check`, header types slot, docs in DAWG.md, round-trip and property tests).
+B. **workspace + web tools** (depends on A's `apply_files`; can start on `list/read/write/edit`, `web_search`, `fetch_url` and path scoping immediately).
+C. **media tools** (independent of A except `import_sample`, which lands last).
+D. **sampler playback + highway** (depends on A's schema).
+Each lane: worktree under `~/src/track-wt/<lane>`, PR with tests, rebase on main before merge, squash auto-merge. 0.3.0 ships sign-in + A + B; 0.4.0 ships C + D, or everything in 0.3.0 if they land within the same window.

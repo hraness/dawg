@@ -105,6 +105,30 @@ export function rebaseOperations(
         if (base.bars !== current.bars)
           return { ok: false, reason: "loop length changed" };
         break;
+      case "setKey":
+        if (base.key !== current.key)
+          return { ok: false, reason: "key changed" };
+        break;
+      case "setMeter":
+        if (base.beatsPerBar !== current.beatsPerBar)
+          return { ok: false, reason: "meter changed" };
+        break;
+      case "removeTrack": {
+        if (added.tracks.has(operation.trackId)) break;
+        if (
+          !settingsUnchanged(operation.trackId) ||
+          !notesUnchanged(operation.trackId)
+        )
+          return { ok: false, reason: `track ${operation.trackId} changed` };
+        break;
+      }
+      case "moveTrack": {
+        const order = (score: TrackScore) =>
+          score.tracks.map((track) => track.id).join("\u0000");
+        if (order(base) !== order(current))
+          return { ok: false, reason: "track order changed" };
+        break;
+      }
       default:
         return { ok: false, reason: "unsupported operation" };
     }

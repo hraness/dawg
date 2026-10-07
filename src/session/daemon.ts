@@ -678,6 +678,10 @@ const OPERATION_TYPES = new Set([
   "updateTrack",
   "setAutomation",
   "clearTrack",
+  "removeTrack",
+  "moveTrack",
+  "setKey",
+  "setMeter",
 ]);
 
 /** Shape gate before the reducer, which validates every field it reads. */

@@ -499,3 +499,13 @@ test("text overlay shows titled lines, scrolls, closes on Esc and on submit", ()
   h.app.input("\r");
   expect(h.app.overlay).toBeUndefined();
 });
+
+test("header shows the project types indicator beside sync", () => {
+  const h = harness(120, 24);
+  h.frame(0, { types: { ok: true, errors: 0 } });
+  expect(h.vt.lines()[0]).toContain("types ✓");
+  h.frame(0, { types: { ok: false, errors: 3 } });
+  expect(h.vt.lines()[0]).toContain("types ✗ 3");
+  h.frame(0, { types: undefined });
+  expect(h.vt.lines()[0]).not.toContain("types");
+});

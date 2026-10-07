@@ -1,5 +1,6 @@
 import {
   SCORE_LIMITS,
+  isSamplerInstrument,
   isTrackAudible,
   type AutomationPoint,
   type Note,
@@ -153,6 +154,8 @@ export function renderScorePcm(
   for (const [trackId, notes] of groups) {
     if (!isTrackAudible(score, trackId)) continue;
     const track = tracks.get(trackId);
+    // Sampler tracks (score v2) are silent until the sample renderer lands.
+    if (isSamplerInstrument(track?.instrument)) continue;
     dry.fill(0);
     const drums = isDrumInstrument(track?.instrument);
     for (const note of notes) {

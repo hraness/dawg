@@ -152,6 +152,43 @@ Set `DAWG_AUDIO=0` for headless sessions.
 
 Use `DAWG_DEMO=1 bun run src/main.ts` for a deterministic non-interactive frame stream while developing the renderer.
 
+## Project files and SDK
+
+A directory with a `dawg.json` is a project: its score lives in typechecked TypeScript files that you, an editor or the agent can edit, and every window keeps those files and the session in step. `dawg init [dir]` creates one and is idempotent; it never touches anything outside the target.
+
+```text
+dawg.json                  {"format":"dawg.project/v1","sdk":1}
+tsconfig.json              extends .dawg/sdk/tsconfig.json; paths {"dawg": ["./.dawg/sdk/v1.ts"]}
+song.ts                    tempo, meter, bars, key, track order; imports tracks/*/track.ts
+tracks/<slug>/track.ts     one track: instrument or sampler, mix, effects, automation, notes
+tracks/<slug>/samples/     audio a sampler references by relative path
+.dawg/sdk/v1.ts            vendored SDK (committed), refreshed by init when a newer 1.x ships
+.dawg/sync.json            hashes of the files dawg last wrote (runtime, gitignored)
+.dawg/tsbuild/             incremental typecheck state (runtime, gitignored)
+```
+
+`init` appends `.dawg/*` and `!.dawg/sdk/` to `.gitignore`, so sessions and caches stay local while the vendored SDK is committed with the project. The slug is `trackSlug(name)` from `core/slug.ts`; duplicates get `-2`, `-3`. The full design is in [docs/project-format.md](./docs/project-format.md).
+
+SDK. `core/sdk/v1.ts` is one dependency-free file with JSDoc on every export, because its signatures are what an agent reads. Authors write beats; `song()` returns a `track.loop/v1` document in integer ticks (`round(beat × ticksPerBeat)`). Builders: `note(pitch, start, length = 1, velocity = 0.8)`, `seq("E2 . G2", {from, step, len, vel})` (`.`, `-`, `_` rest), `hit(voice, start, velocity, length = 0.25)` and `hits(voice, beats)` for `kit` voices (`kick`, `snare`, `hat`, …) and sampler voices, `every(step, {from, until})`, `sampler(voices, {mode})`, `slices(src, count)`, `track({...})` and `song({...})`. Note ids are content hashes, so the files never carry them and dawg keeps the session's ids for notes that did not change.
+
+Evaluation. `evaluateProject(dir)` (`core/sdk/eval.ts`) imports `song.ts` in a fresh `bun --no-addons --no-install` child with cwd at the project, an environment of only `PATH`, `HOME` and `TMPDIR`, a 10 s timeout and 1 MiB of output, then decodes the document through the ordinary score validator. Failures are diagnostics `file:line:col message`, never throws. Evaluation is a guard against mistakes, not a sandbox: project code runs with your user's file access, like any build script.
+
+Typecheck. `typecheckProject(dir)` (`src/project/typecheck.ts`) runs the native TypeScript 7 compiler from the `typescript` dependency with `--incremental` state in `.dawg/tsbuild`. A cold check of a three-track project takes about 65 ms and a warm one about 26 ms on an M-series Mac. The header shows `types ✓` or `types ✗ N`.
+
+Two-way sync (`src/project/sync.ts`) runs in every window of a project:
+
+- Files to score: `fs.watch` on the project and `tracks/` (plus a 1.5 s poll) with a 150 ms debounce. A changed source is evaluated, its notes adopt the session's ids, and `diffScores` (`core/diff.ts`) turns the difference into the smallest list of score operations, committed as one `files.apply` revision through the session port, so dawgd rebases it like an agent intent and undo drops it as one step. The window shows `applied from files · 2 notes, 1 track`. A file that fails to evaluate leaves the score untouched and shows `files rejected · <diagnostic>` once per distinct error.
+- Score to files: after any accepted revision (TUI, agent, another window) the window reprints only the files whose bytes would change. A file whose evaluation already equals the score is never rewritten, so hand formatting and comments survive until the content they describe changes. A track file left behind by a rename or removal is deleted only if its hash still matches what dawg wrote; a hand-edited one is kept.
+- Startup: if any source differs from the hash in `.dawg/sync.json` (edited while dawg was closed, or never written by dawg), the files win; otherwise the session wins and the files are reprinted.
+- Echo: a window skips files whose hashes it already evaluated; another window's write costs one no-op evaluation.
+- The agent's `write_file`/`edit_file` on a `.ts` source applies before the tool result returns; the result carries the outcome line, `types ✓` or `types ✗ N` and up to eight diagnostics.
+
+The printer (`core/sdk/print.ts`) is deterministic and Prettier-stable (`prettier --check` passes on its output), prints only non-default fields, and satisfies `print(evaluate(print(score))) = print(score)`.
+
+`dawg check` typechecks and evaluates the project, prints diagnostics to stderr and `ok · 3 tracks, 12 notes · types 26 ms · eval 21 ms` on success, and exits 1 on any problem or outside a project.
+
+Score format. The score stays `track.loop/v1` with `version: 1`: every addition is an optional field, so older documents still parse and older dawg versions reject only documents that use the new fields. Tracks may carry `sampler: {mode: "oneshot" | "keyed", voices: {name: {src, sha256?, root?, begin?, end?, gain?, speed?, loop?, choke?}}}` with bounds in `SCORE_LIMITS` (64 voices, 256-character relative `src`, gain ≤ 2, speed ≤ 8). One-shot voices map to pitches from 36 in voice-name order. The renderer treats sampler tracks as silent until sample playback lands. `diffScores` uses four operations added alongside: `removeTrack`, `moveTrack`, `setKey` and `setMeter`, which dawgd rebases and the planner accepts.
+
 ## Release
 
 Bump `version` in `package.json` and add its section to `CHANGELOG.md` in a pull request, then merge it. When Check passes on `main`, the annotated `v<version>` tag, the immutable GitHub Release (tarball, `SHA256SUMS` and a provenance attestation) and the npm publish of `@hraness/dawg` follow automatically. See [docs/publishing.md](./docs/publishing.md).

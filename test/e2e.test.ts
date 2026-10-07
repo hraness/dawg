@@ -466,3 +466,100 @@ test("demo --track drums seeds a drum pattern, not melodic notes", async () => {
   expect([...pitches].sort()).toEqual([36, 38, 42]);
   expect(exported.notes.every((note) => note.trackId === "drums")).toBe(true);
 });
+
+test.skipIf(!supported)(
+  "project files: init, hand-edited track file, TUI edit reprinted, second window sees both",
+  async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "dawg-project-"));
+    workspaces.push(workspace);
+    const cli = async (argv: string[]) => {
+      const proc = Bun.spawn([process.execPath, MAIN, ...argv], {
+        cwd: workspace,
+        env: env(workspace),
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [code, stdout, stderr] = await Promise.all([
+        proc.exited,
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+      ]);
+      return { code, stdout, stderr };
+    };
+    const init = await cli(["init"]);
+    expect(init.code).toBe(0);
+    expect(init.stdout).toContain("wrote song.ts\n");
+
+    const a = open(workspace, "A");
+    await ready(a);
+    // The session wins over the untouched init song: its tracks are printed.
+    let trackFile = "";
+    const readTrack = () => readFile(join(workspace, trackFile), "utf8");
+    const deadline = Date.now() + 10_000;
+    while (!trackFile && Date.now() < deadline) {
+      const dirs = await readdir(join(workspace, "tracks")).catch(() => []);
+      for (const dir of dirs) {
+        const path = `tracks/${dir}/track.ts`;
+        if (await readFile(join(workspace, path), "utf8").catch(() => "")) {
+          trackFile = path;
+          break;
+        }
+      }
+      await Bun.sleep(50);
+    }
+    expect(trackFile).not.toBe("");
+    await until(
+      () => header(a).includes("types ✓"),
+      "types indicator",
+      () => a.vt.text(),
+      15_000,
+    );
+
+    // An agent-free edit: append two notes to the printed track by hand.
+    const printed = await readTrack();
+    const authored = printed
+      .replace(/^import \{ ([^}]*) \} from "dawg";/, (_, names: string) => {
+        const set = new Set(names.split(", "));
+        set.add("note");
+        return `import { ${[...set].sort().join(", ")} } from "dawg";`;
+      })
+      .replace(
+        /\n\}\);\n$/,
+        `\n  notes: [note("E3", 2), note("G3", 3)],\n});\n`,
+      );
+    expect(authored).not.toBe(printed);
+    const before = revision(a);
+    await Bun.write(join(workspace, trackFile), authored);
+    await until(
+      () => revision(a) > before && a.vt.text().includes("applied from files"),
+      "files applied in A",
+      () => a.vt.text(),
+      15_000,
+    );
+
+    // A TUI edit lands in the file; the hand-written notes stay.
+    await edit(a, "add C4 at 0 for 1");
+    let text = "";
+    const reprintDeadline = Date.now() + 15_000;
+    while (!text.includes('note("C4", 0)')) {
+      if (Date.now() > reprintDeadline)
+        throw new Error(`track file not reprinted\n${text}\n${a.vt.text()}`);
+      await Bun.sleep(50);
+      text = await readTrack();
+    }
+    expect(text).toContain('note("E3", 2)');
+    expect(text).toContain('note("G3", 3)');
+
+    const b = open(workspace, "B");
+    await ready(b);
+    await converged([a, b]);
+    const check = await cli(["check"]);
+    expect(check.stderr).toBe("");
+    expect(check.code).toBe(0);
+    expect(check.stdout).toMatch(/^ok · \d+ tracks?, 3 notes/);
+    await close(b);
+    await close(a);
+  },
+  120_000,
+);
