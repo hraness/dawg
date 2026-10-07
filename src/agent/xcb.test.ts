@@ -21,6 +21,7 @@ import {
 } from "./agent.ts";
 import {
   generateText,
+  providerFingerprint,
   providerLabel,
   runProviderTurn,
   selectProvider,
@@ -100,6 +101,37 @@ describe("xcb capabilities", () => {
     expect(parsed.accounts[1]?.label).not.toContain("\u001b");
     expect(() => parseCapabilities({ version: 2 })).toThrow(XcbError);
     expect(() => parseCapabilities("nope")).toThrow(XcbError);
+  });
+
+  test("a pending automatic admission is usable; denied never is", () => {
+    const row = (extra: Record<string, unknown>) => ({
+      id: "acct",
+      provider: "devin",
+      connected: true,
+      available: false,
+      reason: "application_not_qualified",
+      models: [{ key: "devin/swe-2-high" }],
+      ...extra,
+    });
+    const parsed = parseCapabilities({
+      version: 1,
+      accounts: [
+        row({ id: "p", admission: "pending" }),
+        row({ id: "o", admission: { state: "pending" } }),
+        row({ id: "d", available: true, admission: "denied" }),
+        row({ id: "x", admission: "weird" }),
+        row({ id: "n" }),
+        row({ id: "e", admission: "pending", models: [] }),
+      ],
+    });
+    const by = Object.fromEntries(parsed.accounts.map((a) => [a.id, a]));
+    expect(by.p).toMatchObject({ available: true, admission: "pending" });
+    expect(by.o).toMatchObject({ available: true, admission: "pending" });
+    expect(by.d).toMatchObject({ available: false, admission: "denied" });
+    expect(by.x?.available).toBe(false);
+    expect(by.x && "admission" in by.x).toBe(false);
+    expect(by.n?.available).toBe(false);
+    expect(by.e?.available).toBe(false);
   });
 
   test("readCapabilities surfaces non-JSON and failures", async () => {
@@ -542,6 +574,83 @@ describe("provider selection", () => {
     ).toBe(1);
     expect(lines.join("\n")).toContain(
       "curl -fsSL https://xcb.sh/install.sh | sh",
+    );
+  });
+
+  test("pending accounts select with admissionPending; a preset login saves that pair", async () => {
+    const caps = {
+      version: 1,
+      supported: true,
+      accounts: [
+        {
+          id: "a1",
+          name: "first",
+          provider: "claude",
+          available: true,
+          models: [{ key: "claude/sonnet" }, { key: "claude/opus" }],
+        },
+        {
+          id: ACCOUNT,
+          name: "devin",
+          provider: "devin",
+          available: false,
+          admission: "pending",
+          models: [{ key: "devin/swe-2-high" }],
+        },
+      ],
+    };
+    const call: ScriptedCall = {
+      match: (_c, args) => args.includes("--capabilities"),
+      result: { stdout: JSON.stringify(caps) },
+    };
+    const lines: string[] = [];
+    const io: LoginIO = {
+      interactive: false,
+      print: (l) => void lines.push(l),
+      readSecret: async () => "",
+      ask: async () => "",
+    };
+    const deps = () => ({
+      auth: auth(scriptedRunner([call], ["xcb"])),
+      io,
+      hostname: "h",
+    });
+    expect(
+      await login("xcb", deps(), {
+        xcb: { account: ACCOUNT, model: "devin/swe-2-high" },
+      }),
+    ).toBe(0);
+    expect(lines.join("\n")).toContain("first request");
+    const selection = await selectProvider(
+      auth(scriptedRunner([call], ["xcb"])),
+    );
+    expect(selection).toMatchObject({
+      kind: "xcb",
+      account: ACCOUNT,
+      admissionPending: true,
+    });
+    lines.length = 0;
+    expect(
+      await login("xcb", deps(), { xcb: { account: "gone", model: "m" } }),
+    ).toBe(1);
+    expect(lines.join("\n")).toContain("no longer available");
+    // The saved pair is unchanged by the failed preset.
+    expect(
+      await selectProvider(auth(scriptedRunner([call], ["xcb"]))),
+    ).toMatchObject({ account: ACCOUNT });
+  });
+
+  test("providerFingerprint changes when config or credentials change", async () => {
+    const before = providerFingerprint(dir, {});
+    await writeConfig(auth(scriptedRunner([])), { provider: "gateway" });
+    const after = providerFingerprint(dir, {});
+    expect(after).not.toBe(before);
+    expect(providerFingerprint(dir, {})).toBe(after);
+    expect(providerFingerprint(dir, { AI_GATEWAY_API_KEY: KEY })).not.toContain(
+      KEY,
+    );
+    expect(providerFingerprint(dir, { AI_GATEWAY_API_KEY: KEY })).not.toBe(
+      after,
     );
   });
 

@@ -1,6 +1,12 @@
 import { hostname } from "node:os";
 import { defaultAuthEnv } from "./credentials.ts";
-import { authStatus, login, logout, type LoginIO } from "./login.ts";
+import {
+  authStatus,
+  listXcbChoices,
+  login,
+  logout,
+  type LoginIO,
+} from "./login.ts";
 import { systemRunner, type CommandRunner } from "./runner.ts";
 import type { GatewayModel } from "../agent/gateway.ts";
 import { audioStatusLine } from "../audio/engine.ts";
@@ -34,8 +40,15 @@ export async function tuiAuthCommand(
         })),
         audioStatusLine(),
       );
-    else if (rest.includes("--xcb")) await login("xcb", deps);
-    else if (rest.includes("--key"))
+    else if (rest.includes("--xcb")) {
+      const account = flagValue(rest, "--account");
+      const model = flagValue(rest, "--model");
+      await login(
+        "xcb",
+        deps,
+        account && model ? { xcb: { account, model } } : {},
+      );
+    } else if (rest.includes("--key"))
       lines.push(
         "Paste a key from a shell: `track login --key` (input is hidden there).",
       );
@@ -46,4 +59,32 @@ export async function tuiAuthCommand(
     );
   }
   return lines.map((line) => line.slice(0, 240));
+}
+
+function flagValue(args: readonly string[], flag: string): string | undefined {
+  const index = args.indexOf(flag);
+  const value = index >= 0 ? args[index + 1] : undefined;
+  return value && !value.startsWith("--") ? value : undefined;
+}
+
+export type XcbPickerItem = Readonly<{ label: string; value: string }>;
+
+/**
+ * Picker rows for `/login --xcb`: one per usable account and model, valued as
+ * the follow-up command that saves it. Undefined when xcb is missing or
+ * unreadable (the plain login path then prints the guidance).
+ */
+export async function xcbPickerItems(
+  runner: CommandRunner = systemRunner,
+): Promise<XcbPickerItem[] | undefined> {
+  const choices = await listXcbChoices(defaultAuthEnv(runner));
+  return choices?.map(({ account, model }) => ({
+    label: [
+      account.label,
+      account.provider,
+      model.label === model.key ? model.key : `${model.label} (${model.key})`,
+      ...(account.admission === "pending" ? ["admits on first use"] : []),
+    ].join(" · "),
+    value: `/login --xcb --account ${account.id} --model ${model.key}`,
+  }));
 }

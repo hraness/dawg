@@ -1,4 +1,7 @@
+import { statSync } from "node:fs";
+import { join } from "node:path";
 import {
+  configDir,
   defaultAuthEnv,
   PROVIDER_CHOICES,
   readConfig,
@@ -48,6 +51,8 @@ export type ProviderSelection =
       account: string;
       accountLabel: string;
       model: string;
+      /** xcb admits this account on its first call, which takes longer. */
+      admissionPending?: boolean;
     }>
   | Readonly<{ kind: "offline"; choice: ProviderChoice; reason: string }>;
 
@@ -124,6 +129,7 @@ export async function selectProvider(
         account: account.id,
         accountLabel: account.label,
         model: saved.model,
+        ...(account.admission === "pending" ? { admissionPending: true } : {}),
       };
     if (choice === "xcb")
       return {
@@ -141,6 +147,7 @@ export async function selectProvider(
       account: account.id,
       accountLabel: account.label,
       model: account.models[0]!.key,
+      ...(account.admission === "pending" ? { admissionPending: true } : {}),
     };
   return {
     kind: "offline",
@@ -150,6 +157,31 @@ export async function selectProvider(
         ? "no xcb account is qualified for applications; run `track login --xcb`"
         : `no model configured; ${LOGIN_HINT}`,
   };
+}
+
+/**
+ * A cheap fingerprint of everything on disk and in the environment that
+ * `selectProvider` reads (config.json, credentials.json, provider env vars).
+ * Two stats per call; the host re-resolves the provider when it changes.
+ */
+export function providerFingerprint(
+  dir: string = configDir(),
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): string {
+  const parts = ["config.json", "credentials.json"].map((name) => {
+    try {
+      const info = statSync(join(dir, name));
+      return `${name}:${info.size}:${info.mtimeMs}:${info.ino}`;
+    } catch {
+      return `${name}:-`;
+    }
+  });
+  // Presence only: a process's environment cannot change under it, and the
+  // fingerprint must never carry secret material.
+  parts.push(
+    `env:${env.TRACK_PROVIDER ?? "-"}:${env.AI_GATEWAY_API_KEY ? 1 : 0}`,
+  );
+  return parts.join("|");
 }
 
 /** `opus-5.5 · gateway`, `claude/sonnet · xcb`, or `offline`. */

@@ -57,7 +57,24 @@ export interface TrackScoreSnapshot {
   transportStartedAtMs?: number | undefined;
   playing?: boolean | undefined;
   activity?: string | undefined;
+  /**
+   * Other unmuted tracks drawn dimmed under the focused track, each in its own
+   * accent. Empty or omitted in focus view.
+   */
+  layers?: readonly HighwayLayer[] | undefined;
 }
+
+/** One background track overlaid on the highway. */
+export interface HighwayLayer {
+  trackId: string;
+  trackName?: string | undefined;
+  notes: readonly NoteSnapshot[];
+  /** The layer's own lanes (drum voices); mapped onto the main projection. */
+  projection?: LaneProjection | undefined;
+}
+
+/** Bound on overlaid notes so a dense arrangement cannot stall a frame. */
+export const MAX_LAYER_NOTES = 2048;
 
 // ---------------------------------------------------------------------------
 // Lane projections
@@ -162,7 +179,41 @@ export function projectionFor(score: TrackScoreSnapshot): LaneProjection {
       score.laneCount ?? score.laneLabels?.length ?? 12,
       score.laneLabels,
     );
-  return pitchProjection(score.notes);
+  // Melodic overlays share the focused track's pitch axis, so the fit covers
+  // their pitches too and a bass line and a lead keep their real intervals.
+  const melodic = (score.layers ?? [])
+    .filter((layer) => isPitchLayer(layer))
+    .flatMap((layer) => layer.notes);
+  return pitchProjection(
+    melodic.length ? [...score.notes, ...melodic] : score.notes,
+  );
+}
+
+function isPitchLayer(layer: HighwayLayer): boolean {
+  return (
+    layer.projection === undefined &&
+    !layer.notes.some((note) => note.lane !== undefined)
+  );
+}
+
+/**
+ * Lane mapper for an overlay: pitch layers reuse a pitch main projection
+ * directly; anything else is projected on its own lanes and scaled across the
+ * main lane count.
+ */
+export function layerLaneOf(
+  layer: HighwayLayer,
+  main: LaneProjection,
+): (note: NoteSnapshot) => number | undefined {
+  if (main.kind === "pitch" && isPitchLayer(layer))
+    return (note) => main.laneOf(note);
+  const own = layer.projection ?? projectionFor({ notes: layer.notes });
+  const scale = (main.laneCount - 1) / Math.max(1, own.laneCount - 1);
+  return (note) => {
+    const lane = own.laneOf(note);
+    if (lane === undefined) return undefined;
+    return Math.max(0, Math.min(main.laneCount - 1, Math.round(lane * scale)));
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -532,11 +583,34 @@ export function paintHighway(
     start: number;
     end: number;
     phase: HitPhase;
+    accent: Style;
+    dim: boolean;
   }
   const occurrences: Occurrence[] = [];
-  for (const note of score.notes) {
+  const sources: {
+    note: NoteSnapshot;
+    laneOf: (note: NoteSnapshot) => number | undefined;
+    accent: Style;
+    dim: boolean;
+  }[] = [];
+  let layerBudget = MAX_LAYER_NOTES;
+  for (const layer of score.layers ?? []) {
+    if (layer.trackId === score.trackId) continue;
+    const laneOf = layerLaneOf(layer, projection);
+    const layerAccent = accentStyle(theme, layer.trackId);
+    for (const note of layer.notes) {
+      if (layerBudget <= 0) break;
+      layerBudget -= 1;
+      sources.push({ note, laneOf, accent: layerAccent, dim: true });
+    }
+  }
+  const focusLaneOf = (note: NoteSnapshot) => projection.laneOf(note);
+  for (const note of score.notes)
+    sources.push({ note, laneOf: focusLaneOf, accent, dim: false });
+  for (const source of sources) {
+    const { note } = source;
     if (!Number.isFinite(note.startBeat)) continue;
-    const lane = projection.laneOf(note);
+    const lane = source.laneOf(note);
     if (lane === undefined) continue;
     const duration = Math.max(0, note.durationBeats ?? 0);
     const starts: number[] = [];
@@ -557,6 +631,8 @@ export function paintHighway(
         start,
         end,
         phase: hitPhase(start, end, beat, bpm),
+        accent: source.accent,
+        dim: source.dim,
       });
     }
   }
@@ -569,8 +645,12 @@ export function paintHighway(
     burst: 5,
     flash: 6,
   };
+  // Dimmed overlays first so the focused track always draws on top.
   occurrences.sort(
-    (a, b) => order[a.phase] - order[b.phase] || b.start - a.start,
+    (a, b) =>
+      Number(b.dim) - Number(a.dim) ||
+      order[a.phase] - order[b.phase] ||
+      b.start - a.start,
   );
 
   const rowOf = (time: number): number =>
@@ -582,6 +662,20 @@ export function paintHighway(
     const width = layout.laneWidth > 0 ? layout.tileWidth : 1;
     const center = x + Math.floor((width - 1) / 2);
     const velocity = Math.max(0, Math.min(1, note.velocity ?? 0.8));
+    if (item.dim) {
+      paintDimmed(painter, glyphs, roles, item, {
+        x,
+        width,
+        center,
+        headRow: rowOf(item.start),
+        tailRow: rowOf(item.end),
+        hitRow,
+        lastNoteRow,
+        sustaining: beat < item.end,
+        style: shade(velocityStyle(item.accent, velocity), -0.5),
+      });
+      continue;
+    }
     let base = velocityStyle(accent, velocity);
     if (note.muted) base = roles.mutedNote;
     else if (note.pending)
@@ -740,6 +834,52 @@ export function paintHighway(
     }
   }
   return layout;
+}
+
+/**
+ * A background track: a quiet head and sustain line in the track's accent,
+ * no hit flash, sparks or ghosts, so the focused track stays readable.
+ */
+function paintDimmed(
+  painter: Painter,
+  glyphs: HighwayGlyphs,
+  roles: Theme["roles"],
+  item: { note: NoteSnapshot; phase: HitPhase },
+  geometry: {
+    x: number;
+    width: number;
+    center: number;
+    headRow: number;
+    tailRow: number;
+    hitRow: number;
+    lastNoteRow: number;
+    sustaining: boolean;
+    style: Style;
+  },
+): void {
+  const { x, width, center, headRow, tailRow, hitRow, lastNoteRow } = geometry;
+  const style = item.note.muted ? roles.mutedNote : geometry.style;
+  const head = glyphs.density[Math.min(1, densityIndex(item.note.velocity))]!;
+  const tile = (row: number, ch: string): void => {
+    if (row < 0 || row > lastNoteRow) return;
+    for (let offset = 0; offset < width; offset += 1)
+      painter.put(x + offset, row, ch, style);
+  };
+  if (item.phase === "approach") {
+    for (
+      let row = Math.max(0, tailRow);
+      row < Math.min(headRow, hitRow);
+      row += 1
+    )
+      painter.put(center, row, glyphs.beam, style);
+    if (headRow <= hitRow - 1) tile(headRow, head);
+    return;
+  }
+  if (item.phase === "past" || item.phase === "ghost") return;
+  if (geometry.sustaining && tailRow < hitRow)
+    for (let row = Math.max(0, tailRow); row < hitRow; row += 1)
+      painter.put(center, row, glyphs.beam, style);
+  tile(hitRow, head);
 }
 
 function mixStyle(base: Style, overlay: Style): Style {
