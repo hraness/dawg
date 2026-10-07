@@ -24,7 +24,7 @@ import {
   resolveBeat,
   type TrackScoreSnapshot,
 } from "./highway.ts";
-import { classifyKey, type UiCommand } from "./keys.ts";
+import { classifyKey, overlayKey, type UiCommand } from "./keys.ts";
 import { PromptModel, type PromptAction, type PromptMode } from "./prompt.ts";
 import { CellBuffer, ScreenWriter, type CursorPosition } from "./screen.ts";
 import { displayWidth, truncate } from "./text.ts";
@@ -62,7 +62,58 @@ export interface UiState {
   theme: Theme;
   capabilities: TerminalCapabilities;
   reducedMotion: boolean;
-  overlay: "log" | undefined;
+  overlay: "log" | "picker" | undefined;
+  /** Transcript scroll (entries up from the newest) and filter. */
+  log?: LogView | undefined;
+  picker?: PickerState | undefined;
+}
+
+export type LogFilter = "all" | "requests" | "ops" | "errors";
+export const LOG_FILTERS: readonly LogFilter[] = [
+  "all",
+  "requests",
+  "ops",
+  "errors",
+];
+
+export interface LogView {
+  scroll: number;
+  filter: LogFilter;
+}
+
+/** An arrow-key list overlay (`/resume`, `/login --xcb`). */
+export interface PickerState {
+  /** Caller tag returned with the choice. */
+  id: string;
+  title: string;
+  items: readonly PickerItem[];
+  index: number;
+}
+
+export interface PickerItem {
+  label: string;
+  /** Opaque value returned on Enter. */
+  value: string;
+  detail?: string | undefined;
+}
+
+/** Most picker rows kept; longer lists are truncated by the caller's order. */
+export const MAX_PICKER_ITEMS = 64;
+
+export function logEntriesFor(
+  entries: readonly TranscriptEntry[],
+  filter: LogFilter,
+): readonly TranscriptEntry[] {
+  if (filter === "all") return entries;
+  return entries.filter((entry) =>
+    filter === "requests"
+      ? entry.kind === "request"
+      : filter === "errors"
+        ? entry.kind === "error"
+        : entry.kind === "op" ||
+          entry.kind === "revision" ||
+          entry.kind === "agent",
+  );
 }
 
 export interface FrameSize {
@@ -570,28 +621,36 @@ function paintOverlay(
     buffer.set(left, y, box.v, border);
     buffer.set(left + boxWidth - 1, y, box.v, border);
   }
+  const view = ui.log ?? { scroll: 0, filter: "all" };
+  const inner = height - 2;
+  const all = logEntriesFor(activity.transcript, view.filter);
+  const maxScroll = Math.max(0, all.length - inner);
+  const scroll = Math.max(0, Math.min(maxScroll, view.scroll));
+  const end = all.length - scroll;
+  const entries = all.slice(Math.max(0, end - inner), end);
+  const position =
+    scroll > 0 ? ` · ${end}/${all.length}` : all.length > inner ? " · end" : "";
   buffer.text(
     left + 2,
     top,
-    " transcript · requests, ops, revisions, errors ",
+    ` transcript · ${view.filter}${position} `,
     onBackground({ ...roles.text, bold: true }, panel),
     boxWidth - 4,
   );
-  const hint = " esc close ";
-  if (boxWidth > 60)
+  const hint = " ↑↓ pgup pgdn scroll · / filter · esc close ";
+  const hintText = capabilities.unicode ? hint : hint.replace("↑↓", "up dn");
+  if (boxWidth > hintText.length + 4)
     buffer.text(
-      left + boxWidth - 2 - hint.length,
+      left + boxWidth - 2 - hintText.length,
       top + height - 1,
-      hint,
+      hintText,
       onBackground(roles.muted, panel),
     );
-  const inner = height - 2;
-  const entries = activity.transcript.slice(-inner);
   if (entries.length === 0)
     buffer.text(
       left + 2,
       top + 1,
-      "nothing yet",
+      view.filter === "all" ? "nothing yet" : `no ${view.filter} yet`,
       onBackground(roles.faint, panel),
     );
   entries.forEach((entry, index) => {
@@ -616,6 +675,94 @@ function paintOverlay(
       truncate(entry.text.replace(/\s+/g, " "), boxWidth - 8),
       onBackground(entry.kind === "error" ? roles.error : roles.text, panel),
     );
+  });
+}
+
+function paintBox(
+  buffer: CellBuffer,
+  ui: UiState,
+  rect: { left: number; top: number; width: number; height: number },
+): Style {
+  const roles = ui.theme.roles;
+  const box = ui.capabilities.unicode ? UNICODE_BOX : ASCII_BOX;
+  const panel = roles.panel;
+  const border = onBackground(roles.borderFocus, panel);
+  const { left, top, width, height } = rect;
+  buffer.fill(left, top, width, height, panel);
+  buffer.set(left, top, box.tl, border);
+  buffer.set(left + width - 1, top, box.tr, border);
+  buffer.set(left, top + height - 1, box.bl, border);
+  buffer.set(left + width - 1, top + height - 1, box.br, border);
+  for (let x = left + 1; x < left + width - 1; x += 1) {
+    buffer.set(x, top, box.h, border);
+    buffer.set(x, top + height - 1, box.h, border);
+  }
+  for (let y = top + 1; y < top + height - 1; y += 1) {
+    buffer.set(left, y, box.v, border);
+    buffer.set(left + width - 1, y, box.v, border);
+  }
+  return panel;
+}
+
+function paintPicker(
+  buffer: CellBuffer,
+  ui: UiState,
+  region: { y: number; height: number },
+  width: number,
+): void {
+  const picker = ui.picker;
+  if (!picker) return;
+  const roles = ui.theme.roles;
+  const left = width >= 60 ? 2 : 0;
+  const boxWidth = width - left * 2;
+  const height = Math.min(region.height, picker.items.length + 2);
+  if (height < 3 || boxWidth < 10) return;
+  const panel = paintBox(buffer, ui, {
+    left,
+    top: region.y,
+    width: boxWidth,
+    height,
+  });
+  buffer.text(
+    left + 2,
+    region.y,
+    ` ${picker.title} `,
+    onBackground({ ...roles.text, bold: true }, panel),
+    boxWidth - 4,
+  );
+  const hint = ui.capabilities.unicode
+    ? " ↑↓ move · enter choose · esc cancel "
+    : " up/dn move · enter choose · esc cancel ";
+  if (boxWidth > hint.length + 4)
+    buffer.text(
+      left + boxWidth - 2 - hint.length,
+      region.y + height - 1,
+      hint,
+      onBackground(roles.muted, panel),
+    );
+  const inner = height - 2;
+  const first = Math.max(
+    0,
+    Math.min(picker.items.length - inner, picker.index - inner + 1),
+  );
+  picker.items.slice(first, first + inner).forEach((item, offset) => {
+    const index = first + offset;
+    const y = region.y + 1 + offset;
+    const selected = index === picker.index;
+    const marker = selected ? (ui.capabilities.unicode ? "›" : ">") : " ";
+    const style = selected
+      ? onBackground({ ...roles.borderFocus, bold: true }, panel)
+      : onBackground(roles.text, panel);
+    buffer.text(left + 2, y, marker, style);
+    const room = boxWidth - 6;
+    const used = buffer.text(left + 4, y, truncate(item.label, room), style);
+    if (item.detail && used + 3 < room)
+      buffer.text(
+        left + 4 + used + 2,
+        y,
+        truncate(item.detail, room - used - 2),
+        onBackground(roles.muted, panel),
+      );
   });
 }
 
@@ -659,6 +806,8 @@ export function composeFrame(
   const beat = view.beat ?? resolveBeat(view.score, nowMs);
   if (layout.highway.height > 0) {
     if (ui.overlay === "log") paintOverlay(buffer, ui, layout.highway, width);
+    else if (ui.overlay === "picker" && ui.picker)
+      paintPicker(buffer, ui, layout.highway, width);
     else
       paintHighway(
         buffer,
@@ -699,6 +848,12 @@ export interface TuiAppOptions {
 export type AppInput =
   | { type: "action"; action: PromptAction }
   | { type: "ui"; command: UiCommand }
+  /** Enter on a picker row; `value` is the chosen item's value. */
+  | { type: "pick"; picker: string; value: string }
+  /** Esc on a picker. */
+  | { type: "pick-cancel"; picker: string }
+  /** Consumed by an overlay (scroll, filter, move). */
+  | { type: "overlay" }
   | { type: "none" };
 
 export class TuiApp {
@@ -709,7 +864,11 @@ export class TuiApp {
   capabilities: TerminalCapabilities;
   themeName: ThemeName;
   reducedMotion: boolean;
-  overlay: "log" | undefined;
+  overlay: "log" | "picker" | undefined;
+  log: LogView = { scroll: 0, filter: "all" };
+  picker: PickerState | undefined;
+  /** `/view all` overlays every unmuted track; `/view focus` shows one. */
+  highwayView: "all" | "focus" = "all";
   private writer: ScreenWriter;
   private lastFrame: Frame | undefined;
   private lastFrameAt = Number.NEGATIVE_INFINITY;
@@ -741,6 +900,8 @@ export class TuiApp {
       capabilities: this.capabilities,
       reducedMotion: this.reducedMotion,
       overlay: this.overlay,
+      log: this.log,
+      picker: this.picker,
     };
   }
 
@@ -783,10 +944,92 @@ export class TuiApp {
         action: this.prompt.handle({ type: "paste", text: value.text }),
       };
     const key = classifyKey(value);
+    if (this.overlay === "picker" && this.picker) {
+      const picker = this.picker;
+      const nav = overlayKey(value);
+      if (nav === "up" || nav === "down" || nav === "pgup" || nav === "pgdn") {
+        const step =
+          nav === "up" ? -1 : nav === "down" ? 1 : nav === "pgup" ? -8 : 8;
+        picker.index = Math.max(
+          0,
+          Math.min(picker.items.length - 1, picker.index + step),
+        );
+        return { type: "overlay" };
+      }
+      if (nav === "home" || nav === "end") {
+        picker.index = nav === "home" ? 0 : picker.items.length - 1;
+        return { type: "overlay" };
+      }
+      if (nav === "enter") {
+        const item = picker.items[picker.index];
+        this.closePicker();
+        return item
+          ? { type: "pick", picker: picker.id, value: item.value }
+          : { type: "pick-cancel", picker: picker.id };
+      }
+      if (key.type === "ui" && key.command === "close-overlay") {
+        this.closePicker();
+        return { type: "pick-cancel", picker: picker.id };
+      }
+      if (key.type === "text" && /^[1-9]$/.test(key.text)) {
+        const index = Number(key.text) - 1;
+        if (index < picker.items.length) {
+          const item = picker.items[index]!;
+          this.closePicker();
+          return { type: "pick", picker: picker.id, value: item.value };
+        }
+        return { type: "overlay" };
+      }
+      // Quit and redraw still work; everything else is swallowed.
+      if (
+        key.type === "ui" &&
+        (key.command === "quit" || key.command === "redraw")
+      ) {
+        if (key.command === "redraw") this.invalidate();
+        return { type: "ui", command: key.command };
+      }
+      return { type: "overlay" };
+    }
+    if (this.overlay === "log") {
+      const nav = overlayKey(value);
+      const page = Math.max(1, this.io.rows() - 10);
+      if (nav && nav !== "enter") {
+        const step =
+          nav === "up"
+            ? 1
+            : nav === "down"
+              ? -1
+              : nav === "pgup"
+                ? page
+                : nav === "pgdn"
+                  ? -page
+                  : 0;
+        const total = logEntriesFor(
+          this.activity.transcript,
+          this.log.filter,
+        ).length;
+        this.log.scroll =
+          nav === "home"
+            ? total
+            : nav === "end"
+              ? 0
+              : Math.max(0, Math.min(total, this.log.scroll + step));
+        return { type: "overlay" };
+      }
+      if (key.type === "text" && key.text === "/") {
+        const next =
+          LOG_FILTERS[
+            (LOG_FILTERS.indexOf(this.log.filter) + 1) % LOG_FILTERS.length
+          ]!;
+        this.log = { scroll: 0, filter: next };
+        return { type: "overlay" };
+      }
+    }
     switch (key.type) {
       case "ui":
         if (key.command === "toggle-log") {
-          this.overlay = this.overlay ? undefined : "log";
+          this.overlay = this.overlay === "log" ? undefined : "log";
+          if (this.overlay === "log") this.log = { ...this.log, scroll: 0 };
           return { type: "ui", command: key.command };
         }
         if (key.command === "close-overlay") {
@@ -814,6 +1057,23 @@ export class TuiApp {
     }
   }
 
+  /** Show an arrow-key picker over the highway; replaces any overlay. */
+  openPicker(picker: Omit<PickerState, "index"> & { index?: number }): void {
+    const items = picker.items.slice(0, MAX_PICKER_ITEMS);
+    if (items.length === 0) return;
+    this.picker = {
+      ...picker,
+      items,
+      index: Math.max(0, Math.min(items.length - 1, picker.index ?? 0)),
+    };
+    this.overlay = "picker";
+  }
+
+  closePicker(): void {
+    this.picker = undefined;
+    if (this.overlay === "picker") this.overlay = undefined;
+  }
+
   /**
    * Handle TUI-local slash commands (`/log`, `/theme`, `/motion`).
    * Returns a receipt, or undefined when the command is not a UI command.
@@ -821,7 +1081,8 @@ export class TuiApp {
   command(text: string): string | undefined {
     const command = text.trim();
     if (/^\/(log|transcript)$/i.test(command)) {
-      this.overlay = this.overlay ? undefined : "log";
+      this.overlay = this.overlay === "log" ? undefined : "log";
+      if (this.overlay === "log") this.log = { ...this.log, scroll: 0 };
       return this.overlay
         ? "transcript open · esc closes"
         : "transcript closed";
@@ -837,6 +1098,17 @@ export class TuiApp {
       return this.capabilities.colorDepth === "none" && name !== "mono"
         ? `theme ${name} · terminal has no color, showing mono`
         : `theme ${name}`;
+    }
+    const view = command.match(/^\/view(?:\s+(\S+))?$/i);
+    if (view) {
+      const value = view[1]?.toLowerCase();
+      if (value === undefined)
+        this.highwayView = this.highwayView === "all" ? "focus" : "all";
+      else if (value === "all" || value === "focus") this.highwayView = value;
+      else return "view · /view focus | all";
+      return this.highwayView === "all"
+        ? "view all · every unmuted track, focused track on top"
+        : "view focus · focused track only";
     }
     const motion = command.match(/^\/motion(?:\s+(on|off))?$/i);
     if (motion) {

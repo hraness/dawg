@@ -264,9 +264,12 @@ test.skipIf(!supported)(
     // 1. Three windows on a new session, one per instrument.
     const drums = open(workspace, "drums", ["--new", "--track", "drums"]);
     await ready(drums);
+    // Sequential: each window creates its track on attach, and auto-claim
+    // below depends on score order drums, bass, keys.
     const bass = open(workspace, "bass", ["--track", "bass"]);
+    await ready(bass);
     const keys = open(workspace, "keys", ["--track", "keys"]);
-    await Promise.all([ready(bass), ready(keys)]);
+    await ready(keys);
     const trio = [drums, bass, keys];
     await converged(trio);
 

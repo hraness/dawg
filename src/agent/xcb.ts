@@ -49,6 +49,12 @@ export type XcbAccount = Readonly<{
   connected: boolean;
   reason: string | null;
   models: readonly XcbModel[];
+  /**
+   * xcb's per-account application admission, when it reports one. `pending`
+   * means xcb admits the account on first use (that call is slower); it
+   * treats it as usable. Absent on xcb builds without automatic admission.
+   */
+  admission?: "pending" | "admitted" | "denied" | undefined;
 }>;
 export type XcbCapabilities = Readonly<{
   supported: boolean;
@@ -72,6 +78,16 @@ function shortString(value: unknown, max: number, fallback = ""): string {
 }
 
 /** Parse `xcb --json generate --capabilities` output from `unknown`. */
+const ADMISSION_STATES = new Set(["pending", "admitted", "denied"]);
+
+/** `"pending"` or `{ state | status: "pending" }`; anything else is ignored. */
+function admissionState(value: unknown): XcbAccount["admission"] {
+  const raw = isRecord(value) ? (value.state ?? value.status) : value;
+  return typeof raw === "string" && ADMISSION_STATES.has(raw)
+    ? (raw as XcbAccount["admission"])
+    : undefined;
+}
+
 export function parseCapabilities(value: unknown): XcbCapabilities {
   if (!isRecord(value) || value.version !== 1)
     throw new XcbError("xcb capabilities were not a version-1 object");
@@ -107,11 +123,17 @@ export function parseCapabilities(value: unknown): XcbCapabilities {
       shortString(row.name, 64) ||
       shortString(row.email, 64) ||
       row.id;
+    const admission = admissionState(row.admission);
     accounts.push({
       id: row.id,
       label,
       provider: shortString(row.provider, 32, "unknown") || "unknown",
-      available: row.available === true && models.length > 0,
+      // A pending admission is usable: xcb admits the account on first call.
+      available:
+        models.length > 0 &&
+        admission !== "denied" &&
+        (row.available === true || admission === "pending"),
+      ...(admission ? { admission } : {}),
       connected: row.connected === true,
       reason:
         typeof row.reason === "string" ? shortString(row.reason, 64) : null,

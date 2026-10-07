@@ -78,3 +78,25 @@ export function classifyKey(value: string): KeyResult {
     .join("");
   return text ? { type: "text", text } : { type: "ignore" };
 }
+
+export type OverlayKey =
+  "up" | "down" | "pgup" | "pgdn" | "home" | "end" | "enter";
+
+const OVERLAY_SEQUENCES: Record<string, OverlayKey> = {
+  "\u001b[A": "up",
+  "\u001bOA": "up",
+  "\u001b[B": "down",
+  "\u001bOB": "down",
+  "\u001b[5~": "pgup",
+  "\u001b[6~": "pgdn",
+  "\u001b[H": "home",
+  "\u001b[1~": "home",
+  "\u001b[F": "end",
+  "\u001b[4~": "end",
+  "\r": "enter",
+};
+
+/** Navigation keys an open overlay (transcript, picker) consumes. */
+export function overlayKey(value: string): OverlayKey | undefined {
+  return OVERLAY_SEQUENCES[value];
+}

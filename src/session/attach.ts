@@ -22,7 +22,9 @@ import type { NamingTarget } from "./naming.ts";
 import type { SessionPort } from "./port.ts";
 import {
   createForkSession,
+  inheritedEvents,
   setCurrentSession,
+  type SessionEvent,
   type SessionRecord,
 } from "./store.ts";
 
@@ -115,6 +117,30 @@ export async function forkSession<T>(
   const record = await createForkSession(workspace, source, name);
   await setCurrentSession(workspace, record.sessionId);
   return record;
+}
+
+const inheritedCache = new Map<string, Promise<SessionEvent[]>>();
+
+/**
+ * The event log undo/redo replays: the fork ancestry's prefix (see
+ * `inheritedEvents`), then this session's own events. Undo in a fork can
+ * therefore step back past the fork point into the parent's edits. The
+ * inherited prefix never changes, so it is cached per lineage.
+ */
+export async function historyEvents<T>(
+  workspace: string,
+  record: SessionRecord<T>,
+): Promise<SessionEvent[]> {
+  const fork = record.meta.forkOf;
+  if (!fork) return record.events;
+  const key = `${workspace}\0${record.sessionId}\0${fork.sessionId}@${fork.revision}`;
+  let inherited = inheritedCache.get(key);
+  if (!inherited) {
+    inherited = inheritedEvents(workspace, record.meta, record.sessionId);
+    if (inheritedCache.size > 32) inheritedCache.clear();
+    inheritedCache.set(key, inherited);
+  }
+  return [...(await inherited), ...record.events];
 }
 
 /** The auto-namer's view of the live session. */

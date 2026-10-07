@@ -192,10 +192,15 @@ describe("trackd", () => {
       status: "duplicate",
       revision: 1,
     });
+    // A stale full composition cannot be merged.
     const stale = await second.apply({
-      ...intent,
+      base: 0,
+      kind: "score.replace",
       key: "note-key-2",
-      operations: [addNote("n2")],
+      payload: {},
+      composition: createScore({
+        tracks: [{ id: "main", name: "main", instrument: "sine" }],
+      }).toJSON(),
     });
     expect(stale).toMatchObject({
       status: "rebase",
@@ -213,6 +218,89 @@ describe("trackd", () => {
     expect(first.record.revision).toBe(1);
     expect(second.record.revision).toBe(1);
     expect(first.digest).toBe(second.digest);
+  });
+
+  test("stale operation intents rebase when nothing they touch changed", async () => {
+    const { workspace, sessionId, paths } = await session(["main", "bass"]);
+    const human = await client(workspace, sessionId, "human");
+    const agent = await client(workspace, sessionId, "agent");
+    expect(
+      await agent.apply({
+        base: 0,
+        kind: "score.operation",
+        payload: {},
+        operations: [addNote("a1")],
+      }),
+    ).toMatchObject({ status: "accepted", revision: 1 });
+    // The human edits another track while the agent still holds base 1.
+    expect(
+      await human.apply({
+        base: 1,
+        kind: "score.operation",
+        payload: {},
+        operations: [
+          { type: "updateTrack", trackId: "bass", patch: { volume: 0.5 } },
+        ],
+      }),
+    ).toMatchObject({ status: "accepted", revision: 2 });
+    const rebased = await agent.apply({
+      base: 1,
+      kind: "agent.tool",
+      payload: { summary: "more notes" },
+      operations: [
+        addNote("a2", 240),
+        { type: "updateNote", noteId: "a1", patch: { velocity: 0.9 } },
+      ],
+    });
+    expect(rebased).toEqual({ status: "accepted", revision: 3 });
+    const disk = await loadSession<{
+      notes: { id: string; velocity: number }[];
+      tracks: { id: string; volume: number }[];
+    }>(paths);
+    expect(disk.composition.notes.map((note) => note.id).sort()).toEqual([
+      "a1",
+      "a2",
+    ]);
+    expect(disk.composition.notes.find((n) => n.id === "a1")?.velocity).toBe(
+      0.9,
+    );
+    // The human's edit survived the rebase.
+    expect(disk.composition.tracks.find((t) => t.id === "bass")?.volume).toBe(
+      0.5,
+    );
+    const event = disk.events[2]!;
+    expect(event.payload).toMatchObject({ rebasedFrom: 1 });
+    // `before` is the score the operations were replayed on (rev 2), so undo
+    // drops only the agent's change.
+    const before = (event.payload as { before: typeof disk.composition })
+      .before;
+    expect(before.tracks.find((t) => t.id === "bass")?.volume).toBe(0.5);
+    expect(before.notes.map((note) => note.id)).toEqual(["a1"]);
+
+    // Touching something that changed since the base is still a conflict.
+    await human.apply({
+      base: 3,
+      kind: "score.operation",
+      payload: {},
+      operations: [{ type: "updateNote", noteId: "a2", patch: { pitch: 64 } }],
+    });
+    const conflict = await agent.apply({
+      base: 3,
+      kind: "agent.tool",
+      payload: {},
+      operations: [{ type: "removeNote", noteId: "a2" }],
+    });
+    expect(conflict).toMatchObject({ status: "rebase", currentRevision: 4 });
+    if (conflict.status === "rebase")
+      expect(conflict.message).toContain("note a2 changed");
+    // Bases beyond the log are never guessed.
+    const future = await agent.apply({
+      base: 99,
+      kind: "agent.tool",
+      payload: {},
+      operations: [addNote("a3")],
+    });
+    expect(future.status).toBe("rebase");
   });
 
   test("broadcasts one transport with a shared timestamp", async () => {

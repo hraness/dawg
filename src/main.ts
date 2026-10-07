@@ -19,6 +19,7 @@ import {
   ALL_TRACKS_OPEN_HINT,
   attachTrack,
   forkSession,
+  historyEvents,
   namingTarget,
   pickerLines,
   resolveSessionArg,
@@ -31,6 +32,7 @@ import { parsePrompt } from "./agent/ops.ts";
 import { applyMusicCommand, parseMusicCommand } from "./commands/music.ts";
 import { historyTarget, REDO_KIND, UNDO_KIND } from "./commands/history.ts";
 import { drumSnapshotFields } from "../tui/drums.ts";
+import { highwayLayers } from "../tui/layers.ts";
 import { drumVoicePitch, isDrumInstrument } from "../core/drums.ts";
 import {
   describeAgentEvent,
@@ -40,13 +42,14 @@ import {
 } from "./agent/agent.ts";
 import { type GatewayModel } from "./agent/gateway.ts";
 import {
+  providerFingerprint,
   providerLabel,
   runProviderTurn,
   selectProvider,
   type ProviderSelection,
 } from "./agent/provider.ts";
 import { runAuthCommand } from "./auth/cli.ts";
-import { tuiAuthCommand } from "./auth/tui.ts";
+import { tuiAuthCommand, xcbPickerItems } from "./auth/tui.ts";
 import { TransportClock } from "./audio/clock.ts";
 import {
   addNote,
@@ -99,7 +102,7 @@ Commands:
   track <name>, bars <count>, extend <count> bars
   /tracks, /status, /export <file>, /import <file>, /model opus-5.5|sol-6.1
   /sessions, /resume [n|name|id], /rename <name>|--auto, /fork [name]
-  /log, /theme default|high-contrast|mono, /motion on|off
+  /log, /view focus|all, /theme default|high-contrast|mono, /motion on|off
   /login [--xcb], /logout, /auth [--check]
 
 Auth:
@@ -228,6 +231,7 @@ let reportAgentActivity: (text: string) => void = () => undefined;
 let agentEventSink: (event: AgentEvent) => void = () => undefined;
 /** Resolved lazily (and again after /login); `undefined` until first needed. */
 let provider: Promise<ProviderSelection> | undefined;
+let providerStamp = { fingerprint: "", at: 0, offline: false };
 let providerName = "";
 if (demo) {
   if (score.notes.length === 0) score = seedDemo(score, requestedTrack);
@@ -352,6 +356,15 @@ function snapshot(
       value.tracks.find((track) => track.id === requestedTrack)?.instrument,
       notes,
     ),
+    layers:
+      tui.highwayView === "all"
+        ? highwayLayers(
+            value.tracks,
+            value.notes,
+            value.ticksPerBeat,
+            requestedTrack,
+          )
+        : undefined,
   };
 }
 
@@ -627,6 +640,14 @@ async function runInteractive(): Promise<void> {
               const base = record.revision;
               receipt(await stepHistory(input.command), base);
             }
+          } else if (input.type === "pick") {
+            // Picker choices run as the command they stand for.
+            queuedPrompts.unshift(
+              input.picker === "resume"
+                ? `/resume ${input.value}`
+                : input.value,
+            );
+            void drainQueue();
           } else if (action?.kind === "exit") exiting = true;
           else if (action?.kind === "cancel" && agentTurn) {
             agentTurn.controller.abort();
@@ -715,6 +736,23 @@ async function submit(prompt: string): Promise<string> {
     selectedModel = modelCommand[1]!.toLowerCase() as GatewayModel;
     if (provider) void currentProvider();
     return `model · ${selectedModel}`;
+  }
+  if (/^\/login\s+--xcb$/i.test(prompt.trim())) {
+    tui.activity.setSpinner("xcb accounts");
+    try {
+      const items = await xcbPickerItems();
+      if (items && items.length > 1) {
+        tui.openPicker({
+          id: "xcb",
+          title: "xcb account · model · ↑/↓ Enter · Esc",
+          items,
+        });
+        return `xcb · ${items.length} choices`;
+      }
+    } finally {
+      tui.activity.setSpinner(undefined);
+    }
+    // Zero or one choice: the plain flow saves it or prints guidance.
   }
   if (/^\/(login|logout|auth)\b/i.test(prompt.trim())) {
     tui.activity.setSpinner(prompt.trim().split(/\s+/)[0]!.slice(1));
@@ -1011,14 +1049,29 @@ async function sessionCommand(command: string): Promise<string | undefined> {
     return `renamed · ${result.meta.name}`;
   }
   const sessions = await listSessions(workspace);
-  if (verb === "sessions" || (verb === "resume" && !arg)) {
+  if (verb === "resume" && !arg) {
+    const readable = sessions.filter((session) => !session.error).slice(0, 64);
+    if (readable.length === 0) return "no sessions to resume";
+    const current = readable.findIndex(
+      (session) => session.sessionId === record.sessionId,
+    );
+    tui.openPicker({
+      id: "resume",
+      title: "resume session · ↑/↓ Enter · Esc",
+      items: readable.map((session) => ({
+        label: `${session.sessionId === record.sessionId ? "* " : "  "}${formatSessionLine(session, sessions)}`,
+        value: session.sessionId,
+      })),
+      index: Math.max(0, current),
+    });
+    return "resume · pick a session (or /resume <n|name|id>)";
+  }
+  if (verb === "sessions") {
     const lines = pickerLines(sessions, record.sessionId, (session) =>
       formatSessionLine(session, sessions),
     );
     for (const line of lines) tui.activity.pushCard(line, { tone: "info" });
-    return verb === "resume"
-      ? "resume · /resume <n|name|id>"
-      : `${lines.length} sessions`;
+    return `${lines.length} sessions`;
   }
   if (agentTurn) return "agent busy; finish or Esc first";
   if (verb === "fork") {
@@ -1087,7 +1140,11 @@ async function commitScore(
 
 async function stepHistory(direction: "undo" | "redo"): Promise<string> {
   const latest = await port.load();
-  const target = historyTarget(latest.events, direction);
+  // A fork's undo continues into its parent's history past the fork point.
+  const target = historyTarget(
+    await historyEvents(process.cwd(), latest),
+    direction,
+  );
   if (!target) return `nothing to ${direction}`;
   try {
     const restored = scoreFromJSON(target.composition);
@@ -1149,6 +1206,9 @@ async function runAgent(text: string): Promise<string> {
   const turn = { controller: new AbortController(), steering: [] as string[] };
   agentTurn = turn;
   reportAgentActivity(`${providerName} · thinking…`);
+  // xcb admits a pending account on its first call, which takes longer.
+  let admitting = selection.kind === "xcb" && selection.admissionPending;
+  if (admitting) tui.activity.setSpinner("admitting account…");
   try {
     const result = await runProviderTurn({
       selection,
@@ -1156,7 +1216,14 @@ async function runAgent(text: string): Promise<string> {
       model: selectedModel,
       host: agentHost(turn),
       signal: turn.controller.signal,
-      onEvent: (event) => agentEventSink(event),
+      onEvent: (event) => {
+        if (admitting && event.type === "step" && event.step <= 1) return;
+        if (admitting) {
+          admitting = false;
+          provider = undefined; // Re-read capabilities: now admitted.
+        }
+        agentEventSink(event);
+      },
     });
     return describeAgentEvent(result) ?? "agent finished";
   } finally {
@@ -1170,14 +1237,28 @@ function authTone(line: string): "success" | "warning" | "info" {
   return "info";
 }
 
+/**
+ * The cached provider, re-resolved when `~/.config/track` config or
+ * credentials change (two stats per call) and, while offline, at most every
+ * 30 s so an account admitted elsewhere is picked up without a restart.
+ */
 function currentProvider(): Promise<ProviderSelection> {
-  provider ??= selectProvider().catch((): ProviderSelection => ({
-    kind: "offline",
-    choice: "auto",
-    reason: "provider unavailable; run `track login`",
-  }));
+  const fingerprint = providerFingerprint();
+  const stale =
+    fingerprint !== providerStamp.fingerprint ||
+    (providerStamp.offline && Date.now() - providerStamp.at > 30_000);
+  if (provider && stale) provider = undefined;
+  if (!provider) {
+    providerStamp = { fingerprint, at: Date.now(), offline: false };
+    provider = selectProvider().catch((): ProviderSelection => ({
+      kind: "offline",
+      choice: "auto",
+      reason: "provider unavailable; run `track login`",
+    }));
+  }
   return provider.then((selection) => {
     providerName = providerLabel(selection, selectedModel);
+    providerStamp.offline = selection.kind === "offline";
     return selection;
   });
 }
@@ -1196,15 +1277,29 @@ function agentHost(turn: { steering: string[] }): AgentHost {
       }),
     }),
     async commit(change) {
-      if (change.baseRevision !== record.revision)
+      // trackd rebases operation intents onto newer revisions when nothing
+      // they touch changed; the file port keeps the strict base check.
+      if (port.mode !== "daemon" && change.baseRevision !== record.revision)
         throw new StaleRevisionError(change.baseRevision, record.revision);
       try {
-        await commitScore(change.next, "agent.tool", {
-          tool: change.toolName,
-          callId: change.callId,
-          summary: change.summary,
-          operations: change.operations,
-        });
+        record = await port.appendOperations(
+          { ...record, revision: change.baseRevision },
+          {
+            kind: "agent.tool",
+            payload: {
+              tool: change.toolName,
+              callId: change.callId,
+              summary: change.summary,
+              operations: change.operations,
+              before: record.composition,
+            },
+          },
+          change.operations,
+          change.next.toJSON(),
+        );
+        // A rebased commit lands on a newer score than `change.next`.
+        score = scoreFromJSON(record.composition);
+        if (clock.playing) void audio.play(score);
       } catch (error) {
         if (error instanceof SessionConflictError)
           throw new StaleRevisionError(

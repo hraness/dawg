@@ -10,6 +10,11 @@ import { TransportClock } from "../audio/clock.ts";
 import { AudioEngine } from "../audio/engine.ts";
 import { acquireSessionLock } from "./lock.ts";
 import {
+  compositionAt,
+  MAX_REBASE_DISTANCE,
+  rebaseOperations,
+} from "./rebase.ts";
+import {
   compositionDigest,
   daemonLockPath,
   daemonLogPath,
@@ -390,20 +395,29 @@ export class TrackDaemon {
   ): Promise<ApplyResult> {
     const seen = this.keys.get(message.key);
     if (seen !== undefined) return { status: "duplicate", revision: seen };
-    if (message.base !== this.record.revision)
-      return {
-        status: "rebase",
-        baseRevision: message.base,
-        currentRevision: this.record.revision,
-        message: `session is at rev ${this.record.revision}; rebase from rev ${message.base}`,
-      };
+    const stale = message.base !== this.record.revision;
+    let rebased = false;
     let next: TrackScore;
     try {
       if (message.operations) {
-        next = this.score;
-        for (const operation of message.operations)
-          next = applyScoreOperation(next, parseOperation(operation));
-      } else next = scoreFromJSON(message.composition);
+        const operations = message.operations.map(parseOperation);
+        if (stale) {
+          // Operation intents from an older base replay on the current score
+          // when nothing they touch changed in between.
+          const base = this.baseScore(message.base);
+          if (base === undefined)
+            return this.rebaseReply(message.base, "base is not recoverable");
+          const result = rebaseOperations(base, this.score, operations);
+          if (!result.ok) return this.rebaseReply(message.base, result.reason);
+          next = result.next;
+          rebased = true;
+        } else {
+          next = this.score;
+          for (const operation of operations)
+            next = applyScoreOperation(next, operation);
+        }
+      } else if (stale) return this.rebaseReply(message.base);
+      else next = scoreFromJSON(message.composition);
       // Round-trip through the parser so only canonical score data is stored.
       next = scoreFromJSON(next.toJSON());
     } catch (error) {
@@ -413,12 +427,26 @@ export class TrackDaemon {
         message: error instanceof Error ? error.message : String(error),
       };
     }
+    // Every event records the score it replaced (`before`) so undo and later
+    // rebases can recover it; after a rebase that is the score replayed on.
+    const payload =
+      typeof message.payload === "object" &&
+      message.payload !== null &&
+      !Array.isArray(message.payload)
+        ? {
+            ...(message.payload as Record<string, unknown>),
+            ...(rebased || !("before" in message.payload)
+              ? { before: this.record.composition }
+              : {}),
+            ...(rebased ? { rebasedFrom: message.base } : {}),
+          }
+        : message.payload;
     const previousTempo = this.score.tempoBpm;
     try {
       this.record = await appendSessionEvent(
         this.paths,
         this.record,
-        { kind: message.kind, payload: message.payload, id: message.key },
+        { kind: message.kind, payload, id: message.key },
         next.toJSON(),
       );
     } catch (error) {
@@ -458,6 +486,33 @@ export class TrackDaemon {
     });
     this.afterScoreChange(previousTempo);
     return { status: "accepted", revision: this.record.revision };
+  }
+
+  private rebaseReply(base: number, reason?: string): ApplyResult {
+    return {
+      status: "rebase",
+      baseRevision: base,
+      currentRevision: this.record.revision,
+      message: `session is at rev ${this.record.revision}; rebase from rev ${base}${reason ? ` (${reason})` : ""}`,
+    };
+  }
+
+  /** The score at an older revision, when the log still vouches for it. */
+  private baseScore(revision: number): TrackScore | undefined {
+    if (
+      !Number.isSafeInteger(revision) ||
+      revision < 0 ||
+      revision >= this.record.revision ||
+      this.record.revision - revision > MAX_REBASE_DISTANCE
+    )
+      return undefined;
+    const composition = compositionAt(this.record.events, revision);
+    if (composition === undefined) return undefined;
+    try {
+      return scoreFromJSON(composition);
+    } catch {
+      return undefined;
+    }
   }
 
   private afterScoreChange(previousTempo: number): void {

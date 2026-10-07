@@ -14,6 +14,7 @@ import {
   XCB_DOC_URL,
   XCB_INSTALL,
   type XcbAccount,
+  type XcbModel,
 } from "../agent/xcb.ts";
 import { providerLabel, selectProvider } from "../agent/provider.ts";
 
@@ -45,9 +46,9 @@ export type KeyCheck = "valid" | "rejected" | "unverified";
 export async function login(
   mode: LoginMode,
   deps: LoginDeps,
-  options: { budget?: number } = {},
+  options: { budget?: number; xcb?: XcbPreset } = {},
 ): Promise<number> {
-  if (mode === "xcb") return loginXcb(deps);
+  if (mode === "xcb") return loginXcb(deps, options.xcb);
   if (mode === "key") return loginWithPastedKey(deps);
   return loginGateway(deps, options);
 }
@@ -240,7 +241,31 @@ export async function checkKey(
   }
 }
 
-async function loginXcb(deps: LoginDeps): Promise<number> {
+/** A pre-chosen xcb account and model (from the TUI picker). */
+export type XcbPreset = Readonly<{ account: string; model: string }>;
+export type XcbChoice = Readonly<{ account: XcbAccount; model: XcbModel }>;
+
+/**
+ * Every usable (account, model) pair xcb reports, without printing. Accounts
+ * with a pending automatic admission count as usable.
+ */
+export async function listXcbChoices(
+  auth: AuthEnv,
+): Promise<XcbChoice[] | undefined> {
+  const bin = resolveXcbBin(auth.env, auth.runner);
+  if (!bin) return undefined;
+  try {
+    return (await readCapabilities(bin, auth.runner)).accounts
+      .filter((account) => account.available)
+      .flatMap((account) =>
+        account.models.map((model) => ({ account, model })),
+      );
+  } catch {
+    return undefined;
+  }
+}
+
+async function loginXcb(deps: LoginDeps, preset?: XcbPreset): Promise<number> {
   const { auth, io } = deps;
   const bin = resolveXcbBin(auth.env, auth.runner);
   if (!bin) {
@@ -288,7 +313,20 @@ async function loginXcb(deps: LoginDeps): Promise<number> {
     return 1;
   }
   let picked = choices[0]!;
-  if (choices.length > 1) {
+  if (preset) {
+    const match = choices.find(
+      (choice) =>
+        choice.account.id === preset.account &&
+        choice.model.key === preset.model,
+    );
+    if (!match) {
+      io.print(
+        `xcb account ${preset.account.slice(0, 24)} · ${preset.model.slice(0, 60)} is no longer available. Nothing was saved.`,
+      );
+      return 1;
+    }
+    picked = match;
+  } else if (choices.length > 1) {
     choices.forEach((choice, index) =>
       io.print(
         `  ${index + 1}) ${choice.account.label} · ${choice.account.provider} · ${choice.model.key}`,
@@ -311,6 +349,10 @@ async function loginXcb(deps: LoginDeps): Promise<number> {
   io.print(
     `✓ Using ${picked.account.label} (${picked.account.provider}) · ${picked.model.key} through xcb.`,
   );
+  if (picked.account.admission === "pending")
+    io.print(
+      "xcb admits this account on its first request, so the first turn takes longer.",
+    );
   io.print(
     "Saved to ~/.config/track/config.json (no secrets). Run `track` and type a request.",
   );
