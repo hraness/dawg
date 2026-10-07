@@ -16,6 +16,10 @@ import {
 } from "../../core/synth.ts";
 import { applySynthCommand, type SynthCommand } from "../commands/synth.ts";
 import {
+  setSampleControls,
+  type SampleControlValue,
+} from "../commands/sample.ts";
+import {
   EFFECT_NAMES,
   FX_PRESETS,
   effectSpec,
@@ -634,6 +638,53 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
             trackId,
             patch: { instrument: next.instrument, synth: next.synth ?? null },
           },
+        ],
+        trackId,
+        summary: `${trackId} ${result.message}`,
+      };
+    },
+  },
+  {
+    name: "set_sample",
+    description:
+      "Set a sampler voice's Strudel sample controls: begin end gain speed unit(r|c|s) loop loopBegin loopEnd clip(legato) fit loopAt accelerate squiz cut; null unsets one.",
+    parameters: {
+      type: "object",
+      properties: {
+        trackId: trackIdSchema,
+        voice: { type: "string" },
+        params: {
+          type: "object",
+          additionalProperties: {
+            type: ["number", "string", "boolean", "null"],
+          },
+        },
+      },
+      required: ["voice", "params"],
+      additionalProperties: false,
+    },
+    plan(args, context) {
+      const trackId = targetTrack(args, context);
+      const params = args.params;
+      if (
+        typeof args.voice !== "string" ||
+        typeof params !== "object" ||
+        params === null ||
+        Array.isArray(params)
+      )
+        throw new ToolArgumentError("set_sample needs voice and params");
+      const result = setSampleControls(
+        context.score,
+        trackId,
+        args.voice,
+        params as Record<string, SampleControlValue>,
+      );
+      if (!result.ok) throw new ToolArgumentError(result.message);
+      const next = result.next.tracks.find((t) => t.id === trackId)!;
+      return {
+        kind: "score",
+        operations: [
+          { type: "updateTrack", trackId, patch: { sampler: next.sampler } },
         ],
         trackId,
         summary: `${trackId} ${result.message}`,

@@ -562,6 +562,8 @@ function stemKey(
     notes,
     context.score.tempoBpm,
     context.score.ticksPerBeat,
+    // Bar length: sampler `unit: "c"` stretches a window to whole bars.
+    context.score.beatsPerBar,
     context.sampleRate,
     context.samples,
     // Sampler stems also depend on the decoded files: a replaced or missing

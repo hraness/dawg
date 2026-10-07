@@ -68,7 +68,23 @@ const rich = createScore({
       instrument: "sampler",
       sampler: {
         mode: "keyed",
-        voices: { vox: { src: "tracks/vox/samples/vox.wav", root: 60 } },
+        voices: {
+          vox: { src: "tracks/vox/samples/vox.wav", root: 60 },
+          // Strudel sample controls (SDK 1.13.0).
+          pad: {
+            src: "tracks/vox/samples/pad.wav",
+            root: 48,
+            speed: 0.5,
+            loop: true,
+            loopBegin: 0.2,
+            loopEnd: 0.8,
+            clip: 1.5,
+            unit: "c",
+            fit: false,
+            accelerate: -0.5,
+            squiz: 2,
+          },
+        },
       },
     },
     {

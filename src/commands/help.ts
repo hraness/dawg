@@ -404,7 +404,8 @@ const USAGE: Readonly<Record<string, string>> = {
   status: "/status",
   export: "/export <file> · /export loop.track.json",
   import: "/import <file> · /import loop.track.json",
-  sample: "/sample <path> [as <voice>] · /sample kick.wav as kick",
+  sample:
+    "/sample <path> [as <voice>] · /sample set <voice> <control> <value>… · /sample set brk fit on clip 1",
   samples: "/sample · lists the focused track's voices",
   view: "/view focus | all",
   transcript: "/transcript",

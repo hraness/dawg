@@ -60,6 +60,12 @@ export const SCORE_LIMITS = Object.freeze({
   /** |speed| bound; negative speeds play in reverse. */
   maxSampleSpeed: 8,
   maxChokeGroupLength: 32,
+  /** Sampler `clip`/`legato` factor bound. */
+  maxSampleClip: 16,
+  /** |accelerate| bound. */
+  maxSampleAccelerate: 8,
+  /** Sampler `squiz` ratio bound. */
+  maxSampleSquiz: 32,
   /** Per sample file, enforced by the decoder and the import tool. */
   maxSampleFileBytes: 50 * 1024 * 1024,
   maxSampleSeconds: 600,
@@ -361,7 +367,47 @@ export type SampleRef = Readonly<{
   loop?: boolean;
   /** Choke group: a new hit in the group stops the previous one. */
   choke?: string;
+  /**
+   * Optional (Strudel `loopBegin`/`loopb`, `loopEnd`/`loope`): the looped
+   * part of the window, fractions of the file with
+   * begin ≤ loopBegin < loopEnd ≤ end. Playback starts at `begin`.
+   */
+  loopBegin?: number;
+  loopEnd?: number;
+  /**
+   * Optional (Strudel `clip`/`legato`): the voice lasts the note's length
+   * times this, cutting the sample off; a oneshot voice otherwise plays
+   * the whole window. 0 < clip ≤ 16.
+   */
+  clip?: number;
+  /**
+   * Optional (Strudel/Tidal `unit`): how `speed` reads. `r` (default) is a
+   * rate; `c`: the window lasts 1/|speed| cycles (a cycle is one bar);
+   * `s`: the window lasts |speed| seconds. Negative still reverses.
+   */
+  unit?: SampleUnit;
+  /** Optional (Strudel `fit`): the window lasts exactly the note's length. */
+  fit?: boolean;
+  /**
+   * Optional (Tidal/Strudel `accelerate`): the rate ramps linearly by this
+   * many times the starting rate over the voice (−8..8; −1 slows to a stop).
+   */
+  accelerate?: number;
+  /**
+   * Optional (Tidal/Strudel `squiz`): raise the pitch by this ratio inside
+   * each zero-crossing cycle, repeating the cycle to keep the length
+   * (1 is off, up to 32).
+   */
+  squiz?: number;
 }>;
+
+/** Sample `unit`: rate, cycles (bars) or seconds. */
+export type SampleUnit = "r" | "c" | "s";
+export const SAMPLE_UNITS: readonly SampleUnit[] = Object.freeze([
+  "r",
+  "c",
+  "s",
+]);
 
 export type TrackReverb = Readonly<{
   /** Wet level added to the dry signal, 0..1. */
@@ -1484,6 +1530,13 @@ export function normalizeSampleRef(input: unknown, name: string): SampleRef {
     speed?: number;
     loop?: boolean;
     choke?: string;
+    loopBegin?: number;
+    loopEnd?: number;
+    clip?: number;
+    unit?: SampleUnit;
+    fit?: boolean;
+    accelerate?: number;
+    squiz?: number;
   } = { src };
   if (input.sha256 !== undefined) {
     if (typeof input.sha256 !== "string" || !SHA256_HEX.test(input.sha256))
@@ -1584,6 +1637,69 @@ export function normalizeSampleRef(input: unknown, name: string): SampleRef {
       );
     ref.choke = input.choke;
   }
+  if (input.loopBegin !== undefined || input.loopEnd !== undefined) {
+    const loopBegin = input.loopBegin === undefined ? begin : input.loopBegin;
+    const loopEnd = input.loopEnd === undefined ? end : input.loopEnd;
+    if (
+      typeof loopBegin !== "number" ||
+      typeof loopEnd !== "number" ||
+      !Number.isFinite(loopBegin) ||
+      !Number.isFinite(loopEnd) ||
+      loopBegin < begin ||
+      loopEnd > end ||
+      loopBegin >= loopEnd
+    )
+      throw new ScoreValidationError(
+        `${label} loopBegin/loopEnd must be fractions with begin ≤ loopBegin < loopEnd ≤ end`,
+        "invalid-track",
+      );
+    if (input.loopBegin !== undefined) ref.loopBegin = loopBegin;
+    if (input.loopEnd !== undefined) ref.loopEnd = loopEnd;
+  }
+  if (input.clip !== undefined) {
+    const clip = boundedNumber(
+      input.clip,
+      `${label} clip`,
+      0,
+      SCORE_LIMITS.maxSampleClip,
+    );
+    if (clip === 0)
+      throw new ScoreValidationError(
+        `${label} clip must be greater than 0`,
+        "invalid-track",
+      );
+    ref.clip = clip;
+  }
+  if (input.unit !== undefined) {
+    if (!SAMPLE_UNITS.includes(input.unit as SampleUnit))
+      throw new ScoreValidationError(
+        `${label} unit must be "r", "c" or "s"`,
+        "invalid-track",
+      );
+    ref.unit = input.unit as SampleUnit;
+  }
+  if (input.fit !== undefined) {
+    if (typeof input.fit !== "boolean")
+      throw new ScoreValidationError(
+        `${label} fit must be boolean`,
+        "invalid-track",
+      );
+    ref.fit = input.fit;
+  }
+  if (input.accelerate !== undefined)
+    ref.accelerate = boundedNumber(
+      input.accelerate,
+      `${label} accelerate`,
+      -SCORE_LIMITS.maxSampleAccelerate,
+      SCORE_LIMITS.maxSampleAccelerate,
+    );
+  if (input.squiz !== undefined)
+    ref.squiz = boundedNumber(
+      input.squiz,
+      `${label} squiz`,
+      1,
+      SCORE_LIMITS.maxSampleSquiz,
+    );
   return Object.freeze(ref);
 }
 

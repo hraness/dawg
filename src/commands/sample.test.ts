@@ -12,7 +12,9 @@ import {
   parseSampleCommand,
   placeSampleFile,
   samplerTarget,
+  setSampleControls,
   voiceNameFrom,
+  type SampleControlValue,
 } from "./sample.ts";
 
 const roots: string[] = [];
@@ -149,5 +151,91 @@ describe("/sample", () => {
         voice: "x",
       }),
     ).rejects.toThrow("no such file");
+  });
+});
+
+describe("/sample set", () => {
+  const score = createScore({
+    tempoBpm: 120,
+    bars: 1,
+    tracks: [
+      {
+        id: "s",
+        name: "s",
+        instrument: "sampler",
+        sampler: {
+          mode: "oneshot",
+          voices: { brk: { src: "tracks/s/samples/brk.wav" } },
+        },
+      },
+      { id: "lead", name: "lead", instrument: "saw" },
+    ],
+    notes: [],
+  });
+
+  test("parses control/value pairs with on/off and numbers", () => {
+    expect(
+      parseSampleCommand("/sample set brk fit on clip 1 cut hats legato off"),
+    ).toEqual({
+      kind: "set",
+      voice: "brk",
+      values: { fit: true, clip: 1, cut: "hats", legato: false },
+    });
+  });
+
+  test("sets Strudel controls and aliases, unsets with off", () => {
+    const result = setSampleControls(score, "s", "brk", {
+      loopAt: 2,
+      loopb: 0.25,
+      legato: 1.5,
+      accelerate: -1,
+      squiz: 2,
+      cut: 1,
+      loop: true,
+    });
+    if (!result.ok) throw new Error(result.message);
+    const ref = result.next.tracks[0]!.sampler!.voices.brk!;
+    expect(ref).toEqual({
+      src: "tracks/s/samples/brk.wav",
+      speed: 0.5,
+      unit: "c",
+      loopBegin: 0.25,
+      clip: 1.5,
+      accelerate: -1,
+      squiz: 2,
+      choke: "cut1",
+      loop: true,
+    });
+    // Round-trips through track.ts.
+    expect(printTrack(result.next, result.next.tracks[0]!)).toContain(
+      "loopBegin: 0.25",
+    );
+    const cleared = setSampleControls(result.next, "s", "brk", {
+      loopAt: false,
+      loop: false,
+      cut: false,
+      clip: false,
+    });
+    if (!cleared.ok) throw new Error(cleared.message);
+    expect(cleared.next.tracks[0]!.sampler!.voices.brk).toEqual({
+      src: "tracks/s/samples/brk.wav",
+      loopBegin: 0.25,
+      accelerate: -1,
+      squiz: 2,
+    });
+  });
+
+  test("rejects unknown controls, bad values and non-sampler tracks", () => {
+    const bad = (values: Record<string, SampleControlValue>, id = "s") => {
+      const result = setSampleControls(score, id, "brk", values);
+      expect(result.ok).toBe(false);
+      return result.ok ? "" : result.message;
+    };
+    expect(bad({ wobble: 1 })).toContain("unknown control");
+    expect(bad({ squiz: 99 })).toContain("squiz");
+    expect(bad({ unit: "x" })).toContain("unit");
+    expect(bad({ loopAt: -1 })).toContain("loopAt");
+    expect(bad({ clip: 1 }, "lead")).toContain("not a sampler");
+    expect(setSampleControls(score, "s", "nope", { clip: 1 }).ok).toBe(false);
   });
 });
