@@ -229,7 +229,9 @@ test.skipIf(!supported)(
     const t = await launch(100, 30, {}, []);
     await t.until(() => t.vt.text().includes("STEER"), "prompt");
     expect(t.vt.text()).toContain("created .dawg/ · add it to .gitignore");
-    expect(t.vt.text()).toContain("main · empty · add C4 at 0 to start");
+    expect(t.vt.text()).toContain(
+      "main · empty · type a request · ctrl-p play · ctrl-k menu",
+    );
 
     // A drum command on a melodic track is a failure, drawn in the error role.
     await t.send("pattern kick 0 1\r");
@@ -370,6 +372,12 @@ test.skipIf(!supported)(
       "prose reaches the agent path",
     );
     expect(t.vt.text()).not.toContain("add <note> at <beat>");
+    // A one-letter slip whose arguments parse is caught locally.
+    await t.send("tempoo 90\r");
+    await t.until(
+      () => t.vt.text().includes("tempoo 90 · did you mean tempo 90?"),
+      "typo suggestion",
+    );
     await t.send("\u0003");
     await Promise.race([t.proc.exited, Bun.sleep(5000)]);
     t.proc.kill();

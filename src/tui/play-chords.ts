@@ -337,7 +337,6 @@ export class ChordPad {
     return rate === "grid" ? gridBeats : RATE_BEATS[rate];
   }
 
-  /** `AUTO C major · Dm7 (ii7) → G7 · min+m7 · inv +1 · arp-up · bass`. */
   /** The header at a glance: mode, key, last chord, next, latches. */
   public glance(keySet: boolean): string {
     const s = this.settings;
@@ -388,20 +387,17 @@ export class ChordPad {
     ];
   }
 
+  /**
+   * The full chord state for the `?` panel, in the header's words:
+   * `AUTO C major · Dm (ii) · next G · min+m7 · voicing +1 · arp-up · bass chords`.
+   */
   public headerText(keySet: boolean): string {
     const s = this.settings;
     if (s.mode === "off") return "";
-    const key = this.key;
-    const flats = keyUsesFlats(key);
-    const parts = [
-      `${s.mode.toUpperCase()} ${keyName(key)}${keySet ? "" : "?"}`,
-    ];
-    if (this.last)
-      parts.push(`${this.last.name} (${romanOf(key, this.last.chord)})`);
-    parts.push(`→ ${chordName(this.next(), flats)}`);
+    const parts = [this.glance(keySet)];
     const latches = this.latchText();
     if (latches) parts.push(latches);
-    if (s.inversion !== 0) parts.push(`inv ${signed(s.inversion)}`);
+    if (s.inversion !== 0) parts.push(`voicing ${signed(s.inversion)}`);
     if (s.spread !== "close") parts.push(s.spread);
     if (s.perform === "pattern")
       parts.push(`pattern ${patternLabel(s.pattern)}`);

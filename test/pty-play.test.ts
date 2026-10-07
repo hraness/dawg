@@ -160,3 +160,41 @@ test.skipIf(!supported)(
   },
   20_000,
 );
+
+test.skipIf(!supported)(
+  "real PTY: a latched chord key is drawn reversed in the legend, in colour",
+  async () => {
+    const t = await launch(120, 28, {}, ["--track", "keys"]);
+    try {
+      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.send("\u0010");
+      await t.until(() => t.vt.text().includes("1 dim"), "legend");
+      const style = (label: string) => {
+        const y = t.vt.findRow("1 dim");
+        const x = t.vt.lines()[y]!.indexOf(label);
+        return t.vt.cell(x, y).style;
+      };
+      expect(style("min").reverse).toBeFalsy();
+      await t.send("2");
+      await t.until(() => style("min").reverse === true, "min latched");
+      expect(style("min").fg).toBeDefined();
+      expect(style("dim").reverse).toBeFalsy();
+      expect(style("m7").reverse).toBeFalsy();
+      // The ? panel's chord line uses the header's words.
+      await t.send("?");
+      await t.until(() => t.vt.text().includes("── play mode"), "keys panel");
+      expect(t.vt.text()).toMatch(
+        /chords AUTO \S+ major \(assumed\) · next \S+ · min/,
+      );
+      expect(t.vt.text()).not.toContain("→");
+      await t.send("?");
+      await t.until(() => !t.vt.text().includes("── play mode"), "closed");
+      await t.send("0");
+      await t.until(() => !style("min").reverse, "latches cleared");
+    } finally {
+      t.terminal.write("\u0003");
+      await t.proc.exited;
+    }
+  },
+  20_000,
+);

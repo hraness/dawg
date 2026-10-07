@@ -116,8 +116,10 @@ describe("ChordPad", () => {
   test("the header names the key, the chord and the suggestion", () => {
     const p = pad("A minor");
     p.voice(p.chordFor(57)!, 57);
-    expect(p.headerText(true)).toMatch(/^AUTO A minor · Am \(i\) · → \S+/);
-    expect(pad("nonsense").headerText(false)).toStartWith("AUTO C major?");
+    expect(p.headerText(true)).toMatch(/^AUTO A minor · Am \(i\) · next \S+/);
+    expect(pad("nonsense").headerText(false)).toStartWith(
+      "AUTO C major (assumed)",
+    );
   });
 });
 

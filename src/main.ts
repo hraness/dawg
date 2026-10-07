@@ -49,9 +49,11 @@ import {
   helpText,
   helpTopicLines,
   nearestCommand,
+  typoFix,
   usageHint,
 } from "./commands/help.ts";
 import { historyTarget, REDO_KIND, UNDO_KIND } from "./commands/history.ts";
+
 import {
   SamplePlacementError,
   addSampleVoice,
@@ -183,6 +185,23 @@ import {
   type ProjectSync,
   type SyncHost,
 } from "./project/sync.ts";
+
+/** Whether a bare command parses (no side effects): for typo suggestions. */
+function parsesLocally(text: string): boolean {
+  return [
+    parsePrompt,
+    parseMusicCommand,
+    parseEditCommand,
+    parseRhythmCommand,
+    parseFxCommand,
+    parseSynthCommand,
+    parsePatternCommand,
+    parseKitCommand,
+    parsePackCommand,
+    parseSampleCommand,
+    parseWavetableCommand,
+  ].some((parse) => parse(text) !== undefined);
+}
 
 const ESC = "\u001b[";
 /** `/sessions` rows shown in the overlay. */
@@ -1389,6 +1408,9 @@ async function submit(prompt: string): Promise<string | Receipt> {
     // A known verb with bad arguments gets usage, not a model call.
     const hint = usageHint(command);
     if (hint) return fail(`${truncateForCard(command)} · ${hint}`);
+    // A one-letter slip on a command whose arguments parse stays local.
+    const fix = typoFix(command, parsesLocally);
+    if (fix) return fail(`${truncateForCard(command)} · did you mean ${fix}?`);
     if (process.env.DAWG_AI === "0")
       return fail(`unrecognized · ${truncateForCard(command)} · /help`);
     await materializeDraft();
