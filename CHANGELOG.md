@@ -114,6 +114,9 @@ dawg projects are now plain TypeScript files that you, an agent or another windo
 - **Sentences reach the agent**: a request that merely starts with a command word (`add a walking bass in A minor`, the prompt's own example, or `pan the hats left`) goes to the agent instead of answering with the command's usage. Short or numeric misuse (`pan 3`, `add H4 at 0`) still gets the usage hint locally.
 - **`/help` is a short task guide** (start here, play notes, make drums, shape the sound, chords) pointing to Ctrl-K, Ctrl-P and `?`; `/help all` is the full reference and `/help music|session|window|keys` shows one group. The reference now lists `fx`, `synth`, `/pattern`, `/kit` and `/pack`.
 - **Typos get the nearest command**: `/clik on` answers `unknown command /clik · did you mean /click? · /help` instead of a bare "unknown". Entering play mode says `? keys · esc leaves` instead of listing four keys.
+- **Bare-word slips are caught too**: `tempoo 90` answers `did you mean tempo 90?` without a model call when the rest parses as that command's arguments; sentences still go to the agent.
+- **First run names the three ways in**: an empty track reads `<track> · empty · type a request · ctrl-p play · ctrl-k menu` (narrow windows keep `add C4 at 0 to start`).
+- **The play `?` panel's chord line uses the header's words** (`next G`, `(assumed)`, `voicing +1`) instead of `→`, `?` and `inv`.
 
 ### Performance
 

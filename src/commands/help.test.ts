@@ -6,6 +6,7 @@ import {
   helpText,
   helpTopicLines,
   nearestCommand,
+  typoFix,
   usageHint,
 } from "./help.ts";
 
@@ -116,4 +117,15 @@ test("a sentence starting with a command verb is a request, not a usage error", 
     expect(looksLikeProse(text)).toBe(false);
   expect(usageHint("pan 3")).toBe("pan takes -1…1 · pan -0.5");
   expect(usageHint("/export")).toBeDefined();
+});
+
+test("a one-letter slip on a command whose arguments parse is suggested", () => {
+  const parses = (text: string) => /^(tempo \d+|pan -?[\d.]+)$/.test(text);
+  expect(typoFix("tempoo 90", parses)).toBe("tempo 90");
+  expect(typoFix("pann -0.5", parses)).toBe("pan -0.5");
+  // Prose after a near-verb, slash words and far words still go on.
+  expect(typoFix("tempoo the song up", parses)).toBeUndefined();
+  expect(typoFix("/tempoo 90", parses)).toBeUndefined();
+  expect(typoFix("tmpooo 90", parses)).toBeUndefined();
+  expect(typoFix("tempo 90", parses)).toBeUndefined();
 });

@@ -483,6 +483,28 @@ export function nearestCommand(command: string): string | undefined {
 }
 
 /**
+ * `tempoo 90` → `tempo 90`: the first word one edit from a bare command
+ * whose arguments then parse (`parses` decides). Slash words and inputs
+ * whose rest is not that command's arguments (prose) return undefined.
+ */
+export function typoFix(
+  command: string,
+  parses: (candidate: string) => boolean,
+): string | undefined {
+  const text = command.trim();
+  if (!text || text.startsWith("/")) return undefined;
+  const [first, ...rest] = text.split(/\s+/);
+  const word = first!.toLowerCase();
+  for (const verb of KNOWN_VERBS) {
+    if (verb.startsWith("/") || verb === word) continue;
+    if (editDistance(word, verb) !== 1) continue;
+    const candidate = [verb, ...rest].join(" ");
+    if (parses(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+/**
  * True for a sentence that merely starts with a command verb (`add a walking
  * bass in A minor`, `pan the hats left`): three or more words and no number
  * or note name with an octave. Those are requests for the agent, not
