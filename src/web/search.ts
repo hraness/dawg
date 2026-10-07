@@ -400,7 +400,10 @@ async function gatewaySearch(
   options.onSpend?.({
     provider: "gateway",
     tool,
-    usd: round(SEARCH_TOOL_USD[tool] + reportedCost(json)),
+    // The gateway's reported cost already includes the search tool fee
+    // (captured 2026-10-07: cost 0.013273 = inference 0.006273 + exa 0.007),
+    // so the fee is only an estimate when no cost is reported.
+    usd: round(reportedCost(json) || SEARCH_TOOL_USD[tool]),
   });
   return { provider: "gateway", tool, results };
 }

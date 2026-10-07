@@ -4,6 +4,10 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ## Unreleased
 
+### Fixed
+
+- Gateway web searches no longer count the search fee twice in the spend line and ledger. The gateway's reported cost already includes it. A real Exa search response is now a test fixture.
+
 ## 0.3.0
 
 dawg projects are now plain TypeScript files that you, an agent or another window can edit, with sampler tracks, local media tools, a computer-keyboard play mode and menus for every edit by hand.
