@@ -37,6 +37,15 @@ export type PlayHeaderView = Readonly<{
   /** Short status (`octave C2`, `no audio`). */
   status?: string | undefined;
   keys: readonly PlayStripKey[];
+  /** Chord mode's number-row legend; latched entries are `on`. */
+  legend?: readonly ChordLegendCell[] | undefined;
+}>;
+
+/** One chord-mode key on the legend row: `1 dim`, `9 strum-up`. */
+export type ChordLegendCell = Readonly<{
+  key: string;
+  label: string;
+  on: boolean;
 }>;
 
 /** Text of the header row, for tests and narrow terminals. */
@@ -44,15 +53,14 @@ export function playHeaderText(view: PlayHeaderView, unicode = true): string {
   const parts = [
     "PLAY",
     view.range,
-    `vel ${view.velocity}`,
     view.armed
       ? `${unicode ? "●" : "*"} ${view.recording ? "REC" : "rec armed"}${view.replace ? " replace" : ""}`
       : "",
-    `click ${view.click ? (unicode ? "✓" : "on") : "off"}`,
+    view.click ? "click" : "",
     view.sustain ? "SUSTAIN" : "",
-    view.grid,
     view.chords ?? "",
     view.countIn ?? "",
+    view.status ?? "",
   ].filter(Boolean);
   return parts.join("  ");
 }
@@ -81,16 +89,13 @@ export function paintPlayHeader(
   };
   put(" PLAY ", roles.pillSteer);
   put(view.range, { ...roles.text, bold: true });
-  put(`vel ${view.velocity}`);
   if (view.armed)
     put(
       `${unicode ? "●" : "*"} ${view.recording ? "REC" : "rec armed"}${view.replace ? " replace" : ""}`,
       view.recording ? roles.error : roles.warning,
     );
-  put(
-    `click ${view.click ? (unicode ? "✓" : "on") : "off"}`,
-    view.click ? roles.success : roles.muted,
-  );
+  // Velocity, grid and click details live in the `?` panel.
+  if (view.click) put("click", roles.success);
   if (view.sustain) put("SUSTAIN", roles.pillQueue);
   if (view.chords) put(view.chords, roles.hit);
   if (view.countIn) put(view.countIn, roles.warning);
@@ -113,14 +118,48 @@ export function paintPlayHeader(
         : roles.muted,
     );
   }
-  put(view.grid, roles.muted);
-  if (view.status) put(view.status, roles.muted);
-  // Mode keys at the right edge while there is room.
-  const hint = view.chords
-    ? "q auto/manual · 1–8 chord · n next · esc exit"
-    : "z/x oct · c/v vel · r rec · m click · esc exit";
-  const room = width - 1 - displayWidth(hint);
-  if (room > x) buffer.text(room, y, hint, onBackground(roles.faint, panel));
+  // The way out and the way to learn more, always at the right edge.
+  const hint = "? keys · esc leave";
+  const right = width - 1 - displayWidth(hint);
+  // Status shows whole or by its first clause, never cut mid-word.
+  if (view.status) {
+    const room = right - 2 - x;
+    const first = view.status.split(" · ")[0]!;
+    const text =
+      displayWidth(view.status) <= room
+        ? view.status
+        : displayWidth(first) <= room
+          ? first
+          : "";
+    if (text) x += buffer.text(x, y, text, onBackground(roles.muted, panel));
+  }
+  if (right > x) buffer.text(right, y, hint, onBackground(roles.faint, panel));
+}
+
+/** Chord mode's number row: `1 dim  2 min … 9 block  b bass off  n next`. */
+export function paintChordLegend(
+  buffer: CellBuffer,
+  y: number,
+  width: number,
+  cells: readonly ChordLegendCell[],
+  theme: Theme,
+): void {
+  const roles = theme.roles;
+  buffer.fill(0, y, width, 1, roles.canvas);
+  let x = 1;
+  for (const cell of cells) {
+    const keyWidth = displayWidth(cell.key);
+    const cellWidth = keyWidth + 1 + displayWidth(cell.label) + 2;
+    if (x + cellWidth > width) break;
+    buffer.text(x, y, cell.key, { ...roles.text, bold: true });
+    buffer.text(
+      x + keyWidth + 1,
+      y,
+      cell.label,
+      cell.on ? { ...roles.hit, reverse: true } : roles.muted,
+    );
+    x += cellWidth;
+  }
 }
 
 /** `a C3 │ w C#3 …`: each key with its note; lit keys reversed. */

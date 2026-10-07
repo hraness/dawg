@@ -107,6 +107,7 @@ import {
 } from "./tui/play-session.ts";
 import { EditMenu, MENU_SECTIONS, type MenuContext } from "./tui/menu.ts";
 import { EuclidEditor } from "./tui/euclid.ts";
+import { HINTS, KEYS, keyLines, type KeySection } from "../tui/grammar.ts";
 import { renderAudition } from "./audio/audition.ts";
 import { rhythmVoicePitch } from "../core/rhythm.ts";
 import { applyChordsCommand, defaultChordSettings } from "./tui/play-chords.ts";
@@ -955,6 +956,17 @@ async function runInteractive(): Promise<void> {
         ...(text === "\u001b" ? inputDecoder.flush() : []),
       ];
       for (const value of values) {
+        // The `?` panel closes on any key (Ctrl-C still quits).
+        if (tui.ui.keys && typeof value === "string" && value !== "\u0003") {
+          tui.closeKeys();
+          tick(true);
+          continue;
+        }
+        if (value === "?" && keysScreen()) {
+          showKeys();
+          tick(true);
+          continue;
+        }
         // The rhythm editor owns every key while it is up (Esc backs out).
         if (typeof value === "string" && euclid.open) {
           if (tui.ui.overlay !== "picker" || tui.ui.picker?.id !== "euclid")
@@ -1056,14 +1068,10 @@ async function runInteractive(): Promise<void> {
                 })
                 .finally(() => tick(true));
             }
-          } else if (
-            input.type === "overlay" &&
-            tui.ui.picker?.id === "pattern"
-          ) {
+          } else if (input.type === "pick-move") {
             // Moving through /pattern previews the row under the cursor.
-            const picker = tui.ui.picker;
-            const value = picker.items[picker.index]?.value;
-            previewPattern(value?.replace(/^\/pattern\s+/, ""));
+            if (input.picker === "pattern")
+              previewPattern(input.value.replace(/^\/pattern\s+/, ""));
           } else if (input.type === "pick") {
             // Picker choices run as the command they stand for.
             queuedPrompts.unshift(
@@ -1124,7 +1132,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
   const command = prompt.trim();
   if (/^\/?help$|^\/?\?$/.test(command.toLowerCase())) {
     tui.openText("help", helpLines(Math.max(40, (stdout.columns ?? 80) - 8)));
-    return ok("help · esc closes");
+    return ok("help");
   }
   if (/^\/?tracks$/i.test(command)) {
     const problems = await sampleProblems(score);
@@ -1142,7 +1150,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
     });
     tui.openText("tracks · * focused", lines);
     return ok(
-      `${lines.length} track${lines.length === 1 ? "" : "s"} · esc closes`,
+      `${lines.length} track${lines.length === 1 ? "" : "s"}`,
     );
   }
   const playCommand = command.match(/^\/play(?:\s+(on|off))?$/i);
@@ -1174,7 +1182,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
       tui.closePicker();
     }
     openEuclid(euclidCommand[1]?.toLowerCase(), from);
-    return ok("euclid · ←→ nudge · tab param · esc closes");
+    return ok("rhythm editor");
   }
   const menuCommand = command.match(/^\/menu(?:\s+(\S+))?$/i);
   if (menuCommand) {
@@ -1182,7 +1190,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
     if (section && !(MENU_SECTIONS as readonly string[]).includes(section))
       return fail(`/menu [${MENU_SECTIONS.join("|")}]`);
     openMenu(section);
-    return ok("menu · esc closes");
+    return ok("menu");
   }
   const gridCommand = command.match(/^\/grid\s+(\S+)$/i);
   if (gridCommand) {
@@ -1610,7 +1618,7 @@ async function sampleCommand(
       );
     tui.openText(`samples · ${requestedTrack}`, lines);
     return ok(
-      `${lines.length} sample${lines.length === 1 ? "" : "s"} · esc closes`,
+      `${lines.length} sample${lines.length === 1 ? "" : "s"}`,
     );
   }
   await materializeDraft();
@@ -1709,7 +1717,7 @@ async function packCommand(command: PackCommand): Promise<Receipt> {
     if (command.kind === "list") {
       const lines = packListLines(await packs().list());
       tui.openText("packs", lines);
-      return ok(`${lines.length} packs · /pack info <name> · esc closes`);
+      return ok(`${lines.length} packs · /pack info <name>`);
     }
     if (command.kind === "cache") {
       const library = (sampleLibrary ??= new SampleLibrary({
@@ -1810,7 +1818,8 @@ async function patternCommand(command: PatternCommand): Promise<Receipt> {
   if (command.kind === "browse") {
     tui.openPicker({
       id: "pattern",
-      title: "patterns · ↑/↓ preview · Enter applies · Esc",
+      title: "drum patterns",
+      hint: HINTS.preview,
       items: DRUM_PATTERNS.map((entry) => ({
         label: `${entry.label.padEnd(22)} ${entry.tempo.bpm} BPM · ${entry.tags.join(", ")}`,
         value: `/pattern ${entry.name}`,
@@ -1881,7 +1890,7 @@ function openKitPicker(): Receipt {
   }));
   tui.openPicker({
     id: "kit",
-    title: "kits · ↑/↓ Enter · Esc",
+    title: "drum kits",
     items,
     filterable: true,
     index: Math.max(
@@ -1946,7 +1955,7 @@ async function wavetableCommand(command: WavetableCommand): Promise<Receipt> {
       "wavetables",
       await wavetableListLines(packs(), process.cwd()),
     );
-    return ok("wavetables · wt <table> on the focused track · esc closes");
+    return ok("wavetables · wt <table> sets the focused track");
   }
   await materializeDraft();
   const trackId = requestedTrack;
@@ -2086,7 +2095,7 @@ async function sessionCommand(
     );
     tui.openPicker({
       id: "resume",
-      title: "resume session · ↑/↓ Enter · Esc",
+      title: "resume a session",
       items: readable.map((session) => ({
         label: `${session.sessionId === record.sessionId ? "* " : "  "}${formatSessionLine(session, sessions)}`,
         value: session.sessionId,
@@ -2104,7 +2113,7 @@ async function sessionCommand(
     );
     tui.openText("sessions · * current · /resume <n>", lines);
     return ok(
-      `${lines.length} session${lines.length === 1 ? "" : "s"} · esc closes`,
+      `${lines.length} session${lines.length === 1 ? "" : "s"}`,
     );
   }
   if (agentTurn) return warn("agent busy · finish or Esc first");
@@ -2187,6 +2196,35 @@ function menuContext(): MenuContext {
   };
 }
 
+/** The screen `?` describes, or undefined while `?` is typed text. */
+function keysScreen(): readonly KeySection[] | undefined {
+  if (euclid.open) return euclid.typing ? undefined : KEYS.euclid;
+  if (menu.open) return menu.typing ? undefined : KEYS.menu;
+  const overlay = tui.ui.overlay;
+  if (overlay === "picker")
+    return tui.pickerTyping
+      ? undefined
+      : tui.ui.picker?.id === "pattern"
+        ? KEYS.preview
+        : KEYS.list;
+  if (overlay === "text") return KEYS.text;
+  if (overlay === "log") return KEYS.log;
+  if (prompt.value.length > 0) return undefined;
+  if (play?.on)
+    return play.chords.on ? [...KEYS.play, ...KEYS.chords] : KEYS.play;
+  return KEYS.prompt;
+}
+
+function showKeys(): void {
+  const sections = keysScreen();
+  if (!sections) return;
+  const lines = keyLines(sections);
+  // Play mode's secondary state lives here instead of the header.
+  if (play?.on && !tui.ui.overlay && !menu.open)
+    lines.unshift(...play.details(), "");
+  tui.showKeys("keys", lines);
+}
+
 function openMenu(section?: string): void {
   menu.show(menuContext(), section);
   refreshMenu();
@@ -2262,6 +2300,7 @@ function refreshMenu(): void {
       : [{ label: "no matches", value: "none" }],
     index: view.index,
     hint: view.hint,
+    note: view.note,
   });
 }
 

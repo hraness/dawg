@@ -13,6 +13,7 @@
  * digits type a value · enter add/edit · space audition · x off · f freeze ·
  * esc back.
  */
+import { HINTS } from "../../tui/grammar.ts";
 import { DRUM_VOICES, isDrumInstrument } from "../../core/drums.ts";
 import {
   DIVISIONS,
@@ -286,6 +287,11 @@ export class EuclidEditor {
   }
 
   /** Where the editor was opened from, for Esc to return there. */
+  /** True while a value is being typed. */
+  get typing(): boolean {
+    return this.entry !== undefined;
+  }
+
   get returnTo(): string | undefined {
     return this.origin;
   }
@@ -442,12 +448,9 @@ export class EuclidEditor {
     const voice = lanes[index]?.voice ?? "";
     const row = lanes[index]?.row;
     const value = row ? formatValue(param.value(row)) : "—";
-    let title = `euclid › ${context.trackId} · ${voice} · ${param.label} ${value}`;
+    let title = `rhythm › ${context.trackId}${voice ? ` · ${voice}` : ""} · ${param.label} ${value}`;
     if (this.entry !== undefined) title += ` · ${param.label}: ${this.entry}▏`;
-    const hint =
-      this.entry !== undefined
-        ? " type a value · enter apply · esc cancel "
-        : " ↑↓ voice · ←→ nudge · tab param · digits set · space hear · x off · f freeze · esc back ";
+    const hint = this.entry !== undefined ? HINTS.typing : HINTS.euclid;
     return {
       title,
       items: items.length

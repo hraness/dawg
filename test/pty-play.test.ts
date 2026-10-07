@@ -57,7 +57,18 @@ test.skipIf(!supported)(
       await t.send("z");
       await t.until(() => t.vt.text().includes("C2–F3"), "octave down");
       await t.send("c");
-      await t.until(() => t.vt.text().includes("vel 84"), "velocity");
+      // Velocity is a status line, not header furniture.
+      await t.until(() => t.vt.text().includes("velocity 84"), "velocity");
+      // `?` lists play mode's keys and the state kept out of the header.
+      await t.send("?");
+      await t.until(() => t.vt.text().includes("letters are piano keys"), "keys");
+      expect(t.vt.text()).toContain("velocity 84 · grid 1/16");
+      await t.send("\u001b");
+      await t.until(
+        () => !t.vt.text().includes("letters are piano keys"),
+        "keys closed",
+      );
+      expect(t.vt.text()).toContain("PLAY");
 
       // Arm, start, play two notes, stop: one recorded pass.
       await t.send("r");
@@ -108,6 +119,10 @@ test.skipIf(!supported)(
       // A keys track defaults to auto chords; the strip names each chord.
       await t.until(() => t.vt.text().includes("AUTO C major"), "auto header");
       expect(t.vt.text()).toContain("S Dm");
+      // The number-row legend shows what each chord key does.
+      expect(t.vt.text()).toContain("1 dim");
+      expect(t.vt.text()).toContain("b bass off");
+      expect(t.vt.text()).toContain("? keys · esc leave");
 
       await t.send("r");
       await t.until(() => t.vt.text().includes("rec armed"), "armed");
