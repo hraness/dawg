@@ -4,6 +4,10 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ## Unreleased
 
+## 0.4.1
+
+Sound previews now crossfade instead of clicking, reverb changes are heard in under 100 ms, and the rhythm editor and chord settings hold changes until you keep them. dawg.sh gains a security policy and security headers.
+
 ### Previewing changes
 
 - **Edits crossfade instead of clicking.** When the loop (audition or song) swaps to a new render, the old and new buffers crossfade over 20 ms with equal-power gains at the same beat, so a change no longer steps the waveform. Playback only: renders and exports are byte-identical.
