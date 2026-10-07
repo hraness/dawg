@@ -453,9 +453,7 @@ test("an empty track shows a start hint instead of lane and bar labels", () => {
   const empty: TrackScoreSnapshot = { ...score, trackName: "main", notes: [] };
   h.app.render({ score: empty, beat: 0 }, { force: true });
   const text = h.vt.text();
-  expect(text).toContain(
-    "main · empty · type a request · ctrl-p play · ctrl-k menu",
-  );
+  expect(text).toContain("main · empty · add C4 at 0 to start");
   // No pitch legend row (C3 … C6) and no bar numbers in the gutter.
   expect(text.replace("add C4 at 0", "")).not.toMatch(/\bC[3-6]\b/);
   expect(h.vt.lines().some((line) => /^ *[12] /.test(line))).toBe(false);
@@ -468,9 +466,7 @@ test("an empty track shows a start hint instead of lane and bar labels", () => {
     ...drumSnapshotFields("kit", []),
   };
   h.app.render({ score: drums, beat: 0 }, { force: true });
-  expect(h.vt.text()).toContain(
-    "drums · empty · type a request · ctrl-p play · ctrl-k menu",
-  );
+  expect(h.vt.text()).toContain("drums · empty · hit kick at 0 to start");
   expect(h.vt.text()).not.toContain("snare");
 });
 

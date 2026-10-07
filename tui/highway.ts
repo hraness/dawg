@@ -562,13 +562,7 @@ export function paintHighway(
   if (empty) {
     const name = score.trackName ?? score.trackId ?? "track";
     const start = projection.kind === "pitch" ? "add C4 at 0" : "hit kick at 0";
-    // First run: name the three ways in (ask, play, menu); narrow
-    // windows fall back to one prompt command.
-    const full = `${name} · empty · type a request · ctrl-p play · ctrl-k menu`;
-    const text = truncate(
-      full.length <= areaWidth ? full : `${name} · empty · ${start} to start`,
-      areaWidth,
-    );
+    const text = truncate(`${name} · empty · ${start} to start`, areaWidth);
     const x = gutter + Math.max(0, Math.floor((areaWidth - text.length) / 2));
     const y = Math.max(0, Math.floor(hitRow / 2));
     for (let index = 0; index < text.length; index += 1)
