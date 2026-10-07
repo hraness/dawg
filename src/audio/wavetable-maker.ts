@@ -82,7 +82,7 @@ export type MadeWavetable = Readonly<{
   /** Median pitch over the region; absent for unpitched material. */
   pitch?: DetectedPitch;
   region: Readonly<{ start: number; end: number; auto: boolean }>;
-  /** Per-frame spectral centroid in harmonics (power-weighted). */
+  /** Per-frame spectral centroid in harmonics (power-weighted, 30 dB floor). */
   centroids: readonly number[];
   /** One paragraph on how the timbre moves across the table. */
   sweep: string;
@@ -446,16 +446,29 @@ function smoothFrames(spectra: Spectrum[], amount: number): Spectrum[] {
 }
 
 function centroid(spectrum: Spectrum): number {
+  // Power-weighted over the harmonics that stand out: within 30 dB of the
+  // strongest and well above the noise floor (20x the median bin, which a
+  // noise bin exceeds with probability ~1e-6), so a quiet noise floor spread
+  // across a thousand harmonics does not outweigh the few loud ones a
+  // listener hears.
+  const power = new Float64Array(HARMONICS);
+  let peak = 0;
+  for (let h = 1; h <= HARMONICS; h += 1) {
+    power[h - 1] = spectrum.re[h]! ** 2 + spectrum.im[h]! ** 2;
+    peak = Math.max(peak, power[h - 1]!);
+  }
+  const sorted = Float64Array.from(power).sort();
+  const median = sorted[sorted.length >> 1]!;
+  const floor = Math.max(peak * 1e-3, median * 20);
   let sum = 0;
   let weighted = 0;
   for (let h = 1; h <= HARMONICS; h += 1) {
-    // Power-weighted: a quiet noise floor across a thousand harmonics
-    // should not outweigh the few loud ones a listener hears.
-    const m = spectrum.re[h]! ** 2 + spectrum.im[h]! ** 2;
-    sum += m;
-    weighted += h * m;
+    const p = power[h - 1]!;
+    if (p < floor) continue;
+    sum += p;
+    weighted += h * p;
   }
-  return sum > 1e-12 ? weighted / sum : 0;
+  return sum > 1e-24 ? weighted / sum : 0;
 }
 
 function brightness(c: number): string {
