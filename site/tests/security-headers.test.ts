@@ -3,7 +3,8 @@ import { describe, expect, test } from "bun:test";
 import nextConfig from "../next.config";
 import { securityHeaders } from "../security-headers";
 
-const header = (key: string) => securityHeaders.find((h) => h.key === key)?.value ?? "";
+const header = (key: string) =>
+  securityHeaders.find((h) => h.key === key)?.value ?? "";
 
 describe("security headers", () => {
   test("next config applies them to every route", async () => {
