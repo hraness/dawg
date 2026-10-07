@@ -1,4 +1,3 @@
-import { envValue } from "../env.ts";
 import {
   clearGatewayKey,
   isValidKey,
@@ -386,7 +385,7 @@ export async function authStatus(
   const config = await readConfig(auth);
   lines.push(
     `provider: ${providerLabel(selection, options.gatewayModel ?? "opus-5.5")} (${selection.choice}${
-      envValue("PROVIDER", auth.env)
+      auth.env.DAWG_PROVIDER
         ? " from DAWG_PROVIDER"
         : config.provider
           ? " saved"

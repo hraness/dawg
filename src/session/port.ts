@@ -1,4 +1,3 @@
-import { envValue } from "../env.ts";
 import { randomUUID } from "node:crypto";
 import { watch, type FSWatcher } from "node:fs";
 import { basename, dirname } from "node:path";
@@ -132,7 +131,7 @@ export type OpenPortOptions = {
 export async function openSessionPort<T>(
   options: OpenPortOptions,
 ): Promise<SessionPort<T>> {
-  if (options.daemon !== false && envValue("DAEMON") !== "0") {
+  if (options.daemon !== false && process.env.DAWG_DAEMON !== "0") {
     try {
       const clientOptions: DaemonClientOptions = {
         workspace: dirname(options.paths.root),

@@ -1,4 +1,3 @@
-import { envValue } from "../env.ts";
 import { unlink } from "node:fs/promises";
 import type { TrackScore } from "../../core/score.ts";
 import { PlaybackLock } from "./lock.ts";
@@ -32,7 +31,7 @@ export class LoopPlayer {
    */
   public async play(score: TrackScore, beat = 0): Promise<void> {
     await this.stopAsync();
-    if (envValue("AUDIO") === "0") return;
+    if (process.env.DAWG_AUDIO === "0") return;
     if (this.lockPath && !(await this.acquireLock())) return;
     const path = `/tmp/dawg-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.wav`;
     await Bun.write(path, renderLoopWav(score, beat));

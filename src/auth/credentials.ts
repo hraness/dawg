@@ -1,5 +1,4 @@
 import { randomBytes } from "node:crypto";
-import { statSync } from "node:fs";
 import {
   chmod,
   mkdir,
@@ -11,23 +10,15 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { envValue } from "../env.ts";
 import type { CommandRunner } from "./runner.ts";
 
 /**
  * Local credentials and provider choice. Secrets live in the macOS Keychain
  * or `~/.config/dawg/credentials.json` (0600 under a 0700 directory), never in
  * the project's `.dawg/` directory. `AI_GATEWAY_API_KEY` always wins.
- *
- * Migration from Track: when `~/.config/dawg` is missing and `~/.config/track`
- * exists, the legacy directory is used, and a key stored under the legacy
- * Keychain service `track` is still read. Nothing legacy is moved or deleted
- * automatically; only an explicit `dawg logout` removes the legacy key.
  */
 export const KEYCHAIN_SERVICE = "dawg";
-export const LEGACY_KEYCHAIN_SERVICE = "track";
 export const CONFIG_DIR_NAME = "dawg";
-export const LEGACY_CONFIG_DIR_NAME = "track";
 export const KEYCHAIN_ACCOUNT = "ai-gateway";
 const MAX_CONFIG_BYTES = 16 * 1024;
 /** Gateway keys are opaque tokens; restricting the alphabet keeps them quote-safe. */
@@ -61,20 +52,10 @@ export type AuthEnv = Readonly<{
 export function configDir(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): string {
-  const explicit = envValue("CONFIG_DIR", env);
+  const explicit = env.DAWG_CONFIG_DIR;
   if (explicit) return explicit;
   const base = env.XDG_CONFIG_HOME || join(env.HOME || homedir(), ".config");
-  const current = join(base, CONFIG_DIR_NAME);
-  const legacy = join(base, LEGACY_CONFIG_DIR_NAME);
-  return !isDirectory(current) && isDirectory(legacy) ? legacy : current;
-}
-
-function isDirectory(path: string): boolean {
-  try {
-    return statSync(path).isDirectory();
-  } catch {
-    return false;
-  }
+  return join(base, CONFIG_DIR_NAME);
 }
 
 export function defaultAuthEnv(runner: CommandRunner): AuthEnv {
@@ -102,7 +83,7 @@ export function maskKey(key: string): string {
 function useKeychain(auth: AuthEnv): boolean {
   return (
     auth.platform === "darwin" &&
-    envValue("CREDENTIAL_STORE", auth.env) !== "file" &&
+    auth.env.DAWG_CREDENTIAL_STORE !== "file" &&
     auth.runner.which("security") !== undefined
   );
 }
@@ -114,10 +95,8 @@ export async function resolveGatewayKey(
   const fromEnv = auth.env.AI_GATEWAY_API_KEY?.trim();
   if (fromEnv) return { key: fromEnv, source: "env" };
   if (useKeychain(auth)) {
-    for (const service of [KEYCHAIN_SERVICE, LEGACY_KEYCHAIN_SERVICE]) {
-      const key = (await readKeychain(auth, service)) ?? "";
-      if (isValidKey(key)) return { key, source: "keychain" };
-    }
+    const key = (await readKeychain(auth, KEYCHAIN_SERVICE)) ?? "";
+    if (isValidKey(key)) return { key, source: "keychain" };
   }
   const file = await readJsonObject(join(auth.dir, "credentials.json"));
   const key = file?.aiGateway;
@@ -180,26 +159,24 @@ async function readKeychain(
   return result?.code === 0 ? result.stdout.trim() : undefined;
 }
 
-/**
- * Remove stored keys from both backends, including the legacy `track`
- * Keychain item (otherwise the read fallback would keep finding it after an
- * explicit logout). Env keys are left to the user.
- */
+/** Remove stored keys from both backends. Env keys are left to the user. */
 export async function clearGatewayKey(auth: AuthEnv): Promise<string[]> {
   const removed: string[] = [];
   if (useKeychain(auth)) {
-    let any = false;
-    for (const service of [KEYCHAIN_SERVICE, LEGACY_KEYCHAIN_SERVICE]) {
-      const result = await auth.runner
-        .run(
-          "security",
-          ["delete-generic-password", "-s", service, "-a", KEYCHAIN_ACCOUNT],
-          { timeoutMs: 10_000, maxOutputBytes: 4096 },
-        )
-        .catch(() => undefined);
-      if (result?.code === 0) any = true;
-    }
-    if (any) removed.push("keychain");
+    const result = await auth.runner
+      .run(
+        "security",
+        [
+          "delete-generic-password",
+          "-s",
+          KEYCHAIN_SERVICE,
+          "-a",
+          KEYCHAIN_ACCOUNT,
+        ],
+        { timeoutMs: 10_000, maxOutputBytes: 4096 },
+      )
+      .catch(() => undefined);
+    if (result?.code === 0) removed.push("keychain");
   }
   if (await removeFileKey(auth)) removed.push("file");
   return removed;
