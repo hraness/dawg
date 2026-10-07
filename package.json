@@ -1,10 +1,20 @@
 {
   "name": "@hraness/track",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "MIT",
   "repository": "https://github.com/hraness/track",
   "description": "A local-first terminal music workstation with an agent-driven piano-roll interface.",
   "type": "module",
+  "files": [
+    "src/**/*.ts",
+    "!src/**/*.test.ts",
+    "!src/**/fixtures/**",
+    "core/**/*.ts",
+    "!core/**/*.test.ts",
+    "tui/**/*.ts",
+    "!tui/**/*.test.ts",
+    "CHANGELOG.md"
+  ],
   "bin": {
     "track": "./src/main.ts"
   },

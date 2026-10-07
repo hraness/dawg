@@ -1,0 +1,422 @@
+/**
+ * End-to-end qualification: real `track` processes in real PTYs, a real
+ * trackd daemon, a temp workspace, and no network.
+ *
+ * One scenario walks the multi-window workflow: three windows build drums,
+ * bass and keys on a new session and converge on one revision and digest;
+ * transport is shared; /rename propagates; reopened windows auto-claim the
+ * three tracks and a fourth gets a draft; undo/redo stay consistent across
+ * windows; /fork numbers the new session; a `kill -9` of trackd recovers
+ * with the same digest on the next edit; and `track render` is
+ * byte-for-byte deterministic.
+ */
+import { afterAll, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { VirtualTerminal } from "./vt.ts";
+
+const MAIN = resolve(import.meta.dir, "../src/main.ts");
+const supported =
+  process.platform !== "win32" &&
+  typeof (Bun as unknown as { Terminal?: unknown }).Terminal === "function";
+
+const COLS = 120;
+const ROWS = 32;
+
+interface PtyTerminal {
+  write(data: string): void;
+  close(): void;
+}
+
+type Window = {
+  name: string;
+  proc: ReturnType<typeof Bun.spawn>;
+  terminal: PtyTerminal;
+  vt: VirtualTerminal;
+};
+
+const workspaces: string[] = [];
+const windows = new Set<Window>();
+
+/** Offline, credential-free environment: no provider, no audio, no network. */
+function env(workspace: string): Record<string, string> {
+  return {
+    PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
+    HOME: workspace,
+    TERM: "xterm-256color",
+    COLORTERM: "truecolor",
+    NO_COLOR: "1",
+    TRACK_AUDIO: "0",
+    TRACK_AI: "0",
+    TRACK_PROVIDER: "gateway",
+    TRACK_CREDENTIAL_STORE: "file",
+    TRACK_CONFIG_DIR: join(workspace, ".config"),
+  };
+}
+
+function open(workspace: string, name: string, argv: string[] = []): Window {
+  const vt = new VirtualTerminal(COLS, ROWS);
+  const decoder = new TextDecoder();
+  const proc = Bun.spawn([process.execPath, MAIN, ...argv], {
+    cwd: workspace,
+    env: env(workspace),
+    terminal: {
+      cols: COLS,
+      rows: ROWS,
+      data(_terminal: unknown, data: Uint8Array) {
+        vt.write(decoder.decode(data, { stream: true }));
+      },
+    },
+  } as Parameters<typeof Bun.spawn>[1]);
+  const terminal = (proc as unknown as { terminal: PtyTerminal }).terminal;
+  const window = { name, proc, terminal, vt };
+  windows.add(window);
+  return window;
+}
+
+async function until(
+  predicate: () => boolean,
+  label: string,
+  context: () => string = () => "",
+  timeoutMs = 10_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline)
+      throw new Error(`timed out waiting for ${label}\n${context()}`);
+    await Bun.sleep(25);
+  }
+}
+
+const header = (w: Window) => w.vt.lines()[0] ?? "";
+const screens = (ws: readonly Window[]) =>
+  ws.map((w) => `--- ${w.name}\n${w.vt.text()}`).join("\n");
+
+async function ready(w: Window): Promise<void> {
+  await until(
+    () => w.vt.text().includes("STEER") && /rev \d+/.test(header(w)),
+    `${w.name} prompt`,
+    () => w.vt.text(),
+  );
+}
+
+async function send(w: Window, line: string): Promise<void> {
+  w.terminal.write(`${line}\r`);
+  await Bun.sleep(40);
+}
+
+/** Runs a command that commits exactly one revision and waits for it. */
+async function edit(w: Window, line: string): Promise<number> {
+  const before = revision(w);
+  await send(w, line);
+  await until(
+    () => revision(w) > before,
+    `${w.name}: ${line}`,
+    () => w.vt.text(),
+  );
+  return revision(w);
+}
+
+function revision(w: Window): number {
+  const match = header(w).match(/rev (\d+)/);
+  return match ? Number(match[1]) : -1;
+}
+
+type Status = { name: string; revision: number; digest: string; mode: string };
+
+/**
+ * Asks a window for `/status` and parses its own revision and digest. The
+ * activity strip lists the newest card first and merges repeats, so the
+ * first match whose revision equals the header's is the current reading.
+ */
+async function status(w: Window): Promise<Status> {
+  const marker = /status · (.+?) · rev (\d+) · ([0-9a-f]{16}) · (daemon|file)/;
+  await send(w, "/status");
+  let found: RegExpMatchArray | null = null;
+  await until(
+    () => {
+      found = w.vt.text().match(marker);
+      return (
+        found !== null &&
+        Number(found[2]) === revision(w) &&
+        header(w).includes(found[1]!)
+      );
+    },
+    `${w.name} /status`,
+    () => w.vt.text(),
+  );
+  const match = found as unknown as RegExpMatchArray;
+  return {
+    name: match[1]!,
+    revision: Number(match[2]),
+    digest: match[3]!,
+    mode: match[4]!,
+  };
+}
+
+/**
+ * Waits until every window's header shows the same revision, then checks
+ * each window's own composition digest and session name agree.
+ */
+async function converged(ws: readonly Window[]): Promise<Status> {
+  await until(
+    () => {
+      const revisions = ws.map(revision);
+      return revisions[0]! > 0 && revisions.every((r) => r === revisions[0]);
+    },
+    "same revision in every window",
+    () => screens(ws),
+  );
+  const statuses: Status[] = [];
+  for (const w of ws) statuses.push(await status(w));
+  for (const s of statuses) {
+    expect(s.mode).toBe("daemon");
+    expect(s.revision).toBe(statuses[0]!.revision);
+    expect(s.digest).toBe(statuses[0]!.digest);
+    expect(s.name).toBe(statuses[0]!.name);
+  }
+  for (const w of ws) expect(header(w)).toContain(statuses[0]!.name);
+  return statuses[0]!;
+}
+
+async function close(w: Window): Promise<void> {
+  w.terminal.write("\u0003");
+  const code = await Promise.race([
+    w.proc.exited,
+    Bun.sleep(5_000).then(() => "timeout" as const),
+  ]);
+  if (code === "timeout") w.proc.kill("SIGKILL");
+  w.terminal.close();
+  windows.delete(w);
+  expect(code).toBe(0);
+}
+
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Live trackd pids for every session in a workspace, from their locks. */
+async function daemonPids(workspace: string): Promise<number[]> {
+  const dir = join(workspace, ".track", "sessions");
+  const names = await readdir(dir).catch(() => [] as string[]);
+  const pids: number[] = [];
+  for (const name of names.filter((n) => n.endsWith(".daemon.lock"))) {
+    try {
+      const owner = JSON.parse(
+        await readFile(join(dir, name, "owner"), "utf8"),
+      ) as {
+        pid?: unknown;
+      };
+      if (typeof owner.pid === "number" && alive(owner.pid))
+        pids.push(owner.pid);
+    } catch {
+      // A lock being rewritten; the next read sees it.
+    }
+  }
+  return pids;
+}
+
+afterAll(async () => {
+  for (const w of windows) {
+    w.proc.kill("SIGKILL");
+    w.terminal.close();
+  }
+  for (const workspace of workspaces) {
+    for (const pid of await daemonPids(workspace)) process.kill(pid, "SIGKILL");
+    await rm(workspace, { recursive: true, force: true });
+  }
+});
+
+async function render(workspace: string, out: string): Promise<string> {
+  const proc = Bun.spawn([process.execPath, MAIN, "render", out], {
+    cwd: workspace,
+    env: env(workspace),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [code, stdout, stderr] = await Promise.all([
+    proc.exited,
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+  expect(stderr).toBe("");
+  expect(code).toBe(0);
+  const bytes = await readFile(join(workspace, out));
+  const sha = createHash("sha256").update(bytes).digest("hex");
+  expect(stdout).toContain(sha);
+  expect(bytes.subarray(0, 4).toString("latin1")).toBe("RIFF");
+  return sha;
+}
+
+test.skipIf(!supported)(
+  "e2e: three windows, trackd, rename, auto-claim, undo/redo, fork, kill -9, render",
+  async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "track-e2e-"));
+    workspaces.push(workspace);
+
+    // 1. Three windows on a new session, one per instrument.
+    const drums = open(workspace, "drums", ["--new", "--track", "drums"]);
+    await ready(drums);
+    const bass = open(workspace, "bass", ["--track", "bass"]);
+    const keys = open(workspace, "keys", ["--track", "keys"]);
+    await Promise.all([ready(bass), ready(keys)]);
+    const trio = [drums, bass, keys];
+    await converged(trio);
+
+    await edit(drums, "pattern kick every 1");
+    await edit(drums, "pattern snare 1 3 vel 0.8");
+    await edit(drums, "pattern hat every 0.5 from 0.25 vel 0.5");
+    await converged(trio);
+    await edit(bass, "instrument bass");
+    await edit(bass, "add C2 at 0 for 1");
+    await edit(bass, "add G2 at 2 for 1");
+    await converged(trio);
+    await edit(keys, "instrument piano");
+    await edit(keys, "add E4 at 0 for 2");
+    await edit(keys, "add G4 at 2 for 2");
+    const built = await converged(trio);
+    expect(header(drums)).toContain("drums");
+    expect(header(bass)).toContain("bass");
+    expect(header(keys)).toContain("keys");
+
+    // Transport is shared: play in one window shows ▶ in all three.
+    await send(bass, "play");
+    await until(
+      () => trio.every((w) => header(w).includes("▶")),
+      "▶ in every window",
+      () => screens(trio),
+    );
+    await send(keys, "pause");
+    await until(
+      () => trio.every((w) => header(w).includes("⏸")),
+      "⏸ in every window",
+      () => screens(trio),
+    );
+
+    // 2. /rename propagates to every header.
+    await send(drums, "/rename night drive");
+    await until(
+      () => trio.every((w) => header(w).includes("night drive")),
+      "renamed header in every window",
+      () => screens(trio),
+    );
+    const renamed = await converged(trio);
+    expect(renamed.name).toBe("night drive");
+    expect(renamed.digest).toBe(built.digest);
+    for (const w of trio) await close(w);
+
+    // Reopened plain windows auto-claim drums, bass and keys in score order;
+    // a fourth window gets a draft track.
+    const one = open(workspace, "one");
+    await ready(one);
+    const two = open(workspace, "two");
+    await ready(two);
+    const three = open(workspace, "three");
+    await ready(three);
+    expect(header(one)).toContain("drums");
+    expect(header(two)).toContain("bass");
+    expect(header(three)).toContain("keys");
+    const four = open(workspace, "four");
+    await until(
+      () => four.vt.text().includes("all tracks open"),
+      "draft hint",
+      () => four.vt.text(),
+    );
+    expect(header(four)).toContain("track-4");
+    const quad = [one, two, three, four];
+    const reopened = await converged(quad);
+    expect(reopened.digest).toBe(built.digest);
+    expect(reopened.name).toBe("night drive");
+
+    // Undo in one window and redo in another stay consistent everywhere.
+    await edit(two, "add A2 at 3 for 1");
+    const added = await converged(quad);
+    await edit(three, "undo");
+    const undone = await converged(quad);
+    expect(undone.digest).toBe(built.digest);
+    await edit(one, "redo");
+    const redone = await converged(quad);
+    expect(redone.digest).toBe(added.digest);
+    await send(four, "redo");
+    await until(
+      () => four.vt.text().includes("nothing to redo"),
+      "empty redo stack",
+      () => four.vt.text(),
+    );
+
+    // 3. kill -9 trackd mid-session: the next edit recovers the same state.
+    const [pid] = await daemonPids(workspace);
+    expect(pid).toBeNumber();
+    process.kill(pid!, "SIGKILL");
+    await until(() => !alive(pid!), "trackd exit");
+    const recovered = await edit(one, "pattern clap 1 3 vel 0.6");
+    expect(recovered).toBe(redone.revision + 1);
+    const afterCrash = await converged(quad);
+    expect(afterCrash.revision).toBe(recovered);
+    const [respawned] = await daemonPids(workspace);
+    expect(respawned).toBeNumber();
+    expect(respawned).not.toBe(pid);
+    // Undoing the post-crash edit returns to the pre-crash digest.
+    await edit(three, "undo");
+    const rewound = await converged(quad);
+    expect(rewound.digest).toBe(redone.digest);
+    await edit(two, "redo");
+    const replayed = await converged(quad);
+    expect(replayed.digest).toBe(afterCrash.digest);
+
+    // 4. /fork numbers the new session and moves only this window.
+    await send(four, "/fork");
+    await until(
+      () => header(four).includes("night drive 2"),
+      "fork header",
+      () => four.vt.text(),
+    );
+    expect(four.vt.text()).toContain("forked · night drive 2");
+    const forked = await status(four);
+    expect(forked.name).toBe("night drive 2");
+    expect(forked.digest).toBe(replayed.digest);
+    for (const w of [one, two, three])
+      expect(header(w)).not.toContain("night drive 2");
+    const stayed = await converged([one, two, three]);
+    expect(stayed.name).toBe("night drive");
+
+    for (const w of quad) await close(w);
+
+    // 5. Rendering the session twice is byte-identical. The workspace
+    // pointer follows the fork, which holds the same composition.
+    const first = await render(workspace, "first.wav");
+    const second = await render(workspace, "second.wav");
+    expect(second).toBe(first);
+  },
+  120_000,
+);
+
+test("demo --track drums seeds a drum pattern, not melodic notes", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "track-demo-"));
+  workspaces.push(workspace);
+  const proc = Bun.spawn(
+    [process.execPath, MAIN, "--track", "drums", "--export", "demo.json"],
+    {
+      cwd: workspace,
+      env: { ...env(workspace), TRACK_DEMO: "1" },
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+  );
+  expect(await proc.exited).toBe(0);
+  const exported = JSON.parse(
+    await readFile(join(workspace, "demo.json"), "utf8"),
+  ) as { notes: { pitch: number; trackId: string }[] };
+  const pitches = new Set(exported.notes.map((note) => note.pitch));
+  // kick 36, snare 38, closed hat 42; nothing falls through to rim.
+  expect([...pitches].sort()).toEqual([36, 38, 42]);
+  expect(exported.notes.every((note) => note.trackId === "drums")).toBe(true);
+});

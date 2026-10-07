@@ -11,7 +11,7 @@ bun install
 bun run track
 ```
 
-Run `track` from any directory. It creates `.track/session` on first use and reuses that session in later terminal windows. Use `track --new` for a separate composition, `track --session <id>` to attach explicitly, and `track --track bass` to focus a named track. Every window connects to `trackd`, a per-session daemon the first window starts in the background. It is the single writer: windows send operations with a base revision and an idempotency key, duplicate keys are no-ops, stale bases receive a typed rebase diagnostic, and accepted commits are persisted through the same atomic snapshot store before being broadcast to every window. The daemon also owns the only transport and audio player, broadcasting play, pause, seek, and tempo with a timestamp so every window draws the same hit line. It keeps a presence table (`clientId`, `pid`, focused track) and can atomically claim the first unfocused track for a new window. The daemon exits 30 seconds after its last window closes, removes its socket on SIGTERM, and a crashed daemon's socket and lock are reclaimed by the next window. If `trackd` cannot be started (or `TRACK_DAEMON=0`), windows fall back to polling the snapshot under the file lock, with presence kept in per-window heartbeat files. `track sessions` lists sessions in the current workspace.
+Run `track` from any directory. It creates `.track/session` on first use and reuses that session in later terminal windows. Use `track --new` for a separate composition, `track --session <id>` to attach explicitly, and `track --track bass` to focus a named track. Every window connects to `trackd`, a per-session daemon the first window starts in the background. It is the single writer: windows send operations with a base revision and an idempotency key, duplicate keys are no-ops, stale bases receive a typed rebase diagnostic, and accepted commits are persisted through the same atomic snapshot store before being broadcast to every window. The daemon also owns the only transport and audio player, broadcasting play, pause, seek, and tempo with a timestamp so every window draws the same hit line. It keeps a presence table (`clientId`, `pid`, focused track) and can atomically claim the first unfocused track for a new window. The daemon exits 30 seconds after its last window closes, removes its socket on SIGTERM, and a crashed daemon's socket and lock are reclaimed by the next window. If `trackd` cannot be started (or `TRACK_DAEMON=0`), windows fall back to polling the snapshot under the file lock, with presence kept in per-window heartbeat files. `track sessions` lists sessions in the current workspace. `track render <out.wav> [--session <name|id>] [--import <file>]` reads the session record from disk (no daemon, no audio) and writes a mono 16-bit WAV through the playback renderer; the same score always yields the same bytes, and the command prints the size and sha256. `/status` reports `status · <name> · rev <n> · <digest> · daemon|file`, where the digest is the 16-hex composition digest trackd broadcasts. In demo mode a drum track is seeded with a one-bar kick, snare and hat groove instead of melodic notes.
 
 ### Sessions, names and forks
 
@@ -78,6 +78,7 @@ redo
 move note <id> to 2.5
 duration note <id> 0.25
 /tracks
+/status
 /export loop.track.json
 /import loop.track.json
 /model opus-5.5
