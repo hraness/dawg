@@ -110,6 +110,7 @@ dawg projects are now plain TypeScript files that you, an agent or another windo
 
 ### Help
 
+- **Sentences reach the agent**: a request that merely starts with a command word (`add a walking bass in A minor`, the prompt's own example, or `pan the hats left`) goes to the agent instead of answering with the command's usage. Short or numeric misuse (`pan 3`, `add H4 at 0`) still gets the usage hint locally.
 - **`/help` is a short task guide** (start here, play notes, make drums, shape the sound, chords) pointing to Ctrl-K, Ctrl-P and `?`; `/help all` is the full reference and `/help music|session|window|keys` shows one group. The reference now lists `fx`, `synth`, `/pattern`, `/kit` and `/pack`.
 - **Typos get the nearest command**: `/clik on` answers `unknown command /clik · did you mean /click? · /help` instead of a bare "unknown". Entering play mode says `? keys · esc leaves` instead of listing four keys.
 

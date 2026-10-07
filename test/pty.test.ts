@@ -362,6 +362,14 @@ test.skipIf(!supported)(
     await t.until(() => t.vt.text().includes("dawg login"), "offline hint");
     expect(t.vt.text()).toContain("no model · dawg login");
     expect(t.vt.text()).not.toContain("STEER");
+    // A sentence that starts with a command verb is a request, not a usage
+    // error: offline it says "unrecognized", never the add syntax.
+    await t.send("add a walking bass in A minor\r");
+    await t.until(
+      () => t.vt.text().includes("unrecognized · add a walking bass"),
+      "prose reaches the agent path",
+    );
+    expect(t.vt.text()).not.toContain("add <note> at <beat>");
     await t.send("\u0003");
     await Promise.race([t.proc.exited, Bun.sleep(5000)]);
     t.proc.kill();
