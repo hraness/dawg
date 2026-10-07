@@ -34,6 +34,7 @@ import {
   interpolateAutomation,
 } from "../effects/common.ts";
 import { seededRandom } from "../random.ts";
+import { isZzfxSound, renderZzfx } from "./zzfx.ts";
 import {
   makePinkNoise,
   resolveOscillator,
@@ -349,6 +350,46 @@ export function renderSynthNote(
 
   // Pitch.
   const base = 440 * 2 ** ((note.pitch - 69) / 12);
+
+  if (isZzfxSound(sound) && !context.oscillatorFor) {
+    const count = end - start;
+    const raw = new Float64Array(count);
+    renderZzfx(raw, count, {
+      sound,
+      sampleRate,
+      frequency: base,
+      zrand: c.number("zrand"),
+      curve: c.number("curve"),
+      slide: c.number("slide"),
+      deltaSlide: c.number("deltaSlide"),
+      pitchJump: c.number("pitchJump"),
+      pitchJumpTime: c.number("pitchJumpTime"),
+      lfo: c.number("lfo"),
+      noise: c.number("noise"),
+      zmod: c.number("zmod"),
+      zcrush: c.number("zcrush"),
+      zdelay: c.number("zdelay"),
+      tremolo: c.number("tremolo"),
+      random,
+    });
+    const filters = noteFilters(c, gate, sampleRate).map((make) => make());
+    for (let elapsed = 0; elapsed < count; elapsed += 1) {
+      const t = elapsed / sampleRate;
+      if (elapsed % CONTROL_SAMPLES === 0)
+        for (const filter of filters) filter.update(t);
+      let value = raw[elapsed]!;
+      for (const filter of filters) value = filter.process(value);
+      const level =
+        amp.at(t) *
+        velocity *
+        gain *
+        VOICE_LEVEL *
+        gainAt(note.startTick + elapsed / samplesPerTick);
+      left[start + elapsed]! += value * level;
+      if (right) right[start + elapsed]! += value * level;
+    }
+    return;
+  }
   const vib = c.number("vib");
   const vibmod = c.number("vibmod");
   const penv = c.number("penv");

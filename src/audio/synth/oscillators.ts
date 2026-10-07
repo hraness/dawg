@@ -251,6 +251,15 @@ const BUILT_IN: Readonly<Record<string, OscillatorFactory>> = Object.freeze({
       return hit ? value : 0;
     };
   },
+  // ZzFX sounds render through their own generator (zzfx.ts); these plain
+  // waves only register the names (and serve as their seam fallback).
+  z_sine: () => (phase) => Math.sin(2 * Math.PI * phase),
+  z_triangle: () => triangle,
+  z_sawtooth: () => sawtooth,
+  z_square: () => (phase, increment) => pulse(phase, increment, 0.5),
+  z_tan: () => (phase) =>
+    Math.max(-1, Math.min(1, Math.tan(Math.PI * (phase - Math.floor(phase))))),
+  z_noise: (init) => () => init.random() * 2 - 1,
 });
 
 /** Every built-in sound name. */
