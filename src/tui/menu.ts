@@ -12,6 +12,7 @@ import {
   AUTOMATION_PARAMETERS,
   automationPoints,
   automationRange,
+  REVERB_IR_BUILTINS,
   SCORE_LIMITS,
   isTrackAutomationParameter,
   WARP_MODES,
@@ -692,6 +693,14 @@ function synthAdvancedNodes(context: MenuContext): MenuNode[] {
       text.trim() ? `synth partials ${text.trim()}` : "synth partials off",
     example: "synth partials 1 0.5 0.33 0.25",
   });
+  nodes.push({
+    kind: "entry",
+    label: "zzfx array",
+    value: "—",
+    placeholder: "a raw ZzFX array, e.g. ,,129,.01,,.15,2",
+    command: (text) => `synth zzfx ${text.trim()}`,
+    example: "synth zzfx ,,129,.01,,.15,2",
+  });
   return nodes;
 }
 
@@ -871,6 +880,20 @@ function effectParamNodes(
         options: presets,
         command: (preset) => `fx ${effect} preset ${preset}`,
       });
+    if (effect === "reverb") {
+      // Convolution (Strudel `ir`): a generated impulse, or `fx ir <file>`.
+      const ir = track.reverb?.ir?.src;
+      const current = ir?.startsWith("builtin:")
+        ? ir.slice("builtin:".length)
+        : (ir ?? "off");
+      nodes.push({
+        kind: "choice",
+        label: "impulse (ir)",
+        value: current,
+        options: ["off", ...REVERB_IR_BUILTINS],
+        command: (choice) => `fx reverb ir ${choice}`,
+      });
+    }
   }
   const keys = advanced ? Object.keys(spec.params) : spec.simple;
   for (const key of keys) {

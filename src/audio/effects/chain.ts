@@ -21,7 +21,7 @@ import {
 import { applyChorus, applyLeslie, applyPhaser } from "./modulation.ts";
 import { applyDelay, applyReverb } from "./space.ts";
 
-export { delayTailFor, reverbTailFor } from "./space.ts";
+export { delayTailFor, reverbImpulse, reverbTailFor } from "./space.ts";
 export { interpolateAutomation, type EffectContext } from "./common.ts";
 
 type MonoStage = (
@@ -74,17 +74,23 @@ export function applyMonoChain(
   }
 }
 
-/** Stereo stages, in chain order, after pan. */
+/**
+ * Stereo stages, in chain order, after pan. A track on a shared orbit bus
+ * (`sends: false`) skips delay and reverb: the bus applies them to the sum.
+ */
 export function applyStereoChain(
   left: Float64Array,
   right: Float64Array,
   track: Track,
   context: EffectContext,
+  sends = true,
 ): void {
   for (const stage of FX_CHAIN.slice(PAN_INDEX + 1)) {
-    if (stage === "delay") applyDelay(left, right, track, context);
-    else if (stage === "reverb") applyReverb(left, right, track, context);
-    else {
+    if (stage === "delay") {
+      if (sends) applyDelay(left, right, track, context);
+    } else if (stage === "reverb") {
+      if (sends) applyReverb(left, right, track, context);
+    } else {
       const values = track.fx?.[stage as FxName];
       const apply = STEREO[stage as FxName];
       if (values && apply) apply(left, right, track, values, context);

@@ -29,7 +29,15 @@ const rich = createScore({
       pan: -0.25,
       filter: { cutoff: 800, resonance: 0.2 },
       delay: { beats: 0.5, feedback: 0.3, mix: 0.2 },
-      reverb: { mix: 0.1, size: 0.5 },
+      reverb: {
+        mix: 0.1,
+        size: 0.5,
+        ir: {
+          src: "pack:dirt-samples/bev:0",
+          sha256: "a".repeat(64),
+          url: "https://raw.githubusercontent.com/tidalcycles/dirt-samples/master/bev/00_BEV.wav",
+        },
+      },
       volumeAutomation: [
         { tick: 0, value: 1 },
         { tick: 1920, value: 0.5 },
@@ -69,7 +77,13 @@ const rich = createScore({
       instrument: "saw",
       filter: { cutoff: 300, resonance: 0.1, type: "hpf", ftype: "24db" },
       delay: { beats: 0.75, feedback: 0.35, mix: 0.25, pingpong: true },
-      reverb: { mix: 0.3, size: 0.6, fade: 3, predelay: 0.02 },
+      reverb: {
+        mix: 0.3,
+        size: 0.6,
+        fade: 3,
+        predelay: 0.02,
+        ir: { src: "hall" },
+      },
       fx: {
         chorus: {},
         distort: { drive: 3, type: "fold" },

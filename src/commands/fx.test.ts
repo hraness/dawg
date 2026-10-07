@@ -180,3 +180,23 @@ describe("set_fx agent tool", () => {
     expect(() => tool.plan({ effect: "chorus" }, context)).toThrow();
   });
 });
+
+describe("fx reverb ir (convolution)", () => {
+  test("built-in impulses store canonically, turn reverb on, and clear", () => {
+    expect(parseFxCommand("fx reverb ir hall")).toEqual({
+      type: "fx-ir",
+      ir: "builtin:hall",
+    });
+    expect(parseFxCommand("fx reverb ir ../x.wav")).toBeUndefined();
+    const on = run("fx reverb ir plate");
+    expect(on.ok).toBe(true);
+    const reverb = on.next!.tracks[0]!.reverb!;
+    expect(reverb.ir).toEqual({ src: "builtin:plate" });
+    expect(reverb.mix).toBeGreaterThan(0);
+    const back = scoreFromJSON(JSON.parse(JSON.stringify(on.next)));
+    expect(back.tracks[0]!.reverb!.ir).toEqual({ src: "builtin:plate" });
+    const off = run("fx reverb ir off", on.next!);
+    expect(off.next!.tracks[0]!.reverb!.ir).toBeUndefined();
+    expect(off.next!.tracks[0]!.reverb!.mix).toBe(reverb.mix);
+  });
+});

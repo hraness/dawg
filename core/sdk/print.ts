@@ -275,6 +275,22 @@ export function printTrack(score: TrackScore, track: Track): string {
           ["mix", num(track.reverb.mix)],
           ["size", num(track.reverb.size)],
           ...optional(track.reverb, ["fade", "lowpass", "dim", "predelay"]),
+          ...(track.reverb.ir
+            ? ([
+                [
+                  "ir",
+                  track.reverb.ir.src.startsWith(BUILTIN_TABLE_PREFIX)
+                    ? str(
+                        track.reverb.ir.src.slice(BUILTIN_TABLE_PREFIX.length),
+                      )
+                    : printSample(
+                        track.reverb.ir,
+                        INDENT + INDENT,
+                        "ir: ".length,
+                      ),
+                ],
+              ] as const)
+            : []),
         ],
         INDENT,
         "reverb: ".length,
@@ -287,7 +303,10 @@ export function printTrack(score: TrackScore, track: Track): string {
     const body = effects.map(([effect, values]) => {
       // Only values that differ from the default: decoding fills the rest.
       const params = Object.entries(fxSpec(effect).params)
-        .filter(([key, spec]) => values[key] !== spec.default)
+        .filter(
+          ([key, spec]) =>
+            values[key] !== undefined && values[key] !== spec.default,
+        )
         .map(([key]) => [key, value(values[key]!)] as const);
       return `${inner}${effect}: ${params.length === 0 ? "{}" : obj(params, inner, `${effect}: `.length, 1)},`;
     });
@@ -562,7 +581,13 @@ function obj(
  */
 function property(key: string, value: string, indent: string): string {
   const line = `${indent}${key}: ${value},`;
-  if (line.length <= WIDTH || !value.startsWith('"') || value.includes("\n"))
+  // Prettier keeps a short key (under tabWidth + 3 = 5 characters) inline.
+  if (
+    line.length <= WIDTH ||
+    key.length < 5 ||
+    !value.startsWith('"') ||
+    value.includes("\n")
+  )
     return line;
   return `${indent}${key}:\n${indent}${INDENT}${value},`;
 }

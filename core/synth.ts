@@ -914,3 +914,88 @@ export const SYNTH_PRESETS: Readonly<
 export function isSynthPreset(name: string): boolean {
   return Object.prototype.hasOwnProperty.call(SYNTH_PRESETS, name);
 }
+
+/**
+ * The ZzFX positional parameter layout (ZzFX README, MIT): `zzfx(...[volume,
+ * randomness, frequency, attack, sustain, release, shape, shapeCurve, slide,
+ * deltaSlide, pitchJump, pitchJumpTime, repeatTime, noise, modulation,
+ * bitCrush, delay, sustainVolume, decay, tremolo, filter])`. Each entry is
+ * the dawg synth parameter it sets; `null` entries are taken from the note
+ * (`frequency` is the note's pitch, `sustain` time its length).
+ */
+export const ZZFX_ARRAY_LAYOUT = Object.freeze([
+  "gain",
+  "zrand",
+  null,
+  "attack",
+  null,
+  "release",
+  "shape",
+  "curve",
+  "slide",
+  "deltaSlide",
+  "pitchJump",
+  "pitchJumpTime",
+  "lfo",
+  "noise",
+  "zmod",
+  "zcrush",
+  "zdelay",
+  "sustain",
+  "decay",
+  "tremolo",
+  "filter",
+] as const);
+
+/** ZzFX `shape` 0..5 as dawg's z_* sounds. */
+const ZZFX_SHAPES = [
+  "z_sine",
+  "z_triangle",
+  "z_sawtooth",
+  "z_tan",
+  "z_noise",
+  "z_square",
+] as const;
+
+/** ZzFX's defaults where they differ from an unset dawg parameter. */
+const ZZFX_ARRAY_DEFAULTS: Readonly<Record<string, number>> = {
+  zrand: 0.05,
+  attack: 0,
+  release: 0.1,
+};
+
+/**
+ * A raw ZzFX parameter array (Strudel `zzfx([...])`) as a `z_*` instrument
+ * and synth parameters. Empty slots (`undefined`/`null`) take ZzFX's
+ * defaults; values outside dawg's ranges are rejected like any synth
+ * parameter. `filter` > 0 is a high-pass at that many Hz, < 0 a low-pass.
+ * core/sdk/v1.ts `zzfx()` mirrors this mapping.
+ */
+export function zzfxArraySynth(
+  values: readonly (number | null | undefined)[],
+): { instrument: string; synth: TrackSynth } {
+  if (values.length > ZZFX_ARRAY_LAYOUT.length)
+    throw new FxValidationError(
+      `zzfx takes at most ${ZZFX_ARRAY_LAYOUT.length} values`,
+    );
+  const synth: Record<string, number> = { ...ZZFX_ARRAY_DEFAULTS };
+  let instrument: string = ZZFX_SHAPES[0];
+  ZZFX_ARRAY_LAYOUT.forEach((name, index) => {
+    const value = values[index];
+    if (name === null || value === undefined || value === null) return;
+    if (!Number.isFinite(value))
+      throw new FxValidationError(`zzfx value ${index} must be a number`);
+    if (name === "shape") {
+      instrument =
+        ZZFX_SHAPES[Math.max(0, Math.min(5, Math.round(value)))] ?? instrument;
+      return;
+    }
+    if (name === "filter") {
+      if (value === 0) return;
+      synth[value > 0 ? "hpf" : "lpf"] = Math.abs(value);
+      return;
+    }
+    synth[name] = value;
+  });
+  return { instrument, synth: normalizeSynth(synth) ?? Object.freeze({}) };
+}
