@@ -598,13 +598,18 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   {
     name: "set_synth",
     description:
-      "Shape a synth track's voice with Strudel synth params (attack decay sustain release, lpf lpq lpenv, fm fmh, unison detune spread, vib vibmod, penv, noise, pw…); null unsets one. preset loads a voice (instrument + params); reset clears all.",
+      "Shape a synth track's voice with Strudel synth params (attack decay sustain release, lpf lpq lpenv, fm fmh, unison detune spread, vib vibmod, penv, noise, pw…); null unsets one. preset loads a voice (instrument + params); reset clears all; zzfx takes a raw ZzFX array (empty slots null) and sets a z_* sound.",
     parameters: {
       type: "object",
       properties: {
         trackId: trackIdSchema,
         preset: { type: "string", enum: Object.keys(SYNTH_PRESETS) },
         reset: { type: "boolean" },
+        zzfx: {
+          type: "array",
+          maxItems: 21,
+          items: { type: ["number", "null"] },
+        },
         params: {
           type: "object",
           additionalProperties: {
@@ -1436,6 +1441,15 @@ function fxToolCommand(
 
 function synthToolCommand(args: Record<string, unknown>): SynthCommand {
   if (args.reset === true) return { type: "synth-reset" };
+  if (args.zzfx !== undefined) {
+    if (
+      !Array.isArray(args.zzfx) ||
+      args.zzfx.length > 21 ||
+      !args.zzfx.every((n) => n === null || typeof n === "number")
+    )
+      throw new ToolArgumentError("zzfx must be up to 21 numbers or nulls");
+    return { type: "synth-zzfx", values: args.zzfx as (number | null)[] };
+  }
   if (args.preset !== undefined) {
     if (typeof args.preset !== "string" || !isSynthPreset(args.preset))
       throw new ToolArgumentError(

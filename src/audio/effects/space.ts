@@ -3,6 +3,13 @@
  * optional parameters both render exactly as the original renderer did.
  */
 import type { Track } from "../../../core/score.ts";
+import type { DecodedSample } from "../samples.ts";
+import {
+  builtinImpulse,
+  convolveStereo,
+  sampleImpulse,
+  type Impulse,
+} from "./convolution.ts";
 import {
   CONTROL_SAMPLES,
   OnePole,
@@ -26,13 +33,15 @@ export function delaySeconds(track: Track, tempoBpm: number): number {
  * `pingpong`, the mono sum enters the left line only and every repeat
  * crosses over, so echoes alternate left, right, left. `highcut` runs a
  * one-pole low-pass on everything written into the lines, so each repeat
- * is darker than the last. Feedback and mix follow their lanes.
+ * is darker than the last. Feedback and mix follow their lanes. `wetOnly`
+ * (a shared orbit bus) replaces the input with the repeats alone.
  */
 export function applyDelay(
   left: Float64Array,
   right: Float64Array,
   track: Track,
   context: EffectContext,
+  wetOnly = false,
 ): void {
   const delay = track.delay;
   if (!delay) return;
@@ -83,8 +92,8 @@ export function applyDelay(
     }
     lineL[slot] = writeL;
     lineR[slot] = writeR;
-    left[index] = dryL + wetL * mix;
-    right[index] = dryR + wetR * mix;
+    left[index] = (wetOnly ? 0 : dryL) + wetL * mix;
+    right[index] = (wetOnly ? 0 : dryR) + wetR * mix;
   }
 }
 
@@ -107,12 +116,61 @@ const STEREO_SPREAD = 23;
 const REVERB_INPUT_GAIN = 0.015;
 const REVERB_WET_SCALE = 3;
 
+/**
+ * Convolution wet level: an energy-normalized impulse on the summed pair,
+ * scaled so `mix` sounds as loud as the algorithmic tail at the same mix.
+ */
+const IR_WET_SCALE = 2.1;
+
+/** Impulses decoded from samples, by sha256 and rate (small: a few IRs). */
+const SAMPLE_IMPULSES = new Map<string, Impulse>();
+const MAX_SAMPLE_IMPULSES = 8;
+
+/**
+ * The impulse a track's `reverb.ir` names at this rate: a generated
+ * built-in, or the decoded sample in `irs`. Undefined when the track has no
+ * `ir` or its sample did not load (the algorithmic reverb then plays).
+ */
+export function reverbImpulse(
+  track: Track,
+  sampleRate: number,
+  irs?: ReadonlyMap<string, DecodedSample>,
+): Impulse | undefined {
+  const ir = track.reverb?.ir;
+  if (!ir) return undefined;
+  if (ir.src.startsWith("builtin:"))
+    return builtinImpulse(ir.src.slice("builtin:".length), sampleRate);
+  const sample = irs?.get(track.id);
+  if (!sample) return undefined;
+  const key = `${sample.sha256}@${sampleRate}`;
+  let impulse = SAMPLE_IMPULSES.get(key);
+  if (!impulse) {
+    impulse = sampleImpulse(
+      `${ir.src}#${sample.sha256}`,
+      sample.mono,
+      sample.sampleRate,
+      sampleRate,
+    );
+    if (SAMPLE_IMPULSES.size >= MAX_SAMPLE_IMPULSES)
+      SAMPLE_IMPULSES.delete(SAMPLE_IMPULSES.keys().next().value!);
+    SAMPLE_IMPULSES.set(key, impulse);
+  }
+  return impulse;
+}
+
 /** Seconds of reverb tail a render keeps for this track. */
-export function reverbTailFor(track: Track): number {
+export function reverbTailFor(
+  track: Track,
+  sampleRate = 44_100,
+  irs?: ReadonlyMap<string, DecodedSample>,
+): number {
   const reverb = track.reverb;
   const lane = track.fxAutomation?.["reverb-mix"] ?? [];
   if (!reverb || (reverb.mix <= 0 && lane.length === 0)) return 0;
-  const decay = reverb.fade ?? 1 + 3 * reverb.size;
+  const impulse = reverbImpulse(track, sampleRate, irs);
+  const decay = impulse
+    ? impulse.left.length / sampleRate
+    : (reverb.fade ?? 1 + 3 * reverb.size);
   return Math.min(20, decay + (reverb.predelay ?? 0));
 }
 
@@ -122,12 +180,14 @@ export function reverbTailFor(track: Track): number {
  * `size` sets comb feedback and damping; `fade` instead sets each comb's
  * feedback for an exact -60 dB decay time; `dim` sets the in-loop damping
  * frequency, `lowpass` filters the input and `predelay` delays it.
+ * `wetOnly` (a shared orbit bus) replaces the input with the tail alone.
  */
 export function applyReverb(
   left: Float64Array,
   right: Float64Array,
   track: Track,
   context: EffectContext,
+  wetOnly = false,
 ): void {
   const reverb = track.reverb;
   if (!reverb) return;
@@ -138,6 +198,19 @@ export function applyReverb(
   );
   if (reverb.mix <= 0 && !mixParam.automated) return;
   const { sampleRate } = context;
+  const impulse = reverbImpulse(track, sampleRate, context.irs);
+  if (impulse) {
+    applyConvolutionReverb(
+      left,
+      right,
+      track,
+      context,
+      impulse,
+      mixParam,
+      wetOnly,
+    );
+    return;
+  }
   const scale = sampleRate / 44_100;
   const sizeFeedback = 0.7 + 0.28 * reverb.size;
   const damp =
@@ -204,7 +277,61 @@ export function applyReverb(
       predelay[slot] = input;
       input = delayed;
     }
-    left[index]! += process(sides[0], input) * wet;
-    right[index]! += process(sides[1], input) * wet;
+    if (wetOnly) {
+      left[index] = process(sides[0], input) * wet;
+      right[index] = process(sides[1], input) * wet;
+    } else {
+      left[index]! += process(sides[0], input) * wet;
+      right[index]! += process(sides[1], input) * wet;
+    }
   }
+}
+
+/**
+ * `reverb.ir`: the summed pair (through `lowpass` and `predelay`, as the
+ * algorithmic reverb) convolved with the impulse and added at `mix`.
+ * `size`, `fade` and `dim` describe the algorithmic tail and do nothing
+ * here: the impulse is the room.
+ */
+function applyConvolutionReverb(
+  left: Float64Array,
+  right: Float64Array,
+  track: Track,
+  context: EffectContext,
+  impulse: Impulse,
+  mixParam: Param,
+  wetOnly: boolean,
+): void {
+  const reverb = track.reverb!;
+  const { sampleRate } = context;
+  const input = new Float64Array(left.length);
+  const inputFilter =
+    reverb.lowpass === undefined
+      ? undefined
+      : new OnePole(reverb.lowpass, sampleRate);
+  const offset = Math.round((reverb.predelay ?? 0) * sampleRate);
+  for (let index = 0; index + offset < left.length; index += 1) {
+    let value = (left[index]! + right[index]!) * 0.5;
+    if (inputFilter) value = inputFilter.process(value);
+    input[index + offset] = value;
+  }
+  if (wetOnly) {
+    left.fill(0);
+    right.fill(0);
+  }
+  let wet = reverb.mix * IR_WET_SCALE;
+  convolveStereo(
+    input,
+    impulse,
+    left,
+    right,
+    wet,
+    mixParam.automated
+      ? (index) => {
+          if (index % CONTROL_SAMPLES === 0)
+            wet = mixParam.at(index) * IR_WET_SCALE;
+          return wet;
+        }
+      : undefined,
+  );
 }

@@ -73,6 +73,8 @@ export type SampleBank = Readonly<{
   problems: readonly SampleProblem[];
   /** Pack wavetables keyed by track id (built-in tables need no loading). */
   wavetables?: ReadonlyMap<string, Wavetable>;
+  /** Decoded `reverb.ir` samples keyed by track id (built-ins need none). */
+  irs?: ReadonlyMap<string, DecodedSample>;
 }>;
 
 export const EMPTY_SAMPLE_BANK: SampleBank = Object.freeze({
@@ -91,7 +93,8 @@ export function hasSamplerTracks(score: TrackScore): boolean {
         track.sampler !== undefined &&
         Object.keys(track.sampler.voices).length > 0) ||
       packWavetable(track) !== undefined ||
-      localWavetable(track) !== undefined,
+      localWavetable(track) !== undefined ||
+      reverbIrSample(track) !== undefined,
   );
 }
 
@@ -102,6 +105,14 @@ export function localWavetable(
   if (!isWavetableInstrument(track.instrument)) return undefined;
   const table = track.wavetable?.table;
   return table && isLocalTableSrc(table.src) ? table : undefined;
+}
+
+/** The pack sound or project file a track's reverb convolves with, if any. */
+export function reverbIrSample(
+  track: TrackScore["tracks"][number],
+): SampleRef | undefined {
+  const ir = track.reverb?.ir;
+  return ir && !ir.src.startsWith("builtin:") ? ir : undefined;
 }
 
 /** The pinned pack table a wavetable track plays, if any. */
@@ -581,6 +592,11 @@ export class SampleLibrary implements SampleSource {
       }
     }
     for (const track of score.tracks) {
+      const ir = reverbIrSample(track);
+      if (ir?.sha256) this.inUse.add(ir.sha256);
+      if (ir?.url) urls.push(ir.url);
+    }
+    for (const track of score.tracks) {
       const table = packWavetable(track);
       if (table?.sha256) this.inUse.add(table.sha256);
       if (table?.url) urls.push(table.url);
@@ -698,10 +714,48 @@ export class SampleLibrary implements SampleSource {
         }
       }
     }
+    const irs = new Map<string, DecodedSample>();
+    for (const track of score.tracks) {
+      const ref = reverbIrSample(track);
+      if (!ref) continue;
+      const report = (level: SampleProblem["level"], message: string) =>
+        problems.push({
+          trackId: track.id,
+          voice: "ir",
+          src: ref.src,
+          level,
+          message,
+        });
+      try {
+        if (ref.src.startsWith(PACK_PREFIX)) {
+          const loaded = await this.loadPack(ref);
+          this.inUse.add(loaded.sample.sha256);
+          irs.set(track.id, loaded.sample);
+          if (loaded.warning)
+            report("warning", `ir · ${ref.src} · ${loaded.warning}`);
+        } else {
+          dirs ??= trackDirectories(score);
+          const src = ref.src.startsWith("tracks/")
+            ? ref.src
+            : `tracks/${dirs.get(track.id) ?? track.id}/${ref.src.replace(/^\.\//, "")}`;
+          const loaded = await this.loadFile(src);
+          this.inUse.add(loaded.sha256);
+          irs.set(track.id, loaded);
+        }
+      } catch (error) {
+        report(
+          "error",
+          error instanceof PackError
+            ? `ir · ${ref.src} · ${error.message} · fx reverb ir hall uses a built-in`
+            : describeFailure("ir", ref.src, error, this.ffmpeg),
+        );
+      }
+    }
     return Object.freeze({
       voices,
       problems: Object.freeze(problems),
       ...(wavetables.size ? { wavetables } : {}),
+      ...(irs.size ? { irs } : {}),
     });
   }
 

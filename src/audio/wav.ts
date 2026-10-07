@@ -25,7 +25,12 @@ import {
   type VoiceContext,
 } from "./synth/voice.ts";
 import { legacyWave } from "./synth/oscillators.ts";
-import { EMPTY_SAMPLE_BANK, sampleKey, type SampleBank } from "./samples.ts";
+import {
+  EMPTY_SAMPLE_BANK,
+  sampleKey,
+  type DecodedSample,
+  type SampleBank,
+} from "./samples.ts";
 import { synthKit } from "../../core/kits.ts";
 import { kitDrumSample, kitTailSeconds, newKitVoiceState } from "./kits.ts";
 import {
@@ -33,8 +38,16 @@ import {
   applyStereoChain,
   delayTailFor,
   interpolateAutomation,
+  reverbImpulse,
   reverbTailFor,
 } from "./effects/chain.ts";
+import {
+  createOrbitBus,
+  renderOrbitBus,
+  sendToBus,
+  sharedOrbitOf,
+  type OrbitBus,
+} from "./effects/bus.ts";
 import { tableFor, wavetableOscillator } from "./wavetable.ts";
 import {
   duckGains,
@@ -137,6 +150,7 @@ type RenderContext = Readonly<{
   samples: number;
   samplesPerTick: number;
   tempoBpm: number;
+  irs?: ReadonlyMap<string, DecodedSample>;
 }>;
 
 /** Exact (fractional) loop length in frames at a sample rate. */
@@ -195,6 +209,11 @@ type Stem = {
 export class StemRenderer {
   private readonly maxCacheBytes: number;
   private readonly stems = new Map<string, Stem>();
+  /** Shared orbit bus outputs by orbit, keyed by their members' stems. */
+  private readonly buses = new Map<
+    number,
+    { key: string; left: Float64Array; right: Float64Array }
+  >();
   private cacheBytes = 0;
   private renders = 0;
   private scratch: {
@@ -229,8 +248,13 @@ export class StemRenderer {
     const sampleRate = clampSampleRate(options.sampleRate);
     const maxSeconds = Math.max(1, Math.min(60, options.maxSeconds ?? 30));
     const loopSeconds = (score.bars * score.beatsPerBar * 60) / score.tempoBpm;
-    const reverbTail = Math.max(0, ...score.tracks.map(reverbTailFor));
     const bank = options.samples ?? EMPTY_SAMPLE_BANK;
+    const reverbTail = Math.max(
+      0,
+      ...score.tracks.map((track) =>
+        reverbTailFor(track, sampleRate, bank.irs),
+      ),
+    );
     // Zero without sampler voices, so synth-only renders are unchanged.
     // Zero without synth-voice tracks, so legacy renders are unchanged.
     const samplerTail = Math.min(
@@ -275,6 +299,7 @@ export class StemRenderer {
       samples,
       samplesPerTick: (sampleRate * 60) / (score.tempoBpm * score.ticksPerBeat),
       tempoBpm: score.tempoBpm,
+      ...(bank.irs ? { irs: bank.irs } : {}),
     };
     this.renders += 1;
     const { dry, dryR, left, right, mixL, mixR } = this.scratchFor(samples);
@@ -305,11 +330,14 @@ export class StemRenderer {
       sampleRate,
       options.loop ? frames : undefined,
     );
+    // Shared orbit buses (src/audio/effects/bus.ts), created on first send.
+    const buses = new Map<number, OrbitBus>();
     // Tracks render one at a time; the sum order (first note per track) is
     // part of the output, so cached and cold renders keep it.
     for (const [trackId, notes] of groups) {
       if (!isTrackAudible(score, trackId)) continue;
       const track = tracks.get(trackId);
+      const busOrbit = sharedOrbitOf(track);
       const sampler = isSamplerInstrument(track?.instrument);
       // Wavetable hook: the oscillator factory for a wavetable track (its
       // table id joins the stem key), undefined for every other instrument.
@@ -320,6 +348,7 @@ export class StemRenderer {
         context,
         sampler ? bank : undefined,
         wavetable?.id,
+        track ? reverbImpulse(track, sampleRate, bank.irs)?.id : undefined,
       );
       let stem = this.stems.get(trackId);
       if (stem?.key === key) stem.used = this.renders;
@@ -374,7 +403,14 @@ export class StemRenderer {
           context,
           stereo ? dryR : undefined,
         );
-        if (track) applyStereoChain(target.left, target.right, track, context);
+        if (track)
+          applyStereoChain(
+            target.left,
+            target.right,
+            track,
+            context,
+            busOrbit === undefined,
+          );
         stem = {
           key,
           left: target.left,
@@ -383,6 +419,12 @@ export class StemRenderer {
           used: this.renders,
         };
         if (caching) this.store(trackId, stem);
+      }
+      if (track && busOrbit !== undefined) {
+        let bus = buses.get(busOrbit);
+        if (!bus)
+          buses.set(busOrbit, (bus = createOrbitBus(busOrbit, samples)));
+        sendToBus(bus, track, stem.left, stem.right, context, key);
       }
       const gain = ducked.get(trackId);
       if (gain)
@@ -396,6 +438,32 @@ export class StemRenderer {
           mixR[index]! += stem.right[index]!;
         }
     }
+    // Bus returns join after every stem, in orbit order; the orbit's ducking
+    // applies to them as to its tracks.
+    const busGains = duckGains(
+      [...buses.keys()].map((orbit) => ({ id: `bus:${orbit}`, orbit })),
+      duckers,
+      samples,
+      sampleRate,
+      options.loop ? frames : undefined,
+    );
+    for (const orbit of [...buses.keys()].sort((a, b) => a - b)) {
+      const bus = buses.get(orbit)!;
+      const key = JSON.stringify(bus.keys);
+      let wet = this.buses.get(orbit);
+      if (wet?.key !== key) {
+        wet = { key, ...renderOrbitBus(bus, context) };
+        if (this.maxCacheBytes > 0) this.buses.set(orbit, wet);
+      }
+      const gain = busGains.get(`bus:${orbit}`);
+      for (let index = 0; index < samples; index += 1) {
+        const g = gain ? gain[index]! : 1;
+        mixL[index]! += wet.left[index]! * g;
+        mixR[index]! += wet.right[index]! * g;
+      }
+    }
+    for (const orbit of [...this.buses.keys()])
+      if (!buses.has(orbit)) this.buses.delete(orbit);
     // Stems of tracks that left the score are not worth keeping; muted and
     // unsoloed tracks keep theirs so toggling them back is free.
     for (const trackId of [...this.stems.keys()])
@@ -482,6 +550,7 @@ function stemKey(
   context: RenderContext,
   bank?: SampleBank,
   wavetableId?: string,
+  impulseId?: string,
 ): string {
   let settings: Record<string, unknown> | null = null;
   if (track) {
@@ -499,6 +568,8 @@ function stemKey(
     // sample changes the key even when the score did not change.
     ...(bank && track?.sampler ? [samplerVoiceDigest(track, bank)] : []),
     ...(wavetableId ? [wavetableId] : []),
+    // A convolution reverb's impulse (its sha256 for a sample).
+    ...(impulseId ? [impulseId] : []),
   ]);
 }
 

@@ -7,6 +7,9 @@
  *   fx <effect> <param> <value>          set one parameter (enables it)
  *   fx <effect> <number>                 set its first parameter (`fx orbit 2`)
  *   fx <effect> <param> <value> <param> <value>…   several at once
+ *   fx reverb ir <impulse>|off           convolution reverb (Strudel `ir`):
+ *                                        room|hall|plate, a pack sound or a
+ *                                        project file; `fx ir hall` too
  *
  * Effects are every `FX_CHAIN` stage except pan (see core/fx.ts), plus
  * aliases (`dist`, `comp`, `room`, `bitcrush`, `trem`, `auto-filter`…).
@@ -32,7 +35,9 @@ import {
 } from "../../core/fx.ts";
 import {
   ScoreValidationError,
+  normalizeReverbIr,
   updateTrack,
+  type SampleRef,
   type Track,
   type TrackPatch,
   type TrackScore,
@@ -44,6 +49,8 @@ export type FxCommand =
   | { type: "fx-off"; effect: EffectName }
   | { type: "fx-reset"; effect: EffectName }
   | { type: "fx-preset"; effect: EffectName; preset: string }
+  /** `fx reverb ir <src>`: `null` removes the impulse (algorithmic tail). */
+  | { type: "fx-ir"; ir: string | null }
   | {
       type: "fx-set";
       effect: EffectName;
@@ -130,8 +137,14 @@ export function parseFxCommand(prompt: string): FxCommand | undefined {
   if (words[0]?.toLowerCase() !== "fx") return undefined;
   if (words.length === 1) return { type: "fx-list" };
   if (prompt.length > 1_024) return undefined;
+  const irWord = (word: string | undefined) =>
+    word !== undefined && ["ir", "iresponse"].includes(word.toLowerCase());
+  // `fx ir hall`, `fx reverb ir samples/church.wav`, `fx room ir off`.
+  if (irWord(words[1]) && words.length === 3) return irCommand(words[2]!);
   const effect = parseEffectName(words[1]!);
   if (!effect) return undefined;
+  if (effect === "reverb" && irWord(words[2]) && words.length === 4)
+    return irCommand(words[3]!);
   const rest = words.slice(2).map((word) => word.toLowerCase());
   if (rest.length === 1 && (rest[0] === "on" || rest[0] === "off"))
     return { type: rest[0] === "on" ? "fx-on" : "fx-off", effect };
@@ -177,11 +190,22 @@ export function parseFxCommand(prompt: string): FxCommand | undefined {
   return { type: "fx-set", effect, values };
 }
 
+function irCommand(value: string): FxCommand | undefined {
+  const lower = value.toLowerCase();
+  if (lower === "off" || lower === "none") return { type: "fx-ir", ir: null };
+  try {
+    return { type: "fx-ir", ir: normalizeReverbIr(value).src };
+  } catch {
+    return undefined;
+  }
+}
+
 /** Every default, optional ones included: what `fx <effect> on` stores. */
 export function effectDefaults(effect: EffectName): FxValues {
   const out: Record<string, number | string | boolean> = {};
   for (const [key, spec] of Object.entries(effectSpec(effect).params))
-    out[key] = spec.default;
+    // An optional switch that defaults off (orbit `shared`) stays absent.
+    if (!(spec.optional && spec.default === false)) out[key] = spec.default;
   // A zero `time` means "follow beats"; the canonical form omits it.
   if (effect === "delay") delete out.time;
   return out;
@@ -235,6 +259,8 @@ export function applyFxCommand(
   score: TrackScore,
   trackId: string,
   command: FxCommand,
+  /** For `fx-ir` on a pack sound: the pinned reference (src, sha256, url). */
+  pinnedIr?: SampleRef,
 ): FxResult {
   const track = score.tracks.find((candidate) => candidate.id === trackId);
   if (!track) return { ok: false, message: `no track · ${trackId}` };
@@ -247,6 +273,8 @@ export function applyFxCommand(
         : `fx · none · chain ${FX_CHAIN.join(" → ")}`,
     };
   }
+  if (command.type === "fx-ir")
+    return applyIr(score, track, command.ir, pinnedIr);
   const { effect } = command;
   const current = effectValues(track, effect);
   let values: FxValues | null;
@@ -290,5 +318,43 @@ export function applyFxCommand(
     next,
     kind: "score.effect",
     payload: { trackId, effect, value: stored ?? null },
+  };
+}
+
+/** Sets or clears `reverb.ir`, turning the reverb on with defaults if off. */
+function applyIr(
+  score: TrackScore,
+  track: Track,
+  ir: string | null,
+  pinned?: SampleRef,
+): FxResult {
+  const current = track.reverb;
+  if (ir === null && !current?.ir)
+    return { ok: true, message: "reverb · no impulse response" };
+  const { ir: _old, ...rest } = (current ?? effectDefaults("reverb")) as Record<
+    string,
+    unknown
+  >;
+  const reverb =
+    ir === null
+      ? rest
+      : { ...rest, ir: pinned?.src === ir ? pinned : { src: ir } };
+  let next: TrackScore;
+  try {
+    next = updateTrack(score, track.id, { reverb } as unknown as TrackPatch);
+  } catch (error) {
+    if (error instanceof ScoreValidationError)
+      return { ok: false, message: `reverb · ${error.message}` };
+    throw error;
+  }
+  const stored = next.tracks.find((item) => item.id === track.id)?.reverb;
+  return {
+    ok: true,
+    message: stored?.ir
+      ? `reverb · ir ${stored.ir.src.replace(/^builtin:/, "")} · mix ${stored.mix}`
+      : `reverb · ir off · algorithmic tail`,
+    next,
+    kind: "score.effect",
+    payload: { trackId: track.id, effect: "reverb", value: stored ?? null },
   };
 }

@@ -11,6 +11,7 @@
  */
 import type { AutomationPoint, Track } from "../../../core/score.ts";
 import type { FxLane, FxValues } from "../../../core/fx.ts";
+import type { DecodedSample } from "../samples.ts";
 
 /** Effect parameters are refreshed at this sample interval. */
 export const CONTROL_SAMPLES = 32;
@@ -19,6 +20,8 @@ export type EffectContext = Readonly<{
   sampleRate: number;
   samplesPerTick: number;
   tempoBpm: number;
+  /** Decoded `reverb.ir` samples by track id (built-in impulses need none). */
+  irs?: ReadonlyMap<string, DecodedSample>;
 }>;
 
 /** Resolve a piecewise-linear automation lane, holding the static value before its first point. */

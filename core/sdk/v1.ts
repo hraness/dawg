@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.11.0";
+export const SDK_VERSION = "1.12.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -1463,6 +1463,19 @@ export type ReverbInput = Readonly<{
   dim?: number;
   /** Seconds before the tail. */
   predelay?: number;
+  /**
+   * Convolution reverb (Strudel `iresponse`/`ir`): `"room"`, `"hall"`,
+   * `"plate"` (generated), a pack sound `pack:<pack>/<sound>[:<n>]` or a
+   * track-relative audio file. `size`, `fade` and `dim` then do nothing.
+   */
+  ir?:
+    | string
+    | Readonly<{
+        src: string;
+        sha256?: string;
+        url?: string;
+        license?: string;
+      }>;
 }>;
 
 /** Frozen track built by `track()`; `song()` consumes it. Beats, not ticks. */
@@ -1494,6 +1507,78 @@ export type TrackSpec = Readonly<{
   rhythm: readonly RhythmSpec[];
   kit: string | null;
 }>;
+
+/**
+ * A raw ZzFX parameter array (Strudel `zzfx([...])`, ZzFX's own layout:
+ * volume, randomness, frequency, attack, sustain, release, shape,
+ * shapeCurve, slide, deltaSlide, pitchJump, pitchJumpTime, repeatTime,
+ * noise, modulation, bitCrush, delay, sustainVolume, decay, tremolo,
+ * filter) as a `z_*` instrument and synth parameters to spread into a
+ * track. Empty slots take ZzFX's defaults; frequency and sustain time come
+ * from each note. `filter` > 0 is a high-pass in Hz, < 0 a low-pass.
+ *
+ * ```ts
+ * track({ name: "blip", ...zzfx([, , , 0.01, , 0.15, 2, , 5]), notes })
+ * ```
+ */
+export function zzfx(
+  values: readonly (number | null | undefined)[],
+): Readonly<{ instrument: string; synth: SynthInput }> {
+  if (!Array.isArray(values) || values.length > ZZFX_LAYOUT.length)
+    throw new DawgSdkError(
+      `zzfx takes an array of at most ${ZZFX_LAYOUT.length} numbers`,
+    );
+  const synth: Record<string, number> = {
+    zrand: 0.05,
+    attack: 0,
+    release: 0.1,
+  };
+  let instrument = "z_sine";
+  ZZFX_LAYOUT.forEach((name, index) => {
+    const value: unknown = values[index];
+    if (name === null || value === undefined || value === null) return;
+    const n = finite(value, `zzfx[${index}]`);
+    if (name === "shape")
+      instrument = ZZFX_SHAPES[Math.max(0, Math.min(5, Math.round(n)))]!;
+    else if (name === "filter") {
+      if (n !== 0) synth[n > 0 ? "hpf" : "lpf"] = Math.abs(n);
+    } else synth[name] = n;
+  });
+  return Object.freeze({ instrument, synth: Object.freeze(synth) });
+}
+
+const ZZFX_LAYOUT = Object.freeze([
+  "gain",
+  "zrand",
+  null,
+  "attack",
+  null,
+  "release",
+  "shape",
+  "curve",
+  "slide",
+  "deltaSlide",
+  "pitchJump",
+  "pitchJumpTime",
+  "lfo",
+  "noise",
+  "zmod",
+  "zcrush",
+  "zdelay",
+  "sustain",
+  "decay",
+  "tremolo",
+  "filter",
+] as const);
+
+const ZZFX_SHAPES = Object.freeze([
+  "z_sine",
+  "z_triangle",
+  "z_sawtooth",
+  "z_tan",
+  "z_noise",
+  "z_square",
+] as const);
 
 /**
  * Build a track. Hits are resolved to pitches here: GM numbers on a kit,
@@ -1658,6 +1743,9 @@ export function track(input: TrackInput): TrackSpec {
             ["fade", "lowpass", "dim", "predelay"],
             `${name} reverb`,
           ),
+          ...(input.reverb.ir === undefined
+            ? {}
+            : { ir: reverbIr(input.reverb.ir, name, slug) }),
         });
   const fx = fxInput(input.fx, name);
   const synth = synthInput(input.synth, name);
@@ -1812,6 +1900,31 @@ export function voiceSlots(spec: SamplerSpec): ReadonlyMap<string, number> {
     .sort()
     .forEach((voice, index) => slots.set(voice, SAMPLER_FIRST_SLOT + index));
   return slots;
+}
+
+/** `reverb.ir`: built-in names stay bare; files become project-relative. */
+function reverbIr(
+  value: unknown,
+  name: string,
+  slug: string,
+):
+  | string
+  | Readonly<{ src: string; sha256?: string; url?: string; license?: string }> {
+  const spec = typeof value === "string" ? { src: value } : value;
+  if (!isRecord(spec) || typeof spec.src !== "string" || spec.src.length === 0)
+    throw new DawgSdkError(`track ${name}: reverb.ir needs a src`);
+  const src = spec.src.trim().replace(/^\.\//, "");
+  if (src.startsWith("pack:")) {
+    const ref = sample(spec as SampleSpec, `${name} reverb.ir`);
+    return Object.freeze({
+      src: ref.src,
+      ...(ref.sha256 ? { sha256: ref.sha256 } : {}),
+      ...(ref.url ? { url: ref.url } : {}),
+      ...(ref.license ? { license: ref.license } : {}),
+    });
+  }
+  if (src.startsWith("builtin:") || !/[./]/.test(src)) return src;
+  return src.startsWith("tracks/") ? src : `tracks/${slug}/${src}`;
 }
 
 /** `./wavetables/x.wav` → `tracks/<slug>/wavetables/x.wav`, like sampler files. */

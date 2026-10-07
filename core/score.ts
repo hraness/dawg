@@ -376,7 +376,38 @@ export type TrackReverb = Readonly<{
   dim?: number;
   /** Optional: seconds before the tail starts. */
   predelay?: number;
+  /**
+   * Optional (Strudel `iresponse`/`ir`): convolve with this impulse instead
+   * of the algorithmic tail. `builtin:room|hall|plate`, a pinned pack sound
+   * or a project file; `size`, `fade` and `dim` then do nothing.
+   */
+  ir?: SampleRef;
 }>;
+
+/** Generated impulse responses `reverb.ir` can name as `builtin:<name>`. */
+export const REVERB_IR_BUILTINS = Object.freeze(["room", "hall", "plate"]);
+
+/**
+ * Validates `reverb.ir`: a string or `{ src, … }`. Bare built-in names and
+ * `builtin:<name>` become `{ src: "builtin:<name>" }`; anything else is a
+ * sample reference (pack sound or project-relative file).
+ */
+export function normalizeReverbIr(input: unknown): SampleRef {
+  const ref = typeof input === "string" ? { src: input } : input;
+  if (isRecord(ref) && typeof ref.src === "string") {
+    const bare = REVERB_IR_BUILTINS.includes(ref.src);
+    if (bare || ref.src.startsWith(BUILTIN_TABLE_PREFIX)) {
+      const name = bare ? ref.src : ref.src.slice(BUILTIN_TABLE_PREFIX.length);
+      if (!REVERB_IR_BUILTINS.includes(name) || Object.keys(ref).length !== 1)
+        throw new ScoreValidationError(
+          `track reverb ir builtin must be one of ${REVERB_IR_BUILTINS.map((n) => `builtin:${n}`).join(", ")} with no other fields`,
+          "invalid-track",
+        );
+      return Object.freeze({ src: `${BUILTIN_TABLE_PREFIX}${name}` });
+    }
+  }
+  return normalizeSampleRef(ref, "reverb ir");
+}
 
 export type TrackFilter = Readonly<{
   /** Cutoff frequency in Hz, 20..20000. */
@@ -1653,7 +1684,11 @@ export function normalizeReverb(input: unknown): TrackReverb | undefined {
     "dim",
     "predelay",
   ]);
-  return Object.freeze({ mix, size, ...extras });
+  const ir =
+    input.ir === undefined || input.ir === null
+      ? undefined
+      : normalizeReverbIr(input.ir);
+  return Object.freeze({ mix, size, ...extras, ...(ir ? { ir } : {}) });
 }
 
 export function normalizeFilter(input: unknown): TrackFilter | undefined {

@@ -311,3 +311,115 @@ describe("loop renderer with sampler tracks", () => {
     }
   });
 });
+
+describe("loop renderer with convolution reverb", () => {
+  const irScore = (src: string, pitch = 60) =>
+    createScore({
+      tempoBpm: 120,
+      bars: 1,
+      tracks: [
+        {
+          id: "lead",
+          name: "lead",
+          instrument: "pluck",
+          reverb: { mix: 0.4, size: 0.5, predelay: 0.01, ir: { src } },
+        },
+      ],
+      notes: [
+        {
+          id: "l",
+          trackId: "lead",
+          pitch,
+          startTick: 0,
+          durationTicks: 240,
+          velocity: 0.8,
+        },
+      ],
+    });
+
+  test("built-in impulses: worker, inline and cold renders are byte-identical", async () => {
+    const worker = new LoopRenderer({ sampleRate: 8_000 });
+    const inline = new LoopRenderer({ sampleRate: 8_000, worker: false });
+    try {
+      const renders: Int16Array[] = [];
+      for (const ir of ["hall", "plate", "hall"]) {
+        const cold = renderScorePcm(irScore(ir), {
+          sampleRate: 8_000,
+          loop: true,
+        });
+        const [a, b] = await Promise.all([
+          worker.render(irScore(ir)),
+          inline.render(irScore(ir)),
+        ]);
+        expect(a.pcm).toEqual(cold.pcm);
+        expect(b.pcm).toEqual(cold.pcm);
+        renders.push(cold.pcm);
+      }
+      expect(renders[0]).not.toEqual(renders[1]);
+    } finally {
+      worker.dispose();
+      inline.dispose();
+    }
+  });
+
+  test("a project impulse file convolves, and replacing it re-renders", async () => {
+    const root = await mkdtemp(join(tmpdir(), "dawg-ir-"));
+    try {
+      await mkdir(join(root, "tracks", "lead", "impulses"), {
+        recursive: true,
+      });
+      const file = join(root, "tracks", "lead", "impulses", "room.wav");
+      const decay = (rate: number) =>
+        Array.from({ length: 2_000 }, (_, i) =>
+          i === 0 ? 0.9 : 0.5 * Math.exp(-i / rate) * Math.sin(i * 1.7),
+        );
+      await writeFile(file, wavBytes(decay(300), { sampleRate: 8_000 }));
+      const sampled = irScore("impulses/room.wav");
+      const expected = async () =>
+        renderScorePcm(sampled, {
+          sampleRate: 8_000,
+          loop: true,
+          samples: await new SampleLibrary({
+            projectRoot: root,
+            ffmpeg: null,
+            cacheDir: join(root, "cold"),
+          }).load(sampled),
+        });
+      const worker = new LoopRenderer({ sampleRate: 8_000, projectRoot: root });
+      const inline = new LoopRenderer({
+        sampleRate: 8_000,
+        worker: false,
+        projectRoot: root,
+      });
+      try {
+        const first = await expected();
+        const dry = renderScorePcm(
+          createScore({
+            ...JSON.parse(JSON.stringify(sampled)),
+            tracks: [{ ...sampled.tracks[0]!, reverb: undefined }],
+          }),
+          { sampleRate: 8_000, loop: true },
+        );
+        expect(first.pcm).not.toEqual(dry.pcm);
+        for (let pass = 0; pass < 2; pass += 1) {
+          const [a, b] = await Promise.all([
+            worker.render(sampled),
+            inline.render(sampled),
+          ]);
+          expect(a.pcm).toEqual(first.pcm);
+          expect(b.pcm).toEqual(first.pcm);
+        }
+        await writeFile(file, wavBytes(decay(60), { sampleRate: 8_000 }));
+        const second = await expected();
+        expect(second.pcm).not.toEqual(first.pcm);
+        expect((await worker.render(sampled)).pcm).toEqual(second.pcm);
+        expect((await inline.render(sampled)).pcm).toEqual(second.pcm);
+      } finally {
+        worker.dispose();
+        inline.dispose();
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});

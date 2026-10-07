@@ -553,6 +553,12 @@ export const FX_SPECS = Object.freeze({
         doc: "orbit number; tracks without this effect are on orbit 1",
         strudel: ["orbit", "o"],
       },
+      shared: {
+        kind: "boolean",
+        default: false,
+        optional: true,
+        doc: "share one delay and one reverb with the orbit's other shared tracks, as Strudel orbits do (this track's delay/reverb mix becomes its send level)",
+      },
     },
   },
   duck: {

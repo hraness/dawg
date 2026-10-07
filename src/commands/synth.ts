@@ -8,6 +8,7 @@
  *   synth <param> off                   unset one parameter (back to default)
  *   synth partials 1 0.5 0.33           additive harmonics (also `phases`)
  *   synth reset                         unset every parameter
+ *   synth zzfx 1,.05,220,,,.1,2         a raw ZzFX array (z_* sound + params)
  *
  * `synth lpf 800 lpenv 3 lpdecay 0.2`, `synth fm 4 fmh 1.5`, `synth adsr
  * 0.01 0.2 0.5 0.3` (Strudel's `adsr` shorthand). Each command is one
@@ -27,6 +28,8 @@ import {
   isSynthPreset,
   normalizeSynth,
   synthParamName,
+  ZZFX_ARRAY_LAYOUT,
+  zzfxArraySynth,
   type TrackSynth,
 } from "../../core/synth.ts";
 import { parseParamValue } from "./fx.ts";
@@ -35,6 +38,8 @@ export type SynthCommand =
   | { type: "synth-list" }
   | { type: "synth-reset" }
   | { type: "synth-preset"; preset: string }
+  /** A raw ZzFX parameter array (Strudel `zzfx([...])`); empty slots null. */
+  | { type: "synth-zzfx"; values: readonly (number | null)[] }
   | {
       type: "synth-set";
       /** `null` unsets a parameter. */
@@ -66,6 +71,7 @@ export function parseSynthCommand(prompt: string): SynthCommand | undefined {
       return undefined;
     return { type: "synth-set", values: { [list]: numbers } };
   }
+  if (rest[0] === "zzfx") return zzfxCommand(words.slice(2).join(" "));
   if (rest[0] === "adsr") {
     // Strudel's `adsr("a:d:s:r")`, as four words or one colon string.
     const parts = rest.length === 2 ? rest[1]!.split(":") : rest.slice(1);
@@ -93,6 +99,38 @@ export function parseSynthCommand(prompt: string): SynthCommand | undefined {
     values[name] = value;
   }
   return { type: "synth-set", values };
+}
+
+/**
+ * `synth zzfx 1,.05,220,,,.1` or the pasted `zzfx(...[,,129,.01])` form:
+ * commas keep empty slots; without commas, spaces separate the values.
+ */
+function zzfxCommand(text: string): SynthCommand | undefined {
+  const body = text
+    .trim()
+    .replace(/^zzfx\s*\(/i, "")
+    .replace(/\)\s*;?$/, "")
+    .replace(/^\.\.\./, "")
+    .replace(/^\[/, "")
+    .replace(/\]$/, "")
+    .trim();
+  if (body.length === 0) return undefined;
+  const parts = body.includes(",") ? body.split(",") : body.split(/\s+/);
+  if (parts.length > ZZFX_ARRAY_LAYOUT.length) return undefined;
+  const values: (number | null)[] = [];
+  for (const part of parts) {
+    const word = part.trim();
+    if (word === "") {
+      values.push(null);
+      continue;
+    }
+    const value = Number(
+      word.startsWith(".") ? `0${word}` : word.replace(/^-\./, "-0."),
+    );
+    if (!Number.isFinite(value)) return undefined;
+    values.push(value);
+  }
+  return { type: "synth-zzfx", values };
 }
 
 /** `attack 0.01 · lpf 800 …` in spec order, or `defaults`. */
@@ -137,6 +175,16 @@ export function applySynthCommand(
   if (command.type === "synth-reset") {
     if (!track.synth) return { ok: true, message: "synth · already defaults" };
     synth = null;
+  } else if (command.type === "synth-zzfx") {
+    try {
+      const sound = zzfxArraySynth(command.values);
+      instrument = sound.instrument;
+      synth = { ...sound.synth };
+    } catch (error) {
+      if (error instanceof FxValidationError)
+        return { ok: false, message: `synth · ${error.message}` };
+      throw error;
+    }
   } else if (command.type === "synth-preset") {
     const preset = SYNTH_PRESETS[command.preset]!;
     instrument = preset.instrument;

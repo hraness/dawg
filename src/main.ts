@@ -144,8 +144,10 @@ import {
   addNote,
   applyScoreOperation,
   createScore,
+  PACK_PREFIX,
   scoreFromJSON,
   SCORE_LIMITS,
+  type SampleRef,
   type TrackScore,
   type ScoreOperation,
 } from "../core/score.ts";
@@ -1238,7 +1240,18 @@ async function submit(prompt: string): Promise<string | Receipt> {
   const fx = parseFxCommand(command);
   if (fx) {
     if (fx.type !== "fx-list") await materializeDraft();
-    const result = applyFxCommand(score, requestedTrack, fx);
+    // A pack impulse is pinned (sha256 + url) once, as wavetable tables are.
+    let pinnedIr: SampleRef | undefined;
+    if (fx.type === "fx-ir" && fx.ir?.startsWith(PACK_PREFIX)) {
+      try {
+        pinnedIr = await packs().pin(fx.ir);
+      } catch (error) {
+        if (error instanceof PackError)
+          return fail(`reverb ir · ${error.message}`);
+        throw error;
+      }
+    }
+    const result = applyFxCommand(score, requestedTrack, fx, pinnedIr);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
