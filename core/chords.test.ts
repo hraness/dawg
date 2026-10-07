@@ -102,12 +102,55 @@ describe("vocabulary", () => {
   test("resolves Orchid buttons and combinations", () => {
     expect(qualityOf([])).toBeUndefined();
     expect(qualityOf(["sus"])).toBe("sus4");
-    expect(qualityOf(["maj", "dim"])).toBe("aug");
-    expect(qualityOf(["maj", "sus"])).toBe("sus2");
+    expect(qualityOf(["maj", "dim"])).toBe("b6");
+    expect(qualityOf(["maj", "sus"])).toBe("aug");
     expect(manualChord(62, ["min"], ["m7"])).toEqual(
       makeChord(2, "min", ["m7"]),
     );
     expect(manualChord(62, [])).toBeUndefined();
+  });
+});
+
+describe("secret chords (Orchid manual 14.8)", () => {
+  const secret = (
+    types: ("dim" | "min" | "maj" | "sus")[],
+    ext: ("6" | "m7" | "M7" | "9")[] = [],
+  ) => {
+    const chord = manualChord(60, types, ext)!;
+    return [chordName(chord), chordPitchClasses(chord)] as const;
+  };
+
+  test("type pairs play the manual's table on C", () => {
+    expect(secret(["dim", "sus"])).toEqual(["C5", [0, 7]]);
+    expect(secret(["maj", "sus"])).toEqual(["Caug", [0, 4, 8]]);
+    expect(secret(["min", "sus"])).toEqual(["Cm(add4)", [0, 3, 5, 7]]);
+    expect(secret(["min", "dim"], ["6"])).toEqual(["Cm(b6)", [0, 3, 7, 8]]);
+    expect(secret(["maj", "dim"], ["6"])).toEqual(["C(b6)", [0, 4, 7, 8]]);
+    expect(secret(["maj", "min"], ["m7"])).toEqual(["C7#9", [0, 4, 7, 10, 3]]);
+  });
+
+  test("the listed extension is part of the chord, not stacked again", () => {
+    expect(secret(["min", "dim"])).toEqual(secret(["min", "dim"], ["6"]));
+    expect(secret(["maj", "min"])).toEqual(secret(["maj", "min"], ["m7"]));
+    expect(secret(["min", "sus"], ["m7"])[0]).toBe("Cm(add4,7)");
+  });
+
+  test("names round-trip through parseChord", () => {
+    for (const symbol of [
+      "C5",
+      "Caug",
+      "Cm(add4)",
+      "Cm(b6)",
+      "C(b6)",
+      "C7#9",
+    ]) {
+      expect(chordName(parseChord(symbol)!)).toBe(symbol);
+    }
+  });
+
+  test("secret qualities override key mode like any held type", () => {
+    const chord = keyModeChord(C, 62, { types: ["min", "sus"] });
+    expect(chordName(chord)).toBe("Dm(add4)");
   });
 });
 
@@ -305,6 +348,22 @@ describe("perform", () => {
     });
     expect(a).toEqual(b);
     expect(a).not.toEqual(c);
+  });
+
+  test("slop holds every voice, lands each a seeded bit late", () => {
+    const a = perform(chord, 1, 2, { mode: "slop", seed: 3 });
+    const b = perform(chord, 1, 2, { mode: "slop", seed: 3 });
+    const c = perform(chord, 1, 2, { mode: "slop", seed: 4 });
+    expect(a).toEqual(b);
+    expect(a).not.toEqual(c);
+    expect(a.map((n) => n.pitch)).toEqual([...chord].sort((x, y) => x - y));
+    for (const note of a) {
+      expect(note.start).toBeGreaterThanOrEqual(1);
+      expect(note.start).toBeLessThanOrEqual(1 + 0.5 * 0.125);
+      expect(note.start + note.length).toBeCloseTo(3, 5);
+    }
+    const tight = perform(chord, 1, 2, { mode: "slop", slop: 0, seed: 3 });
+    expect(tight.every((n) => n.start === 1)).toBe(true);
   });
 
   test("harp rings across octaves", () => {

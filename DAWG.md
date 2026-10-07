@@ -491,17 +491,17 @@ From Orchid's documentation and reviews:
 - Key mode: once a key is set, every key plays the chord that fits the key (C major: D plays Dm). Type and extension buttons still work on top for less obvious choices.
 - Voicing dial: each click moves the chord's lowest note up an octave, or its highest note down, walking through inversions and up or down the keyboard.
 - Bass: an optional engine that plays a bass note under every chord.
-- Performance modes: Strum (and 2-octave), Slop (humanised strum), Arpeggiator (and 2-octave, tempo-synced; more chord notes make a longer pattern), Pattern (fixed rhythms) and Harp (a sweep across several octaves).
-- "Secret chords": an option makes certain combinations of type and extension buttons play extra chords; the table is not published.
+- Performance modes: Strum (and 2-octave), Slop (random timing per note for a humanised feel that varies with every press), Arpeggiator (and 2-octave, tempo-synced; more chord notes make a longer pattern), Pattern (fixed rhythms) and Harp (a sweep across several octaves).
+- "Secret chords" (firmware 3.84+, Orchid manual section 14.8): two type buttons held together play extra chords. dim+sus is a power chord (C5), maj+sus augmented (C+), min+sus Cm(add4); min+dim with the 6 button is Cm(b6), maj+dim with 6 is C(b6), and maj+min with m7 is C7♯9. dawg's `COMBINED_TYPES` is this table.
 - Orchid has no generator that writes a progression for you. Key mode is its "easy chord progressions" feature: you pick the order, every key is in key.
 
 dawg's own design:
 
-- Two types held together resolve through `COMBINED_TYPES`: dim+maj aug, maj+sus sus2, maj+min power chord (5), min+sus and dim+sus sus2, dim+min dim.
+- Secret chords play without their listed extension, since a latched pair is already deliberate; the listed extension is part of the chord and is not stacked again. Other extensions add on top (`Cm(add4,7)`). With three types latched, the first two in `dim min maj sus` order count.
 - Key-mode chords are the diatonic triads (sevenths when asked) of `major`, `minor`, `dorian`, `phrygian`, `lydian`, `mixolydian`, `locrian` and `harmonic-minor`. A key outside the scale plays the chord borrowed from the parallel major or minor when that scale has the note (C major: E♭, A♭, B♭), otherwise a passing diminished seventh.
 - Voice leading: a voicing is the chord in root position from C4, rotated by the dial. When there is a previous chord, every rotation within one octave of the dial is scored by movement (each new voice's distance to the nearest old voice, plus the reverse, so common tones are free), kept within C3–G5 where it fits, and the cheapest wins; ties go to the rotation nearest the dial. Spread `open` drops the second voice from the top an octave (drop 2), `wide` also the fourth.
 - Bass is the root (or slash bass) in C2–B2, one sustained note per chord.
-- Perform modes `block`, `strum-up`, `strum-down` (1/32-beat gap), `arp-up`, `arp-down`, `arp-updown`, `arp-random` (seeded) with a grid-aligned `rate` and 1–4 `octaves`, and `harp` (a 1/16-beat upward sweep across the octaves that rings to the end of the chord).
+- Perform modes `block`, `strum-up`, `strum-down` (1/32-beat gap), `arp-up`, `arp-down`, `arp-updown`, `arp-random` (seeded) with a grid-aligned `rate` and 1–4 `octaves`, `harp` (a 1/16-beat upward sweep across the octaves that rings to the end of the chord), and `slop` (Orchid's humanised block chord: each voice lands up to 1/16 beat late, chosen by the press's seed, so repeats differ but a recording replays exactly).
 - Progressions (dawg's "auto"): eleven presets (`axis` I–V–vi–IV, `sad-pop` vi–IV–I–V, `fifties` I–vi–IV–V, `ii-v-i`, `turnaround` I–vi–ii–V, `canon`, `aeolian` i–VI–III–VII, `andalusian` i–VII–VI–V, `minor-ii-v`, `dorian-vamp`, `mixolydian-rock` I–♭VII–IV–I) and four styles, `pop`, `jazz`, `modal` and `classical`, that walk a weighted graph of scale-degree transitions (tonic → predominant → dominant → tonic, with plagal and vi–IV moves for pop and the cycle of fifths for jazz) from I with a seeded PRNG. A progression of four or more chords ends on a dominant-function chord (V or vii°; IV or vii in modal) so the loop leads home. The same key, style, length and seed always give the same chords.
 
 Agent. `suggest_progression {key?, chords? | style?, length?, seed?, sevenths?, inversion?, spread?}` (read-only) returns each chord's name, roman numeral, voicing and bass. `write_chords {trackId?, chords, key?, start?, beatsPerChord?, perform?, rate?, octaves?, strum?, velocity?, bass?, bassTrackId?, inversion?, spread?}` writes them as one revision. `chords` takes roman numerals in the key (`ii7`, `bVII`, `V/V`) or symbols (`Cm7`, `F/A`). The system prompt tells the agent to use these tools for chord parts, so its chords are diatonic and voice-led rather than hand-stacked.
@@ -543,7 +543,7 @@ Terminals send no key releases, so the Orchid's held left-hand buttons are latch
 | `5 6 7 8` | latch extension 6 / m7 / M7 / 9 (any number; on top of the type or auto chord) |
 | `0`       | clear every latch                                                              |
 | `-` / `=` | voicing dial down / up (-12..12; walks inversions)                             |
-| `9`       | next perform mode (block, strum-up, strum-down, arp-up, …, harp)               |
+| `9`       | next perform mode (block, strum-up, strum-down, arp-up, …, harp, slop)         |
 | `B`       | bass on/off (root in C2–B2 under each chord)                                   |
 | `N`       | play the suggested next chord (the `→` chord in the header)                    |
 
