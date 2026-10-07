@@ -109,7 +109,7 @@ export default async function Home() {
             <p className="dawg-eyebrow">{productMessaging.category}</p>
             <h1 id="hero-title">
               A DAW in your terminal,{" "}
-              <span className="dawg-hero__dawg">dawg.</span>
+              <span className="dawg-hero__dawg">dawg</span>.
             </h1>
             <p className="dawg-lede">
               Chat with an agent to build loops. Watch every note land on a
