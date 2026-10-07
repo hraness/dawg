@@ -1149,9 +1149,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
       return `${track.id === requestedTrack ? "*" : " "} ${track.id} · ${track.instrument}${samples}${track.muted ? " · muted" : ""}${track.solo ? " · solo" : ""}`;
     });
     tui.openText("tracks · * focused", lines);
-    return ok(
-      `${lines.length} track${lines.length === 1 ? "" : "s"}`,
-    );
+    return ok(`${lines.length} track${lines.length === 1 ? "" : "s"}`);
   }
   const playCommand = command.match(/^\/play(?:\s+(on|off))?$/i);
   if (playCommand) {
@@ -1617,9 +1615,7 @@ async function sampleCommand(
         `sample · ${requestedTrack} has no samples · /sample <path> [as <voice>]`,
       );
     tui.openText(`samples · ${requestedTrack}`, lines);
-    return ok(
-      `${lines.length} sample${lines.length === 1 ? "" : "s"}`,
-    );
+    return ok(`${lines.length} sample${lines.length === 1 ? "" : "s"}`);
   }
   await materializeDraft();
   const trackId = samplerTarget(score, requestedTrack);
@@ -2112,9 +2108,7 @@ async function sessionCommand(
       MAX_LISTED_SESSIONS,
     );
     tui.openText("sessions · * current · /resume <n>", lines);
-    return ok(
-      `${lines.length} session${lines.length === 1 ? "" : "s"}`,
-    );
+    return ok(`${lines.length} session${lines.length === 1 ? "" : "s"}`);
   }
   if (agentTurn) return warn("agent busy · finish or Esc first");
   if (verb === "fork") {

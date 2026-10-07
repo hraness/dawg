@@ -117,7 +117,6 @@ type NumberField = Readonly<{
 }>;
 
 export type MenuNode = (
-
   | Readonly<{
       kind: "menu";
       id: string;
@@ -635,7 +634,9 @@ function panNode(track: Track): MenuNode {
     max: 1,
     step: TRACK_LANE_STEP.pan,
     format: (value) =>
-      value === 0 ? "center" : `${num(Math.abs(value))} ${value < 0 ? "L" : "R"}`,
+      value === 0
+        ? "center"
+        : `${num(Math.abs(value))} ${value < 0 ? "L" : "R"}`,
     command: (value) => `pan ${num(value)}`,
     reset: "pan 0",
     help: "-1 left … 1 right · x centres",
@@ -1203,38 +1204,38 @@ function soundsDetail(track: Track | undefined): string {
  */
 function kitsMenu(): MenuNode {
   return {
-      kind: "menu",
-      id: "kits",
-      label: "drum kits",
-      help: "make this a drum track with a synth or sample kit",
-      detail: `synth ${SYNTH_KIT_NAMES.join(" ")} · samples ${Object.keys(DEFAULT_KITS).join(" ")}`,
-      // Synth kits first (offline), then the pack sample kits.
-      build: () => [
-        ...kitCatalog().map((entry): MenuNode => ({
-          kind: "action",
-          label:
-            entry.kind === "synth"
-              ? `${entry.label} · ${entry.detail}`
-              : `${entry.label} · ${DEFAULT_KITS[entry.name]?.pack ?? entry.detail}`,
-          command: entry.command,
-        })),
-        {
-          kind: "menu",
-          id: "kit-nicknames",
-          label: "Strudel banks",
-          detail: `${Object.keys(STRUDEL_BANK_ALIASES).length} drum machines by nickname`,
-          build: () =>
-            Object.entries(STRUDEL_BANK_ALIASES)
-              .sort(([, a], [, b]) =>
-                a.toLowerCase() < b.toLowerCase() ? -1 : 1,
-              )
-              .map(([bank, nickname]): MenuNode => ({
-                kind: "action",
-                label: `${nickname}  ${bank}`,
-                command: `/kit ${nickname}`,
-              })),
-        },
-      ],
+    kind: "menu",
+    id: "kits",
+    label: "drum kits",
+    help: "make this a drum track with a synth or sample kit",
+    detail: `synth ${SYNTH_KIT_NAMES.join(" ")} · samples ${Object.keys(DEFAULT_KITS).join(" ")}`,
+    // Synth kits first (offline), then the pack sample kits.
+    build: () => [
+      ...kitCatalog().map((entry): MenuNode => ({
+        kind: "action",
+        label:
+          entry.kind === "synth"
+            ? `${entry.label} · ${entry.detail}`
+            : `${entry.label} · ${DEFAULT_KITS[entry.name]?.pack ?? entry.detail}`,
+        command: entry.command,
+      })),
+      {
+        kind: "menu",
+        id: "kit-nicknames",
+        label: "Strudel banks",
+        detail: `${Object.keys(STRUDEL_BANK_ALIASES).length} drum machines by nickname`,
+        build: () =>
+          Object.entries(STRUDEL_BANK_ALIASES)
+            .sort(([, a], [, b]) =>
+              a.toLowerCase() < b.toLowerCase() ? -1 : 1,
+            )
+            .map(([bank, nickname]): MenuNode => ({
+              kind: "action",
+              label: `${nickname}  ${bank}`,
+              command: `/kit ${nickname}`,
+            })),
+      },
+    ],
   };
 }
 
@@ -1447,7 +1448,9 @@ export class EditMenu {
     this.filtering = false;
     this.entry = undefined;
     // Walk the section path (`automation` is Mix & automation › automation).
-    for (const id of section ? (SECTION_ALIASES[section.toLowerCase()] ?? []) : []) {
+    for (const id of section
+      ? (SECTION_ALIASES[section.toLowerCase()] ?? [])
+      : []) {
       const frame = this.stack.at(-1)!;
       const nodes = frame.build(context);
       const index = nodes.findIndex(
@@ -1723,7 +1726,10 @@ export class EditMenu {
       value: String(at),
     }));
     const command = selected ? commandText(selected) : undefined;
-    const note = [selected ? describe(selected) : "", command ? `› ${command}` : ""]
+    const note = [
+      selected ? describe(selected) : "",
+      command ? `› ${command}` : "",
+    ]
       .filter(Boolean)
       .join("  ");
     const hint = this.entry

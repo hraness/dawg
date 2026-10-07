@@ -784,28 +784,28 @@ Sample kits from packs (`/kit 909` and the rest, see **Sample packs**) sit in th
 
 `/menu` or `Ctrl-K` (on an empty prompt, in play mode too) opens the edit menu, drawn with the same overlay as the model picker. Every edit the agent can make is reachable from it with keys alone. Each row shows a plain label and the current value with its unit (s, Hz, oct, st, dB, BPM, bars); the line under the list describes the focused row and shows, dimmed, the prompt command the row runs, so the menu teaches the commands. `/menu <section>` opens a section directly (`/menu effects`); the old names `parameters`, `sounds`, `track`, `automation` and `transport` still work.
 
-| Section          | Rows (most used first)                                                                                                                                                                                                               |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Section          | Rows (most used first)                                                                                                                                                                                                                                                                              |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Sound            | instrument, preset; a synth's attack, decay, sustain, release, filter cutoff/res/env, detune, vibrato, FM amount, then **advanced** with every synth parameter; a wavetable track's table and wavetable parameters; a sampler's mode and voices; **browse sounds** (instruments, wavetables, packs) |
-| Effects          | the core effects (filter, auto filter, distortion, tremolo, compressor, chorus, delay, reverb) with presets and simple parameters, **more effects** (dj filter, vowel, bitcrush, phaser, leslie, post gain, orbit, duck), and **advanced** per effect (see Effects) |
-| Rhythm           | the euclid editor (`/euclid`), drum patterns (`/pattern`), drum kits (`/kit`, synth then samples)                                                                                                                                    |
-| Chords           | play-mode chord mode, key tonic and mode, voicing, spread, bass, sevenths, perform, pattern, arp rate, arp octaves, progression, style                                                                                                |
-| Mix & automation | the focused track's name, mute, solo, volume, pan; **all tracks** (choosing one focuses it); **automation**: each `AUTOMATION_LANES` lane with its points as `beat N  value` rows, add points, ramp, clear lane                   |
-| Project          | play, tempo, beats per bar, loop length, grid, click, count-in bars                                                                                                                                                                  |
+| Effects          | the core effects (filter, auto filter, distortion, tremolo, compressor, chorus, delay, reverb) with presets and simple parameters, **more effects** (dj filter, vowel, bitcrush, phaser, leslie, post gain, orbit, duck), and **advanced** per effect (see Effects)                                 |
+| Rhythm           | the euclid editor (`/euclid`), drum patterns (`/pattern`), drum kits (`/kit`, synth then samples)                                                                                                                                                                                                   |
+| Chords           | play-mode chord mode, key tonic and mode, voicing, spread, bass, sevenths, perform, pattern, arp rate, arp octaves, progression, style                                                                                                                                                              |
+| Mix & automation | the focused track's name, mute, solo, volume, pan; **all tracks** (choosing one focuses it); **automation**: each `AUTOMATION_LANES` lane with its points as `beat N  value` rows, add points, ramp, clear lane                                                                                     |
+| Project          | play, tempo, beats per bar, loop length, grid, click, count-in bars                                                                                                                                                                                                                                 |
 
 Every list, picker and editor uses the same keys (see **Keys** below). In the menu:
 
-| Key                         | Does                                                                         |
-| --------------------------- | ---------------------------------------------------------------------------- |
-| `↑` `↓` / `k` `j`           | move                                                                         |
-| `Enter` / `→` / `l`         | open a section, pick from a list, or start typing a value                    |
-| `←` `→` / `h` `l` / `-` `+` | adjust a value by its step (cutoff moves 25%) or cycle a choice              |
-| `Space`                     | toggle on/off                                                                |
-| digits                      | type a value on a focused value row; `Enter` sets it, `Esc` cancels          |
-| `/`                         | filter the current list by name, value or command                            |
-| `x` / `Delete`              | reset the focused value to its default; on an automation point, remove it    |
-| `Esc` / `←` / `h`           | clear the filter, then back one level, then close                            |
-| `?`                         | the keys for this screen                                                     |
+| Key                         | Does                                                                      |
+| --------------------------- | ------------------------------------------------------------------------- |
+| `↑` `↓` / `k` `j`           | move                                                                      |
+| `Enter` / `→` / `l`         | open a section, pick from a list, or start typing a value                 |
+| `←` `→` / `h` `l` / `-` `+` | adjust a value by its step (cutoff moves 25%) or cycle a choice           |
+| `Space`                     | toggle on/off                                                             |
+| digits                      | type a value on a focused value row; `Enter` sets it, `Esc` cancels       |
+| `/`                         | filter the current list by name, value or command                         |
+| `x` / `Delete`              | reset the focused value to its default; on an automation point, remove it |
+| `Esc` / `←` / `h`           | clear the filter, then back one level, then close                         |
+| `?`                         | the keys for this screen                                                  |
 
 Automation rows take `beat:value` pairs (`2:800` or `0:200 4:8000`); a ramp is two pairs, start and end, and the renderer interpolates between points. Turning an effect's first field up switches it on with defaults. Each change runs the command it shows through the normal prompt path, so it is one `ScoreOperation`, one receipt, one undo step, and it syncs to other windows and the project files.
 
@@ -813,16 +813,16 @@ Automation rows take `beat:value` pairs (`2:800` or `0:200 4:8000`); a ramp is t
 
 One grammar for every picker (`/model`, `/pattern`, `/kit`, `/resume`, the wavetable and pack lists), the menu, the `/euclid` editor and the text panels (`/help`, `/tracks`, the transcript):
 
-| Key                        | Does                                                                |
-| -------------------------- | ------------------------------------------------------------------- |
-| `↑` `↓` / `j` `k`          | move (scroll in a text panel); PgUp/PgDn/Home/End page              |
-| `←` `→` / `h` `l` / `-` `+` | adjust the focused value                                            |
-| `Enter`                    | open or confirm                                                     |
-| `Space`                    | audition or toggle                                                  |
-| `/`                        | filter; typing then narrows the list                                |
-| `Esc`                      | back one level: clears the filter or a typed value first            |
-| `?`                        | the keys for the current screen, drawn over it; any key closes      |
-| digits                     | type a value, only where a value is focused                         |
+| Key                         | Does                                                           |
+| --------------------------- | -------------------------------------------------------------- |
+| `↑` `↓` / `j` `k`           | move (scroll in a text panel); PgUp/PgDn/Home/End page         |
+| `←` `→` / `h` `l` / `-` `+` | adjust the focused value                                       |
+| `Enter`                     | open or confirm                                                |
+| `Space`                     | audition or toggle                                             |
+| `/`                         | filter; typing then narrows the list                           |
+| `Esc`                       | back one level: clears the filter or a typed value first       |
+| `?`                         | the keys for the current screen, drawn over it; any key closes |
+| digits                      | type a value, only where a value is focused                    |
 
 Every screen ends in a one-line footer of its keys that fits 80 columns (parts drop from the middle when narrower; `esc` and `? keys` stay). `?` on an empty prompt lists the prompt keys and the three ways in. Play mode is the one exception: its letters and number row are piano keys and chord latches (the GarageBand "Musical Typing" convention); its `?` panel says so.
 

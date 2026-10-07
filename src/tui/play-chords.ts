@@ -373,7 +373,9 @@ export class ChordPad {
       }),
     );
     const perform =
-      s.perform === "pattern" ? `pattern ${patternLabel(s.pattern)}` : s.perform;
+      s.perform === "pattern"
+        ? `pattern ${patternLabel(s.pattern)}`
+        : s.perform;
     return [
       ...types,
       ...extensions,

@@ -49,9 +49,9 @@ describe("edit menu", () => {
     const menu = new EditMenu();
     const ctx = context();
     menu.show(ctx);
-    const labels = menu.view(ctx).items.map((row) =>
-      row.label.slice(0, 16).trim(),
-    );
+    const labels = menu
+      .view(ctx)
+      .items.map((row) => row.label.slice(0, 16).trim());
     expect(labels).toEqual([
       "Sound",
       "Effects",
@@ -230,9 +230,9 @@ describe("edit menu", () => {
     menu.show(ctx);
     select(menu, ctx, "Sound");
     menu.key("\r", ctx);
-    const labels = menu.view(ctx).items.map((row) =>
-      row.label.slice(0, 16).trim(),
-    );
+    const labels = menu
+      .view(ctx)
+      .items.map((row) => row.label.slice(0, 16).trim());
     expect(labels.slice(0, 3)).toEqual(["instrument", "preset", "attack"]);
     expect(labels.at(-2)).toBe("advanced");
     expect(labels.at(-1)).toBe("browse sounds");

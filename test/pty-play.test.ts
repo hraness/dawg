@@ -61,7 +61,10 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("velocity 84"), "velocity");
       // `?` lists play mode's keys and the state kept out of the header.
       await t.send("?");
-      await t.until(() => t.vt.text().includes("letters are piano keys"), "keys");
+      await t.until(
+        () => t.vt.text().includes("letters are piano keys"),
+        "keys",
+      );
       expect(t.vt.text()).toContain("velocity 84 · grid 1/16");
       await t.send("\u001b");
       await t.until(

@@ -25,6 +25,19 @@ export type KeySection = Readonly<{ title: string; rows: readonly KeyRow[] }>;
  * even `? keys` fits.
  */
 export function fitHint(hint: string, width: number): string {
+  const key = `${width}\u0000${hint}`;
+  const cached = fitted.get(key);
+  if (cached !== undefined) return cached;
+  const text = fitHintUncached(hint, width);
+  if (fitted.size > 256) fitted.clear();
+  fitted.set(key, text);
+  return text;
+}
+
+/** Hints repeat every frame; fit each (hint, width) once. */
+const fitted = new Map<string, string>();
+
+function fitHintUncached(hint: string, width: number): string {
   const parts = hint
     .trim()
     .split(" · ")

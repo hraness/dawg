@@ -872,7 +872,10 @@ function paintPicker(
   const hint = footerHint(
     picker.filtering
       ? HINTS.filtering
-      : (picker.hint ?? (picker.filterable ? HINTS.list : HINTS.list.replace(" · / filter", ""))),
+      : (picker.hint ??
+          (picker.filterable
+            ? HINTS.list
+            : HINTS.list.replace(" · / filter", ""))),
     boxWidth - 4,
     ui.capabilities.unicode,
   );
