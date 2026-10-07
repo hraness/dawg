@@ -36,6 +36,11 @@ export const AGENT_LIMITS = Object.freeze({
   maxToolArgumentBytes: 32 * 1024,
   timeoutMs: 90_000,
   maxTextChars: 4_000,
+  /** Bytes of request bodies sent over a whole turn, all steps together. */
+  maxRequestBytes: 512 * 1024,
+  /** Tool results older than this many steps are sent as one-line summaries. */
+  fullToolResultSteps: 2,
+  maxSummaryChars: 160,
 });
 
 export type AgentBudget = Partial<{
@@ -60,6 +65,8 @@ export type AgentEvent =
       costUsd?: number;
     }
   | { type: "text-delta"; delta: string }
+  /** Provider progress worth a status line (a retry), not model output. */
+  | { type: "activity"; message: string }
   | { type: "tool-start"; callId: string; name: string; step: number }
   /** A progress line from a long-running (media) tool, e.g. "demucs 42%". */
   | { type: "tool-progress"; callId: string; name: string; line: string }
@@ -233,11 +240,14 @@ export async function runAgentTurn(
   let rejected = 0;
   let toolCalls = 0;
   let bytesUsed = 0;
+  let requestBytes = 0;
   let finalText = "";
   const messages: ChatMessage[] = [
     { role: "system", content: AGENT_SYSTEM_PROMPT },
     { role: "user", content: options.prompt.slice(0, 8_000) },
   ];
+  /** The step each tool result was produced in, by message index. */
+  const toolResultStep = new Map<number, number>();
   const finish = (result: AgentTurnResult): AgentTurnResult => {
     deadline.clear();
     emit(result);
@@ -259,13 +269,25 @@ export async function runAgentTurn(
         ...snapshot,
         project: await hostProjectOutline(options.host, snapshot),
       });
+      // The brief already describes the current score, so tool results from
+      // older steps only need to say what happened, not repeat it in full.
       const request: ChatMessage[] = [
         messages[0]!,
         { role: "system", content: `Composition brief (JSON): ${brief}` },
-        ...messages.slice(1),
+        ...messages.slice(1).map((message, offset) => {
+          const producedAt = toolResultStep.get(offset + 1);
+          return message.role === "tool" &&
+            producedAt !== undefined &&
+            producedAt < step - AGENT_LIMITS.fullToolResultSteps
+            ? { ...message, content: summarizeToolResult(message.content) }
+            : message;
+        }),
       ];
       const remaining = limits.maxResponseBytes - bytesUsed;
       if (remaining <= 0) throw new SseBudgetError(limits.maxResponseBytes);
+      requestBytes += Buffer.byteLength(JSON.stringify(request), "utf8");
+      if (requestBytes > AGENT_LIMITS.maxRequestBytes)
+        throw new RequestBudgetError(requestBytes, step);
 
       let text = "";
       let streamBytes = 0;
@@ -285,6 +307,8 @@ export async function runAgentTurn(
         if (event.type === "usage") {
           const { type: _type, ...usage } = event;
           emit({ type: "usage", ...usage });
+        } else if (event.type === "activity") {
+          emit({ type: "activity", message: event.message });
         } else if (event.type === "text") {
           streamBytes += event.delta.length;
           if (text.length < AGENT_LIMITS.maxTextChars) {
@@ -405,6 +429,7 @@ export async function runAgentTurn(
           }
           content = outcome.content;
         }
+        toolResultStep.set(messages.length, step);
         messages.push({ role: "tool", tool_call_id: call.id, content });
       }
       if (overBudget || toolCalls >= limits.maxToolCalls) {
@@ -709,6 +734,47 @@ export function turnDeadline(timeoutMs: number): {
   };
 }
 
+/** The turn's requests, summed over its steps, outgrew the request budget. */
+export class RequestBudgetError extends Error {
+  constructor(
+    readonly bytes: number,
+    readonly step: number,
+  ) {
+    super(
+      `agent request budget exceeded: ${bytes} of ${AGENT_LIMITS.maxRequestBytes} bytes sent by step ${step}; try a smaller request or fewer steps`,
+    );
+    this.name = "RequestBudgetError";
+  }
+}
+
+/**
+ * One line for an older tool result: the outcome and revision when the
+ * result is the usual JSON, otherwise its head.
+ */
+export function summarizeToolResult(content: string): string {
+  const max = AGENT_LIMITS.maxSummaryChars;
+  try {
+    const parsed: unknown = JSON.parse(content);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const record = parsed as Record<string, unknown>;
+      const parts: string[] = [];
+      if (typeof record.ok === "boolean")
+        parts.push(record.ok ? "ok" : "rejected");
+      if (typeof record.revision === "number")
+        parts.push(`rev ${record.revision}`);
+      if (typeof record.summary === "string") parts.push(record.summary);
+      if (typeof record.error === "string") parts.push(record.error);
+      if (typeof record.diagnostic === "string") parts.push(record.diagnostic);
+      if (parts.length > 0)
+        return `(earlier result) ${parts.join(" · ")}`.slice(0, max);
+    }
+  } catch {
+    // Plain text results are truncated below.
+  }
+  const line = content.replace(/\s+/g, " ").trim();
+  return `(earlier result) ${line.length > max ? `${line.slice(0, max - 1)}…` : line}`;
+}
+
 export class AgentTimeoutError extends Error {
   constructor(readonly timeoutMs: number) {
     super(`agent turn timed out after ${Math.round(timeoutMs / 1000)}s`);
@@ -733,7 +799,7 @@ export function classifyAgentError(
           ? error.message
           : (signal.reason as AgentTimeoutError).message,
     };
-  if (error instanceof SseBudgetError)
+  if (error instanceof SseBudgetError || error instanceof RequestBudgetError)
     return { code: "budget", message: error.message };
   if (error instanceof GatewayError)
     return { code: "provider", message: error.message };
@@ -762,6 +828,8 @@ export function describeAgentEvent(event: AgentEvent): string | undefined {
       return event.step === 1 ? "thinking…" : `thinking… step ${event.step}`;
     case "text-delta":
       return undefined;
+    case "activity":
+      return event.message;
     case "tool-start":
       return `${event.name.replace(/_/g, " ")}…`;
     case "tool-progress":

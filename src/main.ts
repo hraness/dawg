@@ -853,27 +853,16 @@ async function runInteractive(): Promise<void> {
         // Keep the empty-prompt space shortcut for transport, while allowing
         // ordinary spaces once a request is being composed.
         if (value === " " && prompt.value.length === 0) {
-          await setTransport("toggle");
-          try {
-            record = await port.append(
-              record,
-              {
-                kind: "transport",
-                payload: {
-                  action: "toggle",
-                  playing: clock.playing,
-                  beat: clock.beatAt(),
-                },
-              },
-              score.toJSON(),
-            );
-          } catch (error) {
-            if (error instanceof SessionConflictError)
-              tui.activity.pushCard("transport changed in another window", {
-                tone: "warning",
-              });
-            else throw error;
-          }
+          // Never await a daemon round trip here: the key loop must stay
+          // live for Esc, quit and redraws while the toggle is in flight.
+          void toggleTransport()
+            .catch((error: unknown) => {
+              tui.activity.pushCard(
+                `transport failed · ${error instanceof Error ? error.message : String(error)}`,
+                { tone: "error" },
+              );
+            })
+            .finally(() => tick(true));
         } else {
           const input = tui.input(value);
           const action = input.type === "action" ? input.action : undefined;
@@ -884,7 +873,16 @@ async function runInteractive(): Promise<void> {
               !agentTurn
             ) {
               const base = baseline();
-              receipt(await stepHistory(input.command), base);
+              const command = input.command;
+              void stepHistory(command)
+                .then((outcome) => receipt(outcome, base))
+                .catch((error: unknown) => {
+                  tui.activity.pushCard(
+                    `${command} failed · ${error instanceof Error ? error.message : String(error)}`,
+                    { tone: "error" },
+                  );
+                })
+                .finally(() => tick(true));
             }
           } else if (input.type === "pick") {
             // Picker choices run as the command they stand for.
@@ -1542,6 +1540,31 @@ async function stepHistory(direction: "undo" | "redo"): Promise<Receipt> {
     return fail(
       `${direction} failed · ${error instanceof Error ? error.message : String(error)}`,
     );
+  }
+}
+
+/** The space-bar toggle: flip the transport, then record it for other windows. */
+async function toggleTransport(): Promise<void> {
+  await setTransport("toggle");
+  try {
+    record = await port.append(
+      record,
+      {
+        kind: "transport",
+        payload: {
+          action: "toggle",
+          playing: clock.playing,
+          beat: clock.beatAt(),
+        },
+      },
+      score.toJSON(),
+    );
+  } catch (error) {
+    if (error instanceof SessionConflictError)
+      tui.activity.pushCard("transport changed in another window", {
+        tone: "warning",
+      });
+    else throw error;
   }
 }
 
