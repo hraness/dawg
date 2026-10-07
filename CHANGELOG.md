@@ -95,6 +95,12 @@ dawg projects are now plain TypeScript files that you, an agent or another windo
 - Sampler tracks play their voices from the keyboard: oneshot voices from MIDI 36, keyed samplers repitched from their root.
 - Terminals send no key-up, so held notes last one grid step and extend while the key auto-repeats.
 
+### Previewing changes
+
+- **Audition loop in the edit menu.** `Space` loops the focused track (solo, or the whole mix with `c`), using its own notes over a region of at most four bars, or a short phrase by role when it has none (chord, riff, groove, or one held wavetable note).
+- **Staged edits with A/B.** While the loop plays, menu changes are staged and heard within about 100 ms (only the changed track re-renders, off-thread). `a` flips between the committed and the staged sound, `Enter` keeps all staged changes as one revision and one undo step, `Esc` reverts. Changed rows show `staged ← committed`. Edits from another window are re-applied under the staged ones.
+- The audition controller (`src/tui/audition.ts`) and the preview score builder (`src/audio/preview.ts`) are reusable by any screen; a preview renders byte-identical to the same bars of a full render.
+
 ### Menus
 
 - **`/menu [section]` or Ctrl-K** opens six plain sections, most used first: **Sound**, **Effects**, **Rhythm**, **Chords**, **Mix & automation** and **Project**. The old section names (`parameters`, `sounds`, `track`, `automation`, `transport`) still open the matching place.

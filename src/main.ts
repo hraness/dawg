@@ -111,10 +111,12 @@ import { AudioEngine } from "./audio/engine.ts";
 import {
   DEFAULT_GRID,
   GRIDS,
+  PLAY_LEAD_MS,
   PlaySession,
   type LiveEngine,
 } from "./tui/play-session.ts";
 import { EditMenu, MENU_SECTIONS, type MenuContext } from "./tui/menu.ts";
+import { Audition, isStageable } from "./tui/audition.ts";
 import { EuclidEditor } from "./tui/euclid.ts";
 import { HINTS, KEYS, keyLines, type KeySection } from "../tui/grammar.ts";
 import { renderAudition } from "./audio/audition.ts";
@@ -451,6 +453,16 @@ let pendingAudition: string | undefined;
 let patternPreview: string | undefined;
 /** Daemon windows play no loop; play mode monitors through its own engine. */
 let monitorEngine: AudioEngine | undefined;
+/** The audition loop and staged edits (src/tui/audition.ts), made lazily. */
+let auditionLoop: Audition | undefined;
+/**
+ * Set while a staged command runs: `commitScore` hands its result here
+ * instead of appending, and a remote revision that lands meanwhile waits in
+ * `committed` (the window's `score` is the staged base until it finishes).
+ */
+let stageCapture: { next?: TrackScore; committed?: TrackScore } | undefined;
+/** Redraw soon (the audition reports renders between frames). */
+let requestFrame: () => void = () => undefined;
 /** The decoded sampler voices, for play mode's live voices. */
 let liveSampleBank: SampleBank | undefined;
 /** The in-flight agent turn: Esc aborts it, Enter steers it. */
@@ -801,12 +813,14 @@ async function runInteractive(): Promise<void> {
   };
   const tick = (force = false) => {
     if (screenSuspended) return;
+    followCommitted();
     play?.tick();
     // Values in the menu follow the score as edits land.
     if (menu.open) refreshMenu();
     if (euclid.open) refreshEuclid();
     tui.render(appView(score, clock.beatAt()), { force });
   };
+  requestFrame = () => tick(true);
   reportAgentActivity = () => {
     tui.activity.applyAgentEvent({ type: "start", model: providerName });
   };
@@ -830,7 +844,9 @@ async function runInteractive(): Promise<void> {
       if (latest.revision > record.revision) {
         const previousRevision = record.revision;
         record = latest;
-        score = scoreFromJSON(record.composition);
+        if (stageCapture)
+          stageCapture.committed = scoreFromJSON(record.composition);
+        else score = scoreFromJSON(record.composition);
         clock.setTempo(score.tempoBpm);
         if (clock.playing) void audio.play(score);
         // Connected windows follow dawgd's transport frames instead.
@@ -1024,11 +1040,24 @@ async function runInteractive(): Promise<void> {
             menu.close();
           else {
             const result = menu.key(value, menuContext());
-            if (result.type === "close") tui.closePicker();
-            else if (result.type === "run") {
-              queuedPrompts.unshift(result.command);
-              void drainQueue();
-            }
+            if (result.type === "close") {
+              tui.closePicker();
+              leaveAuditionScreen();
+            } else if (result.type === "run") {
+              if (!stageIfAuditioning(result.command)) {
+                queuedPrompts.unshift(result.command);
+                void drainQueue();
+              }
+            } else if (result.type === "audition")
+              auditionKeyPressed(result.key);
+            else if (result.type === "revert") revertStaged();
+            else if (result.type === "keep")
+              void keepStaged()
+                .then((outcome) => receipt(outcome))
+                .catch((error) =>
+                  tui.activity.pushError(describeError("keep", error)),
+                )
+                .finally(() => tick(true));
             if (result.type !== "pass") {
               refreshMenu();
               tick(true);
@@ -1776,6 +1805,7 @@ async function commitPackEdit(
   );
   if (problems.length > 0) return fail(`sound · ${problems[0]!.message}`);
   await commitScore(next, kind, payload);
+  if (stageCapture) return undefined;
   if (trackId !== requestedTrack) {
     await port.focus(trackId);
     requestedTrack = trackId;
@@ -2247,6 +2277,11 @@ async function switchSession(sessionId: string): Promise<void> {
 }
 
 function liveEngine(): LiveEngine | undefined {
+  return previewEngine();
+}
+
+/** The engine this window hears itself through (its own in daemon mode). */
+function previewEngine(): AudioEngine {
   if (audio instanceof AudioEngine) return audio;
   monitorEngine ??= new AudioEngine({ projectRoot: process.cwd() });
   return monitorEngine;
@@ -2255,8 +2290,17 @@ function liveEngine(): LiveEngine | undefined {
 /** The play session for the focused track (re-made when focus moves). */
 function menuContext(): MenuContext {
   const session = play;
+  const loop = auditionController();
+  loop.focus(requestedTrack);
   return {
-    score,
+    score: loop.staging ? loop.score : score,
+    audition: {
+      looping: loop.looping,
+      dirty: loop.dirtyEdits,
+      committed: score,
+      hint: loop.hint(),
+      status: loop.status(),
+    },
     trackId: requestedTrack,
     playing: clock.playing,
     grid: session?.grid ?? DEFAULT_GRID,
@@ -2356,11 +2400,181 @@ function audition(voice: string): void {
     .catch(() => undefined);
 }
 
+/**
+ * The window's audition controller. Its loop plays through the ordinary
+ * engine (the render worker and stem cache), so a preview sounds exactly
+ * like the same bars of the song; staged commands run through `submit`
+ * with `commitScore` captured, so a staged edit is made by the same code
+ * as a committed one.
+ */
+function auditionController(): Audition {
+  auditionLoop ??= new Audition(
+    {
+      apply: applyStaged,
+      play: (preview) => previewEngine().play(preview),
+      stop() {
+        const engine = previewEngine();
+        engine.stop();
+        if (!play?.on) engine.setLeadMs(undefined);
+      },
+      leadMs: () => previewEngine().leadMs,
+      now: () => performance.now(),
+      beat: () => clock.beatAt(),
+      setTimer: (callback, ms) => setTimeout(callback, ms),
+      clearTimer: (handle) => clearTimeout(handle as Timer),
+      changed: () => requestFrame(),
+    },
+    score,
+    requestedTrack,
+  );
+  return auditionLoop;
+}
+
+/** Apply one prompt command to `base` without committing (see stageCapture). */
+async function applyStaged(
+  base: TrackScore,
+  command: string,
+): Promise<{ next?: TrackScore; ok: boolean; message: string }> {
+  // Staged commands run one at a time, between queued prompts.
+  while (stageCapture) await Bun.sleep(1);
+  const committed = score;
+  stageCapture = {};
+  score = base;
+  try {
+    const result = await submit(command);
+    const text = typeof result === "string" ? result : result.text;
+    const good = toneOf(result) !== "error";
+    return { next: stageCapture.next, ok: good, message: text };
+  } catch (error) {
+    return { ok: false, message: describeError(command, error) };
+  } finally {
+    score = stageCapture?.committed ?? committed;
+    stageCapture = undefined;
+  }
+}
+
+/** Keep the controller on the committed score (remote edits, undo, agent). */
+function followCommitted(): void {
+  const loop = auditionLoop;
+  if (!loop || stageCapture || loop.committed === score) return;
+  if (!loop.dirtyEdits) {
+    loop.committedNow(score);
+    return;
+  }
+  void loop.rebase(score).then(({ dropped }) => {
+    tui.activity.pushCard(
+      dropped.length
+        ? `score changed · dropped staged ${dropped.join(", ")}`
+        : "score changed · staged edits re-applied on top",
+      { tone: "warning" },
+    );
+    requestFrame();
+  });
+}
+
+async function startAuditionLoop(): Promise<void> {
+  const loop = auditionController();
+  await materializeDraft();
+  loop.committedNow(score);
+  loop.focus(requestedTrack);
+  // One sound at a time: the song stops while the loop plays.
+  if (clock.playing) await setTransport("pause");
+  previewEngine().setLeadMs(PLAY_LEAD_MS);
+  loop.start();
+}
+
+function stopAuditionLoop(): void {
+  auditionLoop?.stop();
+}
+
+/** A menu or picker audition key: Space, `a` (A/B) or `c` (context). */
+function auditionKeyPressed(key: "loop" | "ab" | "context"): void {
+  const loop = auditionController();
+  if (key === "loop") {
+    if (loop.looping) stopAuditionLoop();
+    else void startAuditionLoop().finally(() => requestFrame());
+  } else if (key === "ab") {
+    if (!loop.dirtyEdits) {
+      tui.activity.pushCard("A/B · nothing staged yet · ←→ to change a value", {
+        tone: "info",
+      });
+      return;
+    }
+    loop.toggleAB();
+  } else loop.toggleContext();
+}
+
+/** Stage a menu command while auditioning; undefined when it should run. */
+function stageIfAuditioning(command: string): boolean {
+  const loop = auditionLoop;
+  if (!loop?.staging || !isStageable(command)) return false;
+  void loop.stage(command).then((result) => {
+    if (!result.ok)
+      tui.activity.pushCard(result.message, {
+        tone: result.message.includes("failed") ? "error" : "warning",
+      });
+    requestFrame();
+  });
+  return true;
+}
+
+/** Enter: every staged edit becomes ONE revision (one undo step). */
+async function keepStaged(): Promise<Receipt> {
+  const loop = auditionLoop;
+  await loop?.settled();
+  const taken = loop?.take();
+  if (!loop || !taken) return warn("nothing staged");
+  await materializeDraft();
+  let next = taken.score;
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await commitScore(next, "preview.commit", {
+        trackId: loop.trackId,
+        commands: taken.commands,
+      });
+      break;
+    } catch (error) {
+      if (!(error instanceof SessionConflictError) || attempt > 0) throw error;
+      // Another window committed first: replay the staged commands on it.
+      record = await port.load();
+      score = scoreFromJSON(record.composition);
+      next = score;
+      for (const command of taken.commands) {
+        const result = await applyStaged(next, command);
+        if (result.next) next = result.next;
+      }
+    }
+  }
+  loop.committedNow(score);
+  await projectSync?.flushScore();
+  return ok(
+    `kept ${taken.commands.length} change${taken.commands.length === 1 ? "" : "s"} · one undo step`,
+  );
+}
+
+function revertStaged(): void {
+  const loop = auditionLoop;
+  if (!loop?.dirtyEdits) return;
+  const count = loop.commands.length;
+  loop.revert();
+  tui.activity.pushCard(
+    `reverted ${count} staged change${count === 1 ? "" : "s"}`,
+    { tone: "info" },
+  );
+}
+
+/** Leaving an auditioning screen stops the loop and drops staged edits. */
+function leaveAuditionScreen(): void {
+  if (auditionLoop?.dirtyEdits) revertStaged();
+  stopAuditionLoop();
+}
+
 function refreshMenu(): void {
   if (!menu.open) return;
   if (tui.ui.overlay !== undefined && tui.ui.picker?.id !== "menu") {
     // Another overlay (help, a picker) replaced the menu.
     menu.close();
+    leaveAuditionScreen();
     return;
   }
   const view = menu.view(menuContext());
@@ -2513,6 +2727,12 @@ async function commitScore(
   // Rhythm rows regenerate after a loop resize and freeze when their lane
   // is hand-edited, so rows and notes never disagree.
   next = reconcileRhythm(score, next);
+  if (stageCapture) {
+    // A staged edit: the audition plays it; nothing is written yet.
+    stageCapture.next = next;
+    score = next;
+    return;
+  }
   record = await port.append(record, { kind, payload }, next.toJSON());
   score = next;
   if (clock.playing) void audio.play(score);
@@ -2623,6 +2843,8 @@ async function toggleTransport(): Promise<void> {
 async function setTransport(
   action: "play" | "pause" | "toggle",
 ): Promise<void> {
+  // One sound at a time: starting the song stops an audition loop.
+  if (action !== "pause" && auditionLoop?.looping) stopAuditionLoop();
   if (port.mode === "daemon") {
     // dawgd owns the only transport; its broadcast updates `clock`.
     await port.transport(action);

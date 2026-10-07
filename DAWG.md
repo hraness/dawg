@@ -821,7 +821,7 @@ Every list, picker and editor uses the same keys (see **Keys** below). In the me
 | `↑` `↓` / `k` `j`           | move                                                                      |
 | `Enter` / `→` / `l`         | open a section, pick from a list, or start typing a value                 |
 | `←` `→` / `h` `l` / `-` `+` | adjust a value by its step (cutoff moves 25%) or cycle a choice           |
-| `Space`                     | toggle on/off                                                             |
+| `Space`                     | toggle on/off; elsewhere, hear the focused track (see Previewing changes) |
 | digits                      | type a value on a focused value row; `Enter` sets it, `Esc` cancels       |
 | `/`                         | filter the current list by name, value or command                         |
 | `x` / `Delete`              | reset the focused value to its default; on an automation point, remove it |
@@ -829,6 +829,28 @@ Every list, picker and editor uses the same keys (see **Keys** below). In the me
 | `?`                         | the keys for this screen                                                  |
 
 Automation rows take `beat:value` pairs (`2:800` or `0:200 4:8000`); a ramp is two pairs, start and end, and the renderer interpolates between points. Turning an effect's first field up switches it on with defaults. Each change runs the command it shows through the normal prompt path, so it is one `ScoreOperation`, one receipt, one undo step, and it syncs to other windows and the project files.
+
+## Previewing changes
+
+Hear a sound change before you keep it. In the edit menu (every section: Sound, Effects, Rhythm, Chords, Mix), `Space` starts a short loop of the focused track; `Space` again stops it. The song pauses while the loop plays, so only one thing sounds at a time.
+
+The loop is the track's own notes over its loop region when that is four bars or shorter, otherwise the two bars under the playhead (or the track's first two bars with notes, if those are empty). A track with no notes plays a short phrase by role: a chord for pads and keys, a riff for bass and leads, a groove for kits and drums, and one held note for wavetables so position and envelope changes are audible. It plays solo by default; `c` switches to the whole mix with the track in it.
+
+While the loop plays, each change you make is **staged**, not committed. The loop re-renders only the changed track through the normal renderer and stem cache, in the render worker, and swaps it in within about 100 ms. Held keys are coalesced so only the latest value renders. The menu title shows `●` and `B staged N`, and each changed row shows the staged value beside the committed one (`mix  0.5 ← 0.3`).
+
+| Key     | While auditioning                                            |
+| ------- | ------------------------------------------------------------ |
+| `Space` | start or stop the loop of the focused track                  |
+| `c`     | solo ↔ in context (the whole mix with the track)             |
+| `←` `→` | change the focused value; staged and heard at once           |
+| `a`     | A/B: flip between the committed sound (A) and the staged (B) |
+| `Enter` | keep every staged change as one revision and one undo step   |
+| `Esc`   | revert staged changes (the score is untouched); again: back  |
+| `?`     | the keys for this screen                                     |
+
+Kept changes are one `ScoreOperation` (`preview.commit`, listing the commands), so `Ctrl-Z` takes them all back at once, and they sync to other windows and the project files like any edit. If the score changes underneath (another window, the agent, an undo), the staged commands are re-applied on top of the new score; any that no longer apply are dropped, with a notice. Leaving the menu reverts anything staged. With the loop off, the menu behaves as before: each change is committed right away.
+
+The preview renders through the same path as the song, so filters, automation, shared orbit buses, impulse responses and ZzFX voices sound the same as those bars of the full mix. With no audio device (tests, CI, SSH) the loop does nothing audible and everything else works.
 
 ## Keys
 

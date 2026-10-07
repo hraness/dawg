@@ -145,14 +145,24 @@ export const KEYS = {
         ["← →  h l  - +", "adjust"],
         ["0-9", "type a value, enter applies"],
         ["enter", "type a value · pick from a list"],
-        ["space", "toggle on/off"],
+        ["space", "toggle on/off (elsewhere: hear the track)"],
         ["x  delete", "reset to default (deletes an automation point)"],
+      ],
+    },
+    {
+      title: "auditioning",
+      rows: [
+        ["space", "loop the focused track · again stops"],
+        ["c", "solo ↔ in context (the whole mix)"],
+        ["a", "A/B: committed ↔ staged"],
+        ["enter", "keep staged changes (one undo step)"],
+        ["esc", "revert staged changes"],
       ],
     },
     {
       title: "every change",
       rows: [
-        ["", "runs the command shown under the list"],
+        ["", "while looping, stages; otherwise runs the command shown"],
         ["ctrl-z", "undoes it"],
       ],
     },
