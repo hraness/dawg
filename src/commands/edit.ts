@@ -4,6 +4,7 @@
  *
  *   track name <text>                       rename the focused track
  *   meter <beats per bar>                   time signature numerator (1..16)
+ *   key <name>|none                         song key (`C major`, `F# dorian`)
  *   automate <lane> points <beat:value>...  merge points into a lane
  *   automate <lane> remove <beat>           drop the point at a beat
  *
@@ -20,11 +21,13 @@ import {
   type ScoreOperation,
   type TrackScore,
 } from "../../core/score.ts";
+import { keyName, parseKey } from "../../core/chords.ts";
 import { parseEffectLane } from "./music.ts";
 
 export type EditCommand =
   | { type: "track-name"; name: string }
   | { type: "meter"; beatsPerBar: number }
+  | { type: "key"; key: string | null }
   | {
       type: "automation-points";
       parameter: AutomationParameter;
@@ -57,6 +60,13 @@ export function parseEditCommand(prompt: string): EditCommand | undefined {
     return beatsPerBar >= 1 && beatsPerBar <= SCORE_LIMITS.maxBeatsPerBar
       ? { type: "meter", beatsPerBar }
       : undefined;
+  }
+  const key = text.match(/^\/?key (.+)$/i);
+  if (key) {
+    const value = key[1]!.trim();
+    if (/^(none|off|clear)$/i.test(value)) return { type: "key", key: null };
+    const parsed = parseKey(value);
+    return parsed ? { type: "key", key: keyName(parsed) } : undefined;
   }
   const points = text.match(/^automate ([a-z-]+) points((?: \S+)+)$/i);
   if (points) {
@@ -114,6 +124,15 @@ export function applyEditCommand(
       next: applyScoreOperation(score, operation),
       kind: "score.meter",
       payload: { beatsPerBar: command.beatsPerBar },
+    };
+  }
+  if (command.type === "key") {
+    return {
+      ok: true,
+      message: `key · ${command.key ?? "none"}`,
+      next: applyScoreOperation(score, { type: "setKey", key: command.key }),
+      kind: "score.key",
+      payload: { key: command.key },
     };
   }
   if (!track) return { ok: false, message: `no track ${trackId}` };

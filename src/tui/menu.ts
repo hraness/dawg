@@ -18,6 +18,22 @@ import {
 import { AVAILABLE_INSTRUMENTS } from "../audio/wav.ts";
 import { DEFAULT_KITS, GM_INSTRUMENTS, PACK_CATALOG } from "../audio/packs.ts";
 import type { PickerItem } from "../../tui/app.ts";
+import {
+  MAX_VOICING_STEP,
+  MODE_NAMES,
+  PERFORM_MODES,
+  PROGRESSION_PRESETS,
+  PROGRESSION_STYLES,
+  SPREADS,
+  keyName,
+  parseKey,
+} from "../../core/chords.ts";
+import {
+  ARP_RATES,
+  CHORD_MODES,
+  defaultChordSettings,
+  type ChordSettings,
+} from "./play-chords.ts";
 
 /** What the menu needs to know beyond the score. */
 export type MenuContext = Readonly<{
@@ -28,6 +44,8 @@ export type MenuContext = Readonly<{
   grids: readonly string[];
   clickOn: boolean;
   countInBars: number;
+  /** Play mode's chord settings (defaults when absent). */
+  chords?: ChordSettings;
 }>;
 
 type NumberField = Readonly<{
@@ -235,8 +253,135 @@ export function rootNodes(context: MenuContext): MenuNode[] {
       detail: `${num(context.score.tempoBpm)} BPM · ${context.score.beatsPerBar}/4 · ${context.score.bars} bars · grid ${context.grid}`,
       build: transportNodes,
     },
+    {
+      kind: "menu",
+      id: "chords",
+      label: "Chords",
+      detail: chordsDetail(context),
+      build: chordNodes,
+    },
   ];
 }
+
+function chordsDetail(context: MenuContext): string {
+  const chords = context.chords ?? defaultChordSettings();
+  const key = parseKey(context.score.key ?? undefined);
+  return `${chords.mode} · ${key ? keyName(key) : "no key"} · ${chords.perform}`;
+}
+
+/** Play mode's chord settings and the song key (`/chords …`, `key …`). */
+function chordNodes(context: MenuContext): MenuNode[] {
+  const chords = context.chords ?? defaultChordSettings();
+  const key = parseKey(context.score.key ?? undefined);
+  const tonic = key ? keyName(key).split(" ")[0]! : "C";
+  const mode = key?.mode ?? "major";
+  const presets = PROGRESSION_PRESETS.map((preset) => preset.name);
+  return [
+    {
+      kind: "choice",
+      label: "mode",
+      value: chords.mode,
+      options: CHORD_MODES,
+      command: (option) => `/chords ${option}`,
+    },
+    {
+      kind: "choice",
+      label: "key tonic",
+      value: tonic,
+      options: TONICS,
+      command: (option) => `key ${option} ${mode}`,
+    },
+    {
+      kind: "choice",
+      label: "key mode",
+      value: mode,
+      options: MODE_NAMES,
+      command: (option) => `key ${tonic} ${option}`,
+    },
+    {
+      kind: "number",
+      label: "voicing",
+      value: chords.inversion,
+      min: -MAX_VOICING_STEP,
+      max: MAX_VOICING_STEP,
+      step: linear(1, -MAX_VOICING_STEP, MAX_VOICING_STEP),
+      format: (value) => (value > 0 ? `+${value}` : String(value)),
+      command: (value) => `/chords voicing ${Math.round(value)}`,
+    },
+    {
+      kind: "choice",
+      label: "spread",
+      value: chords.spread,
+      options: SPREADS,
+      command: (option) => `/chords spread ${option}`,
+    },
+    {
+      kind: "toggle",
+      label: "bass",
+      value: chords.bass,
+      command: (on) => `/chords bass ${on ? "on" : "off"}`,
+    },
+    {
+      kind: "toggle",
+      label: "sevenths",
+      value: chords.sevenths,
+      command: (on) => `/chords sevenths ${on ? "on" : "off"}`,
+    },
+    {
+      kind: "choice",
+      label: "perform",
+      value: chords.perform,
+      options: PERFORM_MODES,
+      command: (option) => `/chords perform ${option}`,
+    },
+    {
+      kind: "choice",
+      label: "arp rate",
+      value: chords.rate,
+      options: ARP_RATES,
+      command: (option) => `/chords rate ${option}`,
+    },
+    {
+      kind: "number",
+      label: "arp octaves",
+      value: chords.octaves,
+      min: 1,
+      max: 4,
+      step: linear(1, 1, 4),
+      format: num,
+      command: (value) => `/chords octaves ${Math.round(value)}`,
+    },
+    {
+      kind: "choice",
+      label: "progression",
+      value: chords.preset,
+      options: ["none", ...presets],
+      command: (option) => `/chords preset ${option}`,
+    },
+    {
+      kind: "choice",
+      label: "style",
+      value: chords.style,
+      options: PROGRESSION_STYLES,
+      command: (option) => `/chords style ${option}`,
+    },
+  ];
+}
+
+const TONICS = [
+  "C",
+  "Db",
+  "D",
+  "Eb",
+  "E",
+  "F",
+  "F#",
+  "G",
+  "Ab",
+  "A",
+  "Bb",
+  "B",
+] as const;
 
 function trackNodes(context: MenuContext): MenuNode[] {
   const track = focused(context);
@@ -1172,4 +1317,5 @@ export const MENU_SECTIONS = [
   "mix",
   "sounds",
   "transport",
+  "chords",
 ] as const;

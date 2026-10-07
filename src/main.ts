@@ -97,6 +97,7 @@ import { EditMenu, MENU_SECTIONS, type MenuContext } from "./tui/menu.ts";
 import { EuclidEditor } from "./tui/euclid.ts";
 import { renderAudition } from "./audio/audition.ts";
 import { rhythmVoicePitch } from "../core/rhythm.ts";
+import { applyChordsCommand, defaultChordSettings } from "./tui/play-chords.ts";
 import {
   kitTarget,
   packListLines,
@@ -384,6 +385,8 @@ let namer = makeNamer();
 let rebindPort: () => void = () => undefined;
 /** Play mode's controller; kept across entries so settings persist. */
 let play: PlaySession | undefined;
+/** Chord-mode settings, shared by every track's play session. */
+const chordSettings = defaultChordSettings();
 /** The hand-editing menu (`/menu`, Ctrl-K), drawn as the picker overlay. */
 const menu = new EditMenu();
 /** The Euclidean rhythm editor (`/euclid`, Rhythm in `/menu`). */
@@ -1122,6 +1125,11 @@ async function submit(prompt: string): Promise<string | Receipt> {
     return message.startsWith("usage") || message.startsWith("click volume")
       ? fail(message)
       : ok(message);
+  }
+  const chordsCommand = command.match(/^\/chords(?:\s+(.+))?$/i);
+  if (chordsCommand) {
+    const result = applyChordsCommand(chordSettings, chordsCommand[1] ?? "");
+    return result.ok ? ok(result.message) : fail(result.message);
   }
   const countIn = command.match(/^\/count-?in\s+([0-2])$/i);
   if (countIn) return ok(playSession().setCountIn(Number(countIn[1])));
@@ -1959,6 +1967,7 @@ function menuContext(): MenuContext {
     grids: GRIDS.map((grid) => grid.label),
     clickOn: session?.clickOn ?? false,
     countInBars: session?.countInBars ?? 1,
+    chords: session?.chords.settings ?? chordSettings,
   };
 }
 
@@ -2046,6 +2055,7 @@ function playSession(): PlaySession {
   play = new PlaySession(playHost(), {
     clickOn: previous?.clickOn,
     clickVolume: previous?.clickVolume,
+    chords: chordSettings,
   });
   if (previous) {
     play.countInBars = previous.countInBars;

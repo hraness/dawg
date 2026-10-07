@@ -19,6 +19,8 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - **Progressions.** Eleven presets (I–V–vi–IV, ii–V–I, i–VI–III–VII, the Andalusian cadence, …) and pop, jazz, modal and classical styles that walk a weighted functional-harmony graph with a seed, so the same request always gives the same chords.
 - **Agent tools.** `suggest_progression` returns voice-led chords with names, numerals and bass; `write_chords` writes them to a track (and its bass to another) as block chords, strums, arpeggios or harp sweeps.
 - **SDK 1.3.0.** `chord("Cm7")` and `progression(["ii7", "V7", "Imaj7"], { key, perform })` expand to notes in `track.ts` files.
+- **Chord mode in play mode**, on by default (`auto`) for chord-capable tracks: every note key plays the song key's diatonic chord, voice-led from the last one. `1`–`4` latch dim/min/maj/sus, `5`–`8` latch 6/m7/M7/9, `0` clears, `-`/`=` turn the voicing dial, `9` cycles the perform mode, `B` toggles bass, `N` plays the suggested next chord and `Q` switches auto ⇄ manual. The header shows the mode, key, current chord and the suggestion. Recorded chords keep their strum or arpeggio and stay one undo step per bar.
+- **`/chords`** and a Chords section in `/menu` edit the same settings; **`key <tonic> <mode>`** sets the song key.
 
 ### Fixed
 

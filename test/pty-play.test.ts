@@ -90,3 +90,55 @@ test.skipIf(!supported)(
   },
   20_000,
 );
+
+test.skipIf(!supported)(
+  "real PTY: auto chords record a voiced diatonic chord; q switches to manual",
+  async () => {
+    const t = await launch(120, 28, {}, ["--track", "keys"]);
+    try {
+      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.send("/key C major\r");
+      await t.until(() => t.vt.text().includes("key · C major"), "key");
+      await t.send("/count-in 0\r");
+      await t.until(
+        () => t.vt.text().includes("count-in · 0 bars"),
+        "count-in",
+      );
+      await t.send("\u0010");
+      // A keys track defaults to auto chords; the strip names each chord.
+      await t.until(() => t.vt.text().includes("AUTO C major"), "auto header");
+      expect(t.vt.text()).toContain("S Dm");
+
+      await t.send("r");
+      await t.until(() => t.vt.text().includes("rec armed"), "armed");
+      await t.send(" ");
+      await t.until(() => t.vt.text().includes("REC"), "recording");
+      await t.send("s"); // D → Dm in C major
+      await t.until(() => t.vt.text().includes("Dm (ii)"), "chord shown");
+      await Bun.sleep(250);
+      await t.send(" ");
+      await t.until(
+        () => t.vt.text().includes("recorded 3 notes"),
+        "record receipt",
+      );
+      const notes = (await sessionNotes(t.cwd)).filter(
+        (note) => note.trackId === "keys",
+      );
+      expect(
+        [...new Set(notes.map((note) => note.pitch % 12))].sort(
+          (a, b) => a - b,
+        ),
+      ).toEqual([2, 5, 9]);
+      expect(new Set(notes.map((note) => note.startTick)).size).toBe(1);
+
+      // q: manual, single notes again.
+      await t.send("q");
+      await t.until(() => t.vt.text().includes("MANUAL C major"), "manual");
+      expect(t.vt.text()).not.toContain("S Dm");
+    } finally {
+      t.terminal.write("\u0003");
+      await t.proc.exited;
+    }
+  },
+  20_000,
+);

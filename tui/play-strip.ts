@@ -32,6 +32,8 @@ export type PlayHeaderView = Readonly<{
   beat?: Readonly<{ index: number; of: number; flash: boolean }> | undefined;
   /** `grid 1/16`. */
   grid: string;
+  /** Chord mode: `AUTO C major · Dm (ii) → G · arp-up`, empty when off. */
+  chords?: string | undefined;
   /** Short status (`octave C2`, `no audio`). */
   status?: string | undefined;
   keys: readonly PlayStripKey[];
@@ -49,6 +51,7 @@ export function playHeaderText(view: PlayHeaderView, unicode = true): string {
     `click ${view.click ? (unicode ? "✓" : "on") : "off"}`,
     view.sustain ? "SUSTAIN" : "",
     view.grid,
+    view.chords ?? "",
     view.countIn ?? "",
   ].filter(Boolean);
   return parts.join("  ");
@@ -89,6 +92,7 @@ export function paintPlayHeader(
     view.click ? roles.success : roles.muted,
   );
   if (view.sustain) put("SUSTAIN", roles.pillQueue);
+  if (view.chords) put(view.chords, roles.hit);
   if (view.countIn) put(view.countIn, roles.warning);
   if (view.beat) {
     const cells = Array.from({ length: view.beat.of }, (_, index) =>
@@ -112,7 +116,9 @@ export function paintPlayHeader(
   put(view.grid, roles.muted);
   if (view.status) put(view.status, roles.muted);
   // Mode keys at the right edge while there is room.
-  const hint = "z/x oct · c/v vel · r rec · m click · esc exit";
+  const hint = view.chords
+    ? "q auto/manual · 1–8 chord · n next · esc exit"
+    : "z/x oct · c/v vel · r rec · m click · esc exit";
   const room = width - 1 - displayWidth(hint);
   if (room > x) buffer.text(room, y, hint, onBackground(roles.faint, panel));
 }

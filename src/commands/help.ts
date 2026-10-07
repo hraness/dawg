@@ -63,6 +63,10 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       { command: "track name <text>", summary: "rename this track" },
       { command: "meter <1..16>", summary: "beats per bar" },
       {
+        command: "key <tonic> <mode> | none",
+        summary: "song key · key A minor · key F# dorian",
+      },
+      {
         command: "hit <voice> at <beat>",
         summary: "kit tracks · hit kick at 0",
       },
@@ -135,6 +139,10 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         command: "/click on|off|<volume>",
         summary: "metronome · /count-in 0-2 · /grid 1/16",
       },
+      {
+        command: "/chords auto|manual|off",
+        summary: "play-mode chords · voicing spread bass perform rate preset",
+      },
       { command: "/help", summary: "this list · ?" },
     ],
   },
@@ -200,6 +208,9 @@ export function helpText(): string {
 const USAGE: Readonly<Record<string, string>> = {
   click: "/click on|off|<volume> · /click 50%",
   "count-in": "/count-in 0|1|2",
+  chords:
+    "/chords auto|manual|off · voicing <n> · spread · bass · perform · rate · octaves · sevenths · preset · style",
+  key: "key <tonic> <mode> | none · key A minor",
   grid: "/grid 1/4|1/8|1/8T|1/16|1/16T|1/32",
   tempo: "tempo takes 20…300 · tempo 120",
   bpm: "tempo takes 20…300 · tempo 120",
