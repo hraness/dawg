@@ -1,0 +1,733 @@
+@import "tailwindcss";
+@import "@hraness/ui/styles.css";
+@import "@hraness/design-kit/fonts.css";
+@import "@hraness/design-kit/components.css";
+@import "@hraness/design-kit/palettes.css";
+@import "@hraness/design-kit/product-marketing.css";
+@import "@hraness/design-kit/typography.css";
+@import "@hraness/design-kit/paper-theme.css";
+@import "@hraness/design-kit/palette-system.css";
+@import "@hraness/design-kit/product-marketing-preset.css";
+@import "@hraness/site-footer/styles.css";
+@import "@hraness/design-kit/marketing-forced-colors.css";
+
+/*
+ * dawg's look: a dark terminal set on Rosé Pine paper. The terminal surface
+ * keeps the TUI's own colors in both modes, because it shows real frames.
+ * Around it, the page borrows the highway's grammar: thin lane rules, a
+ * hit line, and accent colors that match the TUI's track accents.
+ */
+:root {
+  --hraness-site-accent: var(--primary);
+  --hraness-site-accent-ink: var(--primary-foreground);
+  --font-heading: var(--font-text);
+  --dawg-term-bg: rgb(24 28 37);
+  --dawg-term-fg: rgb(225 231 239);
+  --dawg-term-chrome: rgb(35 40 52);
+  --dawg-term-line: rgb(58 64 80);
+  /* Track accents, as the TUI's default theme assigns them. */
+  --dawg-lane-1: #eb6f92;
+  --dawg-lane-2: #f6c177;
+  --dawg-lane-3: #9ccfd8;
+  --dawg-lane-4: #c4a7e7;
+  --dawg-measure: 72rem;
+  --dawg-gutter: clamp(1rem, 4vw, 2.5rem);
+  --dawg-lane-rule: color-mix(in oklab, var(--foreground) 9%, transparent);
+  font-synthesis: none;
+  line-height: 1.55;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-text);
+}
+
+code,
+pre,
+kbd {
+  font-family: var(--font-mono);
+}
+
+:where(.dawg-main, .dawg-page, .dawg-docs) :not(pre) > code {
+  font-size: 0.9em;
+  padding: 0.05em 0.35em;
+  border-radius: 0.3em;
+  background: color-mix(in oklab, var(--foreground) 7%, transparent);
+}
+
+a {
+  color: inherit;
+  text-decoration-color: color-mix(in oklab, var(--primary) 60%, transparent);
+  text-underline-offset: 0.2em;
+}
+
+a:hover {
+  text-decoration-color: var(--primary);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.dawg-skip {
+  position: absolute;
+  left: 1rem;
+  top: -4rem;
+  z-index: 100;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.4rem;
+  background: var(--inverse);
+  color: var(--inverse-foreground);
+}
+
+.dawg-skip:focus {
+  top: 0.75rem;
+}
+
+/* Layout */
+.dawg-main,
+.dawg-page {
+  width: min(100%, var(--dawg-measure));
+  margin-inline: auto;
+  padding-inline: var(--dawg-gutter);
+}
+
+.dawg-page {
+  max-width: 46rem;
+  padding-block: 3rem 5rem;
+}
+
+.dawg-eyebrow {
+  margin: 0 0 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.dawg-lede {
+  font-size: 1.15rem;
+  color: var(--muted);
+  max-width: 38rem;
+}
+
+.dawg-small {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+/* Hero */
+.dawg-hero {
+  display: grid;
+  gap: 2.5rem;
+  align-items: center;
+  padding-block: clamp(2.5rem, 7vw, 5rem) 3rem;
+}
+
+@media (min-width: 64rem) {
+  .dawg-hero {
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+    gap: 3rem;
+  }
+}
+
+.dawg-hero h1 {
+  margin: 0 0 1.25rem;
+  font-size: clamp(2.4rem, 6vw, 4rem);
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  font-weight: 700;
+  text-wrap: balance;
+}
+
+.dawg-hero__dawg {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  color: var(--primary);
+}
+
+.dawg-hero__install {
+  margin-top: 1.75rem;
+  max-width: 34rem;
+}
+
+.dawg-hero__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  margin-top: 0.9rem;
+  font-size: 0.95rem;
+}
+
+.dawg-hero__links span {
+  color: var(--muted);
+}
+
+.dawg-hero__demo {
+  min-width: 0;
+}
+
+/* The terminal window around the recording */
+.dawg-demo {
+  margin: 0;
+}
+
+.dawg-demo__chrome {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: 2rem;
+  padding-inline: 0.75rem;
+  border-radius: 0.7rem 0.7rem 0 0;
+  background: var(--dawg-term-chrome);
+  color: rgb(160 168 184);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.dawg-demo__lights {
+  display: inline-flex;
+  gap: 0.4rem;
+}
+
+.dawg-demo__lights span {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  background: var(--dawg-term-line);
+}
+
+.dawg-demo__title {
+  flex: 1;
+  text-align: center;
+  margin-right: 2.6rem;
+}
+
+.dawg-demo__caption {
+  margin-top: 0.75rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.dawg-player {
+  position: relative;
+  border-radius: 0 0 0.7rem 0.7rem;
+  background: var(--dawg-term-bg);
+  overflow: hidden;
+  box-shadow:
+    0 1px 0 var(--dawg-term-line) inset,
+    0 24px 60px -30px rgb(25 23 36 / 0.55);
+}
+
+.dawg-player__screen {
+  position: relative;
+  aspect-ratio: 80 / 48;
+  width: 100%;
+}
+
+.dawg-player__poster,
+.dawg-player__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.dawg-player[data-ready] .dawg-player__poster {
+  visibility: hidden;
+}
+
+.dawg-poster {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: repeat(24, 1fr);
+  color: var(--dawg-term-fg);
+  font-family: "JetBrains Mono", var(--font-mono);
+  /* 80 columns across the frame's width. */
+  font-size: calc(100cqw / 48);
+  line-height: 1;
+  overflow: hidden;
+  white-space: pre;
+  container-type: normal;
+}
+
+.dawg-player__screen {
+  container-type: inline-size;
+}
+
+.dawg-poster__row {
+  display: block;
+  overflow: hidden;
+}
+
+.dawg-player__toggle {
+  position: absolute;
+  right: 0.6rem;
+  bottom: 0.6rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--dawg-term-line);
+  border-radius: 999px;
+  background: rgb(24 28 37 / 0.85);
+  color: var(--dawg-term-fg);
+  font: 500 0.75rem/1 var(--font-mono);
+  cursor: pointer;
+}
+
+.dawg-player__toggle:hover {
+  border-color: var(--dawg-lane-3);
+}
+
+/* Sections, with the highway's lane rules behind the titles */
+.dawg-section {
+  padding-block: clamp(3rem, 7vw, 5rem);
+  border-top: 1px solid var(--line);
+}
+
+.dawg-section__title {
+  margin: 0 0 1.75rem;
+  font-size: clamp(1.6rem, 3.5vw, 2.25rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+  max-width: 34ch;
+}
+
+.dawg-section h3 {
+  margin: 0 0 0.4rem;
+  font-size: 1.05rem;
+}
+
+.dawg-section p {
+  margin: 0 0 1rem;
+  max-width: 62ch;
+}
+
+.dawg-pillars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 0.8rem;
+  overflow: hidden;
+}
+
+@media (min-width: 48rem) {
+  .dawg-pillars {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 72rem) {
+  .dawg-pillars {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.dawg-pillar {
+  position: relative;
+  padding: 1.5rem 1.25rem 1.25rem;
+  background: var(--surface);
+}
+
+.dawg-pillar::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--dawg-lane-1);
+}
+
+.dawg-pillar:nth-child(2)::before {
+  background: var(--dawg-lane-2);
+}
+
+.dawg-pillar:nth-child(3)::before {
+  background: var(--dawg-lane-3);
+}
+
+.dawg-pillar:nth-child(4)::before {
+  background: var(--dawg-lane-4);
+}
+
+.dawg-pillar__index {
+  display: block;
+  margin-bottom: 0.75rem;
+  font: 600 0.8rem/1 var(--font-mono);
+  color: var(--muted);
+}
+
+.dawg-pillar p {
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+/* Three windows */
+.dawg-band {
+  display: grid;
+  gap: 2rem;
+}
+
+@media (min-width: 64rem) {
+  .dawg-band {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+  }
+}
+
+.dawg-band__windows {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.dawg-mini {
+  border-radius: 0.55rem;
+  overflow: hidden;
+  background: var(--dawg-term-bg);
+  color: var(--dawg-term-fg);
+  font: 0.8rem/1.5 var(--font-mono);
+  box-shadow: 0 1px 0 var(--dawg-term-line) inset;
+}
+
+.dawg-mini:nth-child(2) {
+  margin-left: clamp(0rem, 4vw, 2rem);
+}
+
+.dawg-mini:nth-child(3) {
+  margin-left: clamp(0rem, 8vw, 4rem);
+}
+
+.dawg-mini__bar {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.3rem 0.7rem;
+  background: var(--dawg-term-chrome);
+  color: rgb(160 168 184);
+  font-size: 0.72rem;
+}
+
+.dawg-mini__body {
+  padding: 0.55rem 0.7rem 0.7rem;
+  overflow-wrap: anywhere;
+}
+
+.dawg-mini__track {
+  font-weight: 700;
+  color: var(--dawg-lane-1);
+}
+
+.dawg-mini:nth-child(2) .dawg-mini__track {
+  color: var(--dawg-lane-2);
+}
+
+.dawg-mini:nth-child(3) .dawg-mini__track {
+  color: var(--dawg-lane-3);
+}
+
+.dawg-mini__note {
+  color: rgb(160 168 184);
+}
+
+/* Turn flow */
+.dawg-flow {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1.25rem;
+  counter-reset: step;
+}
+
+@media (min-width: 56rem) {
+  .dawg-flow {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.dawg-flow li {
+  counter-increment: step;
+  padding-top: 1rem;
+  border-top: 2px solid var(--dawg-lane-rule);
+  position: relative;
+}
+
+.dawg-flow li::before {
+  content: counter(step);
+  position: absolute;
+  top: -0.7rem;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font: 700 0.75rem/1 var(--font-mono);
+}
+
+.dawg-flow p {
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+/* Features */
+.dawg-features {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1.5rem 2rem;
+}
+
+@media (min-width: 40rem) {
+  .dawg-features {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 64rem) {
+  .dawg-features {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.dawg-features li {
+  padding-left: 0.9rem;
+  border-left: 2px solid var(--dawg-lane-rule);
+}
+
+.dawg-features p {
+  font-size: 0.93rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+/* Install */
+.dawg-install__grid {
+  display: grid;
+  gap: 1.5rem;
+  margin-block: 1.5rem;
+}
+
+@media (min-width: 56rem) {
+  .dawg-install__grid {
+    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  }
+}
+
+.dawg-install__grid > div {
+  min-width: 0;
+}
+
+.dawg-notice {
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid color-mix(in oklab, var(--warning) 45%, transparent);
+  background: var(--warning-soft);
+  color: var(--foreground);
+}
+
+/* Code blocks: always the terminal's colors */
+.dawg-code {
+  border-radius: 0.55rem;
+  overflow: hidden;
+  background: var(--dawg-term-bg);
+  color: var(--dawg-term-fg);
+  margin-block: 0.75rem;
+}
+
+.dawg-code__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 2rem;
+  padding: 0.15rem 0.35rem 0.15rem 0.85rem;
+  background: var(--dawg-term-chrome);
+  color: rgb(160 168 184);
+  font: 0.72rem/1 var(--font-mono);
+}
+
+.dawg-code__copy {
+  color: var(--dawg-term-fg);
+}
+
+.dawg-code pre,
+.dawg-pre {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.dawg-pre {
+  border-radius: 0.55rem;
+  background: var(--dawg-term-bg);
+  color: var(--dawg-term-fg);
+}
+
+/* FAQ */
+.dawg-faq {
+  display: grid;
+  gap: 1.5rem 2.5rem;
+  margin: 0;
+}
+
+@media (min-width: 56rem) {
+  .dawg-faq {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.dawg-faq dt {
+  font-weight: 650;
+  margin-bottom: 0.35rem;
+}
+
+.dawg-faq dd {
+  margin: 0;
+  color: var(--muted);
+}
+
+/* Docs */
+.dawg-docs {
+  width: min(100%, var(--dawg-measure));
+  margin-inline: auto;
+  padding: 2.5rem var(--dawg-gutter) 5rem;
+  display: grid;
+  gap: 2rem;
+}
+
+@media (min-width: 56rem) {
+  .dawg-docs {
+    grid-template-columns: 12rem minmax(0, 46rem);
+    gap: 3.5rem;
+  }
+}
+
+.dawg-docs__nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+}
+
+@media (min-width: 56rem) {
+  .dawg-docs__nav ul {
+    position: sticky;
+    top: 5rem;
+    flex-direction: column;
+  }
+}
+
+.dawg-docs__nav a {
+  display: block;
+  padding: 0.35rem 0.7rem;
+  border-left: 2px solid transparent;
+  text-decoration: none;
+  color: var(--muted);
+}
+
+.dawg-docs__nav a[aria-current="page"] {
+  border-left-color: var(--primary);
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.dawg-docs__main {
+  min-width: 0;
+}
+
+.dawg-prose h1 {
+  margin: 0 0 0.75rem;
+  font-size: clamp(2rem, 5vw, 2.75rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.dawg-prose h2 {
+  margin: 2.5rem 0 0.75rem;
+  font-size: 1.4rem;
+  letter-spacing: -0.01em;
+}
+
+.dawg-prose h3 {
+  margin: 1.75rem 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+.dawg-prose p,
+.dawg-prose li {
+  max-width: 68ch;
+}
+
+.dawg-prose ul {
+  padding-left: 1.25rem;
+}
+
+.dawg-prose li {
+  margin-block: 0.4rem;
+}
+
+.dawg-table-wrap {
+  overflow-x: auto;
+  margin-block: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+}
+
+.dawg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.93rem;
+}
+
+.dawg-table th,
+.dawg-table td {
+  padding: 0.55rem 0.8rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+}
+
+.dawg-table tr:last-child > * {
+  border-bottom: 0;
+}
+
+.dawg-table thead th {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.dawg-table tbody th {
+  font-weight: 500;
+  width: 45%;
+}
+
+.dawg-table tbody th code {
+  white-space: normal;
+}
+
+.dawg-network-footer {
+  margin-top: 2rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+  }
+}
