@@ -30,6 +30,7 @@ import { AutoNamer, providerNameGenerator } from "./session/naming.ts";
 import { normalizeSessionName } from "./session/meta.ts";
 import { parsePrompt } from "./agent/ops.ts";
 import { applyMusicCommand, parseMusicCommand } from "./commands/music.ts";
+import { applyRhythmCommand, parseRhythmCommand } from "./commands/rhythm.ts";
 import { applyEditCommand, parseEditCommand } from "./commands/edit.ts";
 import { helpLines, helpText, usageHint } from "./commands/help.ts";
 import { historyTarget, REDO_KIND, UNDO_KIND } from "./commands/history.ts";
@@ -93,6 +94,9 @@ import {
   type LiveEngine,
 } from "./tui/play-session.ts";
 import { EditMenu, MENU_SECTIONS, type MenuContext } from "./tui/menu.ts";
+import { EuclidEditor } from "./tui/euclid.ts";
+import { renderAudition } from "./audio/audition.ts";
+import { rhythmVoicePitch } from "../core/rhythm.ts";
 import {
   kitTarget,
   packListLines,
@@ -120,6 +124,7 @@ import {
   type TrackScore,
   type ScoreOperation,
 } from "../core/score.ts";
+import { reconcileRhythm } from "../core/rhythm.ts";
 import { decodeLoop, encodeLoop } from "../core/loop.ts";
 import type { TrackScoreSnapshot } from "../tui/render.ts";
 import { PromptModel } from "../tui/prompt.ts";
@@ -381,6 +386,12 @@ let rebindPort: () => void = () => undefined;
 let play: PlaySession | undefined;
 /** The hand-editing menu (`/menu`, Ctrl-K), drawn as the picker overlay. */
 const menu = new EditMenu();
+/** The Euclidean rhythm editor (`/euclid`, Rhythm in `/menu`). */
+const euclid = new EuclidEditor();
+/** Live voice id for auditions (play-mode voices use small positive ids). */
+const AUDITION_VOICE = 0x7fff_0001;
+/** A voice to audition once the editor's queued command lands. */
+let pendingAudition: string | undefined;
 /** Daemon windows play no loop; play mode monitors through its own engine. */
 let monitorEngine: AudioEngine | undefined;
 /** The decoded sampler voices, for play mode's live voices. */
@@ -719,6 +730,11 @@ async function runInteractive(): Promise<void> {
         const nextPrompt = queuedPrompts.shift()!;
         tui.activity.setQueueDepth(queuedPrompts.length);
         await runPrompt(nextPrompt);
+        if (pendingAudition && queuedPrompts.length === 0) {
+          const voice = pendingAudition;
+          pendingAudition = undefined;
+          audition(voice);
+        }
         tick(true);
       }
     } finally {
@@ -731,6 +747,7 @@ async function runInteractive(): Promise<void> {
     play?.tick();
     // Values in the menu follow the score as edits land.
     if (menu.open) refreshMenu();
+    if (euclid.open) refreshEuclid();
     tui.render(appView(score, clock.beatAt()), { force });
   };
   reportAgentActivity = () => {
@@ -910,6 +927,29 @@ async function runInteractive(): Promise<void> {
         ...(text === "\u001b" ? inputDecoder.flush() : []),
       ];
       for (const value of values) {
+        // The rhythm editor owns every key while it is up (Esc backs out).
+        if (typeof value === "string" && euclid.open) {
+          if (tui.ui.overlay !== "picker" || tui.ui.picker?.id !== "euclid")
+            euclid.close();
+          else {
+            const result = euclid.key(value, euclidContext());
+            if (result.type === "close") {
+              const back = euclid.returnTo;
+              euclid.close();
+              tui.closePicker();
+              if (back === "menu") openMenu();
+            } else if (result.type === "run") {
+              queuedPrompts.unshift(result.command);
+              if (result.audition) pendingAudition = result.audition;
+              void drainQueue();
+            } else if (result.type === "audition") audition(result.voice);
+            if (result.type !== "pass") {
+              refreshEuclid();
+              tick(true);
+              continue;
+            }
+          }
+        }
         // The edit menu owns every key while it is up (Esc backs out).
         if (typeof value === "string" && menu.open) {
           if (tui.ui.overlay !== "picker" || tui.ui.picker?.id !== "menu")
@@ -1085,6 +1125,16 @@ async function submit(prompt: string): Promise<string | Receipt> {
   }
   const countIn = command.match(/^\/count-?in\s+([0-2])$/i);
   if (countIn) return ok(playSession().setCountIn(Number(countIn[1])));
+  const euclidCommand = command.match(/^\/euclid(?:\s+(\S+))?$/i);
+  if (euclidCommand) {
+    const from = menu.open ? "menu" : undefined;
+    if (menu.open) {
+      menu.close();
+      tui.closePicker();
+    }
+    openEuclid(euclidCommand[1]?.toLowerCase(), from);
+    return ok("euclid · ←→ nudge · tab param · esc closes");
+  }
   const menuCommand = command.match(/^\/menu(?:\s+(\S+))?$/i);
   if (menuCommand) {
     const section = menuCommand[1]?.toLowerCase();
@@ -1122,6 +1172,14 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (edit) {
     await materializeDraft();
     const result = applyEditCommand(score, requestedTrack, edit);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
+  const rhythm = parseRhythmCommand(command);
+  if (rhythm) {
+    await materializeDraft();
+    const result = applyRhythmCommand(score, requestedTrack, rhythm);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
@@ -1909,6 +1967,60 @@ function openMenu(section?: string): void {
   refreshMenu();
 }
 
+function euclidContext() {
+  return { score, trackId: requestedTrack };
+}
+
+function openEuclid(voice?: string, origin?: string): void {
+  euclid.show(euclidContext(), voice, origin);
+  refreshEuclid();
+}
+
+function refreshEuclid(): void {
+  if (!euclid.open) return;
+  if (tui.ui.overlay !== undefined && tui.ui.picker?.id !== "euclid") {
+    euclid.close();
+    return;
+  }
+  const view = euclid.view(euclidContext());
+  tui.openPicker({
+    id: "euclid",
+    title: view.title,
+    items: view.items,
+    index: view.index,
+    hint: view.hint,
+  });
+}
+
+/**
+ * Play one bar of `voice` on the focused track over silence. While the loop
+ * is playing the edit is already audible, so nothing extra sounds.
+ */
+function audition(voice: string): void {
+  if (clock.playing) return;
+  const track = score.tracks.find(
+    (candidate) => candidate.id === requestedTrack,
+  );
+  if (!track) return;
+  const pitch = rhythmVoicePitch(track, voice);
+  if (pitch === undefined) return;
+  const engine = liveEngine();
+  if (!engine?.canMonitor) return;
+  const pcm = renderAudition({
+    score,
+    trackId: track.id,
+    pitches: new Set([pitch]),
+    bars: 1,
+    sampleRate: engine.sampleRate,
+    ...(liveSampleBank ? { samples: liveSampleBank } : {}),
+  });
+  if (!pcm) return;
+  void engine
+    .monitor(true)
+    .then(() => engine.noteOn(AUDITION_VOICE, pcm))
+    .catch(() => undefined);
+}
+
 function refreshMenu(): void {
   if (!menu.open) return;
   if (tui.ui.overlay !== undefined && tui.ui.picker?.id !== "menu") {
@@ -2061,6 +2173,9 @@ async function commitScore(
   payload: Record<string, unknown> = {},
 ): Promise<void> {
   if (next === score) return;
+  // Rhythm rows regenerate after a loop resize and freeze when their lane
+  // is hand-edited, so rows and notes never disagree.
+  next = reconcileRhythm(score, next);
   record = await port.append(record, { kind, payload }, next.toJSON());
   score = next;
   if (clock.playing) void audio.play(score);

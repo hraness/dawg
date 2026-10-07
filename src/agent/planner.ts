@@ -6,6 +6,7 @@ import {
   normalizeFilter,
   normalizeReverb,
   normalizeSampler,
+  normalizeRhythm,
   scoreFromJSON,
   type ScoreOperation,
 } from "../../core/score.ts";
@@ -153,6 +154,8 @@ function parseOperation(value: unknown): ScoreOperation {
       safe.reverb = normalizeReverb(patch.reverb) ?? null;
     if (patch.sampler !== undefined)
       safe.sampler = normalizeSampler(patch.sampler) ?? null;
+    if (patch.rhythm !== undefined)
+      safe.rhythm = normalizeRhythm(patch.rhythm, value.trackId) ?? null;
     return { type: "updateTrack", trackId: value.trackId, patch: safe };
   }
   if (

@@ -745,7 +745,8 @@ describe("text agent workspace tools", () => {
   test("the op catalog stays well under the xcb input budget and names the file tools", async () => {
     const { renderToolCatalog } = await import("./xcb-agent.ts");
     const catalog = renderToolCatalog();
-    expect(catalog.length).toBeLessThan(16_000);
+    // ~2% of XCB_LIMITS.maxInputBytes (1 MiB); room for the rhythm and pattern tools.
+    expect(catalog.length).toBeLessThan(24_000);
     for (const name of [
       "list_files",
       "read_file",

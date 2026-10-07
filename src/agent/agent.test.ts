@@ -536,6 +536,54 @@ describe("drum, effects, solo, and filter tools", () => {
     ).toContain("+5 drums hits");
   });
 
+  test("set_rhythm stores Euclidean rows and generates their lanes", async () => {
+    const script = scriptedFetch([
+      [
+        ...toolCallChunks(0, "r0", "create_track", {
+          id: "drums",
+          instrument: "kit",
+        }),
+        ...toolCallChunks(1, "r1", "set_rhythm", {
+          trackId: "drums",
+          rows: [
+            { voice: "kick", pulses: 4, steps: 16 },
+            { voice: "hat", pulses: 7, rotate: 2, repeats: 1, time: "1/32" },
+          ],
+        }),
+        ...toolCallChunks(2, "r2", "set_rhythm", {
+          trackId: "drums",
+          rows: [{ voice: "kick", pulses: 17 }],
+        }),
+        finishChunk("tool_calls"),
+      ],
+      [finishChunk("stop")],
+    ]);
+    const { state, host } = memoryHost();
+    const events: AgentEvent[] = [];
+    const result = await runAgentTurn({
+      prompt: "euclid beat",
+      model: "sol-6.1",
+      client: client(script.fetcher),
+      host,
+      onEvent: (e) => events.push(e),
+    });
+    expect(result).toMatchObject({ applied: 2, rejected: 1 });
+    const drums = state.score.tracks.find((t) => t.id === "drums")!;
+    expect(drums.rhythm).toEqual([
+      { voice: "kick" },
+      { voice: "hat", pulses: 7, rotate: 2, repeats: 1, time: "1/32" },
+    ]);
+    const kicks = state.score.notes.filter((n) => n.pitch === 36);
+    expect(kicks.map((n) => n.startTick / 480)).toEqual([
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+    ]);
+    expect(state.score.notes.some((n) => n.pitch === 42)).toBe(true);
+    const diagnostic = events.flatMap((e) =>
+      e.type === "tool-rejected" ? [e.diagnostic] : [],
+    )[0];
+    expect(diagnostic).toContain("pulses");
+  });
+
   test("rejects drums on a melodic track and out-of-range effects", async () => {
     const script = scriptedFetch([
       [

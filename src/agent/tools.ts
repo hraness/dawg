@@ -10,6 +10,7 @@ import type { ChatTool } from "./gateway.ts";
 import { MEDIA_TOOLS } from "../media/tools.ts";
 import { PACK_TOOLS, PackToolError } from "./pack-tools.ts";
 import { PackError, type PackStore } from "../audio/packs.ts";
+import { RHYTHM_TOOLS } from "./rhythm-tools.ts";
 import type { MediaResult, MediaRunContext } from "../media/types.ts";
 import { pitchToMidi } from "./ops.ts";
 import {
@@ -680,7 +681,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   },
   {
     name: "add_drums",
-    description: `Add drum hits to a kit track (create one with create_track instrument "kit"). Voices: ${DRUM_VOICES.map((info) => info.voice).join(", ")}. Give explicit hits, and/or patterns that repeat a voice every N beats across the loop.`,
+    description: `Add one-off drum hits to a kit track (create one with create_track instrument "kit"); prefer set_rhythm for repeating beats. Voices: ${DRUM_VOICES.map((info) => info.voice).join(", ")}. Give explicit hits, and/or patterns that repeat a voice every N beats across the loop.`,
     parameters: {
       type: "object",
       properties: {
@@ -1168,6 +1169,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
       };
     },
   },
+  ...RHYTHM_TOOLS,
   ...MEDIA_TOOLS,
   ...PACK_TOOLS,
 ] satisfies AgentTool[]);

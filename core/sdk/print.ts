@@ -8,7 +8,9 @@
  */
 
 import { DRUM_VOICES, isDrumInstrument } from "../drums.ts";
+import type { RhythmRow } from "../euclid.ts";
 import { midiToPitch } from "../pitch.ts";
+import { rhythmVoicePitch, rowInSync } from "../rhythm.ts";
 import {
   isSamplerInstrument,
   samplerVoiceSlots,
@@ -122,6 +124,10 @@ const RESERVED = new Set([
   "every",
   "sampler",
   "slices",
+  "euclid",
+  "euclidRot",
+  "euclidLegato",
+  "grid",
 ]);
 
 /** Import identifiers for each track, unique in score order. */
@@ -178,7 +184,15 @@ export function printSong(
 
 /** `tracks/<slug>/track.ts` for one track of a score. */
 export function printTrack(score: TrackScore, track: Track): string {
-  const notes = score.notes.filter((note) => note.trackId === track.id);
+  // Rows whose lane still matches their expansion print as generators and
+  // own their notes; a hand-edited lane prints as plain notes instead.
+  const rows = (track.rhythm ?? []).filter((row) =>
+    rowInSync(score, track, row),
+  );
+  const owned = new Set(rows.map((row) => rhythmVoicePitch(track, row.voice)));
+  const notes = score.notes.filter(
+    (note) => note.trackId === track.id && !owned.has(note.pitch),
+  );
   const kit = isDrumInstrument(track.instrument);
   const voiceSlots =
     isSamplerInstrument(track.instrument) && track.sampler
@@ -270,9 +284,37 @@ export function printTrack(score: TrackScore, track: Track): string {
     });
     entries.push(`automation: {\n${body.join("\n")}\n${INDENT}}`);
   }
-  entries.push(`notes: ${list(printed, INDENT, "notes: ".length, 1)}`);
+  if (rows.length > 0) {
+    const inner = INDENT + INDENT;
+    const items = rows.map((row) => {
+      const call = printRow(row, inner);
+      used.add(call.slice(0, call.indexOf("(")));
+      return call;
+    });
+    entries.push(
+      `rhythm: ${list(
+        items,
+        INDENT,
+        "rhythm: ".length,
+        1,
+        items.some((item) => item.includes("\n")),
+      )}`,
+    );
+  }
+  if (rows.length === 0 || printed.length > 0)
+    entries.push(`notes: ${list(printed, INDENT, "notes: ".length, 1)}`);
 
-  const names = ["track", "note", "seq", "hit", "hits", "every", "sampler"]
+  const names = [
+    "track",
+    "note",
+    "seq",
+    "hit",
+    "hits",
+    "every",
+    "sampler",
+    "euclid",
+    "grid",
+  ]
     .filter((name) => used.has(name))
     .join(", ");
   const lines = [
@@ -302,6 +344,73 @@ function printHit(score: TrackScore, note: Note, voice: string): string {
     args.push(num(note.velocity));
   if (length !== DEFAULT_HIT_LENGTH) args.push(num(length));
   return `hit(${args.join(", ")})`;
+}
+
+/** `euclid("hat", 7, 16, 2, { velocity: 0.5 })` or `grid("sd", "....x...")`. */
+function printRow(row: RhythmRow, indent: string): string {
+  const args: string[] = [str(row.voice)];
+  const fields: [string, string][] = [];
+  if (row.grid !== undefined) args.push(str(row.grid));
+  else {
+    args.push(num(row.pulses ?? 4), num(row.steps ?? 16));
+    if (row.rotate) args.push(num(row.rotate));
+  }
+  const inner = indent + INDENT;
+  for (const key of [
+    "division",
+    "repeats",
+    "time",
+    "pace",
+    "ramp",
+    "velocity",
+    "accent",
+    "accents",
+    "gate",
+    "legato",
+    "probability",
+    "seed",
+    "swing",
+    "nudge",
+    "cycles",
+  ] as const) {
+    const value = row[key];
+    if (value === undefined) continue;
+    if (key === "cycles") {
+      const cycles = row.cycles!.map((cycle) =>
+        Object.keys(cycle).length === 0
+          ? "{}"
+          : obj(
+              Object.entries(cycle).map(
+                ([k, v]) => [k, num(v as number)] as const,
+              ),
+              inner + INDENT,
+              0,
+              1,
+            ),
+      );
+      const force =
+        cycles.length > 1 &&
+        row.cycles!.every((cycle) => Object.keys(cycle).length > 1);
+      fields.push([key, list(cycles, inner, "cycles: ".length, 1, force)]);
+    } else
+      fields.push([
+        key,
+        typeof value === "string"
+          ? str(value)
+          : typeof value === "boolean"
+            ? String(value)
+            : num(value as number),
+      ]);
+  }
+  const name = row.grid !== undefined ? "grid" : "euclid";
+  const head = `${name}(${args.join(", ")}`;
+  if (fields.length === 0) return `${head})`;
+  const inlineObject = `{ ${fields.map(([k, v]) => `${k}: ${v}`).join(", ")} }`;
+  const inline = `${head}, ${inlineObject})`;
+  if (!inline.includes("\n") && indent.length + inline.length + 1 <= WIDTH)
+    return inline;
+  const body = fields.map(([k, v]) => `${inner}${k}: ${v},`).join("\n");
+  return `${head}, {\n${body}\n${indent}})`;
 }
 
 function printSampler(sampler: Sampler, indent: string): string {

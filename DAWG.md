@@ -309,6 +309,75 @@ Built-in catalog (manifests are the GitHub-raw equivalents of the files Strudel'
 
 felixroos/dough-samples, the manifest host, has no license file. Strudel's own `gm_*` sounds come from a different soundfont set; dawg uses FluidR3_GM with the same names.
 
+## Rhythm (Euclidean rows)
+
+A drum part can be stored as generators instead of notes: each row owns one voice of a `kit` or oneshot `sampler` track and dawg expands it into ordinary notes, so rendering, diffs and sync are unchanged while you, the agent and `track.ts` edit four numbers instead of sixteen hits. The model follows the Torso T-1's Shape and Groove sections; the Euclidean patterns and rotation match Strudel's `euclid`/`euclidRot` exactly (`E(3,8)` is `x..x..x.`, a positive rotate moves the pattern later).
+
+```ts
+// tracks/drums/track.ts
+import { track, euclid, grid } from "dawg";
+
+export default track({
+  name: "drums",
+  instrument: "kit",
+  rhythm: [
+    euclid("kick", 4, 16),
+    euclid("hat", 7, 16, 2, {
+      velocity: 0.5,
+      accent: 0.6,
+      accents: 3,
+      swing: 0.15,
+    }),
+    grid("snare", "....X.......x..."),
+    euclid({
+      voice: "openhat",
+      pulses: 1,
+      steps: 16,
+      rotate: 14,
+      repeats: 3,
+      time: "1/32",
+      ramp: -0.6,
+    }),
+  ],
+});
+```
+
+| Field                | Range (default)                      | T-1 parameter    | Behaviour                                                                                     |
+| -------------------- | ------------------------------------ | ---------------- | --------------------------------------------------------------------------------------------- |
+| `steps`              | 1..64 (16)                           | Steps            | Length of one pass; the row repeats every pass to the end of the loop.                        |
+| `pulses`             | 0..steps (4)                         | Pulses           | Hits spread over the steps by Bjorklund's algorithm.                                          |
+| `rotate`             | -64..64 (0)                          | Rotate           | Shifts the pattern later by n steps (negative: earlier), Strudel's direction.                 |
+| `division`           | 1/32, 1/16t, 1/16, 1/8t … 1/1 (1/16) | Division         | Length of one step.                                                                           |
+| `grid`               | `x` hit, `X` accent, `.` rest        | per-step editing | Explicit steps instead of pulses; its length is the step count.                               |
+| `repeats`            | 0..16 (0)                            | Repeats          | Extra hits after each pulse, cut off by the next pulse (T-1 "choke" mode).                    |
+| `time`               | a division (= `division`)            | Time             | Spacing of those repeats.                                                                     |
+| `pace`               | -1..1 (0)                            | Pace             | > 0 slows the repeats down progressively, < 0 speeds them up.                                 |
+| `ramp`               | -1..1 (0)                            | Ramp             | Velocity across the repeats: > 0 builds, < 0 fades.                                           |
+| `velocity`           | 0..1 (0.8)                           | Velocity         | Base velocity.                                                                                |
+| `accent`, `accents`  | 0..1 (0), 1..pulses (1)              | Accent           | Lifts `E(accents, pulses)` of the pulses (or the `X` steps) towards full velocity.            |
+| `gate`, `legato`     | 0.05..4 steps (1), boolean           | Sustain          | Note length in steps; `legato` holds each hit to the next one (Strudel `euclidLegato`).       |
+| `probability`,`seed` | 0..1 (1), 0..1e6 (0)                 | Probability      | Drops pulses (and their repeats) by a seeded hash: the same seed always drops the same hits.  |
+| `swing`              | -0.5..0.5 step (0)                   | Timing           | Every second step later (> 0) or earlier.                                                     |
+| `nudge`              | -0.5..0.5 step (0)                   | Delay            | The whole row later or earlier.                                                               |
+| `cycles`             | 1..16 entries                        | Cycles           | Per-pass overrides of `pulses`, `rotate`, `repeats`, `probability`, `velocity`, used in turn. |
+
+Rows regenerate when the loop length or meter changes. Editing a generated lane by hand (play-mode recording, `hit`, the agent's `add_drums`) freezes that row: the row is dropped and its notes stay as plain notes. `euclid <voice> freeze` does the same on purpose, `euclid <voice> off` removes the row and its notes.
+
+Prompt grammar: `euclid kick 4 16`, `euclid hat 7 16 rotate 2`, `euclid hat swing 0.2 prob 0.8 seed 3` (named fields merge into the existing row, `default` resets one), `euclid snare off|freeze`, `grid snare ....X.......x...`. The agent's `set_rhythm` tool takes the same rows and its prompt prefers it for drums.
+
+**Editor.** `/euclid [voice]`, or Rhythm in `/menu`, opens a T-1-style editor on the focused kit or oneshot sampler track: one row per voice with its step grid (`x` hit, `X` accent, `·` rest) and summary (`E(4,16)`). Every change runs one `euclid …` command, so it is one receipt and one undo step, and the edited voice plays once (audition) after it lands. The hits show on the highway like any notes.
+
+| Key                         | Action                                            |
+| --------------------------- | ------------------------------------------------- |
+| `↑ ↓` / `j k`               | select voice                                      |
+| `← →` / `h l` / `- +`       | nudge the selected parameter                      |
+| `Tab` / `Shift-Tab` (`] [`) | next / previous parameter                         |
+| digits, `.`, `-`, Backspace | type a value, Enter applies                       |
+| Enter                       | add a row for a voice without one                 |
+| Space                       | audition the voice                                |
+| `x` / Delete, `f`           | remove the row and its notes / freeze it to notes |
+| Esc                         | back (cancels typing, then closes)                |
+
 ## Play mode (computer keyboard)
 
 `Ctrl-P` or `/play` turns the computer keyboard into a piano for the focused track, using the "musical typing" layout GarageBand, Logic, BandLab, FL Studio and Ableton share. `Esc` or `/play off` leaves it and every normal binding is back. Typing `/` starts a slash command without leaving the mode (`/click 40%`, `/play off`).

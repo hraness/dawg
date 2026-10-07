@@ -224,6 +224,11 @@ export function rootNodes(context: MenuContext): MenuNode[] {
       build: soundNodes,
     },
     {
+      kind: "action",
+      label: "Rhythm",
+      command: "/euclid",
+    },
+    {
       kind: "menu",
       id: "transport",
       label: "Transport",
