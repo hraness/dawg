@@ -116,7 +116,7 @@ import {
   type LiveEngine,
 } from "./tui/play-session.ts";
 import { EditMenu, MENU_SECTIONS, type MenuContext } from "./tui/menu.ts";
-import { Audition, isStageable } from "./tui/audition.ts";
+import { Audition, SUPERSEDED, isStageable } from "./tui/audition.ts";
 import { EuclidEditor } from "./tui/euclid.ts";
 import { HINTS, KEYS, keyLines, type KeySection } from "../tui/grammar.ts";
 import { renderAudition } from "./audio/audition.ts";
@@ -455,6 +455,9 @@ let patternPreview: string | undefined;
 let monitorEngine: AudioEngine | undefined;
 /** The audition loop and staged edits (src/tui/audition.ts), made lazily. */
 let auditionLoop: Audition | undefined;
+/** Pickers that host the audition loop (Space, `a`, `c`, hover). */
+const AUDITION_PICKERS = new Set(["kit", "pattern", "try"]);
+const TRY_USAGE = "/try <sound command> · /try fx reverb mix 0.6";
 /**
  * Set while a staged command runs: `commitScore` hands its result here
  * instead of appending, and a remote revision that lands meanwhile waits in
@@ -818,6 +821,7 @@ async function runInteractive(): Promise<void> {
     // Values in the menu follow the score as edits land.
     if (menu.open) refreshMenu();
     if (euclid.open) refreshEuclid();
+    refreshAuditionPicker();
     tui.render(appView(score, clock.beatAt()), { force });
   };
   requestFrame = () => tick(true);
@@ -1051,6 +1055,14 @@ async function runInteractive(): Promise<void> {
             } else if (result.type === "audition")
               auditionKeyPressed(result.key);
             else if (result.type === "revert") revertStaged();
+            else if (result.type === "hover")
+              hoverItem(result.command, result.key);
+            else if (result.type === "unhover")
+              void auditionLoop
+                ?.unhover(result.key)
+                .finally(() => requestFrame());
+            else if (result.type === "choose")
+              chooseItem(result.command, result.key);
             else if (result.type === "keep")
               void keepStaged()
                 .then((outcome) => receipt(outcome))
@@ -1093,7 +1105,11 @@ async function runInteractive(): Promise<void> {
         // shell exit key; Ctrl-Q is reserved for prompt mode switching.
         // Keep the empty-prompt space shortcut for transport, while allowing
         // ordinary spaces once a request is being composed.
-        if (value === " " && prompt.value.length === 0) {
+        if (
+          value === " " &&
+          prompt.value.length === 0 &&
+          !(tui.ui.overlay === "picker" && tui.ui.picker?.audition)
+        ) {
           // Never await a daemon round trip here: the key loop must stay
           // live for Esc, quit and redraws while the toggle is in flight.
           void toggleTransport()
@@ -1126,9 +1142,51 @@ async function runInteractive(): Promise<void> {
                 .finally(() => tick(true));
             }
           } else if (input.type === "pick-move") {
-            // Moving through /pattern previews the row under the cursor.
-            if (input.picker === "pattern")
+            // Moving through a list auditions the row under the cursor on
+            // the loop; with the loop off, /pattern plays one bar of it.
+            if (auditionLoop?.looping && isStageable(input.value))
+              hoverItem(input.value, `picker:${input.picker}`);
+            else if (input.picker === "pattern")
               previewPattern(input.value.replace(/^\/pattern\s+/, ""));
+          } else if (input.type === "pick-audition") {
+            pickerAuditionKey(input.key);
+          } else if (input.type === "pick-cancel") {
+            if (AUDITION_PICKERS.has(input.picker)) leaveAuditionScreen();
+          } else if (input.type === "pick" && input.picker === "try") {
+            if (input.value === "keep")
+              void keepStaged()
+                .then((outcome) => receipt(outcome))
+                .catch((error) =>
+                  tui.activity.pushError(describeError("keep", error)),
+                )
+                .finally(() => {
+                  stopAuditionLoop();
+                  tick(true);
+                });
+            else leaveAuditionScreen();
+          } else if (
+            input.type === "pick" &&
+            AUDITION_PICKERS.has(input.picker) &&
+            auditionLoop?.staging
+          ) {
+            // Enter in an auditioning list keeps what you hear.
+            const loop = auditionLoop;
+            const key = `picker:${input.picker}`;
+            void (
+              isStageable(input.value)
+                ? loop.hover(input.value, key)
+                : Promise.resolve()
+            )
+              .then(() => loop.settle(key))
+              .then(() => keepStaged())
+              .then((outcome) => receipt(outcome))
+              .catch((error) =>
+                tui.activity.pushError(describeError("keep", error)),
+              )
+              .finally(() => {
+                stopAuditionLoop();
+                tick(true);
+              });
           } else if (input.type === "pick") {
             // Picker choices run as the command they stand for.
             queuedPrompts.unshift(
@@ -1262,6 +1320,8 @@ async function submit(prompt: string): Promise<string | Receipt> {
     openEuclid(euclidCommand[1]?.toLowerCase(), from);
     return ok("rhythm editor");
   }
+  const tryCommand = command.match(/^\/try(?:\s+(.+))?$/i);
+  if (tryCommand) return tryPrompt(tryCommand[1]?.trim() ?? "");
   const menuCommand = command.match(/^\/menu(?:\s+(\S+))?$/i);
   if (menuCommand) {
     const section = menuCommand[1]?.toLowerCase();
@@ -1923,7 +1983,8 @@ async function patternCommand(command: PatternCommand): Promise<Receipt> {
     tui.openPicker({
       id: "pattern",
       title: "drum patterns",
-      hint: HINTS.preview,
+      hint: HINTS.audition,
+      audition: true,
       items: DRUM_PATTERNS.map((entry) => ({
         label: `${entry.label.padEnd(22)} ${entry.tempo.bpm} BPM · ${entry.tags.join(", ")}`,
         value: `/pattern ${entry.name}`,
@@ -1995,6 +2056,8 @@ function openKitPicker(): Receipt {
   tui.openPicker({
     id: "kit",
     title: "drum kits",
+    hint: HINTS.audition,
+    audition: true,
     items,
     filterable: true,
     index: Math.max(
@@ -2320,8 +2383,8 @@ function keysScreen(): readonly KeySection[] | undefined {
   if (overlay === "picker")
     return tui.pickerTyping
       ? undefined
-      : tui.ui.picker?.id === "pattern"
-        ? KEYS.preview
+      : AUDITION_PICKERS.has(tui.ui.picker?.id ?? "")
+        ? KEYS.audition
         : KEYS.list;
   if (overlay === "text") return KEYS.text;
   if (overlay === "log") return KEYS.log;
@@ -2430,11 +2493,49 @@ function auditionController(): Audition {
   return auditionLoop;
 }
 
+/**
+ * Warm the pack cache for a staged command before it runs, so a lazy fetch
+ * (a sample kit, a pack sound or table) happens outside the capture and the
+ * window's score is swapped only for the instant the command takes.
+ */
+async function prefetchStaged(
+  base: TrackScore,
+  command: string,
+): Promise<void> {
+  try {
+    const kit = parseKitCommand(command);
+    if (kit?.kind === "set" && !isSynthKitName(kit.bank)) {
+      const trackId = kitTarget(base, requestedTrack);
+      if (trackId) await useKit(packs(), base, trackId, kit.bank);
+      return;
+    }
+    const pack = parsePackCommand(command);
+    if (pack?.kind === "use") {
+      await useSound(packs(), base, requestedTrack, pack.sound, {
+        ...(pack.voice ? { voice: pack.voice } : {}),
+      });
+      return;
+    }
+    const wavetable = parseWavetableCommand(command);
+    if (wavetable?.kind === "table")
+      await pickWavetable(
+        packs(),
+        base,
+        requestedTrack,
+        wavetable.table,
+        process.cwd(),
+      );
+  } catch {
+    // The command itself reports the failure.
+  }
+}
+
 /** Apply one prompt command to `base` without committing (see stageCapture). */
 async function applyStaged(
   base: TrackScore,
   command: string,
 ): Promise<{ next?: TrackScore; ok: boolean; message: string }> {
+  await prefetchStaged(base, command);
   // Staged commands run one at a time, between queued prompts.
   while (stageCapture) await Bun.sleep(1);
   const committed = score;
@@ -2488,11 +2589,13 @@ function stopAuditionLoop(): void {
 }
 
 /** A menu or picker audition key: Space, `a` (A/B) or `c` (context). */
-function auditionKeyPressed(key: "loop" | "ab" | "context"): void {
+function auditionKeyPressed(
+  key: "loop" | "ab" | "context",
+): Promise<void> | undefined {
   const loop = auditionController();
   if (key === "loop") {
     if (loop.looping) stopAuditionLoop();
-    else void startAuditionLoop().finally(() => requestFrame());
+    else return startAuditionLoop().finally(() => requestFrame());
   } else if (key === "ab") {
     if (!loop.dirtyEdits) {
       tui.activity.pushCard("A/B · nothing staged yet · ←→ to change a value", {
@@ -2502,6 +2605,91 @@ function auditionKeyPressed(key: "loop" | "ab" | "context"): void {
     }
     loop.toggleAB();
   } else loop.toggleContext();
+  return undefined;
+}
+
+/** An auditioning picker's title carries the loop status (`♪ solo · B`). */
+function refreshAuditionPicker(): void {
+  const picker = tui.ui.picker as
+    (NonNullable<typeof tui.ui.picker> & { baseTitle?: string }) | undefined;
+  if (tui.ui.overlay !== "picker" || !picker?.audition) return;
+  // Kept on the picker so a filter's copy of it keeps the plain title too.
+  const base = (picker.baseTitle ??= picker.title);
+  const status = auditionLoop?.status();
+  const dirty = auditionLoop?.dirtyEdits ? "● " : "";
+  picker.title = status ? `${dirty}${base} · ${status}` : base;
+}
+
+/**
+ * `/try <command>`: hear a sound command on the audition loop before it
+ * lands. A small picker offers keep (one undo step) or revert; Space, `a`
+ * and `c` work as in the menu.
+ */
+async function tryPrompt(command: string): Promise<Receipt> {
+  if (!command) return fail(TRY_USAGE);
+  if (!isStageable(command))
+    return fail(`try · only sound changes can be tried · ${TRY_USAGE}`);
+  if (menu.open || euclid.open)
+    return fail("try · close the open screen first");
+  const loop = auditionController();
+  if (!loop.looping) await startAuditionLoop();
+  const result = await loop.stage(command);
+  if (!result.ok) {
+    if (!loop.dirtyEdits) stopAuditionLoop();
+    return fail(`try · ${result.message}`);
+  }
+  tui.openPicker({
+    id: "try",
+    title: `try · ${command.slice(0, 48)}`,
+    hint: HINTS.audition,
+    audition: true,
+    items: [
+      { label: "keep", value: "keep", detail: "commit it · one undo step" },
+      { label: "revert", value: "revert", detail: "drop it" },
+    ],
+  });
+  return ok(`trying · ${command} · a A/B · enter keep · esc revert`);
+}
+
+/** Audition a list's highlighted item in place of its previous hover. */
+function hoverItem(command: string, key: string): void {
+  const loop = auditionLoop;
+  if (!loop?.looping) return;
+  requestFrame();
+  void loop.hover(command, key).then((result) => {
+    if (!result.ok && result.message !== SUPERSEDED)
+      tui.activity.pushCard(result.message, { tone: "warning" });
+    requestFrame();
+  });
+}
+
+/** Enter on a list item while auditioning: it stays staged for good. */
+function chooseItem(command: string, key: string): void {
+  const loop = auditionLoop;
+  if (!loop) return;
+  void loop
+    .hover(command, key)
+    .then((result) => {
+      if (!result.ok && result.message !== SUPERSEDED)
+        tui.activity.pushCard(result.message, { tone: "warning" });
+      loop.settle(key);
+    })
+    .finally(() => requestFrame());
+}
+
+/** Space, `a` or `c` in a picker: starting the loop hovers the cursor row. */
+function pickerAuditionKey(key: "loop" | "ab" | "context"): void {
+  const started = auditionKeyPressed(key);
+  if (!started) return;
+  const picker = tui.ui.picker;
+  const item = picker?.items[picker.index];
+  if (!picker || !item || !isStageable(item.value)) return;
+  void started.then(() => {
+    const now = tui.ui.picker;
+    const current = now?.id === picker.id ? now.items[now.index] : undefined;
+    if (current && isStageable(current.value))
+      hoverItem(current.value, `picker:${picker.id}`);
+  });
 }
 
 /** Stage a menu command while auditioning; undefined when it should run. */

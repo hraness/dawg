@@ -100,6 +100,8 @@ dawg projects are now plain TypeScript files that you, an agent or another windo
 - **Audition loop in the edit menu.** `Space` loops the focused track (solo, or the whole mix with `c`), using its own notes over a region of at most four bars, or a short phrase by role when it has none (chord, riff, groove, or one held wavetable note).
 - **Staged edits with A/B.** While the loop plays, menu changes are staged and heard within about 100 ms (only the changed track re-renders, off-thread). `a` flips between the committed and the staged sound, `Enter` keeps all staged changes as one revision and one undo step, `Esc` reverts. Changed rows show `staged ← committed`. Edits from another window are re-applied under the staged ones.
 - The audition controller (`src/tui/audition.ts`) and the preview score builder (`src/audio/preview.ts`) are reusable by any screen; a preview renders byte-identical to the same bars of a full render.
+- **Hover to hear lists.** With the loop on, moving through a list (wavetables, instruments, drum kits, patterns, choice lists in `/menu`, and the `/kit` and `/pattern` pickers) plays the highlighted item on the loop. Hovers replace each other, fast moves skip straight to the latest item, and a pack sound that needs fetching shows `fetching…` without blocking the cursor. Enter chooses, Esc leaves with nothing changed.
+- **`/try <sound command>`** hears a prompt command on the loop first: `/try fx reverb mix 0.6`, then `a` for A/B, Enter to keep (one undo step) or Esc to drop it.
 
 ### Menus
 

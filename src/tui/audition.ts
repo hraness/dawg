@@ -70,6 +70,10 @@ export type RebaseResult = Readonly<{
 }>;
 
 const DEFAULT_DEBOUNCE_MS = 40;
+/** A stage still running after this long shows "fetching…". */
+const FETCHING_AFTER_MS = 150;
+/** The message of a hover skipped because a newer one replaced it. */
+export const SUPERSEDED = "superseded";
 const LATENCY_SAMPLES = 32;
 
 export class Audition {
@@ -95,6 +99,9 @@ export class Audition {
   private lastRenderAt = -Infinity;
   private timer: unknown;
   private readonly debounceMs: number;
+  private readonly hoverSeq = new Map<string, number>();
+  private pendingStages = 0;
+  private pendingSince: number | undefined;
   /** Renders actually started (coalesced repeats do not count). */
   public renders = 0;
 
@@ -198,10 +205,12 @@ export class Audition {
    */
   public stage(
     command: string,
-    options: { replaceKey?: string } = {},
+    options: { replaceKey?: string; superseded?: () => boolean } = {},
   ): Promise<StageResult> {
     const keyAt = this.host.now();
+    if (this.pendingStages++ === 0) this.pendingSince = keyAt;
     const run = this.work.then(async (): Promise<StageResult> => {
+      if (options.superseded?.()) return { ok: false, message: SUPERSEDED };
       const replaceKey = options.replaceKey;
       const replacing =
         replaceKey !== undefined &&
@@ -212,11 +221,13 @@ export class Audition {
         );
         const replay = await this.replay(this.committedScore, kept);
         const result = await this.host.apply(replay.score, command);
+        if (options.superseded?.()) return { ok: false, message: SUPERSEDED };
         if (!result.ok) return result;
         this.staged = [...replay.kept, { command, replaceKey }];
         this.stagedScore = result.next ?? replay.score;
       } else {
         const result = await this.host.apply(this.score, command);
+        if (options.superseded?.()) return { ok: false, message: SUPERSEDED };
         if (!result.ok || !result.next) return result;
         this.staged.push({ command, replaceKey });
         this.stagedScore = result.next;
@@ -226,8 +237,61 @@ export class Audition {
       this.host.changed?.();
       return { ok: true, message: command, next: this.stagedScore };
     });
+    const done = run.finally(() => {
+      if (--this.pendingStages === 0) this.pendingSince = undefined;
+    });
+    this.work = done.catch(() => undefined);
+    return done;
+  }
+
+  /**
+   * Audition a picker's highlighted item: it replaces the previous hover
+   * of `key`, and a hover overtaken by a newer one before it ran is
+   * skipped, so moving fast through a list (or a slow pack fetch) never
+   * queues a backlog: the latest item plays.
+   */
+  public hover(command: string, key: string): Promise<StageResult> {
+    const seq = (this.hoverSeq.get(key) ?? 0) + 1;
+    this.hoverSeq.set(key, seq);
+    return this.stage(command, {
+      replaceKey: key,
+      superseded: () => this.hoverSeq.get(key) !== seq,
+    });
+  }
+
+  /** Leave a picker without choosing: drop its hover, keep other edits. */
+  public unhover(key: string): Promise<void> {
+    this.hoverSeq.set(key, (this.hoverSeq.get(key) ?? 0) + 1);
+    const run = this.work.then(async () => {
+      if (!this.staged.some((entry) => entry.replaceKey === key)) return;
+      const replay = await this.replay(
+        this.committedScore,
+        this.staged.filter((entry) => entry.replaceKey !== key),
+      );
+      this.staged = replay.kept;
+      this.stagedScore = replay.kept.length ? replay.score : undefined;
+      this.showing = "B";
+      this.request();
+      this.host.changed?.();
+    });
     this.work = run.catch(() => undefined);
     return run;
+  }
+
+  /** Choosing a hovered item makes it an ordinary staged edit. */
+  public settle(key: string): void {
+    this.hoverSeq.set(key, (this.hoverSeq.get(key) ?? 0) + 1);
+    this.staged = this.staged.map((entry) =>
+      entry.replaceKey === key ? { command: entry.command } : entry,
+    );
+  }
+
+  /** A stage (a pack fetch, say) has been running long enough to show. */
+  public get fetching(): boolean {
+    return (
+      this.pendingSince !== undefined &&
+      this.host.now() - this.pendingSince >= FETCHING_AFTER_MS
+    );
   }
 
   /** Drop every staged edit; the loop plays the committed sound again. */
@@ -369,10 +433,11 @@ export class Audition {
    * loop is off and nothing is staged.
    */
   public status(): string | undefined {
-    if (!this.looping && !this.dirtyEdits) return undefined;
+    if (!this.looping && !this.dirtyEdits && !this.fetching) return undefined;
     const parts: string[] = [];
     if (this.looping) parts.push(`♪ ${this.context ? "in context" : "solo"}`);
     else parts.push("loop off");
+    if (this.fetching) parts.push("fetching…");
     if (this.dirtyEdits)
       parts.push(
         this.showing === "A" ? "A committed" : `B staged ${this.staged.length}`,
@@ -408,7 +473,7 @@ export function auditionKey(value: string): AuditionKey | undefined {
  * before.
  */
 const STAGEABLE =
-  /^\/?(fx|effects|filter|lowpass|synth|wt|wavetable|kit|instrument|vol|volume|pan|gain|speed|warpmode|root|pattern)\s+\S/i;
+  /^\/?(?:(fx|effects|filter|lowpass|synth|wt|wavetable|kit|instrument|vol|volume|pan|gain|speed|warpmode|root|pattern)\s+\S|pack\s+use\s+\S)/i;
 /** Subcommands that list or show instead of changing the sound. */
 const READ_ONLY = /^\/?\S+\s+(list|show|info|help)\s*$/i;
 

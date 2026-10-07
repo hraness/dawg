@@ -850,6 +850,17 @@ While the loop plays, each change you make is **staged**, not committed. The loo
 
 Kept changes are one `ScoreOperation` (`preview.commit`, listing the commands), so `Ctrl-Z` takes them all back at once, and they sync to other windows and the project files like any edit. If the score changes underneath (another window, the agent, an undo), the staged commands are re-applied on top of the new score; any that no longer apply are dropped, with a notice. Leaving the menu reverts anything staged. With the loop off, the menu behaves as before: each change is committed right away.
 
+**Lists audition on hover.** With the loop on, moving the cursor through a list plays the highlighted item on the loop: the wavetable list (built-in, pack and project tables), instruments, drum kits and patterns, and every choice list (filter type, warp mode, presets). It is the browser-preview model of Ableton and Bitwig, applied to the loop you are already hearing. Each move replaces the previous hover, so the staged count stays at one, and fast moves skip straight to the latest item. A pack item that has to be fetched shows `fetching…` in the title; the cursor keeps moving and the item plays once it arrives. `Enter` chooses the item (it stays staged until you keep), `Esc` or `←` leaves the list and drops the hover. The `/kit` and `/pattern` pickers work the same way: `Space` starts the loop, moving hears each kit or groove, `Enter` keeps it, `Esc` cancels.
+
+| Key in a list | While auditioning                                   |
+| ------------- | --------------------------------------------------- |
+| `↑` `↓`       | move and hear the highlighted item on the loop      |
+| `Enter`       | choose it (menu) or keep it (picker), one undo step |
+| `Esc` / `←`   | leave the list; the hover is dropped                |
+| `a` / `c`     | A/B against the committed sound / solo ↔ in context |
+
+**Try a prompt command.** `/try <sound command>` stages one command on the loop instead of committing it: `/try fx reverb mix 0.6`, `/try synth cutoff 800`, `/try wt pwm`. A small panel offers keep or revert; `a` flips A/B, `Enter` on keep commits it as one undo step, `Esc` drops it. Only sound commands can be tried (fx, synth, wt, kit, pattern, pack use, volume, pan and similar).
+
 The preview renders through the same path as the song, so filters, automation, shared orbit buses, impulse responses and ZzFX voices sound the same as those bars of the full mix. With no audio device (tests, CI, SSH) the loop does nothing audible and everything else works.
 
 ## Keys
