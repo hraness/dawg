@@ -1481,7 +1481,7 @@ function syncHost(): SyncHost {
         record,
         {
           kind: "files.apply",
-          payload: { summary, before: record.composition },
+          payload: { summary },
         },
         plan.operations,
         plan.next.toJSON(),
