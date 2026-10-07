@@ -51,7 +51,17 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         command: "automate <lane> at <beat> <value>",
         summary: "volume pan filter resonance delay-feedback delay-mix",
       },
+      {
+        command: "automate <lane> points <b:v>...",
+        summary: "several points · automate pan points 0:-1 4:1",
+      },
+      {
+        command: "automate <lane> remove <beat>",
+        summary: "drop one point",
+      },
       { command: "clear [<lane>] automation", summary: "drop a lane's points" },
+      { command: "track name <text>", summary: "rename this track" },
+      { command: "meter <1..16>", summary: "beats per bar" },
       {
         command: "hit <voice> at <beat>",
         summary: "kit tracks · hit kick at 0",
@@ -105,6 +115,10 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       { command: "/auth [--check]", summary: "provider and audio status" },
       { command: "/play [on|off]", summary: "keyboard play mode · Ctrl-P" },
       {
+        command: "/menu [section]",
+        summary: "edit by hand · Ctrl-K · track effects automation …",
+      },
+      {
         command: "/click on|off|<volume>",
         summary: "metronome · /count-in 0-2 · /grid 1/16",
       },
@@ -125,6 +139,10 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       {
         command: "Ctrl-P",
         summary: "play mode: A–' W–P keys · Z/X octave · R rec · M click",
+      },
+      {
+        command: "Ctrl-K",
+        summary: "menu: ↑↓/jk move · enter · ←→/+- nudge · / filter",
       },
       { command: "Ctrl-C", summary: "exit" },
     ],
