@@ -15,6 +15,30 @@ import {
   parseDrumVoice,
   type DrumVoice,
 } from "../../core/drums.ts";
+import { trackSlug } from "../../core/slug.ts";
+import {
+  editFile,
+  listFiles,
+  readFile,
+  WORKSPACE_LIMITS,
+  WorkspaceError,
+  writeFile,
+  type WorkspaceScope,
+} from "./workspace.ts";
+import {
+  fetchUrl,
+  FETCH_LIMITS,
+  formatFetchedPage,
+  type Lookup,
+} from "../web/fetch.ts";
+import { WebError, type FetchLike } from "../web/http.ts";
+import {
+  describeSearchProvider,
+  formatSearchResults,
+  SEARCH_LIMITS,
+  webSearch,
+  type SearchSpend,
+} from "../web/search.ts";
 
 /** What a validated tool call asks the host to do. */
 export type ToolPlan =
@@ -29,7 +53,61 @@ export type ToolPlan =
       action: "play" | "pause" | "toggle";
       summary: string;
     }>
-  | Readonly<{ kind: "explain"; text: string; summary: string }>;
+  | Readonly<{ kind: "explain"; text: string; summary: string }>
+  | Readonly<{
+      kind: "action";
+      summary: string;
+      /** Side effects outside the score (files, network); bounded and async. */
+      run: (context: ActionContext) => Promise<ActionResult>;
+    }>;
+
+/** The project directory the workspace tools operate in. */
+export type WorkspaceHost = Readonly<{ root: string }>;
+
+/** Injection points for the web tools; defaults are the real network. */
+export type WebHost = Readonly<{
+  fetch?: FetchLike;
+  lookup?: Lookup;
+  /** Brave Web Search API key; defaults to `BRAVE_SEARCH_API_KEY` and overrides the chain. */
+  braveApiKey?: string;
+  /** AI Gateway key of the active provider; enables gateway search tools. */
+  gatewayApiKey?: string;
+  gatewayBaseUrl?: string;
+  /** Gateway search tool; defaults to `DAWG_WEB_SEARCH`, then `exa`. */
+  searchTool?: string;
+  /** OpenRouter key; defaults to `OPENROUTER_API_KEY`. */
+  openRouterApiKey?: string;
+  openRouterBaseUrl?: string;
+  /**
+   * Billed searches (gateway tools, OpenRouter web plugin) are reported here
+   * so the host can add them to its spend ledger.
+   * TODO(sign-in lane): wire to `recordUsage` in `src/agent/usage.ts` once
+   * the `~/.config/dawg/usage.json` ledger lands on main.
+   */
+  onSpend?: (spend: SearchSpend) => void;
+}>;
+
+/** What an `action` plan receives from the host when it runs. */
+export type ActionContext = Readonly<{
+  workspace?: WorkspaceHost;
+  /**
+   * Called after a successful `write_file`/`edit_file` with the
+   * project-relative path. Returned text (for example typecheck
+   * diagnostics) is appended to the tool result.
+   */
+  onWorkspaceWrite?: (path: string) => Promise<string | void> | string | void;
+  web?: WebHost;
+  signal?: AbortSignal;
+}>;
+
+export type ActionResult = Readonly<{
+  /** What the model reads; already bounded by the tool. */
+  content: string;
+  /** One line for the activity card. */
+  summary: string;
+  /** True when something outside the score changed (a file write). */
+  mutated?: boolean;
+}>;
 
 export type ToolContext = Readonly<{
   score: TrackScore;
@@ -827,7 +905,318 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
       return { kind: "explain", text, summary: text.slice(0, 80) };
     },
   },
+  {
+    name: "list_files",
+    description:
+      "List a project directory (default: the project root): directories first, then files with size and mtime. At most 500 entries; .dawg/ is hidden.",
+    parameters: {
+      type: "object",
+      properties: { path: pathSchema("Project-relative directory") },
+      additionalProperties: false,
+    },
+    plan(args, context) {
+      const path = optionalPath(args);
+      return {
+        kind: "action",
+        summary: `list ${path || "."}`,
+        run: async (action) => {
+          const scope = workspaceScope(action, context);
+          const result = await listFiles(scope, path);
+          return { content: result.text, summary: result.summary };
+        },
+      };
+    },
+  },
+  {
+    name: "read_file",
+    description: `Read a UTF-8 text file from the project by line range (offset is 1-based, limit is a line count). Output is capped at ${WORKSPACE_LIMITS.maxReadBytes / 1024} KiB; binary files report size and type.`,
+    parameters: {
+      type: "object",
+      properties: {
+        path: pathSchema("Project-relative file"),
+        offset: {
+          type: "integer",
+          minimum: 1,
+          description: "First line (1-based)",
+        },
+        limit: {
+          type: "integer",
+          minimum: 1,
+          maximum: WORKSPACE_LIMITS.maxReadLines,
+          description: "Number of lines",
+        },
+      },
+      required: ["path"],
+      additionalProperties: false,
+    },
+    plan(args, context) {
+      const path = requiredPath(args);
+      const offset = optionalNumber(args, "offset", { min: 1, integer: true });
+      const limit = optionalNumber(args, "limit", {
+        min: 1,
+        max: WORKSPACE_LIMITS.maxReadLines,
+        integer: true,
+      });
+      return {
+        kind: "action",
+        summary: `read ${path}`,
+        run: async (action) => {
+          const scope = workspaceScope(action, context);
+          const result = await readFile(scope, path, {
+            ...(offset !== undefined ? { offset } : {}),
+            ...(limit !== undefined ? { limit } : {}),
+          });
+          return { content: result.text, summary: result.summary };
+        },
+      };
+    },
+  },
+  {
+    name: "write_file",
+    description: `Create or replace a file atomically with the full content (at most ${WORKSPACE_LIMITS.maxWriteBytes / 1024 / 1024} MiB). Writable: song.ts and the focused track's tracks/<slug>/ directory, where notes.md is your scratchpad. Parent directories are created.`,
+    parameters: {
+      type: "object",
+      properties: {
+        path: pathSchema("Project-relative file"),
+        content: { type: "string", description: "Entire new file content" },
+      },
+      required: ["path", "content"],
+      additionalProperties: false,
+    },
+    plan(args, context) {
+      const path = requiredPath(args);
+      if (typeof args.content !== "string")
+        throw new ToolArgumentError("content must be a string");
+      const content = args.content;
+      return {
+        kind: "action",
+        summary: `write ${path}`,
+        run: async (action) => {
+          const scope = workspaceScope(action, context);
+          const result = await writeFile(scope, path, content);
+          return {
+            content: await afterWrite(action, result.rel, result.text),
+            summary: result.summary,
+            mutated: true,
+          };
+        },
+      };
+    },
+  },
+  {
+    name: "edit_file",
+    description:
+      "Replace one exact occurrence of old with new in a writable file (same scope as write_file). old must match exactly once; otherwise the result tells you the count. Prefer this over many note tools for large edits or restructuring of tracks/<slug>/track.ts.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: pathSchema("Project-relative file"),
+        old: {
+          type: "string",
+          minLength: 1,
+          description: "Exact text to replace",
+        },
+        new: { type: "string", description: "Replacement text" },
+      },
+      required: ["path", "old", "new"],
+      additionalProperties: false,
+    },
+    plan(args, context) {
+      const path = requiredPath(args);
+      if (typeof args.old !== "string" || args.old.length === 0)
+        throw new ToolArgumentError("old must be a non-empty string");
+      if (typeof args.new !== "string")
+        throw new ToolArgumentError("new must be a string");
+      const { old: oldText, new: newText } = args;
+      return {
+        kind: "action",
+        summary: `edit ${path}`,
+        run: async (action) => {
+          const scope = workspaceScope(action, context);
+          const result = await editFile(scope, path, oldText, newText);
+          return {
+            content: await afterWrite(action, result.rel, result.text),
+            summary: result.summary,
+            mutated: true,
+          };
+        },
+      };
+    },
+  },
+  {
+    name: "web_search",
+    description: `Search the web; returns up to ${SEARCH_LIMITS.defaultCount} results as title, url and snippet. Follow up with fetch_url to read a page.`,
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", maxLength: SEARCH_LIMITS.maxQueryChars },
+        count: { type: "integer", minimum: 1, maximum: SEARCH_LIMITS.maxCount },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    },
+    plan(args) {
+      if (typeof args.query !== "string" || args.query.trim().length === 0)
+        throw new ToolArgumentError("query must be a non-empty string");
+      if (args.query.length > SEARCH_LIMITS.maxQueryChars)
+        throw new ToolArgumentError(
+          `query must be at most ${SEARCH_LIMITS.maxQueryChars} characters`,
+        );
+      const query = args.query.trim();
+      const count = optionalNumber(args, "count", {
+        min: 1,
+        max: SEARCH_LIMITS.maxCount,
+        integer: true,
+      });
+      return {
+        kind: "action",
+        summary: `search ${query.slice(0, 60)}`,
+        run: async (action) => {
+          const web = action.web ?? {};
+          const outcome = await webSearch(query, {
+            ...(count !== undefined ? { count } : {}),
+            braveApiKey: web.braveApiKey ?? process.env.BRAVE_SEARCH_API_KEY,
+            ...(web.gatewayApiKey ? { gatewayApiKey: web.gatewayApiKey } : {}),
+            ...(web.gatewayBaseUrl
+              ? { gatewayBaseUrl: web.gatewayBaseUrl }
+              : {}),
+            searchTool: web.searchTool ?? process.env.DAWG_WEB_SEARCH,
+            openRouterApiKey:
+              web.openRouterApiKey ?? process.env.OPENROUTER_API_KEY,
+            ...(web.openRouterBaseUrl
+              ? { openRouterBaseUrl: web.openRouterBaseUrl }
+              : {}),
+            ...(web.fetch ? { fetch: web.fetch } : {}),
+            ...(web.onSpend ? { onSpend: web.onSpend } : {}),
+            ...(action.signal ? { signal: action.signal } : {}),
+          });
+          const via = describeSearchProvider(outcome);
+          return {
+            content: formatSearchResults(outcome, query),
+            summary: `searched via ${via}${outcome.fallbackFrom ? " (fallback)" : ""} · ${outcome.results.length} result${outcome.results.length === 1 ? "" : "s"}`,
+          };
+        },
+      };
+    },
+  },
+  {
+    name: "fetch_url",
+    description: `Fetch a public http(s) page and return its readable text (HTML reduced to headings, text and links; at most ${FETCH_LIMITS.maxOutputChars / 1024} KiB). Private and local addresses are refused.`,
+    parameters: {
+      type: "object",
+      properties: {
+        url: { type: "string", maxLength: FETCH_LIMITS.maxUrlChars },
+      },
+      required: ["url"],
+      additionalProperties: false,
+    },
+    plan(args) {
+      if (typeof args.url !== "string" || args.url.trim().length === 0)
+        throw new ToolArgumentError("url must be a non-empty string");
+      if (args.url.length > FETCH_LIMITS.maxUrlChars)
+        throw new ToolArgumentError(
+          `url must be at most ${FETCH_LIMITS.maxUrlChars} characters`,
+        );
+      const url = args.url.trim();
+      let host = url;
+      try {
+        host = new URL(url).hostname;
+      } catch {
+        // admitUrl reports the diagnostic when the action runs.
+      }
+      return {
+        kind: "action",
+        summary: `fetch ${host.slice(0, 60)}`,
+        run: async (action) => {
+          const page = await fetchUrl(url, {
+            ...(action.web?.fetch ? { fetch: action.web.fetch } : {}),
+            ...(action.web?.lookup ? { lookup: action.web.lookup } : {}),
+            ...(action.signal ? { signal: action.signal } : {}),
+          });
+          return {
+            content: formatFetchedPage(page),
+            summary: `fetched ${new URL(page.url).hostname} (${page.bytes} bytes${page.truncated ? ", truncated" : ""})`,
+          };
+        },
+      };
+    },
+  },
 ] satisfies AgentTool[]);
+
+/** Errors an `action` plan may raise that are safe to show to the model. */
+export function isActionDiagnostic(error: unknown): boolean {
+  return (
+    error instanceof WorkspaceError ||
+    error instanceof WebError ||
+    error instanceof ToolArgumentError
+  );
+}
+
+const MAX_HOOK_CHARS = 4_000;
+
+async function afterWrite(
+  action: ActionContext,
+  rel: string,
+  text: string,
+): Promise<string> {
+  if (!action.onWorkspaceWrite) return text;
+  try {
+    const note = await action.onWorkspaceWrite(rel);
+    return typeof note === "string" && note.trim()
+      ? `${text}\n${note.trim().slice(0, MAX_HOOK_CHARS)}`
+      : text;
+  } catch (error) {
+    const message = (
+      error instanceof Error ? error.message : String(error)
+    ).slice(0, MAX_HOOK_CHARS);
+    return `${text}\nafter write: ${message}`;
+  }
+}
+
+/** The slug of the focused track: its name, or its id for a draft track. */
+export function focusedTrackSlug(
+  context: Pick<ToolContext, "score" | "focusedTrackId">,
+): string {
+  const track = context.score.tracks.find(
+    (candidate) => candidate.id === context.focusedTrackId,
+  );
+  return trackSlug(track?.name ?? context.focusedTrackId);
+}
+
+function workspaceScope(
+  action: ActionContext,
+  context: ToolContext,
+): WorkspaceScope {
+  if (!action.workspace)
+    throw new WorkspaceError("file tools are unavailable in this session");
+  return { root: action.workspace.root, trackSlug: focusedTrackSlug(context) };
+}
+
+function pathSchema(description: string) {
+  return {
+    type: "string",
+    maxLength: WORKSPACE_LIMITS.maxPathChars,
+    description,
+  };
+}
+
+function requiredPath(args: Record<string, unknown>): string {
+  const path = optionalPath(args);
+  if (path === undefined || path.length === 0)
+    throw new ToolArgumentError("path is required");
+  return path;
+}
+
+function optionalPath(args: Record<string, unknown>): string | undefined {
+  if (args.path === undefined) return undefined;
+  if (typeof args.path !== "string")
+    throw new ToolArgumentError("path must be a string");
+  if (args.path.length > WORKSPACE_LIMITS.maxPathChars)
+    throw new ToolArgumentError(
+      `path must be at most ${WORKSPACE_LIMITS.maxPathChars} characters`,
+    );
+  return args.path;
+}
 
 const TOOLS_BY_NAME = new Map(AGENT_TOOLS.map((tool) => [tool.name, tool]));
 

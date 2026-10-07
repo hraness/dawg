@@ -1,5 +1,6 @@
 import type { TrackScore } from "../../core/score.ts";
 import { AVAILABLE_EFFECTS, AVAILABLE_INSTRUMENTS } from "../audio/wav.ts";
+import type { ProjectOutline } from "./workspace.ts";
 
 export const MAX_BRIEF_BYTES = 12 * 1024;
 const MAX_FOCUSED_NOTES = 96;
@@ -31,6 +32,8 @@ export function compositionBrief(options: {
   revision: number;
   focusedTrackId: string;
   recentOperations?: readonly string[];
+  /** Bounded project tree and notes head from `projectOutline`; dropped first under pressure. */
+  project?: ProjectOutline;
   maxBytes?: number;
 }): string {
   const { score } = options;
@@ -96,7 +99,12 @@ export function compositionBrief(options: {
   const recent = (options.recentOperations ?? [])
     .slice(-MAX_RECENT)
     .map((line) => line.replace(/\s+/g, " ").slice(0, MAX_RECENT_CHARS));
-  const build = (noteLimit: number, trackLimit: number) => {
+  const project = options.project;
+  const build = (
+    noteLimit: number,
+    trackLimit: number,
+    projectLevel: number,
+  ) => {
     const visible = focusedNotes.slice(0, noteLimit);
     return JSON.stringify({
       revision: options.revision,
@@ -120,17 +128,29 @@ export function compositionBrief(options: {
       recentOperations: recent,
       instruments: AVAILABLE_INSTRUMENTS,
       effects: AVAILABLE_EFFECTS,
+      ...(project && projectLevel > 0 && project.tree.length > 0
+        ? {
+            project: {
+              tree: project.tree,
+              ...(project.notes !== undefined && projectLevel > 1
+                ? { notes: project.notes }
+                : {}),
+            },
+          }
+        : {}),
     });
   };
   const encoder = new TextEncoder();
   let noteLimit = Math.min(MAX_FOCUSED_NOTES, focusedNotes.length);
   let trackLimit = tracks.length;
-  let brief = build(noteLimit, trackLimit);
+  let projectLevel = 2;
+  let brief = build(noteLimit, trackLimit, projectLevel);
   while (encoder.encode(brief).byteLength > maxBytes) {
     if (noteLimit > 0) noteLimit = Math.floor(noteLimit / 2);
+    else if (projectLevel > 0) projectLevel -= 1;
     else if (trackLimit > 1) trackLimit = Math.floor(trackLimit / 2);
     else break;
-    brief = build(noteLimit, trackLimit);
+    brief = build(noteLimit, trackLimit, projectLevel);
   }
   return brief;
 }

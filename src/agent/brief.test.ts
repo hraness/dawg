@@ -129,3 +129,81 @@ describe("tool registry", () => {
     }
   });
 });
+
+describe("project outline in the brief", () => {
+  test("carries the tree and notes head, and sheds them before track summaries under pressure", () => {
+    const tree = Array.from(
+      { length: 30 },
+      (_, i) => `tracks/t${i}/ 2 files 1.2 KiB`,
+    );
+    const notes = "n".repeat(1024) + "…";
+    const score = createScore({ tracks: [{ id: "main" }, { id: "t1" }] });
+    const brief = compositionBrief({
+      score,
+      revision: 1,
+      focusedTrackId: "main",
+      project: { tree, notes },
+    });
+    const parsed = JSON.parse(brief) as {
+      project?: { tree: string[]; notes?: string };
+    };
+    expect(parsed.project).toEqual({ tree, notes });
+    expect(new TextEncoder().encode(brief).byteLength).toBeLessThanOrEqual(
+      MAX_BRIEF_BYTES,
+    );
+    const cramped = JSON.parse(
+      compositionBrief({
+        score,
+        revision: 1,
+        focusedTrackId: "main",
+        project: { tree, notes },
+        maxBytes: 1500,
+      }),
+    ) as { project?: { tree: string[]; notes?: string }; tracks: unknown[] };
+    expect(cramped.project?.notes).toBeUndefined();
+    expect(cramped.tracks).toHaveLength(2);
+    const tiny = JSON.parse(
+      compositionBrief({
+        score,
+        revision: 1,
+        focusedTrackId: "main",
+        project: { tree, notes },
+        maxBytes: 600,
+      }),
+    ) as { project?: unknown; tracks: unknown[] };
+    expect(tiny.project).toBeUndefined();
+    expect(tiny.tracks.length).toBeGreaterThan(0);
+    const without = JSON.parse(
+      compositionBrief({ score, revision: 1, focusedTrackId: "main" }),
+    ) as { project?: unknown };
+    expect(without.project).toBeUndefined();
+  });
+});
+
+describe("workspace and web tools", () => {
+  test("are registered with bounded schemas", () => {
+    const names = chatTools().map((tool) => tool.function.name);
+    for (const name of [
+      "list_files",
+      "read_file",
+      "write_file",
+      "edit_file",
+      "web_search",
+      "fetch_url",
+    ])
+      expect(names).toContain(name);
+    const byName = new Map(AGENT_TOOLS.map((tool) => [tool.name, tool]));
+    expect(byName.get("read_file")!.parameters.required).toEqual(["path"]);
+    expect(byName.get("edit_file")!.parameters.required).toEqual([
+      "path",
+      "old",
+      "new",
+    ]);
+    expect(byName.get("write_file")!.parameters.required).toEqual([
+      "path",
+      "content",
+    ]);
+    expect(byName.get("web_search")!.parameters.required).toEqual(["query"]);
+    expect(byName.get("fetch_url")!.parameters.required).toEqual(["url"]);
+  });
+});

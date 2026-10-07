@@ -1,0 +1,49 @@
+{
+  "_note": "OpenRouter web plugin response shape (openrouter.ai/docs/features/web-search): url_citation annotations on the assistant message plus usage.cost.",
+  "id": "gen-fixture",
+  "object": "chat.completion",
+  "model": "anthropic/claude-haiku-4.5",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "Here is what I found about comb filters.",
+        "annotations": [
+          {
+            "type": "url_citation",
+            "url_citation": {
+              "url": "https://en.wikipedia.org/wiki/Comb_filter?fbclid=xyz",
+              "title": "Comb filter - Wikipedia",
+              "content": "A comb filter adds a delayed version of a signal to itself, causing constructive and destructive interference.",
+              "start_index": 0,
+              "end_index": 40
+            }
+          },
+          {
+            "type": "url_citation",
+            "url_citation": {
+              "url": "https://ccrma.stanford.edu/~jos/pasp/Feedback_Comb_Filters.html",
+              "title": "Feedback Comb Filters",
+              "content": "The feedback comb filter has a transfer function with poles spaced uniformly around the unit circle."
+            }
+          },
+          {
+            "type": "url_citation",
+            "url_citation": {
+              "url": "https://en.wikipedia.org/wiki/Comb_filter",
+              "title": "duplicate of the first after cleaning"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 900,
+    "completion_tokens": 40,
+    "total_tokens": 940,
+    "cost": 0.0012
+  }
+}

@@ -1,4 +1,15 @@
 import { describe, expect, test } from "bun:test";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createScore, type TrackScore } from "../../core/score.ts";
 import {
   describeAgentEvent,
@@ -7,6 +18,7 @@ import {
   type AgentEvent,
   type AgentHost,
 } from "./agent.ts";
+import type { FetchLike } from "../web/http.ts";
 import { createGatewayClient } from "./gateway.ts";
 import {
   finishChunk,
@@ -580,5 +592,211 @@ describe("drum, effects, solo, and filter tools", () => {
     expect(main.filter).toBeUndefined();
     expect(main.delay).toBeUndefined();
     expect(main.reverb).toBeUndefined();
+  });
+});
+
+describe("workspace and web tools in the loop", () => {
+  async function project() {
+    const root = await realpath(await mkdtemp(join(tmpdir(), "dawg-loop-")));
+    await mkdir(join(root, "tracks/main"), { recursive: true });
+    await mkdir(join(root, "tracks/other"), { recursive: true });
+    await writeFile(
+      join(root, "tracks/main/track.ts"),
+      'export default track({ id: "main", volume: 0.5 });\n',
+    );
+    await writeFile(join(root, "tracks/main/notes.md"), "# main\nidea: dub\n");
+    await writeFile(join(root, "tracks/other/track.ts"), "// other\n");
+    await writeFile(join(root, "song.ts"), "export default song({});\n");
+    return root;
+  }
+
+  test("reads, searches, then edits the focused track file and reports the hook", async () => {
+    const root = await project();
+    try {
+      const ddg = await readFile(
+        new URL("../web/fixtures/duckduckgo.html", import.meta.url),
+        "utf8",
+      );
+      const script = scriptedFetch([
+        [
+          ...toolCallChunks(0, "r1", "read_file", {
+            path: "tracks/main/track.ts",
+          }),
+          ...toolCallChunks(1, "s1", "web_search", {
+            query: "comb filter reverb",
+          }),
+          ...toolCallChunks(2, "l1", "list_files", { path: "tracks" }),
+          finishChunk("tool_calls"),
+        ],
+        [
+          ...toolCallChunks(0, "e1", "edit_file", {
+            path: "tracks/main/track.ts",
+            old: "volume: 0.5",
+            new: "volume: 0.8, send: { reverb: 0.3 }",
+          }),
+          ...toolCallChunks(1, "e2", "edit_file", {
+            path: "tracks/other/track.ts",
+            old: "// other",
+            new: "// hacked",
+          }),
+          ...toolCallChunks(2, "w1", "write_file", {
+            path: "tracks/main/notes.md",
+            content: "# main\nidea: dub\nref: freeverb\n",
+          }),
+          finishChunk("tool_calls"),
+        ],
+        [
+          textChunk("Turned up main and noted the reference."),
+          finishChunk("stop"),
+        ],
+      ]);
+      const webFetch: FetchLike = async (input) => {
+        const url = String(input);
+        expect(url.startsWith("https://html.duckduckgo.com/html/")).toBe(true);
+        return new Response(ddg, {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        });
+      };
+      const { state, host } = memoryHost();
+      const writes: string[] = [];
+      const events: AgentEvent[] = [];
+      const result = await runAgentTurn({
+        prompt: "louder main with a reverb reference",
+        model: "opus-5.5",
+        client: client(script.fetcher),
+        host: {
+          ...host,
+          workspace: { root },
+          onWorkspaceWrite: (path) => {
+            writes.push(path);
+            return path.endsWith("track.ts")
+              ? "track.ts applied: 1 track updated"
+              : undefined;
+          },
+          web: { fetch: webFetch },
+        },
+        onEvent: (event) => events.push(event),
+      });
+      expect(result).toMatchObject({
+        type: "done",
+        reason: "stop",
+        applied: 2,
+        rejected: 1,
+        revision: 3,
+      });
+      expect(state.commits).toBe(0);
+      expect(await readFile(join(root, "tracks/main/track.ts"), "utf8")).toBe(
+        'export default track({ id: "main", volume: 0.8, send: { reverb: 0.3 } });\n',
+      );
+      expect(await readFile(join(root, "tracks/other/track.ts"), "utf8")).toBe(
+        "// other\n",
+      );
+      expect(
+        await readFile(join(root, "tracks/main/notes.md"), "utf8"),
+      ).toContain("ref: freeverb");
+      expect(writes).toEqual(["tracks/main/track.ts", "tracks/main/notes.md"]);
+      expect(
+        (await readdir(join(root, "tracks/main"))).filter((n) =>
+          n.endsWith(".tmp"),
+        ),
+      ).toEqual([]);
+      expect(
+        events
+          .filter((e) => e.type === "tool-applied")
+          .map((e) => e.type === "tool-applied" && e.summary),
+      ).toEqual([
+        "read tracks/main/track.ts (1 line)",
+        "searched via duckduckgo · 3 results",
+        "listed tracks (2)",
+        "edited tracks/main/track.ts",
+        "wrote tracks/main/notes.md (31 B)",
+      ]);
+      const rejected = events.find((e) => e.type === "tool-rejected");
+      expect(rejected?.type === "tool-rejected" && rejected.diagnostic).toBe(
+        "tracks/other/track.ts is outside this window's writable scope; it may write song.ts and tracks/main/ (reads work anywhere except .dawg/)",
+      );
+      // The first brief carries the project tree and the notes head.
+      const first = script.requests[0]!.body as {
+        messages: Array<Record<string, unknown>>;
+      };
+      const brief = JSON.parse(
+        String(first.messages[1]!.content).replace(
+          /^Composition brief \(JSON\): /,
+          "",
+        ),
+      ) as { project?: { tree: string[]; notes?: string } };
+      expect(brief.project?.tree).toEqual([
+        "song.ts 25 B",
+        "tracks/main/ (focused) 2 files 68 B",
+        "tracks/other/ 1 file 9 B",
+      ]);
+      expect(brief.project?.notes).toBe("# main\nidea: dub\n");
+      expect(String(first.messages[0]!.content)).toContain("edit_file");
+      // Tool results are plain text; the write hook's text follows the edit result.
+      const second = script.requests[1]!.body as {
+        messages: Array<Record<string, unknown>>;
+      };
+      const tools = second.messages.filter((m) => m.role === "tool");
+      expect(String(tools[0]!.content)).toBe(
+        'tracks/main/track.ts · lines 1-1 of 1\nexport default track({ id: "main", volume: 0.5 });',
+      );
+      expect(String(tools[1]!.content)).toMatch(
+        /^3 results via duckduckgo\n1\. Freeverb/,
+      );
+      expect(String(tools[2]!.content)).toBe(
+        "tracks/ · 2 entries\nmain/\nother/",
+      );
+      const third = script.requests[2]!.body as {
+        messages: Array<Record<string, unknown>>;
+      };
+      const edits = third.messages.filter((m) => m.role === "tool").slice(-3);
+      expect(String(edits[0]!.content)).toBe(
+        "edited tracks/main/track.ts: replaced 1 occurrence (1 → 1 line)\ntrack.ts applied: 1 track updated",
+      );
+      expect(JSON.parse(String(edits[1]!.content))).toMatchObject({
+        ok: false,
+      });
+      expect(String(edits[2]!.content)).toBe(
+        "wrote tracks/main/notes.md (31 bytes)",
+      );
+      for (const request of script.requests)
+        expect(JSON.stringify(request.body)).not.toContain(KEY);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("file tools are unavailable without a workspace and web tools stay bounded", async () => {
+    const script = scriptedFetch([
+      [
+        ...toolCallChunks(0, "r1", "read_file", { path: "song.ts" }),
+        ...toolCallChunks(1, "f1", "fetch_url", {
+          url: "http://localhost:7/x",
+        }),
+        ...toolCallChunks(2, "s1", "web_search", { query: "   " }),
+        finishChunk("tool_calls"),
+      ],
+      [textChunk("Nothing to do."), finishChunk("stop")],
+    ]);
+    const { host } = memoryHost();
+    const events: AgentEvent[] = [];
+    const result = await runAgentTurn({
+      prompt: "x",
+      model: "opus-5.5",
+      client: client(script.fetcher),
+      host,
+      onEvent: (event) => events.push(event),
+    });
+    expect(result).toMatchObject({ type: "done", applied: 0, rejected: 3 });
+    expect(
+      events
+        .filter((e) => e.type === "tool-rejected")
+        .map((e) => e.type === "tool-rejected" && e.diagnostic),
+    ).toEqual([
+      "file tools are unavailable in this session",
+      "localhost is not a public host",
+      "query must be a non-empty string",
+    ]);
   });
 });

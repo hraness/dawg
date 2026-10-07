@@ -1372,7 +1372,7 @@ async function runAgent(text: string): Promise<string | Receipt> {
       selection,
       prompt: text,
       model: selectedModel,
-      host: agentHost(turn),
+      host: agentHost(turn, selection),
       signal: turn.controller.signal,
       onEvent: (event) => {
         if (admitting && event.type === "step" && event.step <= 1) return;
@@ -1421,7 +1421,10 @@ function currentProvider(): Promise<ProviderSelection> {
   });
 }
 
-function agentHost(turn: { steering: string[] }): AgentHost {
+function agentHost(
+  turn: { steering: string[] },
+  selection: ProviderSelection,
+): AgentHost {
   return {
     snapshot: () => ({
       score,
@@ -1486,5 +1489,11 @@ function agentHost(turn: { steering: string[] }): AgentHost {
       }
     },
     takeSteering: () => turn.steering.splice(0),
+    workspace: { root: process.cwd() },
+    // web_search tries the gateway's server-side search tools when the turn
+    // runs on the gateway; Brave, OpenRouter and the search tool come from
+    // the environment inside the tool.
+    web:
+      selection.kind === "gateway" ? { gatewayApiKey: selection.apiKey } : {},
   };
 }
