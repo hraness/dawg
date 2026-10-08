@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.16.0";
+export const SDK_VERSION = "1.17.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -2471,6 +2471,38 @@ export type SongInput = Readonly<{
   time?: readonly (TimeMark | readonly TimeMark[])[];
   /** Tracks in score order; each from `track()`. */
   tracks: readonly TrackSpec[];
+  /** Master chain and loudness target after every track and orbit bus (SDK 1.17.0); omit for none. */
+  master?: MasterInput;
+}>;
+
+/**
+ * The song master (SDK 1.17.0), processed in the fixed order
+ * eq → glue → tape → width → limiter after the tracks and orbit buses are
+ * summed. Each unit present is on; `{}` takes every default. `target` is
+ * an integrated loudness in LUFS (ITU-R BS.1770-4), -40..-3: renders drive
+ * the limiter (or, without one, a clean gain) to reach it. Streaming is
+ * -14, club -8, loud hyperpop or gabber -6, classical -20, broadcast -23.
+ * The SDK takes LUFS numbers only: a target name such as `master target
+ * club` in the prompt also sets a limiter preset, so write that unit out.
+ * DAWG.md "Master and loudness" lists every parameter with its range.
+ *
+ * ```ts
+ * master: { glue: { ratio: 2 }, limiter: { ceiling: -1 }, target: -14 }
+ * ```
+ */
+export type MasterInput = Readonly<{
+  /** `low`/`high` shelves and `bell1`/`bell2` gains in dB, with `…freq` and `…q`. */
+  eq?: EffectParams;
+  /** Bus compressor: threshold, ratio, attack, release (ms), knee, makeup, mix, hpf. */
+  glue?: EffectParams;
+  /** Saturation: drive (dB), bias, tone (Hz), mix. */
+  tape?: EffectParams;
+  /** Stereo width 0..2 (1 unchanged) and `mono` bass below this many Hz. */
+  width?: EffectParams;
+  /** True-peak limiter: ceiling (dBTP), gain, release, lookahead (ms), truepeak. */
+  limiter?: EffectParams;
+  /** Integrated loudness target in LUFS (a negative number, -40..-3). */
+  target?: number;
 }>;
 
 /** A stored note: integer ticks; expression fields only when set. */
@@ -2575,6 +2607,7 @@ export type Song = Readonly<{
   tuning?: ScoreTuning;
   tracks: readonly ScoreTrack[];
   notes: readonly ScoreNote[];
+  master?: MasterInput;
 }>;
 
 /** A stored song `time`: ticks, and 0-based bar indexes. */
@@ -2591,6 +2624,36 @@ export type ScoreTime = Readonly<{
   }>[];
   fermatas?: readonly Readonly<{ tick: number; beats: number }>[];
 }>;
+
+const MASTER_KEYS = ["eq", "glue", "tape", "width", "limiter", "target"];
+
+/** Shape checks only; dawg validates every value when it loads the song. */
+function masterData(input: unknown): MasterInput | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (!isRecord(input)) throw new DawgSdkError("song master must be an object");
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value === undefined) continue;
+    if (!MASTER_KEYS.includes(key))
+      throw new DawgSdkError(
+        `song master has no "${key}"; use ${MASTER_KEYS.join(", ")}`,
+      );
+    if (key === "target") {
+      if (typeof value === "string")
+        throw new DawgSdkError(
+          `song master target takes LUFS, e.g. target: -14 (streaming), -8 (club, with limiter: { release: 60, lookahead: 2 }), -6 (loud, with limiter: { release: 20, lookahead: 1 }); got "${value}"`,
+        );
+      out.target = finite(value as number, "song master target");
+      continue;
+    }
+    if (!isRecord(value))
+      throw new DawgSdkError(`song master ${key} must be an object`);
+    out[key] = Object.freeze({ ...value });
+  }
+  return Object.keys(out).length > 0
+    ? (Object.freeze(out) as MasterInput)
+    : undefined;
+}
 
 /**
  * Assemble the song. Beats become ticks (`Math.round(beat * ticksPerBeat)`,
@@ -2621,6 +2684,7 @@ export function song(input: SongInput): Song {
   if (key !== null && typeof key !== "string")
     throw new DawgSdkError("song key must be a string or null");
   const songTuning = tuningSpec(input.tuning, "song");
+  const master = masterData(input.master);
   if (!Array.isArray(input.tracks))
     throw new DawgSdkError("song tracks must be an array of track()");
   if (input.tracks.length > 64)
@@ -2772,6 +2836,7 @@ export function song(input: SongInput): Song {
     ...(songTuning ? { tuning: songTuning } : {}),
     tracks: Object.freeze(tracks),
     notes: Object.freeze(notes),
+    ...(master ? { master } : {}),
   });
 }
 

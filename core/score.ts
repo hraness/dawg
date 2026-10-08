@@ -46,6 +46,7 @@ import {
 } from "./tuning.ts";
 
 export type { Tuning } from "./tuning.ts";
+import { normalizeMaster, type SongMaster } from "./master.ts";
 
 export const SCORE_VERSION = 1 as const;
 export const DEFAULT_TICKS_PER_BEAT = 480 as const;
@@ -772,6 +773,8 @@ export type TrackScoreData = Readonly<{
   tuning?: Tuning | null;
   tracks?: readonly TrackInput[];
   notes?: readonly NoteInput[];
+  /** Song master chain and loudness target (core/master.ts); absent is off. */
+  master?: SongMaster | null;
 }>;
 
 /** Canonical immutable score. Use `addNote`/`removeNote` to create a revision. */
@@ -787,6 +790,8 @@ export class TrackScore {
   readonly tuning: Tuning | undefined;
   readonly tracks: readonly Track[];
   readonly notes: readonly Note[];
+  /** Absent (not undefined-valued) without a master, so 0.4 scores are unchanged. */
+  declare readonly master?: SongMaster;
 
   constructor(data: TrackScoreData = {}) {
     const tempoBpm = data.tempoBpm ?? 120;
@@ -851,6 +856,15 @@ export class TrackScore {
     const tracks = normalizeTracks(data.tracks ?? []);
     const notes = normalizeNotes(data.notes ?? []);
     this.tuning = tuning;
+    let master: SongMaster | undefined;
+    try {
+      master = normalizeMaster(data.master);
+    } catch (error) {
+      if (error instanceof FxValidationError)
+        throw new ScoreValidationError(error.message, "invalid-score");
+      throw error;
+    }
+    if (master) this.master = master;
     this.tempoBpm = tempoBpm;
     this.beatsPerBar = beatsPerBar;
     this.bars = bars;
@@ -913,6 +927,11 @@ export class TrackScore {
     return new TrackScore({ ...this.toJSON(), time: time ?? null });
   }
 
+  /** Replace the song master; `null` removes it (bypass). */
+  withMaster(master: SongMaster | null): TrackScore {
+    return new TrackScore({ ...this.toJSON(), master });
+  }
+
   toJSON(): TrackScoreData & { version: typeof SCORE_VERSION } {
     return {
       version: SCORE_VERSION,
@@ -925,6 +944,7 @@ export class TrackScore {
       ...(this.tuning ? { tuning: this.tuning } : {}),
       tracks: this.tracks,
       notes: this.notes,
+      ...(this.master ? { master: this.master } : {}),
     };
   }
 }
@@ -1209,6 +1229,10 @@ export type ScoreOperation =
   | Readonly<{
       type: "setTuning";
       tuning: Tuning | null;
+    }>
+  | Readonly<{
+      type: "setMaster";
+      master: SongMaster | null;
     }>;
 
 export function applyScoreOperation(
@@ -1224,6 +1248,7 @@ export function applyScoreOperation(
     return score.withMeter(operation.beatsPerBar);
   if (operation.type === "setTime") return score.withTime(operation.time);
   if (operation.type === "setTuning") return score.withTuning(operation.tuning);
+  if (operation.type === "setMaster") return score.withMaster(operation.master);
   if (operation.type === "addTrack") return addTrack(score, operation.track);
   if (operation.type === "addNote") return addNote(score, operation.note);
   if (operation.type === "removeNote")
@@ -1272,6 +1297,7 @@ export function scoreFromJSON(value: unknown): TrackScore {
     tuning?: Tuning | null;
     tracks: readonly TrackInput[];
     notes: readonly NoteInput[];
+    master?: SongMaster;
   } = {
     tracks: optionalArray(value.tracks).map(parseTrack),
     notes: optionalArray(value.notes).map(parseNote),
@@ -1289,6 +1315,9 @@ export function scoreFromJSON(value: unknown): TrackScore {
   if (value.time !== undefined && value.time !== null)
     data.time = value.time as SongTime;
   if (value.tuning !== undefined) data.tuning = value.tuning as Tuning | null;
+  // Validated by the constructor (core/master.ts normalizeMaster).
+  if (value.master !== undefined && value.master !== null)
+    data.master = value.master as SongMaster;
   return new TrackScore(data);
 }
 

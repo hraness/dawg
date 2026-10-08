@@ -74,6 +74,42 @@ export interface AppView {
   agentOffline?: boolean | undefined;
   /** Play mode: replaces the header and adds the keyboard strip row. */
   play?: PlayHeaderView | undefined;
+  /** Song master meter: integrated LUFS and true peak of the playing loop. */
+  loudness?: LoudnessView | undefined;
+}
+
+export type LoudnessView = Readonly<{
+  /** Integrated loudness, LUFS. */
+  integrated: number;
+  /** True peak, dBTP. */
+  truePeak: number;
+  /** The master's loudness target, when one is set. */
+  target?: number | undefined;
+  /** The limiter's ceiling, dBTP, when the limiter is on. */
+  ceiling?: number | undefined;
+  /** A monitor-rate reading shown until the export-rate one is in (`~`). */
+  estimate?: boolean | undefined;
+}>;
+
+/**
+ * `-14.1 LUFS (-14) · TP -1.0`: the compact loudness meter, with the
+ * master's target in brackets when one is set and `~` before a monitor-rate
+ * estimate. Loudness below -70 LUFS (silence) reads `-∞`.
+ */
+export function loudnessMeter(view: LoudnessView): string {
+  const lufs = view.integrated <= -70 ? "-∞" : view.integrated.toFixed(1);
+  const peak = view.truePeak <= -119 ? "-∞" : view.truePeak.toFixed(1);
+  const target = view.target === undefined ? "" : ` (${view.target})`;
+  return `${view.estimate ? "~" : ""}${lufs} LUFS${target} · TP ${peak}`;
+}
+
+/** Whether the meter's reading is off target by more than 0.5 LU. */
+export function loudnessOffTarget(view: LoudnessView): boolean {
+  return (
+    view.target !== undefined &&
+    view.integrated > -70 &&
+    Math.abs(view.integrated - view.target) > 0.5
+  );
 }
 
 export type TypesIndicator = Readonly<{ ok: boolean; errors: number }>;
@@ -416,6 +452,20 @@ function paintHeader(
         : `types ${unicode ? "✗" : "x"} ${view.types.errors}`,
       style: view.types.ok ? roles.success : roles.error,
       priority: 4,
+    });
+  if (view.loudness)
+    right.push({
+      text: loudnessMeter(view.loudness),
+      // Over full scale is an error; above the limiter's ceiling (-1 dBTP
+      // without one) or off the target by more than 0.5 LU a warning.
+      style:
+        view.loudness.truePeak > 0
+          ? roles.error
+          : view.loudness.truePeak > (view.loudness.ceiling ?? -1) + 0.1 ||
+              loudnessOffTarget(view.loudness)
+            ? roles.warning
+            : roles.muted,
+      priority: 3,
     });
   const sync = syncSegment(view.sync, theme, unicode);
   if (sync) right.push(sync);

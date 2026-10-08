@@ -1,6 +1,7 @@
 import { normalizeSynth } from "../../core/synth.ts";
 import { normalizeSongTime, normalizeTrackTime } from "../../core/tempo.ts";
 import { normalizeFx } from "../../core/fx.ts";
+import { normalizeMaster } from "../../core/master.ts";
 import {
   SCORE_LIMITS,
   automationRange,
@@ -139,6 +140,9 @@ function parseOperation(value: unknown): ScoreOperation {
     const time = value.time === null ? null : normalizeSongTime(value.time);
     return { type: "setTime", time: time ?? null };
   }
+  // The master reuses its bounded validator; null removes it.
+  if (value.type === "setMaster" && value.master !== undefined)
+    return { type: "setMaster", master: normalizeMaster(value.master) ?? null };
   if (
     value.type === "updateTrack" &&
     typeof value.trackId === "string" &&

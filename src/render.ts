@@ -11,7 +11,14 @@ import { resolve } from "node:path";
 import { scoreFromJSON, type TrackScore } from "../core/score.ts";
 import { decodeLoop } from "../core/loop.ts";
 import { scoreToMidi } from "../core/midi.ts";
-import { renderScoreWav } from "./audio/wav.ts";
+import { RENDER_CHANNELS, encodeWav, renderScorePcm } from "./audio/wav.ts";
+import { exportSampleRate, measureRendered } from "./audio/measure.ts";
+import {
+  applyMasterCommand,
+  loudnessLine,
+  measurementLine,
+  parseMasterCommand,
+} from "./commands/master.ts";
 import { SampleLibrary, hasSamplerTracks } from "./audio/samples.ts";
 import {
   PackStore,
@@ -30,7 +37,7 @@ import {
 } from "./session/store.ts";
 
 export const RENDER_USAGE =
-  "usage: dawg render <out.wav> [--session <name|id>] [--import <file.track.json>] · <out.mid> writes MIDI";
+  "usage: dawg render <out.wav> [--session <name|id>] [--import <file.track.json>] [--normalize <lufs|streaming|club|loud|…>] [--measure] [--rate <hz>] · <out.mid> writes MIDI";
 
 const MAX_LOOP_FILE_BYTES = 512 * 1024;
 
@@ -51,7 +58,13 @@ export async function runRenderCommand(
   const positional: string[] = [];
   for (let index = 0; index < rest.length; index += 1) {
     const arg = rest[index]!;
-    if (arg === "--session" || arg === "--import") {
+    if (arg === "--measure") options.set(arg, "");
+    else if (
+      arg === "--session" ||
+      arg === "--import" ||
+      arg === "--normalize" ||
+      arg === "--rate"
+    ) {
       const value = rest[index + 1];
       if (value === undefined || value.startsWith("--")) {
         stderr.write(`${arg} needs a value · ${RENDER_USAGE}\n`);
@@ -79,6 +92,14 @@ export async function runRenderCommand(
     return 1;
   }
   if (/\.midi?$/i.test(target)) {
+    // MIDI carries notes, not audio: the master and loudness flags do not apply.
+    const audioOnly = ["--normalize", "--measure", "--rate"].find((flag) =>
+      options.has(flag),
+    );
+    if (audioOnly) {
+      stderr.write(`render failed · ${audioOnly} applies to .wav only\n`);
+      return 2;
+    }
     const midi = scoreToMidi(score);
     const midiPath = resolve(workspace, target);
     const midiTemporary = `${midiPath}.${process.pid}.tmp`;
@@ -90,13 +111,49 @@ export async function runRenderCommand(
     );
     return 0;
   }
+  // `--normalize` is the song master's loudness target for this export only:
+  // a named target also brings the limiter in at that target's ceiling.
+  const normalize = options.get("--normalize");
+  if (normalize !== undefined) {
+    const command = parseMasterCommand(`master target ${normalize}`);
+    const result = command && applyMasterCommand(score, command);
+    if (!result?.ok) {
+      stderr.write(
+        `render failed · --normalize takes LUFS (-40 to -3) or a target name · ${RENDER_USAGE}\n`,
+      );
+      return 2;
+    }
+    score = result.next ?? score;
+    const flipped =
+      command?.type === "master-target" ? command.flipped : undefined;
+    if (flipped !== undefined)
+      stderr.write(
+        `render · --normalize ${normalize} read as ${-flipped} LUFS\n`,
+      );
+  }
   let samples;
   if (hasSamplerTracks(score)) {
     samples = await new SampleLibrary({ projectRoot: workspace }).load(score);
     for (const problem of samples.problems)
       stderr.write(`sample ${problem.level} · ${problem.message}\n`);
   }
-  let wav = renderScoreWav(score, { samples });
+  // A song with a master is a deliverable: 48 kHz unless --rate says
+  // otherwise; a plain song keeps the engine's rate, as dawg 0.4 wrote it.
+  const rateArg = options.get("--rate");
+  const sampleRate =
+    rateArg === undefined ? exportSampleRate(score) : Number(rateArg);
+  if (
+    !Number.isInteger(sampleRate) ||
+    sampleRate < 8_000 ||
+    sampleRate > 48_000
+  ) {
+    stderr.write(
+      `render failed · --rate takes 8000 to 48000 Hz · ${RENDER_USAGE}\n`,
+    );
+    return 2;
+  }
+  const audio = renderScorePcm(score, { samples, sampleRate });
+  let wav = encodeWav(audio.pcm, audio.sampleRate, RENDER_CHANNELS);
   // Pack sounds: name the packs (and CC-BY attributions) in the WAV's INFO
   // comment and on stdout; CREDITS.md in a project keeps the attributions.
   const refs = score.tracks.flatMap((track) =>
@@ -117,6 +174,12 @@ export async function runRenderCommand(
   const sha = createHash("sha256").update(wav).digest("hex");
   stdout.write(`rendered · ${target} · ${wav.byteLength} bytes · ${sha}\n`);
   if (credits) stdout.write(`credits · ${credits}\n`);
+  if (options.has("--measure"))
+    stdout.write(
+      `loudness · ${measurementLine(measureRendered(audio, false).mix, audio.master)}\n`,
+    );
+  else if (audio.master)
+    stdout.write(`loudness · ${loudnessLine(audio.master)}\n`);
   return 0;
 }
 

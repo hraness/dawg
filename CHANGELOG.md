@@ -38,6 +38,15 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - **Scale-degree keyboard.** In play mode, `i` (or `/play degrees`) maps the home row to consecutive scale degrees, or to every step of a 19- or 31-note tuning (`Z`/`X` page through the steps eleven at a time).
 - **Every way in.** The menu has Project › tuning & scale (`/menu tuning`) and Sound › tuning; the agent has `set_tuning` and `set_scale`, `add_notes` and `update_notes` take cents and the agent brief shows tunings; the SDK is 1.16.0 with `song({ tuning })` and `track({ tuning })`. Projects without a tuning open, print and render byte-identically.
 
+### Master and loudness
+
+- **A song master.** `master glue on`, `master eq preset air`, `master limiter ceiling -1`: an optional chain after the track and orbit-bus sum with EQ (low and high shelves, two bells), a glue bus compressor, tape saturation, mid/side width with mono bass, and a true-peak brickwall limiter with lookahead. No master means byte-identical renders.
+- **Loudness targets.** `master streaming` (-14 LUFS), `apple`, `podcast`, `broadcast` (-23), `classical`, `ambient`, `club` (-8) and `loud` (-6, hyperpop and gabber) at a -2 dBTP ceiling, or `master target -12` (`master -12`, `master on`, `master spotify` are shorthands). The target search is deterministic: the same mix always gets the same gain.
+- **Loudness measurement** per ITU-R BS.1770-4 and EBU R 128: integrated, short-term and momentary LUFS, loudness range and true peak, checked against EBU Tech 3341 and 3342 test cases. `master measure` prints it, the header shows LUFS, the target and true peak while the loop plays (at the export rate once measured), with or without a master.
+- **Export normalization.** `dawg render out.wav --normalize streaming` (or a LUFS number) and `--measure`. A song with a master exports at 48 kHz with TPDF dither (`--rate` overrides); `master measure` and `measure_mix` measure at that same rate, off the UI thread.
+- **Glue auto make-up** (on by default) keeps glue on and off near level-matched; `master glue auto off` uses `makeup` alone.
+- **Menu, agent and SDK.** Mix & automation › master (`/menu master`) with staged A/B; agent tools `set_master` and `measure_mix` (loudness, true peak, spectral balance, stereo correlation); `song({ master })` in the SDK (1.17.0).
+
 ## 0.4.1
 
 Sound previews now crossfade instead of clicking, reverb changes are heard in under 100 ms, and the rhythm editor and chord settings hold changes until you keep them. dawg.sh gains a security policy and security headers.

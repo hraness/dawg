@@ -48,6 +48,17 @@ import {
   type ParamSpec,
 } from "../../core/fx.ts";
 import { effectValues } from "../commands/fx.ts";
+import {
+  LOUDNESS_TARGET_NAMES,
+  LOUDNESS_TARGETS,
+  MASTER_LIMITS,
+  MASTER_PRESETS,
+  MASTER_SPECS,
+  MASTER_UNITS,
+  describeMaster,
+  describeUnit,
+  type MasterUnit,
+} from "../../core/master.ts";
 import { SAMPLE_CONTROLS, type SampleControl } from "../commands/sample.ts";
 import { AVAILABLE_INSTRUMENTS } from "../audio/wav.ts";
 import {
@@ -427,6 +438,7 @@ const SECTION_ALIASES: Readonly<Record<string, readonly string[]>> = {
   mix: ["mix"],
   track: ["mix"],
   automation: ["mix", "automation"],
+  master: ["mix", "master"],
   project: ["project"],
   transport: ["project"],
   tempo: ["project", "tempo"],
@@ -514,7 +526,184 @@ function mixSectionNodes(context: MenuContext): MenuNode[] {
       help: "points that move a value over the loop",
       build: automationNodes,
     },
+    {
+      kind: "menu",
+      id: "master",
+      label: "master",
+      detail: context.score.master
+        ? describeMaster(context.score.master)
+        : "off · bypass",
+      help: "the song master on the summed mix: EQ, glue, tape, width, limiter",
+      build: masterNodes,
+    },
   ];
+}
+
+/** Mix & automation > Master: the loudness target, then each unit in order. */
+function masterNodes(context: MenuContext): MenuNode[] {
+  const master = context.score.master;
+  // A name only when the LUFS and the limiter ceiling both match it, and no
+  // other name shares them (apple and podcast are both -16 at -1 dBTP).
+  const matches = LOUDNESS_TARGET_NAMES.filter(
+    (name) =>
+      LOUDNESS_TARGETS[name].lufs === master?.target &&
+      LOUDNESS_TARGETS[name].ceiling ===
+        (master?.limiter?.ceiling ?? MASTER_LIMITS.safeCeiling),
+  );
+  const named =
+    matches.length === 1
+      ? matches[0]
+      : matches.length > 1
+        ? `${num(master!.target!)} LUFS`
+        : undefined;
+  const nodes: MenuNode[] = [
+    {
+      kind: "choice",
+      label: "target",
+      value: master?.target === undefined ? "off" : (named ?? "custom"),
+      options: ["off", ...LOUDNESS_TARGET_NAMES],
+      command: (name) => `master target ${name}`,
+      help: "named loudness target; loud ones also load a fast limiter",
+    },
+    {
+      kind: "number",
+      label: "target LUFS",
+      value: master?.target,
+      start: -14,
+      off: "off",
+      min: MASTER_LIMITS.minTarget,
+      max: MASTER_LIMITS.maxTarget,
+      step: (value, direction) =>
+        clamp(
+          Math.round((value + direction * 0.5) * 2) / 2,
+          MASTER_LIMITS.minTarget,
+          MASTER_LIMITS.maxTarget,
+        ),
+      format: (value) => `${num(value)} LUFS`,
+      command: (value) => `master target ${num(value)}`,
+      reset: "master target off",
+      help: "integrated loudness renders normalize to (EBU R 128 / BS.1770)",
+    },
+  ];
+  for (const unit of MASTER_UNITS) {
+    const spec = MASTER_SPECS[unit];
+    const values = master?.[unit];
+    nodes.push({
+      kind: "menu",
+      id: `master:${unit}`,
+      label: unit,
+      detail: values ? describeUnit(unit, values) : "off",
+      help: spec.doc,
+      build: (inner) => masterUnitNodes(inner, unit, false),
+    });
+  }
+  nodes.push({
+    kind: "action",
+    label: "measure the mix",
+    command: "master measure",
+    help: "render and report LUFS, true peak, LRA, balance and correlation",
+  });
+  if (master)
+    nodes.push({
+      kind: "action",
+      label: "remove master",
+      command: "master off",
+      help: "bypass: the mix renders exactly as without a master",
+    });
+  return nodes;
+}
+
+/** One master unit: on/off, preset, its simple params, then `advanced`. */
+function masterUnitNodes(
+  context: MenuContext,
+  unit: MasterUnit,
+  advanced: boolean,
+): MenuNode[] {
+  const spec = MASTER_SPECS[unit];
+  const values = context.score.master?.[unit];
+  const nodes: MenuNode[] = [];
+  if (!advanced) {
+    nodes.push({
+      kind: "toggle",
+      label: "on",
+      value: values !== undefined,
+      command: (on) => `master ${unit} ${on ? "on" : "off"}`,
+      help: `switch the master ${spec.label} on or off`,
+    });
+    const presets = Object.keys(MASTER_PRESETS[unit]);
+    if (presets.length > 0)
+      nodes.push({
+        kind: "choice",
+        label: "preset",
+        value: "—",
+        options: presets,
+        command: (preset) => `master ${unit} preset ${preset}`,
+        help: "a starting point; every value stays editable",
+      });
+  }
+  const keys = advanced ? Object.keys(spec.params) : spec.simple;
+  for (const key of keys) {
+    const param = spec.params[key]!;
+    const current = values?.[key];
+    // With a target the search sets the limiter's drive; its gain is unused.
+    if (
+      unit === "limiter" &&
+      key === "gain" &&
+      context.score.master?.target !== undefined
+    ) {
+      nodes.push({ kind: "info", label: key, value: "set by target" });
+      continue;
+    }
+    if (param.kind === "number") {
+      nodes.push({
+        kind: "number",
+        label: key,
+        value: typeof current === "number" ? current : undefined,
+        start: param.default,
+        off: values
+          ? withUnit(formatParam(param, param.default), param.unit)
+          : "off",
+        min: param.min,
+        max: param.max,
+        step: specStep(param),
+        format: (value) => withUnit(formatParam(param, value), param.unit),
+        command: (value) =>
+          `master ${unit} ${key} ${formatParam(param, value)}`,
+        help: param.doc,
+        ...(values
+          ? {
+              reset: `master ${unit} ${key} ${formatParam(param, param.default)}`,
+            }
+          : {}),
+      });
+    } else if (param.kind === "enum") {
+      nodes.push({
+        kind: "choice",
+        label: key,
+        value: typeof current === "string" ? current : param.default,
+        options: param.values,
+        command: (option) => `master ${unit} ${key} ${option}`,
+        help: param.doc,
+      });
+    } else {
+      nodes.push({
+        kind: "toggle",
+        label: key,
+        value: typeof current === "boolean" ? current : param.default,
+        command: (on) => `master ${unit} ${key} ${on ? "on" : "off"}`,
+        help: param.doc,
+      });
+    }
+  }
+  if (!advanced && Object.keys(spec.params).length > spec.simple.length)
+    nodes.push({
+      kind: "menu",
+      id: `master:${unit}:advanced`,
+      label: "advanced",
+      detail: `all ${Object.keys(spec.params).length} params`,
+      build: (inner) => masterUnitNodes(inner, unit, true),
+    });
+  return nodes;
 }
 
 function chordsDetail(context: MenuContext): string {
@@ -2403,6 +2592,7 @@ export const MENU_SECTIONS = [
   "rhythm",
   "chords",
   "mix",
+  "master",
   "project",
   // Older names, still accepted.
   "parameters",

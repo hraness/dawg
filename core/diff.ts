@@ -71,6 +71,8 @@ export function diffScores(
     ops.push({ type: "setTime", time: b.time ?? null });
   if (!deepEqual(a.tuning, b.tuning))
     ops.push({ type: "setTuning", tuning: b.tuning ?? null });
+  if (!deepEqual(a.master, b.master))
+    ops.push({ type: "setMaster", master: b.master ?? null });
 
   const aTracks = new Map(a.tracks.map((track) => [track.id, track]));
   const bTracks = new Map(b.tracks.map((track) => [track.id, track]));

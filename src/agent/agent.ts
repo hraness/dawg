@@ -204,6 +204,7 @@ export const AGENT_SYSTEM_PROMPT = [
   "Effects (set_fx; set_effects and set_automation): the brief's effects list is the fixed chain order with each effect's simple params. set_fx turns an effect on with good defaults, loads a preset or sets params by dawg or Strudel name. Lanes: volume, pan, filter, resonance, delay-feedback, delay-mix, wt and <effect>-<param> (e.g. autofilter-cutoff). Sidechain: put pads/bass on `orbit` 2 and give the kick `duck` (orbit 2, preset pump); a ducker never ducks itself.",
   "Previewing: preview_sound renders a track, or candidate sound tool calls (changes: [{tool, args}]), without committing, returns loudness, brightness and a comparison, and plays it once in the user's window. Use it when choosing between sounds (tables, presets, effect amounts), say how it sounds, then commit with the normal tools.",
   "Wavetable synth: set_wavetable picks a table (built-ins offline, Strudel wt_ sets fetched once) and scans it by position wt.",
+  "Mastering: set_master sets the song master and loudness target; measure_mix reports LUFS, true peak, balance and correlation. Master only when asked for loudness or a finished sound, and measure before and after.",
   "If a call is rejected, read the diagnostic and either fix the arguments or stop.",
   WORKSPACE_PROMPT,
   MEDIA_PROMPT,

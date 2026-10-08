@@ -64,6 +64,12 @@ import {
 } from "./commands/tuning.ts";
 import { TuningError, displayTag, resolveTuning } from "../core/tuning.ts";
 import {
+  applyMasterCommand,
+  measurementLine,
+  parseMasterCommand,
+} from "./commands/master.ts";
+import { exportSampleRate, measureScoreOffThread } from "./audio/measure.ts";
+import {
   HELP_TOPICS,
   helpText,
   helpTopicLines,
@@ -203,6 +209,7 @@ import {
   composeFrame,
   TuiApp,
   type AppView,
+  type LoudnessView,
   type SyncState,
   type TypesIndicator,
 } from "../tui/app.ts";
@@ -230,6 +237,7 @@ function parsesLocally(text: string): boolean {
     parseFxCommand,
     parseSynthCommand,
     parseExpressionCommand,
+    parseMasterCommand,
     parsePatternCommand,
     parseKitCommand,
     parsePackCommand,
@@ -271,6 +279,7 @@ Usage:
   dawg --import <file> --export <file>
   dawg sessions
   dawg render <out.wav|out.mid> [--session <name|id>] [--import <file>]
+               [--normalize <lufs|streaming|club|loud|…>] [--measure]
   dawg init [dir]      project files: song.ts, tracks/<slug>/track.ts, .dawg/sdk
   dawg check           typecheck + evaluate the project; exit 1 on problems
   dawg media doctor|download|stems|analyze|notes|sample|lyrics …  (dawg media --help)
@@ -772,7 +781,65 @@ function appView(value: TrackScore, beat: number): AppView {
     windows: windowCount,
     types: typesIndicator,
     play: play?.on ? play.header() : undefined,
+    loudness: masterLoudness(value),
   };
+}
+
+/**
+ * The 48 kHz reading of the mastered song (what `master measure` and the
+ * export read), for the score it measured; one measurement at a time, in a
+ * worker, started when the loop plays a mastered score it has not read.
+ */
+let exportMeter:
+  { score: TrackScore; view?: LoudnessView; running: boolean } | undefined;
+
+/**
+ * The header meter: loudness of the loop the local engine is playing. With
+ * a master the engine monitors at its own rate, so the meter shows the
+ * export-rate reading once it is in and the monitor's (marked as an
+ * estimate) until then.
+ */
+function masterLoudness(value: TrackScore): LoudnessView | undefined {
+  const engine = audio instanceof AudioEngine ? audio : monitorEngine;
+  const report = engine?.loudness;
+  if (!report) return undefined;
+  const ceiling =
+    typeof value.master?.limiter?.ceiling === "number"
+      ? value.master.limiter.ceiling
+      : value.master?.limiter
+        ? -1
+        : undefined;
+  const target =
+    typeof value.master?.target === "number" ? value.master.target : undefined;
+  const monitor: LoudnessView = {
+    integrated: report.integrated,
+    truePeak: report.truePeak,
+    target,
+    ceiling,
+  };
+  if (!value.master || exportSampleRate(value) === engine.sampleRate)
+    return monitor;
+  if (exportMeter?.score === value && exportMeter.view) return exportMeter.view;
+  if (!exportMeter?.running) {
+    const measuring = { score: value, running: true } as NonNullable<
+      typeof exportMeter
+    >;
+    exportMeter = measuring;
+    void measureScoreOffThread(value, { projectRoot: process.cwd() })
+      .then((measured) => {
+        measuring.view = {
+          integrated: measured.mix.loudness.integrated,
+          truePeak: measured.mix.loudness.truePeak,
+          target,
+          ceiling,
+        };
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        measuring.running = false;
+      });
+  }
+  return { ...monitor, estimate: true };
 }
 
 /** What the strip compares a receipt against: the revision and score before. */
@@ -1518,6 +1585,20 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (synth) {
     if (synth.type !== "synth-list") await materializeDraft();
     const result = applySynthCommand(score, requestedTrack, synth);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
+  const masterCommand = parseMasterCommand(command);
+  if (masterCommand) {
+    if (masterCommand.type === "master-measure")
+      return ok(await measureLine(score));
+    if (
+      masterCommand.type !== "master-list" &&
+      masterCommand.type !== "master-show"
+    )
+      await materializeDraft();
+    const result = applyMasterCommand(score, masterCommand);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
@@ -2664,6 +2745,11 @@ function auditionController(): Audition {
       clearTimer: (handle) => clearTimeout(handle as Timer),
       changed: () => requestFrame(),
       level: () => previewEngine().level,
+      // The last loop the engine played is the song's when a loop starts.
+      masterGainDb: () =>
+        score.master?.target === undefined
+          ? undefined
+          : previewEngine().loudness?.gainDb,
       // The chord settings screen loops a progression with its settings.
       phrase: (showing) => {
         if (!chordScreenOpen()) return undefined;
@@ -3419,6 +3505,25 @@ function mediaServices(): MediaServices {
 }
 
 /**
+ * `master measure`: render the song as the loop that plays and measure
+ * loudness, peaks and balance at the export rate. The render, master and
+ * meter run in a worker (`measureScoreOffThread`), so the header, input and
+ * playback keep going on a long loop.
+ */
+async function measureLine(value: TrackScore): Promise<string> {
+  await sampleProblems(value);
+  tui.activity.setSpinner("measuring");
+  try {
+    const measured = await measureScoreOffThread(value, {
+      projectRoot: process.cwd(),
+    });
+    return `master measure · ${measurementLine(measured.mix, measured.master)} · ${measured.sampleRate / 1000} kHz`;
+  } finally {
+    tui.activity.setSpinner(undefined);
+  }
+}
+
+/**
  * How the agent's preview_sound renders (with this window's decoded
  * samples, at the engine's rate) and plays: once, over silence, unless the
  * song or the audition loop is already sounding or `/try agent off`.
@@ -3430,6 +3535,16 @@ function agentPreviewHost(): PreviewHost {
       return renderScorePcm(value, {
         sampleRate: previewEngine().sampleRate,
         ...(liveSampleBank ? { samples: liveSampleBank } : {}),
+      });
+    },
+    // Off the UI thread, at the export rate (see measureLine).
+    measure: async (value, options) => {
+      await sampleProblems(value);
+      return measureScoreOffThread(value, {
+        projectRoot: process.cwd(),
+        ...(options?.sampleRate === undefined
+          ? {}
+          : { sampleRate: options.sampleRate }),
       });
     },
     play: async (rendered) => {

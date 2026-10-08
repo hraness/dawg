@@ -68,6 +68,7 @@ import {
 } from "./effects/duck.ts";
 import { loopSecondsOf, performedNotes } from "../../core/tempo.ts";
 import { sampleWarpFor, warpedSpan, type SampleWarp } from "./warp.ts";
+import { applyMaster, type MasterReport } from "./master.ts";
 
 export type WavOptions = Readonly<{ sampleRate?: number; maxSeconds?: number }>;
 
@@ -92,6 +93,8 @@ export type RenderedAudio = Readonly<{
   channels: 2;
   frames: number;
   pcm: Int16Array;
+  /** Loudness the song master reached; absent without a master. */
+  master?: MasterReport;
 }>;
 
 /** Output channel count for every render and export. */
@@ -573,12 +576,26 @@ export class StemRenderer {
     // Linear effects superpose, so folding the tail onto the start yields
     // the steady state of the loop playing forever.
     if (samples > frames) foldTail(mixL, mixR, frames, samples);
-    const pcm = toPcm(mixL, mixR, frames);
+    // The song master (src/audio/master.ts); none leaves the mix untouched.
+    const mastered = applyMaster(
+      mixL,
+      mixR,
+      frames,
+      sampleRate,
+      score.master,
+      options.loop === true,
+    );
+    // A master's output is a finished level, so its reduction to 16 bits is
+    // TPDF-dithered (seeded: renders stay byte-identical run to run).
+    const pcm = mastered
+      ? toPcm(mastered.left, mastered.right, frames, true)
+      : toPcm(mixL, mixR, frames);
     return Object.freeze({
       sampleRate,
       channels: RENDER_CHANNELS,
       frames,
       pcm,
+      ...(mastered ? { master: mastered.report } : {}),
     });
   }
 
@@ -681,8 +698,29 @@ function toPcm(
   mixL: Float64Array,
   mixR: Float64Array,
   frames: number,
+  dither = false,
 ): Int16Array {
   const pcm = new Int16Array(frames * RENDER_CHANNELS);
+  if (dither) {
+    // Triangular dither of +-1 LSB: the sum of two uniform values, from a
+    // fixed-seed xorshift so every render of a score dithers the same way.
+    let state = 0x9e3779b9;
+    const uniform = () => {
+      state ^= state << 13;
+      state ^= state >>> 17;
+      state ^= state << 5;
+      return (state >>> 0) / 4_294_967_296;
+    };
+    for (let index = 0; index < frames; index += 1) {
+      pcm[index * 2] = clamp16(
+        Math.round(mixL[index]! * 32767 + uniform() - uniform()),
+      );
+      pcm[index * 2 + 1] = clamp16(
+        Math.round(mixR[index]! * 32767 + uniform() - uniform()),
+      );
+    }
+    return pcm;
+  }
   for (let index = 0; index < frames; index += 1) {
     pcm[index * 2] = clamp16(mixL[index]! * 32767);
     pcm[index * 2 + 1] = clamp16(mixR[index]! * 32767);

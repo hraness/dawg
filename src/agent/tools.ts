@@ -47,6 +47,7 @@ import { RHYTHM_TOOLS } from "./rhythm-tools.ts";
 import { CHORD_TOOLS } from "./chord-tools.ts";
 import { EXPRESSION_TOOLS } from "./expression-tools.ts";
 import { TUNING_TOOLS } from "./tuning-tools.ts";
+import { MASTER_TOOLS } from "./master-tools.ts";
 import { DRUM_TOOLS } from "./drum-tools.ts";
 import { TIME_TOOLS } from "./time-tools.ts";
 import type { MediaResult, MediaRunContext } from "../media/types.ts";
@@ -1383,6 +1384,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   ...TIME_TOOLS,
   ...MEDIA_TOOLS,
   ...PACK_TOOLS,
+  ...MASTER_TOOLS,
   // Looks tools up at call time, so it can plan any of the above.
   previewSoundTool((name) => findAgentTool(name)),
 ] satisfies AgentTool[]);

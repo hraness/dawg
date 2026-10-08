@@ -3,6 +3,8 @@ import { ActivityFeed } from "../tui/activity.ts";
 import {
   composeFrame,
   frameText,
+  loudnessMeter,
+  loudnessOffTarget,
   promptRowCap,
   TuiApp,
   type AppView,
@@ -512,4 +514,30 @@ test("header shows the project types indicator beside sync", () => {
   expect(h.vt.lines()[0]).toContain("types ✗ 3");
   h.frame(0, { types: undefined });
   expect(h.vt.lines()[0]).not.toContain("types");
+});
+
+test("header shows the master loudness meter while a master plays", () => {
+  const h = harness(120, 24);
+  h.frame(0, { loudness: { integrated: -14.04, truePeak: -1.23 } });
+  expect(h.vt.lines()[0]).toContain("-14.0 LUFS · TP -1.2");
+  h.frame(0, { loudness: undefined });
+  expect(h.vt.lines()[0]).not.toContain("LUFS");
+  expect(loudnessMeter({ integrated: -90, truePeak: -150 })).toBe(
+    "-∞ LUFS · TP -∞",
+  );
+  expect(
+    loudnessMeter({
+      integrated: -13.2,
+      truePeak: -1.4,
+      target: -14,
+      estimate: true,
+    }),
+  ).toBe("~-13.2 LUFS (-14) · TP -1.4");
+  expect(
+    loudnessOffTarget({ integrated: -13.2, truePeak: -2, target: -14 }),
+  ).toBe(true);
+  expect(
+    loudnessOffTarget({ integrated: -14.2, truePeak: -2, target: -14 }),
+  ).toBe(false);
+  expect(loudnessOffTarget({ integrated: -9, truePeak: -2 })).toBe(false);
 });

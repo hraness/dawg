@@ -7,6 +7,7 @@ import {
   type AuditionHost,
   type StageResult,
 } from "./audition.ts";
+import { applyMasterCommand, parseMasterCommand } from "../commands/master.ts";
 
 function base(): TrackScore {
   return createScore({
@@ -34,6 +35,8 @@ function base(): TrackScore {
  * a missing track fails, like a real command would.
  */
 function applyFake(score: TrackScore, command: string): StageResult {
+  const master = parseMasterCommand(command);
+  if (master) return applyMasterCommand(score, master);
   const [field, trackId, raw] = command.split(" ");
   const value = Number(raw);
   if (!score.tracks.some((track) => track.id === trackId))
@@ -377,6 +380,8 @@ describe("keys and commands", () => {
       "humanize 10 8 5",
       "humanize reseed",
       "vel-curve soft",
+      "master glue ratio 4",
+      "master target club",
     ])
       expect(isStageable(command)).toBe(true);
     for (const command of [
@@ -390,9 +395,37 @@ describe("keys and commands", () => {
       "pedal",
       "humanize",
       "humanize show",
+      "master measure",
       "undo",
     ])
       expect(isStageable(command)).toBe(false);
+  });
+});
+
+describe("staged master edits", () => {
+  test("B carries the staged master and plays the full mix; A does not", async () => {
+    const h = harness();
+    h.audition.start();
+    await h.advance(0);
+    expect(h.played.at(-1)!.tracks.map((track) => track.id)).toEqual(["lead"]);
+    const result = await h.audition.stage("master glue preset pump");
+    expect(result.ok).toBe(true);
+    await h.advance(50);
+    const b = h.played.at(-1)!;
+    expect(b.master?.glue).toBeDefined();
+    expect(b.tracks.map((track) => track.id)).toEqual(["lead", "bass"]);
+    expect(h.audition.status()).toContain("in context");
+    h.audition.toggleAB();
+    await h.advance(50);
+    const a = h.played.at(-1)!;
+    expect(a.master).toBeUndefined();
+    expect(JSON.stringify(a.toJSON())).not.toBe(JSON.stringify(b.toJSON()));
+  });
+
+  test("a bare `master <unit>` only shows the unit and does not stage", () => {
+    expect(isStageable("master eq")).toBe(false);
+    expect(isStageable("/master limiter")).toBe(false);
+    expect(isStageable("master eq on")).toBe(true);
   });
 });
 

@@ -7,6 +7,8 @@ import {
   type Note,
   type Track,
 } from "./score.ts";
+import type { SongMaster } from "./master.ts";
+import type { Tuning } from "./tuning.ts";
 
 export const LOOP_FORMAT = "track.loop/v1" as const;
 
@@ -20,8 +22,12 @@ export type TrackLoopV1 = Readonly<{
   key: string | null;
   /** Tempo map, meter changes and fermatas (0.5); absent: constant time. */
   time?: SongTime;
+  /** Song tuning (0.5); absent: 12-TET at A4 = 440 Hz. */
+  tuning?: Tuning;
   tracks: readonly Track[];
   notes: readonly Note[];
+  /** Song master (dawg 0.5); absent means none. */
+  master?: SongMaster;
 }>;
 
 /** Return the stable object form used by files and IPC messages. */
@@ -37,8 +43,10 @@ export function encodeLoopDocument(score: TrackScore): TrackLoopV1 {
     ticksPerBeat: score.ticksPerBeat,
     key: score.key,
     ...(score.time ? { time: score.time } : {}),
+    ...(score.tuning ? { tuning: score.tuning } : {}),
     tracks: score.tracks,
     notes: score.notes,
+    ...(score.master ? { master: score.master } : {}),
   });
 }
 

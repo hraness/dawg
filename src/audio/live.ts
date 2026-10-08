@@ -7,7 +7,8 @@
  *
  * The offline renderer is untouched, so loop renders and exports stay
  * byte-identical. Live audio never reaches a render or an export: the engine
- * mixes it into the stream only.
+ * mixes it into the stream only. Like auditions, live notes are pre-master
+ * (see `audition.ts`): the song master is a whole-mix stage.
  */
 import {
   SCORE_LIMITS,
