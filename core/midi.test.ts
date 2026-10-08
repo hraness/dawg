@@ -1,0 +1,168 @@
+import { describe, expect, test } from "bun:test";
+import { midiTempoEvents, scoreToMidi } from "./midi.ts";
+import { createScore } from "./score.ts";
+import { secondsAtTick } from "./tempo.ts";
+
+type Event = { tick: number; status: number; data: number[] };
+
+/** A minimal SMF reader: header fields and absolute-tick events per track. */
+function readMidi(bytes: Uint8Array) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const text = (at: number) => String.fromCharCode(...bytes.slice(at, at + 4));
+  expect(text(0)).toBe("MThd");
+  const format = view.getUint16(8);
+  const count = view.getUint16(10);
+  const division = view.getUint16(12);
+  let offset = 14;
+  const tracks: Event[][] = [];
+  for (let index = 0; index < count; index += 1) {
+    expect(text(offset)).toBe("MTrk");
+    const length = view.getUint32(offset + 4);
+    let at = offset + 8;
+    const end = at + length;
+    let tick = 0;
+    const events: Event[] = [];
+    const varLen = () => {
+      let value = 0;
+      for (;;) {
+        const byte = bytes[at++]!;
+        value = (value << 7) | (byte & 0x7f);
+        if (!(byte & 0x80)) return value;
+      }
+    };
+    while (at < end) {
+      tick += varLen();
+      const status = bytes[at++]!;
+      if (status === 0xff) {
+        const type = bytes[at++]!;
+        const size = varLen();
+        events.push({
+          tick,
+          status: 0xff00 | type,
+          data: [...bytes.slice(at, at + size)],
+        });
+        at += size;
+      } else {
+        events.push({ tick, status, data: [bytes[at]!, bytes[at + 1]!] });
+        at += 2;
+      }
+    }
+    tracks.push(events);
+    offset = end;
+  }
+  return { format, division, tracks };
+}
+
+const usOf = (data: number[]) => (data[0]! << 16) | (data[1]! << 8) | data[2]!;
+
+describe("MIDI export", () => {
+  const piano = {
+    id: "p",
+    name: "piano",
+    instrument: "piano",
+  };
+
+  test("a constant score writes one tempo, one meter and its notes", () => {
+    const score = createScore({
+      tempoBpm: 120,
+      bars: 1,
+      tracks: [piano, { id: "d", name: "drums", instrument: "drums" }],
+      notes: [
+        {
+          id: "a",
+          trackId: "p",
+          startTick: 0,
+          durationTicks: 480,
+          pitch: 60,
+          velocity: 1,
+        },
+        {
+          id: "b",
+          trackId: "d",
+          startTick: 960,
+          durationTicks: 120,
+          pitch: 36,
+          velocity: 0.5,
+        },
+      ],
+    });
+    const midi = readMidi(scoreToMidi(score));
+    expect(midi.format).toBe(1);
+    expect(midi.division).toBe(score.ticksPerBeat);
+    expect(midi.tracks.length).toBe(3);
+    const conductor = midi.tracks[0]!;
+    const tempos = conductor.filter((e) => e.status === 0xff51);
+    expect(tempos.map((e) => usOf(e.data))).toEqual([500_000]);
+    const meters = conductor.filter((e) => e.status === 0xff58);
+    expect(meters).toEqual([{ tick: 0, status: 0xff58, data: [4, 2, 24, 8] }]);
+    const end = conductor.at(-1)!;
+    expect(end.status).toBe(0xff2f);
+    expect(end.tick).toBe(4 * 480);
+    const pianoNotes = midi.tracks[1]!.filter((e) => e.status < 0xff00);
+    expect(pianoNotes).toEqual([
+      { tick: 0, status: 0x90, data: [60, 127] },
+      { tick: 480, status: 0x80, data: [60, 0] },
+    ]);
+    const drumOn = midi.tracks[2]!.find((e) => (e.status & 0xf0) === 0x90)!;
+    expect(drumOn.status & 0x0f).toBe(9);
+    expect(drumOn.data).toEqual([36, 64]);
+  });
+
+  test("meter changes, ramps and fermatas reach the conductor track", () => {
+    const score = createScore({
+      tempoBpm: 120,
+      bars: 4,
+      time: {
+        tempo: [{ tick: 1920, bpm: 60, ramp: "linear" }],
+        meter: [{ bar: 2, beatsPerBar: 6, beatUnit: 8 }],
+        fermatas: [{ tick: 3840, beats: 1 }],
+      },
+    });
+    const conductor = readMidi(scoreToMidi(score)).tracks[0]!;
+    const meters = conductor.filter((e) => e.status === 0xff58);
+    expect(meters.map((e) => [e.tick, ...e.data])).toEqual([
+      [0, 4, 2, 24, 8],
+      [3840, 6, 3, 36, 8],
+    ]);
+    const tempos = midiTempoEvents(score);
+    // Ramp steps slow down monotonically.
+    const ramp = tempos.filter((e) => e.tick < 1920);
+    expect(ramp.length).toBe(16);
+    for (let i = 1; i < ramp.length; i += 1)
+      expect(ramp[i]!.usPerQuarter).toBeGreaterThan(ramp[i - 1]!.usPerQuarter);
+    // Every boundary keeps the rendered timeline: summed MIDI time matches.
+    let seconds = 0;
+    for (let i = 0; i < tempos.length; i += 1) {
+      const next = tempos[i + 1]?.tick ?? 4800;
+      seconds +=
+        ((next - tempos[i]!.tick) / 480) * (tempos[i]!.usPerQuarter / 1e6);
+      expect(seconds).toBeCloseTo(secondsAtTick(score, next), 4);
+    }
+    // The fermata beat plays twice as long, then the tempo returns.
+    const at = (tick: number) =>
+      [...tempos].reverse().find((e) => e.tick <= tick)!.usPerQuarter;
+    expect(at(3840)).toBe(2_000_000);
+    expect(at(4320)).toBe(1_000_000);
+  });
+
+  test("track rate places repeats on the song timeline", () => {
+    const score = createScore({
+      bars: 1,
+      tracks: [{ ...piano, time: { rate: 2, cycle: 960 } }],
+      notes: [
+        {
+          id: "a",
+          trackId: "p",
+          startTick: 0,
+          durationTicks: 480,
+          pitch: 64,
+          velocity: 0.8,
+        },
+      ],
+    });
+    const ons = readMidi(scoreToMidi(score))
+      .tracks[1]!.filter((e) => e.status === 0x90)
+      .map((e) => e.tick);
+    expect(ons).toEqual([0, 480, 960, 1440]);
+  });
+});

@@ -177,6 +177,7 @@ import {
 } from "../core/score.ts";
 import { reconcileRhythm } from "../core/rhythm.ts";
 import { decodeLoop, encodeLoop } from "../core/loop.ts";
+import { scoreToMidi } from "../core/midi.ts";
 import type { TrackScoreSnapshot } from "../tui/render.ts";
 import { PromptModel } from "../tui/prompt.ts";
 import { TerminalInputDecoder } from "../tui/input.ts";
@@ -248,7 +249,7 @@ Usage:
   dawg [--new] [--session <name|id>] [--track <name>]
   dawg --import <file> --export <file>
   dawg sessions
-  dawg render <out.wav> [--session <name|id>] [--import <file>]
+  dawg render <out.wav|out.mid> [--session <name|id>] [--import <file>]
   dawg init [dir]      project files: song.ts, tracks/<slug>/track.ts, .dawg/sdk
   dawg check           typecheck + evaluate the project; exit 1 on problems
   dawg media doctor|download|stems|analyze|notes|sample|lyrics …  (dawg media --help)
@@ -1457,6 +1458,10 @@ async function submit(prompt: string): Promise<string | Receipt> {
   const exportCommand = command.match(/^\/?export\s+([^\s]+)$/i);
   if (exportCommand) {
     const path = resolve(exportCommand[1]!);
+    if (/\.midi?$/i.test(path)) {
+      await writeFile(path, scoreToMidi(score));
+      return `exported midi · ${exportCommand[1]}`;
+    }
     await writeFile(path, encodeLoop(score), "utf8");
     return `exported · ${exportCommand[1]}`;
   }

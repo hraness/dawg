@@ -1,5 +1,5 @@
 /**
- * `dawg render <out.wav>`: renders a session, the project files (`song.ts`,
+ * `dawg render <out.wav>` (or `<out.mid>`): renders a session, the project files (`song.ts`,
  * in a project with no `--session`), or a `track.loop/v1` file to
  * a stereo 16-bit PCM WAV through the same deterministic renderer playback
  * uses, so two renders of one score are byte-identical. It reads the session
@@ -10,6 +10,7 @@ import { readFile, rename, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { scoreFromJSON, type TrackScore } from "../core/score.ts";
 import { decodeLoop } from "../core/loop.ts";
+import { scoreToMidi } from "../core/midi.ts";
 import { renderScoreWav } from "./audio/wav.ts";
 import { SampleLibrary, hasSamplerTracks } from "./audio/samples.ts";
 import {
@@ -29,7 +30,7 @@ import {
 } from "./session/store.ts";
 
 export const RENDER_USAGE =
-  "usage: dawg render <out.wav> [--session <name|id>] [--import <file.track.json>]";
+  "usage: dawg render <out.wav> [--session <name|id>] [--import <file.track.json>] · <out.mid> writes MIDI";
 
 const MAX_LOOP_FILE_BYTES = 512 * 1024;
 
@@ -64,7 +65,7 @@ export async function runRenderCommand(
     } else positional.push(arg);
   }
   const target = positional[0];
-  if (positional.length !== 1 || !target || !/\.wav$/i.test(target)) {
+  if (positional.length !== 1 || !target || !/\.(wav|midi?)$/i.test(target)) {
     stderr.write(`${RENDER_USAGE}\n`);
     return 2;
   }
@@ -76,6 +77,18 @@ export async function runRenderCommand(
       `render failed · ${error instanceof Error ? error.message : String(error)}\n`,
     );
     return 1;
+  }
+  if (/\.midi?$/i.test(target)) {
+    const midi = scoreToMidi(score);
+    const midiPath = resolve(workspace, target);
+    const midiTemporary = `${midiPath}.${process.pid}.tmp`;
+    await writeFile(midiTemporary, midi);
+    await rename(midiTemporary, midiPath);
+    const midiSha = createHash("sha256").update(midi).digest("hex");
+    stdout.write(
+      `rendered · ${target} · ${midi.byteLength} bytes · ${midiSha}\n`,
+    );
+    return 0;
   }
   let samples;
   if (hasSamplerTracks(score)) {

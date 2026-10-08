@@ -136,7 +136,10 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       { command: "/rename <name>|--auto", summary: "name this session" },
       { command: "/fork [<name>]", summary: "copy into a new session" },
       { command: "/status", summary: "name · revision · digest · storage" },
-      { command: "/export <file>", summary: "write track.loop/v1 JSON" },
+      {
+        command: "/export <file>",
+        summary: "write track.loop/v1 JSON, or MIDI for .mid",
+      },
       { command: "/import <file>", summary: "replace the score from a file" },
       {
         command: "/sample [<path> [as <voice>]]",
