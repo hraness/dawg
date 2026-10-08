@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { CodeBlock } from "../code-block";
-import { installCommand, repoUrl, sourceInstallCommands } from "../messaging";
+import { repoUrl } from "../messaging";
 
 export interface DocsTopic {
   slug: string;
@@ -186,30 +186,12 @@ export const docsTopics: readonly DocsTopic[] = [
   {
     slug: "quickstart",
     title: "Quickstart",
-    description: "Install dawg, open a session, make a loop and hear it.",
+    description: "Open a session, make a loop, ask the agent and render a WAV.",
     body: () => (
       <>
-        <h2 id="install">Install</h2>
         <p>
-          dawg needs <a href="https://bun.sh">Bun</a> 1.3.14 or newer. The
-          install script adds Bun if it is missing, downloads the latest release
-          tarball from GitHub, verifies it against <code>SHA256SUMS</code> and
-          runs <code>bun add -g</code>:
-        </p>
-        <CodeBlock code={`$ ${installCommand}`} />
-        <p>
-          Each <a href="https://github.com/hraness/dawg/releases">release</a>{" "}
-          also ships the tarball on its own, so <code>bun add -g</code> with the
-          tarball&rsquo;s URL works too. To run from source instead:
-        </p>
-        <CodeBlock
-          code={sourceInstallCommands.map((line) => `$ ${line}`).join("\n")}
-        />
-        <p>
-          dawg is also on npm: <code>npm i -g @hraness/dawg</code> or{" "}
-          <code>bun add -g @hraness/dawg</code>. For sound, install{" "}
-          <code>ffplay</code> (FFmpeg) or SoX; macOS falls back to{" "}
-          <code>afplay</code>.
+          <Link href="/docs">Install dawg</Link> first. You need Bun 1.3.14 or
+          newer, and <code>ffplay</code> or SoX for sound.
         </p>
         <h2 id="first-loop">Make a loop</h2>
         <p>Open a terminal in any project folder and run:</p>

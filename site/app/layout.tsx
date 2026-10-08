@@ -10,14 +10,16 @@ import { siteDefaultPalette } from "../palette";
 import { productMessaging, productName, productUrl } from "./messaging";
 import { SiteAnalytics } from "./site-analytics";
 import "./globals.css";
+import "./dawg-studio.css";
 
 /**
- * Rosé Pine is dawg's palette; the initial class supplies its compiled values
- * and the blocking bootstrap adds a concrete `data-theme` before paint. With
- * JavaScript off no `data-theme` is rendered, so light-dark() colors follow
- * the operating system.
+ * dawg studio is the Paper palette plus the `dawg-studio` class, which swaps
+ * in the studio values from ./dawg-studio.css. The initial class supplies
+ * Paper's compiled values and the blocking bootstrap adds a concrete
+ * `data-theme` before paint. With JavaScript off no `data-theme` is rendered,
+ * so light-dark() colors follow the operating system.
  */
-const initialPalette = getDesignPaletteTheme("rose-pine", "light");
+const initialPalette = getDesignPaletteTheme("paper", "light");
 
 const title = `${productName} · ${productMessaging.tagline.replace(/\.$/u, "")}`;
 
@@ -43,8 +45,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { color: "#faf4ed", media: "(prefers-color-scheme: light)" },
-    { color: "#191724", media: "(prefers-color-scheme: dark)" },
+    { color: "#f7f7f4", media: "(prefers-color-scheme: light)" },
+    { color: "#0f0f0f", media: "(prefers-color-scheme: dark)" },
   ],
 };
 
@@ -54,8 +56,8 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      data-palette="rose-pine"
-      className={initialPalette.className}
+      data-palette="paper"
+      className={`${initialPalette.className} dawg-studio`}
       suppressHydrationWarning
     >
       <head>

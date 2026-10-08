@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { RouteNotFoundPage } from "@hraness/design-kit/react";
 
-import { docsTopics } from "./docs/topics";
+import { docsHref, docsPages, docsTree } from "./docs/pages";
 import { SiteNotFoundAnalytics } from "./site-analytics";
 import { SiteHeader } from "./site-header";
 
@@ -9,10 +9,8 @@ export const metadata: Metadata = { title: "Page not found" };
 
 const routes = [
   { href: "/", label: "dawg" },
-  ...docsTopics.map((topic) => ({
-    href: topic.slug === "quickstart" ? "/docs" : `/docs/${topic.slug}`,
-    label: topic.title,
-  })),
+  { href: "/docs", label: "Install" },
+  ...docsPages.map((page) => ({ href: docsHref(page.id), label: page.title })),
   { href: "/changelog", label: "Changelog" },
 ];
 
@@ -24,18 +22,15 @@ export default function NotFound() {
       <main id="main" tabIndex={-1}>
         <RouteNotFoundPage
           siteName="dawg"
-          primaryAction={{ href: "/docs", label: "Quickstart" }}
+          primaryAction={{ href: "/docs", label: "Install dawg" }}
           next={[
-            {
-              href: "/docs/commands",
-              label: "Commands",
-              description: "Every prompt command, from tempo to reverb.",
-            },
-            {
-              href: "/docs/sessions",
-              label: "Sessions",
-              description: "Windows, dawgd, names, forks and resuming.",
-            },
+            ...docsTree()
+              .slice(0, 2)
+              .map(({ page }) => ({
+                href: docsHref(page.id),
+                label: page.title,
+                description: page.description,
+              })),
             {
               href: "/changelog",
               label: "Changelog",

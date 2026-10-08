@@ -3,5 +3,5 @@
   "framework": "nextjs",
   "installCommand": "bun install --frozen-lockfile --ignore-scripts",
   "buildCommand": "bun run build",
-  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ../CHANGELOG.md ../package.json"
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ../CHANGELOG.md ../package.json ../guides"
 }

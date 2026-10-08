@@ -1,15 +1,16 @@
 import type { MetadataRoute } from "next";
 
-import { docsTopics } from "./docs/topics";
+import { docsHref, docsPages } from "./docs/pages";
 import { productUrl } from "./messaging";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
     { url: `${productUrl}/`, changeFrequency: "weekly", priority: 1 },
-    ...docsTopics.map((topic) => ({
-      url: `${productUrl}/docs${topic.slug === "quickstart" ? "" : `/${topic.slug}`}`,
+    { url: `${productUrl}/docs`, changeFrequency: "monthly", priority: 0.9 },
+    ...docsPages.map((page) => ({
+      url: `${productUrl}${docsHref(page.id)}`,
       changeFrequency: "monthly" as const,
-      priority: topic.slug === "quickstart" ? 0.9 : 0.7,
+      priority: page.parent === null ? 0.7 : 0.6,
     })),
     {
       url: `${productUrl}/changelog`,

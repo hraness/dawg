@@ -1,9 +1,13 @@
+import { SyntaxCode } from "@hraness/design-kit/react/server";
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 /**
- * A small renderer for the Markdown CHANGELOG.md uses: headings, paragraphs,
- * bullet lists, fenced code, inline code, bold and links. It renders text as
- * React children, never as raw HTML, and only https links become anchors.
+ * A small renderer for the Markdown that CHANGELOG.md and the TUI guides use:
+ * headings, paragraphs, bullet and numbered lists, tables, fenced code,
+ * inline code, bold and links. It renders text as React children, never as
+ * raw HTML. Only https links and links to other guides become anchors; a
+ * guide link is `other-guide.md` or `guides/path/other-guide.md`.
  */
 
 function inline(text: string, keyPrefix: string): ReactNode[] {
@@ -19,11 +23,18 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
       out.push(<strong key={key}>{inline(match[2], key)}</strong>);
     else if (match[3] !== undefined && match[4] !== undefined) {
       const href = match[4];
+      const guide = href.match(
+        /^(?:\.\.?\/)*(?:[\w-]+\/)*([a-z0-9][a-z0-9-]*)\.md(#[\w-]+)?$/u,
+      );
       out.push(
         /^https:\/\//u.test(href) ? (
           <a key={key} href={href}>
             {inline(match[3], key)}
           </a>
+        ) : guide !== null ? (
+          <Link key={key} href={`/docs/${guide[1]!}${guide[2] ?? ""}`}>
+            {inline(match[3], key)}
+          </Link>
         ) : (
           <span key={key}>{inline(match[3], key)}</span>
         ),
@@ -57,17 +68,81 @@ export function Markdown({
       i += 1;
       continue;
     }
-    const fence = line.match(/^```(\w*)/u);
+    const fence = line.match(/^```([\w-]*)/u);
     if (fence) {
       const body: string[] = [];
       i += 1;
       while (i < lines.length && !lines[i]!.startsWith("```"))
         body.push(lines[i++]!);
       i += 1;
+      const language = fence[1] === "" ? "text" : fence[1]!;
       blocks.push(
         <pre key={key++} className="dawg-pre" tabIndex={0}>
-          <code>{body.join("\n")}</code>
+          <SyntaxCode
+            code={body.join("\n")}
+            language={language}
+            styles="classes"
+          />
         </pre>,
+      );
+      continue;
+    }
+    if (/^\|.*\|\s*$/u.test(line)) {
+      const rows: string[][] = [];
+      while (i < lines.length && /^\|.*\|\s*$/u.test(lines[i]!)) {
+        const cells = lines[i]!.trim()
+          .slice(1, -1)
+          .split("|")
+          .map((cell) => cell.trim());
+        if (!cells.every((cell) => /^:?-{3,}:?$/u.test(cell))) rows.push(cells);
+        i += 1;
+      }
+      const [head, ...body] = rows;
+      const tableKey = key++;
+      blocks.push(
+        <div key={tableKey} className="dawg-table-wrap" tabIndex={0}>
+          <table className="dawg-table">
+            {head === undefined ? null : (
+              <thead>
+                <tr>
+                  {head.map((cell, n) => (
+                    <th key={n} scope="col">
+                      {inline(cell, `t${tableKey}-h${n}`)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+            )}
+            <tbody>
+              {body.map((row, r) => (
+                <tr key={r}>
+                  {row.map((cell, n) => (
+                    <td key={n}>{inline(cell, `t${tableKey}-${r}-${n}`)}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
+      );
+      continue;
+    }
+    if (/^\d+\.\s+/u.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^(\d+\.\s+|\s{2,}\S)/u.test(lines[i]!)) {
+        const current = lines[i]!;
+        if (/^\d+\.\s+/u.test(current))
+          items.push(current.replace(/^\d+\.\s+/u, ""));
+        else items[items.length - 1] += ` ${current.trim()}`;
+        i += 1;
+      }
+      const listKey = key++;
+      blocks.push(
+        <ol key={listKey}>
+          {items.map((item, n) => (
+            <li key={n}>{inline(item, `o${listKey}-${n}`)}</li>
+          ))}
+        </ol>,
       );
       continue;
     }
@@ -106,7 +181,7 @@ export function Markdown({
     while (
       i < lines.length &&
       lines[i]!.trim() !== "" &&
-      !/^(#{1,6}\s|```|[-*]\s)/u.test(lines[i]!)
+      !/^(#{1,6}\s|```|[-*]\s|\d+\.\s|\|)/u.test(lines[i]!)
     )
       para.push(lines[i++]!.trim());
     const paraKey = key++;

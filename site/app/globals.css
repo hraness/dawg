@@ -12,10 +12,10 @@
 @import "@hraness/design-kit/marketing-forced-colors.css";
 
 /*
- * dawg's look: a dark terminal set on Rosé Pine paper. The terminal surface
- * keeps the TUI's own colors in both modes, because it shows real frames.
- * Around it, the page borrows the highway's grammar: thin lane rules, a
- * hit line, and accent colors that match the TUI's track accents.
+ * Site layout in the dawg studio idiom (tokens in ./dawg-studio.css). The
+ * terminal surfaces keep the TUI's own colors in both modes, because they
+ * show real frames. Everything else is ink, paper, full-strength rules and
+ * the four clip colors, filled in blocks.
  */
 :root {
   --hraness-site-accent: var(--primary);
@@ -25,14 +25,8 @@
   --dawg-term-fg: rgb(225 231 239);
   --dawg-term-chrome: rgb(35 40 52);
   --dawg-term-line: rgb(58 64 80);
-  /* Track accents, as the TUI's default theme assigns them. */
-  --dawg-lane-1: #eb6f92;
-  --dawg-lane-2: #f6c177;
-  --dawg-lane-3: #9ccfd8;
-  --dawg-lane-4: #c4a7e7;
-  --dawg-measure: 72rem;
+  --dawg-measure: 80rem;
   --dawg-gutter: clamp(1rem, 4vw, 2.5rem);
-  --dawg-lane-rule: color-mix(in oklab, var(--foreground) 9%, transparent);
   font-synthesis: none;
   line-height: 1.55;
 }
@@ -50,20 +44,20 @@ kbd {
 }
 
 :where(.dawg-main, .dawg-page, .dawg-docs) :not(pre) > code {
-  font-size: 0.9em;
-  padding: 0.05em 0.35em;
-  border-radius: 0.3em;
-  background: color-mix(in oklab, var(--foreground) 7%, transparent);
+  font-size: 0.88em;
+  padding: 0.05em 0.3em;
+  border-radius: var(--dawg-radius);
+  background: var(--secondary);
 }
 
 a {
   color: inherit;
-  text-decoration-color: color-mix(in oklab, var(--primary) 60%, transparent);
+  text-decoration-thickness: 1px;
   text-underline-offset: 0.2em;
 }
 
 a:hover {
-  text-decoration-color: var(--primary);
+  text-decoration-thickness: 2px;
 }
 
 :focus-visible {
@@ -77,13 +71,26 @@ a:hover {
   top: -4rem;
   z-index: 100;
   padding: 0.5rem 0.75rem;
-  border-radius: 0.4rem;
   background: var(--inverse);
   color: var(--inverse-foreground);
 }
 
 .dawg-skip:focus {
   top: 0.75rem;
+}
+
+.dawg-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Header: a single strong rule under the shared marketing header. */
+.dawg-header {
+  border-bottom: var(--dawg-rule-strong);
 }
 
 /* Layout */
@@ -95,23 +102,32 @@ a:hover {
 }
 
 .dawg-page {
-  max-width: 46rem;
+  max-width: 48rem;
   padding-block: 3rem 5rem;
 }
 
 .dawg-eyebrow {
   margin: 0 0 0.75rem;
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  letter-spacing: 0.08em;
+  font: 600 0.78rem/1.3 var(--font-mono);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--foreground);
+}
+
+.dawg-eyebrow a {
+  text-decoration: none;
+}
+
+.dawg-eyebrow a:hover {
+  text-decoration: underline;
 }
 
 .dawg-lede {
-  font-size: 1.15rem;
+  font-size: clamp(1.1rem, 1rem + 0.4vw, 1.3rem);
+  line-height: 1.45;
   color: var(--muted);
-  max-width: 38rem;
+  max-width: 36rem;
+  margin: 0;
 }
 
 .dawg-small {
@@ -119,48 +135,73 @@ a:hover {
   color: var(--muted);
 }
 
-/* Hero */
+.dawg-more {
+  display: inline-block;
+  margin-top: 1rem;
+  font-weight: 600;
+}
+
+.dawg-more::after {
+  content: " →";
+}
+
+/* Hero: oversized type, then lede and install side by side, then the demo. */
 .dawg-hero {
   display: grid;
-  gap: 2.5rem;
-  align-items: center;
-  padding-block: clamp(2.5rem, 7vw, 5rem) 3rem;
+  gap: clamp(1.5rem, 3vw, 2.5rem);
+  padding-block: clamp(2.5rem, 6vw, 4.5rem) clamp(2.5rem, 5vw, 4rem);
 }
 
-@media (min-width: 64rem) {
-  .dawg-hero {
-    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
-    gap: 3rem;
-  }
+.dawg-hero__eyebrow {
+  margin: 0;
 }
 
-.dawg-hero h1 {
-  margin: 0 0 1.25rem;
-  font-size: clamp(2.4rem, 6vw, 4rem);
-  line-height: 1.02;
-  letter-spacing: -0.03em;
+.dawg-hero__title {
+  margin: 0;
+  font-size: var(--dawg-display);
   font-weight: 700;
+  line-height: 0.94;
+  letter-spacing: -0.045em;
   text-wrap: balance;
+  max-width: 14ch;
 }
 
 .dawg-hero__dawg {
   font-family: var(--font-mono);
   font-weight: 600;
-  letter-spacing: -0.04em;
-  color: var(--primary);
+  letter-spacing: -0.06em;
+  background: var(--dawg-clip-2);
+  color: var(--dawg-clip-ink);
+  padding-inline: 0.08em;
+}
+
+.dawg-hero__row {
+  display: grid;
+  gap: 1.75rem;
+  align-items: start;
+}
+
+@media (min-width: 60rem) {
+  .dawg-hero__row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 3rem;
+  }
 }
 
 .dawg-hero__install {
-  margin-top: 1.75rem;
-  max-width: 34rem;
+  min-width: 0;
 }
 
 .dawg-hero__links {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem 1.25rem;
-  margin-top: 0.9rem;
+  margin: 0.9rem 0 0;
   font-size: 0.95rem;
+}
+
+.dawg-hero__links a {
+  font-weight: 600;
 }
 
 .dawg-hero__links span {
@@ -169,6 +210,18 @@ a:hover {
 
 .dawg-hero__demo {
   min-width: 0;
+  margin-top: 0.5rem;
+}
+
+/* Install tabs from the design kit, flattened. */
+.dawg-install :where(.hraness-platform-install) {
+  --radius: 0;
+  border-radius: 0;
+}
+
+.dawg-install :where(.hraness-platform-install *) {
+  border-radius: 0 !important;
+  box-shadow: none !important;
 }
 
 /* The terminal window around the recording */
@@ -182,7 +235,6 @@ a:hover {
   gap: 0.75rem;
   height: 2rem;
   padding-inline: 0.75rem;
-  border-radius: 0.7rem 0.7rem 0 0;
   background: var(--dawg-term-chrome);
   color: rgb(160 168 184);
   font-family: var(--font-mono);
@@ -215,12 +267,8 @@ a:hover {
 
 .dawg-player {
   position: relative;
-  border-radius: 0 0 0.7rem 0.7rem;
   background: var(--dawg-term-bg);
   overflow: hidden;
-  box-shadow:
-    0 1px 0 var(--dawg-term-line) inset,
-    0 24px 60px -30px rgb(25 23 36 / 0.55);
 }
 
 .dawg-player__screen {
@@ -272,7 +320,7 @@ a:hover {
   bottom: 0.6rem;
   padding: 0.3rem 0.65rem;
   border: 1px solid var(--dawg-term-line);
-  border-radius: 999px;
+  border-radius: 0;
   background: rgb(24 28 37 / 0.85);
   color: var(--dawg-term-fg);
   font: 500 0.75rem/1 var(--font-mono);
@@ -280,94 +328,104 @@ a:hover {
 }
 
 .dawg-player__toggle:hover {
-  border-color: var(--dawg-lane-3);
+  border-color: var(--dawg-clip-3);
 }
 
-/* Sections, with the highway's lane rules behind the titles */
+/* Clip row: the four pillars as solid colored cells, the session view's clips. */
+.dawg-clips {
+  margin-inline: calc(var(--dawg-gutter) * -1);
+  border-block: var(--dawg-rule-strong);
+}
+
+@media (min-width: 80rem) {
+  .dawg-clips {
+    margin-inline: 0;
+    border-inline: var(--dawg-rule-strong);
+  }
+}
+
+.dawg-clips .dawg-clips__grid {
+  border-block: 0;
+  gap: 0;
+}
+
+.dawg-clips .dawg-clips__grid > div {
+  padding: clamp(1.25rem, 2.5vw, 1.75rem);
+  background: var(--dawg-clip-1);
+  color: var(--dawg-clip-ink);
+  border-color: var(--dawg-clip-ink);
+  border-width: 2px;
+}
+
+.dawg-clips .dawg-clips__grid > div:nth-child(2) {
+  background: var(--dawg-clip-2);
+}
+
+.dawg-clips .dawg-clips__grid > div:nth-child(3) {
+  background: var(--dawg-clip-3);
+}
+
+.dawg-clips .dawg-clips__grid > div:nth-child(4) {
+  background: var(--dawg-clip-4);
+}
+
+.dawg-clips .dawg-clips__grid dt {
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.dawg-clips .dawg-clips__grid dd {
+  color: var(--dawg-clip-ink);
+  font-size: 0.95rem;
+}
+
+/* Sections: a label and title column beside a body column, between rules. */
 .dawg-section {
-  padding-block: clamp(3rem, 7vw, 5rem);
-  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 1.5rem 3rem;
+  padding-block: clamp(3rem, 6vw, 4.5rem);
+  border-top: var(--dawg-rule-strong);
+}
+
+.dawg-clips + .dawg-section {
+  border-top: 0;
+}
+
+@media (min-width: 60rem) {
+  .dawg-section {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+  }
+}
+
+.dawg-section__head {
+  min-width: 0;
+}
+
+.dawg-section__head > p:not(.dawg-eyebrow) {
+  color: var(--muted);
+}
+
+@media (min-width: 60rem) {
+  .dawg-section__head {
+    position: sticky;
+    top: 5rem;
+    align-self: start;
+  }
 }
 
 .dawg-section__title {
-  margin: 0 0 1.75rem;
-  font-size: clamp(1.6rem, 3.5vw, 2.25rem);
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  text-wrap: balance;
-  max-width: 34ch;
-}
-
-.dawg-section h3 {
-  margin: 0 0 0.4rem;
-  font-size: 1.05rem;
-}
-
-.dawg-section p {
-  margin: 0 0 1rem;
-  max-width: 62ch;
-}
-
-.dawg-pillars {
-  list-style: none;
   margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 1px;
-  background: var(--line);
-  border: 1px solid var(--line);
-  border-radius: 0.8rem;
-  overflow: hidden;
+  font-size: var(--dawg-title);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
 }
 
-@media (min-width: 48rem) {
-  .dawg-pillars {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (min-width: 72rem) {
-  .dawg-pillars {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
-.dawg-pillar {
-  position: relative;
-  padding: 1.5rem 1.25rem 1.25rem;
-  background: var(--surface);
-}
-
-.dawg-pillar::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 3px;
-  background: var(--dawg-lane-1);
-}
-
-.dawg-pillar:nth-child(2)::before {
-  background: var(--dawg-lane-2);
-}
-
-.dawg-pillar:nth-child(3)::before {
-  background: var(--dawg-lane-3);
-}
-
-.dawg-pillar:nth-child(4)::before {
-  background: var(--dawg-lane-4);
-}
-
-.dawg-pillar__index {
-  display: block;
-  margin-bottom: 0.75rem;
-  font: 600 0.8rem/1 var(--font-mono);
-  color: var(--muted);
-}
-
-.dawg-pillar p {
-  font-size: 0.95rem;
-  color: var(--muted);
+.dawg-section__body {
+  min-width: 0;
 }
 
 /* Three windows */
@@ -376,25 +434,28 @@ a:hover {
   gap: 2rem;
 }
 
-@media (min-width: 64rem) {
+@media (min-width: 72rem) {
   .dawg-band {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    align-items: center;
+    align-items: start;
   }
+}
+
+.dawg-band__copy p:first-child {
+  margin-top: 0;
 }
 
 .dawg-band__windows {
   display: grid;
-  gap: 0.75rem;
+  gap: 0;
+  border: 2px solid var(--foreground);
 }
 
 .dawg-mini {
-  border-radius: 0.55rem;
   overflow: hidden;
   background: var(--dawg-term-bg);
   color: var(--dawg-term-fg);
   font: 0.8rem/1.5 var(--font-mono);
-  box-shadow: 0 1px 0 var(--dawg-term-line) inset;
 }
 
 .dawg-mini:nth-child(2) {
@@ -421,15 +482,15 @@ a:hover {
 
 .dawg-mini__track {
   font-weight: 700;
-  color: var(--dawg-lane-1);
+  color: var(--dawg-clip-1);
 }
 
 .dawg-mini:nth-child(2) .dawg-mini__track {
-  color: var(--dawg-lane-2);
+  color: var(--dawg-clip-2);
 }
 
 .dawg-mini:nth-child(3) .dawg-mini__track {
-  color: var(--dawg-lane-3);
+  color: var(--dawg-clip-3);
 }
 
 .dawg-mini__note {
@@ -437,90 +498,121 @@ a:hover {
 }
 
 /* Turn flow */
+/* Turn flow: four numbered cells on a strong rule. */
 .dawg-flow {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 1.25rem;
   counter-reset: step;
+  border-top: var(--dawg-rule-strong);
 }
 
-@media (min-width: 56rem) {
+@media (min-width: 40rem) {
   .dawg-flow {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 .dawg-flow li {
   counter-increment: step;
-  padding-top: 1rem;
-  border-top: 2px solid var(--dawg-lane-rule);
-  position: relative;
+  padding: 1rem 1.25rem 1.25rem 0;
+  border-bottom: var(--dawg-rule);
+}
+
+@media (min-width: 40rem) {
+  .dawg-flow li:nth-child(even) {
+    padding-left: 1.25rem;
+    border-left: var(--dawg-rule);
+  }
 }
 
 .dawg-flow li::before {
-  content: counter(step);
-  position: absolute;
-  top: -0.7rem;
-  left: 0;
-  display: grid;
-  place-items: center;
-  width: 1.4rem;
-  height: 1.4rem;
-  border-radius: 50%;
-  background: var(--primary);
-  color: var(--primary-foreground);
-  font: 700 0.75rem/1 var(--font-mono);
+  content: counter(step, decimal-leading-zero);
+  display: block;
+  margin-bottom: 0.75rem;
+  font: 700 0.8rem/1 var(--font-mono);
+}
+
+.dawg-flow h3 {
+  margin: 0 0 0.4rem;
+  font-size: 1.1rem;
+  letter-spacing: -0.01em;
 }
 
 .dawg-flow p {
+  margin: 0;
   font-size: 0.95rem;
   color: var(--muted);
 }
 
-/* Features */
-.dawg-features {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 1.5rem 2rem;
+/* Feature cells: the design kit's pillar grid on full-strength rules. */
+.dawg-cells.hraness-marketing-pillars {
+  border-block: var(--dawg-rule-strong);
 }
 
-@media (min-width: 40rem) {
-  .dawg-features {
+.dawg-cells.hraness-marketing-pillars > div {
+  padding: 1.1rem 1.25rem 1.25rem 0;
+}
+
+.dawg-cells.hraness-marketing-pillars > div + div {
+  padding-left: 1.25rem;
+  border-color: var(--line);
+}
+
+@media (min-width: 48rem) {
+  .dawg-cells.hraness-marketing-pillars {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-}
 
-@media (min-width: 64rem) {
-  .dawg-features {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+  .dawg-cells.hraness-marketing-pillars > div {
+    border-block-start: var(--dawg-rule);
+    border-inline-start: 0;
+  }
+
+  .dawg-cells.hraness-marketing-pillars > div:nth-child(-n + 2) {
+    border-block-start: 0;
+  }
+
+  .dawg-cells.hraness-marketing-pillars > div:nth-child(odd) {
+    padding-left: 0;
+  }
+
+  .dawg-cells.hraness-marketing-pillars > div:nth-child(even) {
+    border-inline-start: var(--dawg-rule);
   }
 }
 
-.dawg-features li {
-  padding-left: 0.9rem;
-  border-left: 2px solid var(--dawg-lane-rule);
-}
+@media (min-width: 72rem) {
+  .dawg-cells.hraness-marketing-pillars {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 
-.dawg-features p {
-  font-size: 0.93rem;
-  color: var(--muted);
-  margin: 0;
+  .dawg-cells.hraness-marketing-pillars > div:nth-child(-n + 4) {
+    border-block-start: 0;
+  }
+
+  .dawg-cells.hraness-marketing-pillars > div:nth-child(n) {
+    padding-left: 1.25rem;
+    border-inline-start: var(--dawg-rule);
+  }
+
+  .dawg-cells.hraness-marketing-pillars > div:nth-child(4n + 1) {
+    padding-left: 0;
+    border-inline-start: 0;
+  }
 }
 
 /* Install */
 .dawg-install__grid {
   display: grid;
   gap: 1.5rem;
-  margin-block: 1.5rem;
+  margin-block: 0 1.5rem;
 }
 
-@media (min-width: 56rem) {
+@media (min-width: 60rem) {
   .dawg-install__grid {
-    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
   }
 }
 
@@ -528,17 +620,23 @@ a:hover {
   min-width: 0;
 }
 
+.dawg-install__grid h3 {
+  margin: 0 0 0.5rem;
+  font: 600 0.78rem/1.3 var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .dawg-notice {
+  margin: 0 0 1.5rem;
   padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
-  border: 1px solid color-mix(in oklab, var(--warning) 45%, transparent);
-  background: var(--warning-soft);
+  border-left: 6px solid var(--dawg-clip-2);
+  background: var(--surface);
   color: var(--foreground);
 }
 
-/* Code blocks: always the terminal's colors */
+/* Code blocks: always the terminal's colors, square. */
 .dawg-code {
-  border-radius: 0.55rem;
   overflow: hidden;
   background: var(--dawg-term-bg);
   color: var(--dawg-term-fg);
@@ -558,6 +656,7 @@ a:hover {
 
 .dawg-code__copy {
   color: var(--dawg-term-fg);
+  border-radius: 0;
 }
 
 .dawg-code pre,
@@ -570,47 +669,70 @@ a:hover {
 }
 
 .dawg-pre {
-  border-radius: 0.55rem;
   background: var(--dawg-term-bg);
   color: var(--dawg-term-fg);
 }
 
-/* FAQ */
+/* FAQ: disclosure rows on rules. */
 .dawg-faq {
-  display: grid;
-  gap: 1.5rem 2.5rem;
-  margin: 0;
+  border-top: var(--dawg-rule-strong);
 }
 
-@media (min-width: 56rem) {
-  .dawg-faq {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+.dawg-faq details {
+  border-bottom: var(--dawg-rule);
 }
 
-.dawg-faq dt {
+.dawg-faq summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 1rem;
+  font-size: 1.1rem;
   font-weight: 650;
-  margin-bottom: 0.35rem;
+  cursor: pointer;
+  list-style: none;
 }
 
-.dawg-faq dd {
-  margin: 0;
+.dawg-faq summary::-webkit-details-marker {
+  display: none;
+}
+
+.dawg-faq summary span {
+  font: 600 1.2rem/1 var(--font-mono);
+}
+
+.dawg-faq details[open] summary span {
+  transform: rotate(45deg);
+}
+
+.dawg-faq details p {
+  margin: 0 0 1.25rem;
+  max-width: 62ch;
   color: var(--muted);
 }
 
-/* Docs */
+/* Docs: a browser-style tree rail beside the page, like the TUI's guides. */
 .dawg-docs {
   width: min(100%, var(--dawg-measure));
   margin-inline: auto;
-  padding: 2.5rem var(--dawg-gutter) 5rem;
+  padding: 0 var(--dawg-gutter) 5rem;
   display: grid;
-  gap: 2rem;
 }
 
 @media (min-width: 56rem) {
   .dawg-docs {
-    grid-template-columns: 12rem minmax(0, 46rem);
-    gap: 3.5rem;
+    grid-template-columns: 15rem minmax(0, 1fr);
+  }
+}
+
+.dawg-docs__nav {
+  border-bottom: var(--dawg-rule-strong);
+}
+
+@media (min-width: 56rem) {
+  .dawg-docs__nav {
+    border-bottom: 0;
+    border-right: var(--dawg-rule-strong);
   }
 }
 
@@ -618,48 +740,134 @@ a:hover {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 0.5rem;
 }
 
-@media (min-width: 56rem) {
-  .dawg-docs__nav ul {
-    position: sticky;
-    top: 5rem;
-    flex-direction: column;
-  }
+.dawg-docs__nav ul ul {
+  padding-left: 0.85rem;
+  border-left: var(--dawg-rule);
+  margin-left: 0.85rem;
 }
 
 .dawg-docs__nav a {
   display: block;
-  padding: 0.35rem 0.7rem;
-  border-left: 2px solid transparent;
+  padding: 0.4rem 0.75rem;
   text-decoration: none;
   color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.dawg-docs__nav a:hover {
+  color: var(--foreground);
+  background: var(--surface-hover);
 }
 
 .dawg-docs__nav a[aria-current="page"] {
-  border-left-color: var(--primary);
-  color: var(--foreground);
+  background: var(--foreground);
+  color: var(--background);
   font-weight: 600;
+}
+
+.dawg-docs__nav-label {
+  margin: 1.25rem 0 0.35rem;
+  padding-inline: 0.75rem;
+  font: 600 0.72rem/1.3 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dawg-docs__menu > summary {
+  padding: 0.9rem 0;
+  font: 600 0.8rem/1.3 var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.dawg-docs__menu[open] {
+  padding-bottom: 1rem;
+}
+
+.dawg-docs__tree {
+  display: none;
+}
+
+@media (min-width: 56rem) {
+  .dawg-docs__menu {
+    display: none;
+  }
+
+  .dawg-docs__tree {
+    display: block;
+    position: sticky;
+    top: 4.5rem;
+    max-height: calc(100vh - 5rem);
+    overflow-y: auto;
+    padding: 2rem 1rem 2rem 0;
+  }
 }
 
 .dawg-docs__main {
   min-width: 0;
+  max-width: 50rem;
+  padding-top: 2.5rem;
 }
 
+@media (min-width: 56rem) {
+  .dawg-docs__main {
+    padding-left: clamp(2rem, 4vw, 3.5rem);
+  }
+}
+
+.dawg-docs__pager {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 3.5rem;
+  border-top: var(--dawg-rule-strong);
+}
+
+.dawg-docs__pager a {
+  display: grid;
+  gap: 0.2rem;
+  padding: 1rem 0;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.dawg-docs__pager a:hover {
+  text-decoration: underline;
+}
+
+.dawg-docs__pager a[rel="next"] {
+  grid-column: 2;
+  text-align: right;
+}
+
+.dawg-docs__pager small {
+  font: 600 0.72rem/1.3 var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Prose */
 .dawg-prose h1 {
-  margin: 0 0 0.75rem;
-  font-size: clamp(2rem, 5vw, 2.75rem);
-  line-height: 1.1;
-  letter-spacing: -0.02em;
+  margin: 0 0 1rem;
+  font-size: clamp(2.25rem, 1.5rem + 3vw, 3.5rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.035em;
+}
+
+.dawg-prose .dawg-lede {
+  margin-bottom: 2rem;
 }
 
 .dawg-prose h2 {
-  margin: 2.5rem 0 0.75rem;
-  font-size: 1.4rem;
-  letter-spacing: -0.01em;
+  margin: 2.75rem 0 0.75rem;
+  padding-top: 0.75rem;
+  border-top: var(--dawg-rule);
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
 }
 
 .dawg-prose h3 {
@@ -672,7 +880,8 @@ a:hover {
   max-width: 68ch;
 }
 
-.dawg-prose ul {
+.dawg-prose ul,
+.dawg-prose ol {
   padding-left: 1.25rem;
 }
 
@@ -680,11 +889,16 @@ a:hover {
   margin-block: 0.4rem;
 }
 
+.dawg-prose blockquote {
+  margin: 1.25rem 0;
+  padding: 0.25rem 0 0.25rem 1rem;
+  border-left: 4px solid var(--foreground);
+}
+
 .dawg-table-wrap {
   overflow-x: auto;
   margin-block: 1rem;
-  border: 1px solid var(--line);
-  border-radius: 0.55rem;
+  border-block: var(--dawg-rule-strong);
 }
 
 .dawg-table {
@@ -695,10 +909,10 @@ a:hover {
 
 .dawg-table th,
 .dawg-table td {
-  padding: 0.55rem 0.8rem;
+  padding: 0.55rem 0.8rem 0.55rem 0;
   text-align: left;
   vertical-align: top;
-  border-bottom: 1px solid var(--line);
+  border-bottom: var(--dawg-rule);
 }
 
 .dawg-table tr:last-child > * {
@@ -706,11 +920,9 @@ a:hover {
 }
 
 .dawg-table thead th {
-  font-size: 0.8rem;
+  font: 600 0.75rem/1.3 var(--font-mono);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--muted);
-  background: var(--surface);
 }
 
 .dawg-table tbody th {
@@ -723,7 +935,8 @@ a:hover {
 }
 
 .dawg-network-footer {
-  margin-top: 2rem;
+  margin-top: 0;
+  border-top: var(--dawg-rule-strong);
 }
 
 @media (prefers-reduced-motion: reduce) {
