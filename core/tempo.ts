@@ -77,6 +77,21 @@ export type TrackTime = Readonly<{
   phase?: number;
   /** Track ticks per repetition; default the song loop. */
   cycle?: number;
+  /**
+   * Stepped phasing, as in Reich's Piano Phase: hold `hold` cycles in
+   * step, then move `shift` ticks ahead over `drift` cycles, and repeat.
+   * Replaces `rate`; absent is the constant drift `rate` gives.
+   */
+  steps?: PhaseSteps;
+}>;
+
+export type PhaseSteps = Readonly<{
+  /** Track ticks gained per step (120 = one sixteenth at 480 tpb). */
+  shift: number;
+  /** Whole cycles held locked between shifts, 0..64. */
+  hold: number;
+  /** Whole cycles over which each shift happens, 1..64. */
+  drift: number;
 }>;
 
 export const TIME_LIMITS = Object.freeze({
@@ -190,8 +205,13 @@ export function normalizeTrackTime(
   label = "track time",
 ): TrackTime | undefined {
   if (input === undefined || input === null) return undefined;
-  const record = recordOf(input, label, ["rate", "phase", "cycle"]);
-  const out: { rate?: number; phase?: number; cycle?: number } = {};
+  const record = recordOf(input, label, ["rate", "phase", "cycle", "steps"]);
+  const out: {
+    rate?: number;
+    phase?: number;
+    cycle?: number;
+    steps?: PhaseSteps;
+  } = {};
   if (record.rate !== undefined) {
     const rate = record.rate;
     if (
@@ -230,7 +250,48 @@ export function normalizeTrackTime(
       );
     out.cycle = cycle;
   }
+  if (record.steps !== undefined) {
+    if (out.rate !== undefined)
+      throw new TimeValidationError(`${label} takes rate or steps, not both`);
+    if (out.cycle === undefined)
+      throw new TimeValidationError(`${label} steps need a cycle`);
+    out.steps = normalizePhaseSteps(record.steps, out.cycle, `${label} steps`);
+  }
   return Object.keys(out).length > 0 ? Object.freeze(out) : undefined;
+}
+
+function normalizePhaseSteps(
+  input: unknown,
+  cycle: number,
+  label: string,
+): PhaseSteps {
+  const record = recordOf(input, label, ["shift", "hold", "drift"]);
+  const int = (value: unknown, min: number, max: number) =>
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= min &&
+    value <= max;
+  if (!int(record.shift, 1, cycle))
+    throw new TimeValidationError(
+      `${label} shift must be an integer between 1 and the cycle (${cycle} ticks)`,
+    );
+  if (!int(record.hold, 0, 64))
+    throw new TimeValidationError(`${label} hold must be 0..64 cycles`);
+  if (!int(record.drift, 1, 64))
+    throw new TimeValidationError(`${label} drift must be 1..64 cycles`);
+  return Object.freeze({
+    shift: record.shift as number,
+    hold: record.hold as number,
+    drift: record.drift as number,
+  });
+}
+
+/**
+ * Song ticks for one stepped-phasing turn: every shift until the track is
+ * a whole cycle ahead and back in step.
+ */
+export function phaseStepsTicks(cycle: number, steps: PhaseSteps): number {
+  return Math.ceil(cycle / steps.shift) * (steps.hold + steps.drift) * cycle;
 }
 
 function normalizeTempoEvent(input: unknown, label: string): TempoEvent {
@@ -1047,8 +1108,9 @@ function roundBpm(bpm: number): number {
 
 /**
  * The rate that makes a track gain `cycles` whole cycles per song loop, so
- * a phasing pair drifts apart and lines up again exactly at the loop end
- * (Reich's Piano Phase gains one cycle; 13/12 over twelve cycles).
+ * a phasing pair drifts apart and lines up again exactly at the loop end.
+ * This is the constant tape drift of Reich's It's Gonna Rain and Come Out;
+ * Piano Phase's shift-and-hold process is `TrackTime.steps`.
  */
 export function driftRate(
   loopTicks: number,
@@ -1108,6 +1170,18 @@ export function performedNotes<N extends PlaceableNote>(
     const phase = time.phase ?? 0;
     const cycle = time.cycle ?? loop;
     if (note.startTick >= cycle) continue;
+    if (time.steps) {
+      repeats = placeStepped(
+        note,
+        cycle,
+        phase,
+        time.steps,
+        loop,
+        out,
+        repeats,
+      );
+      continue;
+    }
     const period = cycle / rate;
     const offset = phase + note.startTick / rate;
     const first = Math.ceil((0 - offset) / period - 1e-9);
@@ -1134,6 +1208,52 @@ export function performedNotes<N extends PlaceableNote>(
   const frozen = Object.freeze(out);
   placedCache.set(score, frozen);
   return frozen;
+}
+
+/**
+ * Stepped phasing: a step is `hold` cycles in song time at rate 1, then
+ * `drift` cycles in which the track plays `shift` ticks more. Track tick
+ * `tau` maps back to song time through that piecewise-linear clock.
+ */
+function placeStepped<N extends PlaceableNote>(
+  note: N,
+  cycle: number,
+  phase: number,
+  steps: PhaseSteps,
+  loop: number,
+  out: N[],
+  repeats: number,
+): number {
+  const held = steps.hold * cycle;
+  const drifting = steps.drift * cycle;
+  const song = held + drifting;
+  const track = song + steps.shift;
+  const squeeze = drifting / (drifting + steps.shift);
+  const songTick = (tau: number) => {
+    const step = Math.floor(tau / track);
+    const within = tau - step * track;
+    return (
+      step * song + (within < held ? within : held + (within - held) * squeeze)
+    );
+  };
+  // The clock repeats every step, so earlier cycles fill the loop's start
+  // when the phase moves it later (as the plain placement wraps).
+  const first = Math.floor((-phase * track) / song / cycle) - 2;
+  for (let k = first; ; k += 1) {
+    if (repeats >= TIME_LIMITS.maxPerformedNotes) break;
+    const tau = k * cycle + note.startTick;
+    const startTick = songTick(tau) + phase;
+    if (startTick >= loop) break;
+    if (startTick < 0) continue;
+    const within = tau - Math.floor(tau / track) * track;
+    out.push({
+      ...note,
+      startTick,
+      durationTicks: note.durationTicks * (within < held ? 1 : squeeze),
+    });
+    repeats += 1;
+  }
+  return repeats;
 }
 
 /** True when any track has its own `time`. */

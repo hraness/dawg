@@ -15,6 +15,8 @@
  *   track phase <beats>|off                    start the track later
  *   track cycle <beats>|off                    polymeter: loop the first beats
  *   track phasing <cycle> [over <beats>] [cycles <n>]   Reich-style drift
+ *   track phasing <cycle> [hold <n>] [drift <n>] [shift <beats>]
+ *                                              stepped, as in Piano Phase
  *   track time off                             follow the song again
  *
  * `tempo <bpm>` (the start tempo) and `meter <n>` (beats per bar) keep their
@@ -34,6 +36,8 @@ import {
   driftRate,
   loopSecondsOf,
   loopTicksOf,
+  phaseStepsTicks,
+  type PhaseSteps,
   TIME_LIMITS,
   TimeValidationError,
   withFermata,
@@ -93,6 +97,11 @@ export type TimeCommand =
       cycle: number;
       over?: number;
       cycles: number;
+      /** Stepped (Piano Phase): any of these switches to shift and hold. */
+      hold?: number;
+      drift?: number;
+      /** Beats gained per step. */
+      shift?: number;
     }>
   | Readonly<{ type: "track-time-off" }>;
 
@@ -308,6 +317,7 @@ function trackTimeCommand(rest: readonly string[]): TimeCommand | undefined {
     if (!(cycle > 0)) return undefined;
     let over: number | undefined;
     let cycles = 1;
+    const stepped: { hold?: number; drift?: number; shift?: number } = {};
     let index = 0;
     while (index < tail.length) {
       const word = tail[index]!;
@@ -315,16 +325,24 @@ function trackTimeCommand(rest: readonly string[]): TimeCommand | undefined {
       if (next === undefined) return undefined;
       if (word === "over" && UNSIGNED.test(next)) over = Number(next);
       else if (word === "cycles" && NUMBER.test(next)) cycles = Number(next);
+      else if (
+        (word === "hold" || word === "drift" || word === "shift") &&
+        UNSIGNED.test(next)
+      )
+        stepped[word] = Number(next);
       else return undefined;
       index += 2;
     }
     if (over !== undefined && !(over > 0)) return undefined;
     if (cycles === 0) return undefined;
+    if (Object.keys(stepped).length > 0 && (over !== undefined || cycles !== 1))
+      return undefined;
     return {
       type: "track-phasing",
       cycle,
       ...(over !== undefined ? { over } : {}),
       cycles,
+      ...stepped,
     };
   }
   return undefined;
@@ -623,17 +641,59 @@ function trackTime(
   const track = score.tracks.find((candidate) => candidate.id === trackId);
   if (!track) return { ok: false, message: `no track ${trackId}` };
   const tpb = score.ticksPerBeat;
-  const current: { rate?: number; phase?: number; cycle?: number } = {
+  const current: {
+    rate?: number;
+    phase?: number;
+    cycle?: number;
+    steps?: PhaseSteps;
+  } = {
     ...track.time,
   };
   let message: string;
   if (command.type === "track-time-off") {
     for (const key of Object.keys(current)) delete current[key as "rate"];
     message = `${trackId} · follows the song`;
+  } else if (
+    command.type === "track-phasing" &&
+    (command.hold !== undefined ||
+      command.drift !== undefined ||
+      command.shift !== undefined)
+  ) {
+    const cycle = Math.round(command.cycle * tpb);
+    const shiftBeats = command.shift ?? 0.25;
+    const shift = Math.round(shiftBeats * tpb);
+    const hold = command.hold ?? 8;
+    const drift = command.drift ?? 2;
+    if (cycle < 1)
+      return { ok: false, message: "track phasing · cycle is too short" };
+    if (shift < 1 || shift > cycle)
+      return {
+        ok: false,
+        message: `track phasing · shift must be more than 0 and at most the ${fmt(command.cycle)}-beat cycle`,
+      };
+    if (!Number.isInteger(hold) || hold > 64)
+      return {
+        ok: false,
+        message: "track phasing · hold is 0..64 whole cycles",
+      };
+    if (!Number.isInteger(drift) || drift < 1 || drift > 64)
+      return {
+        ok: false,
+        message: "track phasing · drift is 1..64 whole cycles",
+      };
+    const steps = { shift, hold, drift };
+    delete current.rate;
+    current.cycle = cycle;
+    (current as { steps?: PhaseSteps }).steps = steps;
+    const turn = phaseStepsTicks(cycle, steps);
+    const loop = loopTicksOf(score);
+    const bars = turn > loop ? barsForWhole(score, turn) : undefined;
+    message = `${trackId} · phasing ${fmt(command.cycle)}-beat cycle in steps of ${fmt(shiftBeats)}: hold ${hold}, drift ${drift} (a full turn is ${fmt(turn / tpb)} beats${turn > loop ? `, longer than the loop; restarts at its end${bars === undefined ? "" : ` · bars ${bars}`}` : ""})`;
   } else if (command.type === "track-phasing") {
     const cycle = Math.round(command.cycle * tpb);
     if (cycle < 1)
       return { ok: false, message: "track phasing · cycle is too short" };
+    delete (current as { steps?: PhaseSteps }).steps;
     const over =
       command.over !== undefined
         ? Math.round(command.over * tpb)

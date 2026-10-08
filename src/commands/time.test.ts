@@ -306,6 +306,33 @@ describe("time commands", () => {
     );
   });
 
+  test("track phasing with hold or drift steps like Piano Phase", () => {
+    expect(parseTimeCommand("track phasing 3 hold 8 drift 2")).toEqual({
+      type: "track-phasing",
+      cycle: 3,
+      cycles: 1,
+      hold: 8,
+      drift: 2,
+    });
+    expect(parseTimeCommand("track phasing 3 over 48 hold 8")).toBeUndefined();
+    const score = createScore({
+      bars: 4,
+      tracks: [{ id: "b", instrument: "piano", time: { rate: 1.5 } }],
+    });
+    const result = applyTimeCommand(score, "b", {
+      type: "track-phasing",
+      cycle: 3,
+      cycles: 1,
+      hold: 4,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.next!.tracks[0]!.time).toEqual({
+      cycle: 1440,
+      steps: { shift: 120, hold: 4, drift: 2 },
+    });
+    expect(result.message).toContain("hold 4, drift 2");
+  });
+
   test("track phasing refuses spans that cannot realign every loop", () => {
     const score = song(); // 8 bars of 4/4, 32 beats
     // A 3-beat cycle does not fit 32 beats: the drift would reset mid-cycle.

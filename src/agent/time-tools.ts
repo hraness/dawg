@@ -161,6 +161,7 @@ export function timeToolCommand(args: Record<string, unknown>): TimeCommand {
         cycle,
         ...(over !== undefined ? { over } : {}),
         cycles: num(args, "cycles", -64, 64) ?? 1,
+        ...stepArgs(args),
       };
     }
     case "track":
@@ -175,7 +176,7 @@ export const TIME_TOOLS: readonly AgentTool[] = Object.freeze([
   {
     name: "set_time",
     description:
-      "Tempo map and meter: action tempo (bpm at beat|bar; ramp linear|exp glides into it), rit/accel (bars or beats long, optional target bpm and start; default 75%/133% over the last 2 bars), fermata (hold beat|bar for beats extra beats), meter ('7/8' from bar, or the whole song without bar), remove_tempo/remove_fermata/remove_meter, clear (what: tempo|meter|fermatas|track|all). Per-track polytempo/polymeter: action track with rate (tempo ratio, 1.5 = three against two), phase (beats later) and cycle (beats per repeat), null resets one; action phasing (cycle beats, over beats, cycles n) sets a Reich-style drift that realigns. Beats count from 0, bars from 1.",
+      "Tempo map and meter: action tempo (bpm at beat|bar; ramp linear|exp glides into it), rit/accel (bars or beats long, optional target bpm and start; default 75%/133% over the last 2 bars), fermata (hold beat|bar for beats extra beats), meter ('7/8' from bar, or the whole song without bar), remove_tempo/remove_fermata/remove_meter, clear (what: tempo|meter|fermatas|track|all). Per-track polytempo/polymeter: action track with rate (tempo ratio, 1.5 = three against two), phase (beats later) and cycle (beats per repeat), null resets one; action phasing (cycle beats, over beats, cycles n) sets a continuous drift that realigns at the loop end (over must divide the loop); with hold/drift (whole cycles) and shift (beats, default 0.25) it is stepped, as in Piano Phase: hold in step, then move shift ahead over drift cycles. Beats count from 0, bars from 1.",
     parameters: {
       type: "object",
       properties: {
@@ -201,6 +202,9 @@ export const TIME_TOOLS: readonly AgentTool[] = Object.freeze([
         cycle: { type: ["number", "null"] },
         over: { type: "number" },
         cycles: { type: "number" },
+        hold: { type: "number" },
+        drift: { type: "number" },
+        shift: { type: "number" },
       },
       required: ["action"],
       additionalProperties: false,
@@ -257,3 +261,19 @@ export const TIME_TOOLS: readonly AgentTool[] = Object.freeze([
     },
   },
 ]);
+
+/** Stepped-phasing arguments; present ones switch phasing to steps. */
+function stepArgs(args: Record<string, unknown>): {
+  hold?: number;
+  drift?: number;
+  shift?: number;
+} {
+  const out: { hold?: number; drift?: number; shift?: number } = {};
+  const hold = num(args, "hold", 0, 64);
+  const drift = num(args, "drift", 1, 64);
+  const shift = num(args, "shift", 0.0625, 100_000);
+  if (hold !== undefined) out.hold = Math.round(hold);
+  if (drift !== undefined) out.drift = Math.round(drift);
+  if (shift !== undefined) out.shift = shift;
+  return out;
+}

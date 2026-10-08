@@ -306,8 +306,15 @@ export function trackTimeNodes(context: MenuContext): MenuNode[] {
       "phasing",
       "<cycle beats> [over <beats>] [cycles <n>]",
       "track phasing",
-      "track phasing 3",
-      "Reich-style drift: gain whole cycles per loop and realign at its end",
+      "track phasing 4",
+      "continuous drift (It's Gonna Rain): gain whole cycles per loop and realign at its end",
+    ),
+    entry(
+      "stepped phasing",
+      "<cycle beats> [hold <n>] [drift <n>] [shift <beats>]",
+      "track phasing",
+      "track phasing 3 hold 8",
+      "Piano Phase: hold in step, then move a sixteenth ahead, and repeat",
     ),
     {
       kind: "action",

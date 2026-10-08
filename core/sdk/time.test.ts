@@ -18,6 +18,7 @@ import {
   ramp,
   rit,
   song,
+  stepPhasing,
   tempo,
   track,
 } from "./v1.ts";
@@ -212,5 +213,65 @@ describe("printing time", () => {
     expect(text).toContain('import { song } from "dawg";');
     expect(text).toContain("import tempo from");
     expect(text).not.toContain("time:");
+  });
+});
+
+describe("song() checks its time marks", () => {
+  test("marks past the song end are refused, as at the prompt", () => {
+    expect(() => song({ bars: 4, tracks: [], time: [tempo(32, 140)] })).toThrow(
+      "past the song end",
+    );
+    expect(() => song({ bars: 4, tracks: [], time: [fermata(16)] })).toThrow(
+      "past the song end",
+    );
+    expect(() =>
+      song({ bars: 4, tracks: [], time: [meter(16, [7, 8])] }),
+    ).toThrow("past the song end");
+    // The format doc's example fits once the song is long enough.
+    const ok = song({
+      tempo: 120,
+      bars: 24,
+      tracks: [],
+      time: [
+        tempo(32, 140),
+        rit(48, 16, 80),
+        fermata(63, 2),
+        meter(16, [7, 8]),
+      ],
+    });
+    expect(ok.time?.fermatas?.[0]?.tick).toBe(63 * 480);
+  });
+
+  test("rit() and accel() check their direction", () => {
+    expect(() =>
+      song({ tempo: 100, bars: 8, tracks: [], time: [rit(8, 8, 180)] }),
+    ).toThrow("rit() target 180 BPM is faster than 100; use accel()");
+    expect(() =>
+      song({ tempo: 100, bars: 8, tracks: [], time: [accel(8, 8, 60)] }),
+    ).toThrow("accel() target 60 BPM is slower than 100; use rit()");
+  });
+
+  test("an over-long fermata fails at song()", () => {
+    expect(() =>
+      song({ bars: 16, tracks: [], time: [fermata(4, 64)] }),
+    ).toThrow(DawgSdkError);
+    expect(() =>
+      song({ bars: 16, tracks: [], time: [fermata(4, 64)] }),
+    ).toThrow("fermata() at beat 4");
+  });
+
+  test("stepPhasing() stores its steps in ticks and prints back", async () => {
+    const s = song({
+      bars: 8,
+      tracks: [piano(stepPhasing(3, { hold: 4 }))],
+    });
+    expect(s.tracks[0]!.time).toEqual({
+      cycle: 3 * 480,
+      steps: { shift: 120, hold: 4, drift: 2 },
+    });
+    const score = scoreFromJSON(s);
+    const files = printProject(score).files;
+    const text = files.find((file) => file.path.includes("piano"))!.text;
+    expect(text).toContain("steps: { shift: 0.25, hold: 4, drift: 2 }");
   });
 });

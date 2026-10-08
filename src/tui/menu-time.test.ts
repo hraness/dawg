@@ -201,6 +201,11 @@ describe("Project › Tempo & meter", () => {
       type: "run",
       command: "track phasing 3",
     });
+    select(menu, ctx, "stepped phasing");
+    expect(type(menu, ctx, "3 hold 8")).toEqual({
+      type: "run",
+      command: "track phasing 3 hold 8",
+    });
     select(menu, ctx, "follow the song");
     expect(menu.key("\r", ctx)).toEqual({
       type: "run",

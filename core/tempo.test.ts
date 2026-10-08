@@ -13,6 +13,7 @@ import {
   normalizeSongTime,
   normalizeTrackTime,
   performedNotes,
+  phaseStepsTicks,
   secondsAtTick,
   tickAtSeconds,
   timeMapFor,
@@ -316,6 +317,27 @@ describe("track time", () => {
       0, 768, 1536, 2304, 3072,
     ]);
     expect(placed[0]!.durationTicks).toBe(240 / 1.25);
+  });
+
+  test("stepped phasing holds in step, shifts, then holds again", () => {
+    // One-beat cycle, a sixteenth per step, hold 2 cycles, drift over 1.
+    const score = {
+      ...timed(undefined, { bars: 2 }),
+      tracks: [
+        {
+          id: "b",
+          time: { cycle: TPB, steps: { shift: 120, hold: 2, drift: 1 } },
+        },
+      ],
+      notes: [note("a", 0)],
+    };
+    const starts = performedNotes(score).map((n) => n.startTick);
+    // Held: on the beat. Drifting: the third note comes 1/16 early.
+    // Held again: every beat 1/16 ahead.
+    expect(starts.slice(0, 6)).toEqual([0, 480, 960, 1344, 1800, 2280]);
+    expect(phaseStepsTicks(TPB, { shift: 120, hold: 2, drift: 1 })).toBe(
+      4 * 3 * TPB,
+    );
   });
 
   test("phase shifts the pattern later and wraps it into the loop", () => {

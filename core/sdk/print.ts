@@ -406,6 +406,13 @@ export function printTrack(score: TrackScore, track: Track): string {
       fields.push(["phase", beats(track.time.phase)]);
     if (track.time.cycle !== undefined)
       fields.push(["cycle", beats(track.time.cycle)]);
+    if (track.time.steps) {
+      const { shift, hold, drift } = track.time.steps;
+      fields.push([
+        "steps",
+        `{ shift: ${beats(shift)}, hold: ${num(hold)}, drift: ${num(drift)} }`,
+      ]);
+    }
     entries.push(`time: ${obj(fields, INDENT, "time: ".length, 1)}`);
   }
   if (track.tuning)
