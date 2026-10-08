@@ -12,6 +12,7 @@ import { commandParam, sketchFor } from "./sketch.ts";
 import { HINTS } from "../../tui/grammar.ts";
 import { auditionKey, isStageable, type AuditionKey } from "./audition.ts";
 import { performanceDetail, performanceNodes } from "./performance-menu.ts";
+import type { FaderSpec } from "./fader.ts";
 import {
   openingMeterCommand,
   openingUnit,
@@ -242,6 +243,8 @@ export type MenuResult =
   | { type: "unhover"; key: string }
   /** Chose a list item while the loop plays: stage it for good. */
   | { type: "choose"; command: string; key: string }
+  /** Enter on a number row: open the fader drawer on this level's values. */
+  | { type: "fader"; label: string }
   | { type: "pass" };
 
 export type MenuView = Readonly<{
@@ -2279,11 +2282,8 @@ export class EditMenu {
         });
         return { type: "handled" };
       }
-      if (
-        node.kind === "entry" ||
-        node.kind === "number" ||
-        node.kind === "point"
-      ) {
+      if (node.kind === "number") return { type: "fader", label: node.label };
+      if (node.kind === "entry" || node.kind === "point") {
         this.entry = { label: node.label, buffer: "" };
         return { type: "handled" };
       }
@@ -2384,6 +2384,33 @@ export class EditMenu {
     return { type: "handled" };
   }
 
+  /**
+   * The current level's number and choice rows as fader fields (the drawer's
+   * related params: every filter control, every reverb control), built
+   * from `context` (the staged score while auditioning).
+   */
+  faderFields(context: MenuContext): FaderSpec[] {
+    const frame = this.stack.at(-1);
+    if (!frame) return [];
+    return faderSpecs(frame.build(context));
+  }
+
+  /** The same fields as committed, for the drawer's `staged ← committed`. */
+  faderCommitted(context: MenuContext): FaderSpec[] {
+    const audition = context.audition;
+    if (!audition?.dirty) return this.faderFields(context);
+    return this.faderFields({
+      ...context,
+      score: audition.committed,
+      ...(audition.committedChords ? { chords: audition.committedChords } : {}),
+    });
+  }
+
+  /** The breadcrumb, for the drawer's title. */
+  get crumbs(): string {
+    return this.stack.map((level) => level.title).join(" › ");
+  }
+
   /** The picker the TUI draws for the current level. */
   view(context: MenuContext): MenuView {
     const frame = this.stack.at(-1);
@@ -2479,6 +2506,37 @@ function placeholderFor(node: MenuNode | undefined): string {
     return `${node.format(node.min)}…${node.format(node.max)}`;
   if (node.kind === "point") return "value";
   return "";
+}
+
+/** Menu rows → fader fields: numbers and choices, in row order. */
+export function faderSpecs(nodes: readonly MenuNode[]): FaderSpec[] {
+  const fields: FaderSpec[] = [];
+  for (const node of nodes) {
+    if (node.kind === "number")
+      fields.push({
+        kind: "number",
+        label: node.label,
+        value: node.value,
+        min: node.min,
+        max: node.max,
+        step: node.step,
+        format: node.format,
+        command: node.command,
+        parse: (text) => entryCommand(node, text),
+        reset: node.reset,
+        start: node.start,
+        off: node.off,
+      });
+    else if (node.kind === "choice")
+      fields.push({
+        kind: "choice",
+        label: node.label,
+        value: node.value,
+        options: node.options,
+        command: node.command,
+      });
+  }
+  return fields;
 }
 
 function entryCommand(node: MenuNode, text: string): string | undefined {
