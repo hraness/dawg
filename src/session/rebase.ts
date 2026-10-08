@@ -114,6 +114,10 @@ export function rebaseOperations(
         if (base.beatsPerBar !== current.beatsPerBar)
           return { ok: false, reason: "meter changed" };
         break;
+      case "setTime":
+        if (!same(base.time, current.time))
+          return { ok: false, reason: "tempo map changed" };
+        break;
       case "removeTrack": {
         if (added.tracks.has(operation.trackId)) break;
         if (

@@ -1,4 +1,5 @@
 import { normalizeSynth } from "../../core/synth.ts";
+import { normalizeSongTime, normalizeTrackTime } from "../../core/tempo.ts";
 import { normalizeFx } from "../../core/fx.ts";
 import {
   SCORE_LIMITS,
@@ -131,6 +132,11 @@ function parseOperation(value: unknown): ScoreOperation {
   ) {
     return { type: "setMeter", beatsPerBar: value.beatsPerBar };
   }
+  if (value.type === "setTime") {
+    // The reducer re-validates; this only bounds the shape.
+    const time = value.time === null ? null : normalizeSongTime(value.time);
+    return { type: "setTime", time: time ?? null };
+  }
   if (
     value.type === "updateTrack" &&
     typeof value.trackId === "string" &&
@@ -168,6 +174,8 @@ function parseOperation(value: unknown): ScoreOperation {
     if (patch.fx !== undefined) safe.fx = normalizeFx(patch.fx) ?? null;
     if (patch.synth !== undefined)
       safe.synth = normalizeSynth(patch.synth) ?? null;
+    if (patch.time !== undefined)
+      safe.time = normalizeTrackTime(patch.time) ?? null;
     return { type: "updateTrack", trackId: value.trackId, patch: safe };
   }
   if (

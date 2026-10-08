@@ -62,6 +62,8 @@ export function diffScores(
   if (a.tempoBpm !== b.tempoBpm)
     ops.push({ type: "setTempo", tempoBpm: b.tempoBpm });
   if (a.key !== b.key) ops.push({ type: "setKey", key: b.key });
+  if (!deepEqual(a.time, b.time))
+    ops.push({ type: "setTime", time: b.time ?? null });
 
   const aTracks = new Map(a.tracks.map((track) => [track.id, track]));
   const bTracks = new Map(b.tracks.map((track) => [track.id, track]));
@@ -159,7 +161,7 @@ function trackPatch(a: Track, b: Track): TrackPatch | undefined {
   if ((a.solo ?? false) !== (b.solo ?? false)) patch.solo = b.solo ?? false;
   for (const key of EFFECTS)
     if (!deepEqual(a[key], b[key])) patch[key] = b[key] ?? null;
-  for (const key of ["rhythm", "kit"] as const)
+  for (const key of ["rhythm", "kit", "time"] as const)
     if (!deepEqual(a[key], b[key])) patch[key] = b[key] ?? null;
   for (const key of LANES)
     if (!deepEqual(a[key] ?? [], b[key] ?? [])) patch[key] = b[key] ?? [];

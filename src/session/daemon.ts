@@ -695,6 +695,7 @@ const OPERATION_TYPES = new Set([
   "moveTrack",
   "setKey",
   "setMeter",
+  "setTime",
 ]);
 
 /** Shape gate before the reducer, which validates every field it reads. */
