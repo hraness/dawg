@@ -29,6 +29,7 @@ import {
   type NoteInput,
   type Track,
 } from "../../core/score.ts";
+import { barAt, barStartTick, songTimeSlice } from "../../core/tempo.ts";
 import { interpolateAutomation } from "./effects/common.ts";
 import { loopedSection, scoreBeatAt } from "./arrange.ts";
 import { RENDER_CHANNELS } from "./wav.ts";
@@ -92,27 +93,30 @@ export function previewRegion(
     : score.bars;
   if (hi - lo <= MAX_PREVIEW_BARS) return { startBar: lo, bars: hi - lo };
   const bars = PREVIEW_REGION_BARS;
-  const barTicks = score.beatsPerBar * score.ticksPerBeat;
   const last = hi - bars;
   const clampBar = (bar: number) =>
     Math.max(lo, Math.min(last, Number.isFinite(bar) ? Math.floor(bar) : lo));
-  let startBar = clampBar(scoreBeatAt(score, beat) / score.beatsPerBar);
+  // Bars through the meter changes; 0.4 scores keep `beat / beatsPerBar`.
+  const barOfTick = (tick: number) => barAt(score, tick).bar;
+  const scoreBeat = scoreBeatAt(score, beat);
+  let startBar = clampBar(
+    Number.isFinite(scoreBeat) ? barOfTick(scoreBeat * score.ticksPerBeat) : lo,
+  );
   const notes = score.notes.filter((note) => note.trackId === trackId);
   const inRegion = (from: number) =>
     notes.some(
       (note) =>
-        note.startTick >= from * barTicks &&
-        note.startTick < (from + bars) * barTicks,
+        note.startTick >= barStartTick(score, from) &&
+        note.startTick < barStartTick(score, from + bars),
     );
+  const loTick = barStartTick(score, lo);
+  const hiTick = barStartTick(score, hi);
   const pool = bounded
-    ? notes.filter(
-        (note) =>
-          note.startTick >= lo * barTicks && note.startTick < hi * barTicks,
-      )
+    ? notes.filter((note) => note.startTick >= loTick && note.startTick < hiTick)
     : notes;
   if (pool.length > 0 && !inRegion(startBar)) {
     const first = Math.min(...pool.map((note) => note.startTick));
-    startBar = clampBar(first / barTicks);
+    startBar = clampBar(barOfTick(first));
   }
   return { startBar, bars };
 }
@@ -301,9 +305,8 @@ export function previewScore(
     Math.min(region.bars, score.bars - Math.max(0, region.startBar)),
   );
   const startBar = Math.max(0, Math.min(region.startBar, score.bars - 1));
-  const barTicks = score.beatsPerBar * score.ticksPerBeat;
-  const start = startBar * barTicks;
-  const end = start + bars * barTicks;
+  const start = barStartTick(score, startBar);
+  const end = barStartTick(score, startBar + bars);
   const context = options.context === true;
   const anySolo = score.tracks.some((candidate) => candidate.solo === true);
   const tracks = score.tracks
@@ -337,8 +340,11 @@ export function previewScore(
     role = phraseRole(track);
     notes.push(...defaultPhrase(score, track, bars, role));
   }
+  // The song's tempo map and meter, rebased to the region's first bar.
+  const timing = songTimeSlice(score, startBar, bars);
   const preview = new TrackScore({
-    tempoBpm: score.tempoBpm,
+    tempoBpm: timing.tempoBpm,
+    ...(timing.time ? { time: timing.time } : {}),
     beatsPerBar: score.beatsPerBar,
     bars,
     ticksPerBeat: score.ticksPerBeat,

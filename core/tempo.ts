@@ -794,6 +794,13 @@ export class TimeMap {
     );
   }
 
+  /** Tempo at `tick` ignoring fermatas: what a metronome mark there reads. */
+  tempoAt(tick: number): number {
+    if (tick < 0) return this.startBpm;
+    const segment = this.pieceAt(tick).segment;
+    return segmentBpm(segment, (tick - segment.origin) / this.ticksPerBeat);
+  }
+
   /** Extra seconds a fermata adds to the beat starting at `tick`, else 0. */
   holdAt(tick: number): number {
     const piece = this.pieceAt(tick);
@@ -847,6 +854,57 @@ export function loopSecondsOf(score: TimeScore): number {
   if (!score.time?.meter)
     return (score.bars * score.beatsPerBar * 60) / score.tempoBpm;
   return ((loopTicksOf(score) / score.ticksPerBeat) * 60) / score.tempoBpm;
+}
+
+/**
+ * The song's time from bar `startBar` for `bars` bars, rebased so that bar
+ * is tick 0: the start tempo is the tempo there (a ramp running through it
+ * keeps ramping to its target), later tempo events and fermatas move back
+ * by the start tick, and the meter at `startBar` becomes the opening meter.
+ * Audition and preview loops use it so a slice plays as it does in the song.
+ */
+export function songTimeSlice(
+  score: TimeScore,
+  startBar: number,
+  bars: number,
+): Readonly<{ tempoBpm: number; time?: SongTime }> {
+  const time = score.time;
+  if (!time || startBar <= 0)
+    return { tempoBpm: score.tempoBpm, ...(time ? { time } : {}) };
+  const start = barStartTick(score, startBar);
+  const end = barStartTick(score, startBar + bars);
+  const map = timeMapFor(score);
+  const tempoBpm = map ? map.tempoAt(start) : score.tempoBpm;
+  const tempo: TempoEvent[] = [];
+  for (const event of time.tempo ?? []) {
+    if (event.tick <= start) continue;
+    tempo.push({ ...event, tick: event.tick - start });
+    // The first event at or past the end still shapes a ramp through it.
+    if (event.tick >= end) break;
+  }
+  const fermatas = (time.fermatas ?? [])
+    .filter((fermata) => fermata.tick >= start && fermata.tick < end)
+    .map((fermata) => ({ ...fermata, tick: fermata.tick - start }));
+  let meter: MeterChange[] | undefined;
+  if (time.meter) {
+    const opening = barAt(score, start);
+    meter = [
+      {
+        bar: 0,
+        beatsPerBar: opening.beatsPerBar,
+        ...(opening.beatUnit !== 4 ? { beatUnit: opening.beatUnit } : {}),
+      },
+    ];
+    for (const change of time.meter)
+      if (change.bar > startBar && change.bar < startBar + bars)
+        meter.push({ ...change, bar: change.bar - startBar });
+  }
+  const sliced = normalizeSongTime({
+    ...(tempo.length ? { tempo } : {}),
+    ...(meter ? { meter } : {}),
+    ...(fermatas.length ? { fermatas } : {}),
+  });
+  return { tempoBpm, ...(sliced ? { time: sliced } : {}) };
 }
 
 /** True when ticks do not map to seconds at one constant rate. */
