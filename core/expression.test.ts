@@ -22,10 +22,12 @@ import {
 } from "./expression.ts";
 import {
   createScore,
+  SCORE_LIMITS,
   scoreFromJSON,
   ScoreValidationError,
   updateNote,
   updateTrack,
+  type Note,
   type NoteInput,
   type TrackInput,
 } from "./score.ts";
@@ -661,5 +663,35 @@ describe("tempo map", () => {
     expect(cents(1)).toBeCloseTo(200);
     // Without a tempo map the timing keeps the constant-tempo arithmetic.
     expect(performanceTimingFor(scoreWith({}, [{}])).secondsAt).toBeUndefined();
+  });
+});
+
+describe("scale", () => {
+  test("legato at SCORE_LIMITS.maxNotes finds next onsets in bounded time", () => {
+    const count = SCORE_LIMITS.maxNotes;
+    const notes = Array.from(
+      { length: count },
+      (_, index) =>
+        ({
+          id: `n${index}`,
+          trackId: "t",
+          startTick: index * 30,
+          durationTicks: 10,
+          pitch: 60,
+          velocity: 0.5,
+          articulation: "legato",
+        }) as Note,
+    );
+    const started = performance.now();
+    const performed = performNotes(undefined, notes, {
+      tempoBpm: 120,
+      ticksPerBeat: 480,
+      endTick: count * 30 + 480,
+    });
+    expect(performance.now() - started).toBeLessThan(1000);
+    // Each note reaches the next onset plus the legato overlap; the last one
+    // has no next onset and only gains the overlap.
+    expect(performed[0]!.durationTicks).toBe(30 + 480 / 16);
+    expect(performed[count - 1]!.durationTicks).toBe(10 + 480 / 16);
   });
 });

@@ -741,8 +741,17 @@ export function performNotes(
       (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
   );
   const onsets = [...new Set(ordered.map((note) => note.startTick))];
-  const nextOnset = (tick: number): number | undefined =>
-    onsets.find((candidate) => candidate > tick);
+  // `onsets` is sorted, so the first onset after `tick` is a binary search.
+  const nextOnset = (tick: number): number | undefined => {
+    let lo = 0;
+    let hi = onsets.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (onsets[mid]! > tick) hi = mid;
+      else lo = mid + 1;
+    }
+    return onsets[lo];
+  };
   // 1. Articulation.
   let working: Working[] = ordered.map((note) => {
     const effect = note.articulation
