@@ -29,6 +29,7 @@ import {
   type Track,
 } from "../score.ts";
 import { trackSlug } from "../slug.ts";
+import { barStartTick } from "../tempo.ts";
 import { DEFAULT_HIT_LENGTH, DEFAULT_VELOCITY } from "./v1.ts";
 
 const WIDTH = 80;
@@ -147,7 +148,12 @@ export function trackIdentifiers(
   const out = new Map<string, string>();
   for (const track of score.tracks) {
     let base = dirs.get(track.id)!.replace(/-/g, "_");
-    if (!/^[a-z_]/.test(base) || RESERVED.has(base)) base = `track_${base}`;
+    if (
+      !/^[a-z_]/.test(base) ||
+      RESERVED.has(base) ||
+      (score.time && TIME_HELPERS.includes(base))
+    )
+      base = `track_${base}`;
     let name = base;
     for (let n = 2; used.has(name); n += 1) name = `${base}_${n}`;
     used.add(name);
@@ -162,7 +168,12 @@ export function printSong(
   dirs: ReadonlyMap<string, string> = trackDirectories(score),
 ): string {
   const ids = trackIdentifiers(score, dirs);
-  const lines: string[] = ['import { song } from "dawg";'];
+  const time = printTime(score);
+  const helpers = [
+    "song",
+    ...TIME_HELPERS.filter((name) => time.used.has(name)),
+  ];
+  const lines: string[] = [`import { ${helpers.join(", ")} } from "dawg";`];
   for (const track of score.tracks)
     lines.push(
       `import ${ids.get(track.id)!} from "./tracks/${dirs.get(track.id)!}/track.ts";`,
@@ -176,6 +187,8 @@ export function printSong(
   if (score.key !== null) entries.push(`key: ${str(score.key)}`);
   if (score.ticksPerBeat !== 480)
     entries.push(`ticksPerBeat: ${num(score.ticksPerBeat)}`);
+  if (time.marks.length > 0)
+    entries.push(`time: ${list(time.marks, INDENT, "time: ".length, 1)}`);
   entries.push(
     `tracks: ${list(
       score.tracks.map((track) => ids.get(track.id)!),
@@ -188,6 +201,62 @@ export function printSong(
   for (const entry of entries) lines.push(`${INDENT}${entry},`);
   lines.push("});", "");
   return lines.join("\n");
+}
+
+/** SDK time helpers `song.ts` may import, in import order. */
+const TIME_HELPERS: readonly string[] = ["tempo", "ramp", "meter", "fermata"];
+
+/** `song({ time })` marks for a score's tempo map, meters and fermatas. */
+function printTime(score: TrackScore): {
+  marks: string[];
+  used: Set<string>;
+} {
+  const marks: string[] = [];
+  const used = new Set<string>();
+  const time = score.time;
+  if (!time) return { marks, used };
+  const beat = (tick: number) => num(tick / score.ticksPerBeat);
+  type Mark = { tick: number; order: number; text: string };
+  const all: Mark[] = [];
+  for (const event of time.tempo ?? []) {
+    if (event.ramp) {
+      used.add("ramp");
+      const curve = event.ramp === "exp" ? ', "exp"' : "";
+      all.push({
+        tick: event.tick,
+        order: 1,
+        text: `ramp(${beat(event.tick)}, ${num(event.bpm)}${curve})`,
+      });
+    } else {
+      used.add("tempo");
+      all.push({
+        tick: event.tick,
+        order: 1,
+        text: `tempo(${beat(event.tick)}, ${num(event.bpm)})`,
+      });
+    }
+  }
+  for (const change of time.meter ?? []) {
+    used.add("meter");
+    const tick = barStartTick(score, change.bar);
+    const unit = change.beatUnit ?? 4;
+    const value =
+      unit === 4
+        ? num(change.beatsPerBar)
+        : `[${num(change.beatsPerBar)}, ${num(unit)}]`;
+    all.push({ tick, order: 0, text: `meter(${beat(tick)}, ${value})` });
+  }
+  for (const hold of time.fermatas ?? []) {
+    used.add("fermata");
+    all.push({
+      tick: hold.tick,
+      order: 2,
+      text: `fermata(${beat(hold.tick)}, ${num(hold.beats)})`,
+    });
+  }
+  all.sort((a, b) => a.tick - b.tick || a.order - b.order);
+  for (const mark of all) marks.push(mark.text);
+  return { marks, used };
 }
 
 /** `tracks/<slug>/track.ts` for one track of a score. */
@@ -237,6 +306,17 @@ export function printTrack(score: TrackScore, track: Track): string {
     entries.push(`instrument: ${printWavetable(wavetable, INDENT)}`);
   } else entries.push(`instrument: ${str(track.instrument)}`);
   if (track.kit) entries.push(`kit: ${str(track.kit)}`);
+  if (track.time) {
+    const beats = (ticks: number) => num(ticks / score.ticksPerBeat);
+    const fields: (readonly [string, string])[] = [];
+    if (track.time.rate !== undefined)
+      fields.push(["rate", num(track.time.rate)]);
+    if (track.time.phase !== undefined)
+      fields.push(["phase", beats(track.time.phase)]);
+    if (track.time.cycle !== undefined)
+      fields.push(["cycle", beats(track.time.cycle)]);
+    entries.push(`time: ${obj(fields, INDENT, "time: ".length, 1)}`);
+  }
   if (track.muted) entries.push("muted: true");
   if (track.solo) entries.push("solo: true");
   if (track.volume !== 1) entries.push(`volume: ${num(track.volume)}`);

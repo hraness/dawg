@@ -845,13 +845,20 @@ export function withTempoRamp(
   if (!(to > from))
     throw new TimeValidationError("a tempo ramp needs an end after its start");
   const start = bpmAtTick(score, from);
-  const kept = (score.time?.tempo ?? []).filter(
-    (e) => e.tick < from || e.tick > to,
+  const existing = score.time?.tempo ?? [];
+  const events: TempoEvent[] = existing.filter(
+    (e) => e.tick <= from || e.tick > to,
   );
-  const events: TempoEvent[] = [...kept.filter((e) => e.tick !== to)];
-  // Pin the start tempo so the ramp begins where the music is.
-  if (from > 0 && !kept.some((e) => e.tick === from))
-    events.push({ tick: from, bpm: roundBpm(start) });
+  // Pin the start tempo so the ramp begins where the music is; a ramp
+  // already running through `from` keeps its shape up to the pin.
+  if (from > 0 && !events.some((e) => e.tick === from)) {
+    const through = existing.find((e) => e.tick > from)?.ramp;
+    events.push({
+      tick: from,
+      bpm: roundBpm(start),
+      ...(through ? { ramp: through } : {}),
+    });
+  }
   events.push({ tick: to, bpm, ramp });
   return rebuild(score.time, { tempo: events });
 }

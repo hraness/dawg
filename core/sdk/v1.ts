@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.13.0";
+export const SDK_VERSION = "1.14.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -1458,6 +1458,14 @@ export type TrackInput = Readonly<{
    * voices.
    */
   kit?: string;
+  /**
+   * The track's own clock against the song (SDK 1.14.0): `rate` 1.5 plays
+   * three beats in two, `phase` starts it that many beats later, `cycle`
+   * repeats its first `cycle` beats (a 3-beat cycle over 4/4 is polymeter).
+   * `{ cycle: 3, rate: 13 / 12 }` drifts against a twin and realigns, as in
+   * Steve Reich's Piano Phase; `phasing()` works the rate out for you.
+   */
+  time?: TrackTimeInput;
   /** Synth voice parameters, Strudel names (`{ attack: 0.01, lpf: 800 }`). */
   synth?: SynthInput;
   muted?: boolean;
@@ -1533,6 +1541,16 @@ export type ReverbInput = Readonly<{
       }>;
 }>;
 
+/** `track({ time })`: every field optional; absent follows the song. */
+export type TrackTimeInput = Readonly<{
+  /** Tempo ratio against the song, 0.125..8 (1 = in step). */
+  rate?: number;
+  /** Beats the track's pattern starts late (negative: early); it wraps. */
+  phase?: number;
+  /** Beats of the track that repeat, default the whole song loop. */
+  cycle?: number;
+}>;
+
 /** Frozen track built by `track()`; `song()` consumes it. Beats, not ticks. */
 export type TrackSpec = Readonly<{
   kind: "track";
@@ -1561,6 +1579,8 @@ export type TrackSpec = Readonly<{
   /** Rhythm rows in order (voice names as written). */
   rhythm: readonly RhythmSpec[];
   kit: string | null;
+  /** Present only when `track({ time })` set something. */
+  time?: TrackTimeInput;
 }>;
 
 /**
@@ -1834,7 +1854,37 @@ export function track(input: TrackInput): TrackSpec {
     notes: Object.freeze(notes),
     rhythm: Object.freeze([...rhythm]),
     kit: drumKit === null ? null : drumKit.trim(),
+    ...trackTime(input.time, name),
   });
+}
+
+function trackTime(input: unknown, name: string): { time?: TrackTimeInput } {
+  if (input === undefined || input === null) return {};
+  if (!isRecord(input))
+    throw new DawgSdkError(`track ${name}: time must be an object`);
+  for (const key of Object.keys(input))
+    if (key !== "rate" && key !== "phase" && key !== "cycle")
+      throw new DawgSdkError(
+        `track ${name}: time takes rate, phase and cycle, not ${key}`,
+      );
+  const out: { rate?: number; phase?: number; cycle?: number } = {};
+  if (input.rate !== undefined) {
+    const rate = finite(input.rate, `track ${name} time.rate`);
+    if (rate < 0.125 || rate > 8)
+      throw new DawgSdkError(`track ${name}: time.rate must be 0.125..8`);
+    if (rate !== 1) out.rate = rate;
+  }
+  if (input.phase !== undefined) {
+    const phase = finite(input.phase, `track ${name} time.phase`);
+    if (phase !== 0) out.phase = phase;
+  }
+  if (input.cycle !== undefined) {
+    const cycle = finite(input.cycle, `track ${name} time.cycle`);
+    if (cycle <= 0)
+      throw new DawgSdkError(`track ${name}: time.cycle must be > 0 beats`);
+    out.cycle = cycle;
+  }
+  return Object.keys(out).length > 0 ? { time: Object.freeze(out) } : {};
 }
 
 const AUTOMATION_KEYS: readonly (keyof AutomationInput)[] = Object.freeze([
@@ -2026,6 +2076,13 @@ export type SongInput = Readonly<{
   key?: string | null;
   /** Integer ticks per beat, default 480. Leave it alone unless you know why. */
   ticksPerBeat?: number;
+  /**
+   * Tempo changes, meter changes and fermatas (SDK 1.14.0), in any order:
+   * `tempo()`, `ramp()`, `rit()`, `accel()`, `fermata()` and `meter()`.
+   * `tempo` above stays the opening tempo and `meter` the opening meter.
+   * `rit()` and `accel()` return two marks; list them as they come.
+   */
+  time?: readonly (TimeMark | readonly TimeMark[])[];
   /** Tracks in score order; each from `track()`. */
   tracks: readonly TrackSpec[];
 }>;
@@ -2094,6 +2151,8 @@ export type ScoreTrack = Readonly<{
   rhythm?: readonly Readonly<Record<string, unknown>>[];
   /** Synth kit name; dawg validates it. */
   kit?: string;
+  /** `rate`, plus `phase` and `cycle` in ticks. */
+  time?: Readonly<{ rate?: number; phase?: number; cycle?: number }>;
   wavetable?: Readonly<{ table: ScoreSampleRef } & WavetableParams>;
   wtAutomation?: readonly ScorePoint[];
 }>;
@@ -2111,8 +2170,25 @@ export type Song = Readonly<{
   bars: number;
   ticksPerBeat: number;
   key: string | null;
+  /** Present only when `song({ time })` has marks. */
+  time?: ScoreTime;
   tracks: readonly ScoreTrack[];
   notes: readonly ScoreNote[];
+}>;
+
+/** A stored song `time`: ticks, and 0-based bar indexes. */
+export type ScoreTime = Readonly<{
+  tempo?: readonly Readonly<{
+    tick: number;
+    bpm: number;
+    ramp?: "linear" | "exp";
+  }>[];
+  meter?: readonly Readonly<{
+    bar: number;
+    beatsPerBar: number;
+    beatUnit?: number;
+  }>[];
+  fermatas?: readonly Readonly<{ tick: number; beats: number }>[];
 }>;
 
 /**
@@ -2202,6 +2278,17 @@ export function song(input: SongInput): Song {
         mode: t.sampler.mode,
       });
     if (t.kit) stored.kit = t.kit;
+    if (t.time) {
+      const time: Record<string, number> = {};
+      if (t.time.rate !== undefined) time.rate = t.time.rate;
+      if (t.time.phase !== undefined) {
+        const phase = ticks(t.time.phase);
+        if (phase !== 0) time.phase = phase;
+      }
+      if (t.time.cycle !== undefined)
+        time.cycle = Math.max(1, ticks(t.time.cycle));
+      if (Object.keys(time).length > 0) stored.time = Object.freeze(time);
+    }
     if (t.rhythm && t.rhythm.length > 0)
       stored.rhythm = Object.freeze(
         t.rhythm.map((row) => {
@@ -2240,9 +2327,301 @@ export function song(input: SongInput): Song {
     bars,
     ticksPerBeat,
     key,
+    ...songTime(input.time, tempoBpm, ticks, beatsPerBar, ticksPerBeat),
     tracks: Object.freeze(tracks),
     notes: Object.freeze(notes),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Time (SDK 1.14.0)
+
+/** One entry of `song({ time })`; build them with the helpers below. */
+export type TimeMark =
+  | Readonly<{
+      kind: "tempo";
+      /** Beat the change lands on. */
+      at: number;
+      /** Absent: keep the tempo in effect there, so a ramp can start from it. */
+      bpm?: number;
+      /** Glide into `bpm` from the previous mark instead of stepping. */
+      ramp?: "linear" | "exp";
+    }>
+  | Readonly<{
+      kind: "meter";
+      /** Beat of the bar line where the meter starts. */
+      at: number;
+      beatsPerBar: number;
+      beatUnit: number;
+    }>
+  | Readonly<{
+      kind: "fermata";
+      at: number;
+      /** Extra beats time holds for. */
+      beats: number;
+    }>;
+
+/** `ramp()` curves: `linear` adds the same BPM each beat, `exp` the same ratio. */
+export type TempoCurve = "linear" | "exp";
+
+/**
+ * Tempo change at beat `at`: `tempo(32, 140)`. Omit `bpm` to pin the tempo
+ * in effect there, the start of a ramp.
+ */
+export function tempo(at: number, bpm?: number): TimeMark {
+  const start = beat(at, "tempo() at");
+  if (start <= 0)
+    throw new DawgSdkError("tempo() at must be > 0; song({ tempo }) is beat 0");
+  if (bpm === undefined) return Object.freeze({ kind: "tempo", at: start });
+  return Object.freeze({ kind: "tempo", at: start, bpm: songBpm(bpm) });
+}
+
+/**
+ * Glide from the previous tempo mark (or the song's opening tempo) to `bpm`
+ * at beat `at`: `ramp(64, 90)`. `exp` changes by the same ratio each beat.
+ */
+export function ramp(
+  at: number,
+  bpm: number,
+  curve: TempoCurve = "linear",
+): TimeMark {
+  const end = beat(at, "ramp() at");
+  if (end <= 0) throw new DawgSdkError("ramp() at must be > 0");
+  return Object.freeze({
+    kind: "tempo",
+    at: end,
+    bpm: songBpm(bpm),
+    ramp: tempoCurve(curve, "ramp()"),
+  });
+}
+
+/**
+ * Ritardando: slow from the tempo at beat `at` to `bpm` over `beats` beats,
+ * `rit(48, 16, 80)`. Same as `[tempo(at), ramp(at + beats, bpm, curve)]`.
+ */
+export function rit(
+  at: number,
+  beats: number,
+  bpm: number,
+  curve: TempoCurve = "linear",
+): readonly TimeMark[] {
+  return gradual("rit()", at, beats, bpm, curve);
+}
+
+/** Accelerando: like `rit()`, toward a faster `bpm`. */
+export function accel(
+  at: number,
+  beats: number,
+  bpm: number,
+  curve: TempoCurve = "linear",
+): readonly TimeMark[] {
+  return gradual("accel()", at, beats, bpm, curve);
+}
+
+function gradual(
+  label: string,
+  at: number,
+  beats: number,
+  bpm: number,
+  curve: TempoCurve,
+): readonly TimeMark[] {
+  const start = beat(at, `${label} at`);
+  const length = positive(beats, `${label} beats`);
+  const target = songBpm(bpm);
+  const shape = tempoCurve(curve, label);
+  const marks: TimeMark[] = [];
+  if (start > 0) marks.push(Object.freeze({ kind: "tempo", at: start }));
+  marks.push(
+    Object.freeze({
+      kind: "tempo",
+      at: start + length,
+      bpm: target,
+      ramp: shape,
+    }),
+  );
+  return Object.freeze(marks);
+}
+
+/** Fermata: time holds at beat `at` for `beats` extra beats (default 2). */
+export function fermata(at: number, beats = 2): TimeMark {
+  const hold = positive(beats, "fermata() beats");
+  if (hold > 64) throw new DawgSdkError("fermata() beats must be at most 64");
+  return Object.freeze({
+    kind: "fermata",
+    at: beat(at, "fermata() at"),
+    beats: hold,
+  });
+}
+
+/**
+ * Meter change on the bar line at beat `at`: `meter(16, [7, 8])` or
+ * `meter(16, 3)` (quarter-note beats). It lasts until the next one.
+ */
+export function meter(
+  at: number,
+  value: readonly [number, number] | number,
+): TimeMark {
+  const start = beat(at, "meter() at");
+  const [beatsPerBar, beatUnit] = Array.isArray(value)
+    ? [value[0], value[1]]
+    : [value as number, 4];
+  if (
+    typeof beatsPerBar !== "number" ||
+    !Number.isInteger(beatsPerBar) ||
+    beatsPerBar < 1 ||
+    beatsPerBar > 16
+  )
+    throw new DawgSdkError("meter() beats per bar must be an integer 1..16");
+  if (![1, 2, 4, 8, 16, 32].includes(beatUnit as number))
+    throw new DawgSdkError("meter() note value must be 1, 2, 4, 8, 16 or 32");
+  return Object.freeze({
+    kind: "meter",
+    at: start,
+    beatsPerBar,
+    beatUnit: beatUnit as number,
+  });
+}
+
+/**
+ * Track time for Steve Reich-style phasing: the track's first `cycle`
+ * beats repeat a little fast, gaining `cycles` whole cycles every `over`
+ * beats, so it drifts away from an identical track and lines up again.
+ * `track({ ..., time: phasing(3, 64) })`.
+ */
+export function phasing(
+  cycle: number,
+  over: number,
+  cycles = 1,
+): TrackTimeInput {
+  const length = positive(cycle, "phasing() cycle");
+  const span = positive(over, "phasing() over");
+  const gain = finite(cycles, "phasing() cycles");
+  const repeats = span / length;
+  const rate = (repeats + gain) / repeats;
+  if (!(rate >= 0.125 && rate <= 8))
+    throw new DawgSdkError("phasing() needs a rate between 0.125 and 8");
+  return Object.freeze({ cycle: length, rate });
+}
+
+function songBpm(value: unknown): number {
+  const bpm = finite(value, "tempo bpm");
+  if (bpm < 20 || bpm > 300)
+    throw new DawgSdkError("tempo bpm must be 20..300");
+  return bpm;
+}
+
+function tempoCurve(value: unknown, label: string): TempoCurve {
+  if (value !== "linear" && value !== "exp")
+    throw new DawgSdkError(`${label} curve must be "linear" or "exp"`);
+  return value;
+}
+
+/** Resolves `song({ time })` marks into the stored ticks and bar indexes. */
+function songTime(
+  input: unknown,
+  tempoBpm: number,
+  ticks: (beats: number) => number,
+  beatsPerBar: number,
+  ticksPerBeat: number,
+): { time?: ScoreTime } {
+  if (input === undefined || input === null) return {};
+  if (!Array.isArray(input))
+    throw new DawgSdkError("song time must be an array of time marks");
+  const marks: TimeMark[] = [];
+  for (const [index, entry] of (input as unknown[]).entries()) {
+    for (const mark of Array.isArray(entry) ? entry : [entry]) {
+      if (
+        !isRecord(mark) ||
+        (mark.kind !== "tempo" &&
+          mark.kind !== "meter" &&
+          mark.kind !== "fermata")
+      )
+        throw new DawgSdkError(
+          `song time[${index}] must come from tempo(), ramp(), rit(), accel(), fermata() or meter()`,
+        );
+      marks.push(mark as TimeMark);
+    }
+  }
+  // Tempo: sort by tick, resolve pins against their neighbours.
+  type Event = { tick: number; bpm?: number; ramp?: TempoCurve };
+  const byTick = new Map<number, Event>();
+  for (const mark of marks) {
+    if (mark.kind !== "tempo") continue;
+    const tick = ticks(mark.at);
+    const previous = byTick.get(tick);
+    if (previous && previous.bpm !== undefined && mark.bpm !== undefined)
+      throw new DawgSdkError(
+        `song time has two tempo changes at beat ${mark.at}`,
+      );
+    // A pin and a change on the same beat: the change wins.
+    if (previous && mark.bpm === undefined) continue;
+    byTick.set(tick, {
+      tick,
+      ...(mark.bpm !== undefined ? { bpm: mark.bpm } : {}),
+      ...(mark.ramp ? { ramp: mark.ramp } : {}),
+    });
+  }
+  const events = [...byTick.values()].sort((a, b) => a.tick - b.tick);
+  const tempo: { tick: number; bpm: number; ramp?: TempoCurve }[] = [];
+  events.forEach((event, index) => {
+    if (event.bpm !== undefined) {
+      tempo.push(
+        Object.freeze({
+          tick: event.tick,
+          bpm: event.bpm,
+          ...(event.ramp ? { ramp: event.ramp } : {}),
+        }),
+      );
+      return;
+    }
+    // A pin holds the tempo of the marks before it, and the next ramp
+    // starts from it. Without a ramp after it, it changes nothing.
+    const after = events.slice(index + 1).find((e) => e.bpm !== undefined);
+    if (!after?.ramp) return;
+    const before = tempo[tempo.length - 1]?.bpm ?? tempoBpm;
+    tempo.push(Object.freeze({ tick: event.tick, bpm: before }));
+  });
+  // Meter: beats to bar indexes, checking each lands on a bar line.
+  const meters = marks
+    .filter((mark) => mark.kind === "meter")
+    .sort((a, b) => a.at - b.at);
+  const meterOut: { bar: number; beatsPerBar: number; beatUnit?: number }[] =
+    [];
+  let barTick = 0;
+  let barIndex = 0;
+  let barLength = beatsPerBar * ticksPerBeat;
+  for (const mark of meters) {
+    const tick = ticks(mark.at);
+    const bars = (tick - barTick) / barLength;
+    if (!Number.isInteger(bars) || bars < 0)
+      throw new DawgSdkError(`meter() at beat ${mark.at} is not on a bar line`);
+    if (meterOut.length > 0 && bars === 0)
+      throw new DawgSdkError(`song time has two meters at beat ${mark.at}`);
+    barIndex += bars;
+    barTick = tick;
+    barLength = (mark.beatsPerBar * ticksPerBeat * 4) / mark.beatUnit;
+    meterOut.push(
+      Object.freeze({
+        bar: barIndex,
+        beatsPerBar: mark.beatsPerBar,
+        ...(mark.beatUnit !== 4 ? { beatUnit: mark.beatUnit } : {}),
+      }),
+    );
+  }
+  const fermatas = marks
+    .filter((mark) => mark.kind === "fermata")
+    .map((mark) => Object.freeze({ tick: ticks(mark.at), beats: mark.beats }))
+    .sort((a, b) => a.tick - b.tick);
+  for (let i = 1; i < fermatas.length; i += 1)
+    if (fermatas[i]!.tick === fermatas[i - 1]!.tick)
+      throw new DawgSdkError("song time has two fermatas on one beat");
+  const time: Record<string, unknown> = {};
+  if (tempo.length > 0) time.tempo = Object.freeze(tempo);
+  if (meterOut.length > 0) time.meter = Object.freeze(meterOut);
+  if (fermatas.length > 0) time.fermatas = Object.freeze(fermatas);
+  return Object.keys(time).length > 0
+    ? { time: Object.freeze(time) as ScoreTime }
+    : {};
 }
 
 // ---------------------------------------------------------------------------
