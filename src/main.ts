@@ -925,20 +925,23 @@ function truncateForCard(value: string): string {
  * terminal) says otherwise. A terminal without mouse support ignores the
  * modes and every key still works.
  */
-const mouseEnabled =
-  !args.has("--no-mouse") &&
-  process.env.DAWG_MOUSE !== "0" &&
-  process.env.TERM !== "dumb";
+function mouseEnabled(): boolean {
+  return (
+    !process.argv.includes("--no-mouse") &&
+    process.env.DAWG_MOUSE !== "0" &&
+    process.env.TERM !== "dumb"
+  );
+}
 
 function mouseOn(): string {
-  return mouseEnabled ? MOUSE_ON : "";
+  return mouseEnabled() ? MOUSE_ON : "";
 }
 
 async function runInteractive(): Promise<void> {
   // A crash or a stray process.exit must not leave the terminal reporting
   // mouse events into the shell.
   process.once("exit", () => {
-    if (mouseEnabled) writeSync(1, MOUSE_OFF);
+    if (mouseEnabled()) writeSync(1, MOUSE_OFF);
   });
   stdin.setRawMode?.(true);
   stdin.resume();

@@ -82,6 +82,10 @@ test.skipIf(!supported)(
       await t.send("\r");
       for (const key of "1200") await t.send(key);
       await t.until(() => t.vt.text().includes("1200"), "typed value");
+      // Enter sets the typed value in the fader drawer (staged); a second
+      // Enter keeps it.
+      await t.send("\r");
+      await t.until(() => t.vt.text().includes("● staged"), "1200 staged");
       await t.send("\r");
       await waitFor(
         async () => (await bass())?.filter?.cutoff === 1200,
@@ -90,6 +94,10 @@ test.skipIf(!supported)(
 
       // Back out to the root with Esc, one level each,
       // then Mix & automation › automation › filter cutoff.
+      // (Enter in the drawer kept the value and closed it; the list's
+      // `/cutoff` filter is still up, so Esc clears it first.)
+      await t.until(() => t.vt.text().includes("kept 1 change"), "kept");
+      await t.send("\u001b");
       await t.send("\u001b");
       await t.send("\u001b");
       await t.until(
@@ -164,6 +172,10 @@ test.skipIf(!supported)(
       await t.send("/depth");
       await t.send("\r");
       for (const key of "0.8") await t.send(key);
+      // Enter sets the typed value in the fader drawer (staged); a second
+      // Enter keeps it.
+      await t.send("\r");
+      await t.until(() => t.vt.text().includes("● staged"), "0.8 staged");
       await t.send("\r");
       await waitFor(
         async () => (await bass())?.fx?.tremolo?.depth === 0.8,
@@ -211,6 +223,10 @@ test.skipIf(!supported)(
       await t.send("/attack");
       await t.send("\r");
       for (const key of "0.2") await t.send(key);
+      // Enter sets the typed value in the fader drawer (staged); a second
+      // Enter keeps it.
+      await t.send("\r");
+      await t.until(() => t.vt.text().includes("● staged"), "0.2 staged");
       await t.send("\r");
       await waitFor(
         async () => (await bass())?.synth?.attack === 0.2,
