@@ -45,6 +45,7 @@ import { PackError, type PackStore } from "../audio/packs.ts";
 import { RHYTHM_TOOLS } from "./rhythm-tools.ts";
 import { CHORD_TOOLS } from "./chord-tools.ts";
 import { DRUM_TOOLS } from "./drum-tools.ts";
+import { TIME_TOOLS } from "./time-tools.ts";
 import type { MediaResult, MediaRunContext } from "../media/types.ts";
 import { pitchToMidi } from "./ops.ts";
 import {
@@ -1351,6 +1352,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   ...RHYTHM_TOOLS,
   ...CHORD_TOOLS,
   ...DRUM_TOOLS,
+  ...TIME_TOOLS,
   ...MEDIA_TOOLS,
   ...PACK_TOOLS,
   // Looks tools up at call time, so it can plan any of the above.
