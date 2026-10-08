@@ -223,8 +223,8 @@ export default async function Home() {
               <p>
                 Run <code>dawg</code> in a project and the first window starts{" "}
                 <code>dawgd</code>, a local daemon that is the only writer for
-                that session. Every window after it joins the same song: play
-                in one and they all play, edit in one and they all redraw. Each
+                that session. Every window after it joins the same song: play in
+                one and they all play, edit in one and they all redraw. Each
                 plain <code>dawg</code> takes the first track no other window
                 has, and a window beyond the last track gets a fresh draft
                 track.
@@ -303,11 +303,10 @@ export default async function Home() {
             heading="Install"
           >
             <p>
-              dawg runs on <a href="https://bun.sh">Bun</a> 1.3.14 or newer.
-              The script installs Bun if it&rsquo;s missing, downloads the
-              latest release tarball from GitHub, checks it against the
-              release&rsquo;s SHA256SUMS and installs it with{" "}
-              <code>bun add -g</code>.
+              dawg runs on <a href="https://bun.sh">Bun</a> 1.3.14 or newer. The
+              script installs Bun if it&rsquo;s missing, downloads the latest
+              release tarball from GitHub, checks it against the release&rsquo;s
+              SHA256SUMS and installs it with <code>bun add -g</code>.
             </p>
           </SectionHead>
           <div className="dawg-section__body">

@@ -84,27 +84,27 @@ export function listGuides(directory = guidesDirectory): Guide[] {
   const guides = markdownFiles(directory).map((path) =>
     parseGuide(
       readFileSync(path, "utf8"),
-      relative(directory, path)
-        .replace(/\.md$/u, "")
-        .split(/[\\/]/u)
-        .at(-1)!,
+      relative(directory, path).replace(/\.md$/u, "").split(/[\\/]/u).at(-1)!,
     ),
   );
   const ids = new Set<string>();
   for (const guide of guides) {
-    if (ids.has(guide.id)) throw new Error(`Two guides use the id "${guide.id}"`);
+    if (ids.has(guide.id))
+      throw new Error(`Two guides use the id "${guide.id}"`);
     ids.add(guide.id);
   }
   for (const guide of guides)
     if (guide.parent !== null && !ids.has(guide.parent))
-      throw new Error(`Guide "${guide.id}" names a missing parent "${guide.parent}"`);
+      throw new Error(
+        `Guide "${guide.id}" names a missing parent "${guide.parent}"`,
+      );
   return orderTree(guides);
 }
 
 /** Depth-first order: each parent, then its children by order and title. */
-export function orderTree<T extends Pick<Guide, "id" | "parent" | "order" | "title">>(
-  items: readonly T[],
-): T[] {
+export function orderTree<
+  T extends Pick<Guide, "id" | "parent" | "order" | "title">,
+>(items: readonly T[]): T[] {
   const byParent = new Map<string | null, T[]>();
   for (const item of items) {
     const siblings = byParent.get(item.parent) ?? [];
@@ -117,7 +117,8 @@ export function orderTree<T extends Pick<Guide, "id" | "parent" | "order" | "tit
       (a, b) => a.order - b.order || a.title.localeCompare(b.title),
     );
     for (const child of children) {
-      if (seen.has(child.id)) throw new Error(`Guide "${child.id}" is in a cycle`);
+      if (seen.has(child.id))
+        throw new Error(`Guide "${child.id}" is in a cycle`);
       out.push(child);
       visit(child.id, new Set([...seen, child.id]));
     }
@@ -133,7 +134,9 @@ export function guideSummary(body: string): string {
   const paragraph = body
     .split(/\n\s*\n/u)
     .map((block) => block.trim())
-    .find((block) => block !== "" && !/^(#|```|[-*]\s|\d+\.\s|\||>)/u.test(block));
+    .find(
+      (block) => block !== "" && !/^(#|```|[-*]\s|\d+\.\s|\||>)/u.test(block),
+    );
   const text = (paragraph ?? "")
     .replace(/\s+/gu, " ")
     .replace(/\[([^\]]+)\]\([^)]+\)/gu, "$1")

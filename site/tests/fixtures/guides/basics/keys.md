@@ -5,6 +5,6 @@ parent: basics
 order: 1
 ---
 
-| Key | Action |
-| --- | --- |
-| Space | play |
+| Key   | Action |
+| ----- | ------ |
+| Space | play   |

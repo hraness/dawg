@@ -76,7 +76,11 @@ export function docsTree(parent: string | null = null): DocsTreeNode[] {
 /** The chain from the top of the tree down to `id`, inclusive. */
 export function docsTrail(id: string): DocsPage[] {
   const trail: DocsPage[] = [];
-  for (let page = docsPage(id); page !== undefined; page = page.parent === null ? undefined : docsPage(page.parent))
+  for (
+    let page = docsPage(id);
+    page !== undefined;
+    page = page.parent === null ? undefined : docsPage(page.parent)
+  )
     trail.unshift(page);
   return trail;
 }

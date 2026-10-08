@@ -23,7 +23,9 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
       out.push(<strong key={key}>{inline(match[2], key)}</strong>);
     else if (match[3] !== undefined && match[4] !== undefined) {
       const href = match[4];
-      const guide = href.match(/^(?:\.\.?\/)*(?:[\w-]+\/)*([a-z0-9][a-z0-9-]*)\.md(#[\w-]+)?$/u);
+      const guide = href.match(
+        /^(?:\.\.?\/)*(?:[\w-]+\/)*([a-z0-9][a-z0-9-]*)\.md(#[\w-]+)?$/u,
+      );
       out.push(
         /^https:\/\//u.test(href) ? (
           <a key={key} href={href}>
@@ -76,7 +78,11 @@ export function Markdown({
       const language = fence[1] === "" ? "text" : fence[1]!;
       blocks.push(
         <pre key={key++} className="dawg-pre" tabIndex={0}>
-          <SyntaxCode code={body.join("\n")} language={language} styles="classes" />
+          <SyntaxCode
+            code={body.join("\n")}
+            language={language}
+            styles="classes"
+          />
         </pre>,
       );
       continue;
@@ -84,7 +90,10 @@ export function Markdown({
     if (/^\|.*\|\s*$/u.test(line)) {
       const rows: string[][] = [];
       while (i < lines.length && /^\|.*\|\s*$/u.test(lines[i]!)) {
-        const cells = lines[i]!.trim().slice(1, -1).split("|").map((cell) => cell.trim());
+        const cells = lines[i]!.trim()
+          .slice(1, -1)
+          .split("|")
+          .map((cell) => cell.trim());
         if (!cells.every((cell) => /^:?-{3,}:?$/u.test(cell))) rows.push(cells);
         i += 1;
       }
@@ -97,7 +106,9 @@ export function Markdown({
               <thead>
                 <tr>
                   {head.map((cell, n) => (
-                    <th key={n} scope="col">{inline(cell, `t${tableKey}-h${n}`)}</th>
+                    <th key={n} scope="col">
+                      {inline(cell, `t${tableKey}-h${n}`)}
+                    </th>
                   ))}
                 </tr>
               </thead>

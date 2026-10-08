@@ -34,8 +34,8 @@ function platforms(installCommand: string): PlatformInstallTarget[] {
 
 function methodOf(button: Element): "curl" | "bun" | "other" {
   const text =
-    button.parentElement?.closest("[data-copy-state]")?.querySelector("pre")?.textContent ??
-    "";
+    button.parentElement?.closest("[data-copy-state]")?.querySelector("pre")
+      ?.textContent ?? "";
   if (text.startsWith("curl ")) return "curl";
   if (text.startsWith("bun ")) return "bun";
   return "other";

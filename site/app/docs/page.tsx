@@ -29,8 +29,8 @@ export default async function DocsInstall() {
       <p>
         dawg runs in a terminal on macOS and Linux. It needs{" "}
         <a href="https://bun.sh">Bun</a> 1.3.14 or newer, and{" "}
-        <code>ffplay</code> or SoX to play sound. On a Mac without either,
-        dawg falls back to <code>afplay</code>.
+        <code>ffplay</code> or SoX to play sound. On a Mac without either, dawg
+        falls back to <code>afplay</code>.
       </p>
       <DawgPlatformInstall installCommand={installCommand} />
       <h2 id="start">Start a session</h2>
