@@ -14,6 +14,11 @@ const routes = [
   { href: "/changelog", label: "Changelog" },
 ];
 
+/** The design kit's "next" cards take at most 90 characters. */
+function shortDescription(text: string): string {
+  return text.length > 90 ? `${text.slice(0, 89).trimEnd()}…` : text;
+}
+
 export default function NotFound() {
   return (
     <>
@@ -29,7 +34,7 @@ export default function NotFound() {
               .map(({ page }) => ({
                 href: docsHref(page.id),
                 label: page.title,
-                description: page.description,
+                description: shortDescription(page.description),
               })),
             {
               href: "/changelog",

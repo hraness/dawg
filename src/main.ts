@@ -1129,6 +1129,16 @@ async function runInteractive(): Promise<void> {
             }
           }
         }
+        // F1 opens the guides from anywhere the prompt has focus.
+        if (
+          (value === "\u001bOP" || value === "\u001b[11~") &&
+          (tui.ui.overlay === undefined || tui.ui.overlay === "guide")
+        ) {
+          if (tui.ui.overlay === "guide") tui.closeGuide();
+          else tui.openGuide();
+          tick(true);
+          continue;
+        }
         // Ctrl-K opens the menu on an empty prompt (in play mode too); with
         // text it keeps its kill-to-end-of-line meaning.
         if (
@@ -1160,7 +1170,8 @@ async function runInteractive(): Promise<void> {
         if (
           value === " " &&
           prompt.value.length === 0 &&
-          !(tui.ui.overlay === "picker" && tui.ui.picker?.audition)
+          !(tui.ui.overlay === "picker" && tui.ui.picker?.audition) &&
+          tui.ui.overlay !== "guide"
         ) {
           // Never await a daemon round trip here: the key loop must stay
           // live for Esc, quit and redraws while the toggle is in flight.
@@ -2454,6 +2465,7 @@ function keysScreen(): readonly KeySection[] | undefined {
         : KEYS.list;
   if (overlay === "text") return KEYS.text;
   if (overlay === "log") return KEYS.log;
+  if (overlay === "guide") return tui.guideTyping ? undefined : KEYS.guide;
   if (prompt.value.length > 0) return undefined;
   if (play?.on)
     return play.chords.on ? [...KEYS.play, ...KEYS.chords] : KEYS.play;

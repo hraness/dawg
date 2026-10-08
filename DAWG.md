@@ -37,6 +37,8 @@ Other code reports into the activity strip through `ActivityFeed` (`tui/activity
 
 `/help` opens a short, task-first guide: **start here** (type a request, Ctrl-P, Ctrl-K, `?`, undo), **play notes**, **make drums**, **shape the sound**, **chords**, and **more**. `/help all` is the full reference; `/help music`, `/help session`, `/help window` and `/help keys` show one group.
 
+`/guide` (or F1) opens the user guides: one short page per feature (`guides/*.md`, shipped in the package and rendered unchanged on dawg.sh/docs), each showing what to ask the agent and the command, key or menu path that does the same by hand. The pane is a tree: ↑↓ (j k) move, → l or Enter expand a section then open a guide, ← h collapse or go to the parent and back from a page, `/` filters by title and text, Esc clears the filter, then steps back, then closes. `/guide chords` opens one guide directly. `guides/guides.test.ts` keeps every guide within 20 rows at 80 columns and checks every `/command` a guide names against the help reference.
+
 The local command path understands requests such as:
 
 ```text

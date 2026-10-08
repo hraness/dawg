@@ -20,6 +20,8 @@
     "core/sdk/**",
     "tui/**/*.ts",
     "!tui/**/*.test.ts",
+    "guides/*.md",
+    "guides/index.ts",
     "CHANGELOG.md",
     "DAWG.md"
   ],
