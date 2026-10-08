@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.18.0";
+export const SDK_VERSION = "1.19.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -1804,7 +1804,7 @@ export type TrackTimeInput = Readonly<{
   /** Beats of the track that repeat, default the whole song loop. */
   cycle?: number;
   /**
-   * Stepped phasing (SDK 1.14.0), as in Reich's Piano Phase: hold `hold`
+   * Stepped phasing (SDK 1.19.0), as in Reich's Piano Phase: hold `hold`
    * cycles in step, then move `shift` beats ahead over `drift` cycles, and
    * repeat. Needs `cycle`; replaces `rate`. `stepPhasing()` builds it.
    */
@@ -3100,7 +3100,7 @@ export function tempo(at: number, bpm?: number): TimeMark {
 }
 
 /**
- * `a tempo` at beat `at` (SDK 1.14.0): step back to the tempo in effect
+ * `a tempo` at beat `at` (SDK 1.19.0): step back to the tempo in effect
  * before the last `rit()`/`accel()` (or ramp) ending before `at`.
  */
 export function aTempo(at: number): TimeMark {
@@ -3109,7 +3109,7 @@ export function aTempo(at: number): TimeMark {
   return Object.freeze({ kind: "tempo", at: start, back: "a-tempo" });
 }
 
-/** `tempo primo` at beat `at` (SDK 1.14.0): step back to `song({ tempo })`. */
+/** `tempo primo` at beat `at` (SDK 1.19.0): step back to `song({ tempo })`. */
 export function tempoPrimo(at: number): TimeMark {
   const start = beat(at, "tempoPrimo() at");
   if (start <= 0) throw new DawgSdkError("tempoPrimo() at must be > 0");
@@ -3248,7 +3248,7 @@ export function phasing(
 }
 
 /**
- * Stepped phasing, as in Reich's Piano Phase: the track's first `cycle`
+ * Stepped phasing (SDK 1.19.0), as in Reich's Piano Phase: the track's first `cycle`
  * beats hold in step with a twin for `hold` cycles, then move `shift`
  * beats ahead over `drift` cycles, and repeat until a whole cycle ahead.
  * `track({ ..., time: stepPhasing(3, { hold: 8 }) })`.

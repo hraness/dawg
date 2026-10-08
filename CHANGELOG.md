@@ -16,7 +16,7 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - **Polytempo, polymeter and phasing.** `track rate 3/2`, `track phase 0.5`, `track cycle 3` and `track phasing 4 [over 16]` give a track its own tempo ratio, offset and loop length, so two identical loops drift apart and realign, as in Reich's _Come Out_. `track phasing 3 hold 8` steps instead: hold in step, move a sixteenth ahead, hold again, as in _Piano Phase_.
 - **One time map everywhere.** Ticks stay score time; the offline renderer, live engine and audition loop, transport clock, click and count-in, recording and the highway convert through the same map.
 - **MIDI export.** `/export song.mid` and `dawg render song.mid` write a Standard MIDI File with tempo and time-signature meta events; ramps become sixteenth-note tempo steps that land on the same seconds as the WAV.
-- **Menu, agent and SDK.** Project › Tempo & meter (`/menu tempo`), the agent's `set_time` tool, and SDK 1.14.0 `tempo`, `ramp`, `rit`, `accel`, `aTempo`, `tempoPrimo`, `fermata`, `meter`, `phasing` and `stepPhasing`; `song()` refuses marks past the song end and checks rit/accel direction and fermata length. Projects without these fields load, print and render byte-identically.
+- **Menu, agent and SDK.** Project › Tempo & meter (`/menu tempo`), the agent's `set_time` tool, and SDK 1.14.0 `tempo`, `ramp`, `rit`, `accel`, `fermata`, `meter` and `phasing`, plus SDK 1.19.0 `aTempo`, `tempoPrimo` and `stepPhasing`; `song()` refuses marks past the song end and checks rit/accel direction and fermata length. Projects without these fields load, print and render byte-identically.
 
 ### Performance and expression
 

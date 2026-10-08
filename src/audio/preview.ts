@@ -112,7 +112,9 @@ export function previewRegion(
   const loTick = barStartTick(score, lo);
   const hiTick = barStartTick(score, hi);
   const pool = bounded
-    ? notes.filter((note) => note.startTick >= loTick && note.startTick < hiTick)
+    ? notes.filter(
+        (note) => note.startTick >= loTick && note.startTick < hiTick,
+      )
     : notes;
   if (pool.length > 0 && !inRegion(startBar)) {
     const first = Math.min(...pool.map((note) => note.startTick));
