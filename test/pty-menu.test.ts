@@ -278,6 +278,9 @@ test.skipIf(!supported)(
       await t.send("/humanize timing");
       await t.send("\r");
       for (const key of "12") await t.send(key);
+      // In the fader drawer Enter stages the typed value; Enter again keeps.
+      await t.send("\r");
+      await t.until(() => t.vt.text().includes("±12 ms"), "staged humanize");
       await t.send("\r");
       await waitFor(
         async () => (await bass())?.humanize?.timing === 12,
