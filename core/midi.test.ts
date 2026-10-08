@@ -188,3 +188,60 @@ describe("MIDI export", () => {
     expect(ons).toEqual([0, 480, 960, 1440]);
   });
 });
+
+describe("MIDI export of performance", () => {
+  test("pedal writes CC64 and articulation shortens the note-off", () => {
+    const score = createScore({
+      tempoBpm: 120,
+      bars: 1,
+      tracks: [
+        {
+          id: "p",
+          name: "piano",
+          instrument: "piano",
+          pedal: [
+            { tick: 0, state: "down" },
+            { tick: 960, state: "half" },
+            { tick: 1440, state: "up" },
+          ],
+        },
+      ],
+      notes: [
+        {
+          id: "a",
+          trackId: "p",
+          startTick: 0,
+          durationTicks: 480,
+          pitch: 60,
+          velocity: 0.5,
+          articulation: "staccato",
+        },
+        {
+          id: "b",
+          trackId: "p",
+          startTick: 480,
+          durationTicks: 480,
+          pitch: 64,
+          velocity: 0.5,
+        },
+      ],
+    });
+    const track = readMidi(scoreToMidi(score)).tracks[1]!;
+    const cc = track.filter((e) => (e.status & 0xf0) === 0xb0);
+    expect(cc.map((e) => [e.tick, ...e.data])).toEqual([
+      [0, 64, 127],
+      [960, 64, 64],
+      [1440, 64, 0],
+    ]);
+    const offs = track.filter((e) => (e.status & 0xf0) === 0x80);
+    // Staccato is shorter than the written 480; the pedal does not
+    // lengthen the key (the second note ends where it was written).
+    const offA = offs.find((e) => e.data[0] === 60)!;
+    expect(offA.tick).toBeLessThan(480);
+    expect(offs.find((e) => e.data[0] === 64)!.tick).toBe(960);
+    // The CC64 down sorts before the note-on at tick 0.
+    const first = track.findIndex((e) => (e.status & 0xf0) === 0xb0);
+    const on = track.findIndex((e) => (e.status & 0xf0) === 0x90);
+    expect(first).toBeLessThan(on);
+  });
+});

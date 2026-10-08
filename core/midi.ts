@@ -11,9 +11,21 @@
  * tempo over its beat. Each step's tempo is the exact average over the step,
  * so every step boundary lands at the same second as in the rendered WAV.
  *
+ * Notes are written as performed (core/expression.ts): articulation
+ * lengths and velocities, humanize, the velocity curve and mono/legato
+ * voicing. The sustain pedal is written as CC64 (127 down, 64 half, 0 up)
+ * while each note keeps its key length, as a real pedal recording does.
+ * Pitch expression (glide, bend, per-note vibrato) is not exported: SMF
+ * pitch bend is per channel, so those notes play at their written pitch.
+ *
  * Pure and dependency-free apart from the score modules.
  */
 import { isDrumInstrument } from "./drums.ts";
+import {
+  performanceTimingFor,
+  performNotes,
+  type PedalState,
+} from "./expression.ts";
 import {
   clickTicksOf,
   loopTicksOf,
@@ -118,6 +130,12 @@ function trackChunk(
   ];
 }
 
+const CC64: Readonly<Record<PedalState, number>> = {
+  down: 127,
+  half: 64,
+  up: 0,
+};
+
 function log2(value: number): number {
   return Math.round(Math.log2(value));
 }
@@ -162,7 +180,8 @@ export function scoreToMidi(
     });
   }
   const chunks: number[][] = [trackChunk(conductor, "dawg", at(end))];
-  const notes = performedNotes(score);
+  const placed = performedNotes(score);
+  const timing = performanceTimingFor(score);
   let melodic = 0;
   for (const track of score.tracks) {
     const drum = isDrumInstrument(track.instrument) || track.kit !== undefined;
@@ -174,8 +193,23 @@ export function scoreToMidi(
       melodic += 1;
     }
     const events: TimedEvent[] = [];
+    // The pedal is written as CC64, so notes are performed without it and
+    // keep the key's length.
+    const notes = performNotes(
+      track.pedal ? { ...track, pedal: undefined } : track,
+      placed.filter((note) => note.trackId === track.id),
+      timing,
+    );
+    for (const event of track.pedal ?? []) {
+      if (event.tick > end) continue;
+      events.push({
+        tick: at(event.tick),
+        // After note-offs, before note-ons at the same tick.
+        order: 0.5,
+        bytes: [0xb0 | channel, 64, CC64[event.state]],
+      });
+    }
     for (const note of notes) {
-      if (note.trackId !== track.id) continue;
       if (note.pitch < 0 || note.pitch > 127) continue;
       const start = at(note.startTick);
       const stop = Math.max(
