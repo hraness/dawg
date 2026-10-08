@@ -21,6 +21,15 @@ updates:
     groups:
       bun-site-minor-and-patch:
         update-types: [minor, patch]
+    # Held until the lint stack supports them: typescript-eslint rejects
+    # TypeScript 7 ("does not support TS 7.0"), and eslint-plugin-react, via
+    # eslint-config-next, calls context.getFilename, which ESLint 10 removed.
+    # Remove an entry once eslint-config-next supports that major.
+    ignore:
+      - dependency-name: typescript
+        versions: [">=7"]
+      - dependency-name: eslint
+        versions: [">=10"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
