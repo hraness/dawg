@@ -98,14 +98,18 @@ describe("tempo map", () => {
     }
   });
 
-  test("a fermata holds time at its tick for beats of the tempo there", () => {
+  test("a fermata stretches its beat by beats of the tempo there", () => {
     const score = timed({ fermatas: [{ tick: 4 * TPB, beats: 2 }] });
     const map = timeMapFor(score)!;
     expect(map.seconds(4 * TPB)).toBeCloseTo(2, 12);
     expect(map.holdAt(4 * TPB)).toBeCloseTo(1, 12);
-    expect(map.seconds(4 * TPB + 1)).toBeCloseTo(3 + 1 / 960, 9);
-    // During the hold the score stays on the fermata tick.
-    expect(map.tick(2.5)).toBe(4 * TPB);
+    // Inside the beat time runs three times slower, evenly.
+    expect(map.seconds(4 * TPB + 1)).toBeCloseTo(2 + 3 / 960, 9);
+    expect(map.seconds(4 * TPB + TPB / 4)).toBeCloseTo(2.375, 9);
+    expect(map.seconds(5 * TPB)).toBeCloseTo(3.5, 9);
+    expect(map.tick(2.75)).toBeCloseTo(4 * TPB + TPB / 2, 6);
+    expect(map.bpm(4 * TPB + 10)).toBeCloseTo(40, 9);
+    expect(map.bpm(5 * TPB)).toBeCloseTo(120, 9);
     expect(loopSecondsOf(score)).toBeCloseTo(9, 9);
   });
 });

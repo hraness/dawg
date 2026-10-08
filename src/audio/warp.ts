@@ -10,9 +10,9 @@
 import { timeMapFor, type TimeScore } from "../../core/tempo.ts";
 
 export type SampleWarp = Readonly<{
-  /** Fractional sample index where `tick` sounds (before a fermata there). */
+  /** Fractional sample index where `tick` sounds. */
   sample(tick: number): number;
-  /** Score tick sounding at sample `index` (held ticks stay put). */
+  /** Score tick sounding at sample `index`. */
   tick(index: number): number;
   /** Tempo at `tick`. */
   bpm(tick: number): number;
@@ -32,8 +32,8 @@ export function sampleWarpFor(
 }
 
 /**
- * Start sample and length of a note through a warp: a note that starts on
- * a fermata's tick sustains through the hold.
+ * Start sample and length of a note through a warp: a note inside a
+ * fermata beat stretches with it.
  */
 export function warpedSpan(
   warp: SampleWarp,

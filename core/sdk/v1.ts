@@ -2357,7 +2357,7 @@ export type TimeMark =
   | Readonly<{
       kind: "fermata";
       at: number;
-      /** Extra beats time holds for. */
+      /** Extra beats the held beat lasts. */
       beats: number;
     }>;
 
@@ -2442,7 +2442,7 @@ function gradual(
   return Object.freeze(marks);
 }
 
-/** Fermata: time holds at beat `at` for `beats` extra beats (default 2). */
+/** Fermata: the beat at `at` lasts `beats` extra beats (default 2). */
 export function fermata(at: number, beats = 2): TimeMark {
   const hold = positive(beats, "fermata() beats");
   if (hold > 64) throw new DawgSdkError("fermata() beats must be at most 64");

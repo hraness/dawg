@@ -145,6 +145,28 @@ describe("MIDI export", () => {
     expect(at(4320)).toBe(1_000_000);
   });
 
+  test("a fermata beat lands subdivisions at the same seconds as the WAV", () => {
+    const score = createScore({
+      tempoBpm: 120,
+      bars: 1,
+      time: { fermatas: [{ tick: 0, beats: 2 }] },
+    });
+    const tempos = midiTempoEvents(score);
+    const midiSeconds = (tick: number) => {
+      let seconds = 0;
+      for (let i = 0; i < tempos.length; i += 1) {
+        const from = tempos[i]!.tick;
+        const to = Math.min(tick, tempos[i + 1]?.tick ?? Infinity);
+        if (to <= from) break;
+        seconds += ((to - from) / 480) * (tempos[i]!.usPerQuarter / 1e6);
+      }
+      return seconds;
+    };
+    for (const tick of [60, 120, 240, 360, 480, 720, 1920])
+      expect(midiSeconds(tick)).toBeCloseTo(secondsAtTick(score, tick), 6);
+    expect(secondsAtTick(score, 120)).toBeCloseTo(0.375, 9);
+  });
+
   test("track rate places repeats on the song timeline", () => {
     const score = createScore({
       bars: 1,

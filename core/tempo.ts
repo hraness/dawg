@@ -10,9 +10,9 @@
  *   An event without `ramp` is a step. `ramp: "linear"` glides from the
  *   previous tempo into the event with an equal BPM change per beat;
  *   `ramp: "exp"` with an equal ratio per beat (even to the ear).
- * - `fermatas`: holds. At `tick` time stands still for `beats` beats of the
- *   tempo there: notes that start on that tick or sound across it sustain
- *   through the hold, and everything later moves back.
+ * - `fermatas`: holds. The beat starting at `tick` lasts `1 + beats` times
+ *   as long (it slows evenly, as a notation player or a MIDI file plays a
+ *   fermata), and everything later moves back.
  * - `meter`: meter changes at bar boundaries (`bar` is 0-based). A bar lasts
  *   `beatsPerBar * 4 / beatUnit` beats. Without changes `beatsPerBar` of the
  *   score is the meter, over 4.
@@ -53,7 +53,7 @@ export type MeterChange = Readonly<{
   beatUnit?: number;
 }>;
 
-/** Time holds at `tick` for `beats` beats of the tempo there. */
+/** The beat at `tick` lasts `1 + beats` times as long. */
 export type Fermata = Readonly<{
   tick: number;
   beats: number;
@@ -558,12 +558,12 @@ type Segment = Readonly<{
 
 type Piece = Readonly<{
   tick: number;
-  /** Seconds at `tick`, after any hold there. */
+  /** Seconds at `tick`. */
   seconds: number;
-  /** Seconds held at `tick` (a fermata). */
-  hold: number;
+  /** Time stretch through this piece: 1 + beats of the fermatas here. */
+  stretch: number;
   segment: Segment;
-  /** Seconds from the segment's origin to `tick`. */
+  /** Seconds from the segment's origin to `tick`, unstretched. */
   base: number;
 }>;
 
@@ -612,8 +612,10 @@ function segmentBpm(segment: Segment, beats: number): number {
 
 /**
  * Converts between score ticks and seconds through tempo events and
- * fermatas. Seconds at a fermata's tick are before its hold; any later
- * tick is after it, so notes starting on the tick sustain through it.
+ * fermatas. A fermata lengthens the beat that carries it, `[tick, tick +
+ * ticksPerBeat)`, to `1 + beats` times its length, as a notation player
+ * and a Standard MIDI File would play it: everything inside that beat
+ * slows evenly and everything later moves back.
  */
 export class TimeMap {
   readonly ticksPerBeat: number;
@@ -661,15 +663,23 @@ export class TimeMap {
         ramp: undefined,
       },
     });
-    // Pieces split segments at fermatas.
+    // Pieces split segments where a fermata beat starts or ends.
     const fermatas = score.time?.fermatas ?? [];
     const starts = new Set<number>(segments.map((entry) => entry.start));
-    for (const fermata of fermatas) starts.add(fermata.tick);
+    for (const fermata of fermatas) {
+      starts.add(fermata.tick);
+      starts.add(fermata.tick + tpb);
+    }
     const ticks = [...starts].sort((a, b) => a - b);
-    const holds = new Map(fermatas.map((f) => [f.tick, f.beats]));
+    const stretchAt = (tick: number) => {
+      let stretch = 1;
+      for (const fermata of fermatas)
+        if (fermata.tick <= tick && tick < fermata.tick + tpb)
+          stretch *= 1 + fermata.beats;
+      return stretch;
+    };
     const pieces: Piece[] = [];
     let segmentIndex = 0;
-    let seconds = 0;
     let lastPiece: Piece | undefined;
     for (const tick of ticks) {
       while (
@@ -678,17 +688,12 @@ export class TimeMap {
       )
         segmentIndex += 1;
       const segment = segments[segmentIndex]!.segment;
-      seconds = lastPiece ? this.secondsInPiece(lastPiece, tick) : 0;
-      const base = segmentSeconds(segment, (tick - segment.origin) / tpb);
-      const beats = holds.get(tick) ?? 0;
-      const bpm = segmentBpm(segment, (tick - segment.origin) / tpb);
-      const hold = (beats * 60) / bpm;
       const piece: Piece = {
         tick,
-        seconds: seconds + hold,
-        hold,
+        seconds: lastPiece ? this.secondsInPiece(lastPiece, tick) : 0,
+        stretch: stretchAt(tick),
         segment,
-        base,
+        base: segmentSeconds(segment, (tick - segment.origin) / tpb),
       };
       pieces.push(piece);
       lastPiece = piece;
@@ -698,15 +703,12 @@ export class TimeMap {
 
   private secondsInPiece(piece: Piece, tick: number): number {
     const segment = piece.segment;
-    if (constant(segment))
-      return (
-        piece.seconds +
-        ((tick - piece.tick) / this.ticksPerBeat) * (60 / segment.from)
-      );
+    const plain = constant(segment)
+      ? ((tick - piece.tick) / this.ticksPerBeat) * (60 / segment.from)
+      : segmentSeconds(segment, (tick - segment.origin) / this.ticksPerBeat) -
+        piece.base;
     return (
-      piece.seconds +
-      segmentSeconds(segment, (tick - segment.origin) / this.ticksPerBeat) -
-      piece.base
+      piece.seconds + (piece.stretch === 1 ? plain : plain * piece.stretch)
     );
   }
 
@@ -722,7 +724,7 @@ export class TimeMap {
     return pieces[low]!;
   }
 
-  /** Seconds from tick 0 to `tick` (before any hold at `tick`). */
+  /** Seconds from tick 0 to `tick`. */
   seconds(tick: number): number {
     if (tick <= 0) {
       const first = this.pieces[0]!;
@@ -730,11 +732,11 @@ export class TimeMap {
       return ((tick / this.ticksPerBeat) * 60) / first.segment.from;
     }
     const piece = this.pieceAt(tick);
-    if (tick === piece.tick) return piece.seconds - piece.hold;
+    if (tick === piece.tick) return piece.seconds;
     return this.secondsInPiece(piece, tick);
   }
 
-  /** The score tick sounding at `seconds` (held ticks stay put). */
+  /** The score tick sounding at `seconds`. */
   tick(seconds: number): number {
     if (seconds <= 0) {
       if (seconds === 0) return 0;
@@ -745,12 +747,11 @@ export class TimeMap {
     let high = pieces.length - 1;
     while (low < high) {
       const middle = (low + high + 1) >> 1;
-      const piece = pieces[middle]!;
-      if (piece.seconds - piece.hold <= seconds) low = middle;
+      if (pieces[middle]!.seconds <= seconds) low = middle;
       else high = middle - 1;
     }
     const piece = pieces[low]!;
-    const into = seconds - piece.seconds;
+    const into = (seconds - piece.seconds) / piece.stretch;
     if (into <= 0) return piece.tick;
     const segment = piece.segment;
     if (constant(segment))
@@ -761,17 +762,25 @@ export class TimeMap {
     );
   }
 
-  /** Tempo at `tick` (after a step there; ramps interpolate). */
+  /** Tempo at `tick` (after a step there; ramps interpolate; a fermata
+   * beat plays slower by its stretch). */
   bpm(tick: number): number {
     if (tick < 0) return this.startBpm;
-    const segment = this.pieceAt(tick).segment;
-    return segmentBpm(segment, (tick - segment.origin) / this.ticksPerBeat);
+    const piece = this.pieceAt(tick);
+    const segment = piece.segment;
+    return (
+      segmentBpm(segment, (tick - segment.origin) / this.ticksPerBeat) /
+      piece.stretch
+    );
   }
 
-  /** Seconds held at `tick` by a fermata, else 0. */
+  /** Extra seconds a fermata adds to the beat starting at `tick`, else 0. */
   holdAt(tick: number): number {
     const piece = this.pieceAt(tick);
-    return piece.tick === tick ? piece.hold : 0;
+    if (piece.tick !== tick || piece.stretch === 1) return 0;
+    const end = tick + this.ticksPerBeat;
+    const span = this.seconds(end) - piece.seconds;
+    return span - span / piece.stretch;
   }
 }
 
