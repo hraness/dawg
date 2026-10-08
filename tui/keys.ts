@@ -100,3 +100,74 @@ const OVERLAY_SEQUENCES: Record<string, OverlayKey> = {
 export function overlayKey(value: string): OverlayKey | undefined {
   return OVERLAY_SEQUENCES[value];
 }
+
+// ---------------------------------------------------------------------------
+// Mouse (SGR 1006)
+
+/**
+ * Mouse reporting: 1000 clicks, 1002 drags with a button held, 1006 the
+ * SGR encoding (`ESC [ < b ; x ; y M|m`), which has no 223-column limit and
+ * tells a release from a press. Off is the same modes in reverse order.
+ */
+export const MOUSE_ON = "\u001b[?1000h\u001b[?1002h\u001b[?1006h";
+export const MOUSE_OFF = "\u001b[?1006l\u001b[?1002l\u001b[?1000l";
+
+export type MouseButton = "left" | "middle" | "right" | "none";
+
+export interface MouseEvent {
+  kind: "down" | "up" | "drag" | "move" | "wheel";
+  button: MouseButton;
+  /** 0-based cell column and row. */
+  x: number;
+  y: number;
+  /** For `wheel`: -1 up (away from you), 1 down. */
+  delta: -1 | 1 | 0;
+  shift: boolean;
+  alt: boolean;
+  ctrl: boolean;
+}
+
+const SGR_MOUSE = /^\u001b\[<(\d{1,4});(\d{1,5});(\d{1,5})([Mm])$/;
+const BUTTONS: readonly MouseButton[] = ["left", "middle", "right", "none"];
+
+/** Decode one SGR mouse report; undefined for anything else. */
+export function parseMouse(value: string): MouseEvent | undefined {
+  const match = SGR_MOUSE.exec(value);
+  if (!match) return undefined;
+  const code = Number(match[1]);
+  const x = Number(match[2]) - 1;
+  const y = Number(match[3]) - 1;
+  if (x < 0 || y < 0) return undefined;
+  const modifiers = {
+    shift: (code & 4) !== 0,
+    alt: (code & 8) !== 0,
+    ctrl: (code & 16) !== 0,
+  };
+  const button = BUTTONS[code & 3]!;
+  if (code & 64) {
+    // 64/65 wheel up/down; 66/67 (horizontal wheels) are ignored.
+    if ((code & 3) > 1) return undefined;
+    return {
+      kind: "wheel",
+      button: "none",
+      x,
+      y,
+      delta: (code & 1) === 0 ? -1 : 1,
+      ...modifiers,
+    };
+  }
+  const motion = (code & 32) !== 0;
+  const kind = match[4] === "m"
+    ? "up"
+    : motion
+      ? button === "none"
+        ? "move"
+        : "drag"
+      : "down";
+  return { kind, button, x, y, delta: 0, ...modifiers };
+}
+
+/** True for any mouse report, SGR or a legacy X10 one (dropped). */
+export function isMouseSequence(value: string): boolean {
+  return value.startsWith("\u001b[<") || value.startsWith("\u001b[M");
+}

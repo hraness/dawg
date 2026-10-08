@@ -53,6 +53,10 @@ export class TerminalInputDecoder {
     // shared a read with the next key, e.g. Esc then Ctrl+Z.
     const next = this.buffer.charCodeAt(1);
     if (next < 0x20 || next === 0x7f) return "\u001b";
+    // A legacy X10 mouse report (a terminal without SGR 1006): CSI M and
+    // three raw bytes. One event, so its bytes never type into the prompt.
+    if (this.buffer.startsWith("\u001b[M"))
+      return this.buffer.length >= 6 ? this.buffer.slice(0, 6) : undefined;
     const final = this.buffer.match(/^\u001b\[[\x20-?]*[\x40-~]/)?.[0];
     if (final !== undefined) return final;
     // SS3: arrows in application mode and F1-F4 (`ESC O P` is F1).
