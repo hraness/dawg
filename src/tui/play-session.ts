@@ -21,7 +21,23 @@ import {
   type TrackScore,
 } from "../../core/score.ts";
 import type { ClickBus } from "../audio/engine.ts";
-import { DEFAULT_CLICK_VOLUME, parseClickArgument } from "../audio/click.ts";
+import {
+  DEFAULT_CLICK_VOLUME,
+  countInClicks,
+  meterClickGrid,
+  parseClickArgument,
+} from "../audio/click.ts";
+import {
+  barAt,
+  bpmAtTick,
+  clickTicksOf,
+  hasMeterChanges,
+  hasTempoMap,
+  loopTickAt,
+  loopTicksOf,
+  transportBar,
+  transportBarStart,
+} from "../../core/tempo.ts";
 import {
   LiveSynth,
   MAX_LIVE_NOTE_SECONDS,
@@ -157,7 +173,16 @@ const LIVE_PLAN_BEATS = 64;
 /** Live chord voices use ids far above the keyboard's. */
 const VOICE_ID_BASE = 1_000_000_000;
 
-type CountIn = { startMs: number; beats: number; startBeat: number };
+type CountIn = {
+  startMs: number;
+  beats: number;
+  startBeat: number;
+  /** Count-in tempo: the tempo where recording starts. */
+  bpm: number;
+  /** Beats per counted bar and per click (meter-aware). */
+  barBeats: number;
+  clickBeats: number;
+};
 
 export type PlayKeyResult =
   | { type: "handled" }
@@ -236,7 +261,17 @@ export class PlaySession {
 
   /** Gate for a single press: one grid step at the current tempo. */
   public gateMs(): number {
-    return (this.gridStep * 60_000) / this.host.score().tempoBpm;
+    return (this.gridStep * 60_000) / this.currentBpm();
+  }
+
+  /** Tempo at the playhead (the song tempo without a tempo map). */
+  private currentBpm(): number {
+    const score = this.host.score();
+    if (!hasTempoMap(score)) return score.tempoBpm;
+    return bpmAtTick(
+      score,
+      loopTickAt(score, this.host.beatAt(this.host.now())),
+    );
   }
 
   public async enter(): Promise<void> {
@@ -265,11 +300,27 @@ export class PlaySession {
   /** The click bus the engine mixes: count-in, then the transport. */
   public clickBus(): ClickBus {
     const score = this.host.score();
+    const count = this.countIn;
+    // Without meter changes the fixed beatsPerBar grid clicks as in 0.4.
+    let grid: ClickBus["grid"];
+    if (count && hasMeterChanges(score))
+      grid = (from, to) =>
+        countInClicks(
+          count.startBeat,
+          count.beats / count.barBeats,
+          count.barBeats,
+          count.clickBeats,
+          from,
+          to,
+        );
+    else if (!count && hasMeterChanges(score))
+      grid = meterClickGrid(() => this.host.score());
     return {
       volume: this.clickVolume,
       beatsPerBar: score.beatsPerBar,
       subdivision: 1,
       beatAt: (ms) => this.clickBeatAt(ms),
+      ...(grid ? { grid } : {}),
     };
   }
 
@@ -277,7 +328,7 @@ export class PlaySession {
   public clickBeatAt(ms: number): number | undefined {
     const count = this.countIn;
     if (count) {
-      const beatMs = 60_000 / this.host.score().tempoBpm;
+      const beatMs = 60_000 / count.bpm;
       return count.startBeat - count.beats + (ms - count.startMs) / beatMs;
     }
     if (!this.clickOn || !this.host.playing()) return undefined;
@@ -560,7 +611,7 @@ export class PlaySession {
   }
 
   private beatMs(): number {
-    return 60_000 / this.host.score().tempoBpm;
+    return 60_000 / this.currentBpm();
   }
 
   /** Start due voices, end finished ones, drop released chords. */
@@ -639,17 +690,25 @@ export class PlaySession {
   public startWithCountIn(): boolean {
     if (!this.armed || this.host.playing() || this.countIn) return false;
     const score = this.host.score();
-    const startBeat =
-      Math.floor(this.host.beatAt(this.host.now()) / score.beatsPerBar) *
-      score.beatsPerBar;
+    const startBeat = transportBarStart(
+      score,
+      transportBar(score, this.host.beatAt(this.host.now())),
+    );
     if (this.countInBars === 0) {
       void this.host.startTransport(startBeat);
       return true;
     }
+    // Count in the meter and tempo of the bar recording starts in.
+    const at = barAt(score, loopTickAt(score, startBeat));
+    const tpb = score.ticksPerBeat;
+    const barBeats = at.barTicks / tpb;
     this.countIn = {
       startMs: this.host.now(),
-      beats: this.countInBars * score.beatsPerBar,
+      beats: this.countInBars * barBeats,
       startBeat,
+      bpm: bpmAtTick(score, at.tick),
+      barBeats,
+      clickBeats: clickTicksOf(at, tpb) / tpb,
     };
     this.applyClick();
     return true;
@@ -662,7 +721,7 @@ export class PlaySession {
     this.pumpChords(now);
     const count = this.countIn;
     if (count) {
-      const beatMs = 60_000 / this.host.score().tempoBpm;
+      const beatMs = 60_000 / count.bpm;
       if (now - count.startMs >= count.beats * beatMs) {
         this.countIn = undefined;
         this.applyClick();
@@ -677,7 +736,7 @@ export class PlaySession {
       return;
     }
     const score = this.host.score();
-    const bar = Math.floor(this.host.beatAt(now) / score.beatsPerBar);
+    const bar = transportBar(score, this.host.beatAt(now));
     if (this.lastBar !== undefined && bar !== this.lastBar) {
       if (this.replace) this.replaceBars.add(this.loopBar(this.lastBar));
       this.queueFlush(bar, now, false);
@@ -722,7 +781,7 @@ export class PlaySession {
     const score = this.host.score();
     const ready: Pending[] = [];
     for (const pending of this.pending.values()) {
-      const bar = Math.floor(pending.beat / score.beatsPerBar);
+      const bar = transportBar(score, pending.beat);
       const released = pending.releaseAtMs <= now;
       if (all || (bar < currentBar && released)) ready.push(pending);
     }
@@ -733,10 +792,12 @@ export class PlaySession {
     const operations = recordOperations(score, {
       trackId: this.trackId,
       notes: ready.flatMap((pending) => {
-        const beats =
-          ((Math.min(pending.releaseAtMs, now) - pending.atMs) *
-            score.tempoBpm) /
-          60_000;
+        const beats = hasTempoMap(score)
+          ? this.host.beatAt(Math.min(pending.releaseAtMs, now)) -
+            this.host.beatAt(pending.atMs)
+          : ((Math.min(pending.releaseAtMs, now) - pending.atMs) *
+              score.tempoBpm) /
+            60_000;
         return pending.chord
           ? chordNotes(pending.chord, {
               beat: pending.beat,
@@ -783,13 +844,13 @@ export class PlaySession {
     const count = this.countIn;
     let beat: PlayHeaderView["beat"];
     let countIn: string | undefined;
-    const beatMs = 60_000 / score.tempoBpm;
+    const beatMs = 60_000 / (count?.bpm ?? score.tempoBpm);
     const at = count
       ? count.startBeat - count.beats + (now - count.startMs) / beatMs
       : this.host.playing()
         ? this.host.beatAt(now)
         : undefined;
-    if (at !== undefined) {
+    if (at !== undefined && (count || !hasMeterChanges(score))) {
       const whole = Math.floor(at);
       const inBar =
         ((whole % score.beatsPerBar) + score.beatsPerBar) % score.beatsPerBar;
@@ -798,7 +859,37 @@ export class PlaySession {
         of: score.beatsPerBar,
         flash: (at - whole) * beatMs < FLASH_MS,
       };
-      if (count) countIn = `count-in ${Math.ceil(count.startBeat - at)}`;
+      if (count) {
+        const clicks = Math.round(count.barBeats / count.clickBeats);
+        const step = Math.floor(
+          (at - (count.startBeat - count.beats)) / count.clickBeats,
+        );
+        beat = {
+          index: (((step % clicks) + clicks) % clicks) + 1,
+          of: clicks,
+          flash:
+            ((at - (count.startBeat - count.beats)) % count.clickBeats) *
+              beatMs <
+            FLASH_MS,
+        };
+        countIn = `count-in ${Math.ceil((count.startBeat - at) / count.clickBeats)}`;
+      }
+    } else if (at !== undefined) {
+      // Meter changes: count the clicks of the bar the playhead is in.
+      const tpb = score.ticksPerBeat;
+      const position = barAt(score, loopTickAt(score, at));
+      const click = clickTicksOf(position, tpb);
+      const inBar = position.offset / click;
+      const whole = Math.floor(inBar);
+      beat = {
+        index: whole + 1,
+        of: Math.round(position.barTicks / click),
+        flash:
+          ((inBar - whole) * click * 60_000) /
+            tpb /
+            bpmAtTick(score, position.tick + whole * click) <
+          FLASH_MS,
+      };
     }
     return {
       range: this.keyboard.range,
@@ -929,14 +1020,16 @@ export function recordOperations(
   }>,
 ): ScoreOperation[] {
   const operations: ScoreOperation[] = [];
-  const loopBeats = score.bars * score.beatsPerBar;
   const tpb = score.ticksPerBeat;
+  const loopBeats = loopTicksOf(score) / tpb;
   const erase = new Set(options.eraseBars ?? []);
   if (erase.size > 0)
     for (const note of score.notes) {
       if (note.trackId !== options.trackId) continue;
       if (options.keep?.has(note.id)) continue;
-      const bar = Math.floor(note.startTick / tpb / score.beatsPerBar);
+      const bar = hasMeterChanges(score)
+        ? barAt(score, note.startTick).bar
+        : Math.floor(note.startTick / tpb / score.beatsPerBar);
       if (erase.has(bar))
         operations.push({ type: "removeNote", noteId: note.id });
     }

@@ -106,7 +106,7 @@ import {
   tuiLoginArgs,
   tuiSetModel,
 } from "./auth/tui.ts";
-import { TransportClock } from "./audio/clock.ts";
+import { TransportClock, transportMapFor } from "./audio/clock.ts";
 import { AudioEngine } from "./audio/engine.ts";
 import {
   DEFAULT_GRID,
@@ -871,7 +871,7 @@ async function runInteractive(): Promise<void> {
         if (stageCapture)
           stageCapture.committed = scoreFromJSON(record.composition);
         else score = scoreFromJSON(record.composition);
-        clock.setTempo(score.tempoBpm);
+        clock.follow(score);
         if (clock.playing) void audio.play(score);
         // Connected windows follow dawgd's transport frames instead.
         const replay =
@@ -924,6 +924,7 @@ async function runInteractive(): Promise<void> {
       // Every window renders the same hit line from dawgd's timestamp.
       const { playing, beat, bpm, atMs } = update.transport;
       clock.setTempo(bpm);
+      clock.setTimeMap(transportMapFor(score));
       clock.sync(beat, playing, atMs, monotonicEpochMs());
     } else if (update.type === "status") {
       syncState = port.sync;
@@ -1563,7 +1564,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (parsed.type === "set-tempo") {
     const next = score.withTempo(parsed.tempoBpm);
     await commitScore(next, "score.tempo", { tempoBpm: parsed.tempoBpm });
-    clock.setTempo?.(next.tempoBpm);
+    clock.follow(next);
     return `tempo · ${next.tempoBpm} BPM`;
   }
   if (parsed.type === "add-track") return focusTrack(parsed.trackId);
@@ -2357,7 +2358,7 @@ async function switchSession(sessionId: string): Promise<void> {
   audio = port.player;
   record = port.mode === "daemon" ? await port.load() : next.record;
   score = scoreFromJSON(record.composition);
-  clock.setTempo(score.tempoBpm);
+  clock.follow(score);
   const attached = await attachTrack(port, score, undefined);
   requestedTrack = attached.trackId;
   draftTrack = attached.draft;
@@ -3063,7 +3064,7 @@ function syncHost(): SyncHost {
         plan.next.toJSON(),
       );
       score = scoreFromJSON(record.composition);
-      clock.setTempo(score.tempoBpm);
+      clock.follow(score);
       if (clock.playing) void audio.play(score);
       reportSampleProblems(score);
       void baseRevision;
@@ -3356,8 +3357,13 @@ function agentHost(
           );
         throw error;
       }
-      if (change.operations.some((operation) => operation.type === "setTempo"))
-        clock.setTempo(score.tempoBpm);
+      if (
+        change.operations.some(
+          (operation) =>
+            operation.type === "setTempo" || operation.type === "setTime",
+        )
+      )
+        clock.follow(score);
       return { revision: record.revision };
     },
     async transport(action) {

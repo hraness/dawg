@@ -31,6 +31,8 @@ import {
   type TrackScore,
 } from "../../core/score.ts";
 import { sampleKey, type DecodedSample, type SampleBank } from "./samples.ts";
+import { loopSecondsOf, performedNotes } from "../../core/tempo.ts";
+import { sampleWarpFor, warpedSpan, type SampleWarp } from "./warp.ts";
 
 /** Output level of a full-scale sample at velocity 1 and gain 1. */
 export const SAMPLE_LEVEL = 0.7;
@@ -46,6 +48,8 @@ const LOOP_CROSSFADE_SECONDS = 0.005;
 export type SamplerTiming = Readonly<{
   score: TrackScore;
   sampleRate: number;
+  /** The song's tempo map in samples; absent keeps constant tempo. */
+  warp?: SampleWarp;
 }>;
 
 /** One planned voice: when it sounds and how it reads its sample. */
@@ -96,7 +100,8 @@ function framesToTravel(distance: number, step: number, ramp: number): number {
 }
 
 function noteStartFrame(note: Note, timing: SamplerTiming): number {
-  const { score, sampleRate } = timing;
+  const { score, sampleRate, warp } = timing;
+  if (warp) return warpedSpan(warp, note.startTick, note.durationTicks).start;
   return Math.max(
     0,
     Math.floor(
@@ -107,7 +112,8 @@ function noteStartFrame(note: Note, timing: SamplerTiming): number {
 }
 
 function noteLengthFrames(note: Note, timing: SamplerTiming): number {
-  const { score, sampleRate } = timing;
+  const { score, sampleRate, warp } = timing;
+  if (warp) return warpedSpan(warp, note.startTick, note.durationTicks).length;
   return Math.max(
     1,
     Math.floor(
@@ -190,7 +196,7 @@ export function planSamplerVoices(
       ? held / sampleRate
       : unit === "c"
         ? (timing.score.beatsPerBar * 60) /
-          timing.score.tempoBpm /
+          (timing.warp?.bpm(note.startTick) ?? timing.score.tempoBpm) /
           Math.abs(speed)
         : unit === "s"
           ? Math.abs(speed)
@@ -293,7 +299,7 @@ export function renderSamplerVoices(
   timing: SamplerTiming,
   gainAt: (tick: number) => number,
 ): void {
-  const { sampleRate, score } = timing;
+  const { sampleRate, score, warp } = timing;
   const samplesPerTick =
     (sampleRate * 60) / (score.tempoBpm * score.ticksPerBeat);
   const attack = Math.max(1, ATTACK_SECONDS * sampleRate);
@@ -343,7 +349,9 @@ export function renderSamplerVoices(
         value *
         envelope *
         level *
-        gainAt(voice.startTick + elapsed / samplesPerTick);
+        gainAt(
+          warp ? warp.tick(index) : voice.startTick + elapsed / samplesPerTick,
+        );
     }
   }
 }
@@ -406,13 +414,17 @@ export function samplerTailSeconds(
   sampleRate: number,
 ): number {
   if (bank.voices.size === 0) return 0;
-  const loopEnd =
-    ((score.bars * score.beatsPerBar * 60) / score.tempoBpm) * sampleRate;
-  const timing = { score, sampleRate };
+  const loopEnd = score.time
+    ? loopSecondsOf(score) * sampleRate
+    : ((score.bars * score.beatsPerBar * 60) / score.tempoBpm) * sampleRate;
+  const warp = sampleWarpFor(score, sampleRate);
+  const timing = { score, sampleRate, ...(warp ? { warp } : {}) };
   let latest = 0;
   for (const track of score.tracks) {
     if (!track.sampler) continue;
-    const notes = score.notes.filter((note) => note.trackId === track.id);
+    const notes = performedNotes(score).filter(
+      (note) => note.trackId === track.id,
+    );
     for (const voice of planSamplerVoices(track, notes, bank, timing))
       latest = Math.max(latest, voice.end - loopEnd);
   }

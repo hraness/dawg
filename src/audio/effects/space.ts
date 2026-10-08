@@ -16,6 +16,7 @@ import {
   OnePole,
   Param,
   interpolateAutomation,
+  tickAtSample,
   type EffectContext,
 } from "./common.ts";
 
@@ -49,7 +50,7 @@ export function applyDelay(
   const feedbackLane = track.delayFeedbackAutomation ?? [];
   const mixLane = track.delayMixAutomation ?? [];
   if (delay.mix <= 0 && mixLane.length === 0) return;
-  const { sampleRate, samplesPerTick } = context;
+  const { sampleRate } = context;
   const length = Math.max(
     1,
     Math.round(delaySeconds(track, context.tempoBpm) * sampleRate),
@@ -69,7 +70,7 @@ export function applyDelay(
         ];
   for (let index = 0; index < left.length; index += 1) {
     if (automated && index % CONTROL_SAMPLES === 0) {
-      const tick = index / samplesPerTick;
+      const tick = tickAtSample(context, index);
       feedback = interpolateAutomation(feedbackLane, tick, delay.feedback);
       mix = interpolateAutomation(mixLane, tick, delay.mix);
     }
@@ -211,6 +212,7 @@ function mixParamOf(track: Track, context: EffectContext): Param {
     track.reverb?.mix ?? 0,
     track.fxAutomation?.["reverb-mix"],
     context.samplesPerTick,
+    context.warp,
   );
 }
 

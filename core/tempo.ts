@@ -452,6 +452,36 @@ export function barAt(score: TimeScore, tick: number): BarPosition {
   };
 }
 
+// The transport runs in unwrapped score beats: pass k of the loop starts at
+// beat k * loop beats. These keep the 0.4 arithmetic without meter changes.
+
+/** Bar index, counting every loop pass, of transport `beat`. */
+export function transportBar(score: TimeScore, beat: number): number {
+  if (!score.time?.meter) return Math.floor(beat / score.beatsPerBar);
+  const loopTicks = loopTicksOf(score);
+  const tick = beat * score.ticksPerBeat;
+  const pass = Math.floor(tick / loopTicks);
+  return pass * score.bars + barAt(score, tick - pass * loopTicks).bar;
+}
+
+/** Transport beat where transport bar `bar` (any loop pass) starts. */
+export function transportBarStart(score: TimeScore, bar: number): number {
+  if (!score.time?.meter) return bar * score.beatsPerBar;
+  const pass = Math.floor(bar / score.bars);
+  const inner = bar - pass * score.bars;
+  return (
+    (pass * loopTicksOf(score) + barStartTick(score, inner)) /
+    score.ticksPerBeat
+  );
+}
+
+/** Score tick inside the loop where transport `beat` falls. */
+export function loopTickAt(score: TimeScore, beat: number): number {
+  const loopTicks = loopTicksOf(score);
+  const tick = beat * score.ticksPerBeat;
+  return ((tick % loopTicks) + loopTicks) % loopTicks;
+}
+
 /** True when the score has a meter change after bar 0 or a non-4 unit. */
 export function hasMeterChanges(score: TimeScore): boolean {
   return score.time?.meter !== undefined;

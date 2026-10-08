@@ -12,6 +12,7 @@
 import type { AutomationPoint, Track } from "../../../core/score.ts";
 import type { FxLane, FxValues } from "../../../core/fx.ts";
 import type { DecodedSample } from "../samples.ts";
+import type { SampleWarp } from "../warp.ts";
 
 /** Effect parameters are refreshed at this sample interval. */
 export const CONTROL_SAMPLES = 32;
@@ -22,7 +23,19 @@ export type EffectContext = Readonly<{
   tempoBpm: number;
   /** Decoded `reverb.ir` samples by track id (built-in impulses need none). */
   irs?: ReadonlyMap<string, DecodedSample>;
+  /** The song's tempo map in samples; absent: constant tempo. */
+  warp?: SampleWarp;
 }>;
+
+/** Score tick at sample `index`, through the tempo map when there is one. */
+export function tickAtSample(
+  context: Pick<EffectContext, "samplesPerTick" | "warp">,
+  index: number,
+): number {
+  return context.warp
+    ? context.warp.tick(index)
+    : index / context.samplesPerTick;
+}
 
 /** Resolve a piecewise-linear automation lane, holding the static value before its first point. */
 export function interpolateAutomation(
@@ -58,6 +71,7 @@ export class Param {
     readonly fallback: number,
     points: readonly AutomationPoint[] | undefined,
     private readonly samplesPerTick: number,
+    private readonly warp?: SampleWarp,
   ) {
     this.points = points ?? [];
     this.automated = this.points.length > 0;
@@ -67,7 +81,7 @@ export class Param {
     return this.automated
       ? interpolateAutomation(
           this.points,
-          index / this.samplesPerTick,
+          this.warp ? this.warp.tick(index) : index / this.samplesPerTick,
           this.fallback,
         )
       : this.fallback;
@@ -93,6 +107,7 @@ export function fxReader(
         values[name] as number,
         track.fxAutomation?.[`${effect}-${name}` as FxLane],
         context.samplesPerTick,
+        context.warp,
       );
     },
   };
