@@ -127,7 +127,7 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       },
       {
         command: "rit|accel [<n> bars] [to <bpm>] [at bar <n>]",
-        summary: "gradual · rit 4 bars to 80 · default 75% / 133%",
+        summary: "gradual · rit 4 bars to 80 · a tempo · tempo primo",
       },
       {
         command: "fermata [at <beat>|at bar <n>|at end] [<extra beats>]",
@@ -142,8 +142,8 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "polytempo · track rate 3/2 · track cycle 3",
       },
       {
-        command: "track phasing <beats> [over <beats>]",
-        summary: "Reich drift · track phasing 3 · track time off",
+        command: "track phasing <beats> [over <beats>|hold <n>]",
+        summary: "Reich phasing · track phasing 3 hold 8 · track time off",
       },
       {
         command: "key <tonic> <mode> | none",
