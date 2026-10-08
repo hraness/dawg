@@ -638,6 +638,25 @@ function trackTime(
       command.over !== undefined
         ? Math.round(command.over * tpb)
         : loopTicksOf(score);
+    // Placement restarts every loop pass, so the pair only realigns when
+    // the loop holds whole spans and the span whole cycles.
+    const loop = loopTicksOf(score);
+    if (over > loop || loop % over !== 0 || over % cycle !== 0) {
+      const bars = barsForWhole(
+        score,
+        command.over === undefined ? cycle : lcm(over, cycle),
+      );
+      const span = `phasing ${fmt(command.cycle)}${command.over !== undefined ? ` over ${fmt(command.over)}` : ""}`;
+      return {
+        ok: false,
+        message:
+          over % cycle !== 0 && command.over !== undefined
+            ? `track phasing · over ${fmt(over / tpb)} beats is not a whole number of ${fmt(command.cycle)}-beat cycles`
+            : bars === undefined
+              ? `track phasing · ${span} does not fit a loop of whole cycles`
+              : `track phasing · ${span} needs a ${bars}-bar loop · bars ${bars}`,
+      };
+    }
     const rate = driftRate(over, cycle, command.cycles);
     if (!(rate >= TIME_LIMITS.minRate && rate <= TIME_LIMITS.maxRate))
       return {
@@ -667,6 +686,10 @@ function trackTime(
       return { ok: false, message: "track cycle · too short" };
     current[command.field] = ticks;
     message = `${trackId} · ${command.field} ${fmt(command.value)} beat${command.value === 1 ? "" : "s"}`;
+    if (command.field === "cycle" && loopTicksOf(score) % ticks !== 0) {
+      const bars = barsForWhole(score, ticks);
+      message += ` · restarts at the loop end${bars === undefined ? "" : `; bars ${bars} for whole cycles`}`;
+    }
   }
   const time: TrackTime | null = Object.keys(current).length
     ? (current as TrackTime)
@@ -684,6 +707,29 @@ function trackTime(
     kind: "track.time",
     payload: { trackId, time },
   };
+}
+
+function gcd(a: number, b: number): number {
+  while (b) [a, b] = [b, a % b];
+  return a;
+}
+
+function lcm(a: number, b: number): number {
+  return (a / gcd(a, b)) * b;
+}
+
+/**
+ * Bars whose loop is a whole multiple of `ticks`: the fewest at or above
+ * the song's length, else the fewest overall; undefined when none fits.
+ */
+function barsForWhole(score: TrackScore, ticks: number): number | undefined {
+  let fewest: number | undefined;
+  for (let bars = 1; bars <= TIME_LIMITS.maxBars; bars += 1) {
+    if (barStartTick(score, bars) % ticks !== 0) continue;
+    if (bars >= score.bars) return bars;
+    fewest ??= bars;
+  }
+  return fewest;
 }
 
 function timeResult(

@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { createScore } from "../../core/score.ts";
-import { bpmAtTick, loopTicksOf, secondsAtTick } from "../../core/tempo.ts";
+import {
+  bpmAtTick,
+  loopTicksOf,
+  performedNotes,
+  secondsAtTick,
+} from "../../core/tempo.ts";
 import { usageHint } from "./help.ts";
 import { applyTimeCommand, parseTimeCommand } from "./time.ts";
 
@@ -288,17 +293,60 @@ describe("time commands", () => {
 
   test("track phasing picks the rate that gains one cycle per loop", () => {
     const score = song();
-    // 32 beats of 3-beat cycles: the drifting track plays one cycle more.
-    const phasing = apply(score, "track phasing 3", "b");
+    // 32 beats of 4-beat cycles: the drifting track plays one cycle more.
+    const phasing = apply(score, "track phasing 4", "b");
     expect(phasing.ok).toBe(true);
     const time = phasing.next!.tracks.find((t) => t.id === "b")!.time!;
-    expect(time.cycle).toBe(3 * 480);
-    expect(time.rate).toBeCloseTo((32 / 3 + 1) / (32 / 3), 9);
-    const slow = apply(score, "track phasing 3 over 12 cycles -1", "b");
+    expect(time.cycle).toBe(4 * 480);
+    expect(time.rate).toBeCloseTo((8 + 1) / 8, 9);
+    const slow = apply(score, "track phasing 4 over 16 cycles -1", "b");
     expect(slow.next!.tracks.find((t) => t.id === "b")!.time!.rate).toBeCloseTo(
       3 / 4,
       9,
     );
+  });
+
+  test("track phasing refuses spans that cannot realign every loop", () => {
+    const score = song(); // 8 bars of 4/4, 32 beats
+    // A 3-beat cycle does not fit 32 beats: the drift would reset mid-cycle.
+    const odd = apply(score, "track phasing 3", "b");
+    expect(odd.ok).toBe(false);
+    expect(odd.message).toContain("bars 9");
+    // Longer than the loop: the wrap resets the drift before it realigns.
+    const long = apply(score, "track phasing 4 over 48", "b");
+    expect(long.ok).toBe(false);
+    expect(long.message).toContain("bars 12");
+    const ragged = apply(score, "track phasing 3 over 16", "b");
+    expect(ragged.ok).toBe(false);
+    expect(ragged.message).toContain("whole number");
+  });
+
+  test("a phased pair lines up at every loop start and after `over`", () => {
+    const base = createScore({
+      tempoBpm: 120,
+      bars: 4,
+      tracks: [
+        { id: "a", instrument: "piano" },
+        { id: "b", instrument: "piano" },
+      ],
+      notes: ["a", "b"].map((trackId) => ({
+        id: `${trackId}0`,
+        trackId,
+        pitch: 60,
+        startTick: 0,
+        durationTicks: 240,
+        velocity: 0.8,
+      })),
+    });
+    const phased = apply(base, "track phasing 2 over 8", "b").next!;
+    const starts = (id: string) =>
+      performedNotes(phased)
+        .filter((note) => note.trackId === id)
+        .map((note) => note.startTick);
+    const b = new Set(starts("b").map((tick) => Math.round(tick)));
+    // The loop (16 beats) holds two spans of 8: aligned at 0 and beat 8.
+    expect(b.has(0)).toBe(true);
+    expect(b.has(8 * 480)).toBe(true);
   });
 });
 

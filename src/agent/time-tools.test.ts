@@ -70,12 +70,12 @@ describe("set_time", () => {
     const phasing = apply(base, {
       action: "phasing",
       trackId: "b",
-      cycle: 12,
-      over: 48,
+      cycle: 4,
+      over: 16,
     });
     const time = phasing.next.tracks.find((t) => t.id === "b")?.time;
-    expect(time?.cycle).toBe(12 * base.ticksPerBeat);
-    expect(time?.rate).toBeCloseTo((48 + 12) / 48, 6);
+    expect(time?.cycle).toBe(4 * base.ticksPerBeat);
+    expect(time?.rate).toBeCloseTo((16 + 4) / 16, 6);
   });
 
   test("bad arguments are tool errors", () => {

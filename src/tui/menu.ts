@@ -77,6 +77,7 @@ import { kitCatalog } from "../audio/kits.ts";
 import { SYNTH_KIT_NAMES } from "../../core/kits.ts";
 import { DRUM_PATTERNS } from "../../core/sdk/v1.ts";
 import { isDrumInstrument } from "../../core/drums.ts";
+import { loopTicksOf } from "../../core/tempo.ts";
 import {
   SYNTH_GROUPS,
   SYNTH_PARAMS,
@@ -1569,7 +1570,7 @@ function laneNodes(
       value: "two points",
       placeholder: "from-beat:value to-beat:value",
       command: (text) => pointsCommand(lane, text, 2),
-      example: `automate ${lane} points 0:${laneFormat(lane, min)} ${context.score.beatsPerBar * context.score.bars}:${laneFormat(lane, max)}`,
+      example: `automate ${lane} points 0:${laneFormat(lane, min)} ${loopTicksOf(context.score) / context.score.ticksPerBeat}:${laneFormat(lane, max)}`,
     },
   ];
   for (const point of points)
