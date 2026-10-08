@@ -12,6 +12,7 @@ import {
   loopTicksOf,
   normalizeSongTime,
   normalizeTrackTime,
+  fermataSpan,
   performedNotes,
   phaseStepsTicks,
   secondsAtTick,
@@ -338,6 +339,28 @@ describe("track time", () => {
     expect(phaseStepsTicks(TPB, { shift: 120, hold: 2, drift: 1 })).toBe(
       4 * 3 * TPB,
     );
+  });
+
+  test("a fermata holds the felt beat of the meter", () => {
+    const base = { tempoBpm: 60, beatsPerBar: 4, bars: 4, ticksPerBeat: TPB };
+    const plain = { ...base, time: { fermatas: [{ tick: 0, beats: 1 }] } };
+    expect(fermataSpan(plain, 0)).toBe(TPB);
+    expect(secondsAtTick(plain, TPB)).toBe(2);
+    const sixEight = {
+      ...base,
+      time: {
+        meter: [{ bar: 0, beatsPerBar: 6, beatUnit: 8 }],
+        fermatas: [{ tick: 0, beats: 1 }],
+      },
+    };
+    expect(fermataSpan(sixEight, 0)).toBe(1.5 * TPB);
+    // The whole dotted quarter doubles: 1.5 s becomes 3 s.
+    expect(secondsAtTick(sixEight, 1.5 * TPB)).toBeCloseTo(3, 9);
+    const sevenEight = {
+      ...base,
+      time: { meter: [{ bar: 0, beatsPerBar: 7, beatUnit: 8 }] },
+    };
+    expect(fermataSpan(sevenEight, 0)).toBe(TPB);
   });
 
   test("phase shifts the pattern later and wraps it into the loop", () => {

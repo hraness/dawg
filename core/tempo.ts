@@ -10,8 +10,8 @@
  *   An event without `ramp` is a step. `ramp: "linear"` glides from the
  *   previous tempo into the event with an equal BPM change per beat;
  *   `ramp: "exp"` with an equal ratio per beat (even to the ear).
- * - `fermatas`: holds. The beat starting at `tick` lasts `1 + beats` times
- *   as long (it slows evenly, as a notation player or a MIDI file plays a
+ * - `fermatas`: holds. The beat starting at `tick` (the meter's felt beat,
+ *   see `fermataSpan`) lasts `1 + beats` times as long (it slows evenly, as a notation player or a MIDI file plays a
  *   fermata), and everything later moves back.
  * - `meter`: meter changes at bar boundaries (`bar` is 0-based). A bar lasts
  *   `beatsPerBar * 4 / beatUnit` beats. Without changes `beatsPerBar` of the
@@ -178,8 +178,8 @@ export function checkSongTime(
   if (score && time?.fermatas) {
     const map = new TimeMap({ ...score, ticksPerBeat, time });
     for (const fermata of time.fermatas) {
-      const held =
-        map.seconds(fermata.tick + ticksPerBeat) - map.seconds(fermata.tick);
+      const span = fermataSpan({ ...score, ticksPerBeat, time }, fermata.tick);
+      const held = map.seconds(fermata.tick + span) - map.seconds(fermata.tick);
       if (held > TIME_LIMITS.maxFermataSeconds + 1e-9)
         throw new TimeValidationError(
           `fermata at beat ${fermata.tick / ticksPerBeat} holds ${held.toFixed(1)} s; at most ${TIME_LIMITS.maxFermataSeconds} s (MIDI tempo limit), so use fewer beats or a faster tempo`,
@@ -580,6 +580,17 @@ export function meterLabel(
  * unit in compound meters (6/8, 9/8, 12/8, 6/16 … click three units), the
  * way a Standard MIDI File's 6/8 example clicks every dotted quarter.
  */
+/**
+ * Ticks a fermata at `tick` stretches: the felt beat of the meter there,
+ * so a dotted quarter in 6/8 or 12/8 and a half in 2/2, never less than a
+ * quarter note (the 4/4 beat, and every score without meter changes).
+ */
+export function fermataSpan(score: TimeScore, tick: number): number {
+  const tpb = score.ticksPerBeat;
+  if (!score.time?.meter) return tpb;
+  return Math.max(tpb, clickTicksOf(barAt(score, tick), tpb));
+}
+
 export function clickTicksOf(
   segment: Pick<MeterSegment, "beatsPerBar" | "beatUnit">,
   ticksPerBeat: number,
@@ -702,6 +713,8 @@ export class TimeMap {
   readonly ticksPerBeat: number;
   readonly startBpm: number;
   private readonly pieces: readonly Piece[];
+  /** Ticks each fermata stretches, by its tick. */
+  private readonly spans = new Map<number, number>();
 
   constructor(score: TimeScore) {
     this.ticksPerBeat = score.ticksPerBeat;
@@ -746,16 +759,22 @@ export class TimeMap {
     });
     // Pieces split segments where a fermata beat starts or ends.
     const fermatas = score.time?.fermatas ?? [];
+    const spans = this.spans;
+    for (const fermata of fermatas)
+      spans.set(fermata.tick, fermataSpan(score, fermata.tick));
     const starts = new Set<number>(segments.map((entry) => entry.start));
     for (const fermata of fermatas) {
       starts.add(fermata.tick);
-      starts.add(fermata.tick + tpb);
+      starts.add(fermata.tick + spans.get(fermata.tick)!);
     }
     const ticks = [...starts].sort((a, b) => a - b);
     const stretchAt = (tick: number) => {
       let stretch = 1;
       for (const fermata of fermatas)
-        if (fermata.tick <= tick && tick < fermata.tick + tpb)
+        if (
+          fermata.tick <= tick &&
+          tick < fermata.tick + spans.get(fermata.tick)!
+        )
           stretch *= 1 + fermata.beats;
       return stretch;
     };
@@ -866,7 +885,7 @@ export class TimeMap {
   holdAt(tick: number): number {
     const piece = this.pieceAt(tick);
     if (piece.tick !== tick || piece.stretch === 1) return 0;
-    const end = tick + this.ticksPerBeat;
+    const end = tick + (this.spans.get(tick) ?? this.ticksPerBeat);
     const span = this.seconds(end) - piece.seconds;
     return span - span / piece.stretch;
   }

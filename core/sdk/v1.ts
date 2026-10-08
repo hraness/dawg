@@ -3480,9 +3480,35 @@ function songTime(
         );
   }
   // A fermata may hold its beat at most as long as a MIDI file can write.
+  // The held beat is the meter's felt beat (a dotted quarter in 6/8), as
+  // core/tempo.ts fermataSpan has it.
+  const feltBeats = (tick: number): number => {
+    let at = 0;
+    let fromBar = 0;
+    let meter = { beatsPerBar, beatUnit: 4 };
+    let length = beatsPerBar * ticksPerBeat;
+    for (const change of meterOut) {
+      const start = at + (change.bar - fromBar) * length;
+      if (start > tick) break;
+      at = start;
+      fromBar = change.bar;
+      meter = {
+        beatsPerBar: change.beatsPerBar,
+        beatUnit: change.beatUnit ?? 4,
+      };
+      length = (meter.beatsPerBar * ticksPerBeat * 4) / meter.beatUnit;
+    }
+    if (meterOut.length === 0) return 1;
+    const unit = 4 / meter.beatUnit;
+    const compound =
+      meter.beatUnit >= 8 &&
+      meter.beatsPerBar > 3 &&
+      meter.beatsPerBar % 3 === 0;
+    return Math.max(1, compound ? unit * 3 : unit);
+  };
   for (const hold of fermatas) {
     const bpm = bpmAtTick(tempo, tempoBpm, hold.tick);
-    const held = ((1 + hold.beats) * 60) / bpm;
+    const held = ((1 + hold.beats) * feltBeats(hold.tick) * 60) / bpm;
     if (held > MAX_FERMATA_SECONDS + 1e-9)
       throw new DawgSdkError(
         `fermata() at beat ${hold.tick / ticksPerBeat} holds ${held.toFixed(1)} s; at most ${MAX_FERMATA_SECONDS} s (MIDI tempo limit), so use fewer beats or a faster tempo`,

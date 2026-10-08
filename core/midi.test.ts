@@ -138,11 +138,13 @@ describe("MIDI export", () => {
         ((next - tempos[i]!.tick) / 480) * (tempos[i]!.usPerQuarter / 1e6);
       expect(seconds).toBeCloseTo(secondsAtTick(score, next), 4);
     }
-    // The fermata beat plays twice as long, then the tempo returns.
+    // The fermata's beat in 6/8 is the dotted quarter: it plays twice as
+    // long, then the tempo returns.
     const at = (tick: number) =>
       [...tempos].reverse().find((e) => e.tick <= tick)!.usPerQuarter;
     expect(at(3840)).toBe(2_000_000);
-    expect(at(4320)).toBe(1_000_000);
+    expect(at(4320)).toBe(2_000_000);
+    expect(at(4560)).toBe(1_000_000);
   });
 
   test("a fermata beat lands subdivisions at the same seconds as the WAV", () => {

@@ -28,6 +28,7 @@ import {
 } from "./expression.ts";
 import {
   clickTicksOf,
+  fermataSpan,
   loopTicksOf,
   meterSegments,
   performedNotes,
@@ -65,7 +66,7 @@ export function midiTempoEvents(
   }
   for (const fermata of score.time?.fermatas ?? []) {
     points.add(fermata.tick);
-    points.add(fermata.tick + tpb);
+    points.add(fermata.tick + fermataSpan(score, fermata.tick));
   }
   const ticks = [...points].filter((tick) => tick >= 0).sort((a, b) => a - b);
   const out: { tick: number; usPerQuarter: number }[] = [];
