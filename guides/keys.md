@@ -11,7 +11,7 @@ order: 5
 - Enter send · Shift-Enter new line · Alt-Enter queue · Ctrl-Q queue mode
 - Space play / pause (empty prompt) · Esc cancel or close
 - Ctrl-Z undo · Ctrl-Y redo · Ctrl-O transcript · Ctrl-L redraw
-- Ctrl-P play mode · Ctrl-K menu · Ctrl-C exit
+- Ctrl-P play mode · Ctrl-K menu · F1 guides · Ctrl-C exit
 
 ## Lists, menus and guides
 

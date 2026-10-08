@@ -8,7 +8,7 @@ order: 1
 ## Ask
 
 - "add a pad track playing long chords"
-- "rename this track to lead and make it a pluck"
+- "make the lead a pluck and the bass a sub"
 
 ## Type it yourself
 

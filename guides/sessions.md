@@ -8,10 +8,6 @@ order: 2
 Open `dawg` in more than one terminal on the same folder: each window
 focuses a different track and every edit syncs to all of them.
 
-## Ask
-
-- "name this session night drive"
-
 ## Type it yourself
 
 - `/sessions` list · `/resume` picker · `/resume 2` or a name

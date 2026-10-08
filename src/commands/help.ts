@@ -310,8 +310,7 @@ export const HELP_GUIDE: readonly HelpSection[] = [
     group: "more" as HelpGroup,
     entries: [
       { command: "/guide", summary: "short guides for every feature · F1" },
-      { command: "/help all", summary: "every command and key" },
-      { command: "/help music", summary: "or session, window, keys" },
+      { command: "/help all", summary: "every command and key · /help music" },
     ],
   },
 ];
