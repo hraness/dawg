@@ -415,8 +415,10 @@ export const HELP_GUIDE: readonly HelpSection[] = [
         command: "rit 4 bars to 80",
         summary: "tempo changes, fermatas, meter · /menu tempo",
       },
-      { command: "/guide", summary: "short guides for every feature · F1" },
-      { command: "/help all", summary: "every command and key · /help music" },
+      {
+        command: "/help all",
+        summary: "every command and key · /guide feature guides · F1",
+      },
     ],
   },
 ];
