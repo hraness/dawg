@@ -92,7 +92,13 @@ test.skipIf(!supported)(
         ["/model", "Claude Opus", "haiku"],
       ] as const) {
         await t.send(`${command}\r`);
-        await t.until(() => t.vt.text().includes(title), command);
+        // The list and its footer can land in separate frames under load.
+        await t.until(
+          () =>
+            t.vt.text().includes(title) &&
+            /esc (back|leave|clear)/.test(t.vt.text()),
+          command,
+        );
         expectFits(t);
         await expectKeysPanel(t, "filter (type, then enter or esc)", title);
         await expectFilter(t, query, title);
