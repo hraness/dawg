@@ -25,7 +25,7 @@ export const socialSite = defineSocialImageSite({
   description: productMessaging.tagline,
   domain: productDomain,
   name: productName,
-  palette: "rose-pine",
+  palette: "paper",
 });
 
 /** Share cards; `strict` fails the build when copy would be cut or shrunk. */

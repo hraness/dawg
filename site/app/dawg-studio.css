@@ -54,9 +54,9 @@
   --dawg-clip-3: #9ccfd8;
   --dawg-clip-4: #c4a7e7;
   --dawg-clip-ink: #0f0f0f;
-  --dawg-rule: 1px solid var(--line);
+  --dawg-rule: 1px solid color-mix(in oklab, var(--foreground) 22%, transparent);
   --dawg-rule-strong: 2px solid var(--foreground);
   --dawg-radius: 0;
-  --dawg-display: clamp(3rem, 1.4rem + 7vw, 7.5rem);
+  --dawg-display: clamp(2.9rem, 1.2rem + 7.2vw, 7.5rem);
   --dawg-title: clamp(2rem, 1.2rem + 3.2vw, 3.75rem);
 }

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
+import { MarketingPillars } from "@hraness/design-kit/react/server";
 
 import { CodeBlock } from "./code-block";
 import { HighwayDemo } from "./highway/highway-demo";
@@ -8,6 +10,7 @@ import {
   repoUrl,
   sourceInstallCommands,
 } from "./messaging";
+import { DawgPlatformInstall } from "./platform-install";
 import { latestRelease, releaseTarballUrl } from "./release";
 import { SiteHeader } from "./site-header";
 
@@ -95,32 +98,89 @@ const questions = [
   },
 ] as const;
 
+/** A section's mono label and heading, in the left column of the studio grid. */
+function SectionHead({
+  id,
+  index,
+  label,
+  heading,
+  children,
+}: Readonly<{
+  id: string;
+  index: string;
+  label: string;
+  heading: string;
+  children?: ReactNode;
+}>) {
+  return (
+    <header className="dawg-section__head">
+      <p className="dawg-eyebrow">
+        <span aria-hidden="true">{index}</span> {label}
+      </p>
+      <h2 id={id} className="dawg-section__title">
+        {heading}
+      </h2>
+      {children}
+    </header>
+  );
+}
+
+const windows = [
+  { name: "drums", note: "kick · snare · hat" },
+  { name: "bass", note: "A2 C3 E3 · G2 D3 E3" },
+  { name: "keys", note: "Am7 · G · reverb 0.3" },
+] as const;
+
+const steps = [
+  {
+    title: "Plain commands run locally",
+    body: (
+      <>
+        <code>tempo 96</code>, <code>pattern hat every 0.5</code>,{" "}
+        <code>reverb 0.3 0.7</code> and the rest of the command language never
+        leave your machine.
+      </>
+    ),
+  },
+  {
+    title: "Everything else goes to the agent",
+    body: "It gets a compact brief of the song, capped at 12 KiB, and edits only through typed tools: tracks, notes, drums, effects, automation.",
+  },
+  {
+    title: "Each tool call is checked three times",
+    body: "The tool\u2019s own argument checks, the planner\u2019s bounded validator and a dry run of the score reducer. A call that fails goes back to the model as a diagnostic.",
+  },
+  {
+    title: "Accepted calls become revisions",
+    body: "Each one is committed separately and broadcast to every window, with a card in the activity strip and an undo that drops exactly that change.",
+  },
+] as const;
+
 export default async function Home() {
   const release = await latestRelease();
-  const bunCommand = release.published
-    ? `bun add -g ${releaseTarballUrl(release.version)}`
-    : null;
   return (
     <>
       <SiteHeader active="home" />
-      <main id="main" className="dawg-main">
+      <main id="main" tabIndex={-1} className="dawg-main">
         <section className="dawg-hero" aria-labelledby="hero-title">
-          <div className="dawg-hero__copy">
-            <p className="dawg-eyebrow">{productMessaging.category}</p>
-            <h1 id="hero-title">
-              A DAW in your terminal,{" "}
-              <span className="dawg-hero__dawg">dawg</span>.
-            </h1>
+          <p className="dawg-eyebrow dawg-hero__eyebrow">
+            {productMessaging.category}
+          </p>
+          <h1 id="hero-title" className="dawg-hero__title">
+            A DAW in your terminal,{" "}
+            <span className="dawg-hero__dawg">dawg</span>.
+          </h1>
+          <div className="dawg-hero__row">
             <p className="dawg-lede">
               Chat with an agent to build loops. Watch every note land on a
               piano roll that scrolls above your prompt. Open another window and
               pick up another instrument.
             </p>
             <div className="dawg-hero__install">
-              <CodeBlock code={`$ ${installCommand}`} />
+              <DawgPlatformInstall installCommand={installCommand} />
               <p className="dawg-hero__links">
                 <Link href="/docs" data-analytics-cta>
-                  Quickstart
+                  Read the docs
                 </Link>
                 <a href={repoUrl}>Source on GitHub</a>
                 <span>MIT · Bun 1.3.14+</span>
@@ -132,119 +192,103 @@ export default async function Home() {
           </div>
         </section>
 
-        <section className="dawg-section" aria-labelledby="pillars-title">
-          <h2 id="pillars-title" className="dawg-section__title">
+        <section className="dawg-clips" aria-labelledby="pillars-title">
+          <h2 id="pillars-title" className="dawg-visually-hidden">
             Make a loop the way you&rsquo;d describe it
           </h2>
-          <ol className="dawg-pillars">
-            {pillars.map((pillar, i) => (
-              <li key={pillar.title} className="dawg-pillar">
-                <span className="dawg-pillar__index" aria-hidden="true">
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-                <h3>{pillar.title}</h3>
-                <p>{pillar.body}</p>
-              </li>
-            ))}
-          </ol>
+          <MarketingPillars
+            ariaLabel="What dawg does"
+            className="dawg-clips__grid"
+            columns={4}
+            pillars={pillars.map((pillar) => ({
+              label: pillar.title,
+              summary: pillar.body,
+            }))}
+          />
         </section>
 
-        <section
-          className="dawg-section dawg-band"
-          aria-labelledby="band-title"
-        >
-          <div className="dawg-band__copy">
-            <h2 id="band-title" className="dawg-section__title">
-              Three windows, one band
-            </h2>
-            <p>
-              Run <code>dawg</code> in a project and the first window starts{" "}
-              <code>dawgd</code>, a local daemon that is the only writer for
-              that session. Every window after it joins the same song: play in
-              one and they all play, edit in one and they all redraw. Each plain{" "}
-              <code>dawg</code> takes the first track no other window has, and a
-              window beyond the last track gets a fresh draft track.
-            </p>
-            <p>
-              Kill a window, or the daemon, and nothing is lost. The next window
-              reclaims the session from the atomic snapshot on disk. If the
-              daemon can&rsquo;t start, windows fall back to a file lock.
-            </p>
-          </div>
-          <div className="dawg-band__windows" aria-hidden="true">
-            {[
-              { name: "drums", note: "kick · snare · hat" },
-              { name: "bass", note: "A2 C3 E3 · G2 D3 E3" },
-              { name: "keys", note: "Am7 · G · reverb 0.3" },
-            ].map((w) => (
-              <div key={w.name} className="dawg-mini">
-                <div className="dawg-mini__bar">
-                  <span>$ dawg</span>
-                  <span>{w.name}</span>
+        <section className="dawg-section" aria-labelledby="band-title">
+          <SectionHead
+            id="band-title"
+            index="01"
+            label="Sessions"
+            heading="Three windows, one band"
+          >
+            <Link className="dawg-more" href="/docs">
+              Install and open a session
+            </Link>
+          </SectionHead>
+          <div className="dawg-section__body dawg-band">
+            <div className="dawg-band__copy">
+              <p>
+                Run <code>dawg</code> in a project and the first window starts{" "}
+                <code>dawgd</code>, a local daemon that is the only writer for
+                that session. Every window after it joins the same song: play
+                in one and they all play, edit in one and they all redraw. Each
+                plain <code>dawg</code> takes the first track no other window
+                has, and a window beyond the last track gets a fresh draft
+                track.
+              </p>
+              <p>
+                Kill a window, or the daemon, and nothing is lost. The next
+                window reclaims the session from the atomic snapshot on disk. If
+                the daemon can&rsquo;t start, windows fall back to a file lock.
+              </p>
+            </div>
+            <div className="dawg-band__windows" aria-hidden="true">
+              {windows.map((w) => (
+                <div key={w.name} className="dawg-mini">
+                  <div className="dawg-mini__bar">
+                    <span>$ dawg</span>
+                    <span>{w.name}</span>
+                  </div>
+                  <div className="dawg-mini__body">
+                    <span className="dawg-mini__track">{w.name}</span> · ▶ 96
+                    BPM · rev 7 · ● synced
+                    <br />
+                    <span className="dawg-mini__note">{w.note}</span>
+                  </div>
                 </div>
-                <div className="dawg-mini__body">
-                  <span className="dawg-mini__track">{w.name}</span> · ▶ 96 BPM
-                  · rev 7 · ● synced
-                  <br />
-                  <span className="dawg-mini__note">{w.note}</span>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </section>
 
         <section className="dawg-section" aria-labelledby="turn-title">
-          <h2 id="turn-title" className="dawg-section__title">
-            What happens when you hit Enter
-          </h2>
-          <ol className="dawg-flow">
-            <li>
-              <h3>Plain commands run locally</h3>
-              <p>
-                <code>tempo 96</code>, <code>pattern hat every 0.5</code>,{" "}
-                <code>reverb 0.3 0.7</code> and the rest of the command language
-                never leave your machine.
-              </p>
-            </li>
-            <li>
-              <h3>Everything else goes to the agent</h3>
-              <p>
-                It gets a compact brief of the song, capped at 12 KiB, and edits
-                only through typed tools: tracks, notes, drums, effects,
-                automation.
-              </p>
-            </li>
-            <li>
-              <h3>Each tool call is checked three times</h3>
-              <p>
-                The tool&rsquo;s own argument checks, the planner&rsquo;s
-                bounded validator and a dry run of the score reducer. A call
-                that fails goes back to the model as a diagnostic.
-              </p>
-            </li>
-            <li>
-              <h3>Accepted calls become revisions</h3>
-              <p>
-                Each one is committed separately and broadcast to every window,
-                with a card in the activity strip and an undo that drops exactly
-                that change.
-              </p>
-            </li>
+          <SectionHead
+            id="turn-title"
+            index="02"
+            label="The agent"
+            heading="What happens when you hit Enter"
+          />
+          <ol className="dawg-section__body dawg-flow">
+            {steps.map((step) => (
+              <li key={step.title}>
+                <h3>{step.title}</h3>
+                <p>{step.body}</p>
+              </li>
+            ))}
           </ol>
         </section>
 
         <section className="dawg-section" aria-labelledby="features-title">
-          <h2 id="features-title" className="dawg-section__title">
-            In the box
-          </h2>
-          <ul className="dawg-features">
-            {features.map((feature) => (
-              <li key={feature.title}>
-                <h3>{feature.title}</h3>
-                <p>{feature.body}</p>
-              </li>
-            ))}
-          </ul>
+          <SectionHead
+            id="features-title"
+            index="03"
+            label="Features"
+            heading="In the box"
+          />
+          <div className="dawg-section__body">
+            <MarketingPillars
+              ariaLabel="Features"
+              className="dawg-cells"
+              columns={4}
+              pillars={features.map((feature) => ({
+                label: feature.title,
+                summary: feature.body,
+              }))}
+            />
+          </div>
         </section>
 
         <section
@@ -252,77 +296,84 @@ export default async function Home() {
           id="install"
           aria-labelledby="install-title"
         >
-          <h2 id="install-title" className="dawg-section__title">
-            Install
-          </h2>
-          <p>
-            dawg runs on <a href="https://bun.sh">Bun</a> 1.3.14 or newer. The
-            script installs Bun if it&rsquo;s missing, downloads the latest
-            release tarball from GitHub, checks it against the release&rsquo;s
-            SHA256SUMS and installs it with <code>bun add -g</code>.
-          </p>
-          {release.published ? null : (
-            <p className="dawg-notice" role="status">
-              The first release of dawg is coming soon. Until it&rsquo;s out the
-              script stops with a note instead of installing; run it from source
-              in the meantime.
+          <SectionHead
+            id="install-title"
+            index="04"
+            label="Get started"
+            heading="Install"
+          >
+            <p>
+              dawg runs on <a href="https://bun.sh">Bun</a> 1.3.14 or newer.
+              The script installs Bun if it&rsquo;s missing, downloads the
+              latest release tarball from GitHub, checks it against the
+              release&rsquo;s SHA256SUMS and installs it with{" "}
+              <code>bun add -g</code>.
             </p>
-          )}
-          <div className="dawg-install__grid">
-            <div>
-              <h3>Install script</h3>
-              <CodeBlock code={`$ ${installCommand}`} />
-              <p className="dawg-small">
-                <a href="/install">Read the script</a> before you pipe it.
+          </SectionHead>
+          <div className="dawg-section__body">
+            {release.published ? null : (
+              <p className="dawg-notice" role="status">
+                The first release of dawg is coming soon. Until it&rsquo;s out
+                the script stops with a note instead of installing; run it from
+                source in the meantime.
               </p>
-            </div>
-            {bunCommand === null ? null : (
+            )}
+            <div className="dawg-install__grid">
               <div>
-                <h3>Release tarball with Bun</h3>
-                <CodeBlock code={`$ ${bunCommand}`} />
+                <h3>Install script</h3>
+                <CodeBlock code={`$ ${installCommand}`} />
                 <p className="dawg-small">
-                  Each{" "}
-                  <a
-                    href={
-                      release.published ? release.url : `${repoUrl}/releases`
-                    }
-                  >
-                    release
-                  </a>{" "}
-                  ships the tarball, SHA256SUMS and a build provenance
-                  attestation.
+                  <a href="/install">Read the script</a> before you pipe it.
                 </p>
               </div>
-            )}
-            <div>
-              <h3>From source</h3>
-              <CodeBlock
-                code={sourceInstallCommands
-                  .map((line) => `$ ${line}`)
-                  .join("\n")}
-              />
+              {release.published ? (
+                <div>
+                  <h3>Release tarball with Bun</h3>
+                  <CodeBlock
+                    code={`$ bun add -g ${releaseTarballUrl(release.version)}`}
+                  />
+                  <p className="dawg-small">
+                    Each <a href={release.url}>release</a> ships the tarball,
+                    SHA256SUMS and a build provenance attestation.
+                  </p>
+                </div>
+              ) : null}
+              <div>
+                <h3>From source</h3>
+                <CodeBlock
+                  code={sourceInstallCommands
+                    .map((line) => `$ ${line}`)
+                    .join("\n")}
+                />
+              </div>
             </div>
+            <p>
+              For sound, install <code>ffplay</code> (from FFmpeg) or SoX; on
+              macOS dawg falls back to <code>afplay</code>. Then run{" "}
+              <code>dawg</code> in any folder and follow the{" "}
+              <Link href="/docs">docs</Link>.
+            </p>
           </div>
-          <p>
-            For sound, install <code>ffplay</code> (from FFmpeg) or SoX; on
-            macOS dawg falls back to <code>afplay</code>. Then run{" "}
-            <code>dawg</code> in any folder and see the{" "}
-            <Link href="/docs">quickstart</Link>.
-          </p>
         </section>
 
         <section className="dawg-section" aria-labelledby="faq-title">
-          <h2 id="faq-title" className="dawg-section__title">
-            Questions
-          </h2>
-          <dl className="dawg-faq">
+          <SectionHead
+            id="faq-title"
+            index="05"
+            label="FAQ"
+            heading="Questions"
+          />
+          <div className="dawg-section__body dawg-faq">
             {questions.map((item) => (
-              <div key={item.q}>
-                <dt>{item.q}</dt>
-                <dd>{item.a}</dd>
-              </div>
+              <details key={item.q}>
+                <summary>
+                  {item.q}
+                  <span aria-hidden="true">+</span>
+                </summary>
+                <p>{item.a}</p>
+              </details>
             ))}
-          </dl>
+          </div>
         </section>
       </main>
     </>
