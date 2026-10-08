@@ -170,6 +170,22 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "detune one note · cents n3 -14 · add E4-14c at 0",
       },
       {
+        command: "section <name> <a>-<b> | add | dup | move | rename | delete",
+        summary: "song sections · section chorus 9-16 · section lists them",
+      },
+      {
+        command: "section loop | jump | mute | vary <name>",
+        summary: "section loop chorus · section mute verse drums",
+      },
+      {
+        command: "form <section…> | off | bake",
+        summary: "song form · form intro verse chorus*2 outro",
+      },
+      {
+        command: "build | drop | fill [<section> | <a>-<b>]",
+        summary: "riser, roll, sweep · pre-drop cut and impact · drum fill",
+      },
+      {
         command: "hit <voice> at <beat>",
         summary: "kit tracks · hit kick at 0",
       },
@@ -317,13 +333,9 @@ export const HELP_GUIDE: readonly HelpSection[] = [
       { command: "ctrl-p", summary: "play notes on the computer keyboard" },
       {
         command: "ctrl-k",
-        summary: "menu: sound, effects, performance, mix, master …",
+        summary: "menu: sound, effects, performance, mix, master, arrange …",
       },
-      { command: "?", summary: "keys for the screen you are on" },
-      {
-        command: "ctrl-z · ctrl-y",
-        summary: "undo · redo (every change is one)",
-      },
+      { command: "? · ctrl-z · ctrl-y", summary: "keys here · undo · redo" },
     ],
   },
   {
@@ -342,8 +354,10 @@ export const HELP_GUIDE: readonly HelpSection[] = [
   {
     group: "make drums" as HelpGroup,
     entries: [
-      { command: "/pattern", summary: "pick a groove · moving previews it" },
-      { command: "/kit", summary: "pick a drum kit" },
+      {
+        command: "/pattern · /kit",
+        summary: "pick a groove · pick a drum kit",
+      },
       { command: "/euclid", summary: "rhythm editor: pulses, steps, rotation" },
     ],
   },
@@ -366,12 +380,8 @@ export const HELP_GUIDE: readonly HelpSection[] = [
     group: "shape the performance" as HelpGroup,
     entries: [
       {
-        command: "ctrl-k › Sound › performance",
-        summary: "articulation, glide, pedal",
-      },
-      {
         command: "art staccato bar 2",
-        summary: "or humanize 8 5 · seeded feel",
+        summary: "humanize 8 5 · ctrl-k › Sound › performance",
       },
     ],
   },
@@ -381,11 +391,20 @@ export const HELP_GUIDE: readonly HelpSection[] = [
       { command: "key A minor", summary: "set the song key" },
       {
         command: "ctrl-p, then q",
-        summary: "chord mode: one key plays a chord",
+        summary: "chord mode · 1–4 type · 5–8 extension · n next",
+      },
+    ],
+  },
+  {
+    group: "song structure" as HelpGroup,
+    entries: [
+      {
+        command: "section verse 1-8",
+        summary: "name bars · form verse chorus*2 orders them",
       },
       {
-        command: "1–4 · 5–8 · n",
-        summary: "chord type · extension · next chord",
+        command: "build · drop · fill",
+        summary: "transitions · ctrl-k › Arrange · /help arrange",
       },
     ],
   },
@@ -399,7 +418,13 @@ export const HELP_GUIDE: readonly HelpSection[] = [
 ];
 
 /** Topics `/help <topic>` takes, besides `all`. */
-export const HELP_TOPICS = ["music", "session", "window", "keys"] as const;
+export const HELP_TOPICS = [
+  "music",
+  "session",
+  "window",
+  "keys",
+  "arrange",
+] as const;
 
 /**
  * Rows for `/help [topic]`: the guide with no topic, the full reference for
@@ -413,8 +438,45 @@ export function helpTopicLines(
   if (!name) return sectionLines(HELP_GUIDE, width, 20);
   if (name === "all" || name === "commands" || name === "reference")
     return helpLines(width);
+  if (name === "arrange" || name === "arrangement" || name === "sections")
+    return sectionLines([arrangeSection()], width);
   const group = HELP_SECTIONS.find((section) => section.group === name);
   return group ? sectionLines([group], width) : undefined;
+}
+
+/** `/help arrange`: every arranging command with its full usage. */
+function arrangeSection(): HelpSection {
+  const verbs = ["section", "sections", "form", "build", "drop", "fill"];
+  return {
+    group: "arrange" as HelpGroup,
+    entries: [
+      // Usage strings run long: wrapped onto continuation rows.
+      ...verbs.flatMap((verb) =>
+        wrapWords(USAGE[verb] ?? "", 46).map((summary, index) => ({
+          command: index === 0 ? verb : "",
+          summary,
+        })),
+      ),
+      { command: "/menu arrange", summary: "the Arrange menu (ctrl-k)" },
+      {
+        command: "dawg render --section <name>",
+        summary: "export one section",
+      },
+    ],
+  };
+}
+
+function wrapWords(text: string, width: number): string[] {
+  const rows: string[] = [];
+  let row = "";
+  for (const word of text.split(" ")) {
+    if (row && row.length + 1 + word.length > width) {
+      rows.push(row);
+      row = word;
+    } else row = row ? `${row} ${word}` : word;
+  }
+  if (row) rows.push(row);
+  return rows;
 }
 
 function sectionLines(
@@ -576,6 +638,14 @@ export const USAGE: Readonly<Record<string, string>> = {
   sustain: EXPRESSION_USAGE.pedal,
   velcurve: EXPRESSION_USAGE.velcurve,
   humanize: EXPRESSION_USAGE.humanize,
+  section:
+    "section [mark] <name> <a>-<b> | add [<name>] [<n>] | dup | move <name> to <bar> | rename <name> to <new> | delete | unmark | mute | vary | reset | loop <name>|off | jump <name> · section chorus 9-16",
+  sections: "section · lists sections, the form and the loop",
+  form: "form <section…> | off | bake · form verse verse chorus verse · form verse chorus*2",
+  build:
+    "build [into <section> | <section> | <a>-<b>] [<n> bars] [riser] [roll] [sweep] [uplifter] · build into chorus",
+  drop: "drop [<section> | at <bar>] [cut <beats>] [no impact] · drop chorus",
+  fill: "fill [<section> | at <bar>] [toms|roll|kick] [<n> beats] [no crash] · fill chorus (the beats before it)",
   undo: "undo · Ctrl-Z",
   redo: "redo · Ctrl-Y",
 };
@@ -675,6 +745,42 @@ export function looksLikeProse(command: string): boolean {
  */
 export function usageHint(command: string): string | undefined {
   if (looksLikeProse(command)) return undefined;
-  const verb = command.trim().toLowerCase().replace(/^\//, "").split(/\s+/)[0];
-  return verb ? USAGE[verb] : undefined;
+  const words = command.trim().toLowerCase().replace(/^\//, "").split(/\s+/);
+  const verb = words[0];
+  if (!verb) return undefined;
+  // `build tension`, `drop bass`, `form a hook`: everyday words, so only
+  // arguments that look like the grammar earn a usage hint; the rest is
+  // a request for the agent.
+  if (
+    ARRANGE_VERBS.has(verb) &&
+    !command.trim().startsWith("/") &&
+    !words.slice(1).some((word) => /\d/.test(word) || ARRANGE_WORDS.has(word))
+  )
+    return undefined;
+  return USAGE[verb];
 }
+
+const ARRANGE_VERBS: ReadonlySet<string> = new Set([
+  "build",
+  "drop",
+  "fill",
+  "form",
+]);
+const ARRANGE_WORDS: ReadonlySet<string> = new Set([
+  "at",
+  "into",
+  "cut",
+  "no",
+  "impact",
+  "crash",
+  "riser",
+  "roll",
+  "sweep",
+  "uplifter",
+  "toms",
+  "kick",
+  "beats",
+  "bars",
+  "bake",
+  "off",
+]);

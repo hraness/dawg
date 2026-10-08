@@ -127,6 +127,14 @@ export function rebaseOperations(
         if (!deepEqual(base.master, current.master))
           return { ok: false, reason: "master changed" };
         break;
+      case "setSections":
+        if (
+          JSON.stringify(base.sections) !== JSON.stringify(current.sections) ||
+          JSON.stringify(base.form) !== JSON.stringify(current.form) ||
+          base.loopSection !== current.loopSection
+        )
+          return { ok: false, reason: "sections changed" };
+        break;
       case "removeTrack": {
         if (added.tracks.has(operation.trackId)) break;
         if (

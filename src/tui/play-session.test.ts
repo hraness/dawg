@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { createScore, type TrackScore } from "../../core/score.ts";
 import { pedalStateAt, type PedalEvent } from "../../core/expression.ts";
+import { loopSection } from "../../core/sections.ts";
+import { scoreBeatAt } from "../audio/arrange.ts";
 import type { ClickBus } from "../audio/engine.ts";
 import type { LiveNotePcm } from "../audio/live.ts";
 import {
@@ -347,6 +349,37 @@ describe("PlaySession", () => {
     expect(state.cards.some((card) => card.includes("disk full"))).toBe(true);
     expect(state.score.notes).toHaveLength(1);
     expect(state.score.tracks[0]!.pedal).toHaveLength(2);
+  });
+
+  test("recording over a looped section lands inside the section", async () => {
+    const score = loopSection(
+      createScore({
+        tempoBpm: 120,
+        bars: 24,
+        tracks: [{ id: "lead", name: "keys", instrument: "piano" }],
+      }).withSections([{ name: "chorus", startBar: 16, bars: 8 }], []),
+      "chorus",
+    );
+    const { session, state, host } = harness(score);
+    host.scoreBeat = (beat) => scoreBeatAt(state.score, beat);
+    await session.enter();
+    session.press("r");
+    state.now = 0;
+    host.startTransport(0);
+    session.tick();
+    // Transport beat 1 of the looped render is the chorus's bar 17, beat 2.
+    state.now = 500;
+    session.tick();
+    session.press("a");
+    state.now = 2_010;
+    session.tick();
+    await session.stopRecording();
+    const notes = state.score.notes.filter((note) => note.trackId === "lead");
+    expect(notes).toHaveLength(1);
+    const ticksPerBar = 4 * state.score.ticksPerBeat;
+    expect(notes[0]!.startTick).toBe(
+      16 * ticksPerBar + state.score.ticksPerBeat,
+    );
   });
 
   test("nothing records while the transport is stopped (free play)", async () => {

@@ -73,6 +73,17 @@ export function diffScores(
     ops.push({ type: "setTuning", tuning: b.tuning ?? null });
   if (!deepEqual(a.master, b.master))
     ops.push({ type: "setMaster", master: b.master ?? null });
+  if (
+    !deepEqual(a.sections, b.sections) ||
+    !deepEqual(a.form, b.form) ||
+    a.loopSection !== b.loopSection
+  )
+    ops.push({
+      type: "setSections",
+      sections: b.sections,
+      form: b.form,
+      ...(b.loopSection === undefined ? {} : { loopSection: b.loopSection }),
+    });
 
   const aTracks = new Map(a.tracks.map((track) => [track.id, track]));
   const bTracks = new Map(b.tracks.map((track) => [track.id, track]));

@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.17.0";
+export const SDK_VERSION = "1.18.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -2473,7 +2473,39 @@ export type SongInput = Readonly<{
   tracks: readonly TrackSpec[];
   /** Master chain and loudness target after every track and orbit bus (SDK 1.17.0); omit for none. */
   master?: MasterInput;
+  /**
+   * Named bar ranges (SDK 1.18.0): `{ name: "chorus", startBar: 8, bars: 8 }`,
+   * optionally with `mute: ["pad"]` and `vary: { lead: { transpose: 12 } }`.
+   */
+  sections?: readonly SongSection[];
+  /**
+   * The order sections play, with repeats (SDK 1.18.0): `"intro verse
+   * chorus*2 outro"`, or `["intro", { section: "chorus", repeat: 2 }]`.
+   * Absent plays the bars straight through.
+   */
+  form?: string | readonly (string | SongFormEntry)[];
+  /** The section playback loops (SDK 1.18.0); export ignores it. */
+  loopSection?: string;
 }>;
+
+/** A song section (SDK 1.18.0); bars are 0-based like beats. */
+export type SongSection = Readonly<{
+  /** `intro`, `verse`, `chorus 2`, `A`: 1..32 characters, unique ignoring case. */
+  name: string;
+  /** First bar, 0-based. */
+  startBar: number;
+  /** Length in bars, at least 1. */
+  bars: number;
+  /** Track ids silent in this section. */
+  mute?: readonly string[];
+  /** Per-track changes in this section: semitones and a velocity multiplier. */
+  vary?: Readonly<
+    Record<string, Readonly<{ transpose?: number; gain?: number }>>
+  >;
+}>;
+
+/** One step of the song form (SDK 1.18.0). */
+export type SongFormEntry = Readonly<{ section: string; repeat?: number }>;
 
 /**
  * The song master (SDK 1.17.0), processed in the fixed order
@@ -2608,6 +2640,12 @@ export type Song = Readonly<{
   tracks: readonly ScoreTrack[];
   notes: readonly ScoreNote[];
   master?: MasterInput;
+  /** Present only when the song has sections (SDK 1.18.0). */
+  sections?: readonly SongSection[];
+  /** Present only when the song has a form (SDK 1.18.0). */
+  form?: readonly SongFormEntry[];
+  /** Present only when a section loops (SDK 1.18.0). */
+  loopSection?: string;
 }>;
 
 /** A stored song `time`: ticks, and 0-based bar indexes. */
@@ -2653,6 +2691,107 @@ function masterData(input: unknown): MasterInput | undefined {
   return Object.keys(out).length > 0
     ? (Object.freeze(out) as MasterInput)
     : undefined;
+}
+
+/** `"intro verse chorus*2"` (comma separated when a name has a space). */
+function parseSongForm(
+  form: NonNullable<SongInput["form"]>,
+): readonly SongFormEntry[] {
+  const items: (string | SongFormEntry)[] =
+    typeof form === "string"
+      ? (form.includes(",") ? form.split(",") : form.trim().split(/\s+/u))
+          .map((item) => item.trim())
+          .filter((item) => item !== "")
+      : Array.isArray(form)
+        ? [...form]
+        : (() => {
+            throw new DawgSdkError(
+              "song form must be a string or an array of section names",
+            );
+          })();
+  return Object.freeze(
+    items.map((item, index) => {
+      let entry: unknown = item;
+      if (typeof item === "string") {
+        const match = /^(.*?)\s*(?:\*|\bx|×)\s*(\d+)$/iu.exec(item);
+        entry =
+          match && match[1]!.length > 0
+            ? { section: match[1]!, repeat: Number(match[2]) }
+            : { section: item };
+      }
+      if (!isRecord(entry) || typeof entry.section !== "string")
+        throw new DawgSdkError(
+          `song form[${index}] must be a section name or { section, repeat }`,
+        );
+      const repeat = entry.repeat ?? 1;
+      if (
+        !Number.isInteger(repeat) ||
+        (repeat as number) < 1 ||
+        (repeat as number) > 16
+      )
+        throw new DawgSdkError(`song form[${index}] repeat must be 1..16`);
+      return Object.freeze(
+        repeat === 1
+          ? { section: entry.section }
+          : { section: entry.section, repeat: repeat as number },
+      );
+    }),
+  );
+}
+
+function songSections(
+  sections: NonNullable<SongInput["sections"]>,
+): readonly SongSection[] {
+  if (!Array.isArray(sections))
+    throw new DawgSdkError("song sections must be an array");
+  if (sections.length > 64) throw new DawgSdkError("song has over 64 sections");
+  return Object.freeze(
+    sections.map((section, index) => {
+      const where = `song sections[${index}]`;
+      if (!isRecord(section) || typeof section.name !== "string")
+        throw new DawgSdkError(`${where} needs a name`);
+      const stored: Record<string, unknown> = {
+        name: section.name,
+        startBar: finite(section.startBar, `${where}.startBar`),
+        bars: finite(section.bars, `${where}.bars`),
+      };
+      if (section.mute !== undefined) {
+        if (
+          !Array.isArray(section.mute) ||
+          section.mute.some((id) => typeof id !== "string")
+        )
+          throw new DawgSdkError(`${where}.mute must be track ids`);
+        if (section.mute.length > 0)
+          stored.mute = Object.freeze([...section.mute]);
+      }
+      if (section.vary !== undefined) {
+        if (!isRecord(section.vary))
+          throw new DawgSdkError(`${where}.vary must be an object`);
+        const vary = Object.entries(section.vary);
+        if (vary.length > 0)
+          stored.vary = Object.freeze(
+            Object.fromEntries(
+              vary.map(([id, change]) => {
+                if (!isRecord(change))
+                  throw new DawgSdkError(
+                    `${where}.vary.${id} must be an object`,
+                  );
+                const out: Record<string, number> = {};
+                if (change.transpose !== undefined)
+                  out.transpose = finite(
+                    change.transpose,
+                    `${where}.vary.${id}.transpose`,
+                  );
+                if (change.gain !== undefined)
+                  out.gain = finite(change.gain, `${where}.vary.${id}.gain`);
+                return [id, Object.freeze(out)];
+              }),
+            ),
+          );
+      }
+      return Object.freeze(stored) as SongSection;
+    }),
+  );
 }
 
 /**
@@ -2817,6 +2956,24 @@ export function song(input: SongInput): Song {
       );
     }
   });
+  const arrangement: {
+    sections?: readonly SongSection[];
+    form?: readonly SongFormEntry[];
+    loopSection?: string;
+  } = {};
+  if (input.sections !== undefined) {
+    const sections = songSections(input.sections);
+    if (sections.length > 0) arrangement.sections = sections;
+  }
+  if (input.form !== undefined) {
+    const form = parseSongForm(input.form);
+    if (form.length > 0) arrangement.form = form;
+  }
+  if (input.loopSection !== undefined) {
+    if (typeof input.loopSection !== "string")
+      throw new DawgSdkError("song loopSection must be a section name");
+    arrangement.loopSection = input.loopSection;
+  }
   return Object.freeze({
     format: "track.loop/v1",
     version: 1,
@@ -2837,6 +2994,7 @@ export function song(input: SongInput): Song {
     tracks: Object.freeze(tracks),
     notes: Object.freeze(notes),
     ...(master ? { master } : {}),
+    ...arrangement,
   });
 }
 

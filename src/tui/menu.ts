@@ -10,6 +10,7 @@
  */
 import { commandParam, sketchFor } from "./sketch.ts";
 import { HINTS } from "../../tui/grammar.ts";
+import { arrangeDetail, arrangeNodes } from "./arrange-menu.ts";
 import { auditionKey, isStageable, type AuditionKey } from "./audition.ts";
 import { performanceDetail, performanceNodes } from "./performance-menu.ts";
 import type { FaderSpec } from "./fader.ts";
@@ -429,6 +430,14 @@ export function rootNodes(context: MenuContext): MenuNode[] {
       help: "tempo, meter, tempo map, loop length, play, click and count-in",
       build: transportNodes,
     },
+    {
+      kind: "menu",
+      id: "arrange",
+      label: "Arrange",
+      detail: arrangeDetail(context),
+      help: "song sections, the form, builds, drops and fills",
+      build: arrangeNodes,
+    },
   ];
 }
 
@@ -453,6 +462,9 @@ const SECTION_ALIASES: Readonly<Record<string, readonly string[]>> = {
   time: ["project", "tempo"],
   tuning: ["project", "tuning"],
   scale: ["project", "tuning"],
+  arrange: ["arrange"],
+  sections: ["arrange"],
+  form: ["arrange"],
 };
 
 /** Sound: instrument and voice first, then the sound browser. */
@@ -2738,6 +2750,7 @@ export const MENU_SECTIONS = [
   "mix",
   "master",
   "project",
+  "arrange",
   // Older names, still accepted.
   "parameters",
   "sounds",

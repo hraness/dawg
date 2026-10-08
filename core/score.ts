@@ -62,6 +62,13 @@ export const SCORE_LIMITS = Object.freeze({
   maxTempoBpm: 300,
   minTempoBpm: 20,
   maxBars: 256,
+  /** Song sections (0.5): named bar ranges and the form that orders them. */
+  maxSections: 64,
+  maxSectionNameLength: 32,
+  maxFormEntries: 128,
+  maxFormRepeat: 16,
+  maxSectionTranspose: 24,
+  maxSectionGain: 2,
   maxBeatsPerBar: 16,
   maxTicksPerBeat: 4096,
   maxTick: 1_000_000,
@@ -758,6 +765,39 @@ export type NoteInput = Readonly<{
 }> &
   NoteExpressionPatch;
 
+/** A per-track change inside a section: semitones and a velocity gain. */
+export type SectionVariation = Readonly<{
+  /** Semitones, -24..24; drum and one-shot sampler tracks ignore it. */
+  transpose?: number;
+  /** Velocity multiplier 0..2 (1 leaves it alone). */
+  gain?: number;
+}>;
+
+/**
+ * A named bar range of the song (0.5). Sections may overlap: two sections
+ * over the same bars with different mutes or variations are two versions
+ * of that music. `mute` and `vary` name track ids; unknown ids are ignored.
+ */
+export type Section = Readonly<{
+  /** Unique (ignoring case), 1..32 characters: `intro`, `chorus 2`, `A`. */
+  name: string;
+  /** First bar, 0-based. */
+  startBar: number;
+  /** Length in bars, at least 1. */
+  bars: number;
+  /** Tracks silent in this section. */
+  mute?: readonly string[];
+  /** Per-track variations in this section. */
+  vary?: Readonly<Record<string, SectionVariation>>;
+}>;
+
+/** One step of the song form: a section by name, played `repeat` times. */
+export type FormEntry = Readonly<{
+  section: string;
+  /** 1..16, default 1. */
+  repeat?: number;
+}>;
+
 export type TrackScoreData = Readonly<{
   tempoBpm?: number;
   beatsPerBar?: number;
@@ -775,6 +815,15 @@ export type TrackScoreData = Readonly<{
   notes?: readonly NoteInput[];
   /** Song master chain and loudness target (core/master.ts); absent is off. */
   master?: SongMaster | null;
+  /** Song sections (0.5); absent or empty means none. */
+  sections?: readonly Section[];
+  /** Song form (0.5): the order sections play in; absent plays the score straight through. */
+  form?: readonly FormEntry[];
+  /**
+   * The section playback loops (0.5), like a DAW's loop brace; absent plays
+   * the song (or its form). A name that matches no section is dropped.
+   */
+  loopSection?: string | null;
 }>;
 
 /** Canonical immutable score. Use `addNote`/`removeNote` to create a revision. */
@@ -792,6 +841,12 @@ export class TrackScore {
   readonly notes: readonly Note[];
   /** Absent (not undefined-valued) without a master, so 0.4 scores are unchanged. */
   declare readonly master?: SongMaster;
+  /** Song sections in bar order; empty when the song has none. */
+  readonly sections: readonly Section[];
+  /** Song form; empty plays the score straight through. */
+  readonly form: readonly FormEntry[];
+  /** The section playback loops; undefined plays the song. */
+  readonly loopSection: string | undefined;
 
   constructor(data: TrackScoreData = {}) {
     const tempoBpm = data.tempoBpm ?? 120;
@@ -865,6 +920,14 @@ export class TrackScore {
       throw error;
     }
     if (master) this.master = master;
+    const sections = normalizeSections(data.sections ?? []);
+    const form = normalizeForm(data.form ?? [], sections);
+    // Sections count bars in one meter; meter changes would move them.
+    if (sections.length > 0 && time?.meter)
+      throw new ScoreValidationError(
+        "sections need one meter: remove the meter changes (time.meter) or the sections",
+        "invalid-score",
+      );
     this.tempoBpm = tempoBpm;
     this.beatsPerBar = beatsPerBar;
     this.bars = bars;
@@ -873,6 +936,9 @@ export class TrackScore {
     if (time) this.time = time;
     this.tracks = freezeArray(tracks);
     this.notes = freezeArray(notes);
+    this.sections = freezeArray(sections);
+    this.form = freezeArray(form);
+    this.loopSection = normalizeLoopSection(data.loopSection, sections);
     Object.freeze(this);
   }
 
@@ -890,6 +956,23 @@ export class TrackScore {
 
   withTempo(tempoBpm: number): TrackScore {
     return new TrackScore({ ...this.toJSON(), tempoBpm });
+  }
+
+  /**
+   * Replace the sections and the form (both validated together). The loop
+   * section is kept while a section of that name remains.
+   */
+  withSections(
+    sections: readonly Section[],
+    form: readonly FormEntry[] = [],
+    loopSection: string | null | undefined = this.loopSection,
+  ): TrackScore {
+    return new TrackScore({
+      ...this.toJSON(),
+      sections,
+      form,
+      loopSection: loopSection ?? null,
+    });
   }
 
   /** Resize the loop without discarding notes or automation outside its bounds. */
@@ -945,6 +1028,11 @@ export class TrackScore {
       tracks: this.tracks,
       notes: this.notes,
       ...(this.master ? { master: this.master } : {}),
+      ...(this.sections.length > 0 ? { sections: this.sections } : {}),
+      ...(this.form.length > 0 ? { form: this.form } : {}),
+      ...(this.loopSection === undefined
+        ? {}
+        : { loopSection: this.loopSection }),
     };
   }
 }
@@ -1233,6 +1321,13 @@ export type ScoreOperation =
   | Readonly<{
       type: "setMaster";
       master: SongMaster | null;
+    }>
+  | Readonly<{
+      type: "setSections";
+      sections: readonly Section[];
+      form: readonly FormEntry[];
+      /** The looped section; absent or null plays the song. */
+      loopSection?: string | null;
     }>;
 
 export function applyScoreOperation(
@@ -1249,6 +1344,12 @@ export function applyScoreOperation(
   if (operation.type === "setTime") return score.withTime(operation.time);
   if (operation.type === "setTuning") return score.withTuning(operation.tuning);
   if (operation.type === "setMaster") return score.withMaster(operation.master);
+  if (operation.type === "setSections")
+    return score.withSections(
+      operation.sections,
+      operation.form,
+      operation.loopSection ?? null,
+    );
   if (operation.type === "addTrack") return addTrack(score, operation.track);
   if (operation.type === "addNote") return addNote(score, operation.note);
   if (operation.type === "removeNote")
@@ -1298,6 +1399,9 @@ export function scoreFromJSON(value: unknown): TrackScore {
     tracks: readonly TrackInput[];
     notes: readonly NoteInput[];
     master?: SongMaster;
+    sections?: readonly Section[];
+    form?: readonly FormEntry[];
+    loopSection?: string | null;
   } = {
     tracks: optionalArray(value.tracks).map(parseTrack),
     notes: optionalArray(value.notes).map(parseNote),
@@ -1318,7 +1422,194 @@ export function scoreFromJSON(value: unknown): TrackScore {
   // Validated by the constructor (core/master.ts normalizeMaster).
   if (value.master !== undefined && value.master !== null)
     data.master = value.master as SongMaster;
+  // Shapes are checked by the constructor (normalizeSections, normalizeForm).
+  if (value.sections !== undefined)
+    data.sections = optionalArray(value.sections) as readonly Section[];
+  if (value.form !== undefined)
+    data.form = optionalArray(value.form) as readonly FormEntry[];
+  // The constructor checks the type and drops a name matching no section.
+  if (value.loopSection !== undefined)
+    data.loopSection = value.loopSection as string | null;
   return new TrackScore(data);
+}
+
+/** Section names: printable text without control characters, trimmed. */
+const SECTION_NAME = /^[^\u0000-\u001f\u007f]+$/u;
+
+function normalizeSections(inputs: readonly unknown[]): Section[] {
+  if (!Array.isArray(inputs) || inputs.length > SCORE_LIMITS.maxSections)
+    throw new ScoreValidationError(
+      `score cannot contain more than ${SCORE_LIMITS.maxSections} sections`,
+      "score-limit",
+    );
+  const seen = new Set<string>();
+  const sections = inputs.map((input, index): Section => {
+    if (!isRecord(input))
+      throw new ScoreValidationError(`section ${index} must be an object`);
+    const name =
+      typeof input.name === "string"
+        ? input.name.trim().replace(/\s+/gu, " ")
+        : "";
+    if (
+      name.length === 0 ||
+      name.length > SCORE_LIMITS.maxSectionNameLength ||
+      !SECTION_NAME.test(name)
+    )
+      throw new ScoreValidationError(
+        `section ${index} needs a name of 1..${SCORE_LIMITS.maxSectionNameLength} characters`,
+      );
+    const folded = name.toLowerCase();
+    if (seen.has(folded))
+      throw new ScoreValidationError(`duplicate section name: ${name}`);
+    seen.add(folded);
+    const startBar = input.startBar;
+    const bars = input.bars;
+    if (
+      typeof startBar !== "number" ||
+      !Number.isInteger(startBar) ||
+      startBar < 0 ||
+      startBar >= SCORE_LIMITS.maxBars
+    )
+      throw new ScoreValidationError(
+        `section ${name} startBar must be an integer 0..${SCORE_LIMITS.maxBars - 1}`,
+      );
+    if (
+      typeof bars !== "number" ||
+      !Number.isInteger(bars) ||
+      bars < 1 ||
+      startBar + bars > SCORE_LIMITS.maxBars
+    )
+      throw new ScoreValidationError(
+        `section ${name} bars must be an integer 1..${SCORE_LIMITS.maxBars - startBar}`,
+      );
+    const out: { -readonly [K in keyof Section]: Section[K] } = {
+      name,
+      startBar,
+      bars,
+    };
+    if (input.mute !== undefined) {
+      if (
+        !Array.isArray(input.mute) ||
+        input.mute.length > SCORE_LIMITS.maxTracks ||
+        input.mute.some((id) => typeof id !== "string" || id.length === 0)
+      )
+        throw new ScoreValidationError(
+          `section ${name} mute must be a list of track ids`,
+        );
+      const mute = [...new Set(input.mute as string[])];
+      if (mute.length > 0) out.mute = freezeArray(mute);
+    }
+    if (input.vary !== undefined) {
+      if (!isRecord(input.vary))
+        throw new ScoreValidationError(
+          `section ${name} vary must map track ids to variations`,
+        );
+      const entries = Object.entries(input.vary);
+      if (entries.length > SCORE_LIMITS.maxTracks)
+        throw new ScoreValidationError(
+          `section ${name} vary has too many tracks`,
+        );
+      const vary: Record<string, SectionVariation> = {};
+      for (const [trackId, raw] of entries.sort(([a], [b]) =>
+        a < b ? -1 : a > b ? 1 : 0,
+      )) {
+        if (!isRecord(raw) || trackId.length === 0)
+          throw new ScoreValidationError(
+            `section ${name} vary.${trackId} must be an object`,
+          );
+        const variation: { transpose?: number; gain?: number } = {};
+        if (raw.transpose !== undefined) {
+          const t = raw.transpose;
+          if (
+            typeof t !== "number" ||
+            !Number.isInteger(t) ||
+            Math.abs(t) > SCORE_LIMITS.maxSectionTranspose
+          )
+            throw new ScoreValidationError(
+              `section ${name} vary.${trackId}.transpose must be an integer -${SCORE_LIMITS.maxSectionTranspose}..${SCORE_LIMITS.maxSectionTranspose}`,
+            );
+          if (t !== 0) variation.transpose = t;
+        }
+        if (raw.gain !== undefined) {
+          const g = raw.gain;
+          if (
+            typeof g !== "number" ||
+            !Number.isFinite(g) ||
+            g < 0 ||
+            g > SCORE_LIMITS.maxSectionGain
+          )
+            throw new ScoreValidationError(
+              `section ${name} vary.${trackId}.gain must be 0..${SCORE_LIMITS.maxSectionGain}`,
+            );
+          if (g !== 1) variation.gain = g;
+        }
+        if (Object.keys(variation).length > 0)
+          vary[trackId] = Object.freeze(variation);
+      }
+      if (Object.keys(vary).length > 0) out.vary = Object.freeze(vary);
+    }
+    return Object.freeze(out);
+  });
+  // Bar order; sections that start together keep the order they were given.
+  return sections
+    .map((section, index) => ({ section, index }))
+    .sort(
+      (a, b) => a.section.startBar - b.section.startBar || a.index - b.index,
+    )
+    .map(({ section }) => section);
+}
+
+function normalizeLoopSection(
+  value: unknown,
+  sections: readonly Section[],
+): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string")
+    throw new ScoreValidationError(
+      "loopSection must be a section name or null",
+      "invalid-score",
+    );
+  const key = value.trim().replace(/\s+/gu, " ").toLowerCase();
+  return sections.find((section) => section.name.toLowerCase() === key)?.name;
+}
+
+function normalizeForm(
+  inputs: readonly unknown[],
+  sections: readonly Section[],
+): FormEntry[] {
+  if (!Array.isArray(inputs) || inputs.length > SCORE_LIMITS.maxFormEntries)
+    throw new ScoreValidationError(
+      `form cannot contain more than ${SCORE_LIMITS.maxFormEntries} entries`,
+      "score-limit",
+    );
+  const byName = new Map(
+    sections.map((section) => [section.name.toLowerCase(), section] as const),
+  );
+  return inputs.map((input, index): FormEntry => {
+    const record = typeof input === "string" ? { section: input } : input;
+    if (!isRecord(record) || typeof record.section !== "string")
+      throw new ScoreValidationError(`form entry ${index} must name a section`);
+    const section = byName.get(record.section.trim().toLowerCase());
+    if (!section)
+      throw new ScoreValidationError(
+        `form entry ${index} names an unknown section: ${record.section}`,
+      );
+    const repeat = record.repeat ?? 1;
+    if (
+      typeof repeat !== "number" ||
+      !Number.isInteger(repeat) ||
+      repeat < 1 ||
+      repeat > SCORE_LIMITS.maxFormRepeat
+    )
+      throw new ScoreValidationError(
+        `form entry ${index} repeat must be an integer 1..${SCORE_LIMITS.maxFormRepeat}`,
+      );
+    return Object.freeze(
+      repeat === 1
+        ? { section: section.name }
+        : { section: section.name, repeat },
+    );
+  });
 }
 
 function normalizeTracks(inputs: readonly unknown[]): Track[] {

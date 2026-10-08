@@ -13,7 +13,9 @@ import {
   normalizeRhythm,
   scoreFromJSON,
   type NotePatch,
+  type FormEntry,
   type ScoreOperation,
+  type Section,
 } from "../../core/score.ts";
 import { NOTE_EXPRESSION_FIELDS } from "../../core/expression.ts";
 import { DRUM_VOICES } from "../../core/drums.ts";
@@ -143,6 +145,26 @@ function parseOperation(value: unknown): ScoreOperation {
   // The master reuses its bounded validator; null removes it.
   if (value.type === "setMaster" && value.master !== undefined)
     return { type: "setMaster", master: normalizeMaster(value.master) ?? null };
+  if (
+    value.type === "setSections" &&
+    Array.isArray(value.sections) &&
+    value.sections.length <= SCORE_LIMITS.maxSections &&
+    (value.form === undefined ||
+      (Array.isArray(value.form) &&
+        value.form.length <= SCORE_LIMITS.maxFormEntries)) &&
+    (value.loopSection === undefined ||
+      value.loopSection === null ||
+      (typeof value.loopSection === "string" &&
+        value.loopSection.length <= SCORE_LIMITS.maxSectionNameLength))
+  ) {
+    // Shapes are validated by the reducer (TrackScore normalizes sections).
+    return {
+      type: "setSections",
+      sections: value.sections as readonly Section[],
+      form: (value.form ?? []) as readonly FormEntry[],
+      loopSection: (value.loopSection ?? null) as string | null,
+    };
+  }
   if (
     value.type === "updateTrack" &&
     typeof value.trackId === "string" &&

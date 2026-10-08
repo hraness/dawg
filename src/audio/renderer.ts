@@ -2,6 +2,7 @@ import type { TrackScore } from "../../core/score.ts";
 import type { MasterReport } from "./master.ts";
 import type { RenderReply, RenderRequest } from "./render-worker.ts";
 import { SampleLibrary, hasSamplerTracks } from "./samples.ts";
+import { renderArranged } from "./arrange.ts";
 import { StemRenderer } from "./wav.ts";
 
 export type LoopRender = Readonly<{
@@ -83,7 +84,7 @@ export class LoopRenderer {
       this.library ??= new SampleLibrary({ projectRoot: this.projectRoot });
       samples = await this.library.load(score);
     }
-    const audio = this.inline.render(score, {
+    const audio = renderArranged(this.inline, score, {
       sampleRate: this.sampleRate,
       loop: true,
       samples,

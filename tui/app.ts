@@ -35,6 +35,7 @@ import {
   paintPlayStrip,
   type PlayHeaderView,
 } from "./play-strip.ts";
+import { paintArrangeStrip, type ArrangeStripView } from "./arrange-strip.ts";
 import { CellBuffer, ScreenWriter, type CursorPosition } from "./screen.ts";
 import { paintDrawer, type DrawerLayout, type DrawerView } from "./drawer.ts";
 import { HitMap, type HitTarget } from "./hits.ts";
@@ -78,6 +79,8 @@ export interface AppView {
   play?: PlayHeaderView | undefined;
   /** Song master meter: integrated LUFS and true peak of the playing loop. */
   loudness?: LoudnessView | undefined;
+  /** Song sections over the timeline (0.5); no row when absent. */
+  arrange?: ArrangeStripView | undefined;
 }
 
 export type LoudnessView = Readonly<{
@@ -1186,6 +1189,20 @@ export function composeFrame(
       };
     }
   } else paintHeader(buffer, view, ui, width, hits);
+  if (view.arrange && layout.highway.height > 4) {
+    paintArrangeStrip(
+      buffer,
+      layout.highway.y,
+      width,
+      view.arrange,
+      ui.theme,
+      ui.capabilities.unicode,
+    );
+    layout.highway = {
+      y: layout.highway.y + 1,
+      height: layout.highway.height - 1,
+    };
+  }
   const beat = view.beat ?? resolveBeat(view.score, nowMs);
   let drawer: DrawerLayout | undefined;
   if (layout.highway.height > 0) {

@@ -25,9 +25,11 @@ import {
   type WavetableParam,
   TrackScore,
   type AutomationPoint,
+  type FormEntry,
   type Note,
   type SampleRef,
   type Sampler,
+  type Section,
   type Track,
 } from "../score.ts";
 import { trackSlug } from "../slug.ts";
@@ -205,6 +207,20 @@ export function printSong(
     )}`,
   );
   if (score.master) entries.push(printMaster(score.master));
+  // Song sections and form (0.5): printed only when the song has them.
+  if (score.sections.length > 0)
+    entries.push(
+      `sections: ${list(
+        score.sections.map((section) => printSection(section, INDENT + INDENT)),
+        INDENT,
+        "sections: ".length,
+        1,
+      )}`,
+    );
+  if (score.form.length > 0)
+    entries.push(`form: ${printForm(score.form, INDENT)}`);
+  if (score.loopSection !== undefined)
+    entries.push(`loopSection: ${str(score.loopSection)}`);
   lines.push("export default song({");
   for (const entry of entries) lines.push(`${INDENT}${entry},`);
   lines.push("});", "");
@@ -265,6 +281,73 @@ function printTime(score: TrackScore): {
   all.sort((a, b) => a.tick - b.tick || a.order - b.order);
   for (const mark of all) marks.push(mark.text);
   return { marks, used };
+}
+
+/**
+ * One `sections` item: `{ name: "verse", startBar: 0, bars: 8 }`. `indent`
+ * is the item's own line; expanded fields sit one level deeper.
+ */
+function printSection(section: Section, indent: string): string {
+  const inner = indent + INDENT;
+  const entries: (readonly [string, string])[] = [
+    ["name", str(section.name)],
+    ["startBar", num(section.startBar)],
+    ["bars", num(section.bars)],
+  ];
+  if (section.mute && section.mute.length > 0)
+    entries.push([
+      "mute",
+      list(section.mute.map(str), inner, "mute: ".length, 1),
+    ]);
+  if (section.vary) {
+    const vary = Object.entries(section.vary).map(([id, change]) => {
+      const key = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(id) ? id : str(id);
+      const fields: (readonly [string, string])[] = [];
+      if (change.transpose !== undefined)
+        fields.push(["transpose", num(change.transpose)]);
+      if (change.gain !== undefined) fields.push(["gain", num(change.gain)]);
+      return [key, obj(fields, inner + INDENT, `${key}: `.length, 1)] as const;
+    });
+    if (vary.length > 0)
+      entries.push(["vary", obj(vary, inner, "vary: ".length, 1)]);
+  }
+  return obj(entries, indent, 0, 1);
+}
+
+/**
+ * The form as a string when every name is plain (`"intro verse chorus*2"`),
+ * else as a list of entries.
+ */
+function printForm(form: readonly FormEntry[], indent: string): string {
+  // Word characters only, so the string reads back as the same entries.
+  const plain = form.every((entry) => /^\w+$/u.test(entry.section));
+  if (plain) {
+    const text = form
+      .map(
+        (entry) =>
+          `${entry.section}${(entry.repeat ?? 1) > 1 ? `*${entry.repeat}` : ""}`,
+      )
+      .join(" ");
+    return str(text);
+  }
+  return list(
+    form.map((entry) =>
+      (entry.repeat ?? 1) > 1
+        ? obj(
+            [
+              ["section", str(entry.section)],
+              ["repeat", num(entry.repeat!)],
+            ],
+            indent + INDENT,
+            0,
+            1,
+          )
+        : str(entry.section),
+    ),
+    indent,
+    "form: ".length,
+    1,
+  );
 }
 
 /** `tracks/<slug>/track.ts` for one track of a score. */

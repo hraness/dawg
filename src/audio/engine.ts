@@ -13,6 +13,7 @@ import { measureLoudness, pcmChannels } from "./loudness.ts";
 import type { MasterReport } from "./master.ts";
 import { levelOf, type SoundLevel } from "./preview.ts";
 import { DEFAULT_SAMPLE_RATE, RENDER_CHANNELS } from "./wav.ts";
+import { playbackTime } from "./arrange.ts";
 import { transportMapFor, type TransportMap } from "./clock.ts";
 
 /**
@@ -874,11 +875,12 @@ export class AudioEngine {
   }
 
   private toLoop(render: LoopRender, score: TrackScore): Loop {
-    const map = transportMapFor(score);
+    const timeline = playbackTime(score);
+    const map = transportMapFor(timeline);
     return {
       pcm: render.pcm,
       frames: render.frames,
-      framesPerBeat: (60 * this.sampleRate) / score.tempoBpm,
+      framesPerBeat: (60 * this.sampleRate) / timeline.tempoBpm,
       sampleRate: this.sampleRate,
       ...(map ? { map } : {}),
     };

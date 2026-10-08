@@ -405,3 +405,73 @@ export default track({
     expect(str("a\nb")).toBe('"a\\nb"');
   });
 });
+
+describe("song sections (0.5)", () => {
+  const arranged = createScore({
+    bars: 16,
+    tracks: [
+      { id: "lead", name: "lead", instrument: "saw" },
+      { id: "pad", name: "pad", instrument: "sine" },
+    ],
+    notes: [
+      {
+        id: "a",
+        trackId: "lead",
+        pitch: 60,
+        startTick: 0,
+        durationTicks: 480,
+        velocity: 0.8,
+      },
+    ],
+  }).withSections(
+    [
+      { name: "intro", startBar: 0, bars: 4, mute: ["pad"] },
+      {
+        name: "chorus 2",
+        startBar: 4,
+        bars: 8,
+        vary: { lead: { transpose: 12, gain: 0.9 } },
+      },
+      { name: "outro", startBar: 12, bars: 4 },
+    ],
+    [
+      { section: "intro" },
+      { section: "chorus 2", repeat: 2 },
+      { section: "outro" },
+    ],
+    "intro",
+  );
+
+  test("print only when present, prettier-stable, and survive eval", async () => {
+    const plain = printSong(createScore({ bars: 4 }));
+    expect(plain).not.toContain("sections");
+    expect(plain).not.toContain("form");
+    const text = printSong(arranged);
+    expect(text).toContain(
+      '{ name: "intro", startBar: 0, bars: 4, mute: ["pad"] }',
+    );
+    expect(text).toContain('loopSection: "intro",');
+    expect(await prettier.format(text, { parser: "typescript" })).toBe(text);
+    const plainForm = printSong(
+      arranged.withSections(arranged.sections.slice(0, 1), [
+        { section: "intro", repeat: 3 },
+      ]),
+    );
+    expect(plainForm).toContain('form: "intro*3",');
+    const dir = await mkdtemp(join(tmpdir(), "dawg-print-sections-"));
+    try {
+      await initProject(dir);
+      await writeProject(dir, arranged);
+      const evaluated = await evaluateProject(dir);
+      if (!evaluated.ok) throw new Error(JSON.stringify(evaluated.diagnostics));
+      expect(evaluated.score.sections).toEqual(arranged.sections);
+      expect(evaluated.score.form).toEqual(arranged.form);
+      expect(evaluated.score.loopSection).toBe("intro");
+      expect(printProject(evaluated.score).files).toEqual(
+        printProject(arranged).files,
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
