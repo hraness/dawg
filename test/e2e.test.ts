@@ -658,3 +658,105 @@ export default song({ tempo: 120, meter: [4, 4], bars: 1, tracks: [drums] });
   },
   30_000,
 );
+
+test("render --normalize masters to a loudness target; --measure reports it", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "dawg-loudness-"));
+  workspaces.push(workspace);
+  const notes = Array.from({ length: 8 }, (_, beat) => ({
+    id: `n${beat}`,
+    trackId: "bass",
+    pitch: 45 + (beat % 3) * 4,
+    startTick: beat * 480,
+    durationTicks: 400,
+    velocity: 0.7,
+  }));
+  await writeFile(
+    join(workspace, "song.track.json"),
+    JSON.stringify({
+      format: "track.loop/v1",
+      version: 1,
+      tempoBpm: 128,
+      beatsPerBar: 4,
+      bars: 2,
+      ticksPerBeat: 480,
+      tracks: [{ id: "bass", name: "bass", instrument: "saw" }],
+      notes,
+    }),
+  );
+  const cli = async (argv: string[]) => {
+    const proc = Bun.spawn([process.execPath, MAIN, ...argv], {
+      cwd: workspace,
+      env: env(workspace),
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [code, stdout, stderr] = await Promise.all([
+      proc.exited,
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
+    return { code, stdout, stderr };
+  };
+  const plain = await cli([
+    "render",
+    "plain.wav",
+    "--import",
+    "song.track.json",
+  ]);
+  expect(plain.stderr).toBe("");
+  expect(plain.code).toBe(0);
+  // No master: no loudness line, and the export is the plain render.
+  expect(plain.stdout).not.toContain("loudness");
+  const measured = await cli([
+    "render",
+    "measured.wav",
+    "--import",
+    "song.track.json",
+    "--measure",
+  ]);
+  expect(measured.code).toBe(0);
+  expect(measured.stdout).toMatch(
+    /loudness · -?\d+\.\d LUFS · momentary max -?\d+\.\d · short-term max/,
+  );
+  expect(await readFile(join(workspace, "measured.wav"))).toEqual(
+    await readFile(join(workspace, "plain.wav")),
+  );
+  const club = await cli([
+    "render",
+    "club.wav",
+    "--import",
+    "song.track.json",
+    "--normalize",
+    "club",
+  ]);
+  expect(club.stderr).toBe("");
+  const clubLine = club.stdout.match(
+    /loudness · (-?\d+\.\d) LUFS · (-?\d+\.\d) dBTP · target -8\.0 reached/,
+  );
+  expect(clubLine).not.toBeNull();
+  expect(Number(clubLine![1])).toBeCloseTo(-8, 0);
+  expect(Number(clubLine![2])).toBeLessThanOrEqual(-0.9);
+  // A mastered export is a deliverable: 48 kHz unless --rate says otherwise.
+  const clubWav = await readFile(join(workspace, "club.wav"));
+  expect(clubWav.readUInt32LE(24)).toBe(48_000);
+  const quiet = await cli([
+    "render",
+    "quiet.wav",
+    "--import",
+    "song.track.json",
+    "--normalize",
+    "-23",
+  ]);
+  expect(quiet.stdout).toContain("-23.0 LUFS");
+  const bad = await cli([
+    "render",
+    "bad.wav",
+    "--import",
+    "song.track.json",
+    "--normalize",
+    "loudest",
+  ]);
+  expect(bad.code).toBe(2);
+  expect(bad.stderr).toContain("--normalize takes LUFS");
+}, 30_000);

@@ -11,6 +11,7 @@ import { DRUM_VOICES, isDrumInstrument } from "../drums.ts";
 import { DEFAULT_FIXED_VELOCITY } from "../expression.ts";
 import type { RhythmRow } from "../euclid.ts";
 import { FX_LANES, fxSpec, type FxName, type FxValues } from "../fx.ts";
+import { MASTER_SPECS, MASTER_UNITS, type SongMaster } from "../master.ts";
 import { midiToPitch } from "../pitch.ts";
 import { rhythmVoicePitch, rowInSync } from "../rhythm.ts";
 import {
@@ -203,6 +204,7 @@ export function printSong(
       1,
     )}`,
   );
+  if (score.master) entries.push(printMaster(score.master));
   lines.push("export default song({");
   for (const entry of entries) lines.push(`${INDENT}${entry},`);
   lines.push("});", "");
@@ -888,6 +890,29 @@ function fill(
   }
   lines.push(inner + line);
   return `[\n${lines.join("\n")}\n${indent}]`;
+}
+
+/** `master: { … }`, always expanded like `fx`; units in chain order. */
+function printMaster(master: SongMaster): string {
+  const inner = INDENT + INDENT;
+  const body: string[] = [];
+  for (const unit of MASTER_UNITS) {
+    const values = master[unit];
+    if (!values) continue;
+    // Only values that differ from the default: loading fills the rest.
+    const params = Object.entries(MASTER_SPECS[unit].params)
+      .filter(
+        ([key, spec]) =>
+          values[key] !== undefined && values[key] !== spec.default,
+      )
+      .map(([key]) => [key, value(values[key]!)] as const);
+    body.push(
+      `${inner}${unit}: ${params.length === 0 ? "{}" : obj(params, inner, `${unit}: `.length, 1)},`,
+    );
+  }
+  if (master.target !== undefined)
+    body.push(`${inner}target: ${num(master.target)},`);
+  return `master: {\n${body.join("\n")}\n${INDENT}}`;
 }
 
 /** Object literal: inline when the line fits, expanded otherwise (prettier keeps both). */

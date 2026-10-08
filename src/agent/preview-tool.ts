@@ -22,6 +22,7 @@ import {
   type SoundStats,
 } from "../audio/preview.ts";
 import { renderScorePcm, type RenderedAudio } from "../audio/wav.ts";
+import type { ScoreMeasurement } from "../audio/measure.ts";
 import type {
   ActionContext,
   AgentTool,
@@ -51,6 +52,14 @@ export type PreviewHost = Readonly<{
   render?: (score: TrackScore) => Promise<RenderedAudio> | RenderedAudio;
   /** Play the snippet once; returns false when nothing could sound. */
   play?: (audio: RenderedAudio) => boolean | Promise<boolean>;
+  /**
+   * Render and measure for measure_mix (the host adds decoded samples), at
+   * `sampleRate` when given and the score's export rate otherwise.
+   */
+  measure?: (
+    score: TrackScore,
+    options?: Readonly<{ sampleRate?: number }>,
+  ) => Promise<ScoreMeasurement>;
 }>;
 
 /** Thrown for a candidate the tool refuses; nothing is rendered. */
@@ -217,22 +226,31 @@ export function previewSoundTool(
             : after.region;
           const render =
             action.preview?.render ?? ((value) => renderScorePcm(value));
-          const snippet = async (value: TrackScore) => {
+          const snippet = async (value: TrackScore, masterGainDb?: number) => {
             const preview = previewScore(value, trackId, {
               context: inContext,
               region,
+              ...(masterGainDb === undefined ? {} : { masterGainDb }),
             });
             if (!preview) return undefined;
             const audio = await render(preview.score);
             return { audio, stats: analyzePcm(audio.pcm, audio.sampleRate) };
           };
-          const next = await snippet(candidate.score);
-          if (!next) throw new PreviewToolError(`unknown track ${trackId}`);
           const before =
             changes.length > 0 &&
             context.score.tracks.some((track) => track.id === trackId)
               ? await snippet(context.score)
               : undefined;
+          // The after snippet plays the master at the drive the before one
+          // used, so a level change is not normalized away by the target
+          // (unless the change is to the master itself).
+          const fixedGain = changes.some(
+            (change) => change.tool === "set_master",
+          )
+            ? undefined
+            : before?.audio.master?.gainDb;
+          const next = await snippet(candidate.score, fixedGain);
+          if (!next) throw new PreviewToolError(`unknown track ${trackId}`);
           let played = false;
           if (play && action.preview?.play)
             played = await action.preview.play(next.audio);

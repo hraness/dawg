@@ -1,4 +1,5 @@
 import type { TrackScore } from "../../core/score.ts";
+import type { MasterReport } from "./master.ts";
 import type { RenderReply, RenderRequest } from "./render-worker.ts";
 import { SampleLibrary, hasSamplerTracks } from "./samples.ts";
 import { StemRenderer } from "./wav.ts";
@@ -9,6 +10,8 @@ export type LoopRender = Readonly<{
   sampleRate: number;
   /** Milliseconds the render itself took (worker or inline). */
   renderMs: number;
+  /** Loudness after the song master; absent without one. */
+  master?: MasterReport;
 }>;
 
 export type LoopRendererOptions = Readonly<{
@@ -90,6 +93,7 @@ export class LoopRenderer {
       frames: audio.frames,
       sampleRate: audio.sampleRate,
       renderMs: performance.now() - started,
+      ...(audio.master ? { master: audio.master } : {}),
     };
   }
 
@@ -143,6 +147,7 @@ export class LoopRenderer {
           frames: reply.frames,
           sampleRate: reply.sampleRate,
           renderMs: reply.renderMs,
+          ...(reply.master ? { master: reply.master } : {}),
         });
       else waiter.reject(new Error(reply.error));
     });

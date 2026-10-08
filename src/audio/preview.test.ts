@@ -288,3 +288,54 @@ describe("levelOf", () => {
     });
   });
 });
+
+describe("master in a preview", () => {
+  const mastered = (volume: number) =>
+    createScore({
+      tempoBpm: 120,
+      bars: 2,
+      tracks: [
+        { id: "a", name: "a", instrument: "saw", volume },
+        { id: "b", name: "b", instrument: "sine" },
+      ],
+      notes: [
+        {
+          id: "n1",
+          trackId: "a",
+          pitch: 57,
+          startTick: 0,
+          durationTicks: 1_920,
+          velocity: 0.8,
+        },
+        {
+          id: "n2",
+          trackId: "b",
+          pitch: 45,
+          startTick: 0,
+          durationTicks: 1_920,
+          velocity: 0.8,
+        },
+      ],
+    }).withMaster({ limiter: { ceiling: -1 }, target: -14 });
+
+  const loudness = (volume: number, masterGainDb?: number) => {
+    const preview = previewScore(mastered(volume), "a", {
+      ...(masterGainDb === undefined ? {} : { masterGainDb }),
+    })!;
+    expect(preview.score.master?.target).toBeUndefined();
+    return renderScorePcm(preview.score, { sampleRate: 48_000 }).master!
+      .integrated;
+  };
+
+  test("a soloed track's volume stays audible with a target set", () => {
+    expect(loudness(1) - loudness(0.25)).toBeGreaterThan(6);
+    expect(loudness(1, 6) - loudness(0.25, 6)).toBeGreaterThan(6);
+  });
+
+  test("the solo plays the master at the song's fixed drive", () => {
+    const preview = previewScore(mastered(1), "a", { masterGainDb: 7.5 })!;
+    expect(preview.score.master?.limiter?.gain).toBe(7.5);
+    const context = previewScore(mastered(1), "a", { context: true })!;
+    expect(context.score.master?.target).toBe(-14);
+  });
+});

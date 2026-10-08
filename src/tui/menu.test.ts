@@ -426,6 +426,72 @@ describe("edit menu", () => {
     });
   });
 
+  test("Mix > master: target, units, presets and params run master commands", () => {
+    const menu = new EditMenu();
+    let ctx = context();
+    menu.show(ctx, "master");
+    expect(menu.view(ctx).title).toBe("menu › Mix & automation › master");
+    select(menu, ctx, "target");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "master target streaming",
+    });
+    select(menu, ctx, "target LUFS");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "master target -14",
+    });
+    select(menu, ctx, "glue");
+    menu.key("\r", ctx);
+    expect(menu.view(ctx).title).toBe(
+      "menu › Mix & automation › master › glue",
+    );
+    select(menu, ctx, "on");
+    expect(menu.key("\r", ctx)).toEqual({
+      type: "run",
+      command: "master glue on",
+    });
+    ctx = context(score().withMaster({ target: -14, glue: { ratio: 2 } }));
+    select(menu, ctx, "ratio");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "master glue ratio 2.5",
+    });
+    expect(menu.key("x", ctx)).toEqual({
+      type: "run",
+      command: "master glue ratio 2",
+    });
+    menu.key(ESC, ctx);
+    select(menu, ctx, "target LUFS");
+    expect(menu.key("x", ctx)).toEqual({
+      type: "run",
+      command: "master target off",
+    });
+    select(menu, ctx, "remove master");
+    expect(menu.key("\r", ctx)).toEqual({ type: "run", command: "master off" });
+  });
+
+  test("Mix > master: target names need a unique LUFS and ceiling match", () => {
+    const menu = new EditMenu();
+    const row = (ctx: MenuContext, label: string) =>
+      menu.view(ctx).items.find((item) => item.label.startsWith(label))!.label;
+    const at = (master: Record<string, unknown>) =>
+      context(score().withMaster(master as never));
+    let ctx = at({ target: -16, limiter: { ceiling: -1 } });
+    menu.show(ctx, "master");
+    // apple and podcast share -16 LUFS at -1 dBTP: show the number.
+    expect(row(ctx, "target ")).toContain("-16 LUFS");
+    expect(row(ctx, "target ")).not.toContain("apple");
+    ctx = at({ target: -14, limiter: { ceiling: -2 } });
+    expect(row(ctx, "target ")).toContain("custom");
+    ctx = at({ target: -14, limiter: { ceiling: -1 } });
+    expect(row(ctx, "target ")).toContain("streaming");
+    // With a target, the limiter's gain is the search's, not the user's.
+    select(menu, ctx, "limiter");
+    menu.key("\r", ctx);
+    expect(row(ctx, "gain")).toContain("set by target");
+  });
+
   test("/ filters the current list; Esc clears the filter first", () => {
     const menu = new EditMenu();
     const ctx = context();

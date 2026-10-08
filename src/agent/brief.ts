@@ -1,3 +1,4 @@
+import { describeMaster } from "../../core/master.ts";
 import type { TrackScore } from "../../core/score.ts";
 import {
   describeSongTime,
@@ -174,6 +175,7 @@ export function compositionBrief(options: {
       ...(score.tuning
         ? { tuning: tuningBrief(score.tuning, undefined, score.key) }
         : {}),
+      ...(score.master ? { master: describeMaster(score.master) } : {}),
       focusedTrack: options.focusedTrackId,
       tracks: tracks.slice(0, trackLimit),
       ...(tracks.length > trackLimit

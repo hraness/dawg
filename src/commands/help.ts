@@ -109,6 +109,16 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "drop one point",
       },
       { command: "clear [<lane>] automation", summary: "drop a lane's points" },
+      {
+        command: "master <unit> on|off | preset <name> | <param> <value>",
+        summary:
+          "song master · eq glue tape width limiter · master glue ratio 4",
+      },
+      {
+        command: "master <target> | target <lufs> | measure | off",
+        summary:
+          "loudness · master streaming · master target -9 · master measure",
+      },
       { command: "track name <text>", summary: "rename this track" },
       { command: "meter <1..16>", summary: "beats per bar" },
       {
@@ -307,7 +317,7 @@ export const HELP_GUIDE: readonly HelpSection[] = [
       { command: "ctrl-p", summary: "play notes on the computer keyboard" },
       {
         command: "ctrl-k",
-        summary: "menu: sound, effects, performance, mix …",
+        summary: "menu: sound, effects, performance, mix, master …",
       },
       { command: "?", summary: "keys for the screen you are on" },
       {
@@ -345,7 +355,10 @@ export const HELP_GUIDE: readonly HelpSection[] = [
         summary: "instrument, envelope, filter, wavetable",
       },
       { command: "ctrl-k › Effects", summary: "delay, reverb, distortion …" },
-      { command: "fx delay mix 0.3", summary: "the same from the prompt" },
+      {
+        command: "master streaming",
+        summary: "finish: -14 LUFS, limiter · master measure",
+      },
       { command: "/try fx reverb mix 0.6", summary: "hear it before keeping" },
     ],
   },
@@ -546,7 +559,9 @@ export const USAGE: Readonly<Record<string, string>> = {
   pack: "/pack list | info <name> | use <pack>/<sound> | add <url>",
   kit: "/kit [name] · /kit syn909",
   euclid: "/euclid [voice] · euclid hat 7 16",
-  menu: "/menu [sound|effects|rhythm|chords|mix|project|tuning]",
+  menu: "/menu [sound|effects|rhythm|chords|mix|master|project|tuning]",
+  master:
+    "master <unit> on|off|preset <name>|<param> <value> · master streaming|club|loud · master target -14 · master measure · master off",
   try: "/try <sound command> · /try fx reverb mix 0.6",
   play: "/play [on|off|degrees|chromatic] · Ctrl-P · i toggles degrees",
   meter:

@@ -16,6 +16,7 @@
  * wavetables so position changes are audible.
  */
 import { isDrumInstrument } from "../../core/drums.ts";
+import type { SongMaster } from "../../core/master.ts";
 import { MODES, parseKey } from "../../core/chords.ts";
 import { rhythmVoicePitch } from "../../core/rhythm.ts";
 import {
@@ -56,6 +57,14 @@ export type PreviewOptions = Readonly<{
    * the staged settings this way, so a voicing or arp change is audible.
    */
   phrase?: (score: TrackScore, track: Track, bars: number) => NoteInput[];
+  /**
+   * The limiter drive the song's master solved for its loudness target on
+   * the full mix, dB. A preview plays the master at this fixed drive instead
+   * of re-solving the target on its few bars, so a volume edit stays
+   * audible. Without it a solo plays the master with no target (the
+   * limiter at its own gain), and a context preview solves on its bars.
+   */
+  masterGainDb?: number;
 }>;
 
 export type Preview = Readonly<{
@@ -321,12 +330,40 @@ export function previewScore(
     key: score.key,
     tracks,
     notes,
+    // The master is the song's output stage, so a soloed preview passes
+    // through it too, the way a DAW solo still reaches the master bus: at
+    // the song's fixed drive, not a target re-solved on what is soloed.
+    ...(score.master
+      ? { master: previewMaster(score.master, context, options.masterGainDb) }
+      : {}),
   });
   return {
     score: preview,
     region: { startBar, bars },
     source: own ? "notes" : "phrase",
     ...(role ? { role } : {}),
+  };
+}
+
+/**
+ * The master a preview plays: the song's, with its loudness target swapped
+ * for a fixed limiter drive (see PreviewOptions.masterGainDb).
+ */
+export function previewMaster(
+  master: SongMaster,
+  context: boolean,
+  masterGainDb: number | undefined,
+): SongMaster {
+  if (master.target === undefined) return master;
+  if (masterGainDb === undefined && context) return master;
+  const { target: _target, ...rest } = master;
+  if (!rest.limiter || masterGainDb === undefined) return rest;
+  return {
+    ...rest,
+    limiter: {
+      ...rest.limiter,
+      gain: Math.max(0, Math.min(24, masterGainDb)),
+    },
   };
 }
 

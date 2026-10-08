@@ -9,6 +9,8 @@ import {
   type ClickLevel,
 } from "./click.ts";
 import type { LiveNotePcm } from "./live.ts";
+import { measureLoudness, pcmChannels } from "./loudness.ts";
+import type { MasterReport } from "./master.ts";
 import { levelOf, type SoundLevel } from "./preview.ts";
 import { DEFAULT_SAMPLE_RATE, RENDER_CHANNELS } from "./wav.ts";
 import { transportMapFor, type TransportMap } from "./clock.ts";
@@ -369,6 +371,9 @@ export class AudioEngine {
   /** The loop last swapped in, for `level` (measured on demand, once). */
   private lastLoopPcm: Int16Array | undefined;
   private measured: { pcm: Int16Array; level: SoundLevel } | undefined;
+  private loudnessOf: { pcm: Int16Array; report: MasterReport } | undefined;
+  /** Loudness the song master reached on the loop now playing. */
+  private lastMaster: MasterReport | undefined;
   private respawns = 0;
   private respawnTimer: ReturnType<typeof setTimeout> | undefined;
   /** Play mode: keep a player running without a loop for live voices. */
@@ -454,6 +459,33 @@ export class AudioEngine {
     if (this.measured?.pcm !== pcm)
       this.measured = { pcm, level: levelOf(pcm) };
     return this.measured.level;
+  }
+
+  /**
+   * Integrated loudness and true peak of the loop now playing, after the
+   * song master when there is one (the header meter). Without a master the
+   * loop's PCM is measured once per render, on first read. Undefined before
+   * any render.
+   */
+  public get loudness(): MasterReport | undefined {
+    const pcm = this.lastLoopPcm;
+    if (!pcm) return undefined;
+    if (this.lastMaster) return this.lastMaster;
+    if (this.loudnessOf?.pcm !== pcm) {
+      const [left, right] = pcmChannels(pcm);
+      const measured = measureLoudness(left, right, this.sampleRate, {
+        loop: true,
+      });
+      this.loudnessOf = {
+        pcm,
+        report: {
+          gainDb: 0,
+          integrated: measured.integrated,
+          truePeak: measured.truePeak,
+        },
+      };
+    }
+    return this.loudnessOf.report;
   }
 
   public get canMonitor(): boolean {
@@ -587,6 +619,7 @@ export class AudioEngine {
           if (request.generation === this.generation) {
             await this.apply(this.toLoop(render, request.score), request);
             this.lastLoopPcm = render.pcm;
+            this.lastMaster = render.master;
           }
           for (const waiter of request.waiters) waiter.resolve();
         } catch (error) {
@@ -649,6 +682,7 @@ export class AudioEngine {
   public async stopAsync(): Promise<void> {
     this.generation += 1;
     this.lastLoopPcm = undefined;
+    this.lastMaster = undefined;
     this.respawns = 0;
     if (this.respawnTimer) clearTimeout(this.respawnTimer);
     this.respawnTimer = undefined;

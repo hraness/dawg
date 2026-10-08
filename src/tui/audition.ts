@@ -68,6 +68,11 @@ export type AuditionHost = {
    * settings screen plays a progression with its settings this way.
    */
   phrase?(showing: "A" | "B"): PreviewOptions["phrase"];
+  /**
+   * The drive the song's master solved for its target on the full mix (the
+   * last song loop), so previews hear a fixed master gain.
+   */
+  masterGainDb?(): number | undefined;
 };
 
 export type AuditionOptions = Readonly<{
@@ -108,6 +113,8 @@ export class Audition {
   private staged: Staged[] = [];
   private work: Promise<unknown> = Promise.resolve();
   private rendering = false;
+  /** The song master's solved drive when the loop started (see host). */
+  private masterGainDb: number | undefined;
   private dirty = false;
   private pendingKeyAt: number | undefined;
   private lastRenderAt = -Infinity;
@@ -166,6 +173,7 @@ export class Audition {
 
   public start(): void {
     if (this.looping) return;
+    this.masterGainDb = this.host.masterGainDb?.();
     this.looping = true;
     this.lastRenderAt = -Infinity;
     this.request();
@@ -190,6 +198,18 @@ export class Audition {
     this.context = !this.context;
     this.request();
     this.host.changed?.();
+  }
+
+  /**
+   * Whether the loop plays the full mix: the `c` toggle, or forced while a
+   * master edit is staged, because the master works on the whole mix and a
+   * solo track says nothing about its loudness.
+   */
+  public get inContext(): boolean {
+    return (
+      this.context ||
+      this.staged.some((entry) => MASTER_COMMAND.test(entry.command))
+    );
   }
 
   /** A/B; a no-op (stays on B) while nothing is staged. */
@@ -412,10 +432,18 @@ export class Audition {
     if (!this.looping || this.rendering) return;
     this.cancelTimer();
     const phrase = this.host.phrase?.(this.dirtyEdits ? this.showing : "A");
+    // A staged master edit re-solves its target on the mix; otherwise the
+    // master plays at the song's solved drive, so a track edit is audible.
+    const masterStaged = this.staged.some((entry) =>
+      MASTER_COMMAND.test(entry.command),
+    );
     const preview = previewScore(this.sounding, this.trackId, {
-      context: this.context,
+      context: this.inContext,
       beat: this.host.beat?.() ?? 0,
       ...(phrase ? { phrase } : {}),
+      ...(this.masterGainDb !== undefined && !masterStaged
+        ? { masterGainDb: this.masterGainDb }
+        : {}),
     });
     if (!preview) return;
     this.rendering = true;
@@ -451,7 +479,7 @@ export class Audition {
   public status(): string | undefined {
     if (!this.looping && !this.dirtyEdits && !this.fetching) return undefined;
     const parts: string[] = [];
-    if (this.looping) parts.push(`♪ ${this.context ? "in context" : "solo"}`);
+    if (this.looping) parts.push(`♪ ${this.inContext ? "in context" : "solo"}`);
     else parts.push("loop off");
     if (this.fetching) parts.push("fetching…");
     if (this.dirtyEdits)
@@ -500,13 +528,18 @@ export function auditionKey(value: string): AuditionKey | undefined {
  * before.
  */
 const STAGEABLE =
-  /^\/?(?:(fx|effects|filter|lowpass|synth|wt|wavetable|kit|instrument|vol|volume|pan|gain|speed|warpmode|root|pattern|euclid|art|articulation|bend|vibrato|glide|portamento|velcurve|vel-curve|pedal|sustain|humanize|tuning|tune)\s+\S|pack\s+use\s+\S)/i;
+  /^\/?(?:(fx|effects|filter|lowpass|synth|wt|wavetable|kit|instrument|vol|volume|pan|gain|speed|warpmode|root|pattern|euclid|art|articulation|bend|vibrato|glide|portamento|velcurve|vel-curve|pedal|sustain|humanize|tuning|tune|master)\s+\S|pack\s+use\s+\S)/i;
 /** Subcommands that list or show instead of changing the sound. */
-const READ_ONLY = /^\/?\S+\s+(list|show|info|help)\s*$/i;
+const READ_ONLY = /^\/?\S+\s+(list|show|info|help|measure|meter)\s*$/i;
+/** `master <unit>` alone only shows the unit. */
+const MASTER_SHOW = /^\/?master\s+(eq|glue|tape|width|limiter)\s*$/i;
+const MASTER_COMMAND = /^\/?master\s/i;
 
 export function isStageable(command: string): boolean {
   const text = command.trim();
-  return STAGEABLE.test(text) && !READ_ONLY.test(text);
+  return (
+    STAGEABLE.test(text) && !READ_ONLY.test(text) && !MASTER_SHOW.test(text)
+  );
 }
 
 /**

@@ -5,6 +5,7 @@
  */
 import { scoreFromJSON } from "../../core/score.ts";
 import { SampleLibrary, hasSamplerTracks } from "./samples.ts";
+import type { MasterReport } from "./master.ts";
 import { StemRenderer } from "./wav.ts";
 
 export type RenderRequest = Readonly<{
@@ -24,6 +25,8 @@ export type RenderReply =
       pcm: Int16Array;
       /** Milliseconds spent rendering, excluding transfer. */
       renderMs: number;
+      /** Loudness after the song master; absent without one. */
+      master?: MasterReport;
     }>
   | Readonly<{ id: number; ok: false; error: string }>;
 
@@ -55,6 +58,7 @@ self.onmessage = async (event: MessageEvent<RenderRequest>) => {
       sampleRate: audio.sampleRate,
       pcm: audio.pcm,
       renderMs: performance.now() - started,
+      ...(audio.master ? { master: audio.master } : {}),
     };
     self.postMessage(reply, [audio.pcm.buffer]);
   } catch (error) {

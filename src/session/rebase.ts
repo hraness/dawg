@@ -16,6 +16,7 @@ import {
   type TrackScore,
 } from "../../core/score.ts";
 import { rewindComposition, type Rewind } from "./delta.ts";
+import { deepEqual } from "../../core/diff.ts";
 
 /** How far behind a base may be and still be rebased. */
 export const MAX_REBASE_DISTANCE = 64;
@@ -117,9 +118,14 @@ export function rebaseOperations(
       case "setTime":
         if (!same(base.time, current.time))
           return { ok: false, reason: "tempo map changed" };
+        break;
       case "setTuning":
         if (!same(base.tuning ?? null, current.tuning ?? null))
           return { ok: false, reason: "tuning changed" };
+        break;
+      case "setMaster":
+        if (!deepEqual(base.master, current.master))
+          return { ok: false, reason: "master changed" };
         break;
       case "removeTrack": {
         if (added.tracks.has(operation.trackId)) break;

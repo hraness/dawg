@@ -5,7 +5,12 @@
  * every change, and the pattern picker previews a pattern before it lands.
  *
  * Like `live.ts` this only builds a smaller score; the renderer is shared,
- * so an audition sounds exactly like the loop.
+ * so an audition sounds exactly like the track does in the loop before the
+ * song master. Auditions and live notes are pre-master on purpose: the
+ * master's glue, limiter and loudness target act on the whole mix, and
+ * running them over one voice would pump and boost it by a different amount
+ * than the loop. The staged A/B loop (`src/tui/audition.ts`) is the place to
+ * hear master changes; it plays the full mix while one is staged.
  */
 import {
   SCORE_LIMITS,
