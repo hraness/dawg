@@ -2209,7 +2209,9 @@ export function song(input: SongInput): Song {
     : finite(meter as number, "song meter");
   const beatUnit = Array.isArray(meter) ? finite(meter[1], "song meter[1]") : 4;
   if (![1, 2, 4, 8, 16, 32].includes(beatUnit))
-    throw new DawgSdkError("song meter note value must be 1, 2, 4, 8, 16 or 32");
+    throw new DawgSdkError(
+      "song meter note value must be 1, 2, 4, 8, 16 or 32",
+    );
   const bars = finite(input.bars ?? 4, "song bars");
   const ticksPerBeat = input.ticksPerBeat ?? DEFAULT_TICKS_PER_BEAT;
   if (

@@ -856,7 +856,11 @@ export class TrackScore {
     const time = this.time?.meter?.some((change) => change.bar === 0)
       ? withMeterChange(this.time, 0, null)
       : this.time;
-    return new TrackScore({ ...this.toJSON(), beatsPerBar, time: time ?? null });
+    return new TrackScore({
+      ...this.toJSON(),
+      beatsPerBar,
+      time: time ?? null,
+    });
   }
 
   /** Replace the tempo map, meter changes and fermatas; null clears them. */

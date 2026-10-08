@@ -163,7 +163,7 @@ describe("time grammar", () => {
     expect(parseTimeCommand("track time off")).toEqual({
       type: "track-time-off",
     });
-    expect(parseTimeCommand("track rate 20")).toBeUndefined();
+    expect(parseTimeCommand("track rate 20")).toMatchObject({ value: 20 });
     expect(parseTimeCommand("track phase 1/2")).toBeUndefined();
     expect(parseTimeCommand("track cycle 0")).toBeUndefined();
   });
