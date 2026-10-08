@@ -222,6 +222,7 @@ function parsesLocally(text: string): boolean {
     parsePackCommand,
     parseSampleCommand,
     parseWavetableCommand,
+    parseTimeCommand,
   ].some((parse) => parse(text) !== undefined);
 }
 

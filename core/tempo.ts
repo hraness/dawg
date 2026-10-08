@@ -84,6 +84,11 @@ export const TIME_LIMITS = Object.freeze({
   maxMeterChanges: 256,
   maxFermatas: 256,
   maxFermataBeats: 64,
+  /**
+   * Longest held beat, in seconds: the slowest tempo a 3-byte SMF tempo
+   * event can write (0xFFFFFF µs per quarter), so MIDI export keeps time.
+   */
+  maxFermataSeconds: 16.777,
   /** Same as `SCORE_LIMITS.minTempoBpm` / `maxTempoBpm`. */
   minBpm: 20,
   maxBpm: 300,
@@ -96,7 +101,7 @@ export const TIME_LIMITS = Object.freeze({
   beatUnits: Object.freeze([1, 2, 4, 8, 16, 32]) as readonly number[],
   minRate: 0.125,
   maxRate: 8,
-  /** Notes `performedNotes` places per score; later repetitions drop. */
+  /** Timed-track repetitions `performedNotes` places; later ones drop. */
   maxPerformedNotes: 16_384,
 } as const);
 
@@ -146,11 +151,26 @@ export function normalizeSongTime(
   });
 }
 
-/** Checks what needs the score's resolution: bars must be whole ticks. */
+/**
+ * Checks what needs the rest of the score: bars must be whole ticks, and
+ * with `score` given, no fermata may hold its beat past `maxFermataSeconds`.
+ */
 export function checkSongTime(
   time: SongTime | undefined,
   ticksPerBeat: number,
+  score?: Omit<TimeScore, "time" | "ticksPerBeat">,
 ): void {
+  if (score && time?.fermatas) {
+    const map = new TimeMap({ ...score, ticksPerBeat, time });
+    for (const fermata of time.fermatas) {
+      const held =
+        map.seconds(fermata.tick + ticksPerBeat) - map.seconds(fermata.tick);
+      if (held > TIME_LIMITS.maxFermataSeconds + 1e-9)
+        throw new TimeValidationError(
+          `fermata at beat ${fermata.tick / ticksPerBeat} holds ${held.toFixed(1)} s; at most ${TIME_LIMITS.maxFermataSeconds} s (MIDI tempo limit), so use fewer beats or a faster tempo`,
+        );
+    }
+  }
   for (const change of time?.meter ?? []) {
     const ticks = barTicksOf(
       change.beatsPerBar,
@@ -1004,6 +1024,8 @@ export function performedNotes<N extends PlaceableNote>(
   for (const track of score.tracks)
     if (track.time) times.set(track.id, track.time);
   const out: N[] = [];
+  // The cap bounds repetitions only: untimed notes always play.
+  let repeats = 0;
   for (const note of score.notes) {
     const time = times.get(note.trackId);
     if (!time) {
@@ -1019,6 +1041,7 @@ export function performedNotes<N extends PlaceableNote>(
     const first = Math.ceil((0 - offset) / period - 1e-9);
     const last = Math.floor((loop - offset) / period - 1e-9);
     for (let k = first; k <= last; k += 1) {
+      if (repeats >= TIME_LIMITS.maxPerformedNotes) break;
       const startTick = offset + k * period;
       if (startTick < 0 || startTick >= loop) continue;
       out.push({
@@ -1026,9 +1049,8 @@ export function performedNotes<N extends PlaceableNote>(
         startTick,
         durationTicks: note.durationTicks / rate,
       });
-      if (out.length >= TIME_LIMITS.maxPerformedNotes) break;
+      repeats += 1;
     }
-    if (out.length >= TIME_LIMITS.maxPerformedNotes) break;
   }
   out.sort(
     (a, b) =>
@@ -1050,22 +1072,32 @@ export function hasTrackTime(
 }
 
 /** One-line description of a song's time, for status lines and briefs. */
-export function describeSongTime(score: TimeScore): string {
+export function describeSongTime(
+  score: TimeScore,
+  options: Readonly<{ bars?: boolean }> = {},
+): string {
   const parts: string[] = [];
   const time = score.time;
+  // `@<beat>` for the agent; with `bars`, positions as the commands take
+  // them: `bar 3` on a downbeat, else `beat 13` (as `at 13`).
+  const at = (tick: number) => {
+    if (!options.bars) return `@${formatNumber(tick / score.ticksPerBeat)}`;
+    const position = barAt(score, tick);
+    return position.offset === 0
+      ? ` bar ${position.bar + 1}`
+      : ` beat ${formatNumber(tick / score.ticksPerBeat)}`;
+  };
   for (const event of time?.tempo ?? [])
     parts.push(
-      `${event.ramp ? (event.ramp === "exp" ? "exp→" : "→") : "="}${formatNumber(event.bpm)}@${formatNumber(event.tick / score.ticksPerBeat)}`,
+      `${event.ramp ? (event.ramp === "exp" ? "exp→" : "→") : "="}${formatNumber(event.bpm)}${at(event.tick)}`,
     );
   for (const change of time?.meter ?? [])
     parts.push(
-      `${change.beatsPerBar}/${change.beatUnit ?? 4}@bar${change.bar + 1}`,
+      `${change.beatsPerBar}/${change.beatUnit ?? 4}${options.bars ? " " : "@"}bar${options.bars ? " " : ""}${change.bar + 1}`,
     );
   for (const fermata of time?.fermatas ?? [])
-    parts.push(
-      `𝄐${formatNumber(fermata.beats)}@${formatNumber(fermata.tick / score.ticksPerBeat)}`,
-    );
-  return parts.join(" ");
+    parts.push(`𝄐${formatNumber(fermata.beats)}${at(fermata.tick)}`);
+  return parts.join(options.bars ? " · " : " ");
 }
 
 function formatNumber(value: number): string {

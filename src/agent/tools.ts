@@ -7,6 +7,7 @@ import {
   type ScoreOperation,
   type TrackScore,
 } from "../../core/score.ts";
+import { loopTicksOf } from "../../core/tempo.ts";
 import { AVAILABLE_INSTRUMENTS } from "../audio/wav.ts";
 import {
   SYNTH_PRESETS,
@@ -916,7 +917,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
           `track ${trackId} is ${track.instrument}, not a drum kit; set_instrument kit or create a kit track`,
         );
       const tpb = context.score.ticksPerBeat;
-      const loopBeats = context.score.bars * context.score.beatsPerBar;
+      const loopBeats = loopTicksOf(context.score) / tpb;
       const voiceOf = (value: unknown, label: string) => {
         const voice =
           typeof value === "string" ? parseDrumVoice(value) : undefined;

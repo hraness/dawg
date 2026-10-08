@@ -11,7 +11,12 @@
 import { commandParam, sketchFor } from "./sketch.ts";
 import { HINTS } from "../../tui/grammar.ts";
 import { auditionKey, isStageable, type AuditionKey } from "./audition.ts";
-import { tempoDetail, tempoMenuNode } from "./menu-time.ts";
+import {
+  openingMeterCommand,
+  openingUnit,
+  tempoDetail,
+  tempoMenuNode,
+} from "./menu-time.ts";
 import {
   AUTOMATION_PARAMETERS,
   automationPoints,
@@ -1512,8 +1517,8 @@ function transportNodes(context: MenuContext): MenuNode[] {
       min: 1,
       max: SCORE_LIMITS.maxBeatsPerBar,
       step: linear(1, 1, SCORE_LIMITS.maxBeatsPerBar),
-      format: (value) => `${value}/4`,
-      command: (value) => `meter ${Math.round(value)}`,
+      format: (value) => `${value}/${openingUnit(score)}`,
+      command: (value) => openingMeterCommand(score, value),
     },
     tempoMenuNode(context),
     {

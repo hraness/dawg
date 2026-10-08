@@ -438,7 +438,8 @@ const USAGE: Readonly<Record<string, string>> = {
   hit: "hit <voice> at <beat> · hit kick at 0",
   pattern: "pattern <voice> <beats...> | every <step> · pattern kick every 1",
   clear: "clear · clear <voice> · clear [<lane>] automation",
-  track: "/track <name> · /track drums",
+  track:
+    "/track <name> · /track drums · track rate <0.125..8>|<a>/<b>|off · track phase <beats> · track cycle <beats> · track phasing <beats> [over <beats>]",
   tracks: "/tracks",
   sessions: "/sessions",
   resume: "/resume [<n>|<name>|<id>]",

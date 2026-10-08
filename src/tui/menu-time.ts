@@ -9,11 +9,24 @@ import {
   bpmAtTick,
   loopSecondsOf,
   loopTicksOf,
+  meterSegments,
   TIME_LIMITS,
   type TimeScore,
 } from "../../core/tempo.ts";
 import { parseTimeCommand } from "../commands/time.ts";
 import type { MenuContext, MenuNode } from "./menu.ts";
+
+/** The opening meter's note value (a bar-1 meter change can set it). */
+export function openingUnit(score: TimeScore): number {
+  return meterSegments(score)[0]?.beatUnit ?? 4;
+}
+
+/** Beats per bar from the slider, keeping the opening note value. */
+export function openingMeterCommand(score: TimeScore, value: number): string {
+  const unit = openingUnit(score);
+  const beats = Math.round(value);
+  return unit === 4 ? `meter ${beats}` : `meter ${beats}/${unit}`;
+}
 
 /** One-line summary for the Project row and the Tempo & meter row. */
 export function tempoDetail(score: TimeScore): string {
@@ -151,13 +164,13 @@ export function tempoNodes(context: MenuContext): MenuNode[] {
     {
       kind: "number",
       label: "beats per bar",
-      help: "the song's meter in quarter notes; meter changes below override it",
+      help: "the song's opening meter; meter changes below override it later",
       value: score.beatsPerBar,
       min: 1,
       max: TIME_LIMITS.maxBeatsPerBar,
       step: stepBy(1, 1, TIME_LIMITS.maxBeatsPerBar),
-      format: (value) => `${value}/4`,
-      command: (value) => `meter ${Math.round(value)}`,
+      format: (value) => `${value}/${openingUnit(score)}`,
+      command: (value) => openingMeterCommand(score, value),
     },
   );
   for (const change of time?.meter ?? []) {

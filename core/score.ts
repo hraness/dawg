@@ -28,6 +28,7 @@ import {
   TimeValidationError,
   type SongTime,
   type TrackTime,
+  withMeterChange,
 } from "./tempo.ts";
 
 export const SCORE_VERSION = 1 as const;
@@ -787,7 +788,7 @@ export class TrackScore {
     }
     const time = timeOrThrow(() => {
       const normalized = normalizeSongTime(data.time);
-      checkSongTime(normalized, ticksPerBeat);
+      checkSongTime(normalized, ticksPerBeat, { tempoBpm, beatsPerBar, bars });
       return normalized;
     });
     const tracks = normalizeTracks(data.tracks ?? []);
@@ -846,9 +847,16 @@ export class TrackScore {
     return new TrackScore({ ...this.toJSON(), key });
   }
 
-  /** Change the meter; ticks are per beat, so notes keep their positions. */
+  /**
+   * Change the meter; ticks are per beat, so notes keep their positions.
+   * Beats per bar is the song meter, so a meter change at bar 1
+   * (`time.meter` bar 0) is dropped rather than left overriding it.
+   */
   withMeter(beatsPerBar: number): TrackScore {
-    return new TrackScore({ ...this.toJSON(), beatsPerBar });
+    const time = this.time?.meter?.some((change) => change.bar === 0)
+      ? withMeterChange(this.time, 0, null)
+      : this.time;
+    return new TrackScore({ ...this.toJSON(), beatsPerBar, time: time ?? null });
   }
 
   /** Replace the tempo map, meter changes and fermatas; null clears them. */

@@ -1,5 +1,10 @@
 import type { TrackScore } from "../../core/score.ts";
 import {
+  describeSongTime,
+  loopTicksOf,
+  meterSegments,
+} from "../../core/tempo.ts";
+import {
   AVAILABLE_EFFECTS,
   AVAILABLE_FX_PRESETS,
   AVAILABLE_INSTRUMENTS,
@@ -93,6 +98,22 @@ export function compositionBrief(options: {
       ...((track.delayMixAutomation?.length ?? 0) > 0
         ? { delayMixAutomation: track.delayMixAutomation!.length }
         : {}),
+      ...(track.time
+        ? {
+            // Per-track time in beats: rate, phase offset and loop cycle.
+            time: {
+              ...(track.time.rate !== undefined
+                ? { rate: track.time.rate }
+                : {}),
+              ...(track.time.phase !== undefined
+                ? { phaseBeats: beats(track.time.phase) }
+                : {}),
+              ...(track.time.cycle !== undefined
+                ? { cycleBeats: beats(track.time.cycle) }
+                : {}),
+            },
+          }
+        : {}),
       ...(track.wavetable ? { wavetable: track.wavetable } : {}),
       ...((track.wtAutomation?.length ?? 0) > 0
         ? { wtAutomation: track.wtAutomation!.length }
@@ -119,6 +140,8 @@ export function compositionBrief(options: {
     .slice(-MAX_RECENT)
     .map((line) => line.replace(/\s+/g, " ").slice(0, MAX_RECENT_CHARS));
   const project = options.project;
+  const opening = meterSegments(score)[0]!;
+  const openingMeter = `${opening.beatsPerBar}/${opening.beatUnit}`;
   const build = (
     noteLimit: number,
     trackLimit: number,
@@ -129,9 +152,11 @@ export function compositionBrief(options: {
     return JSON.stringify({
       revision: options.revision,
       tempoBpm: score.tempoBpm,
-      meter: `${score.beatsPerBar}/4`,
+      meter: openingMeter,
       bars: score.bars,
-      loopBeats: score.bars * score.beatsPerBar,
+      loopBeats: beats(loopTicksOf(score)),
+      // Tempo events (=step, →ramp; bpm@beat), meter changes and fermatas.
+      ...(score.time ? { time: describeSongTime(score) } : {}),
       ...(score.key ? { key: score.key } : {}),
       focusedTrack: options.focusedTrackId,
       tracks: tracks.slice(0, trackLimit),

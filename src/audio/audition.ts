@@ -13,6 +13,11 @@ import {
   type Note,
   type Track,
 } from "../../core/score.ts";
+import {
+  barStartTick,
+  meterSegments,
+  secondsAtTick,
+} from "../../core/tempo.ts";
 import type { LiveNotePcm } from "./live.ts";
 import type { SampleBank } from "./samples.ts";
 import { RENDER_CHANNELS, renderScorePcm } from "./wav.ts";
@@ -39,7 +44,8 @@ export function renderAudition(
     (candidate) => candidate.id === request.trackId,
   );
   if (!track) return undefined;
-  const secondsPerBar = (score.beatsPerBar * 60) / score.tempoBpm;
+  const opening = meterSegments(score)[0]!;
+  const secondsPerBar = secondsAtTick(score, opening.barTicks);
   const bars = Math.max(
     1,
     Math.min(
@@ -48,7 +54,7 @@ export function renderAudition(
       Math.floor(MAX_AUDITION_SECONDS / secondsPerBar) || 1,
     ),
   );
-  const endTick = bars * score.beatsPerBar * score.ticksPerBeat;
+  const endTick = barStartTick(score, bars);
   const notes: Note[] = score.notes.filter(
     (note) =>
       note.trackId === track.id &&
@@ -61,6 +67,8 @@ export function renderAudition(
     beatsPerBar: score.beatsPerBar,
     bars,
     ticksPerBeat: score.ticksPerBeat,
+    // The song's meter and tempo map, so bar spans match `endTick`.
+    ...(score.time ? { time: score.time } : {}),
     tracks: [auditionTrack(track)],
     notes: notes.map((note) => ({
       ...note,

@@ -2068,7 +2068,11 @@ function localizeSampler(spec: SamplerSpec, slug: string): SamplerSpec {
 export type SongInput = Readonly<{
   /** BPM 20..300, default 120. */
   tempo?: number;
-  /** `[beatsPerBar, noteValue]` or just `beatsPerBar`; default `[4, 4]`. Only the numerator is stored. */
+  /**
+   * `[beatsPerBar, noteValue]` or just `beatsPerBar`; default `[4, 4]`.
+   * A note value other than 4 is stored as a meter change at bar 1, so
+   * `[6, 8]` is six eighths (three quarter-note beats) per bar.
+   */
   meter?: readonly [number, number] | number;
   /** Loop length in bars, 1..256, default 4. */
   bars?: number;
@@ -2203,7 +2207,9 @@ export function song(input: SongInput): Song {
   const beatsPerBar = Array.isArray(meter)
     ? finite(meter[0], "song meter[0]")
     : finite(meter as number, "song meter");
-  if (Array.isArray(meter)) finite(meter[1], "song meter[1]");
+  const beatUnit = Array.isArray(meter) ? finite(meter[1], "song meter[1]") : 4;
+  if (![1, 2, 4, 8, 16, 32].includes(beatUnit))
+    throw new DawgSdkError("song meter note value must be 1, 2, 4, 8, 16 or 32");
   const bars = finite(input.bars ?? 4, "song bars");
   const ticksPerBeat = input.ticksPerBeat ?? DEFAULT_TICKS_PER_BEAT;
   if (
@@ -2327,7 +2333,14 @@ export function song(input: SongInput): Song {
     bars,
     ticksPerBeat,
     key,
-    ...songTime(input.time, tempoBpm, ticks, beatsPerBar, ticksPerBeat),
+    ...songTime(
+      input.time,
+      tempoBpm,
+      ticks,
+      beatsPerBar,
+      ticksPerBeat,
+      beatUnit,
+    ),
     tracks: Object.freeze(tracks),
     notes: Object.freeze(notes),
   });
@@ -2523,8 +2536,10 @@ function songTime(
   ticks: (beats: number) => number,
   beatsPerBar: number,
   ticksPerBeat: number,
+  beatUnit = 4,
 ): { time?: ScoreTime } {
-  if (input === undefined || input === null) return {};
+  if ((input === undefined || input === null) && beatUnit === 4) return {};
+  input ??= [];
   if (!Array.isArray(input))
     throw new DawgSdkError("song time must be an array of time marks");
   const marks: TimeMark[] = [];
@@ -2585,6 +2600,9 @@ function songTime(
   const meters = marks
     .filter((mark) => mark.kind === "meter")
     .sort((a, b) => a.at - b.at);
+  // `song({ meter: [6, 8] })`: the song meter's note value as a bar-1 change.
+  if (beatUnit !== 4 && !meters.some((mark) => ticks(mark.at) === 0))
+    meters.unshift({ kind: "meter", at: 0, beatsPerBar, beatUnit });
   const meterOut: { bar: number; beatsPerBar: number; beatUnit?: number }[] =
     [];
   let barTick = 0;

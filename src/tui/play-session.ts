@@ -506,13 +506,17 @@ export class PlaySession {
     const samples = this.host.samples?.();
     if (this.synth?.rate !== engine.sampleRate)
       this.synth = new LiveSynth(engine.sampleRate);
+    const score = this.host.score();
     const pcm = this.synth.render({
-      score: this.host.score(),
+      score,
       trackId: this.trackId,
       pitch: note.pitch,
       velocity: note.velocity / 127,
       seconds,
       ...(samples ? { samples } : {}),
+      ...(score.time?.tempo
+        ? { tick: loopTickAt(score, this.host.beatAt(note.atMs)) }
+        : {}),
     });
     if (!pcm) return;
     const scheduled = engine.noteOn(id, pcm);

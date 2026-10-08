@@ -297,10 +297,9 @@ function trackTimeCommand(rest: readonly string[]): TimeCommand | undefined {
     if (ratio && field !== "rate") return undefined;
     const parsed = ratio ? Number(ratio[1]) / Number(ratio[2]) : Number(number);
     if (!Number.isFinite(parsed)) return undefined;
-    if (field === "rate") {
-      if (parsed < TIME_LIMITS.minRate || parsed > TIME_LIMITS.maxRate)
-        return undefined;
-    } else if (field === "cycle" && !(parsed > 0)) return undefined;
+    // An out-of-range rate parses, so applying it can name the range.
+    if (field === "rate" && !(parsed > 0)) return undefined;
+    if (field === "cycle" && !(parsed > 0)) return undefined;
     return { type: "track-time", field, value: parsed };
   }
   if (field === "phasing") {
@@ -391,7 +390,7 @@ function applyOrThrow(
     case "tempo-map":
       return {
         ok: true,
-        message: `tempo map · ${num(score.tempoBpm)} BPM${score.time ? ` ${describeSongTime(score)}` : " throughout"} · ${num(loopSecondsOf(score))} s`,
+        message: `tempo map · ${num(score.tempoBpm)} BPM${score.time ? ` · ${describeSongTime(score, { bars: true })}` : " throughout"} · ${num(loopSecondsOf(score))} s`,
       };
     case "tempo-at": {
       const tick = tickOf(score, command.at);
@@ -587,24 +586,20 @@ function meterAt(
 ): TimeResult {
   const label = `${command.beatsPerBar}/${command.beatUnit}`;
   if (command.bar === undefined) {
-    // The whole song: quarter-note meters set beats per bar as `meter <n>`
-    // does; other note values become a change at bar 1.
-    const cleared = withMeterChange(score.time, 0, null);
-    if (command.beatUnit === 4) {
-      const next = applyScoreOperation(
-        applyScoreOperation(score, {
-          type: "setMeter",
-          beatsPerBar: command.beatsPerBar,
-        }),
-        { type: "setTime", time: cleared ?? null },
-      );
-      return songResult(next, `meter · ${label}`, "score.meter", {
+    // The whole song: beats per bar is the one source of the song meter
+    // (`meter <n>` sets it too); a note value other than a quarter adds a
+    // matching change at bar 1, which `meter <n>` drops again.
+    const metered = applyScoreOperation(score, {
+      type: "setMeter",
+      beatsPerBar: command.beatsPerBar,
+    });
+    if (command.beatUnit === 4)
+      return songResult(metered, `meter · ${label}`, "score.meter", {
         beatsPerBar: command.beatsPerBar,
       });
-    }
     return timeResult(
-      score,
-      withMeterChange(score.time, 0, command),
+      metered,
+      withMeterChange(metered.time, 0, command),
       `meter · ${label}`,
     );
   }
@@ -656,6 +651,14 @@ function trackTime(
     delete current[command.field];
     message = `${trackId} · ${command.field} off`;
   } else if (command.field === "rate") {
+    if (
+      command.value < TIME_LIMITS.minRate ||
+      command.value > TIME_LIMITS.maxRate
+    )
+      return {
+        ok: false,
+        message: `track rate · ${fmt(command.value, 4)} is out of range; use ${TIME_LIMITS.minRate}..${TIME_LIMITS.maxRate} or a ratio like 3/2`,
+      };
     current.rate = command.value;
     message = `${trackId} · rate ${fmt(command.value, 4)}×`;
   } else {
