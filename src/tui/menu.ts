@@ -2126,7 +2126,10 @@ export class EditMenu {
     this.show(context, "effects");
     if (this.stack.length < 2) return this.fail();
     if (!this.descend(context, effect)) {
-      if (!this.descend(context, "more effects") || !this.descend(context, effect))
+      if (
+        !this.descend(context, "more effects") ||
+        !this.descend(context, effect)
+      )
         return this.fail();
     }
     const fields = this.faderFields(context);
@@ -2161,7 +2164,9 @@ export class EditMenu {
   private focusLabel(context: MenuContext, label: string): string | undefined {
     const frame = this.stack.at(-1);
     if (!frame) return undefined;
-    const index = frame.build(context).findIndex((node) => node.label === label);
+    const index = frame
+      .build(context)
+      .findIndex((node) => node.label === label);
     if (index < 0) return undefined;
     frame.index = index;
     return label;

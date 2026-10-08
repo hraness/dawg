@@ -157,13 +157,14 @@ export function parseMouse(value: string): MouseEvent | undefined {
     };
   }
   const motion = (code & 32) !== 0;
-  const kind = match[4] === "m"
-    ? "up"
-    : motion
-      ? button === "none"
-        ? "move"
-        : "drag"
-      : "down";
+  const kind =
+    match[4] === "m"
+      ? "up"
+      : motion
+        ? button === "none"
+          ? "move"
+          : "drag"
+        : "down";
   return { kind, button, x, y, delta: 0, ...modifiers };
 }
 

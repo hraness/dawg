@@ -1148,7 +1148,13 @@ export function composeFrame(
   const hits = new HitMap();
   if (layout.tooSmall) {
     paintTooSmall(buffer, ui, { width, height });
-    return { buffer, cursor: undefined, promptRows: 0, layout, hits: new HitMap() };
+    return {
+      buffer,
+      cursor: undefined,
+      promptRows: 0,
+      layout,
+      hits: new HitMap(),
+    };
   }
   if (view.play) {
     paintPlayHeader(
