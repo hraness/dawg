@@ -564,6 +564,12 @@ export type PitchSegment = Readonly<{
   /** Glide into `target` from `from` over `glide` seconds (0: none). */
   from: number;
   glide: number;
+  /**
+   * `exp`: a constant-time RC approach (time constant glide/3, landing on
+   * the target at `glide`), as an analog portamento or a TB-303 slide;
+   * absent: a linear sweep in cents.
+   */
+  curve?: "exp";
   bend?: readonly BendPoint[];
   vibrato?: NoteVibrato;
   /** Seconds the vibrato's phase counts from (its own note's start). */
@@ -926,6 +932,7 @@ function segmentFor(
   glide: number,
   span: Span,
   vibratoFrom: number,
+  curve?: "exp",
 ): PitchSegment {
   const { note } = item;
   return {
@@ -935,6 +942,7 @@ function segmentFor(
     target,
     from,
     glide,
+    ...(curve && glide > 0 ? { curve } : {}),
     ...(note.bend ? { bend: note.bend } : {}),
     ...(note.vibrato ? { vibrato: note.vibrato } : {}),
     vibratoFrom,
@@ -1027,7 +1035,15 @@ function reachedCents(segment: PitchSegment, t: number): number {
 function centsOfSegment(segment: PitchSegment, t: number): number {
   const local = t - segment.offset;
   let cents = segment.target;
-  if (segment.glide > 0 && local < segment.glide)
+  if (segment.glide > 0 && segment.curve === "exp" && local < segment.glide)
+    // An RC approach with time constant glide/3, scaled to land exactly on
+    // the target at `glide` so the pitch never steps.
+    cents =
+      segment.from +
+      ((segment.target - segment.from) *
+        (1 - Math.exp((-3 * Math.max(0, local)) / segment.glide))) /
+        (1 - Math.exp(-3));
+  else if (segment.glide > 0 && local < segment.glide)
     cents =
       segment.from + ((segment.target - segment.from) * local) / segment.glide;
   if (segment.bend)
@@ -1049,6 +1065,9 @@ function glideAndMono(
 ): Glided[] {
   const trackGlide = track?.glide;
   const mode = trackGlide?.mode;
+  // Mono and legato glide approach the pitch exponentially, as an analog
+  // portamento does; polyphonic glide stays a linear sweep.
+  const curve = mode === "legato" || mode === "mono" ? "exp" : undefined;
   const glideOf = (item: Working): number =>
     item.note.glide ?? trackGlide?.time ?? 0;
   const accented = (item: Working): boolean =>
@@ -1064,6 +1083,7 @@ function glideAndMono(
         from === undefined ? 0 : glide,
         span,
         0,
+        curve,
       ),
     ];
     const performance = performanceFor(segments, item.damp, accented(item));
@@ -1109,6 +1129,7 @@ function glideAndMono(
           from === undefined ? 0 : glide,
           span,
           0,
+          curve,
         );
         out.push(voice);
         index += 1;
@@ -1119,11 +1140,14 @@ function glideAndMono(
       while (index + chain.length < line.length) {
         const last = chain[chain.length - 1]!;
         const next = line[index + chain.length]!;
-        // A note's own glide is the TB-303 slide flag: the gate holds
-        // across a small gap (up to a 64th) and the pitch slides.
+        // A note with its own glide slides into from the previous note:
+        // the gate holds across a gap of up to one 16th step (a TB-303 gate
+        // closes part-way through its step) and the pitch slides. `next` is
+        // the next onset in the line, so a slide never bridges a rest with
+        // another note in it; a longer gap is a rest and retriggers.
         const end = last.start + last.duration;
         const slide =
-          (next.note.glide ?? 0) > 0 && next.start - end <= ticksPerBeat / 16;
+          (next.note.glide ?? 0) > 0 && next.start - end <= ticksPerBeat / 4;
         if ((end <= next.start && !slide) || next.note.glide === 0) break;
         chain.push(next);
       }
@@ -1154,6 +1178,7 @@ function glideAndMono(
           k === 0 ? 0 : glideOf(item),
           span,
           offset,
+          curve,
         );
         const sounding =
           k + 1 < chain.length
@@ -1179,10 +1204,12 @@ function glideAndMono(
             }
           : {}),
       };
+      // One voice: it keeps the first note's velocity, and is accented
+      // when any chained note is (later velocities are not followed).
       const performance = performanceFor(
         segments,
         merged.damp,
-        accented(first),
+        chain.some(accented),
       );
       out.push({ ...merged, ...(performance ? { performance } : {}) });
       index += chain.length;
