@@ -36,6 +36,8 @@ import {
   type PlayHeaderView,
 } from "./play-strip.ts";
 import { CellBuffer, ScreenWriter, type CursorPosition } from "./screen.ts";
+import { paintDrawer, type DrawerLayout, type DrawerView } from "./drawer.ts";
+import { HitMap, type HitTarget } from "./hits.ts";
 import { displayWidth, truncate } from "./text.ts";
 import {
   accentStyle,
@@ -129,6 +131,8 @@ export interface UiState {
   keys?: TextView | undefined;
   /** The `/guide` tree and pages. */
   guide?: GuideBrowser | undefined;
+  /** The fader drawer, docked over the bottom of the piano roll. */
+  drawer?: DrawerView | undefined;
 }
 
 /**
@@ -222,6 +226,10 @@ export interface Frame {
   /** Rows used by the prompt editor (excluding borders). */
   promptRows: number;
   layout: FrameLayout;
+  /** Click targets, recorded while painting (topmost last). */
+  hits: HitMap;
+  /** Where the fader drawer landed, when one is open. */
+  drawer?: DrawerLayout | undefined;
 }
 
 export interface FrameLayout {
@@ -304,6 +312,8 @@ interface Segment {
   style: Style;
   /** Lower numbers survive longer when space is short. */
   priority: number;
+  /** What a click on it does. */
+  target?: HitTarget | undefined;
 }
 
 function paintSegments(
@@ -315,6 +325,7 @@ function paintSegments(
   separatorStyle: Style,
   background: Style,
   rightSegments: Segment[] = [],
+  hits?: HitMap,
 ): void {
   const sepWidth = displayWidth(separator);
   const total = (list: Segment[]) =>
@@ -341,12 +352,14 @@ function paintSegments(
         separator,
         onBackground(separatorStyle, background),
       );
-    x += buffer.text(
+    const used = buffer.text(
       x,
       y,
       truncate(segment.text, Math.max(1, width - x - 1)),
       onBackground(segment.style, background),
     );
+    if (segment.target) hits?.add(x, y, used, 1, segment.target);
+    x += used;
   });
   if (right.length) {
     let rx = width - 1 - total(right);
@@ -359,12 +372,14 @@ function paintSegments(
           separator,
           onBackground(separatorStyle, background),
         );
-      rx += buffer.text(
+      const used = buffer.text(
         rx,
         y,
         segment.text,
         onBackground(segment.style, background),
       );
+      if (segment.target) hits?.add(rx, y, used, 1, segment.target);
+      rx += used;
     });
   }
 }
@@ -399,6 +414,7 @@ function paintHeader(
   view: AppView,
   ui: UiState,
   width: number,
+  hits?: HitMap,
 ): void {
   const { theme, capabilities } = ui;
   const roles = theme.roles;
@@ -413,11 +429,13 @@ function paintHeader(
       text: name,
       style: { ...accentStyle(theme, score.trackId ?? name), bold: true },
       priority: 0,
+      target: { kind: "tracks" },
     },
     {
       text: transport,
       style: playing ? roles.transport : roles.paused,
       priority: 0,
+      target: { kind: "transport" },
     },
   ];
   if (score.key)
@@ -438,7 +456,12 @@ function paintHeader(
     });
   const right: Segment[] = [];
   if (view.model)
-    right.push({ text: view.model, style: roles.agent, priority: 2 });
+    right.push({
+      text: view.model,
+      style: roles.agent,
+      priority: 2,
+      target: { kind: "model" },
+    });
   if (score.revision !== undefined)
     right.push({
       text: `rev ${score.revision}`,
@@ -469,7 +492,17 @@ function paintHeader(
     });
   const sync = syncSegment(view.sync, theme, unicode);
   if (sync) right.push(sync);
-  paintSegments(buffer, 0, left, width, " · ", roles.faint, roles.panel, right);
+  paintSegments(
+    buffer,
+    0,
+    left,
+    width,
+    " · ",
+    roles.faint,
+    roles.panel,
+    right,
+    hits,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -961,6 +994,7 @@ function paintPicker(
   ui: UiState,
   region: { y: number; height: number },
   width: number,
+  hits?: HitMap,
 ): void {
   const picker = ui.picker;
   if (!picker) return;
@@ -1028,6 +1062,7 @@ function paintPicker(
   picker.items.slice(first, first + inner).forEach((item, offset) => {
     const index = first + offset;
     const y = region.y + 1 + offset;
+    hits?.add(left + 1, y, boxWidth - 2, 1, { kind: "picker-row", index });
     const selected = index === picker.index;
     const marker = selected ? (ui.capabilities.unicode ? "›" : ">") : " ";
     const style = selected
@@ -1110,9 +1145,16 @@ export function composeFrame(
   const buffer = new CellBuffer(width, height, ui.theme.roles.canvas);
   ui.prompt.setWidth(promptEditorWidth(width));
   const layout = computeLayout({ width, height }, ui.prompt.wrappedRows);
+  const hits = new HitMap();
   if (layout.tooSmall) {
     paintTooSmall(buffer, ui, { width, height });
-    return { buffer, cursor: undefined, promptRows: 0, layout };
+    return {
+      buffer,
+      cursor: undefined,
+      promptRows: 0,
+      layout,
+      hits: new HitMap(),
+    };
   }
   if (view.play) {
     paintPlayHeader(
@@ -1143,12 +1185,18 @@ export function composeFrame(
         height: layout.highway.height - 1,
       };
     }
-  } else paintHeader(buffer, view, ui, width);
+  } else paintHeader(buffer, view, ui, width, hits);
   const beat = view.beat ?? resolveBeat(view.score, nowMs);
+  let drawer: DrawerLayout | undefined;
   if (layout.highway.height > 0) {
-    if (ui.overlay === "log") paintOverlay(buffer, ui, layout.highway, width);
-    else if (ui.overlay === "picker" && ui.picker)
-      paintPicker(buffer, ui, layout.highway, width);
+    hits.add(0, layout.highway.y, width, layout.highway.height, {
+      kind: ui.overlay && !ui.drawer ? "text" : "highway",
+    });
+    // The drawer replaces the menu's list: the piano roll shows above it.
+    if (ui.overlay === "log" && !ui.drawer)
+      paintOverlay(buffer, ui, layout.highway, width);
+    else if (ui.overlay === "picker" && ui.picker && !ui.drawer)
+      paintPicker(buffer, ui, layout.highway, width, hits);
     else if (ui.overlay === "text" && ui.text)
       paintText(buffer, ui, layout.highway, width);
     else if (ui.overlay === "guide" && ui.guide)
@@ -1165,6 +1213,15 @@ export function composeFrame(
           reducedMotion: ui.reducedMotion,
         },
       );
+    if (ui.drawer)
+      drawer = paintDrawer(
+        buffer,
+        layout.highway,
+        width,
+        ui.drawer,
+        { theme: ui.theme, unicode: ui.capabilities.unicode },
+        hits,
+      );
   }
   if (ui.keys && layout.highway.height > 0)
     paintText(buffer, ui, keysRegion(layout.highway, ui.keys), width, {
@@ -1173,7 +1230,14 @@ export function composeFrame(
     });
   paintActivity(buffer, layout.activity, ui, width, nowMs);
   const prompt = paintPrompt(buffer, view, ui, layout, width);
-  return { buffer, cursor: prompt.cursor, promptRows: prompt.rows, layout };
+  return {
+    buffer,
+    cursor: prompt.cursor,
+    promptRows: prompt.rows,
+    layout,
+    hits,
+    drawer,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1226,6 +1290,8 @@ export class TuiApp {
   log: LogView = { scroll: 0, filter: "all" };
   picker: PickerState | undefined;
   text: TextView | undefined;
+  /** The fader drawer's paint model while one is open. */
+  drawer: DrawerView | undefined;
   /** `/view all` overlays every unmuted track; `/view focus` shows one. */
   highwayView: "all" | "focus" = "all";
   private writer: ScreenWriter;
@@ -1264,6 +1330,7 @@ export class TuiApp {
       text: this.text,
       keys: this.keys,
       guide: this.guide,
+      drawer: this.drawer,
     };
   }
 

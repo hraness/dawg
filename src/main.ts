@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeSync } from "node:fs";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { stdin, stdout } from "node:process";
@@ -142,6 +142,23 @@ import {
 } from "./tui/play-session.ts";
 import { EditMenu, MENU_SECTIONS, type MenuContext } from "./tui/menu.ts";
 import {
+  drawerView,
+  faderChoose,
+  faderKeyPress,
+  faderSetPosition,
+  faderStep,
+  focusIndex,
+  type FaderResult,
+  type FaderState,
+} from "./tui/fader.ts";
+import {
+  isMouseSequence,
+  MOUSE_OFF,
+  MOUSE_ON,
+  parseMouse,
+  type MouseEvent,
+} from "../tui/keys.ts";
+import {
   Audition,
   SUPERSEDED,
   isChordStageable,
@@ -271,6 +288,7 @@ const FLAGS = [
   "--version",
   "-v",
   "--reduce-motion",
+  "--no-mouse",
 ];
 const HELP_TEXT = `dawg · local-first terminal music workstation
 
@@ -288,6 +306,7 @@ Usage:
 Usage flags:
   --reduce-motion   static hit/sustain states (also DAWG_REDUCE_MOTION=1)
   --theme <name>    default | high-contrast | mono (NO_COLOR forces mono)
+  --no-mouse        keys only; no click/wheel reporting (also DAWG_MOUSE=0)
 
 Prompt:
   Enter submit · Shift-Enter newline · Alt-Enter queue · Ctrl-Q toggle queue
@@ -518,6 +537,18 @@ let chordScreenWas = false;
 let stageCapture: { next?: TrackScore; committed?: TrackScore } | undefined;
 /** Redraw soon (the audition reports renders between frames). */
 let requestFrame: () => void = () => undefined;
+/** Queue a prompt to run as if typed (set by the interactive loop). */
+let runPromptLater: (command: string) => void = () => undefined;
+/** The fader drawer's focus and typing, while one is open over the menu. */
+let fader: FaderState | undefined;
+const KEY_UP = "\u001b[A";
+const KEY_DOWN = "\u001b[B";
+/** The fader bar a left-button drag started on. */
+let dragging: { field: number; left: number; width: number } | undefined;
+/** The open drawer came from a command, not the menu. */
+let faderStandalone = false;
+/** Per-field sequence: a drag drops stale stages that would land late. */
+const faderSeq = new Map<string, number>();
 /** The decoded sampler voices, for play mode's live voices. */
 let liveSampleBank: SampleBank | undefined;
 /** The in-flight agent turn: Esc aborts it, Enter steers it. */
@@ -895,11 +926,46 @@ function truncateForCard(value: string): string {
   return line.length > 32 ? `${line.slice(0, 31)}…` : line;
 }
 
+/**
+ * Mouse reporting is on unless `--no-mouse` or `DAWG_MOUSE=0` (or a dumb
+ * terminal) says otherwise. A terminal without mouse support ignores the
+ * modes and every key still works.
+ */
+function mouseEnabled(): boolean {
+  return (
+    !process.argv.includes("--no-mouse") &&
+    process.env.DAWG_MOUSE !== "0" &&
+    process.env.TERM !== "dumb"
+  );
+}
+
+function mouseOn(): string {
+  return mouseEnabled() ? MOUSE_ON : "";
+}
+
 async function runInteractive(): Promise<void> {
+  // A crash or a stray process.exit must not leave the terminal reporting
+  // mouse events into the shell.
+  process.once("exit", () => {
+    if (mouseEnabled()) writeSync(1, MOUSE_OFF);
+  });
+  // Nor may a kill or a closed terminal: restore it, then exit as killed.
+  for (const [signal, code] of [
+    ["SIGTERM", 143],
+    ["SIGHUP", 129],
+  ] as const)
+    process.once(signal, () => {
+      try {
+        writeSync(1, `${MOUSE_OFF}${ESC}0m${ESC}?2004l${ESC}?25h${ESC}?1049l`);
+      } catch {
+        // The terminal may already be gone (SIGHUP).
+      }
+      process.exit(code);
+    });
   stdin.setRawMode?.(true);
   stdin.resume();
   // Alternate screen, hidden cursor, bracketed paste.
-  stdout.write(`${ESC}?1049h${ESC}?25l${ESC}?2004h${ESC}2J`);
+  stdout.write(`${ESC}?1049h${ESC}?25l${ESC}?2004h${ESC}2J${mouseOn()}`);
   const inputDecoder = new TerminalInputDecoder();
   const queuedPrompts: string[] = [];
   let processingQueue = false;
@@ -961,6 +1027,10 @@ async function runInteractive(): Promise<void> {
     tui.render(appView(score, clock.beatAt()), { force });
   };
   requestFrame = () => tick(true);
+  runPromptLater = (command) => {
+    queuedPrompts.unshift(command);
+    void drainQueue();
+  };
   reportAgentActivity = () => {
     tui.activity.applyAgentEvent({ type: "start", model: providerName });
   };
@@ -1117,11 +1187,11 @@ async function runInteractive(): Promise<void> {
     stdin.pause();
     stdin.setRawMode?.(false);
     // Leave the alternate screen; restore the cursor and plain paste.
-    stdout.write(`${ESC}0m${ESC}?2004l${ESC}?25h${ESC}?1049l`);
+    stdout.write(`${MOUSE_OFF}${ESC}0m${ESC}?2004l${ESC}?25h${ESC}?1049l`);
     try {
       return await flow();
     } finally {
-      stdout.write(`${ESC}?1049h${ESC}?25l${ESC}?2004h${ESC}2J`);
+      stdout.write(`${ESC}?1049h${ESC}?25l${ESC}?2004h${ESC}2J${mouseOn()}`);
       stdin.setRawMode?.(true);
       stdin.on("data", onData);
       stdin.resume();
@@ -1140,7 +1210,31 @@ async function runInteractive(): Promise<void> {
         ...inputDecoder.push(text),
         ...(text === "\u001b" ? inputDecoder.flush() : []),
       ];
-      for (const value of values) {
+      while (values.length) {
+        const value = values.shift()!;
+        // A mouse report acts on what the last frame painted under it; some
+        // become keys (a list row, a wheel notch) and run through below.
+        if (typeof value === "string" && isMouseSequence(value)) {
+          const event = parseMouse(value);
+          if (event) values.unshift(...mouseInput(event));
+          tick(true);
+          continue;
+        }
+        // The fader drawer owns every key while it is up.
+        if (typeof value === "string" && fader && menu.open) {
+          const result = faderKeyPress(
+            fader,
+            menu.faderFields(menuContext()),
+            value,
+            faderKeyOptions(),
+          );
+          if (result.type !== "pass") {
+            faderOutcome(result);
+            refreshMenu();
+            tick(true);
+            continue;
+          }
+        }
         // The `?` panel closes on any key (Ctrl-C still quits).
         if (tui.ui.keys && typeof value === "string" && value !== "\u0003") {
           tui.closeKeys();
@@ -1203,6 +1297,7 @@ async function runInteractive(): Promise<void> {
               }
             } else if (result.type === "audition")
               auditionKeyPressed(result.key);
+            else if (result.type === "fader") openFader(result.label);
             else if (result.type === "revert") revertStaged();
             else if (result.type === "hover")
               hoverItem(result.command, result.key);
@@ -1399,7 +1494,7 @@ async function runInteractive(): Promise<void> {
     await port.close();
     stdin.setRawMode?.(false);
     stdin.pause();
-    stdout.write(`${ESC}0m${ESC}?2004l${ESC}?25h${ESC}?1049l`);
+    stdout.write(`${MOUSE_OFF}${ESC}0m${ESC}?2004l${ESC}?25h${ESC}?1049l`);
   }
 }
 
@@ -1434,7 +1529,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
   }
   if (/^\/?tracks$/i.test(command)) {
     const problems = await sampleProblems(score);
-    const lines = score.tracks.map((track) => {
+    const items = score.tracks.map((track) => {
       const voices = track.sampler
         ? Object.keys(track.sampler.voices).length
         : 0;
@@ -1444,10 +1539,25 @@ async function submit(prompt: string): Promise<string | Receipt> {
       const samples = track.sampler
         ? ` · ${voices} sample${voices === 1 ? "" : "s"}${missing ? ` · ${missing} missing` : ""}`
         : "";
-      return `${track.id === requestedTrack ? "*" : " "} ${track.id} · ${track.instrument}${samples}${track.muted ? " · muted" : ""}${track.solo ? " · solo" : ""}`;
+      return {
+        label: track.id,
+        value: `/track ${track.id}`,
+        detail: `${track.instrument}${samples}${track.muted ? " · muted" : ""}${track.solo ? " · solo" : ""}`,
+        current: track.id === requestedTrack,
+      };
     });
-    tui.openText("tracks · * focused", lines);
-    return ok(`${lines.length} track${lines.length === 1 ? "" : "s"}`);
+    // A picker: Enter (or a click) focuses the track; Esc closes.
+    tui.openPicker({
+      id: "tracks",
+      title: "tracks · ● focused",
+      items,
+      filterable: items.length > 8,
+      index: Math.max(
+        0,
+        items.findIndex((item) => item.current),
+      ),
+    });
+    return ok(`${items.length} track${items.length === 1 ? "" : "s"}`);
   }
   const playCommand = command.match(
     /^\/play(?:\s+(on|off|degrees|in-key|chromatic))?$/i,
@@ -1490,6 +1600,16 @@ async function submit(prompt: string): Promise<string | Receipt> {
   }
   const tryCommand = command.match(/^\/try(?:\s+(.+))?$/i);
   if (tryCommand) return tryPrompt(tryCommand[1]?.trim() ?? "");
+  // A bare parameter (`volume`, `pan`, `fx filter`, `fx reverb mix`)
+  // opens the fader drawer on it, with its related params stacked below.
+  if (/^\/?(?:volume|pan|fx\s+\S+(?:\s+\S+)?)$/i.test(command)) {
+    const label = menu.showFader(menuContext(), command);
+    if (label) {
+      openFader(label, true);
+      refreshMenu();
+      return ok(`${label} · ←→ adjust · enter keep · esc revert`);
+    }
+  }
   const menuCommand = command.match(/^\/menu(?:\s+(\S+))?$/i);
   if (menuCommand) {
     const section = menuCommand[1]?.toLowerCase();
@@ -2623,6 +2743,8 @@ function menuContext(): MenuContext {
 /** The screen `?` describes, or undefined while `?` is typed text. */
 function keysScreen(): readonly KeySection[] | undefined {
   if (euclid.open) return euclid.typing ? undefined : KEYS.euclid;
+  if (fader && menu.open)
+    return fader.typing !== undefined ? undefined : KEYS.fader;
   if (menu.open) return menu.typing ? undefined : KEYS.menu;
   const overlay = tui.ui.overlay;
   if (overlay === "picker")
@@ -3092,14 +3214,28 @@ function leaveAuditionScreen(): void {
 
 function refreshMenu(): void {
   noteChordScreen();
-  if (!menu.open) return;
+  if (!menu.open) {
+    closeFader();
+    return;
+  }
   if (tui.ui.overlay !== undefined && tui.ui.picker?.id !== "menu") {
     // Another overlay (help, a picker) replaced the menu.
     menu.close();
     leaveAuditionScreen();
     return;
   }
-  const view = menu.view(menuContext());
+  const context = menuContext();
+  if (fader) {
+    const fields = menu.faderFields(context);
+    if (fields.length === 0) closeFader();
+    else
+      tui.drawer = drawerView(fader, fields, menu.faderCommitted(context), {
+        title: menu.crumbs,
+        dirty: context.audition?.dirty ?? false,
+        status: context.audition?.status,
+      });
+  }
+  const view = menu.view(context);
   tui.openPicker({
     id: "menu",
     title: view.title,
@@ -3110,6 +3246,216 @@ function refreshMenu(): void {
     hint: view.hint,
     note: view.note,
   });
+}
+
+// ── the fader drawer ─────────────────────────────────────────────────
+
+/** Enter on a number row (or a bare `volume`, `fx filter`): the drawer. */
+/**
+ * Open the drawer on `label`. `standalone` drawers came from a command or a
+ * click, not from inside the menu, so closing one closes the menu too.
+ */
+function openFader(label: string, standalone = false): void {
+  fader = { label };
+  faderStandalone = standalone;
+  const loop = auditionController();
+  if (!loop.dirtyEdits) loop.committedNow(score);
+}
+
+function closeFader(): void {
+  fader = undefined;
+  tui.drawer = undefined;
+  if (faderStandalone && menu.open) {
+    faderStandalone = false;
+    menu.close();
+    tui.closePicker();
+    stopAuditionLoop();
+  }
+  faderStandalone = false;
+}
+
+function faderKeyOptions(): { dirty: boolean; audition: boolean } {
+  return { dirty: auditionLoop?.dirtyEdits ?? false, audition: true };
+}
+
+/**
+ * Act on a drawer result. A set stages on the audition loop, filed under
+ * its field so every nudge replaces the last: the piano roll (and the loop,
+ * when it plays) follows at once, and Enter keeps them all as one revision.
+ * A setting the loop cannot stage (tempo, loop length) applies directly.
+ */
+function faderOutcome(result: FaderResult): void {
+  if (result.type === "set") {
+    if (!stageableNow(result.command)) {
+      runPromptLater(result.command);
+      return;
+    }
+    const loop = auditionController();
+    if (!loop.dirtyEdits) loop.committedNow(score);
+    const seq = (faderSeq.get(result.key) ?? 0) + 1;
+    faderSeq.set(result.key, seq);
+    void loop
+      .stage(result.command, {
+        replaceKey: result.key,
+        superseded: () => faderSeq.get(result.key) !== seq,
+      })
+      .then((outcome) => {
+        if (!outcome.ok && outcome.message !== SUPERSEDED)
+          tui.activity.pushCard(outcome.message, {
+            tone: outcome.message.includes("failed") ? "error" : "warning",
+          });
+        requestFrame();
+      });
+  } else if (result.type === "keep") {
+    closeFader();
+    void keepStaged()
+      .then((outcome) => receipt(outcome))
+      .catch((error) => tui.activity.pushError(describeError("keep", error)))
+      .finally(() => requestFrame());
+  } else if (result.type === "revert") {
+    revertStaged();
+    closeFader();
+  } else if (result.type === "close") closeFader();
+  else if (result.type === "audition") auditionKeyPressed(result.key);
+}
+
+// ── the mouse ────────────────────────────────────────────────────────
+
+/**
+ * One mouse report, hit-tested against the regions the last frame painted.
+ * Acts directly (a fader, the transport) or returns keys to run through the
+ * ordinary key path (a list row is Enter, a wheel notch is an arrow).
+ */
+function mouseInput(event: MouseEvent): string[] {
+  const frame = tui.frame;
+  if (!frame) return [];
+  const target = frame.hits.at(event.x, event.y)?.target;
+  if (event.kind === "wheel") {
+    const fields = fader && menu.open ? menu.faderFields(menuContext()) : [];
+    if (
+      fader &&
+      target &&
+      (target.kind === "fader-bar" ||
+        target.kind === "fader-row" ||
+        target.kind === "fader-step" ||
+        target.kind === "fader-option")
+    ) {
+      // Wheel up raises the value under the pointer.
+      faderOutcome(
+        faderStep(
+          fader,
+          fields[target.field],
+          event.delta < 0 ? 1 : -1,
+          event.shift ? "coarse" : "normal",
+        ),
+      );
+      refreshMenu();
+      return [];
+    }
+    if (fader) return [];
+    if (tui.ui.overlay) return [event.delta < 0 ? KEY_UP : KEY_DOWN];
+    return [];
+  }
+  // A drag keeps moving the fader it started on, even past the bar's ends.
+  if (event.kind === "drag" && event.button === "left" && fader && dragging) {
+    const fields = menu.faderFields(menuContext());
+    faderOutcome(
+      faderSetPosition(
+        fader,
+        fields[dragging.field],
+        (event.x - dragging.left) / Math.max(1, dragging.width - 1),
+      ),
+    );
+    refreshMenu();
+    return [];
+  }
+  if (event.kind === "up") {
+    dragging = undefined;
+    return [];
+  }
+  if (event.kind !== "down" || event.button !== "left" || !target) return [];
+  if (fader && menu.open) {
+    const fields = menu.faderFields(menuContext());
+    let result: FaderResult | undefined;
+    switch (target.kind) {
+      case "fader-step":
+        result = faderStep(
+          fader,
+          fields[target.field],
+          target.direction,
+          event.shift ? "coarse" : "normal",
+        );
+        break;
+      case "fader-bar":
+        dragging = target;
+        result = faderSetPosition(
+          fader,
+          fields[target.field],
+          (event.x - target.left) / Math.max(1, target.width - 1),
+        );
+        break;
+      case "fader-option":
+        result = faderChoose(fader, fields[target.field], target.option);
+        break;
+      case "fader-row": {
+        const field = fields[target.field];
+        if (field) {
+          fader.label = field.label;
+          fader.typing = undefined;
+        }
+        result = { type: "handled" };
+        break;
+      }
+      case "fader-keep":
+        result = auditionLoop?.dirtyEdits
+          ? { type: "keep" }
+          : { type: "close" };
+        break;
+      case "fader-revert":
+        result = auditionLoop?.dirtyEdits
+          ? { type: "revert" }
+          : { type: "close" };
+        break;
+      default:
+        break;
+    }
+    if (result) {
+      faderOutcome(result);
+      refreshMenu();
+      return [];
+    }
+  }
+  switch (target.kind) {
+    case "picker-row": {
+      const picker = tui.ui.picker;
+      if (!picker) return [];
+      if (picker.id === "menu" && menu.open) {
+        // The first click selects a row; a click on the selected row opens it.
+        const again = menu.index === target.index;
+        menu.select(menuContext(), target.index);
+        refreshMenu();
+        return again ? ["\r"] : [];
+      }
+      const again = picker.index === target.index;
+      picker.index = target.index;
+      picker.filtering = false;
+      return again ? ["\r"] : [];
+    }
+    case "transport":
+      if (tui.ui.overlay) return [];
+      void toggleTransport().finally(() => requestFrame());
+      return [];
+    case "tracks":
+      if (tui.ui.overlay) return [];
+      runPromptLater("/tracks");
+      return [];
+    case "model":
+      if (tui.ui.overlay) return [];
+      runPromptLater("/model");
+      return [];
+    default:
+      return [];
+  }
 }
 
 function playSession(): PlaySession {

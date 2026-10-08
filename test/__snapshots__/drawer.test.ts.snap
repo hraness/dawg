@@ -1,0 +1,27 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`80×24: the drawer docks above the prompt 1`] = `
+[
+  "╭─ menu › Effects › Fi… ─── loop off · B staged 1 · ● staged  [keep] [revert]──╮",
+  "│   type        lpf │ hpf │ bpf                                                │",
+  "│                                                                              │",
+  "│ › cutoff     1200 Hz ← 800 Hz                               20 Hz … 20000 Hz │",
+  "│   [−] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┃━━━●───────────────────────── [+] │",
+  "│   resonance  0.2                                                       0 … 1 │",
+  "│   [−] ━━━━━━━━━━━━━●──────────────────────────────────────────────────── [+] │",
+  "╰─────── ←→ adjust · ⇧←→ coarse · [ ] fine · ↑↓ param · 0-9 type · esc revert ─╯",
+]
+`;
+
+exports[`120×40: the drawer docks above the prompt 1`] = `
+[
+  "╭─ menu › Effects › Filter ──────────────────────────────────────── loop off · B staged 1 · ● staged  [keep] [revert]──╮",
+  "│   type        lpf │ hpf │ bpf                                                                                        │",
+  "│                                                                                                                      │",
+  "│ › cutoff     1200 Hz ← 800 Hz                                                                       20 Hz … 20000 Hz │",
+  "│   [−] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┃━━━━━●──────────────────────────────────────── [+] │",
+  "│   resonance  0.2                                                                                               0 … 1 │",
+  "│   [−] ━━━━━━━━━━━━━━━━━━━━━●──────────────────────────────────────────────────────────────────────────────────── [+] │",
+  "╰────────────────────── ←→ adjust · ⇧←→ coarse · [ ] fine · ↑↓ param · 0-9 type · d default · enter keep · esc revert ─╯",
+]
+`;

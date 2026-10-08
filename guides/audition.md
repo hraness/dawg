@@ -10,7 +10,8 @@ its value and, dimmed, the command it runs, so the menu teaches commands.
 
 ## Menu keys
 
-- ↑↓ move · → or Enter open · ←→ adjust a value · Enter type one
+- ↑↓ move · → or Enter open · ←→ adjust a value
+- Enter on a number opens its fader drawer (see Faders and the mouse)
 - `x` reset · `/` filter · Esc back
 - `/menu effects` opens a section (sound effects rhythm chords mix project)
 

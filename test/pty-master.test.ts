@@ -85,10 +85,13 @@ test.skipIf(!supported)(
         async () => (await sessionMaster(t.cwd))?.glue !== undefined,
         "glue in session",
       );
-      // The ratio typed as digits.
+      // The ratio typed as digits in its fader drawer: Enter stages the
+      // value, Enter again keeps it.
       await t.send("/ratio");
       await t.send("\r");
       await t.send("4");
+      await t.send("\r");
+      await t.until(() => t.vt.text().includes("● staged"), "staged ratio");
       await t.send("\r");
       await waitFor(
         async () => (await sessionMaster(t.cwd))?.glue?.ratio === 4,

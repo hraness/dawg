@@ -17,6 +17,10 @@ order: 5
 
 - ↑↓ or `j` `k` move · Enter choose · `/` filter · Esc back
 
+## Mouse
+
+- Click rows, header pills, faders · wheel scrolls · `--no-mouse`
+
 ## Window
 
 - `/theme default|high-contrast|mono` · `/motion off`

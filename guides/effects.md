@@ -24,3 +24,4 @@ chorus, delay, reverb, and more (phaser, bitcrush, vowel, leslie).
 ## Menu
 
 - Ctrl-K › Effects: core effects first, then more effects, advanced
+- `fx filter` alone opens the filter's faders, stacked

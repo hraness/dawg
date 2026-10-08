@@ -20,3 +20,4 @@ order: 4
 ## Menu
 
 - Ctrl-K › Mix: name, mute, solo, volume, pan, all tracks
+- `volume` or `pan` alone opens a fader to drag or step
