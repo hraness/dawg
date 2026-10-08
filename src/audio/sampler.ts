@@ -31,13 +31,10 @@ import {
   type TrackScore,
 } from "../../core/score.ts";
 import { sampleKey, type DecodedSample, type SampleBank } from "./samples.ts";
-import {
-  loopSecondsOf,
-  loopTicksOf,
-  performedNotes,
-} from "../../core/tempo.ts";
+import { loopSecondsOf, performedNotes } from "../../core/tempo.ts";
 import { sampleWarpFor, warpedSpan, type SampleWarp } from "./warp.ts";
 import {
+  performanceTimingFor,
   performNotes,
   type NotePerformance,
   type PerformedNote,
@@ -460,11 +457,7 @@ export function samplerTailSeconds(
   const warp = sampleWarpFor(score, sampleRate);
   const timing = { score, sampleRate, ...(warp ? { warp } : {}) };
   let latest = 0;
-  const performance = {
-    tempoBpm: score.tempoBpm,
-    ticksPerBeat: score.ticksPerBeat,
-    endTick: loopTicksOf(score),
-  };
+  const performance = performanceTimingFor(score);
   for (const track of score.tracks) {
     if (!track.sampler) continue;
     const notes = performNotes(

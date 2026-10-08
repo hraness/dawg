@@ -13,6 +13,12 @@
  * pitch envelope (`penv`), and a gliding note ignores the ZzFX `slide`.
  */
 import type { Note, Track } from "./score.ts";
+import {
+  hasTempoMap,
+  loopTicksOf,
+  secondsAtTick,
+  type TimeScore,
+} from "./tempo.ts";
 
 export const EXPRESSION_LIMITS = Object.freeze({
   maxBendPoints: 32,
@@ -589,7 +595,31 @@ export type PerformanceTiming = Readonly<{
   ticksPerBeat: number;
   /** Ticks a sustained note may ring to (the loop end). */
   endTick: number;
+  /**
+   * Seconds at a score tick, through the song's tempo map and fermatas.
+   * Absent means one constant `tempoBpm` (the 0.4 arithmetic).
+   */
+  secondsAt?: (tick: number) => number;
 }>;
+
+/**
+ * The timing `performNotes` needs for a song: notes ring to the loop end
+ * (through meter changes), and glides, bends, half pedal and humanize
+ * convert seconds through the tempo map when the song has one.
+ */
+export function performanceTimingFor(score: TimeScore): PerformanceTiming {
+  return {
+    tempoBpm: score.tempoBpm,
+    ticksPerBeat: score.ticksPerBeat,
+    endTick: loopTicksOf(score),
+    ...(hasTempoMap(score)
+      ? { secondsAt: (tick: number) => secondsAtTick(score, tick) }
+      : {}),
+  };
+}
+
+/** Seconds between two ticks: through the tempo map, or at one tempo. */
+type Span = (from: number, to: number) => number;
 
 export function hasNoteExpression(note: Note): boolean {
   return (
@@ -666,6 +696,13 @@ export function performNotes(
     return notes;
   const { tempoBpm, ticksPerBeat } = timing;
   const secondsPerTick = 60 / (tempoBpm * ticksPerBeat);
+  const { secondsAt } = timing;
+  const span: Span = secondsAt
+    ? (from, to) => secondsAt(to) - secondsAt(from)
+    : (from, to) => (to - from) * secondsPerTick;
+  // Seconds per tick at `tick` (the local tempo).
+  const localSecondsPerTick = (tick: number): number =>
+    secondsAt ? secondsAt(tick + 1) - secondsAt(tick) : secondsPerTick;
   const ordered = [...notes].sort(
     (a, b) =>
       a.startTick - b.startTick ||
@@ -719,8 +756,8 @@ export function performNotes(
       ),
   );
   if (humanizing) {
-    const ticksPerMs = 1 / (secondsPerTick * 1000);
     working = working.map((item) => {
+      const ticksPerMs = 1 / (localSecondsPerTick(item.start) * 1000);
       const humanize: NoteHumanize | undefined =
         item.note.humanize ?? trackHumanize;
       if (!humanize) return item;
@@ -762,10 +799,10 @@ export function performNotes(
             )?.tick;
       let damp: Working["damp"];
       if (halfAt !== undefined) {
-        const tauTicks = HALF_PEDAL_TAU / secondsPerTick;
+        const tauTicks = HALF_PEDAL_TAU / localSecondsPerTick(halfAt);
         end = Math.min(end, halfAt + 5 * tauTicks);
         damp = {
-          from: (halfAt - item.start) * secondsPerTick,
+          from: span(item.start, halfAt),
           tau: HALF_PEDAL_TAU,
         };
       }
@@ -786,7 +823,7 @@ export function performNotes(
     });
   }
   // 4. Glide and monophony (on the written timing).
-  let performed = glideAndMono(track, working, secondsPerTick, ticksPerBeat);
+  let performed = glideAndMono(track, working, span, ticksPerBeat);
   // 4b. Humanize timing and length, applied to whole voices: a legato chain
   // moves as one, and a pedalled end stays at the pedal lift. A note on tick
   // 0 can only drift late (nothing sounds before the loop starts).
@@ -841,14 +878,14 @@ function segmentFor(
   target: number,
   from: number,
   glide: number,
-  secondsPerTick: number,
+  span: Span,
   vibratoFrom: number,
 ): PitchSegment {
   const { note } = item;
   return {
     offset,
     // Bends follow the key (the articulated length), not pedal or humanize.
-    length: item.bendLength * secondsPerTick,
+    length: span(item.start, item.start + item.bendLength),
     target,
     from,
     glide,
@@ -960,7 +997,7 @@ function centsOfSegment(segment: PitchSegment, t: number): number {
 function glideAndMono(
   track: Track | undefined,
   working: readonly Working[],
-  secondsPerTick: number,
+  span: Span,
   ticksPerBeat: number,
 ): Glided[] {
   const trackGlide = track?.glide;
@@ -978,7 +1015,7 @@ function glideAndMono(
         0,
         from ?? 0,
         from === undefined ? 0 : glide,
-        secondsPerTick,
+        span,
         0,
       ),
     ];
@@ -1011,7 +1048,7 @@ function glideAndMono(
         if (previous && glide > 0) {
           // From the pitch the previous voice reached (it may still be
           // gliding when it is cut off).
-          const at = (first.start - previous.start) * secondsPerTick;
+          const at = span(previous.start, first.start);
           const reached = monoSegment ? reachedCents(monoSegment, at) : 0;
           from = (previous.note.pitch - first.note.pitch) * 100 + reached;
         }
@@ -1023,7 +1060,7 @@ function glideAndMono(
           0,
           from ?? 0,
           from === undefined ? 0 : glide,
-          secondsPerTick,
+          span,
           0,
         );
         out.push(voice);
@@ -1057,7 +1094,7 @@ function glideAndMono(
       const base = first.note.pitch;
       const segments: PitchSegment[] = [];
       chain.forEach((item, k) => {
-        const offset = (item.start - first.start) * secondsPerTick;
+        const offset = span(first.start, item.start);
         const target = (item.note.pitch - base) * 100;
         // Glide on from the pitch the voice has reached, so a glide cut off
         // by the next note never jumps (a TB-303 slide is continuous).
@@ -1069,12 +1106,12 @@ function glideAndMono(
           target,
           from,
           k === 0 ? 0 : glideOf(item),
-          secondsPerTick,
+          span,
           offset,
         );
         const sounding =
           k + 1 < chain.length
-            ? (chain[k + 1]!.start - item.start) * secondsPerTick
+            ? span(item.start, chain[k + 1]!.start)
             : segment.length;
         segments.push({
           ...segment,
@@ -1090,8 +1127,7 @@ function glideAndMono(
         ...(tail.damp
           ? {
               damp: {
-                from:
-                  tail.damp.from + (tail.start - first.start) * secondsPerTick,
+                from: tail.damp.from + span(first.start, tail.start),
                 tau: tail.damp.tau,
               },
             }

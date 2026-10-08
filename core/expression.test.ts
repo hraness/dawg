@@ -14,6 +14,7 @@ import {
   normalizeVelocityCurve,
   normalizeVibrato,
   pedalStateAt,
+  performanceTimingFor,
   performNotes,
   vibratoAt,
   type PerformedNote,
@@ -604,5 +605,39 @@ describe("curves", () => {
         0.5,
       ),
     ).toBe(0);
+  });
+});
+
+describe("tempo map", () => {
+  test("bends, glides and humanize convert seconds through the tempo map", () => {
+    // 120 bpm, then 60 bpm from beat 4: a beat there lasts 1 s, not 0.5 s.
+    const score = createScore({
+      tempoBpm: 120,
+      time: { tempo: [{ tick: 4 * 480, bpm: 60 }] },
+      tracks: [{ id: "t", name: "Lead", instrument: "lead" }],
+      notes: [
+        {
+          id: "n0",
+          trackId: "t",
+          startTick: 4 * 480,
+          durationTicks: 480,
+          pitch: 60,
+          velocity: 0.5,
+          bend: [
+            { at: 0, cents: 0 },
+            { at: 1, cents: 200 },
+          ],
+        },
+      ],
+    });
+    const timing = performanceTimingFor(score);
+    expect(timing.secondsAt).toBeDefined();
+    const [note] = performNotes(score.tracks[0], score.notes, timing);
+    const cents = note!.performance!.cents!;
+    // Half way through the 1 s note, not at its end.
+    expect(cents(0.5)).toBeCloseTo(100);
+    expect(cents(1)).toBeCloseTo(200);
+    // Without a tempo map the timing keeps the constant-tempo arithmetic.
+    expect(performanceTimingFor(scoreWith({}, [{}])).secondsAt).toBeUndefined();
   });
 });

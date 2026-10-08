@@ -10,7 +10,11 @@ import {
   type TrackScore,
 } from "../../core/score.ts";
 import { drumVoiceForPitch, isDrumInstrument } from "../../core/drums.ts";
-import { performNotes, type PerformedNote } from "../../core/expression.ts";
+import {
+  performanceTimingFor,
+  performNotes,
+  type PerformedNote,
+} from "../../core/expression.ts";
 import {
   planSamplerVoices,
   renderSamplerVoices,
@@ -60,11 +64,7 @@ import {
   orbitOf,
   type Ducker,
 } from "./effects/duck.ts";
-import {
-  loopSecondsOf,
-  loopTicksOf,
-  performedNotes,
-} from "../../core/tempo.ts";
+import { loopSecondsOf, performedNotes } from "../../core/tempo.ts";
 import { sampleWarpFor, warpedSpan, type SampleWarp } from "./warp.ts";
 
 export type WavOptions = Readonly<{ sampleRate?: number; maxSeconds?: number }>;
@@ -341,11 +341,7 @@ export class StemRenderer {
     }
     // Note expression and track performance (core/expression.ts): the
     // notes as played. A track with neither gets its notes back unchanged.
-    const timing = {
-      tempoBpm: score.tempoBpm,
-      ticksPerBeat: score.ticksPerBeat,
-      endTick: loopTicksOf(score),
-    };
+    const timing = performanceTimingFor(score);
     const performed = new Map<string, readonly PerformedNote[]>();
     for (const [trackId, notes] of groups)
       performed.set(trackId, performNotes(tracks.get(trackId), notes, timing));

@@ -894,8 +894,7 @@ export class PlaySession {
         const beats = hasTempoMap(score)
           ? this.host.beatAt(Math.min(pending.keyUpMs, now)) -
             this.host.beatAt(pending.atMs)
-          : ((Math.min(pending.keyUpMs, now) - pending.atMs) *
-              score.tempoBpm) /
+          : ((Math.min(pending.keyUpMs, now) - pending.atMs) * score.tempoBpm) /
             60_000;
         return pending.chord
           ? chordNotes(pending.chord, {
