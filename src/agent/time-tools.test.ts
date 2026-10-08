@@ -75,7 +75,7 @@ describe("set_time", () => {
     });
     const time = phasing.next.tracks.find((t) => t.id === "b")?.time;
     expect(time?.cycle).toBe(12 * base.ticksPerBeat);
-    expect(time?.rate).toBeCloseTo(48 / 47, 6);
+    expect(time?.rate).toBeCloseTo((48 + 12) / 48, 6);
   });
 
   test("bad arguments are tool errors", () => {
