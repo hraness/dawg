@@ -30,6 +30,14 @@ import {
   type TrackTime,
   withMeterChange,
 } from "./tempo.ts";
+import {
+  ExpressionValidationError,
+  normalizeNoteExpression,
+  normalizeTrackPerformance,
+  type NoteExpression,
+  type NoteExpressionPatch,
+  type TrackPerformance,
+} from "./expression.ts";
 
 export const SCORE_VERSION = 1 as const;
 export const DEFAULT_TICKS_PER_BEAT = 480 as const;
@@ -344,7 +352,12 @@ export type Track = Readonly<{
    * song.
    */
   time?: TrackTime;
-}>;
+}> &
+  /**
+   * Performance (`core/expression.ts`): glide default, sustain pedal
+   * events, velocity curve and seeded humanize, all applied at render.
+   */
+  TrackPerformance;
 
 /**
  * A track's sample voices (Strudel-aligned). In `oneshot` mode every voice is
@@ -644,6 +657,10 @@ export type TrackPatch = Readonly<
     synth?: TrackSynth | null;
     wavetable?: TrackWavetable | null;
     time?: TrackTime | null;
+    glide?: Track["glide"] | null;
+    pedal?: Track["pedal"] | null;
+    velocityCurve?: Track["velocityCurve"] | null;
+    humanize?: Track["humanize"] | null;
   }
 >;
 
@@ -652,7 +669,11 @@ export type AutomationPoint = Readonly<{
   value: number;
 }>;
 
-/** A note's start and duration are integer ticks, never floating-point beats. */
+/**
+ * A note's start and duration are integer ticks, never floating-point beats.
+ * Expression fields (`articulation`, `glide`, `bend`, `vibrato`, see
+ * `core/expression.ts`) are optional and absent when unused.
+ */
 export type Note = Readonly<{
   id: string;
   trackId: string;
@@ -660,7 +681,8 @@ export type Note = Readonly<{
   durationTicks: number;
   pitch: number;
   velocity: number;
-}>;
+}> &
+  NoteExpression;
 
 export type TrackInput = Readonly<
   Omit<
@@ -676,6 +698,10 @@ export type TrackInput = Readonly<
     | "synth"
     | "wavetable"
     | "time"
+    | "glide"
+    | "pedal"
+    | "velocityCurve"
+    | "humanize"
   > &
     Pick<Track, "id"> & {
       filter?: TrackFilter | null;
@@ -689,6 +715,10 @@ export type TrackInput = Readonly<
       synth?: TrackSynth | null;
       wavetable?: TrackWavetable | null;
       time?: TrackTime | null;
+      glide?: Track["glide"] | number | null;
+      pedal?: Track["pedal"] | null;
+      velocityCurve?: Track["velocityCurve"] | string | null;
+      humanize?: Track["humanize"] | null;
     }
 >;
 
@@ -705,7 +735,8 @@ export type NoteInput = Readonly<{
   duration?: number;
   pitch: number;
   velocity: number;
-}>;
+}> &
+  NoteExpressionPatch;
 
 export type TrackScoreData = Readonly<{
   tempoBpm?: number;
@@ -951,12 +982,19 @@ export function removeNote(score: TrackScore, noteId: string): TrackScore {
   });
 }
 
+/**
+ * A note edit: timing, pitch and velocity, plus the expression fields
+ * (`null` clears one).
+ */
+export type NotePatch = Readonly<
+  Partial<Pick<Note, "startTick" | "durationTicks" | "pitch" | "velocity">>
+> &
+  NoteExpressionPatch;
+
 export function updateNote(
   score: TrackScore,
   noteId: string,
-  patch: Readonly<
-    Partial<Pick<Note, "startTick" | "durationTicks" | "pitch" | "velocity">>
-  >,
+  patch: NotePatch,
 ): TrackScore {
   const current = score.notes.find((note) => note.id === noteId);
   if (!current) return score;
@@ -1131,11 +1169,7 @@ export type ScoreOperation =
   | Readonly<{
       type: "updateNote";
       noteId: string;
-      patch: Readonly<
-        Partial<
-          Pick<Note, "startTick" | "durationTicks" | "pitch" | "velocity">
-        >
-      >;
+      patch: NotePatch;
     }>
   | Readonly<{
       type: "setTempo";
@@ -1370,6 +1404,17 @@ function normalizeTrack(input: unknown): Track {
     () => normalizeTrackTime(input.time, `track ${id} time`),
     "invalid-track",
   );
+  let performance: TrackPerformance;
+  try {
+    performance = normalizeTrackPerformance(input, SCORE_LIMITS.maxTick);
+  } catch (error) {
+    if (error instanceof ExpressionValidationError)
+      throw new ScoreValidationError(
+        `track ${id} ${error.message}`,
+        "invalid-track",
+      );
+    throw error;
+  }
   let kit: string | undefined;
   if (input.kit !== undefined && input.kit !== null) {
     const found =
@@ -1422,6 +1467,7 @@ function normalizeTrack(input: unknown): Track {
     ...(rhythm ? { rhythm } : {}),
     ...(kit ? { kit } : {}),
     ...(time ? { time } : {}),
+    ...performance,
   });
 }
 
@@ -2105,6 +2151,17 @@ function normalizeNote(input: unknown): Note {
       "invalid-note",
     );
   }
+  let expression: NoteExpression;
+  try {
+    expression = normalizeNoteExpression(input);
+  } catch (error) {
+    if (error instanceof ExpressionValidationError)
+      throw new ScoreValidationError(
+        `note ${id} ${error.message}`,
+        "invalid-note",
+      );
+    throw error;
+  }
   return Object.freeze({
     id,
     trackId,
@@ -2112,6 +2169,7 @@ function normalizeNote(input: unknown): Note {
     durationTicks,
     pitch,
     velocity: input.velocity,
+    ...expression,
   });
 }
 

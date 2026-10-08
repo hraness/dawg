@@ -11,6 +11,7 @@
 import { commandParam, sketchFor } from "./sketch.ts";
 import { HINTS } from "../../tui/grammar.ts";
 import { auditionKey, isStageable, type AuditionKey } from "./audition.ts";
+import { performanceDetail, performanceNodes } from "./performance-menu.ts";
 import {
   openingMeterCommand,
   openingUnit,
@@ -409,6 +410,8 @@ const SECTION_ALIASES: Readonly<Record<string, readonly string[]>> = {
   sound: ["sound"],
   parameters: ["sound"],
   sounds: ["sound", "browse"],
+  performance: ["sound", "performance"],
+  expression: ["sound", "performance"],
   effects: ["effects"],
   rhythm: ["rhythm"],
   chords: ["chords"],
@@ -426,6 +429,14 @@ const SECTION_ALIASES: Readonly<Record<string, readonly string[]>> = {
 function soundSectionNodes(context: MenuContext): MenuNode[] {
   return [
     ...parameterNodes(context),
+    {
+      kind: "menu",
+      id: "performance",
+      label: "performance",
+      detail: performanceDetail(focused(context)),
+      help: "articulation, glide, bend, vibrato, pedal, velocity curve, humanize",
+      build: performanceNodes,
+    },
     {
       kind: "menu",
       id: "browse",

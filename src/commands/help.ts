@@ -4,6 +4,7 @@
  * app commands take a slash (bare aliases keep working but are listed once,
  * in their canonical form).
  */
+import { EXPRESSION_USAGE } from "./expression.ts";
 
 export type HelpGroup = "music" | "session" | "window" | "keys";
 
@@ -60,6 +61,36 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         command: "synth <param> <value> | preset <name>",
         summary: "synth voice · synth lpf 1200 · synth lists every param",
       },
+      {
+        command: "art <articulation>|off [target]",
+        summary:
+          "staccato legato accent tenuto marcato ghost · art staccato bars 1-2",
+      },
+      {
+        command: "glide <time> [legato|mono|poly] | glide <time> <target>",
+        summary: "portamento in ms · glide 60 mono · SDK glide 0.06 (s)",
+      },
+      {
+        command: "bend <cents>|scoop|fall|doit|<at:cents>... [target]",
+        summary: "pitch curve over each note · bend +200 bar 3",
+      },
+      {
+        command: "vibrato <rate> <depth> [<delay>] [target]",
+        summary: "per-note vibrato · vibrato 5.5 30 0.2",
+      },
+      {
+        command: "pedal <a>-<b>... | bars | down|half|up <beat> | off",
+        summary: "sustain pedal · pedal 0-3.5 4-7.5 · pedal bars",
+      },
+      {
+        command: "velcurve linear|soft|hard|fixed [<v>]",
+        summary: "how velocity maps to level · velcurve fixed 0.6 (0..1)",
+      },
+      {
+        command: "humanize <ms> [<vel%> [<len%>]] [seed <n>] | off",
+        summary: "seeded feel applied at render · humanize 10 8 5",
+      },
+      { command: "expression", summary: "this track's performance settings" },
       { command: "filter <hz> [res]", summary: "low-pass · filter off" },
       { command: "delay <beats> [fb] [mix]", summary: "ping-pong · delay off" },
       { command: "reverb <mix> [size]", summary: "room · reverb off" },
@@ -250,7 +281,7 @@ export const HELP_GUIDE: readonly HelpSection[] = [
       { command: "ctrl-p", summary: "play notes on the computer keyboard" },
       {
         command: "ctrl-k",
-        summary: "menu: every sound, effect, rhythm, chord",
+        summary: "menu: sound, effects, performance, mix …",
       },
       { command: "?", summary: "keys for the screen you are on" },
       {
@@ -290,6 +321,19 @@ export const HELP_GUIDE: readonly HelpSection[] = [
       { command: "ctrl-k › Effects", summary: "delay, reverb, distortion …" },
       { command: "fx delay mix 0.3", summary: "the same from the prompt" },
       { command: "/try fx reverb mix 0.6", summary: "hear it before keeping" },
+    ],
+  },
+  {
+    group: "shape the performance" as HelpGroup,
+    entries: [
+      {
+        command: "ctrl-k › Sound › performance",
+        summary: "articulation, glide, pedal",
+      },
+      {
+        command: "art staccato bar 2",
+        summary: "or humanize 8 5 · seeded feel",
+      },
     ],
   },
   {
@@ -476,6 +520,16 @@ export const USAGE: Readonly<Record<string, string>> = {
   play: "/play [on|off] · Ctrl-P",
   meter:
     "meter <1..16> · meter 3 · meter 7/8 [at bar <n>] · meter remove bar <n> · meter clear",
+  art: EXPRESSION_USAGE.art,
+  articulation: EXPRESSION_USAGE.art,
+  bend: EXPRESSION_USAGE.bend,
+  vibrato: EXPRESSION_USAGE.vibrato,
+  glide: EXPRESSION_USAGE.glide,
+  portamento: EXPRESSION_USAGE.glide,
+  pedal: EXPRESSION_USAGE.pedal,
+  sustain: EXPRESSION_USAGE.pedal,
+  velcurve: EXPRESSION_USAGE.velcurve,
+  humanize: EXPRESSION_USAGE.humanize,
   undo: "undo · Ctrl-Z",
   redo: "redo · Ctrl-Y",
 };

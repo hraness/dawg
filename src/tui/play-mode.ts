@@ -10,6 +10,7 @@
  *
  *   Z / X  octave down / up      C / V  velocity down / up (steps of 16)
  *   Shift  sustain while held    Tab    sustain latch     Esc  leave the mode
+ *   (while recording, sustain changes record as track pedal events)
  *
  * Terminals report key-down only, so a held key is synthesized from the
  * keyboard's auto-repeat: a press sounds for the gate (one grid step by

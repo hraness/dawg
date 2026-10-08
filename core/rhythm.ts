@@ -235,6 +235,14 @@ function sameNotes(
   for (const note of expected)
     want.set(key(note), (want.get(key(note)) ?? 0) + 1);
   for (const note of actual) {
+    // Expression is a hand edit: the generator cannot reproduce it.
+    if (
+      note.articulation !== undefined ||
+      note.glide !== undefined ||
+      note.bend !== undefined ||
+      note.vibrato !== undefined
+    )
+      return false;
     const left = want.get(key(note));
     if (!left) return false;
     want.set(key(note), left - 1);

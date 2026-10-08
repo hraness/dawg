@@ -53,6 +53,10 @@ export type ZzfxParams = Readonly<{
   zdelay: number;
   tremolo: number;
   random: () => number;
+  /** Note expression: a pitch offset in cents at `t` seconds. */
+  cents?: (t: number) => number;
+  /** The note glides, so `slide` and `deltaSlide` are ignored. */
+  slideOff?: boolean;
 }>;
 
 function wave(sound: string, phase: number, held: number): number {
@@ -98,14 +102,16 @@ export function renderZzfx(
     const t = index / sampleRate;
     // Slide and pitch jump restart every `lfo` seconds.
     const local = params.lfo > 0 ? t % params.lfo : t;
-    let frequency =
-      base +
-      500 * params.slide * local +
-      250 * params.deltaSlide * local * local;
+    let frequency = params.slideOff
+      ? base
+      : base +
+        500 * params.slide * local +
+        250 * params.deltaSlide * local * local;
     if (params.pitchJumpTime > 0 && local >= params.pitchJumpTime)
       frequency += params.pitchJump;
     if (params.zmod > 0)
       frequency *= 1 + 0.5 * Math.sin(2 * Math.PI * params.zmod * t);
+    if (params.cents) frequency *= 2 ** (params.cents(t) / 1200);
     frequency = clamp(frequency, 0, sampleRate / 2);
     let increment = frequency / sampleRate;
     if (params.noise > 0) increment *= 1 + params.noise * (random() * 2 - 1);

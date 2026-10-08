@@ -49,6 +49,10 @@ import {
   hasMeterChanges,
   loopTicksOf,
 } from "../core/tempo.ts";
+import {
+  applyExpressionCommand,
+  parseExpressionCommand,
+} from "./commands/expression.ts";
 import { applyFxCommand, parseFxCommand } from "./commands/fx.ts";
 import { applySynthCommand, parseSynthCommand } from "./commands/synth.ts";
 import {
@@ -217,6 +221,7 @@ function parsesLocally(text: string): boolean {
     parseRhythmCommand,
     parseFxCommand,
     parseSynthCommand,
+    parseExpressionCommand,
     parsePatternCommand,
     parseKitCommand,
     parsePackCommand,
@@ -1461,6 +1466,14 @@ async function submit(prompt: string): Promise<string | Receipt> {
       }
     }
     const result = applyFxCommand(score, requestedTrack, fx, pinnedIr);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
+  const expression = parseExpressionCommand(command);
+  if (expression) {
+    if (expression.type !== "show") await materializeDraft();
+    const result = applyExpressionCommand(score, requestedTrack, expression);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);

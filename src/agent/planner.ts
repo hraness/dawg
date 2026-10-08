@@ -11,8 +11,10 @@ import {
   normalizeSampler,
   normalizeRhythm,
   scoreFromJSON,
+  type NotePatch,
   type ScoreOperation,
 } from "../../core/score.ts";
+import { NOTE_EXPRESSION_FIELDS } from "../../core/expression.ts";
 import { DRUM_VOICES } from "../../core/drums.ts";
 import { synthKit } from "../../core/kits.ts";
 
@@ -218,7 +220,7 @@ function parseOperation(value: unknown): ScoreOperation {
     isRecord(value.patch)
   ) {
     const patch = value.patch;
-    const safe: Record<string, number> = {};
+    const safe: Record<string, unknown> = {};
     for (const key of [
       "startTick",
       "durationTicks",
@@ -228,7 +230,14 @@ function parseOperation(value: unknown): ScoreOperation {
       if (typeof patch[key] === "number" && Number.isFinite(patch[key]))
         safe[key] = patch[key];
     }
-    return { type: "updateNote", noteId: value.noteId, patch: safe };
+    // Expression fields pass through; the reducer validates them.
+    for (const key of NOTE_EXPRESSION_FIELDS)
+      if (key in patch) safe[key] = patch[key];
+    return {
+      type: "updateNote",
+      noteId: value.noteId,
+      patch: safe as NotePatch,
+    };
   }
   if (value.type === "addNote" && isRecord(value.note)) {
     const note = value.note;

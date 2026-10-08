@@ -83,10 +83,11 @@ describe("help reference", () => {
       "── play notes",
       "── make drums",
       "── shape the sound",
+      "── shape the performance",
       "── chords",
       "── more",
     ]);
-    expect(guide.length).toBeLessThanOrEqual(30);
+    expect(guide.length).toBeLessThanOrEqual(34);
     expect(guide.every((line) => line.length <= 72)).toBe(true);
     expect(guide.join("\n")).toContain("ctrl-k");
     expect(helpTopicLines("all", 72)).toEqual(helpLines(72));

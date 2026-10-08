@@ -124,7 +124,7 @@ export const KEYS = {
       rows: [
         ["type + enter", "ask for a change in plain words, or a command"],
         ["ctrl-p", "play notes on the keyboard (chords: q)"],
-        ["ctrl-k", "menu: sound, effects, rhythm, chords, mix"],
+        ["ctrl-k", "menu: sound, effects, rhythm, chords, performance, mix"],
         ["space", "play / pause (empty prompt)"],
         ["/help", "what dawg can do · /help <topic> for more"],
       ],

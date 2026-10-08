@@ -14,6 +14,8 @@ type SessionTrack = {
   fx?: Record<string, Record<string, number | string | boolean>>;
   instrument?: string;
   synth?: Record<string, number | string | boolean | number[]>;
+  velocityCurve?: { curve: string; fixed?: number };
+  humanize?: { timing?: number; velocity?: number; seed: number };
 };
 
 /** Tracks in the newest composition record under `.dawg/`. */
@@ -215,6 +217,57 @@ test.skipIf(!supported)(
         "synth attack in session",
       );
       for (let i = 0; i < 4; i++) await t.send("\u001b");
+      await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
+    } finally {
+      t.terminal.write("\u0003");
+      await t.proc.exited;
+    }
+  },
+  30_000,
+);
+
+test.skipIf(!supported)(
+  "real PTY: Sound › performance sets a velocity curve and humanize",
+  async () => {
+    const t = await launch(100, 30, {});
+    const bass = async () =>
+      (await sessionTracks(t.cwd)).find((track) => track.id === "bass");
+    try {
+      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.send("\u000b");
+      await t.until(() => t.vt.text().includes("Project"), "menu root");
+      await t.send("/sound");
+      await t.send("\r");
+      await t.until(() => t.vt.text().includes("menu › Sound"), "sound");
+      await t.send("/performance");
+      await t.send("\r");
+      await t.until(
+        () => t.vt.text().includes("velocity curve"),
+        "performance rows",
+      );
+      await t.send("/velocity");
+      await t.send("\r");
+      await t.until(() => t.vt.text().includes("hard"), "curve list");
+      await t.send("/soft");
+      await t.send("\r");
+      await waitFor(
+        async () => (await bass())?.velocityCurve?.curve === "soft",
+        "soft velocity curve in session",
+      );
+      for (let i = 0; i < 3; i++) await t.send("\u001b");
+      await t.until(
+        () => t.vt.text().includes("humanize timing"),
+        "back on performance",
+      );
+      await t.send("/humanize timing");
+      await t.send("\r");
+      for (const key of "12") await t.send(key);
+      await t.send("\r");
+      await waitFor(
+        async () => (await bass())?.humanize?.timing === 12,
+        "humanize in session",
+      );
+      for (let i = 0; i < 5; i++) await t.send("\u001b");
       await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
     } finally {
       t.terminal.write("\u0003");

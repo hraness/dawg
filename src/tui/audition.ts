@@ -500,7 +500,7 @@ export function auditionKey(value: string): AuditionKey | undefined {
  * before.
  */
 const STAGEABLE =
-  /^\/?(?:(fx|effects|filter|lowpass|synth|wt|wavetable|kit|instrument|vol|volume|pan|gain|speed|warpmode|root|pattern|euclid)\s+\S|pack\s+use\s+\S)/i;
+  /^\/?(?:(fx|effects|filter|lowpass|synth|wt|wavetable|kit|instrument|vol|volume|pan|gain|speed|warpmode|root|pattern|euclid|art|articulation|bend|vibrato|glide|portamento|velcurve)\s+\S|pack\s+use\s+\S)/i;
 /** Subcommands that list or show instead of changing the sound. */
 const READ_ONLY = /^\/?\S+\s+(list|show|info|help)\s*$/i;
 

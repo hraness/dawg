@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { createScore, type TrackScore } from "../../core/score.ts";
+import { pedalStateAt, type PedalEvent } from "../../core/expression.ts";
 import type { ClickBus } from "../audio/engine.ts";
 import type { LiveNotePcm } from "../audio/live.ts";
 import {
   PlaySession,
   quantize,
   recordOperations,
+  recordPedalOperation,
   type LiveEngine,
   type PlayHost,
 } from "./play-session.ts";
@@ -156,6 +158,195 @@ describe("PlaySession", () => {
     expect(notes[0]!.pitch).toBe(48);
     expect(notes[0]!.durationTicks).toBe(state.score.ticksPerBeat / 4);
     expect(state.cards.at(-1)).toContain("recorded 1 note");
+  });
+
+  test("Tab sustain records pedal events; notes keep their key length", async () => {
+    const { session, state } = harness(leadScore());
+    await session.enter();
+    session.press("r");
+    session.setCountIn(0);
+    session.startWithCountIn();
+    session.tick();
+    expect(session.recording).toBe(true);
+    // Pedal down on beat 0, a note, pedal up on beat 2 (500 ms per beat).
+    session.press("\t");
+    session.press("a");
+    state.now = 1_000;
+    session.press("\t");
+    state.now = 2_010;
+    session.tick();
+    await session.stopRecording();
+    const tpb = state.score.ticksPerBeat;
+    const lead = state.score.tracks.find((track) => track.id === "lead")!;
+    expect(lead.pedal).toEqual([
+      { tick: 0, state: "down" },
+      { tick: 2 * tpb, state: "up" },
+    ]);
+    const notes = state.score.notes.filter((note) => note.trackId === "lead");
+    expect(notes).toHaveLength(1);
+    // The key's gate length, not the pedal-held two beats.
+    expect(notes[0]!.durationTicks).toBe(tpb / 4);
+    expect(state.cards.at(-1)).toContain("2 pedal");
+  });
+
+  test("replace erases the pass's bars of old pedal events", () => {
+    const score = createScore({
+      tempoBpm: 120,
+      bars: 2,
+      tracks: [
+        {
+          id: "lead",
+          pedal: [
+            { tick: 0, state: "down" },
+            { tick: 4 * 480, state: "up" },
+          ],
+        },
+      ],
+    });
+    const tpb = score.ticksPerBeat;
+    const op = recordPedalOperation(score, {
+      trackId: "lead",
+      events: [{ beat: 9, state: "down" }],
+      eraseBars: [0],
+    });
+    // Beat 9 wraps into the 8-beat loop at beat 1.
+    expect(op).toEqual({
+      type: "updateTrack",
+      trackId: "lead",
+      patch: {
+        pedal: [
+          { tick: tpb, state: "down" },
+          { tick: 4 * 480, state: "up" },
+        ],
+      },
+    });
+    expect(
+      recordPedalOperation(score, { trackId: "lead", events: [] }),
+    ).toBeUndefined();
+  });
+
+  test("a pedal held across the loop seam stays down from tick 0", () => {
+    const score = createScore({
+      tempoBpm: 120,
+      bars: 4,
+      tracks: [{ id: "lead", name: "keys", instrument: "piano" }],
+    });
+    const op = recordPedalOperation(score, {
+      trackId: "lead",
+      events: [
+        { beat: 14, state: "down" },
+        { beat: 18, state: "up" },
+      ],
+    });
+    const pedal = (op as unknown as { patch: { pedal: PedalEvent[] } }).patch
+      .pedal;
+    expect(pedal).toEqual([
+      { tick: 0, state: "down" },
+      { tick: 960, state: "up" },
+      { tick: 6720, state: "down" },
+    ]);
+    expect(pedalStateAt(pedal, 480)).toBe("down");
+    expect(pedalStateAt(pedal, 1440)).toBe("up");
+  });
+
+  test("replace restores the pedal state at the erased range's edges", () => {
+    const score = createScore({
+      tempoBpm: 120,
+      bars: 3,
+      tracks: [
+        {
+          id: "lead",
+          pedal: [
+            { tick: 0, state: "down" },
+            { tick: 6 * 480, state: "up" },
+            { tick: 7 * 480, state: "down" },
+          ],
+        },
+      ],
+    });
+    // Erasing bar 2 (beats 4-8) with nothing played: the old lift goes,
+    // so the bar starts up, and bar 3 resumes the old held pedal.
+    const op = recordPedalOperation(score, {
+      trackId: "lead",
+      events: [],
+      eraseBars: [1],
+    });
+    expect(
+      (op as unknown as { patch: { pedal: PedalEvent[] } }).patch.pedal,
+    ).toEqual([
+      { tick: 0, state: "down" },
+      { tick: 4 * 480, state: "up" },
+      { tick: 8 * 480, state: "down" },
+    ]);
+    // A take that entered the bar with the pedal held keeps it held.
+    const held = recordPedalOperation(score, {
+      trackId: "lead",
+      events: [],
+      eraseBars: [1],
+      eraseStates: new Map([[1, "down"]]),
+    });
+    expect(
+      (held as unknown as { patch: { pedal: PedalEvent[] } }).patch.pedal,
+    ).toEqual([{ tick: 0, state: "down" }]);
+  });
+
+  test("a full pedal lane never costs the take's notes", async () => {
+    const full = Array.from({ length: 1024 }, (_, tick) => ({
+      tick,
+      state: tick % 2 === 0 ? ("down" as const) : ("up" as const),
+    }));
+    const score = createScore({
+      tempoBpm: 120,
+      bars: 2,
+      tracks: [{ id: "lead", name: "keys", instrument: "piano", pedal: full }],
+    });
+    const { session, state } = harness(score);
+    await session.enter();
+    session.press("r");
+    session.setCountIn(0);
+    session.startWithCountIn();
+    session.tick();
+    state.now = 1_500;
+    session.press("\t");
+    session.press("a");
+    state.now = 1_800;
+    session.press("\t");
+    state.now = 2_010;
+    session.tick();
+    await session.stopRecording();
+    const notes = state.score.notes.filter((note) => note.trackId === "lead");
+    expect(notes).toHaveLength(1);
+    expect(state.score.tracks[0]!.pedal).toHaveLength(1024);
+    expect(state.cards.at(-1)).toContain("pedal lane is full");
+  });
+
+  test("a failed commit keeps the take for the next flush", async () => {
+    const { session, state, host } = harness(leadScore());
+    const commit = host.commit;
+    let fail = true;
+    host.commit = async (next, kind, payload) => {
+      if (fail) {
+        fail = false;
+        throw new Error("disk full");
+      }
+      await commit(next, kind, payload);
+    };
+    await session.enter();
+    session.press("r");
+    session.setCountIn(0);
+    session.startWithCountIn();
+    session.tick();
+    session.press("\t");
+    session.press("a");
+    state.now = 1_000;
+    session.press("\t");
+    state.now = 2_010;
+    session.tick();
+    await session.stopRecording();
+    // The bar flush failed; stopping retried and committed the same take.
+    expect(state.cards.some((card) => card.includes("disk full"))).toBe(true);
+    expect(state.score.notes).toHaveLength(1);
+    expect(state.score.tracks[0]!.pedal).toHaveLength(2);
   });
 
   test("nothing records while the transport is stopped (free play)", async () => {

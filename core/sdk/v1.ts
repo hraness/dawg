@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.14.0";
+export const SDK_VERSION = "1.15.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -161,7 +161,8 @@ export type NoteSpec = Readonly<{
   length: number;
   /** 0..1. */
   velocity: number;
-}>;
+}> &
+  NoteExpressionSpec;
 
 /** A drum or sampler hit addressed by voice name; resolved to a pitch slot by `track()`. */
 export type HitSpec = Readonly<{
@@ -170,15 +171,203 @@ export type HitSpec = Readonly<{
   start: number;
   length: number;
   velocity: number;
+}> &
+  NoteExpressionSpec;
+
+/** How a note is articulated (SDK 1.15.0). */
+export type Articulation =
+  "staccato" | "legato" | "accent" | "tenuto" | "marcato" | "ghost";
+
+export const ARTICULATIONS: readonly Articulation[] = Object.freeze([
+  "staccato",
+  "legato",
+  "accent",
+  "tenuto",
+  "marcato",
+  "ghost",
+]);
+
+/** A pitch-bend point: `[at, cents]`, `at` 0..1 through the note. */
+export type BendPoint = readonly [number, number];
+
+/**
+ * How one note is played (SDK 1.15.0). Every field is optional.
+ *
+ * ```ts
+ * note("C4", 0, 1, 0.8, { art: "staccato" })
+ * note("E4", 1, 2, 0.8, { glide: 0.1, vibrato: { depth: 30, delay: 0.3 } })
+ * note("G4", 3, 1, 0.8, { bend: [[0, -200], [0.25, 0]] }) // scoop up a tone
+ * ```
+ */
+export type Expression = Readonly<{
+  /**
+   * `staccato` (half length), `legato` (held into the next note),
+   * `accent` (louder), `tenuto` (full length, a little louder), `marcato`
+   * (two-thirds length, much louder) or `ghost` (half length, much softer).
+   */
+  articulation?: Articulation;
+  /** Short alias of `articulation`. */
+  art?: Articulation;
+  /** Portamento into this note from the track's previous pitch, seconds (0..10). */
+  glide?: number;
+  /** Pitch curve in cents as `[at, cents]` points, `at` 0..1 through the note; linear between points. */
+  bend?: readonly BendPoint[];
+  /** Vibrato: `rate` Hz (default 5.5), `depth` cents either side (default 20), `delay` seconds before it fades in. */
+  vibrato?: Readonly<{ rate?: number; depth?: number; delay?: number }>;
+  /**
+   * This note's humanize (SDK 1.15.0), replacing the track's amounts:
+   * `{ timing ms, velocity %, length % }`; `{}` keeps the note exact.
+   * Humanize just bars 5-8 with `expr({ humanize: { timing: 10 } }, ...)`.
+   */
+  humanize?: Readonly<{ timing?: number; velocity?: number; length?: number }>;
 }>;
+
+/** The expression a built note carries; fields are present only when set. */
+export type NoteExpressionSpec = Readonly<{
+  articulation?: Articulation;
+  glide?: number;
+  bend?: readonly BendPoint[];
+  vibrato?: Readonly<{ rate: number; depth: number; delay?: number }>;
+  humanize?: Readonly<{ timing?: number; velocity?: number; length?: number }>;
+}>;
+
+const DEFAULT_VIBRATO_RATE = 5.5;
+const DEFAULT_VIBRATO_DEPTH = 20;
+
+function expression(
+  input: Expression | undefined,
+  label: string,
+): NoteExpressionSpec {
+  if (input === undefined) return {};
+  if (!isRecord(input))
+    throw new DawgSdkError(`${label} expression must be an object`);
+  for (const key of Object.keys(input))
+    if (
+      !["articulation", "art", "glide", "bend", "vibrato", "humanize"].includes(
+        key,
+      )
+    )
+      throw new DawgSdkError(
+        `${label} expression has an unknown field "${key.slice(0, 32)}" (articulation glide bend vibrato humanize)`,
+      );
+  const out: {
+    articulation?: Articulation;
+    glide?: number;
+    bend?: readonly BendPoint[];
+    vibrato?: Readonly<{ rate: number; depth: number; delay?: number }>;
+    humanize?: Readonly<{
+      timing?: number;
+      velocity?: number;
+      length?: number;
+    }>;
+  } = {};
+  const articulation = input.articulation ?? input.art;
+  if (articulation !== undefined) {
+    if (!ARTICULATIONS.includes(articulation))
+      throw new DawgSdkError(
+        `${label} articulation must be one of ${ARTICULATIONS.join(" ")}`,
+      );
+    out.articulation = articulation;
+  }
+  if (input.glide !== undefined) {
+    const glide = finite(input.glide, `${label} glide`);
+    if (glide < 0) throw new DawgSdkError(`${label} glide must be ≥ 0`);
+    out.glide = glide;
+  }
+  if (input.bend !== undefined) {
+    if (!Array.isArray(input.bend) || input.bend.length > 32)
+      throw new DawgSdkError(
+        `${label} bend must be at most 32 [at, cents] points`,
+      );
+    if (input.bend.length > 0)
+      out.bend = Object.freeze(
+        input.bend.map((point: unknown, index: number): BendPoint => {
+          if (!Array.isArray(point) || point.length !== 2)
+            throw new DawgSdkError(
+              `${label} bend[${index}] must be [at, cents]`,
+            );
+          return Object.freeze([
+            unit(point[0], `${label} bend[${index}] at`),
+            finite(point[1], `${label} bend[${index}] cents`),
+          ] as const);
+        }),
+      );
+  }
+  if (input.vibrato !== undefined) {
+    if (!isRecord(input.vibrato))
+      throw new DawgSdkError(`${label} vibrato must be { rate, depth, delay }`);
+    const delay =
+      input.vibrato.delay === undefined
+        ? 0
+        : finite(input.vibrato.delay, `${label} vibrato delay`);
+    out.vibrato = Object.freeze({
+      rate: finite(
+        input.vibrato.rate ?? DEFAULT_VIBRATO_RATE,
+        `${label} vibrato rate`,
+      ),
+      depth: finite(
+        input.vibrato.depth ?? DEFAULT_VIBRATO_DEPTH,
+        `${label} vibrato depth`,
+      ),
+      ...(delay !== 0 ? { delay } : {}),
+    });
+  }
+  if (input.humanize !== undefined) {
+    if (!isRecord(input.humanize))
+      throw new DawgSdkError(
+        `${label} humanize must be { timing, velocity, length }`,
+      );
+    const amounts: Record<string, number> = {};
+    for (const key of Object.keys(input.humanize)) {
+      if (key !== "timing" && key !== "velocity" && key !== "length")
+        throw new DawgSdkError(
+          `${label} humanize has an unknown field "${key.slice(0, 32)}" (timing velocity length)`,
+        );
+      const value = finite(input.humanize[key], `${label} humanize ${key}`);
+      if (value < 0)
+        throw new DawgSdkError(`${label} humanize ${key} must be ≥ 0`);
+      if (value > 0) amounts[key] = value;
+    }
+    out.humanize = Object.freeze(amounts);
+  }
+  return out;
+}
+
+/**
+ * The same expression on many notes or hits (SDK 1.15.0); a note's own
+ * fields win.
+ *
+ * ```ts
+ * notes: expr(seq("C2 C2 Eb2 C3", { step: 0.25 }), { art: "staccato" })
+ * ```
+ */
+export function expr<T extends NoteSpec | HitSpec>(
+  notes: readonly T[],
+  expression_: Expression,
+): readonly T[] {
+  if (!Array.isArray(notes))
+    throw new DawgSdkError("expr needs an array of notes or hits");
+  const shared = expression(expression_, "expr");
+  return Object.freeze(
+    notes.map((item, index) => {
+      if (!isRecord(item) || (item.kind !== "note" && item.kind !== "hit"))
+        throw new DawgSdkError(
+          `expr notes[${index}] must come from note(), seq(), hit() or hits()`,
+        );
+      return Object.freeze({ ...shared, ...item }) as T;
+    }),
+  );
+}
 
 /**
  * One note. `pitch` is a name or MIDI number, `start` and `length` are
- * beats, `velocity` defaults to 0.8.
+ * beats, `velocity` defaults to 0.8, and `how` adds expression
+ * (articulation, glide, bend, vibrato; SDK 1.15.0).
  *
  * ```ts
  * note("A1", 0, 1)          // A1 on the downbeat for one beat
  * note("A1", 1.5, 0.5, 0.6) // off-beat eighth, softer
+ * note("A1", 2, 1, 0.8, { art: "staccato" })
  * ```
  */
 export function note(
@@ -186,6 +375,7 @@ export function note(
   start: number,
   length = 1,
   velocity = DEFAULT_VELOCITY,
+  how?: Expression,
 ): NoteSpec {
   return Object.freeze({
     kind: "note",
@@ -193,6 +383,7 @@ export function note(
     start: beat(start, "note start"),
     length: positive(length, "note length"),
     velocity: unit(velocity, "note velocity"),
+    ...expression(how, "note"),
   });
 }
 
@@ -245,13 +436,14 @@ export function seq(
  * One drum or sampler hit. On a `kit` track `voice` is `kick`, `snare`,
  * `clap`, `rim`, `tom`, `hat` or `openhat` (aliases `bd`, `sd`, `cp`, `hh`,
  * `oh` work); on a `sampler()` track it is a voice name. `length` defaults
- * to a sixteenth.
+ * to a sixteenth; `how` adds expression (`{ art: "ghost" }`, SDK 1.15.0).
  */
 export function hit(
   voice: string,
   start: number,
   velocity = DEFAULT_VELOCITY,
   length = DEFAULT_HIT_LENGTH,
+  how?: Expression,
 ): HitSpec {
   if (typeof voice !== "string" || voice.length === 0 || voice.length > 32)
     throw new DawgSdkError("hit voice must be a short name");
@@ -261,6 +453,7 @@ export function hit(
     start: beat(start, "hit start"),
     length: positive(length, "hit length"),
     velocity: unit(velocity, "hit velocity"),
+    ...expression(how, "hit"),
   });
 }
 
@@ -1484,6 +1677,34 @@ export type TrackInput = Readonly<{
   /** Insert effects by name (`{ distort: { drive: 3 }, chorus: {} }`). */
   fx?: FxInput;
   automation?: AutomationInput;
+  /**
+   * Glide between notes (SDK 1.15.0): seconds (`glide: 0.08`, TB-303 style
+   * legato) or `{ time, mode }`. Mode `legato` glides only into a note that
+   * overlaps the previous one and does not retrigger it; `mono` always
+   * glides and retriggers; `poly` glides every voice of a chord from the
+   * matching voice of the previous one.
+   */
+  glide?: number | Readonly<{ time?: number; mode?: GlideMode }>;
+  /** Sustain pedal changes as `[beat, "down" | "half" | "up"]` (SDK 1.15.0). */
+  pedal?: readonly (readonly [number, PedalState])[];
+  /**
+   * Velocity response (SDK 1.15.0): `soft` (quiet notes louder), `hard`
+   * (needs a firm touch), `fixed` (every note at 0.8, like an organ) or
+   * `{ curve: "fixed", fixed: 0.6 }`. Default `linear`.
+   */
+  velocityCurve?:
+    VelocityCurveName | Readonly<{ curve: VelocityCurveName; fixed?: number }>;
+  /**
+   * Seeded humanize applied when dawg renders, so the notes stay as written
+   * (SDK 1.15.0): `timing` ms either side, `velocity` and `length` in
+   * percent, `seed` (default 1) picks another take.
+   */
+  humanize?: Readonly<{
+    timing?: number;
+    velocity?: number;
+    length?: number;
+    seed?: number;
+  }>;
   /** `note()`/`seq()` for pitched tracks, `hit()`/`hits()` for kits and one-shot samplers. */
   notes?: readonly (NoteSpec | HitSpec)[];
   /**
@@ -1581,7 +1802,129 @@ export type TrackSpec = Readonly<{
   kit: string | null;
   /** Present only when `track({ time })` set something. */
   time?: TrackTimeInput;
+  /** Performance (SDK 1.15.0); present only when set. */
+  glide?: Readonly<{ time: number; mode: GlideMode }>;
+  pedal?: readonly (readonly [number, PedalState])[];
+  velocityCurve?: Readonly<{
+    curve: Exclude<VelocityCurveName, "linear">;
+    fixed?: number;
+  }>;
+  humanize?: Readonly<{
+    timing?: number;
+    velocity?: number;
+    length?: number;
+    seed: number;
+  }>;
 }>;
+
+export type GlideMode = "legato" | "mono" | "poly";
+export type PedalState = "down" | "half" | "up";
+export type VelocityCurveName = "linear" | "soft" | "hard" | "fixed";
+
+const DEFAULT_GLIDE_SECONDS = 0.06;
+const DEFAULT_FIXED_VELOCITY = 0.8;
+
+/** Normalizes `track()` performance options; dawg validates the ranges. */
+function trackPerformance(
+  input: TrackInput,
+  name: string,
+): Partial<Pick<TrackSpec, "glide" | "pedal" | "velocityCurve" | "humanize">> {
+  const out: {
+    glide?: TrackSpec["glide"];
+    pedal?: TrackSpec["pedal"];
+    velocityCurve?: TrackSpec["velocityCurve"];
+    humanize?: TrackSpec["humanize"];
+  } = {};
+  if (input.glide !== undefined) {
+    const raw =
+      typeof input.glide === "number" ? { time: input.glide } : input.glide;
+    if (!isRecord(raw))
+      throw new DawgSdkError(
+        `track ${name}: glide must be seconds or { time, mode }`,
+      );
+    const mode = raw.mode ?? "legato";
+    if (!["legato", "mono", "poly"].includes(mode))
+      throw new DawgSdkError(
+        `track ${name}: glide mode must be legato, mono or poly`,
+      );
+    out.glide = Object.freeze({
+      time: finite(raw.time ?? DEFAULT_GLIDE_SECONDS, `${name} glide time`),
+      mode,
+    });
+  }
+  if (input.pedal !== undefined) {
+    if (!Array.isArray(input.pedal) || input.pedal.length > 1024)
+      throw new DawgSdkError(
+        `track ${name}: pedal must be at most 1024 [beat, "down" | "half" | "up"] events`,
+      );
+    if (input.pedal.length > 0)
+      out.pedal = Object.freeze(
+        input.pedal.map((event: unknown, index: number) => {
+          if (
+            !Array.isArray(event) ||
+            event.length !== 2 ||
+            !["down", "half", "up"].includes(event[1] as string)
+          )
+            throw new DawgSdkError(
+              `track ${name}: pedal[${index}] must be [beat, "down" | "half" | "up"]`,
+            );
+          return Object.freeze([
+            beat(event[0], `${name} pedal[${index}] beat`),
+            event[1] as PedalState,
+          ] as const);
+        }),
+      );
+  }
+  if (input.velocityCurve !== undefined) {
+    const raw =
+      typeof input.velocityCurve === "string"
+        ? { curve: input.velocityCurve }
+        : input.velocityCurve;
+    if (
+      !isRecord(raw) ||
+      !["linear", "soft", "hard", "fixed"].includes(raw.curve as string)
+    )
+      throw new DawgSdkError(
+        `track ${name}: velocityCurve must be linear, soft, hard or fixed`,
+      );
+    if (raw.curve === "fixed")
+      out.velocityCurve = Object.freeze({
+        curve: "fixed",
+        fixed: unit(
+          raw.fixed ?? DEFAULT_FIXED_VELOCITY,
+          `${name} velocityCurve fixed`,
+        ),
+      });
+    else if (raw.curve !== "linear")
+      out.velocityCurve = Object.freeze({ curve: raw.curve });
+  }
+  if (input.humanize !== undefined) {
+    if (!isRecord(input.humanize))
+      throw new DawgSdkError(
+        `track ${name}: humanize must be { timing, velocity, length, seed }`,
+      );
+    const amount = (key: "timing" | "velocity" | "length") => {
+      const value = input.humanize![key];
+      return value === undefined ? 0 : finite(value, `${name} humanize ${key}`);
+    };
+    const timing = amount("timing");
+    const velocity = amount("velocity");
+    const length = amount("length");
+    const seed = input.humanize.seed ?? 1;
+    if (!Number.isInteger(seed) || seed < 0)
+      throw new DawgSdkError(
+        `track ${name}: humanize seed must be an integer ≥ 0`,
+      );
+    if (timing !== 0 || velocity !== 0 || length !== 0)
+      out.humanize = Object.freeze({
+        ...(timing !== 0 ? { timing } : {}),
+        ...(velocity !== 0 ? { velocity } : {}),
+        ...(length !== 0 ? { length } : {}),
+        seed,
+      });
+  }
+  return out;
+}
 
 /**
  * A raw ZzFX parameter array (Strudel `zzfx([...])`, ZzFX's own layout:
@@ -1723,13 +2066,8 @@ export function track(input: TrackInput): TrackSpec {
             ? `track ${name}: unknown sampler voice "${spec.voice}" (${[...slots.keys()].join(" ")})`
             : `track ${name}: hit("${spec.voice}") needs instrument "kit" or sampler(...)`,
       );
-    return Object.freeze({
-      kind: "note" as const,
-      pitch,
-      start: spec.start,
-      length: spec.length,
-      velocity: spec.velocity,
-    });
+    const { kind: _kind, voice: _voice, ...rest } = spec;
+    return Object.freeze({ ...rest, kind: "note" as const, pitch });
   });
   if (notes.length > 4096)
     throw new DawgSdkError(`track ${name}: at most 4096 notes`);
@@ -1855,6 +2193,7 @@ export function track(input: TrackInput): TrackSpec {
     rhythm: Object.freeze([...rhythm]),
     kit: drumKit === null ? null : drumKit.trim(),
     ...trackTime(input.time, name),
+    ...trackPerformance(input, name),
   });
 }
 
@@ -2091,7 +2430,7 @@ export type SongInput = Readonly<{
   tracks: readonly TrackSpec[];
 }>;
 
-/** A stored note: integer ticks. */
+/** A stored note: integer ticks; expression fields only when set. */
 export type ScoreNote = Readonly<{
   id: string;
   trackId: string;
@@ -2099,6 +2438,11 @@ export type ScoreNote = Readonly<{
   durationTicks: number;
   pitch: number;
   velocity: number;
+  articulation?: Articulation;
+  glide?: number;
+  bend?: readonly Readonly<{ at: number; cents: number }>[];
+  vibrato?: Readonly<{ rate: number; depth: number; delay?: number }>;
+  humanize?: Readonly<{ timing?: number; velocity?: number; length?: number }>;
 }>;
 
 /** A stored automation point: integer tick. */
@@ -2159,6 +2503,10 @@ export type ScoreTrack = Readonly<{
   time?: Readonly<{ rate?: number; phase?: number; cycle?: number }>;
   wavetable?: Readonly<{ table: ScoreSampleRef } & WavetableParams>;
   wtAutomation?: readonly ScorePoint[];
+  glide?: TrackSpec["glide"];
+  pedal?: readonly Readonly<{ tick: number; state: PedalState }>[];
+  velocityCurve?: TrackSpec["velocityCurve"];
+  humanize?: TrackSpec["humanize"];
 }>;
 
 /**
@@ -2297,6 +2645,19 @@ export function song(input: SongInput): Song {
         time.cycle = Math.max(1, ticks(t.time.cycle));
       if (Object.keys(time).length > 0) stored.time = Object.freeze(time);
     }
+    if (t.glide) stored.glide = t.glide;
+    if (t.pedal && t.pedal.length > 0) {
+      // One event per tick (the last wins), in tick order, as dawg stores it.
+      const byTick = new Map<number, PedalState>();
+      for (const [at, state] of t.pedal) byTick.set(ticks(at), state);
+      stored.pedal = Object.freeze(
+        [...byTick.entries()]
+          .sort((a, b) => a[0] - b[0])
+          .map(([tick, state]) => Object.freeze({ tick, state })),
+      );
+    }
+    if (t.velocityCurve) stored.velocityCurve = t.velocityCurve;
+    if (t.humanize) stored.humanize = t.humanize;
     if (t.rhythm && t.rhythm.length > 0)
       stored.rhythm = Object.freeze(
         t.rhythm.map((row) => {
@@ -2323,6 +2684,19 @@ export function song(input: SongInput): Song {
           durationTicks,
           pitch: n.pitch,
           velocity: n.velocity,
+          ...(n.articulation ? { articulation: n.articulation } : {}),
+          ...(n.glide !== undefined ? { glide: n.glide } : {}),
+          ...(n.bend
+            ? {
+                bend: Object.freeze(
+                  [...n.bend]
+                    .sort((a, b) => a[0] - b[0])
+                    .map(([at, cents]) => Object.freeze({ at, cents })),
+                ),
+              }
+            : {}),
+          ...(n.vibrato ? { vibrato: n.vibrato } : {}),
+          ...(n.humanize ? { humanize: n.humanize } : {}),
         }),
       );
     }
