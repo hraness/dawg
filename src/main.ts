@@ -43,6 +43,12 @@ import {
 import { kitCatalog } from "./audio/kits.ts";
 import { applyEditCommand, parseEditCommand } from "./commands/edit.ts";
 import { applyTimeCommand, parseTimeCommand } from "./commands/time.ts";
+import {
+  barStartTick,
+  bpmAtTick,
+  hasMeterChanges,
+  loopTicksOf,
+} from "../core/tempo.ts";
 import { applyFxCommand, parseFxCommand } from "./commands/fx.ts";
 import { applySynthCommand, parseSynthCommand } from "./commands/synth.ts";
 import {
@@ -665,10 +671,20 @@ function snapshot(
     trackId: requestedTrack,
     sessionId: record.sessionId,
     revision: record.revision,
-    bpm: value.tempoBpm,
+    bpm: value.time?.tempo
+      ? bpmAtTick(value, beat * value.ticksPerBeat)
+      : value.tempoBpm,
     key: value.key ?? undefined,
-    loopBeats: value.bars * value.beatsPerBar,
+    loopBeats: loopTicksOf(value) / value.ticksPerBeat,
     beatsPerBar: value.beatsPerBar,
+    ...(hasMeterChanges(value)
+      ? {
+          barBeats: Array.from(
+            { length: value.bars },
+            (_, bar) => barStartTick(value, bar) / value.ticksPerBeat,
+          ),
+        }
+      : {}),
     laneCount: 24,
     currentBeat: beat,
     playing: clock.playing,
