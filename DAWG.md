@@ -117,7 +117,7 @@ automate <lane> remove <beat>                            drop one point
 track name <text>                                       rename the focused track
 meter <beats per bar 1..16>
 tempo 90 at bar 9 ramp | rit 4 bars to 80 | fermata at 31 2 | meter 7/8 at bar 5
-track rate 3/2 | track phasing 3 | track time off
+track rate 3/2 | track phasing 4 | track phasing 3 hold 8 | track time off
 solo | unsolo
 undo | redo
 ```
@@ -914,25 +914,28 @@ tempo 140 at 64 ramp         glide from the previous tempo into 140 at beat 64 (
 tempo 70 at bar 17 exp       exponential glide: equal ratio per beat, even to the ear
 tempo remove bar 9 | tempo clear | tempo map
 rit 4 bars to 80             ritardando over the last 4 bars; rit/accel default to 75% / 133% over the last 2 bars
+a tempo [at bar <n>]         step back to the tempo before the last rit/accel (default: the bar after it ends)
+tempo primo [at bar <n>]     step back to the start tempo
 accel 8 bars to 174 at bar 9 accelerando from bar 9; `beats` instead of `bars`, `exp` for an exponential curve
-fermata at 31 2              hold beat 31 for 2 extra beats; fermata [at bar <n>|end] [<beats>], default 2
+fermata at 31 2              hold beat 31 for 2 extra beats; fermata [at <beat>|[at] bar <n>|[at] end] [<extra beats>], default 2
 meter 7/8 at bar 5           meter change on a bar line, lasting until the next one; meter 7/8 alone sets the whole song
 meter remove bar 5 | meter clear
 track rate 3/2               polytempo: the focused track plays at 1.5× the song tempo (0.125..8 or a/b)
 track phase 0.5              start the track half a beat later
 track cycle 3                polymeter: loop the track's first 3 beats against the song's bars
-track phasing 3 [over 48]    Reich-style drift: a 3-beat cycle gains one cycle every 48 beats, then realigns
+track phasing 3 [over 48]    continuous drift: a 3-beat cycle gains one cycle every 48 beats, then realigns (needs a loop of whole spans)
+track phasing 3 hold 8       stepped, as in Piano Phase: hold in step 8 cycles, move a sixteenth ahead over 2 (drift 2, shift 0.25)
 track time off               follow the song again
 ```
 
 - **Tempo events** (`time.tempo: [{tick, bpm, ramp?}]`) follow `tempoBpm`, which stays the start tempo. An event without `ramp` is a step; `ramp: "linear"` or `"exp"` glides from the previous tempo into the event. Ramps are defined over score position (beats), as Logic's and Cubase's tempo curves and MuseScore's gradual tempo changes are, and the renderer integrates them in closed form, so a ramp lands on the same sample however it is rendered.
-- **rit / accel** write a pin at the start (the tempo in effect there) and a ramp to the target. MuseScore's defaults are used when no target is given: ritardando to 75%, accelerando to 133%.
-- **Fermatas** (`time.fermatas: [{tick, beats}]`) lengthen the beat that starts at `tick` to `1 + beats` times its length: everything inside that beat slows evenly and everything later moves back. WAV and MIDI export time it the same way (MIDI writes a slower tempo over the beat), so a held beat may last at most 16.777 s, the slowest tempo a MIDI file can write; a longer hold is refused with a message.
+- **rit / accel** write a pin at the start (the tempo in effect there) and a ramp to the target. MuseScore's defaults are used when no target is given: ritardando to 75%, accelerando to 133%. A rit refuses a faster target and an accel a slower one. `a tempo` and `tempo primo` are plain steps back.
+- **Fermatas** (`time.fermatas: [{tick, beats}]`) lengthen the beat that starts at `tick` to `1 + beats` times its length (the meter's felt beat: a dotted quarter in 6/8 or 12/8, a quarter otherwise): everything inside that beat slows evenly and everything later moves back. WAV and MIDI export time it the same way (MIDI writes a slower tempo over the beat), so a held beat may last at most 16.777 s, the slowest tempo a MIDI file can write; a longer hold is refused with a message.
 - **Meter changes** (`time.meter: [{bar, beatsPerBar, beatUnit}]`, `bar` 0-based in the file) take effect on bar lines only. The bar lasts `beatsPerBar × 4 / beatUnit` beats; `beatsPerBar` on the song stays the default meter. The click accents each bar's downbeat and clicks the meter's beat unit (dotted in compound meters such as 6/8), the count-in uses the meter and tempo at the punch-in bar, the highway draws bar lines and numbers from the meter map, and play-mode replace erases the bars the meter map says.
-- **Track time** (`track.time: {rate, phase, cycle}`, phase and cycle in ticks in the file) places a track's notes on the song timeline: the first `cycle` ticks repeat every `cycle / rate` song ticks, shifted `phase` song ticks later. Two identical tracks with one on `track phasing 3` drift apart a little each cycle and line up again after `over` beats, as in Reich's _Piano Phase_. Automation stays in song time.
+- **Track time** (`track.time: {rate, phase, cycle, steps?}`, phase, cycle and shift in ticks in the file) places a track's notes on the song timeline: the first `cycle` ticks repeat every `cycle / rate` song ticks, shifted `phase` song ticks later, restarting with every song loop. Two identical tracks with one on `track phasing 4` drift apart a little each cycle and line up again after `over` beats (default the loop), the continuous tape phasing of Reich's _It's Gonna Rain_ and _Come Out_; `over` and the cycle must divide the loop, and the prompt names the bars it needs otherwise. `track phasing 3 hold 8` stores `steps: {shift, hold, drift}` instead of a rate: the track holds in step for `hold` cycles, then moves `shift` ahead over `drift` cycles, and repeats, the shift-and-lock process of _Piano Phase_ and _Drumming_. Automation stays in song time.
 - **Everywhere**: the offline renderer, the live engine and audition loop, the transport clock (beat ⇄ wall time, shared by every window through dawgd), click and count-in, recording quantization and the highway use the same map. `/export song.mid` and `dawg render song.mid` write a format-1 Standard MIDI File: track 0 carries the time-signature (FF 58) and tempo (FF 51) meta events, ramps are written as tempo steps every sixteenth whose BPM is the exact average over the step, so each step boundary lands on the same second as the WAV.
 
-The menu has the same controls under **Project › Tempo & meter** (`/menu tempo`): the tempo map (add a change, a ramp, a rit or accel, a fermata), meter changes, and the focused track's rate, phase, cycle and phasing. The agent's `set_time` tool takes the same actions, and the SDK has `tempo`, `ramp`, `rit`, `accel`, `fermata`, `meter` and `phasing` (see **Project files and SDK**).
+The menu has the same controls under **Project › Tempo & meter** (`/menu tempo`): the tempo map (add a change, a ramp, a rit or accel, a tempo, tempo primo, a fermata), meter changes, and the focused track's rate, phase, cycle, phasing and stepped phasing. The agent's `set_time` tool takes the same actions, and the SDK has `tempo`, `ramp`, `rit`, `accel`, `aTempo`, `tempoPrimo`, `fermata`, `meter`, `phasing` and `stepPhasing` (see **Project files and SDK**).
 
 ## Drum patterns and kits
 

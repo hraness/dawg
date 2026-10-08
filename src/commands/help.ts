@@ -127,10 +127,10 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       },
       {
         command: "rit|accel [<n> bars] [to <bpm>] [at bar <n>]",
-        summary: "gradual · rit 4 bars to 80 · default 75% / 133%",
+        summary: "gradual · rit 4 bars to 80 · a tempo · tempo primo",
       },
       {
-        command: "fermata [at <beat>|bar <n>] [<beats>]",
+        command: "fermata [at <beat>|at bar <n>|at end] [<extra beats>]",
         summary: "hold a beat · fermata at 31 2 · fermata clear",
       },
       {
@@ -142,8 +142,8 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "polytempo · track rate 3/2 · track cycle 3",
       },
       {
-        command: "track phasing <beats> [over <beats>]",
-        summary: "Reich drift · track phasing 3 · track time off",
+        command: "track phasing <beats> [over <beats>|hold <n>]",
+        summary: "Reich phasing · track phasing 3 hold 8 · track time off",
       },
       {
         command: "key <tonic> <mode> | none",
@@ -411,8 +411,14 @@ export const HELP_GUIDE: readonly HelpSection[] = [
   {
     group: "more" as HelpGroup,
     entries: [
-      { command: "/guide", summary: "short guides for every feature · F1" },
-      { command: "/help all", summary: "every command and key · /help music" },
+      {
+        command: "rit 4 bars to 80",
+        summary: "tempo changes, fermatas, meter · /menu tempo",
+      },
+      {
+        command: "/help all",
+        summary: "every command and key · /guide feature guides · F1",
+      },
     ],
   },
 ];
@@ -565,7 +571,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   accelerando:
     "accel [<n> bars|beats] [to <bpm>] [at bar <n>|<beat>] [exp] · accel 8 bars to 174",
   fermata:
-    "fermata [at <beat>|bar <n>|end] [<extra beats>] · fermata at 31 2 · fermata remove 31 · fermata clear",
+    "fermata [at <beat>|at bar <n>|at end] [<extra beats>] · fermata at 31 2 · fermata remove 31 · fermata clear",
   add: "add <note> at <beat> [for <beats>] · add C4 at 0",
   put: "add <note> at <beat> [for <beats>] · add C4 at 0",
   remove: "remove <id> · ids show in the transcript",

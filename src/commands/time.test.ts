@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { createScore } from "../../core/score.ts";
-import { bpmAtTick, loopTicksOf, secondsAtTick } from "../../core/tempo.ts";
+import {
+  bpmAtTick,
+  loopTicksOf,
+  performedNotes,
+  secondsAtTick,
+} from "../../core/tempo.ts";
 import { usageHint } from "./help.ts";
 import { applyTimeCommand, parseTimeCommand } from "./time.ts";
 
@@ -101,6 +106,15 @@ describe("time grammar", () => {
     expect(parseTimeCommand("fermata remove 31")).toEqual({
       type: "fermata-remove",
       at: { beat: 31 },
+    });
+    expect(parseTimeCommand("fermata end")).toEqual({
+      type: "fermata",
+      beats: 2,
+    });
+    expect(parseTimeCommand("fermata bar 4 3")).toEqual({
+      type: "fermata",
+      at: { bar: 4 },
+      beats: 3,
     });
     expect(parseTimeCommand("fermata 999")).toBeUndefined();
     expect(parseTimeCommand("meter 7/8 at bar 5")).toEqual({
@@ -288,17 +302,129 @@ describe("time commands", () => {
 
   test("track phasing picks the rate that gains one cycle per loop", () => {
     const score = song();
-    // 32 beats of 3-beat cycles: the drifting track plays one cycle more.
-    const phasing = apply(score, "track phasing 3", "b");
+    // 32 beats of 4-beat cycles: the drifting track plays one cycle more.
+    const phasing = apply(score, "track phasing 4", "b");
     expect(phasing.ok).toBe(true);
     const time = phasing.next!.tracks.find((t) => t.id === "b")!.time!;
-    expect(time.cycle).toBe(3 * 480);
-    expect(time.rate).toBeCloseTo((32 / 3 + 1) / (32 / 3), 9);
-    const slow = apply(score, "track phasing 3 over 12 cycles -1", "b");
+    expect(time.cycle).toBe(4 * 480);
+    expect(time.rate).toBeCloseTo((8 + 1) / 8, 9);
+    const slow = apply(score, "track phasing 4 over 16 cycles -1", "b");
     expect(slow.next!.tracks.find((t) => t.id === "b")!.time!.rate).toBeCloseTo(
       3 / 4,
       9,
     );
+  });
+
+  test("a tempo and tempo primo step back after a rit", () => {
+    expect(parseTimeCommand("a tempo")).toEqual({
+      type: "tempo-return",
+      primo: false,
+    });
+    expect(parseTimeCommand("tempo primo at bar 7")).toEqual({
+      type: "tempo-return",
+      primo: true,
+      at: { bar: 7 },
+    });
+    let score = createScore({ tempoBpm: 120, bars: 8 });
+    score = applyTimeCommand(score, "", {
+      type: "tempo-at",
+      bpm: 100,
+      at: { bar: 3 },
+    }).next!;
+    score = applyTimeCommand(
+      score,
+      "",
+      parseTimeCommand("rit 2 bars to 80 at bar 4")!,
+    ).next!;
+    const back = applyTimeCommand(score, "", parseTimeCommand("a tempo")!);
+    expect(back.ok).toBe(true);
+    expect(back.message).toBe("a tempo · 100 BPM at bar 7");
+    expect(back.next!.time!.tempo!.at(-1)).toEqual({
+      tick: 6 * 1920,
+      bpm: 100,
+    });
+    const primo = applyTimeCommand(
+      score,
+      "",
+      parseTimeCommand("tempo primo at bar 8")!,
+    );
+    expect(primo.message).toBe("tempo primo · 120 BPM at bar 8");
+    const none = applyTimeCommand(
+      createScore({ bars: 4 }),
+      "",
+      parseTimeCommand("a tempo")!,
+    );
+    expect(none.ok).toBe(false);
+  });
+
+  test("track phasing with hold or drift steps like Piano Phase", () => {
+    expect(parseTimeCommand("track phasing 3 hold 8 drift 2")).toEqual({
+      type: "track-phasing",
+      cycle: 3,
+      cycles: 1,
+      hold: 8,
+      drift: 2,
+    });
+    expect(parseTimeCommand("track phasing 3 over 48 hold 8")).toBeUndefined();
+    const score = createScore({
+      bars: 4,
+      tracks: [{ id: "b", instrument: "piano", time: { rate: 1.5 } }],
+    });
+    const result = applyTimeCommand(score, "b", {
+      type: "track-phasing",
+      cycle: 3,
+      cycles: 1,
+      hold: 4,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.next!.tracks[0]!.time).toEqual({
+      cycle: 1440,
+      steps: { shift: 120, hold: 4, drift: 2 },
+    });
+    expect(result.message).toContain("hold 4, drift 2");
+  });
+
+  test("track phasing refuses spans that cannot realign every loop", () => {
+    const score = song(); // 8 bars of 4/4, 32 beats
+    // A 3-beat cycle does not fit 32 beats: the drift would reset mid-cycle.
+    const odd = apply(score, "track phasing 3", "b");
+    expect(odd.ok).toBe(false);
+    expect(odd.message).toContain("bars 9");
+    // Longer than the loop: the wrap resets the drift before it realigns.
+    const long = apply(score, "track phasing 4 over 48", "b");
+    expect(long.ok).toBe(false);
+    expect(long.message).toContain("bars 12");
+    const ragged = apply(score, "track phasing 3 over 16", "b");
+    expect(ragged.ok).toBe(false);
+    expect(ragged.message).toContain("whole number");
+  });
+
+  test("a phased pair lines up at every loop start and after `over`", () => {
+    const base = createScore({
+      tempoBpm: 120,
+      bars: 4,
+      tracks: [
+        { id: "a", instrument: "piano" },
+        { id: "b", instrument: "piano" },
+      ],
+      notes: ["a", "b"].map((trackId) => ({
+        id: `${trackId}0`,
+        trackId,
+        pitch: 60,
+        startTick: 0,
+        durationTicks: 240,
+        velocity: 0.8,
+      })),
+    });
+    const phased = apply(base, "track phasing 2 over 8", "b").next!;
+    const starts = (id: string) =>
+      performedNotes(phased)
+        .filter((note) => note.trackId === id)
+        .map((note) => note.startTick);
+    const b = new Set(starts("b").map((tick) => Math.round(tick)));
+    // The loop (16 beats) holds two spans of 8: aligned at 0 and beat 8.
+    expect(b.has(0)).toBe(true);
+    expect(b.has(8 * 480)).toBe(true);
   });
 });
 

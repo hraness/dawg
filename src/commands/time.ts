@@ -7,7 +7,7 @@
  *   rit|accel [<n> [bars|beats]] [to <bpm>] [at bar <n>|<beat>] [exp]
  *                                              gradual change; 75% / 133% by
  *                                              default, over the last bars
- *   fermata [at <beat>|bar <n>|end] [<beats>]  hold that beat for extra beats
+ *   fermata [at <beat>|[at] bar <n>|[at] end] [<extra beats>]  hold a beat
  *   fermata remove <beat>|bar <n> · fermata clear
  *   meter <n>/<d> [at bar <n>]                 meter change at a bar line
  *   meter remove bar <n> · meter clear
@@ -15,6 +15,8 @@
  *   track phase <beats>|off                    start the track later
  *   track cycle <beats>|off                    polymeter: loop the first beats
  *   track phasing <cycle> [over <beats>] [cycles <n>]   Reich-style drift
+ *   track phasing <cycle> [hold <n>] [drift <n>] [shift <beats>]
+ *                                              stepped, as in Piano Phase
  *   track time off                             follow the song again
  *
  * `tempo <bpm>` (the start tempo) and `meter <n>` (beats per bar) keep their
@@ -34,6 +36,8 @@ import {
   driftRate,
   loopSecondsOf,
   loopTicksOf,
+  phaseStepsTicks,
+  type PhaseSteps,
   TIME_LIMITS,
   TimeValidationError,
   withFermata,
@@ -57,6 +61,13 @@ export type TimeCommand =
       bpm: number;
       at: TimePosition;
       ramp?: TempoRamp;
+    }>
+  | Readonly<{
+      /** `a tempo` (back to before the last rit/accel) or `tempo primo`. */
+      type: "tempo-return";
+      primo: boolean;
+      /** Absent: the first barline after the last rit/accel ends. */
+      at?: TimePosition;
     }>
   | Readonly<{ type: "tempo-remove"; at: TimePosition }>
   | Readonly<{ type: "tempo-clear" }>
@@ -93,6 +104,11 @@ export type TimeCommand =
       cycle: number;
       over?: number;
       cycles: number;
+      /** Stepped (Piano Phase): any of these switches to shift and hold. */
+      hold?: number;
+      drift?: number;
+      /** Beats gained per step. */
+      shift?: number;
     }>
   | Readonly<{ type: "track-time-off" }>;
 
@@ -124,6 +140,10 @@ export function parseTimeCommand(prompt: string): TimeCommand | undefined {
   const words = text.split(" ");
   const verb = words[0]!;
   const rest = words.slice(1);
+  if (verb === "a" && rest[0] === "tempo")
+    return tempoReturnCommand(false, rest.slice(1));
+  if (verb === "tempo" && rest[0] === "primo")
+    return tempoReturnCommand(true, rest.slice(1));
   if (verb === "tempo" || verb === "bpm") return tempoCommand(rest);
   if (RIT.has(verb) || ACCEL.has(verb))
     return gradualCommand(RIT.has(verb) ? "rit" : "accel", rest);
@@ -208,6 +228,18 @@ function gradualCommand(
   };
 }
 
+function tempoReturnCommand(
+  primo: boolean,
+  rest: readonly string[],
+): TimeCommand | undefined {
+  if (rest.length === 0) return { type: "tempo-return", primo };
+  const words = rest[0] === "at" ? rest.slice(1) : rest;
+  const at = position(words);
+  return at && at.used === words.length
+    ? { type: "tempo-return", primo, at: at.position }
+    : undefined;
+}
+
 function fermataCommand(rest: readonly string[]): TimeCommand | undefined {
   if (rest.length === 1 && rest[0] === "clear")
     return { type: "fermata-clear" };
@@ -220,7 +252,15 @@ function fermataCommand(rest: readonly string[]): TimeCommand | undefined {
   }
   let words = rest;
   let at: TimePosition | undefined;
-  if (words[0] === "at") {
+  // `at` is optional before `end` and `bar <n>`; a bare number stays the
+  // extra beats, so a beat position needs `at`.
+  if (words[0] === "end") words = words.slice(1);
+  else if (words[0] === "bar") {
+    const found = position(words);
+    if (!found) return undefined;
+    at = found.position;
+    words = words.slice(found.used);
+  } else if (words[0] === "at") {
     if (words[1] === "end") words = words.slice(2);
     else {
       const found = position(words.slice(1));
@@ -308,6 +348,7 @@ function trackTimeCommand(rest: readonly string[]): TimeCommand | undefined {
     if (!(cycle > 0)) return undefined;
     let over: number | undefined;
     let cycles = 1;
+    const stepped: { hold?: number; drift?: number; shift?: number } = {};
     let index = 0;
     while (index < tail.length) {
       const word = tail[index]!;
@@ -315,16 +356,24 @@ function trackTimeCommand(rest: readonly string[]): TimeCommand | undefined {
       if (next === undefined) return undefined;
       if (word === "over" && UNSIGNED.test(next)) over = Number(next);
       else if (word === "cycles" && NUMBER.test(next)) cycles = Number(next);
+      else if (
+        (word === "hold" || word === "drift" || word === "shift") &&
+        UNSIGNED.test(next)
+      )
+        stepped[word] = Number(next);
       else return undefined;
       index += 2;
     }
     if (over !== undefined && !(over > 0)) return undefined;
     if (cycles === 0) return undefined;
+    if (Object.keys(stepped).length > 0 && (over !== undefined || cycles !== 1))
+      return undefined;
     return {
       type: "track-phasing",
       cycle,
       ...(over !== undefined ? { over } : {}),
       cycles,
+      ...stepped,
     };
   }
   return undefined;
@@ -423,6 +472,8 @@ function applyOrThrow(
         `tempo · ${fmt(command.bpm)} BPM at ${where}${glide}`,
       );
     }
+    case "tempo-return":
+      return tempoReturn(score, command);
     case "tempo-remove": {
       const [from, to] = spanOf(score, command.at);
       const before = score.time?.tempo?.length ?? 0;
@@ -623,21 +674,82 @@ function trackTime(
   const track = score.tracks.find((candidate) => candidate.id === trackId);
   if (!track) return { ok: false, message: `no track ${trackId}` };
   const tpb = score.ticksPerBeat;
-  const current: { rate?: number; phase?: number; cycle?: number } = {
+  const current: {
+    rate?: number;
+    phase?: number;
+    cycle?: number;
+    steps?: PhaseSteps;
+  } = {
     ...track.time,
   };
   let message: string;
   if (command.type === "track-time-off") {
     for (const key of Object.keys(current)) delete current[key as "rate"];
     message = `${trackId} · follows the song`;
+  } else if (
+    command.type === "track-phasing" &&
+    (command.hold !== undefined ||
+      command.drift !== undefined ||
+      command.shift !== undefined)
+  ) {
+    const cycle = Math.round(command.cycle * tpb);
+    const shiftBeats = command.shift ?? 0.25;
+    const shift = Math.round(shiftBeats * tpb);
+    const hold = command.hold ?? 8;
+    const drift = command.drift ?? 2;
+    if (cycle < 1)
+      return { ok: false, message: "track phasing · cycle is too short" };
+    if (shift < 1 || shift > cycle)
+      return {
+        ok: false,
+        message: `track phasing · shift must be more than 0 and at most the ${fmt(command.cycle)}-beat cycle`,
+      };
+    if (!Number.isInteger(hold) || hold > 64)
+      return {
+        ok: false,
+        message: "track phasing · hold is 0..64 whole cycles",
+      };
+    if (!Number.isInteger(drift) || drift < 1 || drift > 64)
+      return {
+        ok: false,
+        message: "track phasing · drift is 1..64 whole cycles",
+      };
+    const steps = { shift, hold, drift };
+    delete current.rate;
+    current.cycle = cycle;
+    (current as { steps?: PhaseSteps }).steps = steps;
+    const turn = phaseStepsTicks(cycle, steps);
+    const loop = loopTicksOf(score);
+    const bars = turn > loop ? barsForWhole(score, turn) : undefined;
+    message = `${trackId} · phasing ${fmt(command.cycle)}-beat cycle in steps of ${fmt(shiftBeats)}: hold ${hold}, drift ${drift} (a full turn is ${fmt(turn / tpb)} beats${turn > loop ? `, longer than the loop; restarts at its end${bars === undefined ? "" : ` · bars ${bars}`}` : ""})`;
   } else if (command.type === "track-phasing") {
     const cycle = Math.round(command.cycle * tpb);
     if (cycle < 1)
       return { ok: false, message: "track phasing · cycle is too short" };
+    delete (current as { steps?: PhaseSteps }).steps;
     const over =
       command.over !== undefined
         ? Math.round(command.over * tpb)
         : loopTicksOf(score);
+    // Placement restarts every loop pass, so the pair only realigns when
+    // the loop holds whole spans and the span whole cycles.
+    const loop = loopTicksOf(score);
+    if (over > loop || loop % over !== 0 || over % cycle !== 0) {
+      const bars = barsForWhole(
+        score,
+        command.over === undefined ? cycle : lcm(over, cycle),
+      );
+      const span = `phasing ${fmt(command.cycle)}${command.over !== undefined ? ` over ${fmt(command.over)}` : ""}`;
+      return {
+        ok: false,
+        message:
+          over % cycle !== 0 && command.over !== undefined
+            ? `track phasing · over ${fmt(over / tpb)} beats is not a whole number of ${fmt(command.cycle)}-beat cycles`
+            : bars === undefined
+              ? `track phasing · ${span} does not fit a loop of whole cycles`
+              : `track phasing · ${span} needs a ${bars}-bar loop · bars ${bars}`,
+      };
+    }
     const rate = driftRate(over, cycle, command.cycles);
     if (!(rate >= TIME_LIMITS.minRate && rate <= TIME_LIMITS.maxRate))
       return {
@@ -667,6 +779,10 @@ function trackTime(
       return { ok: false, message: "track cycle · too short" };
     current[command.field] = ticks;
     message = `${trackId} · ${command.field} ${fmt(command.value)} beat${command.value === 1 ? "" : "s"}`;
+    if (command.field === "cycle" && loopTicksOf(score) % ticks !== 0) {
+      const bars = barsForWhole(score, ticks);
+      message += ` · restarts at the loop end${bars === undefined ? "" : `; bars ${bars} for whole cycles`}`;
+    }
   }
   const time: TrackTime | null = Object.keys(current).length
     ? (current as TrackTime)
@@ -684,6 +800,29 @@ function trackTime(
     kind: "track.time",
     payload: { trackId, time },
   };
+}
+
+function gcd(a: number, b: number): number {
+  while (b) [a, b] = [b, a % b];
+  return a;
+}
+
+function lcm(a: number, b: number): number {
+  return (a / gcd(a, b)) * b;
+}
+
+/**
+ * Bars whose loop is a whole multiple of `ticks`: the fewest at or above
+ * the song's length, else the fewest overall; undefined when none fits.
+ */
+function barsForWhole(score: TrackScore, ticks: number): number | undefined {
+  let fewest: number | undefined;
+  for (let bars = 1; bars <= TIME_LIMITS.maxBars; bars += 1) {
+    if (barStartTick(score, bars) % ticks !== 0) continue;
+    if (bars >= score.bars) return bars;
+    fewest ??= bars;
+  }
+  return fewest;
 }
 
 function timeResult(
@@ -721,6 +860,56 @@ function spanOf(score: TrackScore, at: TimePosition): [number, number] {
     return [tick, tick];
   }
   return [barStartTick(score, at.bar - 1), barStartTick(score, at.bar) - 1];
+}
+
+/**
+ * `a tempo` steps back to the tempo before the last rit/accel; `tempo
+ * primo` steps to the song's start tempo. Both are plain steps.
+ */
+function tempoReturn(
+  score: TrackScore,
+  command: Extract<TimeCommand, { type: "tempo-return" }>,
+): TimeResult {
+  const name = command.primo ? "tempo primo" : "a tempo";
+  const events = [...(score.time?.tempo ?? [])].sort((a, b) => a.tick - b.tick);
+  const limit = command.at === undefined ? Infinity : tickOf(score, command.at);
+  let last = -1;
+  events.forEach((event, index) => {
+    if (event.ramp && event.tick < limit) last = index;
+  });
+  let tick: number;
+  if (command.at !== undefined) tick = limit;
+  else {
+    if (last < 0)
+      return {
+        ok: false,
+        message: `${name} · no rit or accel to come back from; say where: ${name} at bar <n>`,
+      };
+    // The ramp's own tick holds its target, so the step lands on the next
+    // barline after it.
+    tick = barStartTick(score, barAt(score, events[last]!.tick).bar + 1);
+  }
+  const where = command.at
+    ? placeLabel(command.at)
+    : `bar ${barAt(score, tick).bar + 1}`;
+  if (tick >= loopTicksOf(score))
+    return { ok: false, message: `${name} · ${where} is past the song end` };
+  if (tick === 0)
+    return {
+      ok: false,
+      message: `${name} · bar 1 already plays the start tempo`,
+    };
+  let bpm = score.tempoBpm;
+  if (!command.primo) {
+    if (last < 0)
+      return {
+        ok: false,
+        message: `a tempo · no rit or accel before ${where}; use tempo <bpm> at ${where}`,
+      };
+    bpm = last > 0 ? events[last - 1]!.bpm : score.tempoBpm;
+  }
+  const time = withTempoEvent(score.time, { tick, bpm });
+  return timeResult(score, time, `${name} · ${fmt(bpm)} BPM at ${where}`);
 }
 
 function placeLabel(at: TimePosition): string {

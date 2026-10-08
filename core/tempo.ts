@@ -10,8 +10,8 @@
  *   An event without `ramp` is a step. `ramp: "linear"` glides from the
  *   previous tempo into the event with an equal BPM change per beat;
  *   `ramp: "exp"` with an equal ratio per beat (even to the ear).
- * - `fermatas`: holds. The beat starting at `tick` lasts `1 + beats` times
- *   as long (it slows evenly, as a notation player or a MIDI file plays a
+ * - `fermatas`: holds. The beat starting at `tick` (the meter's felt beat,
+ *   see `fermataSpan`) lasts `1 + beats` times as long (it slows evenly, as a notation player or a MIDI file plays a
  *   fermata), and everything later moves back.
  * - `meter`: meter changes at bar boundaries (`bar` is 0-based). A bar lasts
  *   `beatsPerBar * 4 / beatUnit` beats. Without changes `beatsPerBar` of the
@@ -77,6 +77,21 @@ export type TrackTime = Readonly<{
   phase?: number;
   /** Track ticks per repetition; default the song loop. */
   cycle?: number;
+  /**
+   * Stepped phasing, as in Reich's Piano Phase: hold `hold` cycles in
+   * step, then move `shift` ticks ahead over `drift` cycles, and repeat.
+   * Replaces `rate`; absent is the constant drift `rate` gives.
+   */
+  steps?: PhaseSteps;
+}>;
+
+export type PhaseSteps = Readonly<{
+  /** Track ticks gained per step (120 = one sixteenth at 480 tpb). */
+  shift: number;
+  /** Whole cycles held locked between shifts, 0..64. */
+  hold: number;
+  /** Whole cycles over which each shift happens, 1..64. */
+  drift: number;
 }>;
 
 export const TIME_LIMITS = Object.freeze({
@@ -163,8 +178,8 @@ export function checkSongTime(
   if (score && time?.fermatas) {
     const map = new TimeMap({ ...score, ticksPerBeat, time });
     for (const fermata of time.fermatas) {
-      const held =
-        map.seconds(fermata.tick + ticksPerBeat) - map.seconds(fermata.tick);
+      const span = fermataSpan({ ...score, ticksPerBeat, time }, fermata.tick);
+      const held = map.seconds(fermata.tick + span) - map.seconds(fermata.tick);
       if (held > TIME_LIMITS.maxFermataSeconds + 1e-9)
         throw new TimeValidationError(
           `fermata at beat ${fermata.tick / ticksPerBeat} holds ${held.toFixed(1)} s; at most ${TIME_LIMITS.maxFermataSeconds} s (MIDI tempo limit), so use fewer beats or a faster tempo`,
@@ -190,8 +205,13 @@ export function normalizeTrackTime(
   label = "track time",
 ): TrackTime | undefined {
   if (input === undefined || input === null) return undefined;
-  const record = recordOf(input, label, ["rate", "phase", "cycle"]);
-  const out: { rate?: number; phase?: number; cycle?: number } = {};
+  const record = recordOf(input, label, ["rate", "phase", "cycle", "steps"]);
+  const out: {
+    rate?: number;
+    phase?: number;
+    cycle?: number;
+    steps?: PhaseSteps;
+  } = {};
   if (record.rate !== undefined) {
     const rate = record.rate;
     if (
@@ -230,7 +250,48 @@ export function normalizeTrackTime(
       );
     out.cycle = cycle;
   }
+  if (record.steps !== undefined) {
+    if (out.rate !== undefined)
+      throw new TimeValidationError(`${label} takes rate or steps, not both`);
+    if (out.cycle === undefined)
+      throw new TimeValidationError(`${label} steps need a cycle`);
+    out.steps = normalizePhaseSteps(record.steps, out.cycle, `${label} steps`);
+  }
   return Object.keys(out).length > 0 ? Object.freeze(out) : undefined;
+}
+
+function normalizePhaseSteps(
+  input: unknown,
+  cycle: number,
+  label: string,
+): PhaseSteps {
+  const record = recordOf(input, label, ["shift", "hold", "drift"]);
+  const int = (value: unknown, min: number, max: number) =>
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= min &&
+    value <= max;
+  if (!int(record.shift, 1, cycle))
+    throw new TimeValidationError(
+      `${label} shift must be an integer between 1 and the cycle (${cycle} ticks)`,
+    );
+  if (!int(record.hold, 0, 64))
+    throw new TimeValidationError(`${label} hold must be 0..64 cycles`);
+  if (!int(record.drift, 1, 64))
+    throw new TimeValidationError(`${label} drift must be 1..64 cycles`);
+  return Object.freeze({
+    shift: record.shift as number,
+    hold: record.hold as number,
+    drift: record.drift as number,
+  });
+}
+
+/**
+ * Song ticks for one stepped-phasing turn: every shift until the track is
+ * a whole cycle ahead and back in step.
+ */
+export function phaseStepsTicks(cycle: number, steps: PhaseSteps): number {
+  return Math.ceil(cycle / steps.shift) * (steps.hold + steps.drift) * cycle;
 }
 
 function normalizeTempoEvent(input: unknown, label: string): TempoEvent {
@@ -519,6 +580,17 @@ export function meterLabel(
  * unit in compound meters (6/8, 9/8, 12/8, 6/16 … click three units), the
  * way a Standard MIDI File's 6/8 example clicks every dotted quarter.
  */
+/**
+ * Ticks a fermata at `tick` stretches: the felt beat of the meter there,
+ * so a dotted quarter in 6/8 or 12/8 and a half in 2/2, never less than a
+ * quarter note (the 4/4 beat, and every score without meter changes).
+ */
+export function fermataSpan(score: TimeScore, tick: number): number {
+  const tpb = score.ticksPerBeat;
+  if (!score.time?.meter) return tpb;
+  return Math.max(tpb, clickTicksOf(barAt(score, tick), tpb));
+}
+
 export function clickTicksOf(
   segment: Pick<MeterSegment, "beatsPerBar" | "beatUnit">,
   ticksPerBeat: number,
@@ -641,6 +713,8 @@ export class TimeMap {
   readonly ticksPerBeat: number;
   readonly startBpm: number;
   private readonly pieces: readonly Piece[];
+  /** Ticks each fermata stretches, by its tick. */
+  private readonly spans = new Map<number, number>();
 
   constructor(score: TimeScore) {
     this.ticksPerBeat = score.ticksPerBeat;
@@ -685,16 +759,22 @@ export class TimeMap {
     });
     // Pieces split segments where a fermata beat starts or ends.
     const fermatas = score.time?.fermatas ?? [];
+    const spans = this.spans;
+    for (const fermata of fermatas)
+      spans.set(fermata.tick, fermataSpan(score, fermata.tick));
     const starts = new Set<number>(segments.map((entry) => entry.start));
     for (const fermata of fermatas) {
       starts.add(fermata.tick);
-      starts.add(fermata.tick + tpb);
+      starts.add(fermata.tick + spans.get(fermata.tick)!);
     }
     const ticks = [...starts].sort((a, b) => a - b);
     const stretchAt = (tick: number) => {
       let stretch = 1;
       for (const fermata of fermatas)
-        if (fermata.tick <= tick && tick < fermata.tick + tpb)
+        if (
+          fermata.tick <= tick &&
+          tick < fermata.tick + spans.get(fermata.tick)!
+        )
           stretch *= 1 + fermata.beats;
       return stretch;
     };
@@ -794,11 +874,18 @@ export class TimeMap {
     );
   }
 
+  /** Tempo at `tick` ignoring fermatas: what a metronome mark there reads. */
+  tempoAt(tick: number): number {
+    if (tick < 0) return this.startBpm;
+    const segment = this.pieceAt(tick).segment;
+    return segmentBpm(segment, (tick - segment.origin) / this.ticksPerBeat);
+  }
+
   /** Extra seconds a fermata adds to the beat starting at `tick`, else 0. */
   holdAt(tick: number): number {
     const piece = this.pieceAt(tick);
     if (piece.tick !== tick || piece.stretch === 1) return 0;
-    const end = tick + this.ticksPerBeat;
+    const end = tick + (this.spans.get(tick) ?? this.ticksPerBeat);
     const span = this.seconds(end) - piece.seconds;
     return span - span / piece.stretch;
   }
@@ -847,6 +934,71 @@ export function loopSecondsOf(score: TimeScore): number {
   if (!score.time?.meter)
     return (score.bars * score.beatsPerBar * 60) / score.tempoBpm;
   return ((loopTicksOf(score) / score.ticksPerBeat) * 60) / score.tempoBpm;
+}
+
+/**
+ * The song's time from bar `startBar` for `bars` bars, rebased so that bar
+ * is tick 0: the start tempo is the tempo there (a ramp running through it
+ * keeps ramping to its target), later tempo events and fermatas move back
+ * by the start tick, and the meter at `startBar` becomes the opening meter.
+ * Audition and preview loops use it so a slice plays as it does in the song.
+ */
+export function songTimeSlice(
+  score: TimeScore,
+  startBar: number,
+  bars: number,
+): Readonly<{ tempoBpm: number; time?: SongTime }> {
+  const time = score.time;
+  if (!time || startBar <= 0)
+    return { tempoBpm: score.tempoBpm, ...(time ? { time } : {}) };
+  const start = barStartTick(score, startBar);
+  const end = barStartTick(score, startBar + bars);
+  const map = timeMapFor(score);
+  const tempoBpm = map ? map.tempoAt(start) : score.tempoBpm;
+  const tempo: TempoEvent[] = [];
+  for (const event of time.tempo ?? []) {
+    if (event.tick <= start) continue;
+    tempo.push({ ...event, tick: event.tick - start });
+    // The first event at or past the end still shapes a ramp through it.
+    if (event.tick >= end) break;
+  }
+  const fermatas = (time.fermatas ?? [])
+    .filter((fermata) => fermata.tick >= start && fermata.tick < end)
+    .map((fermata) => ({ ...fermata, tick: fermata.tick - start }));
+  let meter: MeterChange[] | undefined;
+  if (time.meter) {
+    const opening = barAt(score, start);
+    meter = [
+      {
+        bar: 0,
+        beatsPerBar: opening.beatsPerBar,
+        ...(opening.beatUnit !== 4 ? { beatUnit: opening.beatUnit } : {}),
+      },
+    ];
+    for (const change of time.meter)
+      if (change.bar > startBar && change.bar < startBar + bars)
+        meter.push({ ...change, bar: change.bar - startBar });
+  }
+  const sliced = normalizeSongTime({
+    ...(tempo.length ? { tempo } : {}),
+    ...(meter ? { meter } : {}),
+    ...(fermatas.length ? { fermatas } : {}),
+  });
+  return { tempoBpm, ...(sliced ? { time: sliced } : {}) };
+}
+
+/**
+ * The slowest the beat ever runs: the lowest tempo mark, slowed by the
+ * longest fermata. `tempoBpm` exactly when the song has no tempo map.
+ */
+export function slowestBpmOf(score: TimeScore): number {
+  if (!score.time?.tempo && !score.time?.fermatas) return score.tempoBpm;
+  let bpm = score.tempoBpm;
+  for (const event of score.time.tempo ?? []) bpm = Math.min(bpm, event.bpm);
+  let stretch = 1;
+  for (const fermata of score.time.fermatas ?? [])
+    stretch = Math.max(stretch, 1 + fermata.beats);
+  return bpm / stretch;
 }
 
 /** True when ticks do not map to seconds at one constant rate. */
@@ -975,8 +1127,9 @@ function roundBpm(bpm: number): number {
 
 /**
  * The rate that makes a track gain `cycles` whole cycles per song loop, so
- * a phasing pair drifts apart and lines up again exactly at the loop end
- * (Reich's Piano Phase gains one cycle; 13/12 over twelve cycles).
+ * a phasing pair drifts apart and lines up again exactly at the loop end.
+ * This is the constant tape drift of Reich's It's Gonna Rain and Come Out;
+ * Piano Phase's shift-and-hold process is `TrackTime.steps`.
  */
 export function driftRate(
   loopTicks: number,
@@ -1036,6 +1189,18 @@ export function performedNotes<N extends PlaceableNote>(
     const phase = time.phase ?? 0;
     const cycle = time.cycle ?? loop;
     if (note.startTick >= cycle) continue;
+    if (time.steps) {
+      repeats = placeStepped(
+        note,
+        cycle,
+        phase,
+        time.steps,
+        loop,
+        out,
+        repeats,
+      );
+      continue;
+    }
     const period = cycle / rate;
     const offset = phase + note.startTick / rate;
     const first = Math.ceil((0 - offset) / period - 1e-9);
@@ -1062,6 +1227,52 @@ export function performedNotes<N extends PlaceableNote>(
   const frozen = Object.freeze(out);
   placedCache.set(score, frozen);
   return frozen;
+}
+
+/**
+ * Stepped phasing: a step is `hold` cycles in song time at rate 1, then
+ * `drift` cycles in which the track plays `shift` ticks more. Track tick
+ * `tau` maps back to song time through that piecewise-linear clock.
+ */
+function placeStepped<N extends PlaceableNote>(
+  note: N,
+  cycle: number,
+  phase: number,
+  steps: PhaseSteps,
+  loop: number,
+  out: N[],
+  repeats: number,
+): number {
+  const held = steps.hold * cycle;
+  const drifting = steps.drift * cycle;
+  const song = held + drifting;
+  const track = song + steps.shift;
+  const squeeze = drifting / (drifting + steps.shift);
+  const songTick = (tau: number) => {
+    const step = Math.floor(tau / track);
+    const within = tau - step * track;
+    return (
+      step * song + (within < held ? within : held + (within - held) * squeeze)
+    );
+  };
+  // The clock repeats every step, so earlier cycles fill the loop's start
+  // when the phase moves it later (as the plain placement wraps).
+  const first = Math.floor((-phase * track) / song / cycle) - 2;
+  for (let k = first; ; k += 1) {
+    if (repeats >= TIME_LIMITS.maxPerformedNotes) break;
+    const tau = k * cycle + note.startTick;
+    const startTick = songTick(tau) + phase;
+    if (startTick >= loop) break;
+    if (startTick < 0) continue;
+    const within = tau - Math.floor(tau / track) * track;
+    out.push({
+      ...note,
+      startTick,
+      durationTicks: note.durationTicks * (within < held ? 1 : squeeze),
+    });
+    repeats += 1;
+  }
+  return repeats;
 }
 
 /** True when any track has its own `time`. */

@@ -10,13 +10,13 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ### Tempo and meter
 
-- **Tempo maps.** `tempo 90 at bar 9` steps the tempo; `ramp` or `exp` glides into it (linear or equal-ratio per beat). `rit 4 bars to 80` and `accel 8 bars to 174 at bar 9` write a ritardando or accelerando (75% / 133% over the last 2 bars by default). `tempo map` lists the changes. Stored as the optional song `time.tempo`; `tempoBpm` stays the start tempo.
-- **Fermatas.** `fermata at 31 2` holds a beat for 2 extra beats: that beat slows evenly to three times its length, in the WAV and the MIDI export alike. A held beat lasts at most 16.777 s, the slowest tempo a MIDI file can write.
+- **Tempo maps.** `tempo 90 at bar 9` steps the tempo; `ramp` or `exp` glides into it (linear or equal-ratio per beat). `rit 4 bars to 80` and `accel 8 bars to 174 at bar 9` write a ritardando or accelerando (75% / 133% over the last 2 bars by default). `a tempo` and `tempo primo` step back. `tempo map` lists the changes. Stored as the optional song `time.tempo`; `tempoBpm` stays the start tempo.
+- **Fermatas.** `fermata at 31 2` holds a beat (the dotted quarter in 6/8) for 2 extra beats: that beat slows evenly to three times its length, in the WAV and the MIDI export alike. A held beat lasts at most 16.777 s, the slowest tempo a MIDI file can write.
 - **Meter changes.** `meter 7/8 at bar 5` changes the meter on a bar line. The click, count-in, highway bar lines and numbers, and play-mode bar erase follow it.
-- **Polytempo, polymeter and phasing.** `track rate 3/2`, `track phase 0.5`, `track cycle 3` and `track phasing 3 [over 48]` give a track its own tempo ratio, offset and loop length, so two identical loops drift apart and realign as in Reich's _Piano Phase_.
+- **Polytempo, polymeter and phasing.** `track rate 3/2`, `track phase 0.5`, `track cycle 3` and `track phasing 4 [over 16]` give a track its own tempo ratio, offset and loop length, so two identical loops drift apart and realign, as in Reich's _Come Out_. `track phasing 3 hold 8` steps instead: hold in step, move a sixteenth ahead, hold again, as in _Piano Phase_.
 - **One time map everywhere.** Ticks stay score time; the offline renderer, live engine and audition loop, transport clock, click and count-in, recording and the highway convert through the same map.
 - **MIDI export.** `/export song.mid` and `dawg render song.mid` write a Standard MIDI File with tempo and time-signature meta events; ramps become sixteenth-note tempo steps that land on the same seconds as the WAV.
-- **Menu, agent and SDK.** Project › Tempo & meter (`/menu tempo`), the agent's `set_time` tool, and SDK 1.14.0 `tempo`, `ramp`, `rit`, `accel`, `fermata`, `meter` and `phasing`. Projects without these fields load, print and render byte-identically.
+- **Menu, agent and SDK.** Project › Tempo & meter (`/menu tempo`), the agent's `set_time` tool, and SDK 1.14.0 `tempo`, `ramp`, `rit`, `accel`, `fermata`, `meter` and `phasing`, plus SDK 1.19.0 `aTempo`, `tempoPrimo` and `stepPhasing`; `song()` refuses marks past the song end and checks rit/accel direction and fermata length. Projects without these fields load, print and render byte-identically.
 
 ### Performance and expression
 

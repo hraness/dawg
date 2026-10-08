@@ -9,6 +9,7 @@ import {
   clamp,
   fxReader,
   lfoHz,
+  tempoAtSample,
   readFractional,
   type EffectContext,
 } from "./common.ts";
@@ -57,7 +58,10 @@ export function applyPhaser(
   };
   for (let index = 0; index < left.length; index += 1) {
     if (index % CONTROL_SAMPLES === 0) {
-      phasor.setHz(lfoHz(sync, rate.at(index), context.tempoBpm), sampleRate);
+      phasor.setHz(
+        lfoHz(sync, rate.at(index), tempoAtSample(context, index)),
+        sampleRate,
+      );
       if (depth.automated) amount = depth.at(index);
       const frequency = clamp(
         center + (sweep / 2) * Math.sin(2 * Math.PI * phasor.phase),

@@ -12,7 +12,9 @@ import {
   loopTicksOf,
   normalizeSongTime,
   normalizeTrackTime,
+  fermataSpan,
   performedNotes,
+  phaseStepsTicks,
   secondsAtTick,
   tickAtSeconds,
   timeMapFor,
@@ -316,6 +318,49 @@ describe("track time", () => {
       0, 768, 1536, 2304, 3072,
     ]);
     expect(placed[0]!.durationTicks).toBe(240 / 1.25);
+  });
+
+  test("stepped phasing holds in step, shifts, then holds again", () => {
+    // One-beat cycle, a sixteenth per step, hold 2 cycles, drift over 1.
+    const score = {
+      ...timed(undefined, { bars: 2 }),
+      tracks: [
+        {
+          id: "b",
+          time: { cycle: TPB, steps: { shift: 120, hold: 2, drift: 1 } },
+        },
+      ],
+      notes: [note("a", 0)],
+    };
+    const starts = performedNotes(score).map((n) => n.startTick);
+    // Held: on the beat. Drifting: the third note comes 1/16 early.
+    // Held again: every beat 1/16 ahead.
+    expect(starts.slice(0, 6)).toEqual([0, 480, 960, 1344, 1800, 2280]);
+    expect(phaseStepsTicks(TPB, { shift: 120, hold: 2, drift: 1 })).toBe(
+      4 * 3 * TPB,
+    );
+  });
+
+  test("a fermata holds the felt beat of the meter", () => {
+    const base = { tempoBpm: 60, beatsPerBar: 4, bars: 4, ticksPerBeat: TPB };
+    const plain = { ...base, time: { fermatas: [{ tick: 0, beats: 1 }] } };
+    expect(fermataSpan(plain, 0)).toBe(TPB);
+    expect(secondsAtTick(plain, TPB)).toBe(2);
+    const sixEight = {
+      ...base,
+      time: {
+        meter: [{ bar: 0, beatsPerBar: 6, beatUnit: 8 }],
+        fermatas: [{ tick: 0, beats: 1 }],
+      },
+    };
+    expect(fermataSpan(sixEight, 0)).toBe(1.5 * TPB);
+    // The whole dotted quarter doubles: 1.5 s becomes 3 s.
+    expect(secondsAtTick(sixEight, 1.5 * TPB)).toBeCloseTo(3, 9);
+    const sevenEight = {
+      ...base,
+      time: { meter: [{ bar: 0, beatsPerBar: 7, beatUnit: 8 }] },
+    };
+    expect(fermataSpan(sevenEight, 0)).toBe(TPB);
   });
 
   test("phase shifts the pattern later and wraps it into the loop", () => {

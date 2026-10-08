@@ -66,7 +66,11 @@ import {
   orbitOf,
   type Ducker,
 } from "./effects/duck.ts";
-import { loopSecondsOf, performedNotes } from "../../core/tempo.ts";
+import {
+  loopSecondsOf,
+  performedNotes,
+  slowestBpmOf,
+} from "../../core/tempo.ts";
 import { sampleWarpFor, warpedSpan, type SampleWarp } from "./warp.ts";
 import { applyMaster, type MasterReport } from "./master.ts";
 import type { SongMaster } from "../../core/master.ts";
@@ -282,9 +286,7 @@ export class StemRenderer {
   public render(score: TrackScore, options: RenderOptions = {}): RenderedAudio {
     const sampleRate = clampSampleRate(options.sampleRate);
     const maxSeconds = Math.max(1, Math.min(60, options.maxSeconds ?? 30));
-    const loopSeconds = score.time
-      ? loopSecondsOf(score)
-      : (score.bars * score.beatsPerBar * 60) / score.tempoBpm;
+    const loopSeconds = loopSecondsOf(score);
     const bank = options.samples ?? EMPTY_SAMPLE_BANK;
     const warp = sampleWarpFor(score, sampleRate);
     const reverbTail = Math.max(
@@ -319,7 +321,10 @@ export class StemRenderer {
           reverbTail +
           Math.max(
             0,
-            ...score.tracks.map((track) => delayTailFor(track, score.tempoBpm)),
+            // The slowest tempo in the map gives the longest echoes.
+            ...score.tracks.map((track) =>
+              delayTailFor(track, slowestBpmOf(score)),
+            ),
           ),
       );
       samples = frames + Math.ceil(tailSeconds * sampleRate);
