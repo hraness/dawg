@@ -216,9 +216,7 @@ export function paintDrawer(
     const keep = "[keep]";
     const revert = "[revert]";
     const buttons = view.dirty ? `${keep} ${revert}` : "";
-    const state = view.dirty
-      ? `${options.unicode ? "●" : "*"} staged`
-      : "";
+    const state = view.dirty ? `${options.unicode ? "●" : "*"} staged` : "";
     const status = [view.status, state].filter(Boolean).join(" · ");
     const right = [status, buttons].filter(Boolean).join("  ");
     const rightWidth = displayWidth(right);
@@ -231,10 +229,15 @@ export function paintDrawer(
     );
     if (right && rightWidth + 4 < width - displayWidth(view.title)) {
       const rx = width - 3 - rightWidth;
-      buffer.text(rx - 1, top, ` ${status}${status && buttons ? "  " : ""}`, on(view.dirty ? roles.warning : roles.muted));
+      buffer.text(
+        rx - 1,
+        top,
+        ` ${status}${status && buttons ? "  " : ""}`,
+        on(view.dirty ? roles.warning : roles.muted),
+      );
       if (buttons) {
         const kx = width - 3 - displayWidth(buttons);
-        buffer.text(kx, top, keep, on({ ...roles.success, bold: true }));
+        buffer.text(kx, top, `${keep} `, on({ ...roles.success, bold: true }));
         buffer.text(kx + keep.length + 1, top, revert, on(roles.muted));
         hits?.add(kx, top, keep.length, 1, { kind: "fader-keep" });
         hits?.add(kx + keep.length + 1, top, revert.length, 1, {
@@ -463,7 +466,11 @@ function paintOptions(
         ? on({ ...roles.muted, underline: true })
         : on(roles.muted);
     buffer.text(x, y, ` ${option} `, style);
-    hits?.add(x, y, width, 1, { kind: "fader-option", field: index, option: at });
+    hits?.add(x, y, width, 1, {
+      kind: "fader-option",
+      field: index,
+      option: at,
+    });
     x += width;
     if (at < field.options.length - 1 && x + 1 < right)
       x += buffer.text(x, y, glyphs.sep, on(roles.faint));

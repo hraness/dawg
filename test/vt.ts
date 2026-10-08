@@ -33,6 +33,8 @@ export class VirtualTerminal {
   cursorVisible = true;
   altScreen = false;
   bracketedPaste = false;
+  /** DEC mouse modes on (1000 clicks, 1002 drags, 1006 SGR). */
+  mouseModes = new Set<string>();
   private style: VtStyle = {};
   private pending = "";
 
@@ -140,6 +142,10 @@ export class VirtualTerminal {
           this.clear();
         }
         if (mode === "2004") this.bracketedPaste = on;
+        if (mode === "1000" || mode === "1002" || mode === "1006") {
+          if (on) this.mouseModes.add(mode);
+          else this.mouseModes.delete(mode);
+        }
       }
       return;
     }

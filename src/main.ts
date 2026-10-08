@@ -541,6 +541,12 @@ let requestFrame: () => void = () => undefined;
 let runPromptLater: (command: string) => void = () => undefined;
 /** The fader drawer's focus and typing, while one is open over the menu. */
 let fader: FaderState | undefined;
+const KEY_UP = "\u001b[A";
+const KEY_DOWN = "\u001b[B";
+/** The fader bar a left-button drag started on. */
+let dragging: { field: number; left: number; width: number } | undefined;
+/** The open drawer came from a command, not the menu. */
+let faderStandalone = false;
 /** Per-field sequence: a drag drops stale stages that would land late. */
 const faderSeq = new Map<string, number>();
 /** The decoded sampler voices, for play mode's live voices. */
@@ -1586,7 +1592,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (/^\/?(?:volume|pan|fx\s+\S+(?:\s+\S+)?)$/i.test(command)) {
     const label = menu.showFader(menuContext(), command);
     if (label) {
-      openFader(label);
+      openFader(label, true);
       refreshMenu();
       return ok(`${label} · ←→ adjust · enter keep · esc revert`);
     }
@@ -3230,8 +3236,13 @@ function refreshMenu(): void {
 // ── the fader drawer ─────────────────────────────────────────────────
 
 /** Enter on a number row (or a bare `volume`, `fx filter`): the drawer. */
-function openFader(label: string): void {
+/**
+ * Open the drawer on `label`. `standalone` drawers came from a command or a
+ * click, not from inside the menu, so closing one closes the menu too.
+ */
+function openFader(label: string, standalone = false): void {
   fader = { label };
+  faderStandalone = standalone;
   const loop = auditionController();
   if (!loop.dirtyEdits) loop.committedNow(score);
 }
@@ -3239,6 +3250,13 @@ function openFader(label: string): void {
 function closeFader(): void {
   fader = undefined;
   tui.drawer = undefined;
+  if (faderStandalone && menu.open) {
+    faderStandalone = false;
+    menu.close();
+    tui.closePicker();
+    stopAuditionLoop();
+  }
+  faderStandalone = false;
 }
 
 function faderKeyOptions(): { dirty: boolean; audition: boolean } {
@@ -3287,9 +3305,6 @@ function faderOutcome(result: FaderResult): void {
 }
 
 // ── the mouse ────────────────────────────────────────────────────────
-
-const KEY_UP = "\u001b[A";
-const KEY_DOWN = "\u001b[B";
 
 /**
  * One mouse report, hit-tested against the regions the last frame painted.
@@ -3377,7 +3392,9 @@ function mouseInput(event: MouseEvent): string[] {
         break;
       }
       case "fader-keep":
-        result = auditionLoop?.dirtyEdits ? { type: "keep" } : { type: "close" };
+        result = auditionLoop?.dirtyEdits
+          ? { type: "keep" }
+          : { type: "close" };
         break;
       case "fader-revert":
         result = auditionLoop?.dirtyEdits
@@ -3425,9 +3442,6 @@ function mouseInput(event: MouseEvent): string[] {
       return [];
   }
 }
-
-/** The fader bar a left-button drag started on. */
-let dragging: { field: number; left: number; width: number } | undefined;
 
 function playSession(): PlaySession {
   if (play && play.track === requestedTrack) return play;
