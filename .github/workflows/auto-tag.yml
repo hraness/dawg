@@ -1,9 +1,12 @@
 name: Tag release
 
-# Once a version bump passes Check on main, this creates its annotated
-# v<version> tag, which starts the tag-triggered release workflow. The tag
-# comes from the hraness-release-tagger GitHub App because tags pushed with
-# GITHUB_TOKEN do not trigger workflows.
+# When Check passes on a main commit whose package.json version has no
+# v<version> tag yet, this creates that annotated tag, which starts the
+# tag-triggered release workflow. Keying on the missing tag, not on a version
+# change in the last commit, means a version bump whose own Check failed is
+# still tagged by the next green commit on main. The tag comes from the
+# hraness-release-tagger GitHub App because tags pushed with GITHUB_TOKEN do
+# not trigger workflows.
 
 on:
   workflow_run:
@@ -27,10 +30,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 2
+          fetch-depth: 0
+          fetch-tags: true
           persist-credentials: false
           ref: ${{ github.event.workflow_run.head_sha }}
-      - name: Detect version bump
+      - name: Detect untagged version
         id: version
         run: |
           set -euo pipefail
@@ -40,11 +44,19 @@ jobs:
             echo "Version $version is not a stable release; nothing to tag."
             exit 0
           fi
-          previous="$(git show HEAD^:package.json 2>/dev/null | read_version || true)"
-          if [[ "$previous" == "$version" ]]; then
-            echo "Version $version is unchanged; nothing to tag."
+          if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+            echo "v$version already exists; nothing to tag."
             exit 0
           fi
+          # Only a version newer than every release counts, so re-running Check
+          # on an old commit (for example one at the never-tagged 0.1.0) does
+          # not release it.
+          latest="$(git tag -l 'v*' | grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' | sort -V | tail -n 1 || true)"
+          if [[ -n "$latest" && "$(printf '%s\n%s\n' "$latest" "v$version" | sort -V | tail -n 1)" != "v$version" ]]; then
+            echo "v$version is older than the latest release $latest; nothing to tag."
+            exit 0
+          fi
+          echo "v$version is newer than ${latest:-every release} and has no tag yet; tagging this green commit."
           printf 'tag=v%s\n' "$version" >> "$GITHUB_OUTPUT"
       - name: Mint tagger token
         if: steps.version.outputs.tag
