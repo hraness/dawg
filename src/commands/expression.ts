@@ -5,17 +5,20 @@
  *   art <articulation>|off [target]          staccato legato accent tenuto marcato ghost
  *   bend <cents>|scoop|fall|doit|<at:cents>…|off [target]
  *   vibrato <rate> <depth> [<delay>]|off [target]
- *   glide <time>|off <target>                portamento into each note
- *   glide <time>|off [legato|mono|poly]      the track's glide (`glide mono`)
- *   pedal <a>-<b>…|bars [<a>-<b>]|down|half|up <beat>|off
+ *   glide <ms>|off <target>                  portamento into each note
+ *   glide <ms>|0|off [legato|mono|poly]      the track's glide (`glide mono`)
+ *   pedal <beat>-<beat>…|bars [<bar>-<bar>]|down|half|up <beat>|off
  *   velcurve linear|soft|hard|fixed [<v>]
  *   humanize <ms> [<vel%> [<len%>]] [seed <n>]|on|off|reseed|seed <n>
+ *   humanize <ms> [<vel%> [<len%>]]|exact|off <target>   per-note amounts
  *   expression                               what the track does
  *
  * A target is `all` (the default), `bar <n>`, `bars <a>-<b>` (1-based, notes
  * that start there) or note ids. Beats are 0-based like `automate`. Times
- * take `ms` or seconds (`glide 60ms`, `glide 0.06`). Parsing is pure;
- * applying returns the next score and the session event.
+ * are milliseconds when bare (`glide 60`) or take a unit (`glide 60ms`,
+ * `glide 0.06s`); a bare fraction like `glide 0.06` is rejected as a unit
+ * slip. Parsing is pure; applying returns the next score and the session
+ * event.
  */
 import {
   ARTICULATIONS,
@@ -37,6 +40,7 @@ import {
   type GlideMode,
   type Humanize,
   type NoteExpressionPatch,
+  type NoteHumanize,
   type NoteVibrato,
   type PedalEvent,
   type PedalState,
@@ -49,6 +53,7 @@ import {
   type Note,
   type Track,
 } from "../../core/score.ts";
+import { barStartTick, loopTicksOf } from "../../core/tempo.ts";
 
 export type NoteTarget =
   | { type: "all" }
@@ -79,9 +84,17 @@ export type ExpressionCommand =
       length: number;
       seed?: number;
     }
+  /** Per-note humanize: amounts replace the track's; `{}` keeps notes exact. */
+  | {
+      type: "note-humanize";
+      humanize: NoteHumanize | null;
+      target: NoteTarget;
+    }
   | { type: "humanize-off" }
   | { type: "humanize-seed"; seed?: number }
-  | { type: "show" };
+  | { type: "show" }
+  /** Recognised but unusable (`glide 0.06`): fail with `message`. */
+  | { type: "invalid"; message: string };
 
 /** Named bend shapes (jazz brass and vocal idioms), in cents. */
 export const BEND_SHAPES: Readonly<Record<string, readonly BendPoint[]>> =
@@ -236,7 +249,13 @@ function parseGlide(words: string[]): ExpressionCommand | undefined {
   if (!first) return undefined;
   const mode = GLIDE_MODES.find((candidate) => candidate === first);
   if (mode && rest.length === 0) return { type: "track-glide", mode };
-  // A bare number is milliseconds here (`glide 60`); `0.06s` is seconds.
+  // A bare number is milliseconds here (`glide 60`); `0.06s` is seconds. A
+  // bare fraction of a millisecond is a unit slip, not a glide.
+  if (NUMBER.test(first) && Number(first) > 0 && Number(first) < 1)
+    return {
+      type: "invalid",
+      message: `glide · a bare number is ms · write glide ${Math.round(Number(first) * 1000)}ms or glide ${first}s`,
+    };
   const time = OFF.test(first)
     ? null
     : NUMBER.test(first)
@@ -245,7 +264,9 @@ function parseGlide(words: string[]): ExpressionCommand | undefined {
   if (time === undefined || (time !== null && time < 0)) return undefined;
   if (time !== null && time > EXPRESSION_LIMITS.maxGlideSeconds)
     return undefined;
-  if (rest.length === 0) return { type: "track-glide", time };
+  // `glide 0` on the track turns glide off; on a target it means never.
+  if (rest.length === 0)
+    return { type: "track-glide", time: time === 0 ? null : time };
   const restMode = GLIDE_MODES.find((candidate) => candidate === rest[0]);
   if (restMode && rest.length === 1)
     return time === null
@@ -313,6 +334,18 @@ function parseHumanize(words: string[]): ExpressionCommand | undefined {
   const [first, ...rest] = words;
   if (!first) return { type: "show" };
   if (OFF.test(first) && rest.length === 0) return { type: "humanize-off" };
+  // `humanize off|exact <target>`: clear the notes' own humanize, or keep
+  // them exact (`{}`) whatever the track does.
+  if ((OFF.test(first) || first === "exact") && rest.length > 0) {
+    const target = parseNoteTarget(rest);
+    return target
+      ? {
+          type: "note-humanize",
+          humanize: OFF.test(first) ? null : {},
+          target,
+        }
+      : undefined;
+  }
   if (first === "on" && rest.length === 0)
     return { type: "humanize", ...DEFAULT_HUMANIZE, length: 0 };
   if (first === "reseed" && rest.length === 0) return { type: "humanize-seed" };
@@ -322,6 +355,7 @@ function parseHumanize(words: string[]): ExpressionCommand | undefined {
       : undefined;
   const amounts: number[] = [];
   let seed: number | undefined;
+  let target: NoteTarget | undefined;
   for (let index = 0; index < words.length; index += 1) {
     const word = words[index]!;
     if (word === "seed") {
@@ -332,9 +366,16 @@ function parseHumanize(words: string[]): ExpressionCommand | undefined {
       break;
     }
     const amount = word.replace(/(ms|%)$/i, "");
-    if (!NUMBER.test(amount) || Number(amount) < 0 || amounts.length === 3)
-      return undefined;
-    amounts.push(Number(amount));
+    if (NUMBER.test(amount) && amounts.length < 3) {
+      if (Number(amount) < 0) return undefined;
+      amounts.push(Number(amount));
+      continue;
+    }
+    // Anything after the amounts is a note target (`humanize 10 8 bars 2-3`).
+    if (amounts.length === 0) return undefined;
+    target = parseNoteTarget(words.slice(index));
+    if (!target) return undefined;
+    break;
   }
   if (amounts.length === 0) return undefined;
   const [timing = 0, velocity = 0, length = 0] = amounts;
@@ -345,6 +386,16 @@ function parseHumanize(words: string[]): ExpressionCommand | undefined {
     (seed !== undefined && seed > EXPRESSION_LIMITS.maxSeed)
   )
     return undefined;
+  if (target)
+    return {
+      type: "note-humanize",
+      humanize: {
+        ...(timing > 0 ? { timing } : {}),
+        ...(velocity > 0 ? { velocity } : {}),
+        ...(length > 0 ? { length } : {}),
+      },
+      target,
+    };
   return {
     type: "humanize",
     timing,
@@ -425,9 +476,9 @@ export function targetNotes(
   }
   const notes = score.notes.filter((note) => note.trackId === trackId);
   if (target.type === "all") return notes;
-  const barTicks = score.beatsPerBar * score.ticksPerBeat;
-  const from = (target.from - 1) * barTicks;
-  const to = target.to * barTicks;
+  // Bars follow the meter map: bar n runs from the start of bar n to n + 1.
+  const from = barStartTick(score, target.from - 1);
+  const to = barStartTick(score, target.to);
   return notes.filter((note) => note.startTick >= from && note.startTick < to);
 }
 
@@ -496,6 +547,10 @@ export function describeHumanize(humanize: Humanize | undefined): string {
   return `±${humanize.timing ?? 0} ms · vel ±${humanize.velocity ?? 0}% · len ±${humanize.length ?? 0}% · seed ${humanize.seed}`;
 }
 
+function describeNoteHumanize(humanize: NoteHumanize): string {
+  return `±${humanize.timing ?? 0} ms · vel ±${humanize.velocity ?? 0}% · len ±${humanize.length ?? 0}%`;
+}
+
 /** One line for the track's performance settings and note expression. */
 export function describePerformance(score: TrackScore, track: Track): string {
   const notes = score.notes.filter((note) => note.trackId === track.id);
@@ -529,6 +584,15 @@ function noteResult(
   value: string,
 ): ExpressionResult {
   const notes = targetNotes(score, trackId, target);
+  if (target.type === "ids") {
+    const known = new Set(notes.map((note) => note.id));
+    const unknown = target.ids.find((id) => !known.has(id));
+    if (unknown !== undefined)
+      return {
+        ok: false,
+        message: `${label} · unknown note id ${unknown} · targets: all, bar 3, bars 2-4, ids`,
+      };
+  }
   if (notes.length === 0)
     return {
       ok: false,
@@ -590,19 +654,18 @@ export function barPedal(
   from = 1,
   to = score.bars,
 ): PedalEvent[] {
-  const barTicks = score.beatsPerBar * score.ticksPerBeat;
   // Legato (syncopated) pedalling: lift at the bar line, catch the new
   // harmony a 32nd note later so the previous chord does not blur into it.
   const catchTicks = Math.max(1, Math.round(score.ticksPerBeat / 8));
   const events: PedalEvent[] = [];
   const last = Math.min(to, score.bars);
   for (let bar = from; bar <= last; bar += 1) {
-    const start = (bar - 1) * barTicks;
+    const start = barStartTick(score, bar - 1);
     if (bar > from) events.push({ tick: start, state: "up" });
     events.push({ tick: start + (bar > from ? catchTicks : 0), state: "down" });
   }
   events.push({
-    tick: Math.min(last * barTicks, score.bars * barTicks),
+    tick: Math.min(barStartTick(score, last), loopTicksOf(score)),
     state: "up",
   });
   return events;
@@ -627,10 +690,12 @@ export function applyExpressionCommand(
   const track = score.tracks.find((candidate) => candidate.id === trackId);
   if (!track) return { ok: false, message: `no track · ${trackId}` };
   const tpb = score.ticksPerBeat;
-  const maxTick = score.bars * score.beatsPerBar * tpb;
+  const maxTick = loopTicksOf(score);
   switch (command.type) {
     case "show":
       return { ok: true, message: describePerformance(score, track) };
+    case "invalid":
+      return { ok: false, message: command.message };
     case "articulation":
       return noteResult(
         score,
@@ -749,7 +814,14 @@ export function applyExpressionCommand(
         };
       let pedal: readonly PedalEvent[] | undefined;
       try {
-        pedal = mergePedal(track.pedal, added, maxTick);
+        // `pedal bars` over the whole loop replaces the lane (as the agent's
+        // `pedal: "bars"` does); spans, events and bar ranges add to it.
+        pedal =
+          command.type === "pedal-bars" &&
+          command.from === undefined &&
+          command.to === undefined
+            ? normalizePedal(added, maxTick)
+            : mergePedal(track.pedal, added, maxTick);
       } catch (error) {
         if (error instanceof ExpressionValidationError)
           return { ok: false, message: `pedal · ${error.message}` };
@@ -775,6 +847,19 @@ export function applyExpressionCommand(
         `velcurve · ${command.curve}${velocityCurve?.fixed !== undefined ? ` ${Math.round(velocityCurve.fixed * 100) / 100} (MIDI ${Math.round(velocityCurve.fixed * 127)})` : ""} · ${trackId}`,
       );
     }
+    case "note-humanize":
+      return noteResult(
+        score,
+        trackId,
+        command.target,
+        { humanize: command.humanize },
+        "humanize",
+        command.humanize === null
+          ? "off (follows the track)"
+          : Object.keys(command.humanize).length === 0
+            ? "exact"
+            : describeNoteHumanize(command.humanize),
+      );
     case "humanize-off":
       return track.humanize
         ? trackResult(
@@ -836,9 +921,9 @@ export const EXPRESSION_USAGE = Object.freeze({
   glide:
     "glide <ms>|<s>s|off [legato|mono|poly] (track) · glide <ms>|off <target> (notes) · glide 60 mono · SDK glide: 0.06 (s)",
   pedal:
-    "pedal <a>-<b>…|bars [<a>-<b>]|down|half|up <beat>|off · pedal 0-3.5 4-7.5 · pedal bars",
+    "pedal <beat>-<beat>…|bars [<bar>-<bar>]|down|half|up <beat>|off · pedal 0-3.5 4-7.5 · pedal bars",
   velcurve:
     "velcurve linear|soft|hard|fixed [<v 0..1>] · velcurve soft · velcurve fixed 0.8",
   humanize:
-    "humanize <ms> [<vel%> [<len%>]] [seed <n>]|on|off|reseed · humanize 10 8 5",
+    "humanize <ms> [<vel%> [<len%>]] [seed <n>]|on|off|reseed (track) · humanize <ms> [<vel%> [<len%>]]|exact|off <target> (notes) · humanize 10 8 5 · humanize 20 bars 2-3",
 });

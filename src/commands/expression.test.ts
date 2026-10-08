@@ -133,6 +133,17 @@ describe("expression grammar", () => {
       time: 0.06,
     });
     expect(parseExpressionCommand("glide 60ms legatoo")).toBeUndefined();
+    // A bare fraction is a seconds-for-ms slip: reject it with the fix.
+    const slip = parseExpressionCommand("glide 0.06");
+    expect(slip).toMatchObject({ type: "invalid" });
+    expect(run("glide 0.06").ok).toBe(false);
+    expect(run("glide 0.06").message).toContain("glide 60ms");
+    // `glide 0` (any unit) on the track turns glide off.
+    for (const text of ["glide 0", "glide 0ms", "glide 0s"])
+      expect(parseExpressionCommand(text)).toEqual({
+        type: "track-glide",
+        time: null,
+      });
     expect(parseExpressionCommand("pedal")).toEqual({ type: "pedal-list" });
     expect(parseExpressionCommand("velcurve soft 0.5")).toBeUndefined();
     expect(parseExpressionCommand("humanize 10ms 8% 5% seed 7")).toEqual({
@@ -252,5 +263,100 @@ describe("expression commands", () => {
     expect(shown.next).toBeUndefined();
     expect(shown.message).toContain("glide off");
     expect(shown.message).toContain("art 1");
+  });
+});
+
+describe("meter map", () => {
+  const metered = (meter: unknown[], bars: number, beats: number) =>
+    createScore({
+      bars,
+      time: { meter },
+      tracks: [{ id: "lead", instrument: "saw" }],
+      notes: Array.from({ length: beats }, (_, beat) => ({
+        id: `n${beat}`,
+        trackId: "lead",
+        start: beat * TPB,
+        duration: TPB / 2,
+        pitch: 60,
+        velocity: 0.8,
+      })),
+    } as Parameters<typeof createScore>[0]);
+
+  test("bar targets follow meter changes", () => {
+    const base = metered([{ bar: 0, beatsPerBar: 3 }], 3, 9);
+    const result = run("art staccato bar 2", base);
+    expect(result.ok).toBe(true);
+    const marked = result
+      .next!.notes.filter((note) => note.articulation === "staccato")
+      .map((note) => note.startTick / TPB);
+    expect(marked).toEqual([3, 4, 5]);
+  });
+
+  test("pedal bars re-pedals on the real downbeats", () => {
+    const base = metered([{ bar: 0, beatsPerBar: 3 }], 3, 9);
+    const result = run("pedal bars", base);
+    expect(result.ok).toBe(true);
+    const pedal = result.next!.tracks[0]!.pedal!;
+    const ups = pedal
+      .filter((event) => event.state === "up")
+      .map((event) => event.tick / TPB);
+    expect(ups).toEqual([3, 6, 9]);
+    expect(Math.max(...pedal.map((event) => event.tick))).toBe(9 * TPB);
+  });
+
+  test("a pedal event at the last beat of a song lengthened by 5/4 is valid", () => {
+    const base = metered([{ bar: 1, beatsPerBar: 5 }], 2, 9);
+    const result = run("pedal down 8.5", base);
+    expect(result.ok).toBe(true);
+    expect(run("pedal down 9.5", base).ok).toBe(false);
+  });
+});
+
+describe("per-note humanize and targets", () => {
+  test("humanize takes a note target", () => {
+    expect(parseExpressionCommand("humanize 20 8 bars 2")).toEqual({
+      type: "note-humanize",
+      humanize: { timing: 20, velocity: 8 },
+      target: { type: "bars", from: 2, to: 2 },
+    });
+    const result = run("humanize 20 8 bar 2");
+    expect(result.ok).toBe(true);
+    const next = roundTrip(result.next);
+    const humanized = next.notes.filter((note) => note.humanize);
+    expect(humanized.map((note) => note.id)).toEqual(["n4", "n5", "n6", "n7"]);
+    expect(humanized[0]!.humanize).toEqual({ timing: 20, velocity: 8 });
+    // Track humanize is untouched.
+    expect(next.tracks[0]!.humanize).toBeUndefined();
+    const exact = run("humanize exact n1", next);
+    expect(exact.ok).toBe(true);
+    expect(
+      exact.next!.notes.find((note) => note.id === "n1")!.humanize,
+    ).toEqual({});
+    const cleared = run("humanize off n4", next);
+    expect(
+      cleared.next!.notes.find((note) => note.id === "n4")!.humanize,
+    ).toBeUndefined();
+    // Track forms still parse as before.
+    expect(parseExpressionCommand("humanize 10 8 5 seed 3")).toMatchObject({
+      type: "humanize",
+      seed: 3,
+    });
+  });
+
+  test("an unknown note id names the bad target", () => {
+    const result = run("art staccato keys");
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("unknown note id keys");
+    expect(result.message).toContain("targets:");
+  });
+});
+
+describe("pedal bars", () => {
+  test("pedal bars over the whole loop replaces recorded events; a range adds", () => {
+    const recorded = run("pedal 0.25-0.75").next!;
+    const replaced = run("pedal bars", recorded).next!.tracks[0]!.pedal!;
+    expect(replaced.some((event) => event.tick === TPB / 4)).toBe(false);
+    const added = run("pedal bars 2", recorded).next!.tracks[0]!.pedal!;
+    expect(added.some((event) => event.tick === TPB / 4)).toBe(true);
   });
 });

@@ -5,6 +5,7 @@ import {
   applyExpressionCommand,
   parseExpressionCommand,
 } from "../commands/expression.ts";
+import { isStageable } from "./audition.ts";
 import { EditMenu, type MenuContext } from "./menu.ts";
 
 function applyEdit(value: TrackScore, command: string): TrackScore {
@@ -490,7 +491,7 @@ describe("Sound › performance", () => {
     const labels = menu.view(ctx).items.map((row) => row.label);
     for (const label of [
       "articulation",
-      "glide (s)",
+      "glide (ms)",
       "glide mode",
       "bend",
       "vibrato",
@@ -509,7 +510,7 @@ describe("Sound › performance", () => {
       type: "run",
       command: "art staccato",
     });
-    select(menu, ctx, "glide (s)");
+    select(menu, ctx, "glide (ms)");
     expect(menu.key(RIGHT, ctx)).toEqual({
       type: "run",
       command: "glide 60ms",
@@ -534,6 +535,22 @@ describe("Sound › performance", () => {
       type: "run",
       command: "humanize 8 0 0",
     });
+  });
+
+  test("pedal and humanize rows stage for A/B while auditioning", () => {
+    const ctx = context(played);
+    const menu = open(ctx);
+    for (const label of [
+      "sustain pedal",
+      "humanize timing",
+      "velocity curve",
+      "glide (ms)",
+    ]) {
+      select(menu, ctx, label);
+      const action = menu.key(RIGHT, ctx) as { command?: string };
+      expect(isStageable(action.command!)).toBe(true);
+    }
+    expect(isStageable("humanize reseed")).toBe(true);
   });
 
   test("set values show and x resets them", () => {

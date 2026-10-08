@@ -67,8 +67,9 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
           "staccato legato accent tenuto marcato ghost · art staccato bars 1-2",
       },
       {
-        command: "glide <time> [legato|mono|poly] | glide <time> <target>",
-        summary: "portamento in ms · glide 60 mono · SDK glide 0.06 (s)",
+        command: "glide <ms>|0 [legato|mono|poly] | glide <ms> <target>",
+        summary:
+          "portamento in ms · glide 60 mono · glide 0 off · SDK 0.06 (s)",
       },
       {
         command: "bend <cents>|scoop|fall|doit|<at:cents>... [target]",
@@ -79,7 +80,7 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "per-note vibrato · vibrato 5.5 30 0.2",
       },
       {
-        command: "pedal <a>-<b>... | bars | down|half|up <beat> | off",
+        command: "pedal <beat>-<beat>... | bars | down|half|up <beat> | off",
         summary: "sustain pedal · pedal 0-3.5 4-7.5 · pedal bars",
       },
       {
@@ -87,8 +88,9 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "how velocity maps to level · velcurve fixed 0.6 (0..1)",
       },
       {
-        command: "humanize <ms> [<vel%> [<len%>]] [seed <n>] | off",
-        summary: "seeded feel applied at render · humanize 10 8 5",
+        command: "humanize <ms> [<vel%> [<len%>]] [seed <n>|<target>] | off",
+        summary:
+          "seeded feel at render · humanize 10 8 5 · humanize 20 bars 2-3",
       },
       { command: "expression", summary: "this track's performance settings" },
       { command: "filter <hz> [res]", summary: "low-pass · filter off" },

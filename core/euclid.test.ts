@@ -308,6 +308,21 @@ describe("rhythm on a score", () => {
     );
   });
 
+  test("humanize on a generated hit is a hand edit and survives printing", () => {
+    const score = setRhythmRow(
+      drumScore(),
+      "drums",
+      normalizeRhythmRow({ voice: "kick" }),
+    );
+    const kick = score.notes.find((note) => note.pitch === 36)!;
+    const humanized = updateNote(score, kick.id, { humanize: { timing: 20 } });
+    const frozen = reconcileRhythm(score, humanized);
+    expect(frozen.tracks[0]!.rhythm).toBeUndefined();
+    const file = printTrack(frozen, frozen.tracks[0]!);
+    expect(file).toContain("humanize");
+    expect(file).not.toContain('euclid("kick", 4, 16)');
+  });
+
   test("rows print as euclid()/grid() and round-trip through song.ts", async () => {
     let score = withTrackRhythm(drumScore(), "drums", [
       normalizeRhythmRow({ voice: "kick" }),

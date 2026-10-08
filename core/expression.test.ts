@@ -22,10 +22,12 @@ import {
 } from "./expression.ts";
 import {
   createScore,
+  SCORE_LIMITS,
   scoreFromJSON,
   ScoreValidationError,
   updateNote,
   updateTrack,
+  type Note,
   type NoteInput,
   type TrackInput,
 } from "./score.ts";
@@ -383,7 +385,9 @@ describe("performNotes", () => {
     const cents = chain!.performance!.cents!;
     const at = (tick: number) => tick * SECONDS_PER_TICK;
     expect(cents(at(100))).toBe(0);
-    expect(cents(at(480) + 0.025)).toBeCloseTo(350);
+    // Exponential (RC) approach: past the linear midpoint at half time.
+    const half = (1 - Math.exp(-1.5)) / (1 - Math.exp(-3));
+    expect(cents(at(480) + 0.025)).toBeCloseTo(700 * half);
     expect(cents(at(700))).toBe(700);
     // A gap means no glide (TB-303 slide only into a tied note).
     expect(detached!.performance).toBeUndefined();
@@ -490,8 +494,9 @@ describe("review fixes", () => {
       { startTick: 960, durationTicks: 480, pitch: 60 },
     ]);
     const cents = voice!.performance!.cents!;
-    // 1200 cents over 1 s moves at most ~1.2 cents per millisecond.
-    expect(maxStep(cents, 0, 1.4)).toBeLessThan(3);
+    // 1200 cents over 1 s on the exponential curve moves at most
+    // 1.2 * 3 / (1 - e^-3) ≈ 3.8 cents per millisecond: no jumps.
+    expect(maxStep(cents, 0, 1.4)).toBeLessThan(5);
     expect(cents(1.5)).toBeGreaterThan(0);
   });
 
@@ -661,5 +666,69 @@ describe("tempo map", () => {
     expect(cents(1)).toBeCloseTo(200);
     // Without a tempo map the timing keeps the constant-tempo arithmetic.
     expect(performanceTimingFor(scoreWith({}, [{}])).secondsAt).toBeUndefined();
+  });
+});
+
+describe("scale", () => {
+  test("legato at SCORE_LIMITS.maxNotes finds next onsets in bounded time", () => {
+    const count = SCORE_LIMITS.maxNotes;
+    const notes = Array.from(
+      { length: count },
+      (_, index) =>
+        ({
+          id: `n${index}`,
+          trackId: "t",
+          startTick: index * 30,
+          durationTicks: 10,
+          pitch: 60,
+          velocity: 0.5,
+          articulation: "legato",
+        }) as Note,
+    );
+    const started = performance.now();
+    const performed = performNotes(undefined, notes, {
+      tempoBpm: 120,
+      ticksPerBeat: 480,
+      endTick: count * 30 + 480,
+    });
+    expect(performance.now() - started).toBeLessThan(1000);
+    // Each note reaches the next onset plus the legato overlap; the last one
+    // has no next onset and only gains the overlap.
+    expect(performed[0]!.durationTicks).toBe(30 + 480 / 16);
+    expect(performed[count - 1]!.durationTicks).toBe(10 + 480 / 16);
+  });
+});
+
+describe("TB-303 slide", () => {
+  const TPB = 480;
+  test("half-step gates on a 16th grid slide into a gliding note", () => {
+    const notes = perform({ glide: { time: 0.05, mode: "legato" } }, [
+      { startTick: 0, durationTicks: TPB / 8, pitch: 48 },
+      { startTick: TPB / 4, durationTicks: TPB / 8, pitch: 55, glide: 0.05 },
+    ]);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]!.performance!.cents).toBeDefined();
+  });
+
+  test("a slide does not bridge a rest longer than a step", () => {
+    const notes = perform({ glide: { time: 0.05, mode: "legato" } }, [
+      { startTick: 0, durationTicks: TPB / 8, pitch: 48 },
+      { startTick: TPB / 2, durationTicks: TPB / 8, pitch: 55, glide: 0.05 },
+    ]);
+    expect(notes).toHaveLength(2);
+  });
+
+  test("an accented slide target accents the chained voice", () => {
+    const notes = perform({ glide: { time: 0.05, mode: "legato" } }, [
+      { startTick: 0, durationTicks: TPB / 2, pitch: 48 },
+      {
+        startTick: TPB / 4,
+        durationTicks: TPB / 4,
+        pitch: 55,
+        articulation: "accent",
+      },
+    ]);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]!.performance!.accent).toBe(true);
   });
 });

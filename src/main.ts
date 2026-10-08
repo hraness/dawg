@@ -1505,7 +1505,8 @@ async function submit(prompt: string): Promise<string | Receipt> {
   }
   const expression = parseExpressionCommand(command);
   if (expression) {
-    if (expression.type !== "show") await materializeDraft();
+    if (expression.type !== "show" && expression.type !== "invalid")
+      await materializeDraft();
     const result = applyExpressionCommand(score, requestedTrack, expression);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);

@@ -372,6 +372,11 @@ describe("keys and commands", () => {
       "vol 0.5",
       "pattern four-on-floor",
       "/pack use gm/gm_acoustic_bass",
+      "pedal bars",
+      "sustain off",
+      "humanize 10 8 5",
+      "humanize reseed",
+      "vel-curve soft",
     ])
       expect(isStageable(command)).toBe(true);
     for (const command of [
@@ -382,6 +387,9 @@ describe("keys and commands", () => {
       "fx list",
       "kit list",
       "pack info gm",
+      "pedal",
+      "humanize",
+      "humanize show",
       "undo",
     ])
       expect(isStageable(command)).toBe(false);
