@@ -254,3 +254,49 @@ describe("expression commands", () => {
     expect(shown.message).toContain("art 1");
   });
 });
+
+describe("meter map", () => {
+  const metered = (meter: unknown[], bars: number, beats: number) =>
+    createScore({
+      bars,
+      time: { meter },
+      tracks: [{ id: "lead", instrument: "saw" }],
+      notes: Array.from({ length: beats }, (_, beat) => ({
+        id: `n${beat}`,
+        trackId: "lead",
+        start: beat * TPB,
+        duration: TPB / 2,
+        pitch: 60,
+        velocity: 0.8,
+      })),
+    } as Parameters<typeof createScore>[0]);
+
+  test("bar targets follow meter changes", () => {
+    const base = metered([{ bar: 0, beatsPerBar: 3 }], 3, 9);
+    const result = run("art staccato bar 2", base);
+    expect(result.ok).toBe(true);
+    const marked = result
+      .next!.notes.filter((note) => note.articulation === "staccato")
+      .map((note) => note.startTick / TPB);
+    expect(marked).toEqual([3, 4, 5]);
+  });
+
+  test("pedal bars re-pedals on the real downbeats", () => {
+    const base = metered([{ bar: 0, beatsPerBar: 3 }], 3, 9);
+    const result = run("pedal bars", base);
+    expect(result.ok).toBe(true);
+    const pedal = result.next!.tracks[0]!.pedal!;
+    const ups = pedal
+      .filter((event) => event.state === "up")
+      .map((event) => event.tick / TPB);
+    expect(ups).toEqual([3, 6, 9]);
+    expect(Math.max(...pedal.map((event) => event.tick))).toBe(9 * TPB);
+  });
+
+  test("a pedal event at the last beat of a song lengthened by 5/4 is valid", () => {
+    const base = metered([{ bar: 1, beatsPerBar: 5 }], 2, 9);
+    const result = run("pedal down 8.5", base);
+    expect(result.ok).toBe(true);
+    expect(run("pedal down 9.5", base).ok).toBe(false);
+  });
+});

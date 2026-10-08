@@ -26,6 +26,7 @@ import {
   type ScoreOperation,
   type TrackPatch,
 } from "../../core/score.ts";
+import { loopTicksOf } from "../../core/tempo.ts";
 import { BEND_SHAPES, barPedal } from "../commands/expression.ts";
 import type { AgentTool, ToolContext } from "./tools.ts";
 
@@ -278,7 +279,7 @@ export const EXPRESSION_TOOLS: readonly AgentTool[] = Object.freeze([
                 }),
               );
       if (args.pedal !== undefined) {
-        const maxTick = score.bars * score.beatsPerBar * score.ticksPerBeat;
+        const maxTick = loopTicksOf(score);
         if (args.pedal === null) patch.pedal = null;
         else if (args.pedal === "bars") patch.pedal = barPedal(score);
         else {

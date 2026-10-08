@@ -49,6 +49,7 @@ import {
   type Note,
   type Track,
 } from "../../core/score.ts";
+import { barStartTick, loopTicksOf } from "../../core/tempo.ts";
 
 export type NoteTarget =
   | { type: "all" }
@@ -425,9 +426,9 @@ export function targetNotes(
   }
   const notes = score.notes.filter((note) => note.trackId === trackId);
   if (target.type === "all") return notes;
-  const barTicks = score.beatsPerBar * score.ticksPerBeat;
-  const from = (target.from - 1) * barTicks;
-  const to = target.to * barTicks;
+  // Bars follow the meter map: bar n runs from the start of bar n to n + 1.
+  const from = barStartTick(score, target.from - 1);
+  const to = barStartTick(score, target.to);
   return notes.filter((note) => note.startTick >= from && note.startTick < to);
 }
 
@@ -590,19 +591,18 @@ export function barPedal(
   from = 1,
   to = score.bars,
 ): PedalEvent[] {
-  const barTicks = score.beatsPerBar * score.ticksPerBeat;
   // Legato (syncopated) pedalling: lift at the bar line, catch the new
   // harmony a 32nd note later so the previous chord does not blur into it.
   const catchTicks = Math.max(1, Math.round(score.ticksPerBeat / 8));
   const events: PedalEvent[] = [];
   const last = Math.min(to, score.bars);
   for (let bar = from; bar <= last; bar += 1) {
-    const start = (bar - 1) * barTicks;
+    const start = barStartTick(score, bar - 1);
     if (bar > from) events.push({ tick: start, state: "up" });
     events.push({ tick: start + (bar > from ? catchTicks : 0), state: "down" });
   }
   events.push({
-    tick: Math.min(last * barTicks, score.bars * barTicks),
+    tick: Math.min(barStartTick(score, last), loopTicksOf(score)),
     state: "up",
   });
   return events;
@@ -627,7 +627,7 @@ export function applyExpressionCommand(
   const track = score.tracks.find((candidate) => candidate.id === trackId);
   if (!track) return { ok: false, message: `no track · ${trackId}` };
   const tpb = score.ticksPerBeat;
-  const maxTick = score.bars * score.beatsPerBar * tpb;
+  const maxTick = loopTicksOf(score);
   switch (command.type) {
     case "show":
       return { ok: true, message: describePerformance(score, track) };
