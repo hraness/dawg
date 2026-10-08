@@ -12,7 +12,7 @@ its value and, dimmed, the command it runs, so the menu teaches commands.
 
 - ↑↓ move · → or Enter open · ←→ adjust a value · Enter type one
 - `x` reset · `/` filter · Esc back
-- `/menu effects` opens a section (sound effects rhythm chords mix)
+- `/menu effects` opens a section (sound effects rhythm chords mix project)
 
 ## Audition loop
 
