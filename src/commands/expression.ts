@@ -5,8 +5,8 @@
  *   art <articulation>|off [target]          staccato legato accent tenuto marcato ghost
  *   bend <cents>|scoop|fall|doit|<at:cents>…|off [target]
  *   vibrato <rate> <depth> [<delay>]|off [target]
- *   glide <time>|off <target>                portamento into each note
- *   glide <time>|off [legato|mono|poly]      the track's glide (`glide mono`)
+ *   glide <ms>|off <target>                  portamento into each note
+ *   glide <ms>|0|off [legato|mono|poly]      the track's glide (`glide mono`)
  *   pedal <a>-<b>…|bars [<a>-<b>]|down|half|up <beat>|off
  *   velcurve linear|soft|hard|fixed [<v>]
  *   humanize <ms> [<vel%> [<len%>]] [seed <n>]|on|off|reseed|seed <n>
@@ -14,8 +14,10 @@
  *
  * A target is `all` (the default), `bar <n>`, `bars <a>-<b>` (1-based, notes
  * that start there) or note ids. Beats are 0-based like `automate`. Times
- * take `ms` or seconds (`glide 60ms`, `glide 0.06`). Parsing is pure;
- * applying returns the next score and the session event.
+ * are milliseconds when bare (`glide 60`) or take a unit (`glide 60ms`,
+ * `glide 0.06s`); a bare fraction like `glide 0.06` is rejected as a unit
+ * slip. Parsing is pure; applying returns the next score and the session
+ * event.
  */
 import {
   ARTICULATIONS,
@@ -82,7 +84,9 @@ export type ExpressionCommand =
     }
   | { type: "humanize-off" }
   | { type: "humanize-seed"; seed?: number }
-  | { type: "show" };
+  | { type: "show" }
+  /** Recognised but unusable (`glide 0.06`): fail with `message`. */
+  | { type: "invalid"; message: string };
 
 /** Named bend shapes (jazz brass and vocal idioms), in cents. */
 export const BEND_SHAPES: Readonly<Record<string, readonly BendPoint[]>> =
@@ -237,7 +241,13 @@ function parseGlide(words: string[]): ExpressionCommand | undefined {
   if (!first) return undefined;
   const mode = GLIDE_MODES.find((candidate) => candidate === first);
   if (mode && rest.length === 0) return { type: "track-glide", mode };
-  // A bare number is milliseconds here (`glide 60`); `0.06s` is seconds.
+  // A bare number is milliseconds here (`glide 60`); `0.06s` is seconds. A
+  // bare fraction of a millisecond is a unit slip, not a glide.
+  if (NUMBER.test(first) && Number(first) > 0 && Number(first) < 1)
+    return {
+      type: "invalid",
+      message: `glide · a bare number is ms · write glide ${Math.round(Number(first) * 1000)}ms or glide ${first}s`,
+    };
   const time = OFF.test(first)
     ? null
     : NUMBER.test(first)
@@ -246,7 +256,9 @@ function parseGlide(words: string[]): ExpressionCommand | undefined {
   if (time === undefined || (time !== null && time < 0)) return undefined;
   if (time !== null && time > EXPRESSION_LIMITS.maxGlideSeconds)
     return undefined;
-  if (rest.length === 0) return { type: "track-glide", time };
+  // `glide 0` on the track turns glide off; on a target it means never.
+  if (rest.length === 0)
+    return { type: "track-glide", time: time === 0 ? null : time };
   const restMode = GLIDE_MODES.find((candidate) => candidate === rest[0]);
   if (restMode && rest.length === 1)
     return time === null
@@ -631,6 +643,8 @@ export function applyExpressionCommand(
   switch (command.type) {
     case "show":
       return { ok: true, message: describePerformance(score, track) };
+    case "invalid":
+      return { ok: false, message: command.message };
     case "articulation":
       return noteResult(
         score,

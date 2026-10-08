@@ -133,6 +133,17 @@ describe("expression grammar", () => {
       time: 0.06,
     });
     expect(parseExpressionCommand("glide 60ms legatoo")).toBeUndefined();
+    // A bare fraction is a seconds-for-ms slip: reject it with the fix.
+    const slip = parseExpressionCommand("glide 0.06");
+    expect(slip).toMatchObject({ type: "invalid" });
+    expect(run("glide 0.06").ok).toBe(false);
+    expect(run("glide 0.06").message).toContain("glide 60ms");
+    // `glide 0` (any unit) on the track turns glide off.
+    for (const text of ["glide 0", "glide 0ms", "glide 0s"])
+      expect(parseExpressionCommand(text)).toEqual({
+        type: "track-glide",
+        time: null,
+      });
     expect(parseExpressionCommand("pedal")).toEqual({ type: "pedal-list" });
     expect(parseExpressionCommand("velcurve soft 0.5")).toBeUndefined();
     expect(parseExpressionCommand("humanize 10ms 8% 5% seed 7")).toEqual({

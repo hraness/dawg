@@ -84,7 +84,7 @@ export function performanceNodes(context: MenuContext): MenuNode[] {
     },
     {
       kind: "number",
-      label: "glide (s)",
+      label: "glide (ms)",
       value: glide?.time,
       min: 0,
       max: EXPRESSION_LIMITS.maxGlideSeconds,

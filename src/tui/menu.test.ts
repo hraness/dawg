@@ -490,7 +490,7 @@ describe("Sound › performance", () => {
     const labels = menu.view(ctx).items.map((row) => row.label);
     for (const label of [
       "articulation",
-      "glide (s)",
+      "glide (ms)",
       "glide mode",
       "bend",
       "vibrato",
@@ -509,7 +509,7 @@ describe("Sound › performance", () => {
       type: "run",
       command: "art staccato",
     });
-    select(menu, ctx, "glide (s)");
+    select(menu, ctx, "glide (ms)");
     expect(menu.key(RIGHT, ctx)).toEqual({
       type: "run",
       command: "glide 60ms",
