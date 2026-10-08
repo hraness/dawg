@@ -23,7 +23,7 @@ import {
   setRhythmRow,
   withTrackRhythm,
 } from "./rhythm.ts";
-import { addNote, createScore, TrackScore } from "./score.ts";
+import { addNote, createScore, TrackScore, updateNote } from "./score.ts";
 import { evaluateProject } from "./sdk/eval.ts";
 import { printProject, printTrack } from "./sdk/print.ts";
 
@@ -291,6 +291,21 @@ describe("rhythm on a score", () => {
     expect(frozen.notes.filter((note) => note.pitch === 36)).toHaveLength(9);
     expect(reconcileRhythm(score, score)).toBe(score);
     expect(refreshRhythm(score)).toBe(score);
+  });
+
+  test("expression on a generated hit is a hand edit and freezes the row", () => {
+    const score = setRhythmRow(
+      drumScore(),
+      "drums",
+      normalizeRhythmRow({ voice: "kick" }),
+    );
+    const kick = score.notes.find((note) => note.pitch === 36)!;
+    const accented = updateNote(score, kick.id, { articulation: "accent" });
+    const frozen = reconcileRhythm(score, accented);
+    expect(frozen.tracks[0]!.rhythm).toBeUndefined();
+    expect(frozen.notes.find((note) => note.id === kick.id)!.articulation).toBe(
+      "accent",
+    );
   });
 
   test("rows print as euclid()/grid() and round-trip through song.ts", async () => {

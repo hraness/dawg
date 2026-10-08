@@ -8,6 +8,7 @@
  */
 
 import { DRUM_VOICES, isDrumInstrument } from "../drums.ts";
+import { DEFAULT_FIXED_VELOCITY } from "../expression.ts";
 import type { RhythmRow } from "../euclid.ts";
 import { FX_LANES, fxSpec, type FxName, type FxValues } from "../fx.ts";
 import { midiToPitch } from "../pitch.ts";
@@ -285,10 +286,10 @@ export function printTrack(score: TrackScore, track: Track): string {
     const voice = voiceFor.get(note.pitch);
     if (voice !== undefined) {
       used.add("hit");
-      return printHit(score, note, voice);
+      return printHit(score, note, voice, INDENT + INDENT);
     }
     used.add("note");
-    return printNote(score, note, !kit && !slots);
+    return printNote(score, note, !kit && !slots, INDENT + INDENT);
   });
   if (track.sampler) used.add("sampler");
   const wavetable = isWavetableInstrument(track.instrument)
@@ -404,6 +405,7 @@ export function printTrack(score: TrackScore, track: Track): string {
     );
     entries.push(`synth: ${obj(params, INDENT, "synth: ".length, 1)}`);
   }
+  entries.push(...performanceEntries(score, track));
   const lanes: [string, readonly AutomationPoint[] | undefined][] = [
     ["volume", track.volumeAutomation],
     ["pan", track.panAutomation],
@@ -487,23 +489,178 @@ export function printTrack(score: TrackScore, track: Track): string {
   return lines.join("\n");
 }
 
-function printNote(score: TrackScore, note: Note, named: boolean): string {
+function printNote(
+  score: TrackScore,
+  note: Note,
+  named: boolean,
+  indent: string,
+): string {
   const pitch = named ? str(midiToPitch(note.pitch)) : num(note.pitch);
   const args = [pitch, num(note.startTick / score.ticksPerBeat)];
   const length = note.durationTicks / score.ticksPerBeat;
-  if (length !== 1 || note.velocity !== DEFAULT_VELOCITY)
+  const how = expressionEntries(note, indent + INDENT);
+  if (length !== 1 || note.velocity !== DEFAULT_VELOCITY || how)
     args.push(num(length));
-  if (note.velocity !== DEFAULT_VELOCITY) args.push(num(note.velocity));
-  return `note(${args.join(", ")})`;
+  if (note.velocity !== DEFAULT_VELOCITY || how) args.push(num(note.velocity));
+  return call("note", args, how, indent);
 }
 
-function printHit(score: TrackScore, note: Note, voice: string): string {
+function printHit(
+  score: TrackScore,
+  note: Note,
+  voice: string,
+  indent: string,
+): string {
   const args = [str(voice), num(note.startTick / score.ticksPerBeat)];
   const length = note.durationTicks / score.ticksPerBeat;
-  if (note.velocity !== DEFAULT_VELOCITY || length !== DEFAULT_HIT_LENGTH)
+  const how = expressionEntries(note, indent + INDENT);
+  if (
+    note.velocity !== DEFAULT_VELOCITY ||
+    length !== DEFAULT_HIT_LENGTH ||
+    how
+  )
     args.push(num(note.velocity));
-  if (length !== DEFAULT_HIT_LENGTH) args.push(num(length));
-  return `hit(${args.join(", ")})`;
+  if (length !== DEFAULT_HIT_LENGTH || how) args.push(num(length));
+  return call("hit", args, how, indent);
+}
+
+/**
+ * A note's expression as the fields of its `how` argument, values laid out
+ * for property lines at `indent`; undefined when it has none.
+ */
+function expressionEntries(
+  note: Note,
+  indent: string,
+): (readonly [string, string])[] | undefined {
+  const entries: (readonly [string, string])[] = [];
+  if (note.articulation) entries.push(["art", str(note.articulation)]);
+  if (note.glide !== undefined) entries.push(["glide", num(note.glide)]);
+  if (note.bend) {
+    const points = note.bend.map((p) => `[${num(p.at)}, ${num(p.cents)}]`);
+    // Prettier forces a break on arrays of 2+ arrays that each hold 2+ items.
+    entries.push([
+      "bend",
+      list(points, indent, "bend: ".length, 1, points.length > 1),
+    ]);
+  }
+  if (note.vibrato)
+    entries.push([
+      "vibrato",
+      obj(
+        [
+          ["rate", num(note.vibrato.rate)],
+          ["depth", num(note.vibrato.depth)],
+          ...(note.vibrato.delay !== undefined
+            ? ([["delay", num(note.vibrato.delay)]] as const)
+            : []),
+        ],
+        indent,
+        "vibrato: ".length,
+        1,
+      ),
+    ]);
+  if (note.humanize) {
+    const { timing, velocity, length } = note.humanize;
+    entries.push([
+      "humanize",
+      obj(
+        [
+          ...(timing !== undefined ? ([["timing", num(timing)]] as const) : []),
+          ...(velocity !== undefined
+            ? ([["velocity", num(velocity)]] as const)
+            : []),
+          ...(length !== undefined ? ([["length", num(length)]] as const) : []),
+        ],
+        indent,
+        "humanize: ".length,
+        1,
+      ),
+    ]);
+  }
+  return entries.length === 0 ? undefined : entries;
+}
+
+/**
+ * `name(args, how)` as a list item at `indent`: on one line when it fits,
+ * otherwise with the trailing `how` object hugged and broken one field per
+ * line, the way prettier prints a last object argument.
+ */
+function call(
+  name: string,
+  args: readonly string[],
+  how: readonly (readonly [string, string])[] | undefined,
+  indent: string,
+): string {
+  if (!how) return `${name}(${args.join(", ")})`;
+  const inline = `${name}(${[...args, `{ ${how.map(([k, v]) => `${k}: ${v}`).join(", ")} }`].join(", ")})`;
+  if (!inline.includes("\n") && indent.length + inline.length + 1 <= WIDTH)
+    return inline;
+  const inner = indent + INDENT;
+  const body = how.map(([k, v]) => property(k, v, inner)).join("\n");
+  return `${name}(${[...args, "{"].join(", ")}\n${body}\n${indent}})`;
+}
+
+/** A track's performance fields (SDK 1.15.0) as `key: literal` entries. */
+function performanceEntries(score: TrackScore, track: Track): string[] {
+  const entries: string[] = [];
+  if (track.glide)
+    entries.push(
+      track.glide.mode === "legato"
+        ? `glide: ${num(track.glide.time)}`
+        : `glide: ${obj(
+            [
+              ["time", num(track.glide.time)],
+              ["mode", str(track.glide.mode)],
+            ],
+            INDENT,
+            "glide: ".length,
+            1,
+          )}`,
+    );
+  if (track.pedal) {
+    const events = track.pedal.map(
+      (event) =>
+        `[${num(event.tick / score.ticksPerBeat)}, ${str(event.state)}]`,
+    );
+    entries.push(
+      `pedal: ${list(events, INDENT, "pedal: ".length, 1, events.length > 1)}`,
+    );
+  }
+  if (track.velocityCurve)
+    entries.push(
+      track.velocityCurve.curve !== "fixed" ||
+        (track.velocityCurve.fixed ?? DEFAULT_FIXED_VELOCITY) ===
+          DEFAULT_FIXED_VELOCITY
+        ? `velocityCurve: ${str(track.velocityCurve.curve)}`
+        : `velocityCurve: ${obj(
+            [
+              ["curve", str(track.velocityCurve.curve)],
+              ["fixed", num(track.velocityCurve.fixed!)],
+            ],
+            INDENT,
+            "velocityCurve: ".length,
+            1,
+          )}`,
+    );
+  if (track.humanize) {
+    const { timing, velocity, length, seed } = track.humanize;
+    entries.push(
+      `humanize: ${obj(
+        [
+          ...(timing !== undefined ? ([["timing", num(timing)]] as const) : []),
+          ...(velocity !== undefined
+            ? ([["velocity", num(velocity)]] as const)
+            : []),
+          ...(length !== undefined ? ([["length", num(length)]] as const) : []),
+          ["seed", num(seed)],
+        ],
+        INDENT,
+        "humanize: ".length,
+        1,
+      )}`,
+    );
+  }
+  return entries;
 }
 
 /** `euclid("hat", 7, 16, 2, { velocity: 0.5 })` or `grid("sd", "....x...")`. */

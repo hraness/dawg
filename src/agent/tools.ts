@@ -45,6 +45,7 @@ import {
 import { PackError, type PackStore } from "../audio/packs.ts";
 import { RHYTHM_TOOLS } from "./rhythm-tools.ts";
 import { CHORD_TOOLS } from "./chord-tools.ts";
+import { EXPRESSION_TOOLS } from "./expression-tools.ts";
 import { DRUM_TOOLS } from "./drum-tools.ts";
 import { TIME_TOOLS } from "./time-tools.ts";
 import type { MediaResult, MediaRunContext } from "../media/types.ts";
@@ -1352,6 +1353,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   },
   ...RHYTHM_TOOLS,
   ...CHORD_TOOLS,
+  ...EXPRESSION_TOOLS,
   ...DRUM_TOOLS,
   ...TIME_TOOLS,
   ...MEDIA_TOOLS,

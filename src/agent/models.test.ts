@@ -171,13 +171,13 @@ describe("cost per prompt", () => {
   test("estimate = typical input × input price + typical output × output price", () => {
     const price = { input: 5e-6, output: 25e-6 };
     expect(estimatePromptCost(price)).toBeCloseTo(
-      18_000 * 5e-6 + 600 * 25e-6,
+      18_500 * 5e-6 + 600 * 25e-6,
       10,
     );
     expect(formatPromptCost(estimatePromptCost(price))).toBe("~$0.11/prompt");
     expect(
       formatPromptCost(estimatePromptCost({ input: 0.2e-6, output: 0.8e-6 })),
-    ).toBe("~$0.0041/prompt");
+    ).toBe("~$0.0042/prompt");
     expect(formatPromptCost(undefined)).toBe("—");
     expect(formatPromptCost(0)).toBe("free");
   });
@@ -223,9 +223,9 @@ describe("model picker rows", () => {
     expect(rows.map((row) => row.class)).toEqual(["frontier", "fast", "open"]);
     expect(rows.find((row) => row.current)?.alias).toBe("haiku-4.5");
     // OpenRouter's own price wins over models.dev.
-    expect(rows[0]?.costUsd).toBeCloseTo(18_000 * 4e-6 + 600 * 2e-5, 10);
+    expect(rows[0]?.costUsd).toBeCloseTo(18_500 * 4e-6 + 600 * 2e-5, 10);
     // Priced from models.dev when the live catalog has none.
-    expect(rows[2]?.costUsd).toBeCloseTo(18_000 * 0.2e-6 + 600 * 0.8e-6, 10);
+    expect(rows[2]?.costUsd).toBeCloseTo(18_500 * 0.2e-6 + 600 * 0.8e-6, 10);
     // Unknown price stays undefined (shown as —).
     expect(rows[1]?.costUsd).toBeUndefined();
   });

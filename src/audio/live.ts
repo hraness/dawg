@@ -142,7 +142,16 @@ export class LiveSynth {
  * without track `time`, so a key sounds once, as played, not re-placed.
  */
 function liveTrack(track: Track): Track {
-  const { solo: _solo, time: _time, ...rest } = track;
+  // A held key is the performance: the recorded pedal and the render-time
+  // humanize stay out of it. The velocity curve stays, so a key sounds like
+  // the note it records as.
+  const {
+    solo: _solo,
+    time: _time,
+    pedal: _pedal,
+    humanize: _humanize,
+    ...rest
+  } = track;
   return { ...rest, muted: false };
 }
 

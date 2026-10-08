@@ -11,9 +11,14 @@
  */
 
 import {
+  NOTE_EXPRESSION_FIELDS,
+  TRACK_PERFORMANCE_FIELDS,
+} from "./expression.ts";
+import {
   applyScoreOperation,
   TrackScore,
   type Note,
+  type NotePatch,
   type ScoreOperation,
   type Track,
   type TrackPatch,
@@ -135,15 +140,8 @@ export function applyScoreOperations(
   return operations.reduce(applyScoreOperation, score);
 }
 
-function notePatch(
-  a: Note,
-  b: Note,
-):
-  | Readonly<
-      Partial<Pick<Note, "startTick" | "durationTicks" | "pitch" | "velocity">>
-    >
-  | undefined {
-  const patch: Record<string, number> = {};
+function notePatch(a: Note, b: Note): NotePatch | undefined {
+  const patch: Record<string, unknown> = {};
   for (const key of [
     "startTick",
     "durationTicks",
@@ -151,7 +149,9 @@ function notePatch(
     "velocity",
   ] as const)
     if (a[key] !== b[key]) patch[key] = b[key];
-  return Object.keys(patch).length > 0 ? patch : undefined;
+  for (const key of NOTE_EXPRESSION_FIELDS)
+    if (!deepEqual(a[key], b[key])) patch[key] = b[key] ?? null;
+  return Object.keys(patch).length > 0 ? (patch as NotePatch) : undefined;
 }
 
 function trackPatch(a: Track, b: Track): TrackPatch | undefined {
@@ -161,7 +161,7 @@ function trackPatch(a: Track, b: Track): TrackPatch | undefined {
   if ((a.solo ?? false) !== (b.solo ?? false)) patch.solo = b.solo ?? false;
   for (const key of EFFECTS)
     if (!deepEqual(a[key], b[key])) patch[key] = b[key] ?? null;
-  for (const key of ["rhythm", "kit", "time"] as const)
+  for (const key of ["rhythm", "kit", "time", ...TRACK_PERFORMANCE_FIELDS] as const)
     if (!deepEqual(a[key], b[key])) patch[key] = b[key] ?? null;
   for (const key of LANES)
     if (!deepEqual(a[key] ?? [], b[key] ?? [])) patch[key] = b[key] ?? [];

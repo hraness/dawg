@@ -20,6 +20,14 @@ import {
   type ScoreOperation,
   type TrackScore,
 } from "../../core/score.ts";
+import {
+  EXPRESSION_LIMITS,
+  ExpressionValidationError,
+  normalizePedal,
+  pedalStateAt,
+  type PedalEvent,
+  type PedalState,
+} from "../../core/expression.ts";
 import type { ClickBus } from "../audio/engine.ts";
 import {
   DEFAULT_CLICK_VOLUME,
@@ -29,6 +37,7 @@ import {
 } from "../audio/click.ts";
 import {
   barAt,
+  barStartTick,
   bpmAtTick,
   clickTicksOf,
   hasMeterChanges,
@@ -138,6 +147,12 @@ type Pending = {
   /** Unwrapped transport beat of the press. */
   beat: number;
   releaseAtMs: number;
+  /**
+   * When the key itself let go. Differs from `releaseAtMs` only while the
+   * sustain pedal holds the note: the recorded length is the key's, and the
+   * recorded pedal events do the sustaining (as a MIDI CC64 recording does).
+   */
+  keyUpMs: number;
   /** Set when the key played a chord: laid out with `perform` on flush. */
   chord?: RecordedChord;
 };
@@ -202,10 +217,16 @@ export class PlaySession {
   private active = false;
   private synth: LiveSynth | undefined;
   private readonly pending = new Map<number, Pending>();
+  /** Sustain changes while recording (Tab latch or Shift), as pedal events. */
+  private pendingPedal: { beat: number; state: PedalState }[] = [];
+  /** The pedal state last recorded this pass. */
+  private pedalDown = false;
   /** Played note id → recorded score note id, for this pass. */
   private readonly recordedIds = new Set<string>();
   /** In-loop bars the playhead finished while replacing. */
   private readonly replaceBars = new Set<number>();
+  /** Live pedal state as the playhead entered each loop bar (replace). */
+  private readonly barPedal = new Map<number, PedalState>();
   private lastBar: number | undefined;
   private countIn: CountIn | undefined;
   private flushing: Promise<void> = Promise.resolve();
@@ -391,7 +412,9 @@ export class PlaySession {
       }
     }
     const action = this.keyboard.press(key, now, this.gateMs());
-    return this.apply(action, now);
+    const result = this.apply(action, now);
+    this.recordPedal(now);
+    return result;
   }
 
   /** The suggested next chord and the lowest note key on its root. */
@@ -453,7 +476,15 @@ export class PlaySession {
           this.stopChord(action.absorbed);
           this.pending.delete(action.absorbed);
         }
-        if (pending) pending.releaseAtMs = action.releaseAtMs;
+        if (pending) {
+          pending.releaseAtMs = action.releaseAtMs;
+          pending.keyUpMs = Math.max(
+            pending.keyUpMs,
+            pending.chord || Number.isFinite(action.releaseAtMs)
+              ? action.releaseAtMs
+              : now + this.gateMs(),
+          );
+        }
         const live = this.liveChords.get(action.id);
         if (live) {
           live.releaseAtMs = action.releaseAtMs;
@@ -530,7 +561,10 @@ export class PlaySession {
       const live = this.liveChords.get(id);
       if (live) live.releaseAtMs = Math.min(live.releaseAtMs, atMs);
       const pending = this.pending.get(id);
-      if (pending) pending.releaseAtMs = atMs;
+      if (pending) {
+        pending.releaseAtMs = atMs;
+        pending.keyUpMs = Math.min(pending.keyUpMs, atMs);
+      }
     }
   }
 
@@ -547,7 +581,35 @@ export class PlaySession {
       atMs: note.atMs,
       beat: this.host.beatAt(note.atMs),
       releaseAtMs: note.releaseAtMs,
+      // A chord press lays its voices out over the held length (arps keep
+      // stepping while the pedal holds), so it keeps that length.
+      keyUpMs:
+        chord || Number.isFinite(note.releaseAtMs)
+          ? note.releaseAtMs
+          : note.atMs + this.gateMs(),
       ...(chord ? { chord } : {}),
+    });
+  }
+
+  /**
+   * Record a sustain change (Tab latch, or Shift held on note keys) as a
+   * pedal event at the playhead, like Logic's Musical Typing records its Tab
+   * sustain key as CC64.
+   */
+  private recordPedal(now: number): void {
+    // Chord presses record the held length on their voices instead.
+    const down =
+      this.keyboard.sustain &&
+      ![...this.pending.values()].some((pending) => pending.chord);
+    if (!this.recording) {
+      if (!down) this.pedalDown = false;
+      return;
+    }
+    if (down === this.pedalDown) return;
+    this.pedalDown = down;
+    this.pendingPedal.push({
+      beat: this.host.beatAt(now),
+      state: down ? "down" : "up",
     });
   }
 
@@ -741,6 +803,8 @@ export class PlaySession {
     }
     const score = this.host.score();
     const bar = transportBar(score, this.host.beatAt(now));
+    if (bar !== this.lastBar)
+      this.barPedal.set(this.loopBar(bar), this.pedalDown ? "down" : "up");
     if (this.lastBar !== undefined && bar !== this.lastBar) {
       if (this.replace) this.replaceBars.add(this.loopBar(this.lastBar));
       this.queueFlush(bar, now, false);
@@ -756,6 +820,10 @@ export class PlaySession {
   /** Commit what record armed collected; called when recording ends. */
   public async stopRecording(): Promise<void> {
     const now = this.host.now();
+    // A pedal still down when recording stops lifts here.
+    if (this.pedalDown && this.host.playing())
+      this.pendingPedal.push({ beat: this.host.beatAt(now), state: "up" });
+    this.pedalDown = false;
     this.queueFlush(Number.POSITIVE_INFINITY, now, true);
     await this.flushing;
     this.recordedIds.clear();
@@ -786,20 +854,47 @@ export class PlaySession {
     const ready: Pending[] = [];
     for (const pending of this.pending.values()) {
       const bar = transportBar(score, pending.beat);
-      const released = pending.releaseAtMs <= now;
+      const released = pending.keyUpMs <= now;
       if (all || (bar < currentBar && released)) ready.push(pending);
     }
     const erase = [...this.replaceBars];
     this.replaceBars.clear();
-    if (ready.length === 0 && erase.length === 0) return;
-    for (const pending of ready) this.pending.delete(pending.id);
+    const pedal = this.pendingPedal.filter(
+      (event) => all || transportBar(score, event.beat) < currentBar,
+    );
+    this.pendingPedal = this.pendingPedal.filter(
+      (event) => !pedal.includes(event),
+    );
+    if (ready.length === 0 && erase.length === 0 && pedal.length === 0) return;
+    const eraseStates = new Map(
+      erase.map((bar) => [bar, this.barPedal.get(bar) ?? "up"] as const),
+    );
+    try {
+      await this.commitTake(score, ready, erase, eraseStates, pedal, now);
+    } catch (error) {
+      // Nothing was committed: keep the take so the next flush retries it.
+      for (const pending of ready) this.pending.set(pending.id, pending);
+      for (const bar of erase) this.replaceBars.add(bar);
+      this.pendingPedal = [...pedal, ...this.pendingPedal];
+      throw error;
+    }
+  }
+
+  private async commitTake(
+    score: TrackScore,
+    ready: readonly Pending[],
+    erase: readonly number[],
+    eraseStates: ReadonlyMap<number, PedalState>,
+    pedal: readonly { beat: number; state: PedalState }[],
+    now: number,
+  ): Promise<void> {
     const operations = recordOperations(score, {
       trackId: this.trackId,
       notes: ready.flatMap((pending) => {
         const beats = hasTempoMap(score)
-          ? this.host.beatAt(Math.min(pending.releaseAtMs, now)) -
+          ? this.host.beatAt(Math.min(pending.keyUpMs, now)) -
             this.host.beatAt(pending.atMs)
-          : ((Math.min(pending.releaseAtMs, now) - pending.atMs) *
+          : ((Math.min(pending.keyUpMs, now) - pending.atMs) *
               score.tempoBpm) /
             60_000;
         return pending.chord
@@ -823,22 +918,37 @@ export class PlaySession {
       keep: this.recordedIds,
       newId: () => this.host.newNoteId(),
     });
+    // A pedal lane that cannot take more events never costs the notes.
+    let pedalNote = "";
+    try {
+      const pedalOperation = recordPedalOperation(score, {
+        trackId: this.trackId,
+        events: pedal,
+        eraseBars: erase,
+        eraseStates,
+      });
+      if (pedalOperation) operations.push(pedalOperation);
+    } catch (error) {
+      if (!(error instanceof ExpressionValidationError)) throw error;
+      pedalNote = ` · pedal not recorded (${error.message})`;
+    }
     if (operations.length === 0) return;
     let next = score;
     for (const operation of operations)
       next = applyScoreOperation(next, operation);
-    for (const operation of operations)
-      if (operation.type === "addNote") this.recordedIds.add(operation.note.id);
     const added = operations.filter((op) => op.type === "addNote").length;
-    const removed = operations.length - added;
+    const removed = operations.filter((op) => op.type === "removeNote").length;
     await this.host.commit(next, "score.record", {
       trackId: this.trackId,
       operations,
       replace: this.replace,
     });
+    for (const pending of ready) this.pending.delete(pending.id);
+    for (const operation of operations)
+      if (operation.type === "addNote") this.recordedIds.add(operation.note.id);
     this.host.card(
-      `recorded ${added} note${added === 1 ? "" : "s"}${removed ? ` · replaced ${removed}` : ""} · ${this.trackId}`,
-      "success",
+      `recorded ${added} note${added === 1 ? "" : "s"}${pedal.length && !pedalNote ? ` · ${pedal.length} pedal` : ""}${removed ? ` · replaced ${removed}` : ""} · ${this.trackId}${pedalNote}`,
+      pedalNote ? "warning" : "success",
     );
   }
 
@@ -1078,4 +1188,82 @@ export function recordOperations(
     });
   }
   return operations;
+}
+
+/**
+ * The `updateTrack` that merges recorded pedal events into the track,
+ * wrapped into the loop (unquantized: pedalling is about the release), after
+ * dropping existing events in `eraseBars` (replace). Undefined when nothing
+ * changes.
+ */
+export function recordPedalOperation(
+  score: TrackScore,
+  options: Readonly<{
+    trackId: string;
+    events: readonly { beat: number; state: PedalState }[];
+    eraseBars?: readonly number[];
+    /** The pedal as the take entered each erased bar (default `up`). */
+    eraseStates?: ReadonlyMap<number, PedalState>;
+  }>,
+): ScoreOperation | undefined {
+  const track = score.tracks.find((item) => item.id === options.trackId);
+  if (!track) return undefined;
+  const tpb = score.ticksPerBeat;
+  // Bars follow the meter map; without meter changes this is the 0.4 grid.
+  const maxTick = loopTicksOf(score);
+  const original = track.pedal ?? [];
+  const erase = new Set(options.eraseBars ?? []);
+  const kept = original.filter(
+    (event) => !erase.has(barAt(score, event.tick).bar),
+  );
+  if (options.events.length === 0 && erase.size === 0) return undefined;
+  const byTick = new Map<number, PedalEvent>(
+    kept.map((event) => [event.tick, event]),
+  );
+  // Replace: an erased bar starts in the state the take had there, and the
+  // old pedal resumes after it, so no stale press is left without its lift.
+  for (const bar of erase) {
+    const start = barStartTick(score, bar);
+    const end = barStartTick(score, bar + 1);
+    byTick.set(start, {
+      tick: start,
+      state: options.eraseStates?.get(bar) ?? "up",
+    });
+    if (end < maxTick && !erase.has(bar + 1) && !byTick.has(end))
+      byTick.set(end, { tick: end, state: pedalStateAt(original, end - 1) });
+  }
+  for (const event of options.events) {
+    let tick = Math.round(event.beat * tpb) % maxTick;
+    if (tick < 0) tick += maxTick;
+    byTick.set(tick, { tick, state: event.state });
+  }
+  const sorted = [...byTick.values()].sort((a, b) => a.tick - b.tick);
+  // A pedal held across the loop seam is down again from tick 0.
+  const seam = sorted[sorted.length - 1]?.state ?? "up";
+  if (options.events.length > 0 && seam !== "up" && sorted[0]?.tick !== 0)
+    sorted.unshift({ tick: 0, state: seam });
+  // Drop events that do not change the state (the lane has a size limit).
+  const compact: PedalEvent[] = [];
+  for (const event of sorted) {
+    const before = compact[compact.length - 1]?.state ?? "up";
+    if (event.state !== before) compact.push(event);
+  }
+  if (compact.length > EXPRESSION_LIMITS.maxPedalEvents)
+    throw new ExpressionValidationError(
+      `the pedal lane is full (${EXPRESSION_LIMITS.maxPedalEvents} events)`,
+    );
+  const pedal = normalizePedal(compact, maxTick);
+  const same =
+    (pedal?.length ?? 0) === original.length &&
+    (pedal ?? []).every(
+      (event, index) =>
+        event.tick === original[index]!.tick &&
+        event.state === original[index]!.state,
+    );
+  if (same) return undefined;
+  return {
+    type: "updateTrack",
+    trackId: options.trackId,
+    patch: { pedal: pedal && pedal.length > 0 ? pedal : null },
+  };
 }

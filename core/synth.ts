@@ -376,6 +376,15 @@ export const SYNTH_PARAMS: Readonly<Record<string, ParamSpec>> = Object.freeze({
     "filter envelope anchor: 0 sweeps up from the cutoff, 1 down to it",
     ["fanchor"],
   ),
+  faccent: {
+    kind: "number",
+    min: 0,
+    max: 4,
+    default: 0,
+    step: 0.25,
+    doc: "accent/marcato notes add this many octaves to the low-pass envelope depth and halve its decay (TB-303 accent)",
+    strudel: ["faccent"],
+  },
   ...fmParams(),
   // ZzFX controls (z_* sounds only; src/audio/synth/zzfx.ts).
   zrand: level(0, "z_*: random pitch offset per note, ± fraction", ["zrand"]),
@@ -545,7 +554,7 @@ export const SYNTH_GROUPS: readonly Readonly<{
       `${prefix}decay`,
       `${prefix}sustain`,
       `${prefix}release`,
-      ...(prefix === "lp" ? ["ftype", "fanchor"] : []),
+      ...(prefix === "lp" ? ["ftype", "fanchor", "faccent"] : []),
     ],
   })),
   ...Array.from({ length: FM_OPERATORS }, (_, index) => {
@@ -789,6 +798,7 @@ export const SYNTH_PRESETS: Readonly<
       lpdecay: 0.18,
       lpsustain: 0,
       ftype: "ladder",
+      faccent: 1.5,
     },
   },
   keys: {

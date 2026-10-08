@@ -19,6 +19,7 @@
  * of the score and the note, so cold, cached and worker renders agree.
  */
 import type { Note, Track } from "../../../core/score.ts";
+import type { PerformedNote } from "../../../core/expression.ts";
 import type { FxLane } from "../../../core/fx.ts";
 import {
   LEGACY_SOUNDS,
@@ -258,11 +259,16 @@ function noteFilters(
   c: Controls,
   gate: number,
   sampleRate: number,
+  accent = false,
 ): (() => NoteFilter)[] {
   const out: (() => NoteFilter)[] = [];
   for (const { prefix, type, param } of FILTERS) {
-    const depth = c.number(`${prefix}env`);
-    if (!c.has(param) && depth === 0) continue;
+    const written = c.number(`${prefix}env`);
+    if (!c.has(param) && written === 0) continue;
+    // TB-303 accent: an accented note opens the low-pass further and its
+    // filter envelope decays faster.
+    const boost = accent && prefix === "lp" ? c.number("faccent") : 0;
+    const depth = written + boost;
     const cutoff = c.number(param);
     const q = c.number(`${prefix}q`);
     const slope = type === "lpf" ? c.text("ftype") : "12db";
@@ -276,7 +282,15 @@ function noteFilters(
           q,
           depth,
           anchor,
-          envelopeFor(c, prefix, "", gate),
+          boost > 0
+            ? new Envelope(
+                c.number(`${prefix}attack`),
+                c.number(`${prefix}decay`) / 2,
+                c.number(`${prefix}sustain`),
+                c.number(`${prefix}release`),
+                gate,
+              )
+            : envelopeFor(c, prefix, "", gate),
           sampleRate,
         ),
     );
@@ -347,6 +361,13 @@ export function renderSynthNote(
   const amp = envelopeFor(c, "", "", gate);
   const velocity = clamp(note.velocity, 0, 1);
   const gain = c.number("gain");
+  // Note expression (core/expression.ts): absent for plain notes, which
+  // keeps their output byte-identical.
+  const performance = (note as PerformedNote).performance;
+  const cents = performance?.cents;
+  const damp = performance?.damp;
+  const dampAt = (t: number): number =>
+    damp && t > damp.from ? Math.exp(-(t - damp.from) / damp.tau) : 1;
 
   // Pitch.
   const base = 440 * 2 ** ((note.pitch - 69) / 12);
@@ -371,28 +392,37 @@ export function renderSynthNote(
       zdelay: c.number("zdelay"),
       tremolo: c.number("tremolo"),
       random,
+      ...(cents ? { cents } : {}),
+      ...(performance?.replaceSlide ? { slideOff: true } : {}),
     });
-    const filters = noteFilters(c, gate, sampleRate).map((make) => make());
+    const filters = noteFilters(
+      c,
+      gate,
+      sampleRate,
+      performance?.accent === true,
+    ).map((make) => make());
     for (let elapsed = 0; elapsed < count; elapsed += 1) {
       const t = elapsed / sampleRate;
       if (elapsed % CONTROL_SAMPLES === 0)
         for (const filter of filters) filter.update(t);
       let value = raw[elapsed]!;
       for (const filter of filters) value = filter.process(value);
-      const level =
+      let level =
         amp.at(t) *
         velocity *
         gain *
         VOICE_LEVEL *
         gainAt(note.startTick + elapsed / samplesPerTick);
+      if (damp) level *= dampAt(t);
       left[start + elapsed]! += value * level;
       if (right) right[start + elapsed]! += value * level;
     }
     return;
   }
-  const vib = c.number("vib");
+  // A note's own vibrato or bend replaces the synth's (note over track).
+  const vib = performance?.replaceVibrato ? 0 : c.number("vib");
   const vibmod = c.number("vibmod");
-  const penv = c.number("penv");
+  const penv = performance?.replacePitchEnvelope ? 0 : c.number("penv");
   const pitchEnv =
     penv === 0
       ? undefined
@@ -463,7 +493,12 @@ export function renderSynthNote(
 
   const fm = fmOperators(c, gate);
   const fmPhases = fm.map(() => new Float64Array(unison));
-  const filterMakers = noteFilters(c, gate, sampleRate);
+  const filterMakers = noteFilters(
+    c,
+    gate,
+    sampleRate,
+    performance?.accent === true,
+  );
   const filtersL = filterMakers.map((make) => make());
   const filtersR = right ? filterMakers.map((make) => make()) : [];
 
@@ -483,6 +518,7 @@ export function renderSynthNote(
       if (pcurve >= 1) e = e * e * e;
       semitones += penv * (e - panchor);
     }
+    if (cents) semitones += cents(t) / 100;
     const frequency = semitones === 0 ? base : base * 2 ** (semitones / 12);
     if (pwsweep > 0)
       width = clamp(
@@ -522,12 +558,13 @@ export function renderSynthNote(
     }
     for (const filter of filtersL) sampleL = filter.process(sampleL);
     for (const filter of filtersR) sampleR = filter.process(sampleR);
-    const level =
+    let level =
       amp.at(t) *
       velocity *
       gain *
       VOICE_LEVEL *
       gainAt(note.startTick + elapsed / samplesPerTick);
+    if (damp) level *= dampAt(t);
     left[index]! += sampleL * level;
     if (right) right[index]! += sampleR * level;
   }

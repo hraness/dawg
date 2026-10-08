@@ -31,8 +31,17 @@ import {
   type TrackScore,
 } from "../../core/score.ts";
 import { sampleKey, type DecodedSample, type SampleBank } from "./samples.ts";
-import { loopSecondsOf, performedNotes } from "../../core/tempo.ts";
+import {
+  loopSecondsOf,
+  loopTicksOf,
+  performedNotes,
+} from "../../core/tempo.ts";
 import { sampleWarpFor, warpedSpan, type SampleWarp } from "./warp.ts";
+import {
+  performNotes,
+  type NotePerformance,
+  type PerformedNote,
+} from "../../core/expression.ts";
 
 /** Output level of a full-scale sample at velocity 1 and gain 1. */
 export const SAMPLE_LEVEL = 0.7;
@@ -78,6 +87,10 @@ export type SamplerVoice = {
   readonly ramp: number;
   /** `squiz` ratio; 1 is off. */
   readonly squiz: number;
+  /** Note expression: pitch in cents over time (glide, bend, vibrato). */
+  readonly cents?: NotePerformance["cents"];
+  /** Half pedal: the level fades from `from` seconds. */
+  readonly damp?: NotePerformance["damp"];
 };
 
 /**
@@ -245,6 +258,7 @@ export function planSamplerVoices(
     const loopTo =
       ref.loopEnd === undefined ? regionEnd : ref.loopEnd * sample.frames;
     const start = noteStartFrame(note, timing);
+    const performance = (note as PerformedNote).performance;
     const voice: SamplerVoice = {
       voice: target.voice,
       sample,
@@ -263,6 +277,8 @@ export function planSamplerVoices(
       loopSpan: loopTo - loopFrom,
       ramp,
       squiz: ref.squiz ?? 1,
+      ...(performance?.cents ? { cents: performance.cents } : {}),
+      ...(performance?.damp ? { damp: performance.damp } : {}),
     };
     if (voice.choke !== undefined) {
       const previous = lastInGroup.get(voice.choke);
@@ -317,10 +333,31 @@ export function renderSamplerVoices(
     const level = SAMPLE_LEVEL * voice.gain;
     const at = (offset: number) =>
       readAt(mono, reverse ? regionEnd - 1 - offset : regionStart + offset);
+    // A bent voice (note expression) integrates its rate frame by frame;
+    // reads arrive in order, so the running sum is kept between calls.
+    const bent = voice.cents;
+    let bentAt = 0;
+    let bentTravel = 0;
+    const travel = (elapsed: number): number => {
+      if (!bent)
+        return ramp === 0 ? elapsed * step : travelAt(elapsed, step, ramp);
+      if (elapsed < bentAt) {
+        bentAt = 0;
+        bentTravel = 0;
+      }
+      while (bentAt < elapsed) {
+        const rate =
+          step *
+          (ramp === 0 ? 1 : Math.max(0, 1 + ramp * bentAt)) *
+          2 ** (bent(bentAt / sampleRate) / 1200);
+        bentTravel += rate;
+        bentAt += 1;
+      }
+      return bentTravel;
+    };
     // The raw read at an elapsed frame, or undefined past a one-shot's end.
     const read = (elapsed: number): number | undefined => {
-      const travelled =
-        ramp === 0 ? elapsed * step : travelAt(elapsed, step, ramp);
+      const travelled = travel(elapsed);
       if (!loop) return travelled >= span ? undefined : at(travelled);
       if (travelled < loopStart) return at(travelled);
       const into = travelled - loopStart;
@@ -345,6 +382,9 @@ export function renderSamplerVoices(
       if (value === undefined) break;
       let envelope = Math.min(1, elapsed / attack);
       if (index >= fadeFrom) envelope *= (voice.end - index) / voice.fade;
+      const damp = voice.damp;
+      if (damp && elapsed / sampleRate > damp.from)
+        envelope *= Math.exp(-(elapsed / sampleRate - damp.from) / damp.tau);
       target[index]! +=
         value *
         envelope *
@@ -420,10 +460,17 @@ export function samplerTailSeconds(
   const warp = sampleWarpFor(score, sampleRate);
   const timing = { score, sampleRate, ...(warp ? { warp } : {}) };
   let latest = 0;
+  const performance = {
+    tempoBpm: score.tempoBpm,
+    ticksPerBeat: score.ticksPerBeat,
+    endTick: loopTicksOf(score),
+  };
   for (const track of score.tracks) {
     if (!track.sampler) continue;
-    const notes = performedNotes(score).filter(
-      (note) => note.trackId === track.id,
+    const notes = performNotes(
+      track,
+      performedNotes(score).filter((note) => note.trackId === track.id),
+      performance,
     );
     for (const voice of planSamplerVoices(track, notes, bank, timing))
       latest = Math.max(latest, voice.end - loopEnd);

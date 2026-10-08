@@ -10,6 +10,7 @@ import {
   type TrackScore,
 } from "../../core/score.ts";
 import { drumVoiceForPitch, isDrumInstrument } from "../../core/drums.ts";
+import { performNotes, type PerformedNote } from "../../core/expression.ts";
 import {
   planSamplerVoices,
   renderSamplerVoices,
@@ -59,7 +60,11 @@ import {
   orbitOf,
   type Ducker,
 } from "./effects/duck.ts";
-import { loopSecondsOf, performedNotes } from "../../core/tempo.ts";
+import {
+  loopSecondsOf,
+  loopTicksOf,
+  performedNotes,
+} from "../../core/tempo.ts";
 import { sampleWarpFor, warpedSpan, type SampleWarp } from "./warp.ts";
 
 export type WavOptions = Readonly<{ sampleRate?: number; maxSeconds?: number }>;
@@ -334,15 +339,27 @@ export class StemRenderer {
       if (group) group.push(note);
       else groups.set(note.trackId, [note]);
     }
+    // Note expression and track performance (core/expression.ts): the
+    // notes as played. A track with neither gets its notes back unchanged.
+    const timing = {
+      tempoBpm: score.tempoBpm,
+      ticksPerBeat: score.ticksPerBeat,
+      endTick: loopTicksOf(score),
+    };
+    const performed = new Map<string, readonly PerformedNote[]>();
+    for (const [trackId, notes] of groups)
+      performed.set(trackId, performNotes(tracks.get(trackId), notes, timing));
     // Orbit ducking is a gain on finished stems (src/audio/effects/duck.ts).
     const duckers: Ducker[] = [];
-    for (const [trackId, notes] of groups) {
+    for (const [trackId] of groups) {
       const settings = duckSettings(tracks.get(trackId));
       if (settings && isTrackAudible(score, trackId))
         duckers.push({
           trackId,
           ...settings,
-          onsets: notes.map((note) => noteSpan(note, context).start),
+          onsets: performed
+            .get(trackId)!
+            .map((note) => noteSpan(note, context).start),
         });
     }
     const ducked = duckGains(
@@ -359,6 +376,9 @@ export class StemRenderer {
     for (const [trackId, notes] of groups) {
       if (!isTrackAudible(score, trackId)) continue;
       const track = tracks.get(trackId);
+      // Stems key on the written notes (with the track's performance
+      // settings); the voices render the performed ones.
+      const played = performed.get(trackId)!;
       const busOrbit = sharedOrbitOf(track);
       const sampler = isSamplerInstrument(track?.instrument);
       // Wavetable hook: the oscillator factory for a wavetable track (its
@@ -416,7 +436,7 @@ export class StemRenderer {
         const stereo = synthVoice && isStereoVoice(track);
         if (stereo) dryR.fill(0);
         if (sampler) {
-          if (track) renderSamplerNotes(dry, notes, track, context, bank);
+          if (track) renderSamplerNotes(dry, played, track, context, bank);
         } else if (synthVoice && track) {
           const gainAt = (tick: number) => trackGainAt(track, tick);
           const voice = {
@@ -425,7 +445,7 @@ export class StemRenderer {
             ...(wavetable ? { oscillatorFor: wavetable.oscillatorFor } : {}),
           };
           const warp = context.warp;
-          for (const note of notes) {
+          for (const note of played) {
             const { start, length } = noteSpan(note, context);
             // The voice asks for `startTick + elapsed / samplesPerTick`;
             // through a tempo map that sample's tick comes from the map.
@@ -450,7 +470,7 @@ export class StemRenderer {
           }
         } else {
           const drums = isDrumInstrument(track?.instrument);
-          for (const note of notes) {
+          for (const note of played) {
             if (drums) renderDrumNote(dry, note, track, context);
             else renderToneNote(dry, note, track, context);
           }
@@ -790,6 +810,9 @@ function renderToneNote(
   const end = Math.min(samples, start + length);
   const frequency = 440 * 2 ** ((note.pitch - 69) / 12);
   const velocity = Math.max(0, Math.min(1, note.velocity));
+  const performance = (note as PerformedNote).performance;
+  const cents = performance?.cents;
+  let bent = 0;
   for (let index = start; index < end; index += 1) {
     const elapsed = index - start;
     const remaining = end - index;
@@ -805,8 +828,18 @@ function renderToneNote(
           ? context.warp.tick(index)
           : note.startTick + elapsed / samplesPerTick,
       );
-    const phase = (frequency * elapsed) / sampleRate;
-    target[index]! += legacyWave(instrument, phase) * envelope;
+    // Plain notes keep the closed-form phase (byte-identical output).
+    let phase = (frequency * elapsed) / sampleRate;
+    if (cents) {
+      phase = bent;
+      bent +=
+        (frequency * 2 ** (cents(elapsed / sampleRate) / 1200)) / sampleRate;
+    }
+    const damp = performance?.damp;
+    const t = elapsed / sampleRate;
+    const held =
+      damp && t > damp.from ? Math.exp(-(t - damp.from) / damp.tau) : 1;
+    target[index]! += legacyWave(instrument, phase) * envelope * held;
   }
 }
 

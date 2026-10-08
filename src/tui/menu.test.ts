@@ -1,7 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import { createScore, type TrackScore } from "../../core/score.ts";
 import { applyEditCommand, parseEditCommand } from "../commands/edit.ts";
+import {
+  applyExpressionCommand,
+  parseExpressionCommand,
+} from "../commands/expression.ts";
 import { EditMenu, type MenuContext } from "./menu.ts";
+
+function applyEdit(value: TrackScore, command: string): TrackScore {
+  const result = applyExpressionCommand(
+    value,
+    "keys",
+    parseExpressionCommand(command)!,
+  );
+  return result.next!;
+}
 
 const UP = "\u001b[A";
 const DOWN = "\u001b[B";
@@ -224,7 +237,7 @@ describe("edit menu", () => {
     });
   });
 
-  test("Sound: instrument, synth preset, simple params, advanced, browse", () => {
+  test("Sound: instrument, synth preset, simple params, advanced, performance, browse", () => {
     const menu = new EditMenu();
     const ctx = context();
     menu.show(ctx);
@@ -234,7 +247,8 @@ describe("edit menu", () => {
       .view(ctx)
       .items.map((row) => row.label.slice(0, 16).trim());
     expect(labels.slice(0, 3)).toEqual(["instrument", "preset", "attack"]);
-    expect(labels.at(-2)).toBe("advanced");
+    expect(labels.at(-3)).toBe("advanced");
+    expect(labels.at(-2)).toBe("performance");
     expect(labels.at(-1)).toBe("browse sounds");
     select(menu, ctx, "attack");
     expect(menu.key(RIGHT, ctx)).toMatchObject({ type: "run" });
@@ -366,6 +380,102 @@ describe("edit menu", () => {
     const ctx = context();
     menu.show(ctx);
     expect(menu.key("\u0003", ctx)).toEqual({ type: "pass" });
+  });
+});
+
+describe("Sound › performance", () => {
+  const played = createScore({
+    tempoBpm: 120,
+    bars: 2,
+    tracks: [{ id: "keys", name: "keys", instrument: "piano" }],
+    notes: [0, 1].map((beat) => ({
+      id: `n${beat}`,
+      trackId: "keys",
+      startTick: beat * 480,
+      durationTicks: 480,
+      pitch: 60,
+      velocity: 0.8,
+    })),
+  });
+
+  function open(ctx: MenuContext): EditMenu {
+    const menu = new EditMenu();
+    menu.show(ctx, "performance");
+    return menu;
+  }
+
+  test("opens by name and lists the performance rows", () => {
+    const ctx = context(played);
+    const menu = open(ctx);
+    expect(menu.view(ctx).title).toContain("performance");
+    const labels = menu.view(ctx).items.map((row) => row.label);
+    for (const label of [
+      "articulation",
+      "glide (s)",
+      "glide mode",
+      "bend",
+      "vibrato",
+      "sustain pedal",
+      "velocity curve",
+      "humanize timing (ms)",
+    ])
+      expect(labels.some((row) => row.startsWith(label))).toBe(true);
+  });
+
+  test("rows run the prompt commands", () => {
+    const ctx = context(played);
+    const menu = open(ctx);
+    select(menu, ctx, "articulation");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "art staccato",
+    });
+    select(menu, ctx, "glide (s)");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "glide 60ms",
+    });
+    select(menu, ctx, "glide mode");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "glide legato",
+    });
+    select(menu, ctx, "sustain pedal");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "pedal bars",
+    });
+    select(menu, ctx, "velocity curve");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "velcurve soft",
+    });
+    select(menu, ctx, "humanize timing");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "humanize 8 0 0",
+    });
+  });
+
+  test("set values show and x resets them", () => {
+    const humanized = applyEdit(played, "humanize 10 5");
+    const ctx = context(humanized);
+    const menu = open(ctx);
+    select(menu, ctx, "humanize timing");
+    expect(menu.view(ctx).items[menu.view(ctx).index]!.label).toContain(
+      "±10 ms",
+    );
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "humanize 11 5 0",
+    });
+    expect(menu.key("x", ctx)).toEqual({
+      type: "run",
+      command: "humanize off",
+    });
+    expect(
+      menu.view(ctx).items.some((row) => row.label.startsWith("new take")),
+    ).toBe(true);
   });
 });
 
