@@ -42,6 +42,7 @@ import {
 } from "./commands/drums.ts";
 import { kitCatalog } from "./audio/kits.ts";
 import { applyEditCommand, parseEditCommand } from "./commands/edit.ts";
+import { applyTimeCommand, parseTimeCommand } from "./commands/time.ts";
 import { applyFxCommand, parseFxCommand } from "./commands/fx.ts";
 import { applySynthCommand, parseSynthCommand } from "./commands/synth.ts";
 import {
@@ -1392,6 +1393,14 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (wavetable) return wavetableCommand(wavetable);
   const sessionReply = await sessionCommand(command);
   if (sessionReply !== undefined) return sessionReply;
+  const time = parseTimeCommand(command);
+  if (time) {
+    if (time.type !== "tempo-map") await materializeDraft();
+    const result = applyTimeCommand(score, requestedTrack, time);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
   const edit = parseEditCommand(command);
   if (edit) {
     await materializeDraft();
@@ -3033,18 +3042,31 @@ async function commitScore(
   // Rhythm rows regenerate after a loop resize and freeze when their lane
   // is hand-edited, so rows and notes never disagree.
   next = reconcileRhythm(score, next);
+  const retimed = timingChanged(score, next);
   if (stageCapture) {
     // A staged edit: the audition plays it; nothing is written yet.
     stageCapture.next = next;
     score = next;
+    if (retimed) clock.follow(score);
     return;
   }
   record = await port.append(record, { kind, payload }, next.toJSON());
   score = next;
+  if (retimed) clock.follow(score);
   if (clock.playing) void audio.play(score);
   projectSync?.scoreChanged(score);
   reportSampleProblems(score);
   void updateCredits(score);
+}
+
+/** True when the transport clock must follow `next` (tempo, meter, loop). */
+function timingChanged(previous: TrackScore, next: TrackScore): boolean {
+  return (
+    previous.time !== next.time ||
+    previous.tempoBpm !== next.tempoBpm ||
+    previous.beatsPerBar !== next.beatsPerBar ||
+    previous.bars !== next.bars
+  );
 }
 
 /** The window's side of the project file sync (see src/project/sync.ts). */

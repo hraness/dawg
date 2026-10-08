@@ -79,6 +79,30 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       { command: "track name <text>", summary: "rename this track" },
       { command: "meter <1..16>", summary: "beats per bar" },
       {
+        command: "tempo <bpm> at <beat>|bar <n> [ramp|exp]",
+        summary: "tempo change · tempo 90 at bar 9 ramp · tempo clear",
+      },
+      {
+        command: "rit|accel [<n> bars] [to <bpm>] [at bar <n>]",
+        summary: "gradual · rit 4 bars to 80 · default 75% / 133%",
+      },
+      {
+        command: "fermata [at <beat>|bar <n>] [<beats>]",
+        summary: "hold a beat · fermata at 31 2 · fermata clear",
+      },
+      {
+        command: "meter <n>/<d> [at bar <n>]",
+        summary: "meter change · meter 7/8 at bar 5 · meter clear",
+      },
+      {
+        command: "track rate|phase|cycle <n> | off",
+        summary: "polytempo · track rate 3/2 · track cycle 3",
+      },
+      {
+        command: "track phasing <beats> [over <beats>]",
+        summary: "Reich drift · track phasing 3 · track time off",
+      },
+      {
         command: "key <tonic> <mode> | none",
         summary: "song key · key A minor · key F# dorian",
       },
@@ -372,8 +396,19 @@ const USAGE: Readonly<Record<string, string>> = {
     "/chords auto|manual|off · voicing <n> · spread · bass · perform · rate · octaves · sevenths · preset · style",
   key: "key <tonic> <mode> | none · key A minor",
   grid: "/grid 1/4|1/8|1/8T|1/16|1/16T|1/32",
-  tempo: "tempo takes 20…300 · tempo 120",
+  tempo:
+    "tempo takes 20…300 · tempo 120 · tempo 90 at bar 9 [ramp|exp] · tempo remove bar 9 · tempo clear · tempo map",
   bpm: "tempo takes 20…300 · tempo 120",
+  rit: "rit [<n> bars|beats] [to <bpm>] [at bar <n>|<beat>] [exp] · rit 4 bars to 80",
+  ritardando:
+    "rit [<n> bars|beats] [to <bpm>] [at bar <n>|<beat>] [exp] · rit 4 bars to 80",
+  rall: "rit [<n> bars|beats] [to <bpm>] [at bar <n>|<beat>] [exp] · rall 2 bars",
+  accel:
+    "accel [<n> bars|beats] [to <bpm>] [at bar <n>|<beat>] [exp] · accel 8 bars to 174 at bar 9",
+  accelerando:
+    "accel [<n> bars|beats] [to <bpm>] [at bar <n>|<beat>] [exp] · accel 8 bars to 174",
+  fermata:
+    "fermata [at <beat>|bar <n>|end] [<extra beats>] · fermata at 31 2 · fermata remove 31 · fermata clear",
   add: "add <note> at <beat> [for <beats>] · add C4 at 0",
   put: "add <note> at <beat> [for <beats>] · add C4 at 0",
   remove: "remove <id> · ids show in the transcript",
@@ -430,7 +465,8 @@ const USAGE: Readonly<Record<string, string>> = {
   menu: "/menu [sound|effects|rhythm|chords|mix|project]",
   try: "/try <sound command> · /try fx reverb mix 0.6",
   play: "/play [on|off] · Ctrl-P",
-  meter: "meter <1..16> · meter 3",
+  meter:
+    "meter <1..16> · meter 3 · meter 7/8 [at bar <n>] · meter remove bar <n> · meter clear",
   undo: "undo · Ctrl-Z",
   redo: "redo · Ctrl-Y",
 };
