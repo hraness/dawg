@@ -4,6 +4,10 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ## Unreleased
 
+### Guides
+
+- **Short guides for every feature, in the app and on dawg.sh.** `/guide` (or F1) opens a tree of one-page guides (getting started, tracks, notes, play mode, chords, rhythm, sounds, effects, automation, mix, the menu and audition loop, media tools, project files, sessions, providers, web search, keys, tempo and meter). Each fits one pane at 80 columns and shows both what to ask the agent and the command, key or menu path that does it by hand. ↑↓ move, → expand or open, ← back, `/` filter, Esc close. The same Markdown files (`guides/*.md`, shipped in the package) are the docs on dawg.sh.
+
 ### Tempo and meter
 
 - **Tempo maps.** `tempo 90 at bar 9` steps the tempo; `ramp` or `exp` glides into it (linear or equal-ratio per beat). `rit 4 bars to 80` and `accel 8 bars to 174 at bar 9` write a ritardando or accelerando (75% / 133% over the last 2 bars by default). `tempo map` lists the changes. Stored as the optional song `time.tempo`; `tempoBpm` stays the start tempo.

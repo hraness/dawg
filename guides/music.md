@@ -3,6 +3,7 @@ id: music
 title: Writing music
 order: 2
 ---
+
 Tracks hold instruments and notes. Each guide below shows what to ask
 the agent and the command, key or menu row that does the same by hand.
 

@@ -189,3 +189,32 @@ test("picker moves with arrows, picks with Enter, cancels with Esc", () => {
   h.app.openPicker({ id: "e", title: "e", items: [] });
   expect(h.app.overlay).toBeUndefined();
 });
+
+test("/guide opens the guide tree; → opens a guide; Esc steps back out", () => {
+  const h = harness();
+  expect(h.app.command("/guide")).toContain("guides");
+  let lines = h.frame();
+  expect(lines.some((line) => line.includes("Getting started"))).toBe(true);
+  expect(lines.some((line) => line.includes("Writing music"))).toBe(true);
+  expect(h.app.input(DOWN).type).toBe("overlay");
+  h.app.input("\u001b[C");
+  lines = h.frame();
+  expect(lines.some((line) => line.includes("Tracks and instruments"))).toBe(
+    true,
+  );
+  h.app.input(DOWN);
+  h.app.input("\r");
+  lines = h.frame();
+  expect(lines.some((line) => line.includes("guide · Writing music ›"))).toBe(
+    true,
+  );
+  for (const line of lines) expect([...line].length).toBeLessThanOrEqual(80);
+  h.app.input(ESC);
+  h.app.input(ESC);
+  expect(h.app.ui.overlay).toBeUndefined();
+  expect(h.app.command("/guide nonsense")).toContain("no guide named");
+  expect(h.app.ui.overlay).toBeUndefined();
+  h.app.command("/guide chords");
+  lines = h.frame();
+  expect(lines.some((line) => line.includes("/chords auto"))).toBe(true);
+});

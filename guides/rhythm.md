@@ -4,10 +4,13 @@ title: Rhythm and drums
 parent: music
 order: 5
 ---
+
 ## Ask
+
 - "give me a house beat" · "add a swung hat, seven hits in sixteen"
 
 ## Type it yourself
+
 - `/pattern house` a starting groove · `/pattern` picker (previews)
 - `/kit syn909` a drum kit · `/kit` picker
 - `hit kick at 0` · `hit snare at 1 vel 0.7`
@@ -18,5 +21,6 @@ order: 5
 - `clear hat` remove one voice
 
 ## Editor
+
 - `/euclid` (Ctrl-K › Rhythm): ↑↓ voice, ←→ adjust, Tab field,
   Space loop, `x` off, Esc back

@@ -4,11 +4,14 @@ title: Sounds and presets
 parent: sound
 order: 1
 ---
+
 ## Ask
+
 - "make the lead brighter with a slow filter sweep"
 - "find a 909 kick in a sample pack"
 
 ## Type it yourself
+
 - `instrument sawtooth` · sine square triangle supersaw pulse
 - `synth preset pluck` · pad lead bass acid keys bell organ strings
 - `synth lpf 800 lpenv 3` any parameter · `synth adsr 0.01 0.2 0.5 0.3`
@@ -18,4 +21,5 @@ order: 1
 - `/sample samples/kick.wav as kick` add a sampler voice
 
 ## Menu
+
 - Ctrl-K › Sound: instrument, preset, envelope, filter, browse sounds

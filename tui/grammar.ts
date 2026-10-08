@@ -215,6 +215,19 @@ export const KEYS = {
       ],
     },
   ],
+  guide: [
+    {
+      title: "guides",
+      rows: [
+        ["↑ ↓  j k", "move · scroll a guide"],
+        ["→ l enter", "expand a section, then open the guide"],
+        ["← h", "collapse · go to the parent · back from a guide"],
+        ["/", "filter by title and text (enter opens)"],
+        ["esc", "clear the filter, then back, then close"],
+        ["f1", "open or close the guides"],
+      ],
+    },
+  ],
   log: [
     {
       title: "transcript",

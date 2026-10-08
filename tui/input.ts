@@ -55,6 +55,9 @@ export class TerminalInputDecoder {
     if (next < 0x20 || next === 0x7f) return "\u001b";
     const final = this.buffer.match(/^\u001b\[[\x20-?]*[\x40-~]/)?.[0];
     if (final !== undefined) return final;
+    // SS3: arrows in application mode and F1-F4 (`ESC O P` is F1).
+    const ss3 = this.buffer.match(/^\u001bO[A-DHFPQRS]/)?.[0];
+    if (ss3 !== undefined) return ss3;
     // An unrecognised Alt-prefixed character is still one complete event.
     if (this.buffer.length >= 2 && this.buffer[1] !== "[")
       return this.buffer.slice(0, 2);

@@ -206,6 +206,10 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         command: "/help [topic]",
         summary: "start here · /help all for everything",
       },
+      {
+        command: "/guide [topic]",
+        summary: "short how-to guides · F1",
+      },
     ],
   },
   {
@@ -305,6 +309,7 @@ export const HELP_GUIDE: readonly HelpSection[] = [
   {
     group: "more" as HelpGroup,
     entries: [
+      { command: "/guide", summary: "short guides for every feature · F1" },
       { command: "/help all", summary: "every command and key" },
       { command: "/help music", summary: "or session, window, keys" },
     ],
@@ -392,7 +397,7 @@ export function helpText(): string {
 }
 
 /** Usage for a known verb, shown instead of sending a near-miss to the agent. */
-const USAGE: Readonly<Record<string, string>> = {
+export const USAGE: Readonly<Record<string, string>> = {
   click: "/click on|off|<volume> · /click 50%",
   "count-in": "/count-in 0|1|2",
   chords:
@@ -461,6 +466,7 @@ const USAGE: Readonly<Record<string, string>> = {
   logout: "/logout [provider]",
   auth: "/auth [--check]",
   help: "/help [topic] · /help all · /help music|session|window|keys",
+  guide: "/guide [topic] · /guide chords · F1",
   fx: "fx <effect> <param> <value> | on | off | preset <name> · fx delay mix 0.3",
   synth: "synth <param> <value> | preset <name> · synth lpf 1200",
   pack: "/pack list | info <name> | use <pack>/<sound> | add <url>",

@@ -171,3 +171,47 @@ test.skipIf(!supported)(
   },
   20_000,
 );
+
+test.skipIf(!supported)(
+  "real PTY: /guide tree, F1, keys panel and filter at 80 columns",
+  async () => {
+    const t = await launch(COLS, 24, {});
+    try {
+      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.send("/guide\r");
+      await t.until(() => t.vt.text().includes("Getting started"), "guides");
+      expectFits(t);
+      await expectKeysPanel(t, "expand a section", "Writing music");
+      await t.send("/euclid");
+      await t.until(() => t.vt.text().includes("/ euclid"), "guide filter");
+      expect(t.vt.text()).toContain("Rhythm and drums");
+      expect(t.vt.text()).not.toContain("Getting started");
+      await t.send(ESC);
+      await t.until(() => t.vt.text().includes("Getting started"), "cleared");
+      // Home ↓ → expands Writing music; ↓ Enter opens its first guide.
+      await t.send("\u001b[H");
+      await t.send("\u001b[B");
+      await t.send("\u001b[C");
+      await t.until(() => t.vt.text().includes("Chords"), "expanded");
+      await t.send("\u001b[B");
+      await t.send("\r");
+      await t.until(
+        () => t.vt.text().includes("Writing music › Tracks"),
+        "guide page",
+      );
+      for (const line of t.vt.lines())
+        expect([...line].length).toBeLessThanOrEqual(COLS);
+      await t.send(ESC);
+      await closeWithEsc(t, "guide");
+      // F1 toggles the same pane.
+      await t.send("\u001bOP");
+      await t.until(() => t.vt.text().includes("Getting started"), "F1");
+      await t.send("\u001bOP");
+      await t.until(() => !t.vt.text().includes("Getting started"), "F1 off");
+    } finally {
+      t.terminal.write("\u0003");
+      await t.proc.exited;
+    }
+  },
+  30_000,
+);

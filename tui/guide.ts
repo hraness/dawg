@@ -34,9 +34,19 @@ export const GUIDE_HINTS = {
   page: " ↑↓ scroll · ← back · esc back · ? keys ",
 } as const;
 
-/** `## Ask` → `── Ask`, `- x` → `• x`, code spans lose their backticks. */
+/**
+ * `## Ask` → `── Ask`, `- x` → `• x`, code spans lose their backticks. The
+ * blank line Markdown wants after a heading is dropped: in a pane the rule
+ * already separates it.
+ */
 export function guideLines(body: string, unicode = true): GuideRow[] {
-  return body.split("\n").map((line) => {
+  const lines = body
+    .split("\n")
+    .filter(
+      (line, index, all) =>
+        line.trim() !== "" || !/^#{1,6}\s/.test(all[index - 1] ?? ""),
+    );
+  return lines.map((line) => {
     const heading = line.match(/^#{1,6}\s+(.*)$/);
     if (heading)
       return { text: `${unicode ? "──" : "--"} ${heading[1]}`, heading: true };
@@ -294,7 +304,10 @@ export class GuideBrowser {
       this.scroll = Math.max(0, Math.min(max, this.scroll));
       const crumb = page.parent ? `${this.byId(page.parent)?.title} › ` : "";
       return {
-        title: `guide · ${crumb}${page.title}`.replace("›", unicode ? "›" : ">"),
+        title: `guide · ${crumb}${page.title}`.replace(
+          "›",
+          unicode ? "›" : ">",
+        ),
         rows: rows.slice(this.scroll, this.scroll + height),
         scroll: this.scroll,
         hint: GUIDE_HINTS.page,
@@ -321,7 +334,10 @@ export class GuideBrowser {
     if (rows.length === 0) rows.push({ text: "no guide matches", muted: true });
     const filter = this.filtering || this.query;
     if (filter)
-      rows.unshift({ text: `/ ${this.query}${this.filtering ? "_" : ""}`, muted: true });
+      rows.unshift({
+        text: `/ ${this.query}${this.filtering ? "_" : ""}`,
+        muted: true,
+      });
     const body = Math.max(1, height);
     const at = rows.findIndex((row) => row.selected);
     const scroll = Math.max(0, Math.min(rows.length - body, at - body + 2));

@@ -25,6 +25,8 @@ import {
   type TrackScoreSnapshot,
 } from "./highway.ts";
 import { asciiHint, fitHint, HINTS } from "./grammar.ts";
+import { GuideBrowser } from "./guide.ts";
+import { listGuides } from "../guides/index.ts";
 import { classifyKey, overlayKey, type UiCommand } from "./keys.ts";
 import { PromptModel, type PromptAction, type PromptMode } from "./prompt.ts";
 import {
@@ -89,10 +91,15 @@ export interface UiState {
   text?: TextView | undefined;
   /** The `?` panel: keys for the screen underneath, drawn over it. */
   keys?: TextView | undefined;
+  /** The `/guide` tree and pages. */
+  guide?: GuideBrowser | undefined;
 }
 
-/** `log` is the transcript, `picker` an arrow-key list, `text` static lines. */
-export type Overlay = "log" | "picker" | "text" | undefined;
+/**
+ * `log` is the transcript, `picker` an arrow-key list, `text` static lines,
+ * `guide` the user guides.
+ */
+export type Overlay = "log" | "picker" | "text" | "guide" | undefined;
 
 /** A scrollable read-only panel (`/help`, `/sessions`, `/tracks`). */
 export interface TextView {
@@ -818,6 +825,61 @@ function paintText(
   });
 }
 
+function paintGuide(
+  buffer: CellBuffer,
+  ui: UiState,
+  region: { y: number; height: number },
+  width: number,
+): void {
+  const guide = ui.guide;
+  if (!guide) return;
+  const roles = ui.theme.roles;
+  const unicode = ui.capabilities.unicode;
+  const left = width >= 60 ? 2 : 0;
+  const boxWidth = width - left * 2;
+  const height = region.height;
+  if (height < 3 || boxWidth < 10) return;
+  const panel = paintBox(buffer, ui, {
+    left,
+    top: region.y,
+    width: boxWidth,
+    height,
+  });
+  const view = guide.view(boxWidth - 4, height - 2, unicode);
+  buffer.text(
+    left + 2,
+    region.y,
+    ` ${view.title} `,
+    onBackground({ ...roles.text, bold: true }, panel),
+    boxWidth - 4,
+  );
+  const hint = footerHint(view.hint, boxWidth - 4, unicode);
+  if (hint)
+    buffer.text(
+      left + boxWidth - 2 - displayWidth(hint),
+      region.y + height - 1,
+      hint,
+      onBackground(roles.muted, panel),
+    );
+  view.rows.forEach((row, index) => {
+    const style = row.selected
+      ? { ...roles.borderFocus, bold: true }
+      : row.heading
+        ? { ...roles.borderFocus, bold: true }
+        : row.muted
+          ? roles.muted
+          : roles.text;
+    const marker = row.selected ? (unicode ? "›" : ">") : " ";
+    const text = guide.page === undefined ? `${marker}${row.text}` : row.text;
+    buffer.text(
+      left + 2,
+      region.y + 1 + index,
+      truncate(text, boxWidth - 4),
+      onBackground(style, panel),
+    );
+  });
+}
+
 function paintBox(
   buffer: CellBuffer,
   ui: UiState,
@@ -1039,6 +1101,8 @@ export function composeFrame(
       paintPicker(buffer, ui, layout.highway, width);
     else if (ui.overlay === "text" && ui.text)
       paintText(buffer, ui, layout.highway, width);
+    else if (ui.overlay === "guide" && ui.guide)
+      paintGuide(buffer, ui, layout.highway, width);
     else
       paintHighway(
         buffer,
@@ -1149,6 +1213,7 @@ export class TuiApp {
       picker: this.picker,
       text: this.text,
       keys: this.keys,
+      guide: this.guide,
     };
   }
 
@@ -1270,6 +1335,18 @@ export class TuiApp {
         if (key.command === "redraw") this.invalidate();
         return { type: "ui", command: key.command };
       }
+      return { type: "overlay" };
+    }
+    if (this.overlay === "guide" && this.guide) {
+      if (
+        key.type === "ui" &&
+        (key.command === "quit" || key.command === "redraw")
+      ) {
+        if (key.command === "redraw") this.invalidate();
+        return { type: "ui", command: key.command };
+      }
+      const result = this.guide.key(value, Math.max(1, this.io.rows() - 10));
+      if (result === "close") this.closeGuide();
       return { type: "overlay" };
     }
     if (this.overlay === "text" && this.text) {
@@ -1434,13 +1511,42 @@ export class TuiApp {
     return this.overlay === "picker" && this.picker?.filtering === true;
   }
 
+  /** The `/guide` pane; built on first use from `guides/*.md`. */
+  guide: GuideBrowser | undefined;
+
+  /**
+   * Open the guides at the tree, or at one guide (`chords`). Returns false
+   * (and opens nothing) when `topic` names no guide.
+   */
+  openGuide(topic?: string): boolean {
+    const browser = this.guide ?? new GuideBrowser(listGuides());
+    if (topic && !browser.open(topic)) return false;
+    if (!topic) {
+      browser.page = undefined;
+      browser.query = "";
+      browser.filtering = false;
+    }
+    this.guide = browser;
+    this.overlay = "guide";
+    return true;
+  }
+
+  closeGuide(): void {
+    if (this.overlay === "guide") this.overlay = undefined;
+  }
+
+  /** True while the guide filter takes typed text (so `?` is a letter). */
+  get guideTyping(): boolean {
+    return this.overlay === "guide" && this.guide?.typing === true;
+  }
+
   closeText(): void {
     this.text = undefined;
     if (this.overlay === "text") this.overlay = undefined;
   }
 
   /**
-   * Handle TUI-local slash commands (`/log`, `/theme`, `/motion`).
+   * Handle TUI-local slash commands (`/log`, `/theme`, `/motion`, `/guide`).
    * Returns a receipt, or undefined when the command is not a UI command.
    */
   command(text: string): string | undefined {
@@ -1463,6 +1569,15 @@ export class TuiApp {
       return this.capabilities.colorDepth === "none" && name !== "mono"
         ? `theme ${name} · terminal has no color, showing mono`
         : `theme ${name}`;
+    }
+    const guide = command.match(/^\/guides?(?:\s+(.+))?$/i);
+    if (guide) {
+      const topic = guide[1]?.trim();
+      if (!this.openGuide(topic))
+        return `no guide named ${topic} · /guide lists them all`;
+      return topic
+        ? `guide · ${this.guide?.guides.find((g) => g.id === this.guide?.page)?.title ?? topic} · esc back`
+        : "guides · → open · esc closes";
     }
     const view = command.match(/^\/view(?:\s+(\S+))?$/i);
     if (view) {
