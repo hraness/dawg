@@ -183,6 +183,20 @@ test.skipIf(!supported)(
 );
 
 test.skipIf(!supported)(
+  "real PTY: SIGTERM turns mouse reporting off",
+  async () => {
+    const t = await launch(80, 24, {});
+    await t.until(() => t.vt.text().includes("STEER"), "prompt");
+    expect(t.vt.mouseModes.size).toBe(3);
+    t.proc.kill("SIGTERM");
+    expect(await t.proc.exited).toBe(143);
+    await Bun.sleep(50);
+    expect(t.vt.mouseModes.size).toBe(0);
+  },
+  20_000,
+);
+
+test.skipIf(!supported)(
   "real PTY: --no-mouse and DAWG_MOUSE=0 never enable reporting",
   async () => {
     for (const [env, argv] of [

@@ -144,6 +144,15 @@ export const KEYS = {
         ["ctrl-c", "quit"],
       ],
     },
+    {
+      title: "mouse",
+      rows: [
+        ["click ▶/⏸ BPM", "play / pause"],
+        ["click track name", "track list (click one to focus it)"],
+        ["click model", "model picker"],
+        ["volume · fx filter", "a bare param opens its fader drawer"],
+      ],
+    },
   ],
   list: [{ title: "list", rows: LIST }],
   audition: [
@@ -188,9 +197,45 @@ export const KEYS = {
         ["enter", "type a value · pick from a list"],
         ["space", "toggle on/off (elsewhere: hear the track)"],
         ["x  delete", "reset to default (deletes an automation point)"],
+        ["enter (number)", "open its fader drawer"],
+      ],
+    },
+    {
+      title: "mouse",
+      rows: [
+        ["click", "select a row · click again opens it"],
+        ["wheel", "move through the list"],
       ],
     },
     ...AUDITIONING,
+  ],
+  fader: [
+    {
+      title: "fader drawer",
+      rows: [
+        ["← →  - +", "step the value (staged, heard on the loop)"],
+        ["shift-← →  { }", "coarse step (five)"],
+        ["[ ]  alt-← →", "fine step (a tenth)"],
+        ["pgup pgdn", "big step (twenty)"],
+        ["home end", "minimum / maximum"],
+        ["0-9 .", "type an exact value, enter sets it"],
+        ["0  d", "back to the default"],
+        ["↑ ↓  tab shift-tab", "next / previous param of this device"],
+        ["enter", "keep every staged change (one undo step)"],
+        ["esc", "revert and close"],
+        ["space  a  c", "loop · A/B · solo ↔ in context"],
+      ],
+    },
+    {
+      title: "mouse",
+      rows: [
+        ["click [−] [+]", "step (shift-click: coarse)"],
+        ["click / drag bar", "set the value there"],
+        ["wheel on a fader", "step it (shift: coarse)"],
+        ["click an option", "choose it"],
+        ["[keep] [revert]", "same as enter / esc"],
+      ],
+    },
   ],
   euclid: [
     {

@@ -58,9 +58,15 @@ describe("guides", () => {
     expect(unknown).toEqual([]);
   });
 
-  // Play mode, the menu loop, sessions and provider setup are hands-on;
-  // every other feature shows what to ask and what to type.
-  const HANDS_ON = new Set(["play", "audition", "sessions", "providers"]);
+  // Play mode, the menu loop, faders, sessions and provider setup are
+  // hands-on; every other feature shows what to ask and what to type.
+  const HANDS_ON = new Set([
+    "play",
+    "audition",
+    "faders",
+    "sessions",
+    "providers",
+  ]);
   test("each feature guide shows both ways in: ask and by hand", () => {
     for (const guide of guides.filter((g) => g.parent)) {
       expect(guide.body).toMatch(/`[^`]+`/);

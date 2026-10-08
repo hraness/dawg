@@ -949,6 +949,19 @@ async function runInteractive(): Promise<void> {
   process.once("exit", () => {
     if (mouseEnabled()) writeSync(1, MOUSE_OFF);
   });
+  // Nor may a kill or a closed terminal: restore it, then exit as killed.
+  for (const [signal, code] of [
+    ["SIGTERM", 143],
+    ["SIGHUP", 129],
+  ] as const)
+    process.once(signal, () => {
+      try {
+        writeSync(1, `${MOUSE_OFF}${ESC}0m${ESC}?2004l${ESC}?25h${ESC}?1049l`);
+      } catch {
+        // The terminal may already be gone (SIGHUP).
+      }
+      process.exit(code);
+    });
   stdin.setRawMode?.(true);
   stdin.resume();
   // Alternate screen, hidden cursor, bracketed paste.
@@ -2730,6 +2743,8 @@ function menuContext(): MenuContext {
 /** The screen `?` describes, or undefined while `?` is typed text. */
 function keysScreen(): readonly KeySection[] | undefined {
   if (euclid.open) return euclid.typing ? undefined : KEYS.euclid;
+  if (fader && menu.open)
+    return fader.typing !== undefined ? undefined : KEYS.fader;
   if (menu.open) return menu.typing ? undefined : KEYS.menu;
   const overlay = tui.ui.overlay;
   if (overlay === "picker")

@@ -31,7 +31,7 @@ The header (`dawg` · track · ▶/⏸ BPM · key · session · N windows, then 
 
 Keys: `Space` (empty prompt) toggles playback. `Enter` submits, or queues in QUEUE mode. `Shift+Enter`/`Ctrl+J` inserts a newline, `Alt+Enter` queues and `Ctrl+Q` toggles STEER/QUEUE. `Ctrl+Z`/`Ctrl+Y` undo and redo, and `Ctrl+O` or `/transcript` opens the transcript, which scrolls with ↑/↓, PgUp/PgDn and Home/End, and `/` cycles its filter (all, requests, ops, errors). `Esc` cancels an agent turn, closes the overlay or clears the draft. `Ctrl+L` redraws and `Ctrl+C` exits. Bracketed paste keeps multiline text intact.
 
-Themes: `/theme default|high-contrast|mono`, `--theme`, `DAWG_THEME`. Color falls back through truecolor, 256-color, 16-color and monochrome. `NO_COLOR` and `TERM=dumb` are supported. `/motion off`, `--reduce-motion` and `DAWG_REDUCE_MOTION=1` switch to static states in the same positions.
+Themes: `/theme default|high-contrast|mono`, `--theme`, `DAWG_THEME`. Color falls back through truecolor, 256-color, 16-color and monochrome. `NO_COLOR` and `TERM=dumb` are supported. `/motion off`, `--reduce-motion` and `DAWG_REDUCE_MOTION=1` switch to static states in the same positions. `--no-mouse` or `DAWG_MOUSE=0` keeps the terminal's own mouse selection (see **Mouse**).
 
 Other code reports into the activity strip through `ActivityFeed` (`tui/activity.ts`): `pushCard(text, {tone, baseRevision, resultRevision, hint})`, `pushError(text)`, `setSpinner(label | undefined)`, `setQueueDepth(n)` and `applyAgentEvent(event)`, which accepts the agent's streaming `AgentEvent`s unchanged. Command handlers return a `Receipt` (`{ok: true | false | "warn", text}`), so a failure such as `main is not a drum track` is red because it says so, not because of its wording; `receiptTone` only classifies the legacy strings that remain. The `^z undo` hint rides only on receipts that changed the score, and only the first three in a session. `/help`, `/sessions` and `/tracks` open a scrollable text overlay (`TuiApp.openText`) and leave one summary card in the strip; `/help` is generated from `src/commands/help.ts`, which also feeds `dawg --help` and the usage hints that answer an unknown `/word` or a near-miss such as `pan 3` without a model call. A known verb followed by a sentence (three or more words, no numbers: `add a walking bass in A minor`) goes to the agent instead. An unknown `/word` names the nearest command (`unknown command /clik · did you mean /click? · /help`); a bare word one edit from a command whose remaining words parse as its arguments is suggested locally (`tempoo 90 · did you mean tempo 90?`); other bare words are requests for the agent.
 
@@ -981,16 +981,70 @@ Every list, picker and editor uses the same keys (see **Keys** below). In the me
 | Key                         | Does                                                                      |
 | --------------------------- | ------------------------------------------------------------------------- |
 | `↑` `↓` / `k` `j`           | move                                                                      |
-| `Enter` / `→` / `l`         | open a section, pick from a list, or start typing a value                 |
+| `Enter` / `→` / `l`         | open a section, pick from a list, or open a number's fader drawer         |
 | `←` `→` / `h` `l` / `-` `+` | adjust a value by its step (cutoff moves 25%) or cycle a choice           |
 | `Space`                     | toggle on/off; elsewhere, hear the focused track (see Previewing changes) |
-| digits                      | type a value on a focused value row; `Enter` sets it, `Esc` cancels       |
+| digits                      | type a value; `Enter` stages it in the fader drawer, `Esc` cancels        |
 | `/`                         | filter the current list by name, value or command                         |
 | `x` / `Delete`              | reset the focused value to its default; on an automation point, remove it |
 | `Esc` / `←` / `h`           | clear the filter, then back one level, then close                         |
 | `?`                         | the keys for this screen                                                  |
 
 Automation rows take `beat:value` pairs (`2:800` or `0:200 4:8000`); a ramp is two pairs, start and end, and the renderer interpolates between points. Turning an effect's first field up switches it on with defaults. Each change runs the command it shows through the normal prompt path, so it is one `ScoreOperation`, one receipt, one undo step, and it syncs to other windows and the project files.
+
+## Fader drawer
+
+Editing a number opens a fader drawer: a panel docked directly above the prompt, over the bottom of the piano roll, which stays visible above it. It opens from `Enter` (or a second click) on a number row in the menu, or from a bare parameter at the prompt: `volume`, `pan`, `fx filter` (every filter param, focused on the first number) or `fx reverb mix` (focused on mix). The drawer stacks every param of that device (all of the filter's, or the Mix screen's), so one drawer covers a device.
+
+```text
+╭─ menu › Effects › Filter ─────────── loop off · B staged 1 · ● staged  [keep] [revert]─╮
+│   type        lpf │ hpf │ bpf                                                         │
+│                                                                                        │
+│ › cutoff     1200 Hz ← 800 Hz                                         20 Hz … 20000 Hz │
+│   [−] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┃━━━●───────────────────────────────── [+] │
+╰──────── ←→ adjust · ⇧←→ coarse · [ ] fine · ↑↓ param · 0-9 type · d default · esc revert ─╯
+```
+
+Each field shows its name, current value with unit, the committed value while a change is staged (`1200 Hz ← 800 Hz`), its range, and a bar with `[−]` `[+]` buttons; the bar marks the committed position with `┃`. Wide positive ranges (cutoff, delay time) map on a log scale. Choice params (filter type, presets, on/off) are segmented selectors in the same drawer. Ranges, steps, units and formatting come from the menu row, which takes them from `core/params.ts`, the effect specs and the automation lanes.
+
+Every change is staged on the audition loop (see **Previewing changes**), filed under its field so repeated nudges replace one staged edit; the piano roll and the loop, when it plays, follow at once. `Enter` keeps everything staged as one revision and one undo step; `Esc` reverts. A setting the loop cannot stage (tempo, loop length) applies directly.
+
+| Key                         | In the drawer                                         |
+| --------------------------- | ----------------------------------------------------- |
+| `←` `→` / `-` `+` / `h` `l` | step by the param's step                              |
+| `Shift`-`←` `→` / `{` `}`   | coarse step (five steps)                              |
+| `[` `]` / `Alt`-`←` `→`     | fine step (a tenth of a step)                         |
+| `PgUp` `PgDn`               | big step (twenty)                                     |
+| `Home` `End`                | minimum / maximum                                     |
+| `1`-`9` `.`                 | type an exact value; `Enter` sets it, `Esc` cancels   |
+| `0` / `d`                   | back to the default                                   |
+| `↑` `↓` / `Tab` `Shift-Tab` | previous / next param of this device                  |
+| `Enter`                     | keep every staged change (one undo step); none: close |
+| `Esc`                       | revert staged changes and close                       |
+| `Space` `a` `c`             | audition loop · A/B · solo ↔ in context               |
+| `?`                         | these keys                                            |
+
+On a choice, `←` `→` move between options and `1`-`9` pick one by number. Sizes: two rows per field (value line, then bar) while the drawer takes at most half the piano roll; one row per field when shorter, as a window that follows the focused field; and at the 8-row terminal minimum a single borderless row with the focused field. The piano roll always keeps at least 40% of its rows above the drawer (at least three).
+
+## Mouse
+
+dawg turns on SGR mouse reporting (modes 1000, 1002 and 1006) and turns it off again on exit, on `SIGTERM`/`SIGHUP`, on a crash, and around external editors. `--no-mouse` or `DAWG_MOUSE=0` (and `TERM=dumb`) leave it off, so the terminal's own selection and scrollback work; a terminal without mouse support ignores the modes and every key still works. Legacy X10 reports are swallowed rather than typed into the prompt.
+
+| Where               | Click / wheel                                                        |
+| ------------------- | -------------------------------------------------------------------- |
+| fader `[−]` `[+]`   | step (shift-click: coarse)                                           |
+| fader bar           | set the value at that point; drag to slide it (past the ends clamps) |
+| fader option        | choose it                                                            |
+| fader name          | focus that field                                                     |
+| `[keep]` `[revert]` | the same as `Enter` / `Esc`                                          |
+| wheel on a fader    | step it (up raises; shift: coarse)                                   |
+| list / menu row     | select it; a click on the selected row opens it (`Enter`)            |
+| wheel on a list     | move through it                                                      |
+| header `▶/⏸ BPM`    | play / pause                                                         |
+| header track name   | the track list (`/tracks`); click a track to focus it                |
+| header model        | the model picker                                                     |
+
+Hit-testing uses the same paint pass that draws the frame: each painter records its click regions into the frame's `HitMap` (`tui/hits.ts`), so targets never drift from what is on screen. The piano roll does not place notes on click (a note needs pitch, length and velocity that a click does not carry); clicks there are ignored.
 
 ## Previewing changes
 
@@ -1049,6 +1103,8 @@ One grammar for every picker (`/model`, `/pattern`, `/kit`, `/resume`, the wavet
 | `Esc`                       | back one level: clears the filter or a typed value first       |
 | `?`                         | the keys for the current screen, drawn over it; any key closes |
 | digits                      | type a value, only where a value is focused                    |
+
+The fader drawer adds coarse, fine and big steps, Home/End and `0`/`d` default (see **Fader drawer**); clicks and the wheel mirror these keys (see **Mouse**).
 
 Every screen ends in a one-line footer of its keys that fits 80 columns (parts drop from the middle when narrower; `esc` and `? keys` stay). `?` on an empty prompt lists the prompt keys and the three ways in. Play mode is the one exception: its letters and number row are piano keys and chord latches (the GarageBand "Musical Typing" convention); its `?` panel says so.
 

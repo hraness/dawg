@@ -72,9 +72,7 @@ export function faderPosition(spec: FaderNumber, value: number): number {
   if (spec.max <= spec.min) return 0;
   const clamped = Math.min(spec.max, Math.max(spec.min, value));
   if (logScale(spec))
-    return (
-      Math.log(clamped / spec.min) / Math.log(spec.max / spec.min)
-    );
+    return Math.log(clamped / spec.min) / Math.log(spec.max / spec.min);
   return (clamped - spec.min) / (spec.max - spec.min);
 }
 
@@ -99,7 +97,11 @@ function snap(spec: FaderNumber, raw: number): number {
   const down = spec.step(raw, -1);
   // Linear steps round onto the grid; log steps move by a ratio. Either
   // way the step size near `raw` bounds the precision worth keeping.
-  const size = Math.max(1e-9, Math.min(Math.abs(up - raw), Math.abs(raw - down)) || Math.abs(up - down) / 2);
+  const size = Math.max(
+    1e-9,
+    Math.min(Math.abs(up - raw), Math.abs(raw - down)) ||
+      Math.abs(up - down) / 2,
+  );
   const decimals = Math.max(0, Math.min(4, Math.ceil(-Math.log10(size))));
   const candidates = [down, up, Number(raw.toFixed(decimals))];
   // Prefer an exact grid value when one is within half a step.
@@ -176,13 +178,22 @@ export function focusIndex(
 function setNumber(spec: FaderNumber, value: number): FaderResult {
   if (spec.value !== undefined && Math.abs(value - spec.value) < 1e-9)
     return { type: "handled" };
-  return { type: "set", command: spec.command(value), key: faderKey(spec.label) };
+  return {
+    type: "set",
+    command: spec.command(value),
+    key: faderKey(spec.label),
+  };
 }
 
 function setChoice(spec: FaderChoice, index: number): FaderResult {
-  const option = spec.options[Math.min(spec.options.length - 1, Math.max(0, index))];
+  const option =
+    spec.options[Math.min(spec.options.length - 1, Math.max(0, index))];
   if (option === undefined || option === spec.value) return { type: "handled" };
-  return { type: "set", command: spec.command(option), key: faderKey(spec.label) };
+  return {
+    type: "set",
+    command: spec.command(option),
+    key: faderKey(spec.label),
+  };
 }
 
 /** One key in fader mode. Mutates `state` (focus, typing). */
@@ -193,7 +204,9 @@ export function faderKeyPress(
   options: FaderKeyOptions,
 ): FaderResult {
   if (fields.length === 0) return { type: "close" };
+  // Ctrl-C, Ctrl-L and `?` (the keys panel) belong to the app.
   if (value === "\u0003" || value === "\u000c") return { type: "pass" };
+  if (value === "?" && state.typing === undefined) return { type: "pass" };
   const index = focusIndex(state, fields);
   const field = fields[index]!;
   state.label = field.label;
@@ -227,8 +240,7 @@ export function faderKeyPress(
     return options.dirty ? { type: "keep" } : { type: "close" };
   const move = UP.has(value) ? -1 : DOWN.has(value) ? 1 : 0;
   if (move) {
-    state.label =
-      fields[(index + move + fields.length) % fields.length]!.label;
+    state.label = fields[(index + move + fields.length) % fields.length]!.label;
     return { type: "handled" };
   }
   if (options.audition) {
@@ -330,7 +342,12 @@ export function drawerView(
   state: FaderState,
   fields: readonly FaderSpec[],
   committed: readonly FaderSpec[],
-  options: { title: string; dirty: boolean; status?: string | undefined; hint?: string },
+  options: {
+    title: string;
+    dirty: boolean;
+    status?: string | undefined;
+    hint?: string;
+  },
 ): DrawerView {
   const before = new Map(committed.map((field) => [field.label, field]));
   const drawn: DrawerField[] = fields.map((field) => {
@@ -353,7 +370,9 @@ export function drawerView(
       };
     }
     const text =
-      field.value === undefined ? (field.off ?? "off") : field.format(field.value);
+      field.value === undefined
+        ? (field.off ?? "off")
+        : field.format(field.value);
     const wasText =
       was?.kind === "number"
         ? was.value === undefined
@@ -367,7 +386,9 @@ export function drawerView(
       text,
       committed: changed ? wasText : undefined,
       position:
-        field.value === undefined ? undefined : faderPosition(field, field.value),
+        field.value === undefined
+          ? undefined
+          : faderPosition(field, field.value),
       committedPosition:
         changed && was?.kind === "number" && was.value !== undefined
           ? faderPosition(field, was.value)
