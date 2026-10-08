@@ -22,6 +22,7 @@
  *
  * Pure: the session asks for a chord per note key and owns sound and time.
  */
+import { resolveTuning, snapToTuning } from "../../core/tuning.ts";
 import {
   BASS_MODES,
   CHORD_PATTERNS,
@@ -610,6 +611,7 @@ export function chordPhrase(
       ? rendered.bass.map((note) => ({ ...note, pitch: note.pitch + 24 }))
       : [...rendered.notes, ...rendered.bass];
   const end = totalBeats * tpb;
+  const table = resolveTuning(score.tuning, track.tuning, score.key);
   const notes: NoteInput[] = [];
   for (const note of performed) {
     const startTick = Math.round(note.start * tpb);
@@ -622,7 +624,7 @@ export function chordPhrase(
         1,
         Math.min(Math.round(note.length * tpb), end - startTick),
       ),
-      pitch: note.pitch,
+      pitch: snapToTuning(note.pitch, table),
       velocity: note.velocity,
     });
   }

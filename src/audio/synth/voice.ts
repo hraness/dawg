@@ -21,6 +21,7 @@
 import type { Note, Track } from "../../../core/score.ts";
 import type { PerformedNote } from "../../../core/expression.ts";
 import type { FxLane } from "../../../core/fx.ts";
+import { noteHz, type TuningTable } from "../../../core/tuning.ts";
 import {
   LEGACY_SOUNDS,
   SOUND_ALIASES,
@@ -79,6 +80,8 @@ export type VoiceContext = Readonly<{
    * (a wavetable track's table); otherwise the sound's resolver is used.
    */
   oscillatorFor?: (note: Note) => OscillatorFactory | undefined;
+  /** The track's merged tuning (`resolveTuning`); absent is 12-TET. */
+  tuning?: TuningTable;
 }>;
 
 /** Track gain at a tick (volume × volume lane), supplied by the renderer. */
@@ -369,8 +372,11 @@ export function renderSynthNote(
   const dampAt = (t: number): number =>
     damp && t > damp.from ? Math.exp(-(t - damp.from) / damp.tau) : 1;
 
-  // Pitch.
-  const base = 440 * 2 ** ((note.pitch - 69) / 12);
+  // Pitch: the tuning table's key frequency and the note's cents (exactly
+  // 440 · 2^((pitch − 69)/12) without either). A key a keyboard mapping
+  // leaves unmapped is silent.
+  const base = noteHz(note.pitch, note.cents, context.tuning);
+  if (!(base > 0)) return;
 
   if (isZzfxSound(sound) && !context.oscillatorFor) {
     const count = end - start;

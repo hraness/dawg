@@ -12,6 +12,7 @@ import {
 import { drumVoiceForPitch, isDrumInstrument } from "../../core/drums.ts";
 import {
   performanceTimingFor,
+  tunedTiming,
   performNotes,
   type PerformedNote,
 } from "../../core/expression.ts";
@@ -58,6 +59,7 @@ import {
   type OrbitBus,
 } from "./effects/bus.ts";
 import { tableFor, wavetableOscillator } from "./wavetable.ts";
+import { noteHz, resolveTuning, type TuningTable } from "../../core/tuning.ts";
 import {
   duckGains,
   duckSettings,
@@ -343,8 +345,13 @@ export class StemRenderer {
     // notes as played. A track with neither gets its notes back unchanged.
     const timing = performanceTimingFor(score);
     const performed = new Map<string, readonly PerformedNote[]>();
-    for (const [trackId, notes] of groups)
-      performed.set(trackId, performNotes(tracks.get(trackId), notes, timing));
+    for (const [trackId, notes] of groups) {
+      const track = tracks.get(trackId);
+      performed.set(
+        trackId,
+        performNotes(track, notes, tunedTiming(timing, score, track)),
+      );
+    }
     // Orbit ducking is a gain on finished stems (src/audio/effects/duck.ts).
     const duckers: Ducker[] = [];
     for (const [trackId] of groups) {
@@ -380,6 +387,8 @@ export class StemRenderer {
       // Wavetable hook: the oscillator factory for a wavetable track (its
       // table id joins the stem key), undefined for every other instrument.
       const wavetable = track ? wavetableHook(track, bank, context) : undefined;
+      // The merged song and track tuning; undefined keeps 12-TET untouched.
+      const tuning = resolveTuning(score.tuning, track?.tuning, score.key);
       const key = stemKey(
         track,
         notes,
@@ -439,6 +448,7 @@ export class StemRenderer {
             ...context,
             ticksPerBeat: score.ticksPerBeat,
             ...(wavetable ? { oscillatorFor: wavetable.oscillatorFor } : {}),
+            ...(tuning ? { tuning } : {}),
           };
           const warp = context.warp;
           for (const note of played) {
@@ -468,7 +478,7 @@ export class StemRenderer {
           const drums = isDrumInstrument(track?.instrument);
           for (const note of played) {
             if (drums) renderDrumNote(dry, note, track, context);
-            else renderToneNote(dry, note, track, context);
+            else renderToneNote(dry, note, track, context, tuning);
           }
         }
         if (track) applyMonoChain(dry, track, context);
@@ -725,6 +735,10 @@ function stemKey(
     ...(wavetableId ? [wavetableId] : []),
     // A convolution reverb's impulse (its sha256 for a sample).
     ...(impulseId ? [impulseId] : []),
+    // The song tuning, and the key whose tonic is the default root.
+    ...(context.score.tuning || track?.tuning
+      ? [context.score.tuning ?? null, context.score.key]
+      : []),
   ]);
 }
 
@@ -799,12 +813,14 @@ function renderToneNote(
   note: Note,
   track: Track | undefined,
   context: RenderContext,
+  tuning?: TuningTable,
 ): void {
   const { sampleRate, samples, samplesPerTick } = context;
   const instrument = track?.instrument ?? "sine";
   const { start, length } = noteSpan(note, context);
   const end = Math.min(samples, start + length);
-  const frequency = 440 * 2 ** ((note.pitch - 69) / 12);
+  const frequency = noteHz(note.pitch, note.cents, tuning);
+  if (!(frequency > 0)) return;
   const velocity = Math.max(0, Math.min(1, note.velocity));
   const performance = (note as PerformedNote).performance;
   const cents = performance?.cents;

@@ -12,7 +12,8 @@
  * `vibrato` replaces the synth `vib`/`vibmod`, a note's `bend` replaces the
  * pitch envelope (`penv`), and a gliding note ignores the ZzFX `slide`.
  */
-import type { Note, Track } from "./score.ts";
+import type { Note, Track, TrackScore } from "./score.ts";
+import { keyCentsFor, resolveTuning } from "./tuning.ts";
 import {
   hasTempoMap,
   loopTicksOf,
@@ -600,6 +601,11 @@ export type PerformanceTiming = Readonly<{
    * Absent means one constant `tempoBpm` (the 0.4 arithmetic).
    */
   secondsAt?: (tick: number) => number;
+  /**
+   * Cents of a key above A4 = 440 Hz in the track's tuning, so glides and
+   * legato chains move by the tuned interval. Absent is 12-TET.
+   */
+  keyCents?: (pitch: number) => number;
 }>;
 
 /**
@@ -618,8 +624,33 @@ export function performanceTimingFor(score: TimeScore): PerformanceTiming {
   };
 }
 
+/**
+ * `timing` with a track's merged tuning, so glides move by tuned steps.
+ * Without a song or track tuning it returns `timing` unchanged.
+ */
+export function tunedTiming(
+  timing: PerformanceTiming,
+  score: Pick<TrackScore, "tuning" | "key">,
+  track: Track | undefined,
+): PerformanceTiming {
+  const tuning = resolveTuning(score.tuning, track?.tuning, score.key);
+  return tuning ? { ...timing, keyCents: keyCentsFor(tuning) } : timing;
+}
+
 /** Seconds between two ticks: through the tempo map, or at one tempo. */
 type Span = (from: number, to: number) => number;
+
+/** Cents from note `b` up to note `a`, with each note's own cents. */
+type Interval = (a: Note, b: Note) => number;
+
+function intervalFor(keyCents: PerformanceTiming["keyCents"]): Interval {
+  // Without a tuning this is exactly the 0.4 `(a − b) · 100` for notes
+  // without cents (adding 0 changes no float).
+  const keys = keyCents
+    ? (a: Note, b: Note) => keyCents(a.pitch) - keyCents(b.pitch)
+    : (a: Note, b: Note) => (a.pitch - b.pitch) * 100;
+  return (a, b) => keys(a, b) + ((a.cents ?? 0) - (b.cents ?? 0));
+}
 
 export function hasNoteExpression(note: Note): boolean {
   return (
@@ -823,7 +854,13 @@ export function performNotes(
     });
   }
   // 4. Glide and monophony (on the written timing).
-  let performed = glideAndMono(track, working, span, ticksPerBeat);
+  let performed = glideAndMono(
+    track,
+    working,
+    span,
+    ticksPerBeat,
+    intervalFor(timing.keyCents),
+  );
   // 4b. Humanize timing and length, applied to whole voices: a legato chain
   // moves as one, and a pedalled end stays at the pedal lift. A note on tick
   // 0 can only drift late (nothing sounds before the loop starts).
@@ -999,6 +1036,7 @@ function glideAndMono(
   working: readonly Working[],
   span: Span,
   ticksPerBeat: number,
+  interval: Interval,
 ): Glided[] {
   const trackGlide = track?.glide;
   const mode = trackGlide?.mode;
@@ -1050,7 +1088,7 @@ function glideAndMono(
           // gliding when it is cut off).
           const at = span(previous.start, first.start);
           const reached = monoSegment ? reachedCents(monoSegment, at) : 0;
-          from = (previous.note.pitch - first.note.pitch) * 100 + reached;
+          from = interval(previous.note, first.note) + reached;
         }
         const voice =
           from === undefined ? single(first) : single(first, from, glide);
@@ -1091,11 +1129,10 @@ function glideAndMono(
         index += 1;
         continue;
       }
-      const base = first.note.pitch;
       const segments: PitchSegment[] = [];
       chain.forEach((item, k) => {
         const offset = span(first.start, item.start);
-        const target = (item.note.pitch - base) * 100;
+        const target = interval(item.note, first.note);
         // Glide on from the pitch the voice has reached, so a glide cut off
         // by the next note never jumps (a TB-303 slide is continuous).
         const prior = segments[k - 1];
@@ -1162,6 +1199,6 @@ function glideAndMono(
     if (!previous) return single(item);
     const rank = chords.get(item.start)!.indexOf(item);
     const source = previous[Math.min(rank, previous.length - 1)]!;
-    return single(item, (source.note.pitch - item.note.pitch) * 100, glide);
+    return single(item, interval(source.note, item.note), glide);
   });
 }

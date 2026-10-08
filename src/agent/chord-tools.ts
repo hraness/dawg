@@ -24,6 +24,7 @@ import {
   type Spread,
 } from "../../core/chords.ts";
 import { midiToPitch } from "../../core/pitch.ts";
+import { resolveTuning, snapToTuning } from "../../core/tuning.ts";
 import { SCORE_LIMITS, type ScoreOperation } from "../../core/score.ts";
 import type { AgentTool, ToolContext } from "./tools.ts";
 
@@ -266,6 +267,12 @@ export const CHORD_TOOLS: readonly AgentTool[] = Object.freeze([
           `${total} notes exceed ${MAX_CHORD_NOTES}; use fewer chords, a slower rate or fewer octaves`,
         );
       const tpb = context.score.ticksPerBeat;
+      const tuningOf = (id: string) =>
+        resolveTuning(
+          context.score.tuning,
+          context.score.tracks.find((track) => track.id === id)?.tuning,
+          context.score.key,
+        );
       const operations: ScoreOperation[] = [];
       const add = (
         notes: readonly {
@@ -276,6 +283,7 @@ export const CHORD_TOOLS: readonly AgentTool[] = Object.freeze([
         }[],
         target: string,
       ) => {
+        const table = tuningOf(target);
         for (const note of notes)
           operations.push({
             type: "addNote",
@@ -284,7 +292,7 @@ export const CHORD_TOOLS: readonly AgentTool[] = Object.freeze([
               trackId: target,
               startTick: Math.round(note.start * tpb),
               durationTicks: Math.max(1, Math.round(note.length * tpb)),
-              pitch: note.pitch,
+              pitch: snapToTuning(note.pitch, table),
               velocity: note.velocity,
             },
           });

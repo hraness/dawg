@@ -10,6 +10,11 @@ import {
   AVAILABLE_INSTRUMENTS,
 } from "../audio/wav.ts";
 import type { ProjectOutline } from "./workspace.ts";
+import {
+  describeTuning,
+  resolveTuning,
+  type Tuning,
+} from "../../core/tuning.ts";
 
 export const MAX_BRIEF_BYTES = 12 * 1024;
 const MAX_FOCUSED_NOTES = 96;
@@ -114,12 +119,19 @@ export function compositionBrief(options: {
             },
           }
         : {}),
+      ...(track.tuning
+        ? { tuning: tuningBrief(score.tuning, track.tuning, score.key) }
+        : {}),
       ...(track.wavetable ? { wavetable: track.wavetable } : {}),
       ...((track.wtAutomation?.length ?? 0) > 0
         ? { wtAutomation: track.wtAutomation!.length }
         : {}),
     };
   });
+  const tunedNotes = score.notes.some(
+    (note) =>
+      note.trackId === options.focusedTrackId && note.cents !== undefined,
+  );
   const focusedNotes = score.notes
     .filter((note) => note.trackId === options.focusedTrackId)
     .slice()
@@ -135,6 +147,7 @@ export function compositionBrief(options: {
       beats(note.startTick),
       beats(note.durationTicks),
       Math.round(note.velocity * 100) / 100,
+      ...(tunedNotes ? [note.cents ?? 0] : []),
     ]);
   const recent = (options.recentOperations ?? [])
     .slice(-MAX_RECENT)
@@ -158,13 +171,23 @@ export function compositionBrief(options: {
       // Tempo events (=step, →ramp; bpm@beat), meter changes and fermatas.
       ...(score.time ? { time: describeSongTime(score) } : {}),
       ...(score.key ? { key: score.key } : {}),
+      ...(score.tuning
+        ? { tuning: tuningBrief(score.tuning, undefined, score.key) }
+        : {}),
       focusedTrack: options.focusedTrackId,
       tracks: tracks.slice(0, trackLimit),
       ...(tracks.length > trackLimit
         ? { omittedTracks: tracks.length - trackLimit }
         : {}),
       focusedNotes: {
-        columns: ["id", "pitch", "startBeat", "durationBeats", "velocity"],
+        columns: [
+          "id",
+          "pitch",
+          "startBeat",
+          "durationBeats",
+          "velocity",
+          ...(tunedNotes ? ["cents"] : []),
+        ],
         rows: visible,
         ...(focusedNotes.length > visible.length
           ? { omitted: focusedNotes.length - visible.length }
@@ -207,4 +230,28 @@ export function compositionBrief(options: {
 
 export function noteName(midi: number): string {
   return `${NOTE_NAMES[midi % 12]}${Math.floor(midi / 12) - 1}`;
+}
+
+/**
+ * A tuning as the agent reads it: the summary, plus the steps per period and
+ * whether keys map one per step (`linear`), in which case a key name such as
+ * C5 no longer sounds as its 12-TET pitch.
+ */
+function tuningBrief(
+  song: Tuning | undefined,
+  track: Tuning | undefined,
+  key: string | null | undefined,
+): { summary: string; steps?: number; linear?: boolean } {
+  const summary = describeTuning(track ?? song);
+  try {
+    const table = resolveTuning(song, track, key);
+    if (!table) return { summary };
+    return {
+      summary,
+      steps: table.size,
+      ...(table.linear && table.size !== 12 ? { linear: true } : {}),
+    };
+  } catch {
+    return { summary };
+  }
 }

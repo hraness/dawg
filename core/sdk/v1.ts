@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.15.0";
+export const SDK_VERSION = "1.16.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -88,6 +88,26 @@ export function midi(pitch: Pitch): number {
   if (value < 0 || value > 127)
     throw new DawgSdkError(`pitch is outside MIDI 0..127: ${pitch}`);
   return value;
+}
+
+/**
+ * A pitch with an optional cents suffix (SDK 1.16.0): `"E4-14c"` is E4
+ * fourteen cents flat, `"A3+50c"` a quarter tone sharp. The offset is
+ * static and sits on top of the song or track tuning; ±1200 at most.
+ */
+export function pitchCents(pitch: Pitch): Readonly<{
+  pitch: number;
+  cents: number;
+}> {
+  const match =
+    typeof pitch === "string"
+      ? pitch.trim().match(/^(.+?)([+-]\d+(?:\.\d+)?)c$/)
+      : null;
+  if (!match) return { pitch: midi(pitch), cents: 0 };
+  const cents = Number(match[2]);
+  if (!(Math.abs(cents) <= 1200))
+    throw new DawgSdkError(`pitch cents must be within ±1200: ${pitch}`);
+  return { pitch: midi(match[1]!), cents };
 }
 
 // ---------------------------------------------------------------------------
@@ -161,6 +181,8 @@ export type NoteSpec = Readonly<{
   length: number;
   /** 0..1. */
   velocity: number;
+  /** Static offset in cents from a `"E4-14c"` pitch (SDK 1.16.0); absent is 0. */
+  cents?: number;
 }> &
   NoteExpressionSpec;
 
@@ -362,12 +384,14 @@ export function expr<T extends NoteSpec | HitSpec>(
 /**
  * One note. `pitch` is a name or MIDI number, `start` and `length` are
  * beats, `velocity` defaults to 0.8, and `how` adds expression
- * (articulation, glide, bend, vibrato; SDK 1.15.0).
+ * (articulation, glide, bend, vibrato; SDK 1.15.0). A cents suffix detunes
+ * one note (SDK 1.16.0): `"E4-14c"` (see `pitchCents`).
  *
  * ```ts
  * note("A1", 0, 1)          // A1 on the downbeat for one beat
  * note("A1", 1.5, 0.5, 0.6) // off-beat eighth, softer
  * note("A1", 2, 1, 0.8, { art: "staccato" })
+ * note("E4-14c", 2)         // a just major third over C, 14 cents flat
  * ```
  */
 export function note(
@@ -377,13 +401,15 @@ export function note(
   velocity = DEFAULT_VELOCITY,
   how?: Expression,
 ): NoteSpec {
+  const tuned = pitchCents(pitch);
   return Object.freeze({
     kind: "note",
-    pitch: midi(pitch),
+    pitch: tuned.pitch,
     start: beat(start, "note start"),
     length: positive(length, "note length"),
     velocity: unit(velocity, "note velocity"),
     ...expression(how, "note"),
+    ...(tuned.cents !== 0 ? { cents: tuned.cents } : {}),
   });
 }
 
@@ -1659,6 +1685,12 @@ export type TrackInput = Readonly<{
    * Steve Reich's Piano Phase; `phasing()` works the rate out for you.
    */
   time?: TrackTimeInput;
+  /**
+   * This track's tuning over the song's (SDK 1.16.0): a library name such
+   * as `"pelog"` or `{ edo, ratios, cents, scl, kbm, ref, root, map }`.
+   * `{ ref: 432 }` alone keeps the song's table at another pitch.
+   */
+  tuning?: TuningInput | null;
   /** Synth voice parameters, Strudel names (`{ attack: 0.01, lpf: 800 }`). */
   synth?: SynthInput;
   muted?: boolean;
@@ -1815,6 +1847,7 @@ export type TrackSpec = Readonly<{
     length?: number;
     seed: number;
   }>;
+  tuning: ScoreTuning | null;
 }>;
 
 export type GlideMode = "legato" | "mono" | "poly";
@@ -2194,6 +2227,7 @@ export function track(input: TrackInput): TrackSpec {
     kit: drumKit === null ? null : drumKit.trim(),
     ...trackTime(input.time, name),
     ...trackPerformance(input, name),
+    tuning: tuningSpec(input.tuning, `track ${name}`),
   });
 }
 
@@ -2415,8 +2449,17 @@ export type SongInput = Readonly<{
   meter?: readonly [number, number] | number;
   /** Loop length in bars, 1..256, default 4. */
   bars?: number;
-  /** Free text such as `"A minor"`, or null. */
+  /**
+   * Free text such as `"A minor"`, or null. A scale name after the tonic
+   * picks a scale: `"D dorian"`, `"E hijaz"`, `"C yaman"`, `"C messiaen-3"`.
+   */
   key?: string | null;
+  /**
+   * Song tuning (SDK 1.16.0), default 12-TET at A4 = 440 Hz: a library name
+   * (`"19-edo"`, `"just"`, `"pelog"`, `"yaman"`) or `{ edo, ratios, cents,
+   * scl, kbm, ref, root, map }`. See `TuningInput`.
+   */
+  tuning?: TuningInput | null;
   /** Integer ticks per beat, default 480. Leave it alone unless you know why. */
   ticksPerBeat?: number;
   /**
@@ -2443,6 +2486,8 @@ export type ScoreNote = Readonly<{
   bend?: readonly Readonly<{ at: number; cents: number }>[];
   vibrato?: Readonly<{ rate: number; depth: number; delay?: number }>;
   humanize?: Readonly<{ timing?: number; velocity?: number; length?: number }>;
+  /** Static cents offset (SDK 1.16.0); absent is 0. */
+  cents?: number;
 }>;
 
 /** A stored automation point: integer tick. */
@@ -2501,6 +2546,8 @@ export type ScoreTrack = Readonly<{
   kit?: string;
   /** `rate`, plus `phase` and `cycle` in ticks. */
   time?: Readonly<{ rate?: number; phase?: number; cycle?: number }>;
+  /** Track tuning; dawg validates it (SDK 1.16.0). */
+  tuning?: ScoreTuning;
   wavetable?: Readonly<{ table: ScoreSampleRef } & WavetableParams>;
   wtAutomation?: readonly ScorePoint[];
   glide?: TrackSpec["glide"];
@@ -2524,6 +2571,8 @@ export type Song = Readonly<{
   key: string | null;
   /** Present only when `song({ time })` has marks. */
   time?: ScoreTime;
+  /** Present only when the song sets one (SDK 1.16.0). */
+  tuning?: ScoreTuning;
   tracks: readonly ScoreTrack[];
   notes: readonly ScoreNote[];
 }>;
@@ -2571,6 +2620,7 @@ export function song(input: SongInput): Song {
   const key = input.key ?? null;
   if (key !== null && typeof key !== "string")
     throw new DawgSdkError("song key must be a string or null");
+  const songTuning = tuningSpec(input.tuning, "song");
   if (!Array.isArray(input.tracks))
     throw new DawgSdkError("song tracks must be an array of track()");
   if (input.tracks.length > 64)
@@ -2658,6 +2708,7 @@ export function song(input: SongInput): Song {
     }
     if (t.velocityCurve) stored.velocityCurve = t.velocityCurve;
     if (t.humanize) stored.humanize = t.humanize;
+    if (t.tuning) stored.tuning = t.tuning;
     if (t.rhythm && t.rhythm.length > 0)
       stored.rhythm = Object.freeze(
         t.rhythm.map((row) => {
@@ -2697,6 +2748,7 @@ export function song(input: SongInput): Song {
             : {}),
           ...(n.vibrato ? { vibrato: n.vibrato } : {}),
           ...(n.humanize ? { humanize: n.humanize } : {}),
+          ...(n.cents ? { cents: n.cents } : {}),
         }),
       );
     }
@@ -2717,6 +2769,7 @@ export function song(input: SongInput): Song {
       ticksPerBeat,
       beatUnit,
     ),
+    ...(songTuning ? { tuning: songTuning } : {}),
     tracks: Object.freeze(tracks),
     notes: Object.freeze(notes),
   });
@@ -3016,6 +3069,105 @@ function songTime(
   return Object.keys(time).length > 0
     ? { time: Object.freeze(time) as ScoreTime }
     : {};
+}
+
+// Tuning (SDK 1.16.0)
+
+/**
+ * A tuning for `song({ tuning })` or `track({ tuning })`: a library name or
+ * an object with at most one table source (`edo`, `ratios`, `cents` or
+ * `scl`). Library names: `12-tet`, `19-edo`, `24-edo`, `31-edo`,
+ * `pythagorean`, `just` (5-limit), `7-limit`, `well-tuned-piano`, `pelog`,
+ * `slendro`, `nyamaropa`, `shruti`, maqam and dastgah sets (`bayati`,
+ * `rast`, `saba`, `shur`, `homayoun`, `chahargah`) and raga intonations
+ * (`yaman`, `bhairav`, `kafi`, `todi`, …); `dawg` lists them with
+ * `/tuning list`. dawg checks every value when the song loads.
+ */
+export type TuningInput =
+  | string
+  | Readonly<{
+      /** A library tuning, or a label for the table given here. */
+      name?: string;
+      /** Equal divisions of the octave, 1..128. */
+      edo?: number;
+      /** Ratios for degrees 1..n, the last the period: `["9/8", "5/4", "2/1"]`. */
+      ratios?: readonly (string | number)[];
+      /** Cents for degrees 1..n, the last the period: `[240, 480, 720, 960, 1200]`. */
+      cents?: readonly number[];
+      /** A Scala `.scl` file in the project, e.g. `"tunings/slendro.scl"`. */
+      scl?: string;
+      /** A Scala `.kbm` keyboard mapping in the project; it sets its own root and A4. */
+      kbm?: string;
+      /** A4 in Hz, 220..880, default 440. */
+      ref?: number;
+      /** Key of degree 0, `"D4"` or 62; default the song key's tonic in octave 4. */
+      root?: Pitch;
+      /** `linear` (default): one key per step. `nearest`: every key plays the step nearest its 12-TET pitch. */
+      map?: "linear" | "nearest";
+    }>;
+
+/** A stored tuning: `root` is a MIDI number, `ratios` are strings. */
+export type ScoreTuning = Readonly<{
+  name?: string;
+  edo?: number;
+  ratios?: readonly string[];
+  cents?: readonly number[];
+  scl?: string;
+  kbm?: string;
+  ref?: number;
+  root?: number;
+  map?: "linear" | "nearest";
+}>;
+
+const TUNING_FIELDS: readonly string[] = Object.freeze([
+  "name",
+  "edo",
+  "ratios",
+  "cents",
+  "scl",
+  "kbm",
+  "ref",
+  "root",
+  "map",
+]);
+
+/** Checks a tuning's shape; dawg validates the values when the song loads. */
+function tuningSpec(
+  input: TuningInput | null | undefined,
+  where: string,
+): ScoreTuning | null {
+  if (input === undefined || input === null) return null;
+  if (typeof input === "string") {
+    if (input.trim() === "")
+      throw new DawgSdkError(`${where} tuning must be a name or an object`);
+    return Object.freeze({ name: input.trim() });
+  }
+  if (!isRecord(input))
+    throw new DawgSdkError(`${where} tuning must be a name or an object`);
+  const out: Record<string, unknown> = {};
+  for (const [field, value] of Object.entries(input)) {
+    if (!TUNING_FIELDS.includes(field))
+      throw new DawgSdkError(
+        `${where} tuning has an unknown field "${field}" (use ${TUNING_FIELDS.join(", ")})`,
+      );
+    if (value === undefined || value === null) continue;
+    if (field === "root") out.root = midi(value as Pitch);
+    else if (field === "ratios" || field === "cents") {
+      if (!Array.isArray(value))
+        throw new DawgSdkError(`${where} tuning ${field} must be a list`);
+      out[field] = Object.freeze(
+        field === "ratios" ? value.map((ratio) => String(ratio)) : [...value],
+      );
+    } else out[field] = value;
+  }
+  const sources = ["edo", "ratios", "cents", "scl"].filter(
+    (field) => out[field] !== undefined,
+  );
+  if (sources.length > 1)
+    throw new DawgSdkError(
+      `${where} tuning has ${sources.join(" and ")}; give one table`,
+    );
+  return Object.freeze(out as ScoreTuning);
 }
 
 // ---------------------------------------------------------------------------
@@ -3588,6 +3740,8 @@ const MODES = Object.freeze({
   mixolydian: [0, 2, 4, 5, 7, 9, 10],
   locrian: [0, 1, 3, 5, 6, 8, 10],
   "harmonic-minor": [0, 2, 3, 5, 7, 8, 11],
+  "melodic-minor": [0, 2, 3, 5, 7, 9, 11],
+  "phrygian-dominant": [0, 1, 4, 5, 7, 8, 10],
 } as const);
 type ModeName = keyof typeof MODES;
 const MODE_NAMES = Object.keys(MODES) as ModeName[];
@@ -3610,25 +3764,302 @@ const MODE_ALIASES: Readonly<Record<string, ModeName>> = Object.freeze({
   "harmonic-minor": "harmonic-minor",
   "harmonic minor": "harmonic-minor",
   harmonic: "harmonic-minor",
+  "melodic-minor": "melodic-minor",
+  "melodic minor": "melodic-minor",
+  melodic: "melodic-minor",
+  "jazz minor": "melodic-minor",
+  "phrygian-dominant": "phrygian-dominant",
+  "phrygian dominant": "phrygian-dominant",
+  freygish: "phrygian-dominant",
+  spanish: "phrygian-dominant",
+  ajam: "major",
+  mahur: "major",
+  bilawal: "major",
 });
 
-type Key = Readonly<{ tonic: number; mode: ModeName }>;
+type ScaleFamily =
+  "pentatonic" | "blues" | "maqam" | "dastgah" | "raga" | "messiaen";
 
 /**
- * Parse a key: `C`, `c major`, `Am`, `a minor`, `F# dorian`, `Eb mixo`.
- * Accepts the `<note> <mode>` form `core/key.ts` writes.
+ * Scales beyond the chord modes, for keys such as `D bayati`, `C yaman` or
+ * `C messiaen-3`. `steps` are semitones above the tonic and may be
+ * fractional (a quarter tone is .5); `mode` is the seven-note mode the
+ * chord engine harmonizes with (the closest one; see DAWG.md). A raga's
+ * `intonation` is each step's traditional just pitch in cents (shruti
+ * offsets), which its named tuning applies (`tuning yaman`): Pythagorean
+ * ati-komal re and dha for Bhairavi, Bhairav, Purvi and Todi, the high
+ * tivra ma (729/512) for Yaman, 9/5 komal ni for Kafi, after Daniélou and
+ * Jairazbhoy. Maqam and dastgah quarter tones follow the 24-tone convention;
+ * Segah and Sikah start on a half-flat note, so their tonic is the key.
+ */
+type ScaleInfo = Readonly<{
+  steps: readonly number[];
+  mode: ModeName;
+  family: ScaleFamily;
+  intonation?: readonly number[];
+  aliases?: readonly string[];
+}>;
+
+const SCALES = Object.freeze({
+  "major-pentatonic": {
+    steps: [0, 2, 4, 7, 9],
+    mode: "major",
+    family: "pentatonic",
+    aliases: ["pentatonic", "major pentatonic", "pent"],
+  },
+  "minor-pentatonic": {
+    steps: [0, 3, 5, 7, 10],
+    mode: "minor",
+    family: "pentatonic",
+    aliases: ["minor pentatonic", "m pentatonic", "min pentatonic"],
+  },
+  blues: {
+    steps: [0, 3, 5, 6, 7, 10],
+    mode: "minor",
+    family: "blues",
+    aliases: ["minor blues"],
+  },
+  "major-blues": {
+    steps: [0, 2, 3, 4, 7, 9],
+    mode: "major",
+    family: "blues",
+    aliases: ["major blues"],
+  },
+  hijaz: {
+    steps: [0, 1, 4, 5, 7, 8, 10],
+    mode: "phrygian-dominant",
+    family: "maqam",
+  },
+  bayati: {
+    steps: [0, 1.5, 3, 5, 7, 8, 10],
+    mode: "phrygian",
+    family: "maqam",
+  },
+  rast: { steps: [0, 2, 3.5, 5, 7, 9, 10.5], mode: "major", family: "maqam" },
+  saba: { steps: [0, 1.5, 3, 4, 7, 8, 10], mode: "phrygian", family: "maqam" },
+  kurd: { steps: [0, 1, 3, 5, 7, 8, 10], mode: "phrygian", family: "maqam" },
+  nahawand: {
+    steps: [0, 2, 3, 5, 7, 8, 11],
+    mode: "harmonic-minor",
+    family: "maqam",
+  },
+  sikah: {
+    steps: [0, 1.5, 3.5, 5.5, 7, 8.5, 10.5],
+    mode: "phrygian",
+    family: "maqam",
+    aliases: ["sika"],
+  },
+  huzam: {
+    steps: [0, 1.5, 3.5, 4.5, 7.5, 8.5, 10.5],
+    mode: "phrygian",
+    family: "maqam",
+    aliases: ["houzam"],
+  },
+  nikriz: { steps: [0, 2, 3, 6, 7, 9, 10], mode: "dorian", family: "maqam" },
+  shur: {
+    steps: [0, 1.5, 3, 5, 7, 8, 10],
+    mode: "phrygian",
+    family: "dastgah",
+  },
+  homayoun: {
+    steps: [0, 1.5, 4, 5, 7, 8, 10],
+    mode: "phrygian-dominant",
+    family: "dastgah",
+    aliases: ["homayun"],
+  },
+  chahargah: {
+    steps: [0, 1.5, 4, 5, 7, 8.5, 11],
+    mode: "phrygian-dominant",
+    family: "dastgah",
+    aliases: ["chahar-gah"],
+  },
+  segah: {
+    steps: [0, 1.5, 3.5, 5, 6.5, 8.5, 10.5],
+    mode: "phrygian",
+    family: "dastgah",
+    aliases: ["sehgah", "se-gah"],
+  },
+  nava: {
+    steps: [0, 2, 3.5, 5, 7, 8, 10],
+    mode: "minor",
+    family: "dastgah",
+  },
+  yaman: {
+    steps: [0, 2, 4, 6, 7, 9, 11],
+    mode: "lydian",
+    family: "raga",
+    intonation: [0, 203.91, 386.31, 611.73, 701.96, 884.36, 1088.27],
+    aliases: ["kalyan", "yaman kalyan"],
+  },
+  bhairav: {
+    steps: [0, 1, 4, 5, 7, 8, 11],
+    mode: "phrygian-dominant",
+    family: "raga",
+    intonation: [0, 90.22, 386.31, 498.04, 701.96, 792.18, 1088.27],
+  },
+  kafi: {
+    steps: [0, 2, 3, 5, 7, 9, 10],
+    mode: "dorian",
+    family: "raga",
+    intonation: [0, 203.91, 315.64, 498.04, 701.96, 884.36, 1017.6],
+  },
+  bhairavi: {
+    steps: [0, 1, 3, 5, 7, 8, 10],
+    mode: "phrygian",
+    family: "raga",
+    intonation: [0, 90.22, 294.13, 498.04, 701.96, 792.18, 996.09],
+  },
+  asavari: {
+    steps: [0, 2, 3, 5, 7, 8, 10],
+    mode: "minor",
+    family: "raga",
+    intonation: [0, 203.91, 315.64, 498.04, 701.96, 813.69, 996.09],
+  },
+  khamaj: {
+    steps: [0, 2, 4, 5, 7, 9, 10],
+    mode: "mixolydian",
+    family: "raga",
+    intonation: [0, 203.91, 386.31, 498.04, 701.96, 884.36, 996.09],
+  },
+  todi: {
+    steps: [0, 1, 3, 6, 7, 8, 11],
+    mode: "phrygian",
+    family: "raga",
+    intonation: [0, 95, 294, 606, 702, 792, 1107],
+  },
+  purvi: {
+    steps: [0, 1, 4, 6, 7, 8, 11],
+    mode: "phrygian-dominant",
+    family: "raga",
+    intonation: [0, 90.22, 386.31, 590.22, 701.96, 792.18, 1088.27],
+  },
+  marwa: {
+    steps: [0, 1, 4, 6, 9, 11],
+    mode: "lydian",
+    family: "raga",
+    intonation: [0, 111.73, 386.31, 590.22, 884.36, 1088.27],
+  },
+  darbari: {
+    steps: [0, 2, 3, 5, 7, 8, 10],
+    mode: "minor",
+    family: "raga",
+    intonation: [0, 203.91, 294.13, 498.04, 701.96, 792.18, 996.09],
+    aliases: ["darbari kanada"],
+  },
+  malkauns: {
+    steps: [0, 3, 5, 8, 10],
+    mode: "minor",
+    family: "raga",
+    intonation: [0, 315.64, 498.04, 813.69, 996.09],
+  },
+  bhupali: {
+    steps: [0, 2, 4, 7, 9],
+    mode: "major",
+    family: "raga",
+    intonation: [0, 203.91, 386.31, 701.96, 884.36],
+  },
+  durga: {
+    steps: [0, 2, 5, 7, 9],
+    mode: "major",
+    family: "raga",
+    intonation: [0, 203.91, 498.04, 701.96, 884.36],
+  },
+  "messiaen-1": {
+    steps: [0, 2, 4, 6, 8, 10],
+    mode: "lydian",
+    family: "messiaen",
+    aliases: ["whole-tone", "whole tone", "wholetone"],
+  },
+  "messiaen-2": {
+    steps: [0, 1, 3, 4, 6, 7, 9, 10],
+    mode: "mixolydian",
+    family: "messiaen",
+    aliases: ["octatonic", "diminished", "half-whole"],
+  },
+  "messiaen-3": {
+    steps: [0, 2, 3, 4, 6, 7, 8, 10, 11],
+    mode: "minor",
+    family: "messiaen",
+  },
+  "messiaen-4": {
+    steps: [0, 1, 2, 5, 6, 7, 8, 11],
+    mode: "harmonic-minor",
+    family: "messiaen",
+  },
+  "messiaen-5": {
+    steps: [0, 1, 5, 6, 7, 11],
+    mode: "lydian",
+    family: "messiaen",
+  },
+  "messiaen-6": {
+    steps: [0, 2, 4, 5, 6, 8, 10, 11],
+    mode: "major",
+    family: "messiaen",
+  },
+  "messiaen-7": {
+    steps: [0, 1, 2, 3, 5, 6, 7, 8, 9, 11],
+    mode: "harmonic-minor",
+    family: "messiaen",
+  },
+} as const satisfies Record<string, ScaleInfo>);
+type ScaleName = keyof typeof SCALES;
+const SCALE_NAMES = Object.keys(SCALES) as ScaleName[];
+
+const SCALE_ALIASES: Readonly<Record<string, ScaleName>> = (() => {
+  const aliases: Record<string, ScaleName> = {};
+  for (const name of SCALE_NAMES) {
+    const info: ScaleInfo = SCALES[name];
+    aliases[name] = name;
+    aliases[name.replace(/-/g, " ")] = name;
+    for (const alias of info.aliases ?? []) aliases[alias] = name;
+  }
+  return Object.freeze(aliases);
+})();
+
+/** The library scale named `text` (case and `-`/space insensitive). */
+function scaleNamed(text: string): ScaleName | undefined {
+  const word = text.trim().toLowerCase().replace(/\s+/g, " ");
+  return SCALE_ALIASES[word] ?? SCALE_ALIASES[word.replace(/ /g, "-")];
+}
+
+/**
+ * A key: a tonic and the seven-note `mode` the chord engine uses, plus the
+ * library `scale` when the key names one (`D bayati`, `C yaman`).
+ */
+type Key = Readonly<{
+  tonic: number;
+  mode: ModeName;
+  scale?: ScaleName;
+}>;
+
+/**
+ * Parse a key: `C`, `c major`, `Am`, `a minor`, `F# dorian`, `Eb mixo`,
+ * `D bayati`, `C messiaen-3`. Accepts the `<note> <mode>` form
+ * `core/key.ts` writes.
  */
 function parseKey(text: string | null | undefined): Key | undefined {
   if (typeof text !== "string" || text.length > 40) return undefined;
   const match = text
     .trim()
-    .match(/^([a-gA-G])(#|b|♯|♭)?\s*(m(?![a-z])|[a-zA-Z][a-zA-Z -]*)?$/);
+    .match(/^([a-gA-G])(#|b|♯|♭)?\s*(m(?![a-z])|[a-zA-Z][a-zA-Z0-9 -]*)?$/);
   if (!match) return undefined;
   const tonic = parsePitchClass(`${match[1]}${match[2] ?? ""}`);
+  if (tonic === undefined) return undefined;
   const word = (match[3] ?? "").trim();
   const mode = MODE_ALIASES[word === "m" ? "m" : word.toLowerCase()];
-  if (tonic === undefined || mode === undefined) return undefined;
-  return Object.freeze({ tonic, mode });
+  if (mode !== undefined) return Object.freeze({ tonic, mode });
+  const scale = scaleNamed(word);
+  if (scale === undefined) return undefined;
+  return Object.freeze({ tonic, mode: SCALES[scale].mode, scale });
+}
+
+/**
+ * Steps of the key's whole scale in semitones above the tonic (fractional
+ * for quarter tones): the library scale when the key names one, else the
+ * mode.
+ */
+function scaleSteps(key: Key): number[] {
+  return [...(key.scale ? SCALES[key.scale].steps : MODES[key.mode])];
 }
 
 /** True when names in the key read better with flats (F, Bb, Eb, d minor…). */
@@ -3643,6 +4074,8 @@ function keyUsesFlats(key: Key): boolean {
     minor: 9,
     locrian: 11,
     "harmonic-minor": 9,
+    "melodic-minor": 9,
+    "phrygian-dominant": 4,
   };
   const parent = mod12(key.tonic - parentOffset[key.mode]);
   return [5, 10, 3, 8, 1].includes(parent);
@@ -3650,7 +4083,7 @@ function keyUsesFlats(key: Key): boolean {
 
 /** `C major`, `F# dorian`, `Bb minor`. */
 function keyName(key: Key): string {
-  return `${noteName(key.tonic, keyUsesFlats(key))} ${key.mode}`;
+  return `${noteName(key.tonic, keyUsesFlats(key))} ${key.scale ?? key.mode}`;
 }
 
 /** Pitch classes of the key's scale, tonic first. */

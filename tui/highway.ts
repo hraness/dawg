@@ -34,6 +34,16 @@ export interface NoteSnapshot {
   selected?: boolean | undefined;
   pending?: boolean | undefined;
   muted?: boolean | undefined;
+  /**
+   * Cents the note sounds away from the nearest 12-TET pitch (tuning plus note
+   * cents). Drawn as a compact `+14`/`−32` tag beside the approaching head.
+   */
+  cents?: number | undefined;
+  /**
+   * In a linear non-12 tuning, the 12-TET pitch class `cents` is measured
+   * from (`D` for a `D−47` tag), since the lane is the key, not the sound.
+   */
+  centsFrom?: string | undefined;
 }
 
 export interface TrackScoreSnapshot {
@@ -58,6 +68,11 @@ export interface TrackScoreSnapshot {
   projection?: LaneProjection | undefined;
   /** Static transport position when the score is paused. */
   transportBeat?: number | undefined;
+  /**
+   * Steps per period and degree-0 key of a linear non-12 tuning; lane labels
+   * then mark each period from the root instead of every C.
+   */
+  tuningPeriod?: { size: number; root: number } | undefined;
   /** Alias accepted by adapters that call this value currentBeat. */
   currentBeat?: number | undefined;
   transportStartedAtMs?: number | undefined;
@@ -133,6 +148,21 @@ const NOTE_NAMES = [
   "B",
 ];
 
+/**
+ * `+14`/`−32` for a cents deviation, empty within ±1 cent; with `from` (a
+ * linear non-12 tuning) the pitch class leads: `D−47`, or `C` alone.
+ */
+export function centsTag(cents: number | undefined, from?: string): string {
+  const rounded = Math.round(cents ?? 0);
+  const value =
+    Math.abs(rounded) < 1 || !Number.isFinite(rounded)
+      ? ""
+      : rounded > 0
+        ? `+${rounded}`
+        : `−${-rounded}`;
+  return from ? `${from}${value}` : value;
+}
+
 export function pitchName(pitch: number): string {
   const rounded = Math.round(pitch);
   return `${NOTE_NAMES[((rounded % 12) + 12) % 12]}${Math.floor(rounded / 12) - 1}`;
@@ -145,6 +175,7 @@ export function pitchName(pitch: number): string {
 export function pitchProjection(
   notes: readonly NoteSnapshot[],
   minimumSpan = 12,
+  period?: { size: number; root: number },
 ): LaneProjection {
   const pitches = notes
     .map((note) => note.pitch)
@@ -169,6 +200,16 @@ export function pitchProjection(
     },
     label(lane) {
       const pitch = low + lane;
+      if (period) {
+        // Mark each period from the root, named as the root plus octaves.
+        const offset = pitch - period.root;
+        if (offset % period.size !== 0) return undefined;
+        const octaves = offset / period.size;
+        return pitchName(period.root).replace(
+          /-?\d+$/,
+          String(Math.floor(period.root / 12) - 1 + octaves),
+        );
+      }
       return pitch % 12 === 0 ? pitchName(pitch) : undefined;
     },
   };
@@ -192,6 +233,8 @@ export function projectionFor(score: TrackScoreSnapshot): LaneProjection {
     .flatMap((layer) => layer.notes);
   return pitchProjection(
     melodic.length ? [...score.notes, ...melodic] : score.notes,
+    12,
+    score.tuningPeriod,
   );
 }
 
@@ -790,7 +833,17 @@ export function paintHighway(
           : glow > 0.6
             ? { ...shade(base, 0.45 * glow), bold: true }
             : shade(base, 0.45 * glow);
-        if (headRow <= hitRow - 1) tile(headRow, headGlyph, style);
+        if (headRow <= hitRow - 1) {
+          tile(headRow, headGlyph, style);
+          const tag =
+            (note.cents !== undefined || note.centsFrom !== undefined) &&
+            !note.muted
+              ? centsTag(note.cents, note.centsFrom)
+              : "";
+          if (tag && x + width + tag.length <= region.width)
+            for (let index = 0; index < tag.length; index += 1)
+              painter.put(x + width + index, headRow, tag[index]!, roles.muted);
+        }
         // The target on the hit line lights up as the note approaches.
         if (!note.muted && glow > 0 && width > 0) {
           for (let offset = 0; offset < width; offset += 1)

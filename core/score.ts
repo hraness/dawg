@@ -38,6 +38,14 @@ import {
   type NoteExpressionPatch,
   type TrackPerformance,
 } from "./expression.ts";
+import {
+  normalizeNoteCents,
+  normalizeTuning,
+  TuningError,
+  type Tuning,
+} from "./tuning.ts";
+
+export type { Tuning } from "./tuning.ts";
 
 export const SCORE_VERSION = 1 as const;
 export const DEFAULT_TICKS_PER_BEAT = 480 as const;
@@ -352,6 +360,11 @@ export type Track = Readonly<{
    * song.
    */
   time?: TrackTime;
+  /**
+   * Tuning for this track (`core/tuning.ts`): its own table, or just a
+   * `ref`/`root` over the song tuning. Absent follows the song tuning.
+   */
+  tuning?: Tuning;
 }> &
   /**
    * Performance (`core/expression.ts`): glide default, sustain pedal
@@ -661,6 +674,7 @@ export type TrackPatch = Readonly<
     pedal?: Track["pedal"] | null;
     velocityCurve?: Track["velocityCurve"] | null;
     humanize?: Track["humanize"] | null;
+    tuning?: Tuning | null;
   }
 >;
 
@@ -681,6 +695,8 @@ export type Note = Readonly<{
   durationTicks: number;
   pitch: number;
   velocity: number;
+  /** Static offset from the tuned pitch in cents (±1200); absent is 0. */
+  cents?: number;
 }> &
   NoteExpression;
 
@@ -702,6 +718,7 @@ export type TrackInput = Readonly<
     | "pedal"
     | "velocityCurve"
     | "humanize"
+    | "tuning"
   > &
     Pick<Track, "id"> & {
       filter?: TrackFilter | null;
@@ -719,6 +736,7 @@ export type TrackInput = Readonly<
       pedal?: Track["pedal"] | null;
       velocityCurve?: Track["velocityCurve"] | string | null;
       humanize?: Track["humanize"] | null;
+      tuning?: Tuning | null;
     }
 >;
 
@@ -735,6 +753,7 @@ export type NoteInput = Readonly<{
   duration?: number;
   pitch: number;
   velocity: number;
+  cents?: number;
 }> &
   NoteExpressionPatch;
 
@@ -749,6 +768,8 @@ export type TrackScoreData = Readonly<{
    * `tempoBpm` and `beatsPerBar` for the whole song.
    */
   time?: SongTime | null;
+  /** Song tuning (`core/tuning.ts`); absent is 12-TET at A4 = 440 Hz. */
+  tuning?: Tuning | null;
   tracks?: readonly TrackInput[];
   notes?: readonly NoteInput[];
 }>;
@@ -763,6 +784,7 @@ export class TrackScore {
   readonly key: string | null;
   /** Tempo map, meters and fermatas; absent when the song has none. */
   declare readonly time?: SongTime;
+  readonly tuning: Tuning | undefined;
   readonly tracks: readonly Track[];
   readonly notes: readonly Note[];
 
@@ -822,8 +844,13 @@ export class TrackScore {
       checkSongTime(normalized, ticksPerBeat, { tempoBpm, beatsPerBar, bars });
       return normalized;
     });
+    const tuning = tuningOrThrow(
+      () => normalizeTuning(data.tuning, "song tuning"),
+      "invalid-score",
+    );
     const tracks = normalizeTracks(data.tracks ?? []);
     const notes = normalizeNotes(data.notes ?? []);
+    this.tuning = tuning;
     this.tempoBpm = tempoBpm;
     this.beatsPerBar = beatsPerBar;
     this.bars = bars;
@@ -844,29 +871,11 @@ export class TrackScore {
   }
 
   withTracks(tracks: readonly TrackInput[]): TrackScore {
-    return new TrackScore({
-      tempoBpm: this.tempoBpm,
-      beatsPerBar: this.beatsPerBar,
-      bars: this.bars,
-      ticksPerBeat: this.ticksPerBeat,
-      key: this.key,
-      time: this.time,
-      tracks,
-      notes: this.notes,
-    });
+    return new TrackScore({ ...this.toJSON(), tracks });
   }
 
   withTempo(tempoBpm: number): TrackScore {
-    return new TrackScore({
-      tempoBpm,
-      beatsPerBar: this.beatsPerBar,
-      bars: this.bars,
-      ticksPerBeat: this.ticksPerBeat,
-      key: this.key,
-      time: this.time,
-      tracks: this.tracks,
-      notes: this.notes,
-    });
+    return new TrackScore({ ...this.toJSON(), tempoBpm });
   }
 
   /** Resize the loop without discarding notes or automation outside its bounds. */
@@ -876,6 +885,11 @@ export class TrackScore {
 
   withKey(key: string | null): TrackScore {
     return new TrackScore({ ...this.toJSON(), key });
+  }
+
+  /** Set or clear (null) the song tuning. */
+  withTuning(tuning: Tuning | null): TrackScore {
+    return new TrackScore({ ...this.toJSON(), tuning });
   }
 
   /**
@@ -908,6 +922,7 @@ export class TrackScore {
       ticksPerBeat: this.ticksPerBeat,
       key: this.key,
       ...(this.time ? { time: this.time } : {}),
+      ...(this.tuning ? { tuning: this.tuning } : {}),
       tracks: this.tracks,
       notes: this.notes,
     };
@@ -944,16 +959,7 @@ export function addNote(score: TrackScore, input: NoteInput): TrackScore {
       "score-limit",
     );
   }
-  return new TrackScore({
-    tempoBpm: score.tempoBpm,
-    beatsPerBar: score.beatsPerBar,
-    bars: score.bars,
-    ticksPerBeat: score.ticksPerBeat,
-    key: score.key,
-    time: score.time,
-    tracks: score.tracks,
-    notes: [...score.notes, note],
-  });
+  return new TrackScore({ ...score.toJSON(), notes: [...score.notes, note] });
 }
 
 export function removeNote(score: TrackScore, noteId: string): TrackScore {
@@ -971,13 +977,7 @@ export function removeNote(score: TrackScore, noteId: string): TrackScore {
   }
   if (!score.notes.some((note) => note.id === noteId)) return score;
   return new TrackScore({
-    tempoBpm: score.tempoBpm,
-    beatsPerBar: score.beatsPerBar,
-    bars: score.bars,
-    ticksPerBeat: score.ticksPerBeat,
-    key: score.key,
-    time: score.time,
-    tracks: score.tracks,
+    ...score.toJSON(),
     notes: score.notes.filter((note) => note.id !== noteId),
   });
 }
@@ -987,7 +987,9 @@ export function removeNote(score: TrackScore, noteId: string): TrackScore {
  * (`null` clears one).
  */
 export type NotePatch = Readonly<
-  Partial<Pick<Note, "startTick" | "durationTicks" | "pitch" | "velocity">>
+  Partial<
+    Pick<Note, "startTick" | "durationTicks" | "pitch" | "velocity" | "cents">
+  >
 > &
   NoteExpressionPatch;
 
@@ -999,13 +1001,7 @@ export function updateNote(
   const current = score.notes.find((note) => note.id === noteId);
   if (!current) return score;
   return new TrackScore({
-    tempoBpm: score.tempoBpm,
-    beatsPerBar: score.beatsPerBar,
-    bars: score.bars,
-    ticksPerBeat: score.ticksPerBeat,
-    key: score.key,
-    time: score.time,
-    tracks: score.tracks,
+    ...score.toJSON(),
     notes: score.notes.map((note) =>
       note.id === noteId ? { ...note, ...patch } : note,
     ),
@@ -1015,13 +1011,7 @@ export function updateNote(
 export function clearTrack(score: TrackScore, trackId: string): TrackScore {
   if (!score.notes.some((note) => note.trackId === trackId)) return score;
   return new TrackScore({
-    tempoBpm: score.tempoBpm,
-    beatsPerBar: score.beatsPerBar,
-    bars: score.bars,
-    ticksPerBeat: score.ticksPerBeat,
-    key: score.key,
-    time: score.time,
-    tracks: score.tracks,
+    ...score.toJSON(),
     notes: score.notes.filter((note) => note.trackId !== trackId),
   });
 }
@@ -1215,6 +1205,10 @@ export type ScoreOperation =
       /** Replaces the song's tempo map, meter changes and fermatas. */
       type: "setTime";
       time: SongTime | null;
+    }>
+  | Readonly<{
+      type: "setTuning";
+      tuning: Tuning | null;
     }>;
 
 export function applyScoreOperation(
@@ -1229,6 +1223,7 @@ export function applyScoreOperation(
   if (operation.type === "setMeter")
     return score.withMeter(operation.beatsPerBar);
   if (operation.type === "setTime") return score.withTime(operation.time);
+  if (operation.type === "setTuning") return score.withTuning(operation.tuning);
   if (operation.type === "addTrack") return addTrack(score, operation.track);
   if (operation.type === "addNote") return addNote(score, operation.note);
   if (operation.type === "removeNote")
@@ -1274,6 +1269,7 @@ export function scoreFromJSON(value: unknown): TrackScore {
     ticksPerBeat?: number;
     key?: string | null;
     time?: SongTime | null;
+    tuning?: Tuning | null;
     tracks: readonly TrackInput[];
     notes: readonly NoteInput[];
   } = {
@@ -1292,6 +1288,7 @@ export function scoreFromJSON(value: unknown): TrackScore {
   if (key !== undefined) data.key = key;
   if (value.time !== undefined && value.time !== null)
     data.time = value.time as SongTime;
+  if (value.tuning !== undefined) data.tuning = value.tuning as Tuning | null;
   return new TrackScore(data);
 }
 
@@ -1415,6 +1412,10 @@ function normalizeTrack(input: unknown): Track {
       );
     throw error;
   }
+  const tuning = tuningOrThrow(
+    () => normalizeTuning(input.tuning, `track ${id} tuning`),
+    "invalid-track",
+  );
   let kit: string | undefined;
   if (input.kit !== undefined && input.kit !== null) {
     const found =
@@ -1468,6 +1469,7 @@ function normalizeTrack(input: unknown): Track {
     ...(kit ? { kit } : {}),
     ...(time ? { time } : {}),
     ...performance,
+    ...(tuning ? { tuning } : {}),
   });
 }
 
@@ -1509,6 +1511,16 @@ function timeOrThrow<T>(
     return run();
   } catch (error) {
     if (error instanceof TimeValidationError)
+      throw new ScoreValidationError(error.message, code);
+    throw error;
+  }
+}
+
+function tuningOrThrow<T>(run: () => T, code: ScoreValidationError["code"]): T {
+  try {
+    return run();
+  } catch (error) {
+    if (error instanceof TuningError)
       throw new ScoreValidationError(error.message, code);
     throw error;
   }
@@ -2162,6 +2174,10 @@ function normalizeNote(input: unknown): Note {
       );
     throw error;
   }
+  const cents = tuningOrThrow(
+    () => normalizeNoteCents(input.cents, `note ${id}`),
+    "invalid-note",
+  );
   return Object.freeze({
     id,
     trackId,
@@ -2170,6 +2186,7 @@ function normalizeNote(input: unknown): Note {
     pitch,
     velocity: input.velocity,
     ...expression,
+    ...(cents !== undefined ? { cents } : {}),
   });
 }
 

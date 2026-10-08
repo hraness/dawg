@@ -11,6 +11,8 @@ export type AgentOperation =
       start: number;
       duration: number;
       velocity: number;
+      /** Static offset from an `E4-14c` pitch; absent is 0. */
+      cents?: number;
     }
   | { type: "remove-note"; noteId: string }
   | {
@@ -21,6 +23,8 @@ export type AgentOperation =
         duration?: number;
         pitch?: number;
         velocity?: number;
+        /** 0 clears the offset. */
+        cents?: number;
       };
     }
   | { type: "set-tempo"; tempoBpm: number }
@@ -139,13 +143,27 @@ export function parsePrompt(prompt: string): AgentOperation | undefined {
       noteId: velocity[1]!,
       patch: { velocity: Number(velocity[2]) },
     };
+  const cents = text.match(
+    /^(?:cents|detune)\s+(?:note\s+)?([a-z0-9._-]{1,64})\s+([+-]?\d+(?:\.\d+)?)c?$/,
+  );
+  if (cents) {
+    const value = Number(cents[2]);
+    if (Math.abs(value) <= 1200)
+      return {
+        type: "update-note",
+        noteId: cents[1]!,
+        patch: { cents: value },
+      };
+  }
   const match = text.match(
-    /^(?:add|put)\s+(?:note\s+)?([a-g](?:#|b)?-?\d+)\s+(?:at\s+)?(\d+(?:\.\d+)?)\s*(?:for|dur|duration)?\s*(\d+(?:\.\d+)?)?$/,
+    /^(?:add|put)\s+(?:note\s+)?([a-g](?:#|b)?-?\d+)([+-]\d+(?:\.\d+)?c)?\s+(?:at\s+)?(\d+(?:\.\d+)?)\s*(?:for|dur|duration)?\s*(\d+(?:\.\d+)?)?$/,
   );
   if (!match) return undefined;
   const pitch = pitchToMidi(match[1] ?? "c4");
-  const start = Number(match[2] ?? 0);
-  const duration = Number(match[3] ?? 1);
+  const offset = match[2] ? Number(match[2].slice(0, -1)) : 0;
+  const start = Number(match[3] ?? 0);
+  const duration = Number(match[4] ?? 1);
+  if (!(Math.abs(offset) <= 1200)) return undefined;
   if (
     !Number.isFinite(pitch) ||
     !Number.isFinite(start) ||
@@ -153,5 +171,12 @@ export function parsePrompt(prompt: string): AgentOperation | undefined {
     duration <= 0
   )
     return undefined;
-  return { type: "add-note", pitch, start, duration, velocity: 0.8 };
+  return {
+    type: "add-note",
+    pitch,
+    start,
+    duration,
+    velocity: 0.8,
+    ...(offset !== 0 ? { cents: offset } : {}),
+  };
 }

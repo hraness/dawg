@@ -98,3 +98,50 @@ test("small viewports show a resize hint instead of clipping the highway", () =>
   });
   expect(frame).toContain("resize terminal");
 });
+
+test("detuned notes carry a compact cents tag while approaching", () => {
+  const frame = stripAnsi(
+    renderHighway(
+      {
+        ...score,
+        notes: [
+          { id: "flat", startBeat: 1, pitch: 64, cents: -14 },
+          { id: "even", startBeat: 2, pitch: 67 },
+        ],
+      },
+      {
+        width: 64,
+        height: 14,
+        clock: () => 0,
+        capabilities: { colorDepth: "none", unicode: true },
+      },
+    ),
+  );
+  expect(frame).toContain("−14");
+  expect(frame).not.toContain("+0");
+});
+
+test("a 19-EDO track tags the pitch it is measured from and labels periods", () => {
+  const frame = stripAnsi(
+    renderHighway(
+      {
+        ...score,
+        tuningPeriod: { size: 19, root: 60 },
+        notes: [
+          { id: "d", startBeat: 1, pitch: 64, cents: -47, centsFrom: "D" },
+          { id: "c", startBeat: 2, pitch: 79, centsFrom: "C" },
+        ],
+      },
+      {
+        width: 64,
+        height: 14,
+        clock: () => 0,
+        capabilities: { colorDepth: "none", unicode: true },
+      },
+    ),
+  );
+  expect(frame).toContain("D−47");
+  // Key 79 is the 19-EDO octave above C4: labelled C5, not G5.
+  expect(frame).toContain("C5");
+  expect(frame).not.toContain("C6");
+});

@@ -31,6 +31,7 @@ import {
 } from "../score.ts";
 import { trackSlug } from "../slug.ts";
 import { barStartTick } from "../tempo.ts";
+import type { Tuning } from "../tuning.ts";
 import { DEFAULT_HIT_LENGTH, DEFAULT_VELOCITY } from "./v1.ts";
 
 const WIDTH = 80;
@@ -186,6 +187,10 @@ export function printSong(
     `bars: ${num(score.bars)}`,
   ];
   if (score.key !== null) entries.push(`key: ${str(score.key)}`);
+  if (score.tuning)
+    entries.push(
+      `tuning: ${printTuning(score.tuning, INDENT, "tuning: ".length)}`,
+    );
   if (score.ticksPerBeat !== 480)
     entries.push(`ticksPerBeat: ${num(score.ticksPerBeat)}`);
   if (time.marks.length > 0)
@@ -283,7 +288,7 @@ export function printTrack(score: TrackScore, track: Track): string {
   if (slots) for (const [voice, slot] of slots) voiceFor.set(slot, voice);
   const used = new Set<string>(["track"]);
   const printed = notes.map((note) => {
-    const voice = voiceFor.get(note.pitch);
+    const voice = note.cents ? undefined : voiceFor.get(note.pitch);
     if (voice !== undefined) {
       used.add("hit");
       return printHit(score, note, voice, INDENT + INDENT);
@@ -318,6 +323,10 @@ export function printTrack(score: TrackScore, track: Track): string {
       fields.push(["cycle", beats(track.time.cycle)]);
     entries.push(`time: ${obj(fields, INDENT, "time: ".length, 1)}`);
   }
+  if (track.tuning)
+    entries.push(
+      `tuning: ${printTuning(track.tuning, INDENT, "tuning: ".length)}`,
+    );
   if (track.muted) entries.push("muted: true");
   if (track.solo) entries.push("solo: true");
   if (track.volume !== 1) entries.push(`volume: ${num(track.volume)}`);
@@ -495,7 +504,14 @@ function printNote(
   named: boolean,
   indent: string,
 ): string {
-  const pitch = named ? str(midiToPitch(note.pitch)) : num(note.pitch);
+  // A detuned note always prints by name: `"E4-14c"`.
+  const pitch = note.cents
+    ? str(
+        `${midiToPitch(note.pitch)}${note.cents > 0 ? "+" : ""}${num(note.cents)}c`,
+      )
+    : named
+      ? str(midiToPitch(note.pitch))
+      : num(note.pitch);
   const args = [pitch, num(note.startTick / score.ticksPerBeat)];
   const length = note.durationTicks / score.ticksPerBeat;
   const how = expressionEntries(note, indent + INDENT);
@@ -809,6 +825,69 @@ function printSample(ref: SampleRef, indent: string, prefix: number): string {
   if (ref.squiz !== undefined) entries.push(["squiz", num(ref.squiz)]);
   if (entries.length === 1) return str(ref.src);
   return obj(entries, indent, prefix, 1);
+}
+
+/**
+ * A song or track tuning: a bare library name, or an object without the
+ * fields dawg resolved from Scala files (the table of an `scl`, the keymap
+ * of a `kbm`).
+ */
+function printTuning(tuning: Tuning, indent: string, prefix: number): string {
+  const entries: [string, string][] = [];
+  if (tuning.name !== undefined) entries.push(["name", str(tuning.name)]);
+  if (tuning.scl === undefined) {
+    const inner = indent + INDENT;
+    if (tuning.edo !== undefined) entries.push(["edo", num(tuning.edo)]);
+    if (tuning.ratios)
+      entries.push([
+        "ratios",
+        list(tuning.ratios.map(str), inner, "ratios: ".length, 1),
+      ]);
+    if (tuning.cents)
+      entries.push([
+        "cents",
+        fill(tuning.cents.map(num), inner, "cents: ".length, 1),
+      ]);
+  } else entries.push(["scl", str(tuning.scl)]);
+  if (tuning.kbm !== undefined) entries.push(["kbm", str(tuning.kbm)]);
+  if (tuning.ref !== undefined) entries.push(["ref", num(tuning.ref)]);
+  if (tuning.root !== undefined)
+    entries.push(["root", str(midiToPitch(tuning.root))]);
+  if (tuning.map !== undefined) entries.push(["map", str(tuning.map)]);
+  if (entries.length === 1 && entries[0]![0] === "name") return entries[0]![1];
+  return obj(entries, indent, prefix, 1);
+}
+
+/**
+ * Number array the way prettier prints one: inline when it fits, else
+ * filled (as many per line as fit, each followed by a comma).
+ */
+function fill(
+  items: readonly string[],
+  indent: string,
+  prefix: number,
+  trailing: number,
+): string {
+  const inline = `[${items.join(", ")}]`;
+  if (
+    items.length < 2 ||
+    indent.length + prefix + inline.length + trailing <= WIDTH
+  )
+    return inline;
+  const inner = indent + INDENT;
+  const lines: string[] = [];
+  let line = "";
+  for (const item of items) {
+    const next = `${item},`;
+    if (line !== "" && inner.length + line.length + 1 + next.length <= WIDTH)
+      line += ` ${next}`;
+    else {
+      if (line !== "") lines.push(inner + line);
+      line = next;
+    }
+  }
+  lines.push(inner + line);
+  return `[\n${lines.join("\n")}\n${indent}]`;
 }
 
 /** Object literal: inline when the line fits, expanded otherwise (prettier keeps both). */

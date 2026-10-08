@@ -702,6 +702,7 @@ const OPERATION_TYPES = new Set([
   "setKey",
   "setMeter",
   "setTime",
+  "setTuning",
 ]);
 
 /** Shape gate before the reducer, which validates every field it reads. */

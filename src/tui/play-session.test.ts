@@ -119,7 +119,7 @@ describe("PlaySession", () => {
     expect(session.press("a")).toEqual({ type: "handled" });
     expect(engine.on.size).toBe(1);
     expect(session.lastLatencyMs).toBe(60);
-    expect(session.press("i")).toEqual({ type: "unmapped" });
+    expect(session.press("]")).toEqual({ type: "unmapped" });
     expect(session.press("\u001b")).toEqual({
       type: "command",
       command: "exit",
@@ -660,5 +660,36 @@ describe("PlaySession chord mode", () => {
     expect(
       ["a", "s", "d", "f", "g", "h", "j"].map((key) => labels.get(key)),
     ).toEqual(["C", "Dm", "Em", "F", "G", "Am", "Bdim"]);
+  });
+});
+
+describe("scale degrees (i)", () => {
+  test("i toggles degree mode, which follows the song key and tuning", async () => {
+    const { session, state } = harness(
+      leadScore().withKey("D dorian"),
+      "lead",
+      {
+        mode: "off",
+        explicit: true,
+      },
+    );
+    await session.enter();
+    expect(session.press("i")).toEqual({ type: "handled" });
+    expect(session.status).toContain("scale degrees · D dorian");
+    // a s d play D E F from D3, the tonic in the default C3 octave.
+    expect(session.keyboard.range).toBe("D3–G4");
+    expect(
+      session
+        .strip()
+        .slice(0, 3)
+        .map((cell) => cell.label),
+    ).toEqual(["D", "E", "F"]);
+    state.score = state.score.withTuning({ edo: 19 });
+    const cells = session.strip();
+    expect(cells).toHaveLength(11);
+    expect(session.keyboard.degrees?.period).toBe(19);
+    session.press("i");
+    expect(session.status).toContain("chromatic");
+    expect(session.strip()).toHaveLength(18);
   });
 });

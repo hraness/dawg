@@ -251,6 +251,7 @@ export const KEYS = {
         ["space", "play / pause (with count-in)"],
         ["r · R", "record · record replacing"],
         ["m", "metronome click"],
+        ["i", "scale degrees ⇄ chromatic (home row in key)"],
         ["q", "chord mode: auto ⇄ manual"],
         ["/", "type a command, still in play mode"],
         ["ctrl-k", "menu"],

@@ -87,6 +87,10 @@ export class LiveSynth {
       score.ticksPerBeat,
       this.sampleRate,
       samplerDigest(track, request.samples),
+      // The song tuning and key (the default tuning root) retune live notes.
+      ...(score.tuning || track.tuning
+        ? [score.tuning ?? null, score.key]
+        : []),
     ]);
     const hit = this.cache.get(key);
     if (hit) {
@@ -105,6 +109,9 @@ export class LiveSynth {
       beatsPerBar: score.beatsPerBar,
       bars,
       ticksPerBeat: score.ticksPerBeat,
+      // The song tuning, and the key whose tonic is the default root.
+      ...(score.tuning ? { tuning: score.tuning } : {}),
+      ...(score.tuning || track.tuning ? { key: score.key } : {}),
       tracks: [liveTrack(track)],
       notes: [
         {
