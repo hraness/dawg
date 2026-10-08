@@ -155,9 +155,10 @@ export const GLIDE_MODES = ["legato", "mono", "poly"] as const;
 export type GlideMode = (typeof GLIDE_MODES)[number];
 
 /**
- * A track's glide default. `legato` (TB-303 style, the default) is
- * monophonic and glides only into a note that overlaps the previous one,
- * without retriggering its envelope; `mono` is monophonic, always glides and
+ * A track's glide default. `legato` (the default) is monophonic and glides
+ * into a note that overlaps the previous one without retriggering its
+ * envelope (a note with its own glide also bridges a gap of up to a 16th,
+ * the TB-303 slide, flagged on the destination note); `mono` is monophonic, always glides and
  * retriggers; `poly` keeps every voice and glides each note from the
  * matching note of the previous chord.
  */
@@ -719,9 +720,9 @@ type Working = {
 const ACCENTED: ReadonlySet<string> = new Set(["accent", "marcato"]);
 
 /**
- * The notes of one track as they are performed: articulation, humanize,
- * sustain pedal, glide (with monophonic legato chains) and the velocity
- * curve. Returns `notes` itself when neither the track nor any note uses
+ * The notes of one track as they are performed: articulation, humanize
+ * velocity, sustain pedal, glide (with monophonic legato chains, on the
+ * written timing), humanize timing and length, and the velocity curve. Returns `notes` itself when neither the track nor any note uses
  * expression. Ticks in the result may be fractional (humanize timing).
  */
 export function performNotes(

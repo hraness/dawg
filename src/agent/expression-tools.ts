@@ -128,7 +128,7 @@ const bendPoint = {
 export const EXPRESSION_TOOLS: readonly AgentTool[] = Object.freeze([
   {
     name: "set_expression",
-    description: `Per-note expression on noteIds, or on trackId's notes starting in [fromBeat, toBeat); null clears. articulation: staccato halves length, legato holds to the next note, accent/marcato louder, ghost quiet. glide: seconds sliding in from the previous pitch. bend: [{at 0..1, cents}] or ${Object.keys(BEND_SHAPES).join("|")}. vibrato: {rate Hz, depth cents, delay s}. humanize: {timing ms, velocity %, length %} for just these notes, replacing the track's amounts ({} keeps them exact). Overrides the synth's slide, penv, vib. On a legato-glide track a note glides only when it overlaps the previous one (use articulation legato).`,
+    description: `Per-note expression on noteIds, or on trackId's notes starting in [fromBeat, toBeat); null clears. articulation: staccato halves length, legato holds to the next note, accent/marcato louder, ghost quiet. glide: seconds sliding in from the previous pitch. bend: [{at 0..1, cents}] or ${Object.keys(BEND_SHAPES).join("|")}. vibrato: {rate Hz, depth cents, delay s}. humanize: {timing ms, velocity %, length %} for just these notes, replacing the track's amounts ({} keeps them exact). Overrides the synth's slide, penv, vib. On a legato-glide track a note glides when it overlaps the previous one (use articulation legato), or, with its own glide, when the previous note ends at most a 16th step earlier (a TB-303 slide; a longer rest never slides).`,
     parameters: {
       type: "object",
       properties: {

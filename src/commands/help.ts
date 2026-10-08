@@ -68,7 +68,8 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       },
       {
         command: "glide <ms>|0 [legato|mono|poly] | glide <ms> <target>",
-        summary: "portamento in ms · glide 60 mono · glide 0 off · SDK 0.06 (s)",
+        summary:
+          "portamento in ms · glide 60 mono · glide 0 off · SDK 0.06 (s)",
       },
       {
         command: "bend <cents>|scoop|fall|doit|<at:cents>... [target]",
@@ -88,7 +89,8 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       },
       {
         command: "humanize <ms> [<vel%> [<len%>]] [seed <n>|<target>] | off",
-        summary: "seeded feel at render · humanize 10 8 5 · humanize 20 bars 2-3",
+        summary:
+          "seeded feel at render · humanize 10 8 5 · humanize 20 bars 2-3",
       },
       { command: "expression", summary: "this track's performance settings" },
       { command: "filter <hz> [res]", summary: "low-pass · filter off" },
