@@ -907,6 +907,20 @@ export function songTimeSlice(
   return { tempoBpm, ...(sliced ? { time: sliced } : {}) };
 }
 
+/**
+ * The slowest the beat ever runs: the lowest tempo mark, slowed by the
+ * longest fermata. `tempoBpm` exactly when the song has no tempo map.
+ */
+export function slowestBpmOf(score: TimeScore): number {
+  if (!score.time?.tempo && !score.time?.fermatas) return score.tempoBpm;
+  let bpm = score.tempoBpm;
+  for (const event of score.time.tempo ?? []) bpm = Math.min(bpm, event.bpm);
+  let stretch = 1;
+  for (const fermata of score.time.fermatas ?? [])
+    stretch = Math.max(stretch, 1 + fermata.beats);
+  return bpm / stretch;
+}
+
 /** True when ticks do not map to seconds at one constant rate. */
 export function hasTempoMap(score: TimeScore): boolean {
   return timeMapFor(score) !== undefined;

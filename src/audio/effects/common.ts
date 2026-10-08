@@ -37,6 +37,20 @@ export function tickAtSample(
     : index / context.samplesPerTick;
 }
 
+/**
+ * Tempo at sample `index` for tempo-synced LFOs and delays: through the
+ * tempo map when there is one (ramps, steps and fermata holds included),
+ * else the song's constant tempo.
+ */
+export function tempoAtSample(
+  context: Pick<EffectContext, "tempoBpm" | "warp">,
+  index: number,
+): number {
+  return context.warp
+    ? context.warp.bpm(context.warp.tick(index))
+    : context.tempoBpm;
+}
+
 /** Resolve a piecewise-linear automation lane, holding the static value before its first point. */
 export function interpolateAutomation(
   points: readonly AutomationPoint[],

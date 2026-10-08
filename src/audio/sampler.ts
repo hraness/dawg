@@ -32,7 +32,12 @@ import {
   type TrackScore,
 } from "../../core/score.ts";
 import { sampleKey, type DecodedSample, type SampleBank } from "./samples.ts";
-import { loopSecondsOf, performedNotes } from "../../core/tempo.ts";
+import {
+  barAt,
+  loopSecondsOf,
+  performedNotes,
+  secondsAtTick,
+} from "../../core/tempo.ts";
 import { sampleWarpFor, warpedSpan, type SampleWarp } from "./warp.ts";
 import {
   performanceTimingFor,
@@ -228,9 +233,7 @@ export function planSamplerVoices(
     const seconds = ref.fit
       ? held / sampleRate
       : unit === "c"
-        ? (timing.score.beatsPerBar * 60) /
-          (timing.warp?.bpm(note.startTick) ?? timing.score.tempoBpm) /
-          Math.abs(speed)
+        ? cycleSeconds(timing.score, note.startTick) / Math.abs(speed)
         : unit === "s"
           ? Math.abs(speed)
           : undefined;
@@ -474,9 +477,7 @@ export function samplerTailSeconds(
   sampleRate: number,
 ): number {
   if (bank.voices.size === 0) return 0;
-  const loopEnd = score.time
-    ? loopSecondsOf(score) * sampleRate
-    : ((score.bars * score.beatsPerBar * 60) / score.tempoBpm) * sampleRate;
+  const loopEnd = loopSecondsOf(score) * sampleRate;
   const warp = sampleWarpFor(score, sampleRate);
   const timing = { score, sampleRate, ...(warp ? { warp } : {}) };
   let latest = 0;
@@ -492,4 +493,17 @@ export function samplerTailSeconds(
       latest = Math.max(latest, voice.end - loopEnd);
   }
   return latest / sampleRate;
+}
+
+/**
+ * Seconds of the bar (a `c` cycle) holding `tick`: through the meter and
+ * the tempo map when the song has `time`, else the 0.4 arithmetic.
+ */
+function cycleSeconds(score: TrackScore, tick: number): number {
+  if (!score.time) return (score.beatsPerBar * 60) / score.tempoBpm;
+  const bar = barAt(score, tick);
+  return (
+    secondsAtTick(score, bar.tick + bar.barTicks) -
+    secondsAtTick(score, bar.tick)
+  );
 }

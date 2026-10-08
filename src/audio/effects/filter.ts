@@ -15,6 +15,7 @@ import {
   interpolateAutomation,
   lfo,
   lfoHz,
+  tempoAtSample,
   resonanceQ,
   tickAtSample,
   type EffectContext,
@@ -206,7 +207,7 @@ export function applyAutoFilter(
         : release * envelope + (1 - release) * level;
     if (index % CONTROL_SAMPLES === 0) {
       phasor.setHz(
-        lfoHz(sync, rate.at(index), context.tempoBpm),
+        lfoHz(sync, rate.at(index), tempoAtSample(context, index)),
         context.sampleRate,
       );
       followOctaves = follow.at(index);

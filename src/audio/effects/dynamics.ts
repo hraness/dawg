@@ -10,6 +10,7 @@ import {
   fxReader,
   lfo,
   lfoHz,
+  tempoAtSample,
   type EffectContext,
 } from "./common.ts";
 
@@ -42,7 +43,7 @@ export function applyTremolo(
   for (let index = 0; index < buffer.length; index += 1) {
     if (index % CONTROL_SAMPLES === 0) {
       phasor.setHz(
-        lfoHz(sync, rate.at(index), context.tempoBpm),
+        lfoHz(sync, rate.at(index), tempoAtSample(context, index)),
         context.sampleRate,
       );
       if (depth.automated) amount = depth.at(index);

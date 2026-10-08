@@ -159,3 +159,118 @@ describe("click through meter changes", () => {
     expect(marks[0]).toEqual({ beat: 4.5, level: "accent" });
   });
 });
+
+describe("tempo-synced effects follow the map", () => {
+  /** One kick at `tick`, with or without a 1-beat delay (dry kept). */
+  function echo(time: SongTime, tick: number, delayed: boolean) {
+    return createScore({
+      tempoBpm: 120,
+      bars: 4,
+      time,
+      tracks: [
+        {
+          id: "k",
+          name: "kick",
+          instrument: "drums",
+          ...(delayed ? { delay: { beats: 1, feedback: 0, mix: 1 } } : {}),
+        },
+      ],
+      notes: [
+        {
+          id: "n",
+          trackId: "k",
+          pitch: 36,
+          startTick: tick,
+          durationTicks: 120,
+          velocity: 0.9,
+        },
+      ],
+    });
+  }
+
+  /** Frames from the dry onset to the echo onset. */
+  function echoLag(time: SongTime, tick: number): number {
+    const dry = renderScorePcm(echo(time, tick, false), {
+      sampleRate: RATE,
+    }).pcm;
+    const wet = renderScorePcm(echo(time, tick, true), {
+      sampleRate: RATE,
+    }).pcm;
+    let dryOnset = -1;
+    let wetOnset = -1;
+    for (let frame = 0; frame < dry.length / 2; frame += 1) {
+      if (dryOnset < 0 && dry[frame * 2] !== 0) dryOnset = frame;
+      if (Math.abs(wet[frame * 2]! - dry[frame * 2]!) > 2) {
+        wetOnset = frame;
+        break;
+      }
+    }
+    return wetOnset - dryOnset;
+  }
+
+  test("an echo lands a beat later after a tempo step", () => {
+    const time: SongTime = { tempo: [{ tick: 1920, bpm: 60 }] };
+    // One beat at 60 BPM: a second.
+    expect(Math.abs(echoLag(time, 1920) - RATE)).toBeLessThanOrEqual(3);
+  });
+
+  test("an echo lands a beat later inside a ramp", () => {
+    const time: SongTime = {
+      tempo: [{ tick: 3840, bpm: 60, ramp: "linear" }],
+    };
+    const score = echo(time, 960, true);
+    const expected =
+      (secondsAtTick(score, 1440) - secondsAtTick(score, 960)) * RATE;
+    expect(Math.abs(echoLag(time, 960) - expected)).toBeLessThanOrEqual(3);
+    // Not the start tempo's half second.
+    expect(Math.abs(echoLag(time, 960) - RATE / 2)).toBeGreaterThan(100);
+  });
+
+  test("a ramped render stays within a small factor of a plain one", () => {
+    const notes = Array.from({ length: 64 }, (_, i) => ({
+      id: `n${i}`,
+      trackId: "k",
+      pitch: 36,
+      startTick: i * 240,
+      durationTicks: 120,
+      velocity: 0.8,
+    }));
+    const base = {
+      tempoBpm: 120,
+      bars: 8,
+      tracks: [
+        {
+          id: "k",
+          name: "kick",
+          instrument: "drums",
+          delay: { beats: 0.75, feedback: 0.4, mix: 0.3 },
+          volumeAutomation: [
+            { tick: 0, value: 0.2 },
+            { tick: 15360, value: 1 },
+          ],
+        },
+      ],
+      notes,
+    };
+    const time = (score: ReturnType<typeof createScore>) => {
+      const started = performance.now();
+      for (let i = 0; i < 3; i += 1)
+        renderScorePcm(score, { sampleRate: 22_050 });
+      return performance.now() - started;
+    };
+    const plain = createScore(base);
+    const ramped = createScore({
+      ...base,
+      time: {
+        tempo: [
+          { tick: 3840, bpm: 140, ramp: "linear" },
+          { tick: 7680, bpm: 90, ramp: "exp" },
+          { tick: 11520, bpm: 120 },
+        ],
+      },
+    });
+    time(plain);
+    time(ramped);
+    expect(time(ramped)).toBeLessThan(time(plain) * 3 + 50);
+  });
+});

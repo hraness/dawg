@@ -51,6 +51,11 @@ export function applyDelay(
   const mixLane = track.delayMixAutomation ?? [];
   if (delay.mix <= 0 && mixLane.length === 0) return;
   const { sampleRate } = context;
+  const synced = !(delay.time !== undefined && delay.time > 0);
+  if (context.warp && synced) {
+    applyWarpedDelay(left, right, track, context, wetOnly);
+    return;
+  }
   const length = Math.max(
     1,
     Math.round(delaySeconds(track, context.tempoBpm) * sampleRate),
@@ -94,6 +99,89 @@ export function applyDelay(
     }
     lineL[slot] = writeL;
     lineR[slot] = writeR;
+    left[index] = (wetOnly ? 0 : dryL) + wetL * mix;
+    right[index] = (wetOnly ? 0 : dryR) + wetR * mix;
+  }
+}
+
+/**
+ * The beat-synced delay under a tempo map: the read head trails the write
+ * head by `beats` of score time at every control block, read with linear
+ * interpolation, so each echo lands `beats` later on the grid through tempo
+ * steps, ramps and fermatas. Same routing and lanes as `applyDelay`.
+ */
+function applyWarpedDelay(
+  left: Float64Array,
+  right: Float64Array,
+  track: Track,
+  context: EffectContext,
+  wetOnly: boolean,
+): void {
+  const delay = track.delay!;
+  const warp = context.warp!;
+  const { sampleRate } = context;
+  const feedbackLane = track.delayFeedbackAutomation ?? [];
+  const mixLane = track.delayMixAutomation ?? [];
+  // Ticks per beat, recovered from the context's start-tempo sample rate.
+  const ticksPerBeat = Math.round(
+    (sampleRate * 60) / (context.tempoBpm * context.samplesPerTick),
+  );
+  const lag = delay.beats * ticksPerBeat;
+  const lagAt = (index: number) =>
+    Math.max(2, index - warp.sample(warp.tick(index) - lag));
+  // Longest lag over the buffer sizes the lines.
+  let longest = 1;
+  for (let index = 0; index <= left.length; index += CONTROL_SAMPLES)
+    longest = Math.max(longest, lagAt(index));
+  const size = Math.ceil(longest) + 2;
+  const lineL = new Float64Array(size);
+  const lineR = new Float64Array(size);
+  const pingpong = delay.pingpong === true;
+  const highcut =
+    delay.highcut === undefined
+      ? undefined
+      : [
+          new OnePole(delay.highcut, sampleRate),
+          new OnePole(delay.highcut, sampleRate),
+        ];
+  let feedback = delay.feedback;
+  let mix = delay.mix;
+  let lagNow = lagAt(0);
+  let lagStep = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    if (index % CONTROL_SAMPLES === 0) {
+      const tick = tickAtSample(context, index);
+      feedback = interpolateAutomation(feedbackLane, tick, delay.feedback);
+      mix = interpolateAutomation(mixLane, tick, delay.mix);
+      lagNow = lagAt(index);
+      lagStep = (lagAt(index + CONTROL_SAMPLES) - lagNow) / CONTROL_SAMPLES;
+    } else lagNow += lagStep;
+    const read = index - Math.min(size - 2, lagNow);
+    const base = Math.floor(read);
+    const fraction = read - base;
+    const at = (line: Float64Array, position: number) =>
+      position < 0 ? 0 : line[position % size]!;
+    const wetL =
+      at(lineL, base) * (1 - fraction) + at(lineL, base + 1) * fraction;
+    const wetR =
+      at(lineR, base) * (1 - fraction) + at(lineR, base + 1) * fraction;
+    const dryL = left[index]!;
+    const dryR = right[index]!;
+    let writeL: number;
+    let writeR: number;
+    if (pingpong) {
+      writeL = (dryL + dryR) * 0.5 + wetR * feedback;
+      writeR = wetL * feedback;
+    } else {
+      writeL = dryL + wetR * feedback;
+      writeR = dryR + wetL * feedback;
+    }
+    if (highcut) {
+      writeL = highcut[0]!.process(writeL);
+      writeR = highcut[1]!.process(writeR);
+    }
+    lineL[index % size] = writeL;
+    lineR[index % size] = writeR;
     left[index] = (wetOnly ? 0 : dryL) + wetL * mix;
     right[index] = (wetOnly ? 0 : dryR) + wetR * mix;
   }
