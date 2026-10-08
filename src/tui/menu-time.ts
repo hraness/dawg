@@ -136,6 +136,22 @@ export function tempoNodes(context: MenuContext): MenuNode[] {
       "speed up gradually, e.g. into a drop",
       true,
     ),
+    entry(
+      "a tempo",
+      "[at bar <n>] · empty: the bar after the last rit/accel",
+      "a tempo",
+      "a tempo at bar 9",
+      "step back to the tempo before the last rit or accel",
+      true,
+    ),
+    entry(
+      "tempo primo",
+      "[at bar <n>] · empty: the bar after the last rit/accel",
+      "tempo primo",
+      "tempo primo at bar 17",
+      "step back to the start tempo",
+      true,
+    ),
   );
   for (const fermata of time?.fermatas ?? []) {
     const beat = fmt(fermata.tick / tpb);

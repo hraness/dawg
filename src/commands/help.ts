@@ -130,7 +130,7 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "gradual · rit 4 bars to 80 · default 75% / 133%",
       },
       {
-        command: "fermata [at <beat>|bar <n>] [<beats>]",
+        command: "fermata [at <beat>|at bar <n>|at end] [<extra beats>]",
         summary: "hold a beat · fermata at 31 2 · fermata clear",
       },
       {
@@ -411,6 +411,10 @@ export const HELP_GUIDE: readonly HelpSection[] = [
   {
     group: "more" as HelpGroup,
     entries: [
+      {
+        command: "rit 4 bars to 80",
+        summary: "tempo changes, fermatas, meter · /menu tempo",
+      },
       { command: "/guide", summary: "short guides for every feature · F1" },
       { command: "/help all", summary: "every command and key · /help music" },
     ],
@@ -565,7 +569,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   accelerando:
     "accel [<n> bars|beats] [to <bpm>] [at bar <n>|<beat>] [exp] · accel 8 bars to 174",
   fermata:
-    "fermata [at <beat>|bar <n>|end] [<extra beats>] · fermata at 31 2 · fermata remove 31 · fermata clear",
+    "fermata [at <beat>|at bar <n>|at end] [<extra beats>] · fermata at 31 2 · fermata remove 31 · fermata clear",
   add: "add <note> at <beat> [for <beats>] · add C4 at 0",
   put: "add <note> at <beat> [for <beats>] · add C4 at 0",
   remove: "remove <id> · ids show in the transcript",

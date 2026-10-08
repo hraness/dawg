@@ -3064,6 +3064,11 @@ export type TimeMark =
       ramp?: "linear" | "exp";
       /** Set by `rit()`/`accel()`: the direction `song()` checks. */
       gradual?: "rit" | "accel";
+      /**
+       * Set by `aTempo()` (the tempo before the last rit/accel) and
+       * `tempoPrimo()` (the song's opening tempo) instead of `bpm`.
+       */
+      back?: "a-tempo" | "primo";
     }>
   | Readonly<{
       kind: "meter";
@@ -3092,6 +3097,23 @@ export function tempo(at: number, bpm?: number): TimeMark {
     throw new DawgSdkError("tempo() at must be > 0; song({ tempo }) is beat 0");
   if (bpm === undefined) return Object.freeze({ kind: "tempo", at: start });
   return Object.freeze({ kind: "tempo", at: start, bpm: songBpm(bpm) });
+}
+
+/**
+ * `a tempo` at beat `at` (SDK 1.14.0): step back to the tempo in effect
+ * before the last `rit()`/`accel()` (or ramp) ending before `at`.
+ */
+export function aTempo(at: number): TimeMark {
+  const start = beat(at, "aTempo() at");
+  if (start <= 0) throw new DawgSdkError("aTempo() at must be > 0");
+  return Object.freeze({ kind: "tempo", at: start, back: "a-tempo" });
+}
+
+/** `tempo primo` at beat `at` (SDK 1.14.0): step back to `song({ tempo })`. */
+export function tempoPrimo(at: number): TimeMark {
+  const start = beat(at, "tempoPrimo() at");
+  if (start <= 0) throw new DawgSdkError("tempoPrimo() at must be > 0");
+  return Object.freeze({ kind: "tempo", at: start, back: "primo" });
 }
 
 /**
@@ -3311,27 +3333,51 @@ function songTime(
     }
   }
   // Tempo: sort by tick, resolve pins against their neighbours.
-  type Event = { tick: number; bpm?: number; ramp?: TempoCurve };
+  type Event = {
+    tick: number;
+    bpm?: number;
+    ramp?: TempoCurve;
+    back?: "a-tempo" | "primo";
+  };
   const byTick = new Map<number, Event>();
   for (const mark of marks) {
     if (mark.kind !== "tempo") continue;
     const tick = ticks(mark.at);
     const previous = byTick.get(tick);
-    if (previous && previous.bpm !== undefined && mark.bpm !== undefined)
+    const sets = (e: { bpm?: number; back?: unknown }) =>
+      e.bpm !== undefined || e.back !== undefined;
+    if (previous && sets(previous) && sets(mark))
       throw new DawgSdkError(
         `song time has two tempo changes at beat ${mark.at}`,
       );
     // A pin and a change on the same beat: the change wins.
-    if (previous && mark.bpm === undefined) continue;
+    if (previous && !sets(mark)) continue;
     byTick.set(tick, {
       tick,
       ...(mark.bpm !== undefined ? { bpm: mark.bpm } : {}),
       ...(mark.ramp ? { ramp: mark.ramp } : {}),
+      ...(mark.back ? { back: mark.back } : {}),
     });
   }
   const events = [...byTick.values()].sort((a, b) => a.tick - b.tick);
   const tempo: { tick: number; bpm: number; ramp?: TempoCurve }[] = [];
   events.forEach((event, index) => {
+    if (event.back) {
+      let bpm = tempoBpm;
+      if (event.back === "a-tempo") {
+        let last = -1;
+        tempo.forEach((e, i) => {
+          if (e.ramp !== undefined) last = i;
+        });
+        if (last < 0)
+          throw new DawgSdkError(
+            `aTempo() at beat ${event.tick / ticksPerBeat} has no rit() or accel() before it`,
+          );
+        bpm = last > 0 ? tempo[last - 1]!.bpm : tempoBpm;
+      }
+      tempo.push(Object.freeze({ tick: event.tick, bpm }));
+      return;
+    }
     if (event.bpm !== undefined) {
       // rit() and accel() check their direction against the tempo they
       // start from, as the prompt's `rit` and `accel` do.
@@ -3360,7 +3406,9 @@ function songTime(
     }
     // A pin holds the tempo of the marks before it, and the next ramp
     // starts from it. Without a ramp after it, it changes nothing.
-    const after = events.slice(index + 1).find((e) => e.bpm !== undefined);
+    const after = events
+      .slice(index + 1)
+      .find((e) => e.bpm !== undefined || e.back !== undefined);
     if (!after?.ramp) return;
     const before = tempo[tempo.length - 1]?.bpm ?? tempoBpm;
     tempo.push(Object.freeze({ tick: event.tick, bpm: before }));

@@ -10,6 +10,7 @@ import { evaluateProject } from "./eval.ts";
 import { printProject } from "./print.ts";
 import {
   accel,
+  aTempo,
   DawgSdkError,
   fermata,
   meter,
@@ -20,6 +21,7 @@ import {
   song,
   stepPhasing,
   tempo,
+  tempoPrimo,
   track,
 } from "./v1.ts";
 
@@ -274,4 +276,20 @@ describe("song() checks its time marks", () => {
     const text = files.find((file) => file.path.includes("piano"))!.text;
     expect(text).toContain("steps: { shift: 0.25, hold: 4, drift: 2 }");
   });
+});
+
+test("aTempo() and tempoPrimo() step back after a rit", () => {
+  const s = song({
+    tempo: 120,
+    bars: 8,
+    tracks: [],
+    time: [tempo(8, 100), rit(12, 8, 80), aTempo(24), tempoPrimo(28)],
+  });
+  expect(s.time?.tempo?.slice(-2)).toEqual([
+    { tick: 24 * 480, bpm: 100 },
+    { tick: 28 * 480, bpm: 120 },
+  ]);
+  expect(() => song({ bars: 8, tracks: [], time: [aTempo(8)] })).toThrow(
+    "no rit() or accel()",
+  );
 });

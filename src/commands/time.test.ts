@@ -107,6 +107,15 @@ describe("time grammar", () => {
       type: "fermata-remove",
       at: { beat: 31 },
     });
+    expect(parseTimeCommand("fermata end")).toEqual({
+      type: "fermata",
+      beats: 2,
+    });
+    expect(parseTimeCommand("fermata bar 4 3")).toEqual({
+      type: "fermata",
+      at: { bar: 4 },
+      beats: 3,
+    });
     expect(parseTimeCommand("fermata 999")).toBeUndefined();
     expect(parseTimeCommand("meter 7/8 at bar 5")).toEqual({
       type: "meter-at",
@@ -304,6 +313,48 @@ describe("time commands", () => {
       3 / 4,
       9,
     );
+  });
+
+  test("a tempo and tempo primo step back after a rit", () => {
+    expect(parseTimeCommand("a tempo")).toEqual({
+      type: "tempo-return",
+      primo: false,
+    });
+    expect(parseTimeCommand("tempo primo at bar 7")).toEqual({
+      type: "tempo-return",
+      primo: true,
+      at: { bar: 7 },
+    });
+    let score = createScore({ tempoBpm: 120, bars: 8 });
+    score = applyTimeCommand(score, "", {
+      type: "tempo-at",
+      bpm: 100,
+      at: { bar: 3 },
+    }).next!;
+    score = applyTimeCommand(
+      score,
+      "",
+      parseTimeCommand("rit 2 bars to 80 at bar 4")!,
+    ).next!;
+    const back = applyTimeCommand(score, "", parseTimeCommand("a tempo")!);
+    expect(back.ok).toBe(true);
+    expect(back.message).toBe("a tempo · 100 BPM at bar 7");
+    expect(back.next!.time!.tempo!.at(-1)).toEqual({
+      tick: 6 * 1920,
+      bpm: 100,
+    });
+    const primo = applyTimeCommand(
+      score,
+      "",
+      parseTimeCommand("tempo primo at bar 8")!,
+    );
+    expect(primo.message).toBe("tempo primo · 120 BPM at bar 8");
+    const none = applyTimeCommand(
+      createScore({ bars: 4 }),
+      "",
+      parseTimeCommand("a tempo")!,
+    );
+    expect(none.ok).toBe(false);
   });
 
   test("track phasing with hold or drift steps like Piano Phase", () => {

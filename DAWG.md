@@ -915,7 +915,7 @@ tempo 70 at bar 17 exp       exponential glide: equal ratio per beat, even to th
 tempo remove bar 9 | tempo clear | tempo map
 rit 4 bars to 80             ritardando over the last 4 bars; rit/accel default to 75% / 133% over the last 2 bars
 accel 8 bars to 174 at bar 9 accelerando from bar 9; `beats` instead of `bars`, `exp` for an exponential curve
-fermata at 31 2              hold beat 31 for 2 extra beats; fermata [at bar <n>|end] [<beats>], default 2
+fermata at 31 2              hold beat 31 for 2 extra beats; fermata [at <beat>|at bar <n>|at end] [<extra beats>], default 2
 meter 7/8 at bar 5           meter change on a bar line, lasting until the next one; meter 7/8 alone sets the whole song
 meter remove bar 5 | meter clear
 track rate 3/2               polytempo: the focused track plays at 1.5× the song tempo (0.125..8 or a/b)

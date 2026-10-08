@@ -7,7 +7,7 @@
  *   rit|accel [<n> [bars|beats]] [to <bpm>] [at bar <n>|<beat>] [exp]
  *                                              gradual change; 75% / 133% by
  *                                              default, over the last bars
- *   fermata [at <beat>|bar <n>|end] [<beats>]  hold that beat for extra beats
+ *   fermata [at <beat>|[at] bar <n>|[at] end] [<extra beats>]  hold a beat
  *   fermata remove <beat>|bar <n> · fermata clear
  *   meter <n>/<d> [at bar <n>]                 meter change at a bar line
  *   meter remove bar <n> · meter clear
@@ -61,6 +61,13 @@ export type TimeCommand =
       bpm: number;
       at: TimePosition;
       ramp?: TempoRamp;
+    }>
+  | Readonly<{
+      /** `a tempo` (back to before the last rit/accel) or `tempo primo`. */
+      type: "tempo-return";
+      primo: boolean;
+      /** Absent: the first barline after the last rit/accel ends. */
+      at?: TimePosition;
     }>
   | Readonly<{ type: "tempo-remove"; at: TimePosition }>
   | Readonly<{ type: "tempo-clear" }>
@@ -133,6 +140,10 @@ export function parseTimeCommand(prompt: string): TimeCommand | undefined {
   const words = text.split(" ");
   const verb = words[0]!;
   const rest = words.slice(1);
+  if (verb === "a" && rest[0] === "tempo")
+    return tempoReturnCommand(false, rest.slice(1));
+  if (verb === "tempo" && rest[0] === "primo")
+    return tempoReturnCommand(true, rest.slice(1));
   if (verb === "tempo" || verb === "bpm") return tempoCommand(rest);
   if (RIT.has(verb) || ACCEL.has(verb))
     return gradualCommand(RIT.has(verb) ? "rit" : "accel", rest);
@@ -217,6 +228,18 @@ function gradualCommand(
   };
 }
 
+function tempoReturnCommand(
+  primo: boolean,
+  rest: readonly string[],
+): TimeCommand | undefined {
+  if (rest.length === 0) return { type: "tempo-return", primo };
+  const words = rest[0] === "at" ? rest.slice(1) : rest;
+  const at = position(words);
+  return at && at.used === words.length
+    ? { type: "tempo-return", primo, at: at.position }
+    : undefined;
+}
+
 function fermataCommand(rest: readonly string[]): TimeCommand | undefined {
   if (rest.length === 1 && rest[0] === "clear")
     return { type: "fermata-clear" };
@@ -229,7 +252,15 @@ function fermataCommand(rest: readonly string[]): TimeCommand | undefined {
   }
   let words = rest;
   let at: TimePosition | undefined;
-  if (words[0] === "at") {
+  // `at` is optional before `end` and `bar <n>`; a bare number stays the
+  // extra beats, so a beat position needs `at`.
+  if (words[0] === "end") words = words.slice(1);
+  else if (words[0] === "bar") {
+    const found = position(words);
+    if (!found) return undefined;
+    at = found.position;
+    words = words.slice(found.used);
+  } else if (words[0] === "at") {
     if (words[1] === "end") words = words.slice(2);
     else {
       const found = position(words.slice(1));
@@ -441,6 +472,8 @@ function applyOrThrow(
         `tempo · ${fmt(command.bpm)} BPM at ${where}${glide}`,
       );
     }
+    case "tempo-return":
+      return tempoReturn(score, command);
     case "tempo-remove": {
       const [from, to] = spanOf(score, command.at);
       const before = score.time?.tempo?.length ?? 0;
@@ -827,6 +860,56 @@ function spanOf(score: TrackScore, at: TimePosition): [number, number] {
     return [tick, tick];
   }
   return [barStartTick(score, at.bar - 1), barStartTick(score, at.bar) - 1];
+}
+
+/**
+ * `a tempo` steps back to the tempo before the last rit/accel; `tempo
+ * primo` steps to the song's start tempo. Both are plain steps.
+ */
+function tempoReturn(
+  score: TrackScore,
+  command: Extract<TimeCommand, { type: "tempo-return" }>,
+): TimeResult {
+  const name = command.primo ? "tempo primo" : "a tempo";
+  const events = [...(score.time?.tempo ?? [])].sort((a, b) => a.tick - b.tick);
+  const limit = command.at === undefined ? Infinity : tickOf(score, command.at);
+  let last = -1;
+  events.forEach((event, index) => {
+    if (event.ramp && event.tick < limit) last = index;
+  });
+  let tick: number;
+  if (command.at !== undefined) tick = limit;
+  else {
+    if (last < 0)
+      return {
+        ok: false,
+        message: `${name} · no rit or accel to come back from; say where: ${name} at bar <n>`,
+      };
+    // The ramp's own tick holds its target, so the step lands on the next
+    // barline after it.
+    tick = barStartTick(score, barAt(score, events[last]!.tick).bar + 1);
+  }
+  const where = command.at
+    ? placeLabel(command.at)
+    : `bar ${barAt(score, tick).bar + 1}`;
+  if (tick >= loopTicksOf(score))
+    return { ok: false, message: `${name} · ${where} is past the song end` };
+  if (tick === 0)
+    return {
+      ok: false,
+      message: `${name} · bar 1 already plays the start tempo`,
+    };
+  let bpm = score.tempoBpm;
+  if (!command.primo) {
+    if (last < 0)
+      return {
+        ok: false,
+        message: `a tempo · no rit or accel before ${where}; use tempo <bpm> at ${where}`,
+      };
+    bpm = last > 0 ? events[last - 1]!.bpm : score.tempoBpm;
+  }
+  const time = withTempoEvent(score.time, { tick, bpm });
+  return timeResult(score, time, `${name} · ${fmt(bpm)} BPM at ${where}`);
 }
 
 function placeLabel(at: TimePosition): string {
