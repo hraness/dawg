@@ -146,7 +146,7 @@ export function performanceNodes(context: MenuContext): MenuNode[] {
           : option === "off"
             ? "pedal off"
             : "pedal",
-      help: "bars re-pedals on each downbeat; in play mode hold Tab to record it",
+      help: "bars replaces the lane with a re-pedal on each downbeat; in play mode press Tab (latch) or hold Shift while recording",
     },
     {
       kind: "choice",
