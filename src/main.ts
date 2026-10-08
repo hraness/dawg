@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeSync } from "node:fs";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { stdin, stdout } from "node:process";
@@ -141,6 +141,23 @@ import {
   type LiveEngine,
 } from "./tui/play-session.ts";
 import { EditMenu, MENU_SECTIONS, type MenuContext } from "./tui/menu.ts";
+import {
+  drawerView,
+  faderChoose,
+  faderKeyPress,
+  faderSetPosition,
+  faderStep,
+  focusIndex,
+  type FaderResult,
+  type FaderState,
+} from "./tui/fader.ts";
+import {
+  isMouseSequence,
+  MOUSE_OFF,
+  MOUSE_ON,
+  parseMouse,
+  type MouseEvent,
+} from "../tui/keys.ts";
 import {
   Audition,
   SUPERSEDED,
@@ -288,6 +305,7 @@ Usage:
 Usage flags:
   --reduce-motion   static hit/sustain states (also DAWG_REDUCE_MOTION=1)
   --theme <name>    default | high-contrast | mono (NO_COLOR forces mono)
+  --no-mouse        keys only; no click/wheel reporting (also DAWG_MOUSE=0)
 
 Prompt:
   Enter submit · Shift-Enter newline · Alt-Enter queue · Ctrl-Q toggle queue
@@ -895,11 +913,30 @@ function truncateForCard(value: string): string {
   return line.length > 32 ? `${line.slice(0, 31)}…` : line;
 }
 
+/**
+ * Mouse reporting is on unless `--no-mouse` or `DAWG_MOUSE=0` (or a dumb
+ * terminal) says otherwise. A terminal without mouse support ignores the
+ * modes and every key still works.
+ */
+const mouseEnabled =
+  !args.has("--no-mouse") &&
+  process.env.DAWG_MOUSE !== "0" &&
+  process.env.TERM !== "dumb";
+
+function mouseOn(): string {
+  return mouseEnabled ? MOUSE_ON : "";
+}
+
 async function runInteractive(): Promise<void> {
+  // A crash or a stray process.exit must not leave the terminal reporting
+  // mouse events into the shell.
+  process.once("exit", () => {
+    if (mouseEnabled) writeSync(1, MOUSE_OFF);
+  });
   stdin.setRawMode?.(true);
   stdin.resume();
   // Alternate screen, hidden cursor, bracketed paste.
-  stdout.write(`${ESC}?1049h${ESC}?25l${ESC}?2004h${ESC}2J`);
+  stdout.write(`${ESC}?1049h${ESC}?25l${ESC}?2004h${ESC}2J${mouseOn()}`);
   const inputDecoder = new TerminalInputDecoder();
   const queuedPrompts: string[] = [];
   let processingQueue = false;
@@ -1117,11 +1154,11 @@ async function runInteractive(): Promise<void> {
     stdin.pause();
     stdin.setRawMode?.(false);
     // Leave the alternate screen; restore the cursor and plain paste.
-    stdout.write(`${ESC}0m${ESC}?2004l${ESC}?25h${ESC}?1049l`);
+    stdout.write(`${MOUSE_OFF}${ESC}0m${ESC}?2004l${ESC}?25h${ESC}?1049l`);
     try {
       return await flow();
     } finally {
-      stdout.write(`${ESC}?1049h${ESC}?25l${ESC}?2004h${ESC}2J`);
+      stdout.write(`${ESC}?1049h${ESC}?25l${ESC}?2004h${ESC}2J${mouseOn()}`);
       stdin.setRawMode?.(true);
       stdin.on("data", onData);
       stdin.resume();
@@ -1140,7 +1177,31 @@ async function runInteractive(): Promise<void> {
         ...inputDecoder.push(text),
         ...(text === "\u001b" ? inputDecoder.flush() : []),
       ];
-      for (const value of values) {
+      while (values.length) {
+        const value = values.shift()!;
+        // A mouse report acts on what the last frame painted under it; some
+        // become keys (a list row, a wheel notch) and run through below.
+        if (typeof value === "string" && isMouseSequence(value)) {
+          const event = parseMouse(value);
+          if (event) values.unshift(...mouseInput(event));
+          tick(true);
+          continue;
+        }
+        // The fader drawer owns every key while it is up.
+        if (typeof value === "string" && fader && menu.open) {
+          const result = faderKeyPress(
+            fader,
+            menu.faderFields(menuContext()),
+            value,
+            faderKeyOptions(),
+          );
+          if (result.type !== "pass") {
+            faderOutcome(result);
+            refreshMenu();
+            tick(true);
+            continue;
+          }
+        }
         // The `?` panel closes on any key (Ctrl-C still quits).
         if (tui.ui.keys && typeof value === "string" && value !== "\u0003") {
           tui.closeKeys();
@@ -1203,6 +1264,7 @@ async function runInteractive(): Promise<void> {
               }
             } else if (result.type === "audition")
               auditionKeyPressed(result.key);
+            else if (result.type === "fader") openFader(result.label);
             else if (result.type === "revert") revertStaged();
             else if (result.type === "hover")
               hoverItem(result.command, result.key);
@@ -1399,7 +1461,7 @@ async function runInteractive(): Promise<void> {
     await port.close();
     stdin.setRawMode?.(false);
     stdin.pause();
-    stdout.write(`${ESC}0m${ESC}?2004l${ESC}?25h${ESC}?1049l`);
+    stdout.write(`${MOUSE_OFF}${ESC}0m${ESC}?2004l${ESC}?25h${ESC}?1049l`);
   }
 }
 
