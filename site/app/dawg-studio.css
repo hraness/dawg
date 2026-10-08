@@ -1,0 +1,62 @@
+/*
+ * dawg studio: dawg's variant of the Hraness design system.
+ *
+ * It rides on the design-kit's Paper palette. The document renders with
+ * data-palette="paper" and the class `dawg-studio`; while both are present,
+ * the rules below replace Paper's semantic values with the studio set. Pick
+ * another palette from the appearance menu and these rules stop matching, so
+ * every Hraness palette still works on dawg.sh.
+ *
+ * The principles, written down in DESIGN.md:
+ * - Flat. No shadows, gradients, blur on content, or rounded corners.
+ * - High contrast. Near-black ink on near-white, and the reverse in dark.
+ * - Grid first. Full-strength rules divide the page into cells.
+ * - Bold grotesk type at large sizes, tight tracking, sentence case.
+ * - Color comes in blocks. The four clip colors are the TUI's track accents;
+ *   they fill whole cells with black ink on top, and appear nowhere else.
+ * - One restrained action color: ink. Buttons are flat ink rectangles.
+ */
+
+:root.dawg-studio[data-palette][data-palette="paper"].dawg-studio {
+  --hraness-palette-background: light-dark(#f7f7f4, #0f0f0f);
+  --hraness-palette-foreground: light-dark(#0f0f0f, #f2f2ee);
+  --hraness-palette-muted: light-dark(#4d4d4a, #b3b3ad);
+  --hraness-palette-faint: light-dark(#5c5c58, #a3a39d);
+  --hraness-palette-grid: light-dark(#d9d9d4, #2a2a28);
+  --hraness-palette-line: light-dark(#0f0f0f, #f2f2ee);
+  --hraness-palette-control-border: light-dark(#0f0f0f, #f2f2ee);
+  --hraness-palette-surface: light-dark(#ffffff, #181818);
+  --hraness-palette-surface-raised: light-dark(#ffffff, #1e1e1e);
+  --hraness-palette-surface-hover: light-dark(#ebebe6, #262624);
+  --hraness-palette-card: light-dark(#ffffff, #181818);
+  --hraness-palette-card-foreground: light-dark(#0f0f0f, #f2f2ee);
+  --hraness-palette-popover: light-dark(#ffffff, #1e1e1e);
+  --hraness-palette-popover-foreground: light-dark(#0f0f0f, #f2f2ee);
+  --hraness-palette-primary: light-dark(#0f0f0f, #f2f2ee);
+  --hraness-palette-primary-foreground: light-dark(#f7f7f4, #0f0f0f);
+  --hraness-palette-primary-soft: light-dark(#e6e6e1, #262624);
+  --hraness-palette-secondary: light-dark(#ebebe6, #262624);
+  --hraness-palette-secondary-foreground: light-dark(#0f0f0f, #f2f2ee);
+  --hraness-palette-accent: light-dark(#ebebe6, #262624);
+  --hraness-palette-accent-foreground: light-dark(#0f0f0f, #f2f2ee);
+  --hraness-palette-focus: light-dark(#1e5ae1, #8fb0ff);
+  --hraness-palette-inverse: light-dark(#0f0f0f, #f2f2ee);
+  --hraness-palette-inverse-foreground: light-dark(#f7f7f4, #0f0f0f);
+  --hraness-site-accent: var(--hraness-palette-primary);
+  --hraness-site-accent-ink: var(--hraness-palette-primary-foreground);
+}
+
+/* Studio tokens, readable by every palette. */
+:root {
+  /* Clip colors: the TUI's track accents, in order. Ink on top is always black. */
+  --dawg-clip-1: #eb6f92;
+  --dawg-clip-2: #f6c177;
+  --dawg-clip-3: #9ccfd8;
+  --dawg-clip-4: #c4a7e7;
+  --dawg-clip-ink: #0f0f0f;
+  --dawg-rule: 1px solid var(--line);
+  --dawg-rule-strong: 2px solid var(--foreground);
+  --dawg-radius: 0;
+  --dawg-display: clamp(3rem, 1.4rem + 7vw, 7.5rem);
+  --dawg-title: clamp(2rem, 1.2rem + 3.2vw, 3.75rem);
+}

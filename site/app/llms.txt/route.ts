@@ -1,4 +1,8 @@
-import { docsTopics } from "../docs/topics";
+import { docsHref, docsPages, docsTrail } from "../docs/pages";
+
+function docsTrailDepth(id: string): number {
+  return docsTrail(id).length - 1;
+}
 import {
   installCommand,
   productMessaging,
@@ -17,12 +21,14 @@ export async function GET(): Promise<Response> {
   const installLines = release.published
     ? `- \`${installCommand}\` installs Bun if missing, downloads v${release.version} with SHA256SUMS from GitHub Releases, verifies the checksum and runs \`bun add -g\`.\n- Or \`bun add -g ${releaseTarballUrl(release.version)}\`.`
     : `- The first GitHub Release is coming soon; until then \`${installCommand}\` exits with a notice. Run from source: \`${sourceInstallCommands.join(" && ")}\`.`;
-  const docs = docsTopics
-    .map(
-      (topic) =>
-        `- [${topic.title}](${productUrl}/docs${topic.slug === "quickstart" ? "" : `/${topic.slug}`}): ${topic.description}`,
-    )
-    .join("\n");
+  const docs = [
+    `- [Install](${productUrl}/docs): Install dawg and start a session.`,
+    ...docsPages.map((page) => {
+      const indent = "  ".repeat(docsTrailDepth(page.id));
+      const summary = page.description === "" ? "" : `: ${page.description}`;
+      return `${indent}- [${page.title}](${productUrl}${docsHref(page.id)})${summary}`;
+    }),
+  ].join("\n");
   const body = `# dawg
 
 > ${productMessaging.tagline} ${productMessaging.short}

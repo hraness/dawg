@@ -1,15 +1,17 @@
 import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
 
-import { DocsShell } from "../docs-shell";
-import { docsTopic, docsTopics } from "../topics";
+import { DocsShell, INSTALL_ID } from "../docs-shell";
+import { docsHref, docsPage, docsPages, docsSource } from "../pages";
 
 export const dynamicParams = false;
 
 export function generateStaticParams() {
-  return docsTopics
-    .filter((topic) => topic.slug !== "quickstart")
-    .map((topic) => ({ slug: topic.slug }));
+  return [
+    ...docsPages.map((page) => ({ slug: page.id })),
+    // The old address of the install page.
+    ...(docsPage(INSTALL_ID) === undefined ? [{ slug: INSTALL_ID }] : []),
+  ];
 }
 
 export async function generateMetadata({
@@ -17,36 +19,39 @@ export async function generateMetadata({
 }: {
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
-  const topic = docsTopic((await params).slug);
-  if (topic === undefined) return {};
+  const page = docsPage((await params).slug);
+  if (page === undefined) return {};
   return {
-    title: topic.title,
-    description: topic.description,
-    alternates: { canonical: `/docs/${topic.slug}` },
+    title: page.title,
+    description: page.description,
+    alternates: { canonical: docsHref(page.id) },
     openGraph: {
-      title: `${topic.title} · dawg docs`,
-      description: topic.description,
-      url: `/docs/${topic.slug}`,
+      title: `${page.title} · dawg docs`,
+      description: page.description,
+      url: docsHref(page.id),
     },
   };
 }
 
-export default async function DocsTopicPage({
+export default async function DocsGuidePage({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  if (slug === "quickstart") permanentRedirect("/docs");
-  const topic = docsTopic(slug);
-  if (topic === undefined) notFound();
+  const page = docsPage(slug);
+  if (page === undefined) {
+    if (slug === INSTALL_ID) permanentRedirect("/docs");
+    notFound();
+  }
   return (
     <DocsShell
-      slug={topic.slug}
-      title={topic.title}
-      description={topic.description}
+      id={page.id}
+      title={page.title}
+      // A guide's first paragraph is its description, so it is not repeated.
+      description={docsSource === "guides" ? "" : page.description}
     >
-      {topic.body()}
+      {page.render()}
     </DocsShell>
   );
 }
