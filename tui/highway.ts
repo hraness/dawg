@@ -45,6 +45,11 @@ export interface TrackScoreSnapshot {
   bpm?: number | undefined;
   key?: string | undefined;
   beatsPerBar?: number | undefined;
+  /**
+   * Bar starts in beats within the loop when the meter changes (bar 1 at
+   * 0); omitted, bars repeat every `beatsPerBar` beats.
+   */
+  barBeats?: readonly number[] | undefined;
   loopBeats?: number | undefined;
   laneCount?: number | undefined;
   /** Optional lane legend (drum voices) drawn just below the hit line. */
@@ -480,15 +485,36 @@ export function paintHighway(
     !(score.layers ?? []).some((layer) => layer.notes.length > 0);
 
   // Beat, bar, and loop rules of increasing strength.
+  const barBeats =
+    score.barBeats && score.barBeats.length > 0 ? score.barBeats : undefined;
   for (let row = 0; row <= lastNoteRow; row += 1) {
     if (row === hitRow) continue;
     const center = rowBeat(row);
     const half = 0.5 / rowsPerBeat;
-    const k = Math.ceil(center - half - 1e-9);
+    let k = Math.ceil(center - half - 1e-9);
+    // Meter changes: a bar may start between beats (7/8), so the row's
+    // bar start wins over the whole beat.
+    let barIndex: number | undefined;
+    if (barBeats) {
+      const base = loop ? Math.floor((center - half) / loop) * loop : 0;
+      for (const offset of loop ? [base, base + loop] : [0]) {
+        const found = barBeats.findIndex((start) => {
+          const at = offset + start;
+          return at >= center - half - 1e-9 && at < center + half - 1e-9;
+        });
+        if (found >= 0) {
+          barIndex = found;
+          k = offset + barBeats[found]!;
+          break;
+        }
+      }
+    }
     if (k > center + half - 1e-9 || k < 0) continue;
     const inLoop = loop ? ((k % loop) + loop) % loop : k;
     const isLoop = loop !== undefined && Math.abs(inLoop) < 1e-9;
-    const isBar = Math.abs(inLoop % beatsPerBar) < 1e-9;
+    const isBar = barBeats
+      ? barIndex !== undefined
+      : Math.abs(inLoop % beatsPerBar) < 1e-9;
     const glyph = isLoop
       ? glyphs.loopRule
       : isBar
@@ -506,7 +532,11 @@ export function paintHighway(
     if (gutter > 0 && (isBar || isLoop) && !empty) {
       const label = isLoop
         ? glyphs.loop
-        : String(Math.floor(inLoop / beatsPerBar) + 1);
+        : String(
+            barIndex !== undefined
+              ? barIndex + 1
+              : Math.floor(inLoop / beatsPerBar) + 1,
+          );
       const text = label.slice(-(gutter - 1)).padStart(gutter - 1, " ");
       for (let index = 0; index < text.length; index += 1)
         painter.put(

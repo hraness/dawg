@@ -42,6 +42,13 @@ import {
 } from "./commands/drums.ts";
 import { kitCatalog } from "./audio/kits.ts";
 import { applyEditCommand, parseEditCommand } from "./commands/edit.ts";
+import { applyTimeCommand, parseTimeCommand } from "./commands/time.ts";
+import {
+  barStartTick,
+  bpmAtTick,
+  hasMeterChanges,
+  loopTicksOf,
+} from "../core/tempo.ts";
 import { applyFxCommand, parseFxCommand } from "./commands/fx.ts";
 import { applySynthCommand, parseSynthCommand } from "./commands/synth.ts";
 import {
@@ -106,7 +113,7 @@ import {
   tuiLoginArgs,
   tuiSetModel,
 } from "./auth/tui.ts";
-import { TransportClock } from "./audio/clock.ts";
+import { TransportClock, transportMapFor } from "./audio/clock.ts";
 import { AudioEngine } from "./audio/engine.ts";
 import {
   DEFAULT_GRID,
@@ -176,6 +183,7 @@ import {
 } from "../core/score.ts";
 import { reconcileRhythm } from "../core/rhythm.ts";
 import { decodeLoop, encodeLoop } from "../core/loop.ts";
+import { scoreToMidi } from "../core/midi.ts";
 import type { TrackScoreSnapshot } from "../tui/render.ts";
 import { PromptModel } from "../tui/prompt.ts";
 import { TerminalInputDecoder } from "../tui/input.ts";
@@ -214,6 +222,7 @@ function parsesLocally(text: string): boolean {
     parsePackCommand,
     parseSampleCommand,
     parseWavetableCommand,
+    parseTimeCommand,
   ].some((parse) => parse(text) !== undefined);
 }
 
@@ -247,7 +256,7 @@ Usage:
   dawg [--new] [--session <name|id>] [--track <name>]
   dawg --import <file> --export <file>
   dawg sessions
-  dawg render <out.wav> [--session <name|id>] [--import <file>]
+  dawg render <out.wav|out.mid> [--session <name|id>] [--import <file>]
   dawg init [dir]      project files: song.ts, tracks/<slug>/track.ts, .dawg/sdk
   dawg check           typecheck + evaluate the project; exit 1 on problems
   dawg media doctor|download|stems|analyze|notes|sample|lyrics …  (dawg media --help)
@@ -663,10 +672,20 @@ function snapshot(
     trackId: requestedTrack,
     sessionId: record.sessionId,
     revision: record.revision,
-    bpm: value.tempoBpm,
+    bpm: value.time?.tempo
+      ? bpmAtTick(value, beat * value.ticksPerBeat)
+      : value.tempoBpm,
     key: value.key ?? undefined,
-    loopBeats: value.bars * value.beatsPerBar,
+    loopBeats: loopTicksOf(value) / value.ticksPerBeat,
     beatsPerBar: value.beatsPerBar,
+    ...(hasMeterChanges(value)
+      ? {
+          barBeats: Array.from(
+            { length: value.bars },
+            (_, bar) => barStartTick(value, bar) / value.ticksPerBeat,
+          ),
+        }
+      : {}),
     laneCount: 24,
     currentBeat: beat,
     playing: clock.playing,
@@ -871,7 +890,7 @@ async function runInteractive(): Promise<void> {
         if (stageCapture)
           stageCapture.committed = scoreFromJSON(record.composition);
         else score = scoreFromJSON(record.composition);
-        clock.setTempo(score.tempoBpm);
+        clock.follow(score);
         if (clock.playing) void audio.play(score);
         // Connected windows follow dawgd's transport frames instead.
         const replay =
@@ -924,6 +943,7 @@ async function runInteractive(): Promise<void> {
       // Every window renders the same hit line from dawgd's timestamp.
       const { playing, beat, bpm, atMs } = update.transport;
       clock.setTempo(bpm);
+      clock.setTimeMap(transportMapFor(score));
       clock.sync(beat, playing, atMs, monotonicEpochMs());
     } else if (update.type === "status") {
       syncState = port.sync;
@@ -1391,6 +1411,14 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (wavetable) return wavetableCommand(wavetable);
   const sessionReply = await sessionCommand(command);
   if (sessionReply !== undefined) return sessionReply;
+  const time = parseTimeCommand(command);
+  if (time) {
+    if (time.type !== "tempo-map") await materializeDraft();
+    const result = applyTimeCommand(score, requestedTrack, time);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
   const edit = parseEditCommand(command);
   if (edit) {
     await materializeDraft();
@@ -1447,6 +1475,10 @@ async function submit(prompt: string): Promise<string | Receipt> {
   const exportCommand = command.match(/^\/?export\s+([^\s]+)$/i);
   if (exportCommand) {
     const path = resolve(exportCommand[1]!);
+    if (/\.midi?$/i.test(path)) {
+      await writeFile(path, scoreToMidi(score));
+      return `exported midi · ${exportCommand[1]}`;
+    }
     await writeFile(path, encodeLoop(score), "utf8");
     return `exported · ${exportCommand[1]}`;
   }
@@ -1563,7 +1595,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (parsed.type === "set-tempo") {
     const next = score.withTempo(parsed.tempoBpm);
     await commitScore(next, "score.tempo", { tempoBpm: parsed.tempoBpm });
-    clock.setTempo?.(next.tempoBpm);
+    clock.follow(next);
     return `tempo · ${next.tempoBpm} BPM`;
   }
   if (parsed.type === "add-track") return focusTrack(parsed.trackId);
@@ -2357,7 +2389,7 @@ async function switchSession(sessionId: string): Promise<void> {
   audio = port.player;
   record = port.mode === "daemon" ? await port.load() : next.record;
   score = scoreFromJSON(record.composition);
-  clock.setTempo(score.tempoBpm);
+  clock.follow(score);
   const attached = await attachTrack(port, score, undefined);
   requestedTrack = attached.trackId;
   draftTrack = attached.draft;
@@ -3032,18 +3064,31 @@ async function commitScore(
   // Rhythm rows regenerate after a loop resize and freeze when their lane
   // is hand-edited, so rows and notes never disagree.
   next = reconcileRhythm(score, next);
+  const retimed = timingChanged(score, next);
   if (stageCapture) {
     // A staged edit: the audition plays it; nothing is written yet.
     stageCapture.next = next;
     score = next;
+    if (retimed) clock.follow(score);
     return;
   }
   record = await port.append(record, { kind, payload }, next.toJSON());
   score = next;
+  if (retimed) clock.follow(score);
   if (clock.playing) void audio.play(score);
   projectSync?.scoreChanged(score);
   reportSampleProblems(score);
   void updateCredits(score);
+}
+
+/** True when the transport clock must follow `next` (tempo, meter, loop). */
+function timingChanged(previous: TrackScore, next: TrackScore): boolean {
+  return (
+    previous.time !== next.time ||
+    previous.tempoBpm !== next.tempoBpm ||
+    previous.beatsPerBar !== next.beatsPerBar ||
+    previous.bars !== next.bars
+  );
 }
 
 /** The window's side of the project file sync (see src/project/sync.ts). */
@@ -3063,7 +3108,7 @@ function syncHost(): SyncHost {
         plan.next.toJSON(),
       );
       score = scoreFromJSON(record.composition);
-      clock.setTempo(score.tempoBpm);
+      clock.follow(score);
       if (clock.playing) void audio.play(score);
       reportSampleProblems(score);
       void baseRevision;
@@ -3356,8 +3401,13 @@ function agentHost(
           );
         throw error;
       }
-      if (change.operations.some((operation) => operation.type === "setTempo"))
-        clock.setTempo(score.tempoBpm);
+      if (
+        change.operations.some(
+          (operation) =>
+            operation.type === "setTempo" || operation.type === "setTime",
+        )
+      )
+        clock.follow(score);
       return { revision: record.revision };
     },
     async transport(action) {

@@ -33,6 +33,7 @@ import {
   type NoteInput,
   type TrackScore,
 } from "../../core/score.ts";
+import { loopTicksOf } from "../../core/tempo.ts";
 import {
   drumVoiceForPitch,
   drumVoicePitch,
@@ -383,7 +384,11 @@ export function applyMusicCommand(
   const beats =
     command.type === "drum-hits"
       ? command.beats
-      : everyBeats(command.from, command.step, score.bars * score.beatsPerBar);
+      : everyBeats(
+          command.from,
+          command.step,
+          loopTicksOf(score) / score.ticksPerBeat,
+        );
   if (beats.length > MAX_PATTERN_HITS)
     return { ok: false, message: `pattern exceeds ${MAX_PATTERN_HITS} hits` };
   const pitch = drumVoicePitch(command.voice);

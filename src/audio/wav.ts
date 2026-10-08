@@ -59,6 +59,8 @@ import {
   orbitOf,
   type Ducker,
 } from "./effects/duck.ts";
+import { loopSecondsOf, performedNotes } from "../../core/tempo.ts";
+import { sampleWarpFor, warpedSpan, type SampleWarp } from "./warp.ts";
 
 export type WavOptions = Readonly<{ sampleRate?: number; maxSeconds?: number }>;
 
@@ -155,10 +157,13 @@ type RenderContext = Readonly<{
   samplesPerTick: number;
   tempoBpm: number;
   irs?: ReadonlyMap<string, DecodedSample>;
+  /** Tempo map in samples (core/tempo.ts); absent: constant tempo. */
+  warp?: SampleWarp;
 }>;
 
 /** Exact (fractional) loop length in frames at a sample rate. */
 export function loopFrames(score: TrackScore, sampleRate: number): number {
+  if (score.time) return loopSecondsOf(score) * sampleRate;
   return (score.bars * score.beatsPerBar * 60 * sampleRate) / score.tempoBpm;
 }
 
@@ -259,8 +264,11 @@ export class StemRenderer {
   public render(score: TrackScore, options: RenderOptions = {}): RenderedAudio {
     const sampleRate = clampSampleRate(options.sampleRate);
     const maxSeconds = Math.max(1, Math.min(60, options.maxSeconds ?? 30));
-    const loopSeconds = (score.bars * score.beatsPerBar * 60) / score.tempoBpm;
+    const loopSeconds = score.time
+      ? loopSecondsOf(score)
+      : (score.bars * score.beatsPerBar * 60) / score.tempoBpm;
     const bank = options.samples ?? EMPTY_SAMPLE_BANK;
+    const warp = sampleWarpFor(score, sampleRate);
     const reverbTail = Math.max(
       0,
       ...score.tracks.map((track) =>
@@ -312,6 +320,7 @@ export class StemRenderer {
       samplesPerTick: (sampleRate * 60) / (score.tempoBpm * score.ticksPerBeat),
       tempoBpm: score.tempoBpm,
       ...(bank.irs ? { irs: bank.irs } : {}),
+      ...(warp ? { warp } : {}),
     };
     this.renders += 1;
     const { dry, dryR, left, right, mixL, mixR } = this.scratchFor(samples);
@@ -319,7 +328,8 @@ export class StemRenderer {
     mixR.fill(0);
     const tracks = new Map(score.tracks.map((track) => [track.id, track]));
     const groups = new Map<string, Note[]>();
-    for (const note of score.notes) {
+    // Track time (rate, phase, cycle) places notes on the song timeline.
+    for (const note of performedNotes(score)) {
       const group = groups.get(note.trackId);
       if (group) group.push(note);
       else groups.set(note.trackId, [note]);
@@ -414,8 +424,19 @@ export class StemRenderer {
             ticksPerBeat: score.ticksPerBeat,
             ...(wavetable ? { oscillatorFor: wavetable.oscillatorFor } : {}),
           };
+          const warp = context.warp;
           for (const note of notes) {
             const { start, length } = noteSpan(note, context);
+            // The voice asks for `startTick + elapsed / samplesPerTick`;
+            // through a tempo map that sample's tick comes from the map.
+            const noteGainAt = warp
+              ? (tick: number) =>
+                  gainAt(
+                    warp.tick(
+                      start + (tick - note.startTick) * context.samplesPerTick,
+                    ),
+                  )
+              : gainAt;
             renderSynthNote(
               dry,
               stereo ? dryR : undefined,
@@ -424,7 +445,7 @@ export class StemRenderer {
               start,
               length,
               voice,
-              gainAt,
+              noteGainAt,
             );
           }
         } else {
@@ -680,6 +701,8 @@ function stemKey(
     context.score.beatsPerBar,
     context.sampleRate,
     context.samples,
+    // Tempo map, meter changes and fermatas move every note.
+    ...(context.score.time ? [context.score.time] : []),
     // Sampler stems also depend on the decoded files: a replaced or missing
     // sample changes the key even when the score did not change.
     ...(bank && track?.sampler ? [samplerVoiceDigest(track, bank)] : []),
@@ -708,7 +731,11 @@ function renderSamplerNotes(
   context: RenderContext,
   bank: SampleBank,
 ): void {
-  const timing = { score: context.score, sampleRate: context.sampleRate };
+  const timing = {
+    score: context.score,
+    sampleRate: context.sampleRate,
+    ...(context.warp ? { warp: context.warp } : {}),
+  };
   renderSamplerVoices(
     target,
     planSamplerVoices(track, notes, bank, timing),
@@ -732,7 +759,8 @@ function noteSpan(
   note: Note,
   context: RenderContext,
 ): { start: number; length: number } {
-  const { score, sampleRate } = context;
+  const { score, sampleRate, warp } = context;
+  if (warp) return warpedSpan(warp, note.startTick, note.durationTicks);
   const start = Math.max(
     0,
     Math.floor(
@@ -771,7 +799,12 @@ function renderToneNote(
       Math.min(attack, release) *
       velocity *
       0.28 *
-      trackGainAt(track, note.startTick + elapsed / samplesPerTick);
+      trackGainAt(
+        track,
+        context.warp
+          ? context.warp.tick(index)
+          : note.startTick + elapsed / samplesPerTick,
+      );
     const phase = (frequency * elapsed) / sampleRate;
     target[index]! += legacyWave(instrument, phase) * envelope;
   }
@@ -865,7 +898,12 @@ function renderDrumNote(
       release *
       velocity *
       0.5 *
-      trackGainAt(track, note.startTick + (index - start) / samplesPerTick);
+      trackGainAt(
+        track,
+        context.warp
+          ? context.warp.tick(index)
+          : note.startTick + (index - start) / samplesPerTick,
+      );
   }
 }
 
@@ -892,7 +930,13 @@ function applyPan(
   for (let index = 0; index < dry.length; index += 1) {
     if (lane.length > 0 && index % CONTROL_SAMPLES === 0)
       [gainL, gainR] = gains(
-        interpolateAutomation(lane, index / context.samplesPerTick, staticPan),
+        interpolateAutomation(
+          lane,
+          context.warp
+            ? context.warp.tick(index)
+            : index / context.samplesPerTick,
+          staticPan,
+        ),
       );
     const sample = dry[index]!;
     left[index] = sample * gainL;
@@ -930,16 +974,29 @@ function wavetableHook(
     lane.length > 0
       ? (tick: number) => interpolateAutomation(lane, tick, settings.wt ?? 0)
       : undefined;
+  const warp = context.warp;
   return {
     id: table.id,
-    oscillatorFor: (note) =>
-      wavetableOscillator(table, settings, note, {
+    oscillatorFor: (note) => {
+      const span = noteSpan(note, context);
+      return wavetableOscillator(table, settings, note, {
         sampleRate: context.sampleRate,
         samplesPerTick: context.samplesPerTick,
         secondsPerTick: context.samplesPerTick / context.sampleRate,
-        gate: noteSpan(note, context).length / context.sampleRate,
-        positionAt,
-      }),
+        gate: span.length / context.sampleRate,
+        // Through a tempo map the lane is read at the sample's song tick.
+        positionAt:
+          warp && positionAt
+            ? (tick: number) =>
+                positionAt(
+                  warp.tick(
+                    span.start +
+                      (tick - note.startTick) * context.samplesPerTick,
+                  ),
+                )
+            : positionAt,
+      });
+    },
   };
 }
 

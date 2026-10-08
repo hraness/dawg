@@ -7,6 +7,7 @@ import {
   type ScoreOperation,
   type TrackScore,
 } from "../../core/score.ts";
+import { loopTicksOf } from "../../core/tempo.ts";
 import { AVAILABLE_INSTRUMENTS } from "../audio/wav.ts";
 import {
   SYNTH_PRESETS,
@@ -45,6 +46,7 @@ import { PackError, type PackStore } from "../audio/packs.ts";
 import { RHYTHM_TOOLS } from "./rhythm-tools.ts";
 import { CHORD_TOOLS } from "./chord-tools.ts";
 import { DRUM_TOOLS } from "./drum-tools.ts";
+import { TIME_TOOLS } from "./time-tools.ts";
 import type { MediaResult, MediaRunContext } from "../media/types.ts";
 import { pitchToMidi } from "./ops.ts";
 import {
@@ -915,7 +917,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
           `track ${trackId} is ${track.instrument}, not a drum kit; set_instrument kit or create a kit track`,
         );
       const tpb = context.score.ticksPerBeat;
-      const loopBeats = context.score.bars * context.score.beatsPerBar;
+      const loopBeats = loopTicksOf(context.score) / tpb;
       const voiceOf = (value: unknown, label: string) => {
         const voice =
           typeof value === "string" ? parseDrumVoice(value) : undefined;
@@ -1351,6 +1353,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   ...RHYTHM_TOOLS,
   ...CHORD_TOOLS,
   ...DRUM_TOOLS,
+  ...TIME_TOOLS,
   ...MEDIA_TOOLS,
   ...PACK_TOOLS,
   // Looks tools up at call time, so it can plan any of the above.

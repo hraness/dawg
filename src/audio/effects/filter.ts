@@ -16,6 +16,7 @@ import {
   lfo,
   lfoHz,
   resonanceQ,
+  tickAtSample,
   type EffectContext,
   type FilterType,
 } from "./common.ts";
@@ -99,7 +100,7 @@ export function applyTrackFilter(
   const resonanceLane = track.resonanceAutomation ?? [];
   if (!track.filter && automation.length === 0 && resonanceLane.length === 0)
     return;
-  const { sampleRate, samplesPerTick } = context;
+  const { sampleRate } = context;
   const staticCutoff = track.filter?.cutoff ?? SCORE_LIMITS.maxFilterCutoff;
   const staticResonance = track.filter?.resonance ?? 0;
   const automated = automation.length > 0 || resonanceLane.length > 0;
@@ -111,7 +112,7 @@ export function applyTrackFilter(
   filter.update(staticCutoff, staticResonance);
   for (let index = 0; index < buffer.length; index += 1) {
     if (automated && index % CONTROL_SAMPLES === 0) {
-      const tick = index / samplesPerTick;
+      const tick = tickAtSample(context, index);
       filter.update(
         interpolateAutomation(automation, tick, staticCutoff),
         interpolateAutomation(resonanceLane, tick, staticResonance),

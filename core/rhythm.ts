@@ -22,6 +22,7 @@ import {
   type Note,
   type Track,
 } from "./score.ts";
+import { loopTicksOf } from "./tempo.ts";
 
 /** MIDI pitch a row's voice plays on `track`, or undefined when unknown. */
 export function rhythmVoicePitch(
@@ -70,7 +71,7 @@ export function expandTrackRow(
       `track ${track.id} has no voice "${row.voice}"`,
       "invalid-track",
     );
-  const loopTicks = score.bars * score.beatsPerBar * score.ticksPerBeat;
+  const loopTicks = loopTicksOf(score);
   const prefix = `rh.${trackHash(track.id)}.${idVoice(row.voice)}.`;
   return expandRow(row, { ticksPerBeat: score.ticksPerBeat, loopTicks }).map(
     (hit, index) => ({

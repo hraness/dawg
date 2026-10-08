@@ -17,6 +17,7 @@ import type { Track } from "../../../core/score.ts";
 import {
   CONTROL_SAMPLES,
   interpolateAutomation,
+  tickAtSample,
   type EffectContext,
 } from "./common.ts";
 import { applyDelay, applyReverb } from "./space.ts";
@@ -58,13 +59,13 @@ function send(
   stemR: Float64Array,
   base: number,
   lane: readonly Readonly<{ tick: number; value: number }>[],
-  samplesPerTick: number,
+  context: Pick<EffectContext, "samplesPerTick" | "warp">,
 ): void {
   if (base <= 0 && lane.length === 0) return;
   let level = base;
   for (let index = 0; index < outL.length; index += 1) {
     if (lane.length > 0 && index % CONTROL_SAMPLES === 0)
-      level = interpolateAutomation(lane, index / samplesPerTick, base);
+      level = interpolateAutomation(lane, tickAtSample(context, index), base);
     outL[index]! += stemL[index]! * level;
     outR[index]! += stemR[index]! * level;
   }
@@ -89,7 +90,7 @@ export function sendToBus(
       stemR,
       track.delay.mix,
       track.delayMixAutomation ?? [],
-      context.samplesPerTick,
+      context,
     );
   }
   if (track.reverb) {
@@ -101,7 +102,7 @@ export function sendToBus(
       stemR,
       track.reverb.mix,
       track.fxAutomation?.["reverb-mix"] ?? [],
-      context.samplesPerTick,
+      context,
     );
   }
 }

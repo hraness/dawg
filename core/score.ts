@@ -21,6 +21,15 @@ import {
   type TrackFx,
 } from "./fx.ts";
 import { normalizeSynth, type TrackSynth } from "./synth.ts";
+import {
+  checkSongTime,
+  normalizeSongTime,
+  normalizeTrackTime,
+  TimeValidationError,
+  type SongTime,
+  type TrackTime,
+  withMeterChange,
+} from "./tempo.ts";
 
 export const SCORE_VERSION = 1 as const;
 export const DEFAULT_TICKS_PER_BEAT = 480 as const;
@@ -328,6 +337,13 @@ export type Track = Readonly<{
    * `lofi`, … see `core/kits.ts`). Absent plays the default voices.
    */
   kit?: string;
+  /**
+   * Track time against the song (`core/tempo.ts`): `rate` (tempo ratio),
+   * `phase` (ticks the pattern shifts later) and `cycle` (track ticks per
+   * repetition) for polytempo, polymeter and phasing. Absent follows the
+   * song.
+   */
+  time?: TrackTime;
 }>;
 
 /**
@@ -627,6 +643,7 @@ export type TrackPatch = Readonly<
     fxAutomation?: Track["fxAutomation"] | null;
     synth?: TrackSynth | null;
     wavetable?: TrackWavetable | null;
+    time?: TrackTime | null;
   }
 >;
 
@@ -658,6 +675,7 @@ export type TrackInput = Readonly<
     | "fxAutomation"
     | "synth"
     | "wavetable"
+    | "time"
   > &
     Pick<Track, "id"> & {
       filter?: TrackFilter | null;
@@ -670,6 +688,7 @@ export type TrackInput = Readonly<
       fxAutomation?: Track["fxAutomation"] | null;
       synth?: TrackSynth | null;
       wavetable?: TrackWavetable | null;
+      time?: TrackTime | null;
     }
 >;
 
@@ -694,6 +713,11 @@ export type TrackScoreData = Readonly<{
   bars?: number;
   ticksPerBeat?: number;
   key?: string | null;
+  /**
+   * Tempo map, meter changes and fermatas (`core/tempo.ts`). Absent keeps
+   * `tempoBpm` and `beatsPerBar` for the whole song.
+   */
+  time?: SongTime | null;
   tracks?: readonly TrackInput[];
   notes?: readonly NoteInput[];
 }>;
@@ -706,6 +730,8 @@ export class TrackScore {
   readonly bars: number;
   readonly ticksPerBeat: number;
   readonly key: string | null;
+  /** Tempo map, meters and fermatas; absent when the song has none. */
+  declare readonly time?: SongTime;
   readonly tracks: readonly Track[];
   readonly notes: readonly Note[];
 
@@ -760,6 +786,11 @@ export class TrackScore {
         "invalid-score",
       );
     }
+    const time = timeOrThrow(() => {
+      const normalized = normalizeSongTime(data.time);
+      checkSongTime(normalized, ticksPerBeat, { tempoBpm, beatsPerBar, bars });
+      return normalized;
+    });
     const tracks = normalizeTracks(data.tracks ?? []);
     const notes = normalizeNotes(data.notes ?? []);
     this.tempoBpm = tempoBpm;
@@ -767,6 +798,7 @@ export class TrackScore {
     this.bars = bars;
     this.ticksPerBeat = ticksPerBeat;
     this.key = key;
+    if (time) this.time = time;
     this.tracks = freezeArray(tracks);
     this.notes = freezeArray(notes);
     Object.freeze(this);
@@ -787,6 +819,7 @@ export class TrackScore {
       bars: this.bars,
       ticksPerBeat: this.ticksPerBeat,
       key: this.key,
+      time: this.time,
       tracks,
       notes: this.notes,
     });
@@ -799,6 +832,7 @@ export class TrackScore {
       bars: this.bars,
       ticksPerBeat: this.ticksPerBeat,
       key: this.key,
+      time: this.time,
       tracks: this.tracks,
       notes: this.notes,
     });
@@ -813,9 +847,25 @@ export class TrackScore {
     return new TrackScore({ ...this.toJSON(), key });
   }
 
-  /** Change the meter; ticks are per beat, so notes keep their positions. */
+  /**
+   * Change the meter; ticks are per beat, so notes keep their positions.
+   * Beats per bar is the song meter, so a meter change at bar 1
+   * (`time.meter` bar 0) is dropped rather than left overriding it.
+   */
   withMeter(beatsPerBar: number): TrackScore {
-    return new TrackScore({ ...this.toJSON(), beatsPerBar });
+    const time = this.time?.meter?.some((change) => change.bar === 0)
+      ? withMeterChange(this.time, 0, null)
+      : this.time;
+    return new TrackScore({
+      ...this.toJSON(),
+      beatsPerBar,
+      time: time ?? null,
+    });
+  }
+
+  /** Replace the tempo map, meter changes and fermatas; null clears them. */
+  withTime(time: SongTime | null | undefined): TrackScore {
+    return new TrackScore({ ...this.toJSON(), time: time ?? null });
   }
 
   toJSON(): TrackScoreData & { version: typeof SCORE_VERSION } {
@@ -826,6 +876,7 @@ export class TrackScore {
       bars: this.bars,
       ticksPerBeat: this.ticksPerBeat,
       key: this.key,
+      ...(this.time ? { time: this.time } : {}),
       tracks: this.tracks,
       notes: this.notes,
     };
@@ -868,6 +919,7 @@ export function addNote(score: TrackScore, input: NoteInput): TrackScore {
     bars: score.bars,
     ticksPerBeat: score.ticksPerBeat,
     key: score.key,
+    time: score.time,
     tracks: score.tracks,
     notes: [...score.notes, note],
   });
@@ -893,6 +945,7 @@ export function removeNote(score: TrackScore, noteId: string): TrackScore {
     bars: score.bars,
     ticksPerBeat: score.ticksPerBeat,
     key: score.key,
+    time: score.time,
     tracks: score.tracks,
     notes: score.notes.filter((note) => note.id !== noteId),
   });
@@ -913,6 +966,7 @@ export function updateNote(
     bars: score.bars,
     ticksPerBeat: score.ticksPerBeat,
     key: score.key,
+    time: score.time,
     tracks: score.tracks,
     notes: score.notes.map((note) =>
       note.id === noteId ? { ...note, ...patch } : note,
@@ -928,6 +982,7 @@ export function clearTrack(score: TrackScore, trackId: string): TrackScore {
     bars: score.bars,
     ticksPerBeat: score.ticksPerBeat,
     key: score.key,
+    time: score.time,
     tracks: score.tracks,
     notes: score.notes.filter((note) => note.trackId !== trackId),
   });
@@ -1121,6 +1176,11 @@ export type ScoreOperation =
   | Readonly<{
       type: "setMeter";
       beatsPerBar: number;
+    }>
+  | Readonly<{
+      /** Replaces the song's tempo map, meter changes and fermatas. */
+      type: "setTime";
+      time: SongTime | null;
     }>;
 
 export function applyScoreOperation(
@@ -1134,6 +1194,7 @@ export function applyScoreOperation(
   if (operation.type === "setKey") return score.withKey(operation.key);
   if (operation.type === "setMeter")
     return score.withMeter(operation.beatsPerBar);
+  if (operation.type === "setTime") return score.withTime(operation.time);
   if (operation.type === "addTrack") return addTrack(score, operation.track);
   if (operation.type === "addNote") return addNote(score, operation.note);
   if (operation.type === "removeNote")
@@ -1178,6 +1239,7 @@ export function scoreFromJSON(value: unknown): TrackScore {
     bars?: number;
     ticksPerBeat?: number;
     key?: string | null;
+    time?: SongTime | null;
     tracks: readonly TrackInput[];
     notes: readonly NoteInput[];
   } = {
@@ -1194,6 +1256,8 @@ export function scoreFromJSON(value: unknown): TrackScore {
   if (bars !== undefined) data.bars = bars;
   if (ticksPerBeat !== undefined) data.ticksPerBeat = ticksPerBeat;
   if (key !== undefined) data.key = key;
+  if (value.time !== undefined && value.time !== null)
+    data.time = value.time as SongTime;
   return new TrackScore(data);
 }
 
@@ -1302,6 +1366,10 @@ function normalizeTrack(input: unknown): Track {
   const wavetable = normalizeWavetable(input.wavetable);
   const sampler = normalizeSampler(input.sampler);
   const rhythm = normalizeRhythm(input.rhythm, id);
+  const time = timeOrThrow(
+    () => normalizeTrackTime(input.time, `track ${id} time`),
+    "invalid-track",
+  );
   let kit: string | undefined;
   if (input.kit !== undefined && input.kit !== null) {
     const found =
@@ -1353,6 +1421,7 @@ function normalizeTrack(input: unknown): Track {
     ...(sampler ? { sampler } : {}),
     ...(rhythm ? { rhythm } : {}),
     ...(kit ? { kit } : {}),
+    ...(time ? { time } : {}),
   });
 }
 
@@ -1384,6 +1453,19 @@ export function normalizeRhythm(
       "invalid-track",
     );
   return Object.freeze(rows);
+}
+
+function timeOrThrow<T>(
+  run: () => T,
+  code: ScoreValidationError["code"] = "invalid-score",
+): T {
+  try {
+    return run();
+  } catch (error) {
+    if (error instanceof TimeValidationError)
+      throw new ScoreValidationError(error.message, code);
+    throw error;
+  }
 }
 
 function fxOrThrow<T>(run: () => T): T {

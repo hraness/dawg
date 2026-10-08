@@ -7,7 +7,18 @@
  * nothing here touches the score.
  */
 
+import { beatMarks, loopTicksOf, type TimeScore } from "../../core/tempo.ts";
+
 export type ClickLevel = "accent" | "beat" | "sub";
+
+/** A click at a transport beat. */
+export type ClickMark = Readonly<{ beat: number; level: ClickLevel }>;
+
+/**
+ * Clicks in the half-open beat span [from, to), for meters a fixed
+ * `beatsPerBar` cannot describe (meter changes, compound and odd meters).
+ */
+export type ClickGrid = (from: number, to: number) => readonly ClickMark[];
 
 export type ClickSettings = Readonly<{
   /** 0..1 output level. */
@@ -15,6 +26,8 @@ export type ClickSettings = Readonly<{
   beatsPerBar: number;
   /** Clicks per beat: 1 = quarters, 2 = eighths, 4 = sixteenths. */
   subdivision: number;
+  /** Replaces the fixed beatsPerBar × subdivision grid when present. */
+  grid?: ClickGrid;
 }>;
 
 export const DEFAULT_CLICK_VOLUME = 0.6;
@@ -50,9 +63,20 @@ export function clicksIn(
   fromBeat: number,
   toBeat: number,
   frames: number,
-  settings: Pick<ClickSettings, "beatsPerBar" | "subdivision">,
+  settings: Pick<ClickSettings, "beatsPerBar" | "subdivision" | "grid">,
 ): ClickEvent[] {
   if (!(toBeat > fromBeat) || frames <= 0) return [];
+  if (settings.grid) {
+    const span = toBeat - fromBeat;
+    const events: ClickEvent[] = [];
+    for (const mark of settings.grid(fromBeat, toBeat)) {
+      const offset = Math.floor(((mark.beat - fromBeat) / span) * frames);
+      if (offset < 0 || offset >= frames) continue;
+      events.push({ offset, level: mark.level, step: Math.round(mark.beat) });
+      if (events.length > 64) break;
+    }
+    return events;
+  }
   const subdivision = Math.max(
     1,
     Math.min(MAX_SUBDIVISION, Math.round(settings.subdivision)),
@@ -75,6 +99,94 @@ export function clicksIn(
     if (events.length > 64) break;
   }
   return events;
+}
+
+const gridCache = new WeakMap<object, Map<number, readonly ClickMark[]>>();
+
+/** Clicks of one loop pass through the score's meters (cached). */
+function loopClicks(
+  score: TimeScore,
+  subdivision: number,
+): readonly ClickMark[] {
+  let bySubdivision = gridCache.get(score);
+  if (!bySubdivision) {
+    bySubdivision = new Map();
+    gridCache.set(score, bySubdivision);
+  }
+  const cached = bySubdivision.get(subdivision);
+  if (cached) return cached;
+  const tpb = score.ticksPerBeat;
+  const loopTicks = loopTicksOf(score);
+  const marks = beatMarks(score, 0, loopTicks);
+  const out: ClickMark[] = [];
+  marks.forEach((mark, index) => {
+    const next = marks[index + 1]?.tick ?? loopTicks;
+    out.push({ beat: mark.tick / tpb, level: mark.bar ? "accent" : "beat" });
+    for (let sub = 1; sub < subdivision; sub += 1)
+      out.push({
+        beat: (mark.tick + ((next - mark.tick) * sub) / subdivision) / tpb,
+        level: "sub",
+      });
+  });
+  const frozen = Object.freeze(out);
+  bySubdivision.set(subdivision, frozen);
+  return frozen;
+}
+
+/**
+ * The click grid through meter changes: downbeats accent, each meter
+ * clicks its beat unit (dotted in compound meters), every loop pass.
+ */
+export function meterClickGrid(
+  score: () => TimeScore,
+  subdivision = 1,
+): ClickGrid {
+  return (from, to) => {
+    const current = score();
+    const loopBeats = loopTicksOf(current) / current.ticksPerBeat;
+    const clicks = loopClicks(
+      current,
+      Math.max(1, Math.min(MAX_SUBDIVISION, Math.round(subdivision))),
+    );
+    const out: ClickMark[] = [];
+    if (!(loopBeats > 0) || !(to > from)) return out;
+    for (
+      let pass = Math.floor(from / loopBeats);
+      pass * loopBeats < to && out.length <= 64;
+      pass += 1
+    ) {
+      const base = pass * loopBeats;
+      for (const click of clicks) {
+        const beat = base + click.beat;
+        if (beat >= to) break;
+        if (beat >= from) out.push({ beat, level: click.level });
+      }
+    }
+    return out;
+  };
+}
+
+/**
+ * Count-in clicks: `bars` bars of `barBeats` beats clicking every
+ * `clickBeats`, ending at `endBeat` where the transport takes over.
+ */
+export function countInClicks(
+  endBeat: number,
+  bars: number,
+  barBeats: number,
+  clickBeats: number,
+  from: number,
+  to: number,
+): ClickMark[] {
+  const out: ClickMark[] = [];
+  const start = endBeat - bars * barBeats;
+  for (let bar = 0; bar < bars; bar += 1)
+    for (let at = 0; at < barBeats - 1e-9; at += clickBeats) {
+      const beat = start + bar * barBeats + at;
+      if (beat >= from && beat < to && beat < endBeat)
+        out.push({ beat, level: at === 0 ? "accent" : "beat" });
+    }
+  return out;
 }
 
 const CLICK_TONES: Readonly<

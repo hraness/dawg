@@ -1,3 +1,4 @@
+import type { SongTime } from "./tempo.ts";
 import {
   SCORE_VERSION,
   TrackScore,
@@ -17,6 +18,8 @@ export type TrackLoopV1 = Readonly<{
   bars: number;
   ticksPerBeat: number;
   key: string | null;
+  /** Tempo map, meter changes and fermatas (0.5); absent: constant time. */
+  time?: SongTime;
   tracks: readonly Track[];
   notes: readonly Note[];
 }>;
@@ -33,6 +36,7 @@ export function encodeLoopDocument(score: TrackScore): TrackLoopV1 {
     bars: score.bars,
     ticksPerBeat: score.ticksPerBeat,
     key: score.key,
+    ...(score.time ? { time: score.time } : {}),
     tracks: score.tracks,
     notes: score.notes,
   });

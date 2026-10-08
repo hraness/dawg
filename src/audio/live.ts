@@ -15,6 +15,7 @@ import {
   isSamplerInstrument,
   type Track,
 } from "../../core/score.ts";
+import { bpmAtTick } from "../../core/tempo.ts";
 import { sampleKey, type SampleBank } from "./samples.ts";
 import { RENDER_CHANNELS, renderScorePcm } from "./wav.ts";
 
@@ -31,6 +32,8 @@ export type LiveNoteRequest = Readonly<{
   seconds: number;
   /** Decoded sampler voices; without it sampler tracks are silent. */
   samples?: SampleBank;
+  /** Song tick being played: the tempo there sets length and synced effects. */
+  tick?: number;
 }>;
 
 /** Longest a single live note is rendered for (a held sustain pedal). */
@@ -60,7 +63,11 @@ export class LiveSynth {
     );
     if (!track) return undefined;
     const { score } = request;
-    const ticksPerSecond = (score.ticksPerBeat * score.tempoBpm) / 60;
+    const bpm =
+      request.tick === undefined
+        ? score.tempoBpm
+        : bpmAtTick(score, request.tick);
+    const ticksPerSecond = (score.ticksPerBeat * bpm) / 60;
     const seconds = Math.max(
       0.01,
       Math.min(MAX_LIVE_NOTE_SECONDS, request.seconds),
@@ -76,7 +83,7 @@ export class LiveSynth {
       pitch,
       velocity,
       durationTicks,
-      score.tempoBpm,
+      bpm,
       score.ticksPerBeat,
       this.sampleRate,
       samplerDigest(track, request.samples),
@@ -94,7 +101,7 @@ export class LiveSynth {
       Math.min(SCORE_LIMITS.maxBars, Math.ceil(beats / score.beatsPerBar)),
     );
     const single = new TrackScore({
-      tempoBpm: score.tempoBpm,
+      tempoBpm: bpm,
       beatsPerBar: score.beatsPerBar,
       bars,
       ticksPerBeat: score.ticksPerBeat,
@@ -130,9 +137,12 @@ export class LiveSynth {
   }
 }
 
-/** The track as it sounds live: audible regardless of mute and solo. */
+/**
+ * The track as it sounds live: audible regardless of mute and solo, and
+ * without track `time`, so a key sounds once, as played, not re-placed.
+ */
 function liveTrack(track: Track): Track {
-  const { solo: _solo, ...rest } = track;
+  const { solo: _solo, time: _time, ...rest } = track;
   return { ...rest, muted: false };
 }
 

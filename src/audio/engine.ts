@@ -2,10 +2,16 @@ import type { TrackScore } from "../../core/score.ts";
 import { PlaybackLock } from "./lock.ts";
 import { LoopPlayer } from "./player.ts";
 import { LoopRenderer, type LoopRender } from "./renderer.ts";
-import { clickSounds, clicksIn, type ClickLevel } from "./click.ts";
+import {
+  clickSounds,
+  clicksIn,
+  type ClickGrid,
+  type ClickLevel,
+} from "./click.ts";
 import type { LiveNotePcm } from "./live.ts";
 import { levelOf, type SoundLevel } from "./preview.ts";
 import { DEFAULT_SAMPLE_RATE, RENDER_CHANNELS } from "./wav.ts";
+import { transportMapFor, type TransportMap } from "./clock.ts";
 
 /**
  * How dawgd (or a file-mode window) makes sound.
@@ -237,7 +243,34 @@ type Loop = Readonly<{
   pcm: Int16Array;
   frames: number;
   framesPerBeat: number;
+  /** The song's tempo map; absent, a beat is `framesPerBeat` frames. */
+  map?: TransportMap;
+  sampleRate: number;
 }>;
+
+/** Loop frame (unwrapped without a map) where transport `beat` sounds. */
+function frameOfBeat(loop: Loop, beat: number): number {
+  const map = loop.map;
+  if (!map) return beat * loop.framesPerBeat;
+  const inner = ((beat % map.loopBeats) + map.loopBeats) % map.loopBeats;
+  return map.seconds(inner) * loop.sampleRate;
+}
+
+/** Transport beat at loop `frame` (inside one pass with a map). */
+function beatOfFrame(loop: Loop, frame: number): number {
+  const map = loop.map;
+  if (!map) return frame / loop.framesPerBeat;
+  const seconds = frame / loop.sampleRate;
+  const inner =
+    ((seconds % map.loopSeconds) + map.loopSeconds) % map.loopSeconds;
+  return map.beat(inner);
+}
+
+/** The beat `frames` stream frames after `beat`. */
+function beatAfter(loop: Loop, beat: number, frames: number): number {
+  if (!loop.map) return beat + frames / loop.framesPerBeat;
+  return beatOfFrame(loop, frameOfBeat(loop, beat) + frames);
+}
 
 /** A loop fading out after a swap, read on from where it was. */
 type FadeOut = {
@@ -259,6 +292,8 @@ export type ClickBus = Readonly<{
   volume: number;
   beatsPerBar: number;
   subdivision: number;
+  /** Meter-aware clicks (core/tempo.ts) replacing the fixed grid. */
+  grid?: ClickGrid;
   beatAt: (monotonicMs: number) => number | undefined;
 }>;
 
@@ -571,10 +606,11 @@ export class AudioEngine {
     const beat =
       request.beat === undefined
         ? undefined
-        : request.beat +
-          ((this.now() - request.atMs) * this.sampleRate) /
-            1000 /
-            loop.framesPerBeat;
+        : beatAfter(
+            loop,
+            request.beat,
+            ((this.now() - request.atMs) * this.sampleRate) / 1000,
+          );
     if (this.child) {
       this.swap(loop, beat);
       return;
@@ -595,17 +631,8 @@ export class AudioEngine {
     if (!this.loop || !this.child) return;
     this.cursor = this.frameForBeat(
       this.loop,
-      beat + this.queuedBeats(this.loop),
+      beatAfter(this.loop, beat, this.queuedFrames()),
     );
-  }
-
-  /**
-   * Beats already queued ahead of the wall clock. The next frame written
-   * sounds this far after now, so a transport beat maps to the write head
-   * by adding it.
-   */
-  private queuedBeats(loop: Loop): number {
-    return this.queuedFrames() / loop.framesPerBeat;
   }
 
   private queuedFrames(): number {
@@ -813,15 +840,18 @@ export class AudioEngine {
   }
 
   private toLoop(render: LoopRender, score: TrackScore): Loop {
+    const map = transportMapFor(score);
     return {
       pcm: render.pcm,
       frames: render.frames,
       framesPerBeat: (60 * this.sampleRate) / score.tempoBpm,
+      sampleRate: this.sampleRate,
+      ...(map ? { map } : {}),
     };
   }
 
   private frameForBeat(loop: Loop, beat: number): number {
-    const frame = Math.round(Math.max(0, beat) * loop.framesPerBeat);
+    const frame = Math.round(frameOfBeat(loop, Math.max(0, beat)));
     return ((frame % loop.frames) + loop.frames) % loop.frames;
   }
 
@@ -829,12 +859,16 @@ export class AudioEngine {
     const previous = this.loop;
     // Keep the musical position: the same beat inside the new loop.
     let cursor = previous
-      ? this.frameForBeat(next, this.cursor / previous.framesPerBeat)
+      ? this.frameForBeat(next, beatOfFrame(previous, this.cursor))
       : 0;
     if (beat !== undefined) {
       // Re-anchor to the transport only when it disagrees audibly (a seek
       // or a tempo change); sub-frame rounding must not click on edits.
-      const anchored = this.frameForBeat(next, beat + this.queuedBeats(next));
+      // The next frame written sounds `queuedFrames` after now.
+      const anchored = this.frameForBeat(
+        next,
+        beatAfter(next, beat, this.queuedFrames()),
+      );
       const distance = Math.abs(anchored - cursor);
       const wrapped = Math.min(distance, next.frames - distance);
       if (!previous || wrapped > this.sampleRate * RESYNC_SECONDS)
@@ -920,7 +954,7 @@ export class AudioEngine {
         if (generation !== this.generation || this.child || this.starting)
           return;
         const frame = heard + ((this.now() - diedAt) * this.sampleRate) / 1000;
-        const beat = loop ? frame / loop.framesPerBeat : 0;
+        const beat = loop ? beatOfFrame(loop, frame) : 0;
         this.starting = this.start(loop, beat).finally(() => {
           this.starting = undefined;
         });

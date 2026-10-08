@@ -6,7 +6,7 @@ import {
   type ScoreOperation,
   type TrackScore,
 } from "../../core/score.ts";
-import { TransportClock } from "../audio/clock.ts";
+import { TransportClock, transportMapFor } from "../audio/clock.ts";
 import { AudioEngine } from "../audio/engine.ts";
 import { acquireSessionLock } from "./lock.ts";
 import {
@@ -127,7 +127,7 @@ export class DawgDaemon {
     }
     try {
       await this.reload();
-      this.clock.setTempo(this.score.tempoBpm);
+      this.clock.follow(this.score);
       // We hold the daemon lock, so any socket file left here belongs to a
       // crashed daemon and is safe to reclaim.
       await rm(this.socketPath, { force: true });
@@ -340,7 +340,7 @@ export class DawgDaemon {
         );
         if (result.record.revision !== this.record.revision) {
           // A file-fallback window wrote the score too; adopt everything.
-          const previousTempo = this.score.tempoBpm;
+          const previousTempo = this.timeKey();
           await this.reload();
           this.broadcast({
             v: 1,
@@ -454,7 +454,7 @@ export class DawgDaemon {
             rebasedFrom: message.base,
           }
         : message.payload;
-    const previousTempo = this.score.tempoBpm;
+    const previousTempo = this.timeKey();
     try {
       this.record = await appendSessionEvent(
         this.paths,
@@ -528,9 +528,14 @@ export class DawgDaemon {
     }
   }
 
-  private afterScoreChange(previousTempo: number): void {
-    if (this.score.tempoBpm !== previousTempo) {
-      this.clock.setTempo(this.score.tempoBpm);
+  /** Tempo and tempo map, compared to tell when the transport must follow. */
+  private timeKey(): string {
+    return JSON.stringify([this.score.tempoBpm, this.score.time ?? null]);
+  }
+
+  private afterScoreChange(previousTempo: string): void {
+    if (this.timeKey() !== previousTempo) {
+      this.clock.follow(this.score);
       this.broadcastTransport();
     }
     // Gapless: a streaming engine swaps the loop at the current beat
@@ -560,6 +565,7 @@ export class DawgDaemon {
       this.audio.seek(this.clock.beatAt());
     } else if (action === "tempo" && bpm !== undefined) {
       this.clock.setTempo(bpm);
+      this.clock.setTimeMap(transportMapFor(this.score));
     }
     this.broadcastTransport();
   }
@@ -641,7 +647,7 @@ export class DawgDaemon {
         }
         return;
       }
-      const previousTempo = this.score.tempoBpm;
+      const previousTempo = this.timeKey();
       await this.reload();
       this.broadcast({
         v: 1,
@@ -695,6 +701,7 @@ const OPERATION_TYPES = new Set([
   "moveTrack",
   "setKey",
   "setMeter",
+  "setTime",
 ]);
 
 /** Shape gate before the reducer, which validates every field it reads. */
