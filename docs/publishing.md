@@ -12,15 +12,20 @@ maintainer credential touches a routine release.
    `## <version>` section to `CHANGELOG.md`. The workflow copies that section
    onto the Release page.
 2. Merge the pull request once the required `check` passes.
-3. That is all. When Check passes on the merged commit, `auto-tag.yml` sees the
-   version change and creates the annotated tag `v<version>` (message
-   `dawg <version>`) with the `hraness-release-tagger` GitHub App. Tags pushed
-   with `GITHUB_TOKEN` would not start other workflows, so the app is required.
+3. That is all. When Check passes on a `main` commit whose `package.json`
+   version has no tag yet, `auto-tag.yml` creates the annotated tag
+   `v<version>` (message `dawg <version>`) on that commit with the
+   `hraness-release-tagger` GitHub App. Tags pushed with `GITHUB_TOKEN` would
+   not start other workflows, so the app is required.
 4. The tag starts `release.yml`, which publishes the GitHub Release and then
    npm.
 
-A version that is not stable `MAJOR.MINOR.PATCH`, or that did not change, is
-never tagged. To tag by hand (for example the first release), create an
+If Check fails on the version-bump commit, fix `main` through a normal pull
+request, or re-run Check if the failure was flaky. The next green Check on
+`main` tags the version, so a failed bump never skips a release.
+
+A version that is not stable `MAJOR.MINOR.PATCH`, already has a tag, or is
+older than the latest release tag is never tagged. To tag by hand, create an
 annotated tag on a commit that is on `main`, then push it:
 
 ```sh
