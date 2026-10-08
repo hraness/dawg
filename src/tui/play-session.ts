@@ -102,6 +102,11 @@ export interface PlayHost {
   playing(): boolean;
   /** Transport beat (unwrapped) at monotonic `ms`. */
   beatAt(ms: number): number;
+  /**
+   * The score beat transport `beat` plays: inside a looped section, or the
+   * matching bar of the form pass. Absent means the transport is the score.
+   */
+  scoreBeat?(beat: number): number;
   engine(): LiveEngine | undefined;
   samples?(): SampleBank | undefined;
   commit(
@@ -853,10 +858,22 @@ export class PlaySession {
     if (bar !== this.lastBar)
       this.barPedal.set(this.loopBar(bar), this.pedalDown ? "down" : "up");
     if (this.lastBar !== undefined && bar !== this.lastBar) {
-      if (this.replace) this.replaceBars.add(this.loopBar(this.lastBar));
+      if (this.replace)
+        this.replaceBars.add(
+          this.loopBar(
+            Math.floor(
+              this.toScoreBeat(this.lastBar * score.beatsPerBar) /
+                score.beatsPerBar,
+            ),
+          ),
+        );
       this.queueFlush(bar, now, false);
     }
     this.lastBar = bar;
+  }
+
+  private toScoreBeat(beat: number): number {
+    return this.host.scoreBeat ? this.host.scoreBeat(beat) : beat;
   }
 
   private loopBar(bar: number): number {
@@ -945,7 +962,7 @@ export class PlaySession {
             60_000;
         return pending.chord
           ? chordNotes(pending.chord, {
-              beat: pending.beat,
+              beat: this.toScoreBeat(pending.beat),
               beats,
               velocity: pending.velocity,
               grid: this.gridStep,
@@ -954,7 +971,7 @@ export class PlaySession {
               {
                 pitch: pending.pitch,
                 velocity: pending.velocity,
-                beat: pending.beat,
+                beat: this.toScoreBeat(pending.beat),
                 beats,
               },
             ];

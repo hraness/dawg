@@ -1,0 +1,390 @@
+/**
+ * The ctrl-k menu's Arrange section (0.5): song sections, the form, and
+ * build/drop/fill generators. Every row runs a `section …`, `form …`,
+ * `build …`, `drop …` or `fill …` prompt command (src/commands/arrange.ts),
+ * so the menu, the prompt and the agent tools share one code path.
+ */
+import type { Section } from "../../core/score.ts";
+import { formatForm } from "../../core/sections.ts";
+import { barsLabel } from "../commands/arrange.ts";
+import type { MenuContext, MenuNode } from "./menu.ts";
+
+/** `3 sections · form A×2 B · loop chorus`, or how to start. */
+export function arrangeDetail(context: MenuContext): string {
+  const score = context.score;
+  if (score.sections.length === 0) return "no sections · mark bars";
+  const count = score.sections.length;
+  const parts = [`${count} section${count === 1 ? "" : "s"}`];
+  if (score.form.length) parts.push(`form ${formatForm(score.form)}`);
+  if (score.loopSection) parts.push(`loop ${score.loopSection}`);
+  return parts.join(" · ");
+}
+
+export function arrangeNodes(context: MenuContext): MenuNode[] {
+  const score = context.score;
+  const nodes: MenuNode[] = score.sections.map((section) => ({
+    kind: "menu",
+    id: `section:${section.name}`,
+    label: section.name,
+    detail: sectionDetail(context, section),
+    help: "loop, jump, mute, vary, move, rename, transitions",
+    build: (next) => sectionNodes(next, section.name),
+  }));
+  nodes.push(
+    {
+      kind: "entry",
+      label: "mark bars",
+      value: "",
+      placeholder: "name and bars, e.g. verse 1-8",
+      example: "section verse 1-8",
+      help: "name a bar range; re-marking a name moves its marker",
+      command: (text) => {
+        const trimmed = text.trim();
+        return /\S\s+\d{1,4}(?:[-–]\d{1,4})?$/u.test(trimmed)
+          ? `section ${trimmed}`
+          : undefined;
+      },
+    },
+    {
+      kind: "entry",
+      label: "add section",
+      value: "",
+      placeholder: "name and bars, e.g. chorus 8 (empty: next name, 8 bars)",
+      example: "section add chorus 8",
+      help: "a new section after the last one (extends the song)",
+      command: (text) => `section add ${text.trim()}`.trim(),
+    },
+  );
+  if (score.sections.length > 0) {
+    nodes.push({
+      kind: "entry",
+      label: "form",
+      value: score.form.length ? formatForm(score.form) : "bars in order",
+      placeholder: "sections in play order, e.g. intro verse chorus*2 outro",
+      example: "form intro verse chorus*2 outro",
+      help: "the order playback and export follow; empty clears it",
+      command: (text) => (text.trim() ? `form ${text.trim()}` : "form off"),
+    });
+    if (score.form.length)
+      nodes.push({
+        kind: "action",
+        label: "bake form",
+        command: "form bake",
+        help: "write the form out as plain bars, then clear it",
+      });
+    if (score.loopSection)
+      nodes.push({
+        kind: "action",
+        label: `stop looping ${score.loopSection}`,
+        command: "section loop off",
+        help: "play the whole song (or form) again",
+      });
+  }
+  return nodes;
+}
+
+function sectionDetail(context: MenuContext, section: Section): string {
+  const parts = [barsLabel(section)];
+  if (context.score.loopSection === section.name) parts.push("looping");
+  if (section.mute?.length) parts.push(`mutes ${section.mute.join(" ")}`);
+  const varied = Object.keys(section.vary ?? {});
+  if (varied.length) parts.push(`varies ${varied.join(" ")}`);
+  return parts.join(" · ");
+}
+
+function sectionNodes(context: MenuContext, name: string): MenuNode[] {
+  const score = context.score;
+  const section = score.sections.find((entry) => entry.name === name);
+  if (!section)
+    return [{ kind: "info", label: "gone", value: `${name} was removed` }];
+  const looping = score.loopSection === name;
+  const track = context.trackId;
+  const vary = section.vary?.[track];
+  const mutes: MenuNode[] = score.tracks.map((entry) => ({
+    kind: "toggle",
+    label: `mute ${entry.id}`,
+    value: section.mute?.includes(entry.id) ?? false,
+    help: `silence ${entry.name} in this section only`,
+    command: (on) => `section ${on ? "mute" : "unmute"} ${name} ${entry.id}`,
+  }));
+  return [
+    {
+      kind: "action",
+      label: looping ? "stop looping" : "loop",
+      command: looping ? "section loop off" : `section loop ${name}`,
+      help: "loop this section in playback (export still plays the song)",
+    },
+    {
+      kind: "action",
+      label: "jump here",
+      command: `section jump ${name}`,
+      help: "move the playhead to its first bar",
+    },
+    ...mutes,
+    {
+      kind: "number",
+      label: `transpose ${track}`,
+      help: "shift the focused track here, in semitones (x resets)",
+      // As written is +0, so the first nudge already moves a semitone.
+      value: vary?.transpose ?? 0,
+      min: -24,
+      max: 24,
+      step: (value, direction) =>
+        Math.max(-24, Math.min(24, Math.round(value) + direction)),
+      format: (value) => `${value > 0 ? "+" : ""}${Math.round(value)} st`,
+      command: (value) => {
+        const rounded = Math.round(value);
+        return `section vary ${name} ${track} ${rounded < 0 ? "" : "+"}${rounded}`;
+      },
+      reset: `section vary ${name} ${track} off`,
+    },
+    {
+      kind: "number",
+      label: `gain ${track}`,
+      help: "scale the focused track's velocity here (x resets)",
+      value: vary?.gain ?? 1,
+      min: 0,
+      max: 2,
+      step: (value, direction) =>
+        Math.max(
+          0,
+          Math.min(2, Math.round((value + 0.1 * direction) * 10) / 10),
+        ),
+      format: (value) => `×${value.toFixed(1)}`,
+      command: (value) =>
+        `section vary ${name} ${track} gain ${(Math.round(value * 10) / 10).toString()}`,
+      reset: `section vary ${name} ${track} off`,
+    },
+    {
+      kind: "menu",
+      id: `section:${name}:build`,
+      label: "build",
+      detail: section.startBar > 0 ? "into it or over it" : "over it",
+      help: "riser, snare roll, filter sweep and uplifter",
+      build: () => buildNodes(section),
+    },
+    ...(section.startBar > 0
+      ? ([
+          {
+            kind: "menu",
+            id: `section:${name}:drop`,
+            label: "drop",
+            detail: "cut and impact",
+            help: "a pre-drop cut before it and an impact on its downbeat",
+            build: () => dropNodes(section),
+          },
+          {
+            kind: "menu",
+            id: `section:${name}:fill`,
+            label: "fill",
+            detail: "toms, roll or kick",
+            help: "a drum fill on the beats before it and a crash on its downbeat",
+            build: () => fillNodes(section),
+          },
+        ] satisfies MenuNode[])
+      : []),
+    {
+      kind: "action",
+      label: "duplicate",
+      command: `section dup ${name}`,
+      help: "copy it and its bars right after it",
+    },
+    {
+      kind: "entry",
+      label: "duplicate as",
+      value: "",
+      placeholder: "the copy's name",
+      example: `section dup ${name} as ${name} 2`,
+      help: "copy it and its bars right after it, under a new name",
+      command: (text) =>
+        text.trim() ? `section dup ${name} as ${text.trim()}` : undefined,
+    },
+    {
+      kind: "entry",
+      label: "move to",
+      value: "",
+      placeholder: "a bar, or before/after a section, e.g. 17 or after chorus",
+      example: `section move ${name} to 17`,
+      help: "move it and its bars; later sections make room",
+      command: (text) => {
+        const trimmed = text.trim();
+        if (/^\d{1,4}$/u.test(trimmed))
+          return `section move ${name} to ${trimmed}`;
+        return /^(before|after)\s+\S/u.test(trimmed)
+          ? `section move ${name} ${trimmed}`
+          : undefined;
+      },
+    },
+    {
+      kind: "action",
+      label: "move left",
+      command: `section move ${name} left`,
+      help: "swap it with the section before (its bars move too)",
+    },
+    {
+      kind: "action",
+      label: "move right",
+      command: `section move ${name} right`,
+      help: "swap it with the section after (its bars move too)",
+    },
+    {
+      kind: "entry",
+      label: "rename",
+      value: name,
+      placeholder: "new name",
+      example: `section rename ${name} to hook`,
+      help: "the form and the loop follow the new name",
+      command: (text) =>
+        text.trim() ? `section rename ${name} to ${text.trim()}` : undefined,
+    },
+    {
+      kind: "action",
+      label: "clear mutes and variations",
+      command: `section reset ${name}`,
+      help: "every track plays as written here",
+    },
+    {
+      kind: "action",
+      label: "unmark",
+      command: `section unmark ${name}`,
+      help: "remove the marker; the music stays",
+    },
+    {
+      kind: "action",
+      label: "delete with its bars",
+      command: `section delete ${name}`,
+      help: "remove it and its bars; later bars move up",
+    },
+  ];
+}
+
+/** Build rows: into the section (the bars before it) or over it. */
+export function buildNodes(section: Section): MenuNode[] {
+  const name = section.name;
+  const nodes: MenuNode[] = [];
+  if (section.startBar > 0) {
+    const bars = Math.min(4, section.startBar);
+    nodes.push({
+      kind: "action",
+      label: `into it (${bars} bar${bars === 1 ? "" : "s"} before)`,
+      command: `build into ${name}`,
+      help: `riser, snare roll, filter sweep and uplifter over bars ${section.startBar - bars + 1}–${section.startBar}, landing on its downbeat`,
+    });
+  }
+  nodes.push(
+    {
+      kind: "action",
+      label: "over it",
+      command: `build ${name}`,
+      help: "riser, snare roll, filter sweep and uplifter over this section, landing on the bar after",
+    },
+    {
+      kind: "entry",
+      label: "custom",
+      value: "",
+      placeholder:
+        "bars and layers, e.g. 8 bars riser sweep (layers: riser roll sweep uplifter)",
+      example: `build into ${name} 8 bars riser sweep`,
+      help: "choose the length and which layers play",
+      command: (text) => {
+        const words = text.trim().toLowerCase().split(/\s+/u).filter(Boolean);
+        const ok = words.every(
+          (word, index) =>
+            /^(riser|roll|sweep|uplifter)s?$/u.test(word) ||
+            (/^\d{1,3}$/u.test(word) &&
+              /^bars?$/u.test(words[index + 1] ?? "")) ||
+            (/^bars?$/u.test(word) &&
+              /^\d{1,3}$/u.test(words[index - 1] ?? "")),
+        );
+        if (!ok) return undefined;
+        const target = section.startBar > 0 ? `into ${name}` : name;
+        return `build ${target} ${words.join(" ")}`.trim();
+      },
+    },
+  );
+  return nodes;
+}
+
+/** Drop rows: cut length and the impact. */
+export function dropNodes(section: Section): MenuNode[] {
+  const name = section.name;
+  return [
+    {
+      kind: "action",
+      label: "cut 1 beat and impact",
+      command: `drop ${name}`,
+      help: "a one-beat cut before it and an impact on its downbeat",
+    },
+    {
+      kind: "action",
+      label: "cut 2 beats and impact",
+      command: `drop ${name} cut 2`,
+      help: "a two-beat cut before it and an impact on its downbeat",
+    },
+    {
+      kind: "action",
+      label: "impact only",
+      command: `drop ${name} no cut`,
+      help: "an impact on its downbeat, no cut",
+    },
+    {
+      kind: "action",
+      label: "cut only",
+      command: `drop ${name} no impact`,
+      help: "a one-beat cut before it, no impact",
+    },
+    {
+      kind: "entry",
+      label: "custom",
+      value: "",
+      placeholder: "cut beats and impact, e.g. cut 4 no impact",
+      example: `drop ${name} cut 4 no impact`,
+      help: "cut 0 up to two bars of beats; no impact skips the hit",
+      command: (text) =>
+        /^(cut\s+\d+(\.\d+)?|no\s+cut|no\s+impact|impact|\s)*$/iu.test(
+          text.trim(),
+        )
+          ? `drop ${name} ${text.trim()}`.trim()
+          : undefined,
+    },
+  ];
+}
+
+/** Fill rows: a style each, plus length and crash. */
+export function fillNodes(section: Section): MenuNode[] {
+  const name = section.name;
+  return [
+    {
+      kind: "action",
+      label: "toms",
+      command: `fill ${name} toms`,
+      help: "snare into high, mid and low toms on the beat before it, crash on its downbeat",
+    },
+    {
+      kind: "action",
+      label: "snare roll",
+      command: `fill ${name} roll`,
+      help: "snare 16ths on the beat before it, crash on its downbeat",
+    },
+    {
+      kind: "action",
+      label: "kick and snare",
+      command: `fill ${name} kick`,
+      help: "kick and snare 16ths on the beat before it, crash on its downbeat",
+    },
+    {
+      kind: "entry",
+      label: "custom",
+      value: "",
+      placeholder: "style, beats and crash, e.g. toms 2 beats no crash",
+      example: `fill ${name} toms 2 beats no crash`,
+      help: "styles toms, roll, kick; half a beat up to two bars",
+      command: (text) =>
+        /^(toms|roll|kick|\d+(\.\d+)?\s+beats?|no\s+crash|crash|\s)*$/iu.test(
+          text.trim(),
+        )
+          ? `fill ${name} ${text.trim()}`.trim()
+          : undefined,
+    },
+  ];
+}

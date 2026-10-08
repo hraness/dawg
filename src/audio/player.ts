@@ -2,8 +2,9 @@ import { unlink } from "node:fs/promises";
 import type { TrackScore } from "../../core/score.ts";
 import { PlaybackLock } from "./lock.ts";
 import { SampleLibrary, hasSamplerTracks, type SampleBank } from "./samples.ts";
-import { RENDER_CHANNELS, encodeWav, renderScorePcm } from "./wav.ts";
+import { RENDER_CHANNELS, encodeWav } from "./wav.ts";
 import { transportMapFor } from "./clock.ts";
+import { playbackTime, renderArrangedPcm } from "./arrange.ts";
 
 /** Small best-effort local player. The score and transport remain testable without a sound device. */
 export class LoopPlayer {
@@ -119,9 +120,10 @@ export function renderLoopWav(
   beat = 0,
   samples?: SampleBank,
 ): Uint8Array {
-  const audio = renderScorePcm(score, { loop: true, samples });
-  const framesPerBeat = (60 * audio.sampleRate) / score.tempoBpm;
-  const map = transportMapFor(score);
+  const audio = renderArrangedPcm(score, { loop: true, samples });
+  const timeline = playbackTime(score);
+  const framesPerBeat = (60 * audio.sampleRate) / timeline.tempoBpm;
+  const map = transportMapFor(timeline);
   const first = map
     ? map.seconds(Math.max(0, beat) % map.loopBeats) * audio.sampleRate
     : Math.max(0, beat) * framesPerBeat;

@@ -198,6 +198,7 @@ export const AGENT_SYSTEM_PROMPT = [
   "Times are in beats from the loop start (0-based). Keep notes inside loopBeats unless you extend the loop first.",
   "Prefer a few well-formed calls (one add_notes call per track part) over many tiny ones.",
   'For drums, create a track with instrument "kit" and prefer set_rhythm (Euclidean rows: pulses over steps, rotate, repeats for rolls, accent, probability, swing) so the beat stays editable as parameters; for a genre groove start from apply_drum_pattern (list_drum_patterns) and pick a sound with set_drum_kit; use add_drums only for one-off fills. Drum pitches select voices, so do not use add_notes for beats.',
+  "Song structure: list_sections shows named sections (bars count from 1); edit_section marks, adds, duplicates, moves, renames, deletes, mutes, varies (transpose/gain) and loops them; set_form sets the play order with repeats (intro verse chorus*2 outro); add_transition generates builds (riser, snare roll, filter sweep, uplifter), drops (cut plus impact) and drum fills at section boundaries.",
   CHORD_PROCESS,
   "Synth voices: set_synth shapes a synth track with Strudel params (ADSR, lpf/lpenv filter envelopes, fm/fmh, supersaw unison/detune, vib, penv, noise; z_* ZzFX sounds take slide/pitchJump/lfo/zcrush…) or a preset (pad lead pluck bass keys bell…).",
   "Sampler voices: set_sample sets Strudel sample controls per voice (begin end speed unit loop loopBegin loopEnd clip/legato fit loopAt accelerate squiz cut); splice = slices with fit.",

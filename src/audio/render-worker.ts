@@ -6,6 +6,7 @@
 import { scoreFromJSON } from "../../core/score.ts";
 import { SampleLibrary, hasSamplerTracks } from "./samples.ts";
 import type { MasterReport } from "./master.ts";
+import { renderArranged } from "./arrange.ts";
 import { StemRenderer } from "./wav.ts";
 
 export type RenderRequest = Readonly<{
@@ -46,7 +47,7 @@ self.onmessage = async (event: MessageEvent<RenderRequest>) => {
         library = new SampleLibrary({ projectRoot });
       samples = await library.load(parsed);
     }
-    const audio = renderer.render(parsed, {
+    const audio = renderArranged(renderer, parsed, {
       sampleRate,
       loop: true,
       samples,

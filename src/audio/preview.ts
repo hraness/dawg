@@ -30,6 +30,7 @@ import {
   type Track,
 } from "../../core/score.ts";
 import { interpolateAutomation } from "./effects/common.ts";
+import { loopedSection, scoreBeatAt } from "./arrange.ts";
 import { RENDER_CHANNELS } from "./wav.ts";
 
 /** Longest preview loop, in bars. */
@@ -81,13 +82,21 @@ export function previewRegion(
   trackId: string,
   beat = 0,
 ): PreviewRegion {
-  if (score.bars <= MAX_PREVIEW_BARS) return { startBar: 0, bars: score.bars };
+  // A looped section bounds the audition, and the playhead (an arranged
+  // beat when the song has a form) maps back to the bars it is playing.
+  const section = loopedSection(score);
+  const bounded = section !== undefined && section.startBar < score.bars;
+  const lo = bounded ? section.startBar : 0;
+  const hi = bounded
+    ? Math.min(score.bars, section.startBar + section.bars)
+    : score.bars;
+  if (hi - lo <= MAX_PREVIEW_BARS) return { startBar: lo, bars: hi - lo };
   const bars = PREVIEW_REGION_BARS;
   const barTicks = score.beatsPerBar * score.ticksPerBeat;
-  const last = score.bars - bars;
+  const last = hi - bars;
   const clampBar = (bar: number) =>
-    Math.max(0, Math.min(last, Number.isFinite(bar) ? Math.floor(bar) : 0));
-  let startBar = clampBar(beat / score.beatsPerBar);
+    Math.max(lo, Math.min(last, Number.isFinite(bar) ? Math.floor(bar) : lo));
+  let startBar = clampBar(scoreBeatAt(score, beat) / score.beatsPerBar);
   const notes = score.notes.filter((note) => note.trackId === trackId);
   const inRegion = (from: number) =>
     notes.some(
@@ -95,8 +104,14 @@ export function previewRegion(
         note.startTick >= from * barTicks &&
         note.startTick < (from + bars) * barTicks,
     );
-  if (notes.length > 0 && !inRegion(startBar)) {
-    const first = Math.min(...notes.map((note) => note.startTick));
+  const pool = bounded
+    ? notes.filter(
+        (note) =>
+          note.startTick >= lo * barTicks && note.startTick < hi * barTicks,
+      )
+    : notes;
+  if (pool.length > 0 && !inRegion(startBar)) {
+    const first = Math.min(...pool.map((note) => note.startTick));
     startBar = clampBar(first / barTicks);
   }
   return { startBar, bars };

@@ -4,7 +4,9 @@ import {
   TrackScore,
   ScoreValidationError,
   scoreFromJSON,
+  type FormEntry,
   type Note,
+  type Section,
   type Track,
 } from "./score.ts";
 import type { SongMaster } from "./master.ts";
@@ -28,6 +30,10 @@ export type TrackLoopV1 = Readonly<{
   notes: readonly Note[];
   /** Song master (dawg 0.5); absent means none. */
   master?: SongMaster;
+  /** Song sections (0.5); omitted when the song has none. */
+  sections?: readonly Section[];
+  /** Song form (0.5); omitted when empty. */
+  form?: readonly FormEntry[];
 }>;
 
 /** Return the stable object form used by files and IPC messages. */
@@ -47,6 +53,11 @@ export function encodeLoopDocument(score: TrackScore): TrackLoopV1 {
     tracks: score.tracks,
     notes: score.notes,
     ...(score.master ? { master: score.master } : {}),
+    ...(score.sections.length > 0 ? { sections: score.sections } : {}),
+    ...(score.form.length > 0 ? { form: score.form } : {}),
+    ...(score.loopSection === undefined
+      ? {}
+      : { loopSection: score.loopSection }),
   });
 }
 

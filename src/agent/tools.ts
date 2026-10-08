@@ -50,6 +50,7 @@ import { TUNING_TOOLS } from "./tuning-tools.ts";
 import { MASTER_TOOLS } from "./master-tools.ts";
 import { DRUM_TOOLS } from "./drum-tools.ts";
 import { TIME_TOOLS } from "./time-tools.ts";
+import { SECTION_TOOLS } from "./section-tools.ts";
 import type { MediaResult, MediaRunContext } from "../media/types.ts";
 import { pitchToMidi } from "./ops.ts";
 import { TUNING_LIMITS } from "../../core/tuning.ts";
@@ -1382,6 +1383,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   ...TUNING_TOOLS,
   ...DRUM_TOOLS,
   ...TIME_TOOLS,
+  ...SECTION_TOOLS,
   ...MEDIA_TOOLS,
   ...PACK_TOOLS,
   ...MASTER_TOOLS,

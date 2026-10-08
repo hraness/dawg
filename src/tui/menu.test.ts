@@ -59,7 +59,7 @@ function select(menu: EditMenu, ctx: MenuContext, label: string): void {
 }
 
 describe("edit menu", () => {
-  test("root lists six plain sections with a summary and a description", () => {
+  test("root lists seven plain sections with a summary and a description", () => {
     const menu = new EditMenu();
     const ctx = context();
     menu.show(ctx);
@@ -73,6 +73,7 @@ describe("edit menu", () => {
       "Chords",
       "Mix & automation",
       "Project",
+      "Arrange",
     ]);
     expect(menu.view(ctx).items[3]!.label).toContain("manual");
     expect(menu.view(ctx).items[5]!.label).toContain("120 BPM");
@@ -93,6 +94,71 @@ describe("edit menu", () => {
       menu.show(ctx, section);
       expect(menu.view(ctx).title).toBe(title);
     }
+  });
+
+  test("Arrange marks, loops, mutes, varies and orders sections", () => {
+    const menu = new EditMenu();
+    const empty = context();
+    menu.show(empty, "arrange");
+    expect(menu.view(empty).title).toBe("menu › Arrange");
+    expect(menu.view(empty).items[0]!.label).toStartWith("mark bars");
+    const ctx = context(
+      score().withSections(
+        [
+          { name: "verse", startBar: 0, bars: 1 },
+          { name: "chorus", startBar: 1, bars: 1, mute: ["keys"] },
+        ],
+        [],
+      ),
+    );
+    menu.show(ctx, "sections");
+    expect(menu.view(ctx).items[1]!.label).toContain("mutes keys");
+    select(menu, ctx, "chorus");
+    menu.key("\r", ctx);
+    expect(menu.view(ctx).title).toBe("menu › Arrange › chorus");
+    expect(menu.key("\r", ctx)).toEqual({
+      type: "run",
+      command: "section loop chorus",
+    });
+    select(menu, ctx, "mute keys");
+    expect(menu.key("\r", ctx)).toEqual({
+      type: "run",
+      command: "section unmute chorus keys",
+    });
+    select(menu, ctx, "transpose keys");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "section vary chorus keys +1",
+    });
+    expect(menu.key(LEFT, ctx)).toEqual({
+      type: "run",
+      command: "section vary chorus keys -1",
+    });
+    expect(menu.key("x", ctx)).toEqual({
+      type: "run",
+      command: "section vary chorus keys off",
+    });
+    select(menu, ctx, "build");
+    menu.key("\r", ctx);
+    select(menu, ctx, "into it");
+    expect(menu.view(ctx).items[menu.view(ctx).index]!.label).toBe(
+      "into it (1 bar before)",
+    );
+    expect(menu.key("\r", ctx)).toEqual({
+      type: "run",
+      command: "build into chorus",
+    });
+    menu.key(ESC, ctx);
+    select(menu, ctx, "move left");
+    expect(menu.key("\r", ctx)).toEqual({
+      type: "run",
+      command: "section move chorus left",
+    });
+    menu.key(ESC, ctx);
+    select(menu, ctx, "form");
+    expect(menu.view(ctx).items[menu.view(ctx).index]!.label).toContain(
+      "bars in order",
+    );
   });
 
   test("Chords edits play-mode chord settings and the song key", () => {

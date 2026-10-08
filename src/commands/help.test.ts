@@ -85,6 +85,7 @@ describe("help reference", () => {
       "── shape the sound",
       "── shape the performance",
       "── chords",
+      "── song structure",
       "── more",
     ]);
     expect(guide.length).toBeLessThanOrEqual(34);
@@ -94,6 +95,11 @@ describe("help reference", () => {
     expect(helpTopicLines("keys", 72)?.[0]).toBe("── keys");
     expect(helpTopicLines("/Music", 72)?.[0]).toBe("── music");
     expect(helpTopicLines("nope", 72)).toBeUndefined();
+    const arrange = helpTopicLines("arrange", 72)!;
+    expect(arrange[0]).toBe("── arrange");
+    for (const verb of ["section", "form", "build", "drop", "fill"])
+      expect(arrange.some((line) => line.startsWith(`${verb} `))).toBe(true);
+    expect(arrange.every((line) => line.length <= 72)).toBe(true);
   });
 
   test("typos get the nearest command", () => {

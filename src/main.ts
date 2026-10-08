@@ -70,6 +70,10 @@ import {
 } from "./commands/master.ts";
 import { exportSampleRate, measureScoreOffThread } from "./audio/measure.ts";
 import {
+  applySectionCommand,
+  parseSectionCommand,
+} from "./commands/arrange.ts";
+import {
   HELP_TOPICS,
   helpText,
   helpTopicLines,
@@ -167,6 +171,9 @@ import {
 import { EuclidEditor, type EuclidContext } from "./tui/euclid.ts";
 import { HINTS, KEYS, keyLines, type KeySection } from "../tui/grammar.ts";
 import { renderAudition } from "./audio/audition.ts";
+import { exportScore, playbackTime, scoreBeatAt } from "./audio/arrange.ts";
+import { formatForm } from "../core/sections.ts";
+import type { ArrangeStripView } from "../tui/arrange-strip.ts";
 import { renderScorePcm } from "./audio/wav.ts";
 import type { PreviewHost } from "./agent/preview-tool.ts";
 import { rhythmVoicePitch } from "../core/rhythm.ts";
@@ -255,6 +262,7 @@ function parsesLocally(text: string): boolean {
     parseSynthCommand,
     parseExpressionCommand,
     parseMasterCommand,
+    (value: string) => parseSectionCommand(value, score),
     parsePatternCommand,
     parseKitCommand,
     parsePackCommand,
@@ -754,7 +762,7 @@ function snapshot(
         }
       : {}),
     laneCount: 24,
-    currentBeat: beat,
+    currentBeat: scoreBeatAt(value, beat),
     playing: clock.playing,
     activity,
     ...drumSnapshotFields(
@@ -801,7 +809,9 @@ function renderOnce(
 function appView(value: TrackScore, beat: number): AppView {
   return {
     score: snapshot(value, beat),
-    beat,
+    // The highway shows score time: inside the looped section or form pass.
+    beat: scoreBeatAt(value, beat),
+    arrange: arrangeStripView(value, beat),
     // `opus-5.5 · gateway`, `sonnet · claude`; hidden when offline.
     model:
       providerName && providerName !== "offline" ? providerName : undefined,
@@ -871,6 +881,21 @@ function masterLoudness(value: TrackScore): LoudnessView | undefined {
       });
   }
   return { ...monitor, estimate: true };
+}
+
+/** The arrangement strip over the timeline; absent without sections. */
+function arrangeStripView(
+  value: TrackScore,
+  beat: number,
+): ArrangeStripView | undefined {
+  if (value.sections.length === 0) return undefined;
+  return {
+    bars: value.bars,
+    sections: value.sections,
+    loop: value.loopSection,
+    playheadBar: scoreBeatAt(value, beat) / value.beatsPerBar,
+    form: value.form.length ? formatForm(value.form) : undefined,
+  };
 }
 
 /** What the strip compares a receipt against: the revision and score before. */
@@ -1110,7 +1135,7 @@ async function runInteractive(): Promise<void> {
       // Every window renders the same hit line from dawgd's timestamp.
       const { playing, beat, bpm, atMs } = update.transport;
       clock.setTempo(bpm);
-      clock.setTimeMap(transportMapFor(score));
+      clock.setTimeMap(transportMapFor(playbackTime(score)));
       clock.sync(beat, playing, atMs, monotonicEpochMs());
     } else if (update.type === "status") {
       syncState = port.sync;
@@ -1723,6 +1748,20 @@ async function submit(prompt: string): Promise<string | Receipt> {
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
   }
+  const arrange = parseSectionCommand(command, score);
+  if (arrange) {
+    const reads =
+      arrange.type === "section-list" ||
+      arrange.type === "section-unknown" ||
+      arrange.type === "form-show" ||
+      arrange.type === "section-jump";
+    if (!reads) await materializeDraft();
+    const result = applySectionCommand(score, requestedTrack, arrange);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    if (result.seekBeat !== undefined) await seekTransport(result.seekBeat);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
   const music = parseMusicCommand(command);
   if (music) {
     await materializeDraft();
@@ -1737,7 +1776,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (exportCommand) {
     const path = resolve(exportCommand[1]!);
     if (/\.midi?$/i.test(path)) {
-      await writeFile(path, scoreToMidi(score));
+      await writeFile(path, scoreToMidi(exportScore(score)));
       return `exported midi · ${exportCommand[1]}`;
     }
     await writeFile(path, encodeLoop(score), "utf8");
@@ -3529,6 +3568,7 @@ function playHost() {
     now: () => performance.now(),
     playing: () => clock.playing,
     beatAt: (ms: number) => clock.beatAt(ms),
+    scoreBeat: (beat: number) => scoreBeatAt(score, beat),
     engine: liveEngine,
     samples: () => liveSampleBank,
     async commit(
@@ -3744,6 +3784,17 @@ async function setTransport(
     clock.play();
     await audio.play(score, clock.beatAt());
   }
+}
+
+/** Move the playhead to transport `beat`, playing or not (section jump). */
+async function seekTransport(beat: number): Promise<void> {
+  if (port.mode === "daemon") {
+    await port.transport("seek", { beat });
+    return;
+  }
+  const now = Date.now();
+  clock.sync(beat, clock.playing, now, now);
+  if (clock.playing) await audio.play(score, clock.beatAt());
 }
 
 /**

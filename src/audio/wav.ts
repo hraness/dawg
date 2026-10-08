@@ -69,6 +69,7 @@ import {
 import { loopSecondsOf, performedNotes } from "../../core/tempo.ts";
 import { sampleWarpFor, warpedSpan, type SampleWarp } from "./warp.ts";
 import { applyMaster, type MasterReport } from "./master.ts";
+import type { SongMaster } from "../../core/master.ts";
 
 export type WavOptions = Readonly<{ sampleRate?: number; maxSeconds?: number }>;
 
@@ -85,6 +86,12 @@ export type RenderOptions = WavOptions &
      * tracks render silent; scores without samplers are unaffected.
      */
     samples?: SampleBank;
+    /**
+     * Ticks added to each note's start when seeding its noise. An arranged
+     * render window passes its origin so seeded voices sound as they do in
+     * a single pass of the whole song. Zero (the default) changes nothing.
+     */
+    seedTick?: number;
   }>;
 
 /** Interleaved stereo 16-bit PCM plus its frame count. */
@@ -169,6 +176,7 @@ type RenderContext = Readonly<{
   irs?: ReadonlyMap<string, DecodedSample>;
   /** Tempo map in samples (core/tempo.ts); absent: constant tempo. */
   warp?: SampleWarp;
+  seedTick?: number;
 }>;
 
 /** Exact (fractional) loop length in frames at a sample rate. */
@@ -331,6 +339,7 @@ export class StemRenderer {
       tempoBpm: score.tempoBpm,
       ...(bank.irs ? { irs: bank.irs } : {}),
       ...(warp ? { warp } : {}),
+      ...(options.seedTick ? { seedTick: options.seedTick } : {}),
     };
     this.renders += 1;
     const { dry, dryR, left, right, mixL, mixR } = this.scratchFor(samples);
@@ -694,6 +703,32 @@ function foldTail(
 }
 
 /** Interleaved 16-bit PCM of the first `frames` mix samples. */
+/**
+ * The song master over an already summed 16-bit mix (an arrangement
+ * rendered in windows), so the whole song is limited and normalized as one
+ * pass is. Undefined when the master is absent or bypassed.
+ */
+export function masterSummedPcm(
+  pcm: Int16Array,
+  frames: number,
+  sampleRate: number,
+  master: SongMaster | undefined,
+  loop: boolean,
+): { pcm: Int16Array; report: MasterReport } | undefined {
+  const left = new Float64Array(frames);
+  const right = new Float64Array(frames);
+  for (let index = 0; index < frames; index += 1) {
+    left[index] = pcm[index * 2]! / 32767;
+    right[index] = pcm[index * 2 + 1]! / 32767;
+  }
+  const mastered = applyMaster(left, right, frames, sampleRate, master, loop);
+  if (!mastered) return undefined;
+  return {
+    pcm: toPcm(mastered.left, mastered.right, frames, true),
+    report: mastered.report,
+  };
+}
+
 function toPcm(
   mixL: Float64Array,
   mixR: Float64Array,
@@ -777,6 +812,8 @@ function stemKey(
     ...(context.score.tuning || track?.tuning
       ? [context.score.tuning ?? null, context.score.key]
       : []),
+    // Seeded noise follows the window origin of an arranged render.
+    ...(context.seedTick ? [`seed:${context.seedTick}`] : []),
   ]);
 }
 
@@ -915,7 +952,9 @@ function renderDrumNote(
     start + Math.ceil((kit?.seconds ?? MAX_DRUM_SECONDS) * sampleRate),
   );
   const voice = drumVoiceForPitch(note.pitch);
-  const random = seededRandom(`${note.id}:${note.startTick}`);
+  const random = seededRandom(
+    `${note.id}:${note.startTick + (context.seedTick ?? 0)}`,
+  );
   const velocity = Math.max(0, Math.min(1, note.velocity));
   let phase = 0;
   let previousNoise = 0;

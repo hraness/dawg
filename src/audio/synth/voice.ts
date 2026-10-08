@@ -82,6 +82,8 @@ export type VoiceContext = Readonly<{
   oscillatorFor?: (note: Note) => OscillatorFactory | undefined;
   /** The track's merged tuning (`resolveTuning`); absent is 12-TET. */
   tuning?: TuningTable;
+  /** Ticks added to a note's start in its noise seed (`RenderOptions`). */
+  seedTick?: number;
 }>;
 
 /** Track gain at a tick (volume × volume lane), supplied by the renderer. */
@@ -360,7 +362,9 @@ export function renderSynthNote(
     start + length + Math.ceil(release * sampleRate),
   );
   if (end <= start) return;
-  const random = seededRandom(`${note.id}:${note.startTick}:synth`);
+  const random = seededRandom(
+    `${note.id}:${note.startTick + (context.seedTick ?? 0)}:synth`,
+  );
   const amp = envelopeFor(c, "", "", gate);
   const velocity = clamp(note.velocity, 0, 1);
   const gain = c.number("gain");

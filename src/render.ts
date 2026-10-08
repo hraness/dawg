@@ -11,7 +11,7 @@ import { resolve } from "node:path";
 import { scoreFromJSON, type TrackScore } from "../core/score.ts";
 import { decodeLoop } from "../core/loop.ts";
 import { scoreToMidi } from "../core/midi.ts";
-import { RENDER_CHANNELS, encodeWav, renderScorePcm } from "./audio/wav.ts";
+import { RENDER_CHANNELS, encodeWav } from "./audio/wav.ts";
 import { exportSampleRate, measureRendered } from "./audio/measure.ts";
 import {
   applyMasterCommand,
@@ -19,6 +19,8 @@ import {
   measurementLine,
   parseMasterCommand,
 } from "./commands/master.ts";
+import { bakeTrackTime, findSection, sectionScore } from "../core/sections.ts";
+import { exportScore, renderArrangedPcm } from "./audio/arrange.ts";
 import { SampleLibrary, hasSamplerTracks } from "./audio/samples.ts";
 import {
   PackStore,
@@ -37,7 +39,7 @@ import {
 } from "./session/store.ts";
 
 export const RENDER_USAGE =
-  "usage: dawg render <out.wav> [--session <name|id>] [--import <file.track.json>] [--normalize <lufs|streaming|club|loud|…>] [--measure] [--rate <hz>] · <out.mid> writes MIDI";
+  "usage: dawg render <out.wav> [--session <name|id>] [--import <file.track.json>] [--section <name>] [--normalize <lufs|streaming|club|loud|…>] [--measure] [--rate <hz>] · <out.mid> writes MIDI";
 
 const MAX_LOOP_FILE_BYTES = 512 * 1024;
 
@@ -63,7 +65,8 @@ export async function runRenderCommand(
       arg === "--session" ||
       arg === "--import" ||
       arg === "--normalize" ||
-      arg === "--rate"
+      arg === "--rate" ||
+      arg === "--section"
     ) {
       const value = rest[index + 1];
       if (value === undefined || value.startsWith("--")) {
@@ -91,6 +94,19 @@ export async function runRenderCommand(
     );
     return 1;
   }
+  const only = options.get("--section");
+  if (only !== undefined) {
+    const section = findSection(score, only);
+    if (!section) {
+      const names = score.sections.map((entry) => entry.name).join(", ");
+      stderr.write(
+        `render failed · no section "${only}"${names ? ` · sections: ${names}` : ""}\n`,
+      );
+      return 1;
+    }
+    // One section as it plays when looped: its mutes and variations, no form.
+    score = sectionScore(bakeTrackTime(score), section);
+  }
   if (/\.midi?$/i.test(target)) {
     // MIDI carries notes, not audio: the master and loudness flags do not apply.
     const audioOnly = ["--normalize", "--measure", "--rate"].find((flag) =>
@@ -100,7 +116,7 @@ export async function runRenderCommand(
       stderr.write(`render failed · ${audioOnly} applies to .wav only\n`);
       return 2;
     }
-    const midi = scoreToMidi(score);
+    const midi = scoreToMidi(exportScore(score));
     const midiPath = resolve(workspace, target);
     const midiTemporary = `${midiPath}.${process.pid}.tmp`;
     await writeFile(midiTemporary, midi);
@@ -152,7 +168,7 @@ export async function runRenderCommand(
     );
     return 2;
   }
-  const audio = renderScorePcm(score, { samples, sampleRate });
+  const audio = renderArrangedPcm(score, { samples, sampleRate });
   let wav = encodeWav(audio.pcm, audio.sampleRate, RENDER_CHANNELS);
   // Pack sounds: name the packs (and CC-BY attributions) in the WAV's INFO
   // comment and on stdout; CREDITS.md in a project keeps the attributions.
