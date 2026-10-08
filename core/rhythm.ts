@@ -22,6 +22,7 @@ import {
   type Note,
   type Track,
 } from "./score.ts";
+import { NOTE_EXPRESSION_FIELDS } from "./expression.ts";
 import { loopTicksOf } from "./tempo.ts";
 
 /** MIDI pitch a row's voice plays on `track`, or undefined when unknown. */
@@ -236,12 +237,7 @@ function sameNotes(
     want.set(key(note), (want.get(key(note)) ?? 0) + 1);
   for (const note of actual) {
     // Expression is a hand edit: the generator cannot reproduce it.
-    if (
-      note.articulation !== undefined ||
-      note.glide !== undefined ||
-      note.bend !== undefined ||
-      note.vibrato !== undefined
-    )
+    if (NOTE_EXPRESSION_FIELDS.some((field) => note[field] !== undefined))
       return false;
     const left = want.get(key(note));
     if (!left) return false;
