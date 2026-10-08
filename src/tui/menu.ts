@@ -11,6 +11,7 @@
 import { commandParam, sketchFor } from "./sketch.ts";
 import { HINTS } from "../../tui/grammar.ts";
 import { auditionKey, isStageable, type AuditionKey } from "./audition.ts";
+import { tempoDetail, tempoMenuNode } from "./menu-time.ts";
 import {
   AUTOMATION_PARAMETERS,
   automationPoints,
@@ -389,8 +390,10 @@ export function rootNodes(context: MenuContext): MenuNode[] {
       kind: "menu",
       id: "project",
       label: "Project",
-      detail: `${num(context.score.tempoBpm)} BPM · ${context.score.beatsPerBar}/4 · ${context.score.bars} bars`,
-      help: "tempo, meter, loop length, play, click and count-in",
+      detail: context.score.time
+        ? `${tempoDetail(context.score)} · ${context.score.bars} bars`
+        : `${num(context.score.tempoBpm)} BPM · ${context.score.beatsPerBar}/4 · ${context.score.bars} bars`,
+      help: "tempo, meter, tempo map, loop length, play, click and count-in",
       build: transportNodes,
     },
   ];
@@ -409,6 +412,9 @@ const SECTION_ALIASES: Readonly<Record<string, readonly string[]>> = {
   automation: ["mix", "automation"],
   project: ["project"],
   transport: ["project"],
+  tempo: ["project", "tempo"],
+  meter: ["project", "tempo"],
+  time: ["project", "tempo"],
 };
 
 /** Sound: instrument and voice first, then the sound browser. */
@@ -1509,6 +1515,7 @@ function transportNodes(context: MenuContext): MenuNode[] {
       format: (value) => `${value}/4`,
       command: (value) => `meter ${Math.round(value)}`,
     },
+    tempoMenuNode(context),
     {
       kind: "number",
       label: "loop length",
@@ -2141,4 +2148,8 @@ export const MENU_SECTIONS = [
   "track",
   "automation",
   "transport",
+  // Subsections.
+  "tempo",
+  "meter",
+  "time",
 ] as const;

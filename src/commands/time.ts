@@ -32,6 +32,7 @@ import {
   bpmAtTick,
   describeSongTime,
   driftRate,
+  loopSecondsOf,
   loopTicksOf,
   TIME_LIMITS,
   TimeValidationError,
@@ -388,7 +389,10 @@ function applyOrThrow(
 ): TimeResult {
   switch (command.type) {
     case "tempo-map":
-      return { ok: true, message: `tempo map · ${describeSongTime(score)}` };
+      return {
+        ok: true,
+        message: `tempo map · ${num(score.tempoBpm)} BPM${score.time ? ` ${describeSongTime(score)}` : " throughout"} · ${num(loopSecondsOf(score))} s`,
+      };
     case "tempo-at": {
       const tick = tickOf(score, command.at);
       const where = placeLabel(command.at);
@@ -729,6 +733,10 @@ function spanLabel(score: TrackScore, from: number, to: number): string {
   }
   const beats = (to - from) / score.ticksPerBeat;
   return `over ${fmt(beats)} beat${beats === 1 ? "" : "s"} from beat ${fmt(from / score.ticksPerBeat)}`;
+}
+
+function num(value: number): string {
+  return fmt(value);
 }
 
 function fmt(value: number, digits = 2): string {
