@@ -48,7 +48,11 @@ import {
   type NumberParam,
   type ParamSpec,
 } from "../../core/fx.ts";
-import { effectValues } from "../commands/fx.ts";
+import {
+  effectValues,
+  parseEffectName,
+  parseParamName,
+} from "../commands/fx.ts";
 import {
   LOUDNESS_TARGET_NAMES,
   LOUDNESS_TARGETS,
@@ -2098,6 +2102,83 @@ export class EditMenu {
       frame.index = index;
       this.stack.push(childFrame(frame, node));
     }
+  }
+
+  /**
+   * Open on the level a bare parameter command edits, for the fader drawer:
+   * `volume` / `pan` (Mix), `fx filter` / `fx filter cutoff` (that effect,
+   * in Effects or its "more effects" list). Returns the label to focus, or
+   * undefined when `command` names no such parameter (the menu is closed).
+   */
+  showFader(context: MenuContext, command: string): string | undefined {
+    const words = command.trim().replace(/^\//, "").toLowerCase().split(/\s+/);
+    if (words.length === 1 && (words[0] === "volume" || words[0] === "pan")) {
+      this.show(context, "mix");
+      if (this.stack.length < 2) return this.fail();
+      return this.focusLabel(context, words[0]) ?? this.fail();
+    }
+    if (words[0] !== "fx" || words.length < 2 || words.length > 3)
+      return undefined;
+    const effect = parseEffectName(words[1]!);
+    if (!effect) return undefined;
+    const param = words[2] ? parseParamName(effect, words[2]) : undefined;
+    if (words[2] && !param) return undefined;
+    this.show(context, "effects");
+    if (this.stack.length < 2) return this.fail();
+    if (!this.descend(context, effect)) {
+      if (!this.descend(context, "more effects") || !this.descend(context, effect))
+        return this.fail();
+    }
+    const fields = this.faderFields(context);
+    const label = param
+      ? fields.find((field) => field.label === param)?.label
+      : fields.find((field) => field.kind === "number")?.label;
+    if (!label) return this.fail();
+    return this.focusLabel(context, label) ?? this.fail();
+  }
+
+  private fail(): undefined {
+    this.close();
+    return undefined;
+  }
+
+  /** Step into the child menu `id` of the current level. */
+  private descend(context: MenuContext, id: string): boolean {
+    const frame = this.stack.at(-1);
+    if (!frame) return false;
+    const nodes = frame.build(context);
+    const index = nodes.findIndex(
+      (node) => node.kind === "menu" && node.id === id,
+    );
+    const node = nodes[index];
+    if (node?.kind !== "menu") return false;
+    frame.index = index;
+    this.stack.push(childFrame(frame, node));
+    return true;
+  }
+
+  /** Put the cursor on the row labelled `label`; returns it when found. */
+  private focusLabel(context: MenuContext, label: string): string | undefined {
+    const frame = this.stack.at(-1);
+    if (!frame) return undefined;
+    const index = frame.build(context).findIndex((node) => node.label === label);
+    if (index < 0) return undefined;
+    frame.index = index;
+    return label;
+  }
+
+  /** Select row `index` of the current level (a click), clearing typing. */
+  select(context: MenuContext, index: number): void {
+    const frame = this.stack.at(-1);
+    if (!frame) return;
+    this.entry = undefined;
+    this.filtering = false;
+    frame.index = clamp(index, 0, Math.max(0, this.nodes(context).length - 1));
+  }
+
+  /** The row index under the cursor (the picker's). */
+  get index(): number {
+    return this.stack.at(-1)?.index ?? 0;
   }
 
   close(): void {

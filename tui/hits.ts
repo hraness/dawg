@@ -9,6 +9,8 @@ export type HitTarget =
   | { kind: "picker-row"; index: number }
   /** The header's transport pill (play / pause). */
   | { kind: "transport" }
+  /** The header's track name (the track list). */
+  | { kind: "tracks" }
   /** The header's model pill (`/model`). */
   | { kind: "model" }
   /** A fader's step buttons, by field index in the drawer. */
