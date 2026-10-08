@@ -226,4 +226,25 @@ describe("menu → fader fields", () => {
     expect(new EditMenu().showFader(ctx(), "/pan")).toBe("pan");
     expect(new EditMenu().showFader(ctx(), "fx nope")).toBeUndefined();
   });
+
+  test("Mix › master number rows are faders with finite ranges", () => {
+    const menu = new EditMenu();
+    const context = ctx();
+    menu.show(context, "master");
+    const numbers = menu
+      .nodes(context)
+      .filter((node) => node.kind === "number")
+      .map((node) => node.label);
+    expect(numbers.length).toBeGreaterThan(0);
+    const fields = menu.faderFields(context);
+    for (const label of numbers) {
+      const field = fields.find((candidate) => candidate.label === label);
+      expect(field?.kind).toBe("number");
+      if (field?.kind === "number") {
+        expect(Number.isFinite(field.min)).toBe(true);
+        expect(Number.isFinite(field.max)).toBe(true);
+        expect(field.min).toBeLessThan(field.max);
+      }
+    }
+  });
 });
