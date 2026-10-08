@@ -1,16 +1,19 @@
 /**
  * Runs inside the evaluation subprocess (`bun --no-addons --no-install
  * --smol eval-child.ts <project>`): imports the project's `song.ts`, fills
- * sample hashes, and prints one JSON line. Never imported by dawg itself.
+ * sample hashes and Scala tuning files, and prints one JSON line. Never
+ * imported by dawg itself.
  */
 
 import { createHash } from "node:crypto";
-import { realpathSync } from "node:fs";
+import { readFileSync, realpathSync, statSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { readTuningFiles } from "../tuning.ts";
 
 const MAX_SAMPLE_FILE_BYTES = 50 * 1024 * 1024;
+const MAX_TUNING_FILE_BYTES = 1024 * 1024;
 
 type Diagnostic = {
   message: string;
@@ -30,7 +33,10 @@ async function main(): Promise<void> {
     const song = module.default;
     if (typeof song !== "object" || song === null)
       throw new Error("song.ts must `export default song({...})`");
-    output = { ok: true, score: await withSampleHashes(song, project) };
+    output = {
+      ok: true,
+      score: withTuningFiles(await withSampleHashes(song, project), project),
+    };
   } catch (error) {
     output = { ok: false, error: diagnostic(error, project) };
   }
@@ -119,6 +125,35 @@ async function withSampleHashes(
       // Missing file: left for `dawg check` to report.
     }
   }
+  return plain;
+}
+
+/**
+ * Reads the Scala `.scl` and `.kbm` files a song or track tuning names, so
+ * the score carries the resolved table and renders without file access.
+ */
+function withTuningFiles(score: unknown, project: string): unknown {
+  if (typeof score !== "object" || score === null) return score;
+  const plain = score as Record<string, unknown>;
+  const read = (path: string): string | undefined => {
+    const file = resolve(project, path);
+    if (relative(project, file).startsWith("..")) return undefined;
+    try {
+      const info = statSync(file);
+      if (!info.isFile() || info.size > MAX_TUNING_FILE_BYTES) return undefined;
+      return readFileSync(file, "utf8");
+    } catch {
+      return undefined;
+    }
+  };
+  if (plain.tuning) plain.tuning = readTuningFiles(plain.tuning, read, "song");
+  for (const track of Array.isArray(plain.tracks) ? plain.tracks : [])
+    if (typeof track === "object" && track !== null && track.tuning)
+      track.tuning = readTuningFiles(
+        track.tuning,
+        read,
+        `track ${String(track.name ?? track.id)}`,
+      );
   return plain;
 }
 

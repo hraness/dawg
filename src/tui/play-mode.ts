@@ -11,6 +11,7 @@
  *   Z / X  octave down / up      C / V  velocity down / up (steps of 16)
  *   Shift  sustain while held    Tab    sustain latch     Esc  leave the mode
  *   (while recording, sustain changes record as track pedal events)
+ *   I      scale degrees: the home row plays the key's scale (any tuning)
  *
  * Terminals report key-down only, so a held key is synthesized from the
  * keyboard's auto-repeat: a press sounds for the gate (one grid step by
@@ -22,12 +23,14 @@
  *
  * Everything here is pure: callers pass the monotonic time of each key.
  */
+import { keyName, parseKey, scaleSteps } from "../../core/chords.ts";
 import {
   SAMPLER_FIRST_SLOT,
   isSamplerInstrument,
   samplerVoiceSlots,
   type Track,
 } from "../../core/score.ts";
+import type { TuningTable } from "../../core/tuning.ts";
 import { pitchName } from "../../tui/highway.ts";
 
 /** Semitone offset from the base C for each note key. */
@@ -149,8 +152,86 @@ export function rangeLabel(base: number): string {
   return `${pitchName(base)}–${pitchName(base + LAYOUT_SPAN)}`;
 }
 
+/** The home row left to right: consecutive degrees in degree mode. */
+export const HOME_ROW: readonly string[] = Object.freeze(
+  Object.keys(WHITE_KEYS),
+);
+
+/**
+ * Scale-degree layout (Push's "In Key", Komplete Kontrol's Easy mode): the
+ * home row plays consecutive degrees from the tonic and the upper row is
+ * off, so every key is in the scale.
+ */
+export type DegreeLayout = Readonly<{
+  /** Key offsets of the degrees within one period, ascending from 0. */
+  steps: readonly number[];
+  /** Keys per period: 12, or a linear tuning's step count. */
+  period: number;
+  /** Key of degree 0 with the keyboard at its default base (C3). */
+  tonic: number;
+  /** `D dorian`, `19-edo`, `C major · 19-edo`. */
+  name: string;
+}>;
+
+/**
+ * The degrees the home row plays for a song key and the track's tuning. A
+ * twelve-key tuning (12-TET, just intonation, a maqam preset) plays the
+ * key's scale on the twelve keys, quarter tones on the key their preset
+ * retunes; a linear non-12 tuning (19-EDO, pelog) plays every step, or the
+ * nearest step to each scale note when a key is set. No key reads C major.
+ */
+export function degreeLayout(
+  keyText: string | null | undefined,
+  table: TuningTable | undefined,
+): DegreeLayout {
+  const key = parseKey(keyText ?? undefined);
+  if (table && table.linear && table.size !== 12) {
+    const period = table.size;
+    const pc = ((table.root % 12) + 12) % 12;
+    const tonic =
+      table.root + Math.round((DEFAULT_BASE + pc - table.root) / 12) * period;
+    const at = (offset: number) =>
+      table.hz[Math.max(0, Math.min(127, tonic + offset))]!;
+    const degreeCents = Array.from({ length: period }, (_, offset) =>
+      at(offset) > 0 && at(0) > 0 ? 1200 * Math.log2(at(offset) / at(0)) : NaN,
+    );
+    const steps = key
+      ? [
+          ...new Set(
+            scaleSteps(key).map((step) => {
+              let best = 0;
+              for (let offset = 1; offset < period; offset += 1)
+                if (
+                  Math.abs(degreeCents[offset]! - step * 100) <
+                  Math.abs(degreeCents[best]! - step * 100)
+                )
+                  best = offset;
+              return best;
+            }),
+          ),
+        ].sort((a, b) => a - b)
+      : degreeCents.map((_, offset) => offset);
+    return Object.freeze({
+      steps: Object.freeze(steps),
+      period,
+      tonic,
+      name: key ? `${keyName(key)} · ${table.name}` : table.name,
+    });
+  }
+  const chosen = key ?? { tonic: 0, mode: "major" as const };
+  const steps = [
+    ...new Set(scaleSteps(chosen).map((step) => Math.ceil(step) % 12)),
+  ].sort((a, b) => a - b);
+  return Object.freeze({
+    steps: Object.freeze(steps),
+    period: 12,
+    tonic: DEFAULT_BASE + chosen.tonic,
+    name: keyName(chosen),
+  });
+}
+
 export type PlayCommand =
-  "exit" | "record" | "replace" | "click" | "transport" | "menu";
+  "exit" | "record" | "replace" | "click" | "transport" | "menu" | "degrees";
 
 /** Keys that drive the mode itself rather than notes. */
 const COMMAND_KEYS: Readonly<Record<string, PlayCommand>> = Object.freeze({
@@ -159,6 +240,7 @@ const COMMAND_KEYS: Readonly<Record<string, PlayCommand>> = Object.freeze({
   R: "replace",
   m: "click",
   M: "click",
+  i: "degrees",
   " ": "transport",
   "\u000b": "menu",
 });
@@ -226,6 +308,27 @@ export class PlayKeyboard {
   private nextId = 1;
   /** Shift was held on the last note key (BandLab's Sustain light). */
   public shiftHeld = false;
+  private layout: DegreeLayout | undefined;
+  /**
+   * Degrees the home row is shifted by when a period has more steps than
+   * the home row has keys (19- or 31-EDO): Z and X page by a row instead of
+   * a period, so every step stays reachable.
+   */
+  public degreeOffset = 0;
+
+  /** Scale-degree layout (`i` in play mode); undefined is chromatic. */
+  public get degrees(): DegreeLayout | undefined {
+    return this.layout;
+  }
+
+  public set degrees(layout: DegreeLayout | undefined) {
+    if (
+      layout?.steps.length !== this.layout?.steps.length ||
+      layout?.period !== this.layout?.period
+    )
+      this.degreeOffset = 0;
+    this.layout = layout;
+  }
 
   public constructor(options: PlayKeyboardOptions = {}) {
     this.base = clampBase(options.base ?? DEFAULT_BASE);
@@ -237,12 +340,30 @@ export class PlayKeyboard {
   }
 
   public get range(): string {
-    return rangeLabel(this.base);
+    if (!this.degrees) return rangeLabel(this.base);
+    const low = this.pitchFor(HOME_ROW[0]!);
+    const high = this.pitchFor(HOME_ROW[HOME_ROW.length - 1]!);
+    return low === undefined || high === undefined
+      ? "out of range"
+      : `${pitchName(low)}–${pitchName(high)}`;
   }
 
   /** Pitch a note key plays at the current octave, or undefined. */
   public pitchFor(key: string): number | undefined {
-    const offset = NOTE_KEYS[SHIFTED[key] ?? key.toLowerCase()];
+    const name = SHIFTED[key] ?? key.toLowerCase();
+    if (this.degrees) {
+      const index = HOME_ROW.indexOf(name);
+      if (index < 0) return undefined;
+      const { steps, period, tonic } = this.degrees;
+      const degree = this.degreeOffset + index;
+      const octave = Math.floor(degree / steps.length);
+      const pitch =
+        tonic +
+        ((this.base - DEFAULT_BASE) / 12 + octave) * period +
+        steps[degree - octave * steps.length]!;
+      return pitch >= MIN_PITCH && pitch <= MAX_PITCH ? pitch : undefined;
+    }
+    const offset = NOTE_KEYS[name];
     if (offset === undefined) return undefined;
     return this.base + offset;
   }
@@ -272,8 +393,25 @@ export class PlayKeyboard {
     if (command) return { type: "command", command };
     const lower = value.length === 1 ? value.toLowerCase() : value;
     if (lower === "z" || lower === "x") {
+      if (this.degrees && this.degrees.steps.length > HOME_ROW.length) {
+        // Page by a home row of degrees; stop before the row falls silent.
+        const previous = this.degreeOffset;
+        this.degreeOffset += lower === "z" ? -HOME_ROW.length : HOME_ROW.length;
+        const clamped = HOME_ROW.every(
+          (key) => this.pitchFor(key) === undefined,
+        );
+        if (clamped) this.degreeOffset = previous;
+        return { type: "octave", base: this.base, clamped };
+      }
       const wanted = this.base + (lower === "z" ? -12 : 12);
+      const previous = this.base;
       this.base = clampBase(wanted);
+      // Degree mode moves a period; stop before the home row falls silent.
+      if (
+        this.degrees &&
+        HOME_ROW.every((key) => this.pitchFor(key) === undefined)
+      )
+        this.base = previous;
       return { type: "octave", base: this.base, clamped: wanted !== this.base };
     }
     if (lower === "c" || lower === "v") {
@@ -429,10 +567,15 @@ export function stripCells(
   lit: ReadonlySet<string>,
   labels: ReadonlyMap<number, string> = new Map(),
 ): StripCell[] {
-  return STRIP_ORDER.map((key) => {
-    const pitch = keyboard.pitchFor(key)!;
+  const order = keyboard.degrees ? HOME_ROW : STRIP_ORDER;
+  return order.map((key) => {
+    const pitch = keyboard.pitchFor(key);
     const name =
-      labels.size > 0 ? (labels.get(pitch) ?? "·") : pitchName(pitch);
+      pitch === undefined
+        ? "·"
+        : labels.size > 0
+          ? (labels.get(pitch) ?? "·")
+          : pitchName(pitch);
     return {
       key,
       label: name,

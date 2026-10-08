@@ -743,25 +743,65 @@ Precedence with the synth: a note's settings override the track's synth. A note'
 
 Menu: **Sound › performance** has glide time and mode, sustain pedal (off or every bar), velocity curve, humanize timing, velocity and length, and new take; the loop stages them for A/B like any other sound change. Agent: `set_expression` (articulation, glide, bend, vibrato and humanize over note ids or a beat range) and `set_performance` (track glide, pedal, velocity curve and humanize). SDK (1.15.0): `note("C4", 0, 1, 0.8, { art: "staccato", glide: 0.05, bend: [[0, -200], [0.25, 0]], vibrato: { rate: 5.5, depth: 30 }, humanize: { timing: 10 } })`, `expr(notes, { art: "ghost" })` for many notes, and `track({ glide: 0.08, pedal: [[0, "down"], [4, "up"]], velocityCurve: "soft", humanize: { timing: 8, seed: 7 } })`.
 
+## Tunings and scales
+
+Every project plays in 12-tone equal temperament at A4 = 440 Hz until it says otherwise. A song tuning, a track tuning or a note's cents change only the frequencies; notes stay MIDI keys, so editing, chords, play mode and exports work the same. A project without any of these renders byte-identically to 0.4.
+
+Tunings (`core/tuning.ts`). A tuning is one table (`edo: 19`, `ratios: ["9/8", "5/4", …, "2/1"]`, `cents: [231, 474, …, 1200]`, a Scala `scl` file, or a library `name`) plus `ref` (the 12-TET A4 in Hz, default 440, that fixes the root key's pitch), `root` (the key of degree 0) and `map` (`linear` or `nearest`). The last table entry is the period, usually 1200 cents (2/1).
+
+- The library: `12-tet`, `19-edo`, `24-edo`, `31-edo`, `pythagorean`, `just` (5-limit), `7-limit`, `well-tuned-piano` (La Monte Young's 7-limit key map from E♭, after Kyle Gann's published ratios), `pelog` and `slendro` (Kunst's and Surjodiningrat's averages), `nyamaropa` (a Shona mbira after Berliner), `hindustani` (twelve just svaras), `shruti` (the 22 shrutis), maqam and dastgah tables (`rast`, `bayati`, `saba`, `sikah`, `huzam`, `shur`, `homayoun`, `chahargah`, `segah`, `nava`) and raga tables (`yaman`, `bhairav`, `kafi`, `bhairavi`, `todi`, `marwa`, `darbari`, `malkauns` and more, each built from the raga's own svaras over 5-limit defaults). `tuning list` shows each one with a line about it. The gamelan, mbira, maqam and raga tables are marked approximate: every gamelan and every mbira is tuned differently, and maqam and raga intonation varies by tradition and performer.
+- Anchoring follows Scala and Surge's tuning library: the root key sounds at its 12-TET frequency under `ref`, and the table counts up from it. So `ref` is the 12-TET A4 that fixes the root, and A4 itself sounds at exactly `ref` only when the root is an A (in `just` from C, A4 is 5/3 above C4, about 436 Hz at ref 440). For an exact reference key and frequency, use a `.kbm` keyboard mapping. The root defaults to the library tuning's own (E♭ for the Well-Tuned Piano), else the song key's tonic in octave 4, else C4.
+- Mapping. Twelve-step tables retune the twelve keys. Other sizes default to `linear`, one key per step, as Scala, Surge and Ableton's tuning system do (19-EDO puts the octave 19 keys up). `map: "nearest"` keeps the piano layout instead and plays each key at the nearest table pitch, which suits pentatonic gamelan tables on a normal keyboard.
+- Frequencies at or above 20 kHz count as unmapped keys and stay silent, so a coarse table (`edo: 1`) cannot alias at the top of the keyboard.
+- Scala. `tuning scl tunings/slendro.scl [kbm tunings/white.kbm]` copies a file from outside the project into `tunings/` and stores the path. The `.scl` parser follows the Scala specification: `!` comments, a description line, the count, then one pitch per line (a period means cents, otherwise a ratio or integer), the 1/1 implicit and the last pitch the period. A `.kbm` keyboard mapping (size, first and last key, middle key, reference key and frequency, octave degree, then the map with `x` for unmapped keys) overrides `ref` and `root`. Bad files are refused with a line number.
+- Track tuning overrides the song's field by field: a track with its own table uses it, and `ref`, `root` and `map` fall back to the song's. Drum kits ignore tunings.
+- Note cents: `note("E4-14c", 0)`, `add E4-14c at 0` or `cents n3 -14` give one note a static offset of up to ±1200 cents on top of any tuning.
+
+Scales (`core/chords.ts`). The song key string now names any scale: `"D dorian"`, `"A harmonic-minor"`, `"E hijaz"`, `"C yaman"`, `"C messiaen-3"`. The library has the church modes, harmonic and melodic minor, phrygian dominant, major and minor pentatonic, blues and major blues, the maqamat `hijaz`, `bayati`, `rast`, `saba`, `kurd`, `nahawand` and `nikriz`, the dastgahs `shur`, `homayoun`, `chahargah`, `segah` and `nava`, the neutral-third maqamat `sikah` and `huzam`, common Hindustani ragas (`yaman`, `bhairav`, `kafi`, `bhairavi`, `asavari`, `khamaj`, `todi`, `purvi`, `marwa`, `darbari`, `malkauns`, `bhupali`, `durga`) by their thaat or aroha notes, and Messiaen's seven modes of limited transposition. Every existing key string reads as before. Quarter-tone scales (Bayati, Rast, Saba) name their half-flat degrees; setting such a scale suggests the matching library tuning so they sound.
+
+Chords. The chord engine stays twelve-tone: a scale outside the seven diatonic modes uses the nearest diatonic mode for key-mode chords. In a twelve-key tuning chords keep their keys (so in `just` they sound pure); in a linear non-12 tuning such as 19-EDO, the chord tools and play-mode chord phrases move each written pitch to the key that sounds nearest, so a C major triad becomes steps 0, 6 and 11.
+
+Play mode. `i` (or `/play degrees`) toggles scale-degree mapping: the home row `A S D F G H J K L ; '` plays consecutive degrees of the song scale, or every step of a linear non-12 tuning (the nearest step to each scale note when a key is set), and the upper row is off. When a tuning has more steps than the home row (19- or 31-EDO with no key), `Z`/`X` page by eleven degrees instead of a period, so every step is reachable. `/play chromatic` turns it back off. The header shows the scale and tuning.
+
+Highway. A note that sounds more than half a cent away from 12-TET shows a compact cents tag (`+14`, `−32`) after its label when there is room. In a twelve-key table the tag is measured from the note's own lane. In a linear non-12 table (19-EDO, slendro) the lane is only the key, so the tag names the 12-TET pitch it is measured from (`D#−47`, or `C` when it sounds right on it), and lane labels mark the tuning's periods (every 19 keys from the root) instead of every C.
+
+Commands and menu.
+
+| Command                                     | Does                                                   |
+| ------------------------------------------- | ------------------------------------------------------ |
+| `tuning <name>` · `edo <n>` · `off`         | song tuning (`off` is 12-TET)                          |
+| `tuning ratios 9/8 5/4 … 2/1` · `cents …`   | a custom table                                         |
+| `tuning scl <file> [kbm <file>]`            | a Scala scale and optional keyboard mapping            |
+| `tuning ref <hz>` · `root <note>` · `map …` | reference pitch, root key, `linear` or `nearest`       |
+| `tuning track <…>` · `track off`            | the focused track's own tuning; `off` follows the song |
+| `tuning list` · `scale list`                | the libraries                                          |
+| `scale [<tonic>] <name>`                    | the song key and scale (`scale D hijaz`)               |
+| `cents <id> <±c>`                           | detune one note                                        |
+
+The menu has the same in Project › tuning & scale (song tuning, ref, root, map, equal steps, ratios, cents, Scala file, keyboard map, scale and tonic; `/menu tuning` jumps there) and Sound › tuning (the track's, showing inherited song values as `· song`). The Chords tonic row keeps a library scale (`D hijaz` stays hijaz). Agent: `set_tuning {target?, name? | edo? | ratios? | cents? | scl?, kbm?, ref?, root?, map?, off?}` and `set_scale {tonic?, scale}` run the same commands, `add_notes` and `update_notes` take an optional `cents` per note (0 clears it), and the agent brief carries the song and track tunings and a `cents` column when a focused note has one. SDK 1.16.0: `song({ tuning })`, `track({ tuning })` (a name string or an object), and pitch strings with a cents suffix (`note("E4-14c", 0)`, `seq("C4 E4-14c G4+2c")`).
+
+Rendering. Synth and wavetable voices start at the tuned frequency; keyed samplers repitch by the ratio between the tuned and the 12-TET frequency, and one-shot samplers apply note cents only. Live playback, audition and export use the same table, so what you hear is what renders.
+
 ## Play mode (computer keyboard)
 
 `Ctrl-P` or `/play` turns the computer keyboard into a piano for the focused track, using the "musical typing" layout GarageBand, Logic, BandLab, FL Studio and Ableton share. `Esc` or `/play off` leaves it and every normal binding is back. Typing `/` starts a slash command without leaving the mode (`/click 40%`, `/play off`).
 
-| Key                     | Does                                                               |
-| ----------------------- | ------------------------------------------------------------------ |
-| `A S D F G H J K L ; '` | white keys C D E F G A B C D E F from the base octave              |
-| `W E T Y U O P`         | black keys C♯ D♯ F♯ G♯ A♯ C♯ D♯ (none on `R` or `I`, like a piano) |
-| `Z` / `X`               | octave down / up (clamped to the score's pitch range)              |
-| `C` / `V`               | velocity down / up in steps of 16 (1–127, shown in the header)     |
-| Shift + note            | sustained note: rings until a plain key or `Tab`                   |
-| `Tab`                   | sustain pedal latch on/off (off releases every sustained note)     |
-| `R`                     | record arm on/off                                                  |
-| `Shift-R`               | replace: bars you play over are cleared first (default: overdub)   |
-| `M`                     | click on/off                                                       |
-| `Space`                 | play/stop; with record armed and stopped, counts in, then records  |
-| `?`                     | the play-mode keys and current settings (any key closes)           |
-| `/`                     | type a slash command without leaving (`/click 40%`)                |
-| `Esc`                   | leave play mode                                                    |
+| Key                     | Does                                                                     |
+| ----------------------- | ------------------------------------------------------------------------ |
+| `A S D F G H J K L ; '` | white keys C D E F G A B C D E F from the base octave                    |
+| `W E T Y U O P`         | black keys C♯ D♯ F♯ G♯ A♯ C♯ D♯ (none on `R` or `I`, like a piano)       |
+| `Z` / `X`               | octave down / up (clamped to the score's pitch range)                    |
+| `C` / `V`               | velocity down / up in steps of 16 (1–127, shown in the header)           |
+| Shift + note            | sustained note: rings until a plain key or `Tab`                         |
+| `Tab`                   | sustain pedal latch on/off (off releases every sustained note)           |
+| `R`                     | record arm on/off                                                        |
+| `Shift-R`               | replace: bars you play over are cleared first (default: overdub)         |
+| `M`                     | click on/off                                                             |
+| `I`                     | scale-degree keys on/off (see [Tunings and scales](#tunings-and-scales)) |
+| `Space`                 | play/stop; with record armed and stopped, counts in, then records        |
+| `?`                     | the play-mode keys and current settings (any key closes)                 |
+| `/`                     | type a slash command without leaving (`/click 40%`)                      |
+| `Esc`                   | leave play mode                                                          |
 
 Recording keeps each note's velocity from `C`/`V`. Sustain is recorded the way Logic's Musical Typing records its `Tab` sustain key: as pedal events (`down` when `Tab` latches or Shift starts holding, `up` when it lets go) on the track, at the playhead and not quantized, while the notes keep the length the key was held. Terminals report key-down only, so `Tab` latches rather than holds. A chord-mode press keeps its held length on its voices instead.
 

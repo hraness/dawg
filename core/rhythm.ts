@@ -230,7 +230,7 @@ function sameNotes(
 ): boolean {
   if (actual.length !== expected.length) return false;
   const key = (note: Note) =>
-    `${note.pitch}|${note.startTick}|${note.durationTicks}|${note.velocity}`;
+    `${note.pitch}|${note.startTick}|${note.durationTicks}|${note.velocity}|${note.cents ?? 0}`;
   const want = new Map<string, number>();
   for (const note of expected)
     want.set(key(note), (want.get(key(note)) ?? 0) + 1);

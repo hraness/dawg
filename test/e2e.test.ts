@@ -394,7 +394,12 @@ test.skipIf(!supported)(
       "fork header",
       () => four.vt.text(),
     );
-    expect(four.vt.text()).toContain("forked · night drive 2");
+    // The card can draw a frame after the header under load.
+    await until(
+      () => four.vt.text().includes("forked · night drive 2"),
+      "fork card",
+      () => four.vt.text(),
+    );
     const forked = await status(four);
     expect(forked.name).toBe("night drive 2");
     expect(forked.digest).toBe(replayed.digest);

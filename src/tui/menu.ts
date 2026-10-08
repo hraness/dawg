@@ -83,10 +83,19 @@ import {
   PERFORM_MODES,
   PROGRESSION_PRESETS,
   PROGRESSION_STYLES,
+  SCALE_NAMES,
   SPREADS,
   keyName,
   parseKey,
 } from "../../core/chords.ts";
+import {
+  TUNING_LIMITS,
+  TUNING_MAPS,
+  TUNING_NAMES,
+  describeTuning,
+  type Tuning,
+} from "../../core/tuning.ts";
+import { rootName, tuningStepsText } from "../commands/tuning.ts";
 import {
   ARP_RATES,
   CHORD_MODES,
@@ -423,12 +432,31 @@ const SECTION_ALIASES: Readonly<Record<string, readonly string[]>> = {
   tempo: ["project", "tempo"],
   meter: ["project", "tempo"],
   time: ["project", "tempo"],
+  tuning: ["project", "tuning"],
+  scale: ["project", "tuning"],
 };
 
 /** Sound: instrument and voice first, then the sound browser. */
 function soundSectionNodes(context: MenuContext): MenuNode[] {
+  const track = focused(context);
+  const tuning: MenuNode[] =
+    track && !isDrumInstrument(track.instrument)
+      ? [
+          {
+            kind: "menu",
+            id: "track-tuning",
+            label: "tuning",
+            detail: track.tuning
+              ? tuningLabel(track.tuning)
+              : `song · ${tuningLabel(context.score.tuning)}`,
+            help: "this track's tuning, or follow the song",
+            build: trackTuningNodes,
+          },
+        ]
+      : [];
   return [
     ...parameterNodes(context),
+    ...tuning,
     {
       kind: "menu",
       id: "performance",
@@ -500,7 +528,8 @@ function chordNodes(context: MenuContext): MenuNode[] {
   const chords = context.chords ?? defaultChordSettings();
   const key = parseKey(context.score.key ?? undefined);
   const tonic = key ? keyName(key).split(" ")[0]! : "C";
-  const mode = key?.mode ?? "major";
+  // A library scale (D hijaz, C yaman) survives a tonic change.
+  const mode: string = key?.scale ?? key?.mode ?? "major";
   const presets = PROGRESSION_PRESETS.map((preset) => preset.name);
   return [
     {
@@ -522,9 +551,9 @@ function chordNodes(context: MenuContext): MenuNode[] {
     {
       kind: "choice",
       label: "key mode",
-      help: "major, minor or a church mode",
+      help: "major, minor, a church mode or any library scale",
       value: mode,
-      options: MODE_NAMES,
+      options: [...MODE_NAMES, ...SCALE_NAMES],
       command: (option) => `key ${tonic} ${option}`,
     },
     {
@@ -1566,7 +1595,224 @@ function transportNodes(context: MenuContext): MenuNode[] {
       options: ["0", "1", "2"],
       command: (option) => `/count-in ${option}`,
     },
+    {
+      kind: "menu",
+      id: "tuning",
+      label: "tuning & scale",
+      detail: `${tuningLabel(score.tuning)} · ${keyLabel(score.key)}`,
+      help: "the song tuning (12-TET, EDOs, just, gamelan, Scala) and scale",
+      build: songTuningNodes,
+    },
   ];
+}
+
+// ── tuning ────────────────────────────────────────────────────────────
+
+/** Short name of a tuning for a choice row: its library name or table. */
+function tuningLabel(tuning: Tuning | undefined): string {
+  if (!tuning) return "12-tet";
+  if (tuning.name) return tuning.name;
+  if (tuning.edo) return `${tuning.edo}-edo`;
+  if (tuning.scl) return tuning.scl.split("/").at(-1)!;
+  if (tuning.ratios || tuning.cents) return "custom";
+  return "12-tet";
+}
+
+function keyLabel(key: string | null | undefined): string {
+  const parsed = parseKey(key ?? undefined);
+  return parsed ? keyName(parsed) : "no key";
+}
+
+const ROOT_OPTIONS = [
+  "auto",
+  "C4",
+  "Db4",
+  "D4",
+  "Eb4",
+  "E4",
+  "F4",
+  "Gb4",
+  "G4",
+  "Ab4",
+  "A4",
+  "Bb4",
+  "B4",
+] as const;
+
+/** Rows shared by the song and track tuning screens. */
+function tuningRows(
+  tuning: Tuning | undefined,
+  prefix: string,
+  first: MenuNode,
+  song?: Tuning,
+): MenuNode[] {
+  // A track screen shows the song's ref and root where the track has none.
+  const ref = tuning?.ref ?? song?.ref;
+  const refFrom =
+    tuning?.ref === undefined && ref !== undefined ? " · song" : "";
+  const root = tuning?.root ?? song?.root;
+  const rootFrom =
+    tuning?.root === undefined && root !== undefined ? " · song" : "";
+  const nodes: MenuNode[] = [
+    first,
+    {
+      kind: "info",
+      label: "steps (cents)",
+      value: tuningStepsText(tuning),
+      help: describeTuning(tuning),
+    },
+    {
+      kind: "number",
+      label: "reference A4",
+      help: "12-TET A4 in Hz; the root sounds at its 12-TET pitch from it · x: 440",
+      value: ref,
+      off: "440 Hz",
+      start: 440,
+      min: TUNING_LIMITS.minRefHz,
+      max: TUNING_LIMITS.maxRefHz,
+      step: linear(1, TUNING_LIMITS.minRefHz, TUNING_LIMITS.maxRefHz),
+      format: (value) => `${num(value)} Hz${refFrom}`,
+      command: (value) => `${prefix} ref ${num(value)}`,
+      reset: `${prefix} ref off`,
+    },
+    {
+      kind: "choice",
+      label: "root",
+      help: song
+        ? `the key that plays degree 0; auto follows the song tuning's root${rootFrom ? " (now the song's)" : ""}`
+        : "the key that plays degree 0; auto follows the song key",
+      value: rootName(root),
+      options: ROOT_OPTIONS,
+      command: (option) => `${prefix} root ${option}`,
+    },
+    {
+      kind: "choice",
+      label: "keys",
+      help: "linear: one key per step (Scala) · nearest: each of 12 keys to its nearest step",
+      value: tuning?.map ?? "linear",
+      options: TUNING_MAPS,
+      command: (option) => `${prefix} map ${option}`,
+    },
+    {
+      kind: "entry",
+      label: "equal steps",
+      value: tuning?.edo ? String(tuning.edo) : "",
+      placeholder: "steps per octave, e.g. 22",
+      command: (text) =>
+        /^\d+$/.test(text.trim()) ? `${prefix} edo ${text.trim()}` : undefined,
+      example: `${prefix} edo 22`,
+      help: "n equal divisions of the octave",
+    },
+    {
+      kind: "entry",
+      label: "Scala file",
+      value: tuning?.scl ?? "",
+      placeholder: "path to a .scl file",
+      command: (text) =>
+        text.trim() ? `${prefix} scl ${text.trim()}` : undefined,
+      example: `${prefix} scl tunings/meantone.scl`,
+      help: "a Scala scale; files outside the project are copied into tunings/",
+    },
+    {
+      kind: "entry",
+      label: "ratios",
+      value: tuning?.ratios?.join(" ") ?? "",
+      placeholder: "just ratios, the last is the period",
+      command: (text) =>
+        text.trim() ? `${prefix} ratios ${text.trim()}` : undefined,
+      example: `${prefix} ratios 9/8 5/4 3/2 2/1`,
+      help: "a just-intonation table: ratios for degrees 1..n",
+    },
+    {
+      kind: "entry",
+      label: "cents",
+      value: tuning?.cents && !tuning.scl ? tuning.cents.join(" ") : "",
+      placeholder: "cents, the last is the period",
+      command: (text) =>
+        /^[-+\d.\s]+$/.test(text.trim())
+          ? `${prefix} cents ${text.trim()}`
+          : undefined,
+      example: `${prefix} cents 231 474 717 955 1200`,
+      help: "a table in cents for degrees 1..n",
+    },
+    {
+      kind: "entry",
+      label: "keyboard map (.kbm)",
+      value: tuning?.kbm ?? "",
+      placeholder: "path to a .kbm file, or off",
+      command: (text) =>
+        text.trim() ? `${prefix} kbm ${text.trim()}` : undefined,
+      example: `${prefix} kbm tunings/white.kbm`,
+      help: "a Scala keyboard map: which key plays which degree; off removes it",
+    },
+  ];
+  return nodes;
+}
+
+/** Project › tuning & scale: the song tuning and the song scale. */
+function songTuningNodes(context: MenuContext): MenuNode[] {
+  const score = context.score;
+  const key = parseKey(score.key ?? undefined);
+  const scale = key ? (key.scale ?? key.mode) : "major";
+  const tonic = key ? keyName(key).split(" ")[0]! : "C";
+  return [
+    ...tuningRows(score.tuning, "tuning", {
+      kind: "choice",
+      label: "tuning",
+      help: "the song tuning; every track without its own follows it",
+      value: tuningLabel(score.tuning),
+      options: TUNING_NAMES,
+      command: (option) =>
+        option === "12-tet" ? "tuning off" : `tuning ${option}`,
+    }),
+    {
+      kind: "choice",
+      label: "scale",
+      help: "the song scale: modes, minors, pentatonics, maqam, ragas, Messiaen",
+      value: scale,
+      options: [...MODE_NAMES, ...SCALE_NAMES],
+      command: (option) => `scale ${option}`,
+    },
+    {
+      kind: "choice",
+      label: "tonic",
+      help: "the song key's tonic; keeps the scale",
+      value: tonic,
+      options: TONICS,
+      command: (option) => `scale ${option} ${scale}`,
+    },
+    {
+      kind: "action",
+      label: "list tunings",
+      command: "tuning list",
+      help: "every library tuning, by family",
+    },
+    {
+      kind: "action",
+      label: "list scales",
+      command: "scale list",
+      help: "every mode and scale, by family",
+    },
+  ];
+}
+
+/** Sound › tuning: the focused track's own tuning, or the song's. */
+function trackTuningNodes(context: MenuContext): MenuNode[] {
+  const track = focused(context);
+  return tuningRows(
+    track?.tuning,
+    "tuning track",
+    {
+      kind: "choice",
+      label: "tuning",
+      help: "song: follow the song tuning · or a tuning for this track only",
+      value: track?.tuning ? tuningLabel(track.tuning) : "song",
+      options: ["song", ...TUNING_NAMES],
+      command: (option) =>
+        option === "song" ? "tuning track off" : `tuning track ${option}`,
+    },
+    context.score.tuning ?? {},
+  );
 }
 
 // ── controller ────────────────────────────────────────────────────────

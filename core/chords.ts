@@ -410,6 +410,8 @@ export const MODES = Object.freeze({
   mixolydian: [0, 2, 4, 5, 7, 9, 10],
   locrian: [0, 1, 3, 5, 6, 8, 10],
   "harmonic-minor": [0, 2, 3, 5, 7, 8, 11],
+  "melodic-minor": [0, 2, 3, 5, 7, 9, 11],
+  "phrygian-dominant": [0, 1, 4, 5, 7, 8, 10],
 } as const);
 export type ModeName = keyof typeof MODES;
 export const MODE_NAMES = Object.keys(MODES) as ModeName[];
@@ -432,25 +434,302 @@ const MODE_ALIASES: Readonly<Record<string, ModeName>> = Object.freeze({
   "harmonic-minor": "harmonic-minor",
   "harmonic minor": "harmonic-minor",
   harmonic: "harmonic-minor",
+  "melodic-minor": "melodic-minor",
+  "melodic minor": "melodic-minor",
+  melodic: "melodic-minor",
+  "jazz minor": "melodic-minor",
+  "phrygian-dominant": "phrygian-dominant",
+  "phrygian dominant": "phrygian-dominant",
+  freygish: "phrygian-dominant",
+  spanish: "phrygian-dominant",
+  ajam: "major",
+  mahur: "major",
+  bilawal: "major",
 });
 
-export type Key = Readonly<{ tonic: number; mode: ModeName }>;
+export type ScaleFamily =
+  "pentatonic" | "blues" | "maqam" | "dastgah" | "raga" | "messiaen";
 
 /**
- * Parse a key: `C`, `c major`, `Am`, `a minor`, `F# dorian`, `Eb mixo`.
- * Accepts the `<note> <mode>` form `core/key.ts` writes.
+ * Scales beyond the chord modes, for keys such as `D bayati`, `C yaman` or
+ * `C messiaen-3`. `steps` are semitones above the tonic and may be
+ * fractional (a quarter tone is .5); `mode` is the seven-note mode the
+ * chord engine harmonizes with (the closest one; see DAWG.md). A raga's
+ * `intonation` is each step's traditional just pitch in cents (shruti
+ * offsets), which its named tuning applies (`tuning yaman`): Pythagorean
+ * ati-komal re and dha for Bhairavi, Bhairav, Purvi and Todi, the high
+ * tivra ma (729/512) for Yaman, 9/5 komal ni for Kafi, after Daniélou and
+ * Jairazbhoy. Maqam and dastgah quarter tones follow the 24-tone convention;
+ * Segah and Sikah start on a half-flat note, so their tonic is the key.
+ */
+export type ScaleInfo = Readonly<{
+  steps: readonly number[];
+  mode: ModeName;
+  family: ScaleFamily;
+  intonation?: readonly number[];
+  aliases?: readonly string[];
+}>;
+
+export const SCALES = Object.freeze({
+  "major-pentatonic": {
+    steps: [0, 2, 4, 7, 9],
+    mode: "major",
+    family: "pentatonic",
+    aliases: ["pentatonic", "major pentatonic", "pent"],
+  },
+  "minor-pentatonic": {
+    steps: [0, 3, 5, 7, 10],
+    mode: "minor",
+    family: "pentatonic",
+    aliases: ["minor pentatonic", "m pentatonic", "min pentatonic"],
+  },
+  blues: {
+    steps: [0, 3, 5, 6, 7, 10],
+    mode: "minor",
+    family: "blues",
+    aliases: ["minor blues"],
+  },
+  "major-blues": {
+    steps: [0, 2, 3, 4, 7, 9],
+    mode: "major",
+    family: "blues",
+    aliases: ["major blues"],
+  },
+  hijaz: {
+    steps: [0, 1, 4, 5, 7, 8, 10],
+    mode: "phrygian-dominant",
+    family: "maqam",
+  },
+  bayati: {
+    steps: [0, 1.5, 3, 5, 7, 8, 10],
+    mode: "phrygian",
+    family: "maqam",
+  },
+  rast: { steps: [0, 2, 3.5, 5, 7, 9, 10.5], mode: "major", family: "maqam" },
+  saba: { steps: [0, 1.5, 3, 4, 7, 8, 10], mode: "phrygian", family: "maqam" },
+  kurd: { steps: [0, 1, 3, 5, 7, 8, 10], mode: "phrygian", family: "maqam" },
+  nahawand: {
+    steps: [0, 2, 3, 5, 7, 8, 11],
+    mode: "harmonic-minor",
+    family: "maqam",
+  },
+  sikah: {
+    steps: [0, 1.5, 3.5, 5.5, 7, 8.5, 10.5],
+    mode: "phrygian",
+    family: "maqam",
+    aliases: ["sika"],
+  },
+  huzam: {
+    steps: [0, 1.5, 3.5, 4.5, 7.5, 8.5, 10.5],
+    mode: "phrygian",
+    family: "maqam",
+    aliases: ["houzam"],
+  },
+  nikriz: { steps: [0, 2, 3, 6, 7, 9, 10], mode: "dorian", family: "maqam" },
+  shur: {
+    steps: [0, 1.5, 3, 5, 7, 8, 10],
+    mode: "phrygian",
+    family: "dastgah",
+  },
+  homayoun: {
+    steps: [0, 1.5, 4, 5, 7, 8, 10],
+    mode: "phrygian-dominant",
+    family: "dastgah",
+    aliases: ["homayun"],
+  },
+  chahargah: {
+    steps: [0, 1.5, 4, 5, 7, 8.5, 11],
+    mode: "phrygian-dominant",
+    family: "dastgah",
+    aliases: ["chahar-gah"],
+  },
+  segah: {
+    steps: [0, 1.5, 3.5, 5, 6.5, 8.5, 10.5],
+    mode: "phrygian",
+    family: "dastgah",
+    aliases: ["sehgah", "se-gah"],
+  },
+  nava: {
+    steps: [0, 2, 3.5, 5, 7, 8, 10],
+    mode: "minor",
+    family: "dastgah",
+  },
+  yaman: {
+    steps: [0, 2, 4, 6, 7, 9, 11],
+    mode: "lydian",
+    family: "raga",
+    intonation: [0, 203.91, 386.31, 611.73, 701.96, 884.36, 1088.27],
+    aliases: ["kalyan", "yaman kalyan"],
+  },
+  bhairav: {
+    steps: [0, 1, 4, 5, 7, 8, 11],
+    mode: "phrygian-dominant",
+    family: "raga",
+    intonation: [0, 90.22, 386.31, 498.04, 701.96, 792.18, 1088.27],
+  },
+  kafi: {
+    steps: [0, 2, 3, 5, 7, 9, 10],
+    mode: "dorian",
+    family: "raga",
+    intonation: [0, 203.91, 315.64, 498.04, 701.96, 884.36, 1017.6],
+  },
+  bhairavi: {
+    steps: [0, 1, 3, 5, 7, 8, 10],
+    mode: "phrygian",
+    family: "raga",
+    intonation: [0, 90.22, 294.13, 498.04, 701.96, 792.18, 996.09],
+  },
+  asavari: {
+    steps: [0, 2, 3, 5, 7, 8, 10],
+    mode: "minor",
+    family: "raga",
+    intonation: [0, 203.91, 315.64, 498.04, 701.96, 813.69, 996.09],
+  },
+  khamaj: {
+    steps: [0, 2, 4, 5, 7, 9, 10],
+    mode: "mixolydian",
+    family: "raga",
+    intonation: [0, 203.91, 386.31, 498.04, 701.96, 884.36, 996.09],
+  },
+  todi: {
+    steps: [0, 1, 3, 6, 7, 8, 11],
+    mode: "phrygian",
+    family: "raga",
+    intonation: [0, 95, 294, 606, 702, 792, 1107],
+  },
+  purvi: {
+    steps: [0, 1, 4, 6, 7, 8, 11],
+    mode: "phrygian-dominant",
+    family: "raga",
+    intonation: [0, 90.22, 386.31, 590.22, 701.96, 792.18, 1088.27],
+  },
+  marwa: {
+    steps: [0, 1, 4, 6, 9, 11],
+    mode: "lydian",
+    family: "raga",
+    intonation: [0, 111.73, 386.31, 590.22, 884.36, 1088.27],
+  },
+  darbari: {
+    steps: [0, 2, 3, 5, 7, 8, 10],
+    mode: "minor",
+    family: "raga",
+    intonation: [0, 203.91, 294.13, 498.04, 701.96, 792.18, 996.09],
+    aliases: ["darbari kanada"],
+  },
+  malkauns: {
+    steps: [0, 3, 5, 8, 10],
+    mode: "minor",
+    family: "raga",
+    intonation: [0, 315.64, 498.04, 813.69, 996.09],
+  },
+  bhupali: {
+    steps: [0, 2, 4, 7, 9],
+    mode: "major",
+    family: "raga",
+    intonation: [0, 203.91, 386.31, 701.96, 884.36],
+  },
+  durga: {
+    steps: [0, 2, 5, 7, 9],
+    mode: "major",
+    family: "raga",
+    intonation: [0, 203.91, 498.04, 701.96, 884.36],
+  },
+  "messiaen-1": {
+    steps: [0, 2, 4, 6, 8, 10],
+    mode: "lydian",
+    family: "messiaen",
+    aliases: ["whole-tone", "whole tone", "wholetone"],
+  },
+  "messiaen-2": {
+    steps: [0, 1, 3, 4, 6, 7, 9, 10],
+    mode: "mixolydian",
+    family: "messiaen",
+    aliases: ["octatonic", "diminished", "half-whole"],
+  },
+  "messiaen-3": {
+    steps: [0, 2, 3, 4, 6, 7, 8, 10, 11],
+    mode: "minor",
+    family: "messiaen",
+  },
+  "messiaen-4": {
+    steps: [0, 1, 2, 5, 6, 7, 8, 11],
+    mode: "harmonic-minor",
+    family: "messiaen",
+  },
+  "messiaen-5": {
+    steps: [0, 1, 5, 6, 7, 11],
+    mode: "lydian",
+    family: "messiaen",
+  },
+  "messiaen-6": {
+    steps: [0, 2, 4, 5, 6, 8, 10, 11],
+    mode: "major",
+    family: "messiaen",
+  },
+  "messiaen-7": {
+    steps: [0, 1, 2, 3, 5, 6, 7, 8, 9, 11],
+    mode: "harmonic-minor",
+    family: "messiaen",
+  },
+} as const satisfies Record<string, ScaleInfo>);
+export type ScaleName = keyof typeof SCALES;
+export const SCALE_NAMES = Object.keys(SCALES) as ScaleName[];
+
+const SCALE_ALIASES: Readonly<Record<string, ScaleName>> = (() => {
+  const aliases: Record<string, ScaleName> = {};
+  for (const name of SCALE_NAMES) {
+    const info: ScaleInfo = SCALES[name];
+    aliases[name] = name;
+    aliases[name.replace(/-/g, " ")] = name;
+    for (const alias of info.aliases ?? []) aliases[alias] = name;
+  }
+  return Object.freeze(aliases);
+})();
+
+/** The library scale named `text` (case and `-`/space insensitive). */
+export function scaleNamed(text: string): ScaleName | undefined {
+  const word = text.trim().toLowerCase().replace(/\s+/g, " ");
+  return SCALE_ALIASES[word] ?? SCALE_ALIASES[word.replace(/ /g, "-")];
+}
+
+/**
+ * A key: a tonic and the seven-note `mode` the chord engine uses, plus the
+ * library `scale` when the key names one (`D bayati`, `C yaman`).
+ */
+export type Key = Readonly<{
+  tonic: number;
+  mode: ModeName;
+  scale?: ScaleName;
+}>;
+
+/**
+ * Parse a key: `C`, `c major`, `Am`, `a minor`, `F# dorian`, `Eb mixo`,
+ * `D bayati`, `C messiaen-3`. Accepts the `<note> <mode>` form
+ * `core/key.ts` writes.
  */
 export function parseKey(text: string | null | undefined): Key | undefined {
   if (typeof text !== "string" || text.length > 40) return undefined;
   const match = text
     .trim()
-    .match(/^([a-gA-G])(#|b|♯|♭)?\s*(m(?![a-z])|[a-zA-Z][a-zA-Z -]*)?$/);
+    .match(/^([a-gA-G])(#|b|♯|♭)?\s*(m(?![a-z])|[a-zA-Z][a-zA-Z0-9 -]*)?$/);
   if (!match) return undefined;
   const tonic = parsePitchClass(`${match[1]}${match[2] ?? ""}`);
+  if (tonic === undefined) return undefined;
   const word = (match[3] ?? "").trim();
   const mode = MODE_ALIASES[word === "m" ? "m" : word.toLowerCase()];
-  if (tonic === undefined || mode === undefined) return undefined;
-  return Object.freeze({ tonic, mode });
+  if (mode !== undefined) return Object.freeze({ tonic, mode });
+  const scale = scaleNamed(word);
+  if (scale === undefined) return undefined;
+  return Object.freeze({ tonic, mode: SCALES[scale].mode, scale });
+}
+
+/**
+ * Steps of the key's whole scale in semitones above the tonic (fractional
+ * for quarter tones): the library scale when the key names one, else the
+ * mode.
+ */
+export function scaleSteps(key: Key): number[] {
+  return [...(key.scale ? SCALES[key.scale].steps : MODES[key.mode])];
 }
 
 /** True when names in the key read better with flats (F, Bb, Eb, d minor…). */
@@ -465,6 +744,8 @@ export function keyUsesFlats(key: Key): boolean {
     minor: 9,
     locrian: 11,
     "harmonic-minor": 9,
+    "melodic-minor": 9,
+    "phrygian-dominant": 4,
   };
   const parent = mod12(key.tonic - parentOffset[key.mode]);
   return [5, 10, 3, 8, 1].includes(parent);
@@ -472,7 +753,7 @@ export function keyUsesFlats(key: Key): boolean {
 
 /** `C major`, `F# dorian`, `Bb minor`. */
 export function keyName(key: Key): string {
-  return `${noteName(key.tonic, keyUsesFlats(key))} ${key.mode}`;
+  return `${noteName(key.tonic, keyUsesFlats(key))} ${key.scale ?? key.mode}`;
 }
 
 /** Pitch classes of the key's scale, tonic first. */

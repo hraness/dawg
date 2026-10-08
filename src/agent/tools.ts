@@ -46,10 +46,12 @@ import { PackError, type PackStore } from "../audio/packs.ts";
 import { RHYTHM_TOOLS } from "./rhythm-tools.ts";
 import { CHORD_TOOLS } from "./chord-tools.ts";
 import { EXPRESSION_TOOLS } from "./expression-tools.ts";
+import { TUNING_TOOLS } from "./tuning-tools.ts";
 import { DRUM_TOOLS } from "./drum-tools.ts";
 import { TIME_TOOLS } from "./time-tools.ts";
 import type { MediaResult, MediaRunContext } from "../media/types.ts";
 import { pitchToMidi } from "./ops.ts";
+import { TUNING_LIMITS } from "../../core/tuning.ts";
 import {
   DRUM_VOICES,
   drumVoicePitch,
@@ -247,6 +249,12 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
                 description: "Length in beats",
               },
               velocity: { type: "number", minimum: 0, maximum: 1 },
+              cents: {
+                type: "number",
+                minimum: -TUNING_LIMITS.maxNoteCents,
+                maximum: TUNING_LIMITS.maxNoteCents,
+                description: "Detune from the tuned pitch (microtones)",
+              },
             },
             required: ["pitch", "start", "duration"],
             additionalProperties: false,
@@ -265,6 +273,10 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
         const start = number(note, "start", { min: 0 });
         const duration = number(note, "duration", { min: 0, exclusive: true });
         const velocity = optionalNumber(note, "velocity", { min: 0, max: 1 });
+        const cents = optionalNumber(note, "cents", {
+          min: -TUNING_LIMITS.maxNoteCents,
+          max: TUNING_LIMITS.maxNoteCents,
+        });
         return {
           type: "addNote",
           note: {
@@ -274,6 +286,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
             durationTicks: Math.max(1, Math.round(duration * tpb)),
             pitch: pitch(note.pitch, `notes[${index}].pitch`),
             velocity: velocity ?? 0.8,
+            ...(cents ? { cents } : {}),
           },
         };
       });
@@ -325,7 +338,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   {
     name: "update_notes",
     description:
-      "Move, resize, transpose, or re-velocity existing notes by id. Times are in beats.",
+      "Move, resize, transpose, re-velocity or detune existing notes by id. Times are in beats.",
     parameters: {
       type: "object",
       properties: {
@@ -346,6 +359,12 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
                 ],
               },
               velocity: { type: "number", minimum: 0, maximum: 1 },
+              cents: {
+                type: "number",
+                minimum: -TUNING_LIMITS.maxNoteCents,
+                maximum: TUNING_LIMITS.maxNoteCents,
+                description: "Detune from the tuned pitch; 0 clears it",
+              },
             },
             required: ["noteId"],
             additionalProperties: false,
@@ -381,6 +400,11 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
             max: 1,
           });
           if (velocity !== undefined) patch.velocity = velocity;
+          const cents = optionalNumber(update, "cents", {
+            min: -TUNING_LIMITS.maxNoteCents,
+            max: TUNING_LIMITS.maxNoteCents,
+          });
+          if (cents !== undefined) patch.cents = cents;
           if (Object.keys(patch).length === 0)
             throw new ToolArgumentError(`updates[${index}] changes nothing`);
           return { type: "updateNote", noteId, patch };
@@ -1354,6 +1378,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   ...RHYTHM_TOOLS,
   ...CHORD_TOOLS,
   ...EXPRESSION_TOOLS,
+  ...TUNING_TOOLS,
   ...DRUM_TOOLS,
   ...TIME_TOOLS,
   ...MEDIA_TOOLS,

@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { stdin, stdout } from "node:process";
@@ -55,6 +56,13 @@ import {
 } from "./commands/expression.ts";
 import { applyFxCommand, parseFxCommand } from "./commands/fx.ts";
 import { applySynthCommand, parseSynthCommand } from "./commands/synth.ts";
+import {
+  applyTuningCommand,
+  importTuningFile,
+  parseTuningCommand,
+  type TuningCommand,
+} from "./commands/tuning.ts";
+import { TuningError, displayTag, resolveTuning } from "../core/tuning.ts";
 import {
   HELP_TOPICS,
   helpText,
@@ -228,6 +236,7 @@ function parsesLocally(text: string): boolean {
     parseSampleCommand,
     parseWavetableCommand,
     parseTimeCommand,
+    parseTuningCommand,
   ].some((parse) => parse(text) !== undefined);
 }
 
@@ -659,16 +668,29 @@ function snapshot(
   beat: number,
   activity?: string,
 ): TrackScoreSnapshot {
+  const focused = value.tracks.find((track) => track.id === requestedTrack);
+  const table =
+    focused && !isDrumInstrument(focused.instrument)
+      ? resolveTuning(value.tuning, focused.tuning, value.key)
+      : undefined;
   const notes = value.notes
     .filter((note) => note.trackId === requestedTrack)
-    .map((note) => ({
-      id: note.id,
-      startBeat: note.startTick / value.ticksPerBeat,
-      durationBeats: note.durationTicks / value.ticksPerBeat,
-      pitch: note.pitch,
-      velocity: note.velocity,
-      muted: value.tracks.find((track) => track.id === requestedTrack)?.muted,
-    }));
+    .map((note) => {
+      const tag =
+        focused && !isDrumInstrument(focused.instrument)
+          ? displayTag(table, note.pitch, note.cents)
+          : undefined;
+      return {
+        id: note.id,
+        startBeat: note.startTick / value.ticksPerBeat,
+        durationBeats: note.durationTicks / value.ticksPerBeat,
+        pitch: note.pitch,
+        velocity: note.velocity,
+        muted: focused?.muted,
+        ...(tag?.cents !== undefined ? { cents: tag.cents } : {}),
+        ...(tag?.name !== undefined ? { centsFrom: tag.name } : {}),
+      };
+    });
   return {
     notes,
     trackName:
@@ -703,6 +725,9 @@ function snapshot(
       value.tracks.find((track) => track.id === requestedTrack),
       notes,
     ),
+    ...(table && table.linear && table.size !== 12
+      ? { tuningPeriod: { size: table.size, root: table.root } }
+      : {}),
     layers:
       tui.highwayView === "all"
         ? highwayLayers(
@@ -1357,11 +1382,19 @@ async function submit(prompt: string): Promise<string | Receipt> {
     tui.openText("tracks · * focused", lines);
     return ok(`${lines.length} track${lines.length === 1 ? "" : "s"}`);
   }
-  const playCommand = command.match(/^\/play(?:\s+(on|off))?$/i);
+  const playCommand = command.match(
+    /^\/play(?:\s+(on|off|degrees|in-key|chromatic))?$/i,
+  );
   if (playCommand) {
     const wanted = playCommand[1]?.toLowerCase();
     if (wanted === "off" || (wanted === undefined && play?.on))
       return exitPlay();
+    if (wanted && wanted !== "on") {
+      const message = playSession().toggleDegrees(wanted !== "chromatic");
+      if (message.startsWith("scale degrees need")) return fail(message);
+      const entered = await enterPlay();
+      return entered.ok ? ok(message) : entered;
+    }
     return enterPlay();
   }
   const clickCommand = command.match(/^\/click(?:\s+(.+))?$/i);
@@ -1478,6 +1511,8 @@ async function submit(prompt: string): Promise<string | Receipt> {
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
   }
+  const tuning = parseTuningCommand(command);
+  if (tuning) return tuningCommand(tuning);
   const synth = parseSynthCommand(command);
   if (synth) {
     if (synth.type !== "synth-list") await materializeDraft();
@@ -1714,6 +1749,9 @@ async function submit(prompt: string): Promise<string | Receipt> {
       ...(typeof parsed.patch.velocity === "number"
         ? { velocity: parsed.patch.velocity }
         : {}),
+      ...(typeof parsed.patch.cents === "number"
+        ? { cents: parsed.patch.cents }
+        : {}),
     };
     const next = applyScoreOperation(score, {
       type: "updateNote",
@@ -1739,6 +1777,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
       ),
       pitch: parsed.pitch,
       velocity: parsed.velocity,
+      ...(parsed.cents ? { cents: parsed.cents } : {}),
     };
     const operation: ScoreOperation = { type: "addNote", note };
     const next = applyScoreOperation(latestScore, operation);
@@ -1842,6 +1881,40 @@ function reportSampleProblems(value: TrackScore): void {
       );
     tickUi();
   });
+}
+
+/** `/tuning …` and `/scale …` (src/commands/tuning.ts). */
+async function tuningCommand(command: TuningCommand): Promise<Receipt> {
+  const projectRoot = process.cwd();
+  if (command.type === "tuning-set") {
+    // Scala files outside the project are copied into tunings/ first.
+    try {
+      const patch = { ...command.patch };
+      if (patch.scl)
+        patch.scl = await importTuningFile(projectRoot, projectRoot, patch.scl);
+      if (patch.kbm)
+        patch.kbm = await importTuningFile(projectRoot, projectRoot, patch.kbm);
+      command = { ...command, patch };
+    } catch (error) {
+      if (error instanceof TuningError)
+        return fail(`tuning · ${error.message}`);
+      throw error;
+    }
+  }
+  if (command.type === "tuning-set" || command.type === "tuning-off")
+    if (command.target === "track") await materializeDraft();
+  const read = (path: string): string | undefined => {
+    try {
+      return readFileSync(join(projectRoot, path), "utf8");
+    } catch {
+      return undefined;
+    }
+  };
+  const result = applyTuningCommand(score, requestedTrack, command, read);
+  if (result.panel) tui.openText(result.panel.title, result.panel.lines);
+  if (result.next && result.kind)
+    await commitScore(result.next, result.kind, result.payload);
+  return result.ok ? ok(result.message) : fail(result.message);
 }
 
 async function sampleCommand(

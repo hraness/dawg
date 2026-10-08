@@ -16,6 +16,7 @@ import {
   pedalStateAt,
   performanceTimingFor,
   performNotes,
+  tunedTiming,
   vibratoAt,
   type PerformedNote,
 } from "./expression.ts";
@@ -386,6 +387,27 @@ describe("performNotes", () => {
     expect(cents(at(700))).toBe(700);
     // A gap means no glide (TB-303 slide only into a tied note).
     expect(detached!.performance).toBeUndefined();
+  });
+
+  test("glides move by the track tuning's interval and note cents", () => {
+    const score = scoreWith({ glide: { time: 0.05, mode: "legato" } }, [
+      { durationTicks: 520 },
+      { startTick: 480, pitch: 61, durationTicks: 480, cents: 10 },
+    ]);
+    const edo = { ...score, tuning: { edo: 19 } } as typeof score;
+    const timing = tunedTiming(TIMING, edo, edo.tracks[0]);
+    expect(timing.keyCents).toBeDefined();
+    const [chain] = performNotes(edo.tracks[0], edo.notes, timing);
+    const cents = chain!.performance!.cents!;
+    // One 19-EDO step (1200 / 19 cents) plus the note's +10 cents.
+    expect(cents(700 * SECONDS_PER_TICK)).toBeCloseTo(1200 / 19 + 10, 6);
+    // No tuning: the timing is untouched and the step is 100 cents.
+    expect(tunedTiming(TIMING, score, score.tracks[0])).toBe(TIMING);
+    const [plain] = performNotes(score.tracks[0], score.notes, TIMING);
+    expect(plain!.performance!.cents!(700 * SECONDS_PER_TICK)).toBeCloseTo(
+      110,
+      6,
+    );
   });
 
   test("a note glide of 0 breaks a legato chain", () => {

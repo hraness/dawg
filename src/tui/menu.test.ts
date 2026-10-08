@@ -247,7 +247,8 @@ describe("edit menu", () => {
       .view(ctx)
       .items.map((row) => row.label.slice(0, 16).trim());
     expect(labels.slice(0, 3)).toEqual(["instrument", "preset", "attack"]);
-    expect(labels.at(-3)).toBe("advanced");
+    expect(labels.at(-4)).toBe("advanced");
+    expect(labels.at(-3)).toBe("tuning");
     expect(labels.at(-2)).toBe("performance");
     expect(labels.at(-1)).toBe("browse sounds");
     select(menu, ctx, "attack");
@@ -272,6 +273,84 @@ describe("edit menu", () => {
       type: "run",
       command: "synth penv 0",
     });
+  });
+
+  test("tuning: song tuning and scale under Project, track tuning under Sound", () => {
+    const menu = new EditMenu();
+    const ctx = context();
+    menu.show(ctx, "tuning");
+    expect(menu.view(ctx).title).toBe("menu › Project › tuning & scale");
+    select(menu, ctx, "tuning");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "tuning 19-edo",
+    });
+    select(menu, ctx, "reference A4");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "tuning ref 440",
+    });
+    select(menu, ctx, "scale");
+    expect(menu.key(RIGHT, ctx)).toMatchObject({ type: "run" });
+    menu.show(ctx, "sound");
+    select(menu, ctx, "tuning");
+    menu.key("\r", ctx);
+    expect(menu.view(ctx).title).toBe("menu › Sound › tuning");
+    select(menu, ctx, "tuning");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "tuning track 12-tet",
+    });
+    select(menu, ctx, "root");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "tuning track root C4",
+    });
+  });
+
+  test("tuning: ratio, cents and keyboard-map entries, and a tonic that keeps the scale", () => {
+    const menu = new EditMenu();
+    const value = score().withKey("D hijaz").withTuning({ ref: 432 });
+    const ctx = context(value);
+    const type = (text: string) => {
+      for (const ch of text) menu.key(ch, ctx);
+      return menu.key("\r", ctx);
+    };
+    menu.show(ctx, "tuning");
+    select(menu, ctx, "ratios");
+    menu.key("\r", ctx);
+    expect(type("9/8 5/4 3/2 2/1")).toEqual({
+      type: "run",
+      command: "tuning ratios 9/8 5/4 3/2 2/1",
+    });
+    select(menu, ctx, "cents");
+    menu.key("\r", ctx);
+    expect(type("231 474 1200")).toEqual({
+      type: "run",
+      command: "tuning cents 231 474 1200",
+    });
+    select(menu, ctx, "keyboard map");
+    menu.key("\r", ctx);
+    expect(type("off")).toEqual({ type: "run", command: "tuning kbm off" });
+    select(menu, ctx, "tonic");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "scale Eb hijaz",
+    });
+    menu.show(ctx, "chords");
+    select(menu, ctx, "key tonic");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "key Eb hijaz",
+    });
+    // A track that follows the song shows the song's reference.
+    menu.show(ctx, "sound");
+    select(menu, ctx, "tuning");
+    menu.key("\r", ctx);
+    select(menu, ctx, "reference A4");
+    expect(menu.view(ctx).items[menu.view(ctx).index]!.label).toContain(
+      "432 Hz · song",
+    );
   });
 
   test("choices open a list; ←/→ cycle without opening", () => {

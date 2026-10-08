@@ -138,6 +138,26 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "song key · key A minor · key F# dorian",
       },
       {
+        command: "scale [<tonic>] <name> | list",
+        summary: "song scale · scale D hijaz · scale yaman · scale list",
+      },
+      {
+        command: "tuning <name> | edo <n> | scl <file> | off",
+        summary: "song tuning · tuning 19-edo · tuning just · tuning list",
+      },
+      {
+        command: "tuning ref <hz> | root <note> | map linear|nearest",
+        summary: "A4 reference · degree-0 key · keys per step",
+      },
+      {
+        command: "tuning track <…> | track off",
+        summary: "this track's tuning · off follows the song",
+      },
+      {
+        command: "cents <id> <±c>",
+        summary: "detune one note · cents n3 -14 · add E4-14c at 0",
+      },
+      {
         command: "hit <voice> at <beat>",
         summary: "kit tracks · hit kick at 0",
       },
@@ -201,6 +221,10 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       },
       { command: "/auth [--check]", summary: "provider and audio status" },
       { command: "/play [on|off]", summary: "keyboard play mode · Ctrl-P" },
+      {
+        command: "/play degrees|chromatic",
+        summary: "home row plays the key's scale degrees (any tuning) · i",
+      },
       {
         command: "/pattern [name]",
         summary: "drum groove picker · moving previews",
@@ -446,6 +470,11 @@ export const USAGE: Readonly<Record<string, string>> = {
   chords:
     "/chords auto|manual|off · voicing <n> · spread · bass · perform · rate · octaves · sevenths · preset · style",
   key: "key <tonic> <mode> | none · key A minor",
+  scale: "scale [<tonic>] <name> | list · scale D hijaz",
+  tuning:
+    "tuning <name> | edo <n> | ratios … | cents … | scl <file> [kbm <file>] | ref <hz> | root <note> | map linear|nearest | track … | off · tuning 19-edo",
+  tune: "tuning <name> | edo <n> | scl <file> | off · tuning list",
+  cents: "cents <id> <±cents> · cents n3 -14",
   grid: "/grid 1/4|1/8|1/8T|1/16|1/16T|1/32",
   tempo:
     "tempo takes 20…300 · tempo 120 · tempo 90 at bar 9 [ramp|exp] · tempo remove bar 9 · tempo clear · tempo map",
@@ -515,9 +544,9 @@ export const USAGE: Readonly<Record<string, string>> = {
   pack: "/pack list | info <name> | use <pack>/<sound> | add <url>",
   kit: "/kit [name] · /kit syn909",
   euclid: "/euclid [voice] · euclid hat 7 16",
-  menu: "/menu [sound|effects|rhythm|chords|mix|project]",
+  menu: "/menu [sound|effects|rhythm|chords|mix|project|tuning]",
   try: "/try <sound command> · /try fx reverb mix 0.6",
-  play: "/play [on|off] · Ctrl-P",
+  play: "/play [on|off|degrees|chromatic] · Ctrl-P · i toggles degrees",
   meter:
     "meter <1..16> · meter 3 · meter 7/8 [at bar <n>] · meter remove bar <n> · meter clear",
   art: EXPRESSION_USAGE.art,

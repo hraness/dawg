@@ -13,7 +13,8 @@
  *   `accelerate` ramps the rate; `squiz` raises pitch per zero-crossing
  *   cycle (described in Tidal/SuperDirt docs; implemented here from that
  *   description).
- * - keyed mode repitches from `root` (rate × 2^((pitch − root)/12)) and holds
+ * - keyed mode repitches from `root` (rate × 2^((pitch − root)/12), or the
+ *   tuning's key frequency over the root's 12-TET frequency) and holds
  *   for the note's length; oneshot mode maps voices to pitch slots from 36 in
  *   voice-name order and plays the whole window unless `loop` is set.
  *
@@ -35,10 +36,12 @@ import { loopSecondsOf, performedNotes } from "../../core/tempo.ts";
 import { sampleWarpFor, warpedSpan, type SampleWarp } from "./warp.ts";
 import {
   performanceTimingFor,
+  tunedTiming,
   performNotes,
   type NotePerformance,
   type PerformedNote,
 } from "../../core/expression.ts";
+import { resolveTuning, type TuningTable } from "../../core/tuning.ts";
 
 /** Output level of a full-scale sample at velocity 1 and gain 1. */
 export const SAMPLE_LEVEL = 0.7;
@@ -133,9 +136,15 @@ function noteLengthFrames(note: Note, timing: SamplerTiming): number {
   );
 }
 
-/** Which voice a note plays and the pitch ratio it plays at. */
+/**
+ * Which voice a note plays and the pitch ratio it plays at. A keyed voice
+ * repitches to the tuning's key frequency over its root's 12-TET frequency
+ * (a sample is recorded at concert pitch); one-shot slots ignore tuning,
+ * since their pitch picks a voice rather than a note.
+ */
 function voiceResolver(
   track: Track,
+  tuning?: TuningTable,
 ): (pitch: number) => { voice: string; ratio: number } | undefined {
   const sampler = track.sampler!;
   if (sampler.mode === "oneshot") {
@@ -157,7 +166,14 @@ function voiceResolver(
     for (const candidate of keyed)
       if (candidate.root <= pitch) chosen = candidate;
     if (!chosen) return undefined;
-    return { voice: chosen.voice, ratio: 2 ** ((pitch - chosen.root) / 12) };
+    if (!tuning)
+      return { voice: chosen.voice, ratio: 2 ** ((pitch - chosen.root) / 12) };
+    const hz = tuning.hz[pitch]!;
+    if (!(hz > 0)) return undefined;
+    return {
+      voice: chosen.voice,
+      ratio: hz / (440 * 2 ** ((chosen.root - 69) / 12)),
+    };
   };
 }
 
@@ -170,7 +186,10 @@ export function planSamplerVoices(
 ): SamplerVoice[] {
   const sampler = track.sampler;
   if (!sampler) return [];
-  const resolve = voiceResolver(track);
+  const resolve = voiceResolver(
+    track,
+    resolveTuning(timing.score.tuning, track.tuning, timing.score.key),
+  );
   const ordered = [...notes].sort(
     (a, b) =>
       a.startTick - b.startTick ||
@@ -190,8 +209,12 @@ export function planSamplerVoices(
     voice.fade = Math.min(fade, end - voice.start);
   };
   for (const note of ordered) {
-    const target = resolve(note.pitch);
-    if (!target) continue;
+    const resolved = resolve(note.pitch);
+    if (!resolved) continue;
+    // A note's cents repitch every voice, keyed or one-shot.
+    const target = note.cents
+      ? { ...resolved, ratio: resolved.ratio * 2 ** (note.cents / 1200) }
+      : resolved;
     const ref: SampleRef | undefined = sampler.voices[target.voice];
     const sample = bank.voices.get(sampleKey(track.id, target.voice));
     if (!ref || !sample) continue;
@@ -463,7 +486,7 @@ export function samplerTailSeconds(
     const notes = performNotes(
       track,
       performedNotes(score).filter((note) => note.trackId === track.id),
-      performance,
+      tunedTiming(performance, score, track),
     );
     for (const voice of planSamplerVoices(track, notes, bank, timing))
       latest = Math.max(latest, voice.end - loopEnd);

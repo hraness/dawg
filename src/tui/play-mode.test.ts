@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { resolveTuning } from "../../core/tuning.ts";
 import {
   BLACK_KEYS,
   DEFAULT_BASE,
+  HOME_ROW,
   MAX_BASE,
   MAX_VELOCITY,
   MIN_VELOCITY,
@@ -10,6 +12,7 @@ import {
   RELEASE_MS,
   WHITE_KEYS,
   defaultBaseFor,
+  degreeLayout,
   rangeLabel,
   stripCells,
 } from "./play-mode.ts";
@@ -55,8 +58,12 @@ describe("musical typing layout", () => {
     );
     for (const [key, pitch] of expected)
       expect(keyboard.pitchFor(key)).toBe(pitch);
+    // I is silent too; it toggles scale degrees ("in key").
     expect(keyboard.pitchFor("i")).toBeUndefined();
-    expect(keyboard.press("i", 0, GATE)).toEqual({ type: "unmapped" });
+    expect(keyboard.press("i", 0, GATE)).toEqual({
+      type: "command",
+      command: "degrees",
+    });
     expect(keyboard.press("r", 0, GATE)).toEqual({
       type: "command",
       command: "record",
@@ -228,5 +235,74 @@ describe("held keys and sustain", () => {
       label: "D#3",
       black: true,
     });
+  });
+});
+
+describe("scale degrees", () => {
+  test("no key reads C major: the home row plays C D E F G A B C D E F", () => {
+    const keyboard = new PlayKeyboard();
+    keyboard.degrees = degreeLayout(undefined, undefined);
+    expect(HOME_ROW.map((key) => keyboard.pitchFor(key))).toEqual([
+      48, 50, 52, 53, 55, 57, 59, 60, 62, 64, 65,
+    ]);
+    expect(keyboard.pitchFor("w")).toBeUndefined();
+  });
+
+  test("a pentatonic key fits every home-row key into the scale", () => {
+    const keyboard = new PlayKeyboard();
+    keyboard.degrees = degreeLayout("A minor pentatonic", undefined);
+    expect(keyboard.degrees.name).toBe("A minor-pentatonic");
+    expect(HOME_ROW.slice(0, 6).map((key) => keyboard.pitchFor(key))).toEqual([
+      57, 60, 62, 64, 67, 69,
+    ]);
+  });
+
+  test("a quarter-tone maqam plays its degree on the retuned key", () => {
+    const layout = degreeLayout("D bayati", undefined);
+    // D, E half-flat (on the E key), F, G, A, Bb, C.
+    expect(layout.steps).toEqual([0, 2, 3, 5, 7, 8, 10]);
+  });
+
+  test("19-EDO steps through every degree and X pages by a home row", () => {
+    const table = resolveTuning({ edo: 19 }, undefined, undefined);
+    const keyboard = new PlayKeyboard();
+    keyboard.degrees = degreeLayout(undefined, table);
+    expect(keyboard.degrees.period).toBe(19);
+    const row = HOME_ROW.map((key) => keyboard.pitchFor(key)!);
+    expect(row[1]! - row[0]!).toBe(1);
+    keyboard.press("x", 0, GATE);
+    expect(keyboard.pitchFor("a")).toBe(row[0]! + HOME_ROW.length);
+    keyboard.press("z", 0, GATE);
+    expect(keyboard.pitchFor("a")).toBe(row[0]!);
+  });
+
+  for (const edo of [19, 31]) {
+    test(`every step of ${edo}-EDO is reachable in degree mode`, () => {
+      const table = resolveTuning({ edo }, undefined, undefined);
+      const keyboard = new PlayKeyboard();
+      keyboard.degrees = degreeLayout(undefined, table);
+      const tonic = keyboard.pitchFor("a")!;
+      const reached = new Set<number>();
+      for (let page = 0; page < 4; page += 1) {
+        for (const key of HOME_ROW) reached.add(keyboard.pitchFor(key)!);
+        keyboard.press("x", 0, GATE);
+      }
+      for (let step = 0; step < edo; step += 1)
+        expect(reached.has(tonic + step)).toBe(true);
+    });
+  }
+
+  test("19-EDO in C major picks the nearest step to each scale note", () => {
+    const table = resolveTuning({ edo: 19 }, undefined, undefined);
+    const layout = degreeLayout("C major", table);
+    // 19-EDO major scale: 0 3 6 8 11 14 17.
+    expect(layout.steps).toEqual([0, 3, 6, 8, 11, 14, 17]);
+  });
+
+  test("the strip shows the home row only", () => {
+    const keyboard = new PlayKeyboard();
+    keyboard.degrees = degreeLayout("C major", undefined);
+    const cells = stripCells(keyboard, new Set());
+    expect(cells.map((cell) => cell.key)).toEqual([...HOME_ROW]);
   });
 });

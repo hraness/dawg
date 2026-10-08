@@ -68,10 +68,12 @@ import {
   type PlayedChord,
 } from "./play-chords.ts";
 import type { PlayHeaderView, PlayStripKey } from "../../tui/play-strip.ts";
+import { resolveTuning } from "../../core/tuning.ts";
 import {
   NOTE_KEYS,
   PlayKeyboard,
   REPEAT_DELAY_MS,
+  degreeLayout,
   playLayoutFor,
   stripCells,
   type PlayAction,
@@ -214,6 +216,9 @@ export class PlaySession {
   public countInBars = 1;
   public grid = DEFAULT_GRID;
   public status: string | undefined;
+  /** Scale-degree layout on (`i`); follows key and tuning changes. */
+  public degreesOn = false;
+  private degreeKey: string | undefined;
   private active = false;
   private synth: LiveSynth | undefined;
   private readonly pending = new Map<number, Pending>();
@@ -392,6 +397,7 @@ export class PlaySession {
   /** Handle one decoded key; mode commands return to the caller. */
   public press(value: string): PlayKeyResult {
     const now = this.host.now();
+    this.syncDegrees();
     let key = value;
     if (this.chords.on && value === "n") {
       // Route the suggestion through the note key of its root, so holding
@@ -420,10 +426,13 @@ export class PlaySession {
   /** The suggested next chord and the lowest note key on its root. */
   private nextRoute(): { key: string; chord: PlayedChord["chord"] } {
     const chord = this.chords.next();
-    const keys = Object.entries(NOTE_KEYS).sort((a, b) => a[1] - b[1]);
-    const found = keys.find(
-      ([, offset]) => (this.keyboard.base + offset - chord.root) % 12 === 0,
-    );
+    const keys = Object.keys(NOTE_KEYS)
+      .map((key) => [key, this.keyboard.pitchFor(key)] as const)
+      .filter(
+        (entry): entry is readonly [string, number] => entry[1] !== undefined,
+      )
+      .sort((a, b) => a[1] - b[1]);
+    const found = keys.find(([, pitch]) => (pitch - chord.root) % 12 === 0);
     return { key: found?.[0] ?? "a", chord };
   }
 
@@ -524,7 +533,45 @@ export class PlaySession {
       this.status = this.clickCommand("toggle");
       return { type: "handled" };
     }
+    if (command === "degrees") {
+      this.status = this.toggleDegrees();
+      return { type: "handled" };
+    }
     return { type: "command", command };
+  }
+
+  /**
+   * `i`: the home row plays scale degrees (the song key's scale, or every
+   * step of a non-12 tuning) instead of chromatic keys. Drum kits and
+   * sampler slots keep their pads.
+   */
+  public toggleDegrees(on = !this.degreesOn): string {
+    if (on && this.layout.labels.size > 0)
+      return "scale degrees need a melodic track";
+    this.degreesOn = on;
+    this.degreeKey = undefined;
+    this.syncDegrees();
+    return on
+      ? `scale degrees · ${this.keyboard.degrees!.name} · ${this.keyboard.range}`
+      : `chromatic · ${this.keyboard.range}`;
+  }
+
+  /** Follows the song key and tuning while degree mode is on. */
+  private syncDegrees(): void {
+    if (!this.degreesOn) {
+      this.keyboard.degrees = undefined;
+      return;
+    }
+    const score = this.host.score();
+    const track = this.trackData();
+    const signature = JSON.stringify([score.key, score.tuning, track?.tuning]);
+    if (signature === this.degreeKey && this.keyboard.degrees) return;
+    this.degreeKey = signature;
+    const table =
+      score.tuning || track?.tuning
+        ? resolveTuning(score.tuning, track?.tuning, score.key)
+        : undefined;
+    this.keyboard.degrees = degreeLayout(score.key, table);
   }
 
   /** Render the note through the track's own voice and start it. */
@@ -1032,6 +1079,7 @@ export class PlaySession {
   }
 
   public strip(now = this.host.now()): PlayStripKey[] {
+    this.syncDegrees();
     return stripCells(
       this.keyboard,
       this.keyboard.litKeys(now),

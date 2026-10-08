@@ -117,6 +117,9 @@ export function rebaseOperations(
       case "setTime":
         if (!same(base.time, current.time))
           return { ok: false, reason: "tempo map changed" };
+      case "setTuning":
+        if (!same(base.tuning ?? null, current.tuning ?? null))
+          return { ok: false, reason: "tuning changed" };
         break;
       case "removeTrack": {
         if (added.tracks.has(operation.trackId)) break;

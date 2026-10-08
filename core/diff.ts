@@ -69,6 +69,8 @@ export function diffScores(
   if (a.key !== b.key) ops.push({ type: "setKey", key: b.key });
   if (!deepEqual(a.time, b.time))
     ops.push({ type: "setTime", time: b.time ?? null });
+  if (!deepEqual(a.tuning, b.tuning))
+    ops.push({ type: "setTuning", tuning: b.tuning ?? null });
 
   const aTracks = new Map(a.tracks.map((track) => [track.id, track]));
   const bTracks = new Map(b.tracks.map((track) => [track.id, track]));
@@ -151,6 +153,7 @@ function notePatch(a: Note, b: Note): NotePatch | undefined {
     if (a[key] !== b[key]) patch[key] = b[key];
   for (const key of NOTE_EXPRESSION_FIELDS)
     if (!deepEqual(a[key], b[key])) patch[key] = b[key] ?? null;
+  if ((a.cents ?? 0) !== (b.cents ?? 0)) patch.cents = b.cents ?? 0;
   return Object.keys(patch).length > 0 ? (patch as NotePatch) : undefined;
 }
 
@@ -165,6 +168,7 @@ function trackPatch(a: Track, b: Track): TrackPatch | undefined {
     "rhythm",
     "kit",
     "time",
+    "tuning",
     ...TRACK_PERFORMANCE_FIELDS,
   ] as const)
     if (!deepEqual(a[key], b[key])) patch[key] = b[key] ?? null;
@@ -242,7 +246,8 @@ export function adoptNoteIds(
 }
 
 function exactKey(note: Note): string {
-  return `${note.trackId}|${note.pitch}|${note.startTick}|${note.durationTicks}|${note.velocity}`;
+  const cents = note.cents ? `|${note.cents}` : "";
+  return `${note.trackId}|${note.pitch}|${note.startTick}|${note.durationTicks}|${note.velocity}${cents}`;
 }
 
 function looseKey(note: Note): string {
