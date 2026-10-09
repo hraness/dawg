@@ -1183,6 +1183,507 @@ const LEAVES: readonly StyleCard[] = [
       },
     },
   }),
+  // East Africa. References: Kelly Askew, Performing the Nation (2002);
+  // Kay Kaufman Shelemay, Music, Ritual and Falasha History (1986).
+  card({
+    id: "benga",
+    summary:
+      "benga: fast 4/4 with the bass playing the plucked nyatiti lyre's leaping ostinato, bright interlocking guitars, I-IV-V in major",
+    tempo: { bpm: [120, 150], typical: 136 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
+    pitch: {
+      scales: [
+        ["major", 0.6],
+        ["major-pentatonic", 0.4],
+      ],
+    },
+    harmony: { forms: [[["I", "IV", "I", "V"], 1]], sources: { forms: 3 } },
+    rhythm: {
+      onsets: {
+        kick: FOUR_FLOOR,
+        snare: BACKBEAT,
+        hat: EIGHTHS,
+        chords: SIXTEENTHS,
+      },
+    },
+    bass: { behaviour: [["arpeggio", 1]], onsets: EIGHTHS },
+    texture: {
+      roles: {
+        ...fullKit("acoustic"),
+        bass: role("ebass"),
+        chords: role("electric"),
+        lead: role("sing", "electric:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "taarab",
+    summary:
+      "taarab: Swahili sung poetry on Arabic maqam (hijaz, rast) with a qanun-and-violin orchestra, the 4/4 chakacha lilt, heterophony",
+    tempo: { bpm: [84, 116], typical: 100 },
+    meter: { signatures: [["8/8", 1]], cycle: MAQSUM },
+    pitch: {
+      scales: [
+        ["hijaz", 0.5],
+        ["nahawand", 0.5],
+      ],
+    },
+    harmony: { model: "drone", rhythm: [[0.5, 1]] },
+    melody: { intervals: ORNATE },
+    texture: {
+      kind: "heterophonic",
+      roles: {
+        kick: null,
+        bell: null,
+        perc: role("daf", "framedrum:0.5"),
+        chords: null,
+        drone: maybe("oud"),
+        lead: role("sing", "violin:0.5"),
+        counter: role("oud", "violin:0.6", "harp:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "bongo-flava",
+    summary:
+      "bongo flava: Tanzanian pop on a programmed kit, taarab-inflected sung hooks, minor loops, singeli-fast hats in the dance cuts",
+    tempo: { bpm: [92, 120], typical: 104 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
+    pitch: {
+      scales: [
+        ["minor", 0.6],
+        ["minor-pentatonic", 0.4],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["aeolian", 0.5],
+        ["sad-pop", 0.5],
+      ],
+    },
+    rhythm: { onsets: { kick: TRESILLO, snare: BACKBEAT, hat: SIXTEENTHS } },
+    texture: {
+      roles: {
+        ...fullKit("trap"),
+        bass: role("bass"),
+        chords: role("keys", "pluck:0.5"),
+        lead: role("sing"),
+      },
+    },
+  }),
+  card({
+    id: "ethio-jazz",
+    summary:
+      "Ethio-jazz: the anhemitonic qenet modes (tezeta, ambassel, anchihoye) over a minor vamp, 6/8 chik-chika shuffle, horns in unison",
+    tempo: { bpm: [80, 120], typical: 96 },
+    meter: {
+      signatures: [
+        ["6/8", 0.6],
+        ["4/4", 0.4],
+      ],
+      hypermeter: [[4, 1]],
+    },
+    pitch: {
+      scales: [
+        ["minor-pentatonic", 0.5],
+        ["kurd", 0.3],
+        ["minor", 0.2],
+      ],
+    },
+    harmony: { model: "modal", rhythm: [[0.5, 1]], sevenths: 0.6 },
+    rhythm: {
+      onsets: { kick: grid("x.....x....."), snare: grid("...x.....x..") },
+    },
+    bass: { behaviour: [["ostinato", 1]] },
+    texture: {
+      roles: {
+        ...fullKit("acoustic"),
+        bell: null,
+        bass: role("upright", "ebass:0.5"),
+        chords: role("organ", "vibes:0.6", "rhodes:0.4"),
+        lead: role("sax", "vibes:0.5", "trumpet:0.4"),
+        counter: maybe("trumpet", "sax:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "ethiopian-chant",
+    summary:
+      "zema: Ethiopian Orthodox liturgical chant in the ge'ez, ezel and araray modes, slow choral monophony with sistrum and kebero",
+    tempo: { bpm: [50, 80], typical: 64 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]], cycle: WAHDA },
+    pitch: {
+      scales: [
+        ["major-pentatonic", 0.5],
+        ["minor-pentatonic", 0.5],
+      ],
+    },
+    harmony: { model: "drone", rhythm: [[0.25, 1]] },
+    melody: { intervals: CHANT, density: [1, 2], ambitus: [5, 9] },
+    bass: { behaviour: [["none", 1]] },
+    texture: {
+      kind: "monophonic",
+      roles: {
+        kick: null,
+        bell: maybe("bell"),
+        shaker: null,
+        perc: role("framedrum"),
+        chords: null,
+        bass: null,
+        lead: role("choir", "sing:0.5"),
+      },
+    },
+    mix: { space: 0.7 },
+  }),
+  card({
+    id: "somali",
+    summary:
+      "Somali music: pentatonic qaraami songs with oud lead, a swaying 6/8 dhaanto, call and response, few chords",
+    tempo: { bpm: [84, 120], typical: 100 },
+    pitch: {
+      scales: [
+        ["major-pentatonic", 0.5],
+        ["minor-pentatonic", 0.5],
+      ],
+    },
+    harmony: { model: "drone", rhythm: [[0.5, 1]] },
+    melody: { intervals: CONJUNCT },
+    texture: {
+      roles: {
+        kick: null,
+        bell: null,
+        perc: role("framedrum", "daf:0.4"),
+        chords: null,
+        drone: maybe("oud"),
+        lead: role("sing", "oud:0.6"),
+        counter: role("oud", "keys:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "kidandali",
+    summary:
+      "kidandali: Ugandan dance pop, kadongo kamu guitar picking on a four-on-the-floor kit, I-IV-V loops, sung Luganda hooks",
+    tempo: { bpm: [110, 132], typical: 120 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
+    pitch: {
+      scales: [
+        ["major", 0.7],
+        ["major-pentatonic", 0.3],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["axis", 0.5],
+        ["fifties", 0.5],
+      ],
+    },
+    rhythm: { onsets: { kick: FOUR_FLOOR, snare: BACKBEAT, hat: OFFBEATS } },
+    texture: {
+      roles: {
+        ...fullKit("syn808"),
+        bass: role("bass"),
+        chords: role("keys", "electric:0.6"),
+        lead: role("sing"),
+      },
+    },
+  }),
+
+  // Southern Africa. References: David Coplan, In Township Tonight! (1985);
+  // Paul Berliner, The Soul of Mbira (1978).
+  card({
+    id: "mbaqanga",
+    summary:
+      "mbaqanga and township jive: the I-IV-I64-V cycle, a melodic bouncing bass leading the band, clean guitar riffs, groaning male lead against women's harmony",
+    tempo: { bpm: [116, 144], typical: 128 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
+    rhythm: { onsets: { kick: FOUR_FLOOR, snare: BACKBEAT, hat: EIGHTHS } },
+    bass: {
+      behaviour: [
+        ["arpeggio", 0.7],
+        ["walking", 0.3],
+      ],
+      onsets: EIGHTHS,
+    },
+    texture: {
+      roles: {
+        ...fullKit("acoustic"),
+        bell: null,
+        bass: role("ebass"),
+        chords: role("electric", "organ:0.4"),
+        lead: role("sing"),
+        counter: role("choir", "sax:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "isicathamiya",
+    summary:
+      "isicathamiya: unaccompanied Zulu male choir, bass-heavy close harmony on I-IV-I64-V, call from the leader and choral response, soft tiptoe pulse",
+    tempo: { bpm: [70, 100], typical: 84 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
+    harmony: {
+      voicing: { types: [["close", 1]], range: [40, 64], notes: [3, 4] },
+    },
+    melody: { intervals: CONJUNCT, density: [1, 2] },
+    bass: {
+      behaviour: [
+        ["root", 0.6],
+        ["root-fifth", 0.4],
+      ],
+    },
+    texture: {
+      kind: "homophonic",
+      roles: {
+        ...NO_KIT,
+        bell: null,
+        perc: null,
+        shaker: null,
+        bass: role("choir"),
+        chords: role("choir"),
+        lead: role("sing"),
+      },
+    },
+    mix: { space: 0.4 },
+  }),
+  card({
+    id: "marabi",
+    summary:
+      "marabi and kwela: a three-chord I-IV-I64-V shuffle on keys, a pennywhistle lead in swung eighths, walking skiffle bass",
+    tempo: { bpm: [110, 140], typical: 124 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
+    groove: { subdivision: 2, swingRatio: [1.4, 1.8] },
+    rhythm: {
+      onsets: {
+        kick: grid("x...x..."),
+        snare: grid("..x...x."),
+        chords: grid(".x.x.x.x"),
+      },
+    },
+    bass: { behaviour: [["walking", 1]] },
+    texture: {
+      roles: {
+        ...fullKit("acoustic"),
+        bell: null,
+        perc: null,
+        shaker: null,
+        bass: role("upright"),
+        chords: role("piano", "organ:0.5", "nylon:0.4"),
+        lead: role("whistle", "sax:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "cape-jazz",
+    summary:
+      "Cape jazz: marabi and ghoema rhythms under jazz harmony, ii-V-I with extended chords, piano-led modal vamps, hymn-like melodies",
+    tempo: { bpm: [80, 130], typical: 104 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
+    harmony: {
+      presets: [
+        ["ii-v-i", 0.5],
+        ["turnaround", 0.3],
+      ],
+      forms: [[["I", "IV", "I", "V"], 1]],
+      sources: { presets: 2, forms: 1 },
+      sevenths: 0.8,
+      voicing: {
+        types: [
+          ["shell", 0.5],
+          ["open", 0.5],
+        ],
+        range: [48, 72],
+        notes: [3, 5],
+      },
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.....x.x......."),
+        snare: grid("...x..x....x..x."),
+        hat: EIGHTHS,
+      },
+    },
+    bass: {
+      behaviour: [
+        ["walking", 0.6],
+        ["arpeggio", 0.4],
+      ],
+    },
+    texture: {
+      roles: {
+        ...fullKit("acoustic"),
+        bell: null,
+        perc: null,
+        bass: role("upright"),
+        chords: role("piano"),
+        lead: role("sax", "piano:0.5", "trumpet:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "maskandi",
+    summary:
+      "maskandi: Zulu guitar music, a fast picked izihlabo introduction then concertina-like riffs over a I-IV-V lope, spoken praise (izibongo)",
+    tempo: { bpm: [120, 150], typical: 132 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
+    harmony: { forms: [[["I", "IV", "V", "I"], 1]], sources: { forms: 3 } },
+    rhythm: { onsets: { kick: FOUR_FLOOR, snare: BACKBEAT, hat: EIGHTHS } },
+    bass: { behaviour: [["root-fifth", 1]] },
+    melody: { intervals: LEAPY, density: [2, 4] },
+    texture: {
+      roles: {
+        ...fullKit("acoustic"),
+        bell: null,
+        perc: null,
+        bass: role("ebass"),
+        chords: role("steel", "electric:0.5"),
+        lead: role("steel", "sing:0.6"),
+      },
+    },
+  }),
+  card({
+    id: "chimurenga",
+    summary:
+      "chimurenga and mbira: the 48-pulse kushaura and kutsinhira interlock on a 12/8 hosho shaker, a four-phrase harmonic cycle, mbira-tuned guitars",
+    tempo: { bpm: [110, 140], typical: 126 },
+    meter: { signatures: [["12/8", 1]], hypermeter: [[4, 1]] },
+    pitch: {
+      tuning: "nyamaropa",
+      scales: [["major", 1]],
+      degrees: [0, 1, 2, 3, 4, 5, 6],
+    },
+    harmony: { model: "drone", rhythm: [[0.5, 1]] },
+    rhythm: {
+      onsets: { shaker: grid("x.xx.xx.xx.x"), kick: grid("x.....x.....") },
+    },
+    melody: { intervals: LEAPY, repetition: 0.85 },
+    bass: { behaviour: [["ostinato", 1]], onsets: grid("x..x..x..x..") },
+    texture: {
+      kind: "interlocking",
+      roles: {
+        bell: null,
+        shaker: role("drums"),
+        bass: role("mbira"),
+        chords: null,
+        drone: role("mbira"),
+        lead: role("mbira", "sing:0.6"),
+        counter: role("mbira", "kalimba:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "kizomba",
+    summary:
+      "kizomba, semba and kuduro: slow zouk-derived 4/4 with the tresillo kick and sensual minor loops; semba faster, kuduro a hard electronic stomp",
+    tempo: { bpm: [84, 140], typical: 92 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
+    pitch: {
+      scales: [
+        ["minor", 0.7],
+        ["dorian", 0.3],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["aeolian", 0.6],
+        ["sad-pop", 0.4],
+      ],
+      sevenths: 0.5,
+    },
+    rhythm: {
+      onsets: { kick: TRESILLO, snare: grid("...x...x...x...x"), hat: EIGHTHS },
+    },
+    texture: {
+      roles: {
+        ...fullKit("electro"),
+        bell: null,
+        perc: null,
+        bass: role("bass", "saw:0.3"),
+        chords: role("keys", "strings:0.5"),
+        lead: role("sing"),
+      },
+    },
+  }),
+  card({
+    id: "marrabenta",
+    summary:
+      "marrabenta: Mozambican fast duple dance, bright I-IV-V guitar picking with a bouncing bass on the off-beats, call and response",
+    tempo: { bpm: [120, 150], typical: 136 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
+    harmony: { forms: [[["I", "IV", "V", "I"], 1]], sources: { forms: 3 } },
+    rhythm: { onsets: { kick: FOUR_FLOOR, snare: BACKBEAT, hat: OFFBEATS } },
+    bass: { behaviour: [["root-fifth", 1]], onsets: grid("x..x..x.x..x..x.") },
+    texture: {
+      roles: {
+        ...fullKit("acoustic"),
+        bell: null,
+        perc: null,
+        bass: role("ebass"),
+        chords: role("electric", "nylon:0.5"),
+        lead: role("sing"),
+      },
+    },
+  }),
+  card({
+    id: "malagasy",
+    summary:
+      "salegy and tsapiky: fast Malagasy 6/8 with ternary-binary ambiguity, valiha-like harp and accordion runs in parallel thirds",
+    tempo: { bpm: [130, 170], typical: 148 },
+    meter: {
+      signatures: [
+        ["6/8", 0.7],
+        ["12/8", 0.3],
+      ],
+      hypermeter: [[4, 1]],
+    },
+    harmony: { forms: [[["I", "IV", "V", "I"], 1]], sources: { forms: 3 } },
+    rhythm: {
+      onsets: {
+        kick: grid("x..x..x..x.."),
+        snare: grid("...x.....x.."),
+        hat: grid("xxxxxxxxxxxx"),
+      },
+    },
+    melody: { intervals: LEAPY, density: [2, 4] },
+    texture: {
+      roles: {
+        ...fullKit("acoustic"),
+        bell: null,
+        bass: role("ebass"),
+        chords: role("electric", "harp:0.5"),
+        lead: role("harp", "organ:0.5", "sing:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "sega",
+    summary:
+      "sega and maloya: ternary 6/8 on ravanne frame drum, kayamb shaker and triangle, creole call and response, maloya's tonic drone",
+    tempo: { bpm: [100, 140], typical: 120 },
+    meter: { signatures: [["6/8", 1]], hypermeter: [[4, 1]] },
+    harmony: {
+      forms: [
+        [["I", "V"], 0.6],
+        [["I", "IV", "V", "I"], 0.4],
+      ],
+      sources: { forms: 3 },
+    },
+    rhythm: {
+      onsets: { perc: grid("x..x.xx..x.x"), shaker: grid("xxxxxxxxxxxx") },
+    },
+    texture: {
+      kind: "homophonic",
+      roles: {
+        ...NO_KIT,
+        bell: null,
+        perc: role("framedrum"),
+        shaker: role("drums"),
+        chords: role("nylon", "steel:0.5"),
+        lead: role("sing"),
+        counter: role("choir"),
+      },
+    },
+  }),
 ];
 
 export const AFRICA_MENA_SOUTHASIA_CARDS: readonly StyleCard[] = [
