@@ -13,6 +13,7 @@ import {
   onFitReady,
   withLiveFit,
 } from "./fit.ts";
+import { LiveSynth } from "./live.ts";
 import { planSamplerVoices, renderSamplerVoices } from "./sampler.ts";
 import { sampleKey, type DecodedSample, type SampleBank } from "./samples.ts";
 import { sampleWarpFor } from "./warp.ts";
@@ -317,5 +318,47 @@ describe("fit cache and live", () => {
       ),
     ).toBe(true);
     expect(rms(playing, 0, RATE)).toBeGreaterThan(0.1);
+  });
+
+  test("live keys: short fits sound at once, long ones report fitting", async () => {
+    const live = new LiveSynth(RATE);
+    const play = (seconds: number) => {
+      const src = decoded(sine(330, seconds), seconds > 8 ? "l" : "s");
+      const score = scoreWith(
+        { src: "t.wav", bpm: 100, fitmode: "tones" },
+        120,
+        1,
+        {
+          startTick: 0,
+          durationTicks: 480,
+        },
+      );
+      return live.render({
+        score,
+        trackId: "s",
+        pitch: 36,
+        velocity: 1,
+        seconds: 0.5,
+        samples: bankOf(src),
+      })!;
+    };
+    const t0 = performance.now();
+    const short = play(4);
+    expect(performance.now() - t0).toBeLessThan(160);
+    expect(short.frames).toBeGreaterThan(0);
+    expect(short.fitting).toBeUndefined();
+    const ready = new Promise<void>((resolve) => {
+      const stop = onFitReady(() => {
+        stop();
+        resolve();
+      });
+    });
+    const long = play(12);
+    expect(long.fitting).toBe(true);
+    expect(long.frames).toBe(0);
+    await ready;
+    const later = play(12);
+    expect(later.fitting).toBeUndefined();
+    expect(later.frames).toBeGreaterThan(0);
   });
 });

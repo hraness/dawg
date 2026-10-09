@@ -256,19 +256,33 @@ export function* tonesFit(
   const syn = new Float64Array(half + 1);
   const next = new Float64Array(half + 1);
   const omega = new Float64Array(half + 1);
+  const prevPh = new Float64Array(half + 1);
+  let lastAt = 0;
   const peaks: number[] = [];
   for (let m = 0; m * hs < length; m += 1) {
     if (m % CHUNK === CHUNK - 1) yield;
     const at = Math.round(map.at(m * hs + half) - half);
+    // Frequencies come from the previous analysis frame when it is a
+    // usable distance back (one FFT per hop); otherwise from an extra
+    // frame exactly one hop back (freezes, jumps, the first frame).
+    const back = at - lastAt;
+    const reuse = m > 0 && back >= hs / 4 && back <= half;
+    if (!reuse) {
+      analyse(x, at - hs, w, reB, imB);
+      for (let k = 0; k <= half; k += 1)
+        prevPh[k] = Math.atan2(imB[k]!, reB[k]!);
+    }
+    const ha = reuse ? back : hs;
     analyse(x, at, w, reA, imA);
-    analyse(x, at - hs, w, reB, imB);
     for (let k = 0; k <= half; k += 1) {
       mag[k] = Math.hypot(reA[k]!, imA[k]!);
       phA[k] = Math.atan2(imA[k]!, reA[k]!);
-      const phB = Math.atan2(imB[k]!, reB[k]!);
-      const bin = (2 * Math.PI * k * hs) / n;
-      omega[k] = bin + princarg(phA[k]! - phB - bin);
+      const bin = (2 * Math.PI * k) / n;
+      omega[k] =
+        (bin * ha + princarg(phA[k]! - prevPh[k]! - bin * ha)) * (hs / ha);
+      prevPh[k] = phA[k]!;
     }
+    lastAt = at;
     if (m === 0) syn.set(phA);
     else {
       // Peaks: local maxima over ±2 bins; each bin keeps its phase offset

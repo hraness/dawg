@@ -609,6 +609,11 @@ export class PlaySession {
         : {}),
     });
     if (!pcm) return;
+    if (pcm.fitting) {
+      // A long fitted sample window is computing: silent, never off-pitch.
+      this.status = "fitting · the sample plays once ready";
+      return;
+    }
     const scheduled = engine.noteOn(id, pcm);
     this.lastLatencyMs = Math.max(0, scheduled - this.host.now());
   }
