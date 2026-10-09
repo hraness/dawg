@@ -33,6 +33,11 @@ const expressive = createScore({
       instrument: "piano",
       glide: { time: 0.12, mode: "poly" },
       pedal: [{ tick: 0, state: "down" }],
+      softPedal: [
+        { tick: 0, state: "half" },
+        { tick: 960, state: "up" },
+      ],
+      sostenuto: [{ tick: 480, state: "down" }],
       velocityCurve: { curve: "fixed", fixed: 0.6 },
     },
     {
@@ -129,6 +134,9 @@ describe("expression in the printer", () => {
     expect(keys).toContain("humanize: { timing: 12, velocity: 4 },");
     expect(keys).toContain('glide: { time: 0.12, mode: "poly" },');
     expect(keys).toContain('pedal: [[0, "down"]],');
+    expect(keys).toContain("softPedal: [\n");
+    expect(keys).toContain('sostenuto: [[1, "down"]],');
+    expect(lead).not.toContain("softPedal");
     expect(keys).toContain('velocityCurve: { curve: "fixed", fixed: 0.6 },');
     const organ = printTrack(expressive, expressive.tracks[2]!);
     expect(organ).toContain('velocityCurve: "fixed",');
@@ -254,6 +262,9 @@ describe("expression in the SDK", () => {
     expect(() =>
       track({ name: "x", pedal: [[0, "sideways"]] as never }),
     ).toThrow(/pedal/);
+    expect(() =>
+      track({ name: "x", sostenuto: [[0, "half"]] as never }),
+    ).toThrow(/sostenuto/);
     expect(() => track({ name: "x", velocityCurve: "spicy" as never })).toThrow(
       /velocityCurve/,
     );
