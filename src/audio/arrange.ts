@@ -8,6 +8,7 @@
  * that carries held notes and tails across the seam, so memory stays
  * bounded however long the form plays (up to MAX_SONG_SECONDS).
  */
+import { withClipLengths } from "./clips.ts";
 import {
   SCORE_LIMITS,
   ScoreValidationError,
@@ -175,6 +176,8 @@ export function renderArranged(
   score: TrackScore,
   options: RenderOptions = {},
 ): RenderedAudio {
+  // Clips cut at sections, forms and windows need their files' real ends.
+  score = withClipLengths(score, options.samples);
   if (
     !(options.loop && loopedSection(score)) &&
     formSegments(score).length === 0 &&

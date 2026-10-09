@@ -30,6 +30,7 @@ import {
 import { ToolArgumentError } from "./tool-error.ts";
 // Types only: tools.ts spreads VOICE_TOOLS, so a value import would cycle.
 import type { AgentTool, ToolContext } from "./tools.ts";
+import { CLIP_TOOL_LIST } from "./clip-tools.ts";
 
 const trackIdSchema = {
   type: "string",
@@ -56,7 +57,7 @@ function targetTrack(
 export type VoiceTool = AgentTool & Readonly<{ previewable?: boolean }>;
 
 /** clips: place_clip, edit_clip, set_lyrics. */
-export const CLIPS_TOOLS: readonly VoiceTool[] = [];
+export const CLIPS_TOOLS: readonly VoiceTool[] = CLIP_TOOL_LIST;
 /** pitch: analyze_pitch, pitch_to_notes. */
 export const PITCH_TOOLS: readonly VoiceTool[] = [];
 const FORMANT_PRESETS = Object.keys(FX_PRESETS.formant ?? {});

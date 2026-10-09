@@ -62,8 +62,12 @@ export async function launch(
     },
   } as Parameters<typeof Bun.spawn>[1]);
   const terminal = (proc as unknown as { terminal: PtyTerminal }).terminal;
-  const until = async (predicate: () => boolean, label: string) => {
-    const deadline = Date.now() + 5000;
+  const until = async (
+    predicate: () => boolean,
+    label: string,
+    timeoutMs = 5000,
+  ) => {
+    const deadline = Date.now() + timeoutMs;
     while (!predicate()) {
       if (Date.now() > deadline)
         throw new Error(`timed out waiting for ${label}\n${vt.text()}`);

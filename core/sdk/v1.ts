@@ -244,6 +244,8 @@ export type Expression = Readonly<{
   humanize?: Readonly<{ timing?: number; velocity?: number; length?: number }>;
   /** The sung vowel on a `sing()` track (SDK 1.32.0): `"a"` .. `"u"` or a morph `"a>o"`. */
   vowel?: string;
+  /** The syllable sung on this note (SDK 1.32.0): no spaces, `_` holds the previous one. */
+  lyric?: string;
 }>;
 
 /** The expression a built note carries; fields are present only when set. */
@@ -254,6 +256,7 @@ export type NoteExpressionSpec = Readonly<{
   vibrato?: Readonly<{ rate: number; depth: number; delay?: number }>;
   humanize?: Readonly<{ timing?: number; velocity?: number; length?: number }>;
   vowel?: string;
+  lyric?: string;
 }>;
 
 const DEFAULT_VIBRATO_RATE = 5.5;
@@ -276,10 +279,11 @@ function expression(
         "vibrato",
         "humanize",
         "vowel",
+        "lyric",
       ].includes(key)
     )
       throw new DawgSdkError(
-        `${label} expression has an unknown field "${key.slice(0, 32)}" (articulation glide bend vibrato humanize vowel)`,
+        `${label} expression has an unknown field "${key.slice(0, 32)}" (articulation glide bend vibrato humanize vowel lyric)`,
       );
   const out: {
     articulation?: Articulation;
@@ -292,6 +296,7 @@ function expression(
       length?: number;
     }>;
     vowel?: string;
+    lyric?: string;
   } = {};
   const articulation = input.articulation ?? input.art;
   if (articulation !== undefined) {
@@ -364,7 +369,22 @@ function expression(
   }
   if (input.vowel !== undefined)
     out.vowel = singVowel(input.vowel, `${label} vowel`);
+  if (input.lyric !== undefined) out.lyric = lyricInput(input.lyric, label);
   return out;
+}
+
+/** A note's lyric: one syllable, no whitespace, at most 32 characters. */
+function lyricInput(value: unknown, label: string): string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > LYRIC_LIMIT ||
+    /\s/u.test(value)
+  )
+    throw new DawgSdkError(
+      `${label} lyric must be one syllable of 1..${LYRIC_LIMIT} characters without spaces`,
+    );
+  return value;
 }
 
 /**
@@ -2948,6 +2968,14 @@ export type TrackInput = Readonly<{
    */
   sostenuto?: readonly (readonly [number, "down" | "up"])[];
   /**
+   * Audio clips on the timeline (SDK 1.32.0): `audio("samples/lead.wav",
+   * { at: 8 })`, or `...repeatAudio(audio(...), { every: 8, until: 64 })`.
+   * They sound on any instrument; on `vocal` the notes are silent guides.
+   */
+  clips?: readonly (AudioSpec | readonly AudioSpec[])[];
+  /** Takes the clips play from (SDK 1.32.0): `take("take-1", "takes/take-1.wav", {...})`. */
+  takes?: readonly TakeSpec[];
+  /**
    * Velocity response (SDK 1.15.0): `soft` (quiet notes louder), `hard`
    * (needs a firm touch), `fixed` (every note at 0.8, like an organ) or
    * `{ curve: "fixed", fixed: 0.6 }`. Default `linear`.
@@ -3105,6 +3133,10 @@ export type TrackSpec = Readonly<{
   wind?: Readonly<{ preset?: WindPresetName } & WindParams>;
   /** Sing settings (SDK 1.32.0); present only on a sing track. */
   sing?: Readonly<{ preset?: SingPresetName } & SingParams>;
+  /** Audio clips (SDK 1.32.0), flattened, paths project-relative; present only when set. */
+  clips?: readonly AudioSpec[];
+  /** Takes (SDK 1.32.0); present only when set. */
+  takes?: readonly TakeSpec[];
 }>;
 
 export type GlideMode = "legato" | "mono" | "poly";
@@ -3600,6 +3632,7 @@ export function track(input: TrackInput): TrackSpec {
     ...(guitarSpec ? { guitar: guitarSpec } : {}),
     ...(windSpec ? { wind: windSpec } : {}),
     ...(singSpec ? { sing: singSpec } : {}),
+    ...trackClips(input, name, slug),
   });
 }
 
@@ -4513,6 +4546,14 @@ export function song(input: SongInput): Song {
     if (t.guitar) stored.guitar = t.guitar;
     if (t.wind) stored.wind = t.wind;
     if (t.sing) stored.sing = t.sing;
+    if (t.clips && t.clips.length > 0)
+      stored.clips = Object.freeze(
+        t.clips.map((clip, index) => storedClip(clip, index, ticks)),
+      );
+    if (t.takes && t.takes.length > 0)
+      stored.takes = Object.freeze(
+        t.takes.map((spec) => storedTake(spec, ticks)),
+      );
     if (t.rhythm && t.rhythm.length > 0)
       stored.rhythm = Object.freeze(
         t.rhythm.map((row) => {
@@ -4554,6 +4595,7 @@ export function song(input: SongInput): Song {
           ...(n.humanize ? { humanize: n.humanize } : {}),
           ...(n.cents ? { cents: n.cents } : {}),
           ...(n.vowel ? { vowel: n.vowel } : {}),
+          ...(n.lyric !== undefined ? { lyric: n.lyric } : {}),
         }),
       );
     }
@@ -5529,6 +5571,298 @@ export function strum(
   return progression(chords, { ...options, perform: "guitar" });
 }
 
+// BEGIN lyrics: generated from core/lyrics.ts by core/sdk/sync-lyrics.ts
+/** Longest lyric on one note (SCORE_LIMITS.maxLyricLength). */
+const LYRIC_LIMIT = 32;
+
+/** One lyric token: a syllable, a held note (`_`) or a skipped note (`~`). */
+type LyricToken = Readonly<{
+  syl: string;
+  /** Index of the word the token belongs to. */
+  word: number;
+  /** First syllable of its word. */
+  first: boolean;
+  kind: "syl" | "hold" | "rest";
+}>;
+
+/**
+ * The lyric grammar: words split by spaces, syllables by `-`, `_` holds the
+ * previous syllable over the next note (melisma), `~` skips a note.
+ * "nev-er gon-na _ give" gives nev er gon na _ give.
+ */
+function parseLyric(text: string): LyricToken[] {
+  const out: LyricToken[] = [];
+  let word = -1;
+  for (const raw of text.trim().split(/\s+/u)) {
+    if (raw === "") continue;
+    if (raw === "_") out.push({ syl: "_", word, first: false, kind: "hold" });
+    else if (raw === "~")
+      out.push({ syl: "~", word, first: false, kind: "rest" });
+    else {
+      word += 1;
+      raw
+        .split("-")
+        .filter(Boolean)
+        .forEach((syl, index) =>
+          out.push({ syl, word, first: index === 0, kind: "syl" }),
+        );
+    }
+  }
+  return out;
+}
+
+const VOWEL = /[aeiouàáâäèéêëìíîïòóôöùúûü]/u;
+/** Consonant pairs that sound as one consonant and are never split. */
+const SYL_DIGRAPHS = new Set(["th", "sh", "ch", "ph", "wh", "ng", "ck", "gh"]);
+/** Digraphs that end a syllable (no English word starts with them). */
+const SYL_CODA_ONLY = new Set(["ng", "ck", "gh", "x"]);
+/** Consonant clusters a syllable may start with (maximal onset). */
+const SYL_ONSETS = new Set(
+  (
+    "bl br cl cr dr fl fr gl gr pl pr sc sk sl sm sn sp st sw tr tw dw " +
+    "thr shr chr phr phl spl spr str scr squ skr"
+  ).split(" "),
+);
+/** Common words ending in a silent `e` that start compounds (some-thing). */
+const SYL_SILENT_E_HEADS = (
+  "some home life time love fire side care where there here more one " +
+  "make lone like name game base wide grace face place space stone bone"
+).split(" ");
+/** Suffixes kept whole after a silent `e` (love-ly, care-ful). */
+const SYL_SUFFIXES = ["ly", "ful", "less", "ness", "ment"];
+/** Unstressed endings that close a short vowel before them (nev-er). */
+const SYL_CLOSING_ENDINGS = new Set([
+  "er",
+  "en",
+  "el",
+  "et",
+  "ed",
+  "es",
+  "est",
+  "ing",
+]);
+
+/**
+ * Syllables of a word typed without hyphens: a guess for English, which a
+ * hyphen always overrides (`nev-er`). Each run of vowels (and `y` after a
+ * consonant) is one syllable; a final silent `e` does not count, but a
+ * consonant plus `le` is its own syllable (lit-tle, ta-ble). Consonant
+ * pairs that sound as one (th sh ch ph wh ng ck gh) never split. Between
+ * vowels a cluster gives the next syllable the longest onset English
+ * allows (mon-ster, chil-dren); one consonant goes with the next vowel
+ * (ba-by, to-night) unless the previous vowel is short before an
+ * unstressed ending (nev-er, sing-ing). "something" gives some thing,
+ * "forever" for ev er.
+ */
+function autoSyllabify(word: string): string[] {
+  const w = word.toLowerCase();
+  // Compounds and suffixes after a silent e: some-thing, love-ly.
+  if (w.length >= 6) {
+    for (const head of SYL_SILENT_E_HEADS)
+      if (w.startsWith(head) && VOWEL.test(w.slice(head.length)))
+        return [
+          word.slice(0, head.length),
+          ...autoSyllabify(word.slice(head.length)),
+        ];
+    for (const suffix of SYL_SUFFIXES) {
+      const stem = w.slice(0, -suffix.length);
+      if (
+        w.endsWith(suffix) &&
+        stem.length >= 3 &&
+        stem.endsWith("e") &&
+        !VOWEL.test(stem[stem.length - 2]!)
+      )
+        return [
+          ...autoSyllabify(word.slice(0, stem.length)),
+          word.slice(stem.length),
+        ];
+    }
+  }
+  // Letters into units: a vowel, a consonant, a digraph, or `qu`.
+  type Unit = { at: number; text: string; vowel: boolean };
+  const units: Unit[] = [];
+  for (let i = 0; i < w.length;) {
+    const pair = w.slice(i, i + 2);
+    if (pair === "qu" || SYL_DIGRAPHS.has(pair)) {
+      units.push({ at: i, text: pair, vowel: false });
+      i += 2;
+      continue;
+    }
+    const ch = w[i]!;
+    const prev = units.at(-1);
+    const vowel =
+      VOWEL.test(ch) || (ch === "y" && prev !== undefined && !prev.vowel);
+    units.push({ at: i, text: ch, vowel });
+    i += 1;
+  }
+  // Vowel groups as [first unit, last unit].
+  const groups: [number, number][] = [];
+  for (let u = 0; u < units.length;) {
+    if (units[u]!.vowel) {
+      let v = u;
+      while (v + 1 < units.length && units[v + 1]!.vowel) v += 1;
+      groups.push([u, v]);
+      u = v + 1;
+    } else u += 1;
+  }
+  const lastUnit = units.length - 1;
+  const finalLe =
+    w.endsWith("le") &&
+    units.length >= 3 &&
+    units[lastUnit - 1]!.text === "l" &&
+    !units[lastUnit - 2]!.vowel;
+  const last = groups.at(-1);
+  if (
+    groups.length > 1 &&
+    last &&
+    last[0] === lastUnit &&
+    last[1] === lastUnit &&
+    units[lastUnit]!.text === "e" &&
+    !units[lastUnit - 1]!.vowel &&
+    !finalLe
+  )
+    groups.pop();
+  if (groups.length <= 1) return [word];
+  const cuts: number[] = [];
+  for (let g = 1; g < groups.length; g += 1) {
+    const prev = groups[g - 1]!;
+    const next = groups[g]!;
+    const cluster = units.slice(prev[1] + 1, next[0]);
+    const n = cluster.length;
+    const isLast = g === groups.length - 1;
+    let onset: number; // units of the cluster that start the next syllable
+    if (isLast && finalLe && n >= 2)
+      onset = cluster[n - 2]!.text === "ck" ? 1 : 2;
+    else if (n === 1) {
+      const unit = cluster[0]!.text;
+      const prevText = units
+        .slice(prev[0], prev[1] + 1)
+        .map((u) => u.text)
+        .join("");
+      const ending = w.slice(units[next[0]]!.at);
+      const short = prevText.length === 1 && "eiou".includes(prevText);
+      const closes =
+        SYL_CODA_ONLY.has(unit) ||
+        (short && isLast && SYL_CLOSING_ENDINGS.has(ending)) ||
+        (unit === "r" && short && units[next[0]]!.text === "e");
+      onset = closes ? 0 : 1;
+    } else {
+      onset = 1;
+      for (let k = n - 1; k >= 2; k -= 1)
+        if (
+          SYL_ONSETS.has(
+            cluster
+              .slice(n - k)
+              .map((u) => u.text)
+              .join(""),
+          )
+        ) {
+          onset = k;
+          break;
+        }
+      if (SYL_CODA_ONLY.has(cluster[n - 1]!.text)) onset = 0;
+    }
+    const first = units[next[0] - onset]!;
+    cuts.push(onset === 0 ? units[next[0]]!.at : first.at);
+  }
+  const out: string[] = [];
+  let at = 0;
+  for (const cut of cuts) {
+    out.push(word.slice(at, cut));
+    at = cut;
+  }
+  out.push(word.slice(at));
+  return out.filter(Boolean);
+}
+
+/** What `assignLyrics` put on each note, and what did not fit. */
+type LyricAssignment = Readonly<{
+  /** Note id to its lyric (`_` holds); notes `~` skipped are absent. */
+  lyrics: ReadonlyMap<string, string>;
+  /** Syllables left over after the last note. */
+  dropped: readonly string[];
+  /** Words split automatically. */
+  split: readonly string[];
+}>;
+
+/**
+ * Lyrics onto `notes` in time order. Hyphens split syllables as typed;
+ * when the text has fewer syllables than there are notes, words typed
+ * whole are split by `autoSyllabify`, and any notes still left hold the
+ * last syllable (melisma) instead of failing. Syllables past the last note
+ * are reported in `dropped`. Notes sharing an onset take one token, on
+ * the top note, with `_` on the others. Each lyric is cut to the 32-character limit.
+ */
+function assignLyrics(
+  text: string,
+  notes: readonly Readonly<{ id: string; startTick: number; pitch: number }>[],
+): LyricAssignment {
+  const sorted = [...notes].sort(
+    (a, b) => a.startTick - b.startTick || b.pitch - a.pitch,
+  );
+  // Notes sharing an onset (a chord or a doubled note) take one token: the
+  // top note carries it and the rest hold.
+  const ordered: (typeof sorted)[number][] = [];
+  const under = new Map<string, string[]>();
+  for (const note of sorted) {
+    const top = ordered.at(-1);
+    if (top && top.startTick === note.startTick)
+      under.get(top.id)!.push(note.id);
+    else {
+      ordered.push(note);
+      under.set(note.id, []);
+    }
+  }
+  let tokens = parseLyric(text);
+  const split: string[] = [];
+  if (tokens.length < ordered.length) {
+    // Split every word typed whole; keep the split only if it still fits.
+    const out: LyricToken[] = [];
+    const words: string[] = [];
+    for (const token of tokens) {
+      const whole =
+        token.kind === "syl" &&
+        token.first &&
+        !tokens.some((t) => t.word === token.word && !t.first);
+      if (!whole) {
+        out.push(token);
+        continue;
+      }
+      const parts = autoSyllabify(token.syl);
+      if (parts.length > 1) words.push(token.syl);
+      parts.forEach((syl, index) =>
+        out.push({ syl, word: token.word, first: index === 0, kind: "syl" }),
+      );
+    }
+    if (out.length <= ordered.length) {
+      tokens = out;
+      split.push(...words);
+    }
+  }
+  const lyrics = new Map<string, string>();
+  const limit = LYRIC_LIMIT;
+  ordered.forEach((note, index) => {
+    const token = tokens[index];
+    if (!token) {
+      if (tokens.length > 0)
+        for (const id of [note.id, ...under.get(note.id)!]) lyrics.set(id, "_");
+      return;
+    }
+    if (token.kind === "rest") return;
+    lyrics.set(
+      note.id,
+      token.kind === "hold" ? "_" : token.syl.slice(0, limit),
+    );
+    for (const id of under.get(note.id)!) lyrics.set(id, "_");
+  });
+  const dropped = tokens
+    .slice(ordered.length)
+    .filter((token) => token.kind === "syl")
+    .map((token) => token.syl);
+  return { lyrics, dropped, split };
+}
+// END lyrics
+
 // BEGIN instrument words: generated from core/instruments.ts by core/sdk/sync-instruments.ts
 /** What an instrument word stores on a track. */
 type InstrumentWord = Readonly<{
@@ -5937,6 +6271,8 @@ const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
   { word: "khoomei", instrument: "sing", field: "sing", preset: "khoomei" },
   { word: "sygyt", instrument: "sing", field: "sing", preset: "sygyt" },
   { word: "kargyraa", instrument: "sing", field: "sing", preset: "kargyraa" },
+  // f07-clips: a track of audio clips; its notes are guides.
+  { word: "vocal", instrument: "vocal" },
 ]);
 
 /**
@@ -8401,6 +8737,362 @@ function renderProgression(options: RenderOptions): RenderedProgression {
   };
 }
 // END chord engine
+
+// ---------------------------------------------------------------------------
+// Audio clips, takes and lyrics (SDK 1.32.0)
+
+/** Options for `audio()`: times in beats, offsets and lengths in seconds. */
+export type AudioOptions = Readonly<{
+  /** Stable clip id; defaults to `clip`, `clip2`, ... by position. */
+  id?: string;
+  /** Beat the clip starts on, default 0. */
+  at?: number;
+  /** Seconds into the file where the clip starts, default 0. */
+  offset?: number;
+  /** Seconds of the file it plays, default to the end. */
+  dur?: number;
+  /** Linear gain 0..4, default 1. */
+  gain?: number;
+  /** Equal-power fade in, seconds (default 5 ms). */
+  fadeInTime?: number;
+  /** Equal-power fade out, seconds (default 5 ms). */
+  fadeTime?: number;
+  /** Play the slice backwards. */
+  rev?: boolean;
+  /** The track take this clip plays from (its clock drift applies). */
+  take?: string;
+  mute?: boolean;
+  /** The words sung in the clip, for the highway and lyrics. */
+  text?: string;
+  /** A text-to-speech clip's time map (0.7.1); kept as written. */
+  say?: Readonly<Record<string, unknown>>;
+  /** The file's pin; dawg fills it from the file when absent. */
+  sha256?: string;
+}>;
+
+/** One audio clip as `audio()` builds it. */
+export type AudioSpec = Readonly<
+  { kind: "audio"; src: string; at: number } & Omit<AudioOptions, "at">
+>;
+
+const AUDIO_KEYS = [
+  "id",
+  "at",
+  "offset",
+  "dur",
+  "gain",
+  "fadeInTime",
+  "fadeTime",
+  "rev",
+  "take",
+  "mute",
+  "text",
+  "say",
+  "sha256",
+] as const;
+
+/**
+ * An audio file on the track's timeline (SDK 1.32.0). `src` is relative
+ * to the track folder (`samples/lead.wav`) or the project
+ * (`tracks/vox/samples/lead.wav`).
+ *
+ * ```ts
+ * clips: [audio("samples/verse.wav", { at: 16, gain: 0.8, fadeTime: 0.2 })]
+ * ```
+ */
+export function audio(src: string, options: AudioOptions = {}): AudioSpec {
+  const file = text(src, "audio src");
+  if (!isRecord(options))
+    throw new DawgSdkError("audio options must be an object");
+  for (const key of Object.keys(options))
+    if (!(AUDIO_KEYS as readonly string[]).includes(key))
+      throw new DawgSdkError(
+        `audio has an unknown option "${key.slice(0, 32)}" (${AUDIO_KEYS.join(" ")})`,
+      );
+  const out: Record<string, unknown> = {
+    kind: "audio",
+    src: file,
+    at: beat(options.at ?? 0, "audio at"),
+  };
+  if (options.id !== undefined) out.id = text(options.id, "audio id");
+  for (const key of [
+    "offset",
+    "dur",
+    "gain",
+    "fadeInTime",
+    "fadeTime",
+  ] as const)
+    if (options[key] !== undefined) {
+      const value = finite(options[key], `audio ${key}`);
+      if (value < 0) throw new DawgSdkError(`audio ${key} must be ≥ 0`);
+      out[key] = value;
+    }
+  for (const key of ["rev", "mute"] as const)
+    if (options[key] !== undefined) {
+      if (typeof options[key] !== "boolean")
+        throw new DawgSdkError(`audio ${key} must be true or false`);
+      if (options[key]) out[key] = true;
+    }
+  if (options.take !== undefined) out.take = text(options.take, "audio take");
+  if (options.text !== undefined) {
+    if (typeof options.text !== "string" || options.text.length > 2000)
+      throw new DawgSdkError("audio text must be at most 2000 characters");
+    out.text = options.text;
+  }
+  if (options.say !== undefined) {
+    if (!isRecord(options.say))
+      throw new DawgSdkError("audio say must be an object");
+    out.say = options.say;
+  }
+  if (options.sha256 !== undefined) {
+    if (
+      typeof options.sha256 !== "string" ||
+      !/^[0-9a-f]{64}$/.test(options.sha256)
+    )
+      throw new DawgSdkError(
+        "audio sha256 must be 64 lowercase hex characters",
+      );
+    out.sha256 = options.sha256;
+  }
+  return Object.freeze(out) as AudioSpec;
+}
+
+/**
+ * Copies of `clip` every `every` beats after it while they start before
+ * `until` (SDK 1.32.0), the clip first: `...repeatAudio(hook, { every: 8,
+ * until: 64 })`. Copies of a clip with an id get `<id>-r2`, `<id>-r3`, ...
+ */
+export function repeatAudio(
+  clip: AudioSpec,
+  options: Readonly<{ every: number; until: number }>,
+): readonly AudioSpec[] {
+  if (!isRecord(clip) || clip.kind !== "audio")
+    throw new DawgSdkError("repeatAudio needs a clip from audio()");
+  if (!isRecord(options))
+    throw new DawgSdkError("repeatAudio needs { every, until } in beats");
+  const every = positive(options.every, "repeatAudio every");
+  const until = beat(options.until, "repeatAudio until");
+  const out: AudioSpec[] = [clip];
+  for (
+    let at = clip.at + every, pass = 2;
+    at < until - 1e-9 && out.length < 256;
+    at += every, pass += 1
+  )
+    out.push(
+      Object.freeze({
+        ...clip,
+        at,
+        ...(clip.id !== undefined ? { id: `${clip.id}-r${pass}` } : {}),
+      }) as AudioSpec,
+    );
+  return Object.freeze(out);
+}
+
+/** Options for `take()`: `at`, `in` and `out` in beats, the rest in seconds. */
+export type TakeOptions = Readonly<{
+  /** Beat the recording's first sample lines up with. */
+  at?: number;
+  /** Punch range in beats, default `at` to `at + 4`. */
+  in?: number;
+  out?: number;
+  /** Seconds into the file where the take starts. */
+  offset?: number;
+  /** Round-trip latency compensated, seconds. */
+  latency?: number;
+  latencyAssumed?: boolean;
+  /** Clock drift in parts per million (±1000). */
+  ppm?: number;
+  /** 0..1 fit of the alignment. */
+  fit?: number;
+  warn?: string;
+  /** Manual nudge in milliseconds (±250). */
+  nudge?: number;
+  sha256?: string;
+}>;
+
+/** One take as `take()` builds it. */
+export type TakeSpec = Readonly<
+  {
+    kind: "take";
+    name: string;
+    src: string;
+    at: number;
+    in: number;
+    out: number;
+  } & Omit<TakeOptions, "at" | "in" | "out">
+>;
+
+const TAKE_KEYS = [
+  "at",
+  "in",
+  "out",
+  "offset",
+  "latency",
+  "latencyAssumed",
+  "ppm",
+  "fit",
+  "warn",
+  "nudge",
+  "sha256",
+] as const;
+
+/**
+ * A take (SDK 1.32.0): one recorded or imported pass the track's clips can
+ * play from (`audio(src, { take: "take-1" })`). Recording itself is 0.7.1.
+ */
+export function take(
+  name: string,
+  src: string,
+  options: TakeOptions = {},
+): TakeSpec {
+  const label = `take ${text(name, "take name")}`;
+  if (!isRecord(options))
+    throw new DawgSdkError(`${label} options must be an object`);
+  for (const key of Object.keys(options))
+    if (!(TAKE_KEYS as readonly string[]).includes(key))
+      throw new DawgSdkError(
+        `${label} has an unknown option "${key.slice(0, 32)}" (${TAKE_KEYS.join(" ")})`,
+      );
+  const at = beat(options.at ?? 0, `${label} at`);
+  const from = beat(options.in ?? at, `${label} in`);
+  const to = beat(options.out ?? from + 4, `${label} out`);
+  if (to <= from) throw new DawgSdkError(`${label}: out must be after in`);
+  const out: Record<string, unknown> = {
+    kind: "take",
+    name,
+    src: text(src, `${label} src`),
+    at,
+    in: from,
+    out: to,
+  };
+  for (const key of ["offset", "latency", "ppm", "fit", "nudge"] as const)
+    if (options[key] !== undefined)
+      out[key] = finite(options[key], `${label} ${key}`);
+  if (options.latencyAssumed) out.latencyAssumed = true;
+  if (options.warn !== undefined)
+    out.warn = text(options.warn, `${label} warn`);
+  if (options.sha256 !== undefined)
+    out.sha256 = text(options.sha256 as unknown, `${label} sha256`);
+  return Object.freeze(out) as TakeSpec;
+}
+
+/**
+ * Sings `text` on `notes` in time order (SDK 1.32.0): spaces split words,
+ * `-` splits syllables, `_` holds the previous syllable over the next note
+ * (melisma), `~` skips a note. With fewer syllables than notes, words typed
+ * whole split by vowel groups and leftover notes hold the last syllable;
+ * syllables past the last note are dropped. Same rules as `/lyrics`.
+ *
+ * ```ts
+ * notes: lyrics("nev-er gon-na give you up", seq("C4 D4 F4 D4 A4 A4 G4"))
+ * ```
+ */
+export function lyrics<N extends NoteSpec>(
+  text: string,
+  notes: readonly N[],
+): readonly N[] {
+  if (typeof text !== "string" || text.length > 2000)
+    throw new DawgSdkError("lyrics text must be at most 2000 characters");
+  if (!Array.isArray(notes))
+    throw new DawgSdkError("lyrics needs an array of notes");
+  const keyed = notes.map((n, index) => ({
+    id: String(index),
+    startTick: Math.round(n.start * 960),
+    pitch: n.pitch,
+  }));
+  const { lyrics: sung } = assignLyrics(text, keyed);
+  return Object.freeze(
+    notes.map((n, index) => {
+      const lyric = sung.get(String(index));
+      if (lyric === undefined) {
+        const { lyric: _drop, ...rest } = n as N & { lyric?: string };
+        return Object.freeze(rest) as unknown as N;
+      }
+      return Object.freeze({ ...n, lyric }) as N;
+    }),
+  );
+}
+
+/** A clip for `song()`, ticks resolved and its default id filled. */
+function storedClip(
+  clip: AudioSpec,
+  index: number,
+  ticks: (beats: number) => number,
+): Record<string, unknown> {
+  const { kind: _kind, at, id, ...rest } = clip;
+  return Object.freeze({
+    id: id ?? defaultClipId(index),
+    ...rest,
+    startTick: ticks(at),
+  });
+}
+
+/** The id a clip without one gets: `clip`, `clip2`, `clip3`, ... */
+export function defaultClipId(index: number): string {
+  return index === 0 ? "clip" : `clip${index + 1}`;
+}
+
+function storedTake(
+  spec: TakeSpec,
+  ticks: (beats: number) => number,
+): Record<string, unknown> {
+  const { kind: _kind, at, in: from, out: to, ...rest } = spec;
+  return Object.freeze({
+    offset: 0,
+    latency: 0,
+    ...rest,
+    startTick: ticks(at),
+    inTick: ticks(from),
+    outTick: ticks(to),
+  });
+}
+
+/** `track({ clips, takes })` as TrackSpec fields, paths project-relative. */
+function trackClips(
+  input: TrackInput,
+  name: string,
+  slug: string,
+): { clips?: readonly AudioSpec[]; takes?: readonly TakeSpec[] } {
+  const local = (src: string) => {
+    const path = src.replace(/^\.\//, "");
+    return path.startsWith("tracks/") || path.startsWith("pack:")
+      ? path
+      : `tracks/${slug}/${path}`;
+  };
+  const out: { clips?: readonly AudioSpec[]; takes?: readonly TakeSpec[] } = {};
+  if (input.clips !== undefined) {
+    if (!Array.isArray(input.clips))
+      throw new DawgSdkError(
+        `track ${name}: clips must be an array of audio()`,
+      );
+    const flat = (input.clips as readonly unknown[]).flat();
+    const clips = flat.map((item, index) => {
+      if (!isRecord(item) || item.kind !== "audio")
+        throw new DawgSdkError(
+          `track ${name}: clips[${index}] must come from audio() or repeatAudio()`,
+        );
+      const clip = item as AudioSpec;
+      return Object.freeze({ ...clip, src: local(clip.src) }) as AudioSpec;
+    });
+    if (clips.length > 256)
+      throw new DawgSdkError(`track ${name}: at most 256 clips`);
+    if (clips.length > 0) out.clips = Object.freeze(clips);
+  }
+  if (input.takes !== undefined) {
+    if (!Array.isArray(input.takes))
+      throw new DawgSdkError(`track ${name}: takes must be an array of take()`);
+    const takes = input.takes.map((item, index) => {
+      if (!isRecord(item) || item.kind !== "take")
+        throw new DawgSdkError(
+          `track ${name}: takes[${index}] must come from take()`,
+        );
+      const spec = item as TakeSpec;
+      return Object.freeze({ ...spec, src: local(spec.src) }) as TakeSpec;
+    });
+    if (takes.length > 0) out.takes = Object.freeze(takes);
+  }
+  return out;
+}
 
 // ---------------------------------------------------------------------------
 // Internals

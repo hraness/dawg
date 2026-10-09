@@ -51,6 +51,9 @@ const EFFECTS = [
   "wind",
   // f07-sing: the singing voice.
   "sing",
+  // f07-clips: audio clips and takes.
+  "clips",
+  "takes",
 ] as const;
 const LANES = [
   "volumeAutomation",
@@ -178,6 +181,7 @@ function notePatch(a: Note, b: Note): NotePatch | undefined {
   for (const key of NOTE_EXPRESSION_FIELDS)
     if (!deepEqual(a[key], b[key])) patch[key] = b[key] ?? null;
   if ((a.cents ?? 0) !== (b.cents ?? 0)) patch.cents = b.cents ?? 0;
+  if (a.lyric !== b.lyric) patch.lyric = b.lyric ?? null;
   return Object.keys(patch).length > 0 ? (patch as NotePatch) : undefined;
 }
 

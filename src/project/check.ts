@@ -13,6 +13,7 @@ import {
   modalPairWarnings,
 } from "../../core/resonators.ts";
 import { plainSineWarnings } from "../audio/instrument-check.ts";
+import { clipPinDiagnostics } from "./clip-pins.ts";
 import { isProject } from "./init.ts";
 import { typecheckProject } from "./typecheck.ts";
 
@@ -41,12 +42,18 @@ export async function checkProject(
     (deps.typecheck ?? typecheckProject)(project),
     (deps.evaluate ?? evaluateProject)(project),
   ]);
+  // 0.7: a clip or take whose file no longer matches its pinned sha256
+  // fails like a type error.
+  const pins = evaluated.ok
+    ? await clipPinDiagnostics(project, evaluated.score)
+    : [];
   const diagnostics = [
     ...types.diagnostics,
     ...(evaluated.ok ? [] : evaluated.diagnostics),
+    ...pins,
   ];
   return Object.freeze({
-    ok: types.ok && evaluated.ok,
+    ok: types.ok && evaluated.ok && pins.length === 0,
     diagnostics: Object.freeze(diagnostics),
     typesMs: types.ms,
     evalMs: evaluated.ms,

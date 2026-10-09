@@ -83,8 +83,8 @@ function diagnostic(error: unknown, project: string): Diagnostic {
 }
 
 /**
- * Adds `sha256` to sampler voices and project wavetable files that exist
- * and are within the size limit.
+ * Adds `sha256` to sampler voices, project wavetable files, audio clips and
+ * takes that exist and are within the size limit.
  */
 async function withSampleHashes(
   song: object,
@@ -106,6 +106,11 @@ async function withSampleHashes(
       refs.push(wavetable.table);
     const granular = track.granular;
     if (isObject(granular) && isObject(granular.src)) refs.push(granular.src);
+    // 0.7 audio clips and takes: a fresh `audio("samples/x.wav")` is pinned
+    // here; a written pin is kept and `dawg check` re-hashes it.
+    for (const key of ["clips", "takes"])
+      for (const item of Array.isArray(track[key]) ? track[key] : [])
+        if (isObject(item)) refs.push(item);
   }
   for (const ref of refs) {
     if (

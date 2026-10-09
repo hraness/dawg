@@ -402,10 +402,12 @@ describe("edit menu", () => {
       .view(ctx)
       .items.map((row) => row.label.slice(0, 16).trim());
     expect(labels.slice(0, 3)).toEqual(["instrument", "preset", "attack"]);
-    expect(labels.at(-5)).toBe("advanced");
+    expect(labels.at(-6)).toBe("advanced");
     // 0.6: a pitched track can be turned into a grain cloud.
-    expect(labels.at(-4)).toBe("granular (conver");
-    expect(labels.at(-3)).toBe("tuning");
+    expect(labels.at(-5)).toBe("granular (conver");
+    expect(labels.at(-4)).toBe("tuning");
+    // 0.7: Sound > Voice (clips and lyrics).
+    expect(labels.at(-3)).toBe("Voice");
     expect(labels.at(-2)).toBe("performance");
     expect(labels.at(-1)).toBe("browse sounds");
     select(menu, ctx, "attack");

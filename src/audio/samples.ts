@@ -36,6 +36,7 @@ import {
   type TrackScore,
 } from "../../core/score.ts";
 import { GRANULAR_SOURCE_VOICE } from "../../core/granular.ts";
+import { CLIP_VOICE_PREFIX, clipSampleRef } from "../../core/clips.ts";
 import { PackError, PackStore } from "./packs.ts";
 import {
   DEFAULT_MEMORY_CACHE_BYTES,
@@ -103,7 +104,8 @@ export function hasSamplerTracks(score: TrackScore): boolean {
       packWavetable(track) !== undefined ||
       localWavetable(track) !== undefined ||
       reverbIrSample(track) !== undefined ||
-      granularSample(track) !== undefined,
+      granularSample(track) !== undefined ||
+      (track.clips?.length ?? 0) > 0,
   );
 }
 
@@ -128,6 +130,9 @@ function trackSampleRefs(track: Track): [string, SampleRef][] {
   }
   const granular = granularSample(track);
   if (granular) refs.push([GRANULAR_SOURCE_VOICE, granular]);
+  // Audio clips (0.7) load as `clip:<id>` voices, sha256-pinned alike.
+  for (const clip of track.clips ?? [])
+    refs.push([`${CLIP_VOICE_PREFIX}${clip.id}`, clipSampleRef(clip)]);
   return refs;
 }
 
@@ -753,7 +758,12 @@ export class SampleLibrary implements SampleSource {
             );
           voices.set(sampleKey(track.id, voice), loaded);
         } catch (error) {
-          report("error", describeFailure(voice, src, error, this.ffmpeg));
+          // A clip whose audio is missing renders as silence with a warning;
+          // a missing instrument voice still fails the render.
+          report(
+            voice.startsWith(CLIP_VOICE_PREFIX) ? "warning" : "error",
+            describeFailure(voice, src, error, this.ffmpeg),
+          );
         }
       }
     }

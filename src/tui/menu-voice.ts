@@ -7,10 +7,11 @@ import { effectSpec } from "../../core/fx.ts";
 import { effectValues } from "../commands/fx.ts";
 import { effectParamNodes, type MenuContext, type MenuNode } from "./menu.ts";
 import { singBrowseRows } from "./sing-menu.ts";
+import { clipMenuRows, vocalBrowseRows } from "./menu-clips.ts";
 
 /** Sound > Voice: Clips and Lyrics (clips lane). */
-export function clipsSoundRows(_context: MenuContext): MenuNode[] {
-  return [];
+export function clipsSoundRows(context: MenuContext): MenuNode[] {
+  return clipMenuRows(context);
 }
 
 /** Sound > Voice: Pitch with trace, detected key and Make notes (pitch lane). */
@@ -57,8 +58,8 @@ export function vocoderEffectRows(_context: MenuContext): MenuNode[] {
  * Sound > browse sounds > Voices: Vocal (clips), Choir, Solo and Throat
  * (sing), Vocoder (vocoder).
  */
-export function voicesBrowseGroup(_context: MenuContext): MenuNode[] {
-  return [...singBrowseRows()];
+export function voicesBrowseGroup(context: MenuContext): MenuNode[] {
+  return [...vocalBrowseRows(context), ...singBrowseRows()];
 }
 
 /** Every Sound > Voice row, in lane order. */

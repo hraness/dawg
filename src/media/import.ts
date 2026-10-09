@@ -38,6 +38,8 @@ export type ImportSampleArgs = Readonly<{
   end?: number;
   /** Root note name or MIDI number the sample is pitched at (default C4). */
   root?: string | number;
+  /** 1 folds to mono (0.7 audio clips); absent keeps today's stereo. */
+  channels?: 1 | 2;
 }>;
 
 export async function importSample(
@@ -68,7 +70,7 @@ export async function importSample(
       "-ar",
       String(SAMPLE_LIMITS.sampleRate),
       "-ac",
-      "2",
+      String(args.channels ?? 2),
       "-c:a",
       "pcm_s16le",
       temp,

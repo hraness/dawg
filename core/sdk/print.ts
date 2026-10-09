@@ -51,13 +51,15 @@ import {
   type SampleRef,
   type Sampler,
   type Section,
+  type AudioClip,
+  type Take,
   type Track,
 } from "../score.ts";
 import { trackSlug } from "../slug.ts";
 import { barStartTick } from "../tempo.ts";
 import type { Tuning } from "../tuning.ts";
 import { DEFAULT_STRING_PRESET, type TrackString } from "../strings.ts";
-import { DEFAULT_HIT_LENGTH, DEFAULT_VELOCITY } from "./v1.ts";
+import { DEFAULT_HIT_LENGTH, DEFAULT_VELOCITY, defaultClipId } from "./v1.ts";
 
 const WIDTH = 80;
 const INDENT = "  ";
@@ -164,6 +166,10 @@ const RESERVED = new Set([
   "modal",
   "wind",
   "sing",
+  "audio",
+  "take",
+  "lyrics",
+  "repeatAudio",
   "slices",
   "euclid",
   "euclidRot",
@@ -667,6 +673,20 @@ export function printTrack(score: TrackScore, track: Track): string {
   }
   if (rows.length === 0 || printed.length > 0)
     entries.push(`notes: ${list(printed, INDENT, "notes: ".length, 1)}`);
+  if (track.takes && track.takes.length > 0) {
+    used.add("take");
+    const items = track.takes.map((t) => printTake(score, t, INDENT + INDENT));
+    entries.push(`takes: ${list(items, INDENT, "takes: ".length, 1, true)}`);
+  }
+  if (track.clips && track.clips.length > 0) {
+    used.add("audio");
+    const items = track.clips.map((clip, index) =>
+      printClip(score, clip, index, INDENT + INDENT),
+    );
+    entries.push(
+      `clips: ${list(items, INDENT, "clips: ".length, 1, items.length > 1)}`,
+    );
+  }
 
   const names = [
     "track",
@@ -685,6 +705,8 @@ export function printTrack(score: TrackScore, track: Track): string {
     "sing",
     "euclid",
     "grid",
+    "audio",
+    "take",
   ]
     .filter((name) => used.has(name))
     .join(", ");
@@ -794,6 +816,7 @@ function expressionEntries(
     ]);
   }
   if (note.vowel) entries.push(["vowel", str(note.vowel)]);
+  if (note.lyric !== undefined) entries.push(["lyric", str(note.lyric)]);
   return entries.length === 0 ? undefined : entries;
 }
 
@@ -815,6 +838,66 @@ function call(
   const inner = indent + INDENT;
   const body = how.map(([k, v]) => property(k, v, inner)).join("\n");
   return `${name}(${[...args, "{"].join(", ")}\n${body}\n${indent}})`;
+}
+
+/** Seconds at 4 decimals (sources.md 6). */
+function secs(value: number): string {
+  return num(Math.round(value * 1e4) / 1e4);
+}
+
+/**
+ * `audio(src, { at, offset, dur, gain, fadeInTime, fadeTime, rev, take,
+ * mute, text, say, sha256 })` (SDK 1.32.0); defaults omitted, an id printed
+ * only when it differs from the positional default.
+ */
+function printClip(
+  score: TrackScore,
+  clip: AudioClip,
+  index: number,
+  indent: string,
+): string {
+  const how: [string, string][] = [];
+  if (clip.id !== defaultClipId(index)) how.push(["id", str(clip.id)]);
+  if (clip.startTick !== 0)
+    how.push(["at", num(clip.startTick / score.ticksPerBeat)]);
+  if (clip.offset) how.push(["offset", secs(clip.offset)]);
+  if (clip.dur !== undefined) how.push(["dur", secs(clip.dur)]);
+  // Gain is linear in the file; a comment shows the dB the commands speak.
+  if (clip.gain !== undefined && clip.gain !== 1)
+    how.push([
+      "gain",
+      `${num(clip.gain)} /* ${
+        clip.gain > 0 ? (20 * Math.log10(clip.gain)).toFixed(1) : "-inf"
+      } dB */`,
+    ]);
+  if (clip.fadeInTime !== undefined)
+    how.push(["fadeInTime", secs(clip.fadeInTime)]);
+  if (clip.fadeTime !== undefined) how.push(["fadeTime", secs(clip.fadeTime)]);
+  if (clip.rev) how.push(["rev", "true"]);
+  if (clip.take !== undefined) how.push(["take", str(clip.take)]);
+  if (clip.mute) how.push(["mute", "true"]);
+  if (clip.text !== undefined) how.push(["text", str(clip.text)]);
+  if (clip.say !== undefined) how.push(["say", JSON.stringify(clip.say)]);
+  how.push(["sha256", str(clip.sha256)]);
+  return call("audio", [str(clip.src)], how, indent);
+}
+
+/** `take(name, src, { at, in, out, ... })` (SDK 1.32.0). */
+function printTake(score: TrackScore, t: Take, indent: string): string {
+  const beatsAt = (tick: number) => num(tick / score.ticksPerBeat);
+  const how: [string, string][] = [];
+  if (t.startTick !== 0) how.push(["at", beatsAt(t.startTick)]);
+  how.push(["in", beatsAt(t.inTick)], ["out", beatsAt(t.outTick)]);
+  if (t.offset) how.push(["offset", secs(t.offset)]);
+  if (t.latency) how.push(["latency", secs(t.latency)]);
+  if (t.latencyAssumed) how.push(["latencyAssumed", "true"]);
+  if (t.ppm !== undefined)
+    how.push(["ppm", num(Math.round(t.ppm * 100) / 100)]);
+  if (t.fit !== undefined) how.push(["fit", num(t.fit)]);
+  if (t.warn !== undefined) how.push(["warn", str(t.warn)]);
+  if (t.nudge !== undefined) how.push(["nudge", num(t.nudge)]);
+  how.push(["sha256", str(t.sha256)]);
+  return call("take", [str(t.name), str(t.src)], how, indent);
 }
 
 /** A track's performance fields (SDK 1.15.0) as `key: literal` entries. */

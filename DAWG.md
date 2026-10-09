@@ -1558,7 +1558,41 @@ The arrangement strip is one row under the header that shows the sections over t
 
 Release 0.7 adds voice tools: audio clips and lyrics, pitch tracking, autotune, a formant shift, sung vowels and choirs, and a vocoder. Each arrives in its own subsection below. `/vocal` is the umbrella: bare `/vocal` lists every voice verb this build has, and `/help voice` shows them. The ctrl-k menu gains Sound › Voice, Effects › Voice and Sound › browse sounds › Voices once a voice tool fills them; until then they stay hidden.
 
-A track may already store `clips`, `takes` and note `lyric`s (see docs/project-format.md); they are validated and kept, and play once the clips tools land. Projects without them sound exactly as before.
+A track may store `clips`, `takes` and note `lyric`s (see docs/project-format.md). Projects without them sound exactly as before.
+
+### Clips and lyrics
+
+An audio clip is a window onto a WAV file in the project, placed at a bar on a track. Clips sum into the track before its effects, so the track's filter, compressor, reverb, sends and automation all act on them. Any track can hold clips: on a synth track the notes still play beside them.
+
+- **`vocal`** is the instrument for a sung part. Its notes are guides: silent in exports and renders, a soft sine (about -12 dB under a plain sine) in play mode and the audition loop so you can sing or check against them. `instrument vocal` (or `/track vocal`) also fills the vocal chain into effects the track has not set: a 90 Hz high-pass for rumble and plosives, a 3:1 compressor, and a short plate. A `vocal` track without clips keeps the plain tone older projects had.
+- **`/vocal import <file> [bar]`** copies a WAV that is already 48 kHz mono 16-bit straight in, and converts anything else through the sample importer (ffmpeg, which dawg detects and never installs), into `tracks/<slug>/samples/` as 48 kHz mono 16-bit, pins its sha256 and places a clip at the bar (bar 1 when left out). The clip gain is set so the file's peak sits at -6 dBFS, leaving headroom for the chain. `/vocal stem [bar]` places the vocals stem from the last `split_stems`. `/vocal setups` lists one-step setups; `/vocal setups <name>` applies only what this build supports and names what is missing (setups needing autotune, harmony, recording or `/say` wait for those tools).
+- **`/clip`** lists the focused track's clips; `/clip [id] <edit>` changes one (the clip under the cursor when `id` is left out): `gain -3` (dB, -60..12, absolute; `gain by -3` nudges), `fade .01 .2` (in and out, seconds, equal-power; `fade in .01` or `fade out default` sets or resets one side), `move 9` and `split 7` (1-based bars, `5.3` is bar 5 beat 3), `trim [offset s] [dur s|end]` (seconds into the file; `dur end` plays to the file's end), `rev`, `mute` (toggles), `repeat every 2 to 32` (copies every 2 bars up to bar 32), `rm`.
+- **`/lyrics [bar] <text>`** puts syllables onto the focused track's notes from the bar, one per note in time order (the top note of a chord). `hel-lo` splits a word across notes, `_` holds the last syllable over another note (a melisma), `~` skips a note. A word without hyphens is split by an English syllable guess (th, sh, ch, ng and ck stay whole, a consonant plus `le` is its own syllable: `lit-tle`, `some-thing`, `for-ev-er`), and the receipt names the words it split; type hyphens where the guess is wrong. Notes starting together (a chord or a doubled note) take one syllable on the top note, and the others hold. `/lyrics` shows them; `/lyrics clear [bar]` removes them. Lyrics are a label in 0.7.0: the guide and the highway show them, and later voice tools sing them.
+
+Placement follows the tempo map: a clip starts on its tick's time and plays at the file's own speed, so a tempo ramp moves its start but never stretches the audio (Ableton calls this warp off; a clip in a take with `ppm` is stretched by that drift only). A clip whose file is missing or whose bytes no longer match its sha256 renders silent and warns; `dawg check` re-hashes every clip and take and reports mismatches like a type error. Sections act on clips: a section mute silences the clips in it, and a clip crossing a section edge is cut there with a 5 ms equal-power fade, as are clips cut by `split`.
+
+The ctrl-k menu has Sound › Voice › **Clips** (each clip with gain, fade in, fade out, start in file, length, reverse, mute, move, split, repeat, file and remove; import a file, the vocals stem and the setups) and **Lyrics**, and Sound › browse sounds › Voices › **Vocal**. The highway draws a clip row beside the focused track: each clip as a waveform block named by its file, a `┃` seam where one clip starts at another's end, and each note's lyric beside its head. Agent tools: `place_clip`, `edit_clip` (gain, fades, trim, move, split, rev, mute, repeat, remove), `set_lyrics`; the tools and commands take gain in dB and the tools' `fadeIn`/`fadeOut` are the SDK's `fadeInTime`/`fadeTime`. SDK:
+
+```ts
+track({
+  id: "vox",
+  instrument: "vocal",
+  clips: [
+    audio("tracks/vox/samples/verse.wav", { at: 8, gain: 0.7, fadeTime: 0.2 }),
+    ...repeatAudio(audio("tracks/vox/samples/hey.wav", { at: 16 }), {
+      every: 4,
+      until: 32,
+    }),
+  ],
+  notes: lyrics("hel-lo _ world", [
+    note("C4", 8),
+    note("D4", 9),
+    note("E4", 10),
+  ]),
+});
+```
+
+`at`, `in` and `out` are in beats, `offset` and `dur` in seconds, and `gain` is linear (0.5 is about -6 dB; the printer writes the dB beside it as `gain: 0.5 /* -6.0 dB */`); `take(name, src, opts)` describes a take (the shape 0.7.1 recording writes). `audio()` prints its options in the order `id at offset dur gain fadeInTime fadeTime rev take mute text say sha256`, and a printed project reads back deep-equal.
 
 ### Formant shift and vowel morph
 
