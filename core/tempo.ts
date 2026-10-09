@@ -1098,6 +1098,36 @@ export function withoutFermatas(
   });
 }
 
+/**
+ * The song time as the SDK can write it: tempo events and fermatas at or
+ * past the final barline and meter changes from bar `bars` on are dropped
+ * (never heard; the SDK refuses them), and a ramp landing on the final
+ * barline moves to the last tick, as the SDK's `ramp()` does. A shorter
+ * song applies this, and the printer applies it to older scores.
+ */
+export function timeWithinSong(score: TimeScore): SongTime | undefined {
+  const time = score.time;
+  if (!time) return time;
+  const end = loopTicksOf(score);
+  const tempo: TempoEvent[] = [];
+  for (const event of time.tempo ?? []) {
+    const previous = tempo[tempo.length - 1]?.tick ?? 0;
+    if (event.tick < end) tempo.push(event);
+    else if (event.tick === end && event.ramp && end - 1 > previous)
+      tempo.push({ ...event, tick: end - 1 });
+  }
+  const meter = (time.meter ?? []).filter((m) => m.bar < score.bars);
+  const fermatas = (time.fermatas ?? []).filter((f) => f.tick < end);
+  if (
+    tempo.every((e, i) => e === time.tempo?.[i]) &&
+    tempo.length === (time.tempo ?? []).length &&
+    meter.length === (time.meter ?? []).length &&
+    fermatas.length === (time.fermatas ?? []).length
+  )
+    return time;
+  return rebuild(time, { tempo, meter, fermatas });
+}
+
 /** Sets the meter from bar `bar` (0-based) on; null removes that change. */
 export function withMeterChange(
   time: SongTime | undefined,

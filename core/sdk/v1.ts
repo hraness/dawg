@@ -2893,6 +2893,12 @@ export type TrackInput = Readonly<{
    */
   sampler?: SamplerSpec | null;
   /**
+   * The `wavetable(...)` a track keeps after it left the wavetable
+   * instrument (SDK 1.32.0), so switching back restores it. A wavetable
+   * track takes its table from `instrument` instead.
+   */
+  wavetable?: WavetableSpec | null;
+  /**
    * Granular engine (SDK 1.23.0) for an `instrument: "granular"` track, or
    * use `instrument: granular("cloud", {...})` or a word (`"cloud"`).
    */
@@ -3370,9 +3376,24 @@ export function track(input: TrackInput): TrackSpec {
     isRecord(rawInstrument) && rawInstrument.kind === "sampler"
       ? localizeSampler(rawInstrument as SamplerSpec, slug)
       : keptSampler;
-  const wavetableSpec =
-    isRecord(rawInstrument) && rawInstrument.kind === "wavetable"
-      ? localizeWavetable(rawInstrument as WavetableSpec, slug)
+  const playedWavetable =
+    isRecord(rawInstrument) && rawInstrument.kind === "wavetable";
+  if (input.wavetable !== undefined && input.wavetable !== null) {
+    if (!isRecord(input.wavetable) || input.wavetable.kind !== "wavetable")
+      throw new DawgSdkError(`track ${name}: wavetable: takes wavetable(...)`);
+    if (
+      playedWavetable ||
+      (typeof rawInstrument === "string" &&
+        rawInstrument.trim().toLowerCase() === WAVETABLE_INSTRUMENT)
+    )
+      throw new DawgSdkError(
+        `track ${name}: a wavetable track sets its table in instrument: wavetable(...)`,
+      );
+  }
+  const wavetableSpec = playedWavetable
+    ? localizeWavetable(rawInstrument as WavetableSpec, slug)
+    : isRecord(input.wavetable)
+      ? localizeWavetable(input.wavetable as WavetableSpec, slug)
       : null;
   const stringFromInstrument =
     isRecord(rawInstrument) && rawInstrument.kind === "string"
@@ -3394,7 +3415,7 @@ export function track(input: TrackInput): TrackSpec {
     ? GRANULAR_INSTRUMENT
     : samplerSpec
       ? SAMPLER_INSTRUMENT
-      : wavetableSpec
+      : playedWavetable
         ? WAVETABLE_INSTRUMENT
         : stringFromInstrument
           ? STRING_INSTRUMENT

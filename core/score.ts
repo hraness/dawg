@@ -49,6 +49,7 @@ import {
   normalizeTrackTime,
   TimeValidationError,
   type SongTime,
+  timeWithinSong,
   type TrackTime,
   withMeterChange,
 } from "./tempo.ts";
@@ -1212,8 +1213,19 @@ export class TrackScore {
   }
 
   /** Resize the loop without discarding notes or automation outside its bounds. */
+  /** A shorter song drops the time marks past its new end. */
   withBars(bars: number): TrackScore {
-    return new TrackScore({ ...this.toJSON(), bars });
+    const time =
+      bars < this.bars
+        ? timeWithinSong({
+            tempoBpm: this.tempoBpm,
+            beatsPerBar: this.beatsPerBar,
+            ticksPerBeat: this.ticksPerBeat,
+            bars,
+            ...(this.time ? { time: this.time } : {}),
+          })
+        : this.time;
+    return new TrackScore({ ...this.toJSON(), bars, time: time ?? null });
   }
 
   withKey(key: string | null): TrackScore {
