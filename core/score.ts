@@ -566,6 +566,19 @@ export type SampleRef = Readonly<{
    * reference only (never read by the renderer).
    */
   from?: SampleProvenance;
+  /**
+   * Optional (0.6.1, SFZ `lovel`/`hivel`): the MIDI velocity range
+   * [lo, hi] (0..127, lo ≤ hi) this voice plays. Keyed voices with the same
+   * root are velocity layers; a one-shot voice outside its range is silent
+   * unless its `rr` group has a voice for that velocity.
+   */
+  vel?: readonly [number, number];
+  /**
+   * Optional (0.6.1, SFZ `seq_length`): round-robin group name. One-shot
+   * voices in a group are one sound (any member's slot plays it); voices
+   * that match a note's velocity take turns, A B A B, in note order.
+   */
+  rr?: string;
 }>;
 
 /** `SampleRef.from`: the source of a resampled file (0.6.1). */
@@ -2235,6 +2248,8 @@ function trackEffectExtras(
 }
 
 const VOICE_NAME = /^[A-Za-z][A-Za-z0-9_]*$/;
+/** A sampler round-robin group name (`SampleRef.rr`). */
+const SAMPLE_RR_GROUP = /^[A-Za-z0-9_]{1,32}$/;
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 
 /** Validates a `Sampler` from unknown; `undefined`/`null` means none. */
@@ -2325,6 +2340,8 @@ export function normalizeSampleRef(input: unknown, name: string): SampleRef {
     fadeTime?: number;
     fadeInTime?: number;
     from?: SampleProvenance;
+    vel?: readonly [number, number];
+    rr?: string;
   } = { src };
   if (input.sha256 !== undefined) {
     if (typeof input.sha256 !== "string" || !SHA256_HEX.test(input.sha256))
@@ -2516,6 +2533,28 @@ export function normalizeSampleRef(input: unknown, name: string): SampleRef {
         "invalid-track",
       );
     ref.len = len;
+  }
+  if (input.vel !== undefined) {
+    const vel = input.vel;
+    if (
+      !Array.isArray(vel) ||
+      vel.length !== 2 ||
+      !vel.every((v) => Number.isInteger(v) && v >= 0 && v <= 127) ||
+      vel[0] > vel[1]
+    )
+      throw new ScoreValidationError(
+        `${label} vel must be [lo, hi], MIDI velocities 0..127 with lo ≤ hi`,
+        "invalid-track",
+      );
+    ref.vel = Object.freeze([vel[0] as number, vel[1] as number] as const);
+  }
+  if (input.rr !== undefined) {
+    if (typeof input.rr !== "string" || !SAMPLE_RR_GROUP.test(input.rr))
+      throw new ScoreValidationError(
+        `${label} rr must be a round-robin group name (letters, digits, _; at most 32)`,
+        "invalid-track",
+      );
+    ref.rr = input.rr;
   }
   if (
     ref.fitmode !== undefined &&

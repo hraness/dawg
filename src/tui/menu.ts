@@ -97,6 +97,9 @@ import {
   STRING_PARAMS,
   STRING_PRESET_NAMES,
   STRING_PRESETS,
+  BOWED_PRESET_NAMES,
+  BOW_SIMPLE_PARAMS,
+  resolveString,
   STRING_SIMPLE_PARAMS,
   stringPresetOf,
 } from "../../core/strings.ts";
@@ -1182,13 +1185,20 @@ function parameterNodes(context: MenuContext): MenuNode[] {
   if (isWavetableInstrument(track.instrument))
     nodes.push(...wavetableNodes(track, context.projectRoot));
   if (isStringTrack(track)) {
-    nodes.push(...stringNodes(track, STRING_SIMPLE_PARAMS));
+    nodes.push(
+      ...stringNodes(
+        track,
+        resolveString(track.string).exciter === "bow"
+          ? BOW_SIMPLE_PARAMS
+          : STRING_SIMPLE_PARAMS,
+      ),
+    );
     nodes.push({
       kind: "menu",
       id: "string:advanced",
       label: "advanced",
       detail: `all ${Object.keys(STRING_PARAMS).length} params`,
-      help: "every string parameter: exciter, loss, body, buzz, sympathetics",
+      help: "every string parameter: exciter, loss, body, buzz, sympathetics, bow (pressure, speed, attack, vib, vibdelay, tremhz, sord, dyn)",
       build: (inner) => {
         const current = focused(inner);
         return current
@@ -1471,8 +1481,35 @@ function sampleVoiceNodes(context: MenuContext, voice: string): MenuNode[] {
       reset: `/fade out off ${voice}`,
       help: SAMPLE_CONTROLS.fadeTime,
     },
+    // 0.6.1 layers: velocity layer (SFZ lovel/hivel) and round-robin group.
+    {
+      kind: "choice",
+      label: "Velocity layer",
+      value: ref.vel ? `${ref.vel[0]}-${ref.vel[1]}` : "off",
+      options: velocityLayerOptions(ref.vel),
+      command: (option) => set(`vel ${option}`),
+      help: `${SAMPLE_CONTROLS.vel} · two layers: 0-63 and 64-127 · three: 0-42 43-84 85-127`,
+    },
+    {
+      kind: "entry",
+      label: "Round robin",
+      value: ref.rr ?? "",
+      placeholder: "group name, e.g. sn",
+      command: (text) => set(`rr ${text.trim() || "off"}`),
+      example: `/sample set ${voice} rr sn`,
+      help: SAMPLE_CONTROLS.rr,
+    },
   );
   return nodes;
+}
+
+/** Common velocity splits, plus the voice's own range when it is another. */
+function velocityLayerOptions(
+  vel: readonly [number, number] | undefined,
+): string[] {
+  const options = ["off", "0-63", "64-127", "0-42", "43-84", "85-127"];
+  const own = vel ? `${vel[0]}-${vel[1]}` : undefined;
+  return own && !options.includes(own) ? [...options, own] : options;
 }
 
 /** Synth preset first, then one row per parameter. */
@@ -2465,15 +2502,32 @@ function soundNodes(): MenuNode[] {
       kind: "menu",
       id: "strings",
       label: "Strings",
-      help: "plucked strings: guitars, basses, sitar, harpsichord, oud, koto…",
-      detail: `${STRING_PRESET_NAMES.length} plucked · built-in`,
-      build: () =>
-        STRING_PRESET_NAMES.map((name): MenuNode => ({
+      help: "plucked strings: guitars, basses, sitar, harpsichord, oud, koto…; Bowed: violin to contrabass, sections",
+      detail: `${STRING_PRESET_NAMES.length - BOWED_PRESET_NAMES.length} plucked · ${BOWED_PRESET_NAMES.length} bowed · built-in`,
+      build: () => [
+        ...STRING_PRESET_NAMES.filter(
+          (name) => !BOWED_PRESET_NAMES.includes(name),
+        ).map((name): MenuNode => ({
           kind: "action",
           label: `${name.padEnd(12)} ${STRING_PRESETS[name]!.doc}`,
           command: `string ${name}`,
           help: STRING_PRESETS[name]!.styles,
         })),
+        {
+          kind: "menu",
+          id: "strings:bowed",
+          label: "Bowed",
+          help: "bowed strings: violin, viola, cello, bass, fiddle, erhu, sections",
+          detail: BOWED_PRESET_NAMES.join(" "),
+          build: () =>
+            BOWED_PRESET_NAMES.map((name): MenuNode => ({
+              kind: "action",
+              label: `${name.padEnd(12)} ${STRING_PRESETS[name]!.doc}`,
+              command: `bowed ${name}`,
+              help: STRING_PRESETS[name]!.styles,
+            })),
+        },
+      ],
     },
     {
       kind: "menu",

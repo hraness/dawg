@@ -22,6 +22,12 @@ import type { EngineContext, InstrumentEngine } from "../instruments.ts";
 import { applyBody, bodyFor, symKeys, sympathetic } from "./body.ts";
 import { clamp } from "./loop.ts";
 import { PluckString, type Exciter, type PluckSpec } from "./pluck.ts";
+import {
+  BowedString,
+  type BowControl,
+  type BowSpec,
+  type BowNote,
+} from "./bow.ts";
 
 const BLOCK = 128;
 /** Longest a single string may ring (seconds). */
@@ -84,8 +90,155 @@ export function noteSpec(
   };
 }
 
+/** Whether resolved values play the bowed voice (`exciter bow`). */
+export function isBowed(values: StringValues): boolean {
+  return values.exciter === "bow";
+}
+
+/** Play mode keeps a bowed section to two players (live budget). */
+export const LIVE_BOW_UNISON = 2;
+
+/** The track as play mode hears it: a bowed section capped at 2 players. */
+export function liveStringTrack(track: Track): Track {
+  if (track.instrument !== "string" || !track.string) return track;
+  const values = resolveString(track.string);
+  if (!isBowed(values) || (values.unison as number) <= LIVE_BOW_UNISON)
+    return track;
+  return { ...track, string: { ...track.string, unison: LIVE_BOW_UNISON } };
+}
+
+/** Bow lanes read every 32 samples (`string-<name>`, absent: the value). */
+const BOW_LANES = ["pressure", "speed", "sord", "dyn"] as const;
+
+/** The bowed spec and note fields for one note. */
+export function bowSpec(
+  values: StringValues,
+  note: PerformedNote,
+  track: Track,
+  context: EngineContext,
+): { spec: BowSpec; velocity: number; control?: (t: number) => BowControl } {
+  const at = (name: string) => valueAt(track, values, name, note.startTick);
+  let velocity = clamp(note.velocity, 0, 1);
+  const articulation = note.articulation;
+  const sens = clamp(values.vel as number, 0, 1);
+  velocity = 1 - sens * (1 - velocity);
+  let attack = values.attack as number;
+  let release = values.release as number;
+  // Detache (spec 4): staccato and ghost are short strokes, quick on and off.
+  if (articulation === "staccato" || articulation === "ghost") {
+    attack = Math.min(attack, 0.01);
+    release = Math.min(release, 0.03);
+  }
+  // A harder stroke presses harder (spec 4: pressure += 0.3 (vel - 0.5)).
+  const press = (p: number) => clamp(p + 0.3 * (velocity - 0.5), 0, 1);
+  // Accent and marcato bite: pressure +0.2 for the first 80 ms.
+  const bite = articulation === "accent" || articulation === "marcato";
+  const spec: BowSpec = {
+    decay: Math.max(0.02, at("ring")),
+    track: values.track as number,
+    damp: clamp(values.damp as number, 0, 1),
+    pos: clamp(at("pos"), 0.01, 0.5),
+    pressure: press(at("pressure")),
+    speed: clamp(at("speed"), 0, 1),
+    attack,
+    release,
+    tremhz: values.tremhz as number,
+    sord: clamp(at("sord"), 0, 1),
+  };
+  const lanes = BOW_LANES.filter(
+    (name) =>
+      (track.fxAutomation?.[`string-${name}` as FxLane]?.length ?? 0) > 0,
+  );
+  const dyn = clamp(values.dyn as number, 0, 1);
+  if (lanes.length === 0 && dyn === 1 && !bite) return { spec, velocity };
+  const fixed: BowControl = {
+    pressure: spec.pressure,
+    speed: spec.speed,
+    sord: spec.sord,
+    dyn,
+  };
+  const bitten: BowControl = {
+    ...fixed,
+    pressure: clamp(spec.pressure + 0.2, 0, 1),
+  };
+  if (lanes.length === 0)
+    return {
+      spec,
+      velocity,
+      control: bite ? (t) => (t < 0.08 ? bitten : fixed) : () => fixed,
+    };
+  // Lanes are read in ticks; warped songs read them at the note's tempo.
+  const ticksPerSecond = context.sampleRate / context.samplesPerTick;
+  const control = (t: number): BowControl => {
+    const tick = note.startTick + t * ticksPerSecond;
+    const lane = (name: string) =>
+      clamp(valueAt(track, values, name, tick), 0, 1);
+    return {
+      pressure: clamp(
+        press(lane("pressure")) + (bite && t < 0.08 ? 0.2 : 0),
+        0,
+        1,
+      ),
+      speed: lane("speed"),
+      sord: lane("sord"),
+      dyn: lane("dyn"),
+    };
+  };
+  return { spec, velocity, control };
+}
+
+/** The preset vibrato alone (a slur keeps it running). */
+function vibratoCurve(
+  note: PerformedNote,
+  values: StringValues,
+  track: Track,
+  player: Readonly<{ rate: number; depth: number; phase: number }> = SOLO,
+): ((t: number) => number) | undefined {
+  if (note.performance?.replaceVibrato) return undefined;
+  const rate = valueAt(track, values, "vib", note.startTick) * player.rate;
+  const depth =
+    valueAt(track, values, "vibmod", note.startTick) * 100 * player.depth;
+  const delay = values.vibdelay as number;
+  if (!(rate > 0 && depth > 0)) return undefined;
+  const phase = player.phase;
+  return (t: number) => {
+    if (t <= delay) return 0;
+    const fade = Math.min(1, (t - delay) / 0.15);
+    return depth * fade * Math.sin(2 * Math.PI * (rate * (t - delay) + phase));
+  };
+}
+
+const SOLO = { rate: 1, depth: 1, phase: 0 } as const;
+
+/** Longest seeded onset spread of a bowed section's players (spec 2). */
+export const SECTION_SPREAD = 0.025;
+
+/**
+ * One section player (spec 2, Ensemble): seeded vibrato rate x0.92-1.08,
+ * depth x0.8-1.2 and phase, and an onset up to 25 ms late (scaled down
+ * for notes under 0.25 s). The first player stays on the grid.
+ */
+export function sectionPlayer(
+  seed: number,
+  index: number,
+  hold: number,
+): { rate: number; depth: number; phase: number; onset: number } {
+  const h = seedHash(`${seed}:${index}:player`);
+  return {
+    rate: 0.92 + 0.16 * unit(h, 0, 1),
+    depth: 0.8 + 0.4 * unit(h, 1, 1),
+    phase: unit(h, 2, 1),
+    onset:
+      index === 0
+        ? 0
+        : SECTION_SPREAD * unit(h, 3, 1) * Math.min(1, hold / 0.25),
+  };
+}
+
 type Voice = {
-  string: PluckString;
+  string: PluckString | BowedString;
+  /** The string's pitch over the note's base pitch (a slur keeps it). */
+  ratio: number;
   start: number;
   pitch: number;
   group: number;
@@ -93,6 +246,26 @@ type Voice = {
   gainR: number;
   damp?: Readonly<{ from: number; tau: number }>;
 };
+
+/**
+ * Whether pending note `index` (starting at `start`) is a lone note: no
+ * other note starts with it, so a held single note may slur into it.
+ */
+function slurs(
+  pending: readonly { start: number }[],
+  index: number,
+  start: number,
+): boolean {
+  return (
+    pending[index - 1]?.start !== start && pending[index + 1]?.start !== start
+  );
+}
+
+/** A 64th note in samples at the song's start tempo (the slur window). */
+function slurWindow(context: EngineContext): number {
+  const ticks = (context.score.ticksPerBeat ?? 480) / 16;
+  return ticks * context.samplesPerTick;
+}
 
 /** Ring-out after the last note-off, in seconds. */
 export function stringTailSeconds(track: Track): number {
@@ -163,6 +336,7 @@ export function renderStrings(
   const octbelow = values.octbelow as number;
   const cap = Math.max(1, Math.round(values.voices as number));
   const tuning = context.tuning;
+  const bowed = isBowed(values);
   const L = new Float64Array(total);
   const R = dryR ? new Float64Array(total) : undefined;
   const voices: Voice[] = [];
@@ -183,6 +357,47 @@ export function renderStrings(
       next += 1;
       const baseHz = noteHz(note.pitch, note.cents, tuning);
       if (!(baseHz > 0) || baseHz >= 0.45 * sr) continue;
+      // Slur (bowed): a single note that starts while one earlier single
+      // note is still bowed moves that bow to the new pitch in 7 ms, with
+      // no new attack (legato articulation overlaps its notes, so it
+      // slurs too). Chords and double stops start new strokes.
+      if (bowed && slurs(pending, next - 1, start)) {
+        const held = voices.filter(
+          (v) => !v.string.done && v.string.offAt > start - v.start,
+        );
+        const groups = new Set(held.map((v) => v.group));
+        const pitches = new Set(held.map((v) => v.pitch));
+        // A true legato only: the held note lets go within a short window
+        // of the new one (a 64th note or 150 ms, legato's own overlap), or
+        // the new note is marked legato. A pedal or a note held under a
+        // moving line keeps sounding and the new note takes a new stroke.
+        const window = Math.max(0.15 * sr, slurWindow(context));
+        const letsGo =
+          note.articulation === "legato" ||
+          held.every((v) => v.start + v.string.offAt <= start + window);
+        const range = held.every((v) =>
+          (v.string as BowedString).canSlurTo(baseHz * v.ratio),
+        );
+        if (
+          letsGo &&
+          range &&
+          groups.size === 1 &&
+          pitches.size === 1 &&
+          held[0]!.start < start
+        ) {
+          const hold = holdSamples(note, start, context) / sr;
+          for (const v of held) {
+            (v.string as BowedString).slurTo(
+              baseHz * v.ratio,
+              start - v.start,
+              Math.max(0.01, hold),
+              note.performance?.cents,
+            );
+            v.pitch = note.pitch;
+          }
+          continue;
+        }
+      }
       // Restrike: the same key damps its previous string.
       for (const v of voices)
         if (v.pitch === note.pitch) v.string.releaseAt(start - v.start);
@@ -197,11 +412,10 @@ export function renderStrings(
         for (const v of held)
           if (v.group === oldest) v.string.releaseAt(start - v.start);
       }
-      const { spec, velocity } = noteSpec(values, note, track);
       const seed = seedHash(
         `${note.id}:${note.startTick + (context.seedTick ?? 0)}:string`,
       );
-      const strings: { hz: number; gain: number }[] = [];
+      const strings: { hz: number; gain: number; ratio: number }[] = [];
       // The course's tuning error belongs to the key, not to the strike: it
       // is seeded by track and key (so every velocity of a key beats the
       // same way) and centred, so the course's mean pitch is the table's.
@@ -213,42 +427,74 @@ export function renderStrings(
       for (let i = 0; i < unison; i += 1) {
         const d = unison > 1 ? (i / (unison - 1) - 0.5) * detune : 0;
         const jitter = jitters[i]! - meanJitter;
+        const ratio = 2 ** ((d * 100 + jitter) / 1200);
         strings.push({
-          hz: baseHz * 2 ** ((d * 100 + jitter) / 1200),
+          hz: baseHz * ratio,
           gain: 1 / Math.sqrt(unison),
+          ratio,
         });
       }
       if (oct > 0 && note.pitch < octbelow) {
         const up = noteHz(Math.min(127, note.pitch + 12), note.cents, tuning);
         const hz = up > 0 ? up : baseHz * 2;
-        if (hz < 0.45 * sr)
+        if (hz < 0.45 * sr) {
+          const tuned =
+            hz * 2 ** (((unit(course, unison, 1) - 0.5) * 4) / 1200);
           strings.push({
-            hz: hz * 2 ** (((unit(course, unison, 1) - 0.5) * 4) / 1200),
+            hz: tuned,
             gain: oct / Math.sqrt(unison),
+            ratio: tuned / baseHz,
           });
+        }
       }
       const hold = holdSamples(note, start, context) / sr;
-      const cents = centsCurve(note, values, track);
+      const pluck = bowed ? undefined : noteSpec(values, note, track);
+      const bow = bowed ? bowSpec(values, note, track, context) : undefined;
+      const cents = bowed
+        ? note.performance?.cents
+        : centsCurve(note, values, track);
+      const section = bowed && unison > 1;
       strings.forEach((s, i) => {
+        // Section players (not the octave string) are seeded as players.
+        const player =
+          section && i < unison ? sectionPlayer(seed, i, hold) : undefined;
+        const onset = player ? Math.round(player.onset * sr) : 0;
+        const vibrato = bowed
+          ? vibratoCurve(note, values, track, player)
+          : undefined;
         const pan =
           strings.length > 1 ? (i / (strings.length - 1) - 0.5) * spread : 0;
-        const string = new PluckString(
-          spec,
-          {
-            hz: s.hz,
-            velocity,
-            hold: Math.max(0.01, hold),
-            seed: seedHash(`${seed}:${i}`),
-            ...(cents ? { cents } : {}),
-          },
-          sr,
-          MAX_RING,
-        );
+        const common = {
+          hz: s.hz,
+          hold: Math.max(0.01, hold - onset / sr),
+          seed: seedHash(`${seed}:${i}`),
+          ...(cents ? { cents } : {}),
+        };
+        const string = bow
+          ? new BowedString(
+              bow.spec,
+              {
+                ...common,
+                velocity: bow.velocity,
+                ...(vibrato ? { vibrato } : {}),
+                ...(bow.control ? { control: bow.control } : {}),
+              } satisfies BowNote,
+              sr,
+              // A bow sustains for as long as the note is held.
+              Math.max(MAX_RING, hold + bow.spec.release + 1),
+            )
+          : new PluckString(
+              pluck!.spec,
+              { ...common, velocity: pluck!.velocity },
+              sr,
+              MAX_RING,
+            );
         const gl = R ? s.gain * Math.sqrt(0.5 - pan / 2) * Math.SQRT2 : s.gain;
         const gr = s.gain * Math.sqrt(0.5 + pan / 2) * Math.SQRT2;
         voices.push({
           string,
-          start,
+          ratio: s.ratio,
+          start: start + onset,
           pitch: note.pitch,
           group: start,
           gainL: gl,

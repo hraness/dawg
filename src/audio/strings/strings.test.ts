@@ -30,7 +30,9 @@ describe("plucked strings (design spec section 9)", () => {
     const hash = createHash("sha256")
       .update(JSON.stringify(STRING_PRESETS))
       .digest("hex");
-    expect(STRING_PRESET_NAMES).toHaveLength(22);
+    // 0.6.1 (f061-bowed) appended 13 bowed and section rows; the 22
+    // plucked rows are unchanged, so the pin moved only for the append.
+    expect(STRING_PRESET_NAMES).toHaveLength(35);
     expect(hash).toBe(PRESET_HASH);
   });
 
@@ -182,9 +184,18 @@ describe("plucked strings (design spec section 9)", () => {
 
   test("levels: a C-major triad at velocity 0.8 peaks near -6 dBFS", () => {
     for (const preset of STRING_PRESET_NAMES) {
-      const root = ["ebass", "slap", "upright", "motown"].includes(preset)
+      const root = [
+        "ebass",
+        "slap",
+        "upright",
+        "motown",
+        "contrabass",
+        "contrabasses",
+      ].includes(preset)
         ? 36
-        : 60;
+        : ["cello", "cellos"].includes(preset)
+          ? 48
+          : 60;
       const triad = render(
         { preset },
         [root, root + 4, root + 7].map((pitch) => ({ pitch, seconds: 1 })),
@@ -235,4 +246,4 @@ describe("plucked strings (design spec section 9)", () => {
 });
 
 const PRESET_HASH =
-  "7e2d7f1fad76942100f0765c45801ce112062387c891e86c329e76cdcd76e7c7";
+  "b204919d783dad1160f4008769d02e82329b51b3a77f5edadcb7b2d420a0d7a3";

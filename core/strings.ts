@@ -31,9 +31,9 @@ export const STRING_PARAMS: Readonly<Record<string, ParamSpec>> = Object.freeze(
   {
     exciter: {
       kind: "enum",
-      values: ["pick", "finger", "hammer", "noise"],
+      values: ["pick", "finger", "hammer", "noise", "bow"],
       default: "pick",
-      doc: "how the string is set in motion",
+      doc: "how the string is set in motion (bow: the bowed voice)",
     },
     ring: {
       kind: "number",
@@ -276,6 +276,63 @@ export const STRING_PARAMS: Readonly<Record<string, ParamSpec>> = Object.freeze(
       doc: "output level (presets carry a calibrated trim)",
       strudel: ["gain"],
     },
+    // ---- bowed (f061-bowed): read only when exciter is bow ----
+    pressure: {
+      kind: "number",
+      min: 0,
+      max: 1,
+      default: 0.5,
+      step: 0.05,
+      automate: true,
+      doc: "bow force within the playable range: flautando at 0, gritty at 1",
+    },
+    speed: {
+      kind: "number",
+      min: 0,
+      max: 1,
+      default: 0.6,
+      step: 0.05,
+      automate: true,
+      doc: "bow speed at full dynamics (loudness)",
+    },
+    attack: {
+      kind: "number",
+      min: 0.005,
+      max: 4,
+      default: 0.08,
+      step: log,
+      unit: "s",
+      doc: "bow-speed ramp at the start of a stroke (swells)",
+      strudel: ["attack"],
+    },
+    tremhz: {
+      kind: "number",
+      min: 0,
+      max: 16,
+      default: 0,
+      step: 0.5,
+      unit: "Hz",
+      doc: "tremolo bowing: rapid up and down strokes per second (0 off)",
+    },
+    sord: {
+      kind: "number",
+      min: 0,
+      max: 1,
+      default: 0,
+      step: 0.05,
+      automate: true,
+      doc: "con sordino: the practice mute, darker and softer",
+    },
+    dyn: {
+      kind: "number",
+      min: 0,
+      max: 1,
+      default: 1,
+      step: 0.05,
+      automate: true,
+      doc: "dynamics on top of velocity, drives bow speed and pressure (swells)",
+      strudel: ["expression"],
+    },
   },
 );
 
@@ -289,6 +346,21 @@ export const STRING_SIMPLE_PARAMS: readonly string[] = Object.freeze([
   "buzz",
   "body",
   "sym",
+]);
+
+/** Simple menu rows of a bowed track (exciter bow, 0.6.1). */
+export const BOW_SIMPLE_PARAMS: readonly string[] = Object.freeze([
+  "pressure",
+  "speed",
+  "attack",
+  "pos",
+  "vib",
+  "tremhz",
+  "sord",
+  "dyn",
+  "bright",
+  "ring",
+  "body",
 ]);
 
 /** Parameter name for a Strudel alias (`decay` -> `ring`), or the name. */
@@ -355,6 +427,37 @@ function preset(
     doc,
     styles,
     values: Object.freeze({ ...BASE, ...values }),
+  });
+}
+
+// Bowed base (proto/strings/presets.ts `B`, 0.6.1): the bowed rows start
+// here, so BASE and every plucked row stay byte-identical.
+const BOW_BASE: StringValues = {
+  ...BASE,
+  exciter: "bow",
+  ring: 0.6,
+  damp: 0.5,
+  pos: 0.12,
+  release: 0.15,
+  pressure: 0.5,
+  speed: 0.6,
+  attack: 0.08,
+  vib: 5.5,
+  vibmod: 0.18,
+  vibdelay: 0.25,
+  body: "violin",
+  voices: 4,
+};
+
+function bowed(
+  doc: string,
+  styles: string,
+  values: StringValues,
+): StringPreset {
+  return Object.freeze({
+    doc,
+    styles,
+    values: Object.freeze({ ...BOW_BASE, ...values }),
   });
 }
 
@@ -738,12 +841,139 @@ export const STRING_PRESETS: Readonly<Record<string, StringPreset>> =
         gain: 0.36,
       },
     ),
+    // ---- bowed (0.6.1, f061-bowed): appended, earlier rows unchanged ----
+    violin: bowed("solo violin", "Bach, Brahms, Shostakovich, cantatas", {
+      gain: 0.393,
+    }),
+    viola: bowed("solo viola", "orchestral, chamber", {
+      vib: 5.2,
+      size: 1.22,
+      gain: 0.537,
+    }),
+    cello: bowed(
+      "solo cello",
+      "Bach suites, Brahms, Shostakovich, Mitski ballads",
+      { ring: 0.9, pos: 0.1, vib: 5, vibmod: 0.2, size: 2.4, gain: 0.415 },
+    ),
+    contrabass: bowed("arco double bass", "orchestral bass", {
+      ring: 1.2,
+      pos: 0.1,
+      vib: 4.5,
+      vibmod: 0.12,
+      body: "bass",
+      size: 1.2,
+      voices: 2,
+      gain: 0.316,
+    }),
+    fiddle: bowed("folk fiddle, straight tone, firm bow", "celtic, bluegrass", {
+      pressure: 0.65,
+      pos: 0.1,
+      attack: 0.03,
+      vib: 0,
+      gain: 0.504,
+    }),
+    erhu: bowed("erhu, skin body, wide vibrato", "Chinese, film", {
+      pressure: 0.45,
+      pos: 0.1,
+      vib: 6,
+      vibmod: 0.35,
+      vibdelay: 0.15,
+      body: "skin",
+      size: 0.77,
+      voices: 2,
+      gain: 0.347,
+    }),
+    kamancheh: bowed("kamancheh spike fiddle", "Persian", {
+      pressure: 0.55,
+      pos: 0.1,
+      vib: 6.5,
+      vibmod: 0.25,
+      vibdelay: 0.1,
+      body: "skin",
+      voices: 2,
+      gain: 0.43,
+    }),
+    violins: bowed(
+      "violin section",
+      "orchestral, Shostakovich, Beethoven, Brahms",
+      { vibmod: 0.15, unison: 6, detune: 0.12, spread: 0.7, gain: 0.399 },
+    ),
+    violas: bowed("viola section", "orchestral", {
+      vib: 5.2,
+      vibmod: 0.15,
+      size: 1.22,
+      unison: 4,
+      detune: 0.12,
+      spread: 0.6,
+      gain: 0.57,
+    }),
+    cellos: bowed("cello section", "orchestral, cantatas", {
+      ring: 0.9,
+      pos: 0.1,
+      vib: 5,
+      vibmod: 0.17,
+      size: 2.4,
+      unison: 4,
+      detune: 0.1,
+      spread: 0.6,
+      gain: 0.46,
+    }),
+    contrabasses: bowed("double bass section", "orchestral", {
+      ring: 1.2,
+      pos: 0.1,
+      vib: 4.5,
+      vibmod: 0.1,
+      body: "bass",
+      size: 1.2,
+      unison: 3,
+      detune: 0.08,
+      spread: 0.4,
+      voices: 2,
+      gain: 0.315,
+    }),
+    pizz: preset(
+      "pizzicato string section, plucked with the finger",
+      "orchestral, Motown strings, film",
+      {
+        exciter: "finger",
+        ring: 0.6,
+        damp: 0.5,
+        pos: 0.2,
+        bright: 0.45,
+        release: 0.08,
+        body: "violin",
+        unison: 4,
+        detune: 0.1,
+        spread: 0.6,
+        voices: 6,
+        gain: 0.497,
+      },
+    ),
+    trem: bowed("tremolo string section, rapid bowing", "film, orchestral", {
+      tremhz: 13,
+      vibmod: 0.1,
+      unison: 4,
+      detune: 0.12,
+      spread: 0.6,
+      gain: 0.507,
+    }),
   });
 
 /** Preset names in table order. */
 export const STRING_PRESET_NAMES: readonly string[] = Object.freeze(
   Object.keys(STRING_PRESETS),
 );
+
+/**
+ * The bowed-family presets (0.6.1): the rows appended from `violin` on,
+ * `pizz` included (a plucked violin section, listed with its family).
+ */
+export const BOWED_PRESET_NAMES: readonly string[] = Object.freeze(
+  STRING_PRESET_NAMES.slice(STRING_PRESET_NAMES.indexOf("violin")),
+);
+
+/** The preset `bowed` with no name plays. */
+export const DEFAULT_BOWED_PRESET = "cello";
 
 /** The preset a bare `string: {}` plays. */
 export const DEFAULT_STRING_PRESET = "nylon";
@@ -760,6 +990,11 @@ export const STRING_ALIASES: Readonly<Record<string, string>> = Object.freeze({
   cembalo: "harpsichord",
   hammered: "dulcimer",
   sehtar: "setar",
+  // bowed (0.6.1); `strings`, `cello` and `contrabass` stay legacy words
+  kemence: "kamancheh",
+  pizzicato: "pizz",
+  tremolo: "trem",
+  "bowed-cello": "cello",
 });
 
 /** A preset name for a word or alias, or undefined. */

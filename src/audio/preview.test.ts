@@ -157,6 +157,22 @@ describe("default phrase", () => {
     expect(phraseRole(track("wt"))).toBe("drone");
   });
 
+  test("bowed strings: low strings riff, solo strings lead, sections chord", () => {
+    const bowed = (preset: string) =>
+      ({
+        id: "x",
+        name: "x",
+        instrument: "string",
+        string: { preset },
+      }) as never;
+    expect(phraseRole(bowed("contrabass"))).toBe("riff");
+    expect(phraseRole(bowed("cellos"))).toBe("riff");
+    expect(phraseRole(bowed("violin"))).toBe("lead");
+    expect(phraseRole(bowed("erhu"))).toBe("lead");
+    expect(phraseRole(bowed("violins"))).toBe("chord");
+    expect(phraseRole(bowed("trem"))).toBe("chord");
+  });
+
   test("a chord stacks notes, a riff and lead move, a groove hits a kick, a drone holds", () => {
     const starts = (id: string) =>
       defaultPhrase(empty, track(id), 2).map((note) => note.startTick);

@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.30.0";
+export const SDK_VERSION = "1.31.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -1293,6 +1293,10 @@ export type SampleSpec = Readonly<{
   fadeInTime?: number;
   /** Where `resample` rendered the file from (informational, SDK 1.29.0). */
   from?: SampleProvenanceSpec;
+  /** Velocity layer (SDK 1.31.0, SFZ lovel/hivel): MIDI velocities `[lo, hi]` this voice plays. */
+  vel?: readonly [number, number];
+  /** Round-robin group (SDK 1.31.0, SFZ seq_length): voices in a group take turns, A B A B. */
+  rr?: string;
 }>;
 
 /** `SampleSpec.from` (SDK 1.29.0): the source of a resampled file. */
@@ -1466,9 +1470,13 @@ export const STRING_INSTRUMENT = "string";
  * String engine settings (SDK 1.21.0): a `preset` (`nylon`, `steel`,
  * `electric`, `jangle`, `ebass`, `slap`, `upright`, `sitar`, `tanpura`,
  * `harpsichord`, `lute`, `oud`, `setar`, `tar`, `santur`, `dulcimer`, `koto`,
- * `harp`, `banjo`, `tres`, `requinto`) plus any parameter to override
- * (`ring`, `bright`, `damp`, `pos`, `mute`, `buzz`, `body`, `sym`, ...).
- * dawg validates names and ranges; see **Strings** in DAWG.md.
+ * `harp`, `banjo`, `tres`, `requinto`; bowed since SDK 1.31.0: `violin`,
+ * `viola`, `cello`, `contrabass`, `fiddle`, `erhu`, `kamancheh`, `violins`,
+ * `violas`, `cellos`, `contrabasses`, `pizz`, `trem`) plus any parameter to
+ * override (`ring`, `bright`, `damp`, `pos`, `mute`, `buzz`, `body`, `sym`,
+ * bow: `exciter: "bow"`, `pressure`, `speed`, `attack`, `vib`, `vibmod`,
+ * `vibdelay`, `tremhz`, `sord`, `dyn`). dawg validates names and ranges;
+ * see **Strings** in DAWG.md.
  */
 export type StringInput = Readonly<
   { preset?: string } & Record<string, number | string | undefined>
@@ -1478,15 +1486,24 @@ export type StringInput = Readonly<
 export type StringSpec = Readonly<{ kind: "string" } & StringInput>;
 
 /**
- * A plucked string instrument (SDK 1.21.0): a preset and overrides.
+ * A plucked or bowed string instrument (SDK 1.21.0; bowed and the object
+ * form 1.31.0): a preset and overrides.
  *
  * instrument: stringed("nylon")
  * instrument: stringed("sitar", { buzz: 0.8, sym: 0.5 })
+ * instrument: stringed({ preset: "cello", vib: 6 })
  */
 export function stringed(
-  preset = "nylon",
+  preset: string | StringInput = "nylon",
   params: Readonly<Record<string, number | string>> = {},
 ): StringSpec {
+  if (isRecord(preset)) {
+    const { preset: name, ...rest } = preset as Record<string, unknown>;
+    return stringed(name === undefined ? "nylon" : (name as string), {
+      ...(rest as Record<string, number | string>),
+      ...params,
+    });
+  }
   if (typeof preset !== "string" || preset.length === 0)
     throw new DawgSdkError("stringed needs a preset name");
   if (!isRecord(params))
@@ -2049,6 +2066,8 @@ function sampleSpec(value: string | SampleSpec, name: string): SampleSpec {
     fadeTime?: number;
     fadeInTime?: number;
     from?: SampleProvenanceSpec;
+    vel?: readonly [number, number];
+    rr?: string;
   } = { src: spec.src };
   if (spec.src.startsWith("pack:")) {
     if (spec.sha256 !== undefined)
@@ -2123,6 +2142,15 @@ function sampleSpec(value: string | SampleSpec, name: string): SampleSpec {
       throw new DawgSdkError(`${name} from must be an object`);
     out.from = spec.from;
   }
+  if (spec.vel !== undefined) {
+    if (!Array.isArray(spec.vel) || spec.vel.length !== 2)
+      throw new DawgSdkError(`${name} vel must be [lo, hi]`);
+    out.vel = Object.freeze([
+      finite(spec.vel[0], `${name} vel`),
+      finite(spec.vel[1], `${name} vel`),
+    ] as const);
+  }
+  if (spec.rr !== undefined) out.rr = text(spec.rr, `${name} rr`);
   return Object.freeze(out);
 }
 
@@ -5389,6 +5417,42 @@ const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
     preset: "dulcimer",
   },
   { word: "sehtar", instrument: "string", field: "string", preset: "setar" },
+  // bowed (f061-bowed): bowed presets of the string engine. `cello`,
+  // `contrabass` and `strings` stay legacy words (today's voice);
+  // `bowed-cello`, `string cello` or `bowed cello` reach the engine.
+  { word: "violin", instrument: "string", field: "string", preset: "violin" },
+  { word: "viola", instrument: "string", field: "string", preset: "viola" },
+  { word: "fiddle", instrument: "string", field: "string", preset: "fiddle" },
+  { word: "erhu", instrument: "string", field: "string", preset: "erhu" },
+  {
+    word: "kamancheh",
+    instrument: "string",
+    field: "string",
+    preset: "kamancheh",
+  },
+  {
+    word: "kemence",
+    instrument: "string",
+    field: "string",
+    preset: "kamancheh",
+  },
+  { word: "violins", instrument: "string", field: "string", preset: "violins" },
+  { word: "violas", instrument: "string", field: "string", preset: "violas" },
+  { word: "cellos", instrument: "string", field: "string", preset: "cellos" },
+  {
+    word: "contrabasses",
+    instrument: "string",
+    field: "string",
+    preset: "contrabasses",
+  },
+  { word: "pizzicato", instrument: "string", field: "string", preset: "pizz" },
+  { word: "tremolo", instrument: "string", field: "string", preset: "trem" },
+  {
+    word: "bowed-cello",
+    instrument: "string",
+    field: "string",
+    preset: "cello",
+  },
   // f06-rig: guitar track aliases, a guitar voice plus a whole rig. The
   // voice is the strings lane's `electric` row (jangle: its 12-string
   // `jangle` preset); the pluck only while that row is absent. Never `lead`

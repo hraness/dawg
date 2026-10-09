@@ -74,6 +74,11 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
           "plucked strings · string sitar · string buzz 0.8 · string ring 6",
       },
       {
+        command: "bowed [<preset>] | <param> <value> | presets",
+        summary:
+          "bowed strings · bowed violin · bowed cellos · bowed pressure 0.7 · bowed sord 1",
+      },
+      {
         command: "rig <preset> | reset",
         summary:
           "guitar rig · rig crunch · rig metal · rig shoegaze · rig lists them",
@@ -721,7 +726,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   export: "/export <file> · /export loop.track.json",
   import: "/import <file> · /import loop.track.json",
   sample:
-    "/sample <path> [as <voice>] · /sample set <voice> <control> <value>… · /sample set brk fit on clip 1",
+    "/sample <path> [as <voice>] · /sample set <voice> <control> <value>… · /sample set brk fit on clip 1 · /sample set soft vel 0-63 rr a",
   samples: "/sample · lists the focused track's voices",
   fitmode:
     "/fitmode [repitch|beats|tones|auto|off] [<voice>] · /fitmode beats · /fitmode auto brk",
@@ -747,6 +752,8 @@ export const USAGE: Readonly<Record<string, string>> = {
   synth: "synth <param> <value> | preset <name> · synth lpf 1200",
   string:
     "string <preset> | preset <name> | <param> <value> | presets | reset | off · string koto",
+  bowed:
+    "bowed [violin|viola|cello|contrabass|fiddle|erhu|kamancheh|violins|violas|cellos|contrabasses|pizz|trem] | <param> <value> | presets · bowed violin · bowed pressure 0.7",
   rig: "rig clean|crunch|punk|ragged|lead|metal|fuzz|octave|funk|wah|bachata|spring|bassdrive|reese|jangle|alt|shoegaze|glide|dreampop|swell|ebow | reset",
   guitar: `guitar tune ${GUITAR_TUNING_NAMES.join("|")} | E A D G B E · capo 0..12 · hand 3..6 · ring 0..1 · position · reset`,
   strum:

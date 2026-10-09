@@ -19,7 +19,7 @@ const LEGACY_TONES = ["square", "saw", "triangle", "bass", "piano", "pluck"];
 
 /** The 0.6 voice to point a plain-sine legacy word at. */
 const LEGACY_ADVICE: Readonly<Record<string, string>> = Object.freeze({
-  cello: "synth preset strings for a string pad",
+  cello: "bowed cello for the bowed cello, synth preset strings for a pad",
   strings: "synth preset strings for a string pad",
   organ: "synth preset organ",
   bell: "modal glock or synth preset bell",
@@ -74,6 +74,10 @@ export function plainSineAdvice(
     return `"${name}" is dawg's plain sine (kept for old projects)${advice ? ` · ${advice}` : ""}`;
   }
   const near = nearestWord(name, knownWords());
+  // A resolver word stored raw (an older project): the word itself now
+  // picks a voice when typed again.
+  if (near === name)
+    return `"${name}" is stored as a bare word and plays a plain sine · type instrument ${name} again for its voice`;
   return `"${name}" is not a dawg instrument and plays a plain sine${near ? ` · did you mean ${near}?` : ""}`;
 }
 

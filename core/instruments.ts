@@ -132,6 +132,42 @@ export const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
     preset: "dulcimer",
   },
   { word: "sehtar", instrument: "string", field: "string", preset: "setar" },
+  // bowed (f061-bowed): bowed presets of the string engine. `cello`,
+  // `contrabass` and `strings` stay legacy words (today's voice);
+  // `bowed-cello`, `string cello` or `bowed cello` reach the engine.
+  { word: "violin", instrument: "string", field: "string", preset: "violin" },
+  { word: "viola", instrument: "string", field: "string", preset: "viola" },
+  { word: "fiddle", instrument: "string", field: "string", preset: "fiddle" },
+  { word: "erhu", instrument: "string", field: "string", preset: "erhu" },
+  {
+    word: "kamancheh",
+    instrument: "string",
+    field: "string",
+    preset: "kamancheh",
+  },
+  {
+    word: "kemence",
+    instrument: "string",
+    field: "string",
+    preset: "kamancheh",
+  },
+  { word: "violins", instrument: "string", field: "string", preset: "violins" },
+  { word: "violas", instrument: "string", field: "string", preset: "violas" },
+  { word: "cellos", instrument: "string", field: "string", preset: "cellos" },
+  {
+    word: "contrabasses",
+    instrument: "string",
+    field: "string",
+    preset: "contrabasses",
+  },
+  { word: "pizzicato", instrument: "string", field: "string", preset: "pizz" },
+  { word: "tremolo", instrument: "string", field: "string", preset: "trem" },
+  {
+    word: "bowed-cello",
+    instrument: "string",
+    field: "string",
+    preset: "cello",
+  },
   // f06-rig: guitar track aliases, a guitar voice plus a whole rig. The
   // voice is the strings lane's `electric` row (jangle: its 12-string
   // `jangle` preset); the pluck only while that row is absent. Never `lead`

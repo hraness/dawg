@@ -18,7 +18,9 @@ type Master = {
 async function sessionMaster(cwd: string): Promise<Master | undefined> {
   const found: string[] = [];
   const walk = async (dir: string): Promise<void> => {
-    for (const entry of await readdir(dir, { withFileTypes: true })) {
+    // A session lock directory can vanish between listing and reading it.
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) await walk(path);
       else if (entry.name.endsWith(".json")) found.push(path);

@@ -9,6 +9,9 @@
  *   string <param> off                  back to the preset's value
  *   string reset                        drop the overrides, keep the preset
  *   string off                          back to the track's synth voice
+ *   bowed                               play the cello preset (bowed strings)
+ *   bowed <preset>                      a bowed preset (violin viola cello …)
+ *   bowed presets                       the bowed presets
  *
  * `string sitar`, `string buzz 0.8 sym 0.5`, `string ring 6`. Each command
  * is one `updateTrack` revision and one undo step.
@@ -20,6 +23,8 @@ import {
   type TrackScore,
 } from "../../core/score.ts";
 import {
+  BOWED_PRESET_NAMES,
+  DEFAULT_BOWED_PRESET,
   DEFAULT_STRING_PRESET,
   isStringTrack,
   normalizeString,
@@ -37,7 +42,7 @@ import { parseParamValue } from "./fx.ts";
 
 export type StringCommand =
   | { type: "string-list" }
-  | { type: "string-presets" }
+  | { type: "string-presets"; bowed?: boolean }
   | { type: "string-reset" }
   | { type: "string-off" }
   | { type: "string-preset"; preset: string }
@@ -49,6 +54,7 @@ export type StringCommand =
 
 export function parseStringCommand(prompt: string): StringCommand | undefined {
   const words = prompt.trim().split(/\s+/);
+  if (words[0]?.toLowerCase() === "bowed") return parseBowed(words.slice(1));
   if (words[0]?.toLowerCase() !== "string") return undefined;
   if (words.length === 1) return { type: "string-list" };
   if (prompt.length > 1_024) return undefined;
@@ -82,6 +88,26 @@ export function parseStringCommand(prompt: string): StringCommand | undefined {
   return { type: "string-set", values };
 }
 
+/**
+ * `bowed` (0.6.1): the string engine's bowed family. `bowed` plays cello,
+ * `bowed <preset>` a bowed preset, `bowed presets` lists them, and
+ * `bowed <param> <value>…` is `string <param> <value>…`.
+ */
+function parseBowed(words: string[]): StringCommand | undefined {
+  if (words.length === 0)
+    return { type: "string-preset", preset: DEFAULT_BOWED_PRESET };
+  const rest = words.map((word) => word.toLowerCase());
+  if (rest.length === 1 && (rest[0] === "presets" || rest[0] === "list"))
+    return { type: "string-presets", bowed: true };
+  if (rest.length === 1) {
+    const preset = stringPresetName(rest[0]!);
+    return preset && BOWED_PRESET_NAMES.includes(preset)
+      ? { type: "string-preset", preset }
+      : undefined;
+  }
+  return parseStringCommand(`string ${rest.join(" ")}`);
+}
+
 /** `sitar · buzz 0.8 · sym 0.5`, or `nylon` for a bare preset. */
 export function describeString(settings: TrackString | undefined): string {
   const parts = [stringPresetOf(settings)];
@@ -108,7 +134,7 @@ export function applyStringCommand(
   if (command.type === "string-presets")
     return {
       ok: true,
-      message: `string presets · ${STRING_PRESET_NAMES.map((name) => `${name} (${STRING_PRESETS[name]!.doc})`).join(" · ")}`,
+      message: `${command.bowed ? "bowed" : "string"} presets · ${(command.bowed ? BOWED_PRESET_NAMES : STRING_PRESET_NAMES).map((name) => `${name} (${STRING_PRESETS[name]!.doc})`).join(" · ")}`,
     };
   if (track.sampler || track.kit)
     return {

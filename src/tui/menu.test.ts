@@ -1063,5 +1063,21 @@ describe("key command", () => {
       type: "run",
       command: "/len 4 brk",
     });
+    // 0.6.1 layers: Velocity layer steps through the common splits.
+    select(menu, ctx, "Velocity layer");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "/sample set brk vel 0-63",
+    });
+    select(menu, ctx, "Round robin");
+    expect(menu.view(ctx).items[menu.view(ctx).index]!.label).toContain(
+      "Round robin",
+    );
+    menu.key("\r", ctx);
+    for (const ch of "sn") menu.key(ch, ctx);
+    expect(menu.key("\r", ctx)).toEqual({
+      type: "run",
+      command: "/sample set brk rr sn",
+    });
   });
 });
