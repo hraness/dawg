@@ -169,6 +169,35 @@ describe("fitmode beats", () => {
     for (let i = 0; i < 200; i += 1) expect(out[i]).toBeCloseTo(plain[i]!, 6);
   });
 
+  test("slowed slices with ringing tails fade out instead of clicking", () => {
+    // 16 hits of 180 Hz with 150 ms decay at 174 BPM eighths: each tail is
+    // still sounding at the next onset, so a slowed slice ends mid-tone.
+    const beat = (60 / 174) * RATE;
+    const at = Array.from({ length: 16 }, (_, i) => Math.round((i * beat) / 2));
+    const x = new Float32Array(Math.round(8 * beat));
+    for (const start of at)
+      for (let i = 0; start + i < x.length; i += 1)
+        x[start + i] =
+          x[start + i]! +
+          0.8 *
+            Math.exp(-i / (0.15 * RATE)) *
+            Math.sin((2 * Math.PI * 180 * i) / RATE);
+    let sourceStep = 0;
+    for (let i = 1; i < x.length; i += 1)
+      sourceStep = Math.max(sourceStep, Math.abs(x[i]! - x[i - 1]!));
+    const score = scoreWith(
+      { src: "b.wav", bpm: 174, fitmode: "beats" },
+      128,
+      2,
+      { startTick: 0, durationTicks: 8 * 480 },
+    );
+    const out = render(score, decoded(x), Math.round(4.2 * RATE));
+    let step = 0;
+    for (let i = 1; i < out.length; i += 1)
+      step = Math.max(step, Math.abs(out[i]! - out[i - 1]!));
+    expect(step).toBeLessThan(2 * sourceStep);
+  });
+
   test("stays in sync within 1 ms over 64 bars of a tempo ramp", () => {
     const srcBpm = 120;
     const beats = 64 * 4;
@@ -360,5 +389,88 @@ describe("fit cache and live", () => {
     const later = play(12);
     expect(later.fitting).toBeUndefined();
     expect(later.frames).toBeGreaterThan(0);
+  });
+  test("a short note on a long fitted window fits only what it plays", () => {
+    // 60 s of source, one clipped beat at 120 BPM: only ~0.5 s is fitted.
+    const src = decoded(sine(330, 60));
+    const ref: SampleRef = {
+      src: "t.wav",
+      bpm: 120,
+      fitmode: "tones",
+      clip: 1,
+    };
+    const score = scoreWith(ref, 120, 1, { startTick: 0, durationTicks: 480 });
+    const t0 = performance.now();
+    const out = render(score, src, RATE);
+    expect(performance.now() - t0).toBeLessThan(1000);
+    expect(fitCacheBytes()).toBeLessThan(RATE * 4);
+    // The bounded fit is the prefix of the whole one.
+    clearFitCache();
+    const long = scoreWith(ref, 120, 4, {
+      startTick: 0,
+      durationTicks: 4 * 480,
+    });
+    const whole = render(long, src, RATE);
+    for (let i = 0; i < Math.round(0.45 * RATE); i += 1)
+      expect(out[i]).toBe(whole[i]!);
+  });
+
+  test("short notes on a ramp re-fit only their own frames", () => {
+    const src = decoded(sine(330, 30));
+    const base = scoreWith(
+      { src: "t.wav", bpm: 120, fitmode: "tones", clip: 1 },
+      120,
+      16,
+      { startTick: 0, durationTicks: 4 * 480 },
+    );
+    const notes = Array.from({ length: 16 }, (_, bar) => ({
+      id: `n${bar}`,
+      trackId: "s",
+      pitch: 36,
+      velocity: 1,
+      startTick: bar * 4 * 480,
+      durationTicks: 4 * 480,
+    }));
+    const score = createScore({
+      ...base.toJSON(),
+      notes,
+    }).withTime({ tempo: [{ tick: 64 * 480, bpm: 150, ramp: "linear" }] });
+    const warp = sampleWarpFor(score, RATE)!;
+    const timing = { score, sampleRate: RATE, warp };
+    const t0 = performance.now();
+    planSamplerVoices(score.tracks[0]!, score.notes, bankOf(src), timing);
+    expect(performance.now() - t0).toBeLessThan(1000);
+    expect(fitCacheBytes()).toBeLessThan(16 * 2.2 * RATE * 4);
+  });
+
+  test("live: a large stretch of a short window goes to the background", async () => {
+    // 4 s of source at bpm 100 in a 25 BPM song: 16 s of tones output.
+    const live = new LiveSynth(48_000);
+    const src = decoded(sine(330, 4), "w");
+    const score = scoreWith(
+      { src: "t.wav", bpm: 100, fitmode: "tones" },
+      25,
+      1,
+      { startTick: 0, durationTicks: 480 },
+    );
+    const ready = new Promise<void>((resolve) => {
+      const stop = onFitReady(() => {
+        if (fitting()) return;
+        stop();
+        resolve();
+      });
+    });
+    const t0 = performance.now();
+    const pcm = live.render({
+      score,
+      trackId: "s",
+      pitch: 36,
+      velocity: 1,
+      seconds: 0.5,
+      samples: bankOf(src),
+    })!;
+    expect(performance.now() - t0).toBeLessThan(160);
+    expect(pcm.fitting).toBe(true);
+    await ready;
   });
 });

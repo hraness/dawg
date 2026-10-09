@@ -1108,8 +1108,9 @@ function sampleVoiceNodes(context: MenuContext, voice: string): MenuNode[] {
     {
       kind: "choice",
       label: "fitmode",
-      value: ref.fitmode ?? "repitch",
-      options: SAMPLE_FIT_MODES,
+      // off: unset (plays as repitch); auto suggests one from the sound.
+      value: ref.fitmode ?? "off",
+      options: ["off", ...SAMPLE_FIT_MODES, "auto"],
       command: (option) => `/fitmode ${option} ${voice}`,
       help: `${SAMPLE_CONTROLS.fitmode} · beats for drums, tones for pads · set bpm or len first`,
     },

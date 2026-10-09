@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createScore, normalizeSampleRef } from "../../core/score.ts";
 import { printTrack } from "../../core/sdk/print.ts";
+import { parsePrompt } from "../agent/ops.ts";
 import { applyFitCommand, parseFitCommand } from "./fit.ts";
 
 const score = (voices: Record<string, object>) =>
@@ -88,7 +89,7 @@ describe("fit commands", () => {
     });
   });
 
-  test("several voices need a name; non-samplers point at /tempo", () => {
+  test("several voices need a name; non-samplers point at the tempo word", () => {
     const two = score({
       a: { src: "tracks/s/samples/a.wav" },
       b: { src: "tracks/s/samples/b.wav" },
@@ -108,7 +109,12 @@ describe("fit commands", () => {
       tracks: [{ id: "s" }],
     });
     const result = applyFitCommand(synth, "s", { control: "bpm", value: 90 });
-    expect(result.message).toContain("/tempo");
+    expect(result.message).toContain("song tempo is tempo <bpm>");
+    // The hint's command is the one that parses (bare word, no slash).
+    expect(parsePrompt("tempo 90")).toEqual({
+      type: "set-tempo",
+      tempoBpm: 90,
+    });
   });
 
   test("validation: bounds and fitmode without a tempo", () => {

@@ -63,6 +63,8 @@ const ATTACK_SECONDS = 0.001;
 /** Fade at a natural end, a held release, a choke and a voice steal. */
 const END_FADE_SECONDS = 0.003;
 const RELEASE_SECONDS = 0.01;
+/** Extra fitted frames past a note's reach (read interpolation). */
+const REACH_MARGIN_FRAMES = 64;
 const CHOKE_SECONDS = 0.005;
 /** Loop seam crossfade (source time). */
 const LOOP_CROSSFADE_SECONDS = 0.005;
@@ -235,8 +237,23 @@ export function planSamplerVoices(
     // 0.6 fit (`bpm`, `len`, or `fit` with fitmode beats|tones): the window
     // is fitted once into a render-rate buffer that plays forward at step 1
     // (times the keyed ratio). Absent fields keep the 0.5 path untouched.
+    // Only the frames this note can reach are fitted: a keyed or clipped
+    // note (not looping, no accelerate) ends at its held length plus the
+    // release, read at the keyed ratio; anything else may play it all.
+    const reach =
+      ref.loop !== true &&
+      (ref.accelerate ?? 0) === 0 &&
+      (sampler.mode === "keyed" || ref.clip !== undefined)
+        ? Math.ceil(
+            ((ref.clip === undefined
+              ? held
+              : Math.max(1, Math.floor(held * ref.clip))) +
+              Math.round(RELEASE_SECONDS * sampleRate)) *
+              target.ratio,
+          ) + REACH_MARGIN_FRAMES
+        : Infinity;
     const fitted = isFitted(ref)
-      ? fitVoice(ref, decoded, note.startTick, held, timing)
+      ? fitVoice(ref, decoded, note.startTick, held, timing, reach)
       : undefined;
     if (fitted === null) continue;
     const sample = fitted?.sample ?? decoded;
@@ -373,6 +390,7 @@ function fitVoice(
   startTick: number,
   held: number,
   timing: SamplerTiming,
+  reach: number,
 ): FittedVoice | null {
   const { sampleRate, score, warp } = timing;
   const speed = ref.speed ?? 1;
@@ -403,7 +421,8 @@ function fitVoice(
   }
   const algorithm = ref.fitmode ?? "repitch";
   const windowKey = `${decoded.sha256}:${decoded.sampleRate}:${from}:${to}:${sampleRate}:${reverse ? 1 : 0}`;
-  const key = `${windowKey}:${algorithm}:${mapPrint(map, frames)}`;
+  const length = Math.min(map.length, reach);
+  const key = `${windowKey}:${algorithm}:${mapPrint(map, frames)}:${Math.round(length)}`;
   const buffer = fittedBuffer(
     key,
     window,
@@ -411,6 +430,7 @@ function fitVoice(
     map,
     algorithm,
     windowKey,
+    length,
   );
   if (!buffer) return null;
   const sample: DecodedSample = Object.freeze({

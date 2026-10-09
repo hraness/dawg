@@ -226,7 +226,8 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       },
       {
         command: "/bpm <n> [<voice>]",
-        summary: "the sample's own tempo · it follows the song's tempo",
+        summary:
+          "the sample's own tempo (slash needed: bare bpm is song tempo)",
       },
       {
         command: "/fitmode [repitch|beats|tones|auto] [<voice>]",

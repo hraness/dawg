@@ -20,7 +20,7 @@ import { bpmAtTick } from "../../core/tempo.ts";
 import { sampleKey, type SampleBank } from "./samples.ts";
 import { RENDER_CHANNELS, renderScorePcm } from "./wav.ts";
 import { engineFor } from "./instruments.ts";
-import { fitting, withLiveFit } from "./fit.ts";
+import { liveFitPending, withLiveFit } from "./fit.ts";
 
 /** A rendered live note: interleaved stereo 16-bit PCM. */
 export type LiveNotePcm = Readonly<{
@@ -31,7 +31,7 @@ export type LiveNotePcm = Readonly<{
   /**
    * A fitted sample window (0.6 `bpm`/`len`/`fitmode`) longer than 8 s is
    * still being computed: the note is silent and not cached; play it again
-   * once `fitting()` (fit.ts) turns false.
+   * once its background fit (fit.ts `onFitReady`) lands.
    */
   fitting?: true;
 }>;
@@ -158,7 +158,7 @@ export class LiveSynth {
         ? { releaseSeconds: Math.min(tail, MAX_LIVE_NOTE_SECONDS) }
         : {}),
     };
-    if (fitting() && frames === 0) return { ...rendered, fitting: true };
+    if (liveFitPending()) return { ...rendered, fitting: true };
     this.cache.set(key, rendered);
     while (this.cache.size > CACHE_ENTRIES) {
       const oldest = this.cache.keys().next().value;

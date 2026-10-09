@@ -19,7 +19,7 @@ order: 1
 - `wt list` tables · `wt pwm` load one · `wt 0.5` position
 - `/pack list` · `/pack use <pack>/<sound> as kick` · `/pack info vcsl`
 - `/sample samples/kick.wav as kick` add a sampler voice
-- `/bpm 174` the sample's tempo · `fitmode beats` (drums) or `tones` (pads) · `len 8`
+- `/bpm 174` the sample's tempo (a bare `bpm 174` is the song's) · `fitmode beats` (drums) or `tones` (pads) · `len 8`
 
 ## Menu
 

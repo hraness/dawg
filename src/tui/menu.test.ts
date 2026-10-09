@@ -941,9 +941,10 @@ describe("key command", () => {
       command: "/bpm off brk",
     });
     select(menu, ctx, "fitmode");
+    // Unset shows off; the next choice is repitch.
     expect(menu.key(RIGHT, ctx)).toEqual({
       type: "run",
-      command: "/fitmode beats brk",
+      command: "/fitmode repitch brk",
     });
     select(menu, ctx, "len");
     expect(menu.key(RIGHT, ctx)).toEqual({

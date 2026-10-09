@@ -219,6 +219,7 @@ import {
   addNote,
   applyScoreOperation,
   createScore,
+  isSamplerInstrument,
   PACK_PREFIX,
   scoreFromJSON,
   SCORE_LIMITS,
@@ -1917,7 +1918,16 @@ async function submit(prompt: string): Promise<string | Receipt> {
     const next = score.withTempo(parsed.tempoBpm);
     await commitScore(next, "score.tempo", { tempoBpm: parsed.tempoBpm });
     clock.follow(next);
-    return `tempo · ${next.tempoBpm} BPM`;
+    // A bare `bpm <n>` stays song tempo; on a sampler track say where the
+    // sample's own tempo lives (`/bpm`, 0.6 fit).
+    const focused = next.tracks.find((t) => t.id === requestedTrack);
+    const samplerHint =
+      /^\s*bpm\b/i.test(prompt) &&
+      focused?.sampler &&
+      isSamplerInstrument(focused.instrument)
+        ? ` · song tempo · the sample's own tempo is /bpm ${parsed.tempoBpm}`
+        : "";
+    return `tempo · ${next.tempoBpm} BPM${samplerHint}`;
   }
   if (parsed.type === "add-track") return focusTrack(parsed.trackId);
   if (parsed.type === "set-bars" || parsed.type === "extend-bars") {

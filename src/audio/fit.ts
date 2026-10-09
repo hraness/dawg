@@ -7,8 +7,8 @@
  *
  * - `repitch` reads the window along the map (tape: pitch follows speed).
  * - `beats` cuts the window at its SuperFlux onsets and places every slice
- *   verbatim at its mapped time; a slice ends with a 2 ms fade at the next
- *   slice's start, and a slowed slice leaves a gap (Ableton Beats without
+ *   verbatim at its mapped time; every slice ends with a 2 ms fade (at the
+ *   next slice's start when crowded), and a slowed slice leaves a gap (Ableton Beats without
  *   transient loops; no WSOLA, so drums keep their exact transients).
  * - `tones` is a phase vocoder with identity phase locking (Laroche and
  *   Dolson, IEEE TSAP 1999), 85 ms Hann frames, hop N/4, analysing two
@@ -16,9 +16,9 @@
  *
  * Results are cached by content key in a 64 MB Float32 LRU (the played
  * window only). Offline renders always compute exactly. Live renders
- * (`withLiveFit`) compute windows up to 8 s synchronously and longer ones
- * in the background: until ready the voice is silent and `fitting()` is
- * true, so a live note never plays at the wrong pitch.
+ * (`withLiveFit`) compute fits up to 8 s (source or output) synchronously
+ * and longer ones in the background: until ready the voice is silent and
+ * `liveFitPending()` is true, so a live note never plays at the wrong pitch.
  */
 import { ONSET_LEAD_SECONDS, detectOnsets } from "./dsp/onset.ts";
 import {
@@ -49,8 +49,14 @@ const CHUNK = 64;
 const cache = new Map<string, Float32Array>();
 let cachedBytes = 0;
 const onsetCache = new Map<string, readonly number[]>();
-const pending = new Map<string, Generator<void, Float32Array>>();
+/** Background jobs by cache key, with the window they fit (one per window). */
+const pending = new Map<
+  string,
+  { job: Generator<void, Float32Array>; window: string }
+>();
 let live = false;
+/** True when the current live render left a voice silent while fitting. */
+let missed = false;
 let timer: ReturnType<typeof setTimeout> | undefined;
 const listeners = new Set<() => void>();
 
@@ -58,6 +64,7 @@ const listeners = new Set<() => void>();
 export function withLiveFit<T>(render: () => T): T {
   const was = live;
   live = true;
+  missed = false;
   try {
     return render();
   } finally {
@@ -68,6 +75,11 @@ export function withLiveFit<T>(render: () => T): T {
 /** True while a background fit is running ("fitting"). */
 export function fitting(): boolean {
   return pending.size > 0;
+}
+
+/** True when the last live render had a voice still fitting (silent). */
+export function liveFitPending(): boolean {
+  return missed;
 }
 
 /** Called once each time a background fit finishes. */
@@ -97,6 +109,7 @@ export function fittedBuffer(
   map: FitMap,
   algorithm: FitAlgorithm,
   onsetKey: string,
+  length: number = map.length,
 ): Float32Array | undefined {
   const hit = cache.get(key);
   if (hit) {
@@ -105,16 +118,24 @@ export function fittedBuffer(
     return hit;
   }
   const work = () =>
-    fitWork(window, sampleRate, map, algorithm, () => {
+    fitWork(window, sampleRate, map, algorithm, length, () => {
       const known = onsetCache.get(onsetKey);
       if (known) return known;
       const found = detectOnsets(window, sampleRate);
       onsetCache.set(onsetKey, found);
       return found;
     });
-  if (live && window.length > LIVE_SYNC_FIT_SECONDS * sampleRate) {
+  // The work scales with the longer of the source window (onsets, beats)
+  // and the output (tones, repitch), so both count against the live budget.
+  const workFrames = Math.max(window.length, Math.min(length, map.length));
+  if (live && workFrames > LIVE_SYNC_FIT_SECONDS * sampleRate) {
+    missed = true;
     if (!pending.has(key)) {
-      pending.set(key, work());
+      // A newer fit of the same window (bpm, fitmode or len changed, or a
+      // later note) replaces the stale one instead of running beside it.
+      for (const [old, entry] of pending)
+        if (entry.window === onsetKey) pending.delete(old);
+      pending.set(key, { job: work(), window: onsetKey });
       schedule();
     }
     return undefined;
@@ -138,7 +159,7 @@ function schedule(): void {
     timer = undefined;
     const next = pending.entries().next();
     if (next.done) return;
-    const [key, job] = next.value;
+    const [key, { job }] = next.value;
     const until = performance.now() + 8;
     for (;;) {
       const step = job.next();
@@ -175,9 +196,10 @@ function* fitWork(
   sampleRate: number,
   map: FitMap,
   algorithm: FitAlgorithm,
+  limit: number,
   onsets: () => readonly number[],
 ): Generator<void, Float32Array> {
-  const length = Math.max(1, Math.round(map.length));
+  const length = Math.max(1, Math.round(Math.min(limit, map.length)));
   if (algorithm === "repitch") {
     const out = new Float32Array(length);
     for (let e = 0; e < length; e += 1) {
@@ -221,9 +243,16 @@ export function beatsFit(
     const ob = Math.min(length, place(b));
     const span = Math.min(ob - oa, b - a);
     if (span <= 0) continue;
-    const cut = ob - oa < b - a;
+    // Every slice end fades (a slowed slice would otherwise step from its
+    // last sample into the silent gap and click), as the prototype does.
+    // A slice after the first starts in the previous hit's ring-out, so it
+    // fades in over the onset lead (before its transient rises).
+    const tail = Math.min(fade, span);
+    const head = a === 0 ? 0 : Math.min(Math.max(1, lead), span - tail);
     for (let i = 0; i < span && oa + i < length; i += 1) {
-      const g = cut && i >= span - fade ? (span - i) / fade : 1;
+      const g =
+        (i >= span - tail ? (span - i) / tail : 1) *
+        (i < head ? (i + 1) / (head + 1) : 1);
       out[oa + i] = out[oa + i]! + x[a + i]! * g;
     }
   }

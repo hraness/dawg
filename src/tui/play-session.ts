@@ -53,6 +53,7 @@ import {
   type LiveNotePcm,
 } from "../audio/live.ts";
 import type { SampleBank } from "../audio/samples.ts";
+import { fitting, onFitReady } from "../audio/fit.ts";
 import {
   DEFAULT_STRUM,
   perform,
@@ -134,6 +135,8 @@ export const GRIDS: readonly Readonly<{ label: string; beats: number }>[] =
 export const DEFAULT_GRID = "1/16";
 /** Play mode's queue lead: short enough that a key feels immediate. */
 export const PLAY_LEAD_MS = 60;
+/** Status while a long fitted sample window computes (fit.ts). */
+const FITTING_STATUS = "fitting · the sample plays once ready";
 export const FLASH_MS = 110;
 
 export function gridBeats(label: string): number | undefined {
@@ -221,6 +224,8 @@ export class PlaySession {
   public countInBars = 1;
   public grid = DEFAULT_GRID;
   public status: string | undefined;
+  /** Unsubscribes the pending "fit ready" listener (fit.ts). */
+  private stopFitWait: (() => void) | undefined;
   /** Scale-degree layout on (`i`); follows key and tuning changes. */
   public degreesOn = false;
   private degreeKey: string | undefined;
@@ -611,7 +616,14 @@ export class PlaySession {
     if (!pcm) return;
     if (pcm.fitting) {
       // A long fitted sample window is computing: silent, never off-pitch.
-      this.status = "fitting · the sample plays once ready";
+      this.status = FITTING_STATUS;
+      this.stopFitWait ??= onFitReady(() => {
+        if (fitting()) return;
+        this.stopFitWait?.();
+        this.stopFitWait = undefined;
+        if (this.status === FITTING_STATUS)
+          this.status = "fit ready · play the key again";
+      });
       return;
     }
     const scheduled = engine.noteOn(id, pcm);

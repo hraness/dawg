@@ -3,7 +3,7 @@
  * voice to the song's time. They act on the focused sampler track's voice
  * (named, or its only voice) through `setSampleControls`, so validation and
  * printing stay the sampler's. `/fitmode` with no mode suggests one from
- * the sample's content (`suggestFitMode`); song tempo stays `/tempo`.
+ * the sample's content (`suggestFitMode`); song tempo stays `tempo <n>`.
  */
 import {
   SAMPLE_FIT_MODES,
@@ -77,7 +77,7 @@ export function fitVoice(
   const sampler = track?.sampler;
   if (!track || !sampler || !isSamplerInstrument(track.instrument))
     return {
-      error: `fit · ${trackId} is not a sampler track · /sample <path> first · song tempo is /tempo <bpm>`,
+      error: `fit · ${trackId} is not a sampler track · /sample <path> first · song tempo is tempo <bpm>`,
     };
   if (voice) return { voice };
   const names = Object.keys(sampler.voices);

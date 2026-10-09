@@ -91,6 +91,13 @@ test.skipIf(!supported)(
       }
       expect(voice).toMatchObject({ bpm: 174, fitmode: "beats", len: 8 });
 
+      // A bare `bpm 150` stays song tempo and says where the sample's is.
+      await t.send("bpm 150\r");
+      await t.until(
+        () => t.vt.text().includes("own tempo is /bpm 150"),
+        "bare bpm is song tempo",
+      );
+
       // The ctrl-k menu filters straight to the voice's fit rows.
       await t.send("\u000b");
       await t.until(() => t.vt.text().includes("Sound"), "menu");
