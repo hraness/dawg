@@ -1161,7 +1161,7 @@ export class PlaySession {
       };
     }
     return {
-      range: this.keyboard.range,
+      range: this.layout.drums ? "drums" : this.keyboard.range,
       velocity: this.keyboard.velocity,
       armed: this.armed,
       recording: this.recording,
@@ -1171,10 +1171,14 @@ export class PlaySession {
       countIn,
       beat,
       grid: `grid ${this.grid}`,
-      chords: this.chords.glance(songKey(this.host.score().key).set),
+      // A kit plays drums, not harmony: no chord row and no key chip.
+      chords: this.layout.drums
+        ? undefined
+        : this.chords.glance(songKey(this.host.score().key).set),
       status: this.status,
       keys: this.strip(now),
-      legend: this.chords.on ? this.chords.legend() : undefined,
+      legend:
+        this.chords.on && !this.layout.drums ? this.chords.legend() : undefined,
     };
   }
 
@@ -1196,7 +1200,9 @@ export class PlaySession {
     ).map((cell) => {
       const chord = this.keyboard.pitchFor(cell.key);
       const name =
-        chord === undefined ? undefined : this.chords.keyLabel(chord);
+        chord === undefined || this.layout.drums
+          ? undefined
+          : this.chords.keyLabel(chord);
       // Chords in the key are the safe ones to reach for: the strip lights
       // them; a borrowed chord still plays but stays plain.
       return name && chord !== undefined

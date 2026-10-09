@@ -432,6 +432,24 @@ function syncSegment(
   return { text: `${glyph[sync]} ${sync}`, style: style[sync], priority: 4 };
 }
 
+/**
+ * The song header compressed for play mode's row: transport, tempo, the
+ * track and the revision (`▶ 120 BPM · drums · rev 1`).
+ */
+export function playContext(
+  score: TrackScoreSnapshot,
+  unicode: boolean,
+): string {
+  const playing = score.playing === true;
+  const glyph = playing ? (unicode ? "▶" : ">") : unicode ? "⏸" : "||";
+  const name = score.trackName ?? score.trackId ?? "track";
+  return [
+    `${glyph} ${score.bpm ?? 120} BPM`,
+    name,
+    ...(score.revision !== undefined ? [`rev ${score.revision}`] : []),
+  ].join(" · ");
+}
+
 function paintHeader(
   buffer: CellBuffer,
   view: AppView,
@@ -1229,7 +1247,10 @@ export function composeFrame(
       buffer,
       layout.header,
       width,
-      view.play,
+      {
+        ...view.play,
+        context: playContext(view.score, ui.capabilities.unicode),
+      },
       ui.theme,
       ui.capabilities.unicode,
     );

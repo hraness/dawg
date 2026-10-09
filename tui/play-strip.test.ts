@@ -45,9 +45,30 @@ function row(width: number, paint: (buffer: CellBuffer) => void): string {
 }
 
 describe("play header", () => {
+  test("the compressed song header leads; a kit drops its range", () => {
+    const text = row(120, (b) =>
+      paintPlayHeader(
+        b,
+        0,
+        120,
+        {
+          ...view,
+          context: "▶ 120 BPM · drums · rev 1",
+          range: "drums",
+          chords: undefined,
+          status: undefined,
+        },
+        theme,
+        true,
+      ),
+    );
+    expect(text).toContain(" PLAY MODE   ▶ 120 BPM · drums · rev 1  ");
+    expect(text).not.toContain("rev 1  drums");
+  });
+
   test("text lists every active part in order", () => {
     expect(playHeaderText(view)).toBe(
-      "PLAY  C3–F4  ● REC replace  click  SUSTAIN  AUTO C major  count-in 3  octave C2 · more detail",
+      "PLAY MODE  C3–F4  ● REC replace  click  SUSTAIN  AUTO C major  count-in 3  octave C2 · more detail",
     );
     expect(
       playHeaderText({ ...view, recording: false, replace: false }, false),
@@ -62,12 +83,25 @@ describe("play header", () => {
         countIn: undefined,
         status: undefined,
       }),
-    ).toBe("PLAY  C3–F4");
+    ).toBe("PLAY MODE  C3–F4");
+    expect(
+      playHeaderText({
+        ...view,
+        context: "▶ 120 BPM · drums · rev 1",
+        range: "drums",
+        armed: false,
+        click: false,
+        sustain: false,
+        chords: undefined,
+        countIn: undefined,
+        status: undefined,
+      }),
+    ).toBe("PLAY MODE  ▶ 120 BPM · drums · rev 1  drums");
   });
 
   test("a wide row shows the beat, the whole status and the hint", () => {
     const text = row(160, (b) => paintPlayHeader(b, 0, 160, view, theme, true));
-    expect(text).toContain(" PLAY ");
+    expect(text).toContain(" PLAY MODE ");
     expect(text).toContain("●···");
     expect(text).toContain("octave C2 · more detail");
     expect(text.trimEnd().endsWith("? keys · esc leave")).toBe(true);

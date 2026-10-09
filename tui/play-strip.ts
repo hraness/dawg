@@ -1,5 +1,6 @@
 /**
- * Play mode's two fixed rows: the header (`PLAY  C3–F4  vel 100  ● REC
+ * Play mode's two fixed rows: the header (`PLAY MODE  ▶ 120 BPM · lead ·
+ * rev 3  C3–F4  vel 100  ● REC
  * click ✓` plus a beat flash) and a one-line keyboard strip with the keys
  * that are sounding lit. Both repaint in place every frame, so playing never
  * scrolls the transcript.
@@ -20,6 +21,11 @@ export type PlayStripKey = Readonly<{
 }>;
 
 export type PlayHeaderView = Readonly<{
+  /**
+   * The song header compressed to the left of the row while play mode
+   * covers it: `▶ 120 BPM · drums · rev 1`.
+   */
+  context?: string | undefined;
   /** `C3–F4`. */
   range: string;
   velocity: number;
@@ -55,7 +61,8 @@ export type ChordLegendCell = Readonly<{
 /** Text of the header row, for tests and narrow terminals. */
 export function playHeaderText(view: PlayHeaderView, unicode = true): string {
   const parts = [
-    "PLAY",
+    "PLAY MODE",
+    view.context ?? "",
     view.range,
     view.armed
       ? `${unicode ? "●" : "*"} ${view.recording ? "REC" : "rec armed"}${view.replace ? " replace" : ""}`
@@ -91,8 +98,11 @@ export function paintPlayHeader(
     );
     x += buffer.text(x, y, "  ", panel);
   };
-  put(" PLAY ", roles.pillSteer);
-  put(view.range, { ...roles.text, bold: true });
+  put(" PLAY MODE ", roles.pillSteer);
+  if (view.context) put(view.context, roles.muted);
+  // A kit names its range by the track already in the context.
+  if (!view.context || view.range !== "drums")
+    put(view.range, { ...roles.text, bold: true });
   if (view.armed)
     put(
       `${unicode ? "●" : "*"} ${view.recording ? "REC" : "rec armed"}${view.replace ? " replace" : ""}`,
