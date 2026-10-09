@@ -264,6 +264,11 @@ export type ToolContext = Readonly<{
 export type AgentTool = Readonly<{
   name: string;
   description: string;
+  /**
+   * Callable but not advertised: a duplicate kept so older transcripts and
+   * models still work. `chatTools` and the xcb catalog leave it out.
+   */
+  hidden?: boolean;
   parameters: Record<string, unknown>;
   plan: (args: Record<string, unknown>, context: ToolContext) => ToolPlan;
 }>;
@@ -1340,7 +1345,8 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   },
   {
     name: "set_effects",
-    description: `Shorthand: low-pass filter, delay (beats) and reverb (mix 0.15..0.35 is a room); null removes one. Prefer set_fx.`,
+    hidden: true,
+    description: `Shorthand for set_fx (use set_fx): low-pass filter, delay (beats) and reverb (mix 0.15..0.35 is a room); null removes one.`,
     parameters: {
       type: "object",
       properties: {
@@ -1500,7 +1506,8 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   },
   {
     name: "add_drums",
-    description: `Add one-off drum hits to a kit track (create one with create_track instrument "kit"); prefer set_rhythm for repeating beats. Voices: ${DRUM_VOICES.map((info) => info.voice).join(", ")}. Give explicit hits, and/or patterns that repeat a voice every N beats across the loop.`,
+    hidden: true,
+    description: `Use set_rhythm. Add one-off drum hits to a kit track (create one with create_track instrument "kit"); prefer set_rhythm for repeating beats. Voices: ${DRUM_VOICES.map((info) => info.voice).join(", ")}. Give explicit hits, and/or patterns that repeat a voice every N beats across the loop.`,
     parameters: {
       type: "object",
       properties: {
@@ -2132,14 +2139,16 @@ export function findAgentTool(
 export function chatTools(
   tools: readonly AgentTool[] = AGENT_TOOLS,
 ): ChatTool[] {
-  return tools.map((tool) => ({
-    type: "function",
-    function: {
-      name: tool.name,
-      description: tool.description,
-      parameters: portableSchema(tool.parameters),
-    },
-  }));
+  return tools
+    .filter((tool) => !tool.hidden)
+    .map((tool) => ({
+      type: "function",
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: portableSchema(tool.parameters),
+      },
+    }));
 }
 
 function fxToolCommand(
