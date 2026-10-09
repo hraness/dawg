@@ -531,6 +531,7 @@ FM operators 2–8 repeat the `fm` rows with a suffix (`fm2`, `fmh2`, `fmattack2
 | raw `zzfx([...])` parameter array                                                                                                                                       | `synth zzfx …`, SDK `zzfx([...])`, `set_synth {zzfx}`          | done: ZzFX's documented layout → named controls      |
 | soundfonts `gm_*`, drum banks, dirt-samples                                                                                                                             | sampler and sample packs                                       | not this engine: hosted samples, see Sample packs    |
 | sample controls `begin`, `end`, `speed`, `unit`, `loop`, `loopBegin`/`loopb`, `loopEnd`/`loope`, `clip`/`legato`, `fit`, `loopAt`, `accelerate`, `squiz`, `cut`, `gain` | sampler voice fields; `/sample set`, `set_sample`              | done (see Samples)                                   |
+| fitting to tempo (Ableton Repitch/Beats/Tones; Strudel `fit`)                                                                                                           | `bpm` `fitmode` `len`; `/fitmode`, `fit_sample`                | done (see Fitting samples)                           |
 
 ## Samples
 
@@ -578,7 +579,34 @@ Semantics follow Strudel's sampler:
 
 `/sample set <voice> <control> <value>…` edits these on the focused sampler track (`/sample set brk fit on clip 1`, `/sample set hat cut hats`, `off` unsets one), each voice in the menu's Parameters section has the same controls, and the agent's `set_sample` tool takes them by name.
 
-Every voice starts and stops with a 1–3 ms fade, so cuts do not click. There is no time-stretch, as in Strudel's default. A sampler track goes through the same volume and pan automation, filter, delay and reverb as any other track and is a cached stem like any other; the stem's cache key includes each voice's sha256, so replacing a file re-renders it.
+### Fitting samples to the song (0.6)
+
+A voice can follow the song's time instead of its own rate. Give it its own tempo (`bpm`) or a length in beats (`len`), and pick how it changes time with `fitmode`:
+
+| Field     | Values                                | What it does                                                                                                                                                                                                                                                                                                                        |
+| --------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bpm`     | 20..400                               | the sample's own tempo: the window advances one source beat per song beat (times `                                                                                                                                                                                                                                                  | speed | `), through the tempo map, ramps and fermatas included; a 174 BPM break in a 128 BPM song plays 128/174 as fast |
+| `len`     | beats, > 0                            | the window lasts `len` song beats through the tempo map                                                                                                                                                                                                                                                                             |
+| `fitmode` | `repitch` (default), `beats`, `tones` | `repitch` is tape: speed and pitch move together. `beats` cuts the window at its onsets (SuperFlux, 30 ms minimum gap) and places each slice on its new time unstretched, so every hit stays sharp: drums, speech. `tones` time-stretches with a phase vocoder with identity phase locking and keeps the pitch: pads, loops, vocals |
+
+How they combine with Strudel's controls and the 0.5 tempo map:
+
+| Set                                                         | Window length                                                         | Pitch                                   |
+| ----------------------------------------------------------- | --------------------------------------------------------------------- | --------------------------------------- |
+| none of them                                                | `speed`, `unit`, `fit`, `loopAt` as before                            | moves with speed                        |
+| `fit` + `fitmode beats/tones`                               | the note (fit wins over `bpm` and `len`)                              | kept                                    |
+| `bpm`                                                       | source beats ÷ `bpm` × song beats, following tempo changes            | `repitch`: moves; `beats`/`tones`: kept |
+| `len` (no `bpm`)                                            | `len` song beats, following tempo changes                             | `repitch`: moves; `beats`/`tones`: kept |
+| `speed` with `bpm`                                          | `                                                                     | speed                                   | ` source beats per song beat (2 = double time); negative reverses | as above |
+| `unit` with `bpm`/`len`                                     | ignored once fitted                                                   | —                                       |
+| keyed root, `cents`, glide                                  | the fitted buffer is repitched on top: play the root to keep the time | moves                                   |
+| `loopBegin`/`loopEnd`, `clip`, `accelerate`, `squiz`, `cut` | apply to the fitted buffer                                            | as before                               |
+
+`fitmode beats` or `tones` needs `bpm`, `len` or `fit` (validation error otherwise). `/bpm 174`, `/len 16` and `/fitmode beats` act on the focused sampler voice (name it when the track has several: `/bpm 174 brk`; `off` unsets; song tempo stays `/tempo`); `/fitmode auto` suggests a mode from the sound (crest factor above 5 and more than 2 onsets a second fit as `beats`, the rest as `tones`). The menu's Sound section lists `bpm`, `fitmode` and `len` on each voice, the agent's `fit_sample` tool takes them, and the SDK is `sample("samples/amen.wav", { bpm: 174, fitmode: "beats" })`.
+
+Fitted windows are computed once and kept in a 64 MB least-recently-used cache of the played window only. Renders and exports always compute them; in play mode and the audition loop a window up to 8 s is fitted on the spot (under 160 ms), and a longer one stays silent with "fitting" in the status line until it is ready, never at the wrong pitch.
+
+Every voice starts and stops with a 1–3 ms fade, so cuts do not click. Without `bpm`, `len` or `fitmode` there is no time-stretch, as in Strudel's default. A sampler track goes through the same volume and pan automation, filter, delay and reverb as any other track and is a cached stem like any other; the stem's cache key includes each voice's sha256, so replacing a file re-renders it.
 
 Decoding: WAV (PCM 16/24/32-bit integer and 32-bit float, any channel count and rate) and AIFF/AIFF-C (8/16/24/32-bit) decode natively, mixed to mono and resampled to the engine rate on the fly with linear interpolation. MP3, FLAC, Ogg, M4A and anything else decode through `ffmpeg` when it is on `PATH` (dawg never installs it); without it the voice is skipped with `<voice> · <path> · not WAV/AIFF and ffmpeg is not on PATH · convert it to WAV, or install ffmpeg (e.g. brew install ffmpeg) and reload`. Decoded PCM is cached at `.dawg/assets/<sha256>.pcm`, least recently used first out past 512 MiB. Files over 50 MiB or 10 minutes, paths that leave the project (including through a symlink), and more than 64 voices are rejected. A `sha256` that no longer matches the file is a warning and the file still plays. Problems appear as receipts in the TUI and on stderr from `dawg render`; the track renders without the missing voices and nothing crashes.
 
