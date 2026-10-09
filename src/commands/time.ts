@@ -34,6 +34,7 @@ import {
   bpmAtTick,
   describeSongTime,
   driftRate,
+  fermataSpan,
   loopSecondsOf,
   loopTicksOf,
   phaseStepsTicks,
@@ -503,9 +504,11 @@ function applyOrThrow(
     case "gradual":
       return gradual(score, command);
     case "fermata": {
+      // `at end`: the start of the last felt beat (a dotted quarter in 6/8).
+      const end = loopTicksOf(score);
       const tick = command.at
         ? tickOf(score, command.at)
-        : Math.max(0, loopTicksOf(score) - score.ticksPerBeat);
+        : Math.max(0, end - fermataSpan(score, Math.max(0, end - 1)));
       if (tick >= loopTicksOf(score))
         return {
           ok: false,
@@ -660,7 +663,31 @@ function meterAt(
       message: `meter · bar ${command.bar} is past the song end (${score.bars} bars)`,
     };
   const time = withMeterChange(score.time, command.bar - 1, command);
-  return timeResult(score, time, `meter · ${label} from bar ${command.bar}`);
+  const result = timeResult(
+    score,
+    time,
+    `meter · ${label} from bar ${command.bar}`,
+  );
+  return result.next ? withPastEnd(result, result.next) : result;
+}
+
+/** Name the notes and fermatas a shorter song left past its end. */
+function withPastEnd(result: TimeResult, next: TrackScore): TimeResult {
+  const end = loopTicksOf(next);
+  const notes = next.notes.filter((note) => note.startTick >= end).length;
+  const fermatas = (next.time?.fermatas ?? []).filter(
+    (fermata) => fermata.tick >= end,
+  ).length;
+  if (notes === 0 && fermatas === 0) return result;
+  const parts = [
+    notes > 0 ? `${notes} note${notes === 1 ? "" : "s"}` : "",
+    fermatas > 0 ? `${fermatas} fermata${fermatas === 1 ? "" : "s"}` : "",
+  ].filter(Boolean);
+  const beats = end / next.ticksPerBeat;
+  return {
+    ...result,
+    message: `${result.message} · ${parts.join(" and ")} now past the song end (beat ${fmt(beats)}); add bars to keep them`,
+  };
 }
 
 function trackTime(
