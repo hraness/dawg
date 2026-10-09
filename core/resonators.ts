@@ -18,6 +18,7 @@
  * maximum weight.
  */
 import { resolveInstrumentWord } from "./instruments.ts";
+import { WIND_INSTRUMENT, windPresetFor, type TrackWind } from "./winds.ts";
 import {
   FxValidationError,
   isRecord,
@@ -84,6 +85,22 @@ export const MODAL_PRESET_NAMES = Object.freeze([
   "bowl",
   "gong",
   "timpani",
+  // f061-gamelan-winds: gamelan, small bells and frame drums (lane A2).
+  "crotales",
+  "musicbox",
+  "toypiano",
+  "saron",
+  "demung",
+  "slenthem",
+  "gangsa",
+  "gender",
+  "bonang",
+  "kenong",
+  "kethuk",
+  "kempul",
+  "daf",
+  "bodhran",
+  "tabla",
 ] as const);
 export type ModalPresetName = (typeof MODAL_PRESET_NAMES)[number];
 
@@ -99,7 +116,28 @@ export const MODAL_ALIASES: Readonly<Record<string, ModalPresetName>> =
     singingbowl: "bowl",
     kettledrum: "timpani",
     tubularbells: "chimes",
+    // f061-gamelan-winds. `gamelan` is a browse group, not an alias.
+    crotale: "crotales",
+    musicalbox: "musicbox",
+    framedrum: "bodhran",
   });
+
+/**
+ * The gamelan presets, in browse order (the `gamelan` hint opens these
+ * under Mallets and bells).
+ */
+export const GAMELAN_PRESETS: readonly ModalPresetName[] = Object.freeze([
+  "saron",
+  "demung",
+  "slenthem",
+  "gangsa",
+  "gender",
+  "bonang",
+  "kenong",
+  "kethuk",
+  "kempul",
+  "gong",
+]);
 
 const num = (
   min: number,
@@ -364,6 +402,186 @@ export const MODAL_PRESETS: Readonly<Record<ModalPresetName, ModalPreset>> =
       "pedal timpani, felt sticks, a small strike glide",
       "Beethoven, Brahms, Shostakovich, orchestral",
     ),
+    // f061-gamelan-winds (lane A2): appended; rows above are unchanged.
+    // Gamelan ranges follow the instruments' slendro/pelog octaves; tune
+    // them with `tuning slendro` or `tuning pelog` (core/tuning.ts).
+    crotales: preset(
+      {
+        body: "crotale",
+        ring: 6,
+        tilt: 0.4,
+        hardness: 0.85,
+        position: 0.5,
+        gain: 1.6,
+      },
+      [84, 108],
+      "antique cymbals, long shimmering ring",
+      "Messiaen, ambient",
+    ),
+    musicbox: preset(
+      {
+        body: "musicbox",
+        ring: 1.8,
+        tilt: 0.7,
+        hardness: 1,
+        position: 0.8,
+        gain: 1.7,
+      },
+      [60, 100],
+      "plucked steel comb",
+      "ambient, OPN, A. G. Cook",
+    ),
+    toypiano: preset(
+      {
+        body: "toypiano",
+        ring: 1,
+        tilt: 0.6,
+        hardness: 0.9,
+        position: 0.6,
+        click: 0.3,
+        gain: 2,
+      },
+      [60, 96],
+      "hammered toy-piano rods, clanky",
+      "hyperpop, A. G. Cook, Four Tet",
+    ),
+    saron: preset(
+      {
+        body: "saron",
+        ring: 2.5,
+        tilt: 0.6,
+        hardness: 0.85,
+        position: 0.5,
+        damp: 0.85,
+        release: 0.1,
+      },
+      [60, 84],
+      "saron barung: bronze keys, horn mallet, the balungan melody; damped at the next note (tutupan)",
+      "Javanese gamelan, Reich",
+    ),
+    demung: preset(
+      {
+        body: "saron",
+        ring: 3.2,
+        tilt: 0.6,
+        hardness: 0.75,
+        position: 0.5,
+        damp: 0.8,
+        release: 0.12,
+      },
+      [48, 72],
+      "demung: the saron an octave lower, fuller",
+      "Javanese gamelan",
+    ),
+    slenthem: preset(
+      { body: "gender", ring: 4.5, tilt: 0.5, hardness: 0.25, position: 0.5 },
+      [43, 60],
+      "slenthem: low bronze keys over tubes, padded mallet",
+      "Javanese gamelan, ambient",
+    ),
+    gangsa: preset(
+      {
+        body: "saron",
+        ring: 2.2,
+        tilt: 0.6,
+        hardness: 0.9,
+        position: 0.5,
+        ombak: 7,
+        damp: 0.85,
+        release: 0.1,
+      },
+      [60, 89],
+      "Balinese metallophone: pengumbang and pengisep beating at 7 Hz (ombak)",
+      "Balinese gamelan, Lopatin, Four Tet",
+    ),
+    gender: preset(
+      { body: "gender", ring: 5, tilt: 0.5, hardness: 0.3, position: 0.5 },
+      [48, 84],
+      "gender: thin bronze keys over tubes, padded mallets, long ring",
+      "Javanese gamelan, ambient",
+    ),
+    bonang: preset(
+      {
+        body: "bonang",
+        ring: 1.8,
+        tilt: 0.7,
+        hardness: 0.6,
+        position: 0.5,
+        damp: 0.7,
+        release: 0.12,
+      },
+      [55, 84],
+      "bonang: small kettle gongs in a row, padded sticks",
+      "Javanese gamelan, Reich",
+    ),
+    kenong: preset(
+      { body: "bonang", ring: 4, tilt: 0.5, hardness: 0.45, position: 0.5 },
+      [55, 72],
+      "kenong: large kettle gong that marks the phrase",
+      "Javanese gamelan",
+    ),
+    kethuk: preset(
+      {
+        body: "bonang",
+        ring: 0.5,
+        tilt: 0.7,
+        hardness: 0.5,
+        position: 0.5,
+        damp: 1,
+        release: 0.08,
+      },
+      [55, 67],
+      "kethuk: small kettle gong, struck and damped (tutupan)",
+      "Javanese gamelan",
+    ),
+    kempul: preset(
+      { body: "kempul", ring: 6, tilt: 0.4, hardness: 0.25, position: 0.5 },
+      [43, 67],
+      "kempul: hanging gong, slow beating",
+      "Javanese gamelan",
+    ),
+    daf: preset(
+      {
+        body: "frame",
+        ring: 0.5,
+        tilt: 0.8,
+        hardness: 0.6,
+        position: 0.85,
+        buzz: 0.6,
+      },
+      [43, 55],
+      "Persian frame drum with ring jingles",
+      "Persian, Sufi",
+    ),
+    bodhran: preset(
+      {
+        body: "frame",
+        ring: 0.35,
+        tilt: 0.9,
+        hardness: 0.5,
+        position: 0.8,
+        damp: 0.4,
+        gain: 2,
+      },
+      [40, 52],
+      "Irish frame drum, tipper",
+      "celtic",
+    ),
+    tabla: preset(
+      {
+        body: "tabla",
+        ring: 1.2,
+        tilt: 0.5,
+        hardness: 0.7,
+        position: 0.75,
+        strikebend: 0.4,
+        strikedecay: 0.12,
+        gain: 2,
+      },
+      [57, 69],
+      "dayan: tuned treble drum with near-harmonic syahi modes",
+      "Hindustani, Talvin Singh, Four Tet",
+    ),
   });
 
 /** Default preset of a `modal` field that names none. */
@@ -388,6 +606,13 @@ export type TrackModal = Readonly<{
   strikedecay?: number;
   gain?: number;
   body?: ModalBody;
+  /**
+   * f061-gamelan-winds: the id of this track's partner in an ombak pair.
+   * A paired track (the pengisep) plays one voice `ombak` Hz above the
+   * pitch instead of its own twin, so it beats against its partner (the
+   * pengumbang). Only this track's render changes.
+   */
+  pair?: string;
 }>;
 
 export function isModalPreset(name: string): name is ModalPresetName {
@@ -425,8 +650,17 @@ export function normalizeModal(input: unknown): TrackModal | undefined {
     throw new FxValidationError("track modal must be an object or null");
   const params: Record<string, unknown> = {};
   let presetName: ModalPresetName | undefined;
+  let pair: string | undefined;
   for (const [key, value] of Object.entries(input)) {
     if (value === undefined || value === null) continue;
+    if (key === "pair") {
+      if (typeof value !== "string" || !PAIR_ID.test(value))
+        throw new FxValidationError(
+          "modal pair must be a track id (letters, digits, - or _)",
+        );
+      pair = value;
+      continue;
+    }
     if (key === "preset") {
       if (typeof value !== "string")
         throw new FxValidationError(
@@ -451,6 +685,7 @@ export function normalizeModal(input: unknown): TrackModal | undefined {
   return Object.freeze({
     ...(presetName ? { preset: presetName } : {}),
     ...values,
+    ...(pair === undefined ? {} : { pair }),
   }) as TrackModal;
 }
 
@@ -468,7 +703,12 @@ export function modalSettings(
   if (modal?.mallet) out.hardness = MODAL_MALLETS[modal.mallet];
   if (modal)
     for (const [key, value] of Object.entries(modal))
-      if (key !== "preset" && key !== "mallet" && value !== undefined)
+      if (
+        key !== "preset" &&
+        key !== "mallet" &&
+        key !== "pair" &&
+        value !== undefined
+      )
         out[key] = value;
   if (lane)
     for (const key of MODAL_LANE_PARAMS) {
@@ -496,7 +736,10 @@ export const MAX_RESONATOR_TAIL = 30;
 /** Voices one modal track sounds at once; the oldest onset is stolen. */
 export const MAX_RESONATOR_VOICES = 32;
 /** Joins the stem cache key so mode-table changes invalidate stems. */
-export const RESONATOR_TABLE_VERSION = 1;
+export const RESONATOR_TABLE_VERSION = 2;
+
+/** A modal `pair` value: a track id. */
+const PAIR_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 /**
  * A modal track's ring-out after its last note-off, in seconds: the preset
@@ -524,8 +767,17 @@ export function modalTailSeconds(
 export function instrumentPatchForWord(word: string): {
   instrument: string;
   modal?: TrackModal;
+  wind?: TrackWind;
 } {
   const meaning = resolveInstrumentWord(word);
+  // f061-gamelan-winds: `flute`, `sax`, `tuba` play a wind preset.
+  if (meaning?.field === "wind" && meaning.instrument === WIND_INSTRUMENT) {
+    const preset = meaning.preset ? windPresetFor(meaning.preset) : undefined;
+    return {
+      instrument: WIND_INSTRUMENT,
+      wind: Object.freeze(preset ? { preset } : {}) as TrackWind,
+    };
+  }
   if (meaning?.field === "modal" && meaning.instrument === MODAL_INSTRUMENT) {
     const preset = meaning.preset ? modalPresetFor(meaning.preset) : undefined;
     return {
@@ -538,7 +790,40 @@ export function instrumentPatchForWord(word: string): {
 
 /** True for a word that resolves to the modal engine (`vibes`, `gong`). */
 export function isModalWord(word: string): boolean {
-  return resolveInstrumentWord(word)?.instrument === MODAL_INSTRUMENT;
+  const meaning = resolveInstrumentWord(word);
+  return (
+    meaning?.instrument === MODAL_INSTRUMENT ||
+    (meaning?.field === "wind" && meaning.instrument === WIND_INSTRUMENT)
+  );
+}
+
+/**
+ * `dawg check` notes for ombak pairs whose partner is missing or is not a
+ * modal track: the pengisep then plays ombak Hz sharp with nothing to beat
+ * against.
+ */
+export function modalPairWarnings(
+  tracks: readonly Readonly<{
+    id: string;
+    instrument: string;
+    modal?: Readonly<{ pair?: string }>;
+  }>[],
+): string[] {
+  const out: string[] = [];
+  for (const track of tracks) {
+    const pair = track.modal?.pair;
+    if (pair === undefined) continue;
+    const partner = tracks.find((candidate) => candidate.id === pair);
+    if (!partner)
+      out.push(
+        `track ${track.id}: modal pair "${pair}" names no track; it plays ombak Hz sharp alone`,
+      );
+    else if (partner.instrument !== MODAL_INSTRUMENT || !partner.modal)
+      out.push(
+        `track ${track.id}: modal pair "${pair}" is not a modal track; give it the same preset (modal gangsa)`,
+      );
+  }
+  return out;
 }
 
 /**
@@ -572,3 +857,6 @@ export function legacyResonatorWarnings(
   }
   return out;
 }
+
+// f061-gamelan-winds: blown instruments live in core/winds.ts.
+export * from "./winds.ts";

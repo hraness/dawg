@@ -19,7 +19,7 @@ import {
 import { bpmAtTick } from "../../core/tempo.ts";
 import { EMPTY_SAMPLE_BANK, sampleKey, type SampleBank } from "./samples.ts";
 import { RENDER_CHANNELS, renderScorePcm } from "./wav.ts";
-import { engineFor } from "./instruments.ts";
+import { engineFor, RING_OUT_FADE_SECONDS } from "./instruments.ts";
 import { chordDigest, chordTimeline } from "./granular.ts";
 import { resolveGranular } from "../../core/granular.ts";
 import { noteHz, resolveTuning } from "../../core/tuning.ts";
@@ -50,6 +50,12 @@ export type LiveNotePcm = Readonly<{
    * request's `clock` for the full pass so the wheels and rotors continue.
    */
   clock?: number;
+  /**
+   * The key's release does not fade the voice: it rings to the end of its
+   * rendered tail (0.6.1 modal `damp 0`), which ends in a `RING_OUT_FADE_SECONDS`
+   * fade when the length cap cut it.
+   */
+  ringOut?: true;
 }>;
 
 export type LiveNoteRequest = Readonly<{
@@ -303,9 +309,13 @@ export class LiveSynth {
           ),
         )
       : tail;
+    const ringOut = !windowed && liveEngine?.ringOut?.(track) === true;
+    const pcm = audio.pcm.subarray(0, frames * RENDER_CHANNELS);
+    if (ringOut) fadeCutTail(pcm, frames, this.sampleRate);
     const rendered: LiveNotePcm = {
-      pcm: audio.pcm.subarray(0, frames * RENDER_CHANNELS),
+      pcm,
       frames,
+      ...(ringOut ? { ringOut: true as const } : {}),
       ...(liveEngine
         ? {
             releaseSeconds: Math.min(
@@ -374,6 +384,32 @@ function samplerDigest(track: Track, bank: SampleBank | undefined): string[] {
 }
 
 /** Frames up to the last non-silent sample, so mixing skips the dead tail. */
+/**
+ * A ring-out note cut by the render length still sounds at its last frame:
+ * fade its final `RING_OUT_FADE_SECONDS` linearly to zero so the cap never
+ * clicks (each step stays under -60 dB of full scale). A tail that already
+ * decayed to silence is left alone.
+ */
+export function fadeCutTail(
+  pcm: Int16Array,
+  frames: number,
+  sampleRate: number,
+): void {
+  if (frames === 0) return;
+  const last = (frames - 1) * RENDER_CHANNELS;
+  // Below -60 dBFS the cut is inaudible.
+  if (Math.abs(pcm[last]!) < 33 && Math.abs(pcm[last + 1]!) < 33) return;
+  const fade = Math.min(frames, Math.round(RING_OUT_FADE_SECONDS * sampleRate));
+  for (let i = 0; i < fade; i += 1) {
+    const frame = frames - fade + i;
+    const gain = (fade - 1 - i) / fade;
+    for (let c = 0; c < RENDER_CHANNELS; c += 1) {
+      const at = frame * RENDER_CHANNELS + c;
+      pcm[at] = Math.round(pcm[at]! * gain);
+    }
+  }
+}
+
 function audibleFrames(pcm: Int16Array): number {
   let last = pcm.length - 1;
   while (last >= 0 && pcm[last] === 0) last -= 1;

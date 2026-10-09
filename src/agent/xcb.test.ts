@@ -746,11 +746,11 @@ describe("text agent workspace tools", () => {
     const { renderToolCatalog } = await import("./xcb-agent.ts");
     const catalog = renderToolCatalog();
     // The real cap is XCB_LIMITS.maxInputBytes (1 MiB); this keeps the
-    // catalog a small share of it (~5%) as rhythm, pattern, chord, 0.6 and
+    // catalog a small share of it (~5.5%) as rhythm, pattern, chord, 0.6 and
     // 0.6.1 instrument tools land (0.6.1 guitar: strum_chords, set_guitar;
     // organ: set_keys drawbars, registers, stops and rotary;
-    // granular: resample).
-    expect(catalog.length).toBeLessThan(56_000);
+    // granular: resample; gamelan-winds: set_modal presets, set_wind).
+    expect(catalog.length).toBeLessThan(58_000);
     for (const name of [
       "list_files",
       "read_file",

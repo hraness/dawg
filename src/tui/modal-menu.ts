@@ -5,6 +5,7 @@
  */
 import type { EnumParam, NumberParam } from "../../core/params.ts";
 import {
+  GAMELAN_PRESETS,
   MODAL_INSTRUMENT,
   MODAL_MALLET_NAMES,
   MODAL_PARAMS,
@@ -12,6 +13,7 @@ import {
   MODAL_PRESET_NAMES,
   MODAL_SIMPLE,
   modalSettings,
+  type ModalPresetName,
 } from "../../core/resonators.ts";
 import type { Track } from "../../core/score.ts";
 import { num, specStep, type MenuNode } from "./menu.ts";
@@ -24,13 +26,38 @@ export function malletsMenu(): MenuNode {
     label: "Mallets and bells",
     detail: `${MODAL_PRESET_NAMES.length} modal presets · marimba, vibes, gong …`,
     help: "struck bars, bells and bowls on the modal resonator engine",
-    build: () =>
-      MODAL_PRESET_NAMES.map((name): MenuNode => ({
-        kind: "action",
-        label: `${name}  ${MODAL_PRESETS[name].doc}`,
-        command: `modal ${name}`,
-        help: MODAL_PRESETS[name].styles,
-      })),
+    build: () => [
+      // The core presets keep their rows (gong too); the gamelan bronzes
+      // added in 0.6.1 sit in their own sub-group.
+      ...MODAL_PRESET_NAMES.filter(
+        (name) => name === "gong" || !GAMELAN_PRESETS.includes(name),
+      ).map(presetRow),
+      gamelanMenu(),
+    ],
+  };
+}
+
+function presetRow(name: ModalPresetName): MenuNode {
+  return {
+    kind: "action",
+    label: `${name}  ${MODAL_PRESETS[name].doc}`,
+    command: `modal ${name}`,
+    help: MODAL_PRESETS[name].styles,
+  };
+}
+
+/**
+ * Mallets and bells › Gamelan (f061-gamelan-winds): the Javanese and
+ * Balinese bronzes. `modal gamelan` points here.
+ */
+export function gamelanMenu(): MenuNode {
+  return {
+    kind: "menu",
+    id: "gamelan",
+    label: "Gamelan",
+    detail: `${GAMELAN_PRESETS.length} bronzes · saron, gangsa (ombak), gong …`,
+    help: "Javanese and Balinese gamelan; pair two gangsa tracks with modal pair, tune with tuning slendro or pelog",
+    build: () => GAMELAN_PRESETS.map(presetRow),
   };
 }
 

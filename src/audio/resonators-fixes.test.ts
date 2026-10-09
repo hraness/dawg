@@ -257,13 +257,15 @@ describe("modal voice stealing", () => {
 
 describe("modal <body>", () => {
   test("a gamelan body word sets the body", () => {
+    // 0.6.1: the gamelan words are presets now; a body word with no
+    // preset of its own still sets the body.
     expect(parseModalCommand("modal saron")).toEqual({
-      type: "modal-set",
-      values: { body: "saron" },
+      type: "modal-preset",
+      preset: "saron",
     });
-    expect(parseModalCommand("modal kempul")).toEqual({
+    expect(parseModalCommand("modal frame")).toEqual({
       type: "modal-set",
-      values: { body: "kempul" },
+      values: { body: "frame" },
     });
     expect(parseModalCommand("modal nope")?.type).toBe("modal-usage");
   });

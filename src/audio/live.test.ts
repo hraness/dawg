@@ -2,8 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { createScore, type TrackScore } from "../../core/score.ts";
 import { PlayKeyboard, playLayoutFor } from "../tui/play-mode.ts";
 import { clickLevel, clicksIn, parseClickArgument } from "./click.ts";
-import { AudioEngine, type AudioBackendInfo } from "./engine.ts";
-import { LiveSynth } from "./live.ts";
+import {
+  AudioEngine,
+  MAX_RING_OUT_VOICES,
+  type AudioBackendInfo,
+} from "./engine.ts";
+import { RING_OUT_FADE_SECONDS } from "./instruments.ts";
+import { fadeCutTail, LiveSynth } from "./live.ts";
 import { sampleKey, type DecodedSample, type SampleBank } from "./samples.ts";
 import { renderScorePcm, renderScoreWav } from "./wav.ts";
 
@@ -451,5 +456,145 @@ describe("live keys ignore the recorded piano pedals (0.6.1)", () => {
     );
     expect(plain.frames).toBeGreaterThan(0);
     expect(pedalled.pcm).toEqual(plain.pcm);
+  });
+});
+
+describe("ring-out (0.6.1 gamelan, spec 7b)", () => {
+  function gongScore(): TrackScore {
+    return createScore({
+      tempoBpm: 120,
+      bars: 1,
+      tracks: [
+        {
+          id: "gong",
+          name: "gong",
+          instrument: "modal",
+          modal: { preset: "gong" },
+        },
+      ],
+      notes: [],
+    } as never);
+  }
+
+  test("an undamped modal key rings on after note-off; damped ones fade", async () => {
+    const live = new LiveSynth(RATE);
+    const gong = live.render({
+      score: gongScore(),
+      trackId: "gong",
+      pitch: 43,
+      velocity: 0.8,
+      seconds: 0.2,
+    })!;
+    expect(gong.ringOut).toBe(true);
+    const clock = { ms: 0 };
+    const fake = fakeSpawn();
+    const engine = engineAt(clock, fake);
+    await engine.monitor(true);
+    engine.noteOn(3, gong);
+    clock.ms = 300;
+    engine.pump();
+    engine.noteOff(3);
+    clock.ms = 600;
+    engine.pump();
+    expect(engine.liveVoices).toBe(1);
+    engine.noteOff(3, true);
+    clock.ms = 900;
+    engine.pump();
+    expect(engine.liveVoices).toBe(0);
+    await engine.monitor(false);
+
+    const damped = gongScore();
+    const kethuk = createScore({
+      ...damped,
+      tracks: [{ ...damped.tracks[0]!, modal: { preset: "kethuk" } }],
+    } as never);
+    const note = live.render({
+      score: kethuk,
+      trackId: "gong",
+      pitch: 60,
+      velocity: 0.8,
+      seconds: 0.2,
+    })!;
+    expect(note.ringOut).toBeUndefined();
+  });
+
+  test("a ring-out cut by the length cap fades over 250 ms, each step under -60 dB", () => {
+    const frames = RATE;
+    const pcm = new Int16Array(frames * 2).fill(32_000);
+    fadeCutTail(pcm, frames, RATE);
+    const fade = Math.round(RING_OUT_FADE_SECONDS * RATE);
+    expect(pcm[(frames - 1) * 2]).toBe(0);
+    expect(pcm[(frames - fade - 1) * 2]).toBe(32_000);
+    let worst = 0;
+    for (let i = frames - fade; i < frames; i += 1)
+      worst = Math.max(worst, Math.abs(pcm[i * 2]! - pcm[(i - 1) * 2]!));
+    expect(20 * Math.log10(worst / 32_768)).toBeLessThan(-60);
+    // A tail already below -60 dBFS is left alone.
+    const quiet = new Int16Array(8).fill(20);
+    fadeCutTail(quiet, 4, RATE);
+    expect([...quiet]).toEqual(new Array(8).fill(20));
+  });
+
+  test("past the voice cap the oldest ring-out fades over 250 ms, no click", async () => {
+    const clock = { ms: 0 };
+    const fake = fakeSpawn();
+    const engine = engineAt(clock, fake);
+    await engine.monitor(true);
+    const level = 10_000;
+    const frames = RATE * 4;
+    engine.noteOn(1, {
+      pcm: new Int16Array(frames * 2).fill(level),
+      frames,
+      ringOut: true,
+    });
+    clock.ms = 100;
+    engine.pump();
+    const before = fake.bytes().length;
+    for (let id = 2; id <= MAX_RING_OUT_VOICES + 1; id += 1)
+      engine.noteOn(id, {
+        pcm: new Int16Array(frames * 2),
+        frames,
+        ringOut: true,
+      });
+    for (let ms = 120; ms <= 700; ms += 20) {
+      clock.ms = ms;
+      engine.pump();
+    }
+    // Voice 1 was stolen: it fades to nothing; the silent rest still sound.
+    expect(engine.voicePosition(1)).toBeUndefined();
+    expect(engine.liveVoices).toBe(MAX_RING_OUT_VOICES);
+    const stream = fake.bytes().subarray(before);
+    let worst = 0;
+    for (let i = 2; i < stream.length; i += 2)
+      worst = Math.max(worst, Math.abs(stream[i]! - stream[i - 2]!));
+    expect(20 * Math.log10(worst / 32_768)).toBeLessThan(-60);
+    expect(stream.at(-2)).toBe(0);
+    await engine.monitor(false);
+  });
+
+  test("a gong loop folds without a click; legacy loops are unchanged", () => {
+    const score = createScore({
+      ...gongScore(),
+      notes: [
+        {
+          id: "n",
+          trackId: "gong",
+          startTick: 0,
+          durationTicks: 240,
+          pitch: 43,
+          velocity: 0.8,
+        },
+      ],
+    } as never);
+    const a = renderScorePcm(score, { sampleRate: RATE, loop: true });
+    const b = renderScorePcm(score, { sampleRate: RATE, loop: true });
+    expect(a.pcm).toEqual(b.pcm);
+    // The fold seam (end of loop to its start) steps no more than the
+    // ringing gong itself does from sample to sample.
+    let worst = 0;
+    for (let i = 2; i < a.pcm.length; i += 2)
+      worst = Math.max(worst, Math.abs(a.pcm[i]! - a.pcm[i - 2]!));
+    const seam = Math.abs(a.pcm[0]! - a.pcm[a.pcm.length - 2]!);
+    expect(seam).toBeLessThanOrEqual(worst);
   });
 });

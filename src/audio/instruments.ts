@@ -9,6 +9,7 @@
 import type { PerformedNote } from "../../core/expression.ts";
 import type { Track, TrackScore } from "../../core/score.ts";
 import type { TuningTable } from "../../core/tuning.ts";
+import { WIND_ENGINE } from "./winds/engine.ts";
 import { MODAL_ENGINE } from "./resonators.ts";
 import type { SampleBank } from "./samples.ts";
 import type { RenderContext } from "./wav.ts";
@@ -23,6 +24,9 @@ export type EngineContext = RenderContext &
     /** The merged song and track tuning; absent keeps 12-TET. */
     tuning?: TuningTable;
   }>;
+
+/** Fade at a ring-out cap (live note length, voice cap, loop fold), in seconds. */
+export const RING_OUT_FADE_SECONDS = 0.25;
 
 export type InstrumentEngine = Readonly<{
   /** The `Track.instrument` value this engine plays. */
@@ -52,6 +56,11 @@ export type InstrumentEngine = Readonly<{
    * (a piano's damper); absent uses `tailSeconds`.
    */
   releaseSeconds?(track: Track, pitch: number, hz: number): number;
+  /**
+   * True when a released live key keeps ringing to the end of its rendered
+   * tail (an undamped bar or gong) instead of fading at note-off.
+   */
+  ringOut?(track: Track): boolean;
   /** True when the engine writes a separate right channel. */
   stereo(track: Track): boolean;
   /**
@@ -128,3 +137,4 @@ registerEngine(STRING_ENGINE);
 registerEngine(GRANULAR_ENGINE);
 for (const engine of KEYS_ENGINES) registerEngine(engine);
 registerEngine(MODAL_ENGINE);
+registerEngine(WIND_ENGINE);

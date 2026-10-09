@@ -14,12 +14,12 @@ order: 1
 
 - `instrument sawtooth` · sine square triangle supersaw pulse
 - `synth preset pluck` · pad lead bass acid keys bell organ strings
-- `synth lpf 800 lpenv 3` any parameter · `synth adsr 0.01 0.2 0.5 0.3`
-- `synth lpf off` · `synth reset` · `synth` lists what is set
+- `synth lpf 800 lpenv 3` · `synth adsr 0.01 0.2 0.5 0.3` · `synth reset`
 - `piano felt` · `epiano suitcase` · `wurli` · `clav` · `keys hardness 0.3`
 - `tonewheel` gospel · `combo` vox · `pipe` flutes · `rotary fast` · `keys`
 - `wt list` tables · `wt pwm` load one · `wt 0.5` position
 - `string sitar` · nylon koto harp … · `string buzz 0.8` · `string presets`
+- `wind sax` · flute trumpet … · `wind breath 0.8` · `modal gamelan` bronzes
 - `/pack list` · `/pack use <pack>/<sound> as kick` · `/pack info vcsl`
 - `/sample samples/kick.wav as kick` add a sampler voice
 - `/bpm 174` sample tempo (`bpm` is the song's) · `fitmode beats` · `len 8`
