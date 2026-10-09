@@ -573,7 +573,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   grid: "/grid 1/4|1/8|1/8T|1/16|1/16T|1/32",
   tempo:
     "tempo takes 20…300 · tempo 120 · tempo 90 at bar 9 [ramp|exp] · tempo remove bar 9 · tempo clear · tempo map",
-  bpm: "tempo takes 20…300 · tempo 120",
+  bpm: "tempo takes 20…300 · tempo 120 · a sample's own tempo: /bpm 174 [<voice>] · /bpm off",
   rit: "rit [<n> bars|beats] [to <bpm>] [at bar <n>|<beat>] [exp] · rit 4 bars to 80",
   ritardando:
     "rit [<n> bars|beats] [to <bpm>] [at bar <n>|<beat>] [exp] · rit 4 bars to 80",
@@ -623,7 +623,6 @@ export const USAGE: Readonly<Record<string, string>> = {
   sample:
     "/sample <path> [as <voice>] · /sample set <voice> <control> <value>… · /sample set brk fit on clip 1",
   samples: "/sample · lists the focused track's voices",
-  bpm: "/bpm <n> [<voice>] · /bpm 174 · /bpm off · song tempo is /tempo <bpm>",
   fitmode:
     "/fitmode [repitch|beats|tones|auto|off] [<voice>] · /fitmode beats · /fitmode auto brk",
   len: "/len <beats> [<voice>] · /len 16 · /len off",

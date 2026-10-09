@@ -904,4 +904,51 @@ describe("key command", () => {
     expect(set.next!.key).toBe("A minor");
     expect(set.kind).toBe("score.key");
   });
+
+  test("Sound › a sample voice fits with bpm, fitmode and len rows", () => {
+    const menu = new EditMenu();
+    const ctx: MenuContext = {
+      ...context(
+        createScore({
+          tempoBpm: 128,
+          bars: 2,
+          tracks: [
+            {
+              id: "keys",
+              instrument: "sampler",
+              sampler: {
+                mode: "oneshot",
+                voices: { brk: { src: "tracks/keys/samples/brk.wav" } },
+              },
+            },
+          ],
+        }),
+      ),
+    };
+    menu.show(ctx, "parameters");
+    select(menu, ctx, "brk");
+    menu.key("\r", ctx);
+    expect(menu.view(ctx).title).toBe("menu › Sound › brk");
+    select(menu, ctx, "bpm");
+    // Off by default; the first step starts at the song's tempo.
+    expect(menu.view(ctx).items[menu.view(ctx).index]!.label).toContain("off");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "/bpm 128 brk",
+    });
+    expect(menu.key("x", ctx)).toEqual({
+      type: "run",
+      command: "/bpm off brk",
+    });
+    select(menu, ctx, "fitmode");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "/fitmode beats brk",
+    });
+    select(menu, ctx, "len");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "/len 4 brk",
+    });
+  });
 });
