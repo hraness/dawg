@@ -4012,6 +4012,7 @@ const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
     preset: "electric",
   },
   { word: "slap", instrument: "string", field: "string", preset: "slap" },
+  { word: "motown", instrument: "string", field: "string", preset: "motown" },
   { word: "tanpura", instrument: "string", field: "string", preset: "tanpura" },
   {
     word: "harpsichord",
