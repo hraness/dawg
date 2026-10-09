@@ -33,6 +33,7 @@ import {
 import {
   SING_LANE_PARAMS,
   SING_VERSION,
+  autoPartVoice,
   autoVoice,
   parseVowel,
   resolveSing,
@@ -425,6 +426,8 @@ type Setup = {
   tickAt: (index: number) => number;
   gainAt: (index: number) => number;
   seedTick: number;
+  /** `voice: "auto"`: the part's voice type, from its median pitch. */
+  partVoice?: VoiceType;
 };
 
 /** Applies the automation lanes at sample `index` onto `live`. */
@@ -470,7 +473,9 @@ function renderLine(
   const head = line.head;
   const seed = `${head.id}:${head.startTick + setup.seedTick}`;
   const voice: VoiceType =
-    s.voice === "auto" ? autoVoice(head.pitch) : (s.voice as VoiceType);
+    s.voice === "auto"
+      ? (setup.partVoice ?? autoVoice(head.pitch))
+      : (s.voice as VoiceType);
   const ringHz = ringHzOf(voice);
   const lengthSec = line.length / sampleRate;
   const members = singMembers(s.voices);
@@ -778,6 +783,14 @@ export function renderSingTrack(
     gainAt,
     seedTick: context.seedTick ?? 0,
   };
+  if (s.voice === "auto") {
+    const part = autoPartVoice(
+      (context.score?.notes ?? [])
+        .filter((note) => note.trackId === track.id)
+        .map((note) => note.pitch),
+    );
+    if (part) setup.partVoice = part;
+  }
   const throat = s.drone !== undefined;
   const melisma = heldVowels(notes, s.vowel);
   const lines = windLines(notes, context, track.glide === undefined);

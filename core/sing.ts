@@ -117,7 +117,7 @@ export const SING_PARAMS: Readonly<Record<string, ParamSpec>> = Object.freeze({
     values: SING_VOICES,
     default: "auto",
     optional: true,
-    doc: "formant table: auto picks by pitch (bass < C3, tenor < G3, alto < C5, soprano)",
+    doc: "formant table: auto picks one per part from its median pitch (bass < F3, tenor < C#4, alto < G4, soprano)",
   }) as EnumParam,
   vowel: Object.freeze({
     kind: "enum",
@@ -741,6 +741,24 @@ export function autoVoice(pitch: number): Exclude<SingVoice, "auto"> {
   if (pitch < 48) return "bass";
   if (pitch < 55) return "tenor";
   if (pitch < 72) return "alto";
+  return "soprano";
+}
+
+/**
+ * `voice: "auto"` for a whole part: the voice type of the part's median
+ * pitch, so an SATB part keeps one formant table across its range (a tenor
+ * line around B3-D4 sings the tenor table, not the alto one note by note).
+ * Undefined for no pitches.
+ */
+export function autoPartVoice(
+  pitches: readonly number[],
+): Exclude<SingVoice, "auto"> | undefined {
+  if (pitches.length === 0) return undefined;
+  const sorted = [...pitches].sort((a, b) => a - b);
+  const median = sorted[Math.floor((sorted.length - 1) / 2)]!;
+  if (median < 53) return "bass";
+  if (median < 61) return "tenor";
+  if (median < 67) return "alto";
   return "soprano";
 }
 

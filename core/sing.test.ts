@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  autoPartVoice,
   normalizeSing,
   parseVowel,
   resolveSing,
@@ -151,5 +152,16 @@ describe("singSummary", () => {
     expect(singSummary({ preset: "kargyraa", drone: 45 }, 4)).not.toContain(
       "(key)",
     );
+  });
+});
+
+describe("autoPartVoice", () => {
+  test("an SATB part keeps one voice type from its median pitch", () => {
+    // Bach chorale ranges: the tenor line around B3-D4 stays a tenor
+    expect(autoPartVoice([59, 60, 62, 59, 57, 62])).toBe("tenor");
+    expect(autoPartVoice([43, 45, 47, 48, 50])).toBe("bass");
+    expect(autoPartVoice([62, 64, 66, 67, 64])).toBe("alto");
+    expect(autoPartVoice([67, 69, 71, 72, 74])).toBe("soprano");
+    expect(autoPartVoice([])).toBeUndefined();
   });
 });
