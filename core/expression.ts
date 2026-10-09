@@ -125,6 +125,11 @@ export type NoteExpression = Readonly<{
    * track's humanize seed, 1 when it has none). `{}` keeps the note exact.
    */
   humanize?: NoteHumanize;
+  /**
+   * Optional (0.7): on an autotune guide note, the share of slow pitch drift
+   * removed (0..1), overriding the track's `autotune.drift` for this note.
+   */
+  drift?: number;
 }>;
 
 /** Per-note humanize: amounts as in `Humanize`, absent ones 0. */
@@ -141,6 +146,7 @@ export type NoteExpressionPatch = Readonly<{
   bend?: readonly BendPoint[] | null;
   vibrato?: NoteVibrato | null;
   humanize?: NoteHumanize | null;
+  drift?: number | null;
 }>;
 
 export const NOTE_EXPRESSION_FIELDS = [
@@ -149,6 +155,7 @@ export const NOTE_EXPRESSION_FIELDS = [
   "bend",
   "vibrato",
   "humanize",
+  "drift",
 ] as const;
 
 export const GLIDE_MODES = ["legato", "mono", "poly"] as const;
@@ -325,6 +332,12 @@ export function normalizeVibrato(value: unknown): NoteVibrato | undefined {
   return Object.freeze({ rate, depth, ...(delay > 0 ? { delay } : {}) });
 }
 
+/** A guide note's autotune drift share (0.7), 0..1. */
+export function normalizeNoteDrift(value: unknown): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  return finite(value, "note drift", 0, 1);
+}
+
 /** Validates a note's expression fields; only the set ones are returned. */
 export function normalizeNoteExpression(
   input: Readonly<Record<string, unknown>>,
@@ -334,12 +347,14 @@ export function normalizeNoteExpression(
   const bend = normalizeBend(input.bend);
   const vibrato = normalizeVibrato(input.vibrato);
   const humanize = normalizeNoteHumanize(input.humanize);
+  const drift = normalizeNoteDrift(input.drift);
   return {
     ...(articulation ? { articulation } : {}),
     ...(glide !== undefined ? { glide } : {}),
     ...(bend ? { bend } : {}),
     ...(vibrato ? { vibrato } : {}),
     ...(humanize ? { humanize } : {}),
+    ...(drift !== undefined ? { drift } : {}),
   };
 }
 

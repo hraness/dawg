@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.32.0";
+export const SDK_VERSION = "1.33.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -246,6 +246,11 @@ export type Expression = Readonly<{
   vowel?: string;
   /** The syllable sung on this note (SDK 1.32.0): no spaces, `_` holds the previous one. */
   lyric?: string;
+  /**
+   * On an autotune guide note (SDK 1.33.0): the share of slow pitch drift
+   * removed, 0..1, overriding the track's `autotune` drift.
+   */
+  drift?: number;
 }>;
 
 /** The expression a built note carries; fields are present only when set. */
@@ -257,6 +262,7 @@ export type NoteExpressionSpec = Readonly<{
   humanize?: Readonly<{ timing?: number; velocity?: number; length?: number }>;
   vowel?: string;
   lyric?: string;
+  drift?: number;
 }>;
 
 const DEFAULT_VIBRATO_RATE = 5.5;
@@ -280,10 +286,11 @@ function expression(
         "humanize",
         "vowel",
         "lyric",
+        "drift",
       ].includes(key)
     )
       throw new DawgSdkError(
-        `${label} expression has an unknown field "${key.slice(0, 32)}" (articulation glide bend vibrato humanize vowel lyric)`,
+        `${label} expression has an unknown field "${key.slice(0, 32)}" (articulation glide bend vibrato humanize vowel lyric drift)`,
       );
   const out: {
     articulation?: Articulation;
@@ -297,6 +304,7 @@ function expression(
     }>;
     vowel?: string;
     lyric?: string;
+    drift?: number;
   } = {};
   const articulation = input.articulation ?? input.art;
   if (articulation !== undefined) {
@@ -370,6 +378,12 @@ function expression(
   if (input.vowel !== undefined)
     out.vowel = singVowel(input.vowel, `${label} vowel`);
   if (input.lyric !== undefined) out.lyric = lyricInput(input.lyric, label);
+  if (input.drift !== undefined) {
+    const drift = finite(input.drift, `${label} drift`);
+    if (drift < 0 || drift > 1)
+      throw new DawgSdkError(`${label} drift must be 0..1`);
+    out.drift = drift;
+  }
   return out;
 }
 
@@ -2468,6 +2482,146 @@ function trackSing(
   );
 }
 
+// ---- autotune (f07-autotune, SDK 1.33.0) ----
+
+/** Autotune presets, gentle to hard (core/autotune.ts AUTOTUNE_PRESETS). */
+export type AutotunePresetName =
+  | "hard"
+  | "robot"
+  | "warble"
+  | "trap"
+  | "pop"
+  | "natural"
+  | "gentle"
+  | "guided"
+  | "locked";
+
+const AUTOTUNE_PRESET_WORDS: readonly string[] = Object.freeze([
+  "hard",
+  "robot",
+  "warble",
+  "trap",
+  "pop",
+  "natural",
+  "gentle",
+  "guided",
+  "locked",
+]);
+
+/** Autotune fields; dawg checks the ranges (core/autotune.ts AUTOTUNE_PARAMS). */
+export type AutotuneParams = Readonly<{
+  /** Targets: `scale` (song or track key, else chromatic), `chromatic`, `chord`, `notes`. */
+  to?: "scale" | "chromatic" | "chord" | "notes";
+  /** Guide track id for `to: "notes"` (a vocal track may use its own notes). */
+  from?: string;
+  /** Scale for this track, e.g. `"D bayati"`; default the song key. */
+  key?: string;
+  /** Retune time in ms, 0..400; 0 is instant and stepped. */
+  speed?: number;
+  /** 0..1 slower retune on held notes. */
+  relax?: number;
+  /** ms 50..1000 before a note counts as held. */
+  hold?: number;
+  /** 0..100: higher only pulls notes already near a target. */
+  flex?: number;
+  /** Seconds 0..0.5 to move between targets. */
+  glide?: number;
+  /** 0..1 correction strength. */
+  amount?: number;
+  /** Added vibrato rate in Hz, 0..12 (0 off). */
+  vib?: number;
+  /** Added vibrato depth in semitones, 0..1. */
+  vibmod?: number;
+  /** Notes mode: 0..1 how far each note's middle moves to the written pitch. */
+  center?: number;
+  /** Notes mode: 0..1 share of slow drift removed. */
+  drift?: number;
+  /** Tracker range: `auto`, `bass`, `tenor`, `alto`, `soprano`. */
+  voice?: "auto" | "bass" | "tenor" | "alto" | "soprano";
+}>;
+
+/** Stored autotune settings: a preset and any fields that override it. */
+export type AutotuneSettings = Readonly<
+  { preset?: AutotunePresetName } & AutotuneParams
+>;
+
+/** Result of `autotune()`; pass it as a track's `autotune`. */
+export type AutotuneSpec = Readonly<{ kind: "autotune" } & AutotuneSettings>;
+
+const AUTOTUNE_PARAM_KEYS: readonly string[] = Object.freeze([
+  "to",
+  "from",
+  "key",
+  "speed",
+  "relax",
+  "hold",
+  "flex",
+  "glide",
+  "amount",
+  "vib",
+  "vibmod",
+  "center",
+  "drift",
+  "voice",
+]);
+
+/**
+ * Pitch correction (SDK 1.33.0), from `gentle` to `hard`; the preset word
+ * alone also works as a track's `autotune`. Fields override the preset.
+ *
+ * autotune: "hard"
+ * autotune: autotune("pop", { speed: 40, key: "D bayati" })
+ * autotune: autotune("guided", { from: "lead" })
+ */
+export function autotune(
+  preset?: AutotunePresetName | AutotuneParams,
+  params?: AutotuneParams,
+): AutotuneSpec {
+  const fields =
+    typeof preset === "object" && preset !== null ? preset : (params ?? {});
+  const name = typeof preset === "string" ? preset : undefined;
+  return Object.freeze({
+    kind: "autotune" as const,
+    ...autotuneInput(
+      { ...(name ? { preset: name } : {}), ...fields },
+      "autotune",
+    ),
+  });
+}
+
+function autotuneInput(raw: unknown, where: string): AutotuneSettings {
+  if (typeof raw === "string") raw = { preset: raw };
+  if (!isRecord(raw))
+    throw new DawgSdkError(
+      `${where} autotune must be a preset word or autotune()`,
+    );
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (key === "kind" || value === undefined) continue;
+    if (key === "preset") {
+      if (typeof value !== "string" || !AUTOTUNE_PRESET_WORDS.includes(value))
+        throw new DawgSdkError(
+          `${where} autotune preset "${String(value).slice(0, 32)}" is not one of ${AUTOTUNE_PRESET_WORDS.join(" ")}`,
+        );
+      out.preset = value;
+    } else if (!AUTOTUNE_PARAM_KEYS.includes(key)) {
+      throw new DawgSdkError(
+        `${where} autotune has no field "${key.slice(0, 32)}" (preset ${AUTOTUNE_PARAM_KEYS.join(" ")})`,
+      );
+    } else if (["to", "from", "key", "voice"].includes(key)) {
+      if (typeof value !== "string")
+        throw new DawgSdkError(`${where} autotune ${key} must be a string`);
+      out[key] = value;
+    } else out[key] = finite(value, `${where} autotune ${key}`);
+  }
+  if (Object.keys(out).length === 0)
+    throw new DawgSdkError(`${where} autotune needs a preset or fields`);
+  const ordered: Record<string, unknown> = {};
+  for (const key of ["preset", ...AUTOTUNE_PARAM_KEYS])
+    if (out[key] !== undefined) ordered[key] = out[key];
+  return Object.freeze(ordered) as AutotuneSettings;
+}
+
 /**
  * `count` equal slices of one file as voices `prefix0 … prefixN-1`, for
  * chopped breaks: `sampler(slices("samples/break.wav", 8, "brk"))`, then
@@ -3231,6 +3385,11 @@ export type TrackInput = Readonly<{
    * it changes no sound by itself.
    */
   guitar?: GuitarInput;
+  /**
+   * Pitch correction on this track's clips and samples (SDK 1.32.0): a
+   * preset word (`"hard"`), or `autotune("pop", { speed: 40 })`.
+   */
+  autotune?: AutotunePresetName | AutotuneSpec;
   /** `note()`/`seq()` for pitched tracks, `hit()`/`hits()` for kits and one-shot samplers. */
   notes?: readonly (NoteSpec | HitSpec)[];
   /**
@@ -3371,6 +3530,8 @@ export type TrackSpec = Readonly<{
   takes?: readonly TakeSpec[];
   /** Vocoder settings (SDK 1.32.0); `src` as written until `song()`. */
   vocoder?: Readonly<{ preset?: VocoderPresetName } & VocoderParams>;
+  /** Pitch correction (SDK 1.32.0); present only when set. */
+  autotune?: AutotuneSettings;
 }>;
 
 export type GlideMode = "legato" | "mono" | "poly";
@@ -3886,6 +4047,9 @@ export function track(input: TrackInput): TrackSpec {
     ...(singSpec ? { sing: singSpec } : {}),
     ...trackClips(input, name, slug),
     ...(vocoderSpec ? { vocoder: vocoderSpec } : {}),
+    ...(input.autotune !== undefined
+      ? { autotune: autotuneInput(input.autotune, `track ${name}`) }
+      : {}),
   });
 }
 
@@ -4393,6 +4557,8 @@ export type ScoreNote = Readonly<{
   bend?: readonly Readonly<{ at: number; cents: number }>[];
   vibrato?: Readonly<{ rate: number; depth: number; delay?: number }>;
   humanize?: Readonly<{ timing?: number; velocity?: number; length?: number }>;
+  /** Autotune guide drift share (SDK 1.32.0). */
+  drift?: number;
   /** Static cents offset (SDK 1.16.0); absent is 0. */
   cents?: number;
   /** Sung vowel (SDK 1.32.0); absent sings the lyric's or the track's. */
@@ -4487,6 +4653,8 @@ export type ScoreTrack = Readonly<{
   sing?: TrackSpec["sing"];
   /** Vocoder settings (SDK 1.32.0); `src` is a track id. */
   vocoder?: TrackSpec["vocoder"];
+  /** Pitch correction (SDK 1.32.0). */
+  autotune?: AutotuneSettings;
   glide?: TrackSpec["glide"];
   pedal?: readonly Readonly<{ tick: number; state: PedalState }>[];
   softPedal?: readonly Readonly<{ tick: number; state: PedalState }>[];
@@ -4822,6 +4990,7 @@ export function song(input: SongInput): Song {
               ),
             },
       );
+    if (t.autotune) stored.autotune = t.autotune;
     if (t.rhythm && t.rhythm.length > 0)
       stored.rhythm = Object.freeze(
         t.rhythm.map((row) => {
@@ -4861,6 +5030,7 @@ export function song(input: SongInput): Song {
             : {}),
           ...(n.vibrato ? { vibrato: n.vibrato } : {}),
           ...(n.humanize ? { humanize: n.humanize } : {}),
+          ...(n.drift !== undefined ? { drift: n.drift } : {}),
           ...(n.cents ? { cents: n.cents } : {}),
           ...(n.vowel ? { vowel: n.vowel } : {}),
           ...(n.lyric !== undefined ? { lyric: n.lyric } : {}),

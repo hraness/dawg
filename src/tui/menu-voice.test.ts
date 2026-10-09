@@ -154,4 +154,60 @@ describe("Sound > Voice > Pitch (pitch lane)", () => {
     const make = pitch.find((row) => row.label === "Make notes")!;
     expect(make.kind === "action" && make.command).toBe("/vocal notes");
   });
+
+  test("Sound > Voice > Autotune on a sampler track: rows run /autotune", () => {
+    const ctx: MenuContext = {
+      ...context(),
+      trackId: "vox",
+      score: createScore({
+        tempoBpm: 120,
+        bars: 2,
+        tracks: [
+          { id: "lead", name: "lead", instrument: "saw" },
+          {
+            id: "vox",
+            name: "vox",
+            instrument: "sampler",
+            sampler: {
+              mode: "oneshot",
+              voices: { take: { src: "tracks/vox/samples/take.wav" } },
+            },
+            autotune: { preset: "hard", speed: 10 },
+          },
+        ],
+        notes: [],
+      }),
+    };
+    const sound = open(rootNodes(ctx), "sound", ctx);
+    const voice = open(sound, "voice", ctx);
+    expect(labels(voice)).toContain("Autotune");
+    const rows = open(voice, "voice:autotune", ctx);
+    expect(labels(rows).slice(0, 4)).toEqual(["Preset", "To", "From", "Key"]);
+    expect(labels(rows)).toContain("Speed");
+    expect(labels(rows)).toContain("Drift");
+    expect(labels(rows)).toContain("Voice");
+    const preset = rows.find((row) => row.label === "Preset")!;
+    if (preset.kind !== "choice") throw new Error("preset is a choice");
+    expect(preset.value).toBe("hard");
+    expect(preset.command("gentle")).toBe("autotune gentle");
+    expect(preset.command("off")).toBe("autotune off");
+    const speed = rows.find((row) => row.label === "Speed")!;
+    if (speed.kind !== "number") throw new Error("speed is a number");
+    expect(speed.value).toBe(10);
+    expect(speed.command(speed.step(10, 1))).toBe("autotune speed 15");
+    expect(speed.reset).toBe("autotune speed off");
+    const from = rows.find((row) => row.label === "From")!;
+    if (from.kind !== "choice") throw new Error("from is a choice");
+    expect(from.options).toEqual(["own notes", "lead"]);
+    expect(from.command("lead")).toBe("autotune to notes lead");
+    expect(labels(rows).at(-1)).toBe("reset to preset");
+  });
+
+  test("a synth track has no Autotune row", () => {
+    const ctx = context();
+    const sound = open(rootNodes(ctx), "sound", ctx);
+    // Voice may show for other lanes (Clips); Autotune stays hidden.
+    if (labels(sound).includes("Voice"))
+      expect(labels(open(sound, "voice", ctx))).not.toContain("Autotune");
+  });
 });

@@ -48,6 +48,7 @@ import {
   type SampleWarp,
 } from "./warp.ts";
 import { fittedBuffer, shiftedBuffer, windowAt } from "./fit.ts";
+import { autotuneVoice } from "./autotune.ts";
 import {
   performanceTimingFor,
   tunedTiming,
@@ -419,9 +420,36 @@ export function planSamplerVoices(
         : ref.loopEnd * sample.frames;
     const start = noteStartFrame(note, timing);
     const performance = (note as PerformedNote).performance;
+    // 0.7 autotune: the played buffer (after fit and shift) retuned at the
+    // pitch and place it sounds; same length, so the plan above holds.
+    // Reversed voices play untuned. Absent `autotune` skips this.
+    // Timed targets tune only the frames this voice can read.
+    const reads =
+      loop || ramp !== 0 || performance?.cents
+        ? {
+            from: Math.min(regionStart, loopFrom),
+            to: Math.max(regionEnd, loopTo),
+          }
+        : {
+            from: regionStart,
+            to: Math.min(regionEnd, regionStart + length * step + 2),
+          };
+    const tuned =
+      track.autotune && speed > 0
+        ? autotuneSample(
+            timing,
+            track,
+            sample,
+            sample === decoded,
+            start,
+            regionStart,
+            step,
+            reads,
+          )
+        : { sample, from: 0 };
     const voice: SamplerVoice = {
       voice: target.voice,
-      sample,
+      sample: tuned.sample,
       startTick: note.startTick,
       start,
       end: start + length,
@@ -429,8 +457,8 @@ export function planSamplerVoices(
       step,
       reverse: speed < 0,
       loop,
-      regionStart,
-      regionEnd,
+      regionStart: regionStart - tuned.from,
+      regionEnd: regionEnd - tuned.from,
       gain: (ref.gain ?? 1) * Math.max(0, Math.min(1, note.velocity)),
       choke: ref.choke,
       loopStart: speed < 0 ? regionEnd - loopTo : loopFrom - regionStart,
@@ -440,7 +468,7 @@ export function planSamplerVoices(
       ...(ref.fadeInTime !== undefined
         ? { attack: Math.max(1, ref.fadeInTime * sampleRate) }
         : {}),
-      ...(ref.from !== undefined && sample.left && sample.right
+      ...(ref.from !== undefined && tuned.sample.left && tuned.sample.right
         ? { stereo: true }
         : {}),
       ...(performance?.cents ? { cents: performance.cents } : {}),
@@ -535,6 +563,7 @@ function fitVoice(
     length,
   );
   if (!buffer) return null;
+  audioIds.set(buffer, key);
   const sample: DecodedSample = Object.freeze({
     sha256: decoded.sha256,
     sampleRate,
@@ -557,6 +586,57 @@ function fitVoice(
     loopTo: Math.max(a, b),
   });
 }
+
+/**
+ * The voice's sample retuned by the track's autotune (0.7), and the source
+ * frame its first frame came from (timed targets tune only `reads`). A
+ * shifted or fitted buffer keeps the file's sha256 but not its audio, so
+ * it is named by its own shift or fit key (`audioIds`).
+ */
+function autotuneSample(
+  timing: SamplerTiming,
+  track: Track,
+  sample: DecodedSample,
+  decoded: boolean,
+  start: number,
+  regionStart: number,
+  step: number,
+  reads: Readonly<{ from: number; to: number }>,
+): Readonly<{ sample: DecodedSample; from: number }> {
+  const id = decoded ? undefined : audioIds.get(sample.mono);
+  const tuned = autotuneVoice(
+    timing.score,
+    track,
+    {
+      ...(id !== undefined ? { id } : decoded ? { sha256: sample.sha256 } : {}),
+      sampleRate: sample.sampleRate,
+      mono: sample.mono,
+      // A shifted or fitted copy keeps the file's channels unshifted:
+      // only the decoded file tunes in stereo.
+      ...(decoded && sample.left && sample.right
+        ? { left: sample.left, right: sample.right }
+        : {}),
+    },
+    start / timing.sampleRate,
+    regionStart,
+    (step * timing.sampleRate) / sample.sampleRate,
+    reads,
+  );
+  if (tuned.mono === sample.mono) return { sample, from: 0 };
+  return {
+    sample: Object.freeze({
+      ...sample,
+      frames: tuned.mono.length,
+      mono: tuned.mono,
+      left: tuned.left,
+      right: tuned.right,
+    }),
+    from: tuned.from,
+  };
+}
+
+/** Shifted and fitted buffers by their own cache key (0.7 autotune ids). */
+const audioIds = new WeakMap<Float32Array, string>();
 
 /** A SampleRef with a pitch or formant shift (0.6.1). */
 export function isShifted(ref: SampleRef): boolean {
@@ -597,6 +677,7 @@ function shiftVoice(
     ref.formant,
   );
   if (!buffer) return undefined;
+  audioIds.set(buffer, key);
   return Object.freeze({ ...sample, frames: buffer.length, mono: buffer });
 }
 

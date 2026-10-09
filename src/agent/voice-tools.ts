@@ -79,6 +79,26 @@ import {
   vocoderEntryLines,
   type VocoderValue,
 } from "../commands/vocoder.ts";
+import {
+  AUTOTUNE_FIELDS,
+  AUTOTUNE_PARAMS,
+  AUTOTUNE_PRESETS,
+  AUTOTUNE_TARGETS,
+  AUTOTUNE_VOICES,
+  type AutotunePreset,
+} from "../../core/autotune.ts";
+import {
+  applyAutotuneCommand,
+  type AutotuneCommand,
+} from "../commands/autotune.ts";
+
+/** A refused argument; named like tools.ts's so the model sees it. */
+class AutotuneToolError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ToolArgumentError";
+  }
+}
 
 /** An agent tool, optionally usable as a `preview_sound` candidate. */
 export type VoiceTool = AgentTool & Readonly<{ previewable?: boolean }>;
@@ -765,7 +785,128 @@ export const VOCODER_TOOLS: readonly VoiceTool[] = [
   },
 ];
 /** autotune: autotune_vocal. */
-export const AUTOTUNE_TOOLS: readonly VoiceTool[] = [];
+export const AUTOTUNE_TOOLS: readonly VoiceTool[] = [
+  {
+    name: "autotune_vocal",
+    previewable: true,
+    description:
+      "Pitch correction on a track's audio (its clips and sampler voices), gentle to hard. preset: hard (instant stepped notes), robot (stepped on every tuning step), warble (hard with synthetic vibrato), trap (fast, glossy), pop (default: polished but sung), natural, gentle (keeps vibrato), guided (follows guide notes), locked (follows notes exactly). params override one field, null returns it to the preset: to scale|chromatic|chord|notes (scale: key or the song key and tuning, so maqam, raga and n-EDO work; chromatic without a key; chord: the chord timeline; notes: `from` or the track's own notes), from <trackId>, key (e.g. 'D bayati'), speed ms (0 instant), relax 0..1, hold ms, flex 0..100 (Antares-style: bends wider than flex cents pass), glide ms (0..500), amount 0..1, vib Hz, vibmod semitones, center 0..1, drift 0..1, voice auto|bass|tenor|alto|soprano. reset drops overrides; off removes it. Unsure of the key? analyze_pitch first. Never fetch an artist's vocal to imitate.",
+    parameters: {
+      type: "object",
+      properties: {
+        trackId: { type: "string", maxLength: SCORE_LIMITS.maxIdLength },
+        preset: { type: "string", enum: [...AUTOTUNE_PRESETS] },
+        reset: { type: "boolean" },
+        off: { type: "boolean" },
+        params: {
+          type: "object",
+          properties: {
+            to: { type: ["string", "null"], enum: [...AUTOTUNE_TARGETS, null] },
+            from: { type: ["string", "null"] },
+            key: { type: ["string", "null"] },
+            voice: {
+              type: ["string", "null"],
+              enum: [...AUTOTUNE_VOICES, null],
+            },
+            ...Object.fromEntries(
+              AUTOTUNE_PARAMS.map((param) => [
+                param.name,
+                {
+                  type: ["number", "null"],
+                  minimum: param.min,
+                  maximum: param.max,
+                },
+              ]),
+            ),
+          },
+          additionalProperties: false,
+        },
+      },
+      additionalProperties: false,
+    },
+    plan(args, context) {
+      const trackId = args.trackId ?? context.focusedTrackId;
+      if (typeof trackId !== "string" || trackId.length === 0)
+        throw new AutotuneToolError("trackId must be a track id");
+      if (!context.score.tracks.some((track) => track.id === trackId))
+        throw new AutotuneToolError(
+          `unknown track ${trackId}; create it with create_track first`,
+        );
+      const commands: AutotuneCommand[] = [];
+      if (args.off === true) commands.push({ type: "autotune-off" });
+      else {
+        if (args.reset === true) commands.push({ type: "autotune-reset" });
+        let preset: AutotunePreset | undefined;
+        if (args.preset !== undefined) {
+          if (
+            typeof args.preset !== "string" ||
+            !(AUTOTUNE_PRESETS as readonly string[]).includes(args.preset)
+          )
+            throw new AutotuneToolError(
+              `preset must be one of ${AUTOTUNE_PRESETS.join(", ")}`,
+            );
+          preset = args.preset as AutotunePreset;
+        }
+        const values: Record<string, number | string | null> = {};
+        if (args.params !== undefined) {
+          if (
+            typeof args.params !== "object" ||
+            args.params === null ||
+            Array.isArray(args.params)
+          )
+            throw new AutotuneToolError("params must be an object");
+          for (const [key, value] of Object.entries(args.params)) {
+            if (
+              !(AUTOTUNE_FIELDS as readonly string[]).includes(key) ||
+              key === "preset"
+            )
+              throw new AutotuneToolError(
+                `autotune has no field ${key} (${AUTOTUNE_FIELDS.filter((f) => f !== "preset").join(" ")})`,
+              );
+            if (
+              value !== null &&
+              typeof value !== "number" &&
+              typeof value !== "string"
+            )
+              throw new AutotuneToolError(`${key} must be a number or string`);
+            // glide reads in ms here, as /autotune and the menu show it.
+            values[key] =
+              key === "glide" && typeof value === "number"
+                ? value / 1000
+                : value;
+          }
+        }
+        if (preset || Object.keys(values).length > 0 || commands.length === 0)
+          commands.push({
+            type: "autotune-set",
+            ...(preset ? { preset } : {}),
+            values,
+          });
+      }
+      let score = context.score;
+      const messages: string[] = [];
+      for (const command of commands) {
+        const result = applyAutotuneCommand(score, trackId, command);
+        if (!result.ok) throw new AutotuneToolError(result.message);
+        if (result.next) score = result.next;
+        messages.push(result.message);
+      }
+      const next = score.tracks.find((track) => track.id === trackId)!;
+      return {
+        kind: "score",
+        operations: [
+          {
+            type: "updateTrack",
+            trackId,
+            patch: { autotune: next.autotune ?? null },
+          },
+        ],
+        trackId,
+        summary: `${trackId} ${messages.at(-1)}`,
+      };
+    },
+  },
+];
 
 /** Every voice tool, in lane order. */
 export const VOICE_TOOLS: readonly VoiceTool[] = [

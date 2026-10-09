@@ -376,3 +376,36 @@ test("a vocoder change and its removal survive a diff round trip", () => {
   const back = applyScoreOperations(b, diffScores(b, a));
   expect(back.tracks[1]!.vocoder).toBeUndefined();
 });
+
+test("autotune, vocoder and note drift round-trip through diff and apply", () => {
+  const a = createScore({
+    tempoBpm: 120,
+    bars: 1,
+    tracks: [
+      { id: "v", name: "v", instrument: "vocal" },
+      { id: "c", name: "c", instrument: "vocoder" },
+    ],
+    notes: [
+      {
+        id: "n0",
+        trackId: "v",
+        startTick: 0,
+        durationTicks: 480,
+        pitch: 60,
+        velocity: 0.8,
+      },
+    ],
+  } as never);
+  let b = updateTrack(a, "v", { autotune: { preset: "hard" } } as never);
+  b = updateTrack(b, "c", { vocoder: { src: "v" } } as never);
+  const json = structuredClone(b.toJSON()) as unknown as {
+    notes: Array<Record<string, unknown>>;
+  };
+  json.notes[0] = { ...json.notes[0], drift: 0.5 };
+  const c = createScore(json as never);
+  expect(c.notes[0]!.drift).toBe(0.5);
+  const ops = diffScores(a, c);
+  expect(applyScoreOperations(a, ops).toJSON()).toEqual(c.toJSON());
+  const back = diffScores(c, a);
+  expect(applyScoreOperations(c, back).toJSON()).toEqual(a.toJSON());
+});

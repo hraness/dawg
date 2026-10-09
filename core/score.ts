@@ -41,6 +41,9 @@ import {
   VOCODER_INSTRUMENT,
   type TrackVocoder,
 } from "./vocoder.ts";
+import { normalizeAutotune, type TrackAutotune } from "./autotune.ts";
+// Registers cross-track reference fields (autotune.from, vocoder.src).
+import "./routing.ts";
 import { normalizeString, type TrackString } from "./strings.ts";
 import {
   isGranularInstrument,
@@ -176,6 +179,13 @@ export const SCORE_LIMITS = Object.freeze({
   maxVocoderBands: 40,
   maxVocoderFormant: 24,
   maxVocoderTracks: 8,
+  /** Track.autotune (0.7). */
+  maxAutotuneSpeedMs: 400,
+  maxAutotuneHoldMs: 1000,
+  maxAutotuneGlideSeconds: 0.5,
+  maxAutotuneVibHz: 12,
+  /** Per-frame correction cap in semitones. */
+  maxAutotuneShift: 12,
 } as const);
 
 /** Instrument name that selects a track's `wavetable` oscillator. */
@@ -508,6 +518,11 @@ export type Track = Readonly<{
    * the modulator track. Absent: today's sound.
    */
   vocoder?: TrackVocoder;
+  /**
+   * Optional (0.7): pitch correction of every clip and sampler voice on the
+   * track (`core/autotune.ts`). Absent keeps the sound untouched.
+   */
+  autotune?: TrackAutotune;
 }> &
   /**
    * Performance (`core/expression.ts`): glide default, sustain pedal
@@ -910,6 +925,7 @@ export type TrackPatch = Readonly<
     clips?: readonly AudioClip[] | null;
     takes?: readonly Take[] | null;
     vocoder?: TrackVocoder | null;
+    autotune?: TrackAutotune | null;
   }
 >;
 
@@ -970,6 +986,7 @@ export type TrackInput = Readonly<
     | "clips"
     | "takes"
     | "vocoder"
+    | "autotune"
   > &
     Pick<Track, "id"> & {
       filter?: TrackFilter | null;
@@ -1000,6 +1017,7 @@ export type TrackInput = Readonly<
       clips?: readonly AudioClip[] | null;
       takes?: readonly Take[] | null;
       vocoder?: TrackVocoder | null;
+      autotune?: TrackAutotune | null;
     }
 >;
 
@@ -1977,6 +1995,18 @@ function normalizeTracks(inputs: readonly unknown[]): Track[] {
   const vocoderError = vocoderScoreError(tracks, SCORE_LIMITS.maxVocoderTracks);
   if (vocoderError)
     throw new ScoreValidationError(vocoderError, "invalid-track");
+  // Cross-track references (0.7): autotune.from names another track.
+  for (const track of tracks) {
+    const from = track.autotune?.from;
+    if (from === undefined) continue;
+    if (from === track.id || !seen.has(from))
+      throw new ScoreValidationError(
+        from === track.id
+          ? `track ${track.id} autotune.from cannot be the track itself`
+          : `track ${track.id} autotune.from: unknown track "${from}"`,
+        "invalid-track",
+      );
+  }
   return tracks;
 }
 
@@ -2087,6 +2117,9 @@ function normalizeTrack(input: unknown): Track {
   const takes = normalizeTakes(input.takes, id);
   const vocoder = fxOrThrow(() => normalizeVocoder(input.vocoder));
   const clips = normalizeClips(input.clips, id, takes);
+  const autotune = fxOrThrow(() =>
+    normalizeAutotune(input.autotune, instrument),
+  );
   const rhythm = normalizeRhythm(input.rhythm, id);
   const time = timeOrThrow(
     () => normalizeTrackTime(input.time, `track ${id} time`),
@@ -2209,6 +2242,7 @@ function normalizeTrack(input: unknown): Track {
     ...(clips ? { clips } : {}),
     ...(takes ? { takes } : {}),
     ...(vocoder ? { vocoder } : {}),
+    ...(autotune ? { autotune } : {}),
   });
 }
 
@@ -3787,21 +3821,24 @@ export function setClips(
  * drop function here (through `registerTrackRefs` in core/routing.ts) so
  * removing a track never leaves a dangling reference.
  */
-const trackRefDrops = new Map<
-  string,
-  (track: Track, removedId: string) => Track
->();
+// `var` and a lazily created map: core/routing.ts registers while this
+// module may still be evaluating (score.ts imports routing.ts for its
+// side effect), so the map must not sit in a temporal dead zone.
+// eslint-disable-next-line no-var
+var trackRefDrops:
+  Map<string, (track: Track, removedId: string) => Track> | undefined;
 
 /** Registers how `field` forgets a removed track. Used by core/routing.ts. */
 export function registerTrackRefDrop(
   field: string,
   drop: (track: Track, removedId: string) => Track,
 ): void {
-  trackRefDrops.set(field, drop);
+  (trackRefDrops ??= new Map()).set(field, drop);
 }
 
 function dropTrackRefs(track: Track, removedId: string): Track {
   let next = track;
-  for (const drop of trackRefDrops.values()) next = drop(next, removedId);
+  for (const drop of trackRefDrops?.values() ?? [])
+    next = drop(next, removedId);
   return next;
 }

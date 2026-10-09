@@ -9,6 +9,7 @@ import {
   type Track,
   type TrackScore,
 } from "../../core/score.ts";
+import { autotuneStemDigests } from "./autotune.ts";
 import { drumVoiceForPitch, isDrumInstrument } from "../../core/drums.ts";
 import {
   performanceTimingFor,
@@ -594,9 +595,14 @@ export class StemRenderer {
       const vocoderSource = track?.vocoder
         ? vocoderSourceOf(track, groups, performed, context, bank)
         : undefined;
-      const engineDigests = vocoderSource
+      const withVocoder = vocoderSource
         ? [...(baseDigests ?? []), vocoderSource.key]
         : baseDigests;
+      // 0.7 autotune: its targets (guide notes, chords, key, tuning) and the
+      // pitch engine version join the stem key; absent adds nothing.
+      const engineDigests = track?.autotune
+        ? [...(withVocoder ?? []), ...autotuneStemDigests(track, score)]
+        : withVocoder;
       // Wavetable hook: the oscillator factory for a wavetable track (its
       // table id joins the stem key), undefined for every other instrument.
       const wavetable = track ? wavetableHook(track, bank, context) : undefined;
@@ -1189,7 +1195,12 @@ function vocoderSourceOf(
     settings.gate === "auto" ? sourceGateDb(source, bank) : settings.gate;
   // The modulator's clips (0.7) are heard; guide tones never are.
   const clipDigest = clipsDigest(source, bank, false);
-  const clipKeys = clipDigest === undefined ? [] : [`clips:${clipDigest}`];
+  // A tuned modulator (0.7 autotune) keys on its targets too: its guide
+  // track's notes, the chord timeline and the key change the tap.
+  const clipKeys = [
+    ...(clipDigest === undefined ? [] : [`clips:${clipDigest}`]),
+    ...(source.autotune ? autotuneStemDigests(source, context.score) : []),
+  ];
   const key = stemKey(
     stripped,
     notes,
@@ -1356,8 +1367,8 @@ function renderVoiceInto(
   // Audio clips (0.7) sum into the dry buffer before the chain.
   if (track?.clips) {
     const gainAt = (tick: number) => trackGainAt(track, tick);
-    renderClips(dry, track, context, bank, gainAt);
-    if (stereo) renderClips(dryR, track, context, bank, gainAt);
+    renderClips(dry, track, context, bank, gainAt, score);
+    if (stereo) renderClips(dryR, track, context, bank, gainAt, score);
   }
   return stereo;
 }

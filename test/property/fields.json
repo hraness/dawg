@@ -1580,6 +1580,41 @@
         "panAutomation": [],
         "vocoder": { "preset": "talkbox" }
       }
+    ],
+    "autotune": [
+      {
+        "id": "v",
+        "name": "v",
+        "instrument": "vocal",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "autotune": { "preset": "hard" }
+      },
+      {
+        "id": "v",
+        "name": "v",
+        "instrument": "vocal",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "autotune": { "preset": "pop", "speed": 40 }
+      },
+      {
+        "id": "v",
+        "name": "v",
+        "instrument": "vocal",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "autotune": { "to": "chromatic", "amount": 0.5 }
+      }
     ]
   },
   "notes": {
@@ -1891,6 +1926,35 @@
         "pitch": 43,
         "velocity": 0.6,
         "vowel": "e"
+      }
+    ],
+    "drift": [
+      {
+        "id": "d",
+        "trackId": "keys",
+        "startTick": 0,
+        "durationTicks": 1920,
+        "pitch": 48,
+        "velocity": 0.7,
+        "drift": 0
+      },
+      {
+        "id": "d",
+        "trackId": "keys",
+        "startTick": 0,
+        "durationTicks": 1920,
+        "pitch": 48,
+        "velocity": 0.7,
+        "drift": 0.5
+      },
+      {
+        "id": "d",
+        "trackId": "keys",
+        "startTick": 0,
+        "durationTicks": 1920,
+        "pitch": 48,
+        "velocity": 0.7,
+        "drift": 1
       }
     ]
   },
