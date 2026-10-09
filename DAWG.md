@@ -1564,6 +1564,26 @@ Section mutes and variations govern every bar of their section: a note held from
 
 The arrangement strip is one row under the header that shows the sections over the timeline (`▏verse   ▏chorus`), the looped section reversed, the section under the playhead bold, and the playhead as `▼`. It appears only when the song has sections. The menu's **Arrange** section (`/menu arrange`) lists every section; each opens loop, jump here, a mute toggle for every track, transpose and gain, build (into it, over it, or custom length and layers), drop (cut length and impact), fill (style, beats and crash), duplicate, duplicate as, move to, move left and right, rename, clear mutes and variations, unmark and delete. Agent tools: `list_sections`, `edit_section` (mark, add, duplicate, move, rename, delete, unmark, mute, unmute, vary, reset, loop, unloop), `set_form` and `add_transition` (build into or over a section, drop, fill). In `song.ts`: `song({ sections: [{ name: "verse", startBar: 0, bars: 8 }, …], form: "intro verse*2 chorus", loopSection: "chorus" })` (SDK 1.18.0).
 
+## Styles
+
+`/style` writes a whole song in a style: drums, bass, chords, melody and form, generated from a **style card**, a set of theory patterns rather than recordings. A card names the meter (signature, additive grouping, hypermeter, cycles such as tala, iqa, gongan or clave timelines), the tempo range, the groove (subdivision, swing ratio, microtiming, per-role lay-back, seeded humanisation), the onset grids per role as abstract step weights, the pitch space (12-TET scales and modes, or a tuning such as maqam quarter tones, with scale weights), the harmony as a grammar (Roman-numeral presets, fixed forms such as the 12-bar blues, a Markov chain and cadences), melody contour, range and interval statistics, the texture (which roles are required) and the form. Cards inherit: a leaf patches its branch, which patches its family root, so `deep-house` only states what differs from `house` and `electronic`.
+
+The taxonomy (`core/styles/taxonomy.ts`) has eight families and about 850 styles; every leaf is present, and a leaf without its own card generates from its nearest ancestor's card. Generation is deterministic: the same style, bars and seed always write the same song, and nothing is random beyond the seed.
+
+| Command                                      | Does                                                                             |
+| -------------------------------------------- | -------------------------------------------------------------------------------- |
+| `style`                                      | the families and their root styles                                               |
+| `style list [<id>]`                          | the children of a style                                                          |
+| `style search <words>`                       | ranked search over ids, names, aliases and regions                               |
+| `style info <id>`                            | path, meter, tempo, groove, tuning, harmony and roles                            |
+| `style <id> [bars] [seed]`                   | replace the song with one in that style (1 to 64 bars, default 8; one undo step) |
+| `style blend <a> <b> [weight] [bars] [seed]` | mix two cards; weight 0 is `a`, 1 is `b` (default 0.5)                           |
+| `style again`                                | the song's style with the next seed                                              |
+
+Every generated song is checked by `core/styles/validate.ts` before it is written: meter and tempo in range, onsets on the card's grid within tolerance, the swing ratio measured from the notes, every pitch in the scale or tuning, the chord sequence accepted by the harmony grammar, melody range and interval statistics, and every instrument resolving. The summary line reports how many checks passed. The song records its provenance in `style` (`{ id, seed, bars, blend? }`), which `/style again` reads.
+
+Menu: **Arrange › style** (`/menu style`) walks the taxonomy, with `find`, `blend` and, once the song has a style, `again`; each style offers make 4, 8, 16 or 32 bars and about. Agent tools: `list_styles` (families, children or a query), `style_info` and `apply_style` (`id`, `bars`, `seed`, `blend`, `weight`). In `song.ts`: `song({ style: style("deep-house", { seed: 3, bars: 8 }) })` records the provenance (SDK 1.33.0); the notes live in the tracks as usual.
+
 ## Voice
 
 Release 0.7 adds voice tools: audio clips and lyrics, pitch tracking, autotune, a formant shift, sung vowels and choirs, and a vocoder. Each arrives in its own subsection below. `/vocal` is the umbrella: bare `/vocal` lists every voice verb this build has, and `/help voice` shows them. The ctrl-k menu gains Sound › Voice, Effects › Voice and Sound › browse sounds › Voices once a voice tool fills them; until then they stay hidden.

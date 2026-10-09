@@ -594,7 +594,7 @@ export const HELP_GUIDE: readonly HelpSection[] = [
         summary: "name bars · form verse chorus*2 · build drop fill",
       },
       {
-        command: "style bebop 16 · ctrl-k › Style",
+        command: "style bebop 16 · Arrange › style",
         summary: "a whole song in a style · style search samba",
       },
     ],
@@ -872,7 +872,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   euclid: "/euclid [voice] · euclid hat 7 16",
   menu: "/menu [sound|effects|rhythm|chords|mix|master|project|tuning]",
   style:
-    "style [list [id]|search <words>|info <id>|<id> [bars] [seed]|blend <a> <b> [w] [bars] [seed]|again] · style deep-house 16 · style blend bebop bossa-nova 0.3",
+    "/style [list [id]|search <words>|info <id>|<id> [bars] [seed]|blend <a> <b> [w] [bars] [seed]|again] · style deep-house 16 · style blend bebop bossa-nova 0.3",
   master:
     "master <unit> on|off|preset <name>|<param> <value> · master streaming|club|loud · master target -14 · master measure · master off",
   try: "/try <sound command> · /try fx reverb mix 0.6",
