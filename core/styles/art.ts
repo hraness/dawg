@@ -2520,6 +2520,556 @@ const MODERN_LEAVES: readonly StyleCard[] = Object.freeze([
   }),
 ]);
 
+// ---------------------------------------------------------------------------
+// Contemporary art music. References: Keith Potter, "Four Musical
+// Minimalists" (2000); Julian Anderson, "A Provisional History of
+// Spectral Music" (Contemporary Music Review 19, 2000); Kyle Gann, "The
+// Arithmetic of Listening" (2019) for just intonation.
+
+const CONTEMPORARY_LEAVES: readonly StyleCard[] = Object.freeze([
+  card({
+    id: "aleatoric",
+    summary:
+      "indeterminacy: chance-ordered events, mobile form, unmeasured gestures in a time frame, pitch fields instead of progressions",
+    tempo: { bpm: [40, 96], typical: 60 },
+    groove: { humanize: { timingMs: 30, velocity: 0.2 } },
+    pitch: {
+      scales: [
+        ["messiaen-7", 0.5],
+        ["messiaen-3", 0.5],
+      ],
+    },
+    harmony: { rhythm: [[0.25, 1]] },
+    melody: {
+      intervals: ANGULAR,
+      density: [0.5, 2],
+      chordToneRate: 0.15,
+      repetition: 0.2,
+      contour: [
+        ["wave", 0.5],
+        ["flat", 0.5],
+      ],
+    },
+    bass: { behaviour: [["pedal", 1]] },
+    texture: {
+      roles: {
+        arp: null,
+        chords: role("strings", "piano:0.5"),
+        bass: role("contrabass", "cello:0.5"),
+        lead: role("flute", "clarinet:0.6", "prepared:0.5"),
+        counter: maybe("vibes", "harp:0.5"),
+      },
+    },
+    expression: { dynamics: [0.1, 0.8] },
+    form: { archetype: "mobile" },
+    mix: { space: 0.6, loudness: "classical" },
+  }),
+  card({
+    id: "sonorism",
+    summary:
+      "texture as subject: tone clusters, string glissando bands and tremolo masses, density and register replacing melody and harmony",
+    tempo: { bpm: [40, 90], typical: 56 },
+    pitch: {
+      scales: [
+        ["messiaen-7", 0.7],
+        ["phrygian", 0.3],
+      ],
+    },
+    harmony: {
+      rhythm: [[0.25, 1]],
+      voicing: { types: [["close", 1]], range: [40, 84], notes: [5, 6] },
+    },
+    melody: {
+      density: [0, 1],
+      chordToneRate: 0.4,
+      intervals: intervals(4, 1, 0.3, 1.5),
+      contour: [
+        ["ascending", 0.5],
+        ["descending", 0.5],
+      ],
+    },
+    bass: { behaviour: [["pedal", 1]] },
+    texture: {
+      roles: {
+        arp: null,
+        chords: role("tremolo", "strings:0.6"),
+        pad: role("strings", "violins:0.5"),
+        bass: role("contrabasses", "cellos:0.5"),
+        lead: role("violins", "tremolo:0.5"),
+      },
+    },
+    expression: { dynamics: [0.05, 1] },
+    mix: { space: 0.7, loudness: "classical" },
+  }),
+  card({
+    id: "spectralism",
+    summary:
+      "harmony from the overtone series: a low fundamental pedal, partials stacked as wide chords, slow spectral interpolation instead of progression",
+    tempo: { bpm: [40, 72], typical: 52 },
+    pitch: {
+      scales: [
+        ["lydian", 0.5],
+        ["mixolydian", 0.5],
+      ],
+    },
+    harmony: {
+      rhythm: [[0.25, 1]],
+      sevenths: 0.8,
+      voicing: { types: [["wide", 1]], range: [36, 88], notes: [5, 6] },
+    },
+    melody: {
+      density: [0.5, 1],
+      chordToneRate: 0.85,
+      intervals: intervals(2, 2, 1, 1),
+    },
+    bass: { behaviour: [["pedal", 1]], range: [28, 43] },
+    texture: {
+      roles: {
+        arp: null,
+        drone: role("contrabass", "organ:0.5"),
+        chords: role("strings", "organ:0.4"),
+        pad: maybe("cloud", "strings:0.5"),
+        bass: role("contrabass"),
+        lead: role("horn", "clarinet:0.5", "cello:0.4"),
+      },
+    },
+    expression: { dynamics: [0.15, 0.85] },
+    mix: { space: 0.75, loudness: "classical" },
+  }),
+  card({
+    id: "new-complexity",
+    summary:
+      "maximal notational density: irrational subdivisions, wide angular leaps, constantly shifting meter and dynamics, no repetition",
+    meter: {
+      signatures: [
+        ["5/4", 0.3],
+        ["7/8", 0.3],
+        ["4/4", 0.2],
+        ["3/4", 0.2],
+      ],
+      grouping: [
+        [[3, 2, 2], 0.5],
+        [[2, 3, 2], 0.5],
+      ],
+    },
+    tempo: { bpm: [48, 80], typical: 60 },
+    groove: { humanize: { timingMs: 22, velocity: 0.2 } },
+    pitch: { scales: [["messiaen-7", 1]] },
+    melody: {
+      intervals: ANGULAR,
+      density: [3, 4],
+      chordToneRate: 0.1,
+      repetition: 0.05,
+      ambitus: [18, 30],
+      range: [52, 92],
+    },
+    bass: {
+      behaviour: [
+        ["arpeggio", 0.5],
+        ["walking", 0.5],
+      ],
+    },
+    texture: {
+      roles: {
+        arp: null,
+        chords: role("piano"),
+        bass: role("cello", "bassclarinet:0.5"),
+        lead: role("flute", "violin:0.6", "clarinet:0.5"),
+        counter: role("piano", "viola:0.5"),
+      },
+    },
+    expression: {
+      dynamics: [0.1, 1],
+      articulation: {
+        lead: [
+          ["accent", 0.4],
+          ["staccato", 0.3],
+          ["marcato", 0.3],
+        ],
+      },
+    },
+    mix: { space: 0.4, loudness: "classical" },
+  }),
+  card({
+    id: "drone-minimalism",
+    summary:
+      "sustained just-intoned intervals over a held tonic drone: no progression, overtones heard as harmony, events measured in minutes",
+    tempo: { bpm: [40, 66], typical: 48 },
+    pitch: {
+      tuning: "just",
+      scales: [
+        ["mixolydian", 0.6],
+        ["major", 0.4],
+      ],
+    },
+    harmony: { model: "drone", rhythm: [[0.25, 1]] },
+    melody: {
+      density: [0, 0.5],
+      chordToneRate: 0.9,
+      repetition: 0.9,
+      intervals: intervals(2, 2, 2, 2),
+      contour: [["flat", 1]],
+    },
+    bass: { behaviour: [["pedal", 1]] },
+    texture: {
+      kind: "heterophonic",
+      roles: {
+        arp: null,
+        chords: null,
+        drone: role("organ", "tanpura:0.6", "strings:0.4"),
+        pad: maybe("cloud", "strings:0.5"),
+        bass: role("contrabass", "organ:0.5"),
+        lead: role("sing", "violin:0.5", "sax:0.3"),
+      },
+    },
+    expression: { dynamics: [0.3, 0.7] },
+    mix: { space: 0.85 },
+  }),
+  card({
+    id: "pulse-minimalism",
+    summary:
+      "an unbroken sixteenth-note pulse, interlocking repeated cells shifting by phase, harmony changing only every few bars",
+    tempo: { bpm: [100, 160], typical: 132 },
+    pitch: {
+      scales: [
+        ["dorian", 0.35],
+        ["mixolydian", 0.3],
+        ["major", 0.35],
+      ],
+    },
+    harmony: {
+      rhythm: [
+        [0.25, 0.5],
+        [0.5, 0.5],
+      ],
+    },
+    melody: { density: [2, 4], repetition: 0.9 },
+    bass: { behaviour: [["ostinato", 1]], onsets: grid("x.x.x.x.x.x.x.x.") },
+    rhythm: { onsets: { arp: grid("xxxxxxxxxxxxxxxx") } },
+    texture: {
+      kind: "interlocking",
+      roles: {
+        arp: role("marimba", "piano:0.6", "vibes:0.4"),
+        chords: role("piano", "organ:0.4"),
+        bass: role("piano", "bassclarinet:0.5"),
+        lead: role("marimba", "clarinet:0.4", "vibes:0.4"),
+      },
+    },
+    groove: { humanize: { timingMs: 2, velocity: 0.04 } },
+    form: {
+      roleMap: {
+        intro: ["arp"],
+        build: ["arp", "chords", "bass"],
+        breakdown: ["arp", "bass"],
+        outro: ["arp"],
+      },
+    },
+  }),
+  card({
+    id: "additive-minimalism",
+    summary:
+      "additive process: a figure grows one note per repeat (1, 1+2, 1+2+3), arpeggiated triads over slow minor-key cycles",
+    meter: {
+      signatures: [
+        ["4/4", 0.5],
+        ["6/8", 0.3],
+        ["3/4", 0.2],
+      ],
+    },
+    tempo: { bpm: [96, 160], typical: 132 },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["aeolian", 0.5],
+        ["andalusian", 0.5],
+      ],
+      sources: { presets: 3 },
+      rhythm: [[0.5, 1]],
+    },
+    pitch: {
+      scales: [
+        ["minor", 0.7],
+        ["dorian", 0.3],
+      ],
+    },
+    melody: { density: [2, 4], repetition: 0.95, chordToneRate: 0.9 },
+    bass: { behaviour: [["arpeggio", 1]] },
+    rhythm: { onsets: { arp: grid("xxx.xxxxx.xxxxx.") } },
+    texture: {
+      roles: {
+        arp: role("organ", "piano:0.6", "farfisa:0.3"),
+        chords: role("organ", "strings:0.5"),
+        bass: role("organ", "bassclarinet:0.4"),
+        lead: role("sax", "flute:0.5", "sing:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "holy-minimalism",
+    summary:
+      "tintinnabuli: a stepwise melody voice around the tonic against a voice sounding only the tonic triad, slow chant-like tempo",
+    tempo: { bpm: [40, 72], typical: 52 },
+    pitch: {
+      scales: [
+        ["minor", 0.6],
+        ["dorian", 0.4],
+      ],
+    },
+    harmony: { model: "drone", rhythm: [[0.25, 1]] },
+    melody: {
+      intervals: STEPWISE,
+      density: [0.5, 1],
+      ambitus: [4, 7],
+      chordToneRate: 0.5,
+      repetition: 0.6,
+      contour: [
+        ["flat", 0.5],
+        ["descending", 0.25],
+        ["ascending", 0.25],
+      ],
+    },
+    bass: { behaviour: [["pedal", 1]] },
+    texture: {
+      kind: "homophonic",
+      roles: {
+        arp: null,
+        chords: null,
+        drone: role("strings", "organ:0.5"),
+        bass: role("contrabass", "organ:0.5"),
+        lead: role("choir", "violin:0.6", "cello:0.4"),
+        counter: maybe("bell", "piano:0.6", "tubular:0.4"),
+      },
+    },
+    expression: { dynamics: [0.2, 0.7] },
+    mix: { space: 0.85, loudness: "classical" },
+  }),
+  card({
+    id: "choral-art",
+    summary:
+      "contemporary choral: added-second and ninth clusters, slow homophonic chords, modal and lydian colour, a cappella or organ support",
+    tempo: { bpm: [44, 84], typical: 60 },
+    pitch: {
+      scales: [
+        ["major", 0.4],
+        ["lydian", 0.3],
+        ["dorian", 0.3],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["canon", 0.5],
+        ["axis", 0.5],
+      ],
+      sevenths: 0.6,
+      rhythm: [
+        [1, 0.6],
+        [0.5, 0.4],
+      ],
+      voicing: {
+        types: [
+          ["close", 0.7],
+          ["open", 0.3],
+        ],
+        notes: [4, 6],
+      },
+    },
+    melody: { intervals: CONJUNCT, density: [0.5, 1.5], chordToneRate: 0.7 },
+    bass: { behaviour: [["root", 1]] },
+    texture: {
+      kind: "homophonic",
+      roles: {
+        arp: null,
+        chords: role("choir", "chorale:0.6"),
+        bass: role("choir", "organ:0.4"),
+        lead: role("choir", "aah:0.5"),
+        pad: maybe("organ"),
+      },
+    },
+    expression: { dynamics: [0.15, 0.8] },
+    mix: { space: 0.8, loudness: "classical" },
+  }),
+  card({
+    id: "postminimalism",
+    summary:
+      "minimalist pulse loosened by lyric melody: tonal progressions return, repetition with variation, pop-tinged diatonic harmony",
+    tempo: { bpm: [80, 140], typical: 108 },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["axis", 0.4],
+        ["sad-pop", 0.3],
+        ["aeolian", 0.3],
+      ],
+      rhythm: [
+        [0.5, 0.5],
+        [1, 0.5],
+      ],
+    },
+    pitch: {
+      scales: [
+        ["major", 0.5],
+        ["minor", 0.3],
+        ["mixolydian", 0.2],
+      ],
+    },
+    melody: { repetition: 0.6, intervals: CONJUNCT, chordToneRate: 0.6 },
+    bass: {
+      behaviour: [
+        ["arpeggio", 0.5],
+        ["root", 0.5],
+      ],
+    },
+    rhythm: { onsets: { arp: grid("x.xxx.xxx.xxx.xx") } },
+    texture: {
+      roles: {
+        arp: maybe("piano", "marimba:0.5"),
+        chords: role("strings", "piano:0.5"),
+        bass: role("cello", "contrabass:0.5"),
+        lead: role("violin", "clarinet:0.5", "piano:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "polystylism",
+    summary:
+      "postmodern collage: tonal and atonal idioms side by side, baroque sequence against cluster, abrupt style cuts between sections",
+    meter: {
+      signatures: [
+        ["4/4", 0.5],
+        ["3/4", 0.3],
+        ["5/4", 0.2],
+      ],
+    },
+    tempo: { bpm: [60, 132], typical: 92 },
+    pitch: {
+      scales: [
+        ["minor", 0.35],
+        ["major", 0.25],
+        ["messiaen-2", 0.2],
+        ["messiaen-7", 0.2],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["canon", 0.4],
+        ["andalusian", 0.3],
+        ["minor-ii-v", 0.3],
+      ],
+      sevenths: 0.3,
+    },
+    melody: {
+      intervals: intervals(2.5, 2, 2, 0.5),
+      chordToneRate: 0.45,
+      repetition: 0.4,
+    },
+    bass: {
+      behaviour: [
+        ["walking", 0.5],
+        ["root", 0.5],
+      ],
+    },
+    texture: {
+      roles: {
+        arp: null,
+        chords: role("harpsichord", "strings:0.6", "prepared:0.4"),
+        bass: role("cello", "contrabass:0.5"),
+        lead: role("violin", "piano:0.5"),
+        counter: maybe("prepared", "celesta:0.5"),
+      },
+    },
+    expression: { dynamics: [0.1, 1] },
+    mix: { space: 0.55, loudness: "classical" },
+  }),
+  card({
+    id: "microtonal-art",
+    summary:
+      "beyond twelve equal steps: 7-limit just ratios, the pure 5:4 third and 7:4 harmonic seventh, beating and its absence as colour",
+    tempo: { bpm: [48, 96], typical: 66 },
+    pitch: {
+      tuning: "7-limit",
+      scales: [
+        ["major", 0.5],
+        ["mixolydian", 0.5],
+      ],
+    },
+    harmony: {
+      rhythm: [
+        [0.5, 0.6],
+        [1, 0.4],
+      ],
+      sevenths: 0,
+    },
+    melody: { intervals: CONJUNCT, chordToneRate: 0.6, density: [1, 2] },
+    bass: {
+      behaviour: [
+        ["root", 0.6],
+        ["pedal", 0.4],
+      ],
+    },
+    texture: {
+      roles: {
+        arp: null,
+        chords: role("organ", "strings:0.5"),
+        bass: role("organ", "cello:0.5"),
+        lead: role("violin", "clarinet:0.5"),
+      },
+    },
+    mix: { space: 0.65, loudness: "classical" },
+  }),
+  card({
+    id: "modern-classical",
+    summary:
+      "contemporary neoclassical: felt piano ostinato, string pads, aeolian loops with suspended chords, intimate close-miked dynamics",
+    tempo: { bpm: [56, 96], typical: 72 },
+    pitch: {
+      scales: [
+        ["minor", 0.6],
+        ["major", 0.4],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["aeolian", 0.4],
+        ["sad-pop", 0.3],
+        ["axis", 0.3],
+      ],
+      sources: { presets: 3 },
+      rhythm: [
+        [1, 0.6],
+        [0.5, 0.4],
+      ],
+      sevenths: 0.3,
+    },
+    melody: {
+      intervals: CONJUNCT,
+      chordToneRate: 0.7,
+      density: [0.5, 2],
+      repetition: 0.7,
+    },
+    bass: {
+      behaviour: [
+        ["root", 0.6],
+        ["arpeggio", 0.4],
+      ],
+    },
+    rhythm: { onsets: { arp: grid("x.x.x.x.x.x.x.x.") } },
+    texture: {
+      kind: "homophonic",
+      roles: {
+        arp: role("felt", "piano:0.6"),
+        chords: role("strings", "felt:0.4"),
+        bass: role("cello", "felt:0.4"),
+        lead: role("felt", "cello:0.5", "violin:0.4"),
+      },
+    },
+    expression: { dynamics: [0.15, 0.6] },
+    mix: { space: 0.6 },
+  }),
+]);
+
 // @@EXPORT
 export const ART_CARDS: readonly StyleCard[] = Object.freeze([
   ...BRANCH_CARDS,
@@ -2527,4 +3077,5 @@ export const ART_CARDS: readonly StyleCard[] = Object.freeze([
   ...BAROQUE_LEAVES,
   ...ROMANTIC_LEAVES,
   ...MODERN_LEAVES,
+  ...CONTEMPORARY_LEAVES,
 ]);
