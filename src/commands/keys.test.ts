@@ -120,7 +120,7 @@ describe("keys command", () => {
     expect(result.ok).toBe(false);
     expect(result.message).toContain("type piano first");
     expect(run(legacy, "keys").message).toContain(
-      "epiano wurli clav for modelled keys",
+      "epiano wurli clav or tonewheel combo pipe for modelled keys",
     );
   });
 
