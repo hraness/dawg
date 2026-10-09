@@ -267,6 +267,16 @@ describe("/clip", () => {
     ]);
   });
 
+  test("repeat 4 copies every 4 bars to the song end", async () => {
+    const r = await run(one(), "/clip repeat 4");
+    expect(r.ok).toBe(true);
+    // base() is 16 bars: copies at bars 5, 9 and 13.
+    expect(r.next!.tracks[0]!.clips!.map((c) => c.startTick)).toEqual([
+      0, 15360, 30720, 46080,
+    ]);
+    expect(r.message).toContain("to the end");
+  });
+
   test("an unknown verb prints usage", () => {
     expect(parseClipCommand("/clip hook wobble")).toHaveProperty("error");
     expect(parseClipCommand("/clips")).toBeUndefined();

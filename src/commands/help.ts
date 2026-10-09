@@ -482,7 +482,7 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       },
       {
         command:
-          "/clip [id] trim offset 1 dur 4|end | rev | repeat every 2 to 32 | mute | rm",
+          "/clip [id] trim offset 1 dur 4|end | rev | repeat 2 [to 32] | mute | rm",
         summary: "trim, reverse, repeat, mute or remove a clip",
       },
       {
@@ -651,7 +651,34 @@ export function helpTopicLines(
   if (name === "arrange" || name === "arrangement" || name === "sections")
     return sectionLines([arrangeSection()], width);
   const group = HELP_SECTIONS.find((section) => section.group === name);
-  return group ? sectionLines([group], width) : undefined;
+  if (group) return sectionLines([group], width);
+  return commandTopic(name, width);
+}
+
+/**
+ * `/help <command>` (`/help vocoder`, `/help clip`): the command's rows
+ * from every group, then its full usage wrapped; undefined when no command
+ * has that name.
+ */
+function commandTopic(name: string, width: number): string[] | undefined {
+  const own = (command: string) =>
+    new RegExp(`^/?${name.replace(/[^a-z0-9-]/g, "")}(\\s|$)`, "i").test(
+      command,
+    );
+  const rows = HELP_SECTIONS.flatMap((section) =>
+    section.entries.filter((entry) => own(entry.command)),
+  );
+  const usage = USAGE[name];
+  if (rows.length === 0 && !usage) return undefined;
+  const wrap = Math.max(30, width - 2);
+  return [
+    `── ${name}`,
+    ...rows.flatMap((entry) => [
+      ...wrapWords(entry.command, wrap),
+      ...wrapWords(entry.summary, wrap - 2).map((line) => `  ${line}`),
+    ]),
+    ...(usage ? ["", ...wrapWords(usage, wrap)] : []),
+  ];
 }
 
 /** `/help arrange`: every arranging command with its full usage. */

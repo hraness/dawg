@@ -107,6 +107,13 @@ describe("help reference", () => {
     for (const verb of ["section", "form", "build", "drop", "fill"])
       expect(arrange.some((line) => line.startsWith(`${verb} `))).toBe(true);
     expect(arrange.every((line) => line.length <= 72)).toBe(true);
+    // A command name is a topic too: its rows and its full usage.
+    for (const name of ["vocoder", "clip", "autotune", "sing", "formant"]) {
+      const lines = helpTopicLines(name, 72)!;
+      expect(lines[0]).toBe(`── ${name}`);
+      expect(lines.every((line) => line.length <= 72)).toBe(true);
+    }
+    expect(helpTopicLines("vocoder", 72)!.join(" ")).toContain("freeze");
   });
 
   test("typos get the nearest command", () => {

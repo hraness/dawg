@@ -1918,7 +1918,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
     );
     if (!lines)
       return fail(
-        `no help topic ${topic} · /help all · ${HELP_TOPICS.join(" ")}`,
+        `no help topic ${topic} · /help all · ${HELP_TOPICS.join(" ")} · or a command (/help vocoder)`,
       );
     tui.openText(topic ? `help · ${topic.toLowerCase()}` : "help", lines);
     return ok(

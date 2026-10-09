@@ -464,7 +464,7 @@ export type ClipEdit =
 export type ClipCommand = Readonly<{ clipId?: string; edit: ClipEdit }>;
 
 const CLIP_USAGE =
-  "/clip [id] gain -3 | gain by -3 | fade .01 .2 | fade in .01 | fade out default | move 9 | split 7 | trim [offset s] [dur s|end] | rev | repeat every 2 to 32 | mute | rm";
+  "/clip [id] gain -3 | gain by -3 | fade .01 .2 | fade in .01 | fade out default | move 9 | split 7 | trim [offset s] [dur s|end] | rev | repeat 2 [to 32] | mute | rm";
 
 /** Parse `/clip ...`; undefined when it is not a /clip command. */
 export function parseClipCommand(
@@ -552,16 +552,13 @@ export function parseClipCommand(
       return { clipId, edit };
     }
     case "repeat": {
-      const every = num(words[words.indexOf("every") + 1]);
+      // `repeat 4`, `repeat every 4`, `repeat every 4 to 32`; no `to`
+      // repeats to the song's end.
+      const everyAt = words.indexOf("every");
+      const every = num(words[everyAt >= 0 ? everyAt + 1 : 0]);
       const toAt = words.indexOf("to");
-      const until = toAt >= 0 ? words[toAt + 1] : undefined;
-      if (
-        words.indexOf("every") < 0 ||
-        every === undefined ||
-        !(every > 0) ||
-        !until
-      )
-        return bad;
+      const until = toAt >= 0 ? words[toAt + 1] : "end";
+      if (every === undefined || !(every > 0) || !until) return bad;
       return { clipId, edit: { kind: "repeat", every, until } };
     }
     default:
@@ -750,7 +747,10 @@ export async function runClipCommand(
         const every = Math.round(
           edit.every * score.beatsPerBar * score.ticksPerBeat,
         );
-        const until = userBarTick(score, edit.until);
+        const until =
+          edit.until === "end"
+            ? barStartTick(score, score.bars)
+            : userBarTick(score, edit.until);
         const copies = repeatClip(
           clip,
           every,
@@ -764,7 +764,7 @@ export async function runClipCommand(
           };
         return replace(
           [...clips, ...copies],
-          `${copies.length} repeat${copies.length === 1 ? "" : "s"} every ${edit.every} bar${edit.every === 1 ? "" : "s"} to bar ${edit.until}`,
+          `${copies.length} repeat${copies.length === 1 ? "" : "s"} every ${edit.every} bar${edit.every === 1 ? "" : "s"} to ${edit.until === "end" ? "the end" : `bar ${edit.until}`}`,
         );
       }
     }
