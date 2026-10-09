@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createScore, type TrackScore } from "../../core/score.ts";
+import { createScore, type TrackScore, updateTrack } from "../../core/score.ts";
 import { applyEditCommand, parseEditCommand } from "../commands/edit.ts";
 import {
   applyExpressionCommand,
@@ -706,6 +706,28 @@ describe("Sound › performance", () => {
       expect(isStageable(action.command!)).toBe(true);
     }
     expect(isStageable("humanize reseed")).toBe(true);
+  });
+
+  test("soft pedal and sostenuto rows show on the modelled pianos", () => {
+    const grand = updateTrack(played, "keys", { instrument: "grand" });
+    const ctx = context(grand);
+    const menu = open(ctx);
+    select(menu, ctx, "soft pedal");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "pedal soft bars",
+    });
+    select(menu, ctx, "sostenuto");
+    const action = menu.key(RIGHT, ctx) as { command?: string };
+    expect(action.command).toBe("pedal sost bars");
+    expect(isStageable(action.command!)).toBe(true);
+    // Not on a synth piano unless a lane is already set.
+    const plain = open(context(played));
+    expect(
+      plain
+        .view(context(played))
+        .items.some((row) => row.label.startsWith("soft pedal")),
+    ).toBe(false);
   });
 
   test("set values show and x resets them", () => {

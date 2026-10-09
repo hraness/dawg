@@ -12,6 +12,7 @@ import {
   VELOCITY_CURVES,
 } from "../../core/expression.ts";
 import type { Note, Track } from "../../core/score.ts";
+import { isPianoFamily } from "../../core/keys.ts";
 import {
   BEND_SHAPES,
   DEFAULT_HUMANIZE,
@@ -50,10 +51,48 @@ export function performanceDetail(track: Track | undefined): string {
   const parts = [
     track.glide ? `glide ${track.glide.mode}` : "",
     track.pedal?.length ? "pedal" : "",
+    track.softPedal?.length ? "soft" : "",
+    track.sostenuto?.length ? "sost" : "",
     track.velocityCurve ? `vel ${track.velocityCurve.curve}` : "",
     track.humanize ? "humanized" : "",
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : "as written";
+}
+
+/** Soft pedal and Sostenuto rows: off, the current lane, or the whole loop. */
+function pianoPedalNodes(track: Track): MenuNode[] {
+  const rows = [
+    {
+      lane: "soft",
+      label: "soft pedal",
+      events: track.softPedal,
+      help: "una corda: the hammers shift to strike fewer strings, softer and darker; read at each note's onset",
+    },
+    {
+      lane: "sost",
+      label: "sostenuto",
+      events: track.sostenuto,
+      help: "holds only the keys already down when it presses (the middle pedal); later notes damp normally",
+    },
+  ] as const;
+  return rows
+    .filter((row) => isPianoFamily(track.instrument) || row.events?.length)
+    .map((row): MenuNode => {
+      const value = row.events?.length ? `${row.events.length} events` : "off";
+      return {
+        kind: "choice",
+        label: row.label,
+        value,
+        options: ["off", ...(value === "off" ? [] : [value]), "bars"],
+        command: (option) =>
+          option === "bars"
+            ? `pedal ${row.lane} bars`
+            : option === "off"
+              ? `pedal ${row.lane} off`
+              : `pedal ${row.lane}`,
+        help: row.help,
+      };
+    });
 }
 
 export function performanceNodes(context: MenuContext): MenuNode[] {
@@ -148,6 +187,9 @@ export function performanceNodes(context: MenuContext): MenuNode[] {
             : "pedal",
       help: "bars replaces the lane with a re-pedal on each downbeat; in play mode press Tab (latch) or hold Shift while recording",
     },
+    // keys-electric (0.6.1): the piano's other two pedals, on modelled piano
+    // tracks (or wherever a lane is already set).
+    ...pianoPedalNodes(track),
     {
       kind: "choice",
       label: "velocity curve",
