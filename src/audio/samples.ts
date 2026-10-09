@@ -32,8 +32,10 @@ import {
   isLocalTableSrc,
   isWavetableInstrument,
   type SampleRef,
+  type Track,
   type TrackScore,
 } from "../../core/score.ts";
+import { GRANULAR_SOURCE_VOICE } from "../../core/granular.ts";
 import { PackError, PackStore } from "./packs.ts";
 import {
   DEFAULT_MEMORY_CACHE_BYTES,
@@ -94,8 +96,33 @@ export function hasSamplerTracks(score: TrackScore): boolean {
         Object.keys(track.sampler.voices).length > 0) ||
       packWavetable(track) !== undefined ||
       localWavetable(track) !== undefined ||
-      reverbIrSample(track) !== undefined,
+      reverbIrSample(track) !== undefined ||
+      granularSample(track) !== undefined,
   );
+}
+
+/**
+ * A granular track's sample source (0.6): its `granular.src` when that is a
+ * SampleRef, loaded and sha256-pinned like a sampler voice under the voice
+ * name `granular:src`. A `synth:` source or no source needs no loading.
+ */
+export function granularSample(track: Track): SampleRef | undefined {
+  if (track.instrument !== "granular") return undefined;
+  const src = track.granular?.src;
+  return src !== undefined && typeof src !== "string" ? src : undefined;
+}
+
+/** The sample voices a track loads: sampler voices, then a granular source. */
+function trackSampleRefs(track: Track): [string, SampleRef][] {
+  const refs: [string, SampleRef][] = [];
+  if (isSamplerInstrument(track.instrument) && track.sampler) {
+    const names = Object.keys(track.sampler.voices).sort();
+    for (const voice of names.slice(0, SCORE_LIMITS.maxSamplerVoices))
+      refs.push([voice, track.sampler.voices[voice]!]);
+  }
+  const granular = granularSample(track);
+  if (granular) refs.push([GRANULAR_SOURCE_VOICE, granular]);
+  return refs;
 }
 
 /** The project WAV a wavetable track plays, if any. */
@@ -585,8 +612,7 @@ export class SampleLibrary implements SampleSource {
     this.inUse = new Set();
     const urls: string[] = [];
     for (const track of score.tracks) {
-      if (!isSamplerInstrument(track.instrument) || !track.sampler) continue;
-      for (const ref of Object.values(track.sampler.voices)) {
+      for (const [, ref] of trackSampleRefs(track)) {
         if (ref.sha256) this.inUse.add(ref.sha256);
         if (ref.url) urls.push(ref.url);
       }
@@ -656,10 +682,7 @@ export class SampleLibrary implements SampleSource {
       }
     }
     for (const track of score.tracks) {
-      if (!isSamplerInstrument(track.instrument) || !track.sampler) continue;
-      const names = Object.keys(track.sampler.voices).sort();
-      for (const voice of names.slice(0, SCORE_LIMITS.maxSamplerVoices)) {
-        const ref = track.sampler.voices[voice]!;
+      for (const [voice, ref] of trackSampleRefs(track)) {
         let src = ref.src;
         if (src.startsWith(PACK_PREFIX)) {
           try {

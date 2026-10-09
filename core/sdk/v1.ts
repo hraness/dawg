@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.22.0";
+export const SDK_VERSION = "1.23.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -1480,6 +1480,77 @@ export function stringed(
   return Object.freeze(out) as StringSpec;
 }
 
+/** Instrument name of the 0.6 granular engine (`Track.granular`). */
+export const GRANULAR_INSTRUMENT = "granular";
+
+/**
+ * Granular settings (SDK 1.23.0). `src` is a sample (`sample(...)` shape,
+ * pinned like a sampler voice) or a built-in synth render
+ * `"synth:<preset>[@note]"` (default `synth:pad`, nothing to download);
+ * `preset` is `cloud`, `hold`, `sparkle`, `swarm`, `stutter`, `microloop`,
+ * `backwards` or `dust`; every other key overrides one parameter (`grain`
+ * seconds, `overlap`, `scan`, `pos`, `begin`, `end`, `spray`, `jitter`,
+ * `pitch`, `detune`, `shimmer`, `shimint`, `spread`, `window`, `reverse`,
+ * `freeze`, `repeat`, `hold`, `drift`, `drate`, `attack`, `release`,
+ * `veltone`, `gain`, `seed`, `root`). dawg validates names and ranges; see
+ * **Granular** in DAWG.md.
+ */
+export type GranularInput = Readonly<
+  {
+    src?: string | SampleSpec;
+    preset?: string;
+  } & Record<string, number | string | boolean | SampleSpec | undefined>
+>;
+
+/** Result of `granular()`; pass it as a track's `instrument`. */
+export type GranularSpec = Readonly<{ kind: "granular" } & GranularInput>;
+
+/**
+ * A granular instrument (SDK 1.23.0): an optional preset, then overrides.
+ *
+ * ```ts
+ * instrument: granular("cloud")
+ * instrument: granular("hold", { src: "samples/choir.wav", scan: 0 })
+ * instrument: granular({ src: "synth:bell@72", grain: 0.08, overlap: 6 })
+ * ```
+ */
+export function granular(
+  preset?: string | GranularInput,
+  params: GranularInput = {},
+): GranularSpec {
+  const fields =
+    typeof preset === "object" && preset !== null ? preset : params;
+  if (!isRecord(fields))
+    throw new DawgSdkError("granular params must be an object");
+  const out: Record<string, unknown> = { kind: "granular" };
+  if (typeof preset === "string") {
+    if (preset.length === 0)
+      throw new DawgSdkError("granular needs a preset name");
+    out.preset = preset;
+  } else if (preset !== undefined && (typeof preset !== "object" || !preset))
+    throw new DawgSdkError("granular takes a preset name or params");
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === undefined || key === "kind") continue;
+    if (key === "src")
+      out.src =
+        typeof value === "string" && value.startsWith("synth:")
+          ? value
+          : sampleSpec(value as string | SampleSpec, "granular src");
+    else if (key === "preset" && typeof preset === "string") continue;
+    else if (key === "root" && typeof value === "string")
+      out.root = midi(value as Pitch);
+    else if (
+      typeof value === "number" ||
+      typeof value === "string" ||
+      typeof value === "boolean"
+    )
+      out[key] =
+        typeof value === "number" ? finite(value, `granular ${key}`) : value;
+    else throw new DawgSdkError(`granular ${key} must be a value`);
+  }
+  return Object.freeze(out) as GranularSpec;
+}
+
 /**
  * `count` equal slices of one file as voices `prefix0 … prefixN-1`, for
  * chopped breaks: `sampler(slices("samples/break.wav", 8, "brk"))`, then
@@ -1910,7 +1981,17 @@ export type TrackInput = Readonly<{
    * `z_triangle`, `z_sawtooth`, `z_square`, `z_tan`, `z_noise`), `kit` for drums,
    * `sampler(...)` or `wavetable(...)`. Default `sine`.
    */
-  instrument?: string | SamplerSpec | WavetableSpec | StringSpec;
+  instrument?: string | SamplerSpec | WavetableSpec | StringSpec | GranularSpec;
+  /**
+   * The sampler a `granular(...)` track keeps while it grains one of its
+   * voices (SDK 1.23.0); `grain off` plays it again.
+   */
+  sampler?: SamplerSpec | null;
+  /**
+   * Granular engine (SDK 1.23.0) for an `instrument: "granular"` track, or
+   * use `instrument: granular("cloud", {...})` or a word (`"cloud"`).
+   */
+  granular?: GranularInput | null;
   /**
    * Synthesized drum kit for an `instrument: "kit"` track: `syn808`,
    * `syn909`, `acoustic`, `lofi`, `electro` or `trap`. Omit for the default
@@ -2080,6 +2161,8 @@ export type TrackSpec = Readonly<{
   wavetable: WavetableSpec | null;
   /** String engine settings (SDK 1.21.0); present only when set. */
   string?: StringInput;
+  /** Granular engine settings (SDK 1.23.0); null when not granular. */
+  granular?: GranularInput | null;
   automation: Readonly<Required<AutomationInput>>;
   /** Every hit resolved to its pitch slot. */
   notes: readonly NoteSpec[];
@@ -2303,10 +2386,22 @@ export function track(input: TrackInput): TrackSpec {
   if (typeof id !== "string" || id.length === 0 || id.length > 64)
     throw new DawgSdkError(`track ${name}: id must be 1..64 characters`);
   const rawInstrument = input.instrument ?? "sine";
+  // A granular track may keep the sampler it grains (`grain off` goes back).
+  const keptSampler =
+    isRecord(input.sampler) &&
+    input.sampler.kind === "sampler" &&
+    isRecord(rawInstrument) &&
+    rawInstrument.kind === "granular"
+      ? localizeSampler(input.sampler as SamplerSpec, slug)
+      : null;
+  if (input.sampler !== undefined && input.sampler !== null && !keptSampler)
+    throw new DawgSdkError(
+      `track ${name}: sampler: is only for a granular(...) track; use instrument: sampler({...})`,
+    );
   const samplerSpec =
     isRecord(rawInstrument) && rawInstrument.kind === "sampler"
       ? localizeSampler(rawInstrument as SamplerSpec, slug)
-      : null;
+      : keptSampler;
   const wavetableSpec =
     isRecord(rawInstrument) && rawInstrument.kind === "wavetable"
       ? localizeWavetable(rawInstrument as WavetableSpec, slug)
@@ -2315,32 +2410,50 @@ export function track(input: TrackInput): TrackSpec {
     isRecord(rawInstrument) && rawInstrument.kind === "string"
       ? stringInput(rawInstrument, name)
       : null;
+  const granularFromInstrument =
+    isRecord(rawInstrument) && rawInstrument.kind === "granular"
+      ? granularInput(rawInstrument, name, slug)
+      : null;
   const word =
     typeof rawInstrument === "string"
       ? resolveInstrumentWord(rawInstrument)
       : undefined;
-  const instrument = samplerSpec
-    ? SAMPLER_INSTRUMENT
-    : wavetableSpec
-      ? WAVETABLE_INSTRUMENT
-      : stringFromInstrument
-        ? STRING_INSTRUMENT
-        : typeof rawInstrument === "string"
-          ? (word?.instrument ?? rawInstrument)
-          : undefined;
+  const instrument = granularFromInstrument
+    ? GRANULAR_INSTRUMENT
+    : samplerSpec
+      ? SAMPLER_INSTRUMENT
+      : wavetableSpec
+        ? WAVETABLE_INSTRUMENT
+        : stringFromInstrument
+          ? STRING_INSTRUMENT
+          : typeof rawInstrument === "string"
+            ? (word?.instrument ?? rawInstrument)
+            : undefined;
+  // A granular word (`"cloud"`) turns the engine on with its preset.
+  const granularSpec =
+    granularInput(input.granular, name, slug) ??
+    granularFromInstrument ??
+    (word?.field === "granular" && word.preset
+      ? Object.freeze({ preset: word.preset })
+      : instrument === GRANULAR_INSTRUMENT
+        ? Object.freeze({})
+        : null);
   if (
     instrument === undefined ||
     instrument.length === 0 ||
     instrument.length > 64
   )
     throw new DawgSdkError(
-      `track ${name}: instrument must be a voice name, "kit", sampler(...), wavetable(...) or stringed(...)`,
+      `track ${name}: instrument must be a voice name, "kit", sampler(...), wavetable(...), stringed(...) or granular(...)`,
     );
   if (instrument === SAMPLER_INSTRUMENT && !samplerSpec)
     throw new DawgSdkError(
       `track ${name}: use instrument: sampler({...}) for a sampler track`,
     );
-  const slots = samplerSpec ? voiceSlots(samplerSpec) : undefined;
+  const slots =
+    samplerSpec && instrument === SAMPLER_INSTRUMENT
+      ? voiceSlots(samplerSpec)
+      : undefined;
   const kit = KIT_INSTRUMENTS.includes(instrument.trim().toLowerCase());
   const notes = (input.notes ?? []).map((item, index) => {
     if (!isRecord(item) || (item.kind !== "note" && item.kind !== "hit"))
@@ -2495,6 +2608,7 @@ export function track(input: TrackInput): TrackSpec {
     sampler: samplerSpec,
     wavetable: wavetableSpec,
     ...(string ? { string } : {}),
+    ...(granularSpec ? { granular: granularSpec } : {}),
     automation: Object.freeze({
       volume: lane("volume"),
       pan: lane("pan"),
@@ -2736,6 +2850,41 @@ function reverbIr(
   return src.startsWith("tracks/") ? src : `tracks/${slug}/${src}`;
 }
 
+/** Validates `granular` input and localizes a sample source like a voice. */
+function granularInput(
+  input: unknown,
+  name: string,
+  slug: string,
+): GranularInput | null {
+  if (input === undefined || input === null) return null;
+  if (!isRecord(input))
+    throw new DawgSdkError(`track ${name}: granular must be an object`);
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value === undefined || key === "kind") continue;
+    if (key === "src" && isRecord(value)) {
+      const ref = sampleSpec(value as SampleSpec, `${name} granular src`);
+      const src = ref.src.replace(/^\.\//, "");
+      out.src = Object.freeze({
+        ...ref,
+        src:
+          src.startsWith("tracks/") || src.startsWith("pack:")
+            ? src
+            : `tracks/${slug}/${src}`,
+      });
+    } else if (key === "src" && typeof value === "string")
+      out.src = value.startsWith("synth:")
+        ? value
+        : granularInput({ src: { src: value } }, name, slug)!.src;
+    else if (typeof value === "number")
+      out[key] = finite(value, `${name} granular.${key}`);
+    else if (typeof value === "string" || typeof value === "boolean")
+      out[key] = value;
+    else throw new DawgSdkError(`${name} granular.${key} must be a value`);
+  }
+  return Object.freeze(out) as GranularInput;
+}
+
 /** `./wavetables/x.wav` → `tracks/<slug>/wavetables/x.wav`, like sampler files. */
 function localizeWavetable(spec: WavetableSpec, slug: string): WavetableSpec {
   const src = spec.table.src;
@@ -2955,6 +3104,8 @@ export type ScoreTrack = Readonly<{
   wtAutomation?: readonly ScorePoint[];
   /** String engine settings; dawg validates them (SDK 1.21.0). */
   string?: StringInput;
+  /** Granular settings (SDK 1.23.0); present only when set. */
+  granular?: GranularInput;
   glide?: TrackSpec["glide"];
   pedal?: readonly Readonly<{ tick: number; state: PedalState }>[];
   velocityCurve?: TrackSpec["velocityCurve"];
@@ -3222,6 +3373,7 @@ export function song(input: SongInput): Song {
       stored.wavetable = Object.freeze(fields);
     }
     if (wtAutomation.length > 0) stored.wtAutomation = wtAutomation;
+    if (t.granular) stored.granular = t.granular;
     if (t.sampler)
       stored.sampler = Object.freeze({
         voices: t.sampler.voices,
@@ -4269,6 +4421,34 @@ const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
   { word: "gtr-lead", instrument: "pluck", voice: "electric", fx: "lead" },
   { word: "gtr-metal", instrument: "pluck", voice: "electric", fx: "metal" },
   { word: "bachata", instrument: "pluck", voice: "electric", fx: "bachata" },
+  // granular (f06-granular): the instrument and its texture presets. Each
+  // starts from a built-in synth source, so nothing downloads.
+  {
+    word: "granular",
+    instrument: "granular",
+    field: "granular",
+    preset: "cloud",
+  },
+  {
+    word: "grains",
+    instrument: "granular",
+    field: "granular",
+    preset: "cloud",
+  },
+  { word: "cloud", instrument: "granular", field: "granular", preset: "cloud" },
+  {
+    word: "sparkle",
+    instrument: "granular",
+    field: "granular",
+    preset: "sparkle",
+  },
+  { word: "swarm", instrument: "granular", field: "granular", preset: "swarm" },
+  {
+    word: "microloop",
+    instrument: "granular",
+    field: "granular",
+    preset: "microloop",
+  },
 ]);
 
 /**

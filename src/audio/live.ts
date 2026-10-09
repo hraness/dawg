@@ -130,6 +130,8 @@ export class LiveSynth {
       score.ticksPerBeat,
       this.sampleRate,
       samplerDigest(track, request.samples),
+      // Assets a 0.6 engine reads (a granular sample source).
+      ...engineDigest(track, request.samples),
       // The song tuning and key (the default tuning root) retune live notes.
       ...(score.tuning || track.tuning
         ? [score.tuning ?? null, score.key]
@@ -261,6 +263,12 @@ function liveTrack(track: Track): Track {
 /** Whether the track plays through a guitar rig stage. */
 function hasRig(track: Track): boolean {
   return Boolean(track.fx?.stomp || track.fx?.head || track.fx?.cab);
+}
+
+function engineDigest(track: Track, bank: SampleBank | undefined): string[] {
+  const engine = engineFor(track);
+  if (!engine?.assetDigests || !bank) return [];
+  return [...engine.assetDigests(track, bank)];
 }
 
 function samplerDigest(track: Track, bank: SampleBank | undefined): string[] {

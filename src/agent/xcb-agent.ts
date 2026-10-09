@@ -1,3 +1,4 @@
+import { GRANULAR_PARAMS } from "../../core/granular.ts";
 import { compositionBrief } from "./brief.ts";
 import { CHORD_PROCESS } from "../../core/chords.ts";
 import {
@@ -56,6 +57,7 @@ export const TEXT_AGENT_SYSTEM_PROMPT = [
   "Guitar rig (set_rig): rig loads a whole rig (clean crunch punk ragged lead metal fuzz octave funk wah bachata spring bassdrive reese jangle alt) on a guitar or bass track; stomp, head and cab tweak the pedal, amp (level-matched, gate in dB) and cabinet. Tracks named jangle punk funk ragged gtr-lead gtr-metal bachata start with a guitar voice and that rig. `amp` is Strudel gain; the guitar amp is head.",
   "Previewing: preview_sound renders a track, or candidate sound tool calls (changes: [{tool, args}]), without committing, returns loudness, brightness and a comparison, and plays it once in the user's window. Use it when choosing between sounds (tables, presets, effect amounts), say how it sounds, then commit with the normal tools.",
   "Wavetable synth: set_wavetable picks a table (built-ins offline, Strudel wt_ sets fetched once) and scans it by position wt.",
+  `Granular: set_granular makes a track a grain cloud (presets cloud hold sparkle swarm stutter microloop backwards dust) of a synth source (src synth:pad, the default; synth:<name>@<note>) or one of its own sampler voices, and overrides params (${Object.keys(GRANULAR_PARAMS).join(" ")}; repeat and hold latch the head for beat repeats, begin and end pick a region, root takes a MIDI number or note name); off returns to the previous voice; the same seed gives the same grains.`,
   "Mastering: set_master sets the song master and loudness target; measure_mix reports LUFS, true peak, balance and correlation. Master only when asked for loudness or a finished sound, and measure before and after.",
   'Reply with exactly one JSON object and nothing else, shaped {"ops":[{"tool":"<tool name>","args":{...}}],"say":"<one short sentence describing the musical change>","done":true}.',
   'Set "done":false only if you need to see the results of these ops before continuing; you will then get each op\'s result and can send more ops.',

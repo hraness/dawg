@@ -140,6 +140,8 @@ export const AVAILABLE_INSTRUMENTS = Object.freeze([
   "z_square",
   "z_tan",
   "z_noise",
+  // 0.6 instruments (src/audio/instruments.ts), one line per lane.
+  "granular",
 ] as const);
 
 /** Per-track effects understood by the renderer and the agent, in chain

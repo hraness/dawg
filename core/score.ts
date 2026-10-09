@@ -23,6 +23,11 @@ import {
 import { normalizeSynth, type TrackSynth } from "./synth.ts";
 import { normalizeString, type TrackString } from "./strings.ts";
 import {
+  isGranularInstrument,
+  normalizeGranular,
+  type TrackGranular,
+} from "./granular.ts";
+import {
   checkSongTime,
   normalizeSongTime,
   normalizeTrackTime,
@@ -384,6 +389,11 @@ export type Track = Readonly<{
    * Played only when `instrument` is "string"; absent keeps today's voice.
    */
   string?: TrackString;
+  /**
+   * Granular instrument settings (0.6, `core/granular.ts`). Played when
+   * `instrument` is `"granular"`; kept when the instrument changes.
+   */
+  granular?: TrackGranular;
 }> &
   /**
    * Performance (`core/expression.ts`): glide default, sustain pedal
@@ -722,6 +732,7 @@ export type TrackPatch = Readonly<
     humanize?: Track["humanize"] | null;
     tuning?: Tuning | null;
     string?: TrackString | null;
+    granular?: TrackGranular | null;
   }
 >;
 
@@ -767,6 +778,7 @@ export type TrackInput = Readonly<
     | "humanize"
     | "tuning"
     | "string"
+    | "granular"
   > &
     Pick<Track, "id"> & {
       filter?: TrackFilter | null;
@@ -786,6 +798,7 @@ export type TrackInput = Readonly<
       humanize?: Track["humanize"] | null;
       tuning?: Tuning | null;
       string?: TrackString | null;
+      granular?: TrackGranular | null;
     }
 >;
 
@@ -1781,6 +1794,14 @@ function normalizeTrack(input: unknown): Track {
     "invalid-track",
   );
   const string = fxOrThrow(() => normalizeString(input.string));
+  // A bare `granular` instrument (set_instrument, `instrument granular`)
+  // gets an empty object, so the engine plays its defaults.
+  const granular =
+    fxOrThrow(() =>
+      normalizeGranular(input.granular, (ref) =>
+        normalizeSampleRef(ref, "granular src"),
+      ),
+    ) ?? (isGranularInstrument(instrument) ? Object.freeze({}) : undefined);
   let kit: string | undefined;
   if (input.kit !== undefined && input.kit !== null) {
     const found =
@@ -1802,7 +1823,12 @@ function normalizeTrack(input: unknown): Track {
       `track ${id} instrument "sampler" needs a sampler`,
       "invalid-track",
     );
-  if (sampler && !isSamplerInstrument(instrument))
+  // A granular track keeps the sampler it grains (`grain off` goes back).
+  if (
+    sampler &&
+    !isSamplerInstrument(instrument) &&
+    !isGranularInstrument(instrument)
+  )
     throw new ScoreValidationError(
       `track ${id} has a sampler but its instrument is "${instrument}"`,
       "invalid-track",
@@ -1836,6 +1862,7 @@ function normalizeTrack(input: unknown): Track {
     ...performance,
     ...(tuning ? { tuning } : {}),
     ...(string ? { string } : {}),
+    ...(granular ? { granular } : {}),
   });
 }
 

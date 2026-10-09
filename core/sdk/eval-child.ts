@@ -104,6 +104,8 @@ async function withSampleHashes(
     const wavetable = track.wavetable;
     if (isObject(wavetable) && isObject(wavetable.table))
       refs.push(wavetable.table);
+    const granular = track.granular;
+    if (isObject(granular) && isObject(granular.src)) refs.push(granular.src);
   }
   for (const ref of refs) {
     if (

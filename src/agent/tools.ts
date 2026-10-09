@@ -73,6 +73,7 @@ import { MASTER_TOOLS } from "./master-tools.ts";
 import { DRUM_TOOLS } from "./drum-tools.ts";
 import { TIME_TOOLS } from "./time-tools.ts";
 import { SECTION_TOOLS } from "./section-tools.ts";
+import { GRANULAR_TOOLS } from "./granular-tools.ts";
 import type { MediaResult, MediaRunContext } from "../media/types.ts";
 import { instrumentPatch, pitchToMidi } from "./ops.ts";
 import { TUNING_LIMITS } from "../../core/tuning.ts";
@@ -1611,6 +1612,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   ...MEDIA_TOOLS,
   ...PACK_TOOLS,
   ...MASTER_TOOLS,
+  ...GRANULAR_TOOLS,
   // Looks tools up at call time, so it can plan any of the above.
   previewSoundTool((name) => findAgentTool(name)),
 ] satisfies AgentTool[]);

@@ -64,6 +64,11 @@ import {
 import { applySynthCommand, parseSynthCommand } from "./commands/synth.ts";
 import { applyStringCommand, parseStringCommand } from "./commands/string.ts";
 import {
+  applyGranularCommand,
+  granularTrackPreset,
+  parseGranularCommand,
+} from "./commands/granular.ts";
+import {
   applyTuningCommand,
   importTuningFile,
   parseTuningCommand,
@@ -272,6 +277,7 @@ function parsesLocally(text: string): boolean {
     parseFxCommand,
     parseSynthCommand,
     parseStringCommand,
+    parseGranularCommand,
     parseExpressionCommand,
     parseMasterCommand,
     (value: string) => parseSectionCommand(value, score),
@@ -1680,6 +1686,15 @@ async function submit(prompt: string): Promise<string | Receipt> {
     /^\/?(?:add\s+)?track\s+([a-z0-9._-]{1,64})$/i,
   );
   if (trackCommand) return focusTrack(trackCommand[1]!.toLowerCase());
+  // `track cloud grain hold`: focus (or create) a track and grain it.
+  const grainTrack = command.match(
+    /^\/?track\s+([a-z0-9._-]{1,64})\s+(grain\s+.+)$/i,
+  );
+  if (grainTrack && parseGranularCommand(grainTrack[2]!)) {
+    const focused = await focusTrack(grainTrack[1]!.toLowerCase());
+    if (requestedTrack !== grainTrack[1]!.toLowerCase()) return focused;
+    return submit(grainTrack[2]!);
+  }
   // `/track piano b`: a name with spaces focuses the track of that name, or
   // creates `piano-b` named "piano b".
   const namedTrack = command.match(/^\/track\s+([a-z0-9._ -]{1,64})$/i);
@@ -1783,6 +1798,15 @@ async function submit(prompt: string): Promise<string | Receipt> {
     )
       await materializeDraft();
     const result = applyStringCommand(score, requestedTrack, stringCommand);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
+  const grain = parseGranularCommand(command);
+  if (grain) {
+    if (grain.type !== "grain-list" && grain.type !== "grain-presets")
+      await materializeDraft();
+    const result = applyGranularCommand(score, requestedTrack, grain);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
@@ -2134,16 +2158,24 @@ async function focusTrack(trackId: string): Promise<Receipt> {
     )
   )
     return warn(`${trackId} is open in another window`);
-  const exists = score.tracks.some((track) => track.id === trackId);
+  const existing = score.tracks.find((track) => track.id === trackId);
+  const exists = existing !== undefined;
+  // `track cloud`, `track hold-2`: a new granular track with that preset.
+  const grainPreset = granularTrackPreset(trackId);
   if (!exists) {
     const next = applyScoreOperation(score, {
       type: "addTrack",
       track: {
         id: trackId,
         name: trackId,
-        instrument: isDrumInstrument(trackId) ? "kit" : "sine",
+        instrument: grainPreset
+          ? "granular"
+          : isDrumInstrument(trackId)
+            ? "kit"
+            : "sine",
         // `track jangle`, `track gtr-metal`…: a guitar voice and its rig.
         ...rigTrackFields(trackId),
+        ...(grainPreset ? { granular: { preset: grainPreset } } : {}),
       },
     });
     await commitScore(next, "track.create", { trackId });
@@ -2151,7 +2183,17 @@ async function focusTrack(trackId: string): Promise<Receipt> {
   await port.focus(trackId);
   requestedTrack = trackId;
   draftTrack = false;
-  return ok(exists ? `track · ${trackId}` : `track created · ${trackId}`);
+  if (exists && grainPreset && existing.instrument !== "granular")
+    return warn(
+      `track · ${trackId} is a ${existing.instrument} track · grain ${grainPreset} makes it granular`,
+    );
+  return ok(
+    exists
+      ? `track · ${trackId}`
+      : grainPreset
+        ? `track created · ${trackId} · granular ${grainPreset} · nothing to download`
+        : `track created · ${trackId}`,
+  );
 }
 
 /** Decode every sampler voice (cached) and return what failed to load. */

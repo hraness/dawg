@@ -129,6 +129,8 @@ export function phraseRole(track: Track): PhraseRole {
   if (isSamplerInstrument(track.instrument))
     return track.sampler?.mode === "keyed" ? "chord" : "groove";
   if (isWavetableInstrument(track.instrument)) return "drone";
+  // Grain clouds are textures: held notes let them evolve.
+  if (track.instrument === "granular") return "drone";
   const words = `${track.instrument} ${track.name} ${track.id}`.toLowerCase();
   if (/\b(bass|sub|808)/.test(words)) return "riff";
   if (/\b(lead|arp|pluck|saw|square|pulse|z_|mono|melody|hook)/.test(words))

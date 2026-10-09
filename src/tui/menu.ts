@@ -127,6 +127,12 @@ import {
 } from "../../core/tuning.ts";
 import { rootName, tuningStepsText } from "../commands/tuning.ts";
 import {
+  granularBrowseNodes,
+  granularMenuDetail,
+  granularMenuLabel,
+  granularMenuNodes,
+} from "./granular-menu.ts";
+import {
   ARP_RATES,
   CHORD_MODES,
   defaultChordSettings,
@@ -500,8 +506,23 @@ function soundSectionNodes(context: MenuContext): MenuNode[] {
           },
         ]
       : [];
+  const grainLabel = granularMenuLabel(track);
+  const granular: MenuNode[] =
+    track && grainLabel
+      ? [
+          {
+            kind: "menu",
+            id: "granular",
+            label: grainLabel,
+            detail: granularMenuDetail(track),
+            help: "grain clouds: preset, source, position, scan, grain size, pitch, shimmer",
+            build: (inner) => granularMenuNodes(focused(inner)),
+          },
+        ]
+      : [];
   return [
     ...parameterNodes(context),
+    ...granular,
     ...tuning,
     {
       kind: "menu",
@@ -1832,6 +1853,8 @@ function patternsMenu(): MenuNode {
   };
 }
 
+const GRANULAR_PRESETS_COUNT = granularBrowseNodes().length;
+
 function soundNodes(): MenuNode[] {
   return [
     {
@@ -1853,6 +1876,14 @@ function soundNodes(): MenuNode[] {
           command: `string ${name}`,
           help: STRING_PRESETS[name]!.styles,
         })),
+    },
+    {
+      kind: "menu",
+      id: "granular-browse",
+      label: "Granular",
+      help: "grain clouds from a built-in synth or this track's own sound",
+      detail: `${GRANULAR_PRESETS_COUNT} presets · built-in`,
+      build: granularBrowseNodes,
     },
     {
       kind: "menu",
