@@ -1087,6 +1087,20 @@ function printSample(ref: SampleRef, indent: string, prefix: number): string {
   if (ref.bpm !== undefined) entries.push(["bpm", num(ref.bpm)]);
   if (ref.fitmode !== undefined) entries.push(["fitmode", str(ref.fitmode)]);
   if (ref.len !== undefined) entries.push(["len", num(ref.len)]);
+  if (ref.shift !== undefined) entries.push(["shift", num(ref.shift)]);
+  if (ref.formant !== undefined) entries.push(["formant", num(ref.formant)]);
+  if (ref.fadeInTime !== undefined)
+    entries.push(["fadeInTime", num(ref.fadeInTime)]);
+  if (ref.fadeTime !== undefined) entries.push(["fadeTime", num(ref.fadeTime)]);
+  if (ref.from !== undefined) {
+    const from = ref.from;
+    const parts: [string, string][] = [["source", str(from.source)]];
+    if (from.section !== undefined) parts.push(["section", str(from.section)]);
+    if (from.bars !== undefined)
+      parts.push(["bars", `[${num(from.bars[0])}, ${num(from.bars[1])}]`]);
+    parts.push(["score", str(from.score)]);
+    entries.push(["from", obj(parts, indent + INDENT, "from: ".length, 1)]);
+  }
   if (entries.length === 1) return str(ref.src);
   return obj(entries, indent, prefix, 1);
 }

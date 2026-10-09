@@ -77,6 +77,14 @@ export type TrackGranular = Readonly<{
   release?: number;
   veltone?: number;
   gain?: number;
+  /** Optional (0.6.1): grain rate as a note value on the tempo map. */
+  sync?: GrainSync;
+  /** Optional (0.6.1): snap grain pitches to the scale or chord. */
+  quant?: GrainQuant;
+  /** Optional (0.6.1): one voice; legato notes retarget it. */
+  mono?: boolean;
+  /** Optional (0.6.1): the sustain pedal freezes the head. */
+  pedal?: boolean;
   /**
    * The instrument `grain off` returns to (set when granular turns on;
    * absent: a sampler, a wavetable, or the source's synth).
@@ -101,6 +109,30 @@ const n = (
     doc,
     ...extra,
   });
+
+export const GRAIN_SYNC_VALUES = Object.freeze([
+  "off",
+  "1/64",
+  "1/32",
+  "1/16t",
+  "1/16",
+  "1/16d",
+  "1/8t",
+  "1/8",
+  "1/8d",
+  "1/4t",
+  "1/4",
+  "1/4d",
+  "1/2",
+  "1/1",
+] as const);
+export type GrainSync = (typeof GRAIN_SYNC_VALUES)[number];
+export const GRAIN_QUANT_VALUES = Object.freeze([
+  "off",
+  "scale",
+  "chord",
+] as const);
+export type GrainQuant = (typeof GRAIN_QUANT_VALUES)[number];
 
 /**
  * The granular parameter table: one row per stored number, enum or flag,
@@ -223,7 +255,62 @@ export const GRANULAR_PARAMS: Readonly<Record<string, ParamSpec>> =
     }),
     veltone: n(0, 1, 0, 0.05, "soft notes are darker"),
     gain: n(0, 4, 1, 0.05, "voice level"),
+    // 0.6.1 grainplay (appended; absent keeps 0.6.0 behaviour).
+    sync: Object.freeze({
+      kind: "enum",
+      values: GRAIN_SYNC_VALUES,
+      default: "off",
+      doc: "grain rate as a note value on the tempo map (off: grain/overlap)",
+    }),
+    quant: Object.freeze({
+      kind: "enum",
+      values: GRAIN_QUANT_VALUES,
+      default: "off",
+      doc: "snap grain pitches to the song scale or the sounding chord",
+    }),
+    mono: Object.freeze({
+      kind: "boolean",
+      default: false,
+      doc: "one voice: legato notes retarget its pitch, the cloud keeps going",
+    }),
+    pedal: Object.freeze({
+      kind: "boolean",
+      default: false,
+      doc: "the sustain pedal freezes the head while it is down",
+    }),
   });
+
+/** Lanes `grain-<param>` (0.6.1): every number row marked `automate`. */
+export const GRANULAR_LANE_PARAMS: readonly Readonly<{
+  param: string;
+  spec: Extract<ParamSpec, { kind: "number" }>;
+}>[] = Object.freeze(
+  Object.entries(GRANULAR_PARAMS)
+    .filter(
+      (entry): entry is [string, Extract<ParamSpec, { kind: "number" }>] =>
+        entry[1].kind === "number" && entry[1].automate === true,
+    )
+    .map(([param, spec]) => Object.freeze({ param, spec })),
+);
+
+/** Note values `sync` takes, with their length in beats. */
+export const GRAIN_SYNC_BEATS: Readonly<Record<string, number>> = Object.freeze(
+  {
+    "1/64": 1 / 16,
+    "1/32": 1 / 8,
+    "1/16t": 1 / 6,
+    "1/16": 1 / 4,
+    "1/16d": 3 / 8,
+    "1/8t": 1 / 3,
+    "1/8": 1 / 2,
+    "1/8d": 3 / 4,
+    "1/4t": 2 / 3,
+    "1/4": 1,
+    "1/4d": 3 / 2,
+    "1/2": 2,
+    "1/1": 4,
+  },
+);
 
 export type GranularParamName = keyof typeof GRANULAR_PARAMS & string;
 
@@ -256,6 +343,10 @@ export type GranularSettings = Readonly<{
   release: number;
   veltone: number;
   gain: number;
+  sync: GrainSync;
+  quant: GrainQuant;
+  mono: boolean;
+  pedal: boolean;
 }>;
 
 /**

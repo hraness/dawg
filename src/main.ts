@@ -133,6 +133,8 @@ import {
   voiceNameFrom,
 } from "./commands/sample.ts";
 import { applyFitCommand, fitVoice, parseFitCommand } from "./commands/fit.ts";
+import { applyShiftCommand, parseShiftCommand } from "./commands/shift.ts";
+import { parseResampleCommand, runResample } from "./commands/resample.ts";
 import { suggestFitMode } from "./audio/dsp/onset.ts";
 import {
   SampleLibrary,
@@ -313,6 +315,8 @@ function parsesLocally(text: string): boolean {
     parsePackCommand,
     parseSampleCommand,
     parseFitCommand,
+    parseShiftCommand,
+    parseResampleCommand,
     parseWavetableCommand,
     parseTimeCommand,
     parseTuningCommand,
@@ -1743,6 +1747,16 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (sample) return sampleCommand(sample);
   const fit = parseFitCommand(command);
   if (fit) return fitCommand(fit);
+  const shift = parseShiftCommand(command);
+  if (shift) {
+    const result = applyShiftCommand(score, requestedTrack, shift);
+    if (!result.ok) return fail(result.message);
+    await commitScore(result.next, "sample.set", { trackId: requestedTrack });
+    await projectSync?.flushScore();
+    return ok(result.message);
+  }
+  const resample = parseResampleCommand(command);
+  if (resample) return resampleCommand(resample);
   const pack = parsePackCommand(command);
   if (pack) return packCommand(pack);
   const pattern = parsePatternCommand(command);
@@ -2404,6 +2418,36 @@ async function fitCommand(
       ? `${result.message} · suggested from the sound (${suggested === "beats" ? "hits" : "held tones"})`
       : result.message,
   );
+}
+
+async function resampleCommand(
+  command: NonNullable<ReturnType<typeof parseResampleCommand>>,
+): Promise<Receipt> {
+  await materializeDraft();
+  // The source's own samples must be loaded for the render.
+  if (hasSamplerTracks(score)) await sampleProblems(score);
+  const result = await runResample({
+    projectRoot: process.cwd(),
+    score,
+    command,
+    ...(liveSampleBank ? { samples: liveSampleBank } : {}),
+  });
+  if (!result.ok) return fail(result.message);
+  const problems = (await sampleProblems(result.next)).filter(
+    (problem) =>
+      problem.trackId === result.trackId && problem.level === "error",
+  );
+  if (problems.length > 0) return fail(`resample · ${problems[0]!.message}`);
+  await commitScore(result.next, "resample", {
+    trackId: result.trackId,
+    src: result.src,
+    sha256: result.sha256,
+  });
+  await port.focus(result.trackId);
+  requestedTrack = result.trackId;
+  draftTrack = false;
+  await projectSync?.flushScore();
+  return ok(result.message);
 }
 
 async function sampleCommand(

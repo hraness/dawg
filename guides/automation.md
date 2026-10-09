@@ -19,6 +19,7 @@ A lane moves a value over beats. Every numeric effect parameter has one.
 - `automate pan at 0 -1` · `automate delay-mix at 4 0`
 - `automate distort-drive points 0:1 8:6`
 - `automate filter remove 4` delete one point
+- `automate grain-pos points 0:0.1 8:0.9` sweeps a granular track's head (every movable `grain-<param>`)
 - `clear filter automation` · `clear automation`
 
 ## Menu

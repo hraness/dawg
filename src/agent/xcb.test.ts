@@ -748,8 +748,9 @@ describe("text agent workspace tools", () => {
     // The real cap is XCB_LIMITS.maxInputBytes (1 MiB); this keeps the
     // catalog a small share of it (~5%) as rhythm, pattern, chord, 0.6 and
     // 0.6.1 instrument tools land (0.6.1 guitar: strum_chords, set_guitar;
-    // organ: set_keys drawbars, registers, stops and rotary).
-    expect(catalog.length).toBeLessThan(54_000);
+    // organ: set_keys drawbars, registers, stops and rotary;
+    // granular: resample).
+    expect(catalog.length).toBeLessThan(56_000);
     for (const name of [
       "list_files",
       "read_file",

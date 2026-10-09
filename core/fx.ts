@@ -16,6 +16,7 @@ import { MODAL_LANE_PARAMS } from "./resonators.ts";
 import { SYNTH_LANE_PARAMS } from "./synth.ts";
 import { STRING_LANE_PARAMS } from "./strings.ts";
 import { KEYS_LANE_PARAMS } from "./keys.ts";
+import { GRANULAR_LANE_PARAMS } from "./granular.ts";
 import {
   FxValidationError,
   normalizeParam,
@@ -1220,12 +1221,12 @@ export function normalizeFx(input: unknown): TrackFx | undefined {
 
 /** Automation lane name of an `fx` parameter, e.g. `distort-drive`. */
 export type FxLane =
-  `${FxName | "reverb" | "synth" | "string" | "keys" | "modal"}-${string}`;
+  `${FxName | "reverb" | "synth" | "string" | "keys" | "modal" | "grain"}-${string}`;
 
 /** Every automatable `fx` parameter as `{ lane, effect, param, spec }`. */
 export const FX_LANES: readonly Readonly<{
   lane: FxLane;
-  effect: FxName | "reverb" | "synth" | "string" | "keys" | "modal";
+  effect: FxName | "reverb" | "synth" | "string" | "keys" | "modal" | "grain";
   param: string;
   spec: NumberParam;
 }>[] = Object.freeze([
@@ -1277,6 +1278,16 @@ export const FX_LANES: readonly Readonly<{
     Object.freeze({
       lane: `modal-${param}` as FxLane,
       effect: "modal" as const,
+      param,
+      spec,
+    }),
+  ),
+  // Granular parameters (core/granular.ts, 0.6.1), read every 32 frames;
+  // grain-scoped ones are latched at each grain's onset.
+  ...GRANULAR_LANE_PARAMS.map(({ param, spec }) =>
+    Object.freeze({
+      lane: `grain-${param}` as FxLane,
+      effect: "grain" as const,
       param,
       spec,
     }),

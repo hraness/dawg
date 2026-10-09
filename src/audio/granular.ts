@@ -13,9 +13,12 @@
  * Randomness is counter-based (`unit(seed, grain, slot)`), so changing one
  * parameter does not reshuffle the others' draws.
  */
-import type { PerformedNote } from "../../core/expression.ts";
+import { parseKey, scaleOf } from "../../core/chords.ts";
+import { pedalStateAt, type PerformedNote } from "../../core/expression.ts";
 import {
   DEFAULT_GRANULAR_SOURCE,
+  GRAIN_SYNC_BEATS,
+  GRANULAR_LANE_PARAMS,
   GRANULAR_SOURCE_VOICE,
   SYNTH_SOURCE_SECONDS,
   granularTailSeconds,
@@ -23,7 +26,8 @@ import {
   resolveGranular,
   type GranularSettings,
 } from "../../core/granular.ts";
-import type { SampleRef, Track } from "../../core/score.ts";
+import type { FxLane } from "../../core/fx.ts";
+import type { SampleRef, Track, TrackScore } from "../../core/score.ts";
 import { SYNTH_PRESETS, type TrackSynth } from "../../core/synth.ts";
 import { noteHz } from "../../core/tuning.ts";
 import {
@@ -44,6 +48,8 @@ import { warpedSpan } from "./warp.ts";
 export const CONTROL_FRAMES = 32;
 /** Grains sounding at once per voice; later grains are skipped by index. */
 export const MAX_GRAINS = 64;
+/** Most grains overlapping at once (synced or not). */
+const MAX_OVERLAP = 32;
 /**
  * Voices per track; the oldest released voice is stolen first, then the
  * oldest held one, with a 5 ms fade.
@@ -77,6 +83,19 @@ export type GranularVoiceInit = Readonly<{
   /** Half pedal: the level fades from `from` seconds with `tau`. */
   damp?: Readonly<{ from: number; tau: number }>;
   seed: number;
+  /**
+   * `grain-<param>` lanes (0.6.1): each value at a voice frame, read every
+   * 32 frames; grain-scoped ones latch at each grain's onset.
+   */
+  lanes?: readonly Readonly<{ name: string; at: (frame: number) => number }>[];
+  /** `sync` (0.6.1): the voice frame of grid point `k` on the tempo map. */
+  grid?: (k: number) => number;
+  /** The synced period at grain `k` (default `grid(k + 1) - grid(k)`). */
+  gridPeriod?: (k: number) => number;
+  /** `quant` (0.6.1): a grain's semitone offset snapped to allowed pitches. */
+  quant?: (semis: number, frame: number) => number;
+  /** `pedal` (0.6.1): true while the sustain pedal holds the head. */
+  held?: (frame: number) => boolean;
 }>;
 
 export type GranularVoice = {
@@ -92,7 +111,12 @@ export type GranularVoice = {
 
 /** A streaming grain voice. */
 export function granularVoice(init: GranularVoiceInit): GranularVoice {
-  const { source, sr, settings: p, seed } = init;
+  const { source, sr, seed } = init;
+  const lanes = init.lanes ?? [];
+  // Automated rows read a mutable copy; without lanes `p` is the settings.
+  const p: { -readonly [K in keyof GranularSettings]: GranularSettings[K] } =
+    lanes.length > 0 ? { ...init.settings } : init.settings;
+  const live = p as unknown as Record<string, number>;
   const data = source.data;
   const srcRate = source.rate;
   const n0 = Math.max(1, data.length);
@@ -108,22 +132,45 @@ export function granularVoice(init: GranularVoiceInit): GranularVoice {
   const spawnEnd = init.gateFrames + releaseFrames;
   const win = grainWindow(p.window);
   const table = win.table;
-  const grainSec = Math.max(0.005, Math.min(2, p.grain));
-  const overlap = Math.max(0.05, Math.min(32, p.overlap));
-  const period = (grainSec * sr) / overlap;
-  const len = Math.max(16, Math.min(maxGrainFrames, Math.round(grainSec * sr)));
-  const winGain = Math.min(
+  let grainSec = Math.max(0.005, Math.min(2, p.grain));
+  let overlap = Math.max(0.05, Math.min(MAX_OVERLAP, p.overlap));
+  let period = (grainSec * sr) / overlap;
+  let len = Math.max(16, Math.min(maxGrainFrames, Math.round(grainSec * sr)));
+  let winGain = Math.min(
     1,
     1 / Math.sqrt(Math.max(1e-9, overlap * win.meanSq)),
   );
   const frameStep = srcRate / sr;
-  const scanStep = p.freeze ? 0 : p.scan * frameStep;
+  let scanStep = p.freeze ? 0 : p.scan * frameStep;
+  const grid = init.grid;
+  const gridPeriod =
+    init.gridPeriod ?? ((at: number) => grid!(at + 1) - grid!(at));
+  /** Grain shape from the current grain, overlap and (synced) period. */
+  function shape(): void {
+    grainSec = Math.max(0.005, Math.min(2, p.grain));
+    if (grid) {
+      period = Math.max(1, gridPeriod(k));
+      overlap = Math.max(0.05, (grainSec * sr) / period);
+      // The unsynced cap: a long grain on a fast grid shortens to 32
+      // overlapping grains, so the level matches the grains that sound.
+      if (overlap > MAX_OVERLAP) {
+        overlap = MAX_OVERLAP;
+        grainSec = (MAX_OVERLAP * period) / sr;
+      }
+    } else {
+      overlap = Math.max(0.05, Math.min(MAX_OVERLAP, p.overlap));
+      period = (grainSec * sr) / overlap;
+    }
+    len = Math.max(16, Math.min(maxGrainFrames, Math.round(grainSec * sr)));
+    winGain = Math.min(1, 1 / Math.sqrt(Math.max(1e-9, overlap * win.meanSq)));
+  }
   const grains: Grain[] = [];
   const pool: Grain[] = [];
   let t = 0;
   let scanned = 0;
-  let nextGrid = 0;
   let k = 0;
+  let nextGrid = grid ? grid(0) : 0;
+  if (grid) shape();
   let latch = 0;
   let latched = 0;
   let lp = 0;
@@ -144,9 +191,9 @@ export function granularVoice(init: GranularVoiceInit): GranularVoice {
   const amp = init.velocity * p.gain;
   const blockL = new Float64Array(CONTROL_FRAMES);
   const blockR = new Float64Array(CONTROL_FRAMES);
-  const driftDepth = 0.5 * p.drift * region;
 
   function driftAt(sec: number): number {
+    const driftDepth = 0.5 * p.drift * region;
     if (driftDepth === 0) return 0;
     const x = sec * p.drate;
     const i = Math.floor(x);
@@ -158,6 +205,7 @@ export function granularVoice(init: GranularVoiceInit): GranularVoice {
   }
 
   function spawn(): void {
+    if (grid) shape();
     const sec = nextGrid / sr;
     // Beat repeat: a grid step may latch the head for `hold` steps.
     if (latch > 0) latch -= 1;
@@ -167,10 +215,11 @@ export function granularVoice(init: GranularVoiceInit): GranularVoice {
     }
     const head = latched;
     const onset = nextGrid + p.jitter * unit(seed, k, 0) * period;
-    const semis =
+    const raw =
       p.pitch +
       p.detune * (unit(seed, k, 2) - 0.5) +
       (unit(seed, k, 5) < p.shimmer ? p.shimint : 0);
+    const semis = init.quant ? init.quant(raw, nextGrid) : raw;
     const step0 = init.baseRate * 2 ** (semis / 12) * frameStep;
     let center =
       begin +
@@ -193,7 +242,7 @@ export function granularVoice(init: GranularVoiceInit): GranularVoice {
       grains.push(g);
     }
     k += 1;
-    nextGrid += period;
+    nextGrid = grid ? grid(k) : nextGrid + period;
   }
 
   function envelope(i: number): number {
@@ -265,6 +314,7 @@ export function granularVoice(init: GranularVoiceInit): GranularVoice {
     }
   }
 
+  let pedalDown = false;
   return {
     totalFrames: total,
     process(outL, outR, offset, frames) {
@@ -276,13 +326,21 @@ export function granularVoice(init: GranularVoiceInit): GranularVoice {
           frames - done,
           total - t,
         );
+        // Lanes are read on 32-frame control boundaries only, so any block
+        // split renders the same samples.
+        if (init.held && t % CONTROL_FRAMES === 0) pedalDown = init.held(t);
+        if (lanes.length > 0 && t % CONTROL_FRAMES === 0) {
+          for (const lane of lanes) live[lane.name] = lane.at(t);
+          if (!grid) shape();
+          scanStep = p.freeze ? 0 : p.scan * frameStep;
+        }
         // Grid points of this block: the grid keeps running through the
         // release, so the release fades a living cloud (spec: release ~ T60).
         while (nextGrid < t + n && t < spawnEnd) spawn();
         const cents = init.cents ? init.cents(t / sr) : 0;
         const centsMul = cents === 0 ? 1 : 2 ** (cents / 1200);
         renderGrains(t, n, centsMul);
-        scanned += scanStep * n;
+        if (!pedalDown) scanned += scanStep * n;
         for (let i = 0; i < n; i += 1) {
           let l = blockL[i]!;
           let r = blockR[i]!;
@@ -559,9 +617,9 @@ export function renderGranularTrack(
     end: number;
     cut: number;
   };
-  const plans: Plan[] = notes.map((note, index) => {
+  const tail = Math.round(granularTailSeconds(track.granular) * sr);
+  let plans: Plan[] = notes.map((note, index) => {
     const { start, length } = spanOf(note, context);
-    const tail = Math.round(granularTailSeconds(track.granular) * sr);
     return {
       note,
       seed: seeds[index]!,
@@ -571,6 +629,31 @@ export function renderGranularTrack(
       cut: Infinity,
     };
   });
+  // Mono (0.6.1): notes that overlap the one before (legato) join its
+  // voice, which retargets pitch at each note's start and keeps its grain
+  // stream; a detached note cuts the previous voice's tail.
+  const chains = new Map<Plan, Plan[]>();
+  if (settings.mono && plans.length > 1) {
+    const sorted = [...plans].sort((a, b) => a.start - b.start);
+    const heads: Plan[] = [];
+    let head: Plan | undefined;
+    for (const plan of sorted) {
+      if (head && plan.start < head.start + head.length) {
+        chains.get(head)!.push(plan);
+        head.length = Math.max(
+          head.length,
+          plan.start + plan.length - head.start,
+        );
+        head.end = head.start + head.length + tail;
+        continue;
+      }
+      if (head && head.end > plan.start) head.cut = plan.start;
+      head = plan;
+      chains.set(plan, [plan]);
+      heads.push(plan);
+    }
+    plans = heads;
+  }
   const order = plans
     .map((_, index) => index)
     .sort((a, b) => plans[a]!.start - plans[b]!.start || a - b);
@@ -598,11 +681,88 @@ export function renderGranularTrack(
   const outR = new Float64Array(block);
   const volume = Math.max(0, Math.min(1, track.volume ?? 1));
   const lane = track.volumeAutomation ?? [];
+  const tickOf = (frame: number): number =>
+    context.warp
+      ? context.warp.tick(frame)
+      : frame / Math.max(1e-9, context.samplesPerTick);
+  const frameOf = (tick: number): number =>
+    context.warp ? context.warp.sample(tick) : tick * context.samplesPerTick;
+  const grainLanes = GRANULAR_LANE_PARAMS.flatMap(({ param }) => {
+    const points = track.fxAutomation?.[`grain-${param}` as FxLane];
+    return points && points.length > 0 ? [{ param, points }] : [];
+  });
+  const syncBeats =
+    settings.sync === "off" ? undefined : GRAIN_SYNC_BEATS[settings.sync];
+  const allowed =
+    settings.quant === "off"
+      ? undefined
+      : quantPitchClasses(context.score, settings.quant, context.quantChord);
+  const pedal = settings.pedal ? track.pedal : undefined;
   for (const plan of plans) {
     const { note } = plan;
     if (plan.start >= left.length) continue;
     const hz = noteHz(note.pitch, note.cents, context.tuning);
     const performance = note.performance;
+    const chain = chains.get(plan);
+    const startTick = note.startTick;
+    const startFrame = plan.start;
+    let cents = performance?.cents;
+    if (chain && chain.length > 1) {
+      // Retarget: the cents of each chained note's pitch over the first's,
+      // from its start, plus that note's own bend/glide/vibrato.
+      const steps = chain.map((item) => ({
+        from: (item.start - startFrame) / sr,
+        cents:
+          1200 *
+          Math.log2(
+            noteHz(item.note.pitch, item.note.cents, context.tuning) / hz,
+          ),
+        perf: item.note.performance?.cents,
+        offset: (item.start - startFrame) / sr,
+      }));
+      cents = (t: number) => {
+        let at = 0;
+        while (at + 1 < steps.length && steps[at + 1]!.from <= t) at += 1;
+        const step = steps[at]!;
+        return step.cents + (step.perf ? step.perf(t - step.offset) : 0);
+      };
+    }
+    const lanes = grainLanes.map(({ param, points }) => {
+      const fallback = settings[param as keyof typeof settings] as number;
+      return {
+        name: param,
+        at: (frame: number) =>
+          interpolateAutomation(points, tickOf(startFrame + frame), fallback),
+      };
+    });
+    let grid: ((k: number) => number) | undefined;
+    let gridPeriod: ((k: number) => number) | undefined;
+    if (syncBeats !== undefined) {
+      const stepTicks = syncBeats * context.ticksPerBeat;
+      const at = startTick / stepTicks;
+      const k0 = Math.round(at);
+      if (Math.abs(at - k0) < 1e-9)
+        grid = (k: number) => frameOf((k0 + k) * stepTicks) - startFrame;
+      else {
+        // Off the grid (humanize, swing, a played note): the first grain
+        // sounds at note-on, the rest follow the grid from the next point.
+        const first = Math.floor(at) + 1;
+        const point = (k: number) =>
+          frameOf((first + k) * stepTicks) - startFrame;
+        grid = (k: number) => (k === 0 ? 0 : point(k - 1));
+        gridPeriod = (k: number) =>
+          k === 0 ? point(1) - point(0) : point(k) - point(k - 1);
+      }
+    }
+    const quant = allowed
+      ? (semis: number, frame: number) =>
+          snapSemis(note.pitch, semis, allowed(tickOf(startFrame + frame)))
+      : undefined;
+    const held =
+      pedal && pedal.length > 0
+        ? (frame: number) =>
+            pedalStateAt(pedal, tickOf(startFrame + frame)) === "down"
+        : undefined;
     const voice = granularVoice({
       source: resolved.source,
       sr,
@@ -610,9 +770,14 @@ export function renderGranularTrack(
       baseRate: hz / rootHz,
       velocity: Math.max(0, Math.min(1, note.velocity)),
       gateFrames: plan.length,
-      ...(performance?.cents ? { cents: performance.cents } : {}),
+      ...(cents ? { cents } : {}),
       ...(performance?.damp ? { damp: performance.damp } : {}),
       seed: plan.seed,
+      ...(lanes.length > 0 ? { lanes } : {}),
+      ...(grid ? { grid } : {}),
+      ...(gridPeriod ? { gridPeriod } : {}),
+      ...(quant ? { quant } : {}),
+      ...(held ? { held } : {}),
     });
     const stop = Math.min(
       left.length,
@@ -642,6 +807,161 @@ export function renderGranularTrack(
   }
 }
 
+/**
+ * The tracks whose notes make the `quant chord` harmony: pitched and not
+ * muted in the song. Granular tracks, kits, one-shot samplers and
+ * resampled audio (a ref with `from`, one held note) are left out, so a
+ * resampled bus does not add its trigger pitch to every chord. Solo is
+ * ignored: soloing a track (or a resample's soloed source) keeps the
+ * song's chords.
+ */
+function harmonicTrack(track: Track): boolean {
+  if (track.muted === true) return false;
+  if (
+    track.granular !== undefined ||
+    track.instrument === "kit" ||
+    track.kit !== undefined
+  )
+    return false;
+  if (track.sampler || track.instrument === "sampler") {
+    const sampler = track.sampler;
+    if (!sampler || sampler.mode !== "keyed") return false;
+    if (Object.values(sampler.voices).some((ref) => ref.from !== undefined))
+      return false;
+  }
+  return true;
+}
+
+/**
+ * Pitch classes sounding on the harmonic tracks, as change points:
+ * `sets[i]` sounds from `ticks[i]` to `ticks[i + 1]`.
+ */
+export type ChordTimeline = Readonly<{
+  ticks: readonly number[];
+  sets: readonly (readonly number[])[];
+}>;
+
+const timelines = new WeakMap<TrackScore, ChordTimeline>();
+
+/** The song's chord timeline (computed once per score object). */
+export function chordTimeline(score: TrackScore): ChordTimeline {
+  const known = timelines.get(score);
+  if (known) return known;
+  const harmonic = new Set(
+    score.tracks.filter(harmonicTrack).map((track) => track.id),
+  );
+  const events = new Map<number, number[]>();
+  const add = (tick: number, pc: number, delta: number) => {
+    let row = events.get(tick);
+    if (!row) events.set(tick, (row = new Array<number>(12).fill(0)));
+    row[pc] = row[pc]! + delta;
+  };
+  for (const note of score.notes) {
+    if (!harmonic.has(note.trackId) || note.durationTicks <= 0) continue;
+    const pc = ((note.pitch % 12) + 12) % 12;
+    add(note.startTick, pc, 1);
+    add(note.startTick + note.durationTicks, pc, -1);
+  }
+  const counts = new Array<number>(12).fill(0);
+  const ticks: number[] = [];
+  const sets: number[][] = [];
+  for (const tick of [...events.keys()].sort((a, b) => a - b)) {
+    const row = events.get(tick)!;
+    for (let pc = 0; pc < 12; pc += 1) counts[pc] = counts[pc]! + row[pc]!;
+    ticks.push(tick);
+    sets.push(counts.flatMap((count, pc) => (count > 0 ? [pc] : [])));
+  }
+  const timeline = Object.freeze({ ticks, sets });
+  timelines.set(score, timeline);
+  return timeline;
+}
+
+/** The classes sounding at `tick` (empty when nothing sounds). */
+export function chordAt(
+  timeline: ChordTimeline,
+  tick: number,
+): readonly number[] {
+  const { ticks, sets } = timeline;
+  let lo = 0;
+  let hi = ticks.length - 1;
+  let found = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (ticks[mid]! <= tick) {
+      found = mid;
+      lo = mid + 1;
+    } else hi = mid - 1;
+  }
+  return found < 0 ? [] : sets[found]!;
+}
+
+/**
+ * The chord changes between two ticks, relative to `from`, as a stable
+ * string: what a `quant chord` render over that span reads.
+ */
+export function chordDigest(
+  timeline: ChordTimeline,
+  from = -Infinity,
+  to = Infinity,
+): string {
+  const parts: string[] = [chordAt(timeline, from).join(".")];
+  for (let i = 0; i < timeline.ticks.length; i += 1) {
+    const tick = timeline.ticks[i]!;
+    if (tick > from && tick < to)
+      parts.push(
+        `${Number.isFinite(from) ? tick - from : tick}:${timeline.sets[i]!.join(".")}`,
+      );
+  }
+  return `chord:${parts.join(",")}`;
+}
+
+/**
+ * `quant` (0.6.1): the pitch classes grains may land on at a tick. `scale`
+ * is the song key's scale (chromatic without a key); `chord` is the pitch
+ * classes sounding on the song's harmonic tracks at the tick (see
+ * `harmonicTrack`), falling back to the scale when nothing else sounds
+ * (Ableton Granulator and Bitwig's scale-quantised grain pitch work the
+ * same way). `chord` reads `source` (the whole song for a live note) at
+ * `tick + offset`.
+ */
+export function quantPitchClasses(
+  score: TrackScore,
+  mode: "scale" | "chord",
+  source?: Readonly<{ score: TrackScore; tick: number }>,
+): (tick: number) => readonly number[] {
+  const key = parseKey(score.key ?? undefined);
+  const scale = key ? scaleOf(key) : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+  if (mode === "scale") return () => scale;
+  const timeline = chordTimeline(source?.score ?? score);
+  const offset = source?.tick ?? 0;
+  return (tick: number) => {
+    const set = chordAt(timeline, tick + offset);
+    return set.length > 0 ? set : scale;
+  };
+}
+
+/** A grain's semitone offset over `pitch`, snapped to the nearest class. */
+export function snapSemis(
+  pitch: number,
+  semis: number,
+  classes: readonly number[],
+): number {
+  const target = pitch + semis;
+  const base = Math.round(target);
+  let best = base;
+  let bestDistance = Infinity;
+  for (let d = 0; d <= 6; d += 1)
+    for (const candidate of d === 0 ? [base] : [base - d, base + d]) {
+      if (!classes.includes(((candidate % 12) + 12) % 12)) continue;
+      const distance = Math.abs(candidate - target);
+      if (distance < bestDistance) {
+        best = candidate;
+        bestDistance = distance;
+      }
+    }
+  return best - pitch;
+}
+
 /** The registered engine (`src/audio/instruments.ts`). */
 export const GRANULAR_ENGINE: InstrumentEngine = Object.freeze({
   id: "granular",
@@ -655,10 +975,21 @@ export const GRANULAR_ENGINE: InstrumentEngine = Object.freeze({
   },
   tailSeconds: (track: Track) => granularTailSeconds(track.granular),
   stereo: () => true,
-  assetDigests(track: Track, bank: SampleBank): readonly string[] {
+  assetDigests(
+    track: Track,
+    bank: SampleBank,
+    score?: TrackScore,
+  ): readonly string[] {
     const src = track.granular?.src;
-    if (src === undefined || typeof src === "string") return [];
-    const decoded = bank.voices.get(granularSampleKey(track.id));
-    return [decoded ? decoded.sha256 : "missing"];
+    const digests: string[] = [];
+    if (src !== undefined && typeof src !== "string") {
+      const decoded = bank.voices.get(granularSampleKey(track.id));
+      digests.push(decoded ? decoded.sha256 : "missing");
+    }
+    // `quant chord` reads the other tracks' notes: their chords join the
+    // stem key, so a cached stem re-renders when the harmony changes.
+    if (score && resolveGranular(track.granular).quant === "chord")
+      digests.push(chordDigest(chordTimeline(score)));
+    return digests;
   },
 });

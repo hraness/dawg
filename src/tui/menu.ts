@@ -399,7 +399,8 @@ function laneLabel(lane: AutomationParameter): string {
     info.effect === "synth" ||
     info.effect === "string" ||
     info.effect === "keys" ||
-    info.effect === "modal"
+    info.effect === "modal" ||
+    info.effect === "grain"
       ? info.effect
       : effectSpec(info.effect).label;
   return `${owner} ${info.param}${unit}`;
@@ -1399,6 +1400,72 @@ function sampleVoiceNodes(context: MenuContext, voice: string): MenuNode[] {
       reset: `/len off ${voice}`,
       help: SAMPLE_CONTROLS.len,
     },
+    // 0.6.1 shift: pitch without changing length, formants kept or moved,
+    // and the voice's fade in and out.
+    {
+      kind: "number",
+      label: "shift",
+      value: ref.shift,
+      start: 0,
+      off: "off",
+      min: -SCORE_LIMITS.maxSampleShift,
+      max: SCORE_LIMITS.maxSampleShift,
+      step: linear(
+        1,
+        -SCORE_LIMITS.maxSampleShift,
+        SCORE_LIMITS.maxSampleShift,
+      ),
+      format: num,
+      command: (value) => `/shift ${num(value)} ${voice}`,
+      reset: `/shift off ${voice}`,
+      help: SAMPLE_CONTROLS.shift,
+    },
+    {
+      kind: "number",
+      label: "formant",
+      value: ref.formant,
+      start: 0,
+      off: "follow",
+      min: -SCORE_LIMITS.maxSampleShift,
+      max: SCORE_LIMITS.maxSampleShift,
+      step: linear(
+        1,
+        -SCORE_LIMITS.maxSampleShift,
+        SCORE_LIMITS.maxSampleShift,
+      ),
+      format: (value) => (value === 0 ? "keep" : num(value)),
+      command: (value) => set(`formant ${num(value)}`),
+      reset: set("formant off"),
+      help: `${SAMPLE_CONTROLS.formant} · needs shift`,
+    },
+    {
+      kind: "number",
+      label: "fade in",
+      value: ref.fadeInTime,
+      start: 0.01,
+      off: "off",
+      min: 0,
+      max: SCORE_LIMITS.maxSampleFadeSeconds,
+      step: linear(0.01, 0, SCORE_LIMITS.maxSampleFadeSeconds),
+      format: num,
+      command: (value) => `/fade in ${num(value)} ${voice}`,
+      reset: `/fade in off ${voice}`,
+      help: SAMPLE_CONTROLS.fadeInTime,
+    },
+    {
+      kind: "number",
+      label: "fade out",
+      value: ref.fadeTime,
+      start: 0.1,
+      off: "off",
+      min: 0,
+      max: SCORE_LIMITS.maxSampleFadeSeconds,
+      step: linear(0.05, 0, SCORE_LIMITS.maxSampleFadeSeconds),
+      format: num,
+      command: (value) => `/fade out ${num(value)} ${voice}`,
+      reset: `/fade out off ${voice}`,
+      help: SAMPLE_CONTROLS.fadeTime,
+    },
   );
   return nodes;
 }
@@ -2140,6 +2207,7 @@ function automationNodes(context: MenuContext): MenuNode[] {
         keysParamsFor(track.instrument).includes(info.param)
       );
     if (info?.effect === "modal") return track.modal !== undefined;
+    if (info?.effect === "grain") return track.granular !== undefined;
     return info !== undefined && effectValues(track, info.effect) !== undefined;
   });
   const hidden = AUTOMATION_PARAMETERS.filter((lane) => !shown.includes(lane));
@@ -2536,7 +2604,73 @@ function transportNodes(context: MenuContext): MenuNode[] {
       help: "the song tuning (12-TET, EDOs, just, gamelan, Scala) and scale",
       build: songTuningNodes,
     },
+    {
+      kind: "menu",
+      id: "resample",
+      label: "resample",
+      detail: "track · section · bars → new sample track",
+      help: "render a track, an orbit or the mix to a pinned WAV on a new sampler or granular track",
+      build: resampleNodes,
+    },
   ];
+}
+
+/** Project > Resample: one action per useful source and range. */
+function resampleNodes(context: MenuContext): MenuNode[] {
+  const track = focused(context);
+  const score = context.score;
+  const nodes: MenuNode[] = [];
+  if (track) {
+    nodes.push(
+      {
+        kind: "action",
+        label: `${track.id} → sampler`,
+        command: `resample ${track.id}`,
+        help: "render this track (pre-master) to a one-shot sampler track",
+      },
+      {
+        kind: "action",
+        label: `${track.id} → granular`,
+        command: `resample ${track.id} grain`,
+        help: "render this track to a granular track (cloud preset) holding one note",
+      },
+    );
+    for (const section of score.sections)
+      nodes.push({
+        kind: "action",
+        label: `${track.id} · section ${section.name}`,
+        command: `resample ${track.id} section ${section.name}`,
+        help: `render bars ${section.startBar + 1}-${section.startBar + section.bars} of this track`,
+      });
+  }
+  nodes.push(
+    {
+      kind: "entry",
+      label: "bars",
+      value: "",
+      placeholder: "a-b [grain]",
+      example: "/resample <track> bars 1-2",
+      command: (text) => {
+        const match = /^\s*(\d{1,4})(?:-(\d{1,4}))?(\s+grain)?\s*$/.exec(text);
+        if (!match || !track) return undefined;
+        return `resample ${track.id} bars ${match[1]}-${match[2] ?? match[1]}${match[3] ? " grain" : ""}`;
+      },
+      help: "render a bar range of the focused track",
+    },
+    {
+      kind: "action",
+      label: "mix → sampler (pre-master)",
+      command: "resample orbit 1",
+      help: "render every track on orbit 1 (the default bus) without the song master",
+    },
+    {
+      kind: "action",
+      label: "master → sampler",
+      command: "resample master",
+      help: "render the whole song through the master chain",
+    },
+  );
+  return nodes;
 }
 
 // ── tuning ────────────────────────────────────────────────────────────

@@ -833,6 +833,25 @@ How they combine with Strudel's controls and the 0.5 tempo map:
 
 `fitmode beats` or `tones` needs `bpm`, `len` or `fit` (validation error otherwise). `/bpm 174`, `/len 16` and `/fitmode beats` act on the focused sampler voice (name it when the track has several: `/bpm 174 brk`; `off` unsets; song tempo stays the bare word `tempo <n>`, and a bare `bpm <n>` without the slash also sets the song tempo, so only `/bpm` sets the sample's); `/fitmode auto` suggests a mode from the sound (crest factor above 5 and more than 2 onsets a second fit as `beats`, the rest as `tones`). The menu's Sound section lists `bpm`, `fitmode` and `len` on each voice, the agent's `fit_sample` tool takes them, and the SDK is `sample("samples/amen.wav", { bpm: 174, fitmode: "beats" })`.
 
+### Shift and fade (0.6.1)
+
+`shift <semitones>` moves a sampler voice's pitch without changing its length (−24..24). It is a phase-vocoder stretch by 2^(st/12) followed by a band-limited read-back at that rate (identity phase locking, Laroche and Dolson 1999; the same idea as Strudel's `stretch`), cached like a fit and applied after any `fitmode`, so a fitted loop can also be transposed. By default the formants move with the pitch, like a tape; `shift 7 formant keep` (stored `formant: 0`) keeps them where they were, so a voice or a guitar keeps its body, and `formant <n>` moves them `n` semitones on their own. Formants are kept with an envelope drawn through the harmonic peaks (a cepstral true envelope, Röbel and Rodet 2005, where no peak stands): measured on voices from 110 to 330 Hz, ±7 and +12 st land within 1 cent and keep the first formant peak within 3%. `shift 0` clears the shift but keeps a formant move (`shift 0 formant 3` moves only the formants); `shift off` clears both.
+
+`fade out 0.5` and `fade in 0.05` (Strudel `fadeTime` and `fadeInTime`, stored as `fadeTime` and `fadeInTime`, 0..2 s) shape a voice's start and end in place of the short default declick, and follow the fitted length when the voice is fitted. `fade off` clears both.
+
+Both act on the focused sampler voice (`shift 7 vox` names one). The menu's **Sound › Sample** voice rows list Shift, Formant, Fade in and Fade out, the agent's `set_sample` tool takes `shift`, `formant`, `fadeTime` and `fadeInTime`, and the SDK writes `sample("samples/vox.wav", { shift: 7, formant: 0, fadeTime: 0.5 })`.
+
+### Resample (0.6.1)
+
+`resample <track>|orbit <n>|master [section <name>|bars a-b] [post] [grain] [as <id>]` renders one track, one orbit or the whole mix to `tracks/<slug>/samples/<name>.wav` through the same offline renderer as `dawg render`, pins its sha256 and adds a track that plays it: a one-shot sampler track with one note across the range, or with `grain` a granular track (the `cloud` preset) holding one note there. The source stays as it is; mute it to hear only the copy. Like freezing and flattening in a DAW (Ableton's Resampling input, Bitwig's bounce in place), it turns a part into material you can chop, grain or shift.
+
+- The render is pre-master (the song master is left out) unless `post` is given or the source is `master`. The same score always gives the same bytes, so the sha256 is stable.
+- The new sampler voice plays the file at gain 2 with no fade in, so it reproduces the source stem within −60 dB.
+- The voice records where it came from in `from: { source: "track:lead" | "orbit:2" | "master", section?, bars?, score }`, `score` being the sha256 of the score it was rendered from. It is informational; the renderer never reads it.
+- Up to 600 s. `section` uses the song's sections; `bars 1-2` is 1-based and inclusive.
+
+**Project › Resample** lists each track, orbit and the mix with a `→ sampler` and `→ granular` row. The agent's `resample {source: track|orbit|master, trackId?, orbit?, section?, bars?, post?, grain?, as?}` tool does the same.
+
 Fitted windows are computed once and kept in a 64 MB least-recently-used cache of the played window only. Only the frames a note can reach are fitted (a held keyed or clipped note fits its length plus the release; a one-shot or looped voice fits the whole window). Renders and exports always compute them; in play mode a fit up to 8 s (of source or output, whichever is longer) is computed on the spot (under 160 ms), and a longer one stays silent with "fitting" in the status line until it is ready ("fit ready" then), never at the wrong pitch. Audition previews fit synchronously.
 
 Every voice starts and stops with a 1–3 ms fade, so cuts do not click. Without `bpm`, `len` or `fitmode` there is no time-stretch, as in Strudel's default. A sampler track goes through the same volume and pan automation, filter, delay and reverb as any other track and is a cached stem like any other; the stem's cache key includes each voice's sha256, so replacing a file re-renders it.
@@ -1027,6 +1046,21 @@ instrument: granular("cloud", { scan: 0.1, seed: 7 }),
 instrument: granular({ src: "synth:bell@72", grain: 0.08, shimmer: 0.3 }),
 instrument: granular("hold", { src: "samples/choir.wav", root: "A3" }),
 ```
+
+### Grain play (0.6.1)
+
+Four optional parameters make a granular track playable like an instrument rather than a texture. Each is absent by default, and absent renders byte-identically to 0.6.0.
+
+| Parameter | Values (default)                                                                               | What it does                                                                                                                                                                                                                                                                                                                                             |
+| --------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sync`    | `off` `1/64` `1/32` `1/16t` `1/16` `1/16d` `1/8t` `1/8` `1/8d` `1/4t` `1/4` `1/4d` `1/2` `1/1` | Grains start on a note-value grid that follows the song's tempo map (ramps included), as Ableton Granulator II and Output Portal sync their grain rate. `grain` still sets each grain's length; `overlap` is ignored. `jitter` moves onsets off the grid by up to a fraction of a step. Measured within 1 ms of 117.19 ms per 1/16 at 128 BPM.           |
+| `quant`   | `off` `scale` `chord`                                                                          | Snaps each grain's pitch offset (`pitch`, `detune`, `shimmer`) to the nearest pitch of the song key's scale, or of the pitch classes sounding on the song's other pitched tracks at that grain's onset, falling back to the scale when nothing sounds (scale quantise, as on Output Portal and Bitwig's Sampler). The played note itself is never moved. |
+| `mono`    | `on` `off` (off)                                                                               | One voice: a note that starts before the previous one ends (legato) retargets that voice's pitch and keeps its grain stream and head, so a melody glides through one cloud; a detached note starts a new voice and cuts the old one's tail.                                                                                                              |
+| `pedal`   | `on` `off` (off)                                                                               | The track's sustain pedal freezes the head while it is down (the cloud keeps playing the same spot), as on Mutable Clouds' freeze and the Hologram Microcosm hold.                                                                                                                                                                                       |
+
+`grain sync 1/16`, `grain quant scale`, `grain mono on` and `grain pedal on` set them (`off` unsets); **Sound › granular** lists them as rows, `set_granular` takes them in `params`, and the SDK writes `granular("cloud", { sync: "1/16", quant: "scale", mono: true })`.
+
+Lanes: every numeric parameter that moves well over time has a `grain-<param>` automation lane: `grain-pos`, `grain-scan`, `grain-grain`, `grain-overlap`, `grain-jitter`, `grain-spray`, `grain-pitch`, `grain-detune`, `grain-shimmer`, `grain-spread`, `grain-reverse`, `grain-repeat` and `grain-drift`. A lane replaces the parameter's value while it has points (`automate grain-pos points 0:0.1 8:0.9` sweeps the head across the source), is read every 32 frames, and latches per grain at its onset, so a block render equals a whole render. They are in **Mix & automation**'s lane picker on granular tracks and stored in `track.fxAutomation` like the effect lanes.
 
 ## Mallets and bells (modal)
 

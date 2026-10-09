@@ -120,6 +120,12 @@ export const SCORE_LIMITS = Object.freeze({
   maxSampleBpm: 400,
   /** Sampler `len` (window length in beats) bound. */
   maxSampleLenBeats: 1024,
+  /** Sampler `shift` and `formant` bound in semitones (0.6.1). */
+  maxSampleShift: 24,
+  /** Sampler `fadeTime`/`fadeInTime` bound in seconds (0.6.1). */
+  maxSampleFadeSeconds: 2,
+  /** Longest `resample` render in seconds (0.6.1). */
+  maxResampleSeconds: 600,
   /** Per sample file, enforced by the decoder and the import tool. */
   maxSampleFileBytes: 50 * 1024 * 1024,
   maxSampleSeconds: 600,
@@ -530,6 +536,38 @@ export type SampleRef = Readonly<{
    * through the song's tempo map. `fit` wins over `bpm`, `bpm` over `len`.
    */
   len?: number;
+  /**
+   * Optional (0.6.1): pitch shift in semitones (−24..24) at constant
+   * length, a cached phase-vocoder preprocess (`src/audio/dsp/shift.ts`).
+   * Applied after any fit, so it follows `fitmode`.
+   */
+  shift?: number;
+  /**
+   * Optional (0.6.1, with `shift`): formant shift in semitones (−24..24).
+   * Absent: formants follow the pitch (chipmunk); 0 keeps them in place.
+   */
+  formant?: number;
+  /** Optional (0.6.1, Strudel `fadeTime`): release fade in seconds (0..2). */
+  fadeTime?: number;
+  /** Optional (0.6.1, Strudel `fadeInTime`): attack fade in seconds (0..2). */
+  fadeInTime?: number;
+  /**
+   * Optional (0.6.1): where `resample` rendered this file from; kept for
+   * reference only (never read by the renderer).
+   */
+  from?: SampleProvenance;
+}>;
+
+/** `SampleRef.from`: the source of a resampled file (0.6.1). */
+export type SampleProvenance = Readonly<{
+  /** `track:<id>`, `orbit:<n>` or `master`. */
+  source: string;
+  /** Section name the render covered. */
+  section?: string;
+  /** Bars a..b (1-based, inclusive) the render covered. */
+  bars?: readonly [number, number];
+  /** sha256 of the canonical score JSON the file was rendered from. */
+  score: string;
 }>;
 
 /** Sampler `fitmode`: how a fitted window changes its time. */
@@ -2258,6 +2296,11 @@ export function normalizeSampleRef(input: unknown, name: string): SampleRef {
     bpm?: number;
     fitmode?: SampleFitMode;
     len?: number;
+    shift?: number;
+    formant?: number;
+    fadeTime?: number;
+    fadeInTime?: number;
+    from?: SampleProvenance;
   } = { src };
   if (input.sha256 !== undefined) {
     if (typeof input.sha256 !== "string" || !SHA256_HEX.test(input.sha256))
@@ -2461,7 +2504,98 @@ export function normalizeSampleRef(input: unknown, name: string): SampleRef {
       `${label} fitmode ${ref.fitmode} needs bpm, len or fit`,
       "invalid-track",
     );
+  if (input.shift !== undefined)
+    ref.shift = boundedNumber(
+      input.shift,
+      `${label} shift`,
+      -SCORE_LIMITS.maxSampleShift,
+      SCORE_LIMITS.maxSampleShift,
+    );
+  if (input.formant !== undefined)
+    ref.formant = boundedNumber(
+      input.formant,
+      `${label} formant`,
+      -SCORE_LIMITS.maxSampleShift,
+      SCORE_LIMITS.maxSampleShift,
+    );
+  if (input.fadeTime !== undefined)
+    ref.fadeTime = boundedNumber(
+      input.fadeTime,
+      `${label} fadeTime`,
+      0,
+      SCORE_LIMITS.maxSampleFadeSeconds,
+    );
+  if (input.fadeInTime !== undefined)
+    ref.fadeInTime = boundedNumber(
+      input.fadeInTime,
+      `${label} fadeInTime`,
+      0,
+      SCORE_LIMITS.maxSampleFadeSeconds,
+    );
+  if (input.from !== undefined)
+    ref.from = normalizeProvenance(input.from, `${label} from`);
   return Object.freeze(ref);
+}
+
+const PROVENANCE_SOURCE =
+  /^(?:track:[A-Za-z0-9_-]{1,64}|orbit:[0-9]{1,2}|master)$/;
+
+function normalizeProvenance(input: unknown, label: string): SampleProvenance {
+  if (
+    !isRecord(input) ||
+    typeof input.source !== "string" ||
+    !PROVENANCE_SOURCE.test(input.source) ||
+    typeof input.score !== "string" ||
+    !SHA256_HEX.test(input.score)
+  )
+    throw new ScoreValidationError(
+      `${label} must be { source: track:<id>|orbit:<n>|master, score: <sha256> }`,
+      "invalid-track",
+    );
+  const from: {
+    source: string;
+    section?: string;
+    bars?: [number, number];
+    score: string;
+  } = {
+    source: input.source,
+    score: input.score,
+  };
+  if (input.section !== undefined) {
+    if (
+      typeof input.section !== "string" ||
+      input.section.length === 0 ||
+      input.section.length > 64
+    )
+      throw new ScoreValidationError(
+        `${label} section must be a section name`,
+        "invalid-track",
+      );
+    from.section = input.section;
+  }
+  if (input.bars !== undefined) {
+    const bars = input.bars;
+    if (
+      !Array.isArray(bars) ||
+      bars.length !== 2 ||
+      !bars.every((b) => Number.isInteger(b) && b >= 1 && b <= 100_000) ||
+      bars[0] > bars[1]
+    )
+      throw new ScoreValidationError(
+        `${label} bars must be [a, b] with 1 ≤ a ≤ b`,
+        "invalid-track",
+      );
+    from.bars = [bars[0], bars[1]];
+  }
+  // Key order is fixed so the printed JSON is stable.
+  return Object.freeze({
+    source: from.source,
+    ...(from.section !== undefined ? { section: from.section } : {}),
+    ...(from.bars !== undefined
+      ? { bars: Object.freeze(from.bars) as readonly [number, number] }
+      : {}),
+    score: from.score,
+  });
 }
 
 /** Prefix of a pack sound reference in `SampleRef.src`. */

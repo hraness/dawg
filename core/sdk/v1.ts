@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.28.0";
+export const SDK_VERSION = "1.29.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -1283,6 +1283,26 @@ export type SampleSpec = Readonly<{
   fitmode?: "repitch" | "beats" | "tones";
   /** Window length in beats (SDK 1.20.0); `fit` wins over `bpm`, `bpm` over `len`. */
   len?: number;
+  /** Pitch shift in semitones at the same length (−24..24, SDK 1.29.0). */
+  shift?: number;
+  /** Formant shift in semitones with `shift` (SDK 1.29.0): absent follows the pitch, 0 keeps the formants. */
+  formant?: number;
+  /** Like Strudel `fadeTime`: release fade in seconds (0..2, SDK 1.29.0). */
+  fadeTime?: number;
+  /** Like Strudel `fadeInTime`: attack fade in seconds (0..2, SDK 1.29.0). */
+  fadeInTime?: number;
+  /** Where `resample` rendered the file from (informational, SDK 1.29.0). */
+  from?: SampleProvenanceSpec;
+}>;
+
+/** `SampleSpec.from` (SDK 1.29.0): the source of a resampled file. */
+export type SampleProvenanceSpec = Readonly<{
+  /** `track:<id>`, `orbit:<n>` or `master`. */
+  source: string;
+  section?: string;
+  bars?: readonly [number, number];
+  /** sha256 of the score the file was rendered from. */
+  score: string;
 }>;
 
 /** Result of `sampler()`; pass it as a track's `instrument`. */
@@ -1800,6 +1820,11 @@ function sampleSpec(value: string | SampleSpec, name: string): SampleSpec {
     bpm?: number;
     fitmode?: "repitch" | "beats" | "tones";
     len?: number;
+    shift?: number;
+    formant?: number;
+    fadeTime?: number;
+    fadeInTime?: number;
+    from?: SampleProvenanceSpec;
   } = { src: spec.src };
   if (spec.src.startsWith("pack:")) {
     if (spec.sha256 !== undefined)
@@ -1862,6 +1887,18 @@ function sampleSpec(value: string | SampleSpec, name: string): SampleSpec {
     out.fitmode = spec.fitmode;
   }
   if (spec.len !== undefined) out.len = finite(spec.len, `${name} len`);
+  if (spec.shift !== undefined) out.shift = finite(spec.shift, `${name} shift`);
+  if (spec.formant !== undefined)
+    out.formant = finite(spec.formant, `${name} formant`);
+  if (spec.fadeTime !== undefined)
+    out.fadeTime = finite(spec.fadeTime, `${name} fadeTime`);
+  if (spec.fadeInTime !== undefined)
+    out.fadeInTime = finite(spec.fadeInTime, `${name} fadeInTime`);
+  if (spec.from !== undefined) {
+    if (typeof spec.from !== "object" || spec.from === null)
+      throw new DawgSdkError(`${name} from must be an object`);
+    out.from = spec.from;
+  }
   return Object.freeze(out);
 }
 
@@ -3614,6 +3651,11 @@ export type ScoreSampleRef = Readonly<{
   bpm?: number;
   fitmode?: "repitch" | "beats" | "tones";
   len?: number;
+  shift?: number;
+  formant?: number;
+  fadeTime?: number;
+  fadeInTime?: number;
+  from?: SampleProvenanceSpec;
 }>;
 
 /** A stored track; optional fields are present only when set. */

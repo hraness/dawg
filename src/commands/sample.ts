@@ -62,6 +62,10 @@ export const SAMPLE_CONTROLS = Object.freeze({
   bpm: "the sample's own tempo: it follows the song's tempo map",
   fitmode: "how a fitted sample changes time: repitch, beats or tones",
   len: "the window lasts n beats of the song's tempo map",
+  shift: "pitch in semitones (−24..24), length unchanged",
+  formant: "formants in semitones with shift: 0 keeps the voice, off follows",
+  fadeTime: "release fade in seconds (0..2); alias fadeout",
+  fadeInTime: "attack fade in seconds (0..2); alias fadein",
 });
 export type SampleControl = keyof typeof SAMPLE_CONTROLS;
 
@@ -70,6 +74,8 @@ const SAMPLE_ALIASES: Readonly<Record<string, string>> = {
   loope: "loopEnd",
   legato: "clip",
   choke: "cut",
+  fadeout: "fadeTime",
+  fadein: "fadeInTime",
 };
 
 function controlName(raw: string): SampleControl | undefined {

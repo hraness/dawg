@@ -92,6 +92,20 @@ const rich = createScore({
             fitmode: "beats",
             len: 8,
           },
+          // Shift, fades and resample provenance (SDK 1.29.0).
+          up: {
+            src: "tracks/vox/samples/up.wav",
+            shift: 7,
+            formant: 0,
+            fadeInTime: 0.05,
+            fadeTime: 0.4,
+            from: {
+              source: "track:lead",
+              section: "verse",
+              bars: [1, 4],
+              score: "c".repeat(64),
+            },
+          },
         },
       },
     },

@@ -58,6 +58,12 @@ export type DecodedSample = Readonly<{
   channels: number;
   frames: number;
   mono: Float32Array;
+  /**
+   * The two channels of a stereo file (0.6.1): a resampled ref (one with
+   * `from`) plays them as stereo. Absent for mono and multichannel files.
+   */
+  left?: Float32Array;
+  right?: Float32Array;
 }>;
 
 export type SampleProblem = Readonly<{
@@ -324,6 +330,20 @@ function checkShape(sampleRate: number, channels: number, frames: number) {
 }
 
 /** Average the channels; the renderer plays sampler voices in mono before pan. */
+/** A stereo file's left and right channels (nothing for other shapes). */
+export function stereoChannels(
+  pcm: PcmData,
+): { left: Float32Array; right: Float32Array } | Record<string, never> {
+  if (pcm.channels !== 2) return {};
+  const left = new Float32Array(pcm.frames);
+  const right = new Float32Array(pcm.frames);
+  for (let frame = 0; frame < pcm.frames; frame += 1) {
+    left[frame] = pcm.data[frame * 2]!;
+    right[frame] = pcm.data[frame * 2 + 1]!;
+  }
+  return { left, right };
+}
+
 export function monoMix(pcm: PcmData): Float32Array {
   if (pcm.channels === 1) return pcm.data;
   const mono = new Float32Array(pcm.frames);
@@ -896,6 +916,7 @@ export class SampleLibrary implements SampleSource {
       channels: pcm.channels,
       frames: pcm.frames,
       mono: monoMix(pcm),
+      ...stereoChannels(pcm),
     });
     this.remember(sample);
     return sample;
@@ -943,6 +964,7 @@ export class SampleLibrary implements SampleSource {
       channels: pcm.channels,
       frames: pcm.frames,
       mono: monoMix(pcm),
+      ...stereoChannels(pcm),
     });
     this.remember(sample);
     return sample;
@@ -966,7 +988,10 @@ export class SampleLibrary implements SampleSource {
   }
 
   private remember(sample: DecodedSample): void {
-    const bytes = sample.mono.byteLength;
+    const bytes =
+      sample.mono.byteLength +
+      (sample.left?.byteLength ?? 0) +
+      (sample.right?.byteLength ?? 0);
     this.memory.set(sample.sha256, { sample, bytes });
     this.memoryBytes += bytes;
     for (const [sha, entry] of this.memory) {
