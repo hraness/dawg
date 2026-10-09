@@ -224,6 +224,18 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         command: "/sample [<path> [as <voice>]]",
         summary: "add a sample voice · list voices",
       },
+      {
+        command: "/bpm <n> [<voice>]",
+        summary: "the sample's own tempo · it follows the song's tempo",
+      },
+      {
+        command: "/fitmode [repitch|beats|tones|auto] [<voice>]",
+        summary: "how it fits · alone suggests one from the sound",
+      },
+      {
+        command: "/len <beats> [<voice>]",
+        summary: "the sample lasts n beats of the song",
+      },
     ],
   },
   {
@@ -611,6 +623,10 @@ export const USAGE: Readonly<Record<string, string>> = {
   sample:
     "/sample <path> [as <voice>] · /sample set <voice> <control> <value>… · /sample set brk fit on clip 1",
   samples: "/sample · lists the focused track's voices",
+  bpm: "/bpm <n> [<voice>] · /bpm 174 · /bpm off · song tempo is /tempo <bpm>",
+  fitmode:
+    "/fitmode [repitch|beats|tones|auto|off] [<voice>] · /fitmode beats · /fitmode auto brk",
+  len: "/len <beats> [<voice>] · /len 16 · /len off",
   view: "/view focus | all",
   transcript: "/transcript",
   log: "/transcript",

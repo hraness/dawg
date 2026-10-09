@@ -94,9 +94,12 @@ import {
   samplerTarget,
   voiceNameFrom,
 } from "./commands/sample.ts";
+import { applyFitCommand, fitVoice, parseFitCommand } from "./commands/fit.ts";
+import { suggestFitMode } from "./audio/dsp/onset.ts";
 import {
   SampleLibrary,
   hasSamplerTracks,
+  sampleKey,
   type SampleBank,
   type SampleProblem,
 } from "./audio/samples.ts";
@@ -267,6 +270,7 @@ function parsesLocally(text: string): boolean {
     parseKitCommand,
     parsePackCommand,
     parseSampleCommand,
+    parseFitCommand,
     parseWavetableCommand,
     parseTimeCommand,
     parseTuningCommand,
@@ -1672,6 +1676,8 @@ async function submit(prompt: string): Promise<string | Receipt> {
   }
   const sample = parseSampleCommand(command);
   if (sample) return sampleCommand(sample);
+  const fit = parseFitCommand(command);
+  if (fit) return fitCommand(fit);
   const pack = parsePackCommand(command);
   if (pack) return packCommand(pack);
   const pattern = parsePatternCommand(command);
@@ -2171,6 +2177,34 @@ async function tuningCommand(command: TuningCommand): Promise<Receipt> {
   if (result.next && result.kind)
     await commitScore(result.next, result.kind, result.payload);
   return result.ok ? ok(result.message) : fail(result.message);
+}
+
+/** `/fitmode`, `/bpm`, `/len` on the focused sampler voice (0.6). */
+async function fitCommand(
+  command: NonNullable<ReturnType<typeof parseFitCommand>>,
+): Promise<Receipt> {
+  let suggested: "beats" | "tones" | undefined;
+  if (command.control === "fitmode" && command.value === undefined) {
+    const target = fitVoice(score, requestedTrack, command.voice);
+    if ("error" in target) return fail(target.error);
+    const decoded = liveSampleBank?.voices.get(
+      sampleKey(requestedTrack, target.voice),
+    );
+    if (!decoded)
+      return warn(
+        "fit · the sample is still loading · fitmode repitch|beats|tones",
+      );
+    suggested = suggestFitMode(decoded.mono, decoded.sampleRate);
+  }
+  const result = applyFitCommand(score, requestedTrack, command, suggested);
+  if (!result.ok) return fail(result.message);
+  await commitScore(result.next, "sample.set", { trackId: requestedTrack });
+  await projectSync?.flushScore();
+  return ok(
+    suggested
+      ? `${result.message} · suggested from the sound (${suggested === "beats" ? "hits" : "held tones"})`
+      : result.message,
+  );
 }
 
 async function sampleCommand(

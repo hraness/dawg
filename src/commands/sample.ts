@@ -59,6 +59,9 @@ export const SAMPLE_CONTROLS = Object.freeze({
   accelerate: "rate ramps by this × over the voice (−8..8)",
   squiz: "pitch-raise ratio per zero-crossing cycle (1..32)",
   cut: "choke group name: a new hit stops the previous one",
+  bpm: "the sample's own tempo: it follows the song's tempo map",
+  fitmode: "how a fitted sample changes time: repitch, beats or tones",
+  len: "the window lasts n beats of the song's tempo map",
 });
 export type SampleControl = keyof typeof SAMPLE_CONTROLS;
 
