@@ -6,11 +6,15 @@
  * then pass the track's body and sympathetic strings, the preset trim and
  * the track volume, before the track's effects (wav.ts).
  */
-import { parseKey, scaleOf } from "../../../core/chords.ts";
+import { parseKey, scaleSteps } from "../../../core/chords.ts";
 import type { PerformedNote } from "../../../core/expression.ts";
 import type { FxLane } from "../../../core/fx.ts";
 import type { Track } from "../../../core/score.ts";
-import { resolveString, type StringValues } from "../../../core/strings.ts";
+import {
+  resolveString,
+  stringPresetTableText,
+  type StringValues,
+} from "../../../core/strings.ts";
 import { noteHz } from "../../../core/tuning.ts";
 import { interpolateAutomation } from "../effects/common.ts";
 import { seedHash, unit } from "../dsp/rng.ts";
@@ -182,11 +186,15 @@ export function renderStrings(
       // Restrike: the same key damps its previous string.
       for (const v of voices)
         if (v.pitch === note.pitch) v.string.releaseAt(start - v.start);
-      const sounding = voices.filter((v) => !v.string.done);
-      const groups = new Set(sounding.map((v) => v.group));
+      // Voice cap: count only chords not yet released, so a releasing
+      // chord never shields the newer ringing ones from the cap.
+      const held = voices.filter(
+        (v) => !v.string.done && v.string.offAt > start - v.start,
+      );
+      const groups = new Set(held.map((v) => v.group));
       if (groups.size >= cap) {
         const oldest = Math.min(...groups);
-        for (const v of sounding)
+        for (const v of held)
           if (v.group === oldest) v.string.releaseAt(start - v.start);
       }
       const { spec, velocity } = noteSpec(values, note, track);
@@ -278,13 +286,13 @@ function finishTrack(
     const mono = R ? new Float64Array(L.length) : L;
     if (R)
       for (let i = 0; i < L.length; i += 1) mono[i] = 0.5 * (L[i]! + R[i]!);
+    // The key's own scale (a raga's or maqam's, quarter tones included),
+    // not the chord mode it harmonizes with.
     const key = parseKey(context.score.key);
     const root = 48 + (key?.tonic ?? 0);
-    const scale = key
-      ? scaleOf(key).map((pc) => (((pc - key.tonic) % 12) + 12) % 12)
-      : [0, 2, 4, 5, 7, 9, 11];
-    const hzs = symKeys(values.symtune as string, root, scale).map((k) =>
-      noteHz(k, undefined, context.tuning),
+    const steps = key ? scaleSteps(key) : [0, 2, 4, 5, 7, 9, 11];
+    const hzs = symKeys(values.symtune as string, root, steps).map((k) =>
+      noteHz(k.key, k.cents || undefined, context.tuning),
     );
     wet = sympathetic(mono, hzs, 0.02 * sym, SYM_DECAY, 0.3, sr);
   }
@@ -328,6 +336,18 @@ export function stringStereo(track: Track): boolean {
   return (values.spread as number) > 0 && strings > 1;
 }
 
+/** Digest of the preset table text (FNV-1a, hex), computed once. */
+const STRING_PRESET_DIGEST = `strings:${fnv1a(stringPresetTableText())}`;
+
+function fnv1a(text: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+
 export const STRING_ENGINE: InstrumentEngine = Object.freeze({
   id: "string",
   field: "string" as keyof Track,
@@ -335,4 +355,7 @@ export const STRING_ENGINE: InstrumentEngine = Object.freeze({
     renderStrings(dry, dryR, notes, track, context),
   tailSeconds: stringTailSeconds,
   stereo: stringStereo,
+  // The preset table joins the stem and live keys: a code-side preset
+  // retune never serves a stem rendered from the old table.
+  assetDigests: () => [STRING_PRESET_DIGEST],
 });

@@ -17,7 +17,7 @@ import {
   type Track,
 } from "../../core/score.ts";
 import { bpmAtTick } from "../../core/tempo.ts";
-import { sampleKey, type SampleBank } from "./samples.ts";
+import { EMPTY_SAMPLE_BANK, sampleKey, type SampleBank } from "./samples.ts";
 import { RENDER_CHANNELS, renderScorePcm } from "./wav.ts";
 import { engineFor } from "./instruments.ts";
 import { liveFitPending, withLiveFit } from "./fit.ts";
@@ -77,6 +77,7 @@ export class LiveSynth {
     );
     if (!track) return undefined;
     const { score } = request;
+    const liveEngine = engineFor(track);
     const bpm =
       request.tick === undefined
         ? score.tempoBpm
@@ -105,6 +106,16 @@ export class LiveSynth {
       ...(score.tuning || track.tuning
         ? [score.tuning ?? null, score.key]
         : []),
+      // A 0.6 engine's assets, and the key it may tune to.
+      ...(liveEngine
+        ? [
+            liveEngine.assetDigests?.(
+              track,
+              request.samples ?? EMPTY_SAMPLE_BANK,
+            ) ?? [],
+            score.key ?? null,
+          ]
+        : []),
     ]);
     const hit = this.cache.get(key);
     if (hit) {
@@ -125,7 +136,7 @@ export class LiveSynth {
       ticksPerBeat: score.ticksPerBeat,
       // The song tuning, and the key whose tonic is the default root.
       ...(score.tuning ? { tuning: score.tuning } : {}),
-      ...(score.tuning || track.tuning ? { key: score.key } : {}),
+      ...(score.tuning || track.tuning || liveEngine ? { key: score.key } : {}),
       tracks: [liveTrack(track)],
       notes: [
         {
@@ -139,8 +150,7 @@ export class LiveSynth {
       ],
     });
     // A 0.6 engine's ring-out sets the one-note length and the key release.
-    const engine = engineFor(track);
-    const tail = engine ? Math.max(0, engine.tailSeconds(track)) : 0;
+    const tail = liveEngine ? Math.max(0, liveEngine.tailSeconds(track)) : 0;
     // Fitted sample windows over 8 s fit in the background (silent until
     // ready, never at the wrong pitch); shorter ones fit synchronously.
     const audio = withLiveFit(() =>
@@ -154,7 +164,7 @@ export class LiveSynth {
     const rendered: LiveNotePcm = {
       pcm: audio.pcm.subarray(0, frames * RENDER_CHANNELS),
       frames,
-      ...(engine
+      ...(liveEngine
         ? { releaseSeconds: Math.min(tail, MAX_LIVE_NOTE_SECONDS) }
         : {}),
     };

@@ -1,4 +1,4 @@
-import { instrumentForWord } from "../../core/instruments.ts";
+import { resolveInstrumentWord } from "../../core/instruments.ts";
 import { pitchToMidi } from "../../core/pitch.ts";
 import { SCORE_LIMITS } from "../../core/score.ts";
 
@@ -35,6 +35,7 @@ export type AgentOperation =
       type: "track";
       patch: {
         instrument?: string;
+        string?: { preset: string };
         muted?: boolean;
         volume?: number;
         pan?: number;
@@ -75,11 +76,10 @@ export function parsePrompt(prompt: string): AgentOperation | undefined {
   const instrument = text.match(
     /^(?:instrument|sound|voice)\s+([a-z0-9._ -]{1,64})$/,
   );
-  if (instrument)
-    return {
-      type: "track",
-      patch: { instrument: instrumentForWord(instrument[1]!.trim()) },
-    };
+  if (instrument) {
+    const word = instrument[1]!.trim();
+    return { type: "track", patch: instrumentPatch(word) };
+  }
   if (/^(?:mute|silence)\b/.test(text))
     return { type: "track", patch: { muted: true } };
   if (/^(?:unmute|unsilence)\b/.test(text))
@@ -183,4 +183,23 @@ export function parsePrompt(prompt: string): AgentOperation | undefined {
     velocity: 0.8,
     ...(offset !== 0 ? { cents: offset } : {}),
   };
+}
+
+/**
+ * The track patch an instrument word means: a 0.6 resolver word for the
+ * string engine also writes its preset (`instrument nylon` plays the nylon
+ * string); every other word stores the instrument as before.
+ */
+export function instrumentPatch(word: string): {
+  instrument: string;
+  string?: { preset: string };
+} {
+  const meaning = resolveInstrumentWord(word);
+  if (!meaning) return { instrument: word };
+  if (meaning.field === "string" && meaning.preset)
+    return {
+      instrument: meaning.instrument,
+      string: { preset: meaning.preset },
+    };
+  return { instrument: meaning.instrument };
 }

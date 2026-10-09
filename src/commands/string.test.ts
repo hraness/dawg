@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createScore } from "../../core/score.ts";
 import { STRING_PRESET_NAMES } from "../../core/strings.ts";
+import { parsePrompt } from "../agent/ops.ts";
 import { findAgentTool } from "../agent/tools.ts";
 import { nearestCommand } from "./help.ts";
 import { applyStringCommand, parseStringCommand } from "./string.ts";
@@ -145,5 +146,73 @@ describe("set_string agent tool", () => {
       /no parameter wobble/,
     );
     expect(() => tool.plan({}, context)).toThrow(/needs preset/);
+  });
+});
+
+describe("instrument words reach the string engine", () => {
+  const context = {
+    score: score(),
+    focusedTrackId: "gtr",
+    revision: 1,
+    newNoteId: (_trackId: string, index: number) => `n${index}`,
+  };
+
+  test("`instrument nylon` writes the string preset", () => {
+    expect(parsePrompt("instrument nylon")).toEqual({
+      type: "track",
+      patch: { instrument: "string", string: { preset: "nylon" } },
+    });
+    expect(parsePrompt("sound koto")).toEqual({
+      type: "track",
+      patch: { instrument: "string", string: { preset: "koto" } },
+    });
+    // Legacy words keep their voice and write no string field.
+    expect(parsePrompt("instrument sitar")).toEqual({
+      type: "track",
+      patch: { instrument: "sitar" },
+    });
+  });
+
+  test("set_instrument and create_track accept string words", () => {
+    const plan = findAgentTool("set_instrument")!.plan(
+      { instrument: "nylon" },
+      context,
+    );
+    expect(plan.kind === "score" && plan.operations).toEqual([
+      {
+        type: "updateTrack",
+        trackId: "gtr",
+        patch: { instrument: "string", string: { preset: "nylon" } },
+      },
+    ]);
+    const bare = findAgentTool("set_instrument")!.plan(
+      { instrument: "string" },
+      context,
+    );
+    expect(bare.kind === "score" && bare.operations).toEqual([
+      {
+        type: "updateTrack",
+        trackId: "gtr",
+        patch: { instrument: "string", string: { preset: "nylon" } },
+      },
+    ]);
+    const created = findAgentTool("create_track")!.plan(
+      { id: "harp", instrument: "harp" },
+      context,
+    );
+    expect(created.kind === "score" && created.operations).toEqual([
+      {
+        type: "addTrack",
+        track: {
+          id: "harp",
+          name: "harp",
+          instrument: "string",
+          string: { preset: "harp" },
+        },
+      },
+    ]);
+    expect(() =>
+      findAgentTool("set_instrument")!.plan({ instrument: "kazoo" }, context),
+    ).toThrow(/instrument must be one of/);
   });
 });

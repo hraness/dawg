@@ -155,18 +155,50 @@ export function applyBody(x: Float64Array, body: Body, sr: number): void {
 
 export type SymTune = "scale" | "open" | "drone";
 
-/** Sympathetic string keys per tuning mode (`scale`: the song key). */
+/** A sympathetic string: a MIDI key plus cents (quarter tones). */
+export interface SymKey {
+  key: number;
+  cents: number;
+}
+
+/**
+ * Sympathetic string keys per tuning mode. `steps` is the song key's scale
+ * in semitones above the tonic (fractional for quarter tones). `scale`
+ * tunes up to 13 strings to it; `drone` is Sa-Pa-Sa, or Sa-Ma-Sa (else
+ * Sa-Ni-Sa) when the scale has no Pa; `open` is guitar EADGBE.
+ */
 export function symKeys(
   mode: string,
   root: number,
-  scale: readonly number[],
-): number[] {
-  if (mode === "open") return [40, 45, 50, 55, 59, 64];
-  if (mode === "drone") return [root - 12, root - 5, root];
-  const keys: number[] = [];
-  for (let k = root; k <= root + 19; k += 1)
-    if (scale.includes((k - root) % 12)) keys.push(k);
-  return keys.slice(0, 13);
+  steps: readonly number[],
+): SymKey[] {
+  const at = (step: number): SymKey => {
+    const whole = Math.round(step);
+    return { key: root + whole, cents: Math.round((step - whole) * 1000) / 10 };
+  };
+  if (mode === "open")
+    return [40, 45, 50, 55, 59, 64].map((key) => ({ key, cents: 0 }));
+  if (mode === "drone") {
+    const has = (n: number) => steps.some((s) => Math.abs(s - n) < 0.01);
+    const second = has(7)
+      ? at(-5)
+      : has(5)
+        ? at(-7)
+        : has(6)
+          ? at(-6)
+          : has(11)
+            ? at(-1)
+            : at(-5);
+    return [at(-12), second, at(0)];
+  }
+  const sorted = [...steps]
+    .map((s) => ((s % 12) + 12) % 12)
+    .sort((a, b) => a - b);
+  const keys: SymKey[] = [];
+  for (let octave = 0; octave <= 12 && keys.length < 13; octave += 12)
+    for (const step of sorted)
+      if (step + octave <= 19 && keys.length < 13) keys.push(at(step + octave));
+  return keys;
 }
 
 /**

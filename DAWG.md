@@ -708,7 +708,7 @@ All arithmetic is float64 in a fixed order with no randomness, so the same input
 
 `instrument: "string"` with a `string` field plays a physical model of a plucked or struck string (`src/audio/strings/`): an extended Karplus-Strong loop (Jaffe and Smith 1983) tuned exactly with a first-order Thiran allpass, a one-pole loss designed from two decay times (Välimäki et al. 1996), an allpass dispersion cascade for stiff strings (Van Duyne and Smith 1994), a raised-cosine pluck shaped by the pluck-position comb, a modal body, a sympathetic string bank and seeded unison courses. Pitches come from the 0.5 tuning tables and pitch curves (bends, glides, cents), so a string track plays 19-EDO or just intonation and follows `bend`. Bare legacy words (`sitar`, `ebass`, `pluck`, `cello`) keep their old tone; the engine runs only when the track has a `string` field.
 
-`string sitar` (or `track sitar` style words through the instrument resolver: `nylon`, `steel`, `harpsichord`, `koto` …) picks one of 22 presets, each a full parameter set frozen by a hash test:
+`string sitar`, or `instrument nylon` / `instrument koto` with the resolver words (`nylon`, `steel`, `harpsichord`, `koto` …; the bare words `sitar`, `ebass` and `pluck` keep their legacy voices), picks one of 22 presets, each a full parameter set frozen by a hash test:
 
 | Preset                                  | Sound                                                                  |
 | --------------------------------------- | ---------------------------------------------------------------------- |
@@ -719,7 +719,7 @@ All arithmetic is float64 in a fixed order with no randomness, so the same input
 | `oud` `setar` `tar` `santur` `dulcimer` | fretless oud, Persian setar and tar, santur and hammered dulcimer      |
 | `koto` `banjo` `tres` `requinto`        | koto, 5-string banjo, Cuban tres, bachata requinto                     |
 
-Aliases: `classical` (nylon), `acoustic` and `guitar` (steel), `12string` (jangle), `bassguitar` and `fender` (ebass), `doublebass` (upright), `cembalo` (harpsichord), `hammered` (dulcimer), `sehtar` (setar).
+Preset aliases (after `string`): `classical` (nylon), `acoustic` and `guitar` (steel), `12string` (jangle), `bassguitar` and `fender` (ebass), `doublebass` (upright), `cembalo` (harpsichord), `hammered` (dulcimer), `sehtar` (setar).
 
 | Parameter                  | Range                    | Meaning                                                                     |
 | -------------------------- | ------------------------ | --------------------------------------------------------------------------- |
@@ -739,6 +739,8 @@ Aliases: `classical` (nylon), `acoustic` and `guitar` (steel), `12string` (jangl
 | `vib` `vibmod` `vibdelay`  | Hz, st, s                | preset vibrato (a note's own vibrato wins)                                  |
 | `release` `voices` `gain`  | s, 1..32, 0..2           | damping after note-off, polyphony cap, level                                |
 
+Sympathetic strings follow the song key's own scale, so `key C bhairav` tunes the taraf to Bhairav (shuddha Ni, komal Re and Dha) and a maqam key keeps its quarter tones. The `drone` tuning is Sa-Pa-Sa, or Sa-Ma-Sa (tivra Ma when the scale has it, else Sa-Ni-Sa) in a raga without Pa such as Marwa. Changing the key re-renders a string track's stem.
+
 `ring`, `damp`, `pos`, `bright`, `mute`, `buzz`, `vib`, `vibmod` and `gain` automate as `string-<param>` lanes (`automate string-buzz points 0:0 4:0.8`). Measured on the renderer: every fifth key within 0.1 cent of the tuning table (sitar with buzz within 1 cent above C4), the fundamental's decay within 10% of `ring` at every fifth key, a C-major triad at velocity 0.8 near -6 dBFS for every preset, and under 20 ms of render per voice-second.
 
 ```ts
@@ -751,7 +753,7 @@ instrument: stringed("sitar", { buzz: 0.8, sym: 0.5 }),
 | `string <preset>`                          | make the focused track that string instrument                     |
 | `string <param> <value> [<param> <value>]` | override parameters (`string buzz 0.8 sym 0.5`, `string decay 6`) |
 | `string <param> off` · `string reset`      | back to the preset's value · drop every override                  |
-| `string off`                               | back to the track's synth voice                                   |
+| `string off`                               | back to the legacy `pluck` voice                                  |
 
 The menu has the presets under Sound › browse sounds › Strings and every string parameter in Sound › Parameters on a string track (left/right adjust, `x` resets, space auditions with staged A/B). The agent's `set_string {trackId?, preset?, params?, reset?, off?}` runs the same command. SDK 1.20.0: `stringed(preset, params)` as a track's `instrument`, or `track({ instrument: "string", string: { preset: "koto", ring: 4 } })`; the printer writes `stringed(...)` back.
 

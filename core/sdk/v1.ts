@@ -4001,7 +4001,8 @@ const LEGACY_WORDS: readonly string[] = Object.freeze([
 const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
   // strings (f06-strings): plucked presets of the string engine. Legacy
   // sitar/ebass keep today's voice (`string preset sitar` reaches the
-  // engine), jangle is the rig alias (12string reaches the preset) and
+  // engine), jangle is the rig alias (the guitar lane maps its 12string to the
+  // preset; `string jangle` reaches it) and
   // upright is the keys lane's piano (doublebass reaches the preset).
   { word: "nylon", instrument: "string", field: "string", preset: "nylon" },
   { word: "steel", instrument: "string", field: "string", preset: "steel" },
@@ -4043,7 +4044,6 @@ const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
   },
   { word: "acoustic", instrument: "string", field: "string", preset: "steel" },
   { word: "classical", instrument: "string", field: "string", preset: "nylon" },
-  { word: "12string", instrument: "string", field: "string", preset: "jangle" },
   {
     word: "bassguitar",
     instrument: "string",

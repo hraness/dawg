@@ -384,7 +384,7 @@ export const HELP_GUIDE: readonly HelpSection[] = [
     entries: [
       {
         command: "ctrl-k › Sound",
-        summary: "instrument, envelope, filter, wavetable",
+        summary: "instrument, strings, envelope, filter, wavetable",
       },
       { command: "ctrl-k › Effects", summary: "delay, reverb, distortion …" },
       {
