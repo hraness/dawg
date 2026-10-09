@@ -1,3 +1,5 @@
+import { portableSchema } from "./portable-schema.ts";
+import { midiToPitch } from "../../core/pitch.ts";
 import { isGuideInstrument, vocalChainPatch } from "../../core/clips.ts";
 import { INSTRUMENT_WORDS } from "../../core/instruments.ts";
 import type { TrackVocoder } from "../../core/vocoder.ts";
@@ -404,7 +406,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   {
     name: "update_notes",
     description:
-      "Move, resize, transpose, re-velocity or detune existing notes by id. Times are in beats.",
+      "Move, resize, transpose, re-velocity or detune existing notes by id. Times are in beats. To transpose, prefer transpose (semitones relative to the note's current pitch, e.g. 2 up a whole step, -12 down an octave) over an absolute pitch.",
     parameters: {
       type: "object",
       properties: {
@@ -424,6 +426,13 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
                   { type: "string", maxLength: 4 },
                 ],
               },
+              transpose: {
+                type: "integer",
+                minimum: -127,
+                maximum: 127,
+                description:
+                  "Semitones relative to the current pitch (not with pitch)",
+              },
               velocity: { type: "number", minimum: 0, maximum: 1 },
               cents: {
                 type: "number",
@@ -442,6 +451,9 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
     },
     plan(args, context) {
       const tpb = context.score.ticksPerBeat;
+      // Pitch changes as before→after, so the model sees what it did and
+      // does not transpose again from the refreshed brief.
+      const moves: string[] = [];
       const operations = list(args, "updates", 1, MAX_NOTES_PER_CALL).map(
         (value, index): ScoreOperation => {
           const update = record(value, `updates[${index}]`);
@@ -459,8 +471,41 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
           });
           if (duration !== undefined)
             patch.durationTicks = Math.max(1, Math.round(duration * tpb));
+          const before = context.score.notes.find((n) => n.id === noteId);
           if (update.pitch !== undefined)
             patch.pitch = pitch(update.pitch, `updates[${index}].pitch`);
+          // Small models fill every field: transpose 0 beside a pitch means
+          // no shift, and a pitch that equals the transposed note agrees.
+          if (
+            patch.pitch !== undefined &&
+            update.transpose !== undefined &&
+            update.transpose !== 0 &&
+            patch.pitch !== (before?.pitch ?? 0) + Number(update.transpose)
+          )
+            throw new ToolArgumentError(
+              `updates[${index}] sets both pitch and transpose; use one`,
+            );
+          if (update.transpose !== undefined && patch.pitch === undefined) {
+            const shift = update.transpose;
+            if (typeof shift !== "number" || !Number.isInteger(shift))
+              throw new ToolArgumentError(
+                `updates[${index}].transpose must be whole semitones`,
+              );
+            const moved = (before?.pitch ?? 0) + shift;
+            if (moved < 0 || moved > 127)
+              throw new ToolArgumentError(
+                `updates[${index}].transpose moves ${noteId} to MIDI ${moved}, outside 0..127`,
+              );
+            patch.pitch = moved;
+          }
+          if (
+            patch.pitch !== undefined &&
+            before &&
+            patch.pitch !== before.pitch
+          )
+            moves.push(
+              `${noteId} ${midiToPitch(before.pitch)}→${midiToPitch(patch.pitch)}`,
+            );
           const velocity = optionalNumber(update, "velocity", {
             min: 0,
             max: 1,
@@ -479,7 +524,11 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
       return {
         kind: "score",
         operations,
-        summary: `~${operations.length} note${operations.length === 1 ? "" : "s"}`,
+        summary: `~${operations.length} note${operations.length === 1 ? "" : "s"}${
+          moves.length === 0
+            ? ""
+            : ` · pitch ${moves.slice(0, 8).join(", ")}${moves.length > 8 ? ` +${moves.length - 8} more` : ""}`
+        }`,
       };
     },
   },
@@ -2084,7 +2133,7 @@ export function chatTools(
     function: {
       name: tool.name,
       description: tool.description,
-      parameters: tool.parameters,
+      parameters: portableSchema(tool.parameters),
     },
   }));
 }

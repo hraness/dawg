@@ -1,0 +1,59 @@
+{
+  "model": "spacexai/grok-4.1-fast-non-reasoning",
+  "task": "files-key",
+  "pass": true,
+  "requests": [
+    {
+      "events": [
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "id": "call_13808153",
+          "name": "edit_file",
+          "arguments": ""
+        },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "arguments": "{\"new\":\"A minor\",\"old\":\"C major\",\"path\":\"song.ts\"}"
+        },
+        {
+          "type": "usage",
+          "inputTokens": 20969,
+          "outputTokens": 48,
+          "cachedInputTokens": 20947,
+          "costUsd": 0.00107575
+        },
+        { "type": "finish", "reason": "tool_calls" }
+      ],
+      "firstTokenMs": 829.9675829999615,
+      "totalMs": 850.5345000000088
+    },
+    {
+      "events": [
+        { "type": "text", "delta": "Updated" },
+        { "type": "text", "delta": " song" },
+        { "type": "text", "delta": ".ts" },
+        { "type": "text", "delta": " to" },
+        { "type": "text", "delta": " set" },
+        { "type": "text", "delta": " the" },
+        { "type": "text", "delta": " song" },
+        { "type": "text", "delta": " key" },
+        { "type": "text", "delta": " to" },
+        { "type": "text", "delta": " A" },
+        { "type": "text", "delta": " minor" },
+        { "type": "text", "delta": "." },
+        {
+          "type": "usage",
+          "inputTokens": 21091,
+          "outputTokens": 12,
+          "cachedInputTokens": 20463,
+          "costUsd": 0.00115475
+        },
+        { "type": "finish", "reason": "stop" }
+      ],
+      "firstTokenMs": 585.8579170000157,
+      "totalMs": 651.3023749999702
+    }
+  ]
+}

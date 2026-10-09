@@ -1,0 +1,50 @@
+{
+  "model": "mistral/mistral-small",
+  "task": "track-by-name",
+  "pass": false,
+  "requests": [
+    {
+      "events": [
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "id": "rqnryuppe",
+          "name": "update_notes",
+          "arguments": ""
+        },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "arguments": "{\"updates\": [{\"noteId\": \"s1\", \"transpose\": 7}]}"
+        },
+        {
+          "type": "usage",
+          "inputTokens": 26070,
+          "outputTokens": 27,
+          "cachedInputTokens": 2928,
+          "costUsd": 0.00353142
+        },
+        { "type": "finish", "reason": "tool_calls" }
+      ],
+      "firstTokenMs": 1926.7810840000166,
+      "totalMs": 1926.8489590000245
+    },
+    {
+      "events": [
+        { "type": "text", "delta": "Trans" },
+        { "type": "text", "delta": "posed the piano up" },
+        { "type": "text", "delta": " a perfect fifth." },
+        {
+          "type": "usage",
+          "inputTokens": 26174,
+          "outputTokens": 10,
+          "cachedInputTokens": 2960,
+          "costUsd": 0.0035325
+        },
+        { "type": "finish", "reason": "stop" }
+      ],
+      "firstTokenMs": 1198.6937909999979,
+      "totalMs": 1238.6490829999675
+    }
+  ]
+}

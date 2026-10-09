@@ -484,16 +484,17 @@ export async function loadLiveCatalog(
  * loop; see models.test.ts, which keeps these in step with the code):
  *
  * - system prompt ≈ 11 KB, tool schemas ≈ 70 KB, brief ≈ 1.6 KB typical
- *   (capped at 12 KiB), user request ≈ 0.1 KB → ≈ 83 KB ≈ 20,600 tokens
- *   per request at ~4 bytes per token;
+ *   (capped at 12 KiB), user request ≈ 0.1 KB → ≈ 83 KB per request. JSON
+ *   schemas tokenize at about 3 bytes per token: the agent eval
+ *   (bench/agent-eval) measured 26,500 input tokens per request on Claude;
  * - about 2 requests per prompt (tool calls, then a short reply), the second
  *   also carrying the first step's tool calls and results (≈ 0.6 KB);
  * - output ≈ 450 tokens of tool-call arguments and ≈ 150 of reply.
  *
- * So ≈ 41,400 input and ≈ 600 output tokens per prompt.
+ * So ≈ 53,000 input and ≈ 600 output tokens per prompt.
  */
 export const TYPICAL_PROMPT = Object.freeze({
-  inputTokens: 41_400,
+  inputTokens: 53_000,
   outputTokens: 600,
 });
 

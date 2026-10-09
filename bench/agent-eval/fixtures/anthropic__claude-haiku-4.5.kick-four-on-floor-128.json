@@ -1,0 +1,95 @@
+{
+  "model": "anthropic/claude-haiku-4.5",
+  "task": "kick-four-on-floor-128",
+  "pass": false,
+  "requests": [
+    {
+      "events": [
+        { "type": "text", "delta": "I'll set" },
+        { "type": "text", "delta": " the" },
+        { "type": "text", "delta": " tempo" },
+        { "type": "text", "delta": " to 128 BP" },
+        { "type": "text", "delta": "M and add a four-" },
+        { "type": "text", "delta": "on-the-floor kick" },
+        { "type": "text", "delta": " pattern" },
+        { "type": "text", "delta": "." },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "id": "toolu_0197Zj2hZCC3vu764Hr7SPQS",
+          "name": "set_tempo",
+          "arguments": ""
+        },
+        { "type": "tool-delta", "index": 0, "arguments": "{\"bpm\": 128" },
+        { "type": "tool-delta", "index": 0, "arguments": "}" },
+        {
+          "type": "tool-delta",
+          "index": 1,
+          "id": "toolu_01WehWTT3nWvLtSxN1wFEhnV",
+          "name": "set_rhythm",
+          "arguments": ""
+        },
+        {
+          "type": "tool-delta",
+          "index": 1,
+          "arguments": "{\"trackId\": \"drums"
+        },
+        {
+          "type": "tool-delta",
+          "index": 1,
+          "arguments": "\", \"rows\": [{\"voice"
+        },
+        {
+          "type": "tool-delta",
+          "index": 1,
+          "arguments": "\": \"kick\", \"pul"
+        },
+        { "type": "tool-delta", "index": 1, "arguments": "ses\": 4" },
+        { "type": "tool-delta", "index": 1, "arguments": ", \"steps" },
+        { "type": "tool-delta", "index": 1, "arguments": "\": 16" },
+        { "type": "tool-delta", "index": 1, "arguments": ", \"division" },
+        { "type": "tool-delta", "index": 1, "arguments": "\": \"" },
+        { "type": "tool-delta", "index": 1, "arguments": "1" },
+        { "type": "tool-delta", "index": 1, "arguments": "/4" },
+        { "type": "tool-delta", "index": 1, "arguments": "\"}" },
+        { "type": "tool-delta", "index": 1, "arguments": "]" },
+        { "type": "tool-delta", "index": 1, "arguments": "}" },
+        {
+          "type": "usage",
+          "inputTokens": 27078,
+          "outputTokens": 162,
+          "cachedInputTokens": 0,
+          "costUsd": 0.027888
+        },
+        { "type": "finish", "reason": "tool_calls" }
+      ],
+      "firstTokenMs": 906.4376249999999,
+      "totalMs": 1862.8629999999998
+    },
+    {
+      "events": [
+        { "type": "text", "delta": "Done" },
+        { "type": "text", "delta": "! Four" },
+        { "type": "text", "delta": " kicks" },
+        { "type": "text", "delta": " on" },
+        { "type": "text", "delta": " each" },
+        { "type": "text", "delta": " beat" },
+        { "type": "text", "delta": " at 128 BP" },
+        { "type": "text", "delta": "M with" },
+        { "type": "text", "delta": " Euc" },
+        { "type": "text", "delta": "lidean rhythm E" },
+        { "type": "text", "delta": "(4,16)." },
+        {
+          "type": "usage",
+          "inputTokens": 27518,
+          "outputTokens": 29,
+          "cachedInputTokens": 0,
+          "costUsd": 0.027663
+        },
+        { "type": "finish", "reason": "stop" }
+      ],
+      "firstTokenMs": 806.030792,
+      "totalMs": 1075.1810420000002
+    }
+  ]
+}

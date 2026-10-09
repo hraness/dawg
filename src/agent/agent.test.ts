@@ -155,8 +155,19 @@ describe("streaming agent turn", () => {
       ok: true,
       revision: 5,
     });
-    // The refreshed brief reflects the applied changes.
+    // The refreshed brief reflects the applied changes, and says so: it
+    // precedes the request, so an unlabeled one reads as the starting score
+    // and small models re-apply the edit (a transpose repeated 8 times).
     expect(String(second.messages[1]!.content)).toContain('"tempoBpm":96');
+    expect(String(second.messages[1]!.content)).toStartWith(
+      "Composition brief (JSON, the current score at revision 6: it already includes every edit your tool calls made this turn, starting from revision 3; do not repeat them): ",
+    );
+    expect(
+      String(
+        (script.requests[0]!.body as { messages: Array<{ content: string }> })
+          .messages[1]!.content,
+      ),
+    ).toStartWith("Composition brief (JSON): ");
     expect(script.requests[0]!.body).toMatchObject({
       model: "anthropic/claude-opus-5.5",
       stream: true,
@@ -886,7 +897,8 @@ describe("workspace and web tools in the loop", () => {
         "tracks/other/ 1 file 9 B",
       ]);
       expect(brief.project?.notes).toBe("# main\nidea: dub\n");
-      expect(String(first.messages[0]!.content)).toContain("edit_file");
+      // Anthropic models get the system prompt as one cache-marked text part.
+      expect(JSON.stringify(first.messages[0]!.content)).toContain("edit_file");
       // Tool results are plain text; the write hook's text follows the edit result.
       const second = script.requests[1]!.body as {
         messages: Array<Record<string, unknown>>;
@@ -1084,7 +1096,7 @@ describe("classifyAgentError", () => {
 });
 
 describe("prompt cache", () => {
-  test("the static prefix is byte-stable across steps and marked for Anthropic on OpenRouter", async () => {
+  test("the static prefix is byte-stable across steps and marked for Anthropic models", async () => {
     const turn = () =>
       scriptedFetch([
         [
@@ -1096,7 +1108,8 @@ describe("prompt cache", () => {
     const routes = [
       ["openrouter", "anthropic/claude-opus-5.5", true],
       ["openrouter", "openai/gpt-oss-20b:nitro", false],
-      ["gateway", "anthropic/claude-opus-5.5", false],
+      ["gateway", "anthropic/claude-opus-5.5", true],
+      ["gateway", "openai/gpt-6-luna", false],
     ] as const;
     for (const [provider, modelId, marked] of routes) {
       const script = turn();

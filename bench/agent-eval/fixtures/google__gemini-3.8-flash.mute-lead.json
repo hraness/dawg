@@ -1,0 +1,48 @@
+{
+  "model": "google/gemini-3.8-flash",
+  "task": "mute-lead",
+  "pass": true,
+  "requests": [
+    {
+      "events": [
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "id": "call_430264",
+          "name": "set_mix",
+          "arguments": ""
+        },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "arguments": "{\"trackId\":\"lead\",\"muted\":true}"
+        },
+        {
+          "type": "usage",
+          "inputTokens": 15498,
+          "outputTokens": 136,
+          "cachedInputTokens": 0,
+          "costUsd": 0.0121335
+        },
+        { "type": "finish", "reason": "tool_calls" }
+      ],
+      "firstTokenMs": 2672.1398750000008,
+      "totalMs": 2909.558707999997
+    },
+    {
+      "events": [
+        { "type": "text", "delta": "Muted the lead track." },
+        {
+          "type": "usage",
+          "inputTokens": 15573,
+          "outputTokens": 44,
+          "cachedInputTokens": 0,
+          "costUsd": 0.01184475
+        },
+        { "type": "finish", "reason": "stop" }
+      ],
+      "firstTokenMs": 2711.787166999995,
+      "totalMs": 2772.1667089999974
+    }
+  ]
+}

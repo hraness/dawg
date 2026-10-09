@@ -1,0 +1,44 @@
+{
+  "model": "google/gemini-3.8-flash",
+  "task": "set-tempo-90",
+  "pass": true,
+  "requests": [
+    {
+      "events": [
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "id": "call_462120",
+          "name": "set_tempo",
+          "arguments": ""
+        },
+        { "type": "tool-delta", "index": 0, "arguments": "{\"bpm\":90}" },
+        {
+          "type": "usage",
+          "inputTokens": 15531,
+          "outputTokens": 83,
+          "cachedInputTokens": 0,
+          "costUsd": 0.0119595
+        },
+        { "type": "finish", "reason": "tool_calls" }
+      ],
+      "firstTokenMs": 1922.645542000002,
+      "totalMs": 2183.507458
+    },
+    {
+      "events": [
+        { "type": "text", "delta": "Set the tempo to 90 BPM." },
+        {
+          "type": "usage",
+          "inputTokens": 15615,
+          "outputTokens": 35,
+          "cachedInputTokens": 0,
+          "costUsd": 0.0118425
+        },
+        { "type": "finish", "reason": "stop" }
+      ],
+      "firstTokenMs": 2047.1912080000002,
+      "totalMs": 2321.6248750000013
+    }
+  ]
+}

@@ -357,3 +357,22 @@ test("a modal change diffs to one updateTrack carrying the modal field", () => {
     b.tracks[0]!.modal,
   );
 });
+
+test("a vocoder change and its removal survive a diff round trip", () => {
+  const a = createScore({
+    tempoBpm: 120,
+    bars: 1,
+    tracks: [
+      { id: "v", name: "v", instrument: "sine" },
+      { id: "c", name: "c", instrument: "saw" },
+    ],
+    notes: [],
+  } as never);
+  const b = updateTrack(a, "c", { vocoder: { src: "v", preset: "robot" } });
+  const ops = diffScores(a, b);
+  expect(applyScoreOperations(a, ops).tracks[1]!.vocoder).toEqual(
+    b.tracks[1]!.vocoder,
+  );
+  const back = applyScoreOperations(b, diffScores(b, a));
+  expect(back.tracks[1]!.vocoder).toBeUndefined();
+});

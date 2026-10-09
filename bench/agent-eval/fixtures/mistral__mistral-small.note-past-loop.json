@@ -1,0 +1,52 @@
+{
+  "model": "mistral/mistral-small",
+  "task": "note-past-loop",
+  "pass": false,
+  "requests": [
+    {
+      "events": [
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "id": "s80Rw1b53",
+          "name": "add_notes",
+          "arguments": ""
+        },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "arguments": "{\"notes\": [{\"pitch\": \"C5\", \"start\": 20, \"duration\": 1, \"velocity\": 0.8}]}"
+        },
+        {
+          "type": "usage",
+          "inputTokens": 26244,
+          "outputTokens": 40,
+          "cachedInputTokens": 26208,
+          "costUsd": 0.00042252
+        },
+        { "type": "finish", "reason": "tool_calls" }
+      ],
+      "firstTokenMs": 5172.533249999979,
+      "totalMs": 5172.588874999958
+    },
+    {
+      "events": [
+        { "type": "text", "delta": "Added" },
+        { "type": "text", "delta": " a C5 quarter" },
+        { "type": "text", "delta": " note on the" },
+        { "type": "text", "delta": " lead at beat " },
+        { "type": "text", "delta": "20." },
+        {
+          "type": "usage",
+          "inputTokens": 26364,
+          "outputTokens": 16,
+          "cachedInputTokens": 0,
+          "costUsd": 0.0039642
+        },
+        { "type": "finish", "reason": "stop" }
+      ],
+      "firstTokenMs": 1391.3760410000104,
+      "totalMs": 1450.0484160000342
+    }
+  ]
+}

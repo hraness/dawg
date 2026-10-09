@@ -1,0 +1,49 @@
+{
+  "model": "zai/glm-5.3-flash",
+  "task": "tempo-out-of-range",
+  "pass": true,
+  "requests": [
+    {
+      "events": [
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "id": "chatcmpl-tool-c37bdc7fa31b40fa9ccee023b64e643a",
+          "name": "set_tempo",
+          "arguments": ""
+        },
+        { "type": "tool-delta", "index": 0, "arguments": "{\"bpm\": " },
+        { "type": "tool-delta", "index": 0, "arguments": "300}" },
+        {
+          "type": "usage",
+          "inputTokens": 24637,
+          "outputTokens": 21,
+          "cachedInputTokens": 23808,
+          "costUsd": 0.00084909
+        },
+        { "type": "finish", "reason": "tool_calls" }
+      ],
+      "firstTokenMs": 942.1955420000013,
+      "totalMs": 973.5608340000035
+    },
+    {
+      "events": [
+        { "type": "text", "delta": "400 BPM is above" },
+        { "type": "text", "delta": " dawg's limit" },
+        { "type": "text", "delta": ", so I set" },
+        { "type": "text", "delta": " the tempo to the maximum of" },
+        { "type": "text", "delta": " 300 BPM." },
+        {
+          "type": "usage",
+          "inputTokens": 24719,
+          "outputTokens": 79,
+          "cachedInputTokens": 23808,
+          "costUsd": 0.00089039
+        },
+        { "type": "finish", "reason": "stop" }
+      ],
+      "firstTokenMs": 1474.6416249999893,
+      "totalMs": 1618.5664579999866
+    }
+  ]
+}
