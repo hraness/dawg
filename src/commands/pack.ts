@@ -389,6 +389,8 @@ export function kitListLines(aliases: BankAliases): string[] {
 export type CacheReport = Readonly<{
   packs: CacheUsage & { max: number };
   assets: CacheUsage & { max: number };
+  /** Pitch curves in `.dawg/analysis` (0.7); omitted when empty. */
+  analysis?: CacheUsage & { max: number };
   freed?: Readonly<{ files: number; bytes: number }>;
 }>;
 
@@ -408,6 +410,11 @@ export function cacheLines(report: CacheReport): string[] {
       : []),
     row("pack downloads", report.packs, "DAWG_PACKS_CACHE_MAX"),
     row("decoded audio (this project)", report.assets, "DAWG_ASSETS_CACHE_MAX"),
+    ...(report.analysis?.files
+      ? [
+          `pitch analysis (this project) · ${formatBytes(report.analysis.bytes)} of ${formatBytes(report.analysis.max)} · ${report.analysis.files} curve${report.analysis.files === 1 ? "" : "s"} · .dawg/analysis, re-tracked on demand`,
+        ]
+      : []),
     "least recently used files go first; this project's sounds are never evicted",
     "evicted sounds re-fetch by their pinned sha256 on next use",
     "/pack cache prune [size] · /pack cache clear",

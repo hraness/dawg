@@ -158,6 +158,7 @@ import {
   runClipCommand,
   setClipImportDeps,
 } from "./commands/clips.ts";
+import { pitchTraceFor } from "./commands/vocal-pitch.ts";
 import { parseResampleCommand, runResample } from "./commands/resample.ts";
 import { suggestFitMode } from "./audio/dsp/onset.ts";
 import {
@@ -167,6 +168,12 @@ import {
   type SampleBank,
   type SampleProblem,
 } from "./audio/samples.ts";
+import {
+  ANALYSIS_CACHE_BYTES,
+  analysisCacheStatus,
+  analysisDir,
+  pruneAnalysisCache,
+} from "./audio/analysis.ts";
 import { drumSnapshotFields, samplerSnapshotFields } from "../tui/drums.ts";
 import { clipSnapshots, loadClipPeaks } from "../tui/clip-row.ts";
 import { highwayLayers } from "../tui/layers.ts";
@@ -891,6 +898,7 @@ function snapshot(
     ...(table && table.linear && table.size !== 12
       ? { tuningPeriod: { size: table.size, root: table.root } }
       : {}),
+    pitchTrace: pitchTraceFor(requestedTrack, value),
     layers:
       tui.highwayView === "all"
         ? highwayLayers(
@@ -2746,11 +2754,19 @@ async function packCommand(command: PackCommand): Promise<Receipt> {
         const store = packs();
         const a = await store.pruneCache(to(store.maxFileCacheBytes));
         const b = await library.pruneCache(to(library.maxCacheBytes));
-        freed = { files: a.removed + b.removed, bytes: a.freed + b.freed };
+        const c = await pruneAnalysisCache(
+          analysisDir(process.cwd()),
+          to(ANALYSIS_CACHE_BYTES),
+        );
+        freed = {
+          files: a.removed + b.removed + c.removed,
+          bytes: a.freed + b.freed + c.freed,
+        };
       }
       const lines = cacheLines({
         packs: await packs().cacheStatus(),
         assets: await library.cacheStatus(),
+        analysis: await analysisCacheStatus(process.cwd()),
         ...(freed ? { freed } : {}),
       });
       tui.openText("cache", lines);

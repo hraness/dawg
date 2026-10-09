@@ -628,6 +628,14 @@ export class SampleLibrary implements SampleSource {
     );
   }
 
+  /**
+   * Decodes one project file (0.7: an audio clip for pitch analysis), with
+   * the same path rules, limits and caches as a sampler voice.
+   */
+  public decodeFile(src: string): Promise<DecodedSample> {
+    return this.loadFile(src);
+  }
+
   public async load(score: TrackScore): Promise<SampleBank> {
     const voices = new Map<string, DecodedSample>();
     const problems: SampleProblem[] = [];

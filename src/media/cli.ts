@@ -16,6 +16,7 @@
  */
 import { systemRunner, type CommandRunner } from "../auth/runner.ts";
 import { doctor, formatDoctor } from "./backend.ts";
+import { analysisCacheStatus, analysisDoctorLine } from "../audio/analysis.ts";
 import { trackSlug } from "./paths.ts";
 import { MediaAbortError } from "./process.ts";
 import { findMediaTool } from "./registry.ts";
@@ -26,7 +27,7 @@ export type Output = { write(text: string): unknown };
 
 export const MEDIA_HELP = `dawg media — local media tools (see DAWG.md "Media tools")
 
-  dawg media doctor                      backend + binaries + install commands
+  dawg media doctor                      backend + binaries + install commands + analysis cache
   dawg media download <url> [--name n]   YouTube audio → tracks/<slug>/downloads/<n>.wav
   dawg media stems <file>                six stems → <file>.stems/
   dawg media analyze <file>              tempo, key, beat grid, peaks → <file>.analysis.json
@@ -139,8 +140,15 @@ export async function runMediaCommand(
       ...host,
       ...(options.signal ? { signal: options.signal } : {}),
     });
-    if (parsed.json) stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-    else stdout.write(`${formatDoctor(report).join("\n")}\n`);
+    const analysis = await analysisCacheStatus(cwd);
+    if (parsed.json)
+      stdout.write(
+        `${JSON.stringify({ ...report, analysisCache: analysis }, null, 2)}\n`,
+      );
+    else
+      stdout.write(
+        `${[...formatDoctor(report), await analysisDoctorLine(cwd)].join("\n")}\n`,
+      );
     return 0;
   }
   const spec = VERBS[parsed.verb];
