@@ -10,20 +10,33 @@ import { grid, intervals, kit, maybe, role } from "./parts.ts";
 import { card, type StyleCard } from "./schema.ts";
 
 const SWING_RIDE = grid("x...x.x.x...x.x.");
-const BLUES_FORM = [
-  "I7",
-  "IV7",
-  "I7",
-  "I7",
-  "IV7",
-  "IV7",
-  "I7",
-  "I7",
-  "V7",
-  "IV7",
-  "I7",
-  "V7",
-] as const;
+/**
+ * The 12-bar blues as dominant sevenths in any mode: `I[7]` is a dominant
+ * seventh on the tonic whether the key is minor (blues scale) or
+ * mixolydian, so IV is never a major seventh.
+ */
+const D = (numeral: string) => `${numeral}[7]`;
+export const BLUES_FORM: readonly string[] = Object.freeze(
+  ["I", "I", "I", "I", "IV", "IV", "I", "I", "V", "IV", "I", "V"].map(D),
+);
+/** Quick-change: IV in bar 2. */
+export const QUICK_CHANGE_FORM: readonly string[] = Object.freeze(
+  ["I", "IV", "I", "I", "IV", "IV", "I", "I", "V", "IV", "I", "V"].map(D),
+);
+/** Final chorus: V-IV-I-I, the turnaround resolved. */
+export const ENDING_FORM: readonly string[] = Object.freeze(
+  ["I", "I", "I", "I", "IV", "IV", "I", "I", "V", "IV", "I", "I"].map(D),
+);
+/** Eight-bar blues: I-V-IV-IV-I-V-I-V. */
+export const EIGHT_BAR_BLUES: readonly string[] = Object.freeze(
+  ["I", "V", "IV", "IV", "I", "V", "I", "V"].map(D),
+);
+/** Son clave 3-2 over one 4/4 bar of sixteenths: 0, 3, 6 | 10, 12. */
+export const SON_CLAVE = grid("x..x..x...x.x...");
+/** Bossa clave: the son clave's last stroke pushed a sixteenth late. */
+export const BOSSA_CLAVE = grid("x..x..x...x..x..");
+/** Tresillo 3+3+2 twice per bar. */
+export const TRESILLO = grid("x..x..x.x..x..x.");
 
 export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
   card({
@@ -334,7 +347,10 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
       ],
     },
     harmony: {
-      forms: [[BLUES_FORM, 1]],
+      forms: [
+        [BLUES_FORM, 0.6],
+        [QUICK_CHANGE_FORM, 0.4],
+      ],
       sources: { forms: 3, presets: 0.2 },
       sevenths: 1,
       rhythm: [[1, 1]],
@@ -538,6 +554,1001 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     form: {
       plans: [[["verse", "verse", "chorus", "verse", "chorus"], 1]],
       archetype: "strophic",
+    },
+  }),
+  // -------------------------------------------------------------------------
+  // Jazz leaves. References: Mark Levine, "The Jazz Theory Book" (1995);
+  // Gunther Schuller, "Early Jazz" (1968) and "The Swing Era" (1989).
+  card({
+    id: "ragtime",
+    summary:
+      "ragtime: straight 2/4 march bass (oom-pah), syncopated right-hand cakewalk figure, secondary dominants, multi-strain AABBACCDD",
+    seedSalt: 1899,
+    meter: { signatures: [["2/4", 1]], hypermeter: [[8, 1]] },
+    tempo: { bpm: [70, 110], typical: 88 },
+    groove: { subdivision: 4, swingRatio: [1, 1.05] },
+    rhythm: {
+      onsets: { kick: null, snare: null, hat: null, chords: grid("..x...x.") },
+    },
+    harmony: {
+      presets: [
+        ["fifties", 0.4],
+        ["turnaround", 0.6],
+      ],
+      chain: {
+        I: [
+          ["VI7", 2],
+          ["IV", 1],
+          ["V7", 1],
+        ],
+        VI7: [["II7", 3]],
+        II7: [["V7", 3]],
+        IV: [
+          ["#ivo7", 1],
+          ["V7", 1],
+        ],
+        "#ivo7": [["I", 3]],
+        V7: [["I", 3]],
+      },
+      sources: { presets: 1, chain: 3 },
+      cadences: [["V-I", 1]],
+      rhythm: [[1, 1]],
+      sevenths: 0.3,
+      voicing: { types: [["close", 1]], range: [55, 76], notes: [3, 4] },
+    },
+    melody: {
+      density: [3, 4],
+      intervals: intervals(4, 3, 1.5, 0.5),
+      chordToneRate: 0.75,
+      contour: [
+        ["arch", 0.6],
+        ["wave", 0.4],
+      ],
+      repetition: 0.6,
+    },
+    bass: {
+      behaviour: [
+        ["octave", 0.6],
+        ["root-fifth", 0.4],
+      ],
+      onsets: grid("x...x..."),
+    },
+    form: {
+      plans: [[["verse", "verse", "chorus", "chorus", "verse"], 1]],
+      archetype: "multi-strain rag",
+    },
+    texture: {
+      kind: "homophonic",
+      roles: {
+        bass: role("piano"),
+        chords: role("piano", "honkytonk:0.5"),
+        lead: role("piano", "honkytonk:0.4"),
+        counter: null,
+      },
+    },
+  }),
+  card({
+    id: "new-orleans-jazz",
+    summary:
+      "New Orleans: two-beat with Spanish-tinge tresillo bass, collective improvisation (trumpet lead, clarinet obbligato, trombone tailgate)",
+    seedSalt: 1917,
+    tempo: { bpm: [90, 200], typical: 150 },
+    rhythm: {
+      onsets: {
+        kick: grid("x...x..."),
+        snare: grid("..x...x."),
+        hat: grid("x.x.x.x."),
+      },
+    },
+    harmony: {
+      presets: [
+        ["fifties", 0.3],
+        ["turnaround", 0.7],
+      ],
+      sevenths: 0.5,
+      rhythm: [[1, 1]],
+      voicing: { types: [["close", 1]] },
+    },
+    melody: { chordToneRate: 0.75, density: [2, 3] },
+    form: { archetype: "head-ensemble-choruses" },
+  }),
+  card({
+    id: "chicago-jazz",
+    summary:
+      "Chicago style: four-to-the-bar replaces two-beat, string bass walks, solo choruses over 32-bar song form, driving hi-hat",
+    seedSalt: 1927,
+    tempo: { bpm: [140, 230], typical: 180 },
+    rhythm: { onsets: { kick: grid("x.x.x.x."), hat: grid("..x...x.") } },
+    bass: {
+      behaviour: [
+        ["walking", 0.7],
+        ["root-fifth", 0.3],
+      ],
+    },
+    texture: {
+      roles: {
+        bass: role("contrabass", "tuba:0.3"),
+        chords: role("piano", "banjo:0.4"),
+        lead: role("trumpet", "clarinet:0.5", "sax:0.5"),
+      },
+    },
+    form: { archetype: "aaba" },
+  }),
+  card({
+    id: "stride",
+    summary:
+      "stride piano: left hand leaps bass note on 1 and 3 to mid-register chord on 2 and 4, right-hand runs over ragtime harmony",
+    seedSalt: 1921,
+    tempo: { bpm: [120, 250], typical: 180 },
+    groove: { swingRatio: [1.3, 1.8] },
+    rhythm: {
+      onsets: { kick: null, snare: null, hat: null, chords: grid("..x...x.") },
+    },
+    harmony: {
+      presets: [["turnaround", 1]],
+      rhythm: [[1, 1]],
+      sevenths: 0.6,
+      voicing: { types: [["close", 1]], range: [52, 70], notes: [3, 4] },
+    },
+    bass: {
+      behaviour: [
+        ["octave", 0.5],
+        ["root-fifth", 0.5],
+      ],
+      onsets: grid("x...x..."),
+      range: [28, 48],
+    },
+    melody: { density: [3, 4], chordToneRate: 0.7 },
+    texture: {
+      kind: "homophonic",
+      roles: {
+        bass: role("piano"),
+        chords: role("piano", "upright:0.5"),
+        lead: role("piano"),
+        counter: null,
+      },
+    },
+  }),
+  card({
+    id: "big-band-swing",
+    summary:
+      "big band: four-on-the-floor swing, saxes vs brass riff call and response, shout chorus, 32-bar AABA, ii-V turnarounds",
+    seedSalt: 1935,
+    tempo: { bpm: [120, 240], typical: 160 },
+    rhythm: {
+      onsets: {
+        kick: grid("x.x.x.x."),
+        snare: grid("..1...1."),
+        hat: grid("x.xxx.xx"),
+      },
+    },
+    bass: { behaviour: [["walking", 1]] },
+    texture: {
+      roles: {
+        chords: role("horn", "trombone:0.6"),
+        counter: role("sax", "altosax:0.6"),
+        lead: role("trumpet", "sax:0.4"),
+      },
+    },
+    form: {
+      plans: [
+        [["intro", "verse", "verse", "bridge", "verse", "chorus", "outro"], 1],
+      ],
+      archetype: "aaba",
+    },
+    mix: { space: 0.4 },
+  }),
+  card({
+    id: "kansas-city-jazz",
+    summary:
+      "Kansas City: riff-based head arrangements over 12-bar blues, light four-four pulse, hi-hat time, relaxed hard swing",
+    seedSalt: 1936,
+    tempo: { bpm: [130, 240], typical: 170 },
+    meter: { hypermeter: [[12, 1]] },
+    pitch: {
+      scales: [
+        ["mixolydian", 0.6],
+        ["blues", 0.4],
+      ],
+    },
+    harmony: {
+      forms: [[BLUES_FORM, 1]],
+      sources: { forms: 3, presets: 0.5 },
+      rhythm: [[1, 1]],
+    },
+    melody: {
+      repetition: 0.8,
+      phraseBars: [
+        [2, 0.6],
+        [4, 0.4],
+      ],
+    },
+    bass: { behaviour: [["walking", 1]] },
+    rhythm: { onsets: { hat: grid("..x...x.") } },
+    form: { archetype: "12-bar riff" },
+  }),
+  card({
+    id: "gypsy-jazz",
+    summary:
+      "gypsy jazz: la pompe rhythm guitar on every beat (2 and 4 accented), no kit, harmonic-minor and minor-sixth colour, violin and guitar arpeggio runs",
+    seedSalt: 1934,
+    tempo: { bpm: [120, 280], typical: 200 },
+    groove: { swingRatio: [1.4, 1.8] },
+    pitch: {
+      scales: [
+        ["harmonic-minor", 0.5],
+        ["major", 0.5],
+      ],
+    },
+    rhythm: {
+      onsets: {
+        kick: null,
+        snare: null,
+        hat: null,
+        chords: grid("x.x.x.x."),
+      },
+    },
+    harmony: {
+      presets: [
+        ["minor-ii-v", 0.5],
+        ["turnaround", 0.5],
+      ],
+      rhythm: [[1, 1]],
+      voicing: { types: [["close", 1]], range: [52, 72], notes: [3, 4] },
+    },
+    bass: { behaviour: [["root-fifth", 1]], onsets: grid("x...x...") },
+    melody: { density: [3, 4], intervals: intervals(4, 4, 0.8, 0.2) },
+    texture: {
+      kind: "homophonic",
+      roles: {
+        bass: role("contrabass"),
+        chords: role("acoustic"),
+        lead: role("violin", "acoustic:0.7"),
+        counter: null,
+      },
+    },
+  }),
+  card({
+    id: "vocal-jazz",
+    summary:
+      "vocal standards: 32-bar AABA song form, ballad to medium swing, ii-V-I with tritone subs, brushes, lyrical stepwise line",
+    seedSalt: 1950,
+    tempo: { bpm: [60, 180], typical: 110 },
+    rhythm: { onsets: { snare: grid("..2...2."), kick: grid("x.......") } },
+    melody: {
+      intervals: intervals(5, 2, 0.6, 0.6),
+      density: [1, 2],
+      chordToneRate: 0.7,
+      contour: [["arch", 1]],
+      repetition: 0.5,
+    },
+    texture: {
+      roles: {
+        lead: role("sing"),
+        chords: role("piano", "acoustic:0.4"),
+        counter: maybe("sax", "trumpet:0.5"),
+      },
+    },
+    form: {
+      plans: [[["intro", "verse", "verse", "bridge", "verse", "outro"], 1]],
+      archetype: "aaba",
+    },
+  }),
+  card({
+    id: "cool-jazz",
+    summary:
+      "cool jazz: relaxed tempos, light swing, counterpoint between horns, soft dynamics, chamber voicings, lydian and major-seventh colour",
+    seedSalt: 1949,
+    tempo: { bpm: [90, 180], typical: 130 },
+    groove: { swingRatio: [1.4, 1.8] },
+    pitch: {
+      scales: [
+        ["major", 0.6],
+        ["lydian", 0.4],
+      ],
+    },
+    melody: {
+      intervals: intervals(5, 3, 0.6, 0.4),
+      density: [2, 3],
+      contour: [
+        ["arch", 0.6],
+        ["wave", 0.4],
+      ],
+    },
+    texture: {
+      kind: "polyphonic",
+      roles: {
+        lead: role("altosax", "trumpet:0.6"),
+        counter: role("barisax", "trombone:0.5", "horn:0.4"),
+        chords: role("piano", "acoustic:0.3"),
+      },
+    },
+    expression: { dynamics: [0.3, 0.7] },
+  }),
+  card({
+    id: "hard-bop",
+    summary:
+      "hard bop: bebop vocabulary with blues and gospel inflection, minor ii-V, trumpet and tenor unison heads, hard-swinging ride and snare comping",
+    seedSalt: 1955,
+    tempo: { bpm: [120, 260], typical: 180 },
+    pitch: {
+      scales: [
+        ["minor", 0.4],
+        ["dorian", 0.3],
+        ["major", 0.3],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["minor-ii-v", 0.5],
+        ["ii-v-i", 0.5],
+      ],
+    },
+    melody: { density: [2, 4], intervals: intervals(5, 3, 0.8, 0.2) },
+    rhythm: { onsets: { snare: grid("..2..12.") } },
+    texture: {
+      roles: {
+        lead: role("trumpet", "sax:0.8"),
+        counter: maybe("sax"),
+      },
+    },
+  }),
+  card({
+    id: "soul-jazz",
+    summary:
+      "soul jazz: Hammond organ trio, bluesy dorian vamps, gospel plagal turns, groove-locked straight-to-light swing backbeat",
+    seedSalt: 1959,
+    tempo: { bpm: [80, 150], typical: 110 },
+    groove: { swingRatio: [1.3, 1.7] },
+    pitch: {
+      scales: [
+        ["dorian", 0.5],
+        ["blues", 0.5],
+      ],
+    },
+    harmony: {
+      presets: [["dorian-vamp", 1]],
+      forms: [[BLUES_FORM, 1]],
+      sources: { presets: 1, forms: 1, chain: 0 },
+      rhythm: [[1, 1]],
+    },
+    rhythm: { onsets: { snare: grid("..x...x."), kick: grid("x...x...") } },
+    bass: {
+      behaviour: [
+        ["walking", 0.6],
+        ["root-fifth", 0.4],
+      ],
+    },
+    texture: {
+      roles: {
+        chords: role("hammond", "jazzorgan:0.6"),
+        bass: role("jazzorgan", "contrabass:0.5"),
+        lead: role("sax", "electric:0.6"),
+      },
+    },
+  }),
+  card({
+    id: "modal-jazz",
+    summary:
+      "modal jazz: few chords held 8-16 bars, dorian mode, quartal (fourths) voicings, pedal-point bass, scalar improvisation over the mode",
+    seedSalt: 1959,
+    tempo: { bpm: [100, 240], typical: 140 },
+    pitch: {
+      scales: [
+        ["dorian", 0.7],
+        ["mixolydian", 0.15],
+        ["lydian", 0.15],
+      ],
+    },
+    harmony: {
+      model: "modal",
+      rhythm: [
+        [0.25, 0.6],
+        [0.5, 0.4],
+      ],
+      sevenths: 0.5,
+      voicing: { types: [["quartal", 1]], notes: [3, 5] },
+    },
+    melody: { chordToneRate: 0.4, intervals: intervals(5, 2, 1.2, 0.2) },
+    bass: {
+      behaviour: [
+        ["walking", 0.7],
+        ["pedal", 0.3],
+      ],
+    },
+  }),
+  card({
+    id: "post-bop",
+    summary:
+      "post-bop: open forms, non-functional chord motion (constant-structure, chromatic mediants), sus and slash chords, interactive time",
+    seedSalt: 1965,
+    tempo: { bpm: [100, 260], typical: 160 },
+    harmony: {
+      chain: {
+        Imaj7: [
+          ["bIIImaj7", 1],
+          ["bVImaj7", 1],
+          ["ii7", 1],
+        ],
+        bIIImaj7: [
+          ["bVImaj7", 1],
+          ["ii7", 1],
+        ],
+        bVImaj7: [
+          ["bII7", 1],
+          ["V7", 1],
+        ],
+        bII7: [["Imaj7", 2]],
+        ii7: [
+          ["V7", 2],
+          ["bII7", 1],
+        ],
+        V7: [
+          ["Imaj7", 2],
+          ["bVImaj7", 1],
+        ],
+      },
+      sources: { presets: 0.5, chain: 3 },
+      voicing: {
+        types: [
+          ["quartal", 0.5],
+          ["open", 0.5],
+        ],
+      },
+    },
+    melody: { intervals: intervals(4, 3, 1.4, 0.2) },
+  }),
+  card({
+    id: "third-stream",
+    summary:
+      "third stream: classical forms and orchestration fused with jazz swing, through-composed counterpoint, French horn and strings",
+    seedSalt: 1957,
+    tempo: { bpm: [70, 160], typical: 110 },
+    groove: { swingRatio: [1.2, 1.7] },
+    texture: {
+      kind: "polyphonic",
+      roles: {
+        chords: role("strings", "horn:0.6"),
+        lead: role("clarinet", "horn:0.5", "altosax:0.5"),
+        counter: role("cello", "bassoon:0.5"),
+      },
+    },
+    form: {
+      plans: [[["intro", "verse", "bridge", "verse", "outro"], 1]],
+      archetype: "through-composed",
+    },
+  }),
+  card({
+    id: "chamber-jazz",
+    summary:
+      "chamber and ECM jazz: rubato-leaning even eighths, open fifths and sus voicings, lydian and aeolian modes, space and long reverb",
+    seedSalt: 1971,
+    tempo: { bpm: [60, 130], typical: 90 },
+    groove: { swingRatio: [1, 1.15] },
+    pitch: {
+      scales: [
+        ["lydian", 0.4],
+        ["minor", 0.3],
+        ["dorian", 0.3],
+      ],
+    },
+    harmony: {
+      model: "modal",
+      rhythm: [[0.5, 1]],
+      voicing: {
+        types: [
+          ["open", 0.6],
+          ["quartal", 0.4],
+        ],
+      },
+    },
+    rhythm: {
+      onsets: { kick: grid("x......."), snare: null, hat: grid("x.2.x.2.") },
+    },
+    bass: {
+      behaviour: [
+        ["pedal", 0.5],
+        ["root", 0.5],
+      ],
+      onsets: grid("x...2..."),
+    },
+    melody: { density: [1, 2], contour: [["arch", 1]] },
+    texture: { roles: { lead: role("sax", "piano:0.6", "acoustic:0.4") } },
+    expression: { dynamics: [0.25, 0.65] },
+    mix: { space: 0.6 },
+  }),
+  card({
+    id: "contemporary-jazz",
+    summary:
+      "contemporary jazz: straight-eighth and swing hybrid grooves, reharmonised standards, upper-structure triads, odd-meter vamps",
+    seedSalt: 1990,
+    tempo: { bpm: [90, 200], typical: 130 },
+    meter: {
+      signatures: [
+        ["4/4", 0.7],
+        ["7/4", 0.15],
+        ["5/4", 0.15],
+      ],
+    },
+    groove: { swingRatio: [1, 1.6] },
+    harmony: {
+      voicing: {
+        types: [
+          ["open", 0.5],
+          ["quartal", 0.5],
+        ],
+      },
+    },
+  }),
+  card({
+    id: "uk-jazz",
+    summary:
+      "UK jazz new wave: straight sixteenth broken-beat and Afrobeat grooves, dorian vamps, tuba or synth bass, sax-led riff heads",
+    seedSalt: 2016,
+    tempo: { bpm: [95, 130], typical: 112 },
+    groove: { subdivision: 4, swingRatio: [1, 1.15] },
+    pitch: {
+      scales: [
+        ["dorian", 0.6],
+        ["minor", 0.4],
+      ],
+    },
+    harmony: {
+      model: "modal",
+      rhythm: [
+        [0.5, 0.6],
+        [1, 0.4],
+      ],
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.....x...x..2.."),
+        snare: grid("....x..2....x..."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+      },
+    },
+    bass: { behaviour: [["ostinato", 1]], onsets: grid("x..x..x...x.x...") },
+    texture: {
+      roles: {
+        bass: role("tuba", "ebass:0.6"),
+        chords: role("rhodes", "piano:0.4"),
+        lead: role("sax", "trumpet:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "free-jazz",
+    summary:
+      "free jazz: no fixed changes, pulse rather than meter, atonal and chromatic intervals, collective improvisation, energy-driven dynamics",
+    seedSalt: 1960,
+    tempo: { bpm: [100, 260], typical: 180 },
+    groove: {
+      swingRatio: [1, 1.6],
+      humanize: { timingMs: 20, velocity: 0.15 },
+    },
+    pitch: {
+      scales: [
+        ["minor", 0.5],
+        ["phrygian", 0.25],
+        ["locrian", 0.25],
+      ],
+    },
+    harmony: {
+      rhythm: [
+        [1, 0.5],
+        [0.5, 0.5],
+      ],
+      voicing: { types: [["quartal", 1]] },
+    },
+    melody: {
+      intervals: intervals(2, 2, 3, 0.2),
+      density: [2, 4],
+      chordToneRate: 0.2,
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("1.2.1..2"),
+        snare: grid(".2.3.2.3"),
+        hat: grid("x.5.x.5."),
+      },
+    },
+    texture: {
+      kind: "polyphonic",
+      roles: {
+        lead: role("sax", "altosax:0.6"),
+        counter: role("trumpet", "bassclarinet:0.5"),
+      },
+    },
+    expression: { dynamics: [0.3, 1] },
+  }),
+  card({
+    id: "avant-garde-jazz",
+    summary:
+      "avant-garde jazz: composed structures with open sections, extended techniques, symmetric and whole-tone colours, sparse percussion",
+    seedSalt: 1964,
+    tempo: { bpm: [60, 200], typical: 120 },
+    groove: { swingRatio: [1, 1.5] },
+    pitch: {
+      scales: [
+        ["lydian", 0.4],
+        ["locrian", 0.3],
+        ["phrygian", 0.3],
+      ],
+    },
+    melody: {
+      intervals: intervals(2, 2, 2.5, 0.4),
+      chordToneRate: 0.3,
+      density: [1, 3],
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("1......."),
+        snare: grid("..2...2."),
+        hat: grid("x.2.x.2."),
+      },
+    },
+    texture: {
+      kind: "polyphonic",
+      roles: {
+        lead: role("bassclarinet", "sax:0.6"),
+        counter: role("prepared", "vibes:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "spiritual-jazz",
+    summary:
+      "spiritual jazz: modal drone on one chord, pedal-point ostinato bass, harp and piano washes, rubato rising to ecstatic swing",
+    seedSalt: 1965,
+    tempo: { bpm: [70, 160], typical: 110 },
+    pitch: {
+      scales: [
+        ["dorian", 0.5],
+        ["mixolydian", 0.3],
+        ["phrygian", 0.2],
+      ],
+    },
+    harmony: {
+      model: "modal",
+      rhythm: [[0.25, 1]],
+      voicing: { types: [["quartal", 1]] },
+    },
+    bass: {
+      behaviour: [
+        ["ostinato", 0.6],
+        ["pedal", 0.4],
+      ],
+      onsets: grid("x..x..x."),
+    },
+    texture: {
+      roles: {
+        chords: role("harp", "piano:0.6"),
+        lead: role("sax", "flute:0.5"),
+        bell: maybe("bell"),
+      },
+    },
+    rhythm: { onsets: { bell: grid("x...x...") } },
+    mix: { space: 0.55 },
+  }),
+  card({
+    id: "dark-jazz",
+    summary:
+      "dark jazz: slow noir tempos, minor and phrygian harmony, brushed kit, muted trumpet over low drones and doom-laden pads",
+    seedSalt: 1994,
+    tempo: { bpm: [55, 90], typical: 70 },
+    groove: { swingRatio: [1.3, 1.7] },
+    pitch: {
+      scales: [
+        ["minor", 0.6],
+        ["phrygian", 0.4],
+      ],
+    },
+    harmony: {
+      presets: [["minor-ii-v", 1]],
+      rhythm: [[0.5, 1]],
+      voicing: { types: [["open", 1]] },
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x......."),
+        snare: grid("..2...x."),
+        hat: grid("..x...x."),
+      },
+    },
+    bass: {
+      behaviour: [
+        ["walking", 0.4],
+        ["root", 0.6],
+      ],
+      onsets: grid("x...x..."),
+    },
+    melody: { density: [1, 2] },
+    texture: {
+      roles: {
+        lead: role("harmon", "sax:0.6"),
+        chords: role("rhodes", "piano:0.5"),
+        pad: maybe("strings"),
+      },
+    },
+    mix: { space: 0.6 },
+  }),
+  card({
+    id: "jazz-fusion",
+    summary:
+      "jazz fusion: rock-funk straight sixteenths, odd meters (7/8, 5/4), modal vamps with lydian and mixolydian colour, distorted guitar and synth leads",
+    seedSalt: 1970,
+    tempo: { bpm: [100, 180], typical: 130 },
+    pitch: {
+      scales: [
+        ["mixolydian", 0.4],
+        ["dorian", 0.3],
+        ["lydian", 0.3],
+      ],
+    },
+    harmony: {
+      rhythm: [
+        [0.5, 0.6],
+        [1, 0.4],
+      ],
+      voicing: {
+        types: [
+          ["quartal", 0.5],
+          ["open", 0.5],
+        ],
+      },
+    },
+    melody: { density: [3, 4], intervals: intervals(5, 3, 1, 0.2) },
+    texture: {
+      roles: {
+        lead: role("electric@lead", "saw:0.5"),
+        chords: role("rhodes", "saw:0.3"),
+      },
+    },
+  }),
+  card({
+    id: "jazz-funk",
+    summary:
+      "jazz-funk: syncopated sixteenth funk groove on the one, dominant-ninth and minor-eleventh vamps, slap or finger bass ostinato, electric piano",
+    seedSalt: 1973,
+    tempo: { bpm: [90, 120], typical: 104 },
+    meter: { signatures: [["4/4", 1]] },
+    pitch: {
+      scales: [
+        ["dorian", 0.6],
+        ["mixolydian", 0.4],
+      ],
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.....x.x.....x."),
+        snare: grid("....x..2.2..x..."),
+        hat: grid("xxxxxxxxxxxxxxxx"),
+      },
+    },
+    bass: { onsets: grid("x..x..x.x.2..x.2") },
+    texture: {
+      roles: {
+        bass: role("slap", "ebass:0.6"),
+        chords: role("rhodes", "clav:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "smooth-jazz",
+    summary:
+      "smooth jazz: mid-tempo straight sixteenths, major-ninth and sus chords, IV-V-iii-vi ballad motion, soprano or alto sax lead, polished mix",
+    seedSalt: 1987,
+    tempo: { bpm: [80, 110], typical: 92 },
+    meter: { signatures: [["4/4", 1]] },
+    pitch: {
+      scales: [
+        ["major", 0.7],
+        ["lydian", 0.3],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["axis", 0.4],
+        ["turnaround", 0.6],
+      ],
+      sources: { presets: 1, chain: 1 },
+      sevenths: 0.9,
+      rhythm: [
+        [1, 0.6],
+        [0.5, 0.4],
+      ],
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.....x...x....."),
+        snare: grid("....x.......x..."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+      },
+    },
+    bass: {
+      behaviour: [
+        ["root-fifth", 0.5],
+        ["arpeggio", 0.5],
+      ],
+      onsets: grid("x.....x...x.x..."),
+    },
+    melody: { density: [1, 2], intervals: intervals(5, 3, 0.6, 0.6) },
+    texture: {
+      roles: {
+        lead: role("altosax", "sax:0.6"),
+        chords: role("rhodes", "epiano:0.6"),
+      },
+    },
+    mix: { space: 0.45, loudness: "streaming" },
+  }),
+  card({
+    id: "acid-jazz",
+    summary:
+      "acid jazz: funk and soul-jazz grooves over breakbeat drums, dorian minor-seventh vamps, Hammond and wah guitar, light sixteenth swing",
+    seedSalt: 1988,
+    tempo: { bpm: [95, 120], typical: 108 },
+    meter: { signatures: [["4/4", 1]] },
+    groove: { swingRatio: [1.1, 1.3] },
+    pitch: {
+      scales: [
+        ["dorian", 0.8],
+        ["minor", 0.2],
+      ],
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.........x..2.."),
+        snare: grid("....x..2.2..x..."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+      },
+    },
+    texture: {
+      roles: {
+        chords: role("hammond", "funk:0.5"),
+        lead: role("sax", "electric@wah:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "nu-jazz",
+    summary:
+      "nu jazz: electronic production with jazz harmony, programmed broken beats or house pulse, minor-ninth chord loops, sampled-feel horns",
+    seedSalt: 1998,
+    tempo: { bpm: [95, 125], typical: 118 },
+    meter: { signatures: [["4/4", 1]] },
+    pitch: {
+      scales: [
+        ["dorian", 0.5],
+        ["minor", 0.5],
+      ],
+    },
+    harmony: { rhythm: [[0.5, 1]] },
+    rhythm: {
+      onsets: {
+        kick: grid("x...x...x...x..."),
+        snare: grid("....x.......x..."),
+        hat: grid("..x...x...x...x."),
+      },
+    },
+    texture: {
+      roles: {
+        kick: kit("electro"),
+        snare: kit("electro"),
+        hat: kit("electro"),
+        chords: role("rhodes", "keys:0.4"),
+        bass: role("bass", "ebass:0.4"),
+        lead: role("trumpet", "flute:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "afro-cuban-jazz",
+    summary:
+      "Afro-Cuban jazz: son clave 3-2 (0,3,6,10,12 of 16) on the bell, tumbao bass anticipating beat 3 and 4, piano montuno, bebop horns over cascara",
+    seedSalt: 1947,
+    tempo: { bpm: [150, 240], typical: 190 },
+    meter: { signatures: [["4/4", 1]] },
+    groove: { swingRatio: [1, 1.05] },
+    pitch: {
+      scales: [
+        ["minor", 0.5],
+        ["major", 0.5],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["minor-ii-v", 0.5],
+        ["ii-v-i", 0.5],
+      ],
+      sources: { presets: 1, chain: 1 },
+      rhythm: [
+        [1, 0.5],
+        [0.5, 0.5],
+      ],
+    },
+    rhythm: {
+      onsets: {
+        bell: SON_CLAVE,
+        perc: grid("...x..x....x..x."),
+        kick: grid("......x.....x..."),
+        snare: null,
+        hat: grid("x.xx.x.xx.x.x.x."),
+        chords: grid("x.x..x.x..x..x.x"),
+      },
+      locks: [],
+    },
+    bass: {
+      behaviour: [["root-fifth", 1]],
+      onsets: grid("......x.....x..."),
+      kickLock: 0,
+    },
+    texture: {
+      roles: {
+        bell: role("drums"),
+        perc: role("drums"),
+        chords: role("piano"),
+        lead: role("trumpet", "sax:0.7"),
+        counter: maybe("trombone"),
+      },
+    },
+  }),
+  card({
+    id: "latin-jazz",
+    summary:
+      "Brazilian and pan-Latin jazz: bossa nova clave (0,3,6,10,13 of 16) on rim, surdo-like bass on 1 and 3, nylon guitar batida, ii-V with altered dominants",
+    seedSalt: 1962,
+    tempo: { bpm: [110, 160], typical: 132 },
+    meter: { signatures: [["4/4", 1]] },
+    groove: { swingRatio: [1, 1.05] },
+    pitch: {
+      scales: [
+        ["major", 0.6],
+        ["minor", 0.4],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["ii-v-i", 0.5],
+        ["turnaround", 0.5],
+      ],
+      sources: { presets: 1, chain: 2 },
+      rhythm: [
+        [1, 0.5],
+        [0.5, 0.5],
+      ],
+      voicing: {
+        types: [
+          ["shell", 0.4],
+          ["close", 0.6],
+        ],
+        range: [52, 72],
+      },
+    },
+    rhythm: {
+      onsets: {
+        bell: BOSSA_CLAVE,
+        kick: grid("x.....x.x.....x."),
+        snare: null,
+        hat: grid("xxxxxxxxxxxxxxxx"),
+        chords: grid("x..x..x...x..x.."),
+      },
+    },
+    bass: {
+      behaviour: [["root-fifth", 1]],
+      onsets: grid("x.....x.x.....x."),
+      kickLock: 0.8,
+    },
+    melody: { density: [1, 2], intervals: intervals(5, 3, 0.6, 0.6) },
+    texture: {
+      roles: {
+        bell: role("drums"),
+        bass: role("contrabass", "ebass:0.5"),
+        chords: role("nylon"),
+        lead: role("flute", "sax:0.6", "sing:0.6"),
+      },
     },
   }),
 ]);
