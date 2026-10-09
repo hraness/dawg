@@ -413,7 +413,7 @@ export const HELP_GUIDE: readonly HelpSection[] = [
     entries: [
       {
         command: "rit 4 bars to 80",
-        summary: "tempo changes, fermatas, meter · /menu tempo",
+        summary: "tempo, fermatas, meter · tuning pelog · scale yaman",
       },
       {
         command: "/help all",

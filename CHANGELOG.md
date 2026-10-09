@@ -11,6 +11,8 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - **Forms keep tempo ramps** that cross a section boundary, and sections work in a compound meter held from bar 1 (6/8, 12/8).
 - `/export name.wav` refuses and points to `dawg render` instead of writing loop JSON under a `.wav` name.
 - Play mode starts in single notes on tracks in a non-12 tuning and on mono glide tracks, instead of auto chords in an assumed C major.
+- True peak uses a 32-tap windowed-sinc interpolator instead of the BS.1770-4 example filter, which read dense, bright masters up to half a dB low; the limiter now holds its ceiling on supersaws and distortion.
+- The `acid` preset slides (60 ms legato glide); expression commands take a `last` target; `tuning root C` takes a bare pitch class; `/track piano b` accepts a name with spaces; a song in a named tuning is auto-named after it instead of a guessed 12-TET key.
 - `fermata at end` holds the last felt beat in compound meters; a meter change that pushes notes or fermatas past the song end says so; the menu's song length names the written end tempo; the SDK accepts a `rit()` that ends where `aTempo()` starts or at the final barline.
 
 ### Guides
