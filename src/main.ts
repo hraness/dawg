@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { isGuideInstrument, vocalChainPatch } from "../core/clips.ts";
 import { isSingWord } from "../core/sing.ts";
-import { commandParses } from "./commands/parses.ts";
+import { commandParses, parseExact } from "./commands/parses.ts";
 import { noteName as midiNoteName } from "./media/notes.ts";
 import {
   EVERYDAY_VERBS,
@@ -420,6 +420,17 @@ import {
   type ProjectSync,
   type SyncHost,
 } from "./project/sync.ts";
+
+/** Set while `submit` runs a grammar reading, so it reads only once. */
+let recovering = false;
+
+/** Slash words `submit` handles itself (no parser in commandParses). */
+const SLASH_HANDLED: ReadonlySet<string> = new Set([
+  ...WINDOW_VERBS,
+  "chords",
+  "click",
+  "help",
+]);
 
 /** Whether a bare command parses (no side effects): for typo suggestions. */
 function parsesLocally(text: string): boolean {
@@ -2000,17 +2011,6 @@ async function runInteractive(): Promise<void> {
   }
 }
 
-/** Set while `submit` runs a grammar reading, so it reads only once. */
-let recovering = false;
-
-/** Slash words `submit` handles itself (no parser in commandParses). */
-const SLASH_HANDLED: ReadonlySet<string> = new Set([
-  ...WINDOW_VERBS,
-  "chords",
-  "click",
-  "help",
-]);
-
 /** `unknown command /clik · did you mean /click? · /help`. */
 function unknownCommand(command: string): string {
   const word = command.split(/\s+/)[0] ?? command;
@@ -2794,11 +2794,12 @@ async function submit(prompt: string): Promise<string | Receipt> {
   // The grammar's second reading (design §3): a line no handler took runs
   // in its other spellings — `/x` ≡ `x`, aliases, `rm|remove|delete`,
   // `list|presets|ls` — so only lines that failed before get one.
-  if (!recovering) {
+  // A line the core prompt parser takes is already understood.
+  if (!recovering && !parsePrompt(prompt)) {
     const retry = recover(
       command,
       (candidate) =>
-        commandParses(candidate, score) ||
+        parseExact(candidate, score) !== undefined ||
         (candidate.startsWith("/") && SLASH_HANDLED.has(verbOf(candidate))),
     );
     if (retry !== undefined) {
@@ -4472,17 +4473,16 @@ async function exportWav(path: string, stems: boolean): Promise<Receipt> {
   }
 }
 
-/** Bare song scalars and the Project fader each opens. */
-const SONG_FADERS: Readonly<Record<string, string>> = {
-  tempo: "tempo",
-  bpm: "tempo",
-  bars: "loop length",
-  meter: "beats per bar",
-};
-
 /** `tempo`, `bars`, `meter`: open Project and name its fader, if it has one. */
 function songFader(context: MenuContext, command: string): string | undefined {
-  const label = SONG_FADERS[command.replace(/^\//, "").toLowerCase()];
+  // Bare song scalars and the Project fader each opens.
+  const faders: Readonly<Record<string, string>> = {
+    tempo: "tempo",
+    bpm: "tempo",
+    bars: "loop length",
+    meter: "beats per bar",
+  };
+  const label = faders[command.replace(/^\//, "").toLowerCase()];
   if (!label) return undefined;
   menu.show(context, "project");
   if (menu.faderFields(context).some((field) => field.label === label))
