@@ -2775,4 +2775,731 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
       },
     },
   }),
+  // -------------------------------------------------------------------------
+  // Gospel and sacred leaves. References: Horace Clarence Boyer, "How Sweet
+  // the Sound: The Golden Age of Gospel" (1995); Eileen Southern, "The Music
+  // of Black Americans" (3rd ed., 1997).
+  card({
+    id: "traditional-gospel",
+    summary:
+      "traditional black gospel: 12/8 slow shout or swung 4/4, plagal IV-I amens, passing diminished chords, Hammond and piano, lead vocal with choir call and response",
+    seedSalt: 1940,
+    tempo: { bpm: [60, 140], typical: 84 },
+    meter: {
+      signatures: [
+        ["12/8", 0.5],
+        ["4/4", 0.5],
+      ],
+      hypermeter: [[4, 1]],
+    },
+    groove: { swingRatio: [1.7, 2.1] },
+    pitch: {
+      scales: [
+        ["major", 0.7],
+        ["major-blues", 0.3],
+      ],
+    },
+    harmony: {
+      chain: {
+        I: [
+          ["IV", 2],
+          ["V7/IV", 1.5],
+          ["vi", 1],
+        ],
+        "V7/IV": [["IV", 3]],
+        IV: [
+          ["#ivo7", 1.5],
+          ["I", 2],
+          ["V7", 1],
+        ],
+        "#ivo7": [["I", 3]],
+        vi: [
+          ["ii", 2],
+          ["IV", 1],
+        ],
+        ii: [["V7", 3]],
+        V7: [["I", 3]],
+      },
+      presets: null,
+      sources: { chain: 1 },
+      cadences: [
+        ["IV-I", 0.6],
+        ["V-I", 0.4],
+      ],
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x...x..."),
+        snare: grid("..x...x."),
+        clap: grid("..x...x."),
+        hat: grid("x.x.x.x."),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic", ["kick", "snare", "hat"], ["clap"]),
+        chords: role("gospel", "piano:0.6"),
+        bass: role("ebass", "hammond:0.4"),
+        lead: role("sing"),
+        counter: role("choir"),
+      },
+    },
+  }),
+  card({
+    id: "gospel-quartet",
+    summary:
+      "gospel quartet: four-part male close harmony, syncopated jubilee bass voice on every beat, minimal guitar, I-IV-V with secondary dominants, call and response lead",
+    seedSalt: 1937,
+    tempo: { bpm: [80, 150], typical: 112 },
+    groove: { swingRatio: [1.5, 1.9] },
+    pitch: { scales: [["major", 1]] },
+    harmony: {
+      presets: [
+        ["turnaround", 0.5],
+        ["fifties", 0.5],
+      ],
+      sevenths: 0.5,
+    },
+    bass: {
+      behaviour: [
+        ["root-fifth", 0.6],
+        ["walking", 0.4],
+      ],
+      onsets: grid("x.x.x.x."),
+    },
+    texture: {
+      roles: {
+        kick: null,
+        snare: null,
+        hat: null,
+        clap: maybe("drums"),
+        chords: role("aah", "electric@clean:0.4"),
+        bass: role("aah", "contrabass:0.5"),
+        lead: role("sing"),
+      },
+    },
+  }),
+  card({
+    id: "urban-gospel",
+    summary:
+      "urban contemporary gospel: R&B production, ii-V-I and IV-iii-ii-I chromatic walk-downs, ninth and eleventh chords, half-time drums and choir stabs, shout vamp sections",
+    seedSalt: 1993,
+    tempo: { bpm: [70, 130], typical: 96 },
+    groove: { subdivision: 4, swingRatio: [1.1, 1.4] },
+    pitch: {
+      scales: [
+        ["major", 0.6],
+        ["dorian", 0.4],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["ii-v-i", 0.5],
+        ["turnaround", 0.5],
+      ],
+      sevenths: 1,
+      voicing: {
+        types: [
+          ["open", 0.6],
+          ["close", 0.4],
+        ],
+        notes: [4, 5],
+      },
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x......x..x....."),
+        snare: grid("....x.......x..."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("syn808"),
+        chords: role("gospel", "epiano:0.5"),
+        bass: role("bass", "ebass:0.5"),
+        lead: role("sing"),
+        counter: role("choir"),
+      },
+    },
+  }),
+  card({
+    id: "southern-gospel",
+    summary:
+      "Southern gospel: white quartet with tenor-lead-baritone-bass stacked harmony, piano-driven country two-beat, I-IV-V and the half-step lift key change",
+    seedSalt: 1950,
+    tempo: { bpm: [80, 140], typical: 108 },
+    groove: { swingRatio: [1, 1.5] },
+    pitch: { scales: [["major", 1]] },
+    harmony: {
+      presets: [
+        ["fifties", 0.5],
+        ["turnaround", 0.5],
+      ],
+      sevenths: 0.2,
+    },
+    bass: { behaviour: [["root-fifth", 1]], onsets: grid("x...x...") },
+    rhythm: {
+      onsets: { kick: grid("x...x..."), snare: grid("..x...x."), hat: null },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic", ["kick", "snare"]),
+        hat: null,
+        chords: role("piano"),
+        bass: role("ebass", "contrabass:0.5"),
+        lead: role("sing"),
+        counter: role("aah"),
+      },
+    },
+  }),
+  card({
+    id: "spirituals",
+    summary:
+      "spirituals: unaccompanied pentatonic melody, call and response, ring-shout handclap and foot-stomp timeline, slow ballad or shout, plagal colour",
+    seedSalt: 1867,
+    tempo: { bpm: [56, 120], typical: 72 },
+    groove: { swingRatio: [1.3, 1.9] },
+    pitch: {
+      scales: [
+        ["major-pentatonic", 0.6],
+        ["minor-pentatonic", 0.4],
+      ],
+    },
+    harmony: {
+      presets: [["fifties", 1]],
+      sevenths: 0,
+      cadences: [["IV-I", 1]],
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x...x..."),
+        clap: grid("..x...x."),
+        snare: null,
+        hat: null,
+      },
+    },
+    melody: { chordToneRate: 0.6, repetition: 0.7, density: [1, 2] },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic", ["kick"], ["clap"]),
+        snare: null,
+        hat: null,
+        chords: role("aah"),
+        bass: maybe("aah"),
+        lead: role("sing"),
+        counter: maybe("choir"),
+      },
+    },
+  }),
+  card({
+    id: "ccm",
+    summary:
+      "contemporary Christian music: pop-rock song form, I-V-vi-IV loops, straight eighths backbeat, verse-chorus-bridge with a lifted final chorus",
+    seedSalt: 1985,
+    tempo: { bpm: [72, 132], typical: 100 },
+    groove: { subdivision: 4, swingRatio: [1, 1.05] },
+    pitch: { scales: [["major", 1]] },
+    harmony: {
+      presets: [
+        ["axis", 0.5],
+        ["sad-pop", 0.3],
+        ["canon", 0.2],
+      ],
+      sevenths: 0.1,
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.......x.x....."),
+        snare: grid("....x.......x..."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic"),
+        chords: role("acoustic", "piano:0.6"),
+        bass: role("ebass"),
+        lead: role("sing"),
+        counter: maybe("electric@clean"),
+      },
+    },
+    form: {
+      plans: [[["verse", "chorus", "verse", "chorus", "bridge", "chorus"], 1]],
+    },
+  }),
+  card({
+    id: "worship",
+    summary:
+      "praise and worship: slow-build anthem on I-V-vi-IV, sustained pads, dotted-eighth delay guitar, tom-driven build into a congregational chorus",
+    seedSalt: 2000,
+    tempo: { bpm: [64, 80], typical: 72 },
+    groove: { subdivision: 4, swingRatio: [1, 1.05] },
+    pitch: { scales: [["major", 1]] },
+    harmony: {
+      presets: [
+        ["axis", 0.5],
+        ["sad-pop", 0.5],
+      ],
+      sevenths: 0,
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.......x......."),
+        snare: grid("........x......."),
+        tom: grid("x..x..x...x..x.."),
+        hat: null,
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic", ["kick", "snare"], ["tom"]),
+        hat: null,
+        chords: role("piano", "acoustic:0.6"),
+        bass: role("ebass"),
+        lead: role("sing"),
+        pad: role("strings", "saw:0.4"),
+        counter: maybe("electric@clean"),
+      },
+    },
+    mix: { space: 0.6, fx: { counter: { chorus: "wide" } } },
+    form: {
+      plans: [
+        [["intro", "verse", "chorus", "verse", "chorus", "build", "chorus"], 1],
+      ],
+    },
+  }),
+  // -------------------------------------------------------------------------
+  // Country leaves. References: Bill C. Malone, "Country Music, U.S.A." (3rd
+  // ed., 2010); Neil V. Rosenberg, "Bluegrass: A History" (1985).
+  card({
+    id: "old-time",
+    summary:
+      "old-time string band: fiddle tune AABB strains in 2/4, droning double stops, clawhammer banjo bum-ditty, I-IV-V and mixolydian or dorian modal tunes",
+    seedSalt: 1925,
+    meter: {
+      signatures: [
+        ["2/4", 0.6],
+        ["4/4", 0.4],
+      ],
+      hypermeter: [[8, 1]],
+    },
+    tempo: { bpm: [100, 140], typical: 120 },
+    groove: { subdivision: 4, swingRatio: [1, 1.15] },
+    pitch: {
+      scales: [
+        ["major", 0.5],
+        ["mixolydian", 0.3],
+        ["dorian", 0.2],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["mixolydian-rock", 0.5],
+        ["fifties", 0.5],
+      ],
+      sevenths: 0,
+    },
+    rhythm: { onsets: { kick: null, snare: null, chords: grid("x.xxx.xx") } },
+    bass: { behaviour: [["root-fifth", 1]], onsets: grid("x...x...") },
+    melody: {
+      density: [3, 4],
+      intervals: intervals(7, 2, 0.6, 0.6),
+      repetition: 0.7,
+    },
+    texture: {
+      roles: {
+        kick: null,
+        snare: null,
+        bass: maybe("contrabass", "steel:0.4"),
+        chords: role("banjo"),
+        lead: role("fiddle"),
+      },
+    },
+    form: { archetype: "AABB" },
+  }),
+  card({
+    id: "bluegrass",
+    summary:
+      "bluegrass: fast cut-time with mandolin chop on the backbeat, Scruggs three-finger banjo rolls in sixteenths, upright bass root-fifth on 1 and 3, G-run turnarounds, high lonesome harmony",
+    seedSalt: 1946,
+    tempo: { bpm: [140, 200], typical: 168 },
+    groove: { subdivision: 4, swingRatio: [1, 1.1] },
+    pitch: {
+      scales: [
+        ["major", 0.8],
+        ["mixolydian", 0.2],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["fifties", 0.4],
+        ["mixolydian-rock", 0.6],
+      ],
+      sevenths: 0.1,
+    },
+    rhythm: {
+      onsets: {
+        kick: null,
+        snare: null,
+        hat: null,
+        chords: grid("....x.......x..."),
+        arp: grid("xxxxxxxxxxxxxxxx"),
+      },
+    },
+    bass: { behaviour: [["root-fifth", 1]], onsets: grid("x.......x.......") },
+    melody: { density: [3, 4] },
+    texture: {
+      roles: {
+        kick: null,
+        snare: null,
+        hat: null,
+        bass: role("contrabass"),
+        chords: role("steel"),
+        arp: role("banjo"),
+        lead: role("fiddle", "sing:0.6"),
+      },
+    },
+  }),
+  card({
+    id: "progressive-bluegrass",
+    summary:
+      "progressive bluegrass (newgrass): bluegrass instrumentation with jazz and rock harmony, seventh and suspended chords, modal vamps, odd-meter and extended improvisations",
+    seedSalt: 1972,
+    meter: {
+      signatures: [
+        ["4/4", 0.8],
+        ["7/8", 0.2],
+      ],
+      hypermeter: [[4, 1]],
+    },
+    tempo: { bpm: [110, 180], typical: 140 },
+    groove: { subdivision: 4, swingRatio: [1, 1.15] },
+    pitch: {
+      scales: [
+        ["major", 0.4],
+        ["dorian", 0.3],
+        ["lydian", 0.3],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["ii-v-i", 0.4],
+        ["axis", 0.3],
+        ["mixolydian-rock", 0.3],
+      ],
+      sevenths: 0.6,
+    },
+    rhythm: {
+      onsets: {
+        kick: null,
+        snare: null,
+        hat: null,
+        arp: grid("xxxxxxxxxxxxxxxx"),
+      },
+    },
+    texture: {
+      roles: {
+        kick: null,
+        snare: null,
+        hat: null,
+        bass: role("contrabass"),
+        chords: role("steel"),
+        arp: maybe("banjo"),
+        lead: role("fiddle", "steel:0.6"),
+      },
+    },
+  }),
+  card({
+    id: "western-swing",
+    summary:
+      "western swing: jazz swing feel (ratio 1.7) on a two-beat country bass, steel guitar and twin fiddles, sixth and dominant seventh chords, ii-V turnarounds",
+    seedSalt: 1936,
+    tempo: { bpm: [120, 200], typical: 160 },
+    groove: { subdivision: 2, swingRatio: [1.6, 1.9] },
+    harmony: {
+      presets: [
+        ["turnaround", 0.5],
+        ["ii-v-i", 0.3],
+        ["fifties", 0.2],
+      ],
+      sevenths: 0.8,
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x...x..."),
+        snare: grid("..x...x."),
+        hat: grid("..x...x."),
+      },
+    },
+    bass: {
+      behaviour: [
+        ["walking", 0.5],
+        ["root-fifth", 0.5],
+      ],
+      onsets: grid("x.x.x.x."),
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic"),
+        bass: role("contrabass"),
+        chords: role("electric@clean", "piano:0.6"),
+        lead: role("fiddle", "electric@glide:0.6"),
+        counter: maybe("fiddle", "trumpet:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "honky-tonk",
+    summary:
+      "honky-tonk: shuffle two-beat with brush snare on 2 and 4, alternating root-fifth bass, crying pedal-steel fills, simple I-IV-V, plain-spoken strophic verses",
+    seedSalt: 1950,
+    tempo: { bpm: [90, 150], typical: 116 },
+    groove: { subdivision: 2, swingRatio: [1.3, 1.7] },
+    harmony: {
+      presets: [
+        ["fifties", 0.4],
+        ["mixolydian-rock", 0.6],
+      ],
+      sevenths: 0.2,
+    },
+    rhythm: { onsets: { kick: grid("x...x..."), snare: grid("..x...x.") } },
+    bass: { onsets: grid("x...x...") },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic", ["kick", "snare"]),
+        chords: role("acoustic", "honkytonk:0.6"),
+        lead: role("sing", "fiddle:0.6"),
+        counter: role("electric@glide", "fiddle:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "nashville-sound",
+    summary:
+      "Nashville sound: smooth countrypolitan ballads, string section and background vocal pads replacing fiddle and steel, slip-note piano, I-vi-IV-V",
+    seedSalt: 1958,
+    tempo: { bpm: [70, 120], typical: 92 },
+    groove: { swingRatio: [1, 1.3] },
+    harmony: {
+      presets: [
+        ["fifties", 0.6],
+        ["turnaround", 0.4],
+      ],
+      sevenths: 0.3,
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.......x......."),
+        snare: grid("....x.......x..."),
+        hat: null,
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic", ["kick", "snare"]),
+        chords: role("piano"),
+        bass: role("ebass", "contrabass:0.4"),
+        lead: role("sing"),
+        pad: role("strings", "ooh:0.6"),
+      },
+    },
+  }),
+  card({
+    id: "bakersfield",
+    summary:
+      "Bakersfield sound: bright twangy Telecaster lead, driving straight-eighth train beat, root-fifth bass, raw I-IV-V honky-tonk harmony, electric pedal steel",
+    seedSalt: 1963,
+    tempo: { bpm: [120, 170], typical: 144 },
+    groove: { subdivision: 2, swingRatio: [1, 1.15] },
+    rhythm: {
+      onsets: {
+        kick: grid("x...x..."),
+        snare: grid("..x...x."),
+        hat: grid("xxxxxxxx"),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic"),
+        chords: role("electric@clean", "acoustic:0.4"),
+        lead: role("electric@clean", "electric@glide:0.5"),
+      },
+    },
+    mix: { fx: { lead: { tremolo: "gentle" } } },
+  }),
+  card({
+    id: "outlaw-country",
+    summary:
+      "outlaw country: stripped-down rock-leaning band, loose mid-tempo backbeat, mixolydian bVII colour, blues-inflected leads, unpolished vocals",
+    seedSalt: 1973,
+    tempo: { bpm: [80, 140], typical: 108 },
+    pitch: {
+      scales: [
+        ["mixolydian", 0.6],
+        ["major", 0.4],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["mixolydian-rock", 0.7],
+        ["fifties", 0.3],
+      ],
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.......x......."),
+        snare: grid("....x.......x..."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic"),
+        chords: role("acoustic", "electric@crunch:0.5"),
+        bass: role("ebass"),
+        lead: role("sing", "electric@crunch:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "cowboy-western",
+    summary:
+      "cowboy and western song: loping horse-gait two-beat (clip-clop woodblock), close vocal-trio harmony, yodel leaps of a sixth and octave, simple I-IV-V waltzes and ballads",
+    seedSalt: 1935,
+    meter: {
+      signatures: [
+        ["4/4", 0.6],
+        ["3/4", 0.4],
+      ],
+      hypermeter: [[4, 1]],
+    },
+    tempo: { bpm: [80, 130], typical: 100 },
+    groove: { subdivision: 2, swingRatio: [1.2, 1.5] },
+    pitch: { scales: [["major", 1]] },
+    harmony: {
+      presets: [
+        ["fifties", 0.5],
+        ["turnaround", 0.5],
+      ],
+      sevenths: 0.2,
+    },
+    rhythm: {
+      onsets: { kick: null, snare: null, hat: null, rim: grid("x.x.x.x.") },
+    },
+    melody: { intervals: intervals(4, 3, 1.4, 0.4), ambitus: [9, 16] },
+    texture: {
+      roles: {
+        kick: null,
+        snare: null,
+        hat: null,
+        rim: role("drums"),
+        bass: role("contrabass"),
+        chords: role("acoustic"),
+        lead: role("sing", "fiddle:0.4"),
+        pad: maybe("aah"),
+      },
+    },
+  }),
+  card({
+    id: "country-pop",
+    summary:
+      "country pop: pop song form with country instrumentation, I-V-vi-IV loops, straight sixteenth groove, big lifted choruses, acoustic strum plus steel and fiddle colour",
+    seedSalt: 2000,
+    tempo: { bpm: [80, 130], typical: 104 },
+    groove: { subdivision: 4, swingRatio: [1, 1.05] },
+    harmony: {
+      presets: [
+        ["axis", 0.6],
+        ["sad-pop", 0.2],
+        ["fifties", 0.2],
+      ],
+      sevenths: 0,
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.......x.x....."),
+        snare: grid("....x.......x..."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic"),
+        chords: role("acoustic"),
+        bass: role("ebass"),
+        lead: role("sing"),
+        counter: maybe("fiddle", "electric@glide:0.6"),
+      },
+    },
+    form: {
+      plans: [[["verse", "chorus", "verse", "chorus", "bridge", "chorus"], 1]],
+    },
+  }),
+  card({
+    id: "alt-country",
+    summary:
+      "alt-country: punk and indie energy on country forms, ragged mixolydian rock chords, twangy reverb guitar, unadorned backbeat, minor-key ballads",
+    seedSalt: 1990,
+    tempo: { bpm: [80, 150], typical: 112 },
+    pitch: {
+      scales: [
+        ["major", 0.4],
+        ["mixolydian", 0.3],
+        ["minor", 0.3],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["mixolydian-rock", 0.5],
+        ["aeolian", 0.2],
+        ["axis", 0.3],
+      ],
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.......x......."),
+        snare: grid("....x.......x..."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic"),
+        chords: role("ragged", "acoustic:0.5"),
+        bass: role("ebass"),
+        lead: role("sing", "electric@crunch:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "texas-red-dirt",
+    summary:
+      "Texas country and red dirt: dance-hall two-step shuffle, fiddle and steel answering the vocal, loose roadhouse rock backbeat, I-IV-V with bVII",
+    seedSalt: 1995,
+    tempo: { bpm: [100, 150], typical: 124 },
+    groove: { subdivision: 2, swingRatio: [1.2, 1.5] },
+    harmony: {
+      presets: [
+        ["mixolydian-rock", 0.6],
+        ["fifties", 0.4],
+      ],
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x...x..."),
+        snare: grid("..x...x."),
+        hat: grid("x.x.x.x."),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic"),
+        chords: role("acoustic", "electric@clean:0.5"),
+        bass: role("ebass"),
+        lead: role("sing", "fiddle:0.6"),
+        counter: role("fiddle", "electric@glide:0.6"),
+      },
+    },
+  }),
 ]);
