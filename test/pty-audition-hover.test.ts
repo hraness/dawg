@@ -135,8 +135,11 @@ test.skipIf(!supported)(
     try {
       await t.until(() => screen().includes("STEER"), "prompt");
       await t.send("/kit\r");
-      await t.until(() => screen().includes("drum kits"), "kit picker");
-      expect(screen()).toContain("space loop");
+      // The title row can arrive before the footer row of the same frame.
+      await t.until(
+        () => screen().includes("drum kits") && screen().includes("space loop"),
+        "kit picker with its loop hint",
+      );
       await t.send(" ");
       await t.until(() => screen().includes("♪ solo"), "auditioning");
       await t.until(() => screen().includes("B staged 1"), "first hover");
