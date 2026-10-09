@@ -358,6 +358,52 @@ describe("modal tracks", () => {
   });
 });
 
+const fretted = createScore({
+  tempoBpm: 100,
+  bars: 1,
+  tracks: [
+    {
+      id: "gtr",
+      name: "gtr",
+      instrument: "pluck",
+      guitar: { tune: "dadgad", capo: 2, hand: 5, ring: 0.8, position: 3 },
+    },
+    {
+      id: "uke",
+      name: "uke",
+      instrument: "pluck",
+      guitar: { tune: [67, 60, 64, 69] },
+    },
+    { id: "plain", name: "plain", instrument: "pluck" },
+  ],
+} as never);
+
+describe("guitar tracks", () => {
+  test("print guitar only when set and survive print → eval", async () => {
+    const [gtr, uke, plain] = fretted.tracks.map((track) =>
+      printTrack(fretted, track),
+    );
+    expect(gtr).toContain(
+      'guitar: { tune: "dadgad", capo: 2, hand: 5, ring: 0.8, position: 3 },',
+    );
+    expect(uke).toContain("guitar: { tune: [67, 60, 64, 69] },");
+    expect(plain).not.toContain("guitar");
+    const dir = await mkdtemp(join(tmpdir(), "dawg-print-guitar-"));
+    try {
+      await initProject(dir);
+      await writeProject(dir, fretted);
+      const evaluated = await evaluateProject(dir);
+      if (!evaluated.ok) throw new Error(JSON.stringify(evaluated.diagnostics));
+      expect(diffScores(fretted, evaluated.score)).toEqual([]);
+      expect(printProject(evaluated.score).files).toEqual(
+        printProject(fretted).files,
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("printer", () => {
   test("effects print their set fields and non-default fx params", () => {
     const lead = printTrack(rich, rich.tracks.at(-1)!);

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { parseKey, parseRoman, renderProgression } from "../chords.ts";
-import { chord, DawgSdkError, progression, song, track } from "./v1.ts";
+import { chord, DawgSdkError, progression, song, strum, track } from "./v1.ts";
 
 describe("sdk chord helpers", () => {
   test("chord() spells a symbol in root position from C4", () => {
@@ -70,5 +70,26 @@ describe("sdk chord helpers", () => {
     const s = song({ tempo: 100, bars: 4, tracks: [keys] });
     expect(s.notes.length).toBe(12);
     expect(new Set(s.notes.map((n) => n.id)).size).toBe(12);
+  });
+});
+
+describe("strum (SDK 1.27.0)", () => {
+  test("strums fretted shapes with the stroke grid and speed in ms", () => {
+    const notes = strum("E", { strokes: "D", step: 4, speed: 30, tempo: 120 });
+    expect(notes.map((n) => n.pitch)).toEqual([40, 47, 52, 56, 59, 64]);
+    const spread = notes.at(-1)!.start - notes[0]!.start;
+    expect(Math.abs((spread * 60_000) / 120 - 30)).toBeLessThanOrEqual(1);
+    expect(strum("G D Em C", { strokes: "folk" })).toEqual(
+      strum("G D Em C", { strokes: "folk" }),
+    );
+  });
+
+  test("capo and bad strokes", () => {
+    const capo = strum("E", { strokes: "D", step: 4, guitar: { capo: 2 } });
+    const low = Math.min(...capo.map((n) => n.pitch));
+    expect(low % 12).toBe(4);
+    expect(low).toBeGreaterThanOrEqual(42);
+    expect(() => strum("E", { strokes: "DZ" })).toThrow(/strokes/);
+    expect(() => strum("E", { guitar: { capo: 20 } })).toThrow(/capo/);
   });
 });

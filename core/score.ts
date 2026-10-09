@@ -33,6 +33,7 @@ import {
   type TrackGranular,
 } from "./granular.ts";
 import { normalizeKeys, type TrackKeys } from "./keys.ts";
+import { GUITAR_TUNING_NAMES } from "./chords.ts";
 import {
   checkSongTime,
   normalizeSongTime,
@@ -427,6 +428,13 @@ export type Track = Readonly<{
    * when it goes down ring until it lifts; later keys damp as usual.
    */
   sostenuto?: readonly PedalEvent[];
+  /**
+   * Optional (0.6.1): how the track is fretted when chords are strummed
+   * (`strum`, perform mode `guitar`): tuning, capo, hand stretch, how much
+   * open strings ring and a preferred position. Notes only; never read at
+   * render, so it changes no sound by itself.
+   */
+  guitar?: TrackGuitar;
 }> &
   /**
    * Performance (`core/expression.ts`): glide default, sustain pedal
@@ -555,14 +563,22 @@ export type TrackReverb = Readonly<{
   predelay?: number;
   /**
    * Optional (Strudel `iresponse`/`ir`): convolve with this impulse instead
-   * of the algorithmic tail. `builtin:room|hall|plate`, a pinned pack sound
+   * of the algorithmic tail. `builtin:room|hall|plate|reverse|gate|spring`, a pinned pack sound
    * or a project file; `size`, `fade` and `dim` then do nothing.
    */
   ir?: SampleRef;
 }>;
 
 /** Generated impulse responses `reverb.ir` can name as `builtin:<name>`. */
-export const REVERB_IR_BUILTINS = Object.freeze(["room", "hall", "plate"]);
+export const REVERB_IR_BUILTINS = Object.freeze([
+  "room",
+  "hall",
+  "plate",
+  // 0.6.1: a reverse (rising) wash, a gated tail, a spring tank.
+  "reverse",
+  "gate",
+  "spring",
+]);
 
 /**
  * Validates `reverb.ir`: a string or `{ src, … }`. Bare built-in names and
@@ -770,6 +786,7 @@ export type TrackPatch = Readonly<
     modal?: TrackModal | null;
     softPedal?: Track["softPedal"] | null;
     sostenuto?: Track["sostenuto"] | null;
+    guitar?: TrackGuitar | null;
   }
 >;
 
@@ -820,6 +837,7 @@ export type TrackInput = Readonly<
     | "modal"
     | "softPedal"
     | "sostenuto"
+    | "guitar"
   > &
     Pick<Track, "id"> & {
       filter?: TrackFilter | null;
@@ -844,6 +862,7 @@ export type TrackInput = Readonly<
       modal?: TrackModal | null;
       softPedal?: Track["softPedal"] | null;
       sostenuto?: Track["sostenuto"] | null;
+      guitar?: TrackGuitar | null;
     }
 >;
 
@@ -1834,6 +1853,7 @@ function normalizeTrack(input: unknown): Track {
       `track ${id} has modal settings but its instrument is "${instrument}"`,
       "invalid-track",
     );
+  const guitar = normalizeGuitar(input.guitar);
   const sampler = normalizeSampler(input.sampler);
   const rhythm = normalizeRhythm(input.rhythm, id);
   const time = timeOrThrow(
@@ -1951,7 +1971,84 @@ function normalizeTrack(input: unknown): Track {
     ...(modal ? { modal } : {}),
     ...(softPedal ? { softPedal } : {}),
     ...(sostenuto ? { sostenuto } : {}),
+    ...(guitar ? { guitar } : {}),
   });
+}
+
+/** Track.guitar (0.6.1): a tuning name or open-string pitches plus fretting. */
+export type TrackGuitar = Readonly<{
+  /** A GUITAR_TUNINGS name or 3..12 open-string MIDI pitches, low to high. */
+  tune?: string | readonly number[];
+  /** Capo fret 0..12. */
+  capo?: number;
+  /** Hand stretch in frets 3..6 (default 4). */
+  hand?: number;
+  /** 0 closed shapes .. 1 ringing open strings (default 0.5). */
+  ring?: number;
+  /** Preferred fret position 0..12. */
+  position?: number;
+}>;
+
+/** Validates Track.guitar; `{}` and null normalize to absent. */
+export function normalizeGuitar(input: unknown): TrackGuitar | undefined {
+  if (input === undefined || input === null) return undefined;
+  const fail = (message: string): never => {
+    throw new ScoreValidationError(`track guitar ${message}`, "invalid-track");
+  };
+  if (typeof input !== "object" || Array.isArray(input))
+    fail("must be an object or null");
+  const out: Record<string, unknown> = {};
+  const record = input as Record<string, unknown>;
+  for (const key of Object.keys(record))
+    if (!["tune", "capo", "hand", "ring", "position"].includes(key))
+      fail(`has no field "${key.slice(0, 32)}"`);
+  const tune = record.tune;
+  if (tune !== undefined && tune !== null) {
+    if (typeof tune === "string") {
+      const name = tune.toLowerCase().replace(/[\s_-]/g, "");
+      if (!(GUITAR_TUNING_NAMES as readonly string[]).includes(name))
+        fail(
+          `tune must be one of ${GUITAR_TUNING_NAMES.join(", ")} or a list of pitches`,
+        );
+      out.tune = name;
+    } else if (
+      Array.isArray(tune) &&
+      tune.length >= 3 &&
+      tune.length <= 12 &&
+      tune.every((p) => Number.isInteger(p) && p >= 0 && p <= 127)
+    )
+      out.tune = Object.freeze([...(tune as number[])]);
+    else fail("tune must be a tuning name or 3..12 MIDI pitches");
+  }
+  const int = (key: string, min: number, max: number) => {
+    const value = record[key];
+    if (value === undefined || value === null) return;
+    if (
+      typeof value !== "number" ||
+      !Number.isInteger(value) ||
+      value < min ||
+      value > max
+    )
+      fail(`${key} must be an integer ${min}..${max}`);
+    out[key] = value;
+  };
+  int("capo", 0, 12);
+  int("hand", 3, 6);
+  const ring = record.ring;
+  if (ring !== undefined && ring !== null) {
+    if (
+      typeof ring !== "number" ||
+      !Number.isFinite(ring) ||
+      ring < 0 ||
+      ring > 1
+    )
+      fail("ring must be 0..1");
+    out.ring = Math.round((ring as number) * 1000) / 1000;
+  }
+  int("position", 0, 12);
+  return Object.keys(out).length > 0
+    ? (Object.freeze(out) as TrackGuitar)
+    : undefined;
 }
 
 export function normalizeRhythm(

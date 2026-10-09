@@ -4,6 +4,7 @@
  * app commands take a slash (bare aliases keep working but are listed once,
  * in their canonical form).
  */
+import { GUITAR_TUNING_NAMES } from "../../core/chords.ts";
 import { EXPRESSION_USAGE } from "./expression.ts";
 
 export type HelpGroup = "music" | "session" | "window" | "keys";
@@ -75,7 +76,22 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       {
         command: "rig <preset> | reset",
         summary:
-          "guitar rig · rig crunch · rig metal · rig funk · rig lists them",
+          "guitar rig · rig crunch · rig metal · rig shoegaze · rig lists them",
+      },
+      {
+        command:
+          "guitar tune <name|notes> | capo | hand | ring | position | reset",
+        summary: "guitar fretting · guitar tune dadgad · guitar capo 2",
+      },
+      {
+        command: "strum [chords] [pattern] [strokes D-DU-UDU] [speed 22ms]",
+        summary:
+          "strummed guitar chords · strum G D Em C folk · strum I V vi IV · strum alone strums the track's chords",
+      },
+      {
+        command: "fx wobble|bloom|swell|double [param value]",
+        summary:
+          "shoegaze · fx wobble depth 30 · fx double · reverb ir builtin:reverse",
       },
       {
         command: "track jangle|punk|funk|ragged|gtr-lead|gtr-metal|bachata",
@@ -613,7 +629,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   click: "/click on|off|<volume> · /click 50%",
   "count-in": "/count-in 0|1|2",
   chords:
-    "/chords auto|manual|off · voicing <n> · spread · bass · perform · rate · octaves · sevenths · preset · style",
+    "/chords auto|manual|off · voicing <n> · spread · bass · perform · rate · octaves · sevenths · preset · style · strokes · speed",
   key: "key <tonic> <mode> | none · key A minor",
   scale: "scale [<tonic>] <name> | list · scale D hijaz",
   tuning:
@@ -695,7 +711,10 @@ export const USAGE: Readonly<Record<string, string>> = {
   synth: "synth <param> <value> | preset <name> · synth lpf 1200",
   string:
     "string <preset> | preset <name> | <param> <value> | presets | reset | off · string koto",
-  rig: "rig clean|crunch|punk|ragged|lead|metal|fuzz|octave|funk|wah|bachata|spring|bassdrive|reese|jangle|alt | reset",
+  rig: "rig clean|crunch|punk|ragged|lead|metal|fuzz|octave|funk|wah|bachata|spring|bassdrive|reese|jangle|alt|shoegaze|glide|dreampop|swell|ebow | reset",
+  guitar: `guitar tune ${GUITAR_TUNING_NAMES.join("|")} | E A D G B E · capo 0..12 · hand 3..6 · ring 0..1 · position · reset`,
+  strum:
+    "strum G D Em C [folk|pop|punk|…] [strokes D-DU-UDU] [speed 22ms] [each 4] [at 0] · strum alone strums the track's chords",
   stomp:
     "stomp fuzz|face|od|rat|octave | gain <0-10> tone <0-1> level <dB> | off",
   head: "head clean|chime|crunch|lead|high|solid|bass | gain bass mid treble presence master <0-10> | gate <dB> | off",

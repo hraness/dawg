@@ -167,3 +167,54 @@ describe("chord tools", () => {
     ).toThrow(/exceed/);
   });
 });
+
+describe("guitar tools (0.6.1)", () => {
+  const apply = (value: TrackScore, operations: readonly unknown[]) =>
+    operations.reduce<TrackScore>(
+      (acc, op) => applyScoreOperation(acc, op as never),
+      value,
+    );
+
+  test("set_guitar stores tuning and capo; strum_chords writes a strum", () => {
+    const set = tool("set_guitar").plan(
+      { tune: "dadgad", capo: 2 },
+      context(score),
+    );
+    expect(set.kind).toBe("score");
+    if (set.kind !== "score") return;
+    const tuned = apply(score, set.operations);
+    expect(tuned.tracks.find((t) => t.id === "keys")!.guitar).toEqual({
+      tune: "dadgad",
+      capo: 2,
+    });
+    const strum = tool("strum_chords").plan(
+      { chords: ["i", "VI"], strokes: "D", speed: 30 },
+      context(tuned),
+    );
+    expect(strum.kind).toBe("score");
+    if (strum.kind !== "score") return;
+    expect(strum.summary).toContain("Am F");
+    const next = apply(tuned, strum.operations);
+    expect(next.notes.length).toBeGreaterThanOrEqual(8);
+  });
+
+  test("strum_chords rejects a bad grid and an empty track", () => {
+    expect(() =>
+      tool("strum_chords").plan(
+        { chords: ["C"], strokes: "Q" },
+        context(score),
+      ),
+    ).toThrow(/strokes/);
+    expect(() => tool("strum_chords").plan({}, context(score))).toThrow(
+      /no chords/,
+    );
+  });
+
+  test("write_chords perform guitar takes strokes and speed", () => {
+    const plan = tool("write_chords").plan(
+      { chords: ["Am"], perform: "guitar", strokes: "down", speed: 40 },
+      context(score),
+    );
+    expect(plan.kind).toBe("score");
+  });
+});

@@ -332,7 +332,7 @@ Parameters (**bold** effect = shown in the simple menu; Lane = automation lane):
 | reverb         | lowpass (optional)  | 200..20000 Hz                                                                     | 8000    | `roomlp`, `rlp`                                                |                        |
 | reverb         | dim (optional)      | 200..20000 Hz                                                                     | 3000    | `roomdim`, `rdim`                                              |                        |
 | reverb         | predelay (optional) | 0..0.5 s                                                                          | 0.02    |                                                                |                        |
-| reverb         | ir (optional)       | `builtin:room\|hall\|plate`, pack sound or project WAV                            | off     | `iresponse`, `ir`                                              |                        |
+| reverb         | ir (optional)       | `builtin:room\|hall\|plate\|reverse\|gate\|spring`, pack sound or project WAV     | off     | `iresponse`, `ir`                                              |                        |
 | orbit          | orbit               | 1..16 (integer)                                                                   | 2       | `orbit`, `o`                                                   |                        |
 | orbit          | shared (optional)   | on/off                                                                            | off     |                                                                |                        |
 | duck           | orbit               | 1..16 (integer)                                                                   | 1       | `duckorbit`, `duck`                                            |                        |
@@ -384,6 +384,43 @@ Rig presets (`RIG_PRESETS` in `core/fx.ts`): `clean crunch punk ragged lead meta
 | **cab**   | type            | 1x12 / 2x12 / 4x12 / 1x10 / open / 8x10 / 1x15 / di | 2x12    |              |
 | **cab**   | mic             | 0..1                                                | 0.3     |              |
 | **cab**   | mix             | 0..1                                                | 1       |              |
+
+### Shoegaze (wobble, bloom, swell, double) (0.6.1)
+
+Four effects that sit after `cab` and before `tremolo` (`double` runs after `pan`, because it makes the stereo image), in `src/audio/effects/gaze.ts`. They run once per track, never per voice, and use seeded randomness only, so every render is identical.
+
+```text
+fx wobble                  held tremolo arm: seeded pitch wow and flutter (depth 20 c)
+fx wobble depth 35 rate 0.4 drift 0.5
+fx bloom                   feedback: the top held note grows a singing harmonic
+fx swell time 0.5          volume swell: each strum fades in, no pick attack
+fx double                  a second, seeded take a few ms late, spread left and right
+rig shoegaze               fuzz + chime head + wobble + bloom + double + a big reverb
+reverb ir builtin:reverse  reverse-gate swell after the attack, not a pre-verb (also builtin:gate and builtin:spring)
+track shoegaze             a new electric guitar track with the shoegaze rig
+```
+
+- **wobble** (`depth` 0..100 cents, `rate` Hz, `drift` 0 periodic .. 1 wandering) is a modulated fractional delay read with a 4-point interpolator, like a held vibrato arm or tape wow. Its peak deviation equals `depth` (a sustained A3 at depth 35 swings ±35 c). `depth` is automatable.
+- **bloom** (`amount`, `harm` 1..4, `delay` s, `time` s) finds the highest held note at each moment (EffectContext.notes) and grows a phase-continuous partial at its `harm`-th harmonic after the note has been held `delay` seconds, the way an amp in feedback picks one note. Each note's partial is seeded by the note id, so it is stable when other notes change.
+- **swell** (`time` s, `mix`) restarts a raised-cosine fade at each note onset: a volume-pedal swell without the pick.
+- **double** (`time` 5..60 ms, `drift` ms, `width`) is automatic double tracking: a second take through a modulated delay whose timing wanders by `drift`, panned against the dry take. Left/right correlation stays between 0.3 and 0.8.
+
+Rig presets gain `shoegaze glide dreampop swell ebow` (the `swell` rig is the swell effect plus a clean amp and a room; `ebow` is swell plus a bloom on the note itself). `jangle` now also writes a light `double`; a project that loaded jangle before 0.6.1 keeps its stored stages and renders unchanged until `rig jangle` is applied again. In `song.ts`, `rig("jangle")` and `instrument: "jangle"` keep the 0.6.0 stages (no double) so existing files render unchanged; add `double: {}` for the 0.6.1 sound. `instrument: "shoegaze"` (and the other new rig words) also sets the rig's reverb wash, like `track shoegaze`; `rig()` returns effects only, so pair it with `reverb: rigReverb("shoegaze")`. The rigs carry a `postgain` trim so the shoegaze rigs land within 2.5 dB of `clean`. The built-in impulses `reverse` (energy rising to a hard stop: a reverse-gate swell that rises after each attack, not a pre-verb that swells into the note; no rig preset uses it, so reach it with `reverb ir builtin:reverse`), `gate` (a dense, flat 250 ms burst cut short) and `spring` (a dispersive, chirping tank) are generated from seeded noise like `room hall plate`; no recorded IR ships. Menu: **Effects › Shoegaze** and the rig preset row in **Effects › Guitar rig**. Agent: `set_fx` and `set_rig`. SDK: `fx: { ...rig("shoegaze") }` or `fx: { wobble: { depth: 30 } }`. A full shoegaze rig costs under 25 ms per track-second.
+
+| Effect     | Param  | Range        | Default | Lane           |
+| ---------- | ------ | ------------ | ------- | -------------- |
+| **wobble** | depth  | 0..100 cents | 20      | `wobble-depth` |
+| **wobble** | rate   | 0.05..8 Hz   | 0.5     |                |
+| **wobble** | drift  | 0..1         | 0.3     |                |
+| **bloom**  | amount | 0..1         | 0.5     |                |
+| **bloom**  | harm   | 1..4         | 2       |                |
+| **bloom**  | delay  | 0..4 s       | 0.6     |                |
+| bloom      | time   | 0.05..4 s    | 1       |                |
+| **swell**  | time   | 0.01..4 s    | 0.4     |                |
+| **swell**  | mix    | 0..1         | 1       | `swell-mix`    |
+| **double** | time   | 5..60 ms     | 22      |                |
+| **double** | drift  | 0..10 ms     | 3       |                |
+| **double** | width  | 0..1         | 0.6     |                |
 
 ## Master and loudness
 
@@ -1063,6 +1100,7 @@ From Orchid's documentation and reviews:
 - Bass: an optional engine that plays the chord's root under every chord. Its menu (manual 10.2, "How to use Bass on Orchid") has Chords Only (bass only under chords), Unison (single notes play bass and treble together), Single Notes (single notes play only bass; the treble sounds only for chords) and Solo (the treble is muted, even for chords).
 - Performance modes: Strum (and 2-octave), Slop (random timing per note for a humanised feel that varies with every press), Arpeggiator (and 2-octave, tempo-synced; more chord notes make a longer pattern), Pattern (fixed rhythms) and Harp (a sweep across several octaves).
 - "Secret chords" (firmware 3.84+, Orchid manual section 14.8): two type buttons held together play extra chords. dim+sus is a power chord (C5), maj+sus augmented (C+), min+sus Cm(add4); min+dim with the 6 button is Cm(b6), maj+dim with 6 is C(b6), and maj+min with m7 is C7♯9. dawg's `COMBINED_TYPES` is this table.
+- Typed upper tensions (0.6.1): chord symbols also accept `11 m11 maj11 add11 madd11 13 m13 maj13 7b9 7#11 maj7#11 7b13 13b9` (`strum C11`, `strum_chords`, SDK `strum()`). They are typed-only (no pad buttons) and name back as typed; the guitar voicer drops the 5th, then the 11th beside a 3rd, then the 9th, and never the 3rd or 7th.
 - Orchid has no generator that writes a progression for you. Key mode is its "easy chord progressions" feature: you pick the order, every key is in key.
 
 dawg's own design:
@@ -1168,6 +1206,27 @@ Rendering. Synth and wavetable voices start at the tuned frequency; keyed sample
 
 Recording keeps each note's velocity from `C`/`V`. Sustain is recorded the way Logic's Musical Typing records its `Tab` sustain key: as pedal events (`down` when `Tab` latches or Shift starts holding, `up` when it lets go) on the track, at the playhead and not quantized, while the notes keep the length the key was held. Terminals report key-down only, so `Tab` latches rather than holds. A chord-mode press keeps its held length on its voices instead.
 
+### Guitar strumming (0.6.1)
+
+The `guitar` perform mode, the `strum` command, `strum_chords` and SDK `strum()` share one fretboard voicer and one stroke engine in `core/chords.ts`.
+
+```text
+guitar                         show the track's fretting (Track.guitar)
+guitar tune dadgad             a tuning name, or open strings low to high: guitar tune D A D G A D
+guitar capo 2 · hand 5 · ring 0.8 · position 5 · guitar reset
+strum G D Em C folk            chords (symbols or roman numerals), one bar each
+strum I V vi IV strokes D-DU-UDU speed 30ms each 2 at 4
+strum                          strum the block chords already on the track
+/chords perform guitar         play mode chords strum on the fretboard; [ ] change speed
+```
+
+- **Voicer.** Each chord is fitted to the strings within `hand` frets (default 4) above the capo, preferring open strings (`ring` 0 closed shapes .. 1 ringing open strings) and the `position` fret. A barre never lies over a string that plays open, the bass is the chord's root or slash bass, and when a chord has more notes than strings fit it drops the fifth, then the 11th, then the 9th, as guitarists do. Every one of the 96 common shapes (12 roots × 8 qualities) is playable within 4 frets in standard tuning.
+- **Tunings** (`GUITAR_TUNINGS`): `standard dropd doubledropd dadgad openg opend opene halfdown nashville bass ukulele requinto`, or any 3..12 open-string notes. The capo moves every string up.
+- **Strokes.** A grid on `step` (an eighth by default) of `D` down, `U` up, `d` `u` light strokes, `x` a muted chuck, and `-` or `.` a rest (the strings ring on), or a named pattern: `down folk pop punk funk reggae waltz jangle island`. Down strokes go low to high, up strokes high to low over three or four strings, and a new stroke cuts the strings it restrikes. Patterns are dawg's own: the classic folk/pop eighth-note patterns of beginner method books.
+- **Speed.** The time a full six-string down stroke takes, 22 ms by default (0..200 ms), the spread a real pick takes across the strings; it is in milliseconds so it stays the same at any tempo (`speed 1/32b` gives it in beats, converted at the song tempo). At 120 BPM the first-to-last note spread equals `speed` within 1 ms.
+
+Track.guitar is stored only when set (`{ tune, capo, hand, ring, position }`). Menu: **Sound › guitar** (on guitar-like tracks: tune, capo, hand, ring, position, strum the chords, reset) and **Chords › strokes / speed**. Agent: `set_guitar`, `strum_chords`, and `write_chords` with `perform: "guitar"`, `strokes`, `speed`. SDK: `track({ guitar: { tune: "dadgad", capo: 2 } })` and `strum("G D Em C", { strokes: "folk", speed: 30 })`.
+
 ### Chord mode
 
 Play mode has a chord sub-mode modelled on the Orchid's Key mode. It is `auto` by default when the focused track can play chords (pitched synths, piano, soundfonts, keyed samplers; not tracks whose instrument, name or id says bass, kit, drum or perc) in 12-TET without a mono or legato glide, otherwise `manual`, so a track in pelog, just intonation or another non-12 tuning, or a TB-303-style legato line, records single notes. Choosing a mode by hand (`Q`, `/chords`, the menu) sticks for the session.
@@ -1178,22 +1237,23 @@ Play mode has a chord sub-mode modelled on the Orchid's Key mode. It is `auto` b
 
 Terminals send no key releases, so the Orchid's held left-hand buttons are latches here: press once to latch, again to release, `0` clears them all.
 
-| Key       | Does (chord mode on)                                                            |
-| --------- | ------------------------------------------------------------------------------- |
-| `Q`       | auto ⇄ manual                                                                   |
-| `1 2 3 4` | latch chord type dim / min / maj / sus (two latched make a combined chord)      |
-| `5 6 7 8` | latch extension 6 / m7 / M7 / 9 (any number; on top of the type or auto chord)  |
-| `0`       | clear every latch                                                               |
-| `-` / `=` | voicing dial down / up (-12..12; walks inversions)                              |
-| `9`       | next perform mode (block, strum-up, strum-down, arp-up, …, harp, slop, pattern) |
-| `B`       | next bass mode: off, chords, unison, single, solo (bass in C2–B2)               |
-| `N`       | play the suggested next chord (the `next` chord in the header)                  |
+| Key       | Does (chord mode on)                                                                    |
+| --------- | --------------------------------------------------------------------------------------- |
+| `Q`       | auto ⇄ manual                                                                           |
+| `1 2 3 4` | latch chord type dim / min / maj / sus (two latched make a combined chord)              |
+| `5 6 7 8` | latch extension 6 / m7 / M7 / 9 (any number; on top of the type or auto chord)          |
+| `0`       | clear every latch                                                                       |
+| `-` / `=` | voicing dial down / up (-12..12; walks inversions)                                      |
+| `9`       | next perform mode (block, strum-up, strum-down, arp-up, …, harp, slop, pattern, guitar) |
+| `[` / `]` | perform guitar: strum slower / faster (5 ms steps, 0..200 ms)                           |
+| `B`       | next bass mode: off, chords, unison, single, solo (bass in C2–B2)                       |
+| `N`       | play the suggested next chord (the `next` chord in the header)                          |
 
 The header gains `AUTO C major · Dm (ii) · next G`: mode, key (`(assumed)` when the score has none and C major is used), the last chord with its numeral, and the suggested next chord. A legend row under the keyboard strip lists the number-row latches (`1 dim  2 min  3 maj  4 sus  5 6  6 m7  7 M7  8 9  0 clear  -= voicing 0  9 block  b bass off  n next  q auto`), with latched ones lit; at 80 columns the row ends where it fits. The full chord state is in the `?` panel, in the header's words: `chords AUTO C major · Dm (ii) · next G · min+m7 · voicing +1 · arp-up · bass chords`. The suggestion comes from the progression engine: the next chord of the chosen preset when the last chord is in it, otherwise a seeded step of the style's transition graph.
 
 Each chord is voice-led from the previous one and sounds through the live voice path. Recording quantizes the press like a note and lays the chord out with the perform mode over its held length (arpeggios at `rate`, `grid` by default; patterns from the press's quantized start), plus the bass note. Under `unison`, `single` and `solo` a single note in manual mode also records its bass (and, for `unison`, the note itself); `solo` records chords as bass only; each bar is still one revision and one undo step.
 
-`/chords` with no argument prints the settings; `/chords auto|manual|off`, `voicing <n>`, `spread close|open|wide`, `bass off|chords|unison|single|solo` (`on` means `chords`), `sevenths on|off`, `perform <mode>`, `pattern <1..13|name>` (also selects the pattern perform mode), `rate grid|1/4|1/8|1/16|1/32`, `octaves 1..4`, `preset <name>|none`, `style pop|jazz|modal|classical`. `key <tonic> <mode>` (`key A minor`, `key F# dorian`, `key none`) sets the song key as one score edit. The same settings and the key are in `/menu` under Chords.
+`/chords` with no argument prints the settings; `/chords auto|manual|off`, `voicing <n>`, `spread close|open|wide`, `bass off|chords|unison|single|solo` (`on` means `chords`), `sevenths on|off`, `perform <mode>`, `pattern <1..13|name>` (also selects the pattern perform mode), `rate grid|1/4|1/8|1/16|1/32`, `octaves 1..4`, `preset <name>|none`, `style pop|jazz|modal|classical`, and for the guitar perform mode `strokes <name|grid>` and `speed <ms|beats>` (`speed 30ms`, `speed 1/32b`). `key <tonic> <mode>` (`key A minor`, `key F# dorian`, `key none`) sets the song key as one score edit. The same settings and the key are in `/menu` under Chords.
 
 The base octave follows the instrument: C3 (MIDI 48) by default, C2 for bass instruments or tracks named bass, C4 for saw/square/triangle/pluck leads. Kits start at C2, so `A` is the GM kick, `S` the snare, `T` the closed hat. On a one-shot sampler track the keys walk the voices in name order from slot 36 (`A` the first voice, `W` the second, chromatically), and the strip shows voice names; a keyed sampler starts at the C below its lowest root and repitches from it.
 

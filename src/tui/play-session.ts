@@ -59,12 +59,14 @@ import {
   DEFAULT_STRUM,
   perform,
   type PerformMode,
+  type PerformOptions,
   type PerformedNote,
 } from "../../core/chords.ts";
 import {
   ChordPad,
   chordCapable,
   defaultChordSettings,
+  guitarPerform,
   songKey,
   type ChordSettings,
   type PlayedChord,
@@ -181,6 +183,8 @@ export type RecordedChord = Readonly<{
   seed: number;
   /** CHORD_PATTERNS name when `mode` is `pattern`. */
   pattern?: string;
+  /** Guitar mode: strokes, speed, tempo, fretting and the chord root. */
+  guitar?: Partial<PerformOptions>;
 }>;
 
 /** A chord sounding live: its voices start and stop from `tick()`. */
@@ -729,6 +733,19 @@ export class PlaySession {
       octaves: settings.octaves,
       seed,
       ...(mode === "pattern" ? { pattern: settings.pattern } : {}),
+      ...(mode === "guitar" ? { guitar: this.guitarOptions(played) } : {}),
+    };
+  }
+
+  /** Guitar-mode perform options for a played chord (strokes, speed, frets). */
+  private guitarOptions(played: PlayedChord): Partial<PerformOptions> {
+    return {
+      ...guitarPerform(
+        this.chords.settings,
+        { tempoBpm: this.currentBpm() },
+        this.trackData(),
+      ),
+      root: played.chord.root,
     };
   }
 
@@ -749,6 +766,7 @@ export class PlaySession {
       seed: note.id,
       pattern: settings.pattern,
       velocity: 1,
+      ...(mode === "guitar" ? this.guitarOptions(played) : {}),
     });
     if (played.bass !== undefined)
       plan.push({
@@ -1213,6 +1231,7 @@ export function chordNotes(
     seed: chord.seed,
     ...(chord.pattern !== undefined ? { pattern: chord.pattern } : {}),
     velocity: 1,
+    ...chord.guitar,
   }).map((note) => ({
     pitch: note.pitch,
     velocity: scaleVelocity(press.velocity, note.velocity),

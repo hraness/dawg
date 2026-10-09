@@ -715,7 +715,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   {
     name: "set_rig",
     description:
-      "Guitar rig on a track (stomp → amp head with noise gate → speaker cab, before tremolo). rig loads a whole rig (clean crunch punk ragged lead metal fuzz octave funk wah bachata spring bassdrive reese jangle alt) or reset removes it; stomp/head/cab set stage params (stomp type fuzz|face|od|rat|octave gain tone level; head type clean|chime|crunch|lead|high|solid|bass gain bass mid treble presence master sag gate(dB); cab type 1x12|2x12|4x12|1x10|open|8x10|1x15|di mic), or null removes a stage. Heads are level-matched. `amp` is Strudel gain, not this.",
+      "Guitar rig on a track (stomp → amp head with noise gate → speaker cab, before tremolo). rig loads a whole rig (clean crunch punk ragged lead metal fuzz octave funk wah bachata spring bassdrive reese jangle alt, and the shoegaze rigs shoegaze glide dreampop swell ebow that add wobble/bloom/swell/double and a long reverb) or reset removes it; stomp/head/cab set stage params (stomp type fuzz|face|od|rat|octave gain tone level; head type clean|chime|crunch|lead|high|solid|bass gain bass mid treble presence master sag gate(dB); cab type 1x12|2x12|4x12|1x10|open|8x10|1x15|di mic), or null removes a stage. Heads are level-matched. `amp` is Strudel gain, not this.",
     parameters: {
       type: "object",
       properties: {

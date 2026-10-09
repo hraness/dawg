@@ -17,13 +17,14 @@ chorus, delay, reverb, and more (phaser, bitcrush, vowel, leslie).
 
 - `fx` list the focused track's effects
 - `fx delay mix 0.3` · `fx filter type hpf cutoff 300`
-- `fx distort drive 4 tone 5000` · `fx reverb ir hall`
+- `fx distort drive 4 tone 5000` · `fx reverb ir builtin:reverse`
 - `fx chorus on` · `fx chorus off` · `fx chorus reset`
 - `fx compressor preset <name>` load a preset
 - `rig crunch` guitar rig · `head lead` · `cab 4x12` · `stomp fuzz`
+- `rig shoegaze` · `fx wobble depth 30` · `fx bloom` · `fx swell` · `fx double`
 - `filter 1200 0.6` · `delay 0.375 0.3` · `reverb 0.4 0.8` · `filter off`
 
 ## Menu
 
-- Ctrl-K › Effects: core effects, Guitar rig, more effects, advanced
+- Ctrl-K › Effects: core effects, Guitar rig, Shoegaze, more, advanced
 - `fx filter` alone opens the filter's faders, stacked

@@ -25,6 +25,20 @@ export type EffectContext = Readonly<{
   irs?: ReadonlyMap<string, DecodedSample>;
   /** The song's tempo map in samples; absent: constant tempo. */
   warp?: SampleWarp;
+  /**
+   * The track's notes in buffer samples, for note-aware stages (bloom,
+   * swell; 0.6.1). Filled only when such a stage is on.
+   */
+  notes?: readonly EffectNote[];
+}>;
+
+/** One note as a note-aware effect sees it: where it sounds and its pitch. */
+export type EffectNote = Readonly<{
+  id: string;
+  start: number;
+  length: number;
+  hz: number;
+  velocity: number;
 }>;
 
 /** Score tick at sample `index`, through the tempo map when there is one. */

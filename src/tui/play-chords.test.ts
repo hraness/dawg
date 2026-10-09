@@ -6,6 +6,7 @@ import {
   chordCapable,
   chordPhrase,
   defaultChordSettings,
+  parseStrokeSpeed,
 } from "./play-chords.ts";
 
 function pad(key = "C major", mode: "auto" | "manual" = "auto") {
@@ -112,7 +113,41 @@ describe("ChordPad", () => {
     expect(p.settings.perform).toBe("pattern");
     expect(p.headerText(true)).toContain("pattern 1 eighths");
     p.press("9");
+    expect(p.settings.perform).toBe("guitar");
+    expect(p.headerText(true)).toContain("guitar down 22ms");
+    p.press("9");
     expect(p.settings.perform).toBe("block");
+  });
+
+  test("[ and ] change the strum speed only in guitar mode", () => {
+    const p = pad();
+    expect(p.press("[").type).toBe("pass");
+    p.settings.perform = "guitar";
+    expect(p.press("[")).toEqual({
+      type: "status",
+      status: "strum speed 27ms",
+    });
+    p.press("]");
+    p.press("]");
+    expect(p.settings.speed).toBe(17);
+    expect(p.legend().some((entry) => entry.label === "speed 17ms")).toBe(true);
+  });
+
+  test("/chords strokes keeps case, speed takes ms or beats", () => {
+    const settings = defaultChordSettings();
+    expect(applyChordsCommand(settings, "strokes D-DU-udu").ok).toBe(true);
+    expect(settings.strokes).toBe("D-DU-udu");
+    expect(settings.perform).toBe("guitar");
+    expect(applyChordsCommand(settings, "strokes Folk").ok).toBe(true);
+    expect(settings.strokes).toBe("folk");
+    expect(applyChordsCommand(settings, "strokes DZ").ok).toBe(false);
+    expect(applyChordsCommand(settings, "speed 30ms", 120).message).toBe(
+      "chords speed 30ms",
+    );
+    // A 32nd of a beat at 120 BPM is 15.6 ms.
+    expect(applyChordsCommand(settings, "speed 1/32b", 120).ok).toBe(true);
+    expect(settings.speed).toBe(15.6);
+    expect(parseStrokeSpeed("500", 120)).toBeUndefined();
   });
 
   test("the header names the key, the chord and the suggestion", () => {

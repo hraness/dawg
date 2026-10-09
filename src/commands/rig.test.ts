@@ -4,7 +4,9 @@ import {
   RIG_PRESETS,
   RIG_STAGES,
   applyRigPreset,
+  normalizeFx,
   rigPresetOf,
+  rigReverb,
 } from "../../core/fx.ts";
 import { resolveInstrumentWord } from "../../core/instruments.ts";
 import { createScore } from "../../core/score.ts";
@@ -33,9 +35,15 @@ describe("rig chain", () => {
     expect(at.every((index) => index >= 0)).toBe(true);
     expect(at[1]).toBe(at[0]! + 1);
     expect(at[2]).toBe(at[1]! + 1);
-    // Shoegaze effects belong to another lane.
-    for (const name of ["wobble", "bloom", "swell", "double"])
-      expect(FX_CHAIN as readonly string[]).not.toContain(name);
+    // Shoegaze (0.6.1) follows the cab, before tremolo; double after pan.
+    const chain = FX_CHAIN as readonly string[];
+    expect(chain.slice(at[2]! + 1, at[2]! + 5)).toEqual([
+      "wobble",
+      "bloom",
+      "swell",
+      "tremolo",
+    ]);
+    expect(chain.indexOf("double")).toBe(chain.indexOf("pan") + 1);
   });
 
   test("every rig preset normalizes and is recognised back", () => {
@@ -248,5 +256,32 @@ describe("set_rig agent tool", () => {
 
   test("rejects unknown rigs", () => {
     expect(() => tool.plan({ rig: "nope" }, context)).toThrow();
+  });
+});
+
+describe("0.6.1 rigs", () => {
+  test("a stored 0.6.0 jangle (no double) is left as it is", () => {
+    const legacy = normalizeFx({
+      head: { type: "chime", gain: 3, treble: 7 },
+      cab: { type: "2x12", mic: 0.2 },
+      compressor: { threshold: -20, ratio: 4, attack: 0.01, release: 0.15 },
+    });
+    expect(legacy?.double).toBeUndefined();
+    // Still reads (and prints) as `...rig("jangle")`, whose SDK stages
+    // have no double either.
+    expect(rigPresetOf(legacy)).toBe("jangle");
+    expect(rigPresetOf(applyRigPreset(undefined, "jangle"))).toBe("jangle");
+    // Re-applying the rig adds the double.
+    expect(applyRigPreset(legacy, "jangle")?.double).toBeDefined();
+  });
+
+  test("shoegaze rigs carry their stages and a long wash", () => {
+    for (const name of ["shoegaze", "glide", "dreampop", "swell", "ebow"]) {
+      const fx = applyRigPreset(undefined, name)!;
+      expect(fx.head).toBeDefined();
+      expect(rigPresetOf(fx)).toBe(name);
+    }
+    expect(applyRigPreset(undefined, "glide")?.wobble).toBeDefined();
+    expect(rigReverb("shoegaze")?.fade).toBe(4);
   });
 });

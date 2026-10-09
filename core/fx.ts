@@ -55,9 +55,16 @@ export const FX_CHAIN = Object.freeze([
   "stomp",
   "head",
   "cab",
+  // 0.6.1 shoegaze (src/audio/effects/gaze.ts): a held tremolo arm, the
+  // dominant note's feedback bloom, a volume swell; double (mono in, stereo
+  // out) runs where the chain turns stereo.
+  "wobble",
+  "bloom",
+  "swell",
   "tremolo",
   "compressor",
   "pan",
+  "double",
   "phaser",
   "chorus",
   "leslie",
@@ -493,6 +500,135 @@ export const FX_SPECS = Object.freeze({
         doc: "microphone position: 0 centre (bright) .. 1 edge (dark)",
       },
       mix: mix(1),
+    },
+  },
+  wobble: {
+    label: "wobble",
+    doc: "held tremolo arm: slow seeded pitch wow and flutter of the whole track",
+    simple: ["depth", "rate", "drift"],
+    strudel: "(no Strudel equivalent; dawg shoegaze)",
+    params: {
+      depth: {
+        kind: "number",
+        min: 0,
+        max: 100,
+        default: 20,
+        step: 1,
+        unit: "c",
+        automate: true,
+        doc: "peak pitch deviation in cents",
+      },
+      rate: {
+        kind: "number",
+        min: 0.05,
+        max: 8,
+        default: 0.5,
+        step: 0.05,
+        unit: "Hz",
+        doc: "wobble rate",
+      },
+      drift: {
+        kind: "number",
+        min: 0,
+        max: 1,
+        default: 0.3,
+        step: 0.05,
+        doc: "0 periodic .. 1 wandering (seeded, so every render matches)",
+      },
+    },
+  },
+  bloom: {
+    label: "bloom",
+    doc: "feedback bloom: the top held note grows a singing harmonic",
+    simple: ["amount", "harm", "delay"],
+    strudel: "(no Strudel equivalent; dawg shoegaze)",
+    params: {
+      amount: {
+        kind: "number",
+        min: 0,
+        max: 1,
+        default: 0.5,
+        step: 0.05,
+        doc: "level of the feedback partial",
+      },
+      harm: {
+        kind: "number",
+        min: 1,
+        max: 4,
+        default: 2,
+        step: 1,
+        doc: "harmonic that feeds back: 1 the note, 2 its octave, 3 the fifth above",
+      },
+      delay: {
+        kind: "number",
+        min: 0,
+        max: 4,
+        default: 0.6,
+        step: 0.05,
+        unit: "s",
+        doc: "how long a note is held before it starts to feed back",
+      },
+      time: {
+        kind: "number",
+        min: 0.05,
+        max: 4,
+        default: 1,
+        step: 0.05,
+        unit: "s",
+        doc: "how fast the feedback grows",
+      },
+    },
+  },
+  swell: {
+    label: "swell",
+    doc: "volume swell: each strum fades in, no pick attack",
+    simple: ["time", "mix"],
+    strudel: "(no Strudel equivalent; dawg shoegaze)",
+    params: {
+      time: {
+        kind: "number",
+        min: 0.01,
+        max: 4,
+        default: 0.4,
+        step: 0.01,
+        unit: "s",
+        doc: "rise time after each onset",
+      },
+      mix: mix(1),
+    },
+  },
+  double: {
+    label: "double",
+    doc: "automatic double tracking: a seeded second take, spread left and right",
+    simple: ["time", "drift", "width"],
+    strudel: "(no Strudel equivalent; dawg shoegaze)",
+    params: {
+      time: {
+        kind: "number",
+        min: 5,
+        max: 60,
+        default: 22,
+        step: 1,
+        unit: "ms",
+        doc: "how late the second take plays",
+      },
+      drift: {
+        kind: "number",
+        min: 0,
+        max: 10,
+        default: 3,
+        step: 0.5,
+        unit: "ms",
+        doc: "how far the second take's timing wanders",
+      },
+      width: {
+        kind: "number",
+        min: 0,
+        max: 1,
+        default: 0.6,
+        step: 0.05,
+        doc: "0 centred .. 1 the two takes hard left and right",
+      },
     },
   },
   tremolo: {
@@ -1006,6 +1142,14 @@ export const CORE_EFFECTS: readonly EffectName[] = Object.freeze([
   "reverb",
 ] as const);
 
+/** The 0.6.1 shoegaze stages (Effects > Shoegaze), in chain order. */
+export const SHOEGAZE_EFFECTS: readonly EffectName[] = Object.freeze([
+  "wobble",
+  "bloom",
+  "swell",
+  "double",
+] as const);
+
 export function isEffectName(value: unknown): value is EffectName {
   return (
     typeof value === "string" &&
@@ -1222,6 +1366,24 @@ export const FX_PRESETS: Readonly<
     "1x15": { type: "1x15" },
     di: { type: "di" },
   },
+  wobble: {
+    glide: { depth: 35, rate: 0.4, drift: 0.4 },
+    tape: { depth: 12, rate: 0.8, drift: 0.6 },
+    seasick: { depth: 60, rate: 0.25, drift: 0.2 },
+  },
+  bloom: {
+    octave: { amount: 0.5, harm: 2, delay: 0.6, time: 1 },
+    fifth: { amount: 0.4, harm: 3, delay: 0.8, time: 1.2 },
+    ebow: { amount: 0.8, harm: 1, delay: 0.1, time: 0.6 },
+  },
+  swell: {
+    slow: { time: 0.8 },
+    violin: { time: 0.3 },
+  },
+  double: {
+    tight: { time: 12, drift: 1.5, width: 0.5 },
+    wide: { time: 28, drift: 3, width: 0.7 },
+  },
   tremolo: {
     gentle: { sync: 1, depth: 0.3, shape: "sine" },
     "eighth-chop": { sync: 0.5, depth: 0.9, shape: "square" },
@@ -1390,13 +1552,69 @@ export const RIG_PRESETS: Readonly<
     head: { type: "chime", gain: 3, treble: 7 },
     cab: { type: "2x12", mic: 0.2 },
     compressor: { threshold: -20, ratio: 4, attack: 0.01, release: 0.15 },
+    // 0.6.1: the double-tracked jangle of a twelve-string record. A stored
+    // 0.6.0 jangle (no double) keeps rendering as it was; `rig jangle` again
+    // adds it. The SDK's rig("jangle") keeps its 0.6.0 stages (see
+    // RIG_ADDED), so the printer writes this double out explicitly.
+    double: { time: 12, drift: 1.5, width: 0.5 },
   },
   alt: {
     stomp: { type: "rat", gain: 6, tone: 0.4 },
     head: { type: "crunch", gain: 4 },
     cab: { type: "4x12" },
   },
+  // 0.6.1 shoegaze rigs (src/audio/effects/gaze.ts): fuzz into a held
+  // tremolo arm, a feedback bloom, doubled takes and a long wash.
+  shoegaze: {
+    stomp: { type: "fuzz", gain: 7, tone: 0.45 },
+    head: { type: "chime", gain: 4 },
+    cab: { type: "2x12" },
+    wobble: { depth: 25, rate: 0.4, drift: 0.4 },
+    bloom: { amount: 0.4, harm: 2, delay: 0.6, time: 1 },
+    double: { time: 18, drift: 2.5, width: 0.4 },
+    postgain: { gain: 0.65 },
+    reverb: { mix: 0.35, size: 0.9, fade: 4, predelay: 0.02, dim: 6000 },
+  },
+  glide: {
+    stomp: { type: "face", gain: 5, tone: 0.5 },
+    head: { type: "clean", gain: 4, treble: 5 },
+    cab: { type: "2x12" },
+    wobble: { depth: 35, rate: 0.4, drift: 0.4 },
+    postgain: { gain: 0.8 },
+    reverb: { mix: 0.35, size: 0.7, fade: 2.5, predelay: 0.01, dim: 6000 },
+  },
+  dreampop: {
+    head: { type: "clean", gain: 2, treble: 6 },
+    cab: { type: "1x12" },
+    chorus: { rate: 0.6, depth: 0.3, mix: 0.35 },
+    double: { time: 14, drift: 2, width: 0.4 },
+    postgain: { gain: 1.45 },
+    reverb: { mix: 0.4, size: 0.85, fade: 5, predelay: 0.03, dim: 7000 },
+  },
+  swell: {
+    head: { type: "clean", gain: 3, treble: 5 },
+    cab: { type: "1x12" },
+    swell: { time: 0.5 },
+    postgain: { gain: 1.25 },
+    reverb: { mix: 0.45, size: 0.8, fade: 4, predelay: 0.02, dim: 6500 },
+  },
+  ebow: {
+    stomp: { type: "od", gain: 3, tone: 0.5, level: 3 },
+    head: { type: "lead", gain: 5, mid: 6 },
+    cab: { type: "4x12" },
+    swell: { time: 0.25 },
+    bloom: { amount: 0.8, harm: 1, delay: 0.1, time: 0.6 },
+  },
 });
+
+/**
+ * Effects a rig preset gained after SDK `rig(name)` was fixed. `rig(name)`
+ * leaves them out, so an older song.ts spreading `...rig("jangle")` keeps
+ * its sound; the printer writes them next to the spread, and a stored
+ * track with or without them still reads as that rig.
+ */
+export const RIG_ADDED: Readonly<Record<string, readonly FxName[]>> =
+  Object.freeze({ jangle: Object.freeze(["double"] as FxName[]) });
 
 export function isRigPreset(name: string): boolean {
   return Object.prototype.hasOwnProperty.call(RIG_PRESETS, name);
@@ -1476,8 +1694,11 @@ export function rigReverb(name: string): FxValues | undefined {
 export function rigPresetOf(fx: TrackFx | undefined): string | undefined {
   if (!fx || !RIG_STAGES.some((stage) => fx[stage])) return undefined;
   for (const name of Object.keys(RIG_PRESETS)) {
-    const want = applyRigPreset(undefined, name) ?? {};
-    const keys = new Set([...RIG_STAGES, ...Object.keys(want)]);
+    const want: Partial<Record<FxName, FxValues>> = {
+      ...(applyRigPreset(undefined, name) ?? {}),
+    };
+    for (const added of RIG_ADDED[name] ?? []) delete want[added];
+    const keys = new Set<string>([...RIG_STAGES, ...Object.keys(want)]);
     if (
       [...keys].every(
         (key) =>
@@ -1492,7 +1713,10 @@ export function rigPresetOf(fx: TrackFx | undefined): string | undefined {
 
 /** The effects of `fx` a printed `...rig(name)` stands for. */
 export function rigPresetKeys(name: string): readonly FxName[] {
-  return Object.keys(RIG_PRESETS[name] ?? {}).filter(isFxName);
+  const added = RIG_ADDED[name] ?? [];
+  return Object.keys(RIG_PRESETS[name] ?? {}).filter(
+    (key): key is FxName => isFxName(key) && !added.includes(key),
+  );
 }
 
 export function effectPresetNames(effect: EffectName): readonly string[] {

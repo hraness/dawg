@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.26.0";
+export const SDK_VERSION = "1.27.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -2018,13 +2018,84 @@ export const RIG_PRESETS: Readonly<
     head: { type: "chime", gain: 3, treble: 7 },
     cab: { type: "2x12", mic: 0.2 },
     compressor: { threshold: -20, ratio: 4, attack: 0.01, release: 0.15 },
+    // The `rig jangle` command adds `double` since 0.6.1; rig("jangle")
+    // keeps its 0.6.0 stages so older song.ts files sound the same. Add
+    // `double: { time: 12, drift: 1.5, width: 0.5 }` for the new one.
   },
   alt: {
     stomp: { type: "rat", gain: 6, tone: 0.4 },
     head: { type: "crunch", gain: 4 },
     cab: { type: "4x12" },
   },
+  // SDK 1.27.0 shoegaze rigs. Their long wash is the track's `reverb`
+  // (see `rigReverb` in the `rig` command), not part of `rig()`.
+  shoegaze: {
+    stomp: { type: "fuzz", gain: 7, tone: 0.45 },
+    head: { type: "chime", gain: 4 },
+    cab: { type: "2x12" },
+    wobble: { depth: 25, rate: 0.4, drift: 0.4 },
+    bloom: { amount: 0.4, harm: 2, delay: 0.6, time: 1 },
+    double: { time: 18, drift: 2.5, width: 0.4 },
+    postgain: { gain: 0.65 },
+  },
+  glide: {
+    stomp: { type: "face", gain: 5, tone: 0.5 },
+    head: { type: "clean", gain: 4, treble: 5 },
+    cab: { type: "2x12" },
+    wobble: { depth: 35, rate: 0.4, drift: 0.4 },
+    postgain: { gain: 0.8 },
+  },
+  dreampop: {
+    stomp: undefined,
+    head: { type: "clean", gain: 2, treble: 6 },
+    cab: { type: "1x12" },
+    chorus: { rate: 0.6, depth: 0.3, mix: 0.35 },
+    double: { time: 14, drift: 2, width: 0.4 },
+    postgain: { gain: 1.45 },
+  },
+  swell: {
+    stomp: undefined,
+    head: { type: "clean", gain: 3, treble: 5 },
+    cab: { type: "1x12" },
+    swell: { time: 0.5 },
+    postgain: { gain: 1.25 },
+  },
+  ebow: {
+    stomp: { type: "od", gain: 3, tone: 0.5, level: 3 },
+    head: { type: "lead", gain: 5, mid: 6 },
+    cab: { type: "4x12" },
+    swell: { time: 0.25 },
+    bloom: { amount: 0.8, harm: 1, delay: 0.1, time: 0.6 },
+  },
 });
+
+/**
+ * The long wash a rig preset sets as the track's `reverb` (SDK 1.27.0),
+ * as the `rig` command stores it. `rig()` returns `fx` only, so give it
+ * as `reverb: rigReverb("shoegaze")`; `instrument: "shoegaze"` adds it
+ * when the track has no `reverb` of its own.
+ */
+const RIG_REVERBS: Readonly<Record<string, ReverbInput & { mix: number }>> =
+  Object.freeze({
+    spring: { mix: 0.3, size: 0.35, fade: 1.5, predelay: 0, dim: 3500 },
+    shoegaze: { mix: 0.35, size: 0.9, fade: 4, predelay: 0.02, dim: 6000 },
+    glide: { mix: 0.35, size: 0.7, fade: 2.5, predelay: 0.01, dim: 6000 },
+    dreampop: { mix: 0.4, size: 0.85, fade: 5, predelay: 0.03, dim: 7000 },
+    swell: { mix: 0.45, size: 0.8, fade: 4, predelay: 0.02, dim: 6500 },
+  });
+
+/** A rig preset's track reverb (`spring`, the shoegaze rigs), if any. */
+export function rigReverb(name: string): ReverbInput | undefined {
+  if (
+    typeof name !== "string" ||
+    !Object.prototype.hasOwnProperty.call(RIG_PRESETS, name)
+  )
+    throw new DawgSdkError(
+      `unknown rig "${String(name)}" (rigs: ${Object.keys(RIG_PRESETS).join(", ")})`,
+    );
+  const values = RIG_REVERBS[name];
+  return values === undefined ? undefined : Object.freeze({ ...values });
+}
 
 /**
  * A guitar rig for a track's `fx` (SDK 1.22.0): the stomp → head → cab
@@ -2355,6 +2426,12 @@ export type TrackInput = Readonly<{
     length?: number;
     seed?: number;
   }>;
+  /**
+   * How chords are fretted on this track (SDK 1.27.0): `{ tune: "dadgad",
+   * capo: 2 }`. dawg's `strum` command and perform mode `guitar` use it;
+   * it changes no sound by itself.
+   */
+  guitar?: GuitarInput;
   /** `note()`/`seq()` for pitched tracks, `hit()`/`hits()` for kits and one-shot samplers. */
   notes?: readonly (NoteSpec | HitSpec)[];
   /**
@@ -2483,6 +2560,8 @@ export type TrackSpec = Readonly<{
   keys?: KeysInput;
   /** Modal settings (SDK 1.25.0); present only on a modal track. */
   modal?: Readonly<{ preset?: ModalPresetName } & ModalParams>;
+  /** Guitar fretting (SDK 1.27.0); present only when set. */
+  guitar?: GuitarSetup;
 }>;
 
 export type GlideMode = "legato" | "mono" | "poly";
@@ -2733,6 +2812,7 @@ export function track(input: TrackInput): TrackSpec {
       ? resolveInstrumentWord(rawInstrument)
       : undefined;
   const modalSpec = trackModal(rawInstrument);
+  const guitarSpec = guitarInput(input.guitar, `track ${name}`);
   const instrument = granularFromInstrument
     ? GRANULAR_INSTRUMENT
     : samplerSpec
@@ -2889,6 +2969,13 @@ export function track(input: TrackInput): TrackSpec {
             `${name} delay`,
           ),
         });
+  // A rig alias with a wash (`instrument: "shoegaze"`) sets the track
+  // reverb the `track shoegaze` prompt sets, unless `reverb` is given.
+  if (input.reverb === undefined && typeof rawInstrument === "string") {
+    const rigName = resolveInstrumentWord(rawInstrument)?.fx;
+    const wash = rigName === undefined ? undefined : RIG_REVERBS[rigName];
+    if (wash) input = { ...input, reverb: wash };
+  }
   const reverb =
     input.reverb === undefined || input.reverb === null
       ? null
@@ -2961,6 +3048,7 @@ export function track(input: TrackInput): TrackSpec {
     tuning: tuningSpec(input.tuning, `track ${name}`),
     ...keysSpec(input.keys, rawInstrument, name),
     ...(modalSpec ? { modal: modalSpec } : {}),
+    ...(guitarSpec ? { guitar: guitarSpec } : {}),
   });
 }
 
@@ -3534,6 +3622,8 @@ export type ScoreTrack = Readonly<{
   granular?: GranularInput;
   /** Modal settings (SDK 1.25.0). */
   modal?: TrackSpec["modal"];
+  /** Guitar fretting (SDK 1.27.0). */
+  guitar?: GuitarSetup;
   glide?: TrackSpec["glide"];
   pedal?: readonly Readonly<{ tick: number; state: PedalState }>[];
   softPedal?: readonly Readonly<{ tick: number; state: PedalState }>[];
@@ -3845,6 +3935,7 @@ export function song(input: SongInput): Song {
     if (t.string) stored.string = t.string;
     if (t.keys) stored.keys = t.keys;
     if (t.modal) stored.modal = t.modal;
+    if (t.guitar) stored.guitar = t.guitar;
     if (t.rhythm && t.rhythm.length > 0)
       stored.rhythm = Object.freeze(
         t.rhythm.map((row) => {
@@ -4553,7 +4644,22 @@ export type ChordOptions = Readonly<{
     | "arp-random"
     | "harp"
     | "slop"
-    | "pattern";
+    | "pattern"
+    | "guitar";
+  /**
+   * With `perform: "guitar"` (SDK 1.27.0): the stroke grid, a name (`down`
+   * `folk` `pop` `punk` `funk` `reggae` `waltz` `jangle` `island`) or
+   * characters D (down) U (up) d u (light) x (muted chuck) - . (rest).
+   */
+  strokes?: string;
+  /** Guitar: grid step in beats, default 0.5 (8ths). */
+  step?: number;
+  /** Guitar: milliseconds a full six-string down stroke takes, default 22. */
+  speed?: number;
+  /** Guitar: the song tempo `speed` converts with, default 120. */
+  tempo?: number;
+  /** Guitar: tuning, capo, hand, ring and position (as a track's `guitar`). */
+  guitar?: GuitarInput;
   /**
    * With `perform: "pattern"`: a rhythm pattern by name or 1-based number
    * (SDK 1.7.0): `eighths`, `sixteenths`, `offbeat`, `pop`, `charleston`,
@@ -4704,6 +4810,7 @@ export function progression(
       seed: finite(options.seed ?? 0, "chord seed"),
       ...(options.pattern !== undefined ? { pattern: options.pattern } : {}),
       velocity: vel,
+      ...(mode === "guitar" ? guitarPerform(options) : {}),
     },
   });
   const out = [
@@ -4715,6 +4822,114 @@ export function progression(
   return Object.freeze(
     out.map((n) => note(n.pitch, round(n.start), n.length, n.velocity)),
   );
+}
+
+/** A track's guitar setup (SDK 1.27.0): see `TrackInput.guitar`. */
+export type GuitarInput = Readonly<{
+  /** `standard` `dropd` `doubledropd` `dadgad` `openg` `opend` `opene` `halfdown` `nashville` `bass` `ukulele` `requinto`, or open-string pitches low to high. */
+  tune?: string | readonly Pitch[];
+  /** Capo fret 0..12. */
+  capo?: number;
+  /** Hand stretch in frets 3..6, default 4. */
+  hand?: number;
+  /** 0 closed shapes .. 1 ringing open strings, default 0.5. */
+  ring?: number;
+  /** Preferred fret position 0..12. */
+  position?: number;
+}>;
+
+function guitarInput(
+  input: GuitarInput | undefined,
+  where: string,
+): GuitarSetup | undefined {
+  if (input === undefined) return undefined;
+  if (!isRecord(input))
+    throw new DawgSdkError(`${where} guitar must be an object`);
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(input))
+    if (!["tune", "capo", "hand", "ring", "position"].includes(key))
+      throw new DawgSdkError(
+        `${where} guitar has no field "${key.slice(0, 32)}" (tune capo hand ring position)`,
+      );
+  if (input.tune !== undefined) {
+    if (typeof input.tune === "string") {
+      const name = input.tune.toLowerCase().replace(/[\s_-]/g, "");
+      if (!(GUITAR_TUNING_NAMES as readonly string[]).includes(name))
+        throw new DawgSdkError(
+          `${where} guitar tune must be one of ${GUITAR_TUNING_NAMES.join(" ")} or a list of pitches`,
+        );
+      out.tune = name;
+    } else if (
+      Array.isArray(input.tune) &&
+      input.tune.length >= 3 &&
+      input.tune.length <= 12
+    )
+      out.tune = Object.freeze(input.tune.map((p) => midi(p)));
+    else
+      throw new DawgSdkError(
+        `${where} guitar tune must be a name or 3..12 pitches`,
+      );
+  }
+  const int = (key: "capo" | "hand" | "position", min: number, max: number) => {
+    const value = input[key];
+    if (value === undefined) return;
+    if (!Number.isInteger(value) || value < min || value > max)
+      throw new DawgSdkError(
+        `${where} guitar ${key} must be an integer ${min}..${max}`,
+      );
+    out[key] = value;
+  };
+  int("capo", 0, 12);
+  int("hand", 3, 6);
+  if (input.ring !== undefined)
+    out.ring =
+      Math.round(unit(input.ring, `${where} guitar ring`) * 1000) / 1000;
+  int("position", 0, 12);
+  return Object.keys(out).length > 0 ? Object.freeze(out) : undefined;
+}
+
+function guitarPerform(options: ChordOptions): Partial<PerformOptions> {
+  if (options.strokes !== undefined && !strokeGrid(options.strokes))
+    throw new DawgSdkError(
+      `chord strokes must be one of ${STROKE_PATTERN_NAMES.join(" ")} or a grid of D U d u x - .`,
+    );
+  const setup = guitarInput(options.guitar, "chord");
+  return {
+    ...(options.strokes !== undefined ? { strokes: options.strokes } : {}),
+    ...(options.step !== undefined
+      ? { step: positive(options.step, "chord step") }
+      : {}),
+    ...(options.speed !== undefined
+      ? {
+          speed:
+            Math.min(200, Math.max(0, finite(options.speed, "chord speed"))) /
+            1000,
+        }
+      : {}),
+    ...(options.tempo !== undefined
+      ? { tempo: positive(options.tempo, "chord tempo") }
+      : {}),
+    ...(setup ? { guitar: setup } : {}),
+  };
+}
+
+/**
+ * Strummed guitar chords (SDK 1.27.0): `progression()` with
+ * `perform: "guitar"`. Each chord is fretted on the guitar (`tune`, `capo`,
+ * no barre over an open string) and strummed with a stroke grid; a down
+ * stroke sweeps the strings in `speed` ms. Pair with `guitar` on the track
+ * so dawg's prompt strums the same shapes.
+ *
+ * ```ts
+ * notes: strum("G D Em C", { strokes: "folk", speed: 25, tempo: 96 })
+ * notes: strum("i VI III VII", { key: "e minor", strokes: "D-DU-UDU", guitar: { capo: 2 } })
+ * ```
+ */
+export function strum(
+  chords: string | readonly string[],
+  options: Omit<ProgressionOptions, "perform"> = {},
+): readonly NoteSpec[] {
+  return progression(chords, { ...options, perform: "guitar" });
 }
 
 // BEGIN instrument words: generated from core/instruments.ts by core/sdk/sync-instruments.ts
@@ -4970,6 +5185,9 @@ const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
   { word: "clav", instrument: "clav", field: "keys", preset: "clav" },
   { word: "clavinet", instrument: "clav", field: "keys", preset: "clav" },
   { word: "funkclav", instrument: "clav", field: "keys", preset: "funkclav" },
+  // f061-guitar: the shoegaze alias, an electric guitar voice plus the
+  // shoegaze rig and its long wash.
+  { word: "shoegaze", instrument: "pluck", voice: "electric", fx: "shoegaze" },
 ]);
 
 /**
@@ -5087,6 +5305,12 @@ type Chord = Readonly<{
   extensions: readonly Extension[];
   /** Slash bass pitch class, when not the root. */
   bass?: number | undefined;
+  /**
+   * Upper tensions beyond the four extension buttons, as semitones above
+   * the root (13 b9, 15 #9, 17 11, 18 #11, 21 13): only typed symbols
+   * such as `C11`, `G13` or `A7b9` carry them (0.6.1).
+   */
+  tensions?: readonly number[] | undefined;
 }>;
 
 function makeChord(
@@ -5094,6 +5318,7 @@ function makeChord(
   quality: Quality,
   extensions: Iterable<Extension> = [],
   bass?: number,
+  tensions: readonly number[] = [],
 ): Chord {
   const held = new Set(extensions);
   const own = SECRET_EXTENSION[quality];
@@ -5105,6 +5330,11 @@ function makeChord(
     quality,
     extensions: Object.freeze(ext),
     ...(slash !== undefined && slash !== pc ? { bass: slash } : {}),
+    ...(tensions.length > 0
+      ? {
+          tensions: Object.freeze([...new Set(tensions)].sort((a, b) => a - b)),
+        }
+      : {}),
   });
 }
 
@@ -5112,6 +5342,7 @@ function makeChord(
 function chordIntervals(chord: Chord): number[] {
   const set = new Set(QUALITY_INTERVALS[chord.quality]);
   for (const ext of chord.extensions) set.add(EXTENSION_INTERVAL[ext]);
+  for (const step of chord.tensions ?? []) set.add(step);
   // m7 and M7 together keep both; 6 with m7 on a dim triad is the dim7's bb7.
   return [...set].sort((a, b) => a - b);
 }
@@ -5164,6 +5395,18 @@ const SECRET_SUFFIX: Readonly<Partial<Record<Quality, string>>> = Object.freeze(
 
 /** Chord symbol suffix: `m7`, `maj9`, `7sus4`, `dim7`, `m7b5`, `6/9`. */
 function chordSuffix(chord: Chord): string {
+  if (chord.tensions?.length) {
+    // A typed extended chord keeps the symbol it was typed as.
+    const typed = TENSION_SUFFIXES.find(
+      ([, quality, ext, tensions]) =>
+        quality === chord.quality &&
+        ext.join() === chord.extensions.join() &&
+        tensions.join() === chord.tensions!.join(),
+    );
+    if (typed) return typed[0];
+    const names = chord.tensions.map((step) => TENSION_NAMES[step] ?? step);
+    return `${chordSuffix({ ...chord, tensions: undefined })}(${names.join(",")})`;
+  }
   const ext = new Set(chord.extensions);
   const b7 = ext.has("m7");
   const M7 = ext.has("M7");
@@ -5327,9 +5570,51 @@ const SUFFIXES: readonly (readonly [string, Quality, readonly Extension[]])[] =
     ["addb6", "b6", []],
     ["7#9", "7#9", []],
   ];
-const SUFFIX_TABLE = new Map(
-  SUFFIXES.map(([suffix, quality, ext]) => [suffix, { quality, ext }]),
-);
+
+/** Typed upper-tension chords (0.6.1): suffix, quality, buttons, tensions. */
+const TENSION_SUFFIXES: readonly (readonly [
+  string,
+  Quality,
+  readonly Extension[],
+  readonly number[],
+])[] = [
+  ["11", "maj", ["m7", "9"], [17]],
+  ["m11", "min", ["m7", "9"], [17]],
+  ["maj11", "maj", ["M7", "9"], [17]],
+  ["add11", "maj", [], [17]],
+  ["madd11", "min", [], [17]],
+  ["13", "maj", ["m7", "9"], [21]],
+  ["m13", "min", ["m7", "9"], [21]],
+  ["maj13", "maj", ["M7", "9"], [21]],
+  ["7b9", "maj", ["m7"], [13]],
+  ["7#11", "maj", ["m7"], [18]],
+  ["maj7#11", "maj", ["M7"], [18]],
+  ["M7#11", "maj", ["M7"], [18]],
+  ["7b13", "maj", ["m7"], [20]],
+  ["13b9", "maj", ["m7"], [13, 21]],
+];
+
+const TENSION_NAMES: Readonly<Record<number, string>> = Object.freeze({
+  13: "b9",
+  15: "#9",
+  17: "11",
+  18: "#11",
+  20: "b13",
+  21: "13",
+});
+
+const SUFFIX_TABLE = new Map<
+  string,
+  { quality: Quality; ext: readonly Extension[]; tensions?: readonly number[] }
+>([
+  ...SUFFIXES.map(
+    ([suffix, quality, ext]) => [suffix, { quality, ext }] as const,
+  ),
+  ...TENSION_SUFFIXES.map(
+    ([suffix, quality, ext, tensions]) =>
+      [suffix, { quality, ext, tensions }] as const,
+  ),
+]);
 
 const LETTER: Readonly<Record<string, number>> = Object.freeze({
   c: 0,
@@ -5371,7 +5656,7 @@ function parseChord(symbol: string): Chord | undefined {
     bass = parsePitchClass(match[4]);
     if (bass === undefined) return undefined;
   }
-  return makeChord(root, entry.quality, entry.ext, bass);
+  return makeChord(root, entry.quality, entry.ext, bass, entry.tensions);
 }
 
 // ---------------------------------------------------------------------------
@@ -6169,6 +6454,8 @@ const PERFORM_MODES = [
   "harp",
   "slop",
   "pattern",
+  // 0.6.1: fretboard-voiced strokes (see `voiceGuitar`, `strokeVoicing`).
+  "guitar",
 ] as const;
 type PerformMode = (typeof PERFORM_MODES)[number];
 
@@ -6188,6 +6475,18 @@ type PerformOptions = Readonly<{
   pattern?: string | number;
   /** 0..1. */
   velocity?: number;
+  /** Guitar mode: the stroke grid (a STROKE_PATTERNS name or D U d u x - .). */
+  strokes?: string;
+  /** Guitar mode: grid step in beats, default 1/2. */
+  step?: number;
+  /** Guitar mode: seconds a full six-string down stroke takes, default 0.022. */
+  speed?: number;
+  /** Guitar mode: tempo in BPM that `speed` converts with, default 120. */
+  tempo?: number;
+  /** Guitar mode: the guitar's tuning, capo, hand, ring and position. */
+  guitar?: GuitarSetup;
+  /** Guitar mode: the chord's root pitch class (default: the lowest note). */
+  root?: number;
 }>;
 
 type PerformedNote = Readonly<{
@@ -6504,6 +6803,24 @@ function perform(
         }
       return out.sort((a, b) => a.start - b.start || a.pitch - b.pitch);
     }
+    case "guitar": {
+      const bass = notes[0]!;
+      const voicing = voiceGuitar(
+        notes.map(mod12),
+        mod12(bass),
+        options.root ?? mod12(bass),
+        options.guitar,
+      );
+      if (!voicing) return notes.map((pitch) => at(pitch, start, end));
+      return strokeVoicing(voicing, start, length, {
+        ...(options.strokes !== undefined ? { strokes: options.strokes } : {}),
+        ...(options.step !== undefined ? { step: options.step } : {}),
+        ...(options.speed !== undefined ? { speed: options.speed } : {}),
+        ...(options.tempo !== undefined ? { tempo: options.tempo } : {}),
+        velocity,
+        strings: guitarStrings(options.guitar?.tune).length,
+      });
+    }
     case "harp": {
       const gap = Math.max(0, options.strum ?? DEFAULT_STRUM * 2);
       return spanned.map((pitch, index) =>
@@ -6536,6 +6853,380 @@ function perform(
       return out;
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Fretboard (0.6.1): guitar voicings and strokes
+
+/**
+ * Open-string MIDI pitches, low string to high, for `guitar tune <name>`.
+ * Ported from the guitar design lane (proto/guitar/strum.ts TUNINGS).
+ */
+const GUITAR_TUNINGS = Object.freeze({
+  standard: [40, 45, 50, 55, 59, 64],
+  dropd: [38, 45, 50, 55, 59, 64],
+  doubledropd: [38, 45, 50, 55, 59, 62],
+  dadgad: [38, 45, 50, 55, 57, 62],
+  openg: [38, 43, 50, 55, 59, 62],
+  opend: [38, 45, 50, 54, 57, 62],
+  opene: [40, 47, 52, 56, 59, 64],
+  halfdown: [39, 44, 49, 54, 58, 63],
+  nashville: [52, 57, 62, 67, 59, 64],
+  bass: [28, 33, 38, 43],
+  ukulele: [67, 60, 64, 69],
+  requinto: [45, 50, 55, 60, 64, 69],
+} as const satisfies Record<string, readonly number[]>);
+type GuitarTuningName = keyof typeof GUITAR_TUNINGS;
+const GUITAR_TUNING_NAMES = Object.keys(GUITAR_TUNINGS) as GuitarTuningName[];
+
+/** How a guitar is set up for voicing chords (`Track.guitar`). */
+type GuitarSetup = Readonly<{
+  /** A GUITAR_TUNINGS name or open-string pitches low to high. */
+  tune?: string | readonly number[];
+  /** Capo fret 0..12. */
+  capo?: number;
+  /** Hand stretch in frets 3..6 (default 4: one fret per finger). */
+  hand?: number;
+  /** 0 closed shapes (no open strings) .. 1 prefer ringing open strings. */
+  ring?: number;
+  /** Preferred fret position 0..12 (0 open position). */
+  position?: number;
+}>;
+
+/** One fretted chord: frets per string low to high (-1 muted). */
+type GuitarVoicing = Readonly<{
+  frets: readonly number[];
+  /** Sounding pitches, low string to high. */
+  pitches: readonly number[];
+  /** The string each pitch sounds on. */
+  strings: readonly number[];
+}>;
+
+/** Open-string pitches for a tuning name or list (standard when unknown). */
+function guitarStrings(tune: GuitarSetup["tune"]): readonly number[] {
+  if (Array.isArray(tune)) return tune as readonly number[];
+  const name = String(tune ?? "standard")
+    .toLowerCase()
+    .replace(/[\s_-]/g, "");
+  return (
+    (GUITAR_TUNINGS as Record<string, readonly number[]>)[name] ??
+    GUITAR_TUNINGS.standard
+  );
+}
+
+/**
+ * Fingers a fretting uses. Strings at the lowest fret count as one barre
+ * only when no open string lies between them (a barre cannot skip an open
+ * string); otherwise one finger each.
+ */
+function guitarFingers(frets: readonly number[]): number {
+  const fretted = frets.filter((f) => f > 0);
+  if (fretted.length === 0) return 0;
+  const min = Math.min(...fretted);
+  const at = frets.flatMap((f, i) => (f === min ? [i] : []));
+  const between = frets.slice(at[0]!, at[at.length - 1]! + 1);
+  const barre = at.length > 1 && !between.includes(0);
+  return (barre ? 1 : at.length) + fretted.filter((f) => f > min).length;
+}
+
+/**
+ * The chord tones a voicing must keep, most required first, after dropping
+ * `drops` tones in the guitarist's order: the 5th, then the 9th; the root,
+ * the 3rd and the 7th always stay (after the design lane's review).
+ */
+function requiredTones(tones: readonly number[], root: number, drops: number) {
+  // The 5th, then the 11th (only beside a 3rd: a sus4 keeps its 4th), then
+  // the 9th. dawg's symbols reach an 11th through m(add4)/madd4 (+9).
+  const third = tones.some((pc) => [3, 4].includes(mod12(pc - root)));
+  const order = (third ? [7, 5, 2] : [7, 2]).map((step) => mod12(root + step));
+  const dropped = order.filter((pc) => tones.includes(pc)).slice(0, drops);
+  return tones.filter((pc) => !dropped.includes(pc));
+}
+
+/**
+ * The most playable fretting of pitch classes `tones` over `bass` on a
+ * guitar `setup`: the bass is the lowest sounding note, every required
+ * tone sounds, at most four fingers within a `hand`-fret stretch, mutes
+ * only under the bass or one inside, and no barre over an open string.
+ * Cost prefers more strings, low positions, open strings (by `ring`), a
+ * fifth present, no doubled third, and small moves from `previous`.
+ * Undefined when nothing fits. Ported from proto/guitar/strum.ts.
+ */
+function voiceGuitar(
+  tones: readonly number[],
+  bass: number,
+  root: number,
+  setup: GuitarSetup = {},
+  previous?: readonly number[],
+): GuitarVoicing | undefined {
+  // Play mode voices every pad press; dense chords at a wide hand take
+  // ~15 ms to search, so repeats come from a small LRU (results are frozen).
+  const key = JSON.stringify([
+    [...new Set([...tones, bass].map(mod12))],
+    mod12(bass),
+    mod12(root),
+    setup.tune ?? null,
+    setup.capo ?? null,
+    setup.hand ?? null,
+    setup.ring ?? null,
+    setup.position ?? null,
+    previous ?? null,
+  ]);
+  if (voicingCache.has(key)) {
+    const hit = voicingCache.get(key);
+    voicingCache.delete(key);
+    voicingCache.set(key, hit);
+    return hit;
+  }
+  const voiced = searchGuitar(tones, bass, root, setup, previous);
+  voicingCache.set(key, voiced);
+  if (voicingCache.size > VOICING_CACHE_SIZE)
+    voicingCache.delete(voicingCache.keys().next().value!);
+  return voiced;
+}
+
+const VOICING_CACHE_SIZE = 256;
+const voicingCache = new Map<string, GuitarVoicing | undefined>();
+
+function searchGuitar(
+  tones: readonly number[],
+  bass: number,
+  root: number,
+  setup: GuitarSetup,
+  previous?: readonly number[],
+): GuitarVoicing | undefined {
+  const pcs = [...new Set([...tones, bass].map(mod12))];
+  const capo = clampInt(setup.capo ?? 0, 0, 12);
+  const open = guitarStrings(setup.tune).map((pitch) => pitch + capo);
+  const n = open.length;
+  const ring = Math.min(1, Math.max(0, setup.ring ?? 0.5));
+  const stretch = clampInt(setup.hand ?? 4, 3, 6);
+  const fifth = mod12(root + 7);
+  const third = pcs.find((pc) => [3, 4].includes(mod12(pc - root)));
+  const prev = previous ? [...previous].sort((a, b) => a - b) : undefined;
+  for (let drops = 0; drops <= 3; drops += 1) {
+    const required = requiredTones(pcs, root, drops);
+    let best: { frets: number[]; cost: number } | undefined;
+    const choose = (frets: readonly number[]) => {
+      const idx = frets.flatMap((f, i) => (f < 0 ? [] : [i]));
+      if (idx.length < Math.min(n, n >= 6 ? 4 : 3)) return;
+      const interior = frets.slice(idx[0]).filter((f) => f < 0).length;
+      if (interior > (n >= 6 ? 1 : 0)) return;
+      const pitches = idx.map((i) => open[i]! + frets[i]!);
+      if (mod12(Math.min(...pitches)) !== mod12(bass)) return;
+      const sounding = new Set(pitches.map(mod12));
+      if (required.some((pc) => !sounding.has(pc))) return;
+      const fingers = guitarFingers(frets);
+      if (fingers > 4) return;
+      const fretted = frets.filter((f) => f > 0);
+      const span = fretted.length
+        ? Math.max(...fretted) - Math.min(...fretted)
+        : 0;
+      if (span > stretch - 1) return;
+      const opens = frets.filter((f) => f === 0).length;
+      if (ring === 0 && opens > 0) return;
+      const pos = fretted.length ? Math.min(...fretted) : 0;
+      let cost =
+        span * 0.6 +
+        pos * 0.25 +
+        fingers * 0.4 -
+        idx.length -
+        opens * 0.7 * ring;
+      cost += interior * 1.5;
+      if (!sounding.has(fifth) && pcs.includes(fifth)) cost += 0.6;
+      if (
+        third !== undefined &&
+        pitches.filter((p) => mod12(p) === third).length > 1
+      )
+        cost += 0.5;
+      if (setup.position !== undefined)
+        cost += Math.abs(pos - setup.position) * 0.5;
+      if (prev && prev.length) {
+        const cur = [...pitches].sort((a, b) => a - b);
+        let move = 0;
+        for (let i = 0; i < cur.length; i += 1)
+          move += Math.abs(cur[i]! - prev[Math.min(i, prev.length - 1)]!);
+        cost += move * 0.05;
+      }
+      if (
+        !best ||
+        cost < best.cost - 1e-9 ||
+        (Math.abs(cost - best.cost) <= 1e-9 && frets.join() < best.frets.join())
+      )
+        best = { frets: [...frets], cost };
+    };
+    for (let p = 1; p <= 12; p += 1) {
+      const options = open.map((o) => {
+        const list = [-1];
+        if (pcs.includes(mod12(o))) list.push(0);
+        for (let f = p; f < p + stretch; f += 1)
+          if (pcs.includes(mod12(o + f))) list.push(f);
+        return list;
+      });
+      const frets = new Array<number>(n).fill(-1);
+      const walk = (s: number): void => {
+        if (s === n) return choose(frets);
+        for (const f of options[s]!) {
+          frets[s] = f;
+          walk(s + 1);
+        }
+      };
+      walk(0);
+    }
+    if (best) {
+      const { frets } = best as { frets: number[] };
+      const strings = frets.flatMap((f, i) => (f < 0 ? [] : [i]));
+      return Object.freeze({
+        frets: Object.freeze(frets),
+        pitches: Object.freeze(strings.map((i) => open[i]! + frets[i]!)),
+        strings: Object.freeze(strings),
+      });
+    }
+  }
+  return undefined;
+}
+
+/** A voicing as tab, low string first: `x 3 2 0 1 0`. */
+function guitarTab(frets: readonly number[]): string {
+  return frets.map((f) => (f < 0 ? "x" : String(f))).join(" ");
+}
+
+/**
+ * Stroke grids for perform mode `guitar`, one character per step: D down
+ * (all strings), U up (top four), d light down (top four), u light up (top
+ * three), x muted chuck, `-` or `.` rest (strings ring on). After the
+ * design lane's STRUM_PATTERNS.
+ */
+const STROKE_PATTERNS = Object.freeze({
+  down: "D",
+  folk: "D-DU-UDU",
+  pop: "D-DU-UD-",
+  punk: "DDDDDDDD",
+  funk: "xUxUDUxUxUDUxUxU",
+  reggae: "-D-D",
+  waltz: "Ddd",
+  jangle: "D-DUDUDU",
+  island: "D-DU-UDU",
+} as const satisfies Record<string, string>);
+const STROKE_PATTERN_NAMES = Object.keys(STROKE_PATTERNS);
+const STROKE_CHARS = /^[DUdux.\-]+$/;
+
+/** Default seconds a full six-string down stroke takes (22 ms). */
+const DEFAULT_STROKE_SPEED = 0.022;
+/** Default stroke grid step in beats (8ths). */
+const DEFAULT_STROKE_STEP = 0.5;
+
+/** A stroke grid by name, or a literal grid of D U d u x - .; undefined if bad. */
+function strokeGrid(text: string | undefined): string | undefined {
+  const raw = (text ?? "down").trim();
+  const named = (STROKE_PATTERNS as Record<string, string>)[raw.toLowerCase()];
+  if (named) return named;
+  const grid = raw.replace(/[|\s]/g, "");
+  return grid.length > 0 && grid.length <= 64 && STROKE_CHARS.test(grid)
+    ? grid
+    : undefined;
+}
+
+/**
+ * Strum fretted `voicing` from `start` for `length` beats with stroke grid
+ * `strokes` (repeats every grid length, one step per `step` beats). A full
+ * down stroke sweeps the six strings in `speed` seconds at `tempo` BPM;
+ * each struck string rings until it is struck again or the chord ends; a
+ * chuck (x) is a short muted hit that stops the strings. Velocity accents
+ * downbeats and lightens upstrokes.
+ */
+function strokeVoicing(
+  voicing: GuitarVoicing,
+  start: number,
+  length: number,
+  options: Readonly<{
+    strokes?: string;
+    step?: number;
+    speed?: number;
+    tempo?: number;
+    velocity?: number;
+    strings?: number;
+  }> = {},
+): PerformedNote[] {
+  const grid = strokeGrid(options.strokes) ?? "D";
+  const step =
+    options.step && options.step > 0 ? options.step : DEFAULT_STROKE_STEP;
+  const tempo = options.tempo && options.tempo > 0 ? options.tempo : 120;
+  const sweep =
+    (Math.max(0, options.speed ?? DEFAULT_STROKE_SPEED) * tempo) / 60;
+  const base = options.velocity ?? 0.8;
+  const total = Math.max(2, options.strings ?? 6);
+  const sounding = voicing.strings;
+  const end = start + length;
+  type Open = { note: PerformedNote; index: number };
+  const ringing = new Map<number, Open>();
+  const out: PerformedNote[] = [];
+  const stop = (string: number, at: number) => {
+    const held = ringing.get(string);
+    if (!held) return;
+    const cut = round6(
+      Math.max(1e-3, Math.min(held.note.length, at - held.note.start)),
+    );
+    out[held.index] = { ...held.note, length: cut };
+    ringing.delete(string);
+  };
+  const steps = Math.max(1, Math.round(length / step));
+  for (let s = 0; s < steps; s += 1) {
+    const ch = grid[s % grid.length]!;
+    if (ch === "-" || ch === ".") continue;
+    const t0 = start + s * step;
+    if (t0 >= end - 1e-9) break;
+    const beat = s * step;
+    const accent =
+      Math.abs(beat - Math.round(beat)) < 1e-9
+        ? Math.round(beat) % 2 === 0
+          ? 1
+          : 0.92
+        : 0.82;
+    let order: number[];
+    let velocity = base * accent;
+    let ring = end - t0;
+    const all = sounding.map((_, k) => k);
+    switch (ch) {
+      case "D":
+        order = all;
+        break;
+      case "U":
+        order = all.slice(-4).reverse();
+        velocity *= 0.85;
+        break;
+      case "d":
+        order = all.slice(-4);
+        velocity *= 0.62;
+        break;
+      case "u":
+        order = all.slice(-3).reverse();
+        velocity *= 0.55;
+        break;
+      default:
+        order = all;
+        velocity *= 0.5;
+        ring = Math.min(ring, 0.03 * (tempo / 60));
+    }
+    const first = sounding[order[0]!]!;
+    order.forEach((k, position) => {
+      const string = sounding[k]!;
+      const at = t0 + (Math.abs(string - first) / (total - 1)) * sweep;
+      if (at >= end - 1e-9) return;
+      stop(string, at);
+      const note: PerformedNote = {
+        pitch: voicing.pitches[k]!,
+        start: round6(at),
+        length: round6(Math.max(1e-3, Math.min(ring, end - at))),
+        velocity: round6(
+          Math.max(0.05, Math.min(1, velocity * (1 - 0.04 * position))),
+        ),
+      };
+      out.push(note);
+      if (ch !== "x") ringing.set(string, { note, index: out.length - 1 });
+    });
+  }
+  return out.sort((a, b) => a.start - b.start || a.pitch - b.pitch);
 }
 
 // ---------------------------------------------------------------------------
@@ -6921,6 +7612,9 @@ function renderProgression(options: RenderOptions): RenderedProgression {
         ...perform(chord.pitches, at, span, {
           ...options.perform,
           seed: (options.perform?.seed ?? 0) + index,
+          ...(options.perform?.mode === "guitar"
+            ? { root: options.chords[index]!.root }
+            : {}),
         }),
       );
     const source = options.chords[index]!;

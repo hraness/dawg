@@ -10,7 +10,7 @@
  * right impulses share one transform: G = FFT(hL + i·hR), and because the
  * input is real, Re(IFFT(X·G)) is the left output and Im(…) the right.
  *
- * Built-in impulses (`builtin:room`, `builtin:hall`, `builtin:plate`) are
+ * Built-in impulses (`builtin:room`, `hall`, `plate`, `reverse`, `gate`, `spring`) are
  * generated from a seeded integer PRNG, so they need no files and are
  * identical on every render path. Everything here is plain float64
  * arithmetic over fixed loops: deterministic. Clean-room, from standard DSP
@@ -236,6 +236,31 @@ export const BUILTIN_IMPULSES = Object.freeze({
     attack: 0.06,
   },
   plate: { title: "plate", seconds: 1.8, damp: 9000, early: 0, attack: 0 },
+  // 0.6.1 shaped impulses (`shape`, see `shapedSide`).
+  reverse: {
+    title: "reverse",
+    seconds: 1.2,
+    damp: 7000,
+    early: 0,
+    attack: 0,
+    shape: "rise",
+  },
+  gate: {
+    title: "gated",
+    seconds: 0.45,
+    damp: 8000,
+    early: 6,
+    attack: 0.005,
+    shape: "gate",
+  },
+  spring: {
+    title: "spring tank",
+    seconds: 2.2,
+    damp: 4500,
+    early: 0,
+    attack: 0,
+    shape: "spring",
+  },
 } as const);
 export type BuiltinImpulse = keyof typeof BUILTIN_IMPULSES;
 
@@ -259,6 +284,15 @@ export function builtinImpulse(
   if (cached) return cached;
   const spec = BUILTIN_IMPULSES[name as BuiltinImpulse];
   const length = Math.max(1, Math.round(spec.seconds * sampleRate));
+  if ("shape" in spec) {
+    const impulse = normalizeImpulse(
+      `builtin:${name}`,
+      shapedSide(name, "L", spec, sampleRate),
+      shapedSide(name, "R", spec, sampleRate),
+    );
+    BUILTIN_CACHE.set(key, impulse);
+    return impulse;
+  }
   const sides = ["L", "R"].map((side) => {
     const random = seededRandom(`dawg-ir:${name}:${side}`);
     const out = new Float64Array(length);
@@ -287,6 +321,77 @@ export function builtinImpulse(
   const impulse = normalizeImpulse(`builtin:${name}`, sides[0]!, sides[1]!);
   BUILTIN_CACHE.set(key, impulse);
   return impulse;
+}
+
+/**
+ * One side of a shaped built-in (0.6.1), all seeded noise through a
+ * one-pole low-pass at `damp`:
+ * - rise: the Yamaha SPX90 "reverse gate": energy rises exponentially to a
+ *   hard cut at `seconds`, so the wash swells into the cut (a reverse
+ *   reverb that stays causal and works in play mode).
+ * - gate: dense flat tail cut hard at `seconds` (the 1980s gated snare).
+ * - spring: a decaying noise tail plus a train of dispersive chirps every
+ *   ~33 ms (high frequencies arrive first, the drip of a spring tank).
+ */
+function shapedSide(
+  name: string,
+  side: string,
+  spec: Readonly<{
+    seconds: number;
+    damp: number;
+    early: number;
+    attack: number;
+    shape: string;
+  }>,
+  sampleRate: number,
+): Float64Array {
+  const random = seededRandom(`dawg-ir:${name}:${side}`);
+  const length = Math.max(16, Math.round(spec.seconds * sampleRate));
+  const out = new Float64Array(length);
+  const coefficient =
+    1 -
+    Math.exp(
+      (-2 * Math.PI * Math.min(spec.damp, sampleRate * 0.45)) / sampleRate,
+    );
+  const fadeOut = Math.min(length >> 2, Math.round(0.003 * sampleRate));
+  let state = 0;
+  for (let index = 0; index < length; index += 1) {
+    const x = (index + 0.5) / length;
+    const t = index / sampleRate;
+    state += coefficient * (random() * 2 - 1 - state);
+    let env: number;
+    if (spec.shape === "rise") env = Math.exp(4 * (x - 1));
+    else if (spec.shape === "gate")
+      env = Math.min(1, t / Math.max(1e-4, spec.attack)) * (1 - 0.3 * x);
+    else env = 0.35 * Math.exp((-Math.log(1000) * t) / spec.seconds);
+    // A short fade into the cut, so it clicks no more than a real gate.
+    if (spec.shape !== "spring" && index >= length - fadeOut)
+      env *= (length - index) / fadeOut;
+    out[index] = state * env;
+  }
+  for (let tap = 0; tap < spec.early; tap += 1) {
+    const at = Math.floor((0.004 + random() * 0.036) * sampleRate);
+    if (at < length) out[at]! += (random() < 0.5 ? -1 : 1) * (0.5 - tap * 0.05);
+  }
+  if (spec.shape === "spring") {
+    // Dispersive chirps: 4 kHz falling to 300 Hz over 25 ms, each echo
+    // -1.6 dB down on the last, the period jittered per side.
+    const period = (0.031 + 0.004 * random()) * sampleRate;
+    const chirp = 0.025;
+    const decay = Math.log(1000) / spec.seconds;
+    for (let echo = 0; echo * period < length; echo += 1) {
+      const start = Math.round(echo * period);
+      const level = Math.exp((-decay * start) / sampleRate);
+      let phase = random() * 2 * Math.PI;
+      for (let k = 0; k < chirp * sampleRate && start + k < length; k += 1) {
+        const u = k / (chirp * sampleRate);
+        const hz = 4000 * (300 / 4000) ** u;
+        phase += (2 * Math.PI * hz) / sampleRate;
+        out[start + k]! += level * Math.sin(phase) * Math.sin(Math.PI * u);
+      }
+    }
+  }
+  return out;
 }
 
 /**

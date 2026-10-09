@@ -12,6 +12,7 @@
  *   Shift  sustain while held    Tab    sustain latch     Esc  leave the mode
  *   (while recording, sustain changes record as track pedal events)
  *   I      scale degrees: the home row plays the key's scale (any tuning)
+ *   [ / ]  strum slower / faster (chords perform guitar, 5 ms steps)
  *
  * Terminals report key-down only, so a held key is synthesized from the
  * keyboard's auto-repeat: a press sounds for the gate (one grid step by

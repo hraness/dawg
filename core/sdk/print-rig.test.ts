@@ -6,15 +6,24 @@ import prettier from "prettier";
 import { initProject, writeAtomic } from "../../src/project/init.ts";
 import { diffScores } from "../diff.ts";
 import {
+  RIG_ADDED,
   RIG_PRESETS as CORE_RIGS,
   RIG_STAGES,
   applyRigPreset,
   normalizeFx,
+  rigReverb as coreRigReverb,
 } from "../fx.ts";
 import { createScore, type TrackScore } from "../score.ts";
 import { evaluateProject } from "./eval.ts";
 import { printProject, printTrack } from "./print.ts";
-import { DawgSdkError, RIG_PRESETS, SDK_VERSION, rig } from "./v1.ts";
+import {
+  DawgSdkError,
+  RIG_PRESETS,
+  SDK_VERSION,
+  rig,
+  rigReverb,
+  track as sdkTrack,
+} from "./v1.ts";
 
 const rigged = createScore({
   tempoBpm: 100,
@@ -41,6 +50,23 @@ const rigged = createScore({
       instrument: "pluck",
       fx: applyRigPreset(undefined, "funk"),
     },
+    {
+      id: "jangle",
+      name: "jangle",
+      instrument: "pluck",
+      fx: applyRigPreset(undefined, "jangle"),
+    },
+    {
+      // A 0.6.0 jangle: no double.
+      id: "jangle060",
+      name: "jangle060",
+      instrument: "pluck",
+      fx: normalizeFx({
+        head: { type: "chime", gain: 3, treble: 7 },
+        cab: { type: "2x12", mic: 0.2 },
+        compressor: { threshold: -20, ratio: 4, attack: 0.01, release: 0.15 },
+      }),
+    },
   ],
 } as never);
 
@@ -56,13 +82,25 @@ describe("rig in the SDK", () => {
       for (const stage of RIG_STAGES)
         expect(RIG_PRESETS[name]![stage]).toEqual(preset[stage]);
       // Companion effects too (spring's reverb is a track field).
+      // Effects a rig gained later (jangle's double) stay out of rig().
       const { reverb: _reverb, ...fx } = preset as Record<string, unknown>;
+      for (const added of RIG_ADDED[name] ?? []) delete fx[added];
       const sdk = Object.fromEntries(
         Object.entries(RIG_PRESETS[name]!).filter(([, v]) => v !== undefined),
       );
       expect(sdk as Record<string, unknown>).toEqual(fx);
-      // rig() gives what the `rig` command stores.
-      expect(normalizeFx(rig(name))).toEqual(applyRigPreset(undefined, name));
+      // rig() gives what the `rig` command stores, less those additions.
+      const stored: Record<string, unknown> = {
+        ...applyRigPreset(undefined, name),
+      };
+      for (const added of RIG_ADDED[name] ?? []) delete stored[added];
+      expect(normalizeFx(rig(name))).toEqual(stored);
+      // The track wash matches the `rig` command's.
+      expect(rigReverb(name) === undefined).toBe(
+        coreRigReverb(name) === undefined,
+      );
+      if (rigReverb(name))
+        expect(coreRigReverb(name)).toMatchObject(rigReverb(name)!);
     }
   });
 
@@ -74,6 +112,34 @@ describe("rig in the SDK", () => {
     });
     expect(rig("metal", { head: { gain: 9 } }).head?.gain).toBe(9);
     expect(() => rig("nope")).toThrow(DawgSdkError);
+  });
+});
+
+describe("0.6.1 rigs in song.ts", () => {
+  test("a 0.6.0 jangle song.ts keeps its 0.6.0 stages (no double)", () => {
+    expect(rig("jangle")).not.toHaveProperty("double");
+    expect(sdkTrack({ name: "g", instrument: "jangle" }).fx).not.toHaveProperty(
+      "double",
+    );
+    // Exactly the stored 0.6.0 jangle, so it renders as it did.
+    const legacy = rigged.tracks[4]!.fx;
+    expect(normalizeFx(rig("jangle"))).toEqual(legacy);
+    expect(
+      normalizeFx(sdkTrack({ name: "g", instrument: "jangle" }).fx as never),
+    ).toEqual(legacy);
+  });
+
+  test("instrument: shoegaze brings the wash the prompt sets", () => {
+    const sdk = sdkTrack({ name: "g", instrument: "shoegaze" });
+    expect(sdk.reverb).not.toBeNull();
+    expect(coreRigReverb("shoegaze")).toMatchObject(sdk.reverb!);
+    expect(normalizeFx(sdk.fx as never)).toEqual(
+      applyRigPreset(undefined, "shoegaze"),
+    );
+    // Its own reverb wins; null keeps it dry.
+    expect(
+      sdkTrack({ name: "g", instrument: "shoegaze", reverb: null }).reverb,
+    ).toBeNull();
   });
 });
 
@@ -89,6 +155,15 @@ describe("rig in the printer", () => {
     const funky = printTrack(rigged, rigged.tracks[2]!);
     expect(funky).toContain('...rig("funk"),');
     expect(funky).not.toContain("autofilter");
+    // 0.6.1 jangle: the spread plus its double; 0.6.0 jangle: the spread
+    // alone, as 0.6.0 printed it.
+    const jangle = printTrack(rigged, rigged.tracks[3]!);
+    expect(jangle).toContain('...rig("jangle"),');
+    expect(jangle).toContain("double: { time: 12, drift: 1.5, width: 0.5 },");
+    const legacy = printTrack(rigged, rigged.tracks[4]!);
+    expect(legacy).toContain('...rig("jangle"),');
+    expect(legacy).not.toContain("double");
+    expect(legacy).not.toContain("compressor");
   });
 
   test("output is prettier-stable", async () => {
