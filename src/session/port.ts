@@ -413,10 +413,10 @@ class FilePort<T> implements SessionPort<T> {
     };
     const recordName = basename(this.options.paths.record);
     // macOS coalesces the temp write and the rename into events named after
-    // the temp file (`<record>.<pid>.tmp`), so match that too, but not the
+    // the temp file (`<record>.<pid>.<n>.tmp`), so match that too, but not the
     // sibling `.audio.lock` / `.daemon.log` files that share the prefix.
     const recordFile = new RegExp(
-      `^${recordName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\.\\d+\\.tmp)?$`,
+      `^${recordName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:(?:\\.\\d+)+\\.tmp)?$`,
     );
     let watcher: FSWatcher | undefined;
     try {
