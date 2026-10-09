@@ -700,7 +700,7 @@ export const USAGE: Readonly<Record<string, string>> = {
     "stomp fuzz|face|od|rat|octave | gain <0-10> tone <0-1> level <dB> | off",
   head: "head clean|chime|crunch|lead|high|solid|bass | gain bass mid treble presence master <0-10> | gate <dB> | off",
   cab: "cab 1x12|2x12|4x12|1x10|open|8x10|1x15|di | mic <0-1> | off",
-  keys: "keys <param> <value> | preset <name> | reset | presets · keys hardness 0.3 · keys stretch 0",
+  keys: "keys <param> <value> | preset <name> | reset | presets · keys hardness 0.3 · keys stretch 0 · keys sym 0.5 (sympathetic bloom under the sustain pedal)",
   piano:
     "piano [grand|ballad|upright|felt|lofi|honkytonk|prepared] · piano ballad",
   epiano:

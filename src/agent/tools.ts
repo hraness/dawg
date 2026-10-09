@@ -888,7 +888,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   },
   {
     name: "set_keys",
-    description: `Shape a modelled piano or electric keys (epiano wurli clav): preset (instrument, keys and its effects), params ${KEYS_SIMPLE.join(" ")}… (epiano: bark bell tone vibe; wurli: trem; clav: pickup mute; null unsets; DAWG.md lists all), or reset. Stored "piano" stays legacy; set_instrument piano writes grand.`,
+    description: `Shape a modelled piano or electric keys (epiano wurli clav): preset (instrument, keys and its effects), params ${KEYS_SIMPLE.join(" ")}… (pianos: sym 0.5 adds sympathetic bloom under the sustain pedal, good for Chopin and Debussy; epiano: bark bell tone vibe; wurli: trem; clav: pickup mute; null unsets; DAWG.md lists all), or reset. Stored "piano" stays legacy; set_instrument piano writes grand.`,
     parameters: {
       type: "object",
       properties: {
