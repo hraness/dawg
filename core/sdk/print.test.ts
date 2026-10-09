@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import prettier from "prettier";
 import { initProject, writeAtomic } from "../../src/project/init.ts";
-import { diffScores } from "../diff.ts";
+import { adoptNoteIds, diffScores } from "../diff.ts";
 import { addNote, createScore, TrackScore, updateTrack } from "../score.ts";
 import { evaluateProject } from "./eval.ts";
 import {
@@ -273,9 +273,7 @@ describe("wavetable tracks", () => {
       await writeProject(dir, tables);
       const evaluated = await evaluateProject(dir);
       if (!evaluated.ok) throw new Error(JSON.stringify(evaluated.diagnostics));
-      const ops = diffScores(tables, evaluated.score).filter(
-        (op) => op.type !== "addNote" && op.type !== "removeNote",
-      );
+      const ops = diffScores(tables, adoptNoteIds(tables, evaluated.score));
       expect(ops).toEqual([]);
       expect(evaluated.score.tracks[0]!.wavetable).toEqual(
         tables.tracks[0]!.wavetable,
@@ -355,9 +353,7 @@ describe("modal tracks", () => {
       await writeProject(dir, mallets);
       const evaluated = await evaluateProject(dir);
       if (!evaluated.ok) throw new Error(JSON.stringify(evaluated.diagnostics));
-      const ops = diffScores(mallets, evaluated.score).filter(
-        (op) => op.type !== "addNote" && op.type !== "removeNote",
-      );
+      const ops = diffScores(mallets, adoptNoteIds(mallets, evaluated.score));
       expect(ops).toEqual([]);
       expect(evaluated.score.tracks.map((track) => track.modal)).toEqual(
         mallets.tracks.map((track) => track.modal),
@@ -457,9 +453,7 @@ describe("printer", () => {
       const evaluated = await evaluateProject(dir);
       if (!evaluated.ok) throw new Error(JSON.stringify(evaluated.diagnostics));
       // Everything but note ids survives; ids are content hashes.
-      const ops = diffScores(rich, evaluated.score).filter(
-        (op) => op.type !== "addNote" && op.type !== "removeNote",
-      );
+      const ops = diffScores(rich, adoptNoteIds(rich, evaluated.score));
       expect(ops).toEqual([]);
       const second = printProject(evaluated.score);
       expect(second.files).toEqual(first.files);

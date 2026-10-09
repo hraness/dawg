@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import prettier from "prettier";
 import { initProject, writeAtomic } from "../../src/project/init.ts";
-import { diffScores } from "../diff.ts";
+import { adoptNoteIds, diffScores } from "../diff.ts";
 import { createScore, type TrackScore } from "../score.ts";
 import { evaluateProject } from "./eval.ts";
 import { printProject, printTrack } from "./print.ts";
@@ -102,9 +102,7 @@ describe("electric keys in the SDK", () => {
       await writeProject(dir, electric);
       const evaluated = await evaluateProject(dir);
       if (!evaluated.ok) throw new Error(JSON.stringify(evaluated.diagnostics));
-      const ops = diffScores(electric, evaluated.score).filter(
-        (op) => op.type !== "addNote" && op.type !== "removeNote",
-      );
+      const ops = diffScores(electric, adoptNoteIds(electric, evaluated.score));
       expect(ops).toEqual([]);
     } finally {
       await rm(dir, { recursive: true, force: true });

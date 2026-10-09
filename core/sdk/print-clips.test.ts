@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import prettier from "prettier";
 import { initProject, writeAtomic } from "../../src/project/init.ts";
-import { diffScores } from "../diff.ts";
+import { adoptNoteIds, diffScores } from "../diff.ts";
 import { createScore, TrackScore } from "../score.ts";
 import { evaluateProject } from "./eval.ts";
 import { printProject, printTrack } from "./print.ts";
@@ -205,9 +205,7 @@ describe("audio clips in the printer", () => {
       const evaluated = await evaluateProject(dir);
       if (!evaluated.ok) throw new Error(JSON.stringify(evaluated.diagnostics));
       expect(
-        diffScores(rounded, evaluated.score).filter(
-          (op) => op.type !== "addNote" && op.type !== "removeNote",
-        ),
+        diffScores(rounded, adoptNoteIds(rounded, evaluated.score)),
       ).toEqual([]);
       expect(evaluated.score.notes.map((n) => n.lyric)).toEqual(["nev", "er"]);
       expect(evaluated.score.tracks[0]!.clips).toEqual(

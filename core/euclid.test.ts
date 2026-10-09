@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import prettier from "prettier";
 import { initProject, writeAtomic } from "../src/project/init.ts";
-import { diffScores } from "./diff.ts";
+import { adoptNoteIds, diffScores } from "./diff.ts";
 import {
   bjorklund,
   chance,
@@ -361,9 +361,7 @@ describe("rhythm on a score", () => {
       expect(evaluated.score.tracks[0]!.rhythm).toEqual(
         score.tracks[0]!.rhythm,
       );
-      const ops = diffScores(score, evaluated.score).filter(
-        (op) => op.type !== "addNote" && op.type !== "removeNote",
-      );
+      const ops = diffScores(score, adoptNoteIds(score, evaluated.score));
       expect(ops).toEqual([]);
       expect(evaluated.score.notes.length).toBe(score.notes.length);
       expect(printProject(evaluated.score).files).toEqual(

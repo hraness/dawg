@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import prettier from "prettier";
 import { initProject, writeAtomic } from "../../src/project/init.ts";
-import { diffScores } from "../diff.ts";
+import { adoptNoteIds, diffScores } from "../diff.ts";
 import { createScore, TrackScore } from "../score.ts";
 import { evaluateProject } from "./eval.ts";
 import { printProject, printSong, printTrack } from "./print.ts";
@@ -153,9 +153,7 @@ describe("tuning in the printer", () => {
       await writeProject(dir, tuned);
       const evaluated = await evaluateProject(dir);
       if (!evaluated.ok) throw new Error(JSON.stringify(evaluated.diagnostics));
-      const ops = diffScores(tuned, evaluated.score).filter(
-        (op) => op.type !== "addNote" && op.type !== "removeNote",
-      );
+      const ops = diffScores(tuned, adoptNoteIds(tuned, evaluated.score));
       expect(ops).toEqual([]);
       expect(evaluated.score.tuning).toEqual(tuned.tuning);
       const cents = evaluated.score.notes.map((n) => n.cents ?? 0);
