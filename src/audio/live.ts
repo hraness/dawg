@@ -102,7 +102,18 @@ export class LiveSynth {
   /** f061-organ: the live organ clock's origin (performance.now ms). */
   private readonly organEpoch = performance.now();
 
-  public constructor(private readonly sampleRate: number) {}
+  /**
+   * `fastTail: false` always renders the whole tail window (tests compare
+   * the release-sized buffer against it).
+   */
+  public constructor(
+    private readonly sampleRate: number,
+    private readonly options: Readonly<{
+      fastTail?: boolean;
+      /** Called with each one-note render's buffer length, in frames. */
+      onRender?: (frames: number) => void;
+    }> = {},
+  ) {}
 
   public get rate(): number {
     return this.sampleRate;
@@ -291,23 +302,6 @@ export class LiveSynth {
     // ready, never at the wrong pitch); shorter ones fit synchronously.
     const windowFrames = Math.round(LIVE_RIG_WINDOW_SECONDS * this.sampleRate);
     const horizon = windowed ? windowFrames : Infinity;
-    const audio = withLiveFit(() =>
-      withSingHorizon(horizon, () =>
-        renderScorePcm(single, {
-          sampleRate: this.sampleRate,
-          // The renderer's shortest one-shot is 1 s; the window is cut below.
-          maxSeconds: windowed
-            ? 1
-            : Math.max(MAX_LIVE_NOTE_SECONDS + 4, seconds + tail),
-          ...(request.samples ? { samples: request.samples } : {}),
-          ...(organTick ? { seedTick: organTick } : {}),
-          ...(quantChord ? { quantChord } : {}),
-        }),
-      ),
-    );
-    const frames = windowed
-      ? Math.min(audibleFrames(audio.pcm), windowFrames)
-      : audibleFrames(audio.pcm);
     const release = liveEngine?.releaseSeconds
       ? liveEngine.releaseSeconds(
           track,
@@ -319,6 +313,44 @@ export class LiveSynth {
           ),
         )
       : tail;
+    const renderFor = (maxSeconds: number) => {
+      const out = withLiveFit(() =>
+        withSingHorizon(horizon, () =>
+          renderScorePcm(single, {
+            sampleRate: this.sampleRate,
+            maxSeconds,
+            ...(request.samples ? { samples: request.samples } : {}),
+            ...(organTick ? { seedTick: organTick } : {}),
+            ...(quantChord ? { quantChord } : {}),
+          }),
+        ),
+      );
+      this.options.onRender?.(out.frames);
+      return out;
+    };
+    const fullSeconds = Math.max(MAX_LIVE_NOTE_SECONDS + 4, seconds + tail);
+    // A damped key decays 60 dB per 4.6 x its release (a linear fade of the
+    // same energy), so 12 x release is past -150 dB: silent in 16 bits. The
+    // renderer is causal, so the short buffer is the full one's prefix; a
+    // note still sounding at its end falls back to the full window.
+    const shortSeconds =
+      !windowed &&
+      this.options.fastTail !== false &&
+      liveFastTail(track, liveEngine !== undefined)
+        ? seconds + Math.min(tail, LIVE_TAIL_RELEASES * release) + 0.1
+        : Infinity;
+    let audio =
+      // The renderer's shortest one-shot is 1 s; the window is cut below.
+      windowed ? renderFor(1) : renderFor(Math.min(fullSeconds, shortSeconds));
+    if (
+      shortSeconds < fullSeconds &&
+      audibleFrames(audio.pcm) >
+        audio.frames - Math.round(LIVE_TAIL_GUARD_SECONDS * this.sampleRate)
+    )
+      audio = renderFor(fullSeconds);
+    const frames = windowed
+      ? Math.min(audibleFrames(audio.pcm), windowFrames)
+      : audibleFrames(audio.pcm);
     const ringOut = !windowed && liveEngine?.ringOut?.(track) === true;
     const pcm = audio.pcm.subarray(0, frames * RENDER_CHANNELS);
     if (ringOut) fadeCutTail(pcm, frames, this.sampleRate);
@@ -461,6 +493,27 @@ export function fadeCutTail(
       pcm[at] = Math.round(pcm[at]! * gain);
     }
   }
+}
+
+/** A short live render ends at 12 x the engine's release past the note. */
+const LIVE_TAIL_RELEASES = 12;
+/** Audio within this much of a short render's end means it was cut. */
+const LIVE_TAIL_GUARD_SECONDS = 0.05;
+
+/**
+ * Whether a live note may render a buffer sized by its engine's release
+ * rather than the whole tail window: only a 0.6 engine's dry track (echoes
+ * and reverb tails are not bounded by the key's release).
+ */
+function liveFastTail(track: Track, engine: boolean): boolean {
+  return (
+    engine &&
+    track.delay === undefined &&
+    track.reverb === undefined &&
+    (track.fx === undefined || Object.keys(track.fx).length === 0) &&
+    (track.fxAutomation === undefined ||
+      Object.keys(track.fxAutomation).length === 0)
+  );
 }
 
 function audibleFrames(pcm: Int16Array): number {
