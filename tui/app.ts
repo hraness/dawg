@@ -29,6 +29,12 @@ import {
   type TrackScoreSnapshot,
 } from "./highway.ts";
 import { placeholderHint } from "./hints.ts";
+import {
+  Delight,
+  downbeatGlint,
+  FIRST_LOOP_CARD,
+  sweepProgress,
+} from "./delight.ts";
 import { asciiHint, fitHint, HINTS } from "./grammar.ts";
 import { GuideBrowser } from "./guide.ts";
 import { listGuides } from "../guides/index.ts";
@@ -148,6 +154,8 @@ export interface UiState {
   guide?: GuideBrowser | undefined;
   /** The fader drawer, docked over the bottom of the piano roll. */
   drawer?: DrawerView | undefined;
+  /** Downbeat glint, first-loop sweep and ghost-note lanes (delight.ts). */
+  delight?: Delight | undefined;
 }
 
 /**
@@ -430,12 +438,23 @@ function paintHeader(
   ui: UiState,
   width: number,
   hits?: HitMap,
+  beat = 0,
 ): void {
   const { theme, capabilities } = ui;
   const roles = theme.roles;
   const score = view.score;
   const unicode = capabilities.unicode;
   const playing = score.playing === true;
+  // The ▶ brightens for a moment on each bar's downbeat.
+  const glint = downbeatGlint({
+    playing,
+    beat,
+    bpm: score.bpm ?? 120,
+    beatsPerBar: score.beatsPerBar ?? 4,
+    barBeats: score.barBeats,
+    loopBeats: score.loopBeats,
+    reducedMotion: ui.reducedMotion,
+  });
   const transport = `${playing ? (unicode ? "▶" : ">") : unicode ? "⏸" : "||"} ${score.bpm ?? 120} BPM`;
   const name = score.trackName ?? score.trackId ?? "track";
   const left: Segment[] = [
@@ -448,7 +467,11 @@ function paintHeader(
     },
     {
       text: transport,
-      style: playing ? roles.transport : roles.paused,
+      style: playing
+        ? glint
+          ? { ...shade(roles.transport, 0.55), bold: true }
+          : roles.transport
+        : roles.paused,
       priority: 0,
       target: { kind: "transport" },
     },
@@ -1230,7 +1253,15 @@ export function composeFrame(
         height: layout.highway.height - 1,
       };
     }
-  } else paintHeader(buffer, view, ui, width, hits);
+  } else
+    paintHeader(
+      buffer,
+      view,
+      ui,
+      width,
+      hits,
+      view.beat ?? resolveBeat(view.score, nowMs),
+    );
   if (view.arrange && layout.highway.height > 4) {
     paintArrangeStrip(
       buffer,
@@ -1274,6 +1305,12 @@ export function composeFrame(
             seed: view.score.sessionId ?? "dawg",
             agent: !view.agentOffline,
           },
+          sweep: sweepProgress(
+            ui.delight?.sweepStartedAtMs,
+            nowMs,
+            ui.reducedMotion,
+          ),
+          glows: ui.delight?.glows(nowMs, ui.reducedMotion),
         },
       );
     if (ui.drawer)
@@ -1369,6 +1406,10 @@ export class TuiApp {
   private lastFrameAt = Number.NEGATIVE_INFINITY;
   /** Minimum interval between frames (~30 fps). */
   frameIntervalMs = 33;
+  /** Session-only delight; `heardLoop` comes from the session's metadata. */
+  readonly delight = new Delight();
+  /** The song wrapped for the first time: the host records it in meta. */
+  onFirstLoop: (() => void) | undefined;
 
   constructor(options: TuiAppOptions) {
     this.io = options.io;
@@ -1401,6 +1442,7 @@ export class TuiApp {
       keys: this.keys,
       guide: this.guide,
       drawer: this.drawer,
+      delight: this.delight,
     };
   }
 
@@ -1423,6 +1465,7 @@ export class TuiApp {
     if (!options.force && now - this.lastFrameAt < this.frameIntervalMs)
       return "";
     this.lastFrameAt = now;
+    this.watchFirstLoop(view, now);
     const frame = composeFrame(
       view,
       this.ui,
@@ -1433,6 +1476,30 @@ export class TuiApp {
     const out = this.writer.frame(frame.buffer, frame.cursor);
     if (out) this.io.write(out);
     return out;
+  }
+
+  /**
+   * The first wrap of a song that never wrapped before: a one-shot sweep
+   * and the card `↻ first loop`. The card shows with motion off too (it is
+   * information); the sweep does not.
+   */
+  private watchFirstLoop(view: AppView, now: number): void {
+    const score = view.score;
+    const wrapped = this.delight.observe(
+      {
+        playing: score.playing === true,
+        beat: view.beat ?? resolveBeat(score, now),
+        loopBeats: score.loopBeats,
+        empty:
+          score.notes.length === 0 &&
+          (score.clips ?? []).length === 0 &&
+          !(score.layers ?? []).some((layer) => layer.notes.length > 0),
+      },
+      now,
+    );
+    if (!wrapped) return;
+    this.activity.pushCard(FIRST_LOOP_CARD, { tone: "info", once: true });
+    this.onFirstLoop?.();
   }
 
   /** Decode one key sequence (from TerminalInputDecoder) into an input. */

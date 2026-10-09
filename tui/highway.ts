@@ -475,6 +475,10 @@ export interface HighwayOptions {
   background?: Style;
   /** Seed and agent presence for the empty-state hint (tui/hints.ts). */
   hint?: Readonly<{ seed: string; agent: boolean }> | undefined;
+  /** The first-loop sweep's head, 0..1 across the hit line (tui/delight.ts). */
+  sweep?: number | undefined;
+  /** Play keys sounding without recording: their lanes glow on the hit line. */
+  glows?: readonly Readonly<{ pitch: number; strength: number }>[] | undefined;
 }
 
 export interface HighwayLayout {
@@ -680,22 +684,19 @@ export function paintHighway(
     );
   }
 
-  // Loop-wrap sweep: a bright band crosses the hit line during the first beat
-  // after the transport wraps.
-  if (loop && !reduced && score.playing && beat >= loop * 0.5) {
-    const loopPhase = ((beat % loop) + loop) % loop;
-    if (loopPhase < 1) {
-      const head = Math.round(gutter + loopPhase * areaWidth);
-      for (let offset = 0; offset < 6; offset += 1) {
-        const column = head - offset;
-        if (column < gutter || column >= region.width) continue;
-        painter.put(
-          column,
-          hitRow,
-          glyphs.loopRule,
-          shade(roles.loopRule, 0.5 - offset * 0.1),
-        );
-      }
+  // First-loop sweep: once per song, a faint band crosses the hit line
+  // when the loop first wraps (tui/delight.ts decides when).
+  if (options.sweep !== undefined && !reduced) {
+    const head = Math.round(gutter + options.sweep * areaWidth);
+    for (let offset = 0; offset < 6; offset += 1) {
+      const column = head - offset;
+      if (column < gutter || column >= region.width) continue;
+      painter.put(
+        column,
+        hitRow,
+        glyphs.loopRule,
+        shade(roles.loopRule, 0.5 - offset * 0.1),
+      );
     }
   }
 
@@ -1037,6 +1038,22 @@ export function paintHighway(
         }
         break;
       }
+    }
+  }
+  // Ghost notes: a play key that is not recording lights its lane on the
+  // hit line for a moment, so the hand sees where the music would land.
+  if (options.glows && !reduced) {
+    const width = Math.max(1, layout.laneWidth || 1);
+    for (const glow of options.glows) {
+      const lane = projection.laneOf({ startBeat: beat, pitch: glow.pitch });
+      if (lane === undefined) continue;
+      const x = laneX(layout, lane, areaWidth);
+      const style = {
+        ...shade(accent, 0.45 * glow.strength),
+        bold: glow.strength > 0.5,
+      };
+      for (let offset = 0; offset < width; offset += 1)
+        painter.put(x + offset, hitRow, glyphs.hitStrong, style);
     }
   }
   if (score.clips && score.clips.length > 0 && region.width >= 24)

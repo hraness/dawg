@@ -1341,6 +1341,7 @@ async function runInteractive(): Promise<void> {
     if (clock.playing || play?.on || auditionLoop?.looping) return true;
     const activity = tui.activity;
     if (activity.spinner || activity.streaming) return true;
+    if (tui.delight.animating(Date.now())) return true;
     const latest = activity.latest;
     return (
       !tui.ui.reducedMotion &&
@@ -1371,6 +1372,7 @@ async function runInteractive(): Promise<void> {
     )
       return;
     followCommitted();
+    tui.delight.song(record.sessionId, record.meta.heardLoop === true);
     play?.tick();
     // Values in the menu follow the score as edits land.
     if (menu.open) refreshMenu();
@@ -1382,6 +1384,13 @@ async function runInteractive(): Promise<void> {
     tui.render(appView(score, clock.beatAt()), { force: true });
   };
   requestFrame = () => tick(true);
+  // The first wrap is remembered per song in .dawg metadata, never the score.
+  tui.onFirstLoop = () => {
+    void port
+      .updateMeta({ heardLoop: true })
+      .then((result) => adoptMeta(result.meta))
+      .catch(() => undefined);
+  };
   runPromptLater = (command) => {
     queuedPrompts.unshift(command);
     void drainQueue();
@@ -4536,6 +4545,10 @@ function playHost() {
     },
     async stopTransport(): Promise<void> {
       await setTransport("pause");
+    },
+    ghost(pitch: number) {
+      tui.delight.ghost(pitch, Date.now());
+      requestFrame();
     },
     card(text: string, tone: "info" | "success" | "warning" | "error") {
       if (tone === "error") tui.activity.pushError(text);

@@ -127,6 +127,8 @@ export interface PlayHost {
   startTransport(beat: number): Promise<void>;
   stopTransport(): Promise<void>;
   card(text: string, tone: "info" | "success" | "warning" | "error"): void;
+  /** A played key that is not recorded: the screen glows its lane. */
+  ghost?(pitch: number): void;
   newNoteId(): string;
 }
 
@@ -491,6 +493,8 @@ export class PlaySession {
         return { type: "handled" };
       case "note": {
         this.release(action.released, now);
+        // A key that is not recording glows its lane for a moment.
+        if (!this.recording) this.host.ghost?.(action.note.pitch);
         const chord = this.chords.chordFor(action.note.pitch);
         if (chord) {
           const played = this.chords.voice(chord, action.note.pitch);
