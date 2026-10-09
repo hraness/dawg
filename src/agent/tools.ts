@@ -1,4 +1,8 @@
-import { instrumentForWord } from "../../core/instruments.ts";
+import { INSTRUMENT_WORDS } from "../../core/instruments.ts";
+import {
+  DEFAULT_STRING_PRESET,
+  STRING_INSTRUMENT,
+} from "../../core/strings.ts";
 import {
   AUTOMATION_PARAMETERS,
   automationPoints,
@@ -17,6 +21,13 @@ import {
   synthParamName,
 } from "../../core/synth.ts";
 import { applySynthCommand, type SynthCommand } from "../commands/synth.ts";
+import { applyStringCommand, type StringCommand } from "../commands/string.ts";
+import {
+  STRING_PARAMS,
+  STRING_PRESET_NAMES,
+  stringParamName,
+  stringPresetName,
+} from "../../core/strings.ts";
 import {
   setSampleControls,
   type SampleControlValue,
@@ -53,7 +64,7 @@ import { DRUM_TOOLS } from "./drum-tools.ts";
 import { TIME_TOOLS } from "./time-tools.ts";
 import { SECTION_TOOLS } from "./section-tools.ts";
 import type { MediaResult, MediaRunContext } from "../media/types.ts";
-import { pitchToMidi } from "./ops.ts";
+import { instrumentPatch, pitchToMidi } from "./ops.ts";
 import { TUNING_LIMITS } from "../../core/tuning.ts";
 import {
   DRUM_VOICES,
@@ -86,6 +97,13 @@ import {
   webSearch,
   type SearchSpend,
 } from "../web/search.ts";
+
+/** Instrument words the tools accept: legacy voices, `string`, 0.6 words. */
+const INSTRUMENT_ENUM: string[] = [
+  ...AVAILABLE_INSTRUMENTS,
+  STRING_INSTRUMENT,
+  ...INSTRUMENT_WORDS.map((row) => row.word),
+].filter((word, index, all) => all.indexOf(word) === index);
 
 /** What a validated tool call asks the host to do. */
 export type ScorePlan = Readonly<{
@@ -427,19 +445,19 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
       type: "object",
       properties: {
         trackId: trackIdSchema,
-        instrument: { type: "string", enum: [...AVAILABLE_INSTRUMENTS] },
+        instrument: { type: "string", enum: INSTRUMENT_ENUM },
       },
       required: ["instrument"],
       additionalProperties: false,
     },
     plan(args, context) {
       const trackId = targetTrack(args, context);
-      const instrument = instrumentName(args.instrument);
+      const patch = instrumentName(args.instrument);
       return {
         kind: "score",
-        operations: [{ type: "updateTrack", trackId, patch: { instrument } }],
+        operations: [{ type: "updateTrack", trackId, patch }],
         trackId,
-        summary: `${trackId} → ${instrument}`,
+        summary: `${trackId} → ${patch.string?.preset ?? patch.instrument}`,
       };
     },
   },
@@ -678,6 +696,49 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
         ],
         trackId,
         summary: `${trackId} ${result.message}`,
+      };
+    },
+  },
+  {
+    name: "set_string",
+    description:
+      "Make a track a plucked string (physical model): preset picks the instrument; params override it (ring s, bright, damp, pos, mute, buzz = jawari, body, sym = sympathetic strings, stiff, exciter pick|finger|hammer|noise); null unsets one. reset keeps the preset and drops overrides; off returns the track to a plain pluck voice.",
+    parameters: {
+      type: "object",
+      properties: {
+        trackId: trackIdSchema,
+        preset: { type: "string", enum: [...STRING_PRESET_NAMES] },
+        reset: { type: "boolean" },
+        off: { type: "boolean" },
+        params: {
+          type: "object",
+          additionalProperties: { type: ["number", "string", "null"] },
+        },
+      },
+      additionalProperties: false,
+    },
+    plan(args, context) {
+      const trackId = targetTrack(args, context);
+      let score = context.score;
+      const messages: string[] = [];
+      for (const command of stringToolCommands(args)) {
+        const result = applyStringCommand(score, trackId, command);
+        if (!result.ok) throw new ToolArgumentError(result.message);
+        if (result.next) score = result.next;
+        messages.push(result.message);
+      }
+      const next = score.tracks.find((t) => t.id === trackId)!;
+      return {
+        kind: "score",
+        operations: [
+          {
+            type: "updateTrack",
+            trackId,
+            patch: { instrument: next.instrument, string: next.string ?? null },
+          },
+        ],
+        trackId,
+        summary: `${trackId} ${messages.at(-1)}`,
       };
     },
   },
@@ -1132,7 +1193,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
       properties: {
         id: { type: "string", pattern: ID_PATTERN.source, maxLength: 64 },
         name: { type: "string", maxLength: SCORE_LIMITS.maxNameLength },
-        instrument: { type: "string", enum: [...AVAILABLE_INSTRUMENTS] },
+        instrument: { type: "string", enum: INSTRUMENT_ENUM },
       },
       required: ["id", "instrument"],
       additionalProperties: false,
@@ -1145,14 +1206,15 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
       const id = args.id;
       if (context.score.tracks.some((track) => track.id === id))
         throw new ToolArgumentError(`track ${id} already exists`);
-      const instrument = instrumentName(args.instrument);
+      const patch = instrumentName(args.instrument);
+      const instrument = patch.string?.preset ?? patch.instrument;
       const name =
         typeof args.name === "string" && args.name.trim().length > 0
           ? args.name.trim().slice(0, SCORE_LIMITS.maxNameLength)
           : id;
       return {
         kind: "score",
-        operations: [{ type: "addTrack", track: { id, name, instrument } }],
+        operations: [{ type: "addTrack", track: { id, name, ...patch } }],
         trackId: id,
         summary: `+track ${id} (${instrument})`,
       };
@@ -1628,6 +1690,46 @@ function synthToolCommand(args: Record<string, unknown>): SynthCommand {
   return { type: "synth-set", values };
 }
 
+function stringToolCommands(args: Record<string, unknown>): StringCommand[] {
+  if (args.off === true) return [{ type: "string-off" }];
+  const commands: StringCommand[] = [];
+  if (args.preset !== undefined) {
+    const preset =
+      typeof args.preset === "string"
+        ? stringPresetName(args.preset)
+        : undefined;
+    if (!preset)
+      throw new ToolArgumentError(
+        `string presets: ${STRING_PRESET_NAMES.join(", ")}`,
+      );
+    commands.push({ type: "string-preset", preset });
+  }
+  if (args.reset === true) commands.push({ type: "string-reset" });
+  if (args.params !== undefined) {
+    const values: Record<string, number | string | null> = {};
+    for (const [name, value] of Object.entries(record(args.params, "params"))) {
+      const param = stringParamName(name);
+      if (!param)
+        throw new ToolArgumentError(
+          `string has no parameter ${name}; params: ${Object.keys(STRING_PARAMS).join(", ")}`,
+        );
+      if (
+        value !== null &&
+        typeof value !== "number" &&
+        typeof value !== "string"
+      )
+        throw new ToolArgumentError(`string ${name} must be a value`);
+      values[param] = value;
+    }
+    commands.push({ type: "string-set", values });
+  }
+  if (commands.length === 0)
+    throw new ToolArgumentError(
+      "set_string needs preset, params, reset or off",
+    );
+  return commands;
+}
+
 function targetTrack(args: Record<string, unknown>, context: ToolContext) {
   const trackId = args.trackId ?? context.focusedTrackId;
   if (typeof trackId !== "string" || trackId.length > SCORE_LIMITS.maxIdLength)
@@ -1647,18 +1749,31 @@ function knownNoteId(value: unknown, context: ToolContext, label: string) {
   return value;
 }
 
-function instrumentName(value: unknown): string {
-  // 0.6 instrument words resolve first; legacy words resolve to themselves.
-  const resolved =
-    typeof value === "string" ? instrumentForWord(value) : undefined;
+/**
+ * The track patch an instrument word means: legacy words store themselves,
+ * `string` and the string resolver words (nylon, koto, harp…) also write
+ * the `Track.string` preset the engine needs.
+ */
+function instrumentName(value: unknown): {
+  instrument: string;
+  string?: { preset: string };
+} {
+  const word = typeof value === "string" ? value.trim() : undefined;
+  if (word === STRING_INSTRUMENT)
+    return {
+      instrument: STRING_INSTRUMENT,
+      string: { preset: DEFAULT_STRING_PRESET },
+    };
+  const patch = word === undefined ? undefined : instrumentPatch(word);
   if (
-    resolved === undefined ||
-    !(AVAILABLE_INSTRUMENTS as readonly string[]).includes(resolved)
+    patch === undefined ||
+    (!patch.string &&
+      !(AVAILABLE_INSTRUMENTS as readonly string[]).includes(patch.instrument))
   )
     throw new ToolArgumentError(
-      `instrument must be one of ${AVAILABLE_INSTRUMENTS.join(", ")}`,
+      `instrument must be one of ${INSTRUMENT_ENUM.join(", ")}`,
     );
-  return resolved;
+  return patch;
 }
 
 function pitch(value: unknown, label: string): number {

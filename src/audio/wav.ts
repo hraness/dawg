@@ -445,8 +445,15 @@ export class StemRenderer {
       // A 0.6 instrument engine (src/audio/instruments.ts), if registered
       // and the track carries its field; undefined keeps today's voices.
       const engine = engineFor(track);
+      // The song key always joins an engine's stem key: engines may tune to
+      // it (sympathetic strings) without a song tuning.
       const engineDigests =
-        engine && track ? engine.assetDigests?.(track, bank) : undefined;
+        engine && track
+          ? [
+              ...(engine.assetDigests?.(track, bank) ?? []),
+              `key:${score.key ?? ""}`,
+            ]
+          : undefined;
       // Wavetable hook: the oscillator factory for a wavetable track (its
       // table id joins the stem key), undefined for every other instrument.
       const wavetable = track ? wavetableHook(track, bank, context) : undefined;

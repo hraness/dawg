@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.20.0";
+export const SDK_VERSION = "1.21.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -1439,6 +1439,47 @@ export function wavetable(
   return Object.freeze(out) as WavetableSpec;
 }
 
+/** Instrument name of the 0.6 string engine (`Track.string`). */
+export const STRING_INSTRUMENT = "string";
+
+/**
+ * String engine settings (SDK 1.21.0): a `preset` (`nylon`, `steel`,
+ * `electric`, `jangle`, `ebass`, `slap`, `upright`, `sitar`, `tanpura`,
+ * `harpsichord`, `lute`, `oud`, `setar`, `tar`, `santur`, `dulcimer`, `koto`,
+ * `harp`, `banjo`, `tres`, `requinto`) plus any parameter to override
+ * (`ring`, `bright`, `damp`, `pos`, `mute`, `buzz`, `body`, `sym`, ...).
+ * dawg validates names and ranges; see **Strings** in DAWG.md.
+ */
+export type StringInput = Readonly<
+  { preset?: string } & Record<string, number | string | undefined>
+>;
+
+/** Result of `stringed()`; pass it as a track's `instrument`. */
+export type StringSpec = Readonly<{ kind: "string" } & StringInput>;
+
+/**
+ * A plucked string instrument (SDK 1.21.0): a preset and overrides.
+ *
+ * instrument: stringed("nylon")
+ * instrument: stringed("sitar", { buzz: 0.8, sym: 0.5 })
+ */
+export function stringed(
+  preset = "nylon",
+  params: Readonly<Record<string, number | string>> = {},
+): StringSpec {
+  if (typeof preset !== "string" || preset.length === 0)
+    throw new DawgSdkError("stringed needs a preset name");
+  if (!isRecord(params))
+    throw new DawgSdkError("stringed params must be an object");
+  const out: Record<string, number | string> = { kind: "string", preset };
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || key === "kind" || key === "preset") continue;
+    out[key] =
+      typeof value === "string" ? value : finite(value, `string ${key}`);
+  }
+  return Object.freeze(out) as StringSpec;
+}
+
 /**
  * `count` equal slices of one file as voices `prefix0 … prefixN-1`, for
  * chopped breaks: `sampler(slices("samples/break.wav", 8, "brk"))`, then
@@ -1706,7 +1747,7 @@ export type TrackInput = Readonly<{
    * `z_triangle`, `z_sawtooth`, `z_square`, `z_tan`, `z_noise`), `kit` for drums,
    * `sampler(...)` or `wavetable(...)`. Default `sine`.
    */
-  instrument?: string | SamplerSpec | WavetableSpec;
+  instrument?: string | SamplerSpec | WavetableSpec | StringSpec;
   /**
    * Synthesized drum kit for an `instrument: "kit"` track: `syn808`,
    * `syn909`, `acoustic`, `lofi`, `electro` or `trap`. Omit for the default
@@ -1730,6 +1771,11 @@ export type TrackInput = Readonly<{
   tuning?: TuningInput | null;
   /** Synth voice parameters, Strudel names (`{ attack: 0.01, lpf: 800 }`). */
   synth?: SynthInput;
+  /**
+   * String engine (SDK 1.21.0) for an `instrument: "string"` track, or use
+   * `instrument: stringed("sitar", {...})` or a preset word (`"nylon"`).
+   */
+  string?: StringInput | null;
   muted?: boolean;
   /** When any track is soloed only soloed tracks play. */
   solo?: boolean;
@@ -1869,6 +1915,8 @@ export type TrackSpec = Readonly<{
   synth: SynthInput | null;
   sampler: SamplerSpec | null;
   wavetable: WavetableSpec | null;
+  /** String engine settings (SDK 1.21.0); present only when set. */
+  string?: StringInput;
   automation: Readonly<Required<AutomationInput>>;
   /** Every hit resolved to its pitch slot. */
   notes: readonly NoteSpec[];
@@ -2100,20 +2148,30 @@ export function track(input: TrackInput): TrackSpec {
     isRecord(rawInstrument) && rawInstrument.kind === "wavetable"
       ? localizeWavetable(rawInstrument as WavetableSpec, slug)
       : null;
+  const stringFromInstrument =
+    isRecord(rawInstrument) && rawInstrument.kind === "string"
+      ? stringInput(rawInstrument, name)
+      : null;
+  const word =
+    typeof rawInstrument === "string"
+      ? resolveInstrumentWord(rawInstrument)
+      : undefined;
   const instrument = samplerSpec
     ? SAMPLER_INSTRUMENT
     : wavetableSpec
       ? WAVETABLE_INSTRUMENT
-      : typeof rawInstrument === "string"
-        ? instrumentForWord(rawInstrument)
-        : undefined;
+      : stringFromInstrument
+        ? STRING_INSTRUMENT
+        : typeof rawInstrument === "string"
+          ? (word?.instrument ?? rawInstrument)
+          : undefined;
   if (
     instrument === undefined ||
     instrument.length === 0 ||
     instrument.length > 64
   )
     throw new DawgSdkError(
-      `track ${name}: instrument must be a voice name, "kit", sampler(...) or wavetable(...)`,
+      `track ${name}: instrument must be a voice name, "kit", sampler(...), wavetable(...) or stringed(...)`,
     );
   if (instrument === SAMPLER_INSTRUMENT && !samplerSpec)
     throw new DawgSdkError(
@@ -2238,6 +2296,13 @@ export function track(input: TrackInput): TrackSpec {
         });
   const fx = fxInput(input.fx, name);
   const synth = synthInput(input.synth, name);
+  // A string preset word (`"nylon"`) turns the engine on with its preset.
+  const string =
+    stringInput(input.string, name) ??
+    stringFromInstrument ??
+    (word?.field === "string" && word.preset
+      ? Object.freeze({ preset: word.preset })
+      : null);
   return Object.freeze({
     kind: "track",
     id,
@@ -2255,6 +2320,7 @@ export function track(input: TrackInput): TrackSpec {
     synth,
     sampler: samplerSpec,
     wavetable: wavetableSpec,
+    ...(string ? { string } : {}),
     automation: Object.freeze({
       volume: lane("volume"),
       pan: lane("pan"),
@@ -2382,6 +2448,21 @@ function fxInput(input: unknown, name: string): FxInput | null {
     out[effect] = Object.freeze(values);
   }
   return Object.keys(out).length > 0 ? Object.freeze(out) : null;
+}
+
+function stringInput(input: unknown, name: string): StringInput | null {
+  if (input === undefined || input === null) return null;
+  if (!isRecord(input))
+    throw new DawgSdkError(`track ${name}: string must be an object`);
+  const out: Record<string, number | string> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value === undefined || key === "kind") continue;
+    out[key] =
+      typeof value === "string"
+        ? value
+        : finite(value, `${name} string.${key}`);
+  }
+  return Object.freeze(out);
 }
 
 function synthInput(input: unknown, name: string): SynthInput | null {
@@ -2698,6 +2779,8 @@ export type ScoreTrack = Readonly<{
   tuning?: ScoreTuning;
   wavetable?: Readonly<{ table: ScoreSampleRef } & WavetableParams>;
   wtAutomation?: readonly ScorePoint[];
+  /** String engine settings; dawg validates them (SDK 1.21.0). */
+  string?: StringInput;
   glide?: TrackSpec["glide"];
   pedal?: readonly Readonly<{ tick: number; state: PedalState }>[];
   velocityCurve?: TrackSpec["velocityCurve"];
@@ -3001,6 +3084,7 @@ export function song(input: SongInput): Song {
     if (t.velocityCurve) stored.velocityCurve = t.velocityCurve;
     if (t.humanize) stored.humanize = t.humanize;
     if (t.tuning) stored.tuning = t.tuning;
+    if (t.string) stored.string = t.string;
     if (t.rhythm && t.rhythm.length > 0)
       stored.rhythm = Object.freeze(
         t.rhythm.map((row) => {
@@ -3914,7 +3998,79 @@ const LEGACY_WORDS: readonly string[] = Object.freeze([
 ]);
 
 /** 0.6 instrument words; each lane appends its own block. */
-const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([]);
+const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
+  // strings (f06-strings): plucked presets of the string engine. Legacy
+  // sitar/ebass keep today's voice (`string preset sitar` reaches the
+  // engine), jangle is the rig alias (the guitar lane maps its 12string to the
+  // preset; `string jangle` reaches it) and
+  // upright is the keys lane's piano (doublebass reaches the preset).
+  { word: "nylon", instrument: "string", field: "string", preset: "nylon" },
+  { word: "steel", instrument: "string", field: "string", preset: "steel" },
+  {
+    word: "electric",
+    instrument: "string",
+    field: "string",
+    preset: "electric",
+  },
+  { word: "slap", instrument: "string", field: "string", preset: "slap" },
+  { word: "motown", instrument: "string", field: "string", preset: "motown" },
+  { word: "tanpura", instrument: "string", field: "string", preset: "tanpura" },
+  {
+    word: "harpsichord",
+    instrument: "string",
+    field: "string",
+    preset: "harpsichord",
+  },
+  { word: "lute", instrument: "string", field: "string", preset: "lute" },
+  { word: "oud", instrument: "string", field: "string", preset: "oud" },
+  { word: "setar", instrument: "string", field: "string", preset: "setar" },
+  { word: "tar", instrument: "string", field: "string", preset: "tar" },
+  { word: "santur", instrument: "string", field: "string", preset: "santur" },
+  {
+    word: "dulcimer",
+    instrument: "string",
+    field: "string",
+    preset: "dulcimer",
+  },
+  { word: "koto", instrument: "string", field: "string", preset: "koto" },
+  { word: "harp", instrument: "string", field: "string", preset: "harp" },
+  { word: "banjo", instrument: "string", field: "string", preset: "banjo" },
+  { word: "tres", instrument: "string", field: "string", preset: "tres" },
+  {
+    word: "requinto",
+    instrument: "string",
+    field: "string",
+    preset: "requinto",
+  },
+  { word: "acoustic", instrument: "string", field: "string", preset: "steel" },
+  { word: "classical", instrument: "string", field: "string", preset: "nylon" },
+  {
+    word: "bassguitar",
+    instrument: "string",
+    field: "string",
+    preset: "ebass",
+  },
+  { word: "fender", instrument: "string", field: "string", preset: "ebass" },
+  {
+    word: "doublebass",
+    instrument: "string",
+    field: "string",
+    preset: "upright",
+  },
+  {
+    word: "cembalo",
+    instrument: "string",
+    field: "string",
+    preset: "harpsichord",
+  },
+  {
+    word: "hammered",
+    instrument: "string",
+    field: "string",
+    preset: "dulcimer",
+  },
+  { word: "sehtar", instrument: "string", field: "string", preset: "setar" },
+]);
 
 /**
  * What an instrument word means: a legacy word is itself, a row word is its

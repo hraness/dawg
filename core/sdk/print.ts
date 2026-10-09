@@ -35,6 +35,7 @@ import {
 import { trackSlug } from "../slug.ts";
 import { barStartTick } from "../tempo.ts";
 import type { Tuning } from "../tuning.ts";
+import { DEFAULT_STRING_PRESET, type TrackString } from "../strings.ts";
 import { DEFAULT_HIT_LENGTH, DEFAULT_VELOCITY } from "./v1.ts";
 
 const WIDTH = 80;
@@ -386,6 +387,8 @@ export function printTrack(score: TrackScore, track: Track): string {
     ? wavetableOf(track)
     : undefined;
   if (wavetable) used.add("wavetable");
+  const stringed = track.instrument === "string" && track.string !== undefined;
+  if (stringed) used.add("stringed");
 
   const entries: string[] = [
     `id: ${str(track.id)}`,
@@ -395,6 +398,8 @@ export function printTrack(score: TrackScore, track: Track): string {
     entries.push(`instrument: ${printSampler(track.sampler, INDENT)}`);
   } else if (wavetable) {
     entries.push(`instrument: ${printWavetable(wavetable, INDENT)}`);
+  } else if (stringed) {
+    entries.push(`instrument: ${printStringed(track.string!, INDENT)}`);
   } else entries.push(`instrument: ${str(track.instrument)}`);
   if (track.kit) entries.push(`kit: ${str(track.kit)}`);
   if (track.time) {
@@ -506,6 +511,12 @@ export function printTrack(score: TrackScore, track: Track): string {
     );
     entries.push(`synth: ${obj(params, INDENT, "synth: ".length, 1)}`);
   }
+  if (track.string && !stringed) {
+    const params = Object.entries(track.string).map(
+      ([key, v]) => [key, value(v!)] as const,
+    );
+    entries.push(`string: ${obj(params, INDENT, "string: ".length, 1)}`);
+  }
   entries.push(...performanceEntries(score, track));
   const lanes: [string, readonly AutomationPoint[] | undefined][] = [
     ["volume", track.volumeAutomation],
@@ -575,6 +586,7 @@ export function printTrack(score: TrackScore, track: Track): string {
     "every",
     "sampler",
     "wavetable",
+    "stringed",
     "euclid",
     "grid",
   ]
@@ -857,6 +869,20 @@ function printSampler(sampler: Sampler, indent: string): string {
   // so the voices sit one level deeper (multi-line voices included).
   const shifted = `{\n${voices(inner + INDENT)}\n${inner}}`;
   return `sampler(\n${inner}${shifted},\n${inner}{ mode: ${str(sampler.mode)} },\n${indent})`;
+}
+
+/** `stringed("sitar", { buzz: 0.8 })`: the preset, then its overrides. */
+function printStringed(settings: TrackString, indent: string): string {
+  const name = str(settings.preset ?? DEFAULT_STRING_PRESET);
+  const params = Object.entries(settings)
+    .filter(([key]) => key !== "preset")
+    .map(([key, v]) => [key, value(v!)] as const);
+  if (params.length === 0) return `stringed(${name})`;
+  const inline = `stringed(${name}, { ${params.map(([k, v]) => `${k}: ${v}`).join(", ")} })`;
+  if (indent.length + "instrument: ".length + inline.length + 1 <= WIDTH)
+    return inline;
+  const inner = indent + INDENT;
+  return `stringed(${name}, {\n${params.map(([k, v]) => `${inner}${k}: ${v},`).join("\n")}\n${indent}})`;
 }
 
 /** `wavetable("basic", { wt: 0.5 })`; pack tables keep their pin. */

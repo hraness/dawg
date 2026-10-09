@@ -704,6 +704,59 @@ The agent's `make_wavetable` tool (`src/audio/wavetable-maker.ts`, `src/media/wa
 
 All arithmetic is float64 in a fixed order with no randomness, so the same input and options give the same bytes. Project tables live under `tracks/<slug>/wavetables/`; `/wt list` and the menu's table picker list them, `/wt vox.wav` (or a full `tracks/…` path) picks one for the focused track, and `track.ts` refers to it as `wavetable("./wavetables/vox.wav")`. The score keeps the project path and its sha256; evaluation re-hashes it like sampler files. A file that changed since it was picked plays with a warning; a missing one is a load problem naming `make_wavetable`.
 
+## Plucked strings
+
+`instrument: "string"` with a `string` field plays a physical model of a plucked or struck string (`src/audio/strings/`): an extended Karplus-Strong loop (Jaffe and Smith 1983) tuned exactly with a first-order Thiran allpass, a one-pole loss designed from two decay times (Välimäki et al. 1996), an allpass dispersion cascade for stiff strings (Van Duyne and Smith 1994), a raised-cosine pluck shaped by the pluck-position comb, a modal body, a sympathetic string bank and seeded unison courses. Pitches come from the 0.5 tuning tables and pitch curves (bends, glides, cents), so a string track plays 19-EDO or just intonation and follows `bend`. Bare legacy words (`sitar`, `ebass`, `pluck`, `cello`) keep their old tone; the engine runs only when the track has a `string` field.
+
+`string sitar`, or `instrument nylon` / `instrument koto` with the resolver words (`nylon`, `steel`, `harpsichord`, `koto` …; the bare words `sitar`, `ebass` and `pluck` keep their legacy voices), picks one of 22 presets, each a full parameter set frozen by a hash test:
+
+| Preset                                  | Sound                                                                  |
+| --------------------------------------- | ---------------------------------------------------------------------- |
+| `nylon` `steel` `electric` `jangle`     | classical, steel-string, clean electric and electric 12-string guitars |
+| `ebass` `slap` `upright` `motown`       | electric bass, slap, upright pizzicato, flatwound muted P-bass         |
+| `sitar` `tanpura`                       | jawari buzz with taraf sympathetic strings; open-string drone          |
+| `harpsichord` `lute` `harp`             | 8'+8' harpsichord (velocity-flat), gut lute courses, concert harp      |
+| `oud` `setar` `tar` `santur` `dulcimer` | fretless oud, Persian setar and tar, santur and hammered dulcimer      |
+| `koto` `banjo` `tres` `requinto`        | koto, 5-string banjo, Cuban tres, bachata requinto                     |
+
+Preset aliases (after `string`): `classical` (nylon), `acoustic` and `guitar` (steel), `12string` (jangle), `bassguitar` and `fender` (ebass), `doublebass` (upright), `cembalo` (harpsichord), `hammered` (dulcimer), `sehtar` (setar).
+
+| Parameter                  | Range                    | Meaning                                                                     |
+| -------------------------- | ------------------------ | --------------------------------------------------------------------------- |
+| `ring` (Strudel `decay`)   | 0.05..60 s               | how long a note rings: the fundamental's T60 at C4                          |
+| `track`                    | 0..1.5                   | higher notes ring shorter: T60 x (f/C4)^-track                              |
+| `damp` `bright`            | 0..1                     | high-frequency loss; excitation brightness at full velocity                 |
+| `pos`                      | 0.02..0.5                | pluck position from the bridge (0.5 round, 0.04 nasal)                      |
+| `exciter`                  | pick finger hammer noise | how the string is set in motion                                             |
+| `mute`                     | 0..1                     | palm mute (staccato and ghost articulations damp the same way)              |
+| `buzz` (`jawari`)          | 0..1                     | bridge buzz: a zero-mean, energy-preserving bridge allpass, pitch-locked    |
+| `stiff`                    | 0..1                     | inharmonicity B = 1e-6 x 400^stiff                                          |
+| `body` `size`              | type, 0.25..5            | body resonance (`guitar`, `gourd`, `board`, `skin`, `bass` …) and its scale |
+| `sym` `symtune`            | 0..1, mode               | sympathetic strings, tuned to the song `scale`, `open` strings or a `drone` |
+| `unison` `detune` `spread` | 1..8, 0..1, 0..1         | strings per course, their detune and stereo spread                          |
+| `oct` `octbelow`           | 0..1, key                | octave strings (12-string, harpsichord 4'), only below a key                |
+| `vel` `pickup` `noise`     | 0..1                     | velocity sensitivity, magnetic pickup position, excitation noise            |
+| `vib` `vibmod` `vibdelay`  | Hz, st, s                | preset vibrato (a note's own vibrato wins)                                  |
+| `release` `voices` `gain`  | s, 1..32, 0..2           | damping after note-off, polyphony cap, level                                |
+
+Sympathetic strings follow the song key's own scale, so `key C bhairav` tunes the taraf to Bhairav (shuddha Ni, komal Re and Dha) and a maqam key keeps its quarter tones. The `drone` tuning is Sa-Pa-Sa, or Sa-Ma-Sa (tivra Ma when the scale has it, else Sa-Ni-Sa) in a raga without Pa such as Marwa. Changing the key re-renders a string track's stem.
+
+`ring`, `damp`, `pos`, `bright`, `mute`, `buzz`, `vib`, `vibmod` and `gain` automate as `string-<param>` lanes (`automate string-buzz points 0:0 4:0.8`). Measured on the renderer: every fifth key within 0.1 cent of the tuning table (sitar with buzz within 1 cent above C4), the fundamental's decay within 10% of `ring` at every fifth key, a C-major triad at velocity 0.8 near -6 dBFS for every preset, and under 20 ms of render per voice-second.
+
+```ts
+instrument: stringed("sitar", { buzz: 0.8, sym: 0.5 }),
+```
+
+| Command                                    | Does                                                              |
+| ------------------------------------------ | ----------------------------------------------------------------- |
+| `string` · `string presets`                | the focused track's preset and overrides · the preset list        |
+| `string <preset>`                          | make the focused track that string instrument                     |
+| `string <param> <value> [<param> <value>]` | override parameters (`string buzz 0.8 sym 0.5`, `string decay 6`) |
+| `string <param> off` · `string reset`      | back to the preset's value · drop every override                  |
+| `string off`                               | back to the legacy `pluck` voice                                  |
+
+The menu has the presets under Sound › browse sounds › Strings and every string parameter in Sound › Parameters on a string track (left/right adjust, `x` resets, space auditions with staged A/B). The agent's `set_string {trackId?, preset?, params?, reset?, off?}` runs the same command. SDK 1.21.0: `stringed(preset, params)` as a track's `instrument`, or `track({ instrument: "string", string: { preset: "koto", ring: 4 } })`; the printer writes `stringed(...)` back.
+
 ## Rhythm (Euclidean rows)
 
 A drum part can be stored as generators instead of notes: each row owns one voice of a `kit` or oneshot `sampler` track and dawg expands it into ordinary notes, so rendering, diffs and sync are unchanged while you, the agent and `track.ts` edit four numbers instead of sixteen hits. The model follows the Torso T-1's Shape and Groove sections; the Euclidean patterns and rotation match Strudel's `euclid`/`euclidRot` exactly (`E(3,8)` is `x..x..x.`, a positive rotate moves the pattern later).

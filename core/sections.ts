@@ -13,6 +13,7 @@
  */
 import { DRUM_VOICES, isDrumInstrument } from "./drums.ts";
 import { FX_LANES } from "./fx.ts";
+import { resolveString } from "./strings.ts";
 import {
   SCORE_LIMITS,
   ScoreValidationError,
@@ -1302,6 +1303,10 @@ function laneFallback(track: Track, lane: string): number | undefined {
   }
   const spec = FX_LANES.find((candidate) => candidate.lane === lane);
   if (!spec) return undefined;
+  if (spec.effect === "string") {
+    const value = resolveString(track.string)[spec.param];
+    return typeof value === "number" ? value : spec.spec.default;
+  }
   const source = (
     spec.effect === "reverb"
       ? track.reverb

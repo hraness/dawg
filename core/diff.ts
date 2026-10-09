@@ -40,6 +40,7 @@ const EFFECTS = [
   "fxAutomation",
   "synth",
   "wavetable",
+  "string",
 ] as const;
 const LANES = [
   "volumeAutomation",

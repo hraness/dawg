@@ -62,6 +62,11 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "synth voice · synth lpf 1200 · synth lists every param",
       },
       {
+        command: "string <preset> | <param> <value> | presets | reset | off",
+        summary:
+          "plucked strings · string sitar · string buzz 0.8 · string ring 6",
+      },
+      {
         command: "art <articulation>|off [target]",
         summary:
           "staccato legato accent tenuto marcato ghost · art staccato bars 1-2",
@@ -379,7 +384,7 @@ export const HELP_GUIDE: readonly HelpSection[] = [
     entries: [
       {
         command: "ctrl-k › Sound",
-        summary: "instrument, envelope, filter, wavetable",
+        summary: "instrument, strings, envelope, filter, wavetable",
       },
       { command: "ctrl-k › Effects", summary: "delay, reverb, distortion …" },
       {
@@ -640,6 +645,8 @@ export const USAGE: Readonly<Record<string, string>> = {
   guide: "/guide [topic] · /guide chords · F1",
   fx: "fx <effect> <param> <value> | on | off | preset <name> · fx delay mix 0.3",
   synth: "synth <param> <value> | preset <name> · synth lpf 1200",
+  string:
+    "string <preset> | preset <name> | <param> <value> | presets | reset | off · string koto",
   pack: "/pack list | info <name> | use <pack>/<sound> | add <url>",
   kit: "/kit [name] · /kit syn909",
   euclid: "/euclid [voice] · euclid hat 7 16",

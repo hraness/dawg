@@ -13,6 +13,7 @@
  */
 
 import { SYNTH_LANE_PARAMS } from "./synth.ts";
+import { STRING_LANE_PARAMS } from "./strings.ts";
 import {
   FxValidationError,
   normalizeParam,
@@ -903,12 +904,12 @@ export function normalizeFx(input: unknown): TrackFx | undefined {
 }
 
 /** Automation lane name of an `fx` parameter, e.g. `distort-drive`. */
-export type FxLane = `${FxName | "reverb" | "synth"}-${string}`;
+export type FxLane = `${FxName | "reverb" | "synth" | "string"}-${string}`;
 
 /** Every automatable `fx` parameter as `{ lane, effect, param, spec }`. */
 export const FX_LANES: readonly Readonly<{
   lane: FxLane;
-  effect: FxName | "reverb" | "synth";
+  effect: FxName | "reverb" | "synth" | "string";
   param: string;
   spec: NumberParam;
 }>[] = Object.freeze([
@@ -932,6 +933,15 @@ export const FX_LANES: readonly Readonly<{
     Object.freeze({
       lane: `synth-${param}` as FxLane,
       effect: "synth" as const,
+      param,
+      spec,
+    }),
+  ),
+  // String engine parameters (core/strings.ts), read at each note's onset.
+  ...STRING_LANE_PARAMS.map(({ param, spec }) =>
+    Object.freeze({
+      lane: `string-${param}` as FxLane,
+      effect: "string" as const,
       param,
       spec,
     }),

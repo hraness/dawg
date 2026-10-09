@@ -11,6 +11,7 @@ import type { Track } from "../../core/score.ts";
 import type { TuningTable } from "../../core/tuning.ts";
 import type { SampleBank } from "./samples.ts";
 import type { RenderContext } from "./wav.ts";
+import { STRING_ENGINE } from "./strings/engine.ts";
 
 /** What an engine renders with: the track's render context plus its tuning. */
 export type EngineContext = RenderContext &
@@ -89,3 +90,4 @@ export function engineTailSeconds(track: Track | undefined): number {
 }
 
 // 0.6 lanes register their engines below, one line each.
+registerEngine(STRING_ENGINE);
