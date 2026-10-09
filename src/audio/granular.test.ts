@@ -499,12 +499,36 @@ describe("granular render", () => {
     expect(performance.now() - started).toBeLessThan(10);
   });
 
-  // Perf guard (spec test 15): steady-state swarm at 48 kHz within
-  // 7 ms per voice-second (prototype 0.6-3.2 ms), after a JIT warm-up.
+  /**
+   * Perf guard (spec test 15): steady-state swarm at 48 kHz within 7 ms per
+   * voice-second (prototype 0.6-3.2 ms), after a JIT warm-up. Measured
+   * against a fixed reference workload timed in the same process (a chain of
+   * 32 one-pole filters over 4 s at 44.1 kHz, REFERENCE_MS per second on the
+   * reference Mac), so a slow shared CI host scales both, as the rig guard
+   * does. DAWG_PERF=1 also asserts the absolute 7 ms figure.
+   */
+  const REFERENCE_MS = 2.3;
+  const reference = (): number => {
+    const sampleRate = 44_100;
+    const seconds = 4;
+    const state = new Float64Array(32);
+    let sink = 0;
+    const started = performance.now();
+    for (let i = 0; i < sampleRate * seconds; i += 1) {
+      let x = Math.sin(i * 0.0279);
+      for (let k = 0; k < 32; k += 1) {
+        state[k] = state[k]! + (0.05 + k * 0.01) * (x - state[k]!);
+        x = state[k]!;
+      }
+      sink += x;
+    }
+    const elapsed = (performance.now() - started) / seconds;
+    return Number.isFinite(sink) ? elapsed : Infinity;
+  };
   test("perf guard: swarm <= 7 ms per voice-second at 48 kHz", () => {
     const source = synthSource("pad", 60, SR);
     const settings = resolveGranular({ preset: "swarm" });
-    const run = (seed: number) => {
+    const run = (seed: number): number => {
       const voice = granularVoice({
         source,
         sr: SR,
@@ -516,15 +540,22 @@ describe("granular render", () => {
       });
       const l = new Float64Array(128);
       const r = new Float64Array(128);
+      const started = performance.now();
       for (let at = 0; at < 2 * SR; at += 128) voice.process(l, r, 0, 128);
+      return (performance.now() - started) / 2;
     };
     for (let i = 0; i < 3; i += 1) run(i);
+    reference();
     let best = Infinity;
+    let ref = Infinity;
+    // Best of three, interleaved: a loaded host stalls both alike.
     for (let i = 0; i < 3; i += 1) {
-      const started = performance.now();
-      run(10 + i);
-      best = Math.min(best, (performance.now() - started) / 2);
+      best = Math.min(best, run(10 + i));
+      ref = Math.min(ref, reference());
     }
-    expect(best).toBeLessThan(7);
+    const scaled = (best / ref) * REFERENCE_MS;
+    if (process.env.DAWG_PERF_LOG) console.log({ best, ref, scaled });
+    expect(scaled).toBeLessThan(7);
+    if (process.env.DAWG_PERF === "1") expect(best).toBeLessThan(7);
   });
 });
