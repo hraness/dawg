@@ -49,6 +49,8 @@ export const FX_CHAIN = Object.freeze([
   "filter",
   "djf",
   "autofilter",
+  // 0.7 formant shift at constant pitch (src/audio/effects/formant.ts).
+  "formant",
   "vowel",
   "crush",
   "distort",
@@ -123,6 +125,25 @@ const mix = (fallback: number, strudel?: readonly string[]): NumberParam => ({
   doc: "wet/dry balance 0..1",
   ...(strudel ? { strudel } : {}),
 });
+
+/** Vowels of the `vowel` effect (src/audio/dsp/formant.ts tables). */
+export const VOWEL_VALUES = Object.freeze([
+  "a",
+  "e",
+  "i",
+  "o",
+  "u",
+  "ae",
+  "aa",
+  "oe",
+  "ue",
+  "y",
+  "uh",
+  "un",
+  "en",
+  "an",
+  "on",
+] as const);
 
 /**
  * Effects stored under `track.fx`. Every number is bounded; enabling an
@@ -221,6 +242,25 @@ export const FX_SPECS = Object.freeze({
       },
     },
   },
+  formant: {
+    label: "formant",
+    doc: "formant shift at constant pitch: moves the spectral envelope (throat or gender knob), any source",
+    simple: ["shift", "mix"],
+    strudel: "none (not a Strudel concept)",
+    params: {
+      shift: {
+        kind: "number",
+        min: -12,
+        max: 12,
+        default: 0,
+        step: 0.5,
+        unit: "st",
+        automate: true,
+        doc: "semitones the formants move (negative deeper, positive smaller); pitch stays",
+      },
+      mix: mix(1),
+    },
+  },
   vowel: {
     label: "vowel",
     doc: "formant filter bank: five band-passes per vowel",
@@ -229,28 +269,30 @@ export const FX_SPECS = Object.freeze({
     params: {
       vowel: {
         kind: "enum",
-        values: [
-          "a",
-          "e",
-          "i",
-          "o",
-          "u",
-          "ae",
-          "aa",
-          "oe",
-          "ue",
-          "y",
-          "uh",
-          "un",
-          "en",
-          "an",
-          "on",
-        ],
+        values: VOWEL_VALUES,
         default: "a",
         doc: "vowel formants (a e i o u plus the extended set)",
         strudel: ["vowel"],
       },
       mix: mix(1),
+      // 0.7: optional morph target; absent keeps the static bank exactly.
+      to: {
+        kind: "enum",
+        values: VOWEL_VALUES,
+        default: "a",
+        optional: true,
+        doc: "vowel to morph towards (absent: no morph)",
+      },
+      morph: {
+        kind: "number",
+        min: 0,
+        max: 1,
+        default: 0,
+        step: 0.05,
+        optional: true,
+        automate: true,
+        doc: "position between vowel (0) and to (1), log-frequency formant morph",
+      },
     },
   },
   crush: {
@@ -1354,6 +1396,12 @@ export const FX_PRESETS: Readonly<
       cutoff: 700,
       resonance: 0.6,
     },
+  },
+  formant: {
+    deep: { shift: -4 },
+    giant: { shift: -8 },
+    bright: { shift: 3 },
+    tiny: { shift: 7 },
   },
   vowel: { a: { vowel: "a" }, o: { vowel: "o" }, ee: { vowel: "i" } },
   crush: {
