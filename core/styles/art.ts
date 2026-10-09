@@ -3415,6 +3415,60 @@ const CHILDRENS_LEAVES: readonly StyleCard[] = Object.freeze([
     },
   }),
   card({
+    id: "lullaby",
+    summary:
+      "cradle song and berceuse: a rocking 6/8 lilt at a slow dotted-quarter, tonic pedal rocking to the dominant, a falling stepwise tune inside a sixth, hushed and dark",
+    meter: { signatures: [["6/8", 1]], grouping: [[[3, 3], 1]] },
+    tempo: { bpm: [52, 72], typical: 60 },
+    groove: { humanize: { timingMs: 14, velocity: 0.06 } },
+    pitch: {
+      scales: [
+        ["major", 0.7],
+        ["minor", 0.3],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      chain: {
+        I: [
+          ["V", 3],
+          ["IV", 1],
+        ],
+        IV: [["I", 2]],
+        V: [["I", 3]],
+      },
+      sources: { presets: 0, chain: 1 },
+      rhythm: [[1, 1]],
+    },
+    melody: {
+      ambitus: [4, 9],
+      intervals: intervals(6, 3, 0.3, 0.7, 0.7),
+      chordToneRate: 0.8,
+      repetition: 0.85,
+      finals: [[0, 1]],
+      phraseBars: [[2, 1]],
+      contour: [["descending", 1]],
+    },
+    bass: {
+      behaviour: [
+        ["pedal", 0.5],
+        ["root", 0.5],
+      ],
+    },
+    texture: {
+      roles: {
+        kick: null,
+        snare: null,
+        hat: null,
+        bass: role("felt", "nylon:0.4", "harp:0.4"),
+        chords: role("harp", "nylon:0.6", "felt:0.5"),
+        lead: role("musicbox", "celesta:0.6", "sing:0.5", "flute:0.3"),
+      },
+    },
+    expression: { dynamics: [0.15, 0.5] },
+    mix: { space: 0.6, loudness: "ambient" },
+  }),
+  card({
     id: "novelty",
     summary:
       "comic and novelty song: oom-pah two-beat, ragtime-ish V7/V turnarounds, staccato toy timbres, a punch-line stop before the last chorus",

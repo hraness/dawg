@@ -104,7 +104,7 @@ describe("family art", () => {
       (id) => !ART_ROWS.some((row) => row[0] === id),
     );
     expect(stray).toEqual([]);
-    expect(ART_ROWS.filter((row) => !PARENTS.has(row[0])).length).toBe(105);
+    expect(ART_ROWS.filter((row) => !PARENTS.has(row[0])).length).toBe(106);
     for (const root of ROOTS) expect(CARD_IDS.has(root)).toBe(true);
   });
 
@@ -142,6 +142,18 @@ describe("family art: style theory", () => {
       for (const r of ["kick", "snare", "hat", "chords"] as const)
         expect(roles.has(r)).toBe(false);
       expect(roles.has("lead")).toBe(true);
+    }
+  });
+
+  test("the lullaby rocks in slow 6/8 without drums, unlike the sing-along", () => {
+    for (const seed of SEEDS) {
+      const g = generateStyle("lullaby", { seed, bars: 8 });
+      expect(g.plan.signature).toBe("6/8");
+      expect(g.plan.bpm).toBeLessThanOrEqual(72);
+      for (const r of ["kick", "snare", "hat"] as const)
+        expect(notesFor(g, r).length).toBe(0);
+      const song = generateStyle("childrens-song", { seed, bars: 8 });
+      expect(song.plan.signature).not.toBe("6/8");
     }
   });
 
