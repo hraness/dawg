@@ -95,6 +95,17 @@ describe("/vocal import", () => {
       // 0.25 peak → 0.5012 / 0.25 ≈ 2.005 (+6 dB)
       expect(20 * Math.log10(0.25 * clip.gain!)).toBeCloseTo(-6, 1);
       expect(result.message).toContain("bar 9");
+      expect(result.message).not.toContain("instrument vocal");
+      // A fresh sine track with no notes becomes a vocal track.
+      const fresh = await runVocalCommand(command, {
+        score: createScore({
+          tracks: [{ id: "vox", name: "vox", instrument: "sine" }],
+        } as never),
+        trackId: "vox",
+        cwd: dir,
+      });
+      expect(fresh.next!.tracks[0]!.instrument).toBe("vocal");
+      expect(fresh.message).toContain("instrument vocal");
     } finally {
       setClipImportDeps({});
       await rm(dir, { recursive: true, force: true });
@@ -132,8 +143,9 @@ describe("/vocal import", () => {
     expect(track.delay?.beats).toBe(0.125);
     // The formant lane's effect is in this build: hyper turns it up.
     expect(track.fx?.formant).toMatchObject({ shift: 3.5 });
-    expect(result.message).toContain("not in this build yet: autotune");
-    expect(result.message).toContain("yet: autotune, harmony, record");
+    // The autotune lane's field is in this build: hyper hard-tunes.
+    expect(track.autotune).toMatchObject({ preset: "hard" });
+    expect(result.message).toContain("not in this build yet: harmony, record");
     expect(applyVocalSetup(plain, "a", "auto").ok).toBe(true);
     expect(applyVocalSetup(plain, "a", "nope").ok).toBe(false);
   });

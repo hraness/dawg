@@ -2632,12 +2632,10 @@ async function submit(prompt: string): Promise<string | Receipt> {
         }
       : parsed.patch;
     // `instrument vocal` (0.7): the vocal chain fills unset effects.
-    const patch = isGuideInstrument(parsed.patch.instrument)
-      ? {
-          ...vocalChainPatch(score.tracks.find((t) => t.id === requestedTrack)),
-          ...rigged,
-        }
-      : rigged;
+    const chain = isGuideInstrument(parsed.patch.instrument)
+      ? vocalChainPatch(score.tracks.find((t) => t.id === requestedTrack))
+      : {};
+    const patch = { ...chain, ...rigged };
     const next = applyScoreOperation(score, {
       type: "updateTrack",
       trackId: requestedTrack,
@@ -2658,6 +2656,13 @@ async function submit(prompt: string): Promise<string | Receipt> {
         ? plainSineAdvice(word)
         : undefined;
     if (sine) return `track · ${requestedTrack} · ${sine}`;
+    const added = [
+      chain.filter ? "hpf 90 Hz" : "",
+      chain.fx?.compressor ? "compressor 3:1" : "",
+      chain.reverb ? "plate 0.14" : "",
+    ].filter(Boolean);
+    if (added.length)
+      return `track · ${requestedTrack} · vocal · added ${added.join(", ")} · fx … off to remove`;
     return `track · ${requestedTrack}`;
   }
   if (parsed.type === "automation") {

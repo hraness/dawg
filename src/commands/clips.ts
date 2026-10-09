@@ -219,7 +219,15 @@ export async function importClip(
   const copied = await importIntoProject(file, name, context, slug);
   const info = await wavInfo(join(context.cwd, copied.src));
   const gain = info ? importGain(info.peak) : undefined;
-  const { score, clip } = placeClip(context.score, context.trackId, {
+  // A fresh track (no notes, the default sine) becomes a `vocal` track, so
+  // its notes are silent guides; the vocal chain stays opt-in.
+  const fresh =
+    !context.score.notes.some((n) => n.trackId === track.id) &&
+    track.instrument === "sine";
+  const base = fresh
+    ? updateTrack(context.score, context.trackId, { instrument: "vocal" })
+    : context.score;
+  const { score, clip } = placeClip(base, context.trackId, {
     id: name,
     src: copied.src,
     sha256: copied.sha256,
@@ -233,7 +241,7 @@ export async function importClip(
       : "";
   return {
     ok: true,
-    message: `vocal ${label}: ${clip.id} at bar ${userBarLabel(score, startTick)} on ${track.name}${seconds}${db} · /clip to edit`,
+    message: `vocal ${label}: ${clip.id} at bar ${userBarLabel(score, startTick)} on ${track.name}${seconds}${db}${fresh ? " · instrument vocal" : ""} · /clip to edit`,
     next: score,
     kind: "clip.place",
     payload: { clipId: clip.id, src: clip.src },
@@ -285,7 +293,7 @@ export type VocalSetup = Readonly<{
   name: string;
   summary: string;
   /** Fields the setup sets beyond the vocal chain. */
-  patch?: Readonly<Partial<Pick<Track, "delay" | "fx">>>;
+  patch?: Readonly<Partial<Pick<Track, "delay" | "fx" | "autotune">>>;
   /** Other lanes' fields it would set; reported when absent here. */
   needs?: readonly string[];
 }>;
@@ -295,13 +303,14 @@ export const VOCAL_SETUPS: readonly VocalSetup[] = [
     name: "hyper",
     summary: "hard-tuned hyperpop lead: formant up, slapback, light distortion",
     patch: {
+      autotune: { preset: "hard" },
       delay: { beats: 0.125, feedback: 0.1, mix: 0.18 },
       fx: {
         formant: { shift: 3.5 } as never,
         distort: { drive: 1, tone: 6000, mix: 0.25 } as never,
       },
     },
-    needs: ["autotune", "harmony", "record"],
+    needs: ["harmony", "record"],
   },
   { name: "take", summary: "a lead with plate reverb", needs: ["record"] },
   { name: "stack", summary: "three passes panned wide", needs: ["record"] },
@@ -359,6 +368,7 @@ export function applyVocalSetup(
     instrument: "vocal",
     ...chain,
     ...(setup.patch?.delay ? { delay: setup.patch.delay } : {}),
+    ...(setup.patch?.autotune ? { autotune: setup.patch.autotune } : {}),
     ...(setup.patch?.fx ? { fx } : {}),
   };
   const next = updateTrack(score, trackId, patch as never);
