@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { fftInPlace } from "../dsp/fft.ts";
+import { pitchShift } from "../dsp/shift.ts";
 import { hann } from "../dsp/stft.ts";
 import { steady, synthVoice, type SungNote } from "../fixtures/voice.ts";
 import { formantFrame, formantPad, formantShift } from "./formant.ts";
@@ -157,10 +158,15 @@ describe("formant shift (fx.formant)", () => {
         const baseline = envelopeDistance(dry.x, truth.x, dry.f0, SR);
         const after = envelopeDistance(y, truth.x, dry.f0, SR);
         expect(after).toBeLessThan(baseline);
-        // At +4 st the fixture's F4 (3.4 kHz) moves to 4.3 kHz, near the
-        // 5 kHz measurement edge; the design allows 11 dB for tenor +4
-        // (formant.md section 9.5), this fixture measures 4.4 to 5.5.
-        expect(after).toBeLessThanOrEqual(st === 4 ? 6 : 4.5);
+        // 4.5 dB everywhere (formant.md section 9.5) except +4 st:
+        // - tenor +4: the design allows 11 dB (F4 and F5 move past the 5 kHz
+        //   measurement edge); this fixture measures 5.45, held to 6.
+        // - alto, soprano, soprano+17 +4: the design's proto testsig measured
+        //   4.24, 3.36, 4.15; the shared fixture (src/audio/fixtures/voice.ts,
+        //   contract-owned, defaults frozen) measures 4.68, 4.43, 4.89, held
+        //   to 5. Every other case measures 2.78 to 4.38.
+        const bound = st !== 4 ? 4.5 : name === "tenor" ? 6 : 5;
+        expect(after).toBeLessThanOrEqual(bound);
         expect(pitchError(y, dry.f0, SR)).toBeLessThanOrEqual(5);
       });
     }
@@ -221,14 +227,26 @@ describe("formant shift (fx.formant)", () => {
     expect(20 * Math.log10(before / burst)).toBeLessThanOrEqual(-15);
   });
 
-  test("costs at most 7 ms per audio-second at 22.05 kHz", () => {
+  test("costs at most 4x a plain pitchShift and about 7 ms per audio-second", () => {
+    // Ratio form (formant.md section 9.5) so the guard does not depend on
+    // the machine; best of five runs each, after a warmup. Measured 4.0 ms
+    // per audio-second at 22.05 kHz on the lane's machine.
     const dry = voice(48);
-    formantShift(dry.x, SR, 2);
-    const t0 = performance.now();
-    for (let i = 0; i < 3; i += 1) formantShift(dry.x, SR, 2 + i * 0.5);
-    const ms = (performance.now() - t0) / 3;
-    const perSecond = ms / (dry.x.length / SR);
-    // Generous headroom for loaded CI machines; the design measured 9 at 48 kHz.
-    expect(perSecond).toBeLessThanOrEqual(7 * 3);
+    const best = (run: (i: number) => void) => {
+      run(0);
+      let min = Infinity;
+      for (let i = 1; i <= 5; i += 1) {
+        const t0 = performance.now();
+        run(i);
+        min = Math.min(min, performance.now() - t0);
+      }
+      return min;
+    };
+    const formant = best((i) => formantShift(dry.x, SR, 2 + i * 0.25));
+    const plain = best((i) => pitchShift(dry.x, SR, 0.5 + i * 0.25));
+    expect(formant / plain).toBeLessThanOrEqual(4);
+    const perSecond = formant / (dry.x.length / SR);
+    // Absolute budget 7 ms with 1.5x headroom for loaded CI machines.
+    expect(perSecond).toBeLessThanOrEqual(7 * 1.5);
   });
 });
