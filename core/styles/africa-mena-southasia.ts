@@ -861,7 +861,7 @@ const LEAVES: readonly StyleCard[] = [
     melody: { intervals: CHANT, density: [2, 3] },
     bass: { behaviour: [["none", 1]] },
     texture: {
-      kind: "call-response",
+      kind: "homophonic",
       roles: {
         chords: null,
         bass: null,
