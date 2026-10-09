@@ -35,6 +35,8 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ### Changed
 
+- **Feel.** Receipts name the musical change: `✓ lofi-hip-hop · G dorian · 133 BPM · 8 bars · 4 tracks`, an agent turn ends on one receipt, and undo names what it took back; play and pause never move the shown revision. The TUI opens straight into the editor with one optional card (`/model key adds an agent · optional`). Hints read `space play · ctrl-p play mode · ctrl-k menu`, with drum (`hit kick at 0`) and vocal hints, a seeded style suggestion at 100 columns or more, and `space stop · type a request` while playing, on a reserved row that never covers the ruler. One-time cards fade after 8 s or 3 actions (still in ctrl-o) and duplicates collapse to `×N`. "synced" only appears for a revision written by another window, and names it (`synced · window 2`). Play mode wears a `PLAY MODE` badge with a compressed header (`▶ 120 BPM · drums · rev 1`); on a kit its keys are labelled by drum and the chord row is hidden. A quiet downbeat glint, a one-time first-loop sweep and lane glows, all seeded and off with `/motion off`. Frames rewrite only each row's changed cells and back off when the terminal lags.
+
 - `fx formant` is no longer an alias of the vowel filter; `/fx formant o` and `set_fx {effect: "formant", vowel}` explain that the vowel filter is `vowel`.
 
 ### Fixed
