@@ -778,7 +778,7 @@ SDK. `chord("Cm7", start, length, opts)` and `progression("ii7 V7 Imaj7", { key,
 
 Notes can say how they are played, and tracks how they perform. Every field is optional: a note or track without them sounds exactly as before. Expression is applied at render to copies of the notes, so the score keeps what you wrote.
 
-Per note (the focused track; a target is `all`, the default, `bar 3`, `bars 2-4` or note ids):
+Per note (the focused track; a target is `all`, the default, `last` (the note added last), `bar 3`, `bars 2-4` or note ids; the reply names the scope and how many notes changed):
 
 | Command                                                     | Does                                                                                                                                                                       |
 | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
