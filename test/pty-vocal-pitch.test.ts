@@ -71,8 +71,11 @@ test.skipIf(!supported)(
       await t.send("\r");
       await t.until(() => t.vt.text().includes("menu › Sound"), "sound");
       await t.send("/Pitch");
-      await t.until(() => /Voice\s+Pitch/.test(t.vt.text()), "voice group");
-      for (let i = 0; i < 6 && !/› Voice\s+Pitch/.test(t.vt.text()); i++) {
+      await t.until(
+        () => /Voice\s+[^\n]*Pitch/.test(t.vt.text()),
+        "voice group",
+      );
+      for (let i = 0; i < 6 && !/› Voice\s/.test(t.vt.text()); i++) {
         await t.send("\u001b[B");
         await Bun.sleep(100);
       }
@@ -82,6 +85,11 @@ test.skipIf(!supported)(
         "voice",
       );
       expect(t.vt.text()).toMatch(/Pitch\s+[a-g]#? (major|minor) · E4/);
+      // Clips and Lyrics (clips lane) sit above Pitch in Sound › Voice.
+      for (let i = 0; i < 6 && !/› Pitch\s/.test(t.vt.text()); i++) {
+        await t.send("\u001b[B");
+        await Bun.sleep(100);
+      }
       await t.send("\r");
       await t.until(() => t.vt.text().includes("Make notes"), "pitch rows");
       expect(t.vt.text()).toContain("Make notes");
