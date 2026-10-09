@@ -21,7 +21,7 @@ export const STRING_INSTRUMENT = "string" as const;
 
 /** A track's string settings: a preset plus parameter overrides. */
 export type TrackString = Readonly<
-  { preset?: string } & Record<string, number | string | boolean | undefined>
+  { preset?: string } & Record<string, number | string | undefined>
 >;
 
 const log = "log" as const;
