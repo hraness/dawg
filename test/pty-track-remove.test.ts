@@ -39,7 +39,7 @@ test.skipIf(!supported)(
     const t = await launch(110, 30, {}, ["--track", "pad"]);
     const tracks = async () => (await composition(t.cwd)).tracks ?? [];
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("/track vox\r");
       await t.until(() => t.vt.text().includes("vox"), "vox");
       await t.send("/track pad\r");

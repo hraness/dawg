@@ -10,7 +10,7 @@ test.skipIf(!supported)(
   async () => {
     const t = await launch(140, 30, {});
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("tempo 138\r");
       await t.send("add C4 at 0 for 2\r");
       await t.send("master target -8\r");

@@ -64,7 +64,7 @@ test.skipIf(!supported)(
     const t = await launch(110, 30, {}, ["--track", "drums"]);
     try {
       await writeFile(join(t.cwd, "brk.wav"), breakWav());
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("/sample brk.wav as brk\r");
       await t.until(() => t.vt.text().includes("brk"), "sample receipt");
       await Bun.sleep(300);

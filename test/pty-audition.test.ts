@@ -69,7 +69,7 @@ test.skipIf(!supported)(
       (await latest(t.cwd)).tracks.find((track) => track.id === "bass")?.reverb
         ?.mix;
     try {
-      await t.until(() => screen().includes("STEER"), "prompt");
+      await t.until(() => screen().includes(" NOW "), "prompt");
       await t.send("\u000b");
       await t.until(() => screen().includes("Project"), "menu root");
       await t.send("j");

@@ -54,7 +54,7 @@ test.skipIf(!supported)(
   async () => {
     const t = await launch(110, 34, {}, ["--track", "lead"]);
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("add C4 at 0 for 2\r");
       await Bun.sleep(300);
       await t.send("add E4 at 2 for 2\r");

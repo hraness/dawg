@@ -78,7 +78,7 @@ test.skipIf(!supported)(
     const bass = async () =>
       (await sessionTracks(t.cwd)).find((track) => track.id === "bass");
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       for (const mode of ["1000", "1002", "1006"])
         expect(t.vt.mouseModes.has(mode)).toBe(true);
 
@@ -152,7 +152,7 @@ test.skipIf(!supported)(
   async () => {
     const t = await launch(100, 30, {});
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("\u000b");
       await t.until(() => t.vt.text().includes("Project"), "menu root");
       // Wheel down moves the cursor; clicking a row selects, again opens.
@@ -189,7 +189,7 @@ test.skipIf(!supported)(
   "real PTY: SIGTERM turns mouse reporting off",
   async () => {
     const t = await launch(80, 24, {});
-    await t.until(() => t.vt.text().includes("STEER"), "prompt");
+    await t.until(() => t.vt.text().includes(" NOW "), "prompt");
     expect(t.vt.mouseModes.size).toBe(3);
     t.proc.kill("SIGTERM");
     expect(await t.proc.exited).toBe(143);
@@ -208,7 +208,7 @@ test.skipIf(!supported)(
     ] as const) {
       const t = await launch(80, 24, env, [...argv]);
       try {
-        await t.until(() => t.vt.text().includes("STEER"), "prompt");
+        await t.until(() => t.vt.text().includes(" NOW "), "prompt");
         expect(t.vt.mouseModes.size).toBe(0);
         // Keys still drive the drawer.
         await t.send("volume");

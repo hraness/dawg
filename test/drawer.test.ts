@@ -87,7 +87,7 @@ for (const [cols, rows] of [
     const frame = app.frame!;
     const drawer = frame.drawer!;
     expect(drawer).toBeDefined();
-    const prompt = lines.findIndex((line) => line.includes("STEER"));
+    const prompt = lines.findIndex((line) => line.includes(" NOW "));
     // Directly above the activity row and the prompt box.
     expect(drawer.top + drawer.height).toBeLessThanOrEqual(prompt);
     expect(drawer.top + drawer.height).toBeGreaterThanOrEqual(prompt - 2);

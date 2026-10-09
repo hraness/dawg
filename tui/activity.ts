@@ -401,7 +401,7 @@ export class ActivityFeed {
           baseRevision: event.baseRevision,
           resultRevision: event.resultRevision,
           trackId: event.trackId,
-          hint: unchanged ? undefined : "^z undo",
+          hint: unchanged ? undefined : "ctrl-z undo",
         });
         return;
       }
@@ -429,7 +429,7 @@ export class ActivityFeed {
         if (summary)
           this.pushCard(summary, {
             tone: "agent",
-            hint: receipt ? "^z undo" : undefined,
+            hint: receipt ? "ctrl-z undo" : undefined,
           });
         else if (event.applied === 0)
           this.pushCard("agent made no changes", { tone: "info" });

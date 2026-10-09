@@ -79,7 +79,7 @@ export interface AppView {
    * gateway`, or `commands only`. The caller sizes it to the width.
    */
   spend?: string | undefined;
-  /** No agent provider: the placeholder teaches commands, no STEER pill. */
+  /** No agent provider: the placeholder teaches commands, no NOW pill. */
   agentOffline?: boolean | undefined;
   /**
    * Show-me: the command the agent is writing, as it streams (ghost text in
@@ -652,7 +652,7 @@ function paintActivity(
 // Prompt panel
 
 function pill(mode: PromptMode): string {
-  return mode === "queue" ? " QUEUE " : " STEER ";
+  return mode === "queue" ? " NEXT " : " NOW ";
 }
 
 function paintPrompt(
@@ -755,13 +755,14 @@ function paintPrompt(
     for (let column = 1; column < width - 1; column += 1)
       buffer.set(column, y, box.h, border);
     buffer.set(width - 1, y, box.br, border);
+    // One notation everywhere: ctrl-<key>, as /help and the menu spell it.
     const hints =
-      width >= 100
-        ? " enter send · shift+enter newline · ^q queue · ^z undo · ^o log · ^c quit "
-        : width >= 72
-          ? " enter send · ^j newline · ^q queue · ^z undo · ^o log "
-          : width >= 44
-            ? " enter · ^q queue · ^z undo · ^o log "
+      width >= 112
+        ? " enter send · shift-enter newline · ctrl-q now/next · ctrl-z undo · ctrl-o log · ctrl-c quit "
+        : width >= 80
+          ? " enter send · ctrl-j newline · ctrl-q now/next · ctrl-z undo · ctrl-o log "
+          : width >= 52
+            ? " enter · ctrl-q now/next · ctrl-z undo · ctrl-o log "
             : "";
     const spend = view.spend ? ` ${view.spend} ` : "";
     const spendWidth = displayWidth(spend);

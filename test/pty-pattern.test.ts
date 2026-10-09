@@ -69,7 +69,7 @@ test.skipIf(!supported)(
     const drums = async () =>
       (await session(t.cwd))?.tracks.find((track) => track.id === "drums");
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("/track drums\r");
       await t.until(() => t.vt.text().includes("drums"), "drums track");
 

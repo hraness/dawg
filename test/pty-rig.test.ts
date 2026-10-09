@@ -54,7 +54,7 @@ test.skipIf(!supported)(
   async () => {
     const t = await launch(110, 30, {}, ["--track", "gtr"]);
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("/rig crunch\r");
       await t.until(() => t.vt.text().includes("rig crunch ·"), "receipt");
       await waitFor(

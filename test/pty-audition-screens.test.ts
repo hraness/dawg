@@ -80,7 +80,7 @@ test.skipIf(!supported)(
         .find((track) => track.id === "drums")
         ?.rhythm?.find((row) => row.voice === "kick")?.pulses ?? 4;
     try {
-      await t.until(() => screen().includes("STEER"), "prompt");
+      await t.until(() => screen().includes(" NOW "), "prompt");
       await t.send("/track drums\r");
       await t.until(() => screen().includes("drums"), "drums track");
       await t.send("instrument kit\r");
@@ -160,7 +160,7 @@ test.skipIf(!supported)(
     const t = await launch(80, 24, {});
     const screen = () => t.vt.text();
     try {
-      await t.until(() => screen().includes("STEER"), "prompt");
+      await t.until(() => screen().includes(" NOW "), "prompt");
       await t.send("/menu chords\r");
       await t.until(() => screen().includes("menu › Chords"), "chords");
       const committed = await latest(t.cwd);

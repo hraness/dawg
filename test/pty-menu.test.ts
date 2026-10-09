@@ -62,7 +62,7 @@ test.skipIf(!supported)(
     const bass = async () =>
       (await sessionTracks(t.cwd)).find((track) => track.id === "bass");
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("\u000b");
       await t.until(() => t.vt.text().includes("Project"), "menu root");
       expect(t.vt.text()).toContain("Mix & automation");
@@ -153,7 +153,7 @@ test.skipIf(!supported)(
     const bass = async () =>
       (await sessionTracks(t.cwd)).find((track) => track.id === "bass");
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("\u000b");
       await t.until(() => t.vt.text().includes("Project"), "menu root");
       await t.send("/effects");
@@ -201,7 +201,7 @@ test.skipIf(!supported)(
     const bass = async () =>
       (await sessionTracks(t.cwd)).find((track) => track.id === "bass");
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("\u000b");
       await t.until(() => t.vt.text().includes("Project"), "menu root");
       await t.send("/sound");
@@ -252,7 +252,7 @@ test.skipIf(!supported)(
     const bass = async () =>
       (await sessionTracks(t.cwd)).find((track) => track.id === "bass");
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("\u000b");
       await t.until(() => t.vt.text().includes("Project"), "menu root");
       await t.send("/sound");

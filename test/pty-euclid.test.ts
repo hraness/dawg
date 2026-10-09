@@ -70,7 +70,7 @@ test.skipIf(!supported)(
         .map((note) => note.startTick)
         .sort((a, b) => a - b);
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("/track drums\r");
       await t.until(() => t.vt.text().includes("drums"), "drums track");
       await t.send("instrument kit\r");

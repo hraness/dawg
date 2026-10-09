@@ -144,7 +144,7 @@ test.skipIf(!supported)(
     ]);
     replies = [reply];
     const t = await launch(100, 30, env(), ["--track", "main"]);
-    await t.until(() => t.vt.text().includes("STEER"), "prompt");
+    await t.until(() => t.vt.text().includes(" NOW "), "prompt");
     await t.send("make it slower and wetter\r");
     await t.until(() => bodies.length > 0, "request");
     release(reply);
@@ -203,7 +203,7 @@ test.skipIf(!supported)(
 
     replies = [gated([`${LINES.join("\n")}\nDone.`])];
     const streamed = await launch(100, 30, env(), ["--track", "main"]);
-    await streamed.until(() => streamed.vt.text().includes("STEER"), "prompt");
+    await streamed.until(() => streamed.vt.text().includes(" NOW "), "prompt");
     await streamed.send("build it\r");
     await streamed.until(
       () => streamed.vt.text().includes("do it yourself: type clear hat"),
@@ -229,7 +229,7 @@ test.skipIf(!supported)(
   "real PTY: /showme off restores the JSON tool path and is saved",
   async () => {
     const t = await launch(100, 30, env(), ["--track", "main"]);
-    await t.until(() => t.vt.text().includes("STEER"), "prompt");
+    await t.until(() => t.vt.text().includes(" NOW "), "prompt");
     await t.send("/showme off\r");
     await t.until(() => t.vt.text().includes("show me off"), "off");
     const before = bodies.length;

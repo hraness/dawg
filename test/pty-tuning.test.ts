@@ -49,7 +49,7 @@ test.skipIf(!supported)(
   async () => {
     const t = await launch(100, 30, {});
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("\u000b");
       await t.until(() => t.vt.text().includes("Project"), "menu root");
       await t.send("/project");

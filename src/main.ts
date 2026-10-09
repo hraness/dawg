@@ -1110,11 +1110,14 @@ function receipt(result: string | Receipt, base?: Baseline): void {
     tui.activity.pushError(message);
     return;
   }
+  // A receipt that names its own undo key needs no second hint.
   const hint =
-    scoreChanged && undoHintsShown < MAX_UNDO_HINTS
+    scoreChanged &&
+    undoHintsShown < MAX_UNDO_HINTS &&
+    !message.endsWith("ctrl-z undo")
       ? message.startsWith("undid")
-        ? "^y redo"
-        : "^z undo"
+        ? "ctrl-y redo"
+        : "ctrl-z undo"
       : undefined;
   if (hint) undoHintsShown += 1;
   tui.activity.pushCard(message, {
@@ -2145,7 +2148,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
     await projectSync?.flushScore();
     if (found.id === requestedTrack) await focusTrack(next.tracks[0]!.id);
     return ok(
-      `removed ${found.id}${dropped.length ? ` · dropped references on ${dropped.join(", ")}` : ""} · ^z undoes`,
+      `removed ${found.id}${dropped.length ? ` · dropped references on ${dropped.join(", ")}` : ""} · ctrl-z undoes`,
     );
   }
   // `/track piano b`: a name with spaces focuses the track of that name, or
@@ -2475,6 +2478,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
     const result = applyStyleCommand(score, styleCommand);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
+    if (result.log) tui.activity.pushNote(result.log);
     return result.ok ? ok(result.message) : fail(result.message);
   }
   const masterCommand = parseMasterCommand(command);
