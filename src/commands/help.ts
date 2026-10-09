@@ -206,6 +206,14 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary:
           "loudness · master streaming · master target -9 · master measure",
       },
+      {
+        command: "style <id> [bars] [seed]",
+        summary: "song from a style · style bebop 16 3 · style again",
+      },
+      {
+        command: "style list|search|info · style blend <a> <b> [w]",
+        summary: "the style tree · style search maqam",
+      },
       { command: "track name <text>", summary: "rename this track" },
       { command: "meter <1..16>", summary: "beats per bar" },
       {
@@ -583,11 +591,11 @@ export const HELP_GUIDE: readonly HelpSection[] = [
     entries: [
       {
         command: "section verse 1-8",
-        summary: "name bars · form verse chorus*2 orders them",
+        summary: "name bars · form verse chorus*2 · build drop fill",
       },
       {
-        command: "build · drop · fill",
-        summary: "transitions · ctrl-k › Arrange · /help arrange",
+        command: "style bebop 16 · ctrl-k › Style",
+        summary: "a whole song in a style · style search samba",
       },
     ],
   },
@@ -863,6 +871,8 @@ export const USAGE: Readonly<Record<string, string>> = {
   kit: "/kit [name] · /kit syn909",
   euclid: "/euclid [voice] · euclid hat 7 16",
   menu: "/menu [sound|effects|rhythm|chords|mix|master|project|tuning]",
+  style:
+    "style [list [id]|search <words>|info <id>|<id> [bars] [seed]|blend <a> <b> [w] [bars] [seed]|again] · style deep-house 16 · style blend bebop bossa-nova 0.3",
   master:
     "master <unit> on|off|preset <name>|<param> <value> · master streaming|club|loud · master target -14 · master measure · master off",
   try: "/try <sound command> · /try fx reverb mix 0.6",
