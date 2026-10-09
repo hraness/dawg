@@ -47,6 +47,7 @@ describe("tuning library", () => {
       "pelog",
       "slendro",
       "nyamaropa",
+      "thai",
       "shruti",
       "yaman",
       "bayati",

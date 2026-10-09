@@ -152,7 +152,7 @@ export const DEGUNG: CycleSpec = Object.freeze({
 });
 
 /**
- * Thai, Khmer and Burmese ching cycle (piphat, pinpeat): the small
+ * Thai and Khmer ching cycle (piphat, pinpeat): the small
  * cymbals alternate an open "ching" and a damped, stressed "chap" on
  * every beat; the chap closes each pair.
  */
@@ -164,6 +164,21 @@ export const CHING: CycleSpec = Object.freeze({
   strokes: Object.freeze(["ching", "chap", "ching", "chap"]),
   low: Object.freeze(["chap"]),
   stress: Object.freeze([2, 4]),
+});
+
+/**
+ * Burmese si-wa (hsaing waing): the si bell and the wa clapper alternate
+ * at the half bar in the slow nayi-se; the wa, the clapper, marks the
+ * stronger beat.
+ */
+export const SI_WA: CycleSpec = Object.freeze({
+  kind: "gongan",
+  name: "si-wa",
+  beats: 4,
+  divisions: [2, 2],
+  strokes: Object.freeze(["si", ".", "wa", "."]),
+  low: Object.freeze(["wa"]),
+  stress: Object.freeze([3]),
 });
 
 /**
@@ -198,6 +213,7 @@ export const GONGAN: Readonly<Record<string, CycleSpec>> = Object.freeze({
   degung: DEGUNG,
   "ching-chap": CHING,
   "agung binalig": AGUNG,
+  "si-wa": SI_WA,
 });
 
 /**

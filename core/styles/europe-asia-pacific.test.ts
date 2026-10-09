@@ -27,11 +27,15 @@ function percPulses(g: GeneratedStyle): [number, number, number][] {
     .map((n) => [Math.round((n.startTick ?? 0) / pulse), n.pitch, n.velocity]);
 }
 
-/** Melodic notes (lead and counter) relative to the plan's root key. */
+/**
+ * Melodic notes (lead and counter) relative to the plan's root key, in
+ * semitones rounded the way the generator gates them (a quarter-tone note
+ * cents offset rounds up: rast's 3.5 is 4).
+ */
 function melodicOffsets(g: GeneratedStyle): number[] {
   return (g.data.notes ?? [])
     .filter((n) => n.trackId === "lead" || n.trackId === "counter")
-    .map((n) => n.pitch - g.plan.rootKey);
+    .map((n) => Math.round(n.pitch + (n.cents ?? 0) / 100 - g.plan.rootKey));
 }
 
 describe("europe-asia-pacific: coverage", () => {
@@ -156,14 +160,48 @@ describe("europe-asia-pacific: theory", () => {
     expect(lesnoto.plan.grouping).toEqual([3, 2, 2]);
   });
 
-  test("Thai, Khmer and Burmese leaves leave the slendro branch for 12-TET", () => {
-    for (const id of ["thai-classical", "khmer", "burmese", "dangdut"])
+  test("Thai and Khmer use the seven equidistant tones; Burmese and dangdut leave the slendro branch for 12-TET", () => {
+    for (const id of ["thai-classical", "khmer"]) {
+      const g = generateStyle(id, { seed: 1, bars: 8 });
+      expect(g.plan.tuning?.name).toBe("thai");
+      expect(g.plan.scale.period).toBe(7);
+      expect(g.plan.scale.tones[1]!.semis).toBeCloseTo(12 / 7, 9);
+    }
+    // The two pitch levels leave different gaps in the seven.
+    const thai = resolveStyle("thai-classical").pitch.degrees;
+    const khmer = resolveStyle("khmer").pitch.degrees;
+    expect(thai).toEqual([0, 1, 2, 4, 5]);
+    expect(khmer).toEqual([0, 1, 3, 4, 5]);
+    for (const id of ["burmese", "dangdut", "vietnamese"])
       expect(
         generateStyle(id, { seed: 1, bars: 4 }).plan.tuning,
       ).toBeUndefined();
     expect(
       generateStyle("balinese-gamelan", { seed: 1, bars: 4 }).plan.tuning?.name,
     ).toBe("pelog");
+  });
+
+  test("Vietnamese oán: xự and cống sound a quarter tone off the tempered third and seventh", () => {
+    for (const seed of SEEDS) {
+      const g = generateStyle("vietnamese", { seed, bars: 16 });
+      const quarter = (g.data.notes ?? []).filter(
+        (n) => n.trackId === "lead" && Math.abs(n.cents ?? 0) === 50,
+      );
+      expect(quarter.length).toBeGreaterThan(0);
+    }
+  });
+
+  test("Burmese si-wa: the si bell and the wa clapper alternate at the half bar", () => {
+    for (const seed of SEEDS) {
+      const g = generateStyle("burmese", { seed, bars: 8 });
+      const half = g.plan.barTicks / 2;
+      const perc = (g.data.notes ?? []).filter((n) => n.trackId === "perc");
+      expect(perc.length).toBeGreaterThan(0);
+      for (const n of perc)
+        expect(mod(Math.round((n.startTick ?? 0) / (half / 4)), 4)).toBe(0);
+      const pitches = new Set(perc.map((n) => n.pitch));
+      expect(pitches.size).toBe(2);
+    }
   });
 
   test("unaccompanied song leaves sound only the voice", () => {

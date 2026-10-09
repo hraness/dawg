@@ -340,6 +340,15 @@ const FIXED_PRESETS: readonly TuningPreset[] = [
     approximate: true,
   },
   {
+    name: "thai",
+    family: "equal",
+    about:
+      "Thai and Khmer seven-tone equidistant tuning, about 171 cents a step (Morton's theoretical norm; every ensemble differs)",
+    cents: edoCents(7),
+    approximate: true,
+    aliases: ["7-edo", "7edo", "7-tet", "khmer"],
+  },
+  {
     name: "nyamaropa",
     family: "african",
     about:

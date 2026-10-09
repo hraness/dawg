@@ -5788,7 +5788,7 @@ function songTime(
  * an object with at most one table source (`edo`, `ratios`, `cents` or
  * `scl`). Library names: `12-tet`, `19-edo`, `24-edo`, `31-edo`,
  * `pythagorean`, `just` (5-limit), `7-limit`, `well-tuned-piano`, `pelog`,
- * `slendro`, `nyamaropa`, `shruti`, maqam and dastgah sets (`bayati`,
+ * `slendro`, `nyamaropa`, `thai`, `shruti`, maqam and dastgah sets (`bayati`,
  * `rast`, `saba`, `shur`, `homayoun`, `chahargah`) and raga intonations
  * (`yaman`, `bhairav`, `kafi`, `todi`, …); `dawg` lists them with
  * `/tuning list`. dawg checks every value when the song loads.

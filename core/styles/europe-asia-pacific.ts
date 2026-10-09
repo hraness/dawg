@@ -12,6 +12,7 @@ import {
   LADRANG,
   pathetFinals,
   pathetPitch,
+  SI_WA,
 } from "./gamelan.ts";
 import { card, type CycleSpec, type StyleCard } from "./schema.ts";
 
@@ -1490,6 +1491,43 @@ const SHANG_MODE = Object.freeze({
   },
 });
 
+/**
+ * Thai thang (pitch level) on the seven equidistant tones: a pentatonic
+ * subset 1 2 3 5 6 of the seven, with 4 and 7 as passing tones left out.
+ */
+const THANG_NOK = Object.freeze({
+  tuning: "thai",
+  degrees: Object.freeze([0, 1, 2, 4, 5]),
+  scales: Object.freeze([Object.freeze(["major-pentatonic", 1] as const)]),
+});
+
+/**
+ * Khmer pinpeat pentatonic on the same equidistant scale, a different
+ * pitch level (1 2 4 5 6 of the seven), so the gaps sit elsewhere.
+ */
+const KHMER_PENTATONIC = Object.freeze({
+  tuning: "thai",
+  degrees: Object.freeze([0, 1, 3, 4, 5]),
+  scales: Object.freeze([Object.freeze(["major-pentatonic", 1] as const)]),
+});
+
+/**
+ * Vietnamese điệu oán (the sad nam mode of cải lương and đờn ca tài tử):
+ * hò xự xang xê cống with xự and cống neutral, about a quarter tone off
+ * the tempered third and seventh (rast's 3.5 and 10.5 steps).
+ */
+const DIEU_OAN = Object.freeze({
+  tuning: null,
+  degrees: null,
+  scales: [["rast", 1]] as const,
+  raga: {
+    aroha: [0, 4, 5, 7, 11],
+    avaroha: [0, 4, 5, 7, 11],
+    vadi: 0,
+    samvadi: 7,
+  },
+});
+
 /** 12-TET for leaves under the slendro-tuned southeast-asia branch. */
 const TWELVE = Object.freeze({ tuning: null, degrees: null });
 
@@ -2052,10 +2090,16 @@ const ASIA_PACIFIC_LEAVES: readonly StyleCard[] = [
   card({
     id: "thai-classical",
     summary:
-      "piphat: ranat xylophone and khong wong gong circle elaborate a core melody, ching cymbal alternating open ching and damped chap",
+      "piphat: ranat xylophone and khong wong gong circle elaborate a core melody in the seven equidistant tones, ching cymbal alternating open ching and damped chap",
     tempo: { bpm: [70, 130], typical: 96 },
     meter: { signatures: [["4/4", 1]], cycle: CHING },
-    pitch: { ...TWELVE, scales: [["major-pentatonic", 1]] },
+    pitch: THANG_NOK,
+    melody: {
+      finals: [
+        [0, 0.7],
+        [3, 0.3],
+      ],
+    },
     texture: {
       roles: {
         perc: role("crotales", "glock:0.5"),
@@ -2073,10 +2117,7 @@ const ASIA_PACIFIC_LEAVES: readonly StyleCard[] = [
     meter: { signatures: [["4/4", 1]] },
     pitch: {
       ...TWELVE,
-      scales: [
-        ["major-pentatonic", 0.6],
-        ["minor-pentatonic", 0.4],
-      ],
+      scales: [["major-pentatonic", 1]],
     },
     harmony: {
       model: "functional",
@@ -2096,11 +2137,12 @@ const ASIA_PACIFIC_LEAVES: readonly StyleCard[] = [
         chords: role("keys", "electric:0.5"),
         lead: role("sing"),
         counter: maybe("trumpet", "sax:0.5"),
-        perc: null,
+        perc: role("crotales"),
       },
     },
     rhythm: {
       onsets: {
+        perc: grid(".x.x.x.x"),
         kick: grid("x...x..."),
         snare: grid("..x...xx"),
         hat: grid("x.x.x.x."),
@@ -2136,39 +2178,35 @@ const ASIA_PACIFIC_LEAVES: readonly StyleCard[] = [
   card({
     id: "khmer",
     summary:
-      "pinpeat: roneat xylophone and kong vong gong circle over the ching-chap cycle, sralai oboe, heterophonic pentatonic core",
+      "pinpeat: sralai oboe leading roneat xylophone heterophony over the ching-chap cycle and skor thom drums, equidistant pentatonic",
     tempo: { bpm: [70, 120], typical: 92 },
     meter: { signatures: [["4/4", 1]], cycle: CHING },
-    pitch: {
-      ...TWELVE,
-      scales: [
-        ["major-pentatonic", 0.6],
-        ["minor-pentatonic", 0.4],
+    pitch: KHMER_PENTATONIC,
+    melody: {
+      finals: [
+        [0, 0.7],
+        [2, 0.3],
       ],
     },
     texture: {
       kind: "heterophonic",
       roles: {
         perc: role("crotales"),
+        kick: role("kettledrum"),
         lead: role("oboe"),
         counter: role("xylophone", "bonang:0.5"),
         bass: maybe("gong"),
       },
     },
+    rhythm: { onsets: { kick: grid("x.......x...x.x.") } },
   }),
   card({
     id: "vietnamese",
     summary:
-      "Vietnamese điệu: bắc mode (bright pentatonic) and nam mode (sad, with vibrated and bent degrees), đàn bầu and đàn tranh",
+      "Vietnamese điệu oán: the sad nam mode of cải lương, neutral xự and cống with vibrato, đàn bầu over đàn tranh, song lang on the strong beats",
     tempo: { bpm: [56, 96], typical: 72 },
     meter: { signatures: [["4/4", 1]] },
-    pitch: {
-      ...TWELVE,
-      scales: [
-        ["major-pentatonic", 0.5],
-        ["minor-pentatonic", 0.5],
-      ],
-    },
+    pitch: DIEU_OAN,
     melody: { density: [1, 2], intervals: intervals(5, 3, 0.6, 0.6) },
     bass: { behaviour: [["none", 1]] },
     texture: {
@@ -2177,10 +2215,10 @@ const ASIA_PACIFIC_LEAVES: readonly StyleCard[] = [
         bass: null,
         lead: role("erhu", "sing:0.6"),
         counter: role("koto"),
-        perc: maybe("framedrum"),
+        perc: role("framedrum"),
       },
     },
-    rhythm: { onsets: { perc: grid("x.......x.x.....") } },
+    rhythm: { onsets: { perc: grid("....x.......x...") } },
   }),
   card({
     id: "philippine",
@@ -2201,21 +2239,16 @@ const ASIA_PACIFIC_LEAVES: readonly StyleCard[] = [
   card({
     id: "burmese",
     summary:
-      "hsaing waing: pat waing tuned-drum circle and kyi waing gongs over the si-wa (bell and clapper) cycle, hne oboe, sudden tempo shifts",
+      "hsaing waing: the pat waing tuned-drum circle leads, hne oboe answers, si bell and wa clapper alternate at the half bar, dense diatonic runs",
     tempo: { bpm: [90, 150], typical: 116 },
-    meter: { signatures: [["4/4", 1]], cycle: CHING },
-    pitch: {
-      ...TWELVE,
-      scales: [
-        ["major-pentatonic", 0.6],
-        ["mixolydian", 0.4],
-      ],
-    },
+    meter: { signatures: [["4/4", 1]], cycle: SI_WA },
+    pitch: { ...TWELVE, scales: [["mixolydian", 1]] },
+    melody: { density: [3, 4] },
     texture: {
       roles: {
         perc: role("crotales", "chimes:0.4"),
-        lead: role("oboe"),
-        counter: role("timpani", "bonang:0.5"),
+        lead: role("timpani"),
+        counter: role("oboe"),
         bass: maybe("gong"),
       },
     },
