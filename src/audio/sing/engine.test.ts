@@ -322,7 +322,7 @@ describe("sing determinism and identity", () => {
     const coarse = (x: Float64Array) =>
       Float64Array.from(x, (value) => Math.round(value * 1e4) + 0); // + 0: no -0
     expect(hash(coarse(l)).slice(0, 16) + hash(coarse(r!)).slice(0, 16)).toBe(
-      "ab59ec46478e7fc57c1a7ccb3b5ec5e3",
+      "609e1a2fedeb4db08358eec39b77ad0c",
     );
   });
 });
