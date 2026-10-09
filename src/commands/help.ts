@@ -694,7 +694,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   piano:
     "piano [grand|ballad|upright|felt|lofi|honkytonk|prepared] · piano ballad",
   modal:
-    "modal <preset> | <param> <value> | mallet <name> | reset | off | presets · modal vibes · modal ring 3",
+    "modal <preset> | <body> | <param> <value> | mallet <name> | reset | off | presets · modal vibes · modal saron · modal ring 3",
   pack: "/pack list | info <name> | use <pack>/<sound> | add <url>",
   kit: "/kit [name] · /kit syn909",
   euclid: "/euclid [voice] · euclid hat 7 16",

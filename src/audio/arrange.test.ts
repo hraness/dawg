@@ -528,6 +528,64 @@ describe("sections meet the 0.5 tempo map, track time and master", () => {
     expect(flat.tracks[0]!.time).toBeUndefined();
   });
 
+  function cycled(bars: number, perCycle: number, sections: boolean) {
+    // Two tracks, each cycling one beat of `perCycle` notes all song long.
+    const tracks = ["a", "b"].map((id) => ({
+      id,
+      name: id,
+      instrument: "sine" as const,
+      time: { cycle: 480 },
+    }));
+    const notes = tracks.flatMap((track, index) =>
+      Array.from({ length: perCycle }, (_, n) => ({
+        id: `${track.id}${n}`,
+        trackId: track.id,
+        pitch: 60 + index * 7 + (n % 5),
+        startTick: Math.floor((n * 480) / perCycle),
+        durationTicks: Math.max(1, Math.floor(480 / perCycle)),
+        velocity: 0.8,
+      })),
+    );
+    const score = createScore({ bars, tempoBpm: 120, tracks, notes });
+    if (!sections) return score;
+    return score.withSections([
+      { name: "intro", startBar: 0, bars: bars / 2 },
+      { name: "phase", startBar: bars / 2, bars: bars / 2 },
+    ]);
+  }
+
+  function windowRms(pcm: Int16Array, rate: number, from: number, to: number) {
+    let sum = 0;
+    let count = 0;
+    for (let frame = from * rate; frame < to * rate; frame += 1) {
+      const value = (pcm[frame * 2] ?? 0) / 32768;
+      sum += value * value;
+      count += 1;
+    }
+    return Math.sqrt(sum / Math.max(1, count));
+  }
+
+  test("a long timed (cycled) track without sections plays to the end", () => {
+    // 32 bars at 120 bpm: 64 s, rendered in windows.
+    const audio = renderArrangedPcm(cycled(32, 3, false));
+    for (let second = 0; second + 10 <= 60; second += 10)
+      expect(
+        windowRms(audio.pcm, audio.sampleRate, second, second + 10),
+      ).toBeGreaterThan(0.01);
+  });
+
+  test("baked timed tracks may hold more notes than a stored score", () => {
+    // 64 bars x 4 beats x 12 notes x 2 tracks = 6144 baked notes.
+    const score = cycled(64, 12, true);
+    expect(score.notes.length).toBe(24);
+    const audio = renderArrangedPcm(score);
+    expect(audio.frames).toBeGreaterThanOrEqual(128 * audio.sampleRate);
+    expect(windowRms(audio.pcm, audio.sampleRate, 110, 120)).toBeGreaterThan(
+      0.01,
+    );
+    expect(exportScore(score).notes.length).toBe(6144);
+  });
+
   test("a long form is mastered once over the whole song", () => {
     const base = song(16).withMaster({ target: -14 });
     const score = withForm(base, parseForm(base, "verse chorus verse chorus"));
@@ -580,5 +638,62 @@ describe("section cues in WAV exports", () => {
     expect(text).toContain("adtl");
     expect(text).toContain("intro");
     expect(text).toContain("drop");
+  });
+});
+
+describe("dawg render with a sample that cannot load", () => {
+  test("fails instead of writing the song without that voice", async () => {
+    const { mkdtemp, writeFile, rm, stat } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { encodeLoopDocument } = await import("../../core/loop.ts");
+    const { runRenderCommand } = await import("../render.ts");
+    const dir = await mkdtemp(join(tmpdir(), "dawg-render-missing-"));
+    try {
+      const score = createScore({
+        tempoBpm: 120,
+        bars: 1,
+        tracks: [
+          {
+            id: "s",
+            name: "s",
+            instrument: "sampler",
+            sampler: {
+              mode: "keyed",
+              voices: { tone: { src: "tracks/s/samples/gone.wav", root: 69 } },
+            },
+          },
+        ],
+        notes: [
+          {
+            id: "a",
+            trackId: "s",
+            pitch: 69,
+            startTick: 0,
+            durationTicks: 480,
+            velocity: 1,
+          },
+        ],
+      });
+      await writeFile(
+        join(dir, "song.track.json"),
+        JSON.stringify(encodeLoopDocument(score)),
+      );
+      const err: string[] = [];
+      const code = await runRenderCommand(
+        ["render", "out.wav", "--import", "song.track.json"],
+        dir,
+        { write: () => undefined },
+        { write: (text: string) => err.push(text) },
+      );
+      expect(code).toBe(1);
+      expect(err.join("")).toContain("sample error");
+      expect(err.join("")).toContain("render failed · 1 sample voice");
+      expect(await stat(join(dir, "out.wav")).catch(() => undefined)).toBe(
+        undefined,
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

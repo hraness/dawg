@@ -832,12 +832,19 @@ export function applyExpressionCommand(
           return { ok: false, message: `pedal · ${error.message}` };
         throw error;
       }
-      const downs = (pedal ?? []).filter((event) => event.state !== "up");
+      const downs = (pedal ?? []).filter((event) => event.state === "down");
+      const halves = (pedal ?? []).filter((event) => event.state === "half");
+      const held = [
+        ...(downs.length > 0 || halves.length === 0
+          ? [`${downs.length} down`]
+          : []),
+        ...(halves.length > 0 ? [`${halves.length} half`] : []),
+      ].join(", ");
       return trackResult(
         score,
         track,
         { pedal: pedal ?? null },
-        `pedal · ${pedal?.length ?? 0} event${pedal?.length === 1 ? "" : "s"} (${downs.length} down) · ${trackId}`,
+        `pedal · ${pedal?.length ?? 0} event${pedal?.length === 1 ? "" : "s"} (${held}) · ${trackId}`,
       );
     }
     case "velcurve": {

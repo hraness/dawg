@@ -35,8 +35,12 @@ import { interpolateAutomation } from "./effects/common.ts";
 import type { EngineContext, InstrumentEngine } from "./instruments.ts";
 import { warpedSpan } from "./warp.ts";
 
-/** Fade applied to a stolen voice, seconds. */
-const STEAL_FADE = 0.005;
+/**
+ * Raised-cosine fade applied to a stolen voice, seconds. At 80 ms the
+ * largest per-sample gain step is pi/(2*fade samples): -61 dB at 22.05 kHz,
+ * -68 dB at 48 kHz, so stealing a long gong or kempul does not click.
+ */
+const STEAL_FADE = 0.08;
 /** Extra mallet hardness for accent and marcato. */
 const ACCENT_HARDNESS = 0.2;
 /**
@@ -241,7 +245,11 @@ export function renderResonatorTrack(
       for (let j = 0; j < count; j += 1) {
         const index = at + j;
         let level = gain;
-        if (index >= steal) level *= Math.max(0, 1 - (index - steal) / fade);
+        if (index >= steal)
+          level *=
+            index - steal >= fade
+              ? 0
+              : 0.5 + 0.5 * Math.cos((Math.PI * (index - steal)) / fade);
         if (damp && index > dampFrom)
           level *= Math.exp(-(index - dampFrom) / (damp.tau * sampleRate));
         dry[index]! += scratch[j]! * level;

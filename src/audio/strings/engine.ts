@@ -202,9 +202,17 @@ export function renderStrings(
         `${note.id}:${note.startTick + (context.seedTick ?? 0)}:string`,
       );
       const strings: { hz: number; gain: number }[] = [];
+      // The course's tuning error belongs to the key, not to the strike: it
+      // is seeded by track and key (so every velocity of a key beats the
+      // same way) and centred, so the course's mean pitch is the table's.
+      const course = seedHash(`${track.id}:${note.pitch}:course`);
+      const jitters = Array.from({ length: unison }, (_, i) =>
+        unison > 1 ? (unit(course, i, 1) - 0.5) * 2 : 0,
+      );
+      const meanJitter = jitters.reduce((a, b) => a + b, 0) / unison;
       for (let i = 0; i < unison; i += 1) {
         const d = unison > 1 ? (i / (unison - 1) - 0.5) * detune : 0;
-        const jitter = unison > 1 ? (unit(seed, i, 1) - 0.5) * 2 : 0;
+        const jitter = jitters[i]! - meanJitter;
         strings.push({
           hz: baseHz * 2 ** ((d * 100 + jitter) / 1200),
           gain: 1 / Math.sqrt(unison),
@@ -215,7 +223,7 @@ export function renderStrings(
         const hz = up > 0 ? up : baseHz * 2;
         if (hz < 0.45 * sr)
           strings.push({
-            hz: hz * 2 ** (((unit(seed, unison, 1) - 0.5) * 4) / 1200),
+            hz: hz * 2 ** (((unit(course, unison, 1) - 0.5) * 4) / 1200),
             gain: oct / Math.sqrt(unison),
           });
       }

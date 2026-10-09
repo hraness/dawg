@@ -17,6 +17,7 @@ import { resolveString } from "./strings.ts";
 import { modalSettings } from "./resonators.ts";
 import {
   SCORE_LIMITS,
+  withNoteCap,
   ScoreValidationError,
   TrackScore,
   isSamplerInstrument,
@@ -123,8 +124,12 @@ export function sliceSongTime(
  * Later repetitions get `~p2`, `~p3` ids. Without timed tracks, or without
  * sections, the score comes back unchanged.
  */
-export function bakeTrackTime(score: TrackScore): TrackScore {
-  if (score.sections.length === 0 || !hasTrackTime(score)) return score;
+export function bakeTrackTime(
+  score: TrackScore,
+  options: { always?: boolean } = {},
+): TrackScore {
+  if (!hasTrackTime(score)) return score;
+  if (score.sections.length === 0 && !options.always) return score;
   const seen = new Map<string, number>();
   const notes = performedNotes(score).map((note) => {
     const count = (seen.get(note.id) ?? 0) + 1;
@@ -136,12 +141,23 @@ export function bakeTrackTime(score: TrackScore): TrackScore {
       durationTicks: Math.max(1, Math.round(note.durationTicks)),
     };
   });
-  return new TrackScore({
-    ...score.toJSON(),
-    tracks: score.tracks.map(({ time: _time, ...track }) => track),
-    notes,
-  });
+  return withNoteCap(
+    BAKED_NOTE_CAP,
+    () =>
+      new TrackScore({
+        ...score.toJSON(),
+        tracks: score.tracks.map(({ time: _time, ...track }) => track),
+        notes,
+      }),
+  );
 }
+
+/**
+ * Most notes a baked or arranged score may hold while it renders: a cycled
+ * or phasing track repeats its notes across the song, past the stored
+ * score's limit.
+ */
+export const BAKED_NOTE_CAP = SCORE_LIMITS.maxNotes * 64;
 
 /** Conventional section names, offered first by `nextSectionName`. */
 export const SECTION_KINDS = Object.freeze([

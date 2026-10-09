@@ -1,4 +1,8 @@
 #!/usr/bin/env bun
+import {
+  isUnknownInstrument,
+  plainSineAdvice,
+} from "./audio/instrument-check.ts";
 import { randomUUID } from "node:crypto";
 import { readFileSync, writeSync } from "node:fs";
 import { readFile, stat, writeFile } from "node:fs/promises";
@@ -54,7 +58,11 @@ import {
   applyExpressionCommand,
   parseExpressionCommand,
 } from "./commands/expression.ts";
-import { applyFxCommand, parseFxCommand } from "./commands/fx.ts";
+import {
+  applyFxCommand,
+  parseFxCommand,
+  unknownFxMessage,
+} from "./commands/fx.ts";
 import {
   applyRigCommand,
   parseRigCommand,
@@ -72,6 +80,7 @@ import { instrumentPatchForWord, isModalWord } from "../core/resonators.ts";
 import {
   applyGranularCommand,
   granularTrackPreset,
+  grainSrcHint,
   parseGranularCommand,
 } from "./commands/granular.ts";
 import {
@@ -1784,6 +1793,8 @@ async function submit(prompt: string): Promise<string | Receipt> {
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
   }
+  const unknownFx = unknownFxMessage(command);
+  if (unknownFx) return fail(unknownFx);
   const expression = parseExpressionCommand(command);
   if (expression) {
     if (expression.type !== "show" && expression.type !== "invalid")
@@ -1836,6 +1847,8 @@ async function submit(prompt: string): Promise<string | Receipt> {
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
   }
+  const grainHint = grainSrcHint(command);
+  if (grainHint) return fail(grainHint);
   const grain = parseGranularCommand(command);
   if (grain) {
     if (grain.type !== "grain-list" && grain.type !== "grain-presets")
@@ -2034,6 +2047,15 @@ async function submit(prompt: string): Promise<string | Receipt> {
     return `bars · ${bars}`;
   }
   if (parsed.type === "track") {
+    // An unknown word would store and play a plain sine: say so instead.
+    const word = parsed.patch.instrument;
+    if (word !== undefined && isUnknownInstrument(word)) {
+      const advice = plainSineAdvice(word) ?? "";
+      const near = advice.match(/did you mean (\S+)\?/)?.[1];
+      return fail(
+        `instrument ${truncateForCard(word)} · not a dawg instrument${near ? ` · did you mean ${near}?` : ""} · /menu sounds lists them`,
+      );
+    }
     // `instrument jangle`: a guitar alias also loads its rig.
     const patch = parsed.word
       ? {
@@ -2056,6 +2078,11 @@ async function submit(prompt: string): Promise<string | Receipt> {
     // Plain `marimba` keeps the legacy tone; point at the mallet engine.
     if (parsed.patch.instrument === "marimba" && !("modal" in parsed.patch))
       return `track · ${requestedTrack} · marimba (legacy tone) · modal marimba for the mallet engine`;
+    const sine =
+      word !== undefined && !("string" in parsed.patch)
+        ? plainSineAdvice(word)
+        : undefined;
+    if (sine) return `track · ${requestedTrack} · ${sine}`;
     return `track · ${requestedTrack}`;
   }
   if (parsed.type === "automation") {

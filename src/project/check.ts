@@ -9,6 +9,7 @@ import {
   type Diagnostic,
 } from "../../core/sdk/eval.ts";
 import { legacyResonatorWarnings } from "../../core/resonators.ts";
+import { plainSineWarnings } from "../audio/instrument-check.ts";
 import { isProject } from "./init.ts";
 import { typecheckProject } from "./typecheck.ts";
 
@@ -49,7 +50,12 @@ export async function checkProject(
     tracks: evaluated.ok ? evaluated.score.tracks.length : 0,
     notes: evaluated.ok ? evaluated.score.notes.length : 0,
     warnings: Object.freeze(
-      evaluated.ok ? legacyResonatorWarnings(evaluated.score.tracks) : [],
+      evaluated.ok
+        ? [
+            ...legacyResonatorWarnings(evaluated.score.tracks),
+            ...plainSineWarnings(evaluated.score.tracks),
+          ]
+        : [],
     ),
   });
 }

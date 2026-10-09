@@ -48,7 +48,16 @@ export type BankSource = Readonly<{
 
 type Chunk = Float32Array;
 
-const chunks = new Map<string, Chunk>();
+/**
+ * Chunks per source (`id` and rate) keyed by level and index as one number.
+ * Grains look a chunk up every 32-frame block, so the lookup avoids string
+ * keys and the LRU order is a use counter (scanned only to evict).
+ */
+type Entry = { chunk: Chunk; used: number };
+const chunks = new Map<string, Map<number, Entry>>();
+const sourceTables = new WeakMap<BankSource, Map<number, Entry>>();
+let count = 0;
+let clock = 0;
 let bytes = 0;
 let byteCap = BANK_MAX_BYTES;
 const ZERO_CHUNK = new Float32Array(BANK_CHUNK_FRAMES + BANK_CHUNK_PAD);
@@ -143,22 +152,41 @@ export function bankChunk(
 ): Chunk {
   if (index < 0 || index * BANK_CHUNK_FRAMES > source.data.length + 2)
     return ZERO_CHUNK;
-  const key = `${source.id}\u0000${source.rate}\u0000${level}\u0000${index}`;
-  let chunk = chunks.get(key);
-  if (chunk) {
-    chunks.delete(key);
-    chunks.set(key, chunk);
-    return chunk;
+  let table = sourceTables.get(source);
+  if (!table) {
+    const id = `${source.id}\u0000${source.rate}`;
+    table = chunks.get(id);
+    if (!table) chunks.set(id, (table = new Map()));
+    sourceTables.set(source, table);
   }
-  chunk = fill(source, level, index);
-  chunks.set(key, chunk);
+  const key = level * 2 ** 32 + index;
+  clock += 1;
+  const hit = table.get(key);
+  if (hit) {
+    hit.used = clock;
+    return hit.chunk;
+  }
+  const chunk = fill(source, level, index);
+  table.set(key, { chunk, used: clock });
+  count += 1;
   bytes += chunk.byteLength;
-  while (bytes > byteCap && chunks.size > 1) {
-    const oldest = chunks.keys().next().value as string;
-    bytes -= chunks.get(oldest)!.byteLength;
-    chunks.delete(oldest);
-  }
+  if (bytes > byteCap) evict();
   return chunk;
+}
+
+/** Drops least recently used chunks until under the budget (keeps one). */
+function evict(): void {
+  const all: { table: Map<number, Entry>; key: number; used: number }[] = [];
+  for (const table of chunks.values())
+    for (const [key, entry] of table)
+      all.push({ table, key, used: entry.used });
+  all.sort((a, b) => a.used - b.used);
+  for (const { table, key } of all) {
+    if (bytes <= byteCap || count <= 1) break;
+    bytes -= table.get(key)!.chunk.byteLength;
+    table.delete(key);
+    count -= 1;
+  }
 }
 
 /** Chunk index of a level frame. */
@@ -193,12 +221,13 @@ export function bankBytes(): number {
 
 /** Chunks held now. */
 export function bankChunks(): number {
-  return chunks.size;
+  return count;
 }
 
 /** Drops every chunk; with `cap`, sets a new byte budget (tests). */
 export function resetBank(cap: number = BANK_MAX_BYTES): void {
-  chunks.clear();
+  for (const table of chunks.values()) table.clear();
+  count = 0;
   bytes = 0;
   byteCap = Math.max(0, cap);
 }
