@@ -71,7 +71,8 @@ describe("Sound › Voices (sing)", () => {
     select(menu, ctx, "Voices");
     menu.key("\r", ctx);
     const groups = menu.view(ctx).items.map((row) => row.label.split(" ")[0]);
-    expect(groups).toEqual(["Choir", "Solo", "Throat"]);
+    // The clips lane's Vocal row comes first, then the sing groups.
+    expect(groups).toEqual(["Vocal", "Choir", "Solo", "Throat"]);
     select(menu, ctx, "Throat");
     menu.key("\r", ctx);
     select(menu, ctx, "khoomei");
