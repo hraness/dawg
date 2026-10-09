@@ -6,7 +6,7 @@
  * (±12 st) and a per-frame energy normaliser, measured after de-emphasis,
  * keeps the frame at the unshifted modulator frame's energy.
  */
-import { gateCurve } from "../dsp/follow.ts";
+import { gateCurve, holdCurve } from "../dsp/follow.ts";
 import { autocorrelate, levinson } from "../dsp/lpc.ts";
 import { TALKBOX_FORMANT_MAX } from "../../../core/vocoder.ts";
 import { noiseSample } from "./bank.ts";
@@ -48,10 +48,12 @@ export function talkboxVocode(
   const rc = new Float64Array(corder + 1);
   const ac = new Float64Array(corder + 1);
   const gate = gateCurve(mod.subarray(0, n), sr, control.gateDb);
+  if (gate && control.hold) holdCurve(gate, control.hold);
   const unvoicedOn = p.unvoiced > 0 || control.curves.unvoiced !== undefined;
   const u = unvoicedOn
     ? unvoicedCurve(mod.subarray(0, n), sr, p.sens, origin, gate)
     : undefined;
+  let heldMe0 = 0;
   for (let start = -posMod(origin, hop) - hop; start < n; start += hop) {
     const centre = Math.min(n - 1, Math.max(0, start + hop));
     const st = Math.max(
@@ -59,9 +61,11 @@ export function talkboxVocode(
       Math.min(TALKBOX_FORMANT_MAX, at(control, "formant", centre)),
     );
     const shift = 2 ** (st / 12);
-    let me = 0;
-    let me0 = 0;
-    for (let i = 0; i < N; i += 1) {
+    // freeze: a held frame reuses the last analysed filter and level
+    const held = heldMe0 > 0 && control.hold?.[centre] === 1;
+    let me = held ? 1 : 0;
+    let me0 = held ? heldMe0 : 0;
+    for (let i = 0; !held && i < N; i += 1) {
       const j = start + i;
       const jj = start + hop + (i - hop) * shift;
       const k0 = Math.floor(jj);
@@ -75,7 +79,10 @@ export function talkboxVocode(
       me0 += raw * raw;
     }
     if (me < 1e-10 || me0 < 1e-10) continue;
-    levinson(autocorrelate(mf, order, r, sr), order, a);
+    if (!held) {
+      levinson(autocorrelate(mf, order, r, sr), order, a);
+      heldMe0 = me0;
+    }
     for (let c = 0; c < cars.length; c += 1) {
       const car = cars[c]!;
       for (let i = 0; i < N; i += 1) {

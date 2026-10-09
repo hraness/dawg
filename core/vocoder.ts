@@ -165,7 +165,7 @@ export const VOCODER_PARAMS: Readonly<Record<string, ParamSpec>> =
       kind: "boolean" as const,
       default: false,
       optional: true,
-      doc: "hold the current vowel",
+      doc: "hold the last sung vowel through rests",
     }),
     mix: num(0, 1, 1, 0.05, "wet against the carrier", { automate: true }),
     gain: num(-24, 24, 0, 0.5, "output trim", { unit: "dB", automate: true }),

@@ -17,7 +17,7 @@ import {
   runBiquad,
   type Biquad,
 } from "../dsp/bandbank.ts";
-import { follow, followCoef, gateCurve } from "../dsp/follow.ts";
+import { follow, followCoef, gateCurve, holdCurve } from "../dsp/follow.ts";
 import { unit } from "../dsp/rng.ts";
 import { at, VOCODER_BLOCK, type VocoderControl } from "./control.ts";
 import { hissPath, unvoicedCurve } from "./detect.ts";
@@ -125,6 +125,7 @@ export function channelVocode(
           filtersFor(widthCurve[Math.min(n - 1, i + offset)]!)[k]!
       : undefined;
   const gate = gateCurve(mod.subarray(0, n), sr, control.gateDb);
+  if (gate && control.hold) holdCurve(gate, control.hold);
   const unvoicedOn = p.unvoiced > 0 || control.curves.unvoiced !== undefined;
   const u = unvoicedOn
     ? unvoicedCurve(mod.subarray(0, n), sr, p.sens, origin, gate)

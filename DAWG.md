@@ -1700,30 +1700,30 @@ The one-step way: focus a vocal track (a sampler voice or clips) and type `/voco
 
 Presets (all 24 bands or fewer): **classic** (70s and 80s band vocoder lead, the default), **robot** (12 bands, a pulse drone), **talkbox** (an LPC mouth filter on a saw), **choir** (stereo supersaw chord pad), **glass** (bright, formant +3), **whisper** (noise carrier), **smear** (long release wash; try `freeze`) and **lofi** (8 narrow bands under 4 kHz).
 
-| Parameter  | Range                               | Default   | Does                                                                         |
-| ---------- | ----------------------------------- | --------- | ---------------------------------------------------------------------------- |
-| `tap`      | `chain`, `dry`                      | chain     | listen to the source after its mono chain (before pan) or before its effects |
-| `mode`     | `channel`, `talkbox`                | channel   | a band bank, or an LPC talkbox (order sr/2000, 20 ms frames)                 |
-| `carrier`  | `saw`, `supersaw`, `pulse`, `noise` | supersaw  | the built-in carrier (`instrument vocoder` only)                             |
-| `follow`   | `notes`, `chords`, `drone`          | notes     | the built-in carrier's pitch: its notes, the song's chords, or `root`        |
-| `root`     | 24..96                              | 45        | the drone pitch (MIDI), and the octave chords are voiced from                |
-| `spread`   | 0..1 st                             | 0.15      | supersaw detune                                                              |
-| `bands`    | 4..40                               | 16        | channel bands, spaced evenly in log frequency (heavy above 24)               |
-| `lo`, `hi` | 50..1000 Hz, 2000..12000 Hz         | 100, 8000 | the lowest and highest band centres                                          |
-| `width`    | 0.25..4                             | 1         | band width as a multiple of the spacing                                      |
-| `attack`   | 0.0005..0.2 s                       | 0.005     | envelope follower attack                                                     |
-| `release`  | 0.005..2 s                          | 0.04      | envelope follower release; long releases smear                               |
-| `formant`  | ±24 st (talkbox ±12)                | 0         | move the voice's formants: + is smaller and brighter                         |
-| `unvoiced` | 0..1                                | 0.5       | noise in place of the carrier on s, f, sh and t                              |
-| `sens`     | 0..1                                | 0.5       | how readily a frame counts as unvoiced                                       |
-| `hiss`     | 0..1                                | 0         | the source's top end passed straight through                                 |
-| `gate`     | -90..0 dBFS or `auto`               | auto      | silence below this source level; `auto` reads the source's noise floor       |
-| `enhance`  | on/off                              | on        | whiten the carrier so every band speaks                                      |
-| `depth`    | 0..1                                | 1         | how much the voice shapes the carrier                                        |
-| `freeze`   | on/off                              | off       | hold the current vowel                                                       |
-| `mix`      | 0..1                                | 1         | wet against the plain carrier                                                |
-| `gain`     | ±24 dB                              | 0         | output trim (a fixed makeup gain and a soft peak guard at 1.0 come first)    |
-| `seed`     | integer                             | track id  | the unvoiced noise seed                                                      |
+| Parameter  | Range                               | Default   | Does                                                                                             |
+| ---------- | ----------------------------------- | --------- | ------------------------------------------------------------------------------------------------ |
+| `tap`      | `chain`, `dry`                      | chain     | listen to the source after its mono chain (before pan) or before its effects                     |
+| `mode`     | `channel`, `talkbox`                | channel   | a band bank, or an LPC talkbox (order sr/2000, 20 ms frames)                                     |
+| `carrier`  | `saw`, `supersaw`, `pulse`, `noise` | supersaw  | the built-in carrier (`instrument vocoder` only)                                                 |
+| `follow`   | `notes`, `chords`, `drone`          | notes     | the built-in carrier's pitch: its notes, the song's chords, or `root`                            |
+| `root`     | 24..96                              | 45        | the drone pitch (MIDI), and the octave chords are voiced from                                    |
+| `spread`   | 0..1 st                             | 0.15      | supersaw detune                                                                                  |
+| `bands`    | 4..40                               | 16        | channel bands, spaced evenly in log frequency (heavy above 24)                                   |
+| `lo`, `hi` | 50..1000 Hz, 2000..12000 Hz         | 100, 8000 | the lowest and highest band centres                                                              |
+| `width`    | 0.25..4                             | 1         | band width as a multiple of the spacing                                                          |
+| `attack`   | 0.0005..0.2 s                       | 0.005     | envelope follower attack                                                                         |
+| `release`  | 0.005..2 s                          | 0.04      | envelope follower release; long releases smear                                                   |
+| `formant`  | ±24 st (talkbox ±12)                | 0         | move the voice's formants: + is smaller and brighter                                             |
+| `unvoiced` | 0..1                                | 0.5       | noise in place of the carrier on s, f, sh and t                                                  |
+| `sens`     | 0..1                                | 0.5       | how readily a frame counts as unvoiced                                                           |
+| `hiss`     | 0..1                                | 0         | the source's top end passed straight through                                                     |
+| `gate`     | -90..0 dBFS or `auto`               | auto      | silence below this source level; `auto` reads the source's noise floor                           |
+| `enhance`  | on/off                              | on        | whiten the carrier so every band speaks                                                          |
+| `depth`    | 0..1                                | 1         | how much the voice shapes the carrier                                                            |
+| `freeze`   | on/off                              | off       | hold the last sung vowel through every rest (a `vocoder-freeze` lane holds whatever is sounding) |
+| `mix`      | 0..1                                | 1         | wet against the plain carrier                                                                    |
+| `gain`     | ±24 dB                              | 0         | output trim (a fixed makeup gain and a soft peak guard at 1.0 come first)                        |
+| `seed`     | integer                             | track id  | the unvoiced noise seed                                                                          |
 
 How it works: channel mode splits both signals into the same bands (cascaded RBJ band-passes, laid out from `lo` to `hi` the same at every sample rate), follows each modulator band's level, and multiplies the carrier's band by it. Each band's envelope is advanced by its filter's group delay plus the attack, so consonants stay on time. A formant shift reads the envelopes at a fractional band index. Talkbox mode fits an all-pole mouth filter to each 20 ms frame of the voice (on an absolute hop grid, so windows agree) and runs the carrier through it, which keeps vowels sharper with fewer artefacts. Frames that are both high-band heavy and aperiodic count as unvoiced and get seeded noise (keyed to the song sample) instead of the carrier, as hardware vocoders do with their sibilance switch. A stereo carrier (a supersaw) gets one analysis and two synthesis banks.
 
