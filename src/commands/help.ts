@@ -417,12 +417,13 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       { command: "/vocal", summary: "voice tools: lists every verb" },
       {
         command:
-          "/formant <-12..12> [mix] | deep | giant | bright | tiny | off",
+          "/formant <-12..12> [mix] | deep | giant | bright | tiny | on | off",
         summary:
           "formant shift at constant pitch · /formant -4 deeper · /formant 3 smaller",
       },
       {
-        command: "/vowel <v> [<to> [<morph>]] | to <v> | morph <0..1> | off",
+        command:
+          "/vowel <v> [<to> [<morph>]] | ee | to <v>|off | morph <0..1> | off",
         summary: "vowel filter · /vowel a · /vowel a o 0.5 morphs a towards o",
       },
       ...VOCAL_VERBS.map((verb) => ({
@@ -803,9 +804,9 @@ export const USAGE: Readonly<Record<string, string>> = {
     "modal <preset> | <body> | <param> <value> | mallet <name> | pair <track> | gamelan | reset | off | presets · modal vibes · modal gangsa · modal ring 3",
   wind: "wind <preset> | <param> <value> | mute <name> | reset | off | presets · wind flute · wind trumpet mute harmon · wind players 4",
   formant:
-    "/formant <-12..12> [mix] | deep|giant|bright|tiny | off · /formant -4 · /formant 3 0.5",
+    "/formant <-12..12> [mix] | deep|giant|bright|tiny | on | off · /formant -4 · /formant 3 0.5",
   vowel:
-    "/vowel <v> [<to> [<morph 0..1>]] | to <v> | morph <0..1> | mix <0..1> | off · /vowel a o 0.5",
+    "/vowel <v> [<to> [<morph 0..1>]] | ee | to <v>|off | morph <0..1> | mix <0..1> | off · /vowel a o 0.5",
   pack: "/pack list | info <name> | use <pack>/<sound> | add <url>",
   kit: "/kit [name] · /kit syn909",
   euclid: "/euclid [voice] · euclid hat 7 16",

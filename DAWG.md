@@ -1574,6 +1574,7 @@ The `formant` effect moves a sound's formants (the resonances of the throat and 
 /formant -4              deeper (pitch stays); /formant 3 0.5 is smaller at half mix
 /formant giant           presets deep giant bright tiny; /formant off removes it
 /vowel a o 0.5           vowel filter halfway from a to o; /vowel morph 0.8, /vowel to u
+/vowel to off            back to one vowel; changing the vowel keeps your mix
 /vocal formant -4        the same, under the voice umbrella
 automate formant-shift points 0:-6 8:6
 ```
