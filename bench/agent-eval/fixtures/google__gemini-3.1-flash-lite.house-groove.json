@@ -1,0 +1,148 @@
+{
+  "model": "google/gemini-3.1-flash-lite",
+  "task": "house-groove",
+  "pass": false,
+  "requests": [
+    {
+      "events": [
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "id": "call_362534",
+          "name": "set_tempo",
+          "arguments": ""
+        },
+        { "type": "tool-delta", "index": 0, "arguments": "{\"bpm\":124}" },
+        {
+          "type": "tool-delta",
+          "index": 1,
+          "id": "call_362537",
+          "name": "set_drum_kit",
+          "arguments": ""
+        },
+        {
+          "type": "tool-delta",
+          "index": 1,
+          "arguments": "{\"kit\":\"syn909\",\"trackId\":\"drums\"}"
+        },
+        {
+          "type": "tool-delta",
+          "index": 2,
+          "id": "call_362543",
+          "name": "set_rhythm",
+          "arguments": ""
+        },
+        {
+          "type": "tool-delta",
+          "index": 2,
+          "arguments": "{\"trackId\":\"drums\",\"rows\":[{\"voice\":\"kick\",\"grid\":\"x...x...x...x...\",\"steps\":16,\"division\":\"1/16\"},{\"division\":\"1/16\",\"steps\":16,\"voice\":\"clap\",\"grid\":\"....x.......x...\"},{\"steps\":16,\"division\":\"1/16\",\"grid\":\"..x.x.x.x.x.x.x.\",\"voice\":\"openhat\"}]}"
+        },
+        {
+          "type": "tool-delta",
+          "index": 3,
+          "id": "call_362552",
+          "name": "add_notes",
+          "arguments": ""
+        },
+        {
+          "type": "tool-delta",
+          "index": 3,
+          "arguments": "{\"trackId\":\"bass\",\"notes\":[{\"start\":0.5,\"velocity\":0.8,\"pitch\":\"A1\",\"duration\":0.5},{\"pitch\":\"A1\",\"duration\":0.5,\"start\":1.5,\"velocity\":0.8},{\"pitch\":\"A1\",\"start\":2.5,\"duration\":0.5,\"velocity\":0.8},{\"start\":3.5,\"velocity\":0.8,\"pitch\":\"A1\",\"duration\":0.5},{\"velocity\":0.8,\"start\":4.5,\"pitch\":\"A1\",\"duration\":0.5},{\"pitch\":\"A1\",\"start\":5.5,\"velocity\":0.8,\"duration\":0.5},{\"velocity\":0.8,\"start\":6.5,\"duration\":0.5,\"pitch\":\"A1\"},{\"duration\":0.5,\"pitch\":\"A1\",\"start\":7.5,\"velocity\":0.8},{\"velocity\":0.8,\"pitch\":\"A1\",\"start\":8.5,\"duration\":0.5},{\"pitch\":\"A1\",\"duration\":0.5,\"start\":9.5,\"velocity\":0.8},{\"velocity\":0.8,\"duration\":0.5,\"pitch\":\"A1\",\"start\":10.5},{\"start\":11.5,\"duration\":0.5,\"pitch\":\"A1\",\"velocity\":0.8},{\"start\":12.5,\"pitch\":\"A1\",\"velocity\":0.8,\"duration\":0.5},{\"velocity\":0.8,\"duration\":0.5,\"start\":13.5,\"pitch\":\"A1\"},{\"velocity\":0.8,\"pitch\":\"A1\",\"duration\":0.5,\"start\":14.5},{\"start\":15.5,\"duration\":0.5,\"pitch\":\"A1\",\"velocity\":0.8}]}"
+        },
+        {
+          "type": "tool-delta",
+          "index": 4,
+          "id": "call_362555",
+          "name": "explain",
+          "arguments": ""
+        },
+        {
+          "type": "tool-delta",
+          "index": 4,
+          "arguments": "{\"text\":\"Set the house groove with a 909 kit and offbeat A1 bass.\"}"
+        },
+        {
+          "type": "usage",
+          "inputTokens": 15376,
+          "outputTokens": 626,
+          "cachedInputTokens": 0,
+          "costUsd": 0.004783
+        },
+        { "type": "finish", "reason": "tool_calls" }
+      ],
+      "firstTokenMs": 1583.4860409999965,
+      "totalMs": 3209.8622910000267
+    },
+    {
+      "events": [
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "id": "call_1735217",
+          "name": "transport",
+          "arguments": ""
+        },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "arguments": "{\"action\":\"play\"}"
+        },
+        {
+          "type": "usage",
+          "inputTokens": 17694,
+          "outputTokens": 14,
+          "cachedInputTokens": 0,
+          "costUsd": 0.0044445
+        },
+        { "type": "finish", "reason": "tool_calls" }
+      ],
+      "firstTokenMs": 1067.177916000015,
+      "totalMs": 1123.2707910000463
+    },
+    {
+      "events": [
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "id": "call_7803452",
+          "name": "explain",
+          "arguments": ""
+        },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "arguments": "{\"text\":\"House groove established with 909 drums and offbeat bass.\"}"
+        },
+        {
+          "type": "usage",
+          "inputTokens": 17715,
+          "outputTokens": 27,
+          "cachedInputTokens": 17621,
+          "costUsd": 0.00059263
+        },
+        { "type": "finish", "reason": "tool_calls" }
+      ],
+      "firstTokenMs": 1002.4535419999738,
+      "totalMs": 1056.3585420000018
+    },
+    {
+      "events": [
+        { "type": "text", "delta": "House" },
+        {
+          "type": "text",
+          "delta": " groove established with 909 drums and offbeat bass."
+        },
+        {
+          "type": "usage",
+          "inputTokens": 17773,
+          "outputTokens": 14,
+          "cachedInputTokens": 16166,
+          "costUsd": 0.00090773
+        },
+        { "type": "finish", "reason": "stop" }
+      ],
+      "firstTokenMs": 991.7728329999954,
+      "totalMs": 1053.440082999994
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "model": "mistral/mistral-small",
+  "task": "files-tempo",
+  "pass": true,
+  "requests": [
+    {
+      "events": [
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "id": "FO5GVKRgw",
+          "name": "edit_file",
+          "arguments": ""
+        },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "arguments": "{\"path\": \"song.ts\", \"old\": \"tempo: 100\", \"new\": \"tempo: 110\"}"
+        },
+        {
+          "type": "usage",
+          "inputTokens": 26249,
+          "outputTokens": 36,
+          "cachedInputTokens": 26208,
+          "costUsd": 0.00042087
+        },
+        { "type": "finish", "reason": "tool_calls" }
+      ],
+      "firstTokenMs": 870.4903750000522,
+      "totalMs": 870.5587500000256
+    },
+    {
+      "events": [
+        { "type": "text", "delta": "T" },
+        { "type": "text", "delta": "empo set" },
+        { "type": "text", "delta": " to 11" },
+        { "type": "text", "delta": "0 B" },
+        { "type": "text", "delta": "PM." },
+        {
+          "type": "usage",
+          "inputTokens": 26352,
+          "outputTokens": 12,
+          "cachedInputTokens": 2928,
+          "costUsd": 0.00356472
+        },
+        { "type": "finish", "reason": "stop" }
+      ],
+      "firstTokenMs": 1490.950582999969,
+      "totalMs": 1532.4145000000135
+    }
+  ]
+}

@@ -1,0 +1,98 @@
+{
+  "model": "anthropic/claude-haiku-4.5",
+  "task": "andalusian-cadence",
+  "pass": true,
+  "requests": [
+    {
+      "events": [
+        { "type": "text", "delta": "I'll write an Andal" },
+        { "type": "text", "delta": "usian cadence in A" },
+        { "type": "text", "delta": " minor using" },
+        { "type": "text", "delta": " the progression" },
+        { "type": "text", "delta": " Am," },
+        { "type": "text", "delta": " G, F, E with" },
+        { "type": "text", "delta": " one chord per bar." },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "id": "toolu_01XF2KrTQw27VXQPY1uFPULt",
+          "name": "write_chords",
+          "arguments": ""
+        },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "arguments": "{\"trackId\": \"keys"
+        },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "arguments": "\", \"chords\": [\"Am\", \"G"
+        },
+        { "type": "tool-delta", "index": 0, "arguments": "\", \"F\", \"E" },
+        { "type": "tool-delta", "index": 0, "arguments": "\"]" },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "arguments": ", \"key\": \"A minor"
+        },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "arguments": "\", \"beatsPerChord\": 4"
+        },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "arguments": ", \"perform\": \"block"
+        },
+        { "type": "tool-delta", "index": 0, "arguments": "\"}" },
+        {
+          "type": "usage",
+          "inputTokens": 27085,
+          "outputTokens": 170,
+          "cachedInputTokens": 0,
+          "costUsd": 0.027935
+        },
+        { "type": "finish", "reason": "tool_calls" }
+      ],
+      "firstTokenMs": 595.6151669999817,
+      "totalMs": 1498.7451669999864
+    },
+    {
+      "events": [
+        { "type": "text", "delta": "Perfect" },
+        { "type": "text", "delta": "! I've written a" },
+        { "type": "text", "delta": " classic" },
+        { "type": "text", "delta": " Andalusian cadence" },
+        { "type": "text", "delta": " on" },
+        { "type": "text", "delta": " the keys track" },
+        { "type": "text", "delta": " with" },
+        { "type": "text", "delta": " the" },
+        { "type": "text", "delta": " progression Am–" },
+        { "type": "text", "delta": "G–F–E," },
+        { "type": "text", "delta": " one" },
+        { "type": "text", "delta": " chord per bar," },
+        { "type": "text", "delta": " vo" },
+        { "type": "text", "delta": "ic" },
+        { "type": "text", "delta": "ele" },
+        { "type": "text", "delta": "ading smooth" },
+        { "type": "text", "delta": "ly within" },
+        { "type": "text", "delta": " a" },
+        { "type": "text", "delta": " comfortable" },
+        { "type": "text", "delta": " range" },
+        { "type": "text", "delta": "." },
+        {
+          "type": "usage",
+          "inputTokens": 27569,
+          "outputTokens": 47,
+          "cachedInputTokens": 0,
+          "costUsd": 0.027804
+        },
+        { "type": "finish", "reason": "stop" }
+      ],
+      "firstTokenMs": 650.2498329999507,
+      "totalMs": 1164.0494159999653
+    }
+  ]
+}

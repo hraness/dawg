@@ -1,0 +1,57 @@
+{
+  "model": "spacexai/grok-4.1-fast-non-reasoning",
+  "task": "files-instrument",
+  "pass": false,
+  "requests": [
+    {
+      "events": [
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "id": "call_07838582",
+          "name": "set_instrument",
+          "arguments": ""
+        },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "arguments": "{\"instrument\":\"pluck\",\"trackId\":\"bass\"}"
+        },
+        {
+          "type": "usage",
+          "inputTokens": 20987,
+          "outputTokens": 37,
+          "cachedInputTokens": 20962,
+          "costUsd": 0.0010716
+        },
+        { "type": "finish", "reason": "tool_calls" }
+      ],
+      "firstTokenMs": 1074.9965410000295,
+      "totalMs": 1085.2989159999997
+    },
+    {
+      "events": [
+        { "type": "text", "delta": "Set" },
+        { "type": "text", "delta": " the" },
+        { "type": "text", "delta": " bass" },
+        { "type": "text", "delta": " track" },
+        { "type": "text", "delta": " to" },
+        { "type": "text", "delta": " use" },
+        { "type": "text", "delta": " the" },
+        { "type": "text", "delta": " pluck" },
+        { "type": "text", "delta": " instrument" },
+        { "type": "text", "delta": "." },
+        {
+          "type": "usage",
+          "inputTokens": 21091,
+          "outputTokens": 10,
+          "cachedInputTokens": 20517,
+          "costUsd": 0.00114565
+        },
+        { "type": "finish", "reason": "stop" }
+      ],
+      "firstTokenMs": 631.7572079999954,
+      "totalMs": 763.8644169999752
+    }
+  ]
+}

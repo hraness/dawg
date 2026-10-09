@@ -1,0 +1,108 @@
+{
+  "model": "google/gemini-3.1-flash-lite",
+  "task": "ii-v-i-bb-walking",
+  "pass": false,
+  "requests": [
+    {
+      "events": [
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "id": "call_772814",
+          "name": "write_chords",
+          "arguments": ""
+        },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "arguments": "{\"trackId\":\"keys\",\"chords\":[\"Cm7\",\"F7\",\"Bbmaj7\",\"Bbmaj7\"],\"key\":\"Bb major\",\"bass\":true,\"bassMode\":\"single\",\"bassTrackId\":\"bass\",\"beatsPerChord\":4,\"perform\":\"block\"}"
+        },
+        {
+          "type": "usage",
+          "inputTokens": 15373,
+          "outputTokens": 81,
+          "cachedInputTokens": 0,
+          "costUsd": 0.00396475
+        },
+        { "type": "finish", "reason": "tool_calls" }
+      ],
+      "firstTokenMs": 1214.3329589999921,
+      "totalMs": 1270.0106249999953
+    },
+    {
+      "events": [
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "id": "call_410018",
+          "name": "add_notes",
+          "arguments": ""
+        },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "arguments": "{\"notes\":[{\"velocity\":0.7,\"pitch\":\"Bb1\",\"start\":0,\"duration\":1},{\"duration\":1,\"start\":1,\"pitch\":\"D2\",\"velocity\":0.7},{\"velocity\":0.7,\"pitch\":\"F2\",\"start\":2,\"duration\":1},{\"pitch\":\"G2\",\"velocity\":0.7,\"duration\":1,\"start\":3},{\"duration\":1,\"pitch\":\"C2\",\"start\":4,\"velocity\":0.7},{\"velocity\":0.7,\"start\":5,\"pitch\":\"Eb2\",\"duration\":1},{\"duration\":1,\"pitch\":\"G2\",\"start\":6,\"velocity\":0.7},{\"start\":7,\"duration\":1,\"velocity\":0.7,\"pitch\":\"A2\"},{\"pitch\":\"F2\",\"duration\":1,\"velocity\":0.7,\"start\":8},{\"pitch\":\"A2\",\"duration\":1,\"velocity\":0.7,\"start\":9},{\"start\":10,\"velocity\":0.7,\"duration\":1,\"pitch\":\"C3\"},{\"velocity\":0.7,\"pitch\":\"D3\",\"start\":11,\"duration\":1},{\"duration\":1,\"pitch\":\"Bb1\",\"start\":12,\"velocity\":0.7},{\"velocity\":0.7,\"pitch\":\"D2\",\"start\":13,\"duration\":1},{\"velocity\":0.7,\"start\":14,\"pitch\":\"F2\",\"duration\":1},{\"pitch\":\"Bb2\",\"velocity\":0.7,\"duration\":1,\"start\":15}],\"trackId\":\"bass\"}"
+        },
+        {
+          "type": "usage",
+          "inputTokens": 15833,
+          "outputTokens": 362,
+          "cachedInputTokens": 0,
+          "costUsd": 0.00450125
+        },
+        { "type": "finish", "reason": "tool_calls" }
+      ],
+      "firstTokenMs": 1887.4627079999918,
+      "totalMs": 1911.426707999999
+    },
+    {
+      "events": [
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "id": "call_833468",
+          "name": "explain",
+          "arguments": ""
+        },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "arguments": "{\"text\":\"I've updated the chord progression to ii-V-I on the piano and added a walking bassline in quarter notes to the bass track.\"}"
+        },
+        {
+          "type": "usage",
+          "inputTokens": 16062,
+          "outputTokens": 43,
+          "cachedInputTokens": 0,
+          "costUsd": 0.00408
+        },
+        { "type": "finish", "reason": "tool_calls" }
+      ],
+      "firstTokenMs": 1315.7672500000044,
+      "totalMs": 1456.9891249999928
+    },
+    {
+      "events": [
+        { "type": "text", "delta": "I" },
+        {
+          "type": "text",
+          "delta": "'ve updated the chord progression to ii-V-I on the piano and added a walking"
+        },
+        {
+          "type": "text",
+          "delta": " bassline in quarter notes to the bass track."
+        },
+        {
+          "type": "usage",
+          "inputTokens": 16116,
+          "outputTokens": 30,
+          "cachedInputTokens": 14344,
+          "costUsd": 0.00091832
+        },
+        { "type": "finish", "reason": "stop" }
+      ],
+      "firstTokenMs": 1020.3661670000001,
+      "totalMs": 1182.6104999999952
+    }
+  ]
+}

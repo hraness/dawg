@@ -1,0 +1,82 @@
+{
+  "model": "anthropic/claude-haiku-4.5",
+  "task": "pop-i-v-vi-iv-g",
+  "pass": true,
+  "requests": [
+    {
+      "events": [
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "id": "toolu_01Auxms6MuT6QauFMxt7n3Gd",
+          "name": "write_chords",
+          "arguments": ""
+        },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "arguments": "{\"trackId\": \"keys"
+        },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "arguments": "\", \"chords\": [\"G\","
+        },
+        { "type": "tool-delta", "index": 0, "arguments": " \"D" },
+        { "type": "tool-delta", "index": 0, "arguments": "\", \"Em" },
+        { "type": "tool-delta", "index": 0, "arguments": "\", \"C" },
+        { "type": "tool-delta", "index": 0, "arguments": "\"]" },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "arguments": ", \"key\": \"G major"
+        },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "arguments": "\", \"beatsPerChord\": 4"
+        },
+        { "type": "tool-delta", "index": 0, "arguments": "}" },
+        {
+          "type": "usage",
+          "inputTokens": 27082,
+          "outputTokens": 124,
+          "cachedInputTokens": 0,
+          "costUsd": 0.027702
+        },
+        { "type": "finish", "reason": "tool_calls" }
+      ],
+      "firstTokenMs": 899.3377920000057,
+      "totalMs": 1449.3395000000019
+    },
+    {
+      "events": [
+        { "type": "text", "delta": "I've written" },
+        { "type": "text", "delta": " a" },
+        { "type": "text", "delta": " I" },
+        { "type": "text", "delta": "-V-vi-IV" },
+        { "type": "text", "delta": " chord" },
+        { "type": "text", "delta": " progression in G major on" },
+        { "type": "text", "delta": " the keys track" },
+        { "type": "text", "delta": "," },
+        { "type": "text", "delta": " one" },
+        { "type": "text", "delta": " chord per bar:" },
+        { "type": "text", "delta": " G, D, Em," },
+        { "type": "text", "delta": " and C," },
+        { "type": "text", "delta": " each" },
+        { "type": "text", "delta": " spanning" },
+        { "type": "text", "delta": " 4 beats." },
+        {
+          "type": "usage",
+          "inputTokens": 27521,
+          "outputTokens": 45,
+          "cachedInputTokens": 0,
+          "costUsd": 0.027746
+        },
+        { "type": "finish", "reason": "stop" }
+      ],
+      "firstTokenMs": 557.512625000003,
+      "totalMs": 933.6064159999951
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "model": "spacexai/grok-4.1-fast-non-reasoning",
+  "task": "files-meter",
+  "pass": false,
+  "requests": [
+    {
+      "events": [
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "id": "call_06419784",
+          "name": "set_time",
+          "arguments": ""
+        },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "arguments": "{\"action\":\"meter\",\"meter\":\"6/8\"}"
+        },
+        {
+          "type": "usage",
+          "inputTokens": 20788,
+          "outputTokens": 37,
+          "cachedInputTokens": 20764,
+          "costUsd": 0.0010615
+        },
+        { "type": "finish", "reason": "tool_calls" }
+      ],
+      "firstTokenMs": 712.9495000000461,
+      "totalMs": 733.7474999999977
+    },
+    {
+      "events": [
+        { "type": "text", "delta": "Set" },
+        { "type": "text", "delta": " the" },
+        { "type": "text", "delta": " song" },
+        { "type": "text", "delta": " meter" },
+        { "type": "text", "delta": " to" },
+        { "type": "text", "delta": " " },
+        { "type": "text", "delta": "6" },
+        { "type": "text", "delta": "/" },
+        { "type": "text", "delta": "8" },
+        { "type": "text", "delta": "." },
+        {
+          "type": "usage",
+          "inputTokens": 20906,
+          "outputTokens": 10,
+          "cachedInputTokens": 20447,
+          "costUsd": 0.00111915
+        },
+        { "type": "finish", "reason": "stop" }
+      ],
+      "firstTokenMs": 582.0103329999838,
+      "totalMs": 759.5988749999669
+    }
+  ]
+}

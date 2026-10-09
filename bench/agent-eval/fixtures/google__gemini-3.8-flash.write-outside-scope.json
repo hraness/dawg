@@ -1,0 +1,52 @@
+{
+  "model": "google/gemini-3.8-flash",
+  "task": "write-outside-scope",
+  "pass": true,
+  "requests": [
+    {
+      "events": [
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "id": "call_415183",
+          "name": "add_notes",
+          "arguments": ""
+        },
+        {
+          "type": "tool-delta",
+          "index": 0,
+          "arguments": "{\"trackId\":\"bass\",\"notes\":[{\"pitch\":\"G2\",\"duration\":2,\"velocity\":0.8,\"start\":2}]}"
+        },
+        {
+          "type": "usage",
+          "inputTokens": 15553,
+          "outputTokens": 216,
+          "cachedInputTokens": 0,
+          "costUsd": 0.01247475
+        },
+        { "type": "finish", "reason": "tool_calls" }
+      ],
+      "firstTokenMs": 3191.015333999996,
+      "totalMs": 3443.2075000000186
+    },
+    {
+      "events": [
+        { "type": "text", "delta": "Added a" },
+        {
+          "type": "text",
+          "delta": " G2 half note at beat 2 on the bass track."
+        },
+        {
+          "type": "usage",
+          "inputTokens": 15638,
+          "outputTokens": 15,
+          "cachedInputTokens": 0,
+          "costUsd": 0.01178475
+        },
+        { "type": "finish", "reason": "stop" }
+      ],
+      "firstTokenMs": 3500.5347499999916,
+      "totalMs": 3616.378250000009
+    }
+  ]
+}
