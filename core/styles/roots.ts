@@ -76,6 +76,10 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
           ["bII7", 0.6],
         ],
         bII7: [["Imaj7", 3]],
+        iv: [
+          ["I", 2],
+          ["V7", 1],
+        ],
         IV: [
           ["iv", 1],
           ["V7", 1],

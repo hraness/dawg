@@ -67,7 +67,7 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
     texture: {
       roles: {
         bass: role("ebass"),
-        chords: role("crunch", "electric:0.5"),
+        chords: role("electric@crunch", "electric:0.5"),
         lead: role("gtr-lead", "sing:0.6"),
         counter: maybe("electric"),
       },

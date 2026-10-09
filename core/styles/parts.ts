@@ -21,14 +21,22 @@ export function grid(pattern: string): readonly number[] {
   return Object.freeze(out);
 }
 
-/** A role's voices: `voices("piano", "keys:0.5")` (word:weight). */
+/**
+ * A role's voices: `voices("piano", "keys:0.5", "electric@crunch:0.5")`
+ * (word, optional `@rig` amp preset, optional `:weight`).
+ */
 export function voices(...words: string[]): readonly RoleVoice[] {
   return Object.freeze(
     words.map((text) => {
-      const [instrument, weight] = text.split(":");
+      const [head, weight] = text.split(":");
+      const [instrument, rig] = head!.split("@");
+      const value = weight === undefined ? 1 : Number(weight);
+      if (!instrument || !(value >= 0))
+        throw new Error(`voices: bad voice "${text}"`);
       return Object.freeze({
-        instrument: instrument!,
-        weight: weight === undefined ? 1 : Number(weight),
+        instrument,
+        ...(rig ? { rig } : {}),
+        weight: value,
       });
     }),
   );

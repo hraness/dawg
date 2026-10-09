@@ -334,7 +334,7 @@ export function stepsOfScale(name: string): readonly number[] | undefined {
 }
 
 /** The seven-note mode the chord engine harmonises a scale with. */
-function modeOfScale(name: string): ModeName {
+export function modeOfScale(name: string): ModeName {
   if (Object.prototype.hasOwnProperty.call(MODES, name))
     return name as ModeName;
   if (Object.prototype.hasOwnProperty.call(SCALES, name))
@@ -367,7 +367,8 @@ export type HarmonyGrammar = Readonly<{
   numerals: ReadonlySet<string>;
 }>;
 
-const stripSeventh = (numeral: string) => numeral.replace(/(maj7|7)$/, "");
+export const stripSeventh = (numeral: string) =>
+  numeral.replace(/(maj7|7)$/, "");
 
 export function harmonyGrammar(
   style: ResolvedStyle,
@@ -389,12 +390,19 @@ export function harmonyGrammar(
     if (preset) cycle(preset.numerals);
   }
   for (const [form] of harmony.forms ?? []) cycle(form);
-  for (const [from, nexts] of Object.entries(harmony.chain ?? {})) {
+  const chain = harmony.chain ?? {};
+  const chainTonic = isMinorMode(mode) ? "i" : "I";
+  const chainStart = chain[chainTonic] ? chainTonic : Object.keys(chain)[0];
+  for (const [from, nexts] of Object.entries(chain)) {
     numerals.add(stripSeventh(from));
     edges.add(`${stripSeventh(from)}>${stripSeventh(from)}`);
+    if (nexts.length === 0 && chainStart)
+      edges.add(`${stripSeventh(from)}>${stripSeventh(chainStart)}`);
     for (const [to] of nexts) {
       numerals.add(stripSeventh(to));
       edges.add(`${stripSeventh(from)}>${stripSeventh(to)}`);
+      if (!chain[to]?.length && !chain[stripSeventh(to)]?.length && chainStart)
+        edges.add(`${stripSeventh(to)}>${stripSeventh(chainStart)}`);
     }
   }
   const cadences = harmony.cadences.map(([cadence]) =>
@@ -451,13 +459,13 @@ function functionalNumerals(
   if (source === "chain") {
     const chain = harmony.chain!;
     const tonic = isMinorMode(mode) ? "i" : "I";
-    let current = chain[tonic] ? tonic : Object.keys(chain)[0]!;
+    const start = chain[tonic] ? tonic : Object.keys(chain)[0]!;
+    let current = start;
     for (let i = 0; i < slots; i += 1) {
       out.push(current);
       const nexts = chain[current] ?? chain[stripSeventh(current)];
-      current = nexts?.length
-        ? pickWeighted(nexts, random)
-        : Object.keys(chain)[0]!;
+      // A numeral with no successors returns to the chain's start.
+      current = nexts?.length ? pickWeighted(nexts, random) : start;
     }
   } else for (let i = 0; i < slots; i += 1) out.push(base[i % base.length]!);
   // Fixed forms keep their changes; presets and chains cadence at each
@@ -1869,6 +1877,16 @@ function playMelody(
         }
       }
       if (!inRange(next)) next = current;
+      // No leap past an octave inside a phrase (finals, snaps and pakad
+      // entries fold back toward the line).
+      if (n > 0) {
+        const from = toneAt(plan, current).semis;
+        while (toneAt(plan, next).semis - from > 12 && inRange(next - size))
+          next -= size;
+        while (from - toneAt(plan, next).semis > 12 && inRange(next + size))
+          next += size;
+        if (Math.abs(toneAt(plan, next).semis - from) > 12) next = current;
+      }
       current = next;
       const pitch = toneAt(plan, current);
       const end = rhythm[n + 1] ?? totalSteps;
