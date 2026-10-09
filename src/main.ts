@@ -1660,6 +1660,16 @@ async function submit(prompt: string): Promise<string | Receipt> {
     /^\/?(?:add\s+)?track\s+([a-z0-9._-]{1,64})$/i,
   );
   if (trackCommand) return focusTrack(trackCommand[1]!.toLowerCase());
+  // `/track piano b`: a name with spaces focuses the track of that name, or
+  // creates `piano-b` named "piano b".
+  const namedTrack = command.match(/^\/track\s+([a-z0-9._ -]{1,64})$/i);
+  if (namedTrack) {
+    const name = namedTrack[1]!.trim().replace(/\s+/g, " ");
+    const found = score.tracks.find(
+      (track) => (track.name ?? track.id).toLowerCase() === name.toLowerCase(),
+    );
+    return focusTrack(found?.id ?? name.toLowerCase().replace(/ /g, "-"));
+  }
   const sample = parseSampleCommand(command);
   if (sample) return sampleCommand(sample);
   const pack = parsePackCommand(command);
