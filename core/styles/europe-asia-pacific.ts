@@ -4,6 +4,15 @@
  */
 
 import { grid, intervals, kitRoles, maybe, role } from "./parts.ts";
+import {
+  AGUNG,
+  CHING,
+  DEGUNG,
+  GILAK,
+  LADRANG,
+  pathetFinals,
+  pathetPitch,
+} from "./gamelan.ts";
 import { card, type CycleSpec, type StyleCard } from "./schema.ts";
 
 const NO_KIT = Object.freeze({ kick: null, snare: null, hat: null });
@@ -1367,6 +1376,1019 @@ const EUROPE_LEAVES: readonly StyleCard[] = [
   }),
 ];
 
+// ---------------------------------------------------------------------------
+// East Asia
+//
+// References: Alan R. Thrasher, "Chinese Musical Instruments" (2000) and
+// "Sizhu Instrumental Music of South China" (2008); William P. Malm,
+// "Traditional Japanese Music and Musical Instruments" (1959/2000);
+// Keith Howard, "Perspectives on Korean Music" (2006); Theodore Levin,
+// "Where Rivers and Mountains Sing" (2006) on Tuvan overtone song.
+
+/**
+ * Korean jangdan: janggu strokes, `deong` (both heads, low), `kung`
+ * (left, low), `deok` (right stick), `giduk` (stick roll).
+ */
+export const JUNGMORI: CycleSpec = Object.freeze({
+  kind: "timeline",
+  name: "jungmori",
+  beats: 12,
+  divisions: [3, 3, 3, 3],
+  strokes: Object.freeze([
+    "deong",
+    ".",
+    "kung",
+    "deok",
+    ".",
+    "kung",
+    "kung",
+    ".",
+    "deong",
+    "deok",
+    ".",
+    ".",
+  ]),
+  low: Object.freeze(["deong", "kung"]),
+  stress: Object.freeze([1, 9]),
+});
+
+/** Gutgeori: four dotted beats, the third answered by a left-hand kung. */
+export const GUTGEORI: CycleSpec = Object.freeze({
+  kind: "timeline",
+  name: "gutgeori",
+  beats: 12,
+  divisions: [3, 3, 3, 3],
+  strokes: Object.freeze([
+    "deong",
+    ".",
+    "deok",
+    "kung",
+    "deok",
+    ".",
+    "kung",
+    ".",
+    "deok",
+    "kung",
+    "deok",
+    "deok",
+  ]),
+  low: Object.freeze(["deong", "kung"]),
+  stress: Object.freeze([1, 7]),
+});
+
+/** Noh yatsu-byōshi: the 8-beat frame the hayashi drums articulate. */
+export const YATSU_BYOSHI: CycleSpec = Object.freeze({
+  kind: "timeline",
+  name: "yatsu-byoshi",
+  beats: 8,
+  divisions: [4, 4],
+  strokes: Object.freeze(["pon", ".", "ta", "pon", ".", "ta", "pon", "ta"]),
+  low: Object.freeze(["pon"]),
+  stress: Object.freeze([1, 8]),
+});
+
+/** The Japanese in scale (miyako-bushi): semitone above tonic and fifth. */
+const IN_SCALE = Object.freeze({
+  scales: [["phrygian", 1]] as const,
+  raga: {
+    aroha: [0, 1, 5, 7, 10],
+    avaroha: [0, 1, 5, 7, 8],
+    vadi: 7,
+    samvadi: 0,
+  },
+});
+
+/** Ryūkyū scale: major with no 2nd or 6th (do mi fa so ti). */
+const RYUKYU = Object.freeze({
+  scales: [["major", 1]] as const,
+  raga: {
+    aroha: [0, 4, 5, 7, 11],
+    avaroha: [0, 4, 5, 7, 11],
+    vadi: 0,
+    samvadi: 7,
+  },
+});
+
+/** Shang mode of the Chinese pentatonic: re mi so la do on re. */
+const SHANG_MODE = Object.freeze({
+  scales: [["dorian", 1]] as const,
+  raga: {
+    aroha: [0, 2, 5, 7, 10],
+    avaroha: [0, 2, 5, 7, 10],
+    vadi: 0,
+    samvadi: 7,
+  },
+});
+
+/** 12-TET for leaves under the slendro-tuned southeast-asia branch. */
+const TWELVE = Object.freeze({ tuning: null, degrees: null });
+
+const ASIA_PACIFIC_LEAVES: readonly StyleCard[] = [
+  card({
+    id: "guqin",
+    summary:
+      "guqin: slow solo zither, harmonics (fanyin) and sliding stopped tones, gong-mode pentatonic, sparse sound and silence",
+    tempo: { bpm: [40, 66], typical: 50 },
+    meter: { signatures: [["4/4", 1]] },
+    melody: {
+      density: [0, 1],
+      range: [48, 79],
+      intervals: intervals(4, 4, 1, 0.6),
+      contour: [["wave", 1]],
+    },
+    texture: {
+      kind: "monophonic",
+      roles: { drone: null, lead: role("koto"), counter: null },
+    },
+    mix: { space: 0.55 },
+  }),
+  card({
+    id: "chinese-classical",
+    summary:
+      "sizhu chamber pieces: silk and bamboo heterophony, each player ornamenting one skeletal pentatonic line, jiahua elaboration",
+    tempo: { bpm: [60, 96], typical: 76 },
+    meter: {
+      signatures: [
+        ["4/4", 0.6],
+        ["2/4", 0.4],
+      ],
+    },
+    melody: { density: [2, 3] },
+    texture: {
+      kind: "heterophonic",
+      roles: {
+        lead: role("lute", "erhu:0.6"),
+        counter: role("flute", "hammered:0.5"),
+        drone: null,
+      },
+    },
+  }),
+  card({
+    id: "chinese-opera",
+    summary:
+      "jingju: xipi and erhuang modes, banshi metres led by the clapper, jinghu fiddle doubling the voice, gong-and-cymbal luogu",
+    tempo: { bpm: [70, 140], typical: 100 },
+    meter: {
+      signatures: [
+        ["2/4", 0.6],
+        ["4/4", 0.4],
+      ],
+    },
+    pitch: {
+      scales: [
+        ["major-pentatonic", 0.6],
+        ["durga", 0.4],
+      ],
+    },
+    melody: { range: [64, 88], density: [1, 3] },
+    texture: {
+      kind: "heterophonic",
+      roles: {
+        lead: role("sing"),
+        counter: role("erhu"),
+        drone: null,
+        bass: maybe("gong"),
+        perc: role("framedrum"),
+      },
+    },
+    rhythm: { onsets: { perc: grid("x.x.xxx.") } },
+  }),
+  card({
+    id: "chinese-folk",
+    summary:
+      "xiaodiao and shan'ge: strophic folk song in the zhi mode (sol la do re mi), suona and dizi, four-phrase qi-cheng-zhuan-he",
+    tempo: { bpm: [72, 120], typical: 92 },
+    meter: {
+      signatures: [
+        ["2/4", 0.6],
+        ["4/4", 0.4],
+      ],
+    },
+    pitch: {
+      scales: [
+        ["durga", 0.6],
+        ["major-pentatonic", 0.4],
+      ],
+    },
+    melody: { phraseBars: [[2, 1]], repetition: 0.6 },
+    texture: {
+      roles: {
+        lead: role("sing", "oboe:0.5", "flute:0.5"),
+        counter: maybe("flute"),
+        drone: null,
+        perc: maybe("framedrum"),
+      },
+    },
+  }),
+  card({
+    id: "cantonese-music",
+    summary:
+      "guangdong yinyue: gaohu and yangqin, lively 2/4 with the yi and fan pien tones colouring the shang mode",
+    tempo: { bpm: [96, 140], typical: 116 },
+    meter: { signatures: [["2/4", 1]] },
+    pitch: SHANG_MODE,
+    melody: { density: [2, 4] },
+    texture: {
+      kind: "heterophonic",
+      roles: {
+        lead: role("erhu"),
+        counter: role("hammered", "lute:0.5"),
+        drone: null,
+      },
+    },
+  }),
+  card({
+    id: "nanguan",
+    summary:
+      "nanguan: very slow Hokkien art song, pipa held horizontally, dongxiao flute, clapper on the strong beat, long melismas",
+    tempo: { bpm: [36, 56], typical: 44 },
+    meter: { signatures: [["4/4", 1]] },
+    melody: { density: [0, 1], intervals: intervals(6, 3, 0.4, 0.6) },
+    texture: {
+      kind: "heterophonic",
+      roles: {
+        lead: role("sing"),
+        counter: role("lute", "shakuhachi:0.6"),
+        drone: null,
+        perc: role("framedrum"),
+      },
+    },
+    rhythm: { onsets: { perc: grid("x.......") } },
+  }),
+  card({
+    id: "chinese-orchestra",
+    summary:
+      "guoyue orchestra: Western-style sections of erhu, yangqin, pipa and dizi, pentatonic melody harmonised in functional triads",
+    tempo: { bpm: [66, 120], typical: 88 },
+    meter: { signatures: [["4/4", 1]] },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["fifties", 0.5],
+        ["canon", 0.5],
+      ],
+      rhythm: [[1, 1]],
+    },
+    bass: { behaviour: [["root", 1]] },
+    texture: {
+      kind: "homophonic",
+      roles: {
+        bass: role("cellos", "contrabasses:0.5"),
+        chords: role("hammered", "strings:0.6"),
+        lead: role("erhu", "flute:0.5"),
+        counter: maybe("lute"),
+        drone: null,
+      },
+    },
+  }),
+  card({
+    id: "gagaku",
+    summary:
+      "gagaku tōgaku: shō cluster chords held over a slow jo-ha-kyū unfolding, hichiriki and ryūteki in heterophony, ritsu mode",
+    tempo: { bpm: [30, 50], typical: 40 },
+    meter: { signatures: [["4/4", 1]] },
+    pitch: {
+      scales: [
+        ["durga", 0.6],
+        ["mixolydian", 0.4],
+      ],
+    },
+    melody: { density: [0, 1], range: [62, 84] },
+    texture: {
+      kind: "heterophonic",
+      roles: {
+        drone: role("reeds"),
+        lead: role("oboe"),
+        counter: role("flute"),
+        bass: maybe("koto"),
+        perc: role("kettledrum"),
+      },
+    },
+    rhythm: { onsets: { perc: grid("x.......") } },
+    mix: { space: 0.55 },
+  }),
+  card({
+    id: "shomyo",
+    summary:
+      "shōmyō: Buddhist chant in unison, narrow range, long melismas on held syllables, ryo and ritsu modes, free pulse",
+    tempo: { bpm: [36, 56], typical: 44 },
+    meter: { signatures: [["4/4", 1]] },
+    pitch: { scales: [["durga", 1]] },
+    melody: {
+      density: [0, 1],
+      ambitus: [4, 7],
+      range: [48, 67],
+      intervals: intervals(9, 1, 0.05, 1),
+    },
+    texture: {
+      kind: "monophonic",
+      roles: { lead: role("choir"), drone: null, perc: maybe("bowl") },
+    },
+    rhythm: { onsets: { perc: grid("x...............") } },
+    mix: { space: 0.7 },
+  }),
+  card({
+    id: "sankyoku",
+    summary:
+      "sankyoku: koto, shamisen and shakuhachi trio in heterophony, in scale (semitone above tonic and fifth), dan sections that accelerate",
+    tempo: { bpm: [60, 110], typical: 80 },
+    meter: { signatures: [["4/4", 1]] },
+    pitch: IN_SCALE,
+    texture: {
+      kind: "heterophonic",
+      roles: {
+        lead: role("koto"),
+        counter: role("shakuhachi"),
+        drone: maybe("lute"),
+      },
+    },
+  }),
+  card({
+    id: "honkyoku",
+    summary:
+      "honkyoku: solo shakuhachi, one breath per phrase (ma between), meri pitch bends in the in scale, no metre",
+    tempo: { bpm: [36, 56], typical: 44 },
+    meter: { signatures: [["4/4", 1]] },
+    pitch: IN_SCALE,
+    melody: { density: [0, 1], phraseBars: [[1, 1]], contour: [["arch", 1]] },
+    texture: {
+      kind: "monophonic",
+      roles: { lead: role("shakuhachi"), drone: null },
+    },
+    mix: { space: 0.65 },
+  }),
+  card({
+    id: "noh",
+    summary:
+      "noh: utai chant over the hayashi (nōkan flute, kotsuzumi, ōtsuzumi) in the 8-beat yatsu-byōshi, in scale",
+    tempo: { bpm: [50, 80], typical: 62 },
+    meter: { signatures: [["4/4", 1]], cycle: YATSU_BYOSHI },
+    pitch: IN_SCALE,
+    texture: {
+      kind: "heterophonic",
+      roles: {
+        lead: role("sing"),
+        counter: role("flute"),
+        drone: null,
+        perc: role("framedrum"),
+      },
+    },
+  }),
+  card({
+    id: "minyo",
+    summary:
+      "min'yō: work and festival song in the yo scale (no semitones), shamisen and taiko on a 2/4 pulse, kakegoe calls",
+    tempo: { bpm: [90, 130], typical: 108 },
+    meter: { signatures: [["2/4", 1]] },
+    pitch: { scales: [["durga", 1]] },
+    texture: {
+      kind: "heterophonic",
+      roles: {
+        lead: role("sing"),
+        counter: role("lute", "flute:0.5"),
+        drone: null,
+        perc: role("kettledrum"),
+      },
+    },
+    rhythm: { onsets: { perc: grid("x.x.x.xx") } },
+  }),
+  card({
+    id: "taiko",
+    summary:
+      "kumi-daiko: ensemble drums over a ji-uchi base pattern (don doko), shinobue flute above, yo scale, accelerating sections",
+    tempo: { bpm: [100, 160], typical: 128 },
+    meter: { signatures: [["4/4", 1]] },
+    pitch: { scales: [["durga", 1]] },
+    texture: {
+      roles: {
+        kick: role("kettledrum"),
+        perc: role("kettledrum", "framedrum:0.5"),
+        lead: role("flute"),
+        drone: null,
+      },
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x...x...x...x..."),
+        perc: grid("x.xxx.xxx.xxx.xx"),
+      },
+    },
+  }),
+  card({
+    id: "okinawan",
+    summary:
+      "Ryūkyū song: sanshin lute in the ryūkyū scale (do mi fa so ti), kachāshī 2/4 dance lilt, hayashi handclaps",
+    tempo: { bpm: [100, 140], typical: 120 },
+    meter: { signatures: [["2/4", 1]] },
+    groove: { subdivision: 2, swingRatio: [1.4, 1.8] },
+    pitch: RYUKYU,
+    texture: {
+      roles: {
+        lead: role("sing"),
+        counter: role("lute"),
+        drone: null,
+        perc: maybe("framedrum"),
+      },
+    },
+  }),
+  card({
+    id: "korean-court",
+    summary:
+      "jeongak: very slow court music, pyeongjo mode, piri and daegeum heterophony with wide vibrato and swelling held tones",
+    tempo: { bpm: [24, 44], typical: 32 },
+    meter: { signatures: [["12/8", 1]] },
+    pitch: { scales: [["durga", 1]] },
+    melody: { density: [0, 1] },
+    texture: {
+      kind: "heterophonic",
+      roles: {
+        lead: role("oboe"),
+        counter: role("flute", "erhu:0.5"),
+        drone: maybe("koto"),
+        perc: role("framedrum"),
+      },
+    },
+    rhythm: { onsets: { perc: grid("x...........") } },
+  }),
+  card({
+    id: "pansori",
+    summary:
+      "pansori: one singer and a buk drummer, jungmori 12-beat jangdan, gyemyeonjo mode (trembling fifth, falling fourth), chuimsae calls",
+    tempo: { bpm: [60, 110], typical: 84 },
+    meter: { signatures: [["12/8", 1]], cycle: JUNGMORI },
+    pitch: { scales: [["minor-pentatonic", 1]] },
+    melody: { intervals: intervals(6, 3, 0.4, 0.8) },
+    texture: {
+      kind: "monophonic",
+      roles: { lead: role("sing"), drone: null, perc: role("framedrum") },
+    },
+  }),
+  card({
+    id: "pungmul",
+    summary:
+      "pungmul: farmers' band of kkwaenggwari gong, jing, janggu and buk in gutgeori 12/8, taepyeongso shawm, accelerating",
+    tempo: { bpm: [90, 150], typical: 120 },
+    meter: { signatures: [["12/8", 1]], cycle: GUTGEORI },
+    pitch: { scales: [["durga", 1]] },
+    texture: {
+      roles: {
+        lead: role("oboe"),
+        bass: role("gong"),
+        drone: null,
+        perc: role("framedrum"),
+      },
+    },
+  }),
+  card({
+    id: "mongolian",
+    summary:
+      "urtyn duu long song: unmetred, wide-ranging pentatonic phrases with falsetto turns over the morin khuur's drone",
+    tempo: { bpm: [44, 70], typical: 54 },
+    meter: { signatures: [["4/4", 1]] },
+    melody: {
+      density: [0, 1],
+      ambitus: [10, 17],
+      intervals: intervals(3, 4, 2, 0.6),
+    },
+    texture: {
+      kind: "heterophonic",
+      roles: {
+        lead: role("sing"),
+        counter: role("fiddle", "cello:0.5"),
+        drone: maybe("khoomei"),
+      },
+    },
+    mix: { space: 0.5 },
+  }),
+  card({
+    id: "tuvan",
+    summary:
+      "khöömei: a sung fundamental drone (kargyraa) with a whistled overtone melody (sygyt) on the harmonic series, galloping igil",
+    tempo: { bpm: [90, 130], typical: 108 },
+    meter: { signatures: [["6/8", 1]] },
+    groove: { subdivision: 3, velocity: [1, 0.5, 0.8] },
+    harmony: { model: "drone" },
+    texture: {
+      roles: {
+        drone: role("kargyraa", "khoomei:0.6"),
+        lead: role("sygyt"),
+        counter: maybe("fiddle"),
+        perc: maybe("framedrum"),
+      },
+    },
+    rhythm: { onsets: { perc: grid("x.xx.x") } },
+  }),
+  card({
+    id: "kazakh-kyrgyz",
+    summary:
+      "dombra and komuz küy: two-string lute in parallel fourths and fifths, galloping strum, programmatic tune episodes",
+    tempo: { bpm: [110, 160], typical: 132 },
+    meter: {
+      signatures: [
+        ["6/8", 0.6],
+        ["2/4", 0.4],
+      ],
+    },
+    groove: { subdivision: 3, velocity: [1, 0.6, 0.8] },
+    pitch: {
+      scales: [
+        ["dorian", 0.5],
+        ["mixolydian", 0.5],
+      ],
+    },
+    harmony: { model: "drone" },
+    texture: {
+      roles: {
+        lead: role("lute"),
+        drone: role("lute"),
+        counter: maybe("fiddle"),
+      },
+    },
+  }),
+
+  // -------------------------------------------------------------------------
+  // Southeast Asia
+  //
+  // References: Judith Becker and Sumarsam (see gamelan.ts); Michael
+  // Tenzer, "Gamelan Gong Kebyar" (2000); Pamela Myers-Moro, "Thai Music
+  // and Musicians in Contemporary Bangkok" (1993); Andrew Weintraub,
+  // "Dangdut Stories" (2010).
+  card({
+    id: "javanese-gamelan",
+    summary:
+      "Javanese gamelan: ladrang colotomy (gong closes the 32-beat gongan), balungan with bonang elaboration, pathet nem",
+    meter: { signatures: [["4/4", 1]], cycle: LADRANG },
+    pitch: pathetPitch("pelog-nem"),
+    melody: { finals: pathetFinals("pelog-nem") },
+    texture: {
+      roles: {
+        perc: role("kenong", "kethuk:0.5"),
+        lead: role("saron", "demung:0.5"),
+        counter: role("bonang", "gender:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "balinese-gamelan",
+    summary:
+      "gong kebyar: fast gilak cycle, kotekan (two gangsa parts interlocking polos and sangsih), pelog selisir, sudden dynamic shifts",
+    tempo: { bpm: [110, 160], typical: 132 },
+    meter: { signatures: [["4/4", 1]], cycle: GILAK },
+    pitch: pathetPitch("pelog-lima"),
+    melody: { density: [3, 4], finals: pathetFinals("pelog-lima") },
+    texture: {
+      roles: {
+        perc: role("gongageng", "kempul:0.5"),
+        lead: role("gangsa"),
+        counter: role("gangsa"),
+      },
+    },
+  }),
+  card({
+    id: "sundanese",
+    summary:
+      "degung: Sundanese gong-chime ensemble, the goong closing a 16-beat cycle, suling flute above, pelog-derived degung scale",
+    tempo: { bpm: [60, 96], typical: 76 },
+    meter: { signatures: [["4/4", 1]], cycle: DEGUNG },
+    pitch: pathetPitch("pelog-nem"),
+    melody: { finals: pathetFinals("pelog-nem") },
+    texture: {
+      roles: {
+        perc: role("bonang", "kenong:0.5"),
+        lead: role("suling"),
+        counter: role("bonang", "saron:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "dangdut",
+    summary:
+      "dangdut: the kendang 'dang-dut' (open low stroke on 4, high on 1), harmonic minor melisma, suling and mandolin-like tremolo",
+    tempo: { bpm: [70, 110], typical: 88 },
+    meter: { signatures: [["4/4", 1]] },
+    pitch: {
+      ...TWELVE,
+      scales: [
+        ["harmonic-minor", 0.6],
+        ["minor", 0.4],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["aeolian", 0.5],
+        ["andalusian", 0.5],
+      ],
+      rhythm: [[1, 1]],
+    },
+    melody: { density: [2, 3], finals: [[0, 1]] },
+    bass: { behaviour: [["root-fifth", 1]] },
+    texture: {
+      kind: "homophonic",
+      roles: {
+        bass: role("bassguitar"),
+        chords: role("keys", "nylon:0.5"),
+        lead: role("sing", "suling:0.4"),
+        counter: maybe("tremolo"),
+        perc: role("tabla"),
+      },
+    },
+    rhythm: { onsets: { perc: grid("x..x....x..x..x.") } },
+  }),
+  card({
+    id: "keroncong",
+    summary:
+      "keroncong: cak and cuk ukuleles interlocking off-beats, pizzicato cello in a running kendang role, I-IV-V7 in major",
+    tempo: { bpm: [80, 110], typical: 92 },
+    meter: { signatures: [["4/4", 1]] },
+    pitch: { ...TWELVE, scales: [["major", 1]] },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["fifties", 0.5],
+        ["turnaround", 0.5],
+      ],
+      rhythm: [[1, 1]],
+      sevenths: 0.3,
+    },
+    melody: { finals: [[0, 1]] },
+    bass: { behaviour: [["root-fifth", 1]] },
+    texture: {
+      kind: "interlocking",
+      roles: {
+        bass: role("pizzicato", "doublebass:0.5"),
+        chords: role("requinto", "nylon:0.5"),
+        lead: role("sing", "violin:0.5", "flute:0.4"),
+        counter: role("tres"),
+      },
+    },
+    rhythm: { onsets: { chords: grid(".x.x.x.x"), counter: grid("x.x.x.x.") } },
+  }),
+  card({
+    id: "thai-classical",
+    summary:
+      "piphat: ranat xylophone and khong wong gong circle elaborate a core melody, ching cymbal alternating open ching and damped chap",
+    tempo: { bpm: [70, 130], typical: 96 },
+    meter: { signatures: [["4/4", 1]], cycle: CHING },
+    pitch: { ...TWELVE, scales: [["major-pentatonic", 1]] },
+    texture: {
+      roles: {
+        perc: role("crotales", "glock:0.5"),
+        lead: role("xylophone"),
+        counter: role("bonang", "oboe:0.4"),
+        bass: maybe("gong"),
+      },
+    },
+  }),
+  card({
+    id: "luk-thung",
+    summary:
+      "luk thung: Thai country song, pentatonic melody with vocal ornaments (luk khor), brass and a cha-cha-tinged kit",
+    tempo: { bpm: [90, 130], typical: 110 },
+    meter: { signatures: [["4/4", 1]] },
+    pitch: {
+      ...TWELVE,
+      scales: [
+        ["major-pentatonic", 0.6],
+        ["minor-pentatonic", 0.4],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["fifties", 0.5],
+        ["sad-pop", 0.5],
+      ],
+      rhythm: [[1, 1]],
+    },
+    melody: { finals: [[0, 1]] },
+    bass: { behaviour: [["root-fifth", 1]] },
+    texture: {
+      kind: "homophonic",
+      roles: {
+        ...KIT_LIGHT,
+        bass: role("bassguitar"),
+        chords: role("keys", "electric:0.5"),
+        lead: role("sing"),
+        counter: maybe("trumpet", "sax:0.5"),
+        perc: null,
+      },
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x...x..."),
+        snare: grid("..x...xx"),
+        hat: grid("x.x.x.x."),
+      },
+    },
+  }),
+  card({
+    id: "mor-lam",
+    summary:
+      "mor lam: the khaen free-reed mouth organ's drone and pulsing chords, rapid patter singing in lai pentatonic modes",
+    tempo: { bpm: [110, 150], typical: 128 },
+    meter: { signatures: [["4/4", 1]] },
+    pitch: {
+      ...TWELVE,
+      scales: [
+        ["minor-pentatonic", 0.6],
+        ["major-pentatonic", 0.4],
+      ],
+    },
+    melody: { density: [3, 4], ambitus: [5, 9], finals: [[0, 1]] },
+    texture: {
+      kind: "heterophonic",
+      roles: {
+        bass: null,
+        drone: role("reeds"),
+        lead: role("sing"),
+        counter: role("reeds", "lute:0.5"),
+        perc: maybe("framedrum"),
+      },
+    },
+    rhythm: { onsets: { perc: grid("x.xxx.xx") } },
+  }),
+  card({
+    id: "khmer",
+    summary:
+      "pinpeat: roneat xylophone and kong vong gong circle over the ching-chap cycle, sralai oboe, heterophonic pentatonic core",
+    tempo: { bpm: [70, 120], typical: 92 },
+    meter: { signatures: [["4/4", 1]], cycle: CHING },
+    pitch: {
+      ...TWELVE,
+      scales: [
+        ["major-pentatonic", 0.6],
+        ["minor-pentatonic", 0.4],
+      ],
+    },
+    texture: {
+      kind: "heterophonic",
+      roles: {
+        perc: role("crotales"),
+        lead: role("oboe"),
+        counter: role("xylophone", "bonang:0.5"),
+        bass: maybe("gong"),
+      },
+    },
+  }),
+  card({
+    id: "vietnamese",
+    summary:
+      "Vietnamese điệu: bắc mode (bright pentatonic) and nam mode (sad, with vibrated and bent degrees), đàn bầu and đàn tranh",
+    tempo: { bpm: [56, 96], typical: 72 },
+    meter: { signatures: [["4/4", 1]] },
+    pitch: {
+      ...TWELVE,
+      scales: [
+        ["major-pentatonic", 0.5],
+        ["minor-pentatonic", 0.5],
+      ],
+    },
+    melody: { density: [1, 2], intervals: intervals(5, 3, 0.6, 0.6) },
+    bass: { behaviour: [["none", 1]] },
+    texture: {
+      kind: "heterophonic",
+      roles: {
+        bass: null,
+        lead: role("erhu", "sing:0.6"),
+        counter: role("koto"),
+        perc: maybe("framedrum"),
+      },
+    },
+    rhythm: { onsets: { perc: grid("x.......x.x.....") } },
+  }),
+  card({
+    id: "philippine",
+    summary:
+      "kulintang: a row of eight gong-chimes plays the melody over agung pair off-beats and the dabakan drum, binalig rhythmic mode",
+    tempo: { bpm: [100, 140], typical: 120 },
+    meter: { signatures: [["4/4", 1]], cycle: AGUNG },
+    pitch: { ...TWELVE, scales: [["major-pentatonic", 1]] },
+    texture: {
+      roles: {
+        perc: role("gong", "gongageng:0.5"),
+        lead: role("bonang"),
+        counter: maybe("kenong"),
+        bass: null,
+      },
+    },
+  }),
+  card({
+    id: "burmese",
+    summary:
+      "hsaing waing: pat waing tuned-drum circle and kyi waing gongs over the si-wa (bell and clapper) cycle, hne oboe, sudden tempo shifts",
+    tempo: { bpm: [90, 150], typical: 116 },
+    meter: { signatures: [["4/4", 1]], cycle: CHING },
+    pitch: {
+      ...TWELVE,
+      scales: [
+        ["major-pentatonic", 0.6],
+        ["mixolydian", 0.4],
+      ],
+    },
+    texture: {
+      roles: {
+        perc: role("crotales", "chimes:0.4"),
+        lead: role("oboe"),
+        counter: role("timpani", "bonang:0.5"),
+        bass: maybe("gong"),
+      },
+    },
+  }),
+  card({
+    id: "malay",
+    summary:
+      "zapin and joget: gambus lute and marwas drums in 4/4 zapin (accent on the last beat), violin in harmonic minor, ronggeng lilt",
+    tempo: { bpm: [90, 130], typical: 108 },
+    meter: { signatures: [["4/4", 1]] },
+    pitch: {
+      ...TWELVE,
+      scales: [
+        ["harmonic-minor", 0.6],
+        ["hijaz", 0.4],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["andalusian", 0.5],
+        ["aeolian", 0.5],
+      ],
+      rhythm: [[1, 1]],
+    },
+    melody: { finals: [[0, 1]] },
+    bass: { behaviour: [["root", 1]] },
+    texture: {
+      kind: "heterophonic",
+      roles: {
+        bass: role("doublebass"),
+        chords: role("oud"),
+        lead: role("violin", "sing:0.6"),
+        counter: null,
+        perc: role("daf", "framedrum:0.5"),
+      },
+    },
+    rhythm: { onsets: { perc: grid("x.....x.x.x.x.xx") } },
+  }),
+
+  // -------------------------------------------------------------------------
+  // Oceania
+  //
+  // References: Mervyn McLean, "Weavers of Song: Polynesian Music and
+  // Dance" (1999); Catherine Ellis, "Aboriginal Music: Education for
+  // Living" (1985); George Kanahele (ed.), "Hawaiian Music and Musicians"
+  // (1979).
+  card({
+    id: "aboriginal",
+    summary:
+      "song series: descending terraced melodic contour over a continuous low drone (didjeridu, voiced here by kargyraa) and clapstick pulse",
+    tempo: { bpm: [100, 140], typical: 120 },
+    meter: { signatures: [["4/4", 1]] },
+    pitch: { scales: [["minor-pentatonic", 1]] },
+    harmony: { model: "drone", presets: null },
+    melody: {
+      contour: [
+        ["terraced", 0.6],
+        ["descending", 0.4],
+      ],
+    },
+    texture: {
+      kind: "heterophonic",
+      roles: {
+        chords: null,
+        drone: role("kargyraa"),
+        lead: role("sing"),
+        perc: role("framedrum"),
+      },
+    },
+    rhythm: { onsets: { perc: grid("x.x.x.x.") } },
+  }),
+  card({
+    id: "maori",
+    summary:
+      "waiata and haka: narrow-range unison chant on a recitation tone, waiata-ā-ringa action songs with strummed I-IV-V",
+    tempo: { bpm: [80, 120], typical: 96 },
+    meter: { signatures: [["4/4", 1]] },
+    melody: { ambitus: [4, 7], intervals: intervals(8, 1.5, 0.2, 1) },
+    texture: {
+      kind: "homophonic",
+      roles: {
+        chords: role("acoustic"),
+        lead: role("choir", "sing:0.6"),
+        bass: null,
+      },
+    },
+    rhythm: { onsets: { chords: grid("x.xx.xx.") } },
+  }),
+  card({
+    id: "hawaiian",
+    summary:
+      "kī hō'alu slack key and steel guitar: open-tuned I-IV-V7 with the II7-V7-I vamp, falsetto ha'i breaks, 2/4 hula",
+    tempo: { bpm: [70, 110], typical: 88 },
+    meter: {
+      signatures: [
+        ["2/4", 0.5],
+        ["4/4", 0.5],
+      ],
+    },
+    harmony: {
+      presets: null,
+      forms: [[["I", "I", "IV", "I", "II", "V", "I", "I"], 1]],
+      cadences: [["V-I", 1]],
+      sevenths: 0.4,
+    },
+    melody: { intervals: intervals(4, 3, 1.5, 0.6) },
+    bass: { behaviour: [["root-fifth", 1]] },
+    texture: {
+      kind: "homophonic",
+      roles: {
+        bass: maybe("bassguitar"),
+        chords: role("steel", "nylon:0.5"),
+        lead: role("sing"),
+        counter: maybe("steel"),
+      },
+    },
+  }),
+  card({
+    id: "polynesian",
+    summary:
+      "Tahitian and Cook Islands drum dance: fast to'ere log-drum 16th patterns with pahu bass drum, himene choral harmony",
+    tempo: { bpm: [120, 170], typical: 144 },
+    meter: { signatures: [["4/4", 1]] },
+    texture: {
+      kind: "homophonic",
+      roles: {
+        kick: role("kettledrum"),
+        perc: role("xylophone", "framedrum:0.5"),
+        chords: role("choir"),
+        lead: role("sing"),
+      },
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.......x......."),
+        perc: grid("x.xxx.xxx.xxx.xx"),
+      },
+    },
+  }),
+  card({
+    id: "melanesian",
+    summary:
+      "string band and bamboo band: fast-strummed guitars and ukulele on I-IV-V, panpipe ensembles in parallel voices",
+    tempo: { bpm: [100, 140], typical: 120 },
+    meter: { signatures: [["4/4", 1]] },
+    harmony: {
+      presets: [
+        ["fifties", 0.5],
+        ["axis", 0.5],
+      ],
+      voicing: { strokes: [["island", 1]] },
+    },
+    bass: { behaviour: [["root-fifth", 1]] },
+    texture: {
+      kind: "homophonic",
+      roles: {
+        bass: role("bassguitar", "doublebass:0.5"),
+        chords: role("steel", "nylon:0.5"),
+        lead: role("sing", "panpipes:0.5"),
+        counter: maybe("panpipes"),
+      },
+    },
+  }),
+  card({
+    id: "island-reggae",
+    summary:
+      "island reggae: off-beat guitar skank, one-drop kick and snare on beat 3, ukulele strum, I-IV-V love-song changes",
+    tempo: { bpm: [70, 100], typical: 84 },
+    meter: { signatures: [["4/4", 1]] },
+    harmony: {
+      presets: [
+        ["axis", 0.5],
+        ["fifties", 0.5],
+      ],
+      voicing: { strokes: [["reggae", 1]] },
+    },
+    bass: { behaviour: [["root-fifth", 1]] },
+    texture: {
+      kind: "homophonic",
+      roles: {
+        ...KIT_LIGHT,
+        bass: role("bassguitar"),
+        chords: role("steel", "keys:0.4"),
+        lead: role("sing"),
+      },
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("........x......."),
+        snare: grid("........x......."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+        chords: grid("..x...x...x...x."),
+      },
+    },
+  }),
+];
+
 export const EUROPE_ASIA_PACIFIC_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "europe-folk",
@@ -1677,4 +2699,5 @@ export const EUROPE_ASIA_PACIFIC_CARDS: readonly StyleCard[] = Object.freeze([
     },
   }),
   ...EUROPE_LEAVES,
+  ...ASIA_PACIFIC_LEAVES,
 ]);
