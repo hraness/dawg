@@ -472,7 +472,7 @@ describe("Ctrl-K paths in the docs resolve", () => {
     for (const command of commands) {
       const pointer = menuPathFor(command);
       expect(pointer, command).toBeDefined();
-      const [segments] = menuPathsIn(pointer);
+      const [segments] = menuPathsIn(pointer ?? "");
       expect(segments, command).toBeDefined();
       expect(resolveMenuPath(segments!), pointer).toBeDefined();
     }
