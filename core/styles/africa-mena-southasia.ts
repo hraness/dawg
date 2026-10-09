@@ -646,4 +646,546 @@ const NODES: readonly StyleCard[] = [
   }),
 ];
 
-export const AFRICA_MENA_SOUTHASIA_CARDS: readonly StyleCard[] = [...NODES];
+// ---------------------------------------------------------------------------
+// Shared leaf parts.
+
+/** A required kit role on a named synth kit (the drum-set traditions). */
+const kitRole = (name: string, weight = 1) =>
+  Object.freeze({ required: true, voices: Object.freeze([kit(name, weight)]) });
+/** An optional kit role on a named synth kit. */
+const kitMaybe = (name: string) =>
+  Object.freeze({ required: false, voices: Object.freeze([kit(name)]) });
+/** The full kit (kick, snare, hat) on one synth kit. */
+const fullKit = (name: string) =>
+  Object.freeze({
+    kick: kitRole(name),
+    snare: kitRole(name),
+    hat: kitRole(name),
+  });
+/** No kit at all (hand drums, bells and voices only). */
+const NO_KIT = Object.freeze({
+  kick: null,
+  snare: null,
+  hat: null,
+  clap: null,
+  rim: null,
+  openhat: null,
+  tom: null,
+});
+
+/** Sung lines: mostly steps, few leaps. */
+const CONJUNCT = intervals(5, 2, 0.6, 0.6);
+/** Chant: repeated notes and steps (recitation, call and response). */
+const CHANT = intervals(4, 1.5, 0.3, 2);
+/** Instrumental lines with arpeggiated leaps (guitar sebene, kora runs). */
+const LEAPY = intervals(3, 2.5, 1.2, 0.4);
+/** Ornamented steps (gamaka, tahrir, meend): seconds dominate. */
+const ORNATE = intervals(8, 1.5, 0.3, 0.5);
+
+const LEAVES: readonly StyleCard[] = [
+  // West Africa. References: J. H. Kwabena Nketia, The Music of Africa
+  // (1974); Eric Charry, Mande Music (2000).
+  card({
+    id: "highlife",
+    summary:
+      "highlife: 4/4 with the 12/8 bell felt underneath, palm-wine guitar arpeggios, I-IV-V cycles, horn riffs answering the voice",
+    tempo: { bpm: [100, 132], typical: 116 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
+    rhythm: {
+      onsets: {
+        kick: grid("x.......x......."),
+        snare: BACKBEAT,
+        hat: EIGHTHS,
+        bell: grid("x.x.x..x.x.x.x.."),
+        chords: OFFBEATS,
+      },
+    },
+    harmony: {
+      forms: [[["I", "IV", "I", "V"], 1]],
+      sources: { forms: 2, presets: 1 },
+      presets: [["fifties", 1]],
+    },
+    texture: {
+      roles: {
+        ...fullKit("acoustic"),
+        chords: role("electric", "nylon:0.5"),
+        lead: role("sing", "trumpet:0.4", "sax:0.4"),
+        counter: maybe("trumpet", "sax:0.6"),
+      },
+    },
+  }),
+  card({
+    id: "hiplife",
+    summary:
+      "hiplife and azonto: highlife chord loops under rapped and sung Twi, programmed kit with a syncopated kick, bell on top",
+    tempo: { bpm: [96, 124], typical: 108 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
+    rhythm: {
+      onsets: {
+        kick: grid("x..x..x...x....."),
+        snare: BACKBEAT,
+        hat: SIXTEENTHS,
+        bell: grid("x.x..x.x..x.x..."),
+      },
+    },
+    harmony: {
+      presets: [
+        ["axis", 0.6],
+        ["sad-pop", 0.4],
+      ],
+    },
+    melody: { intervals: CHANT, density: [2, 3] },
+    texture: {
+      roles: {
+        ...fullKit("syn808"),
+        chords: role("keys", "electric:0.5"),
+        lead: role("sing"),
+      },
+    },
+  }),
+  card({
+    id: "afrobeat",
+    summary:
+      "afrobeat: one-chord modal vamp (dorian) for minutes, interlocking tenor and rhythm guitar, open-hat sixteenths, horn-section riffs, long build",
+    tempo: { bpm: [100, 128], typical: 112 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
+    pitch: {
+      scales: [
+        ["dorian", 0.7],
+        ["minor-pentatonic", 0.3],
+      ],
+    },
+    harmony: {
+      model: "modal",
+      rhythm: [[0.5, 1]],
+      presets: [["dorian-vamp", 1]],
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.....x...x....."),
+        snare: grid("....x..x....x..."),
+        hat: SIXTEENTHS,
+        bell: EIGHTHS,
+        chords: grid(".x.x.x.x.x.x.x.x"),
+      },
+    },
+    bass: { behaviour: [["ostinato", 1]], onsets: grid("x..x...x.x..x...") },
+    form: {
+      plans: [
+        [["intro", "verse", "verse", "chorus", "breakdown", "chorus"], 1],
+      ],
+      archetype: "vamp-build",
+    },
+    texture: {
+      roles: {
+        ...fullKit("acoustic"),
+        bass: role("ebass"),
+        chords: role("electric"),
+        lead: role("sax", "sing:0.6", "trumpet:0.4"),
+        counter: role("trumpet", "trombone:0.6"),
+        pad: maybe("organ"),
+      },
+    },
+  }),
+  card({
+    id: "afrobeats",
+    summary:
+      "afrobeats: the 3+3+2 tresillo kick under a log-drum and shaker groove, sparse minor-pop loops, sung hooks, half-step syncopation",
+    tempo: { bpm: [96, 116], typical: 104 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
+    rhythm: {
+      onsets: {
+        kick: TRESILLO,
+        snare: grid("...x...x...x..x."),
+        hat: SIXTEENTHS,
+        shaker: SIXTEENTHS,
+        bell: grid("..x..x....x..x.."),
+      },
+    },
+    harmony: {
+      presets: [
+        ["sad-pop", 0.5],
+        ["aeolian", 0.5],
+      ],
+      sevenths: 0.3,
+    },
+    melody: { intervals: CONJUNCT, repetition: 0.8 },
+    texture: {
+      roles: {
+        ...fullKit("trap"),
+        bass: role("bass", "saw:0.3"),
+        chords: role("keys", "epiano:0.6", "pluck:0.4"),
+        lead: role("sing"),
+      },
+    },
+    mix: { loudness: "streaming" },
+  }),
+  card({
+    id: "juju",
+    summary:
+      "juju: talking-drum call and response over steel-guitar lines, I-IV-V hymn harmony, layered hand drums in a medium 4/4 lilt",
+    tempo: { bpm: [92, 120], typical: 104 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
+    rhythm: {
+      onsets: {
+        kick: grid("x.......x......."),
+        perc: grid("x..x..x.x.x..x.."),
+        bell: grid("x.x.x.x.x.x.x.x."),
+        chords: OFFBEATS,
+      },
+    },
+    harmony: { forms: [[["I", "IV", "V", "I"], 1]], sources: { forms: 3 } },
+    texture: {
+      roles: {
+        chords: role("electric", "steel:0.6"),
+        lead: role("sing", "steel:0.4"),
+        counter: maybe("steel"),
+      },
+    },
+  }),
+  card({
+    id: "fuji",
+    summary:
+      "fuji and apala: drums and voice only, no chords, pentatonic call and response over a dense dundun and sakara cross-rhythm",
+    tempo: { bpm: [110, 140], typical: 124 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
+    pitch: { scales: [["major-pentatonic", 1]] },
+    harmony: { model: "drone" },
+    rhythm: {
+      onsets: {
+        kick: grid("x..x...x..x....."),
+        perc: grid("x.xx.x.xx.x.x.xx"),
+        bell: grid("x.x.x.x.x.x.x.x."),
+      },
+    },
+    melody: { intervals: CHANT, density: [2, 3] },
+    bass: { behaviour: [["none", 1]] },
+    texture: {
+      kind: "call-response",
+      roles: {
+        chords: null,
+        bass: null,
+        lead: role("sing"),
+        counter: role("choir"),
+      },
+    },
+  }),
+  card({
+    id: "griot",
+    summary:
+      "griot and kora: a kumbengo ostinato under birimintingo runs, heptatonic Mande scale, sung praise in long arching phrases, 12/8 felt in fours",
+    tempo: { bpm: [96, 132], typical: 112 },
+    meter: { signatures: [["12/8", 1]], hypermeter: [[2, 1]] },
+    pitch: {
+      scales: [
+        ["major", 0.5],
+        ["lydian", 0.3],
+        ["mixolydian", 0.2],
+      ],
+    },
+    harmony: { model: "modal", rhythm: [[0.5, 1]] },
+    bass: { behaviour: [["ostinato", 1]], onsets: grid("x..x..x..x..") },
+    melody: {
+      intervals: LEAPY,
+      contour: [
+        ["arch", 0.6],
+        ["descending", 0.4],
+      ],
+    },
+    texture: {
+      roles: {
+        ...NO_KIT,
+        bass: role("harp"),
+        chords: role("harp"),
+        lead: role("sing", "harp:0.6"),
+        counter: maybe("harp", "xylophone:0.5"),
+        perc: maybe("framedrum"),
+      },
+    },
+  }),
+  card({
+    id: "mande-pop",
+    summary:
+      "Mande and wassoulou pop: pentatonic kamalengoni ostinato, shekere sixteenths, a 12/8 lope with a swung 4/4 kit, women's call and response",
+    tempo: { bpm: [100, 136], typical: 118 },
+    pitch: {
+      scales: [
+        ["minor-pentatonic", 0.6],
+        ["major-pentatonic", 0.4],
+      ],
+    },
+    harmony: { model: "modal", rhythm: [[0.5, 1]] },
+    bass: { behaviour: [["ostinato", 1]] },
+    texture: {
+      roles: {
+        snare: maybe("drums"),
+        chords: role("harp", "electric:0.6"),
+        lead: role("sing"),
+        counter: maybe("harp", "flute:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "desert-blues",
+    summary:
+      "desert blues: minor-pentatonic guitar hypnosis on a single tonic drone, 6/8 camel-gait lope, handclaps and calabash, no chord changes",
+    tempo: { bpm: [84, 120], typical: 100 },
+    meter: { signatures: [["6/8", 1]], hypermeter: [[4, 1]] },
+    pitch: {
+      scales: [
+        ["minor-pentatonic", 0.6],
+        ["blues", 0.4],
+      ],
+    },
+    harmony: { model: "drone", rhythm: [[0.25, 1]] },
+    rhythm: {
+      onsets: {
+        kick: grid("x.....x....."),
+        clap: grid("...x.....x.."),
+        perc: grid("x..x.xx..x.x"),
+      },
+    },
+    bass: { behaviour: [["pedal", 1]] },
+    melody: { intervals: CONJUNCT, ambitus: [5, 12] },
+    texture: {
+      roles: {
+        bell: null,
+        clap: kitRole("acoustic"),
+        drone: role("electric"),
+        lead: role("electric", "sing:0.6"),
+        counter: maybe("electric"),
+      },
+    },
+  }),
+  card({
+    id: "mbalax",
+    summary:
+      "mbalax: sabar drum rolls in fast cross-rhythm, tama talking drum fills, bright major-key keys and guitar, melismatic Wolof lead",
+    tempo: { bpm: [120, 150], typical: 132 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
+    rhythm: {
+      onsets: {
+        kick: grid("x..x..x.x......."),
+        snare: grid("....x..x....x.x."),
+        hat: SIXTEENTHS,
+        perc: grid("xx.x.xx.x.xx.x.x"),
+      },
+    },
+    melody: { intervals: ORNATE, density: [2, 4] },
+    texture: {
+      roles: {
+        ...fullKit("acoustic"),
+        chords: role("keys", "electric:0.6"),
+        lead: role("sing", "sax:0.3"),
+      },
+    },
+  }),
+  card({
+    id: "morna",
+    summary:
+      "morna and coladeira: slow 4/4 lament (sodade), minor key with V7-i and iv cadences, cavaquinho off-beat chops over nylon guitar",
+    tempo: { bpm: [60, 96], typical: 76 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
+    pitch: {
+      scales: [
+        ["harmonic-minor", 0.6],
+        ["minor", 0.4],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["minor-ii-v", 0.6],
+        ["andalusian", 0.4],
+      ],
+      cadences: [
+        ["V-I", 0.7],
+        ["iv-I", 0.3],
+      ],
+      sevenths: 0.5,
+    },
+    rhythm: {
+      onsets: {
+        chords: grid("x..x..x.x..x..x."),
+        perc: grid("..x...x...x...x."),
+      },
+    },
+    melody: {
+      intervals: CONJUNCT,
+      contour: [
+        ["arch", 0.7],
+        ["descending", 0.3],
+      ],
+    },
+    texture: {
+      roles: {
+        ...NO_KIT,
+        bell: null,
+        chords: role("nylon"),
+        bass: role("upright", "nylon:0.4"),
+        lead: role("sing", "violin:0.3", "clarinet:0.3"),
+        counter: maybe("violin", "piano:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "funana",
+    summary:
+      "funana: fast duple accordion two-chord pendulum (I-V or i-bVII), ferrinho scraper on every sixteenth, bass on every beat",
+    tempo: { bpm: [128, 160], typical: 140 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
+    harmony: {
+      forms: [
+        [["I", "V"], 0.6],
+        [["i", "bVII"], 0.4],
+      ],
+      sources: { forms: 3 },
+      rhythm: [[1, 1]],
+    },
+    rhythm: {
+      onsets: {
+        kick: FOUR_FLOOR,
+        shaker: SIXTEENTHS,
+        chords: EIGHTHS,
+      },
+    },
+    bass: { behaviour: [["root-fifth", 1]], onsets: FOUR_FLOOR },
+    texture: {
+      roles: {
+        bell: null,
+        perc: null,
+        shaker: role("drums"),
+        chords: role("organ", "keys:0.5"),
+        lead: role("sing", "organ:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "west-african-drum",
+    summary:
+      "djembe ensemble: the 12/8 bell and three dundun ostinati interlock, the lead djembe solos against the timeline, no harmony",
+    tempo: { bpm: [110, 150], typical: 128 },
+    meter: { signatures: [["12/8", 1]], hypermeter: [[2, 1]] },
+    pitch: { scales: [["major-pentatonic", 1]] },
+    harmony: { model: "none" },
+    rhythm: {
+      onsets: {
+        bell: STANDARD_BELL,
+        kick: grid("x.....x..x.."),
+        perc: grid("x.xx.xx.xx.x"),
+        shaker: grid("xxxxxxxxxxxx"),
+      },
+    },
+    bass: { behaviour: [["none", 1]] },
+    melody: { intervals: CHANT, density: [1, 2] },
+    texture: {
+      kind: "interlocking",
+      roles: {
+        chords: null,
+        bass: null,
+        lead: role("sing", "flute:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "ewe-drumming",
+    summary:
+      "Ewe dance drumming (agbadza): the gankogui bell 2-2-1-2-2-2-1 is the timeline, support drums answer on off-pulses, atsimevu leads",
+    tempo: { bpm: [100, 140], typical: 120 },
+    meter: { signatures: [["12/8", 1]], hypermeter: [[2, 1]] },
+    pitch: { scales: [["major-pentatonic", 1]] },
+    harmony: { model: "none" },
+    rhythm: {
+      onsets: {
+        bell: STANDARD_BELL,
+        kick: grid("x.....x....."),
+        perc: grid("..x..x..x..x"),
+        shaker: grid("x..x..x..x.."),
+      },
+    },
+    bass: { behaviour: [["none", 1]] },
+    melody: { intervals: CHANT },
+    texture: {
+      kind: "interlocking",
+      roles: {
+        chords: null,
+        bass: null,
+        lead: role("sing"),
+        counter: role("choir"),
+      },
+    },
+  }),
+
+  // Central Africa. References: Gary Stewart, Rumba on the River (2000);
+  // Simha Arom, African Polyphony and Polyrhythm (1991).
+  card({
+    id: "soukous",
+    summary:
+      "soukous and Congolese rumba: a sung rumba half, then the sebene: interlocking lead, mi-solo and rhythm guitars over a I-IV-V-IV cycle",
+    tempo: { bpm: [116, 150], typical: 132 },
+    harmony: { forms: [[["I", "IV", "V", "IV"], 1]], sources: { forms: 3 } },
+    rhythm: { onsets: { hat: SIXTEENTHS } },
+    melody: { intervals: LEAPY, density: [2, 4] },
+    texture: {
+      roles: {
+        ...fullKit("acoustic"),
+        bass: role("ebass"),
+        counter: role("electric"),
+      },
+    },
+  }),
+  card({
+    id: "makossa",
+    summary:
+      "makossa and bikutsi: makossa's busy melodic bass on a four-on-the-floor; bikutsi's 6/8 hammered against 4/4, balafon-like guitar",
+    tempo: { bpm: [110, 140], typical: 124 },
+    rhythm: { onsets: { kick: FOUR_FLOOR, hat: OFFBEATS } },
+    bass: {
+      behaviour: [
+        ["arpeggio", 0.6],
+        ["walking", 0.4],
+      ],
+    },
+    texture: {
+      roles: {
+        ...fullKit("acoustic"),
+        bass: role("ebass"),
+        chords: role("electric", "marimba:0.4"),
+        counter: maybe("sax", "trumpet:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "aka-polyphony",
+    summary:
+      "forest polyphony: yodelled interlocking voices in a pentatonic cycle, each part a short ostinato, hand claps and a hemiola pulse",
+    tempo: { bpm: [100, 132], typical: 116 },
+    meter: { signatures: [["12/8", 1]], hypermeter: [[2, 1]] },
+    pitch: { scales: [["major-pentatonic", 1]] },
+    harmony: { model: "none" },
+    rhythm: {
+      onsets: {
+        clap: grid("x.x.xx.x.x.x"),
+        perc: grid("x..x..x..x.."),
+      },
+    },
+    bass: { behaviour: [["none", 1]] },
+    melody: { intervals: LEAPY, repetition: 0.85, ambitus: [7, 14] },
+    texture: {
+      kind: "interlocking",
+      roles: {
+        ...NO_KIT,
+        clap: kitRole("acoustic"),
+        bell: null,
+        chords: null,
+        bass: null,
+        lead: role("sing"),
+        counter: role("choir", "flute:0.4"),
+      },
+    },
+  }),
+];
+
+export const AFRICA_MENA_SOUTHASIA_CARDS: readonly StyleCard[] = [
+  ...NODES,
+  ...LEAVES,
+];
