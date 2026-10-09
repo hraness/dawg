@@ -456,7 +456,7 @@ export function applyKeysCommand(
   const elsewhere =
     track.instrument === "organ"
       ? `keys · ${trackId} is the legacy organ; type tonewheel (or combo, pipe) for drawbars and rotary, or piano for the modelled piano`
-      : `keys · ${trackId} is ${track.instrument}; type piano (${PIANO_FAMILIES.join(" ")}), ${ELECTRIC_FAMILIES.join(" ")} or ${ORGAN_FAMILIES.join(" ")} for modelled keys`;
+      : `keys · ${trackId} is ${track.instrument}; type piano first (${PIANO_FAMILIES.join(" ")}), ${ELECTRIC_FAMILIES.join(" ")} or ${ORGAN_FAMILIES.join(" ")} for modelled keys`;
   if (command.type === "keys-list")
     return {
       ok: true,
