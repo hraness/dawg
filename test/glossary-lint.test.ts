@@ -274,9 +274,9 @@ const SOURCES: Source[] = [
 
 /**
  * Exact counts of retired phrases per source (design §2, §8.2, E7). The
- * renames belong to other lanes: the menu lane (PR #139: instruments, kits,
+ * renames belong to other lanes: the menu lane (PR #142: instruments, kits,
  * grooves), the feel lane (PR #140: hints, now/next pills), the grammar lane
- * (PR #141: loop, `rig <preset>`, `model key`) and the language lane (PR #142:
+ * (PR #141: loop, `rig <preset>`, `model key`) and the language lane (PR #139:
  * docs, guides, help). Each count must equal its ceiling, so a rename that
  * lands forces the number down here and a regression cannot creep back up.
  * The target is an empty table.
