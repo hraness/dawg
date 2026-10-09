@@ -155,8 +155,19 @@ describe("streaming agent turn", () => {
       ok: true,
       revision: 5,
     });
-    // The refreshed brief reflects the applied changes.
+    // The refreshed brief reflects the applied changes, and says so: it
+    // precedes the request, so an unlabeled one reads as the starting score
+    // and small models re-apply the edit (a transpose repeated 8 times).
     expect(String(second.messages[1]!.content)).toContain('"tempoBpm":96');
+    expect(String(second.messages[1]!.content)).toStartWith(
+      "Composition brief (JSON, the current score at revision 6: it already includes every edit your tool calls made this turn, starting from revision 3; do not repeat them): ",
+    );
+    expect(
+      String(
+        (script.requests[0]!.body as { messages: Array<{ content: string }> })
+          .messages[1]!.content,
+      ),
+    ).toStartWith("Composition brief (JSON): ");
     expect(script.requests[0]!.body).toMatchObject({
       model: "anthropic/claude-opus-5.5",
       stream: true,

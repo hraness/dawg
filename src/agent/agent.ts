@@ -285,6 +285,7 @@ export async function runAgentTurn(
     return result;
   };
   const currentRevision = () => options.host.snapshot().revision;
+  const turnStartRevision = currentRevision();
 
   try {
     for (let step = 1; step <= limits.maxSteps; step += 1) {
@@ -302,9 +303,17 @@ export async function runAgentTurn(
       });
       // The brief already describes the current score, so tool results from
       // older steps only need to say what happened, not repeat it in full.
+      // It sits before the user request, so once this turn has edited the
+      // score it says so: otherwise a model reads the edited notes as the
+      // starting point and applies the same edit again (a transpose that
+      // repeats until the step limit).
+      const briefMessage = (json: string, revision: number) =>
+        revision === turnStartRevision
+          ? `Composition brief (JSON): ${json}`
+          : `Composition brief (JSON, the current score at revision ${revision}: it already includes every edit your tool calls made this turn, starting from revision ${turnStartRevision}; do not repeat them): ${json}`;
       const request: ChatMessage[] = [
         messages[0]!,
-        { role: "system", content: `Composition brief (JSON): ${brief}` },
+        { role: "system", content: briefMessage(brief, snapshot.revision) },
         ...messages.slice(1).map((message, offset) => {
           const producedAt = toolResultStep.get(offset + 1);
           return message.role === "tool" &&
