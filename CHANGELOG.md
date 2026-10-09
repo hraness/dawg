@@ -21,6 +21,10 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - **Style engine.** `/style <id> [bars] [seed]` writes a whole song in a style from a style card: theory patterns for meter and cycles, tempo, groove and swing, onset grids per role, scales and tunings, harmony grammar, melody statistics, texture and form, with inheritance from family to branch to leaf. The taxonomy covers about 850 styles in eight families; every leaf is present and generates from its nearest card. Every generated song passes numeric pattern checks (meter, tempo, onset grids, swing ratio, scale and tuning membership, progression grammar, melody range and intervals, instruments). `/style list|search|info`, `/style blend a b 0.3`, `/style again`, Arrange › style (`/menu style`), agent tools `list_styles`, `style_info` and `apply_style`, and `song({ style: style("deep-house", { seed: 3 }) })` provenance in the SDK (1.33.0). Projects without `style` render byte-identically.
 - **Faster agent turns and `/model fast`.** `/model fast` (`dawg model fast`, `DAWG_MODEL=fast`) picks Claude Haiku 5.5, the fastest model that passes the agent eval about as well as the default; Haiku 5.5 and GLM-5.3 Flash join the fast models. A parameter edit (tempo, mix, effects, sound) whose reply starts with `Done:` beside its tool calls ends the turn once they apply, saving a round trip; note, rhythm, chord and structure writes keep their review step. A provider that sends nothing for 20 s after its headers is retried, and Haiku 5.5 falls back once to GLM-5.3 Flash when every attempt failed before its first byte. Typed commands entered during an agent turn run at once instead of steering it. Before and after numbers are in `docs/model-eval.md`.
 
+### Changed
+
+- `fx formant` is no longer an alias of the vowel filter; `/fx formant o` and `set_fx {effect: "formant", vowel}` explain that the vowel filter is `vowel`.
+
 ### Fixed
 
 - **0.7 Voice integration.** Fixes from scenario runs on the merged voice lanes. Throat presets keep an audible drone under the whistle (overtone gain lowered), kargyraa's period-doubled sub is deeper, and a melody note a few cents outside the harmonic band no longer jumps an octave. A static vocoder `freeze` holds the last sung vowel instead of an empty envelope, and the gate no longer fades a frozen vowel when the singer stops (channel and talkbox). `sing voice: auto` picks one formant table per part from its median pitch instead of per note. `/vocal notes` splits repeated pitches at re-articulation dips, and `/vocal pitch` weighs a line's first and last notes when naming the key. Hard autotune corrects low-confidence onsets and glides. Reversed clips mirror exactly (they were one sample late).
@@ -41,18 +45,8 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - **Bowed tremolo stays in tune.** At each `tremhz` reversal the bow eases its force, and the pitch lock takes one step per stroke, so a tremolo cello reads within 8 cents from C2 to E5 instead of 10 to 37 cents off. Strings without tremolo are byte-identical.
 - **Non-finite samples are caught.** A NaN or infinite sample in any stem or bus is zeroed before it reaches the feedback stages or the 16-bit writer, and `dawg render` names the tracks it came from.
 - **`djf` at 1 stays audible.** The high-pass end of the DJ filter stops at 10 kHz instead of 20 kHz, which removed everything (values below about 0.95 are unchanged); the low-pass end is unchanged. The amp gate doc notes that 0 dB gates everything.
-
-### Fixed
-
 - Shortening a song (`/bars`, `setBars`) drops tempo marks, meter changes and fermatas past the new end; they were never heard, and the printed `song.ts` failed to load. Older projects that hold such marks print without them, and a tempo ramp ending exactly on the final barline prints at the last tick, as `ramp()` writes it.
 - A wavetable kept on a track after it switched to another instrument is printed as `wavetable: wavetable(...)` (SDK 1.32.0) instead of being lost on the next sync.
-
-### Changed
-
-- `fx formant` is no longer an alias of the vowel filter; `/fx formant o` and `set_fx {effect: "formant", vowel}` explain that the vowel filter is `vowel`.
-
-### Fixed
-
 - **Command-line argv.** `dawg <command> --help` prints usage, exits 0 and writes nothing for every subcommand (`dawg init --help` used to create a project, `dawg media --help` exited 2, `dawg check --help` ran the check); `init`, `check` and `sessions` reject unknown options and extra arguments with exit 2. Value flags with no value, an unknown `--theme`, and an invalid or over-long `--track` exit 2 with one line instead of attaching, defaulting or printing a stack trace. `--track` is normalized like `/track` and matches an existing track by id or name. `dawg --import a --export b` is now a pure conversion that leaves the session alone, and a demo frame in a fresh directory no longer creates `.dawg/`. `dawg --help` shows every render flag.
 - **Typo suggestions** count an adjacent swap as one edit, so `/hlep`, `/meun` and `/plya` suggest `/help`, `/menu` and `/play`; `/play in-key` is in help.
 - **Original lyric examples.** Help, menus, SDK docs and the `/lyrics` hints use original syllables; a test guards shipped text against known lyric phrases.
