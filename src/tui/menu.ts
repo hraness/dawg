@@ -185,6 +185,8 @@ export type MenuContext = Readonly<{
   grids: readonly string[];
   clickOn: boolean;
   countInBars: number;
+  /** How much agent turns show (`/showme`); absent hides the row. */
+  showMe?: string;
   /** Play mode's chord settings (defaults when absent). */
   chords?: ChordSettings;
   /** Project root, for the project's own wavetables (none when absent). */
@@ -2732,6 +2734,18 @@ function transportNodes(context: MenuContext): MenuNode[] {
       options: ["0", "1", "2"],
       command: (option) => `/count-in ${option}`,
     },
+    ...(context.showMe === undefined
+      ? []
+      : [
+          {
+            kind: "choice" as const,
+            label: "show me",
+            help: "agent turns: its commands as ghost text, faders, keys",
+            value: context.showMe,
+            options: ["on", "quiet", "off"],
+            command: (option: string) => `/showme ${option}`,
+          },
+        ]),
     {
       kind: "menu",
       id: "tuning",

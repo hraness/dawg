@@ -1,3 +1,4 @@
+import { runCommandAgentTurn } from "./command-agent.ts";
 import { statSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -349,6 +350,13 @@ export async function runProviderTurn(
     ...(options.signal ? { signal: options.signal } : {}),
     ...(options.budget ? { budget: options.budget } : {}),
   };
+  if (isApiSelection(selection) && options.host.commands && !options.model)
+    return runCommandAgentTurn({
+      ...common,
+      model: selection.modelId,
+      client: options.gatewayClient ?? apiClient(selection),
+      commands: options.host.commands,
+    });
   if (isApiSelection(selection))
     return runAgentTurn({
       ...common,

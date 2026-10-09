@@ -75,6 +75,12 @@ export interface AppView {
   spend?: string | undefined;
   /** No agent provider: the placeholder teaches commands, no STEER pill. */
   agentOffline?: boolean | undefined;
+  /**
+   * Show-me: the command the agent is writing, as it streams (ghost text in
+   * an empty prompt bar), and the caption naming the human gesture.
+   */
+  showMe?:
+    { ghost?: string | undefined; caption?: string | undefined } | undefined;
   /** Play mode: replaces the header and adds the keyboard strip row. */
   play?: PlayHeaderView | undefined;
   /** Song master meter: integrated LUFS and true peak of the playing loop. */
@@ -698,7 +704,14 @@ function paintPrompt(
     if (index === rows - 1 && layoutInfo.first + rows < layoutInfo.total)
       buffer.text(width - 3, y, capabilities.unicode ? "↓" : "v", faint);
   }
-  if (prompt.value.length === 0) {
+  const ghost = view.showMe?.ghost;
+  const caption = view.showMe?.caption;
+  if (prompt.value.length === 0 && (ghost || caption)) {
+    // The agent's command as it streams, then the gesture it stands for.
+    const typed = ghost ? `${ghost}${capabilities.unicode ? "▏" : "_"}` : "";
+    const line = typed && caption ? `${typed}  ${caption}` : typed || caption!;
+    buffer.text(5, top + 1, truncate(line, editorWidth - 1), faint);
+  } else if (prompt.value.length === 0) {
     const placeholder = view.agentOffline
       ? "try: tempo 96 · add C4 at 0 · /help  (dawg login enables the agent)"
       : mode === "queue"
