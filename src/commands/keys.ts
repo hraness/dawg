@@ -22,8 +22,10 @@
  */
 import { FxValidationError } from "../../core/params.ts";
 import {
+  ELECTRIC_FAMILIES,
   KEYS_PARAMS,
   KEYS_PRESETS,
+  PIANO_FAMILIES,
   isKeysPreset,
   isKeysFamily,
   keysParamName,
@@ -44,7 +46,8 @@ import { parseParamValue } from "./fx.ts";
 
 export type KeysCommand =
   | { type: "keys-list" }
-  | { type: "keys-presets" }
+  /** `family`: `epiano preset` lists only that family's presets. */
+  | { type: "keys-presets"; family?: string }
   | { type: "keys-reset" }
   | { type: "keys-preset"; preset: string }
   | {
@@ -106,6 +109,7 @@ export function parseKeysCommand(prompt: string): KeysCommand | undefined {
         ? parsed
         : undefined;
     if (parsed.type === "keys-set") return { ...parsed, family };
+    if (parsed.type === "keys-presets") return { ...parsed, family };
     return parsed;
   }
   if (head !== "keys") {
@@ -273,7 +277,15 @@ export function applyKeysCommand(
   if (command.type === "keys-presets")
     return {
       ok: true,
-      message: `keys presets · ${Object.keys(KEYS_PRESETS).join(" ")}`,
+      message: `${command.family ?? "keys"} presets · ${Object.keys(
+        KEYS_PRESETS,
+      )
+        .filter(
+          (name) =>
+            !command.family ||
+            KEYS_PRESETS[name]!.instrument === command.family,
+        )
+        .join(" ")}`,
     };
   const piano = isKeysFamily(track.instrument);
   if (command.type === "keys-list")
@@ -281,7 +293,7 @@ export function applyKeysCommand(
       ok: true,
       message: piano
         ? `keys · ${track.instrument} · ${describeKeys(track.keys)} · basics ${keysSimpleFor(track.instrument).join(" ")}`
-        : `keys · ${trackId} is ${track.instrument}; type piano (or grand upright felt honkytonk prepared) for the modelled piano`,
+        : `keys · ${trackId} is ${track.instrument}; type piano (${PIANO_FAMILIES.join(" ")}) or ${ELECTRIC_FAMILIES.join(" ")} for modelled keys`,
     };
   if (
     command.type === "keys-set" &&

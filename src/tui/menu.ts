@@ -542,7 +542,9 @@ function soundSectionNodes(context: MenuContext): MenuNode[] {
             id: "keys",
             label: "keys",
             detail: `${track.instrument}${track.keys.preset ? ` · ${track.keys.preset}` : ""}`,
-            help: "the modelled piano: preset, touch, hammers, dampers, stretch",
+            help: isElectricFamily(track.instrument)
+              ? "electric keys: preset, bark, bell, tone, vibe/trem, pickup and mute"
+              : "the modelled piano: preset, touch, hammers, dampers, stretch",
             build: (inner) => {
               const current = focused(inner);
               return current

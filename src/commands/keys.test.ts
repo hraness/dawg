@@ -119,7 +119,9 @@ describe("keys command", () => {
     const result = run(legacy, "keys hardness 0.4");
     expect(result.ok).toBe(false);
     expect(result.message).toContain("type piano first");
-    expect(run(legacy, "keys").message).toContain("for the modelled piano");
+    expect(run(legacy, "keys").message).toContain(
+      "epiano wurli clav for modelled keys",
+    );
   });
 
   test("out-of-range values do not parse", () => {
@@ -195,6 +197,16 @@ describe("electric keys commands", () => {
     const clav = run(song(), "clav").next!;
     expect(run(clav, "keys felt 0.5").ok).toBe(false);
     expect(parseKeysCommand("epiano preset funkclav")).toBeUndefined();
+  });
+
+  test("a family's preset list names only its presets", () => {
+    expect(run(song(), "epiano preset").message).toBe(
+      "epiano presets · epiano suitcase dyno",
+    );
+    expect(run(song(), "clav preset").message).toBe(
+      "clav presets · clav funkclav",
+    );
+    expect(run(song(), "keys preset").message).toContain("grand ballad");
   });
 
   test("electric words are registered for typo suggestions", () => {
