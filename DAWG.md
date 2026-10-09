@@ -865,7 +865,7 @@ Recording keeps each note's velocity from `C`/`V`. Sustain is recorded the way L
 
 ### Chord mode
 
-Play mode has a chord sub-mode modelled on the Orchid's Key mode. It is `auto` by default when the focused track can play chords (pitched synths, piano, soundfonts, keyed samplers; not tracks whose instrument, name or id says bass, kit, drum or perc), otherwise `manual`. Choosing a mode by hand (`Q`, `/chords`, the menu) sticks for the session.
+Play mode has a chord sub-mode modelled on the Orchid's Key mode. It is `auto` by default when the focused track can play chords (pitched synths, piano, soundfonts, keyed samplers; not tracks whose instrument, name or id says bass, kit, drum or perc) in 12-TET without a mono or legato glide, otherwise `manual`, so a track in pelog, just intonation or another non-12 tuning, or a TB-303-style legato line, records single notes. Choosing a mode by hand (`Q`, `/chords`, the menu) sticks for the session.
 
 - `auto`: each note key plays the diatonic chord of the song key on that root (C major: `S` plays Dm, `G` plays G). Keys outside the scale borrow from the parallel major or minor. The strip labels every white and black key with its chord.
 - `manual`: note keys play single notes as before; latch a chord type or extension and they play that chord on the pressed root.

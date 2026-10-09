@@ -68,7 +68,7 @@ import {
   type PlayedChord,
 } from "./play-chords.ts";
 import type { PlayHeaderView, PlayStripKey } from "../../tui/play-strip.ts";
-import { resolveTuning } from "../../core/tuning.ts";
+import { resolveTuning, type Tuning } from "../../core/tuning.ts";
 import {
   NOTE_KEYS,
   PlayKeyboard,
@@ -268,8 +268,15 @@ export class PlaySession {
     this.layout = playLayoutFor(track);
     const settings = options.chords ?? defaultChordSettings();
     // Auto chords by default on chord-capable tracks, until chosen by hand.
+    // Diatonic triads assume 12-TET and a polyphonic part: a track in
+    // another tuning, or a mono/legato glide line, plays single notes.
     if (!settings.explicit)
-      settings.mode = chordCapable(track) ? "auto" : "manual";
+      settings.mode =
+        chordCapable(track) &&
+        twelveTet(this.host.score(), track) &&
+        (track?.glide === undefined || track.glide.mode === "poly")
+          ? "auto"
+          : "manual";
     this.chords = new ChordPad(settings, () => this.host.score().key);
     this.keyboard = new PlayKeyboard({ base: this.layout.base });
     this.clickOn = options.clickOn ?? false;
@@ -1330,4 +1337,21 @@ export function recordPedalOperation(
     trackId: options.trackId,
     patch: { pedal: pedal && pedal.length > 0 ? pedal : null },
   };
+}
+
+/** Whether `track` sounds in plain 12-TET (no tuning, or one equal to it). */
+function twelveTet(
+  score: Readonly<{ tuning?: Tuning; key?: string | null }>,
+  track: Readonly<{ tuning?: Tuning }> | undefined,
+): boolean {
+  if (!score.tuning && !track?.tuning) return true;
+  const table = resolveTuning(score.tuning, track?.tuning, score.key);
+  if (!table) return true;
+  if (table.size !== 12 || Math.abs(table.period - 1200) > 0.01) return false;
+  for (let key = 1; key < 128; key += 1) {
+    const [low, high] = [table.hz[key - 1]!, table.hz[key]!];
+    if (low <= 0 || high <= 0) return false;
+    if (Math.abs(1200 * Math.log2(high / low) - 100) > 0.5) return false;
+  }
+  return true;
 }
