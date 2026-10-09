@@ -293,12 +293,15 @@ export type VocalSetup = Readonly<{
 export const VOCAL_SETUPS: readonly VocalSetup[] = [
   {
     name: "hyper",
-    summary: "hard-tuned hyperpop lead: slapback, light distortion",
+    summary: "hard-tuned hyperpop lead: formant up, slapback, light distortion",
     patch: {
       delay: { beats: 0.125, feedback: 0.1, mix: 0.18 },
-      fx: { distort: { drive: 1, tone: 6000, mix: 0.25 } as never },
+      fx: {
+        formant: { shift: 3.5 } as never,
+        distort: { drive: 1, tone: 6000, mix: 0.25 } as never,
+      },
     },
-    needs: ["autotune", "formant", "harmony", "record"],
+    needs: ["autotune", "harmony", "record"],
   },
   { name: "take", summary: "a lead with plate reverb", needs: ["record"] },
   { name: "stack", summary: "three passes panned wide", needs: ["record"] },
@@ -308,7 +311,8 @@ export const VOCAL_SETUPS: readonly VocalSetup[] = [
   {
     name: "android",
     summary: "TTS sung, formant up",
-    needs: ["say", "formant"],
+    patch: { fx: { formant: { shift: 3.5 } as never } },
+    needs: ["say"],
   },
   { name: "whisper", summary: "whisper voice, reverse swells", needs: ["say"] },
   {
@@ -326,12 +330,7 @@ export const VOCAL_SETUPS: readonly VocalSetup[] = [
 /** Whether this build's Track carries `field` (a later lane's field). */
 export type FieldProbe = (field: string) => boolean;
 
-const knownTrackFields = new Set<string>([
-  "formant",
-  "harmony",
-  "record",
-  "say",
-]);
+const knownTrackFields = new Set<string>(["harmony", "record", "say"]);
 /** Lanes register the fields they add so setups can use them. */
 export function registerVocalSetupField(field: string): void {
   knownTrackFields.add(`+${field}`);

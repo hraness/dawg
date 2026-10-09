@@ -130,7 +130,10 @@ describe("/vocal import", () => {
     expect(track.filter).toMatchObject({ type: "hpf", cutoff: 90 });
     expect(track.fx?.compressor).toMatchObject({ ratio: 3 });
     expect(track.delay?.beats).toBe(0.125);
+    // The formant lane's effect is in this build: hyper turns it up.
+    expect(track.fx?.formant).toMatchObject({ shift: 3.5 });
     expect(result.message).toContain("not in this build yet: autotune");
+    expect(result.message).toContain("yet: autotune, harmony, record");
     expect(applyVocalSetup(plain, "a", "auto").ok).toBe(true);
     expect(applyVocalSetup(plain, "a", "nope").ok).toBe(false);
   });
