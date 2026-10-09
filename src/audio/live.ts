@@ -237,7 +237,10 @@ export class LiveSynth {
     // Organs too: wheels, rotors and drive cost 4-8 ms per note-second.
     const windowed =
       request.full !== true &&
-      (hasRig(track) || organTick !== undefined || bowedTrack(track)) &&
+      (hasRig(track) ||
+        organTick !== undefined ||
+        bowedTrack(track) ||
+        hasFormant(track)) &&
       seconds > LIVE_RIG_WINDOW_SECONDS &&
       !this.cache.has(key);
     if (windowed) {
@@ -377,6 +380,15 @@ function bowedTrack(track: Track): boolean {
     track.string !== undefined &&
     isBowed(resolveString(track.string))
   );
+}
+
+/**
+ * Whether the track plays through the 0.7 formant fx. It is not causal (one
+ * STFT frame of lookahead), but the window renders a 1 s source, well past
+ * the 0.75 s window plus one frame, so the window is an exact prefix.
+ */
+function hasFormant(track: Track): boolean {
+  return Boolean(track.fx?.formant);
 }
 
 /** Whether the track plays through a guitar rig stage. */

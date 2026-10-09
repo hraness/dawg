@@ -83,6 +83,8 @@ import {
   applyFxCommand,
   effectPatch,
   effectValues,
+  FORMANT_VOWEL_HINT,
+  formantGotVowel,
   parseEffectName,
   parseParamName,
   parseFxCommand,
@@ -260,13 +262,8 @@ export type AgentTool = Readonly<{
   plan: (args: Record<string, unknown>, context: ToolContext) => ToolPlan;
 }>;
 
-/** A model-supplied argument that the tool refused; never mutates the score. */
-export class ToolArgumentError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ToolArgumentError";
-  }
-}
+import { ToolArgumentError } from "./tool-error.ts";
+export { ToolArgumentError };
 
 const MAX_NOTES_PER_CALL = 128;
 const MAX_EXPLAIN_CHARS = 2_000;
@@ -2102,6 +2099,14 @@ function fxToolCommand(
     throw new ToolArgumentError("set_fx needs on, preset, or params");
   }
   const params = record(args.params, "params");
+  if (
+    effect === "formant" &&
+    formantGotVowel([
+      ...Object.keys(params),
+      ...Object.values(params),
+    ] as string[])
+  )
+    throw new ToolArgumentError(FORMANT_VOWEL_HINT);
   const values: Record<string, number | string | boolean> = {};
   for (const [name, value] of Object.entries(params)) {
     const param = parseParamName(effect, name);

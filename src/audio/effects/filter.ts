@@ -5,10 +5,12 @@
  */
 import { SCORE_LIMITS, type Track } from "../../../core/score.ts";
 import type { FxValues } from "../../../core/fx.ts";
+import { morphFormants, VOWEL_FORMANTS } from "../dsp/formant.ts";
 import {
   Biquad,
   CONTROL_SAMPLES,
   OnePole,
+  Param,
   Phasor,
   clamp,
   fxReader,
@@ -223,72 +225,6 @@ export function applyAutoFilter(
   }
 }
 
-type Formants = readonly (readonly [number, number, number])[];
-
-/**
- * Formant frequency (Hz), level (dB) and bandwidth (Hz). The five plain
- * vowels use the classic tenor formant table (published acoustic
- * phonetics data); the extended set approximates F1–F3 from standard
- * vowel charts with tenor-typical F4/F5.
- */
-const VOWEL_FORMANTS: Readonly<Record<string, Formants>> = Object.freeze({
-  a: [
-    [650, 0, 80],
-    [1080, -6, 90],
-    [2650, -7, 120],
-    [2900, -8, 130],
-    [3250, -22, 140],
-  ],
-  e: [
-    [400, 0, 70],
-    [1700, -14, 80],
-    [2600, -12, 100],
-    [3200, -14, 120],
-    [3580, -20, 120],
-  ],
-  i: [
-    [290, 0, 40],
-    [1870, -15, 90],
-    [2800, -18, 100],
-    [3250, -20, 120],
-    [3540, -30, 120],
-  ],
-  o: [
-    [400, 0, 40],
-    [800, -10, 80],
-    [2600, -12, 100],
-    [2800, -12, 120],
-    [3000, -26, 120],
-  ],
-  u: [
-    [350, 0, 40],
-    [600, -20, 60],
-    [2700, -17, 100],
-    [2900, -14, 120],
-    [3300, -26, 120],
-  ],
-  ae: extended(660, 1720, 2410),
-  aa: extended(710, 1100, 2540),
-  oe: extended(390, 1680, 2400),
-  ue: extended(300, 1600, 2200),
-  y: extended(250, 1750, 2160),
-  uh: extended(600, 1170, 2390),
-  un: extended(500, 1400, 2500),
-  en: extended(550, 1650, 2500),
-  an: extended(650, 1050, 2550),
-  on: extended(450, 850, 2550),
-});
-
-function extended(f1: number, f2: number, f3: number): Formants {
-  return [
-    [f1, 0, 70],
-    [f2, -8, 90],
-    [f3, -14, 110],
-    [3300, -16, 130],
-    [3750, -24, 140],
-  ];
-}
-
 /** Gain that brings the summed formant bank near unity for speech-band input. */
 const VOWEL_GAIN = 2.2;
 
@@ -307,11 +243,44 @@ export function applyVowel(
     filter.set("bpf", frequency, frequency / bandwidth, context.sampleRate);
     return { filter, gain: 10 ** (level / 20) };
   });
+  // 0.7 morph: present only with `to`; absent keeps the static bank exactly.
+  const toName = values.to as string | undefined;
+  const to = toName === undefined ? undefined : VOWEL_FORMANTS[toName];
+  // Absent morph means 0, so a vowel-morph lane still sweeps without it.
+  const morph = to
+    ? new Param(
+        (values.morph as number | undefined) ?? 0,
+        track.fxAutomation?.["vowel-morph"],
+        context.samplesPerTick,
+        context.warp,
+      )
+    : undefined;
+  const moving = morph !== undefined && (morph.automated || morph.fallback > 0);
+  let at = -1;
+  const retune = (position: number) => {
+    if (position === at) return;
+    at = position;
+    morphFormants(formants, to!, position).forEach(
+      ([frequency, level, bandwidth], index) => {
+        const band = bank[index]!;
+        band.filter.set(
+          "bpf",
+          frequency,
+          frequency / bandwidth,
+          context.sampleRate,
+        );
+        band.gain = 10 ** (level / 20);
+      },
+    );
+  };
+  if (moving) retune(morph.at(0));
   // Formant peaks are narrow; a gentle pre-emphasis keeps the vowel bright.
   const tilt = new OnePole(8000, context.sampleRate);
   let wet = mix.at(0);
   for (let index = 0; index < buffer.length; index += 1) {
     if (mix.automated && index % CONTROL_SAMPLES === 0) wet = mix.at(index);
+    if (moving && morph.automated && index % CONTROL_SAMPLES === 0)
+      retune(morph.at(index));
     const input = buffer[index]!;
     const emphasized = input + 0.5 * (input - tilt.process(input));
     let sum = 0;

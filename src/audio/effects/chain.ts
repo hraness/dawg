@@ -1,7 +1,7 @@
 /**
  * The fixed per-track effects chain (`FX_CHAIN` in core/fx.ts):
  *
- *   filter → djf → autofilter → vowel → crush → distort → stomp → head →
+ *   filter → djf → autofilter → formant → vowel → crush → distort → stomp → head →
  *   cab → wobble → bloom → swell → tremolo →
  *   compressor → pan → double → phaser → chorus → leslie → postgain →
  *   delay → reverb
@@ -21,6 +21,7 @@ import {
   applyTrackFilter,
   applyVowel,
 } from "./filter.ts";
+import { applyFormant } from "./formant.ts";
 import { applyChorus, applyLeslie, applyPhaser } from "./modulation.ts";
 import { applyCab, applyHead, applyStomp } from "./rig/index.ts";
 import { applyDelay, applyReverb } from "./space.ts";
@@ -62,6 +63,7 @@ type StereoStage = (
 const MONO: Readonly<Partial<Record<FxName, MonoStage>>> = Object.freeze({
   djf: applyDjFilter,
   autofilter: applyAutoFilter,
+  formant: applyFormant,
   vowel: applyVowel,
   crush: applyCrush,
   distort: applyDistort,

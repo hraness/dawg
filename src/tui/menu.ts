@@ -55,6 +55,7 @@ import {
   RIG_STAGES,
   rigPresetOf,
   SHOEGAZE_EFFECTS,
+  VOWEL_VALUES,
   effectPresetNames,
   effectSpec,
   type EffectName,
@@ -2042,7 +2043,9 @@ function effectNodes(context: MenuContext): MenuNode[] {
     (effect) =>
       !CORE_EFFECTS.includes(effect) &&
       !rigStages.includes(effect) &&
-      !gaze.includes(effect),
+      !gaze.includes(effect) &&
+      // 0.7: the formant shift lives in Effects > Voice.
+      effect !== "formant",
   );
   const gazeOn = SHOEGAZE_EFFECTS.filter((effect) =>
     effectValues(track, effect),
@@ -2140,7 +2143,7 @@ function formatParam(spec: ParamSpec, value: number): string {
  * One effect's rows: on/off, presets, then its simple parameters; the
  * `advanced` submenu holds every parameter with its Strudel names.
  */
-function effectParamNodes(
+export function effectParamNodes(
   context: MenuContext,
   effect: EffectName,
   advanced: boolean,
@@ -2230,6 +2233,37 @@ function effectParamNodes(
         help: param.doc,
       });
     }
+  }
+  if (!advanced && effect === "vowel") {
+    // 0.7 vowel morph: To picks the target (morph starts halfway), Morph
+    // moves between the two; both through `/vowel`.
+    const to = values?.to;
+    nodes.push(
+      {
+        kind: "choice",
+        label: "to",
+        value: typeof to === "string" ? to : "—",
+        options: ["—", ...VOWEL_VALUES],
+        command: (option) =>
+          option === "—" ? "/vowel to off" : `/vowel to ${option}`,
+        help: "a second vowel to morph towards (— keeps one vowel)",
+      },
+      {
+        kind: "number",
+        label: "morph",
+        value: typeof values?.morph === "number" ? values.morph : undefined,
+        start: 0.5,
+        off: typeof to === "string" ? "0" : "set to first",
+        min: 0,
+        max: 1,
+        step: specStep(spec.params.morph as NumberParam),
+        format: (value) => num(value),
+        command: (value) =>
+          typeof to === "string" ? `/vowel morph ${num(value)}` : `/vowel to o`,
+        help: "0 is the vowel, 1 is the to vowel; log-frequency formant glide, automatable as vowel-morph",
+        ...(typeof to === "string" ? { reset: "/vowel morph 0" } : {}),
+      },
+    );
   }
   if (!advanced) {
     nodes.push({

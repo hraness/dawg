@@ -3,7 +3,9 @@
  * Effects > Voice and Sound > browse sounds > Voices) and hides each while
  * every lane's rows are empty. Each lane fills only its own function below.
  */
-import type { MenuContext, MenuNode } from "./menu.ts";
+import { effectSpec } from "../../core/fx.ts";
+import { effectValues } from "../commands/fx.ts";
+import { effectParamNodes, type MenuContext, type MenuNode } from "./menu.ts";
 
 /** Sound > Voice: Clips and Lyrics (clips lane). */
 export function clipsSoundRows(_context: MenuContext): MenuNode[] {
@@ -20,9 +22,29 @@ export function autotuneSoundRows(_context: MenuContext): MenuNode[] {
   return [];
 }
 
-/** Effects > Voice: Formant (formant lane). */
-export function formantEffectRows(_context: MenuContext): MenuNode[] {
-  return [];
+/**
+ * Effects > Voice: Formant (formant lane). The fx rows (on, preset, shift,
+ * mix, advanced, reset) are the shared effect rows, so left/right, x and
+ * the space audition behave as every other effect's.
+ */
+export function formantEffectRows(context: MenuContext): MenuNode[] {
+  const track = context.score.tracks.find(
+    (candidate) => candidate.id === context.trackId,
+  );
+  if (!track) return [];
+  const values = effectValues(track, "formant");
+  return [
+    {
+      kind: "menu",
+      id: "formant",
+      label: "Formant",
+      detail: values
+        ? `shift ${values.shift} st · mix ${values.mix}`
+        : "off · shift the throat, keep the pitch",
+      help: effectSpec("formant").doc,
+      build: (inner) => effectParamNodes(inner, "formant", false),
+    },
+  ];
 }
 
 /** Effects > Voice: Vocoder with a Source picker (vocoder lane). */

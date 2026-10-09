@@ -30,6 +30,11 @@ export type EffectContext = Readonly<{
    * swell; 0.6.1). Filled only when such a stage is on.
    */
   notes?: readonly EffectNote[];
+  /**
+   * Song seconds at buffer sample 0 when an arranged window renders (the
+   * renderer's `seedSeconds`): the formant stage anchors its frames there.
+   */
+  seedSeconds?: number;
 }>;
 
 /** One note as a note-aware effect sees it: where it sounds and its pitch. */

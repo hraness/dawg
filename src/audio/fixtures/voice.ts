@@ -93,6 +93,12 @@ export type VoiceOptions = Readonly<{
   breath?: number;
   /** Drift depth in cents (slow random walk). */
   drift?: number;
+  /**
+   * Formant lane: scale every formant frequency by this factor (bandwidths by
+   * its square root), the truth render a formant shift of
+   * 12 * log2(formantScale) semitones should match. Absent: unchanged.
+   */
+  formantScale?: number;
 }>;
 
 export type VoiceSignal = Readonly<{
@@ -244,11 +250,14 @@ export function synthVoice(
   const out = new Float64Array(len);
   const y1 = [0, 0, 0, 0];
   const y2 = [0, 0, 0, 0];
+  const fs = opts.formantScale;
+  const bwScale = fs === undefined ? 1 : Math.sqrt(fs);
   for (let i = 0; i < len; i++) {
     let sum = 0;
     for (let f = 0; f < 4; f++) {
-      const fc = formant[f]![i]!;
-      const r = Math.exp((-Math.PI * BANDWIDTHS[f]!) / sr);
+      const fc = fs === undefined ? formant[f]![i]! : formant[f]![i]! * fs;
+      const bw = fs === undefined ? BANDWIDTHS[f]! : BANDWIDTHS[f]! * bwScale;
+      const r = Math.exp((-Math.PI * bw) / sr);
       const a1 = 2 * r * Math.cos((2 * Math.PI * fc) / sr);
       const a2 = -r * r;
       const g = 1 - r;

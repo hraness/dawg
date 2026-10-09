@@ -7,6 +7,12 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 ### Added
 
 - **0.7 Voice groundwork.** Optional score shapes for audio clips on tracks (`Track.clips`: file, sha256, start, offset, length, gain, fades, reverse, take, mute, text), takes (`Track.takes`) and per-note lyrics (`Note.lyric`), validated on load with errors that name the key, and a `setClips` score operation. Nothing renders them yet; projects without them load, print and render byte-identically. Cross-track references (`core/routing.ts`) resolve tracks by id or slug, order audio edges and report cycles, and removing a track drops references to it. `/vocal` lists the voice verbs as they arrive, and `/help voice` shows them. SDK 1.32.0.
+- **Formant shift.** A new `formant` effect (after `autofilter`, before `vowel`) moves the formants at constant pitch: `shift` -12..12 st and `mix`, presets `deep giant bright tiny`, lanes `formant-shift` and `formant-mix`. A cepstral envelope warp with a pitch-adaptive lifter; within 1 cent of the pitch, about 4 ms per audio-second at 22.05 kHz, and a preview window matches the full render bit for bit. `/formant -4`, `/vocal formant`, Effects › Voice › Formant, the `set_formant` agent tool (previewable) and `fx: { formant: { shift: -4 } }` in the SDK.
+- **Vowel morph.** The vowel filter takes optional `to` and `morph` (0..1, lane `vowel-morph`) and glides its five formants between two vowels in log frequency: `/vowel a o 0.5`, To and Morph rows in the vowel menu, `set_fx vowel` with `to` and `morph`. Without them the filter bank is unchanged.
+
+### Changed
+
+- `fx formant` is no longer an alias of the vowel filter; `/fx formant o` and `set_fx {effect: "formant", vowel}` explain that the vowel filter is `vowel`.
 
 ## 0.6.1
 
