@@ -4,6 +4,10 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ## Unreleased
 
+## 0.5.0
+
+Foundations: tunings and microtones, expressive performance, tempo maps and phasing, song sections, and a master bus with loudness metering. Every new field is optional, so 0.4 projects load, print and render byte-identically.
+
 ### Integration fixes
 
 - **Renders cover the whole song.** `dawg render` no longer stops at 30 s for a song without a form or for `--section`; long songs render in windows up to 15 minutes, and a note held across a window seam is crossfaded so long drones stay smooth.
