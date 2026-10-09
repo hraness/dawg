@@ -87,6 +87,8 @@ export function receiptParts(
   operations: readonly ScoreOperation[],
 ): string[] {
   const parts: string[] = [];
+  // Track settings follow the notes: what you hear first reads first.
+  const settings: string[] = [];
   const instruments = new Map(
     before.tracks.map((track) => [track.id, track.instrument]),
   );
@@ -107,7 +109,7 @@ export function receiptParts(
   const trackCount = new Set([
     ...before.tracks.map((track) => track.id),
     ...operations.flatMap((op) =>
-      op.type === "addTrack" ? [op.track.id] : [],
+      op.type === "addTrack" ? [op.track.id ?? "track"] : [],
     ),
   ]).size;
   const prefix = (trackId: string) => (trackCount > 1 ? `${trackId} ` : "");
@@ -130,7 +132,9 @@ export function receiptParts(
         parts.push(op.time ? "tempo map" : "steady tempo");
         break;
       case "setTuning":
-        parts.push(op.tuning ? `tuning ${op.tuning.name ?? ""}`.trim() : "12-TET");
+        parts.push(
+          op.tuning ? `tuning ${op.tuning.name ?? ""}`.trim() : "12-TET",
+        );
         break;
       case "setMaster":
         parts.push(op.master ? "master" : "master off");
@@ -143,11 +147,16 @@ export function receiptParts(
         break;
       case "setCalibration":
         break;
-      case "addTrack":
-        added.add(op.track.id);
-        instruments.set(op.track.id, op.track.instrument);
-        parts.push(`+${op.track.id}${op.track.instrument && op.track.instrument !== op.track.id ? ` (${op.track.instrument})` : ""}`);
+      case "addTrack": {
+        const id = op.track.id ?? "track";
+        const instrument = op.track.instrument;
+        added.add(id);
+        instruments.set(id, instrument ?? "");
+        parts.push(
+          `+${id}${instrument && instrument !== id ? ` (${instrument})` : ""}`,
+        );
         break;
+      }
       case "removeTrack":
         removed.add(op.trackId);
         parts.push(`−${op.trackId}`);
@@ -159,12 +168,12 @@ export function receiptParts(
         parts.push(`cleared ${op.trackId}`);
         break;
       case "setClips":
-        parts.push(
+        settings.push(
           `${prefix(op.trackId)}${op.clips && op.clips.length ? plural(op.clips.length, "clip") : "no clips"}`,
         );
         break;
       case "setAutomation":
-        parts.push(`${prefix(op.trackId)}${op.parameter} automation`);
+        settings.push(`${prefix(op.trackId)}${op.parameter} automation`);
         break;
       case "updateTrack": {
         if (added.has(op.trackId)) break;
@@ -176,15 +185,13 @@ export function receiptParts(
         const label =
           typeof name === "string" ? op.trackId : prefix(op.trackId).trim();
         const text = fields.slice(0, 2).join(" ");
-        parts.push(label ? `${label} ${text}` : text);
+        settings.push(label ? `${label} ${text}` : text);
         break;
       }
       case "addNote": {
         const entry = tally(op.note.trackId);
         entry.added.push(
-          typeof op.note.pitch === "number"
-            ? op.note.pitch
-            : Number.NaN,
+          typeof op.note.pitch === "number" ? op.note.pitch : Number.NaN,
         );
         break;
       }
@@ -217,6 +224,7 @@ export function receiptParts(
     if (entry.changed > 0)
       parts.push(`${plural(entry.changed, "note")} edited on ${trackId}`);
   }
+  parts.push(...settings);
   if (parts.length > MAX_PARTS)
     return [
       ...parts.slice(0, MAX_PARTS - 1),
@@ -226,10 +234,7 @@ export function receiptParts(
 }
 
 /** `96 BPM · +2 notes on bass (C4 E4) · reverb 0.4`, or "" for no change. */
-export function musicalReceipt(
-  before: TrackScore,
-  after: TrackScore,
-): string {
+export function musicalReceipt(before: TrackScore, after: TrackScore): string {
   if (before === after) return "";
   let operations: readonly ScoreOperation[];
   try {
