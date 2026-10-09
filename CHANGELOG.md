@@ -4,6 +4,10 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ## Unreleased
 
+### Internal
+
+- **0.6 instrument plumbing.** Shared DSP primitives under `src/audio/dsp/` (counter-based seeded randomness, Hermite reads and a Thiran fractional delay, half-band 2x/4x oversampling, antiderivative-antialiased shapers, DC blocker and one-pole), an instrument engine registry (`src/audio/instruments.ts`) consulted by renders, the stem cache and live play, and one instrument word resolver (`core/instruments.ts`, copied into the SDK) used by the `instrument` prompt, `set_instrument` and `track()`. Nothing is registered yet, so every project sounds and prints exactly as before.
+
 ## 0.5.0
 
 Foundations: tunings and microtones, expressive performance, tempo maps and phasing, song sections, and a master bus with loudness metering. Every new field is optional, so 0.4 projects load, print and render byte-identically.
