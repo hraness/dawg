@@ -3232,9 +3232,14 @@ export class EditMenu {
     if (!frame) return [];
     const all = frame.build(context);
     const needle = frame.query.toLowerCase();
-    return needle
-      ? all.filter((node) => nodeText(node).toLowerCase().includes(needle))
-      : all;
+    if (!needle) return all;
+    const direct = all.filter((node) =>
+      nodeText(node).toLowerCase().includes(needle),
+    );
+    // At the root a filter with no direct match looks two levels down for
+    // groups (`/voice`, `/autotune`, `/formant`) and offers them by path.
+    if (direct.length > 0 || this.stack.length !== 1) return direct;
+    return deepGroups(all, context, needle);
   }
 
   private selected(context: MenuContext): MenuNode | undefined {
@@ -3763,6 +3768,34 @@ function commandText(node: MenuNode): string | undefined {
     default:
       return undefined;
   }
+}
+
+/** Menu groups below `nodes` (two levels) whose label matches `needle`. */
+function deepGroups(
+  nodes: readonly MenuNode[],
+  context: MenuContext,
+  needle: string,
+): MenuNode[] {
+  const found: MenuNode[] = [];
+  const visit = (list: readonly MenuNode[], path: string, depth: number) => {
+    for (const node of list) {
+      if (node.kind !== "menu" || found.length >= 12) continue;
+      const label = path ? `${path} › ${node.label}` : node.label;
+      if (path && node.label.toLowerCase().includes(needle))
+        found.push({ ...node, label });
+      if (depth < 2) {
+        let children: MenuNode[] = [];
+        try {
+          children = node.build(context);
+        } catch {
+          continue;
+        }
+        visit(children, label, depth + 1);
+      }
+    }
+  };
+  visit(nodes, "", 0);
+  return found;
 }
 
 function nodeText(node: MenuNode): string {

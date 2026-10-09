@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { AUTOMATION_PARAMETERS, createScore } from "../../core/score.ts";
-import { rootNodes, type MenuContext, type MenuNode } from "./menu.ts";
+import {
+  EditMenu,
+  rootNodes,
+  type MenuContext,
+  type MenuNode,
+} from "./menu.ts";
 import { voiceGroup } from "./menu-voice.ts";
 
 function context(): MenuContext {
@@ -181,6 +186,17 @@ describe("Sound > Voice > Pitch (pitch lane)", () => {
     const sound = open(rootNodes(ctx), "sound", ctx);
     const voice = open(sound, "voice", ctx);
     expect(labels(voice)).toContain("Autotune");
+    // The root filter finds nested voice groups by name.
+    const menu = new EditMenu();
+    menu.show(ctx);
+    menu.key("/", ctx);
+    for (const ch of "autotune") menu.key(ch, ctx);
+    const found = menu.view(ctx).items.map((item) => item.label);
+    expect(found.some((label) => label.includes("Voice › Autotune"))).toBe(
+      true,
+    );
+    menu.key("\r", ctx);
+    expect(menu.view(ctx).items[0]!.label).toStartWith("Preset");
     const rows = open(voice, "voice:autotune", ctx);
     expect(labels(rows).slice(0, 4)).toEqual(["Preset", "To", "From", "Key"]);
     expect(labels(rows)).toContain("Speed");
