@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { createScore } from "../../core/score.ts";
+import { createScore, updateNote } from "../../core/score.ts";
 import { clearAutotuneCache } from "./autotune.ts";
 import { trackPitch } from "./dsp/pitch.ts";
 import { synthVoice } from "./fixtures/voice.ts";
 import { sampleKey, type DecodedSample } from "./samples.ts";
-import { renderScorePcm } from "./wav.ts";
+import { renderScorePcm, StemRenderer } from "./wav.ts";
 
 const RATE = 48_000;
 const SHA = "d".repeat(64);
@@ -100,4 +100,67 @@ describe("autotune on audio clips", () => {
     // the clip starts 0.1 s into the file: the steady middle moves earlier
     expect(Math.abs(centsOffC4(tuned.left))).toBeLessThan(5);
   });
+
+  test("a vocoder fed by a guided clip follows guide note edits when warm", () => {
+    const song = (guidePitch: number) =>
+      createScore({
+        tempoBpm: 120,
+        bars: 2,
+        key: "C major",
+        tracks: [
+          {
+            id: "v",
+            name: "vocal",
+            instrument: "vocal",
+            muted: true,
+            clips: [
+              { id: "c1", src: "samples/v.wav", sha256: SHA, startTick: 0 },
+            ],
+            autotune: { preset: "locked", to: "notes", from: "g" },
+          },
+          { id: "g", name: "guide", instrument: "piano", muted: true },
+          {
+            id: "c",
+            name: "carrier",
+            instrument: "vocoder",
+            vocoder: { src: "v" },
+          },
+        ],
+        notes: [
+          {
+            id: "gn",
+            trackId: "g",
+            pitch: guidePitch,
+            startTick: 0,
+            durationTicks: 1920,
+            velocity: 0.8,
+          },
+          {
+            id: "cn",
+            trackId: "c",
+            pitch: 48,
+            startTick: 0,
+            durationTicks: 1920,
+            velocity: 0.8,
+          },
+        ],
+      } as never);
+    const options = () => ({
+      sampleRate: RATE,
+      samples: {
+        voices: new Map([[sampleKey("v", "clip:c1"), sharpVoice()]]),
+        problems: [],
+      },
+    });
+    const warm = new StemRenderer();
+    const first = warm.render(song(60), options());
+    const edited = updateNote(song(60), "gn", { pitch: 62 });
+    const again = warm.render(edited, options());
+    clearAutotuneCache();
+    const cold = renderScorePcm(edited, options());
+    const same = (a: Int16Array, b: Int16Array) =>
+      Buffer.from(a.buffer).equals(Buffer.from(b.buffer));
+    expect(same(again.pcm, cold.pcm)).toBe(true);
+    expect(same(again.pcm, first.pcm)).toBe(false);
+  }, 60_000);
 });

@@ -1195,7 +1195,12 @@ function vocoderSourceOf(
     settings.gate === "auto" ? sourceGateDb(source, bank) : settings.gate;
   // The modulator's clips (0.7) are heard; guide tones never are.
   const clipDigest = clipsDigest(source, bank, false);
-  const clipKeys = clipDigest === undefined ? [] : [`clips:${clipDigest}`];
+  // A tuned modulator (0.7 autotune) keys on its targets too: its guide
+  // track's notes, the chord timeline and the key change the tap.
+  const clipKeys = [
+    ...(clipDigest === undefined ? [] : [`clips:${clipDigest}`]),
+    ...(source.autotune ? autotuneStemDigests(source, context.score) : []),
+  ];
   const key = stemKey(
     stripped,
     notes,
