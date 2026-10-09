@@ -33,6 +33,7 @@ import {
   nodeCommands,
   read,
   resolveMenuPath,
+  TOPIC_IDS,
   walkAll,
 } from "./consistency-lib.ts";
 
@@ -117,20 +118,6 @@ const KNOWN_SLASH_GAPS: readonly string[] = [
   "try fx reverb mix 0.6",
   "vowel a o 0.5",
 ];
-
-/** The ten topic ids (design §4): one id, three doors. */
-export const TOPIC_IDS = [
-  "sound",
-  "voice",
-  "effects",
-  "rhythm",
-  "chords",
-  "mix",
-  "arrange",
-  "project",
-  "keys",
-  "agent",
-] as const;
 
 /**
  * Doors that do not open a topic yet, as `door id`. The language lane (D1,

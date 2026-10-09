@@ -299,3 +299,17 @@ export function resolveMenuPath(
   }
   return undefined;
 }
+
+/** The ten topic ids (design §4): one id, three doors. */
+export const TOPIC_IDS = [
+  "sound",
+  "voice",
+  "effects",
+  "rhythm",
+  "chords",
+  "mix",
+  "arrange",
+  "project",
+  "keys",
+  "agent",
+] as const;
