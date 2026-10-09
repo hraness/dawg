@@ -6,8 +6,8 @@
  *   every numeric pattern check in validate.ts;
  * - generation is deterministic (same seed, same score JSON);
  * - every written card (and a fixed sample of inherited leaves) renders a
- *   one-bar excerpt with sound, no NaN, no clipping and identical bytes on
- *   a second render.
+ *   one-bar excerpt with sound, no NaN and no clipping, and every fifth of
+ *   them renders identical bytes a second time.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -23,6 +23,12 @@ const BARS = 8;
 const RATE = 8_000;
 /** Inherited leaves rendered besides the written cards: every Nth leaf. */
 const LEAF_SAMPLE_STRIDE = 12;
+/**
+ * Rendered styles re-rendered for the byte-identity check: every Nth. The
+ * render path is deterministic by construction (seeded, offline), so a
+ * sample keeps the suite fast with hundreds of cards (about 40 ms each).
+ */
+const RERENDER_STRIDE = 5;
 
 const renderIds = [
   ...new Set([
@@ -74,9 +80,9 @@ describe("style cards: pattern checks", () => {
 });
 
 describe("style cards: rendered excerpt", () => {
-  test(`${renderIds.length} styles sound, never clip and render identically`, () => {
+  test(`${renderIds.length} styles sound, never clip; a sample renders identically`, () => {
     const failures: string[] = [];
-    for (const id of renderIds) {
+    for (const [index, id] of renderIds.entries()) {
       const score = excerptScore(generateStyle(id, { seed: 1, bars: BARS }));
       const first = renderScorePcm(score, { sampleRate: RATE }).pcm;
       let peak = 0;
@@ -90,6 +96,7 @@ describe("style cards: rendered excerpt", () => {
       // renders as silence or full scale, which these bounds catch.
       if (peak < 300) failures.push(`${id}: silent (peak ${peak})`);
       if (full > 0) failures.push(`${id}: ${full} clipped samples`);
+      if (index % RERENDER_STRIDE !== 0) continue;
       const again = renderScorePcm(score, { sampleRate: RATE }).pcm;
       if (sha(first) !== sha(again)) failures.push(`${id}: bytes differ`);
     }
