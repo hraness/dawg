@@ -49,6 +49,8 @@ const EFFECTS = [
   // f061-guitar: fretting setup.
   "guitar",
   "wind",
+  // f07-sing: the singing voice.
+  "sing",
 ] as const;
 const LANES = [
   "volumeAutomation",

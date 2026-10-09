@@ -85,6 +85,11 @@ import {
   parseWindCommand,
   windListLines,
 } from "./commands/wind.ts";
+import {
+  applySingCommand,
+  parseSingCommand,
+  singListLines,
+} from "./commands/sing.ts";
 import { applySynthCommand, parseSynthCommand } from "./commands/synth.ts";
 import { applyStringCommand, parseStringCommand } from "./commands/string.ts";
 import { instrumentPatchForWord, isModalWord } from "../core/resonators.ts";
@@ -336,6 +341,7 @@ function parsesLocally(text: string): boolean {
     parseGuitarCommand,
     parseStrumCommand,
     parseWindCommand,
+    parseSingCommand,
     parseVocalCommand,
     parseFormantCommand,
     parseVowelCommand,
@@ -1936,6 +1942,17 @@ async function submit(prompt: string): Promise<string | Receipt> {
     if (windCommand.type !== "wind-show" && windCommand.type !== "wind-list")
       await materializeDraft();
     const result = applyWindCommand(score, requestedTrack, windCommand);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
+  const singCommand = parseSingCommand(command);
+  if (singCommand) {
+    if (singCommand.type === "sing-list")
+      tui.openText("sing presets", singListLines());
+    if (singCommand.type !== "sing-show" && singCommand.type !== "sing-list")
+      await materializeDraft();
+    const result = applySingCommand(score, requestedTrack, singCommand);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);

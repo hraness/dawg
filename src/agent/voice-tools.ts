@@ -12,7 +12,21 @@ import {
   FORMANT_VOWEL_HINT,
   type FxCommand,
 } from "../commands/fx.ts";
+import {
+  isSingPreset,
+  normalizeVowel,
+  SING_INSTRUMENT,
+  SING_PARAMS,
+  SING_PRESET_NAMES,
+  singParamName,
+} from "../../core/sing.ts";
 import { SCORE_LIMITS } from "../../core/score.ts";
+import {
+  applySingCommand,
+  assignVowels,
+  type SingCommand,
+  type SingValue,
+} from "../commands/sing.ts";
 import { ToolArgumentError } from "./tool-error.ts";
 // Types only: tools.ts spreads VOICE_TOOLS, so a value import would cycle.
 import type { AgentTool, ToolContext } from "./tools.ts";
@@ -143,7 +157,205 @@ export const FORMANT_TOOLS: readonly VoiceTool[] = [
   },
 ];
 /** sing: set_sing, set_vowels. */
-export const SING_TOOLS: readonly VoiceTool[] = [];
+export const SING_TOOLS: readonly VoiceTool[] = [
+  {
+    name: "set_sing",
+    previewable: true,
+    description: `The built-in singing voice (a synthetic LF glottal source through Klatt formants; no recorded or cloned voice). preset (${SING_PRESET_NAMES.join(" ")}) switches the voice and keeps overrides; params sets ${Object.keys(SING_PARAMS).join(" ")}, null returns one to the preset; voices 2..8 is an ensemble (choir); vowel is a e i o u or a morph a>o; drone (a note name like D3 or a MIDI number) turns on throat singing: khoomei, sygyt (whistle) and kargyraa (sub-octave growl) pick a harmonic of the drone per note. A throat preset on a track with no notes writes a short demo melody (8 notes an octave above the drone); write your own notes instead when you have a melody. reset clears overrides; off removes the voice. Notes sing their vowel (set_vowels) or their lyric's vowel. Turns the track into the sing engine.`,
+    parameters: {
+      type: "object",
+      properties: {
+        trackId: trackIdSchema,
+        preset: { type: "string", enum: [...SING_PRESET_NAMES] },
+        reset: { type: "boolean" },
+        off: { type: "boolean" },
+        params: {
+          type: "object",
+          additionalProperties: {
+            type: ["number", "string", "array", "null"],
+          },
+        },
+      },
+      additionalProperties: false,
+    },
+    plan(args, context) {
+      const trackId = targetTrack(args, context);
+      const commands: SingCommand[] = [];
+      if (args.off === true) commands.push({ type: "sing-off" });
+      if (args.reset === true) commands.push({ type: "sing-reset" });
+      let preset: (typeof SING_PRESET_NAMES)[number] | undefined;
+      if (args.preset !== undefined) {
+        if (typeof args.preset !== "string" || !isSingPreset(args.preset))
+          throw new ToolArgumentError(
+            `preset must be one of ${SING_PRESET_NAMES.join(", ")}`,
+          );
+        preset = args.preset;
+      }
+      const values: Record<string, SingValue> = {};
+      if (args.params !== undefined) {
+        if (
+          typeof args.params !== "object" ||
+          args.params === null ||
+          Array.isArray(args.params)
+        )
+          throw new ToolArgumentError("params must be an object");
+        for (const [key, value] of Object.entries(args.params)) {
+          const name = singParamName(key);
+          if (!name)
+            throw new ToolArgumentError(
+              `sing has no parameter ${key} (${Object.keys(SING_PARAMS).join(" ")})`,
+            );
+          if (
+            value !== null &&
+            typeof value !== "number" &&
+            typeof value !== "string" &&
+            !(
+              Array.isArray(value) &&
+              value.length === 2 &&
+              value.every((item) => typeof item === "number")
+            )
+          )
+            throw new ToolArgumentError(
+              `${key} must be a number, a string or [lo, hi]`,
+            );
+          values[name] = value as SingValue;
+        }
+      }
+      if (preset !== undefined || Object.keys(values).length > 0)
+        commands.push({
+          type: "sing-set",
+          ...(preset !== undefined ? { preset } : {}),
+          values,
+        });
+      if (commands.length === 0) {
+        // An empty call turns the track into the sing engine.
+        const current = context.score.tracks.find((t) => t.id === trackId);
+        commands.push({
+          type: "sing-set",
+          preset:
+            current?.instrument === SING_INSTRUMENT && current.sing?.preset
+              ? current.sing.preset
+              : "aah",
+          values: {},
+        });
+      }
+      let score = context.score;
+      const messages: string[] = [];
+      for (const command of commands) {
+        const result = applySingCommand(score, trackId, command);
+        if (!result.ok) throw new ToolArgumentError(result.message);
+        if (result.next) score = result.next;
+        messages.push(result.message);
+      }
+      const next = score.tracks.find((t) => t.id === trackId)!;
+      // A throat preset on an empty track writes its demo line.
+      const before = new Set(context.score.notes.map((note) => note.id));
+      const added = score.notes.filter((note) => !before.has(note.id));
+      return {
+        kind: "score",
+        operations: [
+          {
+            type: "updateTrack",
+            trackId,
+            patch: { instrument: next.instrument, sing: next.sing ?? null },
+          },
+          ...added.map((note) => ({ type: "addNote" as const, note })),
+        ],
+        trackId,
+        summary: `${trackId} ${messages.at(-1)}`,
+      };
+    },
+  },
+  {
+    name: "set_vowels",
+    previewable: true,
+    description:
+      "Set the sung vowel of a sing track's notes (set_sing). vowels: a list cycled over the notes in time order, each a e i o u (also ah eh ee oh oo) or a morph like a>u that travels through the note; noteIds limits it to those notes; vowels [] or null clears them so notes sing their lyric's vowel or the track's vowel.",
+    parameters: {
+      type: "object",
+      properties: {
+        trackId: trackIdSchema,
+        vowels: {
+          type: ["array", "null"],
+          items: { type: "string", maxLength: 16 },
+          maxItems: 64,
+        },
+        noteIds: {
+          type: "array",
+          items: { type: "string", maxLength: SCORE_LIMITS.maxIdLength },
+          maxItems: 128,
+        },
+      },
+      required: ["vowels"],
+      additionalProperties: false,
+    },
+    plan(args, context) {
+      const trackId = targetTrack(args, context);
+      const raw = args.vowels;
+      if (raw !== null && !Array.isArray(raw))
+        throw new ToolArgumentError("vowels must be a list or null");
+      const vowels: string[] = [];
+      for (const item of raw ?? []) {
+        if (typeof item !== "string")
+          throw new ToolArgumentError("each vowel must be a string");
+        try {
+          vowels.push(normalizeVowel(item));
+        } catch (error) {
+          throw new ToolArgumentError(
+            error instanceof Error ? error.message : `bad vowel ${item}`,
+          );
+        }
+      }
+      let noteIds: string[] | undefined;
+      if (args.noteIds !== undefined) {
+        if (!Array.isArray(args.noteIds))
+          throw new ToolArgumentError("noteIds must be a list");
+        noteIds = args.noteIds.map((id) => {
+          const note =
+            typeof id === "string"
+              ? context.score.notes.find((n) => n.id === id)
+              : undefined;
+          if (!note || note.trackId !== trackId)
+            throw new ToolArgumentError(
+              `unknown note ${String(id)} on ${trackId}`,
+            );
+          return id as string;
+        });
+      }
+      const notes = context.score.notes
+        .filter((note) =>
+          noteIds ? noteIds.includes(note.id) : note.trackId === trackId,
+        )
+        .sort((a, b) => a.startTick - b.startTick || a.pitch - b.pitch);
+      if (notes.length === 0)
+        throw new ToolArgumentError(`${trackId} has no notes`);
+      if (vowels.length === 0)
+        return {
+          kind: "score",
+          operations: notes.map((note) => ({
+            type: "updateNote" as const,
+            noteId: note.id,
+            patch: { vowel: null },
+          })),
+          trackId,
+          summary: `${trackId} vowels cleared on ${notes.length} notes`,
+        };
+      const { next } = assignVowels(context.score, trackId, vowels, noteIds);
+      const after = new Map(next.notes.map((note) => [note.id, note.vowel]));
+      return {
+        kind: "score",
+        operations: notes.map((note) => ({
+          type: "updateNote" as const,
+          noteId: note.id,
+          patch: { vowel: after.get(note.id) ?? null },
+        })),
+        trackId,
+        summary: `${trackId} sings ${vowels.join(" ")} over ${notes.length} notes`,
+      };
+    },
+  },
+];
+
 /** vocoder: set_vocoder, vocode. */
 export const VOCODER_TOOLS: readonly VoiceTool[] = [];
 /** autotune: autotune_vocal. */

@@ -756,3 +756,30 @@ describe("scale degrees (i)", () => {
     expect(session.strip()).toHaveLength(18);
   });
 });
+
+describe("PlaySession throat tracks (f07-sing)", () => {
+  test("two keys on a khoomei track: the second releases the first", async () => {
+    const score = createScore({
+      tempoBpm: 120,
+      bars: 2,
+      tracks: [
+        {
+          id: "lead",
+          name: "throat",
+          instrument: "sing",
+          sing: { preset: "khoomei" },
+        },
+      ],
+    } as never);
+    const { session, engine } = harness(score);
+    await session.enter();
+    expect(session.press("a")).toEqual({ type: "handled" });
+    const [first] = [...engine.on.keys()];
+    expect(engine.off).not.toContain(first!);
+    expect(session.press("s")).toEqual({ type: "handled" });
+    expect(engine.on.size).toBe(2);
+    expect(engine.off).toContain(first!);
+    // Each note is a whole drone (it sounds from its own start).
+    for (const pcm of engine.on.values()) expect(pcm.frames).toBeGreaterThan(0);
+  });
+});

@@ -29,7 +29,7 @@ function open(nodes: MenuNode[], id: string, ctx: MenuContext): MenuNode[] {
 const labels = (nodes: MenuNode[]) => nodes.map((node) => node.label);
 
 describe("0.7 voice menu groups", () => {
-  test("hidden while empty; Effects > Voice holds the formant", () => {
+  test("hidden while empty; Effects > Voice holds the formant; Voices mounts once", () => {
     const ctx = context();
     const root = rootNodes(ctx);
     // Seven top-level sections, unchanged.
@@ -41,7 +41,10 @@ describe("0.7 voice menu groups", () => {
     // The formant lane fills Effects > Voice.
     expect(labels(effects)).toContain("Voice");
     expect(labels(open(effects, "voice", ctx))).toContain("Formant");
-    expect(labels(browse)).not.toContain("Voices");
+    // The sing lane fills browse sounds › Voices (Choir, Solo, Throat).
+    expect(labels(browse).filter((label) => label === "Voices")).toHaveLength(
+      1,
+    );
     expect(labels(sound).slice(-2)).toEqual(["performance", "browse sounds"]);
   });
 

@@ -285,11 +285,15 @@ test.skipIf(!supported)(
     await t.until(() => !t.vt.text().includes("── start here"), "guide closed");
     await t.send("/help all\r");
     await t.until(() => t.vt.text().includes("── music"), "help overlay");
-    await t.send("\u001b[F"); // End: the last page holds window + keys
+    await t.send("\u001b[F"); // End: the last page holds keys
     await t.until(() => t.vt.text().includes("── keys"), "help end");
-    expect(t.vt.text()).toContain("/help [topic]");
     await t.send("\u001b");
-    await t.until(() => !t.vt.text().includes("── keys"), "help closed");
+    await t.until(() => !t.vt.text().includes("── keys"), "help all closed");
+    // The window group: its own topic, since the voice group follows it.
+    await t.send("/help window\r");
+    await t.until(() => t.vt.text().includes("/help [topic]"), "help window");
+    await t.send("\u001b");
+    await t.until(() => !t.vt.text().includes("/help [topic]"), "help closed");
     await t.send("/status\r");
     await t.until(
       () => t.vt.text().includes("saved locally · no daemon"),

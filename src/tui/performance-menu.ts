@@ -3,6 +3,7 @@
  * runs the same prompt command a user could type (src/commands/expression.ts),
  * so the menu, the prompt and the agent share one grammar.
  */
+import { singVowelNodes } from "./sing-menu.ts";
 import {
   ARTICULATIONS,
   DEFAULT_FIXED_VELOCITY,
@@ -273,5 +274,7 @@ export function performanceNodes(context: MenuContext): MenuNode[] {
       command: "humanize reseed",
       help: "the same amounts with a different seeded performance",
     });
+  // 0.7 sing: Vowels on a sing track.
+  nodes.push(...singVowelNodes(context));
   return nodes;
 }
