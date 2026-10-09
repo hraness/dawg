@@ -3862,7 +3862,7 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "inuit-throat",
     summary:
-      "Inuit katajjaq: two-voice throat-singing game, short motifs repeated in a fixed cycle, interlocking hocket on alternating pulses (voiced and breathed), narrow range, no harmony",
+      "Inuit katajjaq: two-voice throat-singing game, a short voiced motif on the beat answered by a breathed tonic pulse on every off-beat (hocket), repeated in a fixed cycle, narrow range, no harmony",
     seedSalt: 1950,
     meter: { signatures: [["4/4", 1]], hypermeter: [[2, 1]] },
     tempo: { bpm: [110, 160], typical: 132 },
@@ -3875,20 +3875,14 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     },
     harmony: { model: "none", presets: null, sevenths: 0 },
     rhythm: {
-      onsets: {
-        kick: null,
-        snare: null,
-        hat: null,
-        lead: grid("x.x.x.x."),
-        counter: grid(".x.x.x.x"),
-      },
-      locks: [{ kind: "avoid", a: "lead", b: "counter" }],
+      // The second singer's pulse fills the gaps between the first's.
+      onsets: { kick: null, snare: null, hat: null, arp: grid(".x.x.x.x") },
     },
     melody: {
       ambitus: [3, 7],
       intervals: intervals(2, 3, 0.2, 2),
       repetition: 0.9,
-      density: [2, 2],
+      density: [1, 1],
       contour: [
         ["wave", 0.6],
         ["flat", 0.4],
@@ -3902,15 +3896,15 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
         hat: null,
         chords: null,
         bass: null,
-        lead: role("kargyraa", "sing:0.5"),
-        counter: role("kargyraa", "sing:0.5"),
+        lead: role("sing", "kargyraa:0.5"),
+        arp: role("kargyraa"),
       },
     },
   }),
   card({
     id: "sea-shanty",
     summary:
-      "sea shanty: work-song call and response (shantyman solo, crew chorus), stamped downbeats for hauling, 6/8 or 2/4, plain major and dorian tunes, unaccompanied or concertina",
+      "sea shanty: work-song call and response (shantyman solo, crew chorus), stamped downbeats for hauling, 6/8 or 4/4, plain major and dorian tunes, unaccompanied or concertina",
     seedSalt: 1850,
     meter: {
       signatures: [
