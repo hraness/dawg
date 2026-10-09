@@ -39,6 +39,7 @@ import { barAt, barStartTick, songTimeSlice } from "../../core/tempo.ts";
 import { interpolateAutomation } from "./effects/common.ts";
 import { loopedSection, scoreBeatAt } from "./arrange.ts";
 import { RENDER_CHANNELS } from "./wav.ts";
+import { resolveTrackRef, trackRefs } from "../../core/routing.ts";
 
 /** Longest preview loop, in bars. */
 export const MAX_PREVIEW_BARS = 4;
@@ -327,10 +328,18 @@ export function previewScore(
   const end = barStartTick(score, startBar + bars);
   const context = options.context === true;
   const anySolo = score.tracks.some((candidate) => candidate.solo === true);
+  // A solo preview keeps the tracks the focused one reads audio from (a
+  // vocoder's src), muted: they feed it without being heard.
+  const feeders = context ? new Set<string>() : audioFeeders(score, trackId);
   const tracks = score.tracks
-    .filter((candidate) => context || candidate.id === trackId)
+    .filter(
+      (candidate) =>
+        context || candidate.id === trackId || feeders.has(candidate.id),
+    )
     .map((candidate) => {
       const sliced = sliceTrack(candidate, start, end);
+      if (feeders.has(candidate.id))
+        return { ...sliced, muted: true, solo: false };
       if (candidate.id !== trackId) return sliced;
       // The focused track always sounds, even when muted or not soloed.
       return {
@@ -344,7 +353,7 @@ export function previewScore(
   const notes: NoteInput[] = score.notes
     .filter(
       (note) =>
-        (context || note.trackId === trackId) &&
+        (context || note.trackId === trackId || feeders.has(note.trackId)) &&
         !(replaced && note.trackId === trackId) &&
         note.startTick >= start &&
         note.startTick < end,
@@ -382,6 +391,25 @@ export function previewScore(
     source: own ? "notes" : "phrase",
     ...(role ? { role } : {}),
   };
+}
+
+/** Every track `trackId` reads audio from, transitively (vocoder src). */
+function audioFeeders(score: TrackScore, trackId: string): Set<string> {
+  const found = new Set<string>();
+  const queue = [trackId];
+  while (queue.length > 0) {
+    const id = queue.pop();
+    const track = score.tracks.find((candidate) => candidate.id === id);
+    if (!track) continue;
+    for (const ref of trackRefs(track)) {
+      if (ref.kind !== "audio") continue;
+      const source = resolveTrackRef(score, ref.trackId);
+      if (!source || source.id === trackId || found.has(source.id)) continue;
+      found.add(source.id);
+      queue.push(source.id);
+    }
+  }
+  return found;
 }
 
 /**

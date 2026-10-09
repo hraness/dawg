@@ -460,6 +460,13 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         command: "/lyrics [bar] never gon-na give",
         summary: "syllables onto the notes (- splits, _ holds, ~ skips)",
       },
+      // f07-vocoder
+      {
+        command:
+          "/vocoder [preset] | src <track> | <param> <value|reset> | reset | off | presets",
+        summary:
+          "vocode the focused vocal onto a synth (classic robot talkbox choir glass whisper smear lofi); /help vocoder lists params",
+      },
     ],
   },
   {
@@ -838,6 +845,8 @@ export const USAGE: Readonly<Record<string, string>> = {
   vowel:
     "/vowel <v> [<to> [<morph 0..1>]] | ee | to <v>|off | morph <0..1> | mix <0..1> | off · /vowel a o 0.5",
   sing: "sing <preset> | <param> <value> | drone <D3> | vowels a e i … | reset | off | presets · sing choir · sing khoomei drone D3 · sing vowel o voices 6",
+  vocoder:
+    "vocoder [preset] | src <track> | <param> <value|reset> | reset | off | presets · vocoder talkbox · vocoder src vox · vocoder formant +3 · vocoder gate auto · params: tap mode carrier follow root spread bands lo hi width attack release formant unvoiced sens hiss gate enhance depth freeze mix gain seed",
   pack: "/pack list | info <name> | use <pack>/<sound> | add <url>",
   kit: "/kit [name] · /kit syn909",
   euclid: "/euclid [voice] · euclid hat 7 16",

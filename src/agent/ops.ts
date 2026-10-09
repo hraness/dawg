@@ -1,4 +1,5 @@
 import { resolveInstrumentWord } from "../../core/instruments.ts";
+import type { TrackVocoder } from "../../core/vocoder.ts";
 import { pitchToMidi } from "../../core/pitch.ts";
 import {
   instrumentPatchForWord,
@@ -210,9 +211,13 @@ export function instrumentPatch(word: string): {
   modal?: TrackModal;
   wind?: TrackWind;
   sing?: TrackSing;
+  vocoder?: TrackVocoder;
 } {
   const meaning = resolveInstrumentWord(word);
   if (!meaning) return { instrument: word };
+  // f07-vocoder: the built-in carrier needs its (empty) field.
+  if (meaning.field === "vocoder")
+    return { instrument: meaning.instrument, vocoder: Object.freeze({}) };
   if (
     meaning.field === "modal" ||
     meaning.field === "wind" ||

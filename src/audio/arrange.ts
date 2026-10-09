@@ -9,6 +9,7 @@
  * bounded however long the form plays (up to MAX_SONG_SECONDS).
  */
 import { withClipLengths } from "./clips.ts";
+import { vocoderPrerollSeconds } from "../../core/vocoder.ts";
 import {
   SCORE_LIMITS,
   ScoreValidationError,
@@ -334,8 +335,13 @@ function renderWindows(
   const slowBar = ((beatsPerBar * 60) / Math.min(...bpms)) * fermataStretch;
   const frameAt = (bar: number) =>
     Math.round(secondsAtTick(timeline, bar * ticks) * sampleRate);
-  const ring = Math.max(1, Math.ceil(OVERHANG_SECONDS / fastBar));
-  const ringTicks = Math.ceil((OVERHANG_SECONDS / fastBar) * ticks);
+  // A vocoder's envelopes need 5 releases (+0.1 s) to settle (0.7).
+  const overhang = Math.max(
+    OVERHANG_SECONDS,
+    ...score.tracks.map((track) => vocoderPrerollSeconds(track.vocoder)),
+  );
+  const ring = Math.max(1, Math.ceil(overhang / fastBar));
+  const ringTicks = Math.ceil((overhang / fastBar) * ticks);
   const budget = Math.max(1, Math.floor(WINDOW_BUDGET_SECONDS / slowBar));
   const reach = budget - 1;
   const most = Math.max(1, Math.floor(WINDOW_SECONDS / slowBar));

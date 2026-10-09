@@ -17,6 +17,7 @@ import type { RenderContext } from "./wav.ts";
 import { STRING_ENGINE } from "./strings/engine.ts";
 import { GRANULAR_ENGINE } from "./granular.ts";
 import { KEYS_ENGINES } from "./keys/engine.ts";
+import { VOCODER_ENGINE } from "./vocoder/index.ts";
 
 /** What an engine renders with: the track's render context plus its tuning. */
 export type EngineContext = RenderContext &
@@ -140,3 +141,4 @@ for (const engine of KEYS_ENGINES) registerEngine(engine);
 registerEngine(MODAL_ENGINE);
 registerEngine(WIND_ENGINE);
 registerEngine(SING_ENGINE);
+registerEngine(VOCODER_ENGINE);

@@ -159,6 +159,11 @@ import {
   setClipImportDeps,
 } from "./commands/clips.ts";
 import { pitchTraceFor } from "./commands/vocal-pitch.ts";
+import {
+  applyVocoderCommand,
+  parseVocoderCommand,
+  vocoderListLines,
+} from "./commands/vocoder.ts";
 import { parseResampleCommand, runResample } from "./commands/resample.ts";
 import { suggestFitMode } from "./audio/dsp/onset.ts";
 import {
@@ -358,6 +363,7 @@ function parsesLocally(text: string): boolean {
     parseStrumCommand,
     parseWindCommand,
     parseSingCommand,
+    parseVocoderCommand,
     parseVocalCommand,
     parseFormantCommand,
     parseVowelCommand,
@@ -1862,6 +1868,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
   });
   const vocal = parseVocalCommand(command);
   if (vocal) {
+    if (vocal.kind === "verb") await materializeDraft();
     const result = await runVocalCommand(vocal, {
       score,
       trackId: requestedTrack,
@@ -1874,6 +1881,11 @@ async function submit(prompt: string): Promise<string | Receipt> {
         ...result.payload,
       });
       await projectSync?.flushScore();
+    }
+    // A verb that made or chose another track (a vocoder carrier): focus it.
+    if (result.trackId && result.trackId !== requestedTrack) {
+      await port.focus(result.trackId);
+      requestedTrack = result.trackId;
     }
     return ok(result.message);
   }
@@ -1999,6 +2011,25 @@ async function submit(prompt: string): Promise<string | Receipt> {
     const result = applyModalCommand(score, requestedTrack, modal);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
+  const vocoderCommand = parseVocoderCommand(command);
+  if (vocoderCommand) {
+    if (vocoderCommand.type === "vocoder-list")
+      tui.openText("vocoder presets", vocoderListLines());
+    if (
+      vocoderCommand.type !== "vocoder-list" &&
+      vocoderCommand.type !== "vocoder-usage"
+    )
+      await materializeDraft();
+    const result = applyVocoderCommand(score, requestedTrack, vocoderCommand);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    // `/vocoder` on a vocal makes a carrier track: focus it.
+    if (result.trackId && result.trackId !== requestedTrack) {
+      await port.focus(result.trackId);
+      requestedTrack = result.trackId;
+    }
     return result.ok ? ok(result.message) : fail(result.message);
   }
   const windCommand = parseWindCommand(command);

@@ -128,3 +128,20 @@ export function notesDigestInputs(
     notes: score.notes.filter((note) => note.trackId === id),
   }));
 }
+
+/**
+ * The vocoder's modulator (0.7): `vocoder.src` is an audio edge, so the
+ * modulator renders first and removing it drops the `src` (the carrier then
+ * plays dry until a new source is set).
+ */
+registerTrackRefs("vocoder", {
+  refs: (track) =>
+    track.vocoder?.src !== undefined
+      ? [{ trackId: track.vocoder.src, kind: "audio" }]
+      : [],
+  drop: (track, removedId) => {
+    if (track.vocoder?.src !== removedId) return track;
+    const { src: _src, ...rest } = track.vocoder;
+    return { ...track, vocoder: rest };
+  },
+});

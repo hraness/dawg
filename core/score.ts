@@ -35,6 +35,12 @@ import {
   SING_INSTRUMENT,
   type TrackSing,
 } from "./sing.ts";
+import {
+  normalizeVocoder,
+  vocoderScoreError,
+  VOCODER_INSTRUMENT,
+  type TrackVocoder,
+} from "./vocoder.ts";
 import { normalizeString, type TrackString } from "./strings.ts";
 import {
   isGranularInstrument,
@@ -160,6 +166,11 @@ export const SCORE_LIMITS = Object.freeze({
   singVoicesPerTrack: 48,
   maxSayCuts: 512,
   maxTakePpm: 1000,
+  /** Vocoder (0.7): channel bands, formant shift (st), tracks per song. */
+  minVocoderBands: 4,
+  maxVocoderBands: 40,
+  maxVocoderFormant: 24,
+  maxVocoderTracks: 8,
 } as const);
 
 /** Instrument name that selects a track's `wavetable` oscillator. */
@@ -487,6 +498,11 @@ export type Track = Readonly<{
   clips?: readonly AudioClip[];
   /** Optional (0.7): recorded or imported takes that clips may reference. */
   takes?: readonly Take[];
+  /**
+   * Optional (0.7): vocoder on this track (`core/vocoder.ts`); `src` names
+   * the modulator track. Absent: today's sound.
+   */
+  vocoder?: TrackVocoder;
 }> &
   /**
    * Performance (`core/expression.ts`): glide default, sustain pedal
@@ -888,6 +904,7 @@ export type TrackPatch = Readonly<
     sing?: TrackSing | null;
     clips?: readonly AudioClip[] | null;
     takes?: readonly Take[] | null;
+    vocoder?: TrackVocoder | null;
   }
 >;
 
@@ -947,6 +964,7 @@ export type TrackInput = Readonly<
     | "sing"
     | "clips"
     | "takes"
+    | "vocoder"
   > &
     Pick<Track, "id"> & {
       filter?: TrackFilter | null;
@@ -976,6 +994,7 @@ export type TrackInput = Readonly<
       sing?: TrackSing | null;
       clips?: readonly AudioClip[] | null;
       takes?: readonly Take[] | null;
+      vocoder?: TrackVocoder | null;
     }
 >;
 
@@ -1394,6 +1413,15 @@ export function updateTrack(
         !isKeysFamily(patch.instrument)
       )
         delete next.keys;
+      // f07-vocoder: naming the `vocoder` instrument turns on its built-in
+      // carrier (an empty field keeps every default); a vocoder stage the
+      // track already has (its source) stays.
+      if (
+        patch.instrument === VOCODER_INSTRUMENT &&
+        patch.vocoder === undefined &&
+        next.vocoder === undefined
+      )
+        next.vocoder = Object.freeze({});
       return next as Track;
     }),
   );
@@ -1892,7 +1920,7 @@ function normalizeTracks(inputs: readonly unknown[]): Track[] {
     );
   }
   const seen = new Set<string>();
-  return inputs.map((input) => {
+  const tracks = inputs.map((input) => {
     const track = normalizeTrack(input);
     if (seen.has(track.id))
       throw new ScoreValidationError(
@@ -1902,6 +1930,10 @@ function normalizeTracks(inputs: readonly unknown[]): Track[] {
     seen.add(track.id);
     return track;
   });
+  const vocoderError = vocoderScoreError(tracks, SCORE_LIMITS.maxVocoderTracks);
+  if (vocoderError)
+    throw new ScoreValidationError(vocoderError, "invalid-track");
+  return tracks;
 }
 
 function normalizeTrack(input: unknown): Track {
@@ -2009,6 +2041,7 @@ function normalizeTrack(input: unknown): Track {
     );
   const sampler = normalizeSampler(input.sampler);
   const takes = normalizeTakes(input.takes, id);
+  const vocoder = fxOrThrow(() => normalizeVocoder(input.vocoder));
   const clips = normalizeClips(input.clips, id, takes);
   const rhythm = normalizeRhythm(input.rhythm, id);
   const time = timeOrThrow(
@@ -2131,6 +2164,7 @@ function normalizeTrack(input: unknown): Track {
     ...(sing ? { sing } : {}),
     ...(clips ? { clips } : {}),
     ...(takes ? { takes } : {}),
+    ...(vocoder ? { vocoder } : {}),
   });
 }
 

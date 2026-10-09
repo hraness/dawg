@@ -60,6 +60,25 @@ function targetTrack(
     );
   return trackId;
 }
+import {
+  VOCODER_CARRIERS,
+  VOCODER_FOLLOWS,
+  VOCODER_PARAMS,
+  VOCODER_PRESET_NAMES,
+  isVocoderPreset,
+  vocoderParamName,
+  type VocoderCarrier,
+  type VocoderFollow,
+  type VocoderPresetName,
+} from "../../core/vocoder.ts";
+import {
+  applyVocoderCommand,
+  vocodeTrack,
+  vocoderCandidates,
+  vocoderCostHint,
+  vocoderEntryLines,
+  type VocoderValue,
+} from "../commands/vocoder.ts";
 
 /** An agent tool, optionally usable as a `preview_sound` candidate. */
 export type VoiceTool = AgentTool & Readonly<{ previewable?: boolean }>;
@@ -518,9 +537,233 @@ export const SING_TOOLS: readonly VoiceTool[] = [
     },
   },
 ];
+/** `set_vocoder.params` keys: exactly VOCODER_PARAMS. */
+export const VOCODER_TOOL_PARAM_KEYS: readonly string[] = Object.freeze(
+  Object.keys(VOCODER_PARAMS),
+);
+
+const vocoderTrackId = {
+  type: "string",
+  description: "Target track id. Defaults to the focused track.",
+  maxLength: SCORE_LIMITS.maxIdLength,
+};
+
+function knownTrack(
+  value: unknown,
+  fallback: string,
+  tracks: readonly { id: string }[],
+  label: string,
+): string {
+  const id = value ?? fallback;
+  if (typeof id !== "string" || id.length > SCORE_LIMITS.maxIdLength)
+    throw new ToolArgumentError(`${label} must be a short string`);
+  if (!tracks.some((track) => track.id === id))
+    throw new ToolArgumentError(`unknown track ${id}`);
+  return id;
+}
+
+function presetArg(value: unknown): VocoderPresetName | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !isVocoderPreset(value))
+    throw new ToolArgumentError(
+      `preset must be one of ${VOCODER_PRESET_NAMES.join(", ")}`,
+    );
+  return value;
+}
 
 /** vocoder: set_vocoder, vocode. */
-export const VOCODER_TOOLS: readonly VoiceTool[] = [];
+export const VOCODER_TOOLS: readonly VoiceTool[] = [
+  {
+    name: "set_vocoder",
+    previewable: true,
+    description:
+      "Put a vocoder on a track (the carrier: its synth, sampler or the built-in `vocoder` instrument) or change it. src is the modulator track, usually a vocal (id or name slug). preset (classic robot talkbox choir glass whisper smear lofi) keeps overrides; params sets VOCODER_PARAMS keys, null returns one to the preset; reset drops every override (keeps src and preset); off removes the vocoder. The modulator is heard even when muted. Returns a cost hint and the modulator's licence. Vocode only the user's own or licensed audio.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        trackId: vocoderTrackId,
+        src: { type: "string", maxLength: 64 },
+        preset: { type: "string", enum: [...VOCODER_PRESET_NAMES] },
+        reset: { type: "boolean" },
+        off: { type: "boolean" },
+        params: {
+          type: "object",
+          description: `VOCODER_PARAMS: ${Object.keys(VOCODER_PARAMS).join(" ")}; gate takes "auto"; null resets one`,
+          additionalProperties: {
+            type: ["number", "string", "boolean", "null"],
+          },
+        },
+      },
+    },
+    plan(args, context) {
+      const trackId = knownTrack(
+        args.trackId,
+        context.focusedTrackId,
+        context.score.tracks,
+        "trackId",
+      );
+      let score = context.score;
+      const messages: string[] = [];
+      const run = (command: Parameters<typeof applyVocoderCommand>[2]) => {
+        const result = applyVocoderCommand(score, trackId, command);
+        if (!result.ok) throw new ToolArgumentError(result.message);
+        if (result.next) score = result.next;
+        messages.push(result.message);
+      };
+      if (args.off === true) run({ type: "vocoder-off" });
+      else {
+        const values: Record<string, VocoderValue> = {};
+        if (args.params !== undefined) {
+          if (
+            typeof args.params !== "object" ||
+            args.params === null ||
+            Array.isArray(args.params)
+          )
+            throw new ToolArgumentError("params must be an object");
+          for (const [key, value] of Object.entries(args.params)) {
+            const name = vocoderParamName(key);
+            if (!name)
+              throw new ToolArgumentError(
+                `vocoder has no parameter ${key.slice(0, 32)} (${VOCODER_TOOL_PARAM_KEYS.join(" ")})`,
+              );
+            if (
+              value !== null &&
+              typeof value !== "number" &&
+              typeof value !== "string" &&
+              typeof value !== "boolean"
+            )
+              throw new ToolArgumentError(
+                `${key} must be a number, string, boolean or null`,
+              );
+            values[name] = value;
+          }
+        }
+        if (args.reset === true) run({ type: "vocoder-reset" });
+        const preset = presetArg(args.preset);
+        if (args.src !== undefined && typeof args.src !== "string")
+          throw new ToolArgumentError("src must be a track id or name");
+        const src = args.src as string | undefined;
+        const current = score.tracks.find((t) => t.id === trackId)!;
+        if (
+          preset ||
+          src !== undefined ||
+          Object.keys(values).length > 0 ||
+          (!current.vocoder && args.reset !== true)
+        ) {
+          if (!current.vocoder && src === undefined) {
+            const candidates = vocoderCandidates(score, trackId);
+            if (candidates.length !== 1)
+              throw new ToolArgumentError(
+                candidates.length === 0
+                  ? vocoderEntryLines().join(" ")
+                  : `src is required: one of ${candidates.map((t) => t.id).join(", ")}`,
+              );
+          }
+          run({
+            type: "vocoder-set",
+            ...(preset ? { preset } : {}),
+            src:
+              src ??
+              current.vocoder?.src ??
+              vocoderCandidates(score, trackId)[0]!.id,
+            values,
+          });
+        }
+      }
+      const next = score.tracks.find((t) => t.id === trackId)!;
+      const cost = next.vocoder ? ` · ${vocoderCostHint(next.vocoder)}` : "";
+      return {
+        kind: "score",
+        operations: [
+          {
+            type: "updateTrack",
+            trackId,
+            patch: { vocoder: next.vocoder ?? null },
+          },
+        ],
+        trackId,
+        summary: `${trackId} ${messages.at(-1) ?? "vocoder unchanged"}${cost}`,
+      };
+    },
+  },
+  {
+    name: "vocode",
+    previewable: true,
+    description:
+      "One step: create a vocoder track driven by a vocal (or any) track, following the song's chords (or a drone on the key's root when there are none) unless follow is given. Mutes the source unless keepSource (the vocoder still hears a muted source). Echoes the source's licence. Vocode only the user's own or licensed audio.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["src"],
+      properties: {
+        src: vocoderTrackId,
+        preset: { type: "string", enum: [...VOCODER_PRESET_NAMES] },
+        name: { type: "string", maxLength: 48 },
+        carrier: { type: "string", enum: [...VOCODER_CARRIERS] },
+        follow: { type: "string", enum: [...VOCODER_FOLLOWS] },
+        keepSource: { type: "boolean" },
+      },
+    },
+    plan(args, context) {
+      const src = knownTrack(args.src, "", context.score.tracks, "src");
+      const enumArg = <T extends string>(
+        value: unknown,
+        values: readonly string[],
+        label: string,
+      ): T | undefined => {
+        if (value === undefined) return undefined;
+        if (typeof value !== "string" || !values.includes(value))
+          throw new ToolArgumentError(
+            `${label} must be one of ${values.join(", ")}`,
+          );
+        return value as T;
+      };
+      if (args.name !== undefined && typeof args.name !== "string")
+        throw new ToolArgumentError("name must be a string");
+      const preset = presetArg(args.preset);
+      const carrier = enumArg<VocoderCarrier>(
+        args.carrier,
+        VOCODER_CARRIERS,
+        "carrier",
+      );
+      const follow = enumArg<VocoderFollow>(
+        args.follow,
+        VOCODER_FOLLOWS,
+        "follow",
+      );
+      const result = vocodeTrack(context.score, src, {
+        ...(preset ? { preset } : {}),
+        ...(typeof args.name === "string" ? { name: args.name } : {}),
+        ...(carrier ? { carrier } : {}),
+        ...(follow ? { follow } : {}),
+        ...(args.keepSource === true ? { keepSource: true } : {}),
+      });
+      if (!result.ok || !result.next || !result.trackId)
+        throw new ToolArgumentError(result.message);
+      const track = result.next.tracks.find((t) => t.id === result.trackId)!;
+      const muted = result.next.tracks.find((t) => t.id === src)!.muted;
+      const before = context.score.tracks.find((t) => t.id === src)!.muted;
+      return {
+        kind: "score",
+        operations: [
+          { type: "addTrack", track },
+          ...(muted !== before
+            ? [
+                {
+                  type: "updateTrack" as const,
+                  trackId: src,
+                  patch: { muted: true },
+                },
+              ]
+            : []),
+        ],
+        trackId: result.trackId,
+        summary: `${result.message.split("\n").join(" ")} · ${vocoderCostHint(track.vocoder!)}`,
+      };
+    },
+  },
+];
 /** autotune: autotune_vocal. */
 export const AUTOTUNE_TOOLS: readonly VoiceTool[] = [];
 

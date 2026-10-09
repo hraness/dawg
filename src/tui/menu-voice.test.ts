@@ -29,7 +29,7 @@ function open(nodes: MenuNode[], id: string, ctx: MenuContext): MenuNode[] {
 const labels = (nodes: MenuNode[]) => nodes.map((node) => node.label);
 
 describe("0.7 voice menu groups", () => {
-  test("Voice groups mount once with clips, formant and sing rows", () => {
+  test("Voice groups mount once with clips, formant, sing and vocoder rows", () => {
     const ctx = context();
     const root = rootNodes(ctx);
     // Seven top-level sections, unchanged.
@@ -51,6 +51,9 @@ describe("0.7 voice menu groups", () => {
       "Lyrics",
     ]);
     expect(labels(browse)).toContain("Voices");
+    // The vocoder lane adds Effects > Voice > Vocoder.
+    expect(labels(effects).filter((l) => l === "Voice")).toHaveLength(1);
+    expect(labels(open(effects, "voice", ctx))).toContain("Vocoder");
     expect(labels(sound).slice(-2)).toEqual(["performance", "browse sounds"]);
     // Effects > Voice has no rows until the formant or vocoder lane lands.
     expect(

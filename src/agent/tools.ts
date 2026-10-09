@@ -1,5 +1,6 @@
 import { isGuideInstrument, vocalChainPatch } from "../../core/clips.ts";
 import { INSTRUMENT_WORDS } from "../../core/instruments.ts";
+import type { TrackVocoder } from "../../core/vocoder.ts";
 import {
   DEFAULT_STRING_PRESET,
   STRING_INSTRUMENT,
@@ -2316,6 +2317,7 @@ function instrumentName(value: unknown): {
   string?: { preset: string };
   modal?: TrackModal;
   wind?: TrackWind;
+  vocoder?: TrackVocoder;
 } {
   const word = typeof value === "string" ? value.trim() : undefined;
   if (word === STRING_INSTRUMENT)
@@ -2329,6 +2331,7 @@ function instrumentName(value: unknown): {
     (!patch.string &&
       !patch.modal &&
       !patch.wind &&
+      !patch.vocoder &&
       !(AVAILABLE_INSTRUMENTS as readonly string[]).includes(patch.instrument))
   )
     throw new ToolArgumentError(

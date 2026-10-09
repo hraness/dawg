@@ -34,6 +34,11 @@ import {
   singNoteName,
   type TrackSing,
 } from "../sing.ts";
+import {
+  VOCODER_INSTRUMENT,
+  VOCODER_PARAMS,
+  type TrackVocoder,
+} from "../vocoder.ts";
 import { rhythmVoicePitch, rowInSync } from "../rhythm.ts";
 import {
   BUILTIN_TABLE_PREFIX,
@@ -170,6 +175,7 @@ const RESERVED = new Set([
   "take",
   "lyrics",
   "repeatAudio",
+  "vocoder",
   "slices",
   "euclid",
   "euclidRot",
@@ -439,6 +445,15 @@ export function printTrack(score: TrackScore, track: Track): string {
       ? printSing(track.sing, INDENT)
       : undefined;
   if (singCall?.startsWith("sing(")) used.add("sing");
+  const vocoderCall = track.vocoder
+    ? printVocoder(
+        track.vocoder,
+        vocoderSrcText(score, track.vocoder.src),
+        track.instrument === VOCODER_INSTRUMENT ? "instrument: " : "vocoder: ",
+        INDENT,
+      )
+    : undefined;
+  if (vocoderCall?.startsWith("vocoder(")) used.add("vocoder");
 
   const entries: string[] = [
     `id: ${str(track.id)}`,
@@ -461,7 +476,11 @@ export function printTrack(score: TrackScore, track: Track): string {
     entries.push(`instrument: ${windCall}`);
   } else if (singCall) {
     entries.push(`instrument: ${singCall}`);
+  } else if (vocoderCall && track.instrument === VOCODER_INSTRUMENT) {
+    entries.push(`instrument: ${vocoderCall}`);
   } else entries.push(`instrument: ${str(track.instrument)}`);
+  if (vocoderCall && track.instrument !== VOCODER_INSTRUMENT)
+    entries.push(`vocoder: ${vocoderCall}`);
   if (track.kit) entries.push(`kit: ${str(track.kit)}`);
   if (track.granular && !grained)
     entries.push(
@@ -703,6 +722,7 @@ export function printTrack(score: TrackScore, track: Track): string {
     "modal",
     "wind",
     "sing",
+    "vocoder",
     "euclid",
     "grid",
     "audio",
@@ -1215,6 +1235,63 @@ const SING_BARE_WORDS: ReadonlySet<string> = new Set([
   "sygyt",
   "kargyraa",
 ]);
+
+/**
+ * A vocoder's `src` as the SDK reads it back: the track's name slug when it
+ * names exactly that track (no other slug or id collides), else the id.
+ */
+function vocoderSrcText(
+  score: TrackScore,
+  src: string | undefined,
+): string | undefined {
+  if (src === undefined) return undefined;
+  const target = score.tracks.find((track) => track.id === src);
+  if (!target) return src;
+  const slug = trackSlug(target.name);
+  const clash = score.tracks.some(
+    (track) =>
+      track.id !== target.id &&
+      (track.id === slug || trackSlug(track.name) === slug),
+  );
+  return clash ? src : slug;
+}
+
+/**
+ * A vocoder: the bare word `"vocoder"` for a built-in carrier with nothing
+ * set, else `vocoder("talkbox", { src: "vox", formant: 2 })` with `src`
+ * first and the rest in `VOCODER_PARAMS` order.
+ */
+function printVocoder(
+  settings: TrackVocoder,
+  src: string | undefined,
+  prefix: string,
+  indent: string,
+): string {
+  const params: [string, string][] = [];
+  if (src !== undefined) params.push(["src", str(src)]);
+  for (const key of Object.keys(VOCODER_PARAMS)) {
+    const value = (settings as Record<string, unknown>)[key];
+    if (value === undefined) continue;
+    params.push([
+      key,
+      typeof value === "number"
+        ? num(value)
+        : typeof value === "boolean"
+          ? String(value)
+          : str(String(value)),
+    ]);
+  }
+  const preset = settings.preset;
+  if (params.length === 0 && !preset && prefix === "instrument: ")
+    return str(VOCODER_INSTRUMENT);
+  const head = preset ? str(preset) : "";
+  if (params.length === 0) return `vocoder(${head})`;
+  const lead = head ? `${head}, ` : "";
+  const inline = `vocoder(${lead}{ ${params.map(([k, v]) => `${k}: ${v}`).join(", ")} })`;
+  if (indent.length + prefix.length + inline.length + 1 <= WIDTH) return inline;
+  const inner = indent + INDENT;
+  return `vocoder(${lead}{\n${params.map(([k, v]) => `${inner}${k}: ${v},`).join("\n")}\n${indent}})`;
+}
 
 /** `wavetable("basic", { wt: 0.5 })`; pack tables keep their pin. */
 function printWavetable(settings: TrackWavetable, indent: string): string {

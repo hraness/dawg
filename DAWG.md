@@ -1645,6 +1645,55 @@ dawg can read the melody out of audio: a sampler voice (for example a stem from 
 
 The tracker is a pYIN-style estimator on an exact 16 kHz copy of the audio, with a 5 ms hop, a voicing probability per frame and a Viterbi path that resists octave jumps; on the test voices it stays within 10 cents of the truth on held notes and costs about 20 ms per audio second. Curves are cached in `.dawg/analysis/` (`<sha256>.<voice>.v<version>.f0`, at most 64 MB, oldest removed first; `/pack cache` shows the size), so a second look is instant. A corrupt or old cache file is ignored and rebuilt, and the cached and fresh curves are identical.
 
+### Vocoder
+
+A vocoder makes one sound talk with another: a voice (the modulator) shapes the spectrum of an instrument (the carrier) band by band, so the instrument sings the voice's words at the instrument's pitch. dawg's vocoder sits on the carrier track: `vocoder.src` names the voice track, and the carrier is the track itself.
+
+The one-step way: focus a vocal track (a sampler voice or clips) and type `/vocoder`. dawg adds a `<name> vocoder` track playing the built-in carrier, points it at the vocal and mutes the vocal, in one undo step; the carrier follows the song's chords when it has harmonic tracks, otherwise it drones on the song key's root. `/vocal vocoder` is the same command. On a synth track with one vocal in the song, `/vocoder` drives that synth instead. `/vocoder talkbox` or `/vocoder formant 3` on the vocal does the same with those settings, and on a vocal that already drives a carrier `/vocoder` focuses that carrier (`/vocoder new` makes another). With nothing to vocode it changes nothing and says how to bring a voice in. Muting the source does not silence the vocoder: the vocoder listens before the source's mute, volume, pan and sends.
+
+`/vocoder` and `vocode` echo the modulator's licence. Vocode only your own recordings or audio you hold the rights to. To vocode your own voice, load a recording of it onto a track (`/sample take.wav`), then `/vocoder talkbox` on that track.
+
+| Command                                      | Does                                                                                   |
+| -------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `/vocoder [preset]`                          | vocode the focused vocal (a new carrier), or set the focused carrier's preset          |
+| `/vocoder src <track>`                       | the modulator: a track id or name slug (`lead-vox`); preset words win over track names |
+| `/vocoder <param> <value>` / `<param> reset` | set or reset any parameter below (`att` and `rel` are Strudel spellings)               |
+| `/vocoder reset` / `off` / `presets`         | back to the preset's values; remove the vocoder; list presets                          |
+| `instrument vocoder`                         | the built-in carrier: saw, supersaw, pulse or noise following notes, chords or a drone |
+
+Presets (all 24 bands or fewer): **classic** (70s and 80s band vocoder lead, the default), **robot** (12 bands, a pulse drone), **talkbox** (an LPC mouth filter on a saw), **choir** (stereo supersaw chord pad), **glass** (bright, formant +3), **whisper** (noise carrier), **smear** (long release wash; try `freeze`) and **lofi** (8 narrow bands under 4 kHz).
+
+| Parameter  | Range                               | Default   | Does                                                                         |
+| ---------- | ----------------------------------- | --------- | ---------------------------------------------------------------------------- |
+| `tap`      | `chain`, `dry`                      | chain     | listen to the source after its mono chain (before pan) or before its effects |
+| `mode`     | `channel`, `talkbox`                | channel   | a band bank, or an LPC talkbox (order sr/2000, 20 ms frames)                 |
+| `carrier`  | `saw`, `supersaw`, `pulse`, `noise` | supersaw  | the built-in carrier (`instrument vocoder` only)                             |
+| `follow`   | `notes`, `chords`, `drone`          | notes     | the built-in carrier's pitch: its notes, the song's chords, or `root`        |
+| `root`     | 24..96                              | 45        | the drone pitch (MIDI), and the octave chords are voiced from                |
+| `spread`   | 0..1 st                             | 0.15      | supersaw detune                                                              |
+| `bands`    | 4..40                               | 16        | channel bands, spaced evenly in log frequency (heavy above 24)               |
+| `lo`, `hi` | 50..1000 Hz, 2000..12000 Hz         | 100, 8000 | the lowest and highest band centres                                          |
+| `width`    | 0.25..4                             | 1         | band width as a multiple of the spacing                                      |
+| `attack`   | 0.0005..0.2 s                       | 0.005     | envelope follower attack                                                     |
+| `release`  | 0.005..2 s                          | 0.04      | envelope follower release; long releases smear                               |
+| `formant`  | ±24 st (talkbox ±12)                | 0         | move the voice's formants: + is smaller and brighter                         |
+| `unvoiced` | 0..1                                | 0.5       | noise in place of the carrier on s, f, sh and t                              |
+| `sens`     | 0..1                                | 0.5       | how readily a frame counts as unvoiced                                       |
+| `hiss`     | 0..1                                | 0         | the source's top end passed straight through                                 |
+| `gate`     | -90..0 dBFS or `auto`               | auto      | silence below this source level; `auto` reads the source's noise floor       |
+| `enhance`  | on/off                              | on        | whiten the carrier so every band speaks                                      |
+| `depth`    | 0..1                                | 1         | how much the voice shapes the carrier                                        |
+| `freeze`   | on/off                              | off       | hold the current vowel                                                       |
+| `mix`      | 0..1                                | 1         | wet against the plain carrier                                                |
+| `gain`     | ±24 dB                              | 0         | output trim (a fixed makeup gain and a soft peak guard at 1.0 come first)    |
+| `seed`     | integer                             | track id  | the unvoiced noise seed                                                      |
+
+How it works: channel mode splits both signals into the same bands (cascaded RBJ band-passes, laid out from `lo` to `hi` the same at every sample rate), follows each modulator band's level, and multiplies the carrier's band by it. Each band's envelope is advanced by its filter's group delay plus the attack, so consonants stay on time. A formant shift reads the envelopes at a fractional band index. Talkbox mode fits an all-pole mouth filter to each 20 ms frame of the voice (on an absolute hop grid, so windows agree) and runs the carrier through it, which keeps vowels sharper with fewer artefacts. Frames that are both high-band heavy and aperiodic count as unvoiced and get seeded noise (keyed to the song sample) instead of the carrier, as hardware vocoders do with their sibilance switch. A stereo carrier (a supersaw) gets one analysis and two synthesis banks.
+
+Menu: **Effects › Voice › Vocoder** has a Source picker, Preset and one row per parameter; **Sound › browse sounds › Voices › Vocoder** makes a carrier track or picks a preset. The Mix & automation lane picker lists `vocoder-spread`, `-width`, `-release`, `-formant`, `-unvoiced`, `-hiss`, `-depth`, `-freeze` (a 0/1 step lane), `-mix` and `-gain`. Agent tools: `set_vocoder` (preset, src and a params object; previewable) and `vocode` (makes the carrier from a source and echoes the source's licence). In `song.ts`: `vocoder("talkbox", { src: "lead-vox", formant: 2 })` as an instrument or as a track's `vocoder` field (SDK 1.32.0).
+
+Cost: a 16-band channel vocoder renders at about 45 ms per audio-second, talkbox about 10 ms (measured on an M-series Mac); renders reuse the source's cached audio, and an edit to the source's pan, reverb, delay or sends does not re-render the vocoder.
+
 ## Menus
 
 `/menu` or `Ctrl-K` (on an empty prompt, in play mode too) opens the edit menu, drawn with the same overlay as the model picker. Every edit the agent can make is reachable from it with keys alone. Each row shows a plain label and the current value with its unit (s, Hz, oct, st, dB, BPM, bars); the line under the list describes the focused row and shows, dimmed, the prompt command the row runs, so the menu teaches the commands. `/menu <section>` opens a section directly (`/menu effects`, `/menu arrange`); the old names `parameters`, `sounds`, `track`, `automation` and `transport` still work.

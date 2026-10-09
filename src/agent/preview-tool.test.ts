@@ -176,3 +176,21 @@ describe("preview_sound", () => {
     expect(compareSounds(base, { ...base, clipped: 4 })).toBe("now clips");
   });
 });
+
+describe("preview_sound with a vocoder", () => {
+  test("a set_vocoder candidate is heard through its muted source", async () => {
+    const { json } = await run({
+      trackId: "pad",
+      changes: [
+        {
+          tool: "set_vocoder",
+          args: { src: "lead", params: { follow: "drone" } },
+        },
+      ],
+    });
+    expect(json.mode).toBe("solo");
+    expect(json.candidate).toHaveLength(1);
+    // The pad is vocoded by the lead: a different sound, not the dry pad.
+    expect(json.sound.rmsDb).not.toBe(json.current.rmsDb);
+  });
+});

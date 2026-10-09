@@ -414,7 +414,8 @@ function laneLabel(lane: AutomationParameter): string {
     info.effect === "modal" ||
     info.effect === "grain" ||
     info.effect === "wind" ||
-    info.effect === "sing"
+    info.effect === "sing" ||
+    info.effect === "vocoder"
       ? info.effect
       : effectSpec(info.effect).label;
   return `${owner} ${info.param}${unit}`;
@@ -2315,6 +2316,7 @@ function automationNodes(context: MenuContext): MenuNode[] {
     if (info?.effect === "grain") return track.granular !== undefined;
     if (info?.effect === "wind") return track.wind !== undefined;
     if (info?.effect === "sing") return track.sing !== undefined;
+    if (info?.effect === "vocoder") return track.vocoder !== undefined;
     return info !== undefined && effectValues(track, info.effect) !== undefined;
   });
   const hidden = AUTOMATION_PARAMETERS.filter((lane) => !shown.includes(lane));
