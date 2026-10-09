@@ -58,6 +58,12 @@ export type FxCommand =
       type: "fx-set";
       effect: EffectName;
       values: Readonly<Record<string, number | string | boolean>>;
+    }
+  /** Store exactly these values (`/vowel a` drops a previous morph). */
+  | {
+      type: "fx-replace";
+      effect: EffectName;
+      values: Readonly<Record<string, number | string | boolean>>;
     };
 
 const EFFECT_ALIASES: Readonly<Record<string, EffectName>> = Object.freeze({
@@ -263,6 +269,11 @@ export function effectDefaults(effect: EffectName): FxValues {
     delete out.sag;
     delete out.gate;
   }
+  // The vowel morph stays absent until set: `fx vowel on` stores 0.6 data.
+  if (effect === "vowel") {
+    delete out.to;
+    delete out.morph;
+  }
   return out;
 }
 
@@ -345,6 +356,7 @@ export function applyFxCommand(
       ...effectDefaults(effect),
       ...FX_PRESETS[effect]![command.preset],
     };
+  else if (command.type === "fx-replace") values = { ...command.values };
   else values = { ...(current ?? effectDefaults(effect)), ...command.values };
   if (values && effect === "delay" && values.time === 0) {
     const { time: _time, ...rest } = values;

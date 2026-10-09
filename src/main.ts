@@ -140,6 +140,11 @@ import {
 import { applyFitCommand, fitVoice, parseFitCommand } from "./commands/fit.ts";
 import { applyShiftCommand, parseShiftCommand } from "./commands/shift.ts";
 import { parseVocalCommand, runVocalCommand } from "./commands/vocal.ts";
+import {
+  applyFormantCommand,
+  parseFormantCommand,
+  parseVowelCommand,
+} from "./commands/formant.ts";
 import { parseResampleCommand, runResample } from "./commands/resample.ts";
 import { suggestFitMode } from "./audio/dsp/onset.ts";
 import {
@@ -332,6 +337,8 @@ function parsesLocally(text: string): boolean {
     parseStrumCommand,
     parseWindCommand,
     parseVocalCommand,
+    parseFormantCommand,
+    parseVowelCommand,
   ].some((parse) => parse(text) !== undefined);
 }
 
@@ -1856,6 +1863,15 @@ async function submit(prompt: string): Promise<string | Receipt> {
     if (rig.type !== "rig-show" && rig.type !== "rig-hint")
       await materializeDraft();
     const result = applyRigCommand(score, requestedTrack, rig);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
+  // 0.7 `/formant` and `/vowel`: short forms of `fx formant|vowel`.
+  const formant = parseFormantCommand(command) ?? parseVowelCommand(command);
+  if (formant) {
+    if (formant.type === "fx") await materializeDraft();
+    const result = applyFormantCommand(score, requestedTrack, formant);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);

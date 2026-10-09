@@ -40,8 +40,10 @@ describe("/vocal umbrella", () => {
   });
 
   test("bare /vocal lists the verb table; verbs run; errors are text", async () => {
-    expect(VOCAL_VERBS).toEqual([]);
-    expect(vocalListLines()).toEqual([
+    // Lanes register their verbs; every verb names its lane.
+    expect(VOCAL_VERBS.map((verb) => verb.verb)).toContain("formant");
+    for (const verb of VOCAL_VERBS) expect(verb.lane).toBeTruthy();
+    expect(vocalListLines([])).toEqual([
       "vocal: no voice tools yet in this build",
     ]);
     expect(vocalListLines([demo])).toEqual([

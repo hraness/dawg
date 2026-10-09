@@ -5,6 +5,7 @@
  * documented and typo-matched the moment it is registered.
  */
 import type { TrackScore } from "../../core/score.ts";
+import { applyFormantCommand, formantArgs, FORMANT_USAGE } from "./formant.ts";
 
 /** What a verb sees: the score, the focused track and the project folder. */
 export type VocalContext = Readonly<{
@@ -41,6 +42,14 @@ export const VOCAL_VERBS: readonly VocalVerb[] = [
   // pitch: pitch, notes
   // autotune: autotune
   // formant: formant
+  {
+    verb: "formant",
+    usage: FORMANT_USAGE,
+    summary: "shift formants at constant pitch · same as /formant",
+    lane: "formant",
+    run: async (args, context) =>
+      applyFormantCommand(context.score, context.trackId, formantArgs(args)),
+  },
   // vocoder: vocoder
   // 0.7.1: record, take, comp (record), say (say), harmony (harmony),
   // chop (chops)
