@@ -13,6 +13,7 @@ import { HINTS } from "../../tui/grammar.ts";
 import { arrangeDetail, arrangeNodes } from "./arrange-menu.ts";
 import { auditionKey, isStageable, type AuditionKey } from "./audition.ts";
 import { performanceDetail, performanceNodes } from "./performance-menu.ts";
+import { malletsMenu, modalParameterNodes } from "./modal-menu.ts";
 import type { FaderSpec } from "./fader.ts";
 import {
   openingMeterCommand,
@@ -347,7 +348,7 @@ const TRACK_LANE_LABEL: Readonly<Record<TrackAutomationParameter, string>> = {
 const FX_LANE_INFO = new Map(FX_LANES.map((entry) => [entry.lane, entry]));
 
 /** Nudge for a number spec: linear by its step, or a sixth of an octave. */
-function specStep(
+export function specStep(
   spec: NumberParam,
 ): (value: number, direction: 1 | -1) => number {
   if (spec.step === "log")
@@ -382,7 +383,8 @@ function laneLabel(lane: AutomationParameter): string {
   const owner =
     info.effect === "synth" ||
     info.effect === "string" ||
-    info.effect === "keys"
+    info.effect === "keys" ||
+    info.effect === "modal"
       ? info.effect
       : effectSpec(info.effect).label;
   return `${owner} ${info.param}${unit}`;
@@ -1083,6 +1085,9 @@ function parameterNodes(context: MenuContext): MenuNode[] {
         return current ? keysNodes(current, Object.keys(KEYS_PARAMS)) : [];
       },
     });
+  } else if (track.instrument === "modal") {
+    // 0.6 modal percussion: preset, mallet and MODAL_PARAMS rows.
+    nodes.push(...modalParameterNodes(track));
   } else if (!isDrumInstrument(track.instrument)) {
     nodes.push(...synthNodes(track, SYNTH_SIMPLE));
     nodes.push({
@@ -1766,6 +1771,7 @@ function automationNodes(context: MenuContext): MenuNode[] {
       return track.synth?.[info.param] !== undefined;
     if (info?.effect === "string") return track.string !== undefined;
     if (info?.effect === "keys") return track.keys !== undefined;
+    if (info?.effect === "modal") return track.modal !== undefined;
     return info !== undefined && effectValues(track, info.effect) !== undefined;
   });
   const hidden = AUTOMATION_PARAMETERS.filter((lane) => !shown.includes(lane));
@@ -1971,6 +1977,8 @@ function soundNodes(): MenuNode[] {
       command: "wt basic",
       help: "switch this track to the morphing wavetable synth",
     },
+    // 0.6 instrument groups, one per lane.
+    malletsMenu(),
     {
       kind: "menu",
       id: "strings",

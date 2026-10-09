@@ -142,6 +142,7 @@ export const AVAILABLE_INSTRUMENTS = Object.freeze([
   "z_noise",
   // 0.6 instruments (src/audio/instruments.ts), one line per lane.
   "granular",
+  "modal",
 ] as const);
 
 /** Per-track effects understood by the renderer and the agent, in chain
@@ -183,6 +184,30 @@ function oneShotSeconds(
 }
 /** Loop renders fold at most this much tail back onto the loop start. */
 const MAX_LOOP_TAIL_SECONDS = 8;
+/** A 0.6 engine's one-shot ring-out is capped here, not at the loop fold. */
+const MAX_ENGINE_TAIL_SECONDS = 30;
+
+/**
+ * The longest 0.6 engine ring-out in `score`, capped at 30 s. One-shot
+ * renders (exports, previews) let engine tails reach their own cap; the
+ * 8 s cap applies only to loop folding. Zero without an engine, so legacy
+ * renders are unchanged.
+ */
+function oneShotEngineTail(score: TrackScore): number {
+  let tail = 0;
+  for (const track of score.tracks) {
+    if (!engineFor(track)) continue;
+    let lowest: number | undefined;
+    for (const note of score.notes)
+      if (
+        note.trackId === track.id &&
+        (lowest === undefined || note.pitch < lowest)
+      )
+        lowest = note.pitch;
+    tail = Math.max(tail, engineTailSeconds(track, lowest));
+  }
+  return Math.min(MAX_ENGINE_TAIL_SECONDS, tail);
+}
 
 export type RenderContext = Readonly<{
   score: TrackScore;
@@ -318,10 +343,14 @@ export class StemRenderer {
         samplerTailSeconds(score, bank, sampleRate),
         ...score.tracks.map(synthTailSeconds),
         // Zero without a registered 0.6 instrument engine.
-        ...score.tracks.map(engineTailSeconds),
+        ...score.tracks.map((track) => engineTailSeconds(track)),
       ),
     );
-    return oneShotSeconds(loopSecondsOf(score), samplerTail, reverbTail);
+    return oneShotSeconds(
+      loopSecondsOf(score),
+      Math.max(samplerTail, oneShotEngineTail(score)),
+      reverbTail,
+    );
   }
 
   public render(score: TrackScore, options: RenderOptions = {}): RenderedAudio {
@@ -344,7 +373,7 @@ export class StemRenderer {
         samplerTailSeconds(score, bank, sampleRate),
         ...score.tracks.map(synthTailSeconds),
         // Zero without a registered 0.6 instrument engine.
-        ...score.tracks.map(engineTailSeconds),
+        ...score.tracks.map((track) => engineTailSeconds(track)),
       ),
     );
     let frames: number;
@@ -374,7 +403,11 @@ export class StemRenderer {
     } else {
       const seconds = Math.min(
         maxSeconds,
-        oneShotSeconds(loopSeconds, samplerTail, reverbTail),
+        oneShotSeconds(
+          loopSeconds,
+          Math.max(samplerTail, oneShotEngineTail(score)),
+          reverbTail,
+        ),
       );
       frames = Math.max(1, Math.ceil(seconds * sampleRate));
       samples = frames;

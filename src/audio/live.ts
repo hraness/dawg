@@ -201,7 +201,9 @@ export class LiveSynth {
       ],
     });
     // A 0.6 engine's ring-out sets the one-note length and the key release.
-    const tail = liveEngine ? Math.max(0, liveEngine.tailSeconds(track)) : 0;
+    const tail = liveEngine
+      ? Math.max(0, liveEngine.tailSeconds(track, pitch))
+      : 0;
     // Fitted sample windows over 8 s fit in the background (silent until
     // ready, never at the wrong pitch); shorter ones fit synchronously.
     const audio = withLiveFit(() =>

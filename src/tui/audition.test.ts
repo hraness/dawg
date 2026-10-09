@@ -389,6 +389,9 @@ describe("keys and commands", () => {
       "keys decay 1.5",
       "keys preset ballad",
       "keys reset",
+      "modal vibes",
+      "modal ring 3",
+      "modal mallet yarn",
     ])
       expect(isStageable(command)).toBe(true);
     for (const command of [
@@ -406,6 +409,9 @@ describe("keys and commands", () => {
       "keys",
       "keys presets",
       "keys preset",
+      "modal",
+      "modal list",
+      "modal presets",
       "undo",
     ])
       expect(isStageable(command)).toBe(false);

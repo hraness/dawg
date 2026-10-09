@@ -275,6 +275,89 @@ describe("wavetable tracks", () => {
   });
 });
 
+const mallets = createScore({
+  tempoBpm: 100,
+  bars: 1,
+  tracks: [
+    { id: "vib", name: "vib", instrument: "modal", modal: { preset: "vibes" } },
+    {
+      id: "mar",
+      name: "mar",
+      instrument: "modal",
+      modal: { preset: "marimba", mallet: "rubber", ring: 1.5 },
+    },
+    {
+      id: "bells",
+      name: "bells",
+      instrument: "modal",
+      modal: {
+        preset: "chimes",
+        hardness: 0.9,
+        position: 0.3,
+        ring: 6,
+        damp: 0.4,
+        click: 0.2,
+        gain: 0.7,
+      },
+    },
+    { id: "def", name: "def", instrument: "modal", modal: {} },
+    { id: "old", name: "old", instrument: "marimba" },
+  ],
+  notes: [
+    {
+      id: "n1",
+      trackId: "vib",
+      startTick: 0,
+      durationTicks: 480,
+      pitch: 65,
+      velocity: 0.8,
+    },
+  ],
+} as never);
+
+describe("modal tracks", () => {
+  test("print as a preset word or modal(...) and survive print → eval", async () => {
+    const [vib, mar, bells, def, old] = mallets.tracks.map((track) =>
+      printTrack(mallets, track),
+    );
+    expect(vib).toContain('instrument: "vibes",');
+    expect(vib).not.toContain("modal");
+    expect(mar).toContain('import { track, modal } from "dawg";');
+    expect(mar).toContain(
+      'instrument: modal("marimba", { mallet: "rubber", ring: 1.5 }),',
+    );
+    expect(bells).toContain(
+      'instrument: modal("chimes", {\n    hardness: 0.9,',
+    );
+    expect(def).toContain("instrument: modal(),");
+    expect(old).toContain('instrument: "marimba",');
+    for (const file of printProject(mallets).files)
+      expect(await prettier.format(file.text, { parser: "typescript" })).toBe(
+        file.text,
+      );
+    const dir = await mkdtemp(join(tmpdir(), "dawg-print-modal-"));
+    try {
+      await initProject(dir);
+      await writeProject(dir, mallets);
+      const evaluated = await evaluateProject(dir);
+      if (!evaluated.ok) throw new Error(JSON.stringify(evaluated.diagnostics));
+      const ops = diffScores(mallets, evaluated.score).filter(
+        (op) => op.type !== "addNote" && op.type !== "removeNote",
+      );
+      expect(ops).toEqual([]);
+      expect(evaluated.score.tracks.map((track) => track.modal)).toEqual(
+        mallets.tracks.map((track) => track.modal),
+      );
+      expect(evaluated.score.tracks[4]!.instrument).toBe("marimba");
+      expect(printProject(evaluated.score).files).toEqual(
+        printProject(mallets).files,
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("printer", () => {
   test("effects print their set fields and non-default fx params", () => {
     const lead = printTrack(rich, rich.tracks.at(-1)!);

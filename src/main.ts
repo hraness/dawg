@@ -61,8 +61,14 @@ import {
   rigTrackFields,
   rigWordPatch,
 } from "./commands/rig.ts";
+import {
+  applyModalCommand,
+  modalListLines,
+  parseModalCommand,
+} from "./commands/modal.ts";
 import { applySynthCommand, parseSynthCommand } from "./commands/synth.ts";
 import { applyStringCommand, parseStringCommand } from "./commands/string.ts";
+import { instrumentPatchForWord, isModalWord } from "../core/resonators.ts";
 import {
   applyGranularCommand,
   granularTrackPreset,
@@ -296,6 +302,7 @@ function parsesLocally(text: string): boolean {
     parseTimeCommand,
     parseTuningCommand,
     parseRigCommand,
+    parseModalCommand,
   ].some((parse) => parse(text) !== undefined);
 }
 
@@ -1798,6 +1805,17 @@ async function submit(prompt: string): Promise<string | Receipt> {
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
   }
+  const modal = parseModalCommand(command);
+  if (modal) {
+    if (modal.type === "modal-list")
+      tui.openText("modal presets", modalListLines());
+    if (modal.type !== "modal-show" && modal.type !== "modal-list")
+      await materializeDraft();
+    const result = applyModalCommand(score, requestedTrack, modal);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
   const synth = parseSynthCommand(command);
   if (synth) {
     if (synth.type !== "synth-list") await materializeDraft();
@@ -2035,6 +2053,9 @@ async function submit(prompt: string): Promise<string | Receipt> {
       trackId: requestedTrack,
       patch,
     });
+    // Plain `marimba` keeps the legacy tone; point at the mallet engine.
+    if (parsed.patch.instrument === "marimba" && !("modal" in parsed.patch))
+      return `track · ${requestedTrack} · marimba (legacy tone) · modal marimba for the mallet engine`;
     return `track · ${requestedTrack}`;
   }
   if (parsed.type === "automation") {
@@ -2194,6 +2215,8 @@ async function focusTrack(trackId: string): Promise<Receipt> {
         ...(grainPreset ? { granular: { preset: grainPreset } } : {}),
         // `/track piano` (or grand, felt…) starts on the modelled piano.
         ...newPianoTrack(trackId),
+        // `track vibes`: a 0.6 modal word names the track and its preset.
+        ...(isModalWord(trackId) ? instrumentPatchForWord(trackId) : {}),
       },
     });
     await commitScore(next, "track.create", { trackId });

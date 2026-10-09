@@ -12,6 +12,7 @@
  * under `track.fx.<name>` with every parameter stored once enabled.
  */
 
+import { MODAL_LANE_PARAMS } from "./resonators.ts";
 import { SYNTH_LANE_PARAMS } from "./synth.ts";
 import { STRING_LANE_PARAMS } from "./strings.ts";
 import { KEYS_LANE_PARAMS } from "./keys.ts";
@@ -1075,12 +1076,12 @@ export function normalizeFx(input: unknown): TrackFx | undefined {
 
 /** Automation lane name of an `fx` parameter, e.g. `distort-drive`. */
 export type FxLane =
-  `${FxName | "reverb" | "synth" | "string" | "keys"}-${string}`;
+  `${FxName | "reverb" | "synth" | "string" | "keys" | "modal"}-${string}`;
 
 /** Every automatable `fx` parameter as `{ lane, effect, param, spec }`. */
 export const FX_LANES: readonly Readonly<{
   lane: FxLane;
-  effect: FxName | "reverb" | "synth" | "string" | "keys";
+  effect: FxName | "reverb" | "synth" | "string" | "keys" | "modal";
   param: string;
   spec: NumberParam;
 }>[] = Object.freeze([
@@ -1122,6 +1123,16 @@ export const FX_LANES: readonly Readonly<{
     Object.freeze({
       lane: `keys-${param}` as FxLane,
       effect: "keys" as const,
+      param,
+      spec,
+    }),
+  ),
+  // Modal parameters (core/resonators.ts), read at each note's onset
+  // (`modal-motordepth` every 32-sample control tick).
+  ...MODAL_LANE_PARAMS.map(({ param, spec }) =>
+    Object.freeze({
+      lane: `modal-${param}` as FxLane,
+      effect: "modal" as const,
       param,
       spec,
     }),

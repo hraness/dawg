@@ -196,6 +196,59 @@ export const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
     field: "keys",
     preset: "prepared",
   },
+  // f06-modal: mallets and bells (core/resonators.ts). `marimba` is legacy;
+  // `modal` alone gives the modal marimba.
+  { word: "modal", instrument: "modal", field: "modal", preset: "marimba" },
+  { word: "vibes", instrument: "modal", field: "modal", preset: "vibes" },
+  { word: "vibraphone", instrument: "modal", field: "modal", preset: "vibes" },
+  {
+    word: "xylophone",
+    instrument: "modal",
+    field: "modal",
+    preset: "xylophone",
+  },
+  { word: "glock", instrument: "modal", field: "modal", preset: "glock" },
+  {
+    word: "glockenspiel",
+    instrument: "modal",
+    field: "modal",
+    preset: "glock",
+  },
+  { word: "celesta", instrument: "modal", field: "modal", preset: "celesta" },
+  { word: "chimes", instrument: "modal", field: "modal", preset: "chimes" },
+  { word: "tubular", instrument: "modal", field: "modal", preset: "chimes" },
+  { word: "kalimba", instrument: "modal", field: "modal", preset: "kalimba" },
+  {
+    word: "thumbpiano",
+    instrument: "modal",
+    field: "modal",
+    preset: "kalimba",
+  },
+  { word: "mbira", instrument: "modal", field: "modal", preset: "mbira" },
+  { word: "steelpan", instrument: "modal", field: "modal", preset: "steelpan" },
+  { word: "bowl", instrument: "modal", field: "modal", preset: "bowl" },
+  { word: "gong", instrument: "modal", field: "modal", preset: "gong" },
+  { word: "gongageng", instrument: "modal", field: "modal", preset: "gong" },
+  { word: "timpani", instrument: "modal", field: "modal", preset: "timpani" },
+  {
+    word: "steeldrum",
+    instrument: "modal",
+    field: "modal",
+    preset: "steelpan",
+  },
+  { word: "singingbowl", instrument: "modal", field: "modal", preset: "bowl" },
+  {
+    word: "kettledrum",
+    instrument: "modal",
+    field: "modal",
+    preset: "timpani",
+  },
+  {
+    word: "tubularbells",
+    instrument: "modal",
+    field: "modal",
+    preset: "chimes",
+  },
 ]);
 
 /**

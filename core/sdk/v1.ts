@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.24.0";
+export const SDK_VERSION = "1.25.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -1551,6 +1551,202 @@ export function granular(
   return Object.freeze(out) as GranularSpec;
 }
 
+/** Instrument name that selects the modal mallet-and-bell engine (SDK 1.25.0). */
+export const MODAL_INSTRUMENT = "modal";
+
+/** Modal presets (dawg's core/resonators.ts). */
+export type ModalPresetName =
+  | "marimba"
+  | "vibes"
+  | "xylophone"
+  | "glock"
+  | "celesta"
+  | "chimes"
+  | "kalimba"
+  | "mbira"
+  | "steelpan"
+  | "bowl"
+  | "gong"
+  | "timpani";
+
+/** Modal overrides; omitted means the preset's value. dawg validates ranges. */
+export type ModalParams = Readonly<{
+  /** `yarn` `cord` `rubber` `plastic` `brass`: sets hardness. */
+  mallet?: "yarn" | "cord" | "rubber" | "plastic" | "brass";
+  /** Mallet hardness 0..1: brighter, shorter contact. */
+  hardness?: number;
+  /** Strike position 0..1 (0.5 is the bar's centre). */
+  position?: number;
+  /** Fundamental ring time (T60 seconds). */
+  ring?: number;
+  /** How much faster upper modes die (octaves of decay per octave). */
+  tilt?: number;
+  /** Damping on note-off 0..1 (0 lets the bar ring). */
+  damp?: number;
+  /** Choke time after note-off, seconds. */
+  release?: number;
+  /** Vibraphone motor rate Hz and depth 0..1. */
+  motor?: number;
+  motordepth?: number;
+  /** Beat between paired gamelan modes, Hz. */
+  ombak?: number;
+  /** Mbira buzz 0..1 and mallet click 0..1. */
+  buzz?: number;
+  click?: number;
+  /** Strike pitch bend in semitones and its decay seconds (Strudel penv/pdecay). */
+  strikebend?: number;
+  strikedecay?: number;
+  /** Output level 0..2 (1 is the preset level). */
+  gain?: number;
+  /** Mode table override (`marimba`, `bell`, `gong`, …). */
+  body?: string;
+}>;
+
+const MODAL_KEYS = Object.freeze([
+  "mallet",
+  "hardness",
+  "position",
+  "ring",
+  "tilt",
+  "damp",
+  "release",
+  "motor",
+  "motordepth",
+  "ombak",
+  "buzz",
+  "click",
+  "strikebend",
+  "strikedecay",
+  "gain",
+  "body",
+] as const);
+
+/** Mallet words (core/resonators.ts MODAL_MALLETS). */
+const MODAL_MALLET_WORDS: readonly string[] = Object.freeze([
+  "yarn",
+  "cord",
+  "rubber",
+  "plastic",
+  "brass",
+]);
+
+/** Mode tables a `body` override may name (core/resonators.ts MODAL_BODIES). */
+const MODAL_BODY_WORDS: readonly string[] = Object.freeze([
+  "marimba",
+  "vibraphone",
+  "xylophone",
+  "glockenspiel",
+  "celesta",
+  "chimes",
+  "crotale",
+  "mbira",
+  "kalimba",
+  "musicbox",
+  "toypiano",
+  "saron",
+  "bonang",
+  "gender",
+  "kempul",
+  "gong",
+  "bell",
+  "steelpan",
+  "bowl",
+  "timpani",
+  "tabla",
+  "frame",
+]);
+
+/** Numeric ranges (core/resonators.ts MODAL_PARAMS min..max). */
+const MODAL_RANGES: Readonly<Record<string, readonly [number, number]>> =
+  Object.freeze({
+    hardness: [0, 1],
+    position: [0, 1],
+    ring: [0.05, 30],
+    tilt: [0, 2],
+    damp: [0, 1],
+    release: [0.005, 2],
+    motor: [0, 12],
+    motordepth: [0, 1],
+    ombak: [0, 12],
+    buzz: [0, 1],
+    click: [0, 1],
+    strikebend: [-24, 24],
+    strikedecay: [0.001, 2],
+    gain: [0, 2],
+  });
+
+const MODAL_PRESET_WORDS: readonly string[] = Object.freeze([
+  "marimba",
+  "vibes",
+  "xylophone",
+  "glock",
+  "celesta",
+  "chimes",
+  "kalimba",
+  "mbira",
+  "steelpan",
+  "bowl",
+  "gong",
+  "timpani",
+]);
+
+/** Result of `modal()`; pass it as a track's `instrument`. */
+export type ModalSpec = Readonly<
+  { kind: "modal"; preset?: ModalPresetName } & ModalParams
+>;
+
+/**
+ * Mallets and bells on the modal engine (SDK 1.25.0): a preset and
+ * optional overrides. A preset word alone (`instrument: "vibes"`) is the
+ * same as `modal("vibes")`, except `"marimba"`, which stays the legacy
+ * marimba voice; `modal("marimba")` is the modal one.
+ *
+ * ```ts
+ * instrument: modal("vibes", { motor: 4, hardness: 0.6 })
+ * instrument: modal("marimba", { mallet: "rubber" })
+ * instrument: modal({ ring: 2 }) // default preset (marimba)
+ * ```
+ */
+export function modal(
+  preset?: ModalPresetName | ModalParams,
+  params: ModalParams = {},
+): ModalSpec {
+  const overrides = isRecord(preset) ? preset : params;
+  const name = isRecord(preset) ? undefined : preset;
+  if (!isRecord(overrides))
+    throw new DawgSdkError("modal params must be an object");
+  const out: Record<string, unknown> = { kind: "modal" };
+  if (name !== undefined) {
+    if (typeof name !== "string" || !MODAL_PRESET_WORDS.includes(name))
+      throw new DawgSdkError(
+        `modal preset "${String(name).slice(0, 32)}" is not one of ${MODAL_PRESET_WORDS.join(" ")}`,
+      );
+    out.preset = name;
+  }
+  for (const key of Object.keys(overrides)) {
+    const value = (overrides as Record<string, unknown>)[key];
+    if (value === undefined) continue;
+    if (key === "mallet" || key === "body") {
+      const words = key === "mallet" ? MODAL_MALLET_WORDS : MODAL_BODY_WORDS;
+      if (typeof value !== "string" || !words.includes(value))
+        throw new DawgSdkError(
+          `modal ${key} "${String(value).slice(0, 32)}" is not one of ${words.join(" ")}`,
+        );
+      out[key] = value;
+    } else if ((MODAL_KEYS as readonly string[]).includes(key)) {
+      const number = finite(value, `modal ${key}`);
+      const [min, max] = MODAL_RANGES[key]!;
+      if (number < min || number > max)
+        throw new DawgSdkError(`modal ${key} must be ${min}..${max}`);
+      out[key] = number;
+    } else
+      throw new DawgSdkError(
+        `modal has no parameter "${key.slice(0, 32)}" (${MODAL_KEYS.join(" ")})`,
+      );
+  }
+  return Object.freeze(out) as ModalSpec;
+}
+
 /**
  * `count` equal slices of one file as voices `prefix0 … prefixN-1`, for
  * chopped breaks: `sampler(slices("samples/break.wav", 8, "brk"))`, then
@@ -2026,9 +2222,16 @@ export type TrackInput = Readonly<{
    * `triangle`, and Strudel's `sawtooth`, `supersaw`, `pulse`, `user`,
    * `white`, `pink`, `brown`, `crackle`, and the ZzFX sounds `z_sine`,
    * `z_triangle`, `z_sawtooth`, `z_square`, `z_tan`, `z_noise`), `kit` for drums,
-   * `sampler(...)` or `wavetable(...)`. Default `sine`.
+   * `sampler(...)` or `wavetable(...)`, or a mallet or bell (`vibes`,
+   * `glock`, `gong`, … or `modal(...)`, SDK 1.25.0). Default `sine`.
    */
-  instrument?: string | SamplerSpec | WavetableSpec | StringSpec | GranularSpec;
+  instrument?:
+    | string
+    | SamplerSpec
+    | WavetableSpec
+    | StringSpec
+    | GranularSpec
+    | ModalSpec;
   /**
    * The sampler a `granular(...)` track keeps while it grains one of its
    * voices (SDK 1.23.0); `grain off` plays it again.
@@ -2240,6 +2443,8 @@ export type TrackSpec = Readonly<{
   tuning: ScoreTuning | null;
   /** Modelled piano settings (SDK 1.24.0); present only when set. */
   keys?: KeysInput;
+  /** Modal settings (SDK 1.25.0); present only on a modal track. */
+  modal?: Readonly<{ preset?: ModalPresetName } & ModalParams>;
 }>;
 
 export type GlideMode = "legato" | "mono" | "poly";
@@ -2473,6 +2678,7 @@ export function track(input: TrackInput): TrackSpec {
     typeof rawInstrument === "string"
       ? resolveInstrumentWord(rawInstrument)
       : undefined;
+  const modalSpec = trackModal(rawInstrument);
   const instrument = granularFromInstrument
     ? GRANULAR_INSTRUMENT
     : samplerSpec
@@ -2481,9 +2687,11 @@ export function track(input: TrackInput): TrackSpec {
         ? WAVETABLE_INSTRUMENT
         : stringFromInstrument
           ? STRING_INSTRUMENT
-          : typeof rawInstrument === "string"
-            ? (word?.instrument ?? rawInstrument)
-            : undefined;
+          : modalSpec
+            ? MODAL_INSTRUMENT
+            : typeof rawInstrument === "string"
+              ? (word?.instrument ?? rawInstrument)
+              : undefined;
   // A granular word (`"cloud"`) turns the engine on with its preset.
   const granularSpec =
     granularInput(input.granular, name, slug) ??
@@ -2499,7 +2707,7 @@ export function track(input: TrackInput): TrackSpec {
     instrument.length > 64
   )
     throw new DawgSdkError(
-      `track ${name}: instrument must be a voice name, "kit", sampler(...), wavetable(...), stringed(...) or granular(...)`,
+      `track ${name}: instrument must be a voice name, "kit", sampler(...), wavetable(...), stringed(...), granular(...) or modal(...)`,
     );
   if (instrument === SAMPLER_INSTRUMENT && !samplerSpec)
     throw new DawgSdkError(
@@ -2698,6 +2906,7 @@ export function track(input: TrackInput): TrackSpec {
     ...trackPerformance(input, name),
     tuning: tuningSpec(input.tuning, `track ${name}`),
     ...keysSpec(input.keys, rawInstrument, name),
+    ...(modalSpec ? { modal: modalSpec } : {}),
   });
 }
 
@@ -2769,6 +2978,25 @@ function keysSpec(
     out[key] = effectValue(value, `${name} keys.${key}`);
   }
   return { keys: Object.freeze(out) };
+}
+
+/**
+ * The modal field an instrument makes: `modal(...)`, or a modal preset
+ * word (`"vibes"`, `"glockenspiel"`). The bare words `"modal"` and
+ * `"marimba"` keep their pre-0.6 meaning and make none.
+ */
+function trackModal(
+  raw: unknown,
+): Readonly<{ preset?: ModalPresetName } & ModalParams> | undefined {
+  if (isRecord(raw) && raw.kind === "modal") {
+    const { kind: _kind, ...fields } = raw as ModalSpec;
+    return Object.freeze(fields);
+  }
+  if (typeof raw !== "string" || raw === MODAL_INSTRUMENT) return undefined;
+  const meaning = resolveInstrumentWord(raw);
+  if (meaning?.instrument !== MODAL_INSTRUMENT || !meaning.preset)
+    return undefined;
+  return Object.freeze({ preset: meaning.preset as ModalPresetName });
 }
 
 function trackTime(input: unknown, name: string): { time?: TrackTimeInput } {
@@ -3250,6 +3478,8 @@ export type ScoreTrack = Readonly<{
   string?: StringInput;
   /** Granular settings (SDK 1.23.0); present only when set. */
   granular?: GranularInput;
+  /** Modal settings (SDK 1.25.0). */
+  modal?: TrackSpec["modal"];
   glide?: TrackSpec["glide"];
   pedal?: readonly Readonly<{ tick: number; state: PedalState }>[];
   velocityCurve?: TrackSpec["velocityCurve"];
@@ -3556,6 +3786,7 @@ export function song(input: SongInput): Song {
     if (t.tuning) stored.tuning = t.tuning;
     if (t.string) stored.string = t.string;
     if (t.keys) stored.keys = t.keys;
+    if (t.modal) stored.modal = t.modal;
     if (t.rhythm && t.rhythm.length > 0)
       stored.rhythm = Object.freeze(
         t.rhythm.map((row) => {
@@ -4612,6 +4843,59 @@ const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
     instrument: "prepared",
     field: "keys",
     preset: "prepared",
+  },
+  // f06-modal: mallets and bells (core/resonators.ts). `marimba` is legacy;
+  // `modal` alone gives the modal marimba.
+  { word: "modal", instrument: "modal", field: "modal", preset: "marimba" },
+  { word: "vibes", instrument: "modal", field: "modal", preset: "vibes" },
+  { word: "vibraphone", instrument: "modal", field: "modal", preset: "vibes" },
+  {
+    word: "xylophone",
+    instrument: "modal",
+    field: "modal",
+    preset: "xylophone",
+  },
+  { word: "glock", instrument: "modal", field: "modal", preset: "glock" },
+  {
+    word: "glockenspiel",
+    instrument: "modal",
+    field: "modal",
+    preset: "glock",
+  },
+  { word: "celesta", instrument: "modal", field: "modal", preset: "celesta" },
+  { word: "chimes", instrument: "modal", field: "modal", preset: "chimes" },
+  { word: "tubular", instrument: "modal", field: "modal", preset: "chimes" },
+  { word: "kalimba", instrument: "modal", field: "modal", preset: "kalimba" },
+  {
+    word: "thumbpiano",
+    instrument: "modal",
+    field: "modal",
+    preset: "kalimba",
+  },
+  { word: "mbira", instrument: "modal", field: "modal", preset: "mbira" },
+  { word: "steelpan", instrument: "modal", field: "modal", preset: "steelpan" },
+  { word: "bowl", instrument: "modal", field: "modal", preset: "bowl" },
+  { word: "gong", instrument: "modal", field: "modal", preset: "gong" },
+  { word: "gongageng", instrument: "modal", field: "modal", preset: "gong" },
+  { word: "timpani", instrument: "modal", field: "modal", preset: "timpani" },
+  {
+    word: "steeldrum",
+    instrument: "modal",
+    field: "modal",
+    preset: "steelpan",
+  },
+  { word: "singingbowl", instrument: "modal", field: "modal", preset: "bowl" },
+  {
+    word: "kettledrum",
+    instrument: "modal",
+    field: "modal",
+    preset: "timpani",
+  },
+  {
+    word: "tubularbells",
+    instrument: "modal",
+    field: "modal",
+    preset: "chimes",
   },
 ]);
 

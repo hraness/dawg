@@ -22,6 +22,11 @@ import {
 } from "../fx.ts";
 import { MASTER_SPECS, MASTER_UNITS, type SongMaster } from "../master.ts";
 import { midiToPitch } from "../pitch.ts";
+import {
+  MODAL_INSTRUMENT,
+  MODAL_PARAMS,
+  type TrackModal,
+} from "../resonators.ts";
 import { rhythmVoicePitch, rowInSync } from "../rhythm.ts";
 import {
   BUILTIN_TABLE_PREFIX,
@@ -149,6 +154,7 @@ const RESERVED = new Set([
   "wavetable",
   "rig",
   "granular",
+  "modal",
   "slices",
   "euclid",
   "euclidRot",
@@ -403,6 +409,11 @@ export function printTrack(score: TrackScore, track: Track): string {
   if (wavetable) used.add("wavetable");
   const stringed = track.instrument === "string" && track.string !== undefined;
   if (stringed) used.add("stringed");
+  const modalCall =
+    track.instrument === MODAL_INSTRUMENT && track.modal
+      ? printModal(track.modal, INDENT)
+      : undefined;
+  if (modalCall?.startsWith("modal(")) used.add("modal");
 
   const entries: string[] = [
     `id: ${str(track.id)}`,
@@ -419,6 +430,8 @@ export function printTrack(score: TrackScore, track: Track): string {
     entries.push(`instrument: ${printWavetable(wavetable, INDENT)}`);
   } else if (stringed) {
     entries.push(`instrument: ${printStringed(track.string!, INDENT)}`);
+  } else if (modalCall) {
+    entries.push(`instrument: ${modalCall}`);
   } else entries.push(`instrument: ${str(track.instrument)}`);
   if (track.kit) entries.push(`kit: ${str(track.kit)}`);
   if (track.granular && !grained)
@@ -644,6 +657,7 @@ export function printTrack(score: TrackScore, track: Track): string {
     "stringed",
     "rig",
     "granular",
+    "modal",
     "euclid",
     "grid",
   ]
@@ -971,6 +985,31 @@ function printGranular(settings: TrackGranular, indent: string): string {
   )
     return inline;
   return `${head}{\n${params.map(([k, v]) => property(k, v, inner)).join("\n")}\n${indent}})`;
+}
+
+/**
+ * A modal track's instrument: the preset word alone (`"vibes"`) when there
+ * are no overrides, else `modal("vibes", { motor: 4 })` with keys in
+ * `MODAL_PARAMS` order. `marimba` is a legacy word, so the modal marimba
+ * always prints as `modal("marimba")`.
+ */
+function printModal(settings: TrackModal, indent: string): string {
+  const params: [string, string][] = [];
+  for (const key of Object.keys(MODAL_PARAMS) as (keyof TrackModal)[]) {
+    const value = settings[key];
+    if (value === undefined) continue;
+    params.push([key, typeof value === "number" ? num(value) : str(value)]);
+  }
+  const preset = settings.preset;
+  if (params.length === 0 && preset && preset !== "marimba") return str(preset);
+  const head = preset ? str(preset) : "";
+  if (params.length === 0) return `modal(${head})`;
+  const lead = head ? `${head}, ` : "";
+  const inline = `modal(${lead}{ ${params.map(([k, v]) => `${k}: ${v}`).join(", ")} })`;
+  if (indent.length + "instrument: ".length + inline.length + 1 <= WIDTH)
+    return inline;
+  const inner = indent + INDENT;
+  return `modal(${lead}{\n${params.map(([k, v]) => `${inner}${k}: ${v},`).join("\n")}\n${indent}})`;
 }
 
 /** `wavetable("basic", { wt: 0.5 })`; pack tables keep their pin. */

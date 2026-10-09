@@ -95,6 +95,12 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "piano params · keys hardness 0.3 decay 1.5 · keys lists them",
       },
       {
+        command:
+          "modal <preset> | <param> <value> | mallet <name> | reset | off",
+        summary:
+          "mallets and bells · modal vibes · modal hardness 0.8 · modal presets",
+      },
+      {
         command: "art <articulation>|off [target]",
         summary:
           "staccato legato accent tenuto marcato ghost · art staccato bars 1-2",
@@ -687,6 +693,8 @@ export const USAGE: Readonly<Record<string, string>> = {
   keys: "keys <param> <value> | preset <name> | reset | presets · keys hardness 0.3 · keys stretch 0",
   piano:
     "piano [grand|ballad|upright|felt|lofi|honkytonk|prepared] · piano ballad",
+  modal:
+    "modal <preset> | <param> <value> | mallet <name> | reset | off | presets · modal vibes · modal ring 3",
   pack: "/pack list | info <name> | use <pack>/<sound> | add <url>",
   kit: "/kit [name] · /kit syn909",
   euclid: "/euclid [voice] · euclid hat 7 16",

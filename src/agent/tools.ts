@@ -4,6 +4,17 @@ import {
   STRING_INSTRUMENT,
 } from "../../core/strings.ts";
 import {
+  instrumentPatchForWord,
+  MODAL_ALIASES,
+  MODAL_MALLET_NAMES,
+  MODAL_PARAMS,
+  MODAL_PRESET_NAMES,
+  modalParamName,
+  modalPresetFor,
+  type TrackModal,
+} from "../../core/resonators.ts";
+import { applyModalCommand, type ModalCommand } from "../commands/modal.ts";
+import {
   AUTOMATION_PARAMETERS,
   automationPoints,
   automationRange,
@@ -462,7 +473,8 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   },
   {
     name: "set_instrument",
-    description: "Change a track's instrument voice.",
+    description:
+      "Change a track's instrument voice. Mallets and bells (modal): modal (marimba) vibes xylophone glock celesta chimes kalimba mbira steelpan bowl gong timpani; set_modal shapes them.",
     parameters: {
       type: "object",
       properties: {
@@ -498,7 +510,10 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
           { type: "updateTrack", trackId, patch: { ...patch, ...rig } },
         ],
         trackId,
-        summary: `${trackId} → ${patch.string?.preset ?? patch.instrument}`,
+        summary:
+          patch.instrument === "marimba" && !patch.modal
+            ? `${trackId} → marimba (legacy tone) · set_modal preset marimba for the mallet engine`
+            : `${trackId} → ${patch.string?.preset ?? patch.modal?.preset ?? patch.instrument}`,
       };
     },
   },
@@ -914,6 +929,107 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
         ],
         trackId,
         summary: `${trackId} ${result.message}`,
+      };
+    },
+  },
+  {
+    name: "set_modal",
+    description:
+      "Mallets and bells on the modal engine: preset (marimba vibes xylophone glock celesta chimes kalimba mbira steelpan bowl gong timpani) switches the voice and keeps overrides; mallet yarn|cord|rubber|plastic|brass; params sets MODAL_PARAMS (hardness position ring tilt release damp motor motordepth ombak buzz click strikebend strikedecay gain), null returns one to the preset; reset clears overrides. Turns the track into instrument modal.",
+    parameters: {
+      type: "object",
+      properties: {
+        trackId: trackIdSchema,
+        preset: {
+          type: "string",
+          enum: [...MODAL_PRESET_NAMES, ...Object.keys(MODAL_ALIASES)],
+        },
+        mallet: { type: "string", enum: [...MODAL_MALLET_NAMES] },
+        reset: { type: "boolean" },
+        params: {
+          type: "object",
+          additionalProperties: { type: ["number", "string", "null"] },
+        },
+      },
+      additionalProperties: false,
+    },
+    plan(args, context) {
+      const trackId = targetTrack(args, context);
+      const commands: ModalCommand[] = [];
+      if (args.reset === true) commands.push({ type: "modal-reset" });
+      if (args.preset !== undefined) {
+        const preset =
+          typeof args.preset === "string"
+            ? modalPresetFor(args.preset)
+            : undefined;
+        if (!preset)
+          throw new ToolArgumentError(
+            `preset must be one of ${MODAL_PRESET_NAMES.join(", ")}`,
+          );
+        commands.push({ type: "modal-preset", preset });
+      }
+      const values: Record<string, number | string | null> = {};
+      if (args.mallet !== undefined) {
+        if (typeof args.mallet !== "string")
+          throw new ToolArgumentError("mallet must be a string");
+        values.mallet = args.mallet;
+      }
+      if (args.params !== undefined) {
+        if (
+          typeof args.params !== "object" ||
+          args.params === null ||
+          Array.isArray(args.params)
+        )
+          throw new ToolArgumentError("params must be an object");
+        for (const [key, value] of Object.entries(args.params)) {
+          const name = modalParamName(key);
+          if (!name)
+            throw new ToolArgumentError(
+              `modal has no parameter ${key} (${Object.keys(MODAL_PARAMS).join(" ")})`,
+            );
+          if (
+            value !== null &&
+            typeof value !== "number" &&
+            typeof value !== "string"
+          )
+            throw new ToolArgumentError(`${key} must be a number or string`);
+          values[name] = value;
+        }
+      }
+      if (Object.keys(values).length > 0)
+        commands.push({ type: "modal-set", values });
+      if (commands.length === 0) {
+        // An empty call turns the track modal and keeps a modal track's preset.
+        const current = context.score.tracks.find((t) => t.id === trackId);
+        commands.push({
+          type: "modal-preset",
+          preset:
+            current?.instrument === "modal" && current.modal?.preset
+              ? current.modal.preset
+              : "marimba",
+        });
+      }
+      let score = context.score;
+      const messages: string[] = [];
+      for (const command of commands) {
+        const result = applyModalCommand(score, trackId, command);
+        if (!result.ok || !result.next)
+          throw new ToolArgumentError(result.message);
+        score = result.next;
+        messages.push(result.message);
+      }
+      const next = score.tracks.find((t) => t.id === trackId)!;
+      return {
+        kind: "score",
+        operations: [
+          {
+            type: "updateTrack",
+            trackId,
+            patch: { instrument: next.instrument, modal: next.modal ?? null },
+          },
+        ],
+        trackId,
+        summary: `${trackId} ${messages.at(-1)}`,
       };
     },
   },
@@ -1405,7 +1521,8 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
         };
       }
       const patch = instrumentName(args.instrument);
-      const instrument = patch.string?.preset ?? patch.instrument;
+      const instrument =
+        patch.string?.preset ?? patch.modal?.preset ?? patch.instrument;
       return {
         kind: "score",
         operations: [
@@ -1994,6 +2111,7 @@ function knownNoteId(value: unknown, context: ToolContext, label: string) {
 function instrumentName(value: unknown): {
   instrument: string;
   string?: { preset: string };
+  modal?: TrackModal;
 } {
   const word = typeof value === "string" ? value.trim() : undefined;
   if (word === STRING_INSTRUMENT)
@@ -2005,6 +2123,7 @@ function instrumentName(value: unknown): {
   if (
     patch === undefined ||
     (!patch.string &&
+      !patch.modal &&
       !(AVAILABLE_INSTRUMENTS as readonly string[]).includes(patch.instrument))
   )
     throw new ToolArgumentError(

@@ -180,7 +180,7 @@ Every subprocess goes through the injectable `CommandRunner` in `src/auth/runner
 
 `/login` in the TUI calls `handoff()`: it stops the frame timer, detaches stdin, leaves raw mode, bracketed paste and the alternate screen, runs the same flow on the real terminal, then re-enters, clears and forces a full redraw.
 
-The gateway and OpenRouter share `src/agent/gateway.ts`, an OpenAI-compatible streaming client with tool calls that requests `stream_options.include_usage`. `src/agent/usage.ts` prices each usage chunk, using the provider's own `cost` when present and otherwise tokens × the models.dev price. It keeps the session total and a daily ledger in `~/.config/dawg/usage.json` (31 days, lock file plus atomic rename) that windows share, and draws the spend line under the prompt (`$0.12 session · $0.48 today · opus-5.5 · gateway`; `subscription` for xcb; `no model · dawg login` offline; it narrows by dropping today, then session). Billed web searches add to the same meter. Prices come from `https://models.dev/api.json`, cached in `~/.config/dawg/cache/` for 24 h, fetched with a timeout and size cap, with a stale cache preferred to nothing offline; on OpenRouter its own `/models` prices win. The picker's `~$0.005/prompt` is `TYPICAL_PROMPT` (≈ 22,100 input + 600 output tokens, measured from the system prompt, tool schemas and a fixture brief over about 2 requests) × price.
+The gateway and OpenRouter share `src/agent/gateway.ts`, an OpenAI-compatible streaming client with tool calls that requests `stream_options.include_usage`. `src/agent/usage.ts` prices each usage chunk, using the provider's own `cost` when present and otherwise tokens × the models.dev price. It keeps the session total and a daily ledger in `~/.config/dawg/usage.json` (31 days, lock file plus atomic rename) that windows share, and draws the spend line under the prompt (`$0.12 session · $0.48 today · opus-5.5 · gateway`; `subscription` for xcb; `no model · dawg login` offline; it narrows by dropping today, then session). Billed web searches add to the same meter. Prices come from `https://models.dev/api.json`, cached in `~/.config/dawg/cache/` for 24 h, fetched with a timeout and size cap, with a stale cache preferred to nothing offline; on OpenRouter its own `/models` prices win. The picker's `~$0.005/prompt` is `TYPICAL_PROMPT` (≈ 29,800 input + 600 output tokens, measured from the system prompt, tool schemas and a fixture brief over about 2 requests) × price.
 
 The xcb provider (`src/agent/xcb.ts`, `src/agent/xcb-agent.ts`) calls `xcb --json generate` with one `{version:1, account, model, prompt, timeoutMs, maxOutputBytes}` request on stdin. xcb exposes zero tools and does not stream, so the prompt carries the system rules, the composition brief and the tool catalog as JSON schemas, and asks for exactly one `{ops:[{tool,args}], say?, done}` object. The reply is untrusted. dawg takes the first balanced JSON object in at most 64 KiB, allows at most 16 ops and caps `say` at 400 characters. Each op then goes through `executeCall`, the same argument checks, operation validator, reducer dry run and per-op revision commit used by the gateway loop, and emits the same `tool-applied`/`tool-rejected`/`text-delta` events. If a reply cannot be parsed, an op is rejected or `done` is false, dawg makes another call with the per-op results, up to 3 calls and within the normal turn budgets. Esc aborts the turn, which terminates the xcb child and keeps every accepted revision. The child timeout is `timeoutMs + 75 s`, because the first `generate` per binding (and after an xcb or provider update) admits the account and can take up to a minute longer. A `busy` result, when two first calls hit one account, is retried with backoff. Accounts come from `xcb --json generate --capabilities`, parsed field by field from `unknown`. dawg never runs the xcb installer.
 
@@ -892,6 +892,44 @@ instrument: granular("cloud", { scan: 0.1, seed: 7 }),
 instrument: granular({ src: "synth:bell@72", grain: 0.08, shimmer: 0.3 }),
 instrument: granular("hold", { src: "samples/choir.wav", root: "A3" }),
 ```
+
+## Mallets and bells (modal)
+
+`instrument: "modal"` plays struck bars, tines, bells, bowls and drums on a modal resonator bank (`src/audio/dsp/modal.ts`, `src/audio/resonators.ts`): each note excites a table of measured mode ratios through a mallet pulse, each mode rings as a two-pole resonator with its own decay, and the strike point weights the modes the way it does on a real bar (the node at the centre of a marimba bar mutes the second mode). It is dawg's own engine, ported from the reviewed 0.6 prototype.
+
+Presets (a word picks one): `marimba` `vibes` `xylophone` `glock` `celesta` `chimes` `kalimba` `mbira` `steelpan` `bowl` `gong` `timpani`; aliases `vibraphone`, `glockenspiel`, `tubular`, `thumbpiano`, `gongageng`, `steeldrum`, `singingbowl`, `kettledrum` and `tubularbells`. `instrument vibes` (or any preset word) switches the focused track. Plain `marimba` with no `modal` field keeps the pre-0.6 marimba voice byte-identical, so old projects sound the same; use `modal marimba` for the modal one (the `instrument marimba` receipt says so). One-shot renders let a modal tail ring up to 30 s (bowls and gongs ring out instead of stopping at the 8 s loop-fold cap). `dawg check` warns about tracks still on the legacy `marimba`, `modal` or `wind` words.
+
+| Parameter                  | Range              | Meaning                                                                           |
+| -------------------------- | ------------------ | --------------------------------------------------------------------------------- |
+| `mallet`                   | yarn … brass       | `yarn` `cord` `rubber` `plastic` `brass`; sets `hardness`                         |
+| `hardness`                 | 0..1               | mallet hardness: soft rounds off the high modes, hard adds them; velocity adds    |
+| `position`                 | 0..1               | strike point: 0 the end or edge, 0.5 the centre                                   |
+| `ring`                     | 0.05..30 s (log)   | ring time (T60) at middle C                                                       |
+| `tilt`                     | 0..2               | how much faster high modes and high notes decay                                   |
+| `damp` `release`           | 0..1, 0.005..2 s   | damping at note-off (0 rings on, 1 chokes) and the choke time; the pedal lifts it |
+| `motor` `motordepth`       | 0..12 Hz, 0..1     | vibraphone motor tremolo                                                          |
+| `ombak`                    | 0..12 Hz           | paired-instrument beating (gamelan)                                               |
+| `buzz` `click`             | 0..1               | mbira bottle-cap buzz, mallet contact click                                       |
+| `strikebend` `strikedecay` | ±24 st, 0.001..2 s | the pitch glide at the strike (timpani); Strudel `penv`/`pdecay`                  |
+| `gain`                     | 0..2               | level                                                                             |
+
+`hardness`, `position`, `ring`, `tilt`, `damp`, `motordepth`, `buzz`, `click` and `gain` have `modal-<param>` automation lanes, read at each note's onset. Notes honour the track or song tuning, note `cents`, bends, articulation (accents strike harder, staccato damps), the sustain pedal (holds dampers off), velocity curves, humanize and the tempo map. Up to 32 voices ring at once (the oldest is stolen with a short fade); tails ring up to 30 s and stop early once silent. Rendering is seeded and float64 in a fixed order, so renders are byte-identical across runs and workers.
+
+```ts
+instrument: modal("vibes", { motor: 4, hardness: 0.6 }),
+instrument: modal("marimba", { mallet: "rubber", ring: 2 }),
+```
+
+| Command                                  | Does                                                       |
+| ---------------------------------------- | ---------------------------------------------------------- |
+| `modal` · `modal presets` (`modal list`) | the focused track's preset and overrides · every preset    |
+| `modal <preset>` · `modal preset <name>` | make the focused track a modal track with that preset      |
+| `modal mallet <name>`                    | pick a mallet (sets hardness; the later of the two wins)   |
+| `modal <param> <value> …`                | set parameters (`modal ring 3 hardness 0.7`); `off` clears |
+| `modal reset`                            | clear overrides, keep the preset                           |
+| `modal off`                              | leave the engine for the legacy marimba voice              |
+
+The menu's **Sound › browse sounds › Mallets and bells** lists the presets, and **Sound › Parameters** shows the preset, mallet, the simple parameters and an **advanced** group on a modal track. The agent's `set_modal {trackId, preset?, mallet?, params?, reset?}` tool takes the same names.
 
 ## Rhythm (Euclidean rows)
 
