@@ -413,7 +413,8 @@ describe("bloom in a render", () => {
       const db = level(rig) - reference;
       if (Math.abs(db) > 2.5) throw new Error(`${rig}: ${db.toFixed(2)} dB`);
     }
-  });
+    // Four 19 s rig renders: well under a second locally, slower on CI.
+  }, 60_000);
 
   test("whole doubled rigs stay positively correlated (mono-safe)", async () => {
     // Interleaved stereo: L/R correlation of the whole rig, wash included.
