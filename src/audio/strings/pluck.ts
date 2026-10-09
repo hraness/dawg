@@ -29,6 +29,14 @@ const CONTROL = 32;
 /** Jawari bridge segment: rest length in samples and the shortest. */
 const JAW_BASE = 1.5;
 const JAW_SHORTEST = 0.5;
+/**
+ * Pitch-lock gain on the mean bridge shortening: the buzz also pulls the
+ * fundamental flat by moving energy upward, so the lock over-compensates
+ * by this frozen constant (calibrated at 22.05 kHz over keys 55-81 so the
+ * fundamental holds within 1 cent from 0.3 s; design review asked for a
+ * constant, not runtime state).
+ */
+const JAW_LOCK = 1.3;
 
 /** Phase delay (samples) at w of the DC blocker (1 - z^-1)/(1 - R z^-1). */
 function dcBlockDelay(R: number, w: number): number {
@@ -175,7 +183,7 @@ export class PluckString {
     if (this.jaw > 0) {
       // Pitch lock: the bridge allpass at its mean shortening and the
       // in-loop DC blocker are both counted in the loop length.
-      const frac = this.base - this.jmean;
+      const frac = this.base - JAW_LOCK * this.jmean;
       rest -= allpassDelay((1 - frac) / (1 + frac), w0);
       rest -= dcBlockDelay(this.dcR, w0);
     }

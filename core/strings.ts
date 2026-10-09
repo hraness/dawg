@@ -379,7 +379,7 @@ export const STRING_PRESETS: Readonly<Record<string, StringPreset>> =
         release: 0.12,
         body: "guitar",
         sym: 0.1,
-        gain: 0.62,
+        gain: 0.756,
       },
     ),
     steel: preset(
@@ -395,7 +395,7 @@ export const STRING_PRESETS: Readonly<Record<string, StringPreset>> =
         noise: 0.08,
         body: "steel",
         sym: 0.12,
-        gain: 0.5,
+        gain: 0.41,
       },
     ),
     electric: preset(
@@ -409,7 +409,7 @@ export const STRING_PRESETS: Readonly<Record<string, StringPreset>> =
         exciter: "pick",
         bright: 0.7,
         pickup: 0.18,
-        gain: 0.5,
+        gain: 0.211,
       },
     ),
     jangle: preset(
@@ -429,7 +429,7 @@ export const STRING_PRESETS: Readonly<Record<string, StringPreset>> =
         oct: 0.75,
         octbelow: 60,
         voices: 12,
-        gain: 0.45,
+        gain: 0.149,
       },
     ),
     ebass: preset("electric bass, fingers", "Motown, funk, soul, salsa", {
@@ -443,7 +443,7 @@ export const STRING_PRESETS: Readonly<Record<string, StringPreset>> =
       release: 0.06,
       pickup: 0.15,
       voices: 4,
-      gain: 0.55,
+      gain: 0.207,
     }),
     slap: preset(
       "slap bass, thumb near the neck with fret clatter",
@@ -460,7 +460,7 @@ export const STRING_PRESETS: Readonly<Record<string, StringPreset>> =
         pickup: 0.15,
         buzz: 0.12,
         voices: 4,
-        gain: 0.45,
+        gain: 0.198,
       },
     ),
     upright: preset(
@@ -477,7 +477,7 @@ export const STRING_PRESETS: Readonly<Record<string, StringPreset>> =
         release: 0.08,
         body: "bass",
         voices: 4,
-        gain: 0.7,
+        gain: 0.686,
       },
     ),
     motown: preset(
@@ -495,7 +495,7 @@ export const STRING_PRESETS: Readonly<Record<string, StringPreset>> =
         pickup: 0.15,
         mute: 0.3,
         voices: 4,
-        gain: 0.6,
+        gain: 0.227,
       },
     ),
     sitar: preset(
@@ -515,7 +515,7 @@ export const STRING_PRESETS: Readonly<Record<string, StringPreset>> =
         sym: 0.35,
         symtune: "scale",
         voices: 3,
-        gain: 0.55,
+        gain: 0.403,
       },
     ),
     tanpura: preset(
@@ -534,7 +534,7 @@ export const STRING_PRESETS: Readonly<Record<string, StringPreset>> =
         body: "gourd",
         size: 1.25,
         voices: 4,
-        gain: 0.55,
+        gain: 0.68,
       },
     ),
     harpsichord: preset(
@@ -556,7 +556,7 @@ export const STRING_PRESETS: Readonly<Record<string, StringPreset>> =
         detune: 0.03,
         spread: 0.3,
         voices: 24,
-        gain: 0.45,
+        gain: 0.164,
       },
     ),
     lute: preset(
@@ -573,7 +573,7 @@ export const STRING_PRESETS: Readonly<Record<string, StringPreset>> =
         detune: 0.04,
         spread: 0.3,
         voices: 8,
-        gain: 0.6,
+        gain: 0.541,
       },
     ),
     oud: preset("fretless oud with a plectrum", "maqam, Persian, Arabic", {
@@ -588,7 +588,7 @@ export const STRING_PRESETS: Readonly<Record<string, StringPreset>> =
       detune: 0.03,
       spread: 0.2,
       voices: 6,
-      gain: 0.55,
+      gain: 0.338,
     }),
     setar: preset(
       "Persian setar, nail-plucked, drone strings",
@@ -603,7 +603,7 @@ export const STRING_PRESETS: Readonly<Record<string, StringPreset>> =
         sym: 0.15,
         symtune: "drone",
         voices: 4,
-        gain: 0.6,
+        gain: 0.415,
       },
     ),
     tar: preset("Persian tar, skin-topped double bowl", "Persian dastgah", {
@@ -616,7 +616,7 @@ export const STRING_PRESETS: Readonly<Record<string, StringPreset>> =
       unison: 2,
       detune: 0.03,
       voices: 6,
-      gain: 0.55,
+      gain: 0.28,
     }),
     santur: preset(
       "santur: light mallets, four-string courses, undamped",
@@ -637,7 +637,7 @@ export const STRING_PRESETS: Readonly<Record<string, StringPreset>> =
         detune: 0.1,
         spread: 0.4,
         voices: 24,
-        gain: 0.4,
+        gain: 0.292,
       },
     ),
     dulcimer: preset(
@@ -655,7 +655,7 @@ export const STRING_PRESETS: Readonly<Record<string, StringPreset>> =
         detune: 0.06,
         spread: 0.3,
         voices: 24,
-        gain: 0.45,
+        gain: 0.451,
       },
     ),
     koto: preset(
@@ -671,7 +671,7 @@ export const STRING_PRESETS: Readonly<Record<string, StringPreset>> =
         body: "board",
         size: 1.43,
         voices: 13,
-        gain: 0.6,
+        gain: 0.392,
       },
     ),
     harp: preset(
@@ -689,7 +689,7 @@ export const STRING_PRESETS: Readonly<Record<string, StringPreset>> =
         sym: 0.15,
         symtune: "scale",
         voices: 32,
-        gain: 0.55,
+        gain: 0.692,
       },
     ),
     banjo: preset(
@@ -703,7 +703,7 @@ export const STRING_PRESETS: Readonly<Record<string, StringPreset>> =
         bright: 0.85,
         body: "skin",
         voices: 5,
-        gain: 0.5,
+        gain: 0.376,
       },
     ),
     tres: preset(
@@ -720,7 +720,7 @@ export const STRING_PRESETS: Readonly<Record<string, StringPreset>> =
         detune: 0.03,
         oct: 0.5,
         voices: 6,
-        gain: 0.5,
+        gain: 0.238,
       },
     ),
     requinto: preset(
@@ -735,7 +735,7 @@ export const STRING_PRESETS: Readonly<Record<string, StringPreset>> =
         bright: 0.85,
         body: "small",
         voices: 6,
-        gain: 0.5,
+        gain: 0.36,
       },
     ),
   });

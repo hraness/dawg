@@ -45,11 +45,24 @@ export function designLoss(
     if (ratio(mid) > want) lo = mid;
     else hi = mid;
   }
-  const p = (lo + hi) / 2;
-  const g = Math.min(
-    0.99995,
-    (g0 * Math.sqrt(1 - 2 * p * Math.cos(w0) + p * p)) / (1 - p),
-  );
+  // DC gain g must stay below 1, so cap the pole where the f0 gain would
+  // need g > 0.99995: high keys keep their designed fundamental T60 and
+  // give up some of the requested treble damping (design review: high
+  // nylon and harp notes decayed several times too fast).
+  const gFor = (q: number) =>
+    (g0 * Math.sqrt(1 - 2 * q * Math.cos(w0) + q * q)) / (1 - q);
+  let p = (lo + hi) / 2;
+  if (gFor(p) > 0.99995) {
+    let a = 0;
+    let b = p;
+    for (let i = 0; i < 50; i += 1) {
+      const mid = (a + b) / 2;
+      if (gFor(mid) > 0.99995) b = mid;
+      else a = mid;
+    }
+    p = a;
+  }
+  const g = Math.min(0.99995, gFor(p));
   return { g, p };
 }
 
