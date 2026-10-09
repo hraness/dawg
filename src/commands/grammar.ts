@@ -11,6 +11,8 @@
  * command for typo fixes, show-me and the agent's command mode.
  */
 
+import { editDistance, HELP_SECTIONS, USAGE } from "./help.ts";
+
 /** Words that remove a thing: `section rm verse` ≡ `section remove verse`. */
 export const REMOVE_WORDS: readonly string[] = ["remove", "rm", "delete"];
 /** Words that list a noun's presets: `fx ls` ≡ `fx list` ≡ `fx`. */
@@ -45,11 +47,6 @@ export function verbOf(line: string): string {
  */
 const REWRITES: readonly ((words: readonly string[]) => string | undefined)[] =
   [
-    // groove <name> ≡ /pattern <name>; bare groove opens the browser.
-    (w) =>
-      w[0] === "groove" || w[0] === "grooves"
-        ? ["/pattern", ...w.slice(1)].join(" ")
-        : undefined,
     // key ≡ scale for showing and listing (`key A minor` already parses).
     (w) =>
       w[0] === "key" &&
@@ -304,7 +301,7 @@ export const WINDOW_VERBS: ReadonlySet<string> = new Set([
 ]);
 
 /** `✗ no agent · …`: what prose gets when no provider is signed in. */
-export const NO_AGENT = "no agent · try style deep-house · /login adds one";
+export const NO_AGENT = "no agent · try style deep-house · model key adds one";
 
 /**
  * Command words that are also everyday English: a sentence starting with
@@ -362,4 +359,160 @@ export function usageCard(
   near?: string,
 ): string {
   return near ? `${line} · ${usage} · did you mean ${near}?` : `${line} · ${usage}`;
+}
+
+// ---------------------------------------------------------------------------
+// One vocabulary matcher, one error template
+
+/**
+ * The word in `vocabulary` nearest to `word` (edit distance, adjacent swaps
+ * cost one), within one edit for words of four letters or fewer and two
+ * otherwise; undefined when nothing is that close or `word` is itself in it.
+ * Every vocabulary (instrument, effect, style, kit, groove, track, section,
+ * verb) goes through this one function.
+ */
+export function nearest(
+  word: string,
+  vocabulary: Iterable<string>,
+): string | undefined {
+  const typed = word.trim().toLowerCase();
+  if (!typed) return undefined;
+  const limit = typed.length <= 4 ? 1 : 2;
+  let best: { word: string; distance: number } | undefined;
+  for (const candidate of vocabulary) {
+    const lower = candidate.toLowerCase();
+    if (lower === typed) return undefined;
+    const distance = editDistance(typed, lower);
+    if (distance <= limit && (!best || distance < best.distance))
+      best = { word: candidate, distance };
+  }
+  return best?.word;
+}
+
+/** Every verb help and the usage table know, bare (`fx`, `tempo`, …). */
+export function knownVerbs(): ReadonlySet<string> {
+  knownCache ??= new Set(
+    [
+      ...HELP_SECTIONS.flatMap((section) =>
+        section.group === "keys"
+          ? []
+          : section.entries.map((entry) => entry.command.split(/[\s|[]/)[0]!),
+      ),
+      ...Object.keys(USAGE),
+      ...Object.values(USAGE).map((usage) => usage.split(/[\s|[]/)[0]!),
+      ...WINDOW_VERBS,
+      "groove",
+      "rig",
+      "loop",
+      "export",
+      "remove",
+      "rm",
+      "delete",
+    ]
+      .map((verb) => verb.replace(/^\//, "").toLowerCase())
+      .filter((verb) => /^[a-z][\w-]*$/.test(verb)),
+  );
+  return knownCache;
+}
+let knownCache: Set<string> | undefined;
+
+/** A value's allowed range, unit and a working example. */
+export type ValueRange = Readonly<{
+  command: string;
+  min: number;
+  max: number;
+  unit: string;
+  example: string;
+}>;
+
+/**
+ * Range tables for the values people type, keyed by command word, with the
+ * core schema keys they guard (`tempoBpm`) mapped to the same rows, so a
+ * core message never reaches a card raw.
+ */
+export const RANGES: Readonly<Record<string, ValueRange>> = Object.freeze({
+  tempo: { command: "tempo", min: 20, max: 300, unit: "BPM", example: "tempo 128" },
+  bars: { command: "bars", min: 1, max: 256, unit: "bars", example: "bars 8" },
+  meter: {
+    command: "meter",
+    min: 1,
+    max: 16,
+    unit: "beats per bar",
+    example: "meter 3",
+  },
+  volume: { command: "volume", min: 0, max: 1, unit: "", example: "volume 0.8" },
+  pan: { command: "pan", min: -1, max: 1, unit: "", example: "pan -0.3" },
+});
+
+/** Core schema keys and the command row that explains each. */
+const CORE_KEYS: Readonly<Record<string, string>> = Object.freeze({
+  tempoBpm: "tempo",
+  bars: "bars",
+  beatsPerBar: "meter",
+  "track volume": "volume",
+  "track pan": "pan",
+});
+
+/**
+ * `✗ tempo 900 · tempo takes 20…300 BPM · tempo 128`: the one template for
+ * a value out of range (the `✗` is the card's marker).
+ */
+export function usageError(input: string, range: ValueRange): string {
+  const unit = range.unit ? ` ${range.unit}` : "";
+  return `${clip(input)} · ${range.command} takes ${range.min}…${range.max}${unit} · ${range.example}`;
+}
+
+/**
+ * A core validation message rewritten in the template, or undefined when it
+ * names no known key: `tempoBpm must be between 20 and 300` after `tempo
+ * 900` reads `tempo 900 · tempo takes 20…300 BPM · tempo 128`.
+ */
+export function friendlyCoreError(
+  input: string,
+  message: string,
+): string | undefined {
+  for (const [key, command] of Object.entries(CORE_KEYS)) {
+    if (!message.startsWith(`${key} must be`)) continue;
+    const range = RANGES[command];
+    if (range) return usageError(input, range);
+  }
+  return undefined;
+}
+
+/** `usage · <cmd> <args>`: the one usage line. */
+export function usageLine(usage: string): string {
+  return `usage · ${usage.replace(/^usage\s*·?\s*/i, "")}`;
+}
+
+/** `no track <id> · tracks lists them`: the one missing-track line. */
+export function noTrack(id: string): string {
+  return `no track ${clip(id)} · tracks lists them`;
+}
+
+/** `no note <id> · notes lists them`: the one missing-note line. */
+export function noNote(id: string): string {
+  return `no note ${clip(id)} · notes lists them`;
+}
+
+function clip(value: string): string {
+  const line = value.replace(/\s+/g, " ").trim();
+  return line.length > 32 ? `${line.slice(0, 31)}…` : line;
+}
+
+// ---------------------------------------------------------------------------
+// Canonical rewrites the prompt bar applies before anything else
+
+/**
+ * Canonical forms that name window commands: `model key [provider]` is the
+ * agent-key command (`login` stays an alias), `models` is `model`, and
+ * `voice` opens the Voice help topic. Undefined when `line` is none.
+ */
+export function canonicalWindowForm(line: string): string | undefined {
+  const text = line.trim().replace(/\s+/g, " ");
+  const key = text.match(/^\/?models?\s+key(?:\s+(.*))?$/i);
+  if (key) return `/login${key[1] ? ` ${key[1]}` : ""}`;
+  const models = text.match(/^\/?models(\s+\S+)?$/i);
+  if (models) return `/model${models[1] ?? ""}`;
+  if (/^\/?voice$/i.test(text)) return "/help voice";
+  return undefined;
 }

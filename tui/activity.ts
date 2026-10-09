@@ -472,11 +472,16 @@ export class ActivityFeed {
  * success, `false` a failure, `"warn"` a no-op or conflict. Handlers return
  * these so the strip never infers failure from prose.
  */
-export type Receipt = Readonly<{ ok: boolean | "warn"; text: string }>;
+export type Receipt = Readonly<{
+  ok: boolean | "warn" | "info";
+  text: string;
+}>;
 
 export const ok = (text: string): Receipt => ({ ok: true, text });
 export const fail = (text: string): Receipt => ({ ok: false, text });
 export const warn = (text: string): Receipt => ({ ok: "warn", text });
+/** A status read (`•`): nothing changed (bare `fx`, `tracks`). */
+export const note = (text: string): Receipt => ({ ok: "info", text });
 
 /** Tone of a structured receipt; strings fall back to `receiptTone`. */
 export function toneOf(receipt: string | Receipt): CardTone {
@@ -485,7 +490,9 @@ export function toneOf(receipt: string | Receipt): CardTone {
     ? "success"
     : receipt.ok === "warn"
       ? "warning"
-      : "error";
+      : receipt.ok === "info"
+        ? "info"
+        : "error";
 }
 
 /**

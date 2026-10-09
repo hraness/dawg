@@ -83,14 +83,44 @@ export function plainSineAdvice(
   return `"${name}" is not a dawg instrument and plays a plain sine${near ? ` · did you mean ${near}?` : ""}`;
 }
 
-/** Whether `word` is neither a known instrument nor a legacy word. */
-export function isUnknownInstrument(word: string): boolean {
+/**
+ * Whether `word` names an instrument exactly: an instrument word, preset,
+ * engine, keys family, oscillator, drum, sampler or guide word, or a legacy
+ * tone. The write path (`instrument <word>`) refuses anything else, so a typo
+ * such as `sawtoth` is never stored. Stored projects are not checked here:
+ * the read and render paths keep playing whatever they hold.
+ */
+export function isExactInstrument(word: string): boolean {
   const name = word.trim().toLowerCase();
-  return (
-    playsPlainSine(name) &&
-    !LEGACY_WORDS.includes(name) &&
-    !INSTRUMENT_WORDS.some((row) => row.word === name)
-  );
+  if (name === "") return false;
+  if (
+    name === "sine" ||
+    LEGACY_TONES.includes(name) ||
+    LEGACY_WORDS.includes(name) ||
+    knownWords().includes(name)
+  )
+    return true;
+  if (registeredEngines().includes(name)) return true;
+  if ((KEYS_FAMILIES as readonly string[]).includes(name)) return true;
+  if (isDrumInstrument(name) || isSamplerInstrument(name)) return true;
+  if (isGuideInstrument(name)) return true;
+  return name === "wavetable" || resolveOscillator(name) !== undefined;
+}
+
+/** Whether `word` is not an exact instrument name (see isExactInstrument). */
+export function isUnknownInstrument(word: string): boolean {
+  return !isExactInstrument(word);
+}
+
+/**
+ * `✗ instrument sawtoth · did you mean sawtooth? · instrument list`: the
+ * refusal for an instrument write that names nothing exactly.
+ */
+export function unknownInstrumentMessage(word: string): string {
+  const name = word.trim().toLowerCase();
+  const near = nearestWord(name, [...knownWords(), ...LEGACY_TONES, "sine"]);
+  const shown = name.length > 32 ? `${name.slice(0, 31)}…` : name;
+  return `instrument ${shown}${near && near !== name ? ` · did you mean ${near}?` : ""} · instrument list`;
 }
 
 /** `dawg check` warnings for every track that plays the plain sine. */

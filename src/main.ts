@@ -3,8 +3,25 @@ import { isGuideInstrument, vocalChainPatch } from "../core/clips.ts";
 import { isSingWord } from "../core/sing.ts";
 import { commandParses } from "./commands/parses.ts";
 import {
+  EVERYDAY_VERBS,
+  EXPORT_USAGE,
+  FREE_TEXT_HINTS,
+  WINDOW_VERBS,
+  NO_AGENT,
+  canonicalWindowForm,
+  friendlyCoreError,
+  knownVerbs,
+  nearest,
+  noNote,
+  parseExportCommand,
+  recover,
+  usageCard,
+  verbOf,
+} from "./commands/grammar.ts";
+import {
   isUnknownInstrument,
   plainSineAdvice,
+  unknownInstrumentMessage,
 } from "./audio/instrument-check.ts";
 import { randomUUID } from "node:crypto";
 import { readFileSync, writeSync } from "node:fs";
@@ -378,7 +395,14 @@ import {
   type SyncState,
   type TypesIndicator,
 } from "../tui/app.ts";
-import { fail, ok, toneOf, warn, type Receipt } from "../tui/activity.ts";
+import {
+  fail,
+  note,
+  ok,
+  toneOf,
+  warn,
+  type Receipt,
+} from "../tui/activity.ts";
 import { systemRunner } from "./auth/runner.ts";
 import type { MediaServices } from "./media/types.ts";
 import { encodeBuffer } from "../tui/screen.ts";
@@ -1973,6 +1997,17 @@ async function runInteractive(): Promise<void> {
   }
 }
 
+/** Set while `submit` runs a grammar reading, so it reads only once. */
+let recovering = false;
+
+/** Slash words `submit` handles itself (no parser in commandParses). */
+const SLASH_HANDLED: ReadonlySet<string> = new Set([
+  ...WINDOW_VERBS,
+  "chords",
+  "click",
+  "help",
+]);
+
 /** `unknown command /clik · did you mean /click? · /help`. */
 function unknownCommand(command: string): string {
   const word = command.split(/\s+/)[0] ?? command;
@@ -1984,10 +2019,10 @@ function unknownCommand(command: string): string {
 
 async function submit(prompt: string): Promise<string | Receipt> {
   const command = prompt.trim();
-  // `model key` is the glossary word for adding an agent (design §8.2);
-  // `/login` stays as its alias and owns the flow.
-  const modelKey = command.match(/^\/?model\s+key\b(.*)$/i);
-  if (modelKey) return submit(`/login${modelKey[1]}`);
+  // Canonical names for window commands: `model key` (login), `models`,
+  // `voice` (the Voice topic).
+  const canonical = canonicalWindowForm(command);
+  if (canonical) return submit(canonical);
   const helpCommand = command.match(/^\/?(?:help|\?)(?:\s+(\S+))?$/i);
   if (helpCommand) {
     const topic = helpCommand[1];
@@ -2334,7 +2369,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
   const pattern = parsePatternCommand(command);
   if (pattern) return patternCommand(pattern);
   const kit = parseKitCommand(command);
-  if (kit) return kitCommand(kit, /^\/kit\s*$/i.test(command.trim()));
+  if (kit) return kitCommand(kit, /^\/?kits?\s*$/i.test(command.trim()));
   const wavetable = parseWavetableCommand(command);
   if (wavetable) return wavetableCommand(wavetable);
   const sessionReply = await sessionCommand(command);
@@ -2702,6 +2737,29 @@ async function submit(prompt: string): Promise<string | Receipt> {
       tui.activity.setSpinner(undefined);
     }
   }
+  // The grammar's second reading (design §3): a line no handler took runs
+  // in its other spellings — `/x` ≡ `x`, aliases, `rm|remove|delete`,
+  // `list|presets|ls` — so only lines that failed before get one.
+  if (!recovering) {
+    const retry = recover(
+      command,
+      (candidate) =>
+        commandParses(candidate, score) ||
+        (candidate.startsWith("/") &&
+          SLASH_HANDLED.has(verbOf(candidate))),
+    );
+    if (retry !== undefined) {
+      recovering = true;
+      try {
+        return await submit(retry);
+      } finally {
+        recovering = false;
+      }
+    }
+  }
+  // Bare `rename`, `fork`, `resume`, `login` take free text: a hint only.
+  const freeText = FREE_TEXT_HINTS[command.toLowerCase()];
+  if (freeText !== undefined) return note(freeText);
   // `/model` belongs to its own handler above; every other slash word that
   // reached here is unknown or misused, and never a question for the agent.
   // `/instrument aah` is `instrument aah`; `instrument sing choir` is
@@ -2725,6 +2783,10 @@ async function submit(prompt: string): Promise<string | Receipt> {
     // A one-letter slip on a command whose arguments parse stays local.
     const fix = typoFix(command, parsesLocally);
     if (fix) return fail(`${truncateForCard(command)} · did you mean ${fix}?`);
+    // A grammar verb (not everyday English) never reaches the agent.
+    const verb = verbOf(command);
+    if (knownVerbs().has(verb) && !EVERYDAY_VERBS.has(verb))
+      return fail(usageCard(truncateForCard(command), `/help ${verb}`));
     if (process.env.DAWG_AI === "0")
       return fail(`unrecognized · ${truncateForCard(command)} · /help`);
     await materializeDraft();
@@ -2781,13 +2843,8 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (parsed.type === "track") {
     // An unknown word would store and play a plain sine: say so instead.
     const word = parsed.patch.instrument;
-    if (word !== undefined && isUnknownInstrument(word)) {
-      const advice = plainSineAdvice(word) ?? "";
-      const near = advice.match(/did you mean (\S+)\?/)?.[1];
-      return fail(
-        `instrument ${truncateForCard(word)} · not a dawg instrument${near ? ` · did you mean ${near}?` : ""} · /menu sounds lists them`,
-      );
-    }
+    if (word !== undefined && isUnknownInstrument(word))
+      return fail(unknownInstrumentMessage(word));
     // `instrument jangle`: a guitar alias also loads its rig.
     const rigged = parsed.word
       ? {
@@ -4936,9 +4993,7 @@ async function runAgent(text: string): Promise<string | Receipt> {
   if (agentTurn) return warn("agent busy · Esc cancels");
   const selection = await currentProvider();
   if (selection.kind === "offline")
-    return fail(
-      `unrecognized · ${truncateForCard(text)} · ${selection.reason}`,
-    );
+    return fail(`${truncateForCard(text)} · ${NO_AGENT}`);
   const turn = { controller: new AbortController(), steering: [] as string[] };
   agentTurn = turn;
   // The turn ends on one musical receipt of what it changed.
