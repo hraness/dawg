@@ -1,4 +1,5 @@
-import { readSseData } from "./sse.ts";
+import { isProviderModelId } from "../auth/credentials.ts";
+import { readSseData, SseBudgetError } from "./sse.ts";
 
 /**
  * The two original model aliases. A model is either one of these or an exact
@@ -18,8 +19,6 @@ export const DEFAULT_MODEL_IDS: Readonly<Record<GatewayModel, string>> =
     "sol-6.1": "openai/gpt-6.1-sol",
   });
 
-const MODEL_ID_PATTERN =
-  /^[a-z0-9][a-z0-9-]{0,63}\/[a-z0-9][a-z0-9._-]{0,127}$/i;
 const MAX_ERROR_BODY_BYTES = 4 * 1024;
 
 export function isGatewayModel(value: unknown): value is GatewayModel {
@@ -36,21 +35,22 @@ export function isGatewayModel(value: unknown): value is GatewayModel {
 export function resolveModelId(
   alias: string,
   overrides: Partial<Record<GatewayModel, string | undefined>> = {},
+  provider: ApiProvider = "gateway",
 ): string {
   if (!isGatewayModel(alias)) {
-    if (MODEL_ID_PATTERN.test(alias)) return alias;
+    if (isProviderModelId(alias, provider)) return alias;
     throw new Error(
       `unknown model "${alias.slice(0, 32)}"; use ${GATEWAY_MODELS.join(" or ")} or a vendor/model ID`,
     );
   }
   const id = overrides[alias] ?? DEFAULT_MODEL_IDS[alias];
-  if (!MODEL_ID_PATTERN.test(id))
+  if (!isProviderModelId(id, provider))
     throw new Error(`model ID for ${alias} must look like provider/model`);
   return id;
 }
 
-function checkedModelId(id: string): string {
-  if (!MODEL_ID_PATTERN.test(id))
+function checkedModelId(id: string, provider: ApiProvider): string {
+  if (!isProviderModelId(id, provider))
     throw new Error("model ID must look like provider/model");
   return id;
 }
@@ -222,12 +222,12 @@ function createApiClient(
 
   return {
     provider,
-    modelId: (model) => resolveModelId(model, overrides),
+    modelId: (model) => resolveModelId(model, overrides, provider),
     async *stream(request, signal) {
       const model =
         request.modelId !== undefined
-          ? checkedModelId(request.modelId)
-          : resolveModelId(request.model, overrides);
+          ? checkedModelId(request.modelId, provider)
+          : resolveModelId(request.model, overrides, provider);
       if (!apiKey)
         throw new GatewayError(
           provider === "openrouter"
@@ -236,12 +236,15 @@ function createApiClient(
         );
       const body: Record<string, unknown> = {
         model,
-        messages: request.messages,
+        messages: withPromptCache(provider, model, request.messages),
         stream: true,
         // The final chunk then carries token usage (and OpenRouter's cost).
         stream_options: { include_usage: true },
       };
       if (provider === "openrouter") body.usage = { include: true };
+      // The Gateway adds Anthropic cache breakpoints itself when asked; it
+      // documents the option as a no-op for implicitly caching providers.
+      else body.providerOptions = { gateway: { caching: "auto" } };
       if (request.tools && request.tools.length > 0) {
         body.tools = request.tools;
         body.tool_choice = "auto";
@@ -262,10 +265,26 @@ function createApiClient(
       let response: Response | undefined;
       for (let attempt = 0; ; attempt += 1) {
         if (signal?.aborted) throw abortError(signal);
-        const headerSignal = AbortSignal.any([
-          ...(signal === undefined ? [] : [signal]),
-          AbortSignal.timeout(headerTimeoutMs),
-        ]);
+        // The header budget bounds only the wait for response headers. A
+        // fetch signal also governs the body, so the timer is cleared as soon
+        // as headers arrive; after that only the caller's signal (the user or
+        // the turn budget) can cut the stream short.
+        const headerController = new AbortController();
+        const headerTimer = setTimeout(
+          () =>
+            headerController.abort(
+              new DOMException(
+                `${name} did not respond within ${headerTimeoutMs} ms`,
+                "TimeoutError",
+              ),
+            ),
+          headerTimeoutMs,
+        );
+        const headerSignal = headerController.signal;
+        const requestSignal =
+          signal === undefined
+            ? headerSignal
+            : AbortSignal.any([signal, headerSignal]);
         const init: RequestInit = {
           method: "POST",
           headers: {
@@ -275,11 +294,16 @@ function createApiClient(
             ...(provider === "openrouter" ? OPENROUTER_HEADERS : {}),
           },
           body: encoded,
-          signal: headerSignal,
+          signal: requestSignal,
         };
         let reason: string;
         try {
-          const candidate = await fetcher(`${baseUrl}/chat/completions`, init);
+          let candidate: Response;
+          try {
+            candidate = await fetcher(`${baseUrl}/chat/completions`, init);
+          } finally {
+            clearTimeout(headerTimer);
+          }
           if (candidate.ok) {
             response = candidate;
             break;
@@ -313,17 +337,73 @@ function createApiClient(
         maxBytes: request.maxResponseBytes,
       };
       if (signal !== undefined) streamOptions.signal = signal;
-      for await (const data of readSseData(response.body, streamOptions)) {
-        let chunk: unknown;
-        try {
-          chunk = JSON.parse(data);
-        } catch {
-          throw new GatewayError(`${name} sent a malformed stream chunk`);
+      try {
+        for await (const data of readSseData(response.body, streamOptions)) {
+          let chunk: unknown;
+          try {
+            chunk = JSON.parse(data);
+          } catch {
+            throw new GatewayError(`${name} sent a malformed stream chunk`);
+          }
+          yield* normalizeChunk(chunk, redact, name);
         }
-        yield* normalizeChunk(chunk, redact, name);
+      } catch (error) {
+        // A failure while the body streams (a reset connection, a transport
+        // timeout) is a provider failure, not an internal one. Budget errors
+        // and the caller's own abort keep their identity.
+        if (
+          error instanceof GatewayError ||
+          error instanceof SseBudgetError ||
+          signal?.aborted
+        )
+          throw error;
+        const timedOut =
+          error instanceof Error && error.name === "TimeoutError";
+        throw new GatewayError(
+          timedOut
+            ? `${name} stream timed out`
+            : `${name} stream failed: ${redact(error instanceof Error ? error.message : String(error)).slice(0, 300)}`,
+        );
       }
     },
   };
+}
+
+/**
+ * Mark the leading system message as a prompt-cache breakpoint for Anthropic
+ * models on OpenRouter. Anthropic caches tools, then system, then messages,
+ * so a breakpoint on the static system prompt caches the tool schemas and the
+ * prompt (about 22K tokens) across every step of a turn; the per-step brief
+ * follows it and stays uncached. Other providers cache prefixes implicitly,
+ * and the Gateway is asked to place breakpoints itself, so their messages go
+ * out unchanged.
+ */
+export function withPromptCache(
+  provider: ApiProvider,
+  model: string,
+  messages: readonly ChatMessage[],
+): readonly unknown[] {
+  const first = messages[0];
+  if (
+    provider !== "openrouter" ||
+    !model.toLowerCase().startsWith("anthropic/") ||
+    first?.role !== "system" ||
+    first.content.length === 0
+  )
+    return messages;
+  return [
+    {
+      role: "system",
+      content: [
+        {
+          type: "text",
+          text: first.content,
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+    },
+    ...messages.slice(1),
+  ];
 }
 
 function* normalizeChunk(

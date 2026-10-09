@@ -316,3 +316,145 @@ describe("model alias allowlist", () => {
     ).toThrow("provider/model");
   });
 });
+
+describe("header timeout covers only the header phase", () => {
+  test("a reply that streams longer than the header budget arrives whole", async () => {
+    // A real local server: headers at once, then one chunk every 25 ms for
+    // well past the 40 ms header budget. Before the fix the fetch signal's
+    // timeout also aborted the body, cutting the reply off mid-stream.
+    const encoder = new TextEncoder();
+    const server = Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      fetch() {
+        let i = 0;
+        let timer: ReturnType<typeof setInterval> | undefined;
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            timer = setInterval(() => {
+              if (i < 8) {
+                controller.enqueue(
+                  encoder.encode(
+                    `data: ${JSON.stringify({ choices: [{ delta: { content: `t${i} ` } }] })}\n\n`,
+                  ),
+                );
+                i += 1;
+              } else {
+                clearInterval(timer);
+                controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                controller.close();
+              }
+            }, 25);
+          },
+          cancel() {
+            clearInterval(timer);
+          },
+        });
+        return new Response(body, {
+          headers: { "content-type": "text/event-stream" },
+        });
+      },
+    });
+    try {
+      const client = createGatewayClient({
+        apiKey: KEY,
+        baseUrl: `http://127.0.0.1:${server.port}/v1`,
+        headerTimeoutMs: 40,
+        retry: { retries: 0 },
+      });
+      const events = await collect(
+        client.stream({
+          model: "sol-6.1",
+          messages: [],
+          maxResponseBytes: 1e5,
+        }),
+      );
+      const text = events
+        .map((e) => (e.type === "text" ? e.delta : ""))
+        .join("");
+      expect(text).toBe("t0 t1 t2 t3 t4 t5 t6 t7 ");
+    } finally {
+      await server.stop(true);
+    }
+  });
+
+  test("the body signal is not aborted once headers have arrived", async () => {
+    let seen: AbortSignal | undefined | null;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const encoder = new TextEncoder();
+    const client = createGatewayClient({
+      apiKey: KEY,
+      headerTimeoutMs: 5,
+      retry: { retries: 0 },
+      fetcher: (_input, init) => {
+        seen = init?.signal;
+        const body = new ReadableStream<Uint8Array>({
+          async pull(controller) {
+            await gate;
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ choices: [{ delta: { content: "ok" } }] })}\n\n`,
+              ),
+            );
+            controller.close();
+          },
+        });
+        return Promise.resolve(new Response(body));
+      },
+    });
+    const pending = collect(
+      client.stream({ model: "sol-6.1", messages: [], maxResponseBytes: 1e4 }),
+    );
+    // Wait well past the header budget with the body still pending.
+    await Bun.sleep(40);
+    expect(seen?.aborted).toBe(false);
+    release();
+    const events = await pending;
+    expect(events).toContainEqual({ type: "text", delta: "ok" });
+  });
+
+  test("a mid-stream transport failure surfaces as a redacted GatewayError", async () => {
+    const encoder = new TextEncoder();
+    for (const [failure, expected] of [
+      [new TypeError(`socket reset ${KEY}`), "stream failed"],
+      [
+        new DOMException("The operation timed out.", "TimeoutError"),
+        "timed out",
+      ],
+    ] as const) {
+      let sent = false;
+      const client = createGatewayClient({
+        apiKey: KEY,
+        retry: { retries: 0 },
+        fetcher: () =>
+          Promise.resolve(
+            new Response(
+              new ReadableStream<Uint8Array>({
+                pull(controller) {
+                  if (!sent) {
+                    sent = true;
+                    controller.enqueue(
+                      encoder.encode(
+                        `data: ${JSON.stringify({ choices: [{ delta: { content: "a" } }] })}\n\n`,
+                      ),
+                    );
+                  } else controller.error(failure);
+                },
+              }),
+            ),
+          ),
+      });
+      const error = await collect(
+        client.stream({
+          model: "sol-6.1",
+          messages: [],
+          maxResponseBytes: 1e4,
+        }),
+      ).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(GatewayError);
+      expect((error as Error).message).toContain(expected);
+      expect((error as Error).message).not.toContain(KEY);
+    }
+  });
+});

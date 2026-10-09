@@ -12,6 +12,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createScore, type TrackScore } from "../../core/score.ts";
 import {
+  AGENT_SYSTEM_PROMPT,
+  AgentTimeoutError,
+  classifyAgentError,
   describeAgentEvent,
   runAgentTurn,
   StaleRevisionError,
@@ -20,7 +23,7 @@ import {
   type AgentHost,
 } from "./agent.ts";
 import type { FetchLike } from "../web/http.ts";
-import { createGatewayClient } from "./gateway.ts";
+import { createGatewayClient, createOpenRouterClient } from "./gateway.ts";
 import { scriptedRunner } from "../auth/runner.ts";
 import { ffprobeJson, syntheticWav } from "../media/media-fixtures.ts";
 import {
@@ -1053,5 +1056,103 @@ describe("media tools in the loop", () => {
           event.diagnostic === "media tools are unavailable in this host",
       ),
     ).toBe(true);
+  });
+});
+
+describe("classifyAgentError", () => {
+  test("a transport TimeoutError is a provider failure, the turn budget stays a timeout", () => {
+    const live = new AbortController().signal;
+    expect(
+      classifyAgentError(
+        new DOMException("The operation timed out.", "TimeoutError"),
+        live,
+        undefined,
+      ),
+    ).toEqual({
+      code: "provider",
+      message: "model request timed out: The operation timed out.",
+    });
+    expect(
+      classifyAgentError(new AgentTimeoutError(90_000), live, undefined).code,
+    ).toBe("timeout");
+    const user = new AbortController();
+    user.abort();
+    expect(classifyAgentError(new TypeError("x"), live, user.signal).code).toBe(
+      "aborted",
+    );
+  });
+});
+
+describe("prompt cache", () => {
+  test("the static prefix is byte-stable across steps and marked for Anthropic on OpenRouter", async () => {
+    const turn = () =>
+      scriptedFetch([
+        [
+          ...toolCallChunks(0, "c1", "set_tempo", { bpm: 100 }),
+          finishChunk("tool_calls"),
+        ],
+        [textChunk("done"), finishChunk("stop")],
+      ]);
+    const routes = [
+      ["openrouter", "anthropic/claude-opus-5.5", true],
+      ["openrouter", "openai/gpt-oss-20b:nitro", false],
+      ["gateway", "anthropic/claude-opus-5.5", false],
+    ] as const;
+    for (const [provider, modelId, marked] of routes) {
+      const script = turn();
+      const make =
+        provider === "openrouter"
+          ? createOpenRouterClient
+          : createGatewayClient;
+      const result = await runAgentTurn({
+        prompt: "tempo 100",
+        model: modelId,
+        client: make({
+          apiKey: KEY,
+          baseUrl: "https://gw.test/v1",
+          fetcher: script.fetcher,
+        }),
+        host: memoryHost().host,
+      });
+      expect(result.type).toBe("done");
+      const bodies = script.requests.map(
+        (r) =>
+          r.body as {
+            messages: unknown[];
+            tools: unknown[];
+            providerOptions?: unknown;
+          },
+      );
+      expect(bodies).toHaveLength(2);
+      // Tools and the static system message never change between steps, so
+      // the provider can reuse the cached prefix.
+      expect(JSON.stringify(bodies[1]!.tools)).toBe(
+        JSON.stringify(bodies[0]!.tools),
+      );
+      expect(JSON.stringify(bodies[1]!.messages[0])).toBe(
+        JSON.stringify(bodies[0]!.messages[0]),
+      );
+      const first = bodies[0]!.messages[0] as {
+        role: string;
+        content: unknown;
+      };
+      expect(first.role).toBe("system");
+      if (marked)
+        expect(first.content).toEqual([
+          {
+            type: "text",
+            text: AGENT_SYSTEM_PROMPT,
+            cache_control: { type: "ephemeral" },
+          },
+        ]);
+      else expect(first.content).toBe(AGENT_SYSTEM_PROMPT);
+      // Only the static prompt carries a breakpoint; the brief stays plain.
+      expect(JSON.stringify(bodies[0]!.messages.slice(1))).not.toContain(
+        "cache_control",
+      );
+      expect(bodies[0]!.providerOptions).toEqual(
+        provider === "gateway" ? { gateway: { caching: "auto" } } : undefined,
+      );
+    }
   });
 });

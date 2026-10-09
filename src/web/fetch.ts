@@ -7,6 +7,7 @@
  */
 import { lookup as dnsLookup } from "node:dns/promises";
 import { isIP } from "node:net";
+import { checkServerIdentity, type PeerCertificate } from "node:tls";
 import {
   decodeEntities,
   describeFetchError,
@@ -81,26 +82,64 @@ function isPrivateV4(address: string): boolean {
   );
 }
 
-function isPrivateV6(address: string): boolean {
-  const lower = address.toLowerCase().split("%")[0]!;
-  if (lower === "::" || lower === "::1") return true;
-  const mapped = /^(?:0*:)*:?ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(lower);
-  if (mapped) return isPrivateV4(mapped[1]!);
-  const hexMapped = /^(?:0*:)*:?ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(
-    lower,
-  );
-  if (hexMapped) {
-    const high = Number.parseInt(hexMapped[1]!, 16);
-    const low = Number.parseInt(hexMapped[2]!, 16);
-    return isPrivateV4(`${high >> 8}.${high & 0xff}.${low >> 8}.${low & 0xff}`);
+/** Expand an IPv6 address (zone stripped, embedded dotted IPv4 allowed) to 8 groups. */
+function expandV6(address: string): number[] | undefined {
+  let text = address.toLowerCase().split("%")[0]!;
+  const dotted = /(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(text);
+  if (dotted) {
+    const [a, b, c, d] = dotted.slice(1).map(Number) as [
+      number,
+      number,
+      number,
+      number,
+    ];
+    text = `${text.slice(0, dotted.index)}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
   }
-  const first = Number.parseInt(lower.split(":")[0] || "0", 16);
+  const halves = text.split("::");
+  if (halves.length > 2) return undefined;
+  const parse = (part: string) =>
+    part === ""
+      ? []
+      : part.split(":").map((group) => Number.parseInt(group, 16));
+  const head = parse(halves[0]!);
+  const tail = halves.length === 2 ? parse(halves[1]!) : [];
+  const fill = 8 - head.length - tail.length;
+  if (halves.length === 1 ? fill !== 0 : fill < 1) return undefined;
+  const groups = [
+    ...head,
+    ...new Array<number>(halves.length === 2 ? fill : 0).fill(0),
+    ...tail,
+  ];
+  return groups.every((g) => Number.isInteger(g) && g >= 0 && g <= 0xffff)
+    ? groups
+    : undefined;
+}
+
+function v4From(high: number, low: number): string {
+  return `${high >> 8}.${high & 0xff}.${low >> 8}.${low & 0xff}`;
+}
+
+function isPrivateV6(address: string): boolean {
+  const g = expandV6(address);
+  if (!g) return true;
+  const zero = (from: number, to: number) =>
+    g.slice(from, to).every((x) => x === 0);
+  // ::/96 covers :: and ::1 and the deprecated IPv4-compatible form (::a.b.c.d).
+  if (zero(0, 6)) return true;
+  // ::ffff:0:0/96 IPv4-mapped: as private as the address it carries.
+  if (zero(0, 5) && g[5] === 0xffff) return isPrivateV4(v4From(g[6]!, g[7]!));
+  // 2002::/16 6to4 embeds an IPv4 address in bits 16..47.
+  if (g[0] === 0x2002) return isPrivateV4(v4From(g[1]!, g[2]!));
+  const first = g[0]!;
   return (
+    (first === 0x64 && g[1] === 0xff9b) || // 64:ff9b::/96 and 64:ff9b:1::/48 NAT64
+    (first === 0x100 && zero(1, 4)) || // 100::/64 discard
+    (first === 0x2001 && g[1] === 0) || // 2001::/32 Teredo (obfuscated IPv4)
+    (first === 0x2001 && g[1] === 0xdb8) || // 2001:db8::/32 documentation
     (first & 0xfe00) === 0xfc00 || // fc00::/7 unique local
     (first & 0xffc0) === 0xfe80 || // fe80::/10 link-local
-    (first & 0xff00) === 0xff00 || // ff00::/8 multicast
-    lower.startsWith("64:ff9b:") || // NAT64 well-known prefix
-    lower.startsWith("2001:db8:") // documentation
+    (first & 0xffc0) === 0xfec0 || // fec0::/10 deprecated site-local
+    (first & 0xff00) === 0xff00 // ff00::/8 multicast
   );
 }
 
@@ -136,12 +175,19 @@ export function admitUrl(raw: unknown): URL {
   return url;
 }
 
-async function assertPublicHost(url: URL, lookup: Lookup): Promise<void> {
+/**
+ * Check that a URL's host is public and return the address to connect to.
+ * Every resolved address must be public; the first one is returned so the
+ * request connects to exactly the address that was checked, never to a
+ * second, independent DNS answer (which a rebinding domain could point at
+ * loopback or a metadata service).
+ */
+async function assertPublicHost(url: URL, lookup: Lookup): Promise<string> {
   const host = url.hostname.replace(/^\[|\]$/g, "");
   if (isIP(host)) {
     if (isPrivateAddress(host))
       throw new WebError(`${host} is a private or local address`);
-    return;
+    return host;
   }
   let addresses: readonly string[];
   try {
@@ -153,6 +199,42 @@ async function assertPublicHost(url: URL, lookup: Lookup): Promise<void> {
   for (const address of addresses)
     if (isPrivateAddress(address))
       throw new WebError(`${host} resolves to a private or local address`);
+  return addresses[0]!;
+}
+
+/** Bun's fetch accepts TLS options beyond the standard RequestInit. */
+type PinnedInit = RequestInit & {
+  tls?: {
+    serverName?: string;
+    checkServerIdentity?: (
+      hostname: string,
+      cert: PeerCertificate,
+    ) => Error | undefined;
+  };
+};
+
+/**
+ * Address a request to a checked IP while keeping the original name for the
+ * Host header and for TLS (SNI and certificate verification), so the
+ * connection cannot be redirected by a later DNS answer.
+ */
+export function pinRequest(
+  url: URL,
+  address: string,
+): { target: string; host: string; tls?: PinnedInit["tls"] } {
+  const hostname = url.hostname.replace(/^\[|\]$/g, "");
+  const pinned = new URL(url.toString());
+  pinned.hostname = isIP(address) === 6 ? `[${address}]` : address;
+  const result: { target: string; host: string; tls?: PinnedInit["tls"] } = {
+    target: pinned.toString(),
+    host: url.host,
+  };
+  if (url.protocol === "https:" && !isIP(hostname))
+    result.tls = {
+      serverName: hostname,
+      checkServerIdentity: (_name, cert) => checkServerIdentity(hostname, cert),
+    };
+  return result;
 }
 
 export async function fetchUrl(
@@ -168,18 +250,22 @@ export async function fetchUrl(
     let url = admitUrl(raw);
     let response: Response | undefined;
     for (let hop = 0; hop <= FETCH_LIMITS.maxRedirects; hop += 1) {
-      await assertPublicHost(url, lookup);
+      const address = await assertPublicHost(url, lookup);
+      const pin = pinRequest(url, address);
+      const init: PinnedInit = {
+        method: "GET",
+        redirect: "manual",
+        headers: {
+          host: pin.host,
+          accept:
+            "text/html,application/xhtml+xml,text/plain;q=0.9,application/json;q=0.8,*/*;q=0.5",
+          "user-agent": "Mozilla/5.0 (compatible; dawg-agent)",
+        },
+        signal: timer.signal,
+      };
+      if (pin.tls) init.tls = pin.tls;
       try {
-        response = await fetcher(url, {
-          method: "GET",
-          redirect: "manual",
-          headers: {
-            accept:
-              "text/html,application/xhtml+xml,text/plain;q=0.9,application/json;q=0.8,*/*;q=0.5",
-            "user-agent": "Mozilla/5.0 (compatible; dawg-agent)",
-          },
-          signal: timer.signal,
-        });
+        response = await fetcher(pin.target, init);
       } catch (error) {
         throw new WebError(
           `fetch failed: ${timer.timedOut() ? `timed out after ${timeoutMs / 1000}s` : describeFetchError(error)}`,

@@ -88,6 +88,22 @@ export type DawgConfig = Readonly<{
 /** `vendor/model` IDs as the AI Gateway and OpenRouter spell them. */
 export const PROVIDER_MODEL_ID_PATTERN =
   /^[a-z0-9][a-z0-9-]{0,63}\/[a-z0-9][a-z0-9._-]{0,127}$/i;
+/**
+ * OpenRouter also takes a routing variant after a colon: `:nitro`
+ * (throughput first), `:floor` (price first), `:free`, `:online` and so on.
+ */
+export const OPENROUTER_MODEL_ID_PATTERN =
+  /^[a-z0-9][a-z0-9-]{0,63}\/[a-z0-9][a-z0-9._-]{0,127}(?::[a-z0-9-]{1,32})?$/i;
+
+/** True for an ID the given provider accepts; any provider when omitted. */
+export function isProviderModelId(
+  id: string,
+  provider?: "gateway" | "openrouter",
+): boolean {
+  return provider === "gateway"
+    ? PROVIDER_MODEL_ID_PATTERN.test(id)
+    : OPENROUTER_MODEL_ID_PATTERN.test(id);
+}
 
 export type CredentialSource = "env" | "keychain" | "file" | "oidc";
 export type ResolvedKey = Readonly<{ key: string; source: CredentialSource }>;
@@ -323,7 +339,10 @@ export function parseConfig(value: unknown): DawgConfig {
   }
   for (const field of ["gatewayModel", "openrouterModel"] as const) {
     const id = record[field];
-    if (typeof id === "string" && PROVIDER_MODEL_ID_PATTERN.test(id))
+    if (
+      typeof id === "string" &&
+      isProviderModelId(id, field === "gatewayModel" ? "gateway" : "openrouter")
+    )
       config[field] = id;
   }
   if (record.setup === "skipped") config.setup = "skipped";
