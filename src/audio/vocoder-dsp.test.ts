@@ -18,6 +18,7 @@ import { autoGateDb, gateCurve } from "./dsp/follow.ts";
 import { unvoicedCurve } from "./vocoder/detect.ts";
 import { renderCarrierSpan } from "./vocoder/carrier.ts";
 import { VOCODER_PRESET_NAMES } from "../../core/vocoder.ts";
+import { budget, ratioBudget } from "../../test/perf.ts";
 
 const SR = 48_000;
 /** A spoken-rhythm phrase with fricative-like consonants and rests. */
@@ -472,9 +473,11 @@ describe("vocoder detectors, freeze, stereo and cost", () => {
     // The guard uses the v2 numbers (vocoder.md §3b.9: channel 16 47.9 ms/s,
     // talkbox 9.1) with a 3x load margin, and a ratio to the supersaw chord
     // carrier (measured ~13x and ~3x here) with ~2x margin.
-    expect(ms(channel)).toBeLessThanOrEqual(150);
-    expect(ms(talkbox)).toBeLessThanOrEqual(30);
-    expect(channel).toBeLessThanOrEqual(25 * chord);
-    expect(talkbox).toBeLessThanOrEqual(6 * chord);
+    // Budgets scale with this host's speed (test/perf.ts); DAWG_PERF=1
+    // asserts them as written.
+    expect(ms(channel)).toBeLessThanOrEqual(budget(150));
+    expect(ms(talkbox)).toBeLessThanOrEqual(budget(30));
+    expect(channel).toBeLessThanOrEqual(ratioBudget(25) * chord);
+    expect(talkbox).toBeLessThanOrEqual(ratioBudget(6) * chord);
   }, 60_000);
 });
