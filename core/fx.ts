@@ -1600,7 +1600,7 @@ export const RIG_PRESETS: Readonly<
     wobble: { depth: 25, rate: 0.4, drift: 0.4 },
     bloom: { amount: 0.4, harm: 2, delay: 0.6, time: 1 },
     double: { time: 18, drift: 2.5, width: 0.4 },
-    postgain: { gain: 0.65 },
+    postgain: { gain: 0.86 },
     reverb: { mix: 0.35, size: 0.9, fade: 4, predelay: 0.02, dim: 6000 },
   },
   glide: {

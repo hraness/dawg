@@ -2325,7 +2325,7 @@ export const RIG_PRESETS: Readonly<
     wobble: { depth: 25, rate: 0.4, drift: 0.4 },
     bloom: { amount: 0.4, harm: 2, delay: 0.6, time: 1 },
     double: { time: 18, drift: 2.5, width: 0.4 },
-    postgain: { gain: 0.65 },
+    postgain: { gain: 0.86 },
   },
   glide: {
     stomp: { type: "face", gain: 5, tone: 0.5 },
