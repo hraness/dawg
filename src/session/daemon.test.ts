@@ -467,6 +467,25 @@ describe("file presence fallback", () => {
       await second.stop();
     }
   });
+
+  test("overlapping focus writes never fail a focus change", async () => {
+    const { paths } = await session();
+    const presence = new FilePresence(paths, {
+      clientId: "one",
+      pid: process.pid,
+      label: "one",
+      focusedTrackId: null,
+    });
+    await presence.start();
+    try {
+      const ids = Array.from({ length: 40 }, (_, i) => `t${i}`);
+      await Promise.all(ids.map((id) => presence.focus(id)));
+      const [entry] = await presence.list();
+      expect(entry?.focusedTrackId).toBe("t39");
+    } finally {
+      await presence.stop();
+    }
+  });
 });
 
 describe("multi-window attach", () => {
