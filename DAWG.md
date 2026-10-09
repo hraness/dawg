@@ -235,7 +235,7 @@ Score format. The score stays `track.loop/v1` with `version: 1`: every addition 
 Every track has one fixed effects chain (`FX_CHAIN` in `core/fx.ts`, DSP in `src/audio/effects/`):
 
 ```text
-filter → djf → autofilter → vowel → crush → distort → stomp → head → cab → tremolo → compressor → pan → phaser → chorus → leslie → postgain → delay → reverb → [mix: orbit → duck]
+filter → djf → autofilter → formant → vowel → crush → distort → stomp → head → cab → tremolo → compressor → pan → phaser → chorus → leslie → postgain → delay → reverb → [mix: orbit → duck]
 ```
 
 Stages before `pan` run on the track's mono voice sum; pan spreads it to stereo with the equal-power law; the rest run on the stereo pair. An effect that is off costs nothing. The core set — **filter, auto filter, distortion, tremolo, compressor, chorus, delay, reverb** — leads the Effects menu and the agent brief; dj filter, vowel, bitcrush, phaser, leslie, post gain, orbit and duck are under **more effects** for Strudel parity.
@@ -264,7 +264,7 @@ automate distort-drive points 0:1 8:6    every numeric fx param has a lane
 
 Aliases: `dist`, `comp`, `room`, `bitcrush`, `trem`, `auto-filter`, `bus`/`o` (orbit), `sidechain`/`duckorbit` (duck), `lpf`/`hpf`/`bpf` (filter with that type). The menu's Effects section opens each effect on its on/off toggle, presets and simple parameters; **advanced** lists every parameter with its Strudel names. The agent's `set_fx` tool takes the same names and presets.
 
-Presets: filter `warm dark acid thin telephone`; autofilter `slow-sweep wobble s&h hpf-rise env-follow`; distort `warm crunch fuzz fold shape`; tremolo `gentle eighth-chop pulse`; compressor `gentle punch squash`; chorus `subtle wide seasick`; delay `ping-pong dotted-eighth slapback dub`; reverb `room hall plate ambient`; djf `dark thin`; vowel `a o ee`; crush `8-bit lofi destroy`; phaser `slow fast`; leslie `fast slow`; duck `pump subtle gate`.
+Presets: filter `warm dark acid thin telephone`; autofilter `slow-sweep wobble s&h hpf-rise env-follow`; distort `warm crunch fuzz fold shape`; tremolo `gentle eighth-chop pulse`; compressor `gentle punch squash`; chorus `subtle wide seasick`; delay `ping-pong dotted-eighth slapback dub`; reverb `room hall plate ambient`; djf `dark thin`; formant `deep giant bright tiny`; vowel `a o ee`; crush `8-bit lofi destroy`; phaser `slow fast`; leslie `fast slow`; duck `pump subtle gate`.
 
 The DSP is clean-room, written from public documentation of the parameters and standard literature (RBJ biquads, a Stilson/Smith-style ladder, Freeverb-style combs and allpasses, the Giannoulis–Massberg–Reiss compressor), not from Strudel or superdough source (AGPL). Renders stay deterministic: the random S&H shape hashes the cycle index, so cold, cached and worker renders are byte-identical (`src/audio/renderer.test.ts`).
 
@@ -286,8 +286,12 @@ Parameters (**bold** effect = shown in the simple menu; Lane = automation lane):
 | **autofilter** | shape               | sine / tri / square / saw / ramp / random                                         | sine    |                                                                |                        |
 | autofilter     | phase               | 0..1                                                                              | 0       |                                                                |                        |
 | autofilter     | follow              | -6..6 oct                                                                         | 0       | `lpenv (per note, see synth)`                                  | `autofilter-follow`    |
+| **formant**    | shift               | -12..12 st                                                                        | 0       |                                                                | `formant-shift`        |
+| **formant**    | mix                 | 0..1                                                                              | 1       |                                                                | `formant-mix`          |
 | **vowel**      | vowel               | a / e / i / o / u / ae / aa / oe / ue / y / uh / un / en / an / on                | a       | `vowel`                                                        |                        |
 | **vowel**      | mix                 | 0..1                                                                              | 1       |                                                                | `vowel-mix`            |
+| vowel          | to (optional)       | a / e / i / o / u / ae / aa / oe / ue / y / uh / un / en / an / on                | (none)  |                                                                |                        |
+| vowel          | morph (optional)    | 0..1                                                                              | 0       |                                                                | `vowel-morph`          |
 | **crush**      | bits                | 1..16                                                                             | 8       | `crush`                                                        | `crush-bits`           |
 | **crush**      | coarse              | 1..64                                                                             | 1       | `coarse`                                                       |                        |
 | **crush**      | mix                 | 0..1                                                                              | 1       |                                                                | `crush-mix`            |
@@ -1555,6 +1559,30 @@ The arrangement strip is one row under the header that shows the sections over t
 Release 0.7 adds voice tools: audio clips and lyrics, pitch tracking, autotune, a formant shift, sung vowels and choirs, and a vocoder. Each arrives in its own subsection below. `/vocal` is the umbrella: bare `/vocal` lists every voice verb this build has, and `/help voice` shows them. The ctrl-k menu gains Sound › Voice, Effects › Voice and Sound › browse sounds › Voices once a voice tool fills them; until then they stay hidden.
 
 A track may already store `clips`, `takes` and note `lyric`s (see docs/project-format.md); they are validated and kept, and play once the clips tools land. Projects without them sound exactly as before.
+
+### Formant shift and vowel morph
+
+The `formant` effect moves a sound's formants (the resonances of the throat and mouth that make a voice sound big or small, male or female) without changing its pitch; it works on any source and most clearly on voices. It sits in the chain after `autofilter` and before `vowel`.
+
+| Knob             | Range       | Default | Lane            | Does                                                                        |
+| ---------------- | ----------- | ------- | --------------- | --------------------------------------------------------------------------- |
+| formant shift    | -12..12 st  | 0       | `formant-shift` | moves the spectral envelope; negative is deeper or bigger, positive smaller |
+| formant mix      | 0..1        | 1       | `formant-mix`   | blends the shifted and the dry signal                                       |
+| vowel morph (to) | 0..1 (to v) | 0       | `vowel-morph`   | glides the vowel filter's five formants from `vowel` towards `to` (log Hz)  |
+
+```text
+/formant -4              deeper (pitch stays); /formant 3 0.5 is smaller at half mix
+/formant giant           presets deep giant bright tiny; /formant off removes it
+/vowel a o 0.5           vowel filter halfway from a to o; /vowel morph 0.8, /vowel to u
+/vocal formant -4        the same, under the voice umbrella
+automate formant-shift points 0:-6 8:6
+```
+
+Shifts of 2 to 4 st sound natural; 7 and beyond are a cartoon. The shift is a cepstral spectral-envelope warp (Röbel and Rodet 2005; Smith, Spectral Audio Signal Processing): each STFT frame (1024 points at 24 kHz and below, 2048 above, hop a quarter frame, Hann analysis and synthesis) is divided by its envelope and multiplied by the envelope read at `k / 2^(st/12)`, the gain clamped to 24 dB and the phase left alone. The envelope's lifter follows the voice: 0.75 of a pitch period from a 5-frame median autocorrelation f0, clamped to 1..2 ms, 1 ms when unvoiced. Measured on the synthetic voice fixture at 22.05 kHz, ±2 and ±4 st land within 1 cent of the original pitch and 3 to 5.5 dB RMS of the envelope of a voice synthesised with moved formants (against 4 to 10 dB unprocessed), pre-echo stays below -15 dB, and it costs about 4 ms per audio-second. Frames are anchored to absolute hop multiples, so a preview window plays exactly the same samples as the full render. `shift 0` without automation leaves the sound untouched. This is not the sampler's `shift … formant`, which keeps formants while the pitch moves.
+
+Before 0.7, `fx formant` was an alias of the vowel filter. `/fx formant o` and `set_fx {effect: "formant", vowel}` now answer "formant now shifts formants at constant pitch; the vowel filter is `vowel`".
+
+The menu's **Effects › Voice › Formant** holds shift and mix (left/right adjust, `x` resets, space auditions with staged A/B); **Effects › more effects › vowel** gains To and Morph. Mix & automation lists the `formant-shift`, `formant-mix` and `vowel-morph` lanes. The agent's `set_formant` tool takes `shift`, `mix`, `preset` and `off` and can be previewed with `preview_sound`; `set_fx vowel` takes `to` and `morph`. In the SDK: `fx: { formant: { shift: -4 }, vowel: { vowel: "a", to: "o", morph: 0.5 } }`.
 
 ## Menus
 
