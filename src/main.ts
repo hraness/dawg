@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { isGuideInstrument, vocalChainPatch } from "../core/clips.ts";
+import { commandParses } from "./commands/parses.ts";
 import {
   isUnknownInstrument,
   plainSineAdvice,
@@ -218,7 +219,19 @@ import {
   spendLine as formatSpendLine,
   webHostFor,
 } from "./agent/usage.ts";
-import { configDir } from "./auth/credentials.ts";
+import { configDir, readConfig, writeConfig } from "./auth/credentials.ts";
+import type { CommandOutcome } from "./agent/command-agent.ts";
+import {
+  GLIDE_STEP_MS,
+  NoteScheduler,
+  finishHint,
+  gestureFor,
+  glideValues,
+  isAgentCommand,
+  parseShowMe,
+  toolCaption,
+  type ShowMeLevel,
+} from "./agent/show-me.ts";
 import { runAuthCommand, runFirstRunLogin, runTuiLogin } from "./auth/cli.ts";
 import {
   modelPickerItems,
@@ -358,43 +371,7 @@ import {
 
 /** Whether a bare command parses (no side effects): for typo suggestions. */
 function parsesLocally(text: string): boolean {
-  return [
-    parsePrompt,
-    parseMusicCommand,
-    parseEditCommand,
-    parseRhythmCommand,
-    parseFxCommand,
-    parseSynthCommand,
-    parseStringCommand,
-    parseGranularCommand,
-    parseKeysCommand,
-    parseExpressionCommand,
-    parseMasterCommand,
-    (value: string) => parseSectionCommand(value, score),
-    parsePatternCommand,
-    parseKitCommand,
-    parsePackCommand,
-    parseSampleCommand,
-    parseFitCommand,
-    parseShiftCommand,
-    parseResampleCommand,
-    parseWavetableCommand,
-    parseTimeCommand,
-    parseTuningCommand,
-    parseRigCommand,
-    parseModalCommand,
-    parseGuitarCommand,
-    parseStrumCommand,
-    parseWindCommand,
-    parseSingCommand,
-    parseVocoderCommand,
-    parseVocalCommand,
-    parseFormantCommand,
-    parseVowelCommand,
-    parseClipCommand,
-    parseLyricsCommand,
-    parseAutotuneCommand,
-  ].some((parse) => parse(text) !== undefined);
+  return commandParses(text, score);
 }
 
 const ESC = "\u001b[";
@@ -731,6 +708,25 @@ let requestFrame: () => void = () => undefined;
 let runPromptLater: (command: string) => void = () => undefined;
 /** The fader drawer's focus and typing, while one is open over the menu. */
 let fader: FaderState | undefined;
+/** Show-me state (see the show-me section below). */
+const showMe: {
+  level: ShowMeLevel;
+  ghost?: string | undefined;
+  caption?: string | undefined;
+  commands: string[];
+  notes: NoteScheduler;
+  clear?: ReturnType<typeof setTimeout> | undefined;
+} = {
+  level: parseShowMe(process.env.DAWG_SHOWME ?? "") ?? "on",
+  commands: [],
+  notes: new NoteScheduler(() => score.tempoBpm),
+};
+if (!process.env.DAWG_SHOWME)
+  void readConfig({ dir: configDir() })
+    .then((config) => {
+      if (config.showMe) showMe.level = config.showMe;
+    })
+    .catch(() => undefined);
 const KEY_UP = "\u001b[A";
 const KEY_DOWN = "\u001b[B";
 /** The fader bar a left-button drag started on. */
@@ -988,6 +984,10 @@ function appView(value: TrackScore, beat: number): AppView {
       providerName && providerName !== "offline" ? providerName : undefined,
     spend: spendLine(),
     agentOffline: providerName === "offline" || process.env.DAWG_AI === "0",
+    showMe:
+      showMe.ghost || showMe.caption
+        ? { ghost: showMe.ghost, caption: showMe.caption }
+        : undefined,
     sync: syncState,
     sessionName: record.meta.name,
     windows: windowCount,
@@ -1353,6 +1353,16 @@ async function runInteractive(): Promise<void> {
   };
   agentEventSink = (event) => {
     if (event.type === "usage") return;
+    if (event.type === "command-typing") {
+      showMeTyping(event.text);
+      return;
+    }
+    if (event.type === "command") return;
+    if (event.type === "tool-start") {
+      const caption = toolCaption(event.name);
+      if (caption) showMeCaption(caption);
+    }
+    if (event.type === "done" || event.type === "error") showMeFinish();
     tui.activity.applyAgentEvent(event);
     if (event.type === "done" || event.type === "error") agentReported = true;
   };
@@ -1959,6 +1969,24 @@ async function submit(prompt: string): Promise<string | Receipt> {
     );
     return result.ok ? ok(result.message) : fail(result.message);
   }
+  const showMeCommand = command.match(/^\/show-?me(?:\s+(\S+))?$/i);
+  if (showMeCommand) {
+    if (!showMeCommand[1])
+      return ok(`show me · ${showMe.level} · /showme on|quiet|off`);
+    const level = parseShowMe(showMeCommand[1]);
+    if (!level) return fail("usage · /showme on|quiet|off");
+    showMe.level = level;
+    void writeConfig({ dir: configDir() }, { showMe: level }).catch(
+      () => undefined,
+    );
+    return ok(
+      level === "off"
+        ? "show me off · the agent edits with tools"
+        : level === "quiet"
+          ? "show me quiet · the agent types commands, no captions"
+          : "show me on · the agent types commands, slides faders, plays keys",
+    );
+  }
   const countIn = command.match(/^\/count-?in\s+([0-2])$/i);
   if (countIn) return ok(playSession().setCountIn(Number(countIn[1])));
   const euclidCommand = command.match(/^\/euclid(?:\s+(\S+))?$/i);
@@ -2019,6 +2047,47 @@ async function submit(prompt: string): Promise<string | Receipt> {
   }
   // `/track piano b`: a name with spaces focuses the track of that name, or
   // creates `piano-b` named "piano b".
+  // `/track rm <name>` and `/track move <name> <position>`: the human surface
+  // for the removeTrack and moveTrack operations (undo brings a track back).
+  const trackEdit = command.match(
+    /^\/?track\s+(rm|remove|move)\s+([a-z0-9._-]{1,64})(?:\s+(\d{1,3}))?$/i,
+  );
+  if (trackEdit) {
+    const verb = trackEdit[1]!.toLowerCase();
+    const wanted = trackEdit[2]!.toLowerCase();
+    const found = score.tracks.find(
+      (track) =>
+        track.id.toLowerCase() === wanted ||
+        (track.name ?? "").toLowerCase() === wanted,
+    );
+    if (!found) return fail(`no track ${trackEdit[2]} · /tracks lists them`);
+    if (verb === "move") {
+      const position = Number(trackEdit[3]);
+      if (!trackEdit[3] || position < 1 || position > score.tracks.length)
+        return fail(`usage · /track move <name> <1..${score.tracks.length}>`);
+      const next = applyScoreOperation(score, {
+        type: "moveTrack",
+        trackId: found.id,
+        index: position - 1,
+      });
+      await commitScore(next, "track.move", { trackId: found.id });
+      await projectSync?.flushScore();
+      return ok(`moved ${found.id} to position ${position}`);
+    }
+    if (trackEdit[3]) return fail("usage · /track rm <name>");
+    if (score.tracks.length <= 1) return fail("the last track stays");
+    const next = applyScoreOperation(score, {
+      type: "removeTrack",
+      trackId: found.id,
+    });
+    await commitScore(next, "track.remove", { trackId: found.id });
+    await projectSync?.flushScore();
+    if (found.id === requestedTrack) {
+      const fallback = next.tracks[0]!.id;
+      await focusTrack(fallback);
+    }
+    return ok(`removed ${found.id} · ^z undo`);
+  }
   const namedTrack = command.match(/^\/track\s+([a-z0-9._ -]{1,64})$/i);
   if (namedTrack) {
     const name = namedTrack[1]!.trim().replace(/\s+/g, " ");
@@ -3518,6 +3587,7 @@ function menuContext(): MenuContext {
     grids: GRIDS.map((grid) => grid.label),
     clickOn: session?.clickOn ?? false,
     countInBars: session?.countInBars ?? 1,
+    showMe: showMe.level,
     chords: stagedChordSettings() ?? session?.chords.settings ?? chordSettings,
     projectRoot: process.cwd(),
   };
@@ -4730,6 +4800,159 @@ function agentPreviewHost(): PreviewHost {
   };
 }
 
+// ── show-me ──────────────────────────────────────────────────────────
+
+/**
+ * Show-me (docs/show-me.md): with an API provider the agent writes prompt
+ * commands, streamed. The line being written is ghost text in the empty
+ * prompt bar at the model's own speed; each complete line runs through
+ * `submit()`, the path a typed Enter takes, at once. A parameter value
+ * glides there over ~150 ms while the loop plays (you hear it), notes and
+ * hits sound as they arrive (in time when the stream is ahead of the tempo,
+ * as step entry when it is behind), and the caption names the key or fader
+ * a person would use. Nothing waits for the turn to end.
+ */
+
+function showMeTyping(text: string): void {
+  showMe.ghost = text || undefined;
+  if (text && showMe.level === "on") showMe.caption = undefined;
+  requestFrame();
+}
+
+function showMeCaption(text: string | undefined): void {
+  if (showMe.level !== "on") return;
+  showMe.caption = text;
+  if (showMe.clear) clearTimeout(showMe.clear);
+  showMe.clear = undefined;
+  requestFrame();
+}
+
+/** End of a turn: the ghost goes, the caption becomes the do-it-yourself hint. */
+function showMeFinish(): void {
+  showMe.ghost = undefined;
+  showMe.notes.reset();
+  const hint = finishHint(showMe.commands);
+  showMe.commands = [];
+  if (hint && showMe.level === "on") {
+    showMeCaption(hint);
+    showMe.clear = setTimeout(() => {
+      showMe.caption = undefined;
+      showMe.clear = undefined;
+      requestFrame();
+    }, 8_000);
+  } else {
+    showMe.caption = undefined;
+    requestFrame();
+  }
+}
+
+/**
+ * Slide a fader to its new value the way the drawer does: each eased step is
+ * the field's own command, staged on a scratch score and played, so the loop
+ * moves through the values. Only while the loop plays (otherwise nothing is
+ * heard and the glide would only cost time); never longer than ~150 ms.
+ */
+async function glideFader(param: string, target: number): Promise<void> {
+  if (!clock.playing || !stdout.isTTY) return;
+  const scratch = new EditMenu();
+  const context = { ...menuContext(), score };
+  const label = scratch.showFader(context, param);
+  if (!label) return;
+  const field = scratch
+    .faderFields(context)
+    .find((candidate) => candidate.label === label);
+  scratch.close();
+  if (field?.kind !== "number") return;
+  const from = field.value ?? field.start ?? target;
+  const steps = glideValues(from, target).slice(0, -1);
+  for (const value of steps) {
+    const staged = await applyStaged(score, field.command(value));
+    if (staged.next && clock.playing) void audio.play(staged.next);
+    await Bun.sleep(GLIDE_STEP_MS);
+  }
+}
+
+/** Sound one streamed note on the audition voice (the loop is stopped). */
+function soundStreamedNote(
+  value: TrackScore,
+  trackId: string,
+  pitch: number,
+  startBeat: number,
+): void {
+  if (clock.playing) return; // The loop itself plays it.
+  const engine = liveEngine();
+  if (!engine?.canMonitor) return;
+  const tick = Math.round(startBeat * value.ticksPerBeat);
+  const note = value.notes.find(
+    (candidate) =>
+      candidate.trackId === trackId &&
+      candidate.pitch === pitch &&
+      candidate.startTick === tick,
+  );
+  if (!note) return;
+  try {
+    const json = value.toJSON() as unknown as Record<string, unknown>;
+    const single = scoreFromJSON({
+      ...json,
+      notes: [{ ...note, startTick: 0 }],
+    });
+    const pcm = renderAudition({
+      score: single,
+      trackId,
+      sampleRate: engine.sampleRate,
+      ...(liveSampleBank ? { samples: liveSampleBank } : {}),
+    });
+    if (!pcm) return;
+    void engine
+      .monitor(true)
+      .then(() => engine.noteOn(AUDITION_VOICE, pcm))
+      .catch(() => undefined);
+  } catch {
+    // A note that cannot render is still in the score.
+  }
+}
+
+/** The command host the show-me agent loop runs lines through. */
+function showMeCommandHost(): AgentHost["commands"] {
+  return {
+    isCommand: (line) => isAgentCommand(line, score),
+    async run(line): Promise<CommandOutcome> {
+      const gesture = gestureFor(line, { score, trackId: requestedTrack });
+      showMeCaption(gesture.caption);
+      showMe.commands.push(line);
+      if (gesture.kind === "fader" && showMe.level === "on")
+        await glideFader(gesture.param, gesture.value);
+      const base = baseline();
+      tui.activity.pushNote(`agent › ${line}`, "request");
+      let result: string | Receipt;
+      try {
+        result = await submit(line);
+      } catch (error) {
+        result = fail(describeError(line, error));
+      }
+      receipt(result, base);
+      if (gesture.kind === "keys" && showMe.level === "on") {
+        const trackId = requestedTrack;
+        const after = score;
+        for (const note of gesture.notes) {
+          const { atMs } = showMe.notes.schedule(note.start, performance.now());
+          const delay = Math.max(0, atMs - performance.now());
+          setTimeout(
+            () => soundStreamedNote(after, trackId, note.pitch, note.start),
+            delay,
+          );
+        }
+      }
+      return {
+        ok: toneOf(result) !== "error",
+        message: typeof result === "string" ? result : result.text,
+        baseRevision: base.revision,
+        resultRevision: record.revision,
+      };
+    },
+  };
+}
+
 function agentHost(
   turn: { steering: string[] },
   selection: ProviderSelection,
@@ -4804,6 +5027,9 @@ function agentHost(
       }
     },
     takeSteering: () => turn.steering.splice(0),
+    ...(showMe.level !== "off" && stdout.isTTY
+      ? { commands: showMeCommandHost() }
+      : {}),
     workspace: { root: process.cwd() },
     // A written project source is applied before the tool result returns,
     // so the model reads the outcome and any type errors in the same step.

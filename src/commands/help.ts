@@ -47,6 +47,10 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       { command: "unmute", summary: "hear it again" },
       { command: "solo", summary: "only this track" },
       { command: "unsolo", summary: "every track again" },
+      {
+        command: "track rm|move <name> [<position>]",
+        summary: "remove a track (^z undo) or move it in the list",
+      },
       { command: "clear", summary: "remove this track's notes" },
       {
         command: "wt <table> | wt <0..1> | wt list",
@@ -365,6 +369,10 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       { command: "/transcript", summary: "scrollable log · Ctrl-O" },
       { command: "/theme default|high-contrast|mono", summary: "colors" },
       { command: "/motion on|off", summary: "animation" },
+      {
+        command: "/showme on|quiet|off",
+        summary: "agent types its commands in the prompt bar as it streams",
+      },
       { command: "/model [alias]", summary: "pick a model · cost per prompt" },
       {
         command: "/login [gateway|openrouter|codex|claude]",

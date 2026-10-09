@@ -83,6 +83,8 @@ export type DawgConfig = Readonly<{
   openrouterModel?: string;
   /** Set when the first-run picker was dismissed, so it does not nag. */
   setup?: "skipped";
+  /** Show-me level of agent turns (`/showme`); absent is on. */
+  showMe?: "on" | "quiet" | "off";
 }>;
 
 /** `vendor/model` IDs as the AI Gateway and OpenRouter spell them. */
@@ -330,6 +332,7 @@ export function parseConfig(value: unknown): DawgConfig {
     gatewayModel?: string;
     openrouterModel?: string;
     setup?: "skipped";
+    showMe?: "on" | "quiet" | "off";
   } = {};
   if (PROVIDER_CHOICES.includes(record.provider as ProviderChoice))
     config.provider = record.provider as ProviderChoice;
@@ -346,6 +349,12 @@ export function parseConfig(value: unknown): DawgConfig {
       config[field] = id;
   }
   if (record.setup === "skipped") config.setup = "skipped";
+  if (
+    record.showMe === "on" ||
+    record.showMe === "quiet" ||
+    record.showMe === "off"
+  )
+    config.showMe = record.showMe;
   return config;
 }
 
@@ -369,6 +378,7 @@ export type ConfigPatch = Partial<{
   gatewayModel: string | undefined;
   openrouterModel: string | undefined;
   setup: "skipped" | undefined;
+  showMe: "on" | "quiet" | "off" | undefined;
 }>;
 
 export async function writeConfig(

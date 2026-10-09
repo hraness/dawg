@@ -1,3 +1,4 @@
+import type { CommandHost } from "./command-agent.ts";
 import { GRANULAR_PARAMS } from "../../core/granular.ts";
 import {
   applyScoreOperation,
@@ -73,6 +74,20 @@ export type AgentEvent =
       costUsd?: number;
     }
   | { type: "text-delta"; delta: string }
+  /**
+   * Command mode: the command line the model is writing, as it streams
+   * (empty once the line is done), for the prompt bar's ghost text.
+   */
+  | { type: "command-typing"; text: string }
+  /** Command mode: one complete line ran through the typed-command path. */
+  | {
+      type: "command";
+      line: string;
+      ok: boolean;
+      message: string;
+      baseRevision: number;
+      resultRevision: number;
+    }
   /** Provider progress worth a status line (a retry), not model output. */
   | { type: "activity"; message: string }
   | { type: "tool-start"; callId: string; name: string; step: number }
@@ -167,6 +182,11 @@ export type AgentHost = Readonly<{
   packs?: PackStore;
   /** How preview_sound renders and plays (the TUI plays it once). */
   preview?: PreviewHost;
+  /**
+   * Show-me command mode: the agent writes prompt commands that run through
+   * the user's own command path. Absent keeps the JSON tool loop.
+   */
+  commands?: CommandHost;
 }>;
 
 export type AgentTurnOptions = Readonly<{
