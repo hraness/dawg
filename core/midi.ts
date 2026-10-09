@@ -16,8 +16,9 @@
  * voicing. The sustain pedal is written as CC64 (127 down, 64 half, 0 up)
  * while each note keeps its key length, as a real pedal recording does.
  * Pitch expression (glide, bend, per-note vibrato) and per-note cents are
- * not exported: SMF pitch bend is per channel, so those notes play at their
- * written pitch.
+ * written as pitch bend (range ±24 semitones via RPN 0) on notes that sound
+ * alone on their track; SMF pitch bend is per channel, so notes inside a
+ * chord play at their written pitch.
  *
  * Tuning (core/tuning.ts) is written with the MIDI Tuning Standard: each
  * tuned track gets a real-time single-note tuning change SysEx (F0 7F 7F
@@ -33,6 +34,8 @@ import {
   performanceTimingFor,
   performNotes,
   type PedalState,
+  type PerformanceTiming,
+  type PerformedNote,
 } from "./expression.ts";
 import {
   barStartTick,
@@ -203,6 +206,102 @@ function tuningEvents(
   return events;
 }
 
+/** Pitch-bend range written with RPN 0: ±24 semitones covers octave falls. */
+export const MIDI_BEND_RANGE_SEMITONES = 24;
+
+/**
+ * Pitch bend for notes with pitch expression (glide, bend, vibrato, cents).
+ * SMF pitch bend is per channel, so only notes that sound alone on their
+ * track get it (a mono line, a lead); notes under a chord stay at the key.
+ * The curve is sampled every 1/64 note and written when it changes; the
+ * bend returns to centre when the note ends. RPN 0 sets the range first.
+ */
+function pitchBendEvents(
+  notes: readonly PerformedNote[],
+  channel: number,
+  timing: PerformanceTiming,
+  at: (tick: number) => number,
+): TimedEvent[] {
+  const sorted = [...notes].sort((a, b) => a.startTick - b.startTick);
+  const events: TimedEvent[] = [];
+  const step = Math.max(1, timing.ticksPerBeat / 16);
+  const range = MIDI_BEND_RANGE_SEMITONES * 100;
+  const seconds = (tick: number) =>
+    timing.secondsAt
+      ? timing.secondsAt(tick)
+      : (tick * 60) / (timing.tempoBpm * timing.ticksPerBeat);
+  const bend = (tick: number, order: number, cents: number) => {
+    const value = Math.min(
+      16383,
+      Math.max(0, Math.round(8192 + (cents / range) * 8192)),
+    );
+    events.push({
+      tick,
+      order,
+      bytes: [0xe0 | channel, value & 0x7f, (value >>> 7) & 0x7f],
+    });
+    return value;
+  };
+  sorted.forEach((note, index) => {
+    const cents = note.performance?.cents;
+    if (!cents && !note.cents) return;
+    const stop = note.startTick + note.durationTicks;
+    const overlaps = sorted.some(
+      (other, j) =>
+        j !== index &&
+        other.startTick < stop &&
+        other.startTick + other.durationTicks > note.startTick,
+    );
+    if (overlaps) return;
+    const start = seconds(note.startTick);
+    const centsAtTick = (tick: number) =>
+      (note.cents ?? 0) + (cents ? cents(seconds(tick) - start) : 0);
+    // Before the note-on at the same tick.
+    let last = bend(at(note.startTick), 0.7, centsAtTick(note.startTick));
+    for (let tick = note.startTick + step; tick < stop; tick += step) {
+      const value = Math.min(
+        16383,
+        Math.max(0, Math.round(8192 + (centsAtTick(tick) / range) * 8192)),
+      );
+      if (value === last || at(tick) === at(note.startTick)) continue;
+      last = bend(at(tick), 0.7, centsAtTick(tick));
+    }
+    if (last !== 8192) bend(at(stop), 0.2, 0);
+  });
+  if (events.length === 0) return events;
+  const cc = 0xb0 | channel;
+  events.push({
+    tick: 0,
+    order: -1,
+    bytes: [
+      cc,
+      101,
+      0,
+      0,
+      cc,
+      100,
+      0,
+      0,
+      cc,
+      6,
+      MIDI_BEND_RANGE_SEMITONES,
+      0,
+      cc,
+      38,
+      0,
+      0,
+      cc,
+      101,
+      127,
+      0,
+      cc,
+      100,
+      127,
+    ],
+  });
+  return events;
+}
+
 /** Encode a score as a format-1 Standard MIDI File. */
 export function scoreToMidi(
   score: TrackScore,
@@ -298,6 +397,7 @@ export function scoreToMidi(
         bytes: [0xb0 | channel, 64, CC64[event.state]],
       });
     }
+    if (!drum) events.push(...pitchBendEvents(notes, channel, timing, at));
     for (const note of notes) {
       if (note.pitch < 0 || note.pitch > 127) continue;
       const start = at(note.startTick);

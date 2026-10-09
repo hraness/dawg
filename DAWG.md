@@ -803,7 +803,7 @@ Menu: **Sound › performance** has glide time (ms) and mode, sustain pedal (off
 
 ## Tunings and scales
 
-Every project plays in 12-tone equal temperament at A4 = 440 Hz until it says otherwise. A song tuning, a track tuning or a note's cents change only the frequencies; notes stay MIDI keys, so editing, chords, play mode and exports work the same. A project without any of these renders byte-identically to 0.4.
+Every project plays in 12-tone equal temperament at A4 = 440 Hz until it says otherwise. A song tuning, a track tuning or a note's cents change only the frequencies; notes stay MIDI keys, so editing, chords, play mode and exports work the same. MIDI export carries a tuning with the MIDI Tuning Standard (a single-note tuning SysEx per tuned track, selected with RPN 3), and writes glides, bends, vibrato and note cents as pitch bend (range ±24 semitones) on notes that sound alone on their track; synths without MTS play 12-TET keys. A project without any of these renders byte-identically to 0.4.
 
 Tunings (`core/tuning.ts`). A tuning is one table (`edo: 19`, `ratios: ["9/8", "5/4", …, "2/1"]`, `cents: [231, 474, …, 1200]`, a Scala `scl` file, or a library `name`) plus `ref` (the 12-TET A4 in Hz, default 440, that fixes the root key's pitch), `root` (the key of degree 0) and `map` (`linear` or `nearest`). The last table entry is the period, usually 1200 cents (2/1).
 

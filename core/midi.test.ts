@@ -296,3 +296,69 @@ describe("MIDI export of tuning and sections", () => {
     expect(file).toContain("ff0604" + Buffer.from("drop").toString("hex"));
   });
 });
+
+describe("MIDI export of pitch expression", () => {
+  test("a lone note's bend becomes pitch bend; chord notes stay at the key", () => {
+    const score = createScore({
+      tempoBpm: 120,
+      bars: 1,
+      tracks: [{ id: "l", name: "lead", instrument: "sine" }],
+      notes: [
+        {
+          id: "a",
+          trackId: "l",
+          startTick: 0,
+          durationTicks: 480,
+          pitch: 64,
+          velocity: 0.8,
+          bend: [
+            { at: 0, cents: -200 },
+            { at: 0.5, cents: 0 },
+          ],
+        },
+        {
+          id: "b",
+          trackId: "l",
+          startTick: 960,
+          durationTicks: 480,
+          pitch: 60,
+          velocity: 0.8,
+          cents: 30,
+        },
+        {
+          id: "c",
+          trackId: "l",
+          startTick: 960,
+          durationTicks: 480,
+          pitch: 64,
+          velocity: 0.8,
+        },
+        {
+          id: "d",
+          trackId: "l",
+          startTick: 1440,
+          durationTicks: 240,
+          pitch: 62,
+          velocity: 0.8,
+        },
+      ],
+    });
+    const track = readMidi(scoreToMidi(score)).tracks[1]!;
+    const bends = track
+      .filter((e) => (e.status & 0xf0) === 0xe0)
+      .map((e) => [e.tick, e.data[0]! | (e.data[1]! << 7)] as const);
+    // RPN 0 sets ±24 semitones before any bend.
+    const cc = track.filter((e) => (e.status & 0xf0) === 0xb0);
+    expect(cc.slice(0, 4).map((e) => e.data)).toEqual([
+      [101, 0],
+      [100, 0],
+      [6, 24],
+      [38, 0],
+    ]);
+    // -200 cents of ±2400 is 8192 - 683 at the onset, back to centre by 240.
+    expect(bends[0]).toEqual([0, 8192 - 683]);
+    expect(bends.find(([tick]) => tick === 240)?.[1]).toBe(8192);
+    // The chord at 960 (with cents on one note) gets no bend; d has none.
+    expect(bends.every(([tick]) => tick < 960)).toBe(true);
+  });
+});
