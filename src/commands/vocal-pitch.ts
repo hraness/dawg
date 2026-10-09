@@ -26,6 +26,7 @@ import { pitchCurve } from "../audio/analysis.ts";
 import {
   centsOfHz,
   isPitchVoice,
+  frameLevels,
   pitchNotes,
   PITCH_VOICE_NAMES,
   type PitchCurve,
@@ -171,9 +172,9 @@ export async function analyzeTrackPitch(
   const length = sample.frames / sample.sampleRate;
   const from = Math.min(length, target.clip?.offset ?? 0);
   const to = Math.min(length, from + (target.clip?.dur ?? length));
-  const notes = pitchNotes(curve).filter(
-    (note) => note.end > from && note.start < to,
-  );
+  const notes = pitchNotes(curve, {
+    level: frameLevels(sample.mono, sample.sampleRate, curve),
+  }).filter((note) => note.end > from && note.start < to);
   const hz: number[] = [];
   let frames = 0;
   for (let f = 0; f < curve.f0.length; f += 1) {

@@ -832,7 +832,79 @@ export type PitchNotesOptions = Readonly<{
   holdSeconds?: number;
   /** Shorter segments are dropped. */
   minSeconds?: number;
+  /**
+   * Per-frame level in dB (from `frameLevels`): a dip of `dipDb` or more
+   * between two louder stretches splits a held pitch, so repeated notes
+   * on one pitch (a re-articulation) come out as separate notes.
+   */
+  level?: Float32Array;
+  /** Depth of a re-articulation dip in dB (default 6). */
+  dipDb?: number;
 }>;
+
+/**
+ * Level in dB of `mono` around each frame of `curve` (20 ms RMS window),
+ * for `pitchNotes`' re-articulation split.
+ */
+export function frameLevels(
+  mono: ArrayLike<number>,
+  sampleRate: number,
+  curve: PitchCurve,
+): Float32Array {
+  const n = curve.f0.length;
+  const out = new Float32Array(n);
+  const half = Math.max(1, Math.round(0.01 * sampleRate));
+  for (let f = 0; f < n; f += 1) {
+    const c = Math.round(frameTime(curve, f) * sampleRate);
+    const a = Math.max(0, c - half);
+    const b = Math.min(mono.length, c + half);
+    let e = 0;
+    for (let i = a; i < b; i += 1) e += mono[i]! * mono[i]!;
+    out[f] = 10 * Math.log10(b > a ? e / (b - a) + 1e-20 : 1e-20);
+  }
+  return out;
+}
+
+/** Splits `[a, b)` at level dips that sit between two louder stretches. */
+function splitDips(
+  a: number,
+  b: number,
+  level: Float32Array,
+  hop: number,
+  dipDb: number,
+  minFrames: number,
+): [number, number][] {
+  const reach = Math.max(1, Math.round(0.15 / hop));
+  const local = Math.max(1, Math.round(0.03 / hop));
+  const out: [number, number][] = [];
+  let start = a;
+  for (let f = a + minFrames; f < b - minFrames; f += 1) {
+    const v = level[f]!;
+    let isMin = true;
+    for (
+      let k = Math.max(a, f - local);
+      k <= Math.min(b - 1, f + local);
+      k += 1
+    )
+      if (level[k]! < v || (level[k]! === v && k < f)) {
+        isMin = false;
+        break;
+      }
+    if (!isMin) continue;
+    let before = -Infinity;
+    let after = -Infinity;
+    for (let k = Math.max(start, f - reach); k < f; k += 1)
+      before = Math.max(before, level[k]!);
+    for (let k = f + 1; k <= Math.min(b - 1, f + reach); k += 1)
+      after = Math.max(after, level[k]!);
+    if (before - v < dipDb || after - v < dipDb) continue;
+    if (f - start < minFrames) continue;
+    out.push([start, f]);
+    start = f;
+  }
+  out.push([start, b]);
+  return out;
+}
 
 /**
  * Curve to notes: a note starts at each voiced onset and wherever the
@@ -884,8 +956,22 @@ export function pitchNotes(
     if (pending < 0) anchor += (cc - anchor) * 0.05;
   }
   close(n);
+  const level = options.level;
+  const split2 =
+    level && level.length === n
+      ? segments.flatMap(([a, b]) =>
+          splitDips(
+            a,
+            b,
+            level,
+            curve.hop,
+            options.dipDb ?? 6,
+            Math.max(1, Math.ceil(minSeconds / curve.hop)),
+          ),
+        )
+      : segments;
   const notes: PitchNote[] = [];
-  for (const [a, b] of segments) {
+  for (const [a, b] of split2) {
     if ((b - a) * curve.hop < minSeconds) continue;
     const cents: number[] = [];
     let conf = 0;

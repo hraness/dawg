@@ -9,6 +9,7 @@ import {
 import {
   centsOfHz,
   curveAt,
+  frameLevels,
   frameTime,
   pitchNotes,
   trackPitch,
@@ -295,6 +296,34 @@ describe("pitchNotes", () => {
     const notes = pitchNotes(trackPitch(v.x, v.sr));
     expect(notes.length).toBe(1);
     expect(notes[0]!.midi).toBe(57);
+  });
+
+  test("repeated notes on one pitch split at their level dips", () => {
+    // G4 G4 A4 B4 C5 B4 sung legato: the repeats carry no pitch move
+    const spec = [67, 67, 69, 71, 72, 71, 71].map(
+      (midi) => [midi, 0.4, "a", {}, 0] as const,
+    );
+    const v = synthVoice(build(spec), { sr: 48_000, seed: 7 });
+    const curve = trackPitch(v.x, v.sr);
+    const merged = pitchNotes(curve);
+    const level = frameLevels(v.x, v.sr, curve);
+    const notes = pitchNotes(curve, { level });
+    expect(notes.map((n) => n.midi)).toEqual([67, 67, 69, 71, 72, 71, 71]);
+    expect(merged.length).toBeLessThan(notes.length);
+    for (let i = 0; i < notes.length; i += 1)
+      expect(Math.abs(notes[i]!.start - v.onsets[i]!)).toBeLessThan(0.03);
+  });
+
+  test("a steady held note with a level does not split", () => {
+    const v = synthVoice(build([[57, 2, "a", { vib: 80, rate: 5.5 }, 0]]), {
+      sr: 48_000,
+      seed: 7,
+    });
+    const curve = trackPitch(v.x, v.sr);
+    const notes = pitchNotes(curve, {
+      level: frameLevels(v.x, v.sr, curve),
+    });
+    expect(notes.length).toBe(1);
   });
 
   test("note pitches are the sung notes", () => {
