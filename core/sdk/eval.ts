@@ -1,11 +1,16 @@
 /**
- * Evaluates a project's `song.ts` in a sandboxed Bun subprocess and parses
+ * Evaluates a project's `song.ts` in an isolated Bun subprocess and parses
  * the result from `unknown` into a validated `TrackScore`.
  *
  * The child runs `eval-child.ts` with a scrubbed environment, the project as
  * its working directory, no native addons or auto-install, a 10 second
- * budget and a 1 MiB output bound. Anything it prints that is not the
+ * budget and a 32 MiB output bound. Anything it prints that is not the
  * expected JSON line is a diagnostic.
+ *
+ * Isolation is not a sandbox: the child runs project code as the user, with
+ * the user's filesystem and network access. It protects dawg's own process
+ * (a crash, hang or runaway output in song.ts never takes the window down),
+ * not the machine, so only evaluate projects you trust.
  */
 
 import { dirname, join } from "node:path";
@@ -15,7 +20,11 @@ import { refreshRhythm } from "../rhythm.ts";
 import { ScoreValidationError, TrackScore } from "../score.ts";
 
 export const EVAL_TIMEOUT_MS = 10_000;
-export const EVAL_MAX_OUTPUT_BYTES = 1024 * 1024;
+/**
+ * Above the JSON of the largest score `SCORE_LIMITS` allows (64 tracks with
+ * every automation lane full plus 4096 notes stays well under 16 MiB).
+ */
+export const EVAL_MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
 
 /** A problem in a project file; `file` is project-relative when known. */
 export type Diagnostic = Readonly<{
@@ -39,7 +48,14 @@ export type EvalSpawn = (
     maxOutputBytes: number;
   }>,
 ) => Promise<
-  Readonly<{ code: number; stdout: string; stderr: string; killed: boolean }>
+  Readonly<{
+    code: number;
+    stdout: string;
+    stderr: string;
+    killed: boolean;
+    /** Why the child was killed; absent means the time budget ran out. */
+    reason?: "timeout" | "output";
+  }>
 >;
 
 export type EvalOptions = Readonly<{
@@ -86,12 +102,21 @@ export async function evaluateProject(
       failure(started, [{ message: `could not start bun: ${text(error)}` }]),
     );
   }
+  if (run.killed && run.reason === "output")
+    return done(
+      failure(started, [
+        {
+          file: "song.ts",
+          message: `evaluation printed more than ${EVAL_MAX_OUTPUT_BYTES / (1024 * 1024)} MiB; song.ts must not log`,
+        },
+      ]),
+    );
   if (run.killed)
     return done(
       failure(started, [
         {
           file: "song.ts",
-          message: "evaluation timed out (10 s); song.ts must be pure",
+          message: `evaluation timed out (${Math.round((options.timeoutMs ?? EVAL_TIMEOUT_MS) / 1000)} s); song.ts must be pure`,
         },
       ]),
     );
@@ -224,6 +249,7 @@ export const bunSpawn: EvalSpawn = async (args, options) => {
     stderr: "pipe",
   });
   let killed = false;
+  let reason: "timeout" | "output" = "timeout";
   const timer = setTimeout(() => {
     killed = true;
     child.kill();
@@ -237,6 +263,7 @@ export const bunSpawn: EvalSpawn = async (args, options) => {
       const { value, done } = await reader.read();
       if (done || !value) break;
       if (total + value.byteLength > options.maxOutputBytes) {
+        if (!killed) reason = "output";
         killed = true;
         child.kill();
         break;
@@ -253,7 +280,9 @@ export const bunSpawn: EvalSpawn = async (args, options) => {
       read(child.stderr),
       child.exited,
     ]);
-    return { code, stdout, stderr, killed };
+    return killed
+      ? { code, stdout, stderr, killed, reason }
+      : { code, stdout, stderr, killed };
   } finally {
     clearTimeout(timer);
   }

@@ -4247,6 +4247,9 @@ function timingChanged(previous: TrackScore, next: TrackScore): boolean {
 function syncHost(): SyncHost {
   return {
     project: process.cwd(),
+    // The files belong to one session at a time; another session's window
+    // stays detached instead of reprinting over them.
+    sessionId: () => record.sessionId,
     current: () => score,
     async commit(plan, summary) {
       const baseRevision = record.revision;

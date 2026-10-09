@@ -178,13 +178,17 @@ export function compositionAt(
   record: {
     composition: unknown;
     events: readonly { revision: number; rewind?: Rewind | undefined }[];
+    /** Events folded out of the front of the log (see `SessionRecord`). */
+    folded?: number | undefined;
   },
   revision: number,
 ): unknown {
   const { events } = record;
-  if (!Number.isSafeInteger(revision) || revision < 0) return undefined;
-  if (revision >= events.length) return undefined;
-  for (let index = revision; index < events.length; index += 1)
-    if (events[index]!.revision !== index + 1) return undefined;
-  return rewindComposition(record.composition, events, revision);
+  const base = record.folded ?? 0;
+  if (!Number.isSafeInteger(revision) || revision < base) return undefined;
+  const start = revision - base;
+  if (start >= events.length) return undefined;
+  for (let index = start; index < events.length; index += 1)
+    if (events[index]!.revision !== base + index + 1) return undefined;
+  return rewindComposition(record.composition, events, start);
 }

@@ -551,7 +551,11 @@ function requireRecord(value: unknown): SessionRecord<unknown> {
     !Number.isSafeInteger(record.revision) ||
     typeof record.updatedAt !== "string" ||
     !Array.isArray(record.events) ||
-    record.events.length !== record.revision ||
+    (record.folded !== undefined &&
+      (!Number.isSafeInteger(record.folded) ||
+        (record.folded as number) < 1)) ||
+    record.events.length + ((record.folded as number | undefined) ?? 0) !==
+      record.revision ||
     record.composition === undefined
   )
     throw new ProtocolError("invalid", "record is invalid");
