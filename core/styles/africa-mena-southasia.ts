@@ -2342,6 +2342,494 @@ const LEAVES: readonly StyleCard[] = [
     },
     rhythm: { onsets: { kick: grid("x....x..") } },
   }),
+  // Hindustani. References: Martin Clayton, Time in Indian Music (2000);
+  // Vishnu Narayan Bhatkhande, Hindustani Sangeet Paddhati (1910-32).
+  // dawg has no pakhawaj, mridangam, harmonium or veena: tabla, organ and
+  // sitar stand in for them.
+  card({
+    id: "dhrupad",
+    summary:
+      "dhrupad: raga malkauns (pentatonic, no Re or Pa) in a long nom-tom alap, then the composition in chautal 12 on pakhawaj, vadi Ma, austere gamak",
+    tempo: { bpm: [44, 90], typical: 60 },
+    meter: { signatures: [["4/4", 1]], cycle: CHAUTAL },
+    pitch: {
+      scales: [["malkauns", 1]],
+      raga: {
+        aroha: [0, 3, 5, 8, 10, 12],
+        avaroha: [12, 10, 8, 5, 3, 0],
+        vadi: 5,
+        samvadi: 0,
+        pakad: [[5, 3, 5, 8, 10, 8, 5]],
+      },
+    },
+    melody: { intervals: ORNATE, density: [1, 2] },
+    form: {
+      plans: [[["intro", "verse", "verse", "chorus"], 1]],
+      archetype: "alap-jor-jhala",
+    },
+    texture: { roles: { lead: role("sing", "sitar:0.5") } },
+  }),
+  card({
+    id: "khayal",
+    summary:
+      "khayal: raga yaman (tivra Ma) with vadi Ga and samvadi Ni, a vilambit bada khayal then a drut chhota khayal in teental, taans and bol-alap",
+    tempo: { bpm: [50, 140], typical: 76 },
+    pitch: {
+      tuning: "yaman",
+      scales: [["yaman", 1]],
+      raga: {
+        aroha: [0, 2, 4, 6, 7, 9, 11, 12],
+        avaroha: [12, 11, 9, 7, 6, 4, 2, 0],
+        vadi: 4,
+        samvadi: 11,
+        pakad: [[11, 2, 4, 2, 0]],
+      },
+    },
+    melody: { intervals: ORNATE },
+    texture: {
+      roles: { lead: role("sing"), counter: maybe("organ", "violin:0.5") },
+    },
+  }),
+  card({
+    id: "hindustani-instrumental",
+    summary:
+      "the instrumental gat: alap, jor and jhala on sitar or sarod-like strings, a masitkhani gat in teental on tabla, raga kafi with tihai cadences on sam",
+    tempo: { bpm: [60, 160], typical: 96 },
+    pitch: {
+      scales: [["kafi", 1]],
+      raga: {
+        aroha: [0, 2, 3, 5, 7, 9, 10, 12],
+        avaroha: [12, 10, 9, 7, 5, 3, 2, 0],
+        vadi: 7,
+        samvadi: 0,
+      },
+    },
+    melody: { intervals: LEAPY, density: [2, 4] },
+    form: {
+      plans: [[["intro", "verse", "chorus", "breakdown", "chorus"], 1]],
+      archetype: "alap-jor-jhala",
+    },
+    texture: { roles: { lead: role("sitar", "bansuri:0.5") } },
+  }),
+  card({
+    id: "thumri",
+    summary:
+      "thumri: romantic light classical in raga khamaj or bhairavi, deepchandi 14 (3+4+3+4), bol-banav text play, the laggi tabla release in keherwa",
+    tempo: { bpm: [56, 96], typical: 72 },
+    meter: { signatures: [["4/4", 1]], cycle: DEEPCHANDI },
+    pitch: {
+      scales: [
+        ["khamaj", 0.6],
+        ["bhairavi", 0.4],
+      ],
+    },
+    melody: { intervals: ORNATE },
+    texture: {
+      roles: { lead: role("sing"), counter: role("organ", "violin:0.5") },
+    },
+  }),
+  card({
+    id: "ghazal",
+    summary:
+      "ghazal: Urdu couplets (sher) with a returning radif refrain, raga-tinged kafi or yaman melody, dadra or rupak on tabla, harmonium answering",
+    tempo: { bpm: [60, 100], typical: 76 },
+    meter: {
+      signatures: [
+        ["6/8", 0.6],
+        ["7/8", 0.4],
+      ],
+      cycle: DADRA,
+    },
+    pitch: {
+      scales: [
+        ["kafi", 0.5],
+        ["yaman", 0.3],
+        ["khamaj", 0.2],
+      ],
+    },
+    melody: { intervals: CONJUNCT, repetition: 0.6 },
+    form: {
+      plans: [[["intro", "verse", "chorus", "verse", "chorus"], 1]],
+      archetype: "strophic",
+    },
+    texture: {
+      roles: {
+        lead: role("sing"),
+        counter: role("organ", "sitar:0.4", "violin:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "qawwali",
+    summary:
+      "qawwali: Sufi devotional song led by a soloist and chorus clapping on keherwa, harmonium riffs, raga bhairavi or kafi, sargam runs building to ecstasy",
+    tempo: { bpm: [80, 150], typical: 110 },
+    meter: { signatures: [["4/4", 1]], cycle: KEHERWA },
+    pitch: {
+      scales: [
+        ["bhairavi", 0.5],
+        ["kafi", 0.5],
+      ],
+    },
+    rhythm: { onsets: { clap: grid("x...x...x...x...") } },
+    melody: { intervals: CHANT, repetition: 0.7 },
+    texture: {
+      roles: {
+        clap: kitRole("acoustic"),
+        lead: role("sing"),
+        counter: role("choir", "organ:0.6"),
+      },
+    },
+  }),
+  card({
+    id: "bhajan",
+    summary:
+      "bhajan and kirtan: devotional call and response on pentatonic bhupali or durga, keherwa on dholak, cymbal (manjira) on every beat, accelerating repetitions",
+    tempo: { bpm: [70, 140], typical: 96 },
+    meter: { signatures: [["4/4", 1]], cycle: KEHERWA },
+    pitch: {
+      scales: [
+        ["bhupali", 0.6],
+        ["durga", 0.4],
+      ],
+    },
+    rhythm: { onsets: { bell: grid("x...x...x...x...") } },
+    melody: { intervals: CHANT, repetition: 0.8 },
+    texture: {
+      roles: {
+        bell: role("bell"),
+        lead: role("sing"),
+        counter: role("choir", "organ:0.5"),
+      },
+    },
+  }),
+
+  // Carnatic. References: T. Viswanathan and Matthew Harp Allen, Music in
+  // South India (2004); P. Sambamoorthy, South Indian Music (1958-69).
+  card({
+    id: "kriti",
+    summary:
+      "kriti: pallavi, anupallavi, charanam in adi tala (laghu 4 + drutam 2 + 2), raga mayamalavagowla (the bhairav scale), sangati variations, kalpana swaram",
+    tempo: { bpm: [60, 120], typical: 84 },
+    meter: { signatures: [["4/4", 1]], cycle: ADI },
+    pitch: {
+      scales: [["bhairav", 1]],
+      raga: {
+        aroha: [0, 1, 4, 5, 7, 8, 11, 12],
+        avaroha: [12, 11, 8, 7, 5, 4, 1, 0],
+        vadi: 7,
+        samvadi: 0,
+      },
+    },
+    melody: { intervals: ORNATE },
+    form: {
+      plans: [[["intro", "verse", "chorus", "verse", "chorus"], 1]],
+      archetype: "pallavi-anupallavi-charanam",
+    },
+    texture: {
+      roles: { lead: role("sing", "violin:0.4"), counter: role("violin") },
+    },
+  }),
+  card({
+    id: "carnatic-instrumental",
+    summary:
+      "ragam-tanam-pallavi: free ragam alapana, pulsed tanam, then a pallavi line in misra chapu (3+2+2) varied through niraval and swara kalpana, raga kalyani",
+    tempo: { bpm: [60, 132], typical: 90 },
+    meter: {
+      signatures: [["7/8", 1]],
+      grouping: [[[3, 2, 2], 1]],
+      cycle: MISRA_CHAPU,
+    },
+    pitch: {
+      scales: [["yaman", 1]],
+      raga: {
+        aroha: [0, 2, 4, 6, 7, 9, 11, 12],
+        avaroha: [12, 11, 9, 7, 6, 4, 2, 0],
+        vadi: 7,
+        samvadi: 0,
+      },
+    },
+    melody: { intervals: LEAPY, density: [2, 4] },
+    texture: { roles: { lead: role("sitar", "violin:0.6", "bansuri:0.5") } },
+  }),
+  card({
+    id: "thillana",
+    summary:
+      "thillana: the rhythmic finale of a Bharatanatyam recital, jati syllables over adi tala at speed, raga hindolam (pentatonic, the malkauns set), korvai cadences",
+    tempo: { bpm: [100, 150], typical: 120 },
+    meter: { signatures: [["4/4", 1]], cycle: ADI },
+    pitch: {
+      scales: [["malkauns", 1]],
+      raga: {
+        aroha: [0, 3, 5, 8, 10, 12],
+        avaroha: [12, 10, 8, 5, 3, 0],
+        vadi: 5,
+        samvadi: 10,
+      },
+    },
+    melody: { intervals: CHANT, density: [2, 4], repetition: 0.7 },
+    texture: {
+      roles: {
+        lead: role("sing", "violin:0.4"),
+        counter: role("bansuri", "violin:0.5"),
+      },
+    },
+  }),
+
+  // South Asian popular. References: Gregory D. Booth, Behind the Curtain
+  // (2008); Anna Morcom, Hindi Film Songs and the Cinema (2007).
+  card({
+    id: "filmi",
+    summary:
+      "filmi: string-orchestra interludes between sung verses (mukhda and antara), raga-tinged melody over pop harmony, dholak keherwa and kit",
+    tempo: { bpm: [80, 130], typical: 96 },
+    meter: { signatures: [["4/4", 1]], cycle: KEHERWA },
+    texture: {
+      roles: {
+        ...fullKit("acoustic"),
+        lead: role("sing"),
+        counter: role("strings", "sitar:0.5", "bansuri:0.5"),
+      },
+    },
+    rhythm: { onsets: { hat: EIGHTHS } },
+  }),
+  card({
+    id: "bhangra",
+    summary:
+      "bhangra: the dhol's chaal (a swung 'dha-ge' with the and of every beat accented), tumbi riffs on one or two notes, a mixolydian drone, hoy shouts",
+    tempo: { bpm: [90, 115], typical: 100 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
+    groove: { subdivision: 4, swingRatio: [1.3, 1.6] },
+    pitch: {
+      scales: [
+        ["mixolydian", 0.6],
+        ["khamaj", 0.4],
+      ],
+    },
+    harmony: { model: "drone", rhythm: [[0.5, 1]] },
+    rhythm: {
+      onsets: {
+        kick: grid("x.....x.x....x.."),
+        snare: grid("..x...x...x...x."),
+        perc: OFFBEATS,
+      },
+    },
+    melody: { intervals: CHANT, repetition: 0.85, ambitus: [3, 8] },
+    texture: {
+      roles: {
+        kick: kitRole("acoustic"),
+        snare: kitRole("acoustic"),
+        hat: null,
+        bass: role("bass"),
+        chords: null,
+        drone: maybe("strings"),
+        lead: role("pluck", "sing:0.6"),
+      },
+    },
+  }),
+  card({
+    id: "baul",
+    summary:
+      "Baul: wandering mystic song on the one-string ektara drone, khamok plucked tension, dadra and keherwa on the duggi, pentatonic-leaning major modes",
+    tempo: { bpm: [80, 130], typical: 104 },
+    meter: { signatures: [["6/8", 1]], cycle: DADRA },
+    harmony: { model: "drone" },
+    pitch: {
+      scales: [
+        ["khamaj", 0.5],
+        ["bhupali", 0.5],
+      ],
+    },
+    melody: { intervals: CONJUNCT },
+    texture: {
+      roles: {
+        ...NO_KIT,
+        chords: null,
+        bass: null,
+        drone: role("pluck", "tanpura:0.5"),
+        lead: role("sing", "bansuri:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "lavani",
+    summary:
+      "lavani: Marathi folk theatre song on the dholki, fast keherwa with accelerating tihai, call and response, kafi and bhairavi colours",
+    tempo: { bpm: [110, 160], typical: 132 },
+    meter: { signatures: [["4/4", 1]], cycle: KEHERWA },
+    pitch: {
+      scales: [
+        ["kafi", 0.6],
+        ["bhairavi", 0.4],
+      ],
+    },
+    rhythm: { onsets: { bell: EIGHTHS } },
+    melody: { intervals: CHANT, density: [2, 4] },
+    texture: {
+      roles: {
+        bell: role("bell"),
+        lead: role("sing"),
+        counter: role("organ", "choir:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "rajasthani-folk",
+    summary:
+      "Rajasthani folk: Manganiyar and Langa song on kamaicha drone and khartal clappers, kafi and maand modes, keherwa or dadra swing",
+    tempo: { bpm: [90, 140], typical: 112 },
+    meter: {
+      signatures: [
+        ["6/8", 0.5],
+        ["4/4", 0.5],
+      ],
+      cycle: DADRA,
+    },
+    pitch: {
+      scales: [
+        ["kafi", 0.5],
+        ["khamaj", 0.5],
+      ],
+    },
+    rhythm: { onsets: { shaker: grid("xx.xx.xx.xx.") } },
+    melody: { intervals: ORNATE },
+    texture: {
+      roles: {
+        shaker: role("drums"),
+        drone: role("fiddle", "tanpura:0.5"),
+        lead: role("sing"),
+        counter: role("fiddle", "organ:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "sufi-kafi",
+    summary:
+      "Sufi kafi: Punjabi and Sindhi mystic poetry in a refrain form, slow raga kafi or bhairavi, harmonium and tabla, the tonic drone held throughout",
+    tempo: { bpm: [60, 100], typical: 76 },
+    meter: { signatures: [["4/4", 1]], cycle: KEHERWA },
+    pitch: {
+      tuning: "kafi",
+      scales: [["kafi", 1]],
+    },
+    melody: { intervals: ORNATE, density: [1, 3] },
+    texture: {
+      roles: { lead: role("sing"), counter: role("organ", "sitar:0.4") },
+    },
+  }),
+  card({
+    id: "sri-lankan",
+    summary:
+      "Sri Lankan baila and drums: baila's fast 6/8 kaffirinha strum with I-IV-V, the Kandyan geta beraya drum patterns and cymbal pulse",
+    tempo: { bpm: [110, 150], typical: 128 },
+    meter: { signatures: [["6/8", 1]], hypermeter: [[4, 1]] },
+    pitch: {
+      scales: [
+        ["major", 0.7],
+        ["mixolydian", 0.3],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      forms: [[["I", "IV", "V", "I"], 1]],
+      sources: { forms: 3 },
+      presets: [["fifties", 1]],
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.....x....."),
+        perc: grid("x..x.xx..x.x"),
+        chords: grid("x.xx.xx.xx.x"),
+      },
+    },
+    bass: { behaviour: [["root-fifth", 1]] },
+    texture: {
+      roles: {
+        kick: kitRole("acoustic"),
+        bass: role("bass"),
+        chords: role("nylon", "steel:0.5"),
+        lead: role("sing", "violin:0.3"),
+        drone: null,
+      },
+    },
+  }),
+  card({
+    id: "nepali-folk",
+    summary:
+      "Nepali and Himalayan folk: the 6/8 jhyaure lilt on madal, sarangi fiddle answering the voice, pentatonic and khamaj melodies in call and response",
+    tempo: { bpm: [90, 130], typical: 108 },
+    meter: { signatures: [["6/8", 1]], cycle: DADRA },
+    pitch: {
+      scales: [
+        ["major-pentatonic", 0.5],
+        ["khamaj", 0.5],
+      ],
+    },
+    melody: { intervals: CONJUNCT, repetition: 0.7 },
+    texture: {
+      roles: {
+        lead: role("sing", "bansuri:0.5"),
+        counter: role("fiddle", "bansuri:0.5"),
+        drone: maybe("strings"),
+      },
+    },
+  }),
+  card({
+    id: "tibetan",
+    summary:
+      "Tibetan Buddhist chant: very low sustained recitation on one tone with overtones, long horns and gongs marking structure, cymbal accelerandos, no pulse grid",
+    tempo: { bpm: [40, 70], typical: 52 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
+    pitch: { scales: [["minor-pentatonic", 1]] },
+    melody: {
+      intervals: CHANT,
+      density: [0.5, 1],
+      ambitus: [2, 5],
+      range: [40, 60],
+    },
+    rhythm: { onsets: { bell: grid("x...............") } },
+    texture: {
+      kind: "monophonic",
+      roles: {
+        perc: null,
+        bell: role("gong"),
+        drone: role("choir", "horn:0.5"),
+        lead: role("choir"),
+      },
+    },
+    mix: { space: 0.75 },
+  }),
+  card({
+    id: "asian-underground",
+    summary:
+      "Asian Underground: London breakbeat and drum and bass under tabla loops and sitar drones, sub-bass, raga phrases sampled-style over a minor vamp",
+    tempo: { bpm: [90, 174], typical: 160 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[8, 1]] },
+    pitch: {
+      scales: [
+        ["bhairavi", 0.5],
+        ["kafi", 0.5],
+      ],
+    },
+    rhythm: {
+      onsets: { kick: grid("x.........x....."), snare: BACKBEAT, hat: EIGHTHS },
+    },
+    bass: {
+      behaviour: [
+        ["pedal", 0.5],
+        ["ostinato", 0.5],
+      ],
+    },
+    texture: {
+      roles: {
+        ...fullKit("electro"),
+        bass: role("bass", "saw:0.4"),
+        lead: role("sitar", "sing:0.5", "bansuri:0.4"),
+        pad: maybe("strings", "saw:0.4"),
+      },
+    },
+    mix: { loudness: "club" },
+  }),
 ];
 
 export const AFRICA_MENA_SOUTHASIA_CARDS: readonly StyleCard[] = [
