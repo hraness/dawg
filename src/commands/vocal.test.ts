@@ -43,6 +43,7 @@ describe("/vocal umbrella", () => {
     // Lanes register their verbs; every verb names its lane.
     expect(VOCAL_VERBS.map((verb) => verb.verb)).toContain("formant");
     for (const verb of VOCAL_VERBS) expect(verb.lane).toBeTruthy();
+    expect(VOCAL_VERBS.map((v) => v.verb)).toContain("import");
     expect(vocalListLines([])).toEqual([
       "vocal: no voice tools yet in this build",
     ]);

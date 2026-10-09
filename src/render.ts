@@ -36,6 +36,7 @@ import {
   sectionCues,
 } from "./audio/arrange.ts";
 import { SampleLibrary, hasSamplerTracks } from "./audio/samples.ts";
+import { withClipLengths } from "./audio/clips.ts";
 import {
   PackStore,
   creditsLine,
@@ -117,6 +118,14 @@ export async function runRenderCommand(
         `render failed · no section "${only}"${names ? ` · sections: ${names}` : ""}\n`,
       );
       return 1;
+    }
+    // Clips crossing the section's edges are cut against their files' real
+    // ends, so read their lengths first (load problems are reported below).
+    if (score.tracks.some((track) => track.clips)) {
+      const bank = await new SampleLibrary({ projectRoot: workspace }).load(
+        score,
+      );
+      score = withClipLengths(score, bank);
     }
     // One section as it plays when looped: its mutes and variations, no form.
     score = withNoteCap(BAKED_NOTE_CAP, () =>

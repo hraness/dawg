@@ -19,6 +19,7 @@
  * frames, so held notes and effect tails cross into the range as in the
  * song.
  */
+import { withClipLengths } from "./clips.ts";
 import { createHash } from "node:crypto";
 import {
   SCORE_LIMITS,
@@ -216,7 +217,7 @@ export function renderResample(
     startTick,
     durationTicks,
     leadTicks,
-  } = resampleScore(score, request);
+  } = resampleScore(withClipLengths(score, samples), request);
   // The song's export rate (48 kHz once it has a master), so the new
   // track nulls against the source when both play at that rate.
   const sampleRate = exportSampleRate(score);

@@ -1,3 +1,4 @@
+import { isGuideInstrument, vocalChainPatch } from "../../core/clips.ts";
 import { INSTRUMENT_WORDS } from "../../core/instruments.ts";
 import {
   DEFAULT_STRING_PRESET,
@@ -518,7 +519,18 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
       return {
         kind: "score",
         operations: [
-          { type: "updateTrack", trackId, patch: { ...patch, ...rig } },
+          {
+            type: "updateTrack",
+            trackId,
+            patch: {
+              // `vocal` (0.7): the vocal chain fills unset effects.
+              ...(isGuideInstrument(patch.instrument)
+                ? vocalChainPatch(track)
+                : {}),
+              ...patch,
+              ...rig,
+            },
+          },
         ],
         trackId,
         summary:

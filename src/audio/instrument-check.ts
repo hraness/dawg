@@ -6,6 +6,7 @@
  * playing a test tone silently.
  */
 
+import { isGuideInstrument } from "../../core/clips.ts";
 import { isDrumInstrument } from "../../core/drums.ts";
 import { INSTRUMENT_WORDS, LEGACY_WORDS } from "../../core/instruments.ts";
 import { KEYS_FAMILIES } from "../../core/keys.ts";
@@ -54,6 +55,7 @@ export function playsPlainSine(
   if ((KEYS_FAMILIES as readonly string[]).includes(name)) return false;
   if (isDrumInstrument(name) || isSamplerInstrument(name)) return false;
   if (name === "wavetable" || resolveOscillator(name)) return false;
+  if (isGuideInstrument(name)) return false;
   return !LEGACY_TONES.some((tone) => name.includes(tone));
 }
 

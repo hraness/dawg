@@ -50,6 +50,8 @@ self.onmessage = async (event: MessageEvent<RenderRequest>) => {
     const audio = renderArranged(renderer, parsed, {
       sampleRate,
       loop: true,
+      // The live loop sounds a vocal track's guide notes (0.7 clips).
+      guide: true,
       samples,
     });
     const reply: RenderReply = {

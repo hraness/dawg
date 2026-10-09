@@ -230,6 +230,27 @@ export function noteVowel(
   }
 }
 
+/**
+ * Melisma: a note whose lyric is `_` (the lyric grammar's hold) keeps
+ * singing the vowel of the note before it, in time order.
+ */
+export function heldVowels(
+  notes: readonly PerformedNote[],
+  fallback: string,
+): Map<PerformedNote, string> {
+  const held = new Map<PerformedNote, string>();
+  if (!notes.some((note) => note.lyric === "_")) return held;
+  const ordered = [...notes].sort(
+    (a, b) => a.startTick - b.startTick || b.pitch - a.pitch,
+  );
+  let last = fallback;
+  for (const note of ordered) {
+    if (note.lyric === "_" && note.vowel === undefined) held.set(note, last);
+    else last = noteVowel(note, fallback);
+  }
+  return held;
+}
+
 function ringHzOf(voice: VoiceType): number {
   return voice === "soprano" || voice === "alto" ? 3100 : 2800;
 }
@@ -604,6 +625,7 @@ export function renderSingTrack(
     seedTick: context.seedTick ?? 0,
   };
   const throat = s.drone !== undefined;
+  const melisma = heldVowels(notes, s.vowel);
   const lines = windLines(notes, context, track.glide === undefined);
   const planned: Planned[] = lines.map((line) => ({
     start: line.start,
@@ -615,7 +637,9 @@ export function renderSingTrack(
       end:
         k + 1 < line.segments.length ? line.segments[k + 1]!.at : line.length,
       hz: seg.hz,
-      vowel: noteVowel(line.notes[k] ?? line.notes[0]!, s.vowel),
+      vowel: ((note) => melisma.get(note) ?? noteVowel(note, s.vowel))(
+        line.notes[k] ?? line.notes[0]!,
+      ),
     })),
   }));
   if (throat) {

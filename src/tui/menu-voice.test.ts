@@ -29,7 +29,7 @@ function open(nodes: MenuNode[], id: string, ctx: MenuContext): MenuNode[] {
 const labels = (nodes: MenuNode[]) => nodes.map((node) => node.label);
 
 describe("0.7 voice menu groups", () => {
-  test("hidden while empty; Effects > Voice holds the formant; Voices mounts once", () => {
+  test("Voice groups mount once with clips, formant and sing rows", () => {
     const ctx = context();
     const root = rootNodes(ctx);
     // Seven top-level sections, unchanged.
@@ -37,7 +37,6 @@ describe("0.7 voice menu groups", () => {
     const sound = open(root, "sound", ctx);
     const effects = open(root, "effects", ctx);
     const browse = open(sound, "browse", ctx);
-    expect(labels(sound)).not.toContain("Voice");
     // The formant lane fills Effects > Voice.
     expect(labels(effects)).toContain("Voice");
     expect(labels(open(effects, "voice", ctx))).toContain("Formant");
@@ -45,7 +44,18 @@ describe("0.7 voice menu groups", () => {
     expect(labels(browse).filter((label) => label === "Voices")).toHaveLength(
       1,
     );
+    // The clips lane fills Sound > Voice (Clips, Lyrics) and Voices > Vocal.
+    expect(labels(sound).filter((l) => l === "Voice")).toHaveLength(1);
+    expect(labels(open(sound, "voice", ctx)).slice(0, 2)).toEqual([
+      "Clips",
+      "Lyrics",
+    ]);
+    expect(labels(browse)).toContain("Voices");
     expect(labels(sound).slice(-2)).toEqual(["performance", "browse sounds"]);
+    // Effects > Voice has no rows until the formant or vocoder lane lands.
+    expect(
+      labels(effects).filter((l) => l === "Voice").length,
+    ).toBeLessThanOrEqual(1);
   });
 
   test("a group with rows mounts once as a sub-menu", () => {

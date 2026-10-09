@@ -44,6 +44,24 @@ export interface NoteSnapshot {
    * from (`D` for a `D−47` tag), since the lane is the key, not the sound.
    */
   centsFrom?: string | undefined;
+  /** Sung syllable (`Note.lyric`), drawn beside the head like the cents tag. */
+  lyric?: string | undefined;
+}
+
+/** An audio clip on the focused track (0.7), drawn in the clip row. */
+export interface ClipSnapshot {
+  id: string;
+  /** Song beats where the clip sounds. */
+  startBeat: number;
+  durationBeats: number;
+  /** Normalised RMS over the clip's window (0..1), oldest first. */
+  peaks?: readonly number[] | undefined;
+  /** Take name and clip text, shown after the id. */
+  take?: string | undefined;
+  text?: string | undefined;
+  muted?: boolean | undefined;
+  /** The clip starts where another ends: a comp seam. */
+  seam?: boolean | undefined;
 }
 
 export interface TrackScoreSnapshot {
@@ -83,6 +101,8 @@ export interface TrackScoreSnapshot {
    * accent. Empty or omitted in focus view.
    */
   layers?: readonly HighwayLayer[] | undefined;
+  /** Audio clips on the focused track (0.7): the right-edge clip row. */
+  clips?: readonly ClipSnapshot[] | undefined;
 }
 
 /** One background track overlaid on the highway. */
@@ -473,6 +493,7 @@ interface Painter {
   put(x: number, y: number, ch: string, style: Style): void;
   restyle(x: number, y: number, style: Style): void;
   isBlank(x: number, y: number): boolean;
+  charAt(x: number, y: number): string | undefined;
 }
 
 /**
@@ -516,6 +537,9 @@ export function paintHighway(
     isBlank(x, y) {
       return buffer.get(region.x + x, region.y + y)?.ch === " ";
     },
+    charAt(x, y) {
+      return buffer.get(region.x + x, region.y + y)?.ch;
+    },
   };
 
   const rowBeat = (row: number): number => beat + (hitRow - row) / rowsPerBeat;
@@ -525,6 +549,7 @@ export function paintHighway(
   // centred hint says how to start. The hit line and grid still draw.
   const empty =
     score.notes.length === 0 &&
+    (score.clips ?? []).length === 0 &&
     !(score.layers ?? []).some((layer) => layer.notes.length > 0);
 
   // Beat, bar, and loop rules of increasing strength.
@@ -835,11 +860,13 @@ export function paintHighway(
             : shade(base, 0.45 * glow);
         if (headRow <= hitRow - 1) {
           tile(headRow, headGlyph, style);
-          const tag =
+          const cents =
             (note.cents !== undefined || note.centsFrom !== undefined) &&
             !note.muted
               ? centsTag(note.cents, note.centsFrom)
               : "";
+          const lyric = note.lyric && !note.muted ? note.lyric.slice(0, 8) : "";
+          const tag = [cents, lyric].filter(Boolean).join(" ");
           if (tag && x + width + tag.length <= region.width)
             for (let index = 0; index < tag.length; index += 1)
               painter.put(x + width + index, headRow, tag[index]!, roles.muted);
@@ -938,7 +965,126 @@ export function paintHighway(
       }
     }
   }
+  if (score.clips && score.clips.length > 0 && region.width >= 24)
+    paintClipRow(painter, score, {
+      beat,
+      hitRow,
+      lastNoteRow,
+      rowsPerBeat,
+      width: region.width,
+      loop,
+      glyphs,
+      accent,
+      roles,
+    });
   return layout;
+}
+
+function rowHasOnlyRule(
+  painter: Painter,
+  x: number,
+  length: number,
+  row: number,
+  glyphs: HighwayGlyphs,
+): boolean {
+  for (let index = 0; index < length; index += 1) {
+    const ch = painter.charAt(x + index, row);
+    if (ch !== " " && ch !== glyphs.beatRule) return false;
+  }
+  return true;
+}
+
+/** Shading for a clip's level, quiet to loud. */
+const CLIP_LEVELS_UNICODE = ["▏", "░", "▒", "▓", "█"];
+const CLIP_LEVELS_ASCII = [":", ".", "o", "O", "#"];
+
+/**
+ * The clip row: the rightmost column carries each clip's level as it
+ * falls toward the hit line, a seam (`┄`) where one clip continues
+ * another, and `id take · text` beside the clip's first row.
+ */
+function paintClipRow(
+  painter: Painter,
+  score: TrackScoreSnapshot,
+  at: {
+    beat: number;
+    hitRow: number;
+    lastNoteRow: number;
+    rowsPerBeat: number;
+    width: number;
+    loop: number | undefined;
+    glyphs: HighwayGlyphs;
+    accent: Style;
+    roles: Theme["roles"];
+  },
+): void {
+  const column = at.width - 1;
+  const levels =
+    at.glyphs === ASCII_GLYPHS ? CLIP_LEVELS_ASCII : CLIP_LEVELS_UNICODE;
+  const seamGlyph = at.glyphs === ASCII_GLYPHS ? "-" : "┄";
+  const rowBeat = (row: number) => at.beat + (at.hitRow - row) / at.rowsPerBeat;
+  const half = 0.5 / at.rowsPerBeat;
+  const occurrences = (clip: ClipSnapshot): number[] => {
+    if (!at.loop) return [clip.startBeat];
+    const base = Math.floor(at.beat / at.loop) * at.loop;
+    return [base - at.loop, base, base + at.loop].map(
+      (offset) => offset + clip.startBeat,
+    );
+  };
+  for (const clip of score.clips ?? []) {
+    const style = clip.muted ? at.roles.mutedNote : at.accent;
+    for (const start of occurrences(clip)) {
+      const end = start + clip.durationBeats;
+      for (let row = 0; row <= at.lastNoteRow; row += 1) {
+        if (row === at.hitRow) continue;
+        const center = rowBeat(row);
+        if (center + half <= start || center - half >= end) continue;
+        const isStart = start >= center - half && start < center + half;
+        if (isStart && clip.seam) {
+          painter.put(column, row, seamGlyph, at.roles.muted);
+        } else {
+          const peaks = clip.peaks;
+          const fraction = Math.max(
+            0,
+            Math.min(
+              0.999,
+              (center - start) / Math.max(1e-9, clip.durationBeats),
+            ),
+          );
+          const level =
+            peaks && peaks.length > 0
+              ? peaks[Math.floor(fraction * peaks.length)]!
+              : 0.6;
+          const index = clip.muted
+            ? 0
+            : Math.min(
+                levels.length - 1,
+                Math.round(level * (levels.length - 1)),
+              );
+          painter.put(column, row, levels[index]!, style);
+        }
+        if (isStart && row < at.hitRow) {
+          const label = [clip.id, clip.take, clip.text ? `· ${clip.text}` : ""]
+            .filter(Boolean)
+            .join(" ")
+            .slice(0, Math.max(0, Math.min(24, at.width - 6)));
+          const x = column - 1 - label.length;
+          // Over a beat rule the whole label draws; over notes it never does.
+          const ruled = rowHasOnlyRule(
+            painter,
+            x,
+            label.length,
+            row,
+            at.glyphs,
+          );
+          if (x > 3)
+            for (let index = 0; index < label.length; index += 1)
+              if (painter.isBlank(x + index, row) || ruled)
+                painter.put(x + index, row, label[index]!, at.roles.muted);
+        }
+      }
+    }
+  }
 }
 
 /**

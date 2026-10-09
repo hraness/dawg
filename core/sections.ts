@@ -18,12 +18,21 @@ import { modalSettings, windSettings } from "./resonators.ts";
 import { resolveSing } from "./sing.ts";
 import { slicePedals } from "./expression.ts";
 import {
+  bakeClipTime,
+  copyClipBars,
+  deleteClipBars,
+  insertClipBars,
+  sliceClips,
+  type ClipPiece,
+} from "./clips.ts";
+import {
   SCORE_LIMITS,
   withNoteCap,
   ScoreValidationError,
   TrackScore,
   isSamplerInstrument,
   wavetableOf,
+  type AudioClip,
   type AutomationPoint,
   type FormEntry,
   type Note,
@@ -148,7 +157,10 @@ export function bakeTrackTime(
     () =>
       new TrackScore({
         ...score.toJSON(),
-        tracks: score.tracks.map(({ time: _time, ...track }) => track),
+        tracks: score.tracks.map((track) => {
+          const { time: _time, ...rest } = bakeClipTime(track);
+          return rest;
+        }),
         notes,
       }),
   );
@@ -395,8 +407,73 @@ export function applySectionChanges(score: TrackScore): TrackScore {
     }
     notes.push(cut);
   }
+  // Clips (0.7): a section that mutes a track silences its clips there, its
+  // variation gain scales them; a clip crossing such an edge is cut.
+  const total = Math.max(
+    score.bars,
+    ...score.sections.map((s) => s.startBar + s.bars),
+  );
+  const clipTracks = score.tracks.map((track) => {
+    if (!track.clips) return track;
+    const pieces: ClipPiece[] = [];
+    for (let bar = 0; bar < total; bar += 1) {
+      const section = sectionAtBar(score, bar);
+      pieces.push({
+        from: bar * ticks,
+        to: (bar + 1) * ticks,
+        offset: bar * ticks,
+        ...clipPieceState(section, track.id),
+      });
+    }
+    // The last bar runs on, so a clip sounding past the end is not cut.
+    if (pieces.length > 0)
+      pieces[pieces.length - 1] = {
+        ...pieces[pieces.length - 1]!,
+        to: SCORE_LIMITS.maxTick + 1,
+      };
+    const next = withClips(track, sliceClips(track.clips, pieces, score));
+    if (JSON.stringify(next.clips) !== JSON.stringify(track.clips))
+      changed = true;
+    return next;
+  });
   if (!changed) return score;
-  return new TrackScore({ ...score.toJSON(), notes, sections: [], form: [] });
+  return new TrackScore({
+    ...score.toJSON(),
+    tracks: clipTracks,
+    notes,
+    sections: [],
+    form: [],
+  });
+}
+
+/** A section's mute and variation gain for one track's clips. */
+function clipPieceState(
+  section: Section | undefined,
+  trackId: string,
+): Pick<ClipPiece, "mute" | "gain"> {
+  if (!section) return {};
+  if (section.mute?.includes(trackId)) return { mute: true };
+  const gain = section.vary?.[trackId]?.gain;
+  return gain === undefined || gain === 1 ? {} : { gain };
+}
+
+/** `track` with `clips` (absent when empty). */
+function withClips(
+  track: Track,
+  clips: readonly AudioClip[] | undefined,
+): Track {
+  const { clips: _clips, ...rest } = track;
+  return clips && clips.length > 0 ? { ...rest, clips } : rest;
+}
+
+/** A track's clips cut to `pieces` (sections, forms, windows). */
+function sliceTrackClips(
+  track: Track,
+  pieces: readonly ClipPiece[],
+  time: TrackScore,
+): Track {
+  if (!track.clips) return track;
+  return withClips(track, sliceClips(track.clips, pieces, time));
 }
 
 /**
@@ -434,9 +511,13 @@ export function sectionScore(score: TrackScore, section: Section): TrackScore {
     time: timed.time ?? null,
     bars: section.bars,
     tracks: score.tracks.map((track) =>
-      slicePedals(
-        mapAutomation(track, (points) => cropPoints(points, from, to)),
-        [{ from, to, offset: 0 }],
+      sliceTrackClips(
+        slicePedals(
+          mapAutomation(track, (points) => cropPoints(points, from, to)),
+          [{ from, to, offset: 0 }],
+        ),
+        [{ from, to, offset: 0, ...clipPieceState(section, track.id) }],
+        score,
       ),
     ),
     notes,
@@ -618,7 +699,11 @@ export function insertBars(
     ...score.toJSON(),
     bars: score.bars + count,
     tracks: score.tracks.map((track) =>
-      mapAutomation(track, (points) => insertPoints(points, at, shift)),
+      insertClipBars(
+        mapAutomation(track, (points) => insertPoints(points, at, shift)),
+        at,
+        shift,
+      ),
     ),
     notes: score.notes.map((note) =>
       note.startTick >= at
@@ -682,7 +767,11 @@ export function deleteBars(
     ...score.toJSON(),
     bars: score.bars - count,
     tracks: score.tracks.map((track) =>
-      mapAutomation(track, (points) => deletePoints(points, at, shift)),
+      deleteClipBars(
+        mapAutomation(track, (points) => deletePoints(points, at, shift)),
+        at,
+        end,
+      ),
     ),
     notes,
     sections,
@@ -912,7 +1001,12 @@ export function copyBars(
   return new TrackScore({
     ...score.toJSON(),
     tracks: score.tracks.map((track) =>
-      mapAutomation(track, (points) => copyPoints(points, from, length, to)),
+      copyClipBars(
+        mapAutomation(track, (points) => copyPoints(points, from, length, to)),
+        from,
+        length,
+        to,
+      ),
     ),
     notes: [...kept, ...copies],
   });
@@ -1236,17 +1330,38 @@ export function arrangedSlice(
 ): TrackScore {
   const ticks = barTicks(score);
   const pieces: { from: number; to: number; offset: number }[] = [];
+  // Clips (0.7) are cut per section pass; a window's own edges inside a
+  // pass (or where the form plays straight on) are seams, never cuts, so a
+  // windowed render plays them as one pass does.
+  const clipPieces: (ClipPiece & { section: Section })[] = [];
   const end = fromBar + bars;
+  let previous: FormSegment | undefined;
   for (const segment of formSegments(score)) {
     const segEnd = segment.startBar + segment.bars;
+    const before = previous;
+    previous = segment;
     if (segEnd <= fromBar || segment.startBar >= end) continue;
     const start = Math.max(segment.startBar, fromBar);
     const stop = Math.min(segEnd, end);
     const from = (segment.section.startBar + start - segment.startBar) * ticks;
-    pieces.push({
+    const piece = {
       from,
       to: from + (stop - start) * ticks,
       offset: (start - fromBar) * ticks,
+    };
+    pieces.push(piece);
+    const straight =
+      before !== undefined &&
+      before.section.startBar + before.bars === segment.section.startBar;
+    clipPieces.push({
+      ...piece,
+      section: segment.section,
+      ...(stop < segEnd ? { to: from + (segEnd - start) * ticks } : {}),
+      ...(clipPieces.length === 0 &&
+      fromBar > 0 &&
+      (start > segment.startBar || straight)
+        ? { seam: true }
+        : {}),
     });
   }
   const shift = fromBar * ticks;
@@ -1257,7 +1372,14 @@ export function arrangedSlice(
     time: timed.time ?? null,
     bars,
     tracks: score.tracks.map((track) =>
-      slicePedals(sliceLanes(track, pieces), pieces),
+      sliceTrackClips(
+        slicePedals(sliceLanes(track, pieces), pieces),
+        clipPieces.map(({ section, ...piece }) => ({
+          ...piece,
+          ...clipPieceState(section, track.id),
+        })),
+        score,
+      ),
     ),
     notes: arrangedNotes(score, fromBar, fromBar + noteBars).map((note) => ({
       ...note,

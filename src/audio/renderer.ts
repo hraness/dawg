@@ -87,6 +87,8 @@ export class LoopRenderer {
     const audio = renderArranged(this.inline, score, {
       sampleRate: this.sampleRate,
       loop: true,
+      // The live loop sounds a vocal track's guide notes (0.7 clips).
+      guide: true,
       samples,
     });
     return {

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { isGuideInstrument, vocalChainPatch } from "../core/clips.ts";
 import {
   isUnknownInstrument,
   plainSineAdvice,
@@ -150,6 +151,13 @@ import {
   parseFormantCommand,
   parseVowelCommand,
 } from "./commands/formant.ts";
+import {
+  applyLyrics,
+  parseClipCommand,
+  parseLyricsCommand,
+  runClipCommand,
+  setClipImportDeps,
+} from "./commands/clips.ts";
 import { parseResampleCommand, runResample } from "./commands/resample.ts";
 import { suggestFitMode } from "./audio/dsp/onset.ts";
 import {
@@ -160,6 +168,7 @@ import {
   type SampleProblem,
 } from "./audio/samples.ts";
 import { drumSnapshotFields, samplerSnapshotFields } from "../tui/drums.ts";
+import { clipSnapshots, loadClipPeaks } from "../tui/clip-row.ts";
 import { highwayLayers } from "../tui/layers.ts";
 import { drumVoicePitch, isDrumInstrument } from "../core/drums.ts";
 import {
@@ -345,6 +354,8 @@ function parsesLocally(text: string): boolean {
     parseVocalCommand,
     parseFormantCommand,
     parseVowelCommand,
+    parseClipCommand,
+    parseLyricsCommand,
   ].some((parse) => parse(text) !== undefined);
 }
 
@@ -833,10 +844,18 @@ function snapshot(
         muted: focused?.muted,
         ...(tag?.cents !== undefined ? { cents: tag.cents } : {}),
         ...(tag?.name !== undefined ? { centsFrom: tag.name } : {}),
+        ...(note.lyric !== undefined ? { lyric: note.lyric } : {}),
       };
+    });
+  // 0.7 clips: the clip row; peaks load off the frame path, then redraw.
+  const clips = clipSnapshots(value, requestedTrack);
+  if (clips)
+    void loadClipPeaks(process.cwd(), focused).then((changed) => {
+      if (changed) requestFrame();
     });
   return {
     notes,
+    ...(clips ? { clips } : {}),
     trackName:
       value.tracks.find((track) => track.id === requestedTrack)?.name ??
       requestedTrack,
@@ -1793,7 +1812,46 @@ async function submit(prompt: string): Promise<string | Receipt> {
   }
   const resample = parseResampleCommand(command);
   if (resample) return resampleCommand(resample);
+  // 0.7 clips: `/clip` edits and `/lyrics` on the focused track.
+  const clipCommand = parseClipCommand(command);
+  if (clipCommand) {
+    if ("error" in clipCommand) return fail(clipCommand.error);
+    const result = await runClipCommand(clipCommand, {
+      score,
+      trackId: requestedTrack,
+      cwd: process.cwd(),
+    });
+    if (!result.ok) return fail(result.message);
+    if (result.next && result.kind) {
+      await commitScore(result.next, result.kind, {
+        trackId: requestedTrack,
+        ...result.payload,
+      });
+      await projectSync?.flushScore();
+    }
+    return ok(result.message);
+  }
+  const lyricsCommand = parseLyricsCommand(command);
+  if (lyricsCommand) {
+    const result = applyLyrics(score, requestedTrack, lyricsCommand);
+    if (!result.ok) return fail(result.message);
+    if (result.next && result.kind) {
+      await commitScore(result.next, result.kind, {
+        trackId: requestedTrack,
+        ...result.payload,
+      });
+      await projectSync?.flushScore();
+    }
+    return ok(result.message);
+  }
   // 0.7 Voice: `/vocal <verb>`; lanes register verbs in VOCAL_VERBS.
+  setClipImportDeps({
+    media: {
+      ...mediaServices(),
+      signal: new AbortController().signal,
+      progress: () => undefined,
+    },
+  });
   const vocal = parseVocalCommand(command);
   if (vocal) {
     const result = await runVocalCommand(vocal, {
@@ -2187,7 +2245,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
       );
     }
     // `instrument jangle`: a guitar alias also loads its rig.
-    const patch = parsed.word
+    const rigged = parsed.word
       ? {
           ...parsed.patch,
           ...rigWordPatch(
@@ -2196,6 +2254,13 @@ async function submit(prompt: string): Promise<string | Receipt> {
           ),
         }
       : parsed.patch;
+    // `instrument vocal` (0.7): the vocal chain fills unset effects.
+    const patch = isGuideInstrument(parsed.patch.instrument)
+      ? {
+          ...vocalChainPatch(score.tracks.find((t) => t.id === requestedTrack)),
+          ...rigged,
+        }
+      : rigged;
     const next = applyScoreOperation(score, {
       type: "updateTrack",
       trackId: requestedTrack,
@@ -2377,6 +2442,10 @@ async function focusTrack(trackId: string): Promise<Receipt> {
         ...newPianoTrack(trackId),
         // `track vibes`: a 0.6 modal word names the track and its preset.
         ...(isModalWord(trackId) ? instrumentPatchForWord(trackId) : {}),
+        // `track vocal` (0.7): a clip track with the vocal chain.
+        ...(isGuideInstrument(trackId)
+          ? { instrument: "vocal", ...vocalChainPatch(undefined) }
+          : {}),
       },
     });
     await commitScore(next, "track.create", { trackId });

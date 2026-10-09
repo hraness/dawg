@@ -79,6 +79,8 @@ import {
   slowestBpmOf,
 } from "../../core/tempo.ts";
 import { sampleWarpFor, warpedSpan, type SampleWarp } from "./warp.ts";
+import { clipsDigest, hasClips, renderClips } from "./clips.ts";
+import { isGuideInstrument } from "../../core/clips.ts";
 import { applyMaster, type MasterReport } from "./master.ts";
 import type { SongMaster } from "../../core/master.ts";
 
@@ -92,6 +94,12 @@ export type RenderOptions = WavOptions &
      * what the streaming engine plays; exports keep the default one-shot.
      */
     loop?: boolean;
+    /**
+     * 0.7 clips: a `vocal` track's guide notes sound as a soft sine. The
+     * live loop (audition, play mode) sets it; exports never do, so a
+     * rendered file holds only the clips.
+     */
+    guide?: boolean;
     /**
      * Decoded sampler voices (`SampleLibrary.load`). Without it sampler
      * tracks render silent; scores without samplers are unaffected.
@@ -162,6 +170,8 @@ export const AVAILABLE_INSTRUMENTS = Object.freeze([
   // 0.6 instruments (src/audio/instruments.ts), one line per lane.
   "granular",
   "modal",
+  // 0.7 clips: a track of audio clips whose notes are guides.
+  "vocal",
 ] as const);
 
 /** Per-track effects understood by the renderer and the agent, in chain
@@ -306,6 +316,9 @@ type Stem = {
  * byte-identical to a cold render; mute and solo only pick which stems are
  * summed. Scratch buffers are reused across renders.
  */
+/** A guide note's level against a plain sine note (about -12 dB). */
+const GUIDE_LEVEL = 0.25;
+
 export class StemRenderer {
   private readonly maxCacheBytes: number;
   private readonly stems = new Map<string, Stem>();
@@ -460,6 +473,10 @@ export class StemRenderer {
       if (group) group.push(note);
       else groups.set(note.trackId, [note]);
     }
+    // Tracks with audio clips (0.7) render even without notes, after the
+    // tracks with notes, so songs without clips keep their sum order.
+    for (const track of score.tracks)
+      if (hasClips(track) && !groups.has(track.id)) groups.set(track.id, []);
     // Note expression and track performance (core/expression.ts): the
     // notes as played. A track with neither gets its notes back unchanged.
     const timing = performanceTimingFor(score);
@@ -508,13 +525,19 @@ export class StemRenderer {
       const engine = engineFor(track);
       // The song key always joins an engine's stem key: engines may tune to
       // it (sympathetic strings) without a song tuning.
+      const clipDigest = track
+        ? clipsDigest(track, bank, options.guide === true)
+        : undefined;
       const engineDigests =
         engine && track
           ? [
               ...(engine.assetDigests?.(track, bank, score) ?? []),
               `key:${score.key ?? ""}`,
+              ...(clipDigest === undefined ? [] : [`clips:${clipDigest}`]),
             ]
-          : undefined;
+          : clipDigest === undefined
+            ? undefined
+            : [`clips:${clipDigest}`];
       // Wavetable hook: the oscillator factory for a wavetable track (its
       // table id joins the stem key), undefined for every other instrument.
       const wavetable = track ? wavetableHook(track, bank, context) : undefined;
@@ -631,12 +654,31 @@ export class StemRenderer {
               noteGainAt,
             );
           }
+        } else if (track?.clips && isGuideInstrument(track.instrument)) {
+          // A `vocal` track's notes guide its clips: silent in a render,
+          // a soft sine in the live loop with `guide` on. (Without clips,
+          // an older project's `vocal` keeps its tone.)
+          if (options.guide)
+            for (const note of played)
+              renderToneNote(
+                dry,
+                { ...note, velocity: note.velocity * GUIDE_LEVEL },
+                { ...track, instrument: "sine" },
+                context,
+                tuning,
+              );
         } else {
           const drums = isDrumInstrument(track?.instrument);
           for (const note of played) {
             if (drums) renderDrumNote(dry, note, track, context);
             else renderToneNote(dry, note, track, context, tuning);
           }
+        }
+        // Audio clips (0.7) sum into the dry buffer before the chain.
+        if (track?.clips) {
+          const gainAt = (tick: number) => trackGainAt(track, tick);
+          renderClips(dry, track, context, bank, gainAt);
+          if (stereo) renderClips(dryR, track, context, bank, gainAt);
         }
         // Note-aware stages (bloom, swell) see the notes; others never do.
         const chain =

@@ -445,6 +445,21 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         command: `/vocal ${verb.usage}`,
         summary: verb.summary,
       })),
+      // clips lane
+      {
+        command:
+          "/clip [id] gain -3 | gain by -3 | fade .01 .2 | fade in .01 | move 9 | split 7",
+        summary: "edit an audio clip (dB, seconds, 1-based bars)",
+      },
+      {
+        command:
+          "/clip [id] trim offset 1 dur 4|end | rev | repeat every 2 to 32 | mute | rm",
+        summary: "trim, reverse, repeat, mute or remove a clip",
+      },
+      {
+        command: "/lyrics [bar] never gon-na give",
+        summary: "syllables onto the notes (- splits, _ holds, ~ skips)",
+      },
     ],
   },
   {

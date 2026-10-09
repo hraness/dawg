@@ -419,6 +419,8 @@ export const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
   { word: "khoomei", instrument: "sing", field: "sing", preset: "khoomei" },
   { word: "sygyt", instrument: "sing", field: "sing", preset: "sygyt" },
   { word: "kargyraa", instrument: "sing", field: "sing", preset: "kargyraa" },
+  // f07-clips: a track of audio clips; its notes are guides.
+  { word: "vocal", instrument: "vocal" },
 ]);
 
 /**
