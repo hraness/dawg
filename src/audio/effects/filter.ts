@@ -10,6 +10,7 @@ import {
   Biquad,
   CONTROL_SAMPLES,
   OnePole,
+  Param,
   Phasor,
   clamp,
   fxReader,
@@ -245,8 +246,15 @@ export function applyVowel(
   // 0.7 morph: present only with `to`; absent keeps the static bank exactly.
   const toName = values.to as string | undefined;
   const to = toName === undefined ? undefined : VOWEL_FORMANTS[toName];
-  const morph =
-    to && values.morph !== undefined ? read.param("morph") : undefined;
+  // Absent morph means 0, so a vowel-morph lane still sweeps without it.
+  const morph = to
+    ? new Param(
+        (values.morph as number | undefined) ?? 0,
+        track.fxAutomation?.["vowel-morph"],
+        context.samplesPerTick,
+        context.warp,
+      )
+    : undefined;
   const moving = morph !== undefined && (morph.automated || morph.fallback > 0);
   let at = -1;
   const retune = (position: number) => {

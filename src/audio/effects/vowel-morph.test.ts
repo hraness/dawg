@@ -60,6 +60,29 @@ describe("vowel morph (fx.vowel to, morph)", () => {
     expect(f1).toBeCloseTo(Math.sqrt(650 * VOWEL_FORMANTS.i![0]![0]), 6);
   });
 
+  test("a vowel-morph lane sweeps when `to` is set and morph is absent", () => {
+    const lane = [
+      { tick: 0, value: 0 },
+      { tick: 480, value: 1 },
+    ];
+    const render = (fx: Record<string, unknown>) => {
+      const t = track({
+        fx: { vowel: fx } as never,
+        fxAutomation: { "vowel-morph": lane } as never,
+      });
+      const out = saw(0.5);
+      applyVowel(out, t, t.fx!.vowel!, context);
+      return out;
+    };
+    const absent = render({ vowel: "a", to: "o" });
+    expect(bytes(absent)).not.toEqual(bytes(vowel({ vowel: "a" })));
+    expect(bytes(absent)).toEqual(
+      bytes(render({ vowel: "a", to: "o", morph: 0 })),
+    );
+    // Without `to` the lane has nothing to morph toward: today's bank exactly.
+    expect(bytes(render({ vowel: "a" }))).toEqual(bytes(vowel({ vowel: "a" })));
+  });
+
   test("a project without to/morph normalizes without them", () => {
     const t = track({ fx: { vowel: { vowel: "o" } } });
     expect(t.fx!.vowel).toEqual({ vowel: "o", mix: 1 });
