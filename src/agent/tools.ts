@@ -108,6 +108,7 @@ import { TIME_TOOLS } from "./time-tools.ts";
 import { SECTION_TOOLS } from "./section-tools.ts";
 import { GRANULAR_TOOLS } from "./granular-tools.ts";
 import { RESAMPLE_TOOLS } from "./resample-tool.ts";
+import { VOICE_TOOLS } from "./voice-tools.ts";
 import type { MediaResult, MediaRunContext } from "../media/types.ts";
 import { instrumentPatch, pitchToMidi } from "./ops.ts";
 import { TUNING_LIMITS } from "../../core/tuning.ts";
@@ -1970,6 +1971,8 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   ...MASTER_TOOLS,
   ...GRANULAR_TOOLS,
   ...RESAMPLE_TOOLS,
+  // 0.7 Voice: one array per lane in voice-tools.ts.
+  ...VOICE_TOOLS,
   // Looks tools up at call time, so it can plan any of the above.
   previewSoundTool((name) => findAgentTool(name)),
 ] satisfies AgentTool[]);

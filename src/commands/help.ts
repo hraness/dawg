@@ -6,8 +6,9 @@
  */
 import { GUITAR_TUNING_NAMES } from "../../core/chords.ts";
 import { EXPRESSION_USAGE } from "./expression.ts";
+import { VOCAL_VERBS } from "./vocal.ts";
 
-export type HelpGroup = "music" | "session" | "window" | "keys";
+export type HelpGroup = "music" | "session" | "window" | "voice" | "keys";
 
 export type HelpEntry = Readonly<{
   /** Canonical form, e.g. `pan <-1..1>`. */
@@ -408,6 +409,18 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       },
     ],
   },
+  // 0.7 Voice: built from the /vocal verb table, so a lane's verb is
+  // listed (and typo-matched) once it registers.
+  {
+    group: "voice",
+    entries: [
+      { command: "/vocal", summary: "voice tools: lists every verb" },
+      ...VOCAL_VERBS.map((verb) => ({
+        command: `/vocal ${verb.usage}`,
+        summary: verb.summary,
+      })),
+    ],
+  },
   {
     group: "keys",
     entries: [
@@ -541,6 +554,7 @@ export const HELP_TOPICS = [
   "music",
   "session",
   "window",
+  "voice",
   "keys",
   "arrange",
 ] as const;

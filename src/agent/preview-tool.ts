@@ -23,6 +23,7 @@ import {
 } from "../audio/preview.ts";
 import { renderScorePcm, type RenderedAudio } from "../audio/wav.ts";
 import type { ScoreMeasurement } from "../audio/measure.ts";
+import { VOICE_PREVIEWABLE_TOOLS } from "./voice-tools.ts";
 import type {
   ActionContext,
   AgentTool,
@@ -48,6 +49,8 @@ export const PREVIEWABLE_TOOLS: readonly string[] = Object.freeze([
   "set_granular",
   "set_drum_kit",
   "use_sound",
+  // 0.7 Voice: flagged per lane in voice-tools.ts.
+  ...VOICE_PREVIEWABLE_TOOLS,
 ]);
 
 const MAX_CHANGES = 8;

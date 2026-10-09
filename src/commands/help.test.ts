@@ -16,6 +16,7 @@ describe("help reference", () => {
       "music",
       "session",
       "window",
+      "voice",
       "keys",
     ]);
     const commands = HELP_SECTIONS.flatMap((section) =>
@@ -40,7 +41,11 @@ describe("help reference", () => {
     // App commands take a slash; music words are bare.
     for (const section of HELP_SECTIONS)
       for (const entry of section.entries)
-        if (section.group === "session" || section.group === "window")
+        if (
+          section.group === "session" ||
+          section.group === "window" ||
+          section.group === "voice"
+        )
           expect(entry.command.startsWith("/")).toBe(true);
         else if (section.group === "music")
           expect(entry.command.startsWith("/")).toBe(false);
@@ -52,6 +57,7 @@ describe("help reference", () => {
       "── music",
       "── session",
       "── window",
+      "── voice",
       "── keys",
     ]);
     expect(lines.every((line) => line.length <= 72)).toBe(true);

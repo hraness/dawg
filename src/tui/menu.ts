@@ -8,6 +8,12 @@
  *
  * Rendering reuses the TUI's picker overlay: `view()` returns a picker.
  */
+import {
+  voiceEffectRows,
+  voiceGroup,
+  voicesBrowseGroup,
+  voiceSoundRows,
+} from "./menu-voice.ts";
 import { commandParam, sketchFor } from "./sketch.ts";
 import { HINTS } from "../../tui/grammar.ts";
 import { arrangeDetail, arrangeNodes } from "./arrange-menu.ts";
@@ -611,6 +617,14 @@ function soundSectionNodes(context: MenuContext): MenuNode[] {
     ...keys,
     ...guitar,
     ...tuning,
+    // 0.7 Voice: hidden until a lane fills it.
+    ...voiceGroup(
+      "voice",
+      "Voice",
+      "clips, lyrics, pitch and autotune for sung and spoken parts",
+      voiceSoundRows,
+      context,
+    ),
     {
       kind: "menu",
       id: "performance",
@@ -2073,6 +2087,14 @@ function effectNodes(context: MenuContext): MenuNode[] {
     ...CORE_EFFECTS.map(node),
     rig,
     shoegaze,
+    // 0.7 Voice: hidden until a lane fills it.
+    ...voiceGroup(
+      "voice",
+      "Voice",
+      "formant and vocoder for voices",
+      voiceEffectRows,
+      context,
+    ),
     {
       kind: "menu",
       id: "more effects",
@@ -2434,7 +2456,7 @@ function patternsMenu(): MenuNode {
 
 const GRANULAR_PRESETS_COUNT = granularBrowseNodes().length;
 
-function soundNodes(): MenuNode[] {
+function soundNodes(context: MenuContext): MenuNode[] {
   return [
     {
       kind: "menu",
@@ -2565,6 +2587,14 @@ function soundNodes(): MenuNode[] {
       command: (text) => (text.trim() ? `/pack use ${text.trim()}` : undefined),
       example: "/pack use dirt-samples/bd:3",
     },
+    // 0.7 Voice: hidden until a lane fills it.
+    ...voiceGroup(
+      "group:voices",
+      "Voices",
+      "vocal clips, sung choirs and solos, throat singing, vocoders",
+      voicesBrowseGroup,
+      context,
+    ),
     {
       kind: "menu",
       id: "packs",

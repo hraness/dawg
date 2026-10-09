@@ -139,6 +139,7 @@ import {
 } from "./commands/sample.ts";
 import { applyFitCommand, fitVoice, parseFitCommand } from "./commands/fit.ts";
 import { applyShiftCommand, parseShiftCommand } from "./commands/shift.ts";
+import { parseVocalCommand, runVocalCommand } from "./commands/vocal.ts";
 import { parseResampleCommand, runResample } from "./commands/resample.ts";
 import { suggestFitMode } from "./audio/dsp/onset.ts";
 import {
@@ -330,6 +331,7 @@ function parsesLocally(text: string): boolean {
     parseGuitarCommand,
     parseStrumCommand,
     parseWindCommand,
+    parseVocalCommand,
   ].some((parse) => parse(text) !== undefined);
 }
 
@@ -1778,6 +1780,24 @@ async function submit(prompt: string): Promise<string | Receipt> {
   }
   const resample = parseResampleCommand(command);
   if (resample) return resampleCommand(resample);
+  // 0.7 Voice: `/vocal <verb>`; lanes register verbs in VOCAL_VERBS.
+  const vocal = parseVocalCommand(command);
+  if (vocal) {
+    const result = await runVocalCommand(vocal, {
+      score,
+      trackId: requestedTrack,
+      cwd: process.cwd(),
+    });
+    if (!result.ok) return fail(result.message);
+    if (result.next && result.kind) {
+      await commitScore(result.next, result.kind, {
+        trackId: requestedTrack,
+        ...result.payload,
+      });
+      await projectSync?.flushScore();
+    }
+    return ok(result.message);
+  }
   const pack = parsePackCommand(command);
   if (pack) return packCommand(pack);
   const pattern = parsePatternCommand(command);
