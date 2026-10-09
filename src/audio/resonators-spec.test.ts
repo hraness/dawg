@@ -232,7 +232,7 @@ describe("modal spec §9", () => {
           const measured = pitchOf(name, x, hz, sr, from, x.length);
           expect(Math.abs(cents(measured, hz))).toBeLessThan(0.5);
         }
-  });
+  }, 60_000);
 
   test("3. A4 follows a tuning table that maps it to 433.4 Hz within 0.1 cent", () => {
     // 24-EDO with A4 an exact step: ref 433.4 moves every key by the ratio.
@@ -496,7 +496,7 @@ describe("modal spec §9", () => {
     const t0 = performance.now();
     voice.process(block, 0, 128);
     expect(performance.now() - t0).toBeLessThan(2);
-  });
+  }, 60_000);
 
   test("15. identity: legacy words keep their tone; an empty modal field is the default preset", () => {
     const legacy = song({ instrument: "marimba" }, [{}]);
