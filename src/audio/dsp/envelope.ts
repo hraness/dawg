@@ -94,6 +94,15 @@ export function cepstralEnvelope(
 }
 
 /**
+ * A peak joins the envelope only within this factor (-9 dB) of the smooth
+ * cepstral envelope: harmonics sit on it, while window sidelobes and breath
+ * noise in the valleys between harmonics sit far below. Without this the
+ * envelope followed the source's harmonic comb, and `formant 0` imposed the
+ * old pitch on the shifted one (pitch.md 3.5).
+ */
+const HARMONIC_PEAK_FLOOR = 10 ** (-9 / 20);
+
+/**
  * Harmonic-peak envelope (0.6.1): log magnitude interpolated linearly
  * between the spectral peaks (each refined by a parabola to its true bin
  * and height) of `mag` that stand within `range` of the
@@ -122,6 +131,7 @@ export function peakEnvelope(
     const v = mag[k]!;
     if (
       v > floor &&
+      v >= smooth[k]! * HARMONIC_PEAK_FLOOR &&
       v > mag[k - 1]! &&
       v >= mag[k + 1]! &&
       v > mag[k - 2]! &&
