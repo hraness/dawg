@@ -7551,7 +7551,15 @@ const MODE_ALIASES: Readonly<Record<string, ModeName>> = Object.freeze({
 });
 
 type ScaleFamily =
-  "pentatonic" | "blues" | "maqam" | "dastgah" | "raga" | "messiaen";
+  | "pentatonic"
+  | "blues"
+  | "maqam"
+  | "dastgah"
+  | "raga"
+  | "messiaen"
+  | "chromatic"
+  | "overtone"
+  | "quarter-tone";
 
 /**
  * Scales beyond the chord modes, for keys such as `D bayati`, `C yaman` or
@@ -7773,6 +7781,32 @@ const SCALES = Object.freeze({
     steps: [0, 1, 2, 3, 5, 6, 7, 8, 9, 11],
     mode: "harmonic-minor",
     family: "messiaen",
+  },
+  // All twelve pitch classes: the field of free atonality and the row.
+  chromatic: {
+    steps: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+    mode: "minor",
+    family: "chromatic",
+    aliases: ["twelve-tone", "aggregate"],
+  },
+  // Partials 8 to 15 of the harmonic series over the tonic (Grisey,
+  // Murail): the acoustic scale with the 11th and 13th partials' and the
+  // 7th's just pitches, which its named tuning applies.
+  "harmonic-series": {
+    steps: [0, 2, 4, 6, 7, 9, 10, 11],
+    mode: "mixolydian",
+    family: "overtone",
+    intonation: [0, 204, 386, 551, 702, 841, 969, 1088],
+    aliases: ["overtone", "overtone-scale", "partials"],
+  },
+  // Each tempered degree of the major scale beside its quarter-tone
+  // shadow (Haba, Wyschnegradsky): neutral 2nd, 3rd, 6th and 7th and a
+  // quarter-sharp 4th, sounded as note cents over twelve-tone keys.
+  "quarter-tone": {
+    steps: [0, 1.5, 2, 3.5, 4, 5, 5.5, 7, 8.5, 9, 10.5],
+    mode: "major",
+    family: "quarter-tone",
+    aliases: ["quartertone", "24-tone"],
   },
 } as const satisfies Record<string, ScaleInfo>);
 type ScaleName = keyof typeof SCALES;
