@@ -97,7 +97,9 @@ describe("americas cards", () => {
   });
 
   test("salsa bass is the anticipated tumbao (and of two, four)", () => {
-    expect(onsets("salsa", "bass")).toEqual([6, 12]);
+    // A 4/4 bar is eight steps: the and of two is step 3, four is step 6.
+    expect(onsets("salsa", "bass")).toEqual([3, 6, 11, 14]);
+    expect(onsets("salsa", "bass")).not.toContain(0);
   });
 
   test("reggaeton is the dembow: kick on every beat, snare on 3 6 11 14", () => {

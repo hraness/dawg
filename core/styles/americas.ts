@@ -221,7 +221,8 @@ export const AMERICAS_CARDS: readonly StyleCard[] = Object.freeze([
         ["aeolian", 0.3],
       ],
     },
-    rhythm: { onsets: { counter: grid("x.xx.xx.x.xx.xx.") } },
+    // organ bubble: every sixteenth but the beat, the and doubling the skank
+    rhythm: { onsets: { counter: grid(".xxx.xxx.xxx.xxx") } },
     texture: {
       roles: {
         counter: maybe("hammond"),
@@ -232,22 +233,24 @@ export const AMERICAS_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "lovers-rock",
     summary:
-      "lovers rock: soft one-drop with soul harmony, major sevenths and ii-V, sweet sung lead, gentle steppers kick",
-    tempo: { bpm: [68, 86], typical: 76 },
-    pitch: {
-      scales: [
-        ["major", 0.7],
-        ["dorian", 0.3],
-      ],
-    },
+      "lovers rock: London reggae with soul harmony, major key (never dorian), Imaj7-vi7-ii7-V7 and IVmaj7-iii7 turns, rockers kick on one and three under the rim on three, eighth hats, sweet sung lead",
+    tempo: { bpm: [70, 88], typical: 78 },
+    pitch: { scales: [["major", 1]] },
     harmony: {
-      presets: [
-        ["ii-v-i", 0.5],
-        ["axis", 0.5],
+      presets: null,
+      forms: [
+        [["Imaj7", "vi7", "ii7", "V7"], 0.4],
+        [["IVmaj7", "iii7", "ii7", "V7"], 0.3],
+        [["Imaj7", "IVmaj7", "Imaj7", "V7"], 0.3],
       ],
-      sevenths: 0.6,
+      sevenths: 0.85,
     },
-    rhythm: { onsets: { kick: grid("x.......x.......") } },
+    rhythm: {
+      onsets: {
+        kick: grid("x.......x......."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+      },
+    },
     texture: {
       roles: { chords: role("epiano", "electric:0.5"), lead: role("sing") },
     },
@@ -1125,7 +1128,13 @@ export const AMERICAS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "son: 2-3 or 3-2 son clave (onsets 0 3 6 10 12), tres guajeo, bongo martillo, anticipated bass, largo then montuno call and response",
     tempo: { bpm: [75, 105], typical: 88 },
-    rhythm: { onsets: { shaker: tl("scrape") } },
+    rhythm: {
+      onsets: {
+        shaker: tl("scrape"),
+        // bongo martillo: every eighth, no congas in the classic septeto
+        perc: grid("x5x5x5x5x5x5x5x5"),
+      },
+    },
     form: {
       plans: [[["intro", "verse", "verse", "chorus", "chorus", "outro"], 1]],
     },
@@ -1224,7 +1233,7 @@ export const AMERICAS_CARDS: readonly StyleCard[] = Object.freeze([
       onsets: {
         bell: tl("rumbaClave32"),
         perc: tl("congaTumbao"),
-        shaker: tl("cascara"),
+        shaker: tl("cascara32"),
         chords: null,
       },
     },
@@ -1245,8 +1254,8 @@ export const AMERICAS_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "mambo",
     summary:
-      "mambo: big band montuno, campana bell on the beats, trumpets against saxes in riffs, tumbao bass, ii-V vamps",
-    tempo: { bpm: [85, 105], typical: 96 },
+      "mambo: big band montuno at a run, campana bell on every quarter over the 2-3 clave, timbal ponche on four, trumpets against saxes in riffs, tumbao bass, ii-V vamps",
+    tempo: { bpm: [92, 112], typical: 102 },
     harmony: {
       forms: [
         [["ii7", "V7", "ii7", "V7"], 0.5],
@@ -1254,12 +1263,20 @@ export const AMERICAS_CARDS: readonly StyleCard[] = Object.freeze([
       ],
       sevenths: 0.6,
     },
-    rhythm: { onsets: { shaker: grid("x.x.x.x.x.x.x.x.") } },
+    rhythm: {
+      onsets: {
+        // the bongocero's campana on every quarter; the clave moves to sticks
+        bell: grid("x.x.x.x.x.x.x.x."),
+        shaker: tl("sonClave23"),
+        kick: grid("......x.......x."),
+      },
+    },
     melody: { intervals: LEAPY, density: [2, 3] },
     texture: {
       kind: "polyphonic",
       roles: {
-        shaker: maybe("drums"),
+        shaker: role("drums"),
+        kick: role("drums"),
         chords: role("piano"),
         lead: role("trumpet"),
         counter: role("tenorsax", "barisax:0.5"),
@@ -1914,17 +1931,17 @@ export const AMERICAS_CARDS: readonly StyleCard[] = Object.freeze([
         hat: null,
         chords: role("acoustic"),
         bass: role("doublebass"),
-        lead: role("trumpet", "violins:0.7"),
-        counter: maybe("violin"),
+        lead: role("violins", "trumpet:0.7"),
+        counter: role("trumpet"),
       },
     },
   }),
   card({
     id: "ranchera",
     summary:
-      "ranchera: vals ranchero 3/4 oom-pah-pah (bass on one, chords on two and three), sung lead with held cadences, I-IV-V7",
+      "ranchera: vals ranchero 3/4 oom-pah-pah (bass on one, chords on two and three) at a stately tempo, sung lead with held fermata cadences, mariachi trumpet answers, I-IV-V7",
     meter: { signatures: [["3/4", 1]] },
-    tempo: { bpm: [90, 140], typical: 112 },
+    tempo: { bpm: [80, 120], typical: 96 },
     pitch: {
       scales: [
         ["major", 0.8],
@@ -1958,6 +1975,7 @@ export const AMERICAS_CARDS: readonly StyleCard[] = Object.freeze([
         chords: role("acoustic", "violins:0.4"),
         bass: role("doublebass"),
         lead: role("sing"),
+        counter: maybe("trumpet", "violins:0.6"),
       },
     },
   }),
@@ -2042,9 +2060,9 @@ export const AMERICAS_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "corrido",
     summary:
-      "corrido: strophic narrative ballad, no chorus, 3/4 waltz or 2/4 polka strum, recitation-like lead on few notes, I-V7",
+      "corrido: strophic narrative ballad, no chorus, brisk 3/4 with the guitar strumming every eighth over tololoche on every beat, requinto runs between lines, recitation-like lead on few notes, I-V7",
     meter: { signatures: [["3/4", 1]] },
-    tempo: { bpm: [110, 150], typical: 128 },
+    tempo: { bpm: [120, 160], typical: 138 },
     pitch: {
       scales: [
         ["major", 0.7],
@@ -2064,10 +2082,11 @@ export const AMERICAS_CARDS: readonly StyleCard[] = Object.freeze([
         bell: null,
         perc: null,
         kick: null,
-        chords: grid("....x...x..."),
+        chords: grid("x.x.x.x.x.x."),
+        counter: grid("..xxxxxx..xx"),
       },
     },
-    bass: { onsets: grid("x...........") },
+    bass: { onsets: grid("x...x...x...") },
     melody: { intervals: CHANT, ambitus: [5, 9], repetition: 0.6 },
     form: {
       plans: [[["intro", "verse", "verse", "verse", "verse", "outro"], 1]],
@@ -2080,18 +2099,19 @@ export const AMERICAS_CARDS: readonly StyleCard[] = Object.freeze([
         kick: null,
         snare: null,
         hat: null,
-        chords: role("steel", "requinto:0.4"),
-        bass: role("tuba", "bassguitar:0.6"),
+        chords: role("steel", "acoustic:0.5"),
+        bass: role("doublebass", "tuba:0.4"),
         lead: role("sing"),
+        counter: role("requinto"),
       },
     },
   }),
   card({
     id: "banda",
     summary:
-      "banda sinaloense: brass band, tuba bass on the beats, clarinets and trumpets in thirds, tambora and cymbal off-beats, 2/4 polka drive",
+      "banda sinaloense: brass band, the tuba walking every eighth (not the norteno oom-pah), charcheta horns on the off-beats, clarinets and trumpets in thirds, tambora bass drum on the beats with its cymbal on the off-beats, tarola rolls, 2/4 drive",
     meter: { signatures: [["2/4", 1]] },
-    tempo: { bpm: [110, 150], typical: 128 },
+    tempo: { bpm: [120, 160], typical: 138 },
     pitch: {
       scales: [
         ["major", 0.8],
@@ -2111,17 +2131,22 @@ export const AMERICAS_CARDS: readonly StyleCard[] = Object.freeze([
         bell: null,
         perc: null,
         kick: grid("x...x..."),
-        snare: grid("..x...x."),
+        openhat: grid("..x...x."),
+        snare: grid("5.5.x.x5"),
         chords: grid("..x...x."),
       },
     },
-    bass: { onsets: grid("x...x...") },
+    bass: {
+      behaviour: [["arpeggio", 1]],
+      onsets: grid("x.x.x.x."),
+    },
     texture: {
       roles: {
         bell: null,
         perc: null,
         snare: role("drums"),
-        chords: role("trombone", "horn:0.5"),
+        openhat: role("drums"),
+        chords: role("horn", "trombone:0.5"),
         bass: role("tuba"),
         lead: role("clarinet", "trumpet:0.7"),
         counter: maybe("trumpet"),
@@ -3306,14 +3331,9 @@ export const AMERICAS_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "tropicalia",
     summary:
-      "tropicalia: psychedelic rock meets samba and baiao, fuzz guitar and organ, mixolydian bVII and modal collage",
+      "tropicalia: psychedelic rock meets samba and baiao, straight rock kit with eighth hats, fuzz guitar and organ, mixolydian I-bVII and modal collage",
     tempo: { bpm: [95, 130], typical: 112 },
-    pitch: {
-      scales: [
-        ["mixolydian", 0.6],
-        ["major", 0.4],
-      ],
-    },
+    pitch: { scales: [["mixolydian", 1]] },
     harmony: {
       presets: [
         ["mixolydian-rock", 0.6],
@@ -3325,11 +3345,15 @@ export const AMERICAS_CARDS: readonly StyleCard[] = Object.freeze([
       onsets: {
         kick: grid("x.....x.x......."),
         snare: grid("....x.......x..."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+        perc: null,
       },
     },
     texture: {
       roles: {
         snare: role("drums"),
+        hat: role("drums"),
+        perc: null,
         chords: role("electric@crunch", "organ:0.5"),
         bass: role("ebass"),
         lead: role("sing", "electric@crunch:0.4"),

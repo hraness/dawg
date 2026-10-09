@@ -33,8 +33,10 @@ export const TIMELINES = Object.freeze({
   cinquillo: "x.xx.xx.x.xx.xx.",
   /** Danzon baqueteo: cinquillo bar answered by a plain eighths bar. */
   baqueteo: "x.xx.xx.x.x.x.x.",
-  /** Cascara (shell of the timbal), 2-3 side. */
-  cascara: "x.x.xx.x.xx.x.x.",
+  /** Cascara (shell of the timbal), 2-3: the 2 side x.x.xx.x, then x.xx.x.x. */
+  cascara: "x.x.xx.xx.xx.x.x",
+  /** Cascara, 3-2: the halves swapped (rumba palitos under a 3-2 clave). */
+  cascara32: "x.xx.x.xx.x.xx.x",
   /** Dembow / tresillo off-beat snare: 3 6 11 14. */
   dembowSnare: "...x..x....x..x.",
   /** Four on the floor. */
@@ -47,8 +49,11 @@ export const TIMELINES = Object.freeze({
   partidoAlto: ".x..x.x..x..x.x.",
   /** Guira / guacharaca scrape: long-short-short per beat. */
   scrape: "x.xxx.xxx.xxx.xx",
-  /** Tumbao bass: the and of two and beat four, never the one. */
-  tumbao: "......x.....x...",
+  /**
+   * Tumbao bass: the and of two (bombo) and beat four (ponche) of each 4/4
+   * bar, never the one. A 4/4 bar is eight steps here, a quarter two.
+   */
+  tumbao: "...x..x....x..x.",
   /** Conga tumbao: open tones on 4 and 4-and, slap on two. */
   congaTumbao: "x.x.x.xxx.x.x.xx",
   /** Huayno short-long: sixteenth then dotted eighth on every beat. */
