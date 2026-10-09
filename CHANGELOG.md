@@ -4,6 +4,10 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ## Unreleased
 
+### Added
+
+- **0.7 Voice groundwork.** Optional score shapes for audio clips on tracks (`Track.clips`: file, sha256, start, offset, length, gain, fades, reverse, take, mute, text), takes (`Track.takes`) and per-note lyrics (`Note.lyric`), validated on load with errors that name the key, and a `setClips` score operation. Nothing renders them yet; projects without them load, print and render byte-identically. Cross-track references (`core/routing.ts`) resolve tracks by id or slug, order audio edges and report cycles, and removing a track drops references to it. `/vocal` lists the voice verbs as they arrive, and `/help voice` shows them. SDK 1.32.0.
+
 ## 0.6.1
 
 Instruments wave 2: bowed strings and sampler velocity layers, gamelan presets and a wind engine, electric keys with soft and sostenuto pedals, tonewheel, combo and pipe organs, shoegaze effects and guitar strumming, and granular resample with formant-keeping shift. Every new field is optional, so 0.4, 0.5 and 0.6.0 projects load, print and render byte-identically.
