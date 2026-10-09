@@ -17,6 +17,13 @@ import {
   synthParamName,
 } from "../../core/synth.ts";
 import { applySynthCommand, type SynthCommand } from "../commands/synth.ts";
+import { applyStringCommand, type StringCommand } from "../commands/string.ts";
+import {
+  STRING_PARAMS,
+  STRING_PRESET_NAMES,
+  stringParamName,
+  stringPresetName,
+} from "../../core/strings.ts";
 import {
   setSampleControls,
   type SampleControlValue,
@@ -678,6 +685,49 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
         ],
         trackId,
         summary: `${trackId} ${result.message}`,
+      };
+    },
+  },
+  {
+    name: "set_string",
+    description:
+      "Make a track a plucked string (physical model): preset picks the instrument (nylon steel electric jangle ebass slap upright motown sitar tanpura harpsichord lute oud setar tar santur dulcimer koto harp banjo tres requinto); params override it (ring s, bright, damp, pos, mute, buzz = jawari, body, sym = sympathetic strings, stiff, exciter pick|finger|hammer|plectrum…); null unsets one. reset keeps the preset and drops overrides; off returns the track to a plain pluck voice.",
+    parameters: {
+      type: "object",
+      properties: {
+        trackId: trackIdSchema,
+        preset: { type: "string", enum: [...STRING_PRESET_NAMES] },
+        reset: { type: "boolean" },
+        off: { type: "boolean" },
+        params: {
+          type: "object",
+          additionalProperties: { type: ["number", "string", "null"] },
+        },
+      },
+      additionalProperties: false,
+    },
+    plan(args, context) {
+      const trackId = targetTrack(args, context);
+      let score = context.score;
+      const messages: string[] = [];
+      for (const command of stringToolCommands(args)) {
+        const result = applyStringCommand(score, trackId, command);
+        if (!result.ok) throw new ToolArgumentError(result.message);
+        if (result.next) score = result.next;
+        messages.push(result.message);
+      }
+      const next = score.tracks.find((t) => t.id === trackId)!;
+      return {
+        kind: "score",
+        operations: [
+          {
+            type: "updateTrack",
+            trackId,
+            patch: { instrument: next.instrument, string: next.string ?? null },
+          },
+        ],
+        trackId,
+        summary: `${trackId} ${messages.at(-1)}`,
       };
     },
   },
@@ -1626,6 +1676,46 @@ function synthToolCommand(args: Record<string, unknown>): SynthCommand {
     values[param] = value as number;
   }
   return { type: "synth-set", values };
+}
+
+function stringToolCommands(args: Record<string, unknown>): StringCommand[] {
+  if (args.off === true) return [{ type: "string-off" }];
+  const commands: StringCommand[] = [];
+  if (args.preset !== undefined) {
+    const preset =
+      typeof args.preset === "string"
+        ? stringPresetName(args.preset)
+        : undefined;
+    if (!preset)
+      throw new ToolArgumentError(
+        `string presets: ${STRING_PRESET_NAMES.join(", ")}`,
+      );
+    commands.push({ type: "string-preset", preset });
+  }
+  if (args.reset === true) commands.push({ type: "string-reset" });
+  if (args.params !== undefined) {
+    const values: Record<string, number | string | null> = {};
+    for (const [name, value] of Object.entries(record(args.params, "params"))) {
+      const param = stringParamName(name);
+      if (!param)
+        throw new ToolArgumentError(
+          `string has no parameter ${name}; params: ${Object.keys(STRING_PARAMS).join(", ")}`,
+        );
+      if (
+        value !== null &&
+        typeof value !== "number" &&
+        typeof value !== "string"
+      )
+        throw new ToolArgumentError(`string ${name} must be a value`);
+      values[param] = value;
+    }
+    commands.push({ type: "string-set", values });
+  }
+  if (commands.length === 0)
+    throw new ToolArgumentError(
+      "set_string needs preset, params, reset or off",
+    );
+  return commands;
 }
 
 function targetTrack(args: Record<string, unknown>, context: ToolContext) {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createScore } from "../../core/score.ts";
 import { STRING_PRESET_NAMES } from "../../core/strings.ts";
+import { findAgentTool } from "../agent/tools.ts";
 import { nearestCommand } from "./help.ts";
 import { applyStringCommand, parseStringCommand } from "./string.ts";
 
@@ -99,5 +100,50 @@ describe("string command", () => {
       expect(list.message).toContain(name);
     expect(run("string koto", score(), "drums").ok).toBe(false);
     expect(run("string").message).toContain("off");
+  });
+});
+
+describe("set_string agent tool", () => {
+  const tool = findAgentTool("set_string")!;
+  const context = {
+    score: score(),
+    focusedTrackId: "gtr",
+    revision: 1,
+    newNoteId: (_trackId: string, index: number) => `n${index}`,
+  };
+
+  test("preset and params land in one updateTrack", () => {
+    const plan = tool.plan(
+      { preset: "sitar", params: { buzz: 0.6, sym: 0.4 } },
+      context,
+    );
+    expect(plan.kind).toBe("score");
+    if (plan.kind !== "score") return;
+    expect(plan.operations).toEqual([
+      {
+        type: "updateTrack",
+        trackId: "gtr",
+        patch: {
+          instrument: "string",
+          string: { preset: "sitar", buzz: 0.6, sym: 0.4 },
+        },
+      },
+    ]);
+  });
+
+  test("off clears the field; bad names explain themselves", () => {
+    const on = run("string koto").next!;
+    const plan = tool.plan({ off: true }, { ...context, score: on });
+    if (plan.kind !== "score") throw new Error("expected a score plan");
+    expect(plan.operations[0]).toMatchObject({
+      patch: { instrument: "pluck", string: null },
+    });
+    expect(() => tool.plan({ preset: "zither" }, context)).toThrow(
+      /string presets/,
+    );
+    expect(() => tool.plan({ params: { wobble: 1 } }, context)).toThrow(
+      /no parameter wobble/,
+    );
+    expect(() => tool.plan({}, context)).toThrow(/needs preset/);
   });
 });
