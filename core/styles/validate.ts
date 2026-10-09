@@ -25,7 +25,7 @@ import {
 } from "./generate.ts";
 import { resolveInstrumentWord } from "../instruments.ts";
 import { SYNTH_KIT_NAMES } from "../kits.ts";
-import { stretchGrid } from "./index.ts";
+import { roleGrid } from "./index.ts";
 import {
   KIT_ROLES,
   PERC_ROLES,
@@ -259,11 +259,8 @@ function checkOnsets({ plan, data }: GeneratedStyle): StyleCheck[] {
     }
     worst = Math.max(worst, error);
     if (error > onsetTolerance(plan, role)) off += 1;
-    const grid = style.rhythm.onsets[role];
-    const inGrid =
-      grid && grid.length
-        ? stretchGrid(grid, plan.stepsPerBar)[mod(step, plan.stepsPerBar)]! > 0
-        : false;
+    const grid = roleGrid(style.rhythm.onsets[role], role, plan);
+    const inGrid = grid ? grid[mod(step, plan.stepsPerBar)]! > 0 : false;
     const isFill = fills.has(step) && (role === "snare" || role === "tom");
     if (!inGrid && !isFill) offGrid += 1;
     if (
