@@ -222,7 +222,7 @@ export const MEDIA_PROMPT =
  * which saves the summary-only round trip (about a third of a typical turn).
  */
 export const DONE_PROMPT =
-  'When the tool calls in a response complete the whole request, put your one short sentence describing the musical change in that same response, starting with "Done:"; the turn then ends without another reply once every call is applied. Otherwise, when you are done, reply with one short sentence describing the musical change.';
+  'When you can make every tool call the request needs in one response, start that response with one short sentence describing the musical change, beginning "Done:", then make the calls in the same response; the turn ends once every call is applied, with no further reply. If you need to read something first or are unsure, make the calls without "Done:", and when you are done reply with one short sentence describing the musical change.';
 
 /** `Done: added a kick` → `added a kick`; anything else → undefined. */
 export function doneSummary(text: string): string | undefined {
