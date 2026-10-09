@@ -63,6 +63,12 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - Undo of the edit just made works at the session record's size cap, and a session past 2000 events keeps accepting edits (the oldest events fold away; records gain an optional `folded` count, older records load unchanged).
 - Project files and `.dawg/sync.json` are written durably (fsync of the file and its directory), and closing a window no longer leaves a ghost presence entry or stray temp files.
 - The evaluator is described as an isolated process, not a sandbox: project code runs with your user's access.
+- **The terminal is always restored.** Quitting restores the main screen, plain paste, the cursor and mouse reporting before any teardown step runs, and each step runs on its own, so a read-only `.dawg` or a dead audio engine no longer leaves the shell on the alternate screen with paste brackets on. An uncaught exception leaves the alternate screen before printing its stack and exits 1; a rejected background action becomes an error card and the editor repaints over anything the runtime printed. Runtime warnings and `console.error` go to the transcript instead of over the frame.
+- **A failing header click on the transport** shows the same `transport failed` card as space and the menu, instead of printing a stack into the frame.
+- **The idle editor no longer rebuilds its frame 30 times a second.** Frames build when input, the score, the activity strip or a playing clock changes, with a 2 Hz heartbeat otherwise.
+- **End and Home on the help panel and transcript** stop at the last full page, so the next arrow press moves the view. The help panel's keys list no longer offers `j k`, which type into the prompt there.
+- **Help rows and headings clip with an ellipsis** at narrow widths, like every other panel.
+- **`/fork` and `/resume` keep the new session's name.** A change the old session's watcher was still reading when the session switched no longer lands afterwards and puts the old name (and score) back in the header.
 
 ## 0.6.1
 

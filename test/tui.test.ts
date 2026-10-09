@@ -488,10 +488,11 @@ test("text overlay shows titled lines, scrolls, closes on Esc and on submit", ()
   expect(text).toContain("── group 0");
   expect(text).toContain("line 1");
   expect(text).not.toContain("line 29");
-  h.app.input("\u001b[6~"); // PgDn
+  h.app.input("\u001b[6~"); // PgDn: one full panel (9 rows at 16 rows)
   h.frame(0);
-  expect(h.vt.text()).toContain("line 6");
-  expect(h.vt.text()).not.toContain("line 1\n");
+  expect(h.vt.text()).toContain(" help · 10-18/30");
+  expect(h.vt.text()).toContain("line 9 ");
+  expect(h.vt.text()).not.toContain("line 8 ");
   h.app.input("\u001b[F"); // End
   h.frame(0);
   expect(h.vt.text()).toContain("line 29");

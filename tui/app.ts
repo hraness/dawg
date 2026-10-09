@@ -1485,7 +1485,7 @@ export class TuiApp {
     }
     if (this.overlay === "text" && this.text) {
       const nav = overlayKey(value);
-      const page = Math.max(1, this.io.rows() - 10);
+      const page = this.overlayRows();
       if (nav && nav !== "enter") {
         const step =
           nav === "down"
@@ -1497,19 +1497,22 @@ export class TuiApp {
                 : nav === "pgup"
                   ? -page
                   : 0;
-        const total = this.text.lines.length;
+        // Clamp to the last full page, the same bound paintText uses, so
+        // End then ↑ moves the view on the first press.
+        const max = Math.max(0, this.text.lines.length - page);
+        const from = Math.min(max, this.text.scroll);
         this.text.scroll =
           nav === "home"
             ? 0
             : nav === "end"
-              ? total
-              : Math.max(0, Math.min(total, this.text.scroll + step));
+              ? max
+              : Math.max(0, Math.min(max, from + step));
         return { type: "overlay" };
       }
     }
     if (this.overlay === "log") {
       const nav = overlayKey(value);
-      const page = Math.max(1, this.io.rows() - 10);
+      const page = this.overlayRows();
       if (nav && nav !== "enter") {
         const step =
           nav === "up"
@@ -1525,12 +1528,15 @@ export class TuiApp {
           this.activity.transcript,
           this.log.filter,
         ).length;
+        // Scroll counts rows up from the newest; paintOverlay's bound.
+        const max = Math.max(0, total - page);
+        const from = Math.min(max, this.log.scroll);
         this.log.scroll =
           nav === "home"
-            ? total
+            ? max
             : nav === "end"
               ? 0
-              : Math.max(0, Math.min(total, this.log.scroll + step));
+              : Math.max(0, Math.min(max, from + step));
         return { type: "overlay" };
       }
       if (key.type === "text" && key.text === "/") {
@@ -1622,6 +1628,19 @@ export class TuiApp {
   closePicker(): void {
     this.picker = undefined;
     if (this.overlay === "picker") this.overlay = undefined;
+  }
+
+  /**
+   * Rows of text a panel over the highway shows (its height less the two
+   * borders), as last rendered; a guess from the terminal height before the
+   * first frame.
+   */
+  private overlayRows(): number {
+    const highway = this.lastFrame?.layout.highway.height;
+    return Math.max(
+      1,
+      highway !== undefined && highway > 2 ? highway - 2 : this.io.rows() - 10,
+    );
   }
 
   /** Show static lines over the highway (`/help`, lists); replaces any overlay. */

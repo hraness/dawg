@@ -32,12 +32,14 @@ export async function launch(
   env: Record<string, string>,
   argv: string[] = ["--track", "bass"],
   dir?: string,
+  /** Runtime flags before the script (`--preload <file>`). */
+  bunArgs: string[] = [],
 ) {
   const cwd = dir ?? (await mkdtemp(join(tmpdir(), "dawg-pty-")));
   if (!dir) dirs.push(cwd);
   const vt = new VirtualTerminal(cols, rows);
   const decoder = new TextDecoder();
-  const proc = Bun.spawn([process.execPath, MAIN, ...argv], {
+  const proc = Bun.spawn([process.execPath, ...bunArgs, MAIN, ...argv], {
     cwd,
     env: {
       PATH: process.env.PATH ?? "",

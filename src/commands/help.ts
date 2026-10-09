@@ -5,6 +5,7 @@
  * in their canonical form).
  */
 import { GUITAR_TUNING_NAMES } from "../../core/chords.ts";
+import { truncate } from "../../tui/text.ts";
 import { EXPRESSION_USAGE } from "./expression.ts";
 import { VOCAL_VERBS } from "./vocal.ts";
 
@@ -693,11 +694,11 @@ function sectionLines(
     );
   for (const section of sections) {
     if (lines.length > 0) lines.push("");
-    lines.push(`── ${section.group}`);
+    lines.push(truncate(`── ${section.group}`, width));
     for (const entry of section.entries) {
       const pad = Math.max(1, column - entry.command.length);
       lines.push(
-        `${entry.command}${" ".repeat(pad)}${entry.summary}`.slice(0, width),
+        truncate(`${entry.command}${" ".repeat(pad)}${entry.summary}`, width),
       );
     }
   }
@@ -715,11 +716,11 @@ export function helpLines(width = 80): string[] {
   );
   for (const section of HELP_SECTIONS) {
     if (lines.length > 0) lines.push("");
-    lines.push(`── ${section.group}`);
+    lines.push(truncate(`── ${section.group}`, width));
     for (const entry of section.entries) {
       const pad = Math.max(1, column - entry.command.length);
       lines.push(
-        `${entry.command}${" ".repeat(pad)}${entry.summary}`.slice(0, width),
+        truncate(`${entry.command}${" ".repeat(pad)}${entry.summary}`, width),
       );
     }
   }
