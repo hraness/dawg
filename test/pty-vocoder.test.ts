@@ -67,7 +67,7 @@ test.skipIf(!supported)(
         () => t.vt.text().includes("no voice to vocode yet"),
         "entry guidance",
       );
-      expect(t.vt.text()).toContain("/sample <file.wav>");
+      expect(t.vt.text()).toContain("/vocal import <file.wav>");
 
       await t.send("instrument vocoder\r");
       await waitFor(

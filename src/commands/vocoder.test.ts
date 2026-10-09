@@ -141,7 +141,7 @@ describe("/vocoder apply", () => {
     expect(result.ok).toBe(true);
     expect(result.next).toBeUndefined();
     expect(result.message).toContain("no voice to vocode");
-    expect(result.message).toContain("/sample <file.wav>");
+    expect(result.message).toContain("/vocal import <file.wav>");
   });
 
   test("on a synth with one vocal: drives it from the vocal", () => {
