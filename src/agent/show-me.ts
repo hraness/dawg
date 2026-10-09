@@ -331,3 +331,27 @@ export function finishHint(commands: readonly string[]): string | undefined {
   const count = commands.length;
   return `do it yourself: type ${last}${count > 1 ? ` (+${count - 1} more in ^o log)` : ""}${menu ? ` · or ${menu}` : ""}`;
 }
+
+/** `dawg media` verbs by agent tool: the CLI a person runs for the same job. */
+const MEDIA_VERB: Readonly<Record<string, string>> = {
+  download_audio: "download",
+  split_stems: "stems",
+  analyze_audio: "analyze",
+  transcribe_notes: "notes",
+  import_sample: "sample",
+  transcribe_lyrics: "lyrics",
+  make_wavetable: "wavetable",
+};
+
+/**
+ * The caption for a JSON tool the command language cannot express: names
+ * the manual route (`dawg media stems`, the project files) when one exists.
+ */
+export function toolCaption(name: string): string | undefined {
+  const verb = MEDIA_VERB[name];
+  if (verb) return `media · or run dawg media ${verb} in a shell`;
+  if (/^(?:write_file|edit_file)$/.test(name))
+    return "editing a project file · song.ts and tracks/ are yours to edit";
+  if (/^(?:web_search|fetch_url)$/.test(name)) return "searching the web";
+  return undefined;
+}

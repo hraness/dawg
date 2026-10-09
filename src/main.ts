@@ -228,6 +228,7 @@ import {
   glideValues,
   isAgentCommand,
   parseShowMe,
+  toolCaption,
   type ShowMeLevel,
 } from "./agent/show-me.ts";
 import { runAuthCommand, runFirstRunLogin, runTuiLogin } from "./auth/cli.ts";
@@ -1233,6 +1234,10 @@ async function runInteractive(): Promise<void> {
       return;
     }
     if (event.type === "command") return;
+    if (event.type === "tool-start") {
+      const caption = toolCaption(event.name);
+      if (caption) showMeCaption(caption);
+    }
     if (event.type === "done" || event.type === "error") showMeFinish();
     tui.activity.applyAgentEvent(event);
     if (event.type === "done" || event.type === "error") agentReported = true;

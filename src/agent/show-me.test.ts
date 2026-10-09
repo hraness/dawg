@@ -10,6 +10,7 @@ import {
   menuPathFor,
   NoteScheduler,
   parseShowMe,
+  toolCaption,
 } from "./show-me.ts";
 
 const score = createScore({
@@ -76,7 +77,9 @@ describe("gestures", () => {
     expect(gesture.value).toBe(0.4);
     expect(gesture.caption).toContain("fx reverb mix");
     expect(menuPathFor("fx reverb mix 0.4")).toBe("ctrl-k › Effects › reverb");
-    expect(menuPathFor("volume 0.7")).toBe("ctrl-k › Mix & automation › volume");
+    expect(menuPathFor("volume 0.7")).toBe(
+      "ctrl-k › Mix & automation › volume",
+    );
   });
 
   test("a note names its play-mode key and octave keys", () => {
@@ -185,5 +188,14 @@ describe("NoteScheduler (fake clock)", () => {
     expect(scheduler.schedule(0, 100)).toEqual({ atMs: 100, mode: "in-time" });
     scheduler.reset();
     expect(scheduler.schedule(8, 300)).toEqual({ atMs: 300, mode: "in-time" });
+  });
+});
+
+describe("toolCaption", () => {
+  test("media tools name the dawg media verb", () => {
+    expect(toolCaption("split_stems")).toContain("dawg media stems");
+    expect(toolCaption("download_audio")).toContain("dawg media download");
+    expect(toolCaption("edit_file")).toContain("song.ts");
+    expect(toolCaption("explain")).toBeUndefined();
   });
 });
