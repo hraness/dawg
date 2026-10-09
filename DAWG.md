@@ -1700,6 +1700,8 @@ The one-step way: focus a vocal track (a sampler voice or clips) and type `/voco
 
 Presets (all 24 bands or fewer): **classic** (70s and 80s band vocoder lead, the default), **robot** (12 bands, a pulse drone), **talkbox** (an LPC mouth filter on a saw), **choir** (stereo supersaw chord pad), **glass** (bright, formant +3), **whisper** (noise carrier), **smear** (long release wash; try `freeze`) and **lofi** (8 narrow bands under 4 kHz).
 
+Register matters for the talkbox: a carrier note sounds only the harmonics of its pitch, so a vowel's first formant (250-700 Hz) needs a carrier fundamental well below it. Keep talkbox chords and lines around A2-A3 (`voicing -8` on a progression, or write them an octave or two down); above about 300 Hz /i/ and /u/ blur into /a/. `/track remove <name>` removes a track and drops any `vocoder.src` that named it, so the carrier plays alone; a project file whose src names a missing track fails `dawg check` with that fix.
+
 | Parameter  | Range                               | Default   | Does                                                                                             |
 | ---------- | ----------------------------------- | --------- | ------------------------------------------------------------------------------------------------ |
 | `tap`      | `chain`, `dry`                      | chain     | listen to the source after its mono chain (before pan) or before its effects                     |

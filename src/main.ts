@@ -2066,6 +2066,43 @@ async function submit(prompt: string): Promise<string | Receipt> {
     if (requestedTrack !== grainTrack[1]!.toLowerCase()) return focused;
     return submit(grainTrack[2]!);
   }
+  // `/track remove <track>` (rm, delete): drop a track, its notes and any
+  // reference to it (a vocoder src or autotune from).
+  const removeTrackCommand = command.match(
+    /^\/?track\s+(?:remove|rm|delete)\s+(.{1,64})$/i,
+  );
+  if (removeTrackCommand) {
+    const name = removeTrackCommand[1]!.trim().replace(/^["']|["']$/g, "");
+    const found = score.tracks.find(
+      (track) =>
+        track.id === name.toLowerCase() ||
+        (track.name ?? track.id).toLowerCase() === name.toLowerCase(),
+    );
+    if (!found) return fail(`track remove · no track ${name}`);
+    if (score.tracks.length === 1)
+      return fail("track remove · the last track stays; /clear empties it");
+    const next = applyScoreOperation(score, {
+      type: "removeTrack",
+      trackId: found.id,
+    });
+    const dropped = score.tracks
+      .filter((track) => track.id !== found.id)
+      .filter((track) => {
+        const after = next.tracks.find((t) => t.id === track.id);
+        return (
+          (track.vocoder?.src !== undefined &&
+            after?.vocoder?.src === undefined) ||
+          (track.autotune?.from !== undefined &&
+            after?.autotune?.from === undefined)
+        );
+      })
+      .map((track) => track.id);
+    await commitScore(next, "score.track.remove", { trackId: found.id });
+    if (requestedTrack === found.id) await focusTrack(next.tracks[0]!.id);
+    return ok(
+      `track · removed ${found.id}${dropped.length ? ` · dropped references on ${dropped.join(", ")}` : ""} · ^z undoes`,
+    );
+  }
   // `/track piano b`: a name with spaces focuses the track of that name, or
   // creates `piano-b` named "piano b".
   // `/track rm <name>` and `/track move <name> <position>`: the human surface

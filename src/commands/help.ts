@@ -364,6 +364,11 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         command: "/track <name>",
         summary: "focus a track, creating it if new",
       },
+      {
+        command: "/track remove <name>",
+        summary:
+          "remove a track; drops vocoder src or autotune from that named it",
+      },
       { command: "/tracks", summary: "list tracks" },
       { command: "/view focus|all", summary: "one track or every track" },
       { command: "/transcript", summary: "scrollable log · Ctrl-O" },
