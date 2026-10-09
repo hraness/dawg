@@ -192,7 +192,7 @@ export function renderClips(
       const elapsed = index - start;
       let position = elapsed * step;
       if (position >= span) break;
-      position = clip.rev ? begin + span - position : begin + position;
+      position = clip.rev ? begin + span - 1 - position : begin + position;
       let shape = gain * blockGain;
       if (fadeInFrames > 0 && elapsed < fadeInFrames)
         shape *= equalPowerFade(elapsed / fadeInFrames);
