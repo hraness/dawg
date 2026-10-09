@@ -39,6 +39,7 @@ import {
   VOCODER_PARAMS,
   type TrackVocoder,
 } from "../vocoder.ts";
+import { AUTOTUNE_FIELDS, type TrackAutotune } from "../autotune.ts";
 import { rhythmVoicePitch, rowInSync } from "../rhythm.ts";
 import {
   BUILTIN_TABLE_PREFIX,
@@ -176,6 +177,7 @@ const RESERVED = new Set([
   "lyrics",
   "repeatAudio",
   "vocoder",
+  "autotune",
   "slices",
   "euclid",
   "euclidRot",
@@ -640,6 +642,11 @@ export function printTrack(score: TrackScore, track: Track): string {
     );
   }
   entries.push(...performanceEntries(score, track));
+  if (track.autotune) {
+    const call = printAutotune(track.autotune, INDENT);
+    if (call.startsWith("autotune(")) used.add("autotune");
+    entries.push(`autotune: ${call}`);
+  }
   const lanes: [string, readonly AutomationPoint[] | undefined][] = [
     ["volume", track.volumeAutomation],
     ["pan", track.panAutomation],
@@ -729,6 +736,7 @@ export function printTrack(score: TrackScore, track: Track): string {
     "wind",
     "sing",
     "vocoder",
+    "autotune",
     "euclid",
     "grid",
     "audio",
@@ -843,6 +851,7 @@ function expressionEntries(
   }
   if (note.vowel) entries.push(["vowel", str(note.vowel)]);
   if (note.lyric !== undefined) entries.push(["lyric", str(note.lyric)]);
+  if (note.drift !== undefined) entries.push(["drift", num(note.drift)]);
   return entries.length === 0 ? undefined : entries;
 }
 
@@ -1297,6 +1306,29 @@ function printVocoder(
   if (indent.length + prefix.length + inline.length + 1 <= WIDTH) return inline;
   const inner = indent + INDENT;
   return `vocoder(${lead}{\n${params.map(([k, v]) => `${inner}${k}: ${v},`).join("\n")}\n${indent}})`;
+}
+
+/**
+ * A track's autotune: the preset word alone (`"hard"`) when nothing
+ * overrides it, else `autotune("pop", { speed: 40 })` with keys in
+ * `AUTOTUNE_FIELDS` order.
+ */
+function printAutotune(settings: TrackAutotune, indent: string): string {
+  const params: [string, string][] = [];
+  for (const key of AUTOTUNE_FIELDS) {
+    if (key === "preset") continue;
+    const value = settings[key];
+    if (value === undefined) continue;
+    params.push([key, typeof value === "number" ? num(value) : str(value)]);
+  }
+  const preset = settings.preset;
+  if (params.length === 0 && preset) return str(preset);
+  const lead = preset ? `${str(preset)}, ` : "";
+  const inline = `autotune(${lead}{ ${params.map(([k, v]) => `${k}: ${v}`).join(", ")} })`;
+  if (indent.length + "autotune: ".length + inline.length + 1 <= WIDTH)
+    return inline;
+  const inner = indent + INDENT;
+  return `autotune(${lead}{\n${params.map(([k, v]) => `${inner}${k}: ${v},`).join("\n")}\n${indent}})`;
 }
 
 /** `wavetable("basic", { wt: 0.5 })`; pack tables keep their pin. */

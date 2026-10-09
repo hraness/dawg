@@ -441,6 +441,11 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         command: "/note vowel <v|a>u> [target]",
         summary: "sung vowel for selected notes · note vowel o bar 2",
       },
+      {
+        command: "/autotune [preset] [field value …] | off | presets",
+        summary:
+          "pitch correction · autotune hard · autotune gentle · autotune to notes melody · autotune key D bayati",
+      },
       ...VOCAL_VERBS.map((verb) => ({
         command: `/vocal ${verb.usage}`,
         summary: verb.summary,
@@ -731,7 +736,9 @@ export const USAGE: Readonly<Record<string, string>> = {
   scale: "scale [<tonic>] <name> | list · scale D hijaz",
   tuning:
     "tuning <name> | edo <n> | ratios … | cents … | scl <file> [kbm <file>] | ref <hz> | root <note> | map linear|nearest | track … | off · tuning 19-edo",
-  tune: "tuning <name> | edo <n> | scl <file> | off · tuning list",
+  tune: "tuning <name> | edo <n> | scl <file> | off · tuning list · pitch correction is /autotune",
+  autotune:
+    "autotune [hard|robot|warble|trap|pop|natural|gentle|guided|locked] | to scale|chromatic|chord|notes [track] | key <key> | speed hold glide <ms> | relax amount center drift <0..1> | flex <0..100> | vib <Hz> vibmod <st> | voice auto|bass|tenor|alto|soprano | reset | off | presets · autotune hard · autotune natural flex 40",
   cents: "cents <id> <±cents> · cents n3 -14",
   grid: "/grid 1/4|1/8|1/8T|1/16|1/16T|1/32",
   tempo:

@@ -145,3 +145,21 @@ registerTrackRefs("vocoder", {
     return { ...track, vocoder: rest };
   },
 });
+
+// ---------------------------------------------------------------------------
+// Registered reference fields (one block per lane).
+
+// autotune: `Track.autotune.from` follows another track's notes.
+registerTrackRefs("autotune.from", {
+  refs: (track) =>
+    track.autotune?.from !== undefined
+      ? [{ trackId: track.autotune.from, kind: "notes" }]
+      : [],
+  drop: (track, removedId) => {
+    if (track.autotune?.from !== removedId) return track;
+    // Without its melody the track follows its own notes; `to` and the
+    // preset stay as the user set them.
+    const { from: _from, ...autotune } = track.autotune;
+    return { ...track, autotune };
+  },
+});

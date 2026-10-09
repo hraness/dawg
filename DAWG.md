@@ -1698,6 +1698,30 @@ Menu: **Effects › Voice › Vocoder** has a Source picker, Preset and one row 
 
 Cost: a 16-band channel vocoder renders at about 45 ms per audio-second, talkbox about 10 ms (measured on an M-series Mac); renders reuse the source's cached audio, and an edit to the source's pan, reverb, delay or sends does not re-render the vocoder.
 
+### Autotune
+
+`/autotune hard` corrects the pitch of a track's audio: every clip and every sampler voice on the track, after the sampler's shift step. One word is enough; the default is `pop`. Presets go from hard to gentle:
+
+| Preset    | Sound                                   |
+| --------- | --------------------------------------- |
+| `hard`    | instant, stepped notes                  |
+| `robot`   | stepped on every step of the tuning     |
+| `warble`  | hard with wide synthetic vibrato        |
+| `trap`    | fast and glossy                         |
+| `pop`     | polished but sung (the default)         |
+| `natural` | keeps scoops and vibrato                |
+| `gentle`  | barely there                            |
+| `guided`  | notes to a written melody, vibrato kept |
+| `locked`  | hard tune locked to a melody            |
+
+Targets (`to`): `scale` (the default) uses the track or song key and the 0.5 tuning, so maqam, raga and n-EDO tunings work, and with no key it is chromatic; `chromatic` uses every step of the tuning; `chord` follows the chord timeline; `notes` follows another track's notes (`/autotune to notes lead`, a routing edge like a sidechain) or, without `from`, the track's own notes (so `/autotune guided` and `/autotune locked` work in one step; a track with no notes is told which tracks it could follow). A key override that names a maqam or raga (`key D bayati`, `key C yaman`) brings that scale's intonation when neither the song nor the track sets a tuning. The `chord` target leaves out the tuned track, its guide and other vocal or autotuned tracks, so sung pitches never count as chord tones. A note's `drift` expression overrides how much slow drift is removed under it.
+
+Parameters: `speed` 0..400 ms (retune time, 0 is instant; `0.2s` reads as 200 ms), `relax` 0..1 (slower retune on held notes), `hold` 50..1000 ms (when a note counts as held), `flex` 0..100 (higher only pulls notes already near a target, like Antares Flex-Tune), `glide` 0..500 ms (time between targets; a bare number is ms, `40ms` and `0.04s` also work, as with `/glide`), `amount` 0..1, `vib` 0..12 Hz and `vibmod` 0..1 semitones (added vibrato, on voiced frames only), `center` and `drift` 0..1 (notes targets), `key` (overrides the song key) and `voice` (`auto`, `bass`, `tenor`, `alto`, `soprano`: the tracker's range). Corrections are weighted by voicing, guarded against octave errors, and use hysteresis so vibrato does not flip targets.
+
+Reach it as `/autotune [preset] [param value …]`, `/autotune off`, `/autotune presets`, `/vocal autotune …`, Sound › Voice › Autotune (rows for every parameter; left/right adjusts, `x` resets, space auditions), the agent tool `autotune_vocal`, and the SDK: `track({ autotune: "hard" })` or `autotune("pop", { speed: 40 })`. `/tune` stays the tuning command; `/tune hard` hints at `/autotune`.
+
+Rendering is deterministic: tuned spans are cached (128 MB of their own) by the audio's identity (a shifted or fitted sample by its shift or fit key), the settings, the targets and the engine version; with chord or note targets a sampler voice tunes only the frames it plays, and stereo samples keep both channels. In play mode a span longer than 0.25 s plays untuned until its correction is ready; the correction runs in slices so play mode stays responsive. In a build without the pitch tracker (it ships with the pitch lane) the settings are saved but the audio plays untuned, and `/autotune`, the menu and `autotune_vocal` say so. Licence lines for tuned clips made by `/vocal say` come with `say` in 0.7.1.
+
 ## Menus
 
 `/menu` or `Ctrl-K` (on an empty prompt, in play mode too) opens the edit menu, drawn with the same overlay as the model picker. Every edit the agent can make is reachable from it with keys alone. Each row shows a plain label and the current value with its unit (s, Hz, oct, st, dB, BPM, bars); the line under the list describes the focused row and shows, dimmed, the prompt command the row runs, so the menu teaches the commands. `/menu <section>` opens a section directly (`/menu effects`, `/menu arrange`); the old names `parameters`, `sounds`, `track`, `automation` and `transport` still work.

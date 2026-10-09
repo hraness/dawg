@@ -53,7 +53,12 @@ const onsetCache = new Map<string, readonly number[]>();
 /** Background jobs by cache key, with the window they fit (one per window). */
 const pending = new Map<
   string,
-  { job: Generator<void, Float32Array>; window: string }
+  {
+    job: Generator<void, Float32Array>;
+    window: string;
+    /** Another stage's cache (0.7 autotune) takes the result instead. */
+    done?: (out: Float32Array) => void;
+  }
 >();
 let live = false;
 /** True when the current live render left a voice silent while fitting. */
@@ -191,6 +196,32 @@ export function shiftedBuffer(
   return out;
 }
 
+/** True inside `withLiveFit` (0.7: other stages defer long work too). */
+export function liveFitActive(): boolean {
+  return live;
+}
+
+/**
+ * Runs `job` between live blocks like a long fit and hands the result to
+ * `done` (the caller's own cache); `onFitReady` fires when it lands and
+ * the live render reports `fitting` until then (0.7 autotune).
+ */
+export function deferLiveJob<T>(
+  key: string,
+  job: () => Generator<void, T>,
+  done: (out: T) => void,
+): void {
+  missed = true;
+  if (pending.has(key)) return;
+  // The scheduler only steps the job and hands its value to `done`.
+  pending.set(key, {
+    job: job() as unknown as Generator<void, Float32Array>,
+    window: key,
+    done: done as unknown as (out: Float32Array) => void,
+  });
+  schedule();
+}
+
 function drain(job: Generator<void, Float32Array>): Float32Array {
   for (;;) {
     const step = job.next();
@@ -204,13 +235,14 @@ function schedule(): void {
     timer = undefined;
     const next = pending.entries().next();
     if (next.done) return;
-    const [key, { job }] = next.value;
+    const [key, { job, done }] = next.value;
     const until = performance.now() + 8;
     for (;;) {
       const step = job.next();
       if (step.done) {
         pending.delete(key);
-        remember(key, step.value);
+        if (done) done(step.value);
+        else remember(key, step.value);
         for (const listener of listeners) listener();
         break;
       }

@@ -165,6 +165,11 @@ import {
   parseVocoderCommand,
   vocoderListLines,
 } from "./commands/vocoder.ts";
+import {
+  applyAutotuneCommand,
+  autotuneListLines,
+  parseAutotuneCommand,
+} from "./commands/autotune.ts";
 import { parseResampleCommand, runResample } from "./commands/resample.ts";
 import { suggestFitMode } from "./audio/dsp/onset.ts";
 import {
@@ -381,6 +386,7 @@ function parsesLocally(text: string): boolean {
     parseVowelCommand,
     parseClipCommand,
     parseLyricsCommand,
+    parseAutotuneCommand,
   ].some((parse) => parse(text) !== undefined);
 }
 
@@ -1909,6 +1915,21 @@ async function submit(prompt: string): Promise<string | Receipt> {
       await projectSync?.flushScore();
     }
     return ok(result.message);
+  }
+  // 0.7 autotune: `/autotune …` (and `/tune <preset>` pointing here).
+  // `/vocal autotune …` takes the same path (presets panel, draft, commit).
+  const autotune = parseAutotuneCommand(
+    command.replace(/^\/?vocal\s+(?=autotune\b)/i, ""),
+  );
+  if (autotune) {
+    if (autotune.type === "autotune-list")
+      tui.openText("autotune presets", autotuneListLines());
+    if (autotune.type !== "autotune-usage" && autotune.type !== "autotune-list")
+      await materializeDraft();
+    const result = applyAutotuneCommand(score, requestedTrack, autotune);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
   }
   // 0.7 Voice: `/vocal <verb>`; lanes register verbs in VOCAL_VERBS.
   setClipImportDeps({

@@ -4,6 +4,7 @@
  * them and `/help` prints a Voice section from the same table, so a verb is
  * documented and typo-matched the moment it is registered.
  */
+import { applyAutotuneCommand, parseAutotuneArgs } from "./autotune.ts";
 import type { TrackScore } from "../../core/score.ts";
 import { applyFormantCommand, formantArgs, FORMANT_USAGE } from "./formant.ts";
 import { CLIP_VOCAL_VERBS } from "./clips.ts";
@@ -48,6 +49,18 @@ export const VOCAL_VERBS: readonly VocalVerb[] = [
   // pitch: pitch, notes
   ...PITCH_VERBS,
   // autotune: autotune
+  {
+    verb: "autotune",
+    usage: "autotune [preset] [field value …]",
+    summary: "pitch correction, gentle to hard (same as /autotune)",
+    lane: "autotune",
+    run: async (args, { score, trackId }) =>
+      applyAutotuneCommand(
+        score,
+        trackId,
+        parseAutotuneArgs(args.split(/\s+/)),
+      ),
+  },
   // formant: formant
   {
     verb: "formant",

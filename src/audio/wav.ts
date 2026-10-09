@@ -9,6 +9,7 @@ import {
   type Track,
   type TrackScore,
 } from "../../core/score.ts";
+import { autotuneStemDigests } from "./autotune.ts";
 import { drumVoiceForPitch, isDrumInstrument } from "../../core/drums.ts";
 import {
   performanceTimingFor,
@@ -594,9 +595,14 @@ export class StemRenderer {
       const vocoderSource = track?.vocoder
         ? vocoderSourceOf(track, groups, performed, context, bank)
         : undefined;
-      const engineDigests = vocoderSource
+      const withVocoder = vocoderSource
         ? [...(baseDigests ?? []), vocoderSource.key]
         : baseDigests;
+      // 0.7 autotune: its targets (guide notes, chords, key, tuning) and the
+      // pitch engine version join the stem key; absent adds nothing.
+      const engineDigests = track?.autotune
+        ? [...(withVocoder ?? []), ...autotuneStemDigests(track, score)]
+        : withVocoder;
       // Wavetable hook: the oscillator factory for a wavetable track (its
       // table id joins the stem key), undefined for every other instrument.
       const wavetable = track ? wavetableHook(track, bank, context) : undefined;
