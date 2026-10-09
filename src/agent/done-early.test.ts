@@ -2,12 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { createScore } from "../../core/score.ts";
 import {
   AGENT_SYSTEM_PROMPT,
+  CONTENT_TOOLS,
   DONE_PROMPT,
   doneSummary,
   runAgentTurn,
   type AgentHost,
 } from "./agent.ts";
 import { createGatewayClient } from "./gateway.ts";
+import { AGENT_TOOLS } from "./tools.ts";
 import {
   finishChunk,
   scriptedFetch,
@@ -102,6 +104,28 @@ describe("Done: ends a turn without the summary round trip", () => {
     expect(result).toMatchObject({ type: "done", rejected: 1, applied: 1 });
     expect(script.requests).toHaveLength(2);
     expect(state.score.tempoBpm).toBe(96);
+  });
+
+  test("content writes still get a reply step despite Done:", async () => {
+    const { script, state, turn } = run([
+      [
+        textChunk("Done: four-on-the-floor kick."),
+        ...toolCallChunks(0, "c1", "set_tempo", { bpm: 124 }),
+        ...toolCallChunks(1, "c2", "extend_loop", { bars: 8 }),
+        finishChunk("tool_calls"),
+      ],
+      [textChunk("Tempo 124, eight bars."), finishChunk("stop")],
+    ]);
+    const result = await turn;
+    expect(result).toMatchObject({ type: "done", reason: "stop", applied: 2 });
+    expect(script.requests).toHaveLength(2);
+    expect(state.score.tempoBpm).toBe(124);
+  });
+
+  test("the content set names real tools", () => {
+    for (const name of CONTENT_TOOLS) {
+      expect(AGENT_TOOLS.map((tool) => tool.name)).toContain(name);
+    }
   });
 
   test("read-only calls still get a reply step", async () => {

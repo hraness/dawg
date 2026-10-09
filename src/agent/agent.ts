@@ -222,7 +222,32 @@ export const MEDIA_PROMPT =
  * which saves the summary-only round trip (about a third of a typical turn).
  */
 export const DONE_PROMPT =
-  'When you can make every tool call the request needs in one response, start that response with one short sentence describing the musical change, beginning "Done:", then make the calls in the same response; the turn ends once every call is applied, with no further reply. If you need to read something first or are unsure, make the calls without "Done:", and when you are done reply with one short sentence describing the musical change.';
+  'When you are done, reply with one short sentence describing the musical change. For a tempo, mix, effect or sound change, you may instead put that sentence first, beginning "Done:", before the calls.';
+
+/**
+ * Tools that write musical content (notes, rhythms, chords, structure).
+ * The eval shows models skipping their self-check when they end the turn
+ * early on these, so a step containing one always gets a reply step, even
+ * after "Done:". Parameter edits (tempo, mix, fx, instruments) and project
+ * file edits, which passed every eval run either way, end early.
+ */
+export const CONTENT_TOOLS: ReadonlySet<string> = new Set([
+  "add_notes",
+  "update_notes",
+  "remove_notes",
+  "add_drums",
+  "set_rhythm",
+  "apply_drum_pattern",
+  "write_chords",
+  "strum_chords",
+  "set_automation",
+  "add_transition",
+  "edit_section",
+  "set_form",
+  "extend_loop",
+  "edit_clip",
+  "place_clip",
+]);
 
 /** `Done: added a kick` → `added a kick`; anything else → undefined. */
 export function doneSummary(text: string): string | undefined {
@@ -467,6 +492,9 @@ export async function runAgentTurn(
       let overBudget = false;
       let stepMutated = 0;
       let stepRejected = 0;
+      const stepWritesContent = calls.some((call) =>
+        CONTENT_TOOLS.has(call.name),
+      );
       for (const call of calls) {
         if (signal.aborted) throw signal.reason;
         let content: string;
@@ -523,7 +551,12 @@ export async function runAgentTurn(
       // only when something changed and nothing was rejected: a rejection
       // still goes back to the model so it can fix the arguments.
       const done = doneSummary(text);
-      if (done !== undefined && stepMutated > 0 && stepRejected === 0) {
+      if (
+        done !== undefined &&
+        stepMutated > 0 &&
+        stepRejected === 0 &&
+        !stepWritesContent
+      ) {
         return finish({
           type: "done",
           reason: "stop",
