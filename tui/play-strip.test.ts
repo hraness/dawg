@@ -127,6 +127,40 @@ describe("play strip and chord legend", () => {
     expect(buffer.get(6, 0)!.style?.reverse).toBe(true);
   });
 
+  test("letters are muted, chords bold, chords in the key lit", () => {
+    const chords = [
+      {
+        key: "a",
+        label: "C",
+        black: false,
+        lit: false,
+        chord: true,
+        diatonic: true,
+      },
+      {
+        key: "w",
+        label: "D♭",
+        black: true,
+        lit: false,
+        chord: true,
+        diatonic: false,
+      },
+      { key: "s", label: "D3", black: false, lit: false },
+    ];
+    const buffer = new CellBuffer(40, 1, theme.roles.canvas);
+    paintPlayStrip(buffer, 0, 40, chords, theme);
+    const at = (x: number) => buffer.get(x, 0)!.style!;
+    // " A C W D♭ S D3": letter A at 1, chord C at 3.
+    expect(at(1).fg).toEqual(theme.roles.muted.fg);
+    expect(at(3).bold).toBe(true);
+    expect(at(3).fg).toEqual(theme.roles.hit.fg);
+    // A borrowed chord is bold but not lit.
+    expect(at(7).bold).toBe(true);
+    expect(at(7).fg).toEqual(theme.roles.text.fg);
+    // A plain note is neither.
+    expect(at(12).bold).toBeFalsy();
+  });
+
   test("legend cells stop before the edge and latched ones are reversed", () => {
     const cells = [
       { key: "1", label: "dim", on: false },

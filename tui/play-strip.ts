@@ -6,13 +6,17 @@
  */
 import type { CellBuffer } from "./screen.ts";
 import { displayWidth, truncate } from "./text.ts";
-import { onBackground, type Theme } from "./theme.ts";
+import { onBackground, type Style, type Theme } from "./theme.ts";
 
 export type PlayStripKey = Readonly<{
   key: string;
   label: string;
   black: boolean;
   lit: boolean;
+  /** Chord mode: the label names the chord this key plays. */
+  chord?: boolean | undefined;
+  /** That chord is built on a degree of the song's key. */
+  diatonic?: boolean | undefined;
 }>;
 
 export type PlayHeaderView = Readonly<{
@@ -162,7 +166,11 @@ export function paintChordLegend(
   }
 }
 
-/** `a C3 │ w C#3 …`: each key with its note; lit keys reversed. */
+/**
+ * `A C3  W C#3 …`: each key with what it plays. The key letter is muted so
+ * the music reads first; a chord label is bold, and chords in the song's
+ * key are lit (they always fit). Sounding keys are reversed.
+ */
 export function paintPlayStrip(
   buffer: CellBuffer,
   y: number,
@@ -174,15 +182,24 @@ export function paintPlayStrip(
   buffer.fill(0, y, width, 1, roles.canvas);
   let x = 1;
   for (const key of keys) {
-    const cell = `${key.key.toUpperCase()} ${key.label}`;
-    const cellWidth = displayWidth(cell) + 1;
+    const letter = key.key.toUpperCase();
+    const cellWidth = displayWidth(letter) + 1 + displayWidth(key.label) + 1;
     if (x + cellWidth > width - 1) break;
-    const style = key.lit
+    const labelStyle: Style = key.lit
       ? { ...(key.black ? roles.selected : roles.hit), reverse: true }
+      : key.chord
+        ? { ...(key.diatonic ? roles.hit : roles.text), bold: true }
+        : key.black
+          ? roles.muted
+          : roles.text;
+    const letterStyle: Style = key.lit
+      ? labelStyle
       : key.black
-        ? roles.muted
-        : roles.text;
-    buffer.text(x, y, cell, style);
-    x += cellWidth;
+        ? roles.faint
+        : roles.muted;
+    x += buffer.text(x, y, letter, letterStyle);
+    x += buffer.text(x, y, " ", key.lit ? labelStyle : roles.canvas);
+    x += buffer.text(x, y, key.label, labelStyle);
+    x += 1;
   }
 }

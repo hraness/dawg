@@ -58,6 +58,7 @@ import type { SampleBank } from "../audio/samples.ts";
 import { fitting, onFitReady } from "../audio/fit.ts";
 import {
   DEFAULT_STRUM,
+  degreeOf,
   perform,
   type PerformMode,
   type PerformOptions,
@@ -1192,7 +1193,17 @@ export class PlaySession {
       const chord = this.keyboard.pitchFor(cell.key);
       const name =
         chord === undefined ? undefined : this.chords.keyLabel(chord);
-      return name ? { ...cell, label: name } : this.noteCell(cell);
+      // Chords in the key are the safe ones to reach for: the strip lights
+      // them; a borrowed chord still plays but stays plain.
+      return name && chord !== undefined
+        ? {
+            ...cell,
+            label: name,
+            chord: true,
+            diatonic:
+              degreeOf(this.chords.key, ((chord % 12) + 12) % 12) !== undefined,
+          }
+        : this.noteCell(cell);
     });
   }
 
