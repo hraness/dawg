@@ -390,6 +390,7 @@ const TRADITIONAL: readonly StyleCard[] = [
     1920,
     {
       tempo: { bpm: [100, 150], typical: 126 },
+      groove: { swingRatio: [1.5, 2] },
       harmony: {
         presets: [
           ["turnaround", 0.6],
@@ -520,13 +521,15 @@ const TRADITIONAL: readonly StyleCard[] = [
       },
       pitch: { scales: [["major", 1]] },
       harmony: {
-        presets: [
-          ["fifties", 0.5],
-          ["axis", 0.5],
+        sources: { forms: 1, presets: 0, chain: 0 },
+        forms: [
+          [["I", "I", "V7", "V7", "V7", "V7", "I", "I"], 0.4],
+          [["I", "IV", "V7", "I"], 0.4],
+          [["I", "I", "IV", "IV", "V7", "V7", "I", "I"], 0.2],
         ],
-        cadences: [["V-I", 1]],
-        sevenths: 0.1,
+        sevenths: 0,
       },
+      bass: { behaviour: [["root-fifth", 1]], onsets: grid("x...x...") },
       melody: { ambitus: [7, 11], repetition: 0.85 },
       texture: {
         roles: { chords: role("reeds", "keys:0.5"), lead: role("sing") },
@@ -655,7 +658,7 @@ const TRADITIONAL: readonly StyleCard[] = [
   ),
   leaf(
     "kayokyoku",
-    "kayokyoku: yonanuki-flavoured minor melody (scale degrees 4 and 7 avoided in the line), strings and guitar, i-iv-V7",
+    "kayokyoku: yonanuki minor melody (1 2 b3 5 b6, no 4th or 7th) over harmonic-minor i-iv-V7, strings and guitar, foxtrot or go-go beat",
     1965,
     {
       groove: { subdivision: 4, swingRatio: [1, 1.1] },
@@ -668,16 +671,18 @@ const TRADITIONAL: readonly StyleCard[] = [
       },
       pitch: {
         scales: [
-          ["minor-pentatonic", 0.4],
-          ["harmonic-minor", 0.6],
+          ["yonanuki-minor", 0.8],
+          ["harmonic-minor", 0.2],
         ],
       },
       harmony: {
-        presets: [
-          ["aeolian", 0.5],
-          ["minor-ii-v", 0.5],
+        sources: { forms: 1, presets: 0, chain: 0 },
+        forms: [
+          [["i", "iv", "V7", "i"], 0.5],
+          [["i", "VI", "iv", "V7"], 0.3],
+          [["iv", "V7", "i", "i"], 0.2],
         ],
-        cadences: [["V-I", 1]],
+        sevenths: 0.2,
       },
       bass: { onsets: grid("x.......x.......") },
       texture: { roles: { chords: role("strings", "electric@clean:0.5") } },
@@ -685,16 +690,20 @@ const TRADITIONAL: readonly StyleCard[] = [
   ),
   leaf(
     "enka",
-    "enka: slow minor-pentatonic melody with kobushi ornament, harmonic-minor V7 cadence, shakuhachi and strings",
+    "enka: slow yonanuki minor melody (1 2 b3 5 b6) with kobushi ornament, i-iv-V7 harmonic-minor cadence, shakuhachi and strings",
     1960,
     {
       tempo: { bpm: [60, 90], typical: 72 },
       groove: { swingRatio: [1.3, 1.6] },
-      pitch: { scales: [["minor-pentatonic", 1]] },
+      pitch: { scales: [["yonanuki-minor", 1]] },
       harmony: {
-        presets: [["aeolian", 1]],
-        cadences: [["V-I", 1]],
-        sevenths: 0.3,
+        sources: { forms: 1, presets: 0, chain: 0 },
+        forms: [
+          [["i", "iv", "V7", "i"], 0.6],
+          [["i", "i", "iv", "V7"], 0.4],
+        ],
+        sevenths: 0.2,
+        rhythm: [[0.5, 1]],
       },
       melody: { density: [0.5, 1.5], ambitus: [7, 12], finals: [[0, 1]] },
       texture: {
@@ -732,7 +741,7 @@ const TRADITIONAL: readonly StyleCard[] = [
   ),
   leaf(
     "trot",
-    "trot: ppongjjak two-beat (bass on 1 and 3, snare on the off-beats), minor-pentatonic melody, quick tempo",
+    "trot: ppongjjak two-beat (bass on the beat, snare on the off-beats), yonanuki minor melody (1 2 b3 5 b6), i-iv-V7, quick tempo",
     1930,
     {
       tempo: { bpm: [120, 150], typical: 132 },
@@ -744,17 +753,16 @@ const TRADITIONAL: readonly StyleCard[] = [
           hat: grid("xxxxxxxx"),
         },
       },
-      pitch: {
-        scales: [
-          ["minor-pentatonic", 0.7],
-          ["major-pentatonic", 0.3],
-        ],
-      },
+      pitch: { scales: [["yonanuki-minor", 1]] },
       harmony: {
-        presets: [["aeolian", 1]],
-        cadences: [["V-I", 1]],
+        sources: { forms: 1, presets: 0, chain: 0 },
+        forms: [
+          [["i", "i", "iv", "iv", "V7", "V7", "i", "i"], 0.6],
+          [["i", "iv", "V7", "i"], 0.4],
+        ],
         sevenths: 0.1,
       },
+      bass: { behaviour: [["root-fifth", 1]], onsets: grid("x...x...") },
       melody: { repetition: 0.8 },
       texture: {
         roles: {
@@ -1020,7 +1028,7 @@ const MODERN: readonly StyleCard[] = [
   ),
   leaf(
     "adult-contemporary",
-    "adult contemporary and power ballad: piano ostinato, IV-V-iii-vi and sus4 colour, slow 4/4",
+    "adult contemporary and power ballad: piano ostinato, I-V-vi-IV and the canon's stepwise bass descent, half-note kick, slow 4/4",
     1975,
     {
       tempo: { bpm: [60, 84], typical: 72 },
@@ -1336,9 +1344,10 @@ const MODERN: readonly StyleCard[] = [
       },
       pitch: { scales: [["major", 1]] },
       harmony: {
-        presets: [
-          ["canon", 0.5],
-          ["axis", 0.5],
+        sources: { forms: 1, presets: 0, chain: 0 },
+        forms: [
+          [["I", "IV", "vi", "V"], 0.6],
+          [["IV", "I", "V", "vi"], 0.4],
         ],
         sevenths: 0.2,
       },
@@ -1535,14 +1544,22 @@ const MODERN: readonly StyleCard[] = [
   ),
   leaf(
     "v-pop",
-    "Southeast Asian pop ballad: I-V-vi-IV and canon, melismatic chorus peak, acoustic guitar and soft kit",
+    "Southeast Asian pop ballad: minor-key verses on harmonic-minor i-iv-V7 (the bolero and nhac tre ballad), melismatic chorus peak, acoustic guitar and soft kit",
     1985,
     {
       tempo: { bpm: [66, 104], typical: 82 },
+      pitch: {
+        scales: [
+          ["harmonic-minor", 0.6],
+          ["minor", 0.4],
+        ],
+      },
       harmony: {
-        presets: [
-          ["axis", 0.5],
-          ["canon", 0.5],
+        sources: { forms: 1, presets: 0, chain: 0 },
+        forms: [
+          [["i", "iv", "V7", "i"], 0.4],
+          [["i", "VI", "iv", "V7"], 0.3],
+          [["i", "iv", "VII", "III"], 0.3],
         ],
         sevenths: 0.3,
       },

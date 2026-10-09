@@ -142,6 +142,19 @@ describe("pop family cards", () => {
 });
 
 /** Bar steps of the generated notes a role plays. */
+function rolePitchClasses(
+  id: string,
+  role: RoleName,
+  seed: number,
+): Set<number> {
+  const { plan, data } = generateStyle(id, { seed, bars: 8 });
+  return new Set(
+    (data.notes ?? [])
+      .filter((note) => plan.noteRoles.get(note.id) === role)
+      .map((note) => (((note.pitch - plan.tonic) % 12) + 12) % 12),
+  );
+}
+
 function roleSteps(id: string, role: RoleName, seed: number): number[] {
   const { plan, data } = generateStyle(id, { seed, bars: 8 });
   const every = plan.style.rhythm.fills?.every ?? 0;
@@ -292,6 +305,112 @@ describe("pop family theory", () => {
     const back = snare.filter((s) => s === 4 || s === 12).length;
     expect(back / snare.length).toBeGreaterThan(0.8);
   });
+
+  test("yonanuki minor: enka, kayokyoku and trot melodies avoid the 4th and 7th", () => {
+    expect(SCALES["yonanuki-minor"].steps).toEqual([0, 2, 3, 7, 8]);
+    for (const id of ["enka", "trot"])
+      for (const seed of [1, 2, 3]) {
+        const pcs = rolePitchClasses(id, "lead", seed);
+        expect(pcs.size).toBeGreaterThan(0);
+        for (const pc of pcs) expect([0, 2, 3, 7, 8]).toContain(pc);
+      }
+    const kayo = [1, 2, 3].map((seed) =>
+      rolePitchClasses("kayokyoku", "lead", seed),
+    );
+    expect(kayo.some((pcs) => pcs.has(8) && pcs.has(2))).toBe(true);
+  });
+
+  test("enka, kayokyoku, trot and v-pop cadence on a harmonic-minor V7", () => {
+    for (const id of ["enka", "kayokyoku", "trot", "v-pop"]) {
+      const forms = resolveStyle(id).harmony.forms ?? [];
+      expect(forms.some(([form]) => form.includes("V7"))).toBe(true);
+      expect(forms.every(([form]) => form[0] === "i" || form[0] === "iv")).toBe(
+        true,
+      );
+      expect(resolveStyle(id).harmony.sources?.presets).toBe(0);
+    }
+  });
+
+  test("schlager stays on I, IV and V7", () => {
+    for (const seed of [1, 2, 3]) {
+      const { plan } = generateStyle("schlager", { seed, bars: 8 });
+      expect(plan.harmonySource).toBe("form");
+      for (const pc of rolePitchClasses("schlager", "bass", seed))
+        expect([0, 2, 4, 5, 7, 9, 11]).toContain(pc);
+    }
+    for (const [form] of resolveStyle("schlager").harmony.forms ?? [])
+      for (const numeral of form) expect(["I", "IV", "V7"]).toContain(numeral);
+  });
+
+  test("v-pop ballads are minor where c-pop ballads are major", () => {
+    for (const seed of [1, 2, 3]) {
+      const v = rolePitchClasses("v-pop", "lead", seed);
+      const c = rolePitchClasses("c-pop", "lead", seed);
+      expect(v.has(4)).toBe(false);
+      expect(c.has(3)).toBe(false);
+    }
+  });
+
+  test("tin pan alley swings; schlager stays straight", () => {
+    expect(
+      resolveStyle("tin-pan-alley").groove.swingRatio[0],
+    ).toBeGreaterThanOrEqual(1.5);
+    expect(resolveStyle("schlager").groove.swingRatio[1]).toBe(1);
+  });
+
+  test("sibling leaves are told apart by onsets, pitch classes, tempo and swing", () => {
+    const print = (id: string) => {
+      const pc = new Array<number>(12).fill(0);
+      const on = new Array<number>(16).fill(0);
+      let bpm = 0;
+      let swing = 0;
+      for (const seed of [1, 2, 3]) {
+        const { plan, data } = generateStyle(id, { seed, bars: 8 });
+        bpm += plan.bpm / 3;
+        const sw = plan.style.groove.swingRatio;
+        swing += (sw[0] + sw[1]) / 6;
+        for (const note of data.notes ?? []) {
+          const role = plan.noteRoles.get(note.id);
+          if (
+            role === "lead" ||
+            role === "chords" ||
+            role === "bass" ||
+            role === "counter"
+          )
+            pc[(((note.pitch - plan.tonic) % 12) + 12) % 12]! += 1;
+          else {
+            const step =
+              Math.round((note.startTick ?? 0) / plan.stepTicks) %
+              plan.stepsPerBar;
+            on[Math.floor((step * 16) / plan.stepsPerBar)]! += 1;
+          }
+        }
+      }
+      const norm = (a: number[]) => {
+        const total = a.reduce((x, y) => x + y, 0) || 1;
+        return a.map((x) => x / total);
+      };
+      return { pc: norm(pc), on: norm(on), bpm, swing };
+    };
+    const prints = new Map(LEAVES.map((id) => [id, print(id)]));
+    const l1 = (a: number[], b: number[]) =>
+      a.reduce((s, x, i) => s + Math.abs(x - b[i]!), 0);
+    const close: string[] = [];
+    for (const a of LEAVES)
+      for (const b of LEAVES) {
+        if (a >= b || STYLE_TREE.get(a)!.parent !== STYLE_TREE.get(b)!.parent)
+          continue;
+        const x = prints.get(a)!;
+        const y = prints.get(b)!;
+        const d =
+          l1(x.pc, y.pc) +
+          l1(x.on, y.on) +
+          4 * Math.abs(Math.log(x.bpm / y.bpm)) +
+          Math.abs(x.swing - y.swing);
+        if (d < 0.35) close.push(`${a}~${b} ${d.toFixed(2)}`);
+      }
+    expect(close).toEqual([]);
+  }, 60_000);
 
   test("generation is deterministic per seed", () => {
     for (const id of ["hyperpop", "drill", "jungle"]) {
