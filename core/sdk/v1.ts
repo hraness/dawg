@@ -2093,15 +2093,21 @@ export type FxInput = Readonly<Record<string, EffectParams>>;
  * Every parameter, range and default: **Synth** in DAWG.md.
  */
 /**
- * Modelled piano settings (SDK 1.24.0), for a track whose instrument is a
+ * Modelled keys settings (SDK 1.24.0), for a track whose instrument is a
  * piano family (`"grand"`, `"upright"`, `"felt"`, `"honkytonk"`,
- * `"prepared"`; the words `"ballad"` and `"lofi"` pick presets). Every field
- * is optional; `{}` is the family's own sound. Automate a parameter with
+ * `"prepared"`; the words `"ballad"` and `"lofi"` pick presets) or, from
+ * SDK 1.26.0, an electric family (`"epiano"`, `"wurli"`, `"clav"`; presets
+ * epiano suitcase dyno wurli clav funkclav). Every field is optional; `{}`
+ * is the family's own sound. Automate a parameter with
  * `automation.fx["keys-<param>"]` (hardness, touch, decay, release, knock,
- * noise, felt), read at each note's onset. Ranges: **Keys** in DAWG.md.
+ * noise, felt; electric tone, vibe, trem), read at each note's onset.
+ * Ranges: **Keys** in DAWG.md.
  */
 export type KeysInput = Readonly<{
-  /** A named preset: grand ballad upright felt lofi honkytonk prepared. */
+  /**
+   * A named preset: grand ballad upright felt lofi honkytonk prepared, or
+   * electric epiano suitcase dyno wurli clav funkclav.
+   */
   preset?: string;
   /** Hammer hardness 0..1: brightness at a given velocity (0.5). */
   hardness?: number;
@@ -2147,7 +2153,7 @@ export type KeysInput = Readonly<{
   /** Output low-pass in Hz, 0 off (electric keys). */
   tone?: number;
   /** Clav pickup switch: neck bridge both out ("both"). */
-  pickup?: string;
+  pickup?: "neck" | "bridge" | "both" | "out";
   /** Clav mute slider 0..1 (0). */
   mute?: number;
   /** Suitcase stereo vibrato depth 0..1 (0; epiano). */
