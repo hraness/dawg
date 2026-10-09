@@ -17,6 +17,7 @@ import { LiveSynth } from "./live.ts";
 import { planSamplerVoices, renderSamplerVoices } from "./sampler.ts";
 import { sampleKey, type DecodedSample, type SampleBank } from "./samples.ts";
 import { sampleWarpFor } from "./warp.ts";
+import { budget } from "../../test/perf.ts";
 
 const RATE = 16_000;
 
@@ -377,7 +378,7 @@ describe("fit cache and live", () => {
     );
     const t0 = performance.now();
     const out = withLiveFit(() => render(score, src, RATE));
-    expect(performance.now() - t0).toBeLessThan(160 * (48_000 / RATE));
+    expect(performance.now() - t0).toBeLessThan(budget(160 * (48_000 / RATE)));
     expect(rms(out, 0, RATE)).toBeGreaterThan(0.1);
     expect(fitting()).toBe(false);
   });
@@ -437,7 +438,7 @@ describe("fit cache and live", () => {
     };
     const t0 = performance.now();
     const short = play(4);
-    expect(performance.now() - t0).toBeLessThan(160);
+    expect(performance.now() - t0).toBeLessThan(budget(160));
     expect(short.frames).toBeGreaterThan(0);
     expect(short.fitting).toBeUndefined();
     const ready = new Promise<void>((resolve) => {
@@ -466,7 +467,7 @@ describe("fit cache and live", () => {
     const score = scoreWith(ref, 120, 1, { startTick: 0, durationTicks: 480 });
     const t0 = performance.now();
     const out = render(score, src, RATE);
-    expect(performance.now() - t0).toBeLessThan(1000);
+    expect(performance.now() - t0).toBeLessThan(budget(1000));
     expect(fitCacheBytes()).toBeLessThan(RATE * 4);
     // The bounded fit is the prefix of the whole one.
     clearFitCache();

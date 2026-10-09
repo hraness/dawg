@@ -32,6 +32,7 @@ import {
   type NoteInput,
   type TrackInput,
 } from "./score.ts";
+import { budget } from "../test/perf.ts";
 
 const TIMING = { tempoBpm: 120, ticksPerBeat: 480, endTick: 4 * 4 * 480 };
 const SECONDS_PER_TICK = 60 / (120 * 480);
@@ -692,7 +693,7 @@ describe("scale", () => {
       ticksPerBeat: 480,
       endTick: count * 30 + 480,
     });
-    expect(performance.now() - started).toBeLessThan(1000);
+    expect(performance.now() - started).toBeLessThan(budget(1000));
     // Each note reaches the next onset plus the legato overlap; the last one
     // has no next onset and only gains the overlap.
     expect(performed[0]!.durationTicks).toBe(30 + 480 / 16);

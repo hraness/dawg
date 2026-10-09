@@ -29,6 +29,7 @@ import { WIND_HOUSE_RMS_DB, WIND_TRIM_RATES, windTrim } from "./winds/trim.ts";
 import { WindVoice } from "./winds/voice.ts";
 import { WIND_STEAL_FADE, windLines } from "./winds/engine.ts";
 import { renderScorePcm } from "./wav.ts";
+import { ratioBudget } from "../../test/perf.ts";
 
 const SR = 22_050;
 
@@ -232,7 +233,7 @@ describe("wind dynamics and cost", () => {
     }
     // A plain JS saw is far cheaper than dawg's band-limited one, so this
     // bound is looser in practice than the spec's 40x of a synth voice.
-    expect(worst).toBeLessThan(40 * 12);
+    expect(worst).toBeLessThan(ratioBudget(40 * 12));
   }, 30_000);
 
   test("same input, same bytes", () => {

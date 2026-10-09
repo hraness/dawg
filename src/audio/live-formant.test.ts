@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createScore } from "../../core/score.ts";
 import { LIVE_RIG_WINDOW_SECONDS, LiveSynth } from "./live.ts";
+import { budget } from "../../test/perf.ts";
 
 const RATE = 22_050;
 
@@ -41,9 +42,8 @@ describe("live formant fx", () => {
     expect(Array.from(full.pcm.subarray(0, first.pcm.length))).toEqual(
       Array.from(first.pcm),
     );
-    // The first window stays inside the live budget (15 ms at 22.05 kHz,
-    // with headroom for a loaded machine).
-    expect(windowMs).toBeLessThan(60);
+    // The first window stays inside the live budget (15 ms at 22.05 kHz).
+    expect(windowMs).toBeLessThan(budget(15));
   });
 
   test("a track without the formant fx renders whole", () => {

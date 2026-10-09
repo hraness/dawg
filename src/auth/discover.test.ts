@@ -10,6 +10,7 @@ import {
   type CommandRunner,
   type ScriptedCall,
 } from "./runner.ts";
+import { budget } from "../../test/perf.ts";
 
 let dir: string;
 beforeEach(async () => {
@@ -293,7 +294,7 @@ describe("discovery", () => {
       cwd: dir,
       timeoutMs: 120,
     });
-    expect(performance.now() - started).toBeLessThan(1_500);
+    expect(performance.now() - started).toBeLessThan(budget(1_500));
     expect(found.vercel.state).toBe("timeout");
     expect(found.xcb.state).toBe("timeout");
     // The key found in the environment still makes the gateway ready.

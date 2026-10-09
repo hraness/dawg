@@ -20,6 +20,7 @@ import {
   wheelPitch,
   type OrganNote,
 } from "./organ.ts";
+import { budget, ratioBudget } from "../../../test/perf.ts";
 
 const SR = 22050;
 const noteHz = (pitch: number) => tunedHz(pitch, undefined, undefined);
@@ -547,7 +548,7 @@ describe("tails and cost", () => {
       let ratio = Infinity;
       for (let pair = 0; pair < 3; pair += 1)
         ratio = Math.min(ratio, time(organRun) / time(sawRun));
-      expect(ratio).toBeLessThanOrEqual(16);
+      expect(ratio).toBeLessThanOrEqual(ratioBudget(16));
     }
   });
 });
@@ -574,7 +575,7 @@ describe("live play", () => {
         times.push(performance.now() - t0);
       }
       times.sort((a, b) => a - b);
-      expect(times[1]!).toBeLessThan(60);
+      expect(times[1]!).toBeLessThan(budget(60));
     }
     // 48 kHz: an organ key renders a short first window, then the rest in
     // the background, so note-on stays well inside the lead.

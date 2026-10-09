@@ -18,6 +18,7 @@ import {
   pianoPartial,
   stretchCents,
 } from "./piano.ts";
+import { ratioBudget } from "../../../test/perf.ts";
 
 const SR = 44100;
 
@@ -299,7 +300,7 @@ describe("keys engine: alias and cost", () => {
         out[i] = f.process(y) * env * 0.3;
       }
     });
-    expect(piano).toBeLessThanOrEqual(16 * saw);
+    expect(piano).toBeLessThanOrEqual(ratioBudget(16) * saw);
   });
 });
 

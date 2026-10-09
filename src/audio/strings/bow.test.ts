@@ -13,6 +13,7 @@ import {
   SR,
   tetHz,
 } from "./measure.test-helpers.ts";
+import { budget } from "../../../test/perf.ts";
 
 // One string, no sympathetic bank, body or vibrato: the loop itself.
 const ISO = { unison: 1, sym: 0, body: "none", oct: 0, vib: 0 } as const;
@@ -504,7 +505,7 @@ describe("bowed strings (design spec section 9, f061-bowed)", () => {
       first ??= pcm;
     }
     times.sort((a, b) => a - b);
-    expect(times[2]!).toBeLessThan(40);
+    expect(times[2]!).toBeLessThan(budget(40));
     first = first!;
     // The key path sounds the first window; the full note (background
     // pass) starts with exactly those samples, so the swap is seamless.

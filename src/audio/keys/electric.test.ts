@@ -7,6 +7,7 @@ import { engineFor } from "../instruments.ts";
 import { Biquad2 } from "./dsp.ts";
 import { ClavVoice, clavPositions, TineVoice } from "./electric.ts";
 import { electricParamsAt, renderKeysTrack } from "./engine.ts";
+import { ratioBudget } from "../../../test/perf.ts";
 
 const SR = 44100;
 
@@ -365,8 +366,8 @@ describe("electric keys: alias and cost", () => {
         voice.process(out, 0, rate);
       });
     };
-    expect(voiceCost("epiano")).toBeLessThanOrEqual(15 * saw);
-    expect(voiceCost("wurli")).toBeLessThanOrEqual(28 * saw);
+    expect(voiceCost("epiano")).toBeLessThanOrEqual(ratioBudget(15) * saw);
+    expect(voiceCost("wurli")).toBeLessThanOrEqual(ratioBudget(28) * saw);
     const clav = params("clav", {});
     const clavCost = time(() => {
       const voice = new ClavVoice(
@@ -377,6 +378,6 @@ describe("electric keys: alias and cost", () => {
       out.fill(0);
       voice.process(out, 0, rate);
     });
-    expect(clavCost).toBeLessThanOrEqual(16 * saw);
+    expect(clavCost).toBeLessThanOrEqual(ratioBudget(16) * saw);
   });
 });

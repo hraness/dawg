@@ -21,6 +21,7 @@ import {
   StemRenderer,
   withWavCues,
 } from "./wav.ts";
+import { budget } from "../../test/perf.ts";
 
 function song(bars = 8, tempoBpm = 120): TrackScore {
   const notes = Array.from({ length: bars }, (_, bar) => ({
@@ -487,7 +488,7 @@ describe("songs longer than one pass render in full", () => {
     }
     expect(largest).toBeLessThanOrEqual(typical * 1.5 + 2);
     // Full-size windows, not one bar each with half a minute of pre-roll.
-    expect(elapsed).toBeLessThan(20_000);
+    expect(elapsed).toBeLessThan(budget(20_000));
   });
 });
 

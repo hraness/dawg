@@ -21,6 +21,7 @@ import { applyModalCommand, parseModalCommand } from "../commands/modal.ts";
 import { fft } from "./wavetable.ts";
 import { ModalBank, MODE_TABLES, type ModalNote } from "./dsp/modal.ts";
 import { renderScorePcm } from "./wav.ts";
+import { ratioBudget } from "../../test/perf.ts";
 
 const SR = 22_050;
 
@@ -494,7 +495,7 @@ describe("modal spec §9", () => {
     const saw = time({ instrument: "saw" });
     for (const name of MODAL_PRESET_NAMES) {
       const ms = time({ modal: { preset: name } });
-      expect(ms / saw).toBeLessThan(40);
+      expect(ms / saw).toBeLessThan(ratioBudget(40));
     }
     const voice = new ModalBank(
       modalSettings(normalizeModal({ preset: "gong" })),

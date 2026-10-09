@@ -15,6 +15,7 @@ import {
   type Quality,
   type Extension,
 } from "./chords.ts";
+import { budget } from "../test/perf.ts";
 
 const voice = (chord: Chord, setup = {}) =>
   voiceGuitar(
@@ -174,7 +175,7 @@ describe("typed upper tensions (0.6.1)", () => {
     const a = voice(chord, { hand: 6 });
     const t0 = performance.now();
     const b = voice(chord, { hand: 6 });
-    expect(performance.now() - t0).toBeLessThan(1);
+    expect(performance.now() - t0).toBeLessThan(budget(1));
     expect(b).toBe(a);
   });
 });
