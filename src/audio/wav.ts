@@ -168,6 +168,16 @@ const MAX_DRUM_SECONDS = 0.6;
 const CONTROL_SAMPLES = 32;
 /** One-shot renders keep this much ring-out after the last bar. */
 const ONE_SHOT_TAIL_SECONDS = 0.35;
+
+function oneShotSeconds(
+  loopSeconds: number,
+  samplerTail: number,
+  reverbTail: number,
+): number {
+  return (
+    loopSeconds + Math.max(ONE_SHOT_TAIL_SECONDS, samplerTail) + reverbTail
+  );
+}
 /** Loop renders fold at most this much tail back onto the loop start. */
 const MAX_LOOP_TAIL_SECONDS = 8;
 
@@ -283,6 +293,32 @@ export class StemRenderer {
     return { stems: this.stems.size, bytes: this.cacheBytes };
   }
 
+  /**
+   * Seconds a one-shot render of `score` needs (song plus tail) before the
+   * renderer's cap, so callers can tell when a single pass would cut it.
+   */
+  public oneShotSeconds(
+    score: TrackScore,
+    options: RenderOptions = {},
+  ): number {
+    const sampleRate = clampSampleRate(options.sampleRate);
+    const bank = options.samples ?? EMPTY_SAMPLE_BANK;
+    const reverbTail = Math.max(
+      0,
+      ...score.tracks.map((track) =>
+        reverbTailFor(track, sampleRate, bank.irs),
+      ),
+    );
+    const samplerTail = Math.min(
+      MAX_LOOP_TAIL_SECONDS,
+      Math.max(
+        samplerTailSeconds(score, bank, sampleRate),
+        ...score.tracks.map(synthTailSeconds),
+      ),
+    );
+    return oneShotSeconds(loopSecondsOf(score), samplerTail, reverbTail);
+  }
+
   public render(score: TrackScore, options: RenderOptions = {}): RenderedAudio {
     const sampleRate = clampSampleRate(options.sampleRate);
     const maxSeconds = Math.max(1, Math.min(60, options.maxSeconds ?? 30));
@@ -331,7 +367,7 @@ export class StemRenderer {
     } else {
       const seconds = Math.min(
         maxSeconds,
-        loopSeconds + Math.max(ONE_SHOT_TAIL_SECONDS, samplerTail) + reverbTail,
+        oneShotSeconds(loopSeconds, samplerTail, reverbTail),
       );
       frames = Math.max(1, Math.ceil(seconds * sampleRate));
       samples = frames;

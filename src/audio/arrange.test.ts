@@ -402,6 +402,88 @@ describe("windowed renders match one pass", () => {
   });
 });
 
+describe("songs longer than one pass render in full", () => {
+  function plain(bars: number, tempoBpm = 120): TrackScore {
+    return createScore({
+      bars,
+      tempoBpm,
+      tracks: [{ id: "lead", name: "lead", instrument: "sine" }],
+      notes: Array.from({ length: bars }, (_, bar) => ({
+        id: `n${bar}`,
+        trackId: "lead",
+        pitch: 60,
+        startTick: bar * 4 * 480,
+        durationTicks: 480,
+        velocity: 0.8,
+      })),
+    });
+  }
+
+  test("a plain song past 30 s is not cut", () => {
+    // 32 bars at 120 bpm: 64 s plus the tail.
+    const audio = renderArrangedPcm(plain(32), { sampleRate: 8000 });
+    expect(audio.frames / 8000).toBeGreaterThan(64);
+    expect(audio.frames / 8000).toBeLessThan(66);
+    // The last note (beat 124, 62 s) sounds.
+    let peak = 0;
+    for (let index = 62 * 8000 * 2; index < 63 * 8000 * 2; index += 1)
+      peak = Math.max(peak, Math.abs(audio.pcm[index]!));
+    expect(peak).toBeGreaterThan(1000);
+  });
+
+  test("a song between 30 and 45 s renders in one pass at full length", () => {
+    const audio = renderArrangedPcm(plain(18), { sampleRate: 8000 });
+    expect(audio.frames / 8000).toBeGreaterThan(36);
+  });
+
+  test("a short song renders exactly as before", () => {
+    const score = plain(8);
+    const today = renderScorePcm(score, { sampleRate: 8000 });
+    const arranged = renderArrangedPcm(score, { sampleRate: 8000 });
+    expect(
+      Buffer.from(arranged.pcm.buffer).equals(Buffer.from(today.pcm.buffer)),
+    ).toBe(true);
+  });
+
+  test("a drone held past the window reach crossfades at seams, in linear time", () => {
+    const rate = 8000;
+    const bars = 60; // 120 s at 120 bpm
+    const score = createScore({
+      bars,
+      tempoBpm: 120,
+      tracks: [{ id: "drone", name: "drone", instrument: "sine" }],
+      notes: [
+        {
+          id: "d",
+          trackId: "drone",
+          pitch: 48,
+          startTick: 0,
+          durationTicks: bars * 4 * 480,
+          velocity: 0.7,
+        },
+      ],
+    });
+    const started = performance.now();
+    const audio = renderArrangedPcm(score, { sampleRate: rate });
+    const elapsed = performance.now() - started;
+    expect(audio.frames / rate).toBeGreaterThan(120);
+    // A sine at C3 moves at most ~2*pi*130/8000 of full scale per sample;
+    // a phase step would jump far more.
+    let largest = 0;
+    let typical = 0;
+    for (let frame = rate; frame < 119 * rate; frame += 1) {
+      const step = Math.abs(
+        audio.pcm[frame * 2]! - audio.pcm[(frame - 1) * 2]!,
+      );
+      largest = Math.max(largest, step);
+      typical = Math.max(typical, frame < 40 * rate ? step : 0);
+    }
+    expect(largest).toBeLessThanOrEqual(typical * 1.5 + 2);
+    // Full-size windows, not one bar each with half a minute of pre-roll.
+    expect(elapsed).toBeLessThan(20_000);
+  });
+});
+
 describe("sections meet the 0.5 tempo map, track time and master", () => {
   test("a looped section starts at the tempo sounding there", () => {
     // 8 bars at 120, stepping to 60 bpm at bar 4 (the chorus).

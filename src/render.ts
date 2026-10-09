@@ -188,7 +188,10 @@ export async function runRenderCommand(
   await writeFile(temporary, wav);
   await rename(temporary, path);
   const sha = createHash("sha256").update(wav).digest("hex");
-  stdout.write(`rendered · ${target} · ${wav.byteLength} bytes · ${sha}\n`);
+  const seconds = audio.frames / audio.sampleRate;
+  stdout.write(
+    `rendered · ${target} · ${seconds.toFixed(2)} s · ${wav.byteLength} bytes · ${sha}\n`,
+  );
   if (credits) stdout.write(`credits · ${credits}\n`);
   if (options.has("--measure"))
     stdout.write(
