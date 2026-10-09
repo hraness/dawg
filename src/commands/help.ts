@@ -373,7 +373,10 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         command: "/showme on|quiet|off",
         summary: "agent types its commands in the prompt bar as it streams",
       },
-      { command: "/model [alias]", summary: "pick a model · cost per prompt" },
+      {
+        command: "/model [alias]",
+        summary: "pick a model · cost per prompt · fast",
+      },
       {
         command: "/login [gateway|openrouter|codex|claude]",
         summary: "sign in to a provider",
@@ -833,7 +836,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   log: "/transcript",
   theme: "/theme default | high-contrast | mono",
   motion: "/motion on | off",
-  model: "/model [alias | vendor/model]",
+  model: "/model [fast | alias | vendor/model]",
   login: "/login [gateway | openrouter | codex | claude]",
   logout: "/logout [provider]",
   auth: "/auth [--check]",
