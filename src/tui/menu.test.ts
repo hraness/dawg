@@ -1083,3 +1083,25 @@ describe("key command", () => {
     });
   });
 });
+
+describe("show me row", () => {
+  test("Project lists the show-me level and sets it with /showme", () => {
+    const menu = new EditMenu();
+    const ctx = { ...context(), showMe: "on" };
+    menu.show(ctx, "project");
+    select(menu, ctx, "show me");
+    const row = menu.view(ctx).items[menu.view(ctx).index]!;
+    expect(row.label).toContain("on");
+    const result = menu.key(RIGHT, ctx);
+    expect(JSON.stringify(result)).toContain("/showme quiet");
+  });
+
+  test("no row when the window has no agent setting", () => {
+    const menu = new EditMenu();
+    const ctx = context();
+    menu.show(ctx, "project");
+    expect(
+      menu.view(ctx).items.some((row) => row.label.startsWith("show me")),
+    ).toBe(false);
+  });
+});

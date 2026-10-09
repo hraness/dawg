@@ -704,6 +704,25 @@ let requestFrame: () => void = () => undefined;
 let runPromptLater: (command: string) => void = () => undefined;
 /** The fader drawer's focus and typing, while one is open over the menu. */
 let fader: FaderState | undefined;
+/** Show-me state (see the show-me section below). */
+const showMe: {
+  level: ShowMeLevel;
+  ghost?: string | undefined;
+  caption?: string | undefined;
+  commands: string[];
+  notes: NoteScheduler;
+  clear?: ReturnType<typeof setTimeout> | undefined;
+} = {
+  level: parseShowMe(process.env.DAWG_SHOWME ?? "") ?? "on",
+  commands: [],
+  notes: new NoteScheduler(() => score.tempoBpm),
+};
+if (!process.env.DAWG_SHOWME)
+  void readConfig({ dir: configDir() })
+    .then((config) => {
+      if (config.showMe) showMe.level = config.showMe;
+    })
+    .catch(() => undefined);
 const KEY_UP = "\u001b[A";
 const KEY_DOWN = "\u001b[B";
 /** The fader bar a left-button drag started on. */
@@ -4575,24 +4594,6 @@ function agentPreviewHost(): PreviewHost {
  * as step entry when it is behind), and the caption names the key or fader
  * a person would use. Nothing waits for the turn to end.
  */
-const showMe: {
-  level: ShowMeLevel;
-  ghost?: string | undefined;
-  caption?: string | undefined;
-  commands: string[];
-  notes: NoteScheduler;
-  clear?: ReturnType<typeof setTimeout> | undefined;
-} = {
-  level: parseShowMe(process.env.DAWG_SHOWME ?? "") ?? "on",
-  commands: [],
-  notes: new NoteScheduler(() => score.tempoBpm),
-};
-if (!process.env.DAWG_SHOWME)
-  void readConfig({ dir: configDir() })
-    .then((config) => {
-      if (config.showMe) showMe.level = config.showMe;
-    })
-    .catch(() => undefined);
 
 function showMeTyping(text: string): void {
   showMe.ghost = text || undefined;
