@@ -4,6 +4,10 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ## Unreleased
 
+### Added
+
+- **Fitting samples to the song.** Sampler voices take `bpm` (their own tempo) or `len` (beats), and follow the song's tempo map, ramps included. `fitmode` picks how: `repitch` (tape, the default), `beats` (onset slices placed on time, hits stay sharp) or `tones` (phase-vocoder stretch, pitch kept). `/bpm 174`, `/len 16`, `/fitmode beats` (or `/fitmode auto`, which listens and suggests), the Sound menu's sample rows, the agent's `fit_sample` tool, and `sample(path, { bpm, fitmode, len })` in the SDK. Only the frames a note can reach are fitted. In play mode a fit up to 8 s (source or output) is computed at once; longer ones say "fitting" until ready, then "fit ready". A bare `bpm <n>` stays the song tempo. SDK 1.20.0 (additive).
+
 ### Internal
 
 - **0.6 instrument plumbing.** Shared DSP primitives under `src/audio/dsp/` (counter-based seeded randomness, Hermite reads and a Thiran fractional delay, half-band 2x/4x oversampling, antiderivative-antialiased shapers, DC blocker and one-pole), an instrument engine registry (`src/audio/instruments.ts`) consulted by renders, the stem cache and live play, and one instrument word resolver (`core/instruments.ts`, copied into the SDK) used by the `instrument` prompt, `set_instrument` and `track()`. Nothing is registered yet, so every project sounds and prints exactly as before.

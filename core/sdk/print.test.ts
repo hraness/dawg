@@ -84,6 +84,14 @@ const rich = createScore({
             accelerate: -0.5,
             squiz: 2,
           },
+          // Fitting to the song's time (SDK 1.20.0).
+          brk: {
+            src: "tracks/vox/samples/brk.wav",
+            root: 36,
+            bpm: 174,
+            fitmode: "beats",
+            len: 8,
+          },
         },
       },
     },

@@ -915,6 +915,9 @@ function printSample(ref: SampleRef, indent: string, prefix: number): string {
   if (ref.accelerate !== undefined)
     entries.push(["accelerate", num(ref.accelerate)]);
   if (ref.squiz !== undefined) entries.push(["squiz", num(ref.squiz)]);
+  if (ref.bpm !== undefined) entries.push(["bpm", num(ref.bpm)]);
+  if (ref.fitmode !== undefined) entries.push(["fitmode", str(ref.fitmode)]);
+  if (ref.len !== undefined) entries.push(["len", num(ref.len)]);
   if (entries.length === 1) return str(ref.src);
   return obj(entries, indent, prefix, 1);
 }

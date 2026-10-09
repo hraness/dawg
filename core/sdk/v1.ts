@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.19.0";
+export const SDK_VERSION = "1.20.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -1277,6 +1277,12 @@ export type SampleSpec = Readonly<{
   accelerate?: number;
   /** Like Tidal `squiz`: pitch-raise ratio per zero-crossing cycle (1..32). */
   squiz?: number;
+  /** The file's own tempo (20..400, SDK 1.20.0): the window follows the song's tempo map. */
+  bpm?: number;
+  /** How a fitted window changes time (SDK 1.20.0): `"repitch"` (tape), `"beats"` (onset slices), `"tones"` (keeps pitch). */
+  fitmode?: "repitch" | "beats" | "tones";
+  /** Window length in beats (SDK 1.20.0); `fit` wins over `bpm`, `bpm` over `len`. */
+  len?: number;
 }>;
 
 /** Result of `sampler()`; pass it as a track's `instrument`. */
@@ -1317,7 +1323,7 @@ export function sampler(
       throw new DawgSdkError(
         `sampler voice "${name}" must be a short identifier`,
       );
-    out[name] = sample(voices[name]!, name);
+    out[name] = sampleSpec(voices[name]!, name);
   }
   return Object.freeze({ kind: "sampler", voices: Object.freeze(out), mode });
 }
@@ -1445,7 +1451,7 @@ export function slices(
 ): Record<string, SampleSpec> {
   if (!Number.isInteger(count) || count < 1 || count > 64)
     throw new DawgSdkError("slices count must be an integer 1..64");
-  const base = sample(src, prefix);
+  const base = sampleSpec(src, prefix);
   const begin = base.begin ?? 0;
   const end = base.end ?? 1;
   const span = (end - begin) / count;
@@ -1460,7 +1466,7 @@ export function slices(
   return voices;
 }
 
-function sample(value: string | SampleSpec, name: string): SampleSpec {
+function sampleSpec(value: string | SampleSpec, name: string): SampleSpec {
   const spec = typeof value === "string" ? { src: value } : value;
   if (!isRecord(spec) || typeof spec.src !== "string" || spec.src.length === 0)
     throw new DawgSdkError(`sampler voice ${name} needs a src path`);
@@ -1483,6 +1489,9 @@ function sample(value: string | SampleSpec, name: string): SampleSpec {
     fit?: boolean;
     accelerate?: number;
     squiz?: number;
+    bpm?: number;
+    fitmode?: "repitch" | "beats" | "tones";
+    len?: number;
   } = { src: spec.src };
   if (spec.src.startsWith("pack:")) {
     if (spec.sha256 !== undefined)
@@ -1532,7 +1541,34 @@ function sample(value: string | SampleSpec, name: string): SampleSpec {
   if (spec.accelerate !== undefined)
     out.accelerate = finite(spec.accelerate, `${name} accelerate`);
   if (spec.squiz !== undefined) out.squiz = finite(spec.squiz, `${name} squiz`);
+  if (spec.bpm !== undefined) out.bpm = finite(spec.bpm, `${name} bpm`);
+  if (spec.fitmode !== undefined) {
+    if (
+      spec.fitmode !== "repitch" &&
+      spec.fitmode !== "beats" &&
+      spec.fitmode !== "tones"
+    )
+      throw new DawgSdkError(
+        `${name} fitmode must be "repitch", "beats" or "tones"`,
+      );
+    out.fitmode = spec.fitmode;
+  }
+  if (spec.len !== undefined) out.len = finite(spec.len, `${name} len`);
   return Object.freeze(out);
+}
+
+/**
+ * One sample file with options (SDK 1.20.0), for `sampler({ brk: ... })`:
+ * `sample("samples/break.wav", { bpm: 174, fitmode: "beats" })` plays a
+ * 174 BPM break in time with the song, cut at its hits.
+ */
+export function sample(
+  src: string,
+  options: Omit<SampleSpec, "src"> = {},
+): SampleSpec {
+  if (typeof src !== "string" || src.length === 0)
+    throw new DawgSdkError("sample() needs a src path");
+  return Object.freeze({ ...options, src });
 }
 
 // ---------------------------------------------------------------------------
@@ -2433,7 +2469,7 @@ function reverbIr(
     throw new DawgSdkError(`track ${name}: reverb.ir needs a src`);
   const src = spec.src.trim().replace(/^\.\//, "");
   if (src.startsWith("pack:")) {
-    const ref = sample(spec as SampleSpec, `${name} reverb.ir`);
+    const ref = sampleSpec(spec as SampleSpec, `${name} reverb.ir`);
     return Object.freeze({
       src: ref.src,
       ...(ref.sha256 ? { sha256: ref.sha256 } : {}),
@@ -2617,6 +2653,9 @@ export type ScoreSampleRef = Readonly<{
   fit?: boolean;
   accelerate?: number;
   squiz?: number;
+  bpm?: number;
+  fitmode?: "repitch" | "beats" | "tones";
+  len?: number;
 }>;
 
 /** A stored track; optional fields are present only when set. */

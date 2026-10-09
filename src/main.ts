@@ -94,9 +94,12 @@ import {
   samplerTarget,
   voiceNameFrom,
 } from "./commands/sample.ts";
+import { applyFitCommand, fitVoice, parseFitCommand } from "./commands/fit.ts";
+import { suggestFitMode } from "./audio/dsp/onset.ts";
 import {
   SampleLibrary,
   hasSamplerTracks,
+  sampleKey,
   type SampleBank,
   type SampleProblem,
 } from "./audio/samples.ts";
@@ -216,6 +219,7 @@ import {
   addNote,
   applyScoreOperation,
   createScore,
+  isSamplerInstrument,
   PACK_PREFIX,
   scoreFromJSON,
   SCORE_LIMITS,
@@ -267,6 +271,7 @@ function parsesLocally(text: string): boolean {
     parseKitCommand,
     parsePackCommand,
     parseSampleCommand,
+    parseFitCommand,
     parseWavetableCommand,
     parseTimeCommand,
     parseTuningCommand,
@@ -1672,6 +1677,8 @@ async function submit(prompt: string): Promise<string | Receipt> {
   }
   const sample = parseSampleCommand(command);
   if (sample) return sampleCommand(sample);
+  const fit = parseFitCommand(command);
+  if (fit) return fitCommand(fit);
   const pack = parsePackCommand(command);
   if (pack) return packCommand(pack);
   const pattern = parsePatternCommand(command);
@@ -1911,7 +1918,16 @@ async function submit(prompt: string): Promise<string | Receipt> {
     const next = score.withTempo(parsed.tempoBpm);
     await commitScore(next, "score.tempo", { tempoBpm: parsed.tempoBpm });
     clock.follow(next);
-    return `tempo · ${next.tempoBpm} BPM`;
+    // A bare `bpm <n>` stays song tempo; on a sampler track say where the
+    // sample's own tempo lives (`/bpm`, 0.6 fit).
+    const focused = next.tracks.find((t) => t.id === requestedTrack);
+    const samplerHint =
+      /^\s*bpm\b/i.test(prompt) &&
+      focused?.sampler &&
+      isSamplerInstrument(focused.instrument)
+        ? ` · song tempo · the sample's own tempo is /bpm ${parsed.tempoBpm}`
+        : "";
+    return `tempo · ${next.tempoBpm} BPM${samplerHint}`;
   }
   if (parsed.type === "add-track") return focusTrack(parsed.trackId);
   if (parsed.type === "set-bars" || parsed.type === "extend-bars") {
@@ -2171,6 +2187,34 @@ async function tuningCommand(command: TuningCommand): Promise<Receipt> {
   if (result.next && result.kind)
     await commitScore(result.next, result.kind, result.payload);
   return result.ok ? ok(result.message) : fail(result.message);
+}
+
+/** `/fitmode`, `/bpm`, `/len` on the focused sampler voice (0.6). */
+async function fitCommand(
+  command: NonNullable<ReturnType<typeof parseFitCommand>>,
+): Promise<Receipt> {
+  let suggested: "beats" | "tones" | undefined;
+  if (command.control === "fitmode" && command.value === undefined) {
+    const target = fitVoice(score, requestedTrack, command.voice);
+    if ("error" in target) return fail(target.error);
+    const decoded = liveSampleBank?.voices.get(
+      sampleKey(requestedTrack, target.voice),
+    );
+    if (!decoded)
+      return warn(
+        "fit · the sample is still loading · fitmode repitch|beats|tones",
+      );
+    suggested = suggestFitMode(decoded.mono, decoded.sampleRate);
+  }
+  const result = applyFitCommand(score, requestedTrack, command, suggested);
+  if (!result.ok) return fail(result.message);
+  await commitScore(result.next, "sample.set", { trackId: requestedTrack });
+  await projectSync?.flushScore();
+  return ok(
+    suggested
+      ? `${result.message} · suggested from the sound (${suggested === "beats" ? "hits" : "held tones"})`
+      : result.message,
+  );
 }
 
 async function sampleCommand(

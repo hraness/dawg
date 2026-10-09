@@ -20,6 +20,7 @@ Positions are beats from 0 or `bar <n>`.
 - `fermata at 31 2` hold beat 31 for 2 extra beats
 - `meter 7/8 at bar 5` · `tempo map` show it · `tempo clear`
 - `track rate 3/2` · `track cycle 3` · `track phasing 3` · `track time off`
+- `/bpm 174` on a sampler voice follows the map · `fitmode beats|tones` keeps pitch
 
 ## Menu
 

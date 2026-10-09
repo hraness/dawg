@@ -729,6 +729,55 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
     },
   },
   {
+    name: "fit_sample",
+    description:
+      "Fit a sampler voice to the song's tempo map (ramps included): bpm is the sample's own tempo (20..400), len its length in beats; fitmode repitch (tape: pitch moves with speed, default) | beats (drums, speech: onset slices placed on time, unstretched) | tones (pads, vocals: phase-vocoder stretch, pitch kept). fit on > bpm > len. null unsets one. Song tempo is set_tempo, not this.",
+    parameters: {
+      type: "object",
+      properties: {
+        trackId: trackIdSchema,
+        voice: { type: "string" },
+        bpm: { type: ["number", "null"], minimum: 20, maximum: 400 },
+        fitmode: {
+          anyOf: [
+            { type: "string", enum: ["repitch", "beats", "tones"] },
+            { type: "null" },
+          ],
+        },
+        len: { type: ["number", "null"], exclusiveMinimum: 0, maximum: 1024 },
+      },
+      required: ["voice"],
+      additionalProperties: false,
+    },
+    plan(args, context) {
+      const trackId = targetTrack(args, context);
+      if (typeof args.voice !== "string")
+        throw new ToolArgumentError("fit_sample needs voice");
+      const values: Record<string, SampleControlValue> = {};
+      for (const key of ["bpm", "len", "fitmode"] as const)
+        if (args[key] !== undefined)
+          values[key] = args[key] as SampleControlValue;
+      if (Object.keys(values).length === 0)
+        throw new ToolArgumentError("fit_sample needs bpm, len or fitmode");
+      const result = setSampleControls(
+        context.score,
+        trackId,
+        args.voice,
+        values,
+      );
+      if (!result.ok) throw new ToolArgumentError(result.message);
+      const next = result.next.tracks.find((t) => t.id === trackId)!;
+      return {
+        kind: "score",
+        operations: [
+          { type: "updateTrack", trackId, patch: { sampler: next.sampler } },
+        ],
+        trackId,
+        summary: `${trackId} ${result.message.replace(/^sample/, "fit")}`,
+      };
+    },
+  },
+  {
     name: "set_effects",
     description: `Shorthand: low-pass filter, delay (beats) and reverb (mix 0.15..0.35 is a room); null removes one. Prefer set_fx.`,
     parameters: {

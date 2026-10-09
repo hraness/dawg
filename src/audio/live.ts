@@ -20,6 +20,7 @@ import { bpmAtTick } from "../../core/tempo.ts";
 import { sampleKey, type SampleBank } from "./samples.ts";
 import { RENDER_CHANNELS, renderScorePcm } from "./wav.ts";
 import { engineFor } from "./instruments.ts";
+import { liveFitPending, withLiveFit } from "./fit.ts";
 
 /** A rendered live note: interleaved stereo 16-bit PCM. */
 export type LiveNotePcm = Readonly<{
@@ -27,6 +28,12 @@ export type LiveNotePcm = Readonly<{
   frames: number;
   /** Release fade on note-off, in seconds; absent is the 10 ms default. */
   releaseSeconds?: number;
+  /**
+   * A fitted sample window (0.6 `bpm`/`len`/`fitmode`) longer than 8 s is
+   * still being computed: the note is silent and not cached; play it again
+   * once its background fit (fit.ts `onFitReady`) lands.
+   */
+  fitting?: true;
 }>;
 
 export type LiveNoteRequest = Readonly<{
@@ -134,11 +141,15 @@ export class LiveSynth {
     // A 0.6 engine's ring-out sets the one-note length and the key release.
     const engine = engineFor(track);
     const tail = engine ? Math.max(0, engine.tailSeconds(track)) : 0;
-    const audio = renderScorePcm(single, {
-      sampleRate: this.sampleRate,
-      maxSeconds: Math.max(MAX_LIVE_NOTE_SECONDS + 4, seconds + tail),
-      ...(request.samples ? { samples: request.samples } : {}),
-    });
+    // Fitted sample windows over 8 s fit in the background (silent until
+    // ready, never at the wrong pitch); shorter ones fit synchronously.
+    const audio = withLiveFit(() =>
+      renderScorePcm(single, {
+        sampleRate: this.sampleRate,
+        maxSeconds: Math.max(MAX_LIVE_NOTE_SECONDS + 4, seconds + tail),
+        ...(request.samples ? { samples: request.samples } : {}),
+      }),
+    );
     const frames = audibleFrames(audio.pcm);
     const rendered: LiveNotePcm = {
       pcm: audio.pcm.subarray(0, frames * RENDER_CHANNELS),
@@ -147,6 +158,7 @@ export class LiveSynth {
         ? { releaseSeconds: Math.min(tail, MAX_LIVE_NOTE_SECONDS) }
         : {}),
     };
+    if (liveFitPending()) return { ...rendered, fitting: true };
     this.cache.set(key, rendered);
     while (this.cache.size > CACHE_ENTRIES) {
       const oldest = this.cache.keys().next().value;
