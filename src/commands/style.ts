@@ -257,7 +257,7 @@ export function describeStyle(style: ResolvedStyle): string[] {
     `${style.title} (${style.id})${era ? ` · ${era}` : ""}${node?.region.length ? ` · ${node.region.join(", ")}` : ""}`,
     `path ${stylePath(style.id).join(" › ")} · cards ${style.lineage.join(" › ") || "base"}`,
     style.summary,
-    `meter ${weightedText(style.meter.signatures)}${style.meter.cycle ? ` · cycle ${style.meter.cycle.name}` : ""} · tempo ${style.tempo.bpm[0]}-${style.tempo.bpm[1]} (${style.tempo.typical}) bpm`,
+    `meter ${weightedText(style.meter.signatures)}${style.meter.cycle ? ` · cycle ${style.meter.cycle.name}` : ""} · tempo ${style.tempo.bpm[0]}-${style.tempo.bpm[1]} (${style.tempo.typical}) BPM`,
     `groove ${style.groove.subdivision}/beat · swing ${style.groove.swingRatio[0] === style.groove.swingRatio[1] ? style.groove.swingRatio[0] : style.groove.swingRatio.join("-")}`,
     `pitch ${style.pitch.tuning ?? "12-TET"} · ${weightedText(style.pitch.scales)}`,
     `harmony ${harmony}`,
@@ -313,7 +313,7 @@ export function generatedSummary(generated: GeneratedStyle): string {
   const failed = report.checks.filter((check) => !check.ok);
   return [
     `style ${name} · seed ${plan.seed} · ${plan.bars} bars`,
-    `${plan.signature} ${Math.round(plan.bpm)} bpm`,
+    `${plan.signature} ${Math.round(plan.bpm)} BPM`,
     plan.keyText ?? plan.tuning?.name ?? "",
     `${plan.tracks.length} tracks`,
     failed.length === 0

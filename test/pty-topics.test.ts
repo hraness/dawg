@@ -41,7 +41,37 @@ const PTY_KNOWN_GAPS: readonly string[] = [
   "tempo",
   "formant 3",
   "lyrics",
+  // C15 and D (feel and language lanes): the offline prompt still says
+  // `dawg login` instead of the model-key card.
+  "offline first run",
 ];
+
+/** Every case the suites record; a case that throws early still counts. */
+const EXPECTED_LABELS: readonly string[] = [
+  ...["help", "guide", "menu"].flatMap((door) =>
+    TOPIC_IDS.map((id) => `/${door} ${id}`),
+  ),
+  "first run",
+  "offline first run",
+  "/style deep-house",
+  "tempo",
+  "formant 3",
+  "lyrics",
+];
+
+/** The prompt box is drawn: the TUI is up and taking keys. */
+function ready(t: Session): boolean {
+  return t.vt.lines().some((line) => line.startsWith("╭─"));
+}
+
+/**
+ * The word a door's panel title names for each topic id: `help · effects`,
+ * `guide · Shaping sound › Effects`, `menu › Mix & automation`.
+ */
+function namesTopic(text: string, id: string): boolean {
+  const title = text.split("\n")[0]?.toLowerCase() ?? "";
+  return title.includes("╭─") && title.includes(id.slice(0, 5));
+}
 
 /** The status line and any open panel: what the person reads after Enter. */
 function screen(t: Session): string {
@@ -101,7 +131,7 @@ describe.skipIf(!supported)("real PTY at 80x24: topics and first run", () => {
   test("every topic id opens in /help, /guide and /menu", async () => {
     const t = await launch(80, 24, OFFLINE, []);
     try {
-      await t.until(() => screen(t).includes("dawg login"), "ready");
+      await t.until(() => ready(t), "ready");
       for (const door of ["help", "guide", "menu"])
         for (const id of TOPIC_IDS) {
           const label = `/${door} ${id}`;
@@ -114,7 +144,7 @@ describe.skipIf(!supported)("real PTY at 80x24: topics and first run", () => {
     }
   }, 120_000);
 
-  test("first run offers sign-in, offline first run hints dawg login", async () => {
+  test("first run welcomes; offline first run offers the model key", async () => {
     const online = await launch(80, 24, { AI_GATEWAY_API_KEY: "" }, []);
     try {
       await online.until(
@@ -130,11 +160,14 @@ describe.skipIf(!supported)("real PTY at 80x24: topics and first run", () => {
     const offline = await launch(80, 24, OFFLINE, []);
     try {
       await offline.until(
-        () => screen(offline).includes("no model · dawg login"),
+        () => ready(offline) && screen(offline).includes("try: tempo 96"),
         "offline prompt",
       );
-      expect(screen(offline)).toContain("try: tempo 96");
-      record("offline first run", screen(offline));
+      // §8.2: the agent key is `/model key`; login is only a typed alias.
+      const text = screen(offline);
+      const ok =
+        !/\blogin\b|sign.?in/i.test(text) && text.includes("/model key");
+      record("offline first run", ok ? text : `✗ ${text}`);
     } finally {
       offline.terminal.write("\u0003");
       await offline.proc.exited;
@@ -144,10 +177,12 @@ describe.skipIf(!supported)("real PTY at 80x24: topics and first run", () => {
   test("/style receipt, bare tempo, formant 3, lyrics offline", async () => {
     const t = await launch(80, 24, OFFLINE, []);
     try {
-      await t.until(() => screen(t).includes("dawg login"), "ready");
+      await t.until(() => ready(t), "ready");
       const style = await run(t, "/style deep-house");
       expect(receipt(t)).toContain("✓ style deep-house");
-      expect(receipt(t)).toContain("bpm");
+      // House style: BPM in capitals.
+      expect(receipt(t)).toContain("BPM");
+      expect(receipt(t)).not.toMatch(/\bbpm\b/);
       record("/style deep-house", style);
       await reset(t);
       for (const line of ["tempo", "formant 3", "lyrics"]) {
@@ -164,7 +199,15 @@ describe.skipIf(!supported)("real PTY at 80x24: topics and first run", () => {
     const failing = [...outcomes]
       .filter(([, text]) => BAD.test(text) || text.includes("✗ "))
       .map(([label]) => label);
+    expect(EXPECTED_LABELS.filter((label) => !outcomes.has(label))).toEqual([]);
     const known = new Set(PTY_KNOWN_GAPS);
+    // A door that opens must open its own topic, not a root or general page.
+    for (const door of ["help", "guide", "menu"])
+      for (const id of TOPIC_IDS) {
+        const label = `/${door} ${id}`;
+        if (failing.includes(label)) continue;
+        expect(namesTopic(outcomes.get(label) ?? "", id), label).toBe(true);
+      }
     expect(failing.filter((label) => !known.has(label))).toEqual([]);
     // Once bare tempo works, it opens the fader drawer on the tempo value.
     if (!failing.includes("tempo") && outcomes.has("tempo"))

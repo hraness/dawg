@@ -6,7 +6,9 @@
  * - `remove n1` with no such note refuses (`✗ no note n1 · notes lists them`).
  * - `instrument sawtoth` refuses with a did-you-mean and stores nothing.
  * - `tempo 900` reads through the one usage template, never a core field name.
- * - An edit in one window never shows the "synced from another window" card.
+ * - An edit in one window never shows the "synced from another window" card:
+ *   not for a typed line, not for an agent tool write (which goes through
+ *   the port, the path that misfires), not with the daemon on.
  * - Space (transport) and play mode's Space leave the revision unchanged.
  * - A fake-provider turn streaming a bare `pattern house` writes drums, and
  *   the line never glues onto the prose after it.
@@ -39,7 +41,28 @@ const RECEIPT_KNOWN_GAPS: readonly string[] = [
   "Space",
   "play mode Space",
   "agent pattern house",
+  // C12 (feel lane, PR #140): with the daemon on, this window's own write
+  // comes back through the port and shows the card.
+  "one-window daemon edit",
 ];
+
+/** Every case this suite records; a case that throws early still counts. */
+const EXPECTED_LABELS: readonly string[] = [
+  "remove n1",
+  "instrument sawtoth",
+  "tempo 900",
+  "one-window edit",
+  "one-window agent write",
+  "one-window daemon edit",
+  "Space",
+  "play mode Space",
+  "agent pattern house",
+];
+
+/** The prompt box is drawn: the TUI is up and taking keys. */
+function ready(t: Session): boolean {
+  return t.vt.lines().some((line) => line.startsWith("╭─"));
+}
 
 /** The status line: receipts, newest first, above the prompt box. */
 function statusLine(t: Session): string {
@@ -115,10 +138,22 @@ function record(label: string, ok: boolean, text: string): void {
 // A streaming gateway for the agent case: one scripted reply per request.
 let server: ReturnType<typeof Bun.serve> | undefined;
 let origin = "";
-let replies: string[][] = [];
+/** One scripted reply: text parts, or a tool call the agent runs. */
+type Reply = string[] | { tool: string; args: Record<string, unknown> };
+let replies: Reply[] = [];
 
 function chunk(content: string): string {
   return `data: ${JSON.stringify({ choices: [{ index: 0, delta: { content } }] })}\n\n`;
+}
+
+function toolChunk(name: string, args: Record<string, unknown>): string {
+  const call = {
+    index: 0,
+    id: `call_${name}`,
+    type: "function",
+    function: { name, arguments: JSON.stringify(args) },
+  };
+  return `data: ${JSON.stringify({ choices: [{ index: 0, delta: { tool_calls: [call] } }] })}\n\n`;
 }
 
 beforeAll(() => {
@@ -131,10 +166,13 @@ beforeAll(() => {
       if (!new URL(request.url).pathname.endsWith("/chat/completions"))
         return new Response("nope", { status: 404 });
       await request.json();
-      const parts = replies.shift() ?? ["Done."];
+      const reply = replies.shift() ?? ["Done."];
+      const [content, reason] = Array.isArray(reply)
+        ? [reply.map(chunk).join(""), "stop"]
+        : [toolChunk(reply.tool, reply.args), "tool_calls"];
       const body =
-        parts.map(chunk).join("") +
-        `data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`;
+        content +
+        `data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: reason }] })}\n\ndata: [DONE]\n\n`;
       return new Response(body, {
         headers: { "content-type": "text/event-stream" },
       });
@@ -151,7 +189,7 @@ describe.skipIf(!supported)("real PTY at 80x24: receipts never lie", () => {
   test("refusals refuse: remove, instrument, tempo", async () => {
     const t = await launch(80, 24, OFFLINE, ["--track", "bass"]);
     try {
-      await t.until(() => t.vt.text().includes("dawg login"), "ready");
+      await t.until(() => ready(t), "ready");
 
       const removed = await run(t, "remove n1");
       record(
@@ -194,7 +232,7 @@ describe.skipIf(!supported)("real PTY at 80x24: receipts never lie", () => {
   test("one window: an edit never shows the sync card", async () => {
     const t = await launch(80, 24, OFFLINE, ["--track", "bass"]);
     try {
-      await t.until(() => t.vt.text().includes("dawg login"), "ready");
+      await t.until(() => ready(t), "ready");
       await run(t, "add C4 at 0 for 1");
       await run(t, "tempo 96");
       // The watcher would land well inside this window.
@@ -207,10 +245,54 @@ describe.skipIf(!supported)("real PTY at 80x24: receipts never lie", () => {
     }
   }, 30_000);
 
+  test("one window: an agent tool write never shows the sync card", async () => {
+    replies = [{ tool: "set_tempo", args: { bpm: 96 } }, ["Tempo is 96."]];
+    const t = await launch(
+      80,
+      24,
+      {
+        AI_GATEWAY_BASE_URL: `${origin}/v1`,
+        DAWG_MODELS_DEV_URL: `${origin}/api.json`,
+      },
+      ["--track", "bass"],
+    );
+    try {
+      await t.until(() => ready(t), "prompt");
+      await t.send("slow it to 96\r");
+      await t.until(
+        () => t.vt.lines()[0]?.includes("96") ?? false,
+        "tempo",
+        10_000,
+      );
+      await Bun.sleep(1_500);
+      const text = t.vt.text();
+      record("one-window agent write", !/synced/i.test(text), text);
+    } finally {
+      await quit(t);
+    }
+  }, 30_000);
+
+  test("one window, daemon on: an edit never shows the sync card", async () => {
+    const t = await launch(80, 24, { ...OFFLINE, DAWG_DAEMON: "1" }, [
+      "--track",
+      "bass",
+    ]);
+    try {
+      await t.until(() => ready(t), "ready", 10_000);
+      await run(t, "add C4 at 0 for 1");
+      await run(t, "tempo 96");
+      await Bun.sleep(1_500);
+      const text = t.vt.text();
+      record("one-window daemon edit", !/synced/i.test(text), text);
+    } finally {
+      await quit(t);
+    }
+  }, 30_000);
+
   test("Space and play mode change no revision", async () => {
     const t = await launch(80, 24, OFFLINE, ["--track", "bass"]);
     try {
-      await t.until(() => t.vt.text().includes("dawg login"), "ready");
+      await t.until(() => ready(t), "ready");
       await run(t, "add C4 at 0 for 1");
       const rev = revision(t);
       expect(rev).toBe(1);
@@ -249,7 +331,7 @@ describe.skipIf(!supported)("real PTY at 80x24: receipts never lie", () => {
       ["--track", "drums"],
     );
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => ready(t), "prompt");
       await t.send("give me a house beat\r");
       await t.until(
         () => t.vt.text().includes("Four on the floor"),
@@ -270,6 +352,8 @@ describe.skipIf(!supported)("real PTY at 80x24: receipts never lie", () => {
   }, 30_000);
 
   test("every receipt tells the truth, except the known gaps", () => {
+    // A case that threw before recording would hide its gap; none may.
+    expect(EXPECTED_LABELS.filter((label) => !outcomes.has(label))).toEqual([]);
     const lying = [...outcomes].filter(([, ok]) => !ok).map(([label]) => label);
     const known = new Set(RECEIPT_KNOWN_GAPS);
     expect(lying.filter((label) => !known.has(label))).toEqual([]);
