@@ -144,16 +144,19 @@ describe("family art: style theory", () => {
         expect(["2/4", "6/8", "4/4", "2/2"]).toContain(sig);
       for (const seed of SEEDS) {
         const g = generateStyle(id, { seed, bars: 8 });
-        const beat = g.plan.barTicks / Number(g.plan.signature.split("/")[0]);
-        const strong = g.plan.signature === "6/8" ? beat * 3 : beat * 2;
+        const pulses = Number(g.plan.signature.split("/")[0]);
+        const beat = g.plan.barTicks / pulses;
+        // Oom-pah: the bass speaks on the strong beats (each beat of 2/4,
+        // 1 and 3 of 4/4, the two dotted-quarter beats of 6/8), never
+        // between them (a few ticks of humanize either side).
+        const strong =
+          g.plan.signature === "6/8" ? beat * 3 : pulses > 2 ? beat * 2 : beat;
         const bass = notesFor(g, "bass");
         expect(bass.length).toBeGreaterThan(0);
-        // Oom-pah: the bass speaks on the strong beats (1 and 3, or the
-        // two dotted-quarter beats of 6/8), never between them.
-        for (const note of bass)
-          expect(Math.abs((note.startTick ?? 0) % strong)).toBeLessThan(
-            beat / 2,
-          );
+        for (const note of bass) {
+          const off = (note.startTick ?? 0) % strong;
+          expect(Math.min(off, strong - off)).toBeLessThan(beat / 4);
+        }
       }
     }
   });

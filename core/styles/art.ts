@@ -1688,7 +1688,8 @@ const ROMANTIC_LEAVES: readonly StyleCard[] = Object.freeze([
     },
     texture: {
       roles: {
-        kick: maybe("timpani"),
+        kick: maybe("drums"),
+        perc: maybe("timpani"),
         chords: role("strings", "choir:0.6"),
         pad: role("choir", "frenchhorn:0.5"),
         bass: role("contrabass", "tuba:0.4"),
@@ -1770,7 +1771,8 @@ const ROMANTIC_LEAVES: readonly StyleCard[] = Object.freeze([
     rhythm: { onsets: { kick: grid("x.......x.......") } },
     texture: {
       roles: {
-        kick: maybe("timpani"),
+        kick: maybe("drums"),
+        perc: maybe("timpani"),
         chords: role("strings"),
         pad: maybe("frenchhorn", "trombone:0.5"),
         bass: role("contrabass", "cellos:0.6"),
@@ -3070,6 +3072,441 @@ const CONTEMPORARY_LEAVES: readonly StyleCard[] = Object.freeze([
   }),
 ]);
 
+// ---------------------------------------------------------------------------
+// Bands and marches. References: Frank Battisti, "The Winds of Change"
+// (2002); Paul E. Bierley, "John Philip Sousa: American Phenomenon" (1973)
+// for march form; William Ross, "Pipe Band Drumming" (Scottish Pipe Band
+// Association tutor) for the pipe-band snare idiom.
+
+const BAND_LEAVES: readonly StyleCard[] = Object.freeze([
+  card({
+    id: "military-march",
+    summary:
+      "march form: strains of 16 bars, a trio in the subdominant, oom-pah bass on the strong beats, snare rudiments and a breakstrain",
+    meter: {
+      signatures: [
+        ["2/4", 0.5],
+        ["6/8", 0.5],
+      ],
+    },
+    tempo: { bpm: [108, 132], typical: 120 },
+    groove: { humanize: { timingMs: 4, velocity: 0.05 } },
+    harmony: {
+      model: "functional",
+      chain: {
+        I: [
+          ["IV", 1.5],
+          ["V", 2],
+          ["V7/V", 0.6],
+          ["vi", 0.5],
+        ],
+        IV: [
+          ["I", 1.5],
+          ["V", 1],
+          ["iv", 0.3],
+        ],
+        iv: [["I", 1]],
+        "V7/V": [["V", 3]],
+        vi: [["ii", 1]],
+        ii: [["V", 2]],
+        V: [["I", 3]],
+      },
+      sources: { presets: 0.5, chain: 3 },
+      rhythm: [[1, 1]],
+    },
+    melody: {
+      intervals: intervals(4, 3, 1, 1.2),
+      density: [1, 3],
+      phraseBars: [[4, 1]],
+      repetition: 0.6,
+    },
+    expression: {
+      dynamics: [0.55, 1],
+      articulation: {
+        lead: [
+          ["marcato", 0.4],
+          ["staccato", 0.3],
+          ["accent", 0.3],
+        ],
+      },
+    },
+    texture: {
+      roles: {
+        kick: role("drums"),
+        snare: role("drums"),
+        bass: role("tuba"),
+        chords: role("horn", "trombone:0.5"),
+        lead: role("cornet", "trumpet:0.6", "clarinet:0.4"),
+        counter: maybe("trombone", "horn:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "brass-band",
+    summary:
+      "the cornet-and-saxhorn band: hymn-tune homophony, warm close brass voicing, plagal IV-I amens and slow-march or contest-piece strains",
+    meter: {
+      signatures: [
+        ["4/4", 0.6],
+        ["3/4", 0.4],
+      ],
+    },
+    tempo: { bpm: [66, 116], typical: 84 },
+    rhythm: {
+      onsets: { kick: grid("x.......x.......") },
+      fills: { every: 8, density: [0.2, 0.4] },
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["canon", 0.5],
+        ["fifties", 0.3],
+        ["turnaround", 0.2],
+      ],
+      cadences: [
+        ["IV-I", 0.5],
+        ["V-I", 0.5],
+      ],
+      sevenths: 0.15,
+      voicing: { types: [["close", 1]], notes: [4, 4] },
+    },
+    melody: { intervals: CONJUNCT, chordToneRate: 0.75, density: [1, 2] },
+    bass: {
+      behaviour: [
+        ["root", 0.6],
+        ["walking", 0.4],
+      ],
+      onsets: grid("x...x...x...x..."),
+    },
+    texture: {
+      roles: {
+        kick: maybe("drums"),
+        snare: null,
+        bass: role("tuba"),
+        chords: role("horn", "trombone:0.6"),
+        lead: role("cornet"),
+        counter: maybe("trombone", "horn:0.5"),
+      },
+    },
+    expression: { dynamics: [0.3, 0.95] },
+    mix: { space: 0.5 },
+  }),
+  card({
+    id: "concert-wind-band",
+    summary:
+      "the symphonic wind ensemble: folk-song settings, modal mixture and bVII colour, chorale tutti against woodwind solos, mixed meter",
+    meter: {
+      signatures: [
+        ["4/4", 0.5],
+        ["3/4", 0.3],
+        ["5/4", 0.2],
+      ],
+    },
+    tempo: { bpm: [60, 132], typical: 96 },
+    rhythm: {
+      onsets: {
+        kick: grid("x..............."),
+        snare: grid("............x..."),
+      },
+      fills: { every: 8, density: [0.2, 0.5] },
+    },
+    pitch: {
+      scales: [
+        ["major", 0.4],
+        ["mixolydian", 0.3],
+        ["dorian", 0.3],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["mixolydian-rock", 0.3],
+        ["canon", 0.4],
+        ["aeolian", 0.3],
+      ],
+      sevenths: 0.2,
+      voicing: {
+        types: [
+          ["open", 0.6],
+          ["wide", 0.4],
+        ],
+      },
+    },
+    melody: { intervals: CONJUNCT, chordToneRate: 0.65 },
+    bass: {
+      behaviour: [
+        ["root", 0.6],
+        ["pedal", 0.4],
+      ],
+      onsets: grid("x.......x......."),
+    },
+    texture: {
+      roles: {
+        kick: maybe("drums"),
+        perc: maybe("timpani"),
+        snare: maybe("drums"),
+        bass: role("tuba", "bassoon:0.4"),
+        chords: role("horn", "clarinet:0.6", "trombone:0.4"),
+        lead: role("flute", "oboe:0.6", "clarinet:0.5", "trumpet:0.4"),
+        counter: maybe("bassclarinet", "horn:0.5"),
+      },
+    },
+    form: {
+      plans: [[["intro", "verse", "bridge", "chorus", "outro"], 1]],
+      archetype: "through-composed",
+    },
+    expression: { dynamics: [0.2, 1] },
+    mix: { space: 0.55, loudness: "classical" },
+  }),
+  card({
+    id: "pipe-band",
+    summary:
+      "Highland pipes and drums: a mixolydian chanter over a constant tonic-and-fifth drone, grace-note gracing, 2/4 and 6/8 marches, rolling snare",
+    meter: {
+      signatures: [
+        ["2/4", 0.4],
+        ["6/8", 0.4],
+        ["3/4", 0.2],
+      ],
+    },
+    tempo: { bpm: [80, 120], typical: 96 },
+    groove: { humanize: { timingMs: 4, velocity: 0.06 } },
+    pitch: { scales: [["mixolydian", 1]] },
+    harmony: { model: "drone", rhythm: [[0.25, 1]] },
+    melody: {
+      intervals: intervals(5, 3, 1, 0.5),
+      density: [2, 3],
+      range: [67, 81],
+      ambitus: [9, 9],
+      chordToneRate: 0.5,
+      repetition: 0.6,
+    },
+    bass: { behaviour: [["none", 1]] },
+    rhythm: {
+      onsets: {
+        kick: grid("x.......x......."),
+        snare: grid("x.xxx.xxx.xxx.xx"),
+      },
+      fills: { every: 4, density: [0.5, 0.8] },
+    },
+    texture: {
+      kind: "heterophonic",
+      roles: {
+        kick: role("drums"),
+        snare: role("drums"),
+        bass: null,
+        chords: null,
+        counter: null,
+        drone: role("reeds", "oboe:0.4"),
+        lead: role("oboe", "tinwhistle:0.4"),
+      },
+    },
+    expression: {
+      dynamics: [0.7, 1],
+      articulation: { lead: [["legato", 1]] },
+    },
+  }),
+  card({
+    id: "marching-band",
+    summary:
+      "field show and drumline: a cadence of snare rudiments and multi-tom grooves, unison brass hits, backbeat on 2 and 4 in the stand tunes",
+    meter: {
+      signatures: [
+        ["4/4", 0.7],
+        ["2/4", 0.3],
+      ],
+    },
+    tempo: { bpm: [112, 148], typical: 128 },
+    rhythm: {
+      onsets: {
+        kick: grid("x.......x......."),
+        snare: grid("x.xxx.x.x.xxx.xx"),
+        tom: grid("..x...x...x...x."),
+      },
+      fills: { every: 4, density: [0.5, 0.9] },
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["axis", 0.4],
+        ["mixolydian-rock", 0.3],
+        ["fifties", 0.3],
+      ],
+    },
+    melody: {
+      density: [1, 3],
+      repetition: 0.7,
+      intervals: intervals(4, 3, 1, 1.5),
+    },
+    expression: {
+      dynamics: [0.6, 1],
+      articulation: {
+        lead: [
+          ["accent", 0.5],
+          ["marcato", 0.5],
+        ],
+      },
+    },
+    texture: {
+      roles: {
+        kick: role("drums"),
+        snare: role("drums"),
+        tom: role("drums"),
+        bass: role("tuba"),
+        chords: role("trombone", "horn:0.5"),
+        lead: role("trumpet", "altosax:0.4"),
+      },
+    },
+    mix: { space: 0.3 },
+  }),
+]);
+
+// ---------------------------------------------------------------------------
+// Children's and functional. References: Patricia Shehan Campbell and Carol
+// Scott-Kassner, "Music in Childhood" (4th ed., 2013); the Kodaly sol-mi-la
+// sequence for the small singing range.
+
+const CHILDRENS_LEAVES: readonly StyleCard[] = Object.freeze([
+  card({
+    id: "childrens-song",
+    summary:
+      "sing-along teaching song: sol-mi-la cells inside a sixth, call and echo, two-bar repeats, I-IV-V with a clear V-I close",
+    tempo: { bpm: [92, 126], typical: 108 },
+    melody: {
+      ambitus: [4, 9],
+      intervals: intervals(5, 3.5, 0.5, 1.5),
+      chordToneRate: 0.8,
+      repetition: 0.85,
+      finals: [[0, 1]],
+    },
+    harmony: {
+      model: "functional",
+      chain: {
+        I: [
+          ["IV", 2],
+          ["V", 2],
+        ],
+        IV: [
+          ["I", 1],
+          ["V", 1.5],
+        ],
+        V: [["I", 3]],
+      },
+      sources: { presets: 0.5, chain: 3 },
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.......x......."),
+        snare: grid("....x.......x..."),
+      },
+    },
+    texture: {
+      roles: {
+        kick: maybe("drums"),
+        snare: maybe("drums"),
+        hat: null,
+        bass: role("bass", "ebass:0.5"),
+        chords: role("acoustic", "piano:0.6", "banjo:0.2"),
+        lead: role("sing", "glockenspiel:0.5", "xylophone:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "novelty",
+    summary:
+      "comic and novelty song: oom-pah two-beat, ragtime-ish V7/V turnarounds, staccato toy timbres, a punch-line stop before the last chorus",
+    tempo: { bpm: [104, 152], typical: 128 },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["turnaround", 0.5],
+        ["fifties", 0.5],
+      ],
+      chain: {
+        I: [
+          ["V7/V", 1],
+          ["IV", 1],
+          ["vi", 1],
+        ],
+        vi: [["V7/V", 1]],
+        "V7/V": [["V", 2]],
+        IV: [["V", 1]],
+        V: [["I", 2]],
+      },
+      sources: { presets: 1, chain: 2 },
+      sevenths: 0.4,
+    },
+    bass: {
+      behaviour: [["root-fifth", 1]],
+      onsets: grid("x.......x......."),
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.......x......."),
+        snare: grid("....x.......x..."),
+        chords: grid("....x.......x..."),
+      },
+    },
+    melody: { density: [2, 3], repetition: 0.7 },
+    texture: {
+      roles: {
+        kick: role("drums"),
+        snare: role("drums"),
+        hat: null,
+        bass: role("tuba", "upright:0.5"),
+        chords: role("honkytonk", "banjo:0.5"),
+        lead: role("xylophone", "toypiano:0.5", "clarinet:0.4"),
+      },
+    },
+    expression: {
+      dynamics: [0.5, 0.9],
+      articulation: {
+        lead: [
+          ["staccato", 0.7],
+          ["accent", 0.3],
+        ],
+      },
+    },
+  }),
+  card({
+    id: "wellness",
+    summary:
+      "meditation and relaxation: an unpulsed tonic drone, pentatonic bell tones that never resolve away, slow breath-length phrases, soft dynamics",
+    tempo: { bpm: [48, 72], typical: 60 },
+    groove: { humanize: { timingMs: 20, velocity: 0.08 } },
+    pitch: {
+      scales: [
+        ["major-pentatonic", 0.6],
+        ["lydian", 0.4],
+      ],
+    },
+    harmony: { model: "drone", rhythm: [[0.25, 1]] },
+    melody: {
+      density: [0, 1],
+      chordToneRate: 0.7,
+      repetition: 0.7,
+      phraseBars: [[4, 1]],
+      contour: [["wave", 1]],
+    },
+    bass: { behaviour: [["pedal", 1]] },
+    texture: {
+      kind: "heterophonic",
+      roles: {
+        kick: null,
+        snare: null,
+        hat: null,
+        chords: null,
+        drone: role("singingbowl", "tanpura:0.5", "cloud:0.4"),
+        pad: role("cloud", "strings:0.5"),
+        bass: maybe("felt"),
+        lead: role("bowl", "kalimba:0.5", "flute:0.4", "felt:0.4"),
+      },
+    },
+    expression: { dynamics: [0.15, 0.55] },
+    mix: { space: 0.9, loudness: "ambient" },
+  }),
+]);
+
 // @@EXPORT
 export const ART_CARDS: readonly StyleCard[] = Object.freeze([
   ...BRANCH_CARDS,
@@ -3078,4 +3515,6 @@ export const ART_CARDS: readonly StyleCard[] = Object.freeze([
   ...ROMANTIC_LEAVES,
   ...MODERN_LEAVES,
   ...CONTEMPORARY_LEAVES,
+  ...BAND_LEAVES,
+  ...CHILDRENS_LEAVES,
 ]);
