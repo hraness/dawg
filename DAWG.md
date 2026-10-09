@@ -1501,7 +1501,7 @@ The menu has the same controls under **Project › Tempo & meter** (`/menu tempo
 
 Applying to a missing track creates a kit track; an empty melodic track becomes a kit track; a melodic track with notes is refused. Voices the track lacks (a sampler kit without a rim, say) are skipped and named in the receipt. Every apply is one revision and one undo step. In `track.ts`, `pattern("boom-bap")` returns the rows: `rhythm: pattern("boom-bap")`, or `[...pattern("house"), euclid("rim", 5, 16)]` to add one.
 
-Patterns: `house`, `disco`, `techno`, `minimal`, `electro`, `breakbeat`, `amen-style`, `dnb`, `halftime`, `boom-bap`, `lofi`, `trap`, `drill`, `reggaeton`, `dancehall`, `one-drop`, `afrobeat`, `afrobeats`, `bembe`, `tresillo`, `son-clave`, `bossa-nova`, `samba`, `cumbia`, `garage`, `jersey-club`, `footwork`, `rock`, `funk`, `shuffle`, `euclid-poly`. Sounds → Drum patterns in `/menu` lists them too.
+Patterns: `house`, `disco`, `techno`, `minimal`, `electro`, `breakbeat`, `amen-style`, `dnb`, `halftime`, `boom-bap`, `lofi`, `trap`, `drill`, `reggaeton`, `dancehall`, `one-drop`, `afrobeat`, `afrobeats`, `bembe`, `tresillo`, `son-clave`, `bossa-nova`, `samba`, `cumbia`, `garage`, `jersey-club`, `footwork`, `rock`, `funk`, `shuffle` (triplet 8ths), `half-time-shuffle`, `euclid-poly`. Sounds → Drum patterns in `/menu` lists them too.
 
 **Kits.** A `kit` track plays the built-in drum synth. `kit: "<name>"` on the track (`/kit <name>`, or `set_drum_kit` for the agent) chooses one of six synthesized kits, all offline and deterministic; a track without `kit` sounds exactly as before.
 

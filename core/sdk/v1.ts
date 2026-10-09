@@ -1212,16 +1212,36 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
       euclid("hat", 16, 16, 0, { velocity: 0.35, accent: 0.4, accents: 4 }),
     ],
   ),
+  // The blues and rock shuffle is a triplet-8th feel: each beat is three
+  // 8th-note triplets with the first and third struck (long-short).
   drumPattern(
     "shuffle",
-    "Shuffle",
+    "Shuffle (triplet 8ths)",
     ["blues", "shuffle", "rock"],
     [90, 130, 110],
     "acoustic",
+    0,
+    [
+      grid("kick", "x.....x.....", { division: "1/8t" }),
+      grid("snare", "...x.....x..", { division: "1/8t" }),
+      grid("hat", "X.xx.xX.xx.x", {
+        division: "1/8t",
+        velocity: 0.35,
+        accent: 0.5,
+      }),
+    ],
+  ),
+  // The half-time shuffle swings 16ths against a backbeat on 3.
+  drumPattern(
+    "half-time-shuffle",
+    "Half-time shuffle (swung 16ths)",
+    ["shuffle", "rock", "funk"],
+    [70, 100, 86],
+    "acoustic",
     0.33,
     [
-      grid("kick", "x.......x......."),
-      grid("snare", "....x.......x..."),
+      grid("kick", "x.........x....."),
+      grid("snare", "........x......."),
       euclid("hat", 16, 16, 0, { velocity: 0.35, accent: 0.5, accents: 8 }),
     ],
   ),
