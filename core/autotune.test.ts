@@ -277,6 +277,31 @@ describe("autotune: scale targets (test 8)", () => {
     expect(sum / count).toBeLessThan(10);
   });
 
+  test("hard tune corrects low-confidence pitched onsets fully", () => {
+    const r = resolveAutotune({ preset: "hard" });
+    // a clean pitched onset that tracks at low confidence (prob 0.15)
+    const onset: AutotuneCurve = {
+      ...curve,
+      prob: Uint8Array.from(curve.f0, (hz) => (hz > 0 ? 40 : 0)),
+      aperiodic: Uint8Array.from(curve.f0, (hz) => (hz > 0 ? 10 : 255)),
+    };
+    const grid = { kind: "grid" as const, grid: scaleGrid("C major") };
+    const hard = correctionCurve(onset, grid, r);
+    const pop = correctionCurve(
+      onset,
+      grid,
+      resolveAutotune({ preset: "pop" }),
+    );
+    let h = 0;
+    let p = 0;
+    for (let f = 0; f < hard.length; f += 1)
+      if (curve.f0[f]! > 0) {
+        h += Math.abs(hard[f]!);
+        p += Math.abs(pop[f]!);
+      }
+    expect(h).toBeGreaterThan(5 * p);
+  });
+
   test("no key means chromatic", () => {
     expect(scaleGrid(null).points).toEqual(chromaticGrid().points);
     expect(scaleGrid("C major").points.length).toBeLessThan(

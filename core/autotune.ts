@@ -584,6 +584,18 @@ export function voicingWeight(curve: AutotuneCurve, f: number): number {
   );
 }
 
+/**
+ * Hard tune's weight: full correction on any pitched frame, including the
+ * lower-confidence onsets and glides between notes, so transitions land on
+ * the grid; breath and noise (aperiodic frames) still get none.
+ */
+export function hardVoicingWeight(curve: AutotuneCurve, f: number): number {
+  return (
+    smoothstep((curve.prob[f] ?? 0) / 255, 0.04, 0.18) *
+    (1 - smoothstep((curve.aperiodic[f] ?? 255) / 255, 0.2, 0.4))
+  );
+}
+
 /** Centred moving average of cents over ±r frames, inside voiced runs. */
 function centredAverage(curve: AutotuneCurve, r: number): Float64Array {
   const n = curve.f0.length;
@@ -671,6 +683,9 @@ export function retuneCurve(
     typeof source === "function" ? source : (_seconds: number) => source;
   const dynamic = typeof source === "function";
   const selTau = p.speed <= 5 ? 0 : 60;
+  // Hard tune also snaps the pitched glides between notes, which track
+  // with lower confidence than the held middles.
+  const hardTune = p.speed === 0 && relax === 0;
   const first = gridAt(curve.t0);
   const anyDense = dynamic || first.minStep < 100;
   const avg = anyDense
@@ -734,7 +749,12 @@ export function retuneCurve(
       const dist = Math.abs(centre - target);
       w *= dist <= zone ? 1 : Math.max(0, 1 - (dist - zone) / 10);
     }
-    const voicing = Math.abs(c - med[f]!) > 900 ? 0 : voicingWeight(curve, f);
+    const voicing =
+      Math.abs(c - med[f]!) > 900
+        ? 0
+        : hardTune
+          ? hardVoicingWeight(curve, f)
+          : voicingWeight(curve, f);
     w *= voicing;
     const sustained =
       relax > 0 && inNote > holdMs

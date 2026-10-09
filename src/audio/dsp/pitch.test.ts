@@ -4,6 +4,7 @@ import {
   melody,
   synthVoice,
   vowelPhrase,
+  type PhraseSpec,
   type VoiceSignal,
 } from "../fixtures/voice.ts";
 import {
@@ -300,9 +301,13 @@ describe("pitchNotes", () => {
 
   test("repeated notes on one pitch split at their level dips", () => {
     // G4 G4 A4 B4 C5 B4 sung legato: the repeats carry no pitch move
-    const spec = [67, 67, 69, 71, 72, 71, 71].map(
-      (midi) => [midi, 0.4, "a", {}, 0] as const,
-    );
+    const spec = [67, 67, 69, 71, 72, 71, 71].map((midi): PhraseSpec => [
+      midi,
+      0.4,
+      "a",
+      {},
+      0,
+    ]);
     const v = synthVoice(build(spec), { sr: 48_000, seed: 7 });
     const curve = trackPitch(v.x, v.sr);
     const merged = pitchNotes(curve);
