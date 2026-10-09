@@ -215,6 +215,21 @@ export const WORKSPACE_PROMPT = [
 export const MEDIA_PROMPT =
   "Media tools (download_audio, split_stems, analyze_audio, transcribe_notes, import_sample, make_wavetable, transcribe_lyrics) work on files under tracks/<slug>/downloads/ and report project-relative paths; the brief's project tree lists what is already there (read_file reports a wav's type and size), so never download the same video twice. They can run for minutes, so call them one at a time and chain on their outputs (download → stems → analyze → notes). make_wavetable turns a download, stem or sample into tracks/<slug>/wavetables/<name>.wav and describes its sweep; play it with set_wavetable table <that path>.";
 
+/**
+ * Lets a model end the turn in the same response as its last tool calls,
+ * which saves the summary-only round trip (about a third of a typical turn).
+ */
+export const DONE_PROMPT =
+  'When the tool calls in a response complete the whole request, put your one short sentence describing the musical change in that same response, starting with "Done:"; the turn then ends without another reply once every call is applied. Otherwise, when you are done, reply with one short sentence describing the musical change.';
+
+/** `Done: added a kick` → `added a kick`; anything else → undefined. */
+export function doneSummary(text: string): string | undefined {
+  const match = /^\s*\**done\**\s*[:\u2014\u2013-]\s*([\s\S]*)$/i.exec(text);
+  if (!match) return undefined;
+  const rest = match[1]!.trim();
+  return rest ? rest.charAt(0).toUpperCase() + rest.slice(1) : "Done.";
+}
+
 export const AGENT_SYSTEM_PROMPT = [
   "You are dawg, a loop composer inside a terminal music workstation.",
   "Edit the score only by calling the provided tools; every call is validated and applied immediately, and its result tells you the new revision.",
@@ -247,7 +262,7 @@ export const AGENT_SYSTEM_PROMPT = [
   "If a call is rejected, read the diagnostic and either fix the arguments or stop.",
   WORKSPACE_PROMPT,
   MEDIA_PROMPT,
-  "When you are done, reply with one short sentence describing the musical change.",
+  DONE_PROMPT,
 ].join(" ");
 
 /**
@@ -416,7 +431,7 @@ export async function runAgentTurn(
         }
       }
       bytesUsed += streamBytes;
-      if (text.trim()) finalText = text.trim();
+      if (text.trim()) finalText = doneSummary(text) ?? text.trim();
 
       const calls = [...pending.entries()]
         .sort(([left], [right]) => left - right)
@@ -445,6 +460,8 @@ export async function runAgentTurn(
         tool_calls: assistantCalls,
       });
       let overBudget = false;
+      let stepMutated = 0;
+      let stepRejected = 0;
       for (const call of calls) {
         if (signal.aborted) throw signal.reason;
         let content: string;
@@ -479,10 +496,12 @@ export async function runAgentTurn(
           });
           if (outcome.ok) {
             applied += outcome.mutated ? 1 : 0;
+            stepMutated += outcome.mutated ? 1 : 0;
             if (outcome.explanation) finalText = outcome.explanation;
             emit(outcome.event);
           } else {
             rejected += 1;
+            stepRejected += 1;
             emit({
               type: "tool-rejected",
               callId: call.id,
@@ -494,6 +513,20 @@ export async function runAgentTurn(
         }
         toolResultStep.set(messages.length, step);
         messages.push({ role: "tool", tool_call_id: call.id, content });
+      }
+      // "Done:" in the same response as the calls ends the turn here, but
+      // only when something changed and nothing was rejected: a rejection
+      // still goes back to the model so it can fix the arguments.
+      const done = doneSummary(text);
+      if (done !== undefined && stepMutated > 0 && stepRejected === 0) {
+        return finish({
+          type: "done",
+          reason: "stop",
+          text: done.slice(0, AGENT_LIMITS.maxTextChars),
+          applied,
+          rejected,
+          revision: currentRevision(),
+        });
       }
       if (overBudget || toolCalls >= limits.maxToolCalls) {
         return finish({
