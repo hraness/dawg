@@ -99,6 +99,22 @@ export type VoiceOptions = Readonly<{
    * 12 * log2(formantScale) semitones should match. Absent: unchanged.
    */
   formantScale?: number;
+  // 0.7 pitch lane options. Each is off when absent and draws its own
+  // seeded noise (seed + a fixed offset), so default outputs never change.
+  /** Mains hum: frequency (50 or 60 Hz) and level in dB re the voiced peak. */
+  hum?: Readonly<{ hz: number; db: number }>;
+  /** A pink-noise room bed at this level in dB re the voiced peak. */
+  room?: number;
+  /** Vocal fry: period jitter and an alternating-amplitude subharmonic, 0..1. */
+  fry?: number;
+  /** Inverted polarity. */
+  invert?: boolean;
+  /** A 4-stage first-order all-pass (phase scramble, same magnitude). */
+  allpass?: boolean;
+  /** Clock drift in parts per million (time stretch by 1 + ppm * 1e-6). */
+  clockPpm?: number;
+  /** A stereo variant: `right` is a delayed, tilted copy of `x`. */
+  stereo?: boolean;
 }>;
 
 export type VoiceSignal = Readonly<{
@@ -112,6 +128,8 @@ export type VoiceSignal = Readonly<{
   /** One syllable per note: start, voiced onset and end in seconds, vowel. */
   syllables: readonly VoiceSyllable[];
   sr: number;
+  /** The right channel, only with the `stereo` option (`x` is then left). */
+  right?: Float64Array;
 }>;
 
 export type VoiceSyllable = Readonly<{
@@ -227,14 +245,24 @@ export function synthVoice(
   const exc = new Float64Array(len);
   let phase = 0;
   let prevG = 0;
+  const fry = opts.fry ?? 0;
+  let cycle = 0;
+  let jitter = 1;
   for (let i = 0; i < len; i++) {
     const noise = rng.bi();
     if (amp[i]! > 0 && !Number.isNaN(cents[i]!)) {
       const hz = 440 * 2 ** (cents[i]! / 1200);
       f0[i] = hz;
-      phase += hz / sr;
-      if (phase >= 1) phase -= 1;
-      const g = rosenberg(phase);
+      phase += (hz * jitter) / sr;
+      if (phase >= 1) {
+        phase -= 1;
+        if (fry > 0) {
+          cycle += 1;
+          jitter = 1 + 0.08 * fry * bipolar(seed + 101, cycle);
+        }
+      }
+      const fryAmp = fry > 0 && cycle % 2 === 1 ? 1 - 0.5 * fry : 1;
+      const g = rosenberg(phase) * fryAmp;
       const dg = g - prevG;
       prevG = g;
       // aspiration gated by the open phase
@@ -284,7 +312,109 @@ export function synthVoice(
     end: n.start + n.dur,
     vowel: n.vowel,
   }));
-  return { x: out, f0, target, onsets, syllables, sr };
+  if (
+    !opts.hum &&
+    opts.room === undefined &&
+    !opts.invert &&
+    !opts.allpass &&
+    !opts.clockPpm &&
+    !opts.stereo
+  )
+    return { x: out, f0, target, onsets, syllables, sr };
+  return degrade({ x: out, f0, target, onsets, syllables, sr }, opts);
+}
+
+/** The optional 0.7 pitch-lane impairments, applied after synthesis. */
+function degrade(v: VoiceSignal, opts: VoiceOptions): VoiceSignal {
+  const { sr, seed } = opts;
+  let x: Float64Array = Float64Array.from(v.x);
+  let f0: Float64Array = v.f0;
+  let target: Float64Array = v.target;
+  let peak = 0;
+  for (let i = 0; i < x.length; i++) peak = Math.max(peak, Math.abs(x[i]!));
+  if (opts.hum) {
+    // Mains hum with odd harmonics (a rectified-transformer buzz).
+    const a = peak * 10 ** (opts.hum.db / 20);
+    for (let i = 0; i < x.length; i++) {
+      const w = (2 * Math.PI * opts.hum.hz * i) / sr;
+      x[i]! +=
+        a * (Math.sin(w) + 0.5 * Math.sin(3 * w) + 0.25 * Math.sin(5 * w));
+    }
+  }
+  if (opts.room !== undefined) {
+    // Paul Kellet's economy pink filter on seeded white noise.
+    const a = peak * 10 ** (opts.room / 20) * 0.25;
+    let b0 = 0;
+    let b1 = 0;
+    let b2 = 0;
+    for (let i = 0; i < x.length; i++) {
+      const w = bipolar(seed + 202, i);
+      b0 = 0.99765 * b0 + w * 0.099046;
+      b1 = 0.963 * b1 + w * 0.2965164;
+      b2 = 0.57 * b2 + w * 1.0526913;
+      x[i]! += a * (b0 + b1 + b2 + w * 0.1848);
+    }
+  }
+  if (opts.invert) for (let i = 0; i < x.length; i++) x[i] = -x[i]!;
+  if (opts.allpass) {
+    for (const c of [0.6, -0.3, 0.75, -0.55]) {
+      let x1 = 0;
+      let y1 = 0;
+      for (let i = 0; i < x.length; i++) {
+        const xi = x[i]!;
+        const y = c * xi + x1 - c * y1;
+        x1 = xi;
+        y1 = y;
+        x[i] = y;
+      }
+    }
+  }
+  if (opts.clockPpm) {
+    // Sample n of the output reads source time n * (1 + ppm 1e-6).
+    const r = 1 + opts.clockPpm * 1e-6;
+    const n = Math.floor((x.length - 1) / r);
+    const read = (src: Float64Array): Float64Array => {
+      const y = new Float64Array(n);
+      for (let i = 0; i < n; i++) {
+        const p = i * r;
+        const k = Math.floor(p);
+        const u = p - k;
+        const a = src[k]!;
+        const b = src[Math.min(src.length - 1, k + 1)]!;
+        y[i] =
+          Number.isNaN(a) || Number.isNaN(b)
+            ? u < 0.5
+              ? a
+              : b
+            : a + (b - a) * u;
+      }
+      return y;
+    };
+    x = read(x);
+    f0 = read(f0);
+    target = read(target);
+  }
+  let right: Float64Array | undefined;
+  if (opts.stereo) {
+    // Right: 0.4 ms later, a gentle one-pole tilt, 1.5 dB down.
+    right = new Float64Array(x.length);
+    const d = Math.round(0.0004 * sr);
+    let lp = 0;
+    for (let i = 0; i < x.length; i++) {
+      const s = i >= d ? x[i - d]! : 0;
+      lp += 0.3 * (s - lp);
+      right[i] = 0.84 * (0.6 * s + 0.4 * lp);
+    }
+  }
+  return { ...v, x, f0, target, ...(right ? { right } : {}) };
+}
+
+/** Steady vowel notes from `lo` to `hi` (whole tone apart): the vowel x breath matrix rows. */
+export function vowelPhrase(vowel: Vowel, lo: number, hi: number): SungNote[] {
+  const specs: PhraseSpec[] = [];
+  for (let m = lo; m <= hi; m += 2)
+    specs.push([m, 0.5, vowel, { vib: 25, off: ((m * 7) % 30) - 15 }, 0.12]);
+  return build(specs);
 }
 
 /** A plain polyBLEP sawtooth over the same f0 curve: the cost reference. */

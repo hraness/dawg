@@ -106,3 +106,49 @@ describe("0.7 voice menu groups", () => {
     );
   });
 });
+
+describe("Sound > Voice > Pitch (pitch lane)", () => {
+  test("shows only for a track with audio, with analyze, trace and notes rows", async () => {
+    const { pitchMenuRows, pitchSoundRows } = await import("./menu-voice.ts");
+    const ctx = context();
+    expect(pitchSoundRows(ctx)).toEqual([]);
+    const withClip: MenuContext = {
+      ...ctx,
+      score: createScore({
+        tracks: [
+          {
+            id: "lead",
+            instrument: "sine",
+            clips: [
+              {
+                id: "verse",
+                src: "tracks/lead/samples/verse.wav",
+                sha256: "a".repeat(64),
+                startTick: 0,
+              },
+            ],
+          },
+        ],
+      } as never),
+    };
+    const rows = pitchSoundRows(withClip);
+    expect(labels(rows)).toEqual(["Pitch"]);
+    const sound = open(rootNodes(withClip), "sound", withClip);
+    const voice = open(sound, "voice", withClip);
+    expect(labels(voice)).toContain("Pitch");
+    const pitch = pitchMenuRows(withClip);
+    expect(labels(pitch)).toEqual([
+      "Analyze",
+      "detected key",
+      "median pitch",
+      "trace",
+      "Make notes",
+    ]);
+    const trace = pitch.find((row) => row.label === "trace")!;
+    if (trace.kind !== "toggle") throw new Error("trace is a toggle");
+    expect(trace.value).toBe(false);
+    expect(trace.command(true)).toBe("/vocal pitch trace on");
+    const make = pitch.find((row) => row.label === "Make notes")!;
+    expect(make.kind === "action" && make.command).toBe("/vocal notes");
+  });
+});

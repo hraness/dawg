@@ -148,7 +148,7 @@ All limits live in `WORKSPACE_LIMITS`, `SEARCH_LIMITS` and `FETCH_LIMITS`. Searc
 
 ### Media tools
 
-Seven more `AGENT_TOOLS` entries (`src/media/`) turn reference audio into material for a track. They work on files under the focused track's `tracks/<slug>/downloads/` (the same slug and write scope as `write_file`), return project-relative output paths so the model can chain them, and never install anything: a missing binary is reported with its install command. `dawg media <verb>` runs the same code from the shell, and `dawg media doctor` lists the backend, each binary, how it runs and how to install it.
+Seven more `AGENT_TOOLS` entries (`src/media/`) turn reference audio into material for a track. They work on files under the focused track's `tracks/<slug>/downloads/` (the same slug and write scope as `write_file`), return project-relative output paths so the model can chain them, and never install anything: a missing binary is reported with its install command. `dawg media <verb>` runs the same code from the shell, and `dawg media doctor` lists the backend, each binary, how it runs and how to install it, plus one line for the project's pitch analysis cache (`.dawg/analysis`: files, size against its 64 MB cap, least recently used pruned, tracker version).
 
 - `download_audio {url, name?}`: YouTube only (`youtube.com`, `youtu.be`, `music.youtube.com`). Writes `<name>.wav` plus a `<name>.json` sidecar (title, duration, source URL, backend, sha256, time). The same source URL is reused instead of downloaded again. yt-dlp runs with `--no-playlist`, `--max-filesize 500m` and a 15 min budget.
 - `split_stems {file}`: six stems (vocals, drums, bass, guitar, piano, other) into `<base>.stems/`, cached once present. 20 min budget.
@@ -1632,6 +1632,18 @@ Vowels per note: `/note vowel o` (or `a>u`, or `off`) on the selection, last not
 Throat singing: `khoomei`, `sygyt` and `kargyraa` hold one drone (`drone D3`, a note name or MIDI number) for each phrase, and each melody note picks the drone harmonic nearest to it (folded by octaves into `harmonics`, 6 to 12 by default) and sharpens the overtone filter onto it, so the melody whistles above the drone. `kargyraa` adds a subharmonic an octave below (`sub`). Without a `drone` of your own, the drone follows the song key: the key root nearest the preset's drone, so sygyt keeps its whistle near 2 kHz and kargyraa its growl near A2 (`sing` and the menu show it as, for example, `drone E2 (key)`). A throat preset on a track with no notes writes an 8-note demo line an octave above the drone, so `sing khoomei` sounds in one step. In play mode a throat track is one voice: a new key releases the last.
 
 Menu: Sound › browse sounds › Voices › Choir, Solo and Throat pick a preset (space auditions); Sound › Parameters shows the sing rows, with the drone and overtone rows in a Throat sub-menu; Sound › Performance › Vowels sets the selected notes' vowels. The agent tools are `set_sing` and `set_vowels` (both previewable), and `set_instrument` takes the instrument words. In the SDK: `track({ instrument: sing("khoomei", { drone: "D3" }) })`, `instrument: "choir"`, and `note("C4", 0, 1, 0.8, { vowel: "a>o" })`.
+
+### Pitch
+
+dawg can read the melody out of audio: a sampler voice (for example a stem from `resample` or `split_stems`) or, once clips land, an audio clip. Nothing in the score changes until you ask for guide notes.
+
+- `/vocal pitch` reports the focused audio's detected key, median pitch and range with cents (`stem · voice stem · key · a major · median C#4 -8c · range A3 -5c to F#4 +30c · 14 notes`). Add `clip` or `voice` (a sampler voice), optionally followed by its name in any case, to choose the source, and `bass`, `tenor`, `alto` or `soprano` to narrow the search range (auto is 70-1400 Hz; bass goes down to 55 Hz).
+- `/vocal pitch trace on` draws the sung pitch over the note highway: one dot per column on the lane of the nearest semitone, in the warning colour when it is more than 15 cents off. `/vocal pitch trace off` hides it.
+- `/vocal notes` turns the melody into a new guide-notes track (`<track>-notes`, or `as <name>`), one note per sung note, placed through the tempo map where the audio plays. Velocity follows the voicing confidence.
+- ctrl-k › Sound › Voice › Pitch shows the detected key and median, with Analyze, Trace and Make notes rows.
+- Agent tools: `analyze_pitch` (read-only: key, median, range and the note list in file seconds) and `pitch_to_notes`.
+
+The tracker is a pYIN-style estimator on an exact 16 kHz copy of the audio, with a 5 ms hop, a voicing probability per frame and a Viterbi path that resists octave jumps; on the test voices it stays within 10 cents of the truth on held notes and costs about 20 ms per audio second. Curves are cached in `.dawg/analysis/` (`<sha256>.<voice>.v<version>.f0`, at most 64 MB, oldest removed first; `/pack cache` shows the size), so a second look is instant. A corrupt or old cache file is ignored and rebuilt, and the cached and fresh curves are identical.
 
 ## Menus
 

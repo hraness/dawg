@@ -7,6 +7,7 @@
 import type { TrackScore } from "../../core/score.ts";
 import { applyFormantCommand, formantArgs, FORMANT_USAGE } from "./formant.ts";
 import { CLIP_VOCAL_VERBS } from "./clips.ts";
+import { PITCH_VERBS } from "./vocal-pitch.ts";
 
 /** What a verb sees: the score, the focused track and the project folder. */
 export type VocalContext = Readonly<{
@@ -42,6 +43,7 @@ export const VOCAL_VERBS: readonly VocalVerb[] = [
   // clips: import, stem, setups
   ...CLIP_VOCAL_VERBS,
   // pitch: pitch, notes
+  ...PITCH_VERBS,
   // autotune: autotune
   // formant: formant
   {

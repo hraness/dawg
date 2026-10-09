@@ -44,6 +44,11 @@ describe("/vocal umbrella", () => {
     expect(VOCAL_VERBS.map((verb) => verb.verb)).toContain("formant");
     for (const verb of VOCAL_VERBS) expect(verb.lane).toBeTruthy();
     expect(VOCAL_VERBS.map((v) => v.verb)).toContain("import");
+    // lanes append verbs; every one names its lane and a unique word
+    expect(new Set(VOCAL_VERBS.map((verb) => verb.verb)).size).toBe(
+      VOCAL_VERBS.length,
+    );
+    for (const verb of VOCAL_VERBS) expect(verb.lane.length).toBeGreaterThan(0);
     expect(vocalListLines([])).toEqual([
       "vocal: no voice tools yet in this build",
     ]);

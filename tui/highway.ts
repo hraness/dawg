@@ -103,6 +103,45 @@ export interface TrackScoreSnapshot {
   layers?: readonly HighwayLayer[] | undefined;
   /** Audio clips on the focused track (0.7): the right-edge clip row. */
   clips?: readonly ClipSnapshot[] | undefined;
+  /**
+   * Detected pitch of the focused track's audio (0.7 `/vocal pitch trace`),
+   * sorted by beat. Drawn as a dotted line under the notes, in the warning
+   * role where it sits more than 15 cents off the nearest semitone; hidden
+   * while one row spans more than a beat.
+   */
+  pitchTrace?: readonly PitchTracePoint[] | undefined;
+}
+
+/** One point of a pitch trace: score beats and fractional MIDI pitch. */
+export interface PitchTracePoint {
+  beat: number;
+  pitch: number;
+}
+
+/** Cents a trace point sits away from its nearest semitone before it warns. */
+export const TRACE_WARN_CENTS = 15;
+
+/** The trace point nearest `beat` within `half` beats, by binary search. */
+export function tracePointAt(
+  trace: readonly PitchTracePoint[],
+  beat: number,
+  half: number,
+): PitchTracePoint | undefined {
+  let lo = 0;
+  let hi = trace.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (trace[mid]!.beat < beat) lo = mid + 1;
+    else hi = mid;
+  }
+  let best: PitchTracePoint | undefined;
+  for (const i of [lo - 1, lo]) {
+    const point = trace[i];
+    if (!point || Math.abs(point.beat - beat) > half) continue;
+    if (!best || Math.abs(point.beat - beat) < Math.abs(best.beat - beat))
+      best = point;
+  }
+  return best;
 }
 
 /** One background track overlaid on the highway. */
@@ -690,6 +729,34 @@ export function paintHighway(
       for (let index = 0; index < text.length; index += 1)
         painter.put(start + index, legendRow, text[index]!, roles.muted);
       nextFree = start + text.length + 1;
+    }
+  }
+
+  // 0.7 pitch trace: one dot per row under the notes, at the fractional
+  // lane of the detected pitch. Rows wider than a beat hide it.
+  const trace = score.pitchTrace;
+  if (trace && trace.length > 0 && rowsPerBeat >= 1) {
+    const half = 0.5 / rowsPerBeat;
+    const width = Math.max(1, layout.laneWidth || 1);
+    for (let row = 0; row <= lastNoteRow; row += 1) {
+      if (row === hitRow) continue;
+      let at = rowBeat(row);
+      if (loop) at = ((at % loop) + loop) % loop;
+      const point = tracePointAt(trace, at, half);
+      if (!point) continue;
+      const near = Math.round(point.pitch);
+      const lane = projection.laneOf({ startBeat: point.beat, pitch: near });
+      if (lane === undefined) continue;
+      const off = point.pitch - near;
+      const x =
+        laneX(layout, lane, areaWidth) +
+        Math.max(0, Math.min(width - 1, Math.floor((off + 0.5) * width)));
+      painter.put(
+        x,
+        row,
+        glyphs.muted,
+        Math.abs(off) * 100 > TRACE_WARN_CENTS ? roles.warning : roles.muted,
+      );
     }
   }
 

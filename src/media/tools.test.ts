@@ -768,6 +768,17 @@ describe("dawg media CLI", () => {
     expect(
       (JSON.parse(out.text) as { backend: { kind: string } }).backend.kind,
     ).toBe("direct");
+    expect(
+      (JSON.parse(out.text) as { analysisCache: { files: number } })
+        .analysisCache.files,
+    ).toBe(0);
+    out.text = "";
+    expect(
+      await runMediaCommand(["media", "doctor"], root, out, err, options),
+    ).toBe(0);
+    expect(out.text).toMatch(
+      /analysis cache \.dawg\/analysis · 0 files · 0\.0 MB of 64\.0 MB .* pitch tracker v\d+/,
+    );
     out.text = "";
     expect(
       await runMediaCommand(

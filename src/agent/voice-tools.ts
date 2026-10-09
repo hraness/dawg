@@ -31,6 +31,14 @@ import { ToolArgumentError } from "./tool-error.ts";
 // Types only: tools.ts spreads VOICE_TOOLS, so a value import would cycle.
 import type { AgentTool, ToolContext } from "./tools.ts";
 import { CLIP_TOOL_LIST } from "./clip-tools.ts";
+import { PITCH_VOICE_NAMES, type PitchVoice } from "../audio/dsp/pitch.ts";
+import {
+  analyzeTrackPitch,
+  guideNotesScore,
+  hzName,
+  PitchTargetError,
+  pitchReportLines,
+} from "../commands/vocal-pitch.ts";
 
 const trackIdSchema = {
   type: "string",
@@ -58,8 +66,160 @@ export type VoiceTool = AgentTool & Readonly<{ previewable?: boolean }>;
 
 /** clips: place_clip, edit_clip, set_lyrics. */
 export const CLIPS_TOOLS: readonly VoiceTool[] = CLIP_TOOL_LIST;
+
+/** Notes listed in an analyze_pitch result, at most. */
+export const ANALYZE_PITCH_MAX_NOTES = 64;
+
+type PitchToolArgs = { trackId: string; target?: string; voice?: PitchVoice };
+
+function pitchToolArgs(
+  args: Record<string, unknown>,
+  focusedTrackId: string,
+): PitchToolArgs {
+  const trackId = args.trackId ?? focusedTrackId;
+  if (typeof trackId !== "string" || trackId.length === 0)
+    throw new ToolArgumentError("trackId must be a track id");
+  const out: PitchToolArgs = { trackId };
+  if (args.clip !== undefined) {
+    if (typeof args.clip !== "string" || args.clip.length === 0)
+      throw new ToolArgumentError("clip must be a clip id or sampler voice name");
+    out.target = args.clip;
+  }
+  if (args.voice !== undefined) {
+    if (!PITCH_VOICE_NAMES.includes(args.voice as PitchVoice))
+      throw new ToolArgumentError(
+        `voice is one of ${PITCH_VOICE_NAMES.join(", ")}`,
+      );
+    out.voice = args.voice as PitchVoice;
+  }
+  return out;
+}
+
+const pitchToolProperties = {
+  trackId: { type: "string", maxLength: SCORE_LIMITS.maxIdLength },
+  clip: {
+    type: "string",
+    description:
+      "Clip id or sampler voice on the track; default the first clip, else the first voice.",
+  },
+  voice: {
+    type: "string",
+    enum: PITCH_VOICE_NAMES,
+    description:
+      "Expected range: auto (70-1400 Hz, default) or bass, tenor, alto, soprano.",
+  },
+};
+
+function rethrow(error: unknown): never {
+  if (error instanceof PitchTargetError)
+    throw new ToolArgumentError(error.message);
+  throw error;
+}
+
 /** pitch: analyze_pitch, pitch_to_notes. */
-export const PITCH_TOOLS: readonly VoiceTool[] = [];
+export const PITCH_TOOLS: readonly VoiceTool[] = [
+  {
+    name: "analyze_pitch",
+    description:
+      "Read-only: track the pitch of a track's audio clip or sampler voice (default the focused track) and report the detected key, median pitch, range and the sung notes with their cents off pitch. Cached per file.",
+    parameters: {
+      type: "object",
+      properties: pitchToolProperties,
+      additionalProperties: false,
+    },
+    plan(args, context) {
+      const parsed = pitchToolArgs(args, context.focusedTrackId);
+      return {
+        kind: "action",
+        summary: `analyze_pitch ${parsed.trackId}`,
+        run: async (action) => {
+          const root = action.workspace?.root ?? process.cwd();
+          const report = await analyzeTrackPitch(
+            context.score,
+            parsed.trackId,
+            root,
+            parsed,
+          ).catch(rethrow);
+          const lines = pitchReportLines(report).slice(0, -1);
+          const shown = report.notes.slice(0, ANALYZE_PITCH_MAX_NOTES);
+          if (shown.length > 0) lines.push("notes (file seconds):");
+          for (const note of shown)
+            lines.push(
+              `  ${note.start.toFixed(2)}-${note.end.toFixed(2)} ${hzName(440 * 2 ** ((note.midi - 69) / 12))} ${note.cents >= 0 ? "+" : ""}${Math.round(note.cents)}c`,
+            );
+          if (report.notes.length > shown.length)
+            lines.push(`  … ${report.notes.length - shown.length} more`);
+          return {
+            content: lines.join("\n"),
+            summary: `${report.trackId} · ${report.key ?? "key unclear"} · ${hzName(report.median)}`,
+          };
+        },
+      };
+    },
+  },
+  {
+    name: "pitch_to_notes",
+    description:
+      "Turn a track's sung or played audio (clip or sampler voice) into a new guide-notes track, one note per detected note, placed through the tempo map where the audio plays. The audio track is unchanged.",
+    parameters: {
+      type: "object",
+      properties: {
+        ...pitchToolProperties,
+        as: {
+          type: "string",
+          maxLength: SCORE_LIMITS.maxIdLength,
+          description: "Id for the new track; default <track>-notes.",
+        },
+      },
+      additionalProperties: false,
+    },
+    plan(args, context) {
+      const parsed = pitchToolArgs(args, context.focusedTrackId);
+      if (
+        args.as !== undefined &&
+        (typeof args.as !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(args.as))
+      )
+        throw new ToolArgumentError("as must be a track id");
+      const as = args.as as string | undefined;
+      return {
+        kind: "prepare",
+        summary: `pitch_to_notes ${parsed.trackId}`,
+        run: async (action) => {
+          const root = action.workspace?.root ?? process.cwd();
+          const report = await analyzeTrackPitch(
+            context.score,
+            parsed.trackId,
+            root,
+            parsed,
+          ).catch(rethrow);
+          if (report.notes.length === 0)
+            throw new ToolArgumentError(
+              `no notes found in ${report.trackId} · ${report.target.label}`,
+            );
+          let made: ReturnType<typeof guideNotesScore>;
+          try {
+            made = guideNotesScore(context.score, report, as ? { as } : {});
+          } catch (error) {
+            rethrow(error);
+          }
+          const track = made.next.tracks.find((t) => t.id === made.trackId)!;
+          const notes = made.next.notes.filter(
+            (note) => note.trackId === made.trackId,
+          );
+          return {
+            kind: "score",
+            operations: [
+              { type: "addTrack", track },
+              ...notes.map((note) => ({ type: "addNote" as const, note })),
+            ],
+            summary: `${made.count} guide notes from ${report.trackId} · ${report.target.label} on ${made.trackId}${report.key ? ` · ${report.key}` : ""}`,
+            trackId: made.trackId,
+          };
+        },
+      };
+    },
+  },
+];
 const FORMANT_PRESETS = Object.keys(FX_PRESETS.formant ?? {});
 
 /**
