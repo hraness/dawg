@@ -2137,6 +2137,25 @@ export type KeysInput = Readonly<{
   vib?: number;
   /** Pitch wobble depth in semitones (0.5). */
   vibmod?: number;
+  // keys-electric (SDK 1.26.0)
+  /** Sympathetic string resonance 0..1 under the sustain pedal (0; pianos). */
+  sym?: number;
+  /** Pickup drive 0..1: growl when played hard (0.35; epiano, wurli). */
+  bark?: number;
+  /** Tine or reed bell ping 0..1 (0.5; epiano, wurli). */
+  bell?: number;
+  /** Output low-pass in Hz, 0 off (electric keys). */
+  tone?: number;
+  /** Clav pickup switch: neck bridge both out ("both"). */
+  pickup?: string;
+  /** Clav mute slider 0..1 (0). */
+  mute?: number;
+  /** Suitcase stereo vibrato depth 0..1 (0; epiano). */
+  vibe?: number;
+  /** Suitcase vibrato rate in Hz 0.5..12 (4; epiano). */
+  vibehz?: number;
+  /** Reed piano tremolo depth 0..1 (0; wurli). */
+  trem?: number;
 }>;
 
 export type SynthInput = Readonly<{
