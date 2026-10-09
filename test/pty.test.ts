@@ -232,7 +232,7 @@ test.skipIf(!supported)(
     await t.until(() => t.vt.text().includes(" NOW "), "prompt");
     expect(t.vt.text()).toContain("created .dawg/ · add it to .gitignore");
     expect(t.vt.text()).toMatch(
-      /main · empty · [^\n]* · ctrl-p play · ctrl-k menu/,
+      /main · empty · [^\n]*space play · ctrl-p play mode · ctrl-k menu/,
     );
 
     // A drum command on a melodic track is a failure, drawn in the error role.

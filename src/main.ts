@@ -4462,13 +4462,13 @@ function playSession(): PlaySession {
 }
 
 async function enterPlay(): Promise<Receipt> {
-  if (play?.on) return ok(`play · ${play.track} · esc leaves`);
+  if (play?.on) return ok(`play mode · ${play.track} · esc leaves`);
   await materializeDraft();
   const session = playSession();
   await session.enter();
   if (hasSamplerTracks(score)) void sampleProblems(score);
   return ok(
-    `play · ${session.track} · ${session.keyboard.range} · ? keys · esc leaves`,
+    `play mode · ${session.track} · ${session.layout.drums ? "drums" : session.keyboard.range} · ? keys · esc leaves`,
   );
 }
 
