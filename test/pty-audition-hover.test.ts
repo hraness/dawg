@@ -14,7 +14,10 @@ type Doc = { revision: number; tracks: Track[] };
 async function latest(cwd: string): Promise<Doc> {
   const found: string[] = [];
   const walk = async (dir: string): Promise<void> => {
-    for (const entry of await readdir(dir, { withFileTypes: true })) {
+    // Lock directories and presence files can vanish mid-walk.
+    for (const entry of await readdir(dir, { withFileTypes: true }).catch(
+      () => [],
+    )) {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) await walk(path);
       else if (entry.name.endsWith(".json")) found.push(path);
@@ -23,7 +26,9 @@ async function latest(cwd: string): Promise<Doc> {
   await walk(join(cwd, ".dawg"));
   let best: Doc = { revision: -1, tracks: [] };
   for (const path of found) {
-    const parsed = JSON.parse(await readFile(path, "utf8")) as {
+    const parsed = JSON.parse(
+      await readFile(path, "utf8").catch(() => "{}"),
+    ) as {
       revision?: number;
       composition?: { tracks?: Track[] };
     };

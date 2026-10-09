@@ -20,7 +20,10 @@ type Composition = {
 async function composition(cwd: string): Promise<Composition | undefined> {
   const found: string[] = [];
   const walk = async (dir: string): Promise<void> => {
-    for (const entry of await readdir(dir, { withFileTypes: true })) {
+    // Lock directories and presence files can vanish mid-walk.
+    for (const entry of await readdir(dir, { withFileTypes: true }).catch(
+      () => [],
+    )) {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) await walk(path);
       else if (entry.name.endsWith(".json")) found.push(path);
@@ -28,7 +31,7 @@ async function composition(cwd: string): Promise<Composition | undefined> {
   };
   await walk(join(cwd, ".dawg"));
   for (const path of found) {
-    const text = await readFile(path, "utf8");
+    const text = await readFile(path, "utf8").catch(() => "{}");
     if (!text.includes('"composition"')) continue;
     const parsed = JSON.parse(text) as { composition?: Composition };
     if (parsed.composition?.tracks) return parsed.composition;

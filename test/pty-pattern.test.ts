@@ -24,7 +24,10 @@ type SessionScore = {
 async function session(cwd: string): Promise<SessionScore | undefined> {
   const found: string[] = [];
   const walk = async (dir: string): Promise<void> => {
-    for (const entry of await readdir(dir, { withFileTypes: true })) {
+    // Lock directories and presence files can vanish mid-walk.
+    for (const entry of await readdir(dir, { withFileTypes: true }).catch(
+      () => [],
+    )) {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) await walk(path);
       else if (entry.name.endsWith(".json")) found.push(path);
@@ -33,7 +36,7 @@ async function session(cwd: string): Promise<SessionScore | undefined> {
   await walk(join(cwd, ".dawg"));
   let best: { revision: number; score: SessionScore } | undefined;
   for (const path of found) {
-    const text = await readFile(path, "utf8");
+    const text = await readFile(path, "utf8").catch(() => "{}");
     if (!text.includes('"composition"')) continue;
     const parsed = JSON.parse(text) as {
       revision?: number;
