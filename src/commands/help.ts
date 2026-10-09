@@ -87,6 +87,14 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
           "pedal, amp, cabinet · stomp rat · head gain 7 gate -55 · cab 4x12",
       },
       {
+        command: "piano [<preset>] | grand | upright | felt | honkytonk",
+        summary: "modelled piano · piano ballad · piano lofi · piano prepared",
+      },
+      {
+        command: "keys <param> <value> | preset <name> | reset",
+        summary: "piano params · keys hardness 0.3 decay 1.5 · keys lists them",
+      },
+      {
         command: "art <articulation>|off [target]",
         summary:
           "staccato legato accent tenuto marcato ghost · art staccato bars 1-2",
@@ -621,7 +629,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   bars: "bars takes 1…256 · bars 8",
   extend: "extend <count> bars · extend 4 bars",
   instrument:
-    "instrument <name> · sine piano pluck bass saw square triangle wavetable kit · synth: sawtooth supersaw pulse white pink z_square…",
+    "instrument <name> · sine piano pluck bass saw square triangle wavetable kit · pianos: grand upright felt honkytonk prepared · synth: sawtooth supersaw pulse white pink z_square…",
   volume: "volume takes 0…1 · volume 0.8",
   vol: "volume takes 0…1 · volume 0.8",
   pan: "pan takes -1…1 · pan -0.5",
@@ -676,6 +684,9 @@ export const USAGE: Readonly<Record<string, string>> = {
     "stomp fuzz|face|od|rat|octave | gain <0-10> tone <0-1> level <dB> | off",
   head: "head clean|chime|crunch|lead|high|solid|bass | gain bass mid treble presence master <0-10> | gate <dB> | off",
   cab: "cab 1x12|2x12|4x12|1x10|open|8x10|1x15|di | mic <0-1> | off",
+  keys: "keys <param> <value> | preset <name> | reset | presets · keys hardness 0.3 · keys stretch 0",
+  piano:
+    "piano [grand|ballad|upright|felt|lofi|honkytonk|prepared] · piano ballad",
   pack: "/pack list | info <name> | use <pack>/<sound> | add <url>",
   kit: "/kit [name] · /kit syn909",
   euclid: "/euclid [voice] · euclid hat 7 16",

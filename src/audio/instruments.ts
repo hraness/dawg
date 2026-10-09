@@ -13,6 +13,7 @@ import type { SampleBank } from "./samples.ts";
 import type { RenderContext } from "./wav.ts";
 import { STRING_ENGINE } from "./strings/engine.ts";
 import { GRANULAR_ENGINE } from "./granular.ts";
+import { KEYS_ENGINES } from "./keys/engine.ts";
 
 /** What an engine renders with: the track's render context plus its tuning. */
 export type EngineContext = RenderContext &
@@ -39,8 +40,13 @@ export type InstrumentEngine = Readonly<{
     context: EngineContext,
     bank: SampleBank,
   ): void;
-  /** Ring-out after the last note ends, in seconds (also the live release). */
+  /** Ring-out after the last note ends, in seconds (the live length cap). */
   tailSeconds(track: Track): number;
+  /**
+   * The live note-off fade for one key at its sounding `hz`, in seconds
+   * (a piano's damper); absent uses `tailSeconds`.
+   */
+  releaseSeconds?(track: Track, pitch: number, hz: number): number;
   /** True when the engine writes a separate right channel. */
   stereo(track: Track): boolean;
   /** Digests of any assets the engine reads, joined to the stem cache key. */
@@ -93,3 +99,4 @@ export function engineTailSeconds(track: Track | undefined): number {
 // 0.6 lanes register their engines below, one line each.
 registerEngine(STRING_ENGINE);
 registerEngine(GRANULAR_ENGINE);
+for (const engine of KEYS_ENGINES) registerEngine(engine);

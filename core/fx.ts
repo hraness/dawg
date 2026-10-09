@@ -14,6 +14,7 @@
 
 import { SYNTH_LANE_PARAMS } from "./synth.ts";
 import { STRING_LANE_PARAMS } from "./strings.ts";
+import { KEYS_LANE_PARAMS } from "./keys.ts";
 import {
   FxValidationError,
   normalizeParam,
@@ -1073,12 +1074,13 @@ export function normalizeFx(input: unknown): TrackFx | undefined {
 }
 
 /** Automation lane name of an `fx` parameter, e.g. `distort-drive`. */
-export type FxLane = `${FxName | "reverb" | "synth" | "string"}-${string}`;
+export type FxLane =
+  `${FxName | "reverb" | "synth" | "string" | "keys"}-${string}`;
 
 /** Every automatable `fx` parameter as `{ lane, effect, param, spec }`. */
 export const FX_LANES: readonly Readonly<{
   lane: FxLane;
-  effect: FxName | "reverb" | "synth" | "string";
+  effect: FxName | "reverb" | "synth" | "string" | "keys";
   param: string;
   spec: NumberParam;
 }>[] = Object.freeze([
@@ -1111,6 +1113,15 @@ export const FX_LANES: readonly Readonly<{
     Object.freeze({
       lane: `string-${param}` as FxLane,
       effect: "string" as const,
+      param,
+      spec,
+    }),
+  ),
+  // Modelled piano parameters (core/keys.ts), read at each note's onset.
+  ...KEYS_LANE_PARAMS.map(({ param, spec }) =>
+    Object.freeze({
+      lane: `keys-${param}` as FxLane,
+      effect: "keys" as const,
       param,
       spec,
     }),

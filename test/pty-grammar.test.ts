@@ -150,8 +150,9 @@ test.skipIf(!supported)(
     const t = await launch(COLS, 24, {}, ["--track", "keys"]);
     try {
       await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      // A new `instrument piano` stores the modelled grand (0.6 keys).
       await t.send("instrument piano\r");
-      await t.until(() => t.vt.text().includes("rev 0→1"), "piano");
+      await t.until(() => t.vt.text().includes("keys · grand"), "piano");
       await t.send("\u0010");
       await t.until(() => t.vt.text().includes("PLAY"), "play");
       expect(t.vt.text()).toContain("? keys");

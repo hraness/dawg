@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.23.0";
+export const SDK_VERSION = "1.24.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -1896,6 +1896,53 @@ export type FxInput = Readonly<Record<string, EffectParams>>;
  * `"synth-<param>"` (e.g. `"synth-lpf"`), read at each note's onset.
  * Every parameter, range and default: **Synth** in DAWG.md.
  */
+/**
+ * Modelled piano settings (SDK 1.24.0), for a track whose instrument is a
+ * piano family (`"grand"`, `"upright"`, `"felt"`, `"honkytonk"`,
+ * `"prepared"`; the words `"ballad"` and `"lofi"` pick presets). Every field
+ * is optional; `{}` is the family's own sound. Automate a parameter with
+ * `automation.fx["keys-<param>"]` (hardness, touch, decay, release, knock,
+ * noise, felt), read at each note's onset. Ranges: **Keys** in DAWG.md.
+ */
+export type KeysInput = Readonly<{
+  /** A named preset: grand ballad upright felt lofi honkytonk prepared. */
+  preset?: string;
+  /** Hammer hardness 0..1: brightness at a given velocity (0.5). */
+  hardness?: number;
+  /** Velocity sensitivity 0..1 (1). */
+  touch?: number;
+  /** Inharmonicity multiplier 0..4 (1 grand, 2.5 upright, 0 harmonic). */
+  inharm?: number;
+  /** Unison detune in cents 0..30 (0.7; honkytonk 16). */
+  unison?: number;
+  /** Sustain time multiplier 0.1..4 (1). */
+  decay?: number;
+  /** Damper time multiplier 0.1..4 (1). */
+  release?: number;
+  /** Hammer position along the string 0.04..0.3 (0.12). */
+  strike?: number;
+  /** Aftersound share 0..1 (0.3). */
+  after?: number;
+  /** Soundboard knock 0..1 (0.5). */
+  knock?: number;
+  /** Key and damper mechanics 0..1 (0.25). */
+  noise?: number;
+  /** Felt strip 0..1 (0; felt family 1). */
+  felt?: number;
+  /** Share of prepared keys 0..1 (0; prepared family 0.6). */
+  prep?: number;
+  /** Keyboard stereo width 0..1 (0.6). */
+  width?: number;
+  /** Octave stretch 0..1 (1); 0 keeps every key exactly on its tuning. */
+  stretch?: number;
+  /** Body EQ: grand upright felt honkytonk prepared (the family's own). */
+  body?: string;
+  /** Pitch wobble rate in Hz (tape wow), 0 off. */
+  vib?: number;
+  /** Pitch wobble depth in semitones (0.5). */
+  vibmod?: number;
+}>;
+
 export type SynthInput = Readonly<{
   attack?: number;
   decay?: number;
@@ -2020,6 +2067,12 @@ export type TrackInput = Readonly<{
    * `instrument: stringed("sitar", {...})` or a preset word (`"nylon"`).
    */
   string?: StringInput | null;
+  /**
+   * Modelled piano settings (SDK 1.24.0) for `instrument: "grand"` and the
+   * other piano families; `{}` is the family's sound. The word `"piano"`
+   * keeps the classic 0.4 tone; use `"grand"` for the modelled piano.
+   */
+  keys?: KeysInput;
   muted?: boolean;
   /** When any track is soloed only soloed tracks play. */
   solo?: boolean;
@@ -2185,6 +2238,8 @@ export type TrackSpec = Readonly<{
     seed: number;
   }>;
   tuning: ScoreTuning | null;
+  /** Modelled piano settings (SDK 1.24.0); present only when set. */
+  keys?: KeysInput;
 }>;
 
 export type GlideMode = "legato" | "mono" | "poly";
@@ -2528,6 +2583,23 @@ export function track(input: TrackInput): TrackSpec {
       throw new DawgSdkError(
         `track ${name}: unknown automation lane "${key}" (${AUTOMATION_KEYS.join(" ")})`,
       );
+  // A keys preset word (`"lofi"`, `"ballad"`) brings its preset's effects,
+  // as the prompt does; explicit filter, fx and reverb win.
+  const presetFx = keysPresetFx(input.keys, rawInstrument);
+  if (presetFx) {
+    input = {
+      ...input,
+      ...(input.filter === undefined && presetFx.filter
+        ? { filter: presetFx.filter }
+        : {}),
+      ...(input.reverb === undefined && presetFx.reverb
+        ? { reverb: presetFx.reverb }
+        : {}),
+      ...(presetFx.fx && input.fx !== null
+        ? { fx: { ...presetFx.fx, ...(isRecord(input.fx) ? input.fx : {}) } }
+        : {}),
+    };
+  }
   const filter =
     input.filter === undefined || input.filter === null
       ? null
@@ -2625,7 +2697,78 @@ export function track(input: TrackInput): TrackSpec {
     ...trackTime(input.time, name),
     ...trackPerformance(input, name),
     tuning: tuningSpec(input.tuning, `track ${name}`),
+    ...keysSpec(input.keys, rawInstrument, name),
   });
+}
+
+/**
+ * Effects the keys presets set with the voice: a copy of `KEYS_PRESETS`
+ * filter, fx and reverb in core/keys.ts (core/keys.test.ts checks they
+ * match the prompt's `piano <preset>`).
+ */
+const KEYS_PRESET_FX: Readonly<
+  Record<
+    string,
+    Readonly<{
+      filter?: FilterInput;
+      fx?: FxInput;
+      reverb?: ReverbInput;
+    }>
+  >
+> = Object.freeze({
+  ballad: { reverb: { mix: 0.25, size: 0.7 } },
+  felt: { reverb: { mix: 0.2, size: 0.5 } },
+  lofi: {
+    filter: { cutoff: 3500, resonance: 0.1 },
+    fx: { crush: { bits: 10 } },
+  },
+});
+
+/**
+ * The preset effects an instrument word brings: a preset word that is not
+ * also its family (`"lofi"`, `"ballad"`), or any preset word without
+ * `keys` (`"felt"`). A printed track names its family and always prints
+ * `keys`, so print → eval never adds them twice.
+ */
+function keysPresetFx(
+  keys: unknown,
+  word: unknown,
+): (typeof KEYS_PRESET_FX)[string] | undefined {
+  if (typeof word !== "string") return undefined;
+  const meaning = resolveInstrumentWord(word);
+  if (meaning?.field !== "keys" || !meaning.preset) return undefined;
+  if (keys !== undefined && keys !== null && word === meaning.instrument)
+    return undefined;
+  return KEYS_PRESET_FX[meaning.preset];
+}
+
+/**
+ * `keys` for `track()`: the input as given, or `{ preset }` when the
+ * instrument word names a keys preset (`"grand"`, `"lofi"`), so the word
+ * alone plays the modelled piano. dawg validates the values.
+ */
+function keysSpec(
+  input: unknown,
+  word: unknown,
+  name: string,
+): { keys?: KeysInput } {
+  const meaning =
+    typeof word === "string" ? resolveInstrumentWord(word) : undefined;
+  const preset = meaning?.field === "keys" ? meaning.preset : undefined;
+  if (input === undefined || input === null)
+    return preset ? { keys: Object.freeze({ preset }) } : {};
+  if (!isRecord(input))
+    throw new DawgSdkError(`track ${name}: keys must be an object`);
+  const out: Record<string, EffectValue> = {};
+  // A preset word (`"lofi"`) keeps its preset under given overrides; a
+  // family word (`"upright"`) with `keys` is exactly the given keys.
+  if (preset && input.preset === undefined && word !== meaning?.instrument)
+    out.preset = preset;
+  for (const [key, value] of Object.entries(input)) {
+    if (value === undefined) continue;
+    out[key] = effectValue(value, `${name} keys.${key}`);
+  }
+  return { keys: Object.freeze(out) };
 }
 
 function trackTime(input: unknown, name: string): { time?: TrackTimeInput } {
@@ -3083,6 +3226,7 @@ export type ScoreTrack = Readonly<{
   fx?: FxInput;
   fxAutomation?: Readonly<Record<string, readonly ScorePoint[]>>;
   synth?: SynthInput;
+  keys?: KeysInput;
   sampler?: Readonly<{
     voices: Readonly<Record<string, ScoreSampleRef>>;
     mode: "oneshot" | "keyed";
@@ -3411,6 +3555,7 @@ export function song(input: SongInput): Song {
     if (t.humanize) stored.humanize = t.humanize;
     if (t.tuning) stored.tuning = t.tuning;
     if (t.string) stored.string = t.string;
+    if (t.keys) stored.keys = t.keys;
     if (t.rhythm && t.rhythm.length > 0)
       stored.rhythm = Object.freeze(
         t.rhythm.map((row) => {
@@ -4448,6 +4593,25 @@ const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
     instrument: "granular",
     field: "granular",
     preset: "microloop",
+  },
+  // keys (f06-piano): modelled pianos. `piano` stays legacy here; the typed
+  // surfaces store a new `piano` as `grand` (core/keys.ts `pianoWrite`).
+  { word: "grand", instrument: "grand", field: "keys", preset: "grand" },
+  { word: "ballad", instrument: "grand", field: "keys", preset: "ballad" },
+  { word: "upright", instrument: "upright", field: "keys", preset: "upright" },
+  { word: "felt", instrument: "felt", field: "keys", preset: "felt" },
+  { word: "lofi", instrument: "felt", field: "keys", preset: "lofi" },
+  {
+    word: "honkytonk",
+    instrument: "honkytonk",
+    field: "keys",
+    preset: "honkytonk",
+  },
+  {
+    word: "prepared",
+    instrument: "prepared",
+    field: "keys",
+    preset: "prepared",
   },
 ]);
 

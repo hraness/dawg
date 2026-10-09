@@ -9,6 +9,7 @@ order: 1
 
 - "make the lead brighter with a slow filter sweep"
 - "find a 909 kick in a sample pack"
+- "a soft felt piano for the chords"
 
 ## Type it yourself
 
@@ -16,6 +17,8 @@ order: 1
 - `synth preset pluck` · pad lead bass acid keys bell organ strings
 - `synth lpf 800 lpenv 3` any parameter · `synth adsr 0.01 0.2 0.5 0.3`
 - `synth lpf off` · `synth reset` · `synth` lists what is set
+- `piano` modelled grand · `piano felt` ballad upright lofi prepared
+- `keys hardness 0.3 decay 1.5` · `keys reset` · `keys` lists it
 - `wt list` tables · `wt pwm` load one · `wt 0.5` position
 - `string sitar` · nylon steel koto harp oud … · `string buzz 0.8` · `string presets`
 - `/pack list` · `/pack use <pack>/<sound> as kick` · `/pack info vcsl`

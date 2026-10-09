@@ -97,6 +97,14 @@ import {
   STRING_SIMPLE_PARAMS,
   stringPresetOf,
 } from "../../core/strings.ts";
+import {
+  KEYS_PARAMS,
+  KEYS_PRESETS,
+  KEYS_SIMPLE,
+  PIANO_FAMILIES,
+  isPianoFamily,
+  resolvedKeys,
+} from "../../core/keys.ts";
 import type { PickerItem } from "../../tui/app.ts";
 import { BUILTIN_TABLES, BUILTIN_TABLE_NAMES } from "../audio/wavetable.ts";
 import {
@@ -372,7 +380,9 @@ function laneLabel(lane: AutomationParameter): string {
   if (!info) return lane;
   const unit = info.spec.unit ? ` (${info.spec.unit})` : "";
   const owner =
-    info.effect === "synth" || info.effect === "string"
+    info.effect === "synth" ||
+    info.effect === "string" ||
+    info.effect === "keys"
       ? info.effect
       : effectSpec(info.effect).label;
   return `${owner} ${info.param}${unit}`;
@@ -520,9 +530,28 @@ function soundSectionNodes(context: MenuContext): MenuNode[] {
           },
         ]
       : [];
+  const keys: MenuNode[] =
+    track && isPianoFamily(track.instrument) && track.keys
+      ? [
+          {
+            kind: "menu",
+            id: "keys",
+            label: "keys",
+            detail: `${track.instrument}${track.keys.preset ? ` · ${track.keys.preset}` : ""}`,
+            help: "the modelled piano: preset, touch, hammers, dampers, stretch",
+            build: (inner) => {
+              const current = focused(inner);
+              return current
+                ? keysNodes(current, Object.keys(KEYS_PARAMS))
+                : [];
+            },
+          },
+        ]
+      : [];
   return [
     ...parameterNodes(context),
     ...granular,
+    ...keys,
     ...tuning,
     {
       kind: "menu",
@@ -938,7 +967,7 @@ function trackNodes(context: MenuContext): MenuNode[] {
 }
 
 function instrumentNode(track: Track): MenuNode {
-  const options: string[] = [...AVAILABLE_INSTRUMENTS];
+  const options: string[] = [...AVAILABLE_INSTRUMENTS, ...PIANO_FAMILIES];
   if (!options.includes(track.instrument)) options.push(track.instrument);
   return {
     kind: "choice",
@@ -1040,6 +1069,19 @@ function parameterNodes(context: MenuContext): MenuNode[] {
       kind: "info",
       label: "add a voice",
       value: "/sample <path> [as <voice>]",
+    });
+  } else if (isPianoFamily(track.instrument) && track.keys) {
+    nodes.push(...keysNodes(track, KEYS_SIMPLE));
+    nodes.push({
+      kind: "menu",
+      id: "keys:all",
+      label: "all piano params",
+      detail: `all ${Object.keys(KEYS_PARAMS).length} params`,
+      help: "every modelled piano parameter",
+      build: (inner) => {
+        const current = focused(inner);
+        return current ? keysNodes(current, Object.keys(KEYS_PARAMS)) : [];
+      },
     });
   } else if (!isDrumInstrument(track.instrument)) {
     nodes.push(...synthNodes(track, SYNTH_SIMPLE));
@@ -1200,6 +1242,57 @@ function matchingSynthPreset(track: Track): string | undefined {
       preset.instrument === track.instrument &&
       JSON.stringify(normalizeSynth(preset.synth)) === current,
   )?.[0];
+}
+
+/** Modelled piano rows: the preset, then each parameter (`keys <p> <v>`). */
+function keysNodes(track: Track, params: readonly string[]): MenuNode[] {
+  const effective = resolvedKeys(track.instrument, track.keys);
+  const nodes: MenuNode[] = [
+    {
+      kind: "choice",
+      label: "preset",
+      value: track.keys?.preset ?? "—",
+      options: Object.keys(KEYS_PRESETS),
+      command: (preset) => `keys preset ${preset}`,
+      help: "a starting piano; every value stays editable",
+    },
+  ];
+  for (const key of params) {
+    const param = KEYS_PARAMS[key]!;
+    const stored = track.keys?.[key];
+    if (param.kind === "number") {
+      const base = effective[key] as number;
+      nodes.push({
+        kind: "number",
+        label: key,
+        value: typeof stored === "number" ? stored : undefined,
+        start: base,
+        off: withUnit(formatParam(param, base), param.unit),
+        min: param.min,
+        max: param.max,
+        step: specStep(param),
+        format: (value) => withUnit(formatParam(param, value), param.unit),
+        command: (value) => `keys ${key} ${formatParam(param, value)}`,
+        reset: `keys ${key} off`,
+        help: param.doc,
+      });
+    } else if (param.kind === "enum")
+      nodes.push({
+        kind: "choice",
+        label: key,
+        value: typeof stored === "string" ? stored : String(effective[key]),
+        options: param.values,
+        command: (option) => `keys ${key} ${option}`,
+        help: param.doc,
+      });
+  }
+  nodes.push({
+    kind: "action",
+    label: "reset to the family",
+    command: "keys reset",
+    help: "clear every override and the preset, and the effects the preset added (keeps the family's own sound)",
+  });
+  return nodes;
 }
 
 function synthNodes(track: Track, keys: readonly string[]): MenuNode[] {
@@ -1672,6 +1765,7 @@ function automationNodes(context: MenuContext): MenuNode[] {
     if (info?.effect === "synth")
       return track.synth?.[info.param] !== undefined;
     if (info?.effect === "string") return track.string !== undefined;
+    if (info?.effect === "keys") return track.keys !== undefined;
     return info !== undefined && effectValues(track, info.effect) !== undefined;
   });
   const hidden = AUTOMATION_PARAMETERS.filter((lane) => !shown.includes(lane));
@@ -1857,6 +1951,20 @@ const GRANULAR_PRESETS_COUNT = granularBrowseNodes().length;
 
 function soundNodes(): MenuNode[] {
   return [
+    {
+      kind: "menu",
+      id: "group:keys",
+      label: "Keys",
+      help: "modelled pianos, built in (no download)",
+      detail: Object.keys(KEYS_PRESETS).join(" "),
+      build: () =>
+        Object.entries(KEYS_PRESETS).map(([name, preset]): MenuNode => ({
+          kind: "action",
+          label: `${name.padEnd(10)} ${preset.doc}`,
+          command: `piano ${name}`,
+          help: preset.styles,
+        })),
+    },
     {
       kind: "action",
       label: "wavetable synth  basic shapes morph · built-in",
@@ -2573,11 +2681,17 @@ export class EditMenu {
                     candidate.kind === "choice" &&
                     candidate.label === node.label,
                 ) ?? node;
-            return live.options.map((option) => ({
-              kind: "action",
-              label: option === live.value ? `${option}  ✓` : option,
-              command: live.command(option),
-            }));
+            // The current value is shown, not re-run: re-confirming a
+            // legacy `piano` would otherwise re-voice it as the grand.
+            return live.options.map((option): MenuNode =>
+              option === live.value
+                ? { kind: "info", label: `${option}  ✓`, value: "current" }
+                : {
+                    kind: "action",
+                    label: option,
+                    command: live.command(option),
+                  },
+            );
           },
         });
         return { type: "handled" };

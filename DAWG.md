@@ -576,6 +576,57 @@ FM operators 2–8 repeat the `fm` rows with a suffix (`fm2`, `fmh2`, `fmattack2
 | sample controls `begin`, `end`, `speed`, `unit`, `loop`, `loopBegin`/`loopb`, `loopEnd`/`loope`, `clip`/`legato`, `fit`, `loopAt`, `accelerate`, `squiz`, `cut`, `gain` | sampler voice fields; `/sample set`, `set_sample`              | done (see Samples)                                   |
 | fitting to tempo (Ableton Repitch/Beats/Tones; Strudel `fit`)                                                                                                           | `bpm` `fitmode` `len`; `/fitmode`, `fit_sample`                | done (see Fitting samples)                           |
 
+## Keys (modelled piano)
+
+A track whose `instrument` is a piano family (`grand`, `upright`, `felt`, `honkytonk`, `prepared`) and which has a `keys` field plays dawg's modelled piano (`src/audio/keys/`): a felt hammer of the chosen hardness strikes a bank of stretched, inharmonic string modes (two or three detuned unison strings per key, with a fast first stage and a slow aftersound), a soundboard knock, dampers that stop a released key in about a second, and a small body EQ per family. The 0.5 sustain pedal (down, half, up) holds the dampers off. It is built in: nothing downloads and every render is byte-identical.
+
+`piano` keeps two meanings on purpose. A project already stored as `instrument: "piano"` keeps the legacy tone forever. Every new write of the word (`piano`, `instrument piano`, `set_instrument piano`, the menu) stores `instrument: "grand"` with `keys: { preset: "grand" }`. `organ` stays the synth preset. The sampled Salamander grand is still in the browser under instruments.
+
+Tuning: each key's first partial sits on the track's tuning (12-TET or any table, 19-EDO included; an unmapped degree is silent). By default the octaves are stretched from the strings' own inharmonicity, as a piano tuner would: low octaves are tuned between the 2:1 and 4:2 beats and the treble is beatless 2:1 to the stretched note below, so the octave from A3 to A4 beats under 1 Hz. `keys stretch 0` keeps every key exactly on the tuning. Bends and glides keep each string mode under the Nyquist limit (modes that would alias are muted), and each note fades over its last 250 ms so it ends inside the 8 s loop-tail window.
+
+Polyphony is 64 voices; a new key steals the oldest released voice, then the oldest held one.
+
+Prompt grammar (one undo step per command):
+
+```text
+piano                                    the modelled grand (also: grand)
+piano ballad                             a preset: grand ballad upright felt lofi honkytonk prepared
+upright | felt | honkytonk | prepared   the preset word alone
+keys                                     list this track's piano settings
+keys presets                             every preset with its styles
+keys preset lofi                         load a preset (instrument, keys and its effects)
+keys hardness 0.3 decay 1.5              any parameter
+keys hardness off                        unset one parameter (back to the preset)
+keys reset                               the family's own sound (keys: {})
+automate keys-hardness points 0:0.2 8:0.8   automatable parameters have lanes
+```
+
+Presets: `grand` (concert grand, bright and long, three-string unisons), `ballad` (darker grand, softer hammer, more aftersound, plus a room reverb), `upright` (boxy, more inharmonic, shorter), `felt` (felt strip down, muted and intimate, audible mechanics, a small room), `lofi` (felt piano with tape wow, a 3.5 kHz low-pass filter and a 10-bit crush), `honkytonk` (16-cent unisons, bright saloon upright), `prepared` (bolts, rubber and screws on 60% of keys, seeded per key, so the same key always carries the same preparation). A preset is stored as `keys.preset`; its values are read at render, so overrides stay small. The effects a preset brings (`ballad`, `felt`, `lofi`) are ordinary track fields (`reverb`, `filter`, `fx.crush`) and stay editable; switching presets or `keys reset` removes them while they still hold the preset's values, and the same preset word in `song.ts` (`instrument: "lofi"`) brings the same effects. A bare `lofi` stays the drum kit and crush preset word; type `piano lofi`.
+
+The menu has the pianos under **Sound > browse sounds > Keys**, and for a piano track a **Sound > Keys** page and the simple rows (preset, hardness, decay, release, felt) in **Sound > Parameters**. The agent's `set_keys` tool takes the same presets and names; `set_instrument` and `create_track` take the piano words. In the SDK: `track({ instrument: "grand", keys: { hardness: 0.3 } })`.
+
+| Param        | Range                                 | Default            | Lane            | What it does                                                         |
+| ------------ | ------------------------------------- | ------------------ | --------------- | -------------------------------------------------------------------- |
+| **hardness** | 0..1                                  | 0.5                | `keys-hardness` | hammer felt hardness: brightness at a given velocity                 |
+| **touch**    | 0..1                                  | 1                  | `keys-touch`    | velocity sensitivity (0 plays every note at 0.8)                     |
+| **inharm**   | 0..4 x                                | 1 (upright 2.5)    |                 | inharmonicity multiplier (0 harmonic)                                |
+| **unison**   | 0..30 cents                           | 0.7 (honkytonk 16) |                 | detune spread of the unison strings                                  |
+| **decay**    | 0.1..4 x                              | 1 (upright 0.6)    | `keys-decay`    | sustain time multiplier                                              |
+| **release**  | 0.1..4 x                              | 1                  | `keys-release`  | damper time multiplier (how fast a released key stops)               |
+| **strike**   | 0.04..0.3                             | 0.12               |                 | hammer position along the string                                     |
+| **after**    | 0..1                                  | 0.3                |                 | aftersound share (the slow second stage of the decay)                |
+| **knock**    | 0..1                                  | 0.5                | `keys-knock`    | soundboard knock and hammer thump                                    |
+| **noise**    | 0..1                                  | 0.25 (felt 0.6)    | `keys-noise`    | key-off and damper mechanics                                         |
+| **felt**     | 0..1                                  | 0 (felt 1)         | `keys-felt`     | felt strip between hammers and strings                               |
+| **prep**     | 0..1                                  | 0 (prepared 0.6)   |                 | share of keys carrying a preparation (seeded per key)                |
+| **width**    | 0..1                                  | 0.6                |                 | keyboard stereo spread, bass left and treble right                   |
+| **stretch**  | 0..1                                  | 1                  |                 | octave stretch from the strings' inharmonicity; 0 keeps tuning exact |
+| **body**     | grand upright felt honkytonk prepared | the family's own   |                 | body EQ voicing                                                      |
+| **vib**      | 0..64 Hz                              | 0                  |                 | pitch wobble rate (tape wow); note vibrato replaces it               |
+| **vibmod**   | 0..24 semitones                       | 0.5                |                 | pitch wobble depth                                                   |
+
+Lanes are read at each note's onset. The model is dawg's own, from public literature (Fletcher's inharmonicity B·n² law, Railsback stretch, Weinreich's coupled unison strings and two-stage decay, Chaigne and Askenfelt's felt-hammer model, Bank's modal piano synthesis), with no sampled audio.
+
 ## Samples
 
 A track whose instrument is `sampler(...)` plays audio files instead of a synth. Voices live in `tracks/<slug>/samples/` and `src` is relative to the track directory (`samples/kick.wav`); a project-relative `tracks/<slug>/samples/kick.wav` works too.
