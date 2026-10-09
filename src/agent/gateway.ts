@@ -1,3 +1,4 @@
+import { isProviderModelId } from "../auth/credentials.ts";
 import { readSseData, SseBudgetError } from "./sse.ts";
 
 /**
@@ -18,8 +19,6 @@ export const DEFAULT_MODEL_IDS: Readonly<Record<GatewayModel, string>> =
     "sol-6.1": "openai/gpt-6.1-sol",
   });
 
-const MODEL_ID_PATTERN =
-  /^[a-z0-9][a-z0-9-]{0,63}\/[a-z0-9][a-z0-9._-]{0,127}$/i;
 const MAX_ERROR_BODY_BYTES = 4 * 1024;
 
 export function isGatewayModel(value: unknown): value is GatewayModel {
@@ -36,21 +35,22 @@ export function isGatewayModel(value: unknown): value is GatewayModel {
 export function resolveModelId(
   alias: string,
   overrides: Partial<Record<GatewayModel, string | undefined>> = {},
+  provider: ApiProvider = "gateway",
 ): string {
   if (!isGatewayModel(alias)) {
-    if (MODEL_ID_PATTERN.test(alias)) return alias;
+    if (isProviderModelId(alias, provider)) return alias;
     throw new Error(
       `unknown model "${alias.slice(0, 32)}"; use ${GATEWAY_MODELS.join(" or ")} or a vendor/model ID`,
     );
   }
   const id = overrides[alias] ?? DEFAULT_MODEL_IDS[alias];
-  if (!MODEL_ID_PATTERN.test(id))
+  if (!isProviderModelId(id, provider))
     throw new Error(`model ID for ${alias} must look like provider/model`);
   return id;
 }
 
-function checkedModelId(id: string): string {
-  if (!MODEL_ID_PATTERN.test(id))
+function checkedModelId(id: string, provider: ApiProvider): string {
+  if (!isProviderModelId(id, provider))
     throw new Error("model ID must look like provider/model");
   return id;
 }
@@ -222,12 +222,12 @@ function createApiClient(
 
   return {
     provider,
-    modelId: (model) => resolveModelId(model, overrides),
+    modelId: (model) => resolveModelId(model, overrides, provider),
     async *stream(request, signal) {
       const model =
         request.modelId !== undefined
-          ? checkedModelId(request.modelId)
-          : resolveModelId(request.model, overrides);
+          ? checkedModelId(request.modelId, provider)
+          : resolveModelId(request.model, overrides, provider);
       if (!apiKey)
         throw new GatewayError(
           provider === "openrouter"

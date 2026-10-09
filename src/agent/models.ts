@@ -1,6 +1,6 @@
 import { mkdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { writePrivateJson } from "../auth/credentials.ts";
+import { isProviderModelId, writePrivateJson } from "../auth/credentials.ts";
 import {
   DEFAULT_MODEL_IDS,
   GATEWAY_BASE_URL,
@@ -129,9 +129,6 @@ export const MODEL_CATALOG: readonly CatalogEntry[] = Object.freeze([
   },
 ]);
 
-const MODEL_ID_PATTERN =
-  /^[a-z0-9][a-z0-9-]{0,63}\/[a-z0-9][a-z0-9._-]{0,127}$/i;
-
 export function defaultModelId(provider: ApiProvider): string {
   return provider === "openrouter"
     ? MODEL_CATALOG[0]!.openrouter!
@@ -150,7 +147,7 @@ export function resolveModelChoice(
   );
   if (entry) return entry[provider];
   if (isGatewayModel(lower)) return DEFAULT_MODEL_IDS[lower];
-  return MODEL_ID_PATTERN.test(value) ? value : undefined;
+  return isProviderModelId(value, provider) ? value : undefined;
 }
 
 /** `anthropic/claude-opus-5.5` → `opus-5.5`; unknown IDs show as themselves. */
@@ -397,7 +394,7 @@ export function parseLiveCatalog(
     if (
       !isRecord(row) ||
       typeof row.id !== "string" ||
-      !MODEL_ID_PATTERN.test(row.id)
+      !isProviderModelId(row.id, provider)
     )
       continue;
     const pricing = isRecord(row.pricing) ? row.pricing : {};

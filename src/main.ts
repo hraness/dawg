@@ -438,7 +438,11 @@ if (["login", "logout", "auth", "model"].includes(process.argv[2] ?? ""))
 {
   // An unknown DAWG_MODEL is an error, never a silent fallback.
   const fromEnv = process.env.DAWG_MODEL?.trim();
-  if (fromEnv && !resolveModelChoice("gateway", fromEnv)) {
+  if (
+    fromEnv &&
+    !resolveModelChoice("gateway", fromEnv) &&
+    !resolveModelChoice("openrouter", fromEnv)
+  ) {
     process.stderr.write(
       `dawg: unknown DAWG_MODEL "${fromEnv.slice(0, 40)}"; use one of ${MODEL_CATALOG.map((row) => row.alias).join(", ")} or a vendor/model ID\n`,
     );
