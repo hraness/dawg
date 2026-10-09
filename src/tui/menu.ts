@@ -86,6 +86,14 @@ import {
   SYNTH_SIMPLE,
   normalizeSynth,
 } from "../../core/synth.ts";
+import {
+  isStringTrack,
+  STRING_PARAMS,
+  STRING_PRESET_NAMES,
+  STRING_PRESETS,
+  STRING_SIMPLE_PARAMS,
+  stringPresetOf,
+} from "../../core/strings.ts";
 import type { PickerItem } from "../../tui/app.ts";
 import { BUILTIN_TABLES, BUILTIN_TABLE_NAMES } from "../audio/wavetable.ts";
 import {
@@ -959,6 +967,30 @@ function parameterNodes(context: MenuContext): MenuNode[] {
   // A wavetable track also has the synth voice's envelope, filters and FM.
   if (isWavetableInstrument(track.instrument))
     nodes.push(...wavetableNodes(track, context.projectRoot));
+  if (isStringTrack(track)) {
+    nodes.push(...stringNodes(track, STRING_SIMPLE_PARAMS));
+    nodes.push({
+      kind: "menu",
+      id: "string:advanced",
+      label: "advanced",
+      detail: `all ${Object.keys(STRING_PARAMS).length} params`,
+      help: "every string parameter: exciter, loss, body, buzz, sympathetics",
+      build: (inner) => {
+        const current = focused(inner);
+        return current
+          ? stringNodes(current, Object.keys(STRING_PARAMS), false)
+          : [];
+      },
+    });
+    if (Object.keys(track.string ?? {}).some((key) => key !== "preset"))
+      nodes.push({
+        kind: "action",
+        label: "reset to preset",
+        command: "string reset",
+        help: "drop this track's string overrides, keep the preset",
+      });
+    return nodes;
+  }
   if (track.sampler) {
     nodes.push({
       kind: "info",
@@ -1215,6 +1247,57 @@ const SYNTH_LABEL: Readonly<Record<string, string>> = {
   vib: "vibrato",
   fm: "FM amount",
 };
+
+/** String preset first (simple view), then one row per parameter. */
+function stringNodes(
+  track: Track,
+  keys: readonly string[],
+  withPreset = true,
+): MenuNode[] {
+  const nodes: MenuNode[] = [];
+  const preset = STRING_PRESETS[stringPresetOf(track.string)]!;
+  if (withPreset)
+    nodes.push({
+      kind: "choice",
+      label: "preset",
+      help: preset.doc,
+      value: stringPresetOf(track.string),
+      options: STRING_PRESET_NAMES,
+      command: (name) => `string preset ${name}`,
+    });
+  for (const key of keys) {
+    const param = STRING_PARAMS[key]!;
+    const own = track.string?.[key];
+    const base = preset.values[key] ?? param.default;
+    if (param.kind === "number")
+      nodes.push({
+        kind: "number",
+        label: param.unit ? `${key} ${param.unit}` : key,
+        help: param.doc,
+        value: typeof own === "number" ? own : undefined,
+        start: typeof base === "number" ? base : param.default,
+        off: formatParam(
+          param,
+          typeof base === "number" ? base : param.default,
+        ),
+        min: param.min,
+        max: param.max,
+        step: specStep(param),
+        format: (value) => formatParam(param, value),
+        command: (value) => `string ${key} ${formatParam(param, value)}`,
+      });
+    else if (param.kind === "enum")
+      nodes.push({
+        kind: "choice",
+        label: key,
+        help: param.doc,
+        value: typeof own === "string" ? own : String(base),
+        options: param.values,
+        command: (option) => `string ${key} ${option}`,
+      });
+  }
+  return nodes;
+}
 
 /** Every synth parameter, grouped (amplitude, oscillator, FM 1..8, …). */
 function synthAdvancedNodes(context: MenuContext): MenuNode[] {
@@ -1725,6 +1808,20 @@ function soundNodes(): MenuNode[] {
       label: "wavetable synth  basic shapes morph · built-in",
       command: "wt basic",
       help: "switch this track to the morphing wavetable synth",
+    },
+    {
+      kind: "menu",
+      id: "strings",
+      label: "Strings",
+      help: "plucked strings: guitars, basses, sitar, harpsichord, oud, koto…",
+      detail: `${STRING_PRESET_NAMES.length} plucked · built-in`,
+      build: () =>
+        STRING_PRESET_NAMES.map((name): MenuNode => ({
+          kind: "action",
+          label: `${name.padEnd(12)} ${STRING_PRESETS[name]!.doc}`,
+          command: `string ${name}`,
+          help: STRING_PRESETS[name]!.styles,
+        })),
     },
     {
       kind: "menu",

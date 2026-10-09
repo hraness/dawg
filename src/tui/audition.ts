@@ -528,9 +528,9 @@ export function auditionKey(value: string): AuditionKey | undefined {
  * before.
  */
 const STAGEABLE =
-  /^\/?(?:(fx|effects|filter|lowpass|synth|wt|wavetable|kit|instrument|vol|volume|pan|gain|speed|warpmode|root|pattern|euclid|art|articulation|bend|vibrato|glide|portamento|velcurve|vel-curve|pedal|sustain|humanize|tuning|tune|master)\s+\S|pack\s+use\s+\S)/i;
+  /^\/?(?:(fx|effects|filter|lowpass|synth|string|wt|wavetable|kit|instrument|vol|volume|pan|gain|speed|warpmode|root|pattern|euclid|art|articulation|bend|vibrato|glide|portamento|velcurve|vel-curve|pedal|sustain|humanize|tuning|tune|master)\s+\S|pack\s+use\s+\S)/i;
 /** Subcommands that list or show instead of changing the sound. */
-const READ_ONLY = /^\/?\S+\s+(list|show|info|help|measure|meter)\s*$/i;
+const READ_ONLY = /^\/?\S+\s+(list|presets|show|info|help|measure|meter)\s*$/i;
 /** `master <unit>` alone only shows the unit. */
 const MASTER_SHOW = /^\/?master\s+(eq|glue|tape|width|limiter)\s*$/i;
 const MASTER_COMMAND = /^\/?master\s/i;
