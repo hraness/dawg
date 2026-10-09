@@ -196,6 +196,39 @@ export const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
     field: "keys",
     preset: "prepared",
   },
+  // keys (f061-organ): tonewheel, combo and pipe organs on the keys
+  // engine. `organ` stays legacy (the sine voice).
+  {
+    word: "tonewheel",
+    instrument: "tonewheel",
+    field: "keys",
+    preset: "tonewheel",
+  },
+  {
+    word: "hammond",
+    instrument: "tonewheel",
+    field: "keys",
+    preset: "tonewheel",
+  },
+  { word: "b3", instrument: "tonewheel", field: "keys", preset: "tonewheel" },
+  { word: "gospel", instrument: "tonewheel", field: "keys", preset: "gospel" },
+  {
+    word: "jazzorgan",
+    instrument: "tonewheel",
+    field: "keys",
+    preset: "jazzorgan",
+  },
+  { word: "combo", instrument: "combo", field: "keys", preset: "combo" },
+  { word: "farfisa", instrument: "combo", field: "keys", preset: "combo" },
+  { word: "vox", instrument: "combo", field: "keys", preset: "vox" },
+  { word: "pipe", instrument: "pipe", field: "keys", preset: "pipe" },
+  { word: "church", instrument: "pipe", field: "keys", preset: "pipe" },
+  { word: "pipeorgan", instrument: "pipe", field: "keys", preset: "pipe" },
+  { word: "churchorgan", instrument: "pipe", field: "keys", preset: "pipe" },
+  { word: "flutes", instrument: "pipe", field: "keys", preset: "flutes" },
+  { word: "cornet", instrument: "pipe", field: "keys", preset: "cornet" },
+  { word: "reeds", instrument: "pipe", field: "keys", preset: "reeds" },
+  { word: "celeste", instrument: "pipe", field: "keys", preset: "celeste" },
   // f06-modal: mallets and bells (core/resonators.ts). `marimba` is legacy;
   // `modal` alone gives the modal marimba.
   { word: "modal", instrument: "modal", field: "modal", preset: "marimba" },

@@ -18,6 +18,7 @@ export type LiveFullRequest = Readonly<{
   velocity: number;
   seconds: number;
   tick?: number;
+  clock?: number;
   samples?: SampleBank;
 }>;
 
@@ -32,7 +33,7 @@ declare const self: Worker;
 let synth: LiveSynth | undefined;
 
 self.onmessage = (event: MessageEvent<LiveFullRequest>) => {
-  const { id, sampleRate, score, samples, tick, ...note } = event.data;
+  const { id, sampleRate, score, samples, tick, clock, ...note } = event.data;
   try {
     if (synth?.rate !== sampleRate) synth = new LiveSynth(sampleRate);
     const pcm = synth.render({
@@ -41,6 +42,7 @@ self.onmessage = (event: MessageEvent<LiveFullRequest>) => {
       full: true,
       ...(samples ? { samples } : {}),
       ...(tick === undefined ? {} : { tick }),
+      ...(clock === undefined ? {} : { clock }),
     });
     const reply: LiveFullReply = pcm ? { id, pcm } : { id };
     self.postMessage(reply);

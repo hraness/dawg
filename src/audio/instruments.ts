@@ -7,7 +7,7 @@
  * render takes exactly today's code path.
  */
 import type { PerformedNote } from "../../core/expression.ts";
-import type { Track } from "../../core/score.ts";
+import type { Track, TrackScore } from "../../core/score.ts";
 import type { TuningTable } from "../../core/tuning.ts";
 import { MODAL_ENGINE } from "./resonators.ts";
 import type { SampleBank } from "./samples.ts";
@@ -54,6 +54,18 @@ export type InstrumentEngine = Readonly<{
   releaseSeconds?(track: Track, pitch: number, hz: number): number;
   /** True when the engine writes a separate right channel. */
   stereo(track: Track): boolean;
+  /**
+   * State the engine carries into an arranged window that its pre-roll
+   * cannot rebuild (an organ's rotors along a lane), as a string: `history`
+   * is the song before the window and `frames` its length in samples.
+   * Arranged renders hand it back as `context.seedState[track.id]`.
+   */
+  windowSeed?(
+    history: TrackScore,
+    track: Track,
+    frames: number,
+    sampleRate: number,
+  ): string | undefined;
   /** Digests of any assets the engine reads, joined to the stem cache key. */
   assetDigests?(track: Track, bank: SampleBank): readonly string[];
 }>;

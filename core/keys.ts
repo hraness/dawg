@@ -69,10 +69,26 @@ export function softPedalNote(
   return undefined;
 }
 
+/** The organ families (f061-organ): tonewheel, combo and pipe organs. */
+export const ORGAN_FAMILIES = Object.freeze([
+  "tonewheel",
+  "combo",
+  "pipe",
+] as const);
+
+export type OrganFamily = (typeof ORGAN_FAMILIES)[number];
+
+export function isOrganFamily(
+  instrument: string | undefined,
+): instrument is OrganFamily {
+  return (ORGAN_FAMILIES as readonly string[]).includes(instrument ?? "");
+}
+
 /** Every keys family (the instruments that read `Track.keys`). */
 export const KEYS_FAMILIES = Object.freeze([
   ...PIANO_FAMILIES,
   ...ELECTRIC_FAMILIES,
+  ...ORGAN_FAMILIES,
 ] as const);
 
 export type KeysFamily = (typeof KEYS_FAMILIES)[number];
@@ -239,13 +255,60 @@ export const KEYS_PARAMS: Readonly<Record<string, ParamSpec>> = Object.freeze({
     unit: "Hz",
     doc: "suitcase vibrato rate (epiano)",
   },
-  trem: unit(0, "reed piano tremolo depth at 5.6 Hz (wurli)", true),
+  trem: unit(
+    0,
+    "tremolo depth: reed piano at 5.6 Hz (wurli), pipe tremulant (pipe)",
+    true,
+  ),
   // keys-electric (0.6.1): piano sympathetic resonance (pianos only; 0 keeps
   // 0.6.0 renders byte-identical).
   sym: unit(
     0,
     "sympathetic string resonance while the sustain pedal is down; 0 is off",
   ),
+  // organ (f061-organ): tonewheel, combo and pipe rows (ORGAN_ROWS says
+  // which family reads each). The drawbars, registers and stops strings
+  // live in ORGAN_TEXT (ParamSpec has no text kind).
+  perc: {
+    kind: "enum",
+    values: ["off", "2nd", "3rd"],
+    default: "off",
+    doc: "tonewheel percussion harmonic, single-trigger; on mutes the 1' bar",
+  },
+  percdecay: {
+    kind: "enum",
+    values: ["fast", "slow"],
+    default: "fast",
+    doc: "tonewheel percussion decay (fast 0.6 s, slow 1.8 s)",
+  },
+  click: unit(0.5, "tonewheel key click (contact bounce)"),
+  scanner: {
+    kind: "enum",
+    values: ["off", "v1", "v2", "v3", "c1", "c2", "c3"],
+    default: "c3",
+    doc: "tonewheel scanner vibrato (v1-v3) or chorus (c1-c3)",
+  },
+  drive: unit(0.15, "organ preamp overdrive", true),
+  rotary: {
+    kind: "enum",
+    values: ["slow", "fast", "stop"],
+    default: "slow",
+    doc: "rotary speaker at the start (lane keys-rotary: 0 stop, 1 slow, 2 fast)",
+  },
+  voice: {
+    kind: "enum",
+    values: ["flute", "reed", "bright"],
+    default: "reed",
+    doc: "combo register timbre: filtered square, reed pulse, bright saw",
+  },
+  chiff: unit(0.4, "pipe speech: the noise at each flue pipe's attack"),
+  wind: unit(0.3, "pipe wind instability (slow pitch and level drift)"),
+  percvol: {
+    kind: "enum",
+    values: ["normal", "soft"],
+    default: "normal",
+    doc: "tonewheel percussion volume: soft is about 6 dB down and keeps the drawbars at full level",
+  },
 });
 
 /**
@@ -269,16 +332,203 @@ export const KEYS_PARAM_FAMILIES: Readonly<
   mute: ["clav"],
   vibe: ["epiano"],
   vibehz: ["epiano"],
-  trem: ["wurli"],
+  trem: ["wurli", "pipe"],
+  // organ (f061-organ): the organ rows; organs list theirs in ORGAN_ROWS.
+  perc: ["tonewheel"],
+  percdecay: ["tonewheel"],
+  percvol: ["tonewheel"],
+  click: ["tonewheel"],
+  scanner: ["tonewheel"],
+  drive: ["tonewheel", "combo"],
+  rotary: ["tonewheel", "combo"],
+  voice: ["combo"],
+  chiff: ["pipe"],
+  wind: ["pipe"],
 });
 
 /** The keys parameters a family reads, in `KEYS_PARAMS` order. */
 export function keysParamsFor(instrument: string | undefined): string[] {
+  if (isOrganFamily(instrument)) return [...ORGAN_ROWS[instrument]];
   const family = isKeysFamily(instrument) ? instrument : "grand";
   return Object.keys(KEYS_PARAMS).filter((name) => {
     const families = KEYS_PARAM_FAMILIES[name];
     return families ? families.includes(family) : isPianoFamily(family);
   });
+}
+
+/**
+ * Organ text rows (f061-organ), stored as strings after the KEYS_PARAMS
+ * values: `drawbars` nine digits 0-8 (16' 5⅓' 8' 4' 2⅔' 2' 1⅗' 1⅓' 1'),
+ * `registers` five digits 0-8 (combo 16' 8' 4' 2⅔' 2'), `stops` pipe stop
+ * names and registrations separated by spaces.
+ */
+export const ORGAN_TEXT = Object.freeze({
+  drawbars: Object.freeze({
+    digits: 9,
+    default: "888000000",
+    doc: "tonewheel drawbars, nine digits 0-8: 16' 5⅓' 8' 4' 2⅔' 2' 1⅗' 1⅓' 1'",
+  }),
+  registers: Object.freeze({
+    digits: 5,
+    default: "08800",
+    doc: "combo registers, five digits 0-8: 16' 8' 4' 2⅔' 2'",
+  }),
+  stops: Object.freeze({
+    digits: 0,
+    default: "principal8 octave4 fifteenth2 mixture",
+    doc: "pipe stops (or a registration: plenum flutes cornet reeds strings full)",
+  }),
+} as const);
+
+export type OrganTextParam = keyof typeof ORGAN_TEXT;
+
+export function isOrganText(name: string): name is OrganTextParam {
+  return Object.prototype.hasOwnProperty.call(ORGAN_TEXT, name);
+}
+
+/** Drawbar footages in drawbar order (labels for the menu and docs). */
+export const DRAWBAR_FEET = Object.freeze([
+  "16'",
+  "5⅓'",
+  "8'",
+  "4'",
+  "2⅔'",
+  "2'",
+  "1⅗'",
+  "1⅓'",
+  "1'",
+]);
+
+/** Combo register footages in register order. */
+export const REGISTER_FEET = Object.freeze(["16'", "8'", "4'", "2⅔'", "2'"]);
+
+/** Pipe stops, low to high pitch with the reeds last. */
+export const PIPE_STOPS = Object.freeze([
+  "subbass16",
+  "bourdon16",
+  "principal8",
+  "flute8",
+  "gedackt8",
+  "gamba8",
+  "celeste8",
+  "octave4",
+  "flute4",
+  "nazard",
+  "fifteenth2",
+  "piccolo2",
+  "tierce",
+  "larigot",
+  "mixture",
+  "trombone16",
+  "trumpet8",
+  "oboe8",
+  "krummhorn8",
+] as const);
+
+/** Named registrations: a word that stands for a set of stops. */
+export const PIPE_REGISTRATIONS: Readonly<Record<string, readonly string[]>> =
+  Object.freeze({
+    plenum: ["subbass16", "principal8", "octave4", "fifteenth2", "mixture"],
+    flutes: ["gedackt8", "flute4"],
+    cornet: ["flute8", "flute4", "nazard", "piccolo2", "tierce"],
+    reeds: ["trumpet8", "oboe8", "nazard", "tierce", "larigot"],
+    strings: ["gamba8", "celeste8"],
+    full: PIPE_STOPS.filter((stop) => stop !== "celeste8"),
+  });
+
+/** The stop names a `stops` value sounds (registrations expanded, deduped). */
+export function pipeStops(text: string): string[] {
+  const out: string[] = [];
+  for (const word of text.trim().split(/\s+/)) {
+    const names = PIPE_REGISTRATIONS[word] ?? [word];
+    for (const name of names) if (!out.includes(name)) out.push(name);
+  }
+  return out.filter((name) => (PIPE_STOPS as readonly string[]).includes(name));
+}
+
+/** Validates one organ text value; returns the stored string. */
+export function normalizeOrganText(
+  name: OrganTextParam,
+  value: unknown,
+): string {
+  if (typeof value !== "string")
+    throw new FxValidationError(`keys ${name} must be a string`);
+  const spec = ORGAN_TEXT[name];
+  if (spec.digits > 0) {
+    if (!new RegExp(`^[0-8]{${spec.digits}}$`).test(value))
+      throw new FxValidationError(
+        `keys ${name} must be ${spec.digits} digits 0-8 (like ${spec.default})`,
+      );
+    return value;
+  }
+  const words = value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0)
+    throw new FxValidationError("keys stops must name at least one stop");
+  for (const word of words)
+    if (
+      !(PIPE_STOPS as readonly string[]).includes(word) &&
+      !Object.prototype.hasOwnProperty.call(PIPE_REGISTRATIONS, word)
+    )
+      throw new FxValidationError(
+        `keys stops: unknown stop "${word}" (stops ${PIPE_STOPS.join(" ")}; registrations ${Object.keys(PIPE_REGISTRATIONS).join(" ")})`,
+      );
+  return words.join(" ");
+}
+
+/** The KEYS_PARAMS rows and text rows each organ family reads. */
+export const ORGAN_ROWS: Readonly<Record<OrganFamily, readonly string[]>> =
+  Object.freeze({
+    tonewheel: [
+      "drawbars",
+      "perc",
+      "percdecay",
+      "percvol",
+      "click",
+      "scanner",
+      "drive",
+      "rotary",
+    ],
+    combo: ["registers", "voice", "vib", "vibmod", "drive", "rotary"],
+    pipe: ["stops", "chiff", "wind", "trem"],
+  });
+
+/** Every organ-only row name (KEYS_PARAMS rows and text rows). */
+export const ORGAN_PARAM_NAMES: readonly string[] = Object.freeze([
+  "perc",
+  "percdecay",
+  "click",
+  "scanner",
+  "drive",
+  "rotary",
+  "voice",
+  "chiff",
+  "wind",
+  "trem",
+  "percvol",
+  ...Object.keys(ORGAN_TEXT),
+]);
+
+/** Each organ family's own defaults over KEYS_PARAMS. */
+export const ORGAN_FAMILY_DEFAULTS: Readonly<
+  Record<OrganFamily, Readonly<Record<string, number | string>>>
+> = Object.freeze({
+  tonewheel: Object.freeze({ drawbars: ORGAN_TEXT.drawbars.default }),
+  combo: Object.freeze({
+    registers: ORGAN_TEXT.registers.default,
+    vib: 6,
+    vibmod: 0.12,
+    drive: 0,
+    rotary: "stop",
+  }),
+  pipe: Object.freeze({ stops: ORGAN_TEXT.stops.default }),
+});
+
+/**
+ * The rows a keys family shows and reads, in display order (an organ's
+ * ORGAN_ROWS, else its KEYS_PARAM_FAMILIES rows).
+ */
+export function keysRowsFor(instrument: string | undefined): string[] {
+  return keysParamsFor(instrument);
 }
 
 /** The parameters shown first in the menu and `keys` listing. */
@@ -302,6 +552,7 @@ export const ELECTRIC_SIMPLE: Readonly<
 export function keysSimpleFor(
   instrument: string | undefined,
 ): readonly string[] {
+  if (isOrganFamily(instrument)) return ORGAN_ROWS[instrument];
   return isElectricFamily(instrument)
     ? ELECTRIC_SIMPLE[instrument]
     : KEYS_SIMPLE;
@@ -445,8 +696,94 @@ export const KEYS_PRESETS: Readonly<Record<string, KeysPreset>> = Object.freeze(
       doc: "clavinet with both pickups out of phase and the mute slider up",
       styles: "Stevie Wonder funk, Bill Withers",
     },
+    // organ (f061-organ)
+    tonewheel: {
+      instrument: "tonewheel",
+      keys: {},
+      doc: "tonewheel organ 888000000, scanner C3, slow rotary",
+      styles: "jazz, soul, gospel comping, Beach House",
+    },
+    gospel: {
+      instrument: "tonewheel",
+      keys: {
+        drawbars: "888800008",
+        perc: "3rd",
+        rotary: "fast",
+        drive: 0.35,
+      },
+      doc: "888800008, 3rd percussion (mutes the 1'), fast rotary, driven",
+      styles: "gospel, Motown, rock",
+    },
+    jazzorgan: {
+      instrument: "tonewheel",
+      keys: {
+        drawbars: "888000000",
+        perc: "3rd",
+        percvol: "soft",
+        scanner: "c3",
+      },
+      doc: "888000000 with soft fast 3rd percussion, slow rotary",
+      styles: "Jimmy Smith jazz, soul jazz",
+    },
+    combo: {
+      instrument: "combo",
+      keys: {},
+      doc: "Farfisa-style reed registers 08800 with vibrato",
+      styles: "Beach House, 60s garage, Glass, Reich",
+    },
+    vox: {
+      instrument: "combo",
+      keys: { registers: "08880", voice: "bright", vib: 5.5, vibmod: 0.1 },
+      doc: "Vox-style bright saw registers 08880",
+      styles: "60s, Doors-ish, shoegaze drones",
+    },
+    pipe: {
+      instrument: "pipe",
+      keys: { stops: "plenum" },
+      reverb: { mix: 0.35, size: 0.9 },
+      doc: "plenum: principal chorus, mixture and 16' in a church",
+      styles: "Bach fugue, Bach cantata",
+    },
+    flutes: {
+      instrument: "pipe",
+      keys: { stops: "flutes", trem: 0.4, chiff: 0.5 },
+      reverb: { mix: 0.3, size: 0.8 },
+      doc: "gedackt 8' and flute 4' with tremulant",
+      styles: "Bach chorale preludes, Eno, ambient",
+    },
+    cornet: {
+      instrument: "pipe",
+      keys: { stops: "cornet" },
+      reverb: { mix: 0.3, size: 0.8 },
+      doc: "the cornet solo combination (8' 4' 2⅔' 2' 1⅗')",
+      styles: "Bach, Buxtehude, French classical",
+    },
+    reeds: {
+      instrument: "pipe",
+      keys: { stops: "reeds" },
+      reverb: { mix: 0.3, size: 0.85 },
+      doc: "trumpet and oboe with nazard, tierce and larigot",
+      styles: "Messiaen",
+    },
+    celeste: {
+      instrument: "pipe",
+      keys: { stops: "strings", wind: 0.4 },
+      reverb: { mix: 0.35, size: 0.9 },
+      doc: "gamba and celeste: slow beating strings",
+      styles: "Messiaen, ambient, La Monte Young drones",
+    },
   },
 );
+
+/** Organ words that name a keys preset (aliases of the presets). */
+export const ORGAN_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+  hammond: "tonewheel",
+  b3: "tonewheel",
+  farfisa: "combo",
+  church: "pipe",
+  pipeorgan: "pipe",
+  churchorgan: "pipe",
+});
 
 export function isKeysPreset(name: string): boolean {
   return Object.prototype.hasOwnProperty.call(KEYS_PRESETS, name);
@@ -460,6 +797,10 @@ export function isKeysParam(name: string): boolean {
 export function keysParamName(name: string): string | undefined {
   const lower = name.toLowerCase();
   if (isKeysParam(lower)) return lower;
+  if (isOrganText(lower)) return lower;
+  if (lower === "reg" || lower === "registration" || lower === "stop")
+    return "stops";
+  if (lower === "drawbar") return "drawbars";
   if (lower === "aftersound") return "after";
   if (lower === "prepared") return "prep";
   for (const [key, spec] of Object.entries(KEYS_PARAMS))
@@ -478,8 +819,29 @@ export const KEYS_LANE_PARAMS: readonly Readonly<{
       (entry): entry is [string, NumberParam] =>
         entry[1].kind === "number" && entry[1].automate === true,
     )
-    .map(([param, spec]) => Object.freeze({ param, spec })),
+    .map(([param, spec]) => Object.freeze({ param, spec }))
+    .concat(
+      // f061-organ: the rotary speed as a lane (0 stop, 1 slow, 2 fast);
+      // the rotors glide between speeds with their own inertia.
+      Object.freeze({
+        param: "rotary",
+        spec: Object.freeze({
+          kind: "number",
+          min: 0,
+          max: 2,
+          default: 1,
+          step: 1,
+          integer: true,
+          doc: "rotary speed: 0 stop, 1 slow, 2 fast",
+        }) as NumberParam,
+      }),
+    ),
 );
+
+/** The `rotary` enum as its lane number (0 stop, 1 slow, 2 fast). */
+export function rotarySpeed(value: unknown): number {
+  return value === "fast" ? 2 : value === "stop" ? 0 : 1;
+}
 
 /**
  * Validates `Track.keys`: overrides in `KEYS_PARAMS` order, then `preset`.
@@ -491,6 +853,7 @@ export function normalizeKeys(input: unknown): TrackKeys | undefined {
   if (!isRecord(input))
     throw new FxValidationError("track keys must be an object or null");
   const params: Record<string, unknown> = {};
+  const text: Partial<Record<OrganTextParam, string>> = {};
   let preset: string | undefined;
   for (const [key, value] of Object.entries(input)) {
     if (value === undefined || value === null) continue;
@@ -500,6 +863,10 @@ export function normalizeKeys(input: unknown): TrackKeys | undefined {
           `keys preset must be one of ${Object.keys(KEYS_PRESETS).join(", ")}`,
         );
       preset = value;
+      continue;
+    }
+    if (isOrganText(key)) {
+      text[key] = normalizeOrganText(key, value);
       continue;
     }
     if (!isKeysParam(key)) {
@@ -513,6 +880,11 @@ export function normalizeKeys(input: unknown): TrackKeys | undefined {
   const values = normalizeParams(KEYS_PARAMS, params, "keys", false);
   return Object.freeze({
     ...(values as Record<string, number | string>),
+    ...Object.fromEntries(
+      Object.keys(ORGAN_TEXT)
+        .filter((key) => text[key as OrganTextParam] !== undefined)
+        .map((key) => [key, text[key as OrganTextParam]!]),
+    ),
     ...(preset ? { preset } : {}),
   });
 }
@@ -532,6 +904,8 @@ export function resolvedKeys(
     Object.assign(out, PIANO_FAMILY_DEFAULTS[instrument]);
   if (isElectricFamily(instrument))
     Object.assign(out, ELECTRIC_FAMILY_DEFAULTS[instrument]);
+  if (isOrganFamily(instrument))
+    Object.assign(out, ORGAN_FAMILY_DEFAULTS[instrument]);
   const preset = keys?.preset ? KEYS_PRESETS[keys.preset] : undefined;
   if (preset) Object.assign(out, preset.keys);
   for (const [key, value] of Object.entries(keys ?? {}))
@@ -567,7 +941,7 @@ export function pianoWrite(word: string):
         : "upright"
       : lower === "feltpiano"
         ? "felt"
-        : (KEYS_ALIASES[lower] ?? lower);
+        : (KEYS_ALIASES[lower] ?? ORGAN_ALIASES[lower] ?? lower);
   if (!isKeysPreset(name)) return undefined;
   const preset = KEYS_PRESETS[name]!;
   return Object.freeze({

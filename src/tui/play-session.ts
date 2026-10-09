@@ -647,16 +647,21 @@ export class PlaySession {
     // The full pass runs on a worker, in key order, so a strummed chord or a
     // fast run never stalls key handling behind an oversampled render.
     if (pcm.partial)
-      void this.fullRenderer.full(synth, request).then((full) => {
-        // Not after note-off: a swap would cancel the release fade.
-        if (
-          full &&
-          this.windows.get(id) === false &&
-          engine.voicePosition?.(id) !== undefined
+      void this.fullRenderer
+        .full(
+          synth,
+          pcm.clock === undefined ? request : { ...request, clock: pcm.clock },
         )
-          engine.noteOn(id, full);
-        this.windows.delete(id);
-      });
+        .then((full) => {
+          // Not after note-off: a swap would cancel the release fade.
+          if (
+            full &&
+            this.windows.get(id) === false &&
+            engine.voicePosition?.(id) !== undefined
+          )
+            engine.noteOn(id, full);
+          this.windows.delete(id);
+        });
   }
 
   private release(ids: readonly number[], atMs: number): void {

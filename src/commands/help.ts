@@ -117,6 +117,17 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       },
       {
         command:
+          "tonewheel [<drawbars>] | combo [<registers>] [<voice>] | pipe [<stops>] [<row> <value> …]",
+        summary:
+          "organs · tonewheel 888800008 perc 3rd · gospel · combo 08880 flute · pipe plenum · keys perc 3rd",
+      },
+      {
+        command: "rotary slow|fast|stop [at <beat>]",
+        summary:
+          "organ rotary speaker speed · rotary fast at 16 writes the keys-rotary lane",
+      },
+      {
+        command:
           "modal <preset> | <param> <value> | mallet <name> | reset | off",
         summary:
           "mallets and bells · modal vibes · modal hardness 0.8 · modal presets",
@@ -727,6 +738,11 @@ export const USAGE: Readonly<Record<string, string>> = {
   wurli:
     "wurli [preset wurli] | bark bell tone trem decay release <value> · wurli trem 0.5",
   clav: "clav [preset clav|funkclav] | pickup neck|bridge|both|out | mute tone decay release <value> · clav pickup bridge",
+  tonewheel:
+    "tonewheel [<9 drawbar digits>] | hammond | b3 | gospel | jazzorgan · tonewheel 888800008",
+  combo: "combo [<5 register digits>] | farfisa | vox · combo 08880",
+  pipe: "pipe [plenum|flutes|cornet|reeds|strings|full | <stop> …] | church · pipe principal8,octave4",
+  rotary: "rotary slow|fast|stop [at <beat>] · rotary fast · rotary fast at 16",
   modal:
     "modal <preset> | <body> | <param> <value> | mallet <name> | reset | off | presets · modal vibes · modal saron · modal ring 3",
   pack: "/pack list | info <name> | use <pack>/<sound> | add <url>",

@@ -51,6 +51,7 @@ import {
   type RenderedAudio,
   type WavCue,
 } from "./wav.ts";
+import { engineFor } from "./instruments.ts";
 
 /** What one default render pass holds before the renderer cuts it. */
 const DEFAULT_PASS_SECONDS = 30;
@@ -393,11 +394,31 @@ function renderWindows(
       notes,
       master: null,
     });
+    // State an engine cannot rebuild in the pre-roll (organ rotors along a
+    // lane) is integrated over the song before the window.
+    const seedState: Record<string, string> = {};
+    if (
+      pre > 0 &&
+      window.tracks.some((track) => engineFor(track)?.windowSeed)
+    ) {
+      const history = frame(0, pre);
+      for (const track of history.tracks) {
+        const seed = engineFor(track)?.windowSeed?.(
+          history,
+          track,
+          frameAt(pre),
+          sampleRate,
+        );
+        if (seed !== undefined) seedState[track.id] = seed;
+      }
+    }
     const audio = renderer.render(window, {
       ...options,
       sampleRate,
       loop: false,
       seedTick: preTick,
+      ...(pre > 0 ? { seedSeconds: secondsAtTick(timeline, pre * ticks) } : {}),
+      ...(Object.keys(seedState).length > 0 ? { seedState } : {}),
       // Past `end` too, so voices that fade where the buffer stops (the
       // legacy tone voice) fade in frames this window drops.
       maxSeconds: last

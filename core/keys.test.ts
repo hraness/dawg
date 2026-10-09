@@ -8,6 +8,7 @@ import { FX_LANES } from "./fx.ts";
 import { instrumentForWord, resolveInstrumentWord } from "./instruments.ts";
 import {
   KEYS_PARAMS,
+  ORGAN_TEXT,
   KEYS_PRESETS,
   keysParamName,
   normalizeKeys,
@@ -93,6 +94,8 @@ describe("Track.keys", () => {
       "keys-tone",
       "keys-vibe",
       "keys-trem",
+      "keys-drive",
+      "keys-rotary",
     ]);
     expect(keysParamName("aftersound")).toBe("after");
     expect(keysParamName("vibrato")).toBe("vib");
@@ -102,7 +105,7 @@ describe("Track.keys", () => {
     for (const [name, preset] of Object.entries(KEYS_PRESETS)) {
       expect(normalizeKeys({ preset: name, ...preset.keys })).toBeDefined();
       for (const key of Object.keys(preset.keys))
-        expect(KEYS_PARAMS[key]).toBeDefined();
+        expect(KEYS_PARAMS[key] ?? ORGAN_TEXT[key as "stops"]).toBeDefined();
     }
   });
 });

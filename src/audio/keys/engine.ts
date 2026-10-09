@@ -29,6 +29,7 @@ import type { FxLane } from "../../../core/fx.ts";
 import { interpolateAutomation } from "../effects/common.ts";
 import type { EngineContext, InstrumentEngine } from "../instruments.ts";
 import { Biquad2, clamp, CONTROL, LN1000 } from "./dsp.ts";
+import { ORGAN_ENGINES } from "./organ.ts";
 import {
   damperT60,
   physicalKey,
@@ -469,7 +470,7 @@ function engineFor(id: string): InstrumentEngine {
 
 /**
  * One engine per keys family (the registry dispatches by instrument id):
- * the pianos, then the electric keys (0.6.1).
+ * the pianos, then the electric keys and the organs (0.6.1).
  */
 export const KEYS_ENGINES: readonly InstrumentEngine[] = Object.freeze(
   [
@@ -477,5 +478,8 @@ export const KEYS_ENGINES: readonly InstrumentEngine[] = Object.freeze(
       isPianoFamily(id),
     ),
     ...["epiano", "wurli", "clav"].filter((id) => isElectricFamily(id)),
-  ].map(engineFor),
+  ]
+    .map(engineFor)
+    // f061-organ: tonewheel, combo and pipe (src/audio/keys/organ.ts).
+    .concat(ORGAN_ENGINES),
 );

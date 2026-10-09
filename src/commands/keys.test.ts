@@ -214,3 +214,132 @@ describe("electric keys commands", () => {
     expect(nearestCommand("epaino vibe 0.5")).toBe("epiano");
   });
 });
+
+describe("organ commands (f061-organ)", () => {
+  test("tonewheel, combo and pipe verbs store the engine; organ stays legacy", () => {
+    expect(parseKeysCommand("organ")).toBeUndefined();
+    for (const [prompt, instrument, preset] of [
+      ["tonewheel", "tonewheel", "tonewheel"],
+      ["hammond", "tonewheel", "tonewheel"],
+      ["b3", "tonewheel", "tonewheel"],
+      ["gospel", "tonewheel", "gospel"],
+      ["combo", "combo", "combo"],
+      ["farfisa", "combo", "combo"],
+      ["vox", "combo", "vox"],
+      ["pipe", "pipe", "pipe"],
+      ["church", "pipe", "pipe"],
+      ["flutes", "pipe", "flutes"],
+      ["instrument hammond", "tonewheel", "tonewheel"],
+    ] as const) {
+      const result = run(song(), prompt);
+      expect(result.ok).toBe(true);
+      const track = result.next!.tracks[0]!;
+      expect(track.instrument).toBe(instrument);
+      expect(track.keys?.preset).toBe(preset);
+    }
+  });
+
+  test("drawbars, registers and stops shorthand", () => {
+    const tw = run(song(), "tonewheel 888800008").next!.tracks[0]!;
+    expect(tw.keys).toEqual({ drawbars: "888800008", preset: "tonewheel" });
+    const combo = run(song(), "combo 08880").next!.tracks[0]!;
+    expect(combo.keys?.registers).toBe("08880");
+    const pipe = run(song(), "pipe principal8,octave4 mixture").next!
+      .tracks[0]!;
+    expect(pipe.keys?.stops).toBe("principal8 octave4 mixture");
+    expect(parseKeysCommand("tonewheel 8888")).toBeUndefined();
+    expect(parseKeysCommand("tonewheel 999999999")).toBeUndefined();
+    expect(parseKeysCommand("pipe kazoo8")).toBeUndefined();
+    expect(parseKeysCommand("hammond gospel")).toEqual({
+      type: "keys-preset",
+      preset: "gospel",
+    });
+  });
+
+  test("keys rows and rotary on an organ track", () => {
+    let score = run(song(), "tonewheel").next!;
+    score = run(score, "keys drawbars 808000000 perc 3rd").next!;
+    expect(score.tracks[0]!.keys).toMatchObject({
+      drawbars: "808000000",
+      perc: "3rd",
+    });
+    score = run(score, "rotary fast").next!;
+    expect(score.tracks[0]!.keys?.rotary).toBe("fast");
+    expect(parseKeysCommand("rotary warp")).toBeUndefined();
+    score = run(score, "keys drawbars off").next!;
+    expect(score.tracks[0]!.keys?.drawbars).toBeUndefined();
+    const pipe = run(
+      run(song(), "pipe").next!,
+      "keys stops flute8 flute4 trem 0.4",
+    ).next!.tracks[0]!;
+    expect(pipe.keys).toMatchObject({ stops: "flute8 flute4", trem: 0.4 });
+    const bad = run(score, "keys drawbars 12");
+    expect(bad.ok).toBe(false);
+    // rotary on a non-keys track names the way in.
+    expect(run(song(), "rotary slow").ok).toBe(false);
+  });
+
+  test("/help knows the organ words", () => {
+    expect(nearestCommand("tonewhel")).toBe("tonewheel");
+    expect(nearestCommand("rotry")).toBe("rotary");
+  });
+});
+
+describe("organ commands (review fixes)", () => {
+  function one(instrument: string, keys?: Record<string, string>) {
+    return createScore({
+      tracks: [{ id: "o", name: "o", instrument, ...(keys ? { keys } : {}) }],
+    } as Parameters<typeof createScore>[0]);
+  }
+  const run = (song: ReturnType<typeof one>, text: string) =>
+    applyKeysCommand(song, "o", parseKeysCommand(text)!);
+
+  test("rows from another family are refused with the families that read them", () => {
+    const pipe = run(one("pipe"), "rotary fast");
+    expect(pipe.ok).toBe(false);
+    expect(pipe.message).toContain("pipe has no rotary (tonewheel/combo row)");
+    expect(run(one("grand"), "keys drawbars 888000000").ok).toBe(false);
+    expect(run(one("tonewheel"), "keys stops plenum").ok).toBe(false);
+    expect(run(one("combo"), "keys hardness 0.5").ok).toBe(false);
+    expect(run(one("tonewheel"), "rotary fast").ok).toBe(true);
+  });
+
+  test("keys on an organ lists the organ rows", () => {
+    const listed = run(one("tonewheel"), "keys");
+    expect(listed.message).toContain("basics drawbars perc");
+    expect(listed.message).not.toContain("hardness");
+  });
+
+  test("a legacy organ track is pointed at tonewheel", () => {
+    expect(run(one("organ"), "keys").message).toContain("type tonewheel");
+    expect(run(one("organ"), "rotary fast").message).toContain(
+      "type tonewheel",
+    );
+  });
+
+  test("organ verbs take more rows and the combo voice", () => {
+    expect(parseKeysCommand("tonewheel 888800008 perc 3rd")).toEqual({
+      type: "keys-preset",
+      preset: "tonewheel",
+      values: { drawbars: "888800008", perc: "3rd" },
+    });
+    expect(parseKeysCommand("combo flute")).toEqual({
+      type: "keys-preset",
+      preset: "combo",
+      values: { voice: "flute" },
+    });
+    const done = run(one("grand"), "tonewheel 888800008 perc 3rd");
+    expect(done.ok).toBe(true);
+    const track = done.next!.tracks[0]!;
+    expect(track.instrument).toBe("tonewheel");
+    expect(track.keys?.perc).toBe("3rd");
+  });
+
+  test("rotary fast at <beat> writes a keys-rotary point", () => {
+    const done = run(one("tonewheel"), "rotary fast at 16");
+    expect(done.ok).toBe(true);
+    const points = done.next!.tracks[0]!.fxAutomation?.["keys-rotary"];
+    expect(points).toEqual([{ tick: 16 * 480, value: 2 }]);
+    expect(parseKeysCommand("rotary fast at x")).toBeUndefined();
+  });
+});

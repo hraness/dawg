@@ -99,6 +99,14 @@ export type RenderOptions = WavOptions &
      * a single pass of the whole song. Zero (the default) changes nothing.
      */
     seedTick?: number;
+    /**
+     * Song seconds at an arranged window's first frame (with a tempo map,
+     * more than `seedTick` at the base tempo); engines whose state runs on
+     * the song clock (organ wheels and rotors) start there.
+     */
+    seedSeconds?: number;
+    /** Per-track engine state at the window origin (`windowSeed`). */
+    seedState?: Readonly<Record<string, string>>;
   }>;
 
 /** Interleaved stereo 16-bit PCM plus its frame count. */
@@ -221,6 +229,8 @@ export type RenderContext = Readonly<{
   /** Tempo map in samples (core/tempo.ts); absent: constant tempo. */
   warp?: SampleWarp;
   seedTick?: number;
+  seedSeconds?: number;
+  seedState?: Readonly<Record<string, string>>;
 }>;
 
 /** Exact (fractional) loop length in frames at a sample rate. */
@@ -423,6 +433,8 @@ export class StemRenderer {
       ...(bank.irs ? { irs: bank.irs } : {}),
       ...(warp ? { warp } : {}),
       ...(options.seedTick ? { seedTick: options.seedTick } : {}),
+      ...(options.seedSeconds ? { seedSeconds: options.seedSeconds } : {}),
+      ...(options.seedState ? { seedState: options.seedState } : {}),
     };
     this.renders += 1;
     const { dry, dryR, left, right, mixL, mixR } = this.scratchFor(samples);
@@ -934,6 +946,10 @@ function stemKey(
       : []),
     // Seeded noise follows the window origin of an arranged render.
     ...(context.seedTick ? [`seed:${context.seedTick}`] : []),
+    ...(context.seedSeconds ? [`at:${context.seedSeconds}`] : []),
+    ...(track && context.seedState?.[track.id]
+      ? [`state:${context.seedState[track.id]}`]
+      : []),
   ]);
 }
 
