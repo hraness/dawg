@@ -17,11 +17,17 @@ import { FX_NAMES, FX_PRESETS, RIG_PRESETS } from "../fx.ts";
 import { resolveInstrumentWord } from "../instruments.ts";
 import { SYNTH_KIT_NAMES } from "../kits.ts";
 import { isLoudnessTargetName } from "../master.ts";
-import { TUNING_NAMES } from "../tuning.ts";
+import { TUNING_NAMES, tuningPreset } from "../tuning.ts";
 import { ART_CARDS } from "./art.ts";
 import { generateStyle, type GeneratedStyle } from "./generate.ts";
 import { resolveStyle } from "./index.ts";
-import type { RoleName, RoleTexture, RoleVoice, StyleCard } from "./schema.ts";
+import {
+  KIT_ROLES,
+  type RoleName,
+  type RoleTexture,
+  type RoleVoice,
+  type StyleCard,
+} from "./schema.ts";
 import { STYLE_FAMILIES, TAXONOMY_ROWS } from "./taxonomy.ts";
 
 const SEEDS = [1, 2, 3, 4, 5, 6];
@@ -29,6 +35,7 @@ const ROOTS = STYLE_FAMILIES.find((f) => f.key === "art")!.roots;
 const PARENTS = new Set(TAXONOMY_ROWS.map((row) => row[1]));
 const ART_ROWS = TAXONOMY_ROWS.filter((row) => row[2] === "art");
 const CARD_IDS = new Set(ART_CARDS.map((c) => c.id));
+const KIT_ROLE_SET = new Set<string>(KIT_ROLES);
 
 /** A role's voices, whether listed or appended with `{ "+": [...] }`. */
 function voicesOf(texture: RoleTexture | null | undefined): RoleVoice[] {
@@ -196,14 +203,143 @@ describe("family art: style theory", () => {
     }
   });
 
-  test("the twelve-tone card spreads over the chromatic aggregate", () => {
-    for (const seed of SEEDS) {
-      const g = generateStyle("twelve-tone", { seed, bars: 8 });
-      const counts = new Array<number>(12).fill(0);
-      for (const r of ["lead", "counter", "bass", "chords"] as const)
-        for (const note of notesFor(g, r)) counts[note.pitch % 12]! += 1;
-      expect(counts.filter((n) => n > 0).length).toBeGreaterThanOrEqual(8);
+  test("serial cards complete every aggregate before a pitch class returns", () => {
+    for (const id of [
+      "twelve-tone",
+      "integral-serialism",
+      "elektronische-musik",
+    ])
+      for (const seed of SEEDS.slice(0, 3)) {
+        const g = generateStyle(id, { seed, bars: 8 });
+        const counts = new Array<number>(12).fill(0);
+        for (const note of g.data.notes ?? []) {
+          const role = g.plan.noteRoles.get(note.id)!;
+          if (KIT_ROLE_SET.has(role)) continue;
+          counts[(((note.pitch - g.plan.tonic) % 12) + 12) % 12]! += 1;
+          expect(note.cents ?? 0).toBe(0);
+        }
+        // Whole rows give equal counts; the last, partial row adds one.
+        expect(Math.max(...counts) - Math.min(...counts)).toBeLessThanOrEqual(
+          1,
+        );
+        expect(Math.min(...counts)).toBeGreaterThan(0);
+      }
+  });
+
+  test("integral serialism orders durations and dynamics too", () => {
+    const g = generateStyle("integral-serialism", { seed: 4, bars: 8 });
+    const durations = new Set<number>();
+    const velocities = new Set<number>();
+    for (const note of g.data.notes ?? []) {
+      durations.add(Math.round(note.durationTicks ?? 0));
+      velocities.add(Math.round((note.velocity ?? 0) * 100));
     }
+    expect(durations.size).toBeGreaterThanOrEqual(8);
+    expect(velocities.size).toBeGreaterThanOrEqual(8);
+  });
+
+  test("expressionism draws on the whole chromatic", () => {
+    for (const seed of SEEDS.slice(0, 3)) {
+      const g = generateStyle("expressionism", { seed, bars: 8 });
+      const pcs = new Set<number>();
+      for (const note of g.data.notes ?? [])
+        pcs.add((((note.pitch - g.plan.tonic) % 12) + 12) % 12);
+      expect(pcs.size).toBeGreaterThanOrEqual(10);
+    }
+  });
+
+  test("spectralism sounds the harmonic series in just intonation", () => {
+    const g = generateStyle("spectralism", { seed: 2, bars: 8 });
+    expect(g.data.tuning?.name).toBe("harmonic-series");
+    const cents = tuningPreset("harmonic-series")!.cents;
+    // 7th, 11th and 13th partials: 969, 551 and 841 cents above the tonic.
+    expect(cents[9]).toBe(969);
+    expect(cents[5]).toBe(551);
+    expect(cents[8]).toBe(841);
+    // Partials 8-15 only: no minor second, minor third or perfect fourth.
+    for (const note of g.data.notes ?? []) {
+      const role = g.plan.noteRoles.get(note.id)!;
+      if (KIT_ROLE_SET.has(role)) continue;
+      const pc = (((note.pitch - g.plan.tonic) % 12) + 12) % 12;
+      expect([1, 3, 5, 8]).not.toContain(pc);
+    }
+  });
+
+  test("microtonal art sounds quarter tones beside tempered degrees", () => {
+    for (const seed of SEEDS.slice(0, 3)) {
+      const g = generateStyle("microtonal-art", { seed, bars: 8 });
+      const notes = g.data.notes ?? [];
+      const quarter = notes.filter((n) => Math.abs(n.cents ?? 0) === 50);
+      expect(quarter.length / notes.length).toBeGreaterThan(0.1);
+      expect(quarter.length).toBeLessThan(notes.length);
+    }
+  });
+
+  test("siblings differ in tempo, meter, instruments, pitch classes or onsets", () => {
+    const leaves = ART_CARDS.filter((c) => !c.abstract).map((c) => c.id);
+    const parent = new Map(TAXONOMY_ROWS.map((r) => [r[0], r[1]]));
+    type Print = {
+      bpm: number;
+      meters: Set<string>;
+      instruments: Set<string>;
+      pcs: number[];
+      onsets: number[];
+    };
+    const print = (id: string): Print => {
+      const out: Print = {
+        bpm: 0,
+        meters: new Set(),
+        instruments: new Set(),
+        pcs: new Array(12).fill(0),
+        onsets: new Array(16).fill(0),
+      };
+      const bpms: number[] = [];
+      let pitched = 0;
+      let all = 0;
+      for (const seed of [1, 2, 3, 4, 5]) {
+        const { plan, data } = generateStyle(id, { seed, bars: 8 });
+        bpms.push(plan.bpm);
+        out.meters.add(plan.signature);
+        for (const t of plan.tracks) out.instruments.add(t.instrument);
+        for (const note of data.notes ?? []) {
+          const role = plan.noteRoles.get(note.id)!;
+          if (!KIT_ROLE_SET.has(role)) {
+            out.pcs[(((note.pitch - plan.tonic) % 12) + 12) % 12]! += 1;
+            pitched += 1;
+          }
+          const at = ((note.startTick ?? 0) % plan.barTicks) / plan.barTicks;
+          out.onsets[Math.floor(at * 16)]! += 1;
+          all += 1;
+        }
+      }
+      out.bpm = bpms.sort((a, b) => a - b)[2]!;
+      out.pcs = out.pcs.map((x) => x / (pitched || 1));
+      out.onsets = out.onsets.map((x) => x / (all || 1));
+      return out;
+    };
+    const prints = new Map(leaves.map((id) => [id, print(id)]));
+    const jaccard = (a: Set<string>, b: Set<string>) => {
+      let both = 0;
+      for (const x of a) if (b.has(x)) both += 1;
+      return both / (a.size + b.size - both);
+    };
+    const l1 = (a: number[], b: number[]) =>
+      a.reduce((sum, x, i) => sum + Math.abs(x - b[i]!), 0);
+    const same: string[] = [];
+    for (const a of leaves)
+      for (const b of leaves) {
+        if (a >= b || parent.get(a) !== parent.get(b)) continue;
+        const A = prints.get(a)!;
+        const B = prints.get(b)!;
+        const apart =
+          Math.abs(A.bpm - B.bpm) / Math.min(A.bpm, B.bpm) > 0.2 ||
+          jaccard(A.meters, B.meters) < 0.5 ||
+          jaccard(A.instruments, B.instruments) < 0.5 ||
+          l1(A.pcs, B.pcs) > 0.3 ||
+          l1(A.onsets, B.onsets) > 0.3;
+        if (!apart) same.push(`${a} ~ ${b}`);
+      }
+    expect(same).toEqual([]);
   });
 
   test("drone and harsh-noise-wall hold one harmony throughout", () => {

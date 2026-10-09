@@ -1238,14 +1238,17 @@ const BAROQUE_LEAVES: readonly StyleCard[] = Object.freeze([
     id: "french-baroque",
     summary:
       "notes inegales (paired eighths played long-short), dotted French overture, ornamented oboe and harpsichord, minuet and sarabande in 3/4",
+    // Minuet, sarabande, courante and passacaille are triple; the dotted
+    // overture is the duple exception.
     meter: {
       signatures: [
-        ["4/4", 0.5],
-        ["3/4", 0.5],
+        ["3/4", 0.75],
+        ["4/4", 0.25],
       ],
     },
     tempo: { bpm: [60, 112], typical: 84 },
     groove: { swingRatio: [1.4, 1.8] },
+    melody: { density: [1, 2], repetition: 0.7 },
     pitch: {
       scales: [
         ["minor", 0.5],
@@ -1272,6 +1275,7 @@ const BAROQUE_LEAVES: readonly StyleCard[] = Object.freeze([
         chords: role("harpsichord", "strings:0.5"),
         bass: role("cello", "bassoon:0.5"),
         lead: role("oboe", "flute:0.6", "violin:0.4"),
+        counter: maybe("bassoon", "flute:0.5"),
       },
     },
     form: { archetype: "french overture" },
@@ -1295,7 +1299,8 @@ const BAROQUE_LEAVES: readonly StyleCard[] = Object.freeze([
         [1, 0.4],
       ],
     },
-    melody: { repetition: 0.8, density: [2, 4] },
+    meter: { signatures: [["4/4", 1]] },
+    melody: { repetition: 0.8, density: [3, 4] },
     bass: { behaviour: [["walking", 1]] },
     texture: {
       kind: "polyphonic",
@@ -1702,7 +1707,13 @@ const ROMANTIC_LEAVES: readonly StyleCard[] = Object.freeze([
     id: "music-drama",
     summary:
       "endless melody without full cadences, leitmotif cells transformed, deceptive V-bVI and the half-diminished chord resolving by semitone voice leading",
-    tempo: { bpm: [48, 96], typical: 64 },
+    tempo: { bpm: [40, 76], typical: 54 },
+    pitch: {
+      scales: [
+        ["minor", 0.5],
+        ["harmonic-minor", 0.5],
+      ],
+    },
     harmony: {
       chain: {
         V: [
@@ -1771,8 +1782,7 @@ const ROMANTIC_LEAVES: readonly StyleCard[] = Object.freeze([
     rhythm: { onsets: { kick: grid("x.......x.......") } },
     texture: {
       roles: {
-        kick: maybe("drums"),
-        perc: maybe("timpani"),
+        kick: role("timpani"),
         chords: role("strings"),
         pad: maybe("frenchhorn", "trombone:0.5"),
         bass: role("contrabass", "cellos:0.6"),
@@ -1791,7 +1801,8 @@ const ROMANTIC_LEAVES: readonly StyleCard[] = Object.freeze([
     id: "tone-poem",
     summary:
       "programmatic single movement: thematic transformation of one idea, chromatic-mediant shifts between scenes, orchestral colour as narrative",
-    tempo: { bpm: [48, 132], typical: 80 },
+    tempo: { bpm: [44, 96], typical: 66 },
+    groove: { humanize: { timingMs: 30, velocity: 0.15 } },
     harmony: {
       chain: {
         I: [
@@ -1815,9 +1826,10 @@ const ROMANTIC_LEAVES: readonly StyleCard[] = Object.freeze([
     texture: {
       roles: {
         chords: role("strings"),
-        pad: maybe("frenchhorn", "harp:0.5"),
+        pad: maybe("frenchhorn", "celesta:0.4"),
+        arp: role("harp"),
         bass: role("contrabass", "cellos:0.5"),
-        lead: role("clarinet", "oboe:0.5", "frenchhorn:0.5", "violins:0.5"),
+        lead: role("clarinet", "oboe:0.5", "flute:0.4", "violins:0.5"),
       },
     },
     form: {
@@ -1871,7 +1883,14 @@ const ROMANTIC_LEAVES: readonly StyleCard[] = Object.freeze([
     id: "late-romantic",
     summary:
       "saturated chromaticism: ninth chords, long appoggiaturas, enharmonic pivots, slow-building climaxes for a very large orchestra",
-    tempo: { bpm: [44, 112], typical: 66 },
+    tempo: { bpm: [52, 112], typical: 72 },
+    pitch: {
+      scales: [
+        ["major", 0.6],
+        ["lydian", 0.2],
+        ["minor", 0.2],
+      ],
+    },
     harmony: {
       sevenths: 0.7,
       voicing: { notes: [4, 6], range: [38, 84] },
@@ -4074,7 +4093,7 @@ const SCREEN_LEAVES: readonly StyleCard[] = Object.freeze([
     id: "modern-orchestral-score",
     summary:
       "the thematic blockbuster score: a heroic theme with rising fourths and fifths, brass on lydian I-II colour, a string ostinato driving the action under it",
-    tempo: { bpm: [80, 140], typical: 110 },
+    tempo: { bpm: [72, 120], typical: 96 },
     pitch: {
       scales: [
         ["lydian", 0.4],
@@ -4340,7 +4359,7 @@ const SCREEN_LEAVES: readonly StyleCard[] = Object.freeze([
     summary:
       "production music built to edit: steady tempo, four- and eight-bar blocks that can be cut anywhere, a clean I-V-vi-IV bed and a short ident hook",
     meter: { signatures: [["4/4", 1]] },
-    tempo: { bpm: [90, 128], typical: 110 },
+    tempo: { bpm: [104, 128], typical: 118 },
     groove: { humanize: { timingMs: 4, velocity: 0.06 } },
     pitch: {
       scales: [
@@ -4369,15 +4388,16 @@ const SCREEN_LEAVES: readonly StyleCard[] = Object.freeze([
         kick: grid("x.......x......."),
         snare: grid("....x.......x..."),
         hat: grid("x.x.x.x.x.x.x.x."),
+        shaker: grid("xxxxxxxxxxxxxxxx"),
+        clap: grid("....x.......x..."),
       },
     },
     texture: {
       roles: {
-        ...kitRoles("acoustic", ["kick", "snare", "hat"]),
-        chords: role("piano", "steel:0.5"),
-        pad: maybe("strings"),
+        ...kitRoles("acoustic", ["kick", "snare", "hat", "shaker"], ["clap"]),
+        chords: role("steel", "piano:0.3"),
         bass: role("bassguitar"),
-        lead: role("glockenspiel", "piano:0.5", "whistle:0.3"),
+        lead: role("glockenspiel", "whistle:0.4", "xylophone:0.3"),
       },
     },
     form: {
@@ -4529,7 +4549,7 @@ const SCREEN_LEAVES: readonly StyleCard[] = Object.freeze([
     summary:
       "the pop and rock musical: verse-chorus songs with a key change for the eleven-o'clock number, rhythm section plus strings, belt range in the lead",
     meter: { signatures: [["4/4", 1]] },
-    tempo: { bpm: [70, 140], typical: 104 },
+    tempo: { bpm: [66, 132], typical: 92 },
     pitch: {
       scales: [
         ["major", 0.6],
@@ -4739,7 +4759,7 @@ const SCREEN_LEAVES: readonly StyleCard[] = Object.freeze([
     id: "orchestral-game",
     summary:
       "the adaptive game score: loopable sections that layer up with the action (stems in, stems out), an ostinato bed under a heroic theme, seamless loop points",
-    tempo: { bpm: [80, 150], typical: 116 },
+    tempo: { bpm: [110, 160], typical: 132 },
     pitch: {
       scales: [
         ["minor", 0.4],
@@ -4765,7 +4785,7 @@ const SCREEN_LEAVES: readonly StyleCard[] = Object.freeze([
       roles: {
         kick: role("timpani"),
         snare: maybe("drums"),
-        arp: maybe("strings", "harp:0.5"),
+        arp: role("strings", "harp:0.3"),
         chords: role("strings", "choir:0.4"),
         bass: role("contrabasses", "trombone:0.4"),
         lead: role("frenchhorn", "violins:0.5", "flute:0.4"),
