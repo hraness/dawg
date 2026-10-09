@@ -29,6 +29,12 @@ import {
   type TrackWind,
 } from "./resonators.ts";
 import { normalizeSynth, type TrackSynth } from "./synth.ts";
+import {
+  normalizeSing,
+  normalizeVowel,
+  SING_INSTRUMENT,
+  type TrackSing,
+} from "./sing.ts";
 import { normalizeString, type TrackString } from "./strings.ts";
 import {
   isGranularInstrument,
@@ -148,6 +154,10 @@ export const SCORE_LIMITS = Object.freeze({
   maxLyricLength: 32,
   maxTakeNudgeMs: 250,
   maxTtsVoiceLength: 64,
+  /** Singers per note in a `sing` ensemble (0.7). */
+  singVoices: 8,
+  /** Ensemble members one `sing` track sounds at once (0.7). */
+  singVoicesPerTrack: 48,
   maxSayCuts: 512,
   maxTakePpm: 1000,
 } as const);
@@ -464,6 +474,12 @@ export type Track = Readonly<{
    * field is rejected.
    */
   wind?: TrackWind;
+  /**
+   * Optional (0.7): the built-in singing voice (`core/sing.ts`), a preset
+   * plus overrides. Plays only when `instrument` is `"sing"`; any other
+   * instrument with this field is rejected.
+   */
+  sing?: TrackSing;
   /**
    * Optional (0.7): audio clips placed on the timeline. Shapes only in the
    * contract; the renderer ignores them until the clips lane.
@@ -869,6 +885,7 @@ export type TrackPatch = Readonly<
     sostenuto?: Track["sostenuto"] | null;
     guitar?: TrackGuitar | null;
     wind?: TrackWind | null;
+    sing?: TrackSing | null;
     clips?: readonly AudioClip[] | null;
     takes?: readonly Take[] | null;
   }
@@ -895,6 +912,8 @@ export type Note = Readonly<{
   cents?: number;
   /** Optional (0.7): one sung syllable, no whitespace (≤ 32 characters). */
   lyric?: string;
+  /** Optional (0.7): the sung vowel, `"a"` or a morph `"a>u"` (sing). */
+  vowel?: string;
 }> &
   NoteExpression;
 
@@ -925,6 +944,7 @@ export type TrackInput = Readonly<
     | "sostenuto"
     | "guitar"
     | "wind"
+    | "sing"
     | "clips"
     | "takes"
   > &
@@ -953,6 +973,7 @@ export type TrackInput = Readonly<
       sostenuto?: Track["sostenuto"] | null;
       guitar?: TrackGuitar | null;
       wind?: TrackWind | null;
+      sing?: TrackSing | null;
       clips?: readonly AudioClip[] | null;
       takes?: readonly Take[] | null;
     }
@@ -973,6 +994,7 @@ export type NoteInput = Readonly<{
   velocity: number;
   cents?: number;
   lyric?: string | null;
+  vowel?: string | null;
 }> &
   NoteExpressionPatch;
 
@@ -1313,7 +1335,7 @@ export type NotePatch = Readonly<
     Pick<Note, "startTick" | "durationTicks" | "pitch" | "velocity" | "cents">
   >
 > &
-  Readonly<{ lyric?: string | null }> &
+  Readonly<{ lyric?: string | null; vowel?: string | null }> &
   NoteExpressionPatch;
 
 export function updateNote(
@@ -1361,6 +1383,9 @@ export function updateTrack(
       // (`wind` included) without a wind field leaves the wind engine.
       if (patch.instrument !== undefined && patch.wind === undefined)
         delete next.wind;
+      // Likewise a sing field leaves with the singing instrument.
+      if (patch.instrument !== undefined && patch.sing === undefined)
+        delete next.sing;
       // Keys settings only belong to a keys family (piano, electric, organ):
       // switching to another instrument drops them unless the patch sets them.
       if (
@@ -1976,6 +2001,12 @@ function normalizeTrack(input: unknown): Track {
       `track ${id} has wind settings but its instrument is "${instrument}"`,
       "invalid-track",
     );
+  const sing = fxOrThrow(() => normalizeSing(input.sing));
+  if (sing && instrument !== SING_INSTRUMENT)
+    throw new ScoreValidationError(
+      `track ${id} has sing settings but its instrument is "${instrument}"`,
+      "invalid-track",
+    );
   const sampler = normalizeSampler(input.sampler);
   const takes = normalizeTakes(input.takes, id);
   const clips = normalizeClips(input.clips, id, takes);
@@ -2097,6 +2128,7 @@ function normalizeTrack(input: unknown): Track {
     ...(sostenuto ? { sostenuto } : {}),
     ...(guitar ? { guitar } : {}),
     ...(wind ? { wind } : {}),
+    ...(sing ? { sing } : {}),
     ...(clips ? { clips } : {}),
     ...(takes ? { takes } : {}),
   });
@@ -3067,6 +3099,10 @@ function normalizeNote(input: unknown): Note {
     "invalid-note",
   );
   const lyric = normalizeLyric(input.lyric, id);
+  const vowel =
+    input.vowel === undefined || input.vowel === null
+      ? undefined
+      : vowelOrThrow(input.vowel, id);
   return Object.freeze({
     id,
     trackId,
@@ -3077,6 +3113,7 @@ function normalizeNote(input: unknown): Note {
     ...expression,
     ...(cents !== undefined ? { cents } : {}),
     ...(lyric !== undefined ? { lyric } : {}),
+    ...(vowel !== undefined ? { vowel } : {}),
   });
 }
 
@@ -3580,6 +3617,20 @@ export function normalizeClips(
     });
   });
   return clips.length > 0 ? Object.freeze(clips) : undefined;
+}
+
+/** Validates Note.vowel: `"a"` or a morph `"a>u"`; null clears. */
+function vowelOrThrow(input: unknown, noteId: string): string {
+  try {
+    return normalizeVowel(input);
+  } catch (error) {
+    if (error instanceof FxValidationError)
+      throw new ScoreValidationError(
+        `note ${noteId} ${error.message}`,
+        "invalid-note",
+      );
+    throw error;
+  }
 }
 
 /** Validates Note.lyric: one syllable without whitespace; null clears. */

@@ -17,6 +17,7 @@ import { SYNTH_LANE_PARAMS } from "./synth.ts";
 import { STRING_LANE_PARAMS } from "./strings.ts";
 import { KEYS_LANE_PARAMS } from "./keys.ts";
 import { GRANULAR_LANE_PARAMS } from "./granular.ts";
+import { SING_LANE_PARAMS } from "./sing.ts";
 import {
   FxValidationError,
   normalizeParam,
@@ -1263,7 +1264,7 @@ export function normalizeFx(input: unknown): TrackFx | undefined {
 
 /** Automation lane name of an `fx` parameter, e.g. `distort-drive`. */
 export type FxLane =
-  `${FxName | "reverb" | "synth" | "string" | "keys" | "modal" | "grain" | "wind"}-${string}`;
+  `${FxName | "reverb" | "synth" | "string" | "keys" | "modal" | "grain" | "wind" | "sing"}-${string}`;
 
 /** Every automatable `fx` parameter as `{ lane, effect, param, spec }`. */
 export const FX_LANES: readonly Readonly<{
@@ -1276,7 +1277,8 @@ export const FX_LANES: readonly Readonly<{
     | "keys"
     | "modal"
     | "grain"
-    | "wind";
+    | "wind"
+    | "sing";
   param: string;
   spec: NumberParam;
 }>[] = Object.freeze([
@@ -1347,6 +1349,15 @@ export const FX_LANES: readonly Readonly<{
     Object.freeze({
       lane: `wind-${param}` as FxLane,
       effect: "wind" as const,
+      param,
+      spec,
+    }),
+  ),
+  // Sing parameters (core/sing.ts, 0.7), read every 32-sample control tick.
+  ...SING_LANE_PARAMS.map(({ param, spec }) =>
+    Object.freeze({
+      lane: `sing-${param}` as FxLane,
+      effect: "sing" as const,
       param,
       spec,
     }),

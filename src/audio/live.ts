@@ -28,6 +28,9 @@ import { isOrganFamily } from "../../core/keys.ts";
 import type { LiveFullReply, LiveFullRequest } from "./live-worker.ts";
 import { isBowed, liveStringTrack } from "./strings/engine.ts";
 import { resolveString } from "../../core/strings.ts";
+import { singTrack } from "../../core/sing.ts";
+import { warmGlottal } from "./dsp/glottal.ts";
+import { withSingHorizon } from "./sing/engine.ts";
 
 /** A rendered live note: interleaved stereo 16-bit PCM. */
 export type LiveNotePcm = Readonly<{
@@ -240,7 +243,8 @@ export class LiveSynth {
       (hasRig(track) ||
         organTick !== undefined ||
         bowedTrack(track) ||
-        hasFormant(track)) &&
+        hasFormant(track) ||
+        singTrack(track)) &&
       seconds > LIVE_RIG_WINDOW_SECONDS &&
       !this.cache.has(key);
     if (windowed) {
@@ -285,23 +289,24 @@ export class LiveSynth {
       : 0;
     // Fitted sample windows over 8 s fit in the background (silent until
     // ready, never at the wrong pitch); shorter ones fit synchronously.
+    const windowFrames = Math.round(LIVE_RIG_WINDOW_SECONDS * this.sampleRate);
+    const horizon = windowed ? windowFrames : Infinity;
     const audio = withLiveFit(() =>
-      renderScorePcm(single, {
-        sampleRate: this.sampleRate,
-        // The renderer's shortest one-shot is 1 s; the window is cut below.
-        maxSeconds: windowed
-          ? 1
-          : Math.max(MAX_LIVE_NOTE_SECONDS + 4, seconds + tail),
-        ...(request.samples ? { samples: request.samples } : {}),
-        ...(organTick ? { seedTick: organTick } : {}),
-        ...(quantChord ? { quantChord } : {}),
-      }),
+      withSingHorizon(horizon, () =>
+        renderScorePcm(single, {
+          sampleRate: this.sampleRate,
+          // The renderer's shortest one-shot is 1 s; the window is cut below.
+          maxSeconds: windowed
+            ? 1
+            : Math.max(MAX_LIVE_NOTE_SECONDS + 4, seconds + tail),
+          ...(request.samples ? { samples: request.samples } : {}),
+          ...(organTick ? { seedTick: organTick } : {}),
+          ...(quantChord ? { quantChord } : {}),
+        }),
+      ),
     );
     const frames = windowed
-      ? Math.min(
-          audibleFrames(audio.pcm),
-          Math.round(LIVE_RIG_WINDOW_SECONDS * this.sampleRate),
-        )
+      ? Math.min(audibleFrames(audio.pcm), windowFrames)
       : audibleFrames(audio.pcm);
     const release = liveEngine?.releaseSeconds
       ? liveEngine.releaseSeconds(
@@ -347,6 +352,27 @@ export class LiveSynth {
       this.cache.delete(oldest);
     }
   }
+}
+
+/**
+ * Pays a voice's one-off costs before a key can sound (formant.md 4.5): the
+ * sing engine builds its LF glottal tables (about 50 ms) on first use and
+ * its inner loops need a pass to compile, so the first sing key of a session
+ * would miss the 15 ms first-window budget by 4x. Play mode calls this when
+ * it opens on a track; a no-op for every other voice. The warm render goes
+ * through a throwaway synth, so no cache entry or state is left behind.
+ */
+export function warmLive(
+  score: TrackScore,
+  trackId: string,
+  sampleRate: number,
+): void {
+  const track = score.tracks.find((candidate) => candidate.id === trackId);
+  if (!track || !singTrack(track)) return;
+  warmGlottal();
+  const synth = new LiveSynth(sampleRate);
+  for (const pitch of [48, 60])
+    synth.render({ score, trackId, pitch, velocity: 0.8, seconds: 0.3 });
 }
 
 /**

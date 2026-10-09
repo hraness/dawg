@@ -6,6 +6,7 @@
 import { effectSpec } from "../../core/fx.ts";
 import { effectValues } from "../commands/fx.ts";
 import { effectParamNodes, type MenuContext, type MenuNode } from "./menu.ts";
+import { singBrowseRows } from "./sing-menu.ts";
 
 /** Sound > Voice: Clips and Lyrics (clips lane). */
 export function clipsSoundRows(_context: MenuContext): MenuNode[] {
@@ -57,7 +58,7 @@ export function vocoderEffectRows(_context: MenuContext): MenuNode[] {
  * (sing), Vocoder (vocoder).
  */
 export function voicesBrowseGroup(_context: MenuContext): MenuNode[] {
-  return [];
+  return [...singBrowseRows()];
 }
 
 /** Every Sound > Voice row, in lane order. */

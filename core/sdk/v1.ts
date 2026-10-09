@@ -242,6 +242,8 @@ export type Expression = Readonly<{
    * Humanize just bars 5-8 with `expr({ humanize: { timing: 10 } }, ...)`.
    */
   humanize?: Readonly<{ timing?: number; velocity?: number; length?: number }>;
+  /** The sung vowel on a `sing()` track (SDK 1.32.0): `"a"` .. `"u"` or a morph `"a>o"`. */
+  vowel?: string;
 }>;
 
 /** The expression a built note carries; fields are present only when set. */
@@ -251,6 +253,7 @@ export type NoteExpressionSpec = Readonly<{
   bend?: readonly BendPoint[];
   vibrato?: Readonly<{ rate: number; depth: number; delay?: number }>;
   humanize?: Readonly<{ timing?: number; velocity?: number; length?: number }>;
+  vowel?: string;
 }>;
 
 const DEFAULT_VIBRATO_RATE = 5.5;
@@ -265,12 +268,18 @@ function expression(
     throw new DawgSdkError(`${label} expression must be an object`);
   for (const key of Object.keys(input))
     if (
-      !["articulation", "art", "glide", "bend", "vibrato", "humanize"].includes(
-        key,
-      )
+      ![
+        "articulation",
+        "art",
+        "glide",
+        "bend",
+        "vibrato",
+        "humanize",
+        "vowel",
+      ].includes(key)
     )
       throw new DawgSdkError(
-        `${label} expression has an unknown field "${key.slice(0, 32)}" (articulation glide bend vibrato humanize)`,
+        `${label} expression has an unknown field "${key.slice(0, 32)}" (articulation glide bend vibrato humanize vowel)`,
       );
   const out: {
     articulation?: Articulation;
@@ -282,6 +291,7 @@ function expression(
       velocity?: number;
       length?: number;
     }>;
+    vowel?: string;
   } = {};
   const articulation = input.articulation ?? input.art;
   if (articulation !== undefined) {
@@ -352,6 +362,8 @@ function expression(
     }
     out.humanize = Object.freeze(amounts);
   }
+  if (input.vowel !== undefined)
+    out.vowel = singVowel(input.vowel, `${label} vowel`);
   return out;
 }
 
@@ -2008,6 +2020,214 @@ function trackWind(
   return Object.freeze({ preset: meaning.preset as WindPresetName });
 }
 
+// ---- sing (f07-sing, SDK 1.32.0) ----
+
+/** The instrument value of the singing voice (core/sing.ts). */
+export const SING_INSTRUMENT = "sing";
+
+/** Sing presets (core/sing.ts SING_PRESET_NAMES). */
+export type SingPresetName =
+  | "aah"
+  | "ooh"
+  | "choir"
+  | "oohchoir"
+  | "chorale"
+  | "airy"
+  | "glass"
+  | "lament"
+  | "soprano"
+  | "basso"
+  | "drone"
+  | "khoomei"
+  | "sygyt"
+  | "kargyraa";
+
+const SING_PRESET_WORDS: readonly string[] = Object.freeze([
+  "aah",
+  "ooh",
+  "choir",
+  "oohchoir",
+  "chorale",
+  "airy",
+  "glass",
+  "lament",
+  "soprano",
+  "basso",
+  "drone",
+  "khoomei",
+  "sygyt",
+  "kargyraa",
+]);
+
+/** Sing overrides (core/sing.ts SING_PARAMS). */
+export type SingParams = Readonly<{
+  voice?: "auto" | "soprano" | "alto" | "tenor" | "bass";
+  /** `"a"`, `"e"`, `"i"`, `"o"`, `"u"` or a morph `"a>o"`. */
+  vowel?: string;
+  morph?: number;
+  formant?: number;
+  bright?: number;
+  breath?: number;
+  jitter?: number;
+  shimmer?: number;
+  attack?: number;
+  release?: number;
+  vib?: number;
+  vibmod?: number;
+  vibdelay?: number;
+  voices?: number;
+  spread?: number;
+  ring?: number;
+  /** Throat drone: a note name (`"D3"`) or MIDI 36..67. */
+  drone?: string | number;
+  overtone?: number;
+  /** Throat melody harmonic range `[lo, hi]`, 2..24. */
+  harmonics?: readonly [number, number];
+  sub?: number;
+  gain?: number;
+}>;
+
+const SING_VOWEL_LETTERS: readonly string[] = Object.freeze([
+  "a",
+  "e",
+  "i",
+  "o",
+  "u",
+]);
+
+/** Numeric ranges (core/sing.ts SING_PARAMS min..max). */
+const SING_RANGES: Readonly<Record<string, readonly [number, number]>> =
+  Object.freeze({
+    morph: [0, 1],
+    formant: [-12, 12],
+    bright: [0, 1],
+    breath: [0, 1],
+    jitter: [0, 3],
+    shimmer: [0, 1],
+    attack: [0.005, 2],
+    release: [0.01, 4],
+    vib: [0, 9],
+    vibmod: [0, 1],
+    vibdelay: [0, 2],
+    voices: [1, 8],
+    spread: [0, 40],
+    ring: [0, 1],
+    overtone: [0, 1],
+    sub: [0, 1],
+    gain: [0, 2],
+  });
+
+/** Result of `sing()`; pass it as a track's `instrument`. */
+export type SingSpec = Readonly<
+  { kind: "sing"; preset?: SingPresetName } & SingParams
+>;
+
+/** `"a"` or `"a>o"`, lower-cased; throws otherwise. */
+function singVowel(value: unknown, label: string): string {
+  const parts =
+    typeof value === "string" ? value.trim().toLowerCase().split(">") : [];
+  if (
+    (parts.length === 1 || parts.length === 2) &&
+    parts.every((part) => SING_VOWEL_LETTERS.includes(part))
+  )
+    return parts.join(">");
+  throw new DawgSdkError(
+    `${label} must be one of ${SING_VOWEL_LETTERS.join(" ")} or a morph like a>o`,
+  );
+}
+
+/**
+ * The built-in singing voice (SDK 1.32.0): an LF glottal source through
+ * SATB formants, choirs, and Tuvan throat singing. A preset word alone
+ * (`instrument: "choir"`) is the same as `sing("choir")`. Notes sing their
+ * `vowel` (`note("A3", 0, 2, 0.8, { vowel: "a>o" })`), else their lyric's
+ * vowel, else the track's.
+ *
+ * ```ts
+ * instrument: sing("choir", { vowel: "o" })
+ * instrument: sing("khoomei", { drone: "D3" }) // notes pick the overtone
+ * instrument: sing({ voices: 4, breath: 0.3 }) // default preset (aah)
+ * ```
+ */
+export function sing(
+  preset?: SingPresetName | SingParams,
+  params: SingParams = {},
+): SingSpec {
+  const overrides = isRecord(preset) ? preset : params;
+  const name = isRecord(preset) ? undefined : preset;
+  if (!isRecord(overrides))
+    throw new DawgSdkError("sing params must be an object");
+  const out: Record<string, unknown> = { kind: "sing" };
+  if (name !== undefined) {
+    if (typeof name !== "string" || !SING_PRESET_WORDS.includes(name))
+      throw new DawgSdkError(
+        `sing preset "${String(name).slice(0, 32)}" is not one of ${SING_PRESET_WORDS.join(" ")}`,
+      );
+    out.preset = name;
+  }
+  for (const key of Object.keys(overrides)) {
+    const value = (overrides as Record<string, unknown>)[key];
+    if (value === undefined) continue;
+    if (key === "voice") {
+      const voices = ["auto", "soprano", "alto", "tenor", "bass"];
+      if (typeof value !== "string" || !voices.includes(value))
+        throw new DawgSdkError(`sing voice must be one of ${voices.join(" ")}`);
+      out.voice = value;
+    } else if (key === "vowel") out.vowel = singVowel(value, "sing vowel");
+    else if (key === "drone") {
+      const midiValue =
+        typeof value === "number" ? value : midi(value as Pitch);
+      if (!Number.isInteger(midiValue) || midiValue < 36 || midiValue > 67)
+        throw new DawgSdkError(
+          'sing drone must be a note name C2..G4 (e.g. "D3") or MIDI 36..67',
+        );
+      out.drone = midiValue;
+    } else if (key === "harmonics") {
+      if (
+        !Array.isArray(value) ||
+        value.length !== 2 ||
+        !value.every((h) => Number.isInteger(h) && h >= 2 && h <= 24) ||
+        value[0] >= value[1]
+      )
+        throw new DawgSdkError(
+          "sing harmonics must be [lo, hi], whole numbers 2..24 with lo < hi",
+        );
+      out.harmonics = Object.freeze([value[0], value[1]]);
+    } else if (SING_RANGES[key]) {
+      const number = finite(value, `sing ${key}`);
+      const [min, max] = SING_RANGES[key]!;
+      if (number < min || number > max)
+        throw new DawgSdkError(`sing ${key} must be ${min}..${max}`);
+      if (key === "voices" && !Number.isInteger(number))
+        throw new DawgSdkError("sing voices must be a whole number");
+      out[key] = number;
+    } else
+      throw new DawgSdkError(
+        `sing has no parameter "${key.slice(0, 32)}" (voice vowel drone harmonics ${Object.keys(SING_RANGES).join(" ")})`,
+      );
+  }
+  return Object.freeze(out) as SingSpec;
+}
+
+/**
+ * The sing field an instrument makes: `sing(...)`, or a sing preset word
+ * (`"choir"`, `"khoomei"`); `"sing"` alone is the default preset.
+ */
+function trackSing(
+  raw: unknown,
+): Readonly<{ preset?: SingPresetName } & SingParams> | undefined {
+  if (isRecord(raw) && raw.kind === "sing") {
+    const { kind: _kind, ...fields } = raw as SingSpec;
+    return Object.freeze(fields);
+  }
+  if (typeof raw !== "string") return undefined;
+  const meaning = resolveInstrumentWord(raw);
+  if (meaning?.instrument !== SING_INSTRUMENT) return undefined;
+  return Object.freeze(
+    meaning.preset ? { preset: meaning.preset as SingPresetName } : {},
+  );
+}
+
 /**
  * `count` equal slices of one file as voices `prefix0 … prefixN-1`, for
  * chopped breaks: `sampler(slices("samples/break.wav", 8, "brk"))`, then
@@ -2645,7 +2865,8 @@ export type TrackInput = Readonly<{
     | StringSpec
     | GranularSpec
     | ModalSpec
-    | WindSpec;
+    | WindSpec
+    | SingSpec;
   /**
    * The sampler a `granular(...)` track keeps while it grains one of its
    * voices (SDK 1.23.0); `grain off` plays it again.
@@ -2882,6 +3103,8 @@ export type TrackSpec = Readonly<{
   guitar?: GuitarSetup;
   /** Wind settings (SDK 1.30.0); present only on a wind-engine track. */
   wind?: Readonly<{ preset?: WindPresetName } & WindParams>;
+  /** Sing settings (SDK 1.32.0); present only on a sing track. */
+  sing?: Readonly<{ preset?: SingPresetName } & SingParams>;
 }>;
 
 export type GlideMode = "legato" | "mono" | "poly";
@@ -3134,6 +3357,7 @@ export function track(input: TrackInput): TrackSpec {
   const modalSpec = trackModal(rawInstrument);
   const guitarSpec = guitarInput(input.guitar, `track ${name}`);
   const windSpec = trackWind(rawInstrument);
+  const singSpec = trackSing(rawInstrument);
   const instrument = granularFromInstrument
     ? GRANULAR_INSTRUMENT
     : samplerSpec
@@ -3146,9 +3370,11 @@ export function track(input: TrackInput): TrackSpec {
             ? MODAL_INSTRUMENT
             : windSpec
               ? WIND_INSTRUMENT
-              : typeof rawInstrument === "string"
-                ? (word?.instrument ?? rawInstrument)
-                : undefined;
+              : singSpec
+                ? SING_INSTRUMENT
+                : typeof rawInstrument === "string"
+                  ? (word?.instrument ?? rawInstrument)
+                  : undefined;
   // A granular word (`"cloud"`) turns the engine on with its preset.
   const granularSpec =
     granularInput(input.granular, name, slug) ??
@@ -3373,6 +3599,7 @@ export function track(input: TrackInput): TrackSpec {
     ...(modalSpec ? { modal: modalSpec } : {}),
     ...(guitarSpec ? { guitar: guitarSpec } : {}),
     ...(windSpec ? { wind: windSpec } : {}),
+    ...(singSpec ? { sing: singSpec } : {}),
   });
 }
 
@@ -3882,6 +4109,8 @@ export type ScoreNote = Readonly<{
   humanize?: Readonly<{ timing?: number; velocity?: number; length?: number }>;
   /** Static cents offset (SDK 1.16.0); absent is 0. */
   cents?: number;
+  /** Sung vowel (SDK 1.32.0); absent sings the lyric's or the track's. */
+  vowel?: string;
 }>;
 
 /** A stored automation point: integer tick. */
@@ -3968,6 +4197,8 @@ export type ScoreTrack = Readonly<{
   guitar?: GuitarSetup;
   /** Wind settings (SDK 1.30.0). */
   wind?: TrackSpec["wind"];
+  /** Sing settings (SDK 1.32.0). */
+  sing?: TrackSpec["sing"];
   glide?: TrackSpec["glide"];
   pedal?: readonly Readonly<{ tick: number; state: PedalState }>[];
   softPedal?: readonly Readonly<{ tick: number; state: PedalState }>[];
@@ -4281,6 +4512,7 @@ export function song(input: SongInput): Song {
     if (t.modal) stored.modal = t.modal;
     if (t.guitar) stored.guitar = t.guitar;
     if (t.wind) stored.wind = t.wind;
+    if (t.sing) stored.sing = t.sing;
     if (t.rhythm && t.rhythm.length > 0)
       stored.rhythm = Object.freeze(
         t.rhythm.map((row) => {
@@ -4321,6 +4553,7 @@ export function song(input: SongInput): Song {
           ...(n.vibrato ? { vibrato: n.vibrato } : {}),
           ...(n.humanize ? { humanize: n.humanize } : {}),
           ...(n.cents ? { cents: n.cents } : {}),
+          ...(n.vowel ? { vowel: n.vowel } : {}),
         }),
       );
     }
@@ -5695,6 +5928,15 @@ const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
   { word: "frenchhorn", instrument: "wind", field: "wind", preset: "horn" },
   { word: "mutedtrumpet", instrument: "wind", field: "wind", preset: "harmon" },
   { word: "wahtrumpet", instrument: "wind", field: "wind", preset: "plunger" },
+  // f07-sing: the built-in singing voice (core/sing.ts).
+  { word: "sing", instrument: "sing", field: "sing" },
+  { word: "aah", instrument: "sing", field: "sing", preset: "aah" },
+  { word: "ooh", instrument: "sing", field: "sing", preset: "ooh" },
+  { word: "choir", instrument: "sing", field: "sing", preset: "choir" },
+  { word: "chorale", instrument: "sing", field: "sing", preset: "chorale" },
+  { word: "khoomei", instrument: "sing", field: "sing", preset: "khoomei" },
+  { word: "sygyt", instrument: "sing", field: "sing", preset: "sygyt" },
+  { word: "kargyraa", instrument: "sing", field: "sing", preset: "kargyraa" },
 ]);
 
 /**

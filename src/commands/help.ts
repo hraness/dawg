@@ -426,6 +426,21 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
           "/vowel <v> [<to> [<morph>]] | ee | to <v>|off | morph <0..1> | off",
         summary: "vowel filter · /vowel a · /vowel a o 0.5 morphs a towards o",
       },
+      // f07-sing
+      {
+        command: "/sing [preset] [param value]",
+        summary:
+          "built-in singing voice: aah ooh choir chorale airy glass lament soprano basso, throat: drone khoomei sygyt kargyraa",
+      },
+      {
+        command: "/sing vowels <v> …",
+        summary:
+          "vowels for the track's notes in order, cycled · sing vowels a e i o",
+      },
+      {
+        command: "/note vowel <v|a>u> [target]",
+        summary: "sung vowel for selected notes · note vowel o bar 2",
+      },
       ...VOCAL_VERBS.map((verb) => ({
         command: `/vocal ${verb.usage}`,
         summary: verb.summary,
@@ -807,6 +822,7 @@ export const USAGE: Readonly<Record<string, string>> = {
     "/formant <-12..12> [mix] | deep|giant|bright|tiny | on | off · /formant -4 · /formant 3 0.5",
   vowel:
     "/vowel <v> [<to> [<morph 0..1>]] | ee | to <v>|off | morph <0..1> | mix <0..1> | off · /vowel a o 0.5",
+  sing: "sing <preset> | <param> <value> | drone <D3> | vowels a e i … | reset | off | presets · sing choir · sing khoomei drone D3 · sing vowel o voices 6",
   pack: "/pack list | info <name> | use <pack>/<sound> | add <url>",
   kit: "/kit [name] · /kit syn909",
   euclid: "/euclid [voice] · euclid hat 7 16",

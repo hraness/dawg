@@ -536,7 +536,7 @@ export function describeTarget(target: NoteTarget): string {
 export function patchNotes(
   score: TrackScore,
   noteIds: ReadonlySet<string>,
-  patch: NoteExpressionPatch,
+  patch: NoteExpressionPatch & Readonly<{ vowel?: string | null }>,
 ): TrackScore {
   if (noteIds.size === 0) return score;
   return new TrackScore({

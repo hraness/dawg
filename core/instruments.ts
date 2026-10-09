@@ -410,6 +410,15 @@ export const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
   { word: "frenchhorn", instrument: "wind", field: "wind", preset: "horn" },
   { word: "mutedtrumpet", instrument: "wind", field: "wind", preset: "harmon" },
   { word: "wahtrumpet", instrument: "wind", field: "wind", preset: "plunger" },
+  // f07-sing: the built-in singing voice (core/sing.ts).
+  { word: "sing", instrument: "sing", field: "sing" },
+  { word: "aah", instrument: "sing", field: "sing", preset: "aah" },
+  { word: "ooh", instrument: "sing", field: "sing", preset: "ooh" },
+  { word: "choir", instrument: "sing", field: "sing", preset: "choir" },
+  { word: "chorale", instrument: "sing", field: "sing", preset: "chorale" },
+  { word: "khoomei", instrument: "sing", field: "sing", preset: "khoomei" },
+  { word: "sygyt", instrument: "sing", field: "sing", preset: "sygyt" },
+  { word: "kargyraa", instrument: "sing", field: "sing", preset: "kargyraa" },
 ]);
 
 /**

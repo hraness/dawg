@@ -50,6 +50,7 @@ import {
 import {
   LiveFullRenderer,
   LiveSynth,
+  warmLive,
   MAX_LIVE_NOTE_SECONDS,
   type LiveNotePcm,
 } from "../audio/live.ts";
@@ -73,6 +74,7 @@ import {
 } from "./play-chords.ts";
 import type { PlayHeaderView, PlayStripKey } from "../../tui/play-strip.ts";
 import { resolveTuning, type Tuning } from "../../core/tuning.ts";
+import { singThroat } from "../../core/sing.ts";
 import {
   NOTE_KEYS,
   PlayKeyboard,
@@ -240,6 +242,8 @@ export class PlaySession {
   private synth: LiveSynth | undefined;
   /** Rig voices awaiting their full render: id → released since. */
   private readonly windows = new Map<number, boolean>();
+  /** f07-sing: the sounding key on a throat track (one drone, mono). */
+  private throatId: number | undefined;
   private readonly fullRenderer = new LiveFullRenderer();
   private readonly pending = new Map<number, Pending>();
   /** Sustain changes while recording (Tab latch or Shift), as pedal events. */
@@ -289,7 +293,8 @@ export class PlaySession {
       settings.mode =
         chordCapable(track) &&
         twelveTet(this.host.score(), track) &&
-        (track?.glide === undefined || track.glide.mode === "poly")
+        (track?.glide === undefined || track.glide.mode === "poly") &&
+        !singThroat(track)
           ? "auto"
           : "manual";
     this.chords = new ChordPad(settings, () => this.host.score().key);
@@ -332,6 +337,8 @@ export class PlaySession {
     const engine = this.host.engine();
     if (engine?.canMonitor) {
       engine.setLeadMs(PLAY_LEAD_MS);
+      // A sing voice's tables and loops are built now, not on the first key.
+      warmLive(this.host.score(), this.trackId, engine.sampleRate);
       await engine.monitor(true);
     } else this.status = "no audio · keys still record";
     this.applyClick();
@@ -500,6 +507,12 @@ export class PlaySession {
             this.recordedChord(single, action.note.id, "block"),
           );
           return { type: "handled" };
+        }
+        // f07-sing: a throat track is one drone; a new key releases the last.
+        if (singThroat(this.trackData())) {
+          if (this.throatId !== undefined && this.throatId !== action.note.id)
+            this.release([this.throatId], now);
+          this.throatId = action.note.id;
         }
         this.sound(action.note.id, action.note);
         this.record(action.note);

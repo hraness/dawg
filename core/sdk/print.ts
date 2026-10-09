@@ -28,6 +28,12 @@ import {
   type TrackModal,
 } from "../resonators.ts";
 import { WIND_INSTRUMENT, WIND_PARAMS, type TrackWind } from "../winds.ts";
+import {
+  SING_INSTRUMENT,
+  SING_KEY_ORDER,
+  singNoteName,
+  type TrackSing,
+} from "../sing.ts";
 import { rhythmVoicePitch, rowInSync } from "../rhythm.ts";
 import {
   BUILTIN_TABLE_PREFIX,
@@ -157,6 +163,7 @@ const RESERVED = new Set([
   "granular",
   "modal",
   "wind",
+  "sing",
   "slices",
   "euclid",
   "euclidRot",
@@ -421,6 +428,11 @@ export function printTrack(score: TrackScore, track: Track): string {
       ? printWind(track.wind, INDENT)
       : undefined;
   if (windCall?.startsWith("wind(")) used.add("wind");
+  const singCall =
+    track.instrument === SING_INSTRUMENT && track.sing
+      ? printSing(track.sing, INDENT)
+      : undefined;
+  if (singCall?.startsWith("sing(")) used.add("sing");
 
   const entries: string[] = [
     `id: ${str(track.id)}`,
@@ -441,6 +453,8 @@ export function printTrack(score: TrackScore, track: Track): string {
     entries.push(`instrument: ${modalCall}`);
   } else if (windCall) {
     entries.push(`instrument: ${windCall}`);
+  } else if (singCall) {
+    entries.push(`instrument: ${singCall}`);
   } else entries.push(`instrument: ${str(track.instrument)}`);
   if (track.kit) entries.push(`kit: ${str(track.kit)}`);
   if (track.granular && !grained)
@@ -668,6 +682,7 @@ export function printTrack(score: TrackScore, track: Track): string {
     "granular",
     "modal",
     "wind",
+    "sing",
     "euclid",
     "grid",
   ]
@@ -778,6 +793,7 @@ function expressionEntries(
       ),
     ]);
   }
+  if (note.vowel) entries.push(["vowel", str(note.vowel)]);
   return entries.length === 0 ? undefined : entries;
 }
 
@@ -1069,6 +1085,53 @@ function printWind(settings: TrackWind, indent: string): string {
   const inner = indent + INDENT;
   return `wind(${lead}{\n${params.map(([k, v]) => `${inner}${k}: ${v},`).join("\n")}\n${indent}})`;
 }
+
+/**
+ * A sing track's instrument: the preset word alone (`"choir"`) when there
+ * are no overrides and the preset is an instrument word, else
+ * `sing("khoomei", { drone: "D3" })` with keys in `SING_KEY_ORDER`; the
+ * drone prints as a note name.
+ */
+function printSing(settings: TrackSing, indent: string): string {
+  const params: [string, string][] = [];
+  for (const key of SING_KEY_ORDER) {
+    const value = (settings as Record<string, unknown>)[key];
+    if (value === undefined) continue;
+    params.push([
+      key,
+      key === "drone"
+        ? str(singNoteName(value as number))
+        : Array.isArray(value)
+          ? `[${value.map((v) => num(v as number)).join(", ")}]`
+          : typeof value === "number"
+            ? num(value)
+            : str(String(value)),
+    ]);
+  }
+  const preset = settings.preset;
+  if (params.length === 0 && preset && SING_BARE_WORDS.has(preset))
+    return str(preset);
+  if (params.length === 0 && !preset) return str(SING_INSTRUMENT);
+  const head = preset ? str(preset) : "";
+  if (params.length === 0) return `sing(${head})`;
+  const lead = head ? `${head}, ` : "";
+  const inline = `sing(${lead}{ ${params.map(([k, v]) => `${k}: ${v}`).join(", ")} })`;
+  if (indent.length + "instrument: ".length + inline.length + 1 <= WIDTH)
+    return inline;
+  const inner = indent + INDENT;
+  return `sing(${lead}{\n${params.map(([k, v]) => `${inner}${k}: ${v},`).join("\n")}\n${indent}})`;
+}
+
+/** Sing presets that are also instrument words (`"choir"`). */
+const SING_BARE_WORDS: ReadonlySet<string> = new Set([
+  "aah",
+  "ooh",
+  "choir",
+  "chorale",
+  "khoomei",
+  "sygyt",
+  "kargyraa",
+]);
 
 /** `wavetable("basic", { wt: 0.5 })`; pack tables keep their pin. */
 function printWavetable(settings: TrackWavetable, indent: string): string {

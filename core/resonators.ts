@@ -19,6 +19,7 @@
  */
 import { resolveInstrumentWord } from "./instruments.ts";
 import { WIND_INSTRUMENT, windPresetFor, type TrackWind } from "./winds.ts";
+import { SING_INSTRUMENT, isSingPreset, type TrackSing } from "./sing.ts";
 import {
   FxValidationError,
   isRecord,
@@ -768,8 +769,20 @@ export function instrumentPatchForWord(word: string): {
   instrument: string;
   modal?: TrackModal;
   wind?: TrackWind;
+  sing?: TrackSing;
 } {
   const meaning = resolveInstrumentWord(word);
+  // f07-sing: `choir`, `aah`, `khoomei` sing a preset.
+  if (meaning?.field === "sing" && meaning.instrument === SING_INSTRUMENT) {
+    const preset =
+      meaning.preset && isSingPreset(meaning.preset)
+        ? meaning.preset
+        : undefined;
+    return {
+      instrument: SING_INSTRUMENT,
+      sing: Object.freeze(preset ? { preset } : {}) as TrackSing,
+    };
+  }
   // f061-gamelan-winds: `flute`, `sax`, `tuba` play a wind preset.
   if (meaning?.field === "wind" && meaning.instrument === WIND_INSTRUMENT) {
     const preset = meaning.preset ? windPresetFor(meaning.preset) : undefined;
@@ -793,7 +806,8 @@ export function isModalWord(word: string): boolean {
   const meaning = resolveInstrumentWord(word);
   return (
     meaning?.instrument === MODAL_INSTRUMENT ||
-    (meaning?.field === "wind" && meaning.instrument === WIND_INSTRUMENT)
+    (meaning?.field === "wind" && meaning.instrument === WIND_INSTRUMENT) ||
+    (meaning?.field === "sing" && meaning.instrument === SING_INSTRUMENT)
   );
 }
 
