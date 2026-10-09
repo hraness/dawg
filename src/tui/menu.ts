@@ -974,6 +974,16 @@ function chordNodes(context: MenuContext): MenuNode[] {
       command: (option) => `/chords ${option}`,
     },
     {
+      kind: "entry",
+      label: "write a progression",
+      value: "",
+      placeholder: "chords, e.g. i7 IV7 each 8",
+      help: "sustained, voice-led block chords on this track in the song key",
+      command: (text) =>
+        text.trim() ? `progression ${text.trim()}` : undefined,
+      example: "progression i7 IV7 each 8",
+    },
+    {
       kind: "choice",
       label: "key tonic",
       help: "the song key; auto chord mode follows it",

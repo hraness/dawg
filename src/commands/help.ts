@@ -96,6 +96,11 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "guitar fretting · guitar tune dadgad · guitar capo 2",
       },
       {
+        command: "progression <chords> [each 4] [at 0] [bass]",
+        summary:
+          "sustained voice-led chords · progression i7 IV7 each 8 · progression Am7 D9 bass",
+      },
+      {
         command: "strum [chords] [pattern] [strokes D-DU-UDU] [speed 22ms]",
         summary:
           "strummed guitar chords · strum G D Em C folk · strum I V vi IV · strum alone strums the track's chords",
@@ -878,6 +883,8 @@ export const USAGE: Readonly<Record<string, string>> = {
     "bowed [violin|viola|cello|contrabass|fiddle|erhu|kamancheh|violins|violas|cellos|contrabasses|pizz|trem] | <param> <value> | presets · bowed violin · bowed pressure 0.7",
   rig: "rig clean|crunch|punk|ragged|lead|metal|fuzz|octave|funk|wah|bachata|spring|bassdrive|reese|jangle|alt|shoegaze|glide|dreampop|swell|ebow | reset",
   guitar: `guitar tune ${GUITAR_TUNING_NAMES.join("|")} | E A D G B E · capo 0..12 · hand 3..6 · ring 0..1 · position · reset`,
+  progression:
+    "progression i7 IV7 i7 IV7 [each 8] [at 0] [bass] · numerals in the song key or symbols (Am7 D9) · block chords that hold for each span",
   strum:
     "strum G D Em C [folk|pop|punk|…] [strokes D-DU-UDU] [speed 22ms] [each 4] [at 0] · strum alone strums the track's chords",
   stomp:

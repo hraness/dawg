@@ -74,6 +74,10 @@ import {
   rigWordPatch,
 } from "./commands/rig.ts";
 import {
+  applyProgressionCommand,
+  parseProgressionCommand,
+} from "./commands/progression.ts";
+import {
   applyGuitarCommand,
   applyStrumCommand,
   parseGuitarCommand,
@@ -2275,6 +2279,19 @@ async function submit(prompt: string): Promise<string | Receipt> {
     if (guitar.type !== "guitar-show" && guitar.type !== "guitar-hint")
       await materializeDraft();
     const result = applyGuitarCommand(score, requestedTrack, guitar);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
+  const progression = parseProgressionCommand(command);
+  if (progression) {
+    if (progression.type === "progression") await materializeDraft();
+    const result = applyProgressionCommand(
+      score,
+      requestedTrack,
+      progression,
+      () => randomUUID().slice(0, 12),
+    );
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
