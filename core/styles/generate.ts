@@ -1145,6 +1145,8 @@ function playRoles(plan: Plan, rng: (salt: string) => Random): Draft[] {
   if (has("counter"))
     drafts.push(...playMelody(plan, "counter", rng("counter")).drafts);
   (plan as { phrases: unknown }).phrases = lead.phrases;
+  if (style.melody.row && plan.scale.period === 12)
+    serialize(plan, drafts, style.melody.row, rng("row"));
   // Articulations per role.
   const articulationRandom = rng("articulation");
   for (const draft of drafts) {
@@ -1153,6 +1155,92 @@ function playRoles(plan: Plan, rng: (salt: string) => Random): Draft[] {
       draft.articulation = pickWeighted(weights, articulationRandom);
   }
   return drafts;
+}
+
+const SERIAL_ROLES = new Set<RoleName>([
+  "bass",
+  "chords",
+  "pad",
+  "arp",
+  "drone",
+  "lead",
+  "counter",
+]);
+
+/**
+ * Twelve-tone order: re-spell every pitched draft, in time order, with the
+ * next pitch class of a seeded row. Each aggregate takes one form of the
+ * row (prime, inversion, retrograde, retrograde inversion) at a seeded
+ * transposition; the first is the prime. A note keeps its register: it
+ * moves to the nearest key of its row pitch class, and the lead stays in
+ * range and within an octave of its last note. Simultaneities (chords)
+ * take consecutive row segments, so verticals are row hexachords and
+ * trichords as in Schoenberg's and Webern's practice. "integral" also
+ * serializes durations (1 to 12 units of a sixteenth's half) and dynamics
+ * (twelve levels, ppp to fff), Boulez's Structures Ia scheme.
+ */
+function serialize(
+  plan: Plan,
+  drafts: Draft[],
+  kind: "pitch" | "integral",
+  random: Random,
+): void {
+  const row = [...Array(12).keys()];
+  for (let i = 11; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    [row[i], row[j]] = [row[j]!, row[i]!];
+  }
+  const form = (index: number): number[] => {
+    if (index === 0) return row;
+    const shape = Math.floor(random() * 4);
+    const shift = Math.floor(random() * 12);
+    const base = shape % 2 === 1 ? row.map((pc) => mod(-pc, 12)) : row;
+    const ordered = shape >= 2 ? [...base].reverse() : base;
+    return ordered.map((pc) => mod(pc + shift, 12));
+  };
+  const pitched = drafts
+    .filter((draft) => SERIAL_ROLES.has(draft.role))
+    .sort(
+      (a, b) =>
+        a.tick - b.tick || a.role.localeCompare(b.role) || a.key - b.key,
+    );
+  const [low, high] = plan.style.melody.range;
+  const [dynLow, dynHigh] = plan.style.expression.dynamics;
+  const last = new Map<RoleName, number>();
+  let forms = 0;
+  let current = form(forms);
+  let at = 0;
+  for (const draft of pitched) {
+    if (at === 12) {
+      forms += 1;
+      current = form(forms);
+      at = 0;
+    }
+    const order = at;
+    const target = mod(plan.rootKey + current[at]!, 12);
+    at += 1;
+    let key = draft.key - mod(draft.key - target + 6, 12) + 6;
+    if (draft.role === "lead" || draft.role === "counter") {
+      while (key < low) key += 12;
+      while (key > high) key -= 12;
+      const previous = last.get(draft.role);
+      if (previous !== undefined && Math.abs(key - previous) > 12)
+        key += key > previous ? -12 : 12;
+      last.set(draft.role, key);
+    }
+    draft.key = key;
+    draft.cents = 0;
+    if (kind === "integral") {
+      // Order position to duration and dynamic: the series runs in step.
+      const unit = plan.stepTicks / 2;
+      draft.duration = Math.max(30, unit * (1 + ((order * 5) % 12)));
+      draft.velocity = clamp(
+        dynLow + ((dynHigh - dynLow) * ((order * 7) % 12)) / 11,
+        0.05,
+        1,
+      );
+    }
+  }
 }
 
 function playCycle(
