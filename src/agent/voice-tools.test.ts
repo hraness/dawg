@@ -57,4 +57,15 @@ describe("set_formant (formant lane)", () => {
     expect(() => run({ vowel: "o" })).toThrow(FORMANT_VOWEL_HINT);
     expect(() => run({ preset: "nope" })).toThrow(ToolArgumentError);
   });
+
+  test("conflicting arguments are refused or reported", () => {
+    expect(() => run({ off: true, shift: -4 })).toThrow(ToolArgumentError);
+    const plan = tool("set_formant").plan(
+      { preset: "deep", shift: 2 },
+      context(score),
+    );
+    expect(plan.kind === "score" && plan.summary).toContain(
+      "overrides preset deep",
+    );
+  });
 });

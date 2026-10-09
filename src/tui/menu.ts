@@ -2245,9 +2245,7 @@ export function effectParamNodes(
         value: typeof to === "string" ? to : "—",
         options: ["—", ...VOWEL_VALUES],
         command: (option) =>
-          option === "—"
-            ? `/vowel ${typeof values?.vowel === "string" ? values.vowel : "a"}`
-            : `/vowel to ${option}`,
+          option === "—" ? "/vowel to off" : `/vowel to ${option}`,
         help: "a second vowel to morph towards (— keeps one vowel)",
       },
       {

@@ -5,6 +5,7 @@ import {
   parseFormantCommand,
   parseVowelCommand,
 } from "./formant.ts";
+import { applyFxCommand, parseFxCommand, unknownFxMessage } from "./fx.ts";
 import { parseVocalCommand, runVocalCommand } from "./vocal.ts";
 
 const base = () =>
@@ -48,6 +49,35 @@ describe("/formant", () => {
     expect(result.message).toContain("the vowel filter is `vowel`");
   });
 
+  test("on is the toggle, not the nasal vowel", () => {
+    const on = run("/formant on");
+    expect(on.ok).toBe(true);
+    expect(on.next!.tracks[0]!.fx!.formant).toEqual({ shift: 0, mix: 1 });
+    expect(run("/formant on").message).not.toContain("/vowel");
+  });
+
+  test("a positional shift takes a keyword mix", () => {
+    expect(run("/formant -4 mix 0.5").next!.tracks[0]!.fx!.formant).toEqual({
+      shift: -4,
+      mix: 0.5,
+    });
+    expect(run("/formant -4 mix").ok).toBe(false);
+  });
+
+  test("fx formant with bad values names the ranges and presets", () => {
+    for (const text of [
+      "fx formant 30",
+      "fx formant mix 2",
+      "fx formant giantt",
+      "fx formant shift -12.5",
+    ]) {
+      expect(parseFxCommand(text)).toBeUndefined();
+      expect(unknownFxMessage(text)).toContain("shift -12..12 st, mix 0..1");
+      expect(unknownFxMessage(text)).toContain("deep giant bright tiny");
+    }
+    expect(unknownFxMessage("fx formant -4")).toBeUndefined();
+  });
+
   test("/vocal formant is the same command", async () => {
     const parsed = parseVocalCommand("/vocal formant -3");
     expect(parsed).toBeDefined();
@@ -86,6 +116,43 @@ describe("/vowel", () => {
       vowel: "e",
       mix: 1,
     });
+  });
+
+  test("changing the vowel keeps the mix; to off drops only the morph", () => {
+    const half = run("/vowel mix 0.5", run("/vowel a i 0.25").next!).next!;
+    expect(run("/vowel e", half).next!.tracks[0]!.fx!.vowel).toEqual({
+      vowel: "e",
+      mix: 0.5,
+    });
+    expect(run("/vowel o u", half).next!.tracks[0]!.fx!.vowel).toEqual({
+      vowel: "o",
+      mix: 0.5,
+      to: "u",
+      morph: 0.5,
+    });
+    expect(run("/vowel to off", half).next!.tracks[0]!.fx!.vowel).toEqual({
+      vowel: "a",
+      mix: 0.5,
+    });
+  });
+
+  test("vowel presets work as one word", () => {
+    expect(run("/vowel ee").next!.tracks[0]!.fx!.vowel!.vowel).toBe("i");
+  });
+
+  test("fx vowel morph without a target is refused like /vowel morph", () => {
+    const result = applyFxCommand(
+      base(),
+      "v",
+      parseFxCommand("fx vowel morph 0.5")!,
+    );
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("set a target first");
+    const withTo = run("/vowel a o").next!;
+    expect(
+      applyFxCommand(withTo, "v", parseFxCommand("fx vowel morph 0.2")!).next!
+        .tracks[0]!.fx!.vowel!.morph,
+    ).toBe(0.2);
   });
 
   test("morph without a target is refused; to alone starts halfway", () => {

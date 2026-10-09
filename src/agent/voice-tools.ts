@@ -71,6 +71,18 @@ export const FORMANT_TOOLS: readonly VoiceTool[] = [
       const trackId = targetTrack(args, context);
       if ("vowel" in args) throw new ToolArgumentError(FORMANT_VOWEL_HINT);
       const commands: FxCommand[] = [];
+      const others = (["shift", "mix", "preset"] as const).filter(
+        (key) => args[key] !== undefined,
+      );
+      if (args.off === true && others.length > 0)
+        throw new ToolArgumentError(
+          `off removes the formant stage; drop ${others.join(", ")} or off`,
+        );
+      // A preset sets shift; an explicit shift overrides it, and the summary says so.
+      const overridden =
+        args.preset !== undefined && args.shift !== undefined
+          ? ` (shift ${String(args.shift)} overrides preset ${String(args.preset)})`
+          : "";
       if (args.off === true)
         commands.push({ type: "fx-off", effect: "formant" });
       else {
@@ -125,7 +137,7 @@ export const FORMANT_TOOLS: readonly VoiceTool[] = [
           },
         ],
         trackId,
-        summary: `${trackId} ${message}`,
+        summary: `${trackId} ${message}${overridden}`,
       };
     },
   },

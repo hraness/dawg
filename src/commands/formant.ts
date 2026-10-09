@@ -7,11 +7,14 @@
  *   formant <-12..12> [mix]       shift the formants (pitch stays): -4 deeper
  *   formant <preset>              deep giant bright tiny
  *   formant shift <st> mix <0..1> spelled out
- *   formant off | reset           remove it | back to 0 st, mix 1
+ *   formant on | off | reset      turn it on | remove it | back to 0 st, mix 1
  *
  *   vowel                         show the vowel filter
- *   vowel <v> [<to> [<morph>]]    a, or a morphing towards o (morph 0.5)
+ *   vowel <v> [<to> [<morph>]]    a, or a morphing towards o (morph 0.5);
+ *                                 keeps the mix you set
+ *   vowel <preset>                ee (also a, o)
  *   vowel to <v> | morph <0..1>   change one part of the morph
+ *   vowel to off                  drop the morph target (keeps vowel and mix)
  *   vowel mix <0..1> | off
  *
  * `/vocal formant …` runs the same `/formant` grammar.
@@ -21,14 +24,16 @@ import type { TrackScore } from "../../core/score.ts";
 import {
   applyFxCommand,
   effectValues,
+  FORMANT_VOWEL_HINT,
   parseFxCommand,
   type FxCommand,
   type FxResult,
 } from "./fx.ts";
 
 export const FORMANT_USAGE =
-  "formant <-12..12> [mix] | <deep|giant|bright|tiny> | off";
-export const VOWEL_USAGE = "vowel <a|e|i|o|u…> [<to> [<morph 0..1>]] | off";
+  "formant <-12..12> [mix] | <deep|giant|bright|tiny> | on | off";
+export const VOWEL_USAGE =
+  "vowel <a|e|i|o|u…> [<to> [<morph 0..1>]] | ee | to off | off";
 
 export type FormantCommand =
   | Readonly<{ type: "show"; effect: "formant" | "vowel" }>
@@ -66,15 +71,20 @@ export function formantArgs(args: string): FormantCommand {
         effect: "formant",
       },
     };
+  // `on` is also a nasal vowel word; as the only word it is the toggle.
+  if (rest.length === 0 && ["on", "true", "yes"].includes(first))
+    return { type: "fx", command: { type: "fx-on", effect: "formant" } };
   if (rest.length === 0 && FX_PRESETS.formant?.[first])
     return {
       type: "fx",
       command: { type: "fx-preset", effect: "formant", preset: first },
     };
   const shift = numberWord(first);
-  if (shift !== undefined && rest.length <= 1) {
-    const mix = rest[0] === undefined ? undefined : numberWord(rest[0]);
-    if (rest.length === 1 && mix === undefined)
+  // `-4`, `-4 0.5` or `-4 mix 0.5`.
+  const mixWords = rest[0] === "mix" ? rest.slice(1) : rest;
+  if (shift !== undefined && mixWords.length <= 1 && rest.length <= 2) {
+    const mix = mixWords[0] === undefined ? undefined : numberWord(mixWords[0]);
+    if (rest.length > 0 && mix === undefined)
       return { type: "error", message: `usage: /${FORMANT_USAGE}` };
     return {
       type: "fx",
@@ -88,9 +98,7 @@ export function formantArgs(args: string): FormantCommand {
   if (isVowel(first) || words.includes("vowel"))
     return {
       type: "error",
-      message:
-        "formant now shifts formants at constant pitch; the vowel filter is `vowel` · /vowel " +
-        (isVowel(first) ? first : "a"),
+      message: `${FORMANT_VOWEL_HINT} · /vowel ${isVowel(first) ? first : "a"}`,
     };
   const generic = parseFxCommand(`fx formant ${words.join(" ")}`);
   if (generic) return { type: "fx", command: generic };
@@ -116,14 +124,29 @@ export function parseVowelCommand(command: string): FormantCommand | undefined {
         effect: "vowel",
       },
     };
+  if (words.length === 2 && first === "to" && second === "off")
+    return {
+      type: "fx",
+      command: { type: "fx-replace", effect: "vowel", values: {} },
+    };
+  if (
+    words.length === 1 &&
+    !isVowel(first!) &&
+    FX_PRESETS.vowel?.[first!] !== undefined
+  )
+    return {
+      type: "fx",
+      command: { type: "fx-preset", effect: "vowel", preset: first! },
+    };
   if (isVowel(first!) && words.length <= 3) {
+    // `mix` is filled from the stored vowel when the command is applied.
     if (second === undefined)
       return {
         type: "fx",
         command: {
           type: "fx-replace",
           effect: "vowel",
-          values: { vowel: first!, mix: 1 },
+          values: { vowel: first! },
         },
       };
     const morph = third === undefined ? 0.5 : numberWord(third);
@@ -134,7 +157,7 @@ export function parseVowelCommand(command: string): FormantCommand | undefined {
       command: {
         type: "fx-replace",
         effect: "vowel",
-        values: { vowel: first!, mix: 1, to: second, morph },
+        values: { vowel: first!, to: second, morph },
       },
     };
   }
@@ -159,21 +182,24 @@ export function applyFormantCommand(
 ): FxResult {
   if (command.type === "error") return { ok: false, message: command.message };
   if (command.type === "fx") {
-    // Keep a stored `to` when `/vowel to` edits only the morph, but never
-    // invent a morph without a target.
+    // `/vowel <v> [...]` replaces the vowel and its morph but keeps the
+    // stored mix; `/vowel to off` keeps vowel and mix and drops the morph.
     const track = score.tracks.find((candidate) => candidate.id === trackId);
     const fx = command.command;
-    if (
-      fx.type === "fx-set" &&
-      fx.effect === "vowel" &&
-      fx.values.morph !== undefined &&
-      fx.values.to === undefined &&
-      effectValues(track, "vowel")?.to === undefined
-    )
-      return {
-        ok: false,
-        message: "vowel · set a target first: /vowel a o 0.5 or /vowel to o",
-      };
+    if (fx.type === "fx-replace" && fx.effect === "vowel") {
+      const current = effectValues(track, "vowel");
+      const { vowel: vowelWord, ...morphPart } = fx.values;
+      if (vowelWord === undefined && !current)
+        return { ok: true, message: "vowel · off" };
+      return applyFxCommand(score, trackId, {
+        ...fx,
+        values: {
+          vowel: vowelWord ?? current?.vowel ?? "a",
+          mix: current?.mix ?? 1,
+          ...morphPart,
+        },
+      });
+    }
     return applyFxCommand(score, trackId, fx);
   }
   const track = score.tracks.find((candidate) => candidate.id === trackId);

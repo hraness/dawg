@@ -99,6 +99,13 @@ const EFFECT_ALIASES: Readonly<Record<string, EffectName>> = Object.freeze({
  * 0.7: `formant` was an alias of the vowel filter; it now shifts formants.
  * A vowel given to it gets this answer instead of a silent change.
  */
+export const FORMANT_FX_USAGE =
+  "formant · shift -12..12 st, mix 0..1 · presets deep giant bright tiny";
+
+/** `/vowel morph`, `fx vowel morph` and set_fx all refuse a morph with no target. */
+export const VOWEL_MORPH_NEEDS_TO =
+  "set a target first: /vowel a o 0.5 or /vowel to o";
+
 export const FORMANT_VOWEL_HINT =
   "formant now shifts formants at constant pitch; the vowel filter is `vowel`";
 
@@ -230,6 +237,10 @@ export function unknownFxMessage(prompt: string): string | undefined {
   const name = words[1]!.toLowerCase();
   if (name === "formant" && formantGotVowel(words.slice(2)))
     return FORMANT_VOWEL_HINT;
+  // A new numeric-first effect: out-of-range values and preset typos get its
+  // ranges and presets instead of the generic unknown-command path.
+  if (name === "formant" && words.length <= 6 && !parseFxCommand(prompt))
+    return FORMANT_FX_USAGE;
   if (parseEffectName(name) || ["ir", "iresponse", "amp"].includes(name))
     return undefined;
   const near = nearestWord(name, [
@@ -358,6 +369,14 @@ export function applyFxCommand(
     };
   else if (command.type === "fx-replace") values = { ...command.values };
   else values = { ...(current ?? effectDefaults(effect)), ...command.values };
+  if (
+    values &&
+    effect === "vowel" &&
+    command.type === "fx-set" &&
+    command.values.morph !== undefined &&
+    values.to === undefined
+  )
+    return { ok: false, message: `vowel · ${VOWEL_MORPH_NEEDS_TO}` };
   if (values && effect === "delay" && values.time === 0) {
     const { time: _time, ...rest } = values;
     values = rest;
