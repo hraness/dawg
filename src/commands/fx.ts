@@ -4,6 +4,7 @@
  *   fx                                   list the focused track's effects
  *   fx <effect> on|off|reset             enable with defaults, remove, reset
  *   fx <effect> preset <name>            load a named preset (FX_PRESETS)
+ *   fx <effect>                          turn it on (same as `on`)
  *   fx <effect> <param> <value>          set one parameter (enables it)
  *   fx <effect> <number>                 set its first parameter (`fx orbit 2`)
  *   fx <effect> <param> <value> <param> <value>…   several at once
@@ -147,6 +148,8 @@ export function parseFxCommand(prompt: string): FxCommand | undefined {
   if (effect === "reverb" && irWord(words[2]) && words.length === 4)
     return irCommand(words[3]!);
   const rest = words.slice(2).map((word) => word.toLowerCase());
+  // `fx wobble`, `fx double`: a bare effect name turns it on.
+  if (rest.length === 0) return { type: "fx-on", effect };
   if (rest.length === 1 && (rest[0] === "on" || rest[0] === "off"))
     return { type: rest[0] === "on" ? "fx-on" : "fx-off", effect };
   if (rest.length === 1 && rest[0] === "reset")
