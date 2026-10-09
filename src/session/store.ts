@@ -1,4 +1,5 @@
-import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
+import { durableWrite } from "../fs/durable.ts";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { acquireSessionLock } from "./lock.ts";
@@ -413,20 +414,10 @@ async function writeAtomic(path: string, contents: string): Promise<void> {
     throw new SessionValidationError(
       `session record exceeds ${MAX_RECORD_BYTES} bytes`,
     );
-  const temporary = `${path}.${process.pid}.tmp`;
   // Durable before it is visible: the data reaches the disk before the
-  // rename publishes it, so a crash never leaves a truncated record behind.
-  const handle = await open(temporary, "w", 0o644);
-  try {
-    await handle.writeFile(`${contents}\n`, "utf8");
-    await handle.sync();
-  } catch (error) {
-    await handle.close().catch(() => undefined);
-    await rm(temporary, { force: true }).catch(() => undefined);
-    throw error;
-  }
-  await handle.close();
-  await rename(temporary, path);
+  // rename publishes it, and the directory is synced so the rename survives
+  // a power loss too.
+  await durableWrite(path, `${contents}\n`, { mkdir: false });
 }
 
 async function readRecord<T>(path: string): Promise<SessionRecord<T>> {

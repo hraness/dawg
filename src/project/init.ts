@@ -15,10 +15,11 @@
  */
 
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseSimpleArgv } from "../argv.ts";
+import { durableWrite } from "../fs/durable.ts";
 
 export const PROJECT_FILE = "dawg.json";
 export const PROJECT_FORMAT = "dawg.project/v1";
@@ -254,13 +255,13 @@ async function readOptional(path: string): Promise<string | undefined> {
   }
 }
 
-/** Temp file + rename so a reader never sees a partial file. */
+/**
+ * Temp file + fsync + rename + directory fsync, so a reader never sees a
+ * partial file and a crash never loses a write `.dawg/sync.json` vouches for.
+ */
 export async function writeAtomic(
   path: string,
   contents: string,
 ): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-  const temporary = `${path}.${process.pid}.tmp`;
-  await writeFile(temporary, contents, "utf8");
-  await rename(temporary, path);
+  await durableWrite(path, contents);
 }
