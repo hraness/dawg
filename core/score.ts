@@ -20,6 +20,11 @@ import {
   type FxLane,
   type TrackFx,
 } from "./fx.ts";
+import {
+  MODAL_INSTRUMENT,
+  normalizeModal,
+  type TrackModal,
+} from "./resonators.ts";
 import { normalizeSynth, type TrackSynth } from "./synth.ts";
 import { normalizeString, type TrackString } from "./strings.ts";
 import {
@@ -402,6 +407,12 @@ export type Track = Readonly<{
    * present; `{}` is the family's defaults.
    */
   keys?: TrackKeys;
+  /**
+   * Optional (0.6): modal percussion (`core/resonators.ts`), a preset plus
+   * overrides. Plays only when `instrument` is `"modal"`; any other
+   * instrument with this field is rejected. Absent keeps today's tone.
+   */
+  modal?: TrackModal;
 }> &
   /**
    * Performance (`core/expression.ts`): glide default, sustain pedal
@@ -742,6 +753,7 @@ export type TrackPatch = Readonly<
     string?: TrackString | null;
     granular?: TrackGranular | null;
     keys?: TrackKeys | null;
+    modal?: TrackModal | null;
   }
 >;
 
@@ -789,6 +801,7 @@ export type TrackInput = Readonly<
     | "string"
     | "granular"
     | "keys"
+    | "modal"
   > &
     Pick<Track, "id"> & {
       filter?: TrackFilter | null;
@@ -810,6 +823,7 @@ export type TrackInput = Readonly<
       string?: TrackString | null;
       granular?: TrackGranular | null;
       keys?: TrackKeys | null;
+      modal?: TrackModal | null;
     }
 >;
 
@@ -1199,9 +1213,19 @@ export function updateTrack(
 ): TrackScore {
   if (!score.tracks.some((track) => track.id === trackId)) return score;
   return score.withTracks(
-    score.tracks.map((track) =>
-      track.id === trackId ? { ...track, ...patch } : track,
-    ),
+    score.tracks.map((track) => {
+      if (track.id !== trackId) return track;
+      const next: Record<string, unknown> = { ...track, ...patch };
+      // A modal field only belongs to a modal track: switching the
+      // instrument away drops it unless the patch sets it too.
+      if (
+        patch.instrument !== undefined &&
+        patch.modal === undefined &&
+        patch.instrument !== MODAL_INSTRUMENT
+      )
+        delete next.modal;
+      return next as Track;
+    }),
   );
 }
 
@@ -1784,6 +1808,12 @@ function normalizeTrack(input: unknown): Track {
   const synth = fxOrThrow(() => normalizeSynth(input.synth));
   const keys = fxOrThrow(() => normalizeKeys(input.keys));
   const wavetable = normalizeWavetable(input.wavetable);
+  const modal = fxOrThrow(() => normalizeModal(input.modal));
+  if (modal && instrument !== MODAL_INSTRUMENT)
+    throw new ScoreValidationError(
+      `track ${id} has modal settings but its instrument is "${instrument}"`,
+      "invalid-track",
+    );
   const sampler = normalizeSampler(input.sampler);
   const rhythm = normalizeRhythm(input.rhythm, id);
   const time = timeOrThrow(
@@ -1876,6 +1906,7 @@ function normalizeTrack(input: unknown): Track {
     ...(string ? { string } : {}),
     ...(granular ? { granular } : {}),
     ...(keys ? { keys } : {}),
+    ...(modal ? { modal } : {}),
   });
 }
 

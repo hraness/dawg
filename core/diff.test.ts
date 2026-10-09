@@ -9,6 +9,7 @@ import {
 import {
   createScore,
   TrackScore,
+  updateTrack,
   type NoteInput,
   type TrackInput,
 } from "./score.ts";
@@ -334,4 +335,25 @@ describe("adoptNoteIds", () => {
     expect(deepEqual([1, [2]], [1, [2]])).toBe(true);
     expect(deepEqual({ a: 1 }, { a: 2 })).toBe(false);
   });
+});
+
+test("a modal change diffs to one updateTrack carrying the modal field", () => {
+  const a = createScore({
+    tempoBpm: 120,
+    bars: 1,
+    tracks: [{ id: "m", name: "m", instrument: "modal", modal: {} }],
+    notes: [],
+  } as never);
+  const b = updateTrack(a, "m", { modal: { preset: "vibes", ring: 2 } });
+  const ops = diffScores(a, b);
+  expect(ops).toEqual([
+    {
+      type: "updateTrack",
+      trackId: "m",
+      patch: { modal: { preset: "vibes", ring: 2 } },
+    },
+  ]);
+  expect(applyScoreOperations(a, ops).tracks[0]!.modal).toEqual(
+    b.tracks[0]!.modal,
+  );
 });

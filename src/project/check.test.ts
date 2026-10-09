@@ -81,4 +81,34 @@ describe("dawg check", () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  test("warns, without failing, on legacy marimba and bare modal tracks", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "dawg-check-"));
+    try {
+      await initProject(dir);
+      const score = createScore({
+        tracks: [
+          { id: "old", name: "old", instrument: "marimba" },
+          {
+            id: "vib",
+            name: "vib",
+            instrument: "modal",
+            modal: { preset: "vibes" },
+          },
+        ],
+        notes: [],
+      } as never);
+      for (const file of printProject(score).files)
+        await writeAtomic(join(dir, file.path), file.text);
+      const out = sink();
+      const err = sink();
+      expect(
+        await runCheckCommand(["check"], dir, out.stream, err.stream),
+      ).toBe(0);
+      expect(err.read()).toContain('warning: track old: instrument "marimba"');
+      expect(err.read()).not.toContain("track vib");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });

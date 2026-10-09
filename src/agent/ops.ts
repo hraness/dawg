@@ -1,5 +1,9 @@
 import { resolveInstrumentWord } from "../../core/instruments.ts";
 import { pitchToMidi } from "../../core/pitch.ts";
+import {
+  instrumentPatchForWord,
+  type TrackModal,
+} from "../../core/resonators.ts";
 import { SCORE_LIMITS } from "../../core/score.ts";
 
 export { pitchToMidi };
@@ -36,6 +40,8 @@ export type AgentOperation =
       patch: {
         instrument?: string;
         string?: { preset: string };
+        /** 0.6: a modal preset word (`instrument vibes`) sets this too. */
+        modal?: TrackModal;
         muted?: boolean;
         volume?: number;
         pan?: number;
@@ -199,9 +205,11 @@ export function parsePrompt(prompt: string): AgentOperation | undefined {
 export function instrumentPatch(word: string): {
   instrument: string;
   string?: { preset: string };
+  modal?: TrackModal;
 } {
   const meaning = resolveInstrumentWord(word);
   if (!meaning) return { instrument: word };
+  if (meaning.field === "modal") return instrumentPatchForWord(word);
   if (meaning.field === "string" && meaning.preset)
     return {
       instrument: meaning.instrument,

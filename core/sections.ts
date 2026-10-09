@@ -14,6 +14,7 @@
 import { DRUM_VOICES, isDrumInstrument } from "./drums.ts";
 import { FX_LANES } from "./fx.ts";
 import { resolveString } from "./strings.ts";
+import { modalSettings } from "./resonators.ts";
 import {
   SCORE_LIMITS,
   ScoreValidationError,
@@ -1314,7 +1315,9 @@ function laneFallback(track: Track, lane: string): number | undefined {
         ? track.synth
         : spec.effect === "keys"
           ? track.keys
-          : (track.fx as Record<string, unknown> | undefined)?.[spec.effect]
+          : spec.effect === "modal"
+            ? track.modal && modalSettings(track.modal)
+            : (track.fx as Record<string, unknown> | undefined)?.[spec.effect]
   ) as Record<string, unknown> | undefined;
   const stored = source?.[spec.param];
   return typeof stored === "number" ? stored : spec.spec.default;

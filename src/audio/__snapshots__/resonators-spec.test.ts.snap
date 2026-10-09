@@ -1,0 +1,12 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`modal spec §9 10. golden hashes for six presets at 22.05 kHz 1`] = `
+{
+  "glock": "e1c5158f38534be6",
+  "gong": "bd9e98d15f38ce67",
+  "marimba": "1428653210c73228",
+  "mbira": "a9d5ad745553f82f",
+  "timpani": "6f70b7f89f6a3cd0",
+  "vibes": "3c69cb9c68a292fc",
+}
+`;

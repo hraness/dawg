@@ -9,6 +9,7 @@
 import type { PerformedNote } from "../../core/expression.ts";
 import type { Track } from "../../core/score.ts";
 import type { TuningTable } from "../../core/tuning.ts";
+import { MODAL_ENGINE } from "./resonators.ts";
 import type { SampleBank } from "./samples.ts";
 import type { RenderContext } from "./wav.ts";
 import { STRING_ENGINE } from "./strings/engine.ts";
@@ -40,8 +41,12 @@ export type InstrumentEngine = Readonly<{
     context: EngineContext,
     bank: SampleBank,
   ): void;
-  /** Ring-out after the last note ends, in seconds (the live length cap). */
-  tailSeconds(track: Track): number;
+  /**
+   * Ring-out after the last note ends, in seconds (the live length cap).
+   * `lowestPitch`, when given, is the track's lowest note, for engines
+   * whose ring depends on pitch.
+   */
+  tailSeconds(track: Track, lowestPitch?: number): number;
   /**
    * The live note-off fade for one key at its sounding `hz`, in seconds
    * (a piano's damper); absent uses `tailSeconds`.
@@ -91,12 +96,16 @@ export function engineFor(
 }
 
 /** A track's engine ring-out in seconds; 0 without an engine. */
-export function engineTailSeconds(track: Track | undefined): number {
+export function engineTailSeconds(
+  track: Track | undefined,
+  lowestPitch?: number,
+): number {
   const engine = engineFor(track);
-  return engine ? Math.max(0, engine.tailSeconds(track!)) : 0;
+  return engine ? Math.max(0, engine.tailSeconds(track!, lowestPitch)) : 0;
 }
 
 // 0.6 lanes register their engines below, one line each.
 registerEngine(STRING_ENGINE);
 registerEngine(GRANULAR_ENGINE);
 for (const engine of KEYS_ENGINES) registerEngine(engine);
+registerEngine(MODAL_ENGINE);

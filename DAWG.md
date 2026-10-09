@@ -893,6 +893,44 @@ instrument: granular({ src: "synth:bell@72", grain: 0.08, shimmer: 0.3 }),
 instrument: granular("hold", { src: "samples/choir.wav", root: "A3" }),
 ```
 
+## Mallets and bells (modal)
+
+`instrument: "modal"` plays struck bars, tines, bells, bowls and drums on a modal resonator bank (`src/audio/dsp/modal.ts`, `src/audio/resonators.ts`): each note excites a table of measured mode ratios through a mallet pulse, each mode rings as a two-pole resonator with its own decay, and the strike point weights the modes the way it does on a real bar (the node at the centre of a marimba bar mutes the second mode). It is dawg's own engine, ported from the reviewed 0.6 prototype.
+
+Presets (a word picks one): `marimba` `vibes` `xylophone` `glock` `celesta` `chimes` `kalimba` `mbira` `steelpan` `bowl` `gong` `timpani`; aliases `vibraphone`, `glockenspiel`, `tubular`, `thumbpiano`, `gongageng`, `steeldrum`, `singingbowl`, `kettledrum` and `tubularbells`. `instrument vibes` (or any preset word) switches the focused track. Plain `marimba` with no `modal` field keeps the pre-0.6 marimba voice byte-identical, so old projects sound the same; use `modal marimba` for the modal one (the `instrument marimba` receipt says so). One-shot renders let a modal tail ring up to 30 s (bowls and gongs ring out instead of stopping at the 8 s loop-fold cap). `dawg check` warns about tracks still on the legacy `marimba`, `modal` or `wind` words.
+
+| Parameter                  | Range              | Meaning                                                                           |
+| -------------------------- | ------------------ | --------------------------------------------------------------------------------- |
+| `mallet`                   | yarn … brass       | `yarn` `cord` `rubber` `plastic` `brass`; sets `hardness`                         |
+| `hardness`                 | 0..1               | mallet hardness: soft rounds off the high modes, hard adds them; velocity adds    |
+| `position`                 | 0..1               | strike point: 0 the end or edge, 0.5 the centre                                   |
+| `ring`                     | 0.05..30 s (log)   | ring time (T60) at middle C                                                       |
+| `tilt`                     | 0..2               | how much faster high modes and high notes decay                                   |
+| `damp` `release`           | 0..1, 0.005..2 s   | damping at note-off (0 rings on, 1 chokes) and the choke time; the pedal lifts it |
+| `motor` `motordepth`       | 0..12 Hz, 0..1     | vibraphone motor tremolo                                                          |
+| `ombak`                    | 0..12 Hz           | paired-instrument beating (gamelan)                                               |
+| `buzz` `click`             | 0..1               | mbira bottle-cap buzz, mallet contact click                                       |
+| `strikebend` `strikedecay` | ±24 st, 0.001..2 s | the pitch glide at the strike (timpani); Strudel `penv`/`pdecay`                  |
+| `gain`                     | 0..2               | level                                                                             |
+
+`hardness`, `position`, `ring`, `tilt`, `damp`, `motordepth`, `buzz`, `click` and `gain` have `modal-<param>` automation lanes, read at each note's onset. Notes honour the track or song tuning, note `cents`, bends, articulation (accents strike harder, staccato damps), the sustain pedal (holds dampers off), velocity curves, humanize and the tempo map. Up to 32 voices ring at once (the oldest is stolen with a short fade); tails ring up to 30 s and stop early once silent. Rendering is seeded and float64 in a fixed order, so renders are byte-identical across runs and workers.
+
+```ts
+instrument: modal("vibes", { motor: 4, hardness: 0.6 }),
+instrument: modal("marimba", { mallet: "rubber", ring: 2 }),
+```
+
+| Command                                  | Does                                                       |
+| ---------------------------------------- | ---------------------------------------------------------- |
+| `modal` · `modal presets` (`modal list`) | the focused track's preset and overrides · every preset    |
+| `modal <preset>` · `modal preset <name>` | make the focused track a modal track with that preset      |
+| `modal mallet <name>`                    | pick a mallet (sets hardness; the later of the two wins)   |
+| `modal <param> <value> …`                | set parameters (`modal ring 3 hardness 0.7`); `off` clears |
+| `modal reset`                            | clear overrides, keep the preset                           |
+| `modal off`                              | leave the engine for the legacy marimba voice              |
+
+The menu's **Sound › browse sounds › Mallets and bells** lists the presets, and **Sound › Parameters** shows the preset, mallet, the simple parameters and an **advanced** group on a modal track. The agent's `set_modal {trackId, preset?, mallet?, params?, reset?}` tool takes the same names.
+
 ## Rhythm (Euclidean rows)
 
 A drum part can be stored as generators instead of notes: each row owns one voice of a `kit` or oneshot `sampler` track and dawg expands it into ordinary notes, so rendering, diffs and sync are unchanged while you, the agent and `track.ts` edit four numbers instead of sixteen hits. The model follows the Torso T-1's Shape and Groove sections; the Euclidean patterns and rotation match Strudel's `euclid`/`euclidRot` exactly (`E(3,8)` is `x..x..x.`, a positive rotate moves the pattern later).

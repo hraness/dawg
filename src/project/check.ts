@@ -8,6 +8,7 @@ import {
   formatDiagnostic,
   type Diagnostic,
 } from "../../core/sdk/eval.ts";
+import { legacyResonatorWarnings } from "../../core/resonators.ts";
 import { isProject } from "./init.ts";
 import { typecheckProject } from "./typecheck.ts";
 
@@ -23,6 +24,8 @@ export type CheckReport = Readonly<{
   evalMs: number;
   tracks: number;
   notes: number;
+  /** Advice that does not fail the check (0.6: legacy instrument words). */
+  warnings: readonly string[];
 }>;
 
 /** Runs both checks on `project`; never throws for project problems. */
@@ -45,6 +48,9 @@ export async function checkProject(
     evalMs: evaluated.ms,
     tracks: evaluated.ok ? evaluated.score.tracks.length : 0,
     notes: evaluated.ok ? evaluated.score.notes.length : 0,
+    warnings: Object.freeze(
+      evaluated.ok ? legacyResonatorWarnings(evaluated.score.tracks) : [],
+    ),
   });
 }
 
@@ -65,6 +71,7 @@ export async function runCheckCommand(
   const report = await checkProject(project, deps);
   for (const diagnostic of report.diagnostics)
     stderr.write(`${formatDiagnostic(diagnostic)}\n`);
+  for (const warning of report.warnings) stderr.write(`warning: ${warning}\n`);
   if (report.ok) {
     stdout.write(
       `ok · ${report.tracks} track${report.tracks === 1 ? "" : "s"}, ${report.notes} note${

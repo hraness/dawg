@@ -43,6 +43,7 @@ const EFFECTS = [
   "string",
   "granular",
   "keys",
+  "modal",
 ] as const;
 const LANES = [
   "volumeAutomation",
