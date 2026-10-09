@@ -1371,8 +1371,15 @@ export function composeFrame(
 // ---------------------------------------------------------------------------
 // Mutable app
 
+/** The longest a lagging terminal waits between frames. */
+export const MAX_BACKOFF_MS = 250;
+
 export interface TerminalIO {
-  write(data: string): void;
+  /**
+   * Writes a frame. `false` means the terminal is not keeping up (the
+   * stream's buffer is full): frames back off until a write is accepted.
+   */
+  write(data: string): void | boolean;
   columns(): number;
   rows(): number;
 }
@@ -1427,6 +1434,11 @@ export class TuiApp {
   private lastFrameAt = Number.NEGATIVE_INFINITY;
   /** Minimum interval between frames (~30 fps). */
   frameIntervalMs = 33;
+  /**
+   * Extra spacing while the terminal lags: doubles on each refused write up
+   * to `MAX_BACKOFF_MS`, resets on the first accepted one.
+   */
+  backoffMs = 0;
   /** Session-only delight; `heardLoop` comes from the session's metadata. */
   readonly delight = new Delight();
   /** The song wrapped for the first time: the host records it in meta. */
@@ -1483,7 +1495,10 @@ export class TuiApp {
    */
   render(view: AppView, options: { force?: boolean } = {}): string {
     const now = this.clock();
-    if (!options.force && now - this.lastFrameAt < this.frameIntervalMs)
+    if (
+      !options.force &&
+      now - this.lastFrameAt < this.frameIntervalMs + this.backoffMs
+    )
       return "";
     this.lastFrameAt = now;
     this.watchFirstLoop(view, now);
@@ -1495,7 +1510,16 @@ export class TuiApp {
     );
     this.lastFrame = frame;
     const out = this.writer.frame(frame.buffer, frame.cursor);
-    if (out) this.io.write(out);
+    if (out) {
+      const accepted = this.io.write(out);
+      this.backoffMs =
+        accepted === false
+          ? Math.min(
+              MAX_BACKOFF_MS,
+              Math.max(this.frameIntervalMs, this.backoffMs * 2),
+            )
+          : 0;
+    }
     return out;
   }
 

@@ -107,6 +107,32 @@ export class CellBuffer {
     return rows;
   }
 
+  /**
+   * The columns `[from, to)` of row `y` that differ from `other`, widened so
+   * neither edge splits a wide character, or undefined when the row matches.
+   */
+  rowSpan(
+    other: CellBuffer,
+    y: number,
+  ): Readonly<{ from: number; to: number }> | undefined {
+    if (other.width !== this.width) return { from: 0, to: this.width };
+    const offset = y * this.width;
+    const differs = (x: number) => {
+      const left = this.cells[offset + x]!;
+      const right = other.cells[offset + x]!;
+      return left.ch !== right.ch || !sameStyle(left.style, right.style);
+    };
+    let from = 0;
+    while (from < this.width && !differs(from)) from += 1;
+    if (from === this.width) return undefined;
+    let to = this.width;
+    while (to > from && !differs(to - 1)) to -= 1;
+    // A continuation cell ("") belongs to the wide character on its left.
+    while (from > 0 && this.cells[offset + from]!.ch === "") from -= 1;
+    while (to < this.width && this.cells[offset + to]!.ch === "") to += 1;
+    return { from, to };
+  }
+
   rowEquals(other: CellBuffer, y: number): boolean {
     if (other.width !== this.width) return false;
     const offset = y * this.width;
@@ -160,10 +186,12 @@ export function encodeRow(
   buffer: CellBuffer,
   y: number,
   capabilities: TerminalCapabilities,
+  from = 0,
+  to = buffer.width,
 ): string {
   let out = "";
   let current: Style | undefined | null = null;
-  for (let x = 0; x < buffer.width; x += 1) {
+  for (let x = from; x < to; x += 1) {
     const cell = buffer.get(x, y)!;
     if (cell.ch === "") continue;
     if (current === null || !sameStyle(current, cell.style)) {
@@ -193,9 +221,10 @@ export interface CursorPosition {
 }
 
 /**
- * Differential writer: emits cursor-addressed rewrites for changed rows only.
- * Output is wrapped in synchronized-update markers, which capable terminals
- * use to avoid tearing and others ignore.
+ * Differential writer: emits one cursor-addressed rewrite per changed row,
+ * covering only that row's changed run of cells. Each frame is one string
+ * wrapped in synchronized-update markers, which capable terminals use to
+ * avoid tearing and others ignore.
  */
 export class ScreenWriter {
   private previous: CellBuffer | undefined;
@@ -227,8 +256,16 @@ export class ScreenWriter {
     let rows = 0;
     if (full) body += "\u001b[0m\u001b[2J";
     for (let y = 0; y < buffer.height; y += 1) {
-      if (!full && this.previous!.rowEquals(buffer, y)) continue;
-      body += `\u001b[${y + 1};1H${encodeRow(buffer, y, this.capabilities)}`;
+      if (full) {
+        body += `\u001b[${y + 1};1H${encodeRow(buffer, y, this.capabilities)}`;
+        rows += 1;
+        continue;
+      }
+      // Only the changed run of cells: a moving playhead or a ticking meter
+      // rewrites a few columns, not the whole row.
+      const span = buffer.rowSpan(this.previous!, y);
+      if (!span) continue;
+      body += `\u001b[${y + 1};${span.from + 1}H${encodeRow(buffer, y, this.capabilities, span.from, span.to)}`;
       rows += 1;
     }
     const cursorKey = cursor ? `${cursor.x},${cursor.y}` : "hidden";
