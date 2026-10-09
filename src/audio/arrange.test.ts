@@ -12,8 +12,15 @@ import {
   renderArranged,
   renderArrangedPcm,
   scoreBeatAt,
+  sectionCues,
 } from "./arrange.ts";
-import { loopFrames, renderScorePcm, StemRenderer } from "./wav.ts";
+import {
+  encodeWav,
+  loopFrames,
+  renderScorePcm,
+  StemRenderer,
+  withWavCues,
+} from "./wav.ts";
 
 function song(bars = 8, tempoBpm = 120): TrackScore {
   const notes = Array.from({ length: bars }, (_, bar) => ({
@@ -533,5 +540,45 @@ describe("sections meet the 0.5 tempo map, track time and master", () => {
     expect(() =>
       song(8).withTime({ meter: [{ bar: 2, beatsPerBar: 3 }] }),
     ).toThrow(/sections need one meter/);
+  });
+});
+
+describe("section cues in WAV exports", () => {
+  test("cues follow the form in playback order", () => {
+    const score = song(8, 120);
+    const rate = 1000;
+    expect(sectionCues(score, rate)).toEqual([
+      { frame: 0, label: "verse" },
+      { frame: 8000, label: "chorus" },
+    ]);
+    const formed = withForm(score, parseForm(score, "chorus verse chorus"));
+    expect(sectionCues(formed, rate).map((cue) => cue.frame)).toEqual([
+      0, 8000, 16000,
+    ]);
+    expect(sectionCues(createScore({}), rate)).toEqual([]);
+  });
+
+  test("withWavCues writes cue and adtl label chunks", () => {
+    const plain = encodeWav(new Int16Array(4), 1000, 1);
+    expect(withWavCues(plain, [])).toBe(plain);
+    const wav = withWavCues(plain, [
+      { frame: 0, label: "intro" },
+      { frame: 2, label: "drop" },
+    ]);
+    const view = new DataView(wav.buffer);
+    const tag = (at: number) =>
+      String.fromCharCode(...wav.subarray(at, at + 4));
+    expect(view.getUint32(4, true)).toBe(wav.byteLength - 8);
+    const chunks: string[] = [];
+    for (let at = 12; at < wav.byteLength;) {
+      chunks.push(tag(at));
+      const size = view.getUint32(at + 4, true);
+      at += 8 + size + (size % 2);
+    }
+    expect(chunks).toEqual(["fmt ", "data", "cue ", "LIST"]);
+    const text = new TextDecoder().decode(wav);
+    expect(text).toContain("adtl");
+    expect(text).toContain("intro");
+    expect(text).toContain("drop");
   });
 });

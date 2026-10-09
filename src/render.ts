@@ -11,7 +11,7 @@ import { resolve } from "node:path";
 import { scoreFromJSON, type TrackScore } from "../core/score.ts";
 import { decodeLoop } from "../core/loop.ts";
 import { scoreToMidi } from "../core/midi.ts";
-import { RENDER_CHANNELS, encodeWav } from "./audio/wav.ts";
+import { RENDER_CHANNELS, encodeWav, withWavCues } from "./audio/wav.ts";
 import { exportSampleRate, measureRendered } from "./audio/measure.ts";
 import {
   applyMasterCommand,
@@ -20,7 +20,11 @@ import {
   parseMasterCommand,
 } from "./commands/master.ts";
 import { bakeTrackTime, findSection, sectionScore } from "../core/sections.ts";
-import { exportScore, renderArrangedPcm } from "./audio/arrange.ts";
+import {
+  exportScore,
+  renderArrangedPcm,
+  sectionCues,
+} from "./audio/arrange.ts";
 import { SampleLibrary, hasSamplerTracks } from "./audio/samples.ts";
 import {
   PackStore,
@@ -170,6 +174,9 @@ export async function runRenderCommand(
   }
   const audio = renderArrangedPcm(score, { samples, sampleRate });
   let wav = encodeWav(audio.pcm, audio.sampleRate, RENDER_CHANNELS);
+  // Section starts as cue points (a --section render is one section).
+  if (only === undefined)
+    wav = withWavCues(wav, sectionCues(score, audio.sampleRate));
   // Pack sounds: name the packs (and CC-BY attributions) in the WAV's INFO
   // comment and on stdout; CREDITS.md in a project keeps the attributions.
   const refs = score.tracks.flatMap((track) =>

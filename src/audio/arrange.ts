@@ -31,8 +31,10 @@ import {
   sliceSongTime,
 } from "../../core/sections.ts";
 import {
+  barStartTick,
   bpmAtTick,
   loopSecondsOf,
+  loopTicksOf,
   secondsAtTick,
   type TimeScore,
 } from "../../core/tempo.ts";
@@ -44,6 +46,7 @@ import {
   masterSummedPcm,
   type RenderOptions,
   type RenderedAudio,
+  type WavCue,
 } from "./wav.ts";
 
 /** What one default render pass holds before the renderer cuts it. */
@@ -64,6 +67,34 @@ export function exportScore(score: TrackScore): TrackScore {
   // A form past the score's bar limit throws here; renderArranged renders
   // such forms window by window instead, so it never needs this.
   return flattenForm(bakeTrackTime(score));
+}
+
+/**
+ * Section starts as WAV cues, in playback order (the form's passes when it
+ * has one). Empty without sections, or when the form is too long to flatten.
+ */
+export function sectionCues(
+  score: TrackScore,
+  sampleRate: number,
+): readonly WavCue[] {
+  if (score.sections.length === 0) return [];
+  let flat: TrackScore;
+  try {
+    flat = exportScore(score);
+  } catch {
+    return [];
+  }
+  const end = loopTicksOf(flat);
+  return flat.sections
+    .map((section) => ({
+      tick: barStartTick(flat, section.startBar),
+      label: section.name,
+    }))
+    .filter((cue) => cue.tick < end)
+    .map((cue) => ({
+      frame: Math.round(secondsAtTick(flat, cue.tick) * sampleRate),
+      label: cue.label,
+    }));
 }
 
 /** The section playback loops, when `loopSection` names one. */
