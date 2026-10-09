@@ -5,18 +5,23 @@ import { createScore, type TrackScore } from "../../core/score.ts";
 import { generateStyle, styleScore } from "../../core/styles/generate.ts";
 import { validateAgentOperation } from "./planner.ts";
 import { STYLE_TOOLS } from "./style-tools.ts";
-import { AGENT_TOOLS, type ActionContext, type ToolContext } from "./tools.ts";
+import {
+  AGENT_TOOLS,
+  type ActionContext,
+  type AgentTool,
+  type ToolContext,
+} from "./tools.ts";
 
 const tool = (name: string) =>
-  STYLE_TOOLS.find((entry) => entry.name === name)!;
+  STYLE_TOOLS.find((entry) => entry.name === name)! as AgentTool;
 
 function context(score: TrackScore): ToolContext {
   return {
     score,
-    focusedTrackId: undefined,
+    focusedTrackId: "lead",
     revision: 1,
     newNoteId: (trackId, index) => `${trackId}-${index}`,
-  } as ToolContext;
+  };
 }
 
 async function read(name: string, args: Record<string, unknown>) {

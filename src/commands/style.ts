@@ -122,24 +122,25 @@ export function parseStyleCommand(prompt: string): StyleCommand | undefined {
   if (verb === "again" || verb === "next" || verb === "reroll")
     return { type: "style-again" };
   if (verb === "blend" || verb === "mix") {
-    const tail = tailNumbers(rest.slice(1));
-    let parts = tail.rest;
+    // Ids are single words (`deep-house`); then [weight] [bars] [seed].
+    const [a, b, ...numbers] = rest.slice(1);
+    const usage = bad(
+      "style blend <a> <b> [weight 0..1] [bars] [seed] · style blend bebop bossa-nova 0.3",
+    );
+    if (!a || !b || numbers.length > 3) return usage;
     let weight = 0.5;
-    const last = parts[parts.length - 1];
-    if (parts.length >= 3 && last !== undefined && WEIGHT.test(last)) {
-      weight = weightOf(last);
-      parts = parts.slice(0, -1);
+    if (numbers[0] !== undefined) {
+      if (!WEIGHT.test(numbers[0])) return usage;
+      weight = weightOf(numbers[0]);
+      if (!(weight >= 0 && weight <= 1)) return usage;
     }
-    if (parts.length !== 2 || !(weight >= 0 && weight <= 1))
-      return bad(
-        "style blend <a> <b> [weight 0..1] [bars] [seed] · style blend bebop bossa-nova 0.3",
-      );
+    if (numbers.slice(1).some((word) => !INTEGER.test(word))) return usage;
     return {
       type: "style-apply",
-      id: parts[0]!,
-      blend: { id: parts[1]!, weight },
-      ...(tail.bars !== undefined ? { bars: tail.bars } : {}),
-      ...(tail.seed !== undefined ? { seed: tail.seed } : {}),
+      id: a,
+      blend: { id: b, weight },
+      ...(numbers[1] !== undefined ? { bars: Number(numbers[1]) } : {}),
+      ...(numbers[2] !== undefined ? { seed: Number(numbers[2]) } : {}),
     };
   }
   const tail = tailNumbers(rest);

@@ -59,6 +59,12 @@ describe("style command parsing", () => {
     expect(parseStyleCommand("style blend bebop deep-house 30%")).toMatchObject(
       { blend: { weight: 0.3 } },
     );
+    expect(parseStyleCommand("style blend bebop deep-house 1 4")).toMatchObject(
+      { blend: { weight: 1 }, bars: 4 },
+    );
+    expect(parseStyleCommand("style blend bebop deep-house 2")?.type).toBe(
+      "style-bad",
+    );
     expect(parseStyleCommand("style blend bebop")?.type).toBe("style-bad");
     expect(parseStyleCommand("style search")?.type).toBe("style-bad");
   });
