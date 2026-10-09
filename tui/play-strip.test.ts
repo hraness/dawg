@@ -99,6 +99,22 @@ describe("play header", () => {
     ).toBe("PLAY MODE  ▶ 120 BPM · drums · rev 1  drums");
   });
 
+  test("the song header shortens so a status still fits", () => {
+    const busy = {
+      ...view,
+      context: "⏸ 120 BPM · bass · rev 0",
+      armed: false,
+      click: false,
+      sustain: false,
+      countIn: undefined,
+      status: "velocity 84 · more detail",
+    };
+    const text = row(100, (b) => paintPlayHeader(b, 0, 100, busy, theme, true));
+    expect(text).toContain("velocity 84");
+    const wide = row(160, (b) => paintPlayHeader(b, 0, 160, busy, theme, true));
+    expect(wide).toContain("⏸ 120 BPM · bass · rev 0");
+  });
+
   test("a wide row shows the beat, the whole status and the hint", () => {
     const text = row(160, (b) => paintPlayHeader(b, 0, 160, view, theme, true));
     expect(text).toContain(" PLAY MODE ");

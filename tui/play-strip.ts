@@ -99,9 +99,10 @@ export function paintPlayHeader(
     x += buffer.text(x, y, "  ", panel);
   };
   put(" PLAY MODE ", roles.pillSteer);
-  if (view.context) put(view.context, roles.muted);
+  const context = fitContext(view, width, unicode);
+  if (context) put(context, roles.muted);
   // A kit names its range by the track already in the context.
-  if (!view.context || view.range !== "drums")
+  if (!context.includes(" · ") || view.range !== "drums")
     put(view.range, { ...roles.text, bold: true });
   if (view.armed)
     put(
@@ -148,6 +149,31 @@ export function paintPlayHeader(
     if (text) x += buffer.text(x, y, text, onBackground(roles.muted, panel));
   }
   if (right > x) buffer.text(right, y, hint, onBackground(roles.faint, panel));
+}
+
+/**
+ * The compressed song header, shortened so a status still fits: whole
+ * (`▶ 120 BPM · bass · rev 1`), then its first clause, then nothing.
+ */
+function fitContext(
+  view: PlayHeaderView,
+  width: number,
+  unicode: boolean,
+): string {
+  if (!view.context) return "";
+  const status = view.status?.split(" · ")[0] ?? "";
+  if (!status) return view.context;
+  const beat = view.beat ? view.beat.of + 2 : 0;
+  const rest =
+    displayWidth(playHeaderText({ ...view, context: undefined }, unicode)) -
+    displayWidth(view.status ?? "") +
+    displayWidth(status) +
+    beat;
+  // Badge padding, the right-hand hint and the gaps between parts.
+  const room = width - 2 - displayWidth("? keys · esc leave") - 4 - rest;
+  for (const candidate of [view.context, view.context.split(" · ")[0]!])
+    if (displayWidth(candidate) + 2 <= room) return candidate;
+  return "";
 }
 
 /** Chord mode's number row: `1 dim  2 min … 9 block  b bass off  n next`. */
