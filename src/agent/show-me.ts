@@ -244,14 +244,14 @@ export function gestureFor(
 export function menuPathFor(command: string): string | undefined {
   const words = command.replace(/^\//, "").toLowerCase().split(/\s+/);
   if (words[0] === "volume" || words[0] === "pan")
-    return `ctrl-k › Mix › ${words[0]}`;
+    return `ctrl-k › Mix & automation › ${words[0]}`;
   if (words[0] === "fx" && words[1]) return `ctrl-k › Effects › ${words[1]}`;
   if (words[0] === "synth") return "ctrl-k › Sound";
   if (words[0] === "tempo" || words[0] === "bpm")
-    return "ctrl-k › Song › tempo";
+    return "ctrl-k › Project › tempo";
   if (words[0] === "euclid") return "ctrl-k › Rhythm";
-  if (words[0] === "master") return "ctrl-k › Master";
-  if (words[0] === "section" || words[0] === "form") return "ctrl-k › Song";
+  if (words[0] === "master") return "ctrl-k › Mix & automation › master";
+  if (words[0] === "section" || words[0] === "form") return "ctrl-k › Arrange";
   return undefined;
 }
 

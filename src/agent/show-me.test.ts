@@ -76,7 +76,7 @@ describe("gestures", () => {
     expect(gesture.value).toBe(0.4);
     expect(gesture.caption).toContain("fx reverb mix");
     expect(menuPathFor("fx reverb mix 0.4")).toBe("ctrl-k › Effects › reverb");
-    expect(menuPathFor("volume 0.7")).toBe("ctrl-k › Mix › volume");
+    expect(menuPathFor("volume 0.7")).toBe("ctrl-k › Mix & automation › volume");
   });
 
   test("a note names its play-mode key and octave keys", () => {
