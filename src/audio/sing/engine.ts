@@ -65,6 +65,18 @@ export const MAX_SING_LINES = 16;
 const SLUR_SECONDS = 0.03;
 /** A throat phrase ends at a gap longer than this, seconds. */
 const THROAT_GAP_SECONDS = 0.25;
+/**
+ * Level the overtone filter adds at its centre, per unit of `overtone`.
+ * With the F2 resonance on the same harmonic this keeps the selected
+ * overtone 20 dB and more over its neighbours while the drone fundamental
+ * stays audible (about 20-25 dB under the whistle, as in recordings)
+ * instead of 40 dB under it.
+ */
+const OVERTONE_GAIN = 10;
+/** How much weaker every other pulse is at `sub` 1 (kargyraa period doubling). */
+const SUB_DEPTH = 0.95;
+/** A melody note this far outside the harmonic band still counts as in it. */
+const BAND_SLACK_OCTAVES = 1 / 24;
 /** Overtone glide, seconds (time constant). */
 const OVERTONE_GLIDE_SECONDS = 0.04;
 /** Steal fade, seconds. */
@@ -178,7 +190,7 @@ export class VoiceCore {
         this.odd = !this.odd;
       }
       // kargyraa: alternate pulses weaker (period doubling, f0/2 appears)
-      const alt = s.sub > 0 && this.odd ? 1 - 0.7 * s.sub : 1;
+      const alt = s.sub > 0 && this.odd ? 1 - SUB_DEPTH * s.sub : 1;
       src = glottal(this.phase, rd, inc) * this.amp * alt;
     }
     // Unit-variance uniform noise: as white as a Gaussian for aspiration
@@ -205,7 +217,7 @@ export class VoiceCore {
   ): void {
     // With `sub`, every other pulse is weaker by `a`: a period of 2/f0 whose
     // lines at k f0/2 carry (1+a)/2 (even k) and (1-a)/2 (odd k).
-    const a = s.sub > 0 ? 1 - 0.7 * s.sub : 1;
+    const a = s.sub > 0 ? 1 - SUB_DEPTH * s.sub : 1;
     const step = a < 1 ? 0.5 : 1;
     const top = Math.min(
       NORM_HARMONICS,
@@ -259,8 +271,8 @@ export class VoiceCore {
     if (s.overtone > 0) {
       const [ar, ai] = this.ot1.response(cw, sw, c2w, s2w);
       const [br, bi] = this.ot2.response(cw, sw, c2w, s2w);
-      addRe += (ar * br - ai * bi) * s.overtone * 40;
-      addIm += (ar * bi + ai * br) * s.overtone * 40;
+      addRe += (ar * br - ai * bi) * s.overtone * OVERTONE_GAIN;
+      addIm += (ar * bi + ai * br) * s.overtone * OVERTONE_GAIN;
     }
     const yr = re * addRe - im * addIm;
     const yi = re * addIm + im * addRe;
@@ -271,7 +283,7 @@ export class VoiceCore {
     let y = this.tract.process(x);
     if (s.ring > 0) y += this.ringBand.process(y) * s.ring * 3;
     if (s.overtone > 0)
-      y += this.ot2.process(this.ot1.process(y)) * s.overtone * 40;
+      y += this.ot2.process(this.ot1.process(y)) * s.overtone * OVERTONE_GAIN;
     if (this.level < 0) return y;
     this.level +=
       (this.levelTarget - this.level) *
@@ -316,7 +328,14 @@ export function overtoneFor(
   let bestShift = Infinity;
   for (let o = -10; o <= 10; o += 1) {
     const y = x + o;
-    const dist = y < bandLo ? bandLo - y : y > bandHi ? y - bandHi : 0;
+    // Half a semitone of slack: A5 over a D3 drone in 12-EDO sits 2 cents
+    // under harmonic 6 and must sing it, not jump an octave to 12.
+    const dist =
+      y < bandLo - BAND_SLACK_OCTAVES
+        ? bandLo - y
+        : y > bandHi + BAND_SLACK_OCTAVES
+          ? y - bandHi
+          : 0;
     if (
       dist < bestDist - 1e-9 ||
       (Math.abs(dist - bestDist) < 1e-9 && Math.abs(o) < bestShift)

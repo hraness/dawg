@@ -395,7 +395,7 @@ export const SING_PRESETS: Readonly<Record<SingPreset, SingPresetEntry>> =
         vowel: "a",
         drone: 45,
         sub: 0.8,
-        overtone: 0.6,
+        overtone: 0.25,
         harmonics: pair(5, 9),
         vibmod: 0,
         bright: 0.6,
