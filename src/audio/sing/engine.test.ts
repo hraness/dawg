@@ -508,3 +508,23 @@ describe("sing performance", () => {
     expect(rms(half, ...late)).toBeLessThan(rms(full, ...late) * 0.5);
   });
 });
+
+describe("sing with the 0.7 formant effect", () => {
+  test("fx formant reshapes a sung choir after the engine, deterministically", () => {
+    const pcm = (s: TrackScore) =>
+      Int16Array.from(renderScorePcm(s, { sampleRate: 22_050 }).pcm);
+    const notes = [{ pitch: 57 }, { pitch: 60, start: 2 }];
+    const plain = pcm(score({ preset: "choir" }, notes));
+    const deep = (shift: number) =>
+      pcm(
+        score({ preset: "choir" }, notes, {
+          track: { fx: { formant: { shift, mix: 1 } } },
+        }),
+      );
+    const a = deep(-4);
+    expect(a.length).toBe(plain.length);
+    expect(a.some((value, index) => value !== plain[index])).toBe(true);
+    expect(a.some((value) => value !== 0)).toBe(true);
+    expect(hash(new Float64Array(deep(-4)))).toBe(hash(new Float64Array(a)));
+  });
+});
