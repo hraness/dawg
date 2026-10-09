@@ -12,6 +12,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createScore, type TrackScore } from "../../core/score.ts";
 import {
+  AgentTimeoutError,
+  classifyAgentError,
   describeAgentEvent,
   runAgentTurn,
   StaleRevisionError,
@@ -1053,5 +1055,29 @@ describe("media tools in the loop", () => {
           event.diagnostic === "media tools are unavailable in this host",
       ),
     ).toBe(true);
+  });
+});
+
+describe("classifyAgentError", () => {
+  test("a transport TimeoutError is a provider failure, the turn budget stays a timeout", () => {
+    const live = new AbortController().signal;
+    expect(
+      classifyAgentError(
+        new DOMException("The operation timed out.", "TimeoutError"),
+        live,
+        undefined,
+      ),
+    ).toEqual({
+      code: "provider",
+      message: "model request timed out: The operation timed out.",
+    });
+    expect(
+      classifyAgentError(new AgentTimeoutError(90_000), live, undefined).code,
+    ).toBe("timeout");
+    const user = new AbortController();
+    user.abort();
+    expect(classifyAgentError(new TypeError("x"), live, user.signal).code).toBe(
+      "aborted",
+    );
   });
 });

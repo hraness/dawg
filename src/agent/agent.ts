@@ -859,6 +859,13 @@ export function classifyAgentError(
     return { code: "provider", message: errorMessage(error) };
   if (error instanceof Error && error.name === "AbortError")
     return { code: "aborted", message: "cancelled" };
+  // A transport timeout (AbortSignal.timeout's DOMException) that escaped the
+  // client is still the provider's failure, not an internal one.
+  if (error instanceof Error && error.name === "TimeoutError")
+    return {
+      code: "provider",
+      message: `model request timed out: ${errorMessage(error)}`,
+    };
   return { code: "internal", message: errorMessage(error) };
 }
 

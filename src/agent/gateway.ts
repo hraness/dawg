@@ -1,4 +1,4 @@
-import { readSseData } from "./sse.ts";
+import { readSseData, SseBudgetError } from "./sse.ts";
 
 /**
  * The two original model aliases. A model is either one of these or an exact
@@ -262,10 +262,26 @@ function createApiClient(
       let response: Response | undefined;
       for (let attempt = 0; ; attempt += 1) {
         if (signal?.aborted) throw abortError(signal);
-        const headerSignal = AbortSignal.any([
-          ...(signal === undefined ? [] : [signal]),
-          AbortSignal.timeout(headerTimeoutMs),
-        ]);
+        // The header budget bounds only the wait for response headers. A
+        // fetch signal also governs the body, so the timer is cleared as soon
+        // as headers arrive; after that only the caller's signal (the user or
+        // the turn budget) can cut the stream short.
+        const headerController = new AbortController();
+        const headerTimer = setTimeout(
+          () =>
+            headerController.abort(
+              new DOMException(
+                `${name} did not respond within ${headerTimeoutMs} ms`,
+                "TimeoutError",
+              ),
+            ),
+          headerTimeoutMs,
+        );
+        const headerSignal = headerController.signal;
+        const requestSignal =
+          signal === undefined
+            ? headerSignal
+            : AbortSignal.any([signal, headerSignal]);
         const init: RequestInit = {
           method: "POST",
           headers: {
@@ -275,11 +291,16 @@ function createApiClient(
             ...(provider === "openrouter" ? OPENROUTER_HEADERS : {}),
           },
           body: encoded,
-          signal: headerSignal,
+          signal: requestSignal,
         };
         let reason: string;
         try {
-          const candidate = await fetcher(`${baseUrl}/chat/completions`, init);
+          let candidate: Response;
+          try {
+            candidate = await fetcher(`${baseUrl}/chat/completions`, init);
+          } finally {
+            clearTimeout(headerTimer);
+          }
           if (candidate.ok) {
             response = candidate;
             break;
@@ -313,14 +334,33 @@ function createApiClient(
         maxBytes: request.maxResponseBytes,
       };
       if (signal !== undefined) streamOptions.signal = signal;
-      for await (const data of readSseData(response.body, streamOptions)) {
-        let chunk: unknown;
-        try {
-          chunk = JSON.parse(data);
-        } catch {
-          throw new GatewayError(`${name} sent a malformed stream chunk`);
+      try {
+        for await (const data of readSseData(response.body, streamOptions)) {
+          let chunk: unknown;
+          try {
+            chunk = JSON.parse(data);
+          } catch {
+            throw new GatewayError(`${name} sent a malformed stream chunk`);
+          }
+          yield* normalizeChunk(chunk, redact, name);
         }
-        yield* normalizeChunk(chunk, redact, name);
+      } catch (error) {
+        // A failure while the body streams (a reset connection, a transport
+        // timeout) is a provider failure, not an internal one. Budget errors
+        // and the caller's own abort keep their identity.
+        if (
+          error instanceof GatewayError ||
+          error instanceof SseBudgetError ||
+          signal?.aborted
+        )
+          throw error;
+        const timedOut =
+          error instanceof Error && error.name === "TimeoutError";
+        throw new GatewayError(
+          timedOut
+            ? `${name} stream timed out`
+            : `${name} stream failed: ${redact(error instanceof Error ? error.message : String(error)).slice(0, 300)}`,
+        );
       }
     },
   };
