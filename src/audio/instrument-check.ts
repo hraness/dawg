@@ -42,6 +42,24 @@ function knownWords(): readonly string[] {
   ];
 }
 
+/**
+ * `instrument list` rows: every exact instrument word, sorted, wrapped to
+ * `width` columns.
+ */
+export function instrumentListLines(width = 72): string[] {
+  const words = [...new Set(["sine", ...knownWords()])].sort();
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    if (line && line.length + 1 + word.length > width) {
+      lines.push(line);
+      line = word;
+    } else line = line ? `${line} ${word}` : word;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
 /** Whether `instrument` (on `track`) renders as the plain sine fallback. */
 export function playsPlainSine(
   instrument: string,

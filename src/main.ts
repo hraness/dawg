@@ -2,12 +2,14 @@
 import { isGuideInstrument, vocalChainPatch } from "../core/clips.ts";
 import { isSingWord } from "../core/sing.ts";
 import { commandParses } from "./commands/parses.ts";
+import { noteName as midiNoteName } from "./media/notes.ts";
 import {
   EVERYDAY_VERBS,
   EXPORT_USAGE,
   FREE_TEXT_HINTS,
   WINDOW_VERBS,
   NO_AGENT,
+  RANGES,
   canonicalWindowForm,
   friendlyCoreError,
   knownVerbs,
@@ -16,9 +18,11 @@ import {
   parseExportCommand,
   recover,
   usageCard,
+  usageError,
   verbOf,
 } from "./commands/grammar.ts";
 import {
+  instrumentListLines,
   isUnknownInstrument,
   plainSineAdvice,
   unknownInstrumentMessage,
@@ -1176,6 +1180,10 @@ function describeError(command: string, error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   if (detail?.code === "ENOENT" && typeof detail.path === "string")
     return `no such file · ${relative(process.cwd(), detail.path)}`;
+  // `tempo 900` → `tempo 900 · tempo takes 20…300 BPM · tempo 128`: no raw
+  // core keys (`tempoBpm`) on a card.
+  const friendly = friendlyCoreError(truncateForCard(command), message);
+  if (friendly) return friendly;
   const verb = command.trim().split(/\s+/)[0]?.replace(/^\//, "") || "command";
   return `${verb} failed · ${message}`;
 }
@@ -2069,6 +2077,31 @@ async function submit(prompt: string): Promise<string | Receipt> {
     });
     return ok(`${items.length} track${items.length === 1 ? "" : "s"}`);
   }
+  if (/^\/?(?:instruments|instrument\s+(?:list|ls|presets))$/i.test(command)) {
+    // `instrument list`: every word `instrument <name>` takes, by family.
+    const columns = stdout.columns ?? 80;
+    const lines = instrumentListLines(
+      Math.max(10, columns - (columns >= 60 ? 8 : 4)),
+    );
+    tui.openText("instruments", lines);
+    return note("instruments · instrument <name> on the focused track");
+  }
+  if (/^\/?notes(?:\s+(?:list|ls))?$/i.test(command)) {
+    // `notes`: the focused track's note ids, the names `remove <id>` takes.
+    const notes = score.notes
+      .filter((entry) => entry.trackId === requestedTrack)
+      .slice()
+      .sort((a, b) => a.startTick - b.startTick);
+    const lines = notes.map(
+      (entry) =>
+        `${entry.id} · ${midiNoteName(entry.pitch)} · beat ${+(entry.startTick / score.ticksPerBeat).toFixed(2)}`,
+    );
+    if (lines.length === 0) return note(`notes · ${requestedTrack} has none`);
+    tui.openText(`notes · ${requestedTrack}`, lines);
+    return note(
+      `${lines.length} note${lines.length === 1 ? "" : "s"} · ${requestedTrack} · remove <id>`,
+    );
+  }
   const playCommand = command.match(
     /^\/play(?:\s+(on|off|degrees|in-key|chromatic))?$/i,
   );
@@ -2816,6 +2849,9 @@ async function submit(prompt: string): Promise<string | Receipt> {
     return parsed.action;
   }
   if (parsed.type === "set-tempo") {
+    const range = RANGES.tempo!;
+    if (parsed.tempoBpm < range.min || parsed.tempoBpm > range.max)
+      return fail(usageError(truncateForCard(command), range));
     const next = score.withTempo(parsed.tempoBpm);
     await commitScore(next, "score.tempo", { tempoBpm: parsed.tempoBpm });
     clock.follow(next);
@@ -2931,6 +2967,9 @@ async function submit(prompt: string): Promise<string | Receipt> {
     return `cleared · ${requestedTrack}`;
   }
   if (parsed.type === "remove-note") {
+    // A receipt never claims a removal that did not happen.
+    if (!score.notes.some((note) => note.id === parsed.noteId))
+      return fail(noNote(parsed.noteId));
     const next = applyScoreOperation(score, {
       type: "removeNote",
       noteId: parsed.noteId,
