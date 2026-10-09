@@ -245,6 +245,50 @@ describe("electric keys: character", () => {
   });
 });
 
+describe("electric keys: levels", () => {
+  const peakDb = ([left, right]: [Float64Array, Float64Array]) => {
+    let top = 0;
+    for (const channel of [left, right])
+      for (const x of channel) top = Math.max(top, Math.abs(x));
+    return 20 * Math.log10(top);
+  };
+
+  test("a C-major triad at velocity 0.8 peaks between -8 and -4 dBFS", () => {
+    for (const [instrument, preset] of [
+      ["epiano", "epiano"],
+      ["epiano", "suitcase"],
+      ["epiano", "dyno"],
+      ["wurli", "wurli"],
+      ["clav", "clav"],
+      ["clav", "funkclav"],
+    ] as const) {
+      const db = peakDb(
+        render(
+          song(
+            instrument,
+            { preset },
+            [60, 64, 67].map((pitch) => ({ pitch, dur: 480, vel: 0.8 })),
+          ),
+          1.5,
+        ),
+      );
+      expect({ preset, ok: db > -8 && db < -4 }).toEqual({ preset, ok: true });
+    }
+  });
+
+  test("clav pickups peak within 1.5 dB of each other at C3", () => {
+    const levels = (["neck", "bridge", "both", "out"] as const).map((pickup) =>
+      peakDb(
+        render(
+          song("clav", { pickup }, [{ pitch: 48, dur: 480, vel: 0.8 }]),
+          1.5,
+        ),
+      ),
+    );
+    expect(Math.max(...levels) - Math.min(...levels)).toBeLessThanOrEqual(1.5);
+  });
+});
+
 describe("electric keys: alias and cost", () => {
   test("a hard-driven tine (bark 1, velocity 1, key 96) aliases < -50 dB", () => {
     const p = params("epiano", { bark: 1, bell: 0, tone: 0 });

@@ -33,6 +33,7 @@ import {
   LN1000,
   ModeBank,
   panGains,
+  pulseMag,
   TAU,
 } from "./dsp.ts";
 
@@ -137,10 +138,12 @@ export class TineVoice implements KeysVoice {
     if (rhodes) this.bank.add(f * 2 ** (0.4 / 1200), T * 1.3, A * 0.15, 1, sr);
     this.bank.add(f * BEAM[1], 0.35 * 2 ** (-(key - 60) / 24), A * bell, 1, sr);
     if (rhodes) this.bank.add(f * BEAM[2], 0.06, A * bell * 0.3 * v, 1, sr);
-    // Normalise by the pickup's small-signal slope at the doubled rate.
+    // Normalise by the pickup's small-signal slope at the doubled rate. The
+    // tine's 0.36 puts a velocity-0.8 C-major triad near -6.5 dBFS, the
+    // house level (the reed's 0.32 already sits there).
     const w = (TAU * f) / (2 * sr);
     this.norm =
-      (rhodes ? 0.3 : 0.32) /
+      (rhodes ? 0.36 : 0.32) /
       ((rhodes ? (2 * X0) / (1 + X0 * X0) ** 2 : 0.5) * w);
     this.prevPhi = this.pickup(0);
     this.dc = new DcBlock(sr, 8);
@@ -303,9 +306,15 @@ export class ClavVoice implements KeysVoice {
         (T / (1 + (fn / 3000) ** 2)) *
         (1 - 0.85 * p.mute * Math.min(1, (n - 1) / 4));
       modes.push([fn, t60, u]);
-      energy += Math.sin(n * Math.PI * tangent) ** 2;
+      // Level is set on what the pickup hears through the tangent's
+      // contact spectrum, so every pickup switch sits within about 1.5 dB
+      // of the others (a C-major triad at velocity 0.8 near -6 dBFS).
+      energy += (u * pulseMag(this.pulse, (2 * Math.PI * fn) / sr)) ** 2;
     }
-    const G = (0.5 * v ** 1.2) / Math.sqrt(Math.max(1e-9, energy));
+    // Out of phase leaves a peakier, thinner sum: +1.6 dB brings its peak
+    // level to the other pickups' (measured at C3, velocity 0.8).
+    const trim = p.pickup === "out" ? 1.2 : 1;
+    const G = (0.146 * trim * v ** 1.2) / Math.sqrt(Math.max(1e-12, energy));
     for (const [fn, t60, u] of modes)
       bank.add(fn, Math.max(0.02, t60), u * G, 1, sr);
     this.bank = bank;
