@@ -239,7 +239,7 @@ import {
   toolCaption,
   type ShowMeLevel,
 } from "./agent/show-me.ts";
-import { runAuthCommand, runFirstRunLogin, runTuiLogin } from "./auth/cli.ts";
+import { firstRunCard, runAuthCommand, runTuiLogin } from "./auth/cli.ts";
 import {
   modelPickerItems,
   tuiAuthCommand,
@@ -547,10 +547,12 @@ if (importPath && exportPath) {
 }
 const demo =
   args.has("--demo") || process.env.DAWG_DEMO === "1" || !stdin.isTTY;
-// First run with no provider (or a saved one that stopped working): the
-// sign-in picker, in the shell, before the TUI takes the screen.
-if (!demo && process.env.DAWG_AI !== "0" && stdout.isTTY)
-  await runFirstRunLogin();
+// Music first: the TUI opens directly. The first session with no provider
+// (or a saved one that stopped working) gets one card instead of a picker.
+const launchCard =
+  !demo && process.env.DAWG_AI !== "0" && stdout.isTTY
+    ? firstRunCard().catch(() => undefined)
+    : undefined;
 
 const initial = createScore({
   tracks: [
@@ -1515,6 +1517,9 @@ async function runInteractive(): Promise<void> {
     });
   if (port.status !== "file session")
     tui.activity.pushCard(port.status, { tone: "info" });
+  void launchCard?.then((card) => {
+    if (card) tui.activity.pushCard(card.text, { tone: card.tone, once: true });
+  });
   if (await isProject(process.cwd()))
     projectSync = startProjectSync(syncHost());
   void currentProvider().then(() => tick(true));
@@ -3493,12 +3498,10 @@ function adoptMeta(meta: typeof record.meta): void {
   record = { ...record, meta };
   if (meta.name !== announcedName) {
     announcedName = meta.name;
-    tui.activity.pushCard(
-      meta.nameSource === "auto"
-        ? `${meta.name} (auto-named) · rename with /rename <name>`
-        : `session · ${meta.name}`,
-      { tone: "info" },
-    );
+    // The auto-name joins the receipt that earned it, as a quiet suffix.
+    if (meta.nameSource === "auto")
+      tui.activity.attachNote(`named “${meta.name}” · /rename`);
+    else tui.activity.pushCard(`session · ${meta.name}`, { tone: "info" });
   }
 }
 

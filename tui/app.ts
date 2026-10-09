@@ -14,6 +14,7 @@
 
 import {
   ActivityFeed,
+  ERROR_FADE_MS,
   fail,
   revisionLabel,
   spinnerFrame,
@@ -538,7 +539,9 @@ function cardMarker(card: ActivityCard, unicode: boolean): string {
 }
 
 export function cardText(card: ActivityCard, unicode: boolean): string {
-  const parts = [`${cardMarker(card, unicode)} ${card.text}`];
+  const count =
+    card.count && card.count > 1 ? ` ${unicode ? "×" : "x"}${card.count}` : "";
+  const parts = [`${cardMarker(card, unicode)} ${card.text}${count}`];
   const revision = revisionLabel(
     card.baseRevision,
     card.resultRevision,
@@ -546,6 +549,7 @@ export function cardText(card: ActivityCard, unicode: boolean): string {
   );
   if (revision) parts.push(revision);
   if (card.hint) parts.push(card.hint);
+  if (card.suffix) parts.push(card.suffix);
   return parts.join(" · ");
 }
 
@@ -592,7 +596,7 @@ function paintActivity(
       x += buffer.text(x, y, truncate(shown, room), roles.muted);
     }
   } else {
-    const cards = [...activity.cards].reverse();
+    const cards = activity.visible(nowMs);
     cards.forEach((card, index) => {
       if (x >= limit) return;
       const text = cardText(card, capabilities.unicode);
@@ -614,7 +618,14 @@ function paintActivity(
               : card.tone === "success"
                 ? roles.success
                 : roles.text;
-      if (index > 0) style = card.tone === "error" ? roles.error : roles.faint;
+      // Behind the first slot everything is faint; an error keeps its
+      // colour until it is old, then fades with the rest.
+      if (index > 0)
+        style =
+          card.tone === "error" && age < ERROR_FADE_MS
+            ? roles.error
+            : roles.faint;
+      else if (card.once) style = roles.faint;
       else if (!ui.reducedMotion && age >= 0 && age < CARD_GLOW_MS)
         style = { ...shade(style, 0.4 * (1 - age / CARD_GLOW_MS)), bold: true };
       x += buffer.text(x, y, truncate(text, Math.max(0, limit - x)), style);

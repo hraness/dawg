@@ -23,6 +23,33 @@ export interface ActivityCard {
   trackId?: string | undefined;
   /** Key hint shown after the card, e.g. "u undo". */
   hint?: string | undefined;
+  /**
+   * A one-time info card (a launch note, a tip): it leaves the strip after
+   * `ONCE_TTL_MS` or `ONCE_ACTIONS` later actions, whichever comes first.
+   */
+  once?: boolean | undefined;
+  /** Repeats of the same text and tone, shown as `×N` (absent is 1). */
+  count?: number | undefined;
+  /** A quieter note joined to the card, e.g. the auto-name. */
+  suffix?: string | undefined;
+  /** `actions` when the card was pushed, for the `once` expiry. */
+  atAction?: number | undefined;
+}
+
+/** A `once` card's lifetime in milliseconds. */
+export const ONCE_TTL_MS = 8_000;
+/** Actions (receipts, requests) after which a `once` card leaves. */
+export const ONCE_ACTIONS = 3;
+/** Age after which an older error fades to the faint role. */
+export const ERROR_FADE_MS = 6_000;
+
+/** One strip line: newlines read as ` · `, runs of space collapse. */
+export function stripLine(text: string): string {
+  return text
+    .split(/\s*\n\s*/)
+    .map((part) => part.replace(/[ \t]+/g, " ").trim())
+    .filter(Boolean)
+    .join(" · ");
 }
 
 export type TranscriptKind =
@@ -135,6 +162,8 @@ export class ActivityFeed {
   private spinnerSince = 0;
   private streamText = "";
   private queue = 0;
+  /** Receipts and requests so far: the clock `once` cards expire on. */
+  private actions = 0;
   private listeners = new Set<() => void>();
   /** Increments on every change; renderers can skip work when unchanged. */
   version = 0;
@@ -167,6 +196,36 @@ export class ActivityFeed {
     return this.cardList[this.cardList.length - 1];
   }
 
+  /**
+   * The cards the strip shows at `nowMs`, first slot first: the newest
+   * receipt leads, live `once` notes follow it, and expired `once` notes
+   * are gone.
+   */
+  visible(nowMs: number = this.clock()): ActivityCard[] {
+    const live = this.cardList.filter(
+      (card) =>
+        !card.once ||
+        (nowMs - card.atMs < ONCE_TTL_MS &&
+          this.actions - (card.atAction ?? 0) < ONCE_ACTIONS),
+    );
+    const newest = [...live].reverse();
+    return [
+      ...newest.filter((card) => !card.once),
+      ...newest.filter((card) => card.once),
+    ];
+  }
+
+  /** The next time a `once` card expires on the clock, for frame wakeups. */
+  nextExpiry(nowMs: number = this.clock()): number | undefined {
+    let next: number | undefined;
+    for (const card of this.cardList) {
+      if (!card.once) continue;
+      const at = card.atMs + ONCE_TTL_MS;
+      if (at > nowMs && (next === undefined || at < next)) next = at;
+    }
+    return next;
+  }
+
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -176,24 +235,76 @@ export class ActivityFeed {
     text: string,
     details: Omit<Partial<ActivityCard>, "id" | "atMs" | "text"> = {},
   ): ActivityCard {
+    const line = stripLine(text);
+    const once = details.once === true;
+    if (!once) this.actions += 1;
+    const last = this.cardList[this.cardList.length - 1];
+    const tone = details.tone ?? "info";
+    // The same message again reads `×N` instead of filling the strip.
+    if (
+      last &&
+      last.text === line &&
+      last.tone === tone &&
+      last.resultRevision === details.resultRevision
+    ) {
+      const repeat: ActivityCard = {
+        ...last,
+        count: (last.count ?? 1) + 1,
+        atMs: this.clock(),
+        atAction: this.actions,
+      };
+      this.cardList = [...this.cardList.slice(0, -1), repeat];
+      this.record(tone === "error" ? "error" : "op", line);
+      this.changed();
+      return repeat;
+    }
     const card: ActivityCard = {
       id: this.nextId++,
-      text,
-      tone: details.tone ?? "info",
+      text: line,
+      tone,
       atMs: this.clock(),
       baseRevision: details.baseRevision,
       resultRevision: details.resultRevision,
       trackId: details.trackId,
       hint: details.hint,
+      ...(once ? { once: true } : {}),
+      ...(details.suffix ? { suffix: stripLine(details.suffix) } : {}),
+      atAction: this.actions,
     };
     this.cardList = [...this.cardList, card].slice(-this.maxCards);
     const revision = revisionLabel(card.baseRevision, card.resultRevision);
     this.record(
       card.tone === "error" ? "error" : "op",
-      revision ? `${text} · ${revision}` : text,
+      revision ? `${line} · ${revision}` : line,
     );
     this.changed();
     return card;
+  }
+
+  /**
+   * Join a quiet note to the newest receipt (`… · named "dusk loop"`), so
+   * it rides in the first slot instead of pushing the receipt aside. With
+   * no receipt in the last few seconds it becomes a `once` card.
+   */
+  attachNote(text: string, withinMs = ONCE_TTL_MS): ActivityCard {
+    const line = stripLine(text);
+    const last = this.cardList[this.cardList.length - 1];
+    if (
+      last &&
+      !last.once &&
+      last.tone !== "error" &&
+      this.clock() - last.atMs < withinMs
+    ) {
+      const joined: ActivityCard = {
+        ...last,
+        suffix: last.suffix ? `${last.suffix} · ${line}` : line,
+      };
+      this.cardList = [...this.cardList.slice(0, -1), joined];
+      this.record("note", line);
+      this.changed();
+      return joined;
+    }
+    return this.pushCard(line, { tone: "info", once: true });
   }
 
   pushError(message: string): ActivityCard {
@@ -202,6 +313,7 @@ export class ActivityFeed {
 
   /** Record a user request in the transcript without adding a strip card. */
   pushRequest(text: string): void {
+    this.actions += 1;
     this.record("request", text);
     this.changed();
   }
