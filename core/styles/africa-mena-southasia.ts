@@ -446,6 +446,7 @@ const NODES: readonly StyleCard[] = [
         snare: null,
         hat: null,
         chords: null,
+        bass: maybe("cello", "contrabass:0.5"),
         perc: role("daf", "framedrum:0.6", "tabla:0.3"),
         drone: maybe("oud", "strings:0.4"),
         lead: role("oud", "ney:0.7", "violin:0.5", "santur:0.3"),
@@ -672,6 +673,9 @@ const NO_KIT = Object.freeze({
   openhat: null,
   tom: null,
 });
+
+/** Folk and devotional textures: voices, drone and hand drums only. */
+const UNPLUGGED = Object.freeze({ ...NO_KIT, chords: null, bass: null });
 
 /** Sung lines: mostly steps, few leaps. */
 const CONJUNCT = intervals(5, 2, 0.6, 0.6);
@@ -951,6 +955,7 @@ const LEAVES: readonly StyleCard[] = [
       roles: {
         bell: null,
         clap: kitRole("acoustic"),
+        chords: null,
         drone: role("electric"),
         lead: role("electric", "sing:0.6"),
         counter: maybe("electric"),
@@ -2237,6 +2242,8 @@ const LEAVES: readonly StyleCard[] = [
     melody: { intervals: ORNATE, density: [2, 4] },
     texture: {
       roles: {
+        perc: null,
+        drone: null,
         kick: kitRole("acoustic"),
         snare: kitRole("acoustic"),
         bass: role("tuba", "upright:0.6"),
@@ -2266,6 +2273,7 @@ const LEAVES: readonly StyleCard[] = [
       kind: "monophonic",
       roles: {
         chords: null,
+        perc: null,
         lead: role("sing"),
         drone: role("organ", "choir:0.6"),
         counter: maybe("choir"),
@@ -2665,8 +2673,11 @@ const LEAVES: readonly StyleCard[] = [
     },
     rhythm: { onsets: { bell: EIGHTHS } },
     melody: { intervals: CHANT, density: [2, 4] },
+    harmony: { model: "drone", rhythm: [[0.25, 1]] },
+    bass: { behaviour: [["none", 1]] },
     texture: {
       roles: {
+        ...UNPLUGGED,
         bell: role("bell"),
         lead: role("sing"),
         counter: role("organ", "choir:0.5"),
@@ -2693,8 +2704,11 @@ const LEAVES: readonly StyleCard[] = [
     },
     rhythm: { onsets: { shaker: grid("xx.xx.xx.xx.") } },
     melody: { intervals: ORNATE },
+    harmony: { model: "drone", rhythm: [[0.25, 1]] },
+    bass: { behaviour: [["none", 1]] },
     texture: {
       roles: {
+        ...UNPLUGGED,
         shaker: role("drums"),
         drone: role("fiddle", "tanpura:0.5"),
         lead: role("sing"),
@@ -2713,8 +2727,14 @@ const LEAVES: readonly StyleCard[] = [
       scales: [["kafi", 1]],
     },
     melody: { intervals: ORNATE, density: [1, 3] },
+    harmony: { model: "drone", rhythm: [[0.25, 1]] },
+    bass: { behaviour: [["none", 1]] },
     texture: {
-      roles: { lead: role("sing"), counter: role("organ", "sitar:0.4") },
+      roles: {
+        ...UNPLUGGED,
+        lead: role("sing"),
+        counter: role("organ", "sitar:0.4"),
+      },
     },
   }),
   card({
@@ -2746,6 +2766,7 @@ const LEAVES: readonly StyleCard[] = [
     texture: {
       roles: {
         kick: kitRole("acoustic"),
+        snare: kitRole("acoustic"),
         bass: role("bass"),
         chords: role("nylon", "steel:0.5"),
         lead: role("sing", "violin:0.3"),
@@ -2766,8 +2787,11 @@ const LEAVES: readonly StyleCard[] = [
       ],
     },
     melody: { intervals: CONJUNCT, repetition: 0.7 },
+    harmony: { model: "drone", rhythm: [[0.25, 1]] },
+    bass: { behaviour: [["none", 1]] },
     texture: {
       roles: {
+        ...UNPLUGGED,
         lead: role("sing", "bansuri:0.5"),
         counter: role("fiddle", "bansuri:0.5"),
         drone: maybe("strings"),
@@ -2788,9 +2812,12 @@ const LEAVES: readonly StyleCard[] = [
       range: [40, 60],
     },
     rhythm: { onsets: { bell: grid("x...............") } },
+    harmony: { model: "drone", rhythm: [[0.25, 1]] },
+    bass: { behaviour: [["none", 1]] },
     texture: {
       kind: "monophonic",
       roles: {
+        ...UNPLUGGED,
         perc: null,
         bell: role("gong"),
         drone: role("choir", "horn:0.5"),
