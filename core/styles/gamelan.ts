@@ -175,7 +175,16 @@ export const AGUNG: CycleSpec = Object.freeze({
   name: "agung binalig",
   beats: 8,
   divisions: [4, 4],
-  strokes: Object.freeze(["gong", "agung", "gong", "agung", "gong", "agung", "agung", "."]),
+  strokes: Object.freeze([
+    "gong",
+    "agung",
+    "gong",
+    "agung",
+    "gong",
+    "agung",
+    "agung",
+    ".",
+  ]),
   low: Object.freeze(["gong"]),
   stress: Object.freeze([1, 5]),
 });
