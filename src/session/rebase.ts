@@ -132,6 +132,10 @@ export function rebaseOperations(
         if (!deepEqual(base.master, current.master))
           return { ok: false, reason: "master changed" };
         break;
+      case "setStyle":
+        if (!deepEqual(base.style, current.style))
+          return { ok: false, reason: "style changed" };
+        break;
       case "setSections":
         if (
           JSON.stringify(base.sections) !== JSON.stringify(current.sections) ||

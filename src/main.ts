@@ -122,6 +122,7 @@ import {
   measurementLine,
   parseMasterCommand,
 } from "./commands/master.ts";
+import { applyStyleCommand, parseStyleCommand } from "./commands/style.ts";
 import { exportSampleRate, measureScoreOffThread } from "./audio/measure.ts";
 import {
   applySectionCommand,
@@ -2165,6 +2166,17 @@ async function submit(prompt: string): Promise<string | Receipt> {
     if (grain.type !== "grain-list" && grain.type !== "grain-presets")
       await materializeDraft();
     const result = applyGranularCommand(score, requestedTrack, grain);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
+  const styleCommand = parseStyleCommand(command);
+  if (styleCommand) {
+    const writes =
+      styleCommand.type === "style-apply" ||
+      styleCommand.type === "style-again";
+    if (writes) await materializeDraft();
+    const result = applyStyleCommand(score, styleCommand);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);

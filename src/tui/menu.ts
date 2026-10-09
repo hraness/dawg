@@ -528,6 +528,9 @@ const SECTION_ALIASES: Readonly<Record<string, readonly string[]>> = {
   tuning: ["project", "tuning"],
   scale: ["project", "tuning"],
   arrange: ["arrange"],
+  style: ["arrange", "style"],
+  styles: ["arrange", "style"],
+  genre: ["arrange", "style"],
   sections: ["arrange"],
   form: ["arrange"],
 };
@@ -3762,6 +3765,7 @@ export const MENU_SECTIONS = [
   "master",
   "project",
   "arrange",
+  "style",
   // Older names, still accepted.
   "parameters",
   "sounds",

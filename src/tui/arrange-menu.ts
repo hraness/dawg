@@ -8,6 +8,7 @@ import type { Section } from "../../core/score.ts";
 import { formatForm } from "../../core/sections.ts";
 import { barsLabel } from "../commands/arrange.ts";
 import type { MenuContext, MenuNode } from "./menu.ts";
+import { styleMenuDetail, styleMenuNodes } from "./style-menu.ts";
 
 /** `3 sections · form A×2 B · loop chorus`, or how to start. */
 export function arrangeDetail(context: MenuContext): string {
@@ -80,6 +81,15 @@ export function arrangeNodes(context: MenuContext): MenuNode[] {
         help: "play the whole song (or form) again",
       });
   }
+  // The style browser: a whole song from a style (src/tui/style-menu.ts).
+  nodes.push({
+    kind: "menu",
+    id: "style",
+    label: "style",
+    detail: styleMenuDetail(context),
+    help: "make a whole song from a style: the style tree, find and blend",
+    build: styleMenuNodes,
+  });
   return nodes;
 }
 
