@@ -307,13 +307,17 @@ export function startProjectSync(
     }
     const current = await hashProject(project);
     if (mode === "files-win") {
-      if (sameHashes(current, seen)) return lastOutcome;
+      // Nothing re-evaluated: a standing rejection still holds, anything
+      // else is reported as unchanged rather than repeating an old apply.
+      if (sameHashes(current, seen))
+        return lastRejection ? lastOutcome : (lastOutcome = UNCHANGED);
       // An echo: every changed file is exactly what dawg (this window or
       // another) last synced, so the session already holds it.
       const state = await readState();
       const changed = changedPaths(current, seen);
       if (
         seen.size > 0 &&
+        !lastRejection &&
         changed.every(
           (path) =>
             current.get(path) !== undefined &&
@@ -322,7 +326,7 @@ export function startProjectSync(
       ) {
         for (const path of changed) known.delete(path);
         seen = current;
-        return lastOutcome;
+        return (lastOutcome = "files match the score");
       }
     }
     const result = await evaluate(project);
@@ -387,6 +391,8 @@ export function startProjectSync(
     if (encoded === filesEqual) return;
     const printed = printProject(score);
     const conflicts: string[] = [];
+    /** Paths this flush wrote (hash) or removed (undefined). */
+    const wrote = new Map<string, string | undefined>();
     await locked(async () => {
       const state = await readState();
       const files = { ...state.files };
@@ -409,6 +415,7 @@ export function startProjectSync(
         }
         await writeAtomic(path, file.text);
         files[file.path] = sha256(file.text);
+        wrote.set(file.path, files[file.path]);
         known.set(file.path, file.text);
       }
       // Track files dawg printed earlier for tracks that no longer exist.
@@ -418,12 +425,21 @@ export function startProjectSync(
         if (existing !== undefined && sha256(existing) !== hash) continue;
         if (existing !== undefined)
           await rm(join(project, path), { force: true });
+        wrote.set(path, undefined);
         delete files[path];
         known.delete(path);
       }
       await writeState({ ...state, files });
     });
-    seen = await hashProject(project);
+    // Only our own writes are folded into `seen`: an edit the author saved
+    // to any other file since the last look must still be evaluated. While
+    // the files are rejected nothing is folded, so the next look re-evaluates.
+    if (!lastRejection) {
+      seen = new Map(seen);
+      for (const [path, hash] of wrote)
+        if (hash === undefined) seen.delete(path);
+        else seen.set(path, hash);
+    }
     if (conflicts.length === 0) {
       filesEqual = encoded;
       lastConflict = "";
@@ -560,6 +576,8 @@ export function startProjectSync(
 /** Text extensions a project's evaluation can read: modules, data and tuning. */
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?|json|scl|kbm)$/;
 const MAX_SOURCE_DEPTH = 6;
+/** Outcome when no project source changed since the last look. */
+export const UNCHANGED = "files unchanged";
 /** Project configuration, not evaluated: editing it never re-evaluates. */
 const CONFIG_FILES = new Set([
   "dawg.json",
