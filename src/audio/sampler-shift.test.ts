@@ -8,6 +8,7 @@ import {
 import { clearFitCache, onFitReady, withLiveFit } from "./fit.ts";
 import { planSamplerVoices, renderSamplerVoices } from "./sampler.ts";
 import { sampleKey, type DecodedSample, type SampleBank } from "./samples.ts";
+import { budget } from "../../test/perf.ts";
 
 const RATE = 16_000;
 
@@ -166,7 +167,7 @@ describe("sampler shift live (0.6.1)", () => {
     const first = withLiveFit(() => render(ref, src));
     // The note-on does no phase-vocoder work: well inside the 10 ms budget
     // plus the plain sampler render of three seconds.
-    expect(performance.now() - started).toBeLessThan(50);
+    expect(performance.now() - started).toBeLessThan(budget(50));
     expect(Math.abs(cents(f0(first, 3000, 12000), want))).toBeLessThan(1);
     await ready;
     const exact = withLiveFit(() => render(ref, src));

@@ -4,6 +4,7 @@ import { secondsAtTick, type SongTime } from "../../core/tempo.ts";
 import { countInClicks, clicksIn, meterClickGrid } from "./click.ts";
 import { TransportClock, transportMapFor } from "./clock.ts";
 import { loopFrames, renderScorePcm } from "./wav.ts";
+import { ratioBudget } from "../../test/perf.ts";
 
 const RATE = 8_000;
 
@@ -271,6 +272,6 @@ describe("tempo-synced effects follow the map", () => {
     });
     time(plain);
     time(ramped);
-    expect(time(ramped)).toBeLessThan(time(plain) * 3 + 50);
+    expect(time(ramped)).toBeLessThan(time(plain) * ratioBudget(3) + 50);
   });
 });

@@ -16,6 +16,7 @@ import {
   type PitchCurve,
   type TrackOptions,
 } from "./pitch.ts";
+import { budget } from "../../../test/perf.ts";
 
 // Analysis tests run whole voices; shared CI runners need more than 5 s.
 setDefaultTimeout(30_000);
@@ -232,13 +233,10 @@ describe("trackPitch", () => {
   }
 
   // The budget is 30 ms per audio second at hop 5 ms (measured 19-27 on a
-  // quiet Apple-silicon host for clean, low and room-bed voices). The full
-  // suite runs files in parallel, so the gate is 1.5x the budget; set
-  // DAWG_STRICT_BUDGET=1 on a quiet host to assert the budget itself. Shared
-  // CI runners run the suite about 2x slower than that host, so CI checks
-  // twice the gate: it still catches an algorithmic regression, not runner
-  // noise.
-  const BUDGET = process.env.DAWG_STRICT_BUDGET ? 30 : process.env.CI ? 90 : 45;
+  // quiet Apple-silicon host for clean, low and room-bed voices). On other
+  // hosts test/perf.ts scales it by host speed with slack; DAWG_PERF=1 or
+  // DAWG_STRICT_BUDGET=1 on a quiet host asserts the budget itself.
+  const BUDGET = process.env.DAWG_STRICT_BUDGET ? 30 : budget(30);
 
   test("cost stays within budget at hop 5 ms: clean, low and room bed", () => {
     for (const [root, room] of [

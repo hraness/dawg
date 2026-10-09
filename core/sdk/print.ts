@@ -61,7 +61,7 @@ import {
   type Track,
 } from "../score.ts";
 import { trackSlug } from "../slug.ts";
-import { barStartTick } from "../tempo.ts";
+import { barStartTick, timeWithinSong } from "../tempo.ts";
 import type { Tuning } from "../tuning.ts";
 import { DEFAULT_STRING_PRESET, type TrackString } from "../strings.ts";
 import { DEFAULT_HIT_LENGTH, DEFAULT_VELOCITY, defaultClipId } from "./v1.ts";
@@ -276,7 +276,8 @@ function printTime(score: TrackScore): {
 } {
   const marks: string[] = [];
   const used = new Set<string>();
-  const time = score.time;
+  // Marks past the final barline are never heard and the SDK refuses them.
+  const time = timeWithinSong(score);
   if (!time) return { marks, used };
   const beat = (tick: number) => num(tick / score.ticksPerBeat);
   type Mark = { tick: number; order: number; text: string };
@@ -482,6 +483,11 @@ export function printTrack(score: TrackScore, track: Track): string {
   if (vocoderCall && track.instrument !== VOCODER_INSTRUMENT)
     entries.push(`vocoder: ${vocoderCall}`);
   if (track.kit) entries.push(`kit: ${str(track.kit)}`);
+  // The table a track keeps after leaving the wavetable instrument.
+  if (track.wavetable && !wavetable) {
+    used.add("wavetable");
+    entries.push(`wavetable: ${printWavetable(track.wavetable, INDENT)}`);
+  }
   if (track.granular && !grained)
     entries.push(
       `granular: ${obj(

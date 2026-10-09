@@ -30,6 +30,7 @@ import {
   yin,
 } from "./analysis.ts";
 import { overtoneFor, renderSingTrack, singStereo } from "./engine.ts";
+import { budget } from "../../../test/perf.ts";
 
 const hzOf = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
 const TPB = 480;
@@ -461,12 +462,12 @@ describe("sing cost at 22,050 Hz", () => {
       { pitch: 71, length: 8 },
     ]);
     const seconds = (one.bars * 4 * 60) / one.tempoBpm;
-    // Machine headroom: the spec's budgets are 2.5 and 40 ms per audio-second
-    // on the reference host; CI gets 3x.
+    // The spec's budgets are 2.5 and 40 ms per audio-second on the
+    // reference host.
     const x1 = best(() => render(one)) / seconds;
     const x6 = best(() => render(choir)) / seconds;
-    expect(x1).toBeLessThanOrEqual(2.5 * 3);
-    expect(x6).toBeLessThanOrEqual(40 * 3);
+    expect(x1).toBeLessThanOrEqual(budget(2.5));
+    expect(x6).toBeLessThanOrEqual(budget(40));
   }, 30_000);
 });
 

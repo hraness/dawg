@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import prettier from "prettier";
 import { initProject, writeAtomic } from "../../src/project/init.ts";
-import { diffScores } from "../diff.ts";
+import { adoptNoteIds, diffScores } from "../diff.ts";
 import { createScore, TrackScore } from "../score.ts";
 import { evaluateProject } from "./eval.ts";
 import { printProject, printTrack } from "./print.ts";
@@ -187,9 +187,7 @@ describe("granular in the printer", () => {
       await writeProject(dir, grained);
       const evaluated = await evaluateProject(dir);
       if (!evaluated.ok) throw new Error(JSON.stringify(evaluated.diagnostics));
-      const ops = diffScores(grained, evaluated.score).filter(
-        (op) => op.type !== "addNote" && op.type !== "removeNote",
-      );
+      const ops = diffScores(grained, adoptNoteIds(grained, evaluated.score));
       expect(ops).toEqual([]);
       expect(evaluated.score.tracks.map((t) => t.granular)).toEqual(
         grained.tracks.map((t) => t.granular),

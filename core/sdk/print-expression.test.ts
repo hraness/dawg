@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import prettier from "prettier";
 import { initProject, writeAtomic } from "../../src/project/init.ts";
-import { diffScores } from "../diff.ts";
+import { adoptNoteIds, diffScores } from "../diff.ts";
 import { createScore, TrackScore } from "../score.ts";
 import { evaluateProject } from "./eval.ts";
 import { printProject, printTrack } from "./print.ts";
@@ -160,8 +160,9 @@ describe("expression in the printer", () => {
       await writeProject(dir, expressive);
       const evaluated = await evaluateProject(dir);
       if (!evaluated.ok) throw new Error(JSON.stringify(evaluated.diagnostics));
-      const ops = diffScores(expressive, evaluated.score).filter(
-        (op) => op.type !== "addNote" && op.type !== "removeNote",
+      const ops = diffScores(
+        expressive,
+        adoptNoteIds(expressive, evaluated.score),
       );
       expect(ops).toEqual([]);
       const strip = (score: TrackScore) =>

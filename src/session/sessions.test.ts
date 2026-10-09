@@ -302,6 +302,8 @@ describe("rename", () => {
   test("file sessions see renames from another window without polling delay", async () => {
     const dir = await workspace();
     const { paths, record } = await ensureSession(initial, { workspace: dir });
+    // The backstop poll is pushed far past the test's deadline, so a rename
+    // that arrives at all arrived through fs.watch (no wall-clock bound).
     const open = (label: string) =>
       openSessionPort({
         paths,
@@ -309,33 +311,30 @@ describe("rename", () => {
         label,
         focusedTrackId: null,
         daemon: false,
+        watchedPollMs: 600_000,
       });
     const a = await open("a");
     const b = await open("b");
-    const seen: { name: string; at: number }[] = [];
+    const seen: string[] = [];
     let baseline = false;
     const stop = b.subscribe((update) => {
       if (update.type === "record") baseline = true;
-      if (update.type === "meta")
-        seen.push({ name: update.meta.name, at: Date.now() });
+      if (update.type === "meta") seen.push(update.meta.name);
     });
     try {
-      const ready = Date.now() + 2_000;
+      const ready = Date.now() + 10_000;
       while (!baseline && Date.now() < ready) await Bun.sleep(5);
       expect(baseline).toBe(true);
-      const renamedAt = Date.now();
       await a.updateMeta({ name: "watched", nameSource: "user" });
-      const deadline = Date.now() + 3_000;
+      const deadline = Date.now() + 10_000;
       while (seen.length === 0 && Date.now() < deadline) await Bun.sleep(5);
-      expect(seen[0]?.name).toBe("watched");
-      // fs.watch delivers well inside the 1 s backstop poll.
-      expect(seen[0]!.at - renamedAt).toBeLessThan(800);
+      expect(seen[0]).toBe("watched");
     } finally {
       stop();
       await a.close();
       await b.close();
     }
-  });
+  }, 30_000);
 
   test("dawgd: renames broadcast to every window and stale auto-names drop", async () => {
     const dir = await workspace();

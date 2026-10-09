@@ -16,6 +16,7 @@ import {
   SR,
   tetHz,
 } from "./measure.test-helpers.ts";
+import { budget } from "../../../test/perf.ts";
 
 // One string, no sympathetic bank or body: the loop's own pitch and decay.
 const ISO = { unison: 1, sym: 0, body: "none", oct: 0 } as const;
@@ -241,7 +242,7 @@ describe("plucked strings (design spec section 9)", () => {
       const strings = Math.max(1, resolveString({ preset }).unison as number);
       worst = Math.max(worst, ms / (8 * 4 * strings));
     }
-    expect(worst).toBeLessThan(20);
+    expect(worst).toBeLessThan(budget(20));
   });
 });
 

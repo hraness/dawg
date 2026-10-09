@@ -277,6 +277,7 @@ describe("measurement lines", () => {
       score = applyMasterCommand(score, parseMasterCommand(command)!).next!;
     let ticks = 0;
     const timer = setInterval(() => (ticks += 1), 5);
+    // perf-exempt: timer ticks against elapsed time, no budget.
     const started = performance.now();
     const off = await measureScoreOffThread(score);
     const elapsed = performance.now() - started;

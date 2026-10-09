@@ -1,0 +1,1947 @@
+{
+  "tracks": {
+    "name": [
+      {
+        "id": "c",
+        "name": "c",
+        "instrument": "kit",
+        "muted": true,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": []
+      },
+      {
+        "id": "d",
+        "name": "d",
+        "instrument": "kit",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": []
+      },
+      {
+        "id": "a",
+        "name": "a",
+        "instrument": "sine",
+        "muted": true,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": []
+      }
+    ],
+    "instrument": [
+      {
+        "id": "c",
+        "name": "c",
+        "instrument": "kit",
+        "muted": true,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": []
+      },
+      {
+        "id": "a",
+        "name": "a",
+        "instrument": "sine",
+        "muted": true,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": []
+      },
+      {
+        "id": "c",
+        "name": "c",
+        "instrument": "piano",
+        "muted": true,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": []
+      }
+    ],
+    "muted": [
+      {
+        "id": "c",
+        "name": "c",
+        "instrument": "kit",
+        "muted": true,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": []
+      },
+      {
+        "id": "d",
+        "name": "d",
+        "instrument": "kit",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": []
+      }
+    ],
+    "volume": [
+      {
+        "id": "c",
+        "name": "c",
+        "instrument": "kit",
+        "muted": true,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": []
+      },
+      {
+        "id": "c",
+        "name": "c",
+        "instrument": "kit",
+        "muted": false,
+        "volume": 0.5,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": []
+      },
+      {
+        "id": "b",
+        "name": "b",
+        "instrument": "bass",
+        "muted": true,
+        "volume": 0.8,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": []
+      }
+    ],
+    "pan": [
+      {
+        "id": "c",
+        "name": "c",
+        "instrument": "kit",
+        "muted": true,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": []
+      },
+      {
+        "id": "e",
+        "name": "e",
+        "instrument": "kit",
+        "muted": true,
+        "volume": 1,
+        "pan": -0.5,
+        "volumeAutomation": [],
+        "panAutomation": []
+      },
+      {
+        "id": "c",
+        "name": "c",
+        "instrument": "kit",
+        "muted": true,
+        "volume": 1,
+        "pan": 0.25,
+        "volumeAutomation": [],
+        "panAutomation": []
+      }
+    ],
+    "volumeAutomation": [
+      {
+        "id": "c",
+        "name": "c",
+        "instrument": "kit",
+        "muted": true,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": []
+      },
+      {
+        "id": "e",
+        "name": "e",
+        "instrument": "kit",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [
+          { "tick": 0, "value": 1 },
+          { "tick": 960, "value": 0.5 }
+        ],
+        "panAutomation": []
+      },
+      {
+        "id": "d",
+        "name": "d",
+        "instrument": "bass",
+        "muted": true,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [
+          { "tick": 0, "value": 1 },
+          { "tick": 960, "value": 0.25 }
+        ],
+        "panAutomation": []
+      }
+    ],
+    "panAutomation": [
+      {
+        "id": "c",
+        "name": "c",
+        "instrument": "kit",
+        "muted": true,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": []
+      },
+      {
+        "id": "b",
+        "name": "b",
+        "instrument": "kit",
+        "muted": true,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [{ "tick": 480, "value": 0.5 }]
+      },
+      {
+        "id": "bass",
+        "name": "bass",
+        "instrument": "bass",
+        "muted": false,
+        "volume": 0.8,
+        "pan": -0.25,
+        "volumeAutomation": [
+          { "tick": 0, "value": 1 },
+          { "tick": 1920, "value": 0.5 }
+        ],
+        "panAutomation": [{ "tick": 0, "value": 0 }],
+        "filter": { "cutoff": 800, "resonance": 0.2 },
+        "delay": { "beats": 0.5, "feedback": 0.3, "mix": 0.2 },
+        "reverb": {
+          "mix": 0.1,
+          "size": 0.5,
+          "ir": {
+            "src": "pack:dirt-samples/bev:0",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "url": "https://raw.githubusercontent.com/tidalcycles/dirt-samples/master/bev/00_BEV.wav"
+          }
+        }
+      }
+    ],
+    "fxAutomation": [
+      {
+        "id": "e",
+        "name": "e",
+        "instrument": "kit",
+        "muted": true,
+        "volume": 0.5,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "fxAutomation": { "tremolo-depth": [{ "tick": 0, "value": 0.8 }] }
+      },
+      {
+        "id": "a",
+        "name": "a",
+        "instrument": "piano",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "fxAutomation": { "tremolo-depth": [{ "tick": 0, "value": 0.2 }] }
+      },
+      {
+        "id": "sitar",
+        "name": "sitar",
+        "instrument": "string",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "fxAutomation": {
+          "string-bright": [
+            { "tick": 0, "value": 0.3 },
+            { "tick": 960, "value": 0.9 }
+          ]
+        },
+        "string": { "preset": "sitar", "buzz": 0.8, "sym": 0.5 }
+      }
+    ],
+    "keys": [
+      {
+        "id": "plain",
+        "name": "plain",
+        "instrument": "upright",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "keys": {}
+      },
+      {
+        "id": "wurli",
+        "name": "wurli",
+        "instrument": "wurli",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "keys": { "trem": 0.6 }
+      },
+      {
+        "id": "vox",
+        "name": "vox",
+        "instrument": "combo",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "keys": { "registers": "08080" }
+      }
+    ],
+    "filter": [
+      {
+        "id": "b",
+        "name": "b",
+        "instrument": "kit",
+        "muted": true,
+        "volume": 0.5,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "filter": { "cutoff": 800, "resonance": 0.2 }
+      },
+      {
+        "id": "b",
+        "name": "b",
+        "instrument": "piano",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "filter": { "cutoff": 2000, "resonance": 0.2 }
+      },
+      {
+        "id": "lead",
+        "name": "lead",
+        "instrument": "saw",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "filter": {
+          "cutoff": 300,
+          "resonance": 0.1,
+          "type": "hpf",
+          "ftype": "24db"
+        },
+        "delay": {
+          "beats": 0.75,
+          "feedback": 0.35,
+          "mix": 0.25,
+          "pingpong": true
+        },
+        "reverb": {
+          "mix": 0.3,
+          "size": 0.6,
+          "fade": 3,
+          "predelay": 0.02,
+          "ir": { "src": "builtin:hall" }
+        },
+        "fx": {
+          "autofilter": {
+            "type": "lpf",
+            "cutoff": 1200,
+            "resonance": 0.3,
+            "depth": 2,
+            "sync": 0.25,
+            "rate": 0.5,
+            "shape": "random",
+            "phase": 0,
+            "follow": 0
+          },
+          "distort": {
+            "drive": 3,
+            "type": "fold",
+            "tone": 8000,
+            "mix": 1,
+            "postgain": 1
+          },
+          "chorus": { "rate": 0.8, "depth": 0.4, "mix": 0.5 },
+          "orbit": { "orbit": 4 },
+          "duck": { "orbit": 3, "depth": 0.7, "attack": 0.1, "onset": 0.003 }
+        },
+        "fxAutomation": {
+          "autofilter-cutoff": [
+            { "tick": 0, "value": 400 },
+            { "tick": 1920, "value": 4000 }
+          ],
+          "reverb-mix": [{ "tick": 0, "value": 0.2 }],
+          "synth-lpf": [
+            { "tick": 0, "value": 600 },
+            { "tick": 1920, "value": 3000 }
+          ]
+        },
+        "synth": {
+          "attack": 0.01,
+          "lpf": 1200,
+          "lpenv": 2,
+          "fm": 1.5,
+          "partials": [1, 0.5]
+        }
+      }
+    ],
+    "filterAutomation": [
+      {
+        "id": "a",
+        "name": "a",
+        "instrument": "bass",
+        "muted": true,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "filterAutomation": [{ "tick": 0, "value": 1000 }]
+      },
+      {
+        "id": "e",
+        "name": "e",
+        "instrument": "kit",
+        "muted": false,
+        "volume": 1,
+        "pan": 0.25,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "filterAutomation": [{ "tick": 0, "value": 500 }]
+      }
+    ],
+    "reverb": [
+      {
+        "id": "e",
+        "name": "e",
+        "instrument": "piano",
+        "muted": true,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "reverb": { "mix": 0.2, "size": 0.5 }
+      },
+      {
+        "id": "bass",
+        "name": "bass",
+        "instrument": "bass",
+        "muted": false,
+        "volume": 0.8,
+        "pan": -0.25,
+        "volumeAutomation": [
+          { "tick": 0, "value": 1 },
+          { "tick": 1920, "value": 0.5 }
+        ],
+        "panAutomation": [{ "tick": 0, "value": 0 }],
+        "filter": { "cutoff": 800, "resonance": 0.2 },
+        "delay": { "beats": 0.5, "feedback": 0.3, "mix": 0.2 },
+        "reverb": {
+          "mix": 0.1,
+          "size": 0.5,
+          "ir": {
+            "src": "pack:dirt-samples/bev:0",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "url": "https://raw.githubusercontent.com/tidalcycles/dirt-samples/master/bev/00_BEV.wav"
+          }
+        }
+      },
+      {
+        "id": "lead",
+        "name": "lead",
+        "instrument": "saw",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "filter": {
+          "cutoff": 300,
+          "resonance": 0.1,
+          "type": "hpf",
+          "ftype": "24db"
+        },
+        "delay": {
+          "beats": 0.75,
+          "feedback": 0.35,
+          "mix": 0.25,
+          "pingpong": true
+        },
+        "reverb": {
+          "mix": 0.3,
+          "size": 0.6,
+          "fade": 3,
+          "predelay": 0.02,
+          "ir": { "src": "builtin:hall" }
+        },
+        "fx": {
+          "autofilter": {
+            "type": "lpf",
+            "cutoff": 1200,
+            "resonance": 0.3,
+            "depth": 2,
+            "sync": 0.25,
+            "rate": 0.5,
+            "shape": "random",
+            "phase": 0,
+            "follow": 0
+          },
+          "distort": {
+            "drive": 3,
+            "type": "fold",
+            "tone": 8000,
+            "mix": 1,
+            "postgain": 1
+          },
+          "chorus": { "rate": 0.8, "depth": 0.4, "mix": 0.5 },
+          "orbit": { "orbit": 4 },
+          "duck": { "orbit": 3, "depth": 0.7, "attack": 0.1, "onset": 0.003 }
+        },
+        "fxAutomation": {
+          "autofilter-cutoff": [
+            { "tick": 0, "value": 400 },
+            { "tick": 1920, "value": 4000 }
+          ],
+          "reverb-mix": [{ "tick": 0, "value": 0.2 }],
+          "synth-lpf": [
+            { "tick": 0, "value": 600 },
+            { "tick": 1920, "value": 3000 }
+          ]
+        },
+        "synth": {
+          "attack": 0.01,
+          "lpf": 1200,
+          "lpenv": 2,
+          "fm": 1.5,
+          "partials": [1, 0.5]
+        }
+      }
+    ],
+    "delay": [
+      {
+        "id": "d",
+        "name": "d",
+        "instrument": "kit",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "delay": { "beats": 0.5, "feedback": 0.3, "mix": 0.4 }
+      },
+      {
+        "id": "d",
+        "name": "d",
+        "instrument": "bass",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "delay": { "beats": 0.5, "feedback": 0.3, "mix": 0.2 }
+      },
+      {
+        "id": "lead",
+        "name": "lead",
+        "instrument": "saw",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "filter": {
+          "cutoff": 300,
+          "resonance": 0.1,
+          "type": "hpf",
+          "ftype": "24db"
+        },
+        "delay": {
+          "beats": 0.75,
+          "feedback": 0.35,
+          "mix": 0.25,
+          "pingpong": true
+        },
+        "reverb": {
+          "mix": 0.3,
+          "size": 0.6,
+          "fade": 3,
+          "predelay": 0.02,
+          "ir": { "src": "builtin:hall" }
+        },
+        "fx": {
+          "autofilter": {
+            "type": "lpf",
+            "cutoff": 1200,
+            "resonance": 0.3,
+            "depth": 2,
+            "sync": 0.25,
+            "rate": 0.5,
+            "shape": "random",
+            "phase": 0,
+            "follow": 0
+          },
+          "distort": {
+            "drive": 3,
+            "type": "fold",
+            "tone": 8000,
+            "mix": 1,
+            "postgain": 1
+          },
+          "chorus": { "rate": 0.8, "depth": 0.4, "mix": 0.5 },
+          "orbit": { "orbit": 4 },
+          "duck": { "orbit": 3, "depth": 0.7, "attack": 0.1, "onset": 0.003 }
+        },
+        "fxAutomation": {
+          "autofilter-cutoff": [
+            { "tick": 0, "value": 400 },
+            { "tick": 1920, "value": 4000 }
+          ],
+          "reverb-mix": [{ "tick": 0, "value": 0.2 }],
+          "synth-lpf": [
+            { "tick": 0, "value": 600 },
+            { "tick": 1920, "value": 3000 }
+          ]
+        },
+        "synth": {
+          "attack": 0.01,
+          "lpf": 1200,
+          "lpenv": 2,
+          "fm": 1.5,
+          "partials": [1, 0.5]
+        }
+      }
+    ],
+    "fx": [
+      {
+        "id": "plain",
+        "name": "plain",
+        "instrument": "pad",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "fx": { "formant": { "shift": 0, "mix": 1 } }
+      },
+      {
+        "id": "v",
+        "name": "v",
+        "instrument": "sing",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "fx": { "formant": { "shift": -4, "mix": 1 } },
+        "sing": { "preset": "choir" }
+      },
+      {
+        "id": "c",
+        "name": "c",
+        "instrument": "kit",
+        "muted": false,
+        "volume": 1,
+        "pan": 0.25,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "fx": {
+          "tremolo": {
+            "sync": 0.5,
+            "rate": 4,
+            "depth": 0.6,
+            "shape": "sine",
+            "skew": 0.5,
+            "phase": 0
+          }
+        }
+      }
+    ],
+    "sampler": [
+      {
+        "id": "e",
+        "name": "e",
+        "instrument": "sampler",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "sampler": {
+          "voices": {
+            "kick": { "src": "tracks/e/samples/kick.wav", "gain": 0.5 }
+          },
+          "mode": "keyed"
+        }
+      },
+      {
+        "id": "d",
+        "name": "d",
+        "instrument": "sampler",
+        "muted": false,
+        "volume": 0.5,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "sampler": {
+          "voices": {
+            "kick": { "src": "tracks/d/samples/kick.wav", "gain": 1 }
+          },
+          "mode": "oneshot"
+        }
+      },
+      {
+        "id": "d",
+        "name": "d",
+        "instrument": "sampler",
+        "muted": false,
+        "volume": 0.5,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "sampler": {
+          "voices": {
+            "kick": { "src": "tracks/d/samples/kick.wav", "gain": 0.5 }
+          },
+          "mode": "keyed"
+        }
+      }
+    ],
+    "solo": [
+      {
+        "id": "e",
+        "name": "e",
+        "instrument": "kit",
+        "muted": false,
+        "volume": 0.8,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "solo": true
+      }
+    ],
+    "modal": [
+      {
+        "id": "m",
+        "name": "m",
+        "instrument": "modal",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "modal": {}
+      },
+      {
+        "id": "vib",
+        "name": "vib",
+        "instrument": "modal",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "modal": { "preset": "vibes" }
+      },
+      {
+        "id": "m",
+        "name": "m",
+        "instrument": "modal",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "modal": { "preset": "vibes", "ring": 2 }
+      }
+    ],
+    "glide": [
+      {
+        "id": "t",
+        "name": "Lead",
+        "instrument": "lead",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "glide": { "time": 0.05, "mode": "legato" },
+        "velocityCurve": { "curve": "soft" }
+      },
+      {
+        "id": "lead",
+        "name": "lead",
+        "instrument": "saw",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "glide": { "time": 0.08, "mode": "legato" },
+        "pedal": [
+          { "tick": 0, "state": "down" },
+          { "tick": 1920, "state": "up" },
+          { "tick": 2400, "state": "half" }
+        ],
+        "velocityCurve": { "curve": "soft" },
+        "humanize": { "timing": 8, "velocity": 5, "seed": 7 }
+      },
+      {
+        "id": "keys",
+        "name": "keys",
+        "instrument": "piano",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "glide": { "time": 0.12, "mode": "poly" },
+        "pedal": [{ "tick": 0, "state": "down" }],
+        "velocityCurve": { "curve": "fixed", "fixed": 0.6 },
+        "softPedal": [
+          { "tick": 0, "state": "half" },
+          { "tick": 960, "state": "up" }
+        ],
+        "sostenuto": [{ "tick": 480, "state": "down" }]
+      }
+    ],
+    "velocityCurve": [
+      {
+        "id": "t",
+        "name": "Lead",
+        "instrument": "lead",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "glide": { "time": 0.05, "mode": "legato" },
+        "velocityCurve": { "curve": "soft" }
+      },
+      {
+        "id": "organ",
+        "name": "organ",
+        "instrument": "organ",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "velocityCurve": { "curve": "fixed", "fixed": 0.8 },
+        "humanize": { "length": 10, "seed": 0 }
+      },
+      {
+        "id": "keys",
+        "name": "keys",
+        "instrument": "piano",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "glide": { "time": 0.12, "mode": "poly" },
+        "pedal": [{ "tick": 0, "state": "down" }],
+        "velocityCurve": { "curve": "fixed", "fixed": 0.6 },
+        "softPedal": [
+          { "tick": 0, "state": "half" },
+          { "tick": 960, "state": "up" }
+        ],
+        "sostenuto": [{ "tick": 480, "state": "down" }]
+      }
+    ],
+    "rhythm": [
+      {
+        "id": "drums",
+        "name": "drums",
+        "instrument": "kit",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "rhythm": [{ "voice": "hat", "pulses": 7, "rotate": 2 }]
+      },
+      {
+        "id": "drums",
+        "name": "drums",
+        "instrument": "kit",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "rhythm": [
+          {
+            "voice": "kick",
+            "grid": "x......x..x.....x.x....x..x.....",
+            "swing": 0.12
+          },
+          { "voice": "snare", "grid": "....x.......x...", "swing": 0.12 },
+          {
+            "voice": "hat",
+            "pulses": 8,
+            "velocity": 0.5,
+            "accent": 0.4,
+            "accents": 4,
+            "swing": 0.12
+          }
+        ],
+        "kit": "lofi"
+      },
+      {
+        "id": "drums",
+        "name": "drums",
+        "instrument": "kit",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "rhythm": [
+          { "voice": "kick" },
+          {
+            "voice": "hat",
+            "pulses": 7,
+            "rotate": 2,
+            "repeats": 1,
+            "time": "1/32",
+            "velocity": 0.5,
+            "accent": 0.6,
+            "accents": 3,
+            "probability": 0.9,
+            "seed": 3,
+            "cycles": [{}, { "pulses": 9, "rotate": 1 }]
+          },
+          { "voice": "openhat", "grid": "..X...x." }
+        ]
+      }
+    ],
+    "clips": [
+      {
+        "id": "vox",
+        "name": "vox",
+        "instrument": "vocal",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "clips": [
+          {
+            "id": "clip",
+            "src": "tracks/vox/samples/verse.wav",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "startTick": 0
+          },
+          {
+            "id": "hook",
+            "src": "tracks/vox/takes/take-1.wav",
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "startTick": 7680,
+            "offset": 1.2346,
+            "dur": 2,
+            "gain": 0.5,
+            "fadeInTime": 0.01,
+            "fadeTime": 0.2,
+            "rev": true,
+            "take": "take-1",
+            "mute": true,
+            "text": "oh yeah"
+          }
+        ],
+        "takes": [
+          {
+            "name": "take-1",
+            "src": "tracks/vox/takes/take-1.wav",
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "startTick": 3840,
+            "offset": 0.25,
+            "latency": 0.0123,
+            "ppm": 12.35,
+            "inTick": 3840,
+            "outTick": 7680
+          }
+        ]
+      }
+    ],
+    "takes": [
+      {
+        "id": "vox",
+        "name": "vox",
+        "instrument": "vocal",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "clips": [
+          {
+            "id": "clip",
+            "src": "tracks/vox/samples/verse.wav",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "startTick": 0
+          },
+          {
+            "id": "hook",
+            "src": "tracks/vox/takes/take-1.wav",
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "startTick": 7680,
+            "offset": 1.2346,
+            "dur": 2,
+            "gain": 0.5,
+            "fadeInTime": 0.01,
+            "fadeTime": 0.2,
+            "rev": true,
+            "take": "take-1",
+            "mute": true,
+            "text": "oh yeah"
+          }
+        ],
+        "takes": [
+          {
+            "name": "take-1",
+            "src": "tracks/vox/takes/take-1.wav",
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "startTick": 3840,
+            "offset": 0.25,
+            "latency": 0.0123,
+            "ppm": 12.35,
+            "inTick": 3840,
+            "outTick": 7680
+          }
+        ]
+      }
+    ],
+    "string": [
+      {
+        "id": "gtr",
+        "name": "gtr",
+        "instrument": "string",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "string": { "preset": "nylon" }
+      },
+      {
+        "id": "sitar",
+        "name": "sitar",
+        "instrument": "string",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "fxAutomation": {
+          "string-bright": [
+            { "tick": 0, "value": 0.3 },
+            { "tick": 960, "value": 0.9 }
+          ]
+        },
+        "string": { "preset": "sitar", "buzz": 0.8, "sym": 0.5 }
+      }
+    ],
+    "granular": [
+      {
+        "id": "bare",
+        "name": "bare",
+        "instrument": "granular",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "granular": {}
+      },
+      {
+        "id": "pad",
+        "name": "pad",
+        "instrument": "granular",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "granular": { "preset": "cloud" }
+      },
+      {
+        "id": "kept",
+        "name": "kept",
+        "instrument": "pad",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "granular": { "preset": "dust", "gain": 0.5 }
+      }
+    ],
+    "kit": [
+      {
+        "id": "drums",
+        "name": "drums",
+        "instrument": "kit",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "rhythm": [
+          {
+            "voice": "kick",
+            "grid": "x......x..x.....x.x....x..x.....",
+            "swing": 0.12
+          },
+          { "voice": "snare", "grid": "....x.......x...", "swing": 0.12 },
+          {
+            "voice": "hat",
+            "pulses": 8,
+            "velocity": 0.5,
+            "accent": 0.4,
+            "accents": 4,
+            "swing": 0.12
+          }
+        ],
+        "kit": "lofi"
+      }
+    ],
+    "pedal": [
+      {
+        "id": "v",
+        "name": "v",
+        "instrument": "sing",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "pedal": [{ "tick": 0, "state": "down" }],
+        "sing": { "breath": 0, "jitter": 0, "shimmer": 0, "vibmod": 0 }
+      },
+      {
+        "id": "v",
+        "name": "v",
+        "instrument": "sing",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "pedal": [{ "tick": 0, "state": "half" }],
+        "sing": { "breath": 0, "jitter": 0, "shimmer": 0, "vibmod": 0 }
+      },
+      {
+        "id": "lead",
+        "name": "lead",
+        "instrument": "saw",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "glide": { "time": 0.08, "mode": "legato" },
+        "pedal": [
+          { "tick": 0, "state": "down" },
+          { "tick": 1920, "state": "up" },
+          { "tick": 2400, "state": "half" }
+        ],
+        "velocityCurve": { "curve": "soft" },
+        "humanize": { "timing": 8, "velocity": 5, "seed": 7 }
+      }
+    ],
+    "softPedal": [
+      {
+        "id": "grand",
+        "name": "grand",
+        "instrument": "grand",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "pedal": [{ "tick": 0, "state": "down" }],
+        "keys": { "sym": 0.5, "preset": "grand" },
+        "softPedal": [{ "tick": 0, "state": "down" }],
+        "sostenuto": [
+          { "tick": 480, "state": "down" },
+          { "tick": 1920, "state": "up" }
+        ]
+      },
+      {
+        "id": "keys",
+        "name": "keys",
+        "instrument": "piano",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "glide": { "time": 0.12, "mode": "poly" },
+        "pedal": [{ "tick": 0, "state": "down" }],
+        "velocityCurve": { "curve": "fixed", "fixed": 0.6 },
+        "softPedal": [
+          { "tick": 0, "state": "half" },
+          { "tick": 960, "state": "up" }
+        ],
+        "sostenuto": [{ "tick": 480, "state": "down" }]
+      }
+    ],
+    "sostenuto": [
+      {
+        "id": "grand",
+        "name": "grand",
+        "instrument": "grand",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "pedal": [{ "tick": 0, "state": "down" }],
+        "keys": { "sym": 0.5, "preset": "grand" },
+        "softPedal": [{ "tick": 0, "state": "down" }],
+        "sostenuto": [
+          { "tick": 480, "state": "down" },
+          { "tick": 1920, "state": "up" }
+        ]
+      },
+      {
+        "id": "keys",
+        "name": "keys",
+        "instrument": "piano",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "glide": { "time": 0.12, "mode": "poly" },
+        "pedal": [{ "tick": 0, "state": "down" }],
+        "velocityCurve": { "curve": "fixed", "fixed": 0.6 },
+        "softPedal": [
+          { "tick": 0, "state": "half" },
+          { "tick": 960, "state": "up" }
+        ],
+        "sostenuto": [{ "tick": 480, "state": "down" }]
+      }
+    ],
+    "humanize": [
+      {
+        "id": "organ",
+        "name": "organ",
+        "instrument": "organ",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "velocityCurve": { "curve": "fixed", "fixed": 0.8 },
+        "humanize": { "length": 10, "seed": 0 }
+      },
+      {
+        "id": "lead",
+        "name": "lead",
+        "instrument": "saw",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "glide": { "time": 0.08, "mode": "legato" },
+        "pedal": [
+          { "tick": 0, "state": "down" },
+          { "tick": 1920, "state": "up" },
+          { "tick": 2400, "state": "half" }
+        ],
+        "velocityCurve": { "curve": "soft" },
+        "humanize": { "timing": 8, "velocity": 5, "seed": 7 }
+      }
+    ],
+    "time": [
+      {
+        "id": "right",
+        "name": "tempo",
+        "instrument": "piano",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "time": { "rate": 1.0833333333333333, "phase": -120, "cycle": 2880 }
+      }
+    ],
+    "wavetable": [
+      {
+        "id": "pad",
+        "name": "pad",
+        "instrument": "wavetable",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "wavetable": {
+          "table": { "src": "builtin:formant" },
+          "wt": 0.25,
+          "wtenv": -0.5,
+          "warp": 0.3,
+          "warpmode": "bendmp"
+        },
+        "wtAutomation": [
+          { "tick": 0, "value": 0.25 },
+          { "tick": 960, "value": 0.75 }
+        ]
+      },
+      {
+        "id": "lead",
+        "name": "lead",
+        "instrument": "wavetable",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "wavetable": {
+          "table": {
+            "src": "pack:uzu-wavetables/wt_digital:2",
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "url": "https://example.com/wt_digital/c.wav"
+          },
+          "wtphaserand": 1
+        }
+      }
+    ],
+    "wtAutomation": [
+      {
+        "id": "pad",
+        "name": "pad",
+        "instrument": "wavetable",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "wavetable": {
+          "table": { "src": "builtin:formant" },
+          "wt": 0.25,
+          "wtenv": -0.5,
+          "warp": 0.3,
+          "warpmode": "bendmp"
+        },
+        "wtAutomation": [
+          { "tick": 0, "value": 0.25 },
+          { "tick": 960, "value": 0.75 }
+        ]
+      }
+    ],
+    "guitar": [
+      {
+        "id": "uke",
+        "name": "uke",
+        "instrument": "pluck",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "guitar": { "tune": [67, 60, 64, 69] }
+      },
+      {
+        "id": "gtr",
+        "name": "gtr",
+        "instrument": "pluck",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "guitar": {
+          "tune": "dadgad",
+          "capo": 2,
+          "hand": 5,
+          "ring": 0.8,
+          "position": 3
+        }
+      }
+    ],
+    "synth": [
+      {
+        "id": "lead",
+        "name": "lead",
+        "instrument": "saw",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "filter": {
+          "cutoff": 300,
+          "resonance": 0.1,
+          "type": "hpf",
+          "ftype": "24db"
+        },
+        "delay": {
+          "beats": 0.75,
+          "feedback": 0.35,
+          "mix": 0.25,
+          "pingpong": true
+        },
+        "reverb": {
+          "mix": 0.3,
+          "size": 0.6,
+          "fade": 3,
+          "predelay": 0.02,
+          "ir": { "src": "builtin:hall" }
+        },
+        "fx": {
+          "autofilter": {
+            "type": "lpf",
+            "cutoff": 1200,
+            "resonance": 0.3,
+            "depth": 2,
+            "sync": 0.25,
+            "rate": 0.5,
+            "shape": "random",
+            "phase": 0,
+            "follow": 0
+          },
+          "distort": {
+            "drive": 3,
+            "type": "fold",
+            "tone": 8000,
+            "mix": 1,
+            "postgain": 1
+          },
+          "chorus": { "rate": 0.8, "depth": 0.4, "mix": 0.5 },
+          "orbit": { "orbit": 4 },
+          "duck": { "orbit": 3, "depth": 0.7, "attack": 0.1, "onset": 0.003 }
+        },
+        "fxAutomation": {
+          "autofilter-cutoff": [
+            { "tick": 0, "value": 400 },
+            { "tick": 1920, "value": 4000 }
+          ],
+          "reverb-mix": [{ "tick": 0, "value": 0.2 }],
+          "synth-lpf": [
+            { "tick": 0, "value": 600 },
+            { "tick": 1920, "value": 3000 }
+          ]
+        },
+        "synth": {
+          "attack": 0.01,
+          "lpf": 1200,
+          "lpenv": 2,
+          "fm": 1.5,
+          "partials": [1, 0.5]
+        }
+      }
+    ],
+    "tuning": [
+      {
+        "id": "lead",
+        "name": "lead",
+        "instrument": "sine",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "tuning": { "name": "pelog" }
+      },
+      {
+        "id": "pad",
+        "name": "pad",
+        "instrument": "saw",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "tuning": { "ratios": ["9/8", "5/4", "3/2", "2/1"], "map": "nearest" }
+      }
+    ],
+    "sing": [
+      {
+        "id": "d",
+        "name": "d",
+        "instrument": "sing",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "sing": {}
+      },
+      {
+        "id": "v",
+        "name": "v",
+        "instrument": "sing",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "sing": { "voices": 6 }
+      },
+      {
+        "id": "v",
+        "name": "v",
+        "instrument": "sing",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "sing": { "voices": 1 }
+      }
+    ],
+    "wind": [
+      {
+        "id": "w",
+        "name": "w",
+        "instrument": "wind",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "wind": { "preset": "sax" }
+      },
+      {
+        "id": "w",
+        "name": "w",
+        "instrument": "wind",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "wind": { "preset": "flute" }
+      },
+      {
+        "id": "w",
+        "name": "w",
+        "instrument": "wind",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "wind": { "preset": "trumpet" }
+      }
+    ]
+  },
+  "notes": {
+    "startTick": [
+      {
+        "id": "n",
+        "trackId": "a",
+        "startTick": 0,
+        "durationTicks": 120,
+        "pitch": 60,
+        "velocity": 0.8
+      },
+      {
+        "id": "n2",
+        "trackId": "a",
+        "startTick": 240,
+        "durationTicks": 120,
+        "pitch": 36,
+        "velocity": 0.6
+      },
+      {
+        "id": "n9",
+        "trackId": "a",
+        "startTick": 960,
+        "durationTicks": 480,
+        "pitch": 38,
+        "velocity": 0.6
+      }
+    ],
+    "durationTicks": [
+      {
+        "id": "n",
+        "trackId": "a",
+        "startTick": 0,
+        "durationTicks": 120,
+        "pitch": 60,
+        "velocity": 0.8
+      },
+      {
+        "id": "n4",
+        "trackId": "d",
+        "startTick": 0,
+        "durationTicks": 480,
+        "pitch": 60,
+        "velocity": 0.8
+      },
+      {
+        "id": "n5",
+        "trackId": "e",
+        "startTick": 0,
+        "durationTicks": 240,
+        "pitch": 60,
+        "velocity": 0.6
+      }
+    ],
+    "pitch": [
+      {
+        "id": "n",
+        "trackId": "a",
+        "startTick": 0,
+        "durationTicks": 120,
+        "pitch": 60,
+        "velocity": 0.8
+      },
+      {
+        "id": "n6",
+        "trackId": "b",
+        "startTick": 0,
+        "durationTicks": 120,
+        "pitch": 36,
+        "velocity": 0.6
+      },
+      {
+        "id": "n3",
+        "trackId": "a",
+        "startTick": 0,
+        "durationTicks": 240,
+        "pitch": 64,
+        "velocity": 0.8
+      }
+    ],
+    "velocity": [
+      {
+        "id": "n",
+        "trackId": "a",
+        "startTick": 0,
+        "durationTicks": 120,
+        "pitch": 60,
+        "velocity": 0.8
+      },
+      {
+        "id": "n5",
+        "trackId": "e",
+        "startTick": 0,
+        "durationTicks": 240,
+        "pitch": 60,
+        "velocity": 0.6
+      },
+      {
+        "id": "n0",
+        "trackId": "t",
+        "startTick": 0,
+        "durationTicks": 480,
+        "pitch": 60,
+        "velocity": 0.5
+      }
+    ],
+    "articulation": [
+      {
+        "id": "n0",
+        "trackId": "t",
+        "startTick": 0,
+        "durationTicks": 480,
+        "pitch": 60,
+        "velocity": 0.5,
+        "articulation": "accent"
+      },
+      {
+        "id": "e",
+        "trackId": "kit",
+        "startTick": 240,
+        "durationTicks": 120,
+        "pitch": 42,
+        "velocity": 0.3,
+        "articulation": "ghost"
+      },
+      {
+        "id": "a",
+        "trackId": "lead",
+        "startTick": 0,
+        "durationTicks": 480,
+        "pitch": 60,
+        "velocity": 0.8,
+        "articulation": "staccato"
+      }
+    ],
+    "bend": [
+      {
+        "id": "n1",
+        "trackId": "t",
+        "startTick": 480,
+        "durationTicks": 480,
+        "pitch": 60,
+        "velocity": 0.5,
+        "bend": [{ "at": 1, "cents": 100 }]
+      },
+      {
+        "id": "b",
+        "trackId": "lead",
+        "startTick": 480,
+        "durationTicks": 480,
+        "pitch": 62,
+        "velocity": 0.8,
+        "glide": 0.05,
+        "bend": [
+          { "at": 0, "cents": -200 },
+          { "at": 0.25, "cents": 0 }
+        ]
+      },
+      {
+        "id": "c",
+        "trackId": "lead",
+        "startTick": 960,
+        "durationTicks": 960,
+        "pitch": 64,
+        "velocity": 0.55,
+        "articulation": "tenuto",
+        "glide": 0.1,
+        "bend": [{ "at": 0.5, "cents": 100 }],
+        "vibrato": { "rate": 5.5, "depth": 30, "delay": 0.2 }
+      }
+    ],
+    "lyric": [
+      {
+        "id": "n1",
+        "trackId": "vox",
+        "startTick": 0,
+        "durationTicks": 960,
+        "pitch": 60,
+        "velocity": 0.8,
+        "lyric": "nev"
+      },
+      {
+        "id": "n2",
+        "trackId": "vox",
+        "startTick": 960,
+        "durationTicks": 960,
+        "pitch": 62,
+        "velocity": 0.8,
+        "lyric": "er"
+      }
+    ],
+    "vibrato": [
+      {
+        "id": "d",
+        "trackId": "keys",
+        "startTick": 0,
+        "durationTicks": 1920,
+        "pitch": 48,
+        "velocity": 0.7,
+        "vibrato": { "rate": 4, "depth": 10 },
+        "humanize": { "timing": 12, "velocity": 4 }
+      },
+      {
+        "id": "c",
+        "trackId": "lead",
+        "startTick": 960,
+        "durationTicks": 960,
+        "pitch": 64,
+        "velocity": 0.55,
+        "articulation": "tenuto",
+        "glide": 0.1,
+        "bend": [{ "at": 0.5, "cents": 100 }],
+        "vibrato": { "rate": 5.5, "depth": 30, "delay": 0.2 }
+      }
+    ],
+    "humanize": [
+      {
+        "id": "d",
+        "trackId": "keys",
+        "startTick": 0,
+        "durationTicks": 1920,
+        "pitch": 48,
+        "velocity": 0.7,
+        "vibrato": { "rate": 4, "depth": 10 },
+        "humanize": { "timing": 12, "velocity": 4 }
+      }
+    ],
+    "glide": [
+      {
+        "id": "b",
+        "trackId": "lead",
+        "startTick": 480,
+        "durationTicks": 480,
+        "pitch": 62,
+        "velocity": 0.8,
+        "glide": 0.05,
+        "bend": [
+          { "at": 0, "cents": -200 },
+          { "at": 0.25, "cents": 0 }
+        ]
+      },
+      {
+        "id": "c",
+        "trackId": "lead",
+        "startTick": 960,
+        "durationTicks": 960,
+        "pitch": 64,
+        "velocity": 0.55,
+        "articulation": "tenuto",
+        "glide": 0.1,
+        "bend": [{ "at": 0.5, "cents": 100 }],
+        "vibrato": { "rate": 5.5, "depth": 30, "delay": 0.2 }
+      }
+    ],
+    "cents": [
+      {
+        "id": "n3",
+        "trackId": "kit",
+        "startTick": 0,
+        "durationTicks": 120,
+        "pitch": 36,
+        "velocity": 0.8,
+        "cents": 25
+      },
+      {
+        "id": "n2",
+        "trackId": "pad",
+        "startTick": 480,
+        "durationTicks": 480,
+        "pitch": 57,
+        "velocity": 0.8,
+        "cents": 50
+      },
+      {
+        "id": "n1",
+        "trackId": "lead",
+        "startTick": 0,
+        "durationTicks": 480,
+        "pitch": 64,
+        "velocity": 0.8,
+        "cents": -13.7
+      }
+    ],
+    "vowel": [
+      {
+        "id": "n0",
+        "trackId": "v",
+        "startTick": 0,
+        "durationTicks": 960,
+        "pitch": 57,
+        "velocity": 1,
+        "vowel": "a"
+      },
+      {
+        "id": "n0",
+        "trackId": "v",
+        "startTick": 0,
+        "durationTicks": 960,
+        "pitch": 43,
+        "velocity": 0.6,
+        "vowel": "u"
+      },
+      {
+        "id": "n0",
+        "trackId": "v",
+        "startTick": 0,
+        "durationTicks": 960,
+        "pitch": 43,
+        "velocity": 0.6,
+        "vowel": "e"
+      }
+    ]
+  },
+  "song": {
+    "tempoBpm": [90, 96, 120],
+    "beatsPerBar": [4, 3],
+    "bars": [8, 1, 4],
+    "ticksPerBeat": [480],
+    "key": [null, "C major", "A minor"],
+    "sections": [
+      [{ "name": "intro", "startBar": 0, "bars": 2 }],
+      [
+        { "name": "verse", "startBar": 0, "bars": 4 },
+        { "name": "chorus", "startBar": 4, "bars": 4 }
+      ]
+    ],
+    "form": [
+      [{ "section": "intro" }],
+      [{ "section": "verse" }, { "section": "chorus" }]
+    ],
+    "loopSection": ["chorus"],
+    "master": [
+      {
+        "glue": {
+          "threshold": -18,
+          "ratio": 4,
+          "attack": 10,
+          "release": 300,
+          "knee": 6,
+          "makeup": 0,
+          "auto": true,
+          "mix": 1,
+          "hpf": 0
+        },
+        "width": { "width": 1.2, "mono": 120 },
+        "target": -9
+      },
+      {
+        "glue": {
+          "threshold": -18,
+          "ratio": 3,
+          "attack": 10,
+          "release": 300,
+          "knee": 6,
+          "makeup": 0,
+          "auto": true,
+          "mix": 1,
+          "hpf": 0
+        },
+        "limiter": {
+          "ceiling": -1,
+          "gain": 0,
+          "release": 100,
+          "lookahead": 5,
+          "truepeak": true
+        },
+        "target": -12
+      }
+    ],
+    "time": [
+      { "tempo": [{ "tick": 1920, "bpm": 100, "ramp": "linear" }] },
+      {
+        "tempo": [
+          { "tick": 1920, "bpm": 132 },
+          { "tick": 5760, "bpm": 70, "ramp": "exp" },
+          { "tick": 7680, "bpm": 96, "ramp": "linear" }
+        ],
+        "meter": [
+          { "bar": 2, "beatsPerBar": 7, "beatUnit": 8 },
+          { "bar": 4, "beatsPerBar": 3 }
+        ],
+        "fermatas": [{ "tick": 9600, "beats": 3 }]
+      }
+    ],
+    "tuning": [
+      { "name": "19-edo" },
+      {
+        "name": "shruti",
+        "cents": [
+          90.2, 111.7, 182.4, 203.9, 294.1, 315.6, 386.3, 407.8, 498, 519.6,
+          590.2, 611.7, 702, 792.2, 813.7, 884.4, 905.9, 996.1, 1017.6, 1088.3,
+          1109.8, 1200
+        ],
+        "ref": 432,
+        "root": 62
+      }
+    ]
+  }
+}

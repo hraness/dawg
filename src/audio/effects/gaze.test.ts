@@ -11,6 +11,7 @@ import {
 import { seededRandom } from "../dsp/rng.ts";
 import { builtinImpulse } from "./convolution.ts";
 import { normalizeReverbIr, type Track } from "../../../core/score.ts";
+import { budget, ratioBudget } from "../../../test/perf.ts";
 
 const SR = 44_100;
 const context: EffectContext = {
@@ -457,7 +458,7 @@ describe("cost and legacy", () => {
       notes,
     });
     const msPerSecond = (performance.now() - t0) / seconds;
-    expect(msPerSecond).toBeLessThan(25);
+    expect(msPerSecond).toBeLessThan(budget(25));
   });
 
   test("the whole shoegaze rig costs under 25 ms per track-second", async () => {
@@ -494,7 +495,9 @@ describe("cost and legacy", () => {
       `rig cost per track-second: shoegaze ${shoegaze.toFixed(2)} ms, crunch ${crunch.toFixed(2)} ms`,
     );
     const CRUNCH_REF_MS = 7.4;
-    expect(shoegaze).toBeLessThan(25 * Math.max(1, crunch / CRUNCH_REF_MS));
+    expect(shoegaze).toBeLessThan(
+      ratioBudget(25) * Math.max(1, crunch / CRUNCH_REF_MS),
+    );
     expect(x.every(Number.isFinite)).toBe(true);
   });
 });

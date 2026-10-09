@@ -4,6 +4,7 @@ import { pitchShift } from "../dsp/shift.ts";
 import { hann } from "../dsp/stft.ts";
 import { steady, synthVoice, type SungNote } from "../fixtures/voice.ts";
 import { formantFrame, formantPad, formantShift } from "./formant.ts";
+import { budget, ratioBudget } from "../../../test/perf.ts";
 
 // Measurement helpers (test only): YIN f0 and harmonic levels, ported from
 // the design prototype (proto/formant/analysis.ts).
@@ -244,9 +245,9 @@ describe("formant shift (fx.formant)", () => {
     };
     const formant = best((i) => formantShift(dry.x, SR, 2 + i * 0.25));
     const plain = best((i) => pitchShift(dry.x, SR, 0.5 + i * 0.25));
-    expect(formant / plain).toBeLessThanOrEqual(4);
+    expect(formant / plain).toBeLessThanOrEqual(ratioBudget(4));
     const perSecond = formant / (dry.x.length / SR);
-    // Absolute budget 7 ms with 1.5x headroom for loaded CI machines.
-    expect(perSecond).toBeLessThanOrEqual(7 * 1.5);
+    // Absolute budget 7 ms on the reference host.
+    expect(perSecond).toBeLessThanOrEqual(budget(7));
   });
 });

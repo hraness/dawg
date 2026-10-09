@@ -21,6 +21,11 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - **OpenRouter routing variants.** Model IDs with a `:nitro`, `:free`, `:floor` or other variant suffix are accepted on OpenRouter (`/model`, `dawg login`, `DAWG_MODEL`) and sent unchanged; the AI Gateway still refuses them.
 - **Prompt caching.** Requests to Anthropic models mark the static system prompt with a cache breakpoint, and tool descriptions fit the 1024-character limit some providers apply, so later agent steps reuse the cached prefix instead of re-sending about 22K tokens at full cost.
 
+### Fixed
+
+- Shortening a song (`/bars`, `setBars`) drops tempo marks, meter changes and fermatas past the new end; they were never heard, and the printed `song.ts` failed to load. Older projects that hold such marks print without them, and a tempo ramp ending exactly on the final barline prints at the last tick, as `ramp()` writes it.
+- A wavetable kept on a track after it switched to another instrument is printed as `wavetable: wavetable(...)` (SDK 1.32.0) instead of being lost on the next sync.
+
 ### Changed
 
 - `fx formant` is no longer an alias of the vowel filter; `/fx formant o` and `set_fx {effect: "formant", vowel}` explain that the vowel filter is `vowel`.

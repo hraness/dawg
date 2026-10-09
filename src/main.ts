@@ -310,7 +310,12 @@ import { decodeLoop, encodeLoop } from "../core/loop.ts";
 import { scoreToMidi } from "../core/midi.ts";
 import type { TrackScoreSnapshot } from "../tui/render.ts";
 import { PromptModel } from "../tui/prompt.ts";
-import { TerminalInputDecoder } from "../tui/input.ts";
+import {
+  ESCAPE_FLUSH_MS,
+  INPUT_FLUSH,
+  PASTE_FLUSH_MS,
+  TerminalInputDecoder,
+} from "../tui/input.ts";
 import {
   composeFrame,
   TuiApp,
@@ -1349,8 +1354,28 @@ async function runInteractive(): Promise<void> {
   stdin.on("end", onEnd);
   async function* chunks(): AsyncGenerator<string> {
     for (;;) {
-      while (inbox.length === 0)
-        await new Promise<void>((resolve) => (wake = resolve));
+      while (inbox.length === 0) {
+        // A partial escape (Alt+[, a cut-off paste) is flushed after a short
+        // idle so it never holds back the keys behind it.
+        const held = inputDecoder.pending();
+        const idle =
+          held === "paste"
+            ? PASTE_FLUSH_MS
+            : held === "escape"
+              ? ESCAPE_FLUSH_MS
+              : undefined;
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        const timedOut = await new Promise<boolean>((resolve) => {
+          wake = () => resolve(false);
+          if (idle !== undefined)
+            timeout = setTimeout(() => resolve(true), idle);
+        });
+        clearTimeout(timeout);
+        if (timedOut && inbox.length === 0) {
+          wake = undefined;
+          yield INPUT_FLUSH;
+        }
+      }
       wake = undefined;
       const next = inbox.shift()!;
       if (next === "\u0000eof") return;
@@ -1384,10 +1409,13 @@ async function runInteractive(): Promise<void> {
     let exiting = false;
     for await (const text of chunks()) {
       // A read that is exactly ESC is the Esc key, not the start of a sequence.
-      const values = [
-        ...inputDecoder.push(text),
-        ...(text === "\u001b" ? inputDecoder.flush() : []),
-      ];
+      const values =
+        text === INPUT_FLUSH
+          ? inputDecoder.flush()
+          : [
+              ...inputDecoder.push(text),
+              ...(text === "\u001b" ? inputDecoder.flush() : []),
+            ];
       while (values.length) {
         const value = values.shift()!;
         // A mouse report acts on what the last frame painted under it; some

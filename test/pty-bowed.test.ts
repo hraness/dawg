@@ -8,6 +8,7 @@ import { expect, test } from "bun:test";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { launch, supported } from "./pty-harness.ts";
+import { budget } from "./perf.ts";
 
 type Doc = {
   tracks?: {
@@ -105,7 +106,7 @@ test.skipIf(!supported)(
         () => t.vt.text().includes("recorded 2 notes"),
         "record receipt",
       );
-      expect(performance.now() - started).toBeLessThan(5_000);
+      expect(performance.now() - started).toBeLessThan(budget(5_000));
       const doc = await composition(t.cwd);
       expect(
         (doc.notes ?? []).filter((note) => note.trackId === "lead"),

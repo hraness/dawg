@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import prettier from "prettier";
 import { initProject, writeAtomic } from "../../src/project/init.ts";
-import { diffScores } from "../diff.ts";
+import { adoptNoteIds, diffScores } from "../diff.ts";
 import { createScore, scoreFromJSON, TrackScore } from "../score.ts";
 import { evaluateProject } from "./eval.ts";
 import { printProject } from "./print.ts";
@@ -200,9 +200,7 @@ describe("printing time", () => {
 
   test("print(eval(print(x))) keeps the time fields", async () => {
     const back = await roundTrip(timedScore);
-    const ops = diffScores(timedScore, back).filter(
-      (op) => op.type !== "addNote" && op.type !== "removeNote",
-    );
+    const ops = diffScores(timedScore, adoptNoteIds(timedScore, back));
     expect(ops).toEqual([]);
     expect(printProject(back).files).toEqual(printProject(timedScore).files);
   });

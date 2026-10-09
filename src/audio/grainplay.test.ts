@@ -12,6 +12,7 @@ import {
 } from "./granular.ts";
 import { LiveSynth } from "./live.ts";
 import { renderScorePcm, StemRenderer } from "./wav.ts";
+import { budget } from "../../test/perf.ts";
 
 const SR = 48_000;
 
@@ -414,7 +415,7 @@ describe("grainplay: live cost", () => {
     const l = new Float64Array(128);
     const r = new Float64Array(128);
     voice.process(l, r, 0, 128);
-    expect(performance.now() - started).toBeLessThan(10);
+    expect(performance.now() - started).toBeLessThan(budget(10));
   });
 });
 

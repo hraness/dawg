@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import prettier from "prettier";
 import { initProject, writeAtomic } from "../../src/project/init.ts";
-import { diffScores } from "../diff.ts";
+import { adoptNoteIds, diffScores } from "../diff.ts";
 import { createScore, type TrackScore } from "../score.ts";
 import { evaluateProject } from "./eval.ts";
 import { printProject, printTrack } from "./print.ts";
@@ -129,9 +129,7 @@ describe("organs in the SDK (f061-organ)", () => {
       await writeProject(dir, organs);
       const evaluated = await evaluateProject(dir);
       if (!evaluated.ok) throw new Error(JSON.stringify(evaluated.diagnostics));
-      const ops = diffScores(organs, evaluated.score).filter(
-        (op) => op.type !== "addNote" && op.type !== "removeNote",
-      );
+      const ops = diffScores(organs, adoptNoteIds(organs, evaluated.score));
       expect(ops).toEqual([]);
       expect(evaluated.score.tracks.map((t) => t.keys)).toEqual(
         organs.tracks.map((t) => t.keys),

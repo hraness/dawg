@@ -10,6 +10,7 @@ import { createScore, type TrackScore } from "../../core/score.ts";
 import { ModalBank, positionWeight, MODE_TABLES } from "./dsp/modal.ts";
 import { engineFor } from "./instruments.ts";
 import { renderScorePcm } from "./wav.ts";
+import { best, budget } from "../../test/perf.ts";
 
 const SR = 48_000;
 
@@ -232,10 +233,10 @@ describe("modal engine", () => {
   test("cost stays under 4 ms per voice-second", () => {
     const voices = 8;
     const seconds = 2;
-    const t0 = performance.now();
-    for (let v = 0; v < voices; v += 1)
-      strike("gong", 110 * (1 + v / 8), seconds, { ombak: 3 }, 0.8, seconds);
-    const ms = performance.now() - t0;
-    expect(ms / (voices * seconds)).toBeLessThan(4);
+    const ms = best(() => {
+      for (let v = 0; v < voices; v += 1)
+        strike("gong", 110 * (1 + v / 8), seconds, { ombak: 3 }, 0.8, seconds);
+    }, 3);
+    expect(ms / (voices * seconds)).toBeLessThan(budget(4));
   });
 });
