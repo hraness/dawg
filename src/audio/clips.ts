@@ -15,6 +15,7 @@ import {
   resolveClipLengths,
 } from "../../core/clips.ts";
 import type { AudioClip, Take, Track, TrackScore } from "../../core/score.ts";
+import { autotuneClip } from "./autotune.ts";
 import { sampleKey, type DecodedSample, type SampleBank } from "./samples.ts";
 import type { SampleWarp } from "./warp.ts";
 
@@ -110,7 +111,9 @@ export function equalPowerFade(x: number): number {
  * Sum `track`'s clips into `target` (the mono dry buffer). `gainAt(tick)`
  * is the track volume with automation; `tickAt(sample)` maps a render
  * sample back to a score tick for it. Returns the clips that did not
- * load (they stay silent).
+ * load (they stay silent). With `score` and a `Track.autotune` (0.7), each
+ * clip plays retuned (`autotuneClip`, keyed by its offset and nudge);
+ * reversed clips play untuned.
  */
 export function renderClips(
   target: Float64Array,
@@ -118,6 +121,7 @@ export function renderClips(
   context: ClipContext,
   bank: SampleBank | undefined,
   gainAt: (tick: number) => number,
+  score?: TrackScore,
 ): string[] {
   const missing: string[] = [];
   if (!track.clips) return missing;
@@ -160,7 +164,27 @@ export function renderClips(
     const fadeInFrames = fadeIn * sampleRate;
     const fadeOutFrames = fadeOut * sampleRate;
     const gain = clip.gain ?? 1;
-    const data = audio.mono;
+    // 0.7 autotune: the clip's audio retuned at the song second its
+    // offset sounds (`start` already holds the nudge).
+    const tuned =
+      track.autotune && score && !clip.rev
+        ? autotuneClip(
+            score,
+            track,
+            {
+              sha256: audio.sha256,
+              sampleRate: audio.sampleRate,
+              mono: audio.mono,
+            },
+            start / sampleRate,
+            offset,
+            clip.id,
+            0,
+            nudge,
+          )
+        : undefined;
+    const data = tuned ? tuned.mono : audio.mono;
+    const shiftFrom = tuned ? tuned.from : 0;
     // Track volume (with automation) is read once per 32-sample block.
     let blockGain = 0;
     for (let index = first; index < last; index += 1) {
@@ -175,7 +199,7 @@ export function renderClips(
       const remaining = total - elapsed;
       if (fadeOutFrames > 0 && remaining < fadeOutFrames)
         shape *= equalPowerFade(remaining / fadeOutFrames);
-      target[index]! += readHermite(data, position) * shape;
+      target[index]! += readHermite(data, position - shiftFrom) * shape;
     }
   }
   return missing;

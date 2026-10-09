@@ -1362,8 +1362,8 @@ function renderVoiceInto(
   // Audio clips (0.7) sum into the dry buffer before the chain.
   if (track?.clips) {
     const gainAt = (tick: number) => trackGainAt(track, tick);
-    renderClips(dry, track, context, bank, gainAt);
-    if (stereo) renderClips(dryR, track, context, bank, gainAt);
+    renderClips(dry, track, context, bank, gainAt, score);
+    if (stereo) renderClips(dryR, track, context, bank, gainAt, score);
   }
   return stereo;
 }
