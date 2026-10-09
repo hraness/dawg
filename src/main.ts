@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { isGuideInstrument, vocalChainPatch } from "../core/clips.ts";
+import { commandParses } from "./commands/parses.ts";
 import {
   isUnknownInstrument,
   plainSineAdvice,
@@ -355,43 +356,7 @@ import {
 
 /** Whether a bare command parses (no side effects): for typo suggestions. */
 function parsesLocally(text: string): boolean {
-  return [
-    parsePrompt,
-    parseMusicCommand,
-    parseEditCommand,
-    parseRhythmCommand,
-    parseFxCommand,
-    parseSynthCommand,
-    parseStringCommand,
-    parseGranularCommand,
-    parseKeysCommand,
-    parseExpressionCommand,
-    parseMasterCommand,
-    (value: string) => parseSectionCommand(value, score),
-    parsePatternCommand,
-    parseKitCommand,
-    parsePackCommand,
-    parseSampleCommand,
-    parseFitCommand,
-    parseShiftCommand,
-    parseResampleCommand,
-    parseWavetableCommand,
-    parseTimeCommand,
-    parseTuningCommand,
-    parseRigCommand,
-    parseModalCommand,
-    parseGuitarCommand,
-    parseStrumCommand,
-    parseWindCommand,
-    parseSingCommand,
-    parseVocoderCommand,
-    parseVocalCommand,
-    parseFormantCommand,
-    parseVowelCommand,
-    parseClipCommand,
-    parseLyricsCommand,
-    parseAutotuneCommand,
-  ].some((parse) => parse(text) !== undefined);
+  return commandParses(text, score);
 }
 
 const ESC = "\u001b[";
