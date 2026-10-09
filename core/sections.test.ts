@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { secondsAtTick } from "./tempo.ts";
 import { decodeLoop, encodeLoop } from "./loop.ts";
 import { diffScores } from "./diff.ts";
 import {
@@ -607,5 +608,34 @@ describe("forms in linear order", () => {
     expect(
       flat.notes.map((note) => [note.startTick, note.durationTicks]),
     ).toEqual(base.notes.map((note) => [note.startTick, note.durationTicks]));
+  });
+});
+
+describe("a form keeps tempo ramps that cross section boundaries", () => {
+  test("a form in song order times exactly like the song", () => {
+    const ticks = 4 * 480;
+    // 96 bpm gliding linearly to 60 over bars 0..6, then 60 to the end.
+    const song = createScore({
+      bars: 8,
+      tempoBpm: 96,
+      tracks: [{ id: "lead", name: "lead", instrument: "sine" }],
+      notes: [],
+    })
+      .withTime({ tempo: [{ tick: 6 * ticks, bpm: 60, ramp: "linear" }] })
+      .withSections(
+        [
+          { name: "a", startBar: 0, bars: 2 },
+          { name: "b", startBar: 2, bars: 3 },
+          { name: "c", startBar: 5, bars: 3 },
+        ],
+        [],
+      );
+    const formed = withForm(song, parseForm(song, "a b c"));
+    const flat = flattenForm(formed);
+    for (const bar of [1, 2, 3, 5, 6, 8])
+      expect(secondsAtTick(flat, bar * ticks)).toBeCloseTo(
+        secondsAtTick(song, bar * ticks),
+        2,
+      );
   });
 });

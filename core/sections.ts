@@ -40,7 +40,7 @@ import {
  * The song tempo map for `pieces` of the score laid end to end: each piece
  * starts at the tempo sounding at its source tick, keeps the tempo events
  * and fermatas inside it (a ramp cut by the piece glides on from that
- * tempo), and the cut score starts at the first piece's tempo. Meter
+ * tempo, and one running past its end glides to the tempo reached there), and the cut score starts at the first piece's tempo. Meter
  * changes never reach here (sections need one meter). Scores without a
  * tempo map come back unchanged.
  */
@@ -84,6 +84,19 @@ export function sliceSongTime(
       }
       tempo.push({ ...event, tick });
       current = event.bpm;
+    }
+    // A ramp running on past the piece's end: glide to the tempo it has
+    // reached a tick before the end, so the piece follows the curve (a
+    // sub-span of a linear or exponential ramp is the same kind of ramp).
+    const crossing = (score.time.tempo ?? []).find(
+      (event) => event.tick >= piece.to,
+    );
+    const lastTick = inner.at(-1)?.tick ?? piece.from;
+    if (crossing?.ramp && piece.to - 1 > lastTick) {
+      const bpm = clampBpm(bpmAtTick(score, piece.to - 1));
+      const tick = piece.to - 1 + shift;
+      if (tick >= 1 && Math.abs(bpm - current) > 1e-9)
+        tempo.push({ tick, bpm, ramp: crossing.ramp });
     }
     // The tempo at the piece's end, for the next piece's step.
     current = clampBpm(bpmAtTick(score, Math.max(piece.from, piece.to - 1)));
