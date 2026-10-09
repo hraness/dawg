@@ -492,3 +492,69 @@ describe("preset levels", () => {
     expect(Math.abs(levels.lofi! - median)).toBeLessThan(3);
   });
 });
+
+describe("vocoder over audio clips (0.7 clips lane)", () => {
+  function clipSong(startTick: number) {
+    return createScore({
+      tempoBpm: 120,
+      bars: 4,
+      tracks: [
+        {
+          id: "vox",
+          name: "Vox",
+          instrument: "vocal",
+          muted: true,
+          clips: [
+            {
+              id: "c1",
+              src: "samples/v.wav",
+              sha256: "a".repeat(64),
+              startTick,
+            },
+          ],
+        },
+        {
+          id: "pad",
+          name: "Pad",
+          instrument: "vocoder",
+          vocoder: { src: "vox" },
+        },
+      ],
+      notes: [45, 52, 57].map((pitch, index) => ({
+        id: `c${index}`,
+        trackId: "pad",
+        pitch,
+        startTick: 0,
+        durationTicks: 480 * 16,
+        velocity: 0.8,
+      })),
+    });
+  }
+  const clipBank = (): SampleBank => ({
+    voices: new Map([[sampleKey("vox", "clip:c1"), voiceSample()]]),
+    problems: [],
+  });
+
+  test("a vocal track's clip modulates the carrier, and moving it changes the stem", () => {
+    const a = renderScorePcm(clipSong(0), {
+      sampleRate: SR,
+      samples: clipBank(),
+    });
+    expect(rms(a.pcm)).toBeGreaterThan(0.01);
+    const silent = renderScorePcm(clipSong(0), {
+      sampleRate: SR,
+      samples: { voices: new Map(), problems: [] },
+    });
+    expect(rms(silent.pcm)).toBeLessThan(rms(a.pcm) / 4);
+    const stems = new StemRenderer();
+    const first = hash(
+      stems.render(clipSong(0), { sampleRate: SR, samples: clipBank() }).pcm,
+    );
+    const moved = hash(
+      stems.render(clipSong(480 * 4), { sampleRate: SR, samples: clipBank() })
+        .pcm,
+    );
+    expect(moved).not.toBe(first);
+    expect(first).toBe(hash(a.pcm));
+  });
+});
