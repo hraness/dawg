@@ -49,6 +49,7 @@ import {
   KEYS_SIMPLE,
   isKeysPreset,
   keysParamName,
+  pianoWrite,
 } from "../../core/keys.ts";
 import {
   setSampleControls,
@@ -474,7 +475,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   {
     name: "set_instrument",
     description:
-      "Change a track's instrument voice. Mallets and bells (modal): modal (marimba) vibes xylophone glock celesta chimes kalimba mbira steelpan bowl gong timpani; set_modal shapes them.",
+      "Change a track's instrument voice. Mallets and bells (modal): modal (marimba) vibes xylophone glock celesta chimes kalimba mbira steelpan bowl gong timpani; set_modal shapes them. Electric keys: epiano suitcase dyno wurli clav funkclav (set_keys).",
     parameters: {
       type: "object",
       properties: {
@@ -490,7 +491,8 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
       const track = context.score.tracks.find((t) => t.id === trackId);
       if (track && typeof args.instrument === "string") {
         const word = args.instrument.toLowerCase();
-        const preset = word === "piano" ? "grand" : word;
+        // `rhodes`, `wurlitzer`, `clavinet` name their electric presets.
+        const preset = pianoWrite(word)?.preset ?? word;
         if (isKeysPreset(preset)) {
           const patch = keysPresetPatch(track, preset);
           return {
@@ -886,7 +888,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   },
   {
     name: "set_keys",
-    description: `Shape a modelled piano: preset (instrument, keys and its effects), params ${KEYS_SIMPLE.join(" ")}… (null unsets; DAWG.md lists all), or reset. Stored "piano" stays legacy; set_instrument piano writes grand.`,
+    description: `Shape a modelled piano or electric keys (epiano wurli clav): preset (instrument, keys and its effects), params ${KEYS_SIMPLE.join(" ")}… (epiano: bark bell tone vibe; wurli: trem; clav: pickup mute; null unsets; DAWG.md lists all), or reset. Stored "piano" stays legacy; set_instrument piano writes grand.`,
     parameters: {
       type: "object",
       properties: {

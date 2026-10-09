@@ -252,7 +252,6 @@ export const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
   // keys-electric (0.6.1): electric pianos and clavinet. `keys` stays legacy.
   { word: "epiano", instrument: "epiano", field: "keys", preset: "epiano" },
   { word: "rhodes", instrument: "epiano", field: "keys", preset: "epiano" },
-  { word: "tine", instrument: "epiano", field: "keys", preset: "epiano" },
   {
     word: "suitcase",
     instrument: "epiano",
