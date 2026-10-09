@@ -1367,6 +1367,8 @@ async function runInteractive(): Promise<void> {
     (applying = applying.then(() => applyRecord(latest)));
   const applyRecord = async (latest: typeof record): Promise<void> => {
     try {
+      // Queued before a /fork or /resume swapped the session: stale.
+      if (latest.sessionId !== record.sessionId) return;
       if (latest.revision > record.revision) {
         const previousRevision = record.revision;
         record = latest;
@@ -1435,7 +1437,17 @@ async function runInteractive(): Promise<void> {
       });
     }
   };
-  let unsubscribe = port.subscribe(onUpdate);
+  // Each subscription answers only while its port is the live one: /fork and
+  // /resume swap the port, and a load the old port started before the swap
+  // could otherwise land afterwards and pull the old session's name and
+  // score into the new one.
+  const subscribeLive = (): (() => void) => {
+    const bound = port;
+    return bound.subscribe((update) => {
+      if (bound === port) onUpdate(update);
+    });
+  };
+  let unsubscribe = subscribeLive();
   const refreshPresence = () =>
     void port
       .presence()
@@ -1451,7 +1463,7 @@ async function runInteractive(): Promise<void> {
   rebindPort = () => {
     unsubscribe();
     syncState = port.sync;
-    unsubscribe = port.subscribe(onUpdate);
+    unsubscribe = subscribeLive();
     refreshPresence();
   };
   if (freshWorkspace)

@@ -66,6 +66,7 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - **The idle editor no longer rebuilds its frame 30 times a second.** Frames build when input, the score, the activity strip or a playing clock changes, with a 2 Hz heartbeat otherwise.
 - **End and Home on the help panel and transcript** stop at the last full page, so the next arrow press moves the view. The help panel's keys list no longer offers `j k`, which type into the prompt there.
 - **Help rows and headings clip with an ellipsis** at narrow widths, like every other panel.
+- **`/fork` and `/resume` keep the new session's name.** A change the old session's watcher was still reading when the session switched no longer lands afterwards and puts the old name (and score) back in the header.
 
 ## 0.6.1
 
