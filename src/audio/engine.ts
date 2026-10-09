@@ -530,18 +530,27 @@ export class AudioEngine {
       existing.pcm = note.pcm;
       existing.frames = note.frames;
       existing.fadeLeft = undefined;
+      existing.fadeFrames = this.releaseFrames(note);
     } else
       this.voices.set(id, {
         pcm: note.pcm,
         frames: note.frames,
         position: 0,
         fadeLeft: undefined,
-        fadeFrames: Math.max(1, Math.round(this.sampleRate * 0.01)),
+        fadeFrames: this.releaseFrames(note),
       });
     // Write what is due now so the voice joins the very next chunk.
     const first = this.written;
     this.pump();
     return this.frameMs(first);
+  }
+
+  /** A live voice's note-off fade: 10 ms, or the instrument's release. */
+  private releaseFrames(note: LiveNotePcm): number {
+    return Math.max(
+      1,
+      Math.round(this.sampleRate * (note.releaseSeconds ?? 0.01)),
+    );
   }
 
   /** Fade a live voice out over ~10 ms (sustain lifted, mode left). */
