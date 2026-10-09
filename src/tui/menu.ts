@@ -509,7 +509,7 @@ export function rootNodes(context: MenuContext): MenuNode[] {
 }
 
 /** Old section names still open the menu where that content now lives. */
-const SECTION_ALIASES: Readonly<Record<string, readonly string[]>> = {
+export const SECTION_ALIASES: Readonly<Record<string, readonly string[]>> = {
   sound: ["sound"],
   parameters: ["sound"],
   sounds: ["sound", "browse"],
@@ -3865,4 +3865,13 @@ export const MENU_SECTIONS = [
   "tempo",
   "meter",
   "time",
+  "performance",
+  "expression",
+  "tuning",
+  "scale",
+  // More names for arrange › style and arrange.
+  "styles",
+  "genre",
+  "sections",
+  "form",
 ] as const;

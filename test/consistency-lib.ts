@@ -63,7 +63,10 @@ export function windowPatterns(): RegExp[] {
 }
 
 /** True when the prompt bar runs `line` locally (no model call). */
-export function accepts(line: string, score: TrackScore = demoScore()): boolean {
+export function accepts(
+  line: string,
+  score: TrackScore = demoScore(),
+): boolean {
   const command = line.trim();
   if (!command) return false;
   if (commandParses(command, score)) return true;
@@ -103,8 +106,22 @@ export function demoScore(): TrackScore {
       },
     ],
     notes: [
-      { id: "n1", trackId: "saw", pitch: 60, startTick: 0, durationTicks: 480, velocity: 0.8 },
-      { id: "n2", trackId: "drums", pitch: 36, startTick: 0, durationTicks: 120, velocity: 0.8 },
+      {
+        id: "n1",
+        trackId: "saw",
+        pitch: 60,
+        startTick: 0,
+        durationTicks: 480,
+        velocity: 0.8,
+      },
+      {
+        id: "n2",
+        trackId: "drums",
+        pitch: 36,
+        startTick: 0,
+        durationTicks: 120,
+        velocity: 0.8,
+      },
     ],
   } as Parameters<typeof createScore>[0]);
 }
@@ -212,19 +229,27 @@ export function guideFiles(): { path: string; text: string }[] {
  */
 export function menuPathsIn(text: string): string[][] {
   const out: string[][] = [];
-  for (const match of text.matchAll(/ctrl-k((?: › [^`()\[\]:.,"·|\n/$]+)+)/gi)) {
+  for (const match of text.matchAll(
+    /ctrl-k((?: › [^`()\[\]:.,"·|\n/$]+)+)/gi,
+  )) {
     const segments = match[1]!
       .split(" › ")
       .map((segment) => segment.replace(/\*\*/g, "").trim())
       .filter(Boolean)
-      .map((segment) => segment.split(/ (?:as|and|shows|lists|for) /)[0]!.trim());
+      .map((segment) =>
+        segment.split(/ (?:as|and|shows|lists|for) /)[0]!.trim(),
+      );
     if (segments.length > 0) out.push(segments);
   }
   return out;
 }
 
 const norm = (text: string) =>
-  String(text ?? "").toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, " ").trim();
+  String(text ?? "")
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 
 /**
  * How well a menu row answers to `segment`: 3 for its label or id, 2 for a

@@ -66,7 +66,7 @@ export type FxCommand =
       values: Readonly<Record<string, number | string | boolean>>;
     };
 
-const EFFECT_ALIASES: Readonly<Record<string, EffectName>> = Object.freeze({
+export const EFFECT_ALIASES: Readonly<Record<string, EffectName>> = Object.freeze({
   lpf: "filter",
   hpf: "filter",
   bpf: "filter",
