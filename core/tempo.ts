@@ -107,8 +107,8 @@ export const TIME_LIMITS = Object.freeze({
   /** Same as `SCORE_LIMITS.minTempoBpm` / `maxTempoBpm`. */
   minBpm: 20,
   maxBpm: 300,
-  /** Same as `SCORE_LIMITS.maxTick`. */
-  maxTick: 1_000_000,
+  /** Same as `SCORE_LIMITS.maxTick` (2^26). */
+  maxTick: 67_108_864,
   /** Same as `SCORE_LIMITS.maxBeatsPerBar`. */
   maxBeatsPerBar: 16,
   /** Same as `SCORE_LIMITS.maxBars`. */

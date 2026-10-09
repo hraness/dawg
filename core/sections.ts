@@ -684,6 +684,34 @@ function checkBars(bars: number): void {
     );
 }
 
+/**
+ * The song tempo map, fermatas and pedal lanes for a ripple edit that lays
+ * `pieces` of the score end to end: they move with the music they belong
+ * to, as notes and automation do.
+ */
+function rippleTime(
+  score: TrackScore,
+  pieces: readonly { from: number; to: number; offset: number }[],
+): Readonly<{
+  tempoBpm: number;
+  time: SongTime | null;
+  pedals: (track: Track) => Track;
+}> {
+  const kept = pieces.filter((piece) => piece.to > piece.from);
+  const timed = sliceSongTime(
+    score,
+    kept.map((piece) => ({
+      ...piece,
+      to: Math.min(piece.to, SCORE_LIMITS.maxTick + 1),
+    })),
+  );
+  return {
+    tempoBpm: timed.tempoBpm,
+    time: timed.time ?? null,
+    pedals: (track) => slicePedals(track, kept),
+  };
+}
+
 /** Insert `count` empty bars at `atBar`, shifting later music and sections. */
 export function insertBars(
   score: TrackScore,
@@ -695,12 +723,20 @@ export function insertBars(
   const ticks = barTicks(score);
   const at = atBar * ticks;
   const shift = count * ticks;
+  const ripple = rippleTime(score, [
+    { from: 0, to: at, offset: 0 },
+    { from: at, to: Infinity, offset: at + shift },
+  ]);
   return new TrackScore({
     ...score.toJSON(),
+    tempoBpm: ripple.tempoBpm,
+    time: ripple.time,
     bars: score.bars + count,
     tracks: score.tracks.map((track) =>
       insertClipBars(
-        mapAutomation(track, (points) => insertPoints(points, at, shift)),
+        mapAutomation(ripple.pedals(track), (points) =>
+          insertPoints(points, at, shift),
+        ),
         at,
         shift,
       ),
@@ -763,12 +799,20 @@ export function deleteBars(
     }
   }
   const names = new Set(sections.map((section) => foldName(section.name)));
+  const ripple = rippleTime(score, [
+    { from: 0, to: at, offset: 0 },
+    { from: end, to: Infinity, offset: at },
+  ]);
   return new TrackScore({
     ...score.toJSON(),
+    tempoBpm: ripple.tempoBpm,
+    time: ripple.time,
     bars: score.bars - count,
     tracks: score.tracks.map((track) =>
       deleteClipBars(
-        mapAutomation(track, (points) => deletePoints(points, at, shift)),
+        mapAutomation(ripple.pedals(track), (points) =>
+          deletePoints(points, at, shift),
+        ),
         at,
         end,
       ),
