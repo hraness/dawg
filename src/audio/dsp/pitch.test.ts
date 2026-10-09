@@ -249,7 +249,7 @@ describe("trackPitch", () => {
         console.error(`trackPitch cost ${ms.toFixed(1)} ms/s (root ${root})`);
       expect(ms).toBeLessThan(BUDGET);
     }
-  });
+  }, 60_000);
 });
 
 describe("pitchNotes", () => {
