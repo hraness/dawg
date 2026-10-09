@@ -138,6 +138,18 @@ export const SCORE_LIMITS = Object.freeze({
    * `DAWG_ASSETS_CACHE_MAX` / `DAWG_PACKS_CACHE_MAX`.
    */
   maxSampleCacheBytes: 512 * 1024 * 1024,
+  /** Audio clips, takes and lyrics (0.7, shapes in the contract). */
+  maxClipsPerTrack: 256,
+  maxTakesPerTrack: 64,
+  maxClipGain: 4,
+  maxClipFadeSeconds: 2,
+  maxClipSeconds: 520,
+  maxClipTextLength: 2000,
+  maxLyricLength: 32,
+  maxTakeNudgeMs: 250,
+  maxTtsVoiceLength: 64,
+  maxSayCuts: 512,
+  maxTakePpm: 1000,
 } as const);
 
 /** Instrument name that selects a track's `wavetable` oscillator. */
@@ -311,7 +323,8 @@ export class ScoreValidationError extends Error {
     | "invalid-track"
     | "duplicate-note"
     | "duplicate-track"
-    | "score-limit";
+    | "score-limit"
+    | "routing-cycle";
 
   constructor(
     message: string,
@@ -451,6 +464,13 @@ export type Track = Readonly<{
    * field is rejected.
    */
   wind?: TrackWind;
+  /**
+   * Optional (0.7): audio clips placed on the timeline. Shapes only in the
+   * contract; the renderer ignores them until the clips lane.
+   */
+  clips?: readonly AudioClip[];
+  /** Optional (0.7): recorded or imported takes that clips may reference. */
+  takes?: readonly Take[];
 }> &
   /**
    * Performance (`core/expression.ts`): glide default, sustain pedal
@@ -849,6 +869,8 @@ export type TrackPatch = Readonly<
     sostenuto?: Track["sostenuto"] | null;
     guitar?: TrackGuitar | null;
     wind?: TrackWind | null;
+    clips?: readonly AudioClip[] | null;
+    takes?: readonly Take[] | null;
   }
 >;
 
@@ -871,6 +893,8 @@ export type Note = Readonly<{
   velocity: number;
   /** Static offset from the tuned pitch in cents (±1200); absent is 0. */
   cents?: number;
+  /** Optional (0.7): one sung syllable, no whitespace (≤ 32 characters). */
+  lyric?: string;
 }> &
   NoteExpression;
 
@@ -901,6 +925,8 @@ export type TrackInput = Readonly<
     | "sostenuto"
     | "guitar"
     | "wind"
+    | "clips"
+    | "takes"
   > &
     Pick<Track, "id"> & {
       filter?: TrackFilter | null;
@@ -927,6 +953,8 @@ export type TrackInput = Readonly<
       sostenuto?: Track["sostenuto"] | null;
       guitar?: TrackGuitar | null;
       wind?: TrackWind | null;
+      clips?: readonly AudioClip[] | null;
+      takes?: readonly Take[] | null;
     }
 >;
 
@@ -944,6 +972,7 @@ export type NoteInput = Readonly<{
   pitch: number;
   velocity: number;
   cents?: number;
+  lyric?: string | null;
 }> &
   NoteExpressionPatch;
 
@@ -1284,6 +1313,7 @@ export type NotePatch = Readonly<
     Pick<Note, "startTick" | "durationTicks" | "pitch" | "velocity" | "cents">
   >
 > &
+  Readonly<{ lyric?: string | null }> &
   NoteExpressionPatch;
 
 export function updateNote(
@@ -1349,7 +1379,9 @@ export function removeTrack(score: TrackScore, trackId: string): TrackScore {
   if (!score.tracks.some((track) => track.id === trackId)) return score;
   return new TrackScore({
     ...score.toJSON(),
-    tracks: score.tracks.filter((track) => track.id !== trackId),
+    tracks: score.tracks
+      .filter((track) => track.id !== trackId)
+      .map((track) => dropTrackRefs(track, trackId)),
     notes: score.notes.filter((note) => note.trackId !== trackId),
   });
 }
@@ -1530,6 +1562,12 @@ export type ScoreOperation =
       master: SongMaster | null;
     }>
   | Readonly<{
+      /** Replaces a track's audio clips (0.7); null clears them. */
+      type: "setClips";
+      trackId: string;
+      clips: readonly AudioClip[] | null;
+    }>
+  | Readonly<{
       type: "setSections";
       sections: readonly Section[];
       form: readonly FormEntry[];
@@ -1576,6 +1614,8 @@ export function applyScoreOperation(
     );
   if (operation.type === "clearTrack")
     return clearTrack(score, operation.trackId);
+  if (operation.type === "setClips")
+    return setClips(score, operation.trackId, operation.clips);
   return assertNever(operation);
 }
 
@@ -1937,6 +1977,8 @@ function normalizeTrack(input: unknown): Track {
       "invalid-track",
     );
   const sampler = normalizeSampler(input.sampler);
+  const takes = normalizeTakes(input.takes, id);
+  const clips = normalizeClips(input.clips, id, takes);
   const rhythm = normalizeRhythm(input.rhythm, id);
   const time = timeOrThrow(
     () => normalizeTrackTime(input.time, `track ${id} time`),
@@ -2055,6 +2097,8 @@ function normalizeTrack(input: unknown): Track {
     ...(sostenuto ? { sostenuto } : {}),
     ...(guitar ? { guitar } : {}),
     ...(wind ? { wind } : {}),
+    ...(clips ? { clips } : {}),
+    ...(takes ? { takes } : {}),
   });
 }
 
@@ -3022,6 +3066,7 @@ function normalizeNote(input: unknown): Note {
     () => normalizeNoteCents(input.cents, `note ${id}`),
     "invalid-note",
   );
+  const lyric = normalizeLyric(input.lyric, id);
   return Object.freeze({
     id,
     trackId,
@@ -3031,6 +3076,7 @@ function normalizeNote(input: unknown): Note {
     velocity: input.velocity,
     ...expression,
     ...(cents !== undefined ? { cents } : {}),
+    ...(lyric !== undefined ? { lyric } : {}),
   });
 }
 
@@ -3103,4 +3149,478 @@ function assertNever(value: never): never {
   throw new ScoreValidationError(
     `unsupported score operation: ${String(value)}`,
   );
+}
+
+// ---------------------------------------------------------------------------
+// 0.7 Voice contract: audio clips, takes and lyrics (shapes only). The
+// renderer ignores these fields until the clips lane wires them up.
+// ---------------------------------------------------------------------------
+
+/** How a text-to-speech clip was made and where its syllables fall (0.7.1). */
+export type ClipSay = Readonly<{
+  engine: "say" | "espeak-ng" | "piper";
+  /** Stock voice name, at most 64 characters. */
+  voice: string;
+  /** Words per minute 80..400 (default 180). */
+  rate?: number;
+  /** Licence of the voice output, recorded with the clip. */
+  license: string;
+  /** Syllable starts in seconds, strictly increasing. */
+  cuts: readonly number[];
+  /** Voicing onsets in seconds (= cuts for unvoiced syllables). */
+  vowels: readonly number[];
+  /** Indices of unvoiced syllables. */
+  unvoiced?: readonly number[];
+  /** Octave shift applied to targets, -3..3. */
+  oct?: number;
+  /** 0..1 share of the spoken contour kept. */
+  soft?: number;
+  /** The pinned sung buffer. */
+  sung?: Readonly<{ src: string; sha256: string; key: string }>;
+}>;
+
+/** An audio file placed on a track's timeline (0.7). Times in seconds. */
+export type AudioClip = Readonly<{
+  id: string;
+  src: string;
+  sha256: string;
+  startTick: number;
+  offset?: number;
+  dur?: number;
+  gain?: number;
+  fadeInTime?: number;
+  fadeTime?: number;
+  rev?: boolean;
+  /** Name of the track's take this clip plays from. */
+  take?: string;
+  mute?: boolean;
+  text?: string;
+  say?: ClipSay;
+}>;
+
+/** A recorded or imported take (0.7 shape; recording is 0.7.1). */
+export type Take = Readonly<{
+  name: string;
+  src: string;
+  sha256: string;
+  startTick: number;
+  /** Seconds into the file where the take starts. */
+  offset: number;
+  /** Round-trip latency compensated, in seconds. */
+  latency: number;
+  latencyAssumed?: boolean;
+  /** Clock drift in parts per million (±1000). */
+  ppm?: number;
+  /** 0..1 fit of the alignment. */
+  fit?: number;
+  warn?: string;
+  /** Manual nudge in milliseconds (±250). */
+  nudge?: number;
+  inTick: number;
+  outTick: number;
+}>;
+
+const MAX_CLIP_LABEL_LENGTH = 128;
+
+function clipError(message: string): ScoreValidationError {
+  return new ScoreValidationError(message, "invalid-track");
+}
+
+function clipNumber(
+  value: unknown,
+  label: string,
+  min: number,
+  max: number,
+): number | undefined {
+  if (value === undefined) return undefined;
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value < min ||
+    value > max
+  )
+    throw clipError(`${label} must be a number ${min}..${max}`);
+  return value;
+}
+
+function clipTick(value: unknown, label: string): number {
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 0 ||
+    value > SCORE_LIMITS.maxTick
+  )
+    throw clipError(`${label} must be an integer tick 0..${SCORE_LIMITS.maxTick}`);
+  return value;
+}
+
+function clipString(
+  value: unknown,
+  label: string,
+  max: number,
+): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.length === 0 || value.length > max)
+    throw clipError(`${label} must be 1..${max} characters`);
+  return value;
+}
+
+function clipBool(value: unknown, label: string): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") throw clipError(`${label} must be a boolean`);
+  return value || undefined;
+}
+
+function clipSrc(value: unknown, label: string): string {
+  const packRef = typeof value === "string" && value.startsWith(PACK_PREFIX);
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > SCORE_LIMITS.maxSamplePathLength ||
+    (packRef ? !isPackRef(value) : !isSafeRelativePath(value))
+  )
+    throw clipError(
+      `${label} src must be a project-relative path without ".." or pack:<pack>/<sound>, at most ${SCORE_LIMITS.maxSamplePathLength} characters`,
+    );
+  return value;
+}
+
+function clipSha(value: unknown, label: string): string {
+  if (typeof value !== "string" || !SHA256_HEX.test(value))
+    throw clipError(`${label} sha256 must be 64 lowercase hex characters`);
+  return value;
+}
+
+function increasingTimes(value: unknown, label: string): number[] {
+  if (!Array.isArray(value) || value.length > SCORE_LIMITS.maxSayCuts)
+    throw clipError(
+      `${label} must be an array of at most ${SCORE_LIMITS.maxSayCuts} times`,
+    );
+  let previous = -Infinity;
+  return value.map((time: unknown, index) => {
+    if (
+      typeof time !== "number" ||
+      !Number.isFinite(time) ||
+      time < 0 ||
+      time > SCORE_LIMITS.maxClipSeconds
+    )
+      throw clipError(
+        `${label}[${index}] must be seconds 0..${SCORE_LIMITS.maxClipSeconds}`,
+      );
+    if (time <= previous)
+      throw clipError(`${label} must be strictly increasing`);
+    previous = time;
+    return time;
+  });
+}
+
+/** Validates ClipSay; absent stays absent. */
+export function normalizeClipSay(
+  input: unknown,
+  label: string,
+): ClipSay | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (!isRecord(input)) throw clipError(`${label} say must be an object`);
+  const engine = input.engine;
+  if (engine !== "say" && engine !== "espeak-ng" && engine !== "piper")
+    throw clipError(`${label} say.engine must be say, espeak-ng or piper`);
+  const voice = clipString(
+    input.voice,
+    `${label} say.voice`,
+    SCORE_LIMITS.maxTtsVoiceLength,
+  );
+  if (voice === undefined) throw clipError(`${label} say.voice is required`);
+  const license = clipString(
+    input.license,
+    `${label} say.license`,
+    MAX_CLIP_LABEL_LENGTH,
+  );
+  if (license === undefined)
+    throw clipError(`${label} say.license is required`);
+  const rate = clipNumber(input.rate, `${label} say.rate`, 80, 400);
+  const cuts = increasingTimes(input.cuts, `${label} say.cuts`);
+  const vowels = increasingTimes(input.vowels, `${label} say.vowels`);
+  if (cuts.length !== vowels.length)
+    throw clipError(`${label} say.cuts and say.vowels must be the same length`);
+  cuts.forEach((cut, index) => {
+    if (cut > vowels[index]!)
+      throw clipError(`${label} say.cuts[${index}] must be <= say.vowels[${index}]`);
+  });
+  let unvoiced: number[] | undefined;
+  if (input.unvoiced !== undefined) {
+    if (!Array.isArray(input.unvoiced))
+      throw clipError(`${label} say.unvoiced must be an array of indices`);
+    let previous = -1;
+    unvoiced = input.unvoiced.map((index: unknown) => {
+      if (
+        typeof index !== "number" ||
+        !Number.isInteger(index) ||
+        index <= previous ||
+        index >= cuts.length
+      )
+        throw clipError(
+          `${label} say.unvoiced must be increasing indices below ${cuts.length}`,
+        );
+      previous = index;
+      return index;
+    });
+  }
+  const oct = clipNumber(input.oct, `${label} say.oct`, -3, 3);
+  if (oct !== undefined && !Number.isInteger(oct))
+    throw clipError(`${label} say.oct must be an integer -3..3`);
+  const soft = clipNumber(input.soft, `${label} say.soft`, 0, 1);
+  let sung: ClipSay["sung"];
+  if (input.sung !== undefined) {
+    if (!isRecord(input.sung))
+      throw clipError(`${label} say.sung must be { src, sha256, key }`);
+    const key = clipString(
+      input.sung.key,
+      `${label} say.sung.key`,
+      MAX_CLIP_LABEL_LENGTH,
+    );
+    if (key === undefined) throw clipError(`${label} say.sung.key is required`);
+    sung = Object.freeze({
+      src: clipSrc(input.sung.src, `${label} say.sung`),
+      sha256: clipSha(input.sung.sha256, `${label} say.sung`),
+      key,
+    });
+  }
+  return Object.freeze({
+    engine,
+    voice,
+    ...(rate !== undefined ? { rate } : {}),
+    license,
+    cuts: Object.freeze(cuts),
+    vowels: Object.freeze(vowels),
+    ...(unvoiced && unvoiced.length > 0
+      ? { unvoiced: Object.freeze(unvoiced) }
+      : {}),
+    ...(oct !== undefined ? { oct } : {}),
+    ...(soft !== undefined ? { soft } : {}),
+    ...(sung ? { sung } : {}),
+  });
+}
+
+/**
+ * Validates Track.takes: unique names, sample path rules, inTick < outTick.
+ * Null, absent and `[]` normalize to absent.
+ */
+export function normalizeTakes(
+  input: unknown,
+  trackId: string,
+): readonly Take[] | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (!Array.isArray(input))
+    throw clipError(`track ${trackId} takes must be an array`);
+  if (input.length > SCORE_LIMITS.maxTakesPerTrack)
+    throw new ScoreValidationError(
+      `track ${trackId} takes holds at most ${SCORE_LIMITS.maxTakesPerTrack} takes`,
+      "score-limit",
+    );
+  const names = new Set<string>();
+  const takes = input.map((value: unknown, index): Take => {
+    if (!isRecord(value))
+      throw clipError(`track ${trackId} takes[${index}] must be an object`);
+    const name = clipString(
+      value.name,
+      `track ${trackId} takes[${index}] name`,
+      SCORE_LIMITS.maxNameLength,
+    );
+    if (name === undefined)
+      throw clipError(`track ${trackId} takes[${index}] name is required`);
+    if (names.has(name))
+      throw clipError(`track ${trackId} take name ${name} is duplicated`);
+    names.add(name);
+    const label = `track ${trackId} take ${name}`;
+    const offset = clipNumber(
+      value.offset,
+      `${label} offset`,
+      0,
+      SCORE_LIMITS.maxClipSeconds,
+    );
+    if (offset === undefined) throw clipError(`${label} offset is required`);
+    const latency = clipNumber(value.latency, `${label} latency`, -1, 1);
+    if (latency === undefined) throw clipError(`${label} latency is required`);
+    const inTick = clipTick(value.inTick, `${label} inTick`);
+    const outTick = clipTick(value.outTick, `${label} outTick`);
+    if (inTick >= outTick)
+      throw clipError(`${label} inTick must be before outTick`);
+    const latencyAssumed = clipBool(
+      value.latencyAssumed,
+      `${label} latencyAssumed`,
+    );
+    const ppm = clipNumber(
+      value.ppm,
+      `${label} ppm`,
+      -SCORE_LIMITS.maxTakePpm,
+      SCORE_LIMITS.maxTakePpm,
+    );
+    const fit = clipNumber(value.fit, `${label} fit`, 0, 1);
+    const warn = clipString(value.warn, `${label} warn`, MAX_CLIP_LABEL_LENGTH);
+    const nudge = clipNumber(
+      value.nudge,
+      `${label} nudge`,
+      -SCORE_LIMITS.maxTakeNudgeMs,
+      SCORE_LIMITS.maxTakeNudgeMs,
+    );
+    return Object.freeze({
+      name,
+      src: clipSrc(value.src, label),
+      sha256: clipSha(value.sha256, label),
+      startTick: clipTick(value.startTick, `${label} startTick`),
+      offset,
+      latency,
+      ...(latencyAssumed ? { latencyAssumed } : {}),
+      ...(ppm !== undefined ? { ppm } : {}),
+      ...(fit !== undefined ? { fit } : {}),
+      ...(warn !== undefined ? { warn } : {}),
+      ...(nudge !== undefined ? { nudge } : {}),
+      inTick,
+      outTick,
+    });
+  });
+  return takes.length > 0 ? Object.freeze(takes) : undefined;
+}
+
+/**
+ * Validates Track.clips: unique ids, sample path rules, sha256 pins,
+ * offset + dur within maxClipSeconds, fades that fit the clip, and takes
+ * that exist on the track. Null, absent and `[]` normalize to absent.
+ */
+export function normalizeClips(
+  input: unknown,
+  trackId: string,
+  takes: readonly Take[] | undefined,
+): readonly AudioClip[] | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (!Array.isArray(input))
+    throw clipError(`track ${trackId} clips must be an array`);
+  if (input.length > SCORE_LIMITS.maxClipsPerTrack)
+    throw new ScoreValidationError(
+      `track ${trackId} clips holds at most ${SCORE_LIMITS.maxClipsPerTrack} clips`,
+      "score-limit",
+    );
+  const takeNames = new Set((takes ?? []).map((take) => take.name));
+  const ids = new Set<string>();
+  const clips = input.map((value: unknown, index): AudioClip => {
+    if (!isRecord(value))
+      throw clipError(`track ${trackId} clips[${index}] must be an object`);
+    const id = clipString(
+      value.id,
+      `track ${trackId} clips[${index}] id`,
+      SCORE_LIMITS.maxIdLength,
+    );
+    if (id === undefined)
+      throw clipError(`track ${trackId} clips[${index}] id is required`);
+    if (ids.has(id))
+      throw clipError(`track ${trackId} clip id ${id} is duplicated`);
+    ids.add(id);
+    const label = `track ${trackId} clip ${id}`;
+    const max = SCORE_LIMITS.maxClipSeconds;
+    const offset = clipNumber(value.offset, `${label} offset`, 0, max);
+    const dur = clipNumber(value.dur, `${label} dur`, 0, max);
+    if (dur === 0) throw clipError(`${label} dur must be above 0`);
+    if ((offset ?? 0) + (dur ?? 0) > max)
+      throw clipError(`${label} offset + dur must be at most ${max} seconds`);
+    const gain = clipNumber(
+      value.gain,
+      `${label} gain`,
+      0,
+      SCORE_LIMITS.maxClipGain,
+    );
+    const fadeMax = SCORE_LIMITS.maxClipFadeSeconds;
+    const fadeInTime = clipNumber(
+      value.fadeInTime,
+      `${label} fadeInTime`,
+      0,
+      fadeMax,
+    );
+    const fadeTime = clipNumber(value.fadeTime, `${label} fadeTime`, 0, fadeMax);
+    if (dur !== undefined && (fadeInTime ?? 0) + (fadeTime ?? 0) > dur)
+      throw clipError(`${label} fadeInTime + fadeTime must fit within dur`);
+    const rev = clipBool(value.rev, `${label} rev`);
+    const take = clipString(
+      value.take,
+      `${label} take`,
+      SCORE_LIMITS.maxNameLength,
+    );
+    if (take !== undefined && !takeNames.has(take))
+      throw clipError(`${label} take ${take} does not exist on the track`);
+    const mute = clipBool(value.mute, `${label} mute`);
+    const text = clipString(
+      value.text,
+      `${label} text`,
+      SCORE_LIMITS.maxClipTextLength,
+    );
+    const say = normalizeClipSay(value.say, label);
+    return Object.freeze({
+      id,
+      src: clipSrc(value.src, label),
+      sha256: clipSha(value.sha256, label),
+      startTick: clipTick(value.startTick, `${label} startTick`),
+      ...(offset !== undefined ? { offset } : {}),
+      ...(dur !== undefined ? { dur } : {}),
+      ...(gain !== undefined ? { gain } : {}),
+      ...(fadeInTime !== undefined ? { fadeInTime } : {}),
+      ...(fadeTime !== undefined ? { fadeTime } : {}),
+      ...(rev ? { rev } : {}),
+      ...(take !== undefined ? { take } : {}),
+      ...(mute ? { mute } : {}),
+      ...(text !== undefined ? { text } : {}),
+      ...(say ? { say } : {}),
+    });
+  });
+  return clips.length > 0 ? Object.freeze(clips) : undefined;
+}
+
+/** Validates Note.lyric: one syllable without whitespace; null clears. */
+export function normalizeLyric(
+  input: unknown,
+  noteId: string,
+): string | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (
+    typeof input !== "string" ||
+    input.length === 0 ||
+    input.length > SCORE_LIMITS.maxLyricLength ||
+    /\s/.test(input)
+  )
+    throw new ScoreValidationError(
+      `note ${noteId} lyric must be 1..${SCORE_LIMITS.maxLyricLength} characters without whitespace`,
+      "invalid-note",
+    );
+  return input;
+}
+
+/** Replaces (or with null clears) a track's clips. */
+export function setClips(
+  score: TrackScore,
+  trackId: string,
+  clips: readonly AudioClip[] | null,
+): TrackScore {
+  return updateTrack(score, trackId, { clips });
+}
+
+/**
+ * Cross-track references (0.7): fields that name another track register a
+ * drop function here (through `registerTrackRefs` in core/routing.ts) so
+ * removing a track never leaves a dangling reference.
+ */
+const trackRefDrops = new Map<
+  string,
+  (track: Track, removedId: string) => Track
+>();
+
+/** Registers how `field` forgets a removed track. Used by core/routing.ts. */
+export function registerTrackRefDrop(
+  field: string,
+  drop: (track: Track, removedId: string) => Track,
+): void {
+  trackRefDrops.set(field, drop);
+}
+
+function dropTrackRefs(track: Track, removedId: string): Track {
+  let next = track;
+  for (const drop of trackRefDrops.values()) next = drop(next, removedId);
+  return next;
 }

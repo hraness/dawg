@@ -705,6 +705,7 @@ const OPERATION_TYPES = new Set([
   "setTuning",
   "setMaster",
   "setSections",
+  "setClips",
 ]);
 
 /** Shape gate before the reducer, which validates every field it reads. */

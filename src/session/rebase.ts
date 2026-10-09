@@ -84,6 +84,7 @@ export function rebaseOperations(
         break;
       }
       case "updateTrack":
+      case "setClips":
       case "setAutomation": {
         if (added.tracks.has(operation.trackId)) break;
         if (!settingsUnchanged(operation.trackId))
