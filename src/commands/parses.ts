@@ -37,8 +37,52 @@ import { parseVocalCommand } from "./vocal.ts";
 import { parseVocoderCommand } from "./vocoder.ts";
 import { parseWavetableCommand } from "./wavetable.ts";
 import { parseWindCommand } from "./wind.ts";
+import {
+  candidates,
+  parseExportCommand,
+  parseLoopCommand,
+  parseTrackEdit,
+} from "./grammar.ts";
 
+/** One parser's reading of a line: its name and what it parsed. */
+export type ParsedCommand = Readonly<{ parser: string; value: unknown }>;
+
+/**
+ * The first parser that takes `text` exactly as typed, with its result
+ * (no grammar rewrites): what the prompt bar would run for this spelling.
+ */
+export function parseExact(
+  text: string,
+  score: TrackScore,
+): ParsedCommand | undefined {
+  for (const parse of parsers(score)) {
+    const value = parse(text);
+    if (value !== undefined) return { parser: parse.name || "anonymous", value };
+  }
+  return undefined;
+}
+
+/**
+ * What `text` runs as: the exact spelling first, then the grammar's other
+ * readings (`/x` ≡ `x`, aliases, remove and list words) in order.
+ */
+export function parseCommand(
+  text: string,
+  score: TrackScore,
+): ParsedCommand | undefined {
+  for (const line of [text, ...candidates(text)]) {
+    const parsed = parseExact(line, score);
+    if (parsed) return parsed;
+  }
+  return undefined;
+}
+
+/** Whether a line runs locally, in any spelling the grammar accepts. */
 export function commandParses(text: string, score: TrackScore): boolean {
+  return parseCommand(text, score) !== undefined;
+}
+
+function parsers(score: TrackScore): ((text: string) => unknown)[] {
   return [
     parsePrompt,
     parseMusicCommand,
@@ -51,7 +95,9 @@ export function commandParses(text: string, score: TrackScore): boolean {
     parseKeysCommand,
     parseExpressionCommand,
     parseMasterCommand,
-    (value: string) => parseSectionCommand(value, score),
+    function parseSection(value: string) {
+      return parseSectionCommand(value, score);
+    },
     parsePatternCommand,
     parseKitCommand,
     parsePackCommand,
@@ -76,5 +122,8 @@ export function commandParses(text: string, score: TrackScore): boolean {
     parseVowelCommand,
     parseClipCommand,
     parseLyricsCommand,
-  ].some((parse) => parse(text) !== undefined);
+    parseExportCommand,
+    parseLoopCommand,
+    parseTrackEdit,
+  ];
 }

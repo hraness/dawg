@@ -345,6 +345,7 @@ import {
   applyScoreOperation,
   createScore,
   isSamplerInstrument,
+  isTrackAudible,
   PACK_PREFIX,
   scoreFromJSON,
   SCORE_LIMITS,
@@ -389,7 +390,7 @@ import {
   parseSimpleArgv,
   resolveTrackArg,
 } from "./launch-args.ts";
-import { RENDER_USAGE } from "./render.ts";
+import { RENDER_USAGE, runRenderCommand } from "./render.ts";
 import { typecheckProject } from "./project/typecheck.ts";
 import {
   startProjectSync,
@@ -2096,14 +2097,33 @@ async function submit(prompt: string): Promise<string | Receipt> {
   }
   const tryCommand = command.match(/^\/try(?:\s+(.+))?$/i);
   if (tryCommand) return tryPrompt(tryCommand[1]?.trim() ?? "");
-  // A bare parameter (`volume`, `pan`, `fx filter`, `fx reverb mix`)
-  // opens the fader drawer on it, with its related params stacked below.
-  if (/^\/?(?:volume|pan|fx\s+\S+(?:\s+\S+)?)$/i.test(command)) {
-    const label = menu.showFader(menuContext(), command);
+  // A bare scalar (`volume`, `pan`, `fx reverb mix`, and the song's
+  // `tempo`, `bars` and `meter`) opens the fader drawer on it, with its
+  // related params stacked below.
+  if (
+    /^\/?(?:volume|pan|tempo|bpm|bars|meter|fx\s+\S+(?:\s+\S+)?)$/i.test(
+      command,
+    )
+  ) {
+    const context = menuContext();
+    const label =
+      menu.showFader(context, command) ?? songFader(context, command);
     if (label) {
+      const field = menu
+        .faderFields(context)
+        .find((candidate) => candidate.label === label);
+      // The receipt names the value it opened on: `tempo · 120 BPM · …`.
+      const value =
+        field?.kind === "number"
+          ? field.value !== undefined
+            ? field.format(field.value)
+            : field.off
+          : undefined;
       openFader(label, true);
       refreshMenu();
-      return ok(`${label} · ←→ adjust · enter keep · esc revert`);
+      return ok(
+        `${label}${value ? ` · ${value}` : ""} · ←→ adjust · enter keep · esc revert`,
+      );
     }
   }
   const menuCommand = command.match(/^\/menu(?:\s+(\S+))?$/i);
@@ -2525,17 +2545,42 @@ async function submit(prompt: string): Promise<string | Receipt> {
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
   }
-  const styleCommand = parseStyleCommand(command);
+  const styleCommand = parseStyleCommand(
+    /^\/?styles?\s+presets$/i.test(command) ? "style list" : command,
+  );
   if (styleCommand) {
     const writes =
       styleCommand.type === "style-apply" ||
       styleCommand.type === "style-again";
+    // Bare `style` opens Arrange › style; `style list|ls|presets` lists.
+    if (
+      styleCommand.type === "style-families" &&
+      /^\/?styles?$/i.test(command)
+    ) {
+      openMenu("style");
+      return ok(
+        "style · ↑/↓ browse · enter makes the song · style list prints it",
+      );
+    }
     if (writes) await materializeDraft();
     const result = applyStyleCommand(score, styleCommand);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
     if (result.log) tui.activity.pushNote(result.log);
-    return result.ok ? ok(result.message) : fail(result.message);
+    if (!result.ok) return fail(result.message);
+    // A new song: focus its first melodic track, so play and the menu
+    // land on something tonal instead of a track the style replaced.
+    const melodic = writes
+      ? result.next?.tracks.find((track) => !isDrumInstrument(track.instrument))
+      : undefined;
+    if (melodic && melodic.id !== requestedTrack) {
+      await port.focus(melodic.id);
+      requestedTrack = melodic.id;
+      draftTrack = false;
+    }
+    return ok(
+      melodic ? `${result.message} · focused ${melodic.id}` : result.message,
+    );
   }
   const masterCommand = parseMasterCommand(command);
   if (masterCommand) {
@@ -2575,20 +2620,21 @@ async function submit(prompt: string): Promise<string | Receipt> {
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
   }
-  const exportCommand = command.match(/^\/?export\s+([^\s]+)$/i);
+  const exportCommand = parseExportCommand(command);
   if (exportCommand) {
-    const path = resolve(exportCommand[1]!);
-    if (/\.midi?$/i.test(path)) {
+    const path = resolve(exportCommand.path);
+    if (exportCommand.format === "mid") {
       await writeFile(path, scoreToMidi(exportScore(score)));
-      return `exported midi · ${exportCommand[1]}`;
+      return `exported midi · ${exportCommand.path}`;
     }
-    // Audio comes from the offline renderer, never JSON under an audio name.
-    if (/\.(wav|aiff?|flac|mp3|ogg|m4a)$/i.test(path))
-      return fail(
-        `/export writes .track.json or .mid · render audio with: dawg render ${exportCommand[1]}`,
-      );
+    // Audio goes through the `dawg render` path, the same bytes as the CLI.
+    if (exportCommand.format === "wav")
+      return exportWav(exportCommand.path, exportCommand.stems);
+    // Other audio names are not formats dawg writes.
+    if (/\.(aiff?|flac|mp3|ogg|m4a)$/i.test(path))
+      return fail(`export · ${exportCommand.path} · ${EXPORT_USAGE}`);
     await writeFile(path, encodeLoop(score), "utf8");
-    return `exported · ${exportCommand[1]}`;
+    return `exported · ${exportCommand.path}`;
   }
   const importCommand = command.match(/^\/?import\s+([^\s]+)$/i);
   if (importCommand) {
@@ -4261,6 +4307,74 @@ function refreshMenu(): void {
 // ── the fader drawer ─────────────────────────────────────────────────
 
 /** Enter on a number row (or a bare `volume`, `fx filter`): the drawer. */
+/**
+ * `export song.wav [stems]`: render the song as `dawg render song.wav` would
+ * (the offline renderer, deterministic), then with `stems` one WAV per
+ * audible track beside it (`song-bass.wav`), each that track soloed.
+ */
+async function exportWav(path: string, stems: boolean): Promise<Receipt> {
+  const directory = await mkdtemp(join(tmpdir(), "dawg-export-"));
+  const errors: string[] = [];
+  const sink = { write: (text: string) => errors.push(text.trim()) };
+  const quiet = { write: () => undefined };
+  const render = async (song: TrackScore, target: string): Promise<boolean> => {
+    const file = join(directory, "song.track.json");
+    await writeFile(file, encodeLoop(song), "utf8");
+    const code = await runRenderCommand(
+      ["render", target, "--import", file],
+      process.cwd(),
+      quiet,
+      sink,
+    );
+    return code === 0;
+  };
+  tui.activity.setSpinner(`export ${path}`);
+  try {
+    if (!(await render(score, path)))
+      return fail(errors.at(-1) ?? `export failed · ${path}`);
+    if (!stems) return ok(`exported · ${path}`);
+    const written: string[] = [];
+    const base = path.replace(/\.wav$/i, "");
+    for (const track of score.tracks) {
+      if (!isTrackAudible(score, track.id)) continue;
+      let solo = score;
+      for (const other of score.tracks)
+        solo = applyScoreOperation(solo, {
+          type: "updateTrack",
+          trackId: other.id,
+          patch: { solo: other.id === track.id },
+        });
+      const target = `${base}-${track.id}.wav`;
+      if (!(await render(solo, target)))
+        return fail(errors.at(-1) ?? `export failed · ${target}`);
+      written.push(target);
+    }
+    return ok(`exported · ${path} · ${written.length} stems`);
+  } finally {
+    tui.activity.setSpinner(undefined);
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+/** Bare song scalars and the Project fader each opens. */
+const SONG_FADERS: Readonly<Record<string, string>> = {
+  tempo: "tempo",
+  bpm: "tempo",
+  bars: "loop length",
+  meter: "beats per bar",
+};
+
+/** `tempo`, `bars`, `meter`: open Project and name its fader, if it has one. */
+function songFader(context: MenuContext, command: string): string | undefined {
+  const label = SONG_FADERS[command.replace(/^\//, "").toLowerCase()];
+  if (!label) return undefined;
+  menu.show(context, "project");
+  if (menu.faderFields(context).some((field) => field.label === label))
+    return label;
+  menu.close();
+  return undefined;
+}
+
 /**
  * Open the drawer on `label`. `standalone` drawers came from a command or a
  * click, not from inside the menu, so closing one closes the menu too.
