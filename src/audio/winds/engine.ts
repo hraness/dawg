@@ -170,7 +170,11 @@ export function renderWindTrack(
     if (points) lanes.set(param, points);
   }
   const base = windSettings(track.wind);
-  const trim = windTrim(windPresetOf(track.wind), sampleRate);
+  const trim = windTrim(
+    windPresetOf(track.wind),
+    sampleRate,
+    context.score.calibration ?? 0,
+  );
   const players = Math.max(1, Math.round(base.players));
   const seedTick = context.seedTick ?? 0;
   const volumeLane = track.volumeAutomation ?? [];

@@ -59,6 +59,13 @@ export type WindTrim = Readonly<{
   level: number;
   /** Loudness curve over the range: a gain factor at `hz` (default 1). */
   gain?: (hz: number) => number;
+  /**
+   * Calibration 1 lips (q08): the lip resonance sits on the sounding pitch
+   * at Q 40 and the lip opening saturates softly, so the lips lock to the
+   * bore's mode instead of beating against it (a 23-35% warble every 8 or
+   * 9 periods before). Only the calibration 1 trim rows set it.
+   */
+  lips?: 1;
 }>;
 
 const NO_TRIM: WindTrim = { cents: () => 0, level: 1 };
@@ -328,8 +335,11 @@ export class WindVoice {
         // STK Brass: a bore of two periods sounding its 2nd mode and a lip
         // resonance a little below f (constant Q 12, unit DC gain x 3 so
         // every register speaks); the trim removes the pull (+15..45 c).
+        // Calibration 1 tunes the lips to f at Q 40 (see WindTrim.lips).
         this.d0.set(2 * period - dcBlockDelay(this.dc.r, w), w);
-        this.lip.set(f * (0.95 + 0.04 * (p.reed - 0.5)), 12, 3, rate);
+        if (this.trim.lips)
+          this.lip.set(f * (1 + 0.04 * (p.reed - 0.5)), 40, 3, rate);
+        else this.lip.set(f * (0.95 + 0.04 * (p.reed - 0.5)), 12, 3, rate);
         break;
     }
     // Brightness for the reed, sax and lip bores: a high shelf from about
@@ -416,7 +426,10 @@ export class WindVoice {
         const mouth = 0.3 * breath;
         let delta = this.lip.process(mouth - bore);
         delta *= delta;
-        if (delta > 1) delta = 1;
+        // Calibration 1: a soft opening (x / (1 + x)) in place of the hard
+        // clamp, whose corner fed the warble.
+        if (this.trim.lips) delta = delta / (1 + delta);
+        else if (delta > 1) delta = 1;
         const frame = delta * mouth + (1 - delta) * bore;
         this.d0.push(this.dc.process(frame));
         return bore * 2;
