@@ -13,6 +13,7 @@
  * score and the session event, leaving persistence to the caller.
  */
 import {
+  AUTOMATION_PARAMETERS,
   automationPoints,
   automationRange,
   SCORE_LIMITS,
@@ -40,7 +41,13 @@ export function parseLane(name: string): AutomationParameter | undefined {
   const lower = name.toLowerCase();
   if (lower === "volume" || lower === "vol") return "volume";
   if (lower === "pan") return "pan";
-  return parseEffectLane(lower);
+  // Lanes are typed in any case: `synth-pitchjump` is `synth-pitchJump`.
+  return (
+    parseEffectLane(lower) ??
+    parseEffectLane(
+      AUTOMATION_PARAMETERS.find((lane) => lane.toLowerCase() === lower) ?? "",
+    )
+  );
 }
 
 const NUMBER = /^-?\d+(?:\.\d+)?$/;
@@ -69,7 +76,7 @@ export function parseEditCommand(prompt: string): EditCommand | undefined {
     const parsed = parseKey(value);
     return parsed ? { type: "key", key: keyName(parsed) } : undefined;
   }
-  const points = text.match(/^automate ([a-z-]+) points((?: \S+)+)$/i);
+  const points = text.match(/^automate ([a-z0-9-]+) points((?: \S+)+)$/i);
   if (points) {
     const parameter = parseLane(points[1]!);
     if (!parameter) return undefined;
@@ -89,7 +96,7 @@ export function parseEditCommand(prompt: string): EditCommand | undefined {
       return undefined;
     return { type: "automation-points", parameter, points: parsed };
   }
-  const remove = text.match(/^automate ([a-z-]+) remove (\d+(?:\.\d+)?)$/i);
+  const remove = text.match(/^automate ([a-z0-9-]+) remove (\d+(?:\.\d+)?)$/i);
   if (remove) {
     const parameter = parseLane(remove[1]!);
     return parameter

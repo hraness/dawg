@@ -2189,9 +2189,10 @@ function withUnit(text: string, unit: string | undefined): string {
 
 function formatParam(spec: ParamSpec, value: number): string {
   if (spec.kind !== "number") return num(value);
-  return spec.step === "log" && value >= 100
-    ? `${Math.round(value)}`
-    : num(value);
+  const text =
+    spec.step === "log" && value >= 100 ? `${Math.round(value)}` : num(value);
+  // Rounding never leaves the range: attack 0.0001 types as 0.0001, not 0.
+  return Number(text) < spec.min ? String(spec.min) : text;
 }
 
 /**
