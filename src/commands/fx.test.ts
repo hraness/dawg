@@ -18,6 +18,10 @@ const run = (text: string, base = score()) => {
 describe("fx grammar", () => {
   test("parses on/off, presets, params and Strudel names", () => {
     expect(parseFxCommand("fx")).toEqual({ type: "fx-list" });
+    expect(parseFxCommand("fx wobble")).toEqual({
+      type: "fx-on",
+      effect: "wobble",
+    });
     expect(parseFxCommand("fx tremolo off")).toEqual({
       type: "fx-off",
       effect: "tremolo",

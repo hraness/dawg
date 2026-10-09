@@ -229,6 +229,15 @@ export async function runRenderCommand(
     `rendered · ${target} · ${seconds.toFixed(2)} s · ${wav.byteLength} bytes · ${sha}\n`,
   );
   if (credits) stdout.write(`credits · ${credits}\n`);
+  const clipped = clippedSamples(audio.pcm);
+  if (clipped > 0)
+    stderr.write(
+      `warning · ${clipped} ${clipped === 1 ? "sample clips" : "samples clip"} at full scale · ${
+        audio.master
+          ? "add master limiter or lower the master gain"
+          : "lower track volumes or add a master with a limiter (master streaming, or master: { limiter: {} } in song.ts)"
+      }\n`,
+    );
   if (options.has("--measure"))
     stdout.write(
       `loudness · ${measurementLine(measureRendered(audio, false).mix, audio.master)}\n`,
@@ -236,6 +245,13 @@ export async function runRenderCommand(
   else if (audio.master)
     stdout.write(`loudness · ${loudnessLine(audio.master)}\n`);
   return 0;
+}
+
+/** Samples at or past 16-bit full scale: the mix bus hit the rails. */
+export function clippedSamples(pcm: Int16Array): number {
+  let count = 0;
+  for (const value of pcm) if (value >= 32_767 || value <= -32_768) count += 1;
+  return count;
 }
 
 async function loadScore(

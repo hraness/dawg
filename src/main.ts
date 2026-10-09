@@ -505,6 +505,22 @@ const freshWorkspace = !(await stat(join(process.cwd(), ".dawg")).then(
   () => true,
   () => false,
 ));
+// Decode the import before a session exists, so a bad file is one line.
+let importedScore: TrackScore | undefined;
+if (importPath) {
+  try {
+    importedScore = decodeLoop(await readLoopFile(importPath));
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    const midi = /\.midi?$/i.test(importPath)
+      ? " · MIDI files are not imported; --import takes a .track.json loop"
+      : "";
+    process.stderr.write(
+      `dawg: cannot import ${importPath} · ${reason.split("\n")[0]!.slice(0, 160)}${midi}\n`,
+    );
+    process.exit(1);
+  }
+}
 const session = await ensureSession(initial.toJSON(), sessionOptions);
 // dawgd when connected, the file-lock path otherwise (see src/session/port.ts).
 let port = await openSessionPort<ReturnType<TrackScore["toJSON"]>>({
@@ -517,9 +533,8 @@ let port = await openSessionPort<ReturnType<TrackScore["toJSON"]>>({
 let record: SessionRecord<ReturnType<TrackScore["toJSON"]>> =
   port.mode === "daemon" ? await port.load() : session.record;
 let score = scoreFromJSON(record.composition);
-if (importPath) {
-  const imported = decodeLoop(await readLoopFile(importPath));
-  score = imported;
+if (importPath && importedScore) {
+  score = importedScore;
   record = await port.append(
     record,
     {

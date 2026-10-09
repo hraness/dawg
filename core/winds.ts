@@ -102,16 +102,12 @@ export const WIND_GROUPS: readonly Readonly<{
     ],
   },
   {
+    label: "Saxophones",
+    presets: ["sax", "altosax", "barisax"],
+  },
+  {
     label: "Reeds",
-    presets: [
-      "clarinet",
-      "bassclarinet",
-      "oboe",
-      "bassoon",
-      "sax",
-      "altosax",
-      "barisax",
-    ],
+    presets: ["clarinet", "bassclarinet", "oboe", "bassoon"],
   },
   {
     label: "Brass",

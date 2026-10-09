@@ -1309,6 +1309,11 @@ export type PerformOptions = Readonly<{
   guitar?: GuitarSetup;
   /** Guitar mode: the chord's root pitch class (default: the lowest note). */
   root?: number;
+  /**
+   * Guitar mode: a slash bass pitch class that must sound lowest, even when
+   * it is not a chord tone (B/E keeps its E pedal). Default: the lowest note.
+   */
+  slash?: number;
 }>;
 
 export type PerformedNote = Readonly<{
@@ -1626,7 +1631,7 @@ export function perform(
       return out.sort((a, b) => a.start - b.start || a.pitch - b.pitch);
     }
     case "guitar": {
-      const bass = notes[0]!;
+      const bass = options.slash ?? notes[0]!;
       const voicing = voiceGuitar(
         notes.map(mod12),
         mod12(bass),
@@ -2445,7 +2450,12 @@ export function renderProgression(options: RenderOptions): RenderedProgression {
           ...options.perform,
           seed: (options.perform?.seed ?? 0) + index,
           ...(options.perform?.mode === "guitar"
-            ? { root: options.chords[index]!.root }
+            ? {
+                root: options.chords[index]!.root,
+                ...(options.chords[index]!.bass !== undefined
+                  ? { slash: options.chords[index]!.bass }
+                  : {}),
+              }
             : {}),
         }),
       );

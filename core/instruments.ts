@@ -336,6 +336,10 @@ export const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
   // f061-guitar: the shoegaze alias, an electric guitar voice plus the
   // shoegaze rig and its long wash.
   { word: "shoegaze", instrument: "pluck", voice: "electric", fx: "shoegaze" },
+  // f061 integration: the two rig names that are free as instrument words
+  // (glide and swell are taken by commands; reach them with `rig glide`).
+  { word: "dreampop", instrument: "pluck", voice: "electric", fx: "dreampop" },
+  { word: "ebow", instrument: "pluck", voice: "electric", fx: "ebow" },
   // f061-gamelan-winds: gamelan, small bells and frame drums.
   { word: "crotales", instrument: "modal", field: "modal", preset: "crotales" },
   { word: "crotale", instrument: "modal", field: "modal", preset: "crotales" },

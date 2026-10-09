@@ -2325,7 +2325,7 @@ export const RIG_PRESETS: Readonly<
     wobble: { depth: 25, rate: 0.4, drift: 0.4 },
     bloom: { amount: 0.4, harm: 2, delay: 0.6, time: 1 },
     double: { time: 18, drift: 2.5, width: 0.4 },
-    postgain: { gain: 0.65 },
+    postgain: { gain: 0.86 },
   },
   glide: {
     stomp: { type: "face", gain: 5, tone: 0.5 },
@@ -5621,6 +5621,10 @@ const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
   // f061-guitar: the shoegaze alias, an electric guitar voice plus the
   // shoegaze rig and its long wash.
   { word: "shoegaze", instrument: "pluck", voice: "electric", fx: "shoegaze" },
+  // f061 integration: the two rig names that are free as instrument words
+  // (glide and swell are taken by commands; reach them with `rig glide`).
+  { word: "dreampop", instrument: "pluck", voice: "electric", fx: "dreampop" },
+  { word: "ebow", instrument: "pluck", voice: "electric", fx: "ebow" },
   // f061-gamelan-winds: gamelan, small bells and frame drums.
   { word: "crotales", instrument: "modal", field: "modal", preset: "crotales" },
   { word: "crotale", instrument: "modal", field: "modal", preset: "crotales" },
@@ -6990,6 +6994,11 @@ type PerformOptions = Readonly<{
   guitar?: GuitarSetup;
   /** Guitar mode: the chord's root pitch class (default: the lowest note). */
   root?: number;
+  /**
+   * Guitar mode: a slash bass pitch class that must sound lowest, even when
+   * it is not a chord tone (B/E keeps its E pedal). Default: the lowest note.
+   */
+  slash?: number;
 }>;
 
 type PerformedNote = Readonly<{
@@ -7307,7 +7316,7 @@ function perform(
       return out.sort((a, b) => a.start - b.start || a.pitch - b.pitch);
     }
     case "guitar": {
-      const bass = notes[0]!;
+      const bass = options.slash ?? notes[0]!;
       const voicing = voiceGuitar(
         notes.map(mod12),
         mod12(bass),
@@ -8116,7 +8125,12 @@ function renderProgression(options: RenderOptions): RenderedProgression {
           ...options.perform,
           seed: (options.perform?.seed ?? 0) + index,
           ...(options.perform?.mode === "guitar"
-            ? { root: options.chords[index]!.root }
+            ? {
+                root: options.chords[index]!.root,
+                ...(options.chords[index]!.bass !== undefined
+                  ? { slash: options.chords[index]!.bass }
+                  : {}),
+              }
             : {}),
         }),
       );

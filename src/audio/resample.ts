@@ -217,6 +217,8 @@ export function renderResample(
     durationTicks,
     leadTicks,
   } = resampleScore(score, request);
+  // The song's export rate (48 kHz once it has a master), so the new
+  // track nulls against the source when both play at that rate.
   const sampleRate = exportSampleRate(score);
   const rendered = renderArrangedPcm(played, {
     sampleRate,
@@ -235,17 +237,31 @@ export function renderResample(
           frames: rendered.frames - skip,
           pcm: rendered.pcm.subarray(skip * RENDER_CHANNELS),
         };
-  const seconds = audio.frames / audio.sampleRate;
+  const full = new Int16Array(audio.pcm.length);
+  for (let index = 0; index < full.length; index += 1)
+    full[index] = Math.max(
+      -32_768,
+      Math.min(32_767, Math.round(audio.pcm[index]! * RESAMPLE_FILE_SCALE)),
+    );
+  // Trim the tail that rounds to digital silence (within 1 LSB): the new
+  // track's note length comes from the range, not from the file.
+  let end = full.length;
+  while (end > 0 && Math.abs(full[end - 1]!) <= 1) end -= 1;
+  if (end === 0)
+    throw new ScoreValidationError(
+      `${resampleSourceName(request.source)} is silent here · nothing to resample (add notes, unmute it or pick other bars)`,
+    );
+  // Keep 20 ms of silence so the sampler's end fade lands on nothing.
+  const frames = Math.min(
+    audio.frames,
+    Math.ceil(end / RENDER_CHANNELS) + Math.round(0.02 * audio.sampleRate),
+  );
+  const pcm = full.subarray(0, frames * RENDER_CHANNELS);
+  const seconds = frames / audio.sampleRate;
   if (seconds > SCORE_LIMITS.maxResampleSeconds)
     throw new ScoreValidationError(
       `the resample is ${Math.round(seconds)} s; the limit is ${SCORE_LIMITS.maxResampleSeconds} s · pick a section or bars`,
       "score-limit",
-    );
-  const pcm = new Int16Array(audio.pcm.length);
-  for (let index = 0; index < pcm.length; index += 1)
-    pcm[index] = Math.max(
-      -32_768,
-      Math.min(32_767, Math.round(audio.pcm[index]! * RESAMPLE_FILE_SCALE)),
     );
   const wav = encodeWav(pcm, audio.sampleRate, RENDER_CHANNELS);
   const range = request.range;

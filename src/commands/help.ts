@@ -96,7 +96,7 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       {
         command: "fx wobble|bloom|swell|double [param value]",
         summary:
-          "shoegaze · fx wobble depth 30 · fx double · reverb ir builtin:reverse",
+          "shoegaze · fx wobble depth 30 · fx double · fx reverb ir builtin:reverse",
       },
       {
         command: "track jangle|punk|funk|ragged|gtr-lead|gtr-metal|bachata",

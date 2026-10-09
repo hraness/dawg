@@ -178,3 +178,34 @@ describe("typed upper tensions (0.6.1)", () => {
     expect(b).toBe(a);
   });
 });
+
+describe("slash bass in guitar mode (0.6.1)", () => {
+  test("a slash bass that is not a chord tone sounds lowest", async () => {
+    const { strum } = await import("./sdk/v1.ts");
+    for (const tune of ["standard", "opene", "dadgad", "dropd"] as const)
+      for (const ring of [0, 0.5, 1]) {
+        const low = (symbol: string) =>
+          Math.min(
+            ...strum(symbol, {
+              strokes: "D",
+              tempo: 120,
+              guitar: { tune, ring },
+            }).map((note) => note.pitch),
+          );
+        expect(low("B/E") % 12).toBe(4);
+        expect(low("A/E") % 12).toBe(4);
+        expect(low("B") % 12).toBe(11);
+      }
+  });
+
+  test("perform takes the slash pitch class as the bass", () => {
+    const b = parseChord("B")!;
+    const out = perform([47, 51, 54], 0, 1, {
+      mode: "guitar",
+      root: b.root,
+      slash: 4,
+      strokes: "D",
+    });
+    expect(Math.min(...out.map((note) => note.pitch)) % 12).toBe(4);
+  });
+});

@@ -360,6 +360,62 @@ describe("bloom in a render", () => {
     }
   });
 
+  test("strummed, the pick rigs also land within 2.5 dB of clean", async () => {
+    // Fuzz compresses, so a dense strum sits lower against clean than a
+    // held chord; the shoegaze trim is set between the two. swell and ebow
+    // restart their fade on every onset and are calibrated on held notes.
+    const { applyRigPreset, rigReverb } = await import("../../../core/fx.ts");
+    const { rigTrackFields } = await import("../../commands/rig.ts");
+    const { TrackScore } = await import("../../../core/score.ts");
+    const { renderScorePcm } = await import("../wav.ts");
+    const { strum } = await import("../../../core/sdk/v1.ts");
+    const notes = strum("E A B E E A B E", {
+      strokes: "D-DU-UDU",
+      tempo: 100,
+    });
+    const voice = rigTrackFields("shoegaze");
+    const level = (rig: string) => {
+      const score = new TrackScore({
+        version: 2,
+        tempoBpm: 100,
+        bars: 8,
+        beatsPerBar: 4,
+        ticksPerBeat: 480,
+        tracks: [
+          {
+            id: "g",
+            name: "g",
+            instrument: voice.instrument,
+            string: voice.string,
+            muted: false,
+            volume: 0.8,
+            pan: 0,
+            fx: { ...applyRigPreset(undefined, rig) },
+            ...(rigReverb(rig) ? { reverb: rigReverb(rig) } : {}),
+          },
+        ],
+        notes: notes.map((note, i) => ({
+          id: `n${i}`,
+          trackId: "g",
+          startTick: Math.round(note.start * 480),
+          durationTicks: Math.max(1, Math.round(note.length * 480)),
+          pitch: note.pitch,
+          velocity: note.velocity ?? 0.8,
+        })),
+      } as never);
+      const pcm = renderScorePcm(score, { sampleRate: 22_050 }).pcm;
+      let sum = 0;
+      for (const v of pcm) sum += v * v;
+      return 10 * Math.log10(sum / pcm.length);
+    };
+    const reference = level("clean");
+    for (const rig of ["shoegaze", "glide", "dreampop"]) {
+      const db = level(rig) - reference;
+      if (Math.abs(db) > 2.5) throw new Error(`${rig}: ${db.toFixed(2)} dB`);
+    }
+    // Four 19 s rig renders: well under a second locally, slower on CI.
+  }, 60_000);
+
   test("whole doubled rigs stay positively correlated (mono-safe)", async () => {
     // Interleaved stereo: L/R correlation of the whole rig, wash included.
     const corr = async (rig: string) => {

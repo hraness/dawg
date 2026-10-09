@@ -32,6 +32,8 @@ export class FilePresence {
   private readonly lock: string;
   private entry: PresenceEntry;
   private timer: ReturnType<typeof setInterval> | undefined;
+  private writing: Promise<void> = Promise.resolve();
+  private writes = 0;
 
   public constructor(paths: SessionPaths, entry: PresenceEntry) {
     this.dir = `${paths.record}.presence`;
@@ -56,7 +58,8 @@ export class FilePresence {
 
   public async focus(trackId: string | null): Promise<void> {
     this.entry = { ...this.entry, focusedTrackId: trackId };
-    await this.write();
+    // Presence is advisory: a failed heartbeat write never refuses a focus change.
+    await this.write().catch(() => undefined);
   }
 
   public async claim(
@@ -133,9 +136,19 @@ export class FilePresence {
     return join(this.dir, `${this.entry.clientId}.json`);
   }
 
-  private async write(): Promise<void> {
+  /** Writes are serialized so the heartbeat and focus() never share a rename. */
+  private write(): Promise<void> {
+    const next = this.writing.then(
+      () => this.writeNow(),
+      () => this.writeNow(),
+    );
+    this.writing = next.catch(() => undefined);
+    return next;
+  }
+
+  private async writeNow(): Promise<void> {
     await mkdir(this.dir, { recursive: true });
-    const temporary = `${this.file()}.${process.pid}.tmp`;
+    const temporary = `${this.file()}.${process.pid}.${++this.writes}.tmp`;
     await writeFile(
       temporary,
       JSON.stringify({ ...this.entry, at: Date.now() }),
