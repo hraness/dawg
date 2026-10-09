@@ -14,7 +14,7 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("STEER"), "prompt");
       await t.send("/vocal\r");
       await t.until(
-        () => t.vt.text().includes("no voice tools yet"),
+        () => t.vt.text().includes("vocal <verb>:"),
         "vocal list",
       );
       await t.send("/help voice\r");
