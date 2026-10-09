@@ -634,8 +634,8 @@ Lanes are read at each note's onset. The model is dawg's own, from public litera
 
 The modelled pianos have the other two pedals of a grand. Both are pedal lanes like the sustain pedal (`[{ tick, state }]`, at most 1024 events) and absent means today's sound:
 
-- **Soft pedal** (`softPedal`, una corda, the left pedal): while it is down each note's hammer is shifted so it strikes fewer strings with a softer part of the felt: the unison narrows, the hammer contact lengthens and the level drops, so the note is quieter and darker (about 6 dB less 2-4 kHz energy and a 10%+ lower spectral centroid on middle C). `half` is half the shift. It is read at each note's onset, so a note struck before the pedal keeps its tone.
-- **Sostenuto** (`sostenuto`, the middle pedal, `down` and `up` only): keys already held when it goes down keep their dampers up until it lifts; notes struck afterwards damp at their own release. Restriking a held key ends the held note. It works alongside the sustain pedal.
+- **Soft pedal** (`softPedal`, una corda, the left pedal): while it is down each note's hammer is shifted so it strikes fewer strings with a softer part of the felt: the unison narrows, the hammer's high partials are rolled off and the level drops about 3 dB, so the note is quieter and darker (a 10%+ lower spectral centroid and at least 3 dB less 2-4 kHz energy on middle C). `half` is half the shift. It is read at each note's onset, so a note struck before the pedal keeps its tone.
+- **Sostenuto** (`sostenuto`, the middle pedal, `down` and `up` only): keys already held when it goes down keep their dampers up until it lifts; notes struck afterwards damp at their own release. A held key struck again while the pedal is down keeps ringing to the lift (the rod keeps its damper up), and a key still held through a lift is caught again by the next press. It works alongside the sustain pedal. Only the modelled pianos with a `keys` object hear the soft pedal; `pedal soft` says so on any other track.
 
 ```text
 pedal soft 0-8                           una corda from beat 0 to 8 (also: down|half|up <beat>, bars, off)
