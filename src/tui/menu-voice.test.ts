@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { createScore } from "../../core/score.ts";
+import { AUTOMATION_PARAMETERS, createScore } from "../../core/score.ts";
 import { rootNodes, type MenuContext, type MenuNode } from "./menu.ts";
 import { voiceGroup } from "./menu-voice.ts";
 
@@ -85,5 +85,11 @@ describe("0.7 voice menu groups", () => {
     );
     const to = vowel.find((node) => node.label === "to")!;
     expect(to.kind === "choice" && to.command("o")).toBe("/vowel to o");
+  });
+
+  test("Mix & automation offers the formant and vowel-morph lanes", () => {
+    expect(AUTOMATION_PARAMETERS).toEqual(
+      expect.arrayContaining(["formant-shift", "formant-mix", "vowel-morph"]),
+    );
   });
 });
