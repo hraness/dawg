@@ -141,8 +141,12 @@ export function keyOfNotes(notes: readonly PitchNote[]): string | null {
   // relatives (G major against b or e minor) the profile alone leaves close.
   const cue = (note: PitchNote) =>
     (histogram[((note.midi % 12) + 12) % 12]! += total * 0.15);
-  cue(notes[0]!);
-  cue(notes[notes.length - 1]!);
+  // Short blips at a phrase edge (a scoop, a breath) are not cues.
+  const held = notes.filter((note) => note.end - note.start >= 0.2);
+  if (held.length > 0) {
+    cue(held[0]!);
+    cue(held[held.length - 1]!);
+  }
   return estimateKey(histogram);
 }
 
