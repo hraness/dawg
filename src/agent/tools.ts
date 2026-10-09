@@ -262,13 +262,8 @@ export type AgentTool = Readonly<{
   plan: (args: Record<string, unknown>, context: ToolContext) => ToolPlan;
 }>;
 
-/** A model-supplied argument that the tool refused; never mutates the score. */
-export class ToolArgumentError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ToolArgumentError";
-  }
-}
+import { ToolArgumentError } from "./tool-error.ts";
+export { ToolArgumentError };
 
 const MAX_NOTES_PER_CALL = 128;
 const MAX_EXPLAIN_CHARS = 2_000;
