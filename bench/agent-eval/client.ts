@@ -124,3 +124,40 @@ export function replayClient(
     },
   };
 }
+
+/** One tool call of a scripted model response. */
+export type ScriptedCall = Readonly<{ name: string; args: unknown }>;
+
+/**
+ * A recording of a model that makes `steps` (each one response with those
+ * tool calls in order) and then answers `text`. Reference solutions use it
+ * to prove each task is solvable and its grader accepts a correct score.
+ */
+export function scripted(
+  steps: readonly (readonly ScriptedCall[])[],
+  text = "Done.",
+): RecordedRequest[] {
+  const requests: RecordedRequest[] = steps.map((calls, step) => ({
+    events: [
+      ...calls.map((call, index): ChatStreamEvent => ({
+        type: "tool-delta",
+        index,
+        id: `ref-${step}-${index}`,
+        name: call.name,
+        arguments: JSON.stringify(call.args),
+      })),
+      { type: "finish", reason: "tool_calls" },
+    ],
+    firstTokenMs: 0,
+    totalMs: 0,
+  }));
+  requests.push({
+    events: [
+      { type: "text", delta: text },
+      { type: "finish", reason: "stop" },
+    ],
+    firstTokenMs: 0,
+    totalMs: 0,
+  });
+  return requests;
+}
