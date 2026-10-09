@@ -760,3 +760,27 @@ test("render --normalize masters to a loudness target; --measure reports it", as
   expect(bad.code).toBe(2);
   expect(bad.stderr).toContain("--normalize takes LUFS");
 }, 30_000);
+
+test("--import of a non-loop file is a one-line error, not a stack trace", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "dawg-import-bad-"));
+  workspaces.push(workspace);
+  await writeFile(join(workspace, "out.mid"), "MThd\u0000\u0000\u0000\u0006");
+  const proc = Bun.spawn(
+    [process.execPath, MAIN, "--import", "out.mid", "--export", "rt.json"],
+    {
+      cwd: workspace,
+      env: env(workspace),
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  const [code, stderr] = await Promise.all([
+    proc.exited,
+    new Response(proc.stderr).text(),
+  ]);
+  expect(code).toBe(1);
+  expect(stderr).toContain("cannot import out.mid");
+  expect(stderr).toContain("MIDI files are not imported");
+  expect(stderr.trim().split("\n")).toHaveLength(1);
+});
