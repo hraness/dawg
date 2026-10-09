@@ -11,8 +11,10 @@
 import { describe, expect, test } from "bun:test";
 import { AGENT_TOOLS } from "../src/agent/tools.ts";
 import * as sdk from "../core/sdk/v1.ts";
+import { commandParses } from "../src/commands/parses.ts";
 import {
   accepts,
+  demoScore,
   nodeCommands,
   read,
   resolveMenuPath,
@@ -29,6 +31,8 @@ type Feature = Readonly<{
   tools: readonly string[];
   /** `song.x` / `track.x` fields, `sdk:fn` exports, or `cli:dawg …`. */
   sdk: readonly string[];
+  /** For a row with an agent gap: a tool whose name matches closes it. */
+  agentWords?: RegExp;
   /** Doors that are missing today: "menu", "agent", "sdk", with why. */
   gap?: Readonly<Partial<Record<"menu" | "agent" | "sdk", string>>>;
 }>;
@@ -145,6 +149,7 @@ export const FEATURES: readonly Feature[] = [
     command: "/export loop.track.json",
     menu: "verb:export",
     tools: [],
+    agentWords: /export|render|bounce/,
     sdk: ["cli:dawg render"],
     gap: {
       menu: "export is a window command; ctrl-k has no export row",
@@ -156,6 +161,7 @@ export const FEATURES: readonly Feature[] = [
     command: "/sessions",
     menu: "verb:sessions",
     tools: [],
+    agentWords: /session|fork|resume/,
     sdk: ["cli:dawg sessions"],
     gap: {
       menu: "sessions are a window command; ctrl-k has no sessions row",
@@ -167,6 +173,7 @@ export const FEATURES: readonly Feature[] = [
     command: "/model fast",
     menu: "verb:model",
     tools: [],
+    agentWords: /model/,
     sdk: ["cli:/model"],
     gap: {
       menu: "ctrl-k has no model picker",
@@ -178,23 +185,43 @@ export const FEATURES: readonly Feature[] = [
     command: "/showme on",
     menu: "Project › show me",
     tools: [],
+    agentWords: /show.?me/,
     sdk: ["cli:/showme"],
     gap: { agent: "show-me is the agent's own display; it has no tool" },
   },
   {
     feature: "play mode",
     command: "/play on",
-    menu: "verb:play",
-    tools: ["transport"],
+    // `play` in ctrl-k is the transport (§8.2): a play-mode row must run
+    // `/play`, so the verb door is checked with the slash.
+    menu: "verb:/play",
+    tools: [],
+    agentWords: /play.?mode|keyboard/,
     sdk: ["cli:Ctrl-P"],
+    gap: {
+      menu: "ctrl-k shows play-mode settings but has no row that enters it",
+      agent: "the agent does not enter play mode; `transport` is play/pause",
+    },
+  },
+  {
+    feature: "rig",
+    command: "rig crunch",
+    menu: "Effects › Guitar rig",
+    tools: ["set_rig"],
+    sdk: ["sdk:rig", "track.fx"],
   },
 ];
 
 const walked = walkAll().flatMap((entry) => entry.walked);
 const verbs = new Set<string>();
 for (const { node } of walked)
-  for (const command of nodeCommands(node))
-    verbs.add(command.replace(/^\//, "").split(/\s/)[0]!);
+  for (const command of nodeCommands(node)) {
+    const word = command.split(/\s/)[0]!;
+    verbs.add(word.replace(/^\//, ""));
+    // A slash verb also counts under `verb:/x`, for rows where the bare
+    // word means something else (`play` vs `/play`).
+    if (word.startsWith("/")) verbs.add(word);
+  }
 const toolNames = new Set(AGENT_TOOLS.map((tool) => tool.name));
 const v1 = read("core/sdk/v1.ts");
 const printer = read("core/sdk/print.ts");
@@ -215,9 +242,17 @@ function menuDoor(menu: string): boolean {
   return resolveMenuPath(menu.split(" › ")) !== undefined;
 }
 
+/**
+ * The agent reaches a feature through an advertised tool, or by typing the
+ * command through show-me, which runs only lines `commandParses` accepts
+ * (window commands such as `/model` never reach it).
+ */
 function agentDoor(row: Feature): boolean {
-  if (row.tools.length > 0) return row.tools.every((t) => toolNames.has(t));
-  return false;
+  if (row.tools.length > 0 && row.tools.every((t) => toolNames.has(t)))
+    return true;
+  if (row.agentWords && [...toolNames].some((t) => row.agentWords!.test(t)))
+    return true;
+  return commandParses(row.command, demoScore());
 }
 
 function sdkDoor(ref: string): boolean {
@@ -262,6 +297,7 @@ describe("four doors to every feature", () => {
       "model",
       "show-me",
       "play mode",
+      "rig",
     ]);
   });
 
@@ -287,7 +323,7 @@ describe("four doors to every feature", () => {
         // Any tool named must exist; with none, show-me types the command.
         for (const tool of row.tools)
           expect(toolNames.has(tool), tool).toBe(true);
-        if (row.tools.length === 0) expect(accepts(row.command)).toBe(true);
+        expect(door, row.command).toBe(true);
       });
 
       test("SDK: a field the printer writes, an export, or a CLI pointer", () => {
