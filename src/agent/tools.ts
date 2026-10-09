@@ -108,6 +108,7 @@ import { RHYTHM_TOOLS } from "./rhythm-tools.ts";
 import { CHORD_TOOLS } from "./chord-tools.ts";
 import { EXPRESSION_TOOLS } from "./expression-tools.ts";
 import { TUNING_TOOLS } from "./tuning-tools.ts";
+import { CALIBRATION_TOOLS } from "./calibration-tools.ts";
 import { MASTER_TOOLS } from "./master-tools.ts";
 import { DRUM_TOOLS } from "./drum-tools.ts";
 import { TIME_TOOLS } from "./time-tools.ts";
@@ -2022,6 +2023,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   ...CHORD_TOOLS,
   ...EXPRESSION_TOOLS,
   ...TUNING_TOOLS,
+  ...CALIBRATION_TOOLS,
   ...DRUM_TOOLS,
   ...TIME_TOOLS,
   ...SECTION_TOOLS,

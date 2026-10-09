@@ -90,8 +90,7 @@ export const SCORE_VERSION = 1 as const;
  * pitch and voice fixes a song renders with. Absent (0) keeps every 0.4 to
  * 0.6.1 project byte-identical; new songs start at the latest. Revision 1
  * chokes the open hat, key-tracks toms, adds crash, ride and cowbell,
- * band-limits hat metal, levels keys presets, steadies and tunes lip brass,
- * and centers low gongs.
+ * band-limits hat metal, levels keys presets and steadies lip brass.
  */
 export const CALIBRATION_LATEST = 1 as const;
 export const DEFAULT_TICKS_PER_BEAT = 480 as const;

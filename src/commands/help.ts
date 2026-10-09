@@ -253,6 +253,10 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "this track's tuning · off follows the song",
       },
       {
+        command: "calibration [0|1|latest|off]",
+        summary: "sound fixes · 1 chokes hats, levels keys · 0 legacy",
+      },
+      {
         command: "cents <id> <±c>",
         summary: "detune one note · cents n3 -14 · add E4-14c at 0",
       },
@@ -736,6 +740,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   scale: "scale [<tonic>] <name> | list · scale D hijaz",
   tuning:
     "tuning <name> | edo <n> | ratios … | cents … | scl <file> [kbm <file>] | ref <hz> | root <note> | map linear|nearest | track … | off · tuning 19-edo",
+  calibration: "calibration [0|1|latest|off] · calibration latest",
   tune: "tuning <name> | edo <n> | scl <file> | off · tuning list · pitch correction is /autotune",
   autotune:
     "autotune [hard|robot|warble|trap|pop|natural|gentle|guided|locked] | to scale|chromatic|chord|notes [track] | key <key> | speed hold glide <ms> | relax amount center drift <0..1> | flex <0..100> | vib <Hz> vibmod <st> | voice auto|bass|tenor|alto|soprano | reset | off | presets · autotune hard · autotune natural flex 40",
