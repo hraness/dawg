@@ -52,7 +52,7 @@ function song(): TrackScore {
         pitch: 48,
         velocity: 0.9,
         startTick: 0,
-        durationTicks: 1920,
+        durationTicks: 2880,
       },
     ],
     sections: [{ name: "verse", startBar: 1, bars: 1 }],
@@ -260,6 +260,36 @@ describe("runResample", () => {
     // Printed and re-read, the provenance survives.
     const files = printProject(bars.next);
     expect(JSON.stringify(files)).toContain("orbit:1");
+  });
+
+  test("a silent source is refused and adds no track", async () => {
+    const dir = await project();
+    const score = song();
+    const silent = await runResample({
+      projectRoot: dir,
+      score: createScore({
+        ...score.toJSON(),
+        notes: score.notes.filter((n) => n.trackId !== "lead"),
+      }),
+      command: parseResampleCommand("resample lead as stem")!,
+    });
+    expect(silent.ok).toBe(false);
+    if (!silent.ok) expect(silent.message).toContain("silent here");
+  });
+
+  test("the file ends shortly after the sound does", async () => {
+    const dir = await project();
+    const result = await runResample({
+      projectRoot: dir,
+      score: song(),
+      command: parseResampleCommand("resample lead bars 1-1")!,
+    });
+    if (!result.ok) throw new Error(result.message);
+    // One bar at 120 BPM is 2 s; the saw's release is short, so the file
+    // is far shorter than the pre-0.6.1 fixed tail of range + 4.35 s.
+    const seconds = Number(/· ([\d.]+) s →/.exec(result.message)![1]);
+    expect(seconds).toBeGreaterThan(0.5);
+    expect(seconds).toBeLessThan(3);
   });
 
   test("errors are receipts", async () => {
