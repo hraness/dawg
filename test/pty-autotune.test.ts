@@ -88,6 +88,8 @@ test.skipIf(!supported)(
       await send("/voice");
       await send("\r");
       await until(() => vt.text().includes("Autotune"), "Voice > Autotune");
+      // Clips, Lyrics and Pitch sit above it: filter to Autotune, then open.
+      await send("/autotune");
       await send("\r");
       await until(
         () => vt.text().includes("Preset") && vt.text().includes("Flex"),

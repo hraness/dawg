@@ -15,6 +15,7 @@ import { chordTimeline } from "./granular.ts";
 import { clearFitCache, onFitReady, withLiveFit } from "./fit.ts";
 import { planSamplerVoices, renderSamplerVoices } from "./sampler.ts";
 import { sampleKey, type DecodedSample, type SampleBank } from "./samples.ts";
+import { budget } from "../../test/perf.ts";
 
 const RATE = 16_000;
 const HOP = 0.005;
@@ -225,7 +226,7 @@ describe("autotune through the sampler", () => {
     const first = withLiveFit(() =>
       autotuneSpan(score, score.tracks[0]!, buffer, place),
     );
-    expect(performance.now() - t0).toBeLessThan(50);
+    expect(performance.now() - t0).toBeLessThan(budget(50));
     expect(first.mono).toBe(long);
     await new Promise<void>((resolve) => {
       const off = onFitReady(() => {

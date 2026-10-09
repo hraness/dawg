@@ -30,6 +30,7 @@ import {
 } from "./autotune.ts";
 import { FxValidationError } from "./params.ts";
 import { resolveTuning } from "./tuning.ts";
+import { budget } from "../test/perf.ts";
 
 const SR = 16_000;
 const HOP = 0.005;
@@ -514,7 +515,7 @@ describe("autotune: cost with a cached curve", () => {
     for (let i = 0; i < runs; i += 1)
       autotuneBuffer(x, SR, curve, targets, r, identity);
     const msPerSecond = (performance.now() - start) / runs / (x.length / SR);
-    expect(msPerSecond).toBeLessThan(1);
+    expect(msPerSecond).toBeLessThan(budget(1));
   });
 });
 

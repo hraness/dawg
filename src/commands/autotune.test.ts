@@ -5,6 +5,8 @@ import {
   nextAutotune,
   parseAutotuneCommand,
 } from "./autotune.ts";
+import { builtinPitchEngine } from "../audio/autotune-engine.ts";
+import { setPitchEngine } from "../audio/autotune.ts";
 import { parseTuningCommand } from "./tuning.ts";
 import { VOCAL_VERBS, parseVocalCommand } from "./vocal.ts";
 
@@ -237,12 +239,22 @@ describe("/autotune units, presets and receipts (review fixes)", () => {
   });
 
   test("without a pitch engine the receipt says audio plays untuned", () => {
-    const result = applyAutotuneCommand(
-      score,
-      "vox",
-      parseAutotuneCommand("autotune hard")!,
-    );
-    expect(result.message).toContain("audio plays untuned");
+    // The merged pitch engine is installed by default; none is the fallback.
+    expect(
+      applyAutotuneCommand(score, "vox", parseAutotuneCommand("autotune hard")!)
+        .message,
+    ).not.toContain("audio plays untuned");
+    setPitchEngine(undefined);
+    try {
+      const result = applyAutotuneCommand(
+        score,
+        "vox",
+        parseAutotuneCommand("autotune hard")!,
+      );
+      expect(result.message).toContain("audio plays untuned");
+    } finally {
+      setPitchEngine(builtinPitchEngine);
+    }
   });
 
   test("removing the from track keeps to and the preset", () => {
