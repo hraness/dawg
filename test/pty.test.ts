@@ -375,7 +375,7 @@ test.skipIf(!supported)(
   async () => {
     const t = await launch(80, 24, { AI_GATEWAY_API_KEY: "" }, []);
     await t.until(
-      () => t.vt.text().includes("/login adds an agent · optional"),
+      () => t.vt.text().includes("/model key adds an agent · optional"),
       "first-run card",
     );
     // Straight into the editor: no picker, the alternate screen is up.
@@ -389,7 +389,7 @@ test.skipIf(!supported)(
     const two = await launch(80, 24, { AI_GATEWAY_API_KEY: "" }, [], t.cwd);
     await two.until(() => two.vt.text().includes("commands only"), "second");
     await Bun.sleep(300);
-    expect(two.vt.text()).not.toContain("/login adds an agent");
+    expect(two.vt.text()).not.toContain("/model key adds an agent");
     two.terminal.write("\u0003");
     expect(await two.proc.exited).toBe(0);
     two.terminal.close();

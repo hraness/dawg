@@ -102,6 +102,8 @@ export interface TrackScoreSnapshot {
    * accent. Empty or omitted in focus view.
    */
   layers?: readonly HighwayLayer[] | undefined;
+  /** The focused track sings (instrument `vocal`): the empty hint says how. */
+  vocal?: boolean | undefined;
   /** Audio clips on the focused track (0.7): the right-edge clip row. */
   clips?: readonly ClipSnapshot[] | undefined;
   /**
@@ -601,8 +603,11 @@ export function paintHighway(
   // Beat, bar, and loop rules of increasing strength.
   const barBeats =
     score.barBeats && score.barBeats.length > 0 ? score.barBeats : undefined;
+  // An empty highway reserves one row for its hint: no rule scrolls
+  // through it, so the words never sit on the ruler, playing or paused.
+  const hintRow = empty ? Math.max(0, Math.floor(hitRow / 2)) : undefined;
   for (let row = 0; row <= lastNoteRow; row += 1) {
-    if (row === hitRow) continue;
+    if (row === hitRow || row === hintRow) continue;
     const center = rowBeat(row);
     const half = 0.5 / rowsPerBeat;
     let k = Math.ceil(center - half - 1e-9);
@@ -710,12 +715,14 @@ export function paintHighway(
         agent: options.hint?.agent ?? true,
         filled: false,
         drums: projection.kind !== "pitch",
+        vocal: score.vocal === true,
+        playing: score.playing === true,
       },
       name,
       areaWidth,
     );
     const x = gutter + Math.max(0, Math.floor((areaWidth - text.length) / 2));
-    const y = Math.max(0, Math.floor(hitRow / 2));
+    const y = hintRow ?? 0;
     for (let index = 0; index < text.length; index += 1)
       painter.put(x + index, y, text[index]!, roles.muted);
   }

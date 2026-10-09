@@ -6,7 +6,9 @@ import {
   pick,
   placeholderHint,
   seedHash,
+  SUGGESTED_STYLES,
 } from "./hints.ts";
+import { STYLE_IDS } from "../core/styles/index.ts";
 
 describe("seeded hints", () => {
   test("a fixed seed gives fixed text", () => {
@@ -56,22 +58,58 @@ describe("seeded hints", () => {
 
   test("the empty line shortens to fit", () => {
     const state = { seed: "x", agent: true, filled: false };
-    expect(emptyHint(state, "lead", 80).length).toBeLessThanOrEqual(80);
+    expect(emptyHint(state, "lead", 80)).toBe(
+      "lead · empty · space play · ctrl-p play mode · ctrl-k menu",
+    );
     const narrow = emptyHint(state, "lead", 30);
-    expect(narrow.length).toBeLessThanOrEqual(30);
-    expect(narrow).toStartWith("lead · empty");
+    expect(narrow).toBe("lead · empty · space play");
     expect(emptyHint(state, "lead", 5)).toBe("lead ");
+  });
+
+  test("drum, vocal and wide empty lines lead with a way in", () => {
+    const state = { seed: "x", agent: true, filled: false };
+    expect(emptyHint({ ...state, drums: true }, "kit", 80)).toBe(
+      "kit · empty · hit kick at 0 · space play · ctrl-p play mode · ctrl-k menu",
+    );
+    expect(emptyHint({ ...state, vocal: true }, "vox", 120)).toBe(
+      "vox · empty · /lyrics la la · sing ooh · ctrl-k › Voice · space play · ctrl-p play mode · ctrl-k menu",
+    );
+    // A vocal lead that does not fit drops before the keys do.
+    expect(emptyHint({ ...state, vocal: true }, "vox", 80)).toBe(
+      "vox · empty · space play · ctrl-p play mode · ctrl-k menu",
+    );
+    const wide = emptyHint(state, "lead", 100);
+    expect(wide).toMatch(/^lead · empty · try style [a-z-]+ · space play/);
+    expect(wide).toBe(emptyHint(state, "lead", 100));
+    expect(emptyHint(state, "lead", 99)).not.toContain("try style");
+  });
+
+  test("while playing the line says how to stop", () => {
+    const state = { seed: "x", filled: false, playing: true };
+    expect(emptyHint({ ...state, agent: true }, "lead", 80)).toBe(
+      "lead · empty · space stop · type a request",
+    );
+    expect(emptyHint({ ...state, agent: false }, "lead", 120)).toBe(
+      "lead · empty · space stop · ctrl-p play mode",
+    );
+  });
+
+  test("suggested styles have cards", () => {
+    for (const id of SUGGESTED_STYLES)
+      expect([id, STYLE_IDS.includes(id)]).toEqual([id, true]);
   });
 
   test("every suggested command is a known verb", () => {
     const known = new Set(Object.keys(USAGE));
     for (const hint of ALL_HINTS) {
-      const clauses = hint.replace(/^try: /, "").split(" · ");
+      const clauses = hint.replace(/^try:? /, "").split(" · ");
       for (const clause of clauses) {
         if (/^(ctrl|space|then|ask|say|type|describe|queue)\b/.test(clause))
           continue;
         const verb = clause.replace(/^\//, "").split(" ")[0]!;
-        expect({ hint, verb, known: known.has(verb) }).toEqual({
+        // Slash-only commands (`/lyrics`) are listed under their own topic.
+        const slash = clause.startsWith("/") && verb === "lyrics";
+        expect({ hint, verb, known: known.has(verb) || slash }).toEqual({
           hint,
           verb,
           known: true,

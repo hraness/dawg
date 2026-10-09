@@ -30,10 +30,10 @@ describe("activity cards", () => {
 
   test("a command receipt wins the first slot over a once note", () => {
     const { activity, texts } = feed();
-    activity.pushCard("/login adds an agent · optional", { once: true });
+    activity.pushCard("/model key adds an agent · optional", { once: true });
     activity.pushCard("96 BPM", { tone: "success" });
     expect(texts()[0]).toBe("✓ 96 BPM");
-    expect(texts()[1]).toBe("• /login adds an agent · optional");
+    expect(texts()[1]).toBe("• /model key adds an agent · optional");
   });
 
   test("the auto-name joins the receipt as a suffix", () => {

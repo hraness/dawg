@@ -122,9 +122,9 @@ for (const cols of [40, 80, 120]) {
     expect(lines[0]).toContain("rev 42");
     expect(lines.some((line) => line.includes("+8 bass notes"))).toBe(true);
     if (cols >= 80)
-      expect(lines.some((line) => line.includes("rev 41→42 · ctrl-z undo"))).toBe(
-        true,
-      );
+      expect(
+        lines.some((line) => line.includes("rev 41→42 · ctrl-z undo")),
+      ).toBe(true);
     const { top } = promptBox(h.vt);
     expect(top).toBeGreaterThan(5);
     expect(lines[top]).toContain(" NOW ");
@@ -455,8 +455,26 @@ test("an empty track shows a start hint instead of lane and bar labels", () => {
   const empty: TrackScoreSnapshot = { ...score, trackName: "main", notes: [] };
   h.app.render({ score: empty, beat: 0 }, { force: true });
   const text = h.vt.text();
-  // The hint is seeded by the session id (tui/hints.ts).
-  expect(text).toMatch(/main · empty · [^\n]* · ctrl-p play · ctrl-k menu/);
+  // Playing: the line says how to stop (tui/hints.ts).
+  expect(text).toContain("main · empty · space stop · type a request");
+  const hintAt = (lines: string[]) =>
+    lines.findIndex((line) => line.includes("main · empty"));
+  const playingRow = hintAt(h.vt.lines());
+  const rowCount = h.vt.lines().length;
+  // Its row is reserved: no rule shares it.
+  expect(h.vt.lines()[playingRow]).not.toMatch(/[┈─]/);
+  h.app.render(
+    { score: { ...empty, playing: false }, beat: 0 },
+    { force: true },
+  );
+  expect(h.vt.text()).toContain(
+    "main · empty · space play · ctrl-p play mode · ctrl-k menu",
+  );
+  // Pausing keeps the same rows: the hint does not move.
+  expect(hintAt(h.vt.lines())).toBe(playingRow);
+  expect(h.vt.lines().length).toBe(rowCount);
+  h.app.render({ score: empty, beat: 1 }, { force: true });
+  expect(h.vt.lines()[playingRow]).not.toMatch(/[┈─]/);
   // No pitch legend row (C3 … C6) and no bar numbers in the gutter.
   expect(text.replace("add C4 at 0", "")).not.toMatch(/\bC[3-6]\b/);
   expect(h.vt.lines().some((line) => /^ *[12] /.test(line))).toBe(false);
@@ -469,8 +487,8 @@ test("an empty track shows a start hint instead of lane and bar labels", () => {
     ...drumSnapshotFields("kit", []),
   };
   h.app.render({ score: drums, beat: 0 }, { force: true });
-  expect(h.vt.text()).toMatch(
-    /drums · empty · [^\n]* · ctrl-p play · ctrl-k menu/,
+  expect(h.vt.text()).toContain(
+    "drums · empty · hit kick at 0 · space stop · type a request",
   );
   expect(h.vt.text()).not.toContain("snare");
 });

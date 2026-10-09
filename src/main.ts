@@ -956,6 +956,7 @@ function snapshot(
     currentBeat: scoreBeatAt(value, beat),
     playing: clock.playing,
     activity,
+    ...(focused?.instrument === "vocal" ? { vocal: true } : {}),
     ...drumSnapshotFields(
       value.tracks.find((track) => track.id === requestedTrack)?.instrument,
       notes,
@@ -1543,6 +1544,7 @@ async function runInteractive(): Promise<void> {
   if (freshWorkspace)
     tui.activity.pushCard("created .dawg/ · add it to .gitignore", {
       tone: "info",
+      once: true,
     });
   if (attachNotice)
     tui.activity.pushCard(attachNotice, {

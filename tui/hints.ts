@@ -17,6 +17,10 @@ export type HintState = Readonly<{
   filled: boolean;
   /** The focused track is a drum kit. */
   drums?: boolean;
+  /** The focused track is a vocal track. */
+  vocal?: boolean;
+  /** The transport is running. */
+  playing?: boolean;
   /** The agent is busy and Enter queues for after it. */
   queue?: boolean;
 }>;
@@ -80,25 +84,31 @@ const TYPE_DRUMS = [
 ] as const;
 
 /**
- * Where to begin on an empty highway. An agent session invites a
- * request; a commands-only session names a command that runs as typed.
+ * The keys on the empty line (design §8.5): transport, play mode and the
+ * menu while paused; while playing, how to stop and, with an agent, that a
+ * request still works.
  */
-const EMPTY_AGENT = [
-  "type a song idea · ctrl-p play · ctrl-k menu",
-  "ask for a groove · ctrl-p play · ctrl-k menu",
-  "say what you hear · ctrl-p play · ctrl-k menu",
+const KEYS_PAUSED = "space play · ctrl-p play mode · ctrl-k menu";
+const KEYS_PLAYING_AGENT = "space stop · type a request";
+const KEYS_PLAYING = "space stop · ctrl-p play mode";
+
+/** How to start a drum track or a vocal track, before the keys. */
+const LEAD_DRUMS = "hit kick at 0";
+// `/lyrics` is a slash command today; the hint runs exactly as typed.
+const LEAD_VOCAL = "/lyrics la la · sing ooh · ctrl-k › Voice";
+
+/** Styles a wide empty line suggests, one per session (all have cards). */
+export const SUGGESTED_STYLES = [
+  "deep-house",
+  "lofi-hip-hop",
+  "bossa-nova",
+  "nu-disco",
+  "synthwave",
+  "golden-age",
 ] as const;
 
-const EMPTY_COMMANDS = [
-  "style house to start · ctrl-p play · ctrl-k menu",
-  "add C4 at 0 to start · ctrl-p play · ctrl-k menu",
-  "style search jazz · ctrl-p play · ctrl-k menu",
-] as const;
-
-const EMPTY_COMMANDS_DRUMS = [
-  "hit kick at 0 to start · ctrl-p play · ctrl-k menu",
-  "style house to start · ctrl-p play · ctrl-k menu",
-] as const;
+/** From this width the empty line also suggests a seeded style. */
+export const STYLE_HINT_WIDTH = 100;
 
 /** The prompt placeholder for this session and state. */
 export function placeholderHint(state: HintState): string {
@@ -118,25 +128,38 @@ export function placeholderHint(state: HintState): string {
 }
 
 /**
- * The empty-highway line, `<name> · empty · <hint>`, shortened to `width`:
- * the full hint, then only its first clause, then the name alone.
+ * The empty-highway line, `<name> · empty · <lead> · <keys>`, shortened to
+ * `width`: the lead goes first, then the keys shrink to their first
+ * clause, then the name alone. A drum track leads with `hit kick at 0`, a
+ * vocal track with lyrics and sing, and from 100 columns a pitched track
+ * suggests a seeded style.
  */
 export function emptyHint(
   state: HintState,
   name: string,
   width: number,
 ): string {
-  const list = state.agent
-    ? EMPTY_AGENT
-    : state.drums
-      ? EMPTY_COMMANDS_DRUMS
-      : EMPTY_COMMANDS;
-  const hint = pick(list, state.seed, "empty");
-  const full = `${name} · empty · ${hint}`;
-  if (full.length <= width) return full;
-  const short = `${name} · empty · ${hint.split(" · ")[0]}`;
-  if (short.length <= width) return short;
-  return `${name} · empty`.slice(0, Math.max(0, width));
+  const keys = state.playing
+    ? state.agent
+      ? KEYS_PLAYING_AGENT
+      : KEYS_PLAYING
+    : KEYS_PAUSED;
+  const lead = state.drums
+    ? LEAD_DRUMS
+    : state.vocal
+      ? LEAD_VOCAL
+      : width >= STYLE_HINT_WIDTH && !state.playing
+        ? `try style ${pick(SUGGESTED_STYLES, state.seed, "style")}`
+        : undefined;
+  const head = `${name} · empty`;
+  const candidates = [
+    ...(lead ? [`${head} · ${lead} · ${keys}`] : []),
+    `${head} · ${keys}`,
+    `${head} · ${keys.split(" · ")[0]}`,
+  ];
+  for (const candidate of candidates)
+    if (candidate.length <= width) return candidate;
+  return head.slice(0, Math.max(0, width));
 }
 
 /** Every hint string, for the shipped-text and command checks. */
@@ -147,7 +170,10 @@ export const ALL_HINTS: readonly string[] = [
   ...TYPE_EMPTY,
   ...TYPE_FILLED,
   ...TYPE_DRUMS,
-  ...EMPTY_AGENT,
-  ...EMPTY_COMMANDS,
-  ...EMPTY_COMMANDS_DRUMS,
+  KEYS_PAUSED,
+  KEYS_PLAYING_AGENT,
+  KEYS_PLAYING,
+  LEAD_DRUMS,
+  LEAD_VOCAL,
+  ...SUGGESTED_STYLES.map((id) => `try style ${id}`),
 ];

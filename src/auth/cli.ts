@@ -92,7 +92,7 @@ export type FirstRunCard = Readonly<{
 /**
  * The launch note about the agent. dawg opens straight into the TUI: music
  * first, sign-in optional. The first session with no provider gets one
- * faint card, `/login adds an agent · optional`, and records that it was
+ * faint card, `/model key adds an agent · optional`, and records that it was
  * shown so later sessions stay quiet; a saved sign-in that stopped working
  * says so. `dawg login` and `/login` keep the picker.
  */
@@ -116,7 +116,7 @@ export async function firstRunCard(
 }
 
 /** The first session's agent note. */
-export const FIRST_RUN_CARD = "/login adds an agent · optional";
+export const FIRST_RUN_CARD = "/model key adds an agent · optional";
 
 /** `/login` in the TUI, run while the screen is handed back to the shell. */
 export async function runTuiLogin(
