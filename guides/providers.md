@@ -18,6 +18,7 @@ is set: AI Gateway, OpenRouter, or a Codex or Claude subscription.
 ## In the app
 
 - `/login` · `/model` picker · `/model <alias>` · `/logout`
+- `/model fast` the quickest model that passes the agent eval
 - `/auth --check` provider and audio status
 
 ## Environment
