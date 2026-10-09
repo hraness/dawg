@@ -371,12 +371,14 @@ function createApiClient(
 
 /**
  * Mark the leading system message as a prompt-cache breakpoint for Anthropic
- * models on OpenRouter. Anthropic caches tools, then system, then messages,
- * so a breakpoint on the static system prompt caches the tool schemas and the
- * prompt (about 22K tokens) across every step of a turn; the per-step brief
- * follows it and stays uncached. Other providers cache prefixes implicitly,
- * and the Gateway is asked to place breakpoints itself, so their messages go
- * out unchanged.
+ * models on OpenRouter and the AI Gateway. Anthropic caches tools, then
+ * system, then messages, so a breakpoint on the static system prompt caches
+ * the tool schemas and the prompt (about 27K tokens) across every step of a
+ * turn; the per-step brief follows it and stays uncached. The Gateway's
+ * `caching: "auto"` option alone cached nothing on its chat completions
+ * endpoint (bench/agent-eval measured 0 cached tokens over 4M), so the
+ * breakpoint is explicit there too. Other providers cache prefixes
+ * implicitly, so their messages go out unchanged.
  */
 export function withPromptCache(
   provider: ApiProvider,
@@ -385,7 +387,6 @@ export function withPromptCache(
 ): readonly unknown[] {
   const first = messages[0];
   if (
-    provider !== "openrouter" ||
     !model.toLowerCase().startsWith("anthropic/") ||
     first?.role !== "system" ||
     first.content.length === 0

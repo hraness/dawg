@@ -897,7 +897,8 @@ describe("workspace and web tools in the loop", () => {
         "tracks/other/ 1 file 9 B",
       ]);
       expect(brief.project?.notes).toBe("# main\nidea: dub\n");
-      expect(String(first.messages[0]!.content)).toContain("edit_file");
+      // Anthropic models get the system prompt as one cache-marked text part.
+      expect(JSON.stringify(first.messages[0]!.content)).toContain("edit_file");
       // Tool results are plain text; the write hook's text follows the edit result.
       const second = script.requests[1]!.body as {
         messages: Array<Record<string, unknown>>;
@@ -1095,7 +1096,7 @@ describe("classifyAgentError", () => {
 });
 
 describe("prompt cache", () => {
-  test("the static prefix is byte-stable across steps and marked for Anthropic on OpenRouter", async () => {
+  test("the static prefix is byte-stable across steps and marked for Anthropic models", async () => {
     const turn = () =>
       scriptedFetch([
         [
@@ -1107,7 +1108,8 @@ describe("prompt cache", () => {
     const routes = [
       ["openrouter", "anthropic/claude-opus-5.5", true],
       ["openrouter", "openai/gpt-oss-20b:nitro", false],
-      ["gateway", "anthropic/claude-opus-5.5", false],
+      ["gateway", "anthropic/claude-opus-5.5", true],
+      ["gateway", "openai/gpt-6-luna", false],
     ] as const;
     for (const [provider, modelId, marked] of routes) {
       const script = turn();

@@ -17,6 +17,7 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ### Fixed
 
+- **Prompt caching on the AI Gateway.** Anthropic models on the Gateway now get the same explicit cache breakpoint on the system prompt as on OpenRouter; the Gateway's automatic caching option cached nothing on its chat endpoint. Later steps of a turn now read about 27K cached tokens, which made Claude Haiku 4.5 about seven times cheaper per step in `bench/agent-eval`.
 - **Agent replies no longer stop after 15 s.** The gateway header timeout now covers only the wait for response headers; a reply may stream for as long as the turn budget allows. A transport timeout or a dropped stream is reported as a provider error that names the timeout, not as an internal error.
 - **`fetch_url` connects to the address it checked.** The request is pinned to the resolved, public address, so a rebinding hostname cannot point the second lookup at loopback or cloud metadata. IPv4-compatible (`::127.0.0.1`), 6to4 (`2002::/16`), site-local (`fec0::/10`) and discard-prefix (`100::/64`) IPv6 addresses are now refused when they reach a private range.
 - **OpenRouter routing variants.** Model IDs with a `:nitro`, `:free`, `:floor` or other variant suffix are accepted on OpenRouter (`/model`, `dawg login`, `DAWG_MODEL`) and sent unchanged; the AI Gateway still refuses them.
