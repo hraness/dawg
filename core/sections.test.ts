@@ -14,6 +14,7 @@ import {
   applySectionChanges,
   arrangedBars,
   arrangedStartBar,
+  barTicks,
   deleteSection,
   duplicateSection,
   findSection,
@@ -637,5 +638,41 @@ describe("a form keeps tempo ramps that cross section boundaries", () => {
         secondsAtTick(song, bar * ticks),
         2,
       );
+  });
+});
+
+describe("sections in a compound meter", () => {
+  const sixEight = () =>
+    createScore({
+      bars: 4,
+      tempoBpm: 60,
+      beatsPerBar: 6,
+      time: { meter: [{ bar: 0, beatsPerBar: 6, beatUnit: 8 }] },
+      tracks: [{ id: "a", name: "a", instrument: "sine" }],
+      sections: [
+        { name: "A", startBar: 0, bars: 2 },
+        { name: "B", startBar: 2, bars: 2 },
+      ],
+    });
+
+  test("a meter held from bar 1 allows sections; a change does not", () => {
+    const score = sixEight();
+    expect(barTicks(score)).toBe(3 * score.ticksPerBeat);
+    expect(() =>
+      createScore({
+        bars: 4,
+        time: { meter: [{ bar: 2, beatsPerBar: 3 }] },
+        sections: [{ name: "A", startBar: 0, bars: 2 }],
+      }),
+    ).toThrow(/sections need one meter/);
+  });
+
+  test("a form keeps the meter and counts 6/8 bars", () => {
+    const score = withForm(sixEight(), parseForm(sixEight(), "B A"));
+    const flat = flattenForm(score);
+    expect(flat.time?.meter?.[0]?.beatUnit).toBe(8);
+    expect(flat.sections.map((s) => s.startBar)).toEqual([0, 2]);
+    // Two 6/8 bars are six quarters: 6 s at 60 bpm.
+    expect(secondsAtTick(flat, barTicks(flat) * 2)).toBeCloseTo(6, 9);
   });
 });

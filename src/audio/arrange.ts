@@ -21,6 +21,7 @@ import {
   arrangedNotes,
   arrangedSlice,
   bakeTrackTime,
+  barBeats,
   barTicks,
   barsToSeconds,
   findSection,
@@ -147,7 +148,7 @@ export function playbackTime(score: TrackScore): TimeScore {
  */
 export function scoreBeatAt(score: TrackScore, beat: number): number {
   const section = loopedSection(score);
-  const perBar = score.beatsPerBar;
+  const perBar = barBeats(score);
   if (section) {
     const length = section.bars * perBar;
     const phase = Number.isFinite(beat)
