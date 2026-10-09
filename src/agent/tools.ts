@@ -110,6 +110,7 @@ import { EXPRESSION_TOOLS } from "./expression-tools.ts";
 import { TUNING_TOOLS } from "./tuning-tools.ts";
 import { CALIBRATION_TOOLS } from "./calibration-tools.ts";
 import { MASTER_TOOLS } from "./master-tools.ts";
+import { STYLE_TOOLS } from "./style-tools.ts";
 import { DRUM_TOOLS } from "./drum-tools.ts";
 import { TIME_TOOLS } from "./time-tools.ts";
 import { SECTION_TOOLS } from "./section-tools.ts";
@@ -2030,6 +2031,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   ...MEDIA_TOOLS,
   ...PACK_TOOLS,
   ...MASTER_TOOLS,
+  ...STYLE_TOOLS,
   ...GRANULAR_TOOLS,
   ...RESAMPLE_TOOLS,
   // 0.7 Voice: one array per lane in voice-tools.ts.
