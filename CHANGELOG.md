@@ -47,6 +47,14 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - Reasoning models no longer end a turn at the response cap while thinking: the cap is 1 MiB of raw stream.
 - The agent stops re-applying an edit it already made: tool results say the brief already reflects the change, and `update_notes` takes a relative `transpose` in semitones and reports each note's before and after pitch.
 - Models place "beats 2 and 4" on the backbeat: the prompt maps musical counts (from 1) to dawg beats (from 0), and `set_rhythm` says how a row tiles the loop.
+- Two-way sync never overwrites a track or song file you are still editing: a file whose bytes differ from what dawg last wrote (or that fails to evaluate) is kept, with an `edited · not overwritten` card, and untouched files keep their formatting and comments when another track changes.
+- Two sessions opened in one project folder no longer replace each other's music through the files; the files belong to one session at a time, and another session's window stays detached.
+- A window no longer reverts its own newer edit by applying another window's reprint, and concurrent windows merge `.dawg/sync.json` under a lock.
+- Editing a helper module or `.scl` file that a track imports now syncs; a look with nothing new says `files unchanged` instead of repeating the last outcome.
+- A valid score over 1 MiB of JSON no longer fails evaluation as "timed out"; the output bound is 32 MiB and an overflow is reported as such.
+- Undo of the edit just made works at the session record's size cap, and a session past 2000 events keeps accepting edits (the oldest events fold away; records gain an optional `folded` count, older records load unchanged).
+- Project files and `.dawg/sync.json` are written durably (fsync of the file and its directory), and closing a window no longer leaves a ghost presence entry or stray temp files.
+- The evaluator is described as an isolated process, not a sandbox: project code runs with your user's access.
 
 ## 0.6.1
 
