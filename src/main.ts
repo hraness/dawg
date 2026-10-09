@@ -778,7 +778,8 @@ let handoff: <T>(flow: () => Promise<T>) => Promise<T> = (flow) => flow();
 function spendLine(): string {
   const width = stdout.columns ?? 80;
   if (!providerName || providerName === "offline")
-    return width >= 40 ? "no model · dawg login" : "";
+    // A state, not a nag: the first session's card already named /login.
+    return width >= 40 ? formatSpendLine({ kind: "offline" }) : "";
   const [model, provider] = providerName.split(" · ");
   return formatSpendLine(
     {

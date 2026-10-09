@@ -179,6 +179,6 @@ describe("spend meter and line", () => {
     expect(
       spendLine({ kind: "subscription", model: "sonnet", provider: "claude" }),
     ).toBe("subscription · sonnet · claude");
-    expect(spendLine({ kind: "offline" })).toBe("no model · dawg login");
+    expect(spendLine({ kind: "offline" })).toBe("commands only");
   });
 });

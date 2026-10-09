@@ -76,7 +76,7 @@ export interface AppView {
   types?: TypesIndicator | undefined;
   /**
    * The line under the prompt: `$0.12 session · $0.48 today · opus-5.5 ·
-   * gateway`, or `no model · dawg login`. The caller sizes it to the width.
+   * gateway`, or `commands only`. The caller sizes it to the width.
    */
   spend?: string | undefined;
   /** No agent provider: the placeholder teaches commands, no STEER pill. */

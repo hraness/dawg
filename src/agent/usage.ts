@@ -232,7 +232,7 @@ export class SpendMeter {
 
 /**
  * The spend line: `$0.12 session · $0.48 today · opus-5.5 · gateway`;
- * `subscription · sonnet · claude`; `no model · dawg login`. Narrow widths
+ * `subscription · sonnet · claude`; `commands only`. Narrow widths
  * drop the today total, then the session total, then the provider.
  */
 export function spendLine(
@@ -245,7 +245,7 @@ export function spendLine(
   },
   width = 120,
 ): string {
-  if (options.kind === "offline") return "no model · dawg login";
+  if (options.kind === "offline") return "commands only";
   const tail = [options.model, options.provider].filter(Boolean) as string[];
   const money =
     options.kind === "subscription"

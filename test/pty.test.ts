@@ -369,6 +369,33 @@ test.skipIf(!supported)(
 );
 
 test.skipIf(!supported)(
+  "real PTY: the first run opens the TUI with one optional /login card",
+  async () => {
+    const t = await launch(80, 24, { AI_GATEWAY_API_KEY: "" }, []);
+    await t.until(
+      () => t.vt.text().includes("/login adds an agent · optional"),
+      "first-run card",
+    );
+    // Straight into the editor: no picker, the alternate screen is up.
+    expect(t.vt.altScreen).toBe(true);
+    expect(t.vt.text()).not.toContain("Welcome to dawg");
+    expect(t.vt.text()).not.toContain("Esc to skip");
+    t.terminal.write("\u0003");
+    expect(await t.proc.exited).toBe(0);
+    t.terminal.close();
+    // Session two stays quiet: the card was shown once.
+    const two = await launch(80, 24, { AI_GATEWAY_API_KEY: "" }, [], t.cwd);
+    await two.until(() => two.vt.text().includes("commands only"), "second");
+    await Bun.sleep(300);
+    expect(two.vt.text()).not.toContain("/login adds an agent");
+    two.terminal.write("\u0003");
+    expect(await two.proc.exited).toBe(0);
+    two.terminal.close();
+  },
+  20_000,
+);
+
+test.skipIf(!supported)(
   "real PTY: no provider shows the offline spend line and hides STEER",
   async () => {
     const t = await launch(
@@ -377,9 +404,14 @@ test.skipIf(!supported)(
       { AI_GATEWAY_API_KEY: "", DAWG_AI: "0" },
       [],
     );
-    await t.until(() => t.vt.text().includes("dawg login"), "offline hint");
-    expect(t.vt.text()).toContain("no model · dawg login");
+    await t.until(() => t.vt.text().includes("commands only"), "offline state");
+    // No sign-in nag in the header: the first session's card names /login.
+    expect(t.vt.text()).not.toContain("dawg login");
     expect(t.vt.text()).not.toContain("STEER");
+    // Commands only: the empty state and placeholder never ask for prose.
+    expect(t.vt.text()).not.toContain("type a request");
+    expect(t.vt.text()).not.toContain("describe a");
+    expect(t.vt.text()).toContain("try: ");
     // A sentence that starts with a command verb is a request, not a usage
     // error: offline it says "unrecognized", never the add syntax.
     await t.send("add a walking bass in A minor\r");
@@ -441,7 +473,7 @@ test.skipIf(!supported)(
       "--track",
       "gtr",
     ]);
-    await t.until(() => t.vt.text().includes("dawg login"), "ready");
+    await t.until(() => t.vt.text().includes("commands only"), "ready");
     await t.send("guitar capo 2\r");
     await t.until(
       () => t.vt.text().includes("guitar · standard · capo 2"),
