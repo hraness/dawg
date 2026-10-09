@@ -157,3 +157,48 @@ describe("expression tools", () => {
     expect(pedal[0]?.state).toBe("down");
   });
 });
+
+describe("set_piano_pedals (0.6.1)", () => {
+  test("sets and clears the soft and sostenuto lanes", () => {
+    const next = apply(
+      tool("set_piano_pedals").plan(
+        {
+          trackId: "keys",
+          soft: [
+            { beat: 0, state: "down" },
+            { beat: 2, state: "up" },
+          ],
+          sostenuto: "bars",
+        },
+        context(score),
+      ),
+    );
+    const keys = next.tracks.find((track) => track.id === "keys")!;
+    expect(keys.softPedal).toEqual([
+      { tick: 0, state: "down" },
+      { tick: 2 * tpb, state: "up" },
+    ]);
+    expect(keys.sostenuto?.[0]).toEqual({ tick: 0, state: "down" });
+    expect(keys.pedal).toBeUndefined();
+    const off = tool("set_piano_pedals").plan(
+      { trackId: "keys", soft: null, sostenuto: null },
+      context(next),
+    );
+    if (off.kind !== "score") throw new Error("not a score plan");
+    expect(off.operations.reduce(applyScoreOperation, next).toJSON()).toEqual(
+      score.toJSON(),
+    );
+  });
+
+  test("rejects sostenuto half and an empty call", () => {
+    expect(() =>
+      tool("set_piano_pedals").plan(
+        { trackId: "keys", sostenuto: [{ beat: 0, state: "half" }] },
+        context(score),
+      ),
+    ).toThrow(/sostenuto/);
+    expect(() =>
+      tool("set_piano_pedals").plan({ trackId: "keys" }, context(score)),
+    ).toThrow(/soft, sostenuto/);
+  });
+});
