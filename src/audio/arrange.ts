@@ -356,6 +356,10 @@ function renderWindows(
     /** Frames at the end that fade out under the next window. */
     fadeOut: number;
   }[] = [];
+  const nonFinite: { samples: number; tracks: string[] } = {
+    samples: 0,
+    tracks: [],
+  };
   for (let start = 0; start < totalBars;) {
     const startTick = start * ticks;
     // Every note up to the next window, in render order: tracks sum in the
@@ -438,6 +442,11 @@ function renderWindows(
               secondsAtTick(timeline, pre * ticks),
           ),
     });
+    if (audio.nonFinite) {
+      nonFinite.samples += audio.nonFinite.samples;
+      for (const id of audio.nonFinite.tracks)
+        if (!nonFinite.tracks.includes(id)) nonFinite.tracks.push(id);
+    }
     // A restarted note's phase differs from the previous window's, so the
     // seam crossfades over the previous window's last frames instead of
     // stepping; seams without a restart join sample for sample.
@@ -507,6 +516,15 @@ function renderWindows(
     master,
     options.loop === true,
   );
+  const report =
+    nonFinite.samples > 0
+      ? {
+          nonFinite: {
+            samples: nonFinite.samples,
+            tracks: [...nonFinite.tracks],
+          },
+        }
+      : {};
   if (mastered)
     return {
       sampleRate,
@@ -514,6 +532,13 @@ function renderWindows(
       frames: length,
       pcm: mastered.pcm,
       master: mastered.report,
+      ...report,
     };
-  return { sampleRate, channels: RENDER_CHANNELS, frames: length, pcm };
+  return {
+    sampleRate,
+    channels: RENDER_CHANNELS,
+    frames: length,
+    pcm,
+    ...report,
+  };
 }

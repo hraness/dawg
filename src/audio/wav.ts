@@ -143,7 +143,35 @@ export type RenderedAudio = Readonly<{
   pcm: Int16Array;
   /** Loudness the song master reached; absent without a master. */
   master?: MasterReport;
+  /**
+   * Non-finite samples (NaN, Infinity) a track's source or effects made,
+   * zeroed before they could poison a feedback stage or the mix (q08);
+   * absent when every sample was finite.
+   */
+  nonFinite?: NonFiniteReport;
 }>;
+
+/** Where a render zeroed non-finite samples. */
+export type NonFiniteReport = Readonly<{
+  samples: number;
+  /** Track ids in render order, then `bus` for the bus returns. */
+  tracks: readonly string[];
+}>;
+
+/**
+ * Zeroes NaN and Infinity in `buffer` and returns how many it found. A
+ * NaN written into an Int16Array stores 0, and one fed to a filter, comb
+ * or reverb feedback silences everything after it.
+ */
+export function scrubNonFinite(buffer: Float64Array): number {
+  let count = 0;
+  for (let i = 0; i < buffer.length; i += 1)
+    if (!Number.isFinite(buffer[i]!)) {
+      buffer[i] = 0;
+      count += 1;
+    }
+  return count;
+}
 
 /** Output channel count for every render and export. */
 export const RENDER_CHANNELS = 2 as const;
@@ -307,6 +335,8 @@ type Stem = {
   /** Stem, pre-reverb pair and tail (counted in the cache budget). */
   bytes: number;
   used: number;
+  /** Non-finite samples zeroed while rendering it (0 or absent: none). */
+  nonFinite?: number;
   /** For a track with a reverb: its stem before the reverb, and the tail. */
   room?: Readonly<{
     /** `stemKey` of the track with its reverb mix and mix lane left out. */
@@ -477,6 +507,10 @@ export class StemRenderer {
     };
     this.renders += 1;
     const { dry, dryR, left, right, mixL, mixR } = this.scratchFor(samples);
+    const nonFinite: { samples: number; tracks: string[] } = {
+      samples: 0,
+      tracks: [],
+    };
     mixL.fill(0);
     mixR.fill(0);
     const tracks = new Map(score.tracks.map((track) => [track.id, track]));
@@ -642,6 +676,8 @@ export class StemRenderer {
             context,
             vocoderSource.gateDb,
           );
+        // A non-finite source sample would poison every feedback stage.
+        let bad = scrubNonFinite(dry) + (stereo ? scrubNonFinite(dryR) : 0);
         // Note-aware stages (bloom, swell) see the notes; others never do.
         const chain =
           track && needsEffectNotes(track)
@@ -668,6 +704,8 @@ export class StemRenderer {
             true,
             false,
           );
+          // The room's input: scrubbed so the saved pair is clean too.
+          bad += scrubNonFinite(target.left) + scrubNonFinite(target.right);
           const pre = {
             left: Float64Array.from(target.left),
             right: Float64Array.from(target.right),
@@ -685,6 +723,7 @@ export class StemRenderer {
             chain,
             busOrbit === undefined,
           );
+        bad += scrubNonFinite(target.left) + scrubNonFinite(target.right);
         stem = {
           key,
           left: target.left,
@@ -692,8 +731,13 @@ export class StemRenderer {
           bytes: target.left.byteLength * (saved ? 6 : 2),
           used: this.renders,
           ...(saved ? { room: saved } : {}),
+          ...(bad > 0 ? { nonFinite: bad } : {}),
         };
         if (caching) this.store(trackId, stem);
+      }
+      if (stem.nonFinite) {
+        nonFinite.samples += stem.nonFinite;
+        nonFinite.tracks.push(trackId);
       }
       if (track && busOrbit !== undefined) {
         let bus = buses.get(busOrbit);
@@ -753,6 +797,12 @@ export class StemRenderer {
         Math.round(RING_OUT_FADE_SECONDS * sampleRate),
       );
     if (samples > frames) foldTail(mixL, mixR, frames, samples);
+    // Bus returns: a last scrub before the master's own feedback stages.
+    const busBad = scrubNonFinite(mixL) + scrubNonFinite(mixR);
+    if (busBad > 0) {
+      nonFinite.samples += busBad;
+      nonFinite.tracks.push("bus");
+    }
     // The song master (src/audio/master.ts); none leaves the mix untouched.
     const mastered = applyMaster(
       mixL,
@@ -773,6 +823,14 @@ export class StemRenderer {
       frames,
       pcm,
       ...(mastered ? { master: mastered.report } : {}),
+      ...(nonFinite.samples > 0
+        ? {
+            nonFinite: Object.freeze({
+              samples: nonFinite.samples,
+              tracks: Object.freeze([...nonFinite.tracks]),
+            }),
+          }
+        : {}),
     });
   }
 

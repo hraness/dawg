@@ -247,6 +247,10 @@ export async function runRenderCommand(
           : "lower track volumes or add a master with a limiter (master streaming, or master: { limiter: {} } in song.ts)"
       }\n`,
     );
+  if (audio.nonFinite)
+    stderr.write(
+      `warning · ${audio.nonFinite.samples} non-finite ${audio.nonFinite.samples === 1 ? "sample" : "samples"} zeroed · from ${audio.nonFinite.tracks.join(", ")} · an effect or voice setting is unstable\n`,
+    );
   if (options.has("--measure"))
     stdout.write(
       `loudness · ${measurementLine(measureRendered(audio, false).mix, audio.master)}\n`,
