@@ -160,7 +160,9 @@ export function parseGranularCommand(
     const name = rest[index]!;
     const spec = GRANULAR_PARAMS[name];
     if (!spec) return undefined;
-    const word = rest[index + 1]!;
+    // Dotted note values as the rest of dawg writes them: `1/8.` is `1/8d`.
+    const word =
+      name === "sync" ? rest[index + 1]!.replace(/\.$/, "d") : rest[index + 1]!;
     if ((word === "off" || word === "unset") && spec.kind !== "boolean") {
       values[name] = null;
       continue;
@@ -170,7 +172,10 @@ export function parseGranularCommand(
         ? noteNumber(word)
         : parseParamValue(spec, word);
     if (value === undefined) return undefined;
-    values[name] = value;
+    // 0.6.1 switches: off removes the field, so on-then-off leaves the
+    // score (and its sha256) as it was.
+    values[name] =
+      value === false && (name === "mono" || name === "pedal") ? null : value;
   }
   return { type: "grain-set", values };
 }

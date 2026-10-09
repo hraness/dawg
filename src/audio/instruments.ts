@@ -66,8 +66,15 @@ export type InstrumentEngine = Readonly<{
     frames: number,
     sampleRate: number,
   ): string | undefined;
-  /** Digests of any assets the engine reads, joined to the stem cache key. */
-  assetDigests?(track: Track, bank: SampleBank): readonly string[];
+  /**
+   * Digests of any assets the engine reads, joined to the stem cache key.
+   * `score` is the song, for engines that read other tracks' notes.
+   */
+  assetDigests?(
+    track: Track,
+    bank: SampleBank,
+    score?: TrackScore,
+  ): readonly string[];
 }>;
 
 const engines = new Map<string, InstrumentEngine>();

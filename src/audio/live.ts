@@ -20,6 +20,8 @@ import { bpmAtTick } from "../../core/tempo.ts";
 import { EMPTY_SAMPLE_BANK, sampleKey, type SampleBank } from "./samples.ts";
 import { RENDER_CHANNELS, renderScorePcm } from "./wav.ts";
 import { engineFor } from "./instruments.ts";
+import { chordDigest, chordTimeline } from "./granular.ts";
+import { resolveGranular } from "../../core/granular.ts";
 import { noteHz, resolveTuning } from "../../core/tuning.ts";
 import { liveFitPending, withLiveFit } from "./fit.ts";
 import { isOrganFamily } from "../../core/keys.ts";
@@ -147,6 +149,23 @@ export class LiveSynth {
             ),
           )
         : undefined;
+    // Granular `quant chord` (0.6.1): a live note snaps to the song's
+    // chords at the played tick, as the offline render of the same note.
+    const quantChord =
+      track.granular !== undefined &&
+      liveEngine?.id === "granular" &&
+      resolveGranular(track.granular).quant === "chord"
+        ? { score, tick: request.tick ?? 0 }
+        : undefined;
+    const chord = quantChord
+      ? chordDigest(
+          chordTimeline(score),
+          quantChord.tick,
+          quantChord.tick +
+            durationTicks +
+            Math.ceil(liveEngine!.tailSeconds(track, pitch) * ticksPerSecond),
+        )
+      : undefined;
     const key = JSON.stringify([
       liveTrack(track),
       pitch,
@@ -173,6 +192,7 @@ export class LiveSynth {
             score.key ?? null,
           ]
         : []),
+      ...(chord ? [chord] : []),
     ]);
     return {
       track,
@@ -184,6 +204,7 @@ export class LiveSynth {
       pitch,
       key,
       organTick,
+      quantChord,
     };
   }
 
@@ -200,6 +221,7 @@ export class LiveSynth {
       pitch,
       key,
       organTick,
+      quantChord,
     } = plan;
     const liveEngine = engineFor(track);
     // The first window of a rig note: its own cache entry, swapped for the
@@ -261,6 +283,7 @@ export class LiveSynth {
           : Math.max(MAX_LIVE_NOTE_SECONDS + 4, seconds + tail),
         ...(request.samples ? { samples: request.samples } : {}),
         ...(organTick ? { seedTick: organTick } : {}),
+        ...(quantChord ? { quantChord } : {}),
       }),
     );
     const frames = windowed

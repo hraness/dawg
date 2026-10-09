@@ -107,6 +107,10 @@ export type RenderOptions = WavOptions &
     seedSeconds?: number;
     /** Per-track engine state at the window origin (`windowSeed`). */
     seedState?: Readonly<Record<string, string>>;
+     * The song whose chords a granular `quant chord` reads, at `tick` for
+     * this render's tick 0 (a live note renders alone). Absent: the score.
+     */
+    quantChord?: Readonly<{ score: TrackScore; tick: number }>;
   }>;
 
 /** Interleaved stereo 16-bit PCM plus its frame count. */
@@ -231,6 +235,7 @@ export type RenderContext = Readonly<{
   seedTick?: number;
   seedSeconds?: number;
   seedState?: Readonly<Record<string, string>>;
+  quantChord?: Readonly<{ score: TrackScore; tick: number }>;
 }>;
 
 /** Exact (fractional) loop length in frames at a sample rate. */
@@ -435,6 +440,7 @@ export class StemRenderer {
       ...(options.seedTick ? { seedTick: options.seedTick } : {}),
       ...(options.seedSeconds ? { seedSeconds: options.seedSeconds } : {}),
       ...(options.seedState ? { seedState: options.seedState } : {}),
+      ...(options.quantChord ? { quantChord: options.quantChord } : {}),
     };
     this.renders += 1;
     const { dry, dryR, left, right, mixL, mixR } = this.scratchFor(samples);
@@ -499,7 +505,7 @@ export class StemRenderer {
       const engineDigests =
         engine && track
           ? [
-              ...(engine.assetDigests?.(track, bank) ?? []),
+              ...(engine.assetDigests?.(track, bank, score) ?? []),
               `key:${score.key ?? ""}`,
             ]
           : undefined;
@@ -559,7 +565,7 @@ export class StemRenderer {
           : { left, right };
         dry.fill(0);
         const synthVoice = !engine && !sampler && usesSynthVoice(track);
-        const stereo = engine
+        let stereo = engine
           ? engine.stereo(track!)
           : synthVoice && isStereoVoice(track);
         if (stereo) dryR.fill(0);
@@ -577,7 +583,16 @@ export class StemRenderer {
             bank,
           );
         } else if (sampler) {
-          if (track) renderSamplerNotes(dry, played, track, context, bank);
+          // A resampled stereo file plays as stereo (0.6.1).
+          if (track)
+            stereo = renderSamplerNotes(
+              dry,
+              played,
+              track,
+              context,
+              bank,
+              dryR,
+            );
         } else if (synthVoice && track) {
           const gainAt = (tick: number) => trackGainAt(track, tick);
           const voice = {
@@ -964,25 +979,34 @@ function samplerVoiceDigest(track: Track, bank: SampleBank): string[] {
     });
 }
 
-/** Sample voices of a sampler track into its mono dry buffer. */
+/**
+ * Sample voices of a sampler track into its mono dry buffer. When a voice
+ * plays a resampled stereo file (0.6.1), `target` takes the left channel,
+ * `targetRight` the right, and the result is true (the track is stereo).
+ */
 function renderSamplerNotes(
   target: Float64Array,
   notes: readonly Note[],
   track: Track,
   context: RenderContext,
   bank: SampleBank,
-): void {
+  targetRight: Float64Array,
+): boolean {
   const timing = {
     score: context.score,
     sampleRate: context.sampleRate,
     ...(context.warp ? { warp: context.warp } : {}),
   };
-  renderSamplerVoices(
-    target,
-    planSamplerVoices(track, notes, bank, timing),
-    timing,
-    (tick) => trackGainAt(track, tick),
-  );
+  const voices = planSamplerVoices(track, notes, bank, timing);
+  const gainAt = (tick: number) => trackGainAt(track, tick);
+  if (!voices.some((voice) => voice.stereo)) {
+    renderSamplerVoices(target, voices, timing, gainAt);
+    return false;
+  }
+  targetRight.fill(0);
+  renderSamplerVoices(target, voices, timing, gainAt, "left");
+  renderSamplerVoices(targetRight, voices, timing, gainAt, "right");
+  return true;
 }
 
 /** Track volume and volume automation at a score tick (pan is applied in stereo). */

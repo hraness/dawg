@@ -31,6 +31,7 @@ import {
   sampleAt,
 } from "./dsp/stft.ts";
 import { hermite4 } from "./dsp/interp.ts";
+import { pitchShiftJob } from "./dsp/shift.ts";
 import type { FitMap } from "./warp.ts";
 
 export type FitAlgorithm = "repitch" | "beats" | "tones";
@@ -136,6 +137,50 @@ export function fittedBuffer(
       for (const [old, entry] of pending)
         if (entry.window === onsetKey) pending.delete(old);
       pending.set(key, { job: work(), window: onsetKey });
+      schedule();
+    }
+    return undefined;
+  }
+  pending.delete(key);
+  const out = drain(work());
+  remember(key, out);
+  return out;
+}
+
+/**
+ * Live renders pitch-shift buffers up to this long synchronously; longer
+ * ones run between blocks while the voice plays a repitch. A phase-vocoder
+ * shift with formant keeping costs about 30 ms per second of 22.05 kHz
+ * audio, so only very short sounds fit the 10 ms note-on budget.
+ */
+export const LIVE_SYNC_SHIFT_SECONDS = 0.1;
+
+/**
+ * `buffer` pitch-shifted by `semitones` (formant semitones, 0 keeps),
+ * cached under `key` with the fits (0.6.1 `shift`, `formant`). Returns
+ * undefined only in a live render while a long shift is still running.
+ */
+export function shiftedBuffer(
+  key: string,
+  buffer: Float32Array,
+  sampleRate: number,
+  semitones: number,
+  formant: number | undefined,
+): Float32Array | undefined {
+  const hit = cache.get(key);
+  if (hit) {
+    cache.delete(key);
+    cache.set(key, hit);
+    return hit;
+  }
+  const work = () =>
+    pitchShiftJob(buffer, sampleRate, semitones, {
+      ...(formant === undefined ? {} : { formant }),
+    });
+  if (live && buffer.length > LIVE_SYNC_SHIFT_SECONDS * sampleRate) {
+    missed = true;
+    if (!pending.has(key)) {
+      pending.set(key, { job: work(), window: key });
       schedule();
     }
     return undefined;

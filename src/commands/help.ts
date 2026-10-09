@@ -279,6 +279,20 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "repeats pace accent prob swing …",
       },
       { command: "grid <voice> <x.X.>", summary: "explicit steps · X accent" },
+      {
+        command: "shift <semitones> [formant keep|follow|<n>] [<voice>]",
+        summary:
+          "a sample's pitch without changing its length · shift 0 clears",
+      },
+      {
+        command: "fade [in|out] <seconds> [<voice>]",
+        summary: "a sample's fade in and out (Strudel fadeInTime/fadeTime)",
+      },
+      {
+        command:
+          "resample <track>|orbit <n>|master [section <name>|bars a-b] [grain]",
+        summary: "render to a pinned WAV on a new sampler (or granular) track",
+      },
       { command: "undo", summary: "step back · Ctrl-Z" },
       { command: "redo", summary: "step forward · Ctrl-Y" },
     ],
@@ -679,7 +693,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   wt: "wt <table> | wt <0..1> | wt list · wt basic · wt wt_digital:2",
   wavetable: "wt <table> | wt <0..1> | wt list · wt basic · wt wt_digital:2",
   grain:
-    "grain <preset> | <param> <value> | on [voice V] | src synth:<name>|voice V | reset | off | presets · grain cloud · grain pitch 12",
+    "grain <preset> | <param> <value> | on [voice V] | src synth:<name>|voice V | reset | off | presets · sync 1/64…1/1 (t triplet, d or . dotted) · grain cloud · grain pitch 12 · grain sync 1/8.",
   granular:
     "grain <preset> | <param> <value> | on [voice V] | src synth:<name>|voice V | reset | off | presets · grain cloud",
   warpmode: "warpmode none|asym|bendp|bendm|bendmp|sync|quant",
@@ -707,6 +721,12 @@ export const USAGE: Readonly<Record<string, string>> = {
   fitmode:
     "/fitmode [repitch|beats|tones|auto|off] [<voice>] · /fitmode beats · /fitmode auto brk",
   len: "/len <beats> [<voice>] · /len 16 · /len off",
+  shift:
+    "shift <semitones> [formant keep|follow|<n>] [<voice>] · shift 7 formant keep · shift 0",
+  fade: "fade [in|out] <seconds> [<voice>] · fade out 0.5 · fade in 0.05 · fade off",
+  resample:
+    "resample <track>|orbit <n>|master [section <name>|bars a-b] [post] [grain] [as <id>] · resample lead · resample drums bars 1-2 grain · resample master section chorus",
+  bounce: "resample <track>|orbit <n>|master [section <name>|bars a-b] [grain]",
   view: "/view focus | all",
   transcript: "/transcript",
   log: "/transcript",

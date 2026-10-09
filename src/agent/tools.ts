@@ -98,6 +98,7 @@ import { DRUM_TOOLS } from "./drum-tools.ts";
 import { TIME_TOOLS } from "./time-tools.ts";
 import { SECTION_TOOLS } from "./section-tools.ts";
 import { GRANULAR_TOOLS } from "./granular-tools.ts";
+import { RESAMPLE_TOOLS } from "./resample-tool.ts";
 import type { MediaResult, MediaRunContext } from "../media/types.ts";
 import { instrumentPatch, pitchToMidi } from "./ops.ts";
 import { TUNING_LIMITS } from "../../core/tuning.ts";
@@ -590,7 +591,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
         parameter: {
           type: "string",
           description:
-            "volume, pan, filter, resonance, delay-feedback, delay-mix, or <effect>-<param>",
+            "volume, pan, filter, resonance, delay-feedback, delay-mix, <effect>-<param>, or grain-<param> on a granular track",
         },
         mode: { type: "string", enum: ["replace", "merge"] },
         points: {
@@ -1047,7 +1048,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   {
     name: "set_sample",
     description:
-      "Set a sampler voice's Strudel sample controls: begin end gain speed unit(r|c|s) loop loopBegin loopEnd clip(legato) fit loopAt accelerate squiz cut; null unsets one.",
+      "Set a sampler voice's Strudel sample controls: begin end gain speed unit(r|c|s) loop loopBegin loopEnd clip(legato) fit loopAt accelerate squiz cut, and (0.6.1) shift (semitones, length kept) formant (0 keeps the voice's formants) fadeInTime fadeTime (seconds); null unsets one.",
     parameters: {
       type: "object",
       properties: {
@@ -1833,6 +1834,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   ...PACK_TOOLS,
   ...MASTER_TOOLS,
   ...GRANULAR_TOOLS,
+  ...RESAMPLE_TOOLS,
   // Looks tools up at call time, so it can plan any of the above.
   previewSoundTool((name) => findAgentTool(name)),
 ] satisfies AgentTool[]);

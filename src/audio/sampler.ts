@@ -46,7 +46,7 @@ import {
   type FitMap,
   type SampleWarp,
 } from "./warp.ts";
-import { fittedBuffer, windowAt } from "./fit.ts";
+import { fittedBuffer, shiftedBuffer, windowAt } from "./fit.ts";
 import {
   performanceTimingFor,
   tunedTiming,
@@ -106,6 +106,10 @@ export type SamplerVoice = {
   readonly cents?: NotePerformance["cents"];
   /** Half pedal: the level fades from `from` seconds. */
   readonly damp?: NotePerformance["damp"];
+  /** `fadeInTime` in output frames (0.6.1); absent is the 1 ms anti-click. */
+  readonly attack?: number;
+  /** A resampled stereo file (0.6.1): plays its own left and right. */
+  readonly stereo?: boolean;
 };
 
 /**
@@ -256,8 +260,19 @@ export function planSamplerVoices(
       ? fitVoice(ref, decoded, note.startTick, held, timing, reach)
       : undefined;
     if (fitted === null) continue;
-    const sample = fitted?.sample ?? decoded;
-    const speed = fitted ? 1 : (ref.speed ?? 1);
+    // 0.6.1 `shift`/`formant`: a cached constant-length pitch shift of the
+    // played buffer (after any fit, so it follows fitmode).
+    const shifted = isShifted(ref)
+      ? shiftVoice(ref, fitted?.sample ?? decoded, fitted ? "fit" : "raw")
+      : undefined;
+    const sample = shifted ?? fitted?.sample ?? decoded;
+    // Live, until the cached shift is ready: a plain repitch at the shifted
+    // pitch (the length follows, like tape).
+    const repitch =
+      shifted === undefined && isShifted(ref)
+        ? 2 ** ((ref.shift ?? 0) / 12)
+        : 1;
+    const speed = fitted ? repitch : (ref.speed ?? 1) * repitch;
     const regionStart = fitted ? 0 : (ref.begin ?? 0) * sample.frames;
     const regionEnd = fitted ? sample.frames : (ref.end ?? 1) * sample.frames;
     // `fit`, `unit: "c"` and `unit: "s"` give the window a duration; the
@@ -277,7 +292,14 @@ export function planSamplerVoices(
         ? ((Math.abs(speed) * sample.sampleRate) / sampleRate) * target.ratio
         : ((regionEnd - regionStart) / (seconds * sampleRate)) * target.ratio;
     const natural = Math.max(1, Math.floor((regionEnd - regionStart) / step));
-    const release = Math.max(1, Math.round(RELEASE_SECONDS * sampleRate));
+    const release = Math.max(
+      1,
+      Math.round((ref.fadeTime ?? RELEASE_SECONDS) * sampleRate),
+    );
+    const endFade = Math.max(
+      1,
+      Math.round((ref.fadeTime ?? END_FADE_SECONDS) * sampleRate),
+    );
     const loop = ref.loop === true;
     const clipped =
       ref.clip === undefined ? held : Math.max(1, Math.floor(held * ref.clip));
@@ -294,7 +316,7 @@ export function planSamplerVoices(
       fade = release;
     } else {
       length = natural;
-      fade = Math.max(1, Math.round(END_FADE_SECONDS * sampleRate));
+      fade = endFade;
     }
     // accelerate: the rate ramps by `accelerate`× over the planned length;
     // a non-looping voice ends where the ramped read runs out (or stops).
@@ -308,7 +330,7 @@ export function planSamplerVoices(
       const until = Math.max(1, Math.floor(reach));
       if (until < length) {
         length = until;
-        fade = Math.max(1, Math.round(END_FADE_SECONDS * sampleRate));
+        fade = endFade;
       }
     }
     const loopFrom = fitted
@@ -341,6 +363,12 @@ export function planSamplerVoices(
       loopSpan: loopTo - loopFrom,
       ramp,
       squiz: ref.squiz ?? 1,
+      ...(ref.fadeInTime !== undefined
+        ? { attack: Math.max(1, ref.fadeInTime * sampleRate) }
+        : {}),
+      ...(ref.from !== undefined && sample.left && sample.right
+        ? { stereo: true }
+        : {}),
       ...(performance?.cents ? { cents: performance.cents } : {}),
       ...(performance?.damp ? { damp: performance.damp } : {}),
     };
@@ -456,6 +484,48 @@ function fitVoice(
   });
 }
 
+/** A SampleRef with a pitch or formant shift (0.6.1). */
+export function isShifted(ref: SampleRef): boolean {
+  return (
+    (ref.shift !== undefined && ref.shift !== 0) || ref.formant !== undefined
+  );
+}
+
+/** Buffers already shifted, by the identity of the buffer they shift. */
+const shiftKeys = new WeakMap<Float32Array, string>();
+let shiftSerial = 0;
+
+/**
+ * The shifted copy of `sample` (whole buffer, same length). Returns null
+ * while a live shift is still computing (the voice stays silent).
+ */
+function shiftVoice(
+  ref: SampleRef,
+  sample: DecodedSample,
+  kind: "raw" | "fit",
+): DecodedSample | undefined {
+  // Decoded files key by content; fitted buffers (already cached by their
+  // own key) by identity.
+  let base = shiftKeys.get(sample.mono);
+  if (base === undefined) {
+    base =
+      kind === "raw"
+        ? `${sample.sha256}:${sample.sampleRate}:${sample.frames}`
+        : `fit#${(shiftSerial += 1)}`;
+    shiftKeys.set(sample.mono, base);
+  }
+  const key = `shift:${base}:${ref.shift ?? 0}:${ref.formant ?? "follow"}`;
+  const buffer = shiftedBuffer(
+    key,
+    sample.mono,
+    sample.sampleRate,
+    ref.shift ?? 0,
+    ref.formant,
+  );
+  if (!buffer) return undefined;
+  return Object.freeze({ ...sample, frames: buffer.length, mono: buffer });
+}
+
 /** Fingerprint of a position map: its length and 64 exact samples. */
 function mapPrint(map: FitMap, frames: number): string {
   const parts = [map.length.toString()];
@@ -483,6 +553,8 @@ export function renderSamplerVoices(
   voices: readonly SamplerVoice[],
   timing: SamplerTiming,
   gainAt: (tick: number) => number,
+  /** The channel a stereo voice reads (absent: every voice reads mono). */
+  channel?: "left" | "right",
 ): void {
   const { sampleRate, score, warp } = timing;
   const samplesPerTick =
@@ -491,7 +563,8 @@ export function renderSamplerVoices(
   for (const voice of voices) {
     const { sample, step, regionStart, regionEnd, reverse, loop } = voice;
     const { loopStart, loopSpan, ramp } = voice;
-    const mono = sample.mono;
+    const mono =
+      channel && voice.stereo ? (sample[channel] ?? sample.mono) : sample.mono;
     const span = regionEnd - regionStart;
     const crossfade = loop
       ? Math.min(LOOP_CROSSFADE_SECONDS * sample.sampleRate, loopSpan / 4)
@@ -549,7 +622,7 @@ export function renderSamplerVoices(
       const elapsed = index - voice.start;
       const value = squizzed ? squizzed[elapsed]! : read(elapsed);
       if (value === undefined) break;
-      let envelope = Math.min(1, elapsed / attack);
+      let envelope = Math.min(1, elapsed / (voice.attack ?? attack));
       if (index >= fadeFrom) envelope *= (voice.end - index) / voice.fade;
       const damp = voice.damp;
       if (damp && elapsed / sampleRate > damp.from)
