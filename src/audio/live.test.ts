@@ -413,3 +413,43 @@ describe("engine live path", () => {
     await engine.stopAsync();
   });
 });
+
+describe("live keys ignore the recorded piano pedals (0.6.1)", () => {
+  test("una corda and sostenuto lanes do not colour a live key", () => {
+    const grand = (extra: Record<string, unknown>) =>
+      createScore({
+        tempoBpm: 120,
+        bars: 2,
+        tracks: [
+          {
+            id: "p",
+            name: "p",
+            instrument: "grand",
+            keys: {},
+            ...extra,
+          },
+        ],
+        notes: [],
+      } as Parameters<typeof createScore>[0]);
+    const play = (score: TrackScore) =>
+      new LiveSynth(RATE).render({
+        score,
+        trackId: "p",
+        pitch: 64,
+        velocity: 0.7,
+        seconds: 0.25,
+      })!;
+    const plain = play(grand({}));
+    const pedalled = play(
+      grand({
+        softPedal: [{ tick: 0, state: "down" }],
+        sostenuto: [
+          { tick: 0, state: "down" },
+          { tick: 3000, state: "up" },
+        ],
+      }),
+    );
+    expect(plain.frames).toBeGreaterThan(0);
+    expect(pedalled.pcm).toEqual(plain.pcm);
+  });
+});
