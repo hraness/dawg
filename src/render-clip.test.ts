@@ -29,24 +29,27 @@ describe("render rate note", () => {
       tracks: [{ id: "p", name: "piano", instrument: "piano" }],
     });
     await writeFile(join(dir, "in.track.json"), encodeLoop(score), "utf8");
+    let out = "";
     let err = "";
     const code = await runRenderCommand(
       ["render", "out.wav", "--import", "in.track.json", ...args],
       dir,
-      { write: () => true },
+      { write: (text: string) => ((out += text), true) },
       { write: (text: string) => ((err += text), true) },
     );
     expect(code).toBe(0);
-    return err;
+    expect(err).toBe("");
+    return out;
   };
 
   test("a plain song says it renders at 22050 Hz and how to get 48 kHz", async () => {
-    expect(await run([], false)).toContain("note · 22050 Hz");
-    expect(await run([], false)).toContain("--rate 48000");
+    expect(await run([], false)).toMatch(
+      / · 22050 Hz \(--rate 48000 for full band\) · /,
+    );
   });
 
-  test("an explicit rate or a master says nothing", async () => {
-    expect(await run(["--rate", "48000"], false)).not.toContain("note ·");
-    expect(await run([], true)).not.toContain("note ·");
+  test("an explicit rate or a master shows the rate alone", async () => {
+    expect(await run(["--rate", "48000"], false)).toMatch(/ · 48000 Hz · /);
+    expect(await run([], true)).toMatch(/ · 48000 Hz · /);
   });
 });
