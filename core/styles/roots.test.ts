@@ -239,9 +239,148 @@ describe("roots lane: meter", () => {
       "swamp-pop": ["12/8"],
       cajun: ["2/4", "3/4"],
       "old-time": ["2/4", "4/4"],
+      "traditional-gospel": ["12/8"],
     };
     for (const [id, meters] of Object.entries(want))
       for (const seed of SEEDS)
         expect(meters).toContain(gen(id, seed, 8).plan.signature);
   });
+});
+
+describe("roots lane: critic fixes", () => {
+  // Late swung off-beats can round onto the next barline: fold them back.
+  const steps = (g: Generated, role: string) =>
+    [...stepsOf(g, role).values()].flatMap((set) =>
+      [...set].map((step) => step % g.plan.stepsPerBar),
+    );
+  const fourFour = (id: string) =>
+    SEEDS.map((seed) => gen(id, seed, 8)).filter(
+      (g) => g.plan.signature === "4/4" && g.plan.stepsPerBar === 8,
+    );
+
+  test("the jazz ride plays spang-a-lang: 1, 2 &, 3, 4 &", () => {
+    const allowed = new Set([0, 2, 3, 4, 6, 7]);
+    const gs = fourFour("bebop");
+    expect(gs.length).toBeGreaterThan(0);
+    for (const g of gs) {
+      const ride = steps(g, "openhat");
+      expect(ride.length).toBeGreaterThan(0);
+      for (const step of ride) expect(allowed).toContain(step);
+      for (const beat of [0, 2, 4, 6]) expect(ride).toContain(beat);
+    }
+  });
+
+  test("boogie-woogie bass is eight to the bar", () => {
+    for (const seed of SEEDS) {
+      const g = gen("boogie-woogie", seed, 8);
+      // Every eighth of every bar but perhaps the final cadence.
+      expect(roleNotes(g, "bass").length).toBeGreaterThanOrEqual(
+        g.plan.stepsPerBar * (g.plan.bars - 1),
+      );
+    }
+  });
+
+  test("cool jazz plays brushes with no bass drum", () => {
+    for (const seed of SEEDS) {
+      const g = gen("cool-jazz", seed, 8);
+      expect(roleNotes(g, "kick")).toHaveLength(0);
+      expect(roleNotes(g, "snare").length).toBeGreaterThan(0);
+    }
+  });
+
+  test("funk revue ghosts the snare; P-Funk keeps a plain backbeat", () => {
+    const perBar = (id: string) => {
+      let hits = 0;
+      let bars = 0;
+      for (const seed of SEEDS) {
+        const g = gen(id, seed, 8);
+        hits += roleNotes(g, "snare").length;
+        bars += g.plan.bars;
+      }
+      return hits / bars;
+    };
+    expect(perBar("funk-band")).toBeGreaterThan(perBar("p-funk") * 1.8);
+  });
+
+  test("Nashville sound swaps the snare for a cross-stick", () => {
+    for (const seed of SEEDS) {
+      const g = gen("nashville-sound", seed, 8);
+      expect(roleNotes(g, "snare")).toHaveLength(0);
+      expect(roleNotes(g, "rim").length).toBeGreaterThan(0);
+    }
+  });
+
+  test("outlaw country thumps the kick on every beat", () => {
+    for (const g of SEEDS.map((seed) => gen("outlaw-country", seed, 8))) {
+      const beat = g.plan.stepsPerBar / 4;
+      const kicks = steps(g, "kick");
+      for (const b of [0, 1, 2, 3]) expect(kicks).toContain(b * beat);
+    }
+  });
+
+  test("honky-tonk walks; red dirt two-steps faster on root-fifth", () => {
+    const bpm = (id: string) =>
+      SEEDS.reduce((sum, seed) => sum + gen(id, seed, 4).plan.bpm, 0) /
+      SEEDS.length;
+    expect(bpm("texas-red-dirt")).toBeGreaterThan(bpm("honky-tonk"));
+    expect(bpm("honky-tonk")).toBeGreaterThan(bpm("nashville-sound"));
+  });
+});
+
+/**
+ * A listener could tell sibling leaves apart: each leaf's generated output
+ * (tempo, per-role onset grid, pitch-class histogram over three seeds) sits
+ * nearer its own centroid than any sibling's.
+ */
+describe("roots lane: siblings are distinguishable", () => {
+  const RHYTHM = ["kick", "snare", "clap", "hat", "openhat", "rim", "tom"];
+  const RHYTHM2 = [...RHYTHM, "perc", "shaker", "bell", "bass", "chords"];
+  const PITCHED = ["bass", "chords", "lead", "counter", "pad", "arp"];
+  const print = (id: string, seed: number): number[] => {
+    const g = generateStyle(id, { seed, bars: 8 });
+    const { plan } = g;
+    const v = [plan.bpm / 40, plan.stepsPerBar === 12 ? 2 : 0];
+    const rows = RHYTHM2.map(() => new Array<number>(16).fill(0));
+    const pcs = new Array<number>(12).fill(0);
+    let pitched = 0;
+    for (const note of g.data.notes ?? []) {
+      const role = plan.noteRoles.get(note.id) ?? "";
+      const tick = (note.startTick ?? 0) % plan.barTicks;
+      const row = rows[RHYTHM2.indexOf(role)];
+      if (row) row[Math.floor((tick / plan.barTicks) * 16)]! += 1 / plan.bars;
+      if (PITCHED.includes(role)) {
+        pcs[(((note.pitch - plan.tonic) % 12) + 12) % 12]! += 1;
+        pitched++;
+      }
+    }
+    for (const row of rows) v.push(...row.map((x) => Math.min(x, 2) / 2));
+    v.push(...pcs.map((x) => (6 * x) / (pitched || 1)));
+    return v;
+  };
+  const dist = (a: number[], b: number[]) =>
+    Math.sqrt(a.reduce((sum, x, i) => sum + (x - b[i]!) ** 2, 0));
+
+  test("every leaf is nearer its own centroid than a sibling's", () => {
+    const parent = new Map(
+      MINE.map((id) => [id, stylePath(id).at(-2) ?? ""] as const),
+    );
+    const prints = new Map(
+      MINE.map((id) => [id, [1, 2, 3].map((s) => print(id, s))]),
+    );
+    const centre = new Map(
+      [...prints].map(([id, fs]) => [
+        id,
+        fs[0]!.map((_, i) => fs.reduce((sum, f) => sum + f[i]!, 0) / fs.length),
+      ]),
+    );
+    const close: string[] = [];
+    for (const a of MINE)
+      for (const b of MINE) {
+        if (a === b || parent.get(a) !== parent.get(b)) continue;
+        for (const f of prints.get(a)!)
+          if (dist(f, centre.get(a)!) >= dist(f, centre.get(b)!))
+            close.push(`${a}~${b}`);
+      }
+    expect(close).toEqual([]);
+  }, 120_000);
 });

@@ -9,7 +9,11 @@
 import { grid, intervals, kitRoles, maybe, role } from "./parts.ts";
 import { card, type StyleCard } from "./schema.ts";
 
-const SWING_RIDE = grid("x...x.x.x...x.x.");
+/**
+ * The ride cymbal's spang-a-lang in swung eighths: 1, 2 &, 3, 4 & (the
+ * kit's open hat stands in for the ride, which it lacks).
+ */
+const SWING_RIDE = grid("x.xxx.xx");
 /**
  * The 12-bar blues as dominant sevenths in any mode: `I[7]` is a dominant
  * seventh on the tonic whether the key is minor (blues scale) or
@@ -170,7 +174,14 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
       },
     },
     mix: {
-      levels: { kick: -8, snare: -8, hat: -6, bass: -2, chords: -6, lead: 0 },
+      levels: {
+        kick: -8,
+        snare: -8,
+        hat: -6,
+        bass: -2,
+        chords: -6,
+        lead: 0,
+      },
       space: 0.35,
     },
   }),
@@ -215,12 +226,16 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     id: "modern-jazz",
     abstract: true,
     summary: "small combo, ride cymbal time, extended chords, improvised lines",
+    // Ride spang-a-lang over the foot hi-hat on 2 and 4.
+    rhythm: { onsets: { openhat: SWING_RIDE } },
+    texture: { roles: { openhat: role("drums") } },
+    mix: { levels: { openhat: -9 } },
   }),
   card({
     id: "bebop",
     summary: "fast swung eighths, ii-V chains, chromatic lines, walking bass",
     seedSalt: 1942,
-    tempo: { bpm: [160, 300], typical: 220 },
+    tempo: { bpm: [200, 320], typical: 250 },
     groove: {
       swingRatio: [1.6, 2.0],
       microtiming: [0, 0.02],
@@ -845,8 +860,18 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "cool jazz: relaxed tempos, light swing, counterpoint between horns, soft dynamics, chamber voicings, lydian and major-seventh colour",
     seedSalt: 1949,
-    tempo: { bpm: [90, 180], typical: 130 },
-    groove: { swingRatio: [1.4, 1.8] },
+    tempo: { bpm: [92, 150], typical: 118 },
+    groove: { swingRatio: [1.4, 1.7] },
+    // Brushes (Chico Hamilton, Larry Bunker with Mulligan and Baker): a
+    // swept snare on every beat, the bass drum silent, no spang-a-lang.
+    rhythm: {
+      onsets: {
+        kick: null,
+        snare: grid("6.6.6.6."),
+        openhat: null,
+        hat: grid("..x...x."),
+      },
+    },
     pitch: {
       scales: [
         ["major", 0.6],
@@ -867,6 +892,8 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
         lead: role("altosax", "trumpet:0.6"),
         counter: role("barisax", "trombone:0.5", "horn:0.4"),
         chords: role("piano", "acoustic:0.3"),
+        kick: null,
+        openhat: null,
       },
     },
     expression: { dynamics: [0.3, 0.7] },
@@ -876,12 +903,14 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "hard bop: bebop vocabulary with blues and gospel inflection, minor ii-V, trumpet and tenor unison heads, hard-swinging ride and snare comping",
     seedSalt: 1955,
-    tempo: { bpm: [120, 260], typical: 180 },
+    // Medium "hard-swinging" tempos, slower than bebop; minor keys and the
+    // blues scale carry the gospel and blues inflection.
+    tempo: { bpm: [120, 190], typical: 160 },
     pitch: {
       scales: [
-        ["minor", 0.4],
+        ["minor", 0.45],
         ["dorian", 0.3],
-        ["major", 0.3],
+        ["blues", 0.25],
       ],
     },
     harmony: {
@@ -891,7 +920,8 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
       ],
     },
     melody: { density: [2, 4], intervals: intervals(5, 3, 0.8, 0.2) },
-    rhythm: { onsets: { snare: grid("..2..12.") } },
+    // Blakey: a rimshot on 4 and press-roll pickups into the next chorus.
+    rhythm: { onsets: { snare: grid("..2..1x."), kick: grid("x...1...") } },
     texture: {
       roles: {
         lead: role("trumpet", "sax:0.8"),
@@ -938,7 +968,17 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "modal jazz: few chords held 8-16 bars, dorian mode, quartal (fourths) voicings, pedal-point bass, scalar improvisation over the mode",
     seedSalt: 1959,
-    tempo: { bpm: [100, 240], typical: 140 },
+    tempo: { bpm: [120, 200], typical: 150 },
+    // "So What" in 4/4; "My Favorite Things" and "Afro Blue" in a 3/4 or
+    // 6/8 waltz under Elvin Jones's triplet cross-rhythms.
+    meter: {
+      signatures: [
+        ["4/4", 0.5],
+        ["3/4", 0.5],
+      ],
+    },
+    // Elvin Jones: bass drum and snare answering the ride across the beat.
+    rhythm: { onsets: { kick: grid("x..3..3."), snare: grid(".3..3..3") } },
     pitch: {
       scales: [
         ["dorian", 0.7],
@@ -956,11 +996,13 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
       voicing: { types: [["quartal", 1]], notes: [3, 5] },
     },
     melody: { chordToneRate: 0.4, intervals: intervals(5, 2, 1.2, 0.2) },
+    // McCoy Tyner's left-hand fifths and Jimmy Garrison's tonic pedal.
     bass: {
       behaviour: [
-        ["walking", 0.7],
-        ["pedal", 0.3],
+        ["pedal", 0.6],
+        ["walking", 0.4],
       ],
+      onsets: grid("x.....x."),
     },
   }),
   card({
@@ -968,7 +1010,9 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "post-bop: open forms, non-functional chord motion (constant-structure, chromatic mediants), sus and slash chords, interactive time",
     seedSalt: 1965,
-    tempo: { bpm: [100, 260], typical: 160 },
+    tempo: { bpm: [140, 280], typical: 200 },
+    // Tony Williams's hi-hat on all four beats under the ride.
+    rhythm: { onsets: { hat: grid("x.x.x.x."), kick: grid("1..1..1.") } },
     harmony: {
       chain: {
         Imaj7: [
@@ -1009,11 +1053,15 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "third stream: classical forms and orchestration fused with jazz swing, through-composed counterpoint, French horn and strings",
     seedSalt: 1957,
-    tempo: { bpm: [70, 160], typical: 110 },
-    groove: { swingRatio: [1.2, 1.7] },
+    tempo: { bpm: [60, 120], typical: 88 },
+    groove: { swingRatio: [1.2, 1.6] },
+    // Orchestral: no kick or snare backbeat, only a soft ride and foot hat.
+    rhythm: { onsets: { kick: null, snare: null } },
     texture: {
       kind: "polyphonic",
       roles: {
+        kick: null,
+        snare: null,
         chords: role("strings", "horn:0.6"),
         lead: role("clarinet", "horn:0.5", "altosax:0.5"),
         counter: role("cello", "bassoon:0.5"),
@@ -1029,7 +1077,13 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "chamber and ECM jazz: rubato-leaning even eighths, open fifths and sus voicings, lydian and aeolian modes, space and long reverb",
     seedSalt: 1971,
-    tempo: { bpm: [60, 130], typical: 90 },
+    tempo: { bpm: [56, 100], typical: 76 },
+    meter: {
+      signatures: [
+        ["4/4", 0.6],
+        ["3/4", 0.4],
+      ],
+    },
     groove: { swingRatio: [1, 1.15] },
     pitch: {
       scales: [
@@ -1049,7 +1103,13 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
       },
     },
     rhythm: {
-      onsets: { kick: grid("x......."), snare: null, hat: grid("x.2.x.2.") },
+      // Cymbal washes on the downbeat, not ride time.
+      onsets: {
+        kick: grid("x......."),
+        snare: null,
+        hat: grid("x.2.x.2."),
+        openhat: grid("x...2..."),
+      },
     },
     bass: {
       behaviour: [
@@ -1076,7 +1136,17 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
         ["5/4", 0.15],
       ],
     },
-    groove: { swingRatio: [1, 1.6] },
+    // Even eighths in sixteenth-note subdivision (Brian Blade, Mehldau
+    // trio): a displaced kick and cross-stick rather than ride swing.
+    groove: { subdivision: 4, swingRatio: [1, 1.15] },
+    rhythm: {
+      onsets: {
+        kick: grid("x.....x.....x..."),
+        snare: grid("...2..x.....2.x."),
+        hat: grid("x...x...x...x..."),
+        openhat: grid("x.x.x.x.x.x.x.x."),
+      },
+    },
     harmony: {
       voicing: {
         types: [
@@ -1111,6 +1181,7 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
         kick: grid("x.....x...x..2.."),
         snare: grid("....x..2....x..."),
         hat: grid("x.x.x.x.x.x.x.x."),
+        openhat: null,
       },
     },
     bass: { behaviour: [["ostinato", 1]], onsets: grid("x..x..x...x.x...") },
@@ -1564,7 +1635,7 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "Delta blues: solo bottleneck guitar, drone on the tonic, AAB couplet over 12 bars, blue third bent toward the major, heavy triplet shuffle, one-chord stretches",
     seedSalt: 1930,
-    tempo: { bpm: [60, 120], typical: 84 },
+    tempo: { bpm: [60, 104], typical: 78 },
     groove: { swingRatio: [1.9, 2.2] },
     pitch: {
       scales: [
@@ -1633,8 +1704,11 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "Texas blues: free single-note lines over a steady thumbed bass, looser bar counts, minor-pentatonic runs, relaxed swing with jazz-inflected ninths",
     seedSalt: 1926,
-    tempo: { bpm: [70, 130], typical: 96 },
+    tempo: { bpm: [84, 132], typical: 104 },
     groove: { swingRatio: [1.6, 1.9] },
+    // Lightnin' Hopkins and Blind Lemon Jefferson: a monotonic thumb on
+    // every beat under free treble runs.
+    bass: { behaviour: [["root", 1]], onsets: grid("x.x.x.x.") },
     pitch: {
       scales: [
         ["blues", 0.5],
@@ -1701,14 +1775,16 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "Memphis blues: early string-band and jug-band blues of the Mid-South, sixteen-bar and twelve-bar strophes, guitar and harp duets, brisk two-beat",
     seedSalt: 1927,
-    tempo: { bpm: [90, 140], typical: 116 },
+    tempo: { bpm: [104, 150], typical: 124 },
     groove: { swingRatio: [1.5, 1.8] },
     pitch: {
       scales: [
-        ["major-blues", 0.5],
-        ["blues", 0.5],
+        ["major-blues", 0.7],
+        ["blues", 0.3],
       ],
     },
+    // String-band strum on every beat over the two-beat bass.
+    rhythm: { onsets: { chords: grid("x.x.x.x.") } },
     harmony: {
       forms: [
         [BLUES_FORM, 0.6],
@@ -1758,14 +1834,16 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "classic vaudeville blues: singer fronting a small jazz band, stride-like piano, cornet obbligato answering each vocal line (call and response), 12-bar and 16-bar strophes",
     seedSalt: 1923,
-    tempo: { bpm: [70, 120], typical: 88 },
+    tempo: { bpm: [64, 104], typical: 80 },
     groove: { swingRatio: [1.5, 1.8] },
     pitch: {
       scales: [
-        ["blues", 0.5],
-        ["major-blues", 0.5],
+        ["major-blues", 0.7],
+        ["blues", 0.3],
       ],
     },
+    // Stride "oom-pah": bass on 1 and 3, piano chords on 2 and 4.
+    rhythm: { onsets: { chords: grid("..x...x.") } },
     bass: { behaviour: [["root-fifth", 1]], onsets: grid("x...x...") },
     texture: {
       roles: {
@@ -1806,13 +1884,8 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     tempo: { bpm: [140, 200], typical: 168 },
     groove: { swingRatio: [1.5, 1.9] },
     harmony: { forms: [[BLUES_FORM, 1]], sources: { forms: 1 } },
-    bass: {
-      behaviour: [
-        ["ostinato", 0.6],
-        ["walking", 0.4],
-      ],
-      onsets: grid("xxxxxxxx"),
-    },
+    // Eight to the bar, always: a walking line would fall back to quarters.
+    bass: { behaviour: [["ostinato", 1]], onsets: grid("xxxxxxxx") },
     melody: { density: [2, 3], repetition: 0.7 },
     texture: {
       roles: {
@@ -1852,18 +1925,24 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "Chicago blues: amplified electric band, slow-medium shuffle, quick-change 12-bar, guitar and amplified-harp call and response, root-fifth-sixth shuffle bass",
     seedSalt: 1950,
-    tempo: { bpm: [70, 130], typical: 92 },
+    tempo: { bpm: [84, 128], typical: 100 },
+    // Shuffle in 4/4: the 12/8 slow blues belongs to the soul-blues ballad.
+    meter: { signatures: [["4/4", 1]] },
+    groove: { swingRatio: [1.9, 2.2] },
     harmony: {
       forms: [
         [QUICK_CHANGE_FORM, 0.6],
         [BLUES_FORM, 0.4],
       ],
     },
-    bass: {
-      behaviour: [
-        ["arpeggio", 0.6],
-        ["walking", 0.4],
-      ],
+    // Root-fifth-sixth shuffle line, eight to the bar.
+    bass: { behaviour: [["arpeggio", 1]], onsets: grid("xxxxxxxx") },
+    rhythm: {
+      onsets: {
+        kick: grid("x.x.x.x."),
+        snare: grid("..x...x."),
+        hat: grid("xxxxxxxx"),
+      },
     },
     texture: {
       roles: {
@@ -1878,7 +1957,19 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "Louisiana swamp blues: slow laid-back shuffle, tremolo-soaked guitar, reverb-heavy sparse arrangement, harp fills, minor-pentatonic phrasing",
     seedSalt: 1957,
-    tempo: { bpm: [60, 100], typical: 76 },
+    tempo: { bpm: [60, 92], typical: 72 },
+    // Slim Harpo and Lightnin' Slim: a slow 12/8 swamp drag, the backbeat on
+    // a rim click, kick only on the downbeat.
+    meter: { signatures: [["12/8", 1]] },
+    rhythm: {
+      onsets: {
+        kick: grid("x......."),
+        snare: null,
+        rim: grid("..x...x."),
+        hat: grid("x.x.x.x."),
+      },
+    },
+    bass: { behaviour: [["root", 1]], onsets: grid("x...x...") },
     pitch: {
       scales: [
         ["blues", 0.6],
@@ -1888,6 +1979,8 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     melody: { density: [1, 2] },
     texture: {
       roles: {
+        snare: null,
+        rim: role("drums"),
         chords: role("electric@clean"),
         lead: role("electric@clean", "reeds:0.5"),
       },
@@ -1899,8 +1992,20 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "West Coast blues: jazz-inflected urbane blues, ninth and thirteenth chords, smooth swing, horn pads, single-note guitar lines with bebop passing tones",
     seedSalt: 1947,
-    tempo: { bpm: [70, 130], typical: 100 },
+    tempo: { bpm: [100, 150], typical: 120 },
+    meter: { signatures: [["4/4", 1]] },
     groove: { swingRatio: [1.5, 1.8] },
+    // T-Bone Walker's jazz rhythm section: ride time over a walking bass and
+    // foot hat on 2 and 4, a light feathered kick.
+    rhythm: {
+      onsets: {
+        kick: grid("2.2.2.2."),
+        snare: grid("..1...x."),
+        hat: grid("..x...x."),
+        openhat: SWING_RIDE,
+      },
+    },
+    bass: { behaviour: [["walking", 1]] },
     pitch: {
       scales: [
         ["blues", 0.4],
@@ -1918,6 +2023,7 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     melody: { chordToneRate: 0.6, intervals: intervals(6, 3, 0.7, 0.3) },
     texture: {
       roles: {
+        openhat: role("drums"),
         chords: role("piano", "electric@clean:0.6"),
         lead: role("electric@clean"),
         pad: maybe("sax", "trumpet:0.6"),
@@ -1929,8 +2035,19 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "soul blues: blues form with gospel-soul production, straight-eighth backbeat, organ pads, horn stabs, melismatic vocal over minor-pentatonic guitar fills",
     seedSalt: 1969,
-    tempo: { bpm: [60, 100], typical: 78 },
-    groove: { swingRatio: [1, 1.3] },
+    tempo: { bpm: [64, 100], typical: 80 },
+    // Malaco and Hi Records: straight sixteenths, the soul kick figure and a
+    // hard backbeat, not a shuffle.
+    meter: { signatures: [["4/4", 1]] },
+    groove: { subdivision: 4, swingRatio: [1, 1.1] },
+    rhythm: {
+      onsets: {
+        kick: grid("x.....x.x......."),
+        snare: grid("....x.......x..."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+      },
+    },
+    bass: { behaviour: [["root-fifth", 1]], onsets: grid("x.....x.x....x..") },
     harmony: {
       sources: { forms: 1, presets: 1 },
       presets: [["turnaround", 1]],
@@ -1948,8 +2065,19 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "modern electric blues: overdriven guitar lead, power-trio texture, rock backbeat with blues shuffle or straight eighths, sustained bends and long solos",
     seedSalt: 1985,
-    tempo: { bpm: [70, 140], typical: 104 },
+    tempo: { bpm: [110, 160], typical: 128 },
+    meter: { signatures: [["4/4", 1]] },
     groove: { swingRatio: [1, 1.9] },
+    // Power-trio drive: rock kick on 1, the and of 2 and 3, crash-ride
+    // eighths and a hard 2 and 4.
+    rhythm: {
+      onsets: {
+        kick: grid("x..xx..."),
+        snare: grid("..x...x."),
+        hat: grid("xxxxxxxx"),
+      },
+    },
+    bass: { behaviour: [["root", 1]], onsets: grid("xxxxxxxx") },
     pitch: {
       scales: [
         ["blues", 0.6],
@@ -2610,10 +2738,22 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "P-Funk: slower heavy on-the-one groove, synth bass and Moog leads, layered chant vocals, mixolydian and dorian vamps, cosmic synth textures",
     seedSalt: 1975,
-    tempo: { bpm: [90, 110], typical: 100 },
+    tempo: { bpm: [92, 108], typical: 100 },
+    // Parliament ("Give Up the Funk", "Flash Light"): a plain heavy backbeat,
+    // eighth hats with the open hat on the off-beats, and a busy sliding synth
+    // bass carrying the syncopation instead of the drums.
+    rhythm: {
+      onsets: {
+        kick: grid("x.....x...x....."),
+        snare: grid("....x.......x..."),
+        hat: grid("x...x...x...x..."),
+        openhat: grid("..x...x...x...x."),
+      },
+    },
+    bass: { behaviour: [["ostinato", 1]], onsets: grid("x.xx..x..xx.x.x.") },
     texture: {
       roles: {
-        ...kitRoles("acoustic"),
+        ...kitRoles("acoustic", ["kick", "snare", "hat", "openhat"]),
         chords: role("clav", "funk:0.6"),
         bass: role("bass", "ebass:0.4"),
         lead: role("lead", "saw:0.6"),
@@ -2770,7 +2910,18 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "big-band and soul revue funk: full horn section riffing in unison on the one, stop-time hits, tight sixteenth rhythm section, dominant ninth vamps",
     seedSalt: 1970,
-    tempo: { bpm: [100, 126], typical: 112 },
+    tempo: { bpm: [104, 126], typical: 114 },
+    // James Brown revue ("Cold Sweat", "Funky Drummer"): a dense ghosted
+    // snare against the backbeat, sixteenth hats, and a bass line that lands
+    // hard on the one then leaves space.
+    rhythm: {
+      onsets: {
+        kick: grid("x.....x.x.....x."),
+        snare: grid("3.3.x.3x3x3.x.33"),
+        hat: grid("xxxxxxxxxxxxxxxx"),
+      },
+    },
+    bass: { behaviour: [["ostinato", 1]], onsets: grid("x......x.x..x...") },
     texture: {
       roles: {
         ...kitRoles("acoustic"),
@@ -2788,16 +2939,12 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "traditional-gospel",
     summary:
-      "traditional black gospel: 12/8 slow shout or swung 4/4, plagal IV-I amens, passing diminished chords, Hammond and piano, lead vocal with choir call and response",
+      "traditional black gospel: slow 12/8 ballad with triplet piano and organ, claps on 2 and 4, plagal IV-I amens, passing diminished chords, Hammond and piano, lead vocal with choir call and response",
     seedSalt: 1940,
-    tempo: { bpm: [60, 140], typical: 84 },
-    meter: {
-      signatures: [
-        ["12/8", 0.5],
-        ["4/4", 0.5],
-      ],
-      hypermeter: [[4, 1]],
-    },
+    // The slow 12/8 gospel ballad ("Precious Lord"): triplet piano and organ
+    // over a dotted-quarter pulse, claps on 2 and 4.
+    tempo: { bpm: [56, 88], typical: 68 },
+    meter: { signatures: [["12/8", 1]], hypermeter: [[4, 1]] },
     groove: { swingRatio: [1.7, 2.1] },
     pitch: {
       scales: [
@@ -3260,8 +3407,10 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "honky-tonk: shuffle two-beat with brush snare on 2 and 4, alternating root-fifth bass, crying pedal-steel fills, simple I-IV-V, plain-spoken strophic verses",
     seedSalt: 1950,
-    tempo: { bpm: [90, 150], typical: 116 },
+    tempo: { bpm: [120, 170], typical: 140 },
     groove: { subdivision: 2, swingRatio: [1.3, 1.7] },
+    // Ray Price shuffle: walking bass in a 4/4 shuffle, brush snare on 2 and
+    // 4, honky-tonk piano.
     harmony: {
       presets: [
         ["fifties", 0.4],
@@ -3269,11 +3418,17 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
       ],
       sevenths: 0.2,
     },
-    rhythm: { onsets: { kick: grid("x...x..."), snare: grid("..x...x.") } },
-    bass: { onsets: grid("x...x...") },
+    rhythm: {
+      onsets: {
+        kick: grid("x...x..."),
+        snare: grid("..x...x."),
+        hat: grid("x.xxx.xx"),
+      },
+    },
+    bass: { behaviour: [["walking", 1]] },
     texture: {
       roles: {
-        ...kitRoles("acoustic", ["kick", "snare"]),
+        ...kitRoles("acoustic"),
         chords: role("acoustic", "honkytonk:0.6"),
         lead: role("sing", "fiddle:0.6"),
         counter: role("electric@glide", "fiddle:0.4"),
@@ -3285,8 +3440,14 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "Nashville sound: smooth countrypolitan ballads, string section and background vocal pads replacing fiddle and steel, slip-note piano, I-vi-IV-V",
     seedSalt: 1958,
-    tempo: { bpm: [70, 120], typical: 92 },
-    groove: { swingRatio: [1, 1.3] },
+    tempo: { bpm: [64, 96], typical: 78 },
+    meter: {
+      signatures: [
+        ["4/4", 0.6],
+        ["3/4", 0.4],
+      ],
+    },
+    groove: { swingRatio: [1, 1.2] },
     harmony: {
       presets: [
         ["fifties", 0.6],
@@ -3294,16 +3455,23 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
       ],
       sevenths: 0.3,
     },
+    // Studio-polished ballad: the kick only on the one, a cross-stick backbeat,
+    // Floyd Cramer's slip-note piano on the off-beats.
     rhythm: {
       onsets: {
-        kick: grid("x.......x......."),
-        snare: grid("....x.......x..."),
+        kick: grid("x.......2......."),
+        snare: null,
+        rim: grid("....x.......x..."),
         hat: null,
+        chords: grid("x...x...x...x..."),
       },
     },
+    bass: { behaviour: [["root-fifth", 1]], onsets: grid("x.......x.......") },
     texture: {
       roles: {
-        ...kitRoles("acoustic", ["kick", "snare"]),
+        ...kitRoles("acoustic", ["kick", "rim"]),
+        snare: null,
+        hat: null,
         chords: role("piano"),
         bass: role("ebass", "contrabass:0.4"),
         lead: role("sing"),
@@ -3345,7 +3513,7 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "outlaw country: stripped-down rock-leaning band, loose mid-tempo backbeat, mixolydian bVII colour, blues-inflected leads, unpolished vocals",
     seedSalt: 1973,
-    tempo: { bpm: [80, 140], typical: 108 },
+    tempo: { bpm: [96, 132], typical: 112 },
     pitch: {
       scales: [
         ["mixolydian", 0.6],
@@ -3360,11 +3528,13 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     },
     rhythm: {
       onsets: {
-        kick: grid("x.......x......."),
+        // Waylon's thump: kick on every beat under a hard 2 and 4.
+        kick: grid("x...x...x...x..."),
         snare: grid("....x.......x..."),
         hat: grid("x.x.x.x.x.x.x.x."),
       },
     },
+    bass: { behaviour: [["root", 1]], onsets: grid("x.x.x.x.x.x.x.x.") },
     texture: {
       roles: {
         ...kitRoles("acoustic"),
@@ -3453,7 +3623,9 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "alt-country: punk and indie energy on country forms, ragged mixolydian rock chords, twangy reverb guitar, unadorned backbeat, minor-key ballads",
     seedSalt: 1990,
-    tempo: { bpm: [80, 150], typical: 112 },
+    tempo: { bpm: [70, 150], typical: 104 },
+    // Uncle Tupelo to Whiskeytown: punk train-beat ragers on a washy open
+    // hat, beside minor-key laments.
     pitch: {
       scales: [
         ["major", 0.4],
@@ -3472,12 +3644,14 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
       onsets: {
         kick: grid("x.......x......."),
         snare: grid("....x.......x..."),
-        hat: grid("x.x.x.x.x.x.x.x."),
+        hat: null,
+        openhat: grid("x.x.x.x.x.x.x.x."),
       },
     },
     texture: {
       roles: {
-        ...kitRoles("acoustic"),
+        ...kitRoles("acoustic", ["kick", "snare", "openhat"]),
+        hat: null,
         chords: role("ragged", "acoustic:0.5"),
         bass: role("ebass"),
         lead: role("sing", "electric@crunch:0.5"),
@@ -3489,7 +3663,9 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "Texas country and red dirt: dance-hall two-step shuffle, fiddle and steel answering the vocal, loose roadhouse rock backbeat, I-IV-V with bVII",
     seedSalt: 1995,
-    tempo: { bpm: [100, 150], typical: 124 },
+    tempo: { bpm: [150, 200], typical: 172 },
+    // The dance-hall two-step: a cut-time feel, kick on 1 and 3 with the
+    // snare on 2 and 4 and the shuffle on the snare in the turnarounds.
     groove: { subdivision: 2, swingRatio: [1.2, 1.5] },
     harmony: {
       presets: [
@@ -3500,10 +3676,11 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     rhythm: {
       onsets: {
         kick: grid("x...x..."),
-        snare: grid("..x...x."),
-        hat: grid("x.x.x.x."),
+        snare: grid("..x.3.x3"),
+        hat: grid("..x...x."),
       },
     },
+    bass: { behaviour: [["root-fifth", 1]], onsets: grid("x...x...") },
     texture: {
       roles: {
         ...kitRoles("acoustic"),
