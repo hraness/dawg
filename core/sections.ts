@@ -1312,7 +1312,9 @@ function laneFallback(track: Track, lane: string): number | undefined {
       ? track.reverb
       : spec.effect === "synth"
         ? track.synth
-        : (track.fx as Record<string, unknown> | undefined)?.[spec.effect]
+        : spec.effect === "keys"
+          ? track.keys
+          : (track.fx as Record<string, unknown> | undefined)?.[spec.effect]
   ) as Record<string, unknown> | undefined;
   const stored = source?.[spec.param];
   return typeof stored === "number" ? stored : spec.spec.default;

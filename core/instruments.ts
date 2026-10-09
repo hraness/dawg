@@ -177,6 +177,25 @@ export const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
     field: "granular",
     preset: "microloop",
   },
+  // keys (f06-piano): modelled pianos. `piano` stays legacy here; the typed
+  // surfaces store a new `piano` as `grand` (core/keys.ts `pianoWrite`).
+  { word: "grand", instrument: "grand", field: "keys", preset: "grand" },
+  { word: "ballad", instrument: "grand", field: "keys", preset: "ballad" },
+  { word: "upright", instrument: "upright", field: "keys", preset: "upright" },
+  { word: "felt", instrument: "felt", field: "keys", preset: "felt" },
+  { word: "lofi", instrument: "felt", field: "keys", preset: "lofi" },
+  {
+    word: "honkytonk",
+    instrument: "honkytonk",
+    field: "keys",
+    preset: "honkytonk",
+  },
+  {
+    word: "prepared",
+    instrument: "prepared",
+    field: "keys",
+    preset: "prepared",
+  },
 ]);
 
 /**

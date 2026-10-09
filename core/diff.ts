@@ -42,6 +42,7 @@ const EFFECTS = [
   "wavetable",
   "string",
   "granular",
+  "keys",
 ] as const;
 const LANES = [
   "volumeAutomation",

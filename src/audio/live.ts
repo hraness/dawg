@@ -20,6 +20,7 @@ import { bpmAtTick } from "../../core/tempo.ts";
 import { EMPTY_SAMPLE_BANK, sampleKey, type SampleBank } from "./samples.ts";
 import { RENDER_CHANNELS, renderScorePcm } from "./wav.ts";
 import { engineFor } from "./instruments.ts";
+import { noteHz, resolveTuning } from "../../core/tuning.ts";
 import { liveFitPending, withLiveFit } from "./fit.ts";
 import type { LiveFullReply, LiveFullRequest } from "./live-worker.ts";
 
@@ -219,11 +220,27 @@ export class LiveSynth {
           Math.round(LIVE_RIG_WINDOW_SECONDS * this.sampleRate),
         )
       : audibleFrames(audio.pcm);
+    const release = liveEngine?.releaseSeconds
+      ? liveEngine.releaseSeconds(
+          track,
+          pitch,
+          noteHz(
+            pitch,
+            undefined,
+            resolveTuning(score.tuning, track.tuning, score.key),
+          ),
+        )
+      : tail;
     const rendered: LiveNotePcm = {
       pcm: audio.pcm.subarray(0, frames * RENDER_CHANNELS),
       frames,
       ...(liveEngine
-        ? { releaseSeconds: Math.min(tail, MAX_LIVE_NOTE_SECONDS) }
+        ? {
+            releaseSeconds: Math.min(
+              Math.max(0, release),
+              MAX_LIVE_NOTE_SECONDS,
+            ),
+          }
         : {}),
       ...(windowed ? { partial: true } : {}),
     };

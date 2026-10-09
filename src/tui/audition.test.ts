@@ -382,6 +382,13 @@ describe("keys and commands", () => {
       "vel-curve soft",
       "master glue ratio 4",
       "master target club",
+      "piano felt",
+      "piano",
+      "grand",
+      "upright piano",
+      "keys decay 1.5",
+      "keys preset ballad",
+      "keys reset",
     ])
       expect(isStageable(command)).toBe(true);
     for (const command of [
@@ -396,6 +403,9 @@ describe("keys and commands", () => {
       "humanize",
       "humanize show",
       "master measure",
+      "keys",
+      "keys presets",
+      "keys preset",
       "undo",
     ])
       expect(isStageable(command)).toBe(false);

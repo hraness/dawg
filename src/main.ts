@@ -69,6 +69,11 @@ import {
   parseGranularCommand,
 } from "./commands/granular.ts";
 import {
+  applyKeysCommand,
+  newPianoTrack,
+  parseKeysCommand,
+} from "./commands/keys.ts";
+import {
   applyTuningCommand,
   importTuningFile,
   parseTuningCommand,
@@ -278,6 +283,7 @@ function parsesLocally(text: string): boolean {
     parseSynthCommand,
     parseStringCommand,
     parseGranularCommand,
+    parseKeysCommand,
     parseExpressionCommand,
     parseMasterCommand,
     (value: string) => parseSectionCommand(value, score),
@@ -1782,6 +1788,16 @@ async function submit(prompt: string): Promise<string | Receipt> {
   }
   const tuning = parseTuningCommand(command);
   if (tuning) return tuningCommand(tuning);
+  const keysCommand = parseKeysCommand(command);
+  if (keysCommand) {
+    const reads =
+      keysCommand.type === "keys-list" || keysCommand.type === "keys-presets";
+    if (!reads) await materializeDraft();
+    const result = applyKeysCommand(score, requestedTrack, keysCommand);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
   const synth = parseSynthCommand(command);
   if (synth) {
     if (synth.type !== "synth-list") await materializeDraft();
@@ -2176,6 +2192,8 @@ async function focusTrack(trackId: string): Promise<Receipt> {
         // `track jangle`, `track gtr-metal`…: a guitar voice and its rig.
         ...rigTrackFields(trackId),
         ...(grainPreset ? { granular: { preset: grainPreset } } : {}),
+        // `/track piano` (or grand, felt…) starts on the modelled piano.
+        ...newPianoTrack(trackId),
       },
     });
     await commitScore(next, "track.create", { trackId });

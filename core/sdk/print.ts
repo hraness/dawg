@@ -563,6 +563,15 @@ export function printTrack(score: TrackScore, track: Track): string {
     );
     entries.push(`string: ${obj(params, INDENT, "string: ".length, 1)}`);
   }
+  if (track.keys) {
+    // `{}` is meaningful: it turns the modelled piano on.
+    const params = Object.entries(track.keys).map(
+      ([key, v]) => [key, value(v)] as const,
+    );
+    entries.push(
+      `keys: ${params.length === 0 ? "{}" : obj(params, INDENT, "keys: ".length, 1)}`,
+    );
+  }
   entries.push(...performanceEntries(score, track));
   const lanes: [string, readonly AutomationPoint[] | undefined][] = [
     ["volume", track.volumeAutomation],

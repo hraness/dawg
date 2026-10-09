@@ -27,6 +27,7 @@ import {
   normalizeGranular,
   type TrackGranular,
 } from "./granular.ts";
+import { normalizeKeys, type TrackKeys } from "./keys.ts";
 import {
   checkSongTime,
   normalizeSongTime,
@@ -394,6 +395,13 @@ export type Track = Readonly<{
    * `instrument` is `"granular"`; kept when the instrument changes.
    */
   granular?: TrackGranular;
+  /**
+   * Optional (0.6): modelled piano settings (`core/keys.ts`), `{ preset?,
+   * ...overrides }`. The modelled piano plays only when `instrument` is a
+   * piano family (grand upright felt honkytonk prepared) and this is
+   * present; `{}` is the family's defaults.
+   */
+  keys?: TrackKeys;
 }> &
   /**
    * Performance (`core/expression.ts`): glide default, sustain pedal
@@ -733,6 +741,7 @@ export type TrackPatch = Readonly<
     tuning?: Tuning | null;
     string?: TrackString | null;
     granular?: TrackGranular | null;
+    keys?: TrackKeys | null;
   }
 >;
 
@@ -779,6 +788,7 @@ export type TrackInput = Readonly<
     | "tuning"
     | "string"
     | "granular"
+    | "keys"
   > &
     Pick<Track, "id"> & {
       filter?: TrackFilter | null;
@@ -799,6 +809,7 @@ export type TrackInput = Readonly<
       tuning?: Tuning | null;
       string?: TrackString | null;
       granular?: TrackGranular | null;
+      keys?: TrackKeys | null;
     }
 >;
 
@@ -1771,6 +1782,7 @@ function normalizeTrack(input: unknown): Track {
   const fx = fxOrThrow(() => normalizeFx(input.fx));
   const fxAutomation = normalizeFxAutomation(input.fxAutomation);
   const synth = fxOrThrow(() => normalizeSynth(input.synth));
+  const keys = fxOrThrow(() => normalizeKeys(input.keys));
   const wavetable = normalizeWavetable(input.wavetable);
   const sampler = normalizeSampler(input.sampler);
   const rhythm = normalizeRhythm(input.rhythm, id);
@@ -1863,6 +1875,7 @@ function normalizeTrack(input: unknown): Track {
     ...(tuning ? { tuning } : {}),
     ...(string ? { string } : {}),
     ...(granular ? { granular } : {}),
+    ...(keys ? { keys } : {}),
   });
 }
 

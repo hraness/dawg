@@ -29,6 +29,17 @@ import {
   stringPresetName,
 } from "../../core/strings.ts";
 import {
+  applyKeysCommand,
+  keysPresetPatch,
+  type KeysCommand,
+} from "../commands/keys.ts";
+import {
+  KEYS_PRESETS,
+  KEYS_SIMPLE,
+  isKeysPreset,
+  keysParamName,
+} from "../../core/keys.ts";
+import {
   setSampleControls,
   type SampleControlValue,
 } from "../commands/sample.ts";
@@ -463,8 +474,22 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
     },
     plan(args, context) {
       const trackId = targetTrack(args, context);
-      const patch = instrumentName(args.instrument);
+      // piano/grand/upright/felt…: a new write is the modelled piano.
       const track = context.score.tracks.find((t) => t.id === trackId);
+      if (track && typeof args.instrument === "string") {
+        const word = args.instrument.toLowerCase();
+        const preset = word === "piano" ? "grand" : word;
+        if (isKeysPreset(preset)) {
+          const patch = keysPresetPatch(track, preset);
+          return {
+            kind: "score",
+            operations: [{ type: "updateTrack", trackId, patch }],
+            trackId,
+            summary: `${trackId} → ${patch.instrument} (${preset})`,
+          };
+        }
+      }
+      const patch = instrumentName(args.instrument);
       // A guitar alias (`jangle`, `gtr-metal`…) also loads its rig.
       const rig = rigWordPatch(String(args.instrument), track?.fx);
       return {
@@ -841,6 +866,54 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
         ],
         trackId,
         summary: `${trackId} ${messages.at(-1)}`,
+      };
+    },
+  },
+  {
+    name: "set_keys",
+    description: `Shape a modelled piano: preset (instrument, keys and its effects), params ${KEYS_SIMPLE.join(" ")}… (null unsets; DAWG.md lists all), or reset. Stored "piano" stays legacy; set_instrument piano writes grand.`,
+    parameters: {
+      type: "object",
+      properties: {
+        trackId: trackIdSchema,
+        preset: { type: "string", enum: Object.keys(KEYS_PRESETS) },
+        reset: { type: "boolean" },
+        params: {
+          type: "object",
+          additionalProperties: { type: ["number", "string", "null"] },
+        },
+      },
+      additionalProperties: false,
+    },
+    plan(args, context) {
+      const trackId = targetTrack(args, context);
+      const command = keysToolCommand(args);
+      const result = applyKeysCommand(context.score, trackId, command);
+      if (!result.ok || !result.next)
+        throw new ToolArgumentError(result.message);
+      const before = context.score.tracks.find((t) => t.id === trackId)!;
+      const next = result.next.tracks.find((t) => t.id === trackId)!;
+      return {
+        kind: "score",
+        operations: [
+          {
+            type: "updateTrack",
+            trackId,
+            patch: {
+              instrument: next.instrument,
+              keys: next.keys ?? null,
+              ...(next.filter !== before.filter
+                ? { filter: next.filter ?? null }
+                : {}),
+              ...(next.fx !== before.fx ? { fx: next.fx ?? null } : {}),
+              ...(next.reverb !== before.reverb
+                ? { reverb: next.reverb ?? null }
+                : {}),
+            },
+          },
+        ],
+        trackId,
+        summary: `${trackId} ${result.message}`,
       };
     },
   },
@@ -1308,12 +1381,31 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
       const id = args.id;
       if (context.score.tracks.some((track) => track.id === id))
         throw new ToolArgumentError(`track ${id} already exists`);
-      const patch = instrumentName(args.instrument);
-      const instrument = patch.string?.preset ?? patch.instrument;
       const name =
         typeof args.name === "string" && args.name.trim().length > 0
           ? args.name.trim().slice(0, SCORE_LIMITS.maxNameLength)
           : id;
+      const word =
+        typeof args.instrument === "string"
+          ? args.instrument.toLowerCase()
+          : "";
+      const preset = word === "piano" ? "grand" : word;
+      if (isKeysPreset(preset)) {
+        const patch = keysPresetPatch({}, preset);
+        return {
+          kind: "score",
+          operations: [
+            {
+              type: "addTrack",
+              track: { id, name, ...patch, instrument: patch.instrument! },
+            },
+          ],
+          trackId: id,
+          summary: `+track ${id} (${patch.instrument} ${preset})`,
+        };
+      }
+      const patch = instrumentName(args.instrument);
+      const instrument = patch.string?.preset ?? patch.instrument;
       return {
         kind: "score",
         operations: [
@@ -1760,6 +1852,37 @@ function fxToolCommand(
   return { type: "fx-set", effect, values };
 }
 
+function keysToolCommand(args: Record<string, unknown>): KeysCommand {
+  if (args.reset === true) return { type: "keys-reset" };
+  if (args.preset !== undefined) {
+    if (typeof args.preset !== "string" || !isKeysPreset(args.preset))
+      throw new ToolArgumentError(
+        `keys presets: ${Object.keys(KEYS_PRESETS).join(", ")}`,
+      );
+    return { type: "keys-preset", preset: args.preset };
+  }
+  if (args.params === undefined)
+    throw new ToolArgumentError("set_keys needs preset, reset, or params");
+  const params = record(args.params, "params");
+  const values: Record<string, number | string | null> = {};
+  for (const [name, value] of Object.entries(params)) {
+    const param = keysParamName(name);
+    if (!param)
+      throw new ToolArgumentError(
+        `keys has no parameter ${name} (DAWG.md lists them under Keys)`,
+      );
+    if (
+      value !== null &&
+      typeof value !== "number" &&
+      typeof value !== "string"
+    )
+      throw new ToolArgumentError(`keys ${param} takes a number or a word`);
+    values[param] = value;
+  }
+  return { type: "keys-set", values };
+}
+
+/** Instrument words the agent may pick: the voice bank plus the pianos. */
 function synthToolCommand(args: Record<string, unknown>): SynthCommand {
   if (args.reset === true) return { type: "synth-reset" };
   if (args.zzfx !== undefined) {
