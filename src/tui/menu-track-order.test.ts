@@ -26,7 +26,7 @@ function mix(ctx: MenuContext): MenuNode[] {
 }
 
 describe("Mix › position and remove track", () => {
-  test("rows run /track move and /track rm on the focused track", () => {
+  test("rows run /track move and /track remove on the focused track", () => {
     const rows = mix(context(["lead", "pad"]));
     const position = rows.find((n) => n.label === "position");
     const remove = rows.find((n) => n.label === "remove track");
@@ -35,7 +35,7 @@ describe("Mix › position and remove track", () => {
     expect(position.value).toBe("2 of 2");
     expect(position.command("1")).toBe("/track move pad 1");
     expect(position.command("top")).toBeUndefined();
-    expect(remove?.kind === "action" && remove.command).toBe("/track rm pad");
+    expect(remove?.kind === "action" && remove.command).toBe("/track remove pad");
   });
 
   test("a lone track has neither row", () => {

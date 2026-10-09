@@ -14,6 +14,8 @@
  * when a listed gap starts working, so each list only shrinks.
  */
 import { describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { listGuides } from "../guides/index.ts";
 import { parseEditCommand, parseLane } from "../src/commands/edit.ts";
 import {
@@ -23,7 +25,11 @@ import {
 } from "../src/commands/fx.ts";
 import { HELP_SECTIONS, helpTopicLines, USAGE } from "../src/commands/help.ts";
 import { LANE_ALIASES } from "../src/commands/music.ts";
-import { MENU_SECTIONS, SECTION_ALIASES } from "../src/tui/menu.ts";
+import {
+  MENU_SECTIONS,
+  MENU_SHOWN_SECTIONS,
+  SECTION_ALIASES,
+} from "../src/tui/menu.ts";
 import { GuideBrowser } from "../tui/guide.ts";
 import {
   accepts,
@@ -33,6 +39,7 @@ import {
   nodeCommands,
   read,
   resolveMenuPath,
+  ROOT,
   TOPIC_IDS,
   walkAll,
 } from "./consistency-lib.ts";
@@ -139,6 +146,31 @@ const KNOWN_TOPIC_GAPS: readonly string[] = [
   "menu agent",
 ];
 
+/** True until src/commands/grammar.ts lands (grammar lane, PR #141). */
+const GRAMMAR_PENDING = true;
+
+/**
+ * Typed aliases a menu row must not run (design §2, §3): the row runs the
+ * canonical word. `track <alias>` covers the second word of a track row.
+ */
+const CANONICAL_VERBS: Readonly<Record<string, string>> = {
+  rm: "remove",
+  delete: "remove",
+  ls: "list",
+  presets: "list",
+  scale: "key",
+  pattern: "groove",
+  cycle: "loop",
+};
+
+/**
+ * Alias verbs menu rows still run because the canonical form does not parse
+ * on main yet (grammar lane, PR #141: `key <mode>`, `groove <name>`,
+ * `loop`). The test fails as soon as the canonical form parses: flip the
+ * rows in src/tui/menu.ts, then delete the line here.
+ */
+const KNOWN_ALIAS_ROWS: readonly string[] = ["pattern", "scale", "track cycle"];
+
 /** A trailing `(note)` is commentary, not part of the command. */
 const stripNote = (text: string) => text.replace(/\s*\([^)]*\)\s*$/, "").trim();
 
@@ -194,6 +226,81 @@ describe("menu commands parse", () => {
     expect(
       [...bad].map(([command, where]) => `${command}  ← ${where}`),
     ).toEqual([]);
+  });
+
+  test("every row runs the canonical verb, not a typed alias", () => {
+    // alias key (`scale`, `track cycle`) → a command and its canonical form
+    const aliasRows = new Map<string, { command: string; canonical: string }>();
+    for (const { walked } of walks)
+      for (const { node } of walked)
+        for (const command of nodeCommands(node)) {
+          const words = command.replace(/^\//, "").split(/\s+/);
+          const at = words[0] === "track" ? 1 : 0;
+          const canonical = CANONICAL_VERBS[words[at]!.toLowerCase()];
+          if (!canonical) continue;
+          const key = at ? `track ${words[1]}` : words[0]!;
+          const rewritten = [...words];
+          rewritten[at] = canonical;
+          if (!aliasRows.has(key))
+            aliasRows.set(key, {
+              command,
+              canonical: `${command.startsWith("/") ? "/" : ""}${rewritten.join(" ")}`,
+            });
+        }
+    // A canonical form that parses means the row must flip now.
+    const flippable = [...aliasRows]
+      .filter(([, row]) => accepts(row.canonical))
+      .map(([key, row]) => `${key}: ${row.command} → ${row.canonical}`);
+    expect(flippable).toEqual([]);
+    expect([...aliasRows.keys()].sort()).toEqual([...KNOWN_ALIAS_ROWS].sort());
+  });
+});
+
+describe("window commands check their arguments", () => {
+  test("nonsense arguments are refused, so the walks above prove arguments", () => {
+    for (const line of [
+      "/menu nonsense",
+      "/help nonsense",
+      "/guide nonsense",
+      "/model banana",
+      "/showme maybe",
+      "/sessions x y z",
+      "/theme plaid",
+      "/view sideways",
+      "/grid 1/7",
+      "/euclid trombone",
+      "/try banana",
+      "/click loud",
+      "/menu genre-x",
+    ])
+      expect(accepts(line), line).toBe(false);
+  });
+
+  test("real arguments are accepted", () => {
+    for (const line of [
+      "/menu mix",
+      "/help all",
+      "/model fast",
+      "/showme quiet",
+      "/sessions",
+      "/theme mono",
+      "/view focus",
+      "/grid 1/16",
+      "/euclid hat",
+      "/try fx reverb mix 0.6",
+      "/click 50%",
+      "/track remove saw",
+      "/export song.wav",
+    ])
+      expect(accepts(line), line).toBe(true);
+  });
+
+  test("/menu lists only one name per root; aliases stay accepted", () => {
+    const usage = read("src/main.ts");
+    expect(usage).toContain("MENU_SHOWN_SECTIONS.join");
+    for (const name of MENU_SHOWN_SECTIONS)
+      expect(MENU_SECTIONS as readonly string[]).toContain(name);
+    expect(MENU_SHOWN_SECTIONS as readonly string[]).not.toContain("genre");
   });
 });
 
@@ -260,27 +367,66 @@ describe("aliases parse like their canonical form", () => {
     }
   });
 
-  test("grammar.ts aliases, once it exists, parse like their canonical form", async () => {
-    const grammarPath = "../src/commands/grammar.ts";
-    const grammar = (await import(grammarPath).catch(() => undefined)) as
-      | {
-          canonicalize?: (
-            line: string,
-            parses: (line: string) => boolean,
-          ) => string;
-          ALIASES?: Readonly<Record<string, string>>;
-        }
-      | undefined;
-    if (!grammar?.ALIASES || !grammar.canonicalize) return;
-    const score = demoScore();
-    for (const [alias, canonical] of Object.entries(grammar.ALIASES)) {
-      const rewritten = grammar.canonicalize(alias, (line) =>
-        accepts(line, score),
-      );
-      expect(rewritten, alias).toBe(
-        grammar.canonicalize(canonical, (line) => accepts(line, score)),
-      );
+  test("help topic aliases open the same page as their canonical id", () => {
+    const all = helpTopicLines("all");
+    for (const alias of ["commands", "reference"])
+      expect(helpTopicLines(alias), alias).toEqual(all);
+    const arrange = helpTopicLines("arrange");
+    for (const alias of ["arrangement", "sections"])
+      expect(helpTopicLines(alias), alias).toEqual(arrange);
+  });
+
+  test("guide aliases, when the table exists, open their canonical guide", async () => {
+    const source = read("tui/guide.ts");
+    const guideModule = (await import("../tui/guide.ts")) as Record<
+      string,
+      unknown
+    >;
+    if (!/\bGUIDE_ALIASES\b/.test(source)) return;
+    // The table must be exported so this suite can walk it.
+    const aliases = guideModule.GUIDE_ALIASES as
+      Readonly<Record<string, string>> | undefined;
+    expect(aliases, "export GUIDE_ALIASES from tui/guide.ts").toBeDefined();
+    const guides = listGuides();
+    for (const [alias, target] of Object.entries(aliases!)) {
+      const byAlias = new GuideBrowser(guides);
+      const byId = new GuideBrowser(guides);
+      expect(byAlias.open(alias), alias).toBe(true);
+      expect(byId.open(target), target).toBe(true);
+      expect(byAlias.page, alias).toBe(byId.page);
     }
+  });
+
+  test("grammar.ts word tables: every alias parses like the canonical word", async () => {
+    if (!existsSync(join(ROOT, "src/commands/grammar.ts"))) {
+      // Not merged yet (grammar lane, PR #141); the check arms itself.
+      expect(GRAMMAR_PENDING).toBe(true);
+      return;
+    }
+    const grammarPath = "../src/commands/grammar.ts";
+    const grammar = (await import(grammarPath)) as {
+      REMOVE_WORDS?: readonly string[];
+      LIST_WORDS?: readonly string[];
+    };
+    expect(
+      grammar.REMOVE_WORDS,
+      "grammar.ts exports REMOVE_WORDS",
+    ).toBeDefined();
+    expect(grammar.LIST_WORDS, "grammar.ts exports LIST_WORDS").toBeDefined();
+    const score = demoScore();
+    const [remove, ...removeAliases] = grammar.REMOVE_WORDS!;
+    expect(remove).toBe("remove");
+    for (const word of removeAliases)
+      expect(accepts(`/track ${word} saw`, score), word).toBe(
+        accepts(`/track ${remove} saw`, score),
+      );
+    const [list, ...listAliases] = grammar.LIST_WORDS!;
+    expect(list).toBe("list");
+    for (const word of listAliases)
+      for (const noun of ["synth", "fx", "master"])
+        expect(accepts(`${noun} ${word}`, score), `${noun} ${word}`).toBe(
+          accepts(`${noun} ${list}`, score),
+        );
   });
 });
 
@@ -325,7 +471,7 @@ describe("Ctrl-K paths in the docs resolve", () => {
     ];
     for (const command of commands) {
       const pointer = menuPathFor(command);
-      if (!pointer) continue;
+      expect(pointer, command).toBeDefined();
       const [segments] = menuPathsIn(pointer);
       expect(segments, command).toBeDefined();
       expect(resolveMenuPath(segments!), pointer).toBeDefined();

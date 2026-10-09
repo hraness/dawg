@@ -13,11 +13,28 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createScore, type TrackScore } from "../core/score.ts";
+import { DRUM_VOICES } from "../core/drums.ts";
+import { listGuides } from "../guides/index.ts";
+import { parseShowMe } from "../src/agent/show-me.ts";
+import { resolveModelChoice } from "../src/agent/models.ts";
+import { parseClickArgument } from "../src/audio/click.ts";
+import { tuiLoginArgs } from "../src/auth/tui.ts";
 import { parseCalibrationCommand } from "../src/commands/calibration.ts";
+import { parseEffectName } from "../src/commands/fx.ts";
+import { helpTopicLines } from "../src/commands/help.ts";
 import { commandParses } from "../src/commands/parses.ts";
 import { parseStyleCommand } from "../src/commands/style.ts";
+import { isStageable } from "../src/tui/audition.ts";
+import {
+  applyChordsCommand,
+  defaultChordSettings,
+} from "../src/tui/play-chords.ts";
+import { GRIDS } from "../src/tui/play-session.ts";
+import { GuideBrowser } from "../tui/guide.ts";
+import { parseThemeName } from "../tui/theme.ts";
 import {
   EditMenu,
+  MENU_SECTIONS,
   type MenuContext,
   type MenuNode,
   rootNodes,
@@ -58,8 +75,99 @@ export function windowPatterns(): RegExp[] {
     ...slashPatterns(functionBody(main, "async function submit(")),
     ...slashPatterns(functionBody(main, "async function sessionCommand(")),
     ...slashPatterns(functionBody(app, "  command(text: string)")),
-  ];
+  ].filter(
+    // Guards that hand the line on (`/instrument\s`, `/model\b`, a
+    // lookahead) are not commands; `/login\b` and `/logout|auth` are.
+    (pattern) =>
+      pattern.source.endsWith("$") ||
+      /^\^\\\/\(?(?:login|logout)/.test(pattern.source),
+  );
   return windowCache;
+}
+
+/** The verb a window command starts with: `/show-me on` → `showme`. */
+function windowVerb(command: string): string {
+  const word = command.replace(/^\//, "").split(/\s+/)[0]!.toLowerCase();
+  return word.replace(/-/g, "");
+}
+
+type ArgCheck = (arg: string, score: TrackScore) => boolean;
+
+const helpTopic: ArgCheck = (arg) => helpTopicLines(arg) !== undefined;
+const guideTopic: ArgCheck = (arg) => new GuideBrowser(listGuides()).open(arg);
+const onOff: ArgCheck = (arg) => /^(on|off)$/i.test(arg);
+
+/**
+ * What each window verb with a free argument does with it, mirrored from
+ * its handler: `/menu <section>` must name a section, `/help <topic>` a
+ * topic, `/model <alias>` a catalog model, and so on. A verb whose pattern
+ * takes free text and is in neither this table nor FREE_TEXT is refused
+ * with an argument, so a new window command cannot pass laxly.
+ */
+const WINDOW_ARGS: Readonly<Record<string, ArgCheck>> = {
+  help: helpTopic,
+  "?": helpTopic,
+  guide: guideTopic,
+  guides: guideTopic,
+  menu: (arg) =>
+    (MENU_SECTIONS as readonly string[]).includes(arg.toLowerCase()),
+  showme: (arg) => parseShowMe(arg) !== undefined,
+  click: (arg) =>
+    !("error" in parseClickArgument(arg, { on: false, volume: 0.5 })),
+  chords: (arg) => applyChordsCommand(defaultChordSettings(), arg).ok,
+  euclid: (arg) =>
+    DRUM_VOICES.some((voice) => voice.voice === arg.toLowerCase()),
+  try: (arg, score) =>
+    /^agent\s+(on|off)$/i.test(arg) ||
+    (isStageable(arg) && accepts(arg, score)),
+  model: (arg) =>
+    resolveModelChoice("gateway", arg) !== undefined ||
+    resolveModelChoice("openrouter", arg) !== undefined,
+  theme: (arg) => parseThemeName(arg) !== undefined,
+  view: (arg) => /^(all|focus)$/i.test(arg),
+  motion: onOff,
+  grid: (arg) => GRIDS.some((grid) => grid.label === arg.toUpperCase()),
+  volume: () => false,
+  pan: () => false,
+  fx: (arg) => parseEffectName(arg.split(/\s+/)[0]!) !== undefined,
+  login: (arg) => typeof tuiLoginArgs(`/login ${arg}`) !== "string",
+  sessions: () => false,
+};
+
+/** Verbs whose argument is a name or a path the person picks. */
+const FREE_TEXT = new Set([
+  "track",
+  "add",
+  "export",
+  "import",
+  "rename",
+  "fork",
+  "resume",
+]);
+
+/** The argument text after the verb (`fx reverb mix` → `reverb mix`). */
+function windowArg(command: string): string {
+  return command.replace(/^\/?\S+\s*/, "").trim();
+}
+
+/** True when a window command's pattern matches and its argument is real. */
+function windowAccepts(command: string, score: TrackScore): boolean {
+  const verb = windowVerb(command);
+  const arg = windowArg(command);
+  for (const pattern of windowPatterns()) {
+    if (!pattern.test(command)) continue;
+    if (!arg) return true;
+    const check = WINDOW_ARGS[verb];
+    if (check) {
+      if (check(arg, score)) return true;
+      continue;
+    }
+    if (FREE_TEXT.has(verb)) return true;
+    // A pattern that spells out its arguments (`(on|off)`, `([0-2])`)
+    // already checked them; one that takes any text did not.
+    if (!/\.\+|\.\*|\\S\+/.test(pattern.source)) return true;
+  }
+  return false;
 }
 
 /** True when the prompt bar runs `line` locally (no model call). */
@@ -72,7 +180,7 @@ export function accepts(
   if (commandParses(command, score)) return true;
   if (parseStyleCommand(command)) return true;
   if (parseCalibrationCommand(command)) return true;
-  return windowPatterns().some((pattern) => pattern.test(command));
+  return windowAccepts(command, score);
 }
 
 /**

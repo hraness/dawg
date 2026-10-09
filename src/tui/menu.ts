@@ -1167,7 +1167,7 @@ function trackNodes(context: MenuContext): MenuNode[] {
 
 /**
  * Where the focused track sits in the list, and removing it: the menu rows
- * for `/track move` and `/track rm`. A lone track has neither.
+ * for `/track move` and `/track remove`. A lone track has neither.
  */
 function trackOrderNodes(context: MenuContext, track: Track): MenuNode[] {
   const count = context.score.tracks.length;
@@ -1189,7 +1189,7 @@ function trackOrderNodes(context: MenuContext, track: Track): MenuNode[] {
     {
       kind: "action",
       label: "remove track",
-      command: `/track rm ${track.id}`,
+      command: `/track remove ${track.id}`,
       help: "drop this track, its notes and anything that named it · ^z undoes",
     },
   ];
@@ -3844,8 +3844,8 @@ function nodeText(node: MenuNode): string {
   return `${node.label} ${valueText(node)} ${commandText(node) ?? ""}`;
 }
 
-/** Root sections, for `/menu <section>`. */
-export const MENU_SECTIONS = [
+/** The sections `/menu` lists in its usage line, one name per root. */
+export const MENU_SHOWN_SECTIONS = [
   "sound",
   "effects",
   "rhythm",
@@ -3855,7 +3855,12 @@ export const MENU_SECTIONS = [
   "project",
   "arrange",
   "style",
-  // Older names, still accepted.
+] as const;
+
+/** Root sections, for `/menu <section>`: the shown ones, then aliases. */
+export const MENU_SECTIONS = [
+  ...MENU_SHOWN_SECTIONS,
+  // Older names, still accepted, never listed.
   "parameters",
   "sounds",
   "track",
