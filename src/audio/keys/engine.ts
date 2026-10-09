@@ -30,6 +30,7 @@ import { interpolateAutomation } from "../effects/common.ts";
 import type { EngineContext, InstrumentEngine } from "../instruments.ts";
 import { Biquad2, clamp, CONTROL, LN1000 } from "./dsp.ts";
 import { ORGAN_ENGINES } from "./organ.ts";
+import { keysTrim } from "./calibration.ts";
 import {
   damperT60,
   physicalKey,
@@ -154,6 +155,8 @@ export function bodyOf(values: Values): string {
 
 type Live = {
   voice: KeysVoice;
+  /** Calibration 1 level trim (1 for legacy songs). */
+  trim: number;
   /** Sample index the voice started at. */
   start: number;
   /** Sample index of key-up. */
@@ -216,6 +219,7 @@ export function renderKeysTrack(
   const seedTick = context.seedTick ?? 0;
   const window = Math.round(KEYS_LIMITS.tailSeconds * sr);
   const taper = Math.round(KEYS_LIMITS.taperSeconds * sr);
+  const calibrated = (context.score.calibration ?? 0) >= 1;
   const onsets: Onset[] = [];
   notes.forEach((note) => {
     const hz = noteHz(note.pitch, note.cents, context.tuning);
@@ -267,7 +271,14 @@ export function renderKeysTrack(
         trackSeed,
         noteSeed: `${track.id}:${note.id}:${note.startTick + seedTick}`,
         ...(soft > 0 ? { soft } : {}),
+        ...(calibrated ? { calibration: 1 } : {}),
       };
+      const trim = calibrated
+        ? keysTrim(
+            track.keys?.preset ?? track.instrument ?? "grand",
+            note.pitch,
+          )
+        : 1;
       const voice: KeysVoice = electric
         ? electricVoice(
             noteOn,
@@ -292,6 +303,7 @@ export function renderKeysTrack(
         bend && wow ? (t: number) => bend(t) + wow(t) : (bend ?? wow);
       live.push({
         voice,
+        trim,
         start: onset.start,
         off: onset.off,
         end: onset.off + window,
@@ -331,7 +343,7 @@ export function renderKeysTrack(
           gain *= Math.max(0, x.fade) / x.fadeLength;
           x.fade -= 1;
         }
-        const y = block[s]! * gain;
+        const y = block[s]! * gain * x.trim;
         left[index]! += y * gl;
         right[index]! += y * gr;
       }

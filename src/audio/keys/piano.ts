@@ -162,6 +162,11 @@ export type PianoNoteOn = Readonly<{
    * the unstruck string's aftersound.
    */
   soft?: number;
+  /**
+   * Song calibration (q08); 1+ keeps the hammer contact shorter than the
+   * fundamental's period and levels on what the hammer excites.
+   */
+  calibration?: number;
 }>;
 
 type Rattle = {
@@ -242,8 +247,13 @@ export class PianoVoice {
           )
         : 1;
     if (soft > 0) after = clamp(after + (1 - after) * 0.4 * soft, 0, 0.95);
+    const calibrated = (note.calibration ?? 0) >= 1;
+    // Calibration 1: a contact longer than about 0.6 of the fundamental's
+    // period puts the pulse's first spectral null under partial 1, and
+    // the upper keys came out as hammer noise (40 dB down at C7).
+    const contactMs = calibrated ? Math.min(thMs, 600 / f1) : thMs;
     this.pulse = hammerPulse(
-      Math.max(2, Math.round(thMs * 1e-3 * sr)),
+      Math.max(2, Math.round(contactMs * 1e-3 * sr)),
       1 + 2 * v * p.hardness,
     );
     const strings = stringsFor(key);
@@ -311,10 +321,20 @@ export class PianoVoice {
     // amplitude) is made up so the extra loss stays about 1 dB.
     if (soft > 0)
       loud *= (1 - 0.3 * soft) * Math.sqrt(sum0 / Math.max(sumW, 1e-9));
-    const G = (0.35 * loud) / Math.sqrt(Math.max(energy, 1e-9));
     const mags = candidates.map(
       (c) => pulseMag(this.pulse, (TAU * c.hz) / sr) * Math.abs(c.u),
     );
+    // Calibration 1 levels on the partials the hammer actually excites
+    // (as the electric keys do), so the hammer filter no longer sets the
+    // level; legacy levels on the unfiltered strike.
+    const heard = calibrated
+      ? mags.reduce((sum, m) => sum + m * m, 0) /
+        Math.max(
+          1e-12,
+          candidates.reduce((sum, c) => sum + c.u * c.u, 0),
+        )
+      : 1;
+    const G = (0.35 * loud) / Math.sqrt(Math.max(energy * heard, 1e-9));
     const peak = Math.max(0, ...mags);
     candidates.forEach((c, i) => {
       // Below -80 dB after the hammer filter: not worth a mode.
