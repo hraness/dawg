@@ -176,6 +176,57 @@ describe("/vocal pitch", () => {
     expect(again.next!.tracks.at(-1)!.id).toBe("vox-notes-2");
   });
 
+  test("guide notes land where renderClips plays the clip (track time, take nudge, reverse)", async () => {
+    const base = clipScore().toJSON() as never as {
+      tracks: Record<string, unknown>[];
+    };
+    const take = {
+      name: "t1",
+      src: "tracks/vox/samples/lead.wav",
+      sha256: sha,
+      startTick: 1920,
+      offset: 0,
+      latency: 0,
+      nudge: 100,
+      inTick: 0,
+      outTick: 1920,
+    };
+    const track = base.tracks[0]!;
+    const clip = (track.clips as Record<string, unknown>[])[0]!;
+    const score = createScore({
+      ...base,
+      tracks: [
+        {
+          ...track,
+          time: { rate: 2 },
+          takes: [take],
+          clips: [{ ...clip, take: "t1" }],
+        },
+      ],
+    } as never);
+    const result = await run(score, "/vocal notes");
+    const notes = result.next!.notes.filter((n) => n.trackId === "vox-notes");
+    // rate 2 plays the clip at song tick 960; the take nudges it 100 ms late
+    const start = secondsAtTick(score, 960) + 0.1;
+    const first = notes[0]!;
+    expect(first.pitch).toBe(song[0]!.midi);
+    expect(
+      Math.abs(secondsAtTick(score, first.startTick) - start - song[0]!.start),
+    ).toBeLessThan(0.08);
+    // reversed: the last sung note comes first, and ticks stay ordered
+    const reversed = createScore({
+      ...base,
+      tracks: [{ ...track, clips: [{ ...clip, rev: true }] }],
+    } as never);
+    const rev = await run(reversed, "/vocal notes");
+    const revNotes = rev.next!.notes.filter((n) => n.trackId === "vox-notes");
+    const last = song.at(-1)!;
+    expect(revNotes.some((n) => n.pitch === last.midi)).toBe(true);
+    for (const note of revNotes) expect(note.durationTicks).toBeGreaterThan(0);
+    const sorted = [...revNotes].sort((a, b) => a.startTick - b.startTick);
+    expect(sorted[0]!.pitch).toBe(last.midi);
+  });
+
   test("a long take's trace covers the whole window within MAX_TRACE_POINTS", async () => {
     const report = await analyzeTrackPitch(clipScore(), "vox", root);
     const frames = Math.round(600 / report.curve.hop);

@@ -18,6 +18,7 @@ import {
   type Track,
   type TrackInput,
 } from "../../core/score.ts";
+import { clipSongTick } from "../../core/clips.ts";
 import { estimateKey } from "../../core/key.ts";
 import { barTicks } from "../../core/sections.ts";
 import { secondsAtTick, tickAtSeconds } from "../../core/tempo.ts";
@@ -267,8 +268,20 @@ function songSeconds(
   voiceStart: number,
 ): number {
   const clip = currentClip(score, report);
-  if (clip) return secondsAtTick(score, clip.startTick) + t - report.from;
-  return voiceStart + t;
+  if (!clip) return voiceStart + t;
+  // As renderClips places it: track time, the take's nudge and clock drift,
+  // and a reversed clip playing its window backwards.
+  const track = score.tracks.find((item) => item.id === report.trackId);
+  const take = clip.take
+    ? track?.takes?.find((item) => item.name === clip.take)
+    : undefined;
+  const drift = 1 + (take?.ppm ?? 0) / 1e6;
+  const into = clip.rev ? report.to - t : t - report.from;
+  return (
+    secondsAtTick(score, clipSongTick(clip, track?.time)) +
+    (take?.nudge ?? 0) / 1000 +
+    into / drift
+  );
 }
 
 /**
@@ -302,14 +315,12 @@ export function guideNotesScore(
     if (notes.length >= room) break;
     const a = Math.max(note.start, report.from);
     const b = Math.min(note.end, report.to);
-    const startTick = Math.round(
-      tickAtSeconds(score, songSeconds(score, report, a, voiceStart)),
-    );
+    const at = songSeconds(score, report, a, voiceStart);
+    const until = songSeconds(score, report, b, voiceStart);
+    const startTick = Math.round(tickAtSeconds(score, Math.min(at, until)));
     const endTick = Math.min(
       end,
-      Math.round(
-        tickAtSeconds(score, songSeconds(score, report, b, voiceStart)),
-      ),
+      Math.round(tickAtSeconds(score, Math.max(at, until))),
     );
     if (startTick < 0 || startTick >= end) continue;
     notes.push({
@@ -374,6 +385,8 @@ export function pitchTracePoints(
     });
     if (points.length >= MAX_TRACE_POINTS) break;
   }
+  // A reversed clip plays its window backwards; the highway wants beat order.
+  if (report.target.clip?.rev) points.reverse();
   return points;
 }
 
