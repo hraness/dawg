@@ -3250,7 +3250,9 @@ function clipTick(value: unknown, label: string): number {
     value < 0 ||
     value > SCORE_LIMITS.maxTick
   )
-    throw clipError(`${label} must be an integer tick 0..${SCORE_LIMITS.maxTick}`);
+    throw clipError(
+      `${label} must be an integer tick 0..${SCORE_LIMITS.maxTick}`,
+    );
   return value;
 }
 
@@ -3344,7 +3346,9 @@ export function normalizeClipSay(
     throw clipError(`${label} say.cuts and say.vowels must be the same length`);
   cuts.forEach((cut, index) => {
     if (cut > vowels[index]!)
-      throw clipError(`${label} say.cuts[${index}] must be <= say.vowels[${index}]`);
+      throw clipError(
+        `${label} say.cuts[${index}] must be <= say.vowels[${index}]`,
+      );
   });
   let unvoiced: number[] | undefined;
   if (input.unvoiced !== undefined) {
@@ -3535,7 +3539,12 @@ export function normalizeClips(
       0,
       fadeMax,
     );
-    const fadeTime = clipNumber(value.fadeTime, `${label} fadeTime`, 0, fadeMax);
+    const fadeTime = clipNumber(
+      value.fadeTime,
+      `${label} fadeTime`,
+      0,
+      fadeMax,
+    );
     if (dur !== undefined && (fadeInTime ?? 0) + (fadeTime ?? 0) > dur)
       throw clipError(`${label} fadeInTime + fadeTime must fit within dur`);
     const rev = clipBool(value.rev, `${label} rev`);
