@@ -2,8 +2,9 @@
  * The fixed per-track effects chain (`FX_CHAIN` in core/fx.ts):
  *
  *   filter → djf → autofilter → vowel → crush → distort → stomp → head →
- *   cab → tremolo →
- *   compressor → pan → phaser → chorus → leslie → postgain → delay → reverb
+ *   cab → wobble → bloom → swell → tremolo →
+ *   compressor → pan → double → phaser → chorus → leslie → postgain →
+ *   delay → reverb
  *
  * Stages before pan run on the mono voice sum; pan spreads it to stereo;
  * the rest run on the stereo pair. Disabled stages cost nothing.
@@ -12,6 +13,7 @@ import { FX_CHAIN, type FxName, type FxValues } from "../../../core/fx.ts";
 import type { Track } from "../../../core/score.ts";
 import type { EffectContext } from "./common.ts";
 import { applyCrush, applyDistort } from "./drive.ts";
+import { applyBloom, applyDouble, applySwell, applyWobble } from "./gaze.ts";
 import { applyCompressor, applyPostgain, applyTremolo } from "./dynamics.ts";
 import {
   applyAutoFilter,
@@ -32,7 +34,16 @@ export {
   reverbWet,
   type ReverbWet,
 } from "./space.ts";
-export { interpolateAutomation, type EffectContext } from "./common.ts";
+export {
+  interpolateAutomation,
+  type EffectContext,
+  type EffectNote,
+} from "./common.ts";
+
+/** Whether `track` has a stage that reads `EffectContext.notes`. */
+export function needsEffectNotes(track: Track | undefined): boolean {
+  return Boolean(track?.fx?.bloom || track?.fx?.swell);
+}
 
 type MonoStage = (
   buffer: Float64Array,
@@ -57,11 +68,15 @@ const MONO: Readonly<Partial<Record<FxName, MonoStage>>> = Object.freeze({
   stomp: applyStomp,
   head: applyHead,
   cab: applyCab,
+  wobble: applyWobble,
+  bloom: applyBloom,
+  swell: applySwell,
   tremolo: applyTremolo,
   compressor: applyCompressor,
 });
 
 const STEREO: Readonly<Partial<Record<FxName, StereoStage>>> = Object.freeze({
+  double: applyDouble,
   phaser: applyPhaser,
   chorus: applyChorus,
   leslie: applyLeslie,

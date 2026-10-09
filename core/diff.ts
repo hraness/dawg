@@ -46,6 +46,8 @@ const EFFECTS = [
   "modal",
   "softPedal",
   "sostenuto",
+  // f061-guitar: fretting setup.
+  "guitar",
 ] as const;
 const LANES = [
   "volumeAutomation",

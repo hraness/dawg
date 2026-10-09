@@ -47,6 +47,7 @@ import {
   RIG_PRESETS,
   RIG_STAGES,
   rigPresetOf,
+  SHOEGAZE_EFFECTS,
   effectPresetNames,
   effectSpec,
   type EffectName,
@@ -126,6 +127,8 @@ import {
   PROGRESSION_STYLES,
   SCALE_NAMES,
   SPREADS,
+  STROKE_PATTERN_NAMES,
+  GUITAR_TUNING_NAMES,
   keyName,
   parseKey,
 } from "../../core/chords.ts";
@@ -137,6 +140,7 @@ import {
   type Tuning,
 } from "../../core/tuning.ts";
 import { rootName, tuningStepsText } from "../commands/tuning.ts";
+import { describeGuitar } from "../commands/strum.ts";
 import {
   granularBrowseNodes,
   granularMenuDetail,
@@ -146,6 +150,7 @@ import {
 import {
   ARP_RATES,
   CHORD_MODES,
+  STROKE_SPEED_MS,
   defaultChordSettings,
   type ChordSettings,
 } from "./play-chords.ts";
@@ -554,10 +559,29 @@ function soundSectionNodes(context: MenuContext): MenuNode[] {
           },
         ]
       : [];
+  // 0.6.1: fretting for strum and the guitar perform mode, on guitar-like
+  // tracks (a string voice, a rig, or a guitar setup already stored).
+  const guitar: MenuNode[] =
+    track &&
+    (track.guitar ||
+      track.string ||
+      RIG_STAGES.some((stage) => track.fx?.[stage] !== undefined))
+      ? [
+          {
+            kind: "menu",
+            id: "guitar",
+            label: "guitar",
+            detail: describeGuitar(track.guitar),
+            help: "tuning, capo, hand stretch, ringing open strings and position for strum and chords perform guitar",
+            build: (inner) => guitarNodes(focused(inner)),
+          },
+        ]
+      : [];
   return [
     ...parameterNodes(context),
     ...granular,
     ...keys,
+    ...guitar,
     ...tuning,
     {
       kind: "menu",
@@ -574,6 +598,84 @@ function soundSectionNodes(context: MenuContext): MenuNode[] {
       detail: soundsDetail(focused(context)),
       help: "instruments, wavetables, sample packs",
       build: soundNodes,
+    },
+  ];
+}
+
+/** Sound > guitar: Track.guitar rows plus a strum action. */
+function guitarNodes(track: Track | undefined): MenuNode[] {
+  if (!track) return [];
+  const g = track.guitar;
+  const tune = g?.tune ?? "standard";
+  const tuneName = typeof tune === "string" ? tune : tune.join(" ");
+  const int = (
+    label: string,
+    field: "capo" | "hand" | "position",
+    min: number,
+    max: number,
+    fallback: number,
+    help: string,
+  ): MenuNode => ({
+    kind: "number",
+    label,
+    help,
+    value: g?.[field] ?? fallback,
+    min,
+    max,
+    step: linear(1, min, max),
+    format: (value) => num(Math.round(value)),
+    command: (value) => `guitar ${field} ${Math.round(value)}`,
+  });
+  return [
+    {
+      kind: "choice",
+      label: "tune",
+      help: "open strings; type guitar tune D A D G A D for your own",
+      value: tuneName,
+      options: (GUITAR_TUNING_NAMES as readonly string[]).includes(tuneName)
+        ? GUITAR_TUNING_NAMES
+        : [tuneName, ...GUITAR_TUNING_NAMES],
+      command: (option) => `guitar tune ${option}`,
+    },
+    int(
+      "capo",
+      "capo",
+      0,
+      12,
+      0,
+      "capo fret; chord shapes sound this many semitones up",
+    ),
+    int("hand", "hand", 3, 6, 4, "how many frets one hand shape may span"),
+    {
+      kind: "number",
+      label: "ring",
+      help: "0 closed shapes .. 1 lets open strings ring",
+      value: g?.ring ?? 0.5,
+      min: 0,
+      max: 1,
+      step: linear(0.1, 0, 1),
+      format: (value) => num(value),
+      command: (value) => `guitar ring ${Math.round(value * 10) / 10}`,
+    },
+    int(
+      "position",
+      "position",
+      0,
+      12,
+      0,
+      "preferred fret position for voicings",
+    ),
+    {
+      kind: "action",
+      label: "strum the chords on this track",
+      command: "strum",
+      help: "replaces block chords with strummed guitar notes",
+    },
+    {
+      kind: "action",
+      label: "reset",
+      command: "guitar reset",
+      help: "standard tuning, no capo",
     },
   ];
 }
@@ -885,6 +987,34 @@ function chordNodes(context: MenuContext): MenuNode[] {
       options: CHORD_PATTERNS.map((pattern) => pattern.name),
       command: (option) => `/chords pattern ${option}`,
     },
+    // Strum grid and speed only act when perform is guitar.
+    ...(chords.perform !== "guitar"
+      ? []
+      : ([
+          {
+            kind: "choice",
+            label: "strokes",
+            help: "guitar strum grid (D down, U up, d u light, x chuck, - rest); type /chords strokes D-DU-UDU for your own",
+            value: chords.strokes,
+            options: (STROKE_PATTERN_NAMES as readonly string[]).includes(
+              chords.strokes,
+            )
+              ? STROKE_PATTERN_NAMES
+              : [chords.strokes, ...STROKE_PATTERN_NAMES],
+            command: (option) => `/chords strokes ${option}`,
+          },
+          {
+            kind: "number",
+            label: "speed",
+            help: "ms a full down stroke takes (0 hits every string at once); type /chords speed 1/32b to set it in beats",
+            value: chords.speed,
+            min: STROKE_SPEED_MS.min,
+            max: STROKE_SPEED_MS.max,
+            step: linear(1, STROKE_SPEED_MS.min, STROKE_SPEED_MS.max),
+            format: (value) => `${num(value)} ms`,
+            command: (value) => `/chords speed ${Math.round(value)}ms`,
+          },
+        ] satisfies MenuNode[])),
     {
       kind: "choice",
       label: "arp rate",
@@ -1588,9 +1718,28 @@ function effectNodes(context: MenuContext): MenuNode[] {
     };
   };
   const rigStages = RIG_STAGES as readonly string[];
+  // 0.6.1 shoegaze stages get their own sub-menu.
+  const gaze = SHOEGAZE_EFFECTS as readonly string[];
   const more = EFFECT_NAMES.filter(
-    (effect) => !CORE_EFFECTS.includes(effect) && !rigStages.includes(effect),
+    (effect) =>
+      !CORE_EFFECTS.includes(effect) &&
+      !rigStages.includes(effect) &&
+      !gaze.includes(effect),
   );
+  const gazeOn = SHOEGAZE_EFFECTS.filter((effect) =>
+    effectValues(track, effect),
+  );
+  const shoegaze: MenuNode = {
+    kind: "menu",
+    id: "shoegaze",
+    label: "Shoegaze",
+    help: "wobble (tremolo-arm bend), bloom (feedback), swell (volume swell), double (two takes); `rig shoegaze` loads them all",
+    detail:
+      gazeOn.length === 0
+        ? "off"
+        : gazeOn.map((effect) => effectSpec(effect).label).join(", "),
+    build: () => SHOEGAZE_EFFECTS.map(node),
+  };
   const moreOn = more.filter((effect) => effectValues(track, effect));
   // 0.6 guitar rig: stomp → head (with its gate) → cab, plus whole rigs.
   const rigOn = RIG_STAGES.filter((stage) => effectValues(track, stage));
@@ -1619,6 +1768,7 @@ function effectNodes(context: MenuContext): MenuNode[] {
   return [
     ...CORE_EFFECTS.map(node),
     rig,
+    shoegaze,
     {
       kind: "menu",
       id: "more effects",

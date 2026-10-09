@@ -203,7 +203,7 @@ describe("fx reverb ir (convolution)", () => {
 
 describe("unknown effect", () => {
   test("a short fx command with an unknown effect answers locally", () => {
-    expect(unknownFxMessage("fx wobble on")).toContain("unknown effect wobble");
+    expect(unknownFxMessage("fx wobbel on")).toContain("unknown effect wobbel");
     expect(unknownFxMessage("fx dela mix 0.3")).toContain("did you mean");
     expect(unknownFxMessage("fx chorus on")).toBeUndefined();
     expect(unknownFxMessage("fx amp 3")).toBeUndefined();

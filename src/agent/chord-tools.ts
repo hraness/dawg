@@ -12,8 +12,12 @@ import {
   generateProgression,
   keyName,
   parseKey,
+  DEFAULT_STROKE_SPEED,
+  GUITAR_TUNING_NAMES,
   PERFORM_MODES,
   PROGRESSION_PRESETS,
+  STROKE_PATTERN_NAMES,
+  strokeGrid,
   PROGRESSION_STYLES,
   renderProgression,
   resolveChord,
@@ -27,6 +31,12 @@ import { midiToPitch } from "../../core/pitch.ts";
 import { resolveTuning, snapToTuning } from "../../core/tuning.ts";
 import { SCORE_LIMITS, type ScoreOperation } from "../../core/score.ts";
 import type { AgentTool, ToolContext } from "./tools.ts";
+import {
+  applyGuitarCommand,
+  parseGuitarCommand,
+  planStrum,
+  StrumError,
+} from "../commands/strum.ts";
 
 /** Most notes one write_chords call may add (arpeggios multiply fast). */
 export const MAX_CHORD_NOTES = 512;
@@ -193,7 +203,9 @@ export const CHORD_TOOLS: readonly AgentTool[] = Object.freeze([
         perform: { type: "string", enum: [...PERFORM_MODES] },
         rate: { ...num, description: "arp step, beats" },
         octaves: int,
-        strum: num,
+        strum: { ...num, description: "strum/strum-up gap, beats" },
+        strokes: { ...str, description: "perform guitar: see strum_chords" },
+        speed: { ...num, description: "perform guitar: ms per stroke" },
         velocity: num,
         pattern: { type: "string", enum: CHORD_PATTERNS.map((p) => p.name) },
         bass: bool,
@@ -225,6 +237,15 @@ export const CHORD_TOOLS: readonly AgentTool[] = Object.freeze([
       const velocity = finite(args, "velocity", 0, 1);
       const rate = finite(args, "rate", 0.0625, 4);
       const strum = finite(args, "strum", 0, 1);
+      const speedMs = finite(args, "speed", 0, 200);
+      const strokes = args.strokes;
+      if (
+        strokes !== undefined &&
+        (typeof strokes !== "string" || !strokeGrid(strokes))
+      )
+        throw new ChordToolError(
+          `strokes must be ${STROKE_PATTERN_NAMES.join(", ")} or a grid of D U d u x - .`,
+        );
       const octaves = integer(args, "octaves", 1, 4);
       const pattern = args.pattern;
       if (
@@ -259,6 +280,16 @@ export const CHORD_TOOLS: readonly AgentTool[] = Object.freeze([
           ...(velocity !== undefined ? { velocity } : {}),
           seed: integer(args, "seed", 0, 2 ** 31) ?? 0,
           ...(typeof pattern === "string" ? { pattern } : {}),
+          ...(mode === "guitar"
+            ? {
+                ...(typeof strokes === "string" ? { strokes } : {}),
+                speed: (speedMs ?? DEFAULT_STROKE_SPEED * 1000) / 1000,
+                tempo: context.score.tempoBpm,
+                ...(guitarOf(context, trackId)
+                  ? { guitar: guitarOf(context, trackId) }
+                  : {}),
+              }
+            : {}),
         },
       });
       const total = rendered.notes.length + rendered.bass.length;
@@ -308,7 +339,128 @@ export const CHORD_TOOLS: readonly AgentTool[] = Object.freeze([
       };
     },
   },
+  {
+    name: "strum_chords",
+    description: `Strum chords as fretted guitar notes (set_guitar). chords omitted strums the track's block chords. strokes ${STROKE_PATTERN_NAMES.join("|")} or a DUdux-. grid; speed ms/stroke (22); step grid beats; each beats/chord (a bar).`,
+    parameters: {
+      type: "object",
+      properties: {
+        trackId: str,
+        chords: chordsSchema,
+        strokes: str,
+        speed: num,
+        step: num,
+        each: num,
+        at: num,
+        velocity: num,
+        seed: int,
+      },
+      additionalProperties: false,
+    },
+    plan(args, context) {
+      const trackId = trackOf(args.trackId, context, "trackId");
+      const chords = args.chords;
+      if (
+        chords !== undefined &&
+        (!Array.isArray(chords) ||
+          chords.length > MAX_CHORDS ||
+          !chords.every((c) => typeof c === "string"))
+      )
+        throw new ChordToolError(`chords must be up to ${MAX_CHORDS} strings`);
+      if (args.strokes !== undefined && typeof args.strokes !== "string")
+        throw new ChordToolError("strokes must be a string");
+      const speedMs = finite(args, "speed", 0, 200);
+      const step = finite(args, "step", 1 / 32, 4);
+      const each = finite(args, "each", 1e-3, 64);
+      const at = finite(args, "at", 0, Infinity);
+      const velocity = finite(args, "velocity", 0, 1);
+      const seed = integer(args, "seed", 0, 2 ** 31);
+      try {
+        const plan = planStrum(
+          context.score,
+          trackId,
+          {
+            chords: (chords as string[] | undefined) ?? [],
+            ...(typeof args.strokes === "string"
+              ? { strokes: args.strokes }
+              : {}),
+            ...(speedMs !== undefined ? { speedMs } : {}),
+            ...(step !== undefined ? { step } : {}),
+            ...(each !== undefined ? { each } : {}),
+            ...(at !== undefined ? { at } : {}),
+            ...(velocity !== undefined ? { velocity } : {}),
+            ...(seed !== undefined ? { seed } : {}),
+          },
+          (index) => context.newNoteId(trackId, index),
+          MAX_CHORD_NOTES,
+        );
+        return {
+          kind: "score",
+          operations: plan.operations,
+          trackId,
+          summary: `${trackId} strum ${plan.names.join(" ")}`.slice(0, 160),
+        };
+      } catch (error) {
+        if (error instanceof StrumError)
+          throw new ChordToolError(error.message);
+        throw error;
+      }
+    },
+  },
+  {
+    name: "set_guitar",
+    description: `Guitar fretting for strum: tune ${GUITAR_TUNING_NAMES.join("|")} or notes low-high ("D A D G A D"), capo 0..12, hand 3..6 frets, ring 0..1, position 0..12, reset.`,
+    parameters: {
+      type: "object",
+      properties: {
+        trackId: str,
+        tune: str,
+        capo: int,
+        hand: int,
+        ring: num,
+        position: int,
+        reset: bool,
+      },
+      additionalProperties: false,
+    },
+    plan(args, context) {
+      const trackId = trackOf(args.trackId, context, "trackId");
+      let score = context.score;
+      const messages: string[] = [];
+      const run = (command: string) => {
+        const parsed = parseGuitarCommand(command);
+        const result = parsed
+          ? applyGuitarCommand(score, trackId, parsed)
+          : { ok: false, message: `cannot parse ${command}` };
+        if (!result.ok) throw new ChordToolError(result.message);
+        if ("next" in result && result.next) score = result.next;
+        messages.push(result.message);
+      };
+      if (args.reset === true) run("guitar reset");
+      if (args.tune !== undefined) run(`guitar tune ${String(args.tune)}`);
+      for (const field of ["capo", "hand", "ring", "position"] as const)
+        if (args[field] !== undefined)
+          run(`guitar ${field} ${String(args[field])}`);
+      if (messages.length === 0)
+        throw new ChordToolError(
+          "give tune, capo, hand, ring, position or reset",
+        );
+      const guitar = score.tracks.find((t) => t.id === trackId)?.guitar;
+      return {
+        kind: "score",
+        operations: [
+          { type: "updateTrack", trackId, patch: { guitar: guitar ?? null } },
+        ],
+        trackId,
+        summary: messages.at(-1)!,
+      };
+    },
+  },
 ]);
+
+function guitarOf(context: ToolContext, trackId: string) {
+  return context.score.tracks.find((track) => track.id === trackId)?.guitar;
+}
 
 function trackOf(value: unknown, context: ToolContext, label: string): string {
   const trackId = value ?? context.focusedTrackId;

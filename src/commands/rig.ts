@@ -27,6 +27,7 @@ import {
   type FxValues,
   type RigStage,
   type TrackFx,
+  SHOEGAZE_EFFECTS,
 } from "../../core/fx.ts";
 import {
   instrumentForWord,
@@ -140,7 +141,7 @@ export function parseRigCommand(prompt: string): RigCommand | undefined {
 }
 
 function describeRig(values: Readonly<Record<string, FxValues | undefined>>) {
-  return RIG_STAGES.filter((stage) => values[stage])
+  const stages = RIG_STAGES.filter((stage) => values[stage])
     .map((stage) => {
       const v = values[stage]!;
       const type = String(v.type);
@@ -148,6 +149,9 @@ function describeRig(values: Readonly<Record<string, FxValues | undefined>>) {
       return `${stage} ${type}${gain}`;
     })
     .join(" → ");
+  // 0.6.1 shoegaze stages follow the cab in the chain.
+  const gaze = SHOEGAZE_EFFECTS.filter((effect) => values[effect]);
+  return gaze.length ? `${stages} + ${gaze.join(" ")}` : stages;
 }
 
 export function applyRigCommand(

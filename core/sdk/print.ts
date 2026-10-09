@@ -853,6 +853,20 @@ function performanceEntries(score: TrackScore, track: Track): string[] {
       )}`,
     );
   }
+  if (track.guitar) {
+    const { tune, capo, hand, ring, position } = track.guitar;
+    const fields: [string, string][] = [];
+    if (tune !== undefined)
+      fields.push([
+        "tune",
+        typeof tune === "string" ? str(tune) : `[${tune.map(num).join(", ")}]`,
+      ]);
+    if (capo !== undefined) fields.push(["capo", num(capo)]);
+    if (hand !== undefined) fields.push(["hand", num(hand)]);
+    if (ring !== undefined) fields.push(["ring", num(ring)]);
+    if (position !== undefined) fields.push(["position", num(position)]);
+    entries.push(`guitar: ${obj(fields, INDENT, "guitar: ".length, 1)}`);
+  }
   return entries;
 }
 

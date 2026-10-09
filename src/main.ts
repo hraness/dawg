@@ -70,6 +70,12 @@ import {
   rigWordPatch,
 } from "./commands/rig.ts";
 import {
+  applyGuitarCommand,
+  applyStrumCommand,
+  parseGuitarCommand,
+  parseStrumCommand,
+} from "./commands/strum.ts";
+import {
   applyModalCommand,
   modalListLines,
   parseModalCommand,
@@ -312,6 +318,8 @@ function parsesLocally(text: string): boolean {
     parseTuningCommand,
     parseRigCommand,
     parseModalCommand,
+    parseGuitarCommand,
+    parseStrumCommand,
   ].some((parse) => parse(text) !== undefined);
 }
 
@@ -1656,7 +1664,11 @@ async function submit(prompt: string): Promise<string | Receipt> {
   }
   const chordsCommand = command.match(/^\/chords(?:\s+(.+))?$/i);
   if (chordsCommand) {
-    const result = applyChordsCommand(chordSettings, chordsCommand[1] ?? "");
+    const result = applyChordsCommand(
+      chordSettings,
+      chordsCommand[1] ?? "",
+      score.tempoBpm,
+    );
     return result.ok ? ok(result.message) : fail(result.message);
   }
   const countIn = command.match(/^\/count-?in\s+([0-2])$/i);
@@ -1761,6 +1773,25 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (rhythm) {
     await materializeDraft();
     const result = applyRhythmCommand(score, requestedTrack, rhythm);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
+  const guitar = parseGuitarCommand(command);
+  if (guitar) {
+    if (guitar.type !== "guitar-show" && guitar.type !== "guitar-hint")
+      await materializeDraft();
+    const result = applyGuitarCommand(score, requestedTrack, guitar);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
+  const strum = parseStrumCommand(command);
+  if (strum) {
+    if (strum.type === "strum") await materializeDraft();
+    const result = applyStrumCommand(score, requestedTrack, strum, () =>
+      randomUUID().slice(0, 12),
+    );
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
@@ -3167,7 +3198,11 @@ function stagedChordSettings(): ChordSettings | undefined {
   if (chords.length === 0) return undefined;
   const settings = { ...chordSettings };
   for (const command of chords)
-    applyChordsCommand(settings, command.match(CHORDS_COMMAND)![1]!);
+    applyChordsCommand(
+      settings,
+      command.match(CHORDS_COMMAND)![1]!,
+      score.tempoBpm,
+    );
   return settings;
 }
 
@@ -3224,7 +3259,11 @@ async function applyStaged(
   const chords = command.trim().match(CHORDS_COMMAND);
   if (chords) {
     // Window state: checked on a copy; kept settings apply on Enter.
-    const result = applyChordsCommand({ ...chordSettings }, chords[1]!);
+    const result = applyChordsCommand(
+      { ...chordSettings },
+      chords[1]!,
+      base.tempoBpm,
+    );
     return { next: base, ok: result.ok, message: result.message };
   }
   await prefetchStaged(base, command);
@@ -3417,7 +3456,11 @@ async function keepStaged(): Promise<Receipt> {
     CHORDS_COMMAND.test(command),
   );
   for (const command of chordCommands)
-    applyChordsCommand(chordSettings, command.match(CHORDS_COMMAND)![1]!);
+    applyChordsCommand(
+      chordSettings,
+      command.match(CHORDS_COMMAND)![1]!,
+      score.tempoBpm,
+    );
   const scoreCommands = taken.commands.filter(
     (command) => !CHORDS_COMMAND.test(command),
   );

@@ -46,6 +46,8 @@ import {
   applyStereoChain,
   delayTailFor,
   interpolateAutomation,
+  needsEffectNotes,
+  type EffectNote,
   reverbActive,
   reverbImpulse,
   reverbTailFor,
@@ -603,8 +605,13 @@ export class StemRenderer {
             else renderToneNote(dry, note, track, context, tuning);
           }
         }
-        if (track) applyMonoChain(dry, track, context);
-        if (stereo && track) applyMonoChain(dryR, track, context);
+        // Note-aware stages (bloom, swell) see the notes; others never do.
+        const chain =
+          track && needsEffectNotes(track)
+            ? { ...context, notes: effectNotes(played, context, tuning) }
+            : context;
+        if (track) applyMonoChain(dry, track, chain);
+        if (stereo && track) applyMonoChain(dryR, track, chain);
         applyPan(
           dry,
           target.left,
@@ -620,7 +627,7 @@ export class StemRenderer {
             target.left,
             target.right,
             track,
-            context,
+            chain,
             true,
             false,
           );
@@ -638,7 +645,7 @@ export class StemRenderer {
             target.left,
             target.right,
             track,
-            context,
+            chain,
             busOrbit === undefined,
           );
         stem = {
@@ -971,6 +978,24 @@ function trackGainAt(track: Track | undefined, tick: number): number {
     1,
   );
   return trackGain * automatedGain;
+}
+
+/** The notes as note-aware effects see them (EffectContext.notes). */
+function effectNotes(
+  notes: readonly Note[],
+  context: RenderContext,
+  tuning: TuningTable | undefined,
+): EffectNote[] {
+  return notes.map((note) => {
+    const { start, length } = noteSpan(note, context);
+    return {
+      id: note.id,
+      start,
+      length,
+      hz: noteHz(note.pitch, note.cents, tuning),
+      velocity: note.velocity,
+    };
+  });
 }
 
 function noteSpan(

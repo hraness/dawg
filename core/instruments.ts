@@ -264,6 +264,9 @@ export const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
   { word: "clav", instrument: "clav", field: "keys", preset: "clav" },
   { word: "clavinet", instrument: "clav", field: "keys", preset: "clav" },
   { word: "funkclav", instrument: "clav", field: "keys", preset: "funkclav" },
+  // f061-guitar: the shoegaze alias, an electric guitar voice plus the
+  // shoegaze rig and its long wash.
+  { word: "shoegaze", instrument: "pluck", voice: "electric", fx: "shoegaze" },
 ]);
 
 /**

@@ -8,7 +8,7 @@
  *   fx <effect> <number>                 set its first parameter (`fx orbit 2`)
  *   fx <effect> <param> <value> <param> <value>…   several at once
  *   fx reverb ir <impulse>|off           convolution reverb (Strudel `ir`):
- *                                        room|hall|plate, a pack sound or a
+ *                                        room|hall|plate|reverse|gate|spring, a pack sound or a
  *                                        project file; `fx ir hall` too
  *
  * Effects are every `FX_CHAIN` stage except pan (see core/fx.ts), plus

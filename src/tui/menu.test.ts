@@ -7,6 +7,7 @@ import {
 } from "../commands/expression.ts";
 import { isStageable } from "./audition.ts";
 import { EditMenu, type MenuContext } from "./menu.ts";
+import { defaultChordSettings } from "./play-chords.ts";
 
 function applyEdit(value: TrackScore, command: string): TrackScore {
   const result = applyExpressionCommand(
@@ -252,6 +253,72 @@ describe("edit menu", () => {
     menu.key("\r", ctx);
     select(menu, ctx, "type");
     expect(menu.key(RIGHT, ctx)).toMatchObject({ type: "run" });
+  });
+
+  test("Effects > Shoegaze lists wobble, bloom, swell and double", () => {
+    const menu = new EditMenu();
+    const ctx = context();
+    menu.show(ctx);
+    select(menu, ctx, "Effects");
+    menu.key("\r", ctx);
+    select(menu, ctx, "Shoegaze");
+    menu.key("\r", ctx);
+    expect(menu.view(ctx).title).toBe("menu › Effects › Shoegaze");
+    const labels = menu.view(ctx).items.map((row) => row.label);
+    expect(labels).toHaveLength(4);
+    expect(labels[0]).toStartWith("Wobble");
+  });
+
+  test("Sound > guitar sets tuning and capo on a guitar track", () => {
+    const value = createScore({
+      tempoBpm: 120,
+      tracks: [
+        {
+          id: "keys",
+          name: "gtr",
+          instrument: "string",
+          string: { preset: "steel" },
+          guitar: { capo: 2 },
+        },
+      ],
+    });
+    const menu = new EditMenu();
+    const ctx = context(value);
+    menu.show(ctx, "sound");
+    select(menu, ctx, "guitar");
+    menu.key("\r", ctx);
+    expect(menu.view(ctx).title).toBe("menu › Sound › guitar");
+    select(menu, ctx, "tune");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "guitar tune dropd",
+    });
+    select(menu, ctx, "capo");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "guitar capo 3",
+    });
+  });
+
+  test("Chords lists strokes and speed only when perform is guitar", () => {
+    const menu = new EditMenu();
+    const plain = context();
+    menu.show(plain, "chords");
+    const labels = menu.view(plain).items.map((row) => row.label);
+    expect(labels.some((label) => label.startsWith("strokes"))).toBe(false);
+    expect(labels.some((label) => label.startsWith("speed"))).toBe(false);
+    const ctx: MenuContext = {
+      ...context(),
+      chords: { ...defaultChordSettings(), perform: "guitar" },
+    };
+    menu.show(ctx, "chords");
+    select(menu, ctx, "strokes");
+    expect(menu.key(RIGHT, ctx)).toMatchObject({ type: "run" });
+    select(menu, ctx, "speed");
+    expect(menu.key(RIGHT, ctx)).toEqual({
+      type: "run",
+      command: "/chords speed 23ms",
+    });
   });
 
   test("nudges run the command the row shows, with the field's step", () => {

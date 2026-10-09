@@ -35,6 +35,10 @@ import {
   EXTENSIONS,
   MAX_VOICING_STEP,
   PERFORM_MODES,
+  DEFAULT_STROKE_SPEED,
+  STROKE_PATTERN_NAMES,
+  strokeGrid,
+  type PerformOptions,
   PROGRESSION_PRESETS,
   PROGRESSION_STYLES,
   SPREADS,
@@ -100,6 +104,10 @@ export type ChordSettings = {
   /** `none` or a PROGRESSION_PRESETS name; drives the "next" suggestion. */
   preset: string;
   style: ProgressionStyle;
+  /** Guitar perform mode: a STROKE_PATTERNS name or a D U d u x - . grid. */
+  strokes: string;
+  /** Guitar perform mode: ms a full six-string down stroke takes. */
+  speed: number;
 };
 
 export function defaultChordSettings(): ChordSettings {
@@ -116,7 +124,43 @@ export function defaultChordSettings(): ChordSettings {
     sevenths: false,
     preset: "none",
     style: "pop",
+    strokes: "down",
+    speed: DEFAULT_STROKE_SPEED * 1000,
   };
+}
+
+/** Play mode's `[` / `]` strum speed step in ms. */
+export const STROKE_SPEED_STEP = 5;
+
+/** Strum speed bounds in ms (0 = every string at once). */
+export const STROKE_SPEED_MS = Object.freeze({ min: 0, max: 200 });
+
+/**
+ * A strum speed from `/chords speed` text: milliseconds (`22`, `22ms`) or
+ * beats (`1/32b`, `0.05b`) at `bpm`. Undefined when not a speed.
+ */
+export function parseStrokeSpeed(
+  text: string | undefined,
+  bpm: number,
+): number | undefined {
+  const raw = (text ?? "").trim().toLowerCase();
+  const beats = /^(\d+(?:\.\d+)?)(?:\/(\d+))?\s*(?:b|beats?)$/.exec(raw);
+  let ms: number;
+  if (beats) {
+    const value = Number(beats[1]) / (beats[2] ? Number(beats[2]) : 1);
+    ms = (value * 60_000) / bpm;
+  } else {
+    const plain = /^(\d+(?:\.\d+)?)\s*(?:ms)?$/.exec(raw);
+    if (!plain) return undefined;
+    ms = Number(plain[1]);
+  }
+  if (
+    !Number.isFinite(ms) ||
+    ms < STROKE_SPEED_MS.min ||
+    ms > STROKE_SPEED_MS.max
+  )
+    return undefined;
+  return Math.round(ms * 10) / 10;
 }
 
 /**
@@ -235,6 +279,16 @@ export class ChordPad {
       const index = PERFORM_MODES.indexOf(s.perform);
       s.perform = PERFORM_MODES[(index + 1) % PERFORM_MODES.length]!;
       return { type: "status", status: `perform ${s.perform}` };
+    }
+    if ((value === "[" || value === "]") && s.perform === "guitar") {
+      // Strum speed: slower ([) or faster (]) in 5 ms steps.
+      const wanted =
+        s.speed + (value === "[" ? STROKE_SPEED_STEP : -STROKE_SPEED_STEP);
+      s.speed = Math.max(
+        STROKE_SPEED_MS.min,
+        Math.min(STROKE_SPEED_MS.max, Math.round(wanted)),
+      );
+      return { type: "status", status: `strum speed ${s.speed}ms` };
     }
     if (value === "b") {
       const index = BASS_MODES.indexOf(s.bass);
@@ -392,6 +446,9 @@ export class ChordPad {
       { key: "0", label: "clear", on: false },
       { key: "-=", label: `voicing ${signed(s.inversion)}`, on: false },
       { key: "9", label: perform, on: false },
+      ...(s.perform === "guitar"
+        ? [{ key: "[]", label: `speed ${s.speed}ms`, on: false }]
+        : []),
       { key: "b", label: `bass ${s.bass}`, on: false },
       { key: "n", label: "next", on: false },
       { key: "q", label: s.mode === "auto" ? "auto" : "manual", on: false },
@@ -412,6 +469,8 @@ export class ChordPad {
     if (s.spread !== "close") parts.push(s.spread);
     if (s.perform === "pattern")
       parts.push(`pattern ${patternLabel(s.pattern)}`);
+    else if (s.perform === "guitar")
+      parts.push(`guitar ${s.strokes} ${s.speed}ms`);
     else if (s.perform !== "block") parts.push(s.perform);
     if (s.bass !== "off") parts.push(`bass ${s.bass}`);
     return parts.join(" · ");
@@ -435,15 +494,18 @@ function signed(value: number): string {
 /**
  * `/chords …`: `auto|manual|off`, `voicing <-12..12>`, `spread <close|open|
  * wide>`, `bass off|chords|unison|single|solo` (`on` = chords), `perform
- * <mode>`, `pattern <1..13|name>`, `rate <grid|1/8…>`, `octaves
+ * <mode>`, `pattern <1..13|name>`, `strokes <name|D-DU-UDU>` (guitar
+ * mode), `speed <ms|1/32b>`, `rate <grid|1/8…>`, `octaves
  * <1..4>`, `sevenths on|off`, `preset <name|none>`, `style <pop|jazz|…>`.
  * Mutates `settings`; returns the receipt or an error.
  */
 export function applyChordsCommand(
   settings: ChordSettings,
   argument: string,
+  bpm = 120,
 ): { ok: boolean; message: string } {
-  const words = argument.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const raw = argument.trim().split(/\s+/).filter(Boolean);
+  const words = raw.map((word) => word.toLowerCase());
   const [head, value] = words;
   const done = (message: string) => ({ ok: true, message });
   const bad = (message: string) => ({ ok: false, message });
@@ -505,6 +567,28 @@ export function applyChordsCommand(
         return bad(`rate takes ${ARP_RATES.join("|")}`);
       settings.rate = value as ArpRate;
       return done(`chords rate ${value}`);
+    case "strokes": {
+      // Case matters: D is a full down stroke, d a light one.
+      const grid = raw.slice(1).join("");
+      if (!strokeGrid(grid))
+        return bad(
+          `strokes takes ${STROKE_PATTERN_NAMES.join("|")} or a grid of D U d u x - .`,
+        );
+      settings.strokes = (STROKE_PATTERN_NAMES as readonly string[]).includes(
+        grid.toLowerCase(),
+      )
+        ? grid.toLowerCase()
+        : grid;
+      settings.perform = "guitar";
+      return done(`chords strokes ${settings.strokes}`);
+    }
+    case "speed": {
+      const ms = parseStrokeSpeed(words.slice(1).join(""), bpm);
+      if (ms === undefined)
+        return bad("speed takes 0..200 ms (22, 22ms) or beats (1/32b)");
+      settings.speed = ms;
+      return done(`chords speed ${ms}ms`);
+    }
     case "octaves": {
       const n = Number(value);
       if (!Number.isInteger(n) || n < 1 || n > 4)
@@ -526,7 +610,7 @@ export function applyChordsCommand(
       return done(`chords style ${value}`);
     default:
       return bad(
-        "/chords auto|manual|off · voicing · spread · bass · perform · pattern · rate · octaves · sevenths · preset · style",
+        "/chords auto|manual|off · voicing · spread · bass · perform · pattern · strokes · speed · rate · octaves · sevenths · preset · style",
       );
   }
 }
@@ -539,6 +623,8 @@ export function chordsSummary(settings: ChordSettings): string {
     s.spread,
     s.perform,
     `pattern ${patternLabel(s.pattern)}`,
+    `strokes ${s.strokes}`,
+    `speed ${s.speed}ms`,
     `rate ${s.rate}`,
     `octaves ${s.octaves}`,
     `bass ${s.bass}`,
@@ -603,6 +689,7 @@ export function chordPhrase(
       seed: 1,
       velocity: 0.8,
       ...(mode === "pattern" ? { pattern: settings.pattern } : {}),
+      ...(mode === "guitar" ? guitarPerform(settings, score, track) : {}),
     },
   });
   // With chords off a key plays one note: the root, in the chord's octave.
@@ -629,4 +716,18 @@ export function chordPhrase(
     });
   }
   return notes;
+}
+
+/** Perform options for the guitar mode: strokes, speed, tempo and fretting. */
+export function guitarPerform(
+  settings: Pick<ChordSettings, "strokes" | "speed">,
+  score: Pick<TrackScore, "tempoBpm">,
+  track: Pick<Track, "guitar"> | undefined,
+): Partial<PerformOptions> {
+  return {
+    strokes: settings.strokes,
+    speed: settings.speed / 1000,
+    tempo: score.tempoBpm,
+    ...(track?.guitar ? { guitar: track.guitar } : {}),
+  };
 }
