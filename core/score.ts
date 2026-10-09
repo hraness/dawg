@@ -35,7 +35,7 @@ import {
   normalizeGranular,
   type TrackGranular,
 } from "./granular.ts";
-import { normalizeKeys, type TrackKeys } from "./keys.ts";
+import { isKeysFamily, normalizeKeys, type TrackKeys } from "./keys.ts";
 import { GUITAR_TUNING_NAMES } from "./chords.ts";
 import {
   checkSongTime,
@@ -1331,6 +1331,14 @@ export function updateTrack(
       // (`wind` included) without a wind field leaves the wind engine.
       if (patch.instrument !== undefined && patch.wind === undefined)
         delete next.wind;
+      // Keys settings only belong to a keys family (piano, electric, organ):
+      // switching to another instrument drops them unless the patch sets them.
+      if (
+        patch.instrument !== undefined &&
+        patch.keys === undefined &&
+        !isKeysFamily(patch.instrument)
+      )
+        delete next.keys;
       return next as Track;
     }),
   );

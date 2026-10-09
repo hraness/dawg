@@ -318,3 +318,30 @@ describe("TrackScore", () => {
       expect(() => score.withBars(bars)).toThrow("bars must be an integer");
   });
 });
+
+describe("instrument switch drops keys settings (0.6.1)", () => {
+  test("leaving a keys family drops Track.keys; staying keeps it", () => {
+    const score = createScore({
+      tempoBpm: 120,
+      bars: 1,
+      tracks: [
+        {
+          id: "o",
+          name: "o",
+          instrument: "tonewheel",
+          keys: { preset: "gospel", rotary: "fast" },
+        },
+      ],
+      notes: [],
+    });
+    const organ = updateTrack(score, "o", { instrument: "combo" });
+    expect(organ.tracks[0]!.keys).toEqual({ preset: "gospel", rotary: "fast" });
+    const wind = updateTrack(score, "o", {
+      instrument: "wind",
+      wind: { preset: "sax" },
+    });
+    expect(wind.tracks[0]!.keys).toBeUndefined();
+    const bowed = updateTrack(score, "o", { instrument: "string" });
+    expect(bowed.tracks[0]!.keys).toBeUndefined();
+  });
+});
