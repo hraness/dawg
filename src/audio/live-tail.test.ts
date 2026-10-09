@@ -64,7 +64,7 @@ describe("live note tails (q08)", () => {
           expect(a.releaseSeconds).toBe(b.releaseSeconds);
         }
     }
-  });
+  }, 30_000); // a sweep of full renders; CI runners take ~7 s
 
   // The budget the reviewer measured as 21 ms warm: a deterministic proxy
   // (rendered frames), not wall-clock time. A damped grand key at 48 kHz
