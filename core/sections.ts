@@ -15,6 +15,7 @@ import { DRUM_VOICES, isDrumInstrument } from "./drums.ts";
 import { FX_LANES } from "./fx.ts";
 import { resolveString } from "./strings.ts";
 import { modalSettings } from "./resonators.ts";
+import { slicePedals } from "./expression.ts";
 import {
   SCORE_LIMITS,
   withNoteCap,
@@ -432,7 +433,10 @@ export function sectionScore(score: TrackScore, section: Section): TrackScore {
     time: timed.time ?? null,
     bars: section.bars,
     tracks: score.tracks.map((track) =>
-      mapAutomation(track, (points) => cropPoints(points, from, to)),
+      slicePedals(
+        mapAutomation(track, (points) => cropPoints(points, from, to)),
+        [{ from, to, offset: 0 }],
+      ),
     ),
     notes,
     sections: [],
@@ -1251,7 +1255,9 @@ export function arrangedSlice(
     tempoBpm: timed.tempoBpm,
     time: timed.time ?? null,
     bars,
-    tracks: score.tracks.map((track) => sliceLanes(track, pieces)),
+    tracks: score.tracks.map((track) =>
+      slicePedals(sliceLanes(track, pieces), pieces),
+    ),
     notes: arrangedNotes(score, fromBar, fromBar + noteBars).map((note) => ({
       ...note,
       startTick: note.startTick - shift,

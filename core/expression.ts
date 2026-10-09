@@ -555,6 +555,80 @@ export function pedalStateAt(
   return state;
 }
 
+/** A stretch of song ticks `[from, to)` placed at `offset` in a slice. */
+export type PedalPiece = Readonly<{ from: number; to: number; offset: number }>;
+
+/**
+ * Pedal events for a slice made of `pieces` (a render window, a section
+ * pass, an audition region): the state in force at each piece's start is
+ * restated at its offset (`carry`, for sustain and una corda; sostenuto
+ * passes false, since a pedal already down latches no key struck later),
+ * events inside the piece move by `offset - from`, and a pedal still down
+ * at the piece's end is lifted there. Undefined when nothing is left.
+ */
+export function slicePedal(
+  events: readonly PedalEvent[] | undefined,
+  pieces: readonly PedalPiece[],
+  carry = true,
+): readonly PedalEvent[] | undefined {
+  if (!events || events.length === 0) return events;
+  const byTick = new Map<number, PedalEvent>();
+  const put = (tick: number, state: PedalState) =>
+    byTick.set(tick, Object.freeze({ tick, state }));
+  for (const { from, to, offset } of pieces) {
+    let state: PedalState = "up";
+    if (carry)
+      for (const event of events) {
+        if (event.tick >= from) break;
+        state = event.state;
+      }
+    // Restate up too: the previous piece may have ended with it down.
+    if (state !== "up" || byTick.size > 0) put(offset, state);
+    for (const event of events) {
+      if (event.tick < from || event.tick >= to) continue;
+      put(event.tick - from + offset, event.state);
+      state = event.state;
+    }
+    if (state !== "up" && Number.isFinite(to)) put(offset + to - from, "up");
+  }
+  const out = [...byTick.values()].sort((a, b) => a.tick - b.tick);
+  // Drop events that restate the state already in force.
+  const kept: PedalEvent[] = [];
+  let last: PedalState = "up";
+  for (const event of out)
+    if (event.state !== last) {
+      kept.push(event);
+      last = event.state;
+    }
+  return kept.length > 0 ? Object.freeze(kept) : undefined;
+}
+
+/** The track with its three pedal lanes cut to `pieces` (see slicePedal). */
+export function slicePedals<T extends PedalTrack>(
+  track: T,
+  pieces: readonly PedalPiece[],
+): T {
+  if (!track.pedal && !track.softPedal && !track.sostenuto) return track;
+  const out: Record<string, unknown> = { ...track };
+  for (const [field, carry] of [
+    ["pedal", true],
+    ["softPedal", true],
+    ["sostenuto", false],
+  ] as const) {
+    if (!track[field]) continue;
+    const next = slicePedal(track[field], pieces, carry);
+    if (next) out[field] = next;
+    else delete out[field];
+  }
+  return out as T;
+}
+
+type PedalTrack = Readonly<{
+  pedal?: readonly PedalEvent[];
+  softPedal?: readonly PedalEvent[];
+  sostenuto?: readonly PedalEvent[];
+}>;
+
 // ---------------------------------------------------------------------------
 // Performance
 

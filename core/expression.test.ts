@@ -19,6 +19,7 @@ import {
   tunedTiming,
   vibratoAt,
   type PerformedNote,
+  slicePedal,
 } from "./expression.ts";
 import {
   createScore,
@@ -730,5 +731,28 @@ describe("TB-303 slide", () => {
     ]);
     expect(notes).toHaveLength(1);
     expect(notes[0]!.performance!.accent).toBe(true);
+  });
+});
+
+describe("slicePedal (0.6.1)", () => {
+  test("carries the state at the cut, shifts events and lifts at the end", () => {
+    const events = [
+      { tick: 0, state: "down" as const },
+      { tick: 1000, state: "up" as const },
+      { tick: 2000, state: "half" as const },
+    ];
+    expect(slicePedal(events, [{ from: 500, to: 2500, offset: 0 }])).toEqual([
+      { tick: 0, state: "down" },
+      { tick: 500, state: "up" },
+      { tick: 1500, state: "half" },
+      { tick: 2000, state: "up" },
+    ]);
+    // Sostenuto does not carry: a pedal down before the cut latches nothing.
+    expect(
+      slicePedal(events, [{ from: 500, to: 900, offset: 0 }], false),
+    ).toBeUndefined();
+    expect(slicePedal(undefined, [{ from: 0, to: 10, offset: 0 }])).toBe(
+      undefined,
+    );
   });
 });

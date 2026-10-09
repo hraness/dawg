@@ -16,6 +16,7 @@
  * wavetables so position changes are audible.
  */
 import { isDrumInstrument } from "../../core/drums.ts";
+import { slicePedals } from "../../core/expression.ts";
 import type { SongMaster } from "../../core/master.ts";
 import { MODES, parseKey } from "../../core/chords.ts";
 import { rhythmVoicePitch } from "../../core/rhythm.ts";
@@ -287,7 +288,7 @@ function sliceTrack(track: Track, start: number, end: number): Track {
         lanes[name] = sliceLane(points, start, end);
     sliced.fxAutomation = lanes;
   }
-  return sliced as Track;
+  return slicePedals(sliced as Track, [{ from: start, to: end, offset: 0 }]);
 }
 
 /**
