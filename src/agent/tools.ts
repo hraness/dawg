@@ -1,3 +1,4 @@
+import { instrumentForWord } from "../../core/instruments.ts";
 import {
   AUTOMATION_PARAMETERS,
   automationPoints,
@@ -1598,14 +1599,17 @@ function knownNoteId(value: unknown, context: ToolContext, label: string) {
 }
 
 function instrumentName(value: unknown): string {
+  // 0.6 instrument words resolve first; legacy words resolve to themselves.
+  const resolved =
+    typeof value === "string" ? instrumentForWord(value) : undefined;
   if (
-    typeof value !== "string" ||
-    !(AVAILABLE_INSTRUMENTS as readonly string[]).includes(value)
+    resolved === undefined ||
+    !(AVAILABLE_INSTRUMENTS as readonly string[]).includes(resolved)
   )
     throw new ToolArgumentError(
       `instrument must be one of ${AVAILABLE_INSTRUMENTS.join(", ")}`,
     );
-  return value;
+  return resolved;
 }
 
 function pitch(value: unknown, label: string): number {

@@ -1,3 +1,4 @@
+import { instrumentForWord } from "../../core/instruments.ts";
 import { pitchToMidi } from "../../core/pitch.ts";
 import { SCORE_LIMITS } from "../../core/score.ts";
 
@@ -75,7 +76,10 @@ export function parsePrompt(prompt: string): AgentOperation | undefined {
     /^(?:instrument|sound|voice)\s+([a-z0-9._ -]{1,64})$/,
   );
   if (instrument)
-    return { type: "track", patch: { instrument: instrument[1]!.trim() } };
+    return {
+      type: "track",
+      patch: { instrument: instrumentForWord(instrument[1]!.trim()) },
+    };
   if (/^(?:mute|silence)\b/.test(text))
     return { type: "track", patch: { muted: true } };
   if (/^(?:unmute|unsilence)\b/.test(text))
