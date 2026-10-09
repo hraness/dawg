@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.21.0";
+export const SDK_VERSION = "1.22.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -1641,14 +1641,177 @@ export type AutomationInput = Readonly<{
   wt?: readonly Point[];
 }>;
 
+/**
+ * Every rig preset (SDK 1.22.0), kept equal to `RIG_PRESETS` in
+ * core/fx.ts by `print-rig.test.ts`: the stomp, head and cab stages plus
+ * the companion effects a few rigs need (funk's and wah's autofilter,
+ * bachata's chorus, jangle's compressor). `spring`'s short room is the
+ * track's `reverb`, not `fx`: give it as
+ * `reverb: { mix: 0.3, size: 0.35, fade: 1.5, predelay: 0, dim: 3500 }`.
+ */
+export const RIG_PRESETS: Readonly<
+  Record<
+    string,
+    Readonly<
+      Record<"stomp" | "head" | "cab", EffectParams | undefined> &
+        Readonly<Record<string, EffectParams | undefined>>
+    >
+  >
+> = Object.freeze({
+  clean: {
+    stomp: undefined,
+    head: { type: "clean", gain: 3, treble: 6 },
+    cab: { type: "1x12" },
+  },
+  crunch: {
+    stomp: undefined,
+    head: { type: "crunch", gain: 5 },
+    cab: { type: "4x12" },
+  },
+  punk: {
+    stomp: undefined,
+    head: { type: "crunch", gain: 7, mid: 6, master: 6 },
+    cab: { type: "4x12", mic: 0.2 },
+  },
+  ragged: {
+    stomp: { type: "face", gain: 6, tone: 0.6 },
+    head: { type: "chime", gain: 4 },
+    cab: { type: "2x12" },
+  },
+  lead: {
+    stomp: { type: "od", gain: 3, tone: 0.5, level: 3 },
+    head: { type: "lead", gain: 6, mid: 6 },
+    cab: { type: "4x12" },
+  },
+  metal: {
+    stomp: { type: "od", gain: 0, tone: 0.6, level: 6 },
+    head: { type: "high", gain: 7, bass: 6, mid: 3, treble: 7, gate: -55 },
+    cab: { type: "4x12", mic: 0.2 },
+  },
+  fuzz: {
+    stomp: { type: "fuzz", gain: 7, tone: 0.5 },
+    head: { type: "clean", gain: 4 },
+    cab: { type: "2x12" },
+  },
+  octave: {
+    stomp: { type: "octave", gain: 6, tone: 0.6, octave: 0.8 },
+    head: { type: "clean", gain: 3 },
+    cab: { type: "1x12" },
+  },
+  funk: {
+    stomp: undefined,
+    head: { type: "clean", gain: 2, treble: 7, presence: 6 },
+    cab: { type: "2x12" },
+    autofilter: {
+      type: "bpf",
+      sync: 0,
+      rate: 0.01,
+      depth: 0,
+      follow: 3,
+      cutoff: 500,
+      resonance: 0.6,
+    },
+  },
+  wah: {
+    stomp: undefined,
+    head: { type: "crunch", gain: 4 },
+    cab: { type: "2x12" },
+    autofilter: {
+      type: "bpf",
+      sync: 0.5,
+      depth: 2,
+      shape: "sine",
+      cutoff: 700,
+      resonance: 0.6,
+    },
+  },
+  bachata: {
+    stomp: undefined,
+    head: { type: "clean", gain: 2, mid: 6, treble: 7 },
+    cab: { type: "1x12", mic: 0.2 },
+    chorus: { rate: 0.8, depth: 0.25, mix: 0.3 },
+  },
+  spring: {
+    stomp: undefined,
+    head: { type: "clean", gain: 3, treble: 6 },
+    cab: { type: "open" },
+  },
+  bassdrive: {
+    stomp: { type: "od", gain: 4, tone: 0.5, mix: 0.6 },
+    head: { type: "bass", gain: 4 },
+    cab: { type: "8x10" },
+  },
+  reese: {
+    stomp: { type: "rat", gain: 3, tone: 0.3, mix: 0.5 },
+    head: { type: "bass", gain: 6, master: 6 },
+    cab: { type: "1x15" },
+  },
+  jangle: {
+    stomp: undefined,
+    head: { type: "chime", gain: 3, treble: 7 },
+    cab: { type: "2x12", mic: 0.2 },
+    compressor: { threshold: -20, ratio: 4, attack: 0.01, release: 0.15 },
+  },
+  alt: {
+    stomp: { type: "rat", gain: 6, tone: 0.4 },
+    head: { type: "crunch", gain: 4 },
+    cab: { type: "4x12" },
+  },
+});
+
+/**
+ * A guitar rig for a track's `fx` (SDK 1.22.0): the stomp → head → cab
+ * stages of rig preset `name` and its companion effects (as the `rig`
+ * command sets them), with optional per-stage overrides. Spread it
+ * into `fx` next to other effects:
+ *
+ * ```ts
+ * fx: { ...rig("crunch"), chorus: {} }
+ * fx: { ...rig("metal", { head: { gain: 9 } }) }
+ * ```
+ */
+export function rig(
+  name: string,
+  overrides: Readonly<
+    Partial<Record<"stomp" | "head" | "cab", EffectParams>>
+  > = {},
+): FxInput {
+  if (
+    typeof name !== "string" ||
+    !Object.prototype.hasOwnProperty.call(RIG_PRESETS, name)
+  )
+    throw new DawgSdkError(
+      `unknown rig "${String(name)}" (rigs: ${Object.keys(RIG_PRESETS).join(", ")})`,
+    );
+  if (!isRecord(overrides))
+    throw new DawgSdkError("rig overrides must be an object");
+  const out: Record<string, EffectParams> = {};
+  // Companion effects first, then the stages in chain order.
+  for (const [effect, values] of Object.entries(RIG_PRESETS[name]!))
+    if (values && effect !== "stomp" && effect !== "head" && effect !== "cab")
+      out[effect] = Object.freeze({ ...values });
+  for (const stage of ["stomp", "head", "cab"] as const) {
+    const base = RIG_PRESETS[name]![stage];
+    const extra = overrides[stage];
+    if (extra !== undefined && !isRecord(extra))
+      throw new DawgSdkError(`rig ${stage} overrides must be an object`);
+    if (base || extra)
+      out[stage] = Object.freeze({ ...(base ?? {}), ...(extra ?? {}) });
+  }
+  return Object.freeze(out);
+}
+
 /** One effect's parameters; omitted ones take dawg's defaults. */
 export type EffectParams = Readonly<Record<string, number | string | boolean>>;
 
 /**
  * Insert effects by name, rendered in the fixed chain order
- * filter → djf → autofilter → vowel → crush → distort → tremolo →
- * compressor → pan → phaser → chorus → leslie → postgain → delay → reverb.
- * Keys here: djf, autofilter, vowel, crush, distort, tremolo, compressor,
+ * filter → djf → autofilter → vowel → crush → distort → stomp → head →
+ * cab → tremolo → compressor → pan → phaser → chorus → leslie → postgain →
+ * delay → reverb. The guitar rig (stomp, head, cab; SDK 1.22.0) is easiest
+ * as `...rig("crunch")`.
+ * Keys here: djf, autofilter, vowel, crush, distort, stomp, head, cab,
+ * tremolo, compressor,
  * phaser, chorus, leslie, postgain, plus the mix-bus keys `orbit`
  * (`{ orbit: 2 }`, SDK 1.9.0) and `duck` (`{ orbit: 2, depth: 0.85 }`:
  * this track's onsets duck every other track on that orbit). See
@@ -2294,7 +2457,18 @@ export function track(input: TrackInput): TrackSpec {
             ? {}
             : { ir: reverbIr(input.reverb.ir, name, slug) }),
         });
-  const fx = fxInput(input.fx, name);
+  // A guitar alias (`instrument: "jangle"`) also loads its rig; stages and
+  // effects the track's own `fx` names win.
+  const aliasRig =
+    typeof rawInstrument === "string"
+      ? resolveInstrumentWord(rawInstrument)?.fx
+      : undefined;
+  const fx = fxInput(
+    aliasRig === undefined
+      ? input.fx
+      : { ...rig(aliasRig), ...(isRecord(input.fx) ? input.fx : {}) },
+    name,
+  );
   const synth = synthInput(input.synth, name);
   // A string preset word (`"nylon"`) turns the engine on with its preset.
   const string =
@@ -3971,7 +4145,15 @@ type InstrumentWord = Readonly<{
 }>;
 
 /** A word and what it means. */
-type InstrumentWordRow = Readonly<{ word: string }> & InstrumentWord;
+type InstrumentWordRow = Readonly<{
+  word: string;
+  /**
+   * Borrow the voice (instrument, field, preset) of this other word's row
+   * when it exists; `instrument` is the fallback when it does not.
+   */
+  voice?: string;
+}> &
+  InstrumentWord;
 
 /**
  * Words that keep their pre-0.6 meaning forever: they resolve to
@@ -4070,6 +4252,23 @@ const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
     preset: "dulcimer",
   },
   { word: "sehtar", instrument: "string", field: "string", preset: "setar" },
+  // f06-rig: guitar track aliases, a guitar voice plus a whole rig. The
+  // voice is the strings lane's `electric` row (jangle: its 12-string
+  // `jangle` preset); the pluck only while that row is absent. Never `lead`
+  // or `bass`.
+  {
+    word: "jangle",
+    instrument: "string",
+    field: "string",
+    preset: "jangle",
+    fx: "jangle",
+  },
+  { word: "punk", instrument: "pluck", voice: "electric", fx: "punk" },
+  { word: "funk", instrument: "pluck", voice: "electric", fx: "funk" },
+  { word: "ragged", instrument: "pluck", voice: "electric", fx: "ragged" },
+  { word: "gtr-lead", instrument: "pluck", voice: "electric", fx: "lead" },
+  { word: "gtr-metal", instrument: "pluck", voice: "electric", fx: "metal" },
+  { word: "bachata", instrument: "pluck", voice: "electric", fx: "bachata" },
 ]);
 
 /**
@@ -4080,8 +4279,18 @@ function resolveInstrumentWord(word: string): InstrumentWord | undefined {
   if (LEGACY_WORDS.includes(word)) return Object.freeze({ instrument: word });
   const row = INSTRUMENT_WORDS.find((entry) => entry.word === word);
   if (!row) return undefined;
-  const { word: _word, ...meaning } = row;
-  return Object.freeze(meaning);
+  const { word: _word, voice, ...meaning } = row;
+  const borrowed =
+    voice === undefined
+      ? undefined
+      : INSTRUMENT_WORDS.find((entry) => entry.word === voice && !entry.voice);
+  if (!borrowed) return Object.freeze(meaning);
+  return Object.freeze({
+    instrument: borrowed.instrument,
+    ...(borrowed.field === undefined ? {} : { field: borrowed.field }),
+    ...(borrowed.preset === undefined ? {} : { preset: borrowed.preset }),
+    ...(meaning.fx === undefined ? {} : { fx: meaning.fx }),
+  });
 }
 
 /** The `Track.instrument` value a word stores (the word itself if unknown). */

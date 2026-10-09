@@ -35,16 +35,26 @@ import {
 import {
   EFFECT_NAMES,
   FX_PRESETS,
+  RIG_STAGES,
   effectSpec,
   type EffectName,
 } from "../../core/fx.ts";
+import {
+  RIG_PRESET_NAMES,
+  applyRigCommand,
+  parseRigCommand,
+  rigTrackFields,
+  rigWordPatch,
+} from "../commands/rig.ts";
 import {
   applyFxCommand,
   effectPatch,
   effectValues,
   parseEffectName,
   parseParamName,
+  parseFxCommand,
   type FxCommand,
+  type FxResult,
 } from "../commands/fx.ts";
 import type { ChatTool } from "./gateway.ts";
 import { MEDIA_TOOLS } from "../media/tools.ts";
@@ -453,9 +463,14 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
     plan(args, context) {
       const trackId = targetTrack(args, context);
       const patch = instrumentName(args.instrument);
+      const track = context.score.tracks.find((t) => t.id === trackId);
+      // A guitar alias (`jangle`, `gtr-metal`…) also loads its rig.
+      const rig = rigWordPatch(String(args.instrument), track?.fx);
       return {
         kind: "score",
-        operations: [{ type: "updateTrack", trackId, patch }],
+        operations: [
+          { type: "updateTrack", trackId, patch: { ...patch, ...rig } },
+        ],
         trackId,
         summary: `${trackId} → ${patch.string?.preset ?? patch.instrument}`,
       };
@@ -651,6 +666,92 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
         ],
         trackId,
         summary: `${trackId} ${result.message}`,
+      };
+    },
+  },
+  {
+    name: "set_rig",
+    description:
+      "Guitar rig on a track (stomp → amp head with noise gate → speaker cab, before tremolo). rig loads a whole rig (clean crunch punk ragged lead metal fuzz octave funk wah bachata spring bassdrive reese jangle alt) or reset removes it; stomp/head/cab set stage params (stomp type fuzz|face|od|rat|octave gain tone level; head type clean|chime|crunch|lead|high|solid|bass gain bass mid treble presence master sag gate(dB); cab type 1x12|2x12|4x12|1x10|open|8x10|1x15|di mic), or null removes a stage. Heads are level-matched. `amp` is Strudel gain, not this.",
+    parameters: {
+      type: "object",
+      properties: {
+        trackId: trackIdSchema,
+        rig: { type: "string", enum: [...RIG_PRESET_NAMES, "reset"] },
+        ...Object.fromEntries(
+          RIG_STAGES.map((stage) => [
+            stage,
+            {
+              type: ["object", "null"],
+              additionalProperties: { type: ["number", "string"] },
+            },
+          ]),
+        ),
+      },
+      additionalProperties: false,
+    },
+    plan(args, context) {
+      const trackId = targetTrack(args, context);
+      let score = context.score;
+      const messages: string[] = [];
+      const run = (result: FxResult) => {
+        if (!result.ok) throw new ToolArgumentError(result.message);
+        if (result.next) score = result.next;
+        messages.push(result.message);
+      };
+      if (args.rig !== undefined) {
+        if (typeof args.rig !== "string")
+          throw new ToolArgumentError("rig must be a rig name or reset");
+        const command = parseRigCommand(`rig ${args.rig}`);
+        if (!command || command.type === "rig-show")
+          throw new ToolArgumentError(
+            `rig must be one of ${RIG_PRESET_NAMES.join(", ")} or reset`,
+          );
+        run(applyRigCommand(score, trackId, command));
+      }
+      for (const stage of RIG_STAGES) {
+        const params = args[stage];
+        if (params === undefined) continue;
+        if (params === null) {
+          run(
+            applyFxCommand(score, trackId, { type: "fx-off", effect: stage }),
+          );
+          continue;
+        }
+        if (typeof params !== "object" || Array.isArray(params))
+          throw new ToolArgumentError(`${stage} must be an object or null`);
+        const words = Object.entries(params as Record<string, unknown>)
+          .map(([key, value]) => `${key} ${String(value)}`)
+          .join(" ");
+        const command = words.length
+          ? parseFxCommand(`fx ${stage} ${words}`)
+          : ({ type: "fx-on", effect: stage } as const);
+        if (!command)
+          throw new ToolArgumentError(
+            `${stage}: unknown parameter or value in ${words}`,
+          );
+        run(applyFxCommand(score, trackId, command));
+      }
+      if (messages.length === 0)
+        throw new ToolArgumentError("give rig, stomp, head or cab");
+      const next = score.tracks.find((t) => t.id === trackId)!;
+      const before = context.score.tracks.find((t) => t.id === trackId)!;
+      return {
+        kind: "score",
+        operations: [
+          {
+            type: "updateTrack",
+            trackId,
+            patch: {
+              fx: next.fx ?? null,
+              ...(next.reverb !== before.reverb
+                ? { reverb: next.reverb ?? null }
+                : {}),
+            },
+          },
+        ],
+        trackId,
+        summary: `${trackId} ${messages.join(" · ")}`,
       };
     },
   },
@@ -1214,7 +1315,18 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
           : id;
       return {
         kind: "score",
-        operations: [{ type: "addTrack", track: { id, name, ...patch } }],
+        operations: [
+          {
+            type: "addTrack",
+            track: {
+              id,
+              name,
+              ...patch,
+              // A guitar alias also starts with its rig.
+              ...rigTrackFields(String(args.instrument)),
+            },
+          },
+        ],
         trackId: id,
         summary: `+track ${id} (${instrument})`,
       };

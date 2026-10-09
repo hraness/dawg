@@ -55,6 +55,12 @@ import {
   parseExpressionCommand,
 } from "./commands/expression.ts";
 import { applyFxCommand, parseFxCommand } from "./commands/fx.ts";
+import {
+  applyRigCommand,
+  parseRigCommand,
+  rigTrackFields,
+  rigWordPatch,
+} from "./commands/rig.ts";
 import { applySynthCommand, parseSynthCommand } from "./commands/synth.ts";
 import { applyStringCommand, parseStringCommand } from "./commands/string.ts";
 import {
@@ -277,6 +283,7 @@ function parsesLocally(text: string): boolean {
     parseWavetableCommand,
     parseTimeCommand,
     parseTuningCommand,
+    parseRigCommand,
   ].some((parse) => parse(text) !== undefined);
 }
 
@@ -423,7 +430,13 @@ if (!demo && process.env.DAWG_AI !== "0" && stdout.isTTY)
 
 const initial = createScore({
   tracks: [
-    { id: requestedTrack, name: requestedTrack, instrument: initialInstrument },
+    {
+      id: requestedTrack,
+      name: requestedTrack,
+      instrument: initialInstrument,
+      // `dawg jangle`: a guitar alias starts with its voice and rig.
+      ...rigTrackFields(requestedTrack),
+    },
   ],
 });
 const sessionOptions: { sessionId?: string; setCurrent: boolean } = {
@@ -1715,6 +1728,15 @@ async function submit(prompt: string): Promise<string | Receipt> {
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
   }
+  const rig = parseRigCommand(command);
+  if (rig) {
+    if (rig.type !== "rig-show" && rig.type !== "rig-hint")
+      await materializeDraft();
+    const result = applyRigCommand(score, requestedTrack, rig);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
   const fx = parseFxCommand(command);
   if (fx) {
     if (fx.type !== "fx-list") await materializeDraft();
@@ -1954,14 +1976,24 @@ async function submit(prompt: string): Promise<string | Receipt> {
     return `bars · ${bars}`;
   }
   if (parsed.type === "track") {
+    // `instrument jangle`: a guitar alias also loads its rig.
+    const patch = parsed.word
+      ? {
+          ...parsed.patch,
+          ...rigWordPatch(
+            parsed.word,
+            score.tracks.find((t) => t.id === requestedTrack)?.fx,
+          ),
+        }
+      : parsed.patch;
     const next = applyScoreOperation(score, {
       type: "updateTrack",
       trackId: requestedTrack,
-      patch: parsed.patch,
+      patch,
     });
     await commitScore(next, "score.track", {
       trackId: requestedTrack,
-      patch: parsed.patch,
+      patch,
     });
     return `track · ${requestedTrack}`;
   }
@@ -2110,6 +2142,8 @@ async function focusTrack(trackId: string): Promise<Receipt> {
         id: trackId,
         name: trackId,
         instrument: isDrumInstrument(trackId) ? "kit" : "sine",
+        // `track jangle`, `track gtr-metal`…: a guitar voice and its rig.
+        ...rigTrackFields(trackId),
       },
     });
     await commitScore(next, "track.create", { trackId });

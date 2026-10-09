@@ -48,6 +48,7 @@ import {
   transportBarStart,
 } from "../../core/tempo.ts";
 import {
+  LiveFullRenderer,
   LiveSynth,
   MAX_LIVE_NOTE_SECONDS,
   type LiveNotePcm,
@@ -92,6 +93,8 @@ export interface LiveEngine {
   setLeadMs(ms: number | undefined): void;
   noteOn(id: number, note: LiveNotePcm): number;
   noteOff(id: number): void;
+  /** Frames of voice `id` mixed so far, or undefined once it has ended. */
+  voicePosition?(id: number): number | undefined;
   setClick(click: ClickBus | undefined): void;
 }
 
@@ -231,6 +234,9 @@ export class PlaySession {
   private degreeKey: string | undefined;
   private active = false;
   private synth: LiveSynth | undefined;
+  /** Rig voices awaiting their full render: id → released since. */
+  private readonly windows = new Map<number, boolean>();
+  private readonly fullRenderer = new LiveFullRenderer();
   private readonly pending = new Map<number, Pending>();
   /** Sustain changes while recording (Tab latch or Shift), as pedal events. */
   private pendingPedal: { beat: number; state: PedalState }[] = [];
@@ -602,7 +608,7 @@ export class PlaySession {
     if (this.synth?.rate !== engine.sampleRate)
       this.synth = new LiveSynth(engine.sampleRate);
     const score = this.host.score();
-    const pcm = this.synth.render({
+    const request = {
       score,
       trackId: this.trackId,
       pitch: note.pitch,
@@ -612,7 +618,9 @@ export class PlaySession {
       ...(score.time?.tempo
         ? { tick: loopTickAt(score, this.host.beatAt(note.atMs)) }
         : {}),
-    });
+    };
+    const synth = this.synth;
+    const pcm = synth.render(request);
     if (!pcm) return;
     if (pcm.fitting) {
       // A long fitted sample window is computing: silent, never off-pitch.
@@ -628,12 +636,30 @@ export class PlaySession {
     }
     const scheduled = engine.noteOn(id, pcm);
     this.lastLatencyMs = Math.max(0, scheduled - this.host.now());
+    // A guitar rig sounds its first window now; the rest renders after the
+    // key event and replaces the voice in place while it is still sounding.
+    this.windows.delete(id);
+    if (pcm.partial) this.windows.set(id, false);
+    // The full pass runs on a worker, in key order, so a strummed chord or a
+    // fast run never stalls key handling behind an oversampled render.
+    if (pcm.partial)
+      void this.fullRenderer.full(synth, request).then((full) => {
+        // Not after note-off: a swap would cancel the release fade.
+        if (
+          full &&
+          this.windows.get(id) === false &&
+          engine.voicePosition?.(id) !== undefined
+        )
+          engine.noteOn(id, full);
+        this.windows.delete(id);
+      });
   }
 
   private release(ids: readonly number[], atMs: number): void {
     const engine = this.host.engine();
     for (const id of ids) {
       engine?.noteOff(id);
+      if (this.windows.has(id)) this.windows.set(id, true);
       const live = this.liveChords.get(id);
       if (live) live.releaseAtMs = Math.min(live.releaseAtMs, atMs);
       const pending = this.pending.get(id);

@@ -25,7 +25,15 @@ type InstrumentWord = Readonly<{
 }>;
 
 /** A word and what it means. */
-type InstrumentWordRow = Readonly<{ word: string }> & InstrumentWord;
+type InstrumentWordRow = Readonly<{
+  word: string;
+  /**
+   * Borrow the voice (instrument, field, preset) of this other word's row
+   * when it exists; `instrument` is the fallback when it does not.
+   */
+  voice?: string;
+}> &
+  InstrumentWord;
 
 /**
  * Words that keep their pre-0.6 meaning forever: they resolve to
@@ -124,6 +132,23 @@ export const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
     preset: "dulcimer",
   },
   { word: "sehtar", instrument: "string", field: "string", preset: "setar" },
+  // f06-rig: guitar track aliases, a guitar voice plus a whole rig. The
+  // voice is the strings lane's `electric` row (jangle: its 12-string
+  // `jangle` preset); the pluck only while that row is absent. Never `lead`
+  // or `bass`.
+  {
+    word: "jangle",
+    instrument: "string",
+    field: "string",
+    preset: "jangle",
+    fx: "jangle",
+  },
+  { word: "punk", instrument: "pluck", voice: "electric", fx: "punk" },
+  { word: "funk", instrument: "pluck", voice: "electric", fx: "funk" },
+  { word: "ragged", instrument: "pluck", voice: "electric", fx: "ragged" },
+  { word: "gtr-lead", instrument: "pluck", voice: "electric", fx: "lead" },
+  { word: "gtr-metal", instrument: "pluck", voice: "electric", fx: "metal" },
+  { word: "bachata", instrument: "pluck", voice: "electric", fx: "bachata" },
 ]);
 
 /**
@@ -136,8 +161,18 @@ export function resolveInstrumentWord(
   if (LEGACY_WORDS.includes(word)) return Object.freeze({ instrument: word });
   const row = INSTRUMENT_WORDS.find((entry) => entry.word === word);
   if (!row) return undefined;
-  const { word: _word, ...meaning } = row;
-  return Object.freeze(meaning);
+  const { word: _word, voice, ...meaning } = row;
+  const borrowed =
+    voice === undefined
+      ? undefined
+      : INSTRUMENT_WORDS.find((entry) => entry.word === voice && !entry.voice);
+  if (!borrowed) return Object.freeze(meaning);
+  return Object.freeze({
+    instrument: borrowed.instrument,
+    ...(borrowed.field === undefined ? {} : { field: borrowed.field }),
+    ...(borrowed.preset === undefined ? {} : { preset: borrowed.preset }),
+    ...(meaning.fx === undefined ? {} : { fx: meaning.fx }),
+  });
 }
 
 /** The `Track.instrument` value a word stores (the word itself if unknown). */

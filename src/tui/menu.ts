@@ -43,6 +43,9 @@ import {
   CORE_EFFECTS,
   EFFECT_NAMES,
   FX_LANES,
+  RIG_PRESETS,
+  RIG_STAGES,
+  rigPresetOf,
   effectPresetNames,
   effectSpec,
   type EffectName,
@@ -1448,10 +1451,38 @@ function effectNodes(context: MenuContext): MenuNode[] {
       build: (inner) => effectParamNodes(inner, effect, false),
     };
   };
-  const more = EFFECT_NAMES.filter((effect) => !CORE_EFFECTS.includes(effect));
+  const rigStages = RIG_STAGES as readonly string[];
+  const more = EFFECT_NAMES.filter(
+    (effect) => !CORE_EFFECTS.includes(effect) && !rigStages.includes(effect),
+  );
   const moreOn = more.filter((effect) => effectValues(track, effect));
+  // 0.6 guitar rig: stomp → head (with its gate) → cab, plus whole rigs.
+  const rigOn = RIG_STAGES.filter((stage) => effectValues(track, stage));
+  const rig: MenuNode = {
+    kind: "menu",
+    id: "guitar rig",
+    label: "Guitar rig",
+    help: "stomp box, amp head with noise gate and speaker cabinet; `rig <name>` loads a whole rig",
+    detail:
+      rigOn.length === 0 ? "off" : (rigPresetOf(track.fx) ?? rigOn.join(" → ")),
+    build: (inner) => {
+      const current = focused(inner);
+      return [
+        {
+          kind: "choice",
+          label: "rig",
+          value: rigPresetOf(current?.fx) ?? "—",
+          options: [...Object.keys(RIG_PRESETS), "reset"],
+          command: (name) => `rig ${name}`,
+          help: "a whole rig (stomp, head, cab); every stage stays editable",
+        },
+        ...RIG_STAGES.map(node),
+      ];
+    },
+  };
   return [
     ...CORE_EFFECTS.map(node),
+    rig,
     {
       kind: "menu",
       id: "more effects",

@@ -49,6 +49,10 @@ export const FX_CHAIN = Object.freeze([
   "vowel",
   "crush",
   "distort",
+  // 0.6 guitar rig (stomp box, amp head with noise gate, speaker cabinet).
+  "stomp",
+  "head",
+  "cab",
   "tremolo",
   "compressor",
   "pan",
@@ -322,6 +326,171 @@ export const FX_SPECS = Object.freeze({
         doc: "linear gain after compensation (Strudel distort postgain)",
         strudel: ["distort postgain"],
       },
+    },
+  },
+  stomp: {
+    label: "stomp box",
+    doc: "guitar pedal before the amp: fuzz (Big Muff), face (Fuzz Face), od (Tube Screamer), rat, octave (Octavia); oversampled",
+    simple: ["type", "gain", "tone", "level"],
+    strudel: "(no Strudel equivalent; dawg guitar rig)",
+    params: {
+      type: {
+        kind: "enum",
+        values: ["fuzz", "face", "od", "rat", "octave"],
+        default: "od",
+        doc: "circuit: fuzz (Big Muff), face (Fuzz Face), od (Tube Screamer), rat (RAT), octave (Octavia)",
+      },
+      gain: {
+        kind: "number",
+        min: 0,
+        max: 10,
+        default: 5,
+        step: 0.25,
+        automate: true,
+        doc: "the pedal's gain / sustain / distortion knob, 0..10",
+      },
+      tone: {
+        kind: "number",
+        min: 0,
+        max: 1,
+        default: 0.5,
+        step: 0.05,
+        automate: true,
+        doc: "dark 0 .. bright 1",
+      },
+      level: {
+        kind: "number",
+        min: -24,
+        max: 12,
+        default: 0,
+        step: 0.5,
+        unit: "dB",
+        doc: "trim over a level-matched pedal (0 = bypass loudness)",
+      },
+      octave: {
+        kind: "number",
+        min: 0,
+        max: 1,
+        default: 0.7,
+        step: 0.05,
+        doc: "octave: blend of the octave-up (rectified) path",
+      },
+      mix: mix(1),
+    },
+  },
+  head: {
+    label: "amp head",
+    doc: "guitar amp: preamp stages, Yeh-Smith tone stack, power amp with sag, level-matched across types; optional noise gate",
+    simple: ["type", "gain", "bass", "mid", "treble"],
+    strudel: "(no Strudel equivalent; Strudel amp is linear gain)",
+    params: {
+      type: {
+        kind: "enum",
+        values: ["clean", "chime", "crunch", "lead", "high", "solid", "bass"],
+        default: "crunch",
+        doc: "clean (blackface), chime (AC30), crunch (plexi), lead (JCM800), high (modern high gain), solid (JC-120), bass (SVT)",
+      },
+      gain: {
+        kind: "number",
+        min: 0,
+        max: 10,
+        default: 5,
+        step: 0.25,
+        automate: true,
+        doc: "preamp gain 0..10 (level-matched: more gain, not more volume)",
+      },
+      bass: {
+        kind: "number",
+        min: 0,
+        max: 10,
+        default: 5,
+        step: 0.5,
+        doc: "tone stack bass 0..10",
+      },
+      mid: {
+        kind: "number",
+        min: 0,
+        max: 10,
+        default: 5,
+        step: 0.5,
+        doc: "tone stack mid 0..10",
+      },
+      treble: {
+        kind: "number",
+        min: 0,
+        max: 10,
+        default: 5,
+        step: 0.5,
+        doc: "tone stack treble 0..10",
+      },
+      presence: {
+        kind: "number",
+        min: 0,
+        max: 10,
+        default: 5,
+        step: 0.5,
+        doc: "power amp presence 0..10 (5 flat)",
+      },
+      master: {
+        kind: "number",
+        min: 0,
+        max: 10,
+        default: 5,
+        step: 0.25,
+        automate: true,
+        doc: "power amp drive 0..10",
+      },
+      sag: {
+        kind: "number",
+        min: 0,
+        max: 1,
+        default: 0.3,
+        step: 0.05,
+        optional: true,
+        doc: "power supply sag 0..1 (absent: the head type's own)",
+      },
+      gate: {
+        kind: "number",
+        min: -96,
+        max: 0,
+        default: -60,
+        step: 1,
+        unit: "dB",
+        optional: true,
+        doc: "noise gate threshold before the amp (absent: no gate)",
+      },
+      level: {
+        kind: "number",
+        min: -24,
+        max: 12,
+        default: 0,
+        step: 0.5,
+        unit: "dB",
+        doc: "output level after level matching",
+      },
+    },
+  },
+  cab: {
+    label: "speaker cabinet",
+    doc: "speaker cabinet and microphone (biquad model, no impulse response)",
+    simple: ["type", "mic", "mix"],
+    strudel: "(no Strudel equivalent; dawg guitar rig)",
+    params: {
+      type: {
+        kind: "enum",
+        values: ["1x12", "2x12", "4x12", "1x10", "open", "8x10", "1x15", "di"],
+        default: "2x12",
+        doc: "1x12, 2x12, 4x12, 1x10, open back, 8x10 and 1x15 bass, di (no speaker)",
+      },
+      mic: {
+        kind: "number",
+        min: 0,
+        max: 1,
+        default: 0.3,
+        step: 0.05,
+        doc: "microphone position: 0 centre (bright) .. 1 edge (dark)",
+      },
+      mix: mix(1),
     },
   },
   tremolo: {
@@ -983,6 +1152,14 @@ export const FX_PRESETS: Readonly<
       cutoff: 400,
       resonance: 0.4,
     },
+    wah: {
+      type: "bpf",
+      sync: 0.5,
+      depth: 2,
+      shape: "sine",
+      cutoff: 700,
+      resonance: 0.6,
+    },
   },
   vowel: { a: { vowel: "a" }, o: { vowel: "o" }, ee: { vowel: "i" } },
   crush: {
@@ -996,6 +1173,32 @@ export const FX_PRESETS: Readonly<
     fuzz: { drive: 7, type: "hard", tone: 3500 },
     fold: { drive: 5, type: "fold", tone: 7000, mix: 0.7 },
     shape: { drive: 5, type: "shape", tone: 9000 },
+  },
+  stomp: {
+    muff: { type: "fuzz", gain: 7, tone: 0.5 },
+    face: { type: "face", gain: 6, tone: 0.5 },
+    screamer: { type: "od", gain: 5, tone: 0.5, level: 3 },
+    rat: { type: "rat", gain: 6, tone: 0.4 },
+    octavia: { type: "octave", gain: 6, tone: 0.6, octave: 0.8 },
+    boost: { type: "od", gain: 0, tone: 0.6, level: 6 },
+  },
+  head: {
+    blackface: { type: "clean", gain: 3, treble: 6 },
+    ac: { type: "chime", gain: 4, treble: 6 },
+    plexi: { type: "crunch", gain: 5 },
+    lead: { type: "lead", gain: 6, mid: 6 },
+    modern: { type: "high", gain: 7, bass: 6, mid: 3, treble: 7, gate: -55 },
+    jc: { type: "solid", gain: 2, treble: 6 },
+    svt: { type: "bass", gain: 4, bass: 6 },
+  },
+  cab: {
+    "1x12": { type: "1x12" },
+    "2x12": { type: "2x12" },
+    "4x12": { type: "4x12" },
+    open: { type: "open" },
+    "8x10": { type: "8x10" },
+    "1x15": { type: "1x15" },
+    di: { type: "di" },
   },
   tremolo: {
     gentle: { sync: 1, depth: 0.3, shape: "sine" },
@@ -1069,6 +1272,206 @@ export const FX_PRESETS: Readonly<
     gate: { orbit: 2, depth: 1, attack: 0.05 },
   },
 } satisfies Partial<Record<EffectName, Record<string, FxValues>>>);
+
+/** The guitar rig stages, in chain order: what `rig reset` clears. */
+export const RIG_STAGES = Object.freeze(["stomp", "head", "cab"] as const);
+export type RigStage = (typeof RIG_STAGES)[number];
+
+/**
+ * Whole guitar rigs (`rig <name>`): each sets the rig stages it names over
+ * their defaults and clears the ones it leaves out. A few also set one
+ * other effect (a wah, a spring-like reverb, a chorus) the sound needs.
+ */
+export const RIG_PRESETS: Readonly<
+  Record<string, Readonly<Partial<Record<FxName | "reverb", FxValues>>>>
+> = Object.freeze({
+  clean: {
+    head: { type: "clean", gain: 3, treble: 6 },
+    cab: { type: "1x12" },
+  },
+  crunch: { head: { type: "crunch", gain: 5 }, cab: { type: "4x12" } },
+  punk: {
+    head: { type: "crunch", gain: 7, mid: 6, master: 6 },
+    cab: { type: "4x12", mic: 0.2 },
+  },
+  ragged: {
+    stomp: { type: "face", gain: 6, tone: 0.6 },
+    head: { type: "chime", gain: 4 },
+    cab: { type: "2x12" },
+  },
+  lead: {
+    stomp: { type: "od", gain: 3, tone: 0.5, level: 3 },
+    head: { type: "lead", gain: 6, mid: 6 },
+    cab: { type: "4x12" },
+  },
+  metal: {
+    stomp: { type: "od", gain: 0, tone: 0.6, level: 6 },
+    head: { type: "high", gain: 7, bass: 6, mid: 3, treble: 7, gate: -55 },
+    cab: { type: "4x12", mic: 0.2 },
+  },
+  fuzz: {
+    stomp: { type: "fuzz", gain: 7, tone: 0.5 },
+    head: { type: "clean", gain: 4 },
+    cab: { type: "2x12" },
+  },
+  octave: {
+    stomp: { type: "octave", gain: 6, tone: 0.6, octave: 0.8 },
+    head: { type: "clean", gain: 3 },
+    cab: { type: "1x12" },
+  },
+  funk: {
+    head: { type: "clean", gain: 2, treble: 7, presence: 6 },
+    cab: { type: "2x12" },
+    autofilter: {
+      type: "bpf",
+      sync: 0,
+      rate: 0.01,
+      depth: 0,
+      follow: 3,
+      cutoff: 500,
+      resonance: 0.6,
+    },
+  },
+  wah: {
+    head: { type: "crunch", gain: 4 },
+    cab: { type: "2x12" },
+    autofilter: {
+      type: "bpf",
+      sync: 0.5,
+      depth: 2,
+      shape: "sine",
+      cutoff: 700,
+      resonance: 0.6,
+    },
+  },
+  bachata: {
+    head: { type: "clean", gain: 2, mid: 6, treble: 7 },
+    cab: { type: "1x12", mic: 0.2 },
+    chorus: { rate: 0.8, depth: 0.25, mix: 0.3 },
+  },
+  spring: {
+    head: { type: "clean", gain: 3, treble: 6 },
+    cab: { type: "open" },
+    reverb: { mix: 0.3, size: 0.35, fade: 1.5, predelay: 0, dim: 3500 },
+  },
+  bassdrive: {
+    stomp: { type: "od", gain: 4, tone: 0.5, mix: 0.6 },
+    head: { type: "bass", gain: 4 },
+    cab: { type: "8x10" },
+  },
+  reese: {
+    stomp: { type: "rat", gain: 3, tone: 0.3, mix: 0.5 },
+    head: { type: "bass", gain: 6, master: 6 },
+    cab: { type: "1x15" },
+  },
+  jangle: {
+    head: { type: "chime", gain: 3, treble: 7 },
+    cab: { type: "2x12", mic: 0.2 },
+    compressor: { threshold: -20, ratio: 4, attack: 0.01, release: 0.15 },
+  },
+  alt: {
+    stomp: { type: "rat", gain: 6, tone: 0.4 },
+    head: { type: "crunch", gain: 4 },
+    cab: { type: "4x12" },
+  },
+});
+
+export function isRigPreset(name: string): boolean {
+  return Object.prototype.hasOwnProperty.call(RIG_PRESETS, name);
+}
+
+/**
+ * `fx` with rig preset `name` applied: rig stages it leaves out are
+ * removed, every stage it names is filled over its defaults, and other
+ * effects keep their values. `"reset"` removes the rig. A preset's track
+ * effect (the `spring` reverb) is not part of `fx`: see `rigReverb`.
+ */
+export function applyRigPreset(
+  fx: TrackFx | undefined,
+  name: string,
+): TrackFx | undefined {
+  const out: Record<string, unknown> = { ...(fx ?? {}) };
+  for (const stage of RIG_STAGES) delete out[stage];
+  // A previous rig's companion (funk's envelope filter, jangle's
+  // compressor…) goes with it, unless the user has changed it since.
+  for (const [effect, values] of Object.entries(out))
+    if (isRigCompanion(effect, values)) delete out[effect];
+  if (name !== "reset") {
+    if (!isRigPreset(name))
+      throw new FxValidationError(
+        `unknown rig "${name}" (rigs: ${Object.keys(RIG_PRESETS).join(", ")})`,
+      );
+    for (const [effect, values] of Object.entries(RIG_PRESETS[name]!))
+      if (isFxName(effect)) out[effect] = values;
+  }
+  return normalizeFx(out);
+}
+
+/** Normalized companion effects (not stages, not reverb) of every rig. */
+let companions: Map<string, string[]> | undefined;
+
+/** True when `values` is exactly what some rig preset writes for `effect`. */
+function isRigCompanion(effect: string, values: unknown): boolean {
+  if ((RIG_STAGES as readonly string[]).includes(effect)) return false;
+  if (!companions) {
+    companions = new Map();
+    for (const preset of Object.values(RIG_PRESETS))
+      for (const [name, raw] of Object.entries(preset)) {
+        if (!isFxName(name) || (RIG_STAGES as readonly string[]).includes(name))
+          continue;
+        const normal = normalizeFx({ [name]: raw })?.[name];
+        const list = companions.get(name) ?? [];
+        list.push(JSON.stringify(normal));
+        companions.set(name, list);
+      }
+  }
+  return companions.get(effect)?.includes(JSON.stringify(values)) ?? false;
+}
+
+/** True when `reverb` is exactly the track reverb some rig preset sets. */
+export function isRigReverb(reverb: unknown): boolean {
+  if (reverb === undefined) return false;
+  const json = JSON.stringify(reverb);
+  return Object.keys(RIG_PRESETS).some(
+    (name) => rigReverb(name) && JSON.stringify(rigReverb(name)) === json,
+  );
+}
+
+/** The track reverb a rig preset sets (spring), if any. */
+export function rigReverb(name: string): FxValues | undefined {
+  if (!isRigPreset(name)) return undefined;
+  const values = (RIG_PRESETS[name] as Record<string, FxValues | undefined>)
+    .reverb;
+  return values === undefined
+    ? undefined
+    : normalizeParams(TRACK_EFFECT_SPECS.reverb.params, values, "reverb");
+}
+
+/**
+ * The rig preset whose stages and companion effects `fx` matches exactly,
+ * if any (other effects may be present too).
+ */
+export function rigPresetOf(fx: TrackFx | undefined): string | undefined {
+  if (!fx || !RIG_STAGES.some((stage) => fx[stage])) return undefined;
+  for (const name of Object.keys(RIG_PRESETS)) {
+    const want = applyRigPreset(undefined, name) ?? {};
+    const keys = new Set([...RIG_STAGES, ...Object.keys(want)]);
+    if (
+      [...keys].every(
+        (key) =>
+          JSON.stringify(fx[key as FxName]) ===
+          JSON.stringify(want[key as FxName]),
+      )
+    )
+      return name;
+  }
+  return undefined;
+}
+
+/** The effects of `fx` a printed `...rig(name)` stands for. */
+export function rigPresetKeys(name: string): readonly FxName[] {
+  return Object.keys(RIG_PRESETS[name] ?? {}).filter(isFxName);
+}
 
 export function effectPresetNames(effect: EffectName): readonly string[] {
   return Object.keys(FX_PRESETS[effect] ?? {});
