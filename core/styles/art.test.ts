@@ -225,4 +225,35 @@ describe("family art: style theory", () => {
       expect(style.texture.roles.kick ?? null).toBeNull();
     }
   });
+  test("the anime score walks the royal road, IV-V-iii-vi", () => {
+    let found = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const g = generateStyle("anime-score", { seed, bars: 8 });
+      const numerals = g.plan.chords.map((chord) =>
+        chord.numeral.replace(/7$/, ""),
+      );
+      for (let i = 0; i + 3 < numerals.length; i += 1)
+        if (numerals.slice(i, i + 4).join("-") === "IV-V-iii-vi") found += 1;
+    }
+    expect(found).toBeGreaterThan(0);
+  });
+
+  test("the golden-age score shifts by chromatic mediant, I to bVI", () => {
+    let mediants = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const g = generateStyle("golden-age-score", { seed, bars: 8 });
+      const numerals = g.plan.chords.map((chord) => chord.numeral);
+      for (let i = 0; i + 1 < numerals.length; i += 1)
+        if (/^I7?$/.test(numerals[i]!) && /^bVI/.test(numerals[i + 1]!))
+          mediants += 1;
+    }
+    expect(mediants).toBeGreaterThan(0);
+  });
+
+  test("sound design and the noise wall carry no tune", () => {
+    for (const id of ["sound-design", "harsh-noise-wall", "onkyo"]) {
+      const style = resolveStyle(id);
+      expect(style.melody.density[0]).toBeLessThanOrEqual(0.5);
+    }
+  });
 });

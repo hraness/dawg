@@ -4018,6 +4018,907 @@ const EXPERIMENTAL_LEAVES: readonly StyleCard[] = Object.freeze([
   }),
 ]);
 
+// ---------------------------------------------------------------------------
+// Screen and stage. References: Kathryn Kalinak, "Settling the Score"
+// (1992) for the classical Hollywood model (leitmotif, mickey-mousing,
+// the stinger); Karen Collins, "Game Sound" (2008) for loop-based and
+// adaptive scoring; Ethan Mordden, "Anything Goes: A History of American
+// Musical Theatre" (2013) for the 32-bar AABA show tune.
+
+const SCREEN_LEAVES: readonly StyleCard[] = Object.freeze([
+  card({
+    id: "golden-age-score",
+    summary:
+      "the late-romantic studio orchestra: leitmotif themes over lush divided strings, chromatic-mediant shifts for scene changes, horn calls and V-I cadences that close each cue",
+    meter: {
+      signatures: [
+        ["4/4", 0.7],
+        ["3/4", 0.3],
+      ],
+    },
+    tempo: { bpm: [60, 120], typical: 84 },
+    pitch: {
+      scales: [
+        ["major", 0.5],
+        ["minor", 0.3],
+        ["lydian", 0.2],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["canon", 0.4],
+        ["turnaround", 0.3],
+        ["axis", 0.3],
+      ],
+      // The chromatic-mediant scene change: I to bVI and back through V.
+      forms: [[["I", "bVI", "IV", "V"], 1]],
+      sources: { presets: 2, forms: 1 },
+      sevenths: 0.4,
+      cadences: [
+        ["V-I", 0.7],
+        ["half", 0.3],
+      ],
+    },
+    melody: {
+      intervals: intervals(4, 2, 1.4, 0.4),
+      chordToneRate: 0.65,
+      contour: [["arch", 1]],
+    },
+    bass: {
+      behaviour: [
+        ["root", 0.6],
+        ["root-fifth", 0.4],
+      ],
+    },
+    rhythm: { onsets: { kick: grid("x...............") } },
+    texture: {
+      roles: {
+        kick: maybe("timpani"),
+        snare: null,
+        chords: role("strings", "harp:0.4"),
+        pad: maybe("strings", "horn:0.4"),
+        bass: role("contrabass", "cello:0.5"),
+        lead: role("violins", "frenchhorn:0.5", "trumpet:0.3"),
+      },
+    },
+    expression: { dynamics: [0.3, 0.95] },
+    mix: { space: 0.7 },
+  }),
+  card({
+    id: "modern-orchestral-score",
+    summary:
+      "the thematic blockbuster score: a heroic theme with rising fourths and fifths, brass on lydian I-II colour, a string ostinato driving the action under it",
+    tempo: { bpm: [80, 140], typical: 110 },
+    pitch: {
+      scales: [
+        ["lydian", 0.4],
+        ["major", 0.3],
+        ["minor", 0.3],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["axis", 0.4],
+        ["aeolian", 0.3],
+        ["mixolydian-rock", 0.3],
+      ],
+    },
+    melody: {
+      intervals: intervals(2, 1.5, 2.5, 0.3, 1.3),
+      chordToneRate: 0.7,
+      contour: [
+        ["ascending", 0.5],
+        ["arch", 0.5],
+      ],
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.....x.x......."),
+        snare: grid("....x.......x..."),
+      },
+    },
+    texture: {
+      roles: {
+        kick: role("timpani"),
+        snare: maybe("drums"),
+        chords: role("strings", "horn:0.4"),
+        bass: role("contrabasses", "tuba:0.4"),
+        lead: role("frenchhorn", "trumpet:0.5", "violins:0.4"),
+        counter: maybe("trombone", "cellos:0.5"),
+      },
+    },
+    expression: { dynamics: [0.4, 1] },
+    mix: { space: 0.65 },
+  }),
+  card({
+    id: "hybrid-trailer",
+    summary:
+      "the trailer build: a pulsing low-string ostinato on one pedal, synth rises and braams, i-VI-III-VII under a three-act crescendo to a final hit",
+    tempo: { bpm: [90, 140], typical: 120 },
+    pitch: {
+      scales: [
+        ["minor", 0.7],
+        ["phrygian", 0.3],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["aeolian", 0.6],
+        ["andalusian", 0.4],
+      ],
+      rhythm: [[1, 1]],
+    },
+    melody: {
+      density: [0.5, 1.5],
+      chordToneRate: 0.8,
+      contour: [["ascending", 1]],
+    },
+    bass: {
+      behaviour: [
+        ["pedal", 0.6],
+        ["ostinato", 0.4],
+      ],
+      range: [28, 43],
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x..x..x...x..x.."),
+        snare: grid("....x.......x..."),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("syn909", ["kick"]),
+        snare: role("timpani"),
+        arp: role("strings", "saw:0.5"),
+        chords: role("strings", "choir:0.4"),
+        pad: role("swarm", "choir:0.5"),
+        bass: role("saw", "contrabasses:0.5"),
+        lead: role("trombone", "frenchhorn:0.5", "choir:0.4"),
+      },
+    },
+    expression: { dynamics: [0.3, 1] },
+    form: {
+      plans: [[["intro", "build", "chorus", "build", "chorus", "outro"], 1]],
+      archetype: "three-act build",
+      energy: { intro: 0.3, build: 0.7, chorus: 1 },
+    },
+    mix: { fx: { kick: { distort: "crunch" } }, space: 0.6, loudness: "loud" },
+  }),
+  card({
+    id: "synth-score",
+    summary:
+      "the analogue synth score: a sequenced eighth-note ostinato on a minor pedal, slow string-machine pads, a sparse square-wave theme, drum-machine pulse",
+    tempo: { bpm: [80, 130], typical: 104 },
+    pitch: {
+      scales: [
+        ["minor", 0.5],
+        ["dorian", 0.3],
+        ["phrygian", 0.2],
+      ],
+    },
+    harmony: {
+      model: "modal",
+      rhythm: [
+        [1, 0.5],
+        [2, 0.5],
+      ],
+    },
+    melody: { density: [0.5, 1.5], repetition: 0.6, chordToneRate: 0.7 },
+    bass: { behaviour: [["ostinato", 1]], onsets: grid("x.x.x.x.x.x.x.x.") },
+    rhythm: {
+      onsets: {
+        kick: grid("x.......x......."),
+        snare: grid("....x.......x..."),
+        arp: grid("x.x.x.x.x.x.x.x."),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("syn808", ["kick", "snare"]),
+        arp: role("saw", "square:0.5"),
+        chords: null,
+        pad: role("strings", "saw:0.5"),
+        bass: role("saw", "square:0.5"),
+        lead: role("square", "triangle:0.5"),
+      },
+    },
+    mix: { fx: { pad: { chorus: "wide" } }, space: 0.55 },
+  }),
+  card({
+    id: "western-score",
+    summary:
+      "the spaghetti-western palette: a whistled or twangy electric theme in minor, open-fifth guitar strums, the andalusian descent, a galloping hoof rhythm",
+    meter: {
+      signatures: [
+        ["4/4", 0.6],
+        ["2/4", 0.4],
+      ],
+    },
+    tempo: { bpm: [80, 140], typical: 112 },
+    pitch: {
+      scales: [
+        ["minor", 0.6],
+        ["dorian", 0.4],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["andalusian", 0.6],
+        ["aeolian", 0.4],
+      ],
+      cadences: [["V-i", 1]],
+    },
+    melody: {
+      intervals: intervals(2, 1.5, 2.5, 0.6),
+      chordToneRate: 0.7,
+      repetition: 0.5,
+    },
+    bass: { behaviour: [["root-fifth", 1]] },
+    rhythm: {
+      onsets: {
+        kick: grid("x.....x.x.....x."),
+        snare: grid("....x.......x..."),
+      },
+    },
+    texture: {
+      roles: {
+        kick: role("drums"),
+        snare: maybe("drums"),
+        chords: role("nylon", "steel:0.5"),
+        pad: maybe("choir"),
+        bass: role("bassguitar", "contrabass:0.5"),
+        lead: role("whistle", "electric:0.5", "trumpet:0.4"),
+      },
+    },
+    mix: { fx: { lead: { tremolo: "gentle" } }, space: 0.75 },
+  }),
+  card({
+    id: "horror-score",
+    summary:
+      "suspense scoring: a tritone pedal, chromatic cluster stabs, the stinger after silence, high tremolo strings and a semitone-neighbour motif that never resolves",
+    tempo: { bpm: [50, 110], typical: 72 },
+    pitch: {
+      scales: [
+        ["locrian", 0.4],
+        ["phrygian", 0.3],
+        ["messiaen-2", 0.3],
+      ],
+    },
+    harmony: { model: "drone", rhythm: [[2, 1]] },
+    melody: {
+      intervals: intervals(4, 0.5, 1, 1),
+      density: [0.5, 1.5],
+      repetition: 0.7,
+      chordToneRate: 0.3,
+      ambitus: [3, 8],
+    },
+    bass: { behaviour: [["pedal", 1]], range: [28, 40] },
+    rhythm: { onsets: { kick: grid("x...............") } },
+    texture: {
+      roles: {
+        kick: maybe("timpani"),
+        snare: null,
+        chords: role("tremolo", "strings:0.5"),
+        pad: role("cloud", "choir:0.4"),
+        bass: role("contrabasses", "cellos:0.5"),
+        lead: role("violins", "prepared:0.5", "musicbox:0.4"),
+      },
+    },
+    expression: { dynamics: [0.05, 1] },
+    mix: { space: 0.8 },
+  }),
+  card({
+    id: "ambient-score",
+    summary:
+      "the minimal prestige score: a held pedal under slow modal chords, a two-note felt-piano cell repeated with space, cello sustains, swells instead of themes",
+    tempo: { bpm: [50, 84], typical: 66 },
+    pitch: {
+      scales: [
+        ["dorian", 0.4],
+        ["minor", 0.3],
+        ["lydian", 0.3],
+      ],
+    },
+    harmony: {
+      model: "modal",
+      rhythm: [
+        [2, 0.6],
+        [4, 0.4],
+      ],
+    },
+    melody: {
+      density: [0.5, 1],
+      repetition: 0.8,
+      chordToneRate: 0.8,
+      intervals: STEPWISE,
+    },
+    bass: { behaviour: [["pedal", 1]] },
+    rhythm: { onsets: { kick: grid("x...............") } },
+    texture: {
+      roles: {
+        kick: null,
+        snare: null,
+        chords: role("felt", "strings:0.4"),
+        pad: role("cloud", "strings:0.5"),
+        bass: role("cello", "contrabass:0.5"),
+        lead: role("felt", "cello:0.5"),
+      },
+    },
+    expression: { dynamics: [0.15, 0.6] },
+    mix: { fx: { pad: { swell: "slow" } }, space: 0.85, loudness: "ambient" },
+  }),
+  card({
+    id: "library-music",
+    summary:
+      "production music built to edit: steady tempo, four- and eight-bar blocks that can be cut anywhere, a clean I-V-vi-IV bed and a short ident hook",
+    meter: { signatures: [["4/4", 1]] },
+    tempo: { bpm: [90, 128], typical: 110 },
+    groove: { humanize: { timingMs: 4, velocity: 0.06 } },
+    pitch: {
+      scales: [
+        ["major", 0.8],
+        ["mixolydian", 0.2],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["axis", 0.5],
+        ["fifties", 0.3],
+        ["mixolydian-rock", 0.2],
+      ],
+      rhythm: [[1, 1]],
+    },
+    melody: { repetition: 0.8, chordToneRate: 0.75, density: [1, 2] },
+    bass: {
+      behaviour: [
+        ["root", 0.6],
+        ["root-fifth", 0.4],
+      ],
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.......x......."),
+        snare: grid("....x.......x..."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic", ["kick", "snare", "hat"]),
+        chords: role("piano", "steel:0.5"),
+        pad: maybe("strings"),
+        bass: role("bassguitar"),
+        lead: role("glockenspiel", "piano:0.5", "whistle:0.3"),
+      },
+    },
+    form: {
+      plans: [[["intro", "verse", "chorus", "verse", "chorus", "outro"], 1]],
+      archetype: "edit blocks",
+    },
+    mix: { space: 0.35 },
+  }),
+  card({
+    id: "incidental",
+    summary:
+      "underscore and cue: short phrases that sit under dialogue, a sustained bed with a motif that enters and exits, half cadences that leave the scene open",
+    tempo: { bpm: [60, 110], typical: 84 },
+    pitch: {
+      scales: [
+        ["major", 0.4],
+        ["minor", 0.4],
+        ["dorian", 0.2],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["sad-pop", 0.4],
+        ["axis", 0.3],
+        ["aeolian", 0.3],
+      ],
+      cadences: [
+        ["half", 0.7],
+        ["IV-I", 0.3],
+      ],
+    },
+    melody: { density: [0.5, 1.5], chordToneRate: 0.7, range: [55, 79] },
+    rhythm: { onsets: { kick: grid("x...............") } },
+    texture: {
+      roles: {
+        kick: null,
+        snare: null,
+        chords: role("strings", "piano:0.5"),
+        bass: role("cello", "contrabass:0.5"),
+        lead: role("clarinet", "oboe:0.5", "piano:0.4"),
+      },
+    },
+    expression: { dynamics: [0.15, 0.6] },
+    mix: { space: 0.6 },
+  }),
+  card({
+    id: "sound-design",
+    summary:
+      "designed sound rather than music: risers, impacts and whooshes built from noise and granular clouds, a sub hit on the cut, no tune",
+    tempo: { bpm: [60, 120], typical: 90 },
+    pitch: {
+      scales: [
+        ["phrygian", 0.5],
+        ["locrian", 0.5],
+      ],
+    },
+    harmony: { model: "drone", rhythm: [[4, 1]] },
+    melody: {
+      density: [0.5, 1],
+      contour: [
+        ["ascending", 0.6],
+        ["descending", 0.4],
+      ],
+      chordToneRate: 0.4,
+      intervals: ANGULAR,
+    },
+    bass: { behaviour: [["pedal", 1]], range: [24, 36] },
+    rhythm: { onsets: { kick: grid("x...........x...") } },
+    texture: {
+      roles: {
+        ...kitRoles("syn808", ["kick"]),
+        snare: null,
+        chords: null,
+        pad: role("swarm", "granular:0.6"),
+        drone: role("cloud", "grains:0.5"),
+        bass: role("saw", "triangle:0.5"),
+        lead: role("granular", "swarm:0.5", "gong:0.4"),
+      },
+    },
+    mix: { fx: { lead: { autofilter: "hpf-rise" } }, space: 0.7 },
+  }),
+  card({
+    id: "musical-theatre-golden",
+    summary:
+      "the golden-age show tune: 32-bar AABA refrain with a verse, I-vi-ii-V turnarounds, a pit orchestra with brass punctuation, the bridge modulating up",
+    meter: {
+      signatures: [
+        ["4/4", 0.7],
+        ["3/4", 0.3],
+      ],
+    },
+    tempo: { bpm: [90, 160], typical: 120 },
+    groove: { swingRatio: [1, 1.5] },
+    pitch: { scales: [["major", 1]] },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["turnaround", 0.5],
+        ["fifties", 0.3],
+        ["ii-v-i", 0.2],
+      ],
+      sevenths: 0.6,
+      cadences: [
+        ["V-I", 0.6],
+        ["ii-V-I", 0.4],
+      ],
+    },
+    melody: {
+      intervals: intervals(4, 2, 1, 0.6),
+      chordToneRate: 0.7,
+      repetition: 0.6,
+    },
+    bass: {
+      behaviour: [
+        ["root-fifth", 0.7],
+        ["walking", 0.3],
+      ],
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.......x......."),
+        snare: grid("....x.......x..."),
+      },
+    },
+    texture: {
+      roles: {
+        kick: role("drums"),
+        snare: role("drums"),
+        chords: role("piano", "strings:0.5"),
+        counter: maybe("trumpet", "trombone:0.5", "clarinet:0.4"),
+        bass: role("upright", "tuba:0.3"),
+        lead: role("vocal", "violins:0.4"),
+      },
+    },
+    form: {
+      plans: [
+        [
+          ["intro", "verse", "chorus", "chorus", "bridge", "chorus", "outro"],
+          1,
+        ],
+      ],
+      archetype: "aaba",
+    },
+    mix: { space: 0.5 },
+  }),
+  card({
+    id: "contemporary-musical",
+    summary:
+      "the pop and rock musical: verse-chorus songs with a key change for the eleven-o'clock number, rhythm section plus strings, belt range in the lead",
+    meter: { signatures: [["4/4", 1]] },
+    tempo: { bpm: [70, 140], typical: 104 },
+    pitch: {
+      scales: [
+        ["major", 0.6],
+        ["minor", 0.4],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["axis", 0.4],
+        ["sad-pop", 0.3],
+        ["canon", 0.3],
+      ],
+    },
+    melody: {
+      chordToneRate: 0.65,
+      contour: [
+        ["ascending", 0.5],
+        ["arch", 0.5],
+      ],
+      range: [57, 81],
+    },
+    bass: {
+      behaviour: [
+        ["root", 0.6],
+        ["root-fifth", 0.4],
+      ],
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.......x.x....."),
+        snare: grid("....x.......x..."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic", ["kick", "snare", "hat"]),
+        chords: role("piano", "strings:0.5"),
+        pad: maybe("strings"),
+        bass: role("bassguitar"),
+        lead: role("vocal"),
+      },
+    },
+    form: {
+      plans: [
+        [
+          [
+            "intro",
+            "verse",
+            "chorus",
+            "verse",
+            "chorus",
+            "bridge",
+            "chorus",
+            "outro",
+          ],
+          1,
+        ],
+      ],
+    },
+    mix: { space: 0.45 },
+  }),
+  card({
+    id: "cabaret",
+    summary:
+      "Weimar cabaret: a sardonic minor-key song over an oom-pah piano, chromatic passing chords and added sixths, a muted trumpet and clarinet commentary",
+    meter: {
+      signatures: [
+        ["4/4", 0.6],
+        ["3/4", 0.4],
+      ],
+    },
+    tempo: { bpm: [80, 140], typical: 108 },
+    pitch: {
+      scales: [
+        ["minor", 0.5],
+        ["harmonic-minor", 0.5],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["minor-ii-v", 0.5],
+        ["andalusian", 0.5],
+      ],
+      sevenths: 0.6,
+      cadences: [["V-i", 1]],
+    },
+    melody: { intervals: intervals(3, 2, 1.2, 0.8), chordToneRate: 0.6 },
+    bass: { behaviour: [["root-fifth", 1]] },
+    rhythm: { onsets: { chords: grid("....x.......x...") } },
+    texture: {
+      roles: {
+        kick: null,
+        snare: null,
+        chords: role("honkytonk", "piano:0.6"),
+        counter: maybe("clarinet", "trumpet:0.5"),
+        bass: role("tuba", "upright:0.5"),
+        lead: role("vocal", "violin:0.4"),
+      },
+    },
+    expression: { dynamics: [0.3, 0.85] },
+    mix: { space: 0.3 },
+  }),
+  card({
+    id: "vaudeville",
+    summary:
+      "the variety stage: a bright two-beat in major, ragtime syncopation in the melody, oom-pah tuba and banjo, stop-time breaks for the act",
+    meter: {
+      signatures: [
+        ["2/4", 0.5],
+        ["4/4", 0.5],
+      ],
+    },
+    tempo: { bpm: [100, 170], typical: 132 },
+    groove: { humanize: { timingMs: 8, velocity: 0.1 } },
+    pitch: { scales: [["major", 1]] },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["turnaround", 0.6],
+        ["fifties", 0.4],
+      ],
+      sevenths: 0.5,
+      cadences: [["V-I", 1]],
+    },
+    melody: {
+      intervals: intervals(3, 2.5, 1, 0.8),
+      chordToneRate: 0.65,
+      repetition: 0.6,
+    },
+    bass: { behaviour: [["root-fifth", 1]] },
+    rhythm: {
+      onsets: {
+        kick: grid("x.......x......."),
+        snare: grid("....x.......x..."),
+      },
+    },
+    texture: {
+      roles: {
+        kick: role("drums"),
+        snare: maybe("drums"),
+        chords: role("banjo", "honkytonk:0.6"),
+        counter: maybe("trombone", "clarinet:0.5"),
+        bass: role("tuba"),
+        lead: role("cornet", "clarinet:0.5", "vocal:0.4"),
+      },
+    },
+    mix: { space: 0.25 },
+  }),
+  card({
+    id: "ballet-score",
+    summary:
+      "music for dance: square eight-bar phrases a dancer can count, waltz and march numbers, a celesta or harp solo variation, the grand pas building to a coda",
+    meter: {
+      signatures: [
+        ["3/4", 0.5],
+        ["4/4", 0.3],
+        ["2/4", 0.2],
+      ],
+    },
+    tempo: { bpm: [72, 150], typical: 112 },
+    pitch: {
+      scales: [
+        ["major", 0.6],
+        ["minor", 0.4],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["canon", 0.4],
+        ["turnaround", 0.3],
+        ["axis", 0.3],
+      ],
+      cadences: [
+        ["V-I", 0.7],
+        ["half", 0.3],
+      ],
+    },
+    melody: {
+      intervals: intervals(4, 2, 1.2, 0.4),
+      chordToneRate: 0.7,
+      repetition: 0.55,
+    },
+    bass: {
+      behaviour: [
+        ["root", 0.5],
+        ["root-fifth", 0.5],
+      ],
+    },
+    rhythm: { onsets: { kick: grid("x...............") } },
+    texture: {
+      roles: {
+        kick: maybe("timpani"),
+        snare: null,
+        chords: role("strings", "harp:0.5"),
+        bass: role("contrabass", "cellos:0.5"),
+        lead: role("violins", "celeste:0.4", "oboe:0.4", "flute:0.4"),
+      },
+    },
+    expression: { dynamics: [0.3, 0.9] },
+    mix: { space: 0.65 },
+  }),
+  card({
+    id: "orchestral-game",
+    summary:
+      "the adaptive game score: loopable sections that layer up with the action (stems in, stems out), an ostinato bed under a heroic theme, seamless loop points",
+    tempo: { bpm: [80, 150], typical: 116 },
+    pitch: {
+      scales: [
+        ["minor", 0.4],
+        ["dorian", 0.3],
+        ["lydian", 0.3],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["aeolian", 0.4],
+        ["axis", 0.3],
+        ["dorian-vamp", 0.3],
+      ],
+    },
+    melody: { chordToneRate: 0.7, repetition: 0.6 },
+    rhythm: {
+      onsets: {
+        kick: grid("x.....x.x......."),
+        snare: grid("....x.......x..."),
+      },
+    },
+    texture: {
+      roles: {
+        kick: role("timpani"),
+        snare: maybe("drums"),
+        arp: maybe("strings", "harp:0.5"),
+        chords: role("strings", "choir:0.4"),
+        bass: role("contrabasses", "trombone:0.4"),
+        lead: role("frenchhorn", "violins:0.5", "flute:0.4"),
+      },
+    },
+    form: {
+      plans: [[["intro", "verse", "chorus", "verse", "chorus"], 1]],
+      archetype: "loop",
+    },
+    mix: { space: 0.6 },
+  }),
+  card({
+    id: "jrpg",
+    summary:
+      "the console RPG: a fast battle theme on a driving eighth-note bass ostinato, the vi-IV-I-V loop and aeolian i-VI-III-VII, a soaring lead over sixteenth-note arpeggios",
+    meter: { signatures: [["4/4", 1]] },
+    tempo: { bpm: [110, 170], typical: 144 },
+    groove: { humanize: { timingMs: 3, velocity: 0.06 } },
+    pitch: {
+      scales: [
+        ["minor", 0.5],
+        ["major", 0.3],
+        ["harmonic-minor", 0.2],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["sad-pop", 0.4],
+        ["aeolian", 0.3],
+        ["canon", 0.3],
+      ],
+      sevenths: 0.4,
+      rhythm: [[1, 1]],
+    },
+    melody: {
+      density: [2, 4],
+      chordToneRate: 0.65,
+      contour: [
+        ["arch", 0.5],
+        ["ascending", 0.5],
+      ],
+    },
+    bass: {
+      behaviour: [
+        ["ostinato", 0.6],
+        ["octave", 0.4],
+      ],
+      onsets: grid("x.x.x.x.x.x.x.x."),
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.....x.x......."),
+        snare: grid("....x.......x..."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+        arp: grid("xxxxxxxxxxxxxxxx"),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic", ["kick", "snare", "hat"]),
+        arp: role("piano", "harp:0.5", "square:0.4"),
+        chords: role("strings"),
+        bass: role("bassguitar", "square:0.4"),
+        lead: role("violins", "square:0.5", "electric@lead:0.4"),
+      },
+    },
+    mix: { space: 0.45 },
+  }),
+  card({
+    id: "anime-score",
+    summary:
+      "the anime opening and score: royal-road changes (IV-V-iii-vi), fast verses into a soaring chorus a fourth up, piano and strings over a busy kit",
+    meter: { signatures: [["4/4", 1]] },
+    tempo: { bpm: [120, 180], typical: 150 },
+    pitch: { scales: [["major", 1]] },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["sad-pop", 0.4],
+        ["canon", 0.3],
+        ["axis", 0.3],
+      ],
+      // The royal road (oudou shinkou): IV-V-iii-vi.
+      forms: [[["IV", "V", "iii", "vi"], 1]],
+      sources: { presets: 1, forms: 2 },
+      sevenths: 0.5,
+      rhythm: [[1, 1]],
+    },
+    melody: {
+      density: [2, 4],
+      chordToneRate: 0.6,
+      range: [60, 84],
+      contour: [["ascending", 1]],
+    },
+    bass: {
+      behaviour: [
+        ["octave", 0.6],
+        ["root", 0.4],
+      ],
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.....x.x......."),
+        snare: grid("....x.......x..."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic", ["kick", "snare", "hat"]),
+        chords: role("piano", "electric@crunch:0.5"),
+        pad: maybe("strings"),
+        bass: role("bassguitar"),
+        lead: role("vocal", "violins:0.4"),
+      },
+    },
+    form: {
+      plans: [
+        [
+          [
+            "intro",
+            "verse",
+            "pre",
+            "chorus",
+            "verse",
+            "pre",
+            "chorus",
+            "outro",
+          ],
+          1,
+        ],
+      ],
+    },
+    mix: { space: 0.4 },
+  }),
+]);
+
 // @@EXPORT
 export const ART_CARDS: readonly StyleCard[] = Object.freeze([
   ...BRANCH_CARDS,
@@ -4027,6 +4928,7 @@ export const ART_CARDS: readonly StyleCard[] = Object.freeze([
   ...MODERN_LEAVES,
   ...CONTEMPORARY_LEAVES,
   ...EXPERIMENTAL_LEAVES,
+  ...SCREEN_LEAVES,
   ...BAND_LEAVES,
   ...CHILDRENS_LEAVES,
 ]);
