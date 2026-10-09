@@ -751,6 +751,7 @@ export class PlaySession {
         this.trackData(),
       ),
       root: played.chord.root,
+      ...(played.chord.bass !== undefined ? { slash: played.chord.bass } : {}),
     };
   }
 
