@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.20.0";
+export const SDK_VERSION = "1.21.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -1443,7 +1443,7 @@ export function wavetable(
 export const STRING_INSTRUMENT = "string";
 
 /**
- * String engine settings (SDK 1.20.0): a `preset` (`nylon`, `steel`,
+ * String engine settings (SDK 1.21.0): a `preset` (`nylon`, `steel`,
  * `electric`, `jangle`, `ebass`, `slap`, `upright`, `sitar`, `tanpura`,
  * `harpsichord`, `lute`, `oud`, `setar`, `tar`, `santur`, `dulcimer`, `koto`,
  * `harp`, `banjo`, `tres`, `requinto`) plus any parameter to override
@@ -1458,7 +1458,7 @@ export type StringInput = Readonly<
 export type StringSpec = Readonly<{ kind: "string" } & StringInput>;
 
 /**
- * A plucked string instrument (SDK 1.20.0): a preset and overrides.
+ * A plucked string instrument (SDK 1.21.0): a preset and overrides.
  *
  * instrument: stringed("nylon")
  * instrument: stringed("sitar", { buzz: 0.8, sym: 0.5 })
@@ -1772,7 +1772,7 @@ export type TrackInput = Readonly<{
   /** Synth voice parameters, Strudel names (`{ attack: 0.01, lpf: 800 }`). */
   synth?: SynthInput;
   /**
-   * String engine (SDK 1.20.0) for an `instrument: "string"` track, or use
+   * String engine (SDK 1.21.0) for an `instrument: "string"` track, or use
    * `instrument: stringed("sitar", {...})` or a preset word (`"nylon"`).
    */
   string?: StringInput | null;
@@ -1915,7 +1915,7 @@ export type TrackSpec = Readonly<{
   synth: SynthInput | null;
   sampler: SamplerSpec | null;
   wavetable: WavetableSpec | null;
-  /** String engine settings (SDK 1.20.0); present only when set. */
+  /** String engine settings (SDK 1.21.0); present only when set. */
   string?: StringInput;
   automation: Readonly<Required<AutomationInput>>;
   /** Every hit resolved to its pitch slot. */
@@ -2779,7 +2779,7 @@ export type ScoreTrack = Readonly<{
   tuning?: ScoreTuning;
   wavetable?: Readonly<{ table: ScoreSampleRef } & WavetableParams>;
   wtAutomation?: readonly ScorePoint[];
-  /** String engine settings; dawg validates them (SDK 1.20.0). */
+  /** String engine settings; dawg validates them (SDK 1.21.0). */
   string?: StringInput;
   glide?: TrackSpec["glide"];
   pedal?: readonly Readonly<{ tick: number; state: PedalState }>[];

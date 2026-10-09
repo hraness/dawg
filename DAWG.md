@@ -755,7 +755,7 @@ instrument: stringed("sitar", { buzz: 0.8, sym: 0.5 }),
 | `string <param> off` · `string reset`      | back to the preset's value · drop every override                  |
 | `string off`                               | back to the legacy `pluck` voice                                  |
 
-The menu has the presets under Sound › browse sounds › Strings and every string parameter in Sound › Parameters on a string track (left/right adjust, `x` resets, space auditions with staged A/B). The agent's `set_string {trackId?, preset?, params?, reset?, off?}` runs the same command. SDK 1.20.0: `stringed(preset, params)` as a track's `instrument`, or `track({ instrument: "string", string: { preset: "koto", ring: 4 } })`; the printer writes `stringed(...)` back.
+The menu has the presets under Sound › browse sounds › Strings and every string parameter in Sound › Parameters on a string track (left/right adjust, `x` resets, space auditions with staged A/B). The agent's `set_string {trackId?, preset?, params?, reset?, off?}` runs the same command. SDK 1.21.0: `stringed(preset, params)` as a track's `instrument`, or `track({ instrument: "string", string: { preset: "koto", ring: 4 } })`; the printer writes `stringed(...)` back.
 
 ## Rhythm (Euclidean rows)
 
