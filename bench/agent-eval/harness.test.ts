@@ -63,7 +63,9 @@ describe("eval harness", () => {
       record("m", "c", "compose", false, 5000, 1),
     ]);
     expect(s.passRate).toBe(0.6);
-    expect(s.tiers).toEqual({ single: 1, compose: 1 / 3 });
+    // Task-weighted: a 1, b 0.5, c 0; reps do not outweigh other tasks.
+    expect(s.taskPassRate).toBe(0.5);
+    expect(s.tiers).toEqual({ single: 1, compose: 0.25 });
     expect(s.alwaysPass).toBe(1);
     expect(s.neverPass).toBe(1);
     expect(s.p50TurnMs).toBe(3000);
