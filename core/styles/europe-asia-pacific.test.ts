@@ -9,6 +9,7 @@ import { describe, expect, test } from "bun:test";
 import { EUROPE_ASIA_PACIFIC_CARDS } from "./europe-asia-pacific.ts";
 import { generateStyle, type GeneratedStyle } from "./generate.ts";
 import { resolveStyle, STYLE_CARDS, STYLE_IDS, stylePath } from "./index.ts";
+import { TAXONOMY_ROWS } from "./taxonomy.ts";
 
 const ROOTS = ["europe-folk", "east-asia", "southeast-asia", "oceania"];
 const mine = STYLE_IDS.filter((id) => ROOTS.includes(stylePath(id)[0]!));
@@ -211,4 +212,116 @@ describe("europe-asia-pacific: theory", () => {
       expect(g.plan.tracks.map((t) => t.roles).flat()).not.toContain("kick");
     }
   });
+});
+
+describe("europe-asia-pacific: critic", () => {
+  test("an aksak grouping always fills its bar, and the drum strikes it", () => {
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const g = generateStyle("bulgarian-folk", { seed, bars: 2 });
+      const { plan } = g;
+      const groups = plan.grouping ?? [];
+      expect(groups.reduce((a, b) => a + b, 0)).toBe(plan.beatsPerBar);
+      const unit = plan.barTicks / plan.beatsPerBar;
+      const starts = new Set<number>();
+      let at = 0;
+      for (const n of groups) {
+        starts.add(at);
+        at += n;
+      }
+      const perc = (g.data.notes ?? []).filter(
+        (n) => plan.noteRoles.get(n.id) === "perc",
+      );
+      expect(perc.length).toBeGreaterThan(0);
+      for (const n of perc) {
+        const beat = ((n.startTick ?? 0) % plan.barTicks) / unit;
+        expect(starts.has(mod(Math.round(beat), plan.beatsPerBar))).toBe(true);
+      }
+    }
+  });
+
+  test("Chinese zhi-mode leaves have the fourth and no major third; guqin the reverse", () => {
+    const pcs = (id: string) => {
+      const out = new Set<number>();
+      for (const seed of [1, 2, 3]) {
+        const g = generateStyle(id, { seed, bars: 4 });
+        for (const n of g.data.notes ?? [])
+          if (["lead", "counter"].includes(g.plan.noteRoles.get(n.id) ?? ""))
+            out.add(mod(n.pitch - g.plan.tonic, 12));
+      }
+      return out;
+    };
+    for (const id of ["nanguan", "chinese-classical"]) {
+      expect(pcs(id).has(4)).toBe(false);
+      expect(pcs(id).has(5)).toBe(true);
+    }
+    expect(pcs("guqin").has(5)).toBe(false);
+    expect(pcs("guqin").has(4)).toBe(true);
+  });
+
+  test("solo and chant leaves carry no bass; sevdalinka has no drum", () => {
+    for (const id of ["guqin", "honkyoku", "shomyo", "chinese-classical"])
+      expect(
+        generateStyle(id, { seed: 1, bars: 2 }).plan.tracks.flatMap(
+          (t) => t.roles,
+        ),
+      ).not.toContain("bass");
+    for (const seed of [1, 2, 3])
+      expect(
+        generateStyle("sevdalinka", { seed, bars: 2 }).plan.tracks.flatMap(
+          (t) => t.roles,
+        ),
+      ).not.toContain("perc");
+  });
+
+  test("siblings are told apart by onset, pitch-class and tempo fingerprints", () => {
+    // Per leaf, three seeds; each fingerprint must sit nearer its own
+    // centroid than any sibling's (with a 15% margin).
+    const parent = new Map(TAXONOMY_ROWS.map((r) => [r[0], r[1]]));
+    const RH = ["kick", "snare", "clap", "hat", "openhat", "rim", "tom"];
+    RH.push("perc", "shaker", "bell", "bass", "chords");
+    const PITCHED = ["bass", "chords", "lead", "counter", "pad", "arp"];
+    const fp = (id: string, seed: number): number[] => {
+      const g = generateStyle(id, { seed, bars: 8 });
+      const { plan } = g;
+      const v = [plan.bpm / 40, plan.stepsPerBar === 12 ? 2 : 0];
+      const grid = RH.map(() => new Array<number>(16).fill(0));
+      const pcs = new Array<number>(12).fill(0);
+      let n = 0;
+      for (const note of g.data.notes ?? []) {
+        const role = plan.noteRoles.get(note.id) ?? "";
+        const t = (note.startTick ?? 0) % plan.barTicks;
+        const row = grid[RH.indexOf(role)];
+        if (row) row[Math.floor((t / plan.barTicks) * 16)]! += 1 / plan.bars;
+        if (PITCHED.includes(role)) {
+          pcs[mod(note.pitch - plan.tonic, 12)]! += 1;
+          n += 1;
+        }
+      }
+      for (const row of grid) v.push(...row.map((x) => Math.min(x, 2) / 2));
+      v.push(...pcs.map((x) => (6 * x) / (n || 1)));
+      return v;
+    };
+    const dist = (a: number[], b: number[]) =>
+      Math.sqrt(a.reduce((s, x, i) => s + (x - b[i]!) ** 2, 0));
+    const prints = new Map(
+      leaves.map((id) => [id, [1, 2, 3].map((s) => fp(id, s))]),
+    );
+    const centroid = new Map(
+      [...prints].map(([id, fs]) => [
+        id,
+        fs[0]!.map((_, i) => fs.reduce((a, f) => a + f[i]!, 0) / fs.length),
+      ]),
+    );
+    const close: string[] = [];
+    for (const a of leaves)
+      for (const b of leaves) {
+        if (a === b || parent.get(a) !== parent.get(b)) continue;
+        for (const f of prints.get(a)!)
+          if (dist(f, centroid.get(b)!) <= dist(f, centroid.get(a)!) * 1.15) {
+            close.push(`${a}~${b}`);
+            break;
+          }
+      }
+    expect(close).toEqual([]);
+  }, 120_000);
 });

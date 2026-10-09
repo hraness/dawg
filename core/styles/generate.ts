@@ -50,7 +50,7 @@ import {
   type SongMaster,
 } from "../master.ts";
 import { tuningPreset, type Tuning } from "../tuning.ts";
-import { resolveStyle, stretchGrid, STYLE_TREE } from "./index.ts";
+import { resolveStyle, roleGrid, stretchGrid, STYLE_TREE } from "./index.ts";
 import {
   KIT_ROLES,
   PERC_ROLES,
@@ -836,9 +836,11 @@ function planStyle(
   const random = rng("plan");
   const signature = pickWeighted(style.meter.signatures, random);
   const [beatsPerBar, beatUnit] = parseSignature(signature);
-  const grouping = style.meter.grouping?.length
-    ? pickWeighted(style.meter.grouping, random)
-    : undefined;
+  // Only groupings that fill the bar: 2+2+3 is a 7/8, never an 11/8.
+  const fitting = style.meter.grouping?.filter(
+    ([g]) => g.reduce((a, b) => a + b, 0) === beatsPerBar,
+  );
+  const grouping = fitting?.length ? pickWeighted(fitting, random) : undefined;
   const hypermeter = Math.max(
     1,
     Math.round(pickWeighted(style.meter.hypermeter, random)),
@@ -1042,10 +1044,7 @@ function playRoles(plan: Plan, rng: (salt: string) => Random): Draft[] {
   // --- Kit and percussion grids
   const totalSteps = plan.bars * plan.stepsPerBar;
   const gridOf = (role: RoleName) => {
-    const grid = style.rhythm.onsets[role];
-    return grid && grid.length
-      ? stretchGrid(grid, plan.stepsPerBar)
-      : undefined;
+    return roleGrid(style.rhythm.onsets[role], role, plan);
   };
   const decide = (role: RoleName, random: Random) => {
     const grid = gridOf(role);

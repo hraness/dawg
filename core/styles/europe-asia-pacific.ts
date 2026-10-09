@@ -1112,6 +1112,16 @@ const EUROPE_LEAVES: readonly StyleCard[] = [
         [[2, 2, 3, 2, 2], 0.5],
       ],
     },
+    // Bulgarian dance tunes sit mostly in major, mixolydian and dorian;
+    // the augmented-second colour is Thracian, a minority here.
+    pitch: {
+      scales: [
+        ["mixolydian", 0.35],
+        ["dorian", 0.3],
+        ["major", 0.2],
+        ["hijaz", 0.15],
+      ],
+    },
     harmony: { model: "drone" },
     texture: {
       roles: {
@@ -1302,7 +1312,7 @@ const EUROPE_LEAVES: readonly StyleCard[] = [
     id: "sevdalinka",
     summary:
       "sevdalinka: slow melismatic love song, makam hijaz with an augmented second, saz and accordion-like reeds",
-    tempo: { bpm: [56, 90], typical: 70 },
+    tempo: { bpm: [50, 80], typical: 62 },
     meter: {
       signatures: [
         ["4/4", 0.6],
@@ -1323,6 +1333,8 @@ const EUROPE_LEAVES: readonly StyleCard[] = [
         chords: role("reeds", "lute:0.5"),
         lead: role("sing"),
         counter: maybe("lute"),
+        // Sung over saz and accordion; no drum (never an Irish bodhrán).
+        perc: null,
       },
     },
   }),
@@ -1528,6 +1540,21 @@ const DIEU_OAN = Object.freeze({
   },
 });
 
+/**
+ * Nanguan wukong guan: on the pipa's open string it reads 5 6 1 2 3, the
+ * zhi mode of the pentatonic (sol la do re mi on sol), so the fourth is
+ * present and the major third absent; the guqin's gong mode is the reverse.
+ */
+const WUKONG_GUAN = Object.freeze({
+  scales: [["mixolydian", 1]] as const,
+  raga: {
+    aroha: [0, 2, 5, 7, 9],
+    avaroha: [0, 2, 5, 7, 9],
+    vadi: 0,
+    samvadi: 7,
+  },
+});
+
 /** 12-TET for leaves under the slendro-tuned southeast-asia branch. */
 const TWELVE = Object.freeze({ tuning: null, degrees: null });
 
@@ -1536,8 +1563,9 @@ const ASIA_PACIFIC_LEAVES: readonly StyleCard[] = [
     id: "guqin",
     summary:
       "guqin: slow solo zither, harmonics (fanyin) and sliding stopped tones, gong-mode pentatonic, sparse sound and silence",
-    tempo: { bpm: [40, 66], typical: 50 },
+    tempo: { bpm: [38, 56], typical: 46 },
     meter: { signatures: [["4/4", 1]] },
+    pitch: { scales: [["major-pentatonic", 1]] },
     melody: {
       density: [0, 1],
       range: [48, 79],
@@ -1546,7 +1574,7 @@ const ASIA_PACIFIC_LEAVES: readonly StyleCard[] = [
     },
     texture: {
       kind: "monophonic",
-      roles: { drone: null, lead: role("koto"), counter: null },
+      roles: { drone: null, bass: null, lead: role("koto"), counter: null },
     },
     mix: { space: 0.55 },
   }),
@@ -1561,13 +1589,24 @@ const ASIA_PACIFIC_LEAVES: readonly StyleCard[] = [
         ["2/4", 0.4],
       ],
     },
-    melody: { density: [2, 3] },
+    // Jiangnan sizhu sits mostly in zhi mode (the dizi's D pieces: sol la
+    // do re mi on sol), like nanguan's wukong guan but brisk and busy.
+    pitch: WUKONG_GUAN,
+    melody: {
+      density: [2, 3],
+      finals: [
+        [0, 0.6],
+        [4, 0.4],
+      ],
+    },
     texture: {
       kind: "heterophonic",
       roles: {
         lead: role("lute", "erhu:0.6"),
         counter: role("flute", "hammered:0.5"),
         drone: null,
+        bass: null,
+        perc: null,
       },
     },
   }),
@@ -1659,7 +1698,15 @@ const ASIA_PACIFIC_LEAVES: readonly StyleCard[] = [
       "nanguan: very slow Hokkien art song, pipa held horizontally, dongxiao flute, clapper on the strong beat, long melismas",
     tempo: { bpm: [36, 56], typical: 44 },
     meter: { signatures: [["4/4", 1]] },
-    melody: { density: [0, 1], intervals: intervals(6, 3, 0.4, 0.6) },
+    pitch: WUKONG_GUAN,
+    melody: {
+      density: [0, 1],
+      intervals: intervals(6, 3, 0.4, 0.6),
+      finals: [
+        [0, 0.6],
+        [4, 0.4],
+      ],
+    },
     texture: {
       kind: "heterophonic",
       roles: {
@@ -1703,12 +1750,9 @@ const ASIA_PACIFIC_LEAVES: readonly StyleCard[] = [
       "gagaku tōgaku: shō cluster chords held over a slow jo-ha-kyū unfolding, hichiriki and ryūteki in heterophony, ritsu mode",
     tempo: { bpm: [30, 50], typical: 40 },
     meter: { signatures: [["4/4", 1]] },
-    pitch: {
-      scales: [
-        ["durga", 0.6],
-        ["mixolydian", 0.4],
-      ],
-    },
+    // Ritsu (re mi sol la do on re): the hyōjō, ōshikichō and banshikichō
+    // repertory; the ryo modes are in practice coloured toward ritsu.
+    pitch: { scales: [["durga", 1]] },
     melody: { density: [0, 1], range: [62, 84] },
     texture: {
       kind: "heterophonic",
@@ -1716,11 +1760,12 @@ const ASIA_PACIFIC_LEAVES: readonly StyleCard[] = [
         drone: role("reeds"),
         lead: role("oboe"),
         counter: role("flute"),
-        bass: maybe("koto"),
+        bass: role("koto"),
         perc: role("kettledrum"),
       },
     },
-    rhythm: { onsets: { perc: grid("x.......") } },
+    // Kakko taps lead into the taiko stroke that closes each measure.
+    rhythm: { onsets: { perc: grid("....5.5.5..5..x.") } },
     mix: { space: 0.55 },
   }),
   card({
@@ -1729,16 +1774,28 @@ const ASIA_PACIFIC_LEAVES: readonly StyleCard[] = [
       "shōmyō: Buddhist chant in unison, narrow range, long melismas on held syllables, ryo and ritsu modes, free pulse",
     tempo: { bpm: [36, 56], typical: 44 },
     meter: { signatures: [["4/4", 1]] },
-    pitch: { scales: [["durga", 1]] },
+    // Shingon and Tendai chant favour the ryo pentatonic over ritsu.
+    pitch: {
+      scales: [
+        ["major-pentatonic", 0.8],
+        ["durga", 0.2],
+      ],
+    },
+    // Melisma: several tones on each held syllable.
     melody: {
-      density: [0, 1],
+      density: [1, 2],
       ambitus: [4, 7],
       range: [48, 67],
       intervals: intervals(9, 1, 0.05, 1),
     },
     texture: {
       kind: "monophonic",
-      roles: { lead: role("choir"), drone: null, perc: maybe("bowl") },
+      roles: {
+        lead: role("choir"),
+        drone: null,
+        bass: null,
+        perc: maybe("bowl"),
+      },
     },
     rhythm: { onsets: { perc: grid("x...............") } },
     mix: { space: 0.7 },
@@ -1750,7 +1807,7 @@ const ASIA_PACIFIC_LEAVES: readonly StyleCard[] = [
     tempo: { bpm: [60, 110], typical: 80 },
     meter: { signatures: [["4/4", 1]] },
     pitch: IN_SCALE,
-    melody: { finals: IN_FINALS },
+    melody: { density: [1, 3], finals: IN_FINALS },
     texture: {
       kind: "heterophonic",
       roles: {
@@ -1771,11 +1828,15 @@ const ASIA_PACIFIC_LEAVES: readonly StyleCard[] = [
       density: [0, 1],
       phraseBars: [[1, 1]],
       contour: [["arch", 1]],
-      finals: IN_FINALS,
+      // Breaths end on ro (the tonic) or on re a fifth above.
+      finals: [
+        [0, 0.6],
+        [4, 0.4],
+      ],
     },
     texture: {
       kind: "monophonic",
-      roles: { lead: role("shakuhachi"), drone: null },
+      roles: { lead: role("shakuhachi"), drone: null, bass: null },
     },
     mix: { space: 0.65 },
   }),
@@ -1786,7 +1847,8 @@ const ASIA_PACIFIC_LEAVES: readonly StyleCard[] = [
     tempo: { bpm: [50, 80], typical: 62 },
     meter: { signatures: [["4/4", 1]], cycle: YATSU_BYOSHI },
     pitch: IN_SCALE,
-    melody: { finals: IN_FINALS },
+    // Utai moves in a narrow band around the jo, chū and ge pivot tones.
+    melody: { ambitus: [3, 7], density: [1, 2], finals: IN_FINALS },
     texture: {
       kind: "heterophonic",
       roles: {
@@ -1982,7 +2044,8 @@ const ASIA_PACIFIC_LEAVES: readonly StyleCard[] = [
       "Javanese gamelan: ladrang colotomy (gong closes the 32-beat gongan), balungan with bonang elaboration, pathet nem",
     meter: { signatures: [["4/4", 1]], cycle: LADRANG },
     pitch: pathetPitch("pelog-nem"),
-    melody: { finals: pathetFinals("pelog-nem") },
+    // Balungan mlaku: the saron states one skeleton tone per beat.
+    melody: { density: [1, 1], finals: pathetFinals("pelog-nem") },
     texture: {
       roles: {
         perc: role("kenong", "kethuk:0.5"),
@@ -2011,7 +2074,8 @@ const ASIA_PACIFIC_LEAVES: readonly StyleCard[] = [
     id: "sundanese",
     summary:
       "degung: Sundanese gong-chime ensemble, the goong closing a 16-beat cycle, suling flute above, pelog-derived degung scale",
-    tempo: { bpm: [60, 96], typical: 76 },
+    // Degung klasik is unhurried; the suling ornaments freely above.
+    tempo: { bpm: [52, 76], typical: 64 },
     meter: { signatures: [["4/4", 1]], cycle: DEGUNG },
     pitch: pathetPitch("pelog-nem"),
     melody: { finals: pathetFinals("pelog-nem") },

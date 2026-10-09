@@ -391,6 +391,34 @@ export function stretchGrid(grid: readonly number[], size: number): number[] {
   return out;
 }
 
+/**
+ * A role's onset grid for one bar of a plan. An aksak hand drum (perc
+ * under a beat grouping) whose grid was written for another bar length
+ * strikes the group starts instead: stretching would smear 2+2+3.
+ */
+export function roleGrid(
+  grid: readonly number[] | undefined,
+  role: string,
+  plan: {
+    stepsPerBar: number;
+    beatsPerBar: number;
+    grouping?: readonly number[] | undefined;
+  },
+): number[] | undefined {
+  if (!grid || !grid.length) return undefined;
+  if (role === "perc" && plan.grouping && grid.length !== plan.stepsPerBar) {
+    const out = new Array<number>(plan.stepsPerBar).fill(0);
+    const stepsPerUnit = plan.stepsPerBar / plan.beatsPerBar;
+    let at = 0;
+    for (const group of plan.grouping) {
+      out[Math.round(at * stepsPerUnit) % plan.stepsPerBar] = 1;
+      at += group;
+    }
+    return out;
+  }
+  return stretchGrid(grid, plan.stepsPerBar);
+}
+
 function blendValue(a: unknown, b: unknown, w: number, key: string): unknown {
   if (a === undefined) return w >= 0.5 || key === "onsets-role" ? b : undefined;
   if (b === undefined) return w < 0.5 || key === "onsets-role" ? a : undefined;
