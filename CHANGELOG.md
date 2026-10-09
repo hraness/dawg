@@ -4,6 +4,10 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ## Unreleased
 
+## 0.6.0
+
+Instruments: plucked strings, mallets and bells, a modelled piano, granular clouds, fitting samples to the tempo map, and a guitar rig, all built on the 0.5 foundations. Every new field is optional, so 0.4 and 0.5 projects load, print and render byte-identically.
+
 ### Added
 
 - **Fitting samples to the song.** Sampler voices take `bpm` (their own tempo) or `len` (beats), and follow the song's tempo map, ramps included. `fitmode` picks how: `repitch` (tape, the default), `beats` (onset slices placed on time, hits stay sharp) or `tones` (phase-vocoder stretch, pitch kept). `/bpm 174`, `/len 16`, `/fitmode beats` (or `/fitmode auto`, which listens and suggests), the Sound menu's sample rows, the agent's `fit_sample` tool, and `sample(path, { bpm, fitmode, len })` in the SDK. Only the frames a note can reach are fitted. In play mode a fit up to 8 s (source or output) is computed at once; longer ones say "fitting" until ready, then "fit ready". A bare `bpm <n>` stays the song tempo. SDK 1.20.0 (additive).
