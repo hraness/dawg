@@ -359,3 +359,64 @@ describe("synth voice", () => {
     }
   });
 });
+
+describe("synth filter envelopes", () => {
+  const peak = (buffer: Float64Array) => {
+    let out = 0;
+    for (const value of buffer) out = Math.max(out, Math.abs(value));
+    return out;
+  };
+  const one = (synth: Record<string, unknown>, pitch: number) =>
+    peak(
+      render({ instrument: "synth", synth: { gain: 0.1, ...synth } } as never, {
+        pitch,
+        beats: 2,
+      }).left,
+    );
+
+  // A falling cutoff used to blow up the biquad's state: bpf 1000 with
+  // bpenv -10 peaked 20 dB over the unfiltered note and clipped at full
+  // gain. No filter (12db, 24db, each type) may exceed the dry peak by 6 dB
+  // anywhere in the negative depth range.
+  test("negative depths sweep down without transient spikes", () => {
+    for (const pitch of [36, 60]) {
+      const dry = one({}, pitch);
+      for (const [type, prefix] of [
+        ["lpf", "lp"],
+        ["hpf", "hp"],
+        ["bpf", "bp"],
+      ] as const)
+        for (const cutoff of [100, 1000, 8000])
+          for (const depth of [-10, -6, -2, -0.5])
+            for (const ftype of type === "lpf" ? ["12db", "24db"] : ["12db"]) {
+              const wet = one(
+                {
+                  [type]: cutoff,
+                  [`${prefix}env`]: depth,
+                  [`${prefix}q`]: 1,
+                  ftype,
+                },
+                pitch,
+              );
+              const over = 20 * Math.log10(wet / dry);
+              if (over >= 6)
+                throw new Error(
+                  `${type} ${cutoff} ${prefix}env ${depth} ${ftype} at ${pitch}: +${over.toFixed(1)} dB`,
+                );
+            }
+    }
+  });
+
+  test("bpenv -10 at full gain no longer clips", () => {
+    for (const synth of [
+      { bpf: 1000, bpenv: -10 },
+      { lpf: 1000, lpenv: -10 },
+      { lpf: 1000, lpenv: -10, ftype: "24db" },
+    ]) {
+      const { left } = render({ instrument: "synth", synth } as never, {
+        beats: 2,
+      });
+      expect(peak(left)).toBeLessThan(0.99);
+    }
+  });
+});

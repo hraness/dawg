@@ -31,6 +31,7 @@ import {
 } from "../../../core/synth.ts";
 import {
   Biquad,
+  Svf,
   CONTROL_SAMPLES,
   clamp,
   interpolateAutomation,
@@ -197,6 +198,8 @@ const BUTTERWORTH_Q2 = 1.3066;
 class NoteFilter {
   private readonly first = new Biquad();
   private readonly second = new Biquad();
+  private readonly svfFirst: Svf;
+  private readonly svfSecond: Svf;
   private readonly ladder = new Float64Array(4);
   private ladderG = 0;
   private ladderK = 0;
@@ -210,7 +213,22 @@ class NoteFilter {
     readonly anchor: number,
     readonly envelope: Envelope,
     private readonly sampleRate: number,
-  ) {}
+  ) {
+    this.svfFirst = new Svf(type);
+    this.svfSecond = new Svf(type);
+  }
+
+  /**
+   * A negative depth sweeps the cutoff down during the attack, often to
+   * the 20 Hz floor within a few milliseconds. A direct-form biquad
+   * re-designed every control block blows up under that fall (its state
+   * belongs to the old coefficients), so those notes run on the SVF, whose
+   * state stays valid. Positive and zero depths keep the biquad, so their
+   * renders are unchanged.
+   */
+  private get isSvf(): boolean {
+    return this.depth < 0;
+  }
 
   private get isLadder(): boolean {
     return this.slope === "ladder" && this.type === "lpf";
@@ -229,6 +247,17 @@ class NoteFilter {
       this.ladderG = 1 - Math.exp((-2 * Math.PI * frequency) / this.sampleRate);
       // Q 0.7..12 spans the ladder's feedback up to just below oscillation.
       this.ladderK = 3.9 * clamp((q - 0.707) / 11.3, 0, 1);
+      return;
+    }
+    if (this.isSvf) {
+      if (this.slope === "24db") {
+        this.svfFirst.set(frequency, BUTTERWORTH_Q1, this.sampleRate);
+        this.svfSecond.set(
+          frequency,
+          (q * BUTTERWORTH_Q2) / 0.707,
+          this.sampleRate,
+        );
+      } else this.svfFirst.set(frequency, q, this.sampleRate);
       return;
     }
     if (this.slope === "24db") {
@@ -254,6 +283,10 @@ class NoteFilter {
       stages[2]! += g * (stages[1]! - stages[2]!);
       stages[3]! += g * (stages[2]! - stages[3]!);
       return stages[3]! * (1 + 0.5 * this.ladderK);
+    }
+    if (this.isSvf) {
+      const once = this.svfFirst.process(input);
+      return this.slope === "24db" ? this.svfSecond.process(once) : once;
     }
     const once = this.first.process(input);
     return this.slope === "24db" ? this.second.process(once) : once;
