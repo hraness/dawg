@@ -199,6 +199,44 @@ export class Biquad {
   }
 }
 
+/**
+ * Topology-preserving-transform state-variable filter (Zavalishin, Cytomic):
+ * g = tan(pi fc / fs), k = 1 / Q. Its state stays valid when the cutoff
+ * moves between samples, so it is the filter for modulated cutoffs where a
+ * direct-form biquad's state would no longer match its new coefficients.
+ * `bpf` is normalized to 0 dB at the peak, like `Biquad`'s band-pass.
+ */
+export class Svf {
+  private k = Math.SQRT2;
+  private a1 = 1;
+  private a2 = 0;
+  private a3 = 0;
+  private ic1 = 0;
+  private ic2 = 0;
+
+  constructor(private readonly type: FilterType) {}
+
+  set(cutoff: number, q: number, sampleRate: number): void {
+    const frequency = clamp(cutoff, 20, sampleRate * 0.45);
+    const g = Math.tan((Math.PI * frequency) / sampleRate);
+    this.k = 1 / Math.max(0.1, q);
+    this.a1 = 1 / (1 + g * (g + this.k));
+    this.a2 = g * this.a1;
+    this.a3 = g * this.a2;
+  }
+
+  process(input: number): number {
+    const v3 = input - this.ic2;
+    const v1 = this.a1 * this.ic1 + this.a2 * v3;
+    const v2 = this.ic2 + this.a2 * this.ic1 + this.a3 * v3;
+    this.ic1 = 2 * v1 - this.ic1;
+    this.ic2 = 2 * v2 - this.ic2;
+    if (this.type === "lpf") return v2;
+    if (this.type === "hpf") return input - this.k * v1 - v2;
+    return this.k * v1;
+  }
+}
+
 /** One-pole low-pass; `set` takes a cutoff in Hz. */
 export class OnePole {
   private coefficient = 0;

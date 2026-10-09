@@ -20,6 +20,11 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - **`fetch_url` connects to the address it checked.** The request is pinned to the resolved, public address, so a rebinding hostname cannot point the second lookup at loopback or cloud metadata. IPv4-compatible (`::127.0.0.1`), 6to4 (`2002::/16`), site-local (`fec0::/10`) and discard-prefix (`100::/64`) IPv6 addresses are now refused when they reach a private range.
 - **OpenRouter routing variants.** Model IDs with a `:nitro`, `:free`, `:floor` or other variant suffix are accepted on OpenRouter (`/model`, `dawg login`, `DAWG_MODEL`) and sent unchanged; the AI Gateway still refuses them.
 - **Prompt caching.** Requests to Anthropic models mark the static system prompt with a cache breakpoint, and tool descriptions fit the 1024-character limit some providers apply, so later agent steps reuse the cached prefix instead of re-sending about 22K tokens at full cost.
+- **Synth filter envelopes no longer spike.** A negative `lpenv`, `hpenv` or `bpenv` runs the note filter on a state-variable filter that stays stable while its cutoff falls, so a deep downward sweep no longer jumps up to 35 dB above the steady level or clips. Zero and positive depths are byte-identical.
+- **Live keys respond faster.** A live note renders a buffer sized by its release instead of the whole 12 s window, so a warm grand note-on drops from about 21 ms to 4 ms at 48 kHz; the result is byte-identical to the full window.
+- **Bowed tremolo stays in tune.** At each `tremhz` reversal the bow eases its force, and the pitch lock takes one step per stroke, so a tremolo cello reads within 8 cents from C2 to E5 instead of 10 to 37 cents off. Strings without tremolo are byte-identical.
+- **Non-finite samples are caught.** A NaN or infinite sample in any stem or bus is zeroed before it reaches the feedback stages or the 16-bit writer, and `dawg render` names the tracks it came from.
+- **`djf` at 1 stays audible.** The high-pass end of the DJ filter stops at 10 kHz instead of 20 kHz, which removed everything (values below about 0.95 are unchanged); the low-pass end is unchanged. The amp gate doc notes that 0 dB gates everything.
 
 ### Fixed
 

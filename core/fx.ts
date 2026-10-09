@@ -239,7 +239,7 @@ export const FX_SPECS = Object.freeze({
         default: 0.5,
         step: 0.02,
         automate: true,
-        doc: "0 dark … 0.5 open … 1 thin",
+        doc: "0 dark (20 Hz low-pass) … 0.5 open … 1 thin (10 kHz high-pass)",
         strudel: ["djf"],
       },
     },
@@ -511,7 +511,7 @@ export const FX_SPECS = Object.freeze({
         step: 1,
         unit: "dB",
         optional: true,
-        doc: "noise gate threshold before the amp (absent: no gate)",
+        doc: "noise gate threshold before the amp (absent: no gate; 0 dB gates all)",
       },
       level: {
         kind: "number",

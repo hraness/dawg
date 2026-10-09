@@ -359,3 +359,113 @@ describe("synth voice", () => {
     }
   });
 });
+
+describe("synth filter envelopes", () => {
+  const peak = (buffer: Float64Array) => {
+    let out = 0;
+    for (const value of buffer) out = Math.max(out, Math.abs(value));
+    return out;
+  };
+  const one = (synth: Record<string, unknown>, pitch: number) =>
+    peak(
+      render({ instrument: "synth", synth: { gain: 0.1, ...synth } } as never, {
+        pitch,
+        beats: 2,
+      }).left,
+    );
+
+  // A falling cutoff used to blow up the biquad's state: bpf 1000 with
+  // bpenv -10 peaked 20 dB over the unfiltered note and clipped at full
+  // gain. No filter (12db, 24db, each type) may exceed the dry peak by 6 dB
+  // anywhere in the negative depth range.
+  test("negative depths sweep down without transient spikes", () => {
+    for (const pitch of [36, 60]) {
+      const dry = one({}, pitch);
+      for (const [type, prefix] of [
+        ["lpf", "lp"],
+        ["hpf", "hp"],
+        ["bpf", "bp"],
+      ] as const)
+        for (const cutoff of [100, 1000, 8000])
+          for (const depth of [-10, -6, -2, -0.5])
+            for (const ftype of type === "lpf" ? ["12db", "24db"] : ["12db"]) {
+              const wet = one(
+                {
+                  [type]: cutoff,
+                  [`${prefix}env`]: depth,
+                  [`${prefix}q`]: 1,
+                  ftype,
+                },
+                pitch,
+              );
+              const over = 20 * Math.log10(wet / dry);
+              if (over >= 6)
+                throw new Error(
+                  `${type} ${cutoff} ${prefix}env ${depth} ${ftype} at ${pitch}: +${over.toFixed(1)} dB`,
+                );
+            }
+    }
+  });
+
+  // Seeded property run: random filter type, cutoff, resonance, depth
+  // (negative), anchor, envelope times and pitch. No draw may exceed the dry
+  // note by more than 6 dB plus the resonant gain a static filter of that Q
+  // gives (Q per stage), or produce a non-finite sample.
+  test("seeded fuzz: negative-depth envelopes stay bounded", () => {
+    let seed = 0x9e3779b9;
+    const next = () => {
+      seed = (Math.imul(seed ^ (seed >>> 15), 0x2c1b3c6d) + 0x6d2b79f5) >>> 0;
+      return seed / 2 ** 32;
+    };
+    const pick = <T>(items: readonly T[]) =>
+      items[Math.floor(next() * items.length)]!;
+    const dryCache = new Map<number, number>();
+    for (let run = 0; run < 24; run += 1) {
+      const pitch = 30 + Math.floor(next() * 60);
+      const [type, prefix] = pick([
+        ["lpf", "lp"],
+        ["hpf", "hp"],
+        ["bpf", "bp"],
+      ] as const);
+      const synth: Record<string, unknown> = {
+        [type]: Math.round(40 * 400 ** next()),
+        [`${prefix}env`]: -Math.round(next() * 100) / 10 || -0.1,
+        [`${prefix}q`]: Math.round((0.5 + next() * 7.5) * 10) / 10,
+        ftype: type === "lpf" ? pick(["12db", "24db"]) : "12db",
+        [`${prefix}attack`]: Math.round(next() * 300) / 1000,
+        [`${prefix}decay`]: Math.round((0.01 + next() * 0.8) * 1000) / 1000,
+        [`${prefix}sustain`]: Math.round(next() * 100) / 100,
+      };
+      if (type === "lpf") synth.fanchor = Math.round(next() * 100) / 100;
+      if (!dryCache.has(pitch)) dryCache.set(pitch, one({}, pitch));
+      const dry = dryCache.get(pitch)!;
+      const { left } = render(
+        { instrument: "synth", synth: { gain: 0.1, ...synth } } as never,
+        { pitch, beats: 1 },
+      );
+      for (const value of left)
+        if (!Number.isFinite(value)) throw new Error(JSON.stringify(synth));
+      const over = 20 * Math.log10(peak(left) / dry);
+      const stages = synth.ftype === "24db" ? 2 : 1;
+      const q = synth[`${prefix}q`] as number;
+      const bound = 6 + stages * 20 * Math.log10(Math.max(1, q));
+      if (over >= bound)
+        throw new Error(
+          `${JSON.stringify(synth)} at ${pitch}: +${over.toFixed(1)} dB (bound ${bound.toFixed(1)})`,
+        );
+    }
+  });
+
+  test("bpenv -10 at full gain no longer clips", () => {
+    for (const synth of [
+      { bpf: 1000, bpenv: -10 },
+      { lpf: 1000, lpenv: -10 },
+      { lpf: 1000, lpenv: -10, ftype: "24db" },
+    ]) {
+      const { left } = render({ instrument: "synth", synth } as never, {
+        beats: 2,
+      });
+      expect(peak(left)).toBeLessThan(0.99);
+    }
+  });
+});

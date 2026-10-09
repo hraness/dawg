@@ -21,7 +21,11 @@
  *   force and falls with beta and the mute (`sord`).
  * - Slur: `slurTo` retunes over 7 ms and keeps the bow (no new attack).
  * - Tremolo: `tremhz` reverses the bow that many times a second, with a
- *   seeded per-voice rate jitter.
+ *   seeded per-voice rate jitter. At each reversal the bow force eases off
+ *   with the bow speed (the friction curve narrows as dir^2), so the
+ *   string rings through the turn instead of sticking to a slow bow and
+ *   flattening; the pitch lock averages each stroke's middle (one update
+ *   per stroke) instead of chasing the turns' transient periods.
  */
 import { Decimate2 } from "../dsp/oversample.ts";
 import { thiranFor } from "../dsp/interp.ts";
@@ -52,6 +56,12 @@ export const SLUR_RANGE = 24;
  */
 const LOCK_GAIN = 0.25;
 const LOCK_RANGE = 0.03;
+/** Tremolo: |sin| of the reversal phase past which a stroke is steady. */
+const STROKE_STEADY = 0.7;
+/** Tremolo: lock step per stroke, on the stroke's mean period error. */
+const STROKE_LOCK_GAIN = 0.2;
+/** Tremolo: the friction slope widens at most 1 / FLOOR^2 at a turn. */
+const TURN_FORCE_FLOOR = 0.05;
 /** Speed ratio between dyn 0 and dyn 1 (the review's 8:1). */
 const SPEED_RATIO = 8;
 /** Extra gain law across dyn, in dB (with the 18 dB speed law: 28 dB). */
@@ -323,6 +333,11 @@ export class BowedString {
   private readonly decim?: Decimate2;
   private readonly tremRate: number;
   private readonly tremPhase: number;
+  /** Tremolo: between turns, and that stroke's lock measurements. */
+  private steady = true;
+  private strokeErr = 0;
+  private strokeCount = 0;
+  private strokeSkip = 0;
   /** Internal-rate sample count. */
   private n = 0;
   private off: number;
@@ -548,6 +563,20 @@ export class BowedString {
         Math.PI * (this.tremRate * (n / this.rate) + this.tremPhase),
       );
       dir = Math.tanh(4 * s);
+      const steady = Math.abs(s) > STROKE_STEADY;
+      if (steady !== this.steady) {
+        // Leaving a stroke's middle: one lock step on its mean error.
+        if (this.steady && this.strokeCount > 0)
+          this.lock = clamp(
+            this.lock - (STROKE_LOCK_GAIN * this.strokeErr) / this.strokeCount,
+            -LOCK_RANGE,
+            LOCK_RANGE,
+          );
+        this.steady = steady;
+        this.strokeErr = 0;
+        this.strokeCount = 0;
+        this.strokeSkip = 0;
+      }
     }
     // Note-off lifts the bow: the normal force falls over `release` (the
     // friction curve narrows, STK's bow pressure), with the bow still
@@ -556,7 +585,10 @@ export class BowedString {
     // half-reflecting junction that brakes the string.
     const bowVel = this.vtarget * (on ? env : 1) * dir;
     const contact = on || env > 0 ? 1 : 0;
-    const slope = on ? this.slope : this.slope / Math.max(1e-3, env * env);
+    let slope = on ? this.slope : this.slope / Math.max(1e-3, env * env);
+    // A turning bow presses less: the friction curve narrows with speed.
+    if (this.tremRate > 0)
+      slope /= Math.max(TURN_FORCE_FLOOR, Math.abs(dir)) ** 2;
     const bOut = bb[(this.bw - this.Nb) & mask]!;
     const raw = nb[(this.nw - this.Nn) & mask]!;
     const nOut = this.a * raw + this.tx1 - this.a * this.ty1;
@@ -591,8 +623,9 @@ export class BowedString {
     this.bpY1 = y;
     if (!(prev < 0 && y >= 0)) return;
     const cross = n - 1 + prev / (prev - y);
-    const last = this.lastCross;
-    this.lastCross = cross;
+    // Tremolo: only periods wholly inside a stroke's middle count.
+    const last = this.steady ? this.lastCross : -1;
+    this.lastCross = this.steady ? cross : -1;
     // Settle first: the attack and a slur's glide are not steady periods.
     if (last < 0 || n < 0.05 * this.rate) return;
     if (this.slurAt >= 0 && n < this.slurAt + this.slurLen + 0.02 * this.rate)
@@ -600,6 +633,14 @@ export class BowedString {
     const period = cross - last;
     const err = period / this.target - 1;
     if (Math.abs(err) > 0.1) return;
+    if (this.tremRate > 0) {
+      // The first period of a stroke still carries the turn.
+      if ((this.strokeSkip += 1) > 1) {
+        this.strokeErr += err;
+        this.strokeCount += 1;
+      }
+      return;
+    }
     this.lock = clamp(this.lock - LOCK_GAIN * err, -LOCK_RANGE, LOCK_RANGE);
   }
 
