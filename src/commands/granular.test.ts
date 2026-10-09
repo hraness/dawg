@@ -7,6 +7,7 @@ import {
 import { findAgentTool } from "../agent/tools.ts";
 import {
   applyGranularCommand,
+  grainSrcHint,
   granularTrackPreset,
   parseGranularCommand,
 } from "./granular.ts";
@@ -296,5 +297,13 @@ describe("set_granular", () => {
     expect(() => tool.plan({ preset: "nope" }, context())).toThrow(
       /granular presets/,
     );
+  });
+});
+
+describe("grain src hint", () => {
+  test("an unreadable source answers locally", () => {
+    expect(grainSrcHint("grain src bus:guitars")).toContain("not a source yet");
+    expect(grainSrcHint("grain src synth:pad")).toBeUndefined();
+    expect(grainSrcHint("grain cloud")).toBeUndefined();
   });
 });

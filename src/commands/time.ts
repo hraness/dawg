@@ -446,7 +446,10 @@ function applyOrThrow(
       const tick = tickOf(score, command.at);
       const where = placeLabel(command.at);
       if (tick >= loopTicksOf(score))
-        return { ok: false, message: `tempo · ${where} is past the song end` };
+        return {
+          ok: false,
+          message: `tempo · ${where} is past the song end (${score.bars} bars) · bars <n> extends it`,
+        };
       if (tick === 0) {
         const next = applyScoreOperation(score, {
           type: "setTempo",

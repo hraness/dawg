@@ -13,6 +13,7 @@ import {
   ScoreValidationError,
   TrackScore,
   type Note,
+  withNoteCap,
 } from "../../core/score.ts";
 import {
   MAX_SONG_SECONDS,
@@ -20,6 +21,7 @@ import {
   arrangedBars,
   arrangedNotes,
   arrangedSlice,
+  BAKED_NOTE_CAP,
   bakeTrackTime,
   barBeats,
   barTicks,
@@ -67,7 +69,7 @@ const WINDOW_BUDGET_SECONDS = 50;
 export function exportScore(score: TrackScore): TrackScore {
   // A form past the score's bar limit throws here; renderArranged renders
   // such forms window by window instead, so it never needs this.
-  return flattenForm(bakeTrackTime(score));
+  return withNoteCap(BAKED_NOTE_CAP, () => flattenForm(bakeTrackTime(score)));
 }
 
 /**
@@ -109,7 +111,9 @@ export function loopedSection(score: TrackScore) {
 export function playbackScore(score: TrackScore): TrackScore {
   const section = loopedSection(score);
   return section
-    ? sectionScore(bakeTrackTime(score), section)
+    ? withNoteCap(BAKED_NOTE_CAP, () =>
+        sectionScore(bakeTrackTime(score), section),
+      )
     : exportScore(score);
 }
 
@@ -177,11 +181,22 @@ export function renderArranged(
     fitsOnePass(renderer, score, options)
   )
     return renderer.render(score, options);
+  // Baked timed tracks (cycle, rate) may hold more notes than a stored score.
+  return withNoteCap(BAKED_NOTE_CAP, () =>
+    renderArrangedBaked(renderer, score, options),
+  );
+}
+
+function renderArrangedBaked(
+  renderer: StemRenderer,
+  score: TrackScore,
+  options: RenderOptions,
+): RenderedAudio {
   score = bakeTrackTime(score);
   const section = options.loop ? loopedSection(score) : undefined;
   if (!section && formSegments(score).length > 0)
     return renderForm(renderer, score, options);
-  const played = section
+  let played = section
     ? sectionScore(score, section)
     : applySectionChanges(score);
   if (played === score && fitsOnePass(renderer, score, options))
@@ -195,6 +210,9 @@ export function renderArranged(
     );
   if (seconds <= SINGLE_PASS_SECONDS)
     return renderer.render(played, { ...options, maxSeconds: 60 });
+  // Windows pick notes by start tick, so timed tracks (cycle, rate) must be
+  // placed into song ticks first, sections or not.
+  played = bakeTrackTime(played, { always: true });
   return renderWindows(
     renderer,
     played,

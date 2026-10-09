@@ -2560,10 +2560,28 @@ function normalizeAutomation(
   return freezeArray(points);
 }
 
+/** The note cap `normalizeNotes` enforces; see `withNoteCap`. */
+let noteCap: number = SCORE_LIMITS.maxNotes;
+
+/**
+ * Runs `fn` with the note cap raised to `cap`. Stored scores keep
+ * SCORE_LIMITS.maxNotes; the arranged renderer bakes timed tracks (cycle,
+ * rate) into plain notes and may hold more than a stored score allows.
+ */
+export function withNoteCap<T>(cap: number, fn: () => T): T {
+  const previous = noteCap;
+  noteCap = Math.max(previous, cap);
+  try {
+    return fn();
+  } finally {
+    noteCap = previous;
+  }
+}
+
 function normalizeNotes(inputs: readonly unknown[]): Note[] {
-  if (!Array.isArray(inputs) || inputs.length > SCORE_LIMITS.maxNotes) {
+  if (!Array.isArray(inputs) || inputs.length > noteCap) {
     throw new ScoreValidationError(
-      `score cannot contain more than ${SCORE_LIMITS.maxNotes} notes`,
+      `score cannot contain more than ${noteCap} notes`,
       "score-limit",
     );
   }

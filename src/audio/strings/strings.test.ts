@@ -68,7 +68,7 @@ describe("plucked strings (design spec section 9)", () => {
       ).toBeLessThan(0.1);
       const on = render({ preset: "sitar", ...ISO }, [{ pitch: p }], 1.3);
       const cents = Math.abs(centsOff(measurePitch(on, tetHz(p)), tetHz(p)));
-      expect(cents).toBeLessThan(p >= 60 ? 1.5 : 5);
+      expect(cents).toBeLessThan(p >= 60 ? 1 : 5);
     }
     const a4 = render({ preset: "sitar", ...ISO }, [{ pitch: 69 }], 1.3);
     expect(Math.abs(centsOff(measurePitch(a4, 440), 440))).toBeLessThan(1);
@@ -125,6 +125,27 @@ describe("plucked strings (design spec section 9)", () => {
       );
     expect(Math.abs(db("harpsichord"))).toBeLessThan(1);
     expect(db("nylon")).toBeGreaterThan(6);
+  });
+
+  test("default harpsichord: level within 0.5 dB from velocity 40 to 127", () => {
+    // Each strike starts at a different time (a different note seed); the
+    // 8'+8' course's tuning belongs to the key, so its beating is the same.
+    for (const pitch of [41, 62, 81]) {
+      const levels: number[] = [];
+      for (let v = 40, k = 0; v <= 127; v += 29, k += 1) {
+        const start = k * 0.25;
+        const x = render(
+          { preset: "harpsichord" },
+          [{ pitch, velocity: v / 127, start, seconds: 0.5 }],
+          start + 0.5,
+        );
+        let sum = 0;
+        const from = Math.round(start * SR);
+        for (let i = from; i < x.length; i += 1) sum += x[i]! ** 2;
+        levels.push(10 * Math.log10(sum / (x.length - from)));
+      }
+      expect(Math.max(...levels) - Math.min(...levels)).toBeLessThan(0.5);
+    }
   });
 
   test("hard picks are brighter on picked presets", () => {

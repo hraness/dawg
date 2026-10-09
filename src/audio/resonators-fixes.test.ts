@@ -211,3 +211,60 @@ describe("modal aliases", () => {
     expect(resolveInstrumentWord("bell")?.instrument).toBe("bell");
   });
 });
+
+describe("modal voice stealing", () => {
+  function gongRoll(skipFirst: boolean): TrackScore {
+    const notes = Array.from({ length: 33 }, (_, i) => ({
+      id: `n${i}`,
+      trackId: "m",
+      startTick: i * 30,
+      durationTicks: 1920,
+      pitch: 48 + (i % 12),
+      // Quiet, so the summed roll stays under the soft knee (linear).
+      velocity: 0.05,
+    })).filter((note) => !(skipFirst && note.id === "n0"));
+    return createScore({
+      tempoBpm: 120,
+      bars: 2,
+      tracks: [
+        { id: "m", name: "m", instrument: "modal", modal: { preset: "gong" } },
+      ],
+      notes,
+    });
+  }
+
+  test("a stolen voice fades out smoothly over 80 ms", () => {
+    const full = renderScorePcm(gongRoll(false), { sampleRate: SR }).pcm;
+    const rest = renderScorePcm(gongRoll(true), { sampleRate: SR }).pcm;
+    // The 33rd onset (tick 960 = 1 s at 120 BPM) steals the first voice.
+    const steal = SR;
+    const diff = (frame: number) =>
+      Math.abs(full[frame * 2]! - rest[frame * 2]!);
+    const peak = (from: number, to: number) => {
+      let max = 0;
+      for (let f = from; f < to; f += 1) max = Math.max(max, diff(f));
+      return max;
+    };
+    const ms = (n: number) => Math.round((n / 1000) * SR);
+    const before = peak(steal - ms(10), steal);
+    expect(before).toBeGreaterThan(20);
+    // A 5 ms linear fade had gone in 5 ms; the raised cosine is near full
+    // level 2 ms in, and the voice is gone 80 ms after the steal.
+    expect(peak(steal + ms(3), steal + ms(6))).toBeGreaterThan(0.6 * before);
+    expect(peak(steal + ms(82), steal + ms(300))).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("modal <body>", () => {
+  test("a gamelan body word sets the body", () => {
+    expect(parseModalCommand("modal saron")).toEqual({
+      type: "modal-set",
+      values: { body: "saron" },
+    });
+    expect(parseModalCommand("modal kempul")).toEqual({
+      type: "modal-set",
+      values: { body: "kempul" },
+    });
+    expect(parseModalCommand("modal nope")?.type).toBe("modal-usage");
+  });
+});

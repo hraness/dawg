@@ -532,4 +532,43 @@ describe("granular render", () => {
     if (process.env.DAWG_PERF_LOG) console.log({ best });
     expect(best).toBeLessThan(process.env.DAWG_PERF === "1" ? 7 : 21);
   });
+
+  /**
+   * Many voices at different pitches each read their own bank level, so the
+   * chunk lookup runs per grain per 32-frame block: a 16-voice swarm on a
+   * supersaw source renders end to end (warm) within a few ms per
+   * voice-second, under the 7 ms of spec test 15 with headroom on CI.
+   */
+  test("perf guard: 16 swarm voices end to end at 48 kHz", () => {
+    const score = new TrackScore({
+      tempoBpm: 120,
+      bars: 4,
+      tracks: [
+        {
+          id: "g",
+          name: "g",
+          instrument: "granular",
+          granular: { preset: "swarm", src: "synth:supersaw@60" },
+        },
+      ],
+      notes: Array.from({ length: 16 }, (_, i) => ({
+        id: `n${i}`,
+        trackId: "g",
+        pitch: 48 + i * 2,
+        startTick: 0,
+        durationTicks: 16 * 480,
+        velocity: 0.7,
+      })),
+    } as never);
+    renderScorePcm(score, { sampleRate: 48_000 });
+    let best = Infinity;
+    for (let i = 0; i < 2; i += 1) {
+      const started = performance.now();
+      renderScorePcm(score, { sampleRate: 48_000 });
+      best = Math.min(best, performance.now() - started);
+    }
+    const perVoiceSecond = best / (16 * 8);
+    if (process.env.DAWG_PERF_LOG) console.log({ perVoiceSecond });
+    expect(perVoiceSecond).toBeLessThan(process.env.DAWG_PERF === "1" ? 7 : 21);
+  }, 60_000);
 });

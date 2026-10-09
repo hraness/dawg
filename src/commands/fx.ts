@@ -18,6 +18,7 @@
  * on/off/true/false; enums take one of their values. Each command is one
  * `updateTrack` revision and one undo step.
  */
+import { nearestWord } from "../audio/instrument-check.ts";
 import {
   EFFECT_NAMES,
   FX_PRESETS,
@@ -188,6 +189,31 @@ export function parseFxCommand(prompt: string): FxCommand | undefined {
     values[param] = value;
   }
   return { type: "fx-set", effect, values };
+}
+
+/**
+ * A short `fx <word> …` whose word is no effect (`fx wobble on`, `fx dela
+ * mix 0.3`): the local answer, so a typo never goes to the agent. Longer
+ * free text after `fx` still does.
+ */
+export function unknownFxMessage(prompt: string): string | undefined {
+  const words = prompt.trim().split(/\s+/);
+  if (words[0]?.toLowerCase() !== "fx" || words.length < 2) return undefined;
+  const name = words[1]!.toLowerCase();
+  if (parseEffectName(name) || ["ir", "iresponse", "amp"].includes(name))
+    return undefined;
+  const near = nearestWord(name, [
+    ...EFFECT_NAMES,
+    ...Object.keys(EFFECT_ALIASES),
+    "reverb",
+  ]);
+  const rest = words.slice(2).map((word) => word.toLowerCase());
+  const commandShaped =
+    rest.length <= 1 ||
+    ["on", "off", "reset", "preset"].includes(rest[0]!) ||
+    rest.every((word, index) => index % 2 === 0 || /^-?[\d.]+/.test(word));
+  if (!near && !commandShaped) return undefined;
+  return `unknown effect ${name.slice(0, 24)}${near ? ` · did you mean ${near}?` : ""} · effects ${EFFECT_NAMES.join(", ")}`;
 }
 
 function irCommand(value: string): FxCommand | undefined {

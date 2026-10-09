@@ -413,3 +413,15 @@ export function granularTrackPreset(
   const match = /^([a-z]+)(?:-\d{1,3})?$/.exec(trackId);
   return match && isGranularPreset(match[1]!) ? match[1] : undefined;
 }
+
+/**
+ * The local answer for `grain src <something else>` (`grain src bus:guitars`),
+ * so a source dawg cannot read yet never goes to the agent.
+ */
+export function grainSrcHint(prompt: string): string | undefined {
+  const words = prompt.trim().toLowerCase().split(/\s+/);
+  if (words[0] !== "grain" || (words[1] !== "src" && words[1] !== "source"))
+    return undefined;
+  if (parseGranularCommand(prompt)) return undefined;
+  return "grain src synth:<preset>[@note] | voice <name> · a bus or another track is not a source yet: render it and load the file as a sampler voice";
+}

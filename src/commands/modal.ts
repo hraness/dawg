@@ -58,7 +58,7 @@ export type ModalCommand =
 export const MODAL_OFF_INSTRUMENT = "marimba";
 
 export const MODAL_USAGE =
-  "modal <preset> | modal <param> <value> | modal mallet <name> | modal reset | modal off | modal presets";
+  "modal <preset> | modal <body> | modal <param> <value> | modal mallet <name> | modal reset | modal off | modal presets";
 
 function rangeOf(name: string): string {
   const spec = MODAL_PARAMS[name]!;
@@ -91,6 +91,11 @@ export function parseModalCommand(prompt: string): ModalCommand | undefined {
   if (rest.length === 1) {
     const preset = modalPresetFor(rest[0]!);
     if (preset) return { type: "modal-preset", preset };
+    // A body word (saron, kempul, bonang, gender ...) sets the body: the
+    // gamelan presets come later, the bodies already ship.
+    const body = MODAL_PARAMS.body;
+    if (body?.kind === "enum" && body.values.includes(rest[0]!))
+      return { type: "modal-set", values: { body: rest[0]! } };
     return { type: "modal-usage", message: MODAL_USAGE };
   }
   if (rest.length % 2 !== 0)

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createScore, scoreFromJSON } from "../../core/score.ts";
 import { findAgentTool } from "../agent/tools.ts";
-import { applyFxCommand, parseFxCommand } from "./fx.ts";
+import { applyFxCommand, parseFxCommand, unknownFxMessage } from "./fx.ts";
 
 const score = () =>
   createScore({
@@ -198,5 +198,17 @@ describe("fx reverb ir (convolution)", () => {
     const off = run("fx reverb ir off", on.next!);
     expect(off.next!.tracks[0]!.reverb!.ir).toBeUndefined();
     expect(off.next!.tracks[0]!.reverb!.mix).toBe(reverb.mix);
+  });
+});
+
+describe("unknown effect", () => {
+  test("a short fx command with an unknown effect answers locally", () => {
+    expect(unknownFxMessage("fx wobble on")).toContain("unknown effect wobble");
+    expect(unknownFxMessage("fx dela mix 0.3")).toContain("did you mean");
+    expect(unknownFxMessage("fx chorus on")).toBeUndefined();
+    expect(unknownFxMessage("fx amp 3")).toBeUndefined();
+    expect(
+      unknownFxMessage("fx please make this sound warmer"),
+    ).toBeUndefined();
   });
 });

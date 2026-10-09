@@ -139,6 +139,8 @@ describe("expression grammar", () => {
     expect(slip).toMatchObject({ type: "invalid" });
     expect(run("glide 0.06").ok).toBe(false);
     expect(run("glide 0.06").message).toContain("glide 60ms");
+    expect(run("pedal half at 0").message).toContain("1 event (1 half)");
+    expect(run("pedal down at 0").message).toContain("1 event (1 down)");
     // `glide 0` (any unit) on the track turns glide off.
     for (const text of ["glide 0", "glide 0ms", "glide 0s"])
       expect(parseExpressionCommand(text)).toEqual({

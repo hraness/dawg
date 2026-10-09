@@ -176,6 +176,23 @@ describe("loudness: EBU Tech 3341 minimum requirements", () => {
     }
   });
 
+  test("a peak three quarters of the way between samples reads within 0.05 dB", () => {
+    // A bright 0 dBFS burst centred at n + 0.75: the odd eighths alone sit a
+    // quarter sample from it and read about 0.2 dB low on dense material.
+    for (const frequency of [RATE / 3, RATE * 0.42]) {
+      const left = new Float64Array(4096);
+      for (let i = 0; i < left.length; i += 1) {
+        const t = i - 2048.75;
+        left[i] =
+          Math.cos((2 * Math.PI * frequency * t) / RATE) *
+          Math.exp(-((t / 400) ** 2));
+      }
+      const peak = gainToDb(truePeakGain(left, left));
+      expect(peak).toBeGreaterThanOrEqual(-0.05);
+      expect(peak).toBeLessThanOrEqual(0.05);
+    }
+  });
+
   test("a sample-peak meter would fail case 16", () => {
     const [left] = sine(RATE / 4, 0.5, 45);
     let peak = 0;

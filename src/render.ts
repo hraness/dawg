@@ -8,7 +8,12 @@
 import { createHash } from "node:crypto";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { scoreFromJSON, type TrackScore } from "../core/score.ts";
+import {
+  scoreFromJSON,
+  ScoreValidationError,
+  withNoteCap,
+  type TrackScore,
+} from "../core/score.ts";
 import { decodeLoop } from "../core/loop.ts";
 import { scoreToMidi } from "../core/midi.ts";
 import { RENDER_CHANNELS, encodeWav, withWavCues } from "./audio/wav.ts";
@@ -19,7 +24,12 @@ import {
   measurementLine,
   parseMasterCommand,
 } from "./commands/master.ts";
-import { bakeTrackTime, findSection, sectionScore } from "../core/sections.ts";
+import {
+  BAKED_NOTE_CAP,
+  bakeTrackTime,
+  findSection,
+  sectionScore,
+} from "../core/sections.ts";
 import {
   exportScore,
   renderArrangedPcm,
@@ -109,7 +119,9 @@ export async function runRenderCommand(
       return 1;
     }
     // One section as it plays when looped: its mutes and variations, no form.
-    score = sectionScore(bakeTrackTime(score), section);
+    score = withNoteCap(BAKED_NOTE_CAP, () =>
+      sectionScore(bakeTrackTime(score), section),
+    );
   }
   if (/\.midi?$/i.test(target)) {
     // MIDI carries notes, not audio: the master and loudness flags do not apply.
@@ -156,6 +168,16 @@ export async function runRenderCommand(
     samples = await new SampleLibrary({ projectRoot: workspace }).load(score);
     for (const problem of samples.problems)
       stderr.write(`sample ${problem.level} · ${problem.message}\n`);
+    // A voice that cannot load (a missing file, a pin that no longer
+    // matches) would render as silence: fail rather than write a song with
+    // a part missing.
+    const failed = samples.problems.filter((p) => p.level === "error").length;
+    if (failed > 0) {
+      stderr.write(
+        `render failed · ${failed} sample ${failed === 1 ? "voice" : "voices"} could not load · fix or re-pick ${failed === 1 ? "it" : "them"} and render again\n`,
+      );
+      return 1;
+    }
   }
   // A song with a master is a deliverable: 48 kHz unless --rate says
   // otherwise; a plain song keeps the engine's rate, as dawg 0.4 wrote it.
@@ -172,7 +194,14 @@ export async function runRenderCommand(
     );
     return 2;
   }
-  const audio = renderArrangedPcm(score, { samples, sampleRate });
+  let audio;
+  try {
+    audio = renderArrangedPcm(score, { samples, sampleRate });
+  } catch (error) {
+    if (!(error instanceof ScoreValidationError)) throw error;
+    stderr.write(`render failed · ${error.message}\n`);
+    return 1;
+  }
   let wav = encodeWav(audio.pcm, audio.sampleRate, RENDER_CHANNELS);
   // Section starts as cue points (a --section render is one section).
   if (only === undefined)

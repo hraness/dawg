@@ -110,6 +110,41 @@ function rms(x: ArrayLike<number>, from: number, to: number): number {
   return Math.sqrt(sum / (to - from));
 }
 
+/**
+ * An amen-style break at 174 BPM: a ringing 50 Hz kick, snares, ghost notes
+ * and hats, so many hits start inside the previous hit's ring-out.
+ */
+function amen(): { x: Float32Array; at: number[] } {
+  const beat = (60 / 174) * RATE;
+  const rnd = seededRandom("amen");
+  const steps = "K.H.S.HgK.KgS.HgK.H.S.HgHgK.S.Hg";
+  const x = new Float32Array(Math.round(8 * beat) + RATE);
+  const at: number[] = [];
+  for (let s = 0; s < steps.length; s += 1) {
+    const c = steps[s]!;
+    if (c === ".") continue;
+    const start = Math.round((s * beat) / 4);
+    at.push(start);
+    for (let i = 0; i < 0.4 * RATE && start + i < x.length; i += 1) {
+      const t = i / RATE;
+      const noise = rnd() * 2 - 1;
+      x[start + i] =
+        x[start + i]! +
+        (c === "K"
+          ? 0.9 *
+            Math.sin(2 * Math.PI * (50 + 80 * Math.exp(-t / 0.02)) * t) *
+            Math.exp(-t / 0.18)
+          : c === "S"
+            ? 0.6 * noise * Math.exp(-t / 0.06) +
+              0.4 * Math.sin(2 * Math.PI * 190 * t) * Math.exp(-t / 0.1)
+            : c === "g"
+              ? 0.18 * noise * Math.exp(-t / 0.03)
+              : 0.25 * noise * Math.exp(-t / 0.015));
+    }
+  }
+  return { x, at };
+}
+
 const cents = (a: number, b: number) => 1200 * Math.log2(a / b);
 
 beforeEach(() => clearFitCache());
@@ -119,6 +154,14 @@ describe("onset detection", () => {
     const beat = (60 / 174) * RATE;
     const at = Array.from({ length: 16 }, (_, i) => Math.round((i * beat) / 2));
     const found = detectOnsets(hits(Math.round(8 * beat) + RATE, at), RATE);
+    expect(found.length).toBe(at.length);
+    for (let i = 0; i < at.length; i += 1)
+      expect(Math.abs(found[i]! - at[i]!)).toBeLessThanOrEqual(0.002 * RATE);
+  });
+
+  test("hits in a kick's ring-out are found within 2 ms (amen-style break)", () => {
+    const { x, at } = amen();
+    const found = detectOnsets(x, RATE);
     expect(found.length).toBe(at.length);
     for (let i = 0; i < at.length; i += 1)
       expect(Math.abs(found[i]! - at[i]!)).toBeLessThanOrEqual(0.002 * RATE);
@@ -138,6 +181,27 @@ describe("onset detection", () => {
 });
 
 describe("fitmode beats", () => {
+  test("an amen-style break fitted 174 -> 128 keeps every hit within 2 ms", () => {
+    const { x, at } = amen();
+    const beat = (60 / 174) * RATE;
+    const src = decoded(x.slice(0, Math.round(8 * beat)));
+    const score = scoreWith(
+      { src: "b.wav", bpm: 174, fitmode: "beats" },
+      128,
+      2,
+      { startTick: 0, durationTicks: 8 * 480 },
+    );
+    const out = render(score, src, Math.round(4.2 * RATE));
+    const found = detectOnsets(out, RATE);
+    const want = at.map((v) => (v * 174) / 128);
+    // Slowed slices end in a short fade before the gap, which the detector
+    // may also report; every hit must still land on its grid time.
+    for (const time of want) {
+      const near = Math.min(...found.map((f) => Math.abs(f - time)));
+      expect(near).toBeLessThanOrEqual(0.002 * RATE);
+    }
+  });
+
   test("a 174 BPM break fitted to 128 BPM keeps every hit within 2 ms", () => {
     const beat = (60 / 174) * RATE;
     const at = Array.from({ length: 16 }, (_, i) => Math.round((i * beat) / 2));

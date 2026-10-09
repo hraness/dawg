@@ -3,7 +3,7 @@
  * K-weighted mean square, momentary (400 ms) and short-term (3 s) loudness
  * every 100 ms, gated integrated loudness (absolute -70 LUFS, relative
  * -10 LU), loudness range per EBU Tech 3342 (short-term values gated at
- * -70 LUFS and -20 LU, 10th to 95th percentile) and true peak from a 4x
+ * -70 LUFS and -20 LU, 10th to 95th percentile) and true peak from an 8x
  * oversampled polyphase interpolator (BS.1770-4 Annex 2, with a longer
  * windowed-sinc filter than its example). Validated against
  * the synthetic test signals of EBU Tech 3341 and 3342 in loudness.test.ts.
@@ -31,7 +31,7 @@ export type Loudness = Readonly<{
   shortTermMax: number;
   /** Loudness range (LRA), LU. */
   range: number;
-  /** dBTP: the 4x oversampled peak. */
+  /** dBTP: the 8x oversampled peak. */
   truePeak: number;
   /** dBFS: the highest sample. */
   samplePeak: number;
@@ -239,15 +239,18 @@ function besselI0(x: number): number {
 let phases: Float64Array[] | undefined;
 
 /**
- * The true-peak interpolator: four Kaiser-windowed sinc phases of 32 taps,
- * each in time order over x[n-15] .. x[n+16], estimating the signal at
- * n + 1/8, 3/8, 5/8 and 7/8. With the samples themselves they give the 4x
- * oversampled true peak. BS.1770-4 Annex 2's 12-tap example filter rolls
+ * The true-peak interpolator: Kaiser-windowed sinc phases of 32 taps, each
+ * in time order over x[n-15] .. x[n+16], estimating the signal at n + 1/8,
+ * 3/8, 5/8 and 7/8, then (0.6) n + 2/8, 4/8 and 6/8. With the samples
+ * themselves they give an evenly spaced 8x oversampled true peak; the odd
+ * eighths alone left 1/4-sample gaps that read dense material up to 0.2 dB
+ * low at a peak near n + 3/4. The odd phases come first and are unchanged,
+ * so a peak they already caught reads the same. BS.1770-4 Annex 2's 12-tap example filter rolls
  * off early and reads dense, bright material (supersaws, distortion) up to
  * half a dB low; this one stays within a few hundredths of a 64x reference.
  */
 export function truePeakPhases(): readonly Float64Array[] {
-  phases ??= [1, 3, 5, 7].map((eighth) => {
+  phases ??= [1, 3, 5, 7, 2, 4, 6].map((eighth) => {
     const frac = eighth / 8;
     const taps = new Float64Array(TAPS_PER_PHASE);
     const before = TAPS_PER_PHASE / 2 - 1;
@@ -266,9 +269,23 @@ export function truePeakPhases(): readonly Float64Array[] {
   return phases;
 }
 
+let interleaved: Float64Array | undefined;
+
+/** The seven phases interleaved by tap (`tap * 7 + phase`). */
+function interleavedPhases(): Float64Array {
+  if (interleaved) return interleaved;
+  const branches = truePeakPhases();
+  const flat = new Float64Array(TAPS_PER_PHASE * branches.length);
+  branches.forEach((taps, phase) => {
+    for (let tap = 0; tap < TAPS_PER_PHASE; tap += 1)
+      flat[tap * branches.length + phase] = taps[tap]!;
+  });
+  return (interleaved = flat);
+}
+
 /**
  * Largest absolute value between each sample and the next (both samples
- * and the four interpolated points), as `out[n]` for n .. n+1.
+ * and the seven interpolated points), as `out[n]` for n .. n+1.
  */
 export function interSamplePeaks(
   channel: Float64Array,
@@ -277,6 +294,7 @@ export function interSamplePeaks(
 ): void {
   const n = channel.length;
   const branches = truePeakPhases();
+  const flat = interleavedPhases();
   const before = TAPS_PER_PHASE / 2 - 1;
   const at = (index: number): number => {
     if (index >= 0 && index < n) return channel[index]!;
@@ -287,23 +305,50 @@ export function interSamplePeaks(
     let peak = Math.abs(channel[index]!);
     const next = Math.abs(at(index + 1));
     if (next > peak) peak = next;
-    const inside = index - before >= 0 && index + TAPS_PER_PHASE - before <= n;
-    for (const taps of branches) {
-      let sum = 0;
-      if (inside)
+    const base = index - before;
+    if (base >= 0 && base + TAPS_PER_PHASE <= n) {
+      // Every phase in one pass over the window (the interior fast path).
+      let s0 = 0;
+      let s1 = 0;
+      let s2 = 0;
+      let s3 = 0;
+      let s4 = 0;
+      let s5 = 0;
+      let s6 = 0;
+      for (let tap = 0; tap < TAPS_PER_PHASE; tap += 1) {
+        const x = channel[base + tap]!;
+        const k = tap * 7;
+        s0 += x * flat[k]!;
+        s1 += x * flat[k + 1]!;
+        s2 += x * flat[k + 2]!;
+        s3 += x * flat[k + 3]!;
+        s4 += x * flat[k + 4]!;
+        s5 += x * flat[k + 5]!;
+        s6 += x * flat[k + 6]!;
+      }
+      peak = Math.max(
+        peak,
+        Math.abs(s0),
+        Math.abs(s1),
+        Math.abs(s2),
+        Math.abs(s3),
+        Math.abs(s4),
+        Math.abs(s5),
+        Math.abs(s6),
+      );
+    } else
+      for (const taps of branches) {
+        let sum = 0;
         for (let tap = 0; tap < TAPS_PER_PHASE; tap += 1)
-          sum += channel[index - before + tap]! * taps[tap]!;
-      else
-        for (let tap = 0; tap < TAPS_PER_PHASE; tap += 1)
-          sum += at(index - before + tap) * taps[tap]!;
-      const magnitude = Math.abs(sum);
-      if (magnitude > peak) peak = magnitude;
-    }
+          sum += at(base + tap) * taps[tap]!;
+        const magnitude = Math.abs(sum);
+        if (magnitude > peak) peak = magnitude;
+      }
     if (peak > out[index]!) out[index] = peak;
   }
 }
 
-/** The 4x oversampled true peak of a stereo buffer, linear. */
+/** The 8x oversampled true peak of a stereo buffer, linear. */
 export function truePeakGain(
   left: Float64Array,
   right: Float64Array,
