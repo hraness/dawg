@@ -22,6 +22,15 @@ describe("fit commands", () => {
       control: "fitmode",
       value: "beats",
     });
+    // fitmode and len also work bare; a bare bpm stays the song tempo word.
+    expect(parseFitCommand("fitmode tones pad")).toEqual({
+      control: "fitmode",
+      value: "tones",
+      voice: "pad",
+    });
+    expect(parseFitCommand("len 8")).toEqual({ control: "len", value: 8 });
+    expect(parseFitCommand("bpm 120")).toBeUndefined();
+    expect(parseFitCommand("/bpm 120")).toEqual({ control: "bpm", value: 120 });
     expect(parseFitCommand("/fitmode")).toEqual({
       control: "fitmode",
       value: undefined,

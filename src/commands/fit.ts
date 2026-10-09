@@ -23,12 +23,16 @@ export type FitCommand = Readonly<{
 
 const VOICE = "([a-z][a-z0-9_]{0,31})";
 
-/** Parse `/fitmode [mode|auto|off [voice]]`, `/bpm <n|off> [voice]`, `/len <beats|off> [voice]`. */
+/**
+ * Parse `/fitmode [mode|auto|off [voice]]`, `/bpm <n|off> [voice]`,
+ * `/len <beats|off> [voice]`. `fitmode` and `len` also work without the
+ * slash; a bare `bpm 120` stays the song's tempo word, so `/bpm` needs it.
+ */
 export function parseFitCommand(command: string): FitCommand | undefined {
   const text = command.trim();
   const mode = text.match(
     new RegExp(
-      `^/fitmode(?:\\s+(repitch|beats|tones|auto|off|none)(?:\\s+${VOICE})?)?$`,
+      `^/?fitmode(?:\\s+(repitch|beats|tones|auto|off|none)(?:\\s+${VOICE})?)?$`,
       "i",
     ),
   );
@@ -47,14 +51,14 @@ export function parseFitCommand(command: string): FitCommand | undefined {
   }
   const number = text.match(
     new RegExp(
-      `^/(bpm|len)\\s+(\\d+(?:\\.\\d+)?|off|none)(?:\\s+${VOICE})?$`,
+      `^(/bpm|/?len)\\s+(\\d+(?:\\.\\d+)?|off|none)(?:\\s+${VOICE})?$`,
       "i",
     ),
   );
   if (!number) return undefined;
   const raw = number[2]!.toLowerCase();
   return {
-    control: number[1]!.toLowerCase() as "bpm" | "len",
+    control: number[1]!.toLowerCase().replace("/", "") as "bpm" | "len",
     value: raw === "off" || raw === "none" ? null : Number(raw),
     ...(number[3] ? { voice: number[3].toLowerCase() } : {}),
   };
