@@ -248,27 +248,40 @@ describe("keys engine: alias and cost", () => {
   });
 
   test("cost <= 16x a saw voice per voice-second", () => {
-    const seconds = 2;
-    const song = score({}, [{ pitch: 33, dur: 480 * 4 }], {}, 2);
-    // The fastest of several runs is the cost; slower runs measure other
-    // load on a shared CI runner, not the engine.
+    // keys.md cost: one grand voice at key 33 against one polyBLEP saw
+    // voice, both a voice-second at 22.05 kHz in this process (the
+    // prototype measured 12.3x). The fastest of several runs is the cost;
+    // slower runs measure other load on a shared CI runner.
+    const rate = 22050;
     const time = (fn: () => void) => {
       fn();
+      fn();
       let best = Infinity;
-      for (let i = 0; i < 5; i += 1) {
+      for (let i = 0; i < 7; i += 1) {
         const t0 = performance.now();
         fn();
         best = Math.min(best, performance.now() - t0);
       }
       return best;
     };
-    const piano = time(() => render(song, seconds));
-    const out = new Float64Array(seconds * SR);
+    const song = score({}, [{ pitch: 33, dur: 480 * 4 }]);
+    const track = song.tracks[0]!;
+    const p = pianoParamsAt(track, resolvedKeys("grand", track.keys), 0);
+    const out = new Float64Array(rate);
+    const piano = time(() => {
+      const voice = new PianoVoice(
+        { pitch: 33, hz: 55, velocity: 0.8, trackSeed: 1, noteSeed: "cost" },
+        p,
+        rate,
+      );
+      out.fill(0);
+      voice.process(out, 0, rate);
+    });
     const saw = time(() => {
       // The prototype's reference: a polyBLEP saw, a biquad lowpass and an
-      // envelope, one voice at A2.
-      const f = new Biquad2().set("lpf", 4000, 0.7, 0, SR);
-      const dt = 110 / SR;
+      // envelope, one voice at A1.
+      const f = new Biquad2().set("lpf", 4000, 0.7, 0, rate);
+      const dt = 55 / rate;
       let phase = 0;
       let env = 0;
       for (let i = 0; i < out.length; i += 1) {
@@ -286,8 +299,7 @@ describe("keys engine: alias and cost", () => {
         out[i] = f.process(y) * env * 0.3;
       }
     });
-    // Floor the saw at 0.5 ms so timer noise cannot fail a fast machine.
-    expect(piano).toBeLessThanOrEqual(16 * Math.max(saw, 0.5));
+    expect(piano).toBeLessThanOrEqual(16 * saw);
   });
 });
 
