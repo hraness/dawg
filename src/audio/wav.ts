@@ -1085,6 +1085,8 @@ function stemKey(
     ...(context.score.tuning || track?.tuning
       ? [context.score.tuning ?? null, context.score.key]
       : []),
+    // Calibrated engines (0.7) render differently; absent keeps old keys.
+    ...(context.score.calibration ? [`cal:${context.score.calibration}`] : []),
     // Seeded noise follows the window origin of an arranged render.
     ...(context.seedTick ? [`seed:${context.seedTick}`] : []),
     ...(context.seedSeconds ? [`at:${context.seedSeconds}`] : []),
