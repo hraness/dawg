@@ -30,6 +30,7 @@ import {
 } from "./gateway.ts";
 import {
   defaultModelId,
+  fallbackModelId,
   MODEL_CATALOG,
   modelAlias,
   resolveModelChoice,
@@ -350,19 +351,24 @@ export async function runProviderTurn(
     ...(options.signal ? { signal: options.signal } : {}),
     ...(options.budget ? { budget: options.budget } : {}),
   };
-  if (isApiSelection(selection) && options.host.commands && !options.model)
-    return runCommandAgentTurn({
-      ...common,
-      model: selection.modelId,
-      client: options.gatewayClient ?? apiClient(selection),
-      commands: options.host.commands,
-    });
-  if (isApiSelection(selection))
+  if (isApiSelection(selection)) {
+    const model = options.model ?? selection.modelId;
+    const fallback = fallbackModelId(selection.kind, model);
+    if (options.host.commands && !options.model)
+      return runCommandAgentTurn({
+        ...common,
+        model,
+        ...(fallback ? { fallbackModel: fallback } : {}),
+        client: options.gatewayClient ?? apiClient(selection),
+        commands: options.host.commands,
+      });
     return runAgentTurn({
       ...common,
-      model: options.model ?? selection.modelId,
+      model,
+      ...(fallback ? { fallbackModel: fallback } : {}),
       client: options.gatewayClient ?? apiClient(selection),
     });
+  }
   if (selection.kind === "xcb") {
     const runner = options.runner ?? systemRunner;
     return runTextAgentTurn({

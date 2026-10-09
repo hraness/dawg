@@ -201,6 +201,7 @@ import {
   type AgentEvent,
   type AgentHost,
 } from "./agent/agent.ts";
+import { routeDuringTurn } from "./agent/steer.ts";
 import {
   isApiSelection,
   providerFingerprint,
@@ -1275,6 +1276,16 @@ async function runInteractive(): Promise<void> {
     }
   };
   let agentReported = false;
+  /** A typed command during an agent turn; leaves the turn's receipt alone. */
+  const runLocalBesideAgent = async (text: string): Promise<void> => {
+    tui.activity.pushRequest(text);
+    const base = baseline();
+    try {
+      receipt(await submit(text), base);
+    } catch (error) {
+      tui.activity.pushError(describeError(text, error));
+    }
+  };
   const drainQueue = async (): Promise<void> => {
     if (processingQueue) return;
     processingQueue = true;
@@ -1811,6 +1822,16 @@ async function runInteractive(): Promise<void> {
           else if (action?.kind === "cancel" && agentTurn) {
             agentTurn.controller.abort();
             tui.activity.setSpinner("cancelling");
+          } else if (
+            action?.kind === "submit" &&
+            action.value &&
+            agentTurn &&
+            routeDuringTurn(action.value, parsesLocally) === "local"
+          ) {
+            // A typed command never waits on the agent: it commits its own
+            // revision now, and the agent's next call re-reads the score.
+            const value = action.value;
+            void runLocalBesideAgent(value).finally(() => tick(true));
           } else if (action?.kind === "submit" && action.value && agentTurn) {
             // Enter during a turn steers it; Alt-Enter still queues a follow-up.
             agentTurn.steering.push(action.value);

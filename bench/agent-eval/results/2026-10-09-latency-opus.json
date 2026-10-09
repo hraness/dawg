@@ -1,0 +1,596 @@
+{
+  "provider": "gateway",
+  "date": "2026-10-09T16:32:17.442Z",
+  "tasks": [
+    "kick-four-on-floor-128",
+    "transpose-bass-whole-step",
+    "reverb-mix-keys",
+    "ii-v-i-bb-walking",
+    "son-clave-3-2",
+    "trance-build-8-bars",
+    "files-add-note",
+    "house-groove",
+    "mix-pass",
+    "tempo-out-of-range"
+  ],
+  "reps": 1,
+  "capUsd": 1.5,
+  "spentUsd": 1.3385316000000003,
+  "capped": false,
+  "summaries": [
+    {
+      "model": "anthropic/claude-opus-5.5",
+      "runs": 10,
+      "passed": 10,
+      "passRate": 1,
+      "taskPassRate": 1,
+      "tiers": {
+        "single": 1,
+        "compose": 1,
+        "files": 1,
+        "recovery": 1,
+        "multi": 1
+      },
+      "alwaysPass": 10,
+      "neverPass": 0,
+      "p50TurnMs": 8773.57975,
+      "p95TurnMs": 20728.171875,
+      "p50ModelMs": 8661.627709,
+      "p50FirstTokenMs": 2167.696458,
+      "meanSteps": 2.2,
+      "meanToolCalls": 2.4,
+      "meanRejected": 0.2,
+      "meanInputTokens": 85357.4,
+      "meanOutputTokens": 657.9,
+      "costUsd": 1.3385316000000003,
+      "costPerTaskUsd": 0.13385316000000003,
+      "errors": 0
+    }
+  ],
+  "records": [
+    {
+      "model": "anthropic/claude-opus-5.5",
+      "rep": 1,
+      "run": {
+        "id": "reverb-mix-keys",
+        "tier": "single",
+        "pass": true,
+        "checks": [
+          {
+            "name": "keys reverb mix 0.4",
+            "ok": true,
+            "detail": "{\"mix\":0.4,\"size\":0.5,\"fade\":2,\"lowpass\":8000,\"dim\":3000,\"predelay\":0.02}"
+          },
+          {
+            "name": "other tracks unchanged",
+            "ok": true
+          }
+        ],
+        "turns": 1,
+        "toolCalls": 1,
+        "rejected": 0,
+        "calls": [
+          {
+            "name": "set_fx",
+            "outcome": "applied"
+          }
+        ],
+        "end": "stop",
+        "text": "The keys track's reverb mix is now 0.4.",
+        "wallMs": 2974.984125
+      },
+      "stats": {
+        "requests": 1,
+        "inputTokens": 38330,
+        "cachedInputTokens": 0,
+        "outputTokens": 147,
+        "reportedCostUsd": 0.194586,
+        "firstTokenMs": 2167.696458
+      },
+      "modelMs": 2968.984917,
+      "costUsd": 0.194586
+    },
+    {
+      "model": "anthropic/claude-opus-5.5",
+      "rep": 1,
+      "run": {
+        "id": "kick-four-on-floor-128",
+        "tier": "single",
+        "pass": true,
+        "checks": [
+          {
+            "name": "tempo 128",
+            "ok": true,
+            "detail": "128"
+          },
+          {
+            "name": "kick hits",
+            "ok": true,
+            "detail": "0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15"
+          }
+        ],
+        "turns": 2,
+        "toolCalls": 2,
+        "rejected": 0,
+        "calls": [
+          {
+            "name": "set_tempo",
+            "outcome": "applied"
+          },
+          {
+            "name": "set_rhythm",
+            "outcome": "applied"
+          }
+        ],
+        "end": "stop",
+        "text": "The drums track now has a four-on-the-floor kick at 128 BPM: one hit on every beat, 16 across the 4-bar loop.",
+        "wallMs": 6101.817708
+      },
+      "stats": {
+        "requests": 2,
+        "inputTokens": 77000,
+        "cachedInputTokens": 37345,
+        "outputTokens": 209,
+        "reportedCostUsd": 0.20991800000000002,
+        "firstTokenMs": 1966.3654169999998
+      },
+      "modelMs": 6087.82725,
+      "costUsd": 0.20991800000000002
+    },
+    {
+      "model": "anthropic/claude-opus-5.5",
+      "rep": 1,
+      "run": {
+        "id": "transpose-bass-whole-step",
+        "tier": "single",
+        "pass": true,
+        "checks": [
+          {
+            "name": "bass shifted 2",
+            "ok": true,
+            "detail": "38 43 45 38"
+          },
+          {
+            "name": "other tracks unchanged",
+            "ok": true
+          }
+        ],
+        "turns": 2,
+        "toolCalls": 1,
+        "rejected": 0,
+        "calls": [
+          {
+            "name": "update_notes",
+            "outcome": "applied"
+          }
+        ],
+        "end": "stop",
+        "text": "I moved the bass up a whole step: C, F, G, C became D, G, A, D, and the rhythm is unchanged. The project already showed this change before my call, and the revision number stayed the same afterwards, so I don't think it was applied twice. You may want to check that the bass reads D2, G2, A2, D2.\n\nThe keys and lead tracks are still in C major, so the bass will now clash with them unless you transpo",
+        "wallMs": 8412.509
+      },
+      "stats": {
+        "requests": 2,
+        "inputTokens": 76987,
+        "cachedInputTokens": 37345,
+        "outputTokens": 410,
+        "reportedCostUsd": 0.213873,
+        "firstTokenMs": 2184.653416
+      },
+      "modelMs": 8405.428041,
+      "costUsd": 0.213873
+    },
+    {
+      "model": "anthropic/claude-opus-5.5",
+      "rep": 1,
+      "run": {
+        "id": "son-clave-3-2",
+        "tier": "compose",
+        "pass": true,
+        "checks": [
+          {
+            "name": "3-2 son clave",
+            "ok": true,
+            "detail": "0 1.5 3 5 6"
+          },
+          {
+            "name": "covers the loop",
+            "ok": true,
+            "detail": "10"
+          }
+        ],
+        "turns": 2,
+        "toolCalls": 1,
+        "rejected": 0,
+        "calls": [
+          {
+            "name": "set_rhythm",
+            "outcome": "applied"
+          }
+        ],
+        "end": "stop",
+        "text": "The 3-2 son clave is on the rim voice of the drum track and repeats every two bars, so it plays twice across the 4-bar loop. The pattern was already there, so this call didn't change anything. In bar 1 the rim hits beat 1, the \"and\" of 2 and beat 4. In bar 2 it hits beats 2 and 3.",
+        "wallMs": 10169.239
+      },
+      "stats": {
+        "requests": 2,
+        "inputTokens": 76733,
+        "cachedInputTokens": 37345,
+        "outputTokens": 666,
+        "reportedCostUsd": 0.217723,
+        "firstTokenMs": 6073.645667
+      },
+      "modelMs": 10161.341499999999,
+      "costUsd": 0.217723
+    },
+    {
+      "model": "anthropic/claude-opus-5.5",
+      "rep": 1,
+      "run": {
+        "id": "files-add-note",
+        "tier": "files",
+        "pass": true,
+        "checks": [
+          {
+            "name": "edited the project files",
+            "ok": true
+          },
+          {
+            "name": "project files evaluate",
+            "ok": true,
+            "detail": "files evaluate to the session score"
+          },
+          {
+            "name": "5 notes",
+            "ok": true
+          },
+          {
+            "name": "E2 at 6 for 2",
+            "ok": true
+          }
+        ],
+        "turns": 3,
+        "toolCalls": 2,
+        "rejected": 0,
+        "calls": [
+          {
+            "name": "read_file",
+            "outcome": "read"
+          },
+          {
+            "name": "edit_file",
+            "outcome": "applied"
+          }
+        ],
+        "end": "stop",
+        "text": "I added an E2 at beat 6, lasting 2 beats, to `tracks/bass/track.ts`. It now walks down from F2 to E2 before the G2 in bar 3, and the file passed the type check.\n\nOne thing to check: the score summary I was given already listed an E2 at beat 6, but the file didn't have it when I read it. If that note was already in the score, the bass may now have two E2s stacked at beat 6.",
+        "wallMs": 8773.57975
+      },
+      "stats": {
+        "requests": 3,
+        "inputTokens": 115753,
+        "cachedInputTokens": 113958,
+        "outputTokens": 491,
+        "reportedCostUsd": 0.0415786,
+        "firstTokenMs": 1374.6482910000004
+      },
+      "modelMs": 8661.627709,
+      "costUsd": 0.0415786
+    },
+    {
+      "model": "anthropic/claude-opus-5.5",
+      "rep": 1,
+      "run": {
+        "id": "tempo-out-of-range",
+        "tier": "recovery",
+        "pass": true,
+        "checks": [
+          {
+            "name": "tempo 300",
+            "ok": true,
+            "detail": "300"
+          }
+        ],
+        "turns": 1,
+        "toolCalls": 1,
+        "rejected": 0,
+        "calls": [
+          {
+            "name": "set_tempo",
+            "outcome": "applied"
+          }
+        ],
+        "end": "stop",
+        "text": "400 BPM is over dawg's limit, so I'm setting the tempo to the maximum of 300 BPM.",
+        "wallMs": 2216.0352079999993
+      },
+      "stats": {
+        "requests": 1,
+        "inputTokens": 38387,
+        "cachedInputTokens": 37345,
+        "outputTokens": 110,
+        "reportedCostUsd": 0.014875,
+        "firstTokenMs": 1602.6689590000005
+      },
+      "modelMs": 2213.3265420000007,
+      "costUsd": 0.014875
+    },
+    {
+      "model": "anthropic/claude-opus-5.5",
+      "rep": 1,
+      "run": {
+        "id": "ii-v-i-bb-walking",
+        "tier": "compose",
+        "pass": true,
+        "checks": [
+          {
+            "name": "keys ii-V-I",
+            "ok": true
+          },
+          {
+            "name": "walking quarters",
+            "ok": true,
+            "detail": "0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15"
+          },
+          {
+            "name": "roots on downbeats",
+            "ok": true,
+            "detail": "true true true true"
+          },
+          {
+            "name": "bass register",
+            "ok": true
+          },
+          {
+            "name": "stepwise-ish walk",
+            "ok": true,
+            "detail": "2 1 1 1 4 3 1 1 1 2 2 7 4 3 6"
+          }
+        ],
+        "turns": 2,
+        "toolCalls": 2,
+        "rejected": 0,
+        "calls": [
+          {
+            "name": "write_chords",
+            "outcome": "applied"
+          },
+          {
+            "name": "add_notes",
+            "outcome": "applied"
+          }
+        ],
+        "end": "stop",
+        "text": "The keys now play a ii–V–I in Bb: Cm7 for bar 1, F7 for bar 2, then Bbmaj7 held over bars 3 and 4. Under it, the bass walks in quarter notes with the chord root on each downbeat: C–D–E♭–E, F–A–C–B, B♭–A–G–F, B♭–D–F–B. Each bar's last note leads by a half step into the next root, and the B at the end leads back up to C when the loop repeats.",
+        "wallMs": 17990.562875
+      },
+      "stats": {
+        "requests": 2,
+        "inputTokens": 77748,
+        "cachedInputTokens": 37345,
+        "outputTokens": 1631,
+        "reportedCostUsd": 0.242098,
+        "firstTokenMs": 6926.549958
+      },
+      "modelMs": 17978.702084,
+      "costUsd": 0.242098
+    },
+    {
+      "model": "anthropic/claude-opus-5.5",
+      "rep": 1,
+      "run": {
+        "id": "house-groove",
+        "tier": "multi",
+        "pass": true,
+        "checks": [
+          {
+            "name": "tempo 124",
+            "ok": true,
+            "detail": "124"
+          },
+          {
+            "name": "kick hits",
+            "ok": true,
+            "detail": "0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15"
+          },
+          {
+            "name": "clap hits",
+            "ok": true,
+            "detail": "1 3 5 7 9 11 13 15"
+          },
+          {
+            "name": "openhat hits",
+            "ok": true,
+            "detail": "0.5 1.5 2.5 3.5 4.5 5.5 6.5 7.5 8.5 9.5 10.5 11.5 12.5 13.5 14.5 15.5"
+          },
+          {
+            "name": "bass offbeats",
+            "ok": true
+          },
+          {
+            "name": "bass A",
+            "ok": true
+          }
+        ],
+        "turns": 2,
+        "toolCalls": 3,
+        "rejected": 0,
+        "calls": [
+          {
+            "name": "set_tempo",
+            "outcome": "applied"
+          },
+          {
+            "name": "set_rhythm",
+            "outcome": "applied"
+          },
+          {
+            "name": "add_notes",
+            "outcome": "applied"
+          }
+        ],
+        "end": "stop",
+        "text": "The 4-bar house groove is set up at 124 BPM. The kick plays four on the floor, the clap lands on 2 and 4, open hats sit on every offbeat, and the bass plays A1 eighth notes on each offbeat between the kicks.",
+        "wallMs": 11138.352250000002
+      },
+      "stats": {
+        "requests": 2,
+        "inputTokens": 78854,
+        "cachedInputTokens": 74690,
+        "outputTokens": 987,
+        "reportedCostUsd": 0.055492,
+        "firstTokenMs": 3270.0438749999994
+      },
+      "modelMs": 11129.047832999999,
+      "costUsd": 0.055492
+    },
+    {
+      "model": "anthropic/claude-opus-5.5",
+      "rep": 1,
+      "run": {
+        "id": "mix-pass",
+        "tier": "multi",
+        "pass": true,
+        "checks": [
+          {
+            "name": "keys reverb",
+            "ok": true
+          },
+          {
+            "name": "bass 600 Hz",
+            "ok": true
+          },
+          {
+            "name": "lead delay",
+            "ok": true
+          },
+          {
+            "name": "other tracks unchanged",
+            "ok": true
+          }
+        ],
+        "turns": 3,
+        "toolCalls": 4,
+        "rejected": 1,
+        "calls": [
+          {
+            "name": "set_fx",
+            "outcome": "applied"
+          },
+          {
+            "name": "set_fx",
+            "outcome": "rejected"
+          },
+          {
+            "name": "set_fx",
+            "outcome": "applied"
+          },
+          {
+            "name": "set_fx",
+            "outcome": "applied"
+          }
+        ],
+        "end": "stop",
+        "text": "All three mix changes are in. The keys have reverb at 0.3 mix, the bass has a 600 Hz low-pass with no resonance, and the lead has a ping-pong delay at half a beat with 0.4 feedback and a 0.25 mix.",
+        "wallMs": 9534.031833
+      },
+      "stats": {
+        "requests": 3,
+        "inputTokens": 117024,
+        "cachedInputTokens": 112925,
+        "outputTokens": 682,
+        "reportedCostUsd": 0.056712,
+        "firstTokenMs": 2006.3357499999984
+      },
+      "modelMs": 9526.667499999998,
+      "costUsd": 0.056712
+    },
+    {
+      "model": "anthropic/claude-opus-5.5",
+      "rep": 1,
+      "run": {
+        "id": "trance-build-8-bars",
+        "tier": "compose",
+        "pass": true,
+        "checks": [
+          {
+            "name": "tempo 138",
+            "ok": true,
+            "detail": "138"
+          },
+          {
+            "name": "8 bars",
+            "ok": true,
+            "detail": "8"
+          },
+          {
+            "name": "kick every beat of 8 bars",
+            "ok": true
+          },
+          {
+            "name": "ramp starts low",
+            "ok": true,
+            "detail": "600 1100 2000 3600 6500"
+          },
+          {
+            "name": "ramp ends high",
+            "ok": true
+          },
+          {
+            "name": "ramp rises",
+            "ok": true
+          },
+          {
+            "name": "ramp spans the build",
+            "ok": true
+          }
+        ],
+        "turns": 4,
+        "toolCalls": 7,
+        "rejected": 1,
+        "calls": [
+          {
+            "name": "set_tempo",
+            "outcome": "applied"
+          },
+          {
+            "name": "extend_loop",
+            "outcome": "applied"
+          },
+          {
+            "name": "set_rhythm",
+            "outcome": "applied"
+          },
+          {
+            "name": "write_chords",
+            "outcome": "applied"
+          },
+          {
+            "name": "set_fx",
+            "outcome": "rejected"
+          },
+          {
+            "name": "set_automation",
+            "outcome": "applied"
+          },
+          {
+            "name": "set_fx",
+            "outcome": "applied"
+          }
+        ],
+        "end": "stop",
+        "text": "I set up the 8-bar trance build at 138 BPM: a four-on-the-floor kick plays all 8 bars, and the pad plays Am–F–C–G twice under a low-pass filter that rises from 600 Hz to about 6.5 kHz.\n\nThe filter climbs through 1.1 kHz, 2 kHz and 3.6 kHz at the start of bars 3, 5 and 7, so the pad opens up more and more towards the end. The first attempt to switch the filter on was rejected because of a wrong typ",
+        "wallMs": 20728.171875
+      },
+      "stats": {
+        "requests": 4,
+        "inputTokens": 156758,
+        "cachedInputTokens": 149380,
+        "outputTokens": 1246,
+        "reportedCostUsd": 0.09167600000000001,
+        "firstTokenMs": 3042.4475840000005
+      },
+      "modelMs": 20712.134417,
+      "costUsd": 0.09167600000000001
+    }
+  ]
+}

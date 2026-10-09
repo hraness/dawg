@@ -232,6 +232,9 @@ export async function runCommandAgentTurn(
       for await (const event of options.client.stream(
         {
           model: options.model,
+          ...(options.fallbackModel
+            ? { fallbackModelId: options.fallbackModel }
+            : {}),
           messages: [
             { role: "system", content: commandAgentSystemPrompt() },
             { role: "system", content: briefText },
