@@ -8,8 +8,237 @@
  * a dum/tak cycle on the frame drum.
  */
 
-import { grid, intervals, maybe, role } from "./parts.ts";
-import { card, type StyleCard } from "./schema.ts";
+import { grid, intervals, kit, maybe, role } from "./parts.ts";
+import { card, type CycleSpec, type StyleCard } from "./schema.ts";
+
+// ---------------------------------------------------------------------------
+// Timelines, talas, iqa'at and usuller (this lane's section of the cycles).
+//
+// A cycle is one stroke per beat unit (a quarter in x/4, an eighth in x/8);
+// "." is a rest, `stress` and `release` are 1-based beats (tali and khali
+// for a tala, dum accents for an iqa'). The divisions (vibhag, anga,
+// usul groups) must add up to the beats; `cycle()` checks that.
+
+/** Low (bass-voice) strokes: the open dum and bayan strokes of each family. */
+const LOW = Object.freeze([
+  "dum",
+  "dha",
+  "dhin",
+  "dhage",
+  "ge",
+  "thom",
+  "dhi",
+  "dhom",
+]);
+
+/**
+ * A rhythmic cycle; throws when strokes and divisions disagree. Every key
+ * is set (release and low too) so a child's cycle never inherits its
+ * parent's khali or low strokes.
+ */
+export function cycle(
+  kind: CycleSpec["kind"],
+  name: string,
+  divisions: readonly number[],
+  strokes: string,
+  stress: readonly number[],
+  release: readonly number[] = [],
+  low: readonly string[] = LOW,
+): CycleSpec {
+  const list = strokes.trim().split(/\s+/);
+  const beats = divisions.reduce((a, b) => a + b, 0);
+  if (list.length !== beats)
+    throw new Error(`cycle ${name}: ${list.length} strokes for ${beats} beats`);
+  for (const at of [...stress, ...release])
+    if (!(at >= 1 && at <= beats))
+      throw new Error(`cycle ${name}: beat ${at} outside 1-${beats}`);
+  return Object.freeze({
+    kind,
+    name,
+    beats,
+    divisions: Object.freeze([...divisions]),
+    strokes: Object.freeze(list),
+    stress: Object.freeze([...stress]),
+    release: Object.freeze([...release]),
+    low: Object.freeze([...low]),
+  });
+}
+
+/** Teental: 16 beats, vibhag 4+4+4+4, sam on 1, khali on 9. */
+export const TEENTAL = cycle(
+  "tala",
+  "teental",
+  [4, 4, 4, 4],
+  "dha dhin dhin dha dha dhin dhin dha dha tin tin ta ta dhin dhin dha",
+  [1, 5, 13],
+  [9, 10, 11, 12],
+);
+/** Ektaal: 12 beats in six vibhag of two; khali on 3 and 7. */
+export const EKTAAL = cycle(
+  "tala",
+  "ektaal",
+  [2, 2, 2, 2, 2, 2],
+  "dhin dhin dhage tirakita tu na kat ta dhage tirakita dhin na",
+  [1, 5, 9, 11],
+  [3, 4, 7, 8],
+);
+/** Chautal: 12 beats, 2+2+2+2+2+2, the pakhawaj cycle of dhrupad. */
+export const CHAUTAL = cycle(
+  "tala",
+  "chautal",
+  [2, 2, 2, 2, 2, 2],
+  "dha dha din ta kita dha din ta tita kata gadi gana",
+  [1, 5, 9, 11],
+  [3, 4, 7, 8],
+);
+/** Deepchandi: 14 beats, 3+4+3+4, khali on 8 (thumri). */
+export const DEEPCHANDI = cycle(
+  "tala",
+  "deepchandi",
+  [3, 4, 3, 4],
+  "dha dhin . dha dha tin . ta tin . dha dha dhin .",
+  [1, 4, 11],
+  [8, 9, 10],
+);
+/** Keherwa: 8 beats, 4+4, khali on 5. */
+export const KEHERWA = cycle(
+  "tala",
+  "keherwa",
+  [4, 4],
+  "dha ge na ti na ka dhi na",
+  [1],
+  [5, 6, 7, 8],
+);
+/** Dadra: 6 beats, 3+3, khali on 4. */
+export const DADRA = cycle(
+  "tala",
+  "dadra",
+  [3, 3],
+  "dha dhi na dha ti na",
+  [1],
+  [4, 5, 6],
+);
+/** Adi tala: 8 beats, laghu 4 + drutam 2 + drutam 2 (claps 1, 5, 7). */
+export const ADI = cycle(
+  "tala",
+  "adi",
+  [4, 2, 2],
+  "tha ka dhi mi tha ka jo nu",
+  [1, 5, 7],
+  [6, 8],
+);
+/** Misra chapu: 7 beats, 3+2+2. */
+export const MISRA_CHAPU = cycle(
+  "tala",
+  "misra chapu",
+  [3, 2, 2],
+  "tha ki ta tha ka dhi mi",
+  [1, 4, 6],
+);
+/** Rupaka (Carnatic): 6 beats, drutam 2 + laghu 4. */
+export const RUPAKA = cycle(
+  "tala",
+  "rupaka",
+  [2, 4],
+  "tha ka tha ki ta thom",
+  [1, 3],
+  [2],
+);
+/** Maqsum: 8/8 dum tak . tak dum . tak . */
+export const MAQSUM = cycle(
+  "iqa",
+  "maqsum",
+  [8],
+  "dum tak . tak dum . tak .",
+  [1, 5],
+);
+/** Baladi (masmudi saghir): dum dum . tak dum . tak . */
+export const BALADI = cycle(
+  "iqa",
+  "baladi",
+  [8],
+  "dum dum . tak dum . tak .",
+  [1, 2, 5],
+);
+/** Sama'i thaqil: 10/8, the muwashshah and sama'i cycle. */
+export const SAMAI_THAQIL = cycle(
+  "iqa",
+  "sama'i thaqil",
+  [3, 2, 2, 3],
+  "dum . . tak . dum dum tak . .",
+  [1, 6, 7],
+);
+/** Jurjina: 10/8 (3+2+2+3), the Iraqi maqam cycle. */
+export const JURJINA = cycle(
+  "iqa",
+  "jurjina",
+  [3, 2, 2, 3],
+  "dum . tak dum . tak . dum tak .",
+  [1, 4, 8],
+);
+/** Wahda: 4/4 one dum on the downbeat, the slow tarab and recitation pulse. */
+export const WAHDA = cycle(
+  "iqa",
+  "wahda",
+  [4],
+  "dum . tak .",
+  [1],
+);
+/** Aksak: 9/8 in 2+2+2+3. */
+export const AKSAK = cycle(
+  "usul",
+  "aksak",
+  [2, 2, 2, 3],
+  "dum . tek . tek . dum . tek",
+  [1, 7],
+);
+/** Curcuna: 10/8 in 3+2+2+3. */
+export const CURCUNA = cycle(
+  "usul",
+  "curcuna",
+  [3, 2, 2, 3],
+  "dum . tek dum . tek . tek . .",
+  [1, 4],
+);
+/** Devr-i revan: 14/8 in 3+2+2+3+2+2, the Mevlevi ayin's third selam. */
+export const DEVR_I_REVAN = cycle(
+  "usul",
+  "devr-i revan",
+  [3, 2, 2, 3, 2, 2],
+  "dum . tek dum . tek . dum . tek tek . tek .",
+  [1, 4, 8],
+);
+/** Devr-i hindi: 7/8 in 3+2+2. */
+export const DEVR_I_HINDI = cycle(
+  "usul",
+  "devr-i hindi",
+  [3, 2, 2],
+  "dum . tek dum . tek .",
+  [1, 4],
+);
+/** Çiftetelli: 8 beats of 4/4 over two bars, dum on 1, 6 and 7. */
+export const CIFTETELLI = cycle(
+  "usul",
+  "ciftetelli",
+  [3, 3, 2],
+  "dum tek . tek . dum dum tek",
+  [1, 6, 7],
+);
+
+/** Standard 12/8 bell: seven strokes in 2-2-1-2-2-2-1. */
+export const STANDARD_BELL = grid("x.x.xx.x.x.x");
+/** Tresillo 3+3+2, twice per 4/4 bar of sixteenths. */
+export const TRESILLO = grid("x..x..x.x..x..x.");
+/** Four-on-the-floor kick. */
+export const FOUR_FLOOR = grid("x...x...x...x...");
+/** Backbeat on 2 and 4. */
+export const BACKBEAT = grid("....x.......x...");
+/** Off-beat eighths (the "and"s). */
+export const OFFBEATS = grid("..x...x...x...x.");
+/** Straight eighths. */
+export const EIGHTHS = grid("x.x.x.x.x.x.x.x.");
+/** Sixteenths with the downbeats dropped (a shaker or scraper). */
+export const SIXTEENTHS = grid("xxxxxxxxxxxxxxxx");
 
 export const AFRICA_MENA_SOUTHASIA_CARDS: readonly StyleCard[] = Object.freeze([
   card({
@@ -203,14 +432,7 @@ export const AFRICA_MENA_SOUTHASIA_CARDS: readonly StyleCard[] = Object.freeze([
     tempo: { bpm: [72, 112], typical: 92 },
     meter: {
       signatures: [["8/8", 1]],
-      cycle: {
-        kind: "iqa",
-        name: "maqsum",
-        beats: 8,
-        divisions: [8],
-        strokes: ["dum", "tak", ".", "tak", "dum", ".", "tak", "."],
-        stress: [1, 5],
-      },
+      cycle: MAQSUM,
     },
     pitch: {
       tuning: "bayati",
@@ -333,32 +555,7 @@ export const AFRICA_MENA_SOUTHASIA_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "Hindustani raga: teental 16-beat cycle, vadi and samvadi emphasis, meend",
     meter: {
-      cycle: {
-        kind: "tala",
-        name: "teental",
-        beats: 16,
-        divisions: [4, 4, 4, 4],
-        strokes: [
-          "dha",
-          "dhin",
-          "dhin",
-          "dha",
-          "dha",
-          "dhin",
-          "dhin",
-          "dha",
-          "dha",
-          "tin",
-          "tin",
-          "ta",
-          "ta",
-          "dhin",
-          "dhin",
-          "dha",
-        ],
-        stress: [1, 5, 13],
-        release: [9, 10, 11, 12],
-      },
+      cycle: TEENTAL,
     },
   }),
   card({
