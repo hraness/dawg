@@ -35,6 +35,54 @@ export function isPianoFamily(
   return (PIANO_FAMILIES as readonly string[]).includes(instrument ?? "");
 }
 
+/**
+ * Electric keys (0.6.1, keys-electric): the Rhodes-style tine piano, the
+ * Wurlitzer-style reed piano and the clavinet. They share `Track.keys` and
+ * the `KEYS_PARAMS` table with the pianos; `KEYS_PARAM_FAMILIES` says which
+ * rows each family reads.
+ */
+export const ELECTRIC_FAMILIES = Object.freeze([
+  "epiano",
+  "wurli",
+  "clav",
+] as const);
+
+export type ElectricFamily = (typeof ELECTRIC_FAMILIES)[number];
+
+export function isElectricFamily(
+  instrument: string | undefined,
+): instrument is ElectricFamily {
+  return (ELECTRIC_FAMILIES as readonly string[]).includes(instrument ?? "");
+}
+
+/**
+ * Why una corda would not sound on this track (0.6.1), or undefined when it
+ * does: only the modelled pianos with a `keys` object read `softPedal`.
+ */
+export function softPedalNote(
+  track: Readonly<{ id: string; instrument: string; keys?: unknown }>,
+): string | undefined {
+  if (!isPianoFamily(track.instrument))
+    return `${track.id} is ${track.instrument}; una corda acts on the modelled pianos (${PIANO_FAMILIES.join(" ")})`;
+  if (track.keys === undefined)
+    return `${track.id} has no modelled piano yet; keys preset ${track.instrument} first`;
+  return undefined;
+}
+
+/** Every keys family (the instruments that read `Track.keys`). */
+export const KEYS_FAMILIES = Object.freeze([
+  ...PIANO_FAMILIES,
+  ...ELECTRIC_FAMILIES,
+] as const);
+
+export type KeysFamily = (typeof KEYS_FAMILIES)[number];
+
+export function isKeysFamily(
+  instrument: string | undefined,
+): instrument is KeysFamily {
+  return (KEYS_FAMILIES as readonly string[]).includes(instrument ?? "");
+}
+
 /** Body EQ voicings (soundboard and case colour). */
 export const PIANO_BODIES = Object.freeze([
   "grand",
@@ -157,7 +205,81 @@ export const KEYS_PARAMS: Readonly<Record<string, ParamSpec>> = Object.freeze({
     doc: "pitch wobble depth in semitones",
     strudel: ["vibmod", "vmod"],
   },
+  // keys-electric (0.6.1): epiano, wurli and clav rows.
+  bark: unit(0.35, "pickup drive: growl when played hard (epiano, wurli)"),
+  bell: unit(0.5, "tine or reed bell ping (epiano, wurli)"),
+  tone: {
+    kind: "number",
+    min: 0,
+    max: 12000,
+    default: 0,
+    step: 100,
+    unit: "Hz",
+    automate: true,
+    doc: "output low-pass of the electric keys; 0 is off",
+  },
+  pickup: {
+    kind: "enum",
+    values: ["neck", "bridge", "both", "out"],
+    default: "both",
+    doc: "clav pickup switch; out is both pickups out of phase",
+  },
+  mute: unit(0, "clav mute slider: damps the upper partials"),
+  vibe: unit(
+    0,
+    "suitcase stereo vibrato depth: antiphase left/right pan (epiano)",
+    true,
+  ),
+  vibehz: {
+    kind: "number",
+    min: 0.5,
+    max: 12,
+    default: 4,
+    step: 0.25,
+    unit: "Hz",
+    doc: "suitcase vibrato rate (epiano)",
+  },
+  trem: unit(0, "reed piano tremolo depth at 5.6 Hz (wurli)", true),
+  // keys-electric (0.6.1): piano sympathetic resonance (pianos only; 0 keeps
+  // 0.6.0 renders byte-identical).
+  sym: unit(
+    0,
+    "sympathetic string resonance while the sustain pedal is down; 0 is off",
+  ),
 });
+
+/**
+ * The families each keys parameter applies to (menus and listings show a
+ * track only its family's rows). A parameter missing here is a piano row.
+ */
+export const KEYS_PARAM_FAMILIES: Readonly<
+  Record<string, readonly KeysFamily[]>
+> = Object.freeze({
+  hardness: KEYS_FAMILIES,
+  touch: KEYS_FAMILIES,
+  decay: KEYS_FAMILIES,
+  release: KEYS_FAMILIES,
+  width: KEYS_FAMILIES,
+  vib: KEYS_FAMILIES,
+  vibmod: KEYS_FAMILIES,
+  bark: ["epiano", "wurli"],
+  bell: ["epiano", "wurli"],
+  tone: ELECTRIC_FAMILIES,
+  pickup: ["clav"],
+  mute: ["clav"],
+  vibe: ["epiano"],
+  vibehz: ["epiano"],
+  trem: ["wurli"],
+});
+
+/** The keys parameters a family reads, in `KEYS_PARAMS` order. */
+export function keysParamsFor(instrument: string | undefined): string[] {
+  const family = isKeysFamily(instrument) ? instrument : "grand";
+  return Object.keys(KEYS_PARAMS).filter((name) => {
+    const families = KEYS_PARAM_FAMILIES[name];
+    return families ? families.includes(family) : isPianoFamily(family);
+  });
+}
 
 /** The parameters shown first in the menu and `keys` listing. */
 export const KEYS_SIMPLE = Object.freeze([
@@ -166,6 +288,24 @@ export const KEYS_SIMPLE = Object.freeze([
   "release",
   "felt",
 ]);
+
+/** The electric families' first rows. */
+export const ELECTRIC_SIMPLE: Readonly<
+  Record<ElectricFamily, readonly string[]>
+> = Object.freeze({
+  epiano: Object.freeze(["bark", "bell", "tone", "vibe"]),
+  wurli: Object.freeze(["bark", "bell", "tone", "trem"]),
+  clav: Object.freeze(["pickup", "mute", "tone", "decay"]),
+});
+
+/** The first rows for a keys family. */
+export function keysSimpleFor(
+  instrument: string | undefined,
+): readonly string[] {
+  return isElectricFamily(instrument)
+    ? ELECTRIC_SIMPLE[instrument]
+    : KEYS_SIMPLE;
+}
 
 export type TrackKeys = Readonly<
   Record<string, number | string> & { preset?: string }
@@ -187,6 +327,15 @@ export const PIANO_FAMILY_DEFAULTS: Readonly<
   prepared: Object.freeze({ prep: 0.6, body: "prepared" }),
 });
 
+/** Each electric family's own defaults over `KEYS_PARAMS`. */
+export const ELECTRIC_FAMILY_DEFAULTS: Readonly<
+  Record<ElectricFamily, Readonly<Record<string, number | string>>>
+> = Object.freeze({
+  epiano: Object.freeze({ width: 0.3, tone: 6000 }),
+  wurli: Object.freeze({ width: 0.3, bark: 0.5, bell: 0.2, tone: 5000 }),
+  clav: Object.freeze({ width: 0.3 }),
+});
+
 /** Effects a preset sets with the voice (applied over the effect defaults). */
 export type KeysPresetFx = Readonly<{
   /** The track filter (`Track.filter`). */
@@ -197,7 +346,7 @@ export type KeysPresetFx = Readonly<{
 }>;
 
 export type KeysPreset = Readonly<{
-  instrument: PianoFamily;
+  instrument: KeysFamily;
   /** The preset's overrides over the family defaults. */
   keys: Readonly<Record<string, number | string>>;
   doc: string;
@@ -258,6 +407,43 @@ export const KEYS_PRESETS: Readonly<Record<string, KeysPreset>> = Object.freeze(
       keys: {},
       doc: "bolts, rubber and screws on 60% of keys (seeded per key)",
       styles: "Cage, Aphex-style, Oneohtrix Point Never",
+    },
+    // keys-electric (0.6.1)
+    epiano: {
+      instrument: "epiano",
+      keys: {},
+      doc: "Rhodes-style stage tine piano: bell and bark with velocity",
+      styles: "jazz, soul, Flying Lotus, Radiohead",
+    },
+    suitcase: {
+      instrument: "epiano",
+      keys: { vibe: 0.7, vibehz: 4, bark: 0.3 },
+      doc: "tine piano with the suitcase stereo vibrato, left and right in turn",
+      styles: "70s soul, Stevie Wonder ballads, neo-soul",
+    },
+    dyno: {
+      instrument: "epiano",
+      keys: { bell: 0.85, tone: 9000, hardness: 0.7 },
+      doc: "bright, bell-heavy tine piano",
+      styles: "80s ballads, city pop",
+    },
+    wurli: {
+      instrument: "wurli",
+      keys: {},
+      doc: "Wurlitzer-style reed piano, nasal and growly",
+      styles: "soul, funk, Radiohead, Supertramp",
+    },
+    clav: {
+      instrument: "clav",
+      keys: {},
+      doc: "clavinet, both pickups",
+      styles: "funk, disco, reggae",
+    },
+    funkclav: {
+      instrument: "clav",
+      keys: { pickup: "out", mute: 0.3 },
+      doc: "clavinet with both pickups out of phase and the mute slider up",
+      styles: "Stevie Wonder funk, Bill Withers",
     },
   },
 );
@@ -344,12 +530,21 @@ export function resolvedKeys(
     out[key] = spec.default as number | string;
   if (isPianoFamily(instrument))
     Object.assign(out, PIANO_FAMILY_DEFAULTS[instrument]);
+  if (isElectricFamily(instrument))
+    Object.assign(out, ELECTRIC_FAMILY_DEFAULTS[instrument]);
   const preset = keys?.preset ? KEYS_PRESETS[keys.preset] : undefined;
   if (preset) Object.assign(out, preset.keys);
   for (const [key, value] of Object.entries(keys ?? {}))
     if (key !== "preset") out[key] = value;
   return out;
 }
+
+/** Other names for the electric keys presets (keys-electric, 0.6.1). */
+const KEYS_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+  rhodes: "epiano",
+  wurlitzer: "wurli",
+  clavinet: "clav",
+});
 
 /**
  * What a new write of a keys word stores: `piano` and `grand` become the
@@ -358,7 +553,7 @@ export function resolvedKeys(
  */
 export function pianoWrite(word: string):
   | (Readonly<{
-      instrument: PianoFamily;
+      instrument: KeysFamily;
       keys: TrackKeys;
       preset?: string;
     }> &
@@ -372,7 +567,7 @@ export function pianoWrite(word: string):
         : "upright"
       : lower === "feltpiano"
         ? "felt"
-        : lower;
+        : (KEYS_ALIASES[lower] ?? lower);
   if (!isKeysPreset(name)) return undefined;
   const preset = KEYS_PRESETS[name]!;
   return Object.freeze({

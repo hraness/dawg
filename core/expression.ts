@@ -167,6 +167,8 @@ export type TrackGlide = Readonly<{ time: number; mode: GlideMode }>;
 export const DEFAULT_GLIDE_SECONDS = 0.06;
 
 export const PEDAL_STATES = ["down", "half", "up"] as const;
+/** Sostenuto has no half position (0.6.1). */
+export const SOSTENUTO_STATES = ["down", "up"] as const;
 export type PedalState = (typeof PEDAL_STATES)[number];
 
 /** A sustain pedal (MIDI CC64) change at a tick. */
@@ -386,16 +388,18 @@ export function normalizeTrackGlide(value: unknown): TrackGlide | undefined {
 export function normalizePedal(
   value: unknown,
   maxTick: number,
+  label = "pedal",
+  states: readonly PedalState[] = PEDAL_STATES,
 ): readonly PedalEvent[] | undefined {
   if (value === undefined || value === null) return undefined;
   if (!Array.isArray(value) || value.length > EXPRESSION_LIMITS.maxPedalEvents)
     throw new ExpressionValidationError(
-      `pedal must be an array of at most ${EXPRESSION_LIMITS.maxPedalEvents} events`,
+      `${label} must be an array of at most ${EXPRESSION_LIMITS.maxPedalEvents} events`,
     );
   const byTick = new Map<number, PedalEvent>();
   for (const item of value as unknown[]) {
-    const event = record(item, "pedal event");
-    onlyKeys(event, ["tick", "state"], "pedal event");
+    const event = record(item, `${label} event`);
+    onlyKeys(event, ["tick", "state"], `${label} event`);
     const tick = event.tick;
     if (
       typeof tick !== "number" ||
@@ -404,11 +408,11 @@ export function normalizePedal(
       tick > maxTick
     )
       throw new ExpressionValidationError(
-        `pedal tick must be an integer 0..${maxTick}`,
+        `${label} tick must be an integer 0..${maxTick}`,
       );
-    if (!PEDAL_STATES.includes(event.state as PedalState))
+    if (!states.includes(event.state as PedalState))
       throw new ExpressionValidationError(
-        `pedal state must be one of ${PEDAL_STATES.join(", ")}`,
+        `${label} state must be one of ${states.join(", ")}`,
       );
     // The last event at a tick wins.
     byTick.set(tick, Object.freeze({ tick, state: event.state as PedalState }));
@@ -551,6 +555,80 @@ export function pedalStateAt(
   return state;
 }
 
+/** A stretch of song ticks `[from, to)` placed at `offset` in a slice. */
+export type PedalPiece = Readonly<{ from: number; to: number; offset: number }>;
+
+/**
+ * Pedal events for a slice made of `pieces` (a render window, a section
+ * pass, an audition region): the state in force at each piece's start is
+ * restated at its offset (`carry`, for sustain and una corda; sostenuto
+ * passes false, since a pedal already down latches no key struck later),
+ * events inside the piece move by `offset - from`, and a pedal still down
+ * at the piece's end is lifted there. Undefined when nothing is left.
+ */
+export function slicePedal(
+  events: readonly PedalEvent[] | undefined,
+  pieces: readonly PedalPiece[],
+  carry = true,
+): readonly PedalEvent[] | undefined {
+  if (!events || events.length === 0) return events;
+  const byTick = new Map<number, PedalEvent>();
+  const put = (tick: number, state: PedalState) =>
+    byTick.set(tick, Object.freeze({ tick, state }));
+  for (const { from, to, offset } of pieces) {
+    let state: PedalState = "up";
+    if (carry)
+      for (const event of events) {
+        if (event.tick >= from) break;
+        state = event.state;
+      }
+    // Restate up too: the previous piece may have ended with it down.
+    if (state !== "up" || byTick.size > 0) put(offset, state);
+    for (const event of events) {
+      if (event.tick < from || event.tick >= to) continue;
+      put(event.tick - from + offset, event.state);
+      state = event.state;
+    }
+    if (state !== "up" && Number.isFinite(to)) put(offset + to - from, "up");
+  }
+  const out = [...byTick.values()].sort((a, b) => a.tick - b.tick);
+  // Drop events that restate the state already in force.
+  const kept: PedalEvent[] = [];
+  let last: PedalState = "up";
+  for (const event of out)
+    if (event.state !== last) {
+      kept.push(event);
+      last = event.state;
+    }
+  return kept.length > 0 ? Object.freeze(kept) : undefined;
+}
+
+/** The track with its three pedal lanes cut to `pieces` (see slicePedal). */
+export function slicePedals<T extends PedalTrack>(
+  track: T,
+  pieces: readonly PedalPiece[],
+): T {
+  if (!track.pedal && !track.softPedal && !track.sostenuto) return track;
+  const out: Record<string, unknown> = { ...track };
+  for (const [field, carry] of [
+    ["pedal", true],
+    ["softPedal", true],
+    ["sostenuto", false],
+  ] as const) {
+    if (!track[field]) continue;
+    const next = slicePedal(track[field], pieces, carry);
+    if (next) out[field] = next;
+    else delete out[field];
+  }
+  return out as T;
+}
+
+type PedalTrack = Readonly<{
+  pedal?: readonly PedalEvent[];
+  softPedal?: readonly PedalEvent[];
+  sostenuto?: readonly PedalEvent[];
+}>;
+
 // ---------------------------------------------------------------------------
 // Performance
 
@@ -674,6 +752,7 @@ export function hasTrackPerformance(track: Track | undefined): boolean {
     track !== undefined &&
     (track.glide !== undefined ||
       track.pedal !== undefined ||
+      track.sostenuto !== undefined ||
       track.velocityCurve !== undefined ||
       track.humanize !== undefined)
   );
@@ -866,6 +945,64 @@ export function performNotes(
         duration: end - item.start,
         pedalled: end > release,
         ...(damp ? { damp } : {}),
+      };
+    });
+  }
+  // 3b. Sostenuto (0.6.1): a key held (written length after articulation)
+  // when the sostenuto goes down keeps its damper up until the sostenuto
+  // lifts; keys struck later damp at their own release (or the sustain
+  // pedal's). The rod keeps a caught damper raised, so the same pitch
+  // struck again while that sostenuto is down rings to the lift too; the
+  // earlier instance stops at the restrike so voices do not pile up. A key
+  // still held through a lift and a new press is caught again.
+  const sostenuto = track?.sostenuto;
+  if (sostenuto) {
+    const spans: { down: number; lift: number; pitches: Set<number> }[] = [];
+    let open: number | undefined;
+    for (const event of sostenuto) {
+      if (event.state === "down" && open === undefined) open = event.tick;
+      else if (event.state === "up" && open !== undefined) {
+        spans.push({ down: open, lift: event.tick, pitches: new Set() });
+        open = undefined;
+      }
+    }
+    if (open !== undefined)
+      spans.push({ down: open, lift: timing.endTick, pitches: new Set() });
+    const caughtBy = working.map((item) => {
+      const keyUp = item.start + item.bendLength;
+      return spans.filter((span) => {
+        const held = item.start <= span.down && span.down < keyUp;
+        if (held) span.pitches.add(item.note.pitch);
+        return held;
+      });
+    });
+    working = working.map((item, index) => {
+      const keyUp = item.start + item.bendLength;
+      let lift = -Infinity;
+      for (const span of caughtBy[index]!) lift = Math.max(lift, span.lift);
+      for (const span of spans)
+        if (
+          span.pitches.has(item.note.pitch) &&
+          span.down < item.start &&
+          item.start < span.lift
+        )
+          lift = Math.max(lift, span.lift);
+      if (lift === -Infinity) return item;
+      const current = item.start + item.duration;
+      let end = Math.max(current, Math.min(lift, timing.endTick));
+      if (end <= current) return item;
+      const restrike = working.find(
+        (other) =>
+          other !== item &&
+          other.note.pitch === item.note.pitch &&
+          other.start > item.start &&
+          other.start < end,
+      );
+      if (restrike) end = Math.max(current, restrike.start);
+      return {
+        ...item,
+        duration: end - item.start,
+        pedalled: end > keyUp || item.pedalled === true,
       };
     });
   }

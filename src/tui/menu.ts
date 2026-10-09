@@ -101,9 +101,11 @@ import {
 import {
   KEYS_PARAMS,
   KEYS_PRESETS,
-  KEYS_SIMPLE,
-  PIANO_FAMILIES,
-  isPianoFamily,
+  KEYS_FAMILIES,
+  isElectricFamily,
+  isKeysFamily,
+  keysParamsFor,
+  keysSimpleFor,
   resolvedKeys,
 } from "../../core/keys.ts";
 import type { PickerItem } from "../../tui/app.ts";
@@ -533,18 +535,20 @@ function soundSectionNodes(context: MenuContext): MenuNode[] {
         ]
       : [];
   const keys: MenuNode[] =
-    track && isPianoFamily(track.instrument) && track.keys
+    track && isKeysFamily(track.instrument) && track.keys
       ? [
           {
             kind: "menu",
             id: "keys",
             label: "keys",
             detail: `${track.instrument}${track.keys.preset ? ` · ${track.keys.preset}` : ""}`,
-            help: "the modelled piano: preset, touch, hammers, dampers, stretch",
+            help: isElectricFamily(track.instrument)
+              ? "electric keys: preset, bark, bell, tone, vibe/trem, pickup and mute"
+              : "the modelled piano: preset, touch, hammers, dampers, stretch",
             build: (inner) => {
               const current = focused(inner);
               return current
-                ? keysNodes(current, Object.keys(KEYS_PARAMS))
+                ? keysNodes(current, keysParamsFor(current.instrument))
                 : [];
             },
           },
@@ -969,7 +973,7 @@ function trackNodes(context: MenuContext): MenuNode[] {
 }
 
 function instrumentNode(track: Track): MenuNode {
-  const options: string[] = [...AVAILABLE_INSTRUMENTS, ...PIANO_FAMILIES];
+  const options: string[] = [...AVAILABLE_INSTRUMENTS, ...KEYS_FAMILIES];
   if (!options.includes(track.instrument)) options.push(track.instrument);
   return {
     kind: "choice",
@@ -1072,17 +1076,24 @@ function parameterNodes(context: MenuContext): MenuNode[] {
       label: "add a voice",
       value: "/sample <path> [as <voice>]",
     });
-  } else if (isPianoFamily(track.instrument) && track.keys) {
-    nodes.push(...keysNodes(track, KEYS_SIMPLE));
+  } else if (isKeysFamily(track.instrument) && track.keys) {
+    nodes.push(...keysNodes(track, keysSimpleFor(track.instrument)));
+    const all = keysParamsFor(track.instrument);
     nodes.push({
       kind: "menu",
       id: "keys:all",
-      label: "all piano params",
-      detail: `all ${Object.keys(KEYS_PARAMS).length} params`,
-      help: "every modelled piano parameter",
+      label: isElectricFamily(track.instrument)
+        ? `all ${track.instrument} params`
+        : "all piano params",
+      detail: `all ${all.length} params`,
+      help: isElectricFamily(track.instrument)
+        ? "every electric keys parameter for this family"
+        : "every modelled piano parameter",
       build: (inner) => {
         const current = focused(inner);
-        return current ? keysNodes(current, Object.keys(KEYS_PARAMS)) : [];
+        return current
+          ? keysNodes(current, keysParamsFor(current.instrument))
+          : [];
       },
     });
   } else if (track.instrument === "modal") {
@@ -1257,9 +1268,15 @@ function keysNodes(track: Track, params: readonly string[]): MenuNode[] {
       kind: "choice",
       label: "preset",
       value: track.keys?.preset ?? "—",
-      options: Object.keys(KEYS_PRESETS),
+      options: Object.keys(KEYS_PRESETS).filter(
+        (name) =>
+          isElectricFamily(KEYS_PRESETS[name]!.instrument) ===
+          isElectricFamily(track.instrument),
+      ),
       command: (preset) => `keys preset ${preset}`,
-      help: "a starting piano; every value stays editable",
+      help: isElectricFamily(track.instrument)
+        ? "a starting electric piano or clav; every value stays editable"
+        : "a starting piano; every value stays editable",
     },
   ];
   for (const key of params) {
@@ -1961,15 +1978,38 @@ function soundNodes(): MenuNode[] {
       kind: "menu",
       id: "group:keys",
       label: "Keys",
-      help: "modelled pianos, built in (no download)",
+      help: "modelled pianos and electric keys, built in (no download)",
       detail: Object.keys(KEYS_PRESETS).join(" "),
-      build: () =>
-        Object.entries(KEYS_PRESETS).map(([name, preset]): MenuNode => ({
-          kind: "action",
-          label: `${name.padEnd(10)} ${preset.doc}`,
-          command: `piano ${name}`,
-          help: preset.styles,
-        })),
+      build: () => [
+        ...Object.entries(KEYS_PRESETS)
+          .filter(([, preset]) => !isElectricFamily(preset.instrument))
+          .map(([name, preset]): MenuNode => ({
+            kind: "action",
+            label: `${name.padEnd(10)} ${preset.doc}`,
+            command: `piano ${name}`,
+            help: preset.styles,
+          })),
+        // keys-electric (0.6.1): tine and reed pianos and the clavinet.
+        {
+          kind: "menu",
+          id: "group:keys:electric",
+          label: "Electric",
+          help: "electric pianos (tine, reed) and the clavinet, modelled",
+          detail: Object.entries(KEYS_PRESETS)
+            .filter(([, preset]) => isElectricFamily(preset.instrument))
+            .map(([name]) => name)
+            .join(" "),
+          build: () =>
+            Object.entries(KEYS_PRESETS)
+              .filter(([, preset]) => isElectricFamily(preset.instrument))
+              .map(([name, preset]): MenuNode => ({
+                kind: "action",
+                label: `${name.padEnd(10)} ${preset.doc}`,
+                command: `keys preset ${name}`,
+                help: preset.styles,
+              })),
+        },
+      ],
     },
     {
       kind: "action",

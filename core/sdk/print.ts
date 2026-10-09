@@ -808,13 +808,15 @@ function performanceEntries(score: TrackScore, track: Track): string[] {
             1,
           )}`,
     );
-  if (track.pedal) {
-    const events = track.pedal.map(
+  for (const key of ["pedal", "softPedal", "sostenuto"] as const) {
+    const lane = track[key];
+    if (!lane) continue;
+    const events = lane.map(
       (event) =>
         `[${num(event.tick / score.ticksPerBeat)}, ${str(event.state)}]`,
     );
     entries.push(
-      `pedal: ${list(events, INDENT, "pedal: ".length, 1, events.length > 1)}`,
+      `${key}: ${list(events, INDENT, `${key}: `.length, 1, events.length > 1)}`,
     );
   }
   if (track.velocityCurve)

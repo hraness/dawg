@@ -76,3 +76,43 @@ describe("piano agent tools", () => {
     ).toThrow();
   });
 });
+
+describe("electric keys agent tools", () => {
+  test("set_instrument with an electric word loads its preset", () => {
+    for (const [word, instrument, preset] of [
+      ["epiano", "epiano", "epiano"],
+      ["rhodes", "epiano", "epiano"],
+      ["suitcase", "epiano", "suitcase"],
+      ["wurlitzer", "wurli", "wurli"],
+      ["clavinet", "clav", "clav"],
+      ["funkclav", "clav", "funkclav"],
+    ] as const) {
+      const next = apply(song(), "set_instrument", { instrument: word });
+      expect(next.tracks[0]!.instrument).toBe(instrument);
+      expect(next.tracks[0]!.keys?.preset).toBe(preset);
+    }
+  });
+
+  test("set_keys sets electric params and refuses another family's", () => {
+    const ep = apply(song(), "set_keys", { preset: "epiano" });
+    const next = apply(ep, "set_keys", { params: { vibe: 0.6, bark: 0.5 } });
+    expect(next.tracks[0]!.keys).toEqual({
+      preset: "epiano",
+      vibe: 0.6,
+      bark: 0.5,
+    });
+    expect(() =>
+      tool("set_keys").plan({ params: { pickup: "neck" } }, context(ep)),
+    ).toThrow(/epiano has no pickup/);
+    const clav = apply(song(), "set_keys", { preset: "funkclav" });
+    expect(
+      apply(clav, "set_keys", { params: { pickup: "neck" } }).tracks[0]!.keys!
+        .pickup,
+    ).toBe("neck");
+    const schema = tool("set_keys").parameters as {
+      properties: { preset: { enum: string[] } };
+    };
+    for (const name of ["epiano", "suitcase", "dyno", "wurli", "clav"])
+      expect(schema.properties.preset.enum).toContain(name);
+  });
+});

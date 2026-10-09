@@ -10,6 +10,11 @@
  *   keys <param> off              unset one parameter (back to the preset's)
  *   keys reset                    the family's own sound (`keys: {}`),
  *                                 dropping the preset's unedited effects
+ *   epiano | wurli | clav         the electric keys (0.6.1), also rhodes
+ *                                 suitcase dyno wurlitzer clavinet funkclav
+ *   epiano preset <name>          an electric preset
+ *   epiano <param> <value> […]    set electric parameters (vibe 0.6 …);
+ *                                 the track becomes that family first
  *
  * Every new write of `piano` stores `instrument: "grand"` with `keys`; a
  * stored legacy `instrument: "piano"` is never rewritten unless asked. Each
@@ -17,12 +22,15 @@
  */
 import { FxValidationError } from "../../core/params.ts";
 import {
+  ELECTRIC_FAMILIES,
   KEYS_PARAMS,
   KEYS_PRESETS,
-  KEYS_SIMPLE,
+  PIANO_FAMILIES,
   isKeysPreset,
-  isPianoFamily,
+  isKeysFamily,
   keysParamName,
+  keysParamsFor,
+  keysSimpleFor,
   normalizeKeys,
   pianoWrite,
   type TrackKeys,
@@ -38,20 +46,36 @@ import { parseParamValue } from "./fx.ts";
 
 export type KeysCommand =
   | { type: "keys-list" }
-  | { type: "keys-presets" }
+  /** `family`: `epiano preset` lists only that family's presets. */
+  | { type: "keys-presets"; family?: string }
   | { type: "keys-reset" }
   | { type: "keys-preset"; preset: string }
   | {
       type: "keys-set";
       /** `null` unsets a parameter. */
       values: Readonly<Record<string, number | string | null>>;
+      /** `epiano vibe 0.6`: the electric family the track becomes first. */
+      family?: string;
     };
+
+/** Electric family words that also take `preset` and parameters. */
+const FAMILY_HEADS: Readonly<Record<string, string>> = Object.freeze({
+  epiano: "epiano",
+  rhodes: "epiano",
+  wurli: "wurli",
+  wurlitzer: "wurli",
+  clav: "clav",
+  clavinet: "clav",
+});
 
 /** The words that start a keys command (registered with /help). */
 export const KEYS_COMMAND_WORDS = Object.freeze([
   "keys",
   "piano",
   ...Object.keys(KEYS_PRESETS).filter((name) => name !== "lofi"),
+  "rhodes",
+  "wurlitzer",
+  "clavinet",
 ]);
 
 export function parseKeysCommand(prompt: string): KeysCommand | undefined {
@@ -73,6 +97,20 @@ export function parseKeysCommand(prompt: string): KeysCommand | undefined {
     return words.length === 2 && isKeysPreset(words[1]!)
       ? { type: "keys-preset", preset: words[1]! }
       : undefined;
+  }
+  const family = FAMILY_HEADS[head];
+  if (family) {
+    if (words.length === 1)
+      return { type: "keys-preset", preset: pianoWrite(head)!.preset! };
+    const parsed = parseKeysCommand(["keys", ...words.slice(1)].join(" "));
+    if (!parsed || parsed.type === "keys-list") return undefined;
+    if (parsed.type === "keys-preset")
+      return KEYS_PRESETS[parsed.preset]!.instrument === family
+        ? parsed
+        : undefined;
+    if (parsed.type === "keys-set") return { ...parsed, family };
+    if (parsed.type === "keys-presets") return { ...parsed, family };
+    return parsed;
   }
   if (head !== "keys") {
     if (words.length === 1 && isKeysPreset(head) && head !== "lofi")
@@ -239,16 +277,40 @@ export function applyKeysCommand(
   if (command.type === "keys-presets")
     return {
       ok: true,
-      message: `keys presets · ${Object.keys(KEYS_PRESETS).join(" ")}`,
+      message: `${command.family ?? "keys"} presets · ${Object.keys(
+        KEYS_PRESETS,
+      )
+        .filter(
+          (name) =>
+            !command.family ||
+            KEYS_PRESETS[name]!.instrument === command.family,
+        )
+        .join(" ")}`,
     };
-  const piano = isPianoFamily(track.instrument);
+  const piano = isKeysFamily(track.instrument);
   if (command.type === "keys-list")
     return {
       ok: true,
       message: piano
-        ? `keys · ${track.instrument} · ${describeKeys(track.keys)} · basics ${KEYS_SIMPLE.join(" ")}`
-        : `keys · ${trackId} is ${track.instrument}; type piano (or grand upright felt honkytonk prepared) for the modelled piano`,
+        ? `keys · ${track.instrument} · ${describeKeys(track.keys)} · basics ${keysSimpleFor(track.instrument).join(" ")}`
+        : `keys · ${trackId} is ${track.instrument}; type piano (${PIANO_FAMILIES.join(" ")}) or ${ELECTRIC_FAMILIES.join(" ")} for modelled keys`,
     };
+  if (
+    command.type === "keys-set" &&
+    command.family &&
+    track.instrument !== command.family
+  ) {
+    // `epiano vibe 0.6` on another sound: become the family, then set.
+    const base = applyKeysCommand(score, trackId, {
+      type: "keys-preset",
+      preset: command.family,
+    });
+    if (!base.ok || !base.next) return base;
+    return applyKeysCommand(base.next, trackId, {
+      type: "keys-set",
+      values: command.values,
+    });
+  }
   if (track.sampler && command.type !== "keys-preset")
     return {
       ok: false,
@@ -278,6 +340,15 @@ export function applyKeysCommand(
     // The family's own sound: the preset and the effects it brought go.
     patch = { ...keysPresetClear(track), keys: {} };
   } else {
+    const allowed = keysParamsFor(track.instrument);
+    const foreign = Object.keys(command.values).filter(
+      (key) => !allowed.includes(key),
+    );
+    if (foreign.length > 0)
+      return {
+        ok: false,
+        message: `keys · ${track.instrument} has no ${foreign.join(" ")}; its parameters: ${allowed.join(" ")}`,
+      };
     const keys: Record<string, unknown> = { ...(track.keys ?? {}) };
     for (const [key, value] of Object.entries(command.values)) {
       if (value === null) delete keys[key];

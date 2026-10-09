@@ -697,3 +697,94 @@ describe("dawg render with a sample that cannot load", () => {
     }
   });
 });
+
+describe("windowed renders keep the piano pedals (0.6.1)", () => {
+  const rate = 22050;
+  const ticks = 4 * 480;
+  function rmsDb(pcm: Int16Array, fromSecond: number, toSecond: number) {
+    const slice = pcm.subarray(fromSecond * rate * 2, toSecond * rate * 2);
+    let sum = 0;
+    for (const sample of slice) sum += sample * sample;
+    return 10 * Math.log10(sum / Math.max(1, slice.length) + 1e-9);
+  }
+  function score(pedals: boolean) {
+    // 28 bars at 120 bpm: 56 s, so the export renders in windows. Una corda
+    // goes down just before bar 20; sostenuto catches the bar-20 key and
+    // holds it to bar 24.
+    return createScore({
+      bars: 28,
+      tempoBpm: 120,
+      tracks: [
+        {
+          id: "p",
+          name: "p",
+          instrument: "grand",
+          keys: {},
+          ...(pedals
+            ? {
+                softPedal: [{ tick: 20 * ticks - 240, state: "down" }],
+                sostenuto: [
+                  { tick: 20 * ticks + 240, state: "down" },
+                  { tick: 24 * ticks, state: "up" },
+                ],
+              }
+            : {}),
+        },
+      ],
+      notes: [
+        {
+          id: "a",
+          trackId: "p",
+          pitch: 48,
+          startTick: 0,
+          durationTicks: 480,
+          velocity: 0.6,
+        },
+        {
+          id: "b",
+          trackId: "p",
+          pitch: 60,
+          startTick: 20 * ticks,
+          durationTicks: 480,
+          velocity: 0.8,
+        },
+      ],
+    } as Parameters<typeof createScore>[0]).withSections(
+      [{ name: "all", startBar: 0, bars: 28 }],
+      [],
+    );
+  }
+
+  test("una corda and sostenuto past bar 20 match the one-pass render", () => {
+    const windowed = renderArrangedPcm(score(true), { sampleRate: rate });
+    const single = renderScorePcm(applySectionChanges(score(true)), {
+      sampleRate: rate,
+      maxSeconds: 70,
+    });
+    const plain = renderScorePcm(applySectionChanges(score(false)), {
+      sampleRate: rate,
+      maxSeconds: 70,
+    });
+    // Attack under una corda (bar 20 = 40 s) and the latched tail.
+    for (const [from, to] of [
+      [40, 40.4],
+      [43, 46],
+    ] as const)
+      expect(
+        Math.abs(rmsDb(windowed.pcm, from, to) - rmsDb(single.pcm, from, to)),
+      ).toBeLessThanOrEqual(1);
+    // The pedals are audible there, so the match means something: una
+    // corda lowers the attack peak (keys.md 9.12), in both renders.
+    const peakDb = (pcm: Int16Array) => {
+      let top = 0;
+      for (const x of pcm.subarray(40 * rate * 2, 40.2 * rate * 2))
+        top = Math.max(top, Math.abs(x));
+      return 20 * Math.log10(top);
+    };
+    expect(peakDb(plain.pcm) - peakDb(single.pcm)).toBeGreaterThan(1.5);
+    expect(peakDb(plain.pcm) - peakDb(windowed.pcm)).toBeGreaterThan(1.5);
+    expect(
+      rmsDb(single.pcm, 43, 46) - rmsDb(plain.pcm, 43, 46),
+    ).toBeGreaterThan(10);
+  });
+});

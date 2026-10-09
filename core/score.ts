@@ -45,8 +45,11 @@ import {
 import {
   ExpressionValidationError,
   normalizeNoteExpression,
+  normalizePedal,
   normalizeTrackPerformance,
+  SOSTENUTO_STATES,
   type NoteExpression,
+  type PedalEvent,
   type NoteExpressionPatch,
   type TrackPerformance,
 } from "./expression.ts";
@@ -413,6 +416,17 @@ export type Track = Readonly<{
    * instrument with this field is rejected. Absent keeps today's tone.
    */
   modal?: TrackModal;
+  /**
+   * Optional (0.6.1): una corda (soft pedal) events, same shape as `pedal`.
+   * Modelled pianos read it at each onset (half is half the shift); other
+   * instruments ignore it.
+   */
+  softPedal?: readonly PedalEvent[];
+  /**
+   * Optional (0.6.1): sostenuto pedal events (down and up only). Keys held
+   * when it goes down ring until it lifts; later keys damp as usual.
+   */
+  sostenuto?: readonly PedalEvent[];
 }> &
   /**
    * Performance (`core/expression.ts`): glide default, sustain pedal
@@ -754,6 +768,8 @@ export type TrackPatch = Readonly<
     granular?: TrackGranular | null;
     keys?: TrackKeys | null;
     modal?: TrackModal | null;
+    softPedal?: Track["softPedal"] | null;
+    sostenuto?: Track["sostenuto"] | null;
   }
 >;
 
@@ -802,6 +818,8 @@ export type TrackInput = Readonly<
     | "granular"
     | "keys"
     | "modal"
+    | "softPedal"
+    | "sostenuto"
   > &
     Pick<Track, "id"> & {
       filter?: TrackFilter | null;
@@ -824,6 +842,8 @@ export type TrackInput = Readonly<
       granular?: TrackGranular | null;
       keys?: TrackKeys | null;
       modal?: TrackModal | null;
+      softPedal?: Track["softPedal"] | null;
+      sostenuto?: Track["sostenuto"] | null;
     }
 >;
 
@@ -1835,6 +1855,28 @@ function normalizeTrack(input: unknown): Track {
     () => normalizeTuning(input.tuning, `track ${id} tuning`),
     "invalid-track",
   );
+  let softPedal: readonly PedalEvent[] | undefined;
+  let sostenuto: readonly PedalEvent[] | undefined;
+  try {
+    softPedal = normalizePedal(
+      input.softPedal,
+      SCORE_LIMITS.maxTick,
+      "softPedal",
+    );
+    sostenuto = normalizePedal(
+      input.sostenuto,
+      SCORE_LIMITS.maxTick,
+      "sostenuto",
+      SOSTENUTO_STATES,
+    );
+  } catch (error) {
+    if (error instanceof ExpressionValidationError)
+      throw new ScoreValidationError(
+        `track ${id} ${error.message}`,
+        "invalid-track",
+      );
+    throw error;
+  }
   const string = fxOrThrow(() => normalizeString(input.string));
   // A bare `granular` instrument (set_instrument, `instrument granular`)
   // gets an empty object, so the engine plays its defaults.
@@ -1907,6 +1949,8 @@ function normalizeTrack(input: unknown): Track {
     ...(granular ? { granular } : {}),
     ...(keys ? { keys } : {}),
     ...(modal ? { modal } : {}),
+    ...(softPedal ? { softPedal } : {}),
+    ...(sostenuto ? { sostenuto } : {}),
   });
 }
 

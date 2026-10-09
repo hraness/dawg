@@ -24,6 +24,7 @@ const score = createScore({
   tracks: [
     { id: "lead", instrument: "synth" },
     { id: "keys", instrument: "piano" },
+    { id: "grand", instrument: "grand", keys: {} },
   ],
   notes: [0, 1, 2, 3, 4, 5].map((beat) => ({
     id: `n${beat}`,
@@ -155,5 +156,66 @@ describe("expression tools", () => {
     const pedal = next.tracks.find((track) => track.id === "lead")!.pedal!;
     expect(pedal.length).toBeGreaterThan(1);
     expect(pedal[0]?.state).toBe("down");
+  });
+});
+
+describe("set_piano_pedals (0.6.1)", () => {
+  test("sets and clears the soft and sostenuto lanes", () => {
+    const next = apply(
+      tool("set_piano_pedals").plan(
+        {
+          trackId: "grand",
+          soft: [
+            { beat: 0, state: "down" },
+            { beat: 2, state: "up" },
+          ],
+          sostenuto: "bars",
+        },
+        context(score),
+      ),
+    );
+    const keys = next.tracks.find((track) => track.id === "grand")!;
+    expect(keys.softPedal).toEqual([
+      { tick: 0, state: "down" },
+      { tick: 2 * tpb, state: "up" },
+    ]);
+    expect(keys.sostenuto?.[0]).toEqual({ tick: 0, state: "down" });
+    expect(keys.pedal).toBeUndefined();
+    const off = tool("set_piano_pedals").plan(
+      { trackId: "grand", soft: null, sostenuto: null },
+      context(next),
+    );
+    if (off.kind !== "score") throw new Error("not a score plan");
+    expect(off.operations.reduce(applyScoreOperation, next).toJSON()).toEqual(
+      score.toJSON(),
+    );
+  });
+
+  test("refuses una corda where no modelled piano reads it", () => {
+    expect(() =>
+      tool("set_piano_pedals").plan(
+        { trackId: "keys", soft: "bars" },
+        context(score),
+      ),
+    ).toThrow(/una corda acts on the modelled pianos/);
+    // Sostenuto holds notes on any instrument.
+    expect(() =>
+      tool("set_piano_pedals").plan(
+        { trackId: "keys", sostenuto: "bars" },
+        context(score),
+      ),
+    ).not.toThrow();
+  });
+
+  test("rejects sostenuto half and an empty call", () => {
+    expect(() =>
+      tool("set_piano_pedals").plan(
+        { trackId: "grand", sostenuto: [{ beat: 0, state: "half" }] },
+        context(score),
+      ),
+    ).toThrow(/sostenuto/);
+    expect(() =>
+      tool("set_piano_pedals").plan({ trackId: "grand" }, context(score)),
+    ).toThrow(/soft, sostenuto/);
   });
 });

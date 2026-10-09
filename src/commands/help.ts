@@ -95,6 +95,11 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "piano params · keys hardness 0.3 decay 1.5 · keys lists them",
       },
       {
+        command: "epiano|wurli|clav [preset <name>] | <param> <value>",
+        summary:
+          "electric keys · suitcase dyno funkclav · epiano vibe 0.6 · clav pickup bridge",
+      },
+      {
         command:
           "modal <preset> | <param> <value> | mallet <name> | reset | off",
         summary:
@@ -121,6 +126,11 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       {
         command: "pedal <beat>-<beat>... | bars | down|half|up <beat> | off",
         summary: "sustain pedal · pedal 0-3.5 4-7.5 · pedal bars",
+      },
+      {
+        command: "pedal soft|sost <beat>-<beat>... | bars | off",
+        summary:
+          "piano una corda and sostenuto · pedal soft 0-8 · pedal sost 0-4",
       },
       {
         command: "velcurve linear|soft|hard|fixed [<v>]",
@@ -635,7 +645,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   bars: "bars takes 1…256 · bars 8",
   extend: "extend <count> bars · extend 4 bars",
   instrument:
-    "instrument <name> · sine piano pluck bass saw square triangle wavetable kit · pianos: grand upright felt honkytonk prepared · synth: sawtooth supersaw pulse white pink z_square…",
+    "instrument <name> · sine piano pluck bass saw square triangle wavetable kit · pianos: grand upright felt honkytonk prepared · electric: epiano suitcase dyno wurli clav funkclav · synth: sawtooth supersaw pulse white pink z_square…",
   volume: "volume takes 0…1 · volume 0.8",
   vol: "volume takes 0…1 · volume 0.8",
   pan: "pan takes -1…1 · pan -0.5",
@@ -690,9 +700,14 @@ export const USAGE: Readonly<Record<string, string>> = {
     "stomp fuzz|face|od|rat|octave | gain <0-10> tone <0-1> level <dB> | off",
   head: "head clean|chime|crunch|lead|high|solid|bass | gain bass mid treble presence master <0-10> | gate <dB> | off",
   cab: "cab 1x12|2x12|4x12|1x10|open|8x10|1x15|di | mic <0-1> | off",
-  keys: "keys <param> <value> | preset <name> | reset | presets · keys hardness 0.3 · keys stretch 0",
+  keys: "keys <param> <value> | preset <name> | reset | presets · keys hardness 0.3 · keys stretch 0 · keys sym 0.5 (sympathetic bloom under the sustain pedal)",
   piano:
     "piano [grand|ballad|upright|felt|lofi|honkytonk|prepared] · piano ballad",
+  epiano:
+    "epiano [preset epiano|suitcase|dyno] | bark bell tone vibe vibehz decay release <value> · epiano vibe 0.6 · rhodes",
+  wurli:
+    "wurli [preset wurli] | bark bell tone trem decay release <value> · wurli trem 0.5",
+  clav: "clav [preset clav|funkclav] | pickup neck|bridge|both|out | mute tone decay release <value> · clav pickup bridge",
   modal:
     "modal <preset> | <body> | <param> <value> | mallet <name> | reset | off | presets · modal vibes · modal saron · modal ring 3",
   pack: "/pack list | info <name> | use <pack>/<sound> | add <url>",

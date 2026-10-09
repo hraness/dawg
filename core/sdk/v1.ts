@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.25.0";
+export const SDK_VERSION = "1.26.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -2093,15 +2093,21 @@ export type FxInput = Readonly<Record<string, EffectParams>>;
  * Every parameter, range and default: **Synth** in DAWG.md.
  */
 /**
- * Modelled piano settings (SDK 1.24.0), for a track whose instrument is a
+ * Modelled keys settings (SDK 1.24.0), for a track whose instrument is a
  * piano family (`"grand"`, `"upright"`, `"felt"`, `"honkytonk"`,
- * `"prepared"`; the words `"ballad"` and `"lofi"` pick presets). Every field
- * is optional; `{}` is the family's own sound. Automate a parameter with
+ * `"prepared"`; the words `"ballad"` and `"lofi"` pick presets) or, from
+ * SDK 1.26.0, an electric family (`"epiano"`, `"wurli"`, `"clav"`; presets
+ * epiano suitcase dyno wurli clav funkclav). Every field is optional; `{}`
+ * is the family's own sound. Automate a parameter with
  * `automation.fx["keys-<param>"]` (hardness, touch, decay, release, knock,
- * noise, felt), read at each note's onset. Ranges: **Keys** in DAWG.md.
+ * noise, felt; electric tone, vibe, trem), read at each note's onset.
+ * Ranges: **Keys** in DAWG.md.
  */
 export type KeysInput = Readonly<{
-  /** A named preset: grand ballad upright felt lofi honkytonk prepared. */
+  /**
+   * A named preset: grand ballad upright felt lofi honkytonk prepared, or
+   * electric epiano suitcase dyno wurli clav funkclav.
+   */
   preset?: string;
   /** Hammer hardness 0..1: brightness at a given velocity (0.5). */
   hardness?: number;
@@ -2137,6 +2143,25 @@ export type KeysInput = Readonly<{
   vib?: number;
   /** Pitch wobble depth in semitones (0.5). */
   vibmod?: number;
+  // keys-electric (SDK 1.26.0)
+  /** Sympathetic string resonance 0..1 under the sustain pedal (0; pianos). */
+  sym?: number;
+  /** Pickup drive 0..1: growl when played hard (0.35; epiano, wurli). */
+  bark?: number;
+  /** Tine or reed bell ping 0..1 (0.5; epiano, wurli). */
+  bell?: number;
+  /** Output low-pass in Hz, 0 off (electric keys). */
+  tone?: number;
+  /** Clav pickup switch: neck bridge both out ("both"). */
+  pickup?: "neck" | "bridge" | "both" | "out";
+  /** Clav mute slider 0..1 (0). */
+  mute?: number;
+  /** Suitcase stereo vibrato depth 0..1 (0; epiano). */
+  vibe?: number;
+  /** Suitcase vibrato rate in Hz 0.5..12 (4; epiano). */
+  vibehz?: number;
+  /** Reed piano tremolo depth 0..1 (0; wurli). */
+  trem?: number;
 }>;
 
 export type SynthInput = Readonly<{
@@ -2303,6 +2328,16 @@ export type TrackInput = Readonly<{
   /** Sustain pedal changes as `[beat, "down" | "half" | "up"]` (SDK 1.15.0). */
   pedal?: readonly (readonly [number, PedalState])[];
   /**
+   * Una corda on a modelled piano (SDK 1.26.0): `[beat, "down" | "half" |
+   * "up"]`; while down each note strikes fewer strings, softer and darker.
+   */
+  softPedal?: readonly (readonly [number, PedalState])[];
+  /**
+   * Sostenuto on a modelled piano (SDK 1.26.0): `[beat, "down" | "up"]`;
+   * holds only the keys already down when it presses.
+   */
+  sostenuto?: readonly (readonly [number, "down" | "up"])[];
+  /**
    * Velocity response (SDK 1.15.0): `soft` (quiet notes louder), `hard`
    * (needs a firm touch), `fixed` (every note at 0.8, like an organ) or
    * `{ curve: "fixed", fixed: 0.6 }`. Default `linear`.
@@ -2430,6 +2465,9 @@ export type TrackSpec = Readonly<{
   /** Performance (SDK 1.15.0); present only when set. */
   glide?: Readonly<{ time: number; mode: GlideMode }>;
   pedal?: readonly (readonly [number, PedalState])[];
+  /** Soft and sostenuto pedals (SDK 1.26.0); present only when set. */
+  softPedal?: readonly (readonly [number, PedalState])[];
+  sostenuto?: readonly (readonly [number, PedalState])[];
   velocityCurve?: Readonly<{
     curve: Exclude<VelocityCurveName, "linear">;
     fixed?: number;
@@ -2458,10 +2496,17 @@ const DEFAULT_FIXED_VELOCITY = 0.8;
 function trackPerformance(
   input: TrackInput,
   name: string,
-): Partial<Pick<TrackSpec, "glide" | "pedal" | "velocityCurve" | "humanize">> {
+): Partial<
+  Pick<
+    TrackSpec,
+    "glide" | "pedal" | "softPedal" | "sostenuto" | "velocityCurve" | "humanize"
+  >
+> {
   const out: {
     glide?: TrackSpec["glide"];
     pedal?: TrackSpec["pedal"];
+    softPedal?: TrackSpec["softPedal"];
+    sostenuto?: TrackSpec["sostenuto"];
     velocityCurve?: TrackSpec["velocityCurve"];
     humanize?: TrackSpec["humanize"];
   } = {};
@@ -2482,29 +2527,38 @@ function trackPerformance(
       mode,
     });
   }
-  if (input.pedal !== undefined) {
-    if (!Array.isArray(input.pedal) || input.pedal.length > 1024)
+  const pedalLane = (
+    key: "pedal" | "softPedal" | "sostenuto",
+    states: readonly PedalState[],
+  ) => {
+    const value: unknown = input[key];
+    if (value === undefined) return;
+    const shape = `[beat, ${states.map((state) => `"${state}"`).join(" | ")}]`;
+    if (!Array.isArray(value) || value.length > 1024)
       throw new DawgSdkError(
-        `track ${name}: pedal must be at most 1024 [beat, "down" | "half" | "up"] events`,
+        `track ${name}: ${key} must be at most 1024 ${shape} events`,
       );
-    if (input.pedal.length > 0)
-      out.pedal = Object.freeze(
-        input.pedal.map((event: unknown, index: number) => {
+    if (value.length > 0)
+      out[key] = Object.freeze(
+        value.map((event: unknown, index: number) => {
           if (
             !Array.isArray(event) ||
             event.length !== 2 ||
-            !["down", "half", "up"].includes(event[1] as string)
+            !states.includes(event[1] as PedalState)
           )
             throw new DawgSdkError(
-              `track ${name}: pedal[${index}] must be [beat, "down" | "half" | "up"]`,
+              `track ${name}: ${key}[${index}] must be ${shape}`,
             );
           return Object.freeze([
-            beat(event[0], `${name} pedal[${index}] beat`),
+            beat(event[0], `${name} ${key}[${index}] beat`),
             event[1] as PedalState,
           ] as const);
         }),
       );
-  }
+  };
+  pedalLane("pedal", ["down", "half", "up"]);
+  pedalLane("softPedal", ["down", "half", "up"]);
+  pedalLane("sostenuto", ["down", "up"]);
   if (input.velocityCurve !== undefined) {
     const raw =
       typeof input.velocityCurve === "string"
@@ -3482,6 +3536,8 @@ export type ScoreTrack = Readonly<{
   modal?: TrackSpec["modal"];
   glide?: TrackSpec["glide"];
   pedal?: readonly Readonly<{ tick: number; state: PedalState }>[];
+  softPedal?: readonly Readonly<{ tick: number; state: PedalState }>[];
+  sostenuto?: readonly Readonly<{ tick: number; state: PedalState }>[];
   velocityCurve?: TrackSpec["velocityCurve"];
   humanize?: TrackSpec["humanize"];
 }>;
@@ -3771,11 +3827,13 @@ export function song(input: SongInput): Song {
       if (Object.keys(time).length > 0) stored.time = Object.freeze(time);
     }
     if (t.glide) stored.glide = t.glide;
-    if (t.pedal && t.pedal.length > 0) {
+    for (const key of ["pedal", "softPedal", "sostenuto"] as const) {
+      const lane = t[key];
+      if (!lane || lane.length === 0) continue;
       // One event per tick (the last wins), in tick order, as dawg stores it.
       const byTick = new Map<number, PedalState>();
-      for (const [at, state] of t.pedal) byTick.set(ticks(at), state);
-      stored.pedal = Object.freeze(
+      for (const [at, state] of lane) byTick.set(ticks(at), state);
+      stored[key] = Object.freeze(
         [...byTick.entries()]
           .sort((a, b) => a[0] - b[0])
           .map(([tick, state]) => Object.freeze({ tick, state })),
@@ -4897,6 +4955,21 @@ const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
     field: "modal",
     preset: "chimes",
   },
+  // keys-electric (0.6.1): electric pianos and clavinet. `keys` stays legacy.
+  { word: "epiano", instrument: "epiano", field: "keys", preset: "epiano" },
+  { word: "rhodes", instrument: "epiano", field: "keys", preset: "epiano" },
+  {
+    word: "suitcase",
+    instrument: "epiano",
+    field: "keys",
+    preset: "suitcase",
+  },
+  { word: "dyno", instrument: "epiano", field: "keys", preset: "dyno" },
+  { word: "wurli", instrument: "wurli", field: "keys", preset: "wurli" },
+  { word: "wurlitzer", instrument: "wurli", field: "keys", preset: "wurli" },
+  { word: "clav", instrument: "clav", field: "keys", preset: "clav" },
+  { word: "clavinet", instrument: "clav", field: "keys", preset: "clav" },
+  { word: "funkclav", instrument: "clav", field: "keys", preset: "funkclav" },
 ]);
 
 /**

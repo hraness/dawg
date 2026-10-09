@@ -16,8 +16,13 @@
  * - Post: the family's body EQ per channel (the minimal per-track post
  *   hook), then the track volume, before the existing effects chain.
  */
-import type { PerformedNote } from "../../../core/expression.ts";
-import { isPianoFamily, resolvedKeys } from "../../../core/keys.ts";
+import { pedalStateAt, type PerformedNote } from "../../../core/expression.ts";
+import {
+  isElectricFamily,
+  isPianoFamily,
+  resolvedKeys,
+  type ElectricFamily,
+} from "../../../core/keys.ts";
 import type { Track } from "../../../core/score.ts";
 import { noteHz } from "../../../core/tuning.ts";
 import type { FxLane } from "../../../core/fx.ts";
@@ -34,6 +39,15 @@ import {
   trackSeedOf,
   type PianoParams,
 } from "./piano.ts";
+import {
+  clavReleaseT60,
+  electricPost,
+  electricVoice,
+  tineReleaseT60,
+  type ElectricParams,
+  type KeysVoice,
+} from "./electric.ts";
+import { Sympathetic } from "./sympathetic.ts";
 
 export const KEYS_LIMITS = Object.freeze({
   /** Per-track polyphony cap (voice stealing beyond it). */
@@ -98,6 +112,39 @@ export function pianoParamsAt(
   };
 }
 
+/** Electric voice parameters for a note: the resolved keys plus lanes. */
+export function electricParamsAt(
+  track: Track,
+  values: Values,
+  tick: number,
+  kind: ElectricFamily,
+): ElectricParams {
+  const lane = (name: string) => {
+    const points = track.fxAutomation?.[`keys-${name}` as FxLane];
+    const base = num(values, name);
+    return points && points.length > 0
+      ? interpolateAutomation(points, tick, base)
+      : base;
+  };
+  const pickup = values.pickup;
+  return {
+    kind,
+    hardness: clamp(lane("hardness"), 0, 1),
+    touch: clamp(lane("touch"), 0, 1),
+    decay: clamp(lane("decay"), 0.1, 4),
+    release: clamp(lane("release"), 0.1, 4),
+    width: num(values, "width"),
+    bark: num(values, "bark"),
+    bell: num(values, "bell"),
+    tone: clamp(lane("tone"), 0, 12000),
+    pickup:
+      pickup === "neck" || pickup === "bridge" || pickup === "out"
+        ? pickup
+        : "both",
+    mute: num(values, "mute"),
+  };
+}
+
 /** Body voicing name for a track (the stored `body`, else the family's). */
 export function bodyOf(values: Values): string {
   const body = values.body;
@@ -105,7 +152,7 @@ export function bodyOf(values: Values): string {
 }
 
 type Live = {
-  voice: PianoVoice;
+  voice: KeysVoice;
   /** Sample index the voice started at. */
   start: number;
   /** Sample index of key-up. */
@@ -161,6 +208,9 @@ export function renderKeysTrack(
   const sr = context.sampleRate;
   const total = left.length;
   const values = resolvedKeys(track.instrument ?? "grand", track.keys);
+  const electric = isElectricFamily(track.instrument)
+    ? track.instrument
+    : undefined;
   const trackSeed = trackSeedOf(track.id);
   const seedTick = context.seedTick ?? 0;
   const window = Math.round(KEYS_LIMITS.tailSeconds * sr);
@@ -204,18 +254,30 @@ export function renderKeysTrack(
         victim.stolen = true;
       }
       const note = onset.note;
-      const params = pianoParamsAt(track, values, note.startTick);
-      const voice = new PianoVoice(
-        {
-          pitch: note.pitch,
-          hz: onset.hz,
-          velocity: clamp(note.velocity, 0, 1),
-          trackSeed,
-          noteSeed: `${track.id}:${note.id}:${note.startTick + seedTick}`,
-        },
-        params,
-        sr,
-      );
+      // Una corda (0.6.1) at the onset: down is the full shift, half half.
+      const softState = track.softPedal
+        ? pedalStateAt(track.softPedal, note.startTick)
+        : "up";
+      const soft = softState === "down" ? 1 : softState === "half" ? 0.5 : 0;
+      const noteOn = {
+        pitch: note.pitch,
+        hz: onset.hz,
+        velocity: clamp(note.velocity, 0, 1),
+        trackSeed,
+        noteSeed: `${track.id}:${note.id}:${note.startTick + seedTick}`,
+        ...(soft > 0 ? { soft } : {}),
+      };
+      const voice: KeysVoice = electric
+        ? electricVoice(
+            noteOn,
+            electricParamsAt(track, values, note.startTick, electric),
+            sr,
+          )
+        : new PianoVoice(
+            noteOn,
+            pianoParamsAt(track, values, note.startTick),
+            sr,
+          );
       const performance = note.performance;
       // The `vib`/`vibmod` wow (lofi) unless the note brings its own vibrato.
       const vib = num(values, "vib");
@@ -277,6 +339,50 @@ export function renderKeysTrack(
       if (!alive) live.splice(k, 1);
     }
   }
+  if (electric) {
+    // The electric post: suitcase vibrato or reed tremolo, then volume.
+    const param = electric === "wurli" ? "trem" : "vibe";
+    const points = track.fxAutomation?.[`keys-${param}` as FxLane];
+    const base = num(values, param);
+    const tickOf = (sample: number) =>
+      context.warp
+        ? context.warp.tick(sample)
+        : sample / context.samplesPerTick;
+    const depthAt =
+      points && points.length > 0
+        ? (sample: number) =>
+            interpolateAutomation(points, tickOf(sample), base)
+        : () => base;
+    const rate = electric === "wurli" ? 5.6 : num(values, "vibehz") || 4;
+    const startSample = Math.round(seedTick * context.samplesPerTick);
+    electricPost(left, right, electric, rate, depthAt, sr, startSample);
+    applyVolume(left, right, track, context);
+    return;
+  }
+  // Sympathetic resonance (0.6.1): only with `sym` and sustain pedal events.
+  const sym = num(values, "sym");
+  const pedal = track.pedal;
+  if (sym > 0 && pedal?.some((event) => event.state !== "up")) {
+    const bank = new Sympathetic(
+      (pitch) => noteHz(pitch, undefined, context.tuning),
+      sym,
+      sr,
+    );
+    // Pedal changes as samples; the bank reads them in order.
+    const changes = pedal.map((event) => ({
+      at: context.warp
+        ? context.warp.sample(event.tick)
+        : event.tick * context.samplesPerTick,
+      down: event.state !== "up",
+    }));
+    let cursor = 0;
+    let down = false;
+    bank.process(left, right, (sample) => {
+      while (cursor < changes.length && changes[cursor]!.at <= sample)
+        down = changes[cursor++]!.down;
+      return down;
+    });
+  }
   // The per-track post hook: body EQ, then the track volume.
   const body = bodyOf(values);
   const eqL = pianoBody(body, sr);
@@ -329,6 +435,14 @@ function applyVolume(
 export function keysReleaseSeconds(track: Track, hz: number): number {
   if (!(hz > 0) || !Number.isFinite(hz)) return 0.01;
   const values = resolvedKeys(track.instrument ?? "grand", track.keys);
+  if (isElectricFamily(track.instrument)) {
+    const release = clamp(num(values, "release"), 0.1, 4);
+    const t60 =
+      track.instrument === "clav"
+        ? clavReleaseT60(release)
+        : tineReleaseT60(physicalKey(hz), release);
+    return Math.max(0.01, (3 / (2 * LN1000)) * t60);
+  }
   const p = pianoParamsAt(track, values, 0);
   const key = physicalKey(hz);
   if (undamped(key)) return KEYS_LIMITS.tailSeconds;
@@ -353,9 +467,15 @@ function engineFor(id: string): InstrumentEngine {
   };
 }
 
-/** One engine per piano family (the registry dispatches by instrument id). */
+/**
+ * One engine per keys family (the registry dispatches by instrument id):
+ * the pianos, then the electric keys (0.6.1).
+ */
 export const KEYS_ENGINES: readonly InstrumentEngine[] = Object.freeze(
-  ["grand", "upright", "felt", "honkytonk", "prepared"]
-    .filter((id) => isPianoFamily(id))
-    .map(engineFor),
+  [
+    ...["grand", "upright", "felt", "honkytonk", "prepared"].filter((id) =>
+      isPianoFamily(id),
+    ),
+    ...["epiano", "wurli", "clav"].filter((id) => isElectricFamily(id)),
+  ].map(engineFor),
 );

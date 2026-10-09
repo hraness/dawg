@@ -9,6 +9,7 @@ import {
   ExpressionValidationError,
   GLIDE_MODES,
   PEDAL_STATES,
+  SOSTENUTO_STATES,
   VELOCITY_CURVES,
   normalizeArticulation,
   normalizeBend,
@@ -20,12 +21,14 @@ import {
   normalizeVibrato,
   normalizeNoteHumanize,
   type NoteExpressionPatch,
+  type PedalState,
 } from "../../core/expression.ts";
 import {
   SCORE_LIMITS,
   type ScoreOperation,
   type TrackPatch,
 } from "../../core/score.ts";
+import { softPedalNote } from "../../core/keys.ts";
 import { loopTicksOf } from "../../core/tempo.ts";
 import { BEND_SHAPES, barPedal } from "../commands/expression.ts";
 import type { AgentTool, ToolContext } from "./tools.ts";
@@ -333,4 +336,92 @@ export const EXPRESSION_TOOLS: readonly AgentTool[] = Object.freeze([
       };
     },
   },
+  {
+    // keys-electric (0.6.1): the modelled piano's soft and middle pedals.
+    name: "set_piano_pedals",
+    description:
+      'Modelled piano soft (una corda: fewer strings, softer, darker) and sostenuto (holds only keys down when it presses) pedals. Each: [{beat, state}], "bars" (whole loop) or null. Sostenuto has no half.',
+    parameters: {
+      type: "object",
+      properties: {
+        trackId: { type: "string" },
+        soft: pedalSchema(PEDAL_STATES),
+        sostenuto: pedalSchema(SOSTENUTO_STATES),
+      },
+      additionalProperties: false,
+    },
+    plan(args, context) {
+      const trackId = trackOf(args, context);
+      const score = context.score;
+      const patch: Record<string, unknown> = {};
+      if (args.soft !== undefined)
+        patch.softPedal = pedalLane(args.soft, "soft", score, PEDAL_STATES);
+      if (args.sostenuto !== undefined)
+        patch.sostenuto = pedalLane(
+          args.sostenuto,
+          "sostenuto",
+          score,
+          SOSTENUTO_STATES,
+        );
+      if (Object.keys(patch).length === 0)
+        throw new ExpressionToolError("set soft, sostenuto or both");
+      const track = score.tracks.find((candidate) => candidate.id === trackId);
+      const silent =
+        patch.softPedal && track ? softPedalNote(track) : undefined;
+      if (silent) throw new ExpressionToolError(`soft pedal · ${silent}`);
+      return {
+        kind: "score",
+        operations: [
+          { type: "updateTrack", trackId, patch: patch as TrackPatch },
+        ],
+        trackId,
+        summary: `${trackId} ${Object.entries(patch)
+          .map(([key, value]) => (value === null ? `${key} off` : key))
+          .join(", ")}`,
+      };
+    },
+  },
 ] satisfies AgentTool[]);
+
+function pedalSchema(states: readonly string[]) {
+  return {
+    type: ["array", "string", "null"],
+    items: {
+      type: "object",
+      properties: {
+        beat: { type: "number" },
+        state: { type: "string", enum: states },
+      },
+    },
+  };
+}
+
+/** A soft or sostenuto lane from tool arguments: events, "bars" or null. */
+function pedalLane(
+  value: unknown,
+  label: string,
+  score: ToolContext["score"],
+  states: readonly PedalState[],
+): unknown {
+  if (value === null) return null;
+  // Soft and sostenuto hold through the loop (no re-pedal at each bar).
+  if (value === "bars")
+    return [
+      { tick: 0, state: "down" },
+      { tick: loopTicksOf(score), state: "up" },
+    ];
+  if (!Array.isArray(value))
+    throw new ExpressionToolError(`${label} must be an array, "bars" or null`);
+  const events = value.map((item: unknown, index) => {
+    const event = (item ?? {}) as Record<string, unknown>;
+    const at = beat(event, "beat");
+    if (at === undefined)
+      throw new ExpressionToolError(`${label}[${index}].beat is required`);
+    return { tick: Math.round(at * score.ticksPerBeat), state: event.state };
+  });
+  return (
+    validated(() =>
+      normalizePedal(events, loopTicksOf(score), label, states),
+    ) ?? null
+  );
+}
