@@ -1897,7 +1897,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
   // `/track rm <name>` and `/track move <name> <position>`: the human surface
   // for the removeTrack and moveTrack operations (undo brings a track back).
   const trackEdit = command.match(
-    /^\/track\s+(rm|remove|move)\s+([a-z0-9._-]{1,64})(?:\s+(\d{1,3}))?$/i,
+    /^\/?track\s+(rm|remove|move)\s+([a-z0-9._-]{1,64})(?:\s+(\d{1,3}))?$/i,
   );
   if (trackEdit) {
     const verb = trackEdit[1]!.toLowerCase();

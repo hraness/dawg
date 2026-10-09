@@ -46,6 +46,10 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       { command: "unmute", summary: "hear it again" },
       { command: "solo", summary: "only this track" },
       { command: "unsolo", summary: "every track again" },
+      {
+        command: "track rm|move <name> [<position>]",
+        summary: "remove a track (^z undo) or move it in the list",
+      },
       { command: "clear", summary: "remove this track's notes" },
       {
         command: "wt <table> | wt <0..1> | wt list",
@@ -352,10 +356,6 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "focus a track, creating it if new",
       },
       { command: "/tracks", summary: "list tracks" },
-      {
-        command: "/track rm|move <name> [<position>]",
-        summary: "remove a track (^z undo) or move it in the list",
-      },
       { command: "/view focus|all", summary: "one track or every track" },
       { command: "/transcript", summary: "scrollable log · Ctrl-O" },
       { command: "/theme default|high-contrast|mono", summary: "colors" },

@@ -89,7 +89,7 @@ export const COMMAND_AGENT_PROMPT = [
 /** The system prompt with the command reference, built once. */
 let systemPrompt: string | undefined;
 export function commandAgentSystemPrompt(): string {
-  systemPrompt ??= `${COMMAND_AGENT_PROMPT}\n\nCommands:\n${commandReference()}\n/track <name> — focus or create a track\n/track rm <name> | /track move <name> <position> — remove or reorder a track`;
+  systemPrompt ??= `${COMMAND_AGENT_PROMPT}\n\nCommands:\n${commandReference()}\n/track <name> — focus or create a track`;
   return systemPrompt;
 }
 
