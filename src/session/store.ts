@@ -21,9 +21,13 @@ const MAX_EVENT_BYTES = 64 * 1024;
 /** A rewind larger than this (a wholesale import) is not kept; the edit still lands. */
 const MAX_REWIND_BYTES = 1024 * 1024;
 const MAX_EVENTS = 2_000;
+/**
+ * When the log is full, this many of the oldest events are folded away so a
+ * long session keeps accepting edits. The composition is the checkpoint;
+ * undo still reaches back through the events that remain.
+ */
+const FOLD_BATCH = 200;
 export const MAX_RECORD_BYTES = 4 * 1024 * 1024;
-/** Oldest rewinds are dropped in batches of this size when the record fills up. */
-const COMPACT_BATCH = 64;
 const MAX_SESSION_ID_LENGTH = 64;
 const MAX_EVENT_KIND_LENGTH = 128;
 const MAX_TIMESTAMP_LENGTH = 64;
@@ -57,6 +61,13 @@ export type SessionRecord<T> = {
   updatedAt: string;
   composition: T;
   events: SessionEvent[];
+  /**
+   * Optional (0.7): how many of the oldest events were folded away when the
+   * log filled up. `revision === (folded ?? 0) + events.length`, and
+   * `events[i].revision === (folded ?? 0) + i + 1`. Absent on records that
+   * never filled, so older records load and print unchanged.
+   */
+  folded?: number;
   /** Name and lineage. Versioned separately so renames keep the revision. */
   meta: SessionMeta;
 };
@@ -208,10 +219,9 @@ export async function appendSessionEvent<T>(
   try {
     const disk = await readRecord<T>(paths.record);
     if (disk.revision !== current.revision) throw new SessionConflictError();
-    // Re-check the bounded event budget against the locked record. A stale
-    // caller can pass the pre-lock check while another writer fills the log.
-    if (disk.events.length >= MAX_EVENTS)
-      throw new Error(`session event limit ${MAX_EVENTS} reached`);
+    // A full log folds its oldest events away instead of refusing the edit.
+    const fold = disk.events.length >= MAX_EVENTS ? FOLD_BATCH : 0;
+    const folded = (disk.folded ?? 0) + fold;
     const revision = disk.revision + 1;
     const at = new Date().toISOString();
     const appended: SessionEvent = {
@@ -229,7 +239,8 @@ export async function appendSessionEvent<T>(
       revision,
       updatedAt: at,
       composition,
-      events: [...disk.events, appended],
+      events: [...disk.events.slice(fold), appended],
+      ...(folded > 0 ? { folded } : {}),
       // Metadata always comes from disk so a rename written by another window
       // between this caller's read and its write is never reverted.
       meta: disk.meta,
@@ -246,8 +257,10 @@ export async function appendSessionEvent<T>(
 /**
  * Keeps the record under its size cap by dropping the oldest events'
  * rewinds, oldest first, so the rewinds that remain are always the newest
- * contiguous run. Only the composition and the bounded payloads are
- * irreducible; a record that still does not fit is rejected as before.
+ * contiguous run. The appended (last) event's rewind is dropped only when
+ * nothing else is left to drop, so undo of the edit just made keeps working
+ * whenever its rewind fits on its own. Only the composition and the bounded
+ * payloads are irreducible; a record that still does not fit is rejected.
  */
 function compactRecord<T>(record: SessionRecord<T>): {
   record: SessionRecord<T>;
@@ -255,23 +268,27 @@ function compactRecord<T>(record: SessionRecord<T>): {
 } {
   let current = record;
   let json = JSON.stringify(current);
-  while (Buffer.byteLength(json, "utf8") > MAX_RECORD_BYTES) {
-    const first = current.events.findIndex(
-      (event) => event.rewind !== undefined,
-    );
-    if (first < 0)
-      throw new SessionValidationError(
-        `session record exceeds ${MAX_RECORD_BYTES} bytes`,
-      );
-    const events = current.events.map((event, index) => {
-      if (index < first || index >= first + COMPACT_BATCH || !event.rewind)
-        return event;
-      const { rewind: _rewind, ...rest } = event;
-      return rest;
-    });
-    current = { ...current, events };
-    json = JSON.stringify(current);
+  let bytes = Buffer.byteLength(json, "utf8");
+  if (bytes <= MAX_RECORD_BYTES) return { record: current, json };
+  const events = [...current.events];
+  const last = events.length - 1;
+  // Measured sizes let the loop strip exactly as many rewinds as needed with
+  // one final stringify instead of one per batch.
+  // The appended event comes last, after every older rewind is gone.
+  for (let index = 0; index <= last && bytes > MAX_RECORD_BYTES; index += 1) {
+    const event = events[index]!;
+    if (event.rewind === undefined) continue;
+    const { rewind, ...rest } = event;
+    // `,"rewind":<json>` is what dropping the field saves.
+    bytes -= Buffer.byteLength(JSON.stringify(rewind), "utf8") + 10;
+    events[index] = rest;
   }
+  current = { ...current, events };
+  json = JSON.stringify(current);
+  if (Buffer.byteLength(json, "utf8") > MAX_RECORD_BYTES)
+    throw new SessionValidationError(
+      `session record exceeds ${MAX_RECORD_BYTES} bytes`,
+    );
   return { record: current, json };
 }
 
@@ -384,8 +401,13 @@ export async function inheritedEvents(
     } catch {
       break;
     }
-    if (!parent || fork.revision > parent.events.length) break;
-    const prefix = parent.events.slice(0, fork.revision);
+    if (!parent || fork.revision > parent.revision) break;
+    // Events folded out of the parent are gone; what remains still ends at
+    // the fork point.
+    const prefix = parent.events.slice(
+      0,
+      Math.max(0, fork.revision - (parent.folded ?? 0)),
+    );
     chunks.unshift(prefix.slice(-(MAX_INHERITED_EVENTS - total)));
     total += prefix.length;
     fork = parent.meta.forkOf;
@@ -463,7 +485,15 @@ function validateSessionRecord<T>(value: unknown): SessionRecord<T> {
     throw new SessionValidationError(
       `session has more than ${MAX_EVENTS} events`,
     );
-  if (record.revision !== record.events.length)
+  const folded = record.folded ?? 0;
+  if (
+    !Number.isSafeInteger(folded) ||
+    (folded as number) < 0 ||
+    (record.folded !== undefined && folded === 0)
+  )
+    throw new SessionValidationError("session folded count is invalid");
+  const base = folded as number;
+  if (record.revision !== base + record.events.length)
     throw new SessionValidationError(
       "session revision does not match its event log",
     );
@@ -478,7 +508,7 @@ function validateSessionRecord<T>(value: unknown): SessionRecord<T> {
     assertSessionId(candidate.id);
     if (
       !Number.isSafeInteger(candidate.revision) ||
-      candidate.revision !== index + 1
+      candidate.revision !== base + index + 1
     )
       throw new SessionValidationError("session event revisions are invalid");
     if (
@@ -537,6 +567,7 @@ function validateSessionRecord<T>(value: unknown): SessionRecord<T> {
     updatedAt: record.updatedAt,
     composition: record.composition as T,
     events,
+    ...(base > 0 ? { folded: base } : {}),
     meta,
   };
 }
