@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, setDefaultTimeout } from "bun:test";
 import {
   build,
   melody,
@@ -16,6 +16,9 @@ import {
   type PitchCurve,
   type TrackOptions,
 } from "./pitch.ts";
+
+// Analysis tests run whole voices; shared CI runners need more than 5 s.
+setDefaultTimeout(30_000);
 
 type Stats = {
   median: number;

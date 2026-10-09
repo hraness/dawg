@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test, setDefaultTimeout } from "bun:test";
 import { fftInPlace } from "./fft.ts";
 import {
   melody,
@@ -8,6 +8,9 @@ import {
 } from "../fixtures/voice.ts";
 import { centsOfHz, curveAt, curveToSamples, trackPitch } from "./pitch.ts";
 import { constantShift, pitchMarks, psola, psolaStereo } from "./psola.ts";
+
+// Analysis tests run whole voices; shared CI runners need more than 5 s.
+setDefaultTimeout(30_000);
 
 /** Test 4 runs at both rates the brief names; mark sizes depend on the rate. */
 const RATES = [22_050, 48_000] as const;

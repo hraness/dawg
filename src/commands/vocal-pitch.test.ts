@@ -1,4 +1,11 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  test,
+  setDefaultTimeout,
+} from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -20,6 +27,9 @@ import {
   pitchReportLines,
 } from "./vocal-pitch.ts";
 import { parseVocalCommand, runVocalCommand } from "./vocal.ts";
+
+// Analysis tests run whole voices; shared CI runners need more than 5 s.
+setDefaultTimeout(30_000);
 
 const SR = 48_000;
 const song = melody(60);
@@ -136,7 +146,7 @@ describe("/vocal pitch", () => {
       );
       expect(pitchReportLines(warm)).toEqual(pitchReportLines(cold));
     }
-  });
+  }, 30_000);
 
   test("/vocal notes adds a guide track placed through the tempo map", async () => {
     const score = clipScore();

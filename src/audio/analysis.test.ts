@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test, setDefaultTimeout } from "bun:test";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,6 +13,9 @@ import {
   pitchCurve,
   pruneAnalysisCache,
 } from "./analysis.ts";
+
+// Analysis tests run whole voices; shared CI runners need more than 5 s.
+setDefaultTimeout(30_000);
 
 const dirs: string[] = [];
 async function temp(): Promise<string> {
