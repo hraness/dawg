@@ -56,6 +56,7 @@ import {
 } from "./commands/expression.ts";
 import { applyFxCommand, parseFxCommand } from "./commands/fx.ts";
 import { applySynthCommand, parseSynthCommand } from "./commands/synth.ts";
+import { applyStringCommand, parseStringCommand } from "./commands/string.ts";
 import {
   applyTuningCommand,
   importTuningFile,
@@ -264,6 +265,7 @@ function parsesLocally(text: string): boolean {
     parseRhythmCommand,
     parseFxCommand,
     parseSynthCommand,
+    parseStringCommand,
     parseExpressionCommand,
     parseMasterCommand,
     (value: string) => parseSectionCommand(value, score),
@@ -1747,6 +1749,18 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (synth) {
     if (synth.type !== "synth-list") await materializeDraft();
     const result = applySynthCommand(score, requestedTrack, synth);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
+  const stringCommand = parseStringCommand(command);
+  if (stringCommand) {
+    if (
+      stringCommand.type !== "string-list" &&
+      stringCommand.type !== "string-presets"
+    )
+      await materializeDraft();
+    const result = applyStringCommand(score, requestedTrack, stringCommand);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
