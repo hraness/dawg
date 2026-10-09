@@ -94,6 +94,12 @@ describe("tuning grammar", () => {
     expect(parseTuningCommand("tuning root D4")).toMatchObject({
       patch: { root: 62 },
     });
+    expect(parseTuningCommand("tuning root C")).toMatchObject({
+      patch: { root: 60 },
+    });
+    expect(parseTuningCommand("tuning root Bb")).toMatchObject({
+      patch: { root: 70 },
+    });
     expect(parseTuningCommand("tuning root auto")).toMatchObject({
       patch: { root: null },
     });
