@@ -4,6 +4,7 @@ import {
   readFile,
   rename,
   rm,
+  stat,
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
@@ -34,6 +35,7 @@ export class FilePresence {
   private timer: ReturnType<typeof setInterval> | undefined;
   private writing: Promise<void> = Promise.resolve();
   private writes = 0;
+  private stopped = false;
 
   public constructor(paths: SessionPaths, entry: PresenceEntry) {
     this.dir = `${paths.record}.presence`;
@@ -42,6 +44,7 @@ export class FilePresence {
   }
 
   public async start(): Promise<void> {
+    this.stopped = false;
     await this.write();
     this.timer = setInterval(
       () => void this.write().catch(() => {}),
@@ -51,8 +54,12 @@ export class FilePresence {
   }
 
   public async stop(): Promise<void> {
+    // A heartbeat already queued would otherwise rename its file back after
+    // the removal and leave a ghost entry.
+    this.stopped = true;
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
+    await this.writing;
     await rm(this.file(), { force: true });
   }
 
@@ -101,14 +108,17 @@ export class FilePresence {
 
   /** Live entries; stale or dead-process heartbeats are removed. */
   public async list(now = Date.now()): Promise<PresenceEntry[]> {
-    let names: string[];
+    let all: string[];
     try {
-      names = (await readdir(this.dir)).filter((name) =>
-        name.endsWith(".json"),
-      );
+      all = await readdir(this.dir);
     } catch {
       return [];
     }
+    // A writer that crashed between write and rename leaves its temp file.
+    for (const name of all.slice(0, MAX_PRESENCE_FILES))
+      if (name.endsWith(".tmp"))
+        await sweepTemporary(join(this.dir, name), now);
+    const names = all.filter((name) => name.endsWith(".json"));
     const entries: PresenceEntry[] = [];
     for (const name of names.slice(0, MAX_PRESENCE_FILES)) {
       const path = join(this.dir, name);
@@ -147,6 +157,7 @@ export class FilePresence {
   }
 
   private async writeNow(): Promise<void> {
+    if (this.stopped) return;
     await mkdir(this.dir, { recursive: true });
     const temporary = `${this.file()}.${process.pid}.${++this.writes}.tmp`;
     await writeFile(
@@ -154,7 +165,26 @@ export class FilePresence {
       JSON.stringify({ ...this.entry, at: Date.now() }),
       "utf8",
     );
+    if (this.stopped) {
+      await rm(temporary, { force: true });
+      return;
+    }
     await rename(temporary, this.file());
+  }
+}
+
+/** Removes a temp file left by a dead writer, or one older than the stale window. */
+async function sweepTemporary(path: string, now: number): Promise<void> {
+  const pid = Number(/\.(\d+)\.\d+\.tmp$/.exec(path)?.[1]);
+  try {
+    const { mtimeMs } = await stat(path);
+    if (
+      now - mtimeMs > PRESENCE_STALE_MS ||
+      (Number.isSafeInteger(pid) && pid > 0 && !alive(pid))
+    )
+      await rm(path, { force: true });
+  } catch {
+    // Already renamed or removed by its writer.
   }
 }
 
