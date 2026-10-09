@@ -236,12 +236,15 @@ function createApiClient(
         );
       const body: Record<string, unknown> = {
         model,
-        messages: request.messages,
+        messages: withPromptCache(provider, model, request.messages),
         stream: true,
         // The final chunk then carries token usage (and OpenRouter's cost).
         stream_options: { include_usage: true },
       };
       if (provider === "openrouter") body.usage = { include: true };
+      // The Gateway adds Anthropic cache breakpoints itself when asked; it
+      // documents the option as a no-op for implicitly caching providers.
+      else body.providerOptions = { gateway: { caching: "auto" } };
       if (request.tools && request.tools.length > 0) {
         body.tools = request.tools;
         body.tool_choice = "auto";
@@ -364,6 +367,43 @@ function createApiClient(
       }
     },
   };
+}
+
+/**
+ * Mark the leading system message as a prompt-cache breakpoint for Anthropic
+ * models on OpenRouter. Anthropic caches tools, then system, then messages,
+ * so a breakpoint on the static system prompt caches the tool schemas and the
+ * prompt (about 22K tokens) across every step of a turn; the per-step brief
+ * follows it and stays uncached. Other providers cache prefixes implicitly,
+ * and the Gateway is asked to place breakpoints itself, so their messages go
+ * out unchanged.
+ */
+export function withPromptCache(
+  provider: ApiProvider,
+  model: string,
+  messages: readonly ChatMessage[],
+): readonly unknown[] {
+  const first = messages[0];
+  if (
+    provider !== "openrouter" ||
+    !model.toLowerCase().startsWith("anthropic/") ||
+    first?.role !== "system" ||
+    first.content.length === 0
+  )
+    return messages;
+  return [
+    {
+      role: "system",
+      content: [
+        {
+          type: "text",
+          text: first.content,
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+    },
+    ...messages.slice(1),
+  ];
 }
 
 function* normalizeChunk(
