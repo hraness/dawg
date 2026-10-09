@@ -49,6 +49,13 @@ const TRESILLO = grid("x..x..x.x..x..x.");
 const ELECTRO_KICK = grid("x.....x...x.x...");
 /** Two-step broken kick for downtempo and breaks. */
 const BROKEN_KICK = grid("x.....x...x.....");
+/**
+ * Gallop: the off-beat 8th plus the 16th after it, the rolling bass of
+ * progressive trance and melodic techno.
+ */
+const GALLOP = grid("..xx..xx..xx..xx");
+/** Pedal: one held note from the downbeat of each bar. */
+const DOWNBEAT = grid("x...............");
 /** Gated offbeat 16th shaker for house. */
 const SHAKER_16 = grid("x.xxx.xxx.xxx.xx");
 
@@ -311,8 +318,8 @@ const DISCO: readonly StyleCard[] = [
   card({
     id: "hi-nrg",
     summary:
-      "Hi-NRG: fast four-on-the-floor, relentless 8th octave bass, minor triads, handclap backbeat",
-    tempo: { bpm: [125, 140], typical: 132 },
+      "Hi-NRG: fast 128-140 bpm four-on-the-floor, relentless 8th octave bass, minor triads, handclap backbeat",
+    tempo: { bpm: [128, 140], typical: 134 },
     pitch: { scales: [["minor", 1]] },
     harmony: {
       presets: [
@@ -329,10 +336,11 @@ const DISCO: readonly StyleCard[] = [
   card({
     id: "space-disco",
     summary:
-      "Space disco: arpeggiated synth sequences, sweeping filter pads, suspended dorian vamps, long phrases",
-    tempo: { bpm: [110, 125], typical: 118 },
+      "Space disco: 16th sequencer bass and arpeggios instead of the octave bass, sweeping filter pads, dorian vamps, long phrases",
+    tempo: { bpm: [110, 122], typical: 116 },
     meter: { hypermeter: [[16, 1]] },
     harmony: { model: "modal", rhythm: [[0.5, 1]] },
+    bass: { behaviour: [["ostinato", 1]], onsets: SIXTEENTHS },
     rhythm: { onsets: { arp: SIXTEENTHS } },
     texture: {
       roles: {
@@ -717,7 +725,7 @@ const HOUSE: readonly StyleCard[] = [
     bass: { behaviour: [["root", 1]] },
     texture: {
       roles: {
-        chords: role("saw", "piano:0.5"),
+        chords: role("piano", "saw:0.4"),
         lead: role("lead", "saw:0.4"),
       },
     },
@@ -725,10 +733,13 @@ const HOUSE: readonly StyleCard[] = [
   card({
     id: "progressive-house",
     summary:
-      "Progressive house: 16-bar hypermeter, layered plucked arpeggios, slow filter builds, minor suspended loops",
+      "Progressive house: 16-bar hypermeter, syncopated rolling bass with 16th pickups, 16th shaker, layered plucked arpeggios, slow filter builds",
     tempo: { bpm: [122, 128], typical: 126 },
     meter: { hypermeter: [[16, 1]] },
-    rhythm: { onsets: { arp: grid("x.xxx.xxx.xxx.xx") } },
+    rhythm: {
+      onsets: { arp: grid("x.xxx.xxx.xxx.xx"), shaker: SHAKER_16 },
+    },
+    bass: { onsets: grid("..x..xx...x..xx.") },
     harmony: {
       presets: [
         ["aeolian", 0.6],
@@ -738,6 +749,7 @@ const HOUSE: readonly StyleCard[] = [
     },
     texture: {
       roles: {
+        shaker: MACHINE,
         arp: role("pluck"),
         pad: role("strings", "cloud:0.4"),
         chords: role("saw"),
@@ -1416,6 +1428,30 @@ const TECHNO: readonly StyleCard[] = [
     texture: { roles: { bass: role("square"), lead: role("lead", "saw:0.4") } },
     mix: { loudness: "loud" },
   }),
+  card({
+    id: "melodic-techno",
+    summary:
+      "Melodic techno: 120-126 bpm, galloping 8th-plus-16th bass ostinato, closed 16th hats, minor and phrygian arpeggio sequences, long pads, one-chord modal stasis with dramatic builds",
+    tempo: { bpm: [120, 126], typical: 123 },
+    meter: { hypermeter: [[16, 1]] },
+    pitch: {
+      scales: [
+        ["minor", 0.6],
+        ["phrygian", 0.4],
+      ],
+    },
+    harmony: { model: "modal", rhythm: [[0.25, 1]] },
+    bass: { behaviour: [["ostinato", 1]], onsets: GALLOP, range: [31, 45] },
+    rhythm: { onsets: { hat: SIXTEENTHS, arp: SIXTEENTHS } },
+    texture: {
+      roles: {
+        arp: role("pluck", "saw:0.5"),
+        pad: role("strings", "cloud:0.5"),
+        lead: maybe("lead"),
+      },
+    },
+    mix: { fx: { arp: { autofilter: "slow-sweep" } }, space: 0.6 },
+  }),
 ];
 
 // ---------------------------------------------------------------------------
@@ -1478,8 +1514,10 @@ const TRANCE: readonly StyleCard[] = [
   card({
     id: "progressive-trance",
     summary:
-      "Progressive trance: 128-134 bpm, slow-evolving filtered arpeggio, sparse harmonic rhythm, restrained lead",
+      "Progressive trance: 128-134 bpm, galloping 8th-plus-16th bass, closed 16th hats, slow-evolving filtered arpeggio, sparse harmonic rhythm, restrained lead",
     tempo: { bpm: [128, 134], typical: 132 },
+    rhythm: { onsets: { hat: SIXTEENTHS } },
+    bass: { onsets: GALLOP },
     harmony: { rhythm: [[0.25, 1]] },
     melody: { density: [1, 2] },
     texture: { roles: { lead: maybe("pluck", "saw:0.4") } },
@@ -1559,6 +1597,35 @@ const TRANCE: readonly StyleCard[] = [
         lead: role("saw", "square:0.5"),
       },
     },
+  }),
+  card({
+    id: "progressive-psy",
+    summary:
+      "Progressive psytrance: 134-140 bpm, rolling kick-bass in a shorter two-note 16th pattern, minor not phrygian, hypnotic filtered riffs, sparser and deeper than full-on",
+    tempo: { bpm: [134, 140], typical: 137 },
+    meter: { hypermeter: [[16, 1]] },
+    pitch: {
+      scales: [
+        ["minor", 0.7],
+        ["dorian", 0.3],
+      ],
+    },
+    harmony: { model: "modal", rhythm: [[0.25, 1]] },
+    bass: {
+      behaviour: [["ostinato", 1]],
+      onsets: grid(".xx..xx..xx..xx."),
+      range: [31, 45],
+    },
+    rhythm: { onsets: { hat: OFFBEAT, perc: grid("......x.......x.") } },
+    texture: {
+      roles: {
+        perc: MACHINE_OPT,
+        chords: null,
+        pad: maybe("cloud"),
+        lead: role("pluck", "saw:0.5"),
+      },
+    },
+    mix: { fx: { lead: { autofilter: "slow-sweep" } }, space: 0.5 },
   }),
   card({
     id: "dark-psy",
@@ -1710,8 +1777,9 @@ const HARDCORE: readonly StyleCard[] = [
   card({
     id: "gabber",
     summary:
-      "Gabber: 160-200 bpm fuzz-distorted kick on every beat, off-beat hats, dark minor stabs",
+      "Gabber: 160-200 bpm fuzz-distorted kick on every beat that is also the bass (no separate bassline), off-beat hats, dark minor stabs",
     tempo: { bpm: [160, 200], typical: 180 },
+    bass: { behaviour: [["none", 1]] },
     harmony: { model: "modal", rhythm: [[0.25, 1]] },
     texture: { roles: { chords: maybe("saw"), lead: role("saw") } },
     mix: { fx: { kick: { distort: "fuzz" } } },
@@ -1766,12 +1834,13 @@ const HARDCORE: readonly StyleCard[] = [
   card({
     id: "jumpstyle",
     summary:
-      "Jumpstyle: 140-150 bpm hard kick with off-beat bass, two-chord minor stabs, shuffle-dance groove",
-    tempo: { bpm: [140, 150], typical: 145 },
+      "Jumpstyle: 138-145 bpm hard kick with off-beat bass, no hi-hat bed (off-beat percussion instead), two-chord minor stabs, shuffle-dance groove",
+    tempo: { bpm: [138, 145], typical: 142 },
     groove: { swingRatio: [1.1, 1.3] },
+    rhythm: { onsets: { hat: null, perc: grid("..x...x...x...x.") } },
     harmony: { presets: [["dorian-vamp", 1]] },
     bass: { behaviour: [["root", 1]], onsets: OFFBEAT },
-    texture: { roles: { bass: role("square") } },
+    texture: { roles: { bass: role("square"), perc: MACHINE } },
   }),
   card({
     id: "frenchcore",
@@ -2046,7 +2115,7 @@ const AMBIENT: readonly StyleCard[] = [
     tempo: { bpm: [60, 100], typical: 80 },
     harmony: { model: "modal", rhythm: [[0.25, 1]] },
     melody: { density: [0, 1], repetition: 0.5 },
-    bass: { behaviour: [["pedal", 1]] },
+    bass: { behaviour: [["pedal", 1]], onsets: DOWNBEAT },
     form: {
       plans: [[["intro", "verse", "bridge", "verse", "outro"], 1]],
       archetype: "through-composed",
@@ -2111,7 +2180,7 @@ const AMBIENT: readonly StyleCard[] = [
   card({
     id: "berlin-school",
     summary:
-      "Berlin school: 16th-note sequencer ostinato arpeggios over a minor pedal, slow filter evolution, long modal sections",
+      "Berlin school: interlocking 16th sequencer arpeggios over an 8th sequencer bass ostinato, no kit, slow filter evolution, long modal sections",
     tempo: { bpm: [100, 130], typical: 115 },
     meter: { hypermeter: [[16, 1]] },
     pitch: {
@@ -2121,6 +2190,7 @@ const AMBIENT: readonly StyleCard[] = [
       ],
     },
     rhythm: { onsets: { arp: SIXTEENTHS } },
+    bass: { behaviour: [["ostinato", 1]], onsets: EIGHTHS },
     melody: { density: [1, 2] },
     texture: {
       roles: {
@@ -2436,7 +2506,7 @@ const IDM: readonly StyleCard[] = [
         kick: grid("x.......x......."),
         snare: BACKBEAT,
         clap: null,
-        hat: EIGHTHS,
+        hat: OFFBEAT,
       },
     },
     bass: { behaviour: [["ostinato", 1]], onsets: EIGHTHS },

@@ -46,7 +46,7 @@ describe("electronic cards", () => {
     const ids = new Set(ELECTRONIC_CARDS.map((c) => c.id));
     expect([...ids].sort()).toEqual([...OWN].sort());
     expect(ids.size).toBe(ELECTRONIC_CARDS.length);
-    expect(OWN.length).toBe(108);
+    expect(OWN.length).toBe(110);
   });
 
   test("every card carries a theory note", () => {
@@ -149,6 +149,63 @@ describe("electronic defining patterns", () => {
         expect(bass.length, id).toBeGreaterThan(0);
         for (const s of bass) expect([2, 6, 10, 14], id).toContain(s);
       }
+  });
+
+  test("galloping bass: off-beat 8th plus the 16th after it", () => {
+    for (const id of ["progressive-trance", "melodic-techno"])
+      for (const seed of SEEDS) {
+        const g = generateStyle(id, { seed, bars: 8 });
+        const bass = new Set(inBar(g, stepsOf(g, "bass")));
+        expect(
+          [...bass].sort((a, b) => a - b),
+          id,
+        ).toEqual([2, 3, 6, 7, 10, 11, 14, 15]);
+      }
+  });
+
+  test("progressive psy rolls two 16ths, full-on psytrance three", () => {
+    for (const seed of SEEDS) {
+      const prog = new Set(
+        inBar(
+          generateStyle("progressive-psy", { seed, bars: 8 }),
+          stepsOf(generateStyle("progressive-psy", { seed, bars: 8 }), "bass"),
+        ),
+      );
+      expect(prog.has(0) || prog.has(3), "prog psy").toBe(false);
+      const full = new Set(
+        inBar(
+          generateStyle("psytrance", { seed, bars: 8 }),
+          stepsOf(generateStyle("psytrance", { seed, bars: 8 }), "bass"),
+        ),
+      );
+      expect(full.has(3), "psytrance").toBe(true);
+    }
+  });
+
+  test("gabber has no separate bassline; the kick is the bass", () => {
+    for (const seed of SEEDS) {
+      const g = generateStyle("gabber", { seed, bars: 8 });
+      expect(stepsOf(g, "bass")).toEqual([]);
+      expect(stepsOf(g, "kick").length).toBeGreaterThan(0);
+    }
+  });
+
+  test("ambient pedal holds from the downbeat; Berlin school sequences 8ths", () => {
+    for (const seed of SEEDS) {
+      const amb = inBar(
+        generateStyle("ambient", { seed, bars: 8 }),
+        stepsOf(generateStyle("ambient", { seed, bars: 8 }), "bass"),
+      );
+      for (const s of amb) expect(s).toBe(0);
+      const bs = new Set(
+        inBar(
+          generateStyle("berlin-school", { seed, bars: 8 }),
+          stepsOf(generateStyle("berlin-school", { seed, bars: 8 }), "bass"),
+        ),
+      );
+      expect(bs.size).toBeGreaterThanOrEqual(4);
+      for (const s of bs) expect(s % 2).toBe(0);
+    }
   });
 
   test("electro kick is syncopated, not four-on-the-floor", () => {
