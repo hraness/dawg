@@ -237,6 +237,70 @@ describe("sostenuto", () => {
     expect(first.durationTicks).toBe(1920);
   });
 
+  test("a restruck latched key rings to the lift; an unlatched one damps", () => {
+    // C2 held at sostenuto-down, struck again twice as short notes; E4
+    // played the same way but never held at the press. Lift at 4 s.
+    const sost: PedalEvent[] = [
+      { tick: 240, state: "down" },
+      { tick: 3840, state: "up" },
+    ];
+    const notes = [
+      { pitch: 36, start: 0, dur: 480 },
+      { pitch: 36, start: 1440, dur: 120 },
+      { pitch: 36, start: 2400, dur: 120 },
+      { pitch: 64, start: 1440, dur: 120 },
+      { pitch: 64, start: 2400, dur: 120 },
+    ];
+    const s = song({ sostenuto: sost }, notes);
+    const performed = performNotes(
+      s.tracks[0],
+      s.notes,
+      performanceTimingFor(s),
+    );
+    const end = (pitch: number, start: number) => {
+      const n = performed.find(
+        (x) => x.pitch === pitch && x.startTick === start,
+      )!;
+      return n.startTick + n.durationTicks;
+    };
+    expect(end(36, 0)).toBe(1440);
+    expect(end(36, 1440)).toBe(2400);
+    expect(end(36, 2400)).toBe(3840);
+    expect(end(64, 1440)).toBe(1560);
+    expect(end(64, 2400)).toBe(2520);
+    // Audible: C2 still sounds at 3.5 s, E4 is below -60 dB by then.
+    const only = (pitch: number) =>
+      render(
+        song(
+          { sostenuto: sost },
+          notes.filter((n) => n.pitch === pitch),
+        ),
+        4.5,
+      )[0];
+    const c2 = only(36);
+    const e4 = only(64);
+    const late = (x: Float64Array) =>
+      db(rms(x, Math.round(3.5 * SR), Math.round(3.6 * SR)) / peak(x));
+    expect(late(c2)).toBeGreaterThan(-60);
+    expect(late(e4)).toBeLessThan(-60);
+  });
+
+  test("a key held through a lift is caught again by the next press", () => {
+    const s = song(
+      {
+        sostenuto: [
+          { tick: 240, state: "down" },
+          { tick: 960, state: "up" },
+          { tick: 1440, state: "down" },
+          { tick: 3360, state: "up" },
+        ],
+      },
+      [{ pitch: 60, start: 0, dur: 1920 }],
+    );
+    const [note] = performNotes(s.tracks[0], s.notes, performanceTimingFor(s));
+    expect(note!.durationTicks).toBe(3360);
+  });
+
   test("rejects half", () => {
     expect(() =>
       song({ sostenuto: [{ tick: 0, state: "half" }] }, [{ pitch: 60 }]),

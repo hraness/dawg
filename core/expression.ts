@@ -951,20 +951,43 @@ export function performNotes(
   // 3b. Sostenuto (0.6.1): a key held (written length after articulation)
   // when the sostenuto goes down keeps its damper up until the sostenuto
   // lifts; keys struck later damp at their own release (or the sustain
-  // pedal's). Re-striking the same pitch stops the latched note.
+  // pedal's). The rod keeps a caught damper raised, so the same pitch
+  // struck again while that sostenuto is down rings to the lift too; the
+  // earlier instance stops at the restrike so voices do not pile up. A key
+  // still held through a lift and a new press is caught again.
   const sostenuto = track?.sostenuto;
   if (sostenuto) {
-    const downs = sostenuto.filter((event) => event.state === "down");
-    working = working.map((item) => {
+    const spans: { down: number; lift: number; pitches: Set<number> }[] = [];
+    let open: number | undefined;
+    for (const event of sostenuto) {
+      if (event.state === "down" && open === undefined) open = event.tick;
+      else if (event.state === "up" && open !== undefined) {
+        spans.push({ down: open, lift: event.tick, pitches: new Set() });
+        open = undefined;
+      }
+    }
+    if (open !== undefined)
+      spans.push({ down: open, lift: timing.endTick, pitches: new Set() });
+    const caughtBy = working.map((item) => {
       const keyUp = item.start + item.bendLength;
-      const down = downs.find(
-        (event) => event.tick >= item.start && event.tick < keyUp,
-      );
-      if (!down) return item;
-      const lift =
-        sostenuto.find(
-          (event) => event.tick > down.tick && event.state === "up",
-        )?.tick ?? timing.endTick;
+      return spans.filter((span) => {
+        const held = item.start <= span.down && span.down < keyUp;
+        if (held) span.pitches.add(item.note.pitch);
+        return held;
+      });
+    });
+    working = working.map((item, index) => {
+      const keyUp = item.start + item.bendLength;
+      let lift = -Infinity;
+      for (const span of caughtBy[index]!) lift = Math.max(lift, span.lift);
+      for (const span of spans)
+        if (
+          span.pitches.has(item.note.pitch) &&
+          span.down < item.start &&
+          item.start < span.lift
+        )
+          lift = Math.max(lift, span.lift);
+      if (lift === -Infinity) return item;
       const current = item.start + item.duration;
       let end = Math.max(current, Math.min(lift, timing.endTick));
       if (end <= current) return item;
