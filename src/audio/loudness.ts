@@ -269,9 +269,23 @@ export function truePeakPhases(): readonly Float64Array[] {
   return phases;
 }
 
+let interleaved: Float64Array | undefined;
+
+/** The seven phases interleaved by tap (`tap * 7 + phase`). */
+function interleavedPhases(): Float64Array {
+  if (interleaved) return interleaved;
+  const branches = truePeakPhases();
+  const flat = new Float64Array(TAPS_PER_PHASE * branches.length);
+  branches.forEach((taps, phase) => {
+    for (let tap = 0; tap < TAPS_PER_PHASE; tap += 1)
+      flat[tap * branches.length + phase] = taps[tap]!;
+  });
+  return (interleaved = flat);
+}
+
 /**
  * Largest absolute value between each sample and the next (both samples
- * and the four interpolated points), as `out[n]` for n .. n+1.
+ * and the seven interpolated points), as `out[n]` for n .. n+1.
  */
 export function interSamplePeaks(
   channel: Float64Array,
@@ -280,6 +294,7 @@ export function interSamplePeaks(
 ): void {
   const n = channel.length;
   const branches = truePeakPhases();
+  const flat = interleavedPhases();
   const before = TAPS_PER_PHASE / 2 - 1;
   const at = (index: number): number => {
     if (index >= 0 && index < n) return channel[index]!;
@@ -290,18 +305,45 @@ export function interSamplePeaks(
     let peak = Math.abs(channel[index]!);
     const next = Math.abs(at(index + 1));
     if (next > peak) peak = next;
-    const inside = index - before >= 0 && index + TAPS_PER_PHASE - before <= n;
-    for (const taps of branches) {
-      let sum = 0;
-      if (inside)
+    const base = index - before;
+    if (base >= 0 && base + TAPS_PER_PHASE <= n) {
+      // Every phase in one pass over the window (the interior fast path).
+      let s0 = 0;
+      let s1 = 0;
+      let s2 = 0;
+      let s3 = 0;
+      let s4 = 0;
+      let s5 = 0;
+      let s6 = 0;
+      for (let tap = 0; tap < TAPS_PER_PHASE; tap += 1) {
+        const x = channel[base + tap]!;
+        const k = tap * 7;
+        s0 += x * flat[k]!;
+        s1 += x * flat[k + 1]!;
+        s2 += x * flat[k + 2]!;
+        s3 += x * flat[k + 3]!;
+        s4 += x * flat[k + 4]!;
+        s5 += x * flat[k + 5]!;
+        s6 += x * flat[k + 6]!;
+      }
+      peak = Math.max(
+        peak,
+        Math.abs(s0),
+        Math.abs(s1),
+        Math.abs(s2),
+        Math.abs(s3),
+        Math.abs(s4),
+        Math.abs(s5),
+        Math.abs(s6),
+      );
+    } else
+      for (const taps of branches) {
+        let sum = 0;
         for (let tap = 0; tap < TAPS_PER_PHASE; tap += 1)
-          sum += channel[index - before + tap]! * taps[tap]!;
-      else
-        for (let tap = 0; tap < TAPS_PER_PHASE; tap += 1)
-          sum += at(index - before + tap) * taps[tap]!;
-      const magnitude = Math.abs(sum);
-      if (magnitude > peak) peak = magnitude;
-    }
+          sum += at(base + tap) * taps[tap]!;
+        const magnitude = Math.abs(sum);
+        if (magnitude > peak) peak = magnitude;
+      }
     if (peak > out[index]!) out[index] = peak;
   }
 }
