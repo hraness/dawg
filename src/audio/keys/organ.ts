@@ -386,6 +386,7 @@ const COMBO_GAIN = 0.046;
 
 export class ComboVoice implements OrganVoice {
   private readonly ph = new Float64Array(5);
+  private readonly dts = new Float64Array(5);
   private readonly lv: number[];
   private readonly f = new Biquad2();
   private readonly f2 = new Biquad2();
@@ -436,27 +437,37 @@ export class ComboVoice implements OrganVoice {
     const sr = this.sr;
     const attack = 0.02 * (48_000 / sr);
     const release = 0.004 * (48_000 / sr);
+    // Hoisted out of the sample loop (same arithmetic, so the same output).
+    const hz = this.note.hz;
+    const bright = this.tone === "bright";
+    const width = this.tone === "reed" ? 0.3 : 0.5;
+    const { ph, lv, dts } = this;
+    const setDts = () => {
+      for (let r = 0; r < 5; r += 1)
+        dts[r] = (hz * COMBO_RATIOS[r]! * this.ratio) / sr;
+    };
+    setDts();
     for (let i = 0; i < count; i += 1) {
       if ((this.n & (CONTROL - 1)) === 0) {
         const t = this.note.startSec + this.n / sr;
         const vib =
           this.vib > 0 ? this.vibmod * 100 * Math.sin(TAU * this.vib * t) : 0;
         this.ratio = 2 ** ((this.cents + vib) / 1200);
+        setDts();
       }
       this.n += 1;
       let y = 0;
       for (let r = 0; r < 5; r += 1) {
-        const dt = (this.note.hz * COMBO_RATIOS[r]! * this.ratio) / sr;
+        const dt = dts[r]!;
         if (!(dt > 0) || dt >= 0.45) continue;
-        let t = this.ph[r]! + dt;
+        let t = ph[r]! + dt;
         if (t >= 1) t -= 1;
-        this.ph[r] = t;
-        if (this.lv[r] === 0) continue;
+        ph[r] = t;
+        const level = lv[r]!;
+        if (level === 0) continue;
         y +=
-          this.lv[r]! *
-          (this.tone === "bright"
-            ? 2 * t - 1 - polyBlep(t, dt)
-            : blepPulse(t, dt, this.tone === "reed" ? 0.3 : 0.5));
+          level *
+          (bright ? 2 * t - 1 - polyBlep(t, dt) : blepPulse(t, dt, width));
       }
       this.env +=
         ((this.gate ? 1 : 0) - this.env) * (this.gate ? attack : release);
@@ -733,7 +744,9 @@ export class PipeVoice implements OrganVoice {
         const x = rank.ph * TABLE;
         const j = Math.floor(x);
         const s = rank.t[j]! + (rank.t[j + 1]! - rank.t[j]!) * (x - j);
-        y += s * rank.gain * rank.level * (1 - Math.exp(-t / rank.ta));
+        // Past 40 time constants 1 - exp(-t/ta) rounds to exactly 1.
+        const speak = t > 40 * rank.ta ? 1 : 1 - Math.exp(-t / rank.ta);
+        y += s * rank.gain * rank.level * speak;
       }
       if (!this.gate) this.relEnv *= this.relK;
       y *= this.amp * this.relEnv;

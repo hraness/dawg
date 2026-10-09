@@ -506,7 +506,9 @@ describe("tails and cost", () => {
       }
       return best;
     };
-    const out = new Float64Array(SR);
+    // Five voice-seconds, as keys.md 3.4 measured: one second is short
+    // enough that voice setup and timer noise swing the ratio on CI.
+    const out = new Float64Array(SR * 5);
     const sawRun = () => {
       // The keys prototype's reference (as in engine.test.ts): a polyBLEP
       // saw, a biquad lowpass and an envelope, one voice at A1.
