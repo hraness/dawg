@@ -4,7 +4,8 @@
  * every 100 ms, gated integrated loudness (absolute -70 LUFS, relative
  * -10 LU), loudness range per EBU Tech 3342 (short-term values gated at
  * -70 LUFS and -20 LU, 10th to 95th percentile) and true peak from a 4x
- * oversampled polyphase interpolator (BS.1770-4 Annex 2). Validated against
+ * oversampled polyphase interpolator (BS.1770-4 Annex 2, with a longer
+ * windowed-sinc filter than its example). Validated against
  * the synthetic test signals of EBU Tech 3341 and 3342 in loudness.test.ts.
  *
  * A `loop` buffer is measured as if it repeated forever: filters start in
@@ -21,7 +22,7 @@ export const MOMENTARY_SECONDS = 0.4;
 export const SHORT_TERM_SECONDS = 3;
 /** True-peak oversampling factor and taps per polyphase branch. */
 export const TRUE_PEAK_FACTOR = 4;
-const TAPS_PER_PHASE = 12;
+const TAPS_PER_PHASE = 32;
 
 export type Loudness = Readonly<{
   /** Gated integrated loudness, LUFS; -Infinity when everything is gated. */
@@ -222,40 +223,46 @@ export function loudnessRange(
   return high - low;
 }
 
-/**
- * The interpolating FIR of ITU-R BS.1770-4 Annex 2 (48 taps, 4 phases of
- * 12), each phase in time order over x[n-5] .. x[n+6]. The phases estimate
- * the signal at n + 1/8, 3/8, 5/8 and 7/8; together with the samples
- * themselves (as libebur128 does) they give the 4x oversampled true peak.
- */
-const TRUE_PEAK_TAPS: readonly (readonly number[])[] = [
-  [
-    -0.00830078125, 0.014892578125, -0.026611328125, 0.047607421875,
-    -0.102294921875, 0.97216796875, 0.1373291015625, -0.0594482421875,
-    0.033203125, -0.0196533203125, 0.010986328125, 0.001708984375,
-  ],
-  [
-    -0.0189208984375, 0.0330810546875, -0.0582275390625, 0.1015625,
-    -0.2003173828125, 0.77978515625, 0.465087890625, -0.16650390625,
-    0.089111328125, -0.0517578125, 0.029296875, -0.0291748046875,
-  ],
-  [
-    -0.0291748046875, 0.029296875, -0.0517578125, 0.089111328125,
-    -0.16650390625, 0.465087890625, 0.77978515625, -0.2003173828125, 0.1015625,
-    -0.0582275390625, 0.0330810546875, -0.0189208984375,
-  ],
-  [
-    0.001708984375, 0.010986328125, -0.0196533203125, 0.033203125,
-    -0.0594482421875, 0.1373291015625, 0.97216796875, -0.102294921875,
-    0.047607421875, -0.026611328125, 0.014892578125, -0.00830078125,
-  ],
-];
+/** Kaiser window shape for the true-peak interpolator. */
+const TRUE_PEAK_BETA = 8;
+
+function besselI0(x: number): number {
+  let sum = 1;
+  let term = 1;
+  for (let k = 1; k < 40; k += 1) {
+    term *= (x / (2 * k)) ** 2;
+    sum += term;
+  }
+  return sum;
+}
 
 let phases: Float64Array[] | undefined;
 
-/** The Annex 2 phases as typed arrays (see TRUE_PEAK_TAPS). */
+/**
+ * The true-peak interpolator: four Kaiser-windowed sinc phases of 32 taps,
+ * each in time order over x[n-15] .. x[n+16], estimating the signal at
+ * n + 1/8, 3/8, 5/8 and 7/8. With the samples themselves they give the 4x
+ * oversampled true peak. BS.1770-4 Annex 2's 12-tap example filter rolls
+ * off early and reads dense, bright material (supersaws, distortion) up to
+ * half a dB low; this one stays within a few hundredths of a 64x reference.
+ */
 export function truePeakPhases(): readonly Float64Array[] {
-  phases ??= TRUE_PEAK_TAPS.map((taps) => Float64Array.from(taps));
+  phases ??= [1, 3, 5, 7].map((eighth) => {
+    const frac = eighth / 8;
+    const taps = new Float64Array(TAPS_PER_PHASE);
+    const before = TAPS_PER_PHASE / 2 - 1;
+    const norm = besselI0(TRUE_PEAK_BETA);
+    for (let tap = 0; tap < TAPS_PER_PHASE; tap += 1) {
+      const x = tap - before - frac;
+      const m = x / (TAPS_PER_PHASE / 2);
+      const window =
+        Math.abs(m) <= 1
+          ? besselI0(TRUE_PEAK_BETA * Math.sqrt(1 - m * m)) / norm
+          : 0;
+      taps[tap] = (Math.sin(Math.PI * x) / (Math.PI * x)) * window;
+    }
+    return taps;
+  });
   return phases;
 }
 

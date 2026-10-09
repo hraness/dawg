@@ -50,7 +50,7 @@ const PLATEAU_SLOPE = 0.05;
 /** Largest single step the bracketing search takes, dB. */
 const MAX_TARGET_STEP = 12;
 /** Extra samples so true-peak interpolation past the lookahead is real. */
-const TRUE_PEAK_PAD = 8;
+const TRUE_PEAK_PAD = 18;
 
 /**
  * Masters the first `frames` samples of a mix. Returns undefined for a
