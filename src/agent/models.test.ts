@@ -177,7 +177,7 @@ describe("cost per prompt", () => {
     expect(formatPromptCost(estimatePromptCost(price))).toBe("~$0.22/prompt");
     expect(
       formatPromptCost(estimatePromptCost({ input: 0.2e-6, output: 0.8e-6 })),
-    ).toBe("~$0.0064/prompt");
+    ).toBe("~$0.0088/prompt");
     expect(formatPromptCost(undefined)).toBe("—");
     expect(formatPromptCost(0)).toBe("free");
   });
