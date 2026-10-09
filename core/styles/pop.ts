@@ -227,7 +227,7 @@ const ROOTS: readonly StyleCard[] = [
       "modern pop: programmed drums, four-chord loops, sparse verses, big choruses",
     rhythm: { onsets: { clap: BACKBEAT } },
     texture: {
-      roles: { clap: maybe("drums"), chords: role("keys", "pluck:0.5") },
+      roles: { ...kitAll(MACHINE), chords: role("keys", "pluck:0.5") },
     },
   }),
   card({
@@ -339,6 +339,9 @@ const ROOTS: readonly StyleCard[] = [
         kick: TWO_STEP_KICK,
         snare: BACKBEAT,
         hat: EIGHTH_HAT,
+        // The electronic root's clap on 2 and 4 would fight half-time
+        // snares; leaves that clap name their own grid.
+        clap: null,
       },
       fills: { every: 8, density: [0.3, 0.6] },
     },
@@ -363,9 +366,7 @@ const ROOTS: readonly StyleCard[] = [
     },
     texture: {
       roles: {
-        kick: MACHINE,
-        snare: MACHINE,
-        hat: MACHINE,
+        ...kitAll(MACHINE),
         bass: role("bass", "saw:0.5"),
         chords: role("keys", "strings:0.5"),
         lead: maybe("lead"),
@@ -1289,6 +1290,7 @@ const MODERN: readonly StyleCard[] = [
         onsets: {
           kick: grid("x.....x...x...x."),
           snare: HALF_SNARE,
+          clap: HALF_SNARE,
           hat: SIXTEENTH_HAT,
         },
       },
@@ -1372,6 +1374,7 @@ const MODERN: readonly StyleCard[] = [
       bass: { behaviour: [["root-fifth", 1]] },
       texture: {
         roles: {
+          ...kitAll(ACOUSTIC_KIT),
           rim: opt(ACOUSTIC_KIT),
           chords: role("nylon", "rhodes:0.5", "vibes:0.4"),
           counter: maybe("flute", "trumpet:0.4"),
@@ -1657,6 +1660,7 @@ const MODERN: readonly StyleCard[] = [
           snare: grid("...x.."),
           hat: grid("xxxxxx"),
           perc: grid("x.xx.x"),
+          clap: null,
         },
       },
       pitch: {
@@ -1846,10 +1850,9 @@ const OLD_SCHOOL: readonly StyleCard[] = [
       bass: { behaviour: [["ostinato", 1]], onsets: grid("x..x..x.x....x..") },
       texture: {
         roles: {
-          kick: ACOUSTIC_KIT,
+          ...kitAll(ACOUSTIC_KIT),
           rim: ACOUSTIC_KIT,
           snare: null,
-          hat: ACOUSTIC_KIT,
           chords: role("electric@clean", "organ:0.5"),
         },
       },
