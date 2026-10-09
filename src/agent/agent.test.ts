@@ -210,7 +210,7 @@ describe("streaming agent turn", () => {
     const script = scriptedFetch([
       [
         ...toolCallChunks(0, "c1", "add_notes", {
-          notes: [{ pitch: 60, start: 10_000, duration: 1 }],
+          notes: [{ pitch: 60, start: 1_000_000, duration: 1 }],
         }),
         finishChunk("tool_calls"),
       ],

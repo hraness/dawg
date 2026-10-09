@@ -1745,9 +1745,10 @@ export function scoreFromJSON(value: unknown): TrackScore {
   };
   // Files written before 0.7 could hold notes on a track that no longer
   // exists. They never sounded and no edit could reach them, so they go.
+  // They are still checked like any note first.
   const trackIds = new Set(data.tracks.map((track) => track.id));
-  data.notes = data.notes.filter(
-    (note) => typeof note.trackId !== "string" || trackIds.has(note.trackId),
+  data.notes = normalizeNotes(data.notes).filter((note) =>
+    trackIds.has(note.trackId),
   );
   const tempoBpm = optionalNumber(value.tempoBpm);
   const beatsPerBar = optionalNumber(value.beatsPerBar);
