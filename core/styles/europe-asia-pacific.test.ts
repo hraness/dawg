@@ -278,7 +278,7 @@ describe("europe-asia-pacific: critic", () => {
     // centroid than any sibling's (with a 15% margin).
     const parent = new Map(TAXONOMY_ROWS.map((r) => [r[0], r[1]]));
     const RH = ["kick", "snare", "clap", "hat", "openhat", "rim", "tom"];
-    RH.push("perc", "shaker", "bell", "bass", "chords");
+    RH.push("perc", "shaker", "bell", "bass", "chords", "lead");
     const PITCHED = ["bass", "chords", "lead", "counter", "pad", "arp"];
     const fp = (id: string, seed: number): number[] => {
       const g = generateStyle(id, { seed, bars: 8 });
@@ -324,4 +324,17 @@ describe("europe-asia-pacific: critic", () => {
       }
     expect(close).toEqual([]);
   }, 120_000);
+
+  test("drumless traditions carry no inherited frame drum", () => {
+    const quiet = ["gusle-epic", "albanian-iso", "rune-singing"];
+    quiet.push("nordic-fiddle", "maltese", "tamburica", "breton");
+    for (const id of quiet)
+      for (const seed of SEEDS)
+        expect({
+          id,
+          roles: generateStyle(id, { seed, bars: 2 }).plan.tracks.flatMap(
+            (t) => t.roles,
+          ),
+        }).not.toMatchObject({ roles: expect.arrayContaining(["perc"]) });
+  });
 });

@@ -238,6 +238,8 @@ const EUROPE_LEAVES: readonly StyleCard[] = [
     texture: {
       kind: "heterophonic",
       roles: {
+        bass: null,
+        perc: null,
         chords: null,
         lead: role("oboe", "sing:0.6"),
         counter: role("reeds", "sing:0.5"),
@@ -318,8 +320,12 @@ const EUROPE_LEAVES: readonly StyleCard[] = [
       microtiming: [0, 0.1],
     },
     harmony: { model: "drone" },
+    // Polska bowing runs in semiquavers across the three beats.
+    melody: { density: [3, 4] },
     texture: {
       roles: {
+        perc: null,
+        bass: null,
         chords: null,
         lead: role("fiddle", "violin:0.5"),
         counter: maybe("fiddle", "viola:0.5"),
@@ -391,6 +397,7 @@ const EUROPE_LEAVES: readonly StyleCard[] = [
     bass: { behaviour: [["none", 1]] },
     texture: {
       roles: {
+        perc: null,
         chords: null,
         bass: null,
         lead: role("sing"),
@@ -675,6 +682,8 @@ const EUROPE_LEAVES: readonly StyleCard[] = [
     harmony: { presets: [["andalusian", 1]] },
     texture: {
       roles: {
+        perc: null,
+        bass: null,
         chords: role("nylon"),
         lead: role("sing"),
         counter: maybe("sing"),
@@ -1248,6 +1257,7 @@ const EUROPE_LEAVES: readonly StyleCard[] = [
     texture: {
       kind: "homophonic",
       roles: {
+        perc: null,
         bass: role("contrabass"),
         chords: role("requinto", "tres:0.5"),
         lead: role("tremolo", "requinto:0.5"),
@@ -1301,6 +1311,8 @@ const EUROPE_LEAVES: readonly StyleCard[] = [
     texture: {
       kind: "polyphonic",
       roles: {
+        perc: null,
+        bass: null,
         chords: null,
         drone: role("choir"),
         lead: role("sing"),
@@ -1380,6 +1392,7 @@ const EUROPE_LEAVES: readonly StyleCard[] = [
     texture: {
       kind: "heterophonic",
       roles: {
+        perc: null,
         chords: null,
         bass: null,
         lead: role("sing"),
