@@ -8,7 +8,7 @@
 import { describe, expect, test } from "bun:test";
 import * as FAMILY from "./africa-mena-southasia.ts";
 import { generateStyle } from "./generate.ts";
-import { LEAF_IDS, STYLE_CARDS, resolveStyle } from "./index.ts";
+import { LEAF_IDS, STYLE_CARDS, resolveStyle, stylePath } from "./index.ts";
 import type { CycleSpec } from "./schema.ts";
 
 const ROOTS = ["africa", "mena", "south-asia"];
@@ -141,4 +141,96 @@ describe("africa-mena-southasia cards", () => {
       expect(generated.data.tuning?.name).toBe(tuning);
     }
   });
+});
+
+describe("africa-mena-southasia: defining patterns", () => {
+  const steps16 = (id: string, track: string, seed: number) => {
+    const { generated, notes } = notesOn(id, seed, [track]);
+    const step = generated.plan.barTicks / 16;
+    return [
+      ...new Set(notes.map((n) => mod(Math.round(n.startTick! / step), 16))),
+    ].sort((a, b) => a - b);
+  };
+
+  test("afrobeat's bell is Tony Allen's clave, not straight eighths", () => {
+    for (const seed of [1, 2, 3])
+      expect(steps16("afrobeat", "bell", seed)).toEqual([0, 3, 6, 10, 12]);
+  });
+
+  test("the djembe ensemble's kenkeni bell sits on the off-beats", () => {
+    for (const seed of [1, 2, 3])
+      expect(steps16("west-african-drum", "bell", seed)).toEqual([
+        2, 6, 10, 14,
+      ]);
+  });
+
+  test("mande pop and the Ewe ensemble lope in 12/8", () => {
+    for (const id of ["mande-pop", "ewe-drumming"])
+      expect(generateStyle(id, { seed: 1, bars: 8 }).plan.signature).toBe(
+        "12/8",
+      );
+  });
+
+  test("afrobeats leaves the log drum to amapiano", () => {
+    expect(resolveStyle("afrobeats").summary).not.toContain("log");
+  });
+});
+
+/**
+ * A listener could tell sibling leaves apart: each leaf's generated output
+ * (tempo, per-role onset grid, pitch-class histogram over three seeds) sits
+ * nearer its own centroid than any sibling's.
+ */
+describe("africa-mena-southasia: siblings are distinguishable", () => {
+  const MINE = LEAF_IDS.filter((id) => ROOTS.includes(stylePath(id)[0]!));
+  const RHYTHM = ["kick", "snare", "clap", "hat", "openhat", "rim", "tom"];
+  const RHYTHM2 = [...RHYTHM, "perc", "shaker", "bell", "bass", "chords"];
+  const PITCHED = ["bass", "chords", "lead", "counter", "pad", "arp"];
+  const print = (id: string, seed: number): number[] => {
+    const g = generateStyle(id, { seed, bars: 8 });
+    const { plan } = g;
+    const v = [plan.bpm / 40, plan.stepsPerBar === 12 ? 2 : 0];
+    const rows = RHYTHM2.map(() => new Array<number>(16).fill(0));
+    const pcs = new Array<number>(12).fill(0);
+    let pitched = 0;
+    for (const note of g.data.notes ?? []) {
+      const role = plan.noteRoles.get(note.id) ?? "";
+      const tick = (note.startTick ?? 0) % plan.barTicks;
+      const row = rows[RHYTHM2.indexOf(role)];
+      if (row) row[Math.floor((tick / plan.barTicks) * 16)]! += 1 / plan.bars;
+      if (PITCHED.includes(role)) {
+        pcs[mod(note.pitch - plan.tonic, 12)]! += 1;
+        pitched++;
+      }
+    }
+    for (const row of rows) v.push(...row.map((x) => Math.min(x, 2) / 2));
+    v.push(...pcs.map((x) => (6 * x) / (pitched || 1)));
+    return v;
+  };
+  const dist = (a: number[], b: number[]) =>
+    Math.sqrt(a.reduce((sum, x, i) => sum + (x - b[i]!) ** 2, 0));
+
+  test("every leaf is nearer its own centroid than a sibling's", () => {
+    const parent = new Map(
+      MINE.map((id) => [id, stylePath(id).at(-2) ?? ""] as const),
+    );
+    const prints = new Map(
+      MINE.map((id) => [id, [1, 2, 3].map((s) => print(id, s))]),
+    );
+    const centre = new Map(
+      [...prints].map(([id, fs]) => [
+        id,
+        fs[0]!.map((_, i) => fs.reduce((sum, f) => sum + f[i]!, 0) / fs.length),
+      ]),
+    );
+    const close: string[] = [];
+    for (const a of MINE)
+      for (const b of MINE) {
+        if (a === b || parent.get(a) !== parent.get(b)) continue;
+        for (const f of prints.get(a)!)
+          if (dist(f, centre.get(a)!) >= dist(f, centre.get(b)!))
+            close.push(`${a}~${b}`);
+      }
+    expect(close).toEqual([]);
+  }, 120_000);
 });

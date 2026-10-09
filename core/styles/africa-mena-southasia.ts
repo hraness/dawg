@@ -769,7 +769,7 @@ const LEAVES: readonly StyleCard[] = [
         kick: grid("x.....x...x....."),
         snare: grid("....x..x....x..."),
         hat: SIXTEENTHS,
-        bell: EIGHTHS,
+        bell: grid("x..x..x...x.x..."),
         chords: grid(".x.x.x.x.x.x.x.x"),
       },
     },
@@ -794,7 +794,7 @@ const LEAVES: readonly StyleCard[] = [
   card({
     id: "afrobeats",
     summary:
-      "afrobeats: the 3+3+2 tresillo kick under a log-drum and shaker groove, sparse minor-pop loops, sung hooks, half-step syncopation",
+      "afrobeats: the 3+3+2 tresillo kick under a shaker and conga groove, sparse minor-pop loops, sung hooks, half-step syncopation",
     tempo: { bpm: [96, 116], typical: 104 },
     meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
     rhythm: {
@@ -912,6 +912,7 @@ const LEAVES: readonly StyleCard[] = [
     summary:
       "Mande and wassoulou pop: pentatonic kamalengoni ostinato, shekere sixteenths, a 12/8 lope with a swung 4/4 kit, women's call and response",
     tempo: { bpm: [100, 136], typical: 118 },
+    meter: { signatures: [["12/8", 1]], hypermeter: [[2, 1]] },
     pitch: {
       scales: [
         ["minor-pentatonic", 0.6],
@@ -919,7 +920,15 @@ const LEAVES: readonly StyleCard[] = [
       ],
     },
     harmony: { model: "modal", rhythm: [[0.5, 1]] },
-    bass: { behaviour: [["ostinato", 1]] },
+    rhythm: {
+      onsets: {
+        // The karignan iron scraper's long-short lope and a kit backbeat.
+        shaker: grid("xx.xx.xx.xx."),
+        kick: grid("x.....x....."),
+        snare: grid("...x.....x.."),
+      },
+    },
+    bass: { behaviour: [["ostinato", 1]], onsets: grid("x.xx..x.xx..") },
     texture: {
       roles: {
         snare: maybe("drums"),
@@ -1067,17 +1076,19 @@ const LEAVES: readonly StyleCard[] = [
   card({
     id: "west-african-drum",
     summary:
-      "djembe ensemble: the 12/8 bell and three dundun ostinati interlock, the lead djembe solos against the timeline, no harmony",
-    tempo: { bpm: [110, 150], typical: 128 },
-    meter: { signatures: [["12/8", 1]], hypermeter: [[2, 1]] },
+      "djembe ensemble (kuku): dundunba, sangban and kenkeni ostinati with their bells interlock in a fast 4/4, accompanying djembes, the lead djembe solos, no harmony",
+    tempo: { bpm: [120, 160], typical: 138 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
     pitch: { scales: [["major-pentatonic", 1]] },
     harmony: { model: "none" },
     rhythm: {
       onsets: {
-        bell: STANDARD_BELL,
-        kick: grid("x.....x..x.."),
-        perc: grid("x.xx.xx.xx.x"),
-        shaker: grid("xxxxxxxxxxxx"),
+        // Kenkeni bell on the off-beats, dundunba and sangban as the kick,
+        // the djembe accompaniment's tone-slap figure as the perc.
+        bell: grid("..x...x...x...x."),
+        kick: grid("x..x..x.....x..."),
+        perc: grid("x.xx..x.x.xx..x."),
+        shaker: SIXTEENTHS,
       },
     },
     bass: { behaviour: [["none", 1]] },
@@ -1749,7 +1760,7 @@ const LEAVES: readonly StyleCard[] = [
   card({
     id: "khaleeji",
     summary:
-      "khaleeji: Gulf song on the khaliji iqa (dum on 1 and 4, clapped), oud and strings in unison, maqam bayati and hijaz, a rolling 6/8 swing",
+      "khaleeji: Gulf song on the khaliji iqa (dum on 1 and 4, clapped), oud and strings in unison, maqam bayati and hijaz, a rolling 3+3+2 swing",
     tempo: { bpm: [90, 120], typical: 104 },
     meter: {
       signatures: [["8/8", 1]],
@@ -1758,8 +1769,8 @@ const LEAVES: readonly StyleCard[] = [
     },
     pitch: {
       scales: [
-        ["hijaz", 0.5],
-        ["kurd", 0.5],
+        ["bayati", 0.6],
+        ["hijaz", 0.4],
       ],
     },
     rhythm: { onsets: { clap: grid("x..x..x.") } },
@@ -1897,17 +1908,21 @@ const LEAVES: readonly StyleCard[] = [
   card({
     id: "chaabi-maghreb",
     summary:
-      "Algerian and Moroccan chaabi: Andalusian-derived qasida on a 4/4 chaabi lilt, mandole and banjo in heterophony, nahawand and hijaz",
-    tempo: { bpm: [100, 140], typical: 120 },
-    meter: { signatures: [["4/4", 1]], cycle: WAHDA },
+      "Algerian and Moroccan chaabi: Andalusian-derived qasida over a fast ternary 6/8 lilt (the derbouka's dum-tak-tak), mandole and banjo in heterophony, nahawand and hijaz",
+    tempo: { bpm: [120, 160], typical: 138 },
+    meter: { signatures: [["6/8", 1]], hypermeter: [[4, 1]] },
     pitch: {
       scales: [
-        ["nahawand", 0.5],
-        ["hijaz", 0.5],
+        ["nahawand", 0.6],
+        ["hijaz", 0.4],
       ],
+    },
+    rhythm: {
+      onsets: { perc: grid("x.xx.xx.xx.x"), clap: grid("...x.....x..") },
     },
     texture: {
       roles: {
+        clap: kitRole("acoustic"),
         lead: role("sing", "banjo:0.5"),
         counter: role("banjo", "oud:0.6", "violin:0.5"),
         perc: role("tabla", "daf:0.5"),
@@ -1972,17 +1987,19 @@ const LEAVES: readonly StyleCard[] = [
   card({
     id: "yemenite",
     summary:
-      "Yemenite song (al-ghina al-san'ani): qanbus lute and voice, maqam bayati and rast, sahn copper-tray pulse, a tripartite slow-medium-fast qawma",
-    tempo: { bpm: [80, 120], typical: 96 },
-    meter: { signatures: [["8/8", 1]], cycle: MAQSUM },
+      "Yemenite song (al-ghina al-san'ani): qanbus lute and voice, maqam bayati in a narrow ambitus around the tonic jins, sahn copper-tray pulse on every eighth, a tripartite slow-medium-fast qawma",
+    tempo: { bpm: [84, 126], typical: 104 },
+    meter: { signatures: [["4/4", 1]], hypermeter: [[2, 1]] },
     pitch: {
-      tuning: "rast",
-      scales: [["rast", 1]],
-      maqam: { sayr: [0, 2, 4, 2, 0], ghammaz: 4 },
+      tuning: "bayati",
+      scales: [["bayati", 1]],
+      maqam: { sayr: [0, 1, 2, 1, 0], ghammaz: 3 },
     },
-    melody: { intervals: ORNATE, ambitus: [5, 10] },
+    rhythm: { onsets: { bell: EIGHTHS } },
+    melody: { intervals: CHANT, ambitus: [4, 7], repetition: 0.6 },
     texture: {
       roles: {
+        bell: role("bell"),
         lead: role("sing"),
         counter: role("oud"),
         perc: role("framedrum"),
@@ -2021,7 +2038,7 @@ const LEAVES: readonly StyleCard[] = [
     id: "ottoman-classical",
     summary:
       "Ottoman makam: the seyir of makam hicaz or ussak, peşrev and saz semaisi in long usul (aksak 9/8, curcuna 10/8), tanbur and ney heterophony",
-    tempo: { bpm: [60, 110], typical: 84 },
+    tempo: { bpm: [56, 96], typical: 76 },
     meter: {
       signatures: [["9/8", 1]],
       grouping: [[[2, 2, 2, 3], 1]],
@@ -2029,10 +2046,12 @@ const LEAVES: readonly StyleCard[] = [
     },
     pitch: {
       scales: [
-        ["hijaz", 0.6],
-        ["kurd", 0.4],
+        ["hijaz", 0.5],
+        // Ussak: bayati's quarter-tone second (the 24-tone convention).
+        ["bayati", 0.5],
       ],
     },
+    melody: { intervals: ORNATE, density: [1, 3] },
     texture: {
       roles: {
         lead: role("ney", "tar:0.6", "kamancheh:0.5"),
@@ -2071,7 +2090,7 @@ const LEAVES: readonly StyleCard[] = [
     id: "turkish-folk",
     summary:
       "Turkish folk: türkü on the bağlama in aksak meters (7/8, 9/8), uzun hava free song, davul and zurna halay in 2+2+2+3",
-    tempo: { bpm: [100, 150], typical: 124 },
+    tempo: { bpm: [116, 160], typical: 136 },
     meter: {
       signatures: [
         ["9/8", 0.6],
@@ -2091,10 +2110,12 @@ const LEAVES: readonly StyleCard[] = [
       ],
     },
     melody: { intervals: CHANT, repetition: 0.7 },
+    rhythm: { onsets: { kick: grid("x.......") } },
     texture: {
       roles: {
-        lead: role("tar", "setar:0.6", "clarinet:0.5"),
-        counter: role("clarinet", "oboe:0.5"),
+        kick: kitRole("acoustic"),
+        lead: role("tar", "oboe:0.6", "clarinet:0.5"),
+        counter: role("oboe", "clarinet:0.5"),
         perc: role("framedrum", "daf:0.5"),
       },
     },
@@ -2285,21 +2306,16 @@ const LEAVES: readonly StyleCard[] = [
     id: "sephardic",
     summary:
       "Sephardic song: Ladino romances in Mediterranean maqam (hijaz, nahawand, kurd), oud and frame drum, strophic with an instrumental refrain",
-    tempo: { bpm: [70, 110], typical: 88 },
-    meter: {
-      signatures: [
-        ["8/8", 0.5],
-        ["6/8", 0.5],
-      ],
-      grouping: [[[3, 3, 2], 1]],
-    },
+    tempo: { bpm: [76, 116], typical: 96 },
+    meter: { signatures: [["6/8", 1]], hypermeter: [[4, 1]] },
     pitch: {
       scales: [
-        ["hijaz", 0.4],
-        ["nahawand", 0.3],
-        ["kurd", 0.3],
+        ["nahawand", 0.45],
+        ["kurd", 0.35],
+        ["hijaz", 0.2],
       ],
     },
+    rhythm: { onsets: { perc: grid("x.....x..x..") } },
     harmony: { model: "drone", rhythm: [[0.5, 1]] },
     bass: {
       behaviour: [
@@ -2439,7 +2455,7 @@ const LEAVES: readonly StyleCard[] = [
   card({
     id: "ghazal",
     summary:
-      "ghazal: Urdu couplets (sher) with a returning radif refrain, raga-tinged kafi or yaman melody, dadra or rupak on tabla, harmonium answering",
+      "ghazal: Urdu couplets (sher) with a returning radif refrain, raga-tinged khamaj or pahadi melody over simple harmonium changes, dadra or rupak on tabla, harmonium answering",
     tempo: { bpm: [60, 100], typical: 76 },
     meter: {
       signatures: [
@@ -2450,11 +2466,22 @@ const LEAVES: readonly StyleCard[] = [
     },
     pitch: {
       scales: [
-        ["kafi", 0.5],
-        ["yaman", 0.3],
-        ["khamaj", 0.2],
+        ["khamaj", 0.5],
+        // Pahadi: a bilawal (major) based folk raga, a ghazal favourite.
+        ["major", 0.5],
       ],
     },
+    // The light ghazal's harmonium follows simple chord changes.
+    harmony: {
+      model: "functional",
+      rhythm: [[1, 1]],
+      forms: [
+        [["I", "IV", "V", "I"], 0.5],
+        [["I", "ii", "V", "I"], 0.5],
+      ],
+      sources: { forms: 3 },
+    },
+    rhythm: { onsets: { chords: grid("x..x..x..x..") } },
     melody: { intervals: CONJUNCT, repetition: 0.6 },
     form: {
       plans: [[["intro", "verse", "chorus", "verse", "chorus"], 1]],
@@ -2462,8 +2489,9 @@ const LEAVES: readonly StyleCard[] = [
     },
     texture: {
       roles: {
+        chords: role("organ"),
         lead: role("sing"),
-        counter: role("organ", "sitar:0.4", "violin:0.4"),
+        counter: role("violin", "sitar:0.5"),
       },
     },
   }),
@@ -2638,9 +2666,10 @@ const LEAVES: readonly StyleCard[] = [
   card({
     id: "baul",
     summary:
-      "Baul: wandering mystic song on the one-string ektara drone, khamok plucked tension, dadra and keherwa on the duggi, pentatonic-leaning major modes",
-    tempo: { bpm: [80, 130], typical: 104 },
-    meter: { signatures: [["6/8", 1]], cycle: DADRA },
+      "Baul: wandering mystic song on the one-string ektara drone, the khamok's plucked dotted pulse, a keherwa lilt on the duggi, khamaj and pentatonic modes",
+    tempo: { bpm: [84, 132], typical: 108 },
+    meter: { signatures: [["4/4", 1]], cycle: KEHERWA },
+    rhythm: { onsets: { shaker: grid("x..x..x.x..x..x.") } },
     harmony: { model: "drone" },
     pitch: {
       scales: [
@@ -2654,6 +2683,7 @@ const LEAVES: readonly StyleCard[] = [
         ...NO_KIT,
         chords: null,
         bass: null,
+        shaker: role("drums"),
         drone: role("pluck", "tanpura:0.5"),
         lead: role("sing", "bansuri:0.4"),
       },
@@ -2687,13 +2717,11 @@ const LEAVES: readonly StyleCard[] = [
   card({
     id: "rajasthani-folk",
     summary:
-      "Rajasthani folk: Manganiyar and Langa song on kamaicha drone and khartal clappers, kafi and maand modes, keherwa or dadra swing",
-    tempo: { bpm: [90, 140], typical: 112 },
+      "Rajasthani folk: Manganiyar and Langa song on kamaicha drone and khartal clappers, kafi and khamaj (maand) modes, a quick dadra 6/8 swing",
+    tempo: { bpm: [104, 152], typical: 128 },
     meter: {
-      signatures: [
-        ["6/8", 0.5],
-        ["4/4", 0.5],
-      ],
+      signatures: [["6/8", 1]],
+      hypermeter: [[4, 1]],
       cycle: DADRA,
     },
     pitch: {
@@ -2782,8 +2810,8 @@ const LEAVES: readonly StyleCard[] = [
     meter: { signatures: [["6/8", 1]], cycle: DADRA },
     pitch: {
       scales: [
-        ["major-pentatonic", 0.5],
-        ["khamaj", 0.5],
+        ["major-pentatonic", 0.75],
+        ["khamaj", 0.25],
       ],
     },
     melody: { intervals: CONJUNCT, repetition: 0.7 },
