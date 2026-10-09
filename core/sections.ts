@@ -13,6 +13,7 @@
  */
 import { DRUM_VOICES, isDrumInstrument } from "./drums.ts";
 import { FX_LANES } from "./fx.ts";
+import { synthKit } from "./kits.ts";
 import { resolveString } from "./strings.ts";
 import { modalSettings, windSettings } from "./resonators.ts";
 import { resolveSing } from "./sing.ts";
@@ -1618,6 +1619,8 @@ const TOM = DRUM_VOICES.find((voice) => voice.voice === "tom")!.pitch;
 const TOMS = [50, 47, TOM] as const;
 const KICK = DRUM_VOICES.find((voice) => voice.voice === "kick")!.pitch;
 const OPEN_HAT = DRUM_VOICES.find((voice) => voice.voice === "openhat")!.pitch;
+/** GM crash 1, which calibration 1+ renders as a cymbal. */
+const CRASH = 49;
 
 /** Generator tracks, reused by later builds and drops. */
 export const GENERATOR_TRACKS = Object.freeze({
@@ -2209,7 +2212,10 @@ export type FillOptions = Readonly<{
   /** Beats the fill lasts, default 1. */
   beats?: number;
   style?: FillStyle;
-  /** Crash (open hat with kick) on the next downbeat, default on. */
+  /**
+   * Crash with kick on the next downbeat, default on: GM 49 on a
+   * calibrated song's synth kit, else an open hat.
+   */
   crash?: boolean;
 }>;
 
@@ -2254,6 +2260,12 @@ export function generateFill(
     drums = GENERATOR_TRACKS.fills;
   }
   const style = options.style ?? "toms";
+  // Sample kits and legacy songs have no cymbal voice: keep the open hat.
+  const kit = next.tracks.find((track) => track.id === drums)?.kit;
+  const crash =
+    (next.calibration ?? 0) >= 1 && (kit === undefined || synthKit(kit))
+      ? CRASH
+      : OPEN_HAT;
   const clamped: string[] = [];
   const beats = clampNote(
     options.beats ?? 1,
@@ -2284,8 +2296,8 @@ export function generateFill(
               : SNARE
             : progress < 0.25
               ? SNARE
-              : // High, mid, low tom down the fill (GM 50/47/45); the
-                // built-in kit folds all three onto its tom.
+              : // High, mid, low tom down the fill (GM 50/47/45); a
+                // calibrated song pitches them, older songs fold them.
                 TOMS[Math.min(2, Math.floor(((progress - 0.25) / 0.75) * 3))]!;
       fill.push({
         id: nextId(),
@@ -2297,7 +2309,7 @@ export function generateFill(
       });
     }
     if ((options.crash ?? true) && end < next.bars * ticks)
-      for (const pitch of [OPEN_HAT, KICK])
+      for (const pitch of [crash, KICK])
         fill.push({
           id: nextId(),
           trackId: drums,

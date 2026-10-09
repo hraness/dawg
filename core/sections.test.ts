@@ -531,6 +531,27 @@ describe("arrangement core", () => {
     expect(toms.at(-1)).toBe(45);
   });
 
+  test("a calibrated song's fill lands on a GM crash; older songs keep the open hat", () => {
+    const downbeat = (score: TrackScore) =>
+      generateFill(score, { section: "chorus" })
+        .score.notes.filter(
+          (note) => note.trackId === "drums" && note.startTick === 4 * 1920,
+        )
+        .map((note) => note.pitch)
+        .sort((a, b) => a - b);
+    expect(downbeat(song())).toEqual([36, 46]);
+    expect(downbeat(song().withCalibration(1))).toEqual([36, 49]);
+    // A synth kit plays the calibrated crash too.
+    const sampled = song().withCalibration(1);
+    const kitted = createScore({
+      ...sampled.toJSON(),
+      tracks: sampled.tracks.map((track) =>
+        track.id === "drums" ? { ...track, kit: "syn808" } : track,
+      ),
+    });
+    expect(downbeat(kitted)).toEqual([36, 49]);
+  });
+
   test("a held note stops where a later section mutes its track", () => {
     const score = createScore({
       bars: 4,
