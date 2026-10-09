@@ -1,3 +1,4 @@
+import { portableSchema } from "./portable-schema.ts";
 import { midiToPitch } from "../../core/pitch.ts";
 import { isGuideInstrument, vocalChainPatch } from "../../core/clips.ts";
 import { INSTRUMENT_WORDS } from "../../core/instruments.ts";
@@ -2125,7 +2126,7 @@ export function chatTools(
     function: {
       name: tool.name,
       description: tool.description,
-      parameters: tool.parameters,
+      parameters: portableSchema(tool.parameters),
     },
   }));
 }
