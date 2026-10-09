@@ -158,6 +158,11 @@ export function renderResonatorTrack(
       : 1);
   const seedTick = context.seedTick ?? 0;
   const base = modalSettings(track.modal);
+  // An ombak pair (f061-gamelan-winds): the pengisep names its partner in
+  // `pair` and sounds `ombak` Hz above the same note, single voice; the
+  // partner (pengumbang) carries ombak 0. Each track renders from its own
+  // field, so stems key per track.
+  const paired = track.modal?.pair !== undefined;
   const banks: ModalBank[] = [];
   // Conservative end of each planned voice (its ring cap, or a steal).
   const ends: number[] = [];
@@ -186,10 +191,11 @@ export function renderResonatorTrack(
       performance?.accent || note.articulation === "marcato"
         ? ACCENT_HARDNESS
         : 0;
+    const hz = noteHz(note.pitch, note.cents, context.tuning);
     const bank = new ModalBank(
-      settings,
+      paired ? { ...settings, ombak: 0 } : settings,
       {
-        hz: noteHz(note.pitch, note.cents, context.tuning),
+        hz: paired ? hz + settings.ombak : hz,
         velocity: note.velocity,
         start: start / sampleRate,
         duration: length / sampleRate,
@@ -282,6 +288,8 @@ export const MODAL_ENGINE: InstrumentEngine = Object.freeze({
   },
   tailSeconds: (track: Track, lowestPitch?: number) =>
     modalTailSeconds(track.modal, lowestPitch),
+  // Undamped bars and gongs ring on after the key lifts, as struck metal does.
+  ringOut: (track: Track) => modalSettings(track.modal).damp === 0,
   stereo: () => false,
   assetDigests: () => [`resonators:${RESONATOR_TABLE_VERSION}`],
 });

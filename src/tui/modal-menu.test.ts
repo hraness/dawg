@@ -53,8 +53,10 @@ describe("Sound › Mallets and bells", () => {
     select(menu, ctx, "Mallets and bells");
     menu.key("\r", ctx);
     const labels = menu.view(ctx).items.map((row) => row.label);
-    expect(labels.length).toBe(12);
+    // 12 core presets, the 0.6.1 bells and drums, then the Gamelan group.
+    expect(labels.length).toBe(19);
     expect(labels[0]).toStartWith("marimba");
+    expect(labels.at(-1)).toStartWith("Gamelan");
     select(menu, ctx, "vibes");
     expect(menu.key("\r", ctx)).toEqual({
       type: "run",

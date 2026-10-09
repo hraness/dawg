@@ -9,6 +9,7 @@ import {
   type ClickLevel,
 } from "./click.ts";
 import type { LiveNotePcm } from "./live.ts";
+import { RING_OUT_FADE_SECONDS } from "./instruments.ts";
 import { measureLoudness, pcmChannels } from "./loudness.ts";
 import type { MasterReport } from "./master.ts";
 import { levelOf, type SoundLevel } from "./preview.ts";
@@ -308,7 +309,15 @@ type LiveVoice = {
   /** Fade-out frames left once released early; undefined while sounding. */
   fadeLeft: number | undefined;
   fadeFrames: number;
+  /** Rings to its end on note-off (0.6.1 modal ring-out). */
+  ringOut?: boolean;
 };
+
+/**
+ * At most this many ring-out voices sound at once; the oldest beyond it fades
+ * over `RING_OUT_FADE_SECONDS` (spec 7.3: 32 resonator voices).
+ */
+export const MAX_RING_OUT_VOICES = 32;
 
 type PlayRequest = {
   score: TrackScore;
@@ -531,14 +540,18 @@ export class AudioEngine {
       existing.frames = note.frames;
       existing.fadeLeft = undefined;
       existing.fadeFrames = this.releaseFrames(note);
-    } else
+      existing.ringOut = note.ringOut === true;
+    } else {
       this.voices.set(id, {
         pcm: note.pcm,
         frames: note.frames,
         position: 0,
         fadeLeft: undefined,
         fadeFrames: this.releaseFrames(note),
+        ...(note.ringOut ? { ringOut: true } : {}),
       });
+      if (note.ringOut) this.capRingOut();
+    }
     // Write what is due now so the voice joins the very next chunk.
     const first = this.written;
     this.pump();
@@ -553,11 +566,39 @@ export class AudioEngine {
     );
   }
 
-  /** Fade a live voice out over ~10 ms (sustain lifted, mode left). */
-  public noteOff(id: number): void {
+  /**
+   * Past `MAX_RING_OUT_VOICES` ringing voices, fade the oldest still at full
+   * level over `RING_OUT_FADE_SECONDS` (Map order is start order).
+   */
+  private capRingOut(): void {
+    let ringing = 0;
+    for (const voice of this.voices.values())
+      if (voice.ringOut && voice.fadeLeft === undefined) ringing += 1;
+    for (const voice of this.voices.values()) {
+      if (ringing <= MAX_RING_OUT_VOICES) break;
+      if (!voice.ringOut || voice.fadeLeft !== undefined) continue;
+      this.fadeRingOut(voice);
+      ringing -= 1;
+    }
+  }
+
+  private fadeRingOut(voice: LiveVoice): void {
+    voice.fadeFrames = Math.max(
+      1,
+      Math.round(this.sampleRate * RING_OUT_FADE_SECONDS),
+    );
+    voice.fadeLeft = voice.fadeFrames;
+  }
+
+  /**
+   * Fade a live voice out over ~10 ms (sustain lifted, mode left). A
+   * ring-out voice keeps ringing; `noteOff(id, true)` silences it too.
+   */
+  public noteOff(id: number, force = false): void {
     const voice = this.voices.get(id);
-    if (voice && voice.fadeLeft === undefined)
-      voice.fadeLeft = voice.fadeFrames;
+    if (!voice || voice.fadeLeft !== undefined) return;
+    if (!voice.ringOut) voice.fadeLeft = voice.fadeFrames;
+    else if (force) this.fadeRingOut(voice);
   }
 
   /** Frames of live voice `id` already mixed, or undefined once finished. */

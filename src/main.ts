@@ -80,6 +80,11 @@ import {
   modalListLines,
   parseModalCommand,
 } from "./commands/modal.ts";
+import {
+  applyWindCommand,
+  parseWindCommand,
+  windListLines,
+} from "./commands/wind.ts";
 import { applySynthCommand, parseSynthCommand } from "./commands/synth.ts";
 import { applyStringCommand, parseStringCommand } from "./commands/string.ts";
 import { instrumentPatchForWord, isModalWord } from "../core/resonators.ts";
@@ -324,6 +329,7 @@ function parsesLocally(text: string): boolean {
     parseModalCommand,
     parseGuitarCommand,
     parseStrumCommand,
+    parseWindCommand,
   ].some((parse) => parse(text) !== undefined);
 }
 
@@ -1872,6 +1878,17 @@ async function submit(prompt: string): Promise<string | Receipt> {
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
   }
+  const windCommand = parseWindCommand(command);
+  if (windCommand) {
+    if (windCommand.type === "wind-list")
+      tui.openText("wind presets", windListLines());
+    if (windCommand.type !== "wind-show" && windCommand.type !== "wind-list")
+      await materializeDraft();
+    const result = applyWindCommand(score, requestedTrack, windCommand);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
   const synth = parseSynthCommand(command);
   if (synth) {
     if (synth.type !== "synth-list") await materializeDraft();
@@ -2123,6 +2140,9 @@ async function submit(prompt: string): Promise<string | Receipt> {
     // Plain `marimba` keeps the legacy tone; point at the mallet engine.
     if (parsed.patch.instrument === "marimba" && !("modal" in parsed.patch))
       return `track · ${requestedTrack} · marimba (legacy tone) · modal marimba for the mallet engine`;
+    // Plain `wind` keeps the legacy tone; point at the wind engine.
+    if (parsed.patch.instrument === "wind" && !("wind" in parsed.patch))
+      return `track · ${requestedTrack} · wind (legacy tone) · wind flute (or sax, trumpet …) for the wind engine`;
     const sine =
       word !== undefined && !("string" in parsed.patch)
         ? plainSineAdvice(word)

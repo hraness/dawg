@@ -109,6 +109,16 @@ function pitchOf(
   if (name === "chimes") return peakHz(x, hz * 2, sr, from, to, 0.005) / 2;
   const split =
     MODE_TABLES[MODAL_PRESETS[name as ModalPresetName].settings.body].split;
+  // An ombak twin pair (gangsa) sounds hz -+ ombak/2: the pitch is their
+  // geometric centre.
+  const ombak = MODAL_PRESETS[name as ModalPresetName].settings.ombak;
+  if (ombak > 0) {
+    const lo = peakHz(x, hz - ombak / 2, sr, from, to, ombak / 4 / hz);
+    const hi = peakHz(x, hz + ombak / 2, sr, from, to, ombak / 4 / hz);
+    return (
+      Math.sqrt(lo * hi) * (hz / Math.sqrt((hz - ombak / 2) * (hz + ombak / 2)))
+    );
+  }
   if (split) {
     const lo = peakHz(x, hz * (1 - split / 2), sr, from, to, split / 4);
     const hi = peakHz(x, hz * (1 + split / 2), sr, from, to, split / 4);

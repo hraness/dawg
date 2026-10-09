@@ -8,7 +8,10 @@ import {
   formatDiagnostic,
   type Diagnostic,
 } from "../../core/sdk/eval.ts";
-import { legacyResonatorWarnings } from "../../core/resonators.ts";
+import {
+  legacyResonatorWarnings,
+  modalPairWarnings,
+} from "../../core/resonators.ts";
 import { plainSineWarnings } from "../audio/instrument-check.ts";
 import { isProject } from "./init.ts";
 import { typecheckProject } from "./typecheck.ts";
@@ -53,6 +56,7 @@ export async function checkProject(
       evaluated.ok
         ? [
             ...legacyResonatorWarnings(evaluated.score.tracks),
+            ...modalPairWarnings(evaluated.score.tracks),
             ...plainSineWarnings(evaluated.score.tracks),
           ]
         : [],

@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.29.0";
+export const SDK_VERSION = "1.30.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -1587,7 +1587,23 @@ export type ModalPresetName =
   | "steelpan"
   | "bowl"
   | "gong"
-  | "timpani";
+  | "timpani"
+  // SDK 1.30.0: gamelan, small bells and frame drums.
+  | "crotales"
+  | "musicbox"
+  | "toypiano"
+  | "saron"
+  | "demung"
+  | "slenthem"
+  | "gangsa"
+  | "gender"
+  | "bonang"
+  | "kenong"
+  | "kethuk"
+  | "kempul"
+  | "daf"
+  | "bodhran"
+  | "tabla";
 
 /** Modal overrides; omitted means the preset's value. dawg validates ranges. */
 export type ModalParams = Readonly<{
@@ -1620,6 +1636,12 @@ export type ModalParams = Readonly<{
   gain?: number;
   /** Mode table override (`marimba`, `bell`, `gong`, …). */
   body?: string;
+  /**
+   * The partner track id of an ombak pair (SDK 1.30.0): this track (the
+   * pengisep) sounds `ombak` Hz above it. song() sets the partner's ombak
+   * to 0 (one straight voice) unless the partner gives its own.
+   */
+  pair?: string;
 }>;
 
 const MODAL_KEYS = Object.freeze([
@@ -1695,6 +1717,9 @@ const MODAL_RANGES: Readonly<Record<string, readonly [number, number]>> =
     gain: [0, 2],
   });
 
+/** Modal presets whose default carries an ombak twin bank (core/resonators.ts). */
+const MODAL_TWIN_PRESETS: readonly string[] = Object.freeze(["gangsa"]);
+
 const MODAL_PRESET_WORDS: readonly string[] = Object.freeze([
   "marimba",
   "vibes",
@@ -1708,6 +1733,21 @@ const MODAL_PRESET_WORDS: readonly string[] = Object.freeze([
   "bowl",
   "gong",
   "timpani",
+  "crotales",
+  "musicbox",
+  "toypiano",
+  "saron",
+  "demung",
+  "slenthem",
+  "gangsa",
+  "gender",
+  "bonang",
+  "kenong",
+  "kethuk",
+  "kempul",
+  "daf",
+  "bodhran",
+  "tabla",
 ]);
 
 /** Result of `modal()`; pass it as a track's `instrument`. */
@@ -1753,6 +1793,10 @@ export function modal(
           `modal ${key} "${String(value).slice(0, 32)}" is not one of ${words.join(" ")}`,
         );
       out[key] = value;
+    } else if (key === "pair") {
+      if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(value))
+        throw new DawgSdkError("modal pair must be a track id");
+      out.pair = value;
     } else if ((MODAL_KEYS as readonly string[]).includes(key)) {
       const number = finite(value, `modal ${key}`);
       const [min, max] = MODAL_RANGES[key]!;
@@ -1761,10 +1805,190 @@ export function modal(
       out[key] = number;
     } else
       throw new DawgSdkError(
-        `modal has no parameter "${key.slice(0, 32)}" (${MODAL_KEYS.join(" ")})`,
+        `modal has no parameter "${key.slice(0, 32)}" (${MODAL_KEYS.join(" ")} pair)`,
       );
   }
   return Object.freeze(out) as ModalSpec;
+}
+
+// ---- winds (f061-gamelan-winds, SDK 1.30.0) ----
+
+/** The instrument value of the wind engine (core/winds.ts). */
+export const WIND_INSTRUMENT = "wind";
+
+/** Wind presets (core/winds.ts WIND_PRESET_NAMES). */
+export type WindPresetName =
+  | "flute"
+  | "recorder"
+  | "whistle"
+  | "ney"
+  | "shakuhachi"
+  | "panpipe"
+  | "suling"
+  | "bansuri"
+  | "clarinet"
+  | "bassclarinet"
+  | "oboe"
+  | "bassoon"
+  | "sax"
+  | "altosax"
+  | "barisax"
+  | "trumpet"
+  | "harmon"
+  | "plunger"
+  | "trombone"
+  | "tuba"
+  | "horn";
+
+const WIND_PRESET_WORDS: readonly string[] = Object.freeze([
+  "flute",
+  "recorder",
+  "whistle",
+  "ney",
+  "shakuhachi",
+  "panpipe",
+  "suling",
+  "bansuri",
+  "clarinet",
+  "bassclarinet",
+  "oboe",
+  "bassoon",
+  "sax",
+  "altosax",
+  "barisax",
+  "trumpet",
+  "harmon",
+  "plunger",
+  "trombone",
+  "tuba",
+  "horn",
+]);
+
+/** Wind overrides (core/winds.ts WIND_PARAMS). */
+export type WindParams = Readonly<{
+  model?: "jet" | "reed" | "sax" | "lips";
+  breath?: number;
+  noise?: number;
+  attack?: number;
+  release?: number;
+  vib?: number;
+  vibmod?: number;
+  reed?: number;
+  bright?: number;
+  stopped?: boolean;
+  mute?: "open" | "straight" | "cup" | "harmon" | "plunger";
+  wah?: number;
+  wahenv?: number;
+  growl?: number;
+  flutter?: number;
+  players?: number;
+  gain?: number;
+}>;
+
+/** Enum words per wind parameter (core/winds.ts WIND_PARAMS). */
+const WIND_ENUMS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  model: Object.freeze(["jet", "reed", "sax", "lips"]),
+  mute: Object.freeze(["open", "straight", "cup", "harmon", "plunger"]),
+});
+
+/** Numeric ranges (core/winds.ts WIND_PARAMS min..max). */
+const WIND_RANGES: Readonly<Record<string, readonly [number, number]>> =
+  Object.freeze({
+    breath: [0, 1],
+    noise: [0, 1],
+    attack: [0.001, 2],
+    release: [0.005, 2],
+    vib: [0, 12],
+    vibmod: [0, 1],
+    reed: [0, 1],
+    bright: [0, 1],
+    wah: [0, 1],
+    wahenv: [0, 1],
+    growl: [0, 1],
+    flutter: [0, 1],
+    players: [1, 8],
+    gain: [0, 2],
+  });
+
+/** Result of `wind()`; pass it as a track's `instrument`. */
+export type WindSpec = Readonly<
+  { kind: "wind"; preset?: WindPresetName } & WindParams
+>;
+
+/**
+ * Winds and brass on the wind engine (SDK 1.30.0): a preset and optional
+ * overrides. A preset word alone (`instrument: "flute"`) is the same as
+ * `wind("flute")`; the bare word `"wind"` stays the legacy wind tone.
+ *
+ * ```ts
+ * instrument: wind("sax", { breath: 0.8, growl: 0.2 })
+ * instrument: wind("trumpet", { mute: "harmon", players: 3 })
+ * instrument: wind({ bright: 0.3 }) // default preset (flute)
+ * ```
+ */
+export function wind(
+  preset?: WindPresetName | WindParams,
+  params: WindParams = {},
+): WindSpec {
+  const overrides = isRecord(preset) ? preset : params;
+  const name = isRecord(preset) ? undefined : preset;
+  if (!isRecord(overrides))
+    throw new DawgSdkError("wind params must be an object");
+  const out: Record<string, unknown> = { kind: "wind" };
+  if (name !== undefined) {
+    if (typeof name !== "string" || !WIND_PRESET_WORDS.includes(name))
+      throw new DawgSdkError(
+        `wind preset "${String(name).slice(0, 32)}" is not one of ${WIND_PRESET_WORDS.join(" ")}`,
+      );
+    out.preset = name;
+  }
+  for (const key of Object.keys(overrides)) {
+    const value = (overrides as Record<string, unknown>)[key];
+    if (value === undefined) continue;
+    const words = WIND_ENUMS[key];
+    if (words) {
+      if (typeof value !== "string" || !words.includes(value))
+        throw new DawgSdkError(
+          `wind ${key} "${String(value).slice(0, 32)}" is not one of ${words.join(" ")}`,
+        );
+      out[key] = value;
+    } else if (key === "stopped") {
+      if (typeof value !== "boolean")
+        throw new DawgSdkError("wind stopped must be true or false");
+      out.stopped = value;
+    } else if (WIND_RANGES[key]) {
+      const number = finite(value, `wind ${key}`);
+      const [min, max] = WIND_RANGES[key]!;
+      if (number < min || number > max)
+        throw new DawgSdkError(`wind ${key} must be ${min}..${max}`);
+      if (key === "players" && !Number.isInteger(number))
+        throw new DawgSdkError("wind players must be a whole number");
+      out[key] = number;
+    } else
+      throw new DawgSdkError(
+        `wind has no parameter "${key.slice(0, 32)}" (${[...Object.keys(WIND_ENUMS), "stopped", ...Object.keys(WIND_RANGES)].join(" ")})`,
+      );
+  }
+  return Object.freeze(out) as WindSpec;
+}
+
+/**
+ * The wind field an instrument makes: `wind(...)`, or a wind preset word
+ * (`"flute"`, `"saxophone"`). The bare word `"wind"` keeps its pre-0.6.1
+ * meaning (the legacy tone) and makes none.
+ */
+function trackWind(
+  raw: unknown,
+): Readonly<{ preset?: WindPresetName } & WindParams> | undefined {
+  if (isRecord(raw) && raw.kind === "wind") {
+    const { kind: _kind, ...fields } = raw as WindSpec;
+    return Object.freeze(fields);
+  }
+  if (typeof raw !== "string" || raw === WIND_INSTRUMENT) return undefined;
+  const meaning = resolveInstrumentWord(raw);
+  if (meaning?.instrument !== WIND_INSTRUMENT || !meaning.preset)
+    return undefined;
+  return Object.freeze({ preset: meaning.preset as WindPresetName });
 }
 
 /**
@@ -2392,7 +2616,8 @@ export type TrackInput = Readonly<{
     | WavetableSpec
     | StringSpec
     | GranularSpec
-    | ModalSpec;
+    | ModalSpec
+    | WindSpec;
   /**
    * The sampler a `granular(...)` track keeps while it grains one of its
    * voices (SDK 1.23.0); `grain off` plays it again.
@@ -2627,6 +2852,8 @@ export type TrackSpec = Readonly<{
   modal?: Readonly<{ preset?: ModalPresetName } & ModalParams>;
   /** Guitar fretting (SDK 1.27.0); present only when set. */
   guitar?: GuitarSetup;
+  /** Wind settings (SDK 1.30.0); present only on a wind-engine track. */
+  wind?: Readonly<{ preset?: WindPresetName } & WindParams>;
 }>;
 
 export type GlideMode = "legato" | "mono" | "poly";
@@ -2878,6 +3105,7 @@ export function track(input: TrackInput): TrackSpec {
       : undefined;
   const modalSpec = trackModal(rawInstrument);
   const guitarSpec = guitarInput(input.guitar, `track ${name}`);
+  const windSpec = trackWind(rawInstrument);
   const instrument = granularFromInstrument
     ? GRANULAR_INSTRUMENT
     : samplerSpec
@@ -2888,9 +3116,11 @@ export function track(input: TrackInput): TrackSpec {
           ? STRING_INSTRUMENT
           : modalSpec
             ? MODAL_INSTRUMENT
-            : typeof rawInstrument === "string"
-              ? (word?.instrument ?? rawInstrument)
-              : undefined;
+            : windSpec
+              ? WIND_INSTRUMENT
+              : typeof rawInstrument === "string"
+                ? (word?.instrument ?? rawInstrument)
+                : undefined;
   // A granular word (`"cloud"`) turns the engine on with its preset.
   const granularSpec =
     granularInput(input.granular, name, slug) ??
@@ -3114,6 +3344,7 @@ export function track(input: TrackInput): TrackSpec {
     ...keysSpec(input.keys, rawInstrument, name),
     ...(modalSpec ? { modal: modalSpec } : {}),
     ...(guitarSpec ? { guitar: guitarSpec } : {}),
+    ...(windSpec ? { wind: windSpec } : {}),
   });
 }
 
@@ -3707,6 +3938,8 @@ export type ScoreTrack = Readonly<{
   modal?: TrackSpec["modal"];
   /** Guitar fretting (SDK 1.27.0). */
   guitar?: GuitarSetup;
+  /** Wind settings (SDK 1.30.0). */
+  wind?: TrackSpec["wind"];
   glide?: TrackSpec["glide"];
   pedal?: readonly Readonly<{ tick: number; state: PedalState }>[];
   softPedal?: readonly Readonly<{ tick: number; state: PedalState }>[];
@@ -4019,6 +4252,7 @@ export function song(input: SongInput): Song {
     if (t.keys) stored.keys = t.keys;
     if (t.modal) stored.modal = t.modal;
     if (t.guitar) stored.guitar = t.guitar;
+    if (t.wind) stored.wind = t.wind;
     if (t.rhythm && t.rhythm.length > 0)
       stored.rhythm = Object.freeze(
         t.rhythm.map((row) => {
@@ -4063,6 +4297,25 @@ export function song(input: SongInput): Song {
       );
     }
   });
+  // An ombak pair (SDK 1.30.0): a partner (pengumbang) whose preset carries
+  // its own ombak twin bank plays one straight voice instead, as `modal
+  // pair` and set_modal leave it, unless it sets ombak itself.
+  for (const track of [...tracks]) {
+    const pair = (track as { modal?: { pair?: string } }).modal?.pair;
+    if (pair === undefined) continue;
+    const at = tracks.findIndex((candidate) => candidate.id === pair);
+    const partner = tracks[at] as
+      (ScoreTrack & { modal?: Readonly<Record<string, unknown>> }) | undefined;
+    if (
+      partner?.modal &&
+      partner.modal.ombak === undefined &&
+      MODAL_TWIN_PRESETS.includes(String(partner.modal.preset))
+    )
+      tracks[at] = Object.freeze({
+        ...partner,
+        modal: Object.freeze({ ...partner.modal, ombak: 0 }),
+      }) as ScoreTrack;
+  }
   const arrangement: {
     sections?: readonly SongSection[];
     form?: readonly SongFormEntry[];
@@ -5304,6 +5557,76 @@ const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
   // f061-guitar: the shoegaze alias, an electric guitar voice plus the
   // shoegaze rig and its long wash.
   { word: "shoegaze", instrument: "pluck", voice: "electric", fx: "shoegaze" },
+  // f061-gamelan-winds: gamelan, small bells and frame drums.
+  { word: "crotales", instrument: "modal", field: "modal", preset: "crotales" },
+  { word: "crotale", instrument: "modal", field: "modal", preset: "crotales" },
+  { word: "musicbox", instrument: "modal", field: "modal", preset: "musicbox" },
+  { word: "toypiano", instrument: "modal", field: "modal", preset: "toypiano" },
+  { word: "saron", instrument: "modal", field: "modal", preset: "saron" },
+  { word: "demung", instrument: "modal", field: "modal", preset: "demung" },
+  { word: "slenthem", instrument: "modal", field: "modal", preset: "slenthem" },
+  { word: "gangsa", instrument: "modal", field: "modal", preset: "gangsa" },
+  { word: "gender", instrument: "modal", field: "modal", preset: "gender" },
+  { word: "bonang", instrument: "modal", field: "modal", preset: "bonang" },
+  { word: "kenong", instrument: "modal", field: "modal", preset: "kenong" },
+  { word: "kethuk", instrument: "modal", field: "modal", preset: "kethuk" },
+  { word: "kempul", instrument: "modal", field: "modal", preset: "kempul" },
+  { word: "daf", instrument: "modal", field: "modal", preset: "daf" },
+  { word: "bodhran", instrument: "modal", field: "modal", preset: "bodhran" },
+  { word: "framedrum", instrument: "modal", field: "modal", preset: "bodhran" },
+  { word: "tabla", instrument: "modal", field: "modal", preset: "tabla" },
+  // f061-gamelan-winds: blown waveguides (core/winds.ts). The legacy word
+  // `wind` keeps its tone; these words and their aliases pick a wind preset.
+  { word: "flute", instrument: "wind", field: "wind", preset: "flute" },
+  { word: "recorder", instrument: "wind", field: "wind", preset: "recorder" },
+  { word: "whistle", instrument: "wind", field: "wind", preset: "whistle" },
+  { word: "ney", instrument: "wind", field: "wind", preset: "ney" },
+  {
+    word: "shakuhachi",
+    instrument: "wind",
+    field: "wind",
+    preset: "shakuhachi",
+  },
+  { word: "panpipe", instrument: "wind", field: "wind", preset: "panpipe" },
+  { word: "suling", instrument: "wind", field: "wind", preset: "suling" },
+  { word: "bansuri", instrument: "wind", field: "wind", preset: "bansuri" },
+  { word: "clarinet", instrument: "wind", field: "wind", preset: "clarinet" },
+  {
+    word: "bassclarinet",
+    instrument: "wind",
+    field: "wind",
+    preset: "bassclarinet",
+  },
+  { word: "oboe", instrument: "wind", field: "wind", preset: "oboe" },
+  { word: "bassoon", instrument: "wind", field: "wind", preset: "bassoon" },
+  { word: "sax", instrument: "wind", field: "wind", preset: "sax" },
+  { word: "altosax", instrument: "wind", field: "wind", preset: "altosax" },
+  { word: "barisax", instrument: "wind", field: "wind", preset: "barisax" },
+  { word: "trumpet", instrument: "wind", field: "wind", preset: "trumpet" },
+  { word: "harmon", instrument: "wind", field: "wind", preset: "harmon" },
+  { word: "plunger", instrument: "wind", field: "wind", preset: "plunger" },
+  { word: "trombone", instrument: "wind", field: "wind", preset: "trombone" },
+  { word: "tuba", instrument: "wind", field: "wind", preset: "tuba" },
+  { word: "horn", instrument: "wind", field: "wind", preset: "horn" },
+  { word: "tinwhistle", instrument: "wind", field: "wind", preset: "whistle" },
+  {
+    word: "pennywhistle",
+    instrument: "wind",
+    field: "wind",
+    preset: "whistle",
+  },
+  { word: "nay", instrument: "wind", field: "wind", preset: "ney" },
+  { word: "panflute", instrument: "wind", field: "wind", preset: "panpipe" },
+  { word: "panpipes", instrument: "wind", field: "wind", preset: "panpipe" },
+  { word: "saxophone", instrument: "wind", field: "wind", preset: "sax" },
+  { word: "tenorsax", instrument: "wind", field: "wind", preset: "sax" },
+  { word: "tenor", instrument: "wind", field: "wind", preset: "sax" },
+  { word: "alto", instrument: "wind", field: "wind", preset: "altosax" },
+  { word: "bari", instrument: "wind", field: "wind", preset: "barisax" },
+  { word: "baritonesax", instrument: "wind", field: "wind", preset: "barisax" },
+  { word: "frenchhorn", instrument: "wind", field: "wind", preset: "horn" },
+  { word: "mutedtrumpet", instrument: "wind", field: "wind", preset: "harmon" },
+  { word: "wahtrumpet", instrument: "wind", field: "wind", preset: "plunger" },
 ]);
 
 /**

@@ -3,6 +3,7 @@ import { pitchToMidi } from "../../core/pitch.ts";
 import {
   instrumentPatchForWord,
   type TrackModal,
+  type TrackWind,
 } from "../../core/resonators.ts";
 import { SCORE_LIMITS } from "../../core/score.ts";
 
@@ -206,10 +207,12 @@ export function instrumentPatch(word: string): {
   instrument: string;
   string?: { preset: string };
   modal?: TrackModal;
+  wind?: TrackWind;
 } {
   const meaning = resolveInstrumentWord(word);
   if (!meaning) return { instrument: word };
-  if (meaning.field === "modal") return instrumentPatchForWord(word);
+  if (meaning.field === "modal" || meaning.field === "wind")
+    return instrumentPatchForWord(word);
   if (meaning.field === "string" && meaning.preset)
     return {
       instrument: meaning.instrument,

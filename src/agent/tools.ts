@@ -14,6 +14,15 @@ import {
   type TrackModal,
 } from "../../core/resonators.ts";
 import { applyModalCommand, type ModalCommand } from "../commands/modal.ts";
+import { applyWindCommand, type WindCommand } from "../commands/wind.ts";
+import {
+  type TrackWind,
+  WIND_ALIASES,
+  WIND_PARAMS,
+  WIND_PRESET_NAMES,
+  windParamName,
+  windPresetFor,
+} from "../../core/winds.ts";
 import {
   AUTOMATION_PARAMETERS,
   automationPoints,
@@ -477,7 +486,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   {
     name: "set_instrument",
     description:
-      "Change a track's instrument voice. Mallets and bells (modal): modal (marimba) vibes xylophone glock celesta chimes kalimba mbira steelpan bowl gong timpani; set_modal shapes them. Electric keys: epiano suitcase dyno wurli clav funkclav (set_keys).",
+      "Change a track's instrument voice. Mallets and bells (modal): modal (marimba) vibes xylophone glock celesta chimes kalimba mbira steelpan bowl gong timpani, gamelan saron gangsa bonang …; set_modal shapes them. Electric keys: epiano suitcase dyno wurli clav funkclav (set_keys). Winds and brass (wind engine): flute recorder clarinet oboe bassoon sax trumpet trombone tuba horn …; set_wind shapes them.",
     parameters: {
       type: "object",
       properties: {
@@ -517,7 +526,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
         summary:
           patch.instrument === "marimba" && !patch.modal
             ? `${trackId} → marimba (legacy tone) · set_modal preset marimba for the mallet engine`
-            : `${trackId} → ${patch.string?.preset ?? patch.modal?.preset ?? patch.instrument}`,
+            : `${trackId} → ${patch.string?.preset ?? patch.modal?.preset ?? patch.wind?.preset ?? patch.instrument}`,
       };
     },
   },
@@ -947,7 +956,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   {
     name: "set_modal",
     description:
-      "Mallets and bells on the modal engine: preset (marimba vibes xylophone glock celesta chimes kalimba mbira steelpan bowl gong timpani) switches the voice and keeps overrides; mallet yarn|cord|rubber|plastic|brass; params sets MODAL_PARAMS (hardness position ring tilt release damp motor motordepth ombak buzz click strikebend strikedecay gain), null returns one to the preset; reset clears overrides. Turns the track into instrument modal.",
+      "Mallets and bells on the modal engine: preset (marimba vibes xylophone glock celesta chimes kalimba mbira steelpan bowl gong timpani) switches the voice and keeps overrides (gamelan: crotales musicbox toypiano saron demung slenthem gangsa gender bonang kenong kethuk kempul; frame drums daf bodhran tabla); mallet yarn|cord|rubber|plastic|brass; params sets MODAL_PARAMS (hardness position ring tilt release damp motor motordepth ombak buzz click strikebend strikedecay gain), null returns one to the preset; pair names a partner modal track: this track (pengisep) sounds ombak Hz above it and the partner (pengumbang) gets ombak 0, null unpairs; reset clears overrides. Turns the track into instrument modal.",
     parameters: {
       type: "object",
       properties: {
@@ -957,6 +966,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
           enum: [...MODAL_PRESET_NAMES, ...Object.keys(MODAL_ALIASES)],
         },
         mallet: { type: "string", enum: [...MODAL_MALLET_NAMES] },
+        pair: { type: ["string", "null"] },
         reset: { type: "boolean" },
         params: {
           type: "object",
@@ -985,6 +995,11 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
         if (typeof args.mallet !== "string")
           throw new ToolArgumentError("mallet must be a string");
         values.mallet = args.mallet;
+      }
+      if (args.pair !== undefined) {
+        if (args.pair !== null && typeof args.pair !== "string")
+          throw new ToolArgumentError("pair must be a track id or null");
+        values.pair = args.pair;
       }
       if (args.params !== undefined) {
         if (
@@ -1031,13 +1046,125 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
         messages.push(result.message);
       }
       const next = score.tracks.find((t) => t.id === trackId)!;
+      // A pair also sets the partner (pengumbang) to ombak 0.
+      const partners = score.tracks.filter(
+        (t) =>
+          t.id !== trackId &&
+          t.modal !== context.score.tracks.find((o) => o.id === t.id)?.modal,
+      );
+      return {
+        kind: "score",
+        operations: [
+          ...partners.map((t) => ({
+            type: "updateTrack" as const,
+            trackId: t.id,
+            patch: { modal: t.modal ?? null },
+          })),
+          {
+            type: "updateTrack",
+            trackId,
+            patch: { instrument: next.instrument, modal: next.modal ?? null },
+          },
+        ],
+        trackId,
+        summary: `${trackId} ${messages.at(-1)}`,
+      };
+    },
+  },
+  {
+    name: "set_wind",
+    description:
+      "Winds and brass on the wind engine (breath-driven waveguides): preset (flute recorder whistle ney shakuhachi panpipe suling bansuri clarinet bassclarinet oboe bassoon sax altosax barisax trumpet harmon plunger trombone tuba horn) switches the voice and keeps overrides; params sets WIND_PARAMS (breath bright mute players growl noise attack release vib vibmod reed stopped wah wahenv flutter gain model), null returns one to the preset; players 2..8 is a section that spreads over chord tones; reset clears overrides; off returns to the legacy wind tone. Lines slur by default (a note that starts while one note is held is not re-tongued). Turns the track into the wind engine.",
+    parameters: {
+      type: "object",
+      properties: {
+        trackId: trackIdSchema,
+        preset: {
+          type: "string",
+          enum: [...WIND_PRESET_NAMES, ...Object.keys(WIND_ALIASES)],
+        },
+        reset: { type: "boolean" },
+        off: { type: "boolean" },
+        params: {
+          type: "object",
+          additionalProperties: {
+            type: ["number", "string", "boolean", "null"],
+          },
+        },
+      },
+      additionalProperties: false,
+    },
+    plan(args, context) {
+      const trackId = targetTrack(args, context);
+      const commands: WindCommand[] = [];
+      if (args.off === true) commands.push({ type: "wind-off" });
+      if (args.reset === true) commands.push({ type: "wind-reset" });
+      if (args.preset !== undefined) {
+        const preset =
+          typeof args.preset === "string"
+            ? windPresetFor(args.preset)
+            : undefined;
+        if (!preset)
+          throw new ToolArgumentError(
+            `preset must be one of ${WIND_PRESET_NAMES.join(", ")}`,
+          );
+        commands.push({ type: "wind-preset", preset });
+      }
+      const values: Record<string, number | string | boolean | null> = {};
+      if (args.params !== undefined) {
+        if (
+          typeof args.params !== "object" ||
+          args.params === null ||
+          Array.isArray(args.params)
+        )
+          throw new ToolArgumentError("params must be an object");
+        for (const [key, value] of Object.entries(args.params)) {
+          const name = windParamName(key);
+          if (!name)
+            throw new ToolArgumentError(
+              `wind has no parameter ${key} (${Object.keys(WIND_PARAMS).join(" ")})`,
+            );
+          if (
+            value !== null &&
+            typeof value !== "number" &&
+            typeof value !== "string" &&
+            typeof value !== "boolean"
+          )
+            throw new ToolArgumentError(
+              `${key} must be a number, string or boolean`,
+            );
+          values[name] = value;
+        }
+      }
+      if (Object.keys(values).length > 0)
+        commands.push({ type: "wind-set", values });
+      if (commands.length === 0) {
+        // An empty call turns the track into the wind engine.
+        const current = context.score.tracks.find((t) => t.id === trackId);
+        commands.push({
+          type: "wind-preset",
+          preset:
+            current?.instrument === "wind" && current.wind?.preset
+              ? current.wind.preset
+              : "flute",
+        });
+      }
+      let score = context.score;
+      const messages: string[] = [];
+      for (const command of commands) {
+        const result = applyWindCommand(score, trackId, command);
+        if (!result.ok) throw new ToolArgumentError(result.message);
+        if (result.next) score = result.next;
+        messages.push(result.message);
+      }
+      const next = score.tracks.find((t) => t.id === trackId)!;
       return {
         kind: "score",
         operations: [
           {
             type: "updateTrack",
             trackId,
-            patch: { instrument: next.instrument, modal: next.modal ?? null },
+            patch: { instrument: next.instrument, wind: next.wind ?? null },
           },
         ],
         trackId,
@@ -2160,6 +2287,7 @@ function instrumentName(value: unknown): {
   instrument: string;
   string?: { preset: string };
   modal?: TrackModal;
+  wind?: TrackWind;
 } {
   const word = typeof value === "string" ? value.trim() : undefined;
   if (word === STRING_INSTRUMENT)
@@ -2172,6 +2300,7 @@ function instrumentName(value: unknown): {
     patch === undefined ||
     (!patch.string &&
       !patch.modal &&
+      !patch.wind &&
       !(AVAILABLE_INSTRUMENTS as readonly string[]).includes(patch.instrument))
   )
     throw new ToolArgumentError(

@@ -14,6 +14,7 @@ import { arrangeDetail, arrangeNodes } from "./arrange-menu.ts";
 import { auditionKey, isStageable, type AuditionKey } from "./audition.ts";
 import { performanceDetail, performanceNodes } from "./performance-menu.ts";
 import { malletsMenu, modalParameterNodes } from "./modal-menu.ts";
+import { windParameterNodes, windsMenu } from "./wind-menu.ts";
 import type { FaderSpec } from "./fader.ts";
 import {
   openingMeterCommand,
@@ -400,7 +401,8 @@ function laneLabel(lane: AutomationParameter): string {
     info.effect === "string" ||
     info.effect === "keys" ||
     info.effect === "modal" ||
-    info.effect === "grain"
+    info.effect === "grain" ||
+    info.effect === "wind"
       ? info.effect
       : effectSpec(info.effect).label;
   return `${owner} ${info.param}${unit}`;
@@ -1255,6 +1257,9 @@ function parameterNodes(context: MenuContext): MenuNode[] {
   } else if (track.instrument === "modal") {
     // 0.6 modal percussion: preset, mallet and MODAL_PARAMS rows.
     nodes.push(...modalParameterNodes(track));
+  } else if (track.instrument === "wind" && track.wind) {
+    // 0.6.1 wind engine: preset and WIND_PARAMS rows.
+    nodes.push(...windParameterNodes(track));
   } else if (!isDrumInstrument(track.instrument)) {
     nodes.push(...synthNodes(track, SYNTH_SIMPLE));
     nodes.push({
@@ -2208,6 +2213,7 @@ function automationNodes(context: MenuContext): MenuNode[] {
       );
     if (info?.effect === "modal") return track.modal !== undefined;
     if (info?.effect === "grain") return track.granular !== undefined;
+    if (info?.effect === "wind") return track.wind !== undefined;
     return info !== undefined && effectValues(track, info.effect) !== undefined;
   });
   const hidden = AUTOMATION_PARAMETERS.filter((lane) => !shown.includes(lane));
@@ -2454,6 +2460,7 @@ function soundNodes(): MenuNode[] {
     },
     // 0.6 instrument groups, one per lane.
     malletsMenu(),
+    windsMenu(),
     {
       kind: "menu",
       id: "strings",

@@ -23,7 +23,11 @@ import {
 } from "./sampler.ts";
 import { EFFECT_NAMES, FX_PRESETS, effectSpec } from "../../core/fx.ts";
 import { seededRandom } from "./random.ts";
-import { engineFor, engineTailSeconds } from "./instruments.ts";
+import {
+  engineFor,
+  engineTailSeconds,
+  RING_OUT_FADE_SECONDS,
+} from "./instruments.ts";
 import {
   isStereoVoice,
   renderSynthNote,
@@ -206,12 +210,13 @@ const MAX_ENGINE_TAIL_SECONDS = 30;
  * The longest 0.6 engine ring-out in `score`, capped at 30 s. One-shot
  * renders (exports, previews) let engine tails reach their own cap; the
  * 8 s cap applies only to loop folding. Zero without an engine, so legacy
- * renders are unchanged.
+ * renders are unchanged. `ringing` counts only ring-out tracks (0.6.1).
  */
-function oneShotEngineTail(score: TrackScore): number {
+function oneShotEngineTail(score: TrackScore, ringing = false): number {
   let tail = 0;
   for (const track of score.tracks) {
-    if (!engineFor(track)) continue;
+    const engine = engineFor(track);
+    if (!engine || (ringing && engine.ringOut?.(track) !== true)) continue;
     let lowest: number | undefined;
     for (const note of score.notes)
       if (
@@ -729,6 +734,20 @@ export class StemRenderer {
       if (!groups.has(trackId)) this.evict(trackId);
     // Linear effects superpose, so folding the tail onto the start yields
     // the steady state of the loop playing forever.
+    // A ring-out longer than the fold (a gong past 8 s) would be cut there:
+    // fade its last RING_OUT_FADE_SECONDS so the fold never clicks. Only
+    // ringing 0.6 engine tracks qualify, so legacy loops are untouched.
+    if (
+      options.loop &&
+      samples > frames &&
+      oneShotEngineTail(score, true) > (samples - frames) / sampleRate
+    )
+      fadeEnd(
+        mixL,
+        mixR,
+        samples,
+        Math.round(RING_OUT_FADE_SECONDS * sampleRate),
+      );
     if (samples > frames) foldTail(mixL, mixR, frames, samples);
     // The song master (src/audio/master.ts); none leaves the mix untouched.
     const mastered = applyMaster(
@@ -835,6 +854,21 @@ function addStem(
 }
 
 /** Fold everything past `frames` back onto the loop start. */
+/** Fade the last `fade` of `samples` mix frames linearly to zero. */
+function fadeEnd(
+  mixL: Float64Array,
+  mixR: Float64Array,
+  samples: number,
+  fade: number,
+): void {
+  const n = Math.min(fade, samples);
+  for (let i = 0; i < n; i += 1) {
+    const gain = (n - 1 - i) / n;
+    mixL[samples - n + i]! *= gain;
+    mixR[samples - n + i]! *= gain;
+  }
+}
+
 function foldTail(
   mixL: Float64Array,
   mixR: Float64Array,

@@ -133,6 +133,11 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
           "mallets and bells · modal vibes · modal hardness 0.8 · modal presets",
       },
       {
+        command: "wind <preset> | <param> <value> | mute <name> | reset | off",
+        summary:
+          "winds and brass · wind flute · wind sax · wind players 4 · wind presets",
+      },
+      {
         command: "art <articulation>|off [target]",
         summary:
           "staccato legato accent tenuto marcato ghost · art staccato bars 1-2",
@@ -764,7 +769,8 @@ export const USAGE: Readonly<Record<string, string>> = {
   pipe: "pipe [plenum|flutes|cornet|reeds|strings|full | <stop> …] | church · pipe principal8,octave4",
   rotary: "rotary slow|fast|stop [at <beat>] · rotary fast · rotary fast at 16",
   modal:
-    "modal <preset> | <body> | <param> <value> | mallet <name> | reset | off | presets · modal vibes · modal saron · modal ring 3",
+    "modal <preset> | <body> | <param> <value> | mallet <name> | pair <track> | gamelan | reset | off | presets · modal vibes · modal gangsa · modal ring 3",
+  wind: "wind <preset> | <param> <value> | mute <name> | reset | off | presets · wind flute · wind trumpet mute harmon · wind players 4",
   pack: "/pack list | info <name> | use <pack>/<sound> | add <url>",
   kit: "/kit [name] · /kit syn909",
   euclid: "/euclid [voice] · euclid hat 7 16",

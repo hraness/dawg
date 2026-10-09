@@ -27,6 +27,7 @@ import {
   MODAL_PARAMS,
   type TrackModal,
 } from "../resonators.ts";
+import { WIND_INSTRUMENT, WIND_PARAMS, type TrackWind } from "../winds.ts";
 import { rhythmVoicePitch, rowInSync } from "../rhythm.ts";
 import {
   BUILTIN_TABLE_PREFIX,
@@ -155,6 +156,7 @@ const RESERVED = new Set([
   "rig",
   "granular",
   "modal",
+  "wind",
   "slices",
   "euclid",
   "euclidRot",
@@ -414,6 +416,11 @@ export function printTrack(score: TrackScore, track: Track): string {
       ? printModal(track.modal, INDENT)
       : undefined;
   if (modalCall?.startsWith("modal(")) used.add("modal");
+  const windCall =
+    track.instrument === WIND_INSTRUMENT && track.wind
+      ? printWind(track.wind, INDENT)
+      : undefined;
+  if (windCall?.startsWith("wind(")) used.add("wind");
 
   const entries: string[] = [
     `id: ${str(track.id)}`,
@@ -432,6 +439,8 @@ export function printTrack(score: TrackScore, track: Track): string {
     entries.push(`instrument: ${printStringed(track.string!, INDENT)}`);
   } else if (modalCall) {
     entries.push(`instrument: ${modalCall}`);
+  } else if (windCall) {
+    entries.push(`instrument: ${windCall}`);
   } else entries.push(`instrument: ${str(track.instrument)}`);
   if (track.kit) entries.push(`kit: ${str(track.kit)}`);
   if (track.granular && !grained)
@@ -658,6 +667,7 @@ export function printTrack(score: TrackScore, track: Track): string {
     "rig",
     "granular",
     "modal",
+    "wind",
     "euclid",
     "grid",
   ]
@@ -1016,6 +1026,7 @@ function printModal(settings: TrackModal, indent: string): string {
     if (value === undefined) continue;
     params.push([key, typeof value === "number" ? num(value) : str(value)]);
   }
+  if (settings.pair !== undefined) params.push(["pair", str(settings.pair)]);
   const preset = settings.preset;
   if (params.length === 0 && preset && preset !== "marimba") return str(preset);
   const head = preset ? str(preset) : "";
@@ -1026,6 +1037,37 @@ function printModal(settings: TrackModal, indent: string): string {
     return inline;
   const inner = indent + INDENT;
   return `modal(${lead}{\n${params.map(([k, v]) => `${inner}${k}: ${v},`).join("\n")}\n${indent}})`;
+}
+
+/**
+ * A wind track's instrument: the preset word alone (`"flute"`) when there
+ * are no overrides, else `wind("sax", { breath: 0.8 })` with keys in
+ * `WIND_PARAMS` order. Every wind preset word is also an instrument word.
+ */
+function printWind(settings: TrackWind, indent: string): string {
+  const params: [string, string][] = [];
+  for (const key of Object.keys(WIND_PARAMS)) {
+    const value = (settings as Record<string, unknown>)[key];
+    if (value === undefined) continue;
+    params.push([
+      key,
+      typeof value === "number"
+        ? num(value)
+        : typeof value === "boolean"
+          ? String(value)
+          : str(String(value)),
+    ]);
+  }
+  const preset = settings.preset;
+  if (params.length === 0 && preset) return str(preset);
+  const head = preset ? str(preset) : "";
+  if (params.length === 0) return `wind(${head})`;
+  const lead = head ? `${head}, ` : "";
+  const inline = `wind(${lead}{ ${params.map(([k, v]) => `${k}: ${v}`).join(", ")} })`;
+  if (indent.length + "instrument: ".length + inline.length + 1 <= WIDTH)
+    return inline;
+  const inner = indent + INDENT;
+  return `wind(${lead}{\n${params.map(([k, v]) => `${inner}${k}: ${v},`).join("\n")}\n${indent}})`;
 }
 
 /** `wavetable("basic", { wt: 0.5 })`; pack tables keep their pin. */

@@ -12,7 +12,7 @@
  * under `track.fx.<name>` with every parameter stored once enabled.
  */
 
-import { MODAL_LANE_PARAMS } from "./resonators.ts";
+import { MODAL_LANE_PARAMS, WIND_LANE_PARAMS } from "./resonators.ts";
 import { SYNTH_LANE_PARAMS } from "./synth.ts";
 import { STRING_LANE_PARAMS } from "./strings.ts";
 import { KEYS_LANE_PARAMS } from "./keys.ts";
@@ -1221,12 +1221,20 @@ export function normalizeFx(input: unknown): TrackFx | undefined {
 
 /** Automation lane name of an `fx` parameter, e.g. `distort-drive`. */
 export type FxLane =
-  `${FxName | "reverb" | "synth" | "string" | "keys" | "modal" | "grain"}-${string}`;
+  `${FxName | "reverb" | "synth" | "string" | "keys" | "modal" | "grain" | "wind"}-${string}`;
 
 /** Every automatable `fx` parameter as `{ lane, effect, param, spec }`. */
 export const FX_LANES: readonly Readonly<{
   lane: FxLane;
-  effect: FxName | "reverb" | "synth" | "string" | "keys" | "modal" | "grain";
+  effect:
+    | FxName
+    | "reverb"
+    | "synth"
+    | "string"
+    | "keys"
+    | "modal"
+    | "grain"
+    | "wind";
   param: string;
   spec: NumberParam;
 }>[] = Object.freeze([
@@ -1288,6 +1296,15 @@ export const FX_LANES: readonly Readonly<{
     Object.freeze({
       lane: `grain-${param}` as FxLane,
       effect: "grain" as const,
+      param,
+      spec,
+    }),
+  ),
+  // Wind parameters (core/winds.ts), read every 32-sample control tick.
+  ...WIND_LANE_PARAMS.map(({ param, spec }) =>
+    Object.freeze({
+      lane: `wind-${param}` as FxLane,
+      effect: "wind" as const,
       param,
       spec,
     }),

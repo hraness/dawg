@@ -24,6 +24,7 @@
 import { FxValidationError } from "../../core/params.ts";
 import {
   DEFAULT_MODAL_PRESET,
+  GAMELAN_PRESETS,
   MODAL_INSTRUMENT,
   MODAL_PARAMS,
   MODAL_PRESETS,
@@ -31,6 +32,7 @@ import {
   MODAL_SIMPLE,
   modalParamName,
   modalPresetFor,
+  modalSettings,
   normalizeModal,
   type TrackModal,
 } from "../../core/resonators.ts";
@@ -48,6 +50,7 @@ export type ModalCommand =
   | { type: "modal-off" }
   | { type: "modal-preset"; preset: string }
   | { type: "modal-usage"; message: string }
+  | { type: "modal-hint"; message: string }
   | {
       type: "modal-set";
       /** `null` returns a parameter to the preset's value. */
@@ -58,7 +61,7 @@ export type ModalCommand =
 export const MODAL_OFF_INSTRUMENT = "marimba";
 
 export const MODAL_USAGE =
-  "modal <preset> | modal <body> | modal <param> <value> | modal mallet <name> | modal reset | modal off | modal presets";
+  "modal <preset> | modal <body> | modal <param> <value> | modal mallet <name> | modal pair <track> | modal gamelan | modal reset | modal off | modal presets";
 
 function rangeOf(name: string): string {
   const spec = MODAL_PARAMS[name]!;
@@ -79,6 +82,12 @@ export function parseModalCommand(prompt: string): ModalCommand | undefined {
   if (rest.length === 1 && rest[0] === "off") return { type: "modal-off" };
   if (rest.length === 1 && (rest[0] === "list" || rest[0] === "presets"))
     return { type: "modal-list" };
+  // `gamelan` is a browse group, not a preset: list the bronzes.
+  if (rest.length === 1 && rest[0] === "gamelan")
+    return {
+      type: "modal-hint",
+      message: `gamelan · ${GAMELAN_PRESETS.join(" ")} · modal gangsa to start · pair two tracks with modal pair <track> · tuning slendro or pelog · ctrl-k Sound › browse sounds › Mallets and bells › Gamelan`,
+    };
   if (rest[0] === "preset") {
     const preset = rest.length === 2 ? modalPresetFor(rest[1]!) : undefined;
     return preset
@@ -91,12 +100,25 @@ export function parseModalCommand(prompt: string): ModalCommand | undefined {
   if (rest.length === 1) {
     const preset = modalPresetFor(rest[0]!);
     if (preset) return { type: "modal-preset", preset };
-    // A body word (saron, kempul, bonang, gender ...) sets the body: the
-    // gamelan presets come later, the bodies already ship.
+    // A body word with no preset of its own (frame, bell, crotale ...)
+    // sets the body.
     const body = MODAL_PARAMS.body;
     if (body?.kind === "enum" && body.values.includes(rest[0]!))
       return { type: "modal-set", values: { body: rest[0]! } };
     return { type: "modal-usage", message: MODAL_USAGE };
+  }
+  // f061-gamelan-winds: `modal pair <track>` makes this track the
+  // pengisep of an ombak pair (ids keep their case).
+  if (rest[0] === "pair" && rest.length === 2) {
+    const id = prompt.trim().split(/\s+/)[2]!;
+    if (id === "off" || id === "unset" || id === "none")
+      return { type: "modal-set", values: { pair: null } };
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(id))
+      return {
+        type: "modal-usage",
+        message: "modal pair <track id> | modal pair off",
+      };
+    return { type: "modal-set", values: { pair: id } };
   }
   if (rest.length % 2 !== 0)
     return { type: "modal-usage", message: MODAL_USAGE };
@@ -159,6 +181,16 @@ export function nextModal(
   >,
 ): TrackModal {
   const base: Record<string, unknown> = { ...current };
+  // `modal ombak 6` or `modal pair t2` on a track that is not modal yet
+  // means a gamelan pair: start from gangsa, not the default marimba.
+  if (
+    current === undefined &&
+    command.type === "modal-set" &&
+    command.values.preset === undefined &&
+    (typeof command.values.ombak === "number" ||
+      typeof command.values.pair === "string")
+  )
+    base.preset = "gangsa";
   if (command.type === "modal-reset")
     return normalizeModal(current?.preset ? { preset: current.preset } : {})!;
   if (command.type === "modal-preset") base.preset = command.preset;
@@ -183,6 +215,8 @@ export function applyModalCommand(
 ): ModalResult {
   if (command.type === "modal-usage")
     return { ok: false, message: `modal · ${command.message}` };
+  if (command.type === "modal-hint")
+    return { ok: true, message: `modal · ${command.message}` };
   if (command.type === "modal-list")
     return {
       ok: true,
@@ -223,8 +257,37 @@ export function applyModalCommand(
   }
   let modal: TrackModal;
   let next: TrackScore;
+  let partnerNote = "";
   try {
     modal = nextModal(current, command);
+    if (
+      command.type === "modal-set" &&
+      typeof command.values.pair === "string"
+    ) {
+      const partnerId = command.values.pair;
+      const partner = score.tracks.find((entry) => entry.id === partnerId);
+      if (!partner || partnerId === trackId)
+        return {
+          ok: false,
+          message: `modal · pair needs another track id (${score.tracks
+            .filter((entry) => entry.id !== trackId)
+            .map((entry) => entry.id)
+            .join(" ")})`,
+        };
+      if (partner.instrument !== MODAL_INSTRUMENT || !partner.modal)
+        return {
+          ok: false,
+          message: `modal · ${partnerId} is not a modal track · modal gangsa on it first`,
+        };
+      // The partner (pengumbang) plays straight (ombak 0) and this track
+      // (pengisep) sounds ombak Hz above it, so the pair beats at ombak Hz.
+      if (modalSettings(partner.modal).ombak !== 0) {
+        score = updateTrack(score, partnerId, {
+          modal: normalizeModal({ ...partner.modal, ombak: 0 })!,
+        });
+      }
+      partnerNote = ` · ${partnerId} is the pengumbang (ombak 0)`;
+    }
     next = updateTrack(score, trackId, {
       instrument: MODAL_INSTRUMENT,
       modal,
@@ -239,7 +302,7 @@ export function applyModalCommand(
   }
   return {
     ok: true,
-    message: `modal · ${describeModal(modal)}`,
+    message: `modal · ${describeModal(modal)}${partnerNote}`,
     next,
     kind: "score.modal",
     payload: { trackId, instrument: MODAL_INSTRUMENT, modal },

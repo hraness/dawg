@@ -23,7 +23,10 @@ import {
 import {
   MODAL_INSTRUMENT,
   normalizeModal,
+  normalizeWind,
+  WIND_INSTRUMENT,
   type TrackModal,
+  type TrackWind,
 } from "./resonators.ts";
 import { normalizeSynth, type TrackSynth } from "./synth.ts";
 import { normalizeString, type TrackString } from "./strings.ts";
@@ -441,6 +444,13 @@ export type Track = Readonly<{
    * render, so it changes no sound by itself.
    */
   guitar?: TrackGuitar;
+  /**
+   * Optional (0.6.1): a blown waveguide (`core/winds.ts`), a preset plus
+   * overrides. Plays only when `instrument` is `"wind"`; without it the
+   * legacy `wind` tone plays unchanged. Any other instrument with this
+   * field is rejected.
+   */
+  wind?: TrackWind;
 }> &
   /**
    * Performance (`core/expression.ts`): glide default, sustain pedal
@@ -825,6 +835,7 @@ export type TrackPatch = Readonly<
     softPedal?: Track["softPedal"] | null;
     sostenuto?: Track["sostenuto"] | null;
     guitar?: TrackGuitar | null;
+    wind?: TrackWind | null;
   }
 >;
 
@@ -876,6 +887,7 @@ export type TrackInput = Readonly<
     | "softPedal"
     | "sostenuto"
     | "guitar"
+    | "wind"
   > &
     Pick<Track, "id"> & {
       filter?: TrackFilter | null;
@@ -901,6 +913,7 @@ export type TrackInput = Readonly<
       softPedal?: Track["softPedal"] | null;
       sostenuto?: Track["sostenuto"] | null;
       guitar?: TrackGuitar | null;
+      wind?: TrackWind | null;
     }
 >;
 
@@ -1301,6 +1314,10 @@ export function updateTrack(
         patch.instrument !== MODAL_INSTRUMENT
       )
         delete next.modal;
+      // The legacy word `wind` is the legacy tone, so naming any instrument
+      // (`wind` included) without a wind field leaves the wind engine.
+      if (patch.instrument !== undefined && patch.wind === undefined)
+        delete next.wind;
       return next as Track;
     }),
   );
@@ -1892,6 +1909,12 @@ function normalizeTrack(input: unknown): Track {
       "invalid-track",
     );
   const guitar = normalizeGuitar(input.guitar);
+  const wind = fxOrThrow(() => normalizeWind(input.wind));
+  if (wind && instrument !== WIND_INSTRUMENT)
+    throw new ScoreValidationError(
+      `track ${id} has wind settings but its instrument is "${instrument}"`,
+      "invalid-track",
+    );
   const sampler = normalizeSampler(input.sampler);
   const rhythm = normalizeRhythm(input.rhythm, id);
   const time = timeOrThrow(
@@ -2010,6 +2033,7 @@ function normalizeTrack(input: unknown): Track {
     ...(softPedal ? { softPedal } : {}),
     ...(sostenuto ? { sostenuto } : {}),
     ...(guitar ? { guitar } : {}),
+    ...(wind ? { wind } : {}),
   });
 }
 

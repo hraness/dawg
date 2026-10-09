@@ -48,6 +48,7 @@ const EFFECTS = [
   "sostenuto",
   // f061-guitar: fretting setup.
   "guitar",
+  "wind",
 ] as const;
 const LANES = [
   "volumeAutomation",
