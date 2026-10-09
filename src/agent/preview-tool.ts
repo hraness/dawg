@@ -43,6 +43,7 @@ export const PREVIEWABLE_TOOLS: readonly string[] = Object.freeze([
   "fit_sample",
   "set_effects",
   "set_wavetable",
+  "set_granular",
   "set_drum_kit",
   "use_sound",
 ]);

@@ -149,6 +149,34 @@ export const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
   { word: "gtr-lead", instrument: "pluck", voice: "electric", fx: "lead" },
   { word: "gtr-metal", instrument: "pluck", voice: "electric", fx: "metal" },
   { word: "bachata", instrument: "pluck", voice: "electric", fx: "bachata" },
+  // granular (f06-granular): the instrument and its texture presets. Each
+  // starts from a built-in synth source, so nothing downloads.
+  {
+    word: "granular",
+    instrument: "granular",
+    field: "granular",
+    preset: "cloud",
+  },
+  {
+    word: "grains",
+    instrument: "granular",
+    field: "granular",
+    preset: "cloud",
+  },
+  { word: "cloud", instrument: "granular", field: "granular", preset: "cloud" },
+  {
+    word: "sparkle",
+    instrument: "granular",
+    field: "granular",
+    preset: "sparkle",
+  },
+  { word: "swarm", instrument: "granular", field: "granular", preset: "swarm" },
+  {
+    word: "microloop",
+    instrument: "granular",
+    field: "granular",
+    preset: "microloop",
+  },
 ]);
 
 /**

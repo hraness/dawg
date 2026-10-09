@@ -8,6 +8,7 @@
  */
 
 import { DRUM_VOICES, isDrumInstrument } from "../drums.ts";
+import type { TrackGranular } from "../granular.ts";
 import { DEFAULT_FIXED_VELOCITY } from "../expression.ts";
 import type { RhythmRow } from "../euclid.ts";
 import {
@@ -147,6 +148,7 @@ const RESERVED = new Set([
   "sampler",
   "wavetable",
   "rig",
+  "granular",
   "slices",
   "euclid",
   "euclidRot",
@@ -391,6 +393,9 @@ export function printTrack(score: TrackScore, track: Track): string {
     used.add("note");
     return printNote(score, note, !kit && !slots, INDENT + INDENT);
   });
+  const grained =
+    track.instrument === "granular" && track.granular !== undefined;
+  if (grained) used.add("granular");
   if (track.sampler) used.add("sampler");
   const wavetable = isWavetableInstrument(track.instrument)
     ? wavetableOf(track)
@@ -403,7 +408,12 @@ export function printTrack(score: TrackScore, track: Track): string {
     `id: ${str(track.id)}`,
     `name: ${str(track.name)}`,
   ];
-  if (track.sampler) {
+  if (grained) {
+    entries.push(`instrument: ${printGranular(track.granular!, INDENT)}`);
+    // The sampler a granular track keeps for `grain off`.
+    if (track.sampler)
+      entries.push(`sampler: ${printSampler(track.sampler, INDENT)}`);
+  } else if (track.sampler) {
     entries.push(`instrument: ${printSampler(track.sampler, INDENT)}`);
   } else if (wavetable) {
     entries.push(`instrument: ${printWavetable(wavetable, INDENT)}`);
@@ -411,6 +421,20 @@ export function printTrack(score: TrackScore, track: Track): string {
     entries.push(`instrument: ${printStringed(track.string!, INDENT)}`);
   } else entries.push(`instrument: ${str(track.instrument)}`);
   if (track.kit) entries.push(`kit: ${str(track.kit)}`);
+  if (track.granular && !grained)
+    entries.push(
+      `granular: ${obj(
+        [
+          ...(track.granular.preset
+            ? [["preset", str(track.granular.preset)] as const]
+            : []),
+          ...granularEntries(track.granular, INDENT),
+        ],
+        INDENT,
+        "granular: ".length,
+        1,
+      )}`,
+    );
   if (track.time) {
     const beats = (ticks: number) => num(ticks / score.ticksPerBeat);
     const fields: (readonly [string, string])[] = [];
@@ -610,6 +634,7 @@ export function printTrack(score: TrackScore, track: Track): string {
     "wavetable",
     "stringed",
     "rig",
+    "granular",
     "euclid",
     "grid",
   ]
@@ -906,6 +931,37 @@ function printStringed(settings: TrackString, indent: string): string {
     return inline;
   const inner = indent + INDENT;
   return `stringed(${name}, {\n${params.map(([k, v]) => `${inner}${k}: ${v},`).join("\n")}\n${indent}})`;
+}
+
+/** `[key, literal]` for each stored granular field but the preset. */
+function granularEntries(
+  settings: TrackGranular,
+  indent: string,
+): (readonly [string, string])[] {
+  return Object.entries(settings)
+    .filter(([key]) => key !== "preset")
+    .map(([key, v]) => [
+      key,
+      typeof v === "object"
+        ? printSample(v as SampleRef, indent + INDENT, `${key}: `.length)
+        : value(v as number | string | boolean),
+    ]);
+}
+
+/** `granular("cloud", { scan: 0.1 })`: the preset, then its overrides. */
+function printGranular(settings: TrackGranular, indent: string): string {
+  const inner = indent + INDENT;
+  const params = granularEntries(settings, indent);
+  const name = settings.preset ? str(settings.preset) : undefined;
+  if (params.length === 0) return name ? `granular(${name})` : "granular()";
+  const head = name ? `granular(${name}, ` : "granular(";
+  const inline = `${head}{ ${params.map(([k, v]) => `${k}: ${v}`).join(", ")} })`;
+  if (
+    !inline.includes("\n") &&
+    indent.length + "instrument: ".length + inline.length + 1 <= WIDTH
+  )
+    return inline;
+  return `${head}{\n${params.map(([k, v]) => property(k, v, inner)).join("\n")}\n${indent}})`;
 }
 
 /** `wavetable("basic", { wt: 0.5 })`; pack tables keep their pin. */

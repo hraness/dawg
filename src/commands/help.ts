@@ -54,6 +54,12 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "scan the table · warpmode bendp",
       },
       {
+        command:
+          "grain <preset> | <param> <value> | on [voice V] | src synth:<name>|voice V | reset | off",
+        summary:
+          "granular cloud · grain cloud · grain scan 0.2 · track swarm-2 · grain presets",
+      },
+      {
         command: "fx <effect> <param> <value> | on | off | preset <name>",
         summary: "effects · fx delay mix 0.3 · fx reverb on · fx lists them",
       },
@@ -621,6 +627,10 @@ export const USAGE: Readonly<Record<string, string>> = {
   pan: "pan takes -1…1 · pan -0.5",
   wt: "wt <table> | wt <0..1> | wt list · wt basic · wt wt_digital:2",
   wavetable: "wt <table> | wt <0..1> | wt list · wt basic · wt wt_digital:2",
+  grain:
+    "grain <preset> | <param> <value> | on [voice V] | src synth:<name>|voice V | reset | off | presets · grain cloud · grain pitch 12",
+  granular:
+    "grain <preset> | <param> <value> | on [voice V] | src synth:<name>|voice V | reset | off | presets · grain cloud",
   warpmode: "warpmode none|asym|bendp|bendm|bendmp|sync|quant",
   filter: "filter <hz> [res] · filter 800 0.3 · filter off",
   delay: "delay <beats> [fb] [mix] · delay 0.75 0.4 0.3 · delay off",

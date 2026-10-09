@@ -136,3 +136,9 @@ test("a one-letter slip on a command whose arguments parse is suggested", () => 
   expect(typoFix("tmpooo 90", parses)).toBeUndefined();
   expect(typoFix("tempo 90", parses)).toBeUndefined();
 });
+
+test("grain is a known verb: a slip suggests it and usage names it", () => {
+  const parses = (text: string) => /^grain \S+/.test(text);
+  expect(typoFix("graen cloud", parses)).toBe("grain cloud");
+  expect(usageHint("grain")).toContain("grain cloud");
+});
