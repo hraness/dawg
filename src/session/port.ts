@@ -129,6 +129,11 @@ export type OpenPortOptions = {
   /** Set false for one-shot commands (demo, export) that must not spawn dawgd. */
   daemon?: boolean;
   daemonArgs?: string[];
+  /**
+   * File sessions: the backstop poll while fs.watch is live (default 1 s).
+   * Tests raise it to prove a change arrived through the watcher.
+   */
+  watchedPollMs?: number;
 };
 
 /** Connects to (or starts) dawgd, falling back to the file-lock path. */
@@ -429,7 +434,10 @@ class FilePort<T> implements SessionPort<T> {
     } catch {
       watcher = undefined;
     }
-    const timer = setInterval(check, watcher ? WATCHED_POLL_MS : POLL_MS);
+    const timer = setInterval(
+      check,
+      watcher ? (this.options.watchedPollMs ?? WATCHED_POLL_MS) : POLL_MS,
+    );
     this.statusListeners.add(listener);
     check();
     return () => {
