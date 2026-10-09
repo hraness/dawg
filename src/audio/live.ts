@@ -19,9 +19,15 @@ import {
 import { bpmAtTick } from "../../core/tempo.ts";
 import { sampleKey, type SampleBank } from "./samples.ts";
 import { RENDER_CHANNELS, renderScorePcm } from "./wav.ts";
+import { engineFor } from "./instruments.ts";
 
 /** A rendered live note: interleaved stereo 16-bit PCM. */
-export type LiveNotePcm = Readonly<{ pcm: Int16Array; frames: number }>;
+export type LiveNotePcm = Readonly<{
+  pcm: Int16Array;
+  frames: number;
+  /** Release fade on note-off, in seconds; absent is the 10 ms default. */
+  releaseSeconds?: number;
+}>;
 
 export type LiveNoteRequest = Readonly<{
   score: TrackScore;
@@ -125,15 +131,21 @@ export class LiveSynth {
         },
       ],
     });
+    // A 0.6 engine's ring-out sets the one-note length and the key release.
+    const engine = engineFor(track);
+    const tail = engine ? Math.max(0, engine.tailSeconds(track)) : 0;
     const audio = renderScorePcm(single, {
       sampleRate: this.sampleRate,
-      maxSeconds: MAX_LIVE_NOTE_SECONDS + 4,
+      maxSeconds: Math.max(MAX_LIVE_NOTE_SECONDS + 4, seconds + tail),
       ...(request.samples ? { samples: request.samples } : {}),
     });
     const frames = audibleFrames(audio.pcm);
     const rendered: LiveNotePcm = {
       pcm: audio.pcm.subarray(0, frames * RENDER_CHANNELS),
       frames,
+      ...(engine
+        ? { releaseSeconds: Math.min(tail, MAX_LIVE_NOTE_SECONDS) }
+        : {}),
     };
     this.cache.set(key, rendered);
     while (this.cache.size > CACHE_ENTRIES) {

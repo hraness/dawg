@@ -23,6 +23,7 @@ import {
 } from "./sampler.ts";
 import { EFFECT_NAMES, FX_PRESETS, effectSpec } from "../../core/fx.ts";
 import { seededRandom } from "./random.ts";
+import { engineFor, engineTailSeconds } from "./instruments.ts";
 import {
   isStereoVoice,
   renderSynthNote,
@@ -181,7 +182,7 @@ function oneShotSeconds(
 /** Loop renders fold at most this much tail back onto the loop start. */
 const MAX_LOOP_TAIL_SECONDS = 8;
 
-type RenderContext = Readonly<{
+export type RenderContext = Readonly<{
   score: TrackScore;
   sampleRate: number;
   samples: number;
@@ -314,6 +315,8 @@ export class StemRenderer {
       Math.max(
         samplerTailSeconds(score, bank, sampleRate),
         ...score.tracks.map(synthTailSeconds),
+        // Zero without a registered 0.6 instrument engine.
+        ...score.tracks.map(engineTailSeconds),
       ),
     );
     return oneShotSeconds(loopSecondsOf(score), samplerTail, reverbTail);
@@ -338,6 +341,8 @@ export class StemRenderer {
       Math.max(
         samplerTailSeconds(score, bank, sampleRate),
         ...score.tracks.map(synthTailSeconds),
+        // Zero without a registered 0.6 instrument engine.
+        ...score.tracks.map(engineTailSeconds),
       ),
     );
     let frames: number;
@@ -437,6 +442,11 @@ export class StemRenderer {
       const played = performed.get(trackId)!;
       const busOrbit = sharedOrbitOf(track);
       const sampler = isSamplerInstrument(track?.instrument);
+      // A 0.6 instrument engine (src/audio/instruments.ts), if registered
+      // and the track carries its field; undefined keeps today's voices.
+      const engine = engineFor(track);
+      const engineDigests =
+        engine && track ? engine.assetDigests?.(track, bank) : undefined;
       // Wavetable hook: the oscillator factory for a wavetable track (its
       // table id joins the stem key), undefined for every other instrument.
       const wavetable = track ? wavetableHook(track, bank, context) : undefined;
@@ -449,6 +459,7 @@ export class StemRenderer {
         sampler ? bank : undefined,
         wavetable?.id,
         track ? reverbImpulse(track, sampleRate, bank.irs)?.id : undefined,
+        engineDigests,
       );
       let stem = this.stems.get(trackId);
       const caching = this.maxCacheBytes > 0;
@@ -464,6 +475,7 @@ export class StemRenderer {
               sampler ? bank : undefined,
               wavetable?.id,
               reverbImpulse(track, sampleRate, bank.irs)?.id,
+              engineDigests,
             )
           : undefined;
       if (stem?.key === key) stem.used = this.renders;
@@ -490,10 +502,25 @@ export class StemRenderer {
             }
           : { left, right };
         dry.fill(0);
-        const synthVoice = !sampler && usesSynthVoice(track);
-        const stereo = synthVoice && isStereoVoice(track);
+        const synthVoice = !engine && !sampler && usesSynthVoice(track);
+        const stereo = engine
+          ? engine.stereo(track!)
+          : synthVoice && isStereoVoice(track);
         if (stereo) dryR.fill(0);
-        if (sampler) {
+        if (engine && track) {
+          engine.render(
+            dry,
+            stereo ? dryR : undefined,
+            played,
+            track,
+            {
+              ...context,
+              ticksPerBeat: score.ticksPerBeat,
+              ...(tuning ? { tuning } : {}),
+            },
+            bank,
+          );
+        } else if (sampler) {
           if (track) renderSamplerNotes(dry, played, track, context, bank);
         } else if (synthVoice && track) {
           const gainAt = (tick: number) => trackGainAt(track, tick);
@@ -826,6 +853,7 @@ function stemKey(
   bank?: SampleBank,
   wavetableId?: string,
   impulseId?: string,
+  engineDigests?: readonly string[],
 ): string {
   let settings: Record<string, unknown> | null = null;
   if (track) {
@@ -849,6 +877,8 @@ function stemKey(
     ...(wavetableId ? [wavetableId] : []),
     // A convolution reverb's impulse (its sha256 for a sample).
     ...(impulseId ? [impulseId] : []),
+    // Assets a 0.6 instrument engine reads (absent without an engine).
+    ...(engineDigests ? [engineDigests] : []),
     // The song tuning, and the key whose tonic is the default root.
     ...(context.score.tuning || track?.tuning
       ? [context.score.tuning ?? null, context.score.key]

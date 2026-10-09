@@ -2069,7 +2069,7 @@ export function track(input: TrackInput): TrackSpec {
     : wavetableSpec
       ? WAVETABLE_INSTRUMENT
       : typeof rawInstrument === "string"
-        ? rawInstrument
+        ? instrumentForWord(rawInstrument)
         : undefined;
   if (
     instrument === undefined ||
@@ -3833,6 +3833,67 @@ export function progression(
     out.map((n) => note(n.pitch, round(n.start), n.length, n.velocity)),
   );
 }
+
+// BEGIN instrument words: generated from core/instruments.ts by core/sdk/sync-instruments.ts
+/** What an instrument word stores on a track. */
+type InstrumentWord = Readonly<{
+  /** The `Track.instrument` value. */
+  instrument: string;
+  /** The optional Track field the engine reads (created with defaults). */
+  field?: string;
+  /** A preset of that engine to apply. */
+  preset?: string;
+  /** An insert-effect preset to apply with it (rig aliases). */
+  fx?: string;
+}>;
+
+/** A word and what it means. */
+type InstrumentWordRow = Readonly<{ word: string }> & InstrumentWord;
+
+/**
+ * Words that keep their pre-0.6 meaning forever: they resolve to
+ * themselves, whatever rows the lanes add.
+ */
+const LEGACY_WORDS: readonly string[] = Object.freeze([
+  "piano",
+  "pluck",
+  "bass",
+  "saw",
+  "square",
+  "triangle",
+  "marimba",
+  "wind",
+  "cello",
+  "contrabass",
+  "ebass",
+  "sitar",
+  "organ",
+  "strings",
+  "bell",
+  "keys",
+  "lead",
+]);
+
+/** 0.6 instrument words; each lane appends its own block. */
+const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([]);
+
+/**
+ * What an instrument word means: a legacy word is itself, a row word is its
+ * row, anything else is undefined (callers keep the word as typed).
+ */
+function resolveInstrumentWord(word: string): InstrumentWord | undefined {
+  if (LEGACY_WORDS.includes(word)) return Object.freeze({ instrument: word });
+  const row = INSTRUMENT_WORDS.find((entry) => entry.word === word);
+  if (!row) return undefined;
+  const { word: _word, ...meaning } = row;
+  return Object.freeze(meaning);
+}
+
+/** The `Track.instrument` value a word stores (the word itself if unknown). */
+function instrumentForWord(word: string): string {
+  return resolveInstrumentWord(word)?.instrument ?? word;
+}
+// END instrument words
 
 // BEGIN chord engine: generated from core/chords.ts by core/sdk/sync-chords.ts
 // ---------------------------------------------------------------------------
