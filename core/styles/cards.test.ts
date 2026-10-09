@@ -64,7 +64,8 @@ describe("style cards: pattern checks", () => {
         }
       }
     expect(failures).toEqual([]);
-  });
+    // Every card, three seeds: the registry grows with each family.
+  }, 60_000);
 
   test("generation is deterministic per seed and varies across seeds", () => {
     const same: string[] = [];
@@ -101,5 +102,5 @@ describe("style cards: rendered excerpt", () => {
       if (sha(first) !== sha(again)) failures.push(`${id}: bytes differ`);
     }
     expect(failures).toEqual([]);
-  }, 120_000);
+  }, 300_000);
 });
