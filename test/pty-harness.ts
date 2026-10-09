@@ -14,11 +14,17 @@ export const supported =
   typeof (Bun as unknown as { Terminal?: unknown }).Terminal === "function";
 
 const dirs: string[] = [];
-afterAll(async () => {
-  await Promise.all(
-    dirs.map((dir) => rm(dir, { recursive: true, force: true })),
-  );
-});
+// Outside `bun test` (an ad hoc driver script) afterAll throws: the caller
+// owns cleanup there.
+try {
+  afterAll(async () => {
+    await Promise.all(
+      dirs.map((dir) => rm(dir, { recursive: true, force: true })),
+    );
+  });
+} catch {
+  // not under the test runner
+}
 
 interface PtyTerminal {
   write(data: string): void;
