@@ -325,7 +325,9 @@ import {
   PASTE_FLUSH_MS,
   TerminalInputDecoder,
 } from "../tui/input.ts";
+import { FrameGate } from "../tui/frame-gate.ts";
 import {
+  CARD_GLOW_MS,
   composeFrame,
   TuiApp,
   type AppView,
@@ -1136,25 +1138,105 @@ function mouseOn(): string {
   return mouseEnabled() ? MOUSE_ON : "";
 }
 
+/** Mouse off, plain colors, plain paste, cursor shown, main screen. */
+const TERMINAL_RESTORE = `${MOUSE_OFF}${ESC}0m${ESC}?2004l${ESC}?25h${ESC}?1049l`;
+
+/** `dawg: <stack>` for a crash printed after leaving the alternate screen. */
+function crashText(error: unknown): string {
+  const text =
+    error instanceof Error ? (error.stack ?? error.message) : String(error);
+  return `dawg: ${text}\n`;
+}
+
 async function runInteractive(): Promise<void> {
-  // A crash or a stray process.exit must not leave the terminal reporting
-  // mouse events into the shell.
-  process.once("exit", () => {
-    if (mouseEnabled()) writeSync(1, MOUSE_OFF);
-  });
-  // Nor may a kill or a closed terminal: restore it, then exit as killed.
+  // Every way out (quit, a failing teardown step, a crash, a kill, a stray
+  // process.exit) restores the whole terminal, once, synchronously: the
+  // shell must not stay on the alternate screen with paste brackets on.
+  let terminalRestored = false;
+  const restoreTerminal = () => {
+    if (terminalRestored) return;
+    terminalRestored = true;
+    try {
+      stdin.setRawMode?.(false);
+    } catch {
+      // stdin may already be closed.
+    }
+    try {
+      writeSync(1, TERMINAL_RESTORE);
+    } catch {
+      // The terminal may already be gone (SIGHUP).
+    }
+  };
+  process.once("exit", restoreTerminal);
+  // A kill or a closed terminal: restore it, then exit as killed.
   for (const [signal, code] of [
     ["SIGTERM", 143],
     ["SIGHUP", 129],
   ] as const)
     process.once(signal, () => {
-      try {
-        writeSync(1, `${MOUSE_OFF}${ESC}0m${ESC}?2004l${ESC}?25h${ESC}?1049l`);
-      } catch {
-        // The terminal may already be gone (SIGHUP).
-      }
+      restoreTerminal();
       process.exit(code);
     });
+  // An exception nothing caught leaves the editor in an unknown state: leave
+  // the alternate screen first, so the stack lands in the shell, then exit.
+  const onUncaught = (error: unknown) => {
+    restoreTerminal();
+    try {
+      writeSync(2, crashText(error));
+    } catch {
+      // Nowhere left to report it.
+    }
+    process.exit(1);
+  };
+  // A rejected fire-and-forget promise is one failed action, not a broken
+  // editor: report it on the activity strip and repaint over anything the
+  // runtime wrote.
+  const onRejection = (error: unknown) => {
+    if (terminalRestored || screenSuspended) {
+      try {
+        writeSync(2, crashText(error));
+      } catch {
+        // Nowhere left to report it.
+      }
+      return;
+    }
+    tui.activity.pushError(
+      `failed · ${error instanceof Error ? error.message : String(error)}`,
+    );
+    tui.invalidate();
+    requestFrame();
+  };
+  // Runtime warnings and console output would land on top of the frame; the
+  // writer never repaints rows it did not change.  Route them to the
+  // transcript instead, and repaint.
+  const onWarning = (warning: Error) => {
+    if (screenSuspended || terminalRestored) return;
+    tui.activity.pushNote(`warning · ${warning.message}`, "error");
+    tui.invalidate();
+    requestFrame();
+  };
+  const consoleError = console.error;
+  const consoleWarn = console.warn;
+  const consoleToTranscript =
+    (original: (...data: unknown[]) => void) =>
+    (...data: unknown[]) => {
+      if (screenSuspended || terminalRestored) return original(...data);
+      tui.activity.pushNote(
+        data
+          .map((item) =>
+            item instanceof Error ? item.message : String(item),
+          )
+          .join(" "),
+        "error",
+      );
+      tui.invalidate();
+      requestFrame();
+    };
+  process.on("uncaughtException", onUncaught);
+  process.on("unhandledRejection", onRejection);
+  process.on("warning", onWarning);
+  console.error = consoleToTranscript(consoleError);
+  console.warn = consoleToTranscript(consoleWarn);
   stdin.setRawMode?.(true);
   stdin.resume();
   // Alternate screen, hidden cursor, bracketed paste.
@@ -1209,15 +1291,53 @@ async function runInteractive(): Promise<void> {
       tui.activity.setQueueDepth(queuedPrompts.length);
     }
   };
+  // Builds a frame only when something can have changed (tui/frame-gate.ts):
+  // an idle editor no longer rebuilds the whole view 30 times a second.
+  const frameGate = new FrameGate();
+  const unwatchActivity = tui.activity.subscribe(() => frameGate.markDirty());
+  const animating = (): boolean => {
+    if (clock.playing || play?.on || auditionLoop?.looping) return true;
+    const activity = tui.activity;
+    if (activity.spinner || activity.streaming) return true;
+    const latest = activity.latest;
+    return (
+      !tui.ui.reducedMotion &&
+      latest !== undefined &&
+      Date.now() - latest.atMs < CARD_GLOW_MS
+    );
+  };
   const tick = (force = false) => {
     if (screenSuspended) return;
+    if (
+      !frameGate.shouldBuild({
+        nowMs: Date.now(),
+        force,
+        animating: animating(),
+        keys: [
+          score,
+          record.revision,
+          record.sessionId,
+          record.meta.name,
+          syncState,
+          windowCount,
+          typesIndicator,
+          menu.open,
+          euclid.open,
+          tui.ui.overlay,
+        ],
+      })
+    )
+      return;
     followCommitted();
     play?.tick();
     // Values in the menu follow the score as edits land.
     if (menu.open) refreshMenu();
     if (euclid.open) refreshEuclid();
     refreshAuditionPicker();
-    tui.render(appView(score, clock.beatAt()), { force });
+    // The gate already paces frames; the app's own throttle would drop an
+    // approved frame that lands just after a forced one, and the gate would
+    // not ask again until the heartbeat.
+    tui.render(appView(score, clock.beatAt()), { force: true });
   };
   requestFrame = () => tick(true);
   runPromptLater = (command) => {
@@ -1584,12 +1704,7 @@ async function runInteractive(): Promise<void> {
           // Never await a daemon round trip here: the key loop must stay
           // live for Esc, quit and redraws while the toggle is in flight.
           void toggleTransport()
-            .catch((error: unknown) => {
-              tui.activity.pushCard(
-                `transport failed · ${error instanceof Error ? error.message : String(error)}`,
-                { tone: "error" },
-              );
-            })
+            .catch((error: unknown) => transportFailed(error))
             .finally(() => tick(true));
         } else {
           const input = tui.input(value);
@@ -1700,17 +1815,36 @@ async function runInteractive(): Promise<void> {
     stdin.off("end", onEnd);
     clearInterval(timer);
     clearInterval(presenceTimer);
-    await projectSync?.stop();
-    namer.dispose();
     stdout.off("resize", onResize);
-    unsubscribe();
-    await play?.exit().catch(() => undefined);
-    await monitorEngine?.dispose().catch(() => undefined);
-    audio.stop();
-    await port.close();
-    stdin.setRawMode?.(false);
+    // The terminal first: a teardown step that throws (a read-only .dawg,
+    // a dead engine) must not leave the shell on the alternate screen.
+    restoreTerminal();
     stdin.pause();
-    stdout.write(`${MOUSE_OFF}${ESC}0m${ESC}?2004l${ESC}?25h${ESC}?1049l`);
+    console.error = consoleError;
+    console.warn = consoleWarn;
+    process.off("warning", onWarning);
+    unwatchActivity();
+    // Each step on its own: one failure does not skip the rest.
+    const failures: unknown[] = [];
+    const steps: Array<() => unknown> = [
+      () => projectSync?.stop(),
+      () => namer.dispose(),
+      () => unsubscribe(),
+      () => play?.exit(),
+      () => monitorEngine?.dispose(),
+      () => audio.stop(),
+      () => port.close(),
+    ];
+    for (const step of steps) {
+      try {
+        await step();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    process.off("unhandledRejection", onRejection);
+    process.off("uncaughtException", onUncaught);
+    if (failures.length > 0) throw failures[0];
   }
 }
 
@@ -1728,9 +1862,12 @@ async function submit(prompt: string): Promise<string | Receipt> {
   const helpCommand = command.match(/^\/?(?:help|\?)(?:\s+(\S+))?$/i);
   if (helpCommand) {
     const topic = helpCommand[1];
+    // The panel's inner width (tui/app.ts paintText): rows clip there with
+    // an ellipsis, the same as every other panel.
+    const columns = stdout.columns ?? 80;
     const lines = helpTopicLines(
       topic,
-      Math.max(40, (stdout.columns ?? 80) - 10),
+      Math.max(10, columns - (columns >= 60 ? 8 : 4)),
     );
     if (!lines)
       return fail(
@@ -4074,7 +4211,9 @@ function mouseInput(event: MouseEvent): string[] {
     }
     case "transport":
       if (tui.ui.overlay) return [];
-      void toggleTransport().finally(() => requestFrame());
+      void toggleTransport()
+        .catch((error: unknown) => transportFailed(error))
+        .finally(() => requestFrame());
       return [];
     case "tracks":
       if (tui.ui.overlay) return [];
@@ -4141,9 +4280,7 @@ function playKey(value: string): boolean {
     else if (result.command === "transport") {
       if (!session.startWithCountIn())
         void toggleTransport().catch((error: unknown) =>
-          tui.activity.pushError(
-            `transport failed · ${error instanceof Error ? error.message : String(error)}`,
-          ),
+          transportFailed(error),
         );
     } else if (result.command === "menu") return false;
     return true;
@@ -4332,6 +4469,14 @@ async function stepHistory(direction: "undo" | "redo"): Promise<Receipt> {
 }
 
 /** The space-bar toggle: flip the transport, then record it for other windows. */
+/** Space, the menu and a header click all report a failed toggle the same way. */
+function transportFailed(error: unknown): void {
+  tui.activity.pushCard(
+    `transport failed · ${error instanceof Error ? error.message : String(error)}`,
+    { tone: "error" },
+  );
+}
+
 async function toggleTransport(): Promise<void> {
   await setTransport("toggle");
   try {

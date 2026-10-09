@@ -256,8 +256,9 @@ export const KEYS = {
   text: [
     {
       title: "panel",
+      // No j k: the prompt stays live under a panel, so letters type there.
       rows: [
-        ["↑ ↓  j k", "scroll"],
+        ["↑ ↓", "scroll"],
         ["pgup pgdn home end", "page"],
         ["esc", "close"],
       ],
