@@ -35,7 +35,9 @@ describe("Mix › position and remove track", () => {
     expect(position.value).toBe("2 of 2");
     expect(position.command("1")).toBe("/track move pad 1");
     expect(position.command("top")).toBeUndefined();
-    expect(remove?.kind === "action" && remove.command).toBe("/track remove pad");
+    expect(remove?.kind === "action" && remove.command).toBe(
+      "/track remove pad",
+    );
   });
 
   test("a lone track has neither row", () => {
