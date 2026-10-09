@@ -274,9 +274,8 @@ describe("aliases parse like their canonical form", () => {
   });
 
   test("grammar.ts aliases, once it exists, parse like their canonical form", async () => {
-    const grammar = (await import("../src/commands/grammar.ts").catch(
-      () => undefined,
-    )) as
+    const grammarPath = "../src/commands/grammar.ts";
+    const grammar = (await import(grammarPath).catch(() => undefined)) as
       | {
           canonicalize?: (
             line: string,
