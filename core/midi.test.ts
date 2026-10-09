@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { midiTempoEvents, scoreToMidi } from "./midi.ts";
+import { midiTempoEvents, mtsKeys, scoreToMidi } from "./midi.ts";
+import { resolveTuning } from "./tuning.ts";
 import { createScore } from "./score.ts";
 import { secondsAtTick } from "./tempo.ts";
 
@@ -245,5 +246,53 @@ describe("MIDI export of performance", () => {
     const first = track.findIndex((e) => (e.status & 0xf0) === 0xb0);
     const on = track.findIndex((e) => (e.status & 0xf0) === 0x90);
     expect(first).toBeLessThan(on);
+  });
+});
+
+describe("MIDI export of tuning and sections", () => {
+  const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString("hex");
+
+  test("a 12-TET score without sections gains no events", () => {
+    const score = createScore({
+      tracks: [{ id: "a", name: "a", instrument: "sine" }],
+    });
+    expect(hex(scoreToMidi(score))).not.toContain("f07f7f0802");
+    expect(hex(scoreToMidi(score))).not.toContain("ff06");
+  });
+
+  test("a tuned track carries MTS key frequencies and selects them", () => {
+    const score = createScore({
+      tuning: { name: "pelog", root: 60 },
+      tracks: [{ id: "a", name: "polos", instrument: "sine" }],
+    });
+    const table = resolveTuning(score.tuning, undefined, score.key)!;
+    const keys = mtsKeys(table);
+    // Each key decodes back to its frequency within a hundredth of a cent.
+    for (const key of [60, 61, 62, 63, 64]) {
+      const [semi, msb, lsb] = keys[key]!;
+      const value = semi! + ((msb! << 7) | lsb!) / 16384;
+      const hz = 440 * 2 ** ((value - 69) / 12);
+      expect(Math.abs(1200 * Math.log2(hz / table.hz[key]!))).toBeLessThan(
+        0.01,
+      );
+    }
+    const file = hex(scoreToMidi(score));
+    expect(file).toContain("f08207" + "7f7f080200" + "40");
+    // RPN 3 (tuning program select) = program 0 on channel 0.
+    expect(file).toContain("b0650000b0640300b0060000b0657f");
+  });
+
+  test("sections are written as marker events", () => {
+    const score = createScore({
+      bars: 4,
+      sections: [
+        { name: "intro", startBar: 0, bars: 2 },
+        { name: "drop", startBar: 2, bars: 2 },
+      ],
+      tracks: [{ id: "a", name: "a", instrument: "sine" }],
+    });
+    const file = hex(scoreToMidi(score));
+    expect(file).toContain("ff0605" + Buffer.from("intro").toString("hex"));
+    expect(file).toContain("ff0604" + Buffer.from("drop").toString("hex"));
   });
 });

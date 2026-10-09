@@ -15,8 +15,16 @@
  * lengths and velocities, humanize, the velocity curve and mono/legato
  * voicing. The sustain pedal is written as CC64 (127 down, 64 half, 0 up)
  * while each note keeps its key length, as a real pedal recording does.
- * Pitch expression (glide, bend, per-note vibrato) is not exported: SMF
- * pitch bend is per channel, so those notes play at their written pitch.
+ * Pitch expression (glide, bend, per-note vibrato) and per-note cents are
+ * not exported: SMF pitch bend is per channel, so those notes play at their
+ * written pitch.
+ *
+ * Tuning (core/tuning.ts) is written with the MIDI Tuning Standard: each
+ * tuned track gets a real-time single-note tuning change SysEx (F0 7F 7F
+ * 08 02) carrying every key's frequency as a tuning program, selected on
+ * its channel with RPN 3 (tuning program select). Synths that honour MTS
+ * play the tuning; others play 12-TET keys. Section starts are FF 06
+ * marker events on the conductor track.
  *
  * Pure and dependency-free apart from the score modules.
  */
@@ -27,6 +35,7 @@ import {
   type PedalState,
 } from "./expression.ts";
 import {
+  barStartTick,
   clickTicksOf,
   fermataSpan,
   loopTicksOf,
@@ -36,6 +45,7 @@ import {
   type TimeScore,
 } from "./tempo.ts";
 import type { TrackScore } from "./score.ts";
+import { resolveTuning, type TuningTable } from "./tuning.ts";
 
 export type MidiOptions = Readonly<{
   /** Ticks per tempo step inside a ramp; default a sixteenth note. */
@@ -141,6 +151,58 @@ function log2(value: number): number {
   return Math.round(Math.log2(value));
 }
 
+/** MTS frequency words (semitone, 14-bit fraction) for keys 0..127. */
+export function mtsKeys(table: TuningTable): readonly number[][] {
+  const out: number[][] = [];
+  for (let key = 0; key < 128; key++) {
+    const hz = table.hz[key] ?? 0;
+    if (!(hz > 0)) {
+      out.push([0x7f, 0x7f, 0x7f]);
+      continue;
+    }
+    const value = 69 + 12 * Math.log2(hz / 440);
+    let semitone = Math.floor(value);
+    let fraction = Math.round((value - semitone) * 16384);
+    if (fraction >= 16384) {
+      semitone += 1;
+      fraction = 0;
+    }
+    if (semitone < 0) out.push([0, 0, 0]);
+    else if (semitone > 127 || (semitone === 127 && fraction > 16382))
+      out.push([0x7f, 0x7f, 0x7e]);
+    else out.push([semitone, (fraction >> 7) & 0x7f, fraction & 0x7f]);
+  }
+  return out;
+}
+
+/** The SysEx and RPN events that tune a channel at tick 0. */
+function tuningEvents(
+  keys: readonly number[][],
+  program: number,
+  channel: number,
+): TimedEvent[] {
+  const events: TimedEvent[] = [];
+  for (let first = 0; first < 128; first += 64) {
+    const data = [0x7f, 0x7f, 0x08, 0x02, program, 64];
+    for (let key = first; key < first + 64; key++)
+      data.push(key, ...keys[key]!);
+    data.push(0xf7);
+    events.push({
+      tick: 0,
+      order: -2,
+      bytes: [0xf0, ...varLen(data.length), ...data],
+    });
+  }
+  const cc = 0xb0 | channel;
+  events.push({
+    tick: 0,
+    order: -1,
+    bytes: [cc, 101, 0, 0, cc, 100, 3, 0, cc, 6, program, 0, cc, 101, 127],
+  });
+  events.push({ tick: 0, order: -1, bytes: [cc, 100, 127] });
+  return events;
+}
+
 /** Encode a score as a format-1 Standard MIDI File. */
 export function scoreToMidi(
   score: TrackScore,
@@ -180,7 +242,18 @@ export function scoreToMidi(
       bytes: [0xff, 0x51, 3, (us >>> 16) & 0xff, (us >>> 8) & 0xff, us & 0xff],
     });
   }
+  for (const section of score.sections ?? []) {
+    const tick = barStartTick(score, section.startBar);
+    if (tick >= end) continue;
+    const text = [...new TextEncoder().encode(section.name)].slice(0, 127);
+    conductor.push({
+      tick: at(tick),
+      order: 2,
+      bytes: [0xff, 0x06, ...varLen(text.length), ...text],
+    });
+  }
   const chunks: number[][] = [trackChunk(conductor, "dawg", at(end))];
+  const programs = new Map<string, number>();
   const placed = performedNotes(score);
   const timing = performanceTimingFor(score);
   let melodic = 0;
@@ -201,6 +274,21 @@ export function scoreToMidi(
       placed.filter((note) => note.trackId === track.id),
       timing,
     );
+    const table =
+      score.tuning || track.tuning
+        ? resolveTuning(score.tuning, track.tuning, score.key)
+        : undefined;
+    if (table && !drum) {
+      const keys = mtsKeys(table);
+      let program = programs.get(keys.join(","));
+      if (program === undefined && programs.size < 128) {
+        program = programs.size;
+        programs.set(keys.join(","), program);
+      }
+      if (program !== undefined) {
+        events.push(...tuningEvents(keys, program, channel));
+      }
+    }
     for (const event of track.pedal ?? []) {
       if (event.tick > end) continue;
       events.push({
