@@ -194,6 +194,8 @@ export type AgentTurnOptions = Readonly<{
   /** An alias (`opus-5.5`) or an exact `vendor/model` ID. */
   model: GatewayModel | string;
   client: GatewayClient;
+  /** A model ID to try once when `model` fails before its first byte. */
+  fallbackModel?: string;
   host: AgentHost;
   onEvent?: (event: AgentEvent) => void;
   signal?: AbortSignal;
@@ -379,6 +381,9 @@ export async function runAgentTurn(
           messages: request,
           tools: chatToolList,
           maxResponseBytes: remaining,
+          ...(options.fallbackModel
+            ? { fallbackModelId: options.fallbackModel }
+            : {}),
         },
         signal,
       )) {

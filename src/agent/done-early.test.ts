@@ -93,7 +93,10 @@ describe("Done: ends a turn without the summary round trip", () => {
         ...toolCallChunks(1, "c2", "set_tempo", { bpm: -5 }),
         finishChunk("tool_calls"),
       ],
-      [textChunk("Tempo is 96; the second call was invalid."), finishChunk("stop")],
+      [
+        textChunk("Tempo is 96; the second call was invalid."),
+        finishChunk("stop"),
+      ],
     ]);
     const result = await turn;
     expect(result).toMatchObject({ type: "done", rejected: 1, applied: 1 });

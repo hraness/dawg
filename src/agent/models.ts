@@ -27,6 +27,11 @@ export type CatalogEntry = Readonly<{
   class: ModelClass;
   gateway?: string;
   openrouter?: string;
+  /**
+   * Alias of a model on another vendor to try once when this one fails
+   * before its first byte (repeated 5xx, header timeout, stalled stream).
+   */
+  fallback?: string;
 }>;
 
 /**
@@ -70,6 +75,14 @@ export const MODEL_CATALOG: readonly CatalogEntry[] = Object.freeze([
     class: "fast",
     gateway: "anthropic/claude-sonnet-5.5",
     openrouter: "anthropic/claude-sonnet-5.5",
+  },
+  {
+    alias: "haiku-5.5",
+    label: "Claude Haiku 5.5",
+    class: "fast",
+    gateway: "anthropic/claude-haiku-5.5",
+    openrouter: "anthropic/claude-haiku-5.5",
+    fallback: "glm-5.3-flash",
   },
   {
     alias: "haiku-4.5",
@@ -121,6 +134,13 @@ export const MODEL_CATALOG: readonly CatalogEntry[] = Object.freeze([
     openrouter: "z-ai/glm-5.3",
   },
   {
+    alias: "glm-5.3-flash",
+    label: "GLM-5.3 Flash",
+    class: "fast",
+    gateway: "zai/glm-5.3-flash",
+    openrouter: "z-ai/glm-5.3-flash",
+  },
+  {
     alias: "llama-4-maverick",
     label: "Llama 4 Maverick",
     class: "open",
@@ -135,13 +155,36 @@ export function defaultModelId(provider: ApiProvider): string {
     : DEFAULT_MODEL_IDS["opus-5.5"];
 }
 
-/** An alias, a catalog label, or an exact `vendor/model` ID → the provider's ID. */
+/**
+ * `/model fast` picks this alias: the fastest model measured by
+ * bench/agent-eval that passes the non-style tasks about as well as the
+ * default (see docs/model-eval.md).
+ */
+export const FAST_MODEL_ALIAS = "haiku-5.5";
+
+/** The provider ID to fall back to for `id`, if its catalog row names one. */
+export function fallbackModelId(
+  provider: ApiProvider,
+  id: string,
+): string | undefined {
+  const row = MODEL_CATALOG.find((entry) => entry[provider] === id);
+  if (!row?.fallback) return undefined;
+  return MODEL_CATALOG.find((entry) => entry.alias === row.fallback)?.[
+    provider
+  ];
+}
+
+/**
+ * An alias (`fast` included), a catalog label, or an exact `vendor/model` ID
+ * → the provider's ID.
+ */
 export function resolveModelChoice(
   provider: ApiProvider,
   input: string,
 ): string | undefined {
   const value = input.trim();
   const lower = value.toLowerCase();
+  if (lower === "fast") return resolveModelChoice(provider, FAST_MODEL_ALIAS);
   const entry = MODEL_CATALOG.find(
     (row) => row.alias === lower || row.label.toLowerCase() === lower,
   );

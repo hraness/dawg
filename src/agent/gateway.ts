@@ -85,6 +85,11 @@ export type ChatStreamRequest = {
   modelId?: string;
   maxTokens?: number;
   maxResponseBytes: number;
+  /**
+   * A model ID to try once when every attempt on the main model failed
+   * before producing a byte (a 5xx, a header timeout, a stalled stream).
+   */
+  fallbackModelId?: string;
 };
 
 /** Normalized stream events; provider chunk shapes never leave this module. */
@@ -145,6 +150,12 @@ export const GATEWAY_RETRIES = 2;
 const RETRY_BASE_MS = 500;
 /** Response headers must arrive within this long, per attempt. */
 export const GATEWAY_HEADER_TIMEOUT_MS = 15_000;
+/**
+ * After headers, the first stream event must arrive within this long, per
+ * attempt. A provider that accepts the request and then sends nothing is
+ * retried like a header timeout: no byte has reached the caller yet.
+ */
+export const GATEWAY_FIRST_BYTE_TIMEOUT_MS = 20_000;
 
 export type GatewayRetryOptions = Readonly<{
   retries?: number;
@@ -174,6 +185,7 @@ export type ApiClientOptions = {
   fetcher?: GatewayFetcher;
   retry?: GatewayRetryOptions;
   headerTimeoutMs?: number;
+  firstByteTimeoutMs?: number;
 };
 
 /** The streaming tool-calling client for OpenRouter's OpenAI-compatible API. */
@@ -212,6 +224,8 @@ function createApiClient(
   const sleep = options.retry?.sleep ?? ((ms: number) => Bun.sleep(ms));
   const random = options.retry?.random ?? Math.random;
   const headerTimeoutMs = options.headerTimeoutMs ?? GATEWAY_HEADER_TIMEOUT_MS;
+  const firstByteTimeoutMs =
+    options.firstByteTimeoutMs ?? GATEWAY_FIRST_BYTE_TIMEOUT_MS;
   const overrides: Partial<Record<GatewayModel, string | undefined>> = {
     "opus-5.5": process.env.DAWG_OPUS_MODEL || undefined,
     "sol-6.1": process.env.DAWG_SOL_MODEL || undefined,
@@ -224,45 +238,58 @@ function createApiClient(
     provider,
     modelId: (model) => resolveModelId(model, overrides, provider),
     async *stream(request, signal) {
-      const model =
+      const primary =
         request.modelId !== undefined
           ? checkedModelId(request.modelId, provider)
           : resolveModelId(request.model, overrides, provider);
+      const fallback =
+        request.fallbackModelId !== undefined &&
+        request.fallbackModelId !== primary
+          ? checkedModelId(request.fallbackModelId, provider)
+          : undefined;
       if (!apiKey)
         throw new GatewayError(
           provider === "openrouter"
             ? "no OpenRouter key; run `dawg login openrouter` or set OPENROUTER_API_KEY"
             : "no AI Gateway key; run `dawg login` or set AI_GATEWAY_API_KEY",
         );
-      const body: Record<string, unknown> = {
-        model,
-        messages: withPromptCache(provider, model, request.messages),
-        stream: true,
-        // The final chunk then carries token usage (and OpenRouter's cost).
-        stream_options: { include_usage: true },
+      const encodeFor = (model: string): string => {
+        const body: Record<string, unknown> = {
+          model,
+          messages: withPromptCache(provider, model, request.messages),
+          stream: true,
+          // The final chunk then carries token usage (and OpenRouter's cost).
+          stream_options: { include_usage: true },
+        };
+        if (provider === "openrouter") body.usage = { include: true };
+        // The Gateway adds Anthropic cache breakpoints itself when asked; it
+        // documents the option as a no-op for implicitly caching providers.
+        else body.providerOptions = { gateway: { caching: "auto" } };
+        if (request.tools && request.tools.length > 0) {
+          body.tools = request.tools;
+          body.tool_choice = "auto";
+        }
+        if (request.temperature !== undefined)
+          body.temperature = request.temperature;
+        if (
+          request.maxTokens !== undefined &&
+          Number.isInteger(request.maxTokens) &&
+          request.maxTokens > 0
+        )
+          body.max_tokens = Math.min(request.maxTokens, 4096);
+        return JSON.stringify(body);
       };
-      if (provider === "openrouter") body.usage = { include: true };
-      // The Gateway adds Anthropic cache breakpoints itself when asked; it
-      // documents the option as a no-op for implicitly caching providers.
-      else body.providerOptions = { gateway: { caching: "auto" } };
-      if (request.tools && request.tools.length > 0) {
-        body.tools = request.tools;
-        body.tool_choice = "auto";
-      }
-      if (request.temperature !== undefined)
-        body.temperature = request.temperature;
-      if (
-        request.maxTokens !== undefined &&
-        Number.isInteger(request.maxTokens) &&
-        request.maxTokens > 0
-      )
-        body.max_tokens = Math.min(request.maxTokens, 4096);
-      const encoded = JSON.stringify(body);
+      let model = primary;
+      let encoded = encodeFor(model);
       // Retry only before any byte of a response has been consumed: a
       // network failure, a header-phase timeout, or 408/429/5xx. Once the
       // stream is flowing, a failure surfaces as-is (replaying could repeat
       // tool calls the model already made).
-      let response: Response | undefined;
+      let events: AsyncIterator<string> | undefined;
+      let first: IteratorResult<string> | undefined;
+      const streamOptions: { maxBytes: number; signal?: AbortSignal } = {
+        maxBytes: request.maxResponseBytes,
+      };
       for (let attempt = 0; ; attempt += 1) {
         if (signal?.aborted) throw abortError(signal);
         // The header budget bounds only the wait for response headers. A
@@ -305,40 +332,118 @@ function createApiClient(
             clearTimeout(headerTimer);
           }
           if (candidate.ok) {
-            response = candidate;
-            break;
+            if (!candidate.body)
+              throw new GatewayError(`${name} returned an empty stream`);
+            // Wait for the first event under its own budget; the stall
+            // signal is never fired once it has arrived.
+            const stall = new AbortController();
+            const stallTimer = setTimeout(
+              () =>
+                stall.abort(
+                  new DOMException(
+                    `${name} sent nothing within ${firstByteTimeoutMs} ms`,
+                    "TimeoutError",
+                  ),
+                ),
+              firstByteTimeoutMs,
+            );
+            streamOptions.signal =
+              signal === undefined
+                ? stall.signal
+                : AbortSignal.any([signal, stall.signal]);
+            // Any byte, a keep-alive comment included, proves the provider
+            // is alive and disarms the stall timer.
+            const watched = candidate.body.pipeThrough(
+              new TransformStream<Uint8Array, Uint8Array>({
+                transform(chunk, controller) {
+                  clearTimeout(stallTimer);
+                  controller.enqueue(chunk);
+                },
+              }),
+            );
+            const iterator = readSseData(watched, streamOptions)[
+              Symbol.asyncIterator
+            ]();
+            try {
+              first = await iterator.next();
+              events = iterator;
+              break;
+            } catch (error) {
+              if (!stall.signal.aborted || signal?.aborted) throw error;
+              await iterator.return?.(undefined).catch(() => undefined);
+              if (attempt >= retries) {
+                if (fallback !== undefined && model !== fallback) {
+                  model = fallback;
+                  encoded = encodeFor(model);
+                  attempt = -1;
+                  yield {
+                    type: "activity",
+                    message: `falling back to ${model} (stalled)…`,
+                  };
+                  continue;
+                }
+                throw new GatewayError(
+                  `${name} sent nothing within ${firstByteTimeoutMs} ms`,
+                );
+              }
+              reason = "stalled";
+            } finally {
+              clearTimeout(stallTimer);
+            }
+            yield { type: "activity", message: `retrying (${reason})…` };
+            await sleep(
+              Math.round(retryBaseMs * 2 ** attempt * (0.5 + random())),
+            );
+            continue;
           }
           const detail = redact(await boundedErrorDetail(candidate));
           const error = new GatewayError(
             `${name} request failed (${candidate.status})${detail ? `: ${detail}` : ""}`,
             candidate.status,
           );
-          if (!retryableStatus(candidate.status) || attempt >= retries)
-            throw error;
+          if (!retryableStatus(candidate.status)) throw error;
+          if (attempt >= retries) {
+            if (fallback === undefined || model === fallback) throw error;
+            reason = String(candidate.status);
+            model = fallback;
+            encoded = encodeFor(model);
+            attempt = -1;
+            yield {
+              type: "activity",
+              message: `falling back to ${model} (${reason})…`,
+            };
+            continue;
+          }
           reason = String(candidate.status);
         } catch (error) {
-          if (error instanceof GatewayError) throw error;
+          if (error instanceof GatewayError || error instanceof SseBudgetError)
+            throw error;
           if (signal?.aborted) throw abortError(signal);
-          if (attempt >= retries)
-            throw new GatewayError(
+          if (attempt >= retries) {
+            const failure = new GatewayError(
               headerSignal.aborted
                 ? `${name} did not respond within ${headerTimeoutMs} ms`
                 : `${name} request failed: ${redact(error instanceof Error ? error.message : String(error))}`,
             );
+            if (fallback === undefined || model === fallback) throw failure;
+            model = fallback;
+            encoded = encodeFor(model);
+            attempt = -1;
+            yield {
+              type: "activity",
+              message: `falling back to ${model} (${headerSignal.aborted ? "timeout" : "network"})…`,
+            };
+            continue;
+          }
           reason = headerSignal.aborted ? "timeout" : "network";
         }
         yield { type: "activity", message: `retrying (${reason})…` };
         const backoff = retryBaseMs * 2 ** attempt;
         await sleep(Math.round(backoff * (0.5 + random())));
       }
-      if (!response.body)
-        throw new GatewayError(`${name} returned an empty stream`);
-      const streamOptions: { maxBytes: number; signal?: AbortSignal } = {
-        maxBytes: request.maxResponseBytes,
-      };
-      if (signal !== undefined) streamOptions.signal = signal;
       try {
-        for await (const data of readSseData(response.body, streamOptions)) {
+        for (let next = first; !next.done; next = await events.next()) {
+          const data = next.value;
           let chunk: unknown;
           try {
             chunk = JSON.parse(data);
