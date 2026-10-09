@@ -90,6 +90,9 @@ describe("Track.keys", () => {
       "keys-knock",
       "keys-noise",
       "keys-felt",
+      "keys-tone",
+      "keys-vibe",
+      "keys-trem",
     ]);
     expect(keysParamName("aftersound")).toBe("after");
     expect(keysParamName("vibrato")).toBe("vib");

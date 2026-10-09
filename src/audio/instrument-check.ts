@@ -8,7 +8,7 @@
 
 import { isDrumInstrument } from "../../core/drums.ts";
 import { INSTRUMENT_WORDS, LEGACY_WORDS } from "../../core/instruments.ts";
-import { PIANO_FAMILIES } from "../../core/keys.ts";
+import { KEYS_FAMILIES } from "../../core/keys.ts";
 import { isSamplerInstrument, type Track } from "../../core/score.ts";
 import { engineFor, registeredEngines } from "./instruments.ts";
 import { resolveOscillator } from "./synth/oscillators.ts";
@@ -34,7 +34,7 @@ function knownWords(): readonly string[] {
     ...new Set([
       ...AVAILABLE_INSTRUMENTS,
       ...INSTRUMENT_WORDS.map((row) => row.word),
-      ...PIANO_FAMILIES,
+      ...KEYS_FAMILIES,
       ...registeredEngines(),
       "sampler",
     ]),
@@ -49,9 +49,9 @@ export function playsPlainSine(
   const name = instrument.trim().toLowerCase();
   if (name === "" || name.includes("sine")) return false;
   if (track && engineFor(track)) return false;
-  // Engine ids and piano families name a 0.6 voice even without its field.
+  // Engine ids and keys families name a 0.6 voice even without its field.
   if (registeredEngines().includes(name)) return false;
-  if ((PIANO_FAMILIES as readonly string[]).includes(name)) return false;
+  if ((KEYS_FAMILIES as readonly string[]).includes(name)) return false;
   if (isDrumInstrument(name) || isSamplerInstrument(name)) return false;
   if (name === "wavetable" || resolveOscillator(name)) return false;
   return !LEGACY_TONES.some((tone) => name.includes(tone));
