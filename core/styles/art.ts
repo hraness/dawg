@@ -1528,9 +1528,1003 @@ const BAROQUE_LEAVES: readonly StyleCard[] = Object.freeze([
   }),
 ]);
 
+// ---------------------------------------------------------------------------
+// Romantic. References: Carl Dahlhaus, "Nineteenth-Century Music" (1989);
+// Richard Cohn, "Audacious Euphony" (2012) for chromatic-mediant and
+// hexatonic relations.
+
+const ROMANTIC_LEAVES: readonly StyleCard[] = Object.freeze([
+  card({
+    id: "early-romantic",
+    summary:
+      "classical periods coloured by chromatic mediants (I-bVI), the augmented-sixth approach to V and lyrical second themes over arpeggiated accompaniment",
+    tempo: { bpm: [60, 132], typical: 92 },
+    harmony: {
+      forms: [
+        [["I", "bVI", "iv", "V", "I", "vi", "ii", "V"], 0.5],
+        [["i", "VI", "iv", "V", "i", "III", "iv", "V"], 0.5],
+      ],
+      sources: { forms: 1, chain: 2 },
+      cadences: [
+        ["V-I", 0.7],
+        ["half", 0.3],
+      ],
+    },
+    bass: {
+      behaviour: [
+        ["arpeggio", 0.6],
+        ["root", 0.4],
+      ],
+    },
+    texture: {
+      roles: {
+        chords: role("strings", "piano:0.6"),
+        bass: role("cello", "contrabass:0.5"),
+        lead: role("violin", "clarinet:0.5", "piano:0.5"),
+      },
+    },
+    form: { archetype: "sonata" },
+  }),
+  card({
+    id: "romantic-miniature",
+    summary:
+      "nocturne and character piece: wide left-hand arpeggio spanning a tenth under a bel-canto treble, rubato, ternary ABA with a contrasting middle",
+    meter: {
+      signatures: [
+        ["4/4", 0.4],
+        ["3/4", 0.3],
+        ["6/8", 0.3],
+      ],
+    },
+    tempo: { bpm: [50, 96], typical: 66 },
+    groove: { humanize: { timingMs: 24, velocity: 0.12 } },
+    bass: {
+      behaviour: [["arpeggio", 1]],
+      onsets: grid("x.x.x.x.x.x.x.x."),
+      range: [33, 57],
+    },
+    harmony: {
+      voicing: { types: [["wide", 1]] },
+      rhythm: [
+        [1, 0.6],
+        [0.5, 0.4],
+      ],
+    },
+    melody: {
+      density: [1, 3],
+      contour: [
+        ["arch", 0.7],
+        ["wave", 0.3],
+      ],
+    },
+    texture: {
+      kind: "homophonic",
+      roles: {
+        chords: role("piano", "grand:0.5"),
+        bass: role("piano", "grand:0.5"),
+        lead: role("piano", "grand:0.5"),
+        counter: null,
+      },
+    },
+    form: {
+      plans: [[["verse", "bridge", "verse", "outro"], 1]],
+      archetype: "ternary",
+    },
+  }),
+  card({
+    id: "lied",
+    summary:
+      "art song: voice and piano as equal partners, through-composed or modified strophic, tonicizations and major-minor mixture follow the poem",
+    tempo: { bpm: [52, 112], typical: 72 },
+    harmony: {
+      rhythm: [
+        [1, 0.6],
+        [0.5, 0.4],
+      ],
+    },
+    melody: { ambitus: [8, 14], density: [1, 2.5] },
+    rhythm: { onsets: { chords: grid("x.x.x.x.x.x.x.x.") } },
+    texture: {
+      kind: "homophonic",
+      roles: {
+        chords: role("piano"),
+        bass: role("piano"),
+        lead: role("vocal"),
+        counter: null,
+      },
+    },
+    form: {
+      plans: [[["verse", "verse", "bridge", "verse"], 1]],
+      archetype: "modified strophic",
+    },
+  }),
+  card({
+    id: "bel-canto",
+    summary:
+      "cantabile line over guitar-like um-pa-pa strings, cabaletta doubles the tempo, appoggiaturas and a cadenza on the cadential six-four",
+    meter: {
+      signatures: [
+        ["3/4", 0.5],
+        ["4/4", 0.5],
+      ],
+    },
+    tempo: { bpm: [60, 132], typical: 84 },
+    harmony: {
+      presets: [
+        ["fifties", 0.5],
+        ["turnaround", 0.5],
+      ],
+      sources: { presets: 2, chain: 1 },
+      sevenths: 0.15,
+    },
+    bass: { behaviour: [["root", 1]], onsets: grid("x...x...x...x...") },
+    rhythm: { onsets: { chords: AFTERBEATS } },
+    melody: { ambitus: [10, 16], intervals: intervals(4, 2, 1, 0.4) },
+    texture: {
+      kind: "homophonic",
+      roles: {
+        chords: role("strings", "pizzicato:0.5"),
+        bass: role("cello", "contrabass:0.5"),
+        lead: role("vocal"),
+        counter: maybe("flute", "clarinet:0.5"),
+      },
+    },
+    form: { archetype: "cavatina-cabaletta" },
+  }),
+  card({
+    id: "grand-opera",
+    summary:
+      "massed chorus and brass tableaux, march and ballet numbers, dramatic diminished-seventh tremolo before the cadence",
+    tempo: { bpm: [66, 132], typical: 96 },
+    harmony: {
+      chain: {
+        V: [
+          ["I", 3],
+          ["viio7/V", 0.6],
+        ],
+        "viio7/V": [["V", 3]],
+      },
+      voicing: { notes: [4, 6] },
+    },
+    texture: {
+      roles: {
+        kick: maybe("timpani"),
+        chords: role("strings", "choir:0.6"),
+        pad: role("choir", "frenchhorn:0.5"),
+        bass: role("contrabass", "tuba:0.4"),
+        lead: role("vocal", "trumpet:0.4"),
+      },
+    },
+    expression: { dynamics: [0.3, 1] },
+  }),
+  card({
+    id: "music-drama",
+    summary:
+      "endless melody without full cadences, leitmotif cells transformed, deceptive V-bVI and the half-diminished chord resolving by semitone voice leading",
+    tempo: { bpm: [48, 96], typical: 64 },
+    harmony: {
+      chain: {
+        V: [
+          ["bVI", 2],
+          ["vi", 1.5],
+          ["I", 0.5],
+        ],
+        I: [
+          ["iiø7", 1],
+          ["bVI", 1],
+          ["iv", 1],
+        ],
+        iiø7: [["V7", 3]],
+      },
+      cadences: [
+        ["V-vi", 0.6],
+        ["half", 0.4],
+      ],
+      sevenths: 0.6,
+    },
+    melody: { phraseBars: [[8, 1]], repetition: 0.55, ambitus: [10, 17] },
+    texture: {
+      roles: {
+        chords: role("strings", "horn:0.5"),
+        pad: role("frenchhorn", "strings:0.5"),
+        bass: role("contrabass", "tuba:0.4"),
+        lead: role("vocal", "cello:0.4", "frenchhorn:0.3"),
+      },
+    },
+    form: { archetype: "through-composed" },
+  }),
+  card({
+    id: "verismo",
+    summary:
+      "melodic climax doubled in unison by full strings, sudden dynamic swells, parlando recitative, minor-key tragedy closing on the tonic",
+    tempo: { bpm: [56, 120], typical: 80 },
+    pitch: {
+      scales: [
+        ["minor", 0.6],
+        ["harmonic-minor", 0.2],
+        ["major", 0.2],
+      ],
+    },
+    melody: {
+      ambitus: [12, 17],
+      contour: [
+        ["ascending", 0.4],
+        ["arch", 0.6],
+      ],
+    },
+    texture: {
+      roles: {
+        chords: role("strings"),
+        bass: role("cello", "contrabass:0.5"),
+        lead: role("vocal", "violins:0.5"),
+        counter: maybe("violins"),
+      },
+    },
+    expression: { dynamics: [0.25, 1] },
+  }),
+  card({
+    id: "romantic-symphonic",
+    summary:
+      "four-movement symphony: horn-call themes, cyclic motifs, brass chorales at the climax, timpani on tonic and dominant",
+    tempo: { bpm: [60, 144], typical: 100 },
+    rhythm: { onsets: { kick: grid("x.......x.......") } },
+    texture: {
+      roles: {
+        kick: maybe("timpani"),
+        chords: role("strings"),
+        pad: maybe("frenchhorn", "trombone:0.5"),
+        bass: role("contrabass", "cellos:0.6"),
+        lead: role("violins", "frenchhorn:0.5", "clarinet:0.3"),
+        counter: maybe("cellos", "bassoon:0.4"),
+      },
+    },
+    form: {
+      plans: [
+        [["intro", "verse", "chorus", "bridge", "verse", "chorus", "outro"], 1],
+      ],
+      archetype: "symphonic sonata",
+    },
+  }),
+  card({
+    id: "tone-poem",
+    summary:
+      "programmatic single movement: thematic transformation of one idea, chromatic-mediant shifts between scenes, orchestral colour as narrative",
+    tempo: { bpm: [48, 132], typical: 80 },
+    harmony: {
+      chain: {
+        I: [
+          ["bVI", 1.5],
+          ["III", 1],
+          ["vi", 1],
+          ["IV", 1],
+        ],
+        bVI: [
+          ["I", 1],
+          ["iv", 1],
+          ["V", 1],
+        ],
+        III: [
+          ["vi", 1.5],
+          ["I", 1],
+        ],
+      },
+    },
+    melody: { repetition: 0.75 },
+    texture: {
+      roles: {
+        chords: role("strings"),
+        pad: maybe("frenchhorn", "harp:0.5"),
+        bass: role("contrabass", "cellos:0.5"),
+        lead: role("clarinet", "oboe:0.5", "frenchhorn:0.5", "violins:0.5"),
+      },
+    },
+    form: {
+      plans: [
+        [
+          ["intro", "verse", "build", "chorus", "breakdown", "chorus", "outro"],
+          1,
+        ],
+      ],
+      archetype: "programmatic",
+    },
+  }),
+  card({
+    id: "nationalist-romantic",
+    summary:
+      "folk modes inside the orchestra: dorian and mixolydian tunes, drone fifths, dance rhythms, bVII-I and modal plagal cadences",
+    pitch: {
+      scales: [
+        ["dorian", 0.35],
+        ["mixolydian", 0.25],
+        ["minor", 0.25],
+        ["major", 0.15],
+      ],
+    },
+    harmony: {
+      forms: [
+        [["i", "bVII", "i", "bVII", "i", "iv", "bVII", "i"], 0.5],
+        [["I", "bVII", "IV", "I"], 0.5],
+      ],
+      sources: { forms: 2, chain: 1 },
+      cadences: [
+        ["bVII-I", 0.5],
+        ["V-I", 0.5],
+      ],
+    },
+    bass: {
+      behaviour: [
+        ["root-fifth", 0.5],
+        ["pedal", 0.5],
+      ],
+    },
+    texture: {
+      roles: {
+        chords: role("strings"),
+        bass: role("contrabass", "cellos:0.5"),
+        lead: role("oboe", "clarinet:0.6", "violin:0.6"),
+      },
+    },
+  }),
+  card({
+    id: "late-romantic",
+    summary:
+      "saturated chromaticism: ninth chords, long appoggiaturas, enharmonic pivots, slow-building climaxes for a very large orchestra",
+    tempo: { bpm: [44, 112], typical: 66 },
+    harmony: {
+      sevenths: 0.7,
+      voicing: { notes: [4, 6], range: [38, 84] },
+      chain: {
+        I: [
+          ["bVI", 1.2],
+          ["bIII", 0.8],
+          ["iv", 1],
+          ["vi", 1],
+          ["IV", 1],
+        ],
+        bIII: [
+          ["iv", 1],
+          ["bVI", 1],
+        ],
+      },
+    },
+    melody: { ambitus: [12, 22], intervals: intervals(4, 2, 1.6, 0.3) },
+    texture: {
+      roles: {
+        chords: role("strings"),
+        pad: role("frenchhorn", "choir:0.4"),
+        bass: role("contrabass", "tuba:0.4"),
+        lead: role("violins", "frenchhorn:0.6", "vocal:0.3"),
+      },
+    },
+    expression: { dynamics: [0.15, 1] },
+  }),
+  card({
+    id: "operetta",
+    summary:
+      "light stage music: waltz refrains with oom-pah-pah, can-can galops in 2/4, tuneful major-key couplets, I-V7 oscillation",
+    meter: {
+      signatures: [
+        ["3/4", 0.6],
+        ["2/4", 0.4],
+      ],
+    },
+    tempo: { bpm: [96, 168], typical: 132 },
+    pitch: {
+      scales: [
+        ["major", 0.8],
+        ["minor", 0.2],
+      ],
+    },
+    harmony: {
+      forms: [[["I", "I", "V7", "V7", "V7", "V7", "I", "I"], 1]],
+      sources: { forms: 2, chain: 1 },
+    },
+    bass: { behaviour: [["root", 1]], onsets: WALTZ_BASS },
+    rhythm: { onsets: { chords: WALTZ_CHORDS } },
+    melody: { repetition: 0.75, phraseBars: [[4, 1]] },
+    texture: {
+      roles: {
+        chords: role("strings", "pizzicato:0.5"),
+        bass: role("contrabass", "tuba:0.4"),
+        lead: role("vocal", "violin:0.6", "flute:0.3"),
+      },
+    },
+    form: { archetype: "number opera" },
+  }),
+  card({
+    id: "zarzuela",
+    summary:
+      "Spanish stage music: jota in fast triple time, sesquialtera hemiola, Andalusian cadence i-bVII-bVI-V, guitar strum and castanet figures",
+    meter: {
+      signatures: [
+        ["3/4", 0.6],
+        ["6/8", 0.4],
+      ],
+      grouping: [
+        [[3, 3], 0.5],
+        [[2, 2, 2], 0.5],
+      ],
+    },
+    tempo: { bpm: [100, 176], typical: 138 },
+    groove: { humanize: { timingMs: 6, velocity: 0.08 } },
+    pitch: {
+      scales: [
+        ["minor", 0.5],
+        ["major", 0.3],
+        ["harmonic-minor", 0.2],
+      ],
+    },
+    harmony: {
+      presets: [["andalusian", 1]],
+      sources: { presets: 3, chain: 1 },
+      cadences: [["V-i", 1]],
+    },
+    rhythm: { onsets: { perc: grid("x.xx..x.x.x.") } },
+    texture: {
+      roles: {
+        perc: role("framedrum"),
+        chords: role("nylon", "strings:0.6"),
+        bass: role("contrabass", "cello:0.5"),
+        lead: role("vocal", "violin:0.5", "oboe:0.3"),
+      },
+    },
+  }),
+  card({
+    id: "salon-music",
+    summary:
+      "parlour waltzes, polkas and romances: bright major, decorated melody, secondary dominants, waltz bass on one and chords on two and three",
+    meter: {
+      signatures: [
+        ["3/4", 0.6],
+        ["2/4", 0.4],
+      ],
+    },
+    tempo: { bpm: [84, 160], typical: 120 },
+    pitch: {
+      scales: [
+        ["major", 0.8],
+        ["minor", 0.2],
+      ],
+    },
+    bass: { behaviour: [["root-fifth", 1]], onsets: WALTZ_BASS },
+    rhythm: { onsets: { chords: WALTZ_CHORDS } },
+    expression: { dynamics: [0.3, 0.8] },
+    texture: {
+      roles: {
+        chords: role("piano", "upright:0.5"),
+        bass: role("piano", "upright:0.5"),
+        lead: role("piano", "violin:0.6", "flute:0.4"),
+      },
+    },
+  }),
+]);
+
+// ---------------------------------------------------------------------------
+// Modern and contemporary. References: Robert Morgan, "Twentieth-Century
+// Music" (1991); Joseph Straus, "Introduction to Post-Tonal Theory"
+// (2016); Keith Potter, "Four Musical Minimalists" (2000).
+
+const MODERN_LEAVES: readonly StyleCard[] = Object.freeze([
+  card({
+    id: "impressionism",
+    summary:
+      "planing (parallel ninth chords), whole-tone and pentatonic collections, added-note chords, pedal points and blurred harp and flute colour",
+    meter: {
+      signatures: [
+        ["4/4", 0.5],
+        ["3/4", 0.3],
+        ["6/8", 0.2],
+      ],
+      grouping: null,
+    },
+    tempo: { bpm: [48, 100], typical: 66 },
+    pitch: {
+      scales: [
+        ["messiaen-1", 0.3],
+        ["major-pentatonic", 0.25],
+        ["lydian", 0.25],
+        ["dorian", 0.2],
+      ],
+    },
+    harmony: {
+      voicing: {
+        types: [
+          ["open", 0.6],
+          ["wide", 0.4],
+        ],
+        notes: [4, 5],
+      },
+      rhythm: [
+        [1, 0.5],
+        [0.5, 0.5],
+      ],
+    },
+    melody: { intervals: intervals(3, 2.5, 1, 0.5), chordToneRate: 0.55 },
+    bass: {
+      behaviour: [
+        ["pedal", 0.7],
+        ["root", 0.3],
+      ],
+    },
+    texture: {
+      roles: {
+        chords: role("piano", "harp:0.6", "strings:0.5"),
+        bass: role("piano", "contrabass:0.5"),
+        lead: role("flute", "oboe:0.5", "piano:0.5"),
+        pad: maybe("strings", "celesta:0.4"),
+      },
+    },
+    mix: { space: 0.7 },
+  }),
+  card({
+    id: "expressionism",
+    summary:
+      "free atonality: no tonic, wide leaps of sevenths and ninths, extreme registers and dynamics, short motivic cells with no repetition",
+    tempo: { bpm: [40, 132], typical: 72 },
+    pitch: {
+      scales: [
+        ["messiaen-7", 0.6],
+        ["messiaen-2", 0.4],
+      ],
+    },
+    harmony: {
+      model: "modal",
+      voicing: {
+        types: [
+          ["cluster", 0.5],
+          ["wide", 0.5],
+        ],
+      },
+    },
+    melody: {
+      intervals: ANGULAR,
+      chordToneRate: 0.15,
+      repetition: 0.15,
+      ambitus: [14, 24],
+    },
+    expression: {
+      dynamics: [0.1, 1],
+      articulation: {
+        lead: [
+          ["accent", 0.5],
+          ["staccato", 0.2],
+          ["legato", 0.3],
+        ],
+      },
+    },
+    texture: {
+      roles: {
+        chords: role("strings", "piano:0.6"),
+        bass: role("cello", "bassclarinet:0.5"),
+        lead: role("violin", "clarinet:0.5", "vocal:0.3"),
+      },
+    },
+  }),
+  card({
+    id: "twelve-tone",
+    summary:
+      "the tone row: all twelve pitch classes before any repeats, prime, inversion, retrograde and retrograde inversion forms, no tonal centre",
+    tempo: { bpm: [48, 120], typical: 72 },
+    pitch: {
+      scales: [
+        ["messiaen-7", 0.6],
+        ["messiaen-2", 0.4],
+      ],
+    },
+    harmony: {
+      model: "modal",
+      voicing: {
+        types: [
+          ["wide", 0.6],
+          ["open", 0.4],
+        ],
+      },
+    },
+    melody: { intervals: ANGULAR, chordToneRate: 0.1, repetition: 0.2 },
+    texture: {
+      kind: "polyphonic",
+      roles: {
+        chords: role("strings", "piano:0.5"),
+        bass: role("cello", "piano:0.5"),
+        lead: role("violin", "clarinet:0.5", "piano:0.4"),
+        counter: maybe("viola", "bassoon:0.5"),
+      },
+    },
+    form: { archetype: "serial" },
+  }),
+  card({
+    id: "integral-serialism",
+    summary:
+      "series applied to pitch, duration, dynamics and attack alike; pointillist isolated events spread across registers",
+    tempo: { bpm: [40, 112], typical: 60 },
+    pitch: {
+      scales: [
+        ["messiaen-7", 0.6],
+        ["messiaen-2", 0.4],
+      ],
+    },
+    harmony: { model: "none" },
+    melody: {
+      intervals: ANGULAR,
+      chordToneRate: 0,
+      repetition: 0.05,
+      density: [0.5, 2],
+      ambitus: [18, 30],
+      range: [40, 96],
+    },
+    bass: { behaviour: [["none", 1]] },
+    expression: {
+      dynamics: [0.05, 1],
+      articulation: {
+        lead: [
+          ["staccato", 0.3],
+          ["accent", 0.3],
+          ["tenuto", 0.2],
+          ["marcato", 0.2],
+        ],
+      },
+    },
+    texture: {
+      kind: "polyphonic",
+      roles: {
+        chords: null,
+        bass: null,
+        lead: role("piano", "vibes:0.5"),
+        counter: maybe("flute", "piano:0.5"),
+      },
+    },
+    form: { archetype: "serial" },
+  }),
+  card({
+    id: "neoclassicism",
+    summary:
+      "baroque and classical forms with wrong-note diatonicism, dry motor rhythm, polytonal shading and lean winds",
+    meter: {
+      signatures: [
+        ["4/4", 0.5],
+        ["3/4", 0.2],
+        ["5/4", 0.15],
+        ["7/8", 0.15],
+      ],
+    },
+    tempo: { bpm: [84, 144], typical: 112 },
+    pitch: {
+      scales: [
+        ["major", 0.5],
+        ["mixolydian", 0.25],
+        ["lydian", 0.25],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["turnaround", 0.5],
+        ["canon", 0.5],
+      ],
+      sevenths: 0.3,
+    },
+    melody: { intervals: intervals(3, 2, 1.5, 0.6), chordToneRate: 0.55 },
+    bass: {
+      behaviour: [
+        ["walking", 0.5],
+        ["ostinato", 0.5],
+      ],
+    },
+    expression: {
+      articulation: {
+        lead: [
+          ["staccato", 0.5],
+          ["accent", 0.5],
+        ],
+      },
+    },
+    texture: {
+      roles: {
+        chords: role("strings", "piano:0.5"),
+        bass: role("bassoon", "contrabass:0.6"),
+        lead: role("oboe", "trumpet:0.5", "clarinet:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "primitivism",
+    summary:
+      "ostinato blocks, shifting irregular accents and additive meters, polychords (two triads stacked), percussive tutti stabs",
+    meter: {
+      signatures: [
+        ["7/8", 0.3],
+        ["5/8", 0.2],
+        ["4/4", 0.3],
+        ["3/4", 0.2],
+      ],
+      grouping: [
+        [[2, 2, 3], 0.4],
+        [[3, 2, 2], 0.3],
+        [[2, 3], 0.3],
+      ],
+    },
+    tempo: { bpm: [96, 160], typical: 126 },
+    pitch: {
+      scales: [
+        ["dorian", 0.4],
+        ["messiaen-2", 0.3],
+        ["phrygian", 0.3],
+      ],
+    },
+    harmony: {
+      voicing: {
+        types: [
+          ["cluster", 0.5],
+          ["quartal", 0.5],
+        ],
+      },
+    },
+    bass: { behaviour: [["ostinato", 1]] },
+    rhythm: { onsets: { kick: grid("x..x..x.x..x.x..") } },
+    expression: {
+      dynamics: [0.4, 1],
+      articulation: {
+        chords: [
+          ["marcato", 0.6],
+          ["accent", 0.4],
+        ],
+      },
+    },
+    melody: { repetition: 0.8, intervals: intervals(4, 2, 0.6, 1) },
+    texture: {
+      roles: {
+        kick: role("timpani", "drums:0.4"),
+        chords: role("strings", "horn:0.5"),
+        bass: role("contrabass", "bassoon:0.5"),
+        lead: role("bassoon", "horn:0.5", "oboe:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "futurism",
+    summary:
+      "noise intoners and machine rhythm: mechanical repeated pulses, clusters, ostinato motor patterns, noise as material",
+    tempo: { bpm: [100, 168], typical: 132 },
+    pitch: {
+      scales: [
+        ["messiaen-7", 0.5],
+        ["messiaen-2", 0.5],
+      ],
+    },
+    harmony: { voicing: { types: [["cluster", 1]] } },
+    rhythm: {
+      onsets: {
+        kick: grid("x.x.x.x.x.x.x.x."),
+        snare: grid("..x...x...x...x."),
+      },
+    },
+    bass: { behaviour: [["ostinato", 1]], onsets: grid("x.x.x.x.x.x.x.x.") },
+    melody: {
+      repetition: 0.9,
+      chordToneRate: 0.3,
+      intervals: intervals(3, 1, 1, 2),
+    },
+    texture: {
+      kind: "interlocking",
+      roles: {
+        kick: role("drums"),
+        snare: role("drums"),
+        chords: role("organ", "piano:0.5"),
+        bass: role("bassoon", "contrabass:0.5"),
+        lead: role("trumpet", "granular:0.5"),
+      },
+    },
+    mix: { fx: { lead: { distort: "crunch" } } },
+  }),
+  card({
+    id: "folk-modernism",
+    summary:
+      "village modes made modern: acoustic (lydian-dominant) and dorian scales, Bulgarian additive meters 2+2+3, bitonal folk tune harmonisation",
+    meter: {
+      signatures: [
+        ["7/8", 0.4],
+        ["5/8", 0.2],
+        ["2/4", 0.4],
+      ],
+      grouping: [
+        [[2, 2, 3], 0.5],
+        [[3, 2, 2], 0.2],
+        [[2, 3], 0.3],
+      ],
+    },
+    tempo: { bpm: [92, 168], typical: 132 },
+    pitch: {
+      scales: [
+        ["lydian", 0.35],
+        ["dorian", 0.35],
+        ["mixolydian", 0.3],
+      ],
+    },
+    melody: {
+      repetition: 0.75,
+      chordToneRate: 0.45,
+      intervals: intervals(4, 2, 0.8, 0.8),
+    },
+    bass: {
+      behaviour: [
+        ["ostinato", 0.6],
+        ["pedal", 0.4],
+      ],
+    },
+    texture: {
+      roles: {
+        chords: role("strings", "piano:0.5"),
+        bass: role("cello", "contrabass:0.5"),
+        lead: role("violin", "clarinet:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "soviet-modernism",
+    summary:
+      "sardonic marches and tragic slow movements: octatonic flavour, chromatic lowered degrees, motor ostinato under brass, DSCH-type motto cells",
+    meter: {
+      signatures: [
+        ["4/4", 0.5],
+        ["2/4", 0.3],
+        ["3/4", 0.2],
+      ],
+      grouping: null,
+    },
+    tempo: { bpm: [56, 160], typical: 112 },
+    pitch: {
+      scales: [
+        ["minor", 0.3],
+        ["phrygian", 0.3],
+        ["messiaen-2", 0.2],
+        ["locrian", 0.2],
+      ],
+    },
+    rhythm: { onsets: { snare: grid("x.xxx.x.x.xxx.x.") } },
+    bass: {
+      behaviour: [
+        ["ostinato", 0.6],
+        ["root-fifth", 0.4],
+      ],
+    },
+    texture: {
+      roles: {
+        snare: maybe("drums"),
+        chords: role("strings", "horn:0.5"),
+        bass: role("contrabass", "tuba:0.5"),
+        lead: role("trumpet", "violins:0.5", "clarinet:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "modal-mysticism",
+    summary:
+      "modes of limited transposition (messiaen 2 and 3), non-retrogradable rhythms and added values, birdsong-like lines, static ecstatic chords",
+    meter: {
+      signatures: [
+        ["5/4", 0.3],
+        ["7/8", 0.3],
+        ["4/4", 0.4],
+      ],
+    },
+    tempo: { bpm: [40, 88], typical: 56 },
+    pitch: {
+      scales: [
+        ["messiaen-2", 0.5],
+        ["messiaen-3", 0.3],
+        ["messiaen-7", 0.2],
+      ],
+    },
+    harmony: {
+      rhythm: [
+        [0.5, 0.5],
+        [0.25, 0.5],
+      ],
+      voicing: { notes: [4, 6], types: [["wide", 1]] },
+    },
+    melody: { intervals: intervals(3, 3, 1.2, 0.4), chordToneRate: 0.4 },
+    bass: { behaviour: [["pedal", 1]] },
+    texture: {
+      roles: {
+        chords: role("organ", "piano:0.5"),
+        bass: role("organ"),
+        lead: role("flute", "piano:0.5", "glock:0.3"),
+        pad: maybe("strings", "organ:0.5"),
+      },
+    },
+    mix: { space: 0.8 },
+  }),
+  card({
+    id: "american-modernism",
+    summary:
+      "open fifths and quartal spacing, hymn and folk quotations as types, polytonal collage, syncopated prairie and jazz-tinged rhythm",
+    meter: {
+      signatures: [
+        ["4/4", 0.5],
+        ["3/4", 0.2],
+        ["5/4", 0.15],
+        ["7/8", 0.15],
+      ],
+    },
+    pitch: {
+      scales: [
+        ["mixolydian", 0.3],
+        ["major", 0.3],
+        ["lydian", 0.2],
+        ["major-pentatonic", 0.2],
+      ],
+    },
+    harmony: {
+      voicing: {
+        types: [
+          ["quartal", 0.6],
+          ["open", 0.4],
+        ],
+      },
+      rhythm: [
+        [0.5, 0.6],
+        [1, 0.4],
+      ],
+    },
+    melody: { intervals: intervals(3, 2, 1.6, 0.5), chordToneRate: 0.55 },
+    texture: {
+      roles: {
+        chords: role("strings", "horn:0.4"),
+        bass: role("contrabass", "cello:0.5"),
+        lead: role("trumpet", "clarinet:0.5", "oboe:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "neo-romantic",
+    summary:
+      "return to tonal lyricism after modernism: modal-tinged diatonic harmony, added sixths and ninths, broad string melody, slow harmonic rhythm",
+    meter: {
+      signatures: [
+        ["4/4", 0.6],
+        ["3/4", 0.4],
+      ],
+      grouping: null,
+    },
+    tempo: { bpm: [48, 96], typical: 66 },
+    pitch: {
+      scales: [
+        ["major", 0.4],
+        ["minor", 0.3],
+        ["dorian", 0.3],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["axis", 0.4],
+        ["aeolian", 0.3],
+        ["canon", 0.3],
+      ],
+      sevenths: 0.4,
+      voicing: {
+        types: [
+          ["open", 0.6],
+          ["wide", 0.4],
+        ],
+      },
+    },
+    melody: { intervals: intervals(4, 2.5, 1, 0.4), chordToneRate: 0.65 },
+    texture: {
+      roles: {
+        chords: role("strings"),
+        bass: role("contrabass", "cellos:0.5"),
+        lead: role("violins", "oboe:0.4", "frenchhorn:0.3"),
+      },
+    },
+  }),
+]);
+
 // @@EXPORT
 export const ART_CARDS: readonly StyleCard[] = Object.freeze([
   ...BRANCH_CARDS,
   ...EARLY_LEAVES,
   ...BAROQUE_LEAVES,
+  ...ROMANTIC_LEAVES,
+  ...MODERN_LEAVES,
 ]);
