@@ -4,7 +4,7 @@
  * family lane adds a leaf by appending a card whose id is a taxonomy leaf.
  */
 
-import { grid, intervals, kit, maybe, role } from "./parts.ts";
+import { grid, intervals, kit, kitRoles, maybe, role } from "./parts.ts";
 import { card, type StyleCard } from "./schema.ts";
 
 const CONJUNCT = intervals(5, 2, 0.6, 0.6);
@@ -3507,6 +3507,517 @@ const CHILDRENS_LEAVES: readonly StyleCard[] = Object.freeze([
   }),
 ]);
 
+// ---------------------------------------------------------------------------
+// Experimental. References: Pierre Schaeffer, "Traite des objets musicaux"
+// (1966) for the sound object and reduced listening; Denis Smalley,
+// "Spectromorphology" (Organised Sound 2/2, 1997); Curtis Roads,
+// "Microsound" (2001); Paul Hegarty, "Noise/Music" (2007).
+
+const EXPERIMENTAL_LEAVES: readonly StyleCard[] = Object.freeze([
+  card({
+    id: "musique-concrete",
+    summary:
+      "the sound object: recorded material looped, cut and transposed on tape, reduced listening to timbre, closed grooves instead of themes",
+    tempo: { bpm: [50, 100], typical: 72 },
+    melody: { density: [0.5, 2], repetition: 0.6, chordToneRate: 0.2 },
+    rhythm: { onsets: { perc: grid("x..x....x.x.....") } },
+    texture: {
+      roles: {
+        drone: role("microloop", "granular:0.6"),
+        pad: maybe("grains", "cloud:0.5"),
+        lead: role("prepared", "microloop:0.5", "bell:0.4"),
+        perc: maybe("prepared", "gong:0.5"),
+      },
+    },
+    mix: {
+      fx: { lead: { wobble: "tape" }, drone: { wobble: "seasick" } },
+      space: 0.7,
+    },
+  }),
+  card({
+    id: "elektronische-musik",
+    summary:
+      "the studio as instrument: sine-tone and filtered-noise synthesis, serial ordering of pitch, duration and loudness, pointillist events",
+    tempo: { bpm: [48, 96], typical: 66 },
+    pitch: { scales: [["messiaen-7", 1]] },
+    melody: {
+      intervals: ANGULAR,
+      density: [0.5, 2],
+      repetition: 0.1,
+      ambitus: [18, 30],
+      range: [48, 96],
+    },
+    texture: {
+      roles: {
+        drone: role("triangle", "square:0.4"),
+        pad: null,
+        lead: role("triangle", "bell:0.6", "square:0.4"),
+        counter: maybe("bell", "triangle:0.5"),
+      },
+    },
+    expression: {
+      dynamics: [0.1, 0.9],
+      articulation: {
+        lead: [
+          ["staccato", 0.6],
+          ["tenuto", 0.4],
+        ],
+      },
+    },
+    mix: { fx: { lead: { autofilter: "s&h" } }, space: 0.6 },
+  }),
+  card({
+    id: "electroacoustic",
+    summary:
+      "acousmatic composition: spectromorphology of gesture and texture, an acoustic source spread into granular clouds, onset-sustain-decay shaped by space",
+    tempo: { bpm: [44, 90], typical: 60 },
+    melody: {
+      density: [0.5, 1.5],
+      contour: [
+        ["ascending", 0.3],
+        ["descending", 0.3],
+        ["arch", 0.4],
+      ],
+    },
+    texture: {
+      roles: {
+        drone: role("granular", "cloud:0.6"),
+        pad: role("swarm", "grains:0.6"),
+        lead: role("cello", "clarinet:0.5", "flute:0.4"),
+      },
+    },
+    expression: { dynamics: [0.05, 0.9] },
+    mix: {
+      fx: { lead: { swell: "slow" }, pad: { chorus: "wide" } },
+      space: 0.85,
+    },
+  }),
+  card({
+    id: "sound-collage",
+    summary:
+      "plunderphonics and cut-up: borrowed-sounding tonal fragments spliced against each other, abrupt edits, a lo-fi sampler loop as the glue",
+    tempo: { bpm: [80, 120], typical: 96 },
+    groove: { humanize: { timingMs: 12, velocity: 0.12 } },
+    pitch: {
+      scales: [
+        ["major", 0.5],
+        ["minor", 0.5],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["fifties", 0.4],
+        ["turnaround", 0.3],
+        ["aeolian", 0.3],
+      ],
+      rhythm: [[1, 1]],
+    },
+    melody: { chordToneRate: 0.6, repetition: 0.7, density: [1, 2] },
+    bass: { behaviour: [["root", 1]] },
+    rhythm: {
+      onsets: {
+        kick: grid("x.....x...x....."),
+        snare: grid("....x.......x..."),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("lofi", ["kick", "snare"]),
+        drone: null,
+        chords: role("lofi", "microloop:0.5"),
+        bass: role("upright", "bass:0.5"),
+        lead: role("microloop", "honkytonk:0.5", "vibes:0.4"),
+      },
+    },
+    mix: { fx: { chords: { crush: "lofi" } }, space: 0.4 },
+  }),
+  card({
+    id: "free-improvisation",
+    summary:
+      "non-idiomatic improvisation: no shared meter, key or form, extended techniques, collective listening, density rising and thinning by consensus",
+    tempo: { bpm: [60, 160], typical: 100 },
+    groove: { humanize: { timingMs: 35, velocity: 0.25 } },
+    pitch: {
+      scales: [
+        ["messiaen-7", 0.6],
+        ["blues", 0.4],
+      ],
+    },
+    melody: {
+      intervals: ANGULAR,
+      density: [1, 4],
+      chordToneRate: 0.1,
+      repetition: 0.15,
+      ambitus: [14, 28],
+    },
+    bass: {
+      behaviour: [
+        ["walking", 0.5],
+        ["none", 0.5],
+      ],
+    },
+    texture: {
+      kind: "polyphonic",
+      roles: {
+        drone: null,
+        pad: null,
+        bass: maybe("upright", "doublebass:0.5"),
+        lead: role("sax", "tenorsax:0.5", "trumpet:0.3"),
+        counter: role("prepared", "piano:0.5", "cello:0.4"),
+      },
+    },
+    expression: {
+      dynamics: [0.1, 1],
+      articulation: {
+        lead: [
+          ["accent", 0.4],
+          ["staccato", 0.3],
+          ["legato", 0.3],
+        ],
+      },
+    },
+    mix: { space: 0.4 },
+  }),
+  card({
+    id: "onkyo",
+    summary:
+      "onkyo and lowercase: near-silence, sine tones and small clicks at the threshold of hearing, long rests that are part of the piece",
+    tempo: { bpm: [40, 72], typical: 52 },
+    melody: { density: [0, 0.5], repetition: 0.5, contour: [["flat", 1]] },
+    bass: { behaviour: [["none", 1]] },
+    texture: {
+      roles: {
+        drone: role("triangle", "microloop:0.4"),
+        pad: null,
+        lead: role("triangle", "prepared:0.5", "bell:0.3"),
+      },
+    },
+    expression: { dynamics: [0.03, 0.3] },
+    mix: { space: 0.5, loudness: "ambient" },
+  }),
+  card({
+    id: "drone",
+    summary:
+      "a single sustained sonority held for the whole piece: tonic and fifth pedal, slow beating partials, timbre and loudness as the only motion",
+    tempo: { bpm: [40, 66], typical: 48 },
+    pitch: {
+      scales: [
+        ["mixolydian", 0.4],
+        ["dorian", 0.3],
+        ["phrygian", 0.3],
+      ],
+    },
+    harmony: { model: "drone", rhythm: [[0.25, 1]] },
+    melody: { density: [0, 0.5], contour: [["flat", 1]], chordToneRate: 0.9 },
+    texture: {
+      roles: {
+        drone: role("organ", "tanpura:0.5", "cloud:0.5"),
+        pad: role("strings", "granular:0.6", "ebow:0.4"),
+        lead: maybe("ebow", "cello:0.5"),
+      },
+    },
+    expression: { dynamics: [0.3, 0.8] },
+    mix: { fx: { drone: { bloom: "fifth" } }, space: 0.9, loudness: "ambient" },
+  }),
+  card({
+    id: "harsh-noise",
+    summary:
+      "noise as material: saturated feedback, fold-back distortion and bit destruction, sudden cuts between walls of sound, maximum loudness",
+    tempo: { bpm: [60, 180], typical: 120 },
+    groove: { humanize: { timingMs: 30, velocity: 0.3 } },
+    pitch: {
+      scales: [
+        ["locrian", 0.5],
+        ["messiaen-7", 0.5],
+      ],
+    },
+    melody: { density: [2, 4], intervals: ANGULAR, chordToneRate: 0.1 },
+    texture: {
+      roles: {
+        drone: role("swarm", "saw:0.6"),
+        pad: role("granular", "saw:0.5"),
+        lead: role("saw", "square:0.5"),
+      },
+    },
+    expression: { dynamics: [0.8, 1] },
+    mix: {
+      fx: {
+        drone: { distort: "fold" },
+        lead: { crush: "destroy" },
+        pad: { distort: "fuzz" },
+      },
+      space: 0.2,
+      loudness: "loud",
+    },
+  }),
+  card({
+    id: "harsh-noise-wall",
+    summary:
+      "the static wall: one dense unchanging noise texture for the whole duration, no gesture, no rhythm, no development, detail heard from inside",
+    tempo: { bpm: [40, 80], typical: 60 },
+    groove: { humanize: { timingMs: 8, velocity: 0.03 } },
+    pitch: { scales: [["locrian", 1]] },
+    harmony: { model: "drone", rhythm: [[0.25, 1]] },
+    melody: { density: [0, 0.5], contour: [["flat", 1]] },
+    bass: { behaviour: [["pedal", 1]] },
+    texture: {
+      roles: {
+        drone: role("swarm", "saw:0.5"),
+        pad: role("granular", "swarm:0.5"),
+        bass: role("saw"),
+        lead: role("swarm"),
+      },
+    },
+    expression: { dynamics: [0.9, 1] },
+    form: {
+      plans: [[["intro", "verse", "outro"], 1]],
+      archetype: "static",
+    },
+    mix: {
+      fx: { drone: { distort: "fold" }, pad: { crush: "destroy" } },
+      space: 0.1,
+      loudness: "loud",
+    },
+  }),
+  card({
+    id: "power-electronics",
+    summary:
+      "power electronics: a slow distorted pulse, feedback squeal over a sub-bass pedal, a ranting processed voice, confrontational dynamics",
+    tempo: { bpm: [60, 100], typical: 80 },
+    rhythm: { onsets: { kick: grid("x.......x.......") } },
+    pitch: {
+      scales: [
+        ["phrygian", 0.6],
+        ["locrian", 0.4],
+      ],
+    },
+    melody: { density: [1, 2], repetition: 0.6, intervals: ANGULAR },
+    bass: { behaviour: [["pedal", 1]], range: [28, 40] },
+    texture: {
+      roles: {
+        ...kitRoles("syn909", ["kick"]),
+        drone: role("swarm", "saw:0.6"),
+        bass: role("saw", "square:0.5"),
+        lead: role("vocoder", "vocal:0.5"),
+      },
+    },
+    expression: { dynamics: [0.7, 1] },
+    mix: {
+      fx: {
+        kick: { distort: "crunch" },
+        drone: { distort: "fuzz" },
+        lead: { distort: "crunch" },
+      },
+      space: 0.3,
+      loudness: "loud",
+    },
+  }),
+  card({
+    id: "field-recording",
+    summary:
+      "soundscape composition: a keynote ambience bed, sparse signal sounds and soundmarks, no meter, the place itself as the form",
+    tempo: { bpm: [40, 80], typical: 56 },
+    groove: { humanize: { timingMs: 40, velocity: 0.2 } },
+    pitch: { scales: [["major-pentatonic", 1]] },
+    melody: {
+      density: [0, 1],
+      intervals: intervals(1, 1, 2, 1),
+      contour: [
+        ["descending", 0.5],
+        ["wave", 0.5],
+      ],
+    },
+    bass: { behaviour: [["none", 1]] },
+    texture: {
+      roles: {
+        drone: role("cloud", "grains:0.6"),
+        pad: maybe("grains"),
+        lead: role("whistle", "flute:0.5", "chimes:0.4"),
+      },
+    },
+    expression: { dynamics: [0.1, 0.6] },
+    mix: { space: 0.95, loudness: "ambient" },
+  }),
+  card({
+    id: "sound-art",
+    summary:
+      "installation sound: loops of unequal length phasing against each other, no beginning or end, a room-filling texture heard by walking through it",
+    tempo: { bpm: [48, 84], typical: 64 },
+    pitch: {
+      scales: [
+        ["major-pentatonic", 0.5],
+        ["lydian", 0.5],
+      ],
+    },
+    melody: { density: [0.5, 1], repetition: 0.9, chordToneRate: 0.7 },
+    rhythm: { onsets: { arp: grid("x....x....x..x..") } },
+    texture: {
+      kind: "interlocking",
+      roles: {
+        drone: role("cloud", "organ:0.5"),
+        arp: role("musicbox", "bell:0.6", "kalimba:0.4"),
+        lead: role("bell", "vibes:0.5"),
+      },
+    },
+    mix: { fx: { arp: { chorus: "wide" } }, space: 0.85 },
+  }),
+  card({
+    id: "sound-poetry",
+    summary:
+      "voice as material: phonemes and syllables without words, percussive consonants against held vowels, repetition and permutation",
+    tempo: { bpm: [72, 132], typical: 100 },
+    pitch: {
+      scales: [
+        ["minor-pentatonic", 0.5],
+        ["phrygian", 0.5],
+      ],
+    },
+    melody: {
+      density: [2, 4],
+      repetition: 0.8,
+      intervals: intervals(3, 2, 0.6, 2),
+      ambitus: [5, 12],
+      range: [52, 72],
+    },
+    bass: { behaviour: [["none", 1]] },
+    texture: {
+      roles: {
+        drone: maybe("ooh", "aah:0.5"),
+        pad: null,
+        lead: role("vocal", "sing:0.6"),
+        counter: maybe("aah", "vocoder:0.5"),
+      },
+    },
+    expression: {
+      dynamics: [0.3, 1],
+      articulation: {
+        lead: [
+          ["staccato", 0.5],
+          ["accent", 0.3],
+          ["tenuto", 0.2],
+        ],
+      },
+    },
+    mix: { space: 0.3 },
+  }),
+  card({
+    id: "spoken-word",
+    summary:
+      "spoken word over a bed: speech-rhythm phrasing in a narrow low range, a walking bass and brushed kit under ii-V-I changes, space for the line to land",
+    meter: { signatures: [["4/4", 1]] },
+    tempo: { bpm: [72, 108], typical: 88 },
+    groove: {
+      swingRatio: [1.5, 2],
+      humanize: { timingMs: 4, velocity: 0.08 },
+    },
+    pitch: {
+      scales: [
+        ["dorian", 0.5],
+        ["major", 0.5],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["ii-v-i", 0.6],
+        ["minor-ii-v", 0.4],
+      ],
+      sevenths: 0.9,
+    },
+    melody: {
+      density: [1, 3],
+      repetition: 0.4,
+      ambitus: [3, 7],
+      range: [48, 64],
+      intervals: STEPWISE,
+    },
+    bass: {
+      behaviour: [["walking", 1]],
+      walk: { chordToneOnOne: 0.9, chromaticApproach: 0.3 },
+    },
+    rhythm: {
+      onsets: {
+        hat: grid("x...x.x.x...x.x."),
+        snare: grid("....x.......x..."),
+      },
+    },
+    texture: {
+      kind: "homophonic",
+      roles: {
+        hat: role("drums"),
+        snare: maybe("drums"),
+        drone: null,
+        pad: null,
+        chords: role("piano", "rhodes:0.5"),
+        bass: role("upright"),
+        lead: role("vocal"),
+      },
+    },
+    expression: { dynamics: [0.3, 0.75] },
+    mix: { space: 0.35 },
+  }),
+  card({
+    id: "glitch-art",
+    summary:
+      "glitch and microsound: clicks, skips and buffer stutters as rhythm, grains under 100 ms, digital errors made into a groove",
+    tempo: { bpm: [90, 140], typical: 120 },
+    groove: { subdivision: 4, humanize: { timingMs: 2, velocity: 0.1 } },
+    rhythm: {
+      onsets: {
+        hat: grid("x.xx.x..xx.x.x.x"),
+        kick: grid("x.....x...x....."),
+      },
+    },
+    melody: { density: [2, 4], repetition: 0.8 },
+    texture: {
+      roles: {
+        ...kitRoles("electro", ["kick", "hat"]),
+        drone: role("microloop", "grains:0.6"),
+        pad: maybe("granular"),
+        lead: role("microloop", "sparkle:0.5", "bell:0.4"),
+      },
+    },
+    mix: {
+      fx: { lead: { crush: "8-bit" }, hat: { crush: "lofi" } },
+      space: 0.4,
+    },
+  }),
+  card({
+    id: "algorithmic",
+    summary:
+      "generative process: a rule set run on a seed, Markov steps over a pentatonic field, rotating patterns of coprime lengths, no two passes alike",
+    tempo: { bpm: [72, 132], typical: 100 },
+    pitch: {
+      scales: [
+        ["major-pentatonic", 0.5],
+        ["minor-pentatonic", 0.3],
+        ["lydian", 0.2],
+      ],
+    },
+    harmony: { model: "modal", rhythm: [[0.5, 1]] },
+    melody: {
+      density: [1, 3],
+      repetition: 0.5,
+      chordToneRate: 0.5,
+      intervals: STEPWISE,
+    },
+    bass: { behaviour: [["ostinato", 1]], onsets: grid("x....x....x....x") },
+    rhythm: { onsets: { arp: grid("x..x..x.x..x..x.") } },
+    texture: {
+      kind: "interlocking",
+      roles: {
+        drone: null,
+        arp: role("marimba", "sparkle:0.5", "bell:0.4"),
+        pad: maybe("cloud"),
+        bass: role("triangle", "marimba:0.5"),
+        lead: role("vibes", "bell:0.5", "kalimba:0.4"),
+      },
+    },
+    mix: { fx: { arp: { phaser: "slow" } }, space: 0.6 },
+  }),
+]);
+
 // @@EXPORT
 export const ART_CARDS: readonly StyleCard[] = Object.freeze([
   ...BRANCH_CARDS,
@@ -3515,6 +4026,7 @@ export const ART_CARDS: readonly StyleCard[] = Object.freeze([
   ...ROMANTIC_LEAVES,
   ...MODERN_LEAVES,
   ...CONTEMPORARY_LEAVES,
+  ...EXPERIMENTAL_LEAVES,
   ...BAND_LEAVES,
   ...CHILDRENS_LEAVES,
 ]);

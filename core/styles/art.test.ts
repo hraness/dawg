@@ -13,7 +13,7 @@ import {
   STROKE_PATTERNS,
 } from "../chords.ts";
 import { ARTICULATIONS } from "../expression.ts";
-import { FX_PRESETS, RIG_PRESETS } from "../fx.ts";
+import { FX_NAMES, FX_PRESETS, RIG_PRESETS } from "../fx.ts";
 import { resolveInstrumentWord } from "../instruments.ts";
 import { SYNTH_KIT_NAMES } from "../kits.ts";
 import { isLoudnessTargetName } from "../master.ts";
@@ -73,7 +73,8 @@ function badNames(card: StyleCard): string[] {
       const table = (FX_PRESETS as Record<string, Record<string, unknown>>)[
         effect
       ];
-      if (!table || !preset || !(preset in table))
+      const inChain = (FX_NAMES as readonly string[]).includes(effect);
+      if (!inChain || !table || !preset || !(preset in table))
         bad.push(`fx ${effect}:${preset}`);
     }
   if (card.mix?.loudness && !isLoudnessTargetName(card.mix.loudness))
