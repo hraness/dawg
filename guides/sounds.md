@@ -18,7 +18,7 @@ order: 1
 - `piano felt` · `epiano suitcase` · `wurli` · `clav` · `keys hardness 0.3`
 - `tonewheel` gospel · `combo` vox · `pipe` flutes · `rotary fast` · `keys`
 - `wt list` tables · `wt pwm` load one · `wt 0.5` position
-- `string sitar` · nylon koto harp … · `string buzz 0.8` · `string presets`
+- `string sitar` · `bowed violin` · cellos erhu koto … · `string presets`
 - `wind sax` · flute trumpet … · `wind breath 0.8` · `modal gamelan` bronzes
 - `/pack list` · `/pack use <pack>/<sound> as kick` · `/pack info vcsl`
 - `/sample samples/kick.wav as kick` add a sampler voice
@@ -27,4 +27,4 @@ order: 1
 ## Menu
 
 - Ctrl-K › Sound: instrument, preset, envelope, filter, browse sounds
-- Ctrl-K › Sound › browse sounds › Strings: the plucked string presets
+- Ctrl-K › Sound › browse sounds › Strings: plucked presets, Bowed

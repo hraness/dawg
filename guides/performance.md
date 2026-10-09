@@ -18,6 +18,7 @@ Targets are `all` (default), `bar 3`, `bars 2-4` or note ids.
 
 - `art staccato|legato|accent|tenuto|marcato|ghost [target]`
 - `glide 60ms legato` per track · `glide 60ms bar 2` per note
+- bowed strings slur overlapping or `art legato` notes in one bow stroke
 - `bend scoop|fall|doit|-200 [target]` · `vibrato 5.5 30 0.2`
 - `pedal 0-3.5 4-7.5` (beats) · `pedal bars` · `pedal off`
 - `pedal soft 0-8` una corda · `pedal sost 0-4` holds keys down at 0

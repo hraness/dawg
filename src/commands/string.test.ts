@@ -216,3 +216,44 @@ describe("instrument words reach the string engine", () => {
     ).toThrow(/instrument must be one of/);
   });
 });
+
+describe("bowed verb (0.6.1)", () => {
+  test("bowed plays cello; bowed <preset> only takes bowed presets", () => {
+    expect(parseStringCommand("bowed")).toEqual({
+      type: "string-preset",
+      preset: "cello",
+    });
+    expect(parseStringCommand("bowed violins")).toEqual({
+      type: "string-preset",
+      preset: "violins",
+    });
+    expect(parseStringCommand("bowed kemence")).toEqual({
+      type: "string-preset",
+      preset: "kamancheh",
+    });
+    expect(parseStringCommand("bowed sitar")).toBeUndefined();
+    expect(parseStringCommand("bowed presets")).toEqual({
+      type: "string-presets",
+      bowed: true,
+    });
+    expect(parseStringCommand("bowed pressure 0.7 sord 1")).toEqual({
+      type: "string-set",
+      values: { pressure: 0.7, sord: 1 },
+    });
+  });
+
+  test("bowed violin stores a string track with the violin preset", () => {
+    const result = run("bowed violin");
+    expect(result.ok).toBe(true);
+    const track = result.next!.tracks.find((t) => t.id === "gtr")!;
+    expect(track.instrument).toBe("string");
+    expect(track.string).toEqual({ preset: "violin" });
+    const listed = run("bowed presets");
+    expect(listed.message).toStartWith("bowed presets · violin");
+    expect(listed.message).not.toContain("nylon");
+  });
+
+  test("bowed is a known verb for typo suggestions", () => {
+    expect(nearestCommand("bowd violin")).toBe("bowed");
+  });
+});

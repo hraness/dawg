@@ -32,6 +32,7 @@ import {
   type TrackScore,
 } from "../../core/score.ts";
 import { sampleKey, type DecodedSample, type SampleBank } from "./samples.ts";
+import { seedHash } from "./dsp/rng.ts";
 import {
   barAt,
   loopSecondsOf,
@@ -164,35 +165,108 @@ function noteLengthFrames(note: Note, timing: SamplerTiming): number {
 function voiceResolver(
   track: Track,
   tuning?: TuningTable,
-): (pitch: number) => { voice: string; ratio: number } | undefined {
+): (
+  pitch: number,
+  velocity: number,
+) => { voice: string; ratio: number } | undefined {
   const sampler = track.sampler!;
+  const pick = layerPicker(
+    track.id,
+    sampler.voices,
+    sampler.mode === "oneshot",
+  );
   if (sampler.mode === "oneshot") {
     const byPitch = new Map<number, string>();
     for (const [voice, slot] of samplerVoiceSlots(sampler))
       byPitch.set(slot, voice);
-    return (pitch) => {
-      const voice = byPitch.get(pitch);
+    return (pitch, velocity) => {
+      const slotted = byPitch.get(pitch);
+      if (slotted === undefined) return undefined;
+      const voice = pick(slotted, velocity);
       return voice === undefined ? undefined : { voice, ratio: 1 };
     };
   }
   // Keyed: the voice whose root is the highest at or below the pitch (a
-  // multi-sampled instrument), else the lowest root.
+  // multi-sampled instrument), else the lowest root. With velocity layers
+  // only the voices whose `vel` holds the note's velocity take part.
   const keyed = Object.entries(sampler.voices)
-    .map(([voice, ref]) => ({ voice, root: ref.root ?? 60 }))
+    .map(([voice, ref]) => ({ voice, root: ref.root ?? 60, vel: ref.vel }))
     .sort((a, b) => a.root - b.root || (a.voice < b.voice ? -1 : 1));
-  return (pitch) => {
-    let chosen = keyed[0];
-    for (const candidate of keyed)
-      if (candidate.root <= pitch) chosen = candidate;
+  return (pitch, velocity) => {
+    let chosen: (typeof keyed)[number] | undefined;
+    for (const candidate of keyed) {
+      if (!inLayer(candidate.vel, velocity)) continue;
+      if (chosen === undefined || candidate.root <= pitch) chosen = candidate;
+    }
     if (!chosen) return undefined;
-    if (!tuning)
-      return { voice: chosen.voice, ratio: 2 ** ((pitch - chosen.root) / 12) };
+    const voice = pick(chosen.voice, velocity) ?? chosen.voice;
+    if (!tuning) return { voice, ratio: 2 ** ((pitch - chosen.root) / 12) };
     const hz = tuning.hz[pitch]!;
     if (!(hz > 0)) return undefined;
     return {
-      voice: chosen.voice,
+      voice,
       ratio: hz / (440 * 2 ** ((chosen.root - 69) / 12)),
     };
+  };
+}
+
+/** MIDI velocity (0..127) of a note velocity 0..1. */
+export function midiVelocity(velocity: number): number {
+  return Math.max(0, Math.min(127, Math.round(velocity * 127)));
+}
+
+function inLayer(
+  vel: readonly [number, number] | undefined,
+  velocity: number,
+): boolean {
+  if (!vel) return true;
+  const v = midiVelocity(velocity);
+  return v >= vel[0] && v <= vel[1];
+}
+
+/**
+ * Velocity layers and round robin (0.6.1, SFZ lovel/hivel and seq_length).
+ * A voice with `rr` stands for its whole group: of the group's voices that
+ * hold the note's velocity (and, keyed, share its root) the next one in
+ * name order plays. When no layer of the group holds the velocity, the
+ * nearest layer plays rather than nothing. Each group keeps its own
+ * counter in note order, starting at a turn seeded by the track id and
+ * the group, so a render is deterministic (A B A B) while two tracks
+ * with the same samples need not alternate in lockstep. A keyed voice
+ * without `rr` plays itself when its `vel` holds the velocity, else
+ * nothing; a one-shot voice without `rr` (its own pad) always plays.
+ */
+function layerPicker(
+  trackId: string,
+  voices: Readonly<Record<string, SampleRef>>,
+  oneshot: boolean,
+): (voice: string, velocity: number) => string | undefined {
+  const counters = new Map<string, number>();
+  const names = Object.keys(voices).sort();
+  return (voice, velocity) => {
+    const ref = voices[voice]!;
+    if (ref.rr === undefined)
+      return oneshot || inLayer(ref.vel, velocity) ? voice : undefined;
+    const members = names.filter((name) => {
+      const other = voices[name]!;
+      return other.rr === ref.rr && (other.root ?? 60) === (ref.root ?? 60);
+    });
+    let group = members.filter((name) => inLayer(voices[name]!.vel, velocity));
+    if (group.length === 0) {
+      const v = midiVelocity(velocity);
+      const gap = (name: string) => {
+        const vel = voices[name]!.vel!;
+        return v < vel[0] ? vel[0] - v : v - vel[1];
+      };
+      const nearest = Math.min(...members.map(gap));
+      group = members.filter((name) => gap(name) === nearest);
+    }
+    if (group.length === 0) return undefined;
+    const key = `${ref.rr}:${ref.root ?? 60}:${group.join(",")}`;
+    const turn =
+      counters.get(key) ?? seedHash(`${trackId}:${key}`) % group.length;
+    counters.set(key, turn + 1);
+    return group[turn % group.length];
   };
 }
 
@@ -228,7 +302,7 @@ export function planSamplerVoices(
     voice.fade = Math.min(fade, end - voice.start);
   };
   for (const note of ordered) {
-    const resolved = resolve(note.pitch);
+    const resolved = resolve(note.pitch, note.velocity);
     if (!resolved) continue;
     // A note's cents repitch every voice, keyed or one-shot.
     const target = note.cents

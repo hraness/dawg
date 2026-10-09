@@ -17,6 +17,11 @@
  */
 import { isDrumInstrument } from "../../core/drums.ts";
 import { slicePedals } from "../../core/expression.ts";
+import {
+  isStringTrack,
+  resolveString,
+  stringPresetOf,
+} from "../../core/strings.ts";
 import type { SongMaster } from "../../core/master.ts";
 import { MODES, parseKey } from "../../core/chords.ts";
 import { rhythmVoicePitch } from "../../core/rhythm.ts";
@@ -132,6 +137,14 @@ export function phraseRole(track: Track): PhraseRole {
   if (isWavetableInstrument(track.instrument)) return "drone";
   // Grain clouds are textures: held notes let them evolve.
   if (track.instrument === "granular") return "drone";
+  if (isStringTrack(track) && resolveString(track.string).exciter === "bow") {
+    // Bowed: low strings walk a line, solo strings sing a legato line,
+    // sections and pizz/trem hold chords.
+    const preset = stringPresetOf(track.string);
+    if (/^(contrabass|contrabasses|cello|cellos)$/.test(preset)) return "riff";
+    if (/^(violin|viola|fiddle|erhu|kamancheh)$/.test(preset)) return "lead";
+    return "chord";
+  }
   const words = `${track.instrument} ${track.name} ${track.id}`.toLowerCase();
   if (/\b(bass|sub|808)/.test(words)) return "riff";
   if (/\b(lead|arp|pluck|saw|square|pulse|z_|mono|melody|hook)/.test(words))

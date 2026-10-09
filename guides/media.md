@@ -24,4 +24,4 @@ helper is reported with its install command; `dawg media doctor` checks.
 
 ## In the app
 
-- `/sample <path> as <voice>` · `/sample` lists the voices
+- `/sample <path> as <voice>` · `/sample` lists the voices · `/sample set sn vel 0-63 rr sn` layers

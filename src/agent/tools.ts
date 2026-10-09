@@ -857,7 +857,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   {
     name: "set_string",
     description:
-      "Make a track a plucked string (physical model): preset picks the instrument; params override it (ring s, bright, damp, pos, mute, buzz = jawari, body, sym = sympathetic strings, stiff, exciter pick|finger|hammer|noise); null unsets one. reset keeps the preset and drops overrides; off returns the track to a plain pluck voice.",
+      "Make a track a plucked, struck or bowed string (physical model). Bowed presets (exciter bow): violin viola cello contrabass fiddle erhu kamancheh, sections violins violas cellos contrabasses, pizz trem. preset picks the instrument; params override it (ring s, bright, damp, pos, mute, buzz = jawari, body, sym = sympathetic strings, stiff, exciter pick|finger|hammer|noise|bow); null unsets one. Bowed presets take pressure speed attack vib vibmod vibdelay tremhz sord dyn. reset keeps the preset and drops overrides; off returns the track to a plain pluck voice.",
     parameters: {
       type: "object",
       properties: {
@@ -1175,7 +1175,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   {
     name: "set_sample",
     description:
-      "Set a sampler voice's Strudel sample controls: begin end gain speed unit(r|c|s) loop loopBegin loopEnd clip(legato) fit loopAt accelerate squiz cut, and (0.6.1) shift (semitones, length kept) formant (0 keeps the voice's formants) fadeInTime fadeTime (seconds); null unsets one.",
+      "Set a sampler voice's Strudel sample controls: begin end gain speed unit(r|c|s) loop loopBegin loopEnd clip(legato) fit loopAt accelerate squiz cut, and (0.6.1) shift (semitones, length kept) formant (0 keeps the voice's formants) fadeInTime fadeTime (seconds), vel [lo,hi] (velocity layer) rr (round-robin group). null unsets one.",
     parameters: {
       type: "object",
       properties: {
@@ -1184,7 +1184,15 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
         params: {
           type: "object",
           additionalProperties: {
-            type: ["number", "string", "boolean", "null"],
+            anyOf: [
+              { type: ["number", "string", "boolean", "null"] },
+              {
+                type: "array",
+                items: { type: "integer", minimum: 0, maximum: 127 },
+                minItems: 2,
+                maxItems: 2,
+              },
+            ],
           },
         },
       },

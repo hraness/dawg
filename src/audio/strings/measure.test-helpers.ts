@@ -24,6 +24,7 @@ export type TestNote = {
   seconds?: number;
   velocity?: number;
   performance?: PerformedNote["performance"];
+  articulation?: PerformedNote["articulation"];
 };
 
 /** Renders notes on a string track (mono, before effects). */
@@ -58,6 +59,7 @@ export function render(
     startTick: Math.round(((n.start ?? 0) * SR) / SPT),
     durationTicks: Math.round(((n.seconds ?? seconds) * SR) / SPT),
     ...(n.performance ? { performance: n.performance } : {}),
+    ...(n.articulation ? { articulation: n.articulation } : {}),
   })) as unknown as PerformedNote[];
   const dry = new Float64Array(samples);
   renderStrings(dry, undefined, performed, track, context);

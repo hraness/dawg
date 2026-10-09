@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createScore } from "../../core/score.ts";
-import { STRING_PRESET_NAMES } from "../../core/strings.ts";
+import { BOWED_PRESET_NAMES, STRING_PRESET_NAMES } from "../../core/strings.ts";
 import { isStageable } from "./audition.ts";
 import { EditMenu, type MenuContext } from "./menu.ts";
 
@@ -51,7 +51,11 @@ describe("strings in the ctrl-k menu", () => {
     select(menu, ctx, "Strings");
     menu.key("\r", ctx);
     const labels = menu.view(ctx).items.map((row) => row.label.split(" ")[0]);
-    expect(labels).toEqual([...STRING_PRESET_NAMES]);
+    // 0.6.1: the bowed rows sit in a Bowed sub-list after the plucked ones.
+    expect(labels).toEqual([
+      ...STRING_PRESET_NAMES.filter((n) => !BOWED_PRESET_NAMES.includes(n)),
+      "Bowed",
+    ]);
     select(menu, ctx, "sitar");
     expect(menu.key("\r", ctx)).toEqual({
       type: "run",
@@ -92,5 +96,44 @@ describe("strings in the ctrl-k menu", () => {
     expect(isStageable("string sitar")).toBe(true);
     expect(isStageable("string buzz 0.4")).toBe(true);
     expect(isStageable("string presets")).toBe(false);
+    expect(isStageable("bowed violin")).toBe(true);
+    expect(isStageable("bowed pressure 0.7")).toBe(true);
+    expect(isStageable("bowed presets")).toBe(false);
+  });
+
+  test("Strings > Bowed lists the bowed presets and runs `bowed <name>`", () => {
+    const menu = new EditMenu();
+    const ctx = context();
+    menu.show(ctx);
+    for (const label of ["Sound", "browse sounds", "Strings", "Bowed"]) {
+      select(menu, ctx, label);
+      menu.key("\r", ctx);
+    }
+    const labels = menu.view(ctx).items.map((row) => row.label.split(" ")[0]);
+    expect(labels).toEqual([...BOWED_PRESET_NAMES]);
+    select(menu, ctx, "violins");
+    expect(menu.key("\r", ctx)).toEqual({
+      type: "run",
+      command: "bowed violins",
+    });
+  });
+
+  test("a bowed track shows bow rows first", () => {
+    const menu = new EditMenu();
+    const ctx = context({ preset: "cello" });
+    menu.show(ctx);
+    select(menu, ctx, "Sound");
+    menu.key("\r", ctx);
+    const labels = menu
+      .view(ctx)
+      .items.map((row) => row.label.slice(0, 16).trim());
+    expect(labels.slice(0, 3)).toEqual(["instrument", "preset", "pressure"]);
+    expect(labels).toContain("sord");
+    expect(labels).not.toContain("buzz");
+    select(menu, ctx, "pressure");
+    expect(menu.key(RIGHT, ctx)).toMatchObject({
+      type: "run",
+      command: expect.stringMatching(/^string pressure /),
+    });
   });
 });

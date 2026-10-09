@@ -1143,6 +1143,9 @@ function printSample(ref: SampleRef, indent: string, prefix: number): string {
     parts.push(["score", str(from.score)]);
     entries.push(["from", obj(parts, indent + INDENT, "from: ".length, 1)]);
   }
+  if (ref.vel !== undefined)
+    entries.push(["vel", `[${num(ref.vel[0])}, ${num(ref.vel[1])}]`]);
+  if (ref.rr !== undefined) entries.push(["rr", str(ref.rr)]);
   if (entries.length === 1) return str(ref.src);
   return obj(entries, indent, prefix, 1);
 }

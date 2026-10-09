@@ -38,7 +38,8 @@ export type SampleCommand =
     }>;
 
 /** A sample control value: a number, a switch, a unit, or null to unset. */
-export type SampleControlValue = number | string | boolean | null;
+export type SampleControlValue =
+  number | string | boolean | null | readonly number[];
 
 /**
  * Per-voice sample controls `/sample set` and `set_sample` change, by
@@ -66,6 +67,8 @@ export const SAMPLE_CONTROLS = Object.freeze({
   formant: "formants in semitones with shift: 0 keeps the voice, off follows",
   fadeTime: "release fade in seconds (0..2); alias fadeout",
   fadeInTime: "attack fade in seconds (0..2); alias fadein",
+  vel: "velocity layer lo-hi (MIDI 0-127): plays only for those velocities",
+  rr: "round-robin group name: voices in a group take turns",
 });
 export type SampleControl = keyof typeof SAMPLE_CONTROLS;
 
@@ -182,6 +185,18 @@ export function setSampleControls(
       continue;
     }
     if (name === "cut" && typeof value === "number") value = `cut${value}`;
+    if (name === "rr" && typeof value === "number") value = `rr${value}`;
+    if (name === "vel" && value !== null) {
+      const range = parseVelocityRange(value);
+      if (!range)
+        return {
+          ok: false,
+          message: "sample · vel needs lo-hi MIDI velocities, e.g. vel 0-63",
+        };
+      next.vel = range;
+      changed.push(`vel ${range[0]}-${range[1]}`);
+      continue;
+    }
     if (value === null) delete next[field];
     else next[field] = value;
     changed.push(`${raw} ${value === null ? "off" : String(value)}`);
@@ -209,8 +224,22 @@ export function setSampleControls(
   return {
     ok: true,
     next: updated,
-    message: `sample · ${trackId}/${voice} · ${changed.join(" · ")}`,
+    message: `sample · ${trackId}/${voice} · ${changed.join(" · ")}${layerHint(updated, trackId, voice)}`,
   };
+}
+
+/** `0-63`, `0..63`, `64` (one velocity) → [lo, hi]; else undefined. */
+export function parseVelocityRange(
+  value: SampleControlValue | readonly number[],
+): [number, number] | undefined {
+  if (Array.isArray(value))
+    return value.length === 2 && value.every((v) => typeof v === "number")
+      ? [value[0] as number, value[1] as number]
+      : undefined;
+  if (typeof value === "number") return [value, value];
+  if (typeof value !== "string") return undefined;
+  const match = value.trim().match(/^(\d{1,3})\s*(?:-|\.\.|,)\s*(\d{1,3})$/);
+  return match ? [Number(match[1]), Number(match[2])] : undefined;
 }
 
 function unquote(value: string): string {
@@ -376,6 +405,18 @@ export function freeVoiceName(
     const name = `${base.slice(0, 29)}_${n}`;
     if (!(name in voices)) return name;
   }
+}
+
+/**
+ * One-shot velocity layers swap only within a round-robin group: a kit
+ * voice with `vel` and no `rr` keeps its own pad, so say how to join them.
+ */
+function layerHint(score: TrackScore, trackId: string, voice: string): string {
+  const sampler = score.tracks.find((item) => item.id === trackId)?.sampler;
+  const ref = sampler?.voices[voice];
+  if (sampler?.mode !== "oneshot" || !ref?.vel || ref.rr !== undefined)
+    return "";
+  return ` · one-shot layers share a pad only within an rr group: sample ${voice} rr <group> on each layer`;
 }
 
 export class SamplePlacementError extends Error {}

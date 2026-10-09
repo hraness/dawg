@@ -26,6 +26,8 @@ import { noteHz, resolveTuning } from "../../core/tuning.ts";
 import { liveFitPending, withLiveFit } from "./fit.ts";
 import { isOrganFamily } from "../../core/keys.ts";
 import type { LiveFullReply, LiveFullRequest } from "./live-worker.ts";
+import { isBowed, liveStringTrack } from "./strings/engine.ts";
+import { resolveString } from "../../core/strings.ts";
 
 /** A rendered live note: interleaved stereo 16-bit PCM. */
 export type LiveNotePcm = Readonly<{
@@ -40,7 +42,7 @@ export type LiveNotePcm = Readonly<{
    */
   fitting?: true;
   /**
-   * True when this is only the first window of a guitar-rig note
+   * True when this is only the first window of a guitar-rig or bowed note
    * (`LIVE_RIG_WINDOW_SECONDS`): call `LiveSynth.render` again with
    * `full: true` off the key path and swap the result in by voice id.
    */
@@ -235,7 +237,7 @@ export class LiveSynth {
     // Organs too: wheels, rotors and drive cost 4-8 ms per note-second.
     const windowed =
       request.full !== true &&
-      (hasRig(track) || organTick !== undefined) &&
+      (hasRig(track) || organTick !== undefined || bowedTrack(track)) &&
       seconds > LIVE_RIG_WINDOW_SECONDS &&
       !this.cache.has(key);
     if (windowed) {
@@ -361,7 +363,20 @@ function liveTrack(track: Track): Track {
     humanize: _humanize,
     ...rest
   } = track;
-  return { ...rest, muted: false };
+  // A bowed section plays two players live (f061-bowed render budget).
+  return liveStringTrack({ ...rest, muted: false });
+}
+
+/**
+ * Whether the track is a bowed string: a held bow costs about 5 ms per
+ * second, so it windows like a rig (the bow loop is causal too).
+ */
+function bowedTrack(track: Track): boolean {
+  return (
+    track.instrument === "string" &&
+    track.string !== undefined &&
+    isBowed(resolveString(track.string))
+  );
 }
 
 /** Whether the track plays through a guitar rig stage. */
