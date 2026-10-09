@@ -187,6 +187,44 @@ describe("time commands", () => {
   const apply = (score: ReturnType<typeof song>, text: string, track = "a") =>
     applyTimeCommand(score, track, parseTimeCommand(text)!);
 
+  test("fermata at end holds the last felt beat in a compound meter", () => {
+    const six = apply(song(), "meter 6/8").next!;
+    const end = apply(six, "fermata at end 2");
+    expect(end.ok).toBe(true);
+    const tick = end.next!.time!.fermatas![0]!.tick;
+    // The last dotted quarter starts 720 ticks (1.5 beats) before the end.
+    expect(end.next!.bars * 3 * 480 - tick).toBe(720);
+    // Simple meters keep the last quarter.
+    const four = apply(song(), "fermata at end 2").next!;
+    expect(four.bars * 4 * 480 - four.time!.fermatas![0]!.tick).toBe(480);
+  });
+
+  test("a meter change that shortens the song names what falls past the end", () => {
+    const score = createScore({
+      tempoBpm: 120,
+      bars: 4,
+      tracks: [{ id: "a", instrument: "piano" }],
+      notes: [
+        {
+          id: "n",
+          trackId: "a",
+          pitch: 60,
+          startTick: 15 * 480,
+          durationTicks: 480,
+          velocity: 0.8,
+        },
+      ],
+    });
+    const result = apply(score, "meter 3/4 at bar 2");
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe(
+      "meter · 3/4 from bar 2 · 1 note now past the song end (beat 13); add bars to keep them",
+    );
+    expect(apply(song(), "meter 3/4 at bar 2").message).toBe(
+      "meter · 3/4 from bar 2",
+    );
+  });
+
   test("tempo changes write the song time map; beat 0 sets the start tempo", () => {
     const start = apply(song(), "tempo 100 at 0");
     expect(start.ok).toBe(true);

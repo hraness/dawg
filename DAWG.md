@@ -778,7 +778,7 @@ SDK. `chord("Cm7", start, length, opts)` and `progression("ii7 V7 Imaj7", { key,
 
 Notes can say how they are played, and tracks how they perform. Every field is optional: a note or track without them sounds exactly as before. Expression is applied at render to copies of the notes, so the score keeps what you wrote.
 
-Per note (the focused track; a target is `all`, the default, `bar 3`, `bars 2-4` or note ids):
+Per note (the focused track; a target is `all`, the default, `last` (the note added last), `bar 3`, `bars 2-4` or note ids; the reply names the scope and how many notes changed):
 
 | Command                                                     | Does                                                                                                                                                                       |
 | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -803,7 +803,7 @@ Menu: **Sound › performance** has glide time (ms) and mode, sustain pedal (off
 
 ## Tunings and scales
 
-Every project plays in 12-tone equal temperament at A4 = 440 Hz until it says otherwise. A song tuning, a track tuning or a note's cents change only the frequencies; notes stay MIDI keys, so editing, chords, play mode and exports work the same. A project without any of these renders byte-identically to 0.4.
+Every project plays in 12-tone equal temperament at A4 = 440 Hz until it says otherwise. A song tuning, a track tuning or a note's cents change only the frequencies; notes stay MIDI keys, so editing, chords, play mode and exports work the same. MIDI export carries a tuning with the MIDI Tuning Standard (a single-note tuning SysEx per tuned track, selected with RPN 3), and writes glides, bends, vibrato and note cents as pitch bend (range ±24 semitones) on notes that sound alone on their track; synths without MTS play 12-TET keys. A project without any of these renders byte-identically to 0.4.
 
 Tunings (`core/tuning.ts`). A tuning is one table (`edo: 19`, `ratios: ["9/8", "5/4", …, "2/1"]`, `cents: [231, 474, …, 1200]`, a Scala `scl` file, or a library `name`) plus `ref` (the 12-TET A4 in Hz, default 440, that fixes the root key's pitch), `root` (the key of degree 0) and `map` (`linear` or `nearest`). The last table entry is the period, usually 1200 cents (2/1).
 
@@ -865,7 +865,7 @@ Recording keeps each note's velocity from `C`/`V`. Sustain is recorded the way L
 
 ### Chord mode
 
-Play mode has a chord sub-mode modelled on the Orchid's Key mode. It is `auto` by default when the focused track can play chords (pitched synths, piano, soundfonts, keyed samplers; not tracks whose instrument, name or id says bass, kit, drum or perc), otherwise `manual`. Choosing a mode by hand (`Q`, `/chords`, the menu) sticks for the session.
+Play mode has a chord sub-mode modelled on the Orchid's Key mode. It is `auto` by default when the focused track can play chords (pitched synths, piano, soundfonts, keyed samplers; not tracks whose instrument, name or id says bass, kit, drum or perc) in 12-TET without a mono or legato glide, otherwise `manual`, so a track in pelog, just intonation or another non-12 tuning, or a TB-303-style legato line, records single notes. Choosing a mode by hand (`Q`, `/chords`, the menu) sticks for the session.
 
 - `auto`: each note key plays the diatonic chord of the song key on that root (C major: `S` plays Dm, `G` plays G). Keys outside the scale borrow from the parallel major or minor. The strip labels every white and black key with its chord.
 - `manual`: note keys play single notes as before; latch a chord type or extension and they play that chord on the pressed root.
@@ -992,7 +992,7 @@ Sections are markers over the timeline, like the arranger track in Studio One or
 | `drop [<section> \| at <bar>] [cut <beats>] [no impact]`                    | a pre-drop cut (1 beat of silence by default, up to two bars) and an impact on the downbeat; bare `drop` lands on the section named `drop` or `chorus`, else on the bar after the last build (adding that bar when the build ends the song); with neither it asks for `drop chorus` or `drop at 17`. A cut that clips a build's uplifter retunes its rise to end at the cut |
 | `fill [<section> \| at <bar>] [toms\|roll\|kick] [<n> beats] [no crash]`    | a drum fill on the beats before the section (1 by default, ½ beat up to two bars), or at every section boundary                                                                                                                                                                                                                                                             |
 
-Playback follows the form; with a section looped it loops just that section, with its mutes and variations, and the highway, play mode and auditions stay inside it (an audition region is clipped to the looped section). Export (`dawg render`, the agent's preview) always plays the whole form and ignores the section loop; `dawg render out.wav --section chorus` renders one section. A long form renders in windows and is capped at 15 minutes.
+Playback follows the form; with a section looped it loops just that section, with its mutes and variations, and the highway, play mode and auditions stay inside it (an audition region is clipped to the looped section). Export (`dawg render`, the agent's preview) always plays the whole form and ignores the section loop; `dawg render out.wav --section chorus` renders one section. Every WAV covers the whole song (or section) plus its tail; a long song renders in windows and is capped at 15 minutes, and a held note that crosses a window seam is crossfaded so long drones stay smooth. Exports mark the form: WAV renders carry a `cue ` point and `LIST adtl` label at each section start, and MIDI exports an FF 06 marker. Sections count bars in one meter: a compound meter held from bar 1 (`meter 6/8`, `song({ meter: [12, 8] })`) works, while meter changes later in the song and sections exclude each other.
 
 Generators write ordinary notes, tracks and automation, so everything they make can be edited or undone (one step per command):
 

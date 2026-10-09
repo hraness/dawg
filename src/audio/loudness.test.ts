@@ -268,3 +268,43 @@ describe("loudness: loops and mixes", () => {
     expect(right[0]).toBe(-1);
   });
 });
+
+describe("true peak on dense, bright material", () => {
+  test("a saturated supersaw reads within 0.1 dB of a 32x reference", () => {
+    const rate = 48000;
+    const n = rate / 4;
+    const signal = new Float64Array(n);
+    const voices = [110, 110.7, 109.3, 220.5, 329, 440.9, 659, 880.3].map(
+      (freq, index) => ({ freq, phase: (index * 0.137) % 1 }),
+    );
+    for (let i = 0; i < n; i += 1) {
+      let sum = 0;
+      for (const voice of voices) {
+        voice.phase = (voice.phase + voice.freq / rate) % 1;
+        sum += 2 * voice.phase - 1;
+      }
+      signal[i] = Math.tanh(sum * 0.8);
+    }
+    // Reference: 32 phases of a 128-tap Hann-windowed sinc.
+    const taps = 128;
+    const before = taps / 2 - 1;
+    let reference = 0;
+    const kernels = Array.from({ length: 32 }, (_, k) =>
+      Array.from({ length: taps }, (_, tap) => {
+        const x = tap - before - k / 32;
+        const window = 0.5 + 0.5 * Math.cos((Math.PI * x) / (taps / 2));
+        return x === 0 ? 1 : (Math.sin(Math.PI * x) / (Math.PI * x)) * window;
+      }),
+    );
+    for (let i = before; i + taps - before <= n; i += 1)
+      for (const kernel of kernels) {
+        let sum = 0;
+        for (let tap = 0; tap < taps; tap += 1)
+          sum += signal[i - before + tap]! * kernel[tap]!;
+        reference = Math.max(reference, Math.abs(sum));
+      }
+    const measured = truePeakGain(signal, signal);
+    expect(gainToDb(measured)).toBeGreaterThan(gainToDb(reference) - 0.1);
+    expect(gainToDb(measured)).toBeLessThan(gainToDb(reference) + 0.05);
+  });
+});

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { secondsAtTick } from "./tempo.ts";
 import { decodeLoop, encodeLoop } from "./loop.ts";
 import { diffScores } from "./diff.ts";
 import {
@@ -13,6 +14,7 @@ import {
   applySectionChanges,
   arrangedBars,
   arrangedStartBar,
+  barTicks,
   deleteSection,
   duplicateSection,
   findSection,
@@ -607,5 +609,70 @@ describe("forms in linear order", () => {
     expect(
       flat.notes.map((note) => [note.startTick, note.durationTicks]),
     ).toEqual(base.notes.map((note) => [note.startTick, note.durationTicks]));
+  });
+});
+
+describe("a form keeps tempo ramps that cross section boundaries", () => {
+  test("a form in song order times exactly like the song", () => {
+    const ticks = 4 * 480;
+    // 96 bpm gliding linearly to 60 over bars 0..6, then 60 to the end.
+    const song = createScore({
+      bars: 8,
+      tempoBpm: 96,
+      tracks: [{ id: "lead", name: "lead", instrument: "sine" }],
+      notes: [],
+    })
+      .withTime({ tempo: [{ tick: 6 * ticks, bpm: 60, ramp: "linear" }] })
+      .withSections(
+        [
+          { name: "a", startBar: 0, bars: 2 },
+          { name: "b", startBar: 2, bars: 3 },
+          { name: "c", startBar: 5, bars: 3 },
+        ],
+        [],
+      );
+    const formed = withForm(song, parseForm(song, "a b c"));
+    const flat = flattenForm(formed);
+    for (const bar of [1, 2, 3, 5, 6, 8])
+      expect(secondsAtTick(flat, bar * ticks)).toBeCloseTo(
+        secondsAtTick(song, bar * ticks),
+        2,
+      );
+  });
+});
+
+describe("sections in a compound meter", () => {
+  const sixEight = () =>
+    createScore({
+      bars: 4,
+      tempoBpm: 60,
+      beatsPerBar: 6,
+      time: { meter: [{ bar: 0, beatsPerBar: 6, beatUnit: 8 }] },
+      tracks: [{ id: "a", name: "a", instrument: "sine" }],
+      sections: [
+        { name: "A", startBar: 0, bars: 2 },
+        { name: "B", startBar: 2, bars: 2 },
+      ],
+    });
+
+  test("a meter held from bar 1 allows sections; a change does not", () => {
+    const score = sixEight();
+    expect(barTicks(score)).toBe(3 * score.ticksPerBeat);
+    expect(() =>
+      createScore({
+        bars: 4,
+        time: { meter: [{ bar: 2, beatsPerBar: 3 }] },
+        sections: [{ name: "A", startBar: 0, bars: 2 }],
+      }),
+    ).toThrow(/sections need one meter/);
+  });
+
+  test("a form keeps the meter and counts 6/8 bars", () => {
+    const score = withForm(sixEight(), parseForm(sixEight(), "B A"));
+    const flat = flattenForm(score);
+    expect(flat.time?.meter?.[0]?.beatUnit).toBe(8);
+    expect(flat.sections.map((s) => s.startBar)).toEqual([0, 2]);
+    // Two 6/8 bars are six quarters: 6 s at 60 bpm.
+    expect(secondsAtTick(flat, barTicks(flat) * 2)).toBeCloseTo(6, 9);
   });
 });

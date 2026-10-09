@@ -75,6 +75,16 @@ describe("synth grammar", () => {
     expect(next.tracks[0]!.synth).toEqual(normalizeSynth(preset.synth));
   });
 
+  test("the acid preset adds a legato glide unless the track has one", () => {
+    const result = run("synth preset acid");
+    expect(result.next!.tracks[0]!.glide).toEqual({
+      time: 0.06,
+      mode: "legato",
+    });
+    expect(result.message).toContain("glide 60ms legato");
+    expect(run("synth preset bell").next!.tracks[0]!.glide).toBeUndefined();
+  });
+
   test("out-of-range values are rejected without a revision", () => {
     const bad = applySynthCommand(score(), "lead", {
       type: "synth-set",

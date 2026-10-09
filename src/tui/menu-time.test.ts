@@ -72,6 +72,20 @@ describe("Project › Tempo & meter", () => {
     expect(row.label).toContain("4/4");
   });
 
+  test("song length names the written end tempo, not a fermata's hold", () => {
+    const value = run(
+      run(score(), "rit 2 bars to 50 at bar 3"),
+      "fermata at end 2",
+    );
+    const menu = new EditMenu();
+    const ctx = context(value);
+    menu.show(ctx, "tempo");
+    const labels = menu.view(ctx).items.map((item) => item.label);
+    expect(labels.find((label) => label.includes("song length"))).toMatch(
+      /ends at 50 BPM · 1 fermata/,
+    );
+  });
+
   test("typed rows add tempo changes, rit., fermatas and meter changes", () => {
     const menu = new EditMenu();
     let ctx = context();

@@ -27,6 +27,7 @@ import {
   type Track,
 } from "./score.ts";
 import {
+  barStartTick,
   bpmAtTick,
   hasTrackTime,
   normalizeSongTime,
@@ -40,9 +41,10 @@ import {
  * The song tempo map for `pieces` of the score laid end to end: each piece
  * starts at the tempo sounding at its source tick, keeps the tempo events
  * and fermatas inside it (a ramp cut by the piece glides on from that
- * tempo), and the cut score starts at the first piece's tempo. Meter
- * changes never reach here (sections need one meter). Scores without a
- * tempo map come back unchanged.
+ * tempo, and one running past its end glides to the tempo reached there),
+ * and the cut score starts at the first piece's tempo. Sections need one
+ * meter, so a bar-1 meter is kept as it is. Scores without a tempo map come
+ * back unchanged.
  */
 export function sliceSongTime(
   score: TrackScore,
@@ -85,6 +87,19 @@ export function sliceSongTime(
       tempo.push({ ...event, tick });
       current = event.bpm;
     }
+    // A ramp running on past the piece's end: glide to the tempo it has
+    // reached a tick before the end, so the piece follows the curve (a
+    // sub-span of a linear or exponential ramp is the same kind of ramp).
+    const crossing = (score.time.tempo ?? []).find(
+      (event) => event.tick >= piece.to,
+    );
+    const lastTick = inner.at(-1)?.tick ?? piece.from;
+    if (crossing?.ramp && piece.to - 1 > lastTick) {
+      const bpm = clampBpm(bpmAtTick(score, piece.to - 1));
+      const tick = piece.to - 1 + shift;
+      if (tick >= 1 && Math.abs(bpm - current) > 1e-9)
+        tempo.push({ tick, bpm, ramp: crossing.ramp });
+    }
     // The tempo at the piece's end, for the next piece's step.
     current = clampBpm(bpmAtTick(score, Math.max(piece.from, piece.to - 1)));
     for (const fermata of score.time.fermatas ?? [])
@@ -94,6 +109,8 @@ export function sliceSongTime(
   const time = normalizeSongTime({
     ...(tempo.length > 0 ? { tempo } : {}),
     ...(fermatas.length > 0 ? { fermatas } : {}),
+    // The one meter sections allow (a compound meter held from bar 1).
+    ...(score.time.meter ? { meter: score.time.meter } : {}),
   });
   return { tempoBpm, ...(time ? { time } : {}) };
 }
@@ -152,8 +169,19 @@ export type FormSegment = Readonly<{
   bars: number;
 }>;
 
+/**
+ * Ticks per bar. Sections need one meter, which may be a compound one held
+ * from bar 1 (`time.meter` bar 0, such as 6/8).
+ */
 export function barTicks(score: TrackScore): number {
-  return score.beatsPerBar * score.ticksPerBeat;
+  return score.time?.meter
+    ? barStartTick(score, 1)
+    : score.beatsPerBar * score.ticksPerBeat;
+}
+
+/** Beats (quarter notes) per bar in the sections' meter. */
+export function barBeats(score: TrackScore): number {
+  return barTicks(score) / score.ticksPerBeat;
 }
 
 /** The section called `name`, ignoring case and extra spaces. */
@@ -209,7 +237,7 @@ export function arrangedBars(score: TrackScore): number {
 
 /** Seconds at the score tempo. */
 export function barsToSeconds(score: TrackScore, bars: number): number {
-  return (bars * score.beatsPerBar * 60) / score.tempoBpm;
+  return (bars * barBeats(score) * 60) / score.tempoBpm;
 }
 
 /** Where arranged (playback) `beat` falls: the form pass and score beat. */
@@ -218,7 +246,7 @@ export function formPositionAt(
   beat: number,
 ): Readonly<{ segment?: FormSegment; index: number; scoreBeat: number }> {
   const segments = formSegments(score);
-  const bpb = score.beatsPerBar;
+  const bpb = barBeats(score);
   if (segments.length === 0) {
     const total = score.bars * bpb;
     return { index: -1, scoreBeat: wrap(beat, total) };

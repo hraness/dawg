@@ -4,6 +4,17 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ## Unreleased
 
+### Integration fixes
+
+- **Renders cover the whole song.** `dawg render` no longer stops at 30 s for a song without a form or for `--section`; long songs render in windows up to 15 minutes, and a note held across a window seam is crossfaded so long drones stay smooth.
+- **Exports keep more of the song.** WAV renders carry a `cue ` point and `LIST adtl` label at each section start; MIDI exports write FF 06 section markers, the tuning as MIDI Tuning Standard SysEx, and glides, bends, vibrato and cents as pitch bend on lone notes.
+- **Forms keep tempo ramps** that cross a section boundary, and sections work in a compound meter held from bar 1 (6/8, 12/8).
+- `/export name.wav` refuses and points to `dawg render` instead of writing loop JSON under a `.wav` name.
+- Play mode starts in single notes on tracks in a non-12 tuning and on mono glide tracks, instead of auto chords in an assumed C major.
+- True peak uses a 32-tap windowed-sinc interpolator instead of the BS.1770-4 example filter, which read dense, bright masters up to half a dB low; the limiter now holds its ceiling on supersaws and distortion.
+- The `acid` preset slides (60 ms legato glide); expression commands take a `last` target; `tuning root C` takes a bare pitch class; `/track piano b` accepts a name with spaces; a song in a named tuning is auto-named after it instead of a guessed 12-TET key.
+- `fermata at end` holds the last felt beat in compound meters; a meter change that pushes notes or fermatas past the song end says so; the menu's song length names the written end tempo; the SDK accepts a `rit()` that ends where `aTempo()` starts or at the final barline.
+
 ### Guides
 
 - **Short guides for every feature, in the app and on dawg.sh.** `/guide` (or F1) opens a tree of one-page guides (getting started, tracks, notes, play mode, chords, rhythm, sounds, effects, automation, mix, the menu and audition loop, media tools, project files, sessions, providers, web search, keys, tempo and meter). Each fits one pane at 80 columns and shows both what to ask the agent and the command, key or menu path that does it by hand. ↑↓ move, → expand or open, ← back, `/` filter, Esc close. The same Markdown files (`guides/*.md`, shipped in the package) are the docs on dawg.sh.

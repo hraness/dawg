@@ -57,6 +57,8 @@ import { barStartTick, loopTicksOf } from "../../core/tempo.ts";
 
 export type NoteTarget =
   | { type: "all" }
+  /** The note added most recently on the track. */
+  | { type: "last" }
   /** 1-based, inclusive. */
   | { type: "bars"; from: number; to: number }
   | { type: "ids"; ids: readonly string[] };
@@ -147,6 +149,7 @@ export function parseNoteTarget(
   if (words.length === 0) return { type: "all" };
   const [first, second, ...rest] = words.map((word) => word.toLowerCase());
   if (first === "all" && words.length === 1) return { type: "all" };
+  if (first === "last" && words.length === 1) return { type: "last" };
   if ((first === "bar" || first === "bars") && second && rest.length === 0) {
     const range = second.match(/^(\d+)(?:-(\d+))?$/);
     if (!range) return undefined;
@@ -476,6 +479,7 @@ export function targetNotes(
   }
   const notes = score.notes.filter((note) => note.trackId === trackId);
   if (target.type === "all") return notes;
+  if (target.type === "last") return notes.slice(-1);
   // Bars follow the meter map: bar n runs from the start of bar n to n + 1.
   const from = barStartTick(score, target.from - 1);
   const to = barStartTick(score, target.to);
@@ -484,6 +488,7 @@ export function targetNotes(
 
 export function describeTarget(target: NoteTarget): string {
   if (target.type === "all") return "all notes";
+  if (target.type === "last") return "last note";
   if (target.type === "ids")
     return target.ids.length === 1
       ? target.ids[0]!
@@ -590,7 +595,7 @@ function noteResult(
     if (unknown !== undefined)
       return {
         ok: false,
-        message: `${label} · unknown note id ${unknown} · targets: all, bar 3, bars 2-4, ids`,
+        message: `${label} · unknown note id ${unknown} · targets: all, last, bar 3, bars 2-4, ids`,
       };
   }
   if (notes.length === 0)
@@ -914,7 +919,7 @@ export function applyExpressionCommand(
 
 /** Usage lines, also the /help and typo hints. */
 export const EXPRESSION_USAGE = Object.freeze({
-  art: `art ${ARTICULATIONS.join("|")}|off [all|bar <n>|bars <a>-<b>|<ids>] · art staccato bars 1-2`,
+  art: `art ${ARTICULATIONS.join("|")}|off [all|last|bar <n>|bars <a>-<b>|<ids>] · art staccato bars 1-2`,
   bend: "bend <cents>|scoop|fall|doit|<at:cents>…|off [target] · bend +200 · bend 0:0 0.5:200",
   vibrato:
     "vibrato <rate Hz> <depth cents> [<delay s>]|off [target] · vibrato 5.5 30 0.2",

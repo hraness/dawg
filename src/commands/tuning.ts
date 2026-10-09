@@ -204,6 +204,8 @@ function rootKey(text: string): number | undefined {
     const key = Number(text);
     return key <= 127 ? key : undefined;
   }
+  // A bare pitch class (`C`, `F#`, `Bb`) means the octave from middle C.
+  if (/^[a-g](?:#|b|♯|♭)?$/i.test(text)) text = `${text}4`;
   try {
     const key = pitchToMidi(text);
     return Number.isInteger(key) && key >= 0 && key <= 127 ? key : undefined;

@@ -3346,10 +3346,28 @@ function songTime(
     const previous = byTick.get(tick);
     const sets = (e: { bpm?: number; back?: unknown }) =>
       e.bpm !== undefined || e.back !== undefined;
-    if (previous && sets(previous) && sets(mark))
+    if (previous && sets(previous) && sets(mark)) {
+      // A rit or ramp ending where a tempo change starts (`rit(18, 6, 52)`
+      // with `aTempo(24)`): the ramp lands a tick early, then the step.
+      const ramped = previous.ramp ? previous : mark.ramp ? mark : undefined;
+      const other = ramped === previous ? mark : previous;
+      if (ramped && !other.ramp && tick > 1 && !byTick.has(tick - 1)) {
+        byTick.set(tick - 1, {
+          tick: tick - 1,
+          ...(ramped.bpm !== undefined ? { bpm: ramped.bpm } : {}),
+          ramp: ramped.ramp!,
+        });
+        byTick.set(tick, {
+          tick,
+          ...(other.bpm !== undefined ? { bpm: other.bpm } : {}),
+          ...(other.back ? { back: other.back } : {}),
+        });
+        continue;
+      }
       throw new DawgSdkError(
-        `song time has two tempo changes at beat ${mark.at}`,
+        `song time has two tempo changes at beat ${mark.at}; move one, or end a rit() where the next tempo starts`,
       );
+    }
     // A pin and a change on the same beat: the change wins.
     if (previous && !sets(mark)) continue;
     byTick.set(tick, {
@@ -3463,6 +3481,16 @@ function songTime(
     }
     end += (bars - fromBar) * length;
     const beatOf = (tick: number) => tick / ticksPerBeat;
+    // A ramp to the final barline (`rit()` over the last bars) lands on
+    // the last tick, the tempo the song ends at.
+    tempo.forEach((event, index) => {
+      if (
+        event.tick === end &&
+        event.ramp &&
+        end - 1 > (tempo[index - 1]?.tick ?? 0)
+      )
+        tempo[index] = Object.freeze({ ...event, tick: end - 1 });
+    });
     for (const event of tempo)
       if (event.tick >= end)
         throw new DawgSdkError(

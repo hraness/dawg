@@ -12,8 +12,15 @@ import {
   renderArranged,
   renderArrangedPcm,
   scoreBeatAt,
+  sectionCues,
 } from "./arrange.ts";
-import { loopFrames, renderScorePcm, StemRenderer } from "./wav.ts";
+import {
+  encodeWav,
+  loopFrames,
+  renderScorePcm,
+  StemRenderer,
+  withWavCues,
+} from "./wav.ts";
 
 function song(bars = 8, tempoBpm = 120): TrackScore {
   const notes = Array.from({ length: bars }, (_, bar) => ({
@@ -402,6 +409,88 @@ describe("windowed renders match one pass", () => {
   });
 });
 
+describe("songs longer than one pass render in full", () => {
+  function plain(bars: number, tempoBpm = 120): TrackScore {
+    return createScore({
+      bars,
+      tempoBpm,
+      tracks: [{ id: "lead", name: "lead", instrument: "sine" }],
+      notes: Array.from({ length: bars }, (_, bar) => ({
+        id: `n${bar}`,
+        trackId: "lead",
+        pitch: 60,
+        startTick: bar * 4 * 480,
+        durationTicks: 480,
+        velocity: 0.8,
+      })),
+    });
+  }
+
+  test("a plain song past 30 s is not cut", () => {
+    // 32 bars at 120 bpm: 64 s plus the tail.
+    const audio = renderArrangedPcm(plain(32), { sampleRate: 8000 });
+    expect(audio.frames / 8000).toBeGreaterThan(64);
+    expect(audio.frames / 8000).toBeLessThan(66);
+    // The last note (beat 124, 62 s) sounds.
+    let peak = 0;
+    for (let index = 62 * 8000 * 2; index < 63 * 8000 * 2; index += 1)
+      peak = Math.max(peak, Math.abs(audio.pcm[index]!));
+    expect(peak).toBeGreaterThan(1000);
+  });
+
+  test("a song between 30 and 45 s renders in one pass at full length", () => {
+    const audio = renderArrangedPcm(plain(18), { sampleRate: 8000 });
+    expect(audio.frames / 8000).toBeGreaterThan(36);
+  });
+
+  test("a short song renders exactly as before", () => {
+    const score = plain(8);
+    const today = renderScorePcm(score, { sampleRate: 8000 });
+    const arranged = renderArrangedPcm(score, { sampleRate: 8000 });
+    expect(
+      Buffer.from(arranged.pcm.buffer).equals(Buffer.from(today.pcm.buffer)),
+    ).toBe(true);
+  });
+
+  test("a drone held past the window reach crossfades at seams, in linear time", () => {
+    const rate = 8000;
+    const bars = 60; // 120 s at 120 bpm
+    const score = createScore({
+      bars,
+      tempoBpm: 120,
+      tracks: [{ id: "drone", name: "drone", instrument: "sine" }],
+      notes: [
+        {
+          id: "d",
+          trackId: "drone",
+          pitch: 48,
+          startTick: 0,
+          durationTicks: bars * 4 * 480,
+          velocity: 0.7,
+        },
+      ],
+    });
+    const started = performance.now();
+    const audio = renderArrangedPcm(score, { sampleRate: rate });
+    const elapsed = performance.now() - started;
+    expect(audio.frames / rate).toBeGreaterThan(120);
+    // A sine at C3 moves at most ~2*pi*130/8000 of full scale per sample;
+    // a phase step would jump far more.
+    let largest = 0;
+    let typical = 0;
+    for (let frame = rate; frame < 119 * rate; frame += 1) {
+      const step = Math.abs(
+        audio.pcm[frame * 2]! - audio.pcm[(frame - 1) * 2]!,
+      );
+      largest = Math.max(largest, step);
+      typical = Math.max(typical, frame < 40 * rate ? step : 0);
+    }
+    expect(largest).toBeLessThanOrEqual(typical * 1.5 + 2);
+    // Full-size windows, not one bar each with half a minute of pre-roll.
+    expect(elapsed).toBeLessThan(20_000);
+  });
+});
+
 describe("sections meet the 0.5 tempo map, track time and master", () => {
   test("a looped section starts at the tempo sounding there", () => {
     // 8 bars at 120, stepping to 60 bpm at bar 4 (the chorus).
@@ -451,5 +540,45 @@ describe("sections meet the 0.5 tempo map, track time and master", () => {
     expect(() =>
       song(8).withTime({ meter: [{ bar: 2, beatsPerBar: 3 }] }),
     ).toThrow(/sections need one meter/);
+  });
+});
+
+describe("section cues in WAV exports", () => {
+  test("cues follow the form in playback order", () => {
+    const score = song(8, 120);
+    const rate = 1000;
+    expect(sectionCues(score, rate)).toEqual([
+      { frame: 0, label: "verse" },
+      { frame: 8000, label: "chorus" },
+    ]);
+    const formed = withForm(score, parseForm(score, "chorus verse chorus"));
+    expect(sectionCues(formed, rate).map((cue) => cue.frame)).toEqual([
+      0, 8000, 16000,
+    ]);
+    expect(sectionCues(createScore({}), rate)).toEqual([]);
+  });
+
+  test("withWavCues writes cue and adtl label chunks", () => {
+    const plain = encodeWav(new Int16Array(4), 1000, 1);
+    expect(withWavCues(plain, [])).toBe(plain);
+    const wav = withWavCues(plain, [
+      { frame: 0, label: "intro" },
+      { frame: 2, label: "drop" },
+    ]);
+    const view = new DataView(wav.buffer);
+    const tag = (at: number) =>
+      String.fromCharCode(...wav.subarray(at, at + 4));
+    expect(view.getUint32(4, true)).toBe(wav.byteLength - 8);
+    const chunks: string[] = [];
+    for (let at = 12; at < wav.byteLength;) {
+      chunks.push(tag(at));
+      const size = view.getUint32(at + 4, true);
+      at += 8 + size + (size % 2);
+    }
+    expect(chunks).toEqual(["fmt ", "data", "cue ", "LIST"]);
+    const text = new TextDecoder().decode(wav);
+    expect(text).toContain("adtl");
+    expect(text).toContain("intro");
+    expect(text).toContain("drop");
   });
 });

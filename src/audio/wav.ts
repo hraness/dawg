@@ -168,6 +168,16 @@ const MAX_DRUM_SECONDS = 0.6;
 const CONTROL_SAMPLES = 32;
 /** One-shot renders keep this much ring-out after the last bar. */
 const ONE_SHOT_TAIL_SECONDS = 0.35;
+
+function oneShotSeconds(
+  loopSeconds: number,
+  samplerTail: number,
+  reverbTail: number,
+): number {
+  return (
+    loopSeconds + Math.max(ONE_SHOT_TAIL_SECONDS, samplerTail) + reverbTail
+  );
+}
 /** Loop renders fold at most this much tail back onto the loop start. */
 const MAX_LOOP_TAIL_SECONDS = 8;
 
@@ -283,6 +293,32 @@ export class StemRenderer {
     return { stems: this.stems.size, bytes: this.cacheBytes };
   }
 
+  /**
+   * Seconds a one-shot render of `score` needs (song plus tail) before the
+   * renderer's cap, so callers can tell when a single pass would cut it.
+   */
+  public oneShotSeconds(
+    score: TrackScore,
+    options: RenderOptions = {},
+  ): number {
+    const sampleRate = clampSampleRate(options.sampleRate);
+    const bank = options.samples ?? EMPTY_SAMPLE_BANK;
+    const reverbTail = Math.max(
+      0,
+      ...score.tracks.map((track) =>
+        reverbTailFor(track, sampleRate, bank.irs),
+      ),
+    );
+    const samplerTail = Math.min(
+      MAX_LOOP_TAIL_SECONDS,
+      Math.max(
+        samplerTailSeconds(score, bank, sampleRate),
+        ...score.tracks.map(synthTailSeconds),
+      ),
+    );
+    return oneShotSeconds(loopSecondsOf(score), samplerTail, reverbTail);
+  }
+
   public render(score: TrackScore, options: RenderOptions = {}): RenderedAudio {
     const sampleRate = clampSampleRate(options.sampleRate);
     const maxSeconds = Math.max(1, Math.min(60, options.maxSeconds ?? 30));
@@ -331,7 +367,7 @@ export class StemRenderer {
     } else {
       const seconds = Math.min(
         maxSeconds,
-        loopSeconds + Math.max(ONE_SHOT_TAIL_SECONDS, samplerTail) + reverbTail,
+        oneShotSeconds(loopSeconds, samplerTail, reverbTail),
       );
       frames = Math.max(1, Math.ceil(seconds * sampleRate));
       samples = frames;
@@ -1158,4 +1194,59 @@ function writeAscii(target: Uint8Array, offset: number, value: string): void {
 
 function clamp16(value: number): number {
   return Math.max(-32_768, Math.min(32_767, Math.round(value)));
+}
+
+/** A named point in a WAV export: a sample frame and its label. */
+export type WavCue = Readonly<{ frame: number; label: string }>;
+
+/**
+ * Append a `cue ` chunk and a `LIST adtl` chunk of `labl` labels, so DAWs
+ * and DJ tools show the cues (dawg writes section starts). No cues returns
+ * the bytes unchanged.
+ */
+export function withWavCues(
+  bytes: Uint8Array,
+  cues: readonly WavCue[],
+): Uint8Array {
+  if (cues.length === 0 || bytes.byteLength < 12) return bytes;
+  const encoder = new TextEncoder();
+  const labels = cues.map((cue) =>
+    encoder.encode(`${cue.label.slice(0, 200)}\0`),
+  );
+  const cueSize = 4 + 24 * cues.length;
+  const lablSizes = labels.map((text) => 4 + text.byteLength);
+  const adtlSize =
+    4 + lablSizes.reduce((sum, size) => sum + 8 + size + (size % 2), 0);
+  const base = bytes.byteLength + (bytes.byteLength % 2);
+  const out = new Uint8Array(base + 8 + cueSize + 8 + adtlSize);
+  out.set(bytes);
+  const view = new DataView(out.buffer);
+  let at = base;
+  writeAscii(out, at, "cue ");
+  view.setUint32(at + 4, cueSize, true);
+  view.setUint32(at + 8, cues.length, true);
+  at += 12;
+  cues.forEach((cue, index) => {
+    const frame = Math.max(0, Math.round(cue.frame));
+    view.setUint32(at, index + 1, true);
+    view.setUint32(at + 4, frame, true);
+    writeAscii(out, at + 8, "data");
+    view.setUint32(at + 12, 0, true);
+    view.setUint32(at + 16, 0, true);
+    view.setUint32(at + 20, frame, true);
+    at += 24;
+  });
+  writeAscii(out, at, "LIST");
+  view.setUint32(at + 4, adtlSize, true);
+  writeAscii(out, at + 8, "adtl");
+  at += 12;
+  labels.forEach((text, index) => {
+    writeAscii(out, at, "labl");
+    view.setUint32(at + 4, lablSizes[index]!, true);
+    view.setUint32(at + 8, index + 1, true);
+    out.set(text, at + 12);
+    at += 8 + lablSizes[index]! + (lablSizes[index]! % 2);
+  });
+  view.setUint32(4, out.byteLength - 8, true);
+  return out;
 }

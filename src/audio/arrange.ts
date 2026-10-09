@@ -21,6 +21,7 @@ import {
   arrangedNotes,
   arrangedSlice,
   bakeTrackTime,
+  barBeats,
   barTicks,
   barsToSeconds,
   findSection,
@@ -30,7 +31,14 @@ import {
   sectionScore,
   sliceSongTime,
 } from "../../core/sections.ts";
-import { bpmAtTick, secondsAtTick, type TimeScore } from "../../core/tempo.ts";
+import {
+  barStartTick,
+  bpmAtTick,
+  loopSecondsOf,
+  loopTicksOf,
+  secondsAtTick,
+  type TimeScore,
+} from "../../core/tempo.ts";
 import {
   RENDER_CHANNELS,
   StemRenderer,
@@ -39,14 +47,19 @@ import {
   masterSummedPcm,
   type RenderOptions,
   type RenderedAudio,
+  type WavCue,
 } from "./wav.ts";
 
+/** What one default render pass holds before the renderer cuts it. */
+const DEFAULT_PASS_SECONDS = 30;
 /** Arrangements up to this long render in a single pass. */
 const SINGLE_PASS_SECONDS = 45;
 /** Bars per window aim for this many seconds. */
 const WINDOW_SECONDS = 20;
 /** Tail (release, delay, reverb, ducking) a window's pre-roll covers. */
 const OVERHANG_SECONDS = 8;
+/** Crossfade where a window restarts a note held from beyond its reach. */
+const SEAM_FADE_SECONDS = 0.05;
 /** Most seconds a window renders, pre-roll included (the renderer caps 60). */
 const WINDOW_BUDGET_SECONDS = 50;
 
@@ -55,6 +68,34 @@ export function exportScore(score: TrackScore): TrackScore {
   // A form past the score's bar limit throws here; renderArranged renders
   // such forms window by window instead, so it never needs this.
   return flattenForm(bakeTrackTime(score));
+}
+
+/**
+ * Section starts as WAV cues, in playback order (the form's passes when it
+ * has one). Empty without sections, or when the form is too long to flatten.
+ */
+export function sectionCues(
+  score: TrackScore,
+  sampleRate: number,
+): readonly WavCue[] {
+  if (score.sections.length === 0) return [];
+  let flat: TrackScore;
+  try {
+    flat = exportScore(score);
+  } catch {
+    return [];
+  }
+  const end = loopTicksOf(flat);
+  return flat.sections
+    .map((section) => ({
+      tick: barStartTick(flat, section.startBar),
+      label: section.name,
+    }))
+    .filter((cue) => cue.tick < end)
+    .map((cue) => ({
+      frame: Math.round(secondsAtTick(flat, cue.tick) * sampleRate),
+      label: cue.label,
+    }));
 }
 
 /** The section playback loops, when `loopSection` names one. */
@@ -107,7 +148,7 @@ export function playbackTime(score: TrackScore): TimeScore {
  */
 export function scoreBeatAt(score: TrackScore, beat: number): number {
   const section = loopedSection(score);
-  const perBar = score.beatsPerBar;
+  const perBar = barBeats(score);
   if (section) {
     const length = section.bars * perBar;
     const phase = Number.isFinite(beat)
@@ -132,7 +173,8 @@ export function renderArranged(
   if (
     !(options.loop && loopedSection(score)) &&
     formSegments(score).length === 0 &&
-    applySectionChanges(score) === score
+    applySectionChanges(score) === score &&
+    fitsOnePass(renderer, score, options)
   )
     return renderer.render(score, options);
   score = bakeTrackTime(score);
@@ -142,9 +184,16 @@ export function renderArranged(
   const played = section
     ? sectionScore(score, section)
     : applySectionChanges(score);
-  if (played === score) return renderer.render(score, options);
+  if (played === score && fitsOnePass(renderer, score, options))
+    return renderer.render(score, options);
   const ticks = barTicks(played);
-  if (secondsAtTick(played, played.bars * ticks) <= SINGLE_PASS_SECONDS)
+  const seconds = secondsAtTick(played, played.bars * ticks);
+  if (seconds > MAX_SONG_SECONDS)
+    throw new ScoreValidationError(
+      `the song plays ${Math.round(seconds)} s; the limit is ${MAX_SONG_SECONDS} s`,
+      "score-limit",
+    );
+  if (seconds <= SINGLE_PASS_SECONDS)
     return renderer.render(played, { ...options, maxSeconds: 60 });
   return renderWindows(
     renderer,
@@ -159,6 +208,23 @@ export function renderArranged(
       sectionScore(played, { name: "window", startBar: from, bars }),
     options,
   );
+}
+
+/**
+ * Whether a single default pass (capped at 30 s) holds all of `score`: the
+ * loop for playback, the song plus its tail for export. A caller's own
+ * `maxSeconds` is a deliberate cap and always takes the single pass. Longer
+ * songs render in windows instead of being cut at 30 s.
+ */
+function fitsOnePass(
+  renderer: StemRenderer,
+  score: TrackScore,
+  options: RenderOptions,
+): boolean {
+  if (options.maxSeconds !== undefined) return true;
+  return options.loop
+    ? loopSecondsOf(score) <= DEFAULT_PASS_SECONDS
+    : renderer.oneShotSeconds(score, options) <= DEFAULT_PASS_SECONDS;
 }
 
 /**
@@ -253,17 +319,29 @@ function renderWindows(
   const most = Math.max(1, Math.floor(WINDOW_SECONDS / slowBar));
   const master = score.master;
   const look = SCORE_LIMITS.maxBars;
-  const parts: { offset: number; pcm: Int16Array; frames: number }[] = [];
+  const parts: {
+    offset: number;
+    pcm: Int16Array;
+    frames: number;
+    /** Frames at the start that fade in over the previous window's end. */
+    fadeIn: number;
+    /** Frames at the end that fade out under the next window. */
+    fadeOut: number;
+  }[] = [];
   for (let start = 0; start < totalBars;) {
     const startTick = start * ticks;
     // Every note up to the next window, in render order: tracks sum in the
     // order of their first note, as in a single pass.
     const all = notesIn(Math.max(0, start - look), start + most + 1);
     let pre = Math.max(0, start - Math.min(ring, reach));
+    // A note the pre-roll can reach pulls it back to its start; one held
+    // from further back restarts in the pre-roll instead (below), so long
+    // drones keep full-size windows and render time stays linear.
     for (const note of all)
       if (
         note.startTick < startTick &&
-        note.startTick + note.durationTicks + ringTicks > startTick
+        note.startTick + note.durationTicks + ringTicks > startTick &&
+        Math.floor(note.startTick / ticks) >= start - reach
       )
         pre = Math.min(pre, Math.floor(note.startTick / ticks));
     pre = Math.max(pre, start - reach);
@@ -277,14 +355,17 @@ function renderWindows(
     const noteTo = last ? end : Math.min(totalBars, end + 1);
     const preTick = pre * ticks;
     const notes: Note[] = [];
+    let restarted = false;
     for (const note of all) {
       if (note.startTick >= noteTo * ticks) continue;
       const stop = note.startTick + note.durationTicks;
       if (note.startTick >= preTick)
         notes.push({ ...note, startTick: note.startTick - preTick });
       // Held from before the pre-roll could reach: restart it there.
-      else if (stop > preTick && stop + ringTicks > startTick)
+      else if (stop > preTick && stop + ringTicks > startTick) {
         notes.push({ ...note, startTick: 0, durationTicks: stop - preTick });
+        restarted = true;
+      }
     }
     // Export ends like a one-shot render; a loop rings out to fold back.
     const bars =
@@ -309,21 +390,55 @@ function renderWindows(
               secondsAtTick(timeline, pre * ticks),
           ),
     });
-    const from = frameAt(start) - frameAt(pre);
+    // A restarted note's phase differs from the previous window's, so the
+    // seam crossfades over the previous window's last frames instead of
+    // stepping; seams without a restart join sample for sample.
+    const fade =
+      restarted && parts.length > 0
+        ? Math.max(
+            0,
+            Math.min(
+              Math.round(SEAM_FADE_SECONDS * sampleRate),
+              frameAt(start) - frameAt(pre),
+              parts.at(-1)!.frames,
+            ),
+          )
+        : 0;
+    const from = frameAt(start) - frameAt(pre) - fade;
     const to = last
       ? audio.frames
       : Math.min(audio.frames, frameAt(end) - frameAt(pre));
+    if (fade > 0) parts.at(-1)!.fadeOut = fade;
     parts.push({
-      offset: frameAt(start),
+      offset: frameAt(start) - fade,
       pcm: audio.pcm.subarray(from * RENDER_CHANNELS, to * RENDER_CHANNELS),
       frames: Math.max(0, to - from),
+      fadeIn: fade,
+      fadeOut: 0,
     });
     start = end;
   }
   const loopLength = Math.max(1, frameAt(totalBars));
   let length = Math.max(...parts.map((part) => part.offset + part.frames));
   const mix = new Int32Array(length * RENDER_CHANNELS);
-  for (const { offset, pcm } of parts) mix.set(pcm, offset * RENDER_CHANNELS);
+  for (const { offset, pcm, frames, fadeIn, fadeOut } of parts) {
+    const base = offset * RENDER_CHANNELS;
+    for (let frame = 0; frame < frames; frame += 1) {
+      // Linear fades: everything both windows share sums back to itself;
+      // only the restarted note's phase step blends over the fade.
+      const gain =
+        frame < fadeIn
+          ? (frame + 0.5) / fadeIn
+          : frame >= frames - fadeOut
+            ? 1 - (frame - (frames - fadeOut) + 0.5) / fadeOut
+            : 1;
+      for (let channel = 0; channel < RENDER_CHANNELS; channel += 1) {
+        const index = frame * RENDER_CHANNELS + channel;
+        mix[base + index]! +=
+          gain === 1 ? pcm[index]! : Math.round(pcm[index]! * gain);
+      }
+    }
+  }
   if (options.loop) {
     // Fold the tail past the loop end back onto its start.
     for (

@@ -41,6 +41,7 @@ const roundTrip = (next: TrackScore | undefined) =>
 describe("expression grammar", () => {
   test("targets and times", () => {
     expect(parseNoteTarget([])).toEqual({ type: "all" });
+    expect(parseNoteTarget(["last"])).toEqual({ type: "last" });
     expect(parseNoteTarget(["bar", "2"])).toEqual({
       type: "bars",
       from: 2,
@@ -166,6 +167,13 @@ describe("expression grammar", () => {
 });
 
 describe("expression commands", () => {
+  test("last targets only the note added last", () => {
+    const result = run("art accent last");
+    expect(result.message).toContain("1 note (last note)");
+    const marked = result.next!.notes.filter((note) => note.articulation);
+    expect(marked.map((note) => note.id)).toEqual(["n7"]);
+  });
+
   test("articulation over a bar range is one revision on those notes", () => {
     const result = run("art staccato bar 2");
     expect(result.ok).toBe(true);

@@ -293,3 +293,23 @@ test("aTempo() and tempoPrimo() step back after a rit", () => {
     "no rit() or accel()",
   );
 });
+
+test("a rit may end where aTempo() starts, or at the final barline", () => {
+  const s = song({
+    tempo: 66,
+    bars: 12,
+    tracks: [],
+    time: [rit(18, 6, 52), aTempo(24), rit(36, 12, 40)],
+  });
+  expect(s.time?.tempo).toEqual([
+    { tick: 18 * 480, bpm: 66 },
+    { tick: 24 * 480 - 1, bpm: 52, ramp: "linear" },
+    { tick: 24 * 480, bpm: 66 },
+    { tick: 36 * 480, bpm: 66 },
+    { tick: 48 * 480 - 1, bpm: 40, ramp: "linear" },
+  ]);
+  // Two plain changes on one beat are still a mistake.
+  expect(() =>
+    song({ bars: 8, tracks: [], time: [tempo(4, 90), tempo(4, 100)] }),
+  ).toThrow(/two tempo changes/);
+});

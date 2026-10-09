@@ -503,6 +503,36 @@ describe("recordOperations", () => {
     );
     expect(bass.session.chords.settings.mode).toBe("manual");
   });
+
+  test("a non-12 tuning or a mono glide line defaults to single notes", () => {
+    const pelog = createScore({
+      tuning: { name: "pelog" },
+      tracks: [{ id: "lead", name: "polos", instrument: "piano" }],
+    });
+    expect(harness(pelog, "lead", {}).session.chords.settings.mode).toBe(
+      "manual",
+    );
+    const retuned = createScore({
+      tuning: { edo: 12, ref: 446 },
+      tracks: [{ id: "lead", name: "keys", instrument: "piano" }],
+    });
+    expect(harness(retuned, "lead", {}).session.chords.settings.mode).toBe(
+      "auto",
+    );
+    const acid = createScore({
+      tracks: [
+        {
+          id: "lead",
+          name: "acid",
+          instrument: "saw",
+          glide: { time: 0.06, mode: "legato" },
+        },
+      ],
+    });
+    expect(harness(acid, "lead", {}).session.chords.settings.mode).toBe(
+      "manual",
+    );
+  });
 });
 
 function keyedScore(key = "C major"): TrackScore {

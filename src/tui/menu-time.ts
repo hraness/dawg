@@ -249,7 +249,21 @@ export function tempoNodes(context: MenuContext): MenuNode[] {
   nodes.push({
     kind: "info",
     label: "song length",
-    value: `${fmt(loopSecondsOf(score))} s · ends at ${fmt(bpmAtTick(score, loopTicksOf(score)))} BPM`,
+    // The written end tempo: a fermata's hold is not a tempo change.
+    value: `${fmt(loopSecondsOf(score))} s · ends at ${fmt(
+      bpmAtTick(
+        {
+          tempoBpm: score.tempoBpm,
+          beatsPerBar: score.beatsPerBar,
+          bars: score.bars,
+          ticksPerBeat: score.ticksPerBeat,
+          ...(time?.tempo || time?.meter
+            ? { time: { tempo: time.tempo, meter: time.meter } }
+            : {}),
+        },
+        loopTicksOf(score),
+      ),
+    )} BPM${time?.fermatas?.length ? ` · ${time.fermatas.length} fermata${time.fermatas.length === 1 ? "" : "s"}` : ""}`,
   });
   return nodes;
 }

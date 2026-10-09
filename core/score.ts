@@ -923,7 +923,10 @@ export class TrackScore {
     const sections = normalizeSections(data.sections ?? []);
     const form = normalizeForm(data.form ?? [], sections);
     // Sections count bars in one meter; meter changes would move them.
-    if (sections.length > 0 && time?.meter)
+    if (
+      sections.length > 0 &&
+      time?.meter?.some((change, index) => index > 0 || change.bar > 0)
+    )
       throw new ScoreValidationError(
         "sections need one meter: remove the meter changes (time.meter) or the sections",
         "invalid-score",
