@@ -8,6 +8,7 @@ import {
   formatFetchedPage,
   htmlToText,
   isPrivateAddress,
+  pinRequest,
   type Lookup,
 } from "./fetch.ts";
 
@@ -27,26 +28,34 @@ type Route = (url: URL, init: RequestInit) => Response;
 
 function scripted(
   routes: Record<string, Route>,
-): FetchLike & { urls: string[] } {
+): FetchLike & { urls: string[]; connected: string[] } {
   const urls: string[] = [];
+  const connected: string[] = [];
   const fetcher = (async (
     input: string | URL | Request,
     init?: RequestInit,
   ) => {
-    const url = new URL(
+    const target = new URL(
       typeof input === "string"
         ? input
         : input instanceof URL
           ? input.toString()
           : input.url,
     );
+    // fetchUrl connects to the checked address and names the host in the
+    // Host header; route on the logical URL it stands for.
+    const host = new Headers(init?.headers).get("host");
+    const url = new URL(target.toString());
+    if (host) url.host = host;
     urls.push(url.toString());
+    connected.push(target.hostname);
     const route =
       routes[url.toString()] ?? routes[`${url.origin}${url.pathname}`];
     if (!route) throw new TypeError(`unexpected fetch ${url}`);
     return route(url, init ?? {});
-  }) as FetchLike & { urls: string[] };
+  }) as FetchLike & { urls: string[]; connected: string[] };
   fetcher.urls = urls;
+  fetcher.connected = connected;
   return fetcher;
 }
 
@@ -102,6 +111,19 @@ describe("address policy", () => {
       "::ffff:c0a8:101",
       "64:ff9b::a00:1",
       "2001:db8::1",
+      "::127.0.0.1",
+      "::7f00:1",
+      "::a00:1",
+      "2002:7f00:1::",
+      "2002:a9fe:a9fe::1",
+      "2002:c0a8:0101::5",
+      "fec0::1",
+      "feff::1",
+      "100::1",
+      "64:ff9b:1::a",
+      "2001:0:4136:e378::1",
+      "0:0:0:0:0:ffff:127.0.0.1",
+      "::FFFF:7F00:1",
       "not-an-ip",
     ])
       expect(isPrivateAddress(address)).toBe(true);
@@ -112,6 +134,10 @@ describe("address policy", () => {
       "100.128.0.1",
       "2606:4700::1111",
       "::ffff:5db8:d822",
+      "2002:5db8:d822::1",
+      "2001:4860:4860::8888",
+      "101::1",
+      "2a00:1450:4001:80b::200e",
     ])
       expect(isPrivateAddress(address)).toBe(false);
   });
@@ -372,5 +398,179 @@ describe("htmlToText", () => {
     expect(htmlToText("<p>&lt;tag&gt; &amp; &quot;q&quot;</p>")).toEqual({
       text: '<tag> & "q"',
     });
+  });
+});
+
+describe("DNS rebinding", () => {
+  test("connects to the address that was checked, never re-resolving the name", async () => {
+    // A rebinding name answers public first; a second lookup (by fetch
+    // itself) could answer 127.0.0.1. The fetcher must receive the checked
+    // IP with the name only in the Host header.
+    let lookups = 0;
+    const rebinding: Lookup = async () => {
+      lookups += 1;
+      return lookups === 1 ? ["93.184.216.34"] : ["127.0.0.1"];
+    };
+    const fetcher = scripted({
+      "http://rebind.example:8080/a": () => respond("ok", "text/plain"),
+    });
+    const page = await fetchUrl("http://rebind.example:8080/a", {
+      fetch: fetcher,
+      lookup: rebinding,
+    });
+    expect(page.text).toBe("ok");
+    expect(page.url).toBe("http://rebind.example:8080/a");
+    expect(fetcher.connected).toEqual(["93.184.216.34"]);
+    expect(lookups).toBe(1);
+  });
+
+  test("pins https with SNI and certificate checks on the original name", () => {
+    const pin = pinRequest(
+      new URL("https://site.example/p?q=1"),
+      "2001:4860::8",
+    );
+    expect(pin.target).toBe("https://[2001:4860::8]/p?q=1");
+    expect(pin.host).toBe("site.example");
+    expect(pin.tls?.serverName).toBe("site.example");
+    expect(typeof pin.tls?.checkServerIdentity).toBe("function");
+    const literal = pinRequest(
+      new URL("http://93.184.216.34:81/"),
+      "93.184.216.34",
+    );
+    expect(literal).toEqual({
+      target: "http://93.184.216.34:81/",
+      host: "93.184.216.34:81",
+    });
+  });
+
+  test("a pinned request reaches the pinned address with the original Host", async () => {
+    const server = Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      fetch: (request) => new Response(request.headers.get("host") ?? ""),
+    });
+    try {
+      const pin = pinRequest(
+        new URL(`http://site.example:${server.port}/x`),
+        "127.0.0.1",
+      );
+      const response = await fetch(pin.target, { headers: { host: pin.host } });
+      expect(await response.text()).toBe(`site.example:${server.port}`);
+    } finally {
+      await server.stop(true);
+    }
+  });
+
+  test("property: every connection goes to an address the lookup returned and the policy admitted", async () => {
+    let seed = 0x9e3779b9;
+    const rand = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 2 ** 32;
+    };
+    const pick = <T>(items: readonly T[]) =>
+      items[Math.floor(rand() * items.length)]!;
+    const publics = [
+      "93.184.216.34",
+      "1.1.1.1",
+      "8.8.4.4",
+      "2606:4700::1111",
+      "2a00:1450::1",
+    ];
+    const privates = [
+      "127.0.0.1",
+      "10.1.2.3",
+      "169.254.169.254",
+      "::1",
+      "fd00::1",
+      "::ffff:10.0.0.1",
+    ];
+    for (let run = 0; run < 200; run += 1) {
+      const answers = new Map<string, string[]>();
+      const hosts = ["a.example", "b.example", "c.example"];
+      for (const host of hosts) {
+        const n = 1 + Math.floor(rand() * 3);
+        answers.set(
+          host,
+          Array.from({ length: n }, () =>
+            rand() < 0.2 ? pick(privates) : pick(publics),
+          ),
+        );
+      }
+      const hops = Array.from({ length: 1 + Math.floor(rand() * 3) }, () =>
+        pick(hosts),
+      );
+      const routes: Record<string, Route> = {};
+      hops.forEach((host, i) => {
+        const next = hops[i + 1];
+        routes[`http://${host}/${i}`] = () =>
+          next === undefined
+            ? respond("end", "text/plain")
+            : respond(null, "text/html", 302, {
+                location: `http://${next}/${i + 1}`,
+              });
+      });
+      const fetcher = scripted(routes);
+      const lookup: Lookup = async (host) => answers.get(host) ?? [];
+      const allPublic = hops.every((h) =>
+        answers.get(h)!.every((a) => !isPrivateAddress(a)),
+      );
+      const result = await fetchUrl(`http://${hops[0]}/0`, {
+        fetch: fetcher,
+        lookup,
+      }).then(
+        (page) => page.text,
+        (error: unknown) =>
+          error instanceof WebError ? "rejected" : String(error),
+      );
+      expect(result).toBe(allPublic ? "end" : "rejected");
+      fetcher.connected.forEach((address, i) => {
+        const host = new URL(fetcher.urls[i]!).hostname;
+        const bare = address.replace(/^\[|\]$/g, "");
+        expect(answers.get(host)).toContain(bare);
+        expect(isPrivateAddress(bare)).toBe(false);
+      });
+    }
+  });
+});
+
+describe("address policy properties", () => {
+  let seed = 0x1234abcd;
+  const rand = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 2 ** 32;
+  };
+  const byte = () => Math.floor(rand() * 256);
+  const hex = (n: number) => n.toString(16);
+
+  test("embedded IPv4 forms classify like the IPv4 address they carry", () => {
+    for (let i = 0; i < 2000; i += 1) {
+      const [a, b, c, d] = [byte(), byte(), byte(), byte()];
+      const v4 = `${a}.${b}.${c}.${d}`;
+      const high = hex((a << 8) | b);
+      const low = hex((c << 8) | d);
+      const expected = isPrivateAddress(v4);
+      expect(isPrivateAddress(`::ffff:${v4}`)).toBe(expected);
+      expect(isPrivateAddress(`::ffff:${high}:${low}`)).toBe(expected);
+      expect(isPrivateAddress(`2002:${high}:${low}::1`)).toBe(expected);
+      // IPv4-compatible ::/96 is never a public destination.
+      expect(isPrivateAddress(`::${v4}`)).toBe(true);
+    }
+  });
+
+  test("compressed and expanded spellings agree, and junk never throws", () => {
+    for (let i = 0; i < 2000; i += 1) {
+      const groups = Array.from({ length: 8 }, () =>
+        rand() < 0.4 ? 0 : Math.floor(rand() * 0x10000),
+      );
+      const full = groups.map(hex).join(":");
+      const compressed = full.replace(/(^|:)0(:0)+(:|$)/, "::");
+      expect(isPrivateAddress(compressed)).toBe(isPrivateAddress(full));
+      expect(isPrivateAddress(full.toUpperCase())).toBe(isPrivateAddress(full));
+      const junk = Array.from(
+        { length: 1 + Math.floor(rand() * 20) },
+        () => ":.0123456789abcdefg%[]"[Math.floor(rand() * 22)],
+      ).join("");
+      expect(typeof isPrivateAddress(junk)).toBe("boolean");
+    }
   });
 });
