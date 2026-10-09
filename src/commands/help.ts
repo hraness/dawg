@@ -686,7 +686,7 @@ function sectionLines(
     );
   for (const section of sections) {
     if (lines.length > 0) lines.push("");
-    lines.push(`── ${section.group}`);
+    lines.push(truncate(`── ${section.group}`, width));
     for (const entry of section.entries) {
       const pad = Math.max(1, column - entry.command.length);
       lines.push(
@@ -708,7 +708,7 @@ export function helpLines(width = 80): string[] {
   );
   for (const section of HELP_SECTIONS) {
     if (lines.length > 0) lines.push("");
-    lines.push(`── ${section.group}`);
+    lines.push(truncate(`── ${section.group}`, width));
     for (const entry of section.entries) {
       const pad = Math.max(1, column - entry.command.length);
       lines.push(

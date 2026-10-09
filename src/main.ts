@@ -1138,8 +1138,13 @@ function mouseOn(): string {
   return mouseEnabled() ? MOUSE_ON : "";
 }
 
-/** Mouse off, plain colors, plain paste, cursor shown, main screen. */
-const TERMINAL_RESTORE = `${MOUSE_OFF}${ESC}0m${ESC}?2004l${ESC}?25h${ESC}?1049l`;
+/**
+ * Mouse off, plain colors, plain paste, cursor shown, main screen.  A
+ * function, not a const: `await runInteractive()` runs above this line.
+ */
+function terminalRestore(): string {
+  return `${MOUSE_OFF}${ESC}0m${ESC}?2004l${ESC}?25h${ESC}?1049l`;
+}
 
 /** `dawg: <stack>` for a crash printed after leaving the alternate screen. */
 function crashText(error: unknown): string {
@@ -1162,7 +1167,7 @@ async function runInteractive(): Promise<void> {
       // stdin may already be closed.
     }
     try {
-      writeSync(1, TERMINAL_RESTORE);
+      writeSync(1, terminalRestore());
     } catch {
       // The terminal may already be gone (SIGHUP).
     }
@@ -1223,9 +1228,7 @@ async function runInteractive(): Promise<void> {
       if (screenSuspended || terminalRestored) return original(...data);
       tui.activity.pushNote(
         data
-          .map((item) =>
-            item instanceof Error ? item.message : String(item),
-          )
+          .map((item) => (item instanceof Error ? item.message : String(item)))
           .join(" "),
         "error",
       );
@@ -1520,7 +1523,7 @@ async function runInteractive(): Promise<void> {
     stdin.pause();
     stdin.setRawMode?.(false);
     // Leave the alternate screen; restore the cursor and plain paste.
-    stdout.write(`${MOUSE_OFF}${ESC}0m${ESC}?2004l${ESC}?25h${ESC}?1049l`);
+    stdout.write(terminalRestore());
     try {
       return await flow();
     } finally {
@@ -4468,7 +4471,6 @@ async function stepHistory(direction: "undo" | "redo"): Promise<Receipt> {
   }
 }
 
-/** The space-bar toggle: flip the transport, then record it for other windows. */
 /** Space, the menu and a header click all report a failed toggle the same way. */
 function transportFailed(error: unknown): void {
   tui.activity.pushCard(
@@ -4477,6 +4479,7 @@ function transportFailed(error: unknown): void {
   );
 }
 
+/** The space-bar toggle: flip the transport, then record it for other windows. */
 async function toggleTransport(): Promise<void> {
   await setTransport("toggle");
   try {
