@@ -6,7 +6,7 @@
  * chains with sevenths throughout and a chromatic eighth-note line.
  */
 
-import { grid, intervals, kit, maybe, role } from "./parts.ts";
+import { grid, intervals, kitRoles, maybe, role } from "./parts.ts";
 import { card, type StyleCard } from "./schema.ts";
 
 const SWING_RIDE = grid("x...x.x.x...x.x.");
@@ -1433,9 +1433,7 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     },
     texture: {
       roles: {
-        kick: kit("electro"),
-        snare: kit("electro"),
-        hat: kit("electro"),
+        ...kitRoles("electro"),
         chords: role("rhodes", "keys:0.4"),
         bass: role("bass", "ebass:0.4"),
         lead: role("trumpet", "flute:0.4"),
@@ -1548,6 +1546,423 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
         bass: role("contrabass", "ebass:0.5"),
         chords: role("nylon"),
         lead: role("flute", "sax:0.6", "sing:0.6"),
+      },
+    },
+  }),
+  // -------------------------------------------------------------------------
+  // Blues leaves. References: Jeff Todd Titon, "Early Downhome Blues" (1977);
+  // David Evans, "Big Road Blues" (1982); Peter Silvester, "A Left Hand Like
+  // God" (1988, piano blues and boogie-woogie).
+  card({
+    id: "delta-blues",
+    summary:
+      "Delta blues: solo bottleneck guitar, drone on the tonic, AAB couplet over 12 bars, blue third bent toward the major, heavy triplet shuffle, one-chord stretches",
+    seedSalt: 1930,
+    tempo: { bpm: [60, 120], typical: 84 },
+    groove: { swingRatio: [1.9, 2.2] },
+    pitch: {
+      scales: [
+        ["blues", 0.7],
+        ["minor-pentatonic", 0.3],
+      ],
+    },
+    harmony: { forms: [[BLUES_FORM, 1]], sources: { forms: 1 } },
+    bass: {
+      behaviour: [
+        ["pedal", 0.6],
+        ["root", 0.4],
+      ],
+      onsets: grid("x.x.x.x."),
+    },
+    melody: {
+      density: [1, 2],
+      repetition: 0.7,
+      contour: [
+        ["descending", 0.7],
+        ["arch", 0.3],
+      ],
+    },
+    texture: {
+      roles: {
+        bass: role("steel"),
+        chords: role("steel"),
+        lead: role("steel@glide", "sing:0.5"),
+      },
+    },
+    form: { archetype: "12-bar" },
+  }),
+  card({
+    id: "piedmont-blues",
+    summary:
+      "Piedmont blues: ragtime-derived alternating-thumb fingerpicking (bass on every beat, root and fifth), syncopated treble, major-leaning I-VI7-II7-V7 circle",
+    seedSalt: 1928,
+    tempo: { bpm: [90, 140], typical: 112 },
+    groove: { subdivision: 4, swingRatio: [1.2, 1.5] },
+    pitch: {
+      scales: [
+        ["major-blues", 0.6],
+        ["major-pentatonic", 0.4],
+      ],
+    },
+    harmony: {
+      forms: [[BLUES_FORM, 0.5]],
+      presets: [["turnaround", 0.5]],
+      sources: { forms: 1, presets: 1 },
+    },
+    bass: {
+      behaviour: [["root-fifth", 1]],
+      onsets: grid("x...x...x...x..."),
+    },
+    rhythm: { onsets: { chords: grid("..x...x.x.x...x.") } },
+    texture: {
+      roles: {
+        bass: role("steel"),
+        chords: role("steel"),
+        lead: role("steel", "sing:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "texas-blues",
+    summary:
+      "Texas blues: free single-note lines over a steady thumbed bass, looser bar counts, minor-pentatonic runs, relaxed swing with jazz-inflected ninths",
+    seedSalt: 1926,
+    tempo: { bpm: [70, 130], typical: 96 },
+    groove: { swingRatio: [1.6, 1.9] },
+    pitch: {
+      scales: [
+        ["blues", 0.5],
+        ["minor-pentatonic", 0.5],
+      ],
+    },
+    melody: { density: [2, 3], intervals: intervals(5, 3, 1, 0.4) },
+    texture: {
+      roles: {
+        bass: role("steel"),
+        chords: role("steel"),
+        lead: role("steel", "sing:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "hill-country-blues",
+    summary:
+      "hill country blues: one-chord trance groove on a tonic drone, repetitive riff ostinato, fife-and-drum polyrhythm, droning straight-ish eighths",
+    seedSalt: 1959,
+    tempo: { bpm: [90, 130], typical: 108 },
+    groove: { swingRatio: [1.2, 1.5] },
+    pitch: {
+      scales: [
+        ["minor-pentatonic", 0.6],
+        ["blues", 0.4],
+      ],
+    },
+    harmony: {
+      model: "modal",
+      forms: null,
+      presets: null,
+      sources: null,
+      rhythm: [[4, 1]],
+    },
+    bass: {
+      behaviour: [
+        ["ostinato", 0.7],
+        ["pedal", 0.3],
+      ],
+      onsets: grid("x.xx..x."),
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x...x.x."),
+        snare: grid("..x...x."),
+        hat: null,
+      },
+    },
+    melody: { repetition: 0.8, density: [2, 2] },
+    texture: {
+      roles: {
+        kick: role("drums"),
+        snare: maybe("drums"),
+        bass: role("electric"),
+        chords: role("electric@crunch"),
+        lead: role("electric@crunch", "sing:0.4"),
+      },
+    },
+    form: { archetype: "one-chord vamp" },
+  }),
+  card({
+    id: "memphis-blues",
+    summary:
+      "Memphis blues: early string-band and jug-band blues of the Mid-South, sixteen-bar and twelve-bar strophes, guitar and harp duets, brisk two-beat",
+    seedSalt: 1927,
+    tempo: { bpm: [90, 140], typical: 116 },
+    groove: { swingRatio: [1.5, 1.8] },
+    pitch: {
+      scales: [
+        ["major-blues", 0.5],
+        ["blues", 0.5],
+      ],
+    },
+    harmony: {
+      forms: [
+        [BLUES_FORM, 0.6],
+        [EIGHT_BAR_BLUES, 0.4],
+      ],
+    },
+    bass: { behaviour: [["root-fifth", 1]], onsets: grid("x...x...") },
+    texture: {
+      roles: {
+        bass: role("steel"),
+        chords: role("steel", "banjo:0.4"),
+        lead: role("reeds", "steel:0.6"),
+      },
+    },
+  }),
+  card({
+    id: "jug-band",
+    summary:
+      "jug band: tuba-like jug on root and fifth two-beat, washboard sixteenth scrape, kazoo and banjo, ragtime circle I-VI7-II7-V7",
+    seedSalt: 1925,
+    tempo: { bpm: [110, 170], typical: 140 },
+    groove: { swingRatio: [1.4, 1.8] },
+    pitch: {
+      scales: [
+        ["major", 0.6],
+        ["major-blues", 0.4],
+      ],
+    },
+    harmony: {
+      presets: [["turnaround", 1]],
+      forms: [[BLUES_FORM, 1]],
+      sources: { presets: 1, forms: 1 },
+    },
+    rhythm: { onsets: { shaker: grid("xxxxxxxx") } },
+    bass: { behaviour: [["root-fifth", 1]], onsets: grid("x...x...") },
+    texture: {
+      roles: {
+        shaker: role("drums"),
+        bass: role("tuba"),
+        chords: role("banjo", "steel:0.5"),
+        lead: role("reeds", "whistle:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "classic-female-blues",
+    summary:
+      "classic vaudeville blues: singer fronting a small jazz band, stride-like piano, cornet obbligato answering each vocal line (call and response), 12-bar and 16-bar strophes",
+    seedSalt: 1923,
+    tempo: { bpm: [70, 120], typical: 88 },
+    groove: { swingRatio: [1.5, 1.8] },
+    pitch: {
+      scales: [
+        ["blues", 0.5],
+        ["major-blues", 0.5],
+      ],
+    },
+    bass: { behaviour: [["root-fifth", 1]], onsets: grid("x...x...") },
+    texture: {
+      roles: {
+        kick: null,
+        snare: null,
+        hat: null,
+        bass: role("tuba", "contrabass:0.6"),
+        chords: role("honkytonk", "upright:0.6"),
+        lead: role("sing"),
+        counter: role("trumpet", "clarinet:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "piano-blues",
+    summary:
+      "barrelhouse piano blues: rolling left-hand root-fifth-sixth figure, right-hand tremolos and crushed blue-note grace tones, 12-bar shuffle",
+    seedSalt: 1929,
+    tempo: { bpm: [70, 130], typical: 100 },
+    bass: { behaviour: [["arpeggio", 1]], onsets: grid("x.x.x.x.") },
+    rhythm: { onsets: { chords: grid("..x...x.") } },
+    texture: {
+      roles: {
+        kick: null,
+        snare: null,
+        hat: null,
+        bass: role("honkytonk", "upright:0.5"),
+        chords: role("honkytonk", "upright:0.5"),
+        lead: role("honkytonk", "upright:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "boogie-woogie",
+    summary:
+      "boogie-woogie: ostinato left hand of eight-to-the-bar broken octaves and walking 1-3-5-6-b7 patterns, right-hand riffs and tremolos, fast 12-bar",
+    seedSalt: 1938,
+    tempo: { bpm: [140, 200], typical: 168 },
+    groove: { swingRatio: [1.5, 1.9] },
+    harmony: { forms: [[BLUES_FORM, 1]], sources: { forms: 1 } },
+    bass: {
+      behaviour: [
+        ["ostinato", 0.6],
+        ["walking", 0.4],
+      ],
+      onsets: grid("xxxxxxxx"),
+    },
+    melody: { density: [2, 3], repetition: 0.7 },
+    texture: {
+      roles: {
+        kick: null,
+        snare: null,
+        hat: null,
+        bass: role("honkytonk", "grand:0.5"),
+        chords: role("honkytonk", "grand:0.5"),
+        lead: role("honkytonk", "grand:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "jump-blues",
+    summary:
+      "jump blues: up-tempo shuffle, walking or boogie bass, riffing horn section answering a shouted vocal, snare backbeat on 2 and 4, honking tenor solo",
+    seedSalt: 1946,
+    tempo: { bpm: [150, 210], typical: 176 },
+    bass: {
+      behaviour: [
+        ["walking", 0.6],
+        ["ostinato", 0.4],
+      ],
+      onsets: grid("x.x.x.x."),
+    },
+    texture: {
+      roles: {
+        bass: role("contrabass", "ebass:0.4"),
+        chords: role("piano", "honkytonk:0.5"),
+        lead: role("sax", "sing:0.6"),
+        counter: role("trumpet", "trombone:0.6", "barisax:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "chicago-blues",
+    summary:
+      "Chicago blues: amplified electric band, slow-medium shuffle, quick-change 12-bar, guitar and amplified-harp call and response, root-fifth-sixth shuffle bass",
+    seedSalt: 1950,
+    tempo: { bpm: [70, 130], typical: 92 },
+    harmony: {
+      forms: [
+        [QUICK_CHANGE_FORM, 0.6],
+        [BLUES_FORM, 0.4],
+      ],
+    },
+    bass: {
+      behaviour: [
+        ["arpeggio", 0.6],
+        ["walking", 0.4],
+      ],
+    },
+    texture: {
+      roles: {
+        chords: role("electric@crunch", "piano:0.5"),
+        lead: role("electric@crunch", "reeds:0.5"),
+        counter: maybe("reeds"),
+      },
+    },
+  }),
+  card({
+    id: "louisiana-blues",
+    summary:
+      "Louisiana swamp blues: slow laid-back shuffle, tremolo-soaked guitar, reverb-heavy sparse arrangement, harp fills, minor-pentatonic phrasing",
+    seedSalt: 1957,
+    tempo: { bpm: [60, 100], typical: 76 },
+    pitch: {
+      scales: [
+        ["blues", 0.6],
+        ["minor-pentatonic", 0.4],
+      ],
+    },
+    melody: { density: [1, 2] },
+    texture: {
+      roles: {
+        chords: role("electric@clean"),
+        lead: role("electric@clean", "reeds:0.5"),
+      },
+    },
+    mix: { space: 0.6, fx: { chords: { tremolo: "pulse" } } },
+  }),
+  card({
+    id: "west-coast-blues",
+    summary:
+      "West Coast blues: jazz-inflected urbane blues, ninth and thirteenth chords, smooth swing, horn pads, single-note guitar lines with bebop passing tones",
+    seedSalt: 1947,
+    tempo: { bpm: [70, 130], typical: 100 },
+    groove: { swingRatio: [1.5, 1.8] },
+    pitch: {
+      scales: [
+        ["blues", 0.4],
+        ["mixolydian", 0.6],
+      ],
+    },
+    harmony: {
+      voicing: {
+        types: [
+          ["shell", 0.5],
+          ["open", 0.5],
+        ],
+      },
+    },
+    melody: { chordToneRate: 0.6, intervals: intervals(6, 3, 0.7, 0.3) },
+    texture: {
+      roles: {
+        chords: role("piano", "electric@clean:0.6"),
+        lead: role("electric@clean"),
+        pad: maybe("sax", "trumpet:0.6"),
+      },
+    },
+  }),
+  card({
+    id: "soul-blues",
+    summary:
+      "soul blues: blues form with gospel-soul production, straight-eighth backbeat, organ pads, horn stabs, melismatic vocal over minor-pentatonic guitar fills",
+    seedSalt: 1969,
+    tempo: { bpm: [60, 100], typical: 78 },
+    groove: { swingRatio: [1, 1.3] },
+    harmony: {
+      sources: { forms: 1, presets: 1 },
+      presets: [["turnaround", 1]],
+    },
+    texture: {
+      roles: {
+        chords: role("hammond", "epiano:0.5"),
+        lead: role("sing", "electric@clean:0.6"),
+        counter: maybe("trumpet", "sax:0.6"),
+      },
+    },
+  }),
+  card({
+    id: "modern-electric-blues",
+    summary:
+      "modern electric blues: overdriven guitar lead, power-trio texture, rock backbeat with blues shuffle or straight eighths, sustained bends and long solos",
+    seedSalt: 1985,
+    tempo: { bpm: [70, 140], typical: 104 },
+    groove: { swingRatio: [1, 1.9] },
+    pitch: {
+      scales: [
+        ["blues", 0.6],
+        ["minor-pentatonic", 0.4],
+      ],
+    },
+    harmony: {
+      voicing: {
+        types: [
+          ["power", 0.5],
+          ["close", 0.5],
+        ],
+      },
+    },
+    melody: { density: [2, 3] },
+    texture: {
+      roles: {
+        chords: role("electric@crunch"),
+        lead: role("electric@lead", "electric@fuzz:0.4"),
       },
     },
   }),
