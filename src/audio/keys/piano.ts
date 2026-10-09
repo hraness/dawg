@@ -215,15 +215,33 @@ export class PianoVoice {
       (prepKind === 1 ? 0.12 : prepKind >= 0 ? 0.5 : 1);
     const soft = clamp(note.soft ?? 0, 0, 1);
     let after = clamp(p.after, 0, 0.95);
-    let thMs =
+    const thMs =
       lerp(3.5, 0.8, keyPos) *
       lerp(1.6, 0.7, v) *
       (1 + 1.5 * p.felt) *
       (1.3 - 0.6 * p.hardness);
-    if (soft > 0) {
-      after = clamp(after + (1 - after) * 0.4 * soft, 0, 0.95);
-      thMs *= 1 + 0.8 * soft;
-    }
+    // Una corda (keys.md 2.1): the shifted hammer meets the strings with
+    // its softer felt. Modelled spectrally, so the pulse length stays and
+    // its nulls never land on a low partial: mode input gains get a smooth
+    // two-pole low-pass relative to partial 1 (cutoff at a tenth of the
+    // spec's hammer cutoff, lowered 25% at full pedal), floored at -12 dB
+    // so no low harmonic is notched out; more of the slow aftersound is
+    // excited. Measured at keys 48-84, velocity 0.5-0.9: centroid -12 to
+    // -20% through key 72 (-5% at 84), peak -2.3 to -4.8 dB, no partial of
+    // the first eight more than 9 dB down (src/audio/keys/pedals.test.ts).
+    const softFc =
+      35 *
+      2 ** (5 * v * (0.4 + 0.6 * p.hardness) + 1.5 * keyPos) *
+      0.75 ** soft;
+    const softFloor = 1 - 0.75 * soft;
+    const softW = (hz: number) =>
+      soft > 0
+        ? Math.max(
+            softFloor,
+            ((1 + (f1 / softFc) ** 2) / (1 + (hz / softFc) ** 2)) ** soft,
+          )
+        : 1;
+    if (soft > 0) after = clamp(after + (1 - after) * 0.4 * soft, 0, 0.95);
     this.pulse = hammerPulse(
       Math.max(2, Math.round(thMs * 1e-3 * sr)),
       1 + 2 * v * p.hardness,
@@ -251,6 +269,8 @@ export class PianoVoice {
     const shift = prepKind === 0 || prepKind === 2 ? 0.04 + 0.1 * prep() : 0;
     const candidates: { hz: number; t60: number; u: number }[] = [];
     let energy = 0;
+    let sum0 = 0;
+    let sumW = 0;
     for (let n = 1; n <= partials; n += 1) {
       let fn = n * f0 * Math.sqrt(1 + B * n * n);
       if (shift && n > 1) fn *= 1 - shift * Math.sin(n * Math.PI * xb) ** 2;
@@ -258,8 +278,11 @@ export class PianoVoice {
       if (Math.abs(shape) < 1e-3) continue;
       const tn = 1 / (1 / T1 + (fn / 3000) ** 2 / (1.2 * p.decay));
       const damped = prepKind === 1 && n > 3 ? 0.3 : 1;
-      const u = shape * damped;
-      energy += u * u;
+      const u0 = shape * damped;
+      energy += u0 * u0;
+      const u = u0 * softW(fn);
+      sum0 += Math.abs(u0);
+      sumW += Math.abs(u);
       if (n <= 12) {
         // Prompt sound at the centre, aftersound split into a symmetric pair.
         const d = (spread / 2) * (1 + 0.3 * (random() - 0.5));
@@ -284,7 +307,10 @@ export class PianoVoice {
           u: 0.35,
         });
     let loud = v ** 1.4 * (1 - 0.4 * p.felt);
-    if (soft > 0) loud *= 1 - 0.3 * soft;
+    // Una corda's level is 30% down: half the low-pass loss (in summed mode
+    // amplitude) is made up so the extra loss stays about 1 dB.
+    if (soft > 0)
+      loud *= (1 - 0.3 * soft) * Math.sqrt(sum0 / Math.max(sumW, 1e-9));
     const G = (0.35 * loud) / Math.sqrt(Math.max(energy, 1e-9));
     const mags = candidates.map(
       (c) => pulseMag(this.pulse, (TAU * c.hz) / sr) * Math.abs(c.u),
@@ -313,7 +339,7 @@ export class PianoVoice {
           2800,
           1.5,
           0.002,
-          0.02 * v * v * p.hardness * (1 - p.felt),
+          0.02 * v * v * p.hardness * (1 - p.felt) * (1 - 0.3 * soft),
           sr,
         ),
       );
