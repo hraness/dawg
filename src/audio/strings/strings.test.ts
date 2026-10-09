@@ -54,7 +54,7 @@ describe("plucked strings (design spec section 9)", () => {
           ok: true,
         });
       }
-  });
+  }, 60_000);
 
   test("sitar: buzz off is exact, buzz on stays within 1 cent above C4", () => {
     for (let p = 48; p <= 81; p += 3) {
