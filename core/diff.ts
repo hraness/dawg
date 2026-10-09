@@ -11,10 +11,6 @@
  */
 
 import {
-  NOTE_EXPRESSION_FIELDS,
-  TRACK_PERFORMANCE_FIELDS,
-} from "./expression.ts";
-import {
   applyScoreOperation,
   TrackScore,
   type Note,
@@ -31,39 +27,106 @@ export class DiffError extends Error {
   }
 }
 
-const EFFECTS = [
-  "filter",
-  "delay",
-  "reverb",
-  "sampler",
-  "fx",
-  "fxAutomation",
-  "synth",
-  "wavetable",
-  "string",
-  "granular",
-  "keys",
-  "modal",
-  "softPedal",
-  "sostenuto",
-  // f061-guitar: fretting setup.
-  "guitar",
-  "wind",
-  // f07-sing: the singing voice.
-  "sing",
-  // f07-clips: audio clips and takes.
-  "clips",
-  "takes",
-] as const;
-const LANES = [
-  "volumeAutomation",
-  "panAutomation",
-  "filterAutomation",
-  "resonanceAutomation",
-  "delayFeedbackAutomation",
-  "delayMixAutomation",
-  "wtAutomation",
-] as const;
+/**
+ * How each field diffs: `same` is identity (never patched), `set` patches
+ * the new value, `clear` patches the new value or null, `zero` treats
+ * absent as 0, `flag` treats absent as false and `lane` treats absent as
+ * []. The records are keyed by every field of `Note` and `Track`, so a new
+ * field fails typechecking until it is classified here.
+ */
+type FieldRule = "same" | "set" | "clear" | "zero" | "flag" | "lane";
+
+const NOTE_FIELDS: { readonly [K in keyof Note]-?: FieldRule } = {
+  id: "same",
+  trackId: "same",
+  startTick: "set",
+  durationTicks: "set",
+  pitch: "set",
+  velocity: "set",
+  cents: "zero",
+  lyric: "clear",
+  vowel: "clear",
+  articulation: "clear",
+  glide: "clear",
+  bend: "clear",
+  vibrato: "clear",
+  humanize: "clear",
+};
+
+const TRACK_FIELDS: { readonly [K in keyof Track]-?: FieldRule } = {
+  id: "same",
+  name: "set",
+  instrument: "set",
+  muted: "set",
+  volume: "set",
+  pan: "set",
+  solo: "flag",
+  volumeAutomation: "lane",
+  panAutomation: "lane",
+  filterAutomation: "lane",
+  resonanceAutomation: "lane",
+  delayFeedbackAutomation: "lane",
+  delayMixAutomation: "lane",
+  wtAutomation: "lane",
+  filter: "clear",
+  delay: "clear",
+  reverb: "clear",
+  fx: "clear",
+  fxAutomation: "clear",
+  synth: "clear",
+  wavetable: "clear",
+  sampler: "clear",
+  rhythm: "clear",
+  kit: "clear",
+  time: "clear",
+  tuning: "clear",
+  string: "clear",
+  granular: "clear",
+  keys: "clear",
+  modal: "clear",
+  softPedal: "clear",
+  sostenuto: "clear",
+  guitar: "clear",
+  wind: "clear",
+  sing: "clear",
+  clips: "clear",
+  takes: "clear",
+  glide: "clear",
+  pedal: "clear",
+  velocityCurve: "clear",
+  humanize: "clear",
+};
+
+/** Field names of `Note` and `Track`, for tests that check completeness. */
+export const NOTE_FIELD_NAMES = Object.freeze(
+  Object.keys(NOTE_FIELDS),
+) as readonly (keyof Note)[];
+export const TRACK_FIELD_NAMES = Object.freeze(
+  Object.keys(TRACK_FIELDS),
+) as readonly (keyof Track)[];
+
+function fieldPatch(
+  rules: Readonly<Record<string, FieldRule>>,
+  a: Readonly<Record<string, unknown>>,
+  b: Readonly<Record<string, unknown>>,
+): Record<string, unknown> | undefined {
+  const patch: Record<string, unknown> = {};
+  for (const [key, rule] of Object.entries(rules)) {
+    const before = a[key];
+    const after = b[key];
+    if (rule === "same") continue;
+    if (rule === "set") {
+      if (!deepEqual(before, after)) patch[key] = after;
+    } else if (rule === "zero") {
+      if (!deepEqual(before ?? 0, after ?? 0)) patch[key] = after ?? 0;
+    } else if (rule === "flag") {
+      if ((before ?? false) !== (after ?? false)) patch[key] = after ?? false;
+    } else if (rule === "lane") {
+      if (!deepEqual(before ?? [], after ?? [])) patch[key] = after ?? [];
+    } else if (!deepEqual(before, after)) patch[key] = after ?? null;
+  }
+  return Object.keys(patch).length > 0 ? patch : undefined;
+}
 
 /** Operations turning `a` into `b`; empty when they are equal. */
 export function diffScores(
@@ -74,31 +137,7 @@ export function diffScores(
     throw new DiffError(
       `ticksPerBeat differs (${a.ticksPerBeat} → ${b.ticksPerBeat}); the session resolution is fixed`,
     );
-  const ops: ScoreOperation[] = [];
-  if (a.beatsPerBar !== b.beatsPerBar)
-    ops.push({ type: "setMeter", beatsPerBar: b.beatsPerBar });
-  if (a.bars !== b.bars) ops.push({ type: "setBars", bars: b.bars });
-  if (a.tempoBpm !== b.tempoBpm)
-    ops.push({ type: "setTempo", tempoBpm: b.tempoBpm });
-  if (a.key !== b.key) ops.push({ type: "setKey", key: b.key });
-  if (!deepEqual(a.time, b.time))
-    ops.push({ type: "setTime", time: b.time ?? null });
-  if (!deepEqual(a.tuning, b.tuning))
-    ops.push({ type: "setTuning", tuning: b.tuning ?? null });
-  if (!deepEqual(a.master, b.master))
-    ops.push({ type: "setMaster", master: b.master ?? null });
-  if (
-    !deepEqual(a.sections, b.sections) ||
-    !deepEqual(a.form, b.form) ||
-    a.loopSection !== b.loopSection
-  )
-    ops.push({
-      type: "setSections",
-      sections: b.sections,
-      form: b.form,
-      ...(b.loopSection === undefined ? {} : { loopSection: b.loopSection }),
-    });
-
+  const ops: ScoreOperation[] = [...songOperations(a, b)];
   const aTracks = new Map(a.tracks.map((track) => [track.id, track]));
   const bTracks = new Map(b.tracks.map((track) => [track.id, track]));
   const aNotes = new Map(a.notes.map((note) => [note.id, note]));
@@ -106,32 +145,26 @@ export function diffScores(
 
   const updates: ScoreOperation[] = [];
   const additions: ScoreOperation[] = [];
+  // Notes that leave `a`: dropped with their track, or removed one by one
+  // (a note may name a track the score lacks, so check `a` too).
+  const gone = new Set<string>();
   for (const note of a.notes) {
-    if (!bTracks.has(note.trackId)) continue; // removed with its track
+    if (aTracks.has(note.trackId) && !bTracks.has(note.trackId)) {
+      gone.add(note.id); // removed with its track
+      continue;
+    }
     const next = bNotes.get(note.id);
     if (!next || next.trackId !== note.trackId) {
       ops.push({ type: "removeNote", noteId: note.id });
+      gone.add(note.id);
       continue;
     }
     const patch = notePatch(note, next);
     if (patch) updates.push({ type: "updateNote", noteId: note.id, patch });
   }
-  for (const note of b.notes) {
-    const previous = aNotes.get(note.id);
-    if (
-      previous &&
-      previous.trackId === note.trackId &&
-      bTracks.has(note.trackId)
-    )
-      continue;
-    if (
-      previous &&
-      previous.trackId === note.trackId &&
-      !aTracks.has(note.trackId)
-    )
-      continue;
-    additions.push({ type: "addNote", note });
-  }
+  for (const note of b.notes)
+    if (!aNotes.has(note.id) || gone.has(note.id))
+      additions.push({ type: "addNote", note });
 
   for (const track of a.tracks)
     if (!bTracks.has(track.id))
@@ -161,6 +194,65 @@ export function diffScores(
   return Object.freeze(ops);
 }
 
+/**
+ * Song settings, ordered so every step is valid on its own: constraints
+ * that go away are dropped first (sections before meter changes, fermatas
+ * before the tempo or meter that time them) and constraints that arrive
+ * are added last. Steps are checked on a copy without tracks or notes,
+ * because song settings never depend on them.
+ */
+function songOperations(a: TrackScore, b: TrackScore): ScoreOperation[] {
+  const ops: ScoreOperation[] = [];
+  let song = new TrackScore({ ...a.toJSON(), tracks: [], notes: [] });
+  const emit = (operation: ScoreOperation): void => {
+    song = applyScoreOperation(song, operation);
+    ops.push(operation);
+  };
+  const sectionsDiffer = (): boolean =>
+    !deepEqual(song.sections, b.sections) ||
+    !deepEqual(song.form, b.form) ||
+    song.loopSection !== b.loopSection;
+  const setSections = (): void =>
+    emit({
+      type: "setSections",
+      sections: b.sections,
+      form: b.form,
+      ...(b.loopSection === undefined ? {} : { loopSection: b.loopSection }),
+    });
+  if (b.sections.length === 0 && sectionsDiffer()) setSections();
+  const retimed =
+    song.beatsPerBar !== b.beatsPerBar ||
+    song.bars !== b.bars ||
+    song.tempoBpm !== b.tempoBpm;
+  if (retimed && song.time?.fermatas && !deepEqual(song.time, b.time)) {
+    const { fermatas: _fermatas, ...rest } = b.time ?? {};
+    const interim = Object.keys(rest).length > 0 ? rest : null;
+    if (!deepEqual(song.time, interim ?? undefined))
+      emit({ type: "setTime", time: interim });
+  } else if (retimed && song.time?.fermatas) {
+    // Same fermatas before and after, but timed by a new tempo or meter.
+    const { fermatas: _fermatas, ...rest } = song.time;
+    emit({
+      type: "setTime",
+      time: Object.keys(rest).length > 0 ? rest : null,
+    });
+  }
+  if (song.beatsPerBar !== b.beatsPerBar)
+    emit({ type: "setMeter", beatsPerBar: b.beatsPerBar });
+  if (song.bars !== b.bars) emit({ type: "setBars", bars: b.bars });
+  if (song.tempoBpm !== b.tempoBpm)
+    emit({ type: "setTempo", tempoBpm: b.tempoBpm });
+  if (song.key !== b.key) emit({ type: "setKey", key: b.key });
+  if (!deepEqual(song.time, b.time))
+    emit({ type: "setTime", time: b.time ?? null });
+  if (!deepEqual(song.tuning, b.tuning))
+    emit({ type: "setTuning", tuning: b.tuning ?? null });
+  if (!deepEqual(song.master, b.master))
+    emit({ type: "setMaster", master: b.master ?? null });
+  if (sectionsDiffer()) setSections();
+  return ops;
+}
+
 /** Applies operations in order; the inverse of `diffScores`. */
 export function applyScoreOperations(
   score: TrackScore,
@@ -170,44 +262,17 @@ export function applyScoreOperations(
 }
 
 function notePatch(a: Note, b: Note): NotePatch | undefined {
-  const patch: Record<string, unknown> = {};
-  for (const key of [
-    "startTick",
-    "durationTicks",
-    "pitch",
-    "velocity",
-  ] as const)
-    if (a[key] !== b[key]) patch[key] = b[key];
-  for (const key of NOTE_EXPRESSION_FIELDS)
-    if (!deepEqual(a[key], b[key])) patch[key] = b[key] ?? null;
-  if ((a.cents ?? 0) !== (b.cents ?? 0)) patch.cents = b.cents ?? 0;
-  if (a.lyric !== b.lyric) patch.lyric = b.lyric ?? null;
-  return Object.keys(patch).length > 0 ? (patch as NotePatch) : undefined;
+  return fieldPatch(NOTE_FIELDS, a, b) as NotePatch | undefined;
 }
 
 function trackPatch(a: Track, b: Track): TrackPatch | undefined {
-  const patch: Record<string, unknown> = {};
-  for (const key of ["name", "instrument", "muted", "volume", "pan"] as const)
-    if (a[key] !== b[key]) patch[key] = b[key];
-  if ((a.solo ?? false) !== (b.solo ?? false)) patch.solo = b.solo ?? false;
-  for (const key of EFFECTS)
-    if (!deepEqual(a[key], b[key])) patch[key] = b[key] ?? null;
-  for (const key of [
-    "rhythm",
-    "kit",
-    "time",
-    "tuning",
-    ...TRACK_PERFORMANCE_FIELDS,
-  ] as const)
-    if (!deepEqual(a[key], b[key])) patch[key] = b[key] ?? null;
-  for (const key of LANES)
-    if (!deepEqual(a[key] ?? [], b[key] ?? [])) patch[key] = b[key] ?? [];
-  return Object.keys(patch).length > 0 ? (patch as TrackPatch) : undefined;
+  return fieldPatch(TRACK_FIELDS, a, b) as TrackPatch | undefined;
 }
 
 /** Structural equality for plain JSON-like data. */
 export function deepEqual(a: unknown, b: unknown): boolean {
-  if (Object.is(a, b)) return true;
+  // === so -0 equals 0: a printed song.ts reads -0 back as 0.
+  if (a === b) return true;
   if (
     typeof a !== "object" ||
     typeof b !== "object" ||
