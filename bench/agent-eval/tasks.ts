@@ -794,14 +794,17 @@ const compose: EvalTask[] = [
     setup: blank([KIT], "drums", { tempoBpm: 100 }),
     grade: (ctx) => {
       const hits = drumHits(ctx.score, "rim");
-      const folded = [...new Set(hits.map((beat) => round(beat % 8)))].sort(
-        (a, b) => a - b,
-      );
+      const fold = (period: number) =>
+        [...new Set(hits.map((beat) => round(beat % period)))].sort(
+          (a, b) => a - b,
+        );
+      const twoBar = fold(8);
       return [
         check(
           "3-2 son clave",
-          sameBeats(folded, [0, 1.5, 3, 5, 6]),
-          folded.join(" "),
+          // The prompt asks for a two-bar cycle, so a one-bar form fails.
+          sameBeats(twoBar, [0, 1.5, 3, 5, 6]),
+          twoBar.join(" "),
         ),
         check("covers the loop", hits.length >= 10, `${hits.length}`),
       ];
@@ -821,14 +824,20 @@ const compose: EvalTask[] = [
     setup: blank([KIT], "drums", { tempoBpm: 110 }),
     grade: (ctx) => {
       const hits = drumHits(ctx.score, "rim");
-      const folded = [...new Set(hits.map((beat) => round(beat % 8)))].sort(
-        (a, b) => a - b,
-      );
+      const fold = (period: number) =>
+        [...new Set(hits.map((beat) => round(beat % period)))].sort(
+          (a, b) => a - b,
+        );
+      // The span is unspecified: accept the two-bar quarter-pulse form or
+      // the same clave compressed into one bar of sixteenths.
+      const twoBar = fold(8);
+      const oneBar = fold(4);
       return [
         check(
           "3-2 rumba clave",
-          sameBeats(folded, [0, 1.5, 3.5, 5, 6]),
-          folded.join(" "),
+          sameBeats(twoBar, [0, 1.5, 3.5, 5, 6]) ||
+            sameBeats(oneBar, [0, 0.75, 1.75, 2.5, 3]),
+          twoBar.join(" "),
         ),
         check("covers the loop", hits.length >= 10, `${hits.length}`),
       ];

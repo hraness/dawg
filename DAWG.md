@@ -134,6 +134,8 @@ When a tool call finishes streaming, it passes three checks: the tool's own argu
 
 `runAgentTurn` (`src/agent/agent.ts`) emits structured progress events for the TUI: `step`, `text-delta`, `tool-start`, `tool-applied` (with `summary`, `baseRevision`, `resultRevision` and `trackId`), `tool-rejected` (with `diagnostic`), and a final `done` or `error` (`aborted`, `timeout`, `budget`, `provider`). To add an operation family, append a tool to `AGENT_TOOLS` in `src/agent/tools.ts`. The schema, dispatch and validation all come from that one entry.
 
+Times in tools and the brief are beats from 0; the system prompt maps musical counts (beats 2 and 4 of a 4/4 bar are beats 1 and 3) so models place backbeats correctly. `update_notes` takes either an absolute `pitch` or a relative `transpose` in semitones, and its summary lists each moved note as `id before→after`. Tool schemas are sent with unions rewritten as `anyOf` branches (`src/agent/portable-schema.ts`) so Gemini accepts them. `bench/agent-eval/` measures how well a model drives these tools; see `docs/model-eval.md`.
+
 ### Workspace and web tools
 
 The project directory (the directory `dawg` runs in) is the agent's workspace. Six more entries in `AGENT_TOOLS` give the model bounded file and web access on both the gateway and xcb paths; `src/agent/workspace.ts` holds the path policy and `src/web/` the network side.
