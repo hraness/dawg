@@ -2,26 +2,31 @@
 id: media
 title: Samples and media tools
 parent: sound
-order: 6
+order: 4
 ---
 
-Downloads land in `tracks/<slug>/downloads/`. A missing
-helper is reported with its install command; `dawg media doctor` checks.
+Downloads land in `tracks/<slug>/downloads/`. A missing helper prints
+its install command; `dawg media doctor` checks them all.
 
 ## Ask
 
-- "download <youtube url> and split it into stems"
-- "transcribe the bass stem into notes" · "make a sample of the hook"
+- "download <url> and split it into stems" · "make a sample of the hook"
 
-## Shell
+## Type it yourself
 
-- `dawg media download <url> --name hook`
 - `dawg media stems <file>` vocals drums bass guitar piano other
-- `dawg media analyze <file>` tempo, key, beat grid
-- `dawg media notes <file> --kind bass` notes as SDK code
+- `dawg media analyze <file>` · `dawg media notes <file> --kind bass`
 - `dawg media sample <file> hook --begin 0.2 --end 0.3`
-- `dawg media wavetable <file> vox` · `dawg media lyrics <file>`
+- `sample <path> as <sample>` · `sample` lists the track's samples
 
-## In the app
+## Menu
 
-- `/sample <path> as <voice>` · `/sample` lists the voices · `/sample set sn vel 0-63 rr sn` layers
+- Ctrl-K › Sound › instruments › use a sample · sample packs
+
+## Keys
+
+- Enter on a sample auditions it · Esc back
+
+## Next
+
+- `guide resample` · `guide voice`

@@ -135,8 +135,9 @@ import {
   parseSectionCommand,
 } from "./commands/arrange.ts";
 import {
-  HELP_TOPICS,
+  helpMiss,
   helpText,
+  helpTitle,
   helpTopicLines,
   nearestCommand,
   typoFix,
@@ -412,11 +413,11 @@ Usage:
   ${wrapUsage(RENDER_USAGE.replace(/^usage: /, ""), 76, "               ")}
   dawg init [dir]      project files: song.ts, tracks/<slug>/track.ts, .dawg/sdk
   dawg check           typecheck + evaluate the project; exit 1 on problems
-  dawg <command> --help  usage: sessions render init check media login model
+  dawg <command> --help  usage: sessions render init check media model
   dawg media doctor|download|stems|analyze|notes|sample|lyrics …  (dawg media --help)
   dawg --version
 
-Usage flags:
+Display options:
   --reduce-motion   static hit/sustain states (also DAWG_REDUCE_MOTION=1)
   --theme <name>    default | high-contrast | mono (NO_COLOR forces mono)
   --no-mouse        keys only; no click/wheel reporting (also DAWG_MOUSE=0)
@@ -429,9 +430,9 @@ Prompt:
 Commands (bare music words; app commands take a slash):
 ${helpText()}
 
-Sign in (the choice is saved and reused until you log out):
-  dawg login                   find existing setups and pick a provider
-  dawg login gateway|openrouter|codex|claude
+Agent (optional; the choice is saved and reused until you log out):
+  dawg model key               find existing setups and pick a provider
+  dawg model key gateway|openrouter|codex|claude
   dawg model [alias]           pick a model, with the estimated cost per prompt
   dawg logout [provider] · dawg auth status [--check]
 Unrecognized requests go to the agent once a provider is configured
@@ -449,6 +450,9 @@ let requestedTrack = explicitTrack ?? "main";
 const initialInstrument = isDrumInstrument(requestedTrack) ? "kit" : "sine";
 const importPath = launchArgs?.importPath;
 const exportPath = launchArgs?.exportPath;
+// `dawg model key [provider]` is the canonical spelling of `dawg login`.
+if (process.argv[2] === "model" && process.argv[3] === "key")
+  process.exit(await runAuthCommand(["login", ...process.argv.slice(4)]));
 if (["login", "logout", "auth", "model"].includes(process.argv[2] ?? ""))
   process.exit(await runAuthCommand(process.argv.slice(2)));
 {
@@ -1926,16 +1930,9 @@ async function submit(prompt: string): Promise<string | Receipt> {
       topic,
       Math.max(10, columns - (columns >= 60 ? 8 : 4)),
     );
-    if (!lines)
-      return fail(
-        `no help topic ${topic} · /help all · ${HELP_TOPICS.join(" ")} · or a command (/help vocoder)`,
-      );
-    tui.openText(topic ? `help · ${topic.toLowerCase()}` : "help", lines);
-    return ok(
-      topic
-        ? `help · ${topic.toLowerCase()}`
-        : "help · /help all for every command",
-    );
+    if (!lines) return fail(helpMiss(topic!));
+    tui.openText(helpTitle(topic), lines);
+    return ok(topic ? helpTitle(topic) : "help · help all for every command");
   }
   if (/^\/?tracks$/i.test(command)) {
     const problems = await sampleProblems(score);

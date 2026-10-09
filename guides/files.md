@@ -12,17 +12,21 @@ Edit them in any editor; every open window picks up the change.
 
 - "rewrite the drums in track.ts with a euclid kick"
 
-## Shell
+## Type it yourself
 
-- `dawg init` · `dawg check` typecheck and evaluate, exit 1 on problems
-- `dawg render out.wav` render the song to a WAV file
-
-## In a track.ts
-
+- `dawg init` · `dawg check` · `dawg render out.wav`
 - `import { track, note, euclid, chord } from "dawg"`
 - `notes: [note("C4", 0, 1), ...chord("Am7", 4, 4)]`
-- `rhythm: [euclid("kick", 4, 16)]`
+- `export loop.track.json` · `import loop.track.json`
 
-## In the app
+## Menu
 
-- `/export loop.track.json` · `/import loop.track.json`
+- Ctrl-K › Project › export
+
+## Keys
+
+- Edits land as one undo step · Ctrl-Z undoes a file change
+
+## Next
+
+- `guide sessions` · `guide project`

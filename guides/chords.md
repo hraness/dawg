@@ -1,8 +1,7 @@
 ---
 id: chords
-title: Chords
-parent: music
-order: 4
+title: Chords and key
+order: 7
 ---
 
 ## Ask
@@ -10,22 +9,22 @@ order: 4
 - "write a sad pop progression in A minor, two beats per chord"
 - "arpeggiate the chords upward over two octaves"
 
-## Play them
-
-- `key A minor` then Ctrl-P, `q`: every key plays a chord in the key
-- `1 2 3 4` dim min maj sus · `5 6 7 8` add 6, m7, M7, 9
-- `- =` voicing down / up · `9` perform mode · `b` bass mode
-- `n` play the suggested next chord · `0` clear the latches
-- perform guitar strums them; `[ ]` strum slower / faster
-
 ## Type it yourself
 
-- `/chords auto` · `/chords manual` · `/chords off`
-- `/chords voicing 2` · `/chords spread wide` · `/chords bass chords`
-- `/chords perform arp-up` · `/chords sevenths on` · `/chords`
-- `progression i7 IV7 each 8` · `progression Am7 D9 bass`
+- `key A minor` · `scale D hijaz` · `progression i7 IV7 each 8`
+- `chords auto` · `chords voicing 2` · `chords perform arp-up`
 - `strum G D Em C folk` · `guitar tune dadgad` · `guitar capo 2`
 
 ## Menu
 
-- Ctrl-K › Chords: key, voicing, bass, perform, style, progression
+- Ctrl-K › Chords and key › key · play · progression · idiom
+
+## Keys
+
+- Ctrl-P play mode, `q`: every key plays a chord in the key
+- `1 2 3 4` dim min maj sus · `5 6 7 8` 6, m7, M7, 9
+- `- =` voicing · `9` perform · `b` bass · `n` next chord · `0` clear
+
+## Next
+
+- `guide tuning` · `guide play`

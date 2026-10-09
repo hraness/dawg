@@ -1,26 +1,31 @@
 ---
 id: providers
 title: Providers and models
-parent: project
-order: 3
+parent: agent
+order: 2
 ---
 
-Commands work offline. Plain requests go to the agent once a provider
-is set: AI Gateway, OpenRouter, or a Codex or Claude subscription.
+Plain requests go to the agent once a provider is set: AI Gateway,
+OpenRouter, or a Codex or Claude subscription.
 
-## Shell
+## Ask
 
-- `dawg login` finds existing setups and lets you pick
-- `dawg login gateway` · `openrouter` · `codex` · `claude`
-- `dawg model` pick a model with the cost per prompt
-- `dawg auth status --check` · `dawg logout`
+- "which model are you?" (after `model key`)
 
-## In the app
+## Type it yourself
 
-- `/login` · `/model` picker · `/model <alias>` · `/logout`
-- `/model fast` the quickest model that passes the agent eval
-- `/auth --check` provider and audio status
+- `dawg model key` finds setups · `dawg model key gateway`
+- `model key` · `model` picker · `model fast` · `logout`
+- `/auth --check` · `DAWG_MODEL=<alias>` · `DAWG_AI=0` no agent
 
-## Environment
+## Menu
 
-- `DAWG_PROVIDER=gateway` · `DAWG_MODEL=<alias>` · `DAWG_AI=0` no agent
+- Ctrl-K › Project › agent › model · model key
+
+## Keys
+
+- In the model picker ↑↓ move · Enter choose · `/` filter
+
+## Next
+
+- `guide agent` · `guide web-search`

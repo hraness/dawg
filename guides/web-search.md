@@ -1,21 +1,31 @@
 ---
 id: web-search
 title: Web search
-parent: project
-order: 4
+parent: agent
+order: 3
 ---
 
 The agent can search the web and read public pages, for example to look
-up a song's tempo or a chord chart. Fetches never reach private hosts.
+up a song's tempo. Fetches never reach private hosts.
 
 ## Ask
 
-- "look up the tempo and key of Teardrop by Massive Attack"
+- "look up the tempo and key of a song you name"
 - "read this page and copy its chord chart: <url>"
 
-## Where results come from (first match wins)
+## Type it yourself
 
 - `DAWG_WEB_SEARCH=duckduckgo|openrouter|gateway|brave` pins one
-- `BRAVE_SEARCH_API_KEY` set: Brave Search
-- an AI Gateway key (Exa by default), then an OpenRouter key
-- otherwise DuckDuckGo, with no key
+- otherwise Brave with a key, AI Gateway, OpenRouter, then DuckDuckGo
+
+## Menu
+
+- Ctrl-K › Project › agent › model
+
+## Keys
+
+- Ctrl-O shows each search and fetch in the transcript
+
+## Next
+
+- `guide agent` · `guide providers`

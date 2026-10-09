@@ -27,6 +27,7 @@ import {
 import { asciiHint, fitHint, HINTS } from "./grammar.ts";
 import { GuideBrowser } from "./guide.ts";
 import { listGuides } from "../guides/index.ts";
+import { topicMiss } from "../src/lang/glossary.ts";
 import { classifyKey, overlayKey, type UiCommand } from "./keys.ts";
 import { PromptModel, type PromptAction, type PromptMode } from "./prompt.ts";
 import {
@@ -1740,7 +1741,10 @@ export class TuiApp {
     if (guide) {
       const topic = guide[1]?.trim();
       if (!this.openGuide(topic))
-        return `no guide named ${topic} · /guide lists them all`;
+        return topicMiss(
+          topic!,
+          (this.guide?.guides ?? listGuides()).map((g) => g.id),
+        );
       return topic
         ? `guide · ${this.guide?.guides.find((g) => g.id === this.guide?.page)?.title ?? topic} · esc back`
         : "guides · → open · esc closes";

@@ -1,27 +1,31 @@
 ---
 id: keys
-title: Keys
-order: 5
+title: Using dawg
+order: 2
 ---
 
-`?` shows the keys for the screen you are on; any key closes it.
+The same keys work on every screen: arrows move, Enter chooses, Esc goes
+back, `?` lists the keys for the screen you are on.
 
-## Prompt
+## Ask
 
-- Enter send · Shift-Enter new line · Alt-Enter queue · Ctrl-Q queue mode
-- Space play / pause (empty prompt) · Esc cancel or close
-- Ctrl-Z undo · Ctrl-Y redo · Ctrl-O transcript · Ctrl-L redraw
-- Ctrl-P play mode · Ctrl-K menu · F1 guides · Ctrl-C exit
+- "show me how to make the reverb wetter" (the agent types it for you)
 
-## Lists, menus and guides
+## Type it yourself
 
-- ↑↓ or `j` `k` move · Enter choose · `/` filter · Esc back
+- `theme default|high-contrast|mono` · `motion off` · `view all`
+- `help keys` every key of every screen · `transcript` (Ctrl-O)
 
-## Mouse
+## Menu
 
-- Click rows, header pills, faders · wheel scrolls · `--no-mouse`
+- Ctrl-K › Project › help and guides: help, guides, keys
 
-## Window
+## Keys
 
-- `/theme default|high-contrast|mono` · `/motion off`
-- `/help` · `/help all` · `/help keys` · `/guide keys`
+- Enter send · Shift-Enter new line · Alt-Enter run next · Esc cancel
+- Ctrl-Z undo · Ctrl-Y redo · Ctrl-L redraw · Ctrl-C exit
+- Lists: ↑↓ or `j` `k` move · Enter choose · `/` filter · Esc back
+
+## Next
+
+- `guide audition` · `guide faders` · `guide play`

@@ -6,6 +6,8 @@
 import { describe, expect, test } from "bun:test";
 import { HELP_SECTIONS, USAGE } from "../src/commands/help.ts";
 import { guideLines, wrapRows } from "../tui/guide.ts";
+import { TOPICS, TOPIC_ALIASES, lintText } from "../src/lang/glossary.ts";
+import { GuideBrowser } from "../tui/guide.ts";
 import { listGuides } from "./index.ts";
 
 /** Rows a guide may take in the pane (80×24 leaves about 20 inside). */
@@ -42,6 +44,34 @@ describe("guides", () => {
     }
   });
 
+  test("no two siblings share an order", () => {
+    const pairs = guides.map((guide) => `${guide.parent ?? ""}:${guide.order}`);
+    const dupes = pairs.filter((pair, index) => pairs.indexOf(pair) !== index);
+    expect(dupes).toEqual([]);
+  });
+
+  test("no source line runs past 72 columns", () => {
+    const long = guides.flatMap((guide) =>
+      guide.body
+        .split("\n")
+        .filter((line) => [...line].length > WIDTH)
+        .map((line) => `${guide.id}: ${line}`),
+    );
+    expect(long).toEqual([]);
+  });
+
+  test("the voice guide shows lyrics, sing and Ctrl-K › Voice", () => {
+    const voice = guides.find((guide) => guide.id === "voice")!.body;
+    expect(voice).toContain("`lyrics ");
+    expect(voice).toContain("`sing ");
+    expect(voice).toContain("Ctrl-K › Voice");
+  });
+
+  test("hints name play mode, never a bare Ctrl-P play", () => {
+    for (const guide of guides)
+      expect(guide.body).not.toMatch(/Ctrl-P play(?! mode)/i);
+  });
+
   for (const guide of guides)
     test(`${guide.id} fits one pane at 80 columns`, () => {
       const rows = wrapRows(guideLines(guide.body), WIDTH);
@@ -58,19 +88,160 @@ describe("guides", () => {
     expect(unknown).toEqual([]);
   });
 
-  // Play mode, the menu loop, faders, sessions and provider setup are
-  // hands-on; every other feature shows what to ask and what to type.
-  const HANDS_ON = new Set([
-    "play",
-    "audition",
-    "faders",
-    "sessions",
-    "providers",
-  ]);
-  test("each feature guide shows both ways in: ask and by hand", () => {
-    for (const guide of guides.filter((g) => g.parent)) {
-      expect(guide.body).toMatch(/`[^`]+`/);
-      if (!HANDS_ON.has(guide.id)) expect(guide.body).toMatch(/^## Ask/m);
+  test("/guide opens every topic id and alias", () => {
+    for (const word of [...TOPICS, ...Object.keys(TOPIC_ALIASES)]) {
+      const browser = new GuideBrowser(guides);
+      expect(browser.open(word)).toBe(true);
+      expect(browser.page).toBeDefined();
     }
+    const browser = new GuideBrowser(guides);
+    expect(browser.open("scale") && browser.page).toBe("chords");
+    expect(browser.open("tuning") && browser.page).toBe("tuning");
+    expect(browser.open("expression") && browser.page).toBe("performance");
+    expect(browser.open("nonsense")).toBe(false);
+  });
+
+  test("every topic id has a guide", () => {
+    const ids = new Set(guides.map((guide) => guide.id));
+    for (const topic of TOPICS) expect(ids.has(topic)).toBe(true);
+  });
+
+  // One template: Ask / Type it yourself / Menu / Keys / Next, in that
+  // order, with Mouse or Try allowed in between.
+  const TEMPLATE = ["Ask", "Type it yourself", "Menu", "Keys", "Next"];
+  for (const guide of guides)
+    test(`${guide.id} follows the template`, () => {
+      const headings = [...guide.body.matchAll(/^## (.+)$/gm)].map(
+        (match) => match[1]!,
+      );
+      expect(headings.filter((h) => TEMPLATE.includes(h))).toEqual(TEMPLATE);
+      for (const heading of headings)
+        expect([...TEMPLATE, "Mouse", "Try"]).toContain(heading);
+    });
+
+  test("every Ctrl-K path names real menu labels (design §4a)", () => {
+    const bad: string[] = [];
+    for (const guide of guides)
+      for (const line of guide.body.split("\n"))
+        for (const crumb of line.split(/(?=Ctrl-K ›)/).slice(1)) {
+          const path = crumb
+            .replace(/^Ctrl-K › /, "")
+            .split(/[:(]/)[0]!
+            .replace(/\s*·\s*$/, "")
+            .trim();
+          if (!menuPathOk(path)) bad.push(`${guide.id}: ${crumb.trim()}`);
+        }
+    expect(bad).toEqual([]);
+  });
+
+  test("no retired word or British spelling outside alias notes", () => {
+    const hits = guides.flatMap((guide) =>
+      lintText(guide.body).map((hit) => `${guide.id}: ${hit}`),
+    );
+    expect(hits).toEqual([]);
   });
 });
+
+/**
+ * The ctrl-k labels from design §4a. Lane E replaces this with menuPath once
+ * the menu lane lands, so breadcrumbs come from the live tree.
+ */
+type MenuNode = { readonly [label: string]: MenuNode };
+const LEAF: MenuNode = {};
+const leaves = (...labels: string[]): MenuNode =>
+  Object.fromEntries(labels.map((label) => [label, LEAF]));
+const MENU: MenuNode = {
+  Sound: {
+    ...leaves(
+      "instrument",
+      "preset",
+      "advanced",
+      "synth filter",
+      "keys",
+      "organ",
+      "guitar",
+      "granular",
+      "track tuning",
+      "performance",
+    ),
+    instruments: {
+      Keys: leaves("Electric", "Organs"),
+      Strings: leaves("Bowed"),
+      ...leaves(
+        "Mallets and bells",
+        "Winds and brass",
+        "Granular",
+        "Wavetable",
+        "all instruments",
+        "sample packs",
+        "use a sample",
+      ),
+    },
+  },
+  Voice: leaves(
+    "sing",
+    "lyrics",
+    "clips",
+    "pitch",
+    "autotune",
+    "formant",
+    "vocoder",
+    "voice presets",
+  ),
+  Effects: leaves(
+    "Filter",
+    "Auto filter",
+    "Distortion",
+    "Tremolo",
+    "Compressor",
+    "Chorus",
+    "Delay",
+    "Reverb",
+    "Guitar rig",
+    "Shoegaze",
+    "more effects",
+  ),
+  Rhythm: leaves("euclid editor", "grooves", "kits", "grid"),
+  "Chords and key": leaves("key", "tuning", "play", "progression", "idiom"),
+  Mix: leaves(
+    "name",
+    "mute",
+    "solo",
+    "volume",
+    "pan",
+    "all tracks",
+    "automation",
+    "master",
+  ),
+  Arrange: leaves("tracks", "sections", "form", "style"),
+  Project: {
+    ...leaves(
+      "play",
+      "tempo",
+      "beats per bar",
+      "tempo and meter",
+      "loop length",
+      "grid",
+      "click",
+      "count-in bars",
+      "calibration",
+      "export",
+      "resample",
+    ),
+    session: leaves("rename", "fork", "resume"),
+    agent: leaves("model", "show-me", "model key"),
+    "help and guides": leaves("help", "guides", "keys"),
+  },
+};
+
+/** `A › b › c · d`: each step is a child of the one before; `·` siblings. */
+function menuPathOk(path: string): boolean {
+  const steps = path.split(" › ");
+  let node = MENU;
+  for (const [index, step] of steps.entries()) {
+    const names = index === steps.length - 1 ? step.split(" · ") : [step];
+    for (const name of names) if (!(name.trim() in node)) return false;
+    node = node[names[0]!.trim()]!;
+  }
+  return true;
+}

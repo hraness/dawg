@@ -1,9 +1,10 @@
 ---
 id: rhythm
 title: Rhythm and drums
-parent: music
-order: 5
+order: 6
 ---
+
+A drum track has one row per drum: kick, snare, hat and more.
 
 ## Ask
 
@@ -11,16 +12,19 @@ order: 5
 
 ## Type it yourself
 
-- `/pattern house` a starting groove · `/pattern` picker (previews)
-- `/kit syn909` a drum kit · `/kit` picker
-- `hit kick at 0` · `hit snare at 1 vel 0.7`
-- `pattern kick 0 1 2 3` · `pattern hat every 0.5 from 0.25`
-- `euclid hat 7 16 rotate 2` hits spread over steps
-- `euclid hat swing 0.15` · `euclid hat off` · `euclid hat freeze`
-- `grid snare ....X.......x...` explicit steps, X accents
-- `clear hat` remove one voice
+- `pattern house` a groove · `kit syn909` a kit
+- `hit kick at 0` · `pattern kick 0 1 2 3` · `pattern hat every 0.5`
+- `euclid hat 7 16 rotate 2` · `euclid hat swing 0.15`
+- `grid snare ....X.......x...` steps, X accents · `clear hat`
 
-## Editor
+## Menu
 
-- `/euclid` (Ctrl-K › Rhythm): ↑↓ voice, ←→ adjust, Tab field,
-  Space loop, `x` off, Esc back
+- Ctrl-K › Rhythm › euclid editor · grooves · kits · grid
+
+## Keys
+
+- In the euclid editor ↑↓ drum · ←→ adjust · Tab field · Space loop
+
+## Next
+
+- `guide tempo` · `guide mix`

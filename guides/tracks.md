@@ -1,8 +1,8 @@
 ---
 id: tracks
 title: Tracks and instruments
-parent: music
-order: 1
+parent: arrange
+order: 2
 ---
 
 ## Ask
@@ -12,16 +12,19 @@ order: 1
 
 ## Type it yourself
 
-- `/track drums` focus a track, creating it (drums get the kit)
-- `/tracks` list every track
-- `track name lead` rename the focused track
-- `/track rm pad` remove one (^Z undoes) · `/track move pad 1` reorder
-- `instrument piano` · `instrument supersaw` · `instrument kit`
-- `meter 3` beats per bar · `key A minor` · `key none`
-- `clear` remove the focused track's notes
+- `track drums` focus a track, creating it (drums get the kit)
+- `tracks` list them · `track name lead` rename the focused track
+- `track rm pad` remove one · `track move pad 1` reorder
+- `instrument piano` · `instrument kit` · `clear` its notes
 
 ## Menu
 
-- Ctrl-K › Sound › instrument
-- Ctrl-K › Mix › all tracks (choosing one focuses it)
-- Ctrl-K › Mix › position · remove track
+- Ctrl-K › Arrange › tracks · Ctrl-K › Mix › all tracks
+
+## Keys
+
+- Click the track name in the header to list tracks
+
+## Next
+
+- `guide sound` · `guide sessions`

@@ -80,7 +80,7 @@ describe("/vocal umbrella", () => {
   test("/help prints a Voice section and typos find /vocal", () => {
     const lines = helpTopicLines("voice")!;
     expect(lines[0]).toBe("── voice");
-    expect(lines.some((line) => line.startsWith("/vocal"))).toBe(true);
+    expect(lines.some((line) => line.startsWith("vocal"))).toBe(true);
     expect(nearestCommand("/vocl")).toBe("/vocal");
   });
 });

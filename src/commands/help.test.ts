@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { emptyScore } from "../../core/score.ts";
+import { commandParses } from "./parses.ts";
 import {
   HELP_SECTIONS,
   looksLikeProse,
@@ -9,67 +12,88 @@ import {
   nearestCommand,
   typoFix,
   usageHint,
+  keysLines,
 } from "./help.ts";
+import { KEYS, type KeySection } from "../../tui/grammar.ts";
+import {
+  lintText,
+  resolveTopic,
+  TOPIC_ALIASES,
+  TOPICS,
+  topicMiss,
+} from "../lang/glossary.ts";
 
 describe("help reference", () => {
-  test("groups music, session, window and keys, each command exactly once", () => {
-    expect(HELP_SECTIONS.map((section) => section.group)).toEqual([
-      "music",
-      "session",
-      "window",
-      "voice",
-      "keys",
-    ]);
+  test("groups are the topic ids in order, each command exactly once", () => {
+    const topics = HELP_SECTIONS.map(
+      (section) => section.group.split(" · ")[0],
+    );
+    expect([...new Set(topics)]).toEqual(TOPICS.filter((id) => id !== "keys"));
+    // Sub-groups sit right after their topic: the menu root order holds.
+    for (let i = 1; i < topics.length; i++)
+      if (topics[i] !== topics[i - 1])
+        expect(topics.indexOf(topics[i]!)).toBe(i);
+    for (const section of HELP_SECTIONS)
+      expect(section.entries.length).toBeLessThanOrEqual(16);
     const commands = HELP_SECTIONS.flatMap((section) =>
       section.entries.map((entry) => entry.command),
     );
     expect(new Set(commands).size).toBe(commands.length);
     for (const required of [
-      "/help [topic]",
-      "/transcript",
-      "/track <name>",
-      "/view focus|all",
-      "/theme default|high-contrast|mono",
-      "/motion on|off",
-      "/tracks",
-      "/status",
-      "/sessions",
+      "help [topic]",
+      "transcript",
+      "track <name>",
+      "view focus|all",
+      "theme default|high-contrast|mono",
+      "motion on|off",
+      "tracks",
+      "status",
+      "sessions",
       "/resume [<n>|<name>|<id>]",
       "undo",
       "redo",
     ])
       expect(commands).toContain(required);
-    // App commands take a slash; music words are bare.
-    for (const section of HELP_SECTIONS)
-      for (const entry of section.entries)
-        if (
-          section.group === "session" ||
-          section.group === "window" ||
-          section.group === "voice"
-        )
-          expect(entry.command.startsWith("/")).toBe(true);
-        else if (section.group === "music")
-          expect(entry.command.startsWith("/")).toBe(false);
   });
 
-  test("overlay lines carry a heading per group and fit the width", () => {
+  test("commands are bare except the free-text window verbs", () => {
+    const slashed = HELP_SECTIONS.flatMap((section) =>
+      section.entries
+        .map((entry) => entry.command)
+        .filter((command) => command.startsWith("/")),
+    ).map((command) => command.split(/[\s[]/)[0]);
+    expect([...new Set(slashed)].sort()).toEqual(
+      ["/auth", "/bpm", "/fork", "/play", "/rename", "/resume"].sort(),
+    );
+  });
+
+  test("placeholders use the glossary words", () => {
+    const text = HELP_SECTIONS.flatMap((section) =>
+      section.entries.map((entry) => entry.command),
+    ).join("\n");
+    expect(text).toContain("hit <drum>");
+    expect(text).toContain("<sample>");
+    expect(text).toContain("<lane>");
+    expect(text).not.toContain("<voice>");
+    expect(text).not.toContain("<registers>");
+  });
+
+  test("overlay lines carry a heading per topic, then the keys, and fit", () => {
     const lines = helpLines(72);
-    expect(lines.filter((line) => line.startsWith("── "))).toEqual([
-      "── music",
-      "── session",
-      "── window",
-      "── voice",
-      "── keys",
-    ]);
+    const headings = lines.filter((line) => line.startsWith("── "));
+    expect(headings.slice(0, HELP_SECTIONS.length)).toEqual(
+      HELP_SECTIONS.map((section) => `── ${section.group}`),
+    );
+    expect(headings[HELP_SECTIONS.length]).toStartWith("── keys");
     expect(lines.every((line) => line.length <= 72)).toBe(true);
     expect(lines.some((line) => line.startsWith("pan <-1..1>"))).toBe(true);
   });
 
   test("the CLI block lists the same commands without the key table", () => {
     const text = helpText();
-    expect(text).toContain("music:\n  play");
+    expect(text).toContain("sound:\n  instrument");
     expect(text).toContain("/resume [<n>|<name>|<id>]");
-    expect(text).not.toContain("Ctrl-Z");
+    expect(text).not.toContain("ctrl-z");
   });
 
   test("near-misses of known verbs get usage; free text gets nothing", () => {
@@ -77,36 +101,29 @@ describe("help reference", () => {
     expect(usageHint("volume 2")).toBe("volume takes 0…1 · volume 0.8");
     expect(usageHint("add H4 at 0")).toContain("add <note> at <beat>");
     expect(usageHint("/export")).toBe(
-      "/export <file> · /export loop.track.json",
+      "usage · export <file> · export loop.track.json",
     );
     expect(usageHint("/foo")).toBeUndefined();
     expect(usageHint("make it swing")).toBeUndefined();
   });
 
-  test("/help is a short task guide; /help all and /help <group> are the reference", () => {
+  test("/help is start-here plus the ten topics; all is the reference", () => {
     const guide = helpTopicLines(undefined, 72)!;
     expect(guide.filter((line) => line.startsWith("── "))).toEqual([
       "── start here",
-      "── play notes",
-      "── make drums",
-      "── shape the sound",
-      "── shape the performance",
-      "── chords",
-      "── song structure",
-      "── more",
+      "── topics · help <topic>",
     ]);
-    expect(guide.length).toBeLessThanOrEqual(34);
+    expect(guide.length).toBeLessThanOrEqual(22);
     expect(guide.every((line) => line.length <= 72)).toBe(true);
-    expect(guide.join("\n")).toContain("ctrl-k");
+    for (const id of TOPICS)
+      expect(guide.some((line) => line.startsWith(`${id} `))).toBe(true);
     expect(helpTopicLines("all", 72)).toEqual(helpLines(72));
-    expect(helpTopicLines("keys", 72)?.[0]).toBe("── keys");
-    expect(helpTopicLines("/Music", 72)?.[0]).toBe("── music");
     expect(helpTopicLines("nope", 72)).toBeUndefined();
     const arrange = helpTopicLines("arrange", 72)!;
     expect(arrange[0]).toBe("── arrange");
-    for (const verb of ["section", "form", "build", "drop", "fill"])
+    for (const verb of ["section", "form", "build", "style"])
       expect(arrange.some((line) => line.startsWith(`${verb} `))).toBe(true);
-    expect(arrange.every((line) => line.length <= 72)).toBe(true);
+    expect(arrange.at(-1)).toBe("guide arrange · menu arrange · help all");
     // A command name is a topic too: its rows and its full usage.
     for (const name of ["vocoder", "clip", "autotune", "sing", "formant"]) {
       const lines = helpTopicLines(name, 72)!;
@@ -114,6 +131,64 @@ describe("help reference", () => {
       expect(lines.every((line) => line.length <= 72)).toBe(true);
     }
     expect(helpTopicLines("vocoder", 72)!.join(" ")).toContain("freeze");
+    expect(helpTopicLines("vocoder", 72)!.at(-1)).toBe("see also help voice");
+  });
+
+  test("every topic id and alias opens a page", () => {
+    for (const id of TOPICS) {
+      const lines = helpTopicLines(id, 72)!;
+      expect(lines[0]).toBe(`── ${id}`);
+      expect(lines.every((line) => line.length <= 72)).toBe(true);
+      expect(helpTopicLines(`/${id.toUpperCase()}`, 72)?.[0]).toBe(`── ${id}`);
+    }
+    for (const [alias, id] of Object.entries(TOPIC_ALIASES)) {
+      const lines = helpTopicLines(alias, 72);
+      expect(lines).toBeDefined();
+      expect(resolveTopic(alias)).toBe(id);
+    }
+    expect(helpTopicLines("music", 72)?.[0]).toBe("── arrange");
+    expect(helpTopicLines("session", 72)?.[0]).toBe("── project");
+    expect(helpTopicLines("window", 72)?.[0]).toBe("── keys");
+  });
+
+  test("help keys is tui/grammar.ts KEYS, row for row", () => {
+    const lines = keysLines(200);
+    const rows = new Set(
+      (Object.values(KEYS) as readonly KeySection[][]).flatMap((sections) =>
+        sections.flatMap((section) =>
+          section.rows.map(([keys, action]) => `${keys}|${action}`),
+        ),
+      ),
+    );
+    const body = lines.filter((line) => line && !line.startsWith("── "));
+    expect(body.length).toBeGreaterThan(20);
+    for (const line of body) {
+      const match = [...rows].find((row) => {
+        const [keys, action] = row.split("|") as [string, string];
+        return (
+          line.startsWith(keys) &&
+          line.endsWith(action) &&
+          line.slice(keys.length, line.length - action.length).trim() === ""
+        );
+      });
+      expect(match, line).toBeDefined();
+    }
+    for (const sections of Object.values(KEYS) as readonly KeySection[][])
+      for (const section of sections)
+        for (const [keys, action] of section.rows)
+          expect(
+            body.some((line) => line.startsWith(keys) && line.endsWith(action)),
+            `${keys} ${action}`,
+          ).toBe(true);
+  });
+
+  test("an unknown topic names the nearest one", () => {
+    expect(topicMiss("vocie")).toBe(
+      "no topic vocie · did you mean voice · /help",
+    );
+    expect(topicMiss("nonsense")).toMatch(
+      /^no topic nonsense · did you mean \w+ · \/help$/,
+    );
   });
 
   test("typos get the nearest command", () => {
@@ -191,4 +266,121 @@ test("grain is a known verb: a slip suggests it and usage names it", () => {
   const parses = (text: string) => /^grain \S+/.test(text);
   expect(typoFix("graen cloud", parses)).toBe("grain cloud");
   expect(usageHint("grain")).toContain("grain cloud");
+});
+
+/**
+ * Commands /help lists that a person cannot yet type both bare and with a
+ * slash (or that only the window handles, which `commandParses` cannot
+ * see). Lane E ratchets this list down: a row that starts parsing fails
+ * the test below until it is removed here.
+ */
+const KNOWN_GAPS: ReadonlySet<string> = new Set([
+  "synth <param> <value> | preset <name>",
+  "wtenv|wtattack|wtdecay|wtrate|wtdepth|warp <n>",
+  "grain <preset> | <param> <value> | on [voice V] | src synth:<name>|voice V | reset | off",
+  "piano [<preset>] | grand | upright | felt | honkytonk",
+  "keys <param> <value> | preset <name> | reset",
+  "epiano|wurli|clav [preset <name>] | <param> <value>",
+  "tonewheel [<drawbars>] | combo [<tabs>] [<register>] | pipe [<stops>] [<row> <value> …]",
+  "rotary slow|fast|stop [at <beat>]",
+  "string <preset> | <param> <value> | presets | reset | off",
+  "bowed [<preset>] | <param> <value> | presets",
+  "modal <preset> | <param> <value> | mallet <name> | reset | off",
+  "wind <preset> | <param> <value> | mute <name> | reset | off",
+  "velcurve linear|soft|hard|fixed [<v>]",
+  "sample [<path> [as <sample>]]",
+  "/bpm <n> [<sample>]",
+  "fitmode [repitch|beats|tones|auto] [<sample>]",
+  "len <beats> [<sample>]",
+  "fade [in|out] <seconds> [<sample>]",
+  "resample <track>|orbit <n>|master [section <name>|bars a-b] [grain]",
+  "sing [preset] [param value]",
+  "lyrics [bar] sun-lit morn-ing",
+  "formant <-12..12> [mix] | deep | giant | bright | tiny | on | off",
+  "vowel <v> [<to> [<morph>]] | ee | to <v>|off | morph <0..1> | off",
+  "vocoder [preset] | src <track> | <param> <value|reset> | reset | off | presets",
+  "clip [id] gain -3 | gain by -3 | fade .01 .2 | fade in .01 | move 9 | split 7",
+  "clip [id] trim offset 1 dur 4|end | rev | repeat 2 [to 32] | mute | rm",
+  "filter <hz> [res] · delay <beats> [fb] [mix] · reverb <mix>",
+  "hit <drum> at <beat>",
+  "clear <drum>",
+  "pack list|info|use|add",
+  "tuning ref <hz> | root <note> | map linear|nearest",
+  "tuning track <…> | track off",
+  "cents <id> <±c>",
+  "mute",
+  "unmute",
+  "solo",
+  "unsolo",
+  "automate <lane> at <beat> <value>",
+  "automate <lane> points <b:v>...",
+  "automate <lane> remove <beat>",
+  "clear [<lane>] automation",
+  "remove <id>",
+  "move <id> to <beat>",
+  "length <id> <beats>",
+  "velocity <id> <0..1>",
+  "clear",
+  "section <name> <a>-<b> | add | dup | move | rename | remove",
+  "form <section…> | off | bake",
+  "build | drop | fill [<section> | <a>-<b>]",
+  "style <id> [bars] [seed]",
+  "style list|search|info · style blend <a> <b> [w]",
+  "bars <count>",
+  "extend <count> bars",
+  "pause",
+  "tempo <bpm>",
+  "tempo <bpm> at <beat>|bar <n> [ramp|exp]",
+  "rit|accel [<n> bars] [to <bpm>] [at bar <n>]",
+  "fermata [at <beat>|at bar <n>|at end] [<extra beats>]",
+  "meter <1..16>",
+  "meter <n>/<d> [at bar <n>]",
+  "calibration [0|1|latest|off]",
+  "view focus|all",
+  "transcript",
+  "theme default|high-contrast|mono",
+  "motion on|off",
+  "guide [topic]",
+  "showme on|quiet|off",
+]);
+
+/** Verbs main.ts handles itself (`/^\/kit`, `/^\/?track`, …). */
+function windowVerbs(): Set<string> {
+  const source = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
+  const verbs = new Set<string>();
+  for (const match of source.matchAll(/\/\^\\\/\??\(?(?:\?:)?([a-z|]+)/g))
+    for (const verb of match[1]!.split("|")) if (verb) verbs.add(verb);
+  return verbs;
+}
+
+test("every help command parses bare and with a slash, or is a known gap", () => {
+  const score = emptyScore();
+  const window = windowVerbs();
+  const gaps: string[] = [];
+  for (const section of HELP_SECTIONS)
+    for (const entry of section.entries) {
+      const verb = entry.command.split(/[\s|[]/)[0]!.replace(/^\//, "");
+      if (window.has(verb)) continue;
+      const examples = entry.summary
+        .split(" · ")
+        .filter((segment) => segment.split(" ")[0] === verb);
+      if (!/[<|[…]/.test(entry.command))
+        examples.unshift(entry.command.replace(/^\//, ""));
+      const parses = examples.every(
+        (example) =>
+          commandParses(example, score) && commandParses(`/${example}`, score),
+      );
+      if (examples.length === 0 || !parses) gaps.push(entry.command);
+    }
+  if (process.env.PRINT_GAPS) console.log(JSON.stringify(gaps));
+  const unexpected = gaps.filter((gap) => !KNOWN_GAPS.has(gap));
+  expect(unexpected).toEqual([]);
+  // The ratchet: a gap that now parses must leave KNOWN_GAPS.
+  const fixed = [...KNOWN_GAPS].filter((gap) => !gaps.includes(gap));
+  expect(fixed).toEqual([]);
+});
+
+test("no help row uses a glossary loser except in alias notes", () => {
+  expect(lintText(helpText())).toEqual([]);
+  expect(lintText(keysLines(72).join("\n"))).toEqual([]);
 });

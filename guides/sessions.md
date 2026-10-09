@@ -8,14 +8,24 @@ order: 2
 Open `dawg` in more than one terminal on the same folder: each window
 focuses a different track and every edit syncs to all of them.
 
+## Ask
+
+- "name this session night drive"
+
 ## Type it yourself
 
-- `/sessions` list · `/resume` picker · `/resume 2` or a name
-- `/rename night drive` · `/rename --auto` back to auto-naming
-- `/fork` copy the session to try an idea · `/status`
-- `/track bass` focus another track in this window
+- `sessions` · `/resume` picker · `/resume 2` or a name
+- `/rename night drive` · `/rename --auto` · `/fork` · `status`
+- `dawg --new` · `dawg --session <name>` · `dawg --track bass`
 
-## Shell
+## Menu
 
-- `dawg --new` new session · `dawg --session <name>` open one
-- `dawg --track bass` start focused on a track · `dawg sessions`
+- Ctrl-K › Project › session › rename · fork · resume
+
+## Keys
+
+- In the picker ↑↓ move · Enter resumes · `/` filter · Esc back
+
+## Next
+
+- `guide files` · `guide agent`

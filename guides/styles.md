@@ -1,28 +1,31 @@
 ---
 id: styles
 title: Styles
-parent: music
-order: 5
+parent: arrange
+order: 4
 ---
+
+A style is a song recipe: meter, groove, scale, harmony and form. The
+same style, bars and seed always make the same song.
 
 ## Ask
 
-- "make 16 bars of deep house"
-- "a bebop tune, then blend in some bossa nova"
+- "make 16 bars of deep house" · "bebop, blended with bossa nova"
 
-## Type it
+## Type it yourself
 
-- `/style deep-house 16` · `/style bebop 8 3` (bars, then seed)
-- `/style again` the same style with the next seed
-- `/style blend bebop bossa-nova 0.3` 30% of the second
-- `/style search maqam` · `/style list jazz` · `/style info bebop`
-
-## How it works
-
-- each style is patterns: meter, groove, scale, harmony, form
-- leaves inherit from their branch, so every style plays
-- same style, bars and seed: the same song · undo restores
+- `style deep-house 16` · `style bebop 8 3` (bars, then seed)
+- `style again` next seed · `style blend bebop bossa-nova 0.3`
+- `style search maqam` · `style list jazz` · `style info bebop`
 
 ## Menu
 
-- Ctrl-K › Arrange › style: the style tree, find, blend
+- Ctrl-K › Arrange › style: find, blend, families
+
+## Keys
+
+- `/` filters the style tree · Enter makes it · Ctrl-Z undoes
+
+## Next
+
+- `guide arrange` · `guide chords`

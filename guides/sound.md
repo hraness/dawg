@@ -1,15 +1,31 @@
 ---
 id: sound
-title: Shaping sound
+title: Sound
 order: 3
 ---
 
-Every track has an instrument, a fixed effects chain, automation lanes
-and a place in the mix. Try changes on a loop before you keep them.
+Every track plays one instrument. Sound shapes the focused track: its
+instrument, preset, parameters and how notes are played.
 
-- Sounds and presets
-- Effects
-- Automation
-- Mix
-- Menu and audition loop
-- Samples and media tools
+## Ask
+
+- "make the lead a bright pluck" · "a felt piano, softer"
+
+## Type it yourself
+
+- `instrument piano` · `synth preset pluck` · `synth lpf 800`
+- `piano felt` · `bowed cello` · `wind flute` · `grain cloud`
+- `try synth lpf 400` hear it on a loop first
+
+## Menu
+
+- Ctrl-K › Sound › instrument · preset · synth filter · instruments
+
+## Keys
+
+- In a value row ←→ adjust · Enter opens its fader · `x` reset
+
+## Next
+
+- `guide sounds` · `guide performance` · `guide resample`
+- `guide media`

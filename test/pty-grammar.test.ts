@@ -188,22 +188,22 @@ test.skipIf(!supported)(
       await t.send("/guide\r");
       await t.until(() => t.vt.text().includes("Getting started"), "guides");
       expectFits(t);
-      await expectKeysPanel(t, "expand a section", "Writing music");
+      await expectKeysPanel(t, "expand a section", "Using dawg");
       await t.send("/euclid");
       await t.until(() => t.vt.text().includes("/ euclid"), "guide filter");
       expect(t.vt.text()).toContain("Rhythm and drums");
       expect(t.vt.text()).not.toContain("Getting started");
       await t.send(ESC);
       await t.until(() => t.vt.text().includes("Getting started"), "cleared");
-      // Home ↓ → expands Writing music; ↓ Enter opens its first guide.
+      // Home ↓ → expands Using dawg; ↓ Enter opens its first guide.
       await t.send("\u001b[H");
       await t.send("\u001b[B");
       await t.send("\u001b[C");
-      await t.until(() => t.vt.text().includes("Chords"), "expanded");
+      await t.until(() => t.vt.text().includes("Play mode"), "expanded");
       await t.send("\u001b[B");
       await t.send("\r");
       await t.until(
-        () => t.vt.text().includes("Writing music › Tracks"),
+        () => t.vt.text().includes("Using dawg › Menu and audition loop"),
         "guide page",
       );
       for (const line of t.vt.lines())
