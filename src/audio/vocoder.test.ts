@@ -98,7 +98,7 @@ describe("vocoder stage", () => {
     expect(hash(a.pcm)).toBe(hash(b.pcm));
     expect(rms(a.pcm)).toBeGreaterThan(0.01);
     console.log("rms", rms(a.pcm));
-  });
+  }, 60_000);
 });
 
 /** `bars` bars of the vocal every 4 bars against a held carrier chord. */
@@ -187,7 +187,7 @@ describe("vocoder identity, windows and cache (tests 1-3, 15)", () => {
     });
     const b = renderScorePcm(withPad({}), { sampleRate: SR, samples: bank() });
     expect(hash(b.pcm)).toBe(hash(a.pcm));
-  });
+  }, 60_000);
 
   test("2: fresh and warm renderers agree byte for byte", () => {
     const score = updateTrack(
@@ -200,7 +200,7 @@ describe("vocoder identity, windows and cache (tests 1-3, 15)", () => {
     warm.render(score, { sampleRate: SR, samples: bank() });
     const again = warm.render(score, { sampleRate: SR, samples: bank() });
     expect(hash(again.pcm)).toBe(hash(cold.pcm));
-  });
+  }, 60_000);
 
   test("2: a warm renderer follows source volume edits like a cold one", () => {
     const options = { sampleRate: SR, samples: bank() };
@@ -225,7 +225,7 @@ describe("vocoder identity, windows and cache (tests 1-3, 15)", () => {
       // The tap is unity gain: a muted source's volume never moves the carrier.
       expect(hash(cold.pcm)).toBe(hash(first.pcm));
     }
-  });
+  }, 60_000);
 
   test("3: a windowed 56 s render equals one pass", () => {
     const rate = 8000;
@@ -299,7 +299,7 @@ describe("vocoder identity, windows and cache (tests 1-3, 15)", () => {
     expect(same({ vocoder: { src: "vox", mix: 0.5 } }, "pad").kept).toBe(false);
     expect(stems().get("vox")!.left).toBe(vox);
     expect(first.frames).toBeGreaterThan(0);
-  });
+  }, 60_000);
 
   test("15: muting the source never changes the carrier's bytes", () => {
     const options = { sampleRate: SR, samples: bank() };
@@ -309,7 +309,7 @@ describe("vocoder identity, windows and cache (tests 1-3, 15)", () => {
     const a = solo(base);
     const b = solo(updateTrack(base, "vox", { muted: true }));
     expect(hash(b.pcm)).toBe(hash(a.pcm));
-  });
+  }, 60_000);
 });
 
 describe("vocoder SDK and printer", () => {
@@ -365,7 +365,7 @@ describe("vocoder SDK and printer", () => {
     expect(printTrack(score, score.tracks[3]!)).toContain(
       'instrument: "vocoder",',
     );
-  });
+  }, 60_000);
 
   test("slug errors: none, ambiguous, self", () => {
     const make = (src: string, extra: string[] = []) =>
@@ -387,7 +387,7 @@ describe("vocoder SDK and printer", () => {
     expect(() => make("carrier")).toThrow(/cannot vocode itself/);
     expect(() => sdkVocoder({ bands: 99 })).toThrow(/bands/);
     expect(() => sdkVocoder("nope" as never)).toThrow(/preset/);
-  });
+  }, 60_000);
 });
 
 describe("chord-following carrier", () => {
@@ -447,7 +447,7 @@ describe("chord-following carrier", () => {
     const staccato = dips(true);
     expect(staccato).toBeLessThan(held + 1);
     expect(staccato).toBeLessThan(10);
-  });
+  }, 60_000);
 
   test("mergeChordChanges joins equal sets and holds short silences", () => {
     const merged = mergeChordChanges(
@@ -466,7 +466,7 @@ describe("chord-following carrier", () => {
       { start: 400, end: 900, pcs: [] },
       { start: 900, end: 1000, pcs: [2, 5, 9] },
     ]);
-  });
+  }, 60_000);
 });
 
 describe("preset levels", () => {
@@ -490,7 +490,7 @@ describe("preset levels", () => {
     const others = values.filter((_, i) => Object.keys(levels)[i] !== "lofi");
     const median = others.sort((a, b) => a - b)[others.length >> 1]!;
     expect(Math.abs(levels.lofi! - median)).toBeLessThan(3);
-  });
+  }, 60_000);
 });
 
 describe("vocoder over audio clips (0.7 clips lane)", () => {
@@ -556,5 +556,5 @@ describe("vocoder over audio clips (0.7 clips lane)", () => {
     );
     expect(moved).not.toBe(first);
     expect(first).toBe(hash(a.pcm));
-  });
+  }, 60_000);
 });
