@@ -822,7 +822,7 @@ export function applyLyrics(
         ok: true,
         message: sung.length
           ? `lyrics on ${track.name}: ${sung.map((n) => n.lyric).join(" ")}`
-          : `${track.name} has no lyrics · /lyrics never gon-na give`,
+          : `${track.name} has no lyrics · /lyrics sun-lit morn-ing`,
       };
     }
     if (notes.length === 0)

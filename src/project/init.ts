@@ -18,6 +18,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseSimpleArgv } from "../argv.ts";
 
 export const PROJECT_FILE = "dawg.json";
 export const PROJECT_FORMAT = "dawg.project/v1";
@@ -210,6 +211,9 @@ export async function initProject(
   return Object.freeze({ wrote: Object.freeze(wrote), sdkVersion });
 }
 
+export const INIT_USAGE =
+  "usage: dawg init [dir] · writes song.ts, dawg.json, tsconfig.json and .dawg/sdk (existing files are kept)";
+
 /** `dawg init [dir]`: creates the project and prints what it wrote. */
 export async function runInitCommand(
   argv: readonly string[],
@@ -217,8 +221,17 @@ export async function runInitCommand(
   stdout: { write(text: string): unknown },
   stderr: { write(text: string): unknown },
 ): Promise<number> {
-  const target =
-    argv[1] && !argv[1].startsWith("--") ? resolve(cwd, argv[1]) : cwd;
+  const parsed = parseSimpleArgv(argv.slice(1), 1);
+  if (parsed.kind === "help") {
+    stdout.write(`${INIT_USAGE}\n`);
+    return 0;
+  }
+  if (parsed.kind === "error") {
+    stderr.write(`${parsed.problem} · ${INIT_USAGE}\n`);
+    return 2;
+  }
+  const dir = parsed.positionals[0];
+  const target = dir ? resolve(cwd, dir) : cwd;
   try {
     const result = await initProject(target);
     if (result.wrote.length === 0)

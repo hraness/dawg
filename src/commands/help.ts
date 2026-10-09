@@ -364,7 +364,7 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       { command: "/auth [--check]", summary: "provider and audio status" },
       { command: "/play [on|off]", summary: "keyboard play mode · Ctrl-P" },
       {
-        command: "/play degrees|chromatic",
+        command: "/play degrees|in-key|chromatic",
         summary: "home row plays the key's scale degrees (any tuning) · i",
       },
       {
@@ -457,7 +457,7 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "trim, reverse, repeat, mute or remove a clip",
       },
       {
-        command: "/lyrics [bar] never gon-na give",
+        command: "/lyrics [bar] sun-lit morn-ing",
         summary: "syllables onto the notes (- splits, _ holds, ~ skips)",
       },
       // f07-vocoder
@@ -854,7 +854,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   master:
     "master <unit> on|off|preset <name>|<param> <value> · master streaming|club|loud · master target -14 · master measure · master off",
   try: "/try <sound command> · /try fx reverb mix 0.6",
-  play: "/play [on|off|degrees|chromatic] · Ctrl-P · i toggles degrees",
+  play: "/play [on|off|degrees|in-key|chromatic] · Ctrl-P · i toggles degrees",
   meter:
     "meter <1..16> · meter 3 · meter 7/8 [at bar <n>] · meter remove bar <n> · meter clear",
   art: EXPRESSION_USAGE.art,
@@ -893,22 +893,30 @@ const KNOWN_VERBS: readonly string[] = [
   ),
 ];
 
-function editDistance(a: string, b: string): number {
-  const row = Array.from({ length: b.length + 1 }, (_, index) => index);
+/**
+ * Optimal-string-alignment distance: insert, delete, substitute, and an
+ * adjacent swap (`/hlep` → `/help`) each cost one edit.
+ */
+export function editDistance(a: string, b: string): number {
+  let before: number[] = [];
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
   for (let i = 1; i <= a.length; i += 1) {
-    let previous = row[0]!;
-    row[0] = i;
+    const row = [i];
     for (let j = 1; j <= b.length; j += 1) {
-      const current = row[j]!;
-      row[j] = Math.min(
-        row[j]! + 1,
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      let best = Math.min(
+        previous[j]! + 1,
         row[j - 1]! + 1,
-        previous + (a[i - 1] === b[j - 1] ? 0 : 1),
+        previous[j - 1]! + cost,
       );
-      previous = current;
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1])
+        best = Math.min(best, before[j - 2]! + 1);
+      row.push(best);
     }
+    before = previous;
+    previous = row;
   }
-  return row[b.length]!;
+  return previous[b.length]!;
 }
 
 /**

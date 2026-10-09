@@ -6,7 +6,8 @@ import {
 } from "./audio/instrument-check.ts";
 import { randomUUID } from "node:crypto";
 import { readFileSync, writeSync } from "node:fs";
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { stdin, stdout } from "node:process";
 import {
@@ -325,6 +326,12 @@ import { encodeBuffer } from "../tui/screen.ts";
 import { parseThemeName } from "../tui/theme.ts";
 import { formatDiagnostic } from "../core/sdk/eval.ts";
 import { isProject } from "./project/init.ts";
+import {
+  parseLaunchArgs,
+  parseSimpleArgv,
+  resolveTrackArg,
+} from "./launch-args.ts";
+import { RENDER_USAGE } from "./render.ts";
 import { typecheckProject } from "./project/typecheck.ts";
 import {
   startProjectSync,
@@ -376,37 +383,30 @@ const ESC = "\u001b[";
 /** `/sessions` rows shown in the overlay. */
 const MAX_LISTED_SESSIONS = 64;
 
-const SUBCOMMANDS = [
-  "login",
-  "logout",
-  "auth",
-  "sessions",
-  "render",
-  "init",
-  "check",
-];
-const VALUE_FLAGS = ["--session", "--track", "--import", "--export", "--theme"];
-const FLAGS = [
-  ...VALUE_FLAGS,
-  "--new",
-  "--demo",
-  "--help",
-  "-h",
-  "--version",
-  "-v",
-  "--reduce-motion",
-  "--no-mouse",
-];
+/** Wraps a usage line at spaces before `width`, indenting continuations. */
+function wrapUsage(text: string, width: number, indent: string): string {
+  const lines: string[] = [];
+  let line = "";
+  for (const word of text.split(" ")) {
+    const prefix = lines.length === 0 ? "  " : indent;
+    if (line && prefix.length + line.length + 1 + word.length > width) {
+      lines.push(line);
+      line = word;
+    } else line = line ? `${line} ${word}` : word;
+  }
+  lines.push(line);
+  return lines.join(`\n${indent}`);
+}
 const HELP_TEXT = `dawg · local-first terminal music workstation
 
 Usage:
   dawg [--new] [--session <name|id>] [--track <name>]
-  dawg --import <file> --export <file>
+  dawg --import <file> --export <file>   convert a loop file (no session)
   dawg sessions
-  dawg render <out.wav|out.mid> [--session <name|id>] [--import <file>]
-               [--normalize <lufs|streaming|club|loud|…>] [--measure]
+  ${wrapUsage(RENDER_USAGE.replace(/^usage: /, ""), 76, "               ")}
   dawg init [dir]      project files: song.ts, tracks/<slug>/track.ts, .dawg/sdk
   dawg check           typecheck + evaluate the project; exit 1 on problems
+  dawg <command> --help  usage: sessions render init check media login model
   dawg media doctor|download|stems|analyze|notes|sample|lyrics …  (dawg media --help)
   dawg --version
 
@@ -432,13 +432,17 @@ Unrecognized requests go to the agent once a provider is configured
 (DAWG_PROVIDER=gateway|openrouter|codex|claude|auto, DAWG_MODEL=<alias>;
 DAWG_AI=0 disables the agent).`;
 const args = new Set(process.argv.slice(2));
-const requestedSession = optionValue("--session");
-const explicitTrack = optionValue("--track");
+/** One parse for every launch flag; problems are reported below. */
+const launch = parseLaunchArgs(process.argv.slice(2));
+const launchArgs = launch.ok ? launch.args : undefined;
+const requestedSession = launchArgs?.session;
+/** `--track` normalized as `/track` does; matched to an existing track below. */
+let explicitTrack = launchArgs?.track?.id;
 /** The focused track; claimed at startup unless `--track` is given. */
 let requestedTrack = explicitTrack ?? "main";
 const initialInstrument = isDrumInstrument(requestedTrack) ? "kit" : "sine";
-const importPath = optionValue("--import");
-const exportPath = optionValue("--export");
+const importPath = launchArgs?.importPath;
+const exportPath = launchArgs?.exportPath;
 if (["login", "logout", "auth", "model"].includes(process.argv[2] ?? ""))
   process.exit(await runAuthCommand(process.argv.slice(2)));
 {
@@ -452,10 +456,14 @@ if (["login", "logout", "auth", "model"].includes(process.argv[2] ?? ""))
   }
 }
 if (process.argv[2] === "sessions") {
-  if (args.has("--help") || args.has("-h"))
-    stdout.write(
-      "usage: dawg sessions · lists this workspace's sessions, newest first (* marks the current one)\n",
-    );
+  const usage =
+    "usage: dawg sessions · lists this workspace's sessions, newest first (* marks the current one)";
+  const parsed = parseSimpleArgv(process.argv.slice(3), 0);
+  if (parsed.kind === "error") {
+    process.stderr.write(`${parsed.problem} · ${usage}\n`);
+    process.exit(2);
+  }
+  if (parsed.kind === "help") stdout.write(`${usage}\n`);
   else await printSessions(process.cwd(), stdout);
   process.exit(0);
 }
@@ -500,11 +508,28 @@ if (args.has("--help") || args.has("-h")) {
 }
 // Argument mistakes are rejected here, before `.dawg/` could be created.
 {
-  const problem = argumentProblem(process.argv.slice(2));
-  if (problem) {
-    process.stderr.write(`${problem} · dawg --help\n`);
+  if (!launch.ok) {
+    process.stderr.write(`${launch.problem} · dawg --help\n`);
     process.exit(2);
   }
+}
+// `--import X --export Y` converts one loop file to another: no session.
+if (importPath && exportPath) {
+  try {
+    const converted = decodeLoop(await readLoopFile(importPath));
+    await writeFile(resolve(exportPath), encodeLoop(converted), "utf8");
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    const midi = /\.midi?$/i.test(importPath)
+      ? " · MIDI files are not imported; --import takes a .track.json loop"
+      : "";
+    process.stderr.write(
+      `dawg: cannot import ${importPath} · ${reason.split("\n")[0]!.slice(0, 160)}${midi}\n`,
+    );
+    process.exit(1);
+  }
+  stdout.write(`converted ${importPath} → ${exportPath}\n`);
+  process.exit(0);
 }
 const demo =
   args.has("--demo") || process.env.DAWG_DEMO === "1" || !stdin.isTTY;
@@ -560,7 +585,16 @@ if (importPath) {
     process.exit(1);
   }
 }
-const session = await ensureSession(initial.toJSON(), sessionOptions);
+// A demo frame only renders: with no workspace yet (and nothing imported),
+// it runs on a throwaway session so the cwd gets no `.dawg/`.
+const ephemeralWorkspace =
+  demo && freshWorkspace && !importPath && selectedSession === undefined
+    ? await mkdtemp(join(tmpdir(), "dawg-demo-"))
+    : undefined;
+const session = await ensureSession(initial.toJSON(), {
+  ...sessionOptions,
+  ...(ephemeralWorkspace ? { workspace: ephemeralWorkspace } : {}),
+});
 // dawgd when connected, the file-lock path otherwise (see src/session/port.ts).
 let port = await openSessionPort<ReturnType<TrackScore["toJSON"]>>({
   paths: session.paths,
@@ -572,6 +606,12 @@ let port = await openSessionPort<ReturnType<TrackScore["toJSON"]>>({
 let record: SessionRecord<ReturnType<TrackScore["toJSON"]>> =
   port.mode === "daemon" ? await port.load() : session.record;
 let score = scoreFromJSON(record.composition);
+if (importPath && importedScore) score = importedScore;
+// `--track Bass` focuses an existing `bass` (or a track named "Bass").
+if (launchArgs?.track) {
+  explicitTrack = resolveTrackArg(score.tracks, launchArgs.track);
+  requestedTrack = explicitTrack;
+}
 if (importPath && importedScore) {
   score = importedScore;
   record = await port.append(
@@ -612,7 +652,7 @@ const tui = new TuiApp({
     rows: () => stdout.rows ?? 24,
   },
   prompt,
-  theme: parseThemeName(optionValue("--theme") ?? process.env.DAWG_THEME),
+  theme: launchArgs?.theme ?? parseThemeName(process.env.DAWG_THEME),
   reducedMotion:
     args.has("--reduce-motion") || process.env.DAWG_REDUCE_MOTION === "1",
 });
@@ -728,6 +768,10 @@ if (demo) {
     "add C4 at 0 for 1",
     0,
   );
+  if (ephemeralWorkspace) {
+    await port.close().catch(() => undefined);
+    await rm(ephemeralWorkspace, { recursive: true, force: true });
+  }
   process.exit(0);
 }
 
@@ -738,36 +782,12 @@ if (exportPath) {
 
 await runInteractive();
 
-/** Describes an unknown subcommand or option in `argv`, or undefined. */
-function argumentProblem(argv: readonly string[]): string | undefined {
-  if (argv[0] && !argv[0].startsWith("-") && !SUBCOMMANDS.includes(argv[0]))
-    return `unknown command · ${argv[0]}`;
-  if (argv[0] && SUBCOMMANDS.includes(argv[0])) return undefined;
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index]!;
-    if (VALUE_FLAGS.includes(arg)) {
-      index += 1;
-      continue;
-    }
-    if (arg.startsWith("-") && !FLAGS.includes(arg))
-      return `unknown option · ${arg}`;
-    if (!arg.startsWith("-")) return `unknown command · ${arg}`;
-  }
-  return undefined;
-}
-
 async function packageVersion(): Promise<string> {
   const raw = await readFile(
     new URL("../package.json", import.meta.url),
     "utf8",
   );
   return (JSON.parse(raw) as { version?: string }).version ?? "0.0.0";
-}
-
-function optionValue(name: string): string | undefined {
-  const index = process.argv.indexOf(name);
-  const value = index >= 0 ? process.argv[index + 1] : undefined;
-  return value && !value.startsWith("--") ? value : undefined;
 }
 
 function seedDemo(value: TrackScore, trackId: string): TrackScore {
