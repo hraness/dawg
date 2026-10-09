@@ -292,7 +292,8 @@ describe("measurement lines", () => {
       9,
     );
     expect(off.master?.gainDb).toBeCloseTo(inline.master!.gainDb, 9);
-  });
+    // Two full mastering passes, no wall-clock claim: 3.8 s on CI runners.
+  }, 60_000);
 
   test("measure and describe a mastered loop", () => {
     const score = applyMasterCommand(
