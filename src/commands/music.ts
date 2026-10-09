@@ -83,7 +83,7 @@ export type EffectAutomationParameter = Exclude<
   "volume" | "pan"
 >;
 
-const LANE_ALIASES: Readonly<Record<string, EffectAutomationParameter>> =
+export const LANE_ALIASES: Readonly<Record<string, EffectAutomationParameter>> =
   Object.freeze({
     filter: "filter",
     cutoff: "filter",

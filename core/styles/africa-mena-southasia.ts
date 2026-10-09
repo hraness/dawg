@@ -2692,7 +2692,7 @@ const LEAVES: readonly StyleCard[] = [
   card({
     id: "lavani",
     summary:
-      "lavani: Marathi folk theatre song on the dholki, fast keherwa with accelerating tihai, call and response, kafi and bhairavi colours",
+      "lavani: Marathi folk theatre song on the dholki, fast keherwa with accelerating tihai, call and response, kafi and bhairavi colors",
     tempo: { bpm: [110, 160], typical: 132 },
     meter: { signatures: [["4/4", 1]], cycle: KEHERWA },
     pitch: {

@@ -405,7 +405,7 @@ describe("pedal soft|sost (0.6.1)", () => {
 
   test("says when una corda will not sound", () => {
     expect(run("pedal soft 0-4").message).toContain(
-      "no effect: lead is saw; una corda acts on the modelled pianos",
+      "no effect: lead is saw; una corda acts on the modeled pianos",
     );
     const grand = (keys: boolean) =>
       createScore({

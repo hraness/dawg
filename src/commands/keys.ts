@@ -1,7 +1,7 @@
 /**
- * The modelled piano commands (0.6 keys lane, `core/keys.ts`):
+ * The modeled piano commands (0.6 keys lane, `core/keys.ts`):
  *
- *   piano                         the focused track becomes the modelled grand
+ *   piano                         the focused track becomes the modeled grand
  *   piano <preset>                grand ballad upright felt lofi honkytonk prepared
  *   grand | upright | felt …      the same, by the preset word alone
  *   keys                          list this track's piano settings
@@ -214,7 +214,7 @@ export function parseKeysCommand(prompt: string): KeysCommand | undefined {
   if (prompt.length > 1_024) return undefined;
   let words = prompt.trim().toLowerCase().split(/\s+/);
   // `instrument piano` / `sound grand`: the generic instrument command with
-  // a keys word is a new write, so it stores the modelled piano.
+  // a keys word is a new write, so it stores the modeled piano.
   if (
     words.length === 2 &&
     ["instrument", "sound", "voice"].includes(words[0]!) &&
@@ -455,8 +455,8 @@ export function applyKeysCommand(
   const piano = isKeysFamily(track.instrument);
   const elsewhere =
     track.instrument === "organ"
-      ? `keys · ${trackId} is the legacy organ; type tonewheel (or combo, pipe) for drawbars and rotary, or piano for the modelled piano`
-      : `keys · ${trackId} is ${track.instrument}; type piano first (${PIANO_FAMILIES.join(" ")}), ${ELECTRIC_FAMILIES.join(" ")} or ${ORGAN_FAMILIES.join(" ")} for modelled keys`;
+      ? `keys · ${trackId} is the legacy organ; type tonewheel (or combo, pipe) for drawbars and rotary, or piano for the modeled piano`
+      : `keys · ${trackId} is ${track.instrument}; type piano first (${PIANO_FAMILIES.join(" ")}), ${ELECTRIC_FAMILIES.join(" ")} or ${ORGAN_FAMILIES.join(" ")} for modeled keys`;
   if (command.type === "keys-list")
     return {
       ok: true,
@@ -483,7 +483,7 @@ export function applyKeysCommand(
   if (track.sampler && command.type !== "keys-preset")
     return {
       ok: false,
-      message: `keys · ${trackId} is a sampler track; type piano to make it a modelled piano`,
+      message: `keys · ${trackId} is a sampler track; type piano to make it a modeled piano`,
     };
   let patch: TrackPatch;
   if (command.type === "keys-preset") {
@@ -516,7 +516,7 @@ export function applyKeysCommand(
     return {
       ok: false,
       message: keysSynth
-        ? `keys · keys shapes the modelled piano; ${trackId} is the keys synth: use synth ${first ?? "decay"} …, or type piano`
+        ? `keys · keys shapes the modeled piano; ${trackId} is the keys synth: use synth ${first ?? "decay"} …, or type piano`
         : elsewhere,
     };
   } else if (command.type === "keys-rotary-at") {
@@ -605,7 +605,7 @@ export function applyKeysCommand(
 
 /**
  * The fields a new track named after a piano word starts with
- * (`/track piano` → the modelled grand); empty for any other name. `lofi`
+ * (`/track piano` → the modeled grand); empty for any other name. `lofi`
  * is left out: it also names a drum kit and pattern.
  */
 export function newPianoTrack(name: string): {

@@ -121,7 +121,7 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       },
       {
         command: "piano [<preset>] | grand | upright | felt | honkytonk",
-        summary: "modelled piano · piano ballad · piano lofi · piano prepared",
+        summary: "modeled piano · piano ballad · piano lofi · piano prepared",
       },
       {
         command: "keys <param> <value> | preset <name> | reset",
@@ -454,7 +454,7 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       {
         command:
           "/vowel <v> [<to> [<morph>]] | ee | to <v>|off | morph <0..1> | off",
-        summary: "vowel filter · /vowel a · /vowel a o 0.5 morphs a towards o",
+        summary: "vowel filter · /vowel a · /vowel a o 0.5 morphs a toward o",
       },
       // f07-sing
       {

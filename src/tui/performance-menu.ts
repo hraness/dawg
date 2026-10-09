@@ -188,7 +188,7 @@ export function performanceNodes(context: MenuContext): MenuNode[] {
             : "pedal",
       help: "bars replaces the lane with a re-pedal on each downbeat; in play mode press Tab (latch) or hold Shift while recording",
     },
-    // keys-electric (0.6.1): the piano's other two pedals, on modelled piano
+    // keys-electric (0.6.1): the piano's other two pedals, on modeled piano
     // tracks (or wherever a lane is already set).
     ...pianoPedalNodes(track),
     {

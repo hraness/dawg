@@ -83,7 +83,7 @@ export function pitchMenuRows(context: MenuContext): MenuNode[] {
       label: "trace",
       value: pitchTraceFor(context.trackId) !== undefined,
       command: (on) => `/vocal pitch trace ${on ? "on" : "off"}`,
-      help: "a dotted line of the sung pitch on the highway; warning colour past 15 cents off",
+      help: "a dotted line of the sung pitch on the highway; warning color past 15 cents off",
     },
     {
       kind: "action",

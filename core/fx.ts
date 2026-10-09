@@ -154,7 +154,7 @@ export const VOWEL_VALUES = Object.freeze([
 export const FX_SPECS = Object.freeze({
   autofilter: {
     label: "auto filter",
-    doc: "filter whose cutoff an LFO sweeps around a centre, optionally opened by the input level",
+    doc: "filter whose cutoff an LFO sweeps around a center, optionally opened by the input level",
     simple: ["type", "cutoff", "depth", "sync", "shape"],
     strudel:
       "none built in (Strudel fakes it with lpf(sine.range(..)).seg(n)); names follow lpf/lpq",
@@ -174,7 +174,7 @@ export const FX_SPECS = Object.freeze({
         step: "log",
         unit: "Hz",
         automate: true,
-        doc: "centre cutoff",
+        doc: "center cutoff",
         strudel: ["lpf", "cutoff"],
       },
       resonance: {
@@ -195,7 +195,7 @@ export const FX_SPECS = Object.freeze({
         step: 0.25,
         unit: "oct",
         automate: true,
-        doc: "sweep width in octaves around the centre",
+        doc: "sweep width in octaves around the center",
       },
       sync: sync(4),
       rate: rate(0.5),
@@ -283,7 +283,7 @@ export const FX_SPECS = Object.freeze({
         values: VOWEL_VALUES,
         default: "a",
         optional: true,
-        doc: "vowel to morph towards (absent: no morph)",
+        doc: "vowel to morph toward (absent: no morph)",
       },
       morph: {
         kind: "number",
@@ -542,7 +542,7 @@ export const FX_SPECS = Object.freeze({
         max: 1,
         default: 0.3,
         step: 0.05,
-        doc: "microphone position: 0 centre (bright) .. 1 edge (dark)",
+        doc: "microphone position: 0 center (bright) .. 1 edge (dark)",
       },
       mix: mix(1),
     },
@@ -672,7 +672,7 @@ export const FX_SPECS = Object.freeze({
         max: 1,
         default: 0.6,
         step: 0.05,
-        doc: "0 centred .. 1 the two takes hard left and right",
+        doc: "0 centered .. 1 the two takes hard left and right",
       },
     },
   },
@@ -815,7 +815,7 @@ export const FX_SPECS = Object.freeze({
         default: 1000,
         step: "log",
         unit: "Hz",
-        doc: "sweep centre",
+        doc: "sweep center",
         strudel: ["phasercenter", "phc"],
       },
       sweep: {
@@ -999,7 +999,7 @@ export const TRACK_EFFECT_SPECS = Object.freeze({
         step: "log",
         unit: "Hz",
         automate: true,
-        doc: "cutoff (lpf/hpf) or centre (bpf) frequency",
+        doc: "cutoff (lpf/hpf) or center (bpf) frequency",
         strudel: [
           "lpf",
           "cutoff",

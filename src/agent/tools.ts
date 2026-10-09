@@ -961,7 +961,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   },
   {
     name: "set_keys",
-    description: `Shape a modelled piano, electric keys (epiano wurli clav) or organ: preset (instrument, keys and its effects), params ${KEYS_SIMPLE.join(" ")}… (pianos: sym 0.5 adds sympathetic bloom under the sustain pedal, good for Chopin and Debussy; epiano: bark bell tone vibe; wurli: trem; clav: pickup mute; null unsets; DAWG.md lists all), or reset. Stored "piano" stays legacy; set_instrument piano writes grand. Organs (not "organ", a legacy synth): presets tonewheel combo pipe… (aliases hammond b3 farfisa church); drawbars "888800008", registers "08880", stops (plenum, flute8…), rotary; params perc percdecay percvol click scanner drive (tonewheel), voice vib vibmod drive (combo), chiff wind trem (pipe). A row the family does not read is refused.`,
+    description: `Shape a modeled piano, electric keys (epiano wurli clav) or organ: preset (instrument, keys and its effects), params ${KEYS_SIMPLE.join(" ")}… (pianos: sym 0.5 adds sympathetic bloom under the sustain pedal, good for Chopin and Debussy; epiano: bark bell tone vibe; wurli: trem; clav: pickup mute; null unsets; DAWG.md lists all), or reset. Stored "piano" stays legacy; set_instrument piano writes grand. Organs (not "organ", a legacy synth): presets tonewheel combo pipe… (aliases hammond b3 farfisa church); drawbars "888800008", registers "08880", stops (plenum, flute8…), rotary; params perc percdecay percvol click scanner drive (tonewheel), voice vib vibmod drive (combo), chiff wind trem (pipe). A row the family does not read is refused.`,
     parameters: {
       type: "object",
       properties: {

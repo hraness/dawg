@@ -254,7 +254,12 @@ import {
   PlaySession,
   type LiveEngine,
 } from "./tui/play-session.ts";
-import { EditMenu, MENU_SECTIONS, type MenuContext } from "./tui/menu.ts";
+import {
+  EditMenu,
+  MENU_SECTIONS,
+  MENU_SHOWN_SECTIONS,
+  type MenuContext,
+} from "./tui/menu.ts";
 import {
   drawerView,
   faderChoose,
@@ -2041,7 +2046,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (menuCommand) {
     const section = menuCommand[1]?.toLowerCase();
     if (section && !(MENU_SECTIONS as readonly string[]).includes(section))
-      return fail(`/menu [${MENU_SECTIONS.join("|")}]`);
+      return fail(`usage · /menu [${MENU_SHOWN_SECTIONS.join("|")}]`);
     openMenu(section);
     return ok("menu");
   }

@@ -57,15 +57,15 @@ export function isElectricFamily(
 
 /**
  * Why una corda would not sound on this track (0.6.1), or undefined when it
- * does: only the modelled pianos with a `keys` object read `softPedal`.
+ * does: only the modeled pianos with a `keys` object read `softPedal`.
  */
 export function softPedalNote(
   track: Readonly<{ id: string; instrument: string; keys?: unknown }>,
 ): string | undefined {
   if (!isPianoFamily(track.instrument))
-    return `${track.id} is ${track.instrument}; una corda acts on the modelled pianos (${PIANO_FAMILIES.join(" ")})`;
+    return `${track.id} is ${track.instrument}; una corda acts on the modeled pianos (${PIANO_FAMILIES.join(" ")})`;
   if (track.keys === undefined)
-    return `${track.id} has no modelled piano yet; keys preset ${track.instrument} first`;
+    return `${track.id} has no modeled piano yet; keys preset ${track.instrument} first`;
   return undefined;
 }
 

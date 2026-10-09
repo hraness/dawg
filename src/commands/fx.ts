@@ -66,34 +66,35 @@ export type FxCommand =
       values: Readonly<Record<string, number | string | boolean>>;
     };
 
-const EFFECT_ALIASES: Readonly<Record<string, EffectName>> = Object.freeze({
-  lpf: "filter",
-  hpf: "filter",
-  bpf: "filter",
-  dj: "djf",
-  "dj-filter": "djf",
-  "auto-filter": "autofilter",
-  autof: "autofilter",
-  bitcrush: "crush",
-  bitcrusher: "crush",
-  coarse: "crush",
-  distortion: "distort",
-  dist: "distort",
-  drive: "distort",
-  shape: "distort",
-  trem: "tremolo",
-  comp: "compressor",
-  compress: "compressor",
-  rotary: "leslie",
-  gain: "postgain",
-  echo: "delay",
-  bus: "orbit",
-  o: "orbit",
-  sidechain: "duck",
-  duckorbit: "duck",
-  room: "reverb",
-  verb: "reverb",
-});
+export const EFFECT_ALIASES: Readonly<Record<string, EffectName>> =
+  Object.freeze({
+    lpf: "filter",
+    hpf: "filter",
+    bpf: "filter",
+    dj: "djf",
+    "dj-filter": "djf",
+    "auto-filter": "autofilter",
+    autof: "autofilter",
+    bitcrush: "crush",
+    bitcrusher: "crush",
+    coarse: "crush",
+    distortion: "distort",
+    dist: "distort",
+    drive: "distort",
+    shape: "distort",
+    trem: "tremolo",
+    comp: "compressor",
+    compress: "compressor",
+    rotary: "leslie",
+    gain: "postgain",
+    echo: "delay",
+    bus: "orbit",
+    o: "orbit",
+    sidechain: "duck",
+    duckorbit: "duck",
+    room: "reverb",
+    verb: "reverb",
+  });
 
 /**
  * 0.7: `formant` was an alias of the vowel filter; it now shifts formants.

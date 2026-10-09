@@ -176,7 +176,7 @@ export const MODAL_PARAMS: Readonly<Record<string, ParamSpec>> = Object.freeze({
   hardness: num(0, 1, 0.4, 0.05, "mallet hardness: 0 yarn/felt, 1 brass", {
     automate: true,
   }),
-  position: num(0, 1, 0.42, 0.05, "strike point: 0 end or edge, 0.5 centre", {
+  position: num(0, 1, 0.42, 0.05, "strike point: 0 end or edge, 0.5 center", {
     automate: true,
   }),
   ring: num(0.05, 30, 1.6, "log", "ring time (T60) at middle C", {

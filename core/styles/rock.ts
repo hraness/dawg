@@ -1269,7 +1269,7 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "shoegaze",
     summary:
-      "shoegaze: wall of reverse-reverb guitar wash, sustained open chords, buried vocal, lydian and major colours, tonic drone",
+      "shoegaze: wall of reverse-reverb guitar wash, sustained open chords, buried vocal, lydian and major colors, tonic drone",
     tempo: { bpm: [80, 130], typical: 104 },
     pitch: {
       scales: [
@@ -1617,7 +1617,7 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "midwest-emo",
     summary:
-      "midwest emo: twinkly open-tuned arpeggios, major-seventh and add9 colours, odd-meter turns, earnest vocal",
+      "midwest emo: twinkly open-tuned arpeggios, major-seventh and add9 colors, odd-meter turns, earnest vocal",
     tempo: { bpm: [120, 160], typical: 138 },
     meter: {
       signatures: [
@@ -1736,7 +1736,7 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "anatolian-rock",
     summary:
-      "Anatolian rock: makam hijaz and kurd colours on fuzz guitar and saz-like setar, aksak 9/8 as 2+2+2+3, tonic drone",
+      "Anatolian rock: makam hijaz and kurd colors on fuzz guitar and saz-like setar, aksak 9/8 as 2+2+2+3, tonic drone",
     tempo: { bpm: [100, 140], typical: 118 },
     meter: {
       signatures: [
@@ -2419,7 +2419,7 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "doom-metal",
     summary:
-      "doom metal: very slow half-time, aeolian and phrygian riffs on the tonic and bII, sustained power chords, tritone colour",
+      "doom metal: very slow half-time, aeolian and phrygian riffs on the tonic and bII, sustained power chords, tritone color",
     tempo: { bpm: [50, 80], typical: 64 },
     rhythm: {
       onsets: {

@@ -308,7 +308,7 @@ export const SING_PRESETS: Readonly<Record<SingPreset, SingPresetEntry>> =
     choir: preset(
       { voices: 6, ring: 0.2 },
       'six-voice "aah" ensemble',
-      "Eno, Bach cantata colour, pads",
+      "Eno, Bach cantata color, pads",
     ),
     oohchoir: preset(
       { voices: 6, vowel: "u", breath: 0.3, bright: 0.35 },
@@ -350,7 +350,7 @@ export const SING_PRESETS: Readonly<Record<SingPreset, SingPresetEntry>> =
     basso: preset(
       { voice: "bass", vowel: "o", ring: 0.4 },
       'solo bass "oh"',
-      "cantata recitative colour, drones",
+      "cantata recitative color, drones",
     ),
     drone: preset(
       {
@@ -361,7 +361,7 @@ export const SING_PRESETS: Readonly<Record<SingPreset, SingPresetEntry>> =
         vibmod: 0,
         release: 1.5,
       },
-      "held drone, the melody colours its overtones",
+      "held drone, the melody colors its overtones",
       "La Monte Young, Barbieri, Eno",
     ),
     khoomei: preset(

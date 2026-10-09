@@ -120,8 +120,8 @@ export const VOCODER_PARAMS: Readonly<Record<string, ParamSpec>> =
     bands: num(4, 40, 16, 1, "channel bands (heavy above 24)", {
       integer: true,
     }),
-    lo: num(50, 1000, 100, "log", "lowest band centre", { unit: "Hz" }),
-    hi: num(2000, 12000, 8000, "log", "highest band centre", { unit: "Hz" }),
+    lo: num(50, 1000, 100, "log", "lowest band center", { unit: "Hz" }),
+    hi: num(2000, 12000, 8000, "log", "highest band center", { unit: "Hz" }),
     width: num(0.25, 4, 1, 0.05, "band width (x spacing)", {
       automate: true,
     }),

@@ -10,7 +10,7 @@
  *   formant on | off | reset      turn it on | remove it | back to 0 st, mix 1
  *
  *   vowel                         show the vowel filter
- *   vowel <v> [<to> [<morph>]]    a, or a morphing towards o (morph 0.5);
+ *   vowel <v> [<to> [<morph>]]    a, or a morphing toward o (morph 0.5);
  *                                 keeps the mix you set
  *   vowel <preset>                ee (also a, o)
  *   vowel to <v> | morph <0..1>   change one part of the morph

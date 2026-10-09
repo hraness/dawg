@@ -2306,7 +2306,7 @@ const IDM: readonly StyleCard[] = [
     id: "idm-family",
     abstract: true,
     summary:
-      "IDM: irregular programmed beats, additive 7/8 and 5/4 groupings, probabilistic ghost hits, modal colour",
+      "IDM: irregular programmed beats, additive 7/8 and 5/4 groupings, probabilistic ghost hits, modal color",
     meter: {
       signatures: [
         ["4/4", 0.6],

@@ -23,4 +23,4 @@ Turn a part into a sample, grain it, and play the grains like an instrument.
 
 - Ctrl-K › Project › Resample: a track, an orbit or the mix
 - Ctrl-K › Sound › granular: Sync, Quant, Mono, Pedal
-- Ctrl-K › Sound › Sample: Shift, Formant, Fade in, Fade out
+- Ctrl-K › Sound, then a sample voice: shift, formant, fade in, fade out

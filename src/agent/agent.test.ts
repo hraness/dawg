@@ -314,7 +314,7 @@ describe("streaming agent turn", () => {
       revision: 4,
     });
     expect(state.score.tempoBpm).toBe(100);
-    expect(describeAgentEvent(result)).toBe("cancelled · kept rev 4");
+    expect(describeAgentEvent(result)).toBe("canceled · kept rev 4");
   });
 
   test("times out a stalled stream", async () => {

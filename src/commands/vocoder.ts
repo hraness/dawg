@@ -248,7 +248,7 @@ export function vocoderProvenance(score: TrackScore, srcId: string): string[] {
   if (!track) return [];
   const lines = new Set<string>();
   for (const ref of Object.values(track.sampler?.voices ?? {})) {
-    if (ref.license) lines.add(`modulator licence ${ref.license} (${ref.src})`);
+    if (ref.license) lines.add(`modulator license ${ref.license} (${ref.src})`);
   }
   for (const clip of track.clips ?? []) {
     if (clip.say) {
