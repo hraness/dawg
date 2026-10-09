@@ -23,6 +23,7 @@ import {
   pitchTracePoints,
   MAX_TRACE_POINTS,
   hzName,
+  keyOfNotes,
   parsePitchArgs,
   pitchReportLines,
 } from "./vocal-pitch.ts";
@@ -307,4 +308,29 @@ describe("/vocal pitch", () => {
     expect(noVoice.ok).toBe(false);
     expect(noVoice.message).toContain("has no voice");
   });
+});
+
+test("key: a G-major line that dwells on B still reads as G major", () => {
+  // The bach-chorale soprano as /vocal notes recovers it: B is the longest
+  // pitch class, so the profile alone says b minor.
+  const rows: [number, number][] = [
+    [67, 0.8],
+    [69, 0.8],
+    [71, 2.4],
+    [69, 0.8],
+    [67, 0.8],
+    [69, 0.8],
+    [71, 2.0],
+    [74, 1.2],
+    [71, 1.6],
+    [69, 0.8],
+    [67, 0.8],
+  ];
+  let t = 0;
+  const notes = rows.map(([midi, d]) => {
+    const note = { midi, start: t, end: t + d };
+    t += d;
+    return note as unknown as Parameters<typeof keyOfNotes>[0][number];
+  });
+  expect(keyOfNotes(notes)).toBe("g major");
 });

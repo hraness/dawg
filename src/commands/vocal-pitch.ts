@@ -132,8 +132,17 @@ function median(values: number[]): number {
 export function keyOfNotes(notes: readonly PitchNote[]): string | null {
   if (notes.length < 3) return null;
   const histogram = new Array<number>(12).fill(0);
-  for (const note of notes)
+  let total = 0;
+  for (const note of notes) {
     histogram[((note.midi % 12) + 12) % 12]! += note.end - note.start;
+    total += note.end - note.start;
+  }
+  // A short line's first and last notes are strong tonic cues: they settle
+  // relatives (G major against b or e minor) the profile alone leaves close.
+  const cue = (note: PitchNote) =>
+    (histogram[((note.midi % 12) + 12) % 12]! += total * 0.15);
+  cue(notes[0]!);
+  cue(notes[notes.length - 1]!);
   return estimateKey(histogram);
 }
 
