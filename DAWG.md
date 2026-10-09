@@ -99,6 +99,8 @@ duration note <id> 0.25
 
 `/track <name>` focuses a track in this window and creates it when it is new; when another live window has it focused the reply is `<name> is open in another window` and focus stays put. Music words are bare and app commands take a slash; `tracks`, `export`, `import` and `track` still work bare as aliases but are listed once.
 
+`/track rm <name>` (aliases `remove` and `delete`) removes a track and its notes, and drops any `vocoder.src` or `autotune.from` on another track that named it; the last track stays (`/clear` empties it). `/track move <name> <position>` puts a track at a 1-based place in the list. Names match the id or the display name (`/track rm piano b`). Both undo with ^Z, and both sit in Ctrl-K › Mix as **position** and **remove track** on the focused track.
+
 Drum tracks use the `kit` instrument (a track named `drums` gets it automatically). Notes on a kit track keep the score's MIDI pitch field, using General MIDI percussion numbers (kick 36, rim 37, snare 38, clap 39, closed hat 42, tom 45, open hat 46), so drum hits round-trip through `track.loop/v1` unchanged and the highway draws them in one lane per voice. Grammar, one command per prompt, beats in score beats:
 
 ```text
@@ -1700,7 +1702,7 @@ The one-step way: focus a vocal track (a sampler voice or clips) and type `/voco
 
 Presets (all 24 bands or fewer): **classic** (70s and 80s band vocoder lead, the default), **robot** (12 bands, a pulse drone), **talkbox** (an LPC mouth filter on a saw), **choir** (stereo supersaw chord pad), **glass** (bright, formant +3), **whisper** (noise carrier), **smear** (long release wash; try `freeze`) and **lofi** (8 narrow bands under 4 kHz).
 
-Register matters for the talkbox: a carrier note sounds only the harmonics of its pitch, so a vowel's first formant (250-700 Hz) needs a carrier fundamental well below it. Keep talkbox chords and lines around A2-A3 (`voicing -8` on a progression, or write them an octave or two down); above about 300 Hz /i/ and /u/ blur into /a/. `/track remove <name>` removes a track and drops any `vocoder.src` that named it, so the carrier plays alone; a project file whose src names a missing track fails `dawg check` with that fix.
+Register matters for the talkbox: a carrier note sounds only the harmonics of its pitch, so a vowel's first formant (250-700 Hz) needs a carrier fundamental well below it. Keep talkbox chords and lines around A2-A3 (`voicing -8` on a progression, or write them an octave or two down); above about 300 Hz /i/ and /u/ blur into /a/. `/track rm <name>` removes a track and drops any `vocoder.src` that named it, so the carrier plays alone; a project file whose src names a missing track fails `dawg check` with that fix.
 
 | Parameter  | Range                               | Default   | Does                                                                                             |
 | ---------- | ----------------------------------- | --------- | ------------------------------------------------------------------------------------------------ |

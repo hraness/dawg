@@ -2067,21 +2067,50 @@ async function submit(prompt: string): Promise<string | Receipt> {
     if (requestedTrack !== grainTrack[1]!.toLowerCase()) return focused;
     return submit(grainTrack[2]!);
   }
-  // `/track remove <track>` (rm, delete): drop a track, its notes and any
-  // reference to it (a vocoder src or autotune from).
-  const removeTrackCommand = command.match(
-    /^\/?track\s+(?:remove|rm|delete)\s+(.{1,64})$/i,
+  // `/track rm <name>` (aliases remove, delete) and `/track move <name>
+  // <position>`: the human surface for the removeTrack and moveTrack
+  // operations. Removing a track also drops any vocoder src or autotune from
+  // that named it; ^z brings everything back.
+  const trackEdit = command.match(
+    /^\/?track\s+(rm|remove|delete|move)\s+(.{1,64}?)\s*$/i,
   );
-  if (removeTrackCommand) {
-    const name = removeTrackCommand[1]!.trim().replace(/^["']|["']$/g, "");
+  if (trackEdit) {
+    const verb = trackEdit[1]!.toLowerCase() === "move" ? "move" : "rm";
+    let rest = trackEdit[2]!.trim();
+    let position: number | undefined;
+    if (verb === "move") {
+      const tail = rest.match(/^(.+?)\s+(\d{1,3})$/);
+      if (!tail)
+        return fail(`usage · /track move <name> <1..${score.tracks.length}>`);
+      rest = tail[1]!;
+      position = Number(tail[2]);
+    }
+    const wanted = rest
+      .replace(/^["']|["']$/g, "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .toLowerCase();
     const found = score.tracks.find(
       (track) =>
-        track.id === name.toLowerCase() ||
-        (track.name ?? track.id).toLowerCase() === name.toLowerCase(),
+        track.id.toLowerCase() === wanted ||
+        track.id.toLowerCase() === wanted.replace(/ /g, "-") ||
+        (track.name ?? "").toLowerCase() === wanted,
     );
-    if (!found) return fail(`track remove · no track ${name}`);
-    if (score.tracks.length === 1)
-      return fail("track remove · the last track stays; /clear empties it");
+    if (!found) return fail(`no track ${rest} · /tracks lists them`);
+    if (verb === "move") {
+      if (position! < 1 || position! > score.tracks.length)
+        return fail(`usage · /track move <name> <1..${score.tracks.length}>`);
+      const next = applyScoreOperation(score, {
+        type: "moveTrack",
+        trackId: found.id,
+        index: position! - 1,
+      });
+      await commitScore(next, "track.move", { trackId: found.id });
+      await projectSync?.flushScore();
+      return ok(`moved ${found.id} to position ${position}`);
+    }
+    if (score.tracks.length <= 1)
+      return fail("the last track stays · /clear empties it");
     const next = applyScoreOperation(score, {
       type: "removeTrack",
       trackId: found.id,
@@ -2098,55 +2127,15 @@ async function submit(prompt: string): Promise<string | Receipt> {
         );
       })
       .map((track) => track.id);
-    await commitScore(next, "score.track.remove", { trackId: found.id });
-    if (requestedTrack === found.id) await focusTrack(next.tracks[0]!.id);
+    await commitScore(next, "track.remove", { trackId: found.id });
+    await projectSync?.flushScore();
+    if (found.id === requestedTrack) await focusTrack(next.tracks[0]!.id);
     return ok(
-      `track · removed ${found.id}${dropped.length ? ` · dropped references on ${dropped.join(", ")}` : ""} · ^z undoes`,
+      `removed ${found.id}${dropped.length ? ` · dropped references on ${dropped.join(", ")}` : ""} · ^z undoes`,
     );
   }
   // `/track piano b`: a name with spaces focuses the track of that name, or
   // creates `piano-b` named "piano b".
-  // `/track rm <name>` and `/track move <name> <position>`: the human surface
-  // for the removeTrack and moveTrack operations (undo brings a track back).
-  const trackEdit = command.match(
-    /^\/?track\s+(rm|remove|move)\s+([a-z0-9._-]{1,64})(?:\s+(\d{1,3}))?$/i,
-  );
-  if (trackEdit) {
-    const verb = trackEdit[1]!.toLowerCase();
-    const wanted = trackEdit[2]!.toLowerCase();
-    const found = score.tracks.find(
-      (track) =>
-        track.id.toLowerCase() === wanted ||
-        (track.name ?? "").toLowerCase() === wanted,
-    );
-    if (!found) return fail(`no track ${trackEdit[2]} · /tracks lists them`);
-    if (verb === "move") {
-      const position = Number(trackEdit[3]);
-      if (!trackEdit[3] || position < 1 || position > score.tracks.length)
-        return fail(`usage · /track move <name> <1..${score.tracks.length}>`);
-      const next = applyScoreOperation(score, {
-        type: "moveTrack",
-        trackId: found.id,
-        index: position - 1,
-      });
-      await commitScore(next, "track.move", { trackId: found.id });
-      await projectSync?.flushScore();
-      return ok(`moved ${found.id} to position ${position}`);
-    }
-    if (trackEdit[3]) return fail("usage · /track rm <name>");
-    if (score.tracks.length <= 1) return fail("the last track stays");
-    const next = applyScoreOperation(score, {
-      type: "removeTrack",
-      trackId: found.id,
-    });
-    await commitScore(next, "track.remove", { trackId: found.id });
-    await projectSync?.flushScore();
-    if (found.id === requestedTrack) {
-      const fallback = next.tracks[0]!.id;
-      await focusTrack(fallback);
-    }
-    return ok(`removed ${found.id} · ^z undo`);
-  }
   const namedTrack = command.match(/^\/track\s+([a-z0-9._ -]{1,64})$/i);
   if (namedTrack) {
     const name = namedTrack[1]!.trim().replace(/\s+/g, " ");

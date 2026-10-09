@@ -49,7 +49,8 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       { command: "unsolo", summary: "every track again" },
       {
         command: "track rm|move <name> [<position>]",
-        summary: "remove a track (^z undo) or move it in the list",
+        summary:
+          "remove a track and any vocoder src or autotune from naming it (^z undo), or move it",
       },
       { command: "clear", summary: "remove this track's notes" },
       {
@@ -363,11 +364,6 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       {
         command: "/track <name>",
         summary: "focus a track, creating it if new",
-      },
-      {
-        command: "/track remove <name>",
-        summary:
-          "remove a track; drops vocoder src or autotune from that named it",
       },
       { command: "/tracks", summary: "list tracks" },
       { command: "/view focus|all", summary: "one track or every track" },

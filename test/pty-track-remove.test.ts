@@ -1,5 +1,5 @@
 /**
- * `/track remove` in a real PTY, offline: removing a vocoder's source
+ * `/track rm` (here by its alias `remove`) in a real PTY, offline: removing a vocoder's source
  * track drops the carrier's `vocoder.src` instead of leaving a stale
  * reference that `dawg check` would reject.
  */
@@ -34,7 +34,7 @@ async function composition(cwd: string): Promise<Doc> {
 }
 
 test.skipIf(!supported)(
-  "real PTY: /track remove drops a vocoder src",
+  "real PTY: /track remove (alias of rm) drops a vocoder src",
   async () => {
     const t = await launch(110, 30, {}, ["--track", "pad"]);
     const tracks = async () => (await composition(t.cwd)).tracks ?? [];
