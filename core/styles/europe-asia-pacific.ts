@@ -1458,6 +1458,16 @@ const IN_SCALE = Object.freeze({
   },
 });
 
+/**
+ * In-scale cadences: phrases close on the tonic, the 4th or the 5th
+ * (phrygian degrees 0, 3, 4), never on the avoided minor 3rd.
+ */
+const IN_FINALS = Object.freeze([
+  [0, 0.6],
+  [3, 0.15],
+  [4, 0.25],
+] as const);
+
 /** Ryūkyū scale: major with no 2nd or 6th (do mi fa so ti). */
 const RYUKYU = Object.freeze({
   scales: [["major", 1]] as const,
@@ -1587,7 +1597,15 @@ const ASIA_PACIFIC_LEAVES: readonly StyleCard[] = [
     tempo: { bpm: [96, 140], typical: 116 },
     meter: { signatures: [["2/4", 1]] },
     pitch: SHANG_MODE,
-    melody: { density: [2, 4] },
+    melody: {
+      density: [2, 4],
+      // shang closes on the tonic, the 4th or the 5th; the gate omits the 3rd
+      finals: [
+        [0, 0.5],
+        [3, 0.2],
+        [4, 0.3],
+      ],
+    },
     texture: {
       kind: "heterophonic",
       roles: {
@@ -1694,6 +1712,7 @@ const ASIA_PACIFIC_LEAVES: readonly StyleCard[] = [
     tempo: { bpm: [60, 110], typical: 80 },
     meter: { signatures: [["4/4", 1]] },
     pitch: IN_SCALE,
+    melody: { finals: IN_FINALS },
     texture: {
       kind: "heterophonic",
       roles: {
@@ -1710,7 +1729,12 @@ const ASIA_PACIFIC_LEAVES: readonly StyleCard[] = [
     tempo: { bpm: [36, 56], typical: 44 },
     meter: { signatures: [["4/4", 1]] },
     pitch: IN_SCALE,
-    melody: { density: [0, 1], phraseBars: [[1, 1]], contour: [["arch", 1]] },
+    melody: {
+      density: [0, 1],
+      phraseBars: [[1, 1]],
+      contour: [["arch", 1]],
+      finals: IN_FINALS,
+    },
     texture: {
       kind: "monophonic",
       roles: { lead: role("shakuhachi"), drone: null },
@@ -1724,6 +1748,7 @@ const ASIA_PACIFIC_LEAVES: readonly StyleCard[] = [
     tempo: { bpm: [50, 80], typical: 62 },
     meter: { signatures: [["4/4", 1]], cycle: YATSU_BYOSHI },
     pitch: IN_SCALE,
+    melody: { finals: IN_FINALS },
     texture: {
       kind: "heterophonic",
       roles: {
