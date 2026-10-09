@@ -226,6 +226,12 @@ export const KEYS_PARAMS: Readonly<Record<string, ParamSpec>> = Object.freeze({
     doc: "suitcase vibrato rate (epiano)",
   },
   trem: unit(0, "reed piano tremolo depth at 5.6 Hz (wurli)", true),
+  // keys-electric (0.6.1): piano sympathetic resonance (pianos only; 0 keeps
+  // 0.6.0 renders byte-identical).
+  sym: unit(
+    0,
+    "sympathetic string resonance while the sustain pedal is down; 0 is off",
+  ),
 });
 
 /**

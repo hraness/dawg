@@ -10,7 +10,7 @@ import {
 
 describe("instrument words that play the plain sine", () => {
   test("unknown words and plain-sine legacy words are named", () => {
-    for (const word of ["violin", "recorder", "clav", "xyzzy"])
+    for (const word of ["violin", "recorder", "theremin", "xyzzy"])
       expect(plainSineAdvice(word)).toContain("not a dawg instrument");
     for (const word of ["cello", "organ", "strings", "lead"])
       expect(plainSineAdvice(word)).toContain("plain sine (kept for old");
@@ -34,6 +34,9 @@ describe("instrument words that play the plain sine", () => {
       "wavetable",
       "string",
       "grand",
+      "epiano",
+      "wurli",
+      "clav",
       "modal",
       "granular",
     ])

@@ -167,6 +167,8 @@ export type TrackGlide = Readonly<{ time: number; mode: GlideMode }>;
 export const DEFAULT_GLIDE_SECONDS = 0.06;
 
 export const PEDAL_STATES = ["down", "half", "up"] as const;
+/** Sostenuto has no half position (0.6.1). */
+export const SOSTENUTO_STATES = ["down", "up"] as const;
 export type PedalState = (typeof PEDAL_STATES)[number];
 
 /** A sustain pedal (MIDI CC64) change at a tick. */
@@ -386,16 +388,18 @@ export function normalizeTrackGlide(value: unknown): TrackGlide | undefined {
 export function normalizePedal(
   value: unknown,
   maxTick: number,
+  label = "pedal",
+  states: readonly PedalState[] = PEDAL_STATES,
 ): readonly PedalEvent[] | undefined {
   if (value === undefined || value === null) return undefined;
   if (!Array.isArray(value) || value.length > EXPRESSION_LIMITS.maxPedalEvents)
     throw new ExpressionValidationError(
-      `pedal must be an array of at most ${EXPRESSION_LIMITS.maxPedalEvents} events`,
+      `${label} must be an array of at most ${EXPRESSION_LIMITS.maxPedalEvents} events`,
     );
   const byTick = new Map<number, PedalEvent>();
   for (const item of value as unknown[]) {
-    const event = record(item, "pedal event");
-    onlyKeys(event, ["tick", "state"], "pedal event");
+    const event = record(item, `${label} event`);
+    onlyKeys(event, ["tick", "state"], `${label} event`);
     const tick = event.tick;
     if (
       typeof tick !== "number" ||
@@ -404,11 +408,11 @@ export function normalizePedal(
       tick > maxTick
     )
       throw new ExpressionValidationError(
-        `pedal tick must be an integer 0..${maxTick}`,
+        `${label} tick must be an integer 0..${maxTick}`,
       );
-    if (!PEDAL_STATES.includes(event.state as PedalState))
+    if (!states.includes(event.state as PedalState))
       throw new ExpressionValidationError(
-        `pedal state must be one of ${PEDAL_STATES.join(", ")}`,
+        `${label} state must be one of ${states.join(", ")}`,
       );
     // The last event at a tick wins.
     byTick.set(tick, Object.freeze({ tick, state: event.state as PedalState }));
@@ -674,6 +678,7 @@ export function hasTrackPerformance(track: Track | undefined): boolean {
     track !== undefined &&
     (track.glide !== undefined ||
       track.pedal !== undefined ||
+      track.sostenuto !== undefined ||
       track.velocityCurve !== undefined ||
       track.humanize !== undefined)
   );
@@ -866,6 +871,41 @@ export function performNotes(
         duration: end - item.start,
         pedalled: end > release,
         ...(damp ? { damp } : {}),
+      };
+    });
+  }
+  // 3b. Sostenuto (0.6.1): a key held (written length after articulation)
+  // when the sostenuto goes down keeps its damper up until the sostenuto
+  // lifts; keys struck later damp at their own release (or the sustain
+  // pedal's). Re-striking the same pitch stops the latched note.
+  const sostenuto = track?.sostenuto;
+  if (sostenuto) {
+    const downs = sostenuto.filter((event) => event.state === "down");
+    working = working.map((item) => {
+      const keyUp = item.start + item.bendLength;
+      const down = downs.find(
+        (event) => event.tick >= item.start && event.tick < keyUp,
+      );
+      if (!down) return item;
+      const lift =
+        sostenuto.find(
+          (event) => event.tick > down.tick && event.state === "up",
+        )?.tick ?? timing.endTick;
+      const current = item.start + item.duration;
+      let end = Math.max(current, Math.min(lift, timing.endTick));
+      if (end <= current) return item;
+      const restrike = working.find(
+        (other) =>
+          other !== item &&
+          other.note.pitch === item.note.pitch &&
+          other.start > item.start &&
+          other.start < end,
+      );
+      if (restrike) end = Math.max(current, restrike.start);
+      return {
+        ...item,
+        duration: end - item.start,
+        pedalled: end > keyUp || item.pedalled === true,
       };
     });
   }

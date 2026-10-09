@@ -16,7 +16,7 @@
  * - Post: the family's body EQ per channel (the minimal per-track post
  *   hook), then the track volume, before the existing effects chain.
  */
-import type { PerformedNote } from "../../../core/expression.ts";
+import { pedalStateAt, type PerformedNote } from "../../../core/expression.ts";
 import {
   isElectricFamily,
   isPianoFamily,
@@ -47,6 +47,7 @@ import {
   type ElectricParams,
   type KeysVoice,
 } from "./electric.ts";
+import { Sympathetic } from "./sympathetic.ts";
 
 export const KEYS_LIMITS = Object.freeze({
   /** Per-track polyphony cap (voice stealing beyond it). */
@@ -253,12 +254,18 @@ export function renderKeysTrack(
         victim.stolen = true;
       }
       const note = onset.note;
+      // Una corda (0.6.1) at the onset: down is the full shift, half half.
+      const softState = track.softPedal
+        ? pedalStateAt(track.softPedal, note.startTick)
+        : "up";
+      const soft = softState === "down" ? 1 : softState === "half" ? 0.5 : 0;
       const noteOn = {
         pitch: note.pitch,
         hz: onset.hz,
         velocity: clamp(note.velocity, 0, 1),
         trackSeed,
         noteSeed: `${track.id}:${note.id}:${note.startTick + seedTick}`,
+        ...(soft > 0 ? { soft } : {}),
       };
       const voice: KeysVoice = electric
         ? electricVoice(
@@ -351,6 +358,30 @@ export function renderKeysTrack(
     electricPost(left, right, electric, rate, depthAt, sr, startSample);
     applyVolume(left, right, track, context);
     return;
+  }
+  // Sympathetic resonance (0.6.1): only with `sym` and sustain pedal events.
+  const sym = num(values, "sym");
+  const pedal = track.pedal;
+  if (sym > 0 && pedal?.some((event) => event.state !== "up")) {
+    const bank = new Sympathetic(
+      (pitch) => noteHz(pitch, undefined, context.tuning),
+      sym,
+      sr,
+    );
+    // Pedal changes as samples; the bank reads them in order.
+    const changes = pedal.map((event) => ({
+      at: context.warp
+        ? context.warp.sample(event.tick)
+        : event.tick * context.samplesPerTick,
+      down: event.state !== "up",
+    }));
+    let cursor = 0;
+    let down = false;
+    bank.process(left, right, (sample) => {
+      while (cursor < changes.length && changes[cursor]!.at <= sample)
+        down = changes[cursor++]!.down;
+      return down;
+    });
   }
   // The per-track post hook: body EQ, then the track volume.
   const body = bodyOf(values);

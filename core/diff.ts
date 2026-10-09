@@ -44,6 +44,8 @@ const EFFECTS = [
   "granular",
   "keys",
   "modal",
+  "softPedal",
+  "sostenuto",
 ] as const;
 const LANES = [
   "volumeAutomation",

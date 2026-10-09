@@ -156,6 +156,12 @@ export type PianoNoteOn = Readonly<{
   trackSeed: number;
   /** Track seed plus note id (this strike's own randomness). */
   noteSeed: string;
+  /**
+   * Una corda (0.6.1) at the onset, 0..1 (half pedal 0.5); absent is 0.
+   * The hammer shifts: fewer strings struck, a softer felt spot, more of
+   * the unstruck string's aftersound.
+   */
+  soft?: number;
 }>;
 
 type Rattle = {
@@ -207,18 +213,29 @@ export class PianoVoice {
       p.decay *
       (1 - 0.15 * p.felt) *
       (prepKind === 1 ? 0.12 : prepKind >= 0 ? 0.5 : 1);
-    const after = clamp(p.after, 0, 0.95);
-    const thMs =
+    const soft = clamp(note.soft ?? 0, 0, 1);
+    let after = clamp(p.after, 0, 0.95);
+    let thMs =
       lerp(3.5, 0.8, keyPos) *
       lerp(1.6, 0.7, v) *
       (1 + 1.5 * p.felt) *
       (1.3 - 0.6 * p.hardness);
+    if (soft > 0) {
+      after = clamp(after + (1 - after) * 0.4 * soft, 0, 0.95);
+      thMs *= 1 + 0.8 * soft;
+    }
     this.pulse = hammerPulse(
       Math.max(2, Math.round(thMs * 1e-3 * sr)),
       1 + 2 * v * p.hardness,
     );
     const strings = stringsFor(key);
-    const spread = strings === 1 ? 0.08 : p.unison;
+    // Una corda strikes one string fewer: the unison spread narrows.
+    const spread =
+      strings === 1
+        ? 0.08
+        : soft > 0
+          ? p.unison * (1 - (soft * 1) / strings)
+          : p.unison;
     const maxHz = MODE_CEILING * sr;
     let partials = 0;
     while (partials < 160) {
@@ -266,7 +283,8 @@ export class PianoVoice {
           t60: 0.6 + 1.2 * prep(),
           u: 0.35,
         });
-    const loud = v ** 1.4 * (1 - 0.4 * p.felt);
+    let loud = v ** 1.4 * (1 - 0.4 * p.felt);
+    if (soft > 0) loud *= 1 - 0.3 * soft;
     const G = (0.35 * loud) / Math.sqrt(Math.max(energy, 1e-9));
     const mags = candidates.map(
       (c) => pulseMag(this.pulse, (TAU * c.hz) / sr) * Math.abs(c.u),
