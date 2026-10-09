@@ -167,6 +167,7 @@ export const ART_CARDS: readonly StyleCard[] = Object.freeze([
     mix: {
       levels: { bass: -4, chords: -6, lead: -1, counter: -5 },
       space: 0.55,
+      loudness: "classical",
     },
   }),
   card({

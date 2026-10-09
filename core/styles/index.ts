@@ -375,6 +375,7 @@ const DISCRETE = new Set([
   "walk",
   "instrument",
   "voices",
+  "loudness",
 ]);
 
 const lerp = (a: number, b: number, w: number) => a + (b - a) * w;
@@ -444,8 +445,9 @@ function blendValue(a: unknown, b: unknown, w: number, key: string): unknown {
  * A weighted merge of two styles: `weight` 0 is `a`, 1 is `b`. Numbers,
  * ranges and same-shape grids interpolate; weighted lists pool their
  * weights; meter, tuning, harmony model and instrument choices come whole
- * from the heavier side. The pitch system stays `a`'s when the two use
- * different tunings, so the result is always playable.
+ * from the heavier side. When the two use different tunings or degree
+ * sets the heavier side's pitch system comes whole, so the result is
+ * always playable.
  */
 export function blendStyles(
   a: ResolvedStyle,

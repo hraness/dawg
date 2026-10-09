@@ -101,6 +101,7 @@ export const ELECTRONIC_CARDS: readonly StyleCard[] = Object.freeze([
         lead: -4,
       },
       space: 0.3,
+      loudness: "club",
     },
   }),
   card({
@@ -249,7 +250,7 @@ export const ELECTRONIC_CARDS: readonly StyleCard[] = Object.freeze([
     abstract: true,
     summary: "hardcore: 150-200 bpm, distorted kick, minor riffs",
     tempo: { bpm: [150, 200], typical: 170 },
-    mix: { fx: { kick: { distort: "crunch" } } },
+    mix: { fx: { kick: { distort: "crunch" } }, loudness: "loud" },
     texture: { roles: { kick: MACHINE } },
   }),
   card({
@@ -269,7 +270,7 @@ export const ELECTRONIC_CARDS: readonly StyleCard[] = Object.freeze([
     texture: {
       roles: { snare: MACHINE, clap: null, chords: role("epiano", "keys:0.5") },
     },
-    mix: { space: 0.5 },
+    mix: { space: 0.5, loudness: "streaming" },
   }),
   card({
     id: "ambient-family",
@@ -291,7 +292,7 @@ export const ELECTRONIC_CARDS: readonly StyleCard[] = Object.freeze([
         lead: maybe("bell", "pluck:0.5"),
       },
     },
-    mix: { space: 0.85 },
+    mix: { space: 0.85, loudness: "ambient" },
   }),
   card({
     id: "idm-family",

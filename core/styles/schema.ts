@@ -348,6 +348,12 @@ export type MixSpec = Readonly<{
   pan?: Readonly<Partial<Record<RoleName, number>>>;
   /** Overall reverb amount 0..1. */
   space: number;
+  /**
+   * Loudness target the song master normalises to (core/master.ts
+   * LOUDNESS_TARGETS: streaming, club, loud, classical, ambient...). The
+   * generated song always carries a limiter, so it never clips.
+   */
+  loudness?: string;
 }>;
 
 // ---------------------------------------------------------------------------

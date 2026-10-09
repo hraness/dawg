@@ -43,6 +43,12 @@ import {
   type TrackScore,
   type TrackScoreData,
 } from "../score.ts";
+import {
+  isLoudnessTargetName,
+  LOUDNESS_TARGETS,
+  MASTER_PRESETS,
+  type SongMaster,
+} from "../master.ts";
 import { tuningPreset, type Tuning } from "../tuning.ts";
 import { resolveStyle, stretchGrid, STYLE_TREE } from "./index.ts";
 import {
@@ -1920,6 +1926,27 @@ function playMelody(
 // ---------------------------------------------------------------------------
 // Assembly
 
+/**
+ * The song master for a style: its loudness target over a true-peak
+ * limiter (the target's ceiling and limiter preset), so a generated song
+ * never clips however many roles stack up.
+ */
+export function styleMaster(style: ResolvedStyle): SongMaster {
+  const name = style.mix.loudness ?? "streaming";
+  if (!isLoudnessTargetName(name))
+    throw new StyleError(`${style.id}: unknown loudness target "${name}"`);
+  const target = LOUDNESS_TARGETS[name] as {
+    lufs: number;
+    ceiling: number;
+    limiter?: string;
+  };
+  const preset = MASTER_PRESETS.limiter[target.limiter ?? "transparent"] ?? {};
+  return Object.freeze({
+    limiter: Object.freeze({ ...preset, ceiling: target.ceiling }),
+    target: target.lufs,
+  });
+}
+
 const dbToVolume = (db: number) => clamp(0.8 * 10 ** (db / 20), 0, 1);
 
 function assemble(plan: Plan, drafts: Draft[]): GeneratedStyle {
@@ -2029,7 +2056,9 @@ function assemble(plan: Plan, drafts: Draft[]): GeneratedStyle {
             { bar: 0, beatsPerBar: plan.beatsPerBar, beatUnit: plan.beatUnit },
           ],
         };
+  const master = styleMaster(style);
   const data: TrackScoreData = {
+    master,
     tempoBpm: plan.bpm,
     beatsPerBar: plan.beatsPerBar,
     bars: plan.bars,
@@ -2050,6 +2079,7 @@ function assemble(plan: Plan, drafts: Draft[]): GeneratedStyle {
         ]),
     { type: "setKey", key: plan.keyText },
     { type: "setTuning", tuning: plan.tuning ?? null },
+    { type: "setMaster", master },
     ...tracks.map((track) => ({ type: "addTrack", track }) as ScoreOperation),
     ...notes.map((note) => ({ type: "addNote", note }) as ScoreOperation),
     ...(sections.length > 1
