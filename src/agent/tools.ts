@@ -83,6 +83,8 @@ import {
   applyFxCommand,
   effectPatch,
   effectValues,
+  FORMANT_VOWEL_HINT,
+  formantGotVowel,
   parseEffectName,
   parseParamName,
   parseFxCommand,
@@ -2102,6 +2104,14 @@ function fxToolCommand(
     throw new ToolArgumentError("set_fx needs on, preset, or params");
   }
   const params = record(args.params, "params");
+  if (
+    effect === "formant" &&
+    formantGotVowel([
+      ...Object.keys(params),
+      ...Object.values(params),
+    ] as string[])
+  )
+    throw new ToolArgumentError(FORMANT_VOWEL_HINT);
   const values: Record<string, number | string | boolean> = {};
   for (const [name, value] of Object.entries(params)) {
     const param = parseParamName(effect, name);

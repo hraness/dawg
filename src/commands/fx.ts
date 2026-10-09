@@ -29,6 +29,7 @@ import {
   isEffectName,
   normalizeParam,
   FxValidationError,
+  VOWEL_VALUES,
   type EffectName,
   type FxName,
   type FxValues,
@@ -67,7 +68,6 @@ const EFFECT_ALIASES: Readonly<Record<string, EffectName>> = Object.freeze({
   "dj-filter": "djf",
   "auto-filter": "autofilter",
   autof: "autofilter",
-  formant: "vowel",
   bitcrush: "crush",
   bitcrusher: "crush",
   coarse: "crush",
@@ -88,6 +88,25 @@ const EFFECT_ALIASES: Readonly<Record<string, EffectName>> = Object.freeze({
   room: "reverb",
   verb: "reverb",
 });
+
+/**
+ * 0.7: `formant` was an alias of the vowel filter; it now shifts formants.
+ * A vowel given to it gets this answer instead of a silent change.
+ */
+export const FORMANT_VOWEL_HINT =
+  "formant now shifts formants at constant pitch; the vowel filter is `vowel`";
+
+/** Whether `fx formant …` words or set_fx params name a vowel. */
+export function formantGotVowel(
+  words: readonly (string | number | boolean)[],
+): boolean {
+  return words.some(
+    (word) =>
+      typeof word === "string" &&
+      (word.toLowerCase() === "vowel" ||
+        (VOWEL_VALUES as readonly string[]).includes(word.toLowerCase())),
+  );
+}
 
 export function parseEffectName(name: string): EffectName | undefined {
   const lower = name.toLowerCase();
@@ -203,6 +222,8 @@ export function unknownFxMessage(prompt: string): string | undefined {
   const words = prompt.trim().split(/\s+/);
   if (words[0]?.toLowerCase() !== "fx" || words.length < 2) return undefined;
   const name = words[1]!.toLowerCase();
+  if (name === "formant" && formantGotVowel(words.slice(2)))
+    return FORMANT_VOWEL_HINT;
   if (parseEffectName(name) || ["ir", "iresponse", "amp"].includes(name))
     return undefined;
   const near = nearestWord(name, [
