@@ -10,6 +10,7 @@ import {
   type Track,
 } from "./score.ts";
 import type { SongMaster } from "./master.ts";
+import type { SongStyle } from "./style-provenance.ts";
 import type { Tuning } from "./tuning.ts";
 
 export const LOOP_FORMAT = "track.loop/v1" as const;
@@ -30,6 +31,8 @@ export type TrackLoopV1 = Readonly<{
   notes: readonly Note[];
   /** Song master (dawg 0.5); absent means none. */
   master?: SongMaster;
+  /** Which style and seed made the song (quality-08); absent means none. */
+  style?: SongStyle;
   /** Song sections (0.5); omitted when the song has none. */
   sections?: readonly Section[];
   /** Song form (0.5); omitted when empty. */
@@ -53,6 +56,7 @@ export function encodeLoopDocument(score: TrackScore): TrackLoopV1 {
     tracks: score.tracks,
     notes: score.notes,
     ...(score.master ? { master: score.master } : {}),
+    ...(score.style ? { style: score.style } : {}),
     ...(score.sections.length > 0 ? { sections: score.sections } : {}),
     ...(score.form.length > 0 ? { form: score.form } : {}),
     ...(score.loopSection === undefined

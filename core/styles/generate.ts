@@ -2057,6 +2057,17 @@ function assemble(plan: Plan, drafts: Draft[]): GeneratedStyle {
           ],
         };
   const master = styleMaster(style);
+  const blend = (
+    style as ResolvedStyle & {
+      blend?: { a: string; b: string; weight: number };
+    }
+  ).blend;
+  const provenance: StyleProvenance = {
+    id: blend ? blend.a : style.id,
+    seed: plan.seed,
+    bars: plan.bars,
+    ...(blend ? { blend: { id: blend.b, weight: blend.weight } } : {}),
+  };
   const data: TrackScoreData = {
     master,
     tempoBpm: plan.bpm,
@@ -2067,6 +2078,7 @@ function assemble(plan: Plan, drafts: Draft[]): GeneratedStyle {
     ...(plan.tuning ? { tuning: plan.tuning } : {}),
     tracks,
     notes,
+    style: provenance,
     ...(sections.length > 1 ? { sections } : {}),
   };
   const operations: ScoreOperation[] = [
@@ -2080,23 +2092,13 @@ function assemble(plan: Plan, drafts: Draft[]): GeneratedStyle {
     { type: "setKey", key: plan.keyText },
     { type: "setTuning", tuning: plan.tuning ?? null },
     { type: "setMaster", master },
+    { type: "setStyle", style: provenance },
     ...tracks.map((track) => ({ type: "addTrack", track }) as ScoreOperation),
     ...notes.map((note) => ({ type: "addNote", note }) as ScoreOperation),
     ...(sections.length > 1
       ? [{ type: "setSections", sections, form: [] } as ScoreOperation]
       : []),
   ];
-  const blend = (
-    style as ResolvedStyle & {
-      blend?: { a: string; b: string; weight: number };
-    }
-  ).blend;
-  const provenance: StyleProvenance = {
-    id: blend ? blend.a : style.id,
-    seed: plan.seed,
-    bars: plan.bars,
-    ...(blend ? { blend: { id: blend.b, weight: blend.weight } } : {}),
-  };
   const full: StylePlan = { ...plan, noteRoles };
   return { plan: full, data, operations, provenance };
 }

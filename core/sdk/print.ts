@@ -21,6 +21,7 @@ import {
   type FxValues,
 } from "../fx.ts";
 import { MASTER_SPECS, MASTER_UNITS, type SongMaster } from "../master.ts";
+import type { SongStyle } from "../style-provenance.ts";
 import { midiToPitch } from "../pitch.ts";
 import {
   MODAL_INSTRUMENT,
@@ -218,6 +219,7 @@ export function printSong(
   const helpers = [
     "song",
     ...TIME_HELPERS.filter((name) => time.used.has(name)),
+    ...(score.style ? ["style"] : []),
   ];
   const lines: string[] = [`import { ${helpers.join(", ")} } from "dawg";`];
   for (const track of score.tracks)
@@ -248,6 +250,7 @@ export function printSong(
     )}`,
   );
   if (score.master) entries.push(printMaster(score.master));
+  if (score.style) entries.push(`style: ${printStyle(score.style)}`);
   // Song sections and form (0.5): printed only when the song has them.
   if (score.sections.length > 0)
     entries.push(
@@ -1473,6 +1476,14 @@ function fill(
   }
   lines.push(inner + line);
   return `[\n${lines.join("\n")}\n${indent}]`;
+}
+
+/** `style("id", { seed, bars, blend })`: provenance, seed and bars always written. */
+function printStyle(value: SongStyle): string {
+  const options = [`seed: ${num(value.seed)}`, `bars: ${num(value.bars)}`];
+  if (value.blend)
+    options.push(`blend: [${str(value.blend.id)}, ${num(value.blend.weight)}]`);
+  return `style(${str(value.id)}, { ${options.join(", ")} })`;
 }
 
 /** `master: { … }`, always expanded like `fx`; units in chain order. */

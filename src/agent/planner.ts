@@ -1,3 +1,4 @@
+import { normalizeSongStyle } from "../../core/style-provenance.ts";
 import { normalizeSynth } from "../../core/synth.ts";
 import { normalizeSongTime, normalizeTrackTime } from "../../core/tempo.ts";
 import { normalizeFx } from "../../core/fx.ts";
@@ -155,6 +156,8 @@ function parseOperation(value: unknown): ScoreOperation {
   // The master reuses its bounded validator; null removes it.
   if (value.type === "setMaster" && value.master !== undefined)
     return { type: "setMaster", master: normalizeMaster(value.master) ?? null };
+  if (value.type === "setStyle" && value.style !== undefined)
+    return { type: "setStyle", style: normalizeSongStyle(value.style) ?? null };
   if (
     value.type === "setSections" &&
     Array.isArray(value.sections) &&

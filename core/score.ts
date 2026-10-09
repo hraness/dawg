@@ -82,6 +82,11 @@ import {
 
 export type { Tuning } from "./tuning.ts";
 import { normalizeMaster, type SongMaster } from "./master.ts";
+import {
+  normalizeSongStyle,
+  SongStyleError,
+  type SongStyle,
+} from "./style-provenance.ts";
 
 export const SCORE_VERSION = 1 as const;
 
@@ -1099,6 +1104,8 @@ export type TrackScoreData = Readonly<{
   notes?: readonly NoteInput[];
   /** Song master chain and loudness target (core/master.ts); absent is off. */
   master?: SongMaster | null;
+  /** Which style and seed made the song (core/style-provenance.ts); absent is none. */
+  style?: SongStyle | null;
   /** Song sections (0.5); absent or empty means none. */
   sections?: readonly Section[];
   /** Song form (0.5): the order sections play in; absent plays the score straight through. */
@@ -1127,6 +1134,8 @@ export class TrackScore {
   readonly notes: readonly Note[];
   /** Absent (not undefined-valued) without a master, so 0.4 scores are unchanged. */
   declare readonly master?: SongMaster;
+  /** Absent without a style, so older scores are unchanged. */
+  declare readonly style?: SongStyle;
   /** Song sections in bar order; empty when the song has none. */
   readonly sections: readonly Section[];
   /** Song form; empty plays the score straight through. */
@@ -1215,6 +1224,15 @@ export class TrackScore {
       throw error;
     }
     if (master) this.master = master;
+    let style: SongStyle | undefined;
+    try {
+      style = normalizeSongStyle(data.style);
+    } catch (error) {
+      if (error instanceof SongStyleError)
+        throw new ScoreValidationError(error.message, "invalid-score");
+      throw error;
+    }
+    if (style) this.style = style;
     const sections = normalizeSections(data.sections ?? []);
     const form = normalizeForm(data.form ?? [], sections);
     // Sections count bars in one meter; meter changes would move them.
@@ -1337,6 +1355,11 @@ export class TrackScore {
     return new TrackScore({ ...this.toJSON(), master });
   }
 
+  /** Record (or clear, `null`) which style and seed made the song. */
+  withStyle(style: SongStyle | null): TrackScore {
+    return new TrackScore({ ...this.toJSON(), style });
+  }
+
   toJSON(): TrackScoreData & { version: typeof SCORE_VERSION } {
     return {
       version: SCORE_VERSION,
@@ -1350,6 +1373,7 @@ export class TrackScore {
       tracks: this.tracks,
       notes: this.notes,
       ...(this.master ? { master: this.master } : {}),
+      ...(this.style ? { style: this.style } : {}),
       ...(this.sections.length > 0 ? { sections: this.sections } : {}),
       ...(this.form.length > 0 ? { form: this.form } : {}),
       ...(this.loopSection === undefined
@@ -1696,6 +1720,11 @@ export type ScoreOperation =
       calibration: number | null;
     }>
   | Readonly<{
+      /** Which style and seed made the song (quality-08); null clears it. */
+      type: "setStyle";
+      style: SongStyle | null;
+    }>
+  | Readonly<{
       /** Replaces a track's audio clips (0.7); null clears them. */
       type: "setClips";
       trackId: string;
@@ -1725,6 +1754,7 @@ export function applyScoreOperation(
   if (operation.type === "setMaster") return score.withMaster(operation.master);
   if (operation.type === "setCalibration")
     return score.withCalibration(operation.calibration);
+  if (operation.type === "setStyle") return score.withStyle(operation.style);
   if (operation.type === "setSections")
     return score.withSections(
       operation.sections,
@@ -1782,6 +1812,7 @@ export function scoreFromJSON(value: unknown): TrackScore {
     tracks: readonly TrackInput[];
     notes: readonly NoteInput[];
     master?: SongMaster;
+    style?: SongStyle;
     sections?: readonly Section[];
     form?: readonly FormEntry[];
     loopSection?: string | null;
@@ -1813,6 +1844,9 @@ export function scoreFromJSON(value: unknown): TrackScore {
   // Validated by the constructor (core/master.ts normalizeMaster).
   if (value.master !== undefined && value.master !== null)
     data.master = value.master as SongMaster;
+  // Checked by the constructor (core/style-provenance.ts).
+  if (value.style !== undefined && value.style !== null)
+    data.style = value.style as SongStyle;
   // Shapes are checked by the constructor (normalizeSections, normalizeForm).
   if (value.sections !== undefined)
     data.sections = optionalArray(value.sections) as readonly Section[];

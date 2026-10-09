@@ -4548,6 +4548,12 @@ export type SongInput = Readonly<{
   /** Master chain and loudness target after every track and orbit bus (SDK 1.17.0); omit for none. */
   master?: MasterInput;
   /**
+   * Which style and seed made the song (SDK 1.33.0), from `style()`:
+   * `style: style("deep-house", { seed: 3, bars: 8 })`. A record only: the
+   * notes are the tracks above; `/style` in dawg generates them.
+   */
+  style?: StyleSpec;
+  /**
    * Named bar ranges (SDK 1.18.0): `{ name: "chorus", startBar: 8, bars: 8 }`,
    * optionally with `mute: ["pad"]` and `vary: { lead: { transpose: 12 } }`.
    */
@@ -4757,6 +4763,8 @@ export type Song = Readonly<{
   tracks: readonly ScoreTrack[];
   notes: readonly ScoreNote[];
   master?: MasterInput;
+  /** Present only when the song names a style (SDK 1.33.0). */
+  style?: StyleSpec;
   /** Present only when the song has sections (SDK 1.18.0). */
   sections?: readonly SongSection[];
   /** Present only when the song has a form (SDK 1.18.0). */
@@ -4766,6 +4774,68 @@ export type Song = Readonly<{
   /** Present only when the song sets one (SDK 1.32.0). */
   calibration?: number;
 }>;
+
+/** A song's style provenance (SDK 1.33.0); see `style()`. */
+export type StyleSpec = Readonly<{
+  id: string;
+  seed: number;
+  bars: number;
+  blend?: Readonly<{ id: string; weight: number }>;
+}>;
+
+export type StyleOptions = Readonly<{
+  /** Generator seed, integer 0..2147483647, default 1. */
+  seed?: number;
+  /** Bars generated, 1..256, default 8. */
+  bars?: number;
+  /** Blend partner and its weight 0..1: `blend: ["bebop", 0.3]`. */
+  blend?: readonly [string, number];
+}>;
+
+const STYLE_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+/**
+ * Which style and seed made a song (SDK 1.33.0), for `song({ style })`:
+ *
+ * ```ts
+ * style("deep-house", { seed: 3, bars: 8 })
+ * style("bebop", { seed: 7, blend: ["bossa-nova", 0.3] })
+ * ```
+ *
+ * The id is a taxonomy id (`dawg` lists them with `/style list`). It is a
+ * record of where the song came from; the notes live in the tracks.
+ */
+export function style(id: string, options: StyleOptions = {}): StyleSpec {
+  if (typeof id !== "string" || !STYLE_ID_PATTERN.test(id))
+    throw new DawgSdkError(
+      `style id must be lowercase words joined by hyphens, like "deep-house"; got ${JSON.stringify(id)}`,
+    );
+  if (!isRecord(options))
+    throw new DawgSdkError("style options must be an object");
+  const seed = options.seed ?? 1;
+  if (!Number.isInteger(seed) || seed < 0 || seed > 2147483647)
+    throw new DawgSdkError("style seed must be an integer 0..2147483647");
+  const bars = options.bars ?? 8;
+  if (!Number.isInteger(bars) || bars < 1 || bars > 256)
+    throw new DawgSdkError("style bars must be an integer 1..256");
+  let blend: StyleSpec["blend"];
+  if (options.blend !== undefined) {
+    const pair = options.blend;
+    if (
+      !Array.isArray(pair) ||
+      pair.length !== 2 ||
+      typeof pair[0] !== "string" ||
+      !STYLE_ID_PATTERN.test(pair[0]) ||
+      typeof pair[1] !== "number" ||
+      !(pair[1] >= 0 && pair[1] <= 1)
+    )
+      throw new DawgSdkError(
+        'style blend must be ["style-id", weight 0..1], like ["bebop", 0.3]',
+      );
+    blend = Object.freeze({ id: pair[0], weight: pair[1] });
+  }
+  return Object.freeze({ id, seed, bars, ...(blend ? { blend } : {}) });
+}
 
 /** A stored song `time`: ticks, and 0-based bar indexes. */
 export type ScoreTime = Readonly<{
@@ -4781,6 +4851,24 @@ export type ScoreTime = Readonly<{
   }>[];
   fermatas?: readonly Readonly<{ tick: number; beats: number }>[];
 }>;
+
+/** `song({ style })`: the `style()` record, re-checked for hand-written objects. */
+function songStyle(input: unknown): { style?: StyleSpec } {
+  if (input === undefined || input === null) return {};
+  if (!isRecord(input))
+    throw new DawgSdkError('song style must come from style("id", { seed })');
+  const blend = input.blend;
+  const spec = style(input.id as string, {
+    seed: input.seed as number,
+    bars: input.bars as number,
+    ...(blend !== undefined && blend !== null
+      ? isRecord(blend)
+        ? { blend: [blend.id, blend.weight] as unknown as [string, number] }
+        : { blend: blend as [string, number] }
+      : {}),
+  });
+  return { style: spec };
+}
 
 const MASTER_KEYS = ["eq", "glue", "tape", "width", "limiter", "target"];
 
@@ -5185,6 +5273,7 @@ export function song(input: SongInput): Song {
     tracks: Object.freeze(tracks),
     notes: Object.freeze(notes),
     ...(master ? { master } : {}),
+    ...songStyle(input.style),
     ...arrangement,
     ...(calibration ? { calibration } : {}),
   });

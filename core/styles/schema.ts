@@ -24,6 +24,8 @@
  */
 
 /** A taxonomy id (kebab-case), node or leaf. */
+import type { SongStyle } from "../style-provenance.ts";
+
 export type StyleId = string;
 /** Inclusive `[min, max]`. */
 export type Range = readonly [min: number, max: number];
@@ -415,11 +417,5 @@ export type StyleOptions = Readonly<{
   bpm?: number;
 }>;
 
-/** Provenance stored on a song: which style and seed made it. */
-export type StyleProvenance = Readonly<{
-  id: StyleId;
-  seed: number;
-  bars: number;
-  /** Second style and its weight (0..1) when blended. */
-  blend?: Readonly<{ id: StyleId; weight: number }>;
-}>;
+/** Provenance stored on a song: which style and seed made it (`score.style`). */
+export type StyleProvenance = SongStyle;
