@@ -14,6 +14,7 @@
  * 0.01 0.2 0.5 0.3` (Strudel's `adsr` shorthand). Each command is one
  * `updateTrack` revision and one undo step.
  */
+import { DEFAULT_GLIDE_SECONDS } from "../../core/expression.ts";
 import { FxValidationError } from "../../core/params.ts";
 import {
   ScoreValidationError,
@@ -199,9 +200,18 @@ export function applySynthCommand(
   let next: TrackScore;
   try {
     const normalized = normalizeSynth(synth);
+    // The acid preset is a TB-303 line: it slides between overlapping
+    // notes unless the track already has a glide.
+    const slide =
+      command.type === "synth-preset" &&
+      command.preset === "acid" &&
+      !track.glide
+        ? { glide: { time: DEFAULT_GLIDE_SECONDS, mode: "legato" as const } }
+        : {};
     next = updateTrack(score, trackId, {
       instrument,
       synth: normalized ?? null,
+      ...slide,
     });
   } catch (error) {
     if (
@@ -216,7 +226,7 @@ export function applySynthCommand(
     ok: true,
     message:
       command.type === "synth-preset"
-        ? `synth · preset ${command.preset} · ${stored?.instrument} · ${describeSynth(stored?.synth)}`
+        ? `synth · preset ${command.preset} · ${stored?.instrument} · ${describeSynth(stored?.synth)}${stored?.glide && !track.glide ? ` · glide ${Math.round(stored.glide.time * 1000)}ms ${stored.glide.mode}` : ""}`
         : `synth · ${describeSynth(stored?.synth)}`,
     next,
     kind: "score.synth",
