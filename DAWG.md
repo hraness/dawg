@@ -1550,6 +1550,12 @@ Section mutes and variations govern every bar of their section: a note held from
 
 The arrangement strip is one row under the header that shows the sections over the timeline (`▏verse   ▏chorus`), the looped section reversed, the section under the playhead bold, and the playhead as `▼`. It appears only when the song has sections. The menu's **Arrange** section (`/menu arrange`) lists every section; each opens loop, jump here, a mute toggle for every track, transpose and gain, build (into it, over it, or custom length and layers), drop (cut length and impact), fill (style, beats and crash), duplicate, duplicate as, move to, move left and right, rename, clear mutes and variations, unmark and delete. Agent tools: `list_sections`, `edit_section` (mark, add, duplicate, move, rename, delete, unmark, mute, unmute, vary, reset, loop, unloop), `set_form` and `add_transition` (build into or over a section, drop, fill). In `song.ts`: `song({ sections: [{ name: "verse", startBar: 0, bars: 8 }, …], form: "intro verse*2 chorus", loopSection: "chorus" })` (SDK 1.18.0).
 
+## Voice
+
+Release 0.7 adds voice tools: audio clips and lyrics, pitch tracking, autotune, a formant shift, sung vowels and choirs, and a vocoder. Each arrives in its own subsection below. `/vocal` is the umbrella: bare `/vocal` lists every voice verb this build has, and `/help voice` shows them. The ctrl-k menu gains Sound › Voice, Effects › Voice and Sound › browse sounds › Voices once a voice tool fills them; until then they stay hidden.
+
+A track may already store `clips`, `takes` and note `lyric`s (see docs/project-format.md); they are validated and kept, and play once the clips tools land. Projects without them sound exactly as before.
+
 ## Menus
 
 `/menu` or `Ctrl-K` (on an empty prompt, in play mode too) opens the edit menu, drawn with the same overlay as the model picker. Every edit the agent can make is reachable from it with keys alone. Each row shows a plain label and the current value with its unit (s, Hz, oct, st, dB, BPM, bars); the line under the list describes the focused row and shows, dimmed, the prompt command the row runs, so the menu teaches the commands. `/menu <section>` opens a section directly (`/menu effects`, `/menu arrange`); the old names `parameters`, `sounds`, `track`, `automation` and `transport` still work.
