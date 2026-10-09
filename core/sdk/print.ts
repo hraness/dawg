@@ -10,7 +10,15 @@
 import { DRUM_VOICES, isDrumInstrument } from "../drums.ts";
 import { DEFAULT_FIXED_VELOCITY } from "../expression.ts";
 import type { RhythmRow } from "../euclid.ts";
-import { FX_LANES, fxSpec, type FxName, type FxValues } from "../fx.ts";
+import {
+  FX_LANES,
+  RIG_STAGES,
+  fxSpec,
+  rigPresetKeys,
+  rigPresetOf,
+  type FxName,
+  type FxValues,
+} from "../fx.ts";
 import { MASTER_SPECS, MASTER_UNITS, type SongMaster } from "../master.ts";
 import { midiToPitch } from "../pitch.ts";
 import { rhythmVoicePitch, rowInSync } from "../rhythm.ts";
@@ -138,6 +146,7 @@ const RESERVED = new Set([
   "every",
   "sampler",
   "wavetable",
+  "rig",
   "slices",
   "euclid",
   "euclidRot",
@@ -485,18 +494,31 @@ export function printTrack(score: TrackScore, track: Track): string {
       )}`,
     );
   if (track.fx) {
-    const effects = Object.entries(track.fx) as [FxName, FxValues][];
+    // A whole rig preset prints as `...rig("crunch")` (SDK 1.22.0).
+    const rigName = rigPresetOf(track.fx);
+    if (rigName) used.add("rig");
+    const effects = (Object.entries(track.fx) as [FxName, FxValues][]).filter(
+      ([effect]) =>
+        !rigName ||
+        !(
+          (RIG_STAGES as readonly string[]).includes(effect) ||
+          rigPresetKeys(rigName).includes(effect)
+        ),
+    );
     const inner = INDENT + INDENT;
-    const body = effects.map(([effect, values]) => {
-      // Only values that differ from the default: decoding fills the rest.
-      const params = Object.entries(fxSpec(effect).params)
-        .filter(
-          ([key, spec]) =>
-            values[key] !== undefined && values[key] !== spec.default,
-        )
-        .map(([key]) => [key, value(values[key]!)] as const);
-      return `${inner}${effect}: ${params.length === 0 ? "{}" : obj(params, inner, `${effect}: `.length, 1)},`;
-    });
+    const rigLine = rigName ? [`${inner}...rig(${str(rigName)}),`] : [];
+    const body = rigLine.concat(
+      effects.map(([effect, values]) => {
+        // Only values that differ from the default: decoding fills the rest.
+        const params = Object.entries(fxSpec(effect).params)
+          .filter(
+            ([key, spec]) =>
+              values[key] !== undefined && values[key] !== spec.default,
+          )
+          .map(([key]) => [key, value(values[key]!)] as const);
+        return `${inner}${effect}: ${params.length === 0 ? "{}" : obj(params, inner, `${effect}: `.length, 1)},`;
+      }),
+    );
     entries.push(`fx: {\n${body.join("\n")}\n${INDENT}}`);
   }
   if (track.synth) {
@@ -587,6 +609,7 @@ export function printTrack(score: TrackScore, track: Track): string {
     "sampler",
     "wavetable",
     "stringed",
+    "rig",
     "euclid",
     "grid",
   ]

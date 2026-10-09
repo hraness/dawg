@@ -233,6 +233,27 @@ describe("edit menu", () => {
     });
   });
 
+  test("Effects > Guitar rig loads rigs and opens stomp, head and cab", () => {
+    const menu = new EditMenu();
+    const ctx = context();
+    menu.show(ctx);
+    select(menu, ctx, "Effects");
+    menu.key("\r", ctx);
+    select(menu, ctx, "Guitar rig");
+    menu.key("\r", ctx);
+    expect(menu.view(ctx).title).toBe("menu › Effects › Guitar rig");
+    const labels = menu.view(ctx).items.map((row) => row.label);
+    expect(labels).toHaveLength(4);
+    expect(labels[0]!.startsWith("rig")).toBe(true);
+    expect(labels[1]!.startsWith("Stomp box")).toBe(true);
+    select(menu, ctx, "rig");
+    expect(menu.key(RIGHT, ctx)).toEqual({ type: "run", command: "rig clean" });
+    menu.key("\u001b[B", ctx);
+    menu.key("\r", ctx);
+    select(menu, ctx, "type");
+    expect(menu.key(RIGHT, ctx)).toMatchObject({ type: "run" });
+  });
+
   test("nudges run the command the row shows, with the field's step", () => {
     const menu = new EditMenu();
     const ctx = context();

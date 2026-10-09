@@ -235,7 +235,7 @@ Score format. The score stays `track.loop/v1` with `version: 1`: every addition 
 Every track has one fixed effects chain (`FX_CHAIN` in `core/fx.ts`, DSP in `src/audio/effects/`):
 
 ```text
-filter → djf → autofilter → vowel → crush → distort → tremolo → compressor → pan → phaser → chorus → leslie → postgain → delay → reverb → [mix: orbit → duck]
+filter → djf → autofilter → vowel → crush → distort → stomp → head → cab → tremolo → compressor → pan → phaser → chorus → leslie → postgain → delay → reverb → [mix: orbit → duck]
 ```
 
 Stages before `pan` run on the track's mono voice sum; pan spreads it to stereo with the equal-power law; the rest run on the stereo pair. An effect that is off costs nothing. The core set — **filter, auto filter, distortion, tremolo, compressor, chorus, delay, reverb** — leads the Effects menu and the agent brief; dj filter, vowel, bitcrush, phaser, leslie, post gain, orbit and duck are under **more effects** for Strudel parity.
@@ -341,6 +341,49 @@ Parameters (**bold** effect = shown in the simple menu; Lane = automation lane):
 | duck           | onset               | 0..0.5 s                                                                          | 0.003   | `duckonset`                                                    |                        |
 
 Strudel mapping notes: Strudel's `lpf`/`hpf`/`bpf` each set a separate filter; dawg has one track filter whose `type` selects the response, so `lpf(800)` is `filter {type: "lpf", cutoff: 800}` and `lpq`/`hpq`/`bpq` map to `resonance`. `delay` in Strudel is the wet level (dawg `delay.mix`), `delaytime` is seconds (dawg `delay.time`; `beats` is the tempo-synced form), `delayfeedback` is `delay.feedback`. `room` is `reverb.mix`, `size`/`roomsize` is `reverb.size`, `roomfade`/`roomlp`/`roomdim` are `fade`/`lowpass`/`dim`. `distort` and `shape` are the distortion drive with `type: "shape"` for Strudel's `shape` curve; `crush` is bits and `coarse` is the sample-hold factor. `phaser`/`phaserdepth`/`phasercenter`/`phasersweep`, `tremolo*`, `leslie`/`lrate`/`lsize`, `postgain` and `compressor` keep their names. `orbit` groups tracks for `duckorbit`/`duckdepth`/`duckattack`/`duckonset` sidechaining; By default each track keeps its own delay and reverb; `fx orbit 2 shared on` makes the track send to its orbit's one shared delay and reverb, as Strudel orbits do (see **Orbit buses**). `iresponse`/`ir` is `reverb.ir`.
+
+### Guitar rig (stomp, head, cab)
+
+A guitar rig is three effects in the chain after `distort` (`src/audio/effects/rig/`): a **stomp** box, an amp **head** with an optional noise gate, and a speaker **cab**inet. They run once per track on the mono voice sum, never per voice, and each nonlinear section has its own half-band oversampler (4x at 22.05 kHz, 2x at 44.1/48 kHz) with antiderivative-antialiased shapers, so a 1 kHz fuzz keeps its aliases at or below -60 dB in the audible band. A full rig costs about 15-25 ms per track-second.
+
+```text
+rig crunch                 a whole rig: stomp + head + cab (one undo step)
+rig                        show the focused track's rig
+rig reset                  remove all three stages
+stomp fuzz | stomp gain 7  head lead | head treble 7 gate -55 | cab 4x12 | cab mic 0.6
+fx head gain 4             the same stages through the generic fx grammar
+track jangle               a new guitar track: a guitar voice plus the jangle rig
+```
+
+- **stomp** `type` `fuzz` (Big Muff-style, with its tone stack), `face` (Fuzz Face-style), `od` (Tube Screamer-style mid hump and soft clip), `rat` (op-amp hard clip and filter), `octave` (Octavia-style full-wave rectifier, `octave` sets the blend). Each pedal is level-matched to bypass from a fixed -18 dBFS 196 Hz sine (within 1 dB at every type and gain), so kicking on a fuzz does not jump the track; `level` is a trim on top. Presets `muff face screamer rat octavia boost`.
+- **head** `type` `clean` (Fender-style blackface), `chime` (Vox AC-style top boost), `crunch` and `lead` (Marshall-style), `high` (modern high gain), `solid` (clean solid state), `bass` (bass amp). Each has its own Yeh–Smith passive tone stack (`bass mid treble`), a `presence` shelf, power-amp `sag` and a `master`. Each type's makeup gain is calibrated once from a fixed -30 dBFS 196 Hz sine, so switching heads keeps the level within 1 dB. `gate` (dB threshold, absent = off) is a noise gate before the preamp with hysteresis and a short hold. Presets `blackface ac plexi lead modern jc svt`.
+- **cab** `type` `1x12 2x12 4x12 1x10 open 8x10 1x15 di`: biquad speaker models (low resonance, presence peak, cone break-up roll-off); `mic` moves from the cone centre (bright) to the edge (dark); `di` is the band-limited direct box for bass.
+
+Rig presets (`RIG_PRESETS` in `core/fx.ts`): `clean crunch punk ragged lead metal fuzz octave funk wah bachata spring bassdrive reese jangle alt`. A rig writes its three stages and its companion effects (`funk` an envelope filter, `wah` an auto-wah, `bachata` a chorus, `jangle` a compressor, `spring` the track reverb); switching rigs or `rig reset` removes the previous rig's companions while they still hold the values the rig wrote, and keeps any you edited. Each stage stays editable afterwards, and the rig row then reads `—`. Track words `jangle punk funk ragged gtr-lead gtr-metal bachata` create a guitar track on every path (`track jangle`, `dawg jangle`, `instrument jangle`, the agent's create_track and set_instrument, SDK `instrument: "jangle"`): the strings `electric` voice (the 12-string `jangle` preset for jangle) plus that rig. `lead` and `bass` keep their synth meaning.
+
+`amp` stays Strudel's linear gain: `fx amp` and `amp crunch` answer "did you mean head (guitar amp)?". Lanes: `stomp-gain`, `stomp-tone`, `head-gain` (coefficients follow automation every 32 samples, only while automated). Menu: **Effects › Guitar rig** (rig preset row, then Stomp box, Amp head, Speaker cabinet). Agent: `set_rig`. SDK: `fx: { ...rig("crunch") }` or the stages by name. In play mode a held note through a rig sounds its first 0.75 s window at render quality at once and the rest renders on a background worker in key order, so key handling never waits on it (the stages are causal, so the window is the exact prefix of the whole note).
+
+| Effect    | Param           | Range                                               | Default | Lane         |
+| --------- | --------------- | --------------------------------------------------- | ------- | ------------ |
+| **stomp** | type            | fuzz / face / od / rat / octave                     | od      |              |
+| **stomp** | gain            | 0..10                                               | 5       | `stomp-gain` |
+| **stomp** | tone            | 0..1                                                | 0.5     | `stomp-tone` |
+| **stomp** | level           | -24..12 dB                                          | 0       |              |
+| stomp     | octave          | 0..1                                                | 0.7     |              |
+| stomp     | mix             | 0..1                                                | 1       |              |
+| **head**  | type            | clean / chime / crunch / lead / high / solid / bass | crunch  |              |
+| **head**  | gain            | 0..10                                               | 5       | `head-gain`  |
+| **head**  | bass            | 0..10                                               | 5       |              |
+| **head**  | mid             | 0..10                                               | 5       |              |
+| **head**  | treble          | 0..10                                               | 5       |              |
+| head      | presence        | 0..10                                               | 5       |              |
+| head      | master          | 0..10                                               | 5       |              |
+| head      | sag (optional)  | 0..1                                                | 0.3     |              |
+| head      | gate (optional) | -96..0 dB                                           | off     |              |
+| head      | level           | -24..12 dB                                          | 0       |              |
+| **cab**   | type            | 1x12 / 2x12 / 4x12 / 1x10 / open / 8x10 / 1x15 / di | 2x12    |              |
+| **cab**   | mic             | 0..1                                                | 0.3     |              |
+| **cab**   | mix             | 0..1                                                | 1       |              |
 
 ## Master and loudness
 

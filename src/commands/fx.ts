@@ -208,6 +208,11 @@ export function effectDefaults(effect: EffectName): FxValues {
     if (!(spec.optional && spec.default === false)) out[key] = spec.default;
   // A zero `time` means "follow beats"; the canonical form omits it.
   if (effect === "delay") delete out.time;
+  // A head's sag follows its type and its noise gate is off until set.
+  if (effect === "head") {
+    delete out.sag;
+    delete out.gate;
+  }
   return out;
 }
 

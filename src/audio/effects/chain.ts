@@ -1,7 +1,8 @@
 /**
  * The fixed per-track effects chain (`FX_CHAIN` in core/fx.ts):
  *
- *   filter → djf → autofilter → vowel → crush → distort → tremolo →
+ *   filter → djf → autofilter → vowel → crush → distort → stomp → head →
+ *   cab → tremolo →
  *   compressor → pan → phaser → chorus → leslie → postgain → delay → reverb
  *
  * Stages before pan run on the mono voice sum; pan spreads it to stereo;
@@ -19,6 +20,7 @@ import {
   applyVowel,
 } from "./filter.ts";
 import { applyChorus, applyLeslie, applyPhaser } from "./modulation.ts";
+import { applyCab, applyHead, applyStomp } from "./rig/index.ts";
 import { applyDelay, applyReverb } from "./space.ts";
 
 export {
@@ -52,6 +54,9 @@ const MONO: Readonly<Partial<Record<FxName, MonoStage>>> = Object.freeze({
   vowel: applyVowel,
   crush: applyCrush,
   distort: applyDistort,
+  stomp: applyStomp,
+  head: applyHead,
+  cab: applyCab,
   tremolo: applyTremolo,
   compressor: applyCompressor,
 });

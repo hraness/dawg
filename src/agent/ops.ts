@@ -41,6 +41,8 @@ export type AgentOperation =
         pan?: number;
         name?: string;
       };
+      /** The instrument word as typed (a guitar alias also loads its rig). */
+      word?: string;
     }
   | {
       type: "automation";
@@ -78,7 +80,11 @@ export function parsePrompt(prompt: string): AgentOperation | undefined {
   );
   if (instrument) {
     const word = instrument[1]!.trim();
-    return { type: "track", patch: instrumentPatch(word) };
+    return {
+      type: "track",
+      patch: instrumentPatch(word),
+      ...(resolveInstrumentWord(word)?.fx ? { word } : {}),
+    };
   }
   if (/^(?:mute|silence)\b/.test(text))
     return { type: "track", patch: { muted: true } };

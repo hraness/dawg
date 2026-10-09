@@ -67,6 +67,20 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
           "plucked strings · string sitar · string buzz 0.8 · string ring 6",
       },
       {
+        command: "rig <preset> | reset",
+        summary:
+          "guitar rig · rig crunch · rig metal · rig funk · rig lists them",
+      },
+      {
+        command: "track jangle|punk|funk|ragged|gtr-lead|gtr-metal|bachata",
+        summary: "new guitar track with that rig",
+      },
+      {
+        command: "stomp|head|cab <type> | <param> <value>",
+        summary:
+          "pedal, amp, cabinet · stomp rat · head gain 7 gate -55 · cab 4x12",
+      },
+      {
         command: "art <articulation>|off [target]",
         summary:
           "staccato legato accent tenuto marcato ghost · art staccato bars 1-2",
@@ -647,6 +661,11 @@ export const USAGE: Readonly<Record<string, string>> = {
   synth: "synth <param> <value> | preset <name> · synth lpf 1200",
   string:
     "string <preset> | preset <name> | <param> <value> | presets | reset | off · string koto",
+  rig: "rig clean|crunch|punk|ragged|lead|metal|fuzz|octave|funk|wah|bachata|spring|bassdrive|reese|jangle|alt | reset",
+  stomp:
+    "stomp fuzz|face|od|rat|octave | gain <0-10> tone <0-1> level <dB> | off",
+  head: "head clean|chime|crunch|lead|high|solid|bass | gain bass mid treble presence master <0-10> | gate <dB> | off",
+  cab: "cab 1x12|2x12|4x12|1x10|open|8x10|1x15|di | mic <0-1> | off",
   pack: "/pack list | info <name> | use <pack>/<sound> | add <url>",
   kit: "/kit [name] · /kit syn909",
   euclid: "/euclid [voice] · euclid hat 7 16",
