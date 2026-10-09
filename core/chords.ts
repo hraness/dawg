@@ -702,6 +702,12 @@ export const SCALES = Object.freeze({
     family: "blues",
     aliases: ["major blues"],
   },
+  "yonanuki-minor": {
+    steps: [0, 2, 3, 7, 8],
+    mode: "minor",
+    family: "pentatonic",
+    aliases: ["yonanuki", "yonanuki minor", "enka minor"],
+  },
   hijaz: {
     steps: [0, 1, 4, 5, 7, 8, 10],
     mode: "phrygian-dominant",
