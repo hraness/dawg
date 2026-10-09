@@ -315,8 +315,13 @@ describe("sing determinism and identity", () => {
       { pitch: 67, start: 0, length: 4 },
     ]);
     const [l, r] = render(s);
-    expect(hash(l).slice(0, 16) + hash(r!).slice(0, 16)).toBe(
-      "b6c3e71d4eb3f0d2ceab7fba28b41fe3",
+    // Quantised to 1e-4 (about -80 dB) before hashing: libm's exp and cos
+    // differ by an ulp between platforms (CI's x64 Linux, arm64 macOS), and
+    // that must not move the pin; any real change to the voice does.
+    const coarse = (x: Float64Array) =>
+      Float64Array.from(x, (value) => Math.round(value * 1e4) + 0); // + 0: no -0
+    expect(hash(coarse(l)).slice(0, 16) + hash(coarse(r!)).slice(0, 16)).toBe(
+      "ab59ec46478e7fc57c1a7ccb3b5ec5e3",
     );
   });
 });
