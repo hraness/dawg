@@ -191,6 +191,14 @@ export function parseSingCommand(prompt: string): SingCommand | undefined {
       message: near ? `sing · did you mean ${near}?` : SING_USAGE,
     };
   }
+  // `harmonics 6 12` is the range `harmonics 6-12`.
+  for (let index = 0; index + 2 < rest.length; index += 1)
+    if (
+      rest[index] === "harmonics" &&
+      /^\d+$/.test(rest[index + 1]!) &&
+      /^\d+$/.test(rest[index + 2]!)
+    )
+      rest.splice(index + 1, 2, `${rest[index + 1]}-${rest[index + 2]}`);
   // `sing <preset> <param> <value>…`: the preset, then its overrides.
   const lead = rest.length % 2 === 1 ? presetFor(rest[0]!) : undefined;
   if (lead) rest.shift();
@@ -459,7 +467,7 @@ export function applySingCommand(
   if (demo) next = demo.next;
   return {
     ok: true,
-    message: `sing · ${singSummary(sing, keyRootOf(next))}${demo ? ` · ${demo.count} demo notes` : ""}`,
+    message: `sing · ${singSummary(sing, keyRootOf(next))}${demo ? ` · ${demo.count} demo notes (^z removes them; clear before writing your own)` : ""}`,
     next,
     kind: "score.sing",
     payload: { trackId, instrument: SING_INSTRUMENT, sing },

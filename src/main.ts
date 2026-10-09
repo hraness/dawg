@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { isGuideInstrument, vocalChainPatch } from "../core/clips.ts";
+import { isSingWord } from "../core/sing.ts";
 import { commandParses } from "./commands/parses.ts";
 import {
   isUnknownInstrument,
@@ -2581,6 +2582,13 @@ async function submit(prompt: string): Promise<string | Receipt> {
   }
   // `/model` belongs to its own handler above; every other slash word that
   // reached here is unknown or misused, and never a question for the agent.
+  // `/instrument aah` is `instrument aah`; `instrument sing choir` is
+  // `instrument choir`.
+  const singWord = command.match(/^\/?instrument\s+sing\s+([a-z]+)$/i);
+  if (singWord && isSingWord(singWord[1]!.toLowerCase()))
+    return submit(`instrument ${singWord[1]!.toLowerCase()}`);
+  if (/^\/instrument\s/i.test(command) && parsePrompt(command.slice(1)))
+    return submit(command.slice(1));
   if (command.startsWith("/") && !/^\/model\b/i.test(command)) {
     const hint = usageHint(command);
     return fail(

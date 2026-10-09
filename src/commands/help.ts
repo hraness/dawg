@@ -822,7 +822,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   bars: "bars takes 1…256 · bars 8",
   extend: "extend <count> bars · extend 4 bars",
   instrument:
-    "instrument <name> · sine piano pluck bass saw square triangle wavetable kit · pianos: grand upright felt honkytonk prepared · electric: epiano suitcase dyno wurli clav funkclav · synth: sawtooth supersaw pulse white pink z_square…",
+    "instrument <name> · sine piano pluck bass saw square triangle wavetable kit · pianos: grand upright felt honkytonk prepared · electric: epiano suitcase dyno wurli clav funkclav · synth: sawtooth supersaw pulse white pink z_square · voices: vocal aah ooh choir chorale khoomei sygyt kargyraa vocoder…",
   volume: "volume takes 0…1 · volume 0.8",
   vol: "volume takes 0…1 · volume 0.8",
   pan: "pan takes -1…1 · pan -0.5",

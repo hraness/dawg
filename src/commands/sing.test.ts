@@ -59,6 +59,17 @@ describe("/sing", () => {
       type: "sing-set",
       values: { harmonics: [6, 12] },
     });
+    expect(parseSingCommand("sing harmonics 6 12")).toEqual({
+      type: "sing-set",
+      values: { harmonics: [6, 12] },
+    });
+    expect(
+      parseSingCommand("sing khoomei drone D3 harmonics 6 12"),
+    ).toMatchObject({
+      type: "sing-set",
+      preset: "khoomei",
+      values: { harmonics: [6, 12] },
+    });
     expect(parseSingCommand("sing vib off")).toEqual({
       type: "sing-set",
       values: { vib: null },
