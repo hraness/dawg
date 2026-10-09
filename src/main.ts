@@ -1779,6 +1779,11 @@ async function submit(prompt: string): Promise<string | Receipt> {
       await writeFile(path, scoreToMidi(exportScore(score)));
       return `exported midi · ${exportCommand[1]}`;
     }
+    // Audio comes from the offline renderer, never JSON under an audio name.
+    if (/\.(wav|aiff?|flac|mp3|ogg|m4a)$/i.test(path))
+      return fail(
+        `/export writes .track.json or .mid · render audio with: dawg render ${exportCommand[1]}`,
+      );
     await writeFile(path, encodeLoop(score), "utf8");
     return `exported · ${exportCommand[1]}`;
   }
