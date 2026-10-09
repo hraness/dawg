@@ -57,7 +57,9 @@ describe("TrackScore", () => {
   });
 
   test("removeNote is immutable and idempotent for an absent id", () => {
-    const score = createScore().addNote({
+    const score = createScore({
+      tracks: [{ id: "main", name: "main", instrument: "sine" }],
+    }).addNote({
       id: "a",
       trackId: "main",
       startTick: 0,
@@ -101,7 +103,10 @@ describe("TrackScore", () => {
       pitch: 60,
       velocity: 0.5,
     }));
-    const full = createScore({ notes });
+    const full = createScore({
+      tracks: [{ id: "main", name: "main", instrument: "sine" }],
+      notes,
+    });
     expect(() =>
       full.addNote({
         id: "overflow",

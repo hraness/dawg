@@ -103,7 +103,11 @@ export const SCORE_LIMITS = Object.freeze({
   maxSectionGain: 2,
   maxBeatsPerBar: 16,
   maxTicksPerBeat: 4096,
-  maxTick: 1_000_000,
+  /**
+   * Latest tick anything may sit at or reach: the longest valid song,
+   * 256 bars of 16/1 at 4096 ticks per beat (2^26).
+   */
+  maxTick: 67_108_864,
   minFilterCutoff: 20,
   maxFilterCutoff: 20_000,
   maxFilterResonance: 1,
@@ -1163,6 +1167,13 @@ export class TrackScore {
     );
     const tracks = normalizeTracks(data.tracks ?? []);
     const notes = normalizeNotes(data.notes ?? []);
+    const trackIds = new Set(tracks.map((track) => track.id));
+    const orphan = notes.find((note) => !trackIds.has(note.trackId));
+    if (orphan)
+      throw new ScoreValidationError(
+        `note ${orphan.id} is on track ${orphan.trackId}, which does not exist`,
+        "invalid-note",
+      );
     this.tuning = tuning;
     let master: SongMaster | undefined;
     try {
@@ -1206,8 +1217,14 @@ export class TrackScore {
     return removeNote(this, noteId);
   }
 
+  /** The song with `tracks`; notes on a track not listed go with it. */
   withTracks(tracks: readonly TrackInput[]): TrackScore {
-    return new TrackScore({ ...this.toJSON(), tracks });
+    const ids = new Set(tracks.map((track) => track.id));
+    return new TrackScore({
+      ...this.toJSON(),
+      tracks,
+      notes: this.notes.filter((note) => ids.has(note.trackId)),
+    });
   }
 
   withTempo(tempoBpm: number): TrackScore {
@@ -1375,7 +1392,10 @@ export function updateNote(
   patch: NotePatch,
 ): TrackScore {
   const current = score.notes.find((note) => note.id === noteId);
-  if (!current) return score;
+  // A patch for a missing note is a conflict (a stale or diverged score),
+  // never a silent no-op. removeNote stays idempotent: the note is gone.
+  if (!current)
+    throw new ScoreValidationError(`unknown note: ${noteId}`, "invalid-note");
   return new TrackScore({
     ...score.toJSON(),
     notes: score.notes.map((note) =>
@@ -1451,19 +1471,24 @@ export function removeTrack(score: TrackScore, trackId: string): TrackScore {
   });
 }
 
-/** Moves a track to position `index` (clamped) in score order. */
+/** Moves a track to position `index` (0 .. tracks - 1) in score order. */
 export function moveTrack(
   score: TrackScore,
   trackId: string,
   index: number,
 ): TrackScore {
   const from = score.tracks.findIndex((track) => track.id === trackId);
-  if (from < 0 || !Number.isInteger(index))
+  if (
+    from < 0 ||
+    !Number.isInteger(index) ||
+    index < 0 ||
+    index >= score.tracks.length
+  )
     throw new ScoreValidationError(
-      "moveTrack needs an existing track and an integer index",
+      `moveTrack needs an existing track and an index 0..${score.tracks.length - 1}`,
       "invalid-track",
     );
-  const to = Math.max(0, Math.min(score.tracks.length - 1, index));
+  const to = index;
   if (from === to) return score;
   const tracks = [...score.tracks];
   const [moved] = tracks.splice(from, 1);
@@ -1718,6 +1743,13 @@ export function scoreFromJSON(value: unknown): TrackScore {
     tracks: optionalArray(value.tracks).map(parseTrack),
     notes: optionalArray(value.notes).map(parseNote),
   };
+  // Files written before 0.7 could hold notes on a track that no longer
+  // exists. They never sounded and no edit could reach them, so they go.
+  // They are still checked like any note first.
+  const trackIds = new Set(data.tracks.map((track) => track.id));
+  data.notes = normalizeNotes(data.notes).filter((note) =>
+    trackIds.has(note.trackId),
+  );
   const tempoBpm = optionalNumber(value.tempoBpm);
   const beatsPerBar = optionalNumber(value.beatsPerBar);
   const bars = optionalNumber(value.bars);
@@ -3106,6 +3138,12 @@ function normalizeNote(input: unknown): Note {
       "invalid-note",
     );
   }
+  if (startTick + durationTicks > SCORE_LIMITS.maxTick) {
+    throw new ScoreValidationError(
+      `note ${id} must end by tick ${SCORE_LIMITS.maxTick}`,
+      "invalid-note",
+    );
+  }
   const pitch = input.pitch;
   if (
     typeof pitch !== "number" ||
@@ -3178,10 +3216,47 @@ function parseNote(value: unknown): NoteInput {
 function compareNotes(a: Note, b: Note): number {
   return (
     a.startTick - b.startTick ||
-    a.trackId.localeCompare(b.trackId) ||
+    compareIds(a.trackId, b.trackId) ||
     a.pitch - b.pitch ||
-    a.id.localeCompare(b.id)
+    compareIds(a.id, b.id)
   );
+}
+
+/**
+ * Printable ASCII in the order ICU's root collation gives it (uppercase
+ * letters share their lowercase rank and sort after them on a tie).
+ */
+const ID_COLLATION =
+  " _-,;:!?.'\"()[]{}@*/\\&#%`^+<=>|~$0123456789abcdefghijklmnopqrstuvwxyz";
+const PRINTABLE_ASCII = /^[\x20-\x7e]*$/;
+
+/**
+ * Canonical id order, independent of locale and ICU version. Printable
+ * ASCII ids keep the order `localeCompare` gave them before 0.7 (so older
+ * projects print and render byte-identically); any other id sorts after
+ * them by UTF-16 code units, so canonically equivalent spellings stay
+ * distinct and the order is total.
+ */
+export function compareIds(a: string, b: string): number {
+  if (a === b) return 0;
+  const asciiA = PRINTABLE_ASCII.test(a);
+  const asciiB = PRINTABLE_ASCII.test(b);
+  if (asciiA !== asciiB) return asciiA ? -1 : 1;
+  if (!asciiA) return a < b ? -1 : 1;
+  const length = Math.min(a.length, b.length);
+  for (let i = 0; i < length; i += 1) {
+    const rank =
+      ID_COLLATION.indexOf(a[i]!.toLowerCase()) -
+      ID_COLLATION.indexOf(b[i]!.toLowerCase());
+    if (rank !== 0) return rank;
+  }
+  if (a.length !== b.length) return a.length - b.length;
+  for (let i = 0; i < length; i += 1) {
+    if (a[i] === b[i]) continue;
+    // Same letter, different case: lowercase first.
+    return a[i] === a[i]!.toLowerCase() ? -1 : 1;
+  }
+  return 0;
 }
 
 function boundedString(

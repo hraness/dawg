@@ -190,7 +190,7 @@ describe("new score operations", () => {
     ).toBe(base);
   });
 
-  test("moveTrack reorders with a clamped index", () => {
+  test("moveTrack reorders within the track list", () => {
     expect(
       applyScoreOperation(base, {
         type: "moveTrack",
@@ -202,9 +202,13 @@ describe("new score operations", () => {
       applyScoreOperation(base, {
         type: "moveTrack",
         trackId: "a",
-        index: 99,
+        index: 2,
       }).tracks.map((t) => t.id),
     ).toEqual(["b", "c", "a"]);
+    // An index outside the list is a stale operation, not a request to clamp.
+    expect(() =>
+      applyScoreOperation(base, { type: "moveTrack", trackId: "a", index: 99 }),
+    ).toThrow(ScoreValidationError);
     expect(() =>
       applyScoreOperation(base, { type: "moveTrack", trackId: "zz", index: 0 }),
     ).toThrow(ScoreValidationError);

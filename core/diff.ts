@@ -89,6 +89,7 @@ const TRACK_FIELDS: { readonly [K in keyof Track]-?: FieldRule } = {
   guitar: "clear",
   wind: "clear",
   sing: "clear",
+  vocoder: "clear",
   clips: "clear",
   takes: "clear",
   glide: "clear",

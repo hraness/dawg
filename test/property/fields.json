@@ -1545,6 +1545,41 @@
         "panAutomation": [],
         "wind": { "preset": "trumpet" }
       }
+    ],
+    "vocoder": [
+      {
+        "id": "v",
+        "name": "v",
+        "instrument": "saw",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "vocoder": {}
+      },
+      {
+        "id": "v",
+        "name": "v",
+        "instrument": "saw",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "vocoder": { "preset": "robot" }
+      },
+      {
+        "id": "v",
+        "name": "v",
+        "instrument": "saw",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "vocoder": { "preset": "talkbox" }
+      }
     ]
   },
   "notes": {

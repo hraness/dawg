@@ -16,7 +16,7 @@ import { FX_LANES } from "./fx.ts";
 import { resolveString } from "./strings.ts";
 import { modalSettings, windSettings } from "./resonators.ts";
 import { resolveSing } from "./sing.ts";
-import { slicePedals } from "./expression.ts";
+import { slicePedals, type PedalEvent, type PedalState } from "./expression.ts";
 import {
   bakeClipTime,
   copyClipBars,
@@ -42,10 +42,10 @@ import {
 } from "./score.ts";
 import {
   barStartTick,
-  bpmAtTick,
   hasTrackTime,
   normalizeSongTime,
   performedNotes,
+  timeMapFor,
   type Fermata,
   type SongTime,
   type TempoEvent,
@@ -71,6 +71,11 @@ export function sliceSongTime(
     };
   const clampBpm = (bpm: number) =>
     Math.min(SCORE_LIMITS.maxTempoBpm, Math.max(SCORE_LIMITS.minTempoBpm, bpm));
+  // The written tempo: a fermata's hold belongs to its own beat and moves
+  // with it, so it must not leak into the tempo restated at a seam.
+  const map = timeMapFor(score);
+  const bpmAtTick = (_score: TrackScore, tick: number) =>
+    map ? map.tempoAt(tick) : score.tempoBpm;
   const sorted = [...pieces].sort((a, b) => a.offset - b.offset);
   const first = sorted[0];
   const tempoBpm = clampBpm(
@@ -684,6 +689,77 @@ function checkBars(bars: number): void {
     );
 }
 
+/**
+ * The song tempo map, fermatas and pedal lanes for a ripple edit that lays
+ * `pieces` of the score end to end: they move with the music they belong
+ * to, as notes and automation do.
+ */
+function rippleTime(
+  score: TrackScore,
+  pieces: readonly { from: number; to: number; offset: number }[],
+): Readonly<{
+  tempoBpm: number;
+  time: SongTime | null;
+  pedals: (track: Track) => Track;
+}> {
+  const kept = pieces.filter((piece) => piece.to > piece.from);
+  const timed = sliceSongTime(
+    score,
+    kept.map((piece) => ({
+      ...piece,
+      to: Math.min(piece.to, SCORE_LIMITS.maxTick + 1),
+    })),
+  );
+  return {
+    tempoBpm: timed.tempoBpm,
+    time: timed.time ?? null,
+    pedals: (track) => {
+      if (!track.pedal && !track.softPedal && !track.sostenuto) return track;
+      const out: Record<string, unknown> = { ...track };
+      for (const field of ["pedal", "softPedal", "sostenuto"] as const) {
+        const events = track[field];
+        if (!events) continue;
+        const next = ripplePedal(events, kept);
+        if (next) out[field] = next;
+        else delete out[field];
+      }
+      return out as Track;
+    },
+  };
+}
+
+/**
+ * A pedal lane for `pieces` laid end to end with no lift at the seams (unlike
+ * a render slice): each piece starts in the state its source was in, and a
+ * gap left between pieces (inserted bars) holds the state before it.
+ */
+function ripplePedal(
+  events: readonly PedalEvent[],
+  pieces: readonly { from: number; to: number; offset: number }[],
+): readonly PedalEvent[] | undefined {
+  const byTick = new Map<number, PedalState>();
+  for (const { from, to, offset } of pieces) {
+    let state: PedalState = "up";
+    for (const event of events) {
+      if (event.tick > from) break;
+      state = event.state;
+    }
+    byTick.set(offset, state);
+    for (const event of events)
+      if (event.tick > from && event.tick < to)
+        byTick.set(event.tick - from + offset, event.state);
+  }
+  const out: PedalEvent[] = [];
+  let last: PedalState = "up";
+  for (const tick of [...byTick.keys()].sort((a, b) => a - b)) {
+    const state = byTick.get(tick)!;
+    if (state === last) continue;
+    out.push({ tick, state });
+    last = state;
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 /** Insert `count` empty bars at `atBar`, shifting later music and sections. */
 export function insertBars(
   score: TrackScore,
@@ -695,20 +771,32 @@ export function insertBars(
   const ticks = barTicks(score);
   const at = atBar * ticks;
   const shift = count * ticks;
+  const ripple = rippleTime(score, [
+    { from: 0, to: at, offset: 0 },
+    { from: at, to: Infinity, offset: at + shift },
+  ]);
   return new TrackScore({
     ...score.toJSON(),
+    tempoBpm: ripple.tempoBpm,
+    time: ripple.time,
     bars: score.bars + count,
     tracks: score.tracks.map((track) =>
       insertClipBars(
-        mapAutomation(track, (points) => insertPoints(points, at, shift)),
+        mapAutomation(ripple.pedals(track), (points) =>
+          insertPoints(points, at, shift),
+        ),
         at,
         shift,
       ),
     ),
+    // A note's start and end stay with the music they sit in, so one held
+    // across the insertion point sounds on through the new bars.
     notes: score.notes.map((note) =>
       note.startTick >= at
         ? { ...note, startTick: note.startTick + shift }
-        : note,
+        : note.startTick + note.durationTicks > at
+          ? { ...note, durationTicks: note.durationTicks + shift }
+          : note,
     ),
     sections: score.sections.map((section) =>
       section.startBar >= atBar
@@ -726,6 +814,12 @@ export function deleteBars(
   atBar: number,
   count: number,
 ): TrackScore {
+  if (!Number.isInteger(atBar) || atBar < 0 || !Number.isInteger(count))
+    throw new ScoreValidationError(
+      `bars to delete must start at a whole bar inside the song`,
+    );
+  // Only bars inside the song can go (a section may sit past its end).
+  count = Math.min(atBar + count, score.bars) - atBar;
   if (count <= 0) return score;
   if (count >= score.bars)
     throw new ScoreValidationError("a song keeps at least one bar");
@@ -733,16 +827,21 @@ export function deleteBars(
   const at = atBar * ticks;
   const end = (atBar + count) * ticks;
   const shift = count * ticks;
+  // Each note's start and end stay with the music they sit in; the part
+  // inside the deleted bars goes, so a note running out of them keeps its
+  // tail and one running into them is cut where they start.
+  const place = (tick: number) =>
+    tick < at ? tick : tick < end ? at : tick - shift;
   const notes: Note[] = [];
   for (const note of score.notes) {
-    if (note.startTick >= end)
-      notes.push({ ...note, startTick: note.startTick - shift });
-    else if (note.startTick < at)
-      notes.push(
-        note.startTick + note.durationTicks > at
-          ? { ...note, durationTicks: at - note.startTick }
-          : note,
-      );
+    const startTick = place(note.startTick);
+    const stop = place(note.startTick + note.durationTicks);
+    if (stop <= startTick) continue;
+    notes.push(
+      startTick === note.startTick && stop - startTick === note.durationTicks
+        ? note
+        : { ...note, startTick, durationTicks: stop - startTick },
+    );
   }
   const sections: Section[] = [];
   for (const section of score.sections) {
@@ -763,12 +862,20 @@ export function deleteBars(
     }
   }
   const names = new Set(sections.map((section) => foldName(section.name)));
+  const ripple = rippleTime(score, [
+    { from: 0, to: at, offset: 0 },
+    { from: end, to: Infinity, offset: at },
+  ]);
   return new TrackScore({
     ...score.toJSON(),
+    tempoBpm: ripple.tempoBpm,
+    time: ripple.time,
     bars: score.bars - count,
     tracks: score.tracks.map((track) =>
       deleteClipBars(
-        mapAutomation(track, (points) => deletePoints(points, at, shift)),
+        mapAutomation(ripple.pedals(track), (points) =>
+          deletePoints(points, at, shift),
+        ),
         at,
         end,
       ),
@@ -955,6 +1062,15 @@ export function duplicateSection(
   if (options.as !== undefined && findSection(score, options.as))
     throw new ScoreValidationError(`a section named ${options.as} exists`);
   const at = options.toBar ?? section.startBar + section.bars;
+  if (
+    !Number.isInteger(at) ||
+    at < 0 ||
+    at > score.bars ||
+    (at > section.startBar && at < section.startBar + section.bars)
+  )
+    throw new ScoreValidationError(
+      `a copy of ${section.name} goes at a bar 1..${score.bars + 1} outside it`,
+    );
   const opened = insertBars(score, at, section.bars);
   const source =
     section.startBar >= at ? section.startBar + section.bars : section.startBar;
@@ -998,11 +1114,22 @@ export function copyBars(
         Math.min(note.durationTicks, from + length - note.startTick),
       ),
     }));
+  // The copied bars bring their tempo, fermatas and pedal; the music after
+  // them goes on as it was.
+  const ripple = rippleTime(score, [
+    { from: 0, to, offset: 0 },
+    { from, to: from + length, offset: to },
+    { from: to + length, to: Infinity, offset: to + length },
+  ]);
   return new TrackScore({
     ...score.toJSON(),
+    tempoBpm: ripple.tempoBpm,
+    time: ripple.time,
     tracks: score.tracks.map((track) =>
       copyClipBars(
-        mapAutomation(track, (points) => copyPoints(points, from, length, to)),
+        mapAutomation(ripple.pedals(track), (points) =>
+          copyPoints(points, from, length, to),
+        ),
         from,
         length,
         to,
