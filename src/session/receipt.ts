@@ -31,7 +31,7 @@ function noteName(pitch: number, drum: boolean): string {
   return drum ? drumVoiceForPitch(pitch) : midiToPitch(pitch);
 }
 
-type NoteTally = { added: number[]; removed: number; changed: number };
+type NoteTally = { added: number[]; removed: number[]; changed: number };
 
 /** One field of a track patch as a musical phrase, or undefined to skip. */
 function trackField(field: string, value: unknown): string | undefined {
@@ -95,11 +95,17 @@ export function receiptParts(
   const noteTrack = new Map(
     before.notes.map((note) => [note.id, note.trackId]),
   );
+  const notePitch = new Map(
+    before.notes.map((note) => [
+      note.id,
+      typeof note.pitch === "number" ? note.pitch : Number.NaN,
+    ]),
+  );
   const tallies = new Map<string, NoteTally>();
   const tally = (trackId: string): NoteTally => {
     let found = tallies.get(trackId);
     if (!found) {
-      found = { added: [], removed: 0, changed: 0 };
+      found = { added: [], removed: [], changed: 0 };
       tallies.set(trackId, found);
     }
     return found;
@@ -197,7 +203,8 @@ export function receiptParts(
       }
       case "removeNote": {
         const trackId = noteTrack.get(op.noteId);
-        if (trackId && !removed.has(trackId)) tally(trackId).removed += 1;
+        if (trackId && !removed.has(trackId))
+          tally(trackId).removed.push(notePitch.get(op.noteId) ?? Number.NaN);
         break;
       }
       case "updateNote": {
@@ -209,18 +216,22 @@ export function receiptParts(
   }
   for (const [trackId, entry] of tallies) {
     const drum = isDrumInstrument(instruments.get(trackId));
-    if (entry.added.length > 0) {
-      const names = entry.added
+    const listed = (pitches: readonly number[]): string => {
+      const names = pitches
         .filter((pitch) => Number.isFinite(pitch))
         .slice(0, MAX_PITCHES)
         .map((pitch) => noteName(pitch, drum));
-      const more = entry.added.length > MAX_PITCHES ? " …" : "";
+      const more = pitches.length > MAX_PITCHES ? " …" : "";
+      return names.length ? ` (${names.join(" ")}${more})` : "";
+    };
+    if (entry.added.length > 0)
       parts.push(
-        `+${plural(entry.added.length, "note")} on ${trackId}${names.length ? ` (${names.join(" ")}${more})` : ""}`,
+        `+${plural(entry.added.length, "note")} on ${trackId}${listed(entry.added)}`,
       );
-    }
-    if (entry.removed > 0)
-      parts.push(`−${plural(entry.removed, "note")} on ${trackId}`);
+    if (entry.removed.length > 0)
+      parts.push(
+        `−${plural(entry.removed.length, "note")} on ${trackId}${listed(entry.removed)}`,
+      );
     if (entry.changed > 0)
       parts.push(`${plural(entry.changed, "note")} edited on ${trackId}`);
   }

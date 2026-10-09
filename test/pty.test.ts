@@ -95,9 +95,10 @@ test.skipIf(!supported)(
     await t.send(" ");
     await t.until(() => t.vt.lines()[0]!.includes("▶"), "playing");
 
-    // A real edit, so undo has something to revert.
+    // A real edit, so undo has something to revert. Play/pause is not an
+    // edit, so the first edit is still rev 0→1.
     await t.send("add C3 at 0 for 2\r");
-    await t.until(() => t.vt.text().includes("rev 1→2"), "receipt");
+    await t.until(() => t.vt.text().includes("rev 0→1"), "receipt");
     expect(t.vt.text()).toContain("ctrl-z undo");
 
     // Typing while playing, Shift+Enter (CSI u), bracketed paste.
@@ -129,6 +130,7 @@ test.skipIf(!supported)(
     await Bun.sleep(80);
     await t.send("\u001a");
     await t.until(() => t.vt.text().includes("undid"), "undo receipt");
+    expect(t.vt.text()).toContain("undid · −1 note on bass (C3)");
 
     // Ctrl+O opens the transcript with the request we sent.
     await t.send("\u000f");

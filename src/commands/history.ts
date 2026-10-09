@@ -17,6 +17,8 @@
  * every newer event. Events whose rewind was compacted away, and events that
  * did not change the composition (transport), take no part.
  */
+import type { TrackScore } from "../../core/score.ts";
+import { musicalReceipt } from "../session/receipt.ts";
 import {
   isIdentityRewind,
   rewindComposition,
@@ -66,4 +68,20 @@ export function historyTarget(
 
 function changesComposition(event: HistoryEvent): boolean {
   return event.rewind !== undefined && !isIdentityRewind(event.rewind);
+}
+
+/**
+ * The card after undo or redo names the musical change it made
+ * (`undid · −1 note on bass (C3)`, `redid · 96 BPM`), and falls back to the
+ * revision when the change is not in the music (a rename, a section label).
+ */
+export function historyReceipt(
+  direction: "undo" | "redo",
+  before: TrackScore,
+  after: TrackScore,
+  revision: number,
+): string {
+  const verb = direction === "undo" ? "undid" : "redid";
+  const change = musicalReceipt(before, after);
+  return change ? `${verb} · ${change}` : `${verb} · rev ${revision}`;
 }

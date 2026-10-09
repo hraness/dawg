@@ -143,7 +143,12 @@ import {
   typoFix,
   usageHint,
 } from "./commands/help.ts";
-import { historyTarget, REDO_KIND, UNDO_KIND } from "./commands/history.ts";
+import {
+  historyReceipt,
+  historyTarget,
+  REDO_KIND,
+  UNDO_KIND,
+} from "./commands/history.ts";
 
 import {
   SamplePlacementError,
@@ -931,7 +936,7 @@ function snapshot(
       requestedTrack,
     trackId: requestedTrack,
     sessionId: record.sessionId,
-    revision: record.revision,
+    revision: shownRevision(record),
     bpm: value.time?.tempo
       ? bpmAtTick(value, beat * value.ticksPerBeat)
       : value.tempoBpm,
@@ -1122,8 +1127,8 @@ function receipt(result: string | Receipt, base?: Baseline): void {
   if (hint) undoHintsShown += 1;
   tui.activity.pushCard(message, {
     tone,
-    baseRevision: changed ? base.revision : undefined,
-    resultRevision: changed ? record.revision : undefined,
+    baseRevision: changed ? shownRevision(record, base.revision) : undefined,
+    resultRevision: changed ? shownRevision(record) : undefined,
     hint,
     trackId: requestedTrack,
   });
@@ -1451,11 +1456,15 @@ async function runInteractive(): Promise<void> {
           else if (payload.action === "toggle") await setTransport("toggle");
         }
         projectSync?.scoreChanged(score);
-        tui.activity.pushCard("synced from another window", {
-          tone: "info",
-          baseRevision: previousRevision,
-          resultRevision: record.revision,
-        });
+        // Another window's play/pause is followed, not announced.
+        const from = shownRevision(record, previousRevision);
+        const to = shownRevision(record);
+        if (to !== from)
+          tui.activity.pushCard("synced from another window", {
+            tone: "info",
+            baseRevision: from,
+            resultRevision: to,
+          });
       }
     } catch {
       // An invalid composition is skipped; the next update retries.
@@ -4534,7 +4543,8 @@ function playHost() {
         tui.activity.pushCard(text, {
           tone,
           trackId: requestedTrack,
-          resultRevision: tone === "success" ? record.revision : undefined,
+          resultRevision:
+            tone === "success" ? shownRevision(record) : undefined,
         });
     },
     newNoteId: () => randomUUID().slice(0, 12),
@@ -4609,7 +4619,8 @@ function syncHost(): SyncHost {
         tui.activity.pushCard(text, {
           tone,
           hint,
-          resultRevision: tone === "success" ? record.revision : undefined,
+          resultRevision:
+            tone === "success" ? shownRevision(record) : undefined,
         });
     },
     types(state) {
@@ -4640,10 +4651,17 @@ async function stepHistory(direction: "undo" | "redo"): Promise<Receipt> {
       },
       restored.toJSON(),
     );
+    // Compare with what was undone, which another window may have written.
+    const before = scoreFromJSON(latest.composition);
     score = restored;
     if (clock.playing) void audio.play(score);
     return ok(
-      `${direction === "undo" ? "undid" : "redid"} · rev ${target.revision}`,
+      historyReceipt(
+        direction,
+        before,
+        restored,
+        shownRevision(record, target.revision),
+      ),
     );
   } catch (error) {
     if (error instanceof SessionConflictError)
@@ -4662,7 +4680,28 @@ function transportFailed(error: unknown): void {
   );
 }
 
-/** The space-bar toggle: flip the transport, then record it for other windows. */
+/**
+ * The revision dawg shows (header, receipts, undo): edits to the song.
+ * Play and pause are logged so other windows follow them, but they are not
+ * edits, so they never move the number: a revision shows as itself minus
+ * the transport events at or before it.
+ */
+function shownRevision(
+  value: typeof record,
+  revision = value.revision,
+): number {
+  let transports = 0;
+  for (const event of value.events)
+    if (event.revision <= revision && event.kind === "transport")
+      transports += 1;
+  return revision - transports;
+}
+
+/**
+ * The space-bar toggle: flip the transport, then record it for other
+ * windows. The log entry keeps windows in step; the header's revision
+ * (`shownRevision`) skips it, since play/pause is not an edit.
+ */
 async function toggleTransport(): Promise<void> {
   await setTransport("toggle");
   try {
@@ -5039,8 +5078,8 @@ function showMeCommandHost(): AgentHost["commands"] {
       return {
         ok: toneOf(result) !== "error",
         message: typeof result === "string" ? result : result.text,
-        baseRevision: base.revision,
-        resultRevision: record.revision,
+        baseRevision: shownRevision(record, base.revision),
+        resultRevision: shownRevision(record),
       };
     },
   };

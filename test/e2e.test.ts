@@ -108,7 +108,7 @@ const screens = (ws: readonly Window[]) =>
 async function ready(w: Window): Promise<void> {
   await until(
     // DAWG_AI=0: no agent, so the command placeholder shows instead of NOW.
-    () => w.vt.text().includes("try: tempo") && /rev \d+/.test(header(w)),
+    () => w.vt.text().includes("try: ") && /rev \d+/.test(header(w)),
     `${w.name} prompt`,
     () => w.vt.text(),
   );
