@@ -32,11 +32,7 @@ export function stripSlash(line: string): string {
 
 /** The first word, slash and case folded (`/FX` → `fx`). */
 export function verbOf(line: string): string {
-  return (
-    stripSlash(line)
-      .split(/\s+/)[0]
-      ?.toLowerCase() ?? ""
-  );
+  return stripSlash(line).split(/\s+/)[0]?.toLowerCase() ?? "";
 }
 
 /**
@@ -129,7 +125,9 @@ export function candidates(line: string): string[] {
     if (!REMOVE_WORDS.includes(lower[index]!)) continue;
     for (const word of REMOVE_WORDS)
       if (word !== lower[index])
-        push([...words.slice(0, index), word, ...words.slice(index + 1)].join(" "));
+        push(
+          [...words.slice(0, index), word, ...words.slice(index + 1)].join(" "),
+        );
   }
   // <noun> list|presets|ls, or bare <noun>: try every listing spelling.
   const last = lower.at(-1)!;
@@ -168,9 +166,7 @@ export const EXPORT_USAGE =
  * `export song.mid` (slash optional). Stems are a WAV per track.
  */
 export function parseExportCommand(line: string): ExportCommand | undefined {
-  const match = line
-    .trim()
-    .match(/^\/?export\s+(\S+)(?:\s+(stems))?\s*$/i);
+  const match = line.trim().match(/^\/?export\s+(\S+)(?:\s+(stems))?\s*$/i);
   if (!match) return undefined;
   const path = match[1]!;
   const format = /\.wav$/i.test(path)
@@ -213,11 +209,15 @@ export function parseLoopCommand(line: string): LoopCommand | undefined {
   if (rest.length === 0) return { type: "loop-show" };
   if (rest.length === 1 && /^(off|none|song)$/i.test(rest[0]!))
     return { type: "loop-off" };
-  const range = rest.join(" ").match(/^(\d{1,4})\s*(?:-|\.\.|–|\s)\s*(\d{1,4})$/u);
+  const range = rest
+    .join(" ")
+    .match(/^(\d{1,4})\s*(?:-|\.\.|–|\s)\s*(\d{1,4})$/u);
   if (range) {
     const from = Number(range[1]);
     const to = Number(range[2]);
-    return from >= 1 && to >= from ? { type: "loop-bars", from, to } : undefined;
+    return from >= 1 && to >= from
+      ? { type: "loop-bars", from, to }
+      : undefined;
   }
   if (rest.length === 1 && /^\d{1,4}$/.test(rest[0]!)) {
     const bar = Number(rest[0]);
@@ -353,12 +353,10 @@ export const EVERYDAY_VERBS: ReadonlySet<string> = new Set([
  * `✗ <line> · <usage> · did you mean <x>?`: one card for a known verb whose
  * arguments did not parse, the same for slash and bare input.
  */
-export function usageCard(
-  line: string,
-  usage: string,
-  near?: string,
-): string {
-  return near ? `${line} · ${usage} · did you mean ${near}?` : `${line} · ${usage}`;
+export function usageCard(line: string, usage: string, near?: string): string {
+  return near
+    ? `${line} · ${usage} · did you mean ${near}?`
+    : `${line} · ${usage}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -431,7 +429,13 @@ export type ValueRange = Readonly<{
  * core message never reaches a card raw.
  */
 export const RANGES: Readonly<Record<string, ValueRange>> = Object.freeze({
-  tempo: { command: "tempo", min: 20, max: 300, unit: "BPM", example: "tempo 128" },
+  tempo: {
+    command: "tempo",
+    min: 20,
+    max: 300,
+    unit: "BPM",
+    example: "tempo 128",
+  },
   bars: { command: "bars", min: 1, max: 256, unit: "bars", example: "bars 8" },
   meter: {
     command: "meter",
@@ -440,7 +444,13 @@ export const RANGES: Readonly<Record<string, ValueRange>> = Object.freeze({
     unit: "beats per bar",
     example: "meter 3",
   },
-  volume: { command: "volume", min: 0, max: 1, unit: "", example: "volume 0.8" },
+  volume: {
+    command: "volume",
+    min: 0,
+    max: 1,
+    unit: "",
+    example: "volume 0.8",
+  },
   pan: { command: "pan", min: -1, max: 1, unit: "", example: "pan -0.3" },
 });
 

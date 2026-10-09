@@ -19,6 +19,7 @@
  * Any edit makes the track a sing track (`instrument "sing"` plus a `sing`
  * field). One `updateTrack` revision and one undo step per command.
  */
+import { isGuideInstrument } from "../../core/clips.ts";
 import { parseKey } from "../../core/chords.ts";
 import { FxValidationError } from "../../core/params.ts";
 import {
@@ -419,7 +420,9 @@ export function applySingCommand(
         ? `sing · ${singSummary(current, keyRootOf(score))} · ${describeSing(current)}`
         : track.instrument === SING_INSTRUMENT
           ? `sing · off · sing <preset> turns it on (${SING_PRESET_NAMES.join(" ")})`
-          : `sing · ${trackId} plays ${track.instrument} · sing <preset> to switch (${SING_PRESET_NAMES.join(" ")})`,
+          : isGuideInstrument(track.instrument)
+            ? `${trackId} sings with the vocal guide · try sing choir`
+            : `sing · ${trackId} plays ${track.instrument} · sing <preset> to switch (${SING_PRESET_NAMES.join(" ")})`,
     };
   if (track.sampler || track.instrument === "kit")
     return {

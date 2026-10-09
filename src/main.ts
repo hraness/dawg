@@ -7,6 +7,7 @@ import {
   EVERYDAY_VERBS,
   EXPORT_USAGE,
   FREE_TEXT_HINTS,
+  LOOP_USAGE,
   WINDOW_VERBS,
   NO_AGENT,
   RANGES,
@@ -16,6 +17,7 @@ import {
   nearest,
   noNote,
   parseExportCommand,
+  parseLoopCommand,
   recover,
   usageCard,
   usageError,
@@ -399,14 +401,7 @@ import {
   type SyncState,
   type TypesIndicator,
 } from "../tui/app.ts";
-import {
-  fail,
-  note,
-  ok,
-  toneOf,
-  warn,
-  type Receipt,
-} from "../tui/activity.ts";
+import { fail, note, ok, toneOf, warn, type Receipt } from "../tui/activity.ts";
 import { systemRunner } from "./auth/runner.ts";
 import type { MediaServices } from "./media/types.ts";
 import { encodeBuffer } from "../tui/screen.ts";
@@ -2075,7 +2070,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
         items.findIndex((item) => item.current),
       ),
     });
-    return ok(`${items.length} track${items.length === 1 ? "" : "s"}`);
+    return note(`${items.length} track${items.length === 1 ? "" : "s"}`);
   }
   if (/^\/?(?:instruments|instrument\s+(?:list|ls|presets))$/i.test(command)) {
     // `instrument list`: every word `instrument <name>` takes, by family.
@@ -2498,6 +2493,8 @@ async function submit(prompt: string): Promise<string | Receipt> {
     const result = applyFxCommand(score, requestedTrack, fx, pinnedIr);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
+    // Bare `fx` reads the chain (`•`); it changes nothing.
+    if (result.ok && fx.type === "fx-list") return note(result.message);
     return result.ok ? ok(result.message) : fail(result.message);
   }
   const unknownFx = unknownFxMessage(command);
@@ -2664,6 +2661,30 @@ async function submit(prompt: string): Promise<string | Receipt> {
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
   }
+  // `loop <section> | <a>-<b> | off`: the playback region, a section loop.
+  const loop = parseLoopCommand(command);
+  if (loop) {
+    if (loop.type === "loop-show")
+      return note(
+        score.loopSection
+          ? `loop · ${score.loopSection} · loop off plays the song`
+          : `loop · the song · ${LOOP_USAGE}`,
+      );
+    if (loop.type === "loop-off") return submit("section loop off");
+    if (loop.type === "loop-section")
+      return submit(`section loop ${loop.name}`);
+    const span = score.sections.find(
+      (section) =>
+        section.startBar + 1 === loop.from &&
+        section.startBar + section.bars === loop.to,
+    );
+    if (span) return submit(`section loop ${span.name}`);
+    const bars =
+      loop.from === loop.to ? `${loop.from}` : `${loop.from}-${loop.to}`;
+    return fail(
+      `loop ${bars} · no section spans bars ${bars} · section <name> ${bars}, then loop <name>`,
+    );
+  }
   const arrange = parseSectionCommand(command, score);
   if (arrange) {
     const reads =
@@ -2778,8 +2799,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
       command,
       (candidate) =>
         commandParses(candidate, score) ||
-        (candidate.startsWith("/") &&
-          SLASH_HANDLED.has(verbOf(candidate))),
+        (candidate.startsWith("/") && SLASH_HANDLED.has(verbOf(candidate))),
     );
     if (retry !== undefined) {
       recovering = true;

@@ -167,6 +167,16 @@ export function parseParamValue(
   }
 }
 
+/** The effects people reach for first, for the empty `fx` read. */
+const COMMON_FIRST: readonly string[] = [
+  "reverb",
+  "delay",
+  "filter",
+  "distort",
+  "chorus",
+  "compressor",
+];
+
 export function parseFxCommand(prompt: string): FxCommand | undefined {
   const words = prompt.trim().split(/\s+/);
   if (words[0]?.toLowerCase() !== "fx") return undefined;
@@ -348,7 +358,7 @@ export function applyFxCommand(
       ok: true,
       message: on.length
         ? `fx · ${on.map((effect) => `${effect} (${describe(effect, effectValues(track, effect)!)})`).join(" → ")}`
-        : `fx · none · chain ${FX_CHAIN.join(" → ")}`,
+        : `fx · none · ${COMMON_FIRST.join(" ")} … · fx list`,
     };
   }
   if (command.type === "fx-ir")
