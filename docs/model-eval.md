@@ -87,6 +87,72 @@ above, the rest in probes while the harness was built). Raw records, with
 per-run tokens, latency and failed checks, are in
 `bench/agent-eval/results/2026-10-09.json`.
 
+## Latency pass (2026-10-09, after)
+
+What a turn spent its time on: about 2.5 model requests, and the last one
+usually only wrote the closing sentence. Prompt size was not dominant: with
+Anthropic caching on, Haiku 5.5 and Grok reach the first token in about the
+same time on a minimal prompt as on the full one. GLM-5.3 Flash (no explicit
+cache) drops from 2.8 s to 0.7 s on a minimal prompt, so trimming would help
+it, but every trim tried lowered its compose pass rate.
+
+Changes:
+
+- **`Done:` ends a parameter edit in one request.** A tempo, mix, effect or
+  sound edit whose reply starts with `Done:` beside its calls ends once they
+  apply. Steps that write notes, rhythms, chords or structure
+  (`CONTENT_TOOLS` in `src/agent/agent.ts`) always get a review step: ending
+  those early made Haiku skip its self-check and lose clave and build tasks.
+  A longer version of the instruction made GLM-5.3 Flash loop in hidden
+  reasoning until the 1 MB response cap on 10 of 75 compose runs; the
+  shipped wording keeps the old closing line and adds one optional clause.
+- **First-byte timeout and fallback.** A stream that sends no byte for 20 s
+  after its headers is retried; Haiku 5.5 then falls back once to GLM-5.3
+  Flash.
+- **Typed commands never wait on the agent.** A slash command typed during
+  a turn runs at once instead of being queued as steering.
+- **`/model fast`** picks Haiku 5.5.
+
+Same tasks, same day. Providers drifted between the morning and afternoon
+runs (GLM-5.3 Flash compose: 82% in the table above, 73% on unchanged
+`main` in the afternoon), so pass rates are compared against `main` re-run
+the same afternoon, pooled over every rep.
+
+| model            | tier                    |     before (main, same day) |               after |
+| ---------------- | ----------------------- | --------------------------: | ------------------: |
+| claude-haiku-5.5 | compose                 |                92/102 (90%) |       121/136 (89%) |
+| claude-haiku-5.5 | multi                   |                 22/24 (92%) |         38/40 (95%) |
+| claude-haiku-5.5 | single, files, recovery | 98% / 100% / 100% (morning) | 86/88, 40/40, 31/32 |
+| glm-5.3-flash    | compose                 |                 37/51 (73%) |         62/85 (73%) |
+| glm-5.3-flash    | multi                   |                 20/24 (83%) |         36/40 (90%) |
+| glm-5.3-flash    | single, files, recovery |  95% / 100% / 88% (morning) | 84/88, 40/40, 30/32 |
+
+Latency, all 65 tasks twice (after) against the morning table:
+
+| model                            |        pass |     p50 turn | p50 first token |            $/task |
+| -------------------------------- | ----------: | -----------: | --------------: | ----------------: |
+| claude-opus-5.5 (10-task sample) | 100% → 100% |  9.8 → 8.8 s |     2.3 → 2.2 s |     $0.41 → $0.13 |
+| claude-haiku-5.5                 |   97% → 95% |  4.2 → 3.8 s |     1.5 → 1.4 s | $0.0099 → $0.0019 |
+| zai/glm-5.3-flash                |   92% → 88% |  5.7 → 4.9 s |     2.1 → 1.8 s | $0.0051 → $0.0047 |
+| deepseek-v4-flash                |   96% → 93% | 12.7 → 7.6 s |     4.0 → 2.7 s | $0.0032 → $0.0029 |
+| openai/gpt-6-luna                |   84% → 87% |  7.7 → 7.8 s |     2.1 → 2.1 s | $0.0049 → $0.0050 |
+| openai/gpt-oss-120b              |   73% → 70% |  4.5 → 3.6 s |     1.3 → 1.2 s | $0.0066 → $0.0056 |
+| grok-4.1-fast                    |   57% → 60% |  2.3 → 2.7 s |     0.8 → 0.8 s | $0.0036 → $0.0038 |
+
+Most single edits on Haiku 5.5 now take one request (single and multi tiers: p50 turn 1.8 s, first token 1.2 s). The four models in the last rows ran once per task within the spend
+cap (about 60 of 65 tasks); their pass deltas are within one or two tasks
+and within the same-day noise shown above. Haiku's cost drop is mostly the
+prompt-cache fix landing in `main`. `transpose-bass-whole-step` failed both
+final Haiku runs (it double-applied the shift after re-reading the file);
+pooled over today it is 4/6, as before (2/3). Spend for this pass: about
+$9 of the $10 cap.
+
+**`/model fast` = Haiku 5.5.** It is the fastest model that passes the
+non-style tasks about as well as the default: 98% single, 100% files and
+recovery, against Opus 5.5's 100% on its sample. Grok 4.1 Fast and Mistral
+Small are faster but fail most compose tasks, and GLM-5.3 Flash is slower
+at p50 and passes less.
+
 ## Findings
 
 - **Small models do well here.** Five models clear 90% on tasks that need
