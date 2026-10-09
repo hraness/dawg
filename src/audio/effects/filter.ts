@@ -125,16 +125,26 @@ export function applyTrackFilter(
   }
 }
 
-/** Cutoff for a DJ-filter position: 0 → 20 Hz low-pass … 1 → 20 kHz high-pass. */
+/**
+ * Where the DJ filter's high-pass stops rising, as on a DJ mixer: a 20 kHz
+ * high-pass at 44.1 kHz left nothing (q08), so the top of the knob is thin.
+ * The curve below about 0.95 is unchanged.
+ */
+const DJ_HPF_MAX_HZ = 10_000;
+
+/** Cutoff for a DJ-filter position: 0 → 20 Hz low-pass … 1 → 10 kHz high-pass. */
 function djCutoff(value: number): { type: FilterType; cutoff: number } {
   return value < 0.5
     ? { type: "lpf", cutoff: 20 * 1000 ** (value / 0.5) }
-    : { type: "hpf", cutoff: 20 * 1000 ** ((value - 0.5) / 0.5) };
+    : {
+        type: "hpf",
+        cutoff: Math.min(DJ_HPF_MAX_HZ, 20 * 1000 ** ((value - 0.5) / 0.5)),
+      };
 }
 
 /**
  * One-knob DJ filter (Strudel `djf`): below 0.5 a low-pass closes toward
- * 20 Hz, above 0.5 a high-pass rises toward 20 kHz; 0.5 passes unchanged.
+ * 20 Hz, above 0.5 a high-pass rises toward 10 kHz; 0.5 passes unchanged.
  */
 export function applyDjFilter(
   buffer: Float64Array,

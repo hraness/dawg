@@ -136,6 +136,27 @@ describe("filter", () => {
     expect(run(0.1, 4000)).toBeLessThan(-12);
     expect(run(0.9, 100)).toBeLessThan(-12);
   });
+
+  test("djf 1 is thin, not silent: the high-pass stops at 10 kHz (q08)", () => {
+    const run = (value: number, hz: number) => {
+      const t = track({ fx: { djf: { value } } });
+      const b = mono(applyDjFilter, t, "djf", sine(hz, 0.5));
+      return db(rms(b, RATE / 10) / rms(sine(hz, 0.5)));
+    };
+    // Bright content still passes at the end of the sweep...
+    expect(run(1, 14_000)).toBeGreaterThan(-6);
+    // ...while the body is gone, and the sweep below the cap is unchanged.
+    expect(run(1, 1000)).toBeLessThan(-30);
+    expect(run(0.94, 9000)).toBeLessThan(run(1, 14_000));
+    // The sweep is monotonic (within the Q 0.8 peak): a higher position never
+    // lets noticeably more 2 kHz through.
+    let last = Infinity;
+    for (let v = 0.5; v <= 1.0001; v += 0.05) {
+      const level = run(Math.min(1, v), 2000);
+      expect(level).toBeLessThanOrEqual(last + 1);
+      last = level;
+    }
+  });
 });
 
 describe("autofilter", () => {
