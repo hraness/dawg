@@ -9,8 +9,9 @@
  *
  * The pitch tracker and PSOLA belong to the pitch lane
  * (src/audio/dsp/pitch.ts, src/audio/dsp/psola.ts, src/audio/analysis.ts).
- * They reach this module through `setPitchEngine`, so this file has no
- * import of them; without an engine every hook returns the buffer untuned.
+ * They reach this module as `builtinPitchEngine` (./autotune-engine.ts);
+ * tests swap it with `setPitchEngine`, and without an engine every hook
+ * returns the buffer untuned.
  */
 import {
   autotuneDigest,
@@ -37,6 +38,7 @@ import {
   type TuningTable,
 } from "../../core/tuning.ts";
 import { deferLiveJob, liveFitActive } from "./fit.ts";
+import { builtinPitchEngine } from "./autotune-engine.ts";
 import { chordAt, chordDigest, chordTimeline } from "./granular.ts";
 
 /** Tuned buffers stay under this many bytes (separate from the fit cache). */
@@ -91,9 +93,12 @@ export type PitchEngine = Readonly<{
   psolaJob?: PsolaJob;
 }>;
 
-let engine: PitchEngine | undefined;
+let engine: PitchEngine | undefined = builtinPitchEngine;
 
-/** Installs the pitch engine (the pitch lane at startup; tests). */
+/**
+ * Installs a pitch engine (tests); `undefined` leaves autotune inert and
+ * `builtinPitchEngine` restores the default.
+ */
 export function setPitchEngine(next: PitchEngine | undefined): void {
   engine = next;
   clearAutotuneCache();

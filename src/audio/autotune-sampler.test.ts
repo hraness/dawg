@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import type { AutotuneCurve } from "../../core/autotune.ts";
+import { builtinPitchEngine } from "./autotune-engine.ts";
 import { createScore, type SampleRef } from "../../core/score.ts";
 import {
   autotuneCacheStatus,
@@ -111,8 +112,10 @@ function render(
 const sha = (x: Float64Array) =>
   createHash("sha256").update(Buffer.from(x.buffer)).digest("hex");
 
+// Each test installs the engine it needs; the default comes back after.
+beforeEach(() => setPitchEngine(undefined));
 afterEach(() => {
-  setPitchEngine(undefined);
+  setPitchEngine(builtinPitchEngine);
   clearAutotuneCache();
   clearFitCache();
 });

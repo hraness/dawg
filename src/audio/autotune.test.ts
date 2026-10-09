@@ -1,6 +1,9 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createScore } from "../../core/score.ts";
 import type { AutotuneCurve } from "../../core/autotune.ts";
+import { builtinPitchEngine } from "./autotune-engine.ts";
+import { trackPitch } from "./dsp/pitch.ts";
+import { synthVoice } from "./fixtures/voice.ts";
 import {
   autotuneCacheStatus,
   autotuneEngineNote,
@@ -70,8 +73,10 @@ function scoreWith(autotune: object, key: string | null = "C major") {
   } as never);
 }
 
+// Each test installs the engine it needs; the default comes back after.
+beforeEach(() => setPitchEngine(undefined));
 afterEach(() => {
-  setPitchEngine(undefined);
+  setPitchEngine(builtinPitchEngine);
   clearAutotuneCache();
 });
 
@@ -136,5 +141,48 @@ describe("autotune render hooks", () => {
     expect(guide).toStartWith("guide:");
     const plain = score.tracks[1]!;
     expect(autotuneStemDigests(plain, score)).toEqual([]);
+  });
+});
+
+describe("autotune with the built-in pitch engine", () => {
+  test("hard lands voiced frames within 5 cents of C major; cold and warm match", () => {
+    setPitchEngine(builtinPitchEngine);
+    const sr = 44_100;
+    // Two sung notes off by +35 and -40 cents, no vibrato.
+    const voice = synthVoice(
+      [
+        { start: 0.1, dur: 0.6, midi: 60, off: 35, vowel: "a" },
+        { start: 0.8, dur: 0.6, midi: 64, off: -40, vowel: "o" },
+      ],
+      { sr, seed: 7, drift: 0 },
+    );
+    const mono = Float32Array.from(voice.x);
+    const buffer = { sha256: "e".repeat(64), sampleRate: sr, mono };
+    const score = scoreWith({ preset: "hard" });
+    const track = score.tracks.find((t) => t.id === "vox")!;
+    const place = { start: 0, offset: 0, rate: 1 };
+    const out = autotuneSpan(score, track, buffer, place);
+    expect(out.mono).not.toBe(mono);
+    const curve = trackPitch(Float64Array.from(out.mono), sr, {
+      voice: "tenor",
+    });
+    const errors: number[] = [];
+    for (let f = 0; f < curve.f0.length; f += 1) {
+      const hz = curve.f0[f]!;
+      if (hz <= 0 || curve.prob[f]! < 200) continue;
+      const t = curve.t0 + f * curve.hop;
+      // steady middles of the notes only
+      if (!((t > 0.3 && t < 0.6) || (t > 1.0 && t < 1.3))) continue;
+      const cents = 1200 * Math.log2(hz / 440);
+      errors.push(Math.abs(cents - Math.round(cents / 100) * 100));
+    }
+    errors.sort((a, b) => a - b);
+    expect(errors.length).toBeGreaterThan(50);
+    expect(errors[Math.floor(errors.length / 2)]!).toBeLessThan(5);
+    clearAutotuneCache();
+    const warm = autotuneSpan(score, track, buffer, place);
+    expect(
+      Buffer.from(warm.mono.buffer).equals(Buffer.from(out.mono.buffer)),
+    ).toBe(true);
   });
 });
