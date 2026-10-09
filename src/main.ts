@@ -240,6 +240,7 @@ import {
   type ShowMeLevel,
 } from "./agent/show-me.ts";
 import { firstRunCard, runAuthCommand, runTuiLogin } from "./auth/cli.ts";
+import { musicalReceipt } from "./session/receipt.ts";
 import {
   modelPickerItems,
   tuiAuthCommand,
@@ -4732,6 +4733,8 @@ async function runAgent(text: string): Promise<string | Receipt> {
     );
   const turn = { controller: new AbortController(), steering: [] as string[] };
   agentTurn = turn;
+  // The turn ends on one musical receipt of what it changed.
+  const before = score;
   reportAgentActivity(`${providerName} · thinking…`);
   // xcb admits a pending account on its first call, which takes longer.
   let admitting = selection.kind === "xcb" && selection.admissionPending;
@@ -4764,6 +4767,8 @@ async function runAgent(text: string): Promise<string | Receipt> {
           }
           return;
         }
+        if (event.type === "done")
+          tui.activity.setTurnReceipt(musicalReceipt(before, score));
         agentEventSink(event);
       },
     });

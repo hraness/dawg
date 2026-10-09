@@ -161,6 +161,7 @@ export class ActivityFeed {
   private spinnerLabel: string | undefined;
   private spinnerSince = 0;
   private streamText = "";
+  private turnReceipt = "";
   private queue = 0;
   /** Receipts and requests so far: the clock `once` cards expire on. */
   private actions = 0;
@@ -339,6 +340,23 @@ export class ActivityFeed {
     this.changed();
   }
 
+  /**
+   * The musical receipt of the running agent turn (`musicalReceipt` of the
+   * score before and after), shown as the turn's closing card.
+   */
+  setTurnReceipt(text: string): void {
+    this.turnReceipt = text;
+  }
+
+  /**
+   * The latest prose sentence of the streaming agent text, for the faint
+   * tail of the spinner: a complete sentence when one has ended, else the
+   * one being written.
+   */
+  get streamSentence(): string {
+    return latestSentence(this.streamText);
+  }
+
   /** Adapter for the agent lane's streaming events. */
   applyAgentEvent(event: AgentActivityEvent): void {
     switch (event.type) {
@@ -399,9 +417,20 @@ export class ActivityFeed {
       case "done": {
         if (this.streamText) this.record("agent", this.streamText);
         this.streamText = "";
+        // A turn that changed the music ends on what it changed, in musical
+        // terms; its prose stays in the ctrl-o log.
+        const receipt = this.turnReceipt;
+        this.turnReceipt = "";
         const summary =
-          event.summary ?? event.text?.split("\n")[0]?.slice(0, 160);
-        if (summary) this.pushCard(summary, { tone: "agent" });
+          receipt ||
+          event.summary ||
+          firstSentence(event.text ?? "").slice(0, 160) ||
+          undefined;
+        if (summary)
+          this.pushCard(summary, {
+            tone: "agent",
+            hint: receipt ? "^z undo" : undefined,
+          });
         else if (event.applied === 0)
           this.pushCard("agent made no changes", { tone: "info" });
         this.setSpinner(undefined);
@@ -473,4 +502,27 @@ export function receiptTone(message: string): CardTone {
   if (/nothing to|conflict|changed; retry|exists|another window/.test(lower))
     return "warning";
   return "success";
+}
+
+/** The first sentence of a reply (up to its first `.`, `!` or `?`). */
+export function firstSentence(text: string): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  const match = /^.*?[.!?](?=\s|$)/.exec(flat);
+  return (match ? match[0] : flat).trim();
+}
+
+/** The last complete sentence of streaming text, or the one in progress. */
+export function latestSentence(text: string): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  if (!flat) return "";
+  const sentences = flat.match(/[^.!?]+[.!?]+(?=\s|$)|[^.!?]+$/g) ?? [flat];
+  const last = sentences[sentences.length - 1]!.trim();
+  // A fragment of a few words reads as noise; keep the sentence before it.
+  if (
+    !/[.!?]$/.test(last) &&
+    last.split(" ").length < 4 &&
+    sentences.length > 1
+  )
+    return sentences[sentences.length - 2]!.trim();
+  return last;
 }

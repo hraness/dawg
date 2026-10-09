@@ -4,6 +4,7 @@ import {
   ActivityFeed,
   ONCE_ACTIONS,
   ONCE_TTL_MS,
+  latestSentence,
   stripLine,
 } from "./activity.ts";
 
@@ -82,5 +83,41 @@ describe("activity cards", () => {
     expect(activity.cards).toHaveLength(1);
     activity.pushCard("96 BPM", { tone: "success" });
     expect(texts()).toEqual(["✓ 96 BPM", "✗ main is not a drum track ×3"]);
+  });
+
+  test("the spinner tail is the latest sentence, not a raw tail", () => {
+    expect(latestSentence("I'll lay a bass. Then drums")).toBe(
+      "I'll lay a bass.",
+    );
+    expect(latestSentence("I'll lay a bass. Then a busy drum fill")).toBe(
+      "Then a busy drum fill",
+    );
+    expect(latestSentence("")).toBe("");
+  });
+
+  test("an agent turn that changed the music ends on its receipt", () => {
+    const { activity, texts } = feed();
+    activity.applyAgentEvent({ type: "start" });
+    activity.applyAgentEvent({ type: "text-delta", delta: "Slowing it. " });
+    expect(activity.streamSentence).toBe("Slowing it.");
+    activity.setTurnReceipt("96 BPM · +2 notes on bass (C4 E4)");
+    activity.applyAgentEvent({
+      type: "done",
+      text: "Slowing it. Done!",
+      applied: 2,
+    });
+    expect(texts()[0]).toBe("◆ 96 BPM · +2 notes on bass (C4 E4) · ^z undo");
+    // The prose went to the ctrl-o log.
+    expect(
+      activity.transcript.some((e) => e.text.trim() === "Slowing it."),
+    ).toBe(true);
+    // A turn with no change answers in its first sentence.
+    activity.applyAgentEvent({ type: "start" });
+    activity.applyAgentEvent({
+      type: "done",
+      text: "It is in F minor. The bass doubles the root.",
+      applied: 0,
+    });
+    expect(texts()[0]).toBe("◆ It is in F minor.");
   });
 });

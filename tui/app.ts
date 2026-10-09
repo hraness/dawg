@@ -583,9 +583,10 @@ function paintActivity(
       ...roles.agent,
       bold: true,
     });
-    if (activity.streaming && x < limit - 4) {
+    // The agent's latest sentence, faint: what it is doing, in its words.
+    if (activity.streamSentence && x < limit - 4) {
       x += buffer.text(x, y, " · ", roles.faint);
-      const tail = activity.streaming;
+      const tail = activity.streamSentence;
       const room = Math.max(0, limit - x);
       const shown =
         displayWidth(tail) > room
@@ -593,7 +594,7 @@ function paintActivity(
               .slice(-(room - 1))
               .join("")}`
           : tail;
-      x += buffer.text(x, y, truncate(shown, room), roles.muted);
+      x += buffer.text(x, y, truncate(shown, room), roles.faint);
     }
   } else {
     const cards = activity.visible(nowMs);
