@@ -80,6 +80,7 @@ export default song({
   meter: [4, 4],
   bars: 4,
   tracks: [],
+  calibration: 1,
 });
 `;
 

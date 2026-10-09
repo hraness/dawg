@@ -208,3 +208,36 @@ export function openWeight(phase: number, rd: number): number {
   const te = owTe;
   return phase < te ? 0.5 - 0.5 * Math.cos((2 * Math.PI * phase) / te) : 0.15;
 }
+
+const spectra = new Map<number, Float64Array>();
+
+/**
+ * Power of harmonics 1..`count` of the LF flow derivative at `rd`
+ * (rounded to the table's 0.1 grid), from a DFT of one period. Cached:
+ * the sing engine's level normalization reads it at control rate.
+ */
+export function glottalSpectrum(rd: number, count: number): Float64Array {
+  const index = Math.round(
+    (Math.min(RD_MAX, Math.max(RD_MIN, rd)) - RD_MIN) / RD_STEP,
+  );
+  const key = index * 1024 + count;
+  const hit = spectra.get(key);
+  if (hit) return hit;
+  const at = RD_MIN + index * RD_STEP;
+  const n = 1024;
+  const x = new Float64Array(n);
+  for (let i = 0; i < n; i += 1) x[i] = glottal(i / n, at);
+  const out = new Float64Array(count + 1);
+  for (let h = 1; h <= count; h += 1) {
+    let re = 0;
+    let im = 0;
+    for (let i = 0; i < n; i += 1) {
+      const a = (2 * Math.PI * h * i) / n;
+      re += x[i]! * Math.cos(a);
+      im -= x[i]! * Math.sin(a);
+    }
+    out[h] = (re * re + im * im) / (n * n);
+  }
+  spectra.set(key, out);
+  return out;
+}

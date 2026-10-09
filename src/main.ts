@@ -112,6 +112,10 @@ import {
   parseTuningCommand,
   type TuningCommand,
 } from "./commands/tuning.ts";
+import {
+  applyCalibrationCommand,
+  parseCalibrationCommand,
+} from "./commands/calibration.ts";
 import { TuningError, displayTag, resolveTuning } from "../core/tuning.ts";
 import {
   applyMasterCommand,
@@ -2065,6 +2069,13 @@ async function submit(prompt: string): Promise<string | Receipt> {
   }
   const tuning = parseTuningCommand(command);
   if (tuning) return tuningCommand(tuning);
+  const calibration = parseCalibrationCommand(command);
+  if (calibration) {
+    const result = applyCalibrationCommand(score, calibration);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
   const keysCommand = parseKeysCommand(command);
   if (keysCommand) {
     const reads =

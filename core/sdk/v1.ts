@@ -1212,16 +1212,36 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
       euclid("hat", 16, 16, 0, { velocity: 0.35, accent: 0.4, accents: 4 }),
     ],
   ),
+  // The blues and rock shuffle is a triplet-8th feel: each beat is three
+  // 8th-note triplets with the first and third struck (long-short).
   drumPattern(
     "shuffle",
-    "Shuffle",
+    "Shuffle (triplet 8ths)",
     ["blues", "shuffle", "rock"],
     [90, 130, 110],
     "acoustic",
+    0,
+    [
+      grid("kick", "x.....x.....", { division: "1/8t" }),
+      grid("snare", "...x.....x..", { division: "1/8t" }),
+      grid("hat", "X.xx.xX.xx.x", {
+        division: "1/8t",
+        velocity: 0.35,
+        accent: 0.5,
+      }),
+    ],
+  ),
+  // The half-time shuffle swings 16ths against a backbeat on 3.
+  drumPattern(
+    "half-time-shuffle",
+    "Half-time shuffle (swung 16ths)",
+    ["shuffle", "rock", "funk"],
+    [70, 100, 86],
+    "acoustic",
     0.33,
     [
-      grid("kick", "x.......x......."),
-      grid("snare", "....x.......x..."),
+      grid("kick", "x.........x....."),
+      grid("snare", "........x......."),
       euclid("hat", 16, 16, 0, { velocity: 0.35, accent: 0.5, accents: 8 }),
     ],
   ),
@@ -3304,6 +3324,19 @@ export type TrackInput = Readonly<{
    * `{ ref: 432 }` alone keeps the song's table at another pitch.
    */
   tuning?: TuningInput | null;
+  /**
+   * Wind engine settings as a field (SDK 1.32.0): a preset word or
+   * `{ preset, ...params }`, the same as `instrument: wind(...)`. Use with
+   * `instrument` omitted or `"wind"`.
+   */
+  wind?:
+    WindPresetName | Readonly<{ preset?: WindPresetName } & WindParams> | null;
+  /**
+   * Singing voice settings as a field (SDK 1.32.0), the same as
+   * `instrument: sing(...)`. Use with `instrument` omitted or `"sing"`.
+   */
+  sing?:
+    SingPresetName | Readonly<{ preset?: SingPresetName } & SingParams> | null;
   /** Synth voice parameters, Strudel names (`{ attack: 0.01, lpf: 800 }`). */
   synth?: SynthInput;
   /**
@@ -3737,6 +3770,40 @@ const ZZFX_SHAPES = Object.freeze([
  * Sample paths without a `tracks/` prefix are made project-relative under
  * this track's `tracks/<slug>/`.
  */
+/**
+ * `wind:` or `sing:` on track() as the engine spec, so the field is never
+ * silently dropped: it needs `instrument` omitted or the engine's own word.
+ */
+function engineField(
+  input: TrackInput,
+  name: string,
+): WindSpec | SingSpec | undefined {
+  const fields = [
+    ["wind", WIND_INSTRUMENT, wind] as const,
+    ["sing", SING_INSTRUMENT, sing] as const,
+  ].filter(([key]) => input[key] !== undefined && input[key] !== null);
+  if (fields.length === 0) return undefined;
+  if (fields.length > 1)
+    throw new DawgSdkError(`track ${name}: use wind: or sing:, not both`);
+  const [key, word, make] = fields[0]!;
+  if (input.instrument !== undefined && input.instrument !== word)
+    throw new DawgSdkError(
+      `track ${name}: ${key}: needs instrument "${word}" or none (got ${typeof input.instrument === "string" ? `"${input.instrument.slice(0, 32)}"` : "an engine spec"})`,
+    );
+  const value = input[key] as unknown;
+  if (typeof value === "string")
+    return (make as (p: string) => WindSpec | SingSpec)(value);
+  if (!isRecord(value))
+    throw new DawgSdkError(
+      `track ${name}: ${key}: must be a preset word or an object`,
+    );
+  const { preset, ...params } = value as Record<string, unknown>;
+  return (make as (p: unknown, q: object) => WindSpec | SingSpec)(
+    preset ?? params,
+    preset === undefined ? {} : params,
+  );
+}
+
 export function track(input: TrackInput): TrackSpec {
   if (!isRecord(input)) throw new DawgSdkError("track() needs an object");
   if (typeof input.name !== "string" || input.name.trim().length === 0)
@@ -3748,7 +3815,7 @@ export function track(input: TrackInput): TrackSpec {
   const id = input.id ?? slug;
   if (typeof id !== "string" || id.length === 0 || id.length > 64)
     throw new DawgSdkError(`track ${name}: id must be 1..64 characters`);
-  const rawInstrument = input.instrument ?? "sine";
+  const rawInstrument = engineField(input, name) ?? input.instrument ?? "sine";
   // A granular track may keep the sampler it grains (`grain off` goes back).
   const keptSampler =
     isRecord(input.sampler) &&
@@ -4493,6 +4560,13 @@ export type SongInput = Readonly<{
   form?: string | readonly (string | SongFormEntry)[];
   /** The section playback loops (SDK 1.18.0); export ignores it. */
   loopSection?: string;
+  /**
+   * Sound calibration (SDK 1.32.0): `1` renders the 0.7 level, pitch and
+   * drum-kit fixes (hat choke, tuned toms, crash and ride, level keys,
+   * steady brass). Omit it to keep an older song's sound byte-identical;
+   * `dawg init` writes the latest.
+   */
+  calibration?: number;
 }>;
 
 /** A song section (SDK 1.18.0); bars are 0-based like beats. */
@@ -4689,6 +4763,8 @@ export type Song = Readonly<{
   form?: readonly SongFormEntry[];
   /** Present only when a section loops (SDK 1.18.0). */
   loopSection?: string;
+  /** Present only when the song sets one (SDK 1.32.0). */
+  calibration?: number;
 }>;
 
 /** A stored song `time`: ticks, and 0-based bar indexes. */
@@ -4842,6 +4918,9 @@ function songSections(
  * lengths at least one tick), and every note gets a deterministic id from
  * its track and content, so two evaluations of the same files agree.
  */
+/** The newest `song({ calibration })` (mirrors core CALIBRATION_LATEST). */
+export const SONG_CALIBRATION_LATEST = 1;
+
 export function song(input: SongInput): Song {
   if (!isRecord(input)) throw new DawgSdkError("song() needs an object");
   const tempoBpm = finite(input.tempo ?? 120, "song tempo");
@@ -4867,6 +4946,16 @@ export function song(input: SongInput): Song {
     throw new DawgSdkError("song key must be a string or null");
   const songTuning = tuningSpec(input.tuning, "song");
   const master = masterData(input.master);
+  const calibration = input.calibration ?? 0;
+  if (
+    typeof calibration !== "number" ||
+    !Number.isInteger(calibration) ||
+    calibration < 0 ||
+    calibration > SONG_CALIBRATION_LATEST
+  )
+    throw new DawgSdkError(
+      `song calibration must be an integer 0..${SONG_CALIBRATION_LATEST}`,
+    );
   if (!Array.isArray(input.tracks))
     throw new DawgSdkError("song tracks must be an array of track()");
   if (input.tracks.length > 64)
@@ -5097,6 +5186,7 @@ export function song(input: SongInput): Song {
     notes: Object.freeze(notes),
     ...(master ? { master } : {}),
     ...arrangement,
+    ...(calibration ? { calibration } : {}),
   });
 }
 
@@ -6844,6 +6934,11 @@ type Chord = Readonly<{
    * such as `C11`, `G13` or `A7b9` carry them (0.6.1).
    */
   tensions?: readonly number[] | undefined;
+  /**
+   * The root's letter, 0..6 for C..B, when a roman numeral spelled it:
+   * `bVII` in C names Bb (not A#) and `vii` in F# names E# (not F).
+   */
+  letter?: number | undefined;
 }>;
 
 function makeChord(
@@ -6920,6 +7015,25 @@ const FLAT_NAMES = [
 /** Note name for a pitch class; flats when `flats`. */
 function noteName(pc: number, flats = false): string {
   return (flats ? FLAT_NAMES : SHARP_NAMES)[mod12(pc)]!;
+}
+
+const LETTERS = "CDEFGAB";
+const LETTER_PCS = [0, 2, 4, 5, 7, 9, 11] as const;
+
+/**
+ * `pc` spelled on letter `letter` (0..6, C..B) with one accidental at
+ * most (E#, Cb, Bb); undefined when that would need a double accidental.
+ */
+function spellOnLetter(pc: number, letter: number): string | undefined {
+  const l = ((Math.trunc(letter) % 7) + 7) % 7;
+  const diff = ((mod12(pc) - LETTER_PCS[l]! + 18) % 12) - 6;
+  if (Math.abs(diff) > 1) return undefined;
+  return `${LETTERS[l]}${diff === 1 ? "#" : diff === -1 ? "b" : ""}`;
+}
+
+/** The letter (0..6, C..B) a key's tonic is spelled on. */
+function tonicLetter(key: Key): number {
+  return LETTERS.indexOf(noteName(key.tonic, keyUsesFlats(key))[0]!);
 }
 
 const SECRET_SUFFIX: Readonly<Partial<Record<Quality, string>>> = Object.freeze(
@@ -7041,7 +7155,11 @@ function chordSuffix(chord: Chord): string {
 function chordName(chord: Chord, flats = false): string {
   const slash =
     chord.bass === undefined ? "" : `/${noteName(chord.bass, flats)}`;
-  return `${noteName(chord.root, flats)}${chordSuffix(chord)}${slash}`;
+  const root =
+    (chord.letter === undefined
+      ? undefined
+      : spellOnLetter(chord.root, chord.letter)) ?? noteName(chord.root, flats);
+  return `${root}${chordSuffix(chord)}${slash}`;
 }
 
 /** Suffix → quality and extensions, longest first when parsing. */
@@ -7842,6 +7960,11 @@ function sameChord(a: Chord | undefined, b: Chord): boolean {
  * major). `7` adds the diatonic seventh; `maj7`/`M7` and `dom7` are exact.
  */
 function parseRoman(key: Key, text: string): Chord | undefined {
+  return romanIn(key, text, tonicLetter(key));
+}
+
+/** `parseRoman` with the tonic spelled on `tonic` (0..6, C..B). */
+function romanIn(key: Key, text: string, tonic: number): Chord | undefined {
   if (typeof text !== "string" || text.length > 32) return undefined;
   const trimmed = text.trim();
   const exact = trimmed.match(
@@ -7860,15 +7983,22 @@ function parseRoman(key: Key, text: string): Chord | undefined {
       ? scaleOf(key)[degree]
       : mod12(key.tonic + MODES.major[degree]! + shift);
     if (root === undefined) return undefined;
-    return parseChord(`${noteName(root)}${exact[3]!}`);
+    const letter = (tonic + degree) % 7;
+    const chord = parseChord(
+      `${spellOnLetter(root, letter) ?? noteName(root)}${exact[3]!}`,
+    );
+    return chord && Object.freeze({ ...chord, letter });
   }
   const slash = trimmed.match(/^(.+)\/(.+)$/);
   if (slash) {
     // V/x: the chord built on the degree of x in the key (secondary function).
-    const target = parseRoman(key, slash[2]!);
+    const target = romanIn(key, slash[2]!, tonic);
     if (!target) return undefined;
-    const sub = parseRoman({ tonic: target.root, mode: "major" }, slash[1]!);
-    return sub;
+    return romanIn(
+      { tonic: target.root, mode: "major" },
+      slash[1]!,
+      target.letter ?? tonic,
+    );
   }
   const match = trimmed.match(
     /^(b|#|♭|♯|♮)?(vii|vi|v|iv|iii|ii|i|VII|VI|V|IV|III|II|I)(°|o|ø|\+)?(maj7|M7|dom7|7|9|maj9|6|sus4|sus2|sus|add9)?$/,
@@ -7941,7 +8071,10 @@ function parseRoman(key: Key, text: string): Chord | undefined {
       quality = "sus2";
       break;
   }
-  return makeChord(root, quality, ext);
+  return Object.freeze({
+    ...makeChord(root, quality, ext),
+    letter: (tonic + degree) % 7,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -7983,7 +8116,17 @@ function rotate(pitches: readonly number[], steps: number): number[] {
 
 function rootPosition(chord: Chord, anchor = 60): number[] {
   const rootPitch = anchor + mod12(chord.root - anchor);
-  return chordIntervals(chord).map((step) => rootPitch + step);
+  const steps = chordIntervals(chord);
+  // A natural 11 over a major 3rd and a 7th is the avoid-note clash (E
+  // under F a minor 9th up in C11), so the voicing drops the 3rd: C11 is
+  // C G Bb D F, the sus voicing; C13 already leaves the 11 out.
+  const clash =
+    steps.includes(4) &&
+    steps.includes(17) &&
+    (steps.includes(10) || steps.includes(11));
+  return steps
+    .filter((step) => !(clash && step === 4))
+    .map((step) => rootPitch + step);
 }
 
 /** Open voicings: `open` drops the second voice from the top an octave

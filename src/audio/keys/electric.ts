@@ -60,6 +60,8 @@ export type ElectricNoteOn = Readonly<{
   /** Track seed hash (clav pickup positions are per track). */
   trackSeed: number;
   noteSeed: string;
+  /** Song calibration (q08); 1+ keeps the tine hammer under the period. */
+  calibration?: number;
 }>;
 
 /** Clamped-free cantilever mode ratios. */
@@ -130,7 +132,12 @@ export class TineVoice implements KeysVoice {
     const drive = lerp(0.35, rhodes ? 1.6 : 1.5, p.bark);
     const A = (0.15 + 0.85 * v) * drive;
     // Hardness scales the hammer contact (0.5 is the prototype's).
-    const contact = lerp(2.2, 0.9, v) * (1.4 - 0.8 * p.hardness);
+    const legacy = lerp(2.2, 0.9, v) * (1.4 - 0.8 * p.hardness);
+    // Calibration 1: the contact stays under 0.6 of the tine's period, so
+    // the pulse's first null never lands under the fundamental (the top
+    // octave fell 35 dB).
+    const contact =
+      (note.calibration ?? 0) >= 1 ? Math.min(legacy, 600 / f) : legacy;
     this.pulse = hammerPulse(Math.max(2, Math.round(contact * 1e-3 * sr)), 1.5);
     this.bank = new ModeBank(4);
     this.bank.add(f, T, A * 0.85, 1, sr);

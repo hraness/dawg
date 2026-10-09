@@ -50,7 +50,7 @@ import {
   type Formant,
   type VoiceType,
 } from "../dsp/formant.ts";
-import { glottal, openWeight } from "../dsp/glottal.ts";
+import { glottal, glottalSpectrum, openWeight } from "../dsp/glottal.ts";
 import { seededRandom } from "../dsp/rng.ts";
 import { interpolateAutomation } from "../effects/common.ts";
 import type { EngineContext, InstrumentEngine } from "../instruments.ts";
@@ -83,6 +83,32 @@ export function gauss(rand: () => number): number {
 }
 
 const SQRT12 = Math.sqrt(12);
+/** Harmonics the level normalization sums (the rest carry under 2%). */
+const NORM_HARMONICS = 40;
+/**
+ * Level normalization time constants. Gain falls fast (a formant landing
+ * on a harmonic is loud at once) and rises slowly: a narrow filter that
+ * glides off a harmonic keeps ringing at its old level for a while, so a
+ * fast rise would overshoot by 10 dB and more.
+ */
+const LEVEL_FALL_SECONDS = 0.003;
+const LEVEL_RISE_SECONDS = 0.12;
+/** Gaussian line smear: offsets in standard deviations, and weights. */
+const SMEAR_AT = [-2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2] as const;
+const SMEAR = ((w) => w.map((x) => x / w.reduce((a, b) => a + b, 0)))(
+  SMEAR_AT.map((x) => Math.exp((-x * x) / 2)),
+);
+/** Control periods between level re-aims. */
+const NORM_EVERY = 4;
+let reference = 0;
+/** Harmonic power of the reference voice (Rd 1.3) through a flat tract. */
+function referencePower(): number {
+  if (reference === 0) {
+    const ref = glottalSpectrum(1.3, NORM_HARMONICS);
+    for (let h = 1; h <= NORM_HARMONICS; h += 1) reference += ref[h]!;
+  }
+  return reference;
+}
 
 /** One-pole low-passed unit-variance noise: slow pitch drift. */
 class Drift {
@@ -113,6 +139,11 @@ export class VoiceCore {
   private periodScale = 1;
   private odd = false;
   private hp = 0;
+  /** Smoothed loudness normalization; -1 until `aimLevel` first runs. */
+  private level = -1;
+  private levelTarget = 1;
+  private readonly riseRate: number;
+  private readonly fallRate: number;
   readonly tract = new Cascade();
   private readonly ringBand = new Bandpass();
   private readonly ot1 = new Bandpass();
@@ -122,6 +153,8 @@ export class VoiceCore {
     private readonly sampleRate: number,
   ) {
     this.phase = rand();
+    this.riseRate = 1 - Math.exp(-1 / (LEVEL_RISE_SECONDS * sampleRate));
+    this.fallRate = 1 - Math.exp(-1 / (LEVEL_FALL_SECONDS * sampleRate));
   }
   setTract(formants: readonly Formant[], scale: number, ringHz: number): void {
     this.tract.set(formants, scale, this.sampleRate);
@@ -157,13 +190,93 @@ export class VoiceCore {
       src + white * s.breath * 0.35 * (f0 > 0 ? openWeight(this.phase, rd) : 1)
     );
   }
+  /**
+   * Re-aims the loudness normalization at the current filters: the power
+   * the tract, ring and overtone filters give the glottal source (`rd`)
+   * at `f0`, against the reference source (Rd 1.3) through a flat
+   * response. Narrow formants landing on or between harmonics swing
+   * that power by 10 dB and more, so without this a vowel, a note or a
+   * throat preset changes the level as much as velocity does.
+   */
+  aimLevel(
+    f0: number,
+    rd: number,
+    s: Shape & Pick<SingSettings, "sub" | "jitter">,
+  ): void {
+    // With `sub`, every other pulse is weaker by `a`: a period of 2/f0 whose
+    // lines at k f0/2 carry (1+a)/2 (even k) and (1-a)/2 (odd k).
+    const a = s.sub > 0 ? 1 - 0.7 * s.sub : 1;
+    const step = a < 1 ? 0.5 : 1;
+    const top = Math.min(
+      NORM_HARMONICS,
+      Math.floor((0.45 * this.sampleRate) / f0),
+    );
+    if (!(f0 > 0) || top < 1) return;
+    const source = glottalSpectrum(rd, NORM_HARMONICS);
+    const spread = Math.max(0.006, s.jitter * 0.01);
+    let power = 0;
+    for (let h = step; h <= top; h += step) {
+      const whole = Number.isInteger(h);
+      const g = whole
+        ? source[h]! * ((1 + a) / 2) ** 2
+        : (h < 1 ? source[1]! : (source[h - 0.5]! + source[h + 0.5]!) / 2) *
+          ((1 - a) / 2) ** 2;
+      const w = (2 * Math.PI * h * f0) / this.sampleRate;
+      // Jitter and drift smear each line over about +-spread; a narrow
+      // overtone filter sees that average, not the exact harmonic.
+      let r = 0;
+      for (let k = 0; k < SMEAR.length; k += 1)
+        r += SMEAR[k]! * this.responsePower(w * (1 + SMEAR_AT[k]! * spread), s);
+      power += g * r;
+    }
+    this.levelTarget = Math.min(
+      8,
+      Math.max(0.001, Math.sqrt(referencePower() / power)),
+    );
+    if (this.level < 0) this.level = this.levelTarget;
+  }
+  /** |H|^2 of the tract, ring and overtone filters at `w` rad/sample. */
+  private responsePower(w: number, s: Shape): number {
+    const cw = Math.cos(w);
+    const sw = Math.sin(w);
+    const c2w = 2 * cw * cw - 1;
+    const s2w = 2 * sw * cw;
+    let re = 1;
+    let im = 0;
+    for (const r of this.tract.res) {
+      const [hr, hi] = r.response(cw, sw, c2w, s2w);
+      const nr = re * hr - im * hi;
+      im = re * hi + im * hr;
+      re = nr;
+    }
+    let addRe = 1;
+    let addIm = 0;
+    if (s.ring > 0) {
+      const [rr, ri] = this.ringBand.response(cw, sw, c2w, s2w);
+      addRe += rr * s.ring * 3;
+      addIm += ri * s.ring * 3;
+    }
+    if (s.overtone > 0) {
+      const [ar, ai] = this.ot1.response(cw, sw, c2w, s2w);
+      const [br, bi] = this.ot2.response(cw, sw, c2w, s2w);
+      addRe += (ar * br - ai * bi) * s.overtone * 40;
+      addIm += (ar * bi + ai * br) * s.overtone * 40;
+    }
+    const yr = re * addRe - im * addIm;
+    const yi = re * addIm + im * addRe;
+    return yr * yr + yi * yi;
+  }
   /** Tract, singer's formant and overtone filter (shared by a bucket). */
   shape(x: number, s: Shape): number {
     let y = this.tract.process(x);
     if (s.ring > 0) y += this.ringBand.process(y) * s.ring * 3;
     if (s.overtone > 0)
       y += this.ot2.process(this.ot1.process(y)) * s.overtone * 40;
-    return y;
+    if (this.level < 0) return y;
+    this.level +=
+      (this.levelTarget - this.level) *
+      (this.levelTarget > this.level ? this.riseRate : this.fallRate);
+    return y * this.level;
   }
   step(f0: number, rd: number, s: Source & Shape): number {
     return this.shape(this.source(f0, rd, s), s);
@@ -444,6 +557,8 @@ function renderLine(
             2.5 - 2 * live.bright - 1.2 * (head.velocity - 0.6) - push,
           ),
         );
+        if (!bucket && offset % (SING_CONTROL * NORM_EVERY) === 0)
+          core.aimLevel(hz, rd, live);
       }
       let g =
         level *
@@ -480,6 +595,16 @@ function renderLine(
         hz = j === 0 ? seg.hz : seg.hz + (hz - seg.hz) * slur;
         const scale = 2 ** ((live.formant + b.st) / 12);
         b.core.setTract(vowelTable(j, live, scale, hz), scale, ringHz);
+        if (j % (SING_CONTROL * NORM_EVERY) === 0) {
+          const rd = Math.min(
+            2.7,
+            Math.max(
+              0.3,
+              2.5 - 2 * live.bright - 1.2 * (head.velocity - 0.6) - push,
+            ),
+          );
+          b.core.aimLevel(hz, rd, live);
+        }
       }
       const y = b.core.shape(b.buf[j]!, live) * setup.gainAt(index);
       if (right) {
@@ -564,6 +689,8 @@ function renderThroat(
           2.7,
           Math.max(0.3, 2.5 - 2 * live.bright - 1.2 * (velocity - 0.6)),
         );
+        if ((i - start) % (SING_CONTROL * NORM_EVERY) === 0)
+          core.aimLevel(droneHz, rd, live);
       }
       const t = (i - start) / sampleRate;
       const y = core.step(droneHz * ratio, rd, live);
@@ -595,6 +722,13 @@ export function withSingHorizon<T>(frames: number, render: () => T): T {
   }
 }
 
+/**
+ * Output trim that puts one sung note at velocity 0.8 on the same reference
+ * as the other engines (about -18 LUFS, like `piano`), so a choir in a mix
+ * sits beside the band instead of 15 dB over it and into the clip.
+ */
+export const SING_OUTPUT_TRIM = 1.25;
+
 /** Renders a sing track's performed notes into `dry` (and `dryR`). */
 export function renderSingTrack(
   dry: Float64Array,
@@ -611,6 +745,7 @@ export function renderSingTrack(
   const volumeLane = track.volumeAutomation ?? [];
   const volume = Math.max(0, Math.min(1, track.volume ?? 1));
   const gainAt = (index: number): number =>
+    SING_OUTPUT_TRIM *
     volume *
     (volumeLane.length > 0
       ? interpolateAutomation(volumeLane, tickAt(index), 1)

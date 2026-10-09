@@ -20,6 +20,7 @@ import { interpolateAutomation } from "../effects/common.ts";
 import { seedHash, unit } from "../dsp/rng.ts";
 import type { EngineContext, InstrumentEngine } from "../instruments.ts";
 import { applyBody, bodyFor, symKeys, sympathetic } from "./body.ts";
+import { keysTrim } from "../keys/calibration.ts";
 import { clamp } from "./loop.ts";
 import { PluckString, type Exciter, type PluckSpec } from "./pluck.ts";
 import {
@@ -337,6 +338,10 @@ export function renderStrings(
   const cap = Math.max(1, Math.round(values.voices as number));
   const tuning = context.tuning;
   const bowed = isBowed(values);
+  // Calibration 1 (q08): the keyboard string presets (the harpsichord) take
+  // the keys' key-tracked level trim; other presets have no row.
+  const trimPreset =
+    (context.score.calibration ?? 0) >= 1 ? track.string?.preset : undefined;
   const L = new Float64Array(total);
   const R = dryR ? new Float64Array(total) : undefined;
   const voices: Voice[] = [];
@@ -416,6 +421,7 @@ export function renderStrings(
         `${note.id}:${note.startTick + (context.seedTick ?? 0)}:string`,
       );
       const strings: { hz: number; gain: number; ratio: number }[] = [];
+      const trim = trimPreset ? keysTrim(trimPreset, note.pitch) : 1;
       // The course's tuning error belongs to the key, not to the strike: it
       // is seeded by track and key (so every velocity of a key beats the
       // same way) and centred, so the course's mean pitch is the table's.
@@ -430,7 +436,7 @@ export function renderStrings(
         const ratio = 2 ** ((d * 100 + jitter) / 1200);
         strings.push({
           hz: baseHz * ratio,
-          gain: 1 / Math.sqrt(unison),
+          gain: trim / Math.sqrt(unison),
           ratio,
         });
       }
@@ -442,7 +448,7 @@ export function renderStrings(
             hz * 2 ** (((unit(course, unison, 1) - 0.5) * 4) / 1200);
           strings.push({
             hz: tuned,
-            gain: oct / Math.sqrt(unison),
+            gain: (trim * oct) / Math.sqrt(unison),
             ratio: tuned / baseHz,
           });
         }

@@ -235,7 +235,13 @@ export async function runRenderCommand(
   const sha = createHash("sha256").update(wav).digest("hex");
   const seconds = audio.frames / audio.sampleRate;
   stdout.write(
-    `rendered · ${target} · ${seconds.toFixed(2)} s · ${wav.byteLength} bytes · ${sha}\n`,
+    `rendered · ${target} · ${seconds.toFixed(2)} s · ${audio.sampleRate} Hz${
+      // A plain song keeps 0.4's 22.05 kHz (byte-identical renders); say
+      // so, since its ceiling is 11 kHz and cymbal air is lost.
+      rateArg === undefined && !score.master
+        ? " (--rate 48000 for full band)"
+        : ""
+    } · ${wav.byteLength} bytes · ${sha}\n`,
   );
   if (credits) stdout.write(`credits · ${credits}\n`);
   const clipped = clippedSamples(audio.pcm);

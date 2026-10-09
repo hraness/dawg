@@ -47,6 +47,7 @@ import {
   type Track,
   type TrackAutomationParameter,
   type TrackScore,
+  CALIBRATION_LATEST,
 } from "../../core/score.ts";
 import {
   CORE_EFFECTS,
@@ -2738,6 +2739,16 @@ function transportNodes(context: MenuContext): MenuNode[] {
       detail: `${tuningLabel(score.tuning)} · ${keyLabel(score.key)}`,
       help: "the song tuning (12-TET, EDOs, just, gamelan, Scala) and scale",
       build: songTuningNodes,
+    },
+    {
+      kind: "choice",
+      label: "calibration",
+      help: "sound fixes: 1 chokes hats, tunes toms, levels keys, steadies brass · 0 keeps the legacy sound",
+      value: String(score.calibration ?? 0),
+      options: Array.from({ length: CALIBRATION_LATEST + 1 }, (_, i) =>
+        String(i),
+      ),
+      command: (option) => `/calibration ${option}`,
     },
     {
       kind: "menu",

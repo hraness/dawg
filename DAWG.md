@@ -1330,6 +1330,12 @@ Precedence with the synth: a note's settings override the track's synth. A note'
 
 Menu: **Sound › performance** has glide time (ms) and mode, sustain pedal (off or every bar), velocity curve, humanize timing, velocity and length, and new take; the loop stages them for A/B like any other sound change. Agent: `set_expression` (articulation, glide, bend, vibrato and humanize over note ids or a beat range) and `set_performance` (track glide, pedal, velocity curve and humanize). SDK (1.15.0): `note("C4", 0, 1, 0.8, { art: "staccato", glide: 0.05, bend: [[0, -200], [0.25, 0]], vibrato: { rate: 5.5, depth: 30 }, humanize: { timing: 10 } })`, `expr(notes, { art: "ghost" })` for many notes, and `track({ glide: 0.08, pedal: [[0, "down"], [4, "up"]], velocityCurve: "soft", humanize: { timing: 8, seed: 7 } })`.
 
+## Sound calibration
+
+A song's `calibration` picks the revision of level, pitch and kit fixes the released engines render with. Absent or 0 keeps every 0.4 to 0.6.1 project byte-identical; `dawg init` writes the latest (1). `/calibration` shows it, `/calibration 1|latest|0|off` sets it; Project › calibration, the `set_calibration` agent tool and `song({ calibration: 1 })` do the same.
+
+Revision 1: a closed (42) or pedal (44) hat chokes a sounding open hat (46) over 8 ms; GM toms 41 to 50 are pitched two thirds of a semitone per key around 45 (low tom); 49, 52, 55 and 57 play a crash, 51, 53 and 59 a ride and 56 a cowbell (they were a rim click), and section fills end on the crash; hat metal is band-limited; keys presets are levelled to within 3 dB of piano across notes 36 to 96; and lip brass locks its lip resonance to the sounding pitch with soft lip saturation, so held notes are steady and in tune.
+
 ## Tunings and scales
 
 Every project plays in 12-tone equal temperament at A4 = 440 Hz until it says otherwise. A song tuning, a track tuning or a note's cents change only the frequencies; notes stay MIDI keys, so editing, chords, play mode and exports work the same. MIDI export carries a tuning with the MIDI Tuning Standard (a single-note tuning SysEx per tuned track, selected with RPN 3), and writes glides, bends, vibrato and note cents as pitch bend (range ±24 semitones) on notes that sound alone on their track; synths without MTS play 12-TET keys. A project without any of these renders byte-identically to 0.4.
@@ -1501,7 +1507,7 @@ The menu has the same controls under **Project › Tempo & meter** (`/menu tempo
 
 Applying to a missing track creates a kit track; an empty melodic track becomes a kit track; a melodic track with notes is refused. Voices the track lacks (a sampler kit without a rim, say) are skipped and named in the receipt. Every apply is one revision and one undo step. In `track.ts`, `pattern("boom-bap")` returns the rows: `rhythm: pattern("boom-bap")`, or `[...pattern("house"), euclid("rim", 5, 16)]` to add one.
 
-Patterns: `house`, `disco`, `techno`, `minimal`, `electro`, `breakbeat`, `amen-style`, `dnb`, `halftime`, `boom-bap`, `lofi`, `trap`, `drill`, `reggaeton`, `dancehall`, `one-drop`, `afrobeat`, `afrobeats`, `bembe`, `tresillo`, `son-clave`, `bossa-nova`, `samba`, `cumbia`, `garage`, `jersey-club`, `footwork`, `rock`, `funk`, `shuffle`, `euclid-poly`. Sounds → Drum patterns in `/menu` lists them too.
+Patterns: `house`, `disco`, `techno`, `minimal`, `electro`, `breakbeat`, `amen-style`, `dnb`, `halftime`, `boom-bap`, `lofi`, `trap`, `drill`, `reggaeton`, `dancehall`, `one-drop`, `afrobeat`, `afrobeats`, `bembe`, `tresillo`, `son-clave`, `bossa-nova`, `samba`, `cumbia`, `garage`, `jersey-club`, `footwork`, `rock`, `funk`, `shuffle` (triplet 8ths), `half-time-shuffle`, `euclid-poly`. Sounds → Drum patterns in `/menu` lists them too.
 
 **Kits.** A `kit` track plays the built-in drum synth. `kit: "<name>"` on the track (`/kit <name>`, or `set_drum_kit` for the agent) chooses one of six synthesized kits, all offline and deterministic; a track without `kit` sounds exactly as before.
 

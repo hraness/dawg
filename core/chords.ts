@@ -119,6 +119,11 @@ export type Chord = Readonly<{
    * such as `C11`, `G13` or `A7b9` carry them (0.6.1).
    */
   tensions?: readonly number[] | undefined;
+  /**
+   * The root's letter, 0..6 for C..B, when a roman numeral spelled it:
+   * `bVII` in C names Bb (not A#) and `vii` in F# names E# (not F).
+   */
+  letter?: number | undefined;
 }>;
 
 export function makeChord(
@@ -195,6 +200,25 @@ const FLAT_NAMES = [
 /** Note name for a pitch class; flats when `flats`. */
 export function noteName(pc: number, flats = false): string {
   return (flats ? FLAT_NAMES : SHARP_NAMES)[mod12(pc)]!;
+}
+
+const LETTERS = "CDEFGAB";
+const LETTER_PCS = [0, 2, 4, 5, 7, 9, 11] as const;
+
+/**
+ * `pc` spelled on letter `letter` (0..6, C..B) with one accidental at
+ * most (E#, Cb, Bb); undefined when that would need a double accidental.
+ */
+export function spellOnLetter(pc: number, letter: number): string | undefined {
+  const l = ((Math.trunc(letter) % 7) + 7) % 7;
+  const diff = ((mod12(pc) - LETTER_PCS[l]! + 18) % 12) - 6;
+  if (Math.abs(diff) > 1) return undefined;
+  return `${LETTERS[l]}${diff === 1 ? "#" : diff === -1 ? "b" : ""}`;
+}
+
+/** The letter (0..6, C..B) a key's tonic is spelled on. */
+function tonicLetter(key: Key): number {
+  return LETTERS.indexOf(noteName(key.tonic, keyUsesFlats(key))[0]!);
 }
 
 const SECRET_SUFFIX: Readonly<Partial<Record<Quality, string>>> = Object.freeze(
@@ -316,7 +340,11 @@ export function chordSuffix(chord: Chord): string {
 export function chordName(chord: Chord, flats = false): string {
   const slash =
     chord.bass === undefined ? "" : `/${noteName(chord.bass, flats)}`;
-  return `${noteName(chord.root, flats)}${chordSuffix(chord)}${slash}`;
+  const root =
+    (chord.letter === undefined
+      ? undefined
+      : spellOnLetter(chord.root, chord.letter)) ?? noteName(chord.root, flats);
+  return `${root}${chordSuffix(chord)}${slash}`;
 }
 
 /** Suffix → quality and extensions, longest first when parsing. */
@@ -1121,6 +1149,11 @@ function sameChord(a: Chord | undefined, b: Chord): boolean {
  * major). `7` adds the diatonic seventh; `maj7`/`M7` and `dom7` are exact.
  */
 export function parseRoman(key: Key, text: string): Chord | undefined {
+  return romanIn(key, text, tonicLetter(key));
+}
+
+/** `parseRoman` with the tonic spelled on `tonic` (0..6, C..B). */
+function romanIn(key: Key, text: string, tonic: number): Chord | undefined {
   if (typeof text !== "string" || text.length > 32) return undefined;
   const trimmed = text.trim();
   const exact = trimmed.match(
@@ -1139,15 +1172,22 @@ export function parseRoman(key: Key, text: string): Chord | undefined {
       ? scaleOf(key)[degree]
       : mod12(key.tonic + MODES.major[degree]! + shift);
     if (root === undefined) return undefined;
-    return parseChord(`${noteName(root)}${exact[3]!}`);
+    const letter = (tonic + degree) % 7;
+    const chord = parseChord(
+      `${spellOnLetter(root, letter) ?? noteName(root)}${exact[3]!}`,
+    );
+    return chord && Object.freeze({ ...chord, letter });
   }
   const slash = trimmed.match(/^(.+)\/(.+)$/);
   if (slash) {
     // V/x: the chord built on the degree of x in the key (secondary function).
-    const target = parseRoman(key, slash[2]!);
+    const target = romanIn(key, slash[2]!, tonic);
     if (!target) return undefined;
-    const sub = parseRoman({ tonic: target.root, mode: "major" }, slash[1]!);
-    return sub;
+    return romanIn(
+      { tonic: target.root, mode: "major" },
+      slash[1]!,
+      target.letter ?? tonic,
+    );
   }
   const match = trimmed.match(
     /^(b|#|♭|♯|♮)?(vii|vi|v|iv|iii|ii|i|VII|VI|V|IV|III|II|I)(°|o|ø|\+)?(maj7|M7|dom7|7|9|maj9|6|sus4|sus2|sus|add9)?$/,
@@ -1220,7 +1260,10 @@ export function parseRoman(key: Key, text: string): Chord | undefined {
       quality = "sus2";
       break;
   }
-  return makeChord(root, quality, ext);
+  return Object.freeze({
+    ...makeChord(root, quality, ext),
+    letter: (tonic + degree) % 7,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1262,7 +1305,17 @@ export function rotate(pitches: readonly number[], steps: number): number[] {
 
 export function rootPosition(chord: Chord, anchor = 60): number[] {
   const rootPitch = anchor + mod12(chord.root - anchor);
-  return chordIntervals(chord).map((step) => rootPitch + step);
+  const steps = chordIntervals(chord);
+  // A natural 11 over a major 3rd and a 7th is the avoid-note clash (E
+  // under F a minor 9th up in C11), so the voicing drops the 3rd: C11 is
+  // C G Bb D F, the sus voicing; C13 already leaves the 11 out.
+  const clash =
+    steps.includes(4) &&
+    steps.includes(17) &&
+    (steps.includes(10) || steps.includes(11));
+  return steps
+    .filter((step) => !(clash && step === 4))
+    .map((step) => rootPitch + step);
 }
 
 /** Open voicings: `open` drops the second voice from the top an octave

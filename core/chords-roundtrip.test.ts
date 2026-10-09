@@ -92,7 +92,8 @@ const SUFFIXES = [
 ];
 
 const strip = (chord: Chord): string =>
-  JSON.stringify({ ...chord, bass: undefined });
+  // `letter` is spelling, not identity: bVII in C is Bb either way.
+  JSON.stringify({ ...chord, bass: undefined, letter: undefined });
 
 function chords(): Chord[] {
   const out: Chord[] = [];
@@ -188,12 +189,14 @@ describe("roman numerals", () => {
     expect(romanOf(c, parseChord("Fmaj7")!)).toBe("IVmaj7");
     const phrygian = { tonic: 0, mode: "phrygian" as const };
     expect(romanOf(phrygian, parseChord("D")!)).toBe("♮II");
-    expect(parseRoman(phrygian, "♮II")).toEqual(parseChord("D"));
-    expect(parseRoman(phrygian, "II")).toEqual(parseChord("Db"));
+    expect(strip(parseRoman(phrygian, "♮II")!)).toBe(strip(parseChord("D")!));
+    expect(strip(parseRoman(phrygian, "II")!)).toBe(strip(parseChord("Db")!));
+    expect(chordName(parseRoman(phrygian, "II")!)).toBe("Db");
     expect(romanOf(c, parseChord("C7")!)).toBe("Idom7");
     expect(romanOf(c, parseChord("C5")!)).toBe("I[5]");
     expect(romanOf(c, parseChord("C7#9")!)).toBe("I[7#9]");
     expect(romanOf(c, parseChord("C6/9")!)).toBe("I[6/9]");
-    expect(parseRoman(c, "I[6/9]")).toEqual(parseChord("C6/9"));
+    expect(strip(parseRoman(c, "I[6/9]")!)).toBe(strip(parseChord("C6/9")!));
+    expect(chordName(parseRoman(c, "bVII[7]")!)).toBe("Bb7");
   });
 });

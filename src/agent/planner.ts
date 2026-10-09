@@ -3,6 +3,7 @@ import { normalizeSongTime, normalizeTrackTime } from "../../core/tempo.ts";
 import { normalizeFx } from "../../core/fx.ts";
 import { normalizeMaster } from "../../core/master.ts";
 import {
+  CALIBRATION_LATEST,
   SCORE_LIMITS,
   automationRange,
   isAutomationParameter,
@@ -142,6 +143,15 @@ function parseOperation(value: unknown): ScoreOperation {
     const time = value.time === null ? null : normalizeSongTime(value.time);
     return { type: "setTime", time: time ?? null };
   }
+  if (
+    value.type === "setCalibration" &&
+    (value.calibration === null ||
+      (typeof value.calibration === "number" &&
+        Number.isInteger(value.calibration) &&
+        value.calibration >= 0 &&
+        value.calibration <= CALIBRATION_LATEST))
+  )
+    return { type: "setCalibration", calibration: value.calibration };
   // The master reuses its bounded validator; null removes it.
   if (value.type === "setMaster" && value.master !== undefined)
     return { type: "setMaster", master: normalizeMaster(value.master) ?? null };

@@ -58,6 +58,7 @@ export function encodeLoopDocument(score: TrackScore): TrackLoopV1 {
     ...(score.loopSection === undefined
       ? {}
       : { loopSection: score.loopSection }),
+    ...(score.calibration ? { calibration: score.calibration } : {}),
   });
 }
 

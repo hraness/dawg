@@ -11,6 +11,7 @@
  */
 import type { WindPresetName } from "../../../core/winds.ts";
 import { WIND_TRIM_TABLE } from "./trims.ts";
+import { WIND_TRIM_TABLE_1 } from "./trims1.ts";
 import type { WindTrim } from "./voice.ts";
 
 /** House sustain level of every preset at velocity 0.8, dBFS RMS. */
@@ -44,8 +45,19 @@ function nearestRate(sampleRate: number): number {
 export function windTrimRow(
   preset: WindPresetName,
   sampleRate: number,
+  calibration = 0,
 ): WindTrimRow | undefined {
-  return WIND_TRIM_TABLE[nearestRate(sampleRate)]?.[preset];
+  const rate = nearestRate(sampleRate);
+  if (calibration >= 1) {
+    const row = WIND_TRIM_TABLE_1[rate]?.[preset];
+    if (row) return row;
+  }
+  return WIND_TRIM_TABLE[rate]?.[preset];
+}
+
+/** True when `preset` has a calibration 1 row (the lip-model brass). */
+export function windCalibrated(preset: WindPresetName): boolean {
+  return WIND_TRIM_TABLE_1[WIND_TRIM_RATES[0]!]?.[preset] !== undefined;
 }
 
 function interpolate(lo: number, grid: readonly number[], hz: number): number {
@@ -69,12 +81,24 @@ export function rowGain(row: WindTrimRow, hz: number): number {
   return row.gains ? 10 ** (interpolate(row.lo, row.gains, hz) / 20) : 1;
 }
 
-export function windTrim(preset: WindPresetName, sampleRate: number): WindTrim {
-  const row = windTrimRow(preset, sampleRate);
-  if (!row) return { cents: () => 0, level: 1 };
+/**
+ * The voice trim of `preset` at `sampleRate`. Under calibration 1 the
+ * lip-model brass use the calibration 1 rows (`trims1.ts`) and the
+ * calibrated lips; everything else, and every legacy song, keeps the
+ * original table.
+ */
+export function windTrim(
+  preset: WindPresetName,
+  sampleRate: number,
+  calibration = 0,
+): WindTrim {
+  const lips = calibration >= 1 && windCalibrated(preset);
+  const row = windTrimRow(preset, sampleRate, calibration);
+  if (!row) return { cents: () => 0, level: 1, ...(lips ? { lips: 1 } : {}) };
   return {
     cents: (hz) => rowCents(row, hz),
     level: row.level,
     gain: (hz) => rowGain(row, hz),
+    ...(lips ? { lips: 1 as const } : {}),
   };
 }
