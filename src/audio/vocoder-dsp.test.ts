@@ -14,7 +14,7 @@ import {
 } from "./fixtures/vocoder-measure.ts";
 import { build, synthVoice, type VoiceSignal } from "./fixtures/voice.ts";
 import { unit } from "./dsp/rng.ts";
-import { autoGateDb, gateCurve } from "./dsp/follow.ts";
+import { autoGateDb, gateCurve, quietHold } from "./dsp/follow.ts";
 import { unvoicedCurve } from "./vocoder/detect.ts";
 import { renderCarrierSpan } from "./vocoder/carrier.ts";
 import { VOCODER_PRESET_NAMES } from "../../core/vocoder.ts";
@@ -428,6 +428,40 @@ describe("vocoder detectors, freeze, stereo and cost", () => {
       worst: Math.max(...sds),
     });
     expect(meanSd).toBeLessThan(0.5);
+  }, 60_000);
+
+  test("12b: a held vowel survives the gate and a silent modulator", () => {
+    const cut = Math.round((V.syllables[3]!.onset + 0.2) * SR);
+    const mod = Float64Array.from(X);
+    mod.fill(0, cut);
+    const hold = new Uint8Array(LEN);
+    hold.fill(1, cut);
+    for (const mode of ["channel", "talkbox"] as const) {
+      const y = vocodeDirect(
+        mod,
+        [SAW],
+        SR,
+        { mode, gate: -60, unvoiced: 0 },
+        { hold },
+      )[0]!;
+      const span = (a: number) =>
+        db(rms(y.subarray(cut + a * SR, cut + (a + 0.5) * SR)));
+      const levels = [0.25, 0.75, 1.25].map(span);
+      expect(Math.min(...levels)).toBeGreaterThan(-60);
+      expect(Math.max(...levels) - Math.min(...levels)).toBeLessThan(0.5);
+    }
+  }, 60_000);
+
+  test("12c: a static freeze holds the last vowel through rests", () => {
+    const cut = Math.round((V.syllables[3]!.onset + 0.2) * SR);
+    const mod = Float64Array.from(X);
+    mod.fill(0, cut);
+    const hold = quietHold(mod, LEN, SR, -60);
+    // nothing to hold before the voice: silence stays silence
+    expect(hold[0]).toBe(1);
+    const y = vocodeDirect(mod, [SAW], SR, { gate: -60 }, { hold })[0]!;
+    expect(db(rms(y.subarray(cut + SR / 4, cut + SR)))).toBeGreaterThan(-60);
+    expect(db(rms(y.subarray(0, Math.round(0.02 * SR))))).toBeLessThan(-80);
   }, 60_000);
 
   test("13: a stereo carrier keeps L != R; mono path equals the left", () => {

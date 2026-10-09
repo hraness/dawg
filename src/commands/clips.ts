@@ -219,7 +219,15 @@ export async function importClip(
   const copied = await importIntoProject(file, name, context, slug);
   const info = await wavInfo(join(context.cwd, copied.src));
   const gain = info ? importGain(info.peak) : undefined;
-  const { score, clip } = placeClip(context.score, context.trackId, {
+  // A fresh track (no notes, the default sine) becomes a `vocal` track, so
+  // its notes are silent guides; the vocal chain stays opt-in.
+  const fresh =
+    !context.score.notes.some((n) => n.trackId === track.id) &&
+    track.instrument === "sine";
+  const base = fresh
+    ? updateTrack(context.score, context.trackId, { instrument: "vocal" })
+    : context.score;
+  const { score, clip } = placeClip(base, context.trackId, {
     id: name,
     src: copied.src,
     sha256: copied.sha256,
@@ -233,7 +241,7 @@ export async function importClip(
       : "";
   return {
     ok: true,
-    message: `vocal ${label}: ${clip.id} at bar ${userBarLabel(score, startTick)} on ${track.name}${seconds}${db} · /clip to edit`,
+    message: `vocal ${label}: ${clip.id} at bar ${userBarLabel(score, startTick)} on ${track.name}${seconds}${db}${fresh ? " · instrument vocal" : ""} · /clip to edit`,
     next: score,
     kind: "clip.place",
     payload: { clipId: clip.id, src: clip.src },
@@ -285,7 +293,7 @@ export type VocalSetup = Readonly<{
   name: string;
   summary: string;
   /** Fields the setup sets beyond the vocal chain. */
-  patch?: Readonly<Partial<Pick<Track, "delay" | "fx">>>;
+  patch?: Readonly<Partial<Pick<Track, "delay" | "fx" | "autotune">>>;
   /** Other lanes' fields it would set; reported when absent here. */
   needs?: readonly string[];
 }>;
@@ -295,13 +303,14 @@ export const VOCAL_SETUPS: readonly VocalSetup[] = [
     name: "hyper",
     summary: "hard-tuned hyperpop lead: formant up, slapback, light distortion",
     patch: {
+      autotune: { preset: "hard" },
       delay: { beats: 0.125, feedback: 0.1, mix: 0.18 },
       fx: {
         formant: { shift: 3.5 } as never,
         distort: { drive: 1, tone: 6000, mix: 0.25 } as never,
       },
     },
-    needs: ["autotune", "harmony", "record"],
+    needs: ["harmony", "record"],
   },
   { name: "take", summary: "a lead with plate reverb", needs: ["record"] },
   { name: "stack", summary: "three passes panned wide", needs: ["record"] },
@@ -359,6 +368,7 @@ export function applyVocalSetup(
     instrument: "vocal",
     ...chain,
     ...(setup.patch?.delay ? { delay: setup.patch.delay } : {}),
+    ...(setup.patch?.autotune ? { autotune: setup.patch.autotune } : {}),
     ...(setup.patch?.fx ? { fx } : {}),
   };
   const next = updateTrack(score, trackId, patch as never);
@@ -454,7 +464,7 @@ export type ClipEdit =
 export type ClipCommand = Readonly<{ clipId?: string; edit: ClipEdit }>;
 
 const CLIP_USAGE =
-  "/clip [id] gain -3 | gain by -3 | fade .01 .2 | fade in .01 | fade out default | move 9 | split 7 | trim [offset s] [dur s|end] | rev | repeat every 2 to 32 | mute | rm";
+  "/clip [id] gain -3 | gain by -3 | fade .01 .2 | fade in .01 | fade out default | move 9 | split 7 | trim [offset s] [dur s|end] | rev | repeat 2 [to 32] | mute | rm";
 
 /** Parse `/clip ...`; undefined when it is not a /clip command. */
 export function parseClipCommand(
@@ -542,16 +552,13 @@ export function parseClipCommand(
       return { clipId, edit };
     }
     case "repeat": {
-      const every = num(words[words.indexOf("every") + 1]);
+      // `repeat 4`, `repeat every 4`, `repeat every 4 to 32`; no `to`
+      // repeats to the song's end.
+      const everyAt = words.indexOf("every");
+      const every = num(words[everyAt >= 0 ? everyAt + 1 : 0]);
       const toAt = words.indexOf("to");
-      const until = toAt >= 0 ? words[toAt + 1] : undefined;
-      if (
-        words.indexOf("every") < 0 ||
-        every === undefined ||
-        !(every > 0) ||
-        !until
-      )
-        return bad;
+      const until = toAt >= 0 ? words[toAt + 1] : "end";
+      if (every === undefined || !(every > 0) || !until) return bad;
       return { clipId, edit: { kind: "repeat", every, until } };
     }
     default:
@@ -740,7 +747,10 @@ export async function runClipCommand(
         const every = Math.round(
           edit.every * score.beatsPerBar * score.ticksPerBeat,
         );
-        const until = userBarTick(score, edit.until);
+        const until =
+          edit.until === "end"
+            ? barStartTick(score, score.bars)
+            : userBarTick(score, edit.until);
         const copies = repeatClip(
           clip,
           every,
@@ -754,7 +764,7 @@ export async function runClipCommand(
           };
         return replace(
           [...clips, ...copies],
-          `${copies.length} repeat${copies.length === 1 ? "" : "s"} every ${edit.every} bar${edit.every === 1 ? "" : "s"} to bar ${edit.until}`,
+          `${copies.length} repeat${copies.length === 1 ? "" : "s"} every ${edit.every} bar${edit.every === 1 ? "" : "s"} to ${edit.until === "end" ? "the end" : `bar ${edit.until}`}`,
         );
       }
     }

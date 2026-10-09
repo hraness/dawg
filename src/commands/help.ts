@@ -49,7 +49,8 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       { command: "unsolo", summary: "every track again" },
       {
         command: "track rm|move <name> [<position>]",
-        summary: "remove a track (^z undo) or move it in the list",
+        summary:
+          "remove a track and any vocoder src or autotune from naming it (^z undo), or move it",
       },
       { command: "clear", summary: "remove this track's notes" },
       {
@@ -93,6 +94,11 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         command:
           "guitar tune <name|notes> | capo | hand | ring | position | reset",
         summary: "guitar fretting · guitar tune dadgad · guitar capo 2",
+      },
+      {
+        command: "progression <chords> [each 4] [at 0] [bass]",
+        summary:
+          "sustained voice-led chords · progression i7 IV7 each 8 · progression Am7 D9 bass",
       },
       {
         command: "strum [chords] [pattern] [strokes D-DU-UDU] [speed 22ms]",
@@ -482,7 +488,7 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       },
       {
         command:
-          "/clip [id] trim offset 1 dur 4|end | rev | repeat every 2 to 32 | mute | rm",
+          "/clip [id] trim offset 1 dur 4|end | rev | repeat 2 [to 32] | mute | rm",
         summary: "trim, reverse, repeat, mute or remove a clip",
       },
       {
@@ -651,7 +657,34 @@ export function helpTopicLines(
   if (name === "arrange" || name === "arrangement" || name === "sections")
     return sectionLines([arrangeSection()], width);
   const group = HELP_SECTIONS.find((section) => section.group === name);
-  return group ? sectionLines([group], width) : undefined;
+  if (group) return sectionLines([group], width);
+  return commandTopic(name, width);
+}
+
+/**
+ * `/help <command>` (`/help vocoder`, `/help clip`): the command's rows
+ * from every group, then its full usage wrapped; undefined when no command
+ * has that name.
+ */
+function commandTopic(name: string, width: number): string[] | undefined {
+  const own = (command: string) =>
+    new RegExp(`^/?${name.replace(/[^a-z0-9-]/g, "")}(\\s|$)`, "i").test(
+      command,
+    );
+  const rows = HELP_SECTIONS.flatMap((section) =>
+    section.entries.filter((entry) => own(entry.command)),
+  );
+  const usage = USAGE[name];
+  if (rows.length === 0 && !usage) return undefined;
+  const wrap = Math.max(30, width - 2);
+  return [
+    `── ${name}`,
+    ...rows.flatMap((entry) => [
+      ...wrapWords(entry.command, wrap),
+      ...wrapWords(entry.summary, wrap - 2).map((line) => `  ${line}`),
+    ]),
+    ...(usage ? ["", ...wrapWords(usage, wrap)] : []),
+  ];
 }
 
 /** `/help arrange`: every arranging command with its full usage. */
@@ -790,7 +823,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   bars: "bars takes 1…256 · bars 8",
   extend: "extend <count> bars · extend 4 bars",
   instrument:
-    "instrument <name> · sine piano pluck bass saw square triangle wavetable kit · pianos: grand upright felt honkytonk prepared · electric: epiano suitcase dyno wurli clav funkclav · synth: sawtooth supersaw pulse white pink z_square…",
+    "instrument <name> · sine piano pluck bass saw square triangle wavetable kit · pianos: grand upright felt honkytonk prepared · electric: epiano suitcase dyno wurli clav funkclav · synth: sawtooth supersaw pulse white pink z_square · voices: vocal aah ooh choir chorale khoomei sygyt kargyraa vocoder…",
   volume: "volume takes 0…1 · volume 0.8",
   vol: "volume takes 0…1 · volume 0.8",
   pan: "pan takes -1…1 · pan -0.5",
@@ -810,7 +843,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   pattern: "pattern <voice> <beats...> | every <step> · pattern kick every 1",
   clear: "clear · clear <voice> · clear [<lane>] automation",
   track:
-    "/track <name> · /track drums · track rate <0.125..8>|<a>/<b>|off · track phase <beats> · track cycle <beats> · track phasing <beats> [over <beats>]",
+    "/track <name> · /track drums · /track rm <name> · /track move <name> <position> · track rate <0.125..8>|<a>/<b>|off · track phase <beats> · track cycle <beats> · track phasing <beats> [over <beats>]",
   tracks: "/tracks",
   sessions: "/sessions",
   resume: "/resume [<n>|<name>|<id>]",
@@ -850,6 +883,8 @@ export const USAGE: Readonly<Record<string, string>> = {
     "bowed [violin|viola|cello|contrabass|fiddle|erhu|kamancheh|violins|violas|cellos|contrabasses|pizz|trem] | <param> <value> | presets · bowed violin · bowed pressure 0.7",
   rig: "rig clean|crunch|punk|ragged|lead|metal|fuzz|octave|funk|wah|bachata|spring|bassdrive|reese|jangle|alt|shoegaze|glide|dreampop|swell|ebow | reset",
   guitar: `guitar tune ${GUITAR_TUNING_NAMES.join("|")} | E A D G B E · capo 0..12 · hand 3..6 · ring 0..1 · position · reset`,
+  progression:
+    "progression i7 IV7 i7 IV7 [each 8] [at 0] [bass] · numerals in the song key or symbols (Am7 D9) · block chords that hold for each span",
   strum:
     "strum G D Em C [folk|pop|punk|…] [strokes D-DU-UDU] [speed 22ms] [each 4] [at 0] · strum alone strums the track's chords",
   stomp:

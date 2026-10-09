@@ -12,7 +12,7 @@ import {
   insertBars,
   sectionScore,
 } from "../../core/sections.ts";
-import { equalPowerFade } from "./clips.ts";
+import { equalPowerFade, renderClips } from "./clips.ts";
 import { renderArrangedPcm } from "./arrange.ts";
 import {
   EMPTY_SAMPLE_BANK,
@@ -193,6 +193,28 @@ describe("audio clip rendering", () => {
     );
     const early = Math.round(0.1 * RATE);
     expect(Math.abs(rev[early]!)).toBeGreaterThan(Math.abs(fwd[early]!) * 3);
+  });
+
+  test("reverse is the exact mirror: out[i] = src[n - 1 - i]", () => {
+    const frames = 4_800;
+    const src: DecodedSample = {
+      ...dc(0.1),
+      frames,
+      mono: Float32Array.from({ length: frames }, (_, i) => Math.sin(i * 0.37)),
+    };
+    const score = song([clip({ fadeInTime: 0, fadeTime: 0, rev: true })]);
+    const out = new Float64Array(frames + 10);
+    renderClips(
+      out,
+      score.tracks[0]!,
+      { sampleRate: RATE, samples: out.length, samplesPerTick: RATE / 960 },
+      bank(src),
+      () => 1,
+    );
+    let err = 0;
+    for (let i = 0; i < frames; i += 1)
+      err = Math.max(err, Math.abs(out[i]! - src.mono[frames - 1 - i]!));
+    expect(err).toBeLessThan(1e-6);
   });
 
   test("renders are deterministic", () => {

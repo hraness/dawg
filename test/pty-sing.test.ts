@@ -107,6 +107,17 @@ test.skipIf(!supported)(
       await t.send("/sing\r");
       await t.until(() => t.vt.text().includes("sing · khoomei"), "show");
       expect(t.vt.text()).not.toContain("error");
+      // `/instrument <sing word>` and `instrument sing <preset>` both work.
+      await t.send("/instrument ooh\r");
+      await waitFor(
+        async () => (await lead(t.cwd))?.sing?.preset === "ooh",
+        "/instrument ooh",
+      );
+      await t.send("instrument sing chorale\r");
+      await waitFor(
+        async () => (await lead(t.cwd))?.sing?.preset === "chorale",
+        "instrument sing chorale",
+      );
     } finally {
       t.terminal.write("\u0003");
       await t.proc.exited;

@@ -91,6 +91,22 @@ describe("strum command", () => {
     ).toEqual(new Set([0, 1, 2, 3]));
   });
 
+  test("chords past the song's end grow it", () => {
+    const short = applyStrumCommand(
+      base(),
+      "gtr",
+      parseStrumCommand("strum Am7 D7 Am7 D7 each 8")!,
+      ids,
+    );
+    expect(short.ok).toBe(true);
+    const next = short.next!;
+    const end = Math.max(
+      ...next.notes.map((n) => n.startTick + n.durationTicks),
+    );
+    expect(next.bars * 4 * next.ticksPerBeat).toBeGreaterThanOrEqual(end);
+    expect(short.message).toContain("song now");
+  });
+
   test("strum alone strums the track's block chords", () => {
     let score = base();
     const block = applyStrumCommand(

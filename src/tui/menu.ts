@@ -1102,6 +1102,16 @@ function chordNodes(context: MenuContext): MenuNode[] {
       options: PROGRESSION_STYLES,
       command: (option) => `/chords style ${option}`,
     },
+    {
+      kind: "entry",
+      label: "write a progression",
+      value: "",
+      placeholder: "chords, e.g. i7 IV7 each 8",
+      help: "sustained, voice-led block chords on this track in the song key",
+      command: (text) =>
+        text.trim() ? `progression ${text.trim()}` : undefined,
+      example: "progression i7 IV7 each 8",
+    },
   ];
 }
 
@@ -1151,6 +1161,37 @@ function trackNodes(context: MenuContext): MenuNode[] {
     },
     volumeNode(track),
     panNode(track),
+    ...trackOrderNodes(context, track),
+  ];
+}
+
+/**
+ * Where the focused track sits in the list, and removing it: the menu rows
+ * for `/track move` and `/track rm`. A lone track has neither.
+ */
+function trackOrderNodes(context: MenuContext, track: Track): MenuNode[] {
+  const count = context.score.tracks.length;
+  if (count <= 1) return [];
+  const index = context.score.tracks.findIndex((t) => t.id === track.id);
+  return [
+    {
+      kind: "entry",
+      label: "position",
+      value: `${index + 1} of ${count}`,
+      placeholder: `1..${count}`,
+      command: (text) =>
+        /^\d{1,3}$/.test(text.trim())
+          ? `/track move ${track.id} ${text.trim()}`
+          : undefined,
+      example: `/track move ${track.id} 1`,
+      help: "move this track up or down the list",
+    },
+    {
+      kind: "action",
+      label: "remove track",
+      command: `/track rm ${track.id}`,
+      help: "drop this track, its notes and anything that named it · ^z undoes",
+    },
   ];
 }
 
@@ -3232,9 +3273,14 @@ export class EditMenu {
     if (!frame) return [];
     const all = frame.build(context);
     const needle = frame.query.toLowerCase();
-    return needle
-      ? all.filter((node) => nodeText(node).toLowerCase().includes(needle))
-      : all;
+    if (!needle) return all;
+    const direct = all.filter((node) =>
+      nodeText(node).toLowerCase().includes(needle),
+    );
+    // At the root a filter with no direct match looks two levels down for
+    // groups (`/voice`, `/autotune`, `/formant`) and offers them by path.
+    if (direct.length > 0 || this.stack.length !== 1) return direct;
+    return deepGroups(all, context, needle);
   }
 
   private selected(context: MenuContext): MenuNode | undefined {
@@ -3763,6 +3809,34 @@ function commandText(node: MenuNode): string | undefined {
     default:
       return undefined;
   }
+}
+
+/** Menu groups below `nodes` (two levels) whose label matches `needle`. */
+function deepGroups(
+  nodes: readonly MenuNode[],
+  context: MenuContext,
+  needle: string,
+): MenuNode[] {
+  const found: MenuNode[] = [];
+  const visit = (list: readonly MenuNode[], path: string, depth: number) => {
+    for (const node of list) {
+      if (node.kind !== "menu" || found.length >= 12) continue;
+      const label = path ? `${path} › ${node.label}` : node.label;
+      if (path && node.label.toLowerCase().includes(needle))
+        found.push({ ...node, label });
+      if (depth < 2) {
+        let children: MenuNode[] = [];
+        try {
+          children = node.build(context);
+        } catch {
+          continue;
+        }
+        visit(children, label, depth + 1);
+      }
+    }
+  };
+  visit(nodes, "", 0);
+  return found;
 }
 
 function nodeText(node: MenuNode): string {

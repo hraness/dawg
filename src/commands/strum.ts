@@ -41,6 +41,7 @@ function parsePitch(text: string): number | undefined {
 }
 import {
   normalizeGuitar,
+  SCORE_LIMITS,
   ScoreValidationError,
   updateTrack,
   type Note,
@@ -50,6 +51,7 @@ import {
 } from "../../core/score.ts";
 import { resolveTuning, snapToTuning } from "../../core/tuning.ts";
 import { applyScoreOperations } from "../../core/diff.ts";
+import { barTicks } from "../../core/sections.ts";
 
 export type GuitarCommand =
   | { type: "guitar-show" }
@@ -462,10 +464,20 @@ export function applyStrumCommand(
       return { ok: false, message: `strum · ${error.message}` };
     throw error;
   }
+  // Chords that run past the song's end grow it, so they are heard.
+  const end = next.notes.reduce(
+    (max, note) => Math.max(max, note.startTick + note.durationTicks),
+    0,
+  );
+  const perBar = barTicks(next);
+  const needed = Math.min(SCORE_LIMITS.maxBars, Math.ceil(end / perBar));
+  const grew = needed > next.bars;
+  if (grew)
+    next = applyScoreOperations(next, [{ type: "setBars", bars: needed }]);
   const strings = guitarStrings(track.guitar?.tune).length;
   return {
     ok: true,
-    message: `strum · ${plan.names.join(" ")} · ${command.options.strokes ?? "down"} · ${plan.noteCount} notes on ${strings} strings`,
+    message: `strum · ${plan.names.join(" ")} · ${command.options.strokes ?? "down"} · ${plan.noteCount} notes on ${strings} strings${grew ? ` · song now ${needed} bars` : ""}`,
     next,
     kind: "score.notes",
     payload: { trackId, strum: plan.names },

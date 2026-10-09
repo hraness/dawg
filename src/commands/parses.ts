@@ -10,6 +10,7 @@ import { parseSectionCommand } from "./arrange.ts";
 import { parseAutotuneCommand } from "./autotune.ts";
 import { parseClipCommand, parseLyricsCommand } from "./clips.ts";
 import { parsePatternCommand } from "./drums.ts";
+import { parseProgressionCommand } from "./progression.ts";
 import { parseEditCommand } from "./edit.ts";
 import { parseExpressionCommand } from "./expression.ts";
 import { parseFitCommand } from "./fit.ts";
@@ -65,6 +66,7 @@ export function commandParses(text: string, score: TrackScore): boolean {
     parseModalCommand,
     parseGuitarCommand,
     parseStrumCommand,
+    parseProgressionCommand,
     parseWindCommand,
     parseAutotuneCommand,
     parseSingCommand,

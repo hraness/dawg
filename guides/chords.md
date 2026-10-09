@@ -23,8 +23,9 @@ order: 4
 - `/chords auto` · `/chords manual` · `/chords off`
 - `/chords voicing 2` · `/chords spread wide` · `/chords bass chords`
 - `/chords perform arp-up` · `/chords sevenths on` · `/chords`
+- `progression i7 IV7 each 8` · `progression Am7 D9 bass`
 - `strum G D Em C folk` · `guitar tune dadgad` · `guitar capo 2`
 
 ## Menu
 
-- Ctrl-K › Chords: key, voicing, bass, perform, strokes, speed, style
+- Ctrl-K › Chords: key, voicing, bass, perform, style, progression

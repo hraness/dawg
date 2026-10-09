@@ -36,6 +36,7 @@ import {
   type VocoderCurves,
 } from "./control.ts";
 import { talkboxVocode } from "./talkbox.ts";
+import { quietHold } from "../dsp/follow.ts";
 
 export { autoGateDb } from "../dsp/follow.ts";
 
@@ -87,6 +88,7 @@ export function vocoderControl(
   n: number,
   context: LaneContext,
   gateDb: number,
+  mod?: Float64Array,
 ): VocoderControl {
   const settings = resolveVocoder(track.vocoder);
   const origin = originOf(context);
@@ -109,7 +111,12 @@ export function vocoderControl(
       for (let i = 0; i < n; i += 1) hold[i] = curve[i]! >= 0.5 ? 1 : 0;
     } else curves[param] = curve;
   }
-  if (!hold && settings.freeze) hold = new Uint8Array(n).fill(1);
+  // A static freeze holds the last sung vowel through every rest (a hold
+  // from sample 0 would freeze the silence before the voice comes in).
+  if (!hold && settings.freeze)
+    hold = mod
+      ? quietHold(mod, n, context.sampleRate, gateDb)
+      : new Uint8Array(n).fill(1);
   return {
     settings,
     sampleRate: context.sampleRate,
@@ -134,7 +141,6 @@ export function applyVocoder(
   gateDb: number,
 ): void {
   const n = dry.length;
-  const control = vocoderControl(track, n, context, gateDb);
   const cars = dryR ? [dry, dryR] : [dry];
   const padded =
     mod.length >= n
@@ -144,6 +150,7 @@ export function applyVocoder(
           out.set(mod);
           return out;
         })();
+  const control = vocoderControl(track, n, context, gateDb, padded);
   const outs =
     control.settings.mode === "talkbox"
       ? talkboxVocode(padded, cars, control)

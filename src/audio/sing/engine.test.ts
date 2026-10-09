@@ -355,6 +355,37 @@ describe("throat mode", () => {
     expect(picked.size).toBeGreaterThanOrEqual(3);
   });
 
+  test("a note a few cents under the band edge sings the edge harmonic", () => {
+    // A5 is 2 cents under 6 x D3 in 12-EDO: harmonic 6, not 12.
+    expect(overtoneFor(hzOf(81), hzOf(50), 6, 12)).toBe(6);
+    expect(overtoneFor(hzOf(81), hzOf(50), 6, 10)).toBe(6);
+    // a note a whole semitone under the band still folds up an octave
+    expect(overtoneFor(hzOf(80), hzOf(50), 6, 12)).toBe(11);
+  });
+
+  test("the khoomei drone stays audible under the whistle", () => {
+    const sr = 22_050;
+    const droneHz = hzOf(50);
+    const [y] = render(
+      score(
+        { preset: "khoomei", drone: 50, vibmod: 0, jitter: 0, shimmer: 0 },
+        [{ pitch: 81, start: 0.5, length: 2 }],
+      ),
+      sr,
+    );
+    const lv = harmonicLevels(
+      y,
+      sr,
+      Math.floor(1.5 * sr),
+      droneHz,
+      droneHz * 8.5,
+      8192,
+    );
+    const whistle = lv[5]!;
+    expect(whistle - lv[0]!).toBeLessThan(30);
+    expect(whistle - Math.max(lv[4]!, lv[6]!)).toBeGreaterThanOrEqual(20);
+  });
+
   test("sygyt G3 whistles between 1 and 2.9 kHz", () => {
     const droneHz = hzOf(55);
     for (const pitch of [74, 79, 81]) {

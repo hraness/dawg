@@ -26,6 +26,7 @@ import { pitchCurve } from "../audio/analysis.ts";
 import {
   centsOfHz,
   isPitchVoice,
+  frameLevels,
   pitchNotes,
   PITCH_VOICE_NAMES,
   type PitchCurve,
@@ -131,8 +132,21 @@ function median(values: number[]): number {
 export function keyOfNotes(notes: readonly PitchNote[]): string | null {
   if (notes.length < 3) return null;
   const histogram = new Array<number>(12).fill(0);
-  for (const note of notes)
+  let total = 0;
+  for (const note of notes) {
     histogram[((note.midi % 12) + 12) % 12]! += note.end - note.start;
+    total += note.end - note.start;
+  }
+  // A short line's first and last notes are strong tonic cues: they settle
+  // relatives (G major against b or e minor) the profile alone leaves close.
+  const cue = (note: PitchNote) =>
+    (histogram[((note.midi % 12) + 12) % 12]! += total * 0.15);
+  // Short blips at a phrase edge (a scoop, a breath) are not cues.
+  const held = notes.filter((note) => note.end - note.start >= 0.2);
+  if (held.length > 0) {
+    cue(held[0]!);
+    cue(held[held.length - 1]!);
+  }
   return estimateKey(histogram);
 }
 
@@ -171,9 +185,9 @@ export async function analyzeTrackPitch(
   const length = sample.frames / sample.sampleRate;
   const from = Math.min(length, target.clip?.offset ?? 0);
   const to = Math.min(length, from + (target.clip?.dur ?? length));
-  const notes = pitchNotes(curve).filter(
-    (note) => note.end > from && note.start < to,
-  );
+  const notes = pitchNotes(curve, {
+    level: frameLevels(sample.mono, sample.sampleRate, curve),
+  }).filter((note) => note.end > from && note.start < to);
   const hz: number[] = [];
   let frames = 0;
   for (let f = 0; f < curve.f0.length; f += 1) {

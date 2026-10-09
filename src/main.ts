@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { isGuideInstrument, vocalChainPatch } from "../core/clips.ts";
+import { isSingWord } from "../core/sing.ts";
 import { commandParses } from "./commands/parses.ts";
 import {
   isUnknownInstrument,
@@ -72,6 +73,10 @@ import {
   rigTrackFields,
   rigWordPatch,
 } from "./commands/rig.ts";
+import {
+  applyProgressionCommand,
+  parseProgressionCommand,
+} from "./commands/progression.ts";
 import {
   applyGuitarCommand,
   applyStrumCommand,
@@ -1918,7 +1923,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
     );
     if (!lines)
       return fail(
-        `no help topic ${topic} · /help all · ${HELP_TOPICS.join(" ")}`,
+        `no help topic ${topic} · /help all · ${HELP_TOPICS.join(" ")} · or a command (/help vocoder)`,
       );
     tui.openText(topic ? `help · ${topic.toLowerCase()}` : "help", lines);
     return ok(
@@ -2066,49 +2071,75 @@ async function submit(prompt: string): Promise<string | Receipt> {
     if (requestedTrack !== grainTrack[1]!.toLowerCase()) return focused;
     return submit(grainTrack[2]!);
   }
-  // `/track piano b`: a name with spaces focuses the track of that name, or
-  // creates `piano-b` named "piano b".
-  // `/track rm <name>` and `/track move <name> <position>`: the human surface
-  // for the removeTrack and moveTrack operations (undo brings a track back).
+  // `/track rm <name>` (aliases remove, delete) and `/track move <name>
+  // <position>`: the human surface for the removeTrack and moveTrack
+  // operations. Removing a track also drops any vocoder src or autotune from
+  // that named it; ^z brings everything back.
   const trackEdit = command.match(
-    /^\/?track\s+(rm|remove|move)\s+([a-z0-9._-]{1,64})(?:\s+(\d{1,3}))?$/i,
+    /^\/?track\s+(rm|remove|delete|move)\s+(.{1,64}?)\s*$/i,
   );
   if (trackEdit) {
-    const verb = trackEdit[1]!.toLowerCase();
-    const wanted = trackEdit[2]!.toLowerCase();
+    const verb = trackEdit[1]!.toLowerCase() === "move" ? "move" : "rm";
+    let rest = trackEdit[2]!.trim();
+    let position: number | undefined;
+    if (verb === "move") {
+      const tail = rest.match(/^(.+?)\s+(\d{1,3})$/);
+      if (!tail)
+        return fail(`usage · /track move <name> <1..${score.tracks.length}>`);
+      rest = tail[1]!;
+      position = Number(tail[2]);
+    }
+    const wanted = rest
+      .replace(/^["']|["']$/g, "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .toLowerCase();
     const found = score.tracks.find(
       (track) =>
         track.id.toLowerCase() === wanted ||
+        track.id.toLowerCase() === wanted.replace(/ /g, "-") ||
         (track.name ?? "").toLowerCase() === wanted,
     );
-    if (!found) return fail(`no track ${trackEdit[2]} · /tracks lists them`);
+    if (!found) return fail(`no track ${rest} · /tracks lists them`);
     if (verb === "move") {
-      const position = Number(trackEdit[3]);
-      if (!trackEdit[3] || position < 1 || position > score.tracks.length)
+      if (position! < 1 || position! > score.tracks.length)
         return fail(`usage · /track move <name> <1..${score.tracks.length}>`);
       const next = applyScoreOperation(score, {
         type: "moveTrack",
         trackId: found.id,
-        index: position - 1,
+        index: position! - 1,
       });
       await commitScore(next, "track.move", { trackId: found.id });
       await projectSync?.flushScore();
       return ok(`moved ${found.id} to position ${position}`);
     }
-    if (trackEdit[3]) return fail("usage · /track rm <name>");
-    if (score.tracks.length <= 1) return fail("the last track stays");
+    if (score.tracks.length <= 1)
+      return fail("the last track stays · /clear empties it");
     const next = applyScoreOperation(score, {
       type: "removeTrack",
       trackId: found.id,
     });
+    const dropped = score.tracks
+      .filter((track) => track.id !== found.id)
+      .filter((track) => {
+        const after = next.tracks.find((t) => t.id === track.id);
+        return (
+          (track.vocoder?.src !== undefined &&
+            after?.vocoder?.src === undefined) ||
+          (track.autotune?.from !== undefined &&
+            after?.autotune?.from === undefined)
+        );
+      })
+      .map((track) => track.id);
     await commitScore(next, "track.remove", { trackId: found.id });
     await projectSync?.flushScore();
-    if (found.id === requestedTrack) {
-      const fallback = next.tracks[0]!.id;
-      await focusTrack(fallback);
-    }
-    return ok(`removed ${found.id} · ^z undo`);
+    if (found.id === requestedTrack) await focusTrack(next.tracks[0]!.id);
+    return ok(
+      `removed ${found.id}${dropped.length ? ` · dropped references on ${dropped.join(", ")}` : ""} · ^z undoes`,
+    );
   }
+  // `/track piano b`: a name with spaces focuses the track of that name, or
+  // creates `piano-b` named "piano b".
   const namedTrack = command.match(/^\/track\s+([a-z0-9._ -]{1,64})$/i);
   if (namedTrack) {
     const name = namedTrack[1]!.trim().replace(/\s+/g, " ");
@@ -2248,6 +2279,19 @@ async function submit(prompt: string): Promise<string | Receipt> {
     if (guitar.type !== "guitar-show" && guitar.type !== "guitar-hint")
       await materializeDraft();
     const result = applyGuitarCommand(score, requestedTrack, guitar);
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
+  const progression = parseProgressionCommand(command);
+  if (progression) {
+    if (progression.type === "progression") await materializeDraft();
+    const result = applyProgressionCommand(
+      score,
+      requestedTrack,
+      progression,
+      () => randomUUID().slice(0, 12),
+    );
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
@@ -2544,6 +2588,13 @@ async function submit(prompt: string): Promise<string | Receipt> {
   }
   // `/model` belongs to its own handler above; every other slash word that
   // reached here is unknown or misused, and never a question for the agent.
+  // `/instrument aah` is `instrument aah`; `instrument sing choir` is
+  // `instrument choir`.
+  const singWord = command.match(/^\/?instrument\s+sing\s+([a-z]+)$/i);
+  if (singWord && isSingWord(singWord[1]!.toLowerCase()))
+    return submit(`instrument ${singWord[1]!.toLowerCase()}`);
+  if (/^\/instrument\s/i.test(command) && parsePrompt(command.slice(1)))
+    return submit(command.slice(1));
   if (command.startsWith("/") && !/^\/model\b/i.test(command)) {
     const hint = usageHint(command);
     return fail(
@@ -2632,12 +2683,10 @@ async function submit(prompt: string): Promise<string | Receipt> {
         }
       : parsed.patch;
     // `instrument vocal` (0.7): the vocal chain fills unset effects.
-    const patch = isGuideInstrument(parsed.patch.instrument)
-      ? {
-          ...vocalChainPatch(score.tracks.find((t) => t.id === requestedTrack)),
-          ...rigged,
-        }
-      : rigged;
+    const chain = isGuideInstrument(parsed.patch.instrument)
+      ? vocalChainPatch(score.tracks.find((t) => t.id === requestedTrack))
+      : {};
+    const patch = { ...chain, ...rigged };
     const next = applyScoreOperation(score, {
       type: "updateTrack",
       trackId: requestedTrack,
@@ -2658,6 +2707,13 @@ async function submit(prompt: string): Promise<string | Receipt> {
         ? plainSineAdvice(word)
         : undefined;
     if (sine) return `track · ${requestedTrack} · ${sine}`;
+    const added = [
+      chain.filter ? "hpf 90 Hz" : "",
+      chain.fx?.compressor ? "compressor 3:1" : "",
+      chain.reverb ? "plate 0.14" : "",
+    ].filter(Boolean);
+    if (added.length)
+      return `track · ${requestedTrack} · vocal · added ${added.join(", ")} · fx … off to remove`;
     return `track · ${requestedTrack}`;
   }
   if (parsed.type === "automation") {

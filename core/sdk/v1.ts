@@ -2264,7 +2264,7 @@ function resolveVocoderSrc(
     : tracks.filter((track) => vocoderSlug(track.name) === vocoderSlug(src));
   if (matches.length === 0)
     throw new DawgSdkError(
-      `track ${self}: vocoder src "${src.slice(0, 64)}" names no track`,
+      `track ${self}: vocoder src "${src.slice(0, 64)}" names no track; delete src (the carrier plays alone) or point it at a track in this song`,
     );
   if (matches.length > 1)
     throw new DawgSdkError(
