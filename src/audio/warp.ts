@@ -84,3 +84,64 @@ export function warpedSpan(
     length: Math.max(1, Math.floor(to - from)),
   };
 }
+
+/**
+ * A fitted sample window's position map (0.6 `bpm`/`len`/`fit`): output
+ * frames after the note start to window frames and back, both at the
+ * render rate. Through a tempo map the window follows ramps and steps;
+ * at constant tempo both directions are linear.
+ */
+export type FitMap = Readonly<{
+  /** Output frames the whole window takes. */
+  length: number;
+  /** Window frame sounding `e` output frames after the start. */
+  at(e: number): number;
+  /** Output frame (after the start) where window frame `p` sounds. */
+  outAt(p: number): number;
+}>;
+
+/**
+ * The map for a window of `frames` render-rate frames that advances
+ * `perBeat` window frames per song beat from `startTick`. Without a warp the
+ * song runs at `tempoBpm` throughout.
+ */
+export function beatFitMap(
+  warp: SampleWarp | undefined,
+  timing: Readonly<{
+    tempoBpm: number;
+    ticksPerBeat: number;
+    sampleRate: number;
+  }>,
+  startTick: number,
+  frames: number,
+  perBeat: number,
+): FitMap {
+  const { tempoBpm, ticksPerBeat, sampleRate } = timing;
+  if (!warp) {
+    const ratio = perBeat / ((sampleRate * 60) / tempoBpm);
+    return Object.freeze({
+      length: frames / ratio,
+      at: (e: number) => e * ratio,
+      outAt: (p: number) => p / ratio,
+    });
+  }
+  const origin = warp.sample(startTick);
+  const outAt = (p: number) =>
+    warp.sample(startTick + (p / perBeat) * ticksPerBeat) - origin;
+  return Object.freeze({
+    length: outAt(frames),
+    at: (e: number) =>
+      ((warp.tick(origin + e) - startTick) / ticksPerBeat) * perBeat,
+    outAt,
+  });
+}
+
+/** `fit`: the window fills `held` output frames, linearly. */
+export function spanFitMap(frames: number, held: number): FitMap {
+  const ratio = frames / Math.max(1, held);
+  return Object.freeze({
+    length: held,
+    at: (e: number) => e * ratio,
+    outAt: (p: number) => p / ratio,
+  });
+}

@@ -38,7 +38,15 @@ import {
   performedNotes,
   secondsAtTick,
 } from "../../core/tempo.ts";
-import { sampleWarpFor, warpedSpan, type SampleWarp } from "./warp.ts";
+import {
+  beatFitMap,
+  sampleWarpFor,
+  spanFitMap,
+  warpedSpan,
+  type FitMap,
+  type SampleWarp,
+} from "./warp.ts";
+import { fittedBuffer, windowAt } from "./fit.ts";
 import {
   performanceTimingFor,
   tunedTiming,
@@ -221,22 +229,32 @@ export function planSamplerVoices(
       ? { ...resolved, ratio: resolved.ratio * 2 ** (note.cents / 1200) }
       : resolved;
     const ref: SampleRef | undefined = sampler.voices[target.voice];
-    const sample = bank.voices.get(sampleKey(track.id, target.voice));
-    if (!ref || !sample) continue;
-    const speed = ref.speed ?? 1;
-    const regionStart = (ref.begin ?? 0) * sample.frames;
-    const regionEnd = (ref.end ?? 1) * sample.frames;
+    const decoded = bank.voices.get(sampleKey(track.id, target.voice));
+    if (!ref || !decoded) continue;
     const held = noteLengthFrames(note, timing);
+    // 0.6 fit (`bpm`, `len`, or `fit` with fitmode beats|tones): the window
+    // is fitted once into a render-rate buffer that plays forward at step 1
+    // (times the keyed ratio). Absent fields keep the 0.5 path untouched.
+    const fitted = isFitted(ref)
+      ? fitVoice(ref, decoded, note.startTick, held, timing)
+      : undefined;
+    if (fitted === null) continue;
+    const sample = fitted?.sample ?? decoded;
+    const speed = fitted ? 1 : (ref.speed ?? 1);
+    const regionStart = fitted ? 0 : (ref.begin ?? 0) * sample.frames;
+    const regionEnd = fitted ? sample.frames : (ref.end ?? 1) * sample.frames;
     // `fit`, `unit: "c"` and `unit: "s"` give the window a duration; the
     // keyed ratio still repitches on top.
     const unit = ref.unit ?? "r";
-    const seconds = ref.fit
-      ? held / sampleRate
-      : unit === "c"
-        ? cycleSeconds(timing.score, note.startTick) / Math.abs(speed)
-        : unit === "s"
-          ? Math.abs(speed)
-          : undefined;
+    const seconds = fitted
+      ? undefined
+      : ref.fit
+        ? held / sampleRate
+        : unit === "c"
+          ? cycleSeconds(timing.score, note.startTick) / Math.abs(speed)
+          : unit === "s"
+            ? Math.abs(speed)
+            : undefined;
     const step =
       seconds === undefined
         ? ((Math.abs(speed) * sample.sampleRate) / sampleRate) * target.ratio
@@ -276,10 +294,16 @@ export function planSamplerVoices(
         fade = Math.max(1, Math.round(END_FADE_SECONDS * sampleRate));
       }
     }
-    const loopFrom =
-      ref.loopBegin === undefined ? regionStart : ref.loopBegin * sample.frames;
-    const loopTo =
-      ref.loopEnd === undefined ? regionEnd : ref.loopEnd * sample.frames;
+    const loopFrom = fitted
+      ? fitted.loopFrom
+      : ref.loopBegin === undefined
+        ? regionStart
+        : ref.loopBegin * sample.frames;
+    const loopTo = fitted
+      ? fitted.loopTo
+      : ref.loopEnd === undefined
+        ? regionEnd
+        : ref.loopEnd * sample.frames;
     const start = noteStartFrame(note, timing);
     const performance = (note as PerformedNote).performance;
     const voice: SamplerVoice = {
@@ -316,6 +340,108 @@ export function planSamplerVoices(
     voices.push(voice);
   }
   return voices;
+}
+
+/** A SampleRef that fits its window to the song (0.6 `bpm`, `len`, fitmode). */
+export function isFitted(ref: SampleRef): boolean {
+  return (
+    ref.bpm !== undefined ||
+    ref.len !== undefined ||
+    (ref.fit === true && (ref.fitmode === "beats" || ref.fitmode === "tones"))
+  );
+}
+
+type FittedVoice = Readonly<{
+  sample: DecodedSample;
+  loopFrom: number;
+  loopTo: number;
+}>;
+
+/**
+ * The fitted window of one note. Precedence `fit` > `bpm` > `len`:
+ * - `fit`: the window fills the note (Strudel `fit`, with an algorithm);
+ * - `bpm`: the window advances `|speed|` source beats per song beat,
+ *   following the tempo map (ramps, steps, fermatas);
+ * - `len`: the window spans `len` song beats through the tempo map.
+ * A negative `speed` reverses the window; `unit` is ignored once fitted.
+ * Returns null while a live fit is still computing (the voice stays
+ * silent rather than playing at the wrong pitch).
+ */
+function fitVoice(
+  ref: SampleRef,
+  decoded: DecodedSample,
+  startTick: number,
+  held: number,
+  timing: SamplerTiming,
+): FittedVoice | null {
+  const { sampleRate, score, warp } = timing;
+  const speed = ref.speed ?? 1;
+  const reverse = speed < 0;
+  const from = (ref.begin ?? 0) * decoded.frames;
+  const to = (ref.end ?? 1) * decoded.frames;
+  const rate = decoded.sampleRate / sampleRate;
+  const window = windowAt(decoded.mono, from, to, rate, reverse);
+  const frames = window.length;
+  let map: FitMap;
+  if (ref.fit === true) map = spanFitMap(frames, held);
+  else {
+    const perBeat =
+      ref.bpm !== undefined
+        ? ((sampleRate * 60) / ref.bpm) * Math.abs(speed)
+        : frames / ref.len!;
+    map = beatFitMap(
+      warp,
+      {
+        tempoBpm: score.tempoBpm,
+        ticksPerBeat: score.ticksPerBeat,
+        sampleRate,
+      },
+      startTick,
+      frames,
+      perBeat,
+    );
+  }
+  const algorithm = ref.fitmode ?? "repitch";
+  const windowKey = `${decoded.sha256}:${decoded.sampleRate}:${from}:${to}:${sampleRate}:${reverse ? 1 : 0}`;
+  const key = `${windowKey}:${algorithm}:${mapPrint(map, frames)}`;
+  const buffer = fittedBuffer(
+    key,
+    window,
+    sampleRate,
+    map,
+    algorithm,
+    windowKey,
+  );
+  if (!buffer) return null;
+  const sample: DecodedSample = Object.freeze({
+    sha256: decoded.sha256,
+    sampleRate,
+    channels: 1,
+    frames: buffer.length,
+    mono: buffer,
+  });
+  // Loop points move with the map (in window frames, then out frames).
+  const loopAt = (fraction: number | undefined, fallback: number) => {
+    if (fraction === undefined) return fallback;
+    const source = fraction * decoded.frames;
+    const inWindow = (reverse ? to - source : source - from) / rate;
+    return Math.max(0, Math.min(buffer.length, map.outAt(inWindow)));
+  };
+  const a = loopAt(ref.loopBegin, 0);
+  const b = loopAt(ref.loopEnd, buffer.length);
+  return Object.freeze({
+    sample,
+    loopFrom: Math.min(a, b),
+    loopTo: Math.max(a, b),
+  });
+}
+
+/** Fingerprint of a position map: its length and 64 exact samples. */
+function mapPrint(map: FitMap, frames: number): string {
+  const parts = [map.length.toString()];
+  for (let i = 1; i <= 64; i += 1)
+    parts.push(map.outAt((frames * i) / 64).toString());
+  return parts.join(",");
 }
 
 /** Linear-interpolated read, clamped to the sample. */

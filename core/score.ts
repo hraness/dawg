@@ -99,6 +99,11 @@ export const SCORE_LIMITS = Object.freeze({
   maxSampleAccelerate: 8,
   /** Sampler `squiz` ratio bound. */
   maxSampleSquiz: 32,
+  /** Sampler `bpm` (source tempo) bounds. */
+  minSampleBpm: 20,
+  maxSampleBpm: 400,
+  /** Sampler `len` (window length in beats) bound. */
+  maxSampleLenBeats: 1024,
   /** Per sample file, enforced by the decoder and the import tool. */
   maxSampleFileBytes: 50 * 1024 * 1024,
   maxSampleSeconds: 600,
@@ -449,7 +454,34 @@ export type SampleRef = Readonly<{
    * (1 is off, up to 32).
    */
   squiz?: number;
+  /**
+   * Optional: the sample's own tempo (20..400). The window then follows
+   * the song's tempo map (ramps included): a 174 BPM break in a 128 BPM
+   * song plays 128/174 as fast. `fitmode` picks how.
+   */
+  bpm?: number;
+  /**
+   * Optional: how a fitted sample changes its time. `repitch` (default)
+   * changes speed and pitch together like tape; `beats` cuts the window at
+   * its onsets and places each slice on its new time, unstretched (drums,
+   * speech); `tones` time-stretches with a phase vocoder and keeps the
+   * pitch (pads, loops, vocals). Needs `bpm`, `len` or `fit`.
+   */
+  fitmode?: SampleFitMode;
+  /**
+   * Optional: the window's length in beats (0 < len ≤ 1024), followed
+   * through the song's tempo map. `fit` wins over `bpm`, `bpm` over `len`.
+   */
+  len?: number;
 }>;
+
+/** Sampler `fitmode`: how a fitted window changes its time. */
+export type SampleFitMode = "repitch" | "beats" | "tones";
+export const SAMPLE_FIT_MODES: readonly SampleFitMode[] = Object.freeze([
+  "repitch",
+  "beats",
+  "tones",
+]);
 
 /** Sample `unit`: rate, cycles (bars) or seconds. */
 export type SampleUnit = "r" | "c" | "s";
@@ -2000,6 +2032,9 @@ export function normalizeSampleRef(input: unknown, name: string): SampleRef {
     fit?: boolean;
     accelerate?: number;
     squiz?: number;
+    bpm?: number;
+    fitmode?: SampleFitMode;
+    len?: number;
   } = { src };
   if (input.sha256 !== undefined) {
     if (typeof input.sha256 !== "string" || !SHA256_HEX.test(input.sha256))
@@ -2162,6 +2197,46 @@ export function normalizeSampleRef(input: unknown, name: string): SampleRef {
       `${label} squiz`,
       1,
       SCORE_LIMITS.maxSampleSquiz,
+    );
+  if (input.bpm !== undefined)
+    ref.bpm = boundedNumber(
+      input.bpm,
+      `${label} bpm`,
+      SCORE_LIMITS.minSampleBpm,
+      SCORE_LIMITS.maxSampleBpm,
+    );
+  if (input.fitmode !== undefined) {
+    if (!SAMPLE_FIT_MODES.includes(input.fitmode as SampleFitMode))
+      throw new ScoreValidationError(
+        `${label} fitmode must be "repitch", "beats" or "tones"`,
+        "invalid-track",
+      );
+    ref.fitmode = input.fitmode as SampleFitMode;
+  }
+  if (input.len !== undefined) {
+    const len = boundedNumber(
+      input.len,
+      `${label} len`,
+      0,
+      SCORE_LIMITS.maxSampleLenBeats,
+    );
+    if (len === 0)
+      throw new ScoreValidationError(
+        `${label} len must be greater than 0`,
+        "invalid-track",
+      );
+    ref.len = len;
+  }
+  if (
+    ref.fitmode !== undefined &&
+    ref.fitmode !== "repitch" &&
+    ref.bpm === undefined &&
+    ref.len === undefined &&
+    ref.fit !== true
+  )
+    throw new ScoreValidationError(
+      `${label} fitmode ${ref.fitmode} needs bpm, len or fit`,
+      "invalid-track",
     );
   return Object.freeze(ref);
 }
