@@ -640,7 +640,7 @@ automate keys-hardness points 0:0.2 8:0.8   automatable parameters have lanes
 
 Presets: `grand` (concert grand, bright and long, three-string unisons), `ballad` (darker grand, softer hammer, more aftersound, plus a room reverb), `upright` (boxy, more inharmonic, shorter), `felt` (felt strip down, muted and intimate, audible mechanics, a small room), `lofi` (felt piano with tape wow, a 3.5 kHz low-pass filter and a 10-bit crush), `honkytonk` (16-cent unisons, bright saloon upright), `prepared` (bolts, rubber and screws on 60% of keys, seeded per key, so the same key always carries the same preparation). A preset is stored as `keys.preset`; its values are read at render, so overrides stay small. The effects a preset brings (`ballad`, `felt`, `lofi`) are ordinary track fields (`reverb`, `filter`, `fx.crush`) and stay editable; switching presets or `keys reset` removes them while they still hold the preset's values, and the same preset word in `song.ts` (`instrument: "lofi"`) brings the same effects. A bare `lofi` stays the drum kit and crush preset word; type `piano lofi`.
 
-The menu has the pianos under **Sound > browse sounds > Keys**, and for a piano track a **Sound > Keys** page and the simple rows (preset, hardness, decay, release, felt) in **Sound > Parameters**. The agent's `set_keys` tool takes the same presets and names; `set_instrument` and `create_track` take the piano words. In the SDK: `track({ instrument: "grand", keys: { hardness: 0.3 } })`.
+The menu has the pianos under **Sound > browse sounds > Keys**, and for a piano track a **Sound > Keys** page and the simple rows (preset, hardness, decay, release, felt) on the **Sound** page. The agent's `set_keys` tool takes the same presets and names; `set_instrument` and `create_track` take the piano words. In the SDK: `track({ instrument: "grand", keys: { hardness: 0.3 } })`.
 
 | Param        | Range                                 | Default            | Lane            | What it does                                                         |
 | ------------ | ------------------------------------- | ------------------ | --------------- | -------------------------------------------------------------------- |
@@ -711,7 +711,7 @@ automate keys-vibe points 0:0 8:0.8      automatable parameters have lanes
 | **pickup** | clav          | neck bridge both out | both    |             | pickup switch                         |
 | **mute**   | clav          | 0..1                 | 0       |             | mute slider: damps the upper partials |
 
-`hardness`, `touch`, `decay`, `release`, `width`, `vib` and `vibmod` apply to the electric families too. The menu has them under **Sound › browse sounds › Keys › Electric**, with their rows in **Sound › Parameters**; the agent's `set_instrument` and `set_keys` take the same words; the SDK takes `track({ instrument: "epiano", keys: { vibe: 0.6 } })` or `track({ instrument: "suitcase" })`. The models are dawg's own, from public descriptions of the instruments (tine and tone-bar cantilever, electromagnetic and electrostatic pickups, the Clavinet's pickup switching), with no sampled audio.
+`hardness`, `touch`, `decay`, `release`, `width`, `vib` and `vibmod` apply to the electric families too. The menu has them under **Sound › browse sounds › Keys › Electric**, with their rows on the **Sound** page; the agent's `set_instrument` and `set_keys` take the same words; the SDK takes `track({ instrument: "epiano", keys: { vibe: 0.6 } })` or `track({ instrument: "suitcase" })`. The models are dawg's own, from public descriptions of the instruments (tine and tone-bar cantilever, electromagnetic and electrostatic pickups, the Clavinet's pickup switching), with no sampled audio.
 
 ### Organs (tonewheel, combo, pipe)
 
@@ -741,7 +741,7 @@ automate keys-rotary points 0:1 4:2      spin the rotor up at beat 4
 
 Presets: `tonewheel` (888000000, scanner C3, slow rotary), `gospel` (888800008, 3rd percussion, fast rotary, driven), `jazzorgan` (888000000 with soft 3rd percussion), `combo` (reed registers 08800 with vibrato), `vox` (bright 08880), `pipe` (plenum in a church reverb), `flutes` (gedackt 8' and flute 4' with tremulant), `cornet`, `reeds`, `celeste` (gamba and celeste beating).
 
-The menu has them under **Sound > browse sounds > Keys > Organs**; for an organ track **Sound > Parameters** shows the preset, a **Drawbars** (tonewheel), **Registers** (combo) or **Stops** (pipe) sub-menu with one row per footage or stop, and the family's rows. The agent's `set_keys` takes `drawbars`, `registers`, `stops` and `rotary` next to `params`. In the SDK: `track({ instrument: "tonewheel", keys: { drawbars: "888800008", rotary: "fast" } })` or `keys: { stops: ["principal8", "octave4"] }`.
+The menu has them under **Sound > browse sounds > Keys > Organs**; for an organ track the **Sound** page shows the preset, a **Drawbars** (tonewheel), **Registers** (combo) or **Stops** (pipe) sub-menu with one row per footage or stop, and the family's rows. The agent's `set_keys` takes `drawbars`, `registers`, `stops` and `rotary` next to `params`. In the SDK: `track({ instrument: "tonewheel", keys: { drawbars: "888800008", rotary: "fast" } })` or `keys: { stops: ["principal8", "octave4"] }`.
 
 | Param         | Family          | Range                       | Default                               | Lane          | What it does                                   |
 | ------------- | --------------- | --------------------------- | ------------------------------------- | ------------- | ---------------------------------------------- |
@@ -1014,7 +1014,7 @@ instrument: stringed("sitar", { buzz: 0.8, sym: 0.5 }),
 | `string <param> off` · `string reset`      | back to the preset's value · drop every override                  |
 | `string off`                               | back to the legacy `pluck` voice                                  |
 
-The menu has the presets under Sound › browse sounds › Strings and every string parameter in Sound › Parameters on a string track (left/right adjust, `x` resets, space auditions with staged A/B). The agent's `set_string {trackId?, preset?, params?, reset?, off?}` runs the same command. SDK 1.21.0: `stringed(preset, params)` as a track's `instrument`, or `track({ instrument: "string", string: { preset: "koto", ring: 4 } })`; the printer writes `stringed(...)` back.
+The menu has the presets under Sound › browse sounds › Strings and every string parameter on the Sound page of a string track (left/right adjust, `x` resets, space auditions with staged A/B). The agent's `set_string {trackId?, preset?, params?, reset?, off?}` runs the same command. SDK 1.21.0: `stringed(preset, params)` as a track's `instrument`, or `track({ instrument: "string", string: { preset: "koto", ring: 4 } })`; the printer writes `stringed(...)` back.
 
 ### Bowed strings
 
@@ -1050,7 +1050,7 @@ Measured: tuning within 1 cent to C7 at 22.05 and 48 kHz; 0 of 1296 pressure/spe
 | `bowed` · `bowed <preset>` · `bowed presets` | the cello · a bowed preset · the bowed presets          |
 | `bowed <param> <value> …`                    | the same as `string <param> <value> …` (`bowed sord 1`) |
 
-The menu lists them under **Sound › browse sounds › Strings › Bowed**, and **Sound › Parameters** on a bowed track shows `pressure speed vib sord dyn bright ring body` first (the rest under advanced). SDK 1.31.0: `stringed("violin", { pressure: 0.7 })` or `stringed({ preset: "cello", sord: 1 })`.
+The menu lists them under **Sound › browse sounds › Strings › Bowed**, and the **Sound** page on a bowed track shows `pressure speed vib sord dyn bright ring body` first (the rest under advanced). SDK 1.31.0: `stringed("violin", { pressure: 0.7 })` or `stringed({ preset: "cello", sord: 1 })`.
 
 ## Granular
 
@@ -1146,7 +1146,7 @@ instrument: modal("marimba", { mallet: "rubber", ring: 2 }),
 | `modal reset`                            | clear overrides, keep the preset                           |
 | `modal off`                              | leave the engine for the legacy marimba voice              |
 
-The menu's **Sound › browse sounds › Mallets and bells** lists the presets, and **Sound › Parameters** shows the preset, mallet, the simple parameters and an **advanced** group on a modal track. The agent's `set_modal {trackId, preset?, mallet?, params?, reset?}` tool takes the same names.
+The menu's **Sound › browse sounds › Mallets and bells** lists the presets, and the **Sound** page shows the preset, mallet, the simple parameters and an **advanced** group on a modal track. The agent's `set_modal {trackId, preset?, mallet?, params?, reset?}` tool takes the same names.
 
 ### Gamelan (0.6.1)
 
@@ -1160,7 +1160,7 @@ Live, an undamped bar (`damp 0`: gongs, kempul, bowls) keeps ringing after you r
 
 `instrument: "wind"` with a `wind` field plays blown instruments on breath-driven digital waveguides (`src/audio/winds/`): a bore delay line tuned exactly with a Thiran allpass, closed by a reed table (clarinet), a conical reed (saxophones, oboe, bassoon), an air jet (flutes) or a lip resonator (brass), with loss and bell filters, breath noise and a breath envelope. Reed and jet run at 2x with first-order antiderivative antialiasing (`src/audio/dsp/shape.ts`, `oversample.ts`); each preset carries per-semitone pitch and level trims for 22.05, 44.1 and 48 kHz, generated by `bun scripts/calibrate-winds.ts`, so every preset plays within 3 cents across its range. It is dawg's own model, after Smith's digital waveguides, Cook's STK reed and jet models and Välimäki's fractional-delay filters, ported from the reviewed 0.6 prototype; no samples.
 
-Presets (a word picks one): flutes `flute` `recorder` `whistle` `ney` `shakuhachi` `panpipe` `suling` `bansuri`; reeds `clarinet` `bassclarinet` `oboe` `bassoon` `sax` `altosax` `barisax`; brass `trumpet` `harmon` `plunger` `trombone` `tuba` `horn`. Aliases: `tinwhistle` `pennywhistle` `nay` `panflute` `panpipes` `saxophone` `tenorsax` `tenor` `alto` `bari` `baritonesax` `frenchhorn` `mutedtrumpet` `wahtrumpet`. `instrument flute` (or any preset word) switches the focused track. The bare legacy word `wind` with no `wind` field keeps its pre-0.6 tone byte-identically; `wind flute` gives the engine. `presets wind` (or `wind presets`) lists them; the menu has them under **Sound › browse sounds › Winds and brass**, and **Sound › Parameters** shows the simple rows `breath` `bright` `mute` `players` `growl` with the rest under advanced.
+Presets (a word picks one): flutes `flute` `recorder` `whistle` `ney` `shakuhachi` `panpipe` `suling` `bansuri`; reeds `clarinet` `bassclarinet` `oboe` `bassoon` `sax` `altosax` `barisax`; brass `trumpet` `harmon` `plunger` `trombone` `tuba` `horn`. Aliases: `tinwhistle` `pennywhistle` `nay` `panflute` `panpipes` `saxophone` `tenorsax` `tenor` `alto` `bari` `baritonesax` `frenchhorn` `mutedtrumpet` `wahtrumpet`. `instrument flute` (or any preset word) switches the focused track. The bare legacy word `wind` with no `wind` field keeps its pre-0.6 tone byte-identically; `wind flute` gives the engine. `presets wind` (or `wind presets`) lists them; the menu has them under **Sound › browse sounds › Winds and brass**, and the **Sound** page shows the simple rows `breath` `bright` `mute` `players` `growl` with the rest under advanced.
 
 | Parameter          | Range                            | Meaning                                                                       |
 | ------------------ | -------------------------------- | ----------------------------------------------------------------------------- |
