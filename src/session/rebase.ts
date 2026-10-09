@@ -124,6 +124,10 @@ export function rebaseOperations(
         if (!same(base.tuning ?? null, current.tuning ?? null))
           return { ok: false, reason: "tuning changed" };
         break;
+      case "setCalibration":
+        if ((base.calibration ?? 0) !== (current.calibration ?? 0))
+          return { ok: false, reason: "calibration changed" };
+        break;
       case "setMaster":
         if (!deepEqual(base.master, current.master))
           return { ok: false, reason: "master changed" };

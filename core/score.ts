@@ -84,6 +84,16 @@ export type { Tuning } from "./tuning.ts";
 import { normalizeMaster, type SongMaster } from "./master.ts";
 
 export const SCORE_VERSION = 1 as const;
+
+/**
+ * Sound calibration (0.7): which revision of the released engines' level,
+ * pitch and voice fixes a song renders with. Absent (0) keeps every 0.4 to
+ * 0.6.1 project byte-identical; new songs start at the latest. Revision 1
+ * chokes the open hat, key-tracks toms, adds crash, ride and cowbell,
+ * band-limits hat metal, levels keys presets, steadies and tunes lip brass,
+ * and centers low gongs.
+ */
+export const CALIBRATION_LATEST = 1 as const;
 export const DEFAULT_TICKS_PER_BEAT = 480 as const;
 
 export const SCORE_LIMITS = Object.freeze({
@@ -1099,6 +1109,8 @@ export type TrackScoreData = Readonly<{
    * the song (or its form). A name that matches no section is dropped.
    */
   loopSection?: string | null;
+  /** Sound calibration (0.7), 0..CALIBRATION_LATEST; absent or 0 is legacy. */
+  calibration?: number | null;
 }>;
 
 /** Canonical immutable score. Use `addNote`/`removeNote` to create a revision. */
@@ -1122,6 +1134,8 @@ export class TrackScore {
   readonly form: readonly FormEntry[];
   /** The section playback loops; undefined plays the song. */
   readonly loopSection: string | undefined;
+  /** Sound calibration revision; absent is 0 (legacy engines). */
+  declare readonly calibration?: number;
 
   constructor(data: TrackScoreData = {}) {
     const tempoBpm = data.tempoBpm ?? 120;
@@ -1224,6 +1238,8 @@ export class TrackScore {
     this.sections = freezeArray(sections);
     this.form = freezeArray(form);
     this.loopSection = normalizeLoopSection(data.loopSection, sections);
+    const calibration = normalizeCalibration(data.calibration);
+    if (calibration) this.calibration = calibration;
     Object.freeze(this);
   }
 
@@ -1313,6 +1329,11 @@ export class TrackScore {
   }
 
   /** Replace the song master; `null` removes it (bypass). */
+  /** Set the sound calibration revision; 0 or null is legacy. */
+  withCalibration(calibration: number | null): TrackScore {
+    return new TrackScore({ ...this.toJSON(), calibration });
+  }
+
   withMaster(master: SongMaster | null): TrackScore {
     return new TrackScore({ ...this.toJSON(), master });
   }
@@ -1335,6 +1356,7 @@ export class TrackScore {
       ...(this.loopSection === undefined
         ? {}
         : { loopSection: this.loopSection }),
+      ...(this.calibration ? { calibration: this.calibration } : {}),
     };
   }
 }
@@ -1670,6 +1692,11 @@ export type ScoreOperation =
       master: SongMaster | null;
     }>
   | Readonly<{
+      /** Sound calibration revision (0.7); 0 or null is legacy. */
+      type: "setCalibration";
+      calibration: number | null;
+    }>
+  | Readonly<{
       /** Replaces a track's audio clips (0.7); null clears them. */
       type: "setClips";
       trackId: string;
@@ -1697,6 +1724,8 @@ export function applyScoreOperation(
   if (operation.type === "setTime") return score.withTime(operation.time);
   if (operation.type === "setTuning") return score.withTuning(operation.tuning);
   if (operation.type === "setMaster") return score.withMaster(operation.master);
+  if (operation.type === "setCalibration")
+    return score.withCalibration(operation.calibration);
   if (operation.type === "setSections")
     return score.withSections(
       operation.sections,
@@ -1757,6 +1786,7 @@ export function scoreFromJSON(value: unknown): TrackScore {
     sections?: readonly Section[];
     form?: readonly FormEntry[];
     loopSection?: string | null;
+    calibration?: number | null;
   } = {
     tracks: optionalArray(value.tracks).map(parseTrack),
     notes: optionalArray(value.notes).map(parseNote),
@@ -1792,6 +1822,9 @@ export function scoreFromJSON(value: unknown): TrackScore {
   // The constructor checks the type and drops a name matching no section.
   if (value.loopSection !== undefined)
     data.loopSection = value.loopSection as string | null;
+  // The constructor checks the range.
+  if (value.calibration !== undefined)
+    data.calibration = value.calibration as number | null;
   return new TrackScore(data);
 }
 
@@ -1919,6 +1952,21 @@ function normalizeSections(inputs: readonly unknown[]): Section[] {
       (a, b) => a.section.startBar - b.section.startBar || a.index - b.index,
     )
     .map(({ section }) => section);
+}
+
+function normalizeCalibration(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === 0) return undefined;
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 0 ||
+    value > CALIBRATION_LATEST
+  )
+    throw new ScoreValidationError(
+      `calibration must be an integer 0..${CALIBRATION_LATEST}`,
+      "invalid-score",
+    );
+  return value;
 }
 
 function normalizeLoopSection(

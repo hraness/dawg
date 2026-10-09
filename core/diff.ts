@@ -252,6 +252,8 @@ function songOperations(a: TrackScore, b: TrackScore): ScoreOperation[] {
     emit({ type: "setTuning", tuning: b.tuning ?? null });
   if (!deepEqual(song.master, b.master))
     emit({ type: "setMaster", master: b.master ?? null });
+  if ((song.calibration ?? 0) !== (b.calibration ?? 0))
+    emit({ type: "setCalibration", calibration: b.calibration ?? null });
   if (sectionsDiffer()) setSections();
   return ops;
 }

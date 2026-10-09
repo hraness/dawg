@@ -704,6 +704,7 @@ const OPERATION_TYPES = new Set([
   "setTime",
   "setTuning",
   "setMaster",
+  "setCalibration",
   "setSections",
   "setClips",
 ]);

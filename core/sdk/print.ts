@@ -262,6 +262,7 @@ export function printSong(
     entries.push(`form: ${printForm(score.form, INDENT)}`);
   if (score.loopSection !== undefined)
     entries.push(`loopSection: ${str(score.loopSection)}`);
+  if (score.calibration) entries.push(`calibration: ${num(score.calibration)}`);
   lines.push("export default song({");
   for (const entry of entries) lines.push(`${INDENT}${entry},`);
   lines.push("});", "");

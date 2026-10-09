@@ -4560,6 +4560,13 @@ export type SongInput = Readonly<{
   form?: string | readonly (string | SongFormEntry)[];
   /** The section playback loops (SDK 1.18.0); export ignores it. */
   loopSection?: string;
+  /**
+   * Sound calibration (SDK 1.32.0): `1` renders the 0.7 level, pitch and
+   * drum-kit fixes (hat choke, tuned toms, crash and ride, level keys,
+   * steady brass). Omit it to keep an older song's sound byte-identical;
+   * `dawg init` writes the latest.
+   */
+  calibration?: number;
 }>;
 
 /** A song section (SDK 1.18.0); bars are 0-based like beats. */
@@ -4756,6 +4763,8 @@ export type Song = Readonly<{
   form?: readonly SongFormEntry[];
   /** Present only when a section loops (SDK 1.18.0). */
   loopSection?: string;
+  /** Present only when the song sets one (SDK 1.32.0). */
+  calibration?: number;
 }>;
 
 /** A stored song `time`: ticks, and 0-based bar indexes. */
@@ -4909,6 +4918,9 @@ function songSections(
  * lengths at least one tick), and every note gets a deterministic id from
  * its track and content, so two evaluations of the same files agree.
  */
+/** The newest `song({ calibration })` (mirrors core CALIBRATION_LATEST). */
+export const SONG_CALIBRATION_LATEST = 1;
+
 export function song(input: SongInput): Song {
   if (!isRecord(input)) throw new DawgSdkError("song() needs an object");
   const tempoBpm = finite(input.tempo ?? 120, "song tempo");
@@ -4934,6 +4946,16 @@ export function song(input: SongInput): Song {
     throw new DawgSdkError("song key must be a string or null");
   const songTuning = tuningSpec(input.tuning, "song");
   const master = masterData(input.master);
+  const calibration = input.calibration ?? 0;
+  if (
+    typeof calibration !== "number" ||
+    !Number.isInteger(calibration) ||
+    calibration < 0 ||
+    calibration > SONG_CALIBRATION_LATEST
+  )
+    throw new DawgSdkError(
+      `song calibration must be an integer 0..${SONG_CALIBRATION_LATEST}`,
+    );
   if (!Array.isArray(input.tracks))
     throw new DawgSdkError("song tracks must be an array of track()");
   if (input.tracks.length > 64)
@@ -5164,6 +5186,7 @@ export function song(input: SongInput): Song {
     notes: Object.freeze(notes),
     ...(master ? { master } : {}),
     ...arrangement,
+    ...(calibration ? { calibration } : {}),
   });
 }
 
