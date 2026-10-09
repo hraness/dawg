@@ -942,7 +942,7 @@ export function classifyAgentError(
   signal: AbortSignal,
   userSignal: AbortSignal | undefined,
 ): { code: AgentErrorCode; message: string } {
-  if (userSignal?.aborted) return { code: "aborted", message: "cancelled" };
+  if (userSignal?.aborted) return { code: "aborted", message: "canceled" };
   if (
     error instanceof AgentTimeoutError ||
     signal.reason instanceof AgentTimeoutError
@@ -962,7 +962,7 @@ export function classifyAgentError(
   if (error instanceof Error && error.name === "XcbError")
     return { code: "provider", message: errorMessage(error) };
   if (error instanceof Error && error.name === "AbortError")
-    return { code: "aborted", message: "cancelled" };
+    return { code: "aborted", message: "canceled" };
   // A transport timeout (AbortSignal.timeout's DOMException) that escaped the
   // client is still the provider's failure, not an internal one.
   if (error instanceof Error && error.name === "TimeoutError")
@@ -1009,7 +1009,7 @@ export function describeAgentEvent(event: AgentEvent): string | undefined {
       );
     case "error":
       return event.code === "aborted"
-        ? `cancelled · kept rev ${event.revision}`
+        ? `canceled · kept rev ${event.revision}`
         : `agent ${event.code}: ${event.message}`;
   }
 }

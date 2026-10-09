@@ -577,7 +577,7 @@ function soundSectionNodes(context: MenuContext): MenuNode[] {
             id: "keys",
             label: "keys",
             detail: `${track.instrument}${track.keys.preset ? ` · ${track.keys.preset}` : ""}`,
-            help: "the modelled organ: preset, drawbars, registers or stops, rotary",
+            help: "the modeled organ: preset, drawbars, registers or stops, rotary",
             build: (inner) => {
               const current = focused(inner);
               return current ? organNodes(current) : [];
@@ -593,7 +593,7 @@ function soundSectionNodes(context: MenuContext): MenuNode[] {
               detail: `${track.instrument}${track.keys.preset ? ` · ${track.keys.preset}` : ""}`,
               help: isElectricFamily(track.instrument)
                 ? "electric keys: preset, bark, bell, tone, vibe/trem, pickup and mute"
-                : "the modelled piano: preset, touch, hammers, dampers, stretch",
+                : "the modeled piano: preset, touch, hammers, dampers, stretch",
               build: (inner) => {
                 const current = focused(inner);
                 return current
@@ -1238,7 +1238,7 @@ function panNode(track: Track): MenuNode {
         : `${num(Math.abs(value))} ${value < 0 ? "L" : "R"}`,
     command: (value) => `pan ${num(value)}`,
     reset: "pan 0",
-    help: "-1 left … 1 right · x centres",
+    help: "-1 left … 1 right · x centers",
   };
 }
 
@@ -1321,7 +1321,7 @@ function parameterNodes(context: MenuContext): MenuNode[] {
       detail: `all ${all.length} params`,
       help: isElectricFamily(track.instrument)
         ? "every electric keys parameter for this family"
-        : "every modelled piano parameter",
+        : "every modeled piano parameter",
       build: (inner) => {
         const current = focused(inner);
         return current
@@ -1594,7 +1594,7 @@ function matchingSynthPreset(track: Track): string | undefined {
   )?.[0];
 }
 
-/** Modelled piano rows: the preset, then each parameter (`keys <p> <v>`). */
+/** Modeled piano rows: the preset, then each parameter (`keys <p> <v>`). */
 function keysNodes(
   track: Track,
   params: readonly string[],
@@ -2302,7 +2302,7 @@ export function effectParamNodes(
         options: ["—", ...VOWEL_VALUES],
         command: (option) =>
           option === "—" ? "/vowel to off" : `/vowel to ${option}`,
-        help: "a second vowel to morph towards (— keeps one vowel)",
+        help: "a second vowel to morph toward (— keeps one vowel)",
       },
       {
         kind: "number",
@@ -2554,7 +2554,7 @@ function soundNodes(context: MenuContext): MenuNode[] {
       kind: "menu",
       id: "group:keys",
       label: "Keys",
-      help: "modelled pianos, electric keys and organs, built in (no download)",
+      help: "modeled pianos, electric keys and organs, built in (no download)",
       detail: `${PIANO_PRESET_NAMES.join(" ")} · electric: ${ELECTRIC_PRESET_NAMES.join(" ")} · organs: ${ORGAN_PRESET_NAMES.join(" ")}`,
       build: () => [
         ...PIANO_PRESET_NAMES.map((name): MenuNode => {
@@ -2571,7 +2571,7 @@ function soundNodes(context: MenuContext): MenuNode[] {
           kind: "menu",
           id: "group:keys:electric",
           label: "Electric",
-          help: "electric pianos (tine, reed) and the clavinet, modelled",
+          help: "electric pianos (tine, reed) and the clavinet, modeled",
           detail: ELECTRIC_PRESET_NAMES.join(" "),
           build: () =>
             Object.entries(KEYS_PRESETS)

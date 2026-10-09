@@ -372,7 +372,7 @@ track jangle               a new guitar track: a guitar voice plus the jangle ri
 
 - **stomp** `type` `fuzz` (Big Muff-style, with its tone stack), `face` (Fuzz Face-style), `od` (Tube Screamer-style mid hump and soft clip), `rat` (op-amp hard clip and filter), `octave` (Octavia-style full-wave rectifier, `octave` sets the blend). Each pedal is level-matched to bypass from a fixed -18 dBFS 196 Hz sine (within 1 dB at every type and gain), so kicking on a fuzz does not jump the track; `level` is a trim on top. Presets `muff face screamer rat octavia boost`.
 - **head** `type` `clean` (Fender-style blackface), `chime` (Vox AC-style top boost), `crunch` and `lead` (Marshall-style), `high` (modern high gain), `solid` (clean solid state), `bass` (bass amp). Each has its own Yeh–Smith passive tone stack (`bass mid treble`), a `presence` shelf, power-amp `sag` and a `master`. Each type's makeup gain is calibrated once from a fixed -30 dBFS 196 Hz sine, so switching heads keeps the level within 1 dB. `gate` (dB threshold, absent = off) is a noise gate before the preamp with hysteresis and a short hold. Presets `blackface ac plexi lead modern jc svt`.
-- **cab** `type` `1x12 2x12 4x12 1x10 open 8x10 1x15 di`: biquad speaker models (low resonance, presence peak, cone break-up roll-off); `mic` moves from the cone centre (bright) to the edge (dark); `di` is the band-limited direct box for bass.
+- **cab** `type` `1x12 2x12 4x12 1x10 open 8x10 1x15 di`: biquad speaker models (low resonance, presence peak, cone break-up roll-off); `mic` moves from the cone center (bright) to the edge (dark); `di` is the band-limited direct box for bass.
 
 Rig presets (`RIG_PRESETS` in `core/fx.ts`): `clean crunch punk ragged lead metal fuzz octave funk wah bachata spring bassdrive reese jangle alt`. A rig writes its three stages and its companion effects (`funk` an envelope filter, `wah` an auto-wah, `bachata` a chorus, `jangle` a compressor, `spring` the track reverb); switching rigs or `rig reset` removes the previous rig's companions while they still hold the values the rig wrote, and keeps any you edited. Each stage stays editable afterwards, and the rig row then reads `—`. Track words `jangle punk funk ragged gtr-lead gtr-metal bachata` create a guitar track on every path (`track jangle`, `dawg jangle`, `instrument jangle`, the agent's create_track and set_instrument, SDK `instrument: "jangle"`): the strings `electric` voice (the 12-string `jangle` preset for jangle) plus that rig. `lead` and `bass` keep their synth meaning.
 
@@ -452,7 +452,7 @@ The song master is an optional chain after every track, orbit bus and duck are s
 
 Targets: `streaming` -14 LUFS / -1 dBTP, `apple` and `podcast` -16, `broadcast` -23 (EBU R 128), `classical` -20, `ambient` -18, `club` -8 / -2 dBTP (with the `loud` limiter) and `loud` -6 / -2 dBTP (with the `brick` limiter, for hyperpop, gabber and hardcore; masters louder than -14 LUFS stay under -2 dBTP because lossy encoding of loud, dense material adds inter-sample overs). With the limiter on, a target sets the limiter's input gain: a bracketing search on the measured integrated loudness that starts from the linear estimate, gives the same answer for the same mix every time, and stops early with `reached: false` once more drive no longer raises the loudness. At -6 LUFS the limiter alone may stop short; `tape preset crush` or a lower glue threshold before it helps; without it, the gain is capped so the true peak stays at or below -1 dBTP, so a quiet target is always met and a loud one may fall short (the measurement says so).
 
-Measurement follows ITU-R BS.1770-4 and EBU R 128: K-weighting derived for any sample rate, 400 ms momentary and 3 s short-term windows (maxima on a 10 ms grid), the -70 LUFS absolute and -10 LU relative gates for integrated loudness, the EBU Tech 3342 loudness range (-20 LU gate, 10th to 95th percentile of short-term values), and true peak from the BS.1770-4 Annex 2 4x oversampling filter. Tests check EBU Tech 3341 cases 1–5, 9–14 (11 and 14 modelled) and 15–19 and Tech 3342 cases 1–4 within their tolerances. The parameters are in `core/master.ts` (`MASTER_SPECS`, `MASTER_PRESETS`, `LOUDNESS_TARGETS`).
+Measurement follows ITU-R BS.1770-4 and EBU R 128: K-weighting derived for any sample rate, 400 ms momentary and 3 s short-term windows (maxima on a 10 ms grid), the -70 LUFS absolute and -10 LU relative gates for integrated loudness, the EBU Tech 3342 loudness range (-20 LU gate, 10th to 95th percentile of short-term values), and true peak from the BS.1770-4 Annex 2 4x oversampling filter. Tests check EBU Tech 3341 cases 1–5, 9–14 (11 and 14 modeled) and 15–19 and Tech 3342 cases 1–4 within their tolerances. The parameters are in `core/master.ts` (`MASTER_SPECS`, `MASTER_PRESETS`, `LOUDNESS_TARGETS`).
 
 Parameters (**bold** unit = shown in the simple menu; the rest are under `advanced`). Glue's `auto` make-up adds half the reduction a full-scale peak gets, so glue on and off compare near level-matched. Clean EQ corners above 0.45 × the render rate are clamped there.
 
@@ -463,10 +463,10 @@ Parameters (**bold** unit = shown in the simple menu; the rest are under `advanc
 | **eq**      | low       | -12..12 dB     | 0       | low shelf gain                                                                         |
 | eq          | lowfreq   | 20..1000 Hz    | 100     | low shelf corner                                                                       |
 | **eq**      | bell1     | -12..12 dB     | 0       | first bell gain                                                                        |
-| eq          | bell1freq | 40..16000 Hz   | 400     | first bell centre                                                                      |
+| eq          | bell1freq | 40..16000 Hz   | 400     | first bell center                                                                      |
 | eq          | bell1q    | 0.1..10        | 1       | first bell width: higher is narrower                                                   |
 | **eq**      | bell2     | -12..12 dB     | 0       | second bell gain                                                                       |
-| eq          | bell2freq | 200..18000 Hz  | 3000    | second bell centre                                                                     |
+| eq          | bell2freq | 200..18000 Hz  | 3000    | second bell center                                                                     |
 | eq          | bell2q    | 0.1..10        | 1       | second bell width: higher is narrower                                                  |
 | **eq**      | high      | -12..12 dB     | 0       | high shelf gain                                                                        |
 | eq          | highfreq  | 1000..20000 Hz | 10000   | high shelf corner                                                                      |
@@ -484,7 +484,7 @@ Parameters (**bold** unit = shown in the simple menu; the rest are under `advanc
 | tape        | tone      | 2000..20000 Hz | 20000   | high-frequency roll-off after the curve; 20000 is off                                  |
 | **tape**    | mix       | 0..1           | 1       | dry/wet                                                                                |
 | **width**   | width     | 0..2           | 1       | side level: 0 is mono, 1 unchanged, 2 twice as wide                                    |
-| **width**   | mono      | 0..300 Hz      | 120     | below this the mix is mono (keeps bass centred); 0 is off                              |
+| **width**   | mono      | 0..300 Hz      | 120     | below this the mix is mono (keeps bass centered); 0 is off                             |
 | **limiter** | ceiling   | -12..0 dBTP    | -1      | highest true peak out                                                                  |
 | **limiter** | gain      | 0..24 dB       | 0       | drive into the limiter (a target sets it itself)                                       |
 | **limiter** | release   | 1..1000 ms     | 100     | recovery time; short is louder, long is cleaner                                        |
@@ -493,7 +493,7 @@ Parameters (**bold** unit = shown in the simple menu; the rest are under `advanc
 
 <!-- master-params:end -->
 
-A song with a master renders at 48 kHz; a song without one keeps the engine's 22,050 Hz, as dawg 0.4 wrote it, so older projects export byte-identically. `--rate 48000` (or 44100) picks the rate for any render. `dawg render out.wav --normalize streaming` (or a LUFS number) applies a target for that export only, without changing the song; `--measure` prints the loudness line after any render. When samples hit 16-bit full scale, `dawg render` prints a `warning · N samples clip` line on stderr with the fix (lower volumes, or a master with a limiter). While the loop plays, the header shows `-14.1 LUFS (-14) · TP -1.0` for the last rendered loop, with or without a master, so you can read a mix before mastering it. The bracket is the target, and the reading turns to a warning colour when it is more than 0.5 LU off the target or the true peak passes the limiter's ceiling (-1 dBTP without one). With a master the loop monitors at the engine's 22,050 Hz while exports and `master measure` run at 48 kHz; the header shows the 48 kHz reading once it is measured in the background (a `~` marks the monitor estimate until then). EQ above about 9.9 kHz is not audible while monitoring but is in the export. The menu has it under **Mix & automation › master** (`/menu master`), where `Space` stages master changes for A/B like other sound edits. The agent has `set_master` and `measure_mix` (integrated, short-term and momentary LUFS, loudness range, true peak, spectral balance in five bands (sub, bass, low-mid, high-mid, high) and stereo correlation, with `bypass_master` to compare); it masters only when asked and measures before and after. In the SDK: `song({ master: { glue: { ratio: 2 }, limiter: { ceiling: -1 }, target: -14 } })` (SDK 1.17.0).
+A song with a master renders at 48 kHz; a song without one keeps the engine's 22,050 Hz, as dawg 0.4 wrote it, so older projects export byte-identically. `--rate 48000` (or 44100) picks the rate for any render. `dawg render out.wav --normalize streaming` (or a LUFS number) applies a target for that export only, without changing the song; `--measure` prints the loudness line after any render. When samples hit 16-bit full scale, `dawg render` prints a `warning · N samples clip` line on stderr with the fix (lower volumes, or a master with a limiter). While the loop plays, the header shows `-14.1 LUFS (-14) · TP -1.0` for the last rendered loop, with or without a master, so you can read a mix before mastering it. The bracket is the target, and the reading turns to a warning color when it is more than 0.5 LU off the target or the true peak passes the limiter's ceiling (-1 dBTP without one). With a master the loop monitors at the engine's 22,050 Hz while exports and `master measure` run at 48 kHz; the header shows the 48 kHz reading once it is measured in the background (a `~` marks the monitor estimate until then). EQ above about 9.9 kHz is not audible while monitoring but is in the export. The menu has it under **Mix & automation › master** (`/menu master`), where `Space` stages master changes for A/B like other sound edits. The agent has `set_master` and `measure_mix` (integrated, short-term and momentary LUFS, loudness range, true peak, spectral balance in five bands (sub, bass, low-mid, high-mid, high) and stereo correlation, with `bypass_master` to compare); it masters only when asked and measures before and after. In the SDK: `song({ master: { glue: { ratio: 2 }, limiter: { ceiling: -1 }, target: -14 } })` (SDK 1.17.0).
 
 ## Synth
 
@@ -628,11 +628,11 @@ FM operators 2–8 repeat the `fm` rows with a suffix (`fm2`, `fmh2`, `fmattack2
 | sample controls `begin`, `end`, `speed`, `unit`, `loop`, `loopBegin`/`loopb`, `loopEnd`/`loope`, `clip`/`legato`, `fit`, `loopAt`, `accelerate`, `squiz`, `cut`, `gain`, `vel`, `rr` | sampler voice fields; `/sample set`, `set_sample`              | done (see Samples)                                   |
 | fitting to tempo (Ableton Repitch/Beats/Tones; Strudel `fit`)                                                                                                                        | `bpm` `fitmode` `len`; `/fitmode`, `fit_sample`                | done (see Fitting samples)                           |
 
-## Keys (modelled piano)
+## Keys (modeled piano)
 
-A track whose `instrument` is a piano family (`grand`, `upright`, `felt`, `honkytonk`, `prepared`) and which has a `keys` field plays dawg's modelled piano (`src/audio/keys/`): a felt hammer of the chosen hardness strikes a bank of stretched, inharmonic string modes (two or three detuned unison strings per key, with a fast first stage and a slow aftersound), a soundboard knock, dampers that stop a released key in about a second, and a small body EQ per family. The 0.5 sustain pedal (down, half, up) holds the dampers off. It is built in: nothing downloads and every render is byte-identical.
+A track whose `instrument` is a piano family (`grand`, `upright`, `felt`, `honkytonk`, `prepared`) and which has a `keys` field plays dawg's modeled piano (`src/audio/keys/`): a felt hammer of the chosen hardness strikes a bank of stretched, inharmonic string modes (two or three detuned unison strings per key, with a fast first stage and a slow aftersound), a soundboard knock, dampers that stop a released key in about a second, and a small body EQ per family. The 0.5 sustain pedal (down, half, up) holds the dampers off. It is built in: nothing downloads and every render is byte-identical.
 
-`piano` keeps two meanings on purpose. A project already stored as `instrument: "piano"` keeps the legacy tone forever. Every new write of the word (`piano`, `instrument piano`, `set_instrument piano`, the menu) stores `instrument: "grand"` with `keys: { preset: "grand" }`. `organ` stays the synth preset (the modelled organs are `tonewheel`, `combo` and `pipe`, below). The sampled Salamander grand is still in the browser under instruments.
+`piano` keeps two meanings on purpose. A project already stored as `instrument: "piano"` keeps the legacy tone forever. Every new write of the word (`piano`, `instrument piano`, `set_instrument piano`, the menu) stores `instrument: "grand"` with `keys: { preset: "grand" }`. `organ` stays the synth preset (the modeled organs are `tonewheel`, `combo` and `pipe`, below). The sampled Salamander grand is still in the browser under instruments.
 
 Tuning: each key's first partial sits on the track's tuning (12-TET or any table, 19-EDO included; an unmapped degree is silent). By default the octaves are stretched from the strings' own inharmonicity, as a piano tuner would: low octaves are tuned between the 2:1 and 4:2 beats and the treble is beatless 2:1 to the stretched note below, so the octave from A3 to A4 beats under 1 Hz. `keys stretch 0` keeps every key exactly on the tuning. Bends and glides keep each string mode under the Nyquist limit (modes that would alias are muted), and each note fades over its last 250 ms so it ends inside the 8 s loop-tail window.
 
@@ -641,7 +641,7 @@ Polyphony is 64 voices; a new key steals the oldest released voice, then the old
 Prompt grammar (one undo step per command):
 
 ```text
-piano                                    the modelled grand (also: grand)
+piano                                    the modeled grand (also: grand)
 piano ballad                             a preset: grand ballad upright felt lofi honkytonk prepared
 upright | felt | honkytonk | prepared   the preset word alone
 keys                                     list this track's piano settings
@@ -684,10 +684,10 @@ Lanes are read at each note's onset. The model is dawg's own, from public litera
 
 ### Soft pedal and sostenuto (0.6.1)
 
-The modelled pianos have the other two pedals of a grand. Both are pedal lanes like the sustain pedal (`[{ tick, state }]`, at most 1024 events) and absent means today's sound:
+The modeled pianos have the other two pedals of a grand. Both are pedal lanes like the sustain pedal (`[{ tick, state }]`, at most 1024 events) and absent means today's sound:
 
 - **Soft pedal** (`softPedal`, una corda, the left pedal): while it is down each note's hammer is shifted so it strikes fewer strings with a softer part of the felt: the unison narrows, the hammer's high partials are rolled off and the level drops about 3 dB, so the note is quieter and darker (a 10%+ lower spectral centroid and at least 3 dB less 2-4 kHz energy on middle C). `half` is half the shift. It is read at each note's onset, so a note struck before the pedal keeps its tone.
-- **Sostenuto** (`sostenuto`, the middle pedal, `down` and `up` only): keys already held when it goes down keep their dampers up until it lifts; notes struck afterwards damp at their own release. A held key struck again while the pedal is down keeps ringing to the lift (the rod keeps its damper up), and a key still held through a lift is caught again by the next press. It works alongside the sustain pedal. Only the modelled pianos with a `keys` object hear the soft pedal; `pedal soft` says so on any other track.
+- **Sostenuto** (`sostenuto`, the middle pedal, `down` and `up` only): keys already held when it goes down keep their dampers up until it lifts; notes struck afterwards damp at their own release. A held key struck again while the pedal is down keeps ringing to the lift (the rod keeps its damper up), and a key still held through a lift is caught again by the next press. It works alongside the sustain pedal. Only the modeled pianos with a `keys` object hear the soft pedal; `pedal soft` says so on any other track.
 
 ```text
 pedal soft 0-8                           una corda from beat 0 to 8 (also: down|half|up <beat>, bars, off)
@@ -695,7 +695,7 @@ pedal sost 0-4                           sostenuto down at 0, up at 4 (holds the
 pedal soft                               list the lane; pedal sost off clears it
 ```
 
-Menu: **Sound › performance** has **soft pedal** and **sostenuto** rows (off, or held over every bar) on a modelled piano track. Agent: `set_piano_pedals` (`soft`, `sostenuto`: events, `"bars"` or null). SDK (1.26.0): `track({ instrument: "grand", softPedal: [[0, "down"], [8, "up"]], sostenuto: [[1, "down"], [4, "up"]] })`.
+Menu: **Sound › performance** has **soft pedal** and **sostenuto** rows (off, or held over every bar) on a modeled piano track. Agent: `set_piano_pedals` (`soft`, `sostenuto`: events, `"bars"` or null). SDK (1.26.0): `track({ instrument: "grand", softPedal: [[0, "down"], [8, "up"]], sostenuto: [[1, "down"], [4, "up"]] })`.
 
 ### Electric keys (0.6.1)
 
@@ -802,7 +802,7 @@ export default track({
 
 Semantics follow Strudel's sampler:
 
-| Strudel                                                 | dawg                                                       | Behaviour                                                                                                                                        |
+| Strudel                                                 | dawg                                                       | Behavior                                                                                                                                         |
 | ------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `samples({ kick: "kick.wav" })`                         | `sampler({ kick: "samples/kick.wav" })`                    | one voice per name                                                                                                                               |
 | `s("kick hat")`                                         | `hits("kick", …)`, `hit("hat", …)` (oneshot mode)          | voices take pitch slots 36, 37, … in name order; a hit plays the whole sample, whatever the note length                                          |
@@ -884,7 +884,7 @@ Every voice starts and stops with a 1–3 ms fade, so cuts do not click. Without
 
 Decoding: WAV (PCM 16/24/32-bit integer and 32-bit float, any channel count and rate) and AIFF/AIFF-C (8/16/24/32-bit) decode natively, mixed to mono and resampled to the engine rate on the fly with linear interpolation. MP3, FLAC, Ogg, M4A and anything else decode through `ffmpeg` when it is on `PATH` (dawg never installs it); without it the voice is skipped with `<voice> · <path> · not WAV/AIFF and ffmpeg is not on PATH · convert it to WAV, or install ffmpeg (e.g. brew install ffmpeg) and reload`. Decoded PCM is cached at `.dawg/assets/<sha256>.pcm`, least recently used first out past 512 MiB. Files over 50 MiB or 10 minutes, paths that leave the project (including through a symlink), and more than 64 voices are rejected. A `sha256` that no longer matches the file is a warning and the file still plays. Problems appear as receipts in the TUI and on stderr from `dawg render`; the track renders without the missing voices and nothing crashes.
 
-In the TUI, oneshot sampler tracks show one highway lane per voice, labelled by name; keyed tracks use the pitch axis. `/tracks` shows each sampler's sample count and how many failed to load. `/sample <path> [as <voice>]` adds a voice to the focused track: a file outside the track directory is copied into `tracks/<slug>/samples/`, the voice name defaults to the file name, and a focused synth track that already has notes gets a new `samples` track instead. Existing hits keep their voice when the new name shifts the slots. `/sample` alone lists the voices. The agent's `import_sample` media tool writes 48 kHz stereo WAVs to the same folder.
+In the TUI, oneshot sampler tracks show one highway lane per voice, labeled by name; keyed tracks use the pitch axis. `/tracks` shows each sampler's sample count and how many failed to load. `/sample <path> [as <voice>]` adds a voice to the focused track: a file outside the track directory is copied into `tracks/<slug>/samples/`, the voice name defaults to the file name, and a focused synth track that already has notes gets a new `samples` track instead. Existing hits keep their voice when the new name shifts the slots. `/sample` alone lists the voices. The agent's `import_sample` media tool writes 48 kHz stereo WAVs to the same folder.
 
 ## Sample packs
 
@@ -1126,7 +1126,7 @@ Lanes: every numeric parameter that moves well over time has a `grain-<param>` a
 
 ## Mallets and bells (modal)
 
-`instrument: "modal"` plays struck bars, tines, bells, bowls and drums on a modal resonator bank (`src/audio/dsp/modal.ts`, `src/audio/resonators.ts`): each note excites a table of measured mode ratios through a mallet pulse, each mode rings as a two-pole resonator with its own decay, and the strike point weights the modes the way it does on a real bar (the node at the centre of a marimba bar mutes the second mode). It is dawg's own engine, ported from the reviewed 0.6 prototype.
+`instrument: "modal"` plays struck bars, tines, bells, bowls and drums on a modal resonator bank (`src/audio/dsp/modal.ts`, `src/audio/resonators.ts`): each note excites a table of measured mode ratios through a mallet pulse, each mode rings as a two-pole resonator with its own decay, and the strike point weights the modes the way it does on a real bar (the node at the center of a marimba bar mutes the second mode). It is dawg's own engine, ported from the reviewed 0.6 prototype.
 
 Presets (a word picks one): `marimba` `vibes` `xylophone` `glock` `celesta` `chimes` `kalimba` `mbira` `steelpan` `bowl` `gong` `timpani`; aliases `vibraphone`, `glockenspiel`, `tubular`, `thumbpiano`, `gongageng`, `steeldrum`, `singingbowl`, `kettledrum` and `tubularbells`. `instrument vibes` (or any preset word) switches the focused track. Plain `marimba` with no `modal` field keeps the pre-0.6 marimba voice byte-identical, so old projects sound the same; use `modal marimba` for the modal one (the `instrument marimba` receipt says so). One-shot renders let a modal tail ring up to 30 s (bowls and gongs ring out instead of stopping at the 8 s loop-fold cap). `dawg check` warns about tracks still on the legacy `marimba`, `modal` or `wind` words.
 
@@ -1134,7 +1134,7 @@ Presets (a word picks one): `marimba` `vibes` `xylophone` `glock` `celesta` `chi
 | -------------------------- | ------------------ | --------------------------------------------------------------------------------- |
 | `mallet`                   | yarn … brass       | `yarn` `cord` `rubber` `plastic` `brass`; sets `hardness`                         |
 | `hardness`                 | 0..1               | mallet hardness: soft rounds off the high modes, hard adds them; velocity adds    |
-| `position`                 | 0..1               | strike point: 0 the end or edge, 0.5 the centre                                   |
+| `position`                 | 0..1               | strike point: 0 the end or edge, 0.5 the center                                   |
 | `ring`                     | 0.05..30 s (log)   | ring time (T60) at middle C                                                       |
 | `tilt`                     | 0..2               | how much faster high modes and high notes decay                                   |
 | `damp` `release`           | 0..1, 0.005..2 s   | damping at note-off (0 rings on, 1 chokes) and the choke time; the pedal lifts it |
@@ -1244,7 +1244,7 @@ export default track({
 });
 ```
 
-| Field                | Range (default)                      | T-1 parameter    | Behaviour                                                                                     |
+| Field                | Range (default)                      | T-1 parameter    | Behavior                                                                                      |
 | -------------------- | ------------------------------------ | ---------------- | --------------------------------------------------------------------------------------------- |
 | `steps`              | 1..64 (16)                           | Steps            | Length of one pass; the row repeats every pass to the end of the loop.                        |
 | `pulses`             | 0..steps (4)                         | Pulses           | Hits spread over the steps by Bjorklund's algorithm.                                          |
@@ -1256,7 +1256,7 @@ export default track({
 | `pace`               | -1..1 (0)                            | Pace             | > 0 slows the repeats down progressively, < 0 speeds them up.                                 |
 | `ramp`               | -1..1 (0)                            | Ramp             | Velocity across the repeats: > 0 builds, < 0 fades.                                           |
 | `velocity`           | 0..1 (0.8)                           | Velocity         | Base velocity.                                                                                |
-| `accent`, `accents`  | 0..1 (0), 1..pulses (1)              | Accent           | Lifts `E(accents, pulses)` of the pulses (or the `X` steps) towards full velocity.            |
+| `accent`, `accents`  | 0..1 (0), 1..pulses (1)              | Accent           | Lifts `E(accents, pulses)` of the pulses (or the `X` steps) toward full velocity.             |
 | `gate`, `legato`     | 0.05..4 steps (1), boolean           | Sustain          | Note length in steps; `legato` holds each hit to the next one (Strudel `euclidLegato`).       |
 | `probability`,`seed` | 0..1 (1), 0..1e6 (0)                 | Probability      | Drops pulses (and their repeats) by a seeded hash: the same seed always drops the same hits.  |
 | `swing`              | -0.5..0.5 step (0)                   | Timing           | Every second step later (> 0) or earlier.                                                     |
@@ -1345,7 +1345,7 @@ Menu: **Sound › performance** has glide time (ms) and mode, sustain pedal (off
 
 A song's `calibration` picks the revision of level, pitch and kit fixes the released engines render with. Absent or 0 keeps every 0.4 to 0.6.1 project byte-identical; `dawg init` writes the latest (1). `/calibration` shows it, `/calibration 1|latest|0|off` sets it; Project › calibration, the `set_calibration` agent tool and `song({ calibration: 1 })` do the same.
 
-Revision 1: a closed (42) or pedal (44) hat chokes a sounding open hat (46) over 8 ms; GM toms 41 to 50 are pitched two thirds of a semitone per key around 45 (low tom); 49, 52, 55 and 57 play a crash, 51, 53 and 59 a ride and 56 a cowbell (they were a rim click), and section fills end on the crash; hat metal is band-limited; keys presets are levelled to within 3 dB of piano across notes 36 to 96; and lip brass locks its lip resonance to the sounding pitch with soft lip saturation, so held notes are steady and in tune.
+Revision 1: a closed (42) or pedal (44) hat chokes a sounding open hat (46) over 8 ms; GM toms 41 to 50 are pitched two thirds of a semitone per key around 45 (low tom); 49, 52, 55 and 57 play a crash, 51, 53 and 59 a ride and 56 a cowbell (they were a rim click), and section fills end on the crash; hat metal is band-limited; keys presets are leveled to within 3 dB of piano across notes 36 to 96; and lip brass locks its lip resonance to the sounding pitch with soft lip saturation, so held notes are steady and in tune.
 
 ## Tunings and scales
 
@@ -1432,7 +1432,7 @@ Track.guitar is stored only when set (`{ tune, capo, hand, ring, position }`). M
 
 ### Chord mode
 
-Play mode has a chord sub-mode modelled on the Orchid's Key mode. It is `auto` by default when the focused track can play chords (pitched synths, piano, soundfonts, keyed samplers; not tracks whose instrument, name or id says bass, kit, drum or perc) in 12-TET without a mono or legato glide, otherwise `manual`, so a track in pelog, just intonation or another non-12 tuning, or a TB-303-style legato line, records single notes. Choosing a mode by hand (`Q`, `/chords`, the menu) sticks for the session.
+Play mode has a chord sub-mode modeled on the Orchid's Key mode. It is `auto` by default when the focused track can play chords (pitched synths, piano, soundfonts, keyed samplers; not tracks whose instrument, name or id says bass, kit, drum or perc) in 12-TET without a mono or legato glide, otherwise `manual`, so a track in pelog, just intonation or another non-12 tuning, or a TB-303-style legato line, records single notes. Choosing a mode by hand (`Q`, `/chords`, the menu) sticks for the session.
 
 - `auto`: each note key plays the diatonic chord of the song key on that root (C major: `S` plays Dm, `G` plays G). Keys outside the scale borrow from the parallel major or minor. The strip labels every white and black key with its chord.
 - `manual`: note keys play single notes as before; latch a chord type or extension and they play that chord on the pressed root.
@@ -1643,7 +1643,7 @@ The `formant` effect moves a sound's formants (the resonances of the throat and 
 | ---------------- | ----------- | ------- | --------------- | --------------------------------------------------------------------------- |
 | formant shift    | -12..12 st  | 0       | `formant-shift` | moves the spectral envelope; negative is deeper or bigger, positive smaller |
 | formant mix      | 0..1        | 1       | `formant-mix`   | blends the shifted and the dry signal                                       |
-| vowel morph (to) | 0..1 (to v) | 0       | `vowel-morph`   | glides the vowel filter's five formants from `vowel` towards `to` (log Hz)  |
+| vowel morph (to) | 0..1 (to v) | 0       | `vowel-morph`   | glides the vowel filter's five formants from `vowel` toward `to` (log Hz)   |
 
 ```text
 /formant -4              deeper (pitch stays); /formant 3 0.5 is smaller at half mix
@@ -1654,7 +1654,7 @@ The `formant` effect moves a sound's formants (the resonances of the throat and 
 automate formant-shift points 0:-6 8:6
 ```
 
-Shifts of 2 to 4 st sound natural; 7 and beyond are a cartoon. The shift is a cepstral spectral-envelope warp (Röbel and Rodet 2005; Smith, Spectral Audio Signal Processing): each STFT frame (1024 points at 24 kHz and below, 2048 above, hop a quarter frame, Hann analysis and synthesis) is divided by its envelope and multiplied by the envelope read at `k / 2^(st/12)`, the gain clamped to 24 dB and the phase left alone. The envelope's lifter follows the voice: 0.75 of a pitch period from a 5-frame median autocorrelation f0, clamped to 1..2 ms, 1 ms when unvoiced. Measured on the synthetic voice fixture at 22.05 kHz, ±2 and ±4 st land within 1 cent of the original pitch and 3 to 5.5 dB RMS of the envelope of a voice synthesised with moved formants (against 4 to 10 dB unprocessed), pre-echo stays below -15 dB, and it costs about 4 ms per audio-second. Frames are anchored to absolute hop multiples, so a preview window plays exactly the same samples as the full render. `shift 0` without automation leaves the sound untouched. This is not the sampler's `shift … formant`, which keeps formants while the pitch moves.
+Shifts of 2 to 4 st sound natural; 7 and beyond are a cartoon. The shift is a cepstral spectral-envelope warp (Röbel and Rodet 2005; Smith, Spectral Audio Signal Processing): each STFT frame (1024 points at 24 kHz and below, 2048 above, hop a quarter frame, Hann analysis and synthesis) is divided by its envelope and multiplied by the envelope read at `k / 2^(st/12)`, the gain clamped to 24 dB and the phase left alone. The envelope's lifter follows the voice: 0.75 of a pitch period from a 5-frame median autocorrelation f0, clamped to 1..2 ms, 1 ms when unvoiced. Measured on the synthetic voice fixture at 22.05 kHz, ±2 and ±4 st land within 1 cent of the original pitch and 3 to 5.5 dB RMS of the envelope of a voice synthesized with moved formants (against 4 to 10 dB unprocessed), pre-echo stays below -15 dB, and it costs about 4 ms per audio-second. Frames are anchored to absolute hop multiples, so a preview window plays exactly the same samples as the full render. `shift 0` without automation leaves the sound untouched. This is not the sampler's `shift … formant`, which keeps formants while the pitch moves.
 
 Before 0.7, `fx formant` was an alias of the vowel filter. `/fx formant o` and `set_fx {effect: "formant", vowel}` now answer "formant now shifts formants at constant pitch; the vowel filter is `vowel`".
 
@@ -1679,7 +1679,7 @@ Menu: Sound › browse sounds › Voices › Choir, Solo and Throat pick a prese
 dawg can read the melody out of audio: a sampler voice (for example a stem from `resample` or `split_stems`) or, once clips land, an audio clip. Nothing in the score changes until you ask for guide notes.
 
 - `/vocal pitch` reports the focused audio's detected key, median pitch and range with cents (`stem · voice stem · key · a major · median C#4 -8c · range A3 -5c to F#4 +30c · 14 notes`). Add `clip` or `voice` (a sampler voice), optionally followed by its name in any case, to choose the source, and `bass`, `tenor`, `alto` or `soprano` to narrow the search range (auto is 70-1400 Hz; bass goes down to 55 Hz).
-- `/vocal pitch trace on` draws the sung pitch over the note highway: one dot per column on the lane of the nearest semitone, in the warning colour when it is more than 15 cents off. `/vocal pitch trace off` hides it.
+- `/vocal pitch trace on` draws the sung pitch over the note highway: one dot per column on the lane of the nearest semitone, in the warning color when it is more than 15 cents off. `/vocal pitch trace off` hides it.
 - `/vocal notes` turns the melody into a new guide-notes track (`<track>-notes`, or `as <name>`), one note per sung note, placed through the tempo map where the audio plays. Velocity follows the voicing confidence.
 - ctrl-k › Sound › Voice › Pitch shows the detected key and median, with Analyze, Trace and Make notes rows.
 - Agent tools: `analyze_pitch` (read-only: key, median, range and the note list in file seconds) and `pitch_to_notes`.
@@ -1692,7 +1692,7 @@ A vocoder makes one sound talk with another: a voice (the modulator) shapes the 
 
 The one-step way: focus a vocal track (a sampler voice or clips) and type `/vocoder`. dawg adds a `<name> vocoder` track playing the built-in carrier, points it at the vocal and mutes the vocal, in one undo step; the carrier follows the song's chords when it has harmonic tracks, otherwise it drones on the song key's root. `/vocal vocoder` is the same command. On a synth track with one vocal in the song, `/vocoder` drives that synth instead. `/vocoder talkbox` or `/vocoder formant 3` on the vocal does the same with those settings, and on a vocal that already drives a carrier `/vocoder` focuses that carrier (`/vocoder new` makes another). With nothing to vocode it changes nothing and says how to bring a voice in. Muting the source does not silence the vocoder: the vocoder listens before the source's mute, volume, pan and sends.
 
-`/vocoder` and `vocode` echo the modulator's licence. Vocode only your own recordings or audio you hold the rights to. To vocode your own voice, load a recording of it onto a track (`/sample take.wav`), then `/vocoder talkbox` on that track.
+`/vocoder` and `vocode` echo the modulator's license. Vocode only your own recordings or audio you hold the rights to. To vocode your own voice, load a recording of it onto a track (`/sample take.wav`), then `/vocoder talkbox` on that track.
 
 | Command                                      | Does                                                                                   |
 | -------------------------------------------- | -------------------------------------------------------------------------------------- |
@@ -1715,7 +1715,7 @@ Register matters for the talkbox: a carrier note sounds only the harmonics of it
 | `root`     | 24..96                              | 45        | the drone pitch (MIDI), and the octave chords are voiced from                                    |
 | `spread`   | 0..1 st                             | 0.15      | supersaw detune                                                                                  |
 | `bands`    | 4..40                               | 16        | channel bands, spaced evenly in log frequency (heavy above 24)                                   |
-| `lo`, `hi` | 50..1000 Hz, 2000..12000 Hz         | 100, 8000 | the lowest and highest band centres                                                              |
+| `lo`, `hi` | 50..1000 Hz, 2000..12000 Hz         | 100, 8000 | the lowest and highest band centers                                                              |
 | `width`    | 0.25..4                             | 1         | band width as a multiple of the spacing                                                          |
 | `attack`   | 0.0005..0.2 s                       | 0.005     | envelope follower attack                                                                         |
 | `release`  | 0.005..2 s                          | 0.04      | envelope follower release; long releases smear                                                   |
@@ -1733,7 +1733,7 @@ Register matters for the talkbox: a carrier note sounds only the harmonics of it
 
 How it works: channel mode splits both signals into the same bands (cascaded RBJ band-passes, laid out from `lo` to `hi` the same at every sample rate), follows each modulator band's level, and multiplies the carrier's band by it. Each band's envelope is advanced by its filter's group delay plus the attack, so consonants stay on time. A formant shift reads the envelopes at a fractional band index. Talkbox mode fits an all-pole mouth filter to each 20 ms frame of the voice (on an absolute hop grid, so windows agree) and runs the carrier through it, which keeps vowels sharper with fewer artefacts. Frames that are both high-band heavy and aperiodic count as unvoiced and get seeded noise (keyed to the song sample) instead of the carrier, as hardware vocoders do with their sibilance switch. A stereo carrier (a supersaw) gets one analysis and two synthesis banks.
 
-Menu: **Effects › Voice › Vocoder** has a Source picker, Preset and one row per parameter; **Sound › browse sounds › Voices › Vocoder** makes a carrier track or picks a preset. The Mix & automation lane picker lists `vocoder-spread`, `-width`, `-release`, `-formant`, `-unvoiced`, `-hiss`, `-depth`, `-freeze` (a 0/1 step lane), `-mix` and `-gain`. Agent tools: `set_vocoder` (preset, src and a params object; previewable) and `vocode` (makes the carrier from a source and echoes the source's licence). In `song.ts`: `vocoder("talkbox", { src: "lead-vox", formant: 2 })` as an instrument or as a track's `vocoder` field (SDK 1.32.0).
+Menu: **Effects › Voice › Vocoder** has a Source picker, Preset and one row per parameter; **Sound › browse sounds › Voices › Vocoder** makes a carrier track or picks a preset. The Mix & automation lane picker lists `vocoder-spread`, `-width`, `-release`, `-formant`, `-unvoiced`, `-hiss`, `-depth`, `-freeze` (a 0/1 step lane), `-mix` and `-gain`. Agent tools: `set_vocoder` (preset, src and a params object; previewable) and `vocode` (makes the carrier from a source and echoes the source's license). In `song.ts`: `vocoder("talkbox", { src: "lead-vox", formant: 2 })` as an instrument or as a track's `vocoder` field (SDK 1.32.0).
 
 Cost: a 16-band channel vocoder renders at about 45 ms per audio-second, talkbox about 10 ms (measured on an M-series Mac); renders reuse the source's cached audio, and an edit to the source's pan, reverb, delay or sends does not re-render the vocoder.
 
@@ -1759,7 +1759,7 @@ Parameters: `speed` 0..400 ms (retune time, 0 is instant; `0.2s` reads as 200 ms
 
 Reach it as `/autotune [preset] [param value …]`, `/autotune off`, `/autotune presets`, `/vocal autotune …`, Sound › Voice › Autotune (rows for every parameter; left/right adjusts, `x` resets, space auditions), the agent tool `autotune_vocal`, and the SDK: `track({ autotune: "hard" })` or `autotune("pop", { speed: 40 })`. `/tune` stays the tuning command; `/tune hard` hints at `/autotune`.
 
-Rendering is deterministic: tuned spans are cached (128 MB of their own) by the audio's identity (a shifted or fitted sample by its shift or fit key), the settings, the targets and the engine version; with chord or note targets a sampler voice tunes only the frames it plays, and stereo samples keep both channels. In play mode a span longer than 0.25 s plays untuned until its correction is ready; the correction runs in slices so play mode stays responsive. Correction uses the pitch tracker and PSOLA of `/vocal pitch`; a clip is tuned once per placement (its offset and take nudge join the key), and a reversed clip or voice plays untuned. Licence lines for tuned clips made by `/vocal say` come with `say` in 0.7.1.
+Rendering is deterministic: tuned spans are cached (128 MB of their own) by the audio's identity (a shifted or fitted sample by its shift or fit key), the settings, the targets and the engine version; with chord or note targets a sampler voice tunes only the frames it plays, and stereo samples keep both channels. In play mode a span longer than 0.25 s plays untuned until its correction is ready; the correction runs in slices so play mode stays responsive. Correction uses the pitch tracker and PSOLA of `/vocal pitch`; a clip is tuned once per placement (its offset and take nudge join the key), and a reversed clip or voice plays untuned. License lines for tuned clips made by `/vocal say` come with `say` in 0.7.1.
 
 ## Menus
 
@@ -1881,7 +1881,7 @@ Kept changes are one `ScoreOperation` (`preview.commit`, listing the commands), 
 **What you see.** While the loop plays, the menu title adds a level meter of the looping track or mix: RMS as an eight-cell bar over -48..0 dBFS, the peak in dB, and `!` in the last cell when the loop clips (`♪ solo · B staged 2 · 64 ms · █████··· -9 dB`; the `ms` is the last key-to-swap time). A focused cutoff row draws its low- or high-pass curve on a log axis, an attack/decay/sustain/release row draws the envelope with the other stages, and the wavetable position row marks its place in the table:
 
 ```text
-│ cutoff (lpf/hpf) or centre (bpf) frequency  ▇▇▇▇▇▇▇▇▇▇▇▅▂▁▁▁  › fx filt… │
+│ cutoff (lpf/hpf) or center (bpf) frequency  ▇▇▇▇▇▇▇▇▇▇▇▅▂▁▁▁  › fx filt… │
 ```
 
 **The agent can listen too.** The `preview_sound {trackId?, changes?, bars?, context?, play?}` tool renders the same loop score for a track, or for candidate sound tool calls (`changes: [{tool: "set_wavetable", args: {...}}]`, any of `set_fx`, `set_synth`, `set_wavetable`, `set_instrument`, `set_sample`, `set_effects`, `set_mix`, `set_automation`, `set_drum_kit`, `use_sound`) applied to a copy of the score. Nothing is committed. It returns RMS and peak dBFS, the spectral centroid and a one-line description for the current and the candidate sound, plus a comparison (`3.0 dB louder, brighter (×2.00 centroid)`). When the window is quiet (no song or audition loop playing) it plays the candidate once, so the agent can say how it sounds before committing with the normal tools. `/try agent off` keeps agent previews silent (numbers only), `/try agent on` turns them back on; `DAWG_AGENT_PREVIEW=off` starts with them off.

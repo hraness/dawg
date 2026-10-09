@@ -300,7 +300,7 @@ export class ActivityFeed {
         this.setSpinner(undefined);
         if (event.code === "aborted")
           this.pushCard(
-            `cancelled${event.revision === undefined ? "" : ` · kept rev ${event.revision}`}`,
+            `canceled${event.revision === undefined ? "" : ` · kept rev ${event.revision}`}`,
             { tone: "warning" },
           );
         else

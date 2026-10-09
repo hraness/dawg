@@ -197,7 +197,7 @@ describe("set_piano_pedals (0.6.1)", () => {
         { trackId: "keys", soft: "bars" },
         context(score),
       ),
-    ).toThrow(/una corda acts on the modelled pianos/);
+    ).toThrow(/una corda acts on the modeled pianos/);
     // Sostenuto holds notes on any instrument.
     expect(() =>
       tool("set_piano_pedals").plan(
