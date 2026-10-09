@@ -22,6 +22,7 @@ import { RENDER_CHANNELS, renderScorePcm } from "./wav.ts";
 import { engineFor } from "./instruments.ts";
 import { noteHz, resolveTuning } from "../../core/tuning.ts";
 import { liveFitPending, withLiveFit } from "./fit.ts";
+import { isOrganFamily } from "../../core/keys.ts";
 import type { LiveFullReply, LiveFullRequest } from "./live-worker.ts";
 
 /** A rendered live note: interleaved stereo 16-bit PCM. */
@@ -42,6 +43,11 @@ export type LiveNotePcm = Readonly<{
    * `full: true` off the key path and swap the result in by voice id.
    */
   partial?: boolean;
+  /**
+   * The organ clock tick a first window rendered at: pass it back as the
+   * request's `clock` for the full pass so the wheels and rotors continue.
+   */
+  clock?: number;
 }>;
 
 export type LiveNoteRequest = Readonly<{
@@ -58,6 +64,8 @@ export type LiveNoteRequest = Readonly<{
   tick?: number;
   /** Render the whole note even through a guitar rig (the background pass). */
   full?: boolean;
+  /** An organ note's clock tick from its first window (`LiveNotePcm.clock`). */
+  clock?: number;
 }>;
 
 /**
@@ -78,6 +86,8 @@ const CACHE_ENTRIES = 96;
  */
 export class LiveSynth {
   private readonly cache = new Map<string, LiveNotePcm>();
+  /** f061-organ: the live organ clock's origin (performance.now ms). */
+  private readonly organEpoch = performance.now();
 
   public constructor(private readonly sampleRate: number) {}
 
@@ -122,6 +132,21 @@ export class LiveSynth {
     );
     const velocity = Math.max(0, Math.min(1, request.velocity));
     const pitch = Math.max(0, Math.min(127, Math.round(request.pitch)));
+    // f061-organ: one rotating speaker and one set of free-running wheels
+    // per organ track. Each key renders from the song tick it sounds at
+    // (or the synth's own clock when stopped), so successive notes share
+    // the track's rotor and wheel phases instead of restarting them.
+    const organTick =
+      track.keys && isOrganFamily(track.instrument)
+        ? Math.max(
+            0,
+            Math.round(
+              request.clock ??
+                request.tick ??
+                ((performance.now() - this.organEpoch) / 1000) * ticksPerSecond,
+            ),
+          )
+        : undefined;
     const key = JSON.stringify([
       liveTrack(track),
       pitch,
@@ -137,6 +162,7 @@ export class LiveSynth {
       ...(score.tuning || track.tuning
         ? [score.tuning ?? null, score.key]
         : []),
+      ...(organTick !== undefined ? [`organ:${organTick}`] : []),
       // A 0.6 engine's assets, and the key it may tune to.
       ...(liveEngine
         ? [
@@ -148,20 +174,40 @@ export class LiveSynth {
           ]
         : []),
     ]);
-    return { track, score, bpm, seconds, durationTicks, velocity, pitch, key };
+    return {
+      track,
+      score,
+      bpm,
+      seconds,
+      durationTicks,
+      velocity,
+      pitch,
+      key,
+      organTick,
+    };
   }
 
   public render(request: LiveNoteRequest): LiveNotePcm | undefined {
     const plan = this.plan(request);
     if (!plan) return undefined;
-    const { track, score, bpm, seconds, durationTicks, velocity, pitch, key } =
-      plan;
+    const {
+      track,
+      score,
+      bpm,
+      seconds,
+      durationTicks,
+      velocity,
+      pitch,
+      key,
+      organTick,
+    } = plan;
     const liveEngine = engineFor(track);
     // The first window of a rig note: its own cache entry, swapped for the
     // whole note once the background pass has rendered it.
+    // Organs too: wheels, rotors and drive cost 4-8 ms per note-second.
     const windowed =
       request.full !== true &&
-      hasRig(track) &&
+      (hasRig(track) || organTick !== undefined) &&
       seconds > LIVE_RIG_WINDOW_SECONDS &&
       !this.cache.has(key);
     if (windowed) {
@@ -214,6 +260,7 @@ export class LiveSynth {
           ? 1
           : Math.max(MAX_LIVE_NOTE_SECONDS + 4, seconds + tail),
         ...(request.samples ? { samples: request.samples } : {}),
+        ...(organTick ? { seedTick: organTick } : {}),
       }),
     );
     const frames = windowed
@@ -245,8 +292,11 @@ export class LiveSynth {
           }
         : {}),
       ...(windowed ? { partial: true } : {}),
+      ...(windowed && organTick !== undefined ? { clock: organTick } : {}),
     };
     if (liveFitPending()) return { ...rendered, fitting: true };
+    // Organ keys render at their song tick: caching them would only evict.
+    if (organTick !== undefined) return rendered;
     this.cache.set(windowed ? `${key}#window` : key, rendered);
     this.trim();
     return rendered;
@@ -346,6 +396,7 @@ export class LiveFullRenderer {
         velocity: request.velocity,
         seconds: request.seconds,
         ...(request.tick === undefined ? {} : { tick: request.tick }),
+        ...(request.clock === undefined ? {} : { clock: request.clock }),
         ...(request.samples ? { samples: request.samples } : {}),
       };
       try {

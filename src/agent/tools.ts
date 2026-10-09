@@ -46,6 +46,7 @@ import {
 } from "../commands/keys.ts";
 import {
   KEYS_PRESETS,
+  ORGAN_ALIASES,
   KEYS_SIMPLE,
   isKeysPreset,
   keysParamName,
@@ -888,17 +889,25 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   },
   {
     name: "set_keys",
-    description: `Shape a modelled piano or electric keys (epiano wurli clav): preset (instrument, keys and its effects), params ${KEYS_SIMPLE.join(" ")}… (pianos: sym 0.5 adds sympathetic bloom under the sustain pedal, good for Chopin and Debussy; epiano: bark bell tone vibe; wurli: trem; clav: pickup mute; null unsets; DAWG.md lists all), or reset. Stored "piano" stays legacy; set_instrument piano writes grand.`,
+    description: `Shape a modelled piano, electric keys (epiano wurli clav) or organ: preset (instrument, keys and its effects), params ${KEYS_SIMPLE.join(" ")}… (pianos: sym 0.5 adds sympathetic bloom under the sustain pedal, good for Chopin and Debussy; epiano: bark bell tone vibe; wurli: trem; clav: pickup mute; null unsets; DAWG.md lists all), or reset. Stored "piano" stays legacy; set_instrument piano writes grand. Organs (not "organ", a legacy synth): presets tonewheel combo pipe… (aliases hammond b3 farfisa church); drawbars "888800008", registers "08880", stops (plenum, flute8…), rotary; params perc percdecay percvol click scanner drive (tonewheel), voice vib vibmod drive (combo), chiff wind trem (pipe). A row the family does not read is refused.`,
     parameters: {
       type: "object",
       properties: {
         trackId: trackIdSchema,
-        preset: { type: "string", enum: Object.keys(KEYS_PRESETS) },
+        preset: {
+          type: "string",
+          enum: [...Object.keys(KEYS_PRESETS), ...Object.keys(ORGAN_ALIASES)],
+        },
         reset: { type: "boolean" },
         params: {
           type: "object",
           additionalProperties: { type: ["number", "string", "null"] },
         },
+        // f061-organ
+        drawbars: { type: "string", pattern: "^[0-8]{9}$" },
+        registers: { type: "string", pattern: "^[0-8]{5}$" },
+        stops: { type: ["array", "string"], items: { type: "string" } },
+        rotary: { type: "string", enum: ["slow", "fast", "stop"] },
       },
       additionalProperties: false,
     },
@@ -1507,7 +1516,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
         typeof args.instrument === "string"
           ? args.instrument.toLowerCase()
           : "";
-      const preset = word === "piano" ? "grand" : word;
+      const preset = pianoWrite(word)?.preset ?? word;
       if (isKeysPreset(preset)) {
         const patch = keysPresetPatch({}, preset);
         return {
@@ -1971,19 +1980,54 @@ function fxToolCommand(
   return { type: "fx-set", effect, values };
 }
 
+/** f061-organ: set_keys drawbars/registers/stops/rotary as keys values. */
+function organToolValues(
+  args: Record<string, unknown>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const name of ["drawbars", "registers", "rotary"] as const) {
+    const value = args[name];
+    if (value === undefined) continue;
+    if (typeof value !== "string")
+      throw new ToolArgumentError(`keys ${name} must be a string`);
+    out[name] = value;
+  }
+  if (args.stops !== undefined) {
+    const words = Array.isArray(args.stops)
+      ? args.stops
+      : typeof args.stops === "string"
+        ? args.stops.split(/[\s,+]+/)
+        : undefined;
+    if (!words || !words.every((word) => typeof word === "string"))
+      throw new ToolArgumentError("keys stops must be stop names");
+    out.stops = words.join(" ");
+  }
+  return out;
+}
+
 function keysToolCommand(args: Record<string, unknown>): KeysCommand {
   if (args.reset === true) return { type: "keys-reset" };
+  const organ = organToolValues(args);
+  const organSet = Object.keys(organ).length > 0;
   if (args.preset !== undefined) {
-    if (typeof args.preset !== "string" || !isKeysPreset(args.preset))
+    const preset =
+      typeof args.preset === "string"
+        ? (pianoWrite(args.preset)?.preset ?? args.preset)
+        : undefined;
+    if (preset === undefined || !isKeysPreset(preset))
       throw new ToolArgumentError(
         `keys presets: ${Object.keys(KEYS_PRESETS).join(", ")}`,
       );
-    return { type: "keys-preset", preset: args.preset };
+    return organSet
+      ? { type: "keys-preset", preset, values: organ }
+      : { type: "keys-preset", preset };
   }
+  if (args.params === undefined && organSet)
+    return { type: "keys-set", values: organ };
   if (args.params === undefined)
     throw new ToolArgumentError("set_keys needs preset, reset, or params");
   const params = record(args.params, "params");
-  const values: Record<string, number | string | null> = {};
+  const values: Record<string, number | string | null> = { ...organ };
   for (const [name, value] of Object.entries(params)) {
     const param = keysParamName(name);
     if (!param)

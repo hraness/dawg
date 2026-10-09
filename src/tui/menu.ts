@@ -103,11 +103,19 @@ import {
   KEYS_PARAMS,
   KEYS_PRESETS,
   KEYS_FAMILIES,
+  ORGAN_ROWS,
+  ORGAN_TEXT,
+  PIPE_REGISTRATIONS,
+  PIPE_STOPS,
   isElectricFamily,
   isKeysFamily,
+  isOrganFamily,
+  isPianoFamily,
   keysParamsFor,
   keysSimpleFor,
+  pipeStops,
   resolvedKeys,
+  type OrganFamily,
 } from "../../core/keys.ts";
 import type { PickerItem } from "../../tui/app.ts";
 import { BUILTIN_TABLES, BUILTIN_TABLE_NAMES } from "../audio/wavetable.ts";
@@ -540,25 +548,39 @@ function soundSectionNodes(context: MenuContext): MenuNode[] {
         ]
       : [];
   const keys: MenuNode[] =
-    track && isKeysFamily(track.instrument) && track.keys
+    track && isOrganFamily(track.instrument) && track.keys
       ? [
           {
             kind: "menu",
             id: "keys",
             label: "keys",
             detail: `${track.instrument}${track.keys.preset ? ` · ${track.keys.preset}` : ""}`,
-            help: isElectricFamily(track.instrument)
-              ? "electric keys: preset, bark, bell, tone, vibe/trem, pickup and mute"
-              : "the modelled piano: preset, touch, hammers, dampers, stretch",
+            help: "the modelled organ: preset, drawbars, registers or stops, rotary",
             build: (inner) => {
               const current = focused(inner);
-              return current
-                ? keysNodes(current, keysParamsFor(current.instrument))
-                : [];
+              return current ? organNodes(current) : [];
             },
           },
         ]
-      : [];
+      : track && isKeysFamily(track.instrument) && track.keys
+        ? [
+            {
+              kind: "menu",
+              id: "keys",
+              label: "keys",
+              detail: `${track.instrument}${track.keys.preset ? ` · ${track.keys.preset}` : ""}`,
+              help: isElectricFamily(track.instrument)
+                ? "electric keys: preset, bark, bell, tone, vibe/trem, pickup and mute"
+                : "the modelled piano: preset, touch, hammers, dampers, stretch",
+              build: (inner) => {
+                const current = focused(inner);
+                return current
+                  ? keysNodes(current, keysParamsFor(current.instrument))
+                  : [];
+              },
+            },
+          ]
+        : [];
   // 0.6.1: fretting for strum and the guitar perform mode, on guitar-like
   // tracks (a string voice, a rig, or a guitar setup already stored).
   const guitar: MenuNode[] =
@@ -1206,6 +1228,9 @@ function parameterNodes(context: MenuContext): MenuNode[] {
       label: "add a voice",
       value: "/sample <path> [as <voice>]",
     });
+  } else if (isOrganFamily(track.instrument) && track.keys) {
+    // f061-organ: preset, Drawbars/Registers/Stops sub-menus, organ rows.
+    nodes.push(...organNodes(track));
   } else if (isKeysFamily(track.instrument) && track.keys) {
     nodes.push(...keysNodes(track, keysSimpleFor(track.instrument)));
     const all = keysParamsFor(track.instrument);
@@ -1391,22 +1416,24 @@ function matchingSynthPreset(track: Track): string | undefined {
 }
 
 /** Modelled piano rows: the preset, then each parameter (`keys <p> <v>`). */
-function keysNodes(track: Track, params: readonly string[]): MenuNode[] {
+function keysNodes(
+  track: Track,
+  params: readonly string[],
+  presets: readonly string[] = keysPresetNames(track.instrument),
+): MenuNode[] {
   const effective = resolvedKeys(track.instrument, track.keys);
   const nodes: MenuNode[] = [
     {
       kind: "choice",
       label: "preset",
       value: track.keys?.preset ?? "—",
-      options: Object.keys(KEYS_PRESETS).filter(
-        (name) =>
-          isElectricFamily(KEYS_PRESETS[name]!.instrument) ===
-          isElectricFamily(track.instrument),
-      ),
+      options: presets,
       command: (preset) => `keys preset ${preset}`,
-      help: isElectricFamily(track.instrument)
-        ? "a starting electric piano or clav; every value stays editable"
-        : "a starting piano; every value stays editable",
+      help: isOrganFamily(track.instrument)
+        ? "a starting organ; every value stays editable"
+        : isElectricFamily(track.instrument)
+          ? "a starting electric piano or clav; every value stays editable"
+          : "a starting piano; every value stays editable",
     },
   ];
   for (const key of params) {
@@ -1444,6 +1471,174 @@ function keysNodes(track: Track, params: readonly string[]): MenuNode[] {
     command: "keys reset",
     help: "clear every override and the preset, and the effects the preset added (keeps the family's own sound)",
   });
+  return nodes;
+}
+
+// ---- f061-organ menu rows -------------------------------------------------
+
+const PIANO_PRESET_NAMES = Object.keys(KEYS_PRESETS).filter((name) =>
+  isPianoFamily(KEYS_PRESETS[name]!.instrument),
+);
+const ORGAN_PRESET_NAMES = Object.keys(KEYS_PRESETS).filter((name) =>
+  isOrganFamily(KEYS_PRESETS[name]!.instrument),
+);
+const ELECTRIC_PRESET_NAMES = Object.keys(KEYS_PRESETS).filter((name) =>
+  isElectricFamily(KEYS_PRESETS[name]!.instrument),
+);
+
+/** The presets of the track's kind of keys (pianos, electric or organs). */
+function keysPresetNames(instrument: string): readonly string[] {
+  if (isOrganFamily(instrument)) return ORGAN_PRESET_NAMES;
+  if (isElectricFamily(instrument)) return ELECTRIC_PRESET_NAMES;
+  return PIANO_PRESET_NAMES;
+}
+
+const DRAWBAR_FEET = [
+  "16'",
+  "5⅓'",
+  "8'",
+  "4'",
+  "2⅔'",
+  "2'",
+  "1⅗'",
+  "1⅓'",
+  "1'",
+];
+const REGISTER_FEET = ["16'", "8'", "4'", "2⅔'", "2'"];
+
+/**
+ * One 0-8 row per footage of a digit string (`keys drawbars 888000000`):
+ * left/right pull a bar in or out, x puts the whole set back.
+ */
+function digitNodes(
+  name: "drawbars" | "registers",
+  text: string,
+  feet: readonly string[],
+  stored: boolean,
+): MenuNode[] {
+  const digits = text.split("").map(Number);
+  const nodes: MenuNode[] = feet.map((foot, index): MenuNode => {
+    const at = (value: number) =>
+      digits.map((d, i) => (i === index ? value : d)).join("");
+    return {
+      kind: "number",
+      label: foot,
+      value: digits[index]!,
+      min: 0,
+      max: 8,
+      step: (value, direction) => Math.max(0, Math.min(8, value + direction)),
+      format: (value) =>
+        `${value}  ${"█".repeat(value)}${"·".repeat(8 - value)}`,
+      command: (value) => `keys ${name} ${at(value)}`,
+      // x resets this bar only, to its default digit.
+      reset: `keys ${name} ${at(Number(ORGAN_TEXT[name].default[index] ?? 0))}`,
+      help: `${foot} ${name === "drawbars" ? "drawbar" : "register"} 0-8`,
+    };
+  });
+  nodes.push({
+    kind: "entry",
+    label: `${name} (type)`,
+    value: stored ? text : `${text} (default)`,
+    placeholder: `${feet.length} digits 0-8`,
+    command: (typed) =>
+      new RegExp(`^[0-8]{${feet.length}}$`).test(typed.trim())
+        ? `keys ${name} ${typed.trim()}`
+        : undefined,
+    example: `keys ${name} ${text}`,
+  });
+  return nodes;
+}
+
+/** Pipe stops: a registration, then one toggle per stop. */
+function stopNodes(text: string): MenuNode[] {
+  const on = pipeStops(text);
+  const nodes: MenuNode[] = [
+    {
+      kind: "choice",
+      label: "registration",
+      value: Object.keys(PIPE_REGISTRATIONS).includes(text) ? text : "—",
+      options: Object.keys(PIPE_REGISTRATIONS),
+      command: (option) => `keys stops ${option}`,
+      help: "a named registration (stops drawn together)",
+    },
+  ];
+  for (const stop of PIPE_STOPS)
+    nodes.push({
+      kind: "toggle",
+      label: stop,
+      value: on.includes(stop),
+      command: (value) => {
+        const next = value
+          ? PIPE_STOPS.filter((name) => name === stop || on.includes(name))
+          : on.filter((name) => name !== stop);
+        return next.length > 0
+          ? `keys stops ${next.join(" ")}`
+          : "keys stops off";
+      },
+      help: `draw or retire the ${stop} stop`,
+    });
+  return nodes;
+}
+
+/** The organ's rows: preset, its family's sub-menu, then its parameters. */
+function organNodes(track: Track): MenuNode[] {
+  const family = track.instrument as OrganFamily;
+  const effective = resolvedKeys(track.instrument, track.keys);
+  const rows = ORGAN_ROWS[family].filter((row) => row in KEYS_PARAMS);
+  const nodes = keysNodes(track, rows, ORGAN_PRESET_NAMES);
+  const text = (name: keyof typeof ORGAN_TEXT) =>
+    String(effective[name] ?? ORGAN_TEXT[name].default);
+  const sub: MenuNode =
+    family === "tonewheel"
+      ? {
+          kind: "menu",
+          id: "keys:drawbars",
+          label: "Drawbars",
+          detail: text("drawbars"),
+          help: "nine drawbars 16' to 1' (0 in, 8 full out)",
+          build: (inner) => {
+            const current = focused(inner) ?? track;
+            const value = resolvedKeys(current.instrument, current.keys);
+            return digitNodes(
+              "drawbars",
+              String(value.drawbars ?? ORGAN_TEXT.drawbars.default),
+              DRAWBAR_FEET,
+              current.keys?.drawbars !== undefined,
+            );
+          },
+        }
+      : family === "combo"
+        ? {
+            kind: "menu",
+            id: "keys:registers",
+            label: "Registers",
+            detail: text("registers"),
+            help: "five combo-organ registers 16' to 2' (0 off, 8 full)",
+            build: (inner) => {
+              const current = focused(inner) ?? track;
+              const value = resolvedKeys(current.instrument, current.keys);
+              return digitNodes(
+                "registers",
+                String(value.registers ?? ORGAN_TEXT.registers.default),
+                REGISTER_FEET,
+                current.keys?.registers !== undefined,
+              );
+            },
+          }
+        : {
+            kind: "menu",
+            id: "keys:stops",
+            label: "Stops",
+            detail: text("stops"),
+            help: "pipe stops and registrations",
+            build: (inner) => {
+              const current = focused(inner) ?? track;
+              const value = resolvedKeys(current.instrument, current.keys);
+              return stopNodes(String(value.stops ?? ORGAN_TEXT.stops.default));
+            },
+          };
+  // After the preset row, before the parameters.
+  nodes.splice(1, 0, sub);
   return nodes;
 }
 
@@ -1937,7 +2132,13 @@ function automationNodes(context: MenuContext): MenuNode[] {
     if (info?.effect === "synth")
       return track.synth?.[info.param] !== undefined;
     if (info?.effect === "string") return track.string !== undefined;
-    if (info?.effect === "keys") return track.keys !== undefined;
+    // Only the lanes this family's engine reads (keys-rotary on organs,
+    // keys-hardness on pianos); the rest wait under "all lanes".
+    if (info?.effect === "keys")
+      return (
+        track.keys !== undefined &&
+        keysParamsFor(track.instrument).includes(info.param)
+      );
     if (info?.effect === "modal") return track.modal !== undefined;
     return info !== undefined && effectValues(track, info.effect) !== undefined;
   });
@@ -2128,27 +2329,25 @@ function soundNodes(): MenuNode[] {
       kind: "menu",
       id: "group:keys",
       label: "Keys",
-      help: "modelled pianos and electric keys, built in (no download)",
-      detail: Object.keys(KEYS_PRESETS).join(" "),
+      help: "modelled pianos, electric keys and organs, built in (no download)",
+      detail: `${PIANO_PRESET_NAMES.join(" ")} · electric: ${ELECTRIC_PRESET_NAMES.join(" ")} · organs: ${ORGAN_PRESET_NAMES.join(" ")}`,
       build: () => [
-        ...Object.entries(KEYS_PRESETS)
-          .filter(([, preset]) => !isElectricFamily(preset.instrument))
-          .map(([name, preset]): MenuNode => ({
+        ...PIANO_PRESET_NAMES.map((name): MenuNode => {
+          const preset = KEYS_PRESETS[name]!;
+          return {
             kind: "action",
             label: `${name.padEnd(10)} ${preset.doc}`,
             command: `piano ${name}`,
             help: preset.styles,
-          })),
+          };
+        }),
         // keys-electric (0.6.1): tine and reed pianos and the clavinet.
         {
           kind: "menu",
           id: "group:keys:electric",
           label: "Electric",
           help: "electric pianos (tine, reed) and the clavinet, modelled",
-          detail: Object.entries(KEYS_PRESETS)
-            .filter(([, preset]) => isElectricFamily(preset.instrument))
-            .map(([name]) => name)
-            .join(" "),
+          detail: ELECTRIC_PRESET_NAMES.join(" "),
           build: () =>
             Object.entries(KEYS_PRESETS)
               .filter(([, preset]) => isElectricFamily(preset.instrument))
@@ -2158,6 +2357,24 @@ function soundNodes(): MenuNode[] {
                 command: `keys preset ${name}`,
                 help: preset.styles,
               })),
+        },
+        // f061-organ
+        {
+          kind: "menu",
+          id: "group:organs",
+          label: "Organs",
+          help: "tonewheel, combo and pipe organs on the keys engine",
+          detail: ORGAN_PRESET_NAMES.join(" "),
+          build: () =>
+            ORGAN_PRESET_NAMES.map((name): MenuNode => {
+              const preset = KEYS_PRESETS[name]!;
+              return {
+                kind: "action",
+                label: `${name.padEnd(10)} ${preset.doc}`,
+                command: name,
+                help: preset.styles,
+              };
+            }),
         },
       ],
     },

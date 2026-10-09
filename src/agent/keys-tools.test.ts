@@ -116,3 +116,56 @@ describe("electric keys agent tools", () => {
       expect(schema.properties.preset.enum).toContain(name);
   });
 });
+
+describe("organ agent tools (f061-organ)", () => {
+  test("set_instrument organ words reach the engine; organ stays legacy", () => {
+    for (const [word, instrument] of [
+      ["tonewheel", "tonewheel"],
+      ["hammond", "tonewheel"],
+      ["combo", "combo"],
+      ["farfisa", "combo"],
+      ["pipe", "pipe"],
+      ["church", "pipe"],
+    ] as const) {
+      const track = apply(song(), "set_instrument", { instrument: word })
+        .tracks[0]!;
+      expect(track.instrument).toBe(instrument);
+      expect(track.keys).toBeDefined();
+    }
+  });
+
+  test("set_keys drawbars, registers, stops and rotary", () => {
+    let score = apply(song(), "set_keys", {
+      preset: "tonewheel",
+      drawbars: "888800008",
+      rotary: "fast",
+    });
+    expect(score.tracks[0]!.instrument).toBe("tonewheel");
+    expect(score.tracks[0]!.keys).toMatchObject({
+      preset: "tonewheel",
+      drawbars: "888800008",
+      rotary: "fast",
+    });
+    score = apply(score, "set_keys", {
+      params: { perc: "3rd" },
+      rotary: "slow",
+    });
+    expect(score.tracks[0]!.keys).toMatchObject({
+      perc: "3rd",
+      rotary: "slow",
+    });
+    const pipe = apply(song(), "set_keys", {
+      preset: "pipe",
+      stops: ["principal8", "octave4"],
+    });
+    expect(pipe.tracks[0]!.keys?.stops).toBe("principal8 octave4");
+    const combo = apply(song(), "set_keys", {
+      preset: "vox",
+      registers: "08080",
+    });
+    expect(combo.tracks[0]!.keys?.registers).toBe("08080");
+    expect(() =>
+      apply(song(), "set_keys", { preset: "pipe", stops: ["kazoo"] }),
+    ).toThrow();
+  });
+});

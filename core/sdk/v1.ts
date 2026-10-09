@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.27.0";
+export const SDK_VERSION = "1.28.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -2231,7 +2231,35 @@ export type KeysInput = Readonly<{
   vibe?: number;
   /** Suitcase vibrato rate in Hz 0.5..12 (4; epiano). */
   vibehz?: number;
-  /** Reed piano tremolo depth 0..1 (0; wurli). */
+  // Organs (SDK 1.28.0), for instrument `"tonewheel"`, `"combo"` or
+  // `"pipe"` (presets tonewheel gospel jazzorgan combo vox pipe flutes
+  // cornet reeds celeste). `"organ"` stays the legacy sine voice.
+  /** Tonewheel drawbars, nine digits 0-8, 16' to 1' (`"888000000"`). */
+  drawbars?: string;
+  /** Tonewheel percussion: off 2nd 3rd. */
+  perc?: string;
+  /** Percussion decay: fast slow. */
+  percdecay?: string;
+  /** Key click 0..1. */
+  click?: number;
+  /** Scanner vibrato/chorus: off v1 v2 v3 c1 c2 c3. */
+  scanner?: string;
+  /** Preamp drive 0..1 (lane `keys-drive`). */
+  drive?: number;
+  /** Rotary speaker: slow fast stop (lane `keys-rotary`). */
+  rotary?: string;
+  /** Combo registers, five digits 0-8, 16' 8' 4' 2⅔' 2' (`"08800"`). */
+  registers?: string;
+  /**
+   * Pipe stops: names or a registration (plenum flutes cornet reeds strings
+   * full), as one string or a list (`["principal8", "octave4"]`).
+   */
+  stops?: string | readonly string[];
+  /** Pipe chiff 0..1. */
+  chiff?: number;
+  /** Pipe wind unsteadiness 0..1. */
+  wind?: number;
+  /** Tremolo depth 0..1: reed piano (0; wurli), pipe tremulant (0; pipe). */
   trem?: number;
 }>;
 
@@ -3073,6 +3101,12 @@ const KEYS_PRESET_FX: Readonly<
     filter: { cutoff: 3500, resonance: 0.1 },
     fx: { crush: { bits: 10 } },
   },
+  // f061-organ: the pipe presets sound in a church.
+  pipe: { reverb: { mix: 0.35, size: 0.9 } },
+  flutes: { reverb: { mix: 0.3, size: 0.8 } },
+  cornet: { reverb: { mix: 0.3, size: 0.8 } },
+  reeds: { reverb: { mix: 0.3, size: 0.85 } },
+  celeste: { reverb: { mix: 0.35, size: 0.9 } },
 });
 
 /**
@@ -3117,6 +3151,13 @@ function keysSpec(
     out.preset = preset;
   for (const [key, value] of Object.entries(input)) {
     if (value === undefined) continue;
+    // Pipe stops may be a list: stored as one space-separated string.
+    if (key === "stops" && Array.isArray(value)) {
+      if (!value.every((stop) => typeof stop === "string"))
+        throw new DawgSdkError(`track ${name}: keys.stops must be stop names`);
+      out[key] = value.join(" ");
+      continue;
+    }
     out[key] = effectValue(value, `${name} keys.${key}`);
   }
   return { keys: Object.freeze(out) };
@@ -5117,6 +5158,39 @@ const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
     field: "keys",
     preset: "prepared",
   },
+  // keys (f061-organ): tonewheel, combo and pipe organs on the keys
+  // engine. `organ` stays legacy (the sine voice).
+  {
+    word: "tonewheel",
+    instrument: "tonewheel",
+    field: "keys",
+    preset: "tonewheel",
+  },
+  {
+    word: "hammond",
+    instrument: "tonewheel",
+    field: "keys",
+    preset: "tonewheel",
+  },
+  { word: "b3", instrument: "tonewheel", field: "keys", preset: "tonewheel" },
+  { word: "gospel", instrument: "tonewheel", field: "keys", preset: "gospel" },
+  {
+    word: "jazzorgan",
+    instrument: "tonewheel",
+    field: "keys",
+    preset: "jazzorgan",
+  },
+  { word: "combo", instrument: "combo", field: "keys", preset: "combo" },
+  { word: "farfisa", instrument: "combo", field: "keys", preset: "combo" },
+  { word: "vox", instrument: "combo", field: "keys", preset: "vox" },
+  { word: "pipe", instrument: "pipe", field: "keys", preset: "pipe" },
+  { word: "church", instrument: "pipe", field: "keys", preset: "pipe" },
+  { word: "pipeorgan", instrument: "pipe", field: "keys", preset: "pipe" },
+  { word: "churchorgan", instrument: "pipe", field: "keys", preset: "pipe" },
+  { word: "flutes", instrument: "pipe", field: "keys", preset: "flutes" },
+  { word: "cornet", instrument: "pipe", field: "keys", preset: "cornet" },
+  { word: "reeds", instrument: "pipe", field: "keys", preset: "reeds" },
+  { word: "celeste", instrument: "pipe", field: "keys", preset: "celeste" },
   // f06-modal: mallets and bells (core/resonators.ts). `marimba` is legacy;
   // `modal` alone gives the modal marimba.
   { word: "modal", instrument: "modal", field: "modal", preset: "marimba" },

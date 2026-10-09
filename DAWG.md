@@ -617,7 +617,7 @@ FM operators 2–8 repeat the `fm` rows with a suffix (`fm2`, `fmh2`, `fmattack2
 
 A track whose `instrument` is a piano family (`grand`, `upright`, `felt`, `honkytonk`, `prepared`) and which has a `keys` field plays dawg's modelled piano (`src/audio/keys/`): a felt hammer of the chosen hardness strikes a bank of stretched, inharmonic string modes (two or three detuned unison strings per key, with a fast first stage and a slow aftersound), a soundboard knock, dampers that stop a released key in about a second, and a small body EQ per family. The 0.5 sustain pedal (down, half, up) holds the dampers off. It is built in: nothing downloads and every render is byte-identical.
 
-`piano` keeps two meanings on purpose. A project already stored as `instrument: "piano"` keeps the legacy tone forever. Every new write of the word (`piano`, `instrument piano`, `set_instrument piano`, the menu) stores `instrument: "grand"` with `keys: { preset: "grand" }`. `organ` stays the synth preset. The sampled Salamander grand is still in the browser under instruments.
+`piano` keeps two meanings on purpose. A project already stored as `instrument: "piano"` keeps the legacy tone forever. Every new write of the word (`piano`, `instrument piano`, `set_instrument piano`, the menu) stores `instrument: "grand"` with `keys: { preset: "grand" }`. `organ` stays the synth preset (the modelled organs are `tonewheel`, `combo` and `pipe`, below). The sampled Salamander grand is still in the browser under instruments.
 
 Tuning: each key's first partial sits on the track's tuning (12-TET or any table, 19-EDO included; an unmapped degree is silent). By default the octaves are stretched from the strings' own inharmonicity, as a piano tuner would: low octaves are tuned between the 2:1 and 4:2 beats and the treble is beatless 2:1 to the stretched note below, so the octave from A3 to A4 beats under 1 Hz. `keys stretch 0` keeps every key exactly on the tuning. Bends and glides keep each string mode under the Nyquist limit (modes that would alias are muted), and each note fades over its last 250 ms so it ends inside the 8 s loop-tail window.
 
@@ -712,6 +712,55 @@ automate keys-vibe points 0:0 8:0.8      automatable parameters have lanes
 | **mute**   | clav          | 0..1                 | 0       |             | mute slider: damps the upper partials |
 
 `hardness`, `touch`, `decay`, `release`, `width`, `vib` and `vibmod` apply to the electric families too. The menu has them under **Sound › browse sounds › Keys › Electric**, with their rows in **Sound › Parameters**; the agent's `set_instrument` and `set_keys` take the same words; the SDK takes `track({ instrument: "epiano", keys: { vibe: 0.6 } })` or `track({ instrument: "suitcase" })`. The models are dawg's own, from public descriptions of the instruments (tine and tone-bar cantilever, electromagnetic and electrostatic pickups, the Clavinet's pickup switching), with no sampled audio.
+
+### Organs (tonewheel, combo, pipe)
+
+Three organ families run on the same keys engine (`src/audio/keys/organ.ts`) when the track's `instrument` is `tonewheel`, `combo` or `pipe` and it carries `keys`. `organ` stays the legacy sine preset and renders byte-identically; reach the engine with the verbs or presets below, or the aliases `hammond`, `b3`, `farfisa`, `church`, `pipeorgan`.
+
+- **tonewheel**: 91 free-running tonewheels at the gear ratios of the classic organ, phase-locked to song time (a key opens a wheel already turning, so the same chord sounds the same wherever it lands and two keys sharing a wheel share its phase). Nine drawbars `16' 5⅓' 8' 4' 2⅔' 2' 1⅗' 1⅓' 1'` stored as nine digits 0-8 (`888000000`). Single-trigger percussion (2nd or 3rd harmonic, fast or slow) fires only when every key was up and, as on the original, mutes the 1' bar while it is on. Key click, a scanner vibrato/chorus (V1-V3, C1-C3), a preamp drive and a two-rotor rotary speaker (horn and drum, slow, fast or stop) whose rotors glide between speeds with their own inertia: about a second for the horn and several for the drum.
+- **combo**: divider-style combo organ with five registers `16' 8' 4' 2⅔' 2'` (five digits), a flute, reed or bright voice and a vibrato.
+- **pipe**: band-limited additive pipe ranks with chiff, wind unsteadiness and a tremulant. `stops` lists stop names (`subbass16 bourdon16 principal8 flute8 gedackt8 gamba8 celeste8 octave4 flute4 nazard fifteenth2 piccolo2 tierce larigot mixture trombone16 trumpet8 oboe8 krummhorn8`) or registrations (`plenum flutes cornet reeds strings full`). Each rank sits on the track's tuning (12-TET or a table such as 19-EDO); mutation and mixture ranks are tuned pure (quints 3·f, tierces 5·f) so they fuse with the foundation. Drawbar and rank footages are octaves of the table, so a 19-EDO organ keeps its octaves.
+
+A row belongs to its family: `rotary fast` on a pipe organ or `keys drawbars` on a grand is refused with the families that read it, and `keys` on an organ lists its own rows. Single-trigger percussion is one envelope per track: every key struck together sounds it, and a key added while another is held gets the envelope's decayed level. Drive changes the tone at roughly steady loudness.
+
+The scanner, drive and rotary run once per track after its voices (the keys per-track post hook), so chords share one rotor; in play mode the live synth keeps one per track and shares its wheel and rotor clock. Rotary and drive are lanes: `keys-rotary` (0 stop, 1 slow, 2 fast; the rotors spin up or down with inertia) and `keys-drive`.
+
+```text
+tonewheel                                the tonewheel organ (also: hammond, b3)
+tonewheel 888800008                      the organ with those drawbars
+gospel | jazzorgan                       tonewheel presets
+combo | combo 08880 | farfisa | vox      the combo organ
+pipe | pipe flutes | pipe principal8 octave4   the pipe organ with a registration or stops
+flutes | cornet | reeds | celeste        pipe presets
+tonewheel 888800008 perc 3rd             a verb takes more rows (combo 08880 flute)
+rotary slow | fast | stop                the rotary speaker
+rotary fast at 16                        switch it at beat 16 (a keys-rotary lane point)
+keys drawbars 888000000                  any organ row (keys perc 3rd, keys scanner v2, keys stops plenum)
+automate keys-rotary points 0:1 4:2      spin the rotor up at beat 4
+```
+
+Presets: `tonewheel` (888000000, scanner C3, slow rotary), `gospel` (888800008, 3rd percussion, fast rotary, driven), `jazzorgan` (888000000 with soft 3rd percussion), `combo` (reed registers 08800 with vibrato), `vox` (bright 08880), `pipe` (plenum in a church reverb), `flutes` (gedackt 8' and flute 4' with tremulant), `cornet`, `reeds`, `celeste` (gamba and celeste beating).
+
+The menu has them under **Sound > browse sounds > Keys > Organs**; for an organ track **Sound > Parameters** shows the preset, a **Drawbars** (tonewheel), **Registers** (combo) or **Stops** (pipe) sub-menu with one row per footage or stop, and the family's rows. The agent's `set_keys` takes `drawbars`, `registers`, `stops` and `rotary` next to `params`. In the SDK: `track({ instrument: "tonewheel", keys: { drawbars: "888800008", rotary: "fast" } })` or `keys: { stops: ["principal8", "octave4"] }`.
+
+| Param         | Family          | Range                       | Default                               | Lane          | What it does                                   |
+| ------------- | --------------- | --------------------------- | ------------------------------------- | ------------- | ---------------------------------------------- |
+| **drawbars**  | tonewheel       | nine digits 0-8             | 888000000                             |               | drawbar registration, 16' to 1'                |
+| **perc**      | tonewheel       | off 2nd 3rd                 | off                                   |               | single-trigger percussion; on mutes the 1' bar |
+| **percdecay** | tonewheel       | fast slow                   | fast                                  |               | percussion decay (0.6 s or 1.8 s)              |
+| **percvol**   | tonewheel       | normal soft                 | normal                                |               | soft: percussion 6 dB down, drawbars unmuted   |
+| **click**     | tonewheel       | 0..1                        | 0.5                                   |               | key click                                      |
+| **scanner**   | tonewheel       | off v1 v2 v3 c1 c2 c3       | c3                                    |               | scanner vibrato or chorus                      |
+| **drive**     | tonewheel combo | 0..1                        | 0.15 (combo 0)                        | `keys-drive`  | preamp overdrive                               |
+| **rotary**    | tonewheel combo | slow fast stop              | slow (combo stop)                     | `keys-rotary` | rotary speaker speed                           |
+| **registers** | combo           | five digits 0-8             | 08800                                 |               | combo registers, 16' to 2'                     |
+| **voice**     | combo           | flute reed bright           | reed                                  |               | register timbre                                |
+| **stops**     | pipe            | stop names or registrations | principal8 octave4 fifteenth2 mixture |               | drawn stops                                    |
+| **chiff**     | pipe            | 0..1                        | 0.4                                   |               | flue pipe attack noise                         |
+| **wind**      | pipe            | 0..1                        | 0.3                                   |               | wind instability                               |
+| **trem**      | pipe            | 0..1                        | 0                                     |               | tremulant depth                                |
+
+The organ models are dawg's own, from public descriptions of the tonewheel generator (91 wheels, the 2:1 gearing per octave and its 1' foldback at the top), the scanner vibrato, the rotary speaker's horn and drum rotor speeds, and additive pipe-organ synthesis; no sampled audio.
 
 ## Samples
 

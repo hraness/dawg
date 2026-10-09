@@ -10,6 +10,12 @@
  *   keys <param> off              unset one parameter (back to the preset's)
  *   keys reset                    the family's own sound (`keys: {}`),
  *                                 dropping the preset's unedited effects
+ *   tonewheel [888800008]         the tonewheel organ (hammond, b3), drawbars
+ *   combo [08880]                 the combo organ (farfisa), registers
+ *   pipe [plenum | flute8 …]      the pipe organ (church), stops
+ *   rotary slow|fast|stop         the organ's rotary speaker speed
+ *   rotary fast at <beat>         a keys-rotary lane point (the Leslie switch)
+ *   keys drawbars 888800008       organ text rows: drawbars registers stops
  *   epiano | wurli | clav         the electric keys (0.6.1), also rhodes
  *                                 suitcase dyno wurlitzer clavinet funkclav
  *   epiano preset <name>          an electric preset
@@ -25,18 +31,31 @@ import {
   ELECTRIC_FAMILIES,
   KEYS_PARAMS,
   KEYS_PRESETS,
+  KEYS_PARAM_FAMILIES,
+  ORGAN_ALIASES,
+  ORGAN_TEXT,
   PIANO_FAMILIES,
-  isKeysPreset,
+  PIPE_REGISTRATIONS,
+  PIPE_STOPS,
   isKeysFamily,
+  isKeysPreset,
+  isOrganFamily,
+  isOrganText,
+  isPianoFamily,
   keysParamName,
   keysParamsFor,
   keysSimpleFor,
+  ORGAN_ROWS,
+  ORGAN_FAMILIES,
   normalizeKeys,
   pianoWrite,
   type TrackKeys,
 } from "../../core/keys.ts";
 import {
+  automationPoints,
   createScore,
+  SCORE_LIMITS,
+  setTrackAutomation,
   ScoreValidationError,
   updateTrack,
   type TrackPatch,
@@ -49,7 +68,18 @@ export type KeysCommand =
   /** `family`: `epiano preset` lists only that family's presets. */
   | { type: "keys-presets"; family?: string }
   | { type: "keys-reset" }
-  | { type: "keys-preset"; preset: string }
+  | {
+      type: "keys-preset";
+      preset: string;
+      /** f061-organ: overrides on top of the preset (`tonewheel 888800008`). */
+      values?: Readonly<Record<string, string>>;
+    }
+  | {
+      /** f061-organ: `rotary fast at 16` writes a keys-rotary point. */
+      type: "keys-rotary-at";
+      speed: "stop" | "slow" | "fast";
+      beat: number;
+    }
   | {
       type: "keys-set";
       /** `null` unsets a parameter. */
@@ -76,7 +106,109 @@ export const KEYS_COMMAND_WORDS = Object.freeze([
   "rhodes",
   "wurlitzer",
   "clavinet",
+  // f061-organ
+  ...Object.keys(ORGAN_ALIASES),
+  "rotary",
 ]);
+
+/** A pipe stop or registration word. */
+function isStopWord(word: string): boolean {
+  return (
+    (PIPE_STOPS as readonly string[]).includes(word) ||
+    Object.prototype.hasOwnProperty.call(PIPE_REGISTRATIONS, word)
+  );
+}
+
+/** `principal8,octave4` / `principal8+octave4` / words: the stop words. */
+function stopWords(words: readonly string[]): string[] | undefined {
+  const out = words.flatMap((word) => word.split(/[,+]/).filter(Boolean));
+  return out.length > 0 && out.every(isStopWord) ? out : undefined;
+}
+
+/**
+ * f061-organ: `tonewheel 888800008`, `combo 08880`, `pipe plenum`,
+ * `hammond gospel`: an organ preset word with its one text row.
+ */
+function parseOrganWord(words: readonly string[]): KeysCommand | undefined {
+  const head = ORGAN_ALIASES[words[0]!] ?? words[0]!;
+  if (!isKeysPreset(head)) return undefined;
+  const family = KEYS_PRESETS[head]!.instrument;
+  if (!isOrganFamily(family)) return undefined;
+  const rest = words.slice(1);
+  if (rest.length === 0) return { type: "keys-preset", preset: head };
+  if (
+    rest.length === 1 &&
+    isKeysPreset(rest[0]!) &&
+    KEYS_PRESETS[rest[0]!]!.instrument === family
+  )
+    return { type: "keys-preset", preset: rest[0]! };
+  if (family === "pipe") {
+    const stops = stopWords(rest);
+    return stops
+      ? {
+          type: "keys-preset",
+          preset: head,
+          values: { stops: stops.join(" ") },
+        }
+      : undefined;
+  }
+  const name = family === "tonewheel" ? "drawbars" : "registers";
+  const digits = ORGAN_TEXT[name].digits;
+  const values: Record<string, string> = {};
+  let at = 0;
+  if (new RegExp(`^[0-8]{${digits}}$`).test(rest[0]!)) {
+    values[name] = rest[0]!;
+    at = 1;
+  }
+  // `combo flute`: the combo voice by its word.
+  const spec = KEYS_PARAMS.voice;
+  const voices: readonly string[] = spec?.kind === "enum" ? spec.values : [];
+  if (family === "combo" && voices.includes(rest[at]!)) {
+    values.voice = rest[at]!;
+    at += 1;
+  }
+  // Then any rows as `keys` pairs: `tonewheel 888800008 perc 3rd`.
+  const pairs = rest.slice(at);
+  if (pairs.length > 0) {
+    const set = parseKeysCommand(`keys ${pairs.join(" ")}`);
+    if (set?.type !== "keys-set") return undefined;
+    for (const [key, value] of Object.entries(set.values)) {
+      if (value === null) return undefined;
+      values[key] = String(value);
+    }
+  }
+  return Object.keys(values).length > 0
+    ? { type: "keys-preset", preset: head, values }
+    : undefined;
+}
+
+/** The families that read a keys row (for the "wrong family" message). */
+function familiesReading(param: string): string[] {
+  const organs = ORGAN_FAMILIES.filter((family) =>
+    ORGAN_ROWS[family].includes(param),
+  );
+  const others = (KEYS_PARAM_FAMILIES[param] ?? []).filter(
+    (family) => !isOrganFamily(family),
+  );
+  const families = [...new Set([...others, ...organs])];
+  return families.length > 0 ? families : ["the pianos"];
+}
+
+/**
+ * A row the track's family never reads, as a message (`rotary` on a pipe
+ * organ): stored projects still load, but a typed write is refused.
+ */
+export function keysRowMismatch(
+  instrument: string,
+  params: readonly string[],
+): string | undefined {
+  const rows = keysParamsFor(instrument);
+  const wrong = params.filter(
+    (param) => param !== "preset" && !rows.includes(param),
+  );
+  if (wrong.length === 0) return undefined;
+  return `${instrument} has no ${wrong.join(" ")} (${familiesReading(wrong[0]!).join("/")} row); its parameters: ${rows.join(" ")}`;
+}
 
 export function parseKeysCommand(prompt: string): KeysCommand | undefined {
   if (prompt.length > 1_024) return undefined;
@@ -90,6 +222,24 @@ export function parseKeysCommand(prompt: string): KeysCommand | undefined {
   )
     words = [words[1]!];
   const head = words[0] ?? "";
+  // f061-organ: `rotary slow|fast|stop` and the organ words with a row.
+  if (head === "rotary") {
+    const speed = words[1] as "stop" | "slow" | "fast";
+    if (!["slow", "fast", "stop"].includes(speed)) return undefined;
+    if (words.length === 2)
+      return { type: "keys-set", values: { rotary: speed } };
+    const beat = Number(words[3]);
+    return words.length === 4 &&
+      words[2] === "at" &&
+      /^\d+(\.\d+)?$/.test(words[3]!) &&
+      Number.isFinite(beat)
+      ? { type: "keys-rotary-at", speed, beat }
+      : undefined;
+  }
+  if (head !== "keys" && head !== "piano") {
+    const organ = parseOrganWord(words);
+    if (organ) return organ;
+  }
   // `piano`, `piano <preset>`, and a bare preset word (`grand`, `felt`).
   if (head === "piano" || head === "uprightpiano" || head === "feltpiano") {
     if (words.length === 1)
@@ -133,14 +283,28 @@ export function parseKeysCommand(prompt: string): KeysCommand | undefined {
         : undefined;
   if (rest.length === 1 && isKeysPreset(rest[0]!))
     return { type: "keys-preset", preset: rest[0]! };
-  if (rest.length % 2 !== 0) return undefined;
   const values: Record<string, number | string | null> = {};
   for (let index = 0; index < rest.length; index += 2) {
     const name = keysParamName(rest[index]!);
     if (!name) return undefined;
-    const word = rest[index + 1]!;
+    const word = rest[index + 1];
+    if (word === undefined) return undefined;
     if (word === "off" || word === "unset") {
       values[name] = null;
+      continue;
+    }
+    // f061-organ text rows: digits, or stop words up to the next row name.
+    if (isOrganText(name)) {
+      if (name !== "stops") {
+        values[name] = word;
+        continue;
+      }
+      let end = index + 1;
+      while (end < rest.length && !keysParamName(rest[end]!)) end += 1;
+      const stops = stopWords(rest.slice(index + 1, end));
+      if (!stops) return undefined;
+      values[name] = stops.join(" ");
+      index = end - 2;
       continue;
     }
     const value = parseParamValue(KEYS_PARAMS[name]!, word);
@@ -287,13 +451,18 @@ export function applyKeysCommand(
         )
         .join(" ")}`,
     };
+  // f061-organ: organs take `keys` commands too.
   const piano = isKeysFamily(track.instrument);
+  const elsewhere =
+    track.instrument === "organ"
+      ? `keys · ${trackId} is the legacy organ; type tonewheel (or combo, pipe) for drawbars and rotary, or piano for the modelled piano`
+      : `keys · ${trackId} is ${track.instrument}; type piano first (${PIANO_FAMILIES.join(" ")}), ${ELECTRIC_FAMILIES.join(" ")} or ${ORGAN_FAMILIES.join(" ")} for modelled keys`;
   if (command.type === "keys-list")
     return {
       ok: true,
       message: piano
         ? `keys · ${track.instrument} · ${describeKeys(track.keys)} · basics ${keysSimpleFor(track.instrument).join(" ")}`
-        : `keys · ${trackId} is ${track.instrument}; type piano (${PIANO_FAMILIES.join(" ")}) or ${ELECTRIC_FAMILIES.join(" ")} for modelled keys`,
+        : elsewhere,
     };
   if (
     command.type === "keys-set" &&
@@ -323,6 +492,20 @@ export function applyKeysCommand(
       ...(track.sampler ? { sampler: null } : {}),
       ...(track.synth ? { synth: null } : {}),
     };
+    if (command.values) {
+      try {
+        patch = {
+          ...patch,
+          keys: normalizeKeys({ ...patch.keys, ...command.values }) ?? {},
+        };
+      } catch (error) {
+        if (error instanceof FxValidationError)
+          return { ok: false, message: `keys · ${error.message}` };
+        throw error;
+      }
+    }
+  } else if (!piano && command.type === "keys-rotary-at") {
+    return { ok: false, message: elsewhere };
   } else if (!piano) {
     // `keys` is also the legacy synth sound (`instrument keys`): name both
     // ways out.
@@ -334,21 +517,41 @@ export function applyKeysCommand(
       ok: false,
       message: keysSynth
         ? `keys · keys shapes the modelled piano; ${trackId} is the keys synth: use synth ${first ?? "decay"} …, or type piano`
-        : `keys · ${trackId} is ${track.instrument}; type piano first (keys shapes the modelled piano)`,
+        : elsewhere,
+    };
+  } else if (command.type === "keys-rotary-at") {
+    const wrong = keysRowMismatch(track.instrument, ["rotary"]);
+    if (wrong) return { ok: false, message: `keys · ${wrong}` };
+    const tick = Math.round(command.beat * score.ticksPerBeat);
+    const value = { stop: 0, slow: 1, fast: 2 }[command.speed];
+    const merged = new Map(
+      automationPoints(track, "keys-rotary").map((point) => [
+        point.tick,
+        point,
+      ]),
+    );
+    merged.set(tick, { tick, value });
+    const points = [...merged.values()].sort((a, b) => a.tick - b.tick);
+    if (points.length > SCORE_LIMITS.maxAutomationPoints)
+      return { ok: false, message: "keys-rotary automation is full" };
+    return {
+      ok: true,
+      message: `keys · rotary ${command.speed} at beat ${command.beat} · keys-rotary ${points.length} point${points.length === 1 ? "" : "s"}`,
+      next: setTrackAutomation(score, trackId, "keys-rotary", points),
+      kind: "score.automation",
+      payload: { trackId, parameter: "keys-rotary", points },
     };
   } else if (command.type === "keys-reset") {
     // The family's own sound: the preset and the effects it brought go.
     patch = { ...keysPresetClear(track), keys: {} };
   } else {
-    const allowed = keysParamsFor(track.instrument);
-    const foreign = Object.keys(command.values).filter(
-      (key) => !allowed.includes(key),
+    const wrong = keysRowMismatch(
+      track.instrument,
+      Object.entries(command.values)
+        .filter(([, value]) => value !== null)
+        .map(([key]) => key),
     );
-    if (foreign.length > 0)
-      return {
-        ok: false,
-        message: `keys · ${track.instrument} has no ${foreign.join(" ")}; its parameters: ${allowed.join(" ")}`,
-      };
+    if (wrong) return { ok: false, message: `keys · ${wrong}` };
     const keys: Record<string, unknown> = { ...(track.keys ?? {}) };
     for (const [key, value] of Object.entries(command.values)) {
       if (value === null) delete keys[key];
@@ -386,7 +589,9 @@ export function applyKeysCommand(
     ok: true,
     message:
       command.type === "keys-preset"
-        ? `keys · ${stored.instrument} · preset ${command.preset} · ${KEYS_PRESETS[command.preset]!.doc}${extras.length > 0 ? ` · with ${extras.join(" ")}` : ""}`
+        ? command.values
+          ? `keys · ${stored.instrument} · ${describeKeys(stored.keys)}${extras.length > 0 ? ` · with ${extras.join(" ")}` : ""}`
+          : `keys · ${stored.instrument} · preset ${command.preset} · ${KEYS_PRESETS[command.preset]!.doc}${extras.length > 0 ? ` · with ${extras.join(" ")}` : ""}`
         : `keys · ${stored.instrument} · ${describeKeys(stored.keys)}`,
     next,
     kind: "score.keys",
