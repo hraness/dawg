@@ -82,7 +82,9 @@ function pitchToolArgs(
   const out: PitchToolArgs = { trackId };
   if (args.clip !== undefined) {
     if (typeof args.clip !== "string" || args.clip.length === 0)
-      throw new ToolArgumentError("clip must be a clip id or sampler voice name");
+      throw new ToolArgumentError(
+        "clip must be a clip id or sampler voice name",
+      );
     out.target = args.clip;
   }
   if (args.voice !== undefined) {
