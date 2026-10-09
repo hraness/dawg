@@ -4,6 +4,10 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ## Unreleased
 
+## 0.6.1
+
+Instruments wave 2: bowed strings and sampler velocity layers, gamelan presets and a wind engine, electric keys with soft and sostenuto pedals, tonewheel, combo and pipe organs, shoegaze effects and guitar strumming, and granular resample with formant-keeping shift. Every new field is optional, so 0.4, 0.5 and 0.6.0 projects load, print and render byte-identically.
+
 ### Added
 
 - **Electric keys.** Three new keys families on the modelled-piano `keys` field: `epiano` (a tine piano with a nonlinear pickup at 2x oversampling, `bark` and `bell`, and the `vibe` suitcase stereo vibrato), `wurli` (a reed piano with a capacitive pickup and a `trem` tremolo) and `clav` (neck and bridge pickups with `pickup neck|bridge|both|out` and a `mute` slider, seeded per track, with a release plunk). Presets `epiano suitcase dyno wurli clav funkclav`, aliases `rhodes wurlitzer clavinet`. `epiano preset suitcase`, `clav pickup bridge`, Sound › browse sounds › Keys › Electric and the electric rows in the Sound page, `set_instrument` and `set_keys`, and `track({ instrument: "suitcase" })` in the SDK. The legacy word `keys` is unchanged.
