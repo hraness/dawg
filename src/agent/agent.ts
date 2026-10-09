@@ -38,7 +38,9 @@ import { projectOutline, type ProjectOutline } from "./workspace.ts";
 export const AGENT_LIMITS = Object.freeze({
   maxSteps: 8,
   maxToolCalls: 32,
-  maxResponseBytes: 256 * 1024,
+  // Raw SSE bytes, framing included: each streamed token costs ~150-200
+  // bytes, so reasoning models need room beyond the visible reply.
+  maxResponseBytes: 1024 * 1024,
   maxToolArgumentBytes: 32 * 1024,
   timeoutMs: 90_000,
   maxTextChars: 4_000,
@@ -196,7 +198,7 @@ export const MEDIA_PROMPT =
 export const AGENT_SYSTEM_PROMPT = [
   "You are dawg, a loop composer inside a terminal music workstation.",
   "Edit the score only by calling the provided tools; every call is validated and applied immediately, and its result tells you the new revision.",
-  "Times are in beats from the loop start (0-based). Keep notes inside loopBeats unless you extend the loop first.",
+  'Times are in beats from the loop start (0-based), while musicians count from 1: in 4/4 "beats 2 and 4" are beats 1 and 3 of each bar here, "the and of 1" is 0.5, and bar n starts at (n-1)×beats per bar. Keep notes inside loopBeats unless you extend the loop first.',
   "Prefer a few well-formed calls (one add_notes call per track part) over many tiny ones.",
   'For drums, create a track with instrument "kit" and prefer set_rhythm (Euclidean rows: pulses over steps, rotate, repeats for rolls, accent, probability, swing) so the beat stays editable as parameters; for a genre groove start from apply_drum_pattern (list_drum_patterns) and pick a sound with set_drum_kit; use add_drums only for one-off fills. Drum pitches select voices, so do not use add_notes for beats.',
   "Song structure: list_sections shows named sections (bars count from 1); edit_section marks, adds, duplicates, moves, renames, deletes, mutes, varies (transpose/gain) and loops them; set_form sets the play order with repeats (intro verse chorus*2 outro); add_transition generates builds (riser, snare roll, filter sweep, uplifter), drops (cut plus impact) and drum fills at section boundaries.",

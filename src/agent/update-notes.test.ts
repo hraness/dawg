@@ -65,9 +65,25 @@ describe("update_notes", () => {
     expect(plan.summary).toBe("~2 notes · pitch b2 F9→F8");
   });
 
+  test("accepts a pitch beside transpose 0 or the matching transpose", () => {
+    for (const update of [
+      { noteId: "b1", pitch: "E2", transpose: 0 },
+      { noteId: "b1", pitch: "E2", transpose: 4 },
+    ]) {
+      const plan = updateNotes.plan(
+        { updates: [update] },
+        context,
+      ) as ScorePlan;
+      let next = score;
+      for (const op of plan.operations) next = applyScoreOperation(next, op);
+      expect(next.notes[0]!.pitch).toBe(40);
+    }
+  });
+
   test("rejects pitch with transpose, fractional shifts and out-of-range results", () => {
     const bad = [
       { noteId: "b1", pitch: 40, transpose: 2 },
+      { noteId: "b1", pitch: 38, transpose: 4 },
       { noteId: "b1", transpose: 1.5 },
       { noteId: "b2", transpose: 3 },
       { noteId: "b1", transpose: -37 },

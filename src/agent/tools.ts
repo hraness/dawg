@@ -471,14 +471,21 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
           });
           if (duration !== undefined)
             patch.durationTicks = Math.max(1, Math.round(duration * tpb));
-          if (update.pitch !== undefined && update.transpose !== undefined)
-            throw new ToolArgumentError(
-              `updates[${index}] sets both pitch and transpose; use one`,
-            );
           const before = context.score.notes.find((n) => n.id === noteId);
           if (update.pitch !== undefined)
             patch.pitch = pitch(update.pitch, `updates[${index}].pitch`);
-          if (update.transpose !== undefined) {
+          // Small models fill every field: transpose 0 beside a pitch means
+          // no shift, and a pitch that equals the transposed note agrees.
+          if (
+            patch.pitch !== undefined &&
+            update.transpose !== undefined &&
+            update.transpose !== 0 &&
+            patch.pitch !== (before?.pitch ?? 0) + Number(update.transpose)
+          )
+            throw new ToolArgumentError(
+              `updates[${index}] sets both pitch and transpose; use one`,
+            );
+          if (update.transpose !== undefined && patch.pitch === undefined) {
             const shift = update.transpose;
             if (typeof shift !== "number" || !Number.isInteger(shift))
               throw new ToolArgumentError(
