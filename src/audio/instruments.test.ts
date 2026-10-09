@@ -82,7 +82,7 @@ describe("instrument engine registry", () => {
     const bare = song("stubtone", false).tracks[0]!;
     expect(engineFor(withField)).toBeUndefined();
     registerEngine(stub);
-    expect(registeredEngines()).toEqual(["stubtone"]);
+    expect(registeredEngines()).toContain("stubtone");
     expect(engineFor(withField)).toBe(stub);
     expect(engineFor(bare)).toBeUndefined();
     expect(engineFor(song("pluck", true).tracks[0]!)).toBeUndefined();

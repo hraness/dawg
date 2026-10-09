@@ -21,6 +21,7 @@ import {
   type TrackFx,
 } from "./fx.ts";
 import { normalizeSynth, type TrackSynth } from "./synth.ts";
+import { normalizeString, type TrackString } from "./strings.ts";
 import {
   checkSongTime,
   normalizeSongTime,
@@ -378,6 +379,11 @@ export type Track = Readonly<{
    * `ref`/`root` over the song tuning. Absent follows the song tuning.
    */
   tuning?: Tuning;
+  /**
+   * String engine settings (`core/strings.ts`): a preset plus overrides.
+   * Played only when `instrument` is "string"; absent keeps today's voice.
+   */
+  string?: TrackString;
 }> &
   /**
    * Performance (`core/expression.ts`): glide default, sustain pedal
@@ -715,6 +721,7 @@ export type TrackPatch = Readonly<
     velocityCurve?: Track["velocityCurve"] | null;
     humanize?: Track["humanize"] | null;
     tuning?: Tuning | null;
+    string?: TrackString | null;
   }
 >;
 
@@ -759,6 +766,7 @@ export type TrackInput = Readonly<
     | "velocityCurve"
     | "humanize"
     | "tuning"
+    | "string"
   > &
     Pick<Track, "id"> & {
       filter?: TrackFilter | null;
@@ -777,6 +785,7 @@ export type TrackInput = Readonly<
       velocityCurve?: Track["velocityCurve"] | string | null;
       humanize?: Track["humanize"] | null;
       tuning?: Tuning | null;
+      string?: TrackString | null;
     }
 >;
 
@@ -1771,6 +1780,7 @@ function normalizeTrack(input: unknown): Track {
     () => normalizeTuning(input.tuning, `track ${id} tuning`),
     "invalid-track",
   );
+  const string = fxOrThrow(() => normalizeString(input.string));
   let kit: string | undefined;
   if (input.kit !== undefined && input.kit !== null) {
     const found =
@@ -1825,6 +1835,7 @@ function normalizeTrack(input: unknown): Track {
     ...(time ? { time } : {}),
     ...performance,
     ...(tuning ? { tuning } : {}),
+    ...(string ? { string } : {}),
   });
 }
 

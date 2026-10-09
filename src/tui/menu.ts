@@ -355,7 +355,9 @@ function laneLabel(lane: AutomationParameter): string {
   if (!info) return lane;
   const unit = info.spec.unit ? ` (${info.spec.unit})` : "";
   const owner =
-    info.effect === "synth" ? "synth" : effectSpec(info.effect).label;
+    info.effect === "synth" || info.effect === "string"
+      ? info.effect
+      : effectSpec(info.effect).label;
   return `${owner} ${info.param}${unit}`;
 }
 
@@ -1534,6 +1536,7 @@ function automationNodes(context: MenuContext): MenuNode[] {
     const info = FX_LANE_INFO.get(lane as FxLane);
     if (info?.effect === "synth")
       return track.synth?.[info.param] !== undefined;
+    if (info?.effect === "string") return track.string !== undefined;
     return info !== undefined && effectValues(track, info.effect) !== undefined;
   });
   const hidden = AUTOMATION_PARAMETERS.filter((lane) => !shown.includes(lane));

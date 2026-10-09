@@ -52,7 +52,78 @@ export const LEGACY_WORDS: readonly string[] = Object.freeze([
 ]);
 
 /** 0.6 instrument words; each lane appends its own block. */
-export const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([]);
+export const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
+  // strings (f06-strings): plucked presets of the string engine. Legacy
+  // sitar/ebass keep today's voice (`string preset sitar` reaches the
+  // engine), jangle is the rig alias (12string reaches the preset) and
+  // upright is the keys lane's piano (doublebass reaches the preset).
+  { word: "nylon", instrument: "string", field: "string", preset: "nylon" },
+  { word: "steel", instrument: "string", field: "string", preset: "steel" },
+  {
+    word: "electric",
+    instrument: "string",
+    field: "string",
+    preset: "electric",
+  },
+  { word: "slap", instrument: "string", field: "string", preset: "slap" },
+  { word: "tanpura", instrument: "string", field: "string", preset: "tanpura" },
+  {
+    word: "harpsichord",
+    instrument: "string",
+    field: "string",
+    preset: "harpsichord",
+  },
+  { word: "lute", instrument: "string", field: "string", preset: "lute" },
+  { word: "oud", instrument: "string", field: "string", preset: "oud" },
+  { word: "setar", instrument: "string", field: "string", preset: "setar" },
+  { word: "tar", instrument: "string", field: "string", preset: "tar" },
+  { word: "santur", instrument: "string", field: "string", preset: "santur" },
+  {
+    word: "dulcimer",
+    instrument: "string",
+    field: "string",
+    preset: "dulcimer",
+  },
+  { word: "koto", instrument: "string", field: "string", preset: "koto" },
+  { word: "harp", instrument: "string", field: "string", preset: "harp" },
+  { word: "banjo", instrument: "string", field: "string", preset: "banjo" },
+  { word: "tres", instrument: "string", field: "string", preset: "tres" },
+  {
+    word: "requinto",
+    instrument: "string",
+    field: "string",
+    preset: "requinto",
+  },
+  { word: "acoustic", instrument: "string", field: "string", preset: "steel" },
+  { word: "classical", instrument: "string", field: "string", preset: "nylon" },
+  { word: "12string", instrument: "string", field: "string", preset: "jangle" },
+  {
+    word: "bassguitar",
+    instrument: "string",
+    field: "string",
+    preset: "ebass",
+  },
+  { word: "fender", instrument: "string", field: "string", preset: "ebass" },
+  {
+    word: "doublebass",
+    instrument: "string",
+    field: "string",
+    preset: "upright",
+  },
+  {
+    word: "cembalo",
+    instrument: "string",
+    field: "string",
+    preset: "harpsichord",
+  },
+  {
+    word: "hammered",
+    instrument: "string",
+    field: "string",
+    preset: "dulcimer",
+  },
+  { word: "sehtar", instrument: "string", field: "string", preset: "setar" },
+]);
 
 /**
  * What an instrument word means: a legacy word is itself, a row word is its
