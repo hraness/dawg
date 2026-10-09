@@ -50,7 +50,15 @@ import {
   type SampleBank,
 } from "./samples.ts";
 import { synthKit } from "../../core/kits.ts";
-import { kitDrumSample, kitTailSeconds, newKitVoiceState } from "./kits.ts";
+import {
+  kitDrumSample,
+  kitTailSeconds,
+  METAL_SECONDS,
+  metalKindForPitch,
+  metalSample,
+  newKitVoiceState,
+  tomRatio,
+} from "./kits.ts";
 import {
   addReverbWet,
   applyMonoChain,
@@ -1361,8 +1369,13 @@ function renderVoiceInto(
         );
   } else {
     const drums = isDrumInstrument(track?.instrument);
+    // Calibration 1+ (0.7): a closed or pedal hat chokes a ringing open hat.
+    const chokes =
+      drums && (context.score.calibration ?? 0) >= 1
+        ? hatChokes(played, context)
+        : undefined;
     for (const note of played) {
-      if (drums) renderDrumNote(dry, note, track, context);
+      if (drums) renderDrumNote(dry, note, track, context, chokes?.get(note));
       else renderToneNote(dry, note, track, context, tuning);
     }
   }
@@ -1509,11 +1522,40 @@ function renderToneNote(
  * id and start tick, so a hit sounds identical on every render and in every
  * window regardless of note order.
  */
+/** Closed hat (42) and pedal hat (44) GM numbers that choke an open hat. */
+const CHOKING_HATS = new Set([42, 44]);
+/** Open hat fade once choked, in seconds. */
+const CHOKE_SECONDS = 0.008;
+
+/**
+ * For each open hat (46), the sample where the next closed or pedal hat
+ * on the same track starts, as on a real hi-hat stand.
+ */
+function hatChokes(
+  notes: readonly Note[],
+  context: RenderContext,
+): Map<Note, number> {
+  const closers = notes
+    .filter((note) => CHOKING_HATS.has(note.pitch))
+    .map((note) => noteSpan(note, context).start)
+    .sort((a, b) => a - b);
+  const chokes = new Map<Note, number>();
+  if (closers.length === 0) return chokes;
+  for (const note of notes) {
+    if (note.pitch !== 46) continue;
+    const start = noteSpan(note, context).start;
+    const next = closers.find((closer) => closer > start);
+    if (next !== undefined) chokes.set(note, next);
+  }
+  return chokes;
+}
+
 function renderDrumNote(
   target: Float64Array,
   note: Note,
   track: Track | undefined,
   context: RenderContext,
+  chokeAt?: number,
 ): void {
   const { sampleRate, samples, samplesPerTick } = context;
   const { start } = noteSpan(note, context);
@@ -1521,9 +1563,24 @@ function renderDrumNote(
   // one the voices below render exactly as they always have.
   const kit = synthKit(track?.kit);
   const kitState = kit ? newKitVoiceState() : undefined;
+  // Calibration 1+ (0.7): pitched toms, GM cymbals and cowbell as metal
+  // instead of a rim click, band-limited kit hats, and hat choke.
+  const calibrated = (context.score.calibration ?? 0) >= 1;
+  const metal = calibrated ? metalKindForPitch(note.pitch) : undefined;
+  const metalState = metal ? newKitVoiceState() : undefined;
+  const ratio = calibrated ? tomRatio(note.pitch) : 1;
+  const chokeEnd =
+    chokeAt === undefined
+      ? Number.POSITIVE_INFINITY
+      : chokeAt + Math.ceil(CHOKE_SECONDS * sampleRate);
   const end = Math.min(
     samples,
-    start + Math.ceil((kit?.seconds ?? MAX_DRUM_SECONDS) * sampleRate),
+    chokeEnd,
+    start +
+      Math.ceil(
+        (metal ? METAL_SECONDS : (kit?.seconds ?? MAX_DRUM_SECONDS)) *
+          sampleRate,
+      ),
   );
   const voice = drumVoiceForPitch(note.pitch);
   const random = seededRandom(
@@ -1540,7 +1597,10 @@ function renderDrumNote(
     const bright = noise - previousNoise;
     previousNoise = noise;
     let sample = 0;
-    if (kit && kitState)
+    if (metal && metalState) {
+      sample = metalSample(metal, t, bright, metalState, sampleRate);
+      if (kit) sample *= kit.gain;
+    } else if (kit && kitState)
       sample = kitDrumSample(
         kit,
         voice,
@@ -1549,6 +1609,7 @@ function renderDrumNote(
         bright,
         kitState,
         sampleRate,
+        calibrated ? { tomRatio: ratio } : undefined,
       );
     else if (voice === "kick") {
       const frequency = 45 + 105 * Math.exp(-t * 28);
@@ -1557,7 +1618,7 @@ function renderDrumNote(
         Math.sin(2 * Math.PI * phase) * Math.exp(-t * 7.5) +
         noise * 0.12 * Math.exp(-t * 300);
     } else if (voice === "tom") {
-      const frequency = 105 + 95 * Math.exp(-t * 18);
+      const frequency = (105 + 95 * Math.exp(-t * 18)) * ratio;
       phase += frequency / sampleRate;
       sample = Math.sin(2 * Math.PI * phase) * Math.exp(-t * 9);
     } else if (voice === "snare") {
@@ -1584,10 +1645,10 @@ function renderDrumNote(
       1,
       (index - start) / Math.max(1, sampleRate * 0.001),
     );
-    const release = Math.min(
-      1,
-      (end - index) / Math.max(1, sampleRate * 0.005),
-    );
+    const release =
+      chokeAt !== undefined && index >= chokeAt
+        ? Math.max(0, chokeEnd - index) / Math.max(1, chokeEnd - chokeAt)
+        : Math.min(1, (end - index) / Math.max(1, sampleRate * 0.005));
     target[index]! +=
       sample *
       attack *
