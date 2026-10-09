@@ -3,7 +3,7 @@ import { createScore } from "../score.ts";
 import { DawgSdkError, note, sing, song, track, wind } from "./v1.ts";
 
 const scoreOf = (input: Parameters<typeof track>[0]) =>
-  createScore(song({ bpm: 120, bars: 1, tracks: [track(input)] }) as never);
+  createScore(song({ tempo: 120, bars: 1, tracks: [track(input)] }) as never);
 
 describe("track() takes wind: and sing: as fields", () => {
   test("wind: with instrument wind matches instrument: wind(...)", () => {

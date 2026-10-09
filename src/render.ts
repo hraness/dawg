@@ -238,6 +238,12 @@ export async function runRenderCommand(
     `rendered · ${target} · ${seconds.toFixed(2)} s · ${wav.byteLength} bytes · ${sha}\n`,
   );
   if (credits) stdout.write(`credits · ${credits}\n`);
+  // A plain song keeps 0.4's 22.05 kHz (byte-identical renders); say so,
+  // since its ceiling is 11 kHz and cymbal air is lost.
+  if (rateArg === undefined && !score.master)
+    stderr.write(
+      `note · ${sampleRate} Hz, the plain-song rate · --rate 48000 (or a master) renders full bandwidth\n`,
+    );
   const clipped = clippedSamples(audio.pcm);
   if (clipped > 0)
     stderr.write(
