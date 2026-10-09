@@ -11,6 +11,7 @@ import { AMERICAS_CARDS } from "./americas.ts";
 import { onsetSteps, TIMELINES, timelineCycle } from "./cycles.ts";
 import { generateStyle, KIT_PITCH } from "./generate.ts";
 import { resolveStyle } from "./index.ts";
+import { TAXONOMY_ROWS } from "./taxonomy.ts";
 import { validateGenerated } from "./validate.ts";
 
 const SEEDS = [1, 2, 3, 4, 5];
@@ -62,6 +63,20 @@ describe("americas timelines (theory)", () => {
     // Tresillo: 3+3+2 per half bar.
     expect(onsetSteps(TIMELINES.tresillo)).toEqual([0, 3, 6, 8, 11, 14]);
     expect(onsetSteps(TIMELINES.dembowSnare)).toEqual([3, 6, 11, 14]);
+    // Tumbao: bombo (and of two) and ponche (four) of each 4/4 bar.
+    expect(onsetSteps(TIMELINES.tumbao)).toEqual([3, 6, 11, 14]);
+    // Cascara: 2 side x.x.xx.x, 3 side x.xx.x.x; 3-2 swaps the halves.
+    expect(onsetSteps(TIMELINES.cascara)).toEqual([
+      0, 2, 4, 5, 7, 8, 10, 11, 13, 15,
+    ]);
+    const rotate8 = (steps: number[]) =>
+      steps.map((s) => (s + 8) % 16).sort((a, b) => a - b);
+    expect(rotate8(onsetSteps(TIMELINES.cascara))).toEqual(
+      onsetSteps(TIMELINES.cascara32),
+    );
+    // Each cascara half holds its clave half (rumba clave under 3-2).
+    for (const step of onsetSteps(TIMELINES.rumbaClave32))
+      expect(onsetSteps(TIMELINES.cascara32)).toContain(step);
     expect(onsetSteps(TIMELINES.cinquillo)).toEqual([
       0, 2, 3, 5, 6, 8, 10, 11, 13, 14,
     ]);
@@ -79,7 +94,7 @@ describe("americas timelines (theory)", () => {
 
 describe("americas cards", () => {
   test("every leaf has a theory note and resolves under its family", () => {
-    expect(leaves.length).toBe(94);
+    expect(leaves.length).toBe(98);
     for (const id of leaves) {
       const style = resolveStyle(id);
       expect(style.summary.length).toBeGreaterThan(40);
@@ -179,5 +194,85 @@ describe("americas cards", () => {
           if (!c.ok) failures.push(`${id}#${seed} ${c.name}: ${c.detail}`);
       }
     expect(failures).toEqual([]);
+  }, 120_000);
+
+  test("critic fixes: mambo campana, lovers rock major sevenths, banda tuba", () => {
+    expect(onsets("mambo", "bell")).toEqual([0, 2, 4, 6, 8, 10, 12, 14]);
+    const lovers = resolveStyle("lovers-rock");
+    expect(lovers.pitch.scales.map(([s]) => s)).toEqual(["major"]);
+    const numerals = (lovers.harmony.forms ?? []).flatMap(([f]) => f);
+    expect(numerals).toContain("Imaj7");
+    // banda tuba moves every eighth; norteno keeps the oom-pah on beats
+    expect(onsets("banda", "bass")).toEqual([0, 2, 4, 6]);
+    expect(onsets("norteno", "bass")).toEqual([0, 4]);
+    const { plan } = generateStyle("corrido", { seed: 1, bars: 2 });
+    expect(plan.tracks.some((t) => t.roles.includes("counter"))).toBe(true);
+  });
+
+  test("new leaves: songo, conga, dembow, son huasteco", () => {
+    expect(onsets("songo", "bell")).toEqual([0, 2, 4, 6, 8, 10, 12, 14]);
+    expect(onsets("songo", "rim")).toEqual([0, 3, 7, 10, 12]);
+    expect(onsets("conga", "kick")).toEqual([7, 15]);
+    expect(onsets("dembow", "kick")).toEqual([0, 4, 8, 12]);
+    expect(onsets("dembow", "snare")).toEqual([3, 6, 11, 14]);
+    const dembow = generateStyle("dembow", { seed: 1, bars: 2 }).plan.bpm;
+    const reggaeton = generateStyle("reggaeton", { seed: 1, bars: 2 }).plan;
+    expect(dembow).toBeGreaterThan(reggaeton.bpm + 10);
+    const huasteco = generateStyle("son-huasteco", { seed: 1, bars: 2 }).plan;
+    expect(huasteco.signature).toBe("6/8");
+    const lead = huasteco.tracks.find((t) => t.roles.includes("lead"));
+    expect(lead?.instrument).toBe("violin");
+  });
+
+  test("siblings are told apart by onset, pitch-class and tempo fingerprints", () => {
+    // Per leaf, three seeds; each fingerprint must sit nearer its own
+    // centroid than any sibling's (with a 15% margin).
+    const parent = new Map(TAXONOMY_ROWS.map((r) => [r[0], r[1]]));
+    const RH = ["kick", "snare", "clap", "hat", "openhat", "rim", "tom"];
+    RH.push("perc", "shaker", "bell", "bass", "chords");
+    const PITCHED = ["bass", "chords", "lead", "counter", "pad", "arp"];
+    const fp = (id: string, seed: number): number[] => {
+      const g = generateStyle(id, { seed, bars: BARS });
+      const { plan } = g;
+      const v = [plan.bpm / 40, plan.stepsPerBar === 12 ? 2 : 0];
+      const grid = RH.map(() => new Array<number>(16).fill(0));
+      const pcs = new Array<number>(12).fill(0);
+      let n = 0;
+      for (const note of g.data.notes ?? []) {
+        const role = plan.noteRoles.get(note.id) ?? "";
+        const t = (note.startTick ?? 0) % plan.barTicks;
+        const row = grid[RH.indexOf(role)];
+        if (row) row[Math.floor((t / plan.barTicks) * 16)]! += 1 / plan.bars;
+        if (PITCHED.includes(role)) {
+          pcs[(((note.pitch - plan.tonic) % 12) + 12) % 12]! += 1;
+          n += 1;
+        }
+      }
+      for (const row of grid) v.push(...row.map((x) => Math.min(x, 2) / 2));
+      v.push(...pcs.map((x) => (6 * x) / (n || 1)));
+      return v;
+    };
+    const dist = (a: number[], b: number[]) =>
+      Math.sqrt(a.reduce((s, x, i) => s + (x - b[i]!) ** 2, 0));
+    const prints = new Map(
+      leaves.map((id) => [id, [1, 2, 3].map((s) => fp(id, s))]),
+    );
+    const centroid = new Map(
+      [...prints].map(([id, fs]) => [
+        id,
+        fs[0]!.map((_, i) => fs.reduce((a, f) => a + f[i]!, 0) / fs.length),
+      ]),
+    );
+    const close: string[] = [];
+    for (const a of leaves)
+      for (const b of leaves) {
+        if (a === b || parent.get(a) !== parent.get(b)) continue;
+        for (const f of prints.get(a)!)
+          if (dist(f, centroid.get(b)!) <= dist(f, centroid.get(a)!) * 1.15) {
+            close.push(`${a}~${b}`);
+            break;
+          }
+      }
+    expect(close).toEqual([]);
   }, 120_000);
 });

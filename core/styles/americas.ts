@@ -1441,6 +1441,89 @@ export const AMERICAS_CARDS: readonly StyleCard[] = Object.freeze([
     },
   }),
   card({
+    id: "songo",
+    summary:
+      "songo: Los Van Van's 1970s Havana groove, drum kit and timbales together, cowbell on every quarter, rim accents on the rumba clave, bombo on the and of two and ponche on four, dorian vamps",
+    tempo: { bpm: [100, 125], typical: 112 },
+    pitch: { scales: [["dorian", 1]] },
+    harmony: {
+      presets: null,
+      forms: [
+        [["i7", "IV7"], 0.6],
+        [["i7", "bVII", "IV7", "i7"], 0.4],
+      ],
+      rhythm: [[2, 1]],
+    },
+    rhythm: {
+      onsets: {
+        bell: grid("x.x.x.x.x.x.x.x."),
+        rim: tl("rumbaClave32"),
+        kick: grid("...x..x....x..x."),
+        snare: grid("..5...x5..5...x5"),
+        perc: tl("congaTumbao"),
+        shaker: null,
+      },
+    },
+    bass: {
+      behaviour: [["root-fifth", 1]],
+      onsets: grid("x..x..x...x..x.."),
+    },
+    texture: {
+      roles: {
+        bell: role("bell"),
+        rim: role("drums"),
+        kick: role("drums"),
+        snare: role("drums"),
+        shaker: null,
+        chords: role("piano", "epiano:0.4"),
+        bass: role("ebass"),
+        lead: role("sing", "violin:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "conga",
+    summary:
+      "conga de comparsa: Santiago and Havana carnival street band, bombo stroke on the and of four, campana and frying-pan bells, corneta china reed hook, chanted coro, major I-V7",
+    tempo: { bpm: [120, 140], typical: 128 },
+    pitch: { scales: [["major", 1]] },
+    harmony: {
+      presets: null,
+      forms: [
+        [["I", "V7", "V7", "I"], 0.6],
+        [["I", "I", "V7", "I"], 0.4],
+      ],
+      rhythm: [[1, 1]],
+    },
+    rhythm: {
+      onsets: {
+        kick: grid(".......x.......x"),
+        bell: grid("x.xxx.x.x.xxx.x."),
+        perc: grid("x.x.x.xxx.x.x.xx"),
+        shaker: null,
+        snare: null,
+        hat: null,
+        chords: null,
+      },
+    },
+    bass: { behaviour: [["none", 1]] },
+    melody: { intervals: CHANT, ambitus: [4, 7], repetition: 0.6 },
+    texture: {
+      roles: {
+        kick: role("drums"),
+        bell: role("bell"),
+        perc: role("framedrum"),
+        shaker: null,
+        snare: null,
+        hat: null,
+        chords: null,
+        bass: null,
+        lead: role("reeds"),
+        counter: role("choir"),
+      },
+    },
+  }),
+  card({
     id: "nueva-trova",
     summary:
       "trova and nueva trova: singer with guitar, bolero and son roots, extended chords and secondary dominants, strophic poetic form",
@@ -1788,6 +1871,40 @@ export const AMERICAS_CARDS: readonly StyleCard[] = Object.freeze([
     mix: { loudness: "loud" },
   }),
   card({
+    id: "dembow",
+    summary:
+      "dembow dominicano: Santo Domingo street dembow, faster and drier than reggaeton (118-132), kick on every beat, snare and clap on the 3 6 11 14 dembow, sixteenth hats and rolls, one-bar minor loop, chanted repeated-note hooks",
+    tempo: { bpm: [116, 134], typical: 124 },
+    pitch: { scales: [["minor", 1]] },
+    harmony: { model: "modal", presets: null, forms: null, rhythm: [[4, 1]] },
+    rhythm: {
+      onsets: {
+        bell: null,
+        perc: null,
+        kick: tl("fourFloor"),
+        snare: tl("dembowSnare"),
+        clap: tl("dembowSnare"),
+        hat: grid("xxxxxxxxxxxxxxxx"),
+      },
+    },
+    bass: { behaviour: [["root", 1]], onsets: tl("fourFloor"), kickLock: 1 },
+    melody: { intervals: CHANT, ambitus: [3, 6], repetition: 0.7 },
+    texture: {
+      roles: {
+        bell: null,
+        perc: null,
+        kick: { required: true, voices: [kit("syn808")] },
+        snare: { required: true, voices: [kit("syn808")] },
+        clap: { required: true, voices: [kit("syn808")] },
+        hat: { required: true, voices: [kit("syn808")] },
+        chords: role("square"),
+        bass: role("bass"),
+        lead: role("sing"),
+      },
+    },
+    mix: { loudness: "loud" },
+  }),
+  card({
     id: "merengue",
     summary:
       "merengue: tambora on the 2/4 with its slap on the and, guira scraping long-short-short, accordion lead, jaleo section, I-V7 alternation",
@@ -2018,6 +2135,44 @@ export const AMERICAS_CARDS: readonly StyleCard[] = Object.freeze([
         chords: role("requinto", "acoustic:0.5"),
         bass: role("harp"),
         lead: role("harp", "requinto:0.6", "sing:0.6"),
+      },
+    },
+  }),
+  card({
+    id: "son-huasteco",
+    summary:
+      "son huasteco (huapango): trio of violin, jarana huasteca and quinta huapanguera, 6/8 against 3/4 with the quinta's strummed bass, florid violin lead and falsetto breaks, slower and darker than son jarocho, I-IV-V7",
+    meter: { signatures: [["6/8", 1]] },
+    tempo: { bpm: [110, 140], typical: 124 },
+    pitch: { scales: [["major", 1]] },
+    harmony: {
+      presets: null,
+      forms: [
+        [["I", "IV", "V7", "I"], 0.6],
+        [["I", "V7", "V7", "I"], 0.4],
+      ],
+      rhythm: [[1, 1]],
+    },
+    rhythm: {
+      onsets: {
+        bell: null,
+        kick: null,
+        perc: tl("sixEight12"),
+        chords: grid("x.xxx.x.xxx."),
+      },
+    },
+    bass: { onsets: grid("x.....x...x.") },
+    melody: { intervals: LEAPY, density: [3, 4] },
+    texture: {
+      roles: {
+        bell: null,
+        kick: null,
+        snare: null,
+        hat: null,
+        perc: maybe("framedrum"),
+        chords: role("acoustic", "requinto:0.4"),
+        bass: role("acoustic"),
+        lead: role("violin"),
       },
     },
   }),
