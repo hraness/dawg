@@ -249,6 +249,22 @@ export const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
     field: "modal",
     preset: "chimes",
   },
+  // keys-electric (0.6.1): electric pianos and clavinet. `keys` stays legacy.
+  { word: "epiano", instrument: "epiano", field: "keys", preset: "epiano" },
+  { word: "rhodes", instrument: "epiano", field: "keys", preset: "epiano" },
+  { word: "tine", instrument: "epiano", field: "keys", preset: "epiano" },
+  {
+    word: "suitcase",
+    instrument: "epiano",
+    field: "keys",
+    preset: "suitcase",
+  },
+  { word: "dyno", instrument: "epiano", field: "keys", preset: "dyno" },
+  { word: "wurli", instrument: "wurli", field: "keys", preset: "wurli" },
+  { word: "wurlitzer", instrument: "wurli", field: "keys", preset: "wurli" },
+  { word: "clav", instrument: "clav", field: "keys", preset: "clav" },
+  { word: "clavinet", instrument: "clav", field: "keys", preset: "clav" },
+  { word: "funkclav", instrument: "clav", field: "keys", preset: "funkclav" },
 ]);
 
 /**

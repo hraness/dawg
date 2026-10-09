@@ -95,6 +95,11 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "piano params · keys hardness 0.3 decay 1.5 · keys lists them",
       },
       {
+        command: "epiano|wurli|clav [preset <name>] | <param> <value>",
+        summary:
+          "electric keys · suitcase dyno funkclav · epiano vibe 0.6 · clav pickup bridge",
+      },
+      {
         command:
           "modal <preset> | <param> <value> | mallet <name> | reset | off",
         summary:
@@ -635,7 +640,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   bars: "bars takes 1…256 · bars 8",
   extend: "extend <count> bars · extend 4 bars",
   instrument:
-    "instrument <name> · sine piano pluck bass saw square triangle wavetable kit · pianos: grand upright felt honkytonk prepared · synth: sawtooth supersaw pulse white pink z_square…",
+    "instrument <name> · sine piano pluck bass saw square triangle wavetable kit · pianos: grand upright felt honkytonk prepared · electric: epiano suitcase dyno wurli clav funkclav · synth: sawtooth supersaw pulse white pink z_square…",
   volume: "volume takes 0…1 · volume 0.8",
   vol: "volume takes 0…1 · volume 0.8",
   pan: "pan takes -1…1 · pan -0.5",
@@ -693,6 +698,11 @@ export const USAGE: Readonly<Record<string, string>> = {
   keys: "keys <param> <value> | preset <name> | reset | presets · keys hardness 0.3 · keys stretch 0",
   piano:
     "piano [grand|ballad|upright|felt|lofi|honkytonk|prepared] · piano ballad",
+  epiano:
+    "epiano [preset epiano|suitcase|dyno] | bark bell tone vibe vibehz decay release <value> · epiano vibe 0.6 · rhodes",
+  wurli:
+    "wurli [preset wurli] | bark bell tone trem decay release <value> · wurli trem 0.5",
+  clav: "clav [preset clav|funkclav] | pickup neck|bridge|both|out | mute tone decay release <value> · clav pickup bridge",
   modal:
     "modal <preset> | <body> | <param> <value> | mallet <name> | reset | off | presets · modal vibes · modal saron · modal ring 3",
   pack: "/pack list | info <name> | use <pack>/<sound> | add <url>",

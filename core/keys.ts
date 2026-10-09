@@ -522,6 +522,7 @@ export function resolvedKeys(
 /** Other names for the electric keys presets (keys-electric, 0.6.1). */
 const KEYS_ALIASES: Readonly<Record<string, string>> = Object.freeze({
   rhodes: "epiano",
+  tine: "epiano",
   wurlitzer: "wurli",
   clavinet: "clav",
 });

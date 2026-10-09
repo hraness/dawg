@@ -148,3 +148,57 @@ describe("keys command", () => {
     expect(nearestCommand("kees hardness 0.3")).toBe("keys");
   });
 });
+
+describe("electric keys commands", () => {
+  test("family words load their presets", () => {
+    for (const [prompt, instrument, preset] of [
+      ["epiano", "epiano", "epiano"],
+      ["rhodes", "epiano", "epiano"],
+      ["suitcase", "epiano", "suitcase"],
+      ["dyno", "epiano", "dyno"],
+      ["wurli", "wurli", "wurli"],
+      ["wurlitzer", "wurli", "wurli"],
+      ["clav", "clav", "clav"],
+      ["clavinet", "clav", "clav"],
+      ["funkclav", "clav", "funkclav"],
+      ["instrument rhodes", "epiano", "epiano"],
+      ["epiano preset suitcase", "epiano", "suitcase"],
+      ["clav preset funkclav", "clav", "funkclav"],
+    ] as const) {
+      const result = run(song(), prompt);
+      expect(result.ok).toBe(true);
+      const track = result.next!.tracks[0]!;
+      expect(track.instrument).toBe(instrument);
+      expect(track.keys?.preset).toBe(preset);
+    }
+  });
+
+  test("a family word with parameters becomes that family first", () => {
+    const result = run(song("sine"), "epiano vibe 0.6 bark 0.5");
+    expect(result.ok).toBe(true);
+    const track = result.next!.tracks[0]!;
+    expect(track.instrument).toBe("epiano");
+    expect(track.keys).toEqual({ preset: "epiano", vibe: 0.6, bark: 0.5 });
+    const clav = run(song(), "clav pickup bridge mute 0.4");
+    expect(clav.next!.tracks[0]!.keys).toEqual({
+      preset: "clav",
+      pickup: "bridge",
+      mute: 0.4,
+    });
+  });
+
+  test("a parameter from another family is refused with the family's list", () => {
+    const grand = run(song(), "grand").next!;
+    const result = run(grand, "keys vibe 0.5");
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("grand has no vibe");
+    const clav = run(song(), "clav").next!;
+    expect(run(clav, "keys felt 0.5").ok).toBe(false);
+    expect(parseKeysCommand("epiano preset funkclav")).toBeUndefined();
+  });
+
+  test("electric words are registered for typo suggestions", () => {
+    expect(nearestCommand("wurly")).toBe("wurli");
+    expect(nearestCommand("epaino vibe 0.5")).toBe("epiano");
+  });
+});
