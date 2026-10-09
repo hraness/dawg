@@ -156,3 +156,26 @@ describe("cepstralEnvelope", () => {
     expect(Math.abs((k * SR) / n - 700)).toBeLessThan(150);
   });
 });
+
+describe("formant keeping holds the level (0.6.1)", () => {
+  const rms = (x: ArrayLike<number>, from: number, to: number) => {
+    let sum = 0;
+    for (let i = from; i < to; i += 1) sum += x[i]! * x[i]!;
+    return Math.sqrt(sum / (to - from));
+  };
+  test("+7 and -7 st with formant 0 stay within 1.5 dB of the plain shift", () => {
+    // A falling (saw-like) spectrum, where the level loss was largest.
+    const x = new Float64Array(SR);
+    for (let h = 1; h * 220 < SR / 2; h += 1)
+      for (let i = 0; i < x.length; i += 1)
+        x[i] = x[i]! + Math.sin((2 * Math.PI * 220 * h * i) / SR) / h / 4;
+    for (const st of [7, -7]) {
+      const plain = pitchShift(x, SR, st);
+      const kept = pitchShift(x, SR, st, { formant: 0 });
+      const db =
+        20 *
+        Math.log10(rms(kept, 2000, SR - 2000) / rms(plain, 2000, SR - 2000));
+      expect(Math.abs(db)).toBeLessThan(1.5);
+    }
+  });
+});

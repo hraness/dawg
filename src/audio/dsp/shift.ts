@@ -35,6 +35,8 @@ import {
 export const SHIFT_FRAME_SECONDS = 0.085;
 /** Vocoder hops between yields of `pitchShiftJob`. */
 const SHIFT_YIELD_HOPS = 16;
+/** Largest per-frame level restore after formant correction (12 dB). */
+const FORMANT_LEVEL_CAP = 4;
 /** Largest formant correction gain (24 dB), so a deep envelope dip cannot explode. */
 const MAX_FORMANT_GAIN = 16;
 
@@ -151,8 +153,11 @@ function* stretchForShift(
         syn.set(next);
       }
     }
+    let before = 0;
+    let after = 0;
     for (let k = 0; k <= half; k += 1) {
       let a = k > keep ? 0 : mag[k]!;
+      before += a * a;
       if (formantRatio !== undefined && a > 0) {
         // Bin k lands at k*rho after the read-back; give it the envelope
         // found at k*rho/formantRatio in the source frame.
@@ -164,6 +169,7 @@ function* stretchForShift(
             : env[half]! * 1e-3;
         a *= Math.min(target / env[k]!, MAX_FORMANT_GAIN);
       }
+      after += a * a;
       reA[k] = a * Math.cos(syn[k]!);
       imA[k] = a * Math.sin(syn[k]!);
       if (k > 0 && k < half) {
@@ -173,6 +179,15 @@ function* stretchForShift(
     }
     imA[0] = 0;
     imA[half] = 0;
+    // Formant correction reshapes the spectrum, not the loudness: give the
+    // frame back its energy (a scale moves no peak), capped at 12 dB.
+    if (formantRatio !== undefined && after > 0) {
+      const gain = Math.min(Math.sqrt(before / after), FORMANT_LEVEL_CAP);
+      for (let k = 0; k < n; k += 1) {
+        reA[k] = reA[k]! * gain;
+        imA[k] = imA[k]! * gain;
+      }
+    }
     inverse(reA, imA);
     const o0 = m * hs;
     for (let i = 0; i < n; i += 1)
