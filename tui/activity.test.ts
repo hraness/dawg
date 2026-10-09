@@ -106,7 +106,9 @@ describe("activity cards", () => {
       text: "Slowing it. Done!",
       applied: 2,
     });
-    expect(texts()[0]).toBe("◆ 96 BPM · +2 notes on bass (C4 E4) · ctrl-z undo");
+    expect(texts()[0]).toBe(
+      "◆ 96 BPM · +2 notes on bass (C4 E4) · ctrl-z undo",
+    );
     // The prose went to the ctrl-o log.
     expect(
       activity.transcript.some((e) => e.text.trim() === "Slowing it."),
