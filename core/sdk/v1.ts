@@ -6604,6 +6604,7 @@ const QUALITIES = [
   "mb6",
   "b6",
   "7#9",
+  "b5",
 ] as const;
 type Quality = (typeof QUALITIES)[number];
 
@@ -6620,6 +6621,7 @@ const QUALITY_INTERVALS: Readonly<Record<Quality, readonly number[]>> =
     mb6: [0, 3, 7, 8],
     b6: [0, 4, 7, 8],
     "7#9": [0, 4, 7, 10, 15],
+    b5: [0, 4, 6],
   });
 
 /**
@@ -6828,6 +6830,9 @@ function chordSuffix(chord: Chord): string {
         base = `${seventh}(no3)`;
         if (nine) extras.push("9");
         break;
+      case "b5":
+        base = `${ninth}b5`;
+        break;
       default:
         base = seventh; // secret qualities returned above
     }
@@ -6846,6 +6851,7 @@ function chordSuffix(chord: Chord): string {
     mb6: "m(b6)",
     b6: "(b6)",
     "7#9": "7#9",
+    b5: "(b5)",
   };
   base = triad[q];
   if (six && nine && (q === "maj" || q === "min")) return `${base}6/9`;
@@ -6930,6 +6936,31 @@ const SUFFIXES: readonly (readonly [string, Quality, readonly Extension[]])[] =
     ["(b6)", "b6", []],
     ["addb6", "b6", []],
     ["7#9", "7#9", []],
+    // 0.7: more spellings of the same chords.
+    ["-maj7", "min", ["M7"]],
+    ["mmaj7", "min", ["M7"]],
+    ["mMaj7", "min", ["M7"]],
+    ["m(maj7)", "min", ["M7"]],
+    ["-Δ7", "min", ["M7"]],
+    ["mΔ7", "min", ["M7"]],
+    ["add2", "maj", ["9"]],
+    ["2", "maj", ["9"]],
+    ["madd2", "min", ["9"]],
+    ["6add9", "maj", ["6", "9"]],
+    ["m6add9", "min", ["6", "9"]],
+    ["-6", "min", ["6"]],
+    ["-9", "min", ["m7", "9"]],
+    ["dom9", "maj", ["m7", "9"]],
+    ["aug(maj7)", "aug", ["M7"]],
+    ["augmaj7", "aug", ["M7"]],
+    ["+maj7", "aug", ["M7"]],
+    ["aug9", "aug", ["m7", "9"]],
+    ["+9", "aug", ["m7", "9"]],
+    ["m(maj9)", "min", ["M7", "9"]],
+    ["mmaj9", "min", ["M7", "9"]],
+    ["dim(maj7)", "dim", ["M7"]],
+    ["7(no3)", "5", ["m7"]],
+    ["maj7(no3)", "5", ["M7"]],
   ];
 
 /** Typed upper-tension chords (0.6.1): suffix, quality, buttons, tensions. */
@@ -6964,10 +6995,7 @@ const TENSION_NAMES: Readonly<Record<number, string>> = Object.freeze({
   21: "13",
 });
 
-const SUFFIX_TABLE = new Map<
-  string,
-  { quality: Quality; ext: readonly Extension[]; tensions?: readonly number[] }
->([
+const SUFFIX_TABLE = new Map<string, SuffixEntry>([
   ...SUFFIXES.map(
     ([suffix, quality, ext]) => [suffix, { quality, ext }] as const,
   ),
@@ -7000,6 +7028,81 @@ function parsePitchClass(text: string): number | undefined {
   return mod12(LETTER[match[1]!.toLowerCase()]! + accidental);
 }
 
+/** Alteration → upper tension (semitones above the root). */
+const ALTERATION_TENSION: Readonly<Record<string, number>> = Object.freeze({
+  b9: 13,
+  "#9": 15,
+  "11": 17,
+  "#11": 18,
+  "+11": 18,
+  b13: 20,
+  "13": 21,
+});
+
+const TOKEN = "b5|#5|\\+5|b9|#9|#11|\\+11|b13|alt|add9|add11|add13|11|13|9|6";
+/** Bare alterations or parenthesized comma lists of them, in any order. */
+const ALTERATIONS = new RegExp(
+  `^(?:(?:${TOKEN})|\\((?:${TOKEN})(?:,(?:${TOKEN}))*\\))+$`,
+);
+
+type SuffixEntry = {
+  quality: Quality;
+  ext: readonly Extension[];
+  tensions?: readonly number[];
+};
+
+/**
+ * A suffix the table does not list, read as a listed base followed by
+ * alterations, bare or in parentheses: `7#5`, `9#11`, `13#11`, `7b9b13`,
+ * `9b5`, `maj7+5`, `7alt`, `7(b9,#9)`. A raised fifth makes the triad
+ * augmented, a lowered one makes a major triad `b5` (a minor one
+ * diminished); `alt` is b9, #9, #11 and b13 over a dominant seventh.
+ */
+function parseAlteredSuffix(suffix: string): SuffixEntry | undefined {
+  for (let cut = suffix.length - 1; cut >= 0; cut -= 1) {
+    const base = SUFFIX_TABLE.get(suffix.slice(0, cut));
+    if (!base) continue;
+    const raw = suffix.slice(cut);
+    if (!ALTERATIONS.test(raw)) continue;
+    const rest = raw.replace(/[(),]/g, "");
+    const tokens = rest.match(
+      /b5|#5|\+5|b9|#9|#11|\+11|b13|alt|add9|add11|add13|11|13|9|6/g,
+    );
+    if (!tokens || tokens.join("") !== rest) continue;
+    let quality: Quality = base.quality;
+    const ext = new Set<Extension>(base.ext);
+    const tensions = new Set<number>(base.tensions ?? []);
+    let ok = true;
+    for (const token of tokens) {
+      if (token === "#5" || token === "+5") {
+        if (quality === "maj" || quality === "aug") quality = "aug";
+        else ok = false;
+      } else if (token === "b5") {
+        if (quality === "maj" || quality === "b5") quality = "b5";
+        else if (quality === "min" || quality === "dim") quality = "dim";
+        else ok = false;
+      } else if (token === "alt") {
+        if (quality !== "maj") ok = false;
+        ext.add("m7");
+        for (const step of [13, 15, 18, 20]) tensions.add(step);
+      } else if (token === "9" || token === "add9") ext.add("9");
+      else if (token === "6") ext.add("6");
+      else {
+        const step = ALTERATION_TENSION[token.replace(/^add/, "")];
+        if (step === undefined) ok = false;
+        else tensions.add(step);
+      }
+    }
+    if (!ok) continue;
+    return {
+      quality,
+      ext: [...ext],
+      tensions: [...tensions].sort((a, b) => a - b),
+    };
+  }
+  return undefined;
+}
+
 /** Parse a chord symbol (`Cm7`, `F#dim`, `Bbmaj9`, `G7sus4`, `C/E`). */
 function parseChord(symbol: string): Chord | undefined {
   if (typeof symbol !== "string" || symbol.length > 24) return undefined;
@@ -7010,7 +7113,8 @@ function parseChord(symbol: string): Chord | undefined {
   const match = trimmed.match(/^([A-Ga-g])(#|b|♯|♭)?([^/]*)(?:\/(.+))?$/);
   if (!match) return undefined;
   const root = parsePitchClass(`${match[1]}${match[2] ?? ""}`);
-  const entry = SUFFIX_TABLE.get(match[3] ?? "");
+  const entry =
+    SUFFIX_TABLE.get(match[3] ?? "") ?? parseAlteredSuffix(match[3] ?? "");
   if (root === undefined || !entry) return undefined;
   let bass: number | undefined;
   if (match[4] !== undefined) {
@@ -7495,9 +7599,14 @@ function romanOf(key: Key, chord: Chord): string {
   if (degree < 0) {
     // Name chromatic roots against the major scale: bIII, #iv°.
     const major = MODES.major.map((step) => mod12(key.tonic + step));
+    const natural = major.indexOf(chord.root);
     const flat = major.indexOf(mod12(chord.root + 1));
     const sharp = major.indexOf(mod12(chord.root - 1));
-    if (flat >= 0) {
+    if (natural >= 0) {
+      // A major-scale note the mode alters: ♮II in Phrygian.
+      degree = natural;
+      accidental = "♮";
+    } else if (flat >= 0) {
       degree = flat;
       accidental = "b";
     } else {
@@ -7508,7 +7617,6 @@ function romanOf(key: Key, chord: Chord): string {
   const lower =
     chord.quality === "min" ||
     chord.quality === "dim" ||
-    chord.quality === "5" ||
     chord.quality === "madd4" ||
     chord.quality === "mb6";
   const numeral = NUMERALS[degree]!;
@@ -7525,7 +7633,33 @@ function romanOf(key: Key, chord: Chord): string {
         : ext.has("M7")
           ? "maj7"
           : "";
-  return `${accidental}${body}${mark}${seventh}`;
+  // The short numeral when it reads back as this chord; else the chord's
+  // own suffix in brackets (`I[7]`, `i[m6]`, `V[7#9]`), which is exact.
+  const plain = `${accidental}${body}${mark}${seventh}`;
+  const bare = makeChord(
+    chord.root,
+    chord.quality,
+    chord.extensions,
+    undefined,
+    chord.tensions,
+  );
+  for (const candidate of [
+    plain,
+    `${accidental}${body}${mark}${seventh === "7" ? "dom7" : seventh}`,
+  ])
+    if (sameChord(parseRoman(key, candidate), bare)) return candidate;
+  return `${accidental}${body}[${chordSuffix(bare)}]`;
+}
+
+function sameChord(a: Chord | undefined, b: Chord): boolean {
+  return (
+    a !== undefined &&
+    a.root === b.root &&
+    a.quality === b.quality &&
+    a.bass === b.bass &&
+    a.extensions.join() === b.extensions.join() &&
+    (a.tensions ?? []).join() === (b.tensions ?? []).join()
+  );
 }
 
 /**
@@ -7538,8 +7672,26 @@ function romanOf(key: Key, chord: Chord): string {
  * major). `7` adds the diatonic seventh; `maj7`/`M7` and `dom7` are exact.
  */
 function parseRoman(key: Key, text: string): Chord | undefined {
-  if (typeof text !== "string" || text.length > 16) return undefined;
+  if (typeof text !== "string" || text.length > 32) return undefined;
   const trimmed = text.trim();
+  const exact = trimmed.match(
+    /^(b|#|♭|♯|♮)?(vii|vi|v|iv|iii|ii|i|VII|VI|V|IV|III|II|I)\[([^\]]*)\]$/,
+  );
+  if (exact) {
+    // `I[7]`: the numeral names the root, the bracket is a chord suffix.
+    const degree = NUMERALS.indexOf(exact[2]!.toLowerCase());
+    const shift =
+      exact[1] === "b" || exact[1] === "♭"
+        ? -1
+        : exact[1] === "♮" || !exact[1]
+          ? 0
+          : 1;
+    const root = !exact[1]
+      ? scaleOf(key)[degree]
+      : mod12(key.tonic + MODES.major[degree]! + shift);
+    if (root === undefined) return undefined;
+    return parseChord(`${noteName(root)}${exact[3]!}`);
+  }
   const slash = trimmed.match(/^(.+)\/(.+)$/);
   if (slash) {
     // V/x: the chord built on the degree of x in the key (secondary function).
@@ -7549,20 +7701,23 @@ function parseRoman(key: Key, text: string): Chord | undefined {
     return sub;
   }
   const match = trimmed.match(
-    /^(b|#|♭|♯)?(vii|vi|v|iv|iii|ii|i|VII|VI|V|IV|III|II|I)(°|o|ø|\+)?(maj7|M7|dom7|7|9|maj9|6|sus4|sus2|sus|add9)?$/,
+    /^(b|#|♭|♯|♮)?(vii|vi|v|iv|iii|ii|i|VII|VI|V|IV|III|II|I)(°|o|ø|\+)?(maj7|M7|dom7|7|9|maj9|6|sus4|sus2|sus|add9)?$/,
   );
   if (!match) return undefined;
   const accidental =
-    match[1] === "b" || match[1] === "♭" ? -1 : match[1] ? 1 : 0;
+    match[1] === "b" || match[1] === "♭"
+      ? -1
+      : match[1] === "#" || match[1] === "♯"
+        ? 1
+        : 0;
   const numeral = match[2]!;
   const lower = numeral === numeral.toLowerCase();
   const degree = NUMERALS.indexOf(numeral.toLowerCase());
   const mark = match[3];
   const suffix = match[4] ?? "";
-  const root =
-    accidental === 0
-      ? scaleOf(key)[degree]!
-      : mod12(key.tonic + MODES.major[degree]! + accidental);
+  const root = !match[1]
+    ? scaleOf(key)[degree]!
+    : mod12(key.tonic + MODES.major[degree]! + accidental);
   const inKey = degreeOf(key, root);
   const triad = inKey === undefined ? undefined : diatonicChord(key, inKey);
   const seventh =

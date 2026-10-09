@@ -58,6 +58,10 @@ Instruments wave 2: bowed strings and sampler velocity layers, gamelan presets a
 
 ### Fixed
 
+- **Lossless score diffs.** `diffScores` carries note vowels, orders song-level changes so any valid pair applies (sections and fermatas that would block a meter or tempo change are cleared first), keeps a bar-0 meter change, and treats `-0` as `0`. Notes sort by plain code-unit id order, not the locale. Notes on a missing track are rejected (an older file drops them on load), `updateNote` on an unknown id and `moveTrack` outside the track list throw, and the tick bound covers the longest valid song (notes may not end past it).
+- **Bar and section edits carry the tempo map, fermatas and pedals.** Insert, delete, duplicate and move bars or sections now move tempo changes, fermatas and sustain, una corda and sostenuto pedals with the music. Deleting bars keeps the parts of notes that sound outside them, inserting bars inside a held note extends it, deleting a section past the song end removes only its marker, and bad bar numbers are rejected.
+- **Roman numerals round-trip.** `romanOf` no longer drops chord quality or extensions (`C7` was `I7`, which read back as `Cmaj7`); see Chords in DAWG.md. Altered and stacked chord symbols (`C7#5`, `C9#11`, `C7alt`, `C-maj7`, `Cadd2`) now parse.
+
 - Switching tracks could fail at random with a "no such file" error when the presence heartbeat and the focus change wrote at the same moment, leaving play mode recording onto the old track. Presence writes are now serialised with unique temp names, and a presence error never fails a focus change.
 - Guitar strumming kept a slash bass only when it was a chord tone: `B/E` now has E as its lowest note in every tuning, like `A/E`.
 - `dreampop` and `ebow` work as instrument words (`track ebow`, `instrument: "dreampop"`), giving the rig and its reverb wash like `shoegaze`. `glide` and `swell` stay rig-only (`rig glide`), because `glide` is already the portamento command and `swell` an effect.
