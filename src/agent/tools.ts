@@ -691,7 +691,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   {
     name: "set_string",
     description:
-      "Make a track a plucked string (physical model): preset picks the instrument (nylon steel electric jangle ebass slap upright motown sitar tanpura harpsichord lute oud setar tar santur dulcimer koto harp banjo tres requinto); params override it (ring s, bright, damp, pos, mute, buzz = jawari, body, sym = sympathetic strings, stiff, exciter pick|finger|hammer|plectrum…); null unsets one. reset keeps the preset and drops overrides; off returns the track to a plain pluck voice.",
+      "Make a track a plucked string (physical model): preset picks the instrument (nylon steel electric jangle ebass slap upright motown sitar tanpura harpsichord lute oud setar tar santur dulcimer koto harp banjo tres requinto); params override it (ring s, bright, damp, pos, mute, buzz = jawari, body, sym = sympathetic strings, stiff, exciter pick|finger|hammer|noise); null unsets one. reset keeps the preset and drops overrides; off returns the track to a plain pluck voice.",
     parameters: {
       type: "object",
       properties: {
