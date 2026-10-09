@@ -28,4 +28,4 @@ order: 4
 
 ## Menu
 
-- Ctrl-K › Chords: progression, key, voicing, bass, perform, style
+- Ctrl-K › Chords: key, voicing, bass, perform, style, progression
