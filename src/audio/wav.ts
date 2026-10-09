@@ -21,12 +21,18 @@ import {
   renderSamplerVoices,
   samplerTailSeconds,
 } from "./sampler.ts";
-import { EFFECT_NAMES, FX_PRESETS, effectSpec } from "../../core/fx.ts";
+import {
+  EFFECT_NAMES,
+  FX_CHAIN,
+  FX_PRESETS,
+  effectSpec,
+} from "../../core/fx.ts";
 import { seededRandom } from "./random.ts";
 import {
   engineFor,
   engineTailSeconds,
   RING_OUT_FADE_SECONDS,
+  type InstrumentEngine,
 } from "./instruments.ts";
 import {
   isStereoVoice,
@@ -83,6 +89,9 @@ import { clipsDigest, hasClips, renderClips } from "./clips.ts";
 import { isGuideInstrument } from "../../core/clips.ts";
 import { applyMaster, type MasterReport } from "./master.ts";
 import type { SongMaster } from "../../core/master.ts";
+import { resolveTrackRef } from "../../core/routing.ts";
+import { resolveVocoder, VOCODER_INSTRUMENT } from "../../core/vocoder.ts";
+import { applyVocoder, autoGateDb } from "./vocoder/index.ts";
 
 export type WavOptions = Readonly<{ sampleRate?: number; maxSeconds?: number }>;
 
@@ -329,6 +338,11 @@ export class StemRenderer {
   >();
   private cacheBytes = 0;
   private renders = 0;
+  /** Vocoder modulator taps by source key (0.7), kept one render. */
+  private readonly modSources = new Map<
+    string,
+    { tap: Float64Array; used: number }
+  >();
   private scratch: {
     dry: Float64Array;
     dryR: Float64Array;
@@ -477,6 +491,10 @@ export class StemRenderer {
     // tracks with notes, so songs without clips keep their sum order.
     for (const track of score.tracks)
       if (hasClips(track) && !groups.has(track.id)) groups.set(track.id, []);
+    // A built-in vocoder carrier following chords or a drone needs no notes.
+    for (const track of score.tracks)
+      if (!groups.has(track.id) && vocoderPlaysWithoutNotes(track))
+        groups.set(track.id, []);
     // Note expression and track performance (core/expression.ts): the
     // notes as played. A track with neither gets its notes back unchanged.
     const timing = performanceTimingFor(score);
@@ -528,7 +546,7 @@ export class StemRenderer {
       const clipDigest = track
         ? clipsDigest(track, bank, options.guide === true)
         : undefined;
-      const engineDigests =
+      const baseDigests =
         engine && track
           ? [
               ...(engine.assetDigests?.(track, bank, score) ?? []),
@@ -538,6 +556,13 @@ export class StemRenderer {
           : clipDigest === undefined
             ? undefined
             : [`clips:${clipDigest}`];
+      // A vocoder carrier (0.7) also keys on its modulator's tap.
+      const vocoderSource = track?.vocoder
+        ? vocoderSourceOf(track, groups, performed, context, bank)
+        : undefined;
+      const engineDigests = vocoderSource
+        ? [...(baseDigests ?? []), vocoderSource.key]
+        : baseDigests;
       // Wavetable hook: the oscillator factory for a wavetable track (its
       // table id joins the stem key), undefined for every other instrument.
       const wavetable = track ? wavetableHook(track, bank, context) : undefined;
@@ -593,93 +618,30 @@ export class StemRenderer {
             }
           : { left, right };
         dry.fill(0);
-        const synthVoice = !engine && !sampler && usesSynthVoice(track);
-        let stereo = engine
-          ? engine.stereo(track!)
-          : synthVoice && isStereoVoice(track);
-        if (stereo) dryR.fill(0);
-        if (engine && track) {
-          engine.render(
+        const stereo = renderVoiceInto(
+          dry,
+          dryR,
+          played,
+          track,
+          context,
+          score,
+          bank,
+          engine,
+          sampler,
+          wavetable,
+          tuning,
+          options.guide === true,
+        );
+        // The vocoder stage (0.7): after the voice, before the chain.
+        if (track && vocoderSource)
+          applyVocoder(
             dry,
             stereo ? dryR : undefined,
-            played,
+            this.vocoderTap(vocoderSource, context, bank),
             track,
-            {
-              ...context,
-              ticksPerBeat: score.ticksPerBeat,
-              ...(tuning ? { tuning } : {}),
-            },
-            bank,
+            context,
+            vocoderSource.gateDb,
           );
-        } else if (sampler) {
-          // A resampled stereo file plays as stereo (0.6.1).
-          if (track)
-            stereo = renderSamplerNotes(
-              dry,
-              played,
-              track,
-              context,
-              bank,
-              dryR,
-            );
-        } else if (synthVoice && track) {
-          const gainAt = (tick: number) => trackGainAt(track, tick);
-          const voice = {
-            ...context,
-            ticksPerBeat: score.ticksPerBeat,
-            ...(wavetable ? { oscillatorFor: wavetable.oscillatorFor } : {}),
-            ...(tuning ? { tuning } : {}),
-          };
-          const warp = context.warp;
-          for (const note of played) {
-            const { start, length } = noteSpan(note, context);
-            // The voice asks for `startTick + elapsed / samplesPerTick`;
-            // through a tempo map that sample's tick comes from the map.
-            const noteGainAt = warp
-              ? (tick: number) =>
-                  gainAt(
-                    warp.tick(
-                      start + (tick - note.startTick) * context.samplesPerTick,
-                    ),
-                  )
-              : gainAt;
-            renderSynthNote(
-              dry,
-              stereo ? dryR : undefined,
-              note,
-              track,
-              start,
-              length,
-              voice,
-              noteGainAt,
-            );
-          }
-        } else if (track?.clips && isGuideInstrument(track.instrument)) {
-          // A `vocal` track's notes guide its clips: silent in a render,
-          // a soft sine in the live loop with `guide` on. (Without clips,
-          // an older project's `vocal` keeps its tone.)
-          if (options.guide)
-            for (const note of played)
-              renderToneNote(
-                dry,
-                { ...note, velocity: note.velocity * GUIDE_LEVEL },
-                { ...track, instrument: "sine" },
-                context,
-                tuning,
-              );
-        } else {
-          const drums = isDrumInstrument(track?.instrument);
-          for (const note of played) {
-            if (drums) renderDrumNote(dry, note, track, context);
-            else renderToneNote(dry, note, track, context, tuning);
-          }
-        }
-        // Audio clips (0.7) sum into the dry buffer before the chain.
-        if (track?.clips) {
-          const gainAt = (tick: number) => trackGainAt(track, tick);
-          renderClips(dry, track, context, bank, gainAt);
-          if (stereo) renderClips(dryR, track, context, bank, gainAt);
-        }
         // Note-aware stages (bloom, swell) see the notes; others never do.
         const chain =
           track && needsEffectNotes(track)
@@ -812,6 +774,29 @@ export class StemRenderer {
       pcm,
       ...(mastered ? { master: mastered.report } : {}),
     });
+  }
+
+  /**
+   * A vocoder modulator's mono tap over this render: the source's voice,
+   * through its mono chain for `tap: chain`, stereo summed (L+R)/2. Kept
+   * across renders under the stem cache budget, keyed by the source key.
+   */
+  private vocoderTap(
+    source: VocoderSource,
+    context: RenderContext,
+    bank: SampleBank,
+  ): Float64Array {
+    const known = this.modSources.get(source.key);
+    if (known && known.tap.length === context.samples) {
+      known.used = this.renders;
+      return known.tap;
+    }
+    const tap = renderVocoderTap(source, context, bank);
+    for (const [key, entry] of this.modSources)
+      if (entry.used < this.renders - 1) this.modSources.delete(key);
+    if (this.maxCacheBytes > 0)
+      this.modSources.set(source.key, { tap, used: this.renders });
+    return tap;
   }
 
   private scratchFor(samples: number) {
@@ -1054,6 +1039,269 @@ function samplerVoiceDigest(track: Track, bank: SampleBank): string[] {
         ? `${voice}:${sample.sha256}:${sample.sampleRate}:${sample.frames}`
         : `${voice}:-`;
     });
+}
+
+/** A vocoder carrier's modulator: its track, notes, key and gate. */
+/** FX_CHAIN index of pan: a `tap: chain` modulator runs the stages before. */
+const TAP_END = FX_CHAIN.indexOf("pan");
+
+type VocoderSource = Readonly<{
+  track: Track;
+  played: readonly PerformedNote[];
+  tap: "chain" | "dry";
+  key: string;
+  gateDb: number;
+}>;
+
+/** True for a built-in carrier that sounds without notes (chords, drone). */
+function vocoderPlaysWithoutNotes(track: Track): boolean {
+  if (!track.vocoder || track.instrument !== VOCODER_INSTRUMENT) return false;
+  const follow = resolveVocoder(track.vocoder).follow;
+  return follow === "chords" || follow === "drone";
+}
+
+const assetGates = new WeakMap<DecodedSample, number>();
+
+/**
+ * The auto gate from a source's assets (its sampler files): the quietest
+ * file's 10th-percentile 10 ms frame level + 6 dB, never the render span.
+ * A source without assets (a synth) has no noise floor: the gate is off.
+ */
+function sourceGateDb(source: Track, bank: SampleBank): number {
+  let gate: number | undefined;
+  for (const voice of Object.keys(source.sampler?.voices ?? {}).sort()) {
+    const sample = bank.voices.get(sampleKey(source.id, voice));
+    if (!sample) continue;
+    let level = assetGates.get(sample);
+    if (level === undefined) {
+      level = autoGateDb(Float64Array.from(sample.mono), sample.sampleRate);
+      assetGates.set(sample, level);
+    }
+    if (level > -120) gate = gate === undefined ? level : Math.min(gate, level);
+  }
+  return gate ?? -120;
+}
+
+/** Resolves a carrier's modulator, or undefined (the stage is bypassed). */
+function vocoderSourceOf(
+  track: Track,
+  groups: ReadonlyMap<string, readonly Note[]>,
+  performed: ReadonlyMap<string, readonly PerformedNote[]>,
+  context: RenderContext,
+  bank: SampleBank,
+): VocoderSource | undefined {
+  const ref = track.vocoder?.src;
+  if (ref === undefined) return undefined;
+  const source = resolveTrackRef(context.score, ref);
+  if (!source || source.id === track.id) return undefined;
+  const settings = resolveVocoder(track.vocoder);
+  const notes = groups.get(source.id) ?? [];
+  const engine = engineFor(source);
+  // Post-tap fields never change the tap (mute, solo and volume included).
+  const {
+    vocoder: _vocoder,
+    pan: _pan,
+    volume: _volume,
+    volumeAutomation: _volumeAutomation,
+    panAutomation: _panAutomation,
+    delay: _delay,
+    delayFeedbackAutomation: _delayFeedback,
+    delayMixAutomation: _delayMix,
+    reverb: _reverb,
+    ...kept
+  } = source;
+  // Only the stages the tap runs (before pan, and none for `tap: dry`):
+  // a source's reverb, delay, double or other post-pan fx never re-render
+  // its carriers. fxAutomation stays (rarely post-pan; a cheap re-render).
+  const tapped = settings.tap === "chain" ? FX_CHAIN.slice(0, TAP_END) : [];
+  const fx = kept.fx
+    ? Object.fromEntries(
+        Object.entries(kept.fx).filter(
+          ([stage]) =>
+            tapped.includes(stage as never) ||
+            !FX_CHAIN.includes(stage as never),
+        ),
+      )
+    : undefined;
+  const stripped = {
+    ...kept,
+    fx: fx && Object.keys(fx).length > 0 ? fx : undefined,
+  } as unknown as Track;
+  const gateDb =
+    settings.gate === "auto" ? sourceGateDb(source, bank) : settings.gate;
+  // The modulator's clips (0.7) are heard; guide tones never are.
+  const clipDigest = clipsDigest(source, bank, false);
+  const clipKeys = clipDigest === undefined ? [] : [`clips:${clipDigest}`];
+  const key = stemKey(
+    stripped,
+    notes,
+    context,
+    isSamplerInstrument(source.instrument) ? bank : undefined,
+    wavetableHook(source, bank, context)?.id,
+    undefined,
+    engine
+      ? [
+          ...(engine.assetDigests?.(source, bank, context.score) ?? []),
+          `key:${context.score.key ?? ""}`,
+          ...clipKeys,
+        ]
+      : clipKeys.length > 0
+        ? clipKeys
+        : undefined,
+  );
+  return {
+    track: source,
+    played: performed.get(source.id) ?? [],
+    tap: settings.tap,
+    key: `vocsrc:${settings.tap}:${gateDb}:${key}`,
+    gateDb,
+  };
+}
+
+/** Renders a modulator's mono tap (see `StemRenderer.vocoderTap`). */
+function renderVocoderTap(
+  source: VocoderSource,
+  context: RenderContext,
+  bank: SampleBank,
+): Float64Array {
+  const { played } = source;
+  // The tap is rendered at unity gain: the voice bakes track volume in
+  // (trackGainAt), and volume is a post-tap field the cache key leaves out.
+  const track: Track = {
+    ...source.track,
+    volume: 1,
+    volumeAutomation: [],
+  };
+  const { score } = context;
+  const dry = new Float64Array(context.samples);
+  const dryR = new Float64Array(context.samples);
+  const tuning = resolveTuning(score.tuning, track.tuning, score.key);
+  const stereo = renderVoiceInto(
+    dry,
+    dryR,
+    played,
+    track,
+    context,
+    score,
+    bank,
+    engineFor(track),
+    isSamplerInstrument(track.instrument),
+    wavetableHook(track, bank, context),
+    tuning,
+    false,
+  );
+  if (source.tap === "chain") {
+    const chain = needsEffectNotes(track)
+      ? { ...context, notes: effectNotes(played, context, tuning) }
+      : context;
+    applyMonoChain(dry, track, chain);
+    if (stereo) applyMonoChain(dryR, track, chain);
+  }
+  if (stereo)
+    for (let i = 0; i < dry.length; i += 1) dry[i] = (dry[i]! + dryR[i]!) / 2;
+  return dry;
+}
+
+/**
+ * Renders a track's voice (engine, sampler, synth or tone/drum notes) into
+ * `dry` (and `dryR` when stereo) before any effect; returns whether it
+ * wrote a right channel. Shared by the stem pass and the vocoder tap.
+ */
+function renderVoiceInto(
+  dry: Float64Array,
+  dryR: Float64Array,
+  played: readonly PerformedNote[],
+  track: Track | undefined,
+  context: RenderContext,
+  score: TrackScore,
+  bank: SampleBank,
+  engine: InstrumentEngine | undefined,
+  sampler: boolean,
+  wavetable: ReturnType<typeof wavetableHook> | undefined,
+  tuning: TuningTable | undefined,
+  guide: boolean,
+): boolean {
+  const synthVoice = !engine && !sampler && usesSynthVoice(track);
+  let stereo = engine
+    ? engine.stereo(track!)
+    : synthVoice && isStereoVoice(track);
+  if (stereo) dryR.fill(0);
+  if (engine && track) {
+    engine.render(
+      dry,
+      stereo ? dryR : undefined,
+      played,
+      track,
+      {
+        ...context,
+        ticksPerBeat: score.ticksPerBeat,
+        ...(tuning ? { tuning } : {}),
+      },
+      bank,
+    );
+  } else if (sampler) {
+    // A resampled stereo file plays as stereo (0.6.1).
+    if (track)
+      stereo = renderSamplerNotes(dry, played, track, context, bank, dryR);
+  } else if (synthVoice && track) {
+    const gainAt = (tick: number) => trackGainAt(track, tick);
+    const voice = {
+      ...context,
+      ticksPerBeat: score.ticksPerBeat,
+      ...(wavetable ? { oscillatorFor: wavetable.oscillatorFor } : {}),
+      ...(tuning ? { tuning } : {}),
+    };
+    const warp = context.warp;
+    for (const note of played) {
+      const { start, length } = noteSpan(note, context);
+      // The voice asks for `startTick + elapsed / samplesPerTick`;
+      // through a tempo map that sample's tick comes from the map.
+      const noteGainAt = warp
+        ? (tick: number) =>
+            gainAt(
+              warp.tick(
+                start + (tick - note.startTick) * context.samplesPerTick,
+              ),
+            )
+        : gainAt;
+      renderSynthNote(
+        dry,
+        stereo ? dryR : undefined,
+        note,
+        track,
+        start,
+        length,
+        voice,
+        noteGainAt,
+      );
+    }
+  } else if (track?.clips && isGuideInstrument(track.instrument)) {
+    // A `vocal` track's notes guide its clips: silent in a render,
+    // a soft sine in the live loop with `guide` on. (Without clips,
+    // an older project's `vocal` keeps its tone.)
+    if (guide)
+      for (const note of played)
+        renderToneNote(
+          dry,
+          { ...note, velocity: note.velocity * GUIDE_LEVEL },
+          { ...track, instrument: "sine" },
+          context,
+          tuning,
+        );
+  } else {
+    const drums = isDrumInstrument(track?.instrument);
+    for (const note of played) {
+      if (drums) renderDrumNote(dry, note, track, context);
+      else renderToneNote(dry, note, track, context, tuning);
+    }
+  }
+  // Audio clips (0.7) sum into the dry buffer before the chain.
+  if (track?.clips) {
+    const gainAt = (tick: number) => trackGainAt(track, tick);
+    renderClips(dry, track, context, bank, gainAt);
+    if (stereo) renderClips(dryR, track, context, bank, gainAt);
+  }
+  return stereo;
 }
 
 /**

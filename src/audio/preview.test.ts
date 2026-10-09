@@ -355,3 +355,50 @@ describe("master in a preview", () => {
     expect(context.score.master?.target).toBe(-14);
   });
 });
+
+describe("vocoder in a solo preview", () => {
+  function vocoded(src: string | undefined): TrackScore {
+    return createScore({
+      tempoBpm: 120,
+      bars: 2,
+      tracks: [
+        { id: "vox", name: "Lead Vox", instrument: "saw", muted: true },
+        {
+          id: "pad",
+          name: "pad",
+          instrument: "vocoder",
+          vocoder: { follow: "drone", ...(src ? { src } : {}) },
+        },
+      ],
+      notes: [0, 960, 1920, 2880].map((startTick, i) => ({
+        id: `v${i}`,
+        trackId: "vox",
+        pitch: 57 + i,
+        startTick,
+        durationTicks: 480,
+        velocity: 0.9,
+      })),
+    } as never);
+  }
+
+  test("keeps the modulator (muted) so the carrier is vocoded", () => {
+    const pcm = (score: TrackScore) => {
+      const preview = previewScore(score, "pad")!;
+      return renderScorePcm(preview.score, { sampleRate: RATE }).pcm;
+    };
+    const withSrc = previewScore(vocoded("lead-vox"), "pad")!;
+    const vox = withSrc.score.tracks.find((track) => track.id === "vox");
+    expect(vox?.muted).toBe(true);
+    expect(withSrc.score.notes.some((note) => note.trackId === "vox")).toBe(
+      true,
+    );
+    expect(Buffer.from(pcm(vocoded("lead-vox")).buffer)).not.toEqual(
+      Buffer.from(pcm(vocoded(undefined)).buffer),
+    );
+    // A solo preview of the modulator itself does not pull in the carrier.
+    const ids = previewScore(vocoded("vox"), "vox")!.score.tracks.map(
+      (track) => track.id,
+    );
+    expect(ids).toEqual(["vox"]);
+  });
+});

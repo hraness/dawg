@@ -8,6 +8,7 @@ import type { TrackScore } from "../../core/score.ts";
 import { applyFormantCommand, formantArgs, FORMANT_USAGE } from "./formant.ts";
 import { CLIP_VOCAL_VERBS } from "./clips.ts";
 import { PITCH_VERBS } from "./vocal-pitch.ts";
+import { applyVocoderCommand, parseVocoderCommand } from "./vocoder.ts";
 
 /** What a verb sees: the score, the focused track and the project folder. */
 export type VocalContext = Readonly<{
@@ -24,6 +25,8 @@ export type VocalResult = Readonly<{
   /** History kind for the commit, e.g. `clip.place`. */
   kind?: string;
   payload?: Readonly<Record<string, unknown>>;
+  /** The track the verb changed or created, focused when it differs. */
+  trackId?: string;
 }>;
 
 export type VocalVerb = Readonly<{
@@ -55,6 +58,16 @@ export const VOCAL_VERBS: readonly VocalVerb[] = [
       applyFormantCommand(context.score, context.trackId, formantArgs(args)),
   },
   // vocoder: vocoder
+  {
+    verb: "vocoder",
+    usage: "vocoder [preset|src <track>|<param> <value>]",
+    summary: "vocode a voice onto a synth carrier (same as /vocoder)",
+    lane: "vocoder",
+    run: async (args, context) => {
+      const command = parseVocoderCommand(`vocoder ${args}`.trim())!;
+      return applyVocoderCommand(context.score, context.trackId, command);
+    },
+  },
   // 0.7.1: record, take, comp (record), say (say), harmony (harmony),
   // chop (chops)
 ];

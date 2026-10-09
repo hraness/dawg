@@ -13,6 +13,7 @@
  */
 
 import { MODAL_LANE_PARAMS, WIND_LANE_PARAMS } from "./resonators.ts";
+import { VOCODER_LANE_PARAMS } from "./vocoder.ts";
 import { SYNTH_LANE_PARAMS } from "./synth.ts";
 import { STRING_LANE_PARAMS } from "./strings.ts";
 import { KEYS_LANE_PARAMS } from "./keys.ts";
@@ -1264,7 +1265,7 @@ export function normalizeFx(input: unknown): TrackFx | undefined {
 
 /** Automation lane name of an `fx` parameter, e.g. `distort-drive`. */
 export type FxLane =
-  `${FxName | "reverb" | "synth" | "string" | "keys" | "modal" | "grain" | "wind" | "sing"}-${string}`;
+  `${FxName | "reverb" | "synth" | "string" | "keys" | "modal" | "grain" | "wind" | "sing" | "vocoder"}-${string}`;
 
 /** Every automatable `fx` parameter as `{ lane, effect, param, spec }`. */
 export const FX_LANES: readonly Readonly<{
@@ -1278,7 +1279,8 @@ export const FX_LANES: readonly Readonly<{
     | "modal"
     | "grain"
     | "wind"
-    | "sing";
+    | "sing"
+    | "vocoder";
   param: string;
   spec: NumberParam;
 }>[] = Object.freeze([
@@ -1358,6 +1360,15 @@ export const FX_LANES: readonly Readonly<{
     Object.freeze({
       lane: `sing-${param}` as FxLane,
       effect: "sing" as const,
+      param,
+      spec,
+    }),
+  ),
+  // Vocoder (core/vocoder.ts, 0.7), read per 32-sample block on the song grid.
+  ...VOCODER_LANE_PARAMS.map(({ param, spec }) =>
+    Object.freeze({
+      lane: `vocoder-${param}` as FxLane,
+      effect: "vocoder" as const,
       param,
       spec,
     }),

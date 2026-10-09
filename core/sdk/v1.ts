@@ -2021,6 +2021,226 @@ export function wind(
   return Object.freeze(out) as WindSpec;
 }
 
+// ---- vocoder (f07-vocoder, SDK 1.32.0) ----
+
+/** The instrument value of the built-in vocoder carrier (core/vocoder.ts). */
+export const VOCODER_INSTRUMENT = "vocoder";
+
+/** Vocoder presets (core/vocoder.ts VOCODER_PRESET_NAMES). */
+export type VocoderPresetName =
+  | "classic"
+  | "robot"
+  | "talkbox"
+  | "choir"
+  | "glass"
+  | "whisper"
+  | "smear"
+  | "lofi";
+
+const VOCODER_PRESET_WORDS: readonly string[] = Object.freeze([
+  "classic",
+  "robot",
+  "talkbox",
+  "choir",
+  "glass",
+  "whisper",
+  "smear",
+  "lofi",
+]);
+
+/** Vocoder overrides (core/vocoder.ts VOCODER_PARAMS). */
+export type VocoderParams = Readonly<{
+  /** The modulator track: an id or a name slug (`"vox"`, `"lead-vox"`). */
+  src?: string;
+  tap?: "chain" | "dry";
+  mode?: "channel" | "talkbox";
+  carrier?: "saw" | "supersaw" | "pulse" | "noise";
+  follow?: "notes" | "chords" | "drone";
+  root?: number;
+  spread?: number;
+  bands?: number;
+  lo?: number;
+  hi?: number;
+  width?: number;
+  attack?: number;
+  release?: number;
+  formant?: number;
+  unvoiced?: number;
+  sens?: number;
+  hiss?: number;
+  gate?: number | "auto";
+  enhance?: boolean;
+  depth?: number;
+  freeze?: boolean;
+  mix?: number;
+  gain?: number;
+  seed?: number;
+}>;
+
+const VOCODER_ENUMS: Readonly<Record<string, readonly string[]>> =
+  Object.freeze({
+    tap: Object.freeze(["chain", "dry"]),
+    mode: Object.freeze(["channel", "talkbox"]),
+    carrier: Object.freeze(["saw", "supersaw", "pulse", "noise"]),
+    follow: Object.freeze(["notes", "chords", "drone"]),
+  });
+
+const VOCODER_RANGES: Readonly<Record<string, readonly [number, number]>> =
+  Object.freeze({
+    root: [24, 96],
+    spread: [0, 1],
+    bands: [4, 40],
+    lo: [50, 1000],
+    hi: [2000, 12000],
+    width: [0.25, 4],
+    attack: [0.0005, 0.2],
+    release: [0.005, 2],
+    formant: [-24, 24],
+    unvoiced: [0, 1],
+    sens: [0, 1],
+    hiss: [0, 1],
+    gate: [-90, 0],
+    depth: [0, 1],
+    mix: [0, 1],
+    gain: [-24, 24],
+    seed: [0, 2 ** 31],
+  });
+
+const VOCODER_INTEGERS: readonly string[] = Object.freeze([
+  "root",
+  "bands",
+  "seed",
+]);
+
+/** Result of `vocoder()`: a track's `instrument` or its `vocoder` field. */
+export type VocoderSpec = Readonly<
+  { kind: "vocoder"; preset?: VocoderPresetName } & VocoderParams
+>;
+
+/**
+ * A vocoder (SDK 1.32.0): another track's voice (`src`) shapes this track's
+ * sound. As the `instrument` it plays the built-in carrier (a supersaw
+ * following the notes); as the `vocoder` field it vocodes the track's own
+ * synth or sampler. `src` takes a track id or a name slug.
+ *
+ * ```ts
+ * instrument: vocoder("talkbox", { src: "vox", formant: 2 })
+ * vocoder: vocoder({ src: "t-vox", bands: 24 })
+ * ```
+ */
+export function vocoder(
+  preset?: VocoderPresetName | VocoderParams,
+  params: VocoderParams = {},
+): VocoderSpec {
+  const overrides = isRecord(preset) ? preset : params;
+  const name = isRecord(preset) ? undefined : preset;
+  if (!isRecord(overrides))
+    throw new DawgSdkError("vocoder params must be an object");
+  const out: Record<string, unknown> = { kind: "vocoder" };
+  if (name !== undefined) {
+    if (typeof name !== "string" || !VOCODER_PRESET_WORDS.includes(name))
+      throw new DawgSdkError(
+        `vocoder preset "${String(name).slice(0, 32)}" is not one of ${VOCODER_PRESET_WORDS.join(" ")}`,
+      );
+    out.preset = name;
+  }
+  for (const key of Object.keys(overrides)) {
+    const value = (overrides as Record<string, unknown>)[key];
+    if (value === undefined) continue;
+    const words = VOCODER_ENUMS[key];
+    if (key === "src") {
+      if (typeof value !== "string" || value.length === 0 || value.length > 64)
+        throw new DawgSdkError("vocoder src must be a track id or name slug");
+      out.src = value;
+    } else if (words) {
+      if (typeof value !== "string" || !words.includes(value))
+        throw new DawgSdkError(
+          `vocoder ${key} "${String(value).slice(0, 32)}" is not one of ${words.join(" ")}`,
+        );
+      out[key] = value;
+    } else if (key === "enhance" || key === "freeze") {
+      if (typeof value !== "boolean")
+        throw new DawgSdkError(`vocoder ${key} must be true or false`);
+      out[key] = value;
+    } else if (key === "gate" && value === "auto") {
+      out.gate = "auto";
+    } else if (VOCODER_RANGES[key]) {
+      const number = finite(value, `vocoder ${key}`);
+      const [min, max] = VOCODER_RANGES[key]!;
+      if (number < min || number > max)
+        throw new DawgSdkError(`vocoder ${key} must be ${min}..${max}`);
+      if (VOCODER_INTEGERS.includes(key) && !Number.isInteger(number))
+        throw new DawgSdkError(`vocoder ${key} must be a whole number`);
+      out[key] = number;
+    } else
+      throw new DawgSdkError(
+        `vocoder has no parameter "${key.slice(0, 32)}" (src ${[...Object.keys(VOCODER_ENUMS), "enhance", "freeze", ...Object.keys(VOCODER_RANGES)].join(" ")})`,
+      );
+  }
+  return Object.freeze(out) as VocoderSpec;
+}
+
+/**
+ * The vocoder field a track gets: its `vocoder` property, else a
+ * `vocoder(...)` instrument, else `{}` for the bare word `"vocoder"` (the
+ * built-in carrier with every default). `null` removes it.
+ */
+function trackVocoder(
+  rawInstrument: unknown,
+  field: unknown,
+): Readonly<{ preset?: VocoderPresetName } & VocoderParams> | undefined {
+  const strip = (spec: unknown) => {
+    if (!isRecord(spec) || spec.kind !== "vocoder")
+      throw new DawgSdkError("track vocoder must come from vocoder()");
+    const { kind: _kind, ...fields } = spec as VocoderSpec;
+    return Object.freeze(fields);
+  };
+  if (field !== undefined && field !== null) return strip(field);
+  if (isRecord(rawInstrument) && rawInstrument.kind === "vocoder")
+    return strip(rawInstrument);
+  if (rawInstrument === VOCODER_INSTRUMENT) return Object.freeze({});
+  return undefined;
+}
+
+/** Lowercase dash slug of a track name (core/slug.ts trackSlug). */
+function vocoderSlug(text: string): string {
+  const slug = text
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64)
+    .replace(/-+$/g, "");
+  return slug.length > 0 ? slug : "track";
+}
+
+/**
+ * `src` as a track id: an id wins, then a unique name slug. Errors when
+ * nothing matches, two tracks share the slug, or the track names itself.
+ */
+function resolveVocoderSrc(
+  tracks: readonly Readonly<{ id: string; name: string }>[],
+  self: string,
+  src: string,
+): string {
+  const byId = tracks.find((track) => track.id === src);
+  const matches = byId
+    ? [byId]
+    : tracks.filter((track) => vocoderSlug(track.name) === vocoderSlug(src));
+  if (matches.length === 0)
+    throw new DawgSdkError(
+      `track ${self}: vocoder src "${src.slice(0, 64)}" names no track`,
+    );
+  if (matches.length > 1)
+    throw new DawgSdkError(
+      `track ${self}: vocoder src "${src.slice(0, 64)}" matches ${matches.length} tracks; use an id`,
+    );
+  if (matches[0]!.id === self)
+    throw new DawgSdkError(`track ${self}: a track cannot vocode itself`);
+  return matches[0]!.id;
+}
+
 /**
  * The wind field an instrument makes: `wind(...)`, or a wind preset word
  * (`"flute"`, `"saxophone"`). The bare word `"wind"` keeps its pre-0.6.1
@@ -2886,7 +3106,13 @@ export type TrackInput = Readonly<{
     | GranularSpec
     | ModalSpec
     | WindSpec
-    | SingSpec;
+    | SingSpec
+    | VocoderSpec;
+  /**
+   * A vocoder on this track (SDK 1.32.0): `vocoder({ src: "vox" })` lets
+   * the vox track's voice shape this track's sound; `null` removes it.
+   */
+  vocoder?: VocoderSpec | null;
   /**
    * The sampler a `granular(...)` track keeps while it grains one of its
    * voices (SDK 1.23.0); `grain off` plays it again.
@@ -3137,6 +3363,8 @@ export type TrackSpec = Readonly<{
   clips?: readonly AudioSpec[];
   /** Takes (SDK 1.32.0); present only when set. */
   takes?: readonly TakeSpec[];
+  /** Vocoder settings (SDK 1.32.0); `src` as written until `song()`. */
+  vocoder?: Readonly<{ preset?: VocoderPresetName } & VocoderParams>;
 }>;
 
 export type GlideMode = "legato" | "mono" | "poly";
@@ -3390,6 +3618,7 @@ export function track(input: TrackInput): TrackSpec {
   const guitarSpec = guitarInput(input.guitar, `track ${name}`);
   const windSpec = trackWind(rawInstrument);
   const singSpec = trackSing(rawInstrument);
+  const vocoderSpec = trackVocoder(rawInstrument, input.vocoder);
   const instrument = granularFromInstrument
     ? GRANULAR_INSTRUMENT
     : samplerSpec
@@ -3404,9 +3633,11 @@ export function track(input: TrackInput): TrackSpec {
               ? WIND_INSTRUMENT
               : singSpec
                 ? SING_INSTRUMENT
-                : typeof rawInstrument === "string"
-                  ? (word?.instrument ?? rawInstrument)
-                  : undefined;
+                : isRecord(rawInstrument) && rawInstrument.kind === "vocoder"
+                  ? VOCODER_INSTRUMENT
+                  : typeof rawInstrument === "string"
+                    ? (word?.instrument ?? rawInstrument)
+                    : undefined;
   // A granular word (`"cloud"`) turns the engine on with its preset.
   const granularSpec =
     granularInput(input.granular, name, slug) ??
@@ -3633,6 +3864,7 @@ export function track(input: TrackInput): TrackSpec {
     ...(windSpec ? { wind: windSpec } : {}),
     ...(singSpec ? { sing: singSpec } : {}),
     ...trackClips(input, name, slug),
+    ...(vocoderSpec ? { vocoder: vocoderSpec } : {}),
   });
 }
 
@@ -4232,6 +4464,8 @@ export type ScoreTrack = Readonly<{
   wind?: TrackSpec["wind"];
   /** Sing settings (SDK 1.32.0). */
   sing?: TrackSpec["sing"];
+  /** Vocoder settings (SDK 1.32.0); `src` is a track id. */
+  vocoder?: TrackSpec["vocoder"];
   glide?: TrackSpec["glide"];
   pedal?: readonly Readonly<{ tick: number; state: PedalState }>[];
   softPedal?: readonly Readonly<{ tick: number; state: PedalState }>[];
@@ -4553,6 +4787,19 @@ export function song(input: SongInput): Song {
     if (t.takes && t.takes.length > 0)
       stored.takes = Object.freeze(
         t.takes.map((spec) => storedTake(spec, ticks)),
+      );
+    if (t.vocoder)
+      stored.vocoder = Object.freeze(
+        t.vocoder.src === undefined
+          ? t.vocoder
+          : {
+              ...t.vocoder,
+              src: resolveVocoderSrc(
+                input.tracks as TrackSpec[],
+                t.id,
+                t.vocoder.src,
+              ),
+            },
       );
     if (t.rhythm && t.rhythm.length > 0)
       stored.rhythm = Object.freeze(
@@ -6273,6 +6520,14 @@ const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
   { word: "kargyraa", instrument: "sing", field: "sing", preset: "kargyraa" },
   // f07-clips: a track of audio clips; its notes are guides.
   { word: "vocal", instrument: "vocal" },
+  // f07-vocoder: the built-in carrier (core/vocoder.ts); set a source with
+  // `/vocoder src <track>`.
+  {
+    word: "vocoder",
+    instrument: "vocoder",
+    field: "vocoder",
+    preset: "classic",
+  },
 ]);
 
 /**

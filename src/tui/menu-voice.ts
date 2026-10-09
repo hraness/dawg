@@ -14,6 +14,7 @@ import {
 import { effectParamNodes, type MenuContext, type MenuNode } from "./menu.ts";
 import { singBrowseRows } from "./sing-menu.ts";
 import { clipMenuRows, vocalBrowseRows } from "./menu-clips.ts";
+import { vocoderBrowseNode, vocoderEffectNode } from "./vocoder-menu.ts";
 
 /** Sound > Voice: Clips and Lyrics (clips lane). */
 export function clipsSoundRows(context: MenuContext): MenuNode[] {
@@ -109,8 +110,8 @@ export function formantEffectRows(context: MenuContext): MenuNode[] {
 }
 
 /** Effects > Voice: Vocoder with a Source picker (vocoder lane). */
-export function vocoderEffectRows(_context: MenuContext): MenuNode[] {
-  return [];
+export function vocoderEffectRows(context: MenuContext): MenuNode[] {
+  return vocoderEffectNode(context);
 }
 
 /**
@@ -118,7 +119,11 @@ export function vocoderEffectRows(_context: MenuContext): MenuNode[] {
  * (sing), Vocoder (vocoder).
  */
 export function voicesBrowseGroup(context: MenuContext): MenuNode[] {
-  return [...vocalBrowseRows(context), ...singBrowseRows()];
+  return [
+    ...vocalBrowseRows(context),
+    ...singBrowseRows(),
+    ...vocoderBrowseNode(context),
+  ];
 }
 
 /** Every Sound > Voice row, in lane order. */

@@ -421,6 +421,14 @@ export const INSTRUMENT_WORDS: readonly InstrumentWordRow[] = Object.freeze([
   { word: "kargyraa", instrument: "sing", field: "sing", preset: "kargyraa" },
   // f07-clips: a track of audio clips; its notes are guides.
   { word: "vocal", instrument: "vocal" },
+  // f07-vocoder: the built-in carrier (core/vocoder.ts); set a source with
+  // `/vocoder src <track>`.
+  {
+    word: "vocoder",
+    instrument: "vocoder",
+    field: "vocoder",
+    preset: "classic",
+  },
 ]);
 
 /**
