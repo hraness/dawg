@@ -370,3 +370,47 @@ describe("pedal bars", () => {
     expect(added.some((event) => event.tick === TPB / 4)).toBe(true);
   });
 });
+
+describe("pedal soft|sost (0.6.1)", () => {
+  test("parse the lane and the usual forms", () => {
+    expect(parseExpressionCommand("pedal soft 0-4")).toEqual({
+      type: "pedal-spans",
+      spans: [{ from: 0, to: 4 }],
+      lane: "soft",
+    });
+    expect(parseExpressionCommand("pedal sostenuto off")).toEqual({
+      type: "pedal-off",
+      lane: "sost",
+    });
+    expect(parseExpressionCommand("pedal sost")).toEqual({
+      type: "pedal-list",
+      lane: "sost",
+    });
+    expect(parseExpressionCommand("pedal soft bogus")).toBeUndefined();
+  });
+
+  test("soft spans write Track.softPedal and leave the sustain pedal", () => {
+    const result = run("pedal soft 0-4");
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain("soft pedal · 2 events");
+    const track = roundTrip(result.next).tracks[0]!;
+    expect(track.softPedal).toEqual([
+      { tick: 0, state: "down" },
+      { tick: 4 * TPB, state: "up" },
+    ]);
+    expect(track.pedal).toBeUndefined();
+    const off = run("pedal soft off", result.next);
+    expect(off.next!.tracks[0]!.softPedal).toBeUndefined();
+  });
+
+  test("sostenuto holds through bars and rejects half", () => {
+    const bars = run("pedal sost bars");
+    expect(bars.next!.tracks[0]!.sostenuto).toEqual([
+      { tick: 0, state: "down" },
+      { tick: 8 * TPB, state: "up" },
+    ]);
+    const half = run("pedal sost half at 1");
+    expect(half.ok).toBe(false);
+    expect(half.message).toContain("sostenuto");
+  });
+});

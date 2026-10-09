@@ -8,6 +8,7 @@
  *   glide <ms>|off <target>                  portamento into each note
  *   glide <ms>|0|off [legato|mono|poly]      the track's glide (`glide mono`)
  *   pedal <beat>-<beat>…|bars [<bar>-<bar>]|down|half|up <beat>|off
+ *   pedal soft|sost <same forms>             una corda and sostenuto (0.6.1)
  *   velcurve linear|soft|hard|fixed [<v>]
  *   humanize <ms> [<vel%> [<len%>]] [seed <n>]|on|off|reseed|seed <n>
  *   humanize <ms> [<vel%> [<len%>]]|exact|off <target>   per-note amounts
@@ -32,6 +33,7 @@ import {
   normalizeBend,
   normalizeHumanize,
   normalizePedal,
+  SOSTENUTO_STATES,
   normalizeTrackGlide,
   normalizeVelocityCurve,
   normalizeVibrato,
@@ -73,11 +75,15 @@ export type ExpressionCommand =
   | { type: "vibrato"; vibrato: NoteVibrato | null; target: NoteTarget }
   | { type: "note-glide"; glide: number | null; target: NoteTarget }
   | { type: "track-glide"; time?: number | null; mode?: GlideMode }
-  | { type: "pedal-spans"; spans: readonly { from: number; to: number }[] }
-  | { type: "pedal-bars"; from?: number; to?: number }
-  | { type: "pedal-list" }
-  | { type: "pedal-event"; state: PedalState; beat: number }
-  | { type: "pedal-off" }
+  | {
+      type: "pedal-spans";
+      spans: readonly { from: number; to: number }[];
+      lane?: PedalLane;
+    }
+  | { type: "pedal-bars"; from?: number; to?: number; lane?: PedalLane }
+  | { type: "pedal-list"; lane?: PedalLane }
+  | { type: "pedal-event"; state: PedalState; beat: number; lane?: PedalLane }
+  | { type: "pedal-off"; lane?: PedalLane }
   | { type: "velcurve"; curve: VelocityCurveName; fixed?: number }
   | {
       type: "humanize";
@@ -299,7 +305,31 @@ function nearWord(text: string, word: string): boolean {
   return previous[word.length]! <= 2;
 }
 
+/**
+ * Which pedal a `pedal` command edits (0.6.1): absent is the sustain
+ * pedal, `soft` the una corda (Track.softPedal), `sost` the sostenuto.
+ */
+export type PedalLane = "soft" | "sost";
+
+const PEDAL_LANES: Readonly<Record<string, PedalLane>> = {
+  soft: "soft",
+  unacorda: "soft",
+  sost: "sost",
+  sostenuto: "sost",
+};
+
 function parsePedal(words: string[]): ExpressionCommand | undefined {
+  const lane = words[0] ? PEDAL_LANES[words[0]] : undefined;
+  if (lane) {
+    const command = parsePedalLane(words.slice(1));
+    return command && command.type.startsWith("pedal-")
+      ? ({ ...command, lane } as ExpressionCommand)
+      : undefined;
+  }
+  return parsePedalLane(words);
+}
+
+function parsePedalLane(words: string[]): ExpressionCommand | undefined {
   const [first, ...rest] = words;
   if (!first) return { type: "pedal-list" };
   if (OFF.test(first) && rest.length === 0) return { type: "pedal-off" };
@@ -564,6 +594,16 @@ export function describePerformance(score: TrackScore, track: Track): string {
   const parts = [
     `glide ${track.glide ? `${ms(track.glide.time)} ${track.glide.mode}` : "off"}`,
     `pedal ${track.pedal ? `${track.pedal.length} event${track.pedal.length === 1 ? "" : "s"}` : "off"}`,
+    ...(track.softPedal
+      ? [
+          `soft ${track.softPedal.length} event${track.softPedal.length === 1 ? "" : "s"}`,
+        ]
+      : []),
+    ...(track.sostenuto
+      ? [
+          `sost ${track.sostenuto.length} event${track.sostenuto.length === 1 ? "" : "s"}`,
+        ]
+      : []),
     `velcurve ${track.velocityCurve ? `${track.velocityCurve.curve}${track.velocityCurve.fixed !== undefined ? ` ${track.velocityCurve.fixed}` : ""}` : "linear"}`,
     `humanize ${describeHumanize(track.humanize)}`,
   ];
@@ -680,10 +720,24 @@ function mergePedal(
   current: readonly PedalEvent[] | undefined,
   added: readonly PedalEvent[],
   maxTick: number,
+  label?: string,
+  states?: readonly PedalState[],
 ): readonly PedalEvent[] | undefined {
   const byTick = new Map((current ?? []).map((event) => [event.tick, event]));
   for (const event of added) byTick.set(event.tick, event);
-  return normalizePedal([...byTick.values()], maxTick);
+  return normalizePedal([...byTick.values()], maxTick, label, states);
+}
+
+/** The Track field, message label and allowed states of a pedal lane. */
+function pedalLaneOf(lane: PedalLane | undefined): {
+  field: "pedal" | "softPedal" | "sostenuto";
+  label: string;
+  states?: readonly PedalState[];
+} {
+  if (lane === "soft") return { field: "softPedal", label: "soft pedal" };
+  if (lane === "sost")
+    return { field: "sostenuto", label: "sostenuto", states: SOSTENUTO_STATES };
+  return { field: "pedal", label: "pedal" };
 }
 
 /** Apply `command` to the focused track `trackId`. */
@@ -771,11 +825,12 @@ export function applyExpressionCommand(
       );
     }
     case "pedal-list": {
-      const events = track.pedal ?? [];
+      const { field, label } = pedalLaneOf(command.lane);
+      const events = track[field] ?? [];
       if (events.length === 0)
         return {
           ok: true,
-          message: `pedal · none on ${trackId} · pedal bars to add`,
+          message: `${label} · none on ${trackId} · ${command.lane ? `pedal ${command.lane} 0-4` : "pedal bars"} to add`,
         };
       const shown = events
         .slice(0, 12)
@@ -784,24 +839,45 @@ export function applyExpressionCommand(
             `${Math.round((event.tick / score.ticksPerBeat) * 1000) / 1000} ${event.state}`,
         );
       if (events.length > 12) shown.push(`+${events.length - 12} more`);
-      return { ok: true, message: `pedal · ${shown.join(" · ")} · ${trackId}` };
+      return {
+        ok: true,
+        message: `${label} · ${shown.join(" · ")} · ${trackId}`,
+      };
     }
-    case "pedal-off":
-      return track.pedal
-        ? trackResult(score, track, { pedal: null }, `pedal · off · ${trackId}`)
-        : { ok: true, message: `pedal · already off · ${trackId}` };
+    case "pedal-off": {
+      const { field, label } = pedalLaneOf(command.lane);
+      return track[field]
+        ? trackResult(
+            score,
+            track,
+            { [field]: null },
+            `${label} · off · ${trackId}`,
+          )
+        : { ok: true, message: `${label} · already off · ${trackId}` };
+    }
     case "pedal-spans":
     case "pedal-bars":
     case "pedal-event": {
+      const { field, label, states } = pedalLaneOf(command.lane);
       let added: PedalEvent[];
       if (command.type === "pedal-bars") {
         const from = command.from ?? 1;
         if (from > score.bars)
           return {
             ok: false,
-            message: `pedal · the loop has ${score.bars} bar${score.bars === 1 ? "" : "s"}`,
+            message: `${label} · the loop has ${score.bars} bar${score.bars === 1 ? "" : "s"}`,
           };
-        added = barPedal(score, from, command.to ?? score.bars);
+        const to = Math.min(command.to ?? score.bars, score.bars);
+        // Soft and sostenuto hold through the bars (no re-pedalling).
+        added = command.lane
+          ? [
+              { tick: barStartTick(score, from - 1), state: "down" },
+              {
+                tick: Math.min(barStartTick(score, to), maxTick),
+                state: "up",
+              },
+            ]
+          : barPedal(score, from, to);
       } else if (command.type === "pedal-event") {
         added = [
           { tick: Math.round(command.beat * tpb), state: command.state },
@@ -815,7 +891,7 @@ export function applyExpressionCommand(
       if (added.some((event) => event.tick > maxTick))
         return {
           ok: false,
-          message: `pedal · beats run 0..${maxTick / tpb} in this loop`,
+          message: `${label} · beats run 0..${maxTick / tpb} in this loop`,
         };
       let pedal: readonly PedalEvent[] | undefined;
       try {
@@ -825,11 +901,11 @@ export function applyExpressionCommand(
           command.type === "pedal-bars" &&
           command.from === undefined &&
           command.to === undefined
-            ? normalizePedal(added, maxTick)
-            : mergePedal(track.pedal, added, maxTick);
+            ? normalizePedal(added, maxTick, field, states)
+            : mergePedal(track[field], added, maxTick, field, states);
       } catch (error) {
         if (error instanceof ExpressionValidationError)
-          return { ok: false, message: `pedal · ${error.message}` };
+          return { ok: false, message: `${label} · ${error.message}` };
         throw error;
       }
       const downs = (pedal ?? []).filter((event) => event.state === "down");
@@ -843,8 +919,8 @@ export function applyExpressionCommand(
       return trackResult(
         score,
         track,
-        { pedal: pedal ?? null },
-        `pedal · ${pedal?.length ?? 0} event${pedal?.length === 1 ? "" : "s"} (${held}) · ${trackId}`,
+        { [field]: pedal ?? null },
+        `${label} · ${pedal?.length ?? 0} event${pedal?.length === 1 ? "" : "s"} (${held}) · ${trackId}`,
       );
     }
     case "velcurve": {
@@ -933,7 +1009,7 @@ export const EXPRESSION_USAGE = Object.freeze({
   glide:
     "glide <ms>|<s>s|off [legato|mono|poly] (track) · glide <ms>|off <target> (notes) · glide 60 mono · SDK glide: 0.06 (s)",
   pedal:
-    "pedal <beat>-<beat>…|bars [<bar>-<bar>]|down|half|up <beat>|off · pedal 0-3.5 4-7.5 · pedal bars",
+    "pedal [soft|sost] <beat>-<beat>…|bars [<bar>-<bar>]|down|half|up <beat>|off · pedal 0-3.5 4-7.5 · pedal bars · pedal soft 0-8 (una corda) · pedal sost 0-4 (holds keys down at 0)",
   velcurve:
     "velcurve linear|soft|hard|fixed [<v 0..1>] · velcurve soft · velcurve fixed 0.8",
   humanize:

@@ -128,6 +128,11 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "sustain pedal · pedal 0-3.5 4-7.5 · pedal bars",
       },
       {
+        command: "pedal soft|sost <beat>-<beat>... | bars | off",
+        summary:
+          "piano una corda and sostenuto · pedal soft 0-8 · pedal sost 0-4",
+      },
+      {
         command: "velcurve linear|soft|hard|fixed [<v>]",
         summary: "how velocity maps to level · velcurve fixed 0.6 (0..1)",
       },
