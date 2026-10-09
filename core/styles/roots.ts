@@ -351,6 +351,12 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
         [BLUES_FORM, 0.6],
         [QUICK_CHANGE_FORM, 0.4],
       ],
+      // The rare non-form chorus is a turnaround or I-bVII-IV vamp, never a
+      // pop axis loop.
+      presets: [
+        ["turnaround", 0.5],
+        ["mixolydian-rock", 0.5],
+      ],
       sources: { forms: 3, presets: 0.2 },
       sevenths: 1,
       rhythm: [[1, 1]],
@@ -3310,6 +3316,12 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "Bakersfield sound: bright twangy Telecaster lead, driving straight-eighth train beat, root-fifth bass, raw I-IV-V honky-tonk harmony, electric pedal steel",
     seedSalt: 1963,
+    harmony: {
+      presets: [
+        ["fifties", 0.4],
+        ["mixolydian-rock", 0.6],
+      ],
+    },
     tempo: { bpm: [120, 170], typical: 144 },
     groove: { subdivision: 2, swingRatio: [1, 1.15] },
     rhythm: {
@@ -3499,6 +3511,493 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
         bass: role("ebass"),
         lead: role("sing", "fiddle:0.6"),
         counter: role("fiddle", "electric@glide:0.6"),
+      },
+    },
+  }),
+  // -------------------------------------------------------------------------
+  // North American folk leaves. References: Alan Lomax, "The Folk Songs of
+  // North America" (1960); Barry Jean Ancelet, "Cajun and Creole Music
+  // Makers" (1999); Jean-Jacques Nattiez, "Inuit Vocal Games" (1983).
+  card({
+    id: "appalachian",
+    summary:
+      "Appalachian ballad: gapped pentatonic and hexatonic modal melody (dorian, mixolydian, aeolian), unmetered-feeling strophic ballad, dulcimer drone on tonic and fifth",
+    seedSalt: 1916,
+    meter: {
+      signatures: [
+        ["3/4", 0.4],
+        ["4/4", 0.6],
+      ],
+      hypermeter: [[4, 1]],
+    },
+    tempo: { bpm: [60, 110], typical: 80 },
+    pitch: {
+      scales: [
+        ["dorian", 0.3],
+        ["mixolydian", 0.3],
+        ["minor", 0.2],
+        ["major-pentatonic", 0.2],
+      ],
+    },
+    harmony: { model: "drone", presets: null, rhythm: [[1, 1]], sevenths: 0 },
+    melody: {
+      density: [1, 2],
+      repetition: 0.6,
+      contour: [
+        ["arch", 0.6],
+        ["descending", 0.4],
+      ],
+    },
+    texture: {
+      roles: {
+        chords: null,
+        bass: null,
+        drone: role("dulcimer"),
+        lead: role("sing", "fiddle:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "sacred-harp",
+    summary:
+      "Sacred Harp shape-note singing: four-part dispersed harmony in open fifths and fourths, modal minor tunes, tenor-carried melody, square-beat 4/4 and 3/2, fuging entries, unaccompanied",
+    seedSalt: 1844,
+    meter: {
+      signatures: [
+        ["4/4", 0.6],
+        ["3/4", 0.4],
+      ],
+      hypermeter: [[4, 1]],
+    },
+    tempo: { bpm: [80, 130], typical: 104 },
+    groove: { subdivision: 2, swingRatio: [1, 1] },
+    pitch: {
+      scales: [
+        ["minor", 0.5],
+        ["major", 0.3],
+        ["dorian", 0.2],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["aeolian", 0.5],
+        ["fifties", 0.5],
+      ],
+      sevenths: 0,
+      voicing: {
+        types: [
+          ["power", 0.5],
+          ["open", 0.5],
+        ],
+      },
+      cadences: [
+        ["V-I", 0.5],
+        ["IV-I", 0.5],
+      ],
+    },
+    rhythm: { onsets: { chords: grid("x.x.x.x.") } },
+    bass: { behaviour: [["root", 1]], onsets: grid("x.x.x.x.") },
+    texture: {
+      roles: {
+        chords: role("chorale"),
+        bass: role("aah"),
+        lead: role("choir"),
+        counter: role("aah"),
+      },
+    },
+    form: { plans: [[["verse", "verse", "chorus", "chorus"], 1]] },
+  }),
+  card({
+    id: "american-folk-revival",
+    summary:
+      "American folk revival: Travis-picked alternating-bass acoustic guitar, protest and topical strophic songs, I-IV-V and I-vi-IV-V, harmonica breaks, unison group chorus",
+    seedSalt: 1962,
+    tempo: { bpm: [80, 140], typical: 104 },
+    groove: { subdivision: 4, swingRatio: [1, 1.15] },
+    harmony: {
+      presets: [
+        ["fifties", 0.5],
+        ["mixolydian-rock", 0.5],
+      ],
+    },
+    rhythm: { onsets: { arp: grid("x.x.x.x.x.x.x.x.") } },
+    bass: { behaviour: [["root-fifth", 1]], onsets: grid("x...x...x...x...") },
+    texture: {
+      roles: {
+        bass: role("steel"),
+        chords: role("steel"),
+        arp: role("steel"),
+        lead: role("sing"),
+        counter: maybe("reeds", "banjo:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "singer-songwriter",
+    summary:
+      "singer-songwriter: intimate fingerpicked guitar or piano, sus2 and add9 colour, I-V-vi-IV and vi-IV-I-V, verse-chorus-bridge with confessional melody close to speech rhythm",
+    seedSalt: 1971,
+    tempo: { bpm: [64, 120], typical: 88 },
+    groove: { subdivision: 4, swingRatio: [1, 1.1] },
+    pitch: {
+      scales: [
+        ["major", 0.7],
+        ["minor", 0.3],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["axis", 0.4],
+        ["sad-pop", 0.3],
+        ["canon", 0.3],
+      ],
+      sevenths: 0.2,
+    },
+    rhythm: { onsets: { arp: grid("x.x.x.x.x.x.x.x.") } },
+    melody: { intervals: intervals(7, 2, 0.5, 1.2), density: [2, 2] },
+    texture: {
+      roles: {
+        bass: maybe("steel"),
+        chords: role("steel", "piano:0.6"),
+        arp: role("steel", "piano:0.4"),
+        lead: role("sing"),
+      },
+    },
+    form: {
+      plans: [[["verse", "chorus", "verse", "chorus", "bridge", "chorus"], 1]],
+      archetype: "verse-chorus",
+    },
+  }),
+  card({
+    id: "contemporary-folk",
+    summary:
+      "contemporary and indie folk: stomp-and-clap four-on-the-floor kick, banjo and acoustic strum, gang-vocal choruses, I-IV-vi-V, building dynamics",
+    seedSalt: 2010,
+    tempo: { bpm: [80, 130], typical: 112 },
+    groove: { subdivision: 4, swingRatio: [1, 1.1] },
+    harmony: {
+      presets: [
+        ["axis", 0.5],
+        ["canon", 0.5],
+      ],
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x...x...x...x..."),
+        clap: grid("....x.......x..."),
+        snare: null,
+        hat: null,
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic", ["kick", "clap"]),
+        snare: null,
+        hat: null,
+        bass: maybe("contrabass"),
+        chords: role("acoustic", "banjo:0.5"),
+        lead: role("sing"),
+        counter: maybe("choir"),
+      },
+    },
+  }),
+  card({
+    id: "cajun",
+    summary:
+      "Cajun: diatonic accordion and twin fiddles, two-step (2/4 boom-chick) and 3/4 waltz, I-V alternation in major, triangle on every eighth, high-pitched declamatory vocal",
+    seedSalt: 1928,
+    meter: {
+      signatures: [
+        ["2/4", 0.5],
+        ["3/4", 0.5],
+      ],
+      hypermeter: [[8, 1]],
+    },
+    tempo: { bpm: [100, 170], typical: 136 },
+    groove: { subdivision: 2, swingRatio: [1.1, 1.4] },
+    pitch: { scales: [["major", 1]] },
+    harmony: {
+      chain: {
+        I: [
+          ["V7", 3],
+          ["IV", 1],
+        ],
+        V7: [["I", 3]],
+        IV: [
+          ["I", 2],
+          ["V7", 1],
+        ],
+      },
+      presets: null,
+      sources: { chain: 1 },
+      sevenths: 0,
+    },
+    rhythm: { onsets: { kick: null, snare: null, hat: grid("xx") } },
+    bass: { behaviour: [["root-fifth", 1]] },
+    texture: {
+      roles: {
+        kick: null,
+        snare: null,
+        hat: role("drums"),
+        bass: maybe("contrabass"),
+        chords: role("reeds", "steel:0.5"),
+        lead: role("fiddle", "reeds:0.6"),
+        counter: maybe("fiddle"),
+      },
+    },
+  }),
+  card({
+    id: "zydeco",
+    summary:
+      "zydeco: Creole accordion over a syncopated R&B backbeat, rubboard (frottoir) scraping straight sixteenths, blues-scale riffs, I-IV-V and one-chord vamps",
+    seedSalt: 1955,
+    tempo: { bpm: [110, 160], typical: 132 },
+    groove: { subdivision: 4, swingRatio: [1.1, 1.3] },
+    pitch: {
+      scales: [
+        ["mixolydian", 0.5],
+        ["major-blues", 0.5],
+      ],
+    },
+    harmony: {
+      forms: [[BLUES_FORM, 0.5]],
+      presets: [["mixolydian-rock", 1]],
+      sources: { forms: 1, presets: 1 },
+      sevenths: 0.6,
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.....x.x......."),
+        snare: grid("....x.......x..."),
+        shaker: grid("xxxxxxxxxxxxxxxx"),
+        hat: null,
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic", ["kick", "snare"]),
+        hat: null,
+        shaker: role("drums"),
+        bass: role("ebass"),
+        chords: role("reeds", "electric@clean:0.5"),
+        lead: role("reeds", "sing:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "swamp-pop",
+    summary:
+      "swamp pop: slow 12/8 triplet ballad, pounded piano triplets, I-vi-IV-V doo-wop changes, tenor sax break, emotional falsetto-edged vocal",
+    seedSalt: 1958,
+    meter: { signatures: [["12/8", 1]], hypermeter: [[4, 1]] },
+    tempo: { bpm: [56, 80], typical: 66 },
+    groove: { subdivision: 2, swingRatio: [1.9, 2.1] },
+    pitch: { scales: [["major", 1]] },
+    harmony: { presets: [["fifties", 1]], sevenths: 0.2 },
+    rhythm: {
+      onsets: {
+        kick: grid("x...x..."),
+        snare: grid("..x...x."),
+        hat: null,
+        chords: grid("xxxxxxxx"),
+      },
+    },
+    bass: { behaviour: [["arpeggio", 1]] },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic", ["kick", "snare"]),
+        hat: null,
+        bass: role("ebass", "contrabass:0.5"),
+        chords: role("piano", "honkytonk:0.5"),
+        lead: role("sing"),
+        counter: maybe("sax"),
+      },
+    },
+  }),
+  card({
+    id: "native-american",
+    summary:
+      "powwow and Native American song: unison big-drum straight pulse with honor-beat accents, terraced descending pentatonic melody on vocables starting high, no chordal harmony",
+    seedSalt: 1880,
+    meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
+    tempo: { bpm: [90, 150], typical: 120 },
+    groove: { subdivision: 2, swingRatio: [1, 1.1] },
+    pitch: {
+      scales: [
+        ["minor-pentatonic", 0.7],
+        ["major-pentatonic", 0.3],
+      ],
+    },
+    harmony: { model: "none", presets: null, sevenths: 0 },
+    rhythm: {
+      onsets: {
+        kick: grid("x.x.x.x."),
+        snare: null,
+        hat: null,
+        perc: grid("x.x.x.x."),
+      },
+    },
+    melody: {
+      contour: [
+        ["terraced", 0.6],
+        ["descending", 0.4],
+      ],
+      intervals: intervals(2, 4, 1.4, 1),
+      chordToneRate: 0,
+      ambitus: [10, 17],
+      density: [1, 2],
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic", ["kick"]),
+        snare: null,
+        hat: null,
+        perc: maybe("framedrum"),
+        chords: null,
+        bass: null,
+        lead: role("sing", "flute:0.3"),
+      },
+    },
+  }),
+  card({
+    id: "inuit-throat",
+    summary:
+      "Inuit katajjaq: two-voice throat-singing game, short motifs repeated in a fixed cycle, interlocking hocket on alternating pulses (voiced and breathed), narrow range, no harmony",
+    seedSalt: 1950,
+    meter: { signatures: [["4/4", 1]], hypermeter: [[2, 1]] },
+    tempo: { bpm: [110, 160], typical: 132 },
+    groove: { subdivision: 2, swingRatio: [1, 1] },
+    pitch: {
+      scales: [
+        ["minor-pentatonic", 0.6],
+        ["major-pentatonic", 0.4],
+      ],
+    },
+    harmony: { model: "none", presets: null, sevenths: 0 },
+    rhythm: {
+      onsets: {
+        kick: null,
+        snare: null,
+        hat: null,
+        lead: grid("x.x.x.x."),
+        counter: grid(".x.x.x.x"),
+      },
+      locks: [{ kind: "avoid", a: "lead", b: "counter" }],
+    },
+    melody: {
+      ambitus: [3, 7],
+      intervals: intervals(2, 3, 0.2, 2),
+      repetition: 0.9,
+      density: [2, 2],
+      contour: [
+        ["wave", 0.6],
+        ["flat", 0.4],
+      ],
+      phraseBars: [[1, 1]],
+    },
+    texture: {
+      roles: {
+        kick: null,
+        snare: null,
+        hat: null,
+        chords: null,
+        bass: null,
+        lead: role("kargyraa", "sing:0.5"),
+        counter: role("kargyraa", "sing:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "sea-shanty",
+    summary:
+      "sea shanty: work-song call and response (shantyman solo, crew chorus), stamped downbeats for hauling, 6/8 or 2/4, plain major and dorian tunes, unaccompanied or concertina",
+    seedSalt: 1850,
+    meter: {
+      signatures: [
+        ["6/8", 0.5],
+        ["4/4", 0.5],
+      ],
+      hypermeter: [[4, 1]],
+    },
+    tempo: { bpm: [80, 120], typical: 100 },
+    groove: { subdivision: 2, swingRatio: [1, 1.5] },
+    pitch: {
+      scales: [
+        ["major", 0.5],
+        ["dorian", 0.3],
+        ["minor", 0.2],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["fifties", 0.4],
+        ["aeolian", 0.3],
+        ["mixolydian-rock", 0.3],
+      ],
+      sevenths: 0,
+    },
+    rhythm: { onsets: { kick: grid("x......."), snare: null, hat: null } },
+    melody: { repetition: 0.7, density: [1, 2] },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic", ["kick"]),
+        snare: null,
+        hat: null,
+        bass: null,
+        chords: maybe("reeds"),
+        lead: role("sing"),
+        counter: role("choir"),
+      },
+    },
+    form: {
+      plans: [[["verse", "chorus", "verse", "chorus", "verse", "chorus"], 1]],
+      archetype: "call-and-response",
+    },
+  }),
+  card({
+    id: "barbershop",
+    summary:
+      "barbershop: unaccompanied four-part close harmony with melody in the lead (second voice), barbershop dominant sevenths around the circle of fifths (III7-VI7-II7-V7-I), ringing tags",
+    seedSalt: 1905,
+    tempo: { bpm: [60, 120], typical: 84 },
+    groove: { subdivision: 2, swingRatio: [1, 1.4] },
+    pitch: { scales: [["major", 1]] },
+    harmony: {
+      chain: {
+        I: [
+          ["III7", 2],
+          ["VI7", 2],
+          ["IV", 1],
+        ],
+        III7: [["VI7", 3]],
+        VI7: [["II7", 3]],
+        II7: [["V7", 3]],
+        IV: [
+          ["#ivo7", 1],
+          ["I", 1],
+        ],
+        "#ivo7": [
+          ["I", 1],
+          ["V7", 1],
+        ],
+        V7: [["I", 3]],
+      },
+      presets: null,
+      sources: { chain: 1 },
+      sevenths: 0.8,
+      voicing: { types: [["close", 1]], notes: [4, 4] },
+      cadences: [["V-I", 1]],
+    },
+    rhythm: { onsets: { chords: grid("x...x...") } },
+    bass: { behaviour: [["root-fifth", 1]], onsets: grid("x...x...") },
+    texture: {
+      roles: {
+        kick: null,
+        snare: null,
+        hat: null,
+        chords: role("ooh", "aah:0.6"),
+        bass: role("aah"),
+        lead: role("sing"),
       },
     },
   }),
