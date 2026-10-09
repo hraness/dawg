@@ -250,11 +250,17 @@ describe("keys engine: alias and cost", () => {
   test("cost <= 16x a saw voice per voice-second", () => {
     const seconds = 2;
     const song = score({}, [{ pitch: 33, dur: 480 * 4 }], {}, 2);
+    // The fastest of several runs is the cost; slower runs measure other
+    // load on a shared CI runner, not the engine.
     const time = (fn: () => void) => {
       fn();
-      const t0 = performance.now();
-      for (let i = 0; i < 3; i += 1) fn();
-      return (performance.now() - t0) / 3;
+      let best = Infinity;
+      for (let i = 0; i < 5; i += 1) {
+        const t0 = performance.now();
+        fn();
+        best = Math.min(best, performance.now() - t0);
+      }
+      return best;
     };
     const piano = time(() => render(song, seconds));
     const out = new Float64Array(seconds * SR);
