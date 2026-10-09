@@ -206,6 +206,8 @@ describe("Sound > Voice > Pitch (pitch lane)", () => {
   test("a synth track has no Autotune row", () => {
     const ctx = context();
     const sound = open(rootNodes(ctx), "sound", ctx);
-    expect(labels(sound)).not.toContain("Voice");
+    // Voice may show for other lanes (Clips); Autotune stays hidden.
+    if (labels(sound).includes("Voice"))
+      expect(labels(open(sound, "voice", ctx))).not.toContain("Autotune");
   });
 });
