@@ -3224,7 +3224,7 @@ export const AMERICAS_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "nueva-cancion",
     summary:
-      "nueva cancion: protest song, guitar, charango and quena, Andean pentatonic colour on folk forms, strophic verses, minor",
+      "nueva cancion: protest song, guitar, charango and quena, Andean pentatonic color on folk forms, strophic verses, minor",
     tempo: { bpm: [80, 112], typical: 94 },
     meter: { grouping: null },
     pitch: {
@@ -3518,7 +3518,7 @@ export const AMERICAS_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "forro",
     summary:
-      "forro and baiao: zabumba bass on one and the and of two, triangle on the off-beats, accordion in mixolydian with raised fourth (lydian dominant colour)",
+      "forro and baiao: zabumba bass on one and the and of two, triangle on the off-beats, accordion in mixolydian with raised fourth (lydian dominant color)",
     tempo: { bpm: [100, 140], typical: 118 },
     pitch: {
       scales: [

@@ -791,7 +791,7 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "gypsy-jazz",
     summary:
-      "gypsy jazz: la pompe rhythm guitar on every beat (2 and 4 accented), no kit, harmonic-minor and minor-sixth colour, violin and guitar arpeggio runs",
+      "gypsy jazz: la pompe rhythm guitar on every beat (2 and 4 accented), no kit, harmonic-minor and minor-sixth color, violin and guitar arpeggio runs",
     seedSalt: 1934,
     tempo: { bpm: [120, 280], typical: 200 },
     groove: { swingRatio: [1.4, 1.8] },
@@ -858,7 +858,7 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "cool-jazz",
     summary:
-      "cool jazz: relaxed tempos, light swing, counterpoint between horns, soft dynamics, chamber voicings, lydian and major-seventh colour",
+      "cool jazz: relaxed tempos, light swing, counterpoint between horns, soft dynamics, chamber voicings, lydian and major-seventh color",
     seedSalt: 1949,
     tempo: { bpm: [92, 150], typical: 118 },
     groove: { swingRatio: [1.4, 1.7] },
@@ -1241,7 +1241,7 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "avant-garde-jazz",
     summary:
-      "avant-garde jazz: composed structures with open sections, extended techniques, symmetric and whole-tone colours, sparse percussion",
+      "avant-garde jazz: composed structures with open sections, extended techniques, symmetric and whole-tone colors, sparse percussion",
     seedSalt: 1964,
     tempo: { bpm: [60, 200], typical: 120 },
     groove: { swingRatio: [1, 1.5] },
@@ -1352,7 +1352,7 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "jazz-fusion",
     summary:
-      "jazz fusion: rock-funk straight sixteenths, odd meters (7/8, 5/4), modal vamps with lydian and mixolydian colour, distorted guitar and synth leads",
+      "jazz fusion: rock-funk straight sixteenths, odd meters (7/8, 5/4), modal vamps with lydian and mixolydian color, distorted guitar and synth leads",
     seedSalt: 1970,
     tempo: { bpm: [100, 180], typical: 130 },
     pitch: {
@@ -2288,7 +2288,7 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "chicago-soul",
     summary:
-      "Chicago soul: light mid-tempo backbeat, gospel-group vocal harmony, falsetto lead, Latin-tinged percussion, brassy arrangements with major-seventh colour",
+      "Chicago soul: light mid-tempo backbeat, gospel-group vocal harmony, falsetto lead, Latin-tinged percussion, brassy arrangements with major-seventh color",
     seedSalt: 1963,
     tempo: { bpm: [90, 120], typical: 104 },
     pitch: { scales: [["major", 1]] },
@@ -2673,7 +2673,7 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "alternative-rnb",
     summary:
-      "alternative R&B: sparse half-time beats with wide space, detuned pads, modal minor and lydian colour, sub bass and reverb-washed vocal",
+      "alternative R&B: sparse half-time beats with wide space, detuned pads, modal minor and lydian color, sub bass and reverb-washed vocal",
     seedSalt: 2012,
     tempo: { bpm: [60, 90], typical: 72 },
     pitch: {
@@ -3109,7 +3109,7 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "spirituals",
     summary:
-      "spirituals: unaccompanied pentatonic melody, call and response, ring-shout handclap and foot-stomp timeline, slow ballad or shout, plagal colour",
+      "spirituals: unaccompanied pentatonic melody, call and response, ring-shout handclap and foot-stomp timeline, slow ballad or shout, plagal color",
     seedSalt: 1867,
     tempo: { bpm: [56, 120], typical: 72 },
     groove: { swingRatio: [1.3, 1.9] },
@@ -3511,7 +3511,7 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "outlaw-country",
     summary:
-      "outlaw country: stripped-down rock-leaning band, loose mid-tempo backbeat, mixolydian bVII colour, blues-inflected leads, unpolished vocals",
+      "outlaw country: stripped-down rock-leaning band, loose mid-tempo backbeat, mixolydian bVII color, blues-inflected leads, unpolished vocals",
     seedSalt: 1973,
     tempo: { bpm: [96, 132], typical: 112 },
     pitch: {
@@ -3586,7 +3586,7 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "country-pop",
     summary:
-      "country pop: pop song form with country instrumentation, I-V-vi-IV loops, straight sixteenth groove, big lifted choruses, acoustic strum plus steel and fiddle colour",
+      "country pop: pop song form with country instrumentation, I-V-vi-IV loops, straight sixteenth groove, big lifted choruses, acoustic strum plus steel and fiddle color",
     seedSalt: 2000,
     tempo: { bpm: [80, 130], typical: 104 },
     groove: { subdivision: 4, swingRatio: [1, 1.05] },
@@ -3812,7 +3812,7 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "singer-songwriter",
     summary:
-      "singer-songwriter: intimate fingerpicked guitar or piano, sus2 and add9 colour, I-V-vi-IV and vi-IV-I-V, verse-chorus-bridge with confessional melody close to speech rhythm",
+      "singer-songwriter: intimate fingerpicked guitar or piano, sus2 and add9 color, I-V-vi-IV and vi-IV-I-V, verse-chorus-bridge with confessional melody close to speech rhythm",
     seedSalt: 1971,
     tempo: { bpm: [64, 120], typical: 88 },
     groove: { subdivision: 4, swingRatio: [1, 1.1] },

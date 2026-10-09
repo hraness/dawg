@@ -2736,6 +2736,6 @@ export function renderProgression(options: RenderOptions): RenderedProgression {
 export const CHORD_PROCESS = [
   "Chords (Orchid-style): pick chords from the song key's diatonic set (in C major: C Dm Em F G Am Bdim; minor keys i ii° III iv v VI VII, V major for cadences).",
   "Move tonic (I vi iii) → predominant (IV ii) → dominant (V vii°) → tonic; loops end on V or IV to lead home.",
-  "Add sevenths/9ths as colour (6, m7, M7, 9 extensions); voice-lead each chord to the inversion nearest the previous one in C3–G5 so common tones hold; put the root an octave or two below as bass.",
+  "Add sevenths/9ths as color (6, m7, M7, 9 extensions); voice-lead each chord to the inversion nearest the previous one in C3–G5 so common tones hold; put the root an octave or two below as bass.",
   "Use suggest_progression to get voice-led chords and write_chords to write them (block, strum, arpeggio, harp, slop or a rhythm pattern; bassMode chords|unison|single|solo), instead of hand-placing chord notes with add_notes.",
 ].join(" ");

@@ -440,7 +440,7 @@ const TRADITIONAL: readonly StyleCard[] = [
   ),
   leaf(
     "exotica",
-    "exotica: phrygian-dominant and lydian colour, vibes, bells and hand percussion over a mambo-like ostinato",
+    "exotica: phrygian-dominant and lydian color, vibes, bells and hand percussion over a mambo-like ostinato",
     1957,
     {
       tempo: { bpm: [90, 125], typical: 104 },
@@ -807,7 +807,7 @@ const SIXTIES: readonly StyleCard[] = [
   ),
   leaf(
     "sunshine-pop",
-    "sunshine and baroque pop: major sevenths, lydian colour, harpsichord and strings, stacked vocal harmony",
+    "sunshine and baroque pop: major sevenths, lydian color, harpsichord and strings, stacked vocal harmony",
     1966,
     {
       pitch: {
@@ -1160,7 +1160,7 @@ const MODERN: readonly StyleCard[] = [
   ),
   leaf(
     "art-pop",
-    "art pop: lydian and dorian colour, mixed meter with 5/4 and 7/8 (2+2+3), wide intervals, through-composed bridges",
+    "art pop: lydian and dorian color, mixed meter with 5/4 and 7/8 (2+2+3), wide intervals, through-composed bridges",
     1977,
     {
       meter: {
@@ -1519,7 +1519,7 @@ const MODERN: readonly StyleCard[] = [
   ),
   leaf(
     "vocaloid",
-    "Vocaloid: synthesised-voice melody too fast and wide for a singer, royal-road and canon loops, 150-200 bpm rock band",
+    "Vocaloid: synthesized-voice melody too fast and wide for a singer, royal-road and canon loops, 150-200 bpm rock band",
     2008,
     {
       tempo: { bpm: [150, 200], typical: 172 },
@@ -1601,7 +1601,7 @@ const MODERN: readonly StyleCard[] = [
   ),
   leaf(
     "turkish-pop",
-    "Turkish pop: hicaz and kurdi makam colour in 12-tone pop, darbuka on the duyek-like syncopation, 9/8 roman option (2+2+2+3)",
+    "Turkish pop: hicaz and kurdi makam color in 12-tone pop, darbuka on the duyek-like syncopation, 9/8 roman option (2+2+2+3)",
     1990,
     {
       meter: {

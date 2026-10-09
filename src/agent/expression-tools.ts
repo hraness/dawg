@@ -340,7 +340,7 @@ export const EXPRESSION_TOOLS: readonly AgentTool[] = Object.freeze([
     // keys-electric (0.6.1): the modelled piano's soft and middle pedals.
     name: "set_piano_pedals",
     description:
-      'Modelled piano soft (una corda: fewer strings, softer, darker) and sostenuto (holds only keys down when it presses) pedals. Each: [{beat, state}], "bars" (whole loop) or null. Sostenuto has no half.',
+      'Modeled piano soft (una corda: fewer strings, softer, darker) and sostenuto (holds only keys down when it presses) pedals. Each: [{beat, state}], "bars" (whole loop) or null. Sostenuto has no half.',
     parameters: {
       type: "object",
       properties: {

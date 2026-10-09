@@ -421,7 +421,7 @@ const BRANCH_CARDS: readonly StyleCard[] = Object.freeze([
     id: "modern-art",
     abstract: true,
     summary:
-      "post-tonal colour: symmetric and modal scales, quartal chords, irregular meter",
+      "post-tonal color: symmetric and modal scales, quartal chords, irregular meter",
     meter: {
       signatures: [
         ["4/4", 0.4],
@@ -1499,7 +1499,7 @@ const BAROQUE_LEAVES: readonly StyleCard[] = Object.freeze([
   card({
     id: "singspiel",
     summary:
-      "German song-play: strophic folk-like Lied tunes in major, I-IV-V, horn and flute colour, spoken dialogue between numbers",
+      "German song-play: strophic folk-like Lied tunes in major, I-IV-V, horn and flute color, spoken dialogue between numbers",
     meter: {
       signatures: [
         ["2/4", 0.4],
@@ -1542,7 +1542,7 @@ const ROMANTIC_LEAVES: readonly StyleCard[] = Object.freeze([
   card({
     id: "early-romantic",
     summary:
-      "classical periods coloured by chromatic mediants (I-bVI), the augmented-sixth approach to V and lyrical second themes over arpeggiated accompaniment",
+      "classical periods colored by chromatic mediants (I-bVI), the augmented-sixth approach to V and lyrical second themes over arpeggiated accompaniment",
     tempo: { bpm: [60, 132], typical: 92 },
     harmony: {
       forms: [
@@ -1800,7 +1800,7 @@ const ROMANTIC_LEAVES: readonly StyleCard[] = Object.freeze([
   card({
     id: "tone-poem",
     summary:
-      "programmatic single movement: thematic transformation of one idea, chromatic-mediant shifts between scenes, orchestral colour as narrative",
+      "programmatic single movement: thematic transformation of one idea, chromatic-mediant shifts between scenes, orchestral color as narrative",
     tempo: { bpm: [44, 96], typical: 66 },
     groove: { humanize: { timingMs: 30, velocity: 0.15 } },
     harmony: {
@@ -2029,7 +2029,7 @@ const MODERN_LEAVES: readonly StyleCard[] = Object.freeze([
   card({
     id: "impressionism",
     summary:
-      "planing (parallel ninth chords), whole-tone and pentatonic collections, added-note chords, pedal points and blurred harp and flute colour",
+      "planing (parallel ninth chords), whole-tone and pentatonic collections, added-note chords, pedal points and blurred harp and flute color",
     meter: {
       signatures: [
         ["4/4", 0.5],
@@ -2119,7 +2119,7 @@ const MODERN_LEAVES: readonly StyleCard[] = Object.freeze([
   card({
     id: "twelve-tone",
     summary:
-      "the tone row: all twelve pitch classes before any repeats, prime, inversion, retrograde and retrograde inversion forms, no tonal centre",
+      "the tone row: all twelve pitch classes before any repeats, prime, inversion, retrograde and retrograde inversion forms, no tonal center",
     tempo: { bpm: [48, 120], typical: 72 },
     pitch: { scales: [["chromatic", 1]] },
     harmony: {
@@ -2856,7 +2856,7 @@ const CONTEMPORARY_LEAVES: readonly StyleCard[] = Object.freeze([
   card({
     id: "choral-art",
     summary:
-      "contemporary choral: added-second and ninth clusters, slow homophonic chords, modal and lydian colour, a cappella or organ support",
+      "contemporary choral: added-second and ninth clusters, slow homophonic chords, modal and lydian color, a cappella or organ support",
     tempo: { bpm: [44, 84], typical: 60 },
     pitch: {
       scales: [
@@ -3197,7 +3197,7 @@ const BAND_LEAVES: readonly StyleCard[] = Object.freeze([
   card({
     id: "concert-wind-band",
     summary:
-      "the symphonic wind ensemble: folk-song settings, modal mixture and bVII colour, chorale tutti against woodwind solos, mixed meter",
+      "the symphonic wind ensemble: folk-song settings, modal mixture and bVII color, chorale tutti against woodwind solos, mixed meter",
     meter: {
       signatures: [
         ["4/4", 0.5],
@@ -4146,7 +4146,7 @@ const SCREEN_LEAVES: readonly StyleCard[] = Object.freeze([
   card({
     id: "modern-orchestral-score",
     summary:
-      "the thematic blockbuster score: a heroic theme with rising fourths and fifths, brass on lydian I-II colour, a string ostinato driving the action under it",
+      "the thematic blockbuster score: a heroic theme with rising fourths and fifths, brass on lydian I-II color, a string ostinato driving the action under it",
     tempo: { bpm: [72, 120], typical: 96 },
     pitch: {
       scales: [

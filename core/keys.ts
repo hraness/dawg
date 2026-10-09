@@ -65,7 +65,7 @@ export function softPedalNote(
   if (!isPianoFamily(track.instrument))
     return `${track.id} is ${track.instrument}; una corda acts on the modeled pianos (${PIANO_FAMILIES.join(" ")})`;
   if (track.keys === undefined)
-    return `${track.id} has no modelled piano yet; keys preset ${track.instrument} first`;
+    return `${track.id} has no modeled piano yet; keys preset ${track.instrument} first`;
   return undefined;
 }
 
