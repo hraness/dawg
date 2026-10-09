@@ -29,7 +29,7 @@ function open(nodes: MenuNode[], id: string, ctx: MenuContext): MenuNode[] {
 const labels = (nodes: MenuNode[]) => nodes.map((node) => node.label);
 
 describe("0.7 voice menu groups", () => {
-  test("stay hidden while every lane's rows are empty", () => {
+  test("hidden while empty; Effects > Voice holds the formant", () => {
     const ctx = context();
     const root = rootNodes(ctx);
     // Seven top-level sections, unchanged.
@@ -38,7 +38,9 @@ describe("0.7 voice menu groups", () => {
     const effects = open(root, "effects", ctx);
     const browse = open(sound, "browse", ctx);
     expect(labels(sound)).not.toContain("Voice");
-    expect(labels(effects)).not.toContain("Voice");
+    // The formant lane fills Effects > Voice.
+    expect(labels(effects)).toContain("Voice");
+    expect(labels(open(effects, "voice", ctx))).toContain("Formant");
     expect(labels(browse)).not.toContain("Voices");
     expect(labels(sound).slice(-2)).toEqual(["performance", "browse sounds"]);
   });
@@ -58,5 +60,30 @@ describe("0.7 voice menu groups", () => {
     if (group[0]!.kind === "menu")
       expect(labels(group[0]!.build(ctx))).toEqual(["Clips"]);
     expect(voiceGroup("voice", "Voice", "help", () => [], ctx)).toEqual([]);
+  });
+
+  test("Formant rows: on, preset, shift, mix; the vowel gains to and morph", () => {
+    const ctx = context();
+    const effects = open(rootNodes(ctx), "effects", ctx);
+    const formant = open(open(effects, "voice", ctx), "formant", ctx);
+    expect(labels(formant)).toEqual([
+      "on",
+      "preset",
+      "shift",
+      "mix",
+      "advanced",
+    ]);
+    const shift = formant.find((node) => node.label === "shift")!;
+    expect(shift.kind === "number" && shift.command(-4)).toBe(
+      "fx formant shift -4",
+    );
+    // Not duplicated under more effects.
+    expect(labels(open(effects, "more effects", ctx))).not.toContain("Formant");
+    const vowel = open(open(effects, "more effects", ctx), "vowel", ctx);
+    expect(labels(vowel)).toEqual(
+      expect.arrayContaining(["vowel", "mix", "to", "morph"]),
+    );
+    const to = vowel.find((node) => node.label === "to")!;
+    expect(to.kind === "choice" && to.command("o")).toBe("/vowel to o");
   });
 });
