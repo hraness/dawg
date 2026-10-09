@@ -375,6 +375,9 @@ const FIXED_PRESETS: readonly TuningPreset[] = [
 function scalePreset(name: string, info: ScaleInfo): TuningPreset | undefined {
   const quarter = info.steps.some((step) => !Number.isInteger(step));
   if (!quarter && !info.intonation) return undefined;
+  // Quarter-tone art scales keep both a key and its shadow: note cents
+  // carry them, so no twelve-key table can.
+  if (info.family === "quarter-tone") return undefined;
   const raga = info.family === "raga";
   const table = raga ? fromRatios(HINDUSTANI) : edoCents(12);
   const keys = [0, ...table.slice(0, 11)];
@@ -390,10 +393,14 @@ function scalePreset(name: string, info: ScaleInfo): TuningPreset | undefined {
         ? "raga"
         : info.family === "dastgah"
           ? "dastgah"
-          : "maqam",
+          : info.family === "overtone"
+            ? "just"
+            : "maqam",
     about: raga
       ? `raga ${name} with its shruti intonation over the Hindustani just table`
-      : `${info.family} ${name} quarter tones on the twelve keys (24-tone convention)`,
+      : info.family === "overtone"
+        ? `partials 8 to 15 of the harmonic series over the tonic, in just cents`
+        : `${info.family} ${name} quarter tones on the twelve keys (24-tone convention)`,
     cents: [...keys.slice(1), 1200],
     approximate: true,
   };

@@ -265,6 +265,14 @@ export type MelodySpec = Readonly<{
   repetition: number;
   /** Phrase-final scale degrees (0-based scale indices). */
   finals: Weighted<number>;
+  /**
+   * Serial pitch order (12-note scales only). "pitch": every pitched role
+   * takes its pitch classes, in time order, from a seeded twelve-tone row
+   * and its P, I, R and RI forms, so each aggregate completes before a
+   * pitch class repeats. "integral": the row also orders a twelve-step
+   * duration series and a twelve-step dynamics series.
+   */
+  row?: "pitch" | "integral";
 }>;
 
 export type BassSpec = Readonly<{

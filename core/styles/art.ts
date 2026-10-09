@@ -2063,12 +2063,7 @@ const MODERN_LEAVES: readonly StyleCard[] = Object.freeze([
     summary:
       "free atonality: no tonic, wide leaps of sevenths and ninths, extreme registers and dynamics, short motivic cells with no repetition",
     tempo: { bpm: [40, 132], typical: 72 },
-    pitch: {
-      scales: [
-        ["messiaen-7", 0.6],
-        ["messiaen-2", 0.4],
-      ],
-    },
+    pitch: { scales: [["chromatic", 1]] },
     harmony: {
       model: "modal",
       voicing: {
@@ -2107,12 +2102,7 @@ const MODERN_LEAVES: readonly StyleCard[] = Object.freeze([
     summary:
       "the tone row: all twelve pitch classes before any repeats, prime, inversion, retrograde and retrograde inversion forms, no tonal centre",
     tempo: { bpm: [48, 120], typical: 72 },
-    pitch: {
-      scales: [
-        ["messiaen-7", 0.6],
-        ["messiaen-2", 0.4],
-      ],
-    },
+    pitch: { scales: [["chromatic", 1]] },
     harmony: {
       model: "modal",
       voicing: {
@@ -2122,7 +2112,12 @@ const MODERN_LEAVES: readonly StyleCard[] = Object.freeze([
         ],
       },
     },
-    melody: { intervals: ANGULAR, chordToneRate: 0.1, repetition: 0.2 },
+    melody: {
+      intervals: ANGULAR,
+      chordToneRate: 0.1,
+      repetition: 0.2,
+      row: "pitch",
+    },
     texture: {
       kind: "polyphonic",
       roles: {
@@ -2139,14 +2134,10 @@ const MODERN_LEAVES: readonly StyleCard[] = Object.freeze([
     summary:
       "series applied to pitch, duration, dynamics and attack alike; pointillist isolated events spread across registers",
     tempo: { bpm: [40, 112], typical: 60 },
-    pitch: {
-      scales: [
-        ["messiaen-7", 0.6],
-        ["messiaen-2", 0.4],
-      ],
-    },
+    pitch: { scales: [["chromatic", 1]] },
     harmony: { model: "none" },
     melody: {
+      row: "integral",
       intervals: ANGULAR,
       chordToneRate: 0,
       repetition: 0.05,
@@ -2609,10 +2600,8 @@ const CONTEMPORARY_LEAVES: readonly StyleCard[] = Object.freeze([
       "harmony from the overtone series: a low fundamental pedal, partials stacked as wide chords, slow spectral interpolation instead of progression",
     tempo: { bpm: [40, 72], typical: 52 },
     pitch: {
-      scales: [
-        ["lydian", 0.5],
-        ["mixolydian", 0.5],
-      ],
+      tuning: "harmonic-series",
+      scales: [["harmonic-series", 1]],
     },
     harmony: {
       rhythm: [[0.25, 1]],
@@ -2987,15 +2976,10 @@ const CONTEMPORARY_LEAVES: readonly StyleCard[] = Object.freeze([
   card({
     id: "microtonal-art",
     summary:
-      "beyond twelve equal steps: 7-limit just ratios, the pure 5:4 third and 7:4 harmonic seventh, beating and its absence as colour",
+      "beyond twelve equal steps: quarter tones in 24-EDO (Haba, Wyschnegradsky, Ives), neutral seconds, thirds and sixths sounding beside the tempered ones",
     tempo: { bpm: [48, 96], typical: 66 },
-    pitch: {
-      tuning: "7-limit",
-      scales: [
-        ["major", 0.5],
-        ["mixolydian", 0.5],
-      ],
-    },
+    // Quarter tones as note cents: each tempered degree keeps its shadow.
+    pitch: { scales: [["quarter-tone", 1]] },
     harmony: {
       rhythm: [
         [0.5, 0.6],
@@ -3539,8 +3523,9 @@ const EXPERIMENTAL_LEAVES: readonly StyleCard[] = Object.freeze([
     summary:
       "the studio as instrument: sine-tone and filtered-noise synthesis, serial ordering of pitch, duration and loudness, pointillist events",
     tempo: { bpm: [48, 96], typical: 66 },
-    pitch: { scales: [["messiaen-7", 1]] },
+    pitch: { scales: [["chromatic", 1]] },
     melody: {
+      row: "integral",
       intervals: ANGULAR,
       density: [0.5, 2],
       repetition: 0.1,
