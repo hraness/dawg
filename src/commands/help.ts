@@ -843,7 +843,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   pattern: "pattern <voice> <beats...> | every <step> · pattern kick every 1",
   clear: "clear · clear <voice> · clear [<lane>] automation",
   track:
-    "/track <name> · /track drums · track rate <0.125..8>|<a>/<b>|off · track phase <beats> · track cycle <beats> · track phasing <beats> [over <beats>]",
+    "/track <name> · /track drums · /track rm <name> · /track move <name> <position> · track rate <0.125..8>|<a>/<b>|off · track phase <beats> · track cycle <beats> · track phasing <beats> [over <beats>]",
   tracks: "/tracks",
   sessions: "/sessions",
   resume: "/resume [<n>|<name>|<id>]",
