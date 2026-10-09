@@ -57,7 +57,8 @@ export function parseExact(
 ): ParsedCommand | undefined {
   for (const parse of parsers(score)) {
     const value = parse(text);
-    if (value !== undefined) return { parser: parse.name || "anonymous", value };
+    if (value !== undefined)
+      return { parser: parse.name || "anonymous", value };
   }
   return undefined;
 }
