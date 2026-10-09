@@ -501,6 +501,7 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "psychedelic rock: modal mixolydian and dorian vamps, tonic pedal point and drone, fuzz and phaser, slow-to-mid tempo",
     tempo: { bpm: [80, 130], typical: 104 },
+    rhythm: { onsets: { kick: grid("x......x") } },
     pitch: {
       scales: [
         ["mixolydian", 0.4],
@@ -586,6 +587,7 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "southern rock: mixolydian I-bVII-IV, twin harmonised lead guitars in thirds, light shuffle, honky-tonk piano",
     tempo: { bpm: [90, 140], typical: 112 },
+    rhythm: { onsets: { kick: grid("x..x..x.") } },
     groove: { swingRatio: [1.1, 1.4] },
     pitch: {
       scales: [
@@ -627,6 +629,7 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "pub rock: back-to-basics R&B, boogie piano, light shuffle 12-bar and I-IV-V, small-room sound",
     tempo: { bpm: [130, 165], typical: 145 },
+    rhythm: { onsets: { kick: grid("x.xx..x.") } },
     groove: { swingRatio: [1.2, 1.5] },
     harmony: {
       forms: [[TWELVE_BAR, 1]],
@@ -700,6 +703,7 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "heartland rock: I-V-vi-IV anthems, driving straight eighths, organ pad and open-chord acoustic, plain-spoken melody",
     tempo: { bpm: [110, 145], typical: 124 },
+    rhythm: { onsets: { kick: grid("x.x.x.x.") } },
     pitch: {
       scales: [
         ["major", 0.7],
@@ -736,6 +740,7 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "stoner and desert rock: down-tuned fuzz riffs, dorian and minor-pentatonic, tonic pedal bass, heavy mid-tempo groove",
     tempo: { bpm: [70, 115], typical: 92 },
+    rhythm: { onsets: { kick: grid("x.x..xx.") } },
     pitch: {
       scales: [
         ["minor-pentatonic", 0.4],
@@ -765,6 +770,7 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "folk rock: chiming 12-string jangle on folk strum patterns, I-IV-V and modal mixolydian, harmony vocals",
     tempo: { bpm: [95, 130], typical: 112 },
+    rhythm: { onsets: { kick: grid("x.....x."), hat: QUARTERS } },
     pitch: {
       scales: [
         ["major", 0.6],
@@ -801,6 +807,7 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "pop rock: diatonic I-V-vi-IV and I-vi-IV-V, guitar-led verse-pre-chorus-chorus, hook repetition",
     tempo: { bpm: [100, 140], typical: 120 },
+    rhythm: { onsets: { kick: grid("x..xx...") } },
     pitch: {
       scales: [
         ["major", 0.8],
@@ -846,6 +853,7 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "roots and swamp rock: mixolydian I-IV-V and 12-bar, light shuffle, acoustic and clean electric, plainspoken grooves",
     tempo: { bpm: [90, 130], typical: 108 },
+    rhythm: { onsets: { kick: grid("x...x...") } },
     groove: { swingRatio: [1.1, 1.4] },
     pitch: {
       scales: [
@@ -867,6 +875,53 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
       ],
     },
     texture: { roles: { chords: role("electric@clean", "acoustic:0.7") } },
+  }),
+
+  card({
+    id: "latin-rock",
+    summary:
+      "Latin rock: Afro-Cuban percussion (timbale bell, congas) over a rock kit, minor i-IV montuno vamps, sustained-guitar lead, organ comping",
+    tempo: { bpm: [95, 135], typical: 116 },
+    groove: { subdivision: 4 },
+    rhythm: {
+      onsets: {
+        kick: grid("x..x..x.x..x..x."),
+        snare: BACKBEAT16,
+        hat: EIGHTHS16,
+        bell: grid("x.x.xx.x.x.xx.x."),
+        perc: grid("..x..xx...x..xx."),
+      },
+    },
+    pitch: {
+      scales: [
+        ["dorian", 0.6],
+        ["minor", 0.4],
+      ],
+    },
+    harmony: {
+      forms: [
+        [["i", "IV"], 0.6],
+        [["i", "bVII", "bVI", "V"], 0.4],
+      ],
+      presets: [["dorian-vamp", 1]],
+      sources: { forms: 2, presets: 1 },
+      rhythm: [[1, 1]],
+      cadences: [["IV-I", 1]],
+    },
+    bass: {
+      behaviour: [["root-fifth", 1]],
+      onsets: grid("x..x..x.x..x..x."),
+      kickLock: 0.8,
+    },
+    melody: { intervals: ANTHEM, density: [1, 3] },
+    texture: {
+      roles: {
+        bell: role("drums"),
+        perc: role("drums"),
+        chords: role("hammond", "electric@crunch:0.5"),
+        lead: role("gtr-lead", "electric@lead:0.5"),
+      },
+    },
   }),
 
   // -------------------------------------------------------------------
@@ -959,6 +1014,20 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "symphonic prog: mellotron strings and organ, 7/8 and 5/4 sections, modal interchange iv and bVI, extended suites",
     tempo: { bpm: [80, 140], typical: 108 },
+    meter: {
+      signatures: [
+        ["7/8", 0.4],
+        ["5/4", 0.3],
+        ["4/4", 0.3],
+      ],
+    },
+    pitch: {
+      scales: [
+        ["minor", 0.4],
+        ["dorian", 0.3],
+        ["major", 0.3],
+      ],
+    },
     texture: {
       roles: {
         pad: role("strings", "choir:0.4"),
@@ -976,6 +1045,7 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
         ["6/8", 0.3],
       ],
     },
+    rhythm: { onsets: { kick: grid("x..x.xx.") } },
     harmony: { sevenths: 0.5 },
     expression: { dynamics: [0.3, 0.95] },
     texture: { roles: { chords: role("piano", "grand:0.5", "electric:0.4") } },
@@ -1012,6 +1082,7 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
       sevenths: 0.8,
       cadences: [["V-I", 1]],
     },
+    rhythm: { onsets: { kick: grid("x.....x."), hat: grid("x.xxx.xx") } },
     texture: {
       roles: {
         chords: role("epiano", "hammond:0.6"),
@@ -1170,6 +1241,7 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "indie and college rock: angular clean and crunch guitars, axis loops and modal mixolydian, straight eights",
     tempo: { bpm: [110, 150], typical: 128 },
+    rhythm: { onsets: { kick: grid("x..x...x") } },
     texture: { roles: { chords: role("electric@alt", "electric@crunch:0.6") } },
   }),
   card({
@@ -1649,7 +1721,8 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
     id: "k-rock",
     summary:
       "K-rock: band-sound anthems, sad-pop vi-IV-I-V and canon changes, big unison chorus, straight eighths",
-    tempo: { bpm: [110, 160], typical: 132 },
+    tempo: { bpm: [130, 175], typical: 150 },
+    rhythm: { onsets: { kick: grid("x.x.x.x.") } },
     harmony: {
       presets: [
         ["sad-pop", 0.4],
@@ -1667,11 +1740,12 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
     tempo: { bpm: [100, 140], typical: 118 },
     meter: {
       signatures: [
-        ["9/8", 0.4],
-        ["4/4", 0.6],
+        ["9/8", 0.6],
+        ["4/4", 0.4],
       ],
       grouping: [[[2, 2, 2, 3], 1]],
     },
+    rhythm: { onsets: { kick: grid("x..x.x..") } },
     pitch: {
       scales: [
         ["phrygian-dominant", 0.5],
@@ -1734,7 +1808,29 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
     id: "punk-rock",
     summary:
       "first-wave punk: down-stroked eighth power chords, I-IV-V, kick on every beat, shouted unison chorus",
-    tempo: { bpm: [160, 205], typical: 180 },
+    tempo: { bpm: [165, 210], typical: 185 },
+    rhythm: { onsets: { kick: QUARTERS, hat: EIGHTHS } },
+    pitch: {
+      scales: [
+        ["major", 0.6],
+        ["mixolydian", 0.4],
+      ],
+    },
+    harmony: {
+      forms: [
+        [["I", "IV", "V", "IV"], 0.5],
+        [["I", "I", "IV", "V"], 0.3],
+        [["I", "bVII", "IV", "I"], 0.2],
+      ],
+      presets: [["fifties", 1]],
+      sources: { forms: 3, presets: 1 },
+      cadences: [
+        ["V-I", 0.6],
+        ["IV-I", 0.4],
+      ],
+    },
+    bass: { behaviour: [["root", 1]], onsets: EIGHTHS, kickLock: 0 },
+    melody: { repetition: 0.8, density: [1, 2] },
   }),
   card({
     id: "oi",
@@ -1750,6 +1846,23 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
       "hardcore punk: skank beat (kick on the beat, snare on every off-beat eighth), 180-240 bpm, breakdowns, short songs",
     tempo: { bpm: [180, 240], typical: 205 },
     rhythm: { onsets: { kick: grid("x.x.x.x."), snare: grid(".x.x.x.x") } },
+    pitch: {
+      scales: [
+        ["minor", 0.5],
+        ["phrygian", 0.3],
+        ["minor-pentatonic", 0.2],
+      ],
+    },
+    harmony: {
+      forms: [
+        [["i", "bVII", "bVI", "bVII"], 0.5],
+        [["i", "bIII", "bVII", "i"], 0.5],
+      ],
+      presets: [["aeolian", 1]],
+      sources: { forms: 2, presets: 1 },
+      cadences: [["bVII-I", 1]],
+    },
+    melody: { intervals: CHROMATIC, density: [1, 2] },
     bass: { kickLock: 0.5 },
     form: {
       plans: [[["intro", "verse", "chorus", "breakdown", "chorus"], 1]],
@@ -1790,12 +1903,16 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
     id: "pop-punk",
     summary:
       "pop punk: I-V-vi-IV power chords, palm-muted verse eighths into open choruses, hooky major melody",
-    tempo: { bpm: [155, 200], typical: 175 },
+    tempo: { bpm: [145, 185], typical: 165 },
+    rhythm: { onsets: { kick: grid("x..xx.x.") } },
+    pitch: { scales: [["major", 1]] },
     harmony: {
+      forms: [],
       presets: [
         ["axis", 0.6],
         ["sad-pop", 0.4],
       ],
+      sources: { presets: 1 },
     },
     melody: { repetition: 0.75, intervals: ANTHEM },
     form: {
@@ -1824,7 +1941,10 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
       "skate punk: melodic hardcore at 180-230 bpm, skank beat, fast major melodies with harmony leads",
     tempo: { bpm: [180, 230], typical: 200 },
     rhythm: { onsets: { snare: grid(".x.x.x.x") } },
+    pitch: { scales: [["major", 1]] },
     harmony: {
+      forms: [],
+      sources: { presets: 1 },
       presets: [
         ["axis", 0.5],
         ["sad-pop", 0.5],
@@ -2209,10 +2329,11 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "speed metal: driving sixteenth palm-mutes at 160-220 bpm, gallops, harmonic-minor runs, high vocal",
     tempo: { bpm: [160, 220], typical: 185 },
+    rhythm: { onsets: { kick: EIGHTHS16 } },
     pitch: {
       scales: [
-        ["harmonic-minor", 0.5],
-        ["minor", 0.5],
+        ["minor", 0.7],
+        ["phrygian", 0.3],
       ],
     },
     melody: { intervals: SHRED, density: [2, 4] },
@@ -2222,7 +2343,7 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "thrash: skank beat at 180-240 bpm, chromatic phrygian riffs on the low tonic pedal, tritone accents",
     tempo: { bpm: [170, 240], typical: 200 },
-    rhythm: { onsets: { kick: EIGHTHS16, snare: grid("..x...x...x...x.") } },
+    rhythm: { onsets: { kick: QUARTERS16, snare: grid("..x...x...x...x.") } },
     pitch: {
       scales: [
         ["phrygian", 0.6],
@@ -2239,21 +2360,28 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
     tempo: { bpm: [140, 200], typical: 170 },
     pitch: {
       scales: [
+        ["major", 0.6],
         ["minor", 0.4],
-        ["harmonic-minor", 0.3],
-        ["major", 0.3],
       ],
     },
     harmony: {
       presets: [
-        ["aeolian", 0.5],
-        ["axis", 0.3],
-        ["andalusian", 0.2],
+        ["axis", 0.4],
+        ["aeolian", 0.4],
+        ["canon", 0.2],
+      ],
+      cadences: [
+        ["V-I", 0.5],
+        ["bVI-bVII-I", 0.5],
       ],
     },
     melody: { intervals: ANTHEM, repetition: 0.7 },
     texture: {
-      roles: { pad: maybe("choir", "strings:0.6"), counter: maybe("saw") },
+      roles: {
+        pad: role("choir", "strings:0.6"),
+        lead: role("sing", "gtr-lead:0.5"),
+        counter: maybe("saw"),
+      },
     },
   }),
   card({
@@ -2632,7 +2760,8 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
     id: "neo-classical-metal",
     summary:
       "neoclassical metal: harmonic-minor shred arpeggios, V-i and diminished leading-tone motion, baroque sequences",
-    tempo: { bpm: [120, 180], typical: 150 },
+    tempo: { bpm: [110, 150], typical: 130 },
+    rhythm: { onsets: { kick: grid("x.x...x.x.x...x.") } },
     pitch: {
       scales: [
         ["harmonic-minor", 0.7],
@@ -2647,7 +2776,7 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
       cadences: [["V-I", 1]],
     },
     melody: { density: [3, 4], intervals: SHRED },
-    texture: { roles: { counter: maybe("harpsichord", "strings:0.6") } },
+    texture: { roles: { counter: role("harpsichord", "strings:0.6") } },
   }),
   card({
     id: "prog-metal",
@@ -2681,6 +2810,14 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
     summary:
       "metalcore: melodic-death riffs plus hardcore breakdowns in half time, sung chorus on axis loops, double kick",
     tempo: { bpm: [130, 190], typical: 155 },
+    rhythm: { onsets: { kick: grid("xxxx..x.xxxx..x.") } },
+    bass: { onsets: grid("x..x..x.x..x..x.") },
+    pitch: {
+      scales: [
+        ["minor", 0.8],
+        ["phrygian", 0.2],
+      ],
+    },
     harmony: {
       presets: [
         ["aeolian", 0.5],

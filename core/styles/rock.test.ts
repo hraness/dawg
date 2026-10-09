@@ -49,8 +49,8 @@ function each(id: string, run: (g: GeneratedStyle) => void) {
 }
 
 describe("rock family: coverage", () => {
-  test("the family has its 92 leaves and every one has a written card", () => {
-    expect(rockLeaves.length).toBe(92);
+  test("the family has its 93 leaves and every one has a written card", () => {
+    expect(rockLeaves.length).toBe(93);
     expect(rockLeaves.filter((id) => !cardIds.has(id))).toEqual([]);
   });
 
@@ -309,6 +309,112 @@ describe("rock family: leaf patterns", () => {
       const e = resolveStyle(id as StyleId).form.energy ?? {};
       expect(e.drop!).toBeGreaterThan(e.build!);
       expect(e.build!).toBeGreaterThan(e.intro!);
+    }
+  });
+});
+
+/** Kick hits of a resolved card, as step indices. */
+function kickHits(id: string): number[] {
+  const kick = resolveStyle(id as StyleId).rhythm.onsets.kick ?? [];
+  return kick.map((p, i) => (p >= 1 ? i : -1)).filter((i) => i >= 0);
+}
+
+/** Generated fingerprint: kick grid, tempo and pitch-class histogram. */
+function fingerprint(id: string, seed: number): number[] {
+  const g = generateStyle(id as StyleId, { seed, bars: BARS });
+  const { plan } = g;
+  const kick = new Array(16).fill(0);
+  const pcs = new Array(12).fill(0);
+  let pitched = 0;
+  for (const note of g.data.notes ?? []) {
+    const role = plan.noteRoles.get(note.id);
+    const t = (note.startTick ?? 0) % plan.barTicks;
+    if (role === "kick")
+      kick[Math.floor((t / plan.barTicks) * 16)] += 1 / plan.bars;
+    else if (role === "bass" || role === "chords" || role === "lead") {
+      pcs[(((note.pitch - plan.tonic) % 12) + 12) % 12] += 1;
+      pitched += 1;
+    }
+  }
+  return [plan.bpm / 40, ...kick, ...pcs.map((v) => (6 * v) / (pitched || 1))];
+}
+
+const distance = (a: number[], b: number[]) =>
+  Math.sqrt(a.reduce((s, v, i) => s + (v - b[i]!) ** 2, 0));
+
+describe("rock family: siblings a listener can tell apart", () => {
+  test("first-wave punk: kick on every beat, major I-IV-V, faster than pop punk", () => {
+    expect(kickHits("punk-rock")).toEqual([0, 2, 4, 6]);
+    expect(resolveStyle("punk-rock" as StyleId).tempo.typical).toBeGreaterThan(
+      resolveStyle("pop-punk" as StyleId).tempo.typical,
+    );
+    expect(kickHits("pop-punk")).toEqual([0, 3, 4, 6]);
+  });
+
+  test("hardcore is minor and phrygian; skate and pop punk are major", () => {
+    const scales = (id: string) =>
+      (resolveStyle(id as StyleId).pitch.scales ?? []).map((s) => s[0]);
+    expect(scales("hardcore-punk")).not.toContain("major");
+    expect(scales("skate-punk")).toEqual(["major"]);
+    expect(scales("pop-punk")).toEqual(["major"]);
+  });
+
+  test("thrash beat: kick on the beat, snare on every off-beat eighth", () => {
+    expect(kickHits("thrash")).toEqual([0, 4, 8, 12]);
+  });
+
+  test("metal siblings: power metal sings in major, neoclassical is mid-tempo harmonic minor", () => {
+    const power = resolveStyle("power-metal" as StyleId);
+    expect(power.pitch.scales?.[0]?.[0]).toBe("major");
+    expect(power.texture.roles.pad?.required).toBe(true);
+    const neo = resolveStyle("neo-classical-metal" as StyleId);
+    expect(neo.tempo.typical).toBeLessThan(
+      resolveStyle("speed-metal" as StyleId).tempo.typical,
+    );
+    expect(neo.pitch.scales?.[0]?.[0]).toBe("harmonic-minor");
+  });
+
+  test("classic-rock leaves each own a distinct kick figure", () => {
+    const ids = [
+      "hard-rock",
+      "heartland-rock",
+      "pop-rock",
+      "folk-rock",
+      "roots-rock",
+      "pub-rock",
+      "southern-rock",
+      "psychedelic-rock",
+      "stoner-rock",
+    ];
+    const figures = ids.map((id) => kickHits(id).join(","));
+    expect(new Set(figures).size).toBe(ids.length);
+  });
+
+  test("generated siblings sit nearer their own centroid than a confusable sibling's", () => {
+    const pairs: [string, string][] = [
+      ["punk-rock", "pop-punk"],
+      ["hardcore-punk", "skate-punk"],
+      ["speed-metal", "neo-classical-metal"],
+      ["metalcore", "speed-metal"],
+      ["indie-rock", "k-rock"],
+      ["hard-rock", "heartland-rock"],
+    ];
+    const seeds = [1, 2, 3];
+    const centroid = (id: string) => {
+      const fs = seeds.map((s) => fingerprint(id, s));
+      return fs[0]!.map(
+        (_, i) => fs.reduce((a, f) => a + f[i]!, 0) / fs.length,
+      );
+    };
+    for (const [a, b] of pairs) {
+      const ca = centroid(a);
+      const cb = centroid(b);
+      for (const seed of seeds) {
+        const fa = fingerprint(a, seed);
+        expect(distance(fa, ca)).toBeLessThan(distance(fa, cb));
+        const fb = fingerprint(b, seed);
+        expect(distance(fb, cb)).toBeLessThan(distance(fb, ca));
+      }
     }
   });
 });
