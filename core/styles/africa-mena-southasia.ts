@@ -177,13 +177,7 @@ export const JURJINA = cycle(
   [1, 4, 8],
 );
 /** Wahda: 4/4 one dum on the downbeat, the slow tarab and recitation pulse. */
-export const WAHDA = cycle(
-  "iqa",
-  "wahda",
-  [4],
-  "dum . tak .",
-  [1],
-);
+export const WAHDA = cycle("iqa", "wahda", [4], "dum . tak .", [1]);
 /** Aksak: 9/8 in 2+2+2+3. */
 export const AKSAK = cycle(
   "usul",
@@ -225,6 +219,49 @@ export const CIFTETELLI = cycle(
   [1, 6, 7],
 );
 
+/** Jhaptal: 10 beats, vibhag 2+3+2+3, khali on 6. */
+export const JHAPTAL = cycle(
+  "tala",
+  "jhaptal",
+  [2, 3, 2, 3],
+  "dhi na dhi dhi na ti na dhi dhi na",
+  [1, 3, 8],
+  [6, 7],
+);
+/** Rupak: 7 beats, 3+2+2; the sam itself is khali (open, no bayan). */
+export const RUPAK = cycle(
+  "tala",
+  "rupak",
+  [3, 2, 2],
+  "tin tin na dhi na dhi na",
+  [4, 6],
+  [1, 2, 3],
+);
+/** Malfuf: 8/8 in 3+3+2, the quick dabke and zaffa cycle. */
+export const MALFUF = cycle(
+  "iqa",
+  "malfuf",
+  [3, 3, 2],
+  "dum . . tak . . tak .",
+  [1],
+);
+/** Khaliji: 8/8, dum on 1 and 4, the Gulf clapped pulse. */
+export const KHALIJI = cycle(
+  "iqa",
+  "khaliji",
+  [3, 3, 2],
+  "dum . . dum tak . tak .",
+  [1, 4],
+);
+/** Masmudi kabir: 16/8, two dums, rest, then the tak run (muwashshah). */
+export const MASMUDI_KABIR = cycle(
+  "iqa",
+  "masmudi kabir",
+  [4, 4, 4, 4],
+  "dum . dum . . . tak . dum . . tak tak . tak .",
+  [1, 3, 9],
+);
+
 /** Standard 12/8 bell: seven strokes in 2-2-1-2-2-2-1. */
 export const STANDARD_BELL = grid("x.x.xx.x.x.x");
 /** Tresillo 3+3+2, twice per 4/4 bar of sixteenths. */
@@ -240,7 +277,8 @@ export const EIGHTHS = grid("x.x.x.x.x.x.x.x.");
 /** Sixteenths with the downbeats dropped (a shaker or scraper). */
 export const SIXTEENTHS = grid("xxxxxxxxxxxxxxxx");
 
-export const AFRICA_MENA_SOUTHASIA_CARDS: readonly StyleCard[] = Object.freeze([
+/** Root and branch cards: the shared patterns every leaf inherits. */
+const NODES: readonly StyleCard[] = [
   card({
     id: "africa",
     abstract: true,
@@ -606,4 +644,6 @@ export const AFRICA_MENA_SOUTHASIA_CARDS: readonly StyleCard[] = Object.freeze([
       },
     },
   }),
-]);
+];
+
+export const AFRICA_MENA_SOUTHASIA_CARDS: readonly StyleCard[] = [...NODES];
