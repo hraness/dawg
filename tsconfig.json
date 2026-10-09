@@ -11,5 +11,5 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "core/**/*.ts", "tui/**/*.ts", "test/**/*.ts"]
+  "include": ["src/**/*.ts", "core/**/*.ts", "tui/**/*.ts", "test/**/*.ts", "bench/**/*.ts"]
 }
