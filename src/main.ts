@@ -18,6 +18,7 @@ import {
   type SessionRecord,
 } from "./session/store.ts";
 import { openSessionPort } from "./session/port.ts";
+import { OwnWrites, foreignEvents, otherWindowName } from "./session/origin.ts";
 import { compositionDigest, monotonicEpochMs } from "./session/protocol.ts";
 import {
   formatSessionLine,
@@ -1420,6 +1421,8 @@ async function runInteractive(): Promise<void> {
     tick(true);
   };
   stdout.on("resize", onResize);
+  const ownWrites = new OwnWrites();
+  let presenceClients: readonly { clientId: string }[] = [];
   let applying: Promise<void> = Promise.resolve();
   const applyLatest = (latest: typeof record): Promise<void> =>
     (applying = applying.then(() => applyRecord(latest)));
@@ -1465,15 +1468,20 @@ async function runInteractive(): Promise<void> {
           else if (payload.action === "toggle") await setTransport("toggle");
         }
         projectSync?.scoreChanged(score);
-        // Another window's play/pause is followed, not announced.
+        // Another window's play/pause is followed, not announced, and this
+        // window's own writes (which can echo back before the append
+        // resolves) are never "synced".
         const from = shownRevision(record, previousRevision);
         const to = shownRevision(record);
-        if (to !== from)
-          tui.activity.pushCard("synced from another window", {
-            tone: "info",
-            baseRevision: from,
-            resultRevision: to,
-          });
+        await ownWrites.settled();
+        const foreign = foreignEvents(latest, previousRevision, ownWrites).some(
+          (event) => event.kind !== "transport",
+        );
+        if (to !== from && foreign)
+          tui.activity.pushCard(
+            `synced · ${otherWindowName(presenceClients, port.clientId)}`,
+            { tone: "info", baseRevision: from, resultRevision: to },
+          );
       }
     } catch {
       // An invalid composition is skipped; the next update retries.
@@ -1484,8 +1492,10 @@ async function runInteractive(): Promise<void> {
       void applyLatest(update.record);
       adoptMeta(update.record.meta);
     } else if (update.type === "meta") adoptMeta(update.meta);
-    else if (update.type === "presence") windowCount = update.clients.length;
-    else if (update.type === "sync") syncState = update.sync;
+    else if (update.type === "presence") {
+      presenceClients = update.clients;
+      windowCount = update.clients.length;
+    } else if (update.type === "sync") syncState = update.sync;
     else if (update.type === "transport") {
       // Every window renders the same hit line from dawgd's timestamp.
       const { playing, beat, bpm, atMs } = update.transport;
@@ -1505,6 +1515,7 @@ async function runInteractive(): Promise<void> {
   // score into the new one.
   const subscribeLive = (): (() => void) => {
     const bound = port;
+    ownWrites.attach(bound);
     return bound.subscribe((update) => {
       if (bound === port) onUpdate(update);
     });
@@ -1514,6 +1525,7 @@ async function runInteractive(): Promise<void> {
     void port
       .presence()
       .then((clients) => {
+        presenceClients = clients;
         windowCount = Math.max(1, clients.length);
       })
       .catch(() => undefined);
