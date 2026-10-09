@@ -230,8 +230,8 @@ const LOSER_CEILINGS: Readonly<
     STEER: 1,
     QUEUE: 2,
   },
-  "README.md": { "drum kit": 1, STEER: 3, QUEUE: 2 },
-  "docs/project-format.md": { "drum patterns": 1 },
+  // STEER and QUEUE name the prompt pill until it reads NOW and NEXT.
+  "README.md": { STEER: 3, QUEUE: 2 },
   "src/commands/help.ts": { "drum voice": 1, "drum kit": 2 },
   "src/commands/modal.ts": { "browse sounds": 1 },
   "src/tui/menu.ts": {
