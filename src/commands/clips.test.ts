@@ -266,19 +266,19 @@ describe("/lyrics", () => {
     const r = applyLyrics(
       base(),
       "vox",
-      parseLyricsCommand("/lyrics never gon _ ~")!,
+      parseLyricsCommand("/lyrics silver sun _ ~")!,
     );
     expect(r.ok).toBe(true);
     expect(r.next!.notes.map((n) => n.lyric)).toEqual([
-      "nev",
-      "er",
-      "gon",
+      "sil",
+      "ver",
+      "sun",
       "_",
       undefined,
     ]);
-    expect(r.message).toContain("split never");
+    expect(r.message).toContain("split silver");
     const shown = applyLyrics(r.next!, "vox", { kind: "show" });
-    expect(shown.message).toContain("nev er gon _");
+    expect(shown.message).toContain("sil ver sun _");
     const cleared = applyLyrics(
       r.next!,
       "vox",

@@ -22,7 +22,7 @@ export type LyricToken = Readonly<{
 /**
  * The lyric grammar: words split by spaces, syllables by `-`, `_` holds the
  * previous syllable over the next note (melisma), `~` skips a note.
- * "nev-er gon-na _ give" gives nev er gon na _ give.
+ * "sun-lit morn-ing _ glow" gives sun lit morn ing _ glow.
  */
 export function parseLyric(text: string): LyricToken[] {
   const out: LyricToken[] = [];

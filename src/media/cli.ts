@@ -69,6 +69,15 @@ export function parseMediaArgv(argv: readonly string[]): {
   json: boolean;
   help: boolean;
 } {
+  // `dawg media --help` (or `-h`): a leading help flag is not a verb.
+  if (argv[0] === "--help" || argv[0] === "-h")
+    return {
+      verb: undefined,
+      args: {},
+      track: "main",
+      json: false,
+      help: true,
+    };
   const [verb, ...rest] = argv;
   const args: Record<string, unknown> = {};
   const positional: string[] = [];

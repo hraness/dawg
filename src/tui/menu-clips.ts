@@ -259,10 +259,10 @@ export function clipMenuRows(context: MenuContext): MenuNode[] {
             label: "lyrics",
             value: text,
             help: "typed words are split into syllables onto the notes in order",
-            placeholder: "never gon-na give _ you up",
+            placeholder: "sun-lit morn-ing _ glow",
             command: (typed) =>
               typed.trim() ? `/lyrics ${typed.trim()}` : undefined,
-            example: "/lyrics never gon-na give",
+            example: "/lyrics sun-lit morn-ing",
           },
           {
             kind: "entry",

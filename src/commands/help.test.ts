@@ -5,6 +5,7 @@ import {
   helpLines,
   helpText,
   helpTopicLines,
+  editDistance,
   nearestCommand,
   typoFix,
   usageHint,
@@ -114,6 +115,42 @@ describe("help reference", () => {
     expect(nearestCommand("/fx delay on")).toBe("fx");
     expect(nearestCommand("/chrods")).toBe("/chords");
     expect(nearestCommand("/zzzzzzz")).toBeUndefined();
+  });
+
+  test("an adjacent swap is one edit, even in short words", () => {
+    expect(nearestCommand("/hlep")).toBe("/help");
+    expect(nearestCommand("/meun")).toBe("/menu");
+    expect(nearestCommand("/plya")).toBe("/play");
+    expect(nearestCommand("/sesions")).toBe("/sessions");
+    expect(editDistance("hlep", "help")).toBe(1);
+    expect(editDistance("ca", "abc")).toBe(3);
+  });
+
+  test("property: editDistance is a symmetric, bounded edit count", () => {
+    let state = 0x5eed;
+    const next = () => {
+      state = (Math.imul(state, 1103515245) + 12345) >>> 0;
+      return state / 4294967296;
+    };
+    const word = () =>
+      Array.from(
+        { length: Math.floor(next() * 7) },
+        () => "abcde"[Math.floor(next() * 5)],
+      ).join("");
+    for (let run = 0; run < 2000; run += 1) {
+      const a = word();
+      const b = word();
+      const d = editDistance(a, b);
+      expect(d).toBe(editDistance(b, a));
+      expect(d === 0).toBe(a === b);
+      expect(d).toBeGreaterThanOrEqual(Math.abs(a.length - b.length));
+      expect(d).toBeLessThanOrEqual(Math.max(a.length, b.length));
+      if (a.length >= 2) {
+        const i = Math.floor(next() * (a.length - 1));
+        const swapped = `${a.slice(0, i)}${a[i + 1]}${a[i]}${a.slice(i + 2)}`;
+        expect(editDistance(a, swapped)).toBe(swapped === a ? 0 : 1);
+      }
+    }
   });
 });
 

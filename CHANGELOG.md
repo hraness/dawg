@@ -17,6 +17,12 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 - `fx formant` is no longer an alias of the vowel filter; `/fx formant o` and `set_fx {effect: "formant", vowel}` explain that the vowel filter is `vowel`.
 
+### Fixed
+
+- **Command-line argv.** `dawg <command> --help` prints usage, exits 0 and writes nothing for every subcommand (`dawg init --help` used to create a project, `dawg media --help` exited 2, `dawg check --help` ran the check); `init`, `check` and `sessions` reject unknown options and extra arguments with exit 2. Value flags with no value, an unknown `--theme`, and an invalid or over-long `--track` exit 2 with one line instead of attaching, defaulting or printing a stack trace. `--track` is normalized like `/track` and matches an existing track by id or name. `dawg --import a --export b` is now a pure conversion that leaves the session alone, and a demo frame in a fresh directory no longer creates `.dawg/`. `dawg --help` shows every render flag.
+- **Typo suggestions** count an adjacent swap as one edit, so `/hlep`, `/meun` and `/plya` suggest `/help`, `/menu` and `/play`; `/play in-key` is in help.
+- **Original lyric examples.** Help, menus, SDK docs and the `/lyrics` hints use original syllables; a test guards shipped text against known lyric phrases.
+
 ## 0.6.1
 
 Instruments wave 2: bowed strings and sampler velocity layers, gamelan presets and a wind engine, electric keys with soft and sostenuto pedals, tonewheel, combo and pipe organs, shoegaze effects and guitar strumming, and granular resample with formant-keeping shift. Every new field is optional, so 0.4, 0.5 and 0.6.0 projects load, print and render byte-identically.

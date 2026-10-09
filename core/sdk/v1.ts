@@ -5588,7 +5588,7 @@ type LyricToken = Readonly<{
 /**
  * The lyric grammar: words split by spaces, syllables by `-`, `_` holds the
  * previous syllable over the next note (melisma), `~` skips a note.
- * "nev-er gon-na _ give" gives nev er gon na _ give.
+ * "sun-lit morn-ing _ glow" gives sun lit morn ing _ glow.
  */
 function parseLyric(text: string): LyricToken[] {
   const out: LyricToken[] = [];
@@ -8984,7 +8984,7 @@ export function take(
  * syllables past the last note are dropped. Same rules as `/lyrics`.
  *
  * ```ts
- * notes: lyrics("nev-er gon-na give you up", seq("C4 D4 F4 D4 A4 A4 G4"))
+ * notes: lyrics("sun-lit morn-ing glow", seq("C4 D4 E4 G4 E4"))
  * ```
  */
 export function lyrics<N extends NoteSpec>(

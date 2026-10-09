@@ -15,6 +15,7 @@ import {
 import { plainSineWarnings } from "../audio/instrument-check.ts";
 import { clipPinDiagnostics } from "./clip-pins.ts";
 import { isProject } from "./init.ts";
+import { parseSimpleArgv } from "../argv.ts";
 import { typecheckProject } from "./typecheck.ts";
 
 export type CheckDeps = Readonly<{
@@ -71,6 +72,9 @@ export async function checkProject(
   });
 }
 
+export const CHECK_USAGE =
+  "usage: dawg check · typecheck and evaluate the project in this directory; exit 1 on problems";
+
 export async function runCheckCommand(
   argv: readonly string[],
   cwd: string,
@@ -78,6 +82,15 @@ export async function runCheckCommand(
   stderr: { write(text: string): unknown },
   deps: CheckDeps = {},
 ): Promise<number> {
+  const parsed = parseSimpleArgv(argv.slice(1), 0);
+  if (parsed.kind === "help") {
+    stdout.write(`${CHECK_USAGE}\n`);
+    return 0;
+  }
+  if (parsed.kind === "error") {
+    stderr.write(`${parsed.problem} · ${CHECK_USAGE}\n`);
+    return 2;
+  }
   const project = cwd;
   if (!(await isProject(project))) {
     stderr.write(
@@ -99,6 +112,5 @@ export async function runCheckCommand(
   }
   const count = report.diagnostics.length;
   stderr.write(`${count} problem${count === 1 ? "" : "s"}\n`);
-  void argv;
   return 1;
 }
