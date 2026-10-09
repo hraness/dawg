@@ -51,6 +51,7 @@ const NOTE_FIELDS: { readonly [K in keyof Note]-?: FieldRule } = {
   bend: "clear",
   vibrato: "clear",
   humanize: "clear",
+  drift: "clear",
 };
 
 const TRACK_FIELDS: { readonly [K in keyof Track]-?: FieldRule } = {

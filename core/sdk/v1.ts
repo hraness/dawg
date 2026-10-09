@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.32.0";
+export const SDK_VERSION = "1.33.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -247,7 +247,7 @@ export type Expression = Readonly<{
   /** The syllable sung on this note (SDK 1.32.0): no spaces, `_` holds the previous one. */
   lyric?: string;
   /**
-   * On an autotune guide note (SDK 1.32.0): the share of slow pitch drift
+   * On an autotune guide note (SDK 1.33.0): the share of slow pitch drift
    * removed, 0..1, overriding the track's `autotune` drift.
    */
   drift?: number;
@@ -2482,7 +2482,7 @@ function trackSing(
   );
 }
 
-// ---- autotune (f07-autotune, SDK 1.32.0) ----
+// ---- autotune (f07-autotune, SDK 1.33.0) ----
 
 /** Autotune presets, gentle to hard (core/autotune.ts AUTOTUNE_PRESETS). */
 export type AutotunePresetName =
@@ -2566,7 +2566,7 @@ const AUTOTUNE_PARAM_KEYS: readonly string[] = Object.freeze([
 ]);
 
 /**
- * Pitch correction (SDK 1.32.0), from `gentle` to `hard`; the preset word
+ * Pitch correction (SDK 1.33.0), from `gentle` to `hard`; the preset word
  * alone also works as a track's `autotune`. Fields override the preset.
  *
  * autotune: "hard"
