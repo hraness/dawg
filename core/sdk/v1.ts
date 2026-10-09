@@ -3304,6 +3304,19 @@ export type TrackInput = Readonly<{
    * `{ ref: 432 }` alone keeps the song's table at another pitch.
    */
   tuning?: TuningInput | null;
+  /**
+   * Wind engine settings as a field (SDK 1.32.0): a preset word or
+   * `{ preset, ...params }`, the same as `instrument: wind(...)`. Use with
+   * `instrument` omitted or `"wind"`.
+   */
+  wind?:
+    WindPresetName | Readonly<{ preset?: WindPresetName } & WindParams> | null;
+  /**
+   * Singing voice settings as a field (SDK 1.32.0), the same as
+   * `instrument: sing(...)`. Use with `instrument` omitted or `"sing"`.
+   */
+  sing?:
+    SingPresetName | Readonly<{ preset?: SingPresetName } & SingParams> | null;
   /** Synth voice parameters, Strudel names (`{ attack: 0.01, lpf: 800 }`). */
   synth?: SynthInput;
   /**
@@ -3737,6 +3750,40 @@ const ZZFX_SHAPES = Object.freeze([
  * Sample paths without a `tracks/` prefix are made project-relative under
  * this track's `tracks/<slug>/`.
  */
+/**
+ * `wind:` or `sing:` on track() as the engine spec, so the field is never
+ * silently dropped: it needs `instrument` omitted or the engine's own word.
+ */
+function engineField(
+  input: TrackInput,
+  name: string,
+): WindSpec | SingSpec | undefined {
+  const fields = [
+    ["wind", WIND_INSTRUMENT, wind] as const,
+    ["sing", SING_INSTRUMENT, sing] as const,
+  ].filter(([key]) => input[key] !== undefined && input[key] !== null);
+  if (fields.length === 0) return undefined;
+  if (fields.length > 1)
+    throw new DawgSdkError(`track ${name}: use wind: or sing:, not both`);
+  const [key, word, make] = fields[0]!;
+  if (input.instrument !== undefined && input.instrument !== word)
+    throw new DawgSdkError(
+      `track ${name}: ${key}: needs instrument "${word}" or none (got ${typeof input.instrument === "string" ? `"${input.instrument.slice(0, 32)}"` : "an engine spec"})`,
+    );
+  const value = input[key] as unknown;
+  if (typeof value === "string")
+    return (make as (p: string) => WindSpec | SingSpec)(value);
+  if (!isRecord(value))
+    throw new DawgSdkError(
+      `track ${name}: ${key}: must be a preset word or an object`,
+    );
+  const { preset, ...params } = value as Record<string, unknown>;
+  return (make as (p: unknown, q: object) => WindSpec | SingSpec)(
+    preset ?? params,
+    preset === undefined ? {} : params,
+  );
+}
+
 export function track(input: TrackInput): TrackSpec {
   if (!isRecord(input)) throw new DawgSdkError("track() needs an object");
   if (typeof input.name !== "string" || input.name.trim().length === 0)
@@ -3748,7 +3795,7 @@ export function track(input: TrackInput): TrackSpec {
   const id = input.id ?? slug;
   if (typeof id !== "string" || id.length === 0 || id.length > 64)
     throw new DawgSdkError(`track ${name}: id must be 1..64 characters`);
-  const rawInstrument = input.instrument ?? "sine";
+  const rawInstrument = engineField(input, name) ?? input.instrument ?? "sine";
   // A granular track may keep the sampler it grains (`grain off` goes back).
   const keptSampler =
     isRecord(input.sampler) &&

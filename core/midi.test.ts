@@ -295,6 +295,26 @@ describe("MIDI export of tuning and sections", () => {
     expect(file).toContain("ff0605" + Buffer.from("intro").toString("hex"));
     expect(file).toContain("ff0604" + Buffer.from("drop").toString("hex"));
   });
+
+  test("the longest multibyte section names are written whole and valid", () => {
+    // Names are capped at 32 UTF-16 units, so a marker is at most 96 bytes
+    // (32 three-byte characters) and never reaches the 127-byte cut.
+    for (const name of ["€".repeat(32), "🎵".repeat(16), "ü".repeat(32)]) {
+      const score = createScore({
+        bars: 2,
+        sections: [{ name, startBar: 0, bars: 2 }],
+        tracks: [{ id: "a", name: "a", instrument: "sine" }],
+      });
+      const bytes = Buffer.from(name);
+      expect(bytes.length).toBeLessThan(127);
+      const file = hex(scoreToMidi(score));
+      expect(file).toContain(
+        "ff06" +
+          bytes.length.toString(16).padStart(2, "0") +
+          bytes.toString("hex"),
+      );
+    }
+  });
 });
 
 describe("MIDI export of pitch expression", () => {
