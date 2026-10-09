@@ -1966,4 +1966,813 @@ export const ROOTS_CARDS: readonly StyleCard[] = Object.freeze([
       },
     },
   }),
+  // -------------------------------------------------------------------------
+  // R&B, soul and funk leaves. References: Rob Bowman, "Soulsville, U.S.A."
+  // (1997); Anne Danielsen, "Presence and Pleasure: The Funk Grooves of James
+  // Brown and Parliament" (2006); Allan Slutsky, "Standing in the Shadows of
+  // Motown" (1989).
+  card({
+    id: "classic-rnb",
+    summary:
+      "classic rhythm and blues: shuffle backbeat on 2 and 4, 12-bar and I-vi-IV-V forms, boogie arpeggio bass, honking tenor sax answering the vocal",
+    seedSalt: 1949,
+    tempo: { bpm: [90, 160], typical: 120 },
+    harmony: {
+      forms: [[BLUES_FORM, 1]],
+      presets: [["fifties", 1]],
+      sources: { forms: 1, presets: 1 },
+    },
+    rhythm: { onsets: { snare: grid("..x...x."), kick: grid("x...x...") } },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic"),
+        chords: role("piano", "honkytonk:0.5"),
+        lead: role("sing"),
+        counter: role("sax", "barisax:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "doo-wop",
+    summary:
+      "doo-wop: the I-vi-IV-V fifties progression, 12/8 triplet ballad pulse, vocal-group nonsense-syllable backing pads, bass voice on roots",
+    seedSalt: 1954,
+    tempo: { bpm: [60, 130], typical: 76 },
+    meter: {
+      signatures: [
+        ["12/8", 0.6],
+        ["4/4", 0.4],
+      ],
+      hypermeter: [[4, 1]],
+    },
+    groove: { subdivision: 2, swingRatio: [1.8, 2.1] },
+    pitch: { scales: [["major", 1]] },
+    harmony: {
+      presets: [["fifties", 1]],
+      sevenths: 0.2,
+      cadences: [["V-I", 1]],
+    },
+    bass: {
+      behaviour: [
+        ["root", 0.6],
+        ["arpeggio", 0.4],
+      ],
+    },
+    rhythm: { onsets: { chords: grid("x.x.x.x.") } },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic"),
+        chords: role("ooh", "piano:0.4"),
+        bass: role("contrabass", "aah:0.3"),
+        lead: role("sing"),
+        pad: maybe("aah"),
+      },
+    },
+  }),
+  card({
+    id: "new-orleans-rnb",
+    summary:
+      "New Orleans R&B: second-line rumba-boogie piano, tresillo bass (3+3+2), parade-drum snare, horns, I-IV-V in major",
+    seedSalt: 1952,
+    tempo: { bpm: [100, 160], typical: 128 },
+    groove: { subdivision: 4, swingRatio: [1.2, 1.5] },
+    pitch: {
+      scales: [
+        ["major", 0.6],
+        ["mixolydian", 0.4],
+      ],
+    },
+    harmony: {
+      forms: [[BLUES_FORM, 1]],
+      presets: [["fifties", 1]],
+      sources: { forms: 1, presets: 1 },
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x..x..x.x..x..x."),
+        snare: grid("....x..1....x.1."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+      },
+    },
+    bass: { behaviour: [["arpeggio", 1]], onsets: TRESILLO },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic"),
+        chords: role("honkytonk", "upright:0.6"),
+        lead: role("sing", "sax:0.5"),
+        counter: maybe("trumpet", "trombone:0.6"),
+      },
+    },
+  }),
+  card({
+    id: "southern-soul",
+    summary:
+      "Southern soul: lazy behind-the-beat snare on 2 and 4, gospel organ, unison horn stabs, I-IV vamps and 6/8 ballads, sparse Memphis rhythm section",
+    seedSalt: 1965,
+    tempo: { bpm: [60, 120], typical: 92 },
+    pitch: {
+      scales: [
+        ["major", 0.5],
+        ["mixolydian", 0.5],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["mixolydian-rock", 0.4],
+        ["fifties", 0.3],
+        ["turnaround", 0.3],
+      ],
+      sevenths: 0.4,
+    },
+    groove: { roleOffset: { snare: 0.12 } },
+    rhythm: {
+      onsets: {
+        kick: grid("x.....x.x......."),
+        snare: grid("....x.......x..."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+        counter: grid("....x.......x..."),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic"),
+        chords: role("hammond", "electric@clean:0.6"),
+        bass: role("ebass"),
+        lead: role("sing"),
+        counter: role("trumpet", "sax:0.8"),
+      },
+    },
+  }),
+  card({
+    id: "motown",
+    summary:
+      "Motown: four-on-the-floor snare and tambourine on every beat, melodic syncopated bass with chromatic approaches, I-vi-ii-V and ii-V changes, vibes and strings",
+    seedSalt: 1964,
+    tempo: { bpm: [110, 140], typical: 124 },
+    groove: { subdivision: 4, swingRatio: [1, 1.1] },
+    pitch: {
+      scales: [
+        ["major", 0.8],
+        ["minor", 0.2],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["turnaround", 0.5],
+        ["ii-v-i", 0.3],
+        ["axis", 0.2],
+      ],
+      sevenths: 0.4,
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x...x...x...x..."),
+        snare: grid("x...x...x...x..."),
+        shaker: grid("x...x...x...x..."),
+        hat: grid("..x...x...x...x."),
+      },
+    },
+    bass: {
+      behaviour: [
+        ["walking", 0.5],
+        ["arpeggio", 0.5],
+      ],
+      onsets: grid("x..x..x.x.x..x.x"),
+      walk: { chordToneOnOne: 1, chromaticApproach: 0.5 },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic"),
+        shaker: role("drums"),
+        chords: role("piano", "electric@clean:0.5"),
+        bass: role("motown"),
+        lead: role("sing"),
+        pad: maybe("strings", "vibes:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "chicago-soul",
+    summary:
+      "Chicago soul: light mid-tempo backbeat, gospel-group vocal harmony, falsetto lead, Latin-tinged percussion, brassy arrangements with major-seventh colour",
+    seedSalt: 1963,
+    tempo: { bpm: [90, 120], typical: 104 },
+    pitch: { scales: [["major", 1]] },
+    harmony: {
+      presets: [
+        ["turnaround", 0.5],
+        ["axis", 0.5],
+      ],
+      sevenths: 0.6,
+    },
+    rhythm: { onsets: { perc: grid("..x...x...x...x.") } },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic"),
+        perc: maybe("drums"),
+        chords: role("electric@clean", "piano:0.6"),
+        lead: role("sing"),
+        counter: role("trumpet", "aah:0.6"),
+      },
+    },
+  }),
+  card({
+    id: "northern-soul",
+    summary:
+      "Northern soul: up-tempo Motown-style stomp, four-to-the-floor snare and claps on every beat, driving eighth bass, strings and horns, major key",
+    seedSalt: 1966,
+    tempo: { bpm: [120, 150], typical: 134 },
+    groove: { subdivision: 2, swingRatio: [1, 1.05] },
+    pitch: {
+      scales: [
+        ["major", 0.8],
+        ["minor", 0.2],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["turnaround", 0.5],
+        ["axis", 0.5],
+      ],
+      sevenths: 0.3,
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.x.x.x."),
+        snare: grid("x.x.x.x."),
+        clap: grid("x.x.x.x."),
+        hat: grid(".x.x.x.x"),
+      },
+    },
+    bass: {
+      behaviour: [
+        ["octave", 0.5],
+        ["arpeggio", 0.5],
+      ],
+      onsets: grid("xxxxxxxx"),
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic", ["kick", "snare", "hat"], ["clap"]),
+        chords: role("piano"),
+        bass: role("motown"),
+        lead: role("sing"),
+        pad: maybe("strings", "trumpet:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "philly-soul",
+    summary:
+      "Philadelphia soul: lush string and horn orchestration, open hi-hat on the off-beat over four-on-the-floor, major-seventh and ninth chords, ii-V turnarounds",
+    seedSalt: 1972,
+    tempo: { bpm: [100, 125], typical: 112 },
+    groove: { subdivision: 4, swingRatio: [1, 1.05] },
+    pitch: {
+      scales: [
+        ["major", 0.7],
+        ["dorian", 0.3],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["ii-v-i", 0.5],
+        ["turnaround", 0.5],
+      ],
+      sevenths: 1,
+      voicing: {
+        types: [
+          ["open", 0.6],
+          ["close", 0.4],
+        ],
+        notes: [4, 5],
+      },
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x...x...x...x..."),
+        snare: grid("....x.......x..."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+        openhat: grid("..x...x...x...x."),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic", ["kick", "snare", "hat", "openhat"]),
+        chords: role("electric@clean", "epiano:0.6"),
+        bass: role("ebass"),
+        lead: role("sing"),
+        pad: role("strings"),
+        counter: maybe("horn", "vibes:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "psychedelic-soul",
+    summary:
+      "psychedelic soul: long dorian one-chord vamps, wah guitar sixteenths, fuzz bass, phased drums and extended jams over the backbeat",
+    seedSalt: 1969,
+    tempo: { bpm: [90, 120], typical: 104 },
+    groove: { subdivision: 4, swingRatio: [1, 1.1] },
+    pitch: {
+      scales: [
+        ["dorian", 0.6],
+        ["minor-pentatonic", 0.4],
+      ],
+    },
+    harmony: { presets: [["dorian-vamp", 1]], rhythm: [[2, 1]], sevenths: 0.9 },
+    bass: { behaviour: [["ostinato", 1]], onsets: grid("x..x..x...x.x...") },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic"),
+        chords: role("electric@wah"),
+        bass: role("ebass"),
+        lead: role("sing", "electric@fuzz:0.6"),
+        pad: maybe("hammond"),
+      },
+    },
+    mix: { space: 0.5, fx: { chords: { phaser: "slow" } } },
+  }),
+  card({
+    id: "quiet-storm",
+    summary:
+      "quiet storm: slow late-night ballad, soft rim-click backbeat, electric-piano ninths and elevenths, fretless-style sustained bass, ii-V-I with smooth voice leading",
+    seedSalt: 1976,
+    tempo: { bpm: [60, 84], typical: 70 },
+    groove: { subdivision: 4, swingRatio: [1, 1.15] },
+    pitch: {
+      scales: [
+        ["major", 0.6],
+        ["dorian", 0.4],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["ii-v-i", 0.6],
+        ["turnaround", 0.4],
+      ],
+      sevenths: 1,
+      voicing: { types: [["open", 1]], notes: [4, 5] },
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.........x....."),
+        snare: null,
+        rim: grid("....x.......x..."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+      },
+    },
+    bass: {
+      behaviour: [
+        ["root", 0.6],
+        ["arpeggio", 0.4],
+      ],
+      onsets: grid("x.........x....."),
+    },
+    melody: { density: [1, 2] },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic", ["kick", "rim", "hat"]),
+        snare: null,
+        chords: role("epiano"),
+        bass: role("ebass"),
+        lead: role("sing", "sax:0.5"),
+        pad: maybe("strings"),
+      },
+    },
+    mix: { space: 0.6 },
+  }),
+  card({
+    id: "neo-soul",
+    summary:
+      "neo soul: drunk unquantised hip-hop pocket (late snare, early kick), extended ninth and eleventh chords, dorian ii-V vamps, warm Rhodes and upright-style bass",
+    seedSalt: 1997,
+    tempo: { bpm: [70, 98], typical: 84 },
+    groove: {
+      subdivision: 4,
+      swingRatio: [1.2, 1.5],
+      roleOffset: { snare: 0.15, kick: -0.05, hat: 0.08 },
+      humanize: { timingMs: 14, velocity: 0.12 },
+    },
+    pitch: {
+      scales: [
+        ["dorian", 0.6],
+        ["major", 0.4],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["ii-v-i", 0.4],
+        ["dorian-vamp", 0.6],
+      ],
+      sevenths: 1,
+      voicing: {
+        types: [
+          ["open", 0.6],
+          ["shell", 0.4],
+        ],
+        notes: [4, 5],
+      },
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x......x..x....."),
+        snare: grid("....x.......x..."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("lofi"),
+        chords: role("rhodes", "wurli:0.5"),
+        bass: role("ebass", "contrabass:0.4"),
+        lead: role("sing"),
+      },
+    },
+  }),
+  card({
+    id: "uk-street-soul",
+    summary:
+      "UK street soul: mid-tempo programmed swingbeat, minor dorian vamps, synth pads and electric piano, dub-weighted sub bass with off-beat skank",
+    seedSalt: 1989,
+    tempo: { bpm: [86, 104], typical: 96 },
+    groove: { subdivision: 4, swingRatio: [1.2, 1.5] },
+    pitch: {
+      scales: [
+        ["dorian", 0.5],
+        ["minor", 0.5],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["dorian-vamp", 0.6],
+        ["aeolian", 0.4],
+      ],
+      sevenths: 0.8,
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.....x...x....."),
+        snare: grid("....x.......x..."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("syn808"),
+        chords: role("epiano", "keys:0.5"),
+        bass: role("bass"),
+        lead: role("sing"),
+        pad: maybe("strings"),
+      },
+    },
+  }),
+  card({
+    id: "contemporary-rnb",
+    summary:
+      "contemporary R&B: half-time programmed groove, rolled sixteenth and triplet hi-hats, 808 sub bass, minor-ninth loops (vi-IV-I-V) and melismatic vocal",
+    seedSalt: 2010,
+    tempo: { bpm: [60, 100], typical: 76 },
+    pitch: {
+      scales: [
+        ["minor", 0.6],
+        ["dorian", 0.4],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["sad-pop", 0.5],
+        ["aeolian", 0.5],
+      ],
+      sevenths: 0.9,
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x......x..x....."),
+        snare: grid("........x......."),
+        hat: grid("xxx.x.xxx.x.x.xx"),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("trap"),
+        chords: role("epiano", "keys:0.5"),
+        bass: role("bass"),
+        lead: role("sing"),
+        pad: maybe("strings"),
+      },
+    },
+  }),
+  card({
+    id: "new-jack-swing",
+    summary:
+      "new jack swing: hard swung sixteenth drum-machine shuffle (swing ratio 1.6), gated snare on 2 and 4, synth brass stabs, gospel-tinged ninth chords",
+    seedSalt: 1988,
+    tempo: { bpm: [100, 118], typical: 108 },
+    groove: { subdivision: 4, swingRatio: [1.5, 1.7] },
+    pitch: {
+      scales: [
+        ["dorian", 0.5],
+        ["minor", 0.5],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["dorian-vamp", 0.5],
+        ["ii-v-i", 0.5],
+      ],
+      sevenths: 0.9,
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x..x..x...x..x.."),
+        snare: grid("....x.......x..."),
+        hat: grid("x.xxx.xxx.xxx.xx"),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("syn909"),
+        chords: role("keys", "epiano:0.5"),
+        bass: role("bass"),
+        lead: role("sing"),
+        counter: role("saw", "trumpet:0.4"),
+      },
+    },
+  }),
+  card({
+    id: "hip-hop-soul",
+    summary:
+      "hip hop soul: boom-bap breakbeat (kick on 1 and the and-of-2, snare on 2 and 4), looped soul-chord vamp, live-feel bass, gospel vocal over hip-hop drums",
+    seedSalt: 1994,
+    tempo: { bpm: [84, 100], typical: 92 },
+    groove: { subdivision: 4, swingRatio: [1.2, 1.5] },
+    pitch: {
+      scales: [
+        ["minor", 0.5],
+        ["dorian", 0.5],
+      ],
+    },
+    harmony: {
+      presets: [
+        ["aeolian", 0.5],
+        ["dorian-vamp", 0.5],
+      ],
+      sevenths: 0.8,
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x......x..x....."),
+        snare: grid("....x.......x..."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("syn808"),
+        chords: role("epiano", "piano:0.5"),
+        bass: role("ebass", "bass:0.5"),
+        lead: role("sing"),
+      },
+    },
+  }),
+  card({
+    id: "alternative-rnb",
+    summary:
+      "alternative R&B: sparse half-time beats with wide space, detuned pads, modal minor and lydian colour, sub bass and reverb-washed vocal",
+    seedSalt: 2012,
+    tempo: { bpm: [60, 90], typical: 72 },
+    pitch: {
+      scales: [
+        ["minor", 0.4],
+        ["dorian", 0.3],
+        ["lydian", 0.3],
+      ],
+    },
+    harmony: {
+      model: "modal",
+      presets: null,
+      rhythm: [[2, 1]],
+      sevenths: 1,
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x.........x....."),
+        snare: grid("........x......."),
+        hat: grid("x...x.x.x...x.xx"),
+      },
+    },
+    melody: { density: [1, 2] },
+    texture: {
+      roles: {
+        ...kitRoles("trap"),
+        chords: role("keys", "epiano:0.5"),
+        bass: role("bass"),
+        lead: role("sing"),
+        pad: role("strings", "saw:0.5"),
+      },
+    },
+    mix: { space: 0.7 },
+  }),
+  card({
+    id: "classic-funk",
+    summary:
+      "classic funk: emphasis on the one, interlocking sixteenth-note scratch guitar, ghosted snare, dominant ninth one-chord vamp, horn stabs, syncopated bass anchoring beat 1",
+    seedSalt: 1967,
+    tempo: { bpm: [96, 120], typical: 108 },
+    harmony: { presets: null, rhythm: [[4, 1]] },
+    rhythm: {
+      onsets: {
+        kick: grid("x.....x.x.....x."),
+        snare: grid("....x..1.1..x..1"),
+        hat: grid("xxxxxxxxxxxxxxxx"),
+        chords: grid(".x.x.xx..x.x.xx."),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic"),
+        chords: role("funk"),
+        bass: role("ebass"),
+        lead: role("sing", "sax:0.5"),
+        counter: maybe("trumpet", "sax:0.6"),
+      },
+    },
+  }),
+  card({
+    id: "p-funk",
+    summary:
+      "P-Funk: slower heavy on-the-one groove, synth bass and Moog leads, layered chant vocals, mixolydian and dorian vamps, cosmic synth textures",
+    seedSalt: 1975,
+    tempo: { bpm: [90, 110], typical: 100 },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic"),
+        chords: role("clav", "funk:0.6"),
+        bass: role("bass", "ebass:0.4"),
+        lead: role("lead", "saw:0.6"),
+        pad: maybe("choir", "strings:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "bayou-funk",
+    summary:
+      "New Orleans funk: second-line syncopation, kick and snare displaced off the grid around a tresillo, open loose sixteenths, clavinet and organ",
+    seedSalt: 1969,
+    tempo: { bpm: [90, 112], typical: 100 },
+    groove: { swingRatio: [1.15, 1.35] },
+    rhythm: {
+      onsets: {
+        kick: grid("x..x..x...x..x.."),
+        snare: grid("...x..1..1..x..."),
+        hat: grid("x.xxx.xxx.xxx.xx"),
+      },
+    },
+    bass: { onsets: TRESILLO },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic"),
+        chords: role("clav", "hammond:0.6"),
+        bass: role("ebass"),
+        lead: role("electric@clean", "hammond:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "go-go",
+    summary:
+      "go-go: the pocket beat with congas and cowbell in a swung sixteenth, kick-snare figure with the bell on 1 and the and-of-2, call and response over one-chord vamps",
+    seedSalt: 1978,
+    tempo: { bpm: [92, 112], typical: 100 },
+    groove: { swingRatio: [1.3, 1.6] },
+    rhythm: {
+      onsets: {
+        kick: grid("x..x......x....."),
+        snare: grid("....x.......x..."),
+        hat: grid("x.x.x.x.x.x.x.x."),
+        bell: grid("x..x...x..x.x..."),
+        perc: grid("x.xx..x.x.xx..x."),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic"),
+        bell: role("bell"),
+        perc: role("drums"),
+        chords: role("keys", "funk:0.5"),
+        bass: role("ebass"),
+        lead: role("sing", "trumpet:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "minneapolis-sound",
+    summary:
+      "Minneapolis sound: LinnDrum-style straight sixteenth machine groove, synth stabs replacing horns, clipped funk guitar, mixolydian vamps",
+    seedSalt: 1981,
+    tempo: { bpm: [110, 130], typical: 120 },
+    groove: { swingRatio: [1, 1.05] },
+    rhythm: {
+      onsets: {
+        kick: grid("x.....x...x....."),
+        snare: grid("....x.......x..."),
+        hat: grid("xxxxxxxxxxxxxxxx"),
+        clap: grid("....x.......x..."),
+      },
+    },
+    texture: {
+      roles: {
+        ...kitRoles("electro", ["kick", "snare", "hat", "clap"]),
+        chords: role("saw", "funk:0.6"),
+        bass: role("bass"),
+        lead: role("sing", "lead:0.5"),
+        counter: maybe("square", "saw:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "boogie",
+    summary:
+      "boogie (post-disco): mid-tempo four-on-the-floor slowed to a funk pocket, synth bass octaves, ninth and eleventh chords, ii-V cycles, clap backbeat",
+    seedSalt: 1982,
+    tempo: { bpm: [104, 122], typical: 112 },
+    groove: { swingRatio: [1, 1.1] },
+    pitch: {
+      scales: [
+        ["dorian", 0.5],
+        ["major", 0.5],
+      ],
+    },
+    harmony: {
+      model: "functional",
+      presets: [
+        ["ii-v-i", 0.5],
+        ["dorian-vamp", 0.5],
+      ],
+      rhythm: [[1, 1]],
+    },
+    rhythm: {
+      onsets: {
+        kick: grid("x...x...x...x..."),
+        snare: grid("....x.......x..."),
+        clap: grid("....x.......x..."),
+        hat: grid("..x...x...x...x."),
+      },
+    },
+    bass: {
+      behaviour: [
+        ["octave", 0.6],
+        ["ostinato", 0.4],
+      ],
+      onsets: grid("x.xx..x.x.xx..x."),
+    },
+    texture: {
+      roles: {
+        ...kitRoles("syn808", ["kick", "snare", "hat", "clap"]),
+        chords: role("epiano", "keys:0.5"),
+        bass: role("bass"),
+        lead: role("sing"),
+        pad: maybe("strings", "saw:0.5"),
+      },
+    },
+  }),
+  card({
+    id: "free-funk",
+    summary:
+      "free funk: harmolodic funk with free-jazz soloing over tight sixteenth grooves, odd accents, unison lines that drift, few or no fixed chord changes",
+    seedSalt: 1977,
+    tempo: { bpm: [100, 140], typical: 120 },
+    harmony: { model: "modal", presets: null, rhythm: [[4, 1]] },
+    melody: {
+      density: [3, 4],
+      intervals: intervals(4, 2, 1.5, 1.2),
+      chordToneRate: 0.3,
+    },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic"),
+        chords: role("electric@crunch"),
+        bass: role("ebass"),
+        lead: role("sax", "trumpet:0.5"),
+        counter: maybe("electric@clean"),
+      },
+    },
+  }),
+  card({
+    id: "funk-band",
+    summary:
+      "big-band and soul revue funk: full horn section riffing in unison on the one, stop-time hits, tight sixteenth rhythm section, dominant ninth vamps",
+    seedSalt: 1970,
+    tempo: { bpm: [100, 126], typical: 112 },
+    texture: {
+      roles: {
+        ...kitRoles("acoustic"),
+        chords: role("funk", "hammond:0.5"),
+        bass: role("ebass"),
+        lead: role("trumpet", "sax:0.8", "sing:0.6"),
+        counter: role("trombone", "barisax:0.6"),
+      },
+    },
+  }),
 ]);
