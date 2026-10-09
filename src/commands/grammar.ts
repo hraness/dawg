@@ -169,6 +169,8 @@ export function parseExportCommand(line: string): ExportCommand | undefined {
   const match = line.trim().match(/^\/?export\s+(\S+)(?:\s+(stems))?\s*$/i);
   if (!match) return undefined;
   const path = match[1]!;
+  // `export list` is a listing spelling, never a file named `list`.
+  if (LIST_WORDS.includes(path.toLowerCase())) return undefined;
   const format = /\.wav$/i.test(path)
     ? "wav"
     : /\.midi?$/i.test(path)

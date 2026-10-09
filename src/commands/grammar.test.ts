@@ -216,3 +216,15 @@ describe("agent tool dedupe", () => {
     expect(describe("add_drums")).toContain("set_rhythm");
   });
 });
+
+describe("export", () => {
+  test("a listing word is never a file name", () => {
+    expect(parseExportCommand("export list")).toBeUndefined();
+    expect(parseExportCommand("/export ls")).toBeUndefined();
+    expect(parseExportCommand("export a.wav")).toEqual({
+      path: "a.wav",
+      format: "wav",
+      stems: false,
+    });
+  });
+});

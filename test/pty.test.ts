@@ -269,8 +269,8 @@ test.skipIf(!supported)(
     await t.until(() => t.vt.text().includes("export <file>"), "export usage");
     await t.send("/export song.wav\r");
     await t.until(
-      () => t.vt.text().includes("render audio with: dawg render song.wav"),
-      "export audio refused",
+      () => t.vt.text().includes("exported · song.wav"),
+      "export audio renders",
     );
     await t.send("/import nope.json\r");
     await t.until(

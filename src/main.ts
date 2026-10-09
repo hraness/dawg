@@ -2800,7 +2800,10 @@ async function submit(prompt: string): Promise<string | Receipt> {
       command,
       (candidate) =>
         parseExact(candidate, score) !== undefined ||
-        (candidate.startsWith("/") && SLASH_HANDLED.has(verbOf(candidate))),
+        // Window verbs get only the slash toggle, never a listing word.
+        (candidate.startsWith("/") &&
+          SLASH_HANDLED.has(verbOf(candidate)) &&
+          candidate.split(/\s+/).length === command.trim().split(/\s+/).length),
     );
     if (retry !== undefined) {
       recovering = true;
