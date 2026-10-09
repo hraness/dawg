@@ -107,7 +107,14 @@ export function musicalFingerprint(score: TrackScore): Fingerprint {
         : `${role}(${instrument},${register},${density})`,
     );
   }
-  const key = score.key ? score.key.toLowerCase() : estimateKey(histogram);
+  // A tuned song is named by its tuning (`pelog`), not a guessed 12-TET key.
+  const tuned = score.tuning
+    ? (score.tuning.name ??
+      (score.tuning.edo ? `${score.tuning.edo}-edo` : "tuned"))
+    : undefined;
+  const key = score.key
+    ? score.key.toLowerCase()
+    : (tuned?.toLowerCase() ?? estimateKey(histogram));
   const line = [
     `${bpm} bpm`,
     key ?? "no key",

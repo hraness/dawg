@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { addNote, createScore, type TrackScore } from "../../core/score.ts";
+import {
+  addNote,
+  createScore,
+  scoreFromJSON,
+  type TrackScore,
+} from "../../core/score.ts";
 import {
   applyMetaPatch,
   defaultSessionMeta,
@@ -387,4 +392,13 @@ describe("AutoNamer", () => {
     expect(generator.prompts).toHaveLength(1);
     expect(generator.prompts[0]).toContain("94 bpm");
   });
+});
+
+test("a tuned song is named by its tuning, not a guessed key", () => {
+  const tuned = scoreFromJSON({
+    ...groove().toJSON(),
+    tuning: { name: "pelog" },
+  });
+  expect(musicalFingerprint(tuned).key).toBe("pelog");
+  expect(localName(musicalFingerprint(tuned))).toBe("pelog bass groove");
 });
