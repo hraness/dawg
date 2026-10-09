@@ -403,6 +403,26 @@ describe("pedal soft|sost (0.6.1)", () => {
     expect(off.next!.tracks[0]!.softPedal).toBeUndefined();
   });
 
+  test("says when una corda will not sound", () => {
+    expect(run("pedal soft 0-4").message).toContain(
+      "no effect: lead is saw; una corda acts on the modelled pianos",
+    );
+    const grand = (keys: boolean) =>
+      createScore({
+        bars: 2,
+        tracks: [
+          { id: "lead", instrument: "grand", ...(keys ? { keys: {} } : {}) },
+        ],
+        notes: [],
+      });
+    expect(run("pedal soft 0-4", grand(false)).message).toContain(
+      "keys preset grand first",
+    );
+    expect(run("pedal soft 0-4", grand(true)).message).not.toContain(
+      "no effect",
+    );
+  });
+
   test("sostenuto holds through bars and rejects half", () => {
     const bars = run("pedal sost bars");
     expect(bars.next!.tracks[0]!.sostenuto).toEqual([

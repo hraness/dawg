@@ -55,6 +55,7 @@ import {
   type Note,
   type Track,
 } from "../../core/score.ts";
+import { softPedalNote } from "../../core/keys.ts";
 import { barStartTick, loopTicksOf } from "../../core/tempo.ts";
 
 export type NoteTarget =
@@ -916,11 +917,15 @@ export function applyExpressionCommand(
           : []),
         ...(halves.length > 0 ? [`${halves.length} half`] : []),
       ].join(", ");
+      // Una corda is stored anyway (an instrument change may follow), but
+      // say when nothing will sound different.
+      const silent =
+        field === "softPedal" && pedal ? softPedalNote(track) : undefined;
       return trackResult(
         score,
         track,
         { [field]: pedal ?? null },
-        `${label} · ${pedal?.length ?? 0} event${pedal?.length === 1 ? "" : "s"} (${held}) · ${trackId}`,
+        `${label} · ${pedal?.length ?? 0} event${pedal?.length === 1 ? "" : "s"} (${held}) · ${trackId}${silent ? ` · no effect: ${silent}` : ""}`,
       );
     }
     case "velcurve": {

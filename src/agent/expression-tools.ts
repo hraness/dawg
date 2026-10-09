@@ -28,6 +28,7 @@ import {
   type ScoreOperation,
   type TrackPatch,
 } from "../../core/score.ts";
+import { softPedalNote } from "../../core/keys.ts";
 import { loopTicksOf } from "../../core/tempo.ts";
 import { BEND_SHAPES, barPedal } from "../commands/expression.ts";
 import type { AgentTool, ToolContext } from "./tools.ts";
@@ -364,6 +365,10 @@ export const EXPRESSION_TOOLS: readonly AgentTool[] = Object.freeze([
         );
       if (Object.keys(patch).length === 0)
         throw new ExpressionToolError("set soft, sostenuto or both");
+      const track = score.tracks.find((candidate) => candidate.id === trackId);
+      const silent =
+        patch.softPedal && track ? softPedalNote(track) : undefined;
+      if (silent) throw new ExpressionToolError(`soft pedal · ${silent}`);
       return {
         kind: "score",
         operations: [
