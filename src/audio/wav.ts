@@ -107,6 +107,7 @@ export type RenderOptions = WavOptions &
     seedSeconds?: number;
     /** Per-track engine state at the window origin (`windowSeed`). */
     seedState?: Readonly<Record<string, string>>;
+    /**
      * The song whose chords a granular `quant chord` reads, at `tick` for
      * this render's tick 0 (a live note renders alone). Absent: the score.
      */
