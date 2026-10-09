@@ -16,7 +16,7 @@ order: 1
 - `synth preset pluck` · pad lead bass acid keys bell organ strings
 - `synth lpf 800 lpenv 3` any parameter · `synth adsr 0.01 0.2 0.5 0.3`
 - `synth lpf off` · `synth reset` · `synth` lists what is set
-- `piano felt` · grand ballad upright lofi · `keys hardness 0.3` · `keys`
+- `piano felt` · `epiano suitcase` · `wurli` · `clav` · `keys hardness 0.3`
 - `wt list` tables · `wt pwm` load one · `wt 0.5` position
 - `string sitar` · nylon koto harp … · `string buzz 0.8` · `string presets`
 - `/pack list` · `/pack use <pack>/<sound> as kick` · `/pack info vcsl`

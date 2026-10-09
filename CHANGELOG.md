@@ -4,6 +4,11 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ## Unreleased
 
+### Added
+
+- **Electric keys.** Three new keys families on the modelled-piano `keys` field: `epiano` (a tine piano with a nonlinear pickup at 2x oversampling, `bark` and `bell`, and the `vibe` suitcase stereo vibrato), `wurli` (a reed piano with a capacitive pickup and a `trem` tremolo) and `clav` (neck and bridge pickups with `pickup neck|bridge|both|out` and a `mute` slider, seeded per track, with a release plunk). Presets `epiano suitcase dyno wurli clav funkclav`, aliases `rhodes wurlitzer clavinet`. `epiano preset suitcase`, `clav pickup bridge`, Sound › browse sounds › Keys › Electric and the electric rows in Sound › Parameters, `set_instrument` and `set_keys`, and `track({ instrument: "suitcase" })` in the SDK. The legacy word `keys` is unchanged.
+- **Soft pedal and sostenuto.** The modelled pianos take `softPedal` (una corda: fewer unison strings, a softer hammer and a darker, quieter note, read at each onset) and `sostenuto` (holds only the keys already down when it presses). `pedal soft 0-8`, `pedal sost 0-4`, the Soft pedal and Sostenuto rows in Sound › performance, the `set_piano_pedals` agent tool and `track({ softPedal, sostenuto })` in the SDK (1.26.0). The piano parameter `keys sym` adds sympathetic string resonance while the sustain pedal is down. Tracks without them render byte-identically.
+
 ## 0.6.0
 
 Instruments: plucked strings, mallets and bells, a modelled piano, granular clouds, fitting samples to the tempo map, and a guitar rig, all built on the 0.5 foundations. Every new field is optional, so 0.4 and 0.5 projects load, print and render byte-identically.
