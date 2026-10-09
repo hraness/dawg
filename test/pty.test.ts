@@ -229,8 +229,8 @@ test.skipIf(!supported)(
     const t = await launch(100, 30, {}, []);
     await t.until(() => t.vt.text().includes("STEER"), "prompt");
     expect(t.vt.text()).toContain("created .dawg/ · add it to .gitignore");
-    expect(t.vt.text()).toContain(
-      "main · empty · type a request · ctrl-p play · ctrl-k menu",
+    expect(t.vt.text()).toMatch(
+      /main · empty · [^\n]* · ctrl-p play · ctrl-k menu/,
     );
 
     // A drum command on a melodic track is a failure, drawn in the error role.

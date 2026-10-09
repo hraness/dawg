@@ -1,0 +1,153 @@
+/**
+ * Seeded hints: the empty-highway line and the prompt placeholder.
+ *
+ * Each list is chosen by what the session can do (an agent or commands
+ * only) and what the song holds (empty, pitched, drums), and one entry is
+ * picked by hashing the session id, so a session keeps the same words
+ * while it runs and the next session reads a different, equally short one.
+ * Every example is original and every command in it runs as typed.
+ */
+
+export type HintState = Readonly<{
+  /** The session id (or any stable string): the seed. */
+  seed: string;
+  /** An agent provider is ready, so prose requests work. */
+  agent: boolean;
+  /** The song has notes, clips or layers. */
+  filled: boolean;
+  /** The focused track is a drum kit. */
+  drums?: boolean;
+  /** The agent is busy and Enter queues for after it. */
+  queue?: boolean;
+}>;
+
+/** FNV-1a: a small, stable string hash. */
+export function seedHash(seed: string): number {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash >>> 0;
+}
+
+/** The entry of `list` the seed picks; `salt` decorrelates two lists. */
+export function pick<T>(list: readonly T[], seed: string, salt = ""): T {
+  return list[seedHash(`${salt}:${seed}`) % list.length]!;
+}
+
+/** Prose requests an agent understands, for the placeholder. */
+const ASK_EMPTY = [
+  "describe a song — “a slow lofi loop in F with soft drums”",
+  "describe a song — “a four-bar house groove at 124 BPM”",
+  "describe a song — “a sad waltz for piano and cello”",
+  "describe a song — “a bright synth arpeggio in D major”",
+  "describe a song — “a dusty boom bap beat with a walking bass”",
+] as const;
+
+const ASK_FILLED = [
+  "describe a change — “add a walking bass in A minor”",
+  "describe a change — “make the drums swing a little”",
+  "describe a change — “double the melody an octave up”",
+  "describe a change — “add reverb to the keys”",
+  "describe a change — “slow it to 90 BPM and add a fill”",
+] as const;
+
+const ASK_DRUMS = [
+  "describe a change — “a ghost-note snare on the offbeats”",
+  "describe a change — “open hats on every and”",
+  "describe a change — “a crash on bar one, then a fill”",
+] as const;
+
+/** Commands that run without an agent, for the placeholder. */
+const TYPE_EMPTY = [
+  "try: style lofi-hip-hop · space plays · /help",
+  "try: style house 8 · then space to hear it",
+  "try: add C4 at 0 · add E4 at 1 · space plays",
+  "try: style search waltz · /help",
+] as const;
+
+const TYPE_FILLED = [
+  "try: tempo 96 · reverb 0.3 · space plays",
+  "try: style again · ctrl-z undo",
+  "try: add G4 at 2 · bars 8 · space plays",
+  "try: volume 0.6 · pan -0.2 · /help",
+] as const;
+
+const TYPE_DRUMS = [
+  "try: hit kick at 0 · hit snare at 1 · space plays",
+  "try: euclid hat 7 16 · tempo 100",
+] as const;
+
+/**
+ * Where to begin on an empty highway. An agent session invites a
+ * request; a commands-only session names a command that runs as typed.
+ */
+const EMPTY_AGENT = [
+  "type a song idea · ctrl-p play · ctrl-k menu",
+  "ask for a groove · ctrl-p play · ctrl-k menu",
+  "say what you hear · ctrl-p play · ctrl-k menu",
+] as const;
+
+const EMPTY_COMMANDS = [
+  "style house to start · ctrl-p play · ctrl-k menu",
+  "add C4 at 0 to start · ctrl-p play · ctrl-k menu",
+  "style search jazz · ctrl-p play · ctrl-k menu",
+] as const;
+
+const EMPTY_COMMANDS_DRUMS = [
+  "hit kick at 0 to start · ctrl-p play · ctrl-k menu",
+  "style house to start · ctrl-p play · ctrl-k menu",
+] as const;
+
+/** The prompt placeholder for this session and state. */
+export function placeholderHint(state: HintState): string {
+  if (state.agent && state.queue) return "queue a request for after this one…";
+  const list = state.agent
+    ? state.drums && state.filled
+      ? ASK_DRUMS
+      : state.filled
+        ? ASK_FILLED
+        : ASK_EMPTY
+    : state.drums
+      ? TYPE_DRUMS
+      : state.filled
+        ? TYPE_FILLED
+        : TYPE_EMPTY;
+  return pick(list, state.seed, "placeholder");
+}
+
+/**
+ * The empty-highway line, `<name> · empty · <hint>`, shortened to `width`:
+ * the full hint, then only its first clause, then the name alone.
+ */
+export function emptyHint(
+  state: HintState,
+  name: string,
+  width: number,
+): string {
+  const list = state.agent
+    ? EMPTY_AGENT
+    : state.drums
+      ? EMPTY_COMMANDS_DRUMS
+      : EMPTY_COMMANDS;
+  const hint = pick(list, state.seed, "empty");
+  const full = `${name} · empty · ${hint}`;
+  if (full.length <= width) return full;
+  const short = `${name} · empty · ${hint.split(" · ")[0]}`;
+  if (short.length <= width) return short;
+  return `${name} · empty`.slice(0, Math.max(0, width));
+}
+
+/** Every hint string, for the shipped-text and command checks. */
+export const ALL_HINTS: readonly string[] = [
+  ...ASK_EMPTY,
+  ...ASK_FILLED,
+  ...ASK_DRUMS,
+  ...TYPE_EMPTY,
+  ...TYPE_FILLED,
+  ...TYPE_DRUMS,
+  ...EMPTY_AGENT,
+  ...EMPTY_COMMANDS,
+  ...EMPTY_COMMANDS_DRUMS,
+];

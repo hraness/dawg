@@ -23,9 +23,11 @@ import {
 } from "./activity.ts";
 import {
   paintHighway,
+  projectionFor,
   resolveBeat,
   type TrackScoreSnapshot,
 } from "./highway.ts";
+import { placeholderHint } from "./hints.ts";
 import { asciiHint, fitHint, HINTS } from "./grammar.ts";
 import { GuideBrowser } from "./guide.ts";
 import { listGuides } from "../guides/index.ts";
@@ -553,6 +555,7 @@ function paintActivity(
   ui: UiState,
   width: number,
   nowMs: number,
+  agentOffline = false,
 ): void {
   const { theme, capabilities, activity } = ui;
   const roles = theme.roles;
@@ -621,7 +624,9 @@ function paintActivity(
         x,
         y,
         truncate(
-          "type a request · space plays on an empty prompt · /help",
+          agentOffline
+            ? "type a command · space plays on an empty prompt · /help"
+            : "type a request · space plays on an empty prompt · /help",
           limit - x,
         ),
         roles.faint,
@@ -715,11 +720,19 @@ function paintPrompt(
     const line = typed && caption ? `${typed}  ${caption}` : typed || caption!;
     buffer.text(5, top + 1, truncate(line, editorWidth - 1), faint);
   } else if (prompt.value.length === 0) {
-    const placeholder = view.agentOffline
-      ? "try: tempo 96 · add C4 at 0 · /help  (dawg login enables the agent)"
-      : mode === "queue"
-        ? "queue a request for after the current one…"
-        : "describe a change — “add a walking bass in A minor”";
+    // Seeded per session (tui/hints.ts): the words stay put while you
+    // work and change between sessions, chosen by agent and song state.
+    const score = view.score;
+    const placeholder = placeholderHint({
+      seed: score.sessionId ?? "dawg",
+      agent: !view.agentOffline,
+      filled:
+        score.notes.length > 0 ||
+        (score.clips ?? []).length > 0 ||
+        (score.layers ?? []).some((layer) => layer.notes.length > 0),
+      drums: projectionFor(score).kind !== "pitch",
+      queue: mode === "queue",
+    });
     buffer.text(5, top + 1, truncate(placeholder, editorWidth - 1), faint);
   }
 
@@ -1244,6 +1257,10 @@ export function composeFrame(
           theme: ui.theme,
           capabilities: ui.capabilities,
           reducedMotion: ui.reducedMotion,
+          hint: {
+            seed: view.score.sessionId ?? "dawg",
+            agent: !view.agentOffline,
+          },
         },
       );
     if (ui.drawer)
@@ -1261,7 +1278,14 @@ export function composeFrame(
       text: ui.keys,
       hint: HINTS.keys,
     });
-  paintActivity(buffer, layout.activity, ui, width, nowMs);
+  paintActivity(
+    buffer,
+    layout.activity,
+    ui,
+    width,
+    nowMs,
+    view.agentOffline ?? false,
+  );
   const prompt = paintPrompt(buffer, view, ui, layout, width);
   return {
     buffer,

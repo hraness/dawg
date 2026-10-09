@@ -10,6 +10,7 @@
  * lane per voice with a legend.
  */
 
+import { emptyHint } from "./hints.ts";
 import { CellBuffer } from "./screen.ts";
 import { truncate } from "./text.ts";
 import {
@@ -472,6 +473,8 @@ export interface HighwayOptions {
   lookaheadBeats?: number;
   /** Background style painted under the highway. */
   background?: Style;
+  /** Seed and agent presence for the empty-state hint (tui/hints.ts). */
+  hint?: Readonly<{ seed: string; agent: boolean }> | undefined;
 }
 
 export interface HighwayLayout {
@@ -698,12 +701,16 @@ export function paintHighway(
 
   if (empty) {
     const name = score.trackName ?? score.trackId ?? "track";
-    const start = projection.kind === "pitch" ? "add C4 at 0" : "hit kick at 0";
-    // First run: name the three ways in (ask, play, menu); narrow
-    // windows fall back to one prompt command.
-    const full = `${name} · empty · type a request · ctrl-p play · ctrl-k menu`;
-    const text = truncate(
-      full.length <= areaWidth ? full : `${name} · empty · ${start} to start`,
+    // One seeded line names a way in that works in this session: a
+    // request with an agent, a command without one (tui/hints.ts).
+    const text = emptyHint(
+      {
+        seed: options.hint?.seed ?? score.sessionId ?? "dawg",
+        agent: options.hint?.agent ?? true,
+        filled: false,
+        drums: projection.kind !== "pitch",
+      },
+      name,
       areaWidth,
     );
     const x = gutter + Math.max(0, Math.floor((areaWidth - text.length) / 2));
