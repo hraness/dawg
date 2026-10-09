@@ -1889,6 +1889,47 @@ async function submit(prompt: string): Promise<string | Receipt> {
   }
   // `/track piano b`: a name with spaces focuses the track of that name, or
   // creates `piano-b` named "piano b".
+  // `/track rm <name>` and `/track move <name> <position>`: the human surface
+  // for the removeTrack and moveTrack operations (undo brings a track back).
+  const trackEdit = command.match(
+    /^\/track\s+(rm|remove|move)\s+([a-z0-9._-]{1,64})(?:\s+(\d{1,3}))?$/i,
+  );
+  if (trackEdit) {
+    const verb = trackEdit[1]!.toLowerCase();
+    const wanted = trackEdit[2]!.toLowerCase();
+    const found = score.tracks.find(
+      (track) =>
+        track.id.toLowerCase() === wanted ||
+        (track.name ?? "").toLowerCase() === wanted,
+    );
+    if (!found) return fail(`no track ${trackEdit[2]} · /tracks lists them`);
+    if (verb === "move") {
+      const position = Number(trackEdit[3]);
+      if (!trackEdit[3] || position < 1 || position > score.tracks.length)
+        return fail(`usage · /track move <name> <1..${score.tracks.length}>`);
+      const next = applyScoreOperation(score, {
+        type: "moveTrack",
+        trackId: found.id,
+        index: position - 1,
+      });
+      await commitScore(next, "track.move", { trackId: found.id });
+      await projectSync?.flushScore();
+      return ok(`moved ${found.id} to position ${position}`);
+    }
+    if (trackEdit[3]) return fail("usage · /track rm <name>");
+    if (score.tracks.length <= 1) return fail("the last track stays");
+    const next = applyScoreOperation(score, {
+      type: "removeTrack",
+      trackId: found.id,
+    });
+    await commitScore(next, "track.remove", { trackId: found.id });
+    await projectSync?.flushScore();
+    if (found.id === requestedTrack) {
+      const fallback = next.tracks[0]!.id;
+      await focusTrack(fallback);
+    }
+    return ok(`removed ${found.id} · ^z undo`);
+  }
   const namedTrack = command.match(/^\/track\s+([a-z0-9._ -]{1,64})$/i);
   if (namedTrack) {
     const name = namedTrack[1]!.trim().replace(/\s+/g, " ");

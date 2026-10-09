@@ -352,10 +352,18 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "focus a track, creating it if new",
       },
       { command: "/tracks", summary: "list tracks" },
+      {
+        command: "/track rm|move <name> [<position>]",
+        summary: "remove a track (^z undo) or move it in the list",
+      },
       { command: "/view focus|all", summary: "one track or every track" },
       { command: "/transcript", summary: "scrollable log · Ctrl-O" },
       { command: "/theme default|high-contrast|mono", summary: "colors" },
       { command: "/motion on|off", summary: "animation" },
+      {
+        command: "/showme on|quiet|off",
+        summary: "agent types its commands in the prompt bar as it streams",
+      },
       { command: "/model [alias]", summary: "pick a model · cost per prompt" },
       {
         command: "/login [gateway|openrouter|codex|claude]",

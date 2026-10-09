@@ -123,6 +123,14 @@ const LINES = [
   "instrument kit",
   "hit kick at 0",
   "pattern hat 0 0.5 1 1.5",
+  "/track pad",
+  "/track move pad 1",
+  "/track rm pad",
+  "bars 8",
+  "key A minor",
+  "meter 3",
+  "automate volume at 0 0.5",
+  "clear hat",
 ];
 
 test.skipIf(!supported)(
@@ -184,6 +192,13 @@ test.skipIf(!supported)(
     for (const line of LINES) await typed.send(`${line}\r`);
     await Bun.sleep(300);
     const byHand = await composition(typed.cwd);
+    // The lines really ran (not failed alike in both windows).
+    expect(
+      (byHand.tracks as { id: string }[]).map((track) => track.id),
+    ).toEqual(["main", "drums"]);
+    expect(byHand.bars).toBe(8);
+    expect(byHand.tempoBpm).toBe(96);
+    expect(JSON.stringify(byHand)).toContain('"mix":0.4');
     await quit(typed);
 
     replies = [gated([`${LINES.join("\n")}\nDone.`])];
@@ -191,7 +206,7 @@ test.skipIf(!supported)(
     await streamed.until(() => streamed.vt.text().includes("STEER"), "prompt");
     await streamed.send("build it\r");
     await streamed.until(
-      () => streamed.vt.text().includes("do it yourself: type pattern hat"),
+      () => streamed.vt.text().includes("do it yourself: type clear hat"),
       "finished",
       10_000,
     );
