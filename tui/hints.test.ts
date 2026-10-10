@@ -94,6 +94,19 @@ describe("seeded hints", () => {
     );
   });
 
+  test("the empty line and the placeholder never suggest different styles", () => {
+    for (let index = 0; index < 200; index += 1) {
+      const state = { seed: `s${index}`, agent: false, filled: false };
+      const line = emptyHint(state, "keys", 120);
+      const prompt = placeholderHint(state);
+      const styles = [line, prompt]
+        .map((text) => text.match(/\bstyle (?!search)([a-z-]+)/)?.[1])
+        .filter(Boolean);
+      expect(new Set(styles).size).toBeLessThanOrEqual(1);
+      expect(prompt).not.toContain("space plays");
+    }
+  });
+
   test("suggested styles have cards", () => {
     for (const id of SUGGESTED_STYLES)
       expect([id, STYLE_IDS.includes(id)]).toEqual([id, true]);

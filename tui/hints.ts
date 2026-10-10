@@ -63,23 +63,27 @@ const ASK_DRUMS = [
   "describe a change — “a crash on bar one, then a fill”",
 ] as const;
 
-/** Commands that run without an agent, for the placeholder. */
+/**
+ * Commands that run without an agent, for the placeholder. `{style}` is the
+ * same seeded style the wide empty line suggests, so the two lines never
+ * offer competing first steps.
+ */
 const TYPE_EMPTY = [
-  "try: style lofi-hip-hop · space plays · /help",
-  "try: style house 8 · then space to hear it",
-  "try: add C4 at 0 · add E4 at 1 · space plays",
-  "try: style search waltz · /help",
+  "try: style {style} · space play · /help",
+  "try: style {style} 8 · then space to hear it",
+  "try: add C4 at 0 · add E4 at 1 · space play",
+  "try: style {style} · ctrl-z undo",
 ] as const;
 
 const TYPE_FILLED = [
-  "try: tempo 96 · reverb 0.3 · space plays",
+  "try: tempo 96 · reverb 0.3 · space play",
   "try: style again · ctrl-z undo",
-  "try: add G4 at 2 · bars 8 · space plays",
+  "try: add G4 at 2 · bars 8 · space play",
   "try: volume 0.6 · pan -0.2 · /help",
 ] as const;
 
 const TYPE_DRUMS = [
-  "try: hit kick at 0 · hit snare at 1 · space plays",
+  "try: hit kick at 0 · hit snare at 1 · space play",
   "try: euclid hat 7 16 · tempo 100",
 ] as const;
 
@@ -124,7 +128,15 @@ export function placeholderHint(state: HintState): string {
       : state.filled
         ? TYPE_FILLED
         : TYPE_EMPTY;
-  return pick(list, state.seed, "placeholder");
+  return pick(list, state.seed, "placeholder").replace(
+    "{style}",
+    sessionStyle(state.seed),
+  );
+}
+
+/** The one style this session suggests, on the empty line and the prompt. */
+export function sessionStyle(seed: string): string {
+  return pick(SUGGESTED_STYLES, seed, "style");
 }
 
 /**
@@ -149,7 +161,7 @@ export function emptyHint(
     : state.vocal
       ? LEAD_VOCAL
       : width >= STYLE_HINT_WIDTH && !state.playing
-        ? `try style ${pick(SUGGESTED_STYLES, state.seed, "style")}`
+        ? `try style ${sessionStyle(state.seed)}`
         : undefined;
   const head = `${name} · empty`;
   const candidates = [
@@ -167,7 +179,9 @@ export const ALL_HINTS: readonly string[] = [
   ...ASK_EMPTY,
   ...ASK_FILLED,
   ...ASK_DRUMS,
-  ...TYPE_EMPTY,
+  ...TYPE_EMPTY.flatMap((hint) =>
+    SUGGESTED_STYLES.map((id) => hint.replace("{style}", id)),
+  ),
   ...TYPE_FILLED,
   ...TYPE_DRUMS,
   KEYS_PAUSED,

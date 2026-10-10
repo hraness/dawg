@@ -32,9 +32,6 @@ const PTY_KNOWN_GAPS: readonly string[] = [
   "tempo",
   "formant 3",
   "lyrics",
-  // C15 and D (feel and language lanes): the offline prompt still says
-  // `dawg login` instead of the model-key card.
-  "offline first run",
 ];
 
 /** Every case the suites record; a case that throws early still counts. */
@@ -153,14 +150,15 @@ describe.skipIf(!supported)("real PTY at 80x24: topics and first run", () => {
     }
   }, 120_000);
 
-  test("first run welcomes; offline first run offers the model key", async () => {
+  test("first run opens the editor with the model key card; offline too", async () => {
+    // C1: no picker on first run; one optional card names `/model key`.
     const online = await launch(80, 24, { AI_GATEWAY_API_KEY: "" }, []);
     try {
       await online.until(
-        () => screen(online).includes("Welcome to dawg"),
-        "welcome",
+        () => ready(online) && screen(online).includes("/model key"),
+        "model key card",
       );
-      expect(screen(online)).toContain("Esc to skip");
+      expect(screen(online)).not.toContain("Welcome to dawg");
       record("first run", screen(online));
     } finally {
       await stop(online);
@@ -168,13 +166,14 @@ describe.skipIf(!supported)("real PTY at 80x24: topics and first run", () => {
     const offline = await launch(80, 24, OFFLINE, []);
     try {
       await offline.until(
-        () => ready(offline) && screen(offline).includes("try: tempo 96"),
+        () => ready(offline) && screen(offline).includes("try: "),
         "offline prompt",
       );
       // §8.2: the agent key is `/model key`; login is only a typed alias.
+      // DAWG_AI=0 turned the agent off on purpose, so nothing nags about
+      // it; the online first run above shows the `/model key` card.
       const text = screen(offline);
-      const ok =
-        !/\blogin\b|sign.?in/i.test(text) && text.includes("/model key");
+      const ok = !/\blogin\b|sign.?in/i.test(text);
       record("offline first run", ok ? text : `✗ ${text}`);
     } finally {
       await stop(offline);
@@ -187,7 +186,8 @@ describe.skipIf(!supported)("real PTY at 80x24: topics and first run", () => {
     try {
       await t.until(() => ready(t), "ready");
       const style = await run(t, "/style deep-house");
-      expect(receipt(t)).toContain("✓ style deep-house");
+      // §6: the receipt names the musical change, not the verb.
+      expect(receipt(t)).toContain("✓ deep-house ·");
       // House style: BPM in capitals.
       expect(receipt(t)).toContain("BPM");
       expect(receipt(t)).not.toMatch(/\bbpm\b/);
