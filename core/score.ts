@@ -2109,7 +2109,11 @@ function migrateHiddenLoop(data: {
       typeof section?.name === "string" &&
       section.name.trim().toLowerCase() === "loop",
   );
-  if (!hidden || !Number.isInteger(hidden.startBar) || !Number.isInteger(hidden.bars))
+  if (
+    !hidden ||
+    !Number.isInteger(hidden.startBar) ||
+    !Number.isInteger(hidden.bars)
+  )
     return;
   data.loop = { startBar: hidden.startBar, bars: hidden.bars };
   data.loopSection = null;

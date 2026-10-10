@@ -112,10 +112,7 @@ export function sectionCues(
 export function loopedSection(score: TrackScore): Section | undefined {
   if (score.loop) {
     const startBar = Math.min(score.loop.startBar, score.bars - 1);
-    const bars = Math.max(
-      1,
-      Math.min(score.loop.bars, score.bars - startBar),
-    );
+    const bars = Math.max(1, Math.min(score.loop.bars, score.bars - startBar));
     return { name: "loop", startBar, bars };
   }
   return score.loopSection === undefined

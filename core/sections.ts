@@ -548,7 +548,10 @@ export const TRACK_LANES = [
 ] as const;
 
 /** Applies `edit` to every automation lane of `track`. */
-export function mapAutomation(track: Track, edit: (points: Points) => Points): Track {
+export function mapAutomation(
+  track: Track,
+  edit: (points: Points) => Points,
+): Track {
   const out: Record<string, unknown> = { ...track };
   let changed = false;
   for (const field of TRACK_LANES) {

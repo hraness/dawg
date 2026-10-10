@@ -446,7 +446,10 @@ function parseFormWords(
   lower: readonly string[],
 ): SectionCommand | undefined {
   if (words.length === 0) return { type: "form-show" };
-  if (lower.length === 1 && (lower[0] === "bake" || lower[0] === "flatten" || lower[0] === "print"))
+  if (
+    lower.length === 1 &&
+    (lower[0] === "bake" || lower[0] === "flatten" || lower[0] === "print")
+  )
     return { type: "form-bake" };
   if (lower.length === 1 && (lower[0] === "off" || lower[0] === "none"))
     return { type: "form-set", text: "" };
