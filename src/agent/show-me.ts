@@ -17,6 +17,7 @@ import {
   parseDrumVoice,
 } from "../../core/drums.ts";
 import type { TrackScore } from "../../core/score.ts";
+import { workspaceRelative } from "../commands/grammar.ts";
 import { commandParses } from "../commands/parses.ts";
 import { NOTE_KEYS, defaultBaseFor } from "../tui/play-mode.ts";
 import { parsePrompt } from "./ops.ts";
@@ -90,9 +91,27 @@ const WINDOW_ONLY =
 export function isAgentCommand(line: string, score: TrackScore): boolean {
   if (line.length === 0 || line.length > MAX_COMMAND_LINE) return false;
   if (WINDOW_ONLY.test(line)) return false;
+  if (!agentPathsAllowed(line)) return false;
   if (/^\/?track\s+[a-z0-9._ -]{1,64}$/i.test(line)) return true;
   if (/^\/(?:pattern|kit)\s+\S/i.test(line)) return true;
   return commandParses(line, score);
+}
+
+/** Verbs whose arguments name files on disk. */
+const PATH_VERBS = /^\/?(?:export|import|sample|tuning)\s+(.*)$/i;
+
+/**
+ * Whether every file the line names stays inside the workspace: the agent
+ * may not export over, import or load a path that is absolute, under home
+ * or climbs out with `..`. A typed command keeps absolute paths.
+ */
+export function agentPathsAllowed(line: string): boolean {
+  const args = line.trim().match(PATH_VERBS)?.[1];
+  if (args === undefined) return true;
+  return args
+    .split(/\s+/)
+    .filter((token) => token.length > 0)
+    .every((token) => workspaceRelative(token));
 }
 
 /** One key of the qwerty play keyboard and how to reach its octave. */

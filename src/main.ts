@@ -268,6 +268,7 @@ import {
   finishHint,
   gestureFor,
   glideValues,
+  agentPathsAllowed,
   isAgentCommand,
   parseShowMe,
   toolCaption,
@@ -5331,6 +5332,15 @@ function showMeCommandHost(): AgentHost["commands"] {
   return {
     isCommand: (line) => isAgentCommand(line, score),
     async run(line): Promise<CommandOutcome> {
+      if (!agentPathsAllowed(line)) {
+        const revision = shownRevision(record);
+        return {
+          ok: false,
+          message: `${line} · the agent works only inside this folder`,
+          baseRevision: revision,
+          resultRevision: revision,
+        };
+      }
       const gesture = gestureFor(line, { score, trackId: requestedTrack });
       showMeCaption(gesture.caption);
       showMe.commands.push(line);

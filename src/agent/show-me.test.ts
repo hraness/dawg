@@ -66,6 +66,17 @@ describe("isAgentCommand", () => {
     expect(isAgentCommand("/quit", score)).toBe(false);
     expect(isAgentCommand("/showme off", score)).toBe(false);
   });
+
+  test("keeps agent file paths inside the workspace", () => {
+    expect(isAgentCommand("export mix.wav", score)).toBe(true);
+    expect(isAgentCommand("export mix/song.mid", score)).toBe(true);
+    expect(isAgentCommand("export /tmp/x.wav", score)).toBe(false);
+    expect(isAgentCommand("export ../x.wav", score)).toBe(false);
+    expect(isAgentCommand("/export ~/.zshrc", score)).toBe(false);
+    expect(isAgentCommand("import /etc/passwd", score)).toBe(false);
+    expect(isAgentCommand("/sample ../../a.wav as a", score)).toBe(false);
+    expect(isAgentCommand("tuning scl /tmp/a.scl", score)).toBe(false);
+  });
 });
 
 describe("gestures", () => {
