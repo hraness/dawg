@@ -1,6 +1,6 @@
 /**
  * Mouse and the fader drawer end to end in a real PTY: SGR reports click
- * [+], drag the bar, pick an option and press [keep]; header pills and
+ * [+], drag the bar, pick an option and press enter keep; header pills and
  * picker rows respond; mouse reporting is off again after exit, and never
  * on with --no-mouse.
  */
@@ -95,7 +95,7 @@ test.skipIf(!supported)(
       const cutoff = locate(t, "› cutoff");
       const plus = locate(t, "[+]", cutoff.y);
       await t.send(click(plus.x + 1, plus.y));
-      await t.until(() => t.vt.text().includes("● staged"), "staged");
+      await t.until(() => t.vt.text().includes("change staged"), "staged");
       expect((await bass())?.filter).toBeUndefined();
 
       // Drag the cutoff bar to its right end, then wheel it down one notch.
@@ -115,8 +115,8 @@ test.skipIf(!supported)(
       await t.send(click(hpf.x, hpf.y));
       await t.until(() => /type\s+.*hpf/.test(t.vt.text()), "type row");
 
-      // [keep] commits every staged edit as one step.
-      const keep = locate(t, "[keep]");
+      // `enter keep` in the badge commits every staged edit as one step.
+      const keep = locate(t, "enter keep");
       await t.send(click(keep.x + 2, keep.y));
       await t.until(() => t.vt.text().includes("kept"), "kept");
       await waitFor(async () => {
@@ -162,19 +162,19 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("› Effects"), "selected");
       await t.send(click(effects.x, effects.y));
       await t.until(() => t.vt.text().includes("menu › Effects"), "opened");
-      const filter = locate(t, "Filter");
+      const filter = locate(t, "filter ");
       await t.send(click(filter.x, filter.y));
       await t.send(click(filter.x, filter.y));
-      await t.until(() => t.vt.text().includes("› Filter"), "filter");
+      await t.until(() => t.vt.text().includes("› filter"), "filter");
       // Enter on a number row opens its fader; → stages, Esc reverts.
       const cutoff = locate(t, "cutoff");
       await t.send(click(cutoff.x, cutoff.y));
       await t.send(click(cutoff.x, cutoff.y));
       await t.until(() => t.vt.text().includes("[−]"), "drawer");
       await t.send("\u001b[C");
-      await t.until(() => t.vt.text().includes("● staged"), "staged");
+      await t.until(() => t.vt.text().includes("change staged"), "staged");
       await t.send("\u001b");
-      await t.until(() => !t.vt.text().includes("● staged"), "reverted");
+      await t.until(() => !t.vt.text().includes("change staged"), "reverted");
       await t.until(() => !t.vt.text().includes("[−]"), "drawer closed");
     } finally {
       t.terminal.write("\u0003");

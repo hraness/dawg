@@ -71,10 +71,10 @@ test.skipIf(!supported)(
       await t.send("/Sound");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("menu › Sound"), "sound");
-      await t.send("/browse");
+      await t.send("/instruments");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("Strings"), "browse");
-      await t.send("/Strings");
+      await t.until(() => t.vt.text().includes("strings"), "browse");
+      await t.send("/strings");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("koto"), "strings group");
       await t.send("/Bowed");

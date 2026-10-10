@@ -234,7 +234,7 @@ export function performanceNodes(context: MenuContext): MenuNode[] {
     },
     {
       kind: "number",
-      label: "humanize velocity (%)",
+      label: "humanize vel (%)",
       value: humanize ? velocity : undefined,
       min: 0,
       max: EXPRESSION_LIMITS.maxHumanizePercent,

@@ -51,10 +51,10 @@ function open(nodes: MenuNode[], id: string, ctx: MenuContext): MenuNode[] {
   return node.build(ctx);
 }
 
-describe("Sound > Voice > Clips and Lyrics", () => {
+describe("Voice › clips and lyrics", () => {
   test("clip rows run /clip commands that stage for A/B", () => {
     const ctx = context();
-    const voice = open(open(rootNodes(ctx), "sound", ctx), "voice", ctx);
+    const voice = open(rootNodes(ctx), "voice", ctx);
     const clips = open(voice, "voice:clips", ctx);
     expect(clips.map((n) => n.label)).toEqual([
       "hook",
@@ -80,8 +80,8 @@ describe("Sound > Voice > Clips and Lyrics", () => {
 
   test("lyrics row shows the sung text and runs /lyrics", () => {
     const ctx = context();
-    const voice = open(open(rootNodes(ctx), "sound", ctx), "voice", ctx);
-    const lyrics = voice.find((n) => n.label === "Lyrics")!;
+    const voice = open(rootNodes(ctx), "voice", ctx);
+    const lyrics = voice.find((n) => n.label === "lyrics")!;
     if (lyrics.kind === "menu") expect(lyrics.detail).toBe("la");
     const rows = open(voice, "voice:lyrics", ctx);
     const entry = rows[0]!;
@@ -89,12 +89,12 @@ describe("Sound > Voice > Clips and Lyrics", () => {
       expect(entry.command("hel-lo")).toBe("/lyrics hel-lo");
   });
 
-  test("browse sounds > Voices > Vocal sets the vocal instrument", () => {
+  test("Voice › voice presets › vocal sets the vocal instrument", () => {
     const ctx = context();
-    const browse = open(open(rootNodes(ctx), "sound", ctx), "browse", ctx);
-    const voices = open(browse, "group:voices", ctx);
+    const voice = open(rootNodes(ctx), "voice", ctx);
+    const voices = open(voice, "voice:presets", ctx);
     const vocal = voices[0]!;
-    expect(vocal.label.startsWith("Vocal")).toBe(true);
+    expect(vocal.label.startsWith("vocal")).toBe(true);
     if (vocal.kind === "action") {
       expect(vocal.command).toBe("instrument vocal");
       expect(isStageable(vocal.command)).toBe(true);

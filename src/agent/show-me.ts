@@ -18,7 +18,9 @@ import {
 } from "../../core/drums.ts";
 import type { TrackScore } from "../../core/score.ts";
 import { workspaceRelative } from "../commands/grammar.ts";
+import { looksLikeProse, nearestCommand, usageHint } from "../commands/help.ts";
 import { commandParses } from "../commands/parses.ts";
+import { menuPath } from "../tui/menu.ts";
 import { NOTE_KEYS, defaultBaseFor } from "../tui/play-mode.ts";
 import { parsePrompt } from "./ops.ts";
 
@@ -93,7 +95,8 @@ export function isAgentCommand(line: string, score: TrackScore): boolean {
   if (WINDOW_ONLY.test(line)) return false;
   if (!agentPathsAllowed(line)) return false;
   if (/^\/?track\s+[a-z0-9._ -]{1,64}$/i.test(line)) return true;
-  if (/^\/(?:pattern|kit)\s+\S/i.test(line)) return true;
+  // Bare `pattern house` and `kit 808`, as a person types them.
+  if (/^\/?(?:pattern|kit)\s+\S/i.test(line)) return true;
   return commandParses(line, score);
 }
 
@@ -112,6 +115,32 @@ export function agentPathsAllowed(line: string): boolean {
     .split(/\s+/)
     .filter((token) => token.length > 0)
     .every((token) => workspaceRelative(token));
+}
+
+/**
+ * A line the agent meant as a command that does not parse: a slash word,
+ * or a lowercase line led by a known verb (or a near typo of one) that is
+ * not a sentence. Show-me runs nothing for it and shows a red receipt
+ * (brokenCommandReceipt) instead of letting it pass as prose.
+ */
+export function isBrokenCommand(line: string, score: TrackScore): boolean {
+  if (line.length === 0 || line.length > MAX_COMMAND_LINE) return false;
+  if (isAgentCommand(line, score) || WINDOW_ONLY.test(line)) return false;
+  if (line.startsWith("/")) return /^\/[a-z]/i.test(line);
+  if (!/^[a-z]/.test(line) || /[.!?:]$/.test(line)) return false;
+  if (looksLikeProse(line) && !usageHint(line)) return false;
+  return usageHint(line) !== undefined || nearestCommand(line) !== undefined;
+}
+
+/**
+ * The red receipt for a broken agent command: what failed, the usage or
+ * the nearest command when there is one. Never prose.
+ */
+export function brokenCommandReceipt(line: string): string {
+  const usage = usageHint(line);
+  const nearest = nearestCommand(line);
+  const hint = usage ?? (nearest ? `did you mean ${nearest}?` : undefined);
+  return `✗ ${line}${hint ? ` · ${hint}` : " · not a dawg command"}`;
 }
 
 /** One key of the qwerty play keyboard and how to reach its octave. */
@@ -259,19 +288,51 @@ export function gestureFor(
   return { kind: "typed", command, caption: `typing ${command}` };
 }
 
-/** The menu path a command's setting also lives at, for the finish hint. */
+/** Where each command's setting lives in Ctrl-K, as a `/menu` id. */
+const MENU_HOME: Readonly<Record<string, string>> = {
+  synth: "sound",
+  sound: "sound",
+  tempo: "tempo",
+  bpm: "tempo",
+  meter: "tempo",
+  euclid: "rhythm",
+  groove: "patterns",
+  pattern: "patterns",
+  kit: "kits",
+  master: "master",
+  automate: "automation",
+  section: "arrange",
+  form: "arrange",
+  style: "style",
+  tuning: "tuning",
+  key: "chords",
+  chords: "chords",
+  sing: "voice",
+  lyrics: "voice",
+  autotune: "voice",
+  vocode: "voice",
+  export: "export",
+  model: "agent",
+  showme: "agent",
+};
+
+/**
+ * The menu path a command's setting also lives at, for the finish hint:
+ * `Ctrl-K › Effects › reverb`, from the menu's live labels (menuPath).
+ */
 export function menuPathFor(command: string): string | undefined {
   const words = command.replace(/^\//, "").toLowerCase().split(/\s+/);
-  if (words[0] === "volume" || words[0] === "pan")
-    return `ctrl-k › Mix & automation › ${words[0]}`;
-  if (words[0] === "fx" && words[1]) return `ctrl-k › Effects › ${words[1]}`;
-  if (words[0] === "synth") return "ctrl-k › Sound";
-  if (words[0] === "tempo" || words[0] === "bpm")
-    return "ctrl-k › Project › tempo";
-  if (words[0] === "euclid") return "ctrl-k › Rhythm";
-  if (words[0] === "master") return "ctrl-k › Mix & automation › master";
-  if (words[0] === "section" || words[0] === "form") return "ctrl-k › Arrange";
-  return undefined;
+  const verb = words[0] ?? "";
+  if (verb === "volume" || verb === "pan") {
+    const mix = menuPath("mix");
+    return mix && `${mix} › ${verb}`;
+  }
+  if (verb === "fx" && words[1]) {
+    const effects = menuPath("effects");
+    return effects && `${effects} › ${words[1]}`;
+  }
+  const home = MENU_HOME[verb];
+  return home ? menuPath(home) : undefined;
 }
 
 /** Glide length for a fader: short enough to never stall a turn. */

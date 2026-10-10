@@ -30,6 +30,7 @@ const filter: DrawerView = {
   title: "menu › Effects › Filter",
   focus: 1,
   dirty: true,
+  badge: "A/B: 1 change staged · enter keep · esc revert",
   status: "loop off · B staged 1",
   hint: "←→ adjust · ⇧←→ coarse · [ ] fine · ↑↓ param · 0-9 type · d default · enter keep · esc revert",
   fields: [
@@ -99,7 +100,8 @@ for (const [cols, rows] of [
     expect(text).toContain("20 Hz … 20000 Hz");
     expect(text).toContain("[−]");
     expect(text).toContain("[+]");
-    expect(text).toContain("[keep] [revert]");
+    expect(text).toContain("A/B: 1 change staged");
+    expect(text).not.toContain("B staged 1");
     expect(text).toContain("lpf");
     expect(
       lines.slice(drawer.top, drawer.top + drawer.height),
@@ -172,9 +174,10 @@ test("click targets come from the paint pass", () => {
     field: 0,
     option: 1,
   });
-  const keep = find("[keep]");
+  // The badge's key words in the title are the click targets.
+  const keep = find("enter keep");
   expect(hits.at(keep.x + 2, keep.y)?.target).toEqual({ kind: "fader-keep" });
-  const revert = find("[revert]");
+  const revert = find("esc revert");
   expect(hits.at(revert.x + 2, revert.y)?.target).toEqual({
     kind: "fader-revert",
   });

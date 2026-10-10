@@ -99,16 +99,13 @@ test.skipIf(!supported)(
       await t.send("/lyrics hel-lo world\r");
       await t.until(() => t.vt.text().includes("lyrics on"), "lyrics");
 
-      // ctrl-k > Sound > Voice > Clips shows the clip.
+      // ctrl-k > Voice > clips shows the clip.
       await t.send("\u000b");
       await t.until(() => t.vt.text().includes("Arrange"), "menu root");
-      await t.send("/Sound");
-      await t.send("\r");
-      await t.until(() => t.vt.text().includes("menu › Sound"), "sound");
       await t.send("/Voice");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("Clips"), "voice group");
-      await t.send("/Clips");
+      await t.until(() => t.vt.text().includes("menu › Voice"), "voice");
+      await t.send("/clips");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("import a file"), "clips rows");
       expect(t.vt.text()).toContain(clip.id);

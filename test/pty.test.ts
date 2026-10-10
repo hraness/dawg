@@ -469,7 +469,7 @@ test.skipIf(!supported)(
 );
 
 test.skipIf(!supported)(
-  "real PTY: strum and guitar commands, then Effects > Shoegaze in the menu",
+  "real PTY: strum and guitar commands, then Effects › shoegaze in the menu",
   async () => {
     const t = await launch(110, 34, { AI_GATEWAY_API_KEY: "", DAWG_AI: "0" }, [
       "--track",
@@ -491,7 +491,7 @@ test.skipIf(!supported)(
     await t.send("rig shoegaze\r");
     await t.until(() => t.vt.text().includes("rig shoegaze ·"), "rig");
     await t.send("/menu effects\r");
-    await t.until(() => t.vt.text().includes("Shoegaze"), "effects menu");
+    await t.until(() => t.vt.text().includes("shoegaze  "), "effects menu");
     expect(t.vt.text()).toContain("wobble, bloom, double");
     await t.send("\u001b");
     await t.send("\u001b");

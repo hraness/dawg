@@ -52,14 +52,17 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("\u000b");
       await t.until(() => t.vt.text().includes("Project"), "menu root");
-      await t.send("/project");
-      await t.send("\r");
-      await t.until(() => t.vt.text().includes("menu › Project"), "project");
-      await t.send("/tuning");
-      await t.until(() => t.vt.text().includes("tuning & scale"), "row");
+      await t.send("/chords and key");
       await t.send("\r");
       await t.until(
-        () => t.vt.text().includes("› tuning & scale"),
+        () => t.vt.text().includes("menu › Chords and key"),
+        "chords and key",
+      );
+      await t.send("/tuning");
+      await t.until(() => t.vt.text().includes("› tuning"), "row");
+      await t.send("\r");
+      await t.until(
+        () => t.vt.text().includes("Chords and key › tuning"),
         "tuning submenu",
       );
       expect(t.vt.text()).toContain("list scales");

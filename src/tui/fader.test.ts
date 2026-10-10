@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { createScore } from "../../core/score.ts";
 import {
+  detentLabel,
+  detentSnap,
+  detentsFor,
   drawerView,
+  stagedBadge,
   faderKeyPress,
   faderPosition,
   faderSetPosition,
@@ -74,7 +78,7 @@ describe("fader keys", () => {
     expect(press(state, "[")).toMatchObject({ command: "fx reverb mix 0.495" });
   });
 
-  test("PgUp/PgDn page, Home/End min/max, 0 and d reset", () => {
+  test("PgUp/PgDn page, Home/End min/max, x d and Delete reset", () => {
     const state: FaderState = { label: "mix" };
     expect(press(state, "\u001b[5~")).toMatchObject({
       command: "fx reverb mix 1",
@@ -88,13 +92,18 @@ describe("fader keys", () => {
     expect(press(state, "\u001b[F")).toMatchObject({
       command: "fx reverb mix 1",
     });
+    expect(press(state, "x")).toMatchObject({ command: "fx reverb mix 0.3" });
     expect(press(state, "d")).toMatchObject({ command: "fx reverb mix 0.3" });
-    expect(press(state, "0")).toMatchObject({ command: "fx reverb mix 0.3" });
+    expect(press(state, "\u001b[3~")).toMatchObject({
+      command: "fx reverb mix 0.3",
+    });
   });
 
   test("digits type an exact value; Enter sets it, Esc drops the typing", () => {
     const state: FaderState = { label: "mix" };
-    expect(press(state, "0")).toMatchObject({ type: "set" });
+    // `0` starts typing (it no longer resets).
+    expect(press(state, "0")).toEqual({ type: "handled" });
+    expect(state.typing).toBe("0");
     expect(press(state, ".")).toEqual({ type: "handled" });
     expect(state.typing).toBe("0.");
     press(state, "8");
@@ -179,7 +188,7 @@ describe("drawer view", () => {
   test("shows staged beside committed and the focused field", () => {
     const staged = [type, { ...mix, value: 0.8 }];
     const view = drawerView({ label: "mix" }, staged, [type, mix], {
-      title: "Reverb",
+      title: "reverb",
       dirty: true,
     });
     expect(view.focus).toBe(1);
@@ -246,5 +255,121 @@ describe("menu → fader fields", () => {
         expect(field.min).toBeLessThan(field.max);
       }
     }
+  });
+});
+
+describe("fader detents", () => {
+  const volume: FaderNumber = {
+    ...mix,
+    label: "volume",
+    value: 0.9,
+    step: (value, direction) =>
+      Math.round((value + direction * 0.01) * 1000) / 1000,
+    format: (value) => `${value} · ${(20 * Math.log10(value)).toFixed(1)} dB`,
+    command: (value) => `volume ${value}`,
+  };
+  const pan: FaderNumber = {
+    ...mix,
+    label: "pan",
+    value: 0.1,
+    min: -1,
+    max: 1,
+    step: (value, direction) =>
+      Math.round((value + direction * 0.05) * 100) / 100,
+    format: (value) => (value === 0 ? "center" : String(value)),
+    command: (value) => `pan ${value}`,
+  };
+  const tempo: FaderNumber = {
+    ...mix,
+    label: "tempo",
+    value: 120,
+    min: 20,
+    max: 300,
+    step: (value, direction) => value + direction,
+    format: (value) => `${value} BPM`,
+    command: (value) => `tempo ${value}`,
+  };
+
+  test("each kind of row finds its detents from its command", () => {
+    expect(detentsFor(volume)).toEqual([1]);
+    expect(detentsFor(pan)).toEqual([0]);
+    expect(detentsFor(tempo)).toBe("integer");
+    expect(detentsFor(mix)).toEqual([0, 0.5, 1]);
+    const octaves = detentsFor(cutoff) as readonly number[];
+    expect(octaves).toContain(440);
+    expect(octaves).toContain(27.5);
+    expect(detentsFor({ ...mix, command: (v) => `fx delay time ${v}` })).toBe(
+      undefined,
+    );
+  });
+
+  test("a value within 2% snaps; further away it does not", () => {
+    expect(detentSnap(volume, 0.985)).toBe(1);
+    expect(detentSnap(volume, 0.95)).toBeUndefined();
+    expect(detentSnap(pan, 0.03)).toBe(0);
+    expect(detentSnap(mix, 0.51)).toBe(0.5);
+    expect(detentSnap(tempo, 120.4)).toBe(120);
+    expect(detentSnap(cutoff, 445)).toBe(440);
+    // On the detent already: nothing to do.
+    expect(detentSnap(mix, 0.5)).toBeUndefined();
+  });
+
+  test("a key step catches a detent it jumps over, and leaves it freely", () => {
+    const state: FaderState = { label: "pan" };
+    const at = { ...pan, value: 0.03 };
+    expect(faderStep(state, at, -1)).toMatchObject({ command: "pan 0" });
+    expect(state.flash).toBe("pan");
+    const on = { ...pan, value: 0 };
+    expect(faderStep({ label: "pan" }, on, 1)).toMatchObject({
+      command: "pan 0.05",
+    });
+    expect(faderStep({ label: "pan" }, on, -1)).toMatchObject({
+      command: "pan -0.05",
+    });
+  });
+
+  test("fine steps skip detents", () => {
+    const state: FaderState = { label: "volume" };
+    const near = { ...volume, value: 0.995 };
+    expect(faderStep(state, near, 1, "fine")).toMatchObject({
+      command: "volume 0.996",
+    });
+    expect(state.flash).toBeUndefined();
+    expect(faderStep(state, near, 1)).toMatchObject({ command: "volume 1" });
+    expect(state.flash).toBe("volume");
+  });
+
+  test("a drag near 0 dB lands on 1 and flashes for one view", () => {
+    const state: FaderState = { label: "volume" };
+    expect(faderSetPosition(state, volume, 0.99)).toMatchObject({
+      command: "volume 1",
+    });
+    const view = drawerView(state, [{ ...volume, value: 1 }], [volume], {
+      title: "Mix",
+      dirty: true,
+    });
+    const field = view.fields[0]!;
+    expect(field.kind === "number" && field.flash).toBe("0 dB");
+    const again = drawerView(state, [{ ...volume, value: 1 }], [volume], {
+      title: "Mix",
+      dirty: true,
+    });
+    expect(again.fields[0]!.kind === "number" && again.fields[0]!.flash).toBe(
+      undefined,
+    );
+  });
+
+  test("detent labels and the staged badge", () => {
+    expect(detentLabel(volume, 1)).toBe("0 dB");
+    expect(detentLabel(pan, 0)).toBe("center");
+    expect(stagedBadge(1)).toBe(
+      "A/B: 1 change staged · enter keep · esc revert",
+    );
+    expect(stagedBadge(3)).toStartWith("A/B: 3 changes staged");
+    const view = drawerView({ label: "mix" }, [mix], [mix], {
+      title: "t",
+      dirty: true,
+    });
+    expect(view.badge).toBe("A/B: 1 change staged · enter keep · esc revert");
   });
 });

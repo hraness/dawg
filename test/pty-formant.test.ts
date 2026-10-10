@@ -30,9 +30,9 @@ test.skipIf(!supported)(
       await t.send("/Effects");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("menu › Effects"), "effects");
-      await t.send("/Voice");
+      await t.send("/voice effects");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("Formant"), "voice group");
+      await t.until(() => t.vt.text().includes("formant"), "voice group");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("shift"), "formant rows");
       expect(t.vt.text()).toContain("-4 st");

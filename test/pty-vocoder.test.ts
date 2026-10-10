@@ -95,10 +95,10 @@ test.skipIf(!supported)(
       await t.send("/Effects");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("menu › Effects"), "effects");
-      await t.send("/Voice");
+      await t.send("/voice effects");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("Vocoder"), "voice group");
-      await t.send("/Vocoder");
+      await t.until(() => t.vt.text().includes("vocoder"), "voice group");
+      await t.send("/vocoder");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("preset"), "vocoder rows");
       expect(t.vt.text()).toContain("source");

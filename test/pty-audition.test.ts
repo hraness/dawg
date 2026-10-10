@@ -72,13 +72,13 @@ test.skipIf(!supported)(
       await t.until(() => screen().includes(" NOW "), "prompt");
       await t.send("\u000b");
       await t.until(() => screen().includes("Project"), "menu root");
-      await t.send("j");
+      await t.send("jj");
       await t.send("\r");
       await t.until(() => screen().includes("menu › Effects"), "effects");
       await t.send("/reverb");
       await t.until(() => screen().includes("/reverb"), "filtered");
       await t.send("\r");
-      await t.until(() => screen().includes("› Reverb"), "reverb");
+      await t.until(() => screen().includes("› reverb"), "reverb");
       // Switch the reverb on (a plain commit: nothing is auditioning yet).
       await t.send("\r");
       await t.until(() => screen().includes("reset to defaults"), "reverb on");
@@ -113,7 +113,7 @@ test.skipIf(!supported)(
       await t.send("\u001b");
       await t.until(() => /› mix +0\.3 /.test(screen()), "reverted");
       expect(screen()).not.toContain(" ← ");
-      expect(screen()).toContain("› Reverb");
+      expect(screen()).toContain("› reverb");
       await Bun.sleep(150);
       const after = await latest(t.cwd);
       expect(after.revision).toBe(committed.revision);

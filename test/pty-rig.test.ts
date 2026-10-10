@@ -81,11 +81,11 @@ test.skipIf(!supported)(
       await t.send("/guitar");
       await t.send("\r");
       await t.until(
-        () => t.vt.text().includes("Effects › Guitar rig"),
+        () => t.vt.text().includes("Effects › guitar rig"),
         "guitar rig menu",
       );
-      expect(t.vt.text()).toContain("Amp head");
-      expect(t.vt.text()).toContain("Speaker cabinet");
+      expect(t.vt.text()).toContain("amp head");
+      expect(t.vt.text()).toContain("speaker cabinet");
       // An edited stage leaves no named rig ("—"): right loads the first.
       expect(t.vt.text()).toContain("rig              —");
       await t.send("\u001b[C");

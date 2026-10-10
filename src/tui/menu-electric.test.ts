@@ -45,17 +45,17 @@ function select(menu: EditMenu, ctx: MenuContext, label: string): void {
   for (let i = now; i > target; i--) menu.key(UP, ctx);
 }
 
-describe("Sound › browse sounds › Keys › Electric", () => {
+describe("Sound › instruments › keys › electric", () => {
   test("the Keys group opens an Electric sub-group of presets", () => {
     const menu = new EditMenu();
     const ctx = context(score());
     menu.show(ctx, "sounds");
-    select(menu, ctx, "Keys");
+    select(menu, ctx, "keys");
     menu.key("\r", ctx);
     const keys = menu.view(ctx).items.map((row) => row.label);
     expect(keys.some((label) => label.startsWith("grand"))).toBe(true);
     expect(keys.some((label) => label.startsWith("suitcase"))).toBe(false);
-    select(menu, ctx, "Electric");
+    select(menu, ctx, "electric");
     menu.key("\r", ctx);
     const labels = menu.view(ctx).items.map((row) => row.label.split(" ")[0]);
     expect(labels).toEqual([

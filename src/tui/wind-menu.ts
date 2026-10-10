@@ -32,7 +32,7 @@ export function windsMenu(): MenuNode {
   return {
     kind: "menu",
     id: "winds",
-    label: "Winds and brass",
+    label: "winds and brass",
     detail: `${WIND_PRESET_NAMES.length} blown · flute, sax, trumpet …`,
     help: "breath-driven waveguides: flutes, reeds and brass; wind players 4 for a section",
     build: () =>

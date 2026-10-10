@@ -1,6 +1,6 @@
 /**
  * Ctrl-k menu rows for modal percussion (0.6): the "Mallets and bells"
- * group under Sound › browse sounds, and the MODAL_PARAMS rows under
+ * group under Sound › instruments, and the MODAL_PARAMS rows under
  * Sound › Parameters on a modal track. Every row runs a `modal …` command.
  */
 import type { EnumParam, NumberParam } from "../../core/params.ts";
@@ -18,12 +18,12 @@ import {
 import type { Track } from "../../core/score.ts";
 import { num, specStep, type MenuNode } from "./menu.ts";
 
-/** Sound › browse sounds › Mallets and bells: one row per preset. */
+/** Sound › instruments › Mallets and bells: one row per preset. */
 export function malletsMenu(): MenuNode {
   return {
     kind: "menu",
     id: "mallets",
-    label: "Mallets and bells",
+    label: "mallets and bells",
     detail: `${MODAL_PRESET_NAMES.length} modal presets · marimba, vibes, gong …`,
     help: "struck bars, bells and bowls on the modal resonator engine",
     build: () => [

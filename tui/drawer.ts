@@ -5,7 +5,7 @@
  * habit). The piano roll stays visible above it while the terminal is tall
  * enough.
  *
- *   ╭ fader · filter ────────────────────── ● staged  [keep] [revert] ╮
+ *   ╭ Effects › filter ─── A/B: 1 change staged · enter keep · esc revert ╮
  *   │ › cutoff           1200 Hz ← 800 Hz               20 … 20000 Hz │
  *   │   [−] ━━━━━━━━━━━━━━━━━━●──────────────────────────────────  [+] │
  *   │   type             lowpass │ highpass │ bandpass │ notch        │
@@ -39,6 +39,8 @@ export type DrawerField =
       committedPosition?: number | undefined;
       minText: string;
       maxText: string;
+      /** Just caught by a detent: the bar brightens for one frame. */
+      flash?: string | undefined;
     }>
   | Readonly<{
       kind: "choice";
@@ -56,6 +58,8 @@ export type DrawerView = Readonly<{
   typing?: string | undefined;
   /** Edits differ from the committed score. */
   dirty: boolean;
+  /** `A/B: 1 change staged · enter keep · esc revert` while dirty. */
+  badge?: string | undefined;
   /** `♪ solo · B` while the audition loop plays. */
   status?: string | undefined;
   hint: string;
@@ -175,7 +179,12 @@ const ASCII: Glyphs = {
 export interface DrawerPaint {
   theme: Theme;
   unicode: boolean;
+  /** /motion off: detents still snap, the flash is not drawn. */
+  reducedMotion?: boolean;
 }
+
+/** Views whose detent flash has been drawn: a flash lasts one frame. */
+const flashed = new WeakSet<DrawerView>();
 
 /** Paint the drawer into the highway region; returns its layout. */
 export function paintDrawer(
@@ -189,6 +198,9 @@ export function paintDrawer(
   if (region.height <= 0 || width < 16 || view.fields.length === 0)
     return undefined;
   const layout = drawerLayout(view, region);
+  const flashing = !options.reducedMotion && !flashed.has(view);
+  if (view.fields.some((field) => field.kind === "number" && field.flash))
+    flashed.add(view);
   const roles = options.theme.roles;
   const glyphs = options.unicode ? UNICODE : ASCII;
   const panel = roles.panel;
@@ -212,37 +224,58 @@ export function paintDrawer(
       buffer.set(width - 1, y, box.v, border);
     }
     inner = { left: 2, right: width - 2 };
-    // Title left; staged state and the keep / revert buttons right.
-    const keep = "[keep]";
-    const revert = "[revert]";
-    const buttons = view.dirty ? `${keep} ${revert}` : "";
-    const state = view.dirty ? `${options.unicode ? "●" : "*"} staged` : "";
-    const status = [view.status, state].filter(Boolean).join(" · ");
-    const right = [status, buttons].filter(Boolean).join("  ");
+    // Title left; the status and the staged badge right. The badge's
+    // `enter keep` and `esc revert` are click targets; when room is short
+    // the breadcrumb truncates first, then the badge drops its key words.
+    const room = width - 6;
+    const full = view.badge ?? (view.dirty ? "A/B: changes staged" : "");
+    // The badge already counts staged changes; the audition status's
+    // `B staged N` would say it twice.
+    const status = (view.status ?? "")
+      .split(" · ")
+      .filter((part) => !(full && /^B staged \d+$/.test(part)))
+      .join(" · ");
+    const short = full.replace(/ · enter keep · esc revert$/, "");
+    const join = (badge: string) => [status, badge].filter(Boolean).join(" · ");
+    const minTitle = Math.min(displayWidth(view.title), 12) + 2;
+    let right = join(full);
+    if (displayWidth(right) + 3 + minTitle > room) right = join(short);
+    if (displayWidth(right) + 3 + minTitle > room) right = short;
+    if (displayWidth(right) + 3 + minTitle > room) right = "";
     const rightWidth = displayWidth(right);
-    const titleRoom = Math.max(0, width - 6 - (right ? rightWidth + 3 : 0));
+    const titleRoom = Math.max(0, room - (right ? rightWidth + 3 : 0));
     buffer.text(
       2,
       top,
       ` ${truncate(view.title, Math.max(0, titleRoom - 2))} `,
       on({ ...roles.text, bold: true }),
     );
-    if (right && rightWidth + 4 < width - displayWidth(view.title)) {
+    if (right) {
       const rx = width - 3 - rightWidth;
       buffer.text(
         rx - 1,
         top,
-        ` ${status}${status && buttons ? "  " : ""}`,
+        ` ${right}`,
         on(view.dirty ? roles.warning : roles.muted),
       );
-      if (buttons) {
-        const kx = width - 3 - displayWidth(buttons);
-        buffer.text(kx, top, `${keep} `, on({ ...roles.success, bold: true }));
-        buffer.text(kx + keep.length + 1, top, revert, on(roles.muted));
-        hits?.add(kx, top, keep.length, 1, { kind: "fader-keep" });
-        hits?.add(kx + keep.length + 1, top, revert.length, 1, {
-          kind: "fader-revert",
-        });
+      for (const [word, kind] of [
+        ["enter keep", "fader-keep"],
+        ["esc revert", "fader-revert"],
+      ] as const) {
+        const at = right.lastIndexOf(word);
+        if (at < 0) continue;
+        const x = rx + displayWidth(right.slice(0, at));
+        buffer.text(
+          x,
+          top,
+          word,
+          on(
+            kind === "fader-keep"
+              ? { ...roles.success, bold: true }
+              : roles.muted,
+          ),
+        );
+        hits?.add(x, top, word.length, 1, { kind });
       }
     }
     const hint = fitHint(
@@ -306,13 +339,18 @@ export function paintDrawer(
             on(roles.muted),
             inner.right - valueX - used,
           );
-        const range = `${field.minText} … ${field.maxText}`;
+        // For the frame a detent catches, the range gives way to its name.
+        const range =
+          flashing && field.flash !== undefined
+            ? field.flash
+            : `${field.minText} … ${field.maxText}`;
         const rangeX = inner.right - displayWidth(range);
         if (rangeX > valueX + used + displayWidth(committed) + 2)
           buffer.text(rangeX, y, range, on(roles.faint));
         paintBar(buffer, y + 1, inner.left + 2, inner.right, field, index, {
           glyphs,
           focused,
+          flashing,
           roles,
           on,
           ...(hits ? { hits } : {}),
@@ -335,7 +373,7 @@ export function paintDrawer(
           inner.right,
           field,
           index,
-          { glyphs, focused, roles, on, ...(hits ? { hits } : {}) },
+          { glyphs, focused, flashing, roles, on, ...(hits ? { hits } : {}) },
         );
       }
     } else {
@@ -364,6 +402,8 @@ export function paintDrawer(
 interface RowPaint {
   glyphs: Glyphs;
   focused: boolean;
+  /** Draw this field's detent flash (motion on, first frame only). */
+  flashing?: boolean;
   roles: Theme["roles"];
   on: (style: Style) => Style;
   hits?: HitMap;
@@ -412,7 +452,15 @@ function paintBar(
     field.committedPosition === undefined
       ? undefined
       : at(field.committedPosition);
-  const filled = on(paint.focused ? roles.borderFocus : roles.text);
+  // A detent catch brightens the bar for one frame (motion on).
+  const flash = paint.flashing === true && field.flash !== undefined;
+  const filled = on(
+    flash
+      ? { ...roles.success, bold: true }
+      : paint.focused
+        ? roles.borderFocus
+        : roles.text,
+  );
   const empty = on(roles.faint);
   for (let column = 0; column < barWidth; column += 1) {
     const x = barLeft + column;

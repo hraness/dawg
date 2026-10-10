@@ -48,13 +48,13 @@ function select(menu: EditMenu, ctx: MenuContext, label: string): void {
 }
 
 describe("Sound › organs (f061-organ)", () => {
-  test("browse sounds › Keys › Organs plays an organ preset", () => {
+  test("instruments › keys › organs plays an organ preset", () => {
     const menu = new EditMenu();
     const ctx = context(score());
     menu.show(ctx, "sounds");
-    select(menu, ctx, "Keys");
+    select(menu, ctx, "keys");
     menu.key("\r", ctx);
-    select(menu, ctx, "Organs");
+    select(menu, ctx, "organs");
     menu.key("\r", ctx);
     const labels = menu.view(ctx).items.map((row) => row.label);
     expect(labels.length).toBe(10);
@@ -63,7 +63,7 @@ describe("Sound › organs (f061-organ)", () => {
     expect(menu.key("\r", ctx)).toEqual({ type: "run", command: "gospel" });
   });
 
-  test("Parameters › Drawbars pulls one bar and keeps the rest", () => {
+  test("Parameters › drawbars pulls one bar and keeps the rest", () => {
     const value = run(score(), "gospel");
     const menu = new EditMenu();
     const ctx = context(value);
@@ -71,7 +71,7 @@ describe("Sound › organs (f061-organ)", () => {
     const labels = menu.view(ctx).items.map((row) => row.label);
     expect(labels.some((label) => label.startsWith("rotary"))).toBe(true);
     expect(labels.some((label) => label.startsWith("hardness"))).toBe(false);
-    select(menu, ctx, "Drawbars");
+    select(menu, ctx, "drawbars");
     menu.key("\r", ctx);
     select(menu, ctx, "1'");
     const down = menu.key(LEFT, ctx);
@@ -81,12 +81,12 @@ describe("Sound › organs (f061-organ)", () => {
     ).toEqual({ preset: "gospel", drawbars: "888800007" });
   });
 
-  test("Parameters › Stops toggles a stop; Registers edits combo", () => {
+  test("Parameters › stops toggles a stop; Registers edits combo", () => {
     const pipe = run(score(), "pipe");
     let menu = new EditMenu();
     let ctx = context(pipe);
     menu.show(ctx, "parameters");
-    select(menu, ctx, "Stops");
+    select(menu, ctx, "stops");
     menu.key("\r", ctx);
     select(menu, ctx, "trumpet8");
     const toggled = menu.key("\r", ctx);
@@ -99,7 +99,7 @@ describe("Sound › organs (f061-organ)", () => {
     menu = new EditMenu();
     ctx = context(combo);
     menu.show(ctx, "parameters");
-    select(menu, ctx, "Registers");
+    select(menu, ctx, "registers");
     menu.key("\r", ctx);
     select(menu, ctx, "16'");
     expect(menu.key(RIGHT, ctx)).toEqual({
@@ -129,7 +129,7 @@ describe("organ menu review fixes", () => {
     const menu = new EditMenu();
     const ctx = context(value);
     menu.show(ctx, "parameters");
-    select(menu, ctx, "Drawbars");
+    select(menu, ctx, "drawbars");
     menu.key("\r", ctx);
     select(menu, ctx, "1'");
     expect(menu.key("x", ctx)).toEqual({

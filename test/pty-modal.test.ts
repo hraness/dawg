@@ -88,8 +88,8 @@ test.skipIf(!supported)(
 
       // ctrl-k → Sound › browse sounds › Mallets and bells → gong.
       await t.send("/menu sounds\r");
-      await t.until(() => t.vt.text().includes("Mallets and bells"), "group");
-      await t.send("/Mallets");
+      await t.until(() => t.vt.text().includes("mallets and bells"), "group");
+      await t.send("/mallets");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("rosewood bars"), "preset list");
       await t.send("/gong");

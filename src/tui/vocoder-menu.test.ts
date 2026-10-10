@@ -1,4 +1,4 @@
-/** Effects › Voice › Vocoder and browse › Voices › Vocoder rows. */
+/** Effects › Voice › vocoder and browse › Voices › vocoder rows. */
 import { describe, expect, test } from "bun:test";
 import { createScore, type TrackInput } from "../../core/score.ts";
 import { VOCODER_PARAMS } from "../../core/vocoder.ts";
@@ -105,13 +105,12 @@ describe("vocoder menu", () => {
     ]);
   });
 
-  test("browse › Voices › Vocoder makes a carrier or lists presets", () => {
+  test("Voice › voice presets › vocoder makes a carrier or lists presets", () => {
     const c = ctx(
       [vox, { id: "lead", name: "lead", instrument: "saw" }],
       "lead",
     );
-    const sound = open(rootNodes(c), "sound", c);
-    const voices = open(open(sound, "browse", c), "group:voices", c);
+    const voices = open(open(rootNodes(c), "voice", c), "voice:presets", c);
     const rows = open(voices, "voices:vocoder", c);
     expect(rows[0]).toEqual(
       expect.objectContaining({ command: "instrument vocoder" }),
@@ -122,8 +121,8 @@ describe("vocoder menu", () => {
     );
     const presets = open(
       open(
-        open(open(rootNodes(carrier), "sound", carrier), "browse", carrier),
-        "group:voices",
+        open(rootNodes(carrier), "voice", carrier),
+        "voice:presets",
         carrier,
       ),
       "voices:vocoder",
