@@ -426,9 +426,14 @@ test("composeFrame is deterministic for a fixed clock", () => {
   expect(a).toBe(b);
 });
 
-test("header order is dawg · track · transport · key · session · windows ··· model · rev · sync", () => {
+test("header order is dawg · track · transport · key · session · panes ··· model · rev · sync", () => {
   const h = harness(120, 24);
-  h.frame(0, { sessionName: "night drive", windows: 3, sync: "synced" });
+  h.frame(0, {
+    sessionName: "night drive",
+    windows: 3,
+    pane: "B",
+    sync: "synced",
+  });
   const line = h.vt.lines()[0]!;
   const order = [
     "dawg",
@@ -436,7 +441,7 @@ test("header order is dawg · track · transport · key · session · windows ·
     "▶ 120 BPM",
     "Am",
     "night drive",
-    "3 windows",
+    "3 panes · B",
     "sol-6.1",
     "rev 42",
     "synced",
@@ -446,7 +451,7 @@ test("header order is dawg · track · transport · key · session · windows ·
   expect(positions).toEqual([...positions].sort((a, b) => a - b));
   // One window hides the count; a short id stands in for a missing name.
   h.frame(0, { sessionName: undefined, windows: 1 });
-  expect(h.vt.lines()[0]).not.toContain("windows");
+  expect(h.vt.lines()[0]).not.toContain("panes");
   expect(h.vt.lines()[0]).toContain("session 7f3a91c2");
 });
 

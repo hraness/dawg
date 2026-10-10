@@ -89,3 +89,131 @@ describe("protocol revisions", () => {
     expect(toLocalTransport(state, 250).atMs).toBe(9_750);
   });
 });
+
+describe("pane and live frames", () => {
+  test("view frames keep known fields and drop junk", () => {
+    const view = parseClientMessage(
+      JSON.stringify({
+        v: 1,
+        type: "view",
+        screen: "tape",
+        param: "filter",
+        recording: "overdub",
+        playing: true,
+        pinned: true,
+        follow: "B",
+        junk: 1,
+      }),
+    );
+    expect(view).toEqual({
+      v: 1,
+      type: "view",
+      screen: "tape",
+      param: "filter",
+      recording: "overdub",
+      playing: true,
+      pinned: true,
+      follow: "B",
+    });
+    expect(
+      parseClientMessage(
+        JSON.stringify({ v: 1, type: "view", screen: "NOPE!", follow: "bb" }),
+      ),
+    ).toEqual({ v: 1, type: "view" });
+  });
+
+  test("presence entries round-trip pane letters and view fields", () => {
+    const frame = parseServerMessage(
+      JSON.stringify({
+        v: 1,
+        type: "presence",
+        clients: [
+          {
+            clientId: "c1",
+            actorId: ACTOR,
+            pid: 2,
+            label: "dawg",
+            focusedTrackId: "bass",
+            pane: "B",
+            screen: "play",
+            recording: "replace",
+          },
+        ],
+      }),
+    );
+    expect(frame).toEqual({
+      v: 1,
+      type: "presence",
+      clients: [
+        {
+          clientId: "c1",
+          actorId: ACTOR,
+          pid: 2,
+          label: "dawg",
+          focusedTrackId: "bass",
+          pane: "B",
+          screen: "play",
+          recording: "replace",
+        },
+      ],
+    });
+  });
+
+  test("live notes carry beat and authority atMs, and are bounded", () => {
+    const note = {
+      v: 1,
+      type: "live",
+      action: "on",
+      voice: 3,
+      trackId: "bass",
+      pitch: 40,
+      velocity: 0.8,
+      seconds: 0.5,
+      beat: 12.5,
+      atMs: 1_700_000_000_000,
+    };
+    expect(parseClientMessage(JSON.stringify(note))).toEqual(note as never);
+    for (const bad of [
+      { pitch: 200 },
+      { velocity: 2 },
+      { beat: "x" },
+      { atMs: -1 },
+      { trackId: "../x" },
+    ])
+      expect(() =>
+        parseClientMessage(JSON.stringify({ ...note, ...bad })),
+      ).toThrow(ProtocolError);
+    expect(
+      parseClientMessage(
+        JSON.stringify({
+          v: 1,
+          type: "live",
+          action: "click",
+          on: false,
+          volume: 0.4,
+          countIn: {
+            startAtMs: 1,
+            startBeat: 8,
+            beats: 4,
+            barBeats: 4,
+            clickBeats: 1,
+            bpm: 120,
+          },
+        }),
+      ),
+    ).toMatchObject({ action: "click", countIn: { beats: 4 } });
+    expect(
+      parseServerMessage(
+        JSON.stringify({
+          v: 1,
+          type: "liveStatus",
+          id: "r1",
+          canMonitor: true,
+          sampleRate: 48000,
+          leadMs: 15,
+          note: "native",
+        }),
+      ),
+    ).toMatchObject({ type: "liveStatus", leadMs: 15 });
+  });
+});

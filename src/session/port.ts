@@ -5,8 +5,10 @@ import type { TrackScore } from "../../core/score.ts";
 import { AudioEngine } from "../audio/engine.ts";
 import { DaemonClient, type DaemonClientOptions } from "./client.ts";
 import { FilePresence } from "./presence.ts";
+import type { LiveLink } from "./shared-live.ts";
 import {
   toLocalTransport,
+  type PaneView,
   type PresenceEntry,
   type TransportAction,
   type TransportState,
@@ -115,6 +117,15 @@ export interface SessionPort<T> {
     preferred?: string,
   ): Promise<{ trackId: string; draft: boolean }>;
   presence(): Promise<PresenceEntry[]>;
+  /** This pane's letter (daemon mode, assigned by dawgd). */
+  readonly pane: string | undefined;
+  /** Reports what this pane shows; others see it in presence. */
+  setView(view: PaneView): void;
+  /**
+   * The machine's shared live engine (daemon with the `live` capability),
+   * or undefined: the pane then plays through its own monitor engine.
+   */
+  liveLink(): LiveLink | undefined;
   /**
    * Conditional metadata write: applies only while `expect` matches the
    * stored metadata, so a user rename always beats an in-flight auto-name.
@@ -319,6 +330,28 @@ class DaemonPort<T> implements SessionPort<T> {
     return this.client.presence;
   }
 
+  public get pane(): string | undefined {
+    return this.client.self?.pane;
+  }
+
+  public setView(view: PaneView): void {
+    if (this.client.caps.includes("panes")) this.client.setView(view);
+  }
+
+  public liveLink(): LiveLink | undefined {
+    if (!this.client.sharedLive) return undefined;
+    const client = this.client;
+    const port = this;
+    return (this.link ??= {
+      liveMonitor: (on) => client.liveMonitor(on),
+      live: (message) => client.live(message),
+      get clockOffsetMs() {
+        return port.clockOffsetMs;
+      },
+    });
+  }
+  private link: LiveLink | undefined;
+
   public async updateMeta(
     patch: MetaPatch,
     expect?: MetaExpect,
@@ -350,6 +383,14 @@ class FilePort<T> implements SessionPort<T> {
   public readonly player: WindowPlayer;
   private readonly presenceStore: FilePresence;
   private readonly statusListeners = new Set<(update: PortUpdate<T>) => void>();
+  /** File sessions have no pane letters or shared engine (§12.3). */
+  public readonly pane = undefined;
+
+  public setView(_view: PaneView): void {}
+
+  public liveLink(): LiveLink | undefined {
+    return undefined;
+  }
 
   private constructor(private readonly options: OpenPortOptions) {
     this.player = new AudioEngine({

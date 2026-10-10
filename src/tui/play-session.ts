@@ -29,6 +29,7 @@ import {
   type PedalState,
 } from "../../core/expression.ts";
 import type { ClickBus } from "../audio/engine.ts";
+import type { RemoteClick, RemoteNote } from "../session/shared-live.ts";
 import {
   DEFAULT_CLICK_VOLUME,
   countInClicks,
@@ -105,6 +106,14 @@ export interface LiveEngine {
   /** Frames of voice `id` mixed so far, or undefined once it has ended. */
   voicePosition?(id: number): number | undefined;
   setClick(click: ClickBus | undefined): void;
+  /**
+   * A shared engine (dawgd's, src/session/shared-live.ts) takes note events
+   * instead of PCM: it renders the voice itself, so one engine mixes every
+   * pane. Returns the monotonic ms the note is scheduled for.
+   */
+  remoteNote?(id: number, note: RemoteNote): number;
+  /** A shared engine's click: on/volume and the count-in, not a closure. */
+  remoteClick?(click: RemoteClick): void;
 }
 
 export interface PlayHost {
@@ -360,7 +369,8 @@ export class PlaySession {
     this.countIn = undefined;
     const engine = this.host.engine();
     if (engine) {
-      engine.setClick(this.clickOn ? this.clickBus() : undefined);
+      if (engine.remoteClick) this.sendClick(engine.remoteClick.bind(engine));
+      else engine.setClick(this.clickOn ? this.clickBus() : undefined);
       engine.setLeadMs(undefined);
       await engine.monitor(false);
     }
@@ -407,7 +417,32 @@ export class PlaySession {
   private applyClick(): void {
     const engine = this.host.engine();
     if (!engine) return;
+    if (engine.remoteClick) {
+      this.sendClick(engine.remoteClick.bind(engine));
+      return;
+    }
     engine.setClick(this.clickOn || this.countIn ? this.clickBus() : undefined);
+  }
+
+  /** The click as a shared engine takes it: on, volume, count-in. */
+  private sendClick(send: (click: RemoteClick) => void): void {
+    const count = this.countIn;
+    send({
+      on: this.clickOn,
+      volume: this.clickVolume,
+      ...(count
+        ? {
+            countIn: {
+              startMs: count.startMs,
+              startBeat: count.startBeat,
+              beats: count.beats,
+              barBeats: count.barBeats,
+              clickBeats: count.clickBeats,
+              bpm: count.bpm,
+            },
+          }
+        : {}),
+    });
   }
 
   /** `/click on|off|<volume>`. */
@@ -632,6 +667,18 @@ export class PlaySession {
     const seconds = Number.isFinite(note.releaseAtMs)
       ? (note.releaseAtMs - note.atMs) / 1000
       : MAX_LIVE_NOTE_SECONDS;
+    if (engine.remoteNote) {
+      const scheduled = engine.remoteNote(id, {
+        trackId: this.trackId,
+        pitch: note.pitch,
+        velocity: note.velocity / 127,
+        seconds,
+        beat: this.host.beatAt(note.atMs),
+        atMs: note.atMs,
+      });
+      this.lastLatencyMs = Math.max(0, scheduled - this.host.now());
+      return;
+    }
     const samples = this.host.samples?.();
     if (this.synth?.rate !== engine.sampleRate)
       this.synth = new LiveSynth(engine.sampleRate);

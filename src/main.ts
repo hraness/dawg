@@ -54,8 +54,14 @@ import {
   editedTrack,
   foreignEvents,
   otherWindowName,
+  paneLetters,
 } from "./session/origin.ts";
-import { compositionDigest, monotonicEpochMs } from "./session/protocol.ts";
+import {
+  compositionDigest,
+  monotonicEpochMs,
+  type PaneView,
+  type PresenceEntry,
+} from "./session/protocol.ts";
 import {
   formatSessionLine,
   listSessions,
@@ -397,6 +403,7 @@ import {
   packCredits,
   writeCredits,
 } from "./audio/packs.ts";
+import { SharedLiveEngine, type LiveLink } from "./session/shared-live.ts";
 import {
   addNote,
   applyScoreOperation,
@@ -444,6 +451,8 @@ import { formatDiagnostic } from "../core/sdk/eval.ts";
 import { isProject } from "./project/init.ts";
 import {
   parseLaunchArgs,
+  parsePaneArgs,
+  type PaneArgs,
   parseSimpleArgv,
   resolveTrackArg,
 } from "./launch-args.ts";
@@ -769,6 +778,16 @@ const tui = new TuiApp({
 });
 let syncState: SyncState = port.sync;
 let windowCount = 1;
+/** Pin and follow (§12.5): set by `dawg pane …`, `pin` and `follow`. */
+const paneOptions: { pinned: boolean; follow: string | undefined } = {
+  pinned: false,
+  follow: undefined,
+};
+/** Every pane on this session, as the last presence push listed them. */
+let panePresence: readonly PresenceEntry[] = [];
+/** The last view this pane reported (JSON), so unchanged views stay quiet. */
+let reportedView = "";
+let sharedLive: { link: LiveLink; engine: SharedLiveEngine } | undefined;
 /** Project file sync when `dawg.json` is in the working directory. */
 let projectSync: ProjectSync | undefined;
 let packStore: PackStore | undefined;
@@ -1101,6 +1120,7 @@ function appView(value: TrackScore, beat: number): AppView {
     sync: syncState,
     sessionName: record.meta.name,
     windows: windowCount,
+    pane: port.pane,
     types: typesIndicator,
     play: play?.on ? play.header() : undefined,
     loudness: masterLoudness(value),
@@ -1441,6 +1461,7 @@ async function runInteractive(): Promise<void> {
   };
   const tick = (force = false) => {
     if (screenSuspended) return;
+    reportView();
     if (
       !frameGate.shouldBuild({
         nowMs: Date.now(),
@@ -1511,10 +1532,7 @@ async function runInteractive(): Promise<void> {
   };
   stdout.on("resize", onResize);
   const ownWrites = new OwnWrites();
-  let presenceClients: readonly {
-    clientId: string;
-    focusedTrackId?: string | null;
-  }[] = [];
+  let presenceClients: readonly PresenceEntry[] = [];
   let applying: Promise<void> = Promise.resolve();
   const applyLatest = (latest: typeof record): Promise<void> =>
     (applying = applying.then(() => applyRecord(latest)));
@@ -1567,10 +1585,33 @@ async function runInteractive(): Promise<void> {
         const from = shownRevision(record, previousRevision);
         const to = shownRevision(record);
         await ownWrites.settled();
-        const foreign = foreignEvents(latest, previousRevision, ownWrites).some(
-          (event) => event.kind !== "transport",
+        const foreignList = foreignEvents(
+          latest,
+          previousRevision,
+          ownWrites,
+        ).filter((event) => event.kind !== "transport");
+        const foreign = foreignList.length > 0;
+        // dawgd stamps each event's author: another pane's edit is its
+        // letter and what it touched, only when it touches this pane's
+        // track (§12.7); no "synced from another window" card.
+        const letters = paneLetters(
+          foreignList,
+          presenceClients,
+          port.clientId,
         );
-        if (to !== from && foreign)
+        if (to !== from && foreign && letters.length > 0) {
+          const edited = editedTrack(before, scoreFromJSON(latest.composition));
+          if (edited === undefined || edited === requestedTrack)
+            tui.activity.pushCard(
+              `${letters.join(" ")} ✓ ${
+                edited
+                  ? (score.tracks.find((track) => track.id === edited)?.name ??
+                    edited)
+                  : "song"
+              }`,
+              { tone: "info", baseRevision: from, resultRevision: to },
+            );
+        } else if (to !== from && foreign)
           tui.activity.pushCard(
             `synced · ${otherWindowName(presenceClients, port.clientId, {
               editedTrackId: editedTrack(
@@ -1594,6 +1635,8 @@ async function runInteractive(): Promise<void> {
     } else if (update.type === "meta") adoptMeta(update.meta);
     else if (update.type === "presence") {
       presenceClients = update.clients;
+      followPresence(panePresence, update.clients);
+      panePresence = update.clients;
       windowCount = update.clients.length;
     } else if (update.type === "sync") syncState = update.sync;
     else if (update.type === "transport") {
@@ -1626,6 +1669,7 @@ async function runInteractive(): Promise<void> {
       .presence()
       .then((clients) => {
         presenceClients = clients;
+        panePresence = clients;
         windowCount = Math.max(1, clients.length);
       })
       .catch(() => undefined);
@@ -1639,6 +1683,7 @@ async function runInteractive(): Promise<void> {
     syncState = port.sync;
     unsubscribe = subscribeLive();
     refreshPresence();
+    reportedView = "";
   };
   if (freshWorkspace)
     tui.activity.pushCard("created .dawg/ · add it to .gitignore", {
@@ -1661,6 +1706,7 @@ async function runInteractive(): Promise<void> {
   void currentProvider().then(() => tick(true));
   tickUi = () => tick(true);
   reportSampleProblems(score);
+  if (launchArgs?.pane) void openPane(launchArgs.pane).then(() => tick(true));
   // Input arrives through a detachable listener (not `for await`), so /login
   // can hand the terminal to an interactive shell flow and take it back.
   const inbox: string[] = [];
@@ -2268,6 +2314,8 @@ async function submit(prompt: string): Promise<string | Receipt> {
       ? ok(message)
       : fail("usage: /grid 1/4|1/8|1/8T|1/16|1/16T|1/32");
   }
+  const paneReceipt = paneCommand(command);
+  if (paneReceipt) return paneReceipt;
   if (/^\/status$/i.test(command))
     return ok(
       `status · ${record.meta.name} · rev ${record.revision} · ${compositionDigest(record.composition)} · ${port.mode === "daemon" ? "shared via dawgd" : "saved locally · no daemon"}`,
@@ -3196,17 +3244,26 @@ async function submit(prompt: string): Promise<string | Receipt> {
  * not in the score yet. A track another live window has focused stays
  * theirs; focus goes through the port so presence is right everywhere.
  */
-async function focusTrack(trackId: string): Promise<Receipt> {
+async function focusTrack(
+  trackId: string,
+  options: { follow?: boolean } = {},
+): Promise<Receipt> {
   if (trackId === requestedTrack && !draftTrack)
     return warn(`already on ${trackId}`);
+  if (paneOptions.pinned)
+    return warn(`pinned to ${requestedTrack} · unpin to change`);
+  // Typing a track yourself stops following (§12.5).
+  if (!options.follow && paneOptions.follow) paneOptions.follow = undefined;
+  // Focus is not exclusive (§12.5): a track another pane shows is a soft
+  // note on the receipt, never a refusal.
   const clients = await port.presence().catch(() => []);
-  if (
-    clients.some(
-      (client) =>
-        client.clientId !== port.clientId && client.focusedTrackId === trackId,
-    )
-  )
-    return warn(`${trackId} is open in another window`);
+  const sharing = clients.find(
+    (client) =>
+      client.clientId !== port.clientId && client.focusedTrackId === trackId,
+  );
+  const shared = sharing
+    ? ` · ${sharing.pane ? `pane ${sharing.pane}` : "another pane"} is on ${trackId} too`
+    : "";
   const existing = score.tracks.find((track) => track.id === trackId);
   const exists = existing !== undefined;
   // `track cloud`, `track hold-2`: a new granular track with that preset.
@@ -3245,11 +3302,11 @@ async function focusTrack(trackId: string): Promise<Receipt> {
       `track · ${trackId} is a ${existing.instrument} track · grain ${grainPreset} makes it granular`,
     );
   return ok(
-    exists
+    (exists
       ? `track · ${trackId}`
       : grainPreset
         ? `track created · ${trackId} · granular ${grainPreset} · nothing to download`
-        : `track created · ${trackId}`,
+        : `track created · ${trackId}`) + shared,
   );
 }
 
@@ -3997,6 +4054,183 @@ async function switchSession(sessionId: string): Promise<void> {
 
 function liveEngine(): LiveEngine | undefined {
   return previewEngine();
+}
+
+/**
+ * The engine play mode sounds through: dawgd's shared engine when the
+ * daemon offers one (every pane's notes and one click mix there, §12.3),
+ * else this window's own monitor. Never both.
+ */
+function playEngine(): LiveEngine | undefined {
+  const link = port.liveLink();
+  if (!link) return previewEngine();
+  if (sharedLive?.link !== link)
+    sharedLive = { link, engine: new SharedLiveEngine(link) };
+  return sharedLive.engine;
+}
+
+/**
+ * What this pane shows, for the other panes' presence markers (§12.7):
+ * sent only when it changes, and only to a daemon that has panes.
+ */
+function paneView(): PaneView {
+  const session = play;
+  const view: PaneView = {
+    screen: session?.on
+      ? "play"
+      : fader
+        ? "sound"
+        : menu.open
+          ? "menu"
+          : "home",
+  };
+  if (fader) view.param = fader.label.slice(0, 64);
+  if (session?.on) view.playing = true;
+  if (session?.recording)
+    view.recording = session.replace ? "replace" : "overdub";
+  if (paneOptions.pinned) view.pinned = true;
+  if (paneOptions.follow) view.follow = paneOptions.follow;
+  return view;
+}
+function reportView(): void {
+  const view = paneView();
+  const key = JSON.stringify(view);
+  if (key === reportedView) return;
+  reportedView = key;
+  port.setView(view);
+}
+
+/**
+ * `dawg pane <screen> …` at launch: focus its track, then open the screen
+ * through the same commands a person would type, so the pane starts where
+ * the shell line said.
+ */
+async function openPane(pane: PaneArgs): Promise<void> {
+  paneOptions.pinned = pane.pin;
+  paneOptions.follow = pane.follow;
+  let result: string | Receipt | undefined;
+  if (pane.screen === "play") result = await enterPlay();
+  else if (pane.screen === "sound")
+    result = await submit(pane.param ?? "volume");
+  else if (pane.screen === "menu")
+    result = await submit(`/menu${pane.param ? ` ${pane.param}` : ""}`);
+  if (result !== undefined) receipt(result);
+}
+
+/** One pane's line for `pane`: letter, screen, track, parameter, state. */
+function paneLine(entry: PresenceEntry): string {
+  const bits = [
+    `${entry.pane ?? "·"} ${entry.screen ?? "home"}`,
+    entry.focusedTrackId ?? "no track",
+  ];
+  if (entry.param) bits.push(entry.param);
+  if (entry.recording) bits.push(`● ${entry.recording}`);
+  if (entry.pinned) bits.push("pinned");
+  if (entry.follow) bits.push(`follows ${entry.follow}`);
+  if (entry.clientId === port.clientId) bits.push("this pane");
+  return bits.join(" · ");
+}
+
+/**
+ * `pane` lists panes; `pane <screen> [track]…` prints the shell line that
+ * opens one (dawg can't open terminal windows portably), with the tmux
+ * split line inside tmux, and copies it via OSC 52. `pin`, `unpin`,
+ * `follow [letter]`, `unfollow`. Undefined: not a pane command.
+ */
+function paneCommand(command: string): Receipt | undefined {
+  const text = command.replace(/^\//, "").trim();
+  if (/^panes?$/i.test(text)) {
+    if (port.mode !== "daemon")
+      return ok("solo pane · no daemon · DAWG_DAEMON=0 is set");
+    const entries = [...panePresence].sort((a, b) =>
+      (a.pane ?? "~").localeCompare(b.pane ?? "~"),
+    );
+    if (entries.length === 0) return ok("1 pane · this one");
+    return ok(`${entries.length} panes │ ${entries.map(paneLine).join(" │ ")}`);
+  }
+  const open = text.match(/^pane\s+(.+)$/i);
+  if (open) {
+    const parsed = parsePaneArgs(open[1]!.split(/\s+/));
+    if (!parsed.ok) return fail(parsed.problem);
+    const line = `dawg pane ${open[1]!.trim().toLowerCase()}`;
+    copyToClipboard(line);
+    return ok(
+      process.env.TMUX
+        ? `run · tmux split-window ${line} · copied`
+        : `run in another terminal · ${line} · copied`,
+    );
+  }
+  if (/^pin$/i.test(text)) {
+    paneOptions.pinned = true;
+    paneOptions.follow = undefined;
+    return ok(`pinned to ${requestedTrack} · unpin releases`);
+  }
+  if (/^unpin$/i.test(text)) {
+    if (!paneOptions.pinned) return warn("not pinned");
+    paneOptions.pinned = false;
+    return ok("unpinned");
+  }
+  const follow = text.match(/^follow(?:\s+([a-z]))?$/i);
+  if (follow) {
+    if (port.mode !== "daemon") return warn("follow needs dawgd · solo pane");
+    paneOptions.pinned = false;
+    paneOptions.follow = follow[1]?.toUpperCase() ?? "*";
+    followPresence([], panePresence);
+    return ok(
+      paneOptions.follow === "*"
+        ? "following the latest pane's track"
+        : `following pane ${paneOptions.follow}`,
+    );
+  }
+  if (/^unfollow$/i.test(text)) {
+    if (!paneOptions.follow) return warn("not following");
+    paneOptions.follow = undefined;
+    return ok("unfollowed");
+  }
+  return undefined;
+}
+
+/** OSC 52: the terminal copies `text` where it supports it; else a no-op. */
+function copyToClipboard(text: string): void {
+  if (!stdout.isTTY) return;
+  stdout.write(`\u001b]52;c;${Buffer.from(text).toString("base64")}\u0007`);
+}
+
+/**
+ * A following pane takes the track its target focuses: one letter, or for
+ * `*` the other pane whose focus changed most recently. Pinned panes never
+ * move on someone else's focus.
+ */
+function followPresence(
+  before: readonly PresenceEntry[],
+  after: readonly PresenceEntry[],
+): void {
+  const target = paneOptions.follow;
+  if (!target || paneOptions.pinned) return;
+  const others = after.filter((entry) => entry.clientId !== port.clientId);
+  let next: string | null | undefined;
+  if (target !== "*")
+    next = others.find((entry) => entry.pane === target)?.focusedTrackId;
+  else {
+    const moved = others.filter(
+      (entry) =>
+        before.find((old) => old.clientId === entry.clientId)
+          ?.focusedTrackId !== entry.focusedTrackId,
+    );
+    next = (moved.at(-1) ?? (before.length === 0 ? others.at(-1) : undefined))
+      ?.focusedTrackId;
+  }
+  if (!next || next === requestedTrack) return;
+  void focusTrack(next, { follow: true }).then((result) => {
+    if (result.ok) {
+      receipt(
+        ok(
+          `follows ${target === "*" ? "latest pane" : `pane ${target}`} · ${next}`,
+        ),
+      );
+      tickUi();
+    }
+  });
 }
 
 /** The engine this window hears itself through (its own in daemon mode). */
@@ -4932,7 +5166,7 @@ function playHost() {
     playing: () => clock.playing,
     beatAt: (ms: number) => clock.beatAt(ms),
     scoreBeat: (beat: number) => scoreBeatAt(score, beat),
-    engine: liveEngine,
+    engine: playEngine,
     samples: () => liveSampleBank,
     async commit(
       next: TrackScore,
