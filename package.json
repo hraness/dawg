@@ -30,6 +30,7 @@
   },
   "scripts": {
     "dawg": "bun run src/main.ts",
+    "bench:perf": "bun bench/perf/run.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "check": "bun test && bun run typecheck && bun run format",
