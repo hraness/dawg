@@ -29,7 +29,7 @@ const PGUP = "\u001b[5~";
 const PGDN = "\u001b[6~";
 
 function harness(cols: number, rows: number) {
-  const vt = new VirtualTerminal(cols, rows);
+  let vt = new VirtualTerminal(cols, rows);
   let now = 1_000;
   const app = new TuiApp({
     io: { write: (d) => vt.write(d), columns: () => cols, rows: () => rows },
@@ -38,7 +38,16 @@ function harness(cols: number, rows: number) {
   });
   return {
     app,
-    vt,
+    get vt() {
+      return vt;
+    },
+    /** A SIGWINCH: new size, a fresh terminal, the next frame repaints. */
+    resize(nextCols: number, nextRows: number) {
+      cols = nextCols;
+      rows = nextRows;
+      vt = new VirtualTerminal(cols, rows);
+      app.invalidate();
+    },
     frame() {
       now += 50;
       app.render(view, { force: true });
@@ -196,5 +205,36 @@ test("help rows clip with an ellipsis and never pass the width", () => {
         expect(row.endsWith("…") || row.trimEnd() === row).toBe(true);
     }
     if (width === 50) expect(rows.some((row) => row.endsWith("…"))).toBe(true);
+  }
+});
+
+test("resize re-clamps a scrolled panel: grow, shrink, the first press moves", () => {
+  const lines = Array.from(
+    { length: 80 },
+    (_, i) => `L${String(i).padStart(3, "0")}`,
+  );
+  for (const [from, to] of [
+    [
+      [60, 16],
+      [160, 60],
+    ],
+    [
+      [160, 60],
+      [60, 16],
+    ],
+  ] as const) {
+    const h = harness(from[0], from[1]);
+    h.app.openText("help", lines);
+    h.frame();
+    h.app.input(END);
+    expect(visible(h.frame()).at(-1)).toBe(79);
+    h.resize(to[0], to[1]);
+    // Still pinned to the end at the new size, nothing past it.
+    const after = visible(h.frame());
+    expect(after.at(-1)).toBe(79);
+    h.app.input(UP);
+    const moved = visible(h.frame());
+    expect(moved.at(-1)).toBe(78);
+    expect(moved[0]).toBe(after[0]! - 1);
   }
 });

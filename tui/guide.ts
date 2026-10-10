@@ -119,6 +119,8 @@ export class GuideBrowser {
   /** The guide open as a page, or undefined in the tree. */
   page: string | undefined;
   scroll = 0;
+  /** At the last page: resizes keep the end in view. */
+  private atEnd = false;
 
   constructor(guides: readonly Guide[], open?: string) {
     this.guides = guides;
@@ -146,6 +148,7 @@ export class GuideBrowser {
     this.selected = guide.id;
     this.page = guide.id;
     this.scroll = 0;
+    this.atEnd = false;
     return true;
   }
 
@@ -212,6 +215,7 @@ export class GuideBrowser {
     if (this.visible().some((row) => row.guide.id === this.selected)) {
       this.page = this.selected;
       this.scroll = 0;
+      this.atEnd = false;
     }
   }
 
@@ -244,11 +248,13 @@ export class GuideBrowser {
                     : 0;
       if (step !== 0) {
         this.scroll = Math.max(0, Math.min(max, this.scroll + step));
+        this.atEnd = max > 0 && this.scroll === max;
         return "handled";
       }
       if (esc || left || value === "h" || value === "\u007f") {
         this.page = undefined;
         this.scroll = 0;
+        this.atEnd = false;
         return "handled";
       }
       return "handled";
@@ -339,7 +345,8 @@ export class GuideBrowser {
     if (page) {
       const rows = wrapRows(guideLines(page.body, unicode), width);
       const max = Math.max(0, rows.length - height);
-      this.scroll = Math.max(0, Math.min(max, this.scroll));
+      // Pinned to the end at the last page: a resize keeps the end in view.
+      this.scroll = this.atEnd ? max : Math.max(0, Math.min(max, this.scroll));
       const crumb = page.parent ? `${this.byId(page.parent)?.title} › ` : "";
       return {
         title: `guide · ${crumb}${page.title}`.replace(

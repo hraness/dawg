@@ -128,3 +128,23 @@ describe("guide text", () => {
     ]);
   });
 });
+
+test("a page scrolled to its end stays pinned there across a resize", () => {
+  const body = Array.from({ length: 40 }, (_, i) => `line ${i}`).join("\n\n");
+  const b = new GuideBrowser([guide("long", 1, undefined, body)], "long");
+  b.view(70, 30);
+  b.key("\u001b[F", 28); // End
+  const last = (rows: readonly { text: string }[]) =>
+    rows
+      .filter((row) => row.text.trim())
+      .at(-1)
+      ?.text.trim();
+  expect(last(b.view(70, 30).rows)).toBe("line 39");
+  // Shorter and taller: the end stays in view, nothing past it.
+  expect(last(b.view(70, 8).rows)).toBe("line 39");
+  expect(last(b.view(70, 60).rows)).toBe("line 39");
+  // Up from the end unpins: the next resize keeps the top line instead.
+  b.key(UP, 8);
+  const top = b.view(70, 8).scroll;
+  expect(b.view(70, 7).scroll).toBe(top);
+});
