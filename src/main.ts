@@ -4231,6 +4231,9 @@ async function sessionCommand(
       return "auto-naming on";
     }
     const name = normalizeSessionName(arg);
+    // Announced before the write: the session watcher can deliver the new
+    // name before updateMeta returns, which would card the rename twice.
+    announcedName = name;
     // Unconditional: the latest user rename wins over any in-flight auto-name.
     const result = await port.updateMeta({ name, nameSource: "user" });
     announcedName = result.meta.name;

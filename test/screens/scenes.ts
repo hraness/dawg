@@ -104,9 +104,12 @@ export const SCENES: Scene[] = [
     async run(stage, size) {
       const gateway = new FakeGateway();
       stage.onClose(() => gateway.stop());
+      // The first chunk stops mid-command, so nothing is applied before the
+      // capture: an edit landing mid-play re-anchors the transport at a
+      // moment that depends on the runner's speed.
       const release = gateway.reply([
-        "tempo 112\nfx rev",
-        "erb mix 0.4\n",
+        "fx rev",
+        "erb mix 0.4\ntempo 112\n",
         "Slower and wetter.",
       ]);
       const pty = await song(stage, size, ["--track", "chords"], gateway.env);
@@ -115,7 +118,7 @@ export const SCENES: Scene[] = [
       await stage.type(pty, "make it slower and wetter\r", 1);
       await stage.until(() => gateway.requests > 0, "request", pty);
       release();
-      // Only the first chunk is out, so the prompt can't get past "fx rev";
+      // Only the first chunk is out, so the prompt stops at "fx rev";
       // the typing runs on the clock, so a fixed number of steps lands on
       // the same keystroke every run.
       await Bun.sleep(400);
