@@ -45,7 +45,7 @@ ${installLines}
 
 - Instruments: sine, piano, pluck, bass, saw, square, triangle, and a synthesized drum kit (kick, snare, clap, rim, tom, hat, openhat).
 - Per-track volume, pan, mute, solo, low-pass filter, ping-pong stereo delay, Freeverb-style reverb, and automation lanes for volume, pan, filter cutoff, resonance, delay feedback and delay mix.
-- Gapless playback through ffplay or SoX play (afplay fallback on macOS); \`dawg render out.wav\` writes byte-identical stereo WAVs.
+- Gapless playback through dawg's native audio sink (prebuilt for macOS and Linux, arm64 and x64; ffplay, SoX play or afplay as fallbacks); \`dawg render out.wav\` writes byte-identical stereo WAVs.
 - dawgd, one local daemon per session: many terminal windows share one score and one transport; it recovers from crashes and falls back to a file lock if it cannot start.
 - Each new window claims the next unclaimed instrument, so N windows on an N-track song each play a different track.
 - Sessions name themselves from the music; /rename, /fork (numbered), /sessions and /resume.

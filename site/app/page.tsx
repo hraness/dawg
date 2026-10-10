@@ -47,7 +47,7 @@ const features = [
   },
   {
     title: "Gapless playback",
-    body: "One long-lived ffplay or SoX player. Edits, tempo changes and seeks swap the loop in place without a restart.",
+    body: "A native audio sink, with ffplay or SoX as fallbacks. Edits, tempo changes and seeks swap the loop in place without a restart.",
   },
   {
     title: "Undo and redo",
@@ -82,7 +82,7 @@ const questions = [
   },
   {
     q: "Where does the sound come from?",
-    a: "A built-in deterministic synthesizer. Playback streams into ffplay or SoX play, or afplay on macOS. dawg auth status shows which one it found. DAWG_AUDIO=0 runs silent.",
+    a: "A built-in deterministic synthesizer. It plays through dawg's native audio sink, prebuilt for macOS and Linux on arm64 and x64, and falls back to ffplay, SoX play or afplay. dawg doctor shows which one it uses. DAWG_AUDIO=0 runs silent.",
   },
   {
     q: "Can the agent wreck my song?",
@@ -347,10 +347,10 @@ export default async function Home() {
               </div>
             </div>
             <p>
-              For sound, install <code>ffplay</code> (from FFmpeg) or SoX; on
-              macOS dawg falls back to <code>afplay</code>. Then run{" "}
-              <code>dawg</code> in any folder and follow the{" "}
-              <Link href="/docs">docs</Link>.
+              Sound plays through dawg&rsquo;s native audio sink on macOS and
+              Linux; where it cannot load, install <code>ffplay</code> (from
+              FFmpeg) or SoX. Then run <code>dawg</code> in any folder and
+              follow the <Link href="/docs">docs</Link>.
             </p>
           </div>
         </section>
