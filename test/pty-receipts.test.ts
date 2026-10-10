@@ -48,11 +48,14 @@ const RECEIPT_KNOWN_GAPS: readonly string[] = [
 
 /**
  * Gaps that depend on timing: allowed to lie, not required to. C12 (feel
- * lane, PR #140): an agent tool write can come back through the file
+ * lane, PR #140): a typed edit or an agent tool write can come back through the file
  * watcher after the window records its own revision, which happens on
  * slower machines (CI) and shows the sync card.
  */
-const RECEIPT_RACY_GAPS: readonly string[] = ["one-window agent write"];
+const RECEIPT_RACY_GAPS: readonly string[] = [
+  "one-window edit",
+  "one-window agent write",
+];
 
 /** Every case this suite records; a case that throws early still counts. */
 const EXPECTED_LABELS: readonly string[] = [
