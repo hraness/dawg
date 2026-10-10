@@ -12,18 +12,10 @@ import { TOPICS, TOPIC_ALIASES } from "../src/lang/glossary.ts";
 const WORDS = [...TOPICS, ...Object.keys(TOPIC_ALIASES)];
 
 /** Topic words `/menu` does not take yet (the menu lane's resolveTopic). */
-const KNOWN_MENU_TOPIC_GAPS: readonly string[] = [
-  ...["voice", "keys", "agent", "music", "session", "window"],
-  ...["instrument", "instruments", "samples", "vocal", "vocals", "sing"],
-  ...["clips", "lyrics", "autotune", "formant", "vocoder", "fx", "effect"],
-  ...["rig", "drums", "grooves", "patterns", "kits", "packs", "key"],
-  ...["scales", "progression", "mixer", "arrangement", "tracks", "notes"],
-  ...["export", "files", "undo", "keyboard", "shortcuts", "mouse"],
-  ...["model", "models", "showme", "show-me", "sessions", "login", "ai"],
-];
+const KNOWN_MENU_TOPIC_GAPS: readonly string[] = [];
 
 /** Window lines help advertises that do not route yet (grammar lane). */
-const KNOWN_WINDOW_GAPS: readonly string[] = ["/model key", "model key"];
+const KNOWN_WINDOW_GAPS: readonly string[] = [];
 
 const WINDOW_LINES = [
   "/model",

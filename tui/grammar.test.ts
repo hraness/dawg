@@ -5,6 +5,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { displayWidth } from "./text.ts";
 import {
   KEYS,
   KEY_BACK,
@@ -106,6 +107,18 @@ describe("? panels", () => {
       if (!row.startsWith("play:")) expect(row).toMatch(/next/);
     expect(tabs.find((row) => row.startsWith("play:"))).toContain(
       "play mode only",
+    );
+  });
+
+  test("every ? panel row fits an 80-column terminal", () => {
+    // The panel's inner width at 80 columns (main.ts: columns - 8).
+    for (const [screen, sections] of Object.entries(KEYS))
+      for (const line of keyLines(sections))
+        expect(`${screen}: ${displayWidth(line) <= 72 ? "fits" : line}`).toBe(
+          `${screen}: fits`,
+        );
+    expect(keyLines(KEYS.prompt).join("\n")).toMatch(
+      /ctrl-k\s+menu: 8 sections/,
     );
   });
 

@@ -139,7 +139,7 @@ export const HINTS = {
 
 /** The audition loop's keys, shared by the menu and the rhythm editor. */
 const AUDITION_ROWS: readonly KeyRow[] = [
-  ["space", "loop the focused track · again stops (toggles a toggle row)"],
+  ["space", "loop the track · again stops"],
   ["a", "A/B: committed ↔ staged"],
   ["c", "solo ↔ in context (the whole mix)"],
   ["ctrl-z", "undo a kept change"],
@@ -175,9 +175,9 @@ export const KEYS = {
     {
       title: "start here",
       rows: [
-        ["type", "ask for a change in plain words, or a command"],
+        ["type", "ask in plain words, or type a command"],
         ["ctrl-p", "play mode: notes on the keyboard (chords: q)"],
-        ["ctrl-k", `menu: ${MENU_ROOTS.join(", ")}`],
+        ["ctrl-k", `menu: ${MENU_ROOTS.length} sections · /menu <topic>`],
         ["space", "play / pause (empty prompt)"],
         ["/help", "what dawg can do · /help <topic> for more"],
       ],
@@ -237,7 +237,7 @@ export const KEYS = {
         ["↑ ↓  j k", "move"],
         [
           "enter",
-          "open a section · run an action · on a value: its fader, a list or the toggle · staged: keep (one undo step)",
+          "open · run · value: fader or list · staged: keep (one undo)",
         ],
         ["→ l", "go in · run an action · on a value: adjust up"],
         ["← h", "back one level · on a value: adjust down"],
@@ -261,7 +261,7 @@ export const KEYS = {
     {
       title: "fader drawer",
       rows: [
-        ["← →  h l  - +", "step (staged; tempo, meter, length apply at once)"],
+        ["← →  h l  - +", "step (tempo, meter, bars apply at once)"],
         ["shift-← shift-→  { }", "coarse step (five)"],
         ["[ ]  alt-← alt-→", "fine step (a tenth; skips detents)"],
         ["pgup pgdn", "big step (twenty)"],
@@ -269,7 +269,7 @@ export const KEYS = {
         ["0-9 .", "type an exact value, enter sets it"],
         ["x d delete", "back to the default"],
         ["↑ ↓  j k  tab shift-tab", "previous / next param of this device"],
-        ["enter", "keep every staged change (one undo step)"],
+        ["enter", "keep every staged change (one undo)"],
         ["esc", "revert and close"],
         ...AUDITION_ROWS,
       ],
@@ -345,7 +345,7 @@ export const KEYS = {
         ["z x", "octave down / up"],
         ["c v", "velocity down / up"],
         ["shift", "sustain while held"],
-        ["tab", "sustain latch (play mode only: letters are notes)"],
+        ["tab", "sustain latch (play mode only)"],
         ["space", "play / pause (with count-in)"],
         ["r R", "record · record replacing"],
         ["m", "metronome click"],

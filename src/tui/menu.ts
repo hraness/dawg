@@ -8,6 +8,7 @@
  *
  * Rendering reuses the TUI's picker overlay: `view()` returns a picker.
  */
+import { TOPIC_ALIASES } from "../lang/glossary.ts";
 import {
   voiceEffectRows,
   voiceRootDetail,
@@ -501,7 +502,7 @@ export function rootNodes(context: MenuContext): MenuNode[] {
       id: "rhythm",
       label: "Rhythm",
       detail: "euclid editor · grooves · kits",
-      help: "hits per drum, ready-made grooves and drum kits",
+      help: "hits per drum, ready-made grooves and kits",
       build: rhythmNodes,
     },
     {
@@ -548,62 +549,77 @@ export function rootNodes(context: MenuContext): MenuNode[] {
  * guides; the ? panel itself belongs to the window.
  */
 export const SECTION_ALIASES: Readonly<Record<string, readonly string[]>> =
-  Object.freeze({
-    sound: ["sound"],
-    voice: ["voice"],
-    effects: ["effects"],
-    rhythm: ["rhythm"],
-    chords: ["chords"],
-    mix: ["mix"],
-    arrange: ["arrange"],
-    project: ["project"],
-    keys: ["project", "help"],
-    agent: ["project", "agent"],
-    // Older ids, kept as aliases.
-    parameters: ["sound"],
-    sounds: ["sound", "browse"],
-    instruments: ["sound", "browse"],
-    performance: ["sound", "performance"],
-    expression: ["sound", "performance"],
-    clips: ["voice"],
-    lyrics: ["voice"],
-    autotune: ["voice"],
-    sing: ["voice"],
-    vocoder: ["voice"],
-    formant: ["voice"],
-    grooves: ["rhythm", "patterns"],
-    groove: ["rhythm", "patterns"],
-    patterns: ["rhythm", "patterns"],
-    kits: ["rhythm", "kits"],
-    euclid: ["rhythm"],
-    tuning: ["chords", "tuning"],
-    scale: ["chords"],
-    key: ["chords"],
-    track: ["mix"],
-    automation: ["mix", "automation"],
-    master: ["mix", "master"],
-    tracks: ["arrange", "tracks"],
-    music: ["arrange"],
-    style: ["arrange", "style"],
-    styles: ["arrange", "style"],
-    genre: ["arrange", "style"],
-    sections: ["arrange", "sections"],
-    form: ["arrange"],
-    transport: ["project"],
-    tempo: ["project", "tempo"],
-    meter: ["project", "tempo"],
-    time: ["project", "tempo"],
-    export: ["project", "export"],
-    session: ["project", "session"],
-    sessions: ["project", "session"],
-    window: ["project", "help"],
-    help: ["project", "help"],
-    guides: ["project", "help"],
-    model: ["project", "agent"],
-    showme: ["project", "agent"],
-    models: ["project", "agent"],
-    fx: ["effects"],
-  });
+  Object.freeze(
+    withTopicAliases({
+      sound: ["sound"],
+      voice: ["voice"],
+      effects: ["effects"],
+      rhythm: ["rhythm"],
+      chords: ["chords"],
+      mix: ["mix"],
+      arrange: ["arrange"],
+      project: ["project"],
+      keys: ["project", "help"],
+      agent: ["project", "agent"],
+      // Older ids, kept as aliases.
+      parameters: ["sound"],
+      sounds: ["sound", "browse"],
+      instruments: ["sound", "browse"],
+      performance: ["sound", "performance"],
+      expression: ["sound", "performance"],
+      clips: ["voice"],
+      lyrics: ["voice"],
+      autotune: ["voice"],
+      sing: ["voice"],
+      vocoder: ["voice"],
+      formant: ["voice"],
+      grooves: ["rhythm", "patterns"],
+      groove: ["rhythm", "patterns"],
+      patterns: ["rhythm", "patterns"],
+      kits: ["rhythm", "kits"],
+      euclid: ["rhythm"],
+      tuning: ["chords", "tuning"],
+      scale: ["chords"],
+      key: ["chords"],
+      track: ["mix"],
+      automation: ["mix", "automation"],
+      master: ["mix", "master"],
+      tracks: ["arrange", "tracks"],
+      music: ["arrange"],
+      style: ["arrange", "style"],
+      styles: ["arrange", "style"],
+      genre: ["arrange", "style"],
+      sections: ["arrange", "sections"],
+      form: ["arrange"],
+      transport: ["project"],
+      tempo: ["project", "tempo"],
+      meter: ["project", "tempo"],
+      time: ["project", "tempo"],
+      export: ["project", "export"],
+      session: ["project", "session"],
+      sessions: ["project", "session"],
+      window: ["project", "help"],
+      help: ["project", "help"],
+      guides: ["project", "help"],
+      model: ["project", "agent"],
+      showme: ["project", "agent"],
+      models: ["project", "agent"],
+      fx: ["effects"],
+    }),
+  );
+
+/**
+ * Every glossary topic alias (`/help drums`, `/guide mixer`) opens the same
+ * topic in `/menu` too: a word with no deeper path here opens its topic.
+ */
+function withTopicAliases(
+  paths: Record<string, readonly string[]>,
+): Record<string, readonly string[]> {
+  const all = { ...paths };
+  for (const [word, topic] of Object.entries(TOPIC_ALIASES))
+    if (!all[word] && all[topic]) all[word] = all[topic]!;
+  return all;
+}
 
 /** Sound: the instrument and its controls first, then the instruments. */
 function soundSectionNodes(context: MenuContext): MenuNode[] {
@@ -2776,7 +2792,7 @@ function soundsDetail(track: Track | undefined): string {
 }
 
 /**
- * The instrument browser: drum kits and soundfont instruments from the
+ * The instrument browser: kits and soundfont instruments from the
  * built-in packs (fetched on first use), and the pack list.
  */
 function kitsMenu(): MenuNode {
@@ -3091,7 +3107,7 @@ function transportNodes(context: MenuContext): MenuNode[] {
       kind: "menu",
       id: "agent",
       label: "agent",
-      detail: context.showMe ? `show me ${context.showMe}` : "model · login",
+      detail: context.showMe ? `show me ${context.showMe}` : "model · model key",
       help: "the agent's model, show-me and model key",
       build: agentNodes,
     },

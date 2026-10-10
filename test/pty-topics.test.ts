@@ -25,11 +25,7 @@ const BAD = /\bunknown\b|\bunrecognized\b|no help topic|no guide named/i;
  * language lane (D1, D3: help and guide pages per id), the menu lane (B1)
  * and the grammar lane (A2, bare scalars and voice verbs) close them.
  */
-const PTY_KNOWN_GAPS: readonly string[] = [
-  "/menu voice",
-  "/menu keys",
-  "/menu agent",
-];
+const PTY_KNOWN_GAPS: readonly string[] = [];
 
 /** Every case the suites record; a case that throws early still counts. */
 const EXPECTED_LABELS: readonly string[] = [

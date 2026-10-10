@@ -317,7 +317,7 @@ test.skipIf(!supported)(
       await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
     };
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await open("voice", "menu › Voice");
       await close();
       await open("tuning", "Chords and key › tuning");
@@ -346,13 +346,24 @@ test.skipIf(!supported)(
       await open("performance", "Sound › performance");
       expect(t.vt.text()).toContain("humanize timing");
       await close();
-      // An unknown id lists the canonical roots.
+      // An unknown id gets a short usage that fits 80 columns, with the
+      // nearest name when one is close.
       await t.send("/menu nope");
       await t.send("\r");
       await t.until(
-        () => t.vt.text().includes("usage: /menu [sound|voice|effects"),
+        () => t.vt.text().includes('no menu "nope" · /menu <topic or row>'),
         "menu error",
       );
+      await t.send("/menu sond");
+      await t.send("\r");
+      await t.until(
+        () => t.vt.text().includes("did you mean /menu sound?"),
+        "menu did-you-mean",
+      );
+      // The keys topic opens the ? panel (§4).
+      await t.send("/menu keys");
+      await t.send("\r");
+      await t.until(() => t.vt.text().includes("╭─ keys"), "keys panel");
     } finally {
       t.terminal.write("\u0003");
       await t.proc.exited;

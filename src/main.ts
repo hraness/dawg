@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { TOPIC_ALIASES } from "./lang/glossary.ts";
 import { isGuideInstrument, vocalChainPatch } from "../core/clips.ts";
 import { isSingWord } from "../core/sing.ts";
 import { commandParses, parseExact } from "./commands/parses.ts";
@@ -2209,6 +2210,11 @@ async function submit(prompt: string): Promise<string | Receipt> {
   const menuCommand = command.match(/^\/menu(?:\s+(\S+))?$/i);
   if (menuCommand) {
     const section = menuCommand[1]?.toLowerCase();
+    // §4: the keys topic has no menu page; it opens the ? panel.
+    if (section && (section === "keys" || TOPIC_ALIASES[section] === "keys")) {
+      tui.showKeys("keys", keyLines(KEYS.prompt));
+      return ok("keys");
+    }
     if (section && !menuSectionPath(menuContext(), section))
       return fail(menuUsage(menuContext(), section));
     openMenu(section);
