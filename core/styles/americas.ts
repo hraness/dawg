@@ -1443,7 +1443,7 @@ export const AMERICAS_CARDS: readonly StyleCard[] = Object.freeze([
   card({
     id: "songo",
     summary:
-      "songo: Los Van Van's 1970s Havana groove, drum kit and timbales together, cowbell on every quarter, rim accents on the rumba clave, bombo on the and of two and ponche on four, dorian vamps",
+      "songo: Los Van Van's 1970s Havana groove, kit and timbales together, cowbell on every quarter, rim accents on the rumba clave, bombo on the and of two and ponche on four, dorian vamps",
     tempo: { bpm: [100, 125], typical: 112 },
     pitch: { scales: [["dorian", 1]] },
     harmony: {

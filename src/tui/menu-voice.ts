@@ -358,27 +358,39 @@ export function voiceRootNodes(context: MenuContext): MenuNode[] {
   if (!track) return [];
   const voice = isVoiceTrack(track);
   const sing: MenuNode[] =
-    track.instrument === "sing" && track.sing
+    track.instrument === "sing"
       ? [
           {
             kind: "menu",
             id: "voice:sing",
             label: "sing",
-            detail: track.sing.preset ?? "custom",
+            detail: track.sing?.preset ?? "default",
             help: "the built-in singing voice: preset, vowel, voices, breath, formant, throat",
             build: (inner) => {
-              const now = inner.score.tracks.find(
+              const found = inner.score.tracks.find(
                 (t) => t.id === inner.trackId,
               );
-              return now
-                ? [
-                    ...singParameterNodes(
-                      now,
-                      parseKey(inner.score.key ?? undefined)?.tonic,
+              if (!found) return [];
+              // A bare `instrument sing` has no settings yet: show the
+              // defaults, so the first nudge writes them.
+              const now = found.sing ? found : { ...found, sing: {} };
+              const context = found.sing
+                ? inner
+                : {
+                    ...inner,
+                    score: inner.score.withTracks(
+                      inner.score.tracks.map((t) =>
+                        t.id === now.id ? now : t,
+                      ),
                     ),
-                    ...singVowelNodes(inner),
-                  ]
-                : [];
+                  };
+              return [
+                ...singParameterNodes(
+                  now,
+                  parseKey(inner.score.key ?? undefined)?.tonic,
+                ),
+                ...singVowelNodes(context),
+              ];
             },
           },
         ]

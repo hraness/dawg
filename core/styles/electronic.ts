@@ -1987,7 +1987,7 @@ const DOWNTEMPO: readonly StyleCard[] = [
   card({
     id: "leftfield",
     summary:
-      "Leftfield: eclectic genre-blending electronica at 100-120 bpm, dub bass, unusual timbres over four-on-the-floor",
+      "Leftfield: eclectic style-blending electronica at 100-120 bpm, dub bass, unusual timbres over four-on-the-floor",
     tempo: { bpm: [100, 120], typical: 112 },
     rhythm: { onsets: { kick: FOUR_FLOOR, hat: OFFBEAT } },
     harmony: { model: "modal", rhythm: [[0.5, 1]] },
@@ -2168,6 +2168,7 @@ const AMBIENT: readonly StyleCard[] = [
     id: "space-ambient",
     summary:
       "Space ambient: lydian raised-fourth shimmer over a sub pedal, slow cloud textures, vast reverb",
+    tempo: { bpm: [48, 66], typical: 56 },
     pitch: { scales: [["lydian", 1]] },
     texture: {
       roles: {

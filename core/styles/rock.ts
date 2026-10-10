@@ -364,7 +364,7 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
     id: "beat",
     summary:
       "beat and British invasion: jangly Rickenbacker chords, borrowed bVI and bVII, close harmony vocals, straight eights",
-    tempo: { bpm: [120, 150], typical: 136 },
+    tempo: { bpm: [120, 146], typical: 132 },
     meter: { hypermeter: [[4, 1]] },
     groove: { swingRatio: [1, 1.1] },
     pitch: {
@@ -454,7 +454,7 @@ export const ROCK_CARDS: readonly StyleCard[] = Object.freeze([
     id: "instrumental-rock",
     summary:
       "instrumental rock: the twangy clean guitar carries the tune, I-IV-V and fifties changes, no vocal",
-    tempo: { bpm: [120, 160], typical: 138 },
+    tempo: { bpm: [138, 160], typical: 150 },
     groove: { swingRatio: [1, 1.3] },
     harmony: {
       forms: [[TWELVE_BAR, 1]],

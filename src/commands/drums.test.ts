@@ -84,7 +84,7 @@ describe("pattern library", () => {
     expect(findPattern("boom_bap")?.name).toBe("boom-bap");
     expect(findPattern("nope")).toBeUndefined();
     expect(pattern("house")).toBe(findPattern("house")!.rows);
-    expect(() => pattern("nope")).toThrow(/unknown drum pattern/);
+    expect(() => pattern("nope")).toThrow(/unknown groove/);
     expect(patternLine(findPattern("house")!)).toMatch(
       /^house · 118–128 BPM · house, dance/,
     );

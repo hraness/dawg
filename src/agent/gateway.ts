@@ -250,8 +250,8 @@ function createApiClient(
       if (!apiKey)
         throw new GatewayError(
           provider === "openrouter"
-            ? "no OpenRouter key; run `dawg login openrouter` or set OPENROUTER_API_KEY"
-            : "no AI Gateway key; run `dawg login` or set AI_GATEWAY_API_KEY",
+            ? "no OpenRouter key; run `dawg model key openrouter` or set OPENROUTER_API_KEY"
+            : "no AI Gateway key; run `dawg model key` or set AI_GATEWAY_API_KEY",
         );
       const encodeFor = (model: string): string => {
         const body: Record<string, unknown> = {

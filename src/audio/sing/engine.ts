@@ -46,6 +46,7 @@ import { noteHz } from "../../../core/tuning.ts";
 import {
   Bandpass,
   Cascade,
+  morphVowel,
   tuneToPitch,
   vowelAt,
   type Formant,
@@ -64,6 +65,13 @@ export const SING_CONTROL = 32;
 export const MAX_SING_LINES = 16;
 /** Portamento between slurred notes, seconds (time constant). */
 const SLUR_SECONDS = 0.03;
+/**
+ * Vowel glide across a legato note change, seconds. A tract that jumped
+ * from one vowel's formants to the next in one control period rang a
+ * click about 10 dB over the voice (a la-li chorale part peaked at
+ * -0.2 dBFS at -19 LUFS); singers move the tract over tens of ms anyway.
+ */
+const VOWEL_GLIDE_SECONDS = 0.04;
 /** A throat phrase ends at a gap longer than this, seconds. */
 const THROAT_GAP_SECONDS = 0.25;
 /**
@@ -529,22 +537,35 @@ function renderLine(
   const frames = lineEnd - line.start;
   const stealFade = Math.max(1, Math.round(STEAL_FADE_SECONDS * sampleRate));
   const slur = Math.exp(-SING_CONTROL / (SLUR_SECONDS * sampleRate));
-  const segmentAt = (offset: number): Segment => {
+  const segmentIndex = (offset: number): number => {
     let k = 0;
     while (k + 1 < line.segments.length && line.segments[k + 1]!.at <= offset)
       k += 1;
-    return line.segments[k]!;
+    return k;
   };
+  const segmentAt = (offset: number): Segment =>
+    line.segments[segmentIndex(offset)]!;
+  const glideFrames = Math.max(1, VOWEL_GLIDE_SECONDS * sampleRate);
   const vowelTable = (
     offset: number,
     live: Live,
     scale: number,
     hz: number,
   ) => {
-    const seg = segmentAt(offset);
+    const k = segmentIndex(offset);
+    const seg = line.segments[k]!;
     const len = Math.max(1, seg.end - seg.at);
     const t = (Math.min(offset, seg.end) - seg.at) / len;
-    return tuneToPitch(vowelAt(voice, seg.vowel, t * live.morph), hz, scale);
+    let table = vowelAt(voice, seg.vowel, t * live.morph);
+    const into = (offset - seg.at) / glideFrames;
+    const previous = k > 0 ? line.segments[k - 1]! : undefined;
+    if (previous && into < 1 && previous.vowel !== seg.vowel)
+      table = morphVowel(
+        vowelAt(voice, previous.vowel, live.morph),
+        table,
+        into,
+      );
+    return tuneToPitch(table, hz, scale);
   };
 
   // Shared tracts: one per bucket, fed by the sum of its members' sources.

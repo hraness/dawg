@@ -264,7 +264,7 @@ const FIXED_PRESETS: readonly TuningPreset[] = [
   {
     name: "12-tet",
     family: "equal",
-    about: "twelve-tone equal temperament, the default",
+    about: "twelve equal steps per octave (12-TET), the default",
     cents: edoCents(12),
     aliases: ["12edo", "12-edo", "12tet", "12-et", "equal", "et", "standard"],
   },

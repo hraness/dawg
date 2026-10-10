@@ -114,7 +114,7 @@ const sync = (fallback: number, strudel?: readonly string[]): NumberParam => ({
   default: fallback,
   step: 0.25,
   unit: "beats",
-  doc: "LFO cycle length in beats (tempo-synced); 0 uses rate in Hz",
+  doc: "LFO period in beats (tempo-synced); 0 uses rate in Hz",
   ...(strudel ? { strudel } : {}),
 });
 const mix = (fallback: number, strudel?: readonly string[]): NumberParam => ({

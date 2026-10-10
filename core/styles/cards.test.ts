@@ -5,6 +5,10 @@
  * - every taxonomy id resolves, generates for 3 seeds at 8 bars and passes
  *   every numeric pattern check in validate.ts;
  * - generation is deterministic (same seed, same score JSON);
+ * - every taxonomy leaf has its own written card, and no two siblings are
+ *   statistically identical: for some fingerprint (onsets per 16th step,
+ *   pitch-class share, tempo) the gap between their 3-seed centroids
+ *   exceeds the seed-to-seed spread;
  * - every written card (and a fixed sample of inherited leaves) renders a
  *   one-bar excerpt with sound, no NaN and no clipping, and every fifth of
  *   them renders identical bytes a second time.
@@ -15,7 +19,13 @@ import { createHash } from "node:crypto";
 import { renderScorePcm } from "../../src/audio/wav.ts";
 import { excerptScore } from "./excerpt.ts";
 import { generateStyle } from "./generate.ts";
-import { LEAF_IDS, STYLE_CARDS, STYLE_IDS } from "./index.ts";
+import {
+  LEAF_IDS,
+  STYLE_CARDS,
+  STYLE_IDS,
+  hasCard,
+  styleNode,
+} from "./index.ts";
 import { validateGenerated } from "./validate.ts";
 
 const SEEDS = [1, 2, 3];
@@ -103,4 +113,66 @@ describe("style cards: rendered excerpt", () => {
     }
     expect(failures).toEqual([]);
   }, 300_000);
+});
+
+/** One seed's fingerprint: onsets per bar per 16th step, pitch-class share, tempo. */
+function fingerprint(id: (typeof LEAF_IDS)[number], seed: number) {
+  const g = generateStyle(id, { seed, bars: BARS });
+  const { plan } = g;
+  const onsets = new Array<number>(16).fill(0);
+  const classes = new Array<number>(12).fill(0);
+  let pitched = 0;
+  for (const note of g.data.notes ?? []) {
+    const tick = (note.startTick ?? 0) % plan.barTicks;
+    onsets[Math.floor((tick / plan.barTicks) * 16)]! += 1 / plan.bars / 4;
+    const role = plan.noteRoles.get(note.id);
+    if (role === undefined || !PITCHED_ROLES.has(role)) continue;
+    classes[(((note.pitch - plan.tonic) % 12) + 12) % 12]! += 1;
+    pitched += 1;
+  }
+  return [onsets, classes.map((v) => v / (pitched || 1)), [plan.bpm]] as const;
+}
+
+const PITCHED_ROLES = new Set(["bass", "chords", "lead", "pad", "arp"]);
+const l1 = (a: readonly number[], b: readonly number[]) =>
+  a.reduce((sum, v, i) => sum + Math.abs(v - b[i]!), 0);
+const centroid = (xs: readonly (readonly number[])[]) =>
+  xs[0]!.map((_, i) => xs.reduce((sum, x) => sum + x[i]!, 0) / xs.length);
+const spread = (xs: readonly (readonly number[])[]) => {
+  const c = centroid(xs);
+  return xs.reduce((sum, x) => sum + l1(x, c), 0) / xs.length;
+};
+
+describe("style cards: taxonomy coverage", () => {
+  test("every taxonomy leaf has its own written card", () => {
+    expect(LEAF_IDS.length).toBeGreaterThanOrEqual(754);
+    expect(LEAF_IDS.filter((id) => !hasCard(id))).toEqual([]);
+  });
+
+  test("no two sibling leaves are statistically identical", () => {
+    const prints = new Map(
+      LEAF_IDS.map((id) => [id, SEEDS.map((seed) => fingerprint(id, seed))]),
+    );
+    const siblings = new Map<string, (typeof LEAF_IDS)[number][]>();
+    for (const id of LEAF_IDS) {
+      const parent = styleNode(id)?.parent ?? "";
+      siblings.set(parent, [...(siblings.get(parent) ?? []), id]);
+    }
+    const identical: string[] = [];
+    for (const kids of siblings.values())
+      for (const [i, a] of kids.entries())
+        for (const b of kids.slice(i + 1)) {
+          const pa = prints.get(a)!;
+          const pb = prints.get(b)!;
+          const apart = [0, 1, 2].some((dim) => {
+            const xa = pa.map((p) => p[dim]!);
+            const xb = pb.map((p) => p[dim]!);
+            return (
+              l1(centroid(xa), centroid(xb)) > Math.max(spread(xa), spread(xb))
+            );
+          });
+          if (!apart) identical.push(`${a} ~ ${b}`);
+        }
+    expect(identical).toEqual([]);
+  }, 60_000);
 });

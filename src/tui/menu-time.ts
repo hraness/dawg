@@ -1,6 +1,6 @@
 /**
  * Project › Tempo and meter: the song's tempo map, meter changes and
- * fermatas, and the focused track's rate, phase and cycle. Every row runs a
+ * fermatas, and the focused track's rate, phase and loop. Every row runs a
  * prompt command from `src/commands/time.ts`, so the menu and the prompt
  * stay one grammar.
  */
@@ -230,7 +230,7 @@ export function tempoNodes(context: MenuContext): MenuNode[] {
       id: "track-time",
       label: `${track.name ?? track.id} time`,
       detail: trackTimeDetail(context),
-      help: "the focused track's tempo ratio, phase and cycle (polytempo, polymeter, phasing)",
+      help: "the focused track's tempo ratio, phase and loop (polytempo, polymeter, phasing)",
       build: trackTimeNodes,
     });
   if (time?.tempo?.length)
@@ -285,7 +285,7 @@ function trackTimeDetail(context: MenuContext): string {
   const parts: string[] = [];
   if (time.rate !== undefined) parts.push(`rate ${fmt(time.rate, 4)}×`);
   if (time.phase !== undefined) parts.push(`phase ${fmt(time.phase / tpb)}`);
-  if (time.cycle !== undefined) parts.push(`cycle ${fmt(time.cycle / tpb)}`);
+  if (time.cycle !== undefined) parts.push(`loop ${fmt(time.cycle / tpb)}`);
   return parts.join(" · ");
 }
 
@@ -327,8 +327,8 @@ export function trackTimeNodes(context: MenuContext): MenuNode[] {
     },
     {
       kind: "number",
-      label: "cycle",
-      help: "beats before the track's pattern repeats (polymeter) · x follows the song loop",
+      label: "loop",
+      help: "beats before the track's own loop repeats (polymeter) · x follows the song loop",
       value: time?.cycle !== undefined ? time.cycle / tpb : undefined,
       off: "song loop",
       start: score.beatsPerBar,
@@ -336,8 +336,8 @@ export function trackTimeNodes(context: MenuContext): MenuNode[] {
       max: TIME_LIMITS.maxTick / tpb,
       step: stepBy(0.25, 0.25, TIME_LIMITS.maxTick / tpb),
       format: (value) => `${fmt(value)} beat${value === 1 ? "" : "s"}`,
-      command: (value) => `track cycle ${fmt(value, 4)}`,
-      reset: "track cycle off",
+      command: (value) => `track loop ${fmt(value, 4)}`,
+      reset: "track loop off",
     },
     entry(
       "phasing",
@@ -357,7 +357,7 @@ export function trackTimeNodes(context: MenuContext): MenuNode[] {
       kind: "action",
       label: "follow the song",
       command: "track time off",
-      help: "clear rate, phase and cycle",
+      help: "clear rate, phase and loop",
     },
   ];
 }

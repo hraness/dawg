@@ -230,7 +230,11 @@ class DaemonPort<T> implements SessionPort<T> {
     }
     if (result.status === "accepted" || result.status === "duplicate") {
       this.setSync("synced");
-      return this.record();
+      // The client's record can already hold a later write from another
+      // window; mark which revision is this one's (OwnWrites reads it).
+      const record = { ...this.record() };
+      WRITTEN_REVISION.set(record, result.revision);
+      return record;
     }
     if (result.status === "rebase") {
       this.setSync("conflict");
@@ -312,6 +316,12 @@ class DaemonPort<T> implements SessionPort<T> {
     return this.client.record as SessionRecord<T>;
   }
 }
+
+/**
+ * The revision an append produced, for records whose last event may be a
+ * newer write from elsewhere (a daemon window's record follows the log).
+ */
+export const WRITTEN_REVISION = new WeakMap<object, number>();
 
 class FilePort<T> implements SessionPort<T> {
   public readonly mode = "file" as const;

@@ -13,8 +13,7 @@
  * - A fake-provider turn streaming a bare `pattern house` writes drums, and
  *   the line never glues onto the prose after it.
  *
- * Cases another lane still has to land are listed in RECEIPT_KNOWN_GAPS; the
- * suite fails when a listed case starts passing, so the list only shrinks.
+ * RECEIPT_KNOWN_GAPS is empty; an entry fails the suite once it passes.
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readdir, readFile } from "node:fs/promises";
@@ -29,10 +28,8 @@ const OFFLINE = { AI_GATEWAY_API_KEY: "", DAWG_AI: "0" };
 type Session = Awaited<ReturnType<typeof launch>>;
 
 /**
- * Cases that still tell a lie, by label. The grammar lane closes the first
- * three (A11 exact instrument words, A12 remove checks, A13 usageError) and
- * bare `pattern` for the agent (A15, with the menu lane's B12 show-me rule);
- * the feel lane closed the transport revision bump (C7).
+ * Cases that still tell a lie, by label. Empty; an entry fails the
+ * suite once it passes.
  */
 const RECEIPT_KNOWN_GAPS: readonly string[] = [];
 
@@ -43,15 +40,11 @@ const RECEIPT_KNOWN_GAPS: readonly string[] = [];
 const SYNC_CARD = /synced · /;
 
 /**
- * Gaps that depend on timing: allowed to lie, not required to. C12 (feel
- * lane, PR #140): a typed edit or an agent tool write can come back through the file
- * watcher after the window records its own revision, which happens on
- * slower machines (CI) and shows the sync card.
+ * Timing-dependent gaps: allowed to lie, not required to. Empty since
+ * daemon writes mark their own revision (WRITTEN_REVISION) and file
+ * writes record their event id before the watcher can report it.
  */
-const RECEIPT_RACY_GAPS: readonly string[] = [
-  "one-window edit",
-  "one-window agent write",
-];
+const RECEIPT_RACY_GAPS: readonly string[] = [];
 
 /** Every case this suite records; a case that throws early still counts. */
 const EXPECTED_LABELS: readonly string[] = [

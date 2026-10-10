@@ -137,7 +137,7 @@ test.skipIf(!supported)(
       await t.send("/kit\r");
       // The title row can arrive before the footer row of the same frame.
       await t.until(
-        () => screen().includes("drum kits") && screen().includes("space loop"),
+        () => screen().includes("─ kits ─") && screen().includes("space loop"),
         "kit picker with its loop hint",
       );
       await t.send(" ");
@@ -150,7 +150,7 @@ test.skipIf(!supported)(
       capture.picker = screen();
       const before = await latest(t.cwd);
       await t.send("\u001b");
-      await t.until(() => !screen().includes("drum kits"), "closed");
+      await t.until(() => !screen().includes("─ kits ─"), "closed");
       await Bun.sleep(200);
       expect((await latest(t.cwd)).revision).toBe(before.revision);
 

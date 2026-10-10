@@ -1543,7 +1543,7 @@ const ROMANTIC_LEAVES: readonly StyleCard[] = Object.freeze([
     id: "early-romantic",
     summary:
       "classical periods colored by chromatic mediants (I-bVI), the augmented-sixth approach to V and lyrical second themes over arpeggiated accompaniment",
-    tempo: { bpm: [60, 132], typical: 92 },
+    tempo: { bpm: [84, 132], typical: 104 },
     harmony: {
       forms: [
         [["I", "bVI", "iv", "V", "I", "vi", "ii", "V"], 0.5],
@@ -1749,7 +1749,7 @@ const ROMANTIC_LEAVES: readonly StyleCard[] = Object.freeze([
     id: "verismo",
     summary:
       "melodic climax doubled in unison by full strings, sudden dynamic swells, parlando recitative, minor-key tragedy closing on the tonic",
-    tempo: { bpm: [56, 120], typical: 80 },
+    tempo: { bpm: [50, 88], typical: 66 },
     pitch: {
       scales: [
         ["minor", 0.6],
@@ -1929,7 +1929,7 @@ const ROMANTIC_LEAVES: readonly StyleCard[] = Object.freeze([
         ["2/4", 0.4],
       ],
     },
-    tempo: { bpm: [96, 168], typical: 132 },
+    tempo: { bpm: [120, 168], typical: 144 },
     pitch: {
       scales: [
         ["major", 0.8],
@@ -2000,7 +2000,7 @@ const ROMANTIC_LEAVES: readonly StyleCard[] = Object.freeze([
         ["2/4", 0.4],
       ],
     },
-    tempo: { bpm: [84, 160], typical: 120 },
+    tempo: { bpm: [72, 112], typical: 92 },
     pitch: {
       scales: [
         ["major", 0.8],

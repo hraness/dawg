@@ -203,4 +203,4 @@ A. **format + SDK + sync** (`core/sdk/v1.ts`, `core/sdk/print.ts`, `core/sdk/eva
 B. **workspace + web tools** (depends on A's `apply_files`; can start on `list/read/write/edit`, `web_search`, `fetch_url` and path scoping immediately).
 C. **media tools** (independent of A except `import_sample`, which lands last).
 D. **sampler playback + highway** (depends on A's schema).
-Each lane: worktree under `~/src/track-wt/<lane>`, PR with tests, rebase on main before merge, squash auto-merge. 0.3.0 ships sign-in + A + B; 0.4.0 ships C + D, or everything in 0.3.0 if they land within the same window.
+Each lane: worktree under `~/src/track-wt/<lane>`, PR with tests, rebase on main before merge, squash auto-merge. 0.3.0 ships model keys + A + B; 0.4.0 ships C + D, or everything in 0.3.0 if they land within the same window.

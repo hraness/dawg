@@ -1,6 +1,6 @@
 /**
  * Ctrl-k menu rows for the wind engine (0.6.1): the "Winds and brass" group
- * under Sound › browse sounds, and the WIND_PARAMS rows under Sound ›
+ * under Sound › instruments, and the WIND_PARAMS rows under Sound ›
  * Parameters on a wind-engine track. Every row runs a `wind …` command.
  */
 import type { EnumParam, NumberParam } from "../../core/params.ts";
@@ -27,7 +27,7 @@ function presetRow(name: WindPresetName): MenuNode {
   };
 }
 
-/** Sound › browse sounds › Winds and brass: flutes, reeds, brass. */
+/** Sound › instruments › winds and brass: flutes, reeds, brass. */
 export function windsMenu(): MenuNode {
   return {
     kind: "menu",

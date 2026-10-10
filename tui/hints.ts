@@ -98,8 +98,7 @@ const KEYS_PLAYING = "space stop · ctrl-p play mode";
 
 /** How to start a drum track or a vocal track, before the keys. */
 const LEAD_DRUMS = "hit kick at 0";
-// `/lyrics` is a slash command today; the hint runs exactly as typed.
-const LEAD_VOCAL = "/lyrics la la · sing ooh · ctrl-k › Voice";
+const LEAD_VOCAL = 'lyrics "la la" · sing ooh · ctrl-k › Voice';
 
 /** Styles a wide empty line suggests, one per session (all have cards). */
 export const SUGGESTED_STYLES = [

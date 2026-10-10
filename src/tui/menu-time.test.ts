@@ -178,7 +178,7 @@ describe("Project › Tempo and meter", () => {
     });
   });
 
-  test("the focused track's time: rate, phase, cycle and phasing", () => {
+  test("the focused track's time: rate, phase, loop and phasing", () => {
     const menu = new EditMenu();
     const ctx = context();
     menu.show(ctx, "tempo");
@@ -204,11 +204,11 @@ describe("Project › Tempo and meter", () => {
       type: "run",
       command: "track phase 0.25",
     });
-    select(menu, ctx, "cycle");
+    select(menu, ctx, "loop");
     // Off until nudged: the first nudge starts at one bar.
     expect(menu.key(RIGHT, ctx)).toEqual({
       type: "run",
-      command: "track cycle 4",
+      command: "track loop 4",
     });
     select(menu, ctx, "phasing");
     expect(type(menu, ctx, "3")).toEqual({

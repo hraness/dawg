@@ -10,7 +10,7 @@
  * patterns are read from the source, so a new window command is covered
  * without editing this file.
  */
-import { canonicalWindowForm } from "../src/commands/grammar.ts";
+import { WINDOW_VERBS, canonicalWindowForm } from "../src/commands/grammar.ts";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createScore, type TrackScore } from "../core/score.ts";
@@ -184,7 +184,15 @@ export function accepts(
   if (commandParses(command, score)) return true;
   if (parseStyleCommand(command)) return true;
   if (parseCalibrationCommand(command)) return true;
-  return windowAccepts(command, score);
+  if (windowAccepts(command, score)) return true;
+  // The prompt bar's second reading: a bare window verb (`status`,
+  // `guide voice`) runs as its slash form (main.ts SLASH_HANDLED).
+  const verb = command.split(/\s+/)[0]!.toLowerCase();
+  return (
+    !command.startsWith("/") &&
+    (WINDOW_VERBS.has(verb) || verb === "chords") &&
+    windowAccepts(`/${command}`, score)
+  );
 }
 
 /**

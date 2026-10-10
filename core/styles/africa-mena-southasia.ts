@@ -722,7 +722,7 @@ const LEAVES: readonly StyleCard[] = [
     id: "hiplife",
     summary:
       "hiplife and azonto: highlife chord loops under rapped and sung Twi, programmed kit with a syncopated kick, bell on top",
-    tempo: { bpm: [96, 124], typical: 108 },
+    tempo: { bpm: [108, 128], typical: 118 },
     meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
     rhythm: {
       onsets: {
@@ -795,7 +795,7 @@ const LEAVES: readonly StyleCard[] = [
     id: "afrobeats",
     summary:
       "afrobeats: the 3+3+2 tresillo kick under a shaker and conga groove, sparse minor-pop loops, sung hooks, half-step syncopation",
-    tempo: { bpm: [96, 116], typical: 104 },
+    tempo: { bpm: [94, 110], typical: 102 },
     meter: { signatures: [["4/4", 1]], hypermeter: [[4, 1]] },
     rhythm: {
       onsets: {
@@ -2768,7 +2768,7 @@ const LEAVES: readonly StyleCard[] = [
   card({
     id: "sri-lankan",
     summary:
-      "Sri Lankan baila and drums: baila's fast 6/8 kaffirinha strum with I-IV-V, the Kandyan geta beraya drum patterns and cymbal pulse",
+      "Sri Lankan baila and drums: baila's fast 6/8 kaffirinha strum with I-IV-V, the Kandyan geta beraya grooves and cymbal pulse",
     tempo: { bpm: [110, 150], typical: 128 },
     meter: { signatures: [["6/8", 1]], hypermeter: [[4, 1]] },
     pitch: {

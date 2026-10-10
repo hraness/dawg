@@ -1,5 +1,5 @@
 /**
- * Ctrl-k menu rows for modal percussion (0.6): the "Mallets and bells"
+ * Ctrl-k menu rows for modal percussion (0.6): the "mallets"
  * group under Sound › instruments, and the MODAL_PARAMS rows under
  * Sound › Parameters on a modal track. Every row runs a `modal …` command.
  */
@@ -18,7 +18,7 @@ import {
 import type { Track } from "../../core/score.ts";
 import { num, specStep, type MenuNode } from "./menu.ts";
 
-/** Sound › instruments › Mallets and bells: one row per preset. */
+/** Sound › instruments › mallets: one row per preset. */
 export function malletsMenu(): MenuNode {
   return {
     kind: "menu",
@@ -47,14 +47,14 @@ function presetRow(name: ModalPresetName): MenuNode {
 }
 
 /**
- * Mallets and bells › Gamelan (f061-gamelan-winds): the Javanese and
+ * mallets › gamelan (f061-gamelan-winds): the Javanese and
  * Balinese bronzes. `modal gamelan` points here.
  */
 export function gamelanMenu(): MenuNode {
   return {
     kind: "menu",
     id: "gamelan",
-    label: "Gamelan",
+    label: "gamelan",
     detail: `${GAMELAN_PRESETS.length} bronzes · saron, gangsa (ombak), gong …`,
     help: "Javanese and Balinese gamelan; pair two gangsa tracks with modal pair, tune with tuning slendro or pelog",
     build: () => GAMELAN_PRESETS.map(presetRow),

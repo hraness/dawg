@@ -1559,14 +1559,14 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
       const track = context.score.tracks.find((t) => t.id === trackId)!;
       if (!isDrumInstrument(track.instrument))
         throw new ToolArgumentError(
-          `track ${trackId} is ${track.instrument}, not a drum kit; set_instrument kit or create a kit track`,
+          `track ${trackId} is ${track.instrument}, not a kit; set_instrument kit or create a kit track`,
         );
       const tpb = context.score.ticksPerBeat;
       const loopBeats = loopTicksOf(context.score) / tpb;
       const voiceOf = (value: unknown, label: string) => {
         const voice =
           typeof value === "string" ? parseDrumVoice(value) : undefined;
-        if (!voice) throw new ToolArgumentError(`${label}: unknown drum voice`);
+        if (!voice) throw new ToolArgumentError(`${label}: unknown drum`);
         return voice;
       };
       const hits: { voice: DrumVoice; beat: number; velocity: number }[] = [];

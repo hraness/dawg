@@ -544,7 +544,7 @@ describe("provider selection", () => {
       auth(scriptedRunner([capsCall(false)], ["xcb"])),
     );
     expect(none).toMatchObject({ kind: "offline" });
-    expect(none.kind === "offline" && none.reason).toContain("dawg login");
+    expect(none.kind === "offline" && none.reason).toContain("dawg model key");
     expect(await selectProvider(auth(scriptedRunner([])))).toMatchObject({
       kind: "offline",
     });

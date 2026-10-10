@@ -59,7 +59,7 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       },
       {
         command:
-          "grain <preset> | <param> <value> | on [voice V] | src synth:<name>|voice V | reset | off",
+          "grain <preset> | <param> <value> | on [voice V] | src synth:<name>|voice V",
         summary:
           "granular cloud · grain cloud · grain scan 0.2 · track swarm-2 · grain presets",
       },
@@ -78,7 +78,7 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       },
       {
         command:
-          "tonewheel [<drawbars>] | combo [<tabs>] [<register>] | pipe [<stops>] [<row> <value> …]",
+          "tonewheel [<drawbars>] | combo [<tabs>] [<register>] | pipe [<stops>]",
         summary:
           "organs · tonewheel 888800008 perc 3rd · gospel · combo 08880 flute · pipe plenum · keys perc 3rd",
       },
@@ -234,7 +234,7 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       },
       {
         command:
-          "vocoder [preset] | src <track> | <param> <value|reset> | reset | off | presets",
+          "vocoder [preset] | src <track> | <param> <value|reset> | off | presets",
         summary:
           "vocode the focused voice onto a synth (classic robot talkbox choir glass whisper smear lofi) · help vocoder lists params",
       },
@@ -246,7 +246,7 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       { command: "vocal", summary: "voice tools: lists every verb" },
       {
         command:
-          "clip [id] gain -3 | gain by -3 | fade .01 .2 | fade in .01 | move 9 | split 7",
+          "clip [id] gain -3 | gain by -3 | fade .01 .2 | fade in .01 | split 7",
         summary: "edit an audio clip (dB, seconds, 1-based bars)",
       },
       {
@@ -426,8 +426,8 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       },
       { command: "track name <text>", summary: "rename this track" },
       {
-        command: "track rate|phase|cycle <n> | off",
-        summary: "polytempo · track rate 3/2 · track cycle 3",
+        command: "track rate|phase|loop <n> | off",
+        summary: "polytempo · track rate 3/2 · track loop 3",
       },
       {
         command: "track phasing <beats> [over <beats>|hold <n>]",
@@ -892,7 +892,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   pattern: "pattern <drum> <beats...> | every <step> · pattern kick every 1",
   clear: "clear · clear <drum> · clear [<lane>] automation",
   track:
-    "track <name> · track drums · track rm <name> · track move <name> <position> · track rate <0.125..8>|<a>/<b>|off · track phase <beats> · track cycle <beats> · track phasing <beats> [over <beats>]",
+    "track <name> · track drums · track rm <name> · track move <name> <position> · track rate <0.125..8>|<a>/<b>|off · track phase <beats> · track loop <beats> · track phasing <beats> [over <beats>]",
   tracks: "tracks",
   sessions: "/sessions",
   resume: "/resume [<n>|<name>|<id>]",
@@ -962,6 +962,8 @@ export const USAGE: Readonly<Record<string, string>> = {
     "/formant <-12..12> [mix] | deep|giant|bright|tiny | on | off · /formant -4 · /formant 3 0.5",
   vowel:
     "/vowel <v> [<to> [<morph 0..1>]] | ee | to <v>|off | morph <0..1> | mix <0..1> | off · /vowel a o 0.5",
+  lyrics:
+    'lyrics [bar] <syllables> | clear [bar] · lyrics "sun-lit morn-ing" (- splits, _ holds, ~ skips)',
   sing: "sing <preset> | <param> <value> | drone <D3> | vowels a e i … | reset | off | presets · sing choir · sing khoomei drone D3 · sing vowel o voices 6",
   vocoder:
     "vocoder [preset] | src <track> | <param> <value|reset> | reset | off | presets · vocoder talkbox · vocoder src vox · vocoder formant +3 · vocoder gate auto · params: tap mode carrier follow root spread bands lo hi width attack release formant unvoiced sens hiss gate enhance depth freeze mix gain seed",

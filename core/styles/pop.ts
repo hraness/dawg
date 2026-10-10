@@ -1448,7 +1448,7 @@ const MODERN: readonly StyleCard[] = [
   ),
   leaf(
     "k-pop",
-    "K-pop: section-by-section genre switches over a minor trap-EDM hybrid, half-time pre-chorus, dance-break drop",
+    "K-pop: section-by-section style switches over a minor trap-EDM hybrid, half-time pre-chorus, dance-break drop",
     2010,
     {
       tempo: { bpm: [96, 130], typical: 116 },

@@ -11,18 +11,22 @@ const COLS = 80;
 
 type Session = Awaited<ReturnType<typeof launch>>;
 
-/** The screen's footer: the last line naming `esc`, within 80 columns. */
-function footer(t: Session): string {
-  const lines = t.vt.lines();
-  const line = [...lines]
-    .reverse()
-    .find((row) => /esc (back|leave|clear)/.test(row));
-  expect(line).toBeDefined();
-  return line!;
+const FOOTER = /esc (back|leave|clear)/;
+
+/**
+ * The screen's footer: the last line naming `esc`, within 80 columns. A
+ * frame can arrive in several writes, so the body may show before the
+ * footer row is painted; wait for the row rather than sample one write.
+ */
+async function footer(t: Session): Promise<string> {
+  const find = () =>
+    [...t.vt.lines()].reverse().find((row) => FOOTER.test(row));
+  await t.until(() => find() !== undefined, "footer");
+  return find()!;
 }
 
-function expectFits(t: Session): void {
-  const line = footer(t);
+async function expectFits(t: Session): Promise<void> {
+  const line = await footer(t);
   expect(line).toContain("? keys");
   expect(line).not.toContain("…");
   expect([...line].length).toBeLessThanOrEqual(COLS);
@@ -49,7 +53,7 @@ async function expectFilter(
 ): Promise<void> {
   await t.send(`/${query}`);
   await t.until(() => t.vt.text().includes(`/${query}`), `${screen} filter`);
-  expect(footer(t)).toContain("esc clear");
+  expect(await footer(t)).toContain("esc clear");
   await t.send(ESC);
   await t.until(
     () => !t.vt.text().includes(`/${query}`),
@@ -80,14 +84,14 @@ test.skipIf(!supported)(
       // Menu: footer, ?, / filter, Esc out level by level.
       await t.send("\u000b");
       await t.until(() => t.vt.text().includes("menu"), "menu");
-      expectFits(t);
+      await expectFits(t);
       await expectKeysPanel(t, "value: fader or list", "menu");
       await expectFilter(t, "rhy", "menu");
       await closeWithEsc(t, "menu ·");
 
       // /pattern, /kit and /model are lists with the same keys.
       for (const [command, title, query] of [
-        ["/pattern", "drum patterns", "boom"],
+        ["/pattern", "grooves", "boom"],
         ["/kit", "kits", "808"],
         ["/model", "Claude Opus", "haiku"],
       ] as const) {
@@ -99,7 +103,7 @@ test.skipIf(!supported)(
             /esc (back|leave|clear)/.test(t.vt.text()),
           command,
         );
-        expectFits(t);
+        await expectFits(t);
         await expectKeysPanel(t, "filter (type, then enter or esc)", title);
         await expectFilter(t, query, title);
         await closeWithEsc(t, title);
@@ -108,7 +112,7 @@ test.skipIf(!supported)(
       // /euclid: an editor, same footer and panel.
       await t.send("/euclid\r");
       await t.until(() => t.vt.text().includes("rhythm ›"), "euclid");
-      expectFits(t);
+      await expectFits(t);
       await expectKeysPanel(t, "freeze into plain hits", "rhythm ›");
       await closeWithEsc(t, "rhythm ›");
     } finally {
@@ -187,7 +191,7 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("/guide\r");
       await t.until(() => t.vt.text().includes("Getting started"), "guides");
-      expectFits(t);
+      await expectFits(t);
       await expectKeysPanel(t, "expand a section", "Using dawg");
       await t.send("/euclid");
       await t.until(() => t.vt.text().includes("/ euclid"), "guide filter");

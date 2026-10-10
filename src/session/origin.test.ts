@@ -5,6 +5,7 @@ import {
   foreignEvents,
   otherWindowName,
 } from "./origin.ts";
+import { WRITTEN_REVISION } from "./port.ts";
 import type { SessionEvent, SessionRecord } from "./store.ts";
 
 const event = (revision: number, id: string, kind = "edit"): SessionEvent => ({
@@ -32,6 +33,16 @@ describe("sync origin", () => {
     expect(foreignEvents(latest, 0, own).map((e) => e.id)).toEqual(["b"]);
     expect(foreignEvents(latest, 1, own).map((e) => e.id)).toEqual(["b"]);
     expect(foreignEvents(record([event(1, "a")]), 0, own)).toEqual([]);
+  });
+
+  test("a daemon record that already holds a later foreign write", async () => {
+    // dawgd accepted this window's write as revision 1, but the client's
+    // record has also taken in another window's revision 2.
+    const own = new OwnWrites();
+    const written = record([event(1, "mine"), event(2, "theirs")]);
+    WRITTEN_REVISION.set(written, 1);
+    await own.track(Promise.resolve(written));
+    expect(foreignEvents(written, 0, own).map((e) => e.id)).toEqual(["theirs"]);
   });
 
   test("settled waits for an append in flight", async () => {
