@@ -415,7 +415,9 @@ describe("edit menu", () => {
       .view(ctx)
       .items.map((row) => row.label.slice(0, 16).trim());
     expect(labels.slice(0, 3)).toEqual(["instrument", "preset", "attack"]);
-    expect(labels.at(-5)).toBe("advanced");
+    expect(labels.at(-6)).toBe("advanced");
+    // Patcher §7.4: every track has Sound › patch (a preview until it is one).
+    expect(labels.at(-5)).toBe("patch");
     // 0.6: a pitched track can be turned into a grain cloud.
     expect(labels.at(-4)).toBe("granular");
     expect(labels.at(-3)).toBe("track tuning");
