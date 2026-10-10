@@ -184,4 +184,4 @@ case ":$PATH:" in
     printf '\n    export PATH="%s:$PATH"\n\n' "$BIN_DIR"
     ;;
 esac
-say "start with: dawg   (then try \`dawg login\` to connect a model)"
+say "start with: dawg   (then try \`dawg model key\` to connect a model)"
