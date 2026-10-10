@@ -886,11 +886,7 @@ if (exportPath) {
 await runInteractive();
 
 async function packageVersion(): Promise<string> {
-  const raw = await readFile(
-    new URL("../package.json", import.meta.url),
-    "utf8",
-  );
-  return (JSON.parse(raw) as { version?: string }).version ?? "0.0.0";
+  return (await import("./version.ts")).VERSION;
 }
 
 function seedDemo(value: TrackScore, trackId: string): TrackScore {
