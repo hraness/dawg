@@ -67,7 +67,7 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("Project"), "menu root");
       await t.send("/mix");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("menu › Mix"), "mix");
+      await t.until(() => t.vt.text().includes("≡ Mix"), "mix");
       await t.send("/master");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("Mix › master"), "master menu");
@@ -98,7 +98,7 @@ test.skipIf(!supported)(
       );
 
       for (let i = 0; i < 8; i++) await t.send("\u001b");
-      await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
+      await t.until(() => !t.vt.text().includes("≡ "), "menu closed");
     } finally {
       t.terminal.write("\u0003");
       await t.proc.exited;

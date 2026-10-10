@@ -244,7 +244,7 @@ test.skipIf(!supported)(
     // `pane play keys` in a pane prints the shell line instead of opening.
     c.terminal.write("\r"); // enter keeps and closes the drawer
     await until(
-      () => !c.vt.text().includes("menu › Mix"),
+      () => !c.vt.text().includes("≡ Mix"),
       "drawer closed",
       () => c.vt.text(),
     );

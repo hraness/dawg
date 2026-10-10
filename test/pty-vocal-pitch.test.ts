@@ -74,7 +74,7 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("Arrange"), "menu root");
       await t.send("/Voice");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("menu › Voice"), "voice");
+      await t.until(() => t.vt.text().includes("≡ Voice"), "voice");
       expect(t.vt.text()).toMatch(/pitch\s+[a-g]#? (major|minor) · E4/);
       // Clips and lyrics (clips lane) sit above pitch in Voice.
       for (let i = 0; i < 8 && !/› pitch\s/.test(t.vt.text()); i++) {
@@ -85,7 +85,7 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("make notes"), "pitch rows");
       expect(t.vt.text()).toContain("make notes");
       for (let i = 0; i < 5; i++) await t.send("\u001b");
-      await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
+      await t.until(() => !t.vt.text().includes("≡ "), "menu closed");
 
       await t.send("/vocal notes\r");
       const doc = await waitFor(t.cwd, (d) =>

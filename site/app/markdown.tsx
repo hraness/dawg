@@ -2,7 +2,7 @@ import { SyntaxCode } from "@hraness/design-kit/react/server";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { type DocMark, NOTE_MARKS, SECTION_MARKS } from "./doc-marks";
+import { type DocMark, NOTE_MARKS, SECTION_MARKS } from "../../guides/marks.ts";
 
 /** A doc mark before a heading or note; the words beside it say the same. */
 function Mark({ mark }: Readonly<{ mark: DocMark }>) {
@@ -72,7 +72,7 @@ export function Markdown({
 }: Readonly<{
   source: string;
   headingOffset?: number;
-  /** Guide pages: the TUI's section and note marks (app/doc-marks.ts). */
+  /** Guide pages: the TUI's section and note marks (guides/marks.ts). */
   marks?: boolean;
 }>) {
   const lines = source.replace(/\r\n/gu, "\n").split("\n");

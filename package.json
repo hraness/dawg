@@ -22,6 +22,7 @@
     "!tui/**/*.test.ts",
     "guides/*.md",
     "guides/index.ts",
+    "guides/marks.ts",
     "CHANGELOG.md",
     "DAWG.md",
     "native/prebuilt/manifest.json",

@@ -28,7 +28,7 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("Project"), "menu root");
       await t.send("/mix");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("menu › Mix"), "mix");
+      await t.until(() => t.vt.text().includes("≡ Mix"), "mix");
       await resize(t, 50, 14);
       await t.until(
         () => t.vt.text().includes("terminal too small · 50×14 · need ≥ 60×16"),
@@ -64,12 +64,12 @@ test.skipIf(!supported)(
       expect(t.proc.exitCode).toBeNull();
       // Back above the minimum: the menu is where it was, nothing typed.
       await resize(t, 80, 24);
-      await t.until(() => t.vt.text().includes("menu › Mix"), "real UI back");
+      await t.until(() => t.vt.text().includes("≡ Mix"), "real UI back");
       expect(t.vt.text()).not.toContain("too small");
       expect(t.vt.text()).not.toContain("xyz");
       await t.send("\u001b");
       await t.send("\u001b");
-      await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
+      await t.until(() => !t.vt.text().includes("≡ "), "menu closed");
       // q quits from the too-small screen.
       await resize(t, 40, 10);
       await t.until(() => t.vt.text().includes("too small"), "small again");

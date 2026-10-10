@@ -190,6 +190,7 @@ import {
   helpMiss,
   helpText,
   helpTitle,
+  helpHeadingMarks,
   helpTopicLines,
   nearestCommand,
   typoFix,
@@ -476,6 +477,7 @@ import {
   type TypesIndicator,
 } from "../tui/app.ts";
 import type { DrawerView } from "../tui/drawer.ts";
+import { crumbText } from "../tui/crumbs.ts";
 import { fail, note, ok, toneOf, warn, type Receipt } from "../tui/activity.ts";
 import { systemRunner } from "./auth/runner.ts";
 import type { MediaServices } from "./media/types.ts";
@@ -2319,7 +2321,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
       Math.max(10, columns - (columns >= 60 ? 8 : 4)),
     );
     if (!lines) return fail(helpMiss(topic!));
-    tui.openText(helpTitle(topic), lines);
+    tui.openText(helpTitle(topic), lines, helpHeadingMarks(lines));
     return ok(topic ? helpTitle(topic) : "help · help all for every command");
   }
   if (/^\/?tracks$/i.test(command)) {
@@ -5128,7 +5130,8 @@ function refreshMenu(): void {
     else {
       const focusedField = fields[focusIndex(fader, fields)];
       const drawer = drawerView(fader, fields, menu.faderCommitted(context), {
-        title: menu.crumbs,
+        title: crumbText({ steps: menu.steps }),
+        crumbs: { steps: menu.steps },
         dirty: context.audition?.dirty ?? false,
         status: context.audition?.status,
         atOnce:
@@ -5147,6 +5150,7 @@ function refreshMenu(): void {
   tui.openPicker({
     id: "menu",
     title: view.title,
+    crumbs: view.crumbs,
     items: view.items.length
       ? view.items
       : [{ label: "no matches", value: "none" }],

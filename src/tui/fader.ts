@@ -11,6 +11,7 @@
  */
 import type { DrawerAside, DrawerField, DrawerView } from "../../tui/drawer.ts";
 import type { KnobIndex } from "../../tui/knobs.ts";
+import type { Crumbs } from "../../tui/crumbs.ts";
 import {
   KEY_BACKSPACE,
   KEY_BACKTAB,
@@ -513,6 +514,8 @@ export function drawerView(
   committed: readonly FaderSpec[],
   options: {
     title: string;
+    /** The Ctrl-K breadcrumb, painted with the menu mark in place of `title`. */
+    crumbs?: Crumbs | undefined;
     dirty: boolean;
     /** How many edits are staged (defaults to 1 while dirty). */
     staged?: number | undefined;
@@ -583,6 +586,7 @@ export function drawerView(
   const staged = options.staged ?? (options.dirty ? 1 : 0);
   return {
     title: options.title,
+    ...(options.crumbs ? { crumbs: options.crumbs } : {}),
     fields: drawn,
     focus: focusIndex(state, fields),
     typing: state.typing,

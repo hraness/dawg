@@ -94,7 +94,7 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("Arrange"), "menu root");
       await t.send("/Effects");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("menu › Effects"), "effects");
+      await t.until(() => t.vt.text().includes("≡ Effects"), "effects");
       await t.send("/voice effects");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("vocoder"), "voice group");
@@ -104,7 +104,7 @@ test.skipIf(!supported)(
       expect(t.vt.text()).toContain("source");
       expect(t.vt.text()).toContain("robot");
       for (let i = 0; i < 4; i++) await t.send("\u001b");
-      await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
+      await t.until(() => !t.vt.text().includes("≡ "), "menu closed");
       expect(t.vt.text()).not.toContain("error");
     } finally {
       t.terminal.write("\u0003");

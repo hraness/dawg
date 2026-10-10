@@ -27,7 +27,8 @@ const score: TrackScoreSnapshot = {
 };
 
 const filter: DrawerView = {
-  title: "menu › Effects › Filter",
+  title: "≡ Effects › Filter",
+  crumbs: { steps: ["Effects", "Filter"] },
   focus: 1,
   dirty: true,
   badge: "A/B: 1 change staged · enter keep · esc revert",

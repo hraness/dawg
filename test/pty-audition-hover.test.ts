@@ -73,10 +73,10 @@ test.skipIf(!supported)(
       const committed = await latest(t.cwd);
 
       await t.send("/menu sound\r");
-      await t.until(() => screen().includes("menu › Sound"), "sound");
+      await t.until(() => screen().includes("≡ Sound"), "sound");
       await t.send("j");
       await t.send("\r");
-      await t.until(() => screen().includes("menu › Sound › table"), "tables");
+      await t.until(() => screen().includes("≡ Sound › table"), "tables");
       // Space loops; moving now hears each table on the loop.
       await t.send(" ");
       await t.until(() => screen().includes("♪ solo"), "auditioning");
@@ -98,10 +98,7 @@ test.skipIf(!supported)(
 
       // Back in, move, Enter chooses; Esc out; Enter on a value keeps.
       await t.send("\r");
-      await t.until(
-        () => screen().includes("menu › Sound › table"),
-        "tables 2",
-      );
+      await t.until(() => screen().includes("≡ Sound › table"), "tables 2");
       await t.send("jj");
       await t.until(() => screen().includes("B staged 1"), "hover again");
       const chosen = screen().match(/› (\S+) {2}/)?.[1];

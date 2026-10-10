@@ -74,7 +74,7 @@ test.skipIf(!supported)(
       await t.until(() => screen().includes("Project"), "menu root");
       await t.send("jj");
       await t.send("\r");
-      await t.until(() => screen().includes("menu › Effects"), "effects");
+      await t.until(() => screen().includes("≡ Effects"), "effects");
       await t.send("/reverb");
       await t.until(() => screen().includes("/reverb"), "filtered");
       await t.send("\r");
@@ -97,7 +97,7 @@ test.skipIf(!supported)(
       await t.until(() => screen().includes("0.35 ← 0.3"), "first nudge");
       await t.send(RIGHT);
       await t.until(() => screen().includes("0.4 ← 0.3"), "second nudge");
-      expect(screen()).toContain("● menu");
+      expect(screen()).toContain("● ≡ ");
       expect(screen()).toContain("B staged 2");
       expect(screen()).toContain("enter keep");
       await Bun.sleep(150);
@@ -131,11 +131,11 @@ test.skipIf(!supported)(
       expect(screen()).not.toContain("●");
 
       // One undo takes both nudges back.
-      for (let i = 0; i < 4 && screen().includes("╭─ menu"); i += 1) {
+      for (let i = 0; i < 4 && screen().includes("≡ "); i += 1) {
         await t.send("\u001b");
         await Bun.sleep(120);
       }
-      await t.until(() => !screen().includes("╭─ menu"), "menu closed");
+      await t.until(() => !screen().includes("≡ "), "menu closed");
       await t.send("\u001a");
       await waitFor(async () => (await mix()) === 0.3, "undone");
     } finally {

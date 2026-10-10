@@ -84,19 +84,19 @@ test.skipIf(!supported)(
 
       // ctrl-k → Arrange → sections → chorus → loop.
       await t.send("/menu arrange\r");
-      await t.until(() => t.vt.text().includes("menu › Arrange"), "Arrange");
+      await t.until(() => t.vt.text().includes("≡ Arrange"), "Arrange");
       expect(t.vt.text()).toContain("verse");
       expect(t.vt.text()).toContain("chorus");
       await t.send("/sections");
       await t.send("\r");
       await t.until(
-        () => t.vt.text().includes("menu › Arrange › sections"),
+        () => t.vt.text().includes("≡ Arrange › sections"),
         "sections page",
       );
       await t.send("/chorus");
       await t.send("\r");
       await t.until(
-        () => t.vt.text().includes("menu › Arrange › sections › chorus"),
+        () => t.vt.text().includes("≡ Arrange › sections › chorus"),
         "chorus page",
       );
       await t.send("/loop");
@@ -106,7 +106,7 @@ test.skipIf(!supported)(
         "chorus looped",
       );
       // Esc goes back one level at a time until the menu closes.
-      const menuOpen = () => t.vt.text().includes("╭─ menu");
+      const menuOpen = () => t.vt.text().includes("≡ ");
       for (let i = 0; i < 8 && menuOpen(); i++) {
         await t.send("\u001b");
         await Bun.sleep(150);

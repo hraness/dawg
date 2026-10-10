@@ -73,7 +73,7 @@ test.skipIf(!supported)(
       await t.send("j");
       await t.send("j");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("menu › Effects"), "effects");
+      await t.until(() => t.vt.text().includes("≡ Effects"), "effects");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("› filter"), "filter");
       // `/` filters the list; the focused row's command shows under it.
@@ -110,7 +110,7 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("Mix"), "back at the root");
       await t.send("/mix");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("menu › Mix"), "mix");
+      await t.until(() => t.vt.text().includes("≡ Mix"), "mix");
       await t.send("/automation");
       await t.send("\r");
       await t.until(
@@ -133,7 +133,7 @@ test.skipIf(!supported)(
 
       // Esc closes the menu; the prompt takes text again.
       for (let i = 0; i < 8; i++) await t.send("\u001b");
-      await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
+      await t.until(() => !t.vt.text().includes("≡ "), "menu closed");
       await t.send("abc");
       await t.until(() => t.vt.text().includes("abc"), "typing");
     } finally {
@@ -156,7 +156,7 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("Project"), "menu root");
       await t.send("/effects");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("menu › Effects"), "effects");
+      await t.until(() => t.vt.text().includes("≡ Effects"), "effects");
       // The core effects lead; the Strudel extras are one level down.
       expect(t.vt.text()).toContain("tremolo");
       expect(t.vt.text()).toContain("more effects");
@@ -186,7 +186,7 @@ test.skipIf(!supported)(
         "tremolo depth in session",
       );
       for (let i = 0; i < 4; i++) await t.send("\u001b");
-      await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
+      await t.until(() => !t.vt.text().includes("≡ "), "menu closed");
     } finally {
       t.terminal.write("\u0003");
       await t.proc.exited;
@@ -207,7 +207,7 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("Project"), "menu root");
       await t.send("/sound");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("menu › Sound"), "sound");
+      await t.until(() => t.vt.text().includes("≡ Sound"), "sound");
       await t.send("/preset");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("acid"), "preset list");
@@ -240,7 +240,7 @@ test.skipIf(!supported)(
         "synth attack in session",
       );
       for (let i = 0; i < 4; i++) await t.send("\u001b");
-      await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
+      await t.until(() => !t.vt.text().includes("≡ "), "menu closed");
     } finally {
       t.terminal.write("\u0003");
       await t.proc.exited;
@@ -261,7 +261,7 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("Project"), "menu root");
       await t.send("/sound");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("menu › Sound"), "sound");
+      await t.until(() => t.vt.text().includes("≡ Sound"), "sound");
       await t.send("/performance");
       await t.send("\r");
       await t.until(
@@ -294,7 +294,7 @@ test.skipIf(!supported)(
         "humanize in session",
       );
       for (let i = 0; i < 5; i++) await t.send("\u001b");
-      await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
+      await t.until(() => !t.vt.text().includes("≡ "), "menu closed");
     } finally {
       t.terminal.write("\u0003");
       await t.proc.exited;
@@ -314,11 +314,11 @@ test.skipIf(!supported)(
     };
     const close = async () => {
       for (let i = 0; i < 4; i++) await t.send("\u001b");
-      await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
+      await t.until(() => !t.vt.text().includes("≡ "), "menu closed");
     };
     try {
       await t.until(() => t.vt.text().includes(" NOW "), "prompt");
-      await open("voice", "menu › Voice");
+      await open("voice", "≡ Voice");
       await close();
       await open("tuning", "Chords and key › tuning");
       // ← adjusts a value row; on an action row it goes back, like esc.
@@ -328,7 +328,7 @@ test.skipIf(!supported)(
       await t.send("\u001b[D");
       await t.until(
         () =>
-          t.vt.text().includes("menu › Chords and key") &&
+          t.vt.text().includes("≡ Chords and key") &&
           !t.vt.text().includes("› tuning ─"),
         "back to chords and key",
       );
@@ -338,7 +338,7 @@ test.skipIf(!supported)(
       await t.send("h");
       await t.until(
         () =>
-          t.vt.text().includes("menu › Project") &&
+          t.vt.text().includes("≡ Project") &&
           !t.vt.text().includes("Project › agent"),
         "h backs out to project",
       );

@@ -139,7 +139,7 @@ test("a tall highway looks further ahead instead of stretching beats", () => {
 });
 
 const knobs: DrawerView = {
-  title: "menu › Mix",
+  title: "≡ Mix",
   focus: 0,
   dirty: false,
   hint: "↑↓ knob · ←→ turn · tab all",

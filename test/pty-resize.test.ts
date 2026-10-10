@@ -110,7 +110,7 @@ test.skipIf(!supported)(
       expect(t.vt.text()).toContain("glue");
       // Esc steps back one level: the path under it is intact.
       await t.send("\u001b");
-      await t.until(() => t.vt.text().includes("menu › Mix"), "back to Mix");
+      await t.until(() => t.vt.text().includes("≡ Mix"), "back to Mix");
     } finally {
       t.proc.kill();
     }

@@ -164,7 +164,7 @@ test.skipIf(!supported)(
     try {
       await t.until(() => screen().includes(" NOW "), "prompt");
       await t.send("/menu chords\r");
-      await t.until(() => screen().includes("menu › Chords"), "chords");
+      await t.until(() => screen().includes("≡ Chords"), "chords");
       const committed = await latest(t.cwd);
 
       // Space loops a progression played with the chord settings.
@@ -176,7 +176,7 @@ test.skipIf(!supported)(
       await t.until(() => /› voicing/.test(screen()), "voicing row");
       await t.send(RIGHT);
       await t.until(() => screen().includes("+1 ← 0"), "voicing staged");
-      expect(screen()).toContain("● menu");
+      expect(screen()).toContain("● ≡ ");
       expect(screen()).toContain("B staged 1");
       await t.send("a");
       await t.until(() => screen().includes("A committed"), "A");
@@ -186,7 +186,7 @@ test.skipIf(!supported)(
       // Esc reverts it; nothing was written.
       await t.send("\u001b");
       await t.until(() => !screen().includes(" ← "), "reverted");
-      expect(screen()).toContain("menu › Chords");
+      expect(screen()).toContain("≡ Chords");
       await Bun.sleep(150);
       expect((await latest(t.cwd)).revision).toBe(committed.revision);
 
@@ -214,11 +214,11 @@ test.skipIf(!supported)(
       expect(screen()).not.toContain("●");
 
       // Close the menu; one undo takes the key back.
-      for (let i = 0; i < 4 && screen().includes("╭─ menu"); i += 1) {
+      for (let i = 0; i < 4 && screen().includes("≡ "); i += 1) {
         await t.send("\u001b");
         await Bun.sleep(120);
       }
-      await t.until(() => !screen().includes("╭─ menu"), "menu closed");
+      await t.until(() => !screen().includes("≡ "), "menu closed");
       await t.send("\u001a");
       await waitFor(
         async () => (await latest(t.cwd)).key === committed.key,

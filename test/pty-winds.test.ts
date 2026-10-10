@@ -102,11 +102,11 @@ test.skipIf(!supported)(
         async () => (await lead(t.cwd))?.wind?.preset === "flute",
         "flute in session",
       );
-      for (let i = 0; i < 8 && t.vt.text().includes("╭─ menu"); i++) {
+      for (let i = 0; i < 8 && t.vt.text().includes("≡ "); i++) {
         await t.send("\u001b");
         await Bun.sleep(150);
       }
-      await t.until(() => !t.vt.text().includes("╭─ menu"), "menu closed");
+      await t.until(() => !t.vt.text().includes("≡ "), "menu closed");
 
       // Play mode on the wind track: arm, play a key, stop.
       await t.send("\u0010");

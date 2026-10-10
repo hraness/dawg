@@ -137,7 +137,7 @@ export const SCENES: Scene[] = [
     async run(stage, size) {
       const pty = await song(stage, size, ["--track", "bass"]);
       await stage.type(pty, "knobs\r");
-      await stage.until(has(pty, "menu › Sound"), "knobs", pty);
+      await stage.until(has(pty, "≡ Sound"), "knobs", pty);
       await stage.type(pty, RIGHT);
       await stage.type(pty, RIGHT);
       return stage.capture(pty, "knobs");
@@ -192,7 +192,7 @@ export const SCENES: Scene[] = [
     async run(stage, size) {
       const pty = await song(stage, size, ["--track", "bass"]);
       await stage.type(pty, "/menu audio\r");
-      await stage.until(has(pty, "menu › Project › audio"), "audio", pty);
+      await stage.until(has(pty, "≡ Project › audio"), "audio", pty);
       await stage.type(pty, "\r");
       await stage.until(has(pty, "audio › output"), "outputs", pty);
       await stage.type(pty, DOWN);

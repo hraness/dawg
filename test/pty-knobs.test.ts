@@ -134,7 +134,7 @@ describe.skipIf(!supported)("real PTY: four knobs", () => {
       await t.send("loop 5-6\r");
       await t.until(() => t.vt.lines()[0]!.includes("↻ 5–6"), "loop range");
       await t.send("synth\r");
-      await t.until(() => t.vt.text().includes("menu › Sound"), "sound knobs");
+      await t.until(() => t.vt.text().includes("≡ Sound"), "sound knobs");
       const text = t.vt.text();
       for (const glyph of ["●", "▲", "■", "◆"]) expect(text).toContain(glyph);
       const row = t.vt.findRow("◆ volume");

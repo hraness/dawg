@@ -70,7 +70,7 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("Project"), "menu root");
       await t.send("/sound");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("menu › Sound"), "sound");
+      await t.until(() => t.vt.text().includes("≡ Sound"), "sound");
       await t.send("/drawbars");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("5⅓'"), "drawbars sub-menu");
@@ -84,7 +84,7 @@ test.skipIf(!supported)(
       expect((await sessionTrack(t.cwd))?.keys?.preset).toBe("gospel");
 
       for (let i = 0; i < 8; i++) await t.send("\u001b");
-      await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
+      await t.until(() => !t.vt.text().includes("≡ "), "menu closed");
     } finally {
       t.terminal.write("\u0003");
       await t.proc.exited;

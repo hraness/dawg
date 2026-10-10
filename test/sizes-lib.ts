@@ -267,7 +267,7 @@ export const SCENARIOS: readonly Scenario[] = [
       await t.until(() => t.vt.text().includes("Project"), "menu root");
       await t.send("/mix");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("menu › Mix"), "mix");
+      await t.until(() => t.vt.text().includes("≡ Mix"), "mix");
       await t.send("/master");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("master"), "master");
@@ -323,7 +323,7 @@ export const SCENARIOS: readonly Scenario[] = [
     async open(t) {
       await ready(t);
       await t.send("/menu project\r");
-      await t.until(() => t.vt.text().includes("menu › Project"), "Project");
+      await t.until(() => t.vt.text().includes("≡ Project"), "Project");
       await t.send("/audio");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("audio"), "audio");

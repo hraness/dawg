@@ -38,7 +38,13 @@ import {
 } from "./delight.ts";
 import { asciiHint, fitHint, HINTS } from "./grammar.ts";
 import { GuideBrowser } from "./guide.ts";
-import { CODE_ROLE, listGuides, RULE_MARK } from "../guides/index.ts";
+import {
+  CODE_ROLE,
+  listGuides,
+  RULE_MARK,
+  SECTION_MARKS,
+  type DocMark,
+} from "../guides/index.ts";
 import { topicMiss } from "../src/lang/glossary.ts";
 import { classifyKey, overlayKey, type UiCommand } from "./keys.ts";
 import { PromptModel, type PromptAction, type PromptMode } from "./prompt.ts";
@@ -53,6 +59,7 @@ import { CellBuffer, ScreenWriter, type CursorPosition } from "./screen.ts";
 import { paintDrawer, type DrawerLayout, type DrawerView } from "./drawer.ts";
 import { HitMap, type HitTarget } from "./hits.ts";
 import { displayWidth, truncate } from "./text.ts";
+import { paintCrumbs, type Crumbs } from "./crumbs.ts";
 import {
   accentStyle,
   detectTerminalCapabilities,
@@ -173,6 +180,12 @@ export type Overlay = "log" | "picker" | "text" | "guide" | undefined;
 export interface TextView {
   title: string;
   lines: readonly string[];
+  /**
+   * Each `── heading` line's mark (guides/marks.ts), drawn in place of the
+   * rule: `/help` marks its groups by kind (`› sound`, `✦ agent`), the `?`
+   * panel marks every list `⌃`. Undefined (or missing) keeps the rule.
+   */
+  marks?: readonly (DocMark | undefined)[] | undefined;
   /** Rows scrolled down from the top. */
   scroll: number;
 }
@@ -208,6 +221,11 @@ export interface PickerState {
   hint?: string | undefined;
   /** A dim line under the rows: what the focused row does. */
   note?: string | undefined;
+  /**
+   * The Ctrl-K menu's breadcrumb (tui/crumbs.ts), drawn in place of
+   * `title` with the menu mark and folded to fit.
+   */
+  crumbs?: Crumbs | undefined;
   /**
    * Hosts the audition loop (src/tui/audition.ts): Space, `a` and `c` are
    * returned as `pick-audition` instead of being swallowed.
@@ -1113,22 +1131,25 @@ function paintText(
   text.lines.slice(scroll, scroll + inner).forEach((line, index) => {
     const heading = line.startsWith("── ");
     const y = region.y + 1 + index;
+    // The heading's mark, as in /guide (guides/marks.ts): the symbol says
+    // what the group is, its role's color repeats it.
+    const mark = heading
+      ? (text.marks?.[scroll + index] ?? RULE_MARK)
+      : undefined;
+    const sign = mark ? (ui.capabilities.unicode ? mark.mark : mark.ascii) : "";
     buffer.text(
       left + 2,
       y,
-      truncate(
-        heading && !ui.capabilities.unicode ? line.replace("── ", "-- ") : line,
-        boxWidth - 4,
-      ),
+      truncate(heading ? `${sign} ${line.slice(3)}` : line, boxWidth - 4),
       onBackground(heading ? { ...roles.text, bold: true } : roles.text, panel),
     );
-    // The same heading mark as /guide (guides/index.ts RULE_MARK).
-    if (heading)
+    if (mark)
       buffer.text(
         left + 2,
         y,
-        ui.capabilities.unicode ? RULE_MARK.mark : RULE_MARK.ascii,
-        onBackground({ ...roles[RULE_MARK.role], bold: true }, panel),
+        sign,
+        onBackground({ ...roles[mark.role], bold: true }, panel),
+        boxWidth - 4,
       );
   });
 }
@@ -1253,13 +1274,20 @@ function paintPicker(
     width: boxWidth,
     height,
   });
-  buffer.text(
-    left + 2,
-    region.y,
-    ` ${picker.title}${picker.filtering || picker.query ? ` · /${picker.query ?? ""}${picker.filtering ? "▏" : ""}` : ""} `,
-    onBackground({ ...roles.text, bold: true }, panel),
-    boxWidth - 4,
-  );
+  if (picker.crumbs)
+    paintCrumbs(buffer, left + 2, region.y, picker.crumbs, boxWidth - 4, {
+      roles,
+      unicode: ui.capabilities.unicode,
+      background: panel,
+    });
+  else
+    buffer.text(
+      left + 2,
+      region.y,
+      ` ${picker.title}${picker.filtering || picker.query ? ` · /${picker.query ?? ""}${picker.filtering ? "▏" : ""}` : ""} `,
+      onBackground({ ...roles.text, bold: true }, panel),
+      boxWidth - 4,
+    );
   const hint = footerHint(
     picker.filtering
       ? HINTS.filtering
@@ -2049,15 +2077,28 @@ export class TuiApp {
   }
 
   /** Show static lines over the highway (`/help`, lists); replaces any overlay. */
-  openText(title: string, lines: readonly string[]): void {
-    this.text = { title, lines: lines.slice(0, 512), scroll: 0 };
+  openText(
+    title: string,
+    lines: readonly string[],
+    marks?: readonly (DocMark | undefined)[],
+  ): void {
+    this.text = {
+      title,
+      lines: lines.slice(0, 512),
+      scroll: 0,
+      ...(marks ? { marks: marks.slice(0, 512) } : {}),
+    };
     this.overlay = "text";
   }
 
   /** The `?` panel over the current screen; any key closes it. */
   keys: TextView | undefined;
   showKeys(title: string, lines: readonly string[]): void {
-    this.keys = { title, lines, scroll: 0 };
+    // Every list on the ? panel is keys: the guides' `⌃` mark.
+    const marks = lines.map((line) =>
+      line.startsWith("── ") ? SECTION_MARKS.Keys : undefined,
+    );
+    this.keys = { title, lines, scroll: 0, marks };
   }
 
   closeKeys(): void {

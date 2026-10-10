@@ -185,13 +185,13 @@ test.skipIf(!supported)(
       expect(style("m7").reverse).toBeFalsy();
       // The ? panel's chord line uses the header's words.
       await t.send("?");
-      await t.until(() => t.vt.text().includes("── play mode"), "keys panel");
+      await t.until(() => t.vt.text().includes("⌃ play mode"), "keys panel");
       expect(t.vt.text()).toMatch(
         /chords AUTO \S+ major \(assumed\) · next \S+ · min/,
       );
       expect(t.vt.text()).not.toContain("→");
       await t.send("?");
-      await t.until(() => !t.vt.text().includes("── play mode"), "closed");
+      await t.until(() => !t.vt.text().includes("⌃ play mode"), "closed");
       await t.send("0");
       await t.until(() => !style("min").reverse, "latches cleared");
     } finally {

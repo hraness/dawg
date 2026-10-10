@@ -77,7 +77,7 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("Project"), "menu root");
       await t.send("/effects");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("menu › Effects"), "effects");
+      await t.until(() => t.vt.text().includes("≡ Effects"), "effects");
       await t.send("/guitar");
       await t.send("\r");
       await t.until(
@@ -95,7 +95,7 @@ test.skipIf(!supported)(
       );
       expect(t.vt.text()).not.toContain("error");
       for (let i = 0; i < 8; i++) await t.send("\u001b");
-      await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
+      await t.until(() => !t.vt.text().includes("≡ "), "menu closed");
     } finally {
       t.terminal.write("\u0003");
       await t.proc.exited;
