@@ -15,6 +15,7 @@ import {
   ScoreValidationError,
   TrackScore,
   type Note,
+  type Section,
   withNoteCap,
 } from "../../core/score.ts";
 import {
@@ -103,8 +104,20 @@ export function sectionCues(
     }));
 }
 
-/** The section playback loops, when `loopSection` names one. */
-export function loopedSection(score: TrackScore) {
+/**
+ * The bars playback loops: the loop range (as an unnamed section with no
+ * mutes or variations), else the section `loopSection` names. A range is
+ * cut to the song's bars; one wholly past the end loops nothing.
+ */
+export function loopedSection(score: TrackScore): Section | undefined {
+  if (score.loop) {
+    const startBar = Math.min(score.loop.startBar, score.bars - 1);
+    const bars = Math.max(
+      1,
+      Math.min(score.loop.bars, score.bars - startBar),
+    );
+    return { name: "loop", startBar, bars };
+  }
   return score.loopSection === undefined
     ? undefined
     : findSection(score, score.loopSection);

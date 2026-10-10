@@ -779,6 +779,7 @@ const OPERATION_TYPES = new Set([
   "setCalibration",
   "setStyle",
   "setSections",
+  "setLoop",
   "setClips",
 ]);
 

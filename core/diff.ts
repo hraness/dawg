@@ -257,6 +257,8 @@ function songOperations(a: TrackScore, b: TrackScore): ScoreOperation[] {
   if (!deepEqual(song.style, b.style))
     emit({ type: "setStyle", style: b.style ?? null });
   if (sectionsDiffer()) setSections();
+  if (!deepEqual(song.loop, b.loop))
+    emit({ type: "setLoop", loop: b.loop ?? null });
   return ops;
 }
 

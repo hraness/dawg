@@ -806,6 +806,14 @@ export function insertBars(
           ? { ...section, bars: section.bars + count }
           : section,
     ),
+    // The loop range moves (or grows) like a section.
+    loop: score.loop
+      ? score.loop.startBar >= atBar
+        ? { ...score.loop, startBar: score.loop.startBar + count }
+        : score.loop.startBar + score.loop.bars > atBar
+          ? { ...score.loop, bars: score.loop.bars + count }
+          : score.loop
+      : null,
   });
 }
 
@@ -884,7 +892,25 @@ export function deleteBars(
     notes,
     sections,
     form: score.form.filter((entry) => names.has(foldName(entry.section))),
+    loop: score.loop ? shrinkRange(score.loop, atBar, count) : null,
   });
+}
+
+/** A bar range after bars `atBar..atBar+count` go (null when it goes too). */
+function shrinkRange(
+  range: Readonly<{ startBar: number; bars: number }>,
+  atBar: number,
+  count: number,
+): { startBar: number; bars: number } | null {
+  const until = range.startBar + range.bars;
+  if (until <= atBar) return range;
+  if (range.startBar >= atBar + count)
+    return { startBar: range.startBar - count, bars: range.bars };
+  const left = Math.max(0, atBar - range.startBar);
+  const right = Math.max(0, until - (atBar + count));
+  return left + right > 0
+    ? { startBar: Math.min(range.startBar, atBar), bars: left + right }
+    : null;
 }
 
 /** Unused note ids `prefix1`, `prefix2`, ... */
@@ -1088,24 +1114,49 @@ export function duplicateSection(
   );
 }
 
-/** Copy the music of bars `from..from+count` onto bars `to..` (replacing it). */
+/** Options for `copyBars`: which tracks, and whether the copy overdubs. */
+export type CopyBarsOptions = Readonly<{
+  /** Only these tracks (default all). A track subset leaves tempo alone. */
+  trackIds?: ReadonlySet<string>;
+  /** Overdub: keep the destination's notes (default replaces them). */
+  merge?: boolean;
+}>;
+
+/**
+ * Copy the music of bars `from..from+count` onto bars `to..` (replacing it,
+ * or with `merge` overdubbing it). All tracks bring the song's tempo and
+ * fermatas with them; a track subset copies only its own notes, clips,
+ * pedal and automation.
+ */
 export function copyBars(
   score: TrackScore,
   fromBar: number,
   count: number,
   toBar: number,
   idPrefix = "copy-",
+  options: CopyBarsOptions = {},
 ): TrackScore {
   const ticks = barTicks(score);
   const from = fromBar * ticks;
   const length = count * ticks;
   const to = toBar * ticks;
   const nextId = idMaker(score, idPrefix);
+  const picked = (trackId: string): boolean =>
+    options.trackIds === undefined || options.trackIds.has(trackId);
   const kept = score.notes.filter(
-    (note) => note.startTick < to || note.startTick >= to + length,
+    (note) =>
+      options.merge ||
+      !picked(note.trackId) ||
+      note.startTick < to ||
+      note.startTick >= to + length,
   );
   const copies = score.notes
-    .filter((note) => note.startTick >= from && note.startTick < from + length)
+    .filter(
+      (note) =>
+        picked(note.trackId) &&
+        note.startTick >= from &&
+        note.startTick < from + length,
+    )
     .map((note) => ({
       ...note,
       id: nextId(),
@@ -1122,19 +1173,21 @@ export function copyBars(
     { from, to: from + length, offset: to },
     { from: to + length, to: Infinity, offset: to + length },
   ]);
+  const song = options.trackIds === undefined;
   return new TrackScore({
     ...score.toJSON(),
-    tempoBpm: ripple.tempoBpm,
-    time: ripple.time,
+    ...(song ? { tempoBpm: ripple.tempoBpm, time: ripple.time } : {}),
     tracks: score.tracks.map((track) =>
-      copyClipBars(
-        mapAutomation(ripple.pedals(track), (points) =>
-          copyPoints(points, from, length, to),
-        ),
-        from,
-        length,
-        to,
-      ),
+      picked(track.id)
+        ? copyClipBars(
+            mapAutomation(ripple.pedals(track), (points) =>
+              copyPoints(points, from, length, to),
+            ),
+            from,
+            length,
+            to,
+          )
+        : track,
     ),
     notes: [...kept, ...copies],
   });
@@ -1248,6 +1301,120 @@ export function resetSection(score: TrackScore, name: string): TrackScore {
     startBar: section.startBar,
     bars: section.bars,
   });
+}
+
+/**
+ * Split a section at `atBar` (0-based, strictly inside it) into two: the
+ * first keeps the name, the second is `<name> 2` (or `as`). Both keep the
+ * mutes and variations; the form plays both halves wherever it played the
+ * section, and a loop on it becomes the loop range over the same bars.
+ */
+export function splitSection(
+  score: TrackScore,
+  name: string,
+  atBar: number,
+  as?: string,
+): TrackScore {
+  const section = requireSection(score, name);
+  const end = section.startBar + section.bars;
+  if (!Number.isInteger(atBar) || atBar <= section.startBar || atBar >= end)
+    throw new ScoreValidationError(
+      section.bars < 2
+        ? `${section.name} is one bar; nothing to split`
+        : `split ${section.name} at a bar ${section.startBar + 2}..${end}`,
+    );
+  if (as !== undefined && findSection(score, as))
+    throw new ScoreValidationError(`a section named ${as} exists`);
+  const second = uniqueSectionName(score, as ?? `${section.name} 2`);
+  const form: FormEntry[] = [];
+  for (const entry of score.form) {
+    if (foldName(entry.section) !== foldName(section.name)) {
+      form.push(entry);
+      continue;
+    }
+    for (let pass = 0; pass < (entry.repeat ?? 1); pass += 1)
+      form.push({ section: section.name }, { section: second });
+  }
+  if (form.length > SCORE_LIMITS.maxFormEntries)
+    throw new ScoreValidationError(
+      `the form would have ${form.length} entries; the limit is ${SCORE_LIMITS.maxFormEntries}`,
+      "score-limit",
+    );
+  const looping = score.loopSection === section.name;
+  const split = score.withSections(
+    score.sections.flatMap((candidate) =>
+      candidate === section
+        ? [
+            { ...section, bars: atBar - section.startBar },
+            { ...section, name: second, startBar: atBar, bars: end - atBar },
+          ]
+        : [candidate],
+    ),
+    form,
+    looping ? null : score.loopSection,
+  );
+  return looping
+    ? split.withLoop({ startBar: section.startBar, bars: section.bars })
+    : split;
+}
+
+/**
+ * Join a section with the one that starts where it ends. Refused when the
+ * two mute or vary differently (joining would change the sound), or when
+ * the form plays the second anywhere but right after the first.
+ */
+export function joinSection(score: TrackScore, name: string): TrackScore {
+  const section = requireSection(score, name);
+  const end = section.startBar + section.bars;
+  const next = score.sections.find((candidate) => candidate.startBar === end);
+  if (!next)
+    throw new ScoreValidationError(
+      `no section starts at bar ${end + 1}, right after ${section.name}`,
+    );
+  const sameMute =
+    JSON.stringify([...(section.mute ?? [])].sort()) ===
+    JSON.stringify([...(next.mute ?? [])].sort());
+  if (!sameMute || JSON.stringify(section.vary ?? {}) !== JSON.stringify(next.vary ?? {}))
+    throw new ScoreValidationError(
+      `${section.name} and ${next.name} mute or vary differently · section reset one first`,
+    );
+  const form: FormEntry[] = [];
+  const entries = score.form;
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index]!;
+    const isFirst = foldName(entry.section) === foldName(section.name);
+    const isSecond = foldName(entry.section) === foldName(next.name);
+    const following = entries[index + 1];
+    if (
+      isFirst &&
+      (entry.repeat ?? 1) === 1 &&
+      following &&
+      foldName(following.section) === foldName(next.name) &&
+      (following.repeat ?? 1) === 1
+    ) {
+      form.push({ section: section.name });
+      index += 1;
+      continue;
+    }
+    if (isFirst || isSecond)
+      throw new ScoreValidationError(
+        `the form plays ${section.name} and ${next.name} apart · change the form first`,
+      );
+    form.push(entry);
+  }
+  const looping =
+    score.loopSection === section.name || score.loopSection === next.name;
+  return score.withSections(
+    score.sections
+      .filter((candidate) => candidate !== next)
+      .map((candidate) =>
+        candidate === section
+          ? { ...section, bars: section.bars + next.bars }
+          : candidate,
+      ),
+    form,
+    looping ? section.name : score.loopSection,
+  );
 }
 
 function omit<T extends object, K extends keyof T>(

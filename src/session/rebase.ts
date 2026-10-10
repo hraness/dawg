@@ -144,6 +144,10 @@ export function rebaseOperations(
         )
           return { ok: false, reason: "sections changed" };
         break;
+      case "setLoop":
+        if (!deepEqual(base.loop, current.loop))
+          return { ok: false, reason: "loop changed" };
+        break;
       case "removeTrack": {
         if (added.tracks.has(operation.trackId)) break;
         if (
