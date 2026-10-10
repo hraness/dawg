@@ -353,7 +353,8 @@ export function focusCommand(
   return track ? `track ${track.id}` : undefined;
 }
 
-function beatOfBar(score: TrackScore, bar: number): number {
+/** The score beat where `bar` starts (meter-aware). */
+export function beatOfBar(score: TrackScore, bar: number): number {
   return barStartTick(score, bar) / score.ticksPerBeat;
 }
 

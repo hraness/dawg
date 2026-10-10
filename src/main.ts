@@ -330,6 +330,7 @@ import {
 } from "./tui/menu.ts";
 import { KNOB_PAGE_WORDS, knobPageId } from "./tui/knob-map.ts";
 import {
+  beatOfBar,
   cutArmed,
   focusCommand,
   foldBase,
@@ -873,6 +874,11 @@ const tape: {
   cutArmed?: TrackScore | undefined;
   /** Set by the first `v` after a cut: its `move` reads `cut.before`. */
   foldArmed?: boolean | undefined;
+  /**
+   * Where a paste's queued `jump` will put the playhead (a score beat),
+   * so a quick `v v v` tiles before that jump has run.
+   */
+  pending?: { beat: number; until: number } | undefined;
 } = { on: false, zoom: "beat", knobs: { selected: 0 } };
 let stageCapture: { next?: TrackScore; committed?: TrackScore } | undefined;
 /** Redraw soon (the audition reports renders between frames). */
@@ -5387,6 +5393,18 @@ function paneClipboardPath(): string | undefined {
   return clipboardPath(process.cwd(), record.sessionId, port.pane);
 }
 
+/** The paste's target beat until its `jump` lands (or a moment passes). */
+function pendingTapeBeat(value: TrackScore): number | undefined {
+  const pending = tape.pending;
+  if (!pending) return undefined;
+  const here = scoreBeatAt(value, clock.beatAt());
+  if (Date.now() > pending.until || clock.playing || here >= pending.beat) {
+    tape.pending = undefined;
+    return undefined;
+  }
+  return pending.beat;
+}
+
 /** What TAPE's reducer and view read: the score, focus, playhead, clipboard. */
 function tapeContext(
   value: TrackScore = score,
@@ -5396,7 +5414,7 @@ function tapeContext(
   return {
     score: value,
     trackId: requestedTrack,
-    beat: scoreBeatAt(value, beat),
+    beat: pendingTapeBeat(value) ?? scoreBeatAt(value, beat),
     clipboard: board ? { source: board.source, range: board.range } : undefined,
     cut: cutArmed(tape.cut?.after, value),
   };
@@ -5498,7 +5516,13 @@ function tapeInput(value: string): boolean {
       if (action.fold) tape.foldArmed = true;
       const commands = [action.command];
       // The playhead moves past the paste so `v v v` tiles.
-      if (action.end < score.bars) commands.push(`jump ${action.end + 1}`);
+      if (action.end < score.bars) {
+        commands.push(`jump ${action.end + 1}`);
+        tape.pending = {
+          beat: beatOfBar(score, action.end),
+          until: Date.now() + 2000,
+        };
+      }
       runTyped(commands);
       return true;
     }

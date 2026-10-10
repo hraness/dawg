@@ -286,13 +286,10 @@ test.skipIf(!supported)(
       // shift-→ turns the playhead knob a bar: `jump 2`.
       await t.send("\u001b[1;2C");
       await t.until(() => t.vt.text().includes("jump 2"), "echo: jump 2");
-      await t.until(() => t.vt.text().includes("2.1"), "at bar 2");
+      await t.until(() => /playhead 2\.1/.test(t.vt.text()), "at bar 2");
+      // Back to back, as a person types: the second `v` lands past the
+      // first even before its `jump` has run.
       await t.send("v");
-      await waitFor(
-        async () => (await bassNotes()).length === 2,
-        "first tile",
-        () => t.vt.text(),
-      );
       await t.send("v");
       await waitFor(
         async () => (await bassNotes()).join() === "0,1,2",
@@ -318,11 +315,18 @@ test.skipIf(!supported)(
       );
 
       // `s` splits the section under the playhead; `S` joins it back.
-      await t.send(",");
+      // The paste's own `jump` past the insert may still be queued, so `,`
+      // repeats until the playhead sits at the verse's start (a `,` there
+      // is a no-op note).
+      const atStart = () => /playhead 1\.1/.test(t.vt.text());
+      for (let i = 0; i < 20 && !atStart(); i += 1) {
+        await t.send(",");
+        await Bun.sleep(250);
+      }
       await t.until(() => t.vt.text().includes("jump verse"), "echo: jump");
-      await t.until(() => t.vt.text().includes("1.1"), "at bar 1");
+      await t.until(atStart, "at bar 1");
       await t.send("\u001b[1;2C");
-      await t.until(() => t.vt.text().includes("2.1"), "at bar 2 again");
+      await t.until(() => /playhead 2\.1/.test(t.vt.text()), "at bar 2 again");
       await t.send("s");
       await t.until(
         () => t.vt.text().includes("section split verse"),
