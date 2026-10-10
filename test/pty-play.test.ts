@@ -41,7 +41,7 @@ test.skipIf(!supported)(
   async () => {
     const t = await launch(100, 28, {});
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("/count-in 0\r");
       await t.until(
         () => t.vt.text().includes("count-in · 0 bars"),
@@ -113,7 +113,7 @@ test.skipIf(!supported)(
   async () => {
     const t = await launch(120, 28, {}, ["--track", "keys"]);
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("/key C major\r");
       await t.until(() => t.vt.text().includes("key · C major"), "key");
       await t.send("/count-in 0\r");
@@ -169,7 +169,7 @@ test.skipIf(!supported)(
   async () => {
     const t = await launch(120, 28, {}, ["--track", "keys"]);
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("\u0010");
       await t.until(() => t.vt.text().includes("1 dim"), "legend");
       const style = (label: string) => {

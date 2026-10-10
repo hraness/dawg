@@ -425,6 +425,33 @@ export function styleSgr(
   return sequence;
 }
 
+/**
+ * The shortest SGR that moves the terminal from `from` to `to` when they
+ * differ only in foreground colour: `38;…` or `39`, never a full reset.
+ * Undefined when anything else differs (the caller emits `styleSgr`).
+ */
+export function foregroundSgr(
+  from: Style,
+  to: Style,
+  capabilities: TerminalCapabilities,
+): string | undefined {
+  if (capabilities.attributes === false) return "";
+  if (
+    !!from.bold !== !!to.bold ||
+    !!from.dim !== !!to.dim ||
+    !!from.italic !== !!to.italic ||
+    !!from.underline !== !!to.underline ||
+    !!from.reverse !== !!to.reverse
+  )
+    return undefined;
+  const fromBg = from.bg && colorCode(from.bg, capabilities.colorDepth, true);
+  const toBg = to.bg && colorCode(to.bg, capabilities.colorDepth, true);
+  if (fromBg !== toBg) return undefined;
+  if (!to.fg) return "\u001b[39m";
+  const code = colorCode(to.fg, capabilities.colorDepth, false);
+  return code ? `\u001b[${code}m` : "\u001b[39m";
+}
+
 /** Resolve the effective theme: no-color terminals always use attributes only. */
 export function effectiveTheme(
   name: ThemeName,

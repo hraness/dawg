@@ -18,6 +18,12 @@ import {
   type SessionRecord,
 } from "./session/store.ts";
 import { openSessionPort } from "./session/port.ts";
+import {
+  OwnWrites,
+  editedTrack,
+  foreignEvents,
+  otherWindowName,
+} from "./session/origin.ts";
 import { compositionDigest, monotonicEpochMs } from "./session/protocol.ts";
 import {
   formatSessionLine,
@@ -143,7 +149,12 @@ import {
   typoFix,
   usageHint,
 } from "./commands/help.ts";
-import { historyTarget, REDO_KIND, UNDO_KIND } from "./commands/history.ts";
+import {
+  historyReceipt,
+  historyTarget,
+  REDO_KIND,
+  UNDO_KIND,
+} from "./commands/history.ts";
 
 import {
   SamplePlacementError,
@@ -239,7 +250,8 @@ import {
   toolCaption,
   type ShowMeLevel,
 } from "./agent/show-me.ts";
-import { runAuthCommand, runFirstRunLogin, runTuiLogin } from "./auth/cli.ts";
+import { firstRunCard, runAuthCommand, runTuiLogin } from "./auth/cli.ts";
+import { musicalReceipt } from "./session/receipt.ts";
 import {
   modelPickerItems,
   tuiAuthCommand,
@@ -351,7 +363,11 @@ import {
   PASTE_FLUSH_MS,
   TerminalInputDecoder,
 } from "../tui/input.ts";
-import { FrameGate } from "../tui/frame-gate.ts";
+import {
+  FrameGate,
+  IDLE_HEARTBEAT_MS,
+  MIN_FRAME_GAP_MS,
+} from "../tui/frame-gate.ts";
 import {
   CARD_GLOW_MS,
   composeFrame,
@@ -547,10 +563,12 @@ if (importPath && exportPath) {
 }
 const demo =
   args.has("--demo") || process.env.DAWG_DEMO === "1" || !stdin.isTTY;
-// First run with no provider (or a saved one that stopped working): the
-// sign-in picker, in the shell, before the TUI takes the screen.
-if (!demo && process.env.DAWG_AI !== "0" && stdout.isTTY)
-  await runFirstRunLogin();
+// Music first: the TUI opens directly. The first session with no provider
+// (or a saved one that stopped working) gets one card instead of a picker.
+const launchCard =
+  !demo && process.env.DAWG_AI !== "0" && stdout.isTTY
+    ? firstRunCard().catch(() => undefined)
+    : undefined;
 
 const initial = createScore({
   tracks: [
@@ -776,7 +794,8 @@ let handoff: <T>(flow: () => Promise<T>) => Promise<T> = (flow) => flow();
 function spendLine(): string {
   const width = stdout.columns ?? 80;
   if (!providerName || providerName === "offline")
-    return width >= 40 ? "no model · dawg login" : "";
+    // A state, not a nag: the first session's card already named /login.
+    return width >= 40 ? formatSpendLine({ kind: "offline" }) : "";
   const [model, provider] = providerName.split(" · ");
   return formatSpendLine(
     {
@@ -927,7 +946,7 @@ function snapshot(
       requestedTrack,
     trackId: requestedTrack,
     sessionId: record.sessionId,
-    revision: record.revision,
+    revision: shownRevision(record),
     bpm: value.time?.tempo
       ? bpmAtTick(value, beat * value.ticksPerBeat)
       : value.tempoBpm,
@@ -946,6 +965,7 @@ function snapshot(
     currentBeat: scoreBeatAt(value, beat),
     playing: clock.playing,
     activity,
+    ...(focused?.instrument === "vocal" ? { vocal: true } : {}),
     ...drumSnapshotFields(
       value.tracks.find((track) => track.id === requestedTrack)?.instrument,
       notes,
@@ -1106,17 +1126,20 @@ function receipt(result: string | Receipt, base?: Baseline): void {
     tui.activity.pushError(message);
     return;
   }
+  // A receipt that names its own undo key needs no second hint.
   const hint =
-    scoreChanged && undoHintsShown < MAX_UNDO_HINTS
+    scoreChanged &&
+    undoHintsShown < MAX_UNDO_HINTS &&
+    !message.endsWith("ctrl-z undo")
       ? message.startsWith("undid")
-        ? "^y redo"
-        : "^z undo"
+        ? "ctrl-y redo"
+        : "ctrl-z undo"
       : undefined;
   if (hint) undoHintsShown += 1;
   tui.activity.pushCard(message, {
     tone,
-    baseRevision: changed ? base.revision : undefined,
-    resultRevision: changed ? record.revision : undefined,
+    baseRevision: changed ? shownRevision(record, base.revision) : undefined,
+    resultRevision: changed ? shownRevision(record) : undefined,
     hint,
     trackId: requestedTrack,
   });
@@ -1323,12 +1346,13 @@ async function runInteractive(): Promise<void> {
   };
   // Builds a frame only when something can have changed (tui/frame-gate.ts):
   // an idle editor no longer rebuilds the whole view 30 times a second.
-  const frameGate = new FrameGate();
+  const frameGate = new FrameGate(IDLE_HEARTBEAT_MS, MIN_FRAME_GAP_MS);
   const unwatchActivity = tui.activity.subscribe(() => frameGate.markDirty());
   const animating = (): boolean => {
     if (clock.playing || play?.on || auditionLoop?.looping) return true;
     const activity = tui.activity;
     if (activity.spinner || activity.streaming) return true;
+    if (tui.delight.animating(Date.now())) return true;
     const latest = activity.latest;
     return (
       !tui.ui.reducedMotion &&
@@ -1359,6 +1383,7 @@ async function runInteractive(): Promise<void> {
     )
       return;
     followCommitted();
+    tui.delight.song(record.sessionId, record.meta.heardLoop === true);
     play?.tick();
     // Values in the menu follow the score as edits land.
     if (menu.open) refreshMenu();
@@ -1370,6 +1395,13 @@ async function runInteractive(): Promise<void> {
     tui.render(appView(score, clock.beatAt()), { force: true });
   };
   requestFrame = () => tick(true);
+  // The first wrap is remembered per song in .dawg metadata, never the score.
+  tui.onFirstLoop = () => {
+    void port
+      .updateMeta({ heardLoop: true })
+      .then((result) => adoptMeta(result.meta))
+      .catch(() => undefined);
+  };
   runPromptLater = (command) => {
     queuedPrompts.unshift(command);
     void drainQueue();
@@ -1399,6 +1431,11 @@ async function runInteractive(): Promise<void> {
     tick(true);
   };
   stdout.on("resize", onResize);
+  const ownWrites = new OwnWrites();
+  let presenceClients: readonly {
+    clientId: string;
+    focusedTrackId?: string | null;
+  }[] = [];
   let applying: Promise<void> = Promise.resolve();
   const applyLatest = (latest: typeof record): Promise<void> =>
     (applying = applying.then(() => applyRecord(latest)));
@@ -1408,6 +1445,7 @@ async function runInteractive(): Promise<void> {
       if (latest.sessionId !== record.sessionId) return;
       if (latest.revision > record.revision) {
         const previousRevision = record.revision;
+        const before = score;
         record = latest;
         if (stageCapture)
           stageCapture.committed = scoreFromJSON(record.composition);
@@ -1444,11 +1482,27 @@ async function runInteractive(): Promise<void> {
           else if (payload.action === "toggle") await setTransport("toggle");
         }
         projectSync?.scoreChanged(score);
-        tui.activity.pushCard("synced from another window", {
-          tone: "info",
-          baseRevision: previousRevision,
-          resultRevision: record.revision,
-        });
+        // Another window's play/pause is followed, not announced, and this
+        // window's own writes (which can echo back before the append
+        // resolves) are never "synced".
+        const from = shownRevision(record, previousRevision);
+        const to = shownRevision(record);
+        await ownWrites.settled();
+        const foreign = foreignEvents(latest, previousRevision, ownWrites).some(
+          (event) => event.kind !== "transport",
+        );
+        if (to !== from && foreign)
+          tui.activity.pushCard(
+            `synced · ${otherWindowName(presenceClients, port.clientId, {
+              editedTrackId: editedTrack(
+                before,
+                scoreFromJSON(latest.composition),
+              ),
+              trackName: (id) =>
+                score.tracks.find((track) => track.id === id)?.name ?? id,
+            })}`,
+            { tone: "info", baseRevision: from, resultRevision: to },
+          );
       }
     } catch {
       // An invalid composition is skipped; the next update retries.
@@ -1459,8 +1513,10 @@ async function runInteractive(): Promise<void> {
       void applyLatest(update.record);
       adoptMeta(update.record.meta);
     } else if (update.type === "meta") adoptMeta(update.meta);
-    else if (update.type === "presence") windowCount = update.clients.length;
-    else if (update.type === "sync") syncState = update.sync;
+    else if (update.type === "presence") {
+      presenceClients = update.clients;
+      windowCount = update.clients.length;
+    } else if (update.type === "sync") syncState = update.sync;
     else if (update.type === "transport") {
       // Every window renders the same hit line from dawgd's timestamp.
       const { playing, beat, bpm, atMs } = update.transport;
@@ -1480,6 +1536,7 @@ async function runInteractive(): Promise<void> {
   // score into the new one.
   const subscribeLive = (): (() => void) => {
     const bound = port;
+    ownWrites.attach(bound);
     return bound.subscribe((update) => {
       if (bound === port) onUpdate(update);
     });
@@ -1489,6 +1546,7 @@ async function runInteractive(): Promise<void> {
     void port
       .presence()
       .then((clients) => {
+        presenceClients = clients;
         windowCount = Math.max(1, clients.length);
       })
       .catch(() => undefined);
@@ -1506,6 +1564,7 @@ async function runInteractive(): Promise<void> {
   if (freshWorkspace)
     tui.activity.pushCard("created .dawg/ · add it to .gitignore", {
       tone: "info",
+      once: true,
     });
   if (attachNotice)
     tui.activity.pushCard(attachNotice, {
@@ -1515,6 +1574,9 @@ async function runInteractive(): Promise<void> {
     });
   if (port.status !== "file session")
     tui.activity.pushCard(port.status, { tone: "info" });
+  void launchCard?.then((card) => {
+    if (card) tui.activity.pushCard(card.text, { tone: card.tone, once: true });
+  });
   if (await isProject(process.cwd()))
     projectSync = startProjectSync(syncHost());
   void currentProvider().then(() => tick(true));
@@ -1921,6 +1983,10 @@ function unknownCommand(command: string): string {
 
 async function submit(prompt: string): Promise<string | Receipt> {
   const command = prompt.trim();
+  // `model key` is the glossary word for adding an agent (design §8.2);
+  // `/login` stays as its alias and owns the flow.
+  const modelKey = command.match(/^\/?model\s+key\b(.*)$/i);
+  if (modelKey) return submit(`/login${modelKey[1]}`);
   const helpCommand = command.match(/^\/?(?:help|\?)(?:\s+(\S+))?$/i);
   if (helpCommand) {
     const topic = helpCommand[1];
@@ -2138,7 +2204,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
     await projectSync?.flushScore();
     if (found.id === requestedTrack) await focusTrack(next.tracks[0]!.id);
     return ok(
-      `removed ${found.id}${dropped.length ? ` · dropped references on ${dropped.join(", ")}` : ""} · ^z undoes`,
+      `removed ${found.id}${dropped.length ? ` · dropped references on ${dropped.join(", ")}` : ""} · ctrl-z undoes`,
     );
   }
   // `/track piano b`: a name with spaces focuses the track of that name, or
@@ -2468,6 +2534,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
     const result = applyStyleCommand(score, styleCommand);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
+    if (result.log) tui.activity.pushNote(result.log);
     return result.ok ? ok(result.message) : fail(result.message);
   }
   const masterCommand = parseMasterCommand(command);
@@ -3493,12 +3560,10 @@ function adoptMeta(meta: typeof record.meta): void {
   record = { ...record, meta };
   if (meta.name !== announcedName) {
     announcedName = meta.name;
-    tui.activity.pushCard(
-      meta.nameSource === "auto"
-        ? `${meta.name} (auto-named) · rename with /rename <name>`
-        : `session · ${meta.name}`,
-      { tone: "info" },
-    );
+    // The auto-name joins the receipt that earned it, as a quiet suffix.
+    if (meta.nameSource === "auto")
+      tui.activity.attachNote(`named “${meta.name}” · /rename`);
+    else tui.activity.pushCard(`session · ${meta.name}`, { tone: "info" });
   }
 }
 
@@ -4421,13 +4486,13 @@ function playSession(): PlaySession {
 }
 
 async function enterPlay(): Promise<Receipt> {
-  if (play?.on) return ok(`play · ${play.track} · esc leaves`);
+  if (play?.on) return ok(`play mode · ${play.track} · esc leaves`);
   await materializeDraft();
   const session = playSession();
   await session.enter();
   if (hasSamplerTracks(score)) void sampleProblems(score);
   return ok(
-    `play · ${session.track} · ${session.keyboard.range} · ? keys · esc leaves`,
+    `play mode · ${session.track} · ${session.layout.drums ? "kit" : session.keyboard.range} · ? keys · esc leaves`,
   );
 }
 
@@ -4519,13 +4584,18 @@ function playHost() {
     async stopTransport(): Promise<void> {
       await setTransport("pause");
     },
+    ghost(pitch: number) {
+      tui.delight.ghost(pitch, Date.now());
+      requestFrame();
+    },
     card(text: string, tone: "info" | "success" | "warning" | "error") {
       if (tone === "error") tui.activity.pushError(text);
       else
         tui.activity.pushCard(text, {
           tone,
           trackId: requestedTrack,
-          resultRevision: tone === "success" ? record.revision : undefined,
+          resultRevision:
+            tone === "success" ? shownRevision(record) : undefined,
         });
     },
     newNoteId: () => randomUUID().slice(0, 12),
@@ -4600,7 +4670,8 @@ function syncHost(): SyncHost {
         tui.activity.pushCard(text, {
           tone,
           hint,
-          resultRevision: tone === "success" ? record.revision : undefined,
+          resultRevision:
+            tone === "success" ? shownRevision(record) : undefined,
         });
     },
     types(state) {
@@ -4631,10 +4702,17 @@ async function stepHistory(direction: "undo" | "redo"): Promise<Receipt> {
       },
       restored.toJSON(),
     );
+    // Compare with what was undone, which another window may have written.
+    const before = scoreFromJSON(latest.composition);
     score = restored;
     if (clock.playing) void audio.play(score);
     return ok(
-      `${direction === "undo" ? "undid" : "redid"} · rev ${target.revision}`,
+      historyReceipt(
+        direction,
+        before,
+        restored,
+        shownRevision(record, target.revision),
+      ),
     );
   } catch (error) {
     if (error instanceof SessionConflictError)
@@ -4653,7 +4731,28 @@ function transportFailed(error: unknown): void {
   );
 }
 
-/** The space-bar toggle: flip the transport, then record it for other windows. */
+/**
+ * The revision dawg shows (header, receipts, undo): edits to the song.
+ * Play and pause are logged so other windows follow them, but they are not
+ * edits, so they never move the number: a revision shows as itself minus
+ * the transport events at or before it.
+ */
+function shownRevision(
+  value: typeof record,
+  revision = value.revision,
+): number {
+  let transports = 0;
+  for (const event of value.events)
+    if (event.revision <= revision && event.kind === "transport")
+      transports += 1;
+  return revision - transports;
+}
+
+/**
+ * The space-bar toggle: flip the transport, then record it for other
+ * windows. The log entry keeps windows in step; the header's revision
+ * (`shownRevision`) skips it, since play/pause is not an edit.
+ */
 async function toggleTransport(): Promise<void> {
   await setTransport("toggle");
   try {
@@ -4728,6 +4827,8 @@ async function runAgent(text: string): Promise<string | Receipt> {
     );
   const turn = { controller: new AbortController(), steering: [] as string[] };
   agentTurn = turn;
+  // The turn ends on one musical receipt of what it changed.
+  const before = score;
   reportAgentActivity(`${providerName} · thinking…`);
   // xcb admits a pending account on its first call, which takes longer.
   let admitting = selection.kind === "xcb" && selection.admissionPending;
@@ -4760,6 +4861,8 @@ async function runAgent(text: string): Promise<string | Receipt> {
           }
           return;
         }
+        if (event.type === "done")
+          tui.activity.setTurnReceipt(musicalReceipt(before, score));
         agentEventSink(event);
       },
     });
@@ -5026,8 +5129,8 @@ function showMeCommandHost(): AgentHost["commands"] {
       return {
         ok: toneOf(result) !== "error",
         message: typeof result === "string" ? result : result.text,
-        baseRevision: base.revision,
-        resultRevision: record.revision,
+        baseRevision: shownRevision(record, base.revision),
+        resultRevision: shownRevision(record),
       };
     },
   };

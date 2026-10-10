@@ -101,7 +101,7 @@ function harness(
 
 function promptBox(vt: VirtualTerminal): { top: number; bottom: number } {
   const lines = vt.lines();
-  const top = lines.findIndex((line) => /^[╭+]─?.*(STEER|QUEUE)/.test(line));
+  const top = lines.findIndex((line) => /^[╭+]─?.*(NOW|NEXT)/.test(line));
   let bottom = lines.length - 1;
   return { top, bottom };
 }
@@ -113,7 +113,7 @@ for (const cols of [40, 80, 120]) {
       tone: "success",
       baseRevision: 41,
       resultRevision: 42,
-      hint: "^z undo",
+      hint: "ctrl-z undo",
     });
     h.frame(1.02);
     const lines = h.vt.lines();
@@ -122,12 +122,12 @@ for (const cols of [40, 80, 120]) {
     expect(lines[0]).toContain("rev 42");
     expect(lines.some((line) => line.includes("+8 bass notes"))).toBe(true);
     if (cols >= 80)
-      expect(lines.some((line) => line.includes("rev 41→42 · ^z undo"))).toBe(
-        true,
-      );
+      expect(
+        lines.some((line) => line.includes("rev 41→42 · ctrl-z undo")),
+      ).toBe(true);
     const { top } = promptBox(h.vt);
     expect(top).toBeGreaterThan(5);
-    expect(lines[top]).toContain("STEER");
+    expect(lines[top]).toContain(" NOW ");
     // Every row is exactly `cols` cells wide: nothing overflows.
     expect(h.vt.cells.every((row) => row.length === cols)).toBe(true);
     // The prompt panel has a solid background across its full width.
@@ -234,7 +234,7 @@ test("mono and NO_COLOR/TERM=dumb fallbacks keep the same positions", () => {
   // ASCII fallback: same layout, same occupied cells.
   expect(shape(dumb.vt.lines())).toEqual(shape(color.vt.lines()));
   expect(dumb.vt.text()).not.toMatch(/[╭│━┃]/);
-  expect(dumb.vt.text()).toContain("+- STEER -");
+  expect(dumb.vt.text()).toContain("+- NOW -");
   // No colors at all in mono; prompt is marked by attributes or glyphs.
   expect(
     mono.vt.cells.flat().every((cell) => !cell.style.fg && !cell.style.bg),
@@ -325,7 +325,7 @@ test("keyboard replay: typing, Shift+Enter, paste, Ctrl+Q, undo, overlay, quit",
   expect(toggle.type).toBe("action");
   expect(h.app.prompt.snapshot.mode).toBe("queue");
   h.frame(0);
-  expect(h.vt.text()).toContain("QUEUE");
+  expect(h.vt.text()).toContain(" NEXT ");
   const submit = h.app.input("\r");
   expect(submit).toMatchObject({ type: "action", action: { kind: "queue" } });
   expect(h.app.input("\u001a")).toEqual({ type: "ui", command: "undo" });
@@ -455,9 +455,26 @@ test("an empty track shows a start hint instead of lane and bar labels", () => {
   const empty: TrackScoreSnapshot = { ...score, trackName: "main", notes: [] };
   h.app.render({ score: empty, beat: 0 }, { force: true });
   const text = h.vt.text();
-  expect(text).toContain(
-    "main · empty · type a request · ctrl-p play · ctrl-k menu",
+  // Playing: the line says how to stop (tui/hints.ts).
+  expect(text).toContain("main · empty · space stop · type a request");
+  const hintAt = (lines: string[]) =>
+    lines.findIndex((line) => line.includes("main · empty"));
+  const playingRow = hintAt(h.vt.lines());
+  const rowCount = h.vt.lines().length;
+  // Its row is reserved: no rule shares it.
+  expect(h.vt.lines()[playingRow]).not.toMatch(/[┈─]/);
+  h.app.render(
+    { score: { ...empty, playing: false }, beat: 0 },
+    { force: true },
   );
+  expect(h.vt.text()).toContain(
+    "main · empty · space play · ctrl-p play mode · ctrl-k menu",
+  );
+  // Pausing keeps the same rows: the hint does not move.
+  expect(hintAt(h.vt.lines())).toBe(playingRow);
+  expect(h.vt.lines().length).toBe(rowCount);
+  h.app.render({ score: empty, beat: 1 }, { force: true });
+  expect(h.vt.lines()[playingRow]).not.toMatch(/[┈─]/);
   // No pitch legend row (C3 … C6) and no bar numbers in the gutter.
   expect(text.replace("add C4 at 0", "")).not.toMatch(/\bC[3-6]\b/);
   expect(h.vt.lines().some((line) => /^ *[12] /.test(line))).toBe(false);
@@ -471,7 +488,7 @@ test("an empty track shows a start hint instead of lane and bar labels", () => {
   };
   h.app.render({ score: drums, beat: 0 }, { force: true });
   expect(h.vt.text()).toContain(
-    "drums · empty · type a request · ctrl-p play · ctrl-k menu",
+    "drums · empty · hit kick at 0 · space stop · type a request",
   );
   expect(h.vt.text()).not.toContain("snare");
 });

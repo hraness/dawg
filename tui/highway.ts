@@ -10,6 +10,7 @@
  * lane per voice with a legend.
  */
 
+import { emptyHint } from "./hints.ts";
 import { CellBuffer } from "./screen.ts";
 import { truncate } from "./text.ts";
 import {
@@ -101,6 +102,8 @@ export interface TrackScoreSnapshot {
    * accent. Empty or omitted in focus view.
    */
   layers?: readonly HighwayLayer[] | undefined;
+  /** The focused track sings (instrument `vocal`): the empty hint says how. */
+  vocal?: boolean | undefined;
   /** Audio clips on the focused track (0.7): the right-edge clip row. */
   clips?: readonly ClipSnapshot[] | undefined;
   /**
@@ -472,6 +475,12 @@ export interface HighwayOptions {
   lookaheadBeats?: number;
   /** Background style painted under the highway. */
   background?: Style;
+  /** Seed and agent presence for the empty-state hint (tui/hints.ts). */
+  hint?: Readonly<{ seed: string; agent: boolean }> | undefined;
+  /** The first-loop sweep's head, 0..1 across the hit line (tui/delight.ts). */
+  sweep?: number | undefined;
+  /** Play keys sounding without recording: their lanes glow on the hit line. */
+  glows?: readonly Readonly<{ pitch: number; strength: number }>[] | undefined;
 }
 
 export interface HighwayLayout {
@@ -594,8 +603,11 @@ export function paintHighway(
   // Beat, bar, and loop rules of increasing strength.
   const barBeats =
     score.barBeats && score.barBeats.length > 0 ? score.barBeats : undefined;
+  // An empty highway reserves one row for its hint: no rule scrolls
+  // through it, so the words never sit on the ruler, playing or paused.
+  const hintRow = empty ? Math.max(0, Math.floor(hitRow / 2)) : undefined;
   for (let row = 0; row <= lastNoteRow; row += 1) {
-    if (row === hitRow) continue;
+    if (row === hitRow || row === hintRow) continue;
     const center = rowBeat(row);
     const half = 0.5 / rowsPerBeat;
     let k = Math.ceil(center - half - 1e-9);
@@ -677,37 +689,40 @@ export function paintHighway(
     );
   }
 
-  // Loop-wrap sweep: a bright band crosses the hit line during the first beat
-  // after the transport wraps.
-  if (loop && !reduced && score.playing && beat >= loop * 0.5) {
-    const loopPhase = ((beat % loop) + loop) % loop;
-    if (loopPhase < 1) {
-      const head = Math.round(gutter + loopPhase * areaWidth);
-      for (let offset = 0; offset < 6; offset += 1) {
-        const column = head - offset;
-        if (column < gutter || column >= region.width) continue;
-        painter.put(
-          column,
-          hitRow,
-          glyphs.loopRule,
-          shade(roles.loopRule, 0.5 - offset * 0.1),
-        );
-      }
+  // First-loop sweep: once per song, a faint band crosses the hit line
+  // when the loop first wraps (tui/delight.ts decides when).
+  if (options.sweep !== undefined && !reduced) {
+    const head = Math.round(gutter + options.sweep * areaWidth);
+    for (let offset = 0; offset < 6; offset += 1) {
+      const column = head - offset;
+      if (column < gutter || column >= region.width) continue;
+      painter.put(
+        column,
+        hitRow,
+        glyphs.loopRule,
+        shade(roles.loopRule, 0.5 - offset * 0.1),
+      );
     }
   }
 
   if (empty) {
     const name = score.trackName ?? score.trackId ?? "track";
-    const start = projection.kind === "pitch" ? "add C4 at 0" : "hit kick at 0";
-    // First run: name the three ways in (ask, play, menu); narrow
-    // windows fall back to one prompt command.
-    const full = `${name} · empty · type a request · ctrl-p play · ctrl-k menu`;
-    const text = truncate(
-      full.length <= areaWidth ? full : `${name} · empty · ${start} to start`,
+    // One seeded line names a way in that works in this session: a
+    // request with an agent, a command without one (tui/hints.ts).
+    const text = emptyHint(
+      {
+        seed: options.hint?.seed ?? score.sessionId ?? "dawg",
+        agent: options.hint?.agent ?? true,
+        filled: false,
+        drums: projection.kind !== "pitch",
+        vocal: score.vocal === true,
+        playing: score.playing === true,
+      },
+      name,
       areaWidth,
     );
     const x = gutter + Math.max(0, Math.floor((areaWidth - text.length) / 2));
-    const y = Math.max(0, Math.floor(hitRow / 2));
+    const y = hintRow ?? 0;
     for (let index = 0; index < text.length; index += 1)
       painter.put(x + index, y, text[index]!, roles.muted);
   }
@@ -1030,6 +1045,22 @@ export function paintHighway(
         }
         break;
       }
+    }
+  }
+  // Ghost notes: a play key that is not recording lights its lane on the
+  // hit line for a moment, so the hand sees where the music would land.
+  if (options.glows && !reduced) {
+    const width = Math.max(1, layout.laneWidth || 1);
+    for (const glow of options.glows) {
+      const lane = projection.laneOf({ startBeat: beat, pitch: glow.pitch });
+      if (lane === undefined) continue;
+      const x = laneX(layout, lane, areaWidth);
+      const style = {
+        ...shade(accent, 0.45 * glow.strength),
+        bold: glow.strength > 0.5,
+      };
+      for (let offset = 0; offset < width; offset += 1)
+        painter.put(x + offset, hitRow, glyphs.hitStrong, style);
     }
   }
   if (score.clips && score.clips.length > 0 && region.width >= 24)

@@ -58,6 +58,7 @@ import type { SampleBank } from "../audio/samples.ts";
 import { fitting, onFitReady } from "../audio/fit.ts";
 import {
   DEFAULT_STRUM,
+  degreeOf,
   perform,
   type PerformMode,
   type PerformOptions,
@@ -126,6 +127,8 @@ export interface PlayHost {
   startTransport(beat: number): Promise<void>;
   stopTransport(): Promise<void>;
   card(text: string, tone: "info" | "success" | "warning" | "error"): void;
+  /** A played key that is not recorded: the screen glows its lane. */
+  ghost?(pitch: number): void;
   newNoteId(): string;
 }
 
@@ -490,6 +493,8 @@ export class PlaySession {
         return { type: "handled" };
       case "note": {
         this.release(action.released, now);
+        // A key that is not recording glows its lane for a moment.
+        if (!this.recording) this.host.ghost?.(action.note.pitch);
         const chord = this.chords.chordFor(action.note.pitch);
         if (chord) {
           const played = this.chords.voice(chord, action.note.pitch);
@@ -1156,7 +1161,7 @@ export class PlaySession {
       };
     }
     return {
-      range: this.keyboard.range,
+      range: this.layout.drums ? "drums" : this.keyboard.range,
       velocity: this.keyboard.velocity,
       armed: this.armed,
       recording: this.recording,
@@ -1166,10 +1171,14 @@ export class PlaySession {
       countIn,
       beat,
       grid: `grid ${this.grid}`,
-      chords: this.chords.glance(songKey(this.host.score().key).set),
+      // A kit plays drums, not harmony: no chord row and no key chip.
+      chords: this.layout.drums
+        ? undefined
+        : this.chords.glance(songKey(this.host.score().key).set),
       status: this.status,
       keys: this.strip(now),
-      legend: this.chords.on ? this.chords.legend() : undefined,
+      legend:
+        this.chords.on && !this.layout.drums ? this.chords.legend() : undefined,
     };
   }
 
@@ -1191,8 +1200,20 @@ export class PlaySession {
     ).map((cell) => {
       const chord = this.keyboard.pitchFor(cell.key);
       const name =
-        chord === undefined ? undefined : this.chords.keyLabel(chord);
-      return name ? { ...cell, label: name } : this.noteCell(cell);
+        chord === undefined || this.layout.drums
+          ? undefined
+          : this.chords.keyLabel(chord);
+      // Chords in the key are the safe ones to reach for: the strip lights
+      // them; a borrowed chord still plays but stays plain.
+      return name && chord !== undefined
+        ? {
+            ...cell,
+            label: name,
+            chord: true,
+            diatonic:
+              degreeOf(this.chords.key, ((chord % 12) + 12) % 12) !== undefined,
+          }
+        : this.noteCell(cell);
     });
   }
 

@@ -299,7 +299,7 @@ const LOSER_CEILINGS: Readonly<
   "guides/web-search.md": { assistant: 1 },
   "DAWG.md": {
     "drum kit": 1,
-    login: 3,
+    login: 2,
     cycle: 1,
     region: 1,
     assistant: 3,
@@ -319,8 +319,6 @@ const LOSER_CEILINGS: Readonly<
   "core/styles/electronic.ts": { genre: 1 },
   "core/styles/pop.ts": { genre: 1 },
   "core/tuning.ts": { temperament: 1 },
-  "tui/app.ts": { login: 1 },
-  "tui/highway.ts": { "ctrl-p play": 1 },
   "src/commands/help.ts": {
     cycle: 2,
   },
@@ -342,10 +340,9 @@ const LOSER_CEILINGS: Readonly<
   "src/agent/provider.ts": { login: 5, assistant: 1 },
   "src/agent/show-me.ts": { "drum voice": 1, login: 1, "sign in": 1 },
   "src/agent/tools.ts": { "drum voice": 1, "drum kit": 1 },
-  "src/agent/usage.ts": { login: 1 },
   "src/agent/xcb-agent.ts": { genre: 1 },
   "src/agent/xcb.ts": { login: 1 },
-  "src/main.ts": { "drum kit": 1, "drum pattern": 1, login: 2 },
+  "src/main.ts": { "drum kit": 1, "drum pattern": 1, login: 1 },
 };
 
 describe("glossary lint", () => {

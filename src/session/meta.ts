@@ -30,6 +30,11 @@ export type SessionMeta = {
   namedFingerprint?: string;
   /** Track-and-instrument-set hash at the last auto name. */
   namedStructure?: string;
+  /**
+   * Optional (0.7): the song's loop has wrapped once, so the one-shot
+   * `↻ first loop` moment never repeats. Session state, never the score.
+   */
+  heardLoop?: true;
 };
 
 /** Fields a client may change. `null` clears an optional field. */
@@ -38,6 +43,8 @@ export type MetaPatch = {
   nameSource?: NameSource;
   namedFingerprint?: string | null;
   namedStructure?: string | null;
+  /** Only ever set; the first loop is heard once. */
+  heardLoop?: true;
 };
 
 /** A conditional write applies only when every given field still matches. */
@@ -125,6 +132,7 @@ export function parseSessionMeta(
   if (fingerprint) result.namedFingerprint = fingerprint;
   const structure = optionalFingerprint(meta.namedStructure);
   if (structure) result.namedStructure = structure;
+  if (meta.heardLoop === true) result.heardLoop = true;
   return result;
 }
 
@@ -143,6 +151,11 @@ export function parseMetaPatch(value: unknown): MetaPatch {
   for (const key of ["namedFingerprint", "namedStructure"] as const) {
     if (raw[key] === undefined) continue;
     patch[key] = raw[key] === null ? null : requireFingerprint(raw[key]);
+  }
+  if (raw.heardLoop !== undefined) {
+    if (raw.heardLoop !== true)
+      throw new MetaValidationError("heardLoop is invalid");
+    patch.heardLoop = true;
   }
   if (Object.keys(patch).length === 0)
     throw new MetaValidationError("meta patch is empty");
@@ -184,6 +197,7 @@ export function applyMetaPatch(
   };
   if (patch.name !== undefined) next.name = patch.name;
   if (patch.nameSource !== undefined) next.nameSource = patch.nameSource;
+  if (patch.heardLoop) next.heardLoop = true;
   for (const key of ["namedFingerprint", "namedStructure"] as const) {
     if (patch[key] === null) delete next[key];
     else if (patch[key] !== undefined) next[key] = patch[key];

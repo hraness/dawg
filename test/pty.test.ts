@@ -50,7 +50,7 @@ async function launch(
       COLORTERM: "truecolor",
       DAWG_DAEMON: "0",
       DAWG_AUDIO: "0",
-      // A configured (fake) provider: the agent prompt and STEER pill show,
+      // A configured (fake) provider: the agent prompt and NOW pill show,
       // and the first-run sign-in picker stays out of the way.
       AI_GATEWAY_API_KEY: "vck_ptytest0000000000000000",
       DAWG_CREDENTIAL_STORE: "file",
@@ -85,7 +85,7 @@ test.skipIf(!supported)(
   "real PTY: type while playing, newline, paste, queue, undo, resize, quit",
   async () => {
     const t = await launch(80, 24, {});
-    await t.until(() => t.vt.text().includes("STEER"), "prompt");
+    await t.until(() => t.vt.text().includes(" NOW "), "prompt");
     expect(t.vt.lines()[0]).toContain("bass");
     // Alternate screen + bracketed paste were enabled.
     expect(t.vt.altScreen).toBe(true);
@@ -95,10 +95,11 @@ test.skipIf(!supported)(
     await t.send(" ");
     await t.until(() => t.vt.lines()[0]!.includes("▶"), "playing");
 
-    // A real edit, so undo has something to revert.
+    // A real edit, so undo has something to revert. Play/pause is not an
+    // edit, so the first edit is still rev 0→1.
     await t.send("add C3 at 0 for 2\r");
-    await t.until(() => t.vt.text().includes("rev 1→2"), "receipt");
-    expect(t.vt.text()).toContain("^z undo");
+    await t.until(() => t.vt.text().includes("rev 0→1"), "receipt");
+    expect(t.vt.text()).toContain("ctrl-z undo");
 
     // Typing while playing, Shift+Enter (CSI u), bracketed paste.
     await t.send("make it");
@@ -110,11 +111,11 @@ test.skipIf(!supported)(
     expect(first).toBeGreaterThan(0);
     expect(lines[first + 1]).toContain("swing harder");
 
-    // Ctrl+Q switches the pill to QUEUE.
+    // Ctrl+Q switches the pill to NEXT.
     await t.send("\u0011");
-    await t.until(() => t.vt.text().includes("QUEUE"), "queue pill");
+    await t.until(() => t.vt.text().includes(" NEXT "), "next pill");
     await t.send("\u0011");
-    await t.until(() => t.vt.text().includes("STEER"), "steer pill");
+    await t.until(() => t.vt.text().includes(" NOW "), "now pill");
 
     // Resize keeps the draft and reflows.
     t.terminal.resize(40, 20);
@@ -129,6 +130,7 @@ test.skipIf(!supported)(
     await Bun.sleep(80);
     await t.send("\u001a");
     await t.until(() => t.vt.text().includes("undid"), "undo receipt");
+    expect(t.vt.text()).toContain("undid · −1 note on bass (C3)");
 
     // Ctrl+O opens the transcript with the request we sent.
     await t.send("\u000f");
@@ -156,7 +158,7 @@ test.skipIf(!supported)(
     const color = await launch(80, 24, {});
     const mono = await launch(80, 24, { NO_COLOR: "1" });
     for (const t of [color, mono])
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
     await Bun.sleep(100);
     expect(
       mono.vt.cells.flat().every((cell) => !cell.style.fg && !cell.style.bg),
@@ -165,7 +167,7 @@ test.skipIf(!supported)(
       color.vt.cells.flat().some((cell) => cell.style.bg !== undefined),
     ).toBe(true);
     const box = (vt: VirtualTerminal) =>
-      vt.lines().findIndex((line) => line.includes("STEER"));
+      vt.lines().findIndex((line) => line.includes(" NOW "));
     expect(box(mono.vt)).toBe(box(color.vt));
     for (const t of [color, mono]) {
       t.terminal.write("\u0003");
@@ -180,7 +182,7 @@ test.skipIf(!supported)(
   "real PTY: /rename, /fork, /sessions and auto-claimed tracks",
   async () => {
     const t = await launch(100, 30, {});
-    await t.until(() => t.vt.text().includes("STEER"), "prompt");
+    await t.until(() => t.vt.text().includes(" NOW "), "prompt");
     await t.send("/rename night drive\r");
     await t.until(
       () => t.vt.text().includes("renamed · night drive"),
@@ -199,7 +201,7 @@ test.skipIf(!supported)(
     // Plain `dawg` resumes the fork and claims its only track; a second
     // window on the same session gets a draft track.
     const one = await launch(100, 30, {}, [], t.cwd);
-    await one.until(() => one.vt.text().includes("STEER"), "first window");
+    await one.until(() => one.vt.text().includes(" NOW "), "first window");
     expect(one.vt.lines()[0]).toContain("night drive 2");
     expect(one.vt.lines()[0]).toContain("bass");
     const two = await launch(
@@ -227,10 +229,10 @@ test.skipIf(!supported)(
   "real PTY: /track focuses, failures are red, /help is an overlay, slash typos stay local",
   async () => {
     const t = await launch(100, 30, {}, []);
-    await t.until(() => t.vt.text().includes("STEER"), "prompt");
+    await t.until(() => t.vt.text().includes(" NOW "), "prompt");
     expect(t.vt.text()).toContain("created .dawg/ · add it to .gitignore");
-    expect(t.vt.text()).toContain(
-      "main · empty · type a request · ctrl-p play · ctrl-k menu",
+    expect(t.vt.text()).toMatch(
+      /main · empty · [^\n]*space play · ctrl-p play mode · ctrl-k menu/,
     );
 
     // A drum command on a melodic track is a failure, drawn in the error role.
@@ -244,7 +246,7 @@ test.skipIf(!supported)(
     await t.send("track drums\r");
     await t.until(() => t.vt.text().includes("track created · drums"), "track");
     await t.until(() => t.vt.lines()[0]!.includes("drums"), "focus");
-    expect(t.vt.text()).toContain("^z undo");
+    expect(t.vt.text()).toContain("ctrl-z undo");
     await t.send("pattern kick 0 1 2 3\r");
     await t.until(() => t.vt.text().includes("✓ +4 kick hits"), "hits");
     await t.send("pattern kick 0\r");
@@ -313,7 +315,7 @@ test.skipIf(!supported)(
 
     // A second window claims `main`; drums stays with the first window.
     const two = await launch(100, 30, {}, [], t.cwd);
-    await two.until(() => two.vt.text().includes("STEER"), "second window");
+    await two.until(() => two.vt.text().includes(" NOW "), "second window");
     expect(two.vt.lines()[0]).toContain("main");
     await two.send("/track drums\r");
     await two.until(
@@ -345,7 +347,7 @@ test.skipIf(!supported)(
       },
       [],
     );
-    await t.until(() => t.vt.text().includes("STEER"), "prompt");
+    await t.until(() => t.vt.text().includes(" NOW "), "prompt");
     await t.until(
       () => /\$0 session · \$0 today · opus-5\.5 · gateway/.test(t.vt.text()),
       "spend line",
@@ -369,7 +371,34 @@ test.skipIf(!supported)(
 );
 
 test.skipIf(!supported)(
-  "real PTY: no provider shows the offline spend line and hides STEER",
+  "real PTY: the first run opens the TUI with one optional /login card",
+  async () => {
+    const t = await launch(80, 24, { AI_GATEWAY_API_KEY: "" }, []);
+    await t.until(
+      () => t.vt.text().includes("/model key adds an agent · optional"),
+      "first-run card",
+    );
+    // Straight into the editor: no picker, the alternate screen is up.
+    expect(t.vt.altScreen).toBe(true);
+    expect(t.vt.text()).not.toContain("Welcome to dawg");
+    expect(t.vt.text()).not.toContain("Esc to skip");
+    t.terminal.write("\u0003");
+    expect(await t.proc.exited).toBe(0);
+    t.terminal.close();
+    // Session two stays quiet: the card was shown once.
+    const two = await launch(80, 24, { AI_GATEWAY_API_KEY: "" }, [], t.cwd);
+    await two.until(() => two.vt.text().includes("commands only"), "second");
+    await Bun.sleep(300);
+    expect(two.vt.text()).not.toContain("/model key adds an agent");
+    two.terminal.write("\u0003");
+    expect(await two.proc.exited).toBe(0);
+    two.terminal.close();
+  },
+  20_000,
+);
+
+test.skipIf(!supported)(
+  "real PTY: no provider shows the offline spend line and hides NOW",
   async () => {
     const t = await launch(
       100,
@@ -377,9 +406,14 @@ test.skipIf(!supported)(
       { AI_GATEWAY_API_KEY: "", DAWG_AI: "0" },
       [],
     );
-    await t.until(() => t.vt.text().includes("dawg login"), "offline hint");
-    expect(t.vt.text()).toContain("no model · dawg login");
-    expect(t.vt.text()).not.toContain("STEER");
+    await t.until(() => t.vt.text().includes("commands only"), "offline state");
+    // No sign-in nag in the header: the first session's card names /login.
+    expect(t.vt.text()).not.toContain("dawg login");
+    expect(t.vt.text()).not.toContain(" NOW ");
+    // Commands only: the empty state and placeholder never ask for prose.
+    expect(t.vt.text()).not.toContain("type a request");
+    expect(t.vt.text()).not.toContain("describe a");
+    expect(t.vt.text()).toContain("try: ");
     // A sentence that starts with a command verb is a request, not a usage
     // error: offline it says "unrecognized", never the add syntax.
     await t.send("add a walking bass in A minor\r");
@@ -414,7 +448,7 @@ test.skipIf(!supported)(
       },
       [],
     );
-    await t.until(() => t.vt.text().includes("STEER"), "prompt");
+    await t.until(() => t.vt.text().includes(" NOW "), "prompt");
     expect(t.vt.altScreen).toBe(true);
     await t.send("/login\r");
     await t.until(() => !t.vt.altScreen, "left the alternate screen");
@@ -425,7 +459,7 @@ test.skipIf(!supported)(
     await t.until(() => /\[Y\/n\]|Enter/.test(t.vt.text()), "a prompt");
     await t.send("\r");
     await t.until(() => t.vt.altScreen, "back on the alternate screen");
-    await t.until(() => t.vt.text().includes("STEER"), "redrawn TUI");
+    await t.until(() => t.vt.text().includes(" NOW "), "redrawn TUI");
     await t.send("\u0003");
     await Promise.race([t.proc.exited, Bun.sleep(5000)]);
     t.proc.kill();
@@ -441,7 +475,7 @@ test.skipIf(!supported)(
       "--track",
       "gtr",
     ]);
-    await t.until(() => t.vt.text().includes("dawg login"), "ready");
+    await t.until(() => t.vt.text().includes("commands only"), "ready");
     await t.send("guitar capo 2\r");
     await t.until(
       () => t.vt.text().includes("guitar · standard · capo 2"),

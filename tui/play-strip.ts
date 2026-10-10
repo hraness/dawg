@@ -1,21 +1,31 @@
 /**
- * Play mode's two fixed rows: the header (`PLAY  C3–F4  vel 100  ● REC
+ * Play mode's two fixed rows: the header (`PLAY MODE  ▶ 120 BPM · lead ·
+ * rev 3  C3–F4  vel 100  ● REC
  * click ✓` plus a beat flash) and a one-line keyboard strip with the keys
  * that are sounding lit. Both repaint in place every frame, so playing never
  * scrolls the transcript.
  */
 import type { CellBuffer } from "./screen.ts";
 import { displayWidth, truncate } from "./text.ts";
-import { onBackground, type Theme } from "./theme.ts";
+import { onBackground, type Style, type Theme } from "./theme.ts";
 
 export type PlayStripKey = Readonly<{
   key: string;
   label: string;
   black: boolean;
   lit: boolean;
+  /** Chord mode: the label names the chord this key plays. */
+  chord?: boolean | undefined;
+  /** That chord is built on a degree of the song's key. */
+  diatonic?: boolean | undefined;
 }>;
 
 export type PlayHeaderView = Readonly<{
+  /**
+   * The song header compressed to the left of the row while play mode
+   * covers it: `▶ 120 BPM · drums · rev 1`.
+   */
+  context?: string | undefined;
   /** `C3–F4`. */
   range: string;
   velocity: number;
@@ -51,7 +61,8 @@ export type ChordLegendCell = Readonly<{
 /** Text of the header row, for tests and narrow terminals. */
 export function playHeaderText(view: PlayHeaderView, unicode = true): string {
   const parts = [
-    "PLAY",
+    "PLAY MODE",
+    view.context ?? "",
     view.range,
     view.armed
       ? `${unicode ? "●" : "*"} ${view.recording ? "REC" : "rec armed"}${view.replace ? " replace" : ""}`
@@ -87,8 +98,12 @@ export function paintPlayHeader(
     );
     x += buffer.text(x, y, "  ", panel);
   };
-  put(" PLAY ", roles.pillSteer);
-  put(view.range, { ...roles.text, bold: true });
+  put(" PLAY MODE ", roles.pillSteer);
+  const context = fitContext(view, width, unicode);
+  if (context) put(context, roles.muted);
+  // A kit names its range by the track already in the context.
+  if (!context.includes(" · ") || view.range !== "drums")
+    put(view.range, { ...roles.text, bold: true });
   if (view.armed)
     put(
       `${unicode ? "●" : "*"} ${view.recording ? "REC" : "rec armed"}${view.replace ? " replace" : ""}`,
@@ -99,7 +114,8 @@ export function paintPlayHeader(
   if (view.sustain) put("SUSTAIN", roles.pillQueue);
   if (view.chords) put(view.chords, roles.hit);
   if (view.countIn) put(view.countIn, roles.warning);
-  if (view.beat) {
+  const hintWidth = displayWidth("? keys · esc leave");
+  if (view.beat && x + view.beat.of + 2 <= width - 1 - hintWidth) {
     const cells = Array.from({ length: view.beat.of }, (_, index) =>
       index + 1 === view.beat!.index
         ? unicode
@@ -136,6 +152,31 @@ export function paintPlayHeader(
   if (right > x) buffer.text(right, y, hint, onBackground(roles.faint, panel));
 }
 
+/**
+ * The compressed song header (`▶ 120 BPM · bass · rev 1`). It is reserved
+ * first: the beat dots and the status give way before it does, and only a
+ * terminal too narrow for it with the badge and the way out shortens it to
+ * its first clause.
+ */
+function fitContext(
+  view: PlayHeaderView,
+  width: number,
+  unicode: boolean,
+): string {
+  if (!view.context) return "";
+  const rest = displayWidth(
+    playHeaderText(
+      { ...view, context: undefined, status: undefined, beat: undefined },
+      unicode,
+    ),
+  );
+  // Badge padding, the right-hand hint and the gaps between parts.
+  const room = width - 2 - displayWidth("? keys · esc leave") - 4 - rest;
+  for (const candidate of [view.context, view.context.split(" · ")[0]!])
+    if (displayWidth(candidate) + 2 <= room) return candidate;
+  return "";
+}
+
 /** Chord mode's number row: `1 dim  2 min … 9 block  b bass off  n next`. */
 export function paintChordLegend(
   buffer: CellBuffer,
@@ -162,7 +203,11 @@ export function paintChordLegend(
   }
 }
 
-/** `a C3 │ w C#3 …`: each key with its note; lit keys reversed. */
+/**
+ * `A C3  W C#3 …`: each key with what it plays. The key letter is muted so
+ * the music reads first; a chord label is bold, and chords in the song's
+ * key are lit (they always fit). Sounding keys are reversed.
+ */
 export function paintPlayStrip(
   buffer: CellBuffer,
   y: number,
@@ -174,15 +219,24 @@ export function paintPlayStrip(
   buffer.fill(0, y, width, 1, roles.canvas);
   let x = 1;
   for (const key of keys) {
-    const cell = `${key.key.toUpperCase()} ${key.label}`;
-    const cellWidth = displayWidth(cell) + 1;
+    const letter = key.key.toUpperCase();
+    const cellWidth = displayWidth(letter) + 1 + displayWidth(key.label) + 1;
     if (x + cellWidth > width - 1) break;
-    const style = key.lit
+    const labelStyle: Style = key.lit
       ? { ...(key.black ? roles.selected : roles.hit), reverse: true }
+      : key.chord
+        ? { ...(key.diatonic ? roles.hit : roles.text), bold: true }
+        : key.black
+          ? roles.muted
+          : roles.text;
+    const letterStyle: Style = key.lit
+      ? labelStyle
       : key.black
-        ? roles.muted
-        : roles.text;
-    buffer.text(x, y, cell, style);
-    x += cellWidth;
+        ? roles.faint
+        : roles.muted;
+    x += buffer.text(x, y, letter, letterStyle);
+    x += buffer.text(x, y, " ", key.lit ? labelStyle : roles.canvas);
+    x += buffer.text(x, y, key.label, labelStyle);
+    x += 1;
   }
 }

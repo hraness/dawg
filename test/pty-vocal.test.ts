@@ -11,7 +11,7 @@ test.skipIf(!supported)(
   async () => {
     const t = await launch(110, 30, {}, ["--track", "lead"]);
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("/vocal\r");
       await t.until(() => t.vt.text().includes("vocal <verb>:"), "vocal list");
       await t.until(() => t.vt.text().includes("/vocal import"), "vocal list");

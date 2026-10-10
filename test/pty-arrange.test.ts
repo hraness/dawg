@@ -62,7 +62,7 @@ test.skipIf(!supported)(
   async () => {
     const t = await launch(110, 34, {});
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("bars 8\r");
       await t.send("section verse 1-4\r");
       await t.send("section chorus 5-8\r");

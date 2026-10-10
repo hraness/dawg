@@ -70,7 +70,7 @@ test.skipIf(!supported)(
   async () => {
     const t = await launch(110, 30, {}, ["--track", "lead"]);
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("add C4 at 0\r");
       await Bun.sleep(400);
       await t.send("resample lead as stem\r");

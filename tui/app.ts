@@ -14,6 +14,7 @@
 
 import {
   ActivityFeed,
+  ERROR_FADE_MS,
   fail,
   revisionLabel,
   spinnerFrame,
@@ -23,9 +24,17 @@ import {
 } from "./activity.ts";
 import {
   paintHighway,
+  projectionFor,
   resolveBeat,
   type TrackScoreSnapshot,
 } from "./highway.ts";
+import { placeholderHint } from "./hints.ts";
+import {
+  Delight,
+  downbeatGlint,
+  FIRST_LOOP_CARD,
+  sweepProgress,
+} from "./delight.ts";
 import { asciiHint, fitHint, HINTS } from "./grammar.ts";
 import { GuideBrowser } from "./guide.ts";
 import { listGuides } from "../guides/index.ts";
@@ -73,10 +82,10 @@ export interface AppView {
   types?: TypesIndicator | undefined;
   /**
    * The line under the prompt: `$0.12 session · $0.48 today · opus-5.5 ·
-   * gateway`, or `no model · dawg login`. The caller sizes it to the width.
+   * gateway`, or `commands only`. The caller sizes it to the width.
    */
   spend?: string | undefined;
-  /** No agent provider: the placeholder teaches commands, no STEER pill. */
+  /** No agent provider: the placeholder teaches commands, no NOW pill. */
   agentOffline?: boolean | undefined;
   /**
    * Show-me: the command the agent is writing, as it streams (ghost text in
@@ -145,6 +154,8 @@ export interface UiState {
   guide?: GuideBrowser | undefined;
   /** The fader drawer, docked over the bottom of the piano roll. */
   drawer?: DrawerView | undefined;
+  /** Downbeat glint, first-loop sweep and ghost-note lanes (delight.ts). */
+  delight?: Delight | undefined;
 }
 
 /**
@@ -421,18 +432,47 @@ function syncSegment(
   return { text: `${glyph[sync]} ${sync}`, style: style[sync], priority: 4 };
 }
 
+/**
+ * The song header compressed for play mode's row: transport, tempo, the
+ * track and the revision (`▶ 120 BPM · drums · rev 1`).
+ */
+export function playContext(
+  score: TrackScoreSnapshot,
+  unicode: boolean,
+): string {
+  const playing = score.playing === true;
+  const glyph = playing ? (unicode ? "▶" : ">") : unicode ? "⏸" : "||";
+  const name = score.trackName ?? score.trackId ?? "track";
+  return [
+    `${glyph} ${score.bpm ?? 120} BPM`,
+    name,
+    ...(score.revision !== undefined ? [`rev ${score.revision}`] : []),
+  ].join(" · ");
+}
+
 function paintHeader(
   buffer: CellBuffer,
   view: AppView,
   ui: UiState,
   width: number,
   hits?: HitMap,
+  beat = 0,
 ): void {
   const { theme, capabilities } = ui;
   const roles = theme.roles;
   const score = view.score;
   const unicode = capabilities.unicode;
   const playing = score.playing === true;
+  // The ▶ brightens for a moment on each bar's downbeat.
+  const glint = downbeatGlint({
+    playing,
+    beat,
+    bpm: score.bpm ?? 120,
+    beatsPerBar: score.beatsPerBar ?? 4,
+    barBeats: score.barBeats,
+    loopBeats: score.loopBeats,
+    reducedMotion: ui.reducedMotion,
+  });
   const transport = `${playing ? (unicode ? "▶" : ">") : unicode ? "⏸" : "||"} ${score.bpm ?? 120} BPM`;
   const name = score.trackName ?? score.trackId ?? "track";
   const left: Segment[] = [
@@ -445,7 +485,11 @@ function paintHeader(
     },
     {
       text: transport,
-      style: playing ? roles.transport : roles.paused,
+      style: playing
+        ? glint
+          ? { ...shade(roles.transport, 0.55), bold: true }
+          : roles.transport
+        : roles.paused,
       priority: 0,
       target: { kind: "transport" },
     },
@@ -536,7 +580,9 @@ function cardMarker(card: ActivityCard, unicode: boolean): string {
 }
 
 export function cardText(card: ActivityCard, unicode: boolean): string {
-  const parts = [`${cardMarker(card, unicode)} ${card.text}`];
+  const count =
+    card.count && card.count > 1 ? ` ${unicode ? "×" : "x"}${card.count}` : "";
+  const parts = [`${cardMarker(card, unicode)} ${card.text}${count}`];
   const revision = revisionLabel(
     card.baseRevision,
     card.resultRevision,
@@ -544,7 +590,37 @@ export function cardText(card: ActivityCard, unicode: boolean): string {
   );
   if (revision) parts.push(revision);
   if (card.hint) parts.push(card.hint);
+  if (card.suffix) parts.push(card.suffix);
   return parts.join(" · ");
+}
+
+/** How long each one-time note leads when they cannot all fit at once. */
+export const ONCE_ROTATE_MS = 3_000;
+
+/**
+ * The cards for the strip's width: when the one-time notes cannot all show
+ * whole beside the receipts, they take turns (one every `ONCE_ROTATE_MS`,
+ * on the frame clock), so each is read in full at least once.
+ */
+export function stripCards(
+  cards: readonly ActivityCard[],
+  room: number,
+  nowMs: number,
+  unicode: boolean,
+): ActivityCard[] {
+  const width = (list: readonly ActivityCard[]) =>
+    list.reduce(
+      (sum, card, index) =>
+        sum + (index > 0 ? 3 : 0) + displayWidth(cardText(card, unicode)),
+      0,
+    );
+  if (width(cards) <= room) return [...cards];
+  const steady = cards.filter((card) => !card.once);
+  const once = cards.filter((card) => card.once);
+  if (once.length < 2) return [...cards];
+  const turn =
+    once[Math.floor(Math.max(0, nowMs) / ONCE_ROTATE_MS) % once.length]!;
+  return [...steady, turn];
 }
 
 function paintActivity(
@@ -553,6 +629,7 @@ function paintActivity(
   ui: UiState,
   width: number,
   nowMs: number,
+  agentOffline = false,
 ): void {
   const { theme, capabilities, activity } = ui;
   const roles = theme.roles;
@@ -576,9 +653,10 @@ function paintActivity(
       ...roles.agent,
       bold: true,
     });
-    if (activity.streaming && x < limit - 4) {
+    // The agent's latest sentence, faint: what it is doing, in its words.
+    if (activity.streamSentence && x < limit - 4) {
       x += buffer.text(x, y, " · ", roles.faint);
-      const tail = activity.streaming;
+      const tail = activity.streamSentence;
       const room = Math.max(0, limit - x);
       const shown =
         displayWidth(tail) > room
@@ -586,13 +664,24 @@ function paintActivity(
               .slice(-(room - 1))
               .join("")}`
           : tail;
-      x += buffer.text(x, y, truncate(shown, room), roles.muted);
+      x += buffer.text(x, y, truncate(shown, room), roles.faint);
     }
   } else {
-    const cards = [...activity.cards].reverse();
+    const cards = stripCards(
+      activity.visible(nowMs),
+      Math.max(0, limit - x),
+      nowMs,
+      capabilities.unicode,
+    );
     cards.forEach((card, index) => {
       if (x >= limit) return;
       const text = cardText(card, capabilities.unicode);
+      // A one-time note behind the first slot shows whole or not at all
+      // (it stays in ctrl-o); a cut note loses its key word.
+      if (index > 0 && card.once && x + 3 + displayWidth(text) > limit) {
+        x = limit;
+        return;
+      }
       if (index > 0) {
         if (x + 3 + Math.min(12, displayWidth(text)) > limit) {
           x = limit;
@@ -611,7 +700,14 @@ function paintActivity(
               : card.tone === "success"
                 ? roles.success
                 : roles.text;
-      if (index > 0) style = card.tone === "error" ? roles.error : roles.faint;
+      // Behind the first slot everything is faint; an error keeps its
+      // colour until it is old, then fades with the rest.
+      if (index > 0)
+        style =
+          card.tone === "error" && age < ERROR_FADE_MS
+            ? roles.error
+            : roles.faint;
+      else if (card.once) style = roles.faint;
       else if (!ui.reducedMotion && age >= 0 && age < CARD_GLOW_MS)
         style = { ...shade(style, 0.4 * (1 - age / CARD_GLOW_MS)), bold: true };
       x += buffer.text(x, y, truncate(text, Math.max(0, limit - x)), style);
@@ -621,7 +717,9 @@ function paintActivity(
         x,
         y,
         truncate(
-          "type a request · space plays on an empty prompt · /help",
+          agentOffline
+            ? "type a command · space plays on an empty prompt · /help"
+            : "type a request · space plays on an empty prompt · /help",
           limit - x,
         ),
         roles.faint,
@@ -635,7 +733,7 @@ function paintActivity(
 // Prompt panel
 
 function pill(mode: PromptMode): string {
-  return mode === "queue" ? " QUEUE " : " STEER ";
+  return mode === "queue" ? " NEXT " : " NOW ";
 }
 
 function paintPrompt(
@@ -715,11 +813,19 @@ function paintPrompt(
     const line = typed && caption ? `${typed}  ${caption}` : typed || caption!;
     buffer.text(5, top + 1, truncate(line, editorWidth - 1), faint);
   } else if (prompt.value.length === 0) {
-    const placeholder = view.agentOffline
-      ? "try: tempo 96 · add C4 at 0 · /help  (dawg login enables the agent)"
-      : mode === "queue"
-        ? "queue a request for after the current one…"
-        : "describe a change — “add a walking bass in A minor”";
+    // Seeded per session (tui/hints.ts): the words stay put while you
+    // work and change between sessions, chosen by agent and song state.
+    const score = view.score;
+    const placeholder = placeholderHint({
+      seed: score.sessionId ?? "dawg",
+      agent: !view.agentOffline,
+      filled:
+        score.notes.length > 0 ||
+        (score.clips ?? []).length > 0 ||
+        (score.layers ?? []).some((layer) => layer.notes.length > 0),
+      drums: projectionFor(score).kind !== "pitch",
+      queue: mode === "queue",
+    });
     buffer.text(5, top + 1, truncate(placeholder, editorWidth - 1), faint);
   }
 
@@ -730,13 +836,14 @@ function paintPrompt(
     for (let column = 1; column < width - 1; column += 1)
       buffer.set(column, y, box.h, border);
     buffer.set(width - 1, y, box.br, border);
+    // One notation everywhere: ctrl-<key>, as /help and the menu spell it.
     const hints =
-      width >= 100
-        ? " enter send · shift+enter newline · ^q queue · ^z undo · ^o log · ^c quit "
-        : width >= 72
-          ? " enter send · ^j newline · ^q queue · ^z undo · ^o log "
-          : width >= 44
-            ? " enter · ^q queue · ^z undo · ^o log "
+      width >= 112
+        ? " enter send · shift-enter newline · ctrl-q now/next · ctrl-z undo · ctrl-o log · ctrl-c quit "
+        : width >= 80
+          ? " enter send · ctrl-j newline · ctrl-q now/next · ctrl-z undo · ctrl-o log "
+          : width >= 52
+            ? " enter · ctrl-q now/next · ctrl-z undo · ctrl-o log "
             : "";
     const spend = view.spend ? ` ${view.spend} ` : "";
     const spendWidth = displayWidth(spend);
@@ -1180,7 +1287,10 @@ export function composeFrame(
       buffer,
       layout.header,
       width,
-      view.play,
+      {
+        ...view.play,
+        context: playContext(view.score, ui.capabilities.unicode),
+      },
       ui.theme,
       ui.capabilities.unicode,
     );
@@ -1204,7 +1314,15 @@ export function composeFrame(
         height: layout.highway.height - 1,
       };
     }
-  } else paintHeader(buffer, view, ui, width, hits);
+  } else
+    paintHeader(
+      buffer,
+      view,
+      ui,
+      width,
+      hits,
+      view.beat ?? resolveBeat(view.score, nowMs),
+    );
   if (view.arrange && layout.highway.height > 4) {
     paintArrangeStrip(
       buffer,
@@ -1244,6 +1362,16 @@ export function composeFrame(
           theme: ui.theme,
           capabilities: ui.capabilities,
           reducedMotion: ui.reducedMotion,
+          hint: {
+            seed: view.score.sessionId ?? "dawg",
+            agent: !view.agentOffline,
+          },
+          sweep: sweepProgress(
+            ui.delight?.sweepStartedAtMs,
+            nowMs,
+            ui.reducedMotion,
+          ),
+          glows: ui.delight?.glows(nowMs, ui.reducedMotion),
         },
       );
     if (ui.drawer)
@@ -1261,7 +1389,14 @@ export function composeFrame(
       text: ui.keys,
       hint: HINTS.keys,
     });
-  paintActivity(buffer, layout.activity, ui, width, nowMs);
+  paintActivity(
+    buffer,
+    layout.activity,
+    ui,
+    width,
+    nowMs,
+    view.agentOffline ?? false,
+  );
   const prompt = paintPrompt(buffer, view, ui, layout, width);
   return {
     buffer,
@@ -1276,8 +1411,15 @@ export function composeFrame(
 // ---------------------------------------------------------------------------
 // Mutable app
 
+/** The longest a lagging terminal waits between frames. */
+export const MAX_BACKOFF_MS = 250;
+
 export interface TerminalIO {
-  write(data: string): void;
+  /**
+   * Writes a frame. `false` means the terminal is not keeping up (the
+   * stream's buffer is full): frames back off until a write is accepted.
+   */
+  write(data: string): void | boolean;
   columns(): number;
   rows(): number;
 }
@@ -1332,6 +1474,15 @@ export class TuiApp {
   private lastFrameAt = Number.NEGATIVE_INFINITY;
   /** Minimum interval between frames (~30 fps). */
   frameIntervalMs = 33;
+  /**
+   * Extra spacing while the terminal lags: doubles on each refused write up
+   * to `MAX_BACKOFF_MS`, resets on the first accepted one.
+   */
+  backoffMs = 0;
+  /** Session-only delight; `heardLoop` comes from the session's metadata. */
+  readonly delight = new Delight();
+  /** The song wrapped for the first time: the host records it in meta. */
+  onFirstLoop: (() => void) | undefined;
 
   constructor(options: TuiAppOptions) {
     this.io = options.io;
@@ -1364,6 +1515,7 @@ export class TuiApp {
       keys: this.keys,
       guide: this.guide,
       drawer: this.drawer,
+      delight: this.delight,
     };
   }
 
@@ -1383,9 +1535,13 @@ export class TuiApp {
    */
   render(view: AppView, options: { force?: boolean } = {}): string {
     const now = this.clock();
-    if (!options.force && now - this.lastFrameAt < this.frameIntervalMs)
+    if (
+      !options.force &&
+      now - this.lastFrameAt < this.frameIntervalMs + this.backoffMs
+    )
       return "";
     this.lastFrameAt = now;
+    this.watchFirstLoop(view, now);
     const frame = composeFrame(
       view,
       this.ui,
@@ -1394,8 +1550,41 @@ export class TuiApp {
     );
     this.lastFrame = frame;
     const out = this.writer.frame(frame.buffer, frame.cursor);
-    if (out) this.io.write(out);
+    if (out) {
+      const accepted = this.io.write(out);
+      this.backoffMs =
+        accepted === false
+          ? Math.min(
+              MAX_BACKOFF_MS,
+              Math.max(this.frameIntervalMs, this.backoffMs * 2),
+            )
+          : 0;
+    }
     return out;
+  }
+
+  /**
+   * The first wrap of a song that never wrapped before: a one-shot sweep
+   * and the card `↻ first loop`. The card shows with motion off too (it is
+   * information); the sweep does not.
+   */
+  private watchFirstLoop(view: AppView, now: number): void {
+    const score = view.score;
+    const wrapped = this.delight.observe(
+      {
+        playing: score.playing === true,
+        beat: view.beat ?? resolveBeat(score, now),
+        loopBeats: score.loopBeats,
+        empty:
+          score.notes.length === 0 &&
+          (score.clips ?? []).length === 0 &&
+          !(score.layers ?? []).some((layer) => layer.notes.length > 0),
+      },
+      now,
+    );
+    if (!wrapped) return;
+    this.activity.pushCard(FIRST_LOOP_CARD, { tone: "info", once: true });
+    this.onFirstLoop?.();
   }
 
   /** Decode one key sequence (from TerminalInputDecoder) into an input. */

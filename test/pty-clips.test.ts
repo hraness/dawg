@@ -64,7 +64,7 @@ test.skipIf(!supported)(
         );
       await writeFile(join(t.cwd, "take.wav"), encodeWav(pcm, 48_000));
 
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("instrument vocal\r");
       for (let i = 0; i < 20 && (await vox())?.instrument !== "vocal"; i++)
         await Bun.sleep(100);

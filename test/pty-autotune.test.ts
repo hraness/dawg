@@ -64,7 +64,7 @@ test.skipIf(!supported)(
       await Bun.sleep(60);
     };
     try {
-      await until(() => vt.text().includes("dawg login"), "ready");
+      await until(() => vt.text().includes("commands only"), "ready");
       await send("/autotune hard\r");
       await until(() => vt.text().includes("autotune · hard"), "autotune set");
       await send("/tune hard\r");

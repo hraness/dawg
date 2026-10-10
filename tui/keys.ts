@@ -3,7 +3,7 @@
  *
  * The prompt is always focused, so printable keys always type.  Control
  * chords carry the global actions:
- *   Ctrl+C quit · Ctrl+Q toggle STEER/QUEUE · Ctrl+Z undo · Ctrl+Y redo
+ *   Ctrl+C quit · Ctrl+Q toggle NOW/NEXT · Ctrl+Z undo · Ctrl+Y redo
  *   Ctrl+O transcript overlay · Esc closes the overlay
  */
 

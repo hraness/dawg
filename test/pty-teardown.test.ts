@@ -73,7 +73,7 @@ test.skipIf(!supported || process.getuid?.() === 0)(
   async () => {
     const t = await launch(80, 24, {});
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       expect(t.vt.altScreen).toBe(true);
       expect(t.vt.bracketedPaste).toBe(true);
       await readOnly(t.cwd, true);
@@ -99,7 +99,7 @@ test.skipIf(!supported)(
       crash.preload,
     ]);
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await crash.fire();
       const code = await t.proc.exited;
       expect(code).toBe(1);
@@ -122,7 +122,7 @@ test.skipIf(!supported)(
       crash.preload,
     ]);
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await crash.fire();
       await t.until(
         () => t.vt.text().includes("failed · boom-reject"),
@@ -149,7 +149,7 @@ test.skipIf(!supported || process.getuid?.() === 0)(
   async () => {
     const t = await launch(100, 30, {});
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.until(() => t.vt.lines()[0]!.includes("BPM"), "header");
       await readOnly(t.cwd, true);
       const row = t.vt.lines()[0]!;

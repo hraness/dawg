@@ -61,6 +61,8 @@ export type StyleResult = Readonly<{
   next?: TrackScore;
   kind?: string;
   payload?: Record<string, unknown>;
+  /** Detail for the ctrl-o log (seed, check counts), not the card. */
+  log?: string;
 }>;
 
 export const STYLE_USAGE =
@@ -324,6 +326,39 @@ export function generatedSummary(generated: GeneratedStyle): string {
     .join(" · ");
 }
 
+/**
+ * The card after a style lands, in musical terms: what the song now is.
+ * `lofi-hip-hop · F minor · 84 BPM · 8 bars · 4 tracks`.
+ */
+export function styleReceipt(generated: GeneratedStyle): string {
+  const { plan, provenance } = generated;
+  const name = provenance.blend
+    ? `${provenance.id} + ${provenance.blend.id} ${pct(provenance.blend.weight)}`
+    : provenance.id;
+  return [
+    name,
+    plan.keyText ?? plan.tuning?.name ?? "",
+    `${Math.round(plan.bpm)} BPM`,
+    `${plan.bars} bars`,
+    `${plan.tracks.length} tracks`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** Seed, meter and the generator's checks, for the ctrl-o log. */
+export function styleCheckLine(generated: GeneratedStyle): string {
+  const { plan } = generated;
+  const report = validateGenerated(generated);
+  const failed = report.checks.filter((check) => !check.ok);
+  return [
+    `style · seed ${plan.seed} · ${plan.signature}`,
+    failed.length === 0
+      ? `${report.checks.length} checks pass`
+      : `${failed.length} of ${report.checks.length} checks off: ${failed.map((check) => check.name).join(" ")}`,
+  ].join(" · ");
+}
+
 export function applyStyleCommand(
   score: TrackScore,
   command: StyleCommand,
@@ -366,7 +401,8 @@ export function applyStyleCommand(
       }
       return {
         ok: true,
-        message: `${generatedSummary(generated)} · undo restores the song`,
+        message: `${styleReceipt(generated)} · ctrl-z undo`,
+        log: styleCheckLine(generated),
         next: styleScore(generated),
         kind: "style.apply",
         payload: { style: generated.provenance },

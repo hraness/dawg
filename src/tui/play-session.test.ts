@@ -105,6 +105,27 @@ function leadScore(): TrackScore {
 }
 
 describe("PlaySession", () => {
+  test("a drum kit labels keys by drum and hides chords", async () => {
+    const score = createScore({
+      tempoBpm: 120,
+      bars: 1,
+      tracks: [{ id: "drums", name: "drums", instrument: "kit" }],
+    });
+    const { session } = harness(score, "drums", { mode: "auto" });
+    await session.enter();
+    const keys = session.strip(0);
+    const label = (key: string) => keys.find((k) => k.key === key)?.label;
+    expect(label("a")).toBe("kick");
+    expect(label("s")).toBe("snare");
+    expect(label("t")).toBe("hat");
+    expect(keys.some((k) => k.label === "C2")).toBe(false);
+    expect(keys.some((k) => k.chord)).toBe(false);
+    const view = session.header();
+    expect(view.range).toBe("drums");
+    expect(view.chords).toBeUndefined();
+    expect(view.legend).toBeUndefined();
+  });
+
   test("enter drops the lead and monitors; exit restores", async () => {
     const { session, engine } = harness(leadScore());
     await session.enter();

@@ -83,39 +83,40 @@ export async function runAuthCommand(argv: readonly string[]): Promise<number> {
   return login(parsed.target, deps, parsed.options);
 }
 
+/** A one-time card the TUI shows at launch about the agent. */
+export type FirstRunCard = Readonly<{
+  text: string;
+  tone: "info" | "warning";
+}>;
+
 /**
- * The first run of `dawg` in a terminal: when nothing is configured (and the
- * picker was never dismissed), or a saved sign-in stopped working, show the
- * sign-in picker before the TUI starts. Dismissing it is remembered.
+ * The launch note about the agent. dawg opens straight into the TUI: music
+ * first, sign-in optional. The first session with no provider gets one
+ * faint card, `/model key adds an agent · optional`, and records that it was
+ * shown so later sessions stay quiet; a saved sign-in that stopped working
+ * says so. `dawg login` and `/login` keep the picker.
  */
-export async function runFirstRunLogin(
+export async function firstRunCard(
   runner: CommandRunner = systemRunner,
-): Promise<void> {
+): Promise<FirstRunCard | undefined> {
   const auth = defaultAuthEnv(runner);
   const config = await readConfig(auth).catch(() => ({}) as DawgConfig);
-  if (auth.env.DAWG_PROVIDER) return;
-  if (!config.provider && config.setup === "skipped") return;
+  if (auth.env.DAWG_PROVIDER) return undefined;
+  if (!config.provider && config.setup === "skipped") return undefined;
   const selection = await selectProvider(auth).catch(() => undefined);
-  if (!selection || selection.kind !== "offline") return;
-  if (config.provider && !selection.invalidSaved) return;
-  const io = terminalIO();
-  if (!io.interactive) return;
+  if (!selection || selection.kind !== "offline") return undefined;
   if (selection.invalidSaved)
-    io.print(`Your saved sign-in stopped working: ${selection.reason}.`);
-  else io.print("Welcome to dawg. Sign in to enable the agent (Esc to skip).");
-  const code = await login("pick", {
-    auth,
-    io,
-    hostname: hostname(),
-  }).catch((error: unknown) => {
-    io.print(
-      `sign-in failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    return 1;
-  });
-  if (code !== 0 && !config.provider)
-    await writeConfig(auth, { setup: "skipped" }).catch(() => undefined);
+    return {
+      text: `saved sign-in stopped working: ${selection.reason} · /login`,
+      tone: "warning",
+    };
+  if (config.provider) return undefined;
+  await writeConfig(auth, { setup: "skipped" }).catch(() => undefined);
+  return { text: FIRST_RUN_CARD, tone: "info" };
 }
+
+/** The first session's agent note. */
+export const FIRST_RUN_CARD = "/model key adds an agent · optional";
 
 /** `/login` in the TUI, run while the screen is handed back to the shell. */
 export async function runTuiLogin(

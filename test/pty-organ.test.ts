@@ -52,7 +52,7 @@ test.skipIf(!supported)(
   async () => {
     const t = await launch(110, 30, {});
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("gospel\r");
       await waitFor(async () => {
         const track = await sessionTrack(t.cwd);

@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { diffRewind, IDENTITY_REWIND } from "../session/delta.ts";
-import { historyTarget, REDO_KIND, UNDO_KIND } from "./history.ts";
+import { addNote, createScore } from "../../core/score.ts";
+import {
+  historyReceipt,
+  historyTarget,
+  REDO_KIND,
+  UNDO_KIND,
+} from "./history.ts";
 
 type Event = {
   revision: number;
@@ -111,5 +117,31 @@ describe("undo/redo history", () => {
     // The undo at rev 3 popped rev 2; rev 1 has no rewind, so nothing is left.
     expect(historyTarget("b", events, "undo")).toBeUndefined();
     expect(historyTarget("b", events, "redo")?.composition).toBe("c");
+  });
+});
+
+describe("history receipts", () => {
+  test("undo and redo name the musical change", () => {
+    const base = createScore({
+      tracks: [
+        { id: "bass", name: "bass", instrument: "bass" },
+        { id: "lead", name: "lead", instrument: "piano" },
+      ],
+    });
+    const added = addNote(base, {
+      id: "n",
+      trackId: "bass",
+      startTick: 0,
+      durationTicks: 480,
+      pitch: 48,
+      velocity: 0.8,
+    });
+    expect(historyReceipt("undo", added, base, 3)).toBe(
+      "undid · −1 note on bass (C3)",
+    );
+    expect(historyReceipt("redo", base, added, 3)).toBe(
+      "redid · +1 note on bass (C3)",
+    );
+    expect(historyReceipt("undo", base, base, 7)).toBe("undid · rev 7");
   });
 });

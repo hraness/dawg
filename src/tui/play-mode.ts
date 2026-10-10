@@ -32,6 +32,7 @@ import {
   type Track,
 } from "../../core/score.ts";
 import type { TuningTable } from "../../core/tuning.ts";
+import { DRUM_VOICES, isDrumInstrument } from "../../core/drums.ts";
 import { pitchName } from "../../tui/highway.ts";
 
 /** Semitone offset from the base C for each note key. */
@@ -112,9 +113,20 @@ export function defaultBaseFor(instrument: string | undefined): number {
  */
 export type PlayLayout = Readonly<{
   base: number;
-  /** Pitch → label (voice names on one-shot samplers). */
+  /** Pitch → label (voice names on one-shot samplers, drums on kits). */
   labels: ReadonlyMap<number, string>;
+  /** A drum kit: keys name drums and the chord row stays hidden. */
+  drums?: boolean | undefined;
 }>;
+
+/**
+ * A kit's keys on the GM map from C2 (36), the same keys the agent's
+ * show-me gestures press: A kick, W rim, S snare, E clap, T hat, H tom,
+ * U open hat. Other keys still sound their nearest drum, unlabeled.
+ */
+export function drumKeyLabels(): ReadonlyMap<number, string> {
+  return new Map(DRUM_VOICES.map((info) => [info.pitch, info.label]));
+}
 
 export function playLayoutFor(track: Track | undefined): PlayLayout {
   const labels = new Map<number, string>();
@@ -130,6 +142,8 @@ export function playLayoutFor(track: Track | undefined): PlayLayout {
     const lowest = roots.length > 0 ? Math.min(...roots) : 60;
     return { base: clampBase(Math.floor(lowest / 12) * 12), labels };
   }
+  if (track && isDrumInstrument(track.instrument))
+    return { base: 36, labels: drumKeyLabels(), drums: true };
   // A plain instrument takes its range from the track's name (`bass`, `lead`).
   const byInstrument = defaultBaseFor(track?.instrument);
   const base =

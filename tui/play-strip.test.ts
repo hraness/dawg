@@ -45,9 +45,30 @@ function row(width: number, paint: (buffer: CellBuffer) => void): string {
 }
 
 describe("play header", () => {
+  test("the compressed song header leads; a kit drops its range", () => {
+    const text = row(120, (b) =>
+      paintPlayHeader(
+        b,
+        0,
+        120,
+        {
+          ...view,
+          context: "▶ 120 BPM · drums · rev 1",
+          range: "drums",
+          chords: undefined,
+          status: undefined,
+        },
+        theme,
+        true,
+      ),
+    );
+    expect(text).toContain(" PLAY MODE   ▶ 120 BPM · drums · rev 1  ");
+    expect(text).not.toContain("rev 1  drums");
+  });
+
   test("text lists every active part in order", () => {
     expect(playHeaderText(view)).toBe(
-      "PLAY  C3–F4  ● REC replace  click  SUSTAIN  AUTO C major  count-in 3  octave C2 · more detail",
+      "PLAY MODE  C3–F4  ● REC replace  click  SUSTAIN  AUTO C major  count-in 3  octave C2 · more detail",
     );
     expect(
       playHeaderText({ ...view, recording: false, replace: false }, false),
@@ -62,12 +83,61 @@ describe("play header", () => {
         countIn: undefined,
         status: undefined,
       }),
-    ).toBe("PLAY  C3–F4");
+    ).toBe("PLAY MODE  C3–F4");
+    expect(
+      playHeaderText({
+        ...view,
+        context: "▶ 120 BPM · drums · rev 1",
+        range: "drums",
+        armed: false,
+        click: false,
+        sustain: false,
+        chords: undefined,
+        countIn: undefined,
+        status: undefined,
+      }),
+    ).toBe("PLAY MODE  ▶ 120 BPM · drums · rev 1  drums");
+  });
+
+  test("the song header shortens so a status still fits", () => {
+    const busy = {
+      ...view,
+      context: "⏸ 120 BPM · bass · rev 0",
+      armed: false,
+      click: false,
+      sustain: false,
+      countIn: undefined,
+      status: "velocity 84 · more detail",
+    };
+    const text = row(100, (b) => paintPlayHeader(b, 0, 100, busy, theme, true));
+    expect(text).toContain("velocity 84");
+    const wide = row(160, (b) => paintPlayHeader(b, 0, 160, busy, theme, true));
+    expect(wide).toContain("⏸ 120 BPM · bass · rev 0");
+  });
+
+  test("playing at 80 columns keeps the whole song header", () => {
+    const playing = {
+      ...view,
+      context: "▶ 120 BPM · drums · rev 2",
+      range: "drums",
+      armed: false,
+      click: false,
+      sustain: false,
+      chords: undefined,
+      countIn: undefined,
+      status: "no audio",
+      beat: { index: 1, of: 4, flash: false },
+    };
+    const text = row(80, (b) =>
+      paintPlayHeader(b, 0, 80, playing, theme, true),
+    );
+    expect(text).toContain("▶ 120 BPM · drums · rev 2");
+    expect(text.trimEnd().endsWith("? keys · esc leave")).toBe(true);
   });
 
   test("a wide row shows the beat, the whole status and the hint", () => {
     const text = row(160, (b) => paintPlayHeader(b, 0, 160, view, theme, true));
-    expect(text).toContain(" PLAY ");
+    expect(text).toContain(" PLAY MODE ");
     expect(text).toContain("●···");
     expect(text).toContain("octave C2 · more detail");
     expect(text.trimEnd().endsWith("? keys · esc leave")).toBe(true);
@@ -125,6 +195,40 @@ describe("play strip and chord legend", () => {
     paintPlayStrip(buffer, 0, 40, keys, theme);
     expect(buffer.get(1, 0)!.style?.reverse).toBeFalsy();
     expect(buffer.get(6, 0)!.style?.reverse).toBe(true);
+  });
+
+  test("letters are muted, chords bold, chords in the key lit", () => {
+    const chords = [
+      {
+        key: "a",
+        label: "C",
+        black: false,
+        lit: false,
+        chord: true,
+        diatonic: true,
+      },
+      {
+        key: "w",
+        label: "D♭",
+        black: true,
+        lit: false,
+        chord: true,
+        diatonic: false,
+      },
+      { key: "s", label: "D3", black: false, lit: false },
+    ];
+    const buffer = new CellBuffer(40, 1, theme.roles.canvas);
+    paintPlayStrip(buffer, 0, 40, chords, theme);
+    const at = (x: number) => buffer.get(x, 0)!.style!;
+    // " A C W D♭ S D3": letter A at 1, chord C at 3.
+    expect(at(1).fg).toEqual(theme.roles.muted.fg);
+    expect(at(3).bold).toBe(true);
+    expect(at(3).fg).toEqual(theme.roles.hit.fg);
+    // A borrowed chord is bold but not lit.
+    expect(at(7).bold).toBe(true);
+    expect(at(7).fg).toEqual(theme.roles.text.fg);
+    // A plain note is neither.
+    expect(at(12).bold).toBeFalsy();
   });
 
   test("legend cells stop before the edge and latched ones are reversed", () => {

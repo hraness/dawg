@@ -118,7 +118,7 @@ test.skipIf(!supported)(
       cwd,
     );
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("/count-in 0\r");
       await t.until(
         () => t.vt.text().includes("count-in · 0 bars"),

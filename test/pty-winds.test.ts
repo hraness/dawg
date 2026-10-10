@@ -69,7 +69,7 @@ test.skipIf(!supported)(
   async () => {
     const t = await launch(110, 30, {}, ["--track", "lead"]);
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("/count-in 0\r");
       await t.until(() => t.vt.text().includes("count-in · 0 bars"), "count");
       await t.send("wind trumpet\r");
@@ -131,7 +131,7 @@ test.skipIf(!supported)(
       );
       expect(t.vt.text()).not.toContain("error");
       await t.send("\u001b");
-      await t.until(() => t.vt.text().includes("STEER"), "prompt again");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt again");
 
       // ctrl-k → Sound › browse sounds › Mallets and bells › Gamelan → gangsa.
       await t.send("/menu sounds\r");

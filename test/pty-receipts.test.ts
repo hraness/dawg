@@ -32,19 +32,20 @@ type Session = Awaited<ReturnType<typeof launch>>;
  * Cases that still tell a lie, by label. The grammar lane closes the first
  * three (A11 exact instrument words, A12 remove checks, A13 usageError) and
  * bare `pattern` for the agent (A15, with the menu lane's B12 show-me rule);
- * the feel lane closes the transport revision bump (C7).
+ * the feel lane closed the transport revision bump (C7).
  */
 const RECEIPT_KNOWN_GAPS: readonly string[] = [
   "remove n1",
   "instrument sawtoth",
   "tempo 900",
-  "Space",
-  "play mode Space",
   "agent pattern house",
-  // C12 (feel lane, PR #140): with the daemon on, this window's own write
-  // comes back through the port and shows the card.
-  "one-window daemon edit",
 ];
+
+/**
+ * The sync card (`synced · lead window`), not the header's connection
+ * state (`● synced`), which a daemon window always shows.
+ */
+const SYNC_CARD = /synced · /;
 
 /**
  * Gaps that depend on timing: allowed to lie, not required to. C12 (feel
@@ -249,7 +250,7 @@ describe.skipIf(!supported)("real PTY at 80x24: receipts never lie", () => {
       // The watcher would land well inside this window.
       await Bun.sleep(1_500);
       const text = t.vt.text();
-      record("one-window edit", !/synced/i.test(text), text);
+      record("one-window edit", !SYNC_CARD.test(text), text);
       expect(revision(t)).toBe(2);
     } finally {
       await quit(t);
@@ -277,7 +278,7 @@ describe.skipIf(!supported)("real PTY at 80x24: receipts never lie", () => {
       );
       await Bun.sleep(1_500);
       const text = t.vt.text();
-      record("one-window agent write", !/synced/i.test(text), text);
+      record("one-window agent write", !SYNC_CARD.test(text), text);
     } finally {
       await quit(t);
     }
@@ -294,7 +295,7 @@ describe.skipIf(!supported)("real PTY at 80x24: receipts never lie", () => {
       await run(t, "tempo 96");
       await Bun.sleep(1_500);
       const text = t.vt.text();
-      record("one-window daemon edit", !/synced/i.test(text), text);
+      record("one-window daemon edit", !SYNC_CARD.test(text), text);
     } finally {
       await quit(t);
     }

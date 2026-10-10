@@ -65,7 +65,7 @@ async function closeWithEsc(t: Session, screen: string): Promise<void> {
     () => !/esc (back|clear)/.test(t.vt.text()),
     `${screen} closed`,
   );
-  await t.until(() => t.vt.text().includes("STEER"), "prompt back");
+  await t.until(() => t.vt.text().includes(" NOW "), "prompt back");
 }
 
 test.skipIf(!supported)(
@@ -73,7 +73,7 @@ test.skipIf(!supported)(
   async () => {
     const t = await launch(COLS, 24, {}, ["--track", "drums"]);
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("instrument kit\r");
       await t.until(() => t.vt.text().includes("rev 0→1"), "kit track");
 
@@ -124,7 +124,7 @@ test.skipIf(!supported)(
   async () => {
     const t = await launch(COLS, 24, {});
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       // An empty prompt shows `?`'s panel; typed text keeps the character.
       await t.send("?");
       await t.until(() => t.vt.text().includes("start here"), "prompt keys");
@@ -149,7 +149,7 @@ test.skipIf(!supported)(
   async () => {
     const t = await launch(COLS, 24, {}, ["--track", "keys"]);
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       // A new `instrument piano` stores the modelled grand (0.6 keys).
       await t.send("instrument piano\r");
       await t.until(() => t.vt.text().includes("keys · grand"), "piano");
@@ -184,7 +184,7 @@ test.skipIf(!supported)(
   async () => {
     const t = await launch(COLS, 24, {});
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("/guide\r");
       await t.until(() => t.vt.text().includes("Getting started"), "guides");
       expectFits(t);

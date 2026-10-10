@@ -11,7 +11,7 @@ test.skipIf(!supported)(
   async () => {
     const t = await launch(110, 30, {}, ["--track", "lead"]);
     try {
-      await t.until(() => t.vt.text().includes("STEER"), "prompt");
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("/formant -4\r");
       await t.until(
         () => t.vt.text().includes("formant · shift -4"),

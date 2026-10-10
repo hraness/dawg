@@ -54,7 +54,7 @@ export async function launch(
       COLORTERM: "truecolor",
       DAWG_DAEMON: "0",
       DAWG_AUDIO: "0",
-      // A configured (fake) provider: the agent prompt and STEER pill show,
+      // A configured (fake) provider: the agent prompt and NOW pill show,
       // and the first-run sign-in picker stays out of the way.
       AI_GATEWAY_API_KEY: "vck_ptytest0000000000000000",
       DAWG_CREDENTIAL_STORE: "file",

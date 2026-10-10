@@ -316,7 +316,7 @@ export function applyPromptKey(
   }
   switch (keyInput.toUpperCase()) {
     case "ENTER":
-      // The mode pill decides what Enter does: STEER runs now, QUEUE waits.
+      // The mode pill decides what Enter does: NOW runs now, NEXT waits.
       return submit(state, state.mode === "queue" ? "queue" : "submit");
     case "ALT+ENTER":
       return submit(state, "queue");

@@ -63,7 +63,7 @@ test.skipIf(!supported)(
     const t = await launch(80, 24, {});
     const screen = () => t.vt.text();
     try {
-      await t.until(() => screen().includes("STEER"), "prompt");
+      await t.until(() => screen().includes(" NOW "), "prompt");
       await t.send("wt basic\r");
       await t.until(() => screen().includes("wavetable"), "wavetable set");
       const src = async () =>
@@ -133,7 +133,7 @@ test.skipIf(!supported)(
     const t = await launch(80, 24, {});
     const screen = () => t.vt.text();
     try {
-      await t.until(() => screen().includes("STEER"), "prompt");
+      await t.until(() => screen().includes(" NOW "), "prompt");
       await t.send("/kit\r");
       // The title row can arrive before the footer row of the same frame.
       await t.until(
