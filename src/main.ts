@@ -1892,7 +1892,9 @@ async function runInteractive(): Promise<void> {
             if (auditionLoop?.looping && isStageable(input.value))
               hoverItem(input.value, `picker:${input.picker}`);
             else if (input.picker === "pattern")
-              previewPattern(input.value.replace(/^\/pattern\s+/, ""));
+              previewPattern(
+                input.value.replace(/^\/(?:pattern|groove)\s+/, ""),
+              );
           } else if (input.type === "pick-audition") {
             pickerAuditionKey(input.key);
           } else if (input.type === "pick-cancel") {
@@ -2667,7 +2669,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
       await commitScore(result.next, result.kind, result.payload);
     return readOrDone(result);
   }
-  // `loop <section> | <a>-<b> | off`: the playback region, a section loop.
+  // `loop <section> | <a>-<b> | off`: what playback loops, a section.
   const loop = parseLoopCommand(command);
   if (loop) {
     if (loop.type === "loop-show")
@@ -3539,7 +3541,7 @@ async function patternCommand(command: PatternCommand): Promise<Receipt> {
       audition: true,
       items: DRUM_PATTERNS.map((entry) => ({
         label: `${entry.label.padEnd(22)} ${entry.tempo.bpm} BPM · ${entry.tags.join(", ")}`,
-        value: `/pattern ${entry.name}`,
+        value: `/groove ${entry.name}`,
       })),
       filterable: true,
       index: 0,

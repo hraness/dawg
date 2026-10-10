@@ -51,80 +51,15 @@ import {
  * delete each line as it starts to parse.
  */
 const KNOWN_SLASH_GAPS: readonly string[] = [
-  "/accel 8 bars to 174",
-  "/accel 8 bars to 174 at bar 9",
-  "/add C4 at 0",
-  "/automate volume at 0 0.5",
-  "/bars 8",
-  "/bowed pressure 0.7",
-  "/bowed violin",
-  "/cents n3 -14",
-  "/clav pickup bridge",
-  "/clear",
-  "/combo 08880",
-  "/delay 0.75 0.4 0.3",
-  "/delay off",
-  "/epiano vibe 0.6",
-  "/euclid hat 7 16",
-  "/extend 4 bars",
-  "/fermata at 31 2",
-  "/fermata clear",
-  "/fermata remove 31",
-  "/filter 800 0.3",
-  "/filter off",
-  "/fx delay mix 0.3",
-  "/grain cloud",
-  "/grain pitch 12",
-  "/grain sync 1/8.",
-  "/hit kick at 0",
-  "/keys hardness 0.3",
-  "/keys stretch 0",
-  "/keys sym 0.5",
-  "/meter 3",
-  "/meter clear",
-  "/modal gangsa",
-  "/modal ring 3",
-  "/modal vibes",
-  "/mute",
-  "/pan -0.5",
-  "/pattern kick every 1",
-  "/pause",
-  "/piano ballad",
-  "/pipe principal8,octave4",
-  "/rall 2 bars",
-  "/reverb 0.3 0.6",
-  "/reverb off",
-  "/rit 4 bars to 80",
-  "/rotary fast",
-  "/rotary fast at 16",
-  "/solo",
-  "/string koto",
-  "/synth lpf 1200",
-  "/tempo 120",
-  "/tempo clear",
-  "/tempo map",
-  "/tempo remove bar 9",
-  "/tonewheel 888800008",
-  "/unmute",
-  "/unsolo",
-  "/volume 0.8",
-  "/wind flute",
-  "/wind players 4",
-  "/wind trumpet mute harmon",
-  "/wurli trem 0.5",
-  "bpm off",
+  // Bare window verbs: the prompt bar retries them with the slash at
+  // submit (grammar WINDOW_VERBS), which `accepts` does not model.
   "click 50%",
-  "formant -4",
-  "formant 3 0.5",
   "guide voice",
-  "kit syn909",
   "menu sound",
-  "sample set brk fit on clip 1",
   "sessions",
   "status",
   "transcript",
   "try fx reverb mix 0.6",
-  "vowel a o 0.5",
 ];
 
 /**
@@ -161,7 +96,7 @@ const CANONICAL_VERBS: Readonly<Record<string, string>> = {
  * `loop`). The test fails as soon as the canonical form parses: flip the
  * rows in src/tui/menu.ts, then delete the line here.
  */
-const KNOWN_ALIAS_ROWS: readonly string[] = ["pattern", "scale", "track cycle"];
+const KNOWN_ALIAS_ROWS: readonly string[] = ["scale", "track cycle"];
 
 /** A trailing `(note)` is commentary, not part of the command. */
 const stripNote = (text: string) => text.replace(/\s*\([^)]*\)\s*$/, "").trim();

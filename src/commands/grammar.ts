@@ -102,6 +102,12 @@ const REWRITES: readonly ((words: readonly string[]) => string | undefined)[] =
   ];
 
 /**
+ * Verbs whose slash and bare spellings are different commands: bare `play`
+ * is the transport, `/play` is play mode. The grammar never swaps them.
+ */
+export const DISTINCT_SLASH: ReadonlySet<string> = new Set(["play"]);
+
+/**
  * Every other reading of `line`, most likely first: the canonical rewrite,
  * the other slash spelling, and the remove and list word swaps, each with
  * and without the slash. The line itself is not included.
@@ -111,6 +117,8 @@ export function candidates(line: string): string[] {
   if (!text || text.length > 1_024) return [];
   const bare = stripSlash(text);
   if (!bare || bare.startsWith("/")) return [];
+  // `play` and `/play` are two commands (transport vs play mode).
+  if (DISTINCT_SLASH.has(verbOf(text))) return [];
   const words = bare.split(" ");
   const lower = words.map((word) => word.toLowerCase());
   const out: string[] = [];
@@ -227,7 +235,7 @@ export function parseLoopCommand(line: string): LoopCommand | undefined {
     return bar >= 1 ? { type: "loop-bars", from: bar, to: bar } : undefined;
   }
   const name = rest.join(" ");
-  return /^[\p{L}\p{N}][\p{L}\p{N} _'.-]{0,31}$/u.test(name)
+  return /^[\p{L}\p{N}][\p{L}\p{N} _\x27.-]{0,31}$/u.test(name)
     ? { type: "loop-section", name }
     : undefined;
 }
@@ -258,7 +266,8 @@ export const FREE_TEXT_HINTS: Readonly<Record<string, string>> = {
   rename: "rename · /rename <name> names this session · /rename --auto",
   fork: "fork · /fork [<name>] copies this session",
   resume: "resume · /resume [<n>|<name>] · /sessions lists them",
-  login: "login · /login [gateway|openrouter|codex|claude] adds an agent",
+  login:
+    "model key · model key [gateway|openrouter|codex|claude] adds an agent", // login is an alias
 };
 
 /**
@@ -365,7 +374,7 @@ export const EVERYDAY_VERBS: ReadonlySet<string> = new Set([
   "rename",
   "fork",
   "resume",
-  "login",
+  "login", // alias of model key
 ]);
 
 /**
@@ -517,7 +526,7 @@ function clip(value: string): string {
 export function canonicalWindowForm(line: string): string | undefined {
   const text = line.trim().replace(/\s+/g, " ");
   const key = text.match(/^\/?models?\s+key(?:\s+(.*))?$/i);
-  if (key) return `/login${key[1] ? ` ${key[1]}` : ""}`;
+  if (key) return `/login${key[1] ? ` ${key[1]}` : ""}`; // login: the alias it runs
   const models = text.match(/^\/?models(\s+\S+)?$/i);
   if (models) return `/model${models[1] ?? ""}`;
   if (/^\/?voice$/i.test(text)) return "/help voice";

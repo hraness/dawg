@@ -120,6 +120,9 @@ export function parseRhythmCommand(prompt: string): RhythmCommand | undefined {
       fields[key] = Number(raw);
     }
   }
+  // `euclid hat` alone names a row to edit: the window opens the editor on
+  // it (`/euclid hat`), so it is not an empty edit here.
+  if (Object.keys(fields).length === 0) return undefined;
   return { type: "rhythm-set", voice: lowerDrum(voice), fields };
 }
 

@@ -8,6 +8,7 @@ import { AGENT_TOOLS, chatTools, findAgentTool } from "../agent/tools.ts";
 import { renderToolCatalog } from "../agent/xcb-agent.ts";
 import {
   canonicalWindowForm,
+  DISTINCT_SLASH,
   elsewhereHint,
   candidates,
   friendlyCoreError,
@@ -70,6 +71,8 @@ describe("slash and bare are one command", () => {
     let checked = 0;
     for (const verb of verbs) {
       if (!/^[a-z][\w-]*$/i.test(verb)) continue;
+      // `play` (transport) and `/play` (play mode) are two commands.
+      if (DISTINCT_SLASH.has(verb)) continue;
       expect([verb, commandParses(verb, score)]).toEqual([
         verb,
         commandParses(`/${verb}`, score),
@@ -275,6 +278,11 @@ describe("export", () => {
 });
 
 describe("receipts and refusals", () => {
+  test("play and /play stay two commands", () => {
+    expect(candidates("play")).toEqual([]);
+    expect(candidates("/play on")).toEqual([]);
+  });
+
   test("the usage card reads failed · nearest · usage", () => {
     expect(usageCard("fx dela", "help fx", "delay")).toBe(
       "fx dela · did you mean delay? · help fx",
