@@ -23,6 +23,7 @@ import {
 } from "./grammar.ts";
 import { parseFxCommand, unknownFxMessage } from "./fx.ts";
 import { HELP_SECTIONS, USAGE } from "./help.ts";
+import { paramRangeError } from "./param-range.ts";
 import { commandParses, parseCommand } from "./parses.ts";
 
 const score = createScore({
@@ -191,6 +192,20 @@ describe("refusals", () => {
   test("missing notes and tracks", () => {
     expect(noNote("n1")).toBe("no note n1 · notes lists them");
     expect(noTrack("bass")).toBe("no track bass · tracks lists them");
+  });
+});
+
+describe("parameter ranges", () => {
+  test("synth and fx numbers out of range name the range", () => {
+    expect(paramRangeError("synth lpf 99999")).toBe(
+      "synth lpf 99999 · lpf takes 20…20000 Hz · synth lpf 2000",
+    );
+    expect(paramRangeError("fx reverb mix 9")).toContain("mix takes 0…1");
+    expect(paramRangeError("/fx delay feedback 5")).toContain(
+      "feedback takes 0…0.9",
+    );
+    expect(paramRangeError("synth lpf 1200")).toBeUndefined();
+    expect(paramRangeError("tempo 900")).toBeUndefined();
   });
 });
 

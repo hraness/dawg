@@ -2,6 +2,7 @@
 import { isGuideInstrument, vocalChainPatch } from "../core/clips.ts";
 import { isSingWord } from "../core/sing.ts";
 import { commandParses, parseExact } from "./commands/parses.ts";
+import { paramRangeError } from "./commands/param-range.ts";
 import { noteName as midiNoteName } from "./media/notes.ts";
 import {
   EVERYDAY_VERBS,
@@ -2827,6 +2828,9 @@ async function submit(prompt: string): Promise<string | Receipt> {
     return submit(`instrument ${singWord[1]!.toLowerCase()}`);
   if (/^\/instrument\s/i.test(command) && parsePrompt(command.slice(1)))
     return submit(command.slice(1));
+  // A synth or effect number out of range names its range.
+  const range = paramRangeError(command);
+  if (range) return fail(range);
   if (command.startsWith("/") && !/^\/model\b/i.test(command)) {
     const hint = usageHint(command);
     return fail(
