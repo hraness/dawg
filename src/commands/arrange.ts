@@ -37,6 +37,8 @@ import {
   arrangedStartBar,
   deleteSection,
   duplicateSection,
+  joinSection,
+  splitSection,
   DROP_CUT_MIN,
   FILL_STYLES,
   findSection,
@@ -96,6 +98,8 @@ export type SectionCommand =
   | { type: "section-reset"; name: string }
   | { type: "section-loop"; name?: string }
   | { type: "section-jump"; name: string }
+  | { type: "section-split"; name: string; atBar: number }
+  | { type: "section-join"; name: string; force: boolean }
   | { type: "form-show" }
   | { type: "form-set"; text: string }
   | { type: "form-bake" }
@@ -134,6 +138,8 @@ const SUBCOMMANDS = new Set([
   "loop",
   "jump",
   "go",
+  "split",
+  "join",
 ]);
 
 /** `3-6` or `3..6` or `3` → 0-based start and length (1-based inclusive in). */
@@ -370,6 +376,22 @@ function parseSub(
       };
     case "vary":
       return parseVary(lead.name, lead.rest);
+    case "split": {
+      // section split verse at 5 (1-based bar)
+      const where = tail[0] === "at" ? tail.slice(1) : tail;
+      if (where.length === 2 && where[0] === "bar") where.shift();
+      if (where.length !== 1 || !/^\d{1,4}$/u.test(where[0]!)) return undefined;
+      const bar = Number(where[0]);
+      return bar >= 1
+        ? { type: "section-split", name: lead.name, atBar: bar - 1 }
+        : undefined;
+    }
+    case "join":
+      if (tail.length === 0)
+        return { type: "section-join", name: lead.name, force: false };
+      return tail.length === 1 && tail[0] === "force"
+        ? { type: "section-join", name: lead.name, force: true }
+        : undefined;
     default:
       return undefined;
   }
@@ -424,7 +446,7 @@ function parseFormWords(
   lower: readonly string[],
 ): SectionCommand | undefined {
   if (words.length === 0) return { type: "form-show" };
-  if (lower.length === 1 && (lower[0] === "bake" || lower[0] === "flatten"))
+  if (lower.length === 1 && (lower[0] === "bake" || lower[0] === "flatten" || lower[0] === "print"))
     return { type: "form-bake" };
   if (lower.length === 1 && (lower[0] === "off" || lower[0] === "none"))
     return { type: "form-set", text: "" };
@@ -713,6 +735,27 @@ function applyUnchecked(
         `section · added ${section.name} ${barsLabel(section)}${next.bars > score.bars ? ` · song now ${next.bars} bars` : ""}`,
       );
     }
+    case "section-split": {
+      const next = splitSection(score, command.name, command.atBar);
+      const half = next.sections.find(
+        (candidate) => !findSection(score, candidate.name),
+      );
+      return changed(
+        score,
+        next,
+        `section · ${command.name} split at bar ${command.atBar + 1}${half ? ` · ${half.name} ${barsLabel(half)}` : ""}`,
+      );
+    }
+    case "section-join": {
+      const section = findSection(score, command.name)!;
+      const next = joinSection(score, command.name, { force: command.force });
+      const joined = findSection(next, section.name);
+      return changed(
+        score,
+        next,
+        `section · joined into ${section.name}${joined ? ` ${barsLabel(joined)}` : ""}`,
+      );
+    }
     case "section-dup": {
       const next = duplicateSection(score, command.name, {
         ...(command.as ? { as: command.as } : {}),
@@ -926,39 +969,28 @@ function describeVary(vary: { transpose?: number; gain?: number }): string {
 }
 
 /**
- * `loop 2-3` when no section spans those bars: mark the section named
- * `loop` over them (moving it if it exists) and loop it, as one next score.
+ * `loop 2-3`: the loop range (score.loop, op1-ux §4), never a section. A
+ * range past the song's end is refused; a looped section stops looping.
  */
 export function loopSpan(
   score: TrackScore,
-  trackId: string,
   from: number,
   to: number,
 ):
-  | Readonly<{ ok: true; next: TrackScore; name: string; message: string }>
+  | Readonly<{ ok: true; next: TrackScore; message: string }>
   | Readonly<{ ok: false; message: string }> {
   const bars = from === to ? `${from}` : `${from}-${to}`;
-  const name = "loop";
   if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to < from)
     return { ok: false, message: `loop ${bars} · bars run low-high from 1` };
-  const marked = applySectionCommand(score, trackId, {
-    type: "section-mark",
-    name,
-    startBar: from - 1,
-    bars: to - from + 1,
-  });
-  if (!marked.ok || !marked.next)
-    return { ok: false, message: `loop ${bars} · ${marked.message}` };
-  const looped = applySectionCommand(marked.next, trackId, {
-    type: "section-loop",
-    name,
-  });
-  if (!looped.ok || !looped.next)
-    return { ok: false, message: `loop ${bars} · ${looped.message}` };
+  if (to > score.bars)
+    return {
+      ok: false,
+      message: `loop ${bars} · the song has ${score.bars} bars · bars ${to} lengthens it`,
+    };
+  const next = score.withLoop({ startBar: from - 1, bars: to - from + 1 });
   return {
     ok: true,
-    next: looped.next,
-    name,
-    message: `loop · bars ${from === to ? from : `${from}–${to}`} · section ${name} · loop off plays the song`,
+    next,
+    message: `loop · bars ${from === to ? from : `${from}–${to}`} · loop off plays the song`,
   };
 }

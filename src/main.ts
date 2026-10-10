@@ -89,6 +89,7 @@ import { kitCatalog } from "./audio/kits.ts";
 import { applyEditCommand, parseEditCommand } from "./commands/edit.ts";
 import { applyTimeCommand, parseTimeCommand } from "./commands/time.ts";
 import {
+  barAt,
   barStartTick,
   bpmAtTick,
   hasMeterChanges,
@@ -171,6 +172,12 @@ import {
   loopSpan,
   parseSectionCommand,
 } from "./commands/arrange.ts";
+import {
+  applyRangeCommand,
+  parseRangeCommand,
+  type RangeClipboard,
+} from "./commands/range.ts";
+import { rangeLabel } from "../core/range.ts";
 import {
   helpMiss,
   helpText,
@@ -805,6 +812,8 @@ const AGENT_PREVIEW_VOICE = 0x7fff_0002;
 const CHORDS_COMMAND = /^\/chords\s+(.+)$/i;
 /** Whether the chord settings screen was open at the last menu redraw. */
 let chordScreenWas = false;
+/** The range clipboard (`copy bass 5-6`, then `paste at 9`); per window. */
+let rangeClipboard: RangeClipboard | undefined;
 let stageCapture: { next?: TrackScore; committed?: TrackScore } | undefined;
 /** Redraw soon (the audition reports renders between frames). */
 let requestFrame: () => void = () => undefined;
@@ -2722,30 +2731,58 @@ async function submit(prompt: string): Promise<string | Receipt> {
       await commitScore(result.next, result.kind, result.payload);
     return readOrDone(result);
   }
-  // `loop <section> | <a>-<b> | off`: what playback loops, a section.
+  // Range commands (op1-ux §6.4): copy/move/clear/paste/reverse bars,
+  // bars insert|remove, loop next|prev, jump.
+  const rangeCommand = parseRangeCommand(command, score);
+  if (rangeCommand) {
+    const reads =
+      rangeCommand.type === "range-usage" ||
+      rangeCommand.type === "jump-bar" ||
+      rangeCommand.type === "jump-section" ||
+      (rangeCommand.type === "range-copy" && rangeCommand.to === undefined);
+    if (!reads) await materializeDraft();
+    const result = applyRangeCommand(
+      score,
+      {
+        trackId: requestedTrack,
+        playheadBar: playheadBar(),
+        ...(rangeClipboard ? { clipboard: rangeClipboard } : {}),
+      },
+      rangeCommand,
+    );
+    if (result.delegate) return submit(result.delegate);
+    if (result.clipboard) rangeClipboard = result.clipboard;
+    if (result.next && result.kind)
+      await commitScore(result.next, result.kind, result.payload);
+    if (result.seekBeat !== undefined) await seekTransport(result.seekBeat);
+    return readOrDone(result);
+  }
+  // `loop <a>-<b> | <section> | off`: what playback loops. Bars set the
+  // loop range (score.loop); a name loops that section.
   const loop = parseLoopCommand(command);
   if (loop) {
     if (loop.type === "loop-show")
       return note(
-        score.loopSection
-          ? `loop · ${score.loopSection} · loop off plays the song`
-          : `loop · the song · ${LOOP_USAGE}`,
+        score.loop
+          ? `loop · bars ${rangeLabel(score.loop)} · loop off plays the song`
+          : score.loopSection
+            ? `loop · ${score.loopSection} · loop off plays the song`
+            : `loop · the song · ${LOOP_USAGE}`,
       );
-    if (loop.type === "loop-off") return submit("section loop off");
+    if (loop.type === "loop-off") {
+      if (score.loop) {
+        await materializeDraft();
+        await commitScore(score.withLoop(null), "score.loop", { loop: null });
+        return ok("loop · off · playing the song");
+      }
+      return submit("section loop off");
+    }
     if (loop.type === "loop-section")
       return submit(`section loop ${loop.name}`);
-    const span = score.sections.find(
-      (section) =>
-        section.startBar + 1 === loop.from &&
-        section.startBar + section.bars === loop.to,
-    );
-    if (span) return submit(`section loop ${span.name}`);
-    // No section spans the bars: mark (or move) the section named `loop`
-    // and loop it, as one revision.
-    await materializeDraft();
-    const result = loopSpan(score, requestedTrack, loop.from, loop.to);
+    const result = loopSpan(score, loop.from, loop.to);
     if (!result.ok) return fail(result.message);
-    await commitScore(result.next, "score.sections", { loop: result.name });
+    await materializeDraft();
+    await commitScore(result.next, "score.loop", { loop: result.next.loop });
     return ok(result.message);
   }
   const arrange = parseSectionCommand(command, score);
@@ -5145,6 +5182,12 @@ async function setTransport(
 }
 
 /** Move the playhead to transport `beat`, playing or not (section jump). */
+/** The bar under the playhead, 0-based on the score. */
+function playheadBar(): number {
+  const beat = scoreBeatAt(score, clock.beatAt());
+  return barAt(score, Math.max(0, Math.round(beat * score.ticksPerBeat))).bar;
+}
+
 async function seekTransport(beat: number): Promise<void> {
   if (port.mode === "daemon") {
     await port.transport("seek", { beat });

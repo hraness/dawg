@@ -7,6 +7,7 @@
 import type { TrackScore } from "../../core/score.ts";
 import { parsePrompt } from "../agent/ops.ts";
 import { parseSectionCommand } from "./arrange.ts";
+import { parseRangeCommand } from "./range.ts";
 import { parseAutotuneCommand } from "./autotune.ts";
 import { parseClipCommand, parseLyricsCommand } from "./clips.ts";
 import { parsePatternCommand } from "./drums.ts";
@@ -85,6 +86,9 @@ export function commandParses(text: string, score: TrackScore): boolean {
 
 function parsers(score: TrackScore): ((text: string) => unknown)[] {
   return [
+    function parseRange(value: string) {
+      return parseRangeCommand(value, score);
+    },
     parsePrompt,
     parseMusicCommand,
     parseEditCommand,
