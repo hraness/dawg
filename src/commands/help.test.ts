@@ -49,8 +49,8 @@ describe("help reference", () => {
       "/status",
       "/sessions",
       "/resume [<n>|<name>|<id>]",
-      "undo",
-      "redo",
+      "undo [all]",
+      "redo [all]",
     ])
       expect(commands).toContain(required);
   });

@@ -553,8 +553,14 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         command: "calibration [0|1|latest|off]",
         summary: "sound fixes · 1 chokes hats, levels keys · 0 legacy",
       },
-      { command: "undo", summary: "step back · Ctrl-Z" },
-      { command: "redo", summary: "step forward · Ctrl-Y" },
+      {
+        command: "undo [all]",
+        summary: "this pane's last edit · Ctrl-Z · all: anyone's",
+      },
+      {
+        command: "redo [all]",
+        summary: "step forward · Ctrl-Y · all: anyone's",
+      },
       { command: "/status", summary: "name · revision · digest · storage" },
     ],
   },

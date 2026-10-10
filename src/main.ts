@@ -2,7 +2,7 @@
 import { TOPIC_ALIASES } from "./lang/glossary.ts";
 import { isGuideInstrument, vocalChainPatch } from "../core/clips.ts";
 import { newId } from "../core/ids.ts";
-import { DiffError, diffScores } from "../core/diff.ts";
+import { deepEqual, DiffError, diffScores } from "../core/diff.ts";
 import { currentActor } from "./identity/actor.ts";
 import { isSingWord } from "../core/sing.ts";
 import { commandParses, parseExact } from "./commands/parses.ts";
@@ -197,6 +197,7 @@ import {
 import {
   historyReceipt,
   historyTarget,
+  paneHistoryStep,
   REDO_KIND,
   UNDO_KIND,
 } from "./commands/history.ts";
@@ -442,6 +443,7 @@ import {
   type SyncState,
   type TypesIndicator,
 } from "../tui/app.ts";
+import type { DrawerView } from "../tui/drawer.ts";
 import { fail, note, ok, toneOf, warn, type Receipt } from "../tui/activity.ts";
 import { systemRunner } from "./auth/runner.ts";
 import type { MediaServices } from "./media/types.ts";
@@ -1474,6 +1476,7 @@ async function runInteractive(): Promise<void> {
           record.meta.name,
           syncState,
           windowCount,
+          panePresence,
           typesIndicator,
           menu.open,
           euclid.open,
@@ -2143,7 +2146,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
       return {
         label: track.id,
         value: `/track ${track.id}`,
-        detail: `${track.instrument}${samples}${track.muted ? " · muted" : ""}${track.solo ? " · solo" : ""}`,
+        detail: `${track.instrument}${samples}${track.muted ? " · muted" : ""}${track.solo ? " · solo" : ""}${paneMarks(track.id)}`,
         current: track.id === requestedTrack,
       };
     });
@@ -2320,8 +2323,12 @@ async function submit(prompt: string): Promise<string | Receipt> {
     return ok(
       `status · ${record.meta.name} · rev ${record.revision} · ${compositionDigest(record.composition)} · ${port.mode === "daemon" ? "shared via dawgd" : "saved locally · no daemon"}`,
     );
-  if (/^\/?undo$/i.test(command)) return stepHistory("undo");
-  if (/^\/?redo$/i.test(command)) return stepHistory("redo");
+  const history = /^\/?(undo|redo)(?:\s+(all))?$/i.exec(command);
+  if (history)
+    return stepHistory(
+      history[1]!.toLowerCase() as "undo" | "redo",
+      history[2] ? "all" : "pane",
+    );
   const trackCommand = command.match(
     /^\/?(?:add\s+)?track\s+([a-z0-9._-]{1,64})$/i,
   );
@@ -2802,9 +2809,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
     if (result.delegate) return submit(result.delegate);
     if (result.clipboard) rangeClipboard = result.clipboard;
     if (result.next && result.kind)
-      await commitScore(result.next, result.kind, result.payload, {
-        asOps: true,
-      });
+      await commitScore(result.next, result.kind, result.payload);
     if (result.seekBeat !== undefined) await seekTransport(result.seekBeat);
     return readOrDone(result);
   }
@@ -2823,12 +2828,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
     if (loop.type === "loop-off") {
       if (score.loop) {
         await materializeDraft();
-        await commitScore(
-          score.withLoop(null),
-          "score.loop",
-          { loop: null },
-          { asOps: true },
-        );
+        await commitScore(score.withLoop(null), "score.loop", { loop: null });
         return ok("loop · off · playing the song");
       }
       return submit("section loop off");
@@ -2838,12 +2838,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
     const result = loopSpan(score, loop.from, loop.to);
     if (!result.ok) return fail(result.message);
     await materializeDraft();
-    await commitScore(
-      result.next,
-      "score.loop",
-      { loop: result.next.loop },
-      { asOps: true },
-    );
+    await commitScore(result.next, "score.loop", { loop: result.next.loop });
     return ok(result.message);
   }
   const arrange = parseSectionCommand(command, score);
@@ -4117,6 +4112,45 @@ async function openPane(pane: PaneArgs): Promise<void> {
   if (result !== undefined) receipt(result);
 }
 
+/**
+ * Other panes on `trackId`, for a track row's gutter (§12.7): their letters,
+ * a red-dot `●` after a pane that is recording. Empty for a solo window.
+ */
+function paneMarks(trackId: string): string {
+  const marks = panePresence
+    .filter(
+      (entry) =>
+        entry.clientId !== port.clientId &&
+        entry.pane &&
+        entry.focusedTrackId === trackId,
+    )
+    .map((entry) => `${entry.pane}${entry.recording ? "●" : ""}`);
+  return marks.length ? `  ${marks.join(" ")}` : "";
+}
+
+/** A drawer row another pane has open on this track shows its letter. */
+function withPaneMarks(view: DrawerView): DrawerView {
+  const others = panePresence.filter(
+    (entry) =>
+      entry.clientId !== port.clientId &&
+      entry.pane &&
+      entry.param &&
+      entry.screen === "sound" &&
+      entry.focusedTrackId === requestedTrack,
+  );
+  if (others.length === 0) return view;
+  return {
+    ...view,
+    fields: view.fields.map((field) => {
+      const peers = others
+        .filter((entry) => entry.param === field.label)
+        .map((entry) => entry.pane)
+        .join(" ");
+      return peers ? { ...field, peers } : field;
+    }),
+  };
+}
+
 /** One pane's line for `pane`: letter, screen, track, parameter, state. */
 function paneLine(entry: PresenceEntry): string {
   const bits = [
@@ -4794,7 +4828,7 @@ function refreshMenu(): void {
     if (fields.length === 0) closeFader();
     else {
       const focusedField = fields[focusIndex(fader, fields)];
-      tui.drawer = drawerView(fader, fields, menu.faderCommitted(context), {
+      const drawer = drawerView(fader, fields, menu.faderCommitted(context), {
         title: menu.crumbs,
         dirty: context.audition?.dirty ?? false,
         status: context.audition?.status,
@@ -4802,6 +4836,7 @@ function refreshMenu(): void {
           focusedField !== undefined &&
           !stageableNow(faderCommand(focusedField)),
       });
+      tui.drawer = withPaneMarks(drawer);
     }
   }
   const view = menu.view(context);
@@ -5232,7 +5267,6 @@ async function commitScore(
   next: TrackScore,
   kind: string,
   payload: Record<string, unknown> = {},
-  options: { asOps?: boolean } = {},
 ): Promise<void> {
   if (next === score) return;
   // Rhythm rows regenerate after a loop resize and freeze when their lane
@@ -5246,22 +5280,26 @@ async function commitScore(
     if (retimed) clock.follow(score);
     return;
   }
-  const operations = options.asOps ? diffOps(score, next) : undefined;
+  // Every edit travels as score operations (snapshot when the diff cannot
+  // express it), so dawgd rebases it over other panes' concurrent edits per
+  // (track, property) and the log replays as operations (design §12.6).
+  const operations = diffOps(score, next);
   if (operations) {
-    // Sent as ops: dawgd rebases them over unrelated edits, and the log
-    // replays as operations rather than whole-score snapshots.
     record = await port.appendOperations(
       record,
       { kind, payload },
       operations,
       next.toJSON(),
     );
-    score = scoreFromJSON(record.composition);
+    // A rebased edit lands on top of what other panes wrote meanwhile.
+    score = deepEqual(record.composition, next.toJSON())
+      ? next
+      : scoreFromJSON(record.composition);
   } else {
     record = await port.append(record, { kind, payload }, next.toJSON());
     score = next;
   }
-  if (retimed) clock.follow(score);
+  if (retimed || score !== next) clock.follow(score);
   if (clock.playing) void audio.play(score);
   projectSync?.scoreChanged(score);
   reportSampleProblems(score);
@@ -5336,39 +5374,91 @@ function syncHost(): SyncHost {
   };
 }
 
-async function stepHistory(direction: "undo" | "redo"): Promise<Receipt> {
+/**
+ * Undo and redo (design §12.6). By default a pane steps its own edits: the
+ * newest edit this client made, inverted and rebased over whatever other
+ * panes did since. `undo all` / `redo all` step the shared history, whoever
+ * made the edit, and the receipt names the other pane. A lone pane (or one
+ * that has made no edit since it opened) falls back to the shared history,
+ * so single-pane sessions behave exactly as before.
+ */
+async function stepHistory(
+  direction: "undo" | "redo",
+  scope: "pane" | "all" = "pane",
+): Promise<Receipt> {
   const latest = await port.load();
   // A fork's undo continues into its parent's history past the fork point.
-  const target = historyTarget(
-    latest.composition,
-    await historyEvents(process.cwd(), latest),
-    direction,
+  const events = await historyEvents(process.cwd(), latest);
+  const before = scoreFromJSON(latest.composition);
+  const kind = direction === "undo" ? UNDO_KIND : REDO_KIND;
+  const key = direction === "undo" ? "undoneRevision" : "redoneRevision";
+  const otherPanes = panePresence.filter(
+    (entry) => entry.clientId !== port.clientId,
   );
-  if (!target) return warn(`nothing to ${direction}`);
+  let next: TrackScore;
+  let revision: number;
+  let author = "";
+  if (scope === "pane") {
+    const step = paneHistoryStep(
+      latest.composition,
+      events,
+      direction,
+      port.clientId,
+    );
+    if (!step || (!step.ok && step.others.length === 0)) {
+      if (otherPanes.length === 0) return stepHistory(direction, "all");
+      if (!step)
+        return warn(
+          `nothing of this pane's to ${direction} · ${direction} all steps everyone's`,
+        );
+    }
+    if (!step.ok) {
+      if (step.reason === "session-wide")
+        return warn(`that edit is session-wide · ${direction} all`);
+      const who = step.others.map(paneName).join(", ");
+      return warn(
+        `${who} changed ${step.reason.replace(/ changed$/, "")} since · ${direction} all ${direction === "undo" ? "undoes" : "redoes"} theirs too`,
+      );
+    }
+    next = step.next;
+    revision = step.revision;
+  } else {
+    const target = historyTarget(latest.composition, events, direction);
+    if (!target) return warn(`nothing to ${direction}`);
+    next = scoreFromJSON(target.composition);
+    revision = target.revision;
+    const writer = events.find((event) => event.revision === revision)?.actor
+      ?.clientId;
+    if (writer && writer !== port.clientId && otherPanes.length > 0)
+      author = ` (${paneName(writer)})`;
+  }
   try {
-    const restored = scoreFromJSON(target.composition);
-    record = await port.append(
+    const event = {
+      kind,
+      payload: { [key]: revision, ...(scope === "pane" ? {} : { scope }) },
+    };
+    let operations: readonly ScoreOperation[] = [];
+    try {
+      operations = diffScores(before, next);
+    } catch (error) {
+      if (!(error instanceof DiffError)) throw error;
+    }
+    record = await port.appendOperations(
       latest,
-      {
-        kind: direction === "undo" ? UNDO_KIND : REDO_KIND,
-        payload: {
-          [direction === "undo" ? "undoneRevision" : "redoneRevision"]:
-            target.revision,
-        },
-      },
-      restored.toJSON(),
+      event,
+      operations,
+      next.toJSON(),
     );
     // Compare with what was undone, which another window may have written.
-    const before = scoreFromJSON(latest.composition);
-    score = restored;
+    score = scoreFromJSON(record.composition);
     if (clock.playing) void audio.play(score);
     return ok(
       historyReceipt(
         direction,
         before,
-        restored,
-        shownRevision(record, target.revision),
-      ),
+        score,
+        shownRevision(record, revision),
+      ) + author,
     );
   } catch (error) {
     if (error instanceof SessionConflictError)
@@ -5377,6 +5467,12 @@ async function stepHistory(direction: "undo" | "redo"): Promise<Receipt> {
       `${direction} failed · ${error instanceof Error ? error.message : String(error)}`,
     );
   }
+}
+
+/** `pane B` for a client in presence, `another pane` once it has left. */
+function paneName(clientId: string): string {
+  const pane = panePresence.find((entry) => entry.clientId === clientId)?.pane;
+  return pane ? `pane ${pane}` : "another pane";
 }
 
 /** Space, the menu and a header click all report a failed toggle the same way. */
