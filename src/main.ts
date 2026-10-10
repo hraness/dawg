@@ -38,7 +38,7 @@ import {
   unknownInstrumentMessage,
 } from "./audio/instrument-check.ts";
 import { randomUUID } from "node:crypto";
-import { readFileSync, writeSync } from "node:fs";
+import { appendFileSync, readFileSync, writeSync } from "node:fs";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
@@ -1511,6 +1511,9 @@ async function runInteractive(): Promise<void> {
   // Builds a frame only when something can have changed (tui/frame-gate.ts):
   // an idle editor no longer rebuilds the whole view 30 times a second.
   const frameGate = new FrameGate(IDLE_HEARTBEAT_MS, MIN_FRAME_GAP_MS);
+  // `DAWG_FRAME_LOG=<file>`: one `WxH ms bytes` line per frame (the size
+  // matrix in test/sizes-lib.ts reads frame times from it).
+  const frameLog = process.env.DAWG_FRAME_LOG;
   const unwatchActivity = tui.activity.subscribe(() => frameGate.markDirty());
   const animating = (): boolean => {
     if (clock.playing || play?.on || auditionLoop?.looping) return true;
@@ -1558,7 +1561,12 @@ async function runInteractive(): Promise<void> {
     // The gate already paces frames; the app's own throttle would drop an
     // approved frame that lands just after a forced one, and the gate would
     // not ask again until the heartbeat.
-    tui.render(appView(score, clock.beatAt()), { force: true });
+    const out = tui.render(appView(score, clock.beatAt()), { force: true });
+    if (frameLog)
+      appendFileSync(
+        frameLog,
+        `${stdout.columns ?? 0}x${stdout.rows ?? 0} ${tui.lastRenderMs.toFixed(3)} ${out.length}\n`,
+      );
   };
   requestFrame = () => tick(true);
   // The first wrap is remembered per song in .dawg metadata, never the score.

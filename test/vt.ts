@@ -35,6 +35,19 @@ export class VirtualTerminal {
   bracketedPaste = false;
   /** DEC mouse modes on (1000 clicks, 1002 drags, 1006 SGR). */
   mouseModes = new Set<string>();
+  /** Prints that ran past the last column and wrapped (a too-wide row). */
+  wraps = 0;
+  /** Line feeds at the bottom row that scrolled the screen up. */
+  scrolls = 0;
+  /** Full clears (`ESC[2J`): the writer's full repaints. */
+  clears = 0;
+  /** Wraps and scrolls since the last full clear. */
+  wrapsSinceClear = 0;
+  scrollsSinceClear = 0;
+  /** Where the last wrap happened: row and the text that wrapped. */
+  lastWrap: string | undefined;
+  /** Bytes written so far. */
+  bytes = 0;
   private style: VtStyle = {};
   private pending = "";
 
@@ -67,6 +80,7 @@ export class VirtualTerminal {
   }
 
   write(data: string): void {
+    this.bytes += data.length;
     let input = this.pending + data;
     this.pending = "";
     let text = "";
@@ -112,6 +126,8 @@ export class VirtualTerminal {
   private lineFeed(): void {
     if (this.cursorY < this.rows - 1) this.cursorY += 1;
     else {
+      this.scrolls += 1;
+      this.scrollsSinceClear += 1;
       this.cells.shift();
       this.cells.push(Array.from({ length: this.cols }, () => this.blank()));
     }
@@ -120,6 +136,9 @@ export class VirtualTerminal {
   private print(text: string): void {
     for (const g of graphemes(text)) {
       if (this.cursorX + g.width > this.cols) {
+        this.wraps += 1;
+        this.wrapsSinceClear += 1;
+        this.lastWrap = `row ${this.cursorY} "${text.slice(0, 40)}"`;
         this.cursorX = 0;
         this.lineFeed();
       }
@@ -157,7 +176,12 @@ export class VirtualTerminal {
         this.cursorX = Math.min(this.cols - 1, Math.max(0, (nums[1] || 1) - 1));
         break;
       case "J":
-        if (nums[0] === 2 || nums[0] === 3) this.clear();
+        if (nums[0] === 2 || nums[0] === 3) {
+          this.clears += 1;
+          this.wrapsSinceClear = 0;
+          this.scrollsSinceClear = 0;
+          this.clear();
+        }
         break;
       case "K": {
         const row = this.cells[this.cursorY]!;
