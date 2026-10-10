@@ -2632,6 +2632,7 @@ function normalizeEngineSettings(
         if (field === "wind") return normalizeWind(value);
         if (field === "sing") return normalizeSing(value);
         if (field === "keys") return normalizeKeys(value);
+        if (field === "vocoder") return normalizeVocoder(value);
         if (field === "granular")
           return normalizeGranular(value, (ref) =>
             normalizeSampleRef(ref, "granular src"),

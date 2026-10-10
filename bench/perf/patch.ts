@@ -12,6 +12,12 @@ export function patch(runs = 5): Metric[] {
       "ns",
     ),
     metric(
+      "patch.runner.interp",
+      "patch runner, reference interpreter (fuse: false)",
+      patchRunner(runs, false),
+      "ns",
+    ),
+    metric(
       "patch.interp",
       "patch runner, flat interpreter (16 voices x 12 nodes, 48 kHz)",
       patchRun("interp", runs),
