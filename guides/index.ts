@@ -77,8 +77,8 @@ export function listGuides(dir: string = GUIDES_DIR): Guide[] {
 /**
  * The docs' marks: one symbol per kind of line, shared by the TUI's `/guide`
  * pane, `/help` and the dawg.sh docs. The symbol carries the meaning, so a
- * page reads the same under NO_COLOR, the mono theme and ASCII; colour only
- * repeats it. `role` names a tui/theme.ts role and never a knob colour
+ * page reads the same under NO_COLOR, the mono theme and ASCII; color only
+ * repeats it. `role` names a tui/theme.ts role and never a knob color
  * (knob1-4 are reserved for the four knobs).
  */
 export interface DocMark {

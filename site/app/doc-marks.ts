@@ -1,8 +1,8 @@
 /**
  * The docs' marks, mirrored from guides/index.ts (the TUI's `/guide` and
  * `/help` use the same table; site/tests/doc-marks.test.ts fails when the
- * two differ). The symbol carries the meaning; the chip colour repeats it
- * with the site's clip colours, since DESIGN.md keeps colour in blocks.
+ * two differ). The symbol carries the meaning; the chip color repeats it
+ * with the site's clip colors, since DESIGN.md keeps color in blocks.
  */
 export type DocRole =
   | "agent"

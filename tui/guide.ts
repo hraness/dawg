@@ -27,8 +27,8 @@ export type GuideRow = Readonly<{
   muted?: boolean;
   /**
    * The row's leading mark (guides/index.ts DOC_MARKS): its length in
-   * characters and the theme role that colours it. The symbol itself is in
-   * `text`, so it reads without colour.
+   * characters and the theme role that colors it. The symbol itself is in
+   * `text`, so it reads without color.
    */
   mark?: Readonly<{ length: number; role: DocMark["role"] }>;
   /** Typed commands (`code` spans): [start, end) character ranges in `text`. */

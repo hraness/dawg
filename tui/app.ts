@@ -584,7 +584,7 @@ function paintHeader(
   if (score.loopRange)
     left.push({
       text: loopRangeLabel(score.loopRange, unicode),
-      // The loop is the green knob's (§8.1): it wears that colour.
+      // The loop is the green knob's (§8.1): it wears that color.
       style: roles.knob2,
       priority: 3,
     });
@@ -794,7 +794,7 @@ function paintActivity(
                 ? roles.success
                 : roles.text;
       // Behind the first slot everything is faint; an error keeps its
-      // colour until it is old, then fades with the rest.
+      // color until it is old, then fades with the rest.
       if (index > 0)
         style =
           card.tone === "error" && age < ERROR_FADE_MS
@@ -1184,7 +1184,7 @@ function paintGuide(
     const room = boxWidth - 4;
     buffer.text(x, y, truncate(text, room), onBackground(style, panel));
     if (tree) return;
-    // The mark and typed commands repeat their meaning in colour; the
+    // The mark and typed commands repeat their meaning in color; the
     // symbol (or bold) carries it without.
     const paint = (from: number, to: number, role: Style) => {
       const at = displayWidth(row.text.slice(0, from));
