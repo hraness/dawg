@@ -1,0 +1,71 @@
+/**
+ * One topic id opens the same subject in /help, /guide and /menu (design
+ * §4, §8.2), and the window commands help advertises route. The menu door
+ * and `model key` in the prompt bar belong to other lanes (menu PR #142,
+ * grammar PR #141); their misses sit in ratchets below that must shrink to
+ * empty as those land.
+ */
+import { expect, test } from "bun:test";
+import { accepts } from "./consistency-lib.ts";
+import { TOPICS, TOPIC_ALIASES } from "../src/lang/glossary.ts";
+
+const WORDS = [...TOPICS, ...Object.keys(TOPIC_ALIASES)];
+
+/** Topic words `/menu` does not take yet (the menu lane's resolveTopic). */
+const KNOWN_MENU_TOPIC_GAPS: readonly string[] = [
+  ...["voice", "keys", "agent", "music", "session", "window"],
+  ...["instrument", "instruments", "samples", "vocal", "vocals", "sing"],
+  ...["clips", "lyrics", "autotune", "formant", "vocoder", "fx", "effect"],
+  ...["rig", "drums", "grooves", "patterns", "kits", "packs", "key"],
+  ...["scales", "progression", "mixer", "arrangement", "tracks", "notes"],
+  ...["export", "files", "undo", "keyboard", "shortcuts", "mouse"],
+  ...["model", "models", "showme", "show-me", "sessions", "login", "ai"],
+];
+
+/** Window lines help advertises that do not route yet (grammar lane). */
+const KNOWN_WINDOW_GAPS: readonly string[] = ["/model key", "model key"];
+
+const WINDOW_LINES = [
+  "/model",
+  "/model fast",
+  "/model key",
+  "model key",
+  "/logout",
+  "/auth --check",
+  "/showme quiet",
+  "/theme mono",
+  "/view focus",
+  "/motion off",
+  "/resume",
+  "/fork",
+  "/rename demo",
+  "/click on",
+];
+
+test("every topic id and alias opens /help and /guide", () => {
+  for (const word of WORDS) {
+    expect(accepts(`/help ${word}`), `/help ${word}`).toBe(true);
+    expect(accepts(`/guide ${word}`), `/guide ${word}`).toBe(true);
+  }
+});
+
+test("every topic id and alias opens /menu, or is a known gap", () => {
+  const misses = WORDS.filter((word) => !accepts(`/menu ${word}`));
+  expect(
+    misses.filter((word) => !KNOWN_MENU_TOPIC_GAPS.includes(word)),
+  ).toEqual([]);
+  // The ratchet: a word that now opens must leave the gap list.
+  expect(
+    KNOWN_MENU_TOPIC_GAPS.filter((word) => !misses.includes(word)),
+  ).toEqual([]);
+});
+
+test("the window commands help advertises route, or are known gaps", () => {
+  const misses = WINDOW_LINES.filter((line) => !accepts(line));
+  expect(misses.filter((line) => !KNOWN_WINDOW_GAPS.includes(line))).toEqual(
+    [],
+  );
+  expect(KNOWN_WINDOW_GAPS.filter((line) => !misses.includes(line))).toEqual(
+    [],
+  );
+});

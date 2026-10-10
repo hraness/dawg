@@ -20,7 +20,7 @@ the tools that tune them.
 
 ## Menu
 
-- Ctrl-K › Voice › voice presets · lyrics · clips · pitch · autotune · vocoder
+- Ctrl-K › Voice › sing · lyrics · clips · pitch · autotune · vocoder
 
 ## Keys
 

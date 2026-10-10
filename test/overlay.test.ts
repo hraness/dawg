@@ -210,7 +210,15 @@ test("/guide opens the guide tree; → opens a guide; Esc steps back out", () =>
   h.app.input(ESC);
   h.app.input(ESC);
   expect(h.app.ui.overlay).toBeUndefined();
-  expect(h.app.command("/guide nonsense")).toContain("no topic nonsense");
+  // A miss is a refusal (✗), the same tone as a /help miss.
+  expect(h.app.command("/guide nonsense")).toEqual({
+    ok: false,
+    text: "no topic nonsense · /help",
+  });
+  expect(h.app.command("/guide vocie")).toEqual({
+    ok: false,
+    text: "no topic vocie · did you mean voice · /help",
+  });
   expect(h.app.ui.overlay).toBeUndefined();
   h.app.command("/guide chords");
   lines = h.frame();

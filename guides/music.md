@@ -18,7 +18,7 @@ A loop grows into a song in four moves: notes, tracks, sections, form.
 
 ## Menu
 
-- Ctrl-K › Arrange › add section · form
+- Ctrl-K › Arrange › sections · form
 
 ## Keys
 

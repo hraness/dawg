@@ -423,7 +423,7 @@ Display options:
   --no-mouse        keys only; no click/wheel reporting (also DAWG_MOUSE=0)
 
 Prompt:
-  Enter submit · Shift-Enter newline · Alt-Enter queue · Ctrl-Q toggle queue
+  Enter submit · Shift-Enter newline · Alt-Enter next · Ctrl-Q now / next
   Ctrl-Z undo · Ctrl-Y redo · Ctrl-O transcript · Esc cancel/close · Ctrl-C exit
   Space on an empty prompt toggles playback
 
@@ -1266,7 +1266,8 @@ async function runInteractive(): Promise<void> {
   const runPrompt = async (text: string): Promise<void> => {
     const ui = tui.command(text);
     if (ui !== undefined) {
-      tui.activity.pushCard(ui, { tone: "info" });
+      if (typeof ui === "string") tui.activity.pushCard(ui, { tone: "info" });
+      else tui.activity.pushCard(ui.text, { tone: toneOf(ui) });
       return;
     }
     tui.activity.pushRequest(text);

@@ -14,9 +14,11 @@
 
 import {
   ActivityFeed,
+  fail,
   revisionLabel,
   spinnerFrame,
   type ActivityCard,
+  type Receipt,
   type TranscriptEntry,
 } from "./activity.ts";
 import {
@@ -1714,9 +1716,10 @@ export class TuiApp {
 
   /**
    * Handle TUI-local slash commands (`/log`, `/theme`, `/motion`, `/guide`).
-   * Returns a receipt, or undefined when the command is not a UI command.
+   * Returns a receipt (a structured one for a refusal), or undefined when
+   * the command is not a UI command.
    */
-  command(text: string): string | undefined {
+  command(text: string): string | Receipt | undefined {
     const command = text.trim();
     if (/^\/(log|transcript)$/i.test(command)) {
       this.overlay = this.overlay === "log" ? undefined : "log";
@@ -1741,9 +1744,11 @@ export class TuiApp {
     if (guide) {
       const topic = guide[1]?.trim();
       if (!this.openGuide(topic))
-        return topicMiss(
-          topic!,
-          (this.guide?.guides ?? listGuides()).map((g) => g.id),
+        return fail(
+          topicMiss(
+            topic!,
+            (this.guide?.guides ?? listGuides()).map((g) => g.id),
+          ),
         );
       return topic
         ? `guide · ${this.guide?.guides.find((g) => g.id === this.guide?.page)?.title ?? topic} · esc back`

@@ -673,6 +673,8 @@ export function helpTopicLines(
     return helpLines(width);
   if ((TOPICS as readonly string[]).includes(name))
     return topicLines(name as TopicId, width);
+  const spelled = HELP_COMMAND_ALIASES[name];
+  if (spelled) return commandTopic(spelled, width, name);
   const alias = resolveTopic(name);
   // A topic alias wins unless a reference row starts with the word:
   // `/help sections` is the arrange topic, `/help scale` the command.
@@ -700,26 +702,59 @@ function hasRow(name: string): boolean {
  * from every group, then its full usage wrapped; undefined when no command
  * has that name.
  */
-function commandTopic(name: string, width: number): string[] | undefined {
+function commandTopic(
+  name: string,
+  width: number,
+  usageKey = name,
+): string[] | undefined {
+  const pattern = name
+    .replace(/[^a-z0-9 -]/g, "")
+    .trim()
+    .replace(/ +/g, "\\s+");
   const own = (command: string) =>
-    new RegExp(`^/?${name.replace(/[^a-z0-9-]/g, "")}(\\s|$)`, "i").test(
-      command,
-    );
+    new RegExp(`^/?${pattern}(\\s|$)`, "i").test(command);
   const rows = HELP_SECTIONS.flatMap((section) =>
     section.entries.filter((entry) => own(entry.command)),
   );
-  const usage = USAGE[name];
+  const usage = USAGE[usageKey] ?? USAGE[name];
   if (rows.length === 0 && !usage) return undefined;
   const wrap = Math.max(30, width - 2);
+  // A usage line that repeats a row keeps only what it adds (examples).
+  const extra = usage
+    ? rows.reduce((text, entry) => {
+        const bare = (value: string) =>
+          value.replace(/^\//, "").replace(/\s*\|\s*/g, "|");
+        return bare(text).startsWith(bare(entry.command))
+          ? bare(text)
+              .slice(bare(entry.command).length)
+              .replace(/^\s*·\s*/, "")
+          : text;
+      }, usage)
+    : "";
+  // Examples a row summary already shows are not repeated.
+  const shown = rows.map((entry) => entry.summary).join(" · ");
+  const added = extra
+    .split(" · ")
+    .filter((part) => part && !shown.split(" · ").includes(part))
+    .join(" · ");
   return [
     `── ${name}`,
     ...rows.flatMap((entry) => [
       ...wrapWords(entry.command, wrap),
       ...wrapWords(entry.summary, wrap - 2).map((line) => `  ${line}`),
     ]),
-    ...(usage ? ["", ...wrapWords(usage, wrap)] : []),
+    ...(added ? ["", ...wrapWords(added, wrap)] : []),
   ];
 }
+
+/**
+ * Typed aliases that /help shows under their one word (design §8.2): the
+ * alias opens the page and the title, heading and rows name the canonical
+ * command.
+ */
+export const HELP_COMMAND_ALIASES: Readonly<Record<string, string>> = {
+  login: "model key",
+};
 
 function wrapWords(text: string, width: number): string[] {
   const rows: string[] = [];
@@ -836,7 +871,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   bars: "bars takes 1…256 · bars 8",
   extend: "extend <count> bars · extend 4 bars",
   instrument:
-    "instrument <name> · sine piano pluck bass saw square triangle wavetable kit · pianos: grand upright felt honkytonk prepared · electric: epiano suitcase dyno wurli clav funkclav · synth: sawtooth supersaw pulse white pink z_square · voices: vocal aah ooh choir chorale khoomei sygyt kargyraa vocoder…",
+    "instrument <name> · sine piano pluck bass sawtooth square triangle wavetable kit · pianos: grand upright felt honkytonk prepared · electric: epiano suitcase dyno wurli clav funkclav · synth: supersaw pulse white pink z_square · voices: vocal aah ooh choir chorale khoomei sygyt kargyraa vocoder…",
   volume: "volume takes 0…1 · volume 0.8",
   vol: "volume takes 0…1 · volume 0.8",
   pan: "pan takes -1…1 · pan -0.5",
@@ -1138,6 +1173,8 @@ const ARRANGE_WORDS: ReadonlySet<string> = new Set([
 export function helpTitle(topic: string | undefined): string {
   const name = topic?.trim().toLowerCase().replace(/^\//, "");
   if (!name) return "help";
+  const spelled = HELP_COMMAND_ALIASES[name];
+  if (spelled) return `help · ${spelled}`;
   const id = (TOPICS as readonly string[]).includes(name)
     ? name
     : USAGE[name] || commandHelpExists(name)

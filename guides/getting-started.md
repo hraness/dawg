@@ -23,7 +23,7 @@ below, and every change is one undo step.
 
 ## Keys
 
-- Ctrl-P play mode · Ctrl-K menu · `?` keys · F1 guides · Ctrl-Q queue
+- Ctrl-P play mode · Ctrl-K menu · `?` keys · F1 guides · Ctrl-Q next
 
 ## Next
 

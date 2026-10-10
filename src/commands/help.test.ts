@@ -13,6 +13,8 @@ import {
   typoFix,
   usageHint,
   keysLines,
+  USAGE,
+  helpTitle,
 } from "./help.ts";
 import { KEYS, type KeySection } from "../../tui/grammar.ts";
 import {
@@ -214,9 +216,8 @@ describe("help reference", () => {
     expect(topicMiss("vocie")).toBe(
       "no topic vocie · did you mean voice · /help",
     );
-    expect(topicMiss("nonsense")).toMatch(
-      /^no topic nonsense · did you mean \w+ · \/help$/,
-    );
+    // Nothing near: no wild guess, only the way back.
+    expect(topicMiss("nonsense")).toBe("no topic nonsense · /help");
   });
 
   test("typos get the nearest command", () => {
@@ -411,4 +412,23 @@ test("every help command parses bare and with a slash, or is a known gap", () =>
 test("no help row uses a glossary loser except in alias notes", () => {
   expect(lintText(helpText())).toEqual([]);
   expect(lintText(keysLines(72).join("\n"))).toEqual([]);
+  // Usage hints show on every miss, so they speak the glossary too.
+  expect(lintText(Object.values(USAGE).join("\n"))).toEqual([]);
+  expect(USAGE.instrument!.match(/\bsaw(tooth)?\b/g)).toEqual(["sawtooth"]);
+});
+
+test("/help login opens model key and never shows login", () => {
+  const lines = helpTopicLines("login")!;
+  expect(lines[0]).toBe("── model key");
+  expect(lines.join("\n")).not.toMatch(/\blogin\b/);
+  expect(helpTitle("login")).toBe("help · model key");
+});
+
+test("/help <command> does not repeat its usage line", () => {
+  for (const name of ["scale", "model key", "vocoder"]) {
+    const lines = helpTopicLines(name)!.filter((line) => line.trim());
+    expect(new Set(lines).size, name).toBe(lines.length);
+  }
+  const scale = helpTopicLines("scale")!.join("\n");
+  expect(scale.match(/scale D hijaz/g)).toHaveLength(1);
 });

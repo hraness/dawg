@@ -151,9 +151,11 @@ function distance(a: string, b: string): number {
 export function nearestTopic(
   word: string,
   extra: readonly string[] = [],
-): string {
+): string | undefined {
   const name = word.trim().toLowerCase().replace(/^\//, "");
-  let best = { id: TOPICS[0] as string, score: Infinity };
+  // The same reach as nearestCommand: one edit for a short word, two else.
+  const limit = name.length <= 4 ? 1 : 2;
+  let best: { id: string; score: number } | undefined;
   const candidates: [string, string][] = [
     ...TOPICS.map((id): [string, string] => [id, id]),
     ...extra.map((id): [string, string] => [id, id]),
@@ -161,15 +163,21 @@ export function nearestTopic(
   ];
   for (const [spelling, id] of candidates) {
     const score = distance(name, spelling);
-    if (score < best.score) best = { id, score };
+    if (score <= limit && (!best || score < best.score)) best = { id, score };
   }
-  return best.id;
+  return best?.id;
 }
 
-/** `no topic X · did you mean Y · /help`, for any door. */
+/**
+ * `no topic X · did you mean Y · /help` for any door; without a near
+ * topic, `no topic X · /help`.
+ */
 export function topicMiss(word: string, extra: readonly string[] = []): string {
   const name = word.trim().replace(/^\//, "");
-  return `no topic ${name} · did you mean ${nearestTopic(name, extra)} · /help`;
+  const near = nearestTopic(name, extra);
+  return near
+    ? `no topic ${name} · did you mean ${near} · /help`
+    : `no topic ${name} · /help`;
 }
 
 /**

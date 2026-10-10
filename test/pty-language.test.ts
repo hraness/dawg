@@ -20,7 +20,7 @@ async function closeOverlay(t: Pty, marker: string): Promise<void> {
 }
 
 test.skipIf(!supported)(
-  "real PTY 80x24: /guide voice, /help voice, /guide agent, /help nonsense",
+  "real PTY 80x24: /guide voice, /help voice, /guide agent, misses, /help login",
   async () => {
     const t = await launch(80, 24, {}, ["--track", "lead"]);
     try {
@@ -59,6 +59,22 @@ test.skipIf(!supported)(
       );
       expect(t.vt.text()).toContain("/help");
       expect(t.vt.text()).not.toContain("error");
+      // Nothing near: no wild guess.
+      expect(t.vt.text()).not.toContain("did you mean notes");
+
+      // A /guide miss is a refusal, the same ✗ as a /help miss.
+      await t.send("/guide zzqx\r");
+      await t.until(
+        () => /✗ no topic zzqx · \/help/.test(t.vt.text()),
+        "guide miss refused",
+      );
+
+      // `login` is an alias: the page is titled model key.
+      await t.send("/help login\r");
+      await t.until(() => t.vt.text().includes("── model key"), "help login");
+      expect(t.vt.text()).toContain("help · model key");
+      expect(t.vt.text()).not.toMatch(/help · login|── login/);
+      await closeOverlay(t, "╭─ help");
     } finally {
       t.terminal.write("\u0003");
       await t.proc.exited;
