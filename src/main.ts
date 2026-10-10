@@ -328,6 +328,7 @@ import {
   type MenuAudioDevices,
   type MenuContext,
 } from "./tui/menu.ts";
+import { KNOB_PAGE_WORDS, knobPageId } from "./tui/knob-map.ts";
 import {
   drawerView,
   faderChoose,
@@ -1048,6 +1049,7 @@ function snapshot(
       : value.tempoBpm,
     key: value.key ?? undefined,
     loopBeats: loopTicksOf(value) / value.ticksPerBeat,
+    ...(value.loop ? { loopRange: value.loop } : {}),
     beatsPerBar: value.beatsPerBar,
     ...(hasMeterChanges(value)
       ? {
@@ -1800,6 +1802,14 @@ async function runInteractive(): Promise<void> {
         }
         // The fader drawer owns every key while it is up.
         if (typeof value === "string" && fader && menu.open) {
+          // Tab flips the knob front page and every param (design §8.6).
+          if (value === "\t" && menu.knobPage && fader.typing === undefined) {
+            const label = menu.pageKnobs(menuContext(), fader.label);
+            if (label) fader.label = label;
+            refreshMenu();
+            tick(true);
+            continue;
+          }
           const result = faderKeyPress(
             fader,
             menu.faderFields(menuContext()),
@@ -1875,7 +1885,10 @@ async function runInteractive(): Promise<void> {
               }
             } else if (result.type === "audition")
               auditionKeyPressed(result.key);
-            else if (result.type === "fader") openFader(result.label);
+            else if (result.type === "fader")
+              openFader(
+                menu.openKnobs(menuContext(), result.label) ?? result.label,
+              );
             else if (result.type === "revert") revertStaged();
             else if (result.type === "hover")
               hoverItem(result.command, result.key);
@@ -2277,8 +2290,11 @@ async function submit(prompt: string): Promise<string | Receipt> {
     )
   ) {
     const context = menuContext();
-    const label =
+    const opened =
       menu.showFader(context, command) ?? songFader(context, command);
+    // Bare `volume` (and every scalar) opens on its knob page, when its
+    // level has one and the param is a knob: the four knobs up front.
+    const label = opened && (menu.openKnobs(context, opened) ?? opened);
     if (label) {
       const field = menu
         .faderFields(context)
@@ -2293,9 +2309,36 @@ async function submit(prompt: string): Promise<string | Receipt> {
       openFader(label, true);
       refreshMenu();
       return ok(
-        `${label}${value ? ` · ${value}` : ""} · ←→ adjust · enter keep · esc revert`,
+        `${label}${value ? ` · ${value}` : ""} · ${
+          menu.knobPage === "knobs"
+            ? "↑↓ knob · ←→ turn · tab all"
+            : "←→ adjust · enter keep · esc revert"
+        }`,
       );
     }
+  }
+  // `mix`: the drawer's mixer page, every track's level as a fader.
+  // `knobs [sound|mix|master|tempo|fx <effect>]`: a page's four knobs.
+  const knobsCommand = command.match(/^\/?(?:(mix)|knobs(?:\s+(.+))?)$/i);
+  if (knobsCommand) {
+    const context = menuContext();
+    const track = context.score.tracks.find((t) => t.id === context.trackId);
+    const label = knobsCommand[1]
+      ? openMixer(context)
+      : openKnobPage(context, knobsCommand[2], track);
+    if (!label)
+      return fail(
+        knobsCommand[1]
+          ? "mix · no tracks yet · track <name>"
+          : `knobs ${knobsCommand[2] ?? ""} · no such page · knobs ${KNOB_PAGE_WORDS.join("|")}`,
+      );
+    openFader(label, true);
+    refreshMenu();
+    return ok(
+      knobsCommand[1]
+        ? "mix · ↑↓ track · ←→ level · tab this track · enter keep · esc revert"
+        : `knobs · ${menu.knobPageId} · ↑↓ knob · ←→ turn · tab all params`,
+    );
   }
   const menuCommand = command.match(/^\/menu(?:\s+(\S+))?$/i);
   if (menuCommand) {
@@ -2704,6 +2747,16 @@ async function submit(prompt: string): Promise<string | Receipt> {
     const result = applySynthCommand(score, requestedTrack, synth);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
+    // Bare `synth` (design §8.6) also opens the sound page's four knobs.
+    if (synth.type === "synth-list" && result.ok && !stageCapture) {
+      const context = menuContext();
+      const track = context.score.tracks.find((t) => t.id === context.trackId);
+      const label = openKnobPage(context, "sound", track);
+      if (label) {
+        openFader(label, true);
+        refreshMenu();
+      }
+    }
     return readOrDone(result);
   }
   const stringCommand = parseStringCommand(command);
@@ -3081,6 +3134,22 @@ async function submit(prompt: string): Promise<string | Receipt> {
       ? vocalChainPatch(score.tracks.find((t) => t.id === requestedTrack))
       : {};
     const patch = { ...chain, ...rigged };
+    // `volume drums 0.5` names its track; it must exist.
+    if (parsed.trackId !== undefined) {
+      const target = score.tracks.find(
+        (candidate) =>
+          candidate.id === parsed.trackId ||
+          candidate.name.toLowerCase() === parsed.trackId,
+      );
+      if (!target) return fail(`no track ${parsed.trackId}`);
+      const next = applyScoreOperation(score, {
+        type: "updateTrack",
+        trackId: target.id,
+        patch,
+      });
+      await commitScore(next, "score.track", { trackId: target.id, patch });
+      return `track · ${target.id}`;
+    }
     const next = applyScoreOperation(score, {
       type: "updateTrack",
       trackId: requestedTrack,
@@ -4835,6 +4904,7 @@ function refreshMenu(): void {
         atOnce:
           focusedField !== undefined &&
           !stageableNow(faderCommand(focusedField)),
+        knobs: menu.knobPage,
       });
       tui.drawer = withPaneMarks(drawer);
     }
@@ -4902,6 +4972,50 @@ async function exportWav(path: string, stems: boolean): Promise<Receipt> {
     tui.activity.setSpinner(undefined);
     await rm(directory, { recursive: true, force: true });
   }
+}
+
+/** `mix`: Mix › mixer in the drawer, on the focused track's level. */
+function openMixer(context: MenuContext): string | undefined {
+  if (context.score.tracks.length === 0) return undefined;
+  menu.show(context, "mix");
+  if (!menu.enter(context, "mixer")) {
+    menu.close();
+    return undefined;
+  }
+  const first = menu.openKnobs(context);
+  const fields = menu.faderFields(context);
+  const here = fields.find((field) => field.label.includes("›"));
+  if (!first || fields.length === 0) {
+    menu.close();
+    return undefined;
+  }
+  return here?.label ?? first;
+}
+
+/** `knobs <page>`: open that page's level and its four knobs. */
+function openKnobPage(
+  context: MenuContext,
+  word: string | undefined,
+  track: TrackScore["tracks"][number] | undefined,
+): string | undefined {
+  const page = knobPageId(word, track);
+  if (!page) return undefined;
+  if (page.startsWith("fx:")) {
+    if (!menu.showFader(context, `fx ${page.slice(3)}`)) return undefined;
+  } else {
+    const section = page.startsWith("sound:")
+      ? "sound"
+      : page === "tempo"
+        ? "project"
+        : page;
+    menu.show(context, section);
+  }
+  const label = menu.openKnobs(context);
+  if (!label || menu.knobPageId !== page) {
+    menu.close();
+    return undefined;
+  }
+  return label;
 }
 
 /** `tempo`, `bars`, `meter`: open Project and name its fader, if it has one. */

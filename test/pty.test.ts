@@ -188,10 +188,14 @@ test.skipIf(!supported)(
       () => t.vt.text().includes("renamed · night drive"),
       "rename",
     );
-    expect(t.vt.lines()[0]).toContain("night drive");
+    // The session name is in the footer (design §13).
+    expect(t.vt.lines().at(-1)).toContain("night drive");
     await t.send("/fork\r");
     await t.until(() => t.vt.text().includes("forked · night drive 2"), "fork");
-    await t.until(() => t.vt.lines()[0]!.includes("night drive 2"), "header");
+    await t.until(
+      () => t.vt.lines().at(-1)!.includes("night drive 2"),
+      "footer",
+    );
     await t.send("/sessions\r");
     await t.until(() => t.vt.text().includes("2 sessions"), "sessions");
     await t.send("\u0003");
@@ -202,7 +206,7 @@ test.skipIf(!supported)(
     // window on the same session gets a draft track.
     const one = await launch(100, 30, {}, [], t.cwd);
     await one.until(() => one.vt.text().includes(" NOW "), "first window");
-    expect(one.vt.lines()[0]).toContain("night drive 2");
+    expect(one.vt.lines().at(-1)).toContain("night drive 2");
     expect(one.vt.lines()[0]).toContain("bass");
     const two = await launch(
       100,

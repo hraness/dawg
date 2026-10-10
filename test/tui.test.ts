@@ -248,7 +248,9 @@ test("resize collapses the header, preserves the draft, and hints when too small
   const h = harness(120, 24);
   h.type("keep this draft across resizes please");
   h.frame(1);
-  expect(h.vt.lines()[0]).toContain("session 7f3a91c2");
+  // The session id lives in the footer (design §13); the header has bar.beat.
+  expect(h.vt.text()).toContain("session 7f3a91c2");
+  expect(h.vt.lines()[0]).toMatch(/120 BPM · \d+\.\d/);
   h.io.size(40, 24);
   h.frame(1);
   const narrow = h.vt.lines();
@@ -426,33 +428,41 @@ test("composeFrame is deterministic for a fixed clock", () => {
   expect(a).toBe(b);
 });
 
-test("header order is dawg · track · transport · key · session · panes ··· model · rev · sync", () => {
+test("header order is dawg · transport · bar.beat · loop · track ··· key · model · rev · pane · sync", () => {
   const h = harness(120, 24);
   h.frame(0, {
     sessionName: "night drive",
     windows: 3,
     pane: "B",
     sync: "synced",
+    score: { ...score, loopRange: { startBar: 4, bars: 2 } },
   });
   const line = h.vt.lines()[0]!;
   const order = [
     "dawg",
-    "bass",
     "▶ 120 BPM",
+    "1.1",
+    "↻ 5–6",
+    "bass",
     "Am",
-    "night drive",
-    "3 panes · B",
     "sol-6.1",
     "rev 42",
+    "B ⧉3",
     "synced",
   ];
   const positions = order.map((segment) => line.indexOf(segment));
-  expect(positions.every((position) => position >= 0)).toBe(true);
+  expect(
+    positions.every((position) => position >= 0),
+    line,
+  ).toBe(true);
   expect(positions).toEqual([...positions].sort((a, b) => a - b));
+  // The session name is in the footer now, not the header (design §13).
+  expect(line).not.toContain("night drive");
+  expect(h.vt.text()).toContain("night drive");
   // One window hides the count; a short id stands in for a missing name.
   h.frame(0, { sessionName: undefined, windows: 1 });
-  expect(h.vt.lines()[0]).not.toContain("panes");
-  expect(h.vt.lines()[0]).toContain("session 7f3a91c2");
+  expect(h.vt.lines()[0]).not.toContain("⧉");
+  expect(h.vt.text()).toContain("session 7f3a91c2");
 });
 
 test("an empty track shows a start hint instead of lane and bar labels", () => {

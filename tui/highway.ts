@@ -80,6 +80,8 @@ export interface TrackScoreSnapshot {
    */
   barBeats?: readonly number[] | undefined;
   loopBeats?: number | undefined;
+  /** The score's loop range (0-based start bar), for the header's `↻ 5–6`. */
+  loopRange?: Readonly<{ startBar: number; bars: number }> | undefined;
   laneCount?: number | undefined;
   /** Optional lane legend (drum voices) drawn just below the hit line. */
   laneLabels?: readonly string[] | undefined;

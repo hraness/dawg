@@ -52,6 +52,8 @@ export type AgentOperation =
       };
       /** The instrument word as typed (a guitar alias also loads its rig). */
       word?: string;
+      /** `volume drums 0.5`: another track than the focused one. */
+      trackId?: string;
     }
   | {
       type: "automation";
@@ -101,6 +103,19 @@ export function parsePrompt(prompt: string): AgentOperation | undefined {
     return { type: "track", patch: { muted: false } };
   const volume = text.match(/^(?:volume|vol)\s+(0(?:\.\d+)?|1(?:\.0+)?)$/);
   if (volume) return { type: "track", patch: { volume: Number(volume[1]) } };
+  // `volume drums 0.5` / `pan bass -0.2`: the mixer page's rows name their
+  // track, so a level is set without moving the focus.
+  const level = text.match(
+    /^(volume|vol|pan)\s+([a-z0-9][a-z0-9._-]{0,63})\s+(-?1(?:\.0+)?|-?0(?:\.\d+)?)$/,
+  );
+  if (level && !(level[1] !== "pan" && level[3]!.startsWith("-"))) {
+    const value = Number(level[3]);
+    return {
+      type: "track",
+      patch: level[1] === "pan" ? { pan: value } : { volume: value },
+      trackId: level[2]!,
+    };
+  }
   const clearAutomation = text.match(
     /^(?:clear|reset)\s+(?:(volume|pan)\s+)?automation$/,
   );

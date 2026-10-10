@@ -23,7 +23,8 @@ A drum track has one row per drum: kick, snare, hat and more.
 
 ## Keys
 
-- In the euclid editor ↑↓ drum · ←→ adjust · Tab field · Space loop
+- In the euclid editor ↑↓ knob (● drum ▲ pulses ■ rotate
+  ◆ velocity) · ←→ turn · Tab field · Space loop
 
 ## Next
 

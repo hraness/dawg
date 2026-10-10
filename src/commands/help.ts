@@ -382,6 +382,14 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
     entries: [
       { command: "volume <0..1>", summary: "track level" },
       { command: "pan <-1..1>", summary: "left … right" },
+      {
+        command: "knobs [sound|mix|master|tempo|fx <effect>]",
+        summary: "four knobs ● moves ▲ sizes ■ shapes ◆ level · tab all params",
+      },
+      {
+        command: "mix | volume <track> <0..1> | pan <track> <-1..1>",
+        summary: "the mixer page · volume drums 0.5 sets drums, focus stays",
+      },
       { command: "mute", summary: "silence this track" },
       { command: "unmute", summary: "hear it again" },
       { command: "solo", summary: "only this track" },

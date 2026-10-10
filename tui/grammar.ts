@@ -126,7 +126,7 @@ export const HINTS = {
   action: " ↑↓ move · enter apply · / filter · esc back · ? keys ",
   typing: " type a value · enter apply · esc clear ",
   euclid:
-    " ↑↓ drum · ←→ adjust · tab field · space loop · x off · esc back · ? keys ",
+    " ↑↓ knob · ←→ turn · tab field · space loop · x off · esc back · ? keys ",
   text: " ↑↓ scroll · pgup pgdn page · esc back · ? keys ",
   log: " ↑↓ scroll · / filter · esc back · ? keys ",
   keys: " esc or ? closes ",
@@ -289,9 +289,9 @@ export const KEYS = {
     {
       title: "rhythm editor",
       rows: [
-        ["↑ ↓  j k", "drum"],
-        ["← →  h l  - +", "adjust the field"],
-        ["tab shift-tab  ] [", "next / previous field"],
+        ["↑ ↓  j k", "knob: ● drum ▲ pulses ■ rotate ◆ velocity"],
+        ["← →  h l  - +", "turn it (● picks the drum row)"],
+        ["tab shift-tab  ] [", "next / previous field, every field"],
         ["0-9", "type a value, enter applies"],
         ["enter", "add a row (or type a value) · staged: keep"],
         ["x d delete", "turn the row off"],

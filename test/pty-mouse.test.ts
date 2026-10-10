@@ -92,7 +92,7 @@ test.skipIf(!supported)(
       expect(t.vt.lines()[0]).toContain("120 BPM");
 
       // Click [+] on the cutoff fader: staged, not committed.
-      const cutoff = locate(t, "› cutoff");
+      const cutoff = locate(t, "cutoff");
       const plus = locate(t, "[+]", cutoff.y);
       await t.send(click(plus.x + 1, plus.y));
       await t.until(() => t.vt.text().includes("change staged"), "staged");
