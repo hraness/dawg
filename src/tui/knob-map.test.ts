@@ -174,4 +174,12 @@ describe("knob table", () => {
         true,
       );
   });
+
+  test("every sound page fills all four knobs (a kit too)", () => {
+    for (const [family, patch] of Object.entries(FAMILY_TRACKS)) {
+      const score = songWith(patch);
+      const slots = knobSlots(menuContext("t", score), `sound:${family}`);
+      expect(slots.filter((slot) => slot !== undefined).length, family).toBe(4);
+    }
+  });
 });

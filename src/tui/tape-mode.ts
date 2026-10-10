@@ -14,7 +14,11 @@ import {
   type BarRange,
   type ResolvedRange,
 } from "../../core/range.ts";
-import { findSection, sectionAtBar } from "../../core/sections.ts";
+import {
+  findSection,
+  formSegments,
+  sectionAtBar,
+} from "../../core/sections.ts";
 import { TrackScore } from "../../core/score.ts";
 import { barAt, barStartTick } from "../../core/tempo.ts";
 import type { KnobSlot, KnobSlots } from "../../tui/knobs.ts";
@@ -107,7 +111,32 @@ export function rangeLine(context: TapeContext): string {
       : resolved.source === "section"
         ? resolved.section
         : "playhead";
-  return `range: ${trackName(context.score, context.trackId)} · ${barsWord(resolved.range)} (${from})`;
+  const line = `range: ${trackName(context.score, context.trackId)} · ${barsWord(resolved.range)} (${from})`;
+  const repeat = formRepeat(context.score, resolved.range.startBar);
+  return repeat ? `${line} · ${repeat}` : line;
+}
+
+/** How many times the form plays each section; empty without a form. */
+export function formPasses(score: TrackScore): Map<string, number> {
+  const passes = new Map<string, number>();
+  for (const segment of formSegments(score))
+    passes.set(
+      segment.section.name,
+      (passes.get(segment.section.name) ?? 0) + 1,
+    );
+  return passes;
+}
+
+/**
+ * `edits chorus (plays 2×)` when `bar` is in a section the form plays more
+ * than once (op1-ux §4): an edit there lands on every pass.
+ */
+export function formRepeat(score: TrackScore, bar: number): string | undefined {
+  if (score.form.length === 0) return undefined;
+  const section = sectionAtBar(score, bar);
+  if (!section) return undefined;
+  const times = formPasses(score).get(section.name) ?? 0;
+  return times > 1 ? `edits ${section.name} (plays ${times}×)` : undefined;
 }
 
 /** `clipboard: drums · 2 bars`, for the chip. */

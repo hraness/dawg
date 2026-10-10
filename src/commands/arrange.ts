@@ -928,10 +928,10 @@ function applyUnchecked(
       if (score.form.length === 0)
         return {
           ok: false,
-          message: "form · no form to bake · form verse chorus verse",
+          message: "form · no form to print · form verse chorus verse",
         };
       const next = flattenForm(score);
-      return changed(score, next, `form · baked into ${next.bars} bars`);
+      return changed(score, next, `printed form to tape · ${next.bars} bars`);
     }
     case "build": {
       const result = generateBuild(score, command.options);

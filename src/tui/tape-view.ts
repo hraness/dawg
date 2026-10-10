@@ -3,8 +3,13 @@
  * the cells tui/tape.ts paints. Density per cell is the notes starting in
  * it, weighted by velocity (` ▁▂▃▄▅▆▇█`); a held note shows `▁` across the
  * cells it sustains through, and an audio clip `▃` where it plays.
+ *
+ * With a form the tape is drawn unrolled (op1-ux §4): every pass in play
+ * order, the first pass of each section solid and every later one ghosted
+ * `░`. Each cell keeps the score bar it shows, so a click, a drag or a
+ * gesture on a ghost acts on the source section.
  */
-import { formSegments } from "../../core/sections.ts";
+import { formPositionAt, formSegments } from "../../core/sections.ts";
 import type { TrackScore } from "../../core/score.ts";
 import { barStartTick, bpmAtTick } from "../../core/tempo.ts";
 import type { KnobIndex } from "../../tui/knobs.ts";
@@ -17,6 +22,7 @@ import type {
 import {
   barOfBeat,
   clipboardLabel,
+  formPasses,
   loopRange,
   rangeLine,
   tapeKnobs,
@@ -30,7 +36,45 @@ export type TapeViewInput = TapeContext &
     selected: KnobIndex;
     /** Other panes on a track (§12.7): `B`, `C●`. */
     marks: (trackId: string) => string;
+    /**
+     * Transport beat (arranged time), for the playhead on an unrolled form:
+     * which pass it is in. Absent, the playhead sits on the first pass.
+     */
+    transportBeat?: number | undefined;
   }>;
+
+/** One drawn cell on an unrolled form: a score cell, its pass, a ghost. */
+type Unrolled = Readonly<{ cell: number; segment: number; ghost: boolean }>;
+
+/** The form in play order as score cells; undefined without a form. */
+function unroll(
+  score: TrackScore,
+  bars: readonly number[],
+): Unrolled[] | undefined {
+  const segments = formSegments(score);
+  if (segments.length === 0) return undefined;
+  const firstCellOf = new Map<number, number>();
+  bars.forEach((bar, index) => {
+    if (!firstCellOf.has(bar)) firstCellOf.set(bar, index);
+  });
+  const seen = new Set<string>();
+  const cells: Unrolled[] = [];
+  segments.forEach((segment, index) => {
+    const ghost = seen.has(segment.section.name);
+    seen.add(segment.section.name);
+    const from = firstCellOf.get(segment.section.startBar);
+    if (from === undefined) return;
+    const end = segment.section.startBar + segment.section.bars;
+    for (let cell = from; cell < bars.length && bars[cell]! < end; cell += 1)
+      cells.push({ cell, segment: index, ghost });
+  });
+  // Bars the form never plays stay reachable, after it, in score order.
+  const played = new Set(cells.map((item) => item.cell));
+  bars.forEach((_, cell) => {
+    if (!played.has(cell)) cells.push({ cell, segment: -1, ghost: false });
+  });
+  return cells;
+}
 
 /** Cell start ticks and the bar each cell is in, for a zoom. */
 export function tapeCells(
@@ -118,23 +162,36 @@ export function tapeView(input: TapeViewInput): TapeView {
   const { starts, bars } = tapeCells(score, input.zoom);
   const end = barStartTick(score, score.bars);
   const tick = Math.max(0, Math.round(input.beat * score.ticksPerBeat));
-  const playheadCell = Math.max(0, cellAt(starts, Math.min(end - 1, tick)));
+  const scoreHead = Math.max(0, cellAt(starts, Math.min(end - 1, tick)));
+  const unrolled = unroll(score, bars);
+  // The pass under the transport, so the playhead walks through ghosts.
+  const pass =
+    unrolled && input.transportBeat !== undefined
+      ? formPositionAt(score, input.transportBeat).index
+      : undefined;
+  const inPass = unrolled?.findIndex(
+    (item) =>
+      item.cell === scoreHead && (pass === undefined || item.segment === pass),
+  );
+  const playheadCell = unrolled
+    ? Math.max(
+        0,
+        inPass !== undefined && inPass >= 0
+          ? inPass
+          : unrolled.findIndex((item) => item.cell === scoreHead),
+      )
+    : scoreHead;
   // A section the form plays more than once shows `×N` after its name.
-  const passes = new Map<string, number>();
-  if (score.form.length > 0)
-    for (const segment of formSegments(score))
-      passes.set(
-        segment.section.name,
-        (passes.get(segment.section.name) ?? 0) + 1,
-      );
-  const sections: TapeSection[] = score.sections.map((section) => {
-    const times = passes.get(section.name) ?? 1;
-    return {
-      name: times > 1 ? `${section.name} ×${times}` : section.name,
-      startBar: section.startBar,
-      bars: section.bars,
-    };
-  });
+  const passes = formPasses(score);
+  const named = (name: string): string => {
+    const times = passes.get(name) ?? 1;
+    return times > 1 ? `${name} ×${times}` : name;
+  };
+  const sections: TapeSection[] = score.sections.map((section) => ({
+    name: named(section.name),
+    startBar: section.startBar,
+    bars: section.bars,
+  }));
   const loopSection =
     score.loop === undefined && score.loopSection !== undefined
       ? sections.find((section) => section.name.startsWith(score.loopSection!))
@@ -143,20 +200,41 @@ export function tapeView(input: TapeViewInput): TapeView {
   const tempo = [...(score.time?.tempo ?? [])]
     .filter((event) => event.tick > 0 && event.tick < end)
     .sort((a, b) => a.tick - b.tick);
+  const pick = <T>(values: readonly T[]): T[] =>
+    unrolled ? unrolled.map((item) => values[item.cell]!) : [...values];
   const rows: TapeRow[] = score.tracks.map((track) => ({
     id: track.id,
     name: track.name,
     muted: track.muted,
-    levels: trackLevels(score, track.id, starts, end),
+    levels: pick(trackLevels(score, track.id, starts, end)),
     marks: input.marks(track.id).trim(),
   }));
+  // Tempo marks land on the cell their tick starts (the first pass).
+  const tempoCell = (at: number): number => {
+    const cell = Math.max(0, cellAt(starts, at));
+    return unrolled
+      ? Math.max(
+          0,
+          unrolled.findIndex((item) => item.cell === cell),
+        )
+      : cell;
+  };
   const focused = Math.max(
     0,
     score.tracks.findIndex((track) => track.id === input.trackId),
   );
   return {
     bars: score.bars,
-    cellBars: bars,
+    cellBars: pick(bars),
+    ...(unrolled
+      ? {
+          ghosts: unrolled.map((item) => item.ghost),
+          passes: unrolled.map((item) => item.segment),
+          passNames: formSegments(score).map((segment) =>
+            named(segment.section.name),
+          ),
+        }
+      : {}),
     playheadCell,
     loop: loopRange(score),
     sections,
@@ -166,7 +244,7 @@ export function tapeView(input: TapeViewInput): TapeView {
         ? [
             { cell: 0, bpm: Math.round(score.tempoBpm) },
             ...tempo.map((event) => ({
-              cell: Math.max(0, cellAt(starts, event.tick)),
+              cell: tempoCell(event.tick),
               bpm: Math.round(event.bpm),
             })),
           ]

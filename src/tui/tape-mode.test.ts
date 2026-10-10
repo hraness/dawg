@@ -11,6 +11,7 @@ import {
   cutArmed,
   foldBase,
   focusCommand,
+  formRepeat,
   rangeLine,
   tapeKey,
   tapeKnobs,
@@ -21,7 +22,10 @@ import { tapeCells, tapeView } from "./tape-view.ts";
 
 const BAR = 4 * 480;
 
-function song(loop?: { startBar: number; bars: number }): TrackScore {
+function song(
+  loop?: { startBar: number; bars: number },
+  form?: readonly { section: string; repeat?: number }[],
+): TrackScore {
   return createScore({
     bars: 8,
     tracks: [
@@ -41,6 +45,7 @@ function song(loop?: { startBar: number; bars: number }): TrackScore {
       { name: "chorus", startBar: 4, bars: 4 },
     ],
     ...(loop ? { loop } : {}),
+    ...(form ? { form } : {}),
   });
 }
 
@@ -222,5 +227,54 @@ describe("cut then paste", () => {
     const base = foldBase(before, moved);
     expect(base.notes).toEqual(before.notes);
     expect(base.loop).toEqual({ startBar: 4, bars: 2 });
+  });
+});
+
+describe("form on the tape", () => {
+  const formed = (): TrackScore =>
+    song(undefined, [{ section: "verse" }, { section: "chorus", repeat: 2 }]);
+
+  test("editing a repeated section says it plays twice", () => {
+    const score = formed();
+    expect(formRepeat(score, 5)).toBe("edits chorus (plays 2×)");
+    expect(formRepeat(score, 1)).toBeUndefined();
+    expect(formRepeat(song(), 5)).toBeUndefined();
+    expect(rangeLine(context({ score }))).toBe(
+      "range: bass · bars 5–8 (chorus) · edits chorus (plays 2×)",
+    );
+  });
+
+  test("the view unrolls the form; the second pass is a ghost of bars 5-8", () => {
+    const score = formed();
+    const base = { ...context({ score, beat: 17 }), zoom: "bar" as const };
+    const view = tapeView({ ...base, selected: 0, marks: () => "" });
+    expect(view.cellBars).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 4, 5, 6, 7]);
+    expect(view.ghosts).toEqual([
+      ...Array(8).fill(false),
+      ...Array(4).fill(true),
+    ]);
+    expect(view.passNames).toEqual(["verse", "chorus ×2", "chorus ×2"]);
+    // Without a transport beat the playhead sits on the first pass…
+    expect(view.playheadCell).toBe(4);
+    // …and on the second pass when the transport is there (beat 33 = bar 9).
+    const later = tapeView({
+      ...base,
+      selected: 0,
+      marks: () => "",
+      transportBeat: 33,
+    });
+    expect(later.playheadCell).toBe(8);
+  });
+
+  test("bars the form never plays stay on the tape, after it", () => {
+    const score = song(undefined, [{ section: "chorus", repeat: 2 }]);
+    const view = tapeView({
+      ...context({ score }),
+      zoom: "bar",
+      selected: 0,
+      marks: () => "",
+    });
+    expect(view.cellBars).toEqual([4, 5, 6, 7, 4, 5, 6, 7, 0, 1, 2, 3]);
+    expect(view.passes?.slice(-4)).toEqual([-1, -1, -1, -1]);
   });
 });

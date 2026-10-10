@@ -86,7 +86,14 @@ export const KNOB_MAPS: Readonly<Record<string, KnobMap>> = Object.freeze({
     "sound/sample:*/speed",
     "mix/volume",
   ],
-  "sound:kit": [undefined, undefined, "effects/filter/cutoff", "mix/volume"],
+  // A kit has no voice params: blue loosens the timing, green the room it
+  // plays in, white its tone.
+  "sound:kit": [
+    "sound/performance/humanize timing (ms)",
+    "effects/reverb/mix",
+    "effects/filter/cutoff",
+    "mix/volume",
+  ],
   // The mixer page: this track's pan, reverb send, tone and level.
   mix: ["mix/pan", "effects/reverb/mix", "effects/filter/cutoff", "mix/volume"],
   master: [
