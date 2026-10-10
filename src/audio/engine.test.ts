@@ -96,6 +96,7 @@ describe("backend detection", () => {
     expect(
       detectAudioBackend({
         env: {},
+        native: false,
         which: which(["ffplay", "play", "afplay"]),
         platform: "darwin",
       }),
@@ -103,6 +104,7 @@ describe("backend detection", () => {
     expect(
       detectAudioBackend({
         env: {},
+        native: false,
         which: which(["play", "afplay"]),
         platform: "darwin",
       }),
@@ -110,19 +112,25 @@ describe("backend detection", () => {
     expect(
       detectAudioBackend({
         env: {},
+        native: false,
         which: which(["afplay"]),
         platform: "darwin",
       }),
     ).toMatchObject({ backend: "afplay", streaming: false });
     expect(
-      detectAudioBackend({ env: {}, which: which([]), platform: "linux" })
-        .backend,
+      detectAudioBackend({
+        env: {},
+        native: false,
+        which: which([]),
+        platform: "linux",
+      }).backend,
     ).toBe("none");
   });
 
   test("streams raw s16le stereo at the render rate", () => {
     const ffplay = detectAudioBackend({
       env: {},
+      native: false,
       which: which(["ffplay"]),
       sampleRate: 22_050,
     });
@@ -131,6 +139,7 @@ describe("backend detection", () => {
     expect(ffplay.command!.at(-1)).toBe("-");
     const sox = detectAudioBackend({
       env: {},
+      native: false,
       which: which(["play"]),
       sampleRate: 22_050,
     });

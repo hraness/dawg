@@ -94,6 +94,10 @@ export interface LiveEngine {
   readonly sampleRate: number;
   readonly canMonitor: boolean;
   readonly leadMs: number;
+  /** The lead play mode pins (15 ms on the native sink, else 60 ms). */
+  readonly playLeadMs?: number;
+  /** How play mode sounds (`native sink`, `ffplay · no native sink`). */
+  readonly audioNote?: string;
   monitor(on: boolean): Promise<void>;
   setLeadMs(ms: number | undefined): void;
   noteOn(id: number, note: LiveNotePcm): number;
@@ -339,10 +343,12 @@ export class PlaySession {
     this.active = true;
     const engine = this.host.engine();
     if (engine?.canMonitor) {
-      engine.setLeadMs(PLAY_LEAD_MS);
+      engine.setLeadMs(engine.playLeadMs ?? PLAY_LEAD_MS);
       // The voice's tables and loops are built now, not on the first key.
       warmLive(this.host.score(), this.trackId, engine.sampleRate);
       await engine.monitor(true);
+      if (engine.audioNote)
+        this.status = `${engine.audioNote} · ${Math.round(engine.leadMs)} ms lead`;
     } else this.status = "no audio · keys still record";
     this.applyClick();
   }

@@ -116,7 +116,9 @@ Calibration loop 1.91 ms.
 ### Reading it
 
 - **Keys** are already quick: about 65 ms key → scheduled audio, of which
-  60 ms is play mode's fixed queue lead (`PLAY_LEAD_MS`). Rendering the note
+  60 ms is play mode's fixed queue lead (`PLAY_LEAD_MS`). This baseline is
+  the stdin-player path. The native sink cuts the lead to 15 ms; see heard
+  latency below. Rendering the note
   costs 1–30 ms and runs off the main thread.
 - **Typed commands** reach the screen in about 50 ms but are heard about
   230 ms later: the edit re-renders the loop off-thread and swaps it in for
@@ -129,9 +131,56 @@ Calibration loop 1.91 ms.
   time, but an edit to an eight-bar vocoder loop waits well over a second
   before it is heard.
 
+## Heard latency (loopback)
+
+The PTY rows above stop at the time the engine scheduled a sound. The
+loopback bench measures what a listener actually waits for: key → engine →
+player → device → speaker.
+
+```sh
+DAWG_SINK_LIB=native/sink/target/release/libdawg_sink.dylib \
+  bun bench/sink-latency.ts native 40      # or ffplay, sox
+```
+
+The engine plays 10 ms clicks into a loopback output (BlackHole 2ch on
+macOS) and the native sink captures the same device's input. The clock starts
+right before `engine.noteOn`, where a keypress hands over its rendered note,
+and stops at the click's onset in the capture. That onset frame is mapped to
+host time with the sink's per-buffer input timestamps. Synth render time is
+excluded; it is the `live.*` rows above. The native sink plays to the device
+by name. ffplay has no device option, so for its runs the macOS default output
+was switched to BlackHole and then switched back.
+
+Apple M-series, macOS, bun 1.3.14, engine at 22.05 kHz, device at 48 kHz:
+
+| backend                                               | heard p50 |   p90 |   min–max |    notes heard |
+| ----------------------------------------------------- | --------: | ----: | --------: | -------------: |
+| ffplay (stdin pipe, 60 ms lead, 20 ms pump)           |  78–89 ms | 87–98 |     67–99 |    57% (17/30) |
+| native sink (15 ms lead, 5 ms pump, 128-frame buffer) |   17.0 ms |  20.0 | 13.7–21.1 | 100% (110/110) |
+| native sink, `DAWG_PLAY_LEAD_MS=8`                    |    6.4 ms |   9.1 |   3.4–9.7 |   100% (60/60) |
+
+- **ffplay** adds 20 to 40 ms on top of its 60 ms lead, and its onsets
+  spread over a 20 ms pump tick. ffplay also dropped about 4 in 10 of the
+  short clicks. The engine's pipe stream had all of them: the same run
+  written to a file instead of ffplay contained 20 out of 20. At a 48 kHz
+  engine rate ffplay dropped none, but its heard latency rose to about
+  230 ms because SDL's buffer grows with the rate.
+- **The native sink** is the 15 ms lead, plus up to 2.7 ms of device buffer,
+  plus the device's output latency (2.7 ms on BlackHole). It has no pipe and
+  no player buffer, and its pump runs every 5 ms. The MacBook Pro speakers
+  report 4.9 ms of output latency instead of BlackHole's 2.7 ms, so on the
+  built-in speakers expect about 19 ms. The underrun counter stayed at 0
+  throughout.
+- **The lead is the remaining knob.** It has to cover the 5 ms pump plus
+  event-loop jitter; Bun's timer is under 1 ms late at p99 (see the language
+  assessment). At 8 ms there were still no underruns in these runs. The
+  default stays at 15 ms to leave margin for GC pauses and busy machines.
+  `dawg doctor` prints the lead in use.
+
 ## Changes
 
 Each row: what changed, which metrics moved, and the PR.
 
-| change | metric | before | after | PR  |
-| ------ | ------ | -----: | ----: | --- |
+| change                                                     | metric                    |            before |   after | PR           |
+| ---------------------------------------------------------- | ------------------------- | ----------------: | ------: | ------------ |
+| native sink backend (cpal callback, 15 ms lead, 5 ms pump) | key → heard, loopback p50 | 78–89 ms (ffplay) | 17.0 ms | sink backend |
