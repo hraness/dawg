@@ -195,7 +195,7 @@ export default async function Home() {
         >
           <p>
             The main view is a piano roll turned on its side. Every track
-            scrolls down to the hit line in its own colour, with the focused
+            scrolls down to the hit line in its own color, with the focused
             track bright, sustains stretched across beats and a lane per drum
             voice. The prompt stays live underneath, so you edit while the loop
             plays.
@@ -255,8 +255,8 @@ export default async function Home() {
         >
           <p>
             The knobs drawer puts four parameters of the focused track on four
-            coloured, shaped knobs (● ▲ ■ ◆). ↑↓ picks one, ←→ turns it. The
-            same drawer turns the mix, the master, tempo or any effect.
+            colored, shaped knobs (● ▲ ■ ◆). ↑↓ picks one, ←→ turns it. The same
+            drawer turns the mix, the master, tempo or any effect.
           </p>
           <p>
             Instruments include synths, wavetables, pianos and electric keys,
@@ -322,9 +322,9 @@ export default async function Home() {
           </p>
           <p>
             It edits only through typed tools. Each call is validated and
-            dry-run against the score before it commits as its own revision,
-            so Ctrl-Z removes exactly that change. Esc stops a turn and keeps
-            what landed.
+            dry-run against the score before it commits as its own revision, so
+            Ctrl-Z removes exactly that change. Esc stops a turn and keeps what
+            landed.
           </p>
           <p>
             Bring a Vercel AI Gateway or OpenRouter key, or a ChatGPT/Codex or
@@ -342,10 +342,10 @@ export default async function Home() {
           screens={["panes"]}
         >
           <p>
-            Open the same song in more terminals: one plays, one shows TAPE,
-            one the knobs. A small local daemon, <code>dawgd</code>, keeps one
-            score and one transport for all of them. Each pane has a letter and
-            its own undo; <code>follow b</code> mirrors pane B.
+            Open the same song in more terminals: one plays, one shows TAPE, one
+            the knobs. A small local daemon, <code>dawgd</code>, keeps one score
+            and one transport for all of them. Each pane has a letter and its
+            own undo; <code>follow b</code> mirrors pane B.
           </p>
           <p>
             Every edit is written to disk before any window sees it, so a
@@ -364,8 +364,8 @@ export default async function Home() {
             <code>dawg init</code> writes <code>song.ts</code> and one{" "}
             <code>tracks/&lt;slug&gt;/track.ts</code> per track. Edit them in
             any editor, or let the agent, and every open window applies the
-            change as one undo step. Edit in the TUI and the file is
-            reprinted. <code>dawg check</code> typechecks the project.
+            change as one undo step. Edit in the TUI and the file is reprinted.{" "}
+            <code>dawg check</code> typechecks the project.
           </p>
           <CodeBlock code={projectCode} />
         </Feature>

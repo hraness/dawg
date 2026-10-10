@@ -48,11 +48,11 @@ export function loadScreen(id: string): ScreenFile {
 
 function rgb(value: string): [number, number, number] {
   const m = value.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/u);
-  if (m === null) throw new Error(`bad colour "${value}"`);
+  if (m === null) throw new Error(`bad color "${value}"`);
   return [Number(m[1]), Number(m[2]), Number(m[3])];
 }
 
-/** SGR 2 as a terminal shows it: the colour halfway to the background. */
+/** SGR 2 as a terminal shows it: the color halfway to the background. */
 function dimmed(fg: string, bg: string): string {
   const [a, b] = [rgb(fg), rgb(bg)];
   return `rgb(${a.map((v, i) => Math.round((v + b[i]!) / 2)).join(",")})`;
@@ -76,7 +76,12 @@ export function cellStyle(style: ScreenStyle): CSSProperties {
 /** The screen's text, one row per line, for alt text and tests. */
 export function screenText(screen: ScreenFile): string {
   return screen.lines
-    .map((row) => row.map(([text]) => text).join("").trimEnd())
+    .map((row) =>
+      row
+        .map(([text]) => text)
+        .join("")
+        .trimEnd(),
+    )
     .join("\n");
 }
 

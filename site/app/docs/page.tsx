@@ -43,9 +43,9 @@ export default async function DocsInstall() {
       </p>
       <CodeBlock code="$ dawg" />
       <p>
-        Commands, playing and rendering work offline with no account. To ask
-        the agent, give it a model once: an AI Gateway key, OpenRouter, or a
-        Claude or ChatGPT/Codex subscription.
+        Commands, playing and rendering work offline with no account. To ask the
+        agent, give it a model once: an AI Gateway key, OpenRouter, or a Claude
+        or ChatGPT/Codex subscription.
       </p>
       <CodeBlock code="$ dawg model key" />
       {first === undefined ? null : (
