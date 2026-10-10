@@ -5,6 +5,7 @@ import {
   detentSnap,
   detentsFor,
   drawerView,
+  faderCommand,
   stagedBadge,
   faderKeyPress,
   faderPosition,
@@ -16,6 +17,7 @@ import {
   type FaderState,
 } from "./fader.ts";
 import { EditMenu, type MenuContext } from "./menu.ts";
+import { fitHint } from "../../tui/grammar.ts";
 
 const mix: FaderNumber = {
   kind: "number",
@@ -371,5 +373,30 @@ describe("fader detents", () => {
       dirty: true,
     });
     expect(view.badge).toBe("A/B: 1 change staged · enter keep · esc revert");
+  });
+
+  test("the hint keeps enter keep and x reset at 80 columns", () => {
+    const view = drawerView({ label: "mix" }, [mix], [mix], {
+      title: "t",
+      dirty: false,
+    });
+    // The drawer fits its hint into the width less its frame (tui/drawer.ts).
+    const fitted = fitHint(view.hint, 80 - 6);
+    for (const part of ["←→ adjust", "enter keep", "x reset", "esc revert"])
+      expect(fitted).toContain(part);
+  });
+
+  test("a field that cannot stage says it applies at once", () => {
+    expect(faderCommand(mix)).toBe("fx reverb mix 0.5");
+    const view = drawerView({ label: "mix" }, [mix], [mix], {
+      title: "t",
+      dirty: false,
+      atOnce: true,
+    });
+    const fitted = fitHint(view.hint, 80 - 6);
+    expect(fitted).toContain("applies at once");
+    expect(fitted).not.toContain("enter keep");
+    expect(fitted).not.toContain("esc revert");
+    expect(fitted).toContain("x reset");
   });
 });

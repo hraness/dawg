@@ -261,7 +261,7 @@ export const KEYS = {
     {
       title: "fader drawer",
       rows: [
-        ["← →  h l  - +", "step the value (staged, heard on the loop)"],
+        ["← →  h l  - +", "step (staged; tempo, meter, length apply at once)"],
         ["shift-← shift-→  { }", "coarse step (five)"],
         ["[ ]  alt-← alt-→", "fine step (a tenth; skips detents)"],
         ["pgup pgdn", "big step (twenty)"],

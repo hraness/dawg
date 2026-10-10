@@ -307,6 +307,7 @@ import {
 import {
   drawerView,
   faderChoose,
+  faderCommand,
   faderKeyPress,
   faderSetPosition,
   faderStep,
@@ -4446,12 +4447,17 @@ function refreshMenu(): void {
   if (fader) {
     const fields = menu.faderFields(context);
     if (fields.length === 0) closeFader();
-    else
+    else {
+      const focusedField = fields[focusIndex(fader, fields)];
       tui.drawer = drawerView(fader, fields, menu.faderCommitted(context), {
         title: menu.crumbs,
         dirty: context.audition?.dirty ?? false,
         status: context.audition?.status,
+        atOnce:
+          focusedField !== undefined &&
+          !stageableNow(faderCommand(focusedField)),
       });
+    }
   }
   const view = menu.view(context);
   tui.openPicker({

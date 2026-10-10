@@ -477,8 +477,25 @@ export function faderChoose(
   return setChoice(field, option);
 }
 
-const HINT =
-  "←→ adjust · ⇧←→ coarse · [ ] fine · ↑↓ param · 0-9 type · x reset · enter keep · esc revert";
+/**
+ * Most important first: fitHint trims the middle from the right, so at 80
+ * columns the coarse and fine steps go before `enter keep` or `x reset`.
+ */
+export const FADER_HINT =
+  "←→ adjust · enter keep · x reset · 0-9 type · ↑↓ param · ⇧←→ coarse · [ ] fine · esc revert";
+
+/**
+ * The hint for a field the loop cannot stage (tempo, meter, loop length):
+ * each step is a new revision, so there is nothing to keep or revert.
+ */
+export const FADER_HINT_AT_ONCE =
+  "←→ adjust · applies at once · x reset · 0-9 type · ↑↓ param · ⇧←→ coarse · [ ] fine · esc back";
+
+/** The value a field's next step starts from (for checking what it runs). */
+export function faderCommand(field: FaderSpec): string {
+  if (field.kind === "choice") return field.command(field.value);
+  return field.command(field.value ?? field.start ?? field.min);
+}
 
 /** The drawer's paint model for `fields` (staged) beside `committed`. */
 export function drawerView(
@@ -492,6 +509,8 @@ export function drawerView(
     staged?: number | undefined;
     status?: string | undefined;
     hint?: string;
+    /** The focused field applies at once (cannot stage on the loop). */
+    atOnce?: boolean | undefined;
   },
 ): DrawerView {
   const before = new Map(committed.map((field) => [field.label, field]));
@@ -557,7 +576,7 @@ export function drawerView(
     dirty: options.dirty,
     badge: options.dirty ? stagedBadge(staged) : undefined,
     status: options.status,
-    hint: options.hint ?? HINT,
+    hint: options.hint ?? (options.atOnce ? FADER_HINT_AT_ONCE : FADER_HINT),
   };
 }
 
