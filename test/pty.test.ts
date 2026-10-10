@@ -118,12 +118,12 @@ test.skipIf(!supported)(
     await t.until(() => t.vt.text().includes(" NOW "), "now pill");
 
     // Resize keeps the draft and reflows.
-    t.terminal.resize(40, 20);
-    t.vt.resize(40, 20);
+    t.terminal.resize(60, 20);
+    t.vt.resize(60, 20);
     await Bun.sleep(150);
     await t.send("\u000c"); // Ctrl+L forces a full redraw
     await t.until(() => t.vt.text().includes("swing"), "draft after resize");
-    expect(t.vt.cells.every((row) => row.length === 40)).toBe(true);
+    expect(t.vt.cells.every((row) => row.length === 60)).toBe(true);
 
     // Clear the draft (Esc), then undo with Ctrl+Z.
     await t.send("\u001b");

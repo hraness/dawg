@@ -5,7 +5,7 @@
  */
 import { expect, test } from "bun:test";
 import { TuiApp, type AppView } from "../tui/app.ts";
-import type { DrawerView } from "../tui/drawer.ts";
+import { drawerLayout, type DrawerView } from "../tui/drawer.ts";
 import type { TrackScoreSnapshot } from "../tui/highway.ts";
 import { VirtualTerminal } from "./vt.ts";
 
@@ -137,11 +137,17 @@ test("many params collapse to one row per field, windowed on the focus", () => {
   expect(paint(120, 40, many).app.frame!.drawer!.mode).toBe("full");
 });
 
-test("the 8-row minimum keeps a single borderless fader row", () => {
-  const { app, lines } = paint(40, 8, filter);
-  const drawer = app.frame!.drawer;
-  expect(drawer?.mode).toBe("line");
-  expect(lines[drawer!.top]).toContain("cutoff");
+test("a short highway keeps a single borderless fader row", () => {
+  // The 60x16 minimum always leaves room for a bordered drawer; the line
+  // mode is for a highway squeezed by a tall prompt or an overlay.
+  const line = drawerLayout(filter, { y: 2, height: 5 });
+  expect(line.mode).toBe("line");
+  expect(line.bordered).toBe(false);
+  expect(line.top).toBe(6);
+  const { app, lines } = paint(60, 16, filter);
+  const drawer = app.frame!.drawer!;
+  expect(drawer.mode).not.toBe("line");
+  expect(lines.join("\n")).toContain("cutoff");
 });
 
 test("click targets come from the paint pass", () => {

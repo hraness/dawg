@@ -99,8 +99,8 @@ test("property: every arrow press after any key sequence moves or is at a bound"
   const random = lcg(0x5eed);
   const keys = [UP, DOWN, HOME, END, PGUP, PGDN];
   for (let round = 0; round < 30; round += 1) {
-    const cols = 40 + Math.floor(random() * 120);
-    const rows = 14 + Math.floor(random() * 50);
+    const cols = 60 + Math.floor(random() * 100);
+    const rows = 16 + Math.floor(random() * 48);
     const count = 1 + Math.floor(random() * 120);
     const h = harness(cols, rows);
     const log = random() < 0.5;
