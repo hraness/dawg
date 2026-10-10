@@ -56,6 +56,7 @@ import {
   type LiveNotePcm,
 } from "../audio/live.ts";
 import type { SampleBank } from "../audio/samples.ts";
+import { loopedSection } from "../audio/arrange.ts";
 import { fitting, onFitReady } from "../audio/fit.ts";
 import {
   DEFAULT_STRUM,
@@ -140,6 +141,12 @@ export interface PlayHost {
   startTransport(beat: number): Promise<void>;
   stopTransport(): Promise<void>;
   card(text: string, tone: "info" | "success" | "warning" | "error"): void;
+  /**
+   * Another pane recording on `trackId` (§12.4): its name (`pane B`), else
+   * undefined. A replace pass refuses while one is, since it would erase
+   * the other pane's notes.
+   */
+  recordingElsewhere?(trackId: string): string | undefined;
   /** A played key that is not recorded: the screen glows its lane. */
   ghost?(pitch: number): void;
   newNoteId(): string;
@@ -273,6 +280,10 @@ export class PlaySession {
   /** Live pedal state as the playhead entered each loop bar (replace). */
   private readonly barPedal = new Map<number, PedalState>();
   private lastBar: number | undefined;
+  /** Loop recording: the pass (loop wrap) the playhead is in. */
+  private lastPass: number | undefined;
+  /** Passes committed this take (the header's `pass N`). */
+  private passCount = 0;
   private countIn: CountIn | undefined;
   private flushing: Promise<void> = Promise.resolve();
   /** Most recent key-to-sound schedule, ms (lead before device latency). */
@@ -472,6 +483,54 @@ export class PlaySession {
     return `grid · ${match.label}`;
   }
 
+  /**
+   * `keys record [replace|off]` and the r / R keys: arm recording, overdub
+   * (additive) or replace (each pass erases the bars it crossed). With a
+   * loop set, every pass over it is one commit, so one undo step (§4.7).
+   * Replace refuses while another pane records this track (§12.4).
+   */
+  public recordCommand(
+    mode: "overdub" | "replace" | "off",
+  ): Readonly<{ ok: boolean; message: string }> {
+    if (mode === "off") {
+      const was = this.armed;
+      this.armed = false;
+      this.replace = false;
+      if (was) void this.stopRecording();
+      this.status = "record off";
+      return { ok: true, message: "record off" };
+    }
+    if (mode === "replace") {
+      const other = this.host.recordingElsewhere?.(this.trackId);
+      if (other) {
+        const message = `${other} is recording ${this.trackName()} · overdub instead (r)`;
+        this.status = `✗ ${message}`;
+        return { ok: false, message };
+      }
+    }
+    this.replace = mode === "replace";
+    this.armed = true;
+    const message = `record ${this.replace ? "replace" : "overdub"} · ${this.trackName()} · ${this.passWord()}`;
+    this.status = this.replace
+      ? "replace · each pass overwrites its bars"
+      : "overdub";
+    return { ok: true, message };
+  }
+
+  private trackName(): string {
+    return this.trackData()?.name ?? this.trackId;
+  }
+
+  /** `loop 5–6 · one undo step a pass`, or `one undo step a bar`. */
+  private passWord(): string {
+    const loop = loopedSection(this.host.score());
+    if (!loop) return "one undo step a bar";
+    const last = loop.startBar + loop.bars;
+    const bars =
+      loop.bars === 1 ? `${loop.startBar + 1}` : `${loop.startBar + 1}–${last}`;
+    return `loop ${bars} · one undo step a pass`;
+  }
+
   /** Handle one decoded key; mode commands return to the caller. */
   public press(value: string): PlayKeyResult {
     const now = this.host.now();
@@ -604,15 +663,12 @@ export class PlaySession {
 
   private command(command: PlayCommand): PlayKeyResult {
     if (command === "record") {
-      this.armed = !this.armed;
-      if (!this.armed) void this.stopRecording();
-      this.status = this.armed ? "record armed" : "record off";
+      this.recordCommand(this.armed ? "off" : "overdub");
       return { type: "handled" };
     }
     if (command === "replace") {
-      this.replace = !this.replace;
-      this.armed = true;
-      this.status = this.replace ? "replace · bars are overwritten" : "overdub";
+      const result = this.recordCommand(this.replace ? "overdub" : "replace");
+      if (!result.ok) this.host.card(result.message, "error");
       return { type: "handled" };
     }
     if (command === "click") {
@@ -996,25 +1052,50 @@ export class PlaySession {
       if (this.pending.size > 0 || this.replaceBars.size > 0)
         void this.stopRecording();
       this.lastBar = undefined;
+      this.lastPass = undefined;
       return;
     }
     const score = this.host.score();
     const bar = transportBar(score, this.host.beatAt(now));
     if (bar !== this.lastBar)
       this.barPedal.set(this.loopBar(bar), this.pedalDown ? "down" : "up");
+    // With a loop set, a take commits once per pass (each wrap), so one
+    // pass is one undo step; without one, once per bar (§4.7).
+    const loop = loopedSection(score);
+    const pass = loop ? Math.floor(bar / loop.bars) : undefined;
     if (this.lastBar !== undefined && bar !== this.lastBar) {
+      // Every bar the playhead left (a slow frame can skip one).
       if (this.replace)
-        this.replaceBars.add(
-          this.loopBar(
-            Math.floor(
-              this.toScoreBeat(this.lastBar * score.beatsPerBar) /
-                score.beatsPerBar,
+        for (
+          let left = this.lastBar;
+          left < bar && left < this.lastBar + 256;
+          left += 1
+        )
+          this.replaceBars.add(
+            this.loopBar(
+              Math.floor(
+                this.toScoreBeat(left * score.beatsPerBar) / score.beatsPerBar,
+              ),
             ),
-          ),
-        );
-      this.queueFlush(bar, now, false);
+          );
+      if (pass === undefined) this.queueFlush(bar, now, false);
+      else if (this.lastPass !== undefined && pass !== this.lastPass)
+        this.queueFlush(bar, now, false, true);
     }
     this.lastBar = bar;
+    this.lastPass = pass;
+  }
+
+  /** `↻ 5–6 · pass 3` while loop recording; undefined otherwise. */
+  public passLabel(): string | undefined {
+    if (!this.recording) return undefined;
+    const loop = loopedSection(this.host.score());
+    if (!loop) return undefined;
+    const bars =
+      loop.bars === 1
+        ? `${loop.startBar + 1}`
+        : `${loop.startBar + 1}–${loop.startBar + loop.bars}`;
+    return `↻ ${bars} · pass ${this.passCount + 1}`;
   }
 
   private toScoreBeat(beat: number): number {
@@ -1033,15 +1114,27 @@ export class PlaySession {
     if (this.pedalDown && this.host.playing())
       this.pendingPedal.push({ beat: this.host.beatAt(now), state: "up" });
     this.pedalDown = false;
-    this.queueFlush(Number.POSITIVE_INFINITY, now, true);
+    this.queueFlush(
+      Number.POSITIVE_INFINITY,
+      now,
+      true,
+      loopedSection(this.host.score()) !== undefined,
+    );
     await this.flushing;
     this.recordedIds.clear();
     this.lastBar = undefined;
+    this.lastPass = undefined;
+    this.passCount = 0;
   }
 
-  private queueFlush(currentBar: number, now: number, all: boolean): void {
+  private queueFlush(
+    currentBar: number,
+    now: number,
+    all: boolean,
+    pass = false,
+  ): void {
     this.flushing = this.flushing
-      .then(() => this.flush(currentBar, now, all))
+      .then(() => this.flush(currentBar, now, all, pass))
       .catch((error: unknown) =>
         this.host.card(
           `record failed · ${error instanceof Error ? error.message : String(error)}`,
@@ -1058,6 +1151,7 @@ export class PlaySession {
     currentBar: number,
     now: number,
     all: boolean,
+    pass = false,
   ): Promise<void> {
     const score = this.host.score();
     const ready: Pending[] = [];
@@ -1074,12 +1168,39 @@ export class PlaySession {
     this.pendingPedal = this.pendingPedal.filter(
       (event) => !pedal.includes(event),
     );
-    if (ready.length === 0 && erase.length === 0 && pedal.length === 0) return;
+    if (pass) this.passCount += 1;
+    // §12.4: a replace pass never erases while another pane records this
+    // track; its notes still land, as an overdub.
+    const other =
+      erase.length > 0
+        ? this.host.recordingElsewhere?.(this.trackId)
+        : undefined;
+    if (other) {
+      erase.length = 0;
+      this.host.card(
+        `${other} is recording ${this.trackName()} · pass kept as overdub`,
+        "warning",
+      );
+    }
+    if (ready.length === 0 && erase.length === 0 && pedal.length === 0) {
+      if (pass) this.recordedIds.clear();
+      return;
+    }
     const eraseStates = new Map(
       erase.map((bar) => [bar, this.barPedal.get(bar) ?? "up"] as const),
     );
     try {
-      await this.commitTake(score, ready, erase, eraseStates, pedal, now);
+      await this.commitTake(
+        score,
+        ready,
+        erase,
+        eraseStates,
+        pedal,
+        now,
+        pass ? this.passCount : undefined,
+      );
+      // The next pass may replace this one's notes: forget them.
+      if (pass) this.recordedIds.clear();
     } catch (error) {
       // Nothing was committed: keep the take so the next flush retries it.
       for (const pending of ready) this.pending.set(pending.id, pending);
@@ -1096,6 +1217,7 @@ export class PlaySession {
     eraseStates: ReadonlyMap<number, PedalState>,
     pedal: readonly { beat: number; state: PedalState }[],
     now: number,
+    pass?: number,
   ): Promise<void> {
     const operations = recordOperations(score, {
       trackId: this.trackId,
@@ -1150,12 +1272,17 @@ export class PlaySession {
       trackId: this.trackId,
       operations,
       replace: this.replace,
+      ...(pass !== undefined ? { pass } : {}),
     });
     for (const pending of ready) this.pending.delete(pending.id);
     for (const operation of operations)
       if (operation.type === "addNote") this.recordedIds.add(operation.note.id);
+    const head =
+      pass !== undefined
+        ? `pass ${pass} · +${added} note${added === 1 ? "" : "s"}`
+        : `recorded ${added} note${added === 1 ? "" : "s"}`;
     this.host.card(
-      `recorded ${added} note${added === 1 ? "" : "s"}${pedal.length && !pedalNote ? ` · ${pedal.length} pedal` : ""}${removed ? ` · replaced ${removed}` : ""} · ${this.trackId}${pedalNote}`,
+      `${head}${pedal.length && !pedalNote ? ` · ${pedal.length} pedal` : ""}${removed ? ` · replaced ${removed}` : ""} · ${this.trackId}${pedalNote}`,
       pedalNote ? "warning" : "success",
     );
   }
@@ -1219,6 +1346,7 @@ export class PlaySession {
       armed: this.armed,
       recording: this.recording,
       replace: this.replace,
+      pass: this.passLabel(),
       click: this.clickOn,
       sustain: this.keyboard.sustain,
       countIn,

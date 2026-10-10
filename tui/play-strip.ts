@@ -34,6 +34,8 @@ export type PlayHeaderView = Readonly<{
   /** Recording right now (armed and the transport is running). */
   recording: boolean;
   replace: boolean;
+  /** Loop recording: `↻ 5–6 · pass 3`. */
+  pass?: string | undefined;
   click: boolean;
   sustain: boolean;
   /** `count-in 3` while counting in. */
@@ -66,6 +68,11 @@ export function playHeaderText(view: PlayHeaderView, unicode = true): string {
     view.range,
     view.armed
       ? `${unicode ? "●" : "*"} ${view.recording ? "REC" : "rec armed"}${view.replace ? " replace" : ""}`
+      : "",
+    view.pass
+      ? unicode
+        ? view.pass
+        : view.pass.replace("↻", "@").replace("–", "-")
       : "",
     view.click ? "click" : "",
     view.sustain ? "SUSTAIN" : "",
@@ -108,6 +115,11 @@ export function paintPlayHeader(
     put(
       `${unicode ? "●" : "*"} ${view.recording ? "REC" : "rec armed"}${view.replace ? " replace" : ""}`,
       view.recording ? roles.error : roles.warning,
+    );
+  if (view.pass)
+    put(
+      unicode ? view.pass : view.pass.replace("↻", "@").replace("–", "-"),
+      roles.knob2,
     );
   // Velocity, grid and click details live in the `?` panel.
   if (view.click) put("click", roles.success);

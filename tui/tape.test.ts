@@ -222,3 +222,42 @@ describe("paintTape", () => {
     expect(ascii.lines.join("\n")).not.toMatch(/[░▀▅]/);
   });
 });
+
+describe("TAPE delight (op1-ux §9.1, §9.3)", () => {
+  test("the reel sits in the ruler gutter", () => {
+    const { lines } = paint(80, 16, view(16, { reel: "◓" }));
+    expect(lines[0]!.slice(0, 9)).toContain("◓");
+    expect(lines[0]!.slice(0, 9)).toContain("bar");
+  });
+
+  test("a loop flash changes shape, not only colour (mono too)", () => {
+    // Four cells a bar, so the loop's fill shows between its bar numbers.
+    const wide = (extra: Partial<TapeView>) =>
+      view(32, {
+        cellBars: Array.from({ length: 32 }, (_, i) => Math.floor(i / 4)),
+        bars: 8,
+        rows: view(32).rows.map((row) => ({
+          ...row,
+          levels: Array(32).fill(2),
+        })),
+        ...extra,
+      });
+    for (const theme of ["default", "mono"] as const) {
+      const still = paint(80, 16, wide({ playheadCell: 0 }), { theme });
+      const flash = paint(80, 16, wide({ playheadCell: 0, loopFlash: true }), {
+        theme,
+      });
+      expect(still.lines[0]).toContain("═");
+      expect(still.lines[0]).not.toContain("━");
+      expect(flash.lines[0]).toContain("━");
+      const at = flash.lines[0]!.indexOf("[");
+      expect(flash.buffer.get(at, 0)!.style?.reverse).toBe(true);
+      expect(still.buffer.get(at, 0)!.style?.reverse).toBeFalsy();
+    }
+    const ascii = paint(80, 16, wide({ playheadCell: 0, loopFlash: true }), {
+      unicode: false,
+    });
+    expect(ascii.lines[0]).toContain("#");
+    expect(ascii.lines[0]).not.toMatch(/[━═]/);
+  });
+});

@@ -60,7 +60,7 @@ export type TapeAction =
 
 /** The hint row: six gestures, the rest are in `?` (KEYS.tape). */
 export const TAPE_HINT =
-  "c copy · x cut · v paste · \\ loop · s split · 1-9 track · ? keys";
+  "c copy · x cut · v paste · \\ loop · r record · 1-9 track · ? keys";
 
 /** `5-6` or `5`, as typed (1-based, ASCII hyphen). */
 export function typedRange(range: BarRange): string {
@@ -350,6 +350,11 @@ export function tapeKey(context: TapeContext, value: string): TapeAction {
         ? { type: "run", commands: [command] }
         : { type: "note", message: "loop · cannot move its start further" };
     }
+    // §4.7: r / R record the loop in PLAY, one undo step per pass.
+    case "r":
+      return { type: "run", commands: ["keys record"] };
+    case "R":
+      return { type: "run", commands: ["keys record replace"] };
     case "\\": {
       if (loopRange(score)) return { type: "run", commands: ["loop off"] };
       const section = sectionAtBar(score, bar);

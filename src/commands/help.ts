@@ -483,6 +483,10 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "every track across the bars · c copy x cut v paste · ctrl-t",
       },
       {
+        command: "keys record [replace|off]",
+        summary: "record the loop in play · one undo step a pass · r R on tape",
+      },
+      {
         command: "loop <a>-<b> | <section> | next | prev | off",
         summary: "the loop range · loop 5-6 · loop next steps it along",
       },
