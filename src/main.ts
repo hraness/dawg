@@ -2,6 +2,7 @@
 import { TOPIC_ALIASES } from "./lang/glossary.ts";
 import { isGuideInstrument, vocalChainPatch } from "../core/clips.ts";
 import { newId } from "../core/ids.ts";
+import { DiffError, diffScores } from "../core/diff.ts";
 import { currentActor } from "./identity/actor.ts";
 import { isSingWord } from "../core/sing.ts";
 import { commandParses, parseExact } from "./commands/parses.ts";
@@ -2753,7 +2754,9 @@ async function submit(prompt: string): Promise<string | Receipt> {
     if (result.delegate) return submit(result.delegate);
     if (result.clipboard) rangeClipboard = result.clipboard;
     if (result.next && result.kind)
-      await commitScore(result.next, result.kind, result.payload);
+      await commitScore(result.next, result.kind, result.payload, {
+        asOps: true,
+      });
     if (result.seekBeat !== undefined) await seekTransport(result.seekBeat);
     return readOrDone(result);
   }
@@ -2772,7 +2775,12 @@ async function submit(prompt: string): Promise<string | Receipt> {
     if (loop.type === "loop-off") {
       if (score.loop) {
         await materializeDraft();
-        await commitScore(score.withLoop(null), "score.loop", { loop: null });
+        await commitScore(
+          score.withLoop(null),
+          "score.loop",
+          { loop: null },
+          { asOps: true },
+        );
         return ok("loop · off · playing the song");
       }
       return submit("section loop off");
@@ -2782,7 +2790,12 @@ async function submit(prompt: string): Promise<string | Receipt> {
     const result = loopSpan(score, loop.from, loop.to);
     if (!result.ok) return fail(result.message);
     await materializeDraft();
-    await commitScore(result.next, "score.loop", { loop: result.next.loop });
+    await commitScore(
+      result.next,
+      "score.loop",
+      { loop: result.next.loop },
+      { asOps: true },
+    );
     return ok(result.message);
   }
   const arrange = parseSectionCommand(command, score);
@@ -4985,6 +4998,7 @@ async function commitScore(
   next: TrackScore,
   kind: string,
   payload: Record<string, unknown> = {},
+  options: { asOps?: boolean } = {},
 ): Promise<void> {
   if (next === score) return;
   // Rhythm rows regenerate after a loop resize and freeze when their lane
@@ -4998,13 +5012,42 @@ async function commitScore(
     if (retimed) clock.follow(score);
     return;
   }
-  record = await port.append(record, { kind, payload }, next.toJSON());
-  score = next;
+  const operations = options.asOps ? diffOps(score, next) : undefined;
+  if (operations) {
+    // Sent as ops: dawgd rebases them over unrelated edits, and the log
+    // replays as operations rather than whole-score snapshots.
+    record = await port.appendOperations(
+      record,
+      { kind, payload },
+      operations,
+      next.toJSON(),
+    );
+    score = scoreFromJSON(record.composition);
+  } else {
+    record = await port.append(record, { kind, payload }, next.toJSON());
+    score = next;
+  }
   if (retimed) clock.follow(score);
   if (clock.playing) void audio.play(score);
   projectSync?.scoreChanged(score);
   reportSampleProblems(score);
   void updateCredits(score);
+}
+
+/** The ops from `previous` to `next`, or undefined when they do not diff. */
+function diffOps(
+  previous: TrackScore,
+  next: TrackScore,
+): readonly ScoreOperation[] | undefined {
+  try {
+    const operations = diffScores(previous, next);
+    return operations.length > 0 && operations.length <= 256
+      ? operations
+      : undefined;
+  } catch (error) {
+    if (error instanceof DiffError) return undefined;
+    throw error;
+  }
 }
 
 /** True when the transport clock must follow `next` (tempo, meter, loop). */

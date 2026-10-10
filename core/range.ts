@@ -14,6 +14,7 @@
  * - Clear leaves silence; the bars stay. Closing a gap is `deleteBars`.
  * - A paste into bars of a different meter is refused.
  */
+import { newId } from "./ids.ts";
 import { barStartTick, meterSegments, meterLabel } from "./tempo.ts";
 import {
   checkBars,
@@ -232,12 +233,14 @@ export type PlaceOptions = Readonly<{
   target?: string;
 }>;
 
-/** Fresh ids that the score does not use yet. */
+/**
+ * Fresh ids that the score does not use yet, collision-free across actors
+ * (core/ids.ts): two windows copying the same bars at once never clash.
+ */
 function freshIds(used: Set<string>, prefix: string): (stem: string) => string {
   return (stem) => {
-    const base = `${stem.replace(/-r\d+$/u, "").slice(0, SCORE_LIMITS.maxIdLength - 8)}${prefix}`;
-    for (let n = 1; ; n += 1) {
-      const id = `${base}${n}`;
+    for (;;) {
+      const id = newId(prefix);
       if (!used.has(id)) {
         used.add(id);
         return id;
@@ -310,7 +313,7 @@ export function placeRange(
   );
   const targets = new Set(landing.map((entry) => entry.trackId));
   const usedNotes = new Set(next.notes.map((note) => note.id));
-  const noteId = freshIds(usedNotes, "-r");
+  const noteId = freshIds(usedNotes, "n");
   const kept = next.notes.filter(
     (note) =>
       mode === "merge" ||
@@ -332,7 +335,7 @@ export function placeRange(
     const rows = landing.filter((entry) => entry.trackId === track.id);
     if (rows.length === 0) return track;
     const usedClips = new Set((track.clips ?? []).map((clip) => clip.id));
-    const clipId = freshIds(usedClips, "-r");
+    const clipId = freshIds(usedClips, "clip");
     const overwrite = mode !== "merge";
     let clips = (track.clips ?? []).filter(
       (clip) => !overwrite || clip.startTick < from || clip.startTick >= to,

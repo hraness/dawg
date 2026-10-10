@@ -29,21 +29,33 @@ async function session(cwd: string): Promise<SessionScore | undefined> {
     }
   };
   await walk(join(cwd, ".dawg"));
-  let best: { revision: number; score: SessionScore } | undefined;
+  let best:
+    | { revision: number; score: SessionScore; events: SessionEvent[] }
+    | undefined;
   for (const path of found) {
     const text = await readFile(path, "utf8").catch(() => "{}");
     if (!text.includes('"composition"')) continue;
     const parsed = JSON.parse(text) as {
       revision?: number;
       composition?: SessionScore;
+      events?: SessionEvent[];
     };
     if (!parsed.composition?.tracks) continue;
     const revision = parsed.revision ?? 0;
     if (!best || revision >= best.revision)
-      best = { revision, score: parsed.composition };
+      best = {
+        revision,
+        score: parsed.composition,
+        events: parsed.events ?? [],
+      };
   }
+  lastEvents = best?.events ?? [];
   return best?.score;
 }
+
+type SessionEvent = { kind: string; ops?: Record<string, unknown>[] };
+/** The events of the record `session()` last read. */
+let lastEvents: SessionEvent[] = [];
 
 async function waitFor(
   check: () => Promise<boolean>,
@@ -98,6 +110,15 @@ test.skipIf(!supported)(
         "ten bars",
       );
       const grown = (await session(t.cwd))!;
+      // Range edits go to the log as diff ops, not whole-score snapshots.
+      const ranged = lastEvents.filter((event) =>
+        ["score.range", "score.loop"].includes(event.kind),
+      );
+      expect(ranged.length).toBe(3);
+      for (const event of ranged) expect(event.ops?.length).toBeGreaterThan(0);
+      expect(ranged[0]!.ops).toEqual([
+        { type: "setLoop", loop: { startBar: 4, bars: 2 } },
+      ]);
       expect(grown.sections?.[0]).toMatchObject({ startBar: 6, bars: 4 });
       expect(grown.loop).toEqual({ startBar: 6, bars: 2 });
 
