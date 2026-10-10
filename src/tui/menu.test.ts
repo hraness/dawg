@@ -413,7 +413,7 @@ describe("edit menu", () => {
     expect(labels.slice(0, 3)).toEqual(["instrument", "preset", "attack"]);
     expect(labels.at(-5)).toBe("advanced");
     // 0.6: a pitched track can be turned into a grain cloud.
-    expect(labels.at(-4)).toBe("granular (conver");
+    expect(labels.at(-4)).toBe("granular");
     expect(labels.at(-3)).toBe("track tuning");
     // 0.7: voice rows live in the Voice root now.
     expect(labels).not.toContain("Voice");
