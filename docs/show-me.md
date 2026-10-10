@@ -58,7 +58,7 @@ once with the error, for a correction round (`COMMAND_MAX_STEPS` = 4).
 | a parameter value (`volume`, `pan`, `fx <device> <param> <v>`, `synth …`) | the value glides ~150 ms in 30 ms steps through the staged audition path while the loop plays, then commits | the command, or the fader drawer: type the command without a value, or Ctrl-K |
 | a note (`add C4 at 0`)                                                    | the play-mode key and octave keys in the caption; the note sounds on the audition voice in time             | Ctrl-P play mode, the named key                                               |
 | a drum hit or row (`hit kick at 0`, `pattern hat 0 0.5`)                  | the drum key for that voice                                                                                 | Ctrl-P on a kit track                                                         |
-| a groove, style or chords (`/pattern house`, `chords …`)                  | the typed command                                                                                           | the command, or Ctrl-K › Rhythm or Chords and key                             |
+| a groove, style or chords (`/pattern house`, `chords …`)                  | the typed command                                                                                           | the command, or Ctrl-K › Rhythm, or Ctrl-K › Chords and key                   |
 | a track (`/track pad`, `/track rm pad`, `/track move pad 1`)              | the typed command                                                                                           | the command, or click the track name                                          |
 
 Notes and timing: each streamed note is scheduled on the grid behind the

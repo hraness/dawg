@@ -41,14 +41,14 @@ describe("help reference", () => {
     expect(new Set(commands).size).toBe(commands.length);
     for (const required of [
       "help [topic]",
-      "transcript",
+      "/transcript",
       "track <name>",
-      "view focus|all",
-      "theme default|high-contrast|mono",
-      "motion on|off",
+      "/view focus|all",
+      "/theme default|high-contrast|mono",
+      "/motion on|off",
       "tracks",
-      "status",
-      "sessions",
+      "/status",
+      "/sessions",
       "/resume [<n>|<name>|<id>]",
       "undo",
       "redo",
@@ -56,14 +56,42 @@ describe("help reference", () => {
       expect(commands).toContain(required);
   });
 
-  test("commands are bare except the free-text window verbs", () => {
+  // Bare by default; a verb keeps its slash while only the window runs it
+  // (the grammar lane makes the slash optional, then this list shrinks),
+  // so the written form always works today.
+  test("commands are bare except the window-only verbs", () => {
     const slashed = HELP_SECTIONS.flatMap((section) =>
       section.entries
         .map((entry) => entry.command)
         .filter((command) => command.startsWith("/")),
     ).map((command) => command.split(/[\s[]/)[0]);
     expect([...new Set(slashed)].sort()).toEqual(
-      ["/auth", "/bpm", "/fork", "/play", "/rename", "/resume"].sort(),
+      [
+        "/auth",
+        "/bpm",
+        "/chords",
+        "/click",
+        "/fork",
+        "/formant",
+        "/guide",
+        "/kit",
+        "/logout",
+        "/menu",
+        "/model",
+        "/motion",
+        "/play",
+        "/rename",
+        "/resume",
+        "/sample",
+        "/sessions",
+        "/showme",
+        "/status",
+        "/theme",
+        "/transcript",
+        "/try",
+        "/view",
+        "/vowel",
+      ].sort(),
     );
   });
 
@@ -288,7 +316,7 @@ const KNOWN_GAPS: ReadonlySet<string> = new Set([
   "modal <preset> | <param> <value> | mallet <name> | reset | off",
   "wind <preset> | <param> <value> | mute <name> | reset | off",
   "velcurve linear|soft|hard|fixed [<v>]",
-  "sample [<path> [as <sample>]]",
+  "/sample [<path> [as <sample>]]",
   "/bpm <n> [<sample>]",
   "fitmode [repitch|beats|tones|auto] [<sample>]",
   "len <beats> [<sample>]",
@@ -296,8 +324,8 @@ const KNOWN_GAPS: ReadonlySet<string> = new Set([
   "resample <track>|orbit <n>|master [section <name>|bars a-b] [grain]",
   "sing [preset] [param value]",
   "lyrics [bar] sun-lit morn-ing",
-  "formant <-12..12> [mix] | deep | giant | bright | tiny | on | off",
-  "vowel <v> [<to> [<morph>]] | ee | to <v>|off | morph <0..1> | off",
+  "/formant <-12..12> [mix] | deep | giant | bright | tiny | on | off",
+  "/vowel <v> [<to> [<morph>]] | ee | to <v>|off | morph <0..1> | off",
   "vocoder [preset] | src <track> | <param> <value|reset> | reset | off | presets",
   "clip [id] gain -3 | gain by -3 | fade .01 .2 | fade in .01 | move 9 | split 7",
   "clip [id] trim offset 1 dur 4|end | rev | repeat 2 [to 32] | mute | rm",
@@ -336,12 +364,12 @@ const KNOWN_GAPS: ReadonlySet<string> = new Set([
   "meter <1..16>",
   "meter <n>/<d> [at bar <n>]",
   "calibration [0|1|latest|off]",
-  "view focus|all",
-  "transcript",
-  "theme default|high-contrast|mono",
-  "motion on|off",
-  "guide [topic]",
-  "showme on|quiet|off",
+  "/view focus|all",
+  "/transcript",
+  "/theme default|high-contrast|mono",
+  "/motion on|off",
+  "/guide [topic]",
+  "/showme on|quiet|off",
 ]);
 
 /** Verbs main.ts handles itself (`/^\/kit`, `/^\/?track`, …). */

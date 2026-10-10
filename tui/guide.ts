@@ -82,7 +82,7 @@ export function wrapRows(rows: readonly GuideRow[], width: number): GuideRow[] {
  * Words that open a child guide rather than their topic's root guide
  * (`/guide expression` is the performance guide, not Sound).
  */
-const GUIDE_ALIASES: Readonly<Record<string, string>> = {
+export const GUIDE_ALIASES: Readonly<Record<string, string>> = {
   expression: "performance",
   instrument: "sounds",
   instruments: "sounds",
@@ -95,7 +95,6 @@ const GUIDE_ALIASES: Readonly<Record<string, string>> = {
   edo: "tuning",
   meter: "tempo",
   time: "tempo",
-  genre: "styles",
   style: "styles",
   sections: "music",
   form: "music",
@@ -103,7 +102,6 @@ const GUIDE_ALIASES: Readonly<Record<string, string>> = {
   showme: "show-me",
   model: "providers",
   models: "providers",
-  login: "providers",
   search: "web-search",
   web: "web-search",
   mouse: "faders",

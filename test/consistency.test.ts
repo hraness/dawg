@@ -116,8 +116,9 @@ const KNOWN_SLASH_GAPS: readonly string[] = [
   "click 50%",
   "formant -4",
   "formant 3 0.5",
-  "guide chords",
+  "guide voice",
   "kit syn909",
+  "menu sound",
   "sample set brk fit on clip 1",
   "sessions",
   "status",
@@ -132,15 +133,6 @@ const KNOWN_SLASH_GAPS: readonly string[] = [
  * MENU_SECTIONS from every topic id) close them.
  */
 const KNOWN_TOPIC_GAPS: readonly string[] = [
-  "help sound",
-  "help effects",
-  "help rhythm",
-  "help mix",
-  "help project",
-  "help agent",
-  "guide voice",
-  "guide arrange",
-  "guide agent",
   "menu voice",
   "menu keys",
   "menu agent",
@@ -430,6 +422,49 @@ describe("aliases parse like their canonical form", () => {
   });
 });
 
+/**
+ * Ctrl-K paths the docs write in the design §4a tree (Voice root, Project ›
+ * agent, Arrange › tracks, …) that the menu lane (PR #142) builds. Each
+ * resolves on that branch; delete the lines as they resolve here.
+ */
+const KNOWN_MENU_PATH_GAPS: readonly string[] = [
+  "guides/agent.md: Ctrl-K › Project › agent › model",
+  "guides/arrange.md: Ctrl-K › Arrange › tracks",
+  "guides/files.md: Ctrl-K › Project › export",
+  "guides/keys.md: Ctrl-K › Project › help",
+  "guides/media.md: Ctrl-K › Sound › instruments › use a sample",
+  "guides/providers.md: Ctrl-K › Project › agent › model",
+  "guides/sessions.md: Ctrl-K › Project › session › rename",
+  "guides/show-me.md: Ctrl-K › Project › agent › show-me",
+  "guides/sounds.md: Ctrl-K › Sound › instruments › Strings › Bowed",
+  "guides/sounds.md: Ctrl-K › Sound › instruments › Wavetable",
+  "guides/tracks.md: Ctrl-K › Arrange › tracks",
+  "guides/tuning.md: Ctrl-K › Chords › tuning",
+  "guides/voice.md: Ctrl-K › Voice › voice presets",
+  "guides/web-search.md: Ctrl-K › Project › agent › model",
+  "DAWG.md: Ctrl-K › Arrange › tracks",
+  "DAWG.md: Ctrl-K › Sound › instruments › Keys",
+  "DAWG.md: Ctrl-K › Sound › instruments › Keys › Organs;",
+  "DAWG.md: Ctrl-K › Sound › instruments",
+  "DAWG.md: Ctrl-K › Sound › instruments › Granular",
+  "DAWG.md: Ctrl-K › Sound › instruments › Mallets",
+  "DAWG.md: Ctrl-K › Chords › tuning",
+  "DAWG.md: Ctrl-K › Rhythm › grooves",
+  "DAWG.md: Ctrl-K › Voice",
+  "DAWG.md: Ctrl-K › Voice › clips",
+  "DAWG.md: Ctrl-K › Voice › voice presets",
+  "DAWG.md: Ctrl-K › Voice › formant",
+  "DAWG.md: Ctrl-K › Voice › voice presets",
+  "DAWG.md: Ctrl-K › Voice › pitch",
+  "DAWG.md: Ctrl-K › Voice › vocoder",
+  "DAWG.md: Ctrl-K › Voice › voice presets",
+  "DAWG.md: Ctrl-K › Voice › autotune",
+  "DAWG.md: Ctrl-K › Chords › tuning",
+];
+
+/** `/menu <word>`s the docs use before the menu lane accepts them. */
+const KNOWN_MENU_WORD_GAPS: readonly string[] = ["voice"];
+
 describe("Ctrl-K paths in the docs resolve", () => {
   const sources = [
     ...guideFiles(),
@@ -452,7 +487,12 @@ describe("Ctrl-K paths in the docs resolve", () => {
           missing.push(`${path}: Ctrl-K › ${segments.join(" › ")}`);
       }
     expect(count).toBeGreaterThan(20);
-    expect(missing).toEqual([]);
+    const known = new Set(KNOWN_MENU_PATH_GAPS);
+    expect(missing.filter((path) => !known.has(path))).toEqual([]);
+    // The ratchet: a path that now resolves must leave the list.
+    expect(
+      KNOWN_MENU_PATH_GAPS.filter((path) => !missing.includes(path)),
+    ).toEqual([]);
   });
 
   test("show-me's own pointers resolve for the commands it names", async () => {
@@ -531,6 +571,11 @@ describe("every documented /menu <section> opens", () => {
       for (const match of text.matchAll(/\/menu ([a-z]+)\b/g))
         words.add(match[1]!);
     expect(words.size).toBeGreaterThan(5);
+    for (const word of KNOWN_MENU_WORD_GAPS) {
+      expect(words.has(word), `/menu ${word} still written`).toBe(true);
+      expect(MENU_SECTIONS as readonly string[]).not.toContain(word);
+      words.delete(word);
+    }
     for (const word of words)
       expect(MENU_SECTIONS as readonly string[], `/menu ${word}`).toContain(
         word as (typeof MENU_SECTIONS)[number],

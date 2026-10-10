@@ -2572,8 +2572,8 @@ async function submit(prompt: string): Promise<string | Receipt> {
     provider = undefined;
     await currentProvider();
     return providerName === "offline"
-      ? "login · not signed in · direct commands still work"
-      : `signed in · ${providerName}`;
+      ? "no agent key · model key adds one · direct commands still work"
+      : `agent key · ${providerName}`;
   }
   if (/^\/(logout|auth)\b/i.test(prompt.trim())) {
     tui.activity.setSpinner(prompt.trim().split(/\s+/)[0]!.slice(1));
@@ -4790,7 +4790,7 @@ function currentProvider(): Promise<ProviderSelection> {
     provider = selectProvider().catch((): ProviderSelection => ({
       kind: "offline",
       choice: "auto",
-      reason: "provider unavailable; run `dawg login`",
+      reason: "provider unavailable; run `dawg model key`",
     }));
   }
   return provider.then((selection) => {
@@ -4802,9 +4802,9 @@ function currentProvider(): Promise<ProviderSelection> {
       !invalidNoticeShown
     ) {
       invalidNoticeShown = true;
-      tui.activity.pushCard(`sign-in stopped working · ${selection.reason}`, {
+      tui.activity.pushCard(`agent key stopped working · ${selection.reason}`, {
         tone: "warning",
-        hint: "/login",
+        hint: "/model key",
       });
     }
     providerStamp.offline = selection.kind === "offline";

@@ -35,9 +35,9 @@ export const TOPIC_SUMMARY: Readonly<Record<TopicId, string>> = {
   chords: "key, tuning, progressions, chord play",
   mix: "volume, pan, mute, solo, automation, master",
   arrange: "notes, tracks, sections, form, styles",
-  project: "transport, tempo, meter, loop, export, undo",
+  project: "transport, tempo, meter, loop, export, undo, sessions",
   keys: "the keys of every screen",
-  agent: "model, model key, show-me, sessions",
+  agent: "model, model key, show-me",
 };
 
 /**
@@ -113,7 +113,7 @@ export const TOPIC_ALIASES: Readonly<Record<string, TopicId>> = {
   models: "agent",
   showme: "agent",
   "show-me": "agent",
-  sessions: "agent",
+  sessions: "project",
   login: "agent",
   ai: "agent",
 };
