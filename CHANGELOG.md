@@ -4,6 +4,10 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ## Unreleased
 
+## 0.7.0
+
+Voice: pitch tracking, formant shift and vowel morph, sung voices and choirs, audio clips with lyrics, vocoder and talkbox, and autotune. Plus a theory-driven style library with a card for every leaf, show-me command lines, faster agent turns with `/model fast`, a native audio sink, and a coherent design pass with one language, one command grammar and one Ctrl-K tree.
+
 ### Added
 
 - **Native audio sink.** Live keys are heard about 17 ms after the press on macOS, down from about 80 ms, measured on a loopback (`bench/sink-latency.ts`, `docs/perf.md`). `native/sink` is a small Rust library: a lock-free ring drained by the device's real audio callback through cpal (CoreAudio on macOS, ALSA on Linux), loaded with bun:ffi only after its sha256 matches the shipped manifest. The engine still renders every sample; the sink receives the same stream the stdin players got, converted exactly, through a 5 ms pump with a 15 ms play lead (`DAWG_PLAY_LEAD_MS`). The ffplay path measured 78 to 89 ms and dropped about 4 in 10 short clicks. Release tarballs and npm carry prebuilt libraries for darwin-arm64, darwin-x64, linux-x64 and linux-arm64, built in CI, listed in `SHA256SUMS`, attested, and attached on their own as `libdawg_sink-<platform>.<ext>`; nothing is compiled on install. With no prebuilt for the platform, or a library that fails to load, dawg falls back to ffplay, SoX or afplay. `dawg doctor` shows the backend, why the sink is or is not in use, the lead and the audio devices; the play strip names the backend. It also adds device enumeration, input capture that stores takes as `tracks/<slug>/takes/<sha256>.wav`, and per-buffer host timestamps with input and output latency.
