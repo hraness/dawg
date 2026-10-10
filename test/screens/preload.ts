@@ -16,13 +16,22 @@ if (control) {
   const PERF_BASE = 1_000_000_000;
   let ms = 0;
   Date.now = () => DATE_BASE + ms;
-  performance.now = () => PERF_BASE + ms;
   // The shared transport puts its clock on the epoch as timeOrigin + now();
-  // the real timeOrigin is this process's start, different every run.
-  Object.defineProperty(performance, "timeOrigin", {
-    value: DATE_BASE - PERF_BASE,
-    configurable: true,
-  });
+  // the real timeOrigin is this process's start, different every run. Pin
+  // it where the runtime allows; where it does not, shift now() instead so
+  // the sum is the same frozen epoch.
+  let origin = DATE_BASE - PERF_BASE;
+  try {
+    Object.defineProperty(performance, "timeOrigin", {
+      value: origin,
+      configurable: true,
+    });
+  } catch {
+    // read-only here; handled below
+  }
+  if (performance.timeOrigin !== origin) origin = performance.timeOrigin;
+  const perfBase = DATE_BASE - origin;
+  performance.now = () => perfBase + ms;
   let seen = "";
   const poll = setInterval(() => {
     let text = "";
