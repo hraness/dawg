@@ -68,7 +68,7 @@ describe("granular in the ctrl-k menu", () => {
   test("a synth track shows Granular (convert) with grain on and presets", () => {
     const menu = new EditMenu();
     const ctx = context();
-    open(menu, ctx, "Sound", "granular (convert)");
+    open(menu, ctx, "Sound", "granular");
     const labels = menu.view(ctx).items.map((row) => row.label.split(" ")[0]);
     expect(labels[0]).toBe("grain");
     expect(labels).toContain("cloud");

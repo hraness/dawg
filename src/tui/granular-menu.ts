@@ -135,9 +135,7 @@ export function granularMenuLabel(
 ): string | undefined {
   if (!track || track.kit || isDrumInstrument(track.instrument))
     return undefined;
-  return isGranularInstrument(track.instrument)
-    ? "granular"
-    : "granular (convert)";
+  return isGranularInstrument(track.instrument) ? "granular" : "granular";
 }
 
 /** One-line state for the subsection's detail column. */

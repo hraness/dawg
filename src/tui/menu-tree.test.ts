@@ -6,10 +6,8 @@
  */
 import { describe, expect, test } from "bun:test";
 import { createScore, type TrackScore } from "../../core/score.ts";
-import { parseCalibrationCommand } from "../commands/calibration.ts";
-import { commandParses } from "../commands/parses.ts";
 import { helpTopicLines } from "../commands/help.ts";
-import { parseStyleCommand } from "../commands/style.ts";
+import { accepts } from "../../test/consistency-lib.ts";
 import {
   LABEL_WIDTH,
   MENU_SECTIONS,
@@ -87,30 +85,37 @@ function rowCommands(node: MenuNode): string[] {
   }
 }
 
-/**
- * Window commands src/main.ts runs itself (no song parser): they open a
- * screen or change this window. Pinned here so a new one is a choice.
- */
-const WINDOW =
-  /^\/(?:help|guide|menu|play|model|showme|sessions|resume|rename|fork|euclid|grid|count-in|click|chords|track|tracks|try|instrument|export|import|kit|pattern)(?:\s|$)/;
-
-function parses(command: string, value: TrackScore): boolean {
-  return (
-    commandParses(command, value) ||
-    parseStyleCommand(command) !== undefined ||
-    parseCalibrationCommand(command) !== undefined ||
-    WINDOW.test(command)
-  );
-}
-
-/** A label's name, before its two-space detail or `(alias)` note. */
+/** A label's name, before its two-space detail. */
 function labelName(label: string): string {
-  return label.split(/\s{2,}| \(/)[0]!;
+  return label.split(/\s{2,}/)[0]!.trimEnd();
 }
 
 /** Proper names keep their capitals in a lower-case list. */
 const PROPER =
   /^(?:ZzFX|Strudel|Wurlitzer|Rhodes|Cuban|Hammond|Vox|[A-G][#b]?\d?\b)/;
+
+/** A label's name without its unit note: `filter cutoff (Hz)` → `filter cutoff`. */
+function widthName(label: string): string {
+  return labelName(label).replace(
+    / \((?:Hz|s|ms|st|dB|%|oct|BPM|bars?|beats?|ct|\.[a-z]+)\)$/,
+    "",
+  );
+}
+
+/**
+ * Rows that list a catalog (instruments, kits, styles, presets, lanes):
+ * their label is the entry's own name and description, not a menu label.
+ */
+function isCatalogRow(path: string, node: MenuNode): boolean {
+  if (node.kind === "action")
+    return (
+      /\s{2}| · /.test(node.label) ||
+      / › (?:instruments|kits|style|grooves|patterns) › /.test(path)
+    );
+  // Style titles come from the taxonomy; advanced rows note their aliases.
+  if (path.startsWith("Arrange › style › ")) return true;
+  return / › all lanes › | › advanced › /.test(path);
+}
 
 function isValueRow(node: MenuNode): boolean {
   return /^(?:number|toggle|choice|point)$/.test(node.kind);
@@ -123,15 +128,15 @@ describe("the ctrl-k tree", () => {
       const broken: string[] = [];
       for (const { path, node } of walk(ctx))
         for (const command of rowCommands(node))
-          if (!parses(command, ctx.score)) broken.push(`${path}: ${command}`);
+          if (!accepts(command, ctx.score)) broken.push(`${path}: ${command}`);
       expect(broken).toEqual([]);
     });
 
-    test(`${instrument}: value labels fit LABEL_WIDTH`, () => {
+    test(`${instrument}: labels fit LABEL_WIDTH`, () => {
       const ctx = context(instrument);
       const wide = walk(ctx)
-        .filter(({ node }) => isValueRow(node))
-        .filter(({ node }) => labelName(node.label).length > LABEL_WIDTH)
+        .filter(({ path, node }) => !isCatalogRow(path, node))
+        .filter(({ node }) => widthName(node.label).length > LABEL_WIDTH)
         .map(({ path }) => path);
       expect(wide).toEqual([]);
     });
@@ -202,7 +207,7 @@ describe("the ctrl-k tree", () => {
       "usage: /menu <topic or row> · /help menu lists them",
     );
     // The full list lives in /help menu, one name per topic.
-    const helpMenu = helpTopicLines("menu", 200).join(" ");
+    const helpMenu = (helpTopicLines("menu", 200) ?? []).join(" ");
     for (const topic of MENU_SHOWN_SECTIONS) expect(helpMenu).toContain(topic);
   });
 

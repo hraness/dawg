@@ -135,7 +135,7 @@ test.skipIf(!supported)(
 
       // ctrl-k → Sound › browse sounds › Mallets and bells › Gamelan → gangsa.
       await t.send("/menu sounds\r");
-      await t.until(() => t.vt.text().includes("mallets and bells"), "mallets");
+      await t.until(() => t.vt.text().includes("mallets"), "mallets");
       await t.send("/mallets");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("Gamelan"), "gamelan group");

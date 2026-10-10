@@ -105,8 +105,7 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       {
         command:
           "modal <preset> | <param> <value> | mallet <name> | reset | off",
-        summary:
-          "mallets and bells · modal vibes · modal hardness 0.8 · modal presets",
+        summary: "mallets · modal vibes · modal hardness 0.8 · modal presets",
       },
       {
         command: "wind <preset> | <param> <value> | mute <name> | reset | off",

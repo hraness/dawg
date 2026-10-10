@@ -1105,7 +1105,7 @@ Quality and cost. Grains read a shared semitone-level band-limited bank (`src/au
 | `track cloud` · `track hold-2`            | a new granular track named after a preset                           |
 | `track pad grain swarm`                   | focus or create a track and grain it in one step                    |
 
-**Ctrl-K › Sound › granular**: it edits the preset, source and every parameter of a granular track (on any other pitched track it reads **granular (convert)** and offers `grain on` and the presets); **Ctrl-K › Sound › instruments › Granular** lists the presets. `grain` edits stage in the audition loop, so space plays them and `a` compares A/B. The agent's `set_granular {trackId, preset?, src?, voice?, params?, reset?, off?}` tool takes the same names, and the SDK writes:
+**Ctrl-K › Sound › granular**: it edits the preset, source and every parameter of a granular track (on any other pitched track the same row reads `grain this track's synth` and offers `grain on` and the presets); **Ctrl-K › Sound › instruments › Granular** lists the presets. `grain` edits stage in the audition loop, so space plays them and `a` compares A/B. The agent's `set_granular {trackId, preset?, src?, voice?, params?, reset?, off?}` tool takes the same names, and the SDK writes:
 
 ```ts
 instrument: granular("cloud", { scan: 0.1, seed: 7 }),

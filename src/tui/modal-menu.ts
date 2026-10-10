@@ -23,7 +23,7 @@ export function malletsMenu(): MenuNode {
   return {
     kind: "menu",
     id: "mallets",
-    label: "mallets and bells",
+    label: "mallets",
     detail: `${MODAL_PRESET_NAMES.length} modal presets · marimba, vibes, gong …`,
     help: "struck bars, bells and bowls on the modal resonator engine",
     build: () => [

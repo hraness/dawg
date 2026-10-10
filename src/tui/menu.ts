@@ -394,7 +394,7 @@ const TRACK_LANE_LABEL: Readonly<Record<TrackAutomationParameter, string>> = {
   resonance: "filter resonance",
   "delay-feedback": "delay feedback",
   "delay-mix": "delay mix",
-  wt: "wavetable position",
+  wt: "table position",
 };
 
 const FX_LANE_INFO = new Map(FX_LANES.map((entry) => [entry.lane, entry]));
@@ -1008,7 +1008,7 @@ function agentNodes(context: MenuContext): MenuNode[] {
     },
     {
       kind: "action",
-      label: "help on the agent",
+      label: "agent help",
       command: "/help agent",
       help: "what the agent can do and how its turns show",
     },
@@ -1411,7 +1411,7 @@ function chordNodes(context: MenuContext): MenuNode[] {
     },
     {
       kind: "entry",
-      label: "write a progression",
+      label: "progression",
       value: "",
       placeholder: "chords, e.g. i7 IV7 each 8",
       help: "sustained, voice-led block chords on this track in the song key",
@@ -2377,7 +2377,7 @@ function wavetableNodes(track: Track, projectRoot?: string): MenuNode[] {
     nodes.push({
       kind: "info",
       label: "position automation",
-      value: `${track.wtAutomation!.length} points · Automation › wavetable position`,
+      value: `${track.wtAutomation!.length} points · Automation › table position`,
     });
   return nodes;
 }
@@ -3173,9 +3173,9 @@ function resampleNodes(context: MenuContext): MenuNode[] {
     },
     {
       kind: "action",
-      label: "mix → sampler (pre-master)",
+      label: "mix → sampler",
       command: "resample orbit 1",
-      help: "render every track on orbit 1 (the default bus) without the song master",
+      help: "pre-master: render every track on orbit 1 (the default bus) without the song master",
     },
     {
       kind: "action",

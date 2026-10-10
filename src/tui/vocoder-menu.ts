@@ -111,7 +111,7 @@ export function vocoderRows(context: MenuContext): MenuNode[] {
       return [
         {
           kind: "action",
-          label: "vocode this voice",
+          label: "vocode",
           command: "vocoder",
           help: "adds a vocoder track driven by this voice (follows the song's chords, or drones on the key's root); mutes it",
         },
@@ -187,7 +187,7 @@ export function vocoderEffectNode(context: MenuContext): MenuNode[] {
       detail: vocoder
         ? `${vocoder.preset ?? DEFAULT_VOCODER_PRESET}${vocoder.src ? ` · from ${vocoder.src}` : " · no source"}`
         : trackHasAudio(track)
-          ? "vocode this voice"
+          ? "vocode"
           : "off",
       help: "a voice shapes this track's sound: robot, talkbox, choir",
       build: vocoderRows,
@@ -211,7 +211,7 @@ export function vocoderBrowseNode(context: MenuContext): MenuNode[] {
           return [
             {
               kind: "action",
-              label: "vocode this voice",
+              label: "vocode",
               command: "vocoder",
               help: "adds a vocoder track driven by this voice",
             },
@@ -220,7 +220,7 @@ export function vocoderBrowseNode(context: MenuContext): MenuNode[] {
           return [
             {
               kind: "action",
-              label: "make this a vocoder",
+              label: "make a vocoder",
               command: `instrument ${VOCODER_INSTRUMENT}`,
               help: "a supersaw carrier; then pick its presets and source here",
             },
