@@ -24,6 +24,7 @@ import { SYNTH_KIT_NAMES } from "../../core/kits.ts";
 import { DRUM_PATTERNS, findPattern } from "../../core/sdk/v1.ts";
 import { parsePatternCommand } from "../commands/drums.ts";
 import { parseEffectName } from "../commands/fx.ts";
+import { isReadOnlyPatchCommand } from "../commands/patch.ts";
 import { nearest } from "../commands/nearest.ts";
 import { parseKitCommand } from "../commands/pack.ts";
 import { commandParses } from "../commands/parses.ts";
@@ -91,6 +92,15 @@ function cleanLine(line: string): string {
  */
 const WINDOW_ONLY =
   /^\/(?:help|guide|menu|play|login|logout|auth|model|quit|exit|sessions?|new|showme|status|undo|redo|tracks|euclid|try|record|grid|count-?in|click|chords|theme|motion|view|transcript)\b|^\/?(?:tape|knobs|mix|panes?|pin|unpin|follow|unfollow|audio)(?:\s|$)/i;
+
+/**
+ * Lines that only read the song (`patch show`, `patch nodes`): show-me runs
+ * them like any command, but they write no revision, so the turn counts them
+ * as looking, not as an edit.
+ */
+export function isReadOnlyCommand(line: string): boolean {
+  return isReadOnlyPatchCommand(line);
+}
 
 /**
  * Whether a complete line is a command the agent runs: one a human could
@@ -340,6 +350,8 @@ export function gestureFor(
       ],
     };
   }
+  if (isReadOnlyCommand(command))
+    return { kind: "typed", command, caption: `reading · type ${command}` };
   return { kind: "typed", command, caption: `typing ${command}` };
 }
 
@@ -367,6 +379,7 @@ const MENU_HOME: Readonly<Record<string, string>> = {
   autotune: "voice",
   vocode: "voice",
   export: "export",
+  patch: "sound",
   model: "agent",
   showme: "agent",
 };

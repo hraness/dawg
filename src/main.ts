@@ -107,6 +107,21 @@ import {
   parseExpressionCommand,
 } from "./commands/expression.ts";
 import {
+  applyPatchCommand,
+  parsePatchCommand,
+  patchCommandError,
+  patchSourceOf,
+  type PatchCommand,
+  type PatchEnv,
+} from "./commands/patch.ts";
+import {
+  isPatchSource,
+  loadPatchSource,
+  readUserPatch,
+  saveUserPatch,
+} from "./audio/patch-library.ts";
+import { builtinPatch } from "../core/patches/index.ts";
+import {
   applyFxCommand,
   parseFxCommand,
   unknownFxMessage,
@@ -2825,6 +2840,12 @@ async function submit(prompt: string): Promise<string | Receipt> {
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
   }
+  // Patcher (design §6.1): `patch add|set|wire|…` edits the focused
+  // track's patch; each line is one revision of node/cable/macro ops.
+  const patchError = patchCommandError(command);
+  if (patchError) return fail(patchError);
+  const patchCommand = parsePatchCommand(command);
+  if (patchCommand) return runPatchCommand(patchCommand);
   const fx = parseFxCommand(command);
   if (fx) {
     if (fx.type !== "fx-list") await materializeDraft();
@@ -3949,6 +3970,65 @@ async function packCommand(command: PackCommand): Promise<Receipt> {
     if (error instanceof PackError) return fail(`pack · ${error.message}`);
     throw error;
   }
+}
+
+/**
+ * Resolves the patch a command names outside the song before it applies:
+ * a `github:` source is fetched and pinned, any other name not built in or
+ * in the song's library is read from the user library.
+ */
+async function patchEnv(command: PatchCommand): Promise<PatchEnv | string> {
+  const source = patchSourceOf(command);
+  if (source === undefined) return {};
+  try {
+    if (isPatchSource(source)) {
+      const loaded = await loadPatchSource(source, { store: packs() });
+      return { fetched: { source, patch: loaded.patch, from: loaded.from } };
+    }
+    if (builtinPatch(source) || score.patches[source]) return {};
+    const file = await readUserPatch(source);
+    return file
+      ? { userPatch: (name) => (name === source ? file.patch : undefined) }
+      : {};
+  } catch (error) {
+    return `patch: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
+/** Runs one typed `patch …` line (src/commands/patch.ts) on the focused track. */
+async function runPatchCommand(command: PatchCommand): Promise<Receipt> {
+  const reads = command.type === "patch-show" || command.type === "patch-nodes";
+  if (!reads) await materializeDraft();
+  const env = await patchEnv(command);
+  if (typeof env === "string") return fail(env);
+  const result = applyPatchCommand(score, requestedTrack, command, env);
+  if (!result.ok) return fail(result.message);
+  if (result.read) {
+    const lines = result.message.split("\n");
+    if (lines.length > 1) {
+      tui.openText(
+        command.type === "patch-show" ? "patch" : "patch nodes",
+        lines,
+      );
+      return note(`${lines[0]} · ${lines.length} lines`);
+    }
+    return note(result.message);
+  }
+  if (result.effect?.kind === "save-user") {
+    try {
+      await saveUserPatch(result.effect.patch, {
+        name: result.effect.name,
+        ...(result.effect.macros ? { macros: result.effect.macros } : {}),
+      });
+    } catch (error) {
+      return fail(
+        `patch save: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+  if (result.next && result.kind)
+    await commitScore(result.next, result.kind, result.payload);
+  return ok(result.message);
 }
 
 /**

@@ -201,6 +201,39 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
     ],
   },
   {
+    group: "sound · patch",
+    entries: [
+      {
+        command:
+          "patch new <name> [instrument|effect] [from <preset>] · patch load <name>",
+        summary:
+          "a modular patch · patch load acid-bass · patch convert · patch detach · patch show",
+      },
+      {
+        command:
+          "patch add <type> [as <id>] [k=v …] · patch set <id> k=v · patch rm <id>",
+        summary:
+          "nodes · patch add svf as vcf mode=lp · patch nodes lists them",
+      },
+      {
+        command:
+          "patch wire <node.port> <node.port> [amount] · patch unwire <a> <b>",
+        summary: "cables · patch wire tone.out vcf.in · patch rate lfo global",
+      },
+      {
+        command:
+          "patch macro <id> <node.port>[:min..max] … · patch knob <id> <value>",
+        summary: "knobs 1-4 · patch macro cutoff vcf.cutoff range 80..4000",
+      },
+      {
+        command:
+          "patch save <name> [--user] · patch load github:<user>/<repo>/<name>",
+        summary:
+          "the project or your user library · pack patches pinned by hash",
+      },
+    ],
+  },
+  {
     group: "voice",
     entries: [
       {
@@ -1127,6 +1160,8 @@ export const USAGE: Readonly<Record<string, string>> = {
   help: "help [topic] · help all · help sound|voice|effects|rhythm|chords|mix|arrange|project|keys|agent",
   guide: "/guide [topic] · /guide voice · F1 · the same topics as help",
   fx: "fx <effect> <param> <value> | on | off | preset <name> · fx delay mix 0.3",
+  patch:
+    "patch new|load|add|set|wire|unwire|macro|knob|rate|rm|save|show|nodes|convert|detach … [--fx <name>] · patch add osc as tone · patch wire tone.out out.audio",
   synth: "synth <param> <value> | preset <name> · synth lpf 1200",
   string:
     "string <preset> | preset <name> | <param> <value> | presets | reset | off · string koto",

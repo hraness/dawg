@@ -8,6 +8,7 @@ import {
   brokenCommandReceipt,
   isAgentCommand,
   isBrokenCommand,
+  isReadOnlyCommand,
   keyForPitch,
   menuPathFor,
   NoteScheduler,
@@ -308,5 +309,54 @@ describe("broken agent commands", () => {
     );
     expect(isBrokenCommand("tempo 120", score)).toBe(false);
     expect(isBrokenCommand("sounds good, more reverb next", score)).toBe(false);
+  });
+});
+
+describe("show-me streams patch recipes", () => {
+  const song = createScore({
+    bars: 1,
+    tracks: [{ id: "lead", instrument: "saw" }],
+  } as Parameters<typeof createScore>[0]);
+  const lines = [
+    "patch new mine",
+    "patch add osc as tone wave=saw",
+    "patch add svf as vcf mode=lp cutoff=800",
+    "patch set vcf q=0.6",
+    "patch wire tone.out vcf.in",
+    "patch wire lfo.out vcf.cutoff 0.4",
+    "patch unwire tone.out vcf.in",
+    'patch macro bright vcf.cutoff:200..6000 label "Bright"',
+    "patch knob bright 900",
+    "patch rate lfo global",
+    "patch rm vcf",
+    "patch load acid-bass",
+    "patch save mine",
+    "patch set crush bits=4 --fx wide",
+  ];
+  test("each line survives the stream and is a command the agent runs", () => {
+    const stream = new CommandLines();
+    const fenced = [
+      "```",
+      ...lines.map((line) => `- \`${line}\``),
+      "```",
+      "",
+    ].join("\n");
+    const complete = stream.push(fenced).complete;
+    expect(complete).toEqual(lines);
+    for (const line of lines) {
+      expect(isAgentCommand(line, song), line).toBe(true);
+      expect(gestureFor(line, { score: song, trackId: "lead" }).caption).toBe(
+        `typing ${line}`,
+      );
+    }
+  });
+  test("show and nodes are reading, not editing", () => {
+    for (const line of ["patch show", "patch nodes", "patch nodes filter"]) {
+      expect(isReadOnlyCommand(line)).toBe(true);
+      expect(gestureFor(line, { score: song, trackId: "lead" }).caption).toBe(
+        `reading · type ${line}`,
+      );
+    }
+    expect(isReadOnlyCommand("patch add osc")).toBe(false);
   });
 });
