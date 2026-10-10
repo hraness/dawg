@@ -79,10 +79,7 @@ test.skipIf(!supported)(
       // `/` filters, as in every picker; the footer says so.
       expect(t.vt.text()).toContain("/ filter");
       await t.send("/boom");
-      await t.until(
-        () => t.vt.text().includes("grooves · /boom"),
-        "filtered",
-      );
+      await t.until(() => t.vt.text().includes("grooves · /boom"), "filtered");
       await t.send("\r");
       await waitFor(
         async () => (await drums())?.rhythm?.length === 3,

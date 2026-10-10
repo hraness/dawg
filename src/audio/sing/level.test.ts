@@ -54,7 +54,7 @@ describe("sing level parity", () => {
   // A legato line that changes vowel on every note (lyrics la li la li)
   // clicked at each change, peaking at -0.2 dBFS on a -19 LUFS part.
   test("a legato line that changes vowel leaves headroom", () => {
-    for (const preset of ["aah", "chorale"]) {
+    for (const preset of ["aah", "chorale"] as const) {
       const s = song({
         tempo: 72,
         bars: 2,
