@@ -237,7 +237,7 @@ for (const [cols, rows] of [
   );
 
 // Colour and NO_COLOR: the ghost is a glyph, never only a dim colour.
-for (const env of [{}, { NO_COLOR: "1" }] as const)
+for (const env of [{}, { NO_COLOR: "1" }] as Record<string, string>[])
   test.skipIf(!supported)(
     `real PTY: a form draws unrolled, repeats ghosted ░${"NO_COLOR" in env ? " (NO_COLOR)" : ""}`,
     async () => {
