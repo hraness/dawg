@@ -10,6 +10,7 @@ import { createScore } from "../../core/score.ts";
 import { LiveSynth, warmLive } from "../../src/audio/live.ts";
 import { renderScorePcm } from "../../src/audio/wav.ts";
 import { LIVE_CASES } from "./live.ts";
+import { patchRunner } from "./patch-runner.ts";
 import { RENDER_CASES } from "./render.ts";
 import { calibrate } from "./stats.ts";
 
@@ -60,4 +61,14 @@ test("perf gate: the first choir key after the play-mode warm renders within 30 
   synth.render({ score, trackId: "t", pitch: 62, velocity: 0.8, seconds: 0.5 });
   // ~16 ms (8 units) warm; ~65 ms (34 units) without the warm.
   expect((performance.now() - started) / unit).toBeLessThan(30);
+}, 60_000);
+
+test("perf gate: the patch runner plays a voice-sample within 60 calibration units (ns per ms of calibration)", () => {
+  // 16 voices x 12 nodes (bench/perf/patch-runner.ts): about 18 units on
+  // a 2026 laptop (the prototype interpreter in patch-kernel.ts is about
+  // 7; the gap is per-block input evaluation and clamping). A per-sample
+  // allocation or closure trips it.
+  const unit = calibrate();
+  const ns = Math.min(...patchRunner(3));
+  expect(ns / unit).toBeLessThan(60);
 }, 60_000);
