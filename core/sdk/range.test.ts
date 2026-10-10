@@ -27,7 +27,7 @@ describe("song loop (SDK 1.34.0)", () => {
   const lead = track({ name: "lead", notes: [note("C4", 0)] });
 
   test("bars and a section name", () => {
-    expect(SDK_VERSION).toBe("1.34.0");
+    expect(SDK_VERSION).toBe("1.35.0");
     expect(song({ bars: 8, tracks: [lead], loop: "5-6" }).loop).toEqual({
       startBar: 4,
       bars: 2,

@@ -634,6 +634,57 @@ FM operators 2–8 repeat the `fm` rows with a suffix (`fm2`, `fmh2`, `fmattack2
 | sample controls `begin`, `end`, `speed`, `unit`, `loop`, `loopBegin`/`loopb`, `loopEnd`/`loope`, `clip`/`legato`, `fit`, `loopAt`, `accelerate`, `squiz`, `cut`, `gain`, `vel`, `rr` | sampler voice fields; `/sample set`, `set_sample`              | done (see Samples)                                   |
 | fitting to tempo (Ableton Repitch/Beats/Tones; Strudel `fit`)                                                                                                                        | `bpm` `fitmode` `len`; `/fitmode`, `fit_sample`                | done (see Fitting samples)                           |
 
+## Patches
+
+A patch is a small modular synth or effect stored in the score: nodes (oscillators, filters, envelopes, math, whole engines and effects) joined by cables, with up to four macros as its knobs. A track plays one as its instrument (`instrument: "patch"`) or runs effect patches in its chain (`fx.patch`); `song.ts` can also hold a library of named patches that tracks reference.
+
+### Patches in song.ts (SDK 1.35.0)
+
+`patch(name, build)` builds an instrument patch and `fxPatch(name, build)` an effect patch. The build callback receives a factory per node type (`osc`, `svf`, `adsr`, `vca`, `fx.distort`, `engine.modal`, …), the boundaries `voice` (`pitch`, `gate`, `velocity`, …), `song` (`beat`, `bar.phase`, `tempo`) and `input` (the track's notes, its audio and the sidechain), and `macro(id, { min, max, default, curve })`; the first four macros are the knobs, in call order.
+
+```ts
+const acid = patch("acid-bass", ({ voice, osc, svf, adsr, vca, fx, macro }) => {
+  const cutoff = macro("cutoff", {
+    min: 80,
+    max: 4000,
+    default: 600,
+    curve: "exp",
+  });
+  const env = adsr({
+    attack: 0.002,
+    decay: 0.2,
+    sustain: 0,
+    release: 0.05,
+  }).gate(voice.gate);
+  return osc({ wave: "saw" })
+    .pitch(voice.pitch)
+    .to(
+      svf({ mode: "lp" })
+        .cutoff(cutoff.plus(env.times(2400)))
+        .q(macro("reso")),
+    )
+    .to(vca().gain(env.times(voice.velocity)))
+    .to(fx.distort({ drive: 3 }).global());
+});
+
+export default track({
+  name: "acid",
+  instrument: acid,
+  mods: { cutoff: sine.range(300, 2400).slow(4), reso: pat("0.5 0.8 0.6 0.9") },
+  notes: seq("A1 A1 C2 A1 G1 A1 E2 D2", { step: 0.25 }),
+});
+```
+
+- `a.to(b)` cables `a`'s main audio out into `b`'s main audio in and returns `b`. A port setter (`.cutoff(x)`, `.gain(x)`) takes a number, a node, a macro or a pattern; `.input("fm")` and `.output("right")` name other ports. Port setters and settings are typed from the node specs, so a notes source into `cutoff`, an unknown port or a wave word a node does not know is a type error.
+- `x.plus(y)`, `x.times(y)`, `x.range(lo, hi)` and `x.amount(k)` (an attenuverter, -1..1) add math nodes; `.global()` moves a node after the voice sum, so it runs once for all voices.
+- Node and cable ids come from a stable hash of the patch's name and the build, so the same source builds the same patch; pass `{ id }` to a factory to pin one.
+- `patch(name, build, { voices, side, at: "post", from })` sets polyphony, the sidechain track, placement after the effect chain (effect patches) and provenance.
+- The plain form `patch({ role, name, nodes, cables, macros })` is what `dawg` prints back; `patch({ ref: "acid-bass", macros: { cutoff: 900 } })` plays a patch from `song({ patches: [...] })` with its own macro values.
+
+### Patterns as signals
+
+`sine`, `cosine`, `saw`, `isaw`, `tri`, `square`, `rand`, `perlin`, `irand(n)` and `pat("0 0.5 <1 0.8>")` are Strudel's continuous signals, one cycle a bar, with `.range`, `.rangex`, `.slow`, `.fast`, `.segment`, `.add`, `.mul`, `.early`, `.late` and `.every(n, f)`. Values follow Strudel's formulas (`sine` is 0.5 at the bar start and rises; `rand` and `perlin` use its legacy xorshift, seeded per track from the track id). On a track, `mods: { cutoff: sine.range(300, 2400).slow(4) }` drives a patch macro and `lanes: { "synth-lpf": saw.range(400, 3000) }` any automation lane. `song()` bakes each into automation points (at most 16 a bar; stepped signals such as `pat` and `segment` hold their values), and a lane written under `automation` wins. Wiring a pattern straight into a port (`svf().cutoff(sine.range(300, 2400))`) makes a hidden macro driven the same way.
+
 ## Keys (modeled piano)
 
 A track whose `instrument` is a piano family (`grand`, `upright`, `felt`, `honkytonk`, `prepared`) and which has a `keys` field plays dawg's modeled piano (`src/audio/keys/`): a felt hammer of the chosen hardness strikes a bank of stretched, inharmonic string modes (two or three detuned unison strings per key, with a fast first stage and a slow aftersound), a soundboard knock, dampers that stop a released key in about a second, and a small body EQ per family. The 0.5 sustain pedal (down, half, up) holds the dampers off. It is built in: nothing downloads and every render is byte-identical.
