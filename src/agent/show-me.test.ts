@@ -90,6 +90,15 @@ describe("gestures", () => {
     expect(gesture.value).toBe(0.4);
     expect(gesture.caption).toContain("fx reverb mix");
     expect(menuPathFor("fx reverb mix 0.4")).toBe("Ctrl-K › Effects › reverb");
+    // Live labels and real places, not the typed effect word.
+    expect(menuPathFor("fx rig preset x")).toBe(
+      "Ctrl-K › Effects › guitar rig",
+    );
+    expect(menuPathFor("fx formant shift 2")).toBe("Ctrl-K › Voice");
+    expect(menuPathFor("fx phaser on")).toBe(
+      "Ctrl-K › Effects › more effects › phaser",
+    );
+    expect(menuPathFor("fx bogus on")).toBe("Ctrl-K › Effects");
     expect(menuPathFor("volume 0.7")).toBe("Ctrl-K › Mix › volume");
     expect(menuPathFor("tuning just")).toBe("Ctrl-K › Chords and key › tuning");
   });

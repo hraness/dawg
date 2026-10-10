@@ -23,6 +23,7 @@ import { DEFAULT_KITS } from "../audio/packs.ts";
 import { SYNTH_KIT_NAMES } from "../../core/kits.ts";
 import { DRUM_PATTERNS, findPattern } from "../../core/sdk/v1.ts";
 import { parsePatternCommand } from "../commands/drums.ts";
+import { parseEffectName } from "../commands/fx.ts";
 import { nearest } from "../commands/nearest.ts";
 import { parseKitCommand } from "../commands/pack.ts";
 import { commandParses } from "../commands/parses.ts";
@@ -382,8 +383,13 @@ export function menuPathFor(command: string): string | undefined {
     return mix && `${mix} › ${verb}`;
   }
   if (verb === "fx" && words[1]) {
-    const effects = menuPath("effects");
-    return effects && `${effects} › ${words[1]}`;
+    // The row's live label and real place (`more effects › phaser`, the
+    // formant shift under Voice); Effects when nothing names it.
+    const id =
+      words[1] === "rig"
+        ? "guitar rig"
+        : (parseEffectName(words[1]) ?? words[1]);
+    return menuPath(id) ?? menuPath("effects");
   }
   const home = MENU_HOME[verb];
   return home ? menuPath(home) : undefined;
