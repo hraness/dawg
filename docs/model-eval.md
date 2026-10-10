@@ -153,6 +153,27 @@ recovery, against Opus 5.5's 100% on its sample. Grok 4.1 Fast and Mistral
 Small are faster but fail most compose tasks, and GLM-5.3 Flash is slower
 at p50 and passes less.
 
+## Audit rerun (2026-10-10, Vercel AI Gateway)
+
+The 0.7 audit reran the suite on `main` after the style families, grammar,
+menu and language lanes merged. CI-safe mode (`bun test bench/agent-eval`:
+reference solutions, do-nothing answers, 20 recorded transcripts, harness)
+passed 162 of 162. Live, with a $5 cap, the default model ran an 8-task
+sample across every tier and the fast model (`/model fast`) ran all 65
+tasks once. Total spend $1.22.
+
+| model                      | pass | single | compose | files | multi | recovery | p50 turn | p95 turn | p50 first token | steps | calls |  $/task | runs |
+| -------------------------- | ---: | -----: | ------: | ----: | ----: | -------: | -------: | -------: | --------------: | ----: | ----: | ------: | ---: |
+| anthropic/claude-opus-5.5  | 100% |   100% |    100% |  100% |  100% |     100% |    7.7 s |   17.7 s |           2.0 s |   2.4 |   2.3 | $0.1333 |    8 |
+| anthropic/claude-haiku-5.5 |  94% |    95% |     82% |  100% |  100% |     100% |    4.1 s |   17.5 s |           1.3 s |   2.7 |   2.4 | $0.0023 |   65 |
+
+Haiku 5.5 failed transpose-bass-whole-step, rumba-clave-3-2, son-clave-3-2
+and twelve-bar-blues-a, all in the range of its earlier single-run noise
+(95% to 97%). Opus first-token and turn times improved against the
+morning of 2026-10-09 (2.3 to 2.0 s, 9.8 to 7.7 s). Style tasks are still
+not in the suite. Raw records are in
+`bench/agent-eval/results/2026-10-10-audit.json`.
+
 ## Findings
 
 - **Small models do well here.** Five models clear 90% on tasks that need
