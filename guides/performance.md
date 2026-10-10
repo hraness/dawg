@@ -5,11 +5,14 @@ parent: sound
 order: 2
 ---
 
-How notes are played. Targets: `all`, `bar 3`, `bars 2-4` or note ids.
+Performance is how notes are played: short or smooth, sliding, bent,
+held with a pedal. Aim a change at `all`, `bar 3`, `bars 2-4` or note
+ids.
 
 ## Ask
 
-- "make the bass slide like a 303" · "pedal the piano every bar"
+- "make the bass slide like a 303"
+- "pedal the piano every bar"
 
 ## Type it yourself
 
@@ -24,7 +27,7 @@ How notes are played. Targets: `all`, `bar 3`, `bars 2-4` or note ids.
 
 ## Keys
 
-- Shift + note in play mode sustains · Tab latches the sustain
+- In play mode, Shift + note sustains · Tab latches the sustain
 
 ## Next
 

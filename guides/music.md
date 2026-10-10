@@ -5,7 +5,8 @@ parent: arrange
 order: 5
 ---
 
-A loop grows into a song in four moves: notes, tracks, sections, form.
+A loop grows into a song in four moves: write notes, add tracks, name
+sections, then set the form (the order the sections play in).
 
 ## Ask
 
@@ -22,7 +23,7 @@ A loop grows into a song in four moves: notes, tracks, sections, form.
 
 ## Keys
 
-- Ctrl-P play mode plays your idea in · Ctrl-Z undoes any step
+- Ctrl-P play mode lets you play an idea in · Ctrl-Z undoes any step
 
 ## Next
 

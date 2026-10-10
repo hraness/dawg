@@ -38,7 +38,7 @@ import {
 } from "./delight.ts";
 import { asciiHint, fitHint, HINTS } from "./grammar.ts";
 import { GuideBrowser } from "./guide.ts";
-import { listGuides } from "../guides/index.ts";
+import { CODE_ROLE, listGuides, RULE_MARK } from "../guides/index.ts";
 import { topicMiss } from "../src/lang/glossary.ts";
 import { classifyKey, overlayKey, type UiCommand } from "./keys.ts";
 import { PromptModel, type PromptAction, type PromptMode } from "./prompt.ts";
@@ -1112,18 +1112,24 @@ function paintText(
     );
   text.lines.slice(scroll, scroll + inner).forEach((line, index) => {
     const heading = line.startsWith("── ");
+    const y = region.y + 1 + index;
     buffer.text(
       left + 2,
-      region.y + 1 + index,
+      y,
       truncate(
         heading && !ui.capabilities.unicode ? line.replace("── ", "-- ") : line,
         boxWidth - 4,
       ),
-      onBackground(
-        heading ? { ...roles.borderFocus, bold: true } : roles.text,
-        panel,
-      ),
+      onBackground(heading ? { ...roles.text, bold: true } : roles.text, panel),
     );
+    // The same heading mark as /guide (guides/index.ts RULE_MARK).
+    if (heading)
+      buffer.text(
+        left + 2,
+        y,
+        ui.capabilities.unicode ? RULE_MARK.mark : RULE_MARK.ascii,
+        onBackground({ ...roles[RULE_MARK.role], bold: true }, panel),
+      );
   });
 }
 
@@ -1166,18 +1172,35 @@ function paintGuide(
     const style = row.selected
       ? { ...roles.borderFocus, bold: true }
       : row.heading
-        ? { ...roles.borderFocus, bold: true }
+        ? { ...roles.text, bold: true }
         : row.muted
           ? roles.muted
           : roles.text;
     const marker = row.selected ? (unicode ? "›" : ">") : " ";
-    const text = guide.page === undefined ? `${marker}${row.text}` : row.text;
-    buffer.text(
-      left + 2,
-      region.y + 1 + index,
-      truncate(text, boxWidth - 4),
-      onBackground(style, panel),
-    );
+    const tree = guide.page === undefined;
+    const text = tree ? `${marker}${row.text}` : row.text;
+    const x = left + 2;
+    const y = region.y + 1 + index;
+    const room = boxWidth - 4;
+    buffer.text(x, y, truncate(text, room), onBackground(style, panel));
+    if (tree) return;
+    // The mark and typed commands repeat their meaning in colour; the
+    // symbol (or bold) carries it without.
+    const paint = (from: number, to: number, role: Style) => {
+      const at = displayWidth(row.text.slice(0, from));
+      if (at >= room) return;
+      buffer.text(
+        x + at,
+        y,
+        row.text.slice(from, to),
+        onBackground(role, panel),
+        room - at,
+      );
+    };
+    if (row.mark)
+      paint(0, row.mark.length, { ...roles[row.mark.role], bold: true });
+    for (const [from, to] of row.code ?? [])
+      paint(from, to, { ...roles[CODE_ROLE], bold: true });
   });
 }
 

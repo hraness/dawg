@@ -5,8 +5,9 @@ parent: project
 order: 4
 ---
 
-Open the same song in several terminals: one plays, one shows TAPE,
-one the knobs. Each pane has a letter and its own undo.
+Open the same song in several terminals at once: one plays, one shows
+TAPE, one the knobs. They share one transport. Each pane has a letter
+and its own undo.
 
 ## Ask
 
@@ -14,9 +15,10 @@ one the knobs. Each pane has a letter and its own undo.
 
 ## Type it yourself
 
-- `panes` · `pane tape` (copies `dawg pane tape` to paste elsewhere)
-- `pin` keep this pane on its track · `unpin`
-- `follow b` follow pane B's track · `follow` the latest · `unfollow`
+- `panes` lists them · `pane tape` copies `dawg pane tape` to paste
+  into another terminal
+- `pin` keeps this pane on its track · `unpin`
+- `follow b` follows pane B's track · `follow` the latest · `unfollow`
 - `undo` this pane's last edit · `undo all` anyone's
 
 ## Menu
@@ -25,7 +27,9 @@ one the knobs. Each pane has a letter and its own undo.
 
 ## Keys
 
-- In a shell: `dawg pane home|play|tape|sound|menu [track] [pin]`
+In a shell, open a pane on one screen:
+
+- `dawg pane home|play|tape|sound|menu [track] [pin]`
 
 ## Next
 

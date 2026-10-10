@@ -5,8 +5,8 @@ parent: keys
 order: 3
 ---
 
-Ctrl-P turns the computer keyboard into a piano for the focused track.
-Esc leaves it.
+Ctrl-P turns your computer keyboard into a piano for the focused
+track, so you can play and record ideas by hand. Esc leaves it.
 
 ## Ask
 

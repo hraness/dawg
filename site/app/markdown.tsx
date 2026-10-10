@@ -2,6 +2,17 @@ import { SyntaxCode } from "@hraness/design-kit/react/server";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { type DocMark, NOTE_MARKS, SECTION_MARKS } from "./doc-marks";
+
+/** A doc mark before a heading or note; the words beside it say the same. */
+function Mark({ mark }: Readonly<{ mark: DocMark }>) {
+  return (
+    <span className={`dawg-mark dawg-mark--${mark.role}`} aria-hidden="true">
+      {mark.mark}
+    </span>
+  );
+}
+
 /**
  * A small renderer for the Markdown that CHANGELOG.md and the TUI guides use:
  * headings, paragraphs, bullet and numbered lists, tables, fenced code,
@@ -57,7 +68,13 @@ export function slugify(text: string): string {
 export function Markdown({
   source,
   headingOffset = 0,
-}: Readonly<{ source: string; headingOffset?: number }>) {
+  marks = false,
+}: Readonly<{
+  source: string;
+  headingOffset?: number;
+  /** Guide pages: the TUI's section and note marks (app/doc-marks.ts). */
+  marks?: boolean;
+}>) {
   const lines = source.replace(/\r\n/gu, "\n").split("\n");
   const blocks: ReactNode[] = [];
   let i = 0;
@@ -150,8 +167,10 @@ export function Markdown({
     if (heading) {
       const level = Math.min(6, heading[1]!.length + headingOffset);
       const Tag = `h${level}` as "h2";
+      const mark = marks ? SECTION_MARKS[heading[2]!] : undefined;
       blocks.push(
         <Tag key={key++} id={slugify(heading[2]!)}>
+          {mark === undefined ? null : <Mark mark={mark} />}
           {inline(heading[2]!, `h${key}`)}
         </Tag>,
       );
@@ -170,9 +189,20 @@ export function Markdown({
       const listKey = key++;
       blocks.push(
         <ul key={listKey}>
-          {items.map((item, n) => (
-            <li key={n}>{inline(item, `l${listKey}-${n}`)}</li>
-          ))}
+          {items.map((item, n) => {
+            const note = marks
+              ? item.match(/^(Tip|Careful): /u)?.[1]
+              : undefined;
+            if (note === undefined)
+              return <li key={n}>{inline(item, `l${listKey}-${n}`)}</li>;
+            const mark = NOTE_MARKS[note as keyof typeof NOTE_MARKS];
+            return (
+              <li key={n} className={`dawg-note dawg-note--${mark.role}`}>
+                <Mark mark={mark} />
+                {inline(item, `l${listKey}-${n}`)}
+              </li>
+            );
+          })}
         </ul>,
       );
       continue;

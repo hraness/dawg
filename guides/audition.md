@@ -5,8 +5,9 @@ parent: keys
 order: 1
 ---
 
-Each menu row shows its value and, dimmed, the command it runs, so the
-menu teaches the commands. Changes are staged on a loop until you keep.
+Ctrl-K opens a menu of every control. Each row shows its value and,
+dimmed, the command it runs, so the menu teaches you the commands.
+Changes play on a loop and only stick when you keep them.
 
 ## Ask
 
@@ -14,7 +15,8 @@ menu teaches the commands. Changes are staged on a loop until you keep.
 
 ## Type it yourself
 
-- `menu effects` opens a topic · `try fx reverb mix 0.6` stages one
+- `menu effects` opens one topic of the menu
+- `try fx reverb mix 0.6` stages a change to hear first
 
 ## Menu
 
@@ -23,8 +25,8 @@ menu teaches the commands. Changes are staged on a loop until you keep.
 
 ## Keys
 
-- ↑↓ move · → or Enter open · ←→ adjust a value · `x` reset · Esc back
-- Space loops the track · `a` A/B · `c` solo or in context
+- ↑↓ move · → or Enter open · ←→ adjust a value · Esc back
+- `x` reset · Space loops the track · `a` A/B · `c` solo or in context
 - Enter keeps every staged change as one undo step · Esc reverts
 
 ## Next

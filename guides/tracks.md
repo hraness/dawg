@@ -5,6 +5,9 @@ parent: arrange
 order: 2
 ---
 
+A track is one instrument line: drums, bass, a pad. Typing a track's
+name focuses it, and creates it if it is new.
+
 ## Ask
 
 - "add a pad track playing long chords"
@@ -12,9 +15,9 @@ order: 2
 
 ## Type it yourself
 
-- `track drums` focus a track, creating it (drums get the kit)
-- `tracks` list them · `track name lead` rename the focused track
-- `track rm pad` remove one · `track move pad 1` reorder
+- `track drums` focuses a track, creating it (drums get the kit)
+- `tracks` lists them · `track name lead` renames the focused track
+- `track rm pad` removes one · `track move pad 1` reorders
 - `instrument piano` · `instrument kit` · `clear` its notes
 
 ## Menu
@@ -23,7 +26,7 @@ order: 2
 
 ## Keys
 
-- Click the track name in the header to list tracks
+- Click the track name in the header to list the tracks
 
 ## Next
 

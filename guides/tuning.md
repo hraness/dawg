@@ -5,12 +5,13 @@ parent: chords
 order: 1
 ---
 
-Tuning sets how pitches are tuned: equal steps, ratios, cents or a Scala
-file. The key still names the tonic and scale.
+Tuning sets the exact pitch of each note: equal steps, ratios, cents
+or a Scala file. The key still names the tonic and scale.
 
 ## Ask
 
-- "tune the song to 19-EDO" · "use a just intonation in D"
+- "tune the song to 19-EDO"
+- "use a just intonation in D"
 
 ## Type it yourself
 

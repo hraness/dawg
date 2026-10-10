@@ -5,7 +5,9 @@ parent: mix
 order: 1
 ---
 
-A lane moves a value over beats. Every numeric effect parameter has one.
+Automation moves a value over time: fade a pad in, sweep a filter
+open. Each moving value is a lane, and every numeric effect parameter
+can have one.
 
 ## Ask
 
@@ -14,8 +16,10 @@ A lane moves a value over beats. Every numeric effect parameter has one.
 
 ## Type it yourself
 
+Add points one at a time or several at once (beat:value):
+
 - `automate volume at 0 0.2` · `automate volume at 4 1`
-- `automate filter points 0:400 4:6000` several points at once
+- `automate filter points 0:400 4:6000`
 - `automate delay-mix at 4 0` · `automate filter remove 4`
 - `clear filter automation` · `clear automation`
 

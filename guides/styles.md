@@ -5,12 +5,14 @@ parent: arrange
 order: 4
 ---
 
-A style is a song recipe: meter, groove, scale, harmony and form. The
-same style, bars and seed always make the same song.
+A style is a song recipe: meter, groove, scale, harmony and form.
+The same style, bar count and seed always make the same song, so a
+result you like can be made again.
 
 ## Ask
 
-- "make 16 bars of deep house" · "bebop, blended with bossa nova"
+- "make 16 bars of deep house"
+- "bebop, blended with bossa nova"
 
 ## Type it yourself
 

@@ -4,8 +4,9 @@ title: Getting started
 order: 1
 ---
 
-Run `dawg` in a folder: notes fall toward the hit line, the prompt is
-below, and every change is one undo step.
+Run `dawg` in a folder to start a song. Notes fall toward the hit line
+as they play, and the prompt sits below. Every change is one undo step,
+so try anything.
 
 ## Ask
 
@@ -15,7 +16,8 @@ below, and every change is one undo step.
 ## Type it yourself
 
 - `track drums` · `pattern house` · `add C4 at 0 for 1` · `tempo 120`
-- `play` · `pause` · `undo` · `redo` · Space on an empty prompt
+- `play` · `pause` · `undo` · `redo`
+- Tip: Space on an empty prompt plays and pauses
 
 ## Menu
 
@@ -23,7 +25,8 @@ below, and every change is one undo step.
 
 ## Keys
 
-- Ctrl-P play mode · Ctrl-K menu · `?` keys · F1 guides · Ctrl-Q next
+- Ctrl-P play mode · Ctrl-K menu · Ctrl-T TAPE
+- `?` keys · F1 guides · Ctrl-Q NOW/NEXT
 
 ## Next
 

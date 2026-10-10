@@ -4,11 +4,13 @@ title: Rhythm and drums
 order: 6
 ---
 
-A drum track has one row per drum: kick, snare, hat and more.
+Drums get one row per drum: kick, snare, hat and more. Start from a
+groove, then add or move hits.
 
 ## Ask
 
-- "give me a house beat" · "add a swung hat, seven hits in sixteen"
+- "give me a house beat"
+- "add a swung hat, seven hits in sixteen"
 
 ## Type it yourself
 
@@ -23,8 +25,10 @@ A drum track has one row per drum: kick, snare, hat and more.
 
 ## Keys
 
-- In the euclid editor ↑↓ knob (● drum ▲ pulses ■ rotate
-  ◆ velocity) · ←→ turn · Tab field · Space loop
+In the euclid editor:
+
+- ↑↓ picks a knob: ● drum ▲ pulses ■ rotate ◆ velocity
+- ←→ turn · Tab field · Space loop
 
 ## Next
 
