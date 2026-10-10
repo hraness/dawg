@@ -1,8 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { diffRewind, IDENTITY_REWIND } from "../session/delta.ts";
-import { addNote, createScore } from "../../core/score.ts";
+import {
+  addNote,
+  applyScoreOperation,
+  createScore,
+  scoreFromJSON,
+} from "../../core/score.ts";
 import {
   historyReceipt,
+  paneHistoryStep,
   historyTarget,
   REDO_KIND,
   UNDO_KIND,
@@ -143,5 +149,187 @@ describe("history receipts", () => {
       "redid · +1 note on bass (C3)",
     );
     expect(historyReceipt("undo", base, base, 7)).toBe("undid · rev 7");
+  });
+});
+
+describe("per-pane undo (design §12.6)", () => {
+  /** A two-pane log over real scores; every append is authored. */
+  function panes() {
+    const events: {
+      revision: number;
+      kind: string;
+      payload: Record<string, unknown>;
+      actor: { clientId: string };
+      rewind: ReturnType<typeof diffRewind>;
+    }[] = [];
+    let score = createScore({
+      tracks: [
+        { id: "bass", name: "bass", instrument: "sine" },
+        { id: "drums", name: "drums", instrument: "sine" },
+      ],
+    });
+    const append = (
+      clientId: string,
+      kind: string,
+      next: typeof score,
+      payload: Record<string, unknown> = {},
+    ) => {
+      events.push({
+        revision: events.length + 1,
+        kind,
+        payload,
+        actor: { clientId },
+        rewind: diffRewind(score.toJSON(), next.toJSON()),
+      });
+      score = next;
+    };
+    const volume = (id: string) =>
+      score.tracks.find((track) => track.id === id)!.volume;
+    return {
+      events,
+      volume,
+      get score() {
+        return score;
+      },
+      set(clientId: string, trackId: string, value: number) {
+        append(
+          clientId,
+          "score.edit",
+          applyScoreOperation(score, {
+            type: "updateTrack",
+            trackId,
+            patch: { volume: value },
+          }),
+        );
+      },
+      pan(clientId: string, trackId: string, value: number) {
+        append(
+          clientId,
+          "score.edit",
+          applyScoreOperation(score, {
+            type: "updateTrack",
+            trackId,
+            patch: { pan: value },
+          }),
+        );
+      },
+      step(clientId: string, direction: "undo" | "redo") {
+        const step = paneHistoryStep(
+          score.toJSON(),
+          events,
+          direction,
+          clientId,
+        );
+        if (step?.ok)
+          append(
+            clientId,
+            direction === "undo" ? UNDO_KIND : REDO_KIND,
+            step.next,
+            {
+              [direction === "undo" ? "undoneRevision" : "redoneRevision"]:
+                step.revision,
+              scope: "pane",
+            },
+          );
+        return step;
+      },
+      all(clientId: string, direction: "undo" | "redo") {
+        const target = historyTarget(score.toJSON(), events, direction);
+        if (!target) return false;
+        append(
+          clientId,
+          direction === "undo" ? UNDO_KIND : REDO_KIND,
+          scoreFromJSON(target.composition),
+          {
+            [direction === "undo" ? "undoneRevision" : "redoneRevision"]:
+              target.revision,
+          },
+        );
+        return true;
+      },
+    };
+  }
+
+  test("A undoes its own edit and keeps B's later, unrelated edit", () => {
+    const h = panes();
+    h.set("A", "bass", 0.3);
+    h.set("B", "drums", 0.6);
+    expect(h.step("A", "undo")).toMatchObject({ ok: true, revision: 1 });
+    expect(h.volume("bass")).toBe(1);
+    expect(h.volume("drums")).toBe(0.6);
+    expect(h.step("A", "undo")).toBeUndefined();
+    expect(h.step("A", "redo")).toMatchObject({ ok: true });
+    expect(h.volume("bass")).toBe(0.3);
+    expect(h.volume("drums")).toBe(0.6);
+    // B's own stack is untouched by A's steps.
+    expect(h.step("B", "undo")).toMatchObject({ ok: true, revision: 2 });
+    expect(h.volume("drums")).toBe(1);
+    expect(h.volume("bass")).toBe(0.3);
+  });
+
+  test("two panes on one track: different properties undo independently", () => {
+    const h = panes();
+    h.set("A", "bass", 0.3);
+    h.pan("B", "bass", -0.4);
+    expect(h.step("A", "undo")).toMatchObject({ ok: true });
+    const bass = h.score.tracks.find((track) => track.id === "bass")!;
+    expect(bass.volume).toBe(1);
+    expect(bass.pan).toBe(-0.4);
+  });
+
+  test("refuses when another pane changed the same property since", () => {
+    const h = panes();
+    h.set("A", "bass", 0.3);
+    h.set("B", "bass", 0.5);
+    const step = h.step("A", "undo");
+    expect(step).toMatchObject({
+      ok: false,
+      reason: "bass volume changed",
+      others: ["B"],
+    });
+    expect(h.volume("bass")).toBe(0.5);
+  });
+
+  test("undo all is global and its receipt target is the newest edit", () => {
+    const h = panes();
+    h.set("A", "bass", 0.3);
+    h.set("B", "drums", 0.6);
+    expect(h.all("A", "undo")).toBe(true);
+    expect(h.volume("drums")).toBe(1);
+    expect(h.volume("bass")).toBe(0.3);
+    expect(h.all("A", "undo")).toBe(true);
+    expect(h.volume("bass")).toBe(1);
+    expect(h.all("A", "redo")).toBe(true);
+    expect(h.volume("bass")).toBe(0.3);
+  });
+
+  test("a pane undo is an edit in the global history", () => {
+    const h = panes();
+    h.set("A", "bass", 0.3);
+    h.set("B", "drums", 0.6);
+    h.step("A", "undo");
+    expect(h.volume("bass")).toBe(1);
+    // undo all steps back the newest event: A's undo.
+    expect(h.all("B", "undo")).toBe(true);
+    expect(h.volume("bass")).toBe(0.3);
+    expect(h.volume("drums")).toBe(0.6);
+  });
+
+  test("a single pane sees the same history as undo all", () => {
+    const h = panes();
+    h.set("A", "bass", 0.3);
+    h.set("A", "bass", 0.5);
+    h.set("A", "drums", 0.2);
+    h.step("A", "undo");
+    h.step("A", "undo");
+    expect([h.volume("bass"), h.volume("drums")]).toEqual([0.3, 1]);
+    h.step("A", "redo");
+    expect(h.volume("bass")).toBe(0.5);
+    h.set("A", "drums", 0.9);
+    expect(h.step("A", "redo")).toBeUndefined();
+    h.step("A", "undo");
+    h.step("A", "undo");
+    h.step("A", "undo");
+    expect([h.volume("bass"), h.volume("drums")]).toEqual([1, 1]);
   });
 });

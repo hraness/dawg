@@ -351,16 +351,17 @@ test.skipIf(!supported)(
     expect(reopened.digest).toBe(built.digest);
     expect(reopened.name).toBe("night drive");
 
-    // Undo in one window and redo in another stay consistent everywhere.
+    // `undo all` in one pane and `redo all` in another stay consistent
+    // everywhere (plain undo is per pane, design §12.6).
     await edit(two, "add A2 at 3 for 1");
     const added = await converged(quad);
-    await edit(three, "undo");
+    await edit(three, "undo all");
     const undone = await converged(quad);
     expect(undone.digest).toBe(built.digest);
-    await edit(one, "redo");
+    await edit(one, "redo all");
     const redone = await converged(quad);
     expect(redone.digest).toBe(added.digest);
-    await send(four, "redo");
+    await send(four, "redo all");
     await until(
       () => four.vt.text().includes("nothing to redo"),
       "empty redo stack",
@@ -380,10 +381,10 @@ test.skipIf(!supported)(
     expect(respawned).toBeNumber();
     expect(respawned).not.toBe(pid);
     // Undoing the post-crash edit returns to the pre-crash digest.
-    await edit(three, "undo");
+    await edit(three, "undo all");
     const rewound = await converged(quad);
     expect(rewound.digest).toBe(redone.digest);
-    await edit(two, "redo");
+    await edit(two, "redo all");
     const replayed = await converged(quad);
     expect(replayed.digest).toBe(afterCrash.digest);
 

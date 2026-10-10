@@ -143,3 +143,53 @@ describe("rebaseOperations: project-file operations", () => {
     ).toMatchObject({ ok: false, reason: "track order changed" });
   });
 });
+
+describe("rebaseOperations: per (track, property) conflicts", () => {
+  const patch = (
+    trackId: string,
+    value: Record<string, unknown>,
+  ): ScoreOperation =>
+    ({ type: "updateTrack", trackId, patch: value }) as ScoreOperation;
+  const after = (ops: ScoreOperation[]) => {
+    const result = rebaseOperations(base, base, ops);
+    if (!result.ok) throw new Error(result.reason);
+    return result.next;
+  };
+
+  test("different properties of one track both land", () => {
+    const theirs = after([patch("a", { volume: 0.3 })]);
+    const result = rebaseOperations(base, theirs, [patch("a", { pan: -0.5 })]);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const track = result.next.tracks.find((t) => t.id === "a")!;
+      expect(track.volume).toBe(0.3);
+      expect(track.pan).toBe(-0.5);
+    }
+  });
+
+  test("the same property conflicts and names it", () => {
+    const theirs = after([patch("a", { volume: 0.3 })]);
+    expect(
+      rebaseOperations(base, theirs, [patch("a", { volume: 0.5 })]),
+    ).toMatchObject({ ok: false, reason: "a volume changed" });
+  });
+
+  test("automation conflicts per lane; a removed track always conflicts", () => {
+    const lane = (parameter: string, value: number): ScoreOperation =>
+      ({
+        type: "setAutomation",
+        trackId: "a",
+        parameter,
+        points: [{ tick: 0, value }],
+      }) as ScoreOperation;
+    const theirs = after([lane("volume", 0.2)]);
+    expect(rebaseOperations(base, theirs, [lane("pan", 0.1)]).ok).toBe(true);
+    expect(rebaseOperations(base, theirs, [lane("volume", 0.9)])).toMatchObject(
+      { ok: false, reason: "a volume automation changed" },
+    );
+    const removed = after([{ type: "removeTrack", trackId: "b" }]);
+    expect(
+      rebaseOperations(base, removed, [patch("b", { pan: 0.2 })]),
+    ).toMatchObject({ ok: false, reason: "track b was removed" });
+  });
+});

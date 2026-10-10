@@ -2,17 +2,20 @@
  * Server-side rebase of agent operation intents.
  *
  * An agent validates its operations against the score at `base`. When other
- * windows committed in the meantime, dawgd replays the operations on the
+ * panes committed in the meantime, dawgd replays the operations on the
  * current score instead of rejecting, but only when nothing they touch
- * changed since `base`: the notes they update or remove, the tracks whose
- * settings or contents they rewrite, the tracks they add notes to, and the
+ * changed since `base`: the notes they update or remove, the track
+ * properties they patch (per track and field, so two panes can set
+ * different properties of one track), the tracks whose contents they clear, the tracks they add notes to, and the
  * tempo or length they set. Anything else is a conflict and the caller gets
  * the usual `rebase` reply. The reducer still validates every operation.
  */
 import {
   applyScoreOperation,
+  automationPoints,
   scoreFromJSON,
   type ScoreOperation,
+  type Track,
   type TrackScore,
 } from "../../core/score.ts";
 import { rewindComposition, type Rewind } from "./delta.ts";
@@ -83,12 +86,43 @@ export function rebaseOperations(
           return { ok: false, reason: `note ${operation.noteId} changed` };
         break;
       }
-      case "updateTrack":
-      case "setClips":
+      // Track settings conflict per (track, property): another pane's
+      // volume change never blocks this pane's pan, only its volume.
+      case "updateTrack": {
+        const id = operation.trackId;
+        if (added.tracks.has(id)) break;
+        const before = trackSettings(base, id);
+        const now = trackSettings(current, id);
+        if (!now) return { ok: false, reason: `track ${id} was removed` };
+        for (const field of Object.keys(operation.patch) as (keyof Track)[])
+          if (!same(before?.[field] ?? null, now[field] ?? null))
+            return { ok: false, reason: `${id} ${String(field)} changed` };
+        break;
+      }
+      case "setClips": {
+        const id = operation.trackId;
+        if (added.tracks.has(id)) break;
+        const now = trackSettings(current, id);
+        if (!now) return { ok: false, reason: `track ${id} was removed` };
+        if (!same(trackSettings(base, id)?.clips ?? null, now.clips ?? null))
+          return { ok: false, reason: `${id} clips changed` };
+        break;
+      }
       case "setAutomation": {
-        if (added.tracks.has(operation.trackId)) break;
-        if (!settingsUnchanged(operation.trackId))
-          return { ok: false, reason: `track ${operation.trackId} changed` };
+        const id = operation.trackId;
+        if (added.tracks.has(id)) break;
+        const now = trackSettings(current, id);
+        if (!now) return { ok: false, reason: `track ${id} was removed` };
+        if (
+          !same(
+            automationPoints(trackSettings(base, id), operation.parameter),
+            automationPoints(now, operation.parameter),
+          )
+        )
+          return {
+            ok: false,
+            reason: `${id} ${operation.parameter} automation changed`,
+          };
         break;
       }
       case "clearTrack": {
