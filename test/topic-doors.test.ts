@@ -1,9 +1,7 @@
 /**
  * One topic id opens the same subject in /help, /guide and /menu (design
- * §4, §8.2), and the window commands help advertises route. The menu door
- * and `model key` in the prompt bar belong to other lanes (menu PR #142,
- * grammar PR #141); their misses sit in ratchets below that must shrink to
- * empty as those land.
+ * §4, §8.2), and the window commands help advertises route. The ratchets
+ * below are empty; an entry fails the suite once it closes.
  */
 import { expect, test } from "bun:test";
 import { accepts } from "./consistency-lib.ts";
@@ -11,10 +9,10 @@ import { TOPICS, TOPIC_ALIASES } from "../src/lang/glossary.ts";
 
 const WORDS = [...TOPICS, ...Object.keys(TOPIC_ALIASES)];
 
-/** Topic words `/menu` does not take yet (the menu lane's resolveTopic). */
+/** Topic words `/menu` does not take. Empty. */
 const KNOWN_MENU_TOPIC_GAPS: readonly string[] = [];
 
-/** Window lines help advertises that do not route yet (grammar lane). */
+/** Window lines help advertises that do not route. Empty. */
 const KNOWN_WINDOW_GAPS: readonly string[] = [];
 
 const WINDOW_LINES = [

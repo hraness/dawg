@@ -45,22 +45,17 @@ import {
 } from "./consistency-lib.ts";
 
 /**
- * Help and usage examples one spelling of which the prompt bar does not run
- * yet. The grammar lane (design A1, D1 in its notes: retry the other
- * spelling at the submit fallback) makes the slash optional everywhere;
- * delete each line as it starts to parse.
+ * Help and usage examples one spelling of which the prompt bar does not
+ * run (the slash is optional everywhere). Empty; an entry fails the
+ * suite once it parses.
  */
 const KNOWN_SLASH_GAPS: readonly string[] = [];
 
 /**
- * Doors that do not open a topic yet, as `door id`. The language lane (D1,
- * D3, D4: help groups and guides for every id) and the menu lane (B1:
- * MENU_SECTIONS from every topic id) close them.
+ * Doors that do not open a topic, as `door id`. Empty; an entry fails
+ * the suite once the door opens.
  */
 const KNOWN_TOPIC_GAPS: readonly string[] = [];
-
-/** True until src/commands/grammar.ts lands (grammar lane, PR #141). */
-const GRAMMAR_PENDING = true;
 
 /**
  * Typed aliases a menu row must not run (design §2, §3): the row runs the
@@ -77,10 +72,8 @@ const CANONICAL_VERBS: Readonly<Record<string, string>> = {
 };
 
 /**
- * Alias verbs menu rows still run because the canonical form does not parse
- * on main yet (grammar lane, PR #141: `key <mode>`, `groove <name>`,
- * `loop`). The test fails as soon as the canonical form parses: flip the
- * rows in src/tui/menu.ts, then delete the line here.
+ * Menu rows that run an alias verb instead of the canonical word.
+ * Empty; an entry fails the suite once the canonical form parses.
  */
 const KNOWN_ALIAS_ROWS: readonly string[] = [];
 
@@ -310,13 +303,7 @@ describe("aliases parse like their canonical form", () => {
   });
 
   test("grammar.ts word tables: every alias parses like the canonical word", async () => {
-    if (!existsSync(join(ROOT, "src/commands/grammar.ts"))) {
-      // Not merged yet (grammar lane, PR #141); the check arms itself.
-      expect(GRAMMAR_PENDING).toBe(true);
-      return;
-    }
-    const grammarPath = "../src/commands/grammar.ts";
-    const grammar = (await import(grammarPath)) as {
+    const grammar = (await import("../src/commands/grammar.ts")) as {
       REMOVE_WORDS?: readonly string[];
       LIST_WORDS?: readonly string[];
     };
@@ -343,13 +330,14 @@ describe("aliases parse like their canonical form", () => {
 });
 
 /**
- * Ctrl-K paths the docs write in the design §4a tree (Voice root, Project ›
- * agent, Arrange › tracks, …) that the menu lane (PR #142) builds. Each
- * resolves on that branch; delete the lines as they resolve here.
+ * Ctrl-K paths the docs write (design §4a) that do not resolve. Empty;
+ * an entry fails the suite once it resolves.
  */
 const KNOWN_MENU_PATH_GAPS: readonly string[] = [];
 
-/** `/menu <word>`s the docs use before the menu lane accepts them. */
+/**
+ * `/menu <word>`s the docs use that /menu does not take. Empty.
+ */
 const KNOWN_MENU_WORD_GAPS: readonly string[] = [];
 
 describe("Ctrl-K paths in the docs resolve", () => {

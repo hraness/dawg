@@ -4,8 +4,7 @@
  * receipt, a bare scalar, bare `formant 3` and bare `lyrics` offline. No
  * screen may say "unknown" or "unrecognized".
  *
- * Cases another lane still has to land are listed in PTY_KNOWN_GAPS; the
- * suite fails when a listed case starts passing, so the list only shrinks.
+ * PTY_KNOWN_GAPS is empty; an entry fails the suite once it passes.
  */
 import { describe, expect, test } from "bun:test";
 import { TOPIC_IDS } from "./consistency-lib.ts";
@@ -21,9 +20,8 @@ type Session = Awaited<ReturnType<typeof launch>>;
 const BAD = /\bunknown\b|\bunrecognized\b|no help topic|no guide named/i;
 
 /**
- * Cases that still print an error, as the label each case uses. The
- * language lane (D1, D3: help and guide pages per id), the menu lane (B1)
- * and the grammar lane (A2, bare scalars and voice verbs) close them.
+ * Cases that still print an error, by label. Empty; an entry fails the
+ * suite once it passes.
  */
 const PTY_KNOWN_GAPS: readonly string[] = [];
 
