@@ -16,6 +16,7 @@ import {
   validatePatch,
   type Patch,
 } from "./patch.ts";
+import { decodeLoop, encodeLoop } from "./loop.ts";
 import { routingOrder } from "./routing.ts";
 import {
   applyScoreOperation,
@@ -304,6 +305,23 @@ describe("score integration", () => {
     const json = JSON.parse(JSON.stringify(score.toJSON()));
     expect(scoreFromJSON(json).toJSON()).toEqual(score.toJSON());
     expect(score.tracks[0]!.patch).toEqual(validatePatch(SIMPLE));
+  });
+
+  test("the loop file keeps the patch library", () => {
+    const score = createScore({
+      patches: { simple: SIMPLE },
+      tracks: [
+        {
+          id: "lead",
+          name: "lead",
+          instrument: "patch",
+          patch: { kind: "patch", ref: "simple" },
+        },
+      ],
+    } as never);
+    const decoded = decodeLoop(encodeLoop(score));
+    expect(decoded.patches).toEqual(score.patches);
+    expect(encodeLoop(createScore({}))).not.toContain("patches");
   });
 
   test("a patch needs the patch instrument; leaving it drops the patch", () => {
