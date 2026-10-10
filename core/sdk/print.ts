@@ -62,6 +62,7 @@ import {
   type Take,
   type Track,
 } from "../score.ts";
+import type { TrackPatchValue } from "../patch.ts";
 import { trackSlug } from "../slug.ts";
 import { barStartTick, timeWithinSong } from "../tempo.ts";
 import type { Tuning } from "../tuning.ts";
@@ -198,7 +199,9 @@ export function trackIdentifiers(
     if (
       !/^[a-z_]/.test(base) ||
       RESERVED.has(base) ||
-      (score.time && TIME_HELPERS.includes(base))
+      (score.time && TIME_HELPERS.includes(base)) ||
+      (Object.keys(score.patches).length > 0 &&
+        (base === "patch" || base === "fxPatch"))
     )
       base = `track_${base}`;
     let name = base;
@@ -220,6 +223,7 @@ export function printSong(
     "song",
     ...TIME_HELPERS.filter((name) => time.used.has(name)),
     ...(score.style ? ["style"] : []),
+    ...libraryHelpers(score),
   ];
   const lines: string[] = [`import { ${helpers.join(", ")} } from "dawg";`];
   for (const track of score.tracks)
@@ -275,10 +279,29 @@ export function printSong(
   else if (score.loopSection !== undefined)
     entries.push(`loop: ${str(score.loopSection)}`);
   if (score.calibration) entries.push(`calibration: ${num(score.calibration)}`);
+  const library = Object.values(score.patches).map((p) =>
+    printPatch(
+      p,
+      p.role === "effect" ? "fxPatch" : "patch",
+      INDENT + INDENT,
+      0,
+    ),
+  );
+  if (library.length > 0)
+    entries.push(`patches: ${list(library, INDENT, "patches: ".length, 1)}`);
   lines.push("export default song({");
   for (const entry of entries) lines.push(`${INDENT}${entry},`);
   lines.push("});", "");
   return lines.join("\n");
+}
+
+/** `patch` and `fxPatch` when the song has a patch library, in that order. */
+function libraryHelpers(score: TrackScore): string[] {
+  const roles = new Set(Object.values(score.patches).map((p) => p.role));
+  return [
+    ...(roles.has("instrument") ? ["patch"] : []),
+    ...(roles.has("effect") ? ["fxPatch"] : []),
+  ];
 }
 
 /** SDK time helpers `song.ts` may import, in import order. */
@@ -494,6 +517,11 @@ export function printTrack(score: TrackScore, track: Track): string {
     entries.push(`instrument: ${singCall}`);
   } else if (vocoderCall && track.instrument === VOCODER_INSTRUMENT) {
     entries.push(`instrument: ${vocoderCall}`);
+  } else if (track.patch) {
+    used.add("patch");
+    entries.push(
+      `instrument: ${printPatch(track.patch, "patch", INDENT, "instrument: ".length)}`,
+    );
   } else entries.push(`instrument: ${str(track.instrument)}`);
   if (vocoderCall && track.instrument !== VOCODER_INSTRUMENT)
     entries.push(`vocoder: ${vocoderCall}`);
@@ -599,6 +627,14 @@ export function printTrack(score: TrackScore, track: Track): string {
         1,
       )}`,
     );
+  const fxPatches = (track.fxPatch ?? []).map((stage) =>
+    printPatch(stage, "fxPatch", INDENT + INDENT + INDENT, 0),
+  );
+  if (fxPatches.length > 0) used.add("fxPatch");
+  const fxPatchLine =
+    fxPatches.length > 0
+      ? `${INDENT + INDENT}patch: ${list(fxPatches, INDENT + INDENT, "patch: ".length, 1)},`
+      : undefined;
   if (track.fx) {
     // A whole rig preset prints as `...rig("crunch")` (SDK 1.22.0).
     const rigName = rigPresetOf(track.fx);
@@ -625,8 +661,9 @@ export function printTrack(score: TrackScore, track: Track): string {
         return `${inner}${effect}: ${params.length === 0 ? "{}" : obj(params, inner, `${effect}: `.length, 1)},`;
       }),
     );
+    if (fxPatchLine) body.push(fxPatchLine);
     entries.push(`fx: {\n${body.join("\n")}\n${INDENT}}`);
-  }
+  } else if (fxPatchLine) entries.push(`fx: {\n${fxPatchLine}\n${INDENT}}`);
   if (track.synth) {
     const params = Object.entries(track.synth).map(
       ([key, v]) =>
@@ -670,9 +707,33 @@ export function printTrack(score: TrackScore, track: Track): string {
     ["wt", track.wtAutomation],
   ];
   const automation = lanes.filter(([, points]) => points && points.length > 0);
-  const fxLanes = FX_LANES.filter(
-    ({ lane }) => (track.fxAutomation?.[lane]?.length ?? 0) > 0,
-  ).map(({ lane }) => [lane, track.fxAutomation![lane]!] as const);
+  const fxLanes: (readonly [string, readonly AutomationPoint[]])[] =
+    FX_LANES.filter(({ lane }) => (track.fxAutomation?.[lane]?.length ?? 0) > 0)
+      .map(({ lane }): readonly [string, readonly AutomationPoint[]] => [
+        lane,
+        track.fxAutomation![lane]!,
+      ])
+      .concat(
+        Object.keys(track.fxAutomation ?? {})
+          .filter(
+            (lane) =>
+              lane.startsWith("patch-") &&
+              ((
+                track.fxAutomation as Readonly<
+                  Record<string, readonly AutomationPoint[]>
+                >
+              )[lane]?.length ?? 0) > 0,
+          )
+          .sort()
+          .map((lane): readonly [string, readonly AutomationPoint[]] => [
+            lane,
+            (
+              track.fxAutomation as Readonly<
+                Record<string, readonly AutomationPoint[]>
+              >
+            )[lane]!,
+          ]),
+      );
   const laneLine = (
     name: string,
     points: readonly AutomationPoint[],
@@ -754,6 +815,8 @@ export function printTrack(score: TrackScore, track: Track): string {
     "grid",
     "audio",
     "take",
+    "patch",
+    "fxPatch",
   ]
     .filter((name) => used.has(name))
     .join(", ");
@@ -1516,6 +1579,74 @@ function printMaster(master: SongMaster): string {
   if (master.target !== undefined)
     body.push(`${inner}target: ${num(master.target)},`);
   return `master: {\n${body.join("\n")}\n${INDENT}}`;
+}
+
+/**
+ * A patch in its plain form (patcher, SDK 1.35.0): `patch({ name, role,
+ * nodes, cables, macros })`, one node per line; a library reference
+ * prints as `patch({ ref, macros })`. The stored data is already
+ * normalized (cables sorted, defaults dropped), so it prints as it is.
+ */
+export function printPatch(
+  value: TrackPatchValue,
+  call: "patch" | "fxPatch",
+  indent: string,
+  prefix: number,
+): string {
+  const fields = Object.entries(value).filter(
+    ([key, v]) =>
+      v !== undefined &&
+      key !== "kind" &&
+      !(call === "fxPatch" && key === "role"),
+  );
+  const entries = fields.map(
+    ([key, v]) =>
+      [
+        propertyKey(key),
+        literal(v, indent + INDENT, propertyKey(key).length + 2, 1),
+      ] as const,
+  );
+  return `${call}(${obj(entries, indent, prefix + call.length + 1, 2)})`;
+}
+
+/** An object key as prettier prints it: bare when it is an identifier. */
+function propertyKey(key: string): string {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? key : str(key);
+}
+
+/** Any plain JSON value as a prettier-stable literal. */
+function literal(
+  v: unknown,
+  indent: string,
+  prefix: number,
+  trailing: number,
+): string {
+  if (typeof v === "number") return num(v);
+  if (typeof v === "string") return str(v);
+  if (typeof v === "boolean") return `${v}`;
+  if (v === null) return "null";
+  if (Array.isArray(v)) {
+    const items = v.map((item) => literal(item, indent + INDENT, 0, 1));
+    // Prettier breaks an array of 2+ objects (or arrays) that each hold 2+.
+    const busy = (item: unknown) =>
+      Array.isArray(item)
+        ? item.length > 1
+        : typeof item === "object" &&
+          item !== null &&
+          Object.keys(item).length > 1;
+    return list(items, indent, prefix, trailing, v.length > 1 && v.every(busy));
+  }
+  const entries = Object.entries(v as Record<string, unknown>)
+    .filter(([, item]) => item !== undefined)
+    .map(
+      ([key, item]) =>
+        [
+          propertyKey(key),
+          literal(item, indent + INDENT, propertyKey(key).length + 2, 1),
+        ] as const,
+    );
+  if (entries.length === 0) return "{}";
+  return obj(entries, indent, prefix, trailing);
 }
 
 /** Object literal: inline when the line fits, expanded otherwise (prettier keeps both). */
