@@ -51,11 +51,16 @@ export function allpassDelay(a: number, w: number): number {
 export function thiranFor(d: number, w = 0): number {
   let a = (1 - d) / (1 + d);
   if (w < 1e-9) return a;
+  const s = Math.sin(w);
+  const c = Math.cos(w);
   for (let i = 0; i < 4; i += 1) {
     const f = allpassDelay(a, w) - d;
     if (Math.abs(f) < 1e-10) break;
-    const h = 1e-6;
-    const df = (allpassDelay(a + h, w) - allpassDelay(a - h, w)) / (2 * h);
+    // d(delay)/da in closed form: the phase is atan2(-s, a + c) -
+    // atan2(-a s, 1 + a c), so no extra atan2 pair per step.
+    const p = a + c;
+    const q = 1 + a * c;
+    const df = -(s / (p * p + s * s) + s / (q * q + a * a * s * s)) / w;
     if (df === 0) break;
     a = clamp(a - f / df, -0.9, 0.9);
   }

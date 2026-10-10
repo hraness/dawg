@@ -598,7 +598,9 @@ export class BowedString {
     const bridgeRefl = -this.sy;
     const nutRefl = -nOut;
     const dv = bowVel - (bridgeRefl + nutRefl);
-    let f = (Math.abs(dv * slope) + 0.75) ** -4;
+    const r = 1 / (Math.abs(dv * slope) + 0.75);
+    const r2 = r * r;
+    let f = r2 * r2;
     if (f > 1) f = 1;
     const nv = contact * dv * f;
     nb[this.nw & mask] = bridgeRefl + nv;
