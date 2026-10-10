@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { OwnWrites, foreignEvents, otherWindowName } from "./origin.ts";
+import {
+  OwnWrites,
+  editedTrack,
+  foreignEvents,
+  otherWindowName,
+} from "./origin.ts";
 import type { SessionEvent, SessionRecord } from "./store.ts";
 
 const event = (revision: number, id: string, kind = "edit"): SessionEvent => ({
@@ -61,13 +66,50 @@ describe("sync origin", () => {
     expect(own.isOwn("e2")).toBe(true);
   });
 
-  test("names the other window", () => {
-    const list = [{ clientId: "me" }, { clientId: "you" }];
-    expect(otherWindowName(list, "me")).toBe("window 2");
-    expect(otherWindowName([{ clientId: "you" }], "me")).toBe("window 2");
-    expect(otherWindowName([...list, { clientId: "x" }], "me")).toBe(
-      "another window",
+  test("names the other window by its track, stable under reordering", () => {
+    const list = [
+      { clientId: "me", focusedTrackId: "bass" },
+      { clientId: "b", focusedTrackId: "lead" },
+      { clientId: "c", focusedTrackId: "pad" },
+    ];
+    const name = (id: string) => id.toUpperCase();
+    // Seeded shuffles of the presence list never change the label.
+    let x = 7;
+    for (let round = 0; round < 50; round += 1) {
+      const shuffled = [...list].sort(() => {
+        x = (x * 1103515245 + 12345) % 2147483648;
+        return x / 2147483648 - 0.5;
+      });
+      expect(
+        otherWindowName(shuffled, "me", {
+          editedTrackId: "lead",
+          trackName: name,
+        }),
+      ).toBe("LEAD window");
+    }
+    expect(otherWindowName(list.slice(0, 2), "me")).toBe("lead window");
+    // Before presence arrives the edited track names the window.
+    expect(otherWindowName([], "me", { editedTrackId: "pad" })).toBe(
+      "pad window",
     );
+    expect(otherWindowName(list, "me")).toBe("another window");
     expect(otherWindowName([], "me")).toBe("another window");
+  });
+
+  test("editedTrack finds the one track a revision changed", () => {
+    const tracks = [{ id: "a" }, { id: "b" }];
+    const n = (trackId: string, pitch: number) => ({ trackId, pitch });
+    expect(
+      editedTrack(
+        { tracks, notes: [n("a", 1)] },
+        { tracks, notes: [n("a", 1), n("b", 2)] },
+      ),
+    ).toBe("b");
+    expect(
+      editedTrack(
+        { tracks, notes: [] },
+        { tracks, notes: [n("a", 1), n("b", 2)] },
+      ),
+    ).toBeUndefined();
   });
 });

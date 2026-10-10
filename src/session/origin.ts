@@ -81,19 +81,70 @@ export function foreignEvents(
 }
 
 /**
- * Names the other window for the sync card: `window 2` when exactly one
- * other client is present (numbered by its place in the presence list),
- * else `another window`.
+ * Names the other window for the sync card by the track it has open, the
+ * word that window's own header shows (`synced · lead window`), never by a
+ * number taken from the presence list's order. With several other windows
+ * the one whose track the edit touched is named; before presence arrives
+ * the edited track names it. Otherwise `another window`.
  */
 export function otherWindowName(
-  clients: readonly { clientId: string }[],
+  clients: readonly { clientId: string; focusedTrackId?: string | null }[],
   selfId: string,
+  options: {
+    /** The one track the foreign revision changed, when exactly one. */
+    editedTrackId?: string | undefined;
+    /** Display name for a track id. */
+    trackName?: (trackId: string) => string;
+  } = {},
 ): string {
-  const others = clients
-    .map((client, index) => ({ client, index }))
-    .filter(({ client }) => client.clientId !== selfId);
-  // A list without this window (file presence) numbers it as window 1.
-  const offset = others.length === clients.length ? 2 : 1;
-  if (others.length === 1) return `window ${others[0]!.index + offset}`;
+  const name = options.trackName ?? ((trackId: string) => trackId);
+  const others = clients.filter(
+    (client) => client.clientId !== selfId && client.focusedTrackId,
+  );
+  const edited = options.editedTrackId;
+  const owner =
+    (edited && others.find((client) => client.focusedTrackId === edited)) ||
+    (others.length === 1 ? others[0] : undefined);
+  if (owner?.focusedTrackId) return `${name(owner.focusedTrackId)} window`;
+  if (edited) return `${name(edited)} window`;
   return "another window";
+}
+
+/** The single track whose notes or settings differ, or undefined. */
+export function editedTrack(
+  before: {
+    tracks: readonly { id: string }[];
+    notes: readonly { trackId: string }[];
+  },
+  after: {
+    tracks: readonly { id: string }[];
+    notes: readonly { trackId: string }[];
+  },
+): string | undefined {
+  const changed = new Set<string>();
+  const byTrack = (value: typeof before) => {
+    const map = new Map<string, string[]>();
+    for (const note of value.notes) {
+      const list = map.get(note.trackId) ?? [];
+      list.push(JSON.stringify(note));
+      map.set(note.trackId, list);
+    }
+    return map;
+  };
+  const left = byTrack(before);
+  const right = byTrack(after);
+  const ids = new Set([
+    ...before.tracks.map((track) => track.id),
+    ...after.tracks.map((track) => track.id),
+  ]);
+  for (const id of ids) {
+    const a = before.tracks.find((track) => track.id === id);
+    const b = after.tracks.find((track) => track.id === id);
+    if (
+      JSON.stringify(a) !== JSON.stringify(b) ||
+      (left.get(id) ?? []).join("\n") !== (right.get(id) ?? []).join("\n")
+    )
+      changed.add(id);
+  }
+  return changed.size === 1 ? [...changed][0] : undefined;
 }

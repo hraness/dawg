@@ -18,7 +18,12 @@ import {
   type SessionRecord,
 } from "./session/store.ts";
 import { openSessionPort } from "./session/port.ts";
-import { OwnWrites, foreignEvents, otherWindowName } from "./session/origin.ts";
+import {
+  OwnWrites,
+  editedTrack,
+  foreignEvents,
+  otherWindowName,
+} from "./session/origin.ts";
 import { compositionDigest, monotonicEpochMs } from "./session/protocol.ts";
 import {
   formatSessionLine,
@@ -1427,7 +1432,10 @@ async function runInteractive(): Promise<void> {
   };
   stdout.on("resize", onResize);
   const ownWrites = new OwnWrites();
-  let presenceClients: readonly { clientId: string }[] = [];
+  let presenceClients: readonly {
+    clientId: string;
+    focusedTrackId?: string | null;
+  }[] = [];
   let applying: Promise<void> = Promise.resolve();
   const applyLatest = (latest: typeof record): Promise<void> =>
     (applying = applying.then(() => applyRecord(latest)));
@@ -1437,6 +1445,7 @@ async function runInteractive(): Promise<void> {
       if (latest.sessionId !== record.sessionId) return;
       if (latest.revision > record.revision) {
         const previousRevision = record.revision;
+        const before = score;
         record = latest;
         if (stageCapture)
           stageCapture.committed = scoreFromJSON(record.composition);
@@ -1484,7 +1493,14 @@ async function runInteractive(): Promise<void> {
         );
         if (to !== from && foreign)
           tui.activity.pushCard(
-            `synced · ${otherWindowName(presenceClients, port.clientId)}`,
+            `synced · ${otherWindowName(presenceClients, port.clientId, {
+              editedTrackId: editedTrack(
+                before,
+                scoreFromJSON(latest.composition),
+              ),
+              trackName: (id) =>
+                score.tracks.find((track) => track.id === id)?.name ?? id,
+            })}`,
             { tone: "info", baseRevision: from, resultRevision: to },
           );
       }
