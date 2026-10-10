@@ -16,6 +16,16 @@ if (control) {
   const PERF_BASE = 1_000_000_000;
   let ms = 0;
   Date.now = () => DATE_BASE + ms;
+  // `new Date()` reads the real clock even with Date.now replaced (the
+  // file session stamps transport events with it), so freeze that too.
+  const RealDate = Date;
+  class FrozenDate extends RealDate {
+    constructor(...args: unknown[]) {
+      if (args.length === 0) super(DATE_BASE + ms);
+      else super(...(args as [string | number]));
+    }
+  }
+  globalThis.Date = FrozenDate as DateConstructor;
   // The shared transport puts its clock on the epoch as timeOrigin + now();
   // the real timeOrigin is this process's start, different every run. Pin
   // it where the runtime allows; where it does not, shift now() instead so
