@@ -1454,6 +1454,11 @@ async function runInteractive(): Promise<void> {
   const inputDecoder = new TerminalInputDecoder();
   const queuedPrompts = new PromptQueue();
   let processingQueue = false;
+  // Undo/redo runs beside the queue (it must not wait on an agent turn), so
+  // a queued line waits for it instead: started before the undo's append
+  // has resolved, it would append against the old revision and fail with a
+  // conflict (Ctrl-Z then V on TAPE: `copy failed · session changed`).
+  let historyStep: Promise<unknown> = Promise.resolve();
   // `DAWG_STATE_OSC=1` (the PTY tests): each tick ends with an invisible
   // `OSC 7799 ; <json> BEL` saying how many input bytes the editor has acted
   // on and whether anything it started is still running, so a test waits
@@ -1534,6 +1539,7 @@ async function runInteractive(): Promise<void> {
         nextPrompt = queuedPrompts.shift()
       ) {
         tui.activity.setQueueDepth(queuedPrompts.length);
+        await historyStep;
         await runPrompt(nextPrompt);
         if (pendingAudition && queuedPrompts.length === 0) {
           const voice = pendingAudition;
@@ -2140,7 +2146,7 @@ async function runInteractive(): Promise<void> {
             ) {
               const base = baseline();
               const command = input.command;
-              void settling(
+              historyStep = settling(
                 stepHistory(command)
                   .then((outcome) => receipt(outcome, base))
                   .catch((error: unknown) => {
