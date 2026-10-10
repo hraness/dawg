@@ -39,6 +39,7 @@ export const FULL_SIZES: readonly Size[] = [
 /** The sample `bun run check` walks (test/sizes.test.ts). */
 export const CHECK_SIZES: readonly Size[] = [
   [20, 6],
+  [60, 16],
   [80, 24],
   [300, 20],
   [40, 80],
@@ -456,6 +457,10 @@ export function checkScreen(
   }).length;
   const problems: string[] = [];
   if (!alive) problems.push(`exited ${t.proc.exitCode}`);
+  if (big && tooSmall) problems.push("too-small screen at a usable size");
+  // Wide enough for the words: below the minimum the notice must show.
+  if (!big && size[0] >= 20 && size[1] >= 3 && !tooSmall)
+    problems.push("no too-small screen below the minimum");
   if (big && !tooSmall) {
     if (!header) problems.push("no header");
     if (!footer) problems.push("no bottom row");
@@ -507,6 +512,12 @@ export async function runScenario(
         .slice(Math.max(0, before - 1))
         .filter((line) => line.startsWith(`${size[0]}x${size[1]} `))
         .map((line) => line.split(" "));
+      // A big frame lands in several PTY chunks, the cursor hidden until
+      // the last one: give focus a moment to settle before judging it.
+      if (scenario.focus) {
+        const deadline = Date.now() + 1000;
+        while (!scenario.focus(t) && Date.now() < deadline) await Bun.sleep(10);
+      }
       const checked = checkScreen(t, scenario, size);
       const result: SizeResult = {
         ...checked,

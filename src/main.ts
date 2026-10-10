@@ -465,6 +465,8 @@ import {
 import {
   CARD_GLOW_MS,
   composeFrame,
+  isTooSmall,
+  tooSmallKey,
   TuiApp,
   type AppView,
   type LoudnessView,
@@ -1865,6 +1867,22 @@ async function runInteractive(): Promise<void> {
             ];
       while (values.length) {
         const value = values.shift()!;
+        // Below the minimum size only quit and play work; the hidden UI keeps
+        // its state for when the terminal grows back (tui/app.ts).
+        if (
+          isTooSmall({ width: stdout.columns ?? 80, height: stdout.rows ?? 24 })
+        ) {
+          const key = tooSmallKey(value);
+          if (key === "quit") {
+            exiting = true;
+            break;
+          }
+          if (key === "play")
+            void toggleTransport()
+              .catch((error: unknown) => transportFailed(error))
+              .finally(() => tick(true));
+          continue;
+        }
         // A mouse report acts on what the last frame painted under it; some
         // become keys (a list row, a wheel notch) and run through below.
         if (typeof value === "string" && isMouseSequence(value)) {

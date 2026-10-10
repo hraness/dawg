@@ -5,7 +5,12 @@ import {
   frameText,
   loudnessMeter,
   loudnessOffTarget,
+  isTooSmall,
+  MIN_HEIGHT,
+  MIN_WIDTH,
   promptRowCap,
+  tooSmallKey,
+  tooSmallLines,
   TuiApp,
   type AppView,
   type TerminalIO,
@@ -106,7 +111,7 @@ function promptBox(vt: VirtualTerminal): { top: number; bottom: number } {
   return { top, bottom };
 }
 
-for (const cols of [40, 80, 120]) {
+for (const cols of [60, 80, 120]) {
   test(`${cols} cols: header, highway, activity, prompt fill the screen`, () => {
     const h = harness(cols, 24);
     h.app.activity.pushCard("+8 bass notes", {
@@ -139,17 +144,19 @@ for (const cols of [40, 80, 120]) {
 }
 
 test("prompt wraps, grows 1→N rows, caps at 30% of the viewport, then scrolls", () => {
-  const h = harness(40, 30);
+  const h = harness(60, 30);
   h.frame(0);
   const before = promptBox(h.vt).top;
-  h.type("one two three four five six seven eight nine ten");
+  h.type(
+    "one two three four five six seven eight nine ten eleven twelve thirteen",
+  );
   h.frame(0);
   const grown = promptBox(h.vt).top;
   expect(grown).toBeLessThan(before);
   expect(h.app.frame!.promptRows).toBe(2);
   const lines = h.vt.lines();
   expect(lines[grown + 1]).toContain("› one two three");
-  expect(lines[grown + 2]).toContain("ten");
+  expect(lines[grown + 2]).toContain("thirteen");
   // Explicit newlines grow the panel until the cap.
   for (let i = 0; i < 12; i += 1) {
     h.app.input("\u001b[13;2u");
@@ -163,11 +170,11 @@ test("prompt wraps, grows 1→N rows, caps at 30% of the viewport, then scrolls"
   expect(capped.some((line) => line.includes("line 11"))).toBe(true);
   expect(capped.some((line) => line.includes("↑"))).toBe(true);
   expect(capped.join("\n")).toMatch(/\d+\/\d+/);
-  // A short viewport caps lower (30% of 12 rows → 3).
-  h.io.size(40, 12);
+  // A short viewport caps lower (30% of 16 rows → 4).
+  h.io.size(60, 16);
   h.app.invalidate();
   h.frame(0);
-  expect(h.app.frame!.promptRows).toBe(3);
+  expect(h.app.frame!.promptRows).toBe(4);
 });
 
 test("hit flash, burst, sustain beam, and ghost frames come from the beat", () => {
@@ -251,7 +258,7 @@ test("resize collapses the header, preserves the draft, and hints when too small
   // The session id lives in the footer (design §13); the header has bar.beat.
   expect(h.vt.text()).toContain("session 7f3a91c2");
   expect(h.vt.lines()[0]).toMatch(/120 BPM · \d+\.\d/);
-  h.io.size(40, 24);
+  h.io.size(60, 24);
   h.frame(1);
   const narrow = h.vt.lines();
   expect(narrow[0]).not.toContain("session");
@@ -260,7 +267,7 @@ test("resize collapses the header, preserves the draft, and hints when too small
   expect(narrow.join("\n")).toContain("keep this draft");
   h.io.size(20, 6);
   h.frame(1);
-  expect(h.vt.text()).toContain("resize");
+  expect(h.vt.text()).toContain("too small");
   h.io.size(80, 24);
   h.frame(1);
   expect(h.vt.text()).toContain("keep this draft across resizes please");
@@ -573,4 +580,91 @@ test("header shows the master loudness meter while a master plays", () => {
     loudnessOffTarget({ integrated: -14.2, truePeak: -2, target: -14 }),
   ).toBe(false);
   expect(loudnessOffTarget({ integrated: -9, truePeak: -2 })).toBe(false);
+});
+
+test("the minimum size is 60x16 and the too-small screen names both sizes", () => {
+  expect([MIN_WIDTH, MIN_HEIGHT]).toEqual([60, 16]);
+  expect(isTooSmall({ width: 80, height: 24 })).toBe(false);
+  expect(isTooSmall({ width: 60, height: 16 })).toBe(false);
+  expect(isTooSmall({ width: 59, height: 40 })).toBe(true);
+  expect(isTooSmall({ width: 200, height: 15 })).toBe(true);
+  expect(isTooSmall({ width: 0, height: 0 })).toBe(true);
+  expect(isTooSmall({ width: NaN, height: 24 })).toBe(true);
+  const h = harness(59, 20, MONO);
+  h.frame(1);
+  const lines = h.vt.lines();
+  const at = lines.findIndex((line) => line.includes("terminal too small"));
+  expect(lines[at]!.trim()).toBe("terminal too small · 59×20 · need ≥ 60×16");
+  // Centred both ways, with the keys that still work two rows below.
+  expect(at).toBe(Math.floor((20 - 3) / 2));
+  const left = lines[at]!.length - lines[at]!.trimStart().length;
+  const right = 59 - lines[at]!.trimEnd().length;
+  expect(Math.abs(left - right)).toBeLessThanOrEqual(1);
+  expect(lines[at + 2]!.trim()).toBe("space stop · q quit");
+  expect(h.vt.text()).not.toContain("NOW");
+});
+
+test("the too-small screen fits every size down to 1x1, ascii included", () => {
+  for (const unicode of [true, false])
+    for (let width = 1; width < 70; width += 1)
+      for (let height = 1; height < 20; height += 1) {
+        const lines = tooSmallLines({ width, height }, unicode, false);
+        expect(lines.length).toBeGreaterThan(0);
+        expect(lines.length).toBeLessThanOrEqual(height);
+        if (width >= 5)
+          for (const line of lines)
+            expect(Bun.stringWidth(line)).toBeLessThanOrEqual(width);
+      }
+  expect(tooSmallLines({ width: 30, height: 8 }, false, false)).toEqual([
+    "terminal too small",
+    "30x8 - need >= 60x16",
+    "",
+    "space play - q quit",
+  ]);
+  for (const [cols, rows] of [
+    [1, 1],
+    [2, 1],
+    [1, 40],
+    [300, 1],
+  ] as const) {
+    const h = harness(cols, rows, DUMB);
+    expect(() => h.frame(1)).not.toThrow();
+    expect(h.vt.cells.every((row) => row.length === cols)).toBe(true);
+  }
+});
+
+test("a zero-size terminal draws nothing, then repaints in full", () => {
+  const h = harness(80, 24, MONO);
+  h.frame(1);
+  h.io.size(0, 0);
+  expect(h.frame(1)).toBe("");
+  h.io.size(80, 24);
+  const out = h.frame(1);
+  expect(out).toContain("\u001b[2J");
+  expect(h.vt.text()).toContain("NOW");
+});
+
+test("below the minimum only quit and play keys act", () => {
+  expect(tooSmallKey("\u0003")).toBe("quit");
+  expect(tooSmallKey("q")).toBe("quit");
+  expect(tooSmallKey(" ")).toBe("play");
+  for (const key of ["a", "\r", "\u001b", "\u000b", "\t", "?", "\u001b[A"])
+    expect(tooSmallKey(key)).toBe("ignore");
+});
+
+test("shrinking below the minimum and back keeps the draft and the overlay", () => {
+  const h = harness(80, 24, MONO);
+  h.app.openText("help", ["one", "two", "three"]);
+  h.type("a draft");
+  h.frame(1);
+  expect(h.vt.text()).toContain("help");
+  h.io.size(40, 10);
+  h.frame(1);
+  expect(h.vt.text()).toContain("too small");
+  expect(h.vt.text()).not.toContain("a draft");
+  h.io.size(80, 24);
+  h.frame(1);
+  expect(h.vt.text()).toContain("help");
+  expect(h.vt.text()).toContain("three");
+  expect(h.app.prompt.value).toBe("a draft");
 });

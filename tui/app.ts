@@ -272,8 +272,20 @@ export interface FrameLayout {
   tooSmall: boolean;
 }
 
-export const MIN_WIDTH = 24;
-export const MIN_HEIGHT = 8;
+/**
+ * The smallest terminal the real UI draws in (docs/DAWG.md "Terminal
+ * sizes"). Measured with `bun run sizes`: below 60 columns the play-mode
+ * key strip and the header's bar position drop out and the prompt's spend
+ * line clips; below 16 rows the prompt loses its footer and the drawer its
+ * last knob. 80x24 stays the design target.
+ */
+export const MIN_WIDTH = 60;
+export const MIN_HEIGHT = 16;
+
+/** True when a terminal of this size shows the too-small screen instead. */
+export function isTooSmall(size: FrameSize): boolean {
+  return !(size.width >= MIN_WIDTH && size.height >= MIN_HEIGHT);
+}
 export const MAX_PROMPT_ROWS = 8;
 /** New cards glow for this long before settling. */
 export const CARD_GLOW_MS = 700;
@@ -311,7 +323,7 @@ export function computeLayout(
   size: FrameSize,
   promptWrappedRows: number,
 ): FrameLayout {
-  const tooSmall = size.width < MIN_WIDTH || size.height < MIN_HEIGHT;
+  const tooSmall = isTooSmall(size);
   const rows = Math.max(
     1,
     Math.min(promptWrappedRows, promptRowCap(size.height)),
@@ -1304,12 +1316,56 @@ export function footerHint(
 
 // ---------------------------------------------------------------------------
 
-function paintTooSmall(buffer: CellBuffer, ui: UiState, size: FrameSize): void {
-  const roles = ui.theme.roles;
-  const lines = [
-    "resize terminal",
-    `${size.width}x${size.height} · need ${MIN_WIDTH}x${MIN_HEIGHT}`,
+/**
+ * The too-small screen's lines, widest layout that fits first: one line
+ * (`terminal too small · 58×14 · need ≥ 60×16`), then stacked, then bare
+ * numbers. The last line is the keys that still work.
+ */
+export function tooSmallLines(
+  size: FrameSize,
+  unicode: boolean,
+  playing: boolean,
+): string[] {
+  const x = unicode ? "×" : "x";
+  const dot = unicode ? " · " : " - ";
+  const now = `${size.width}${x}${size.height}`;
+  const need = `need ${unicode ? "≥" : ">="} ${MIN_WIDTH}${x}${MIN_HEIGHT}`;
+  const keys = `space ${playing ? "stop" : "play"}${dot}q quit`;
+  const fits = (lines: string[]) =>
+    lines.length <= size.height &&
+    lines.every((line) => displayWidth(line) <= size.width);
+  const layouts = [
+    [`terminal too small${dot}${now}${dot}${need}`, "", keys],
+    ["terminal too small", `${now}${dot}${need}`, "", keys],
+    ["terminal too small", now, need, "", keys],
+    ["terminal too small", now, need],
+    ["too small", now, need],
+    [now, need],
+    [`${now} ${unicode ? "≥" : ">="}${MIN_WIDTH}${x}${MIN_HEIGHT}`],
+    [now],
   ];
+  return layouts.find(fits) ?? [now];
+}
+
+/**
+ * What a key does while the too-small screen is up: ctrl-c and q quit,
+ * space starts or stops playback, everything else (typing, mouse, menu
+ * keys) is dropped so the hidden UI's state is untouched.
+ */
+export function tooSmallKey(value: unknown): "quit" | "play" | "ignore" {
+  if (value === "\u0003" || value === "q" || value === "Q") return "quit";
+  if (value === " ") return "play";
+  return "ignore";
+}
+
+function paintTooSmall(
+  buffer: CellBuffer,
+  ui: UiState,
+  size: FrameSize,
+  playing: boolean,
+): void {
+  const roles = ui.theme.roles;
+  const lines = tooSmallLines(size, ui.capabilities.unicode, playing);
   const top = Math.max(0, Math.floor((size.height - lines.length) / 2));
   lines.forEach((line, index) => {
     const text = truncate(line, size.width);
@@ -1318,7 +1374,7 @@ function paintTooSmall(buffer: CellBuffer, ui: UiState, size: FrameSize): void {
       x,
       top + index,
       text,
-      index === 0 ? roles.warning : roles.muted,
+      index === 0 ? { ...roles.warning, bold: true } : roles.muted,
     );
   });
 }
@@ -1336,7 +1392,7 @@ export function composeFrame(
   const layout = computeLayout({ width, height }, ui.prompt.wrappedRows);
   const hits = new HitMap();
   if (layout.tooSmall) {
-    paintTooSmall(buffer, ui, { width, height });
+    paintTooSmall(buffer, ui, { width, height }, view.score.playing === true);
     return {
       buffer,
       cursor: undefined,
@@ -1616,13 +1672,21 @@ export class TuiApp {
       now - this.lastFrameAt < this.frameIntervalMs + this.backoffMs
     )
       return "";
+    // A zero-size (or unknown) terminal has no cell to draw in; any write
+    // would wrap. Draw again in full once it has one.
+    const columns = Math.floor(this.io.columns() || 0);
+    const rows = Math.floor(this.io.rows() || 0);
+    if (columns < 1 || rows < 1) {
+      this.writer.invalidate();
+      return "";
+    }
     this.lastFrameAt = now;
     this.watchFirstLoop(view, now);
     const started = performance.now();
     const frame = composeFrame(
       view,
       this.ui,
-      { width: this.io.columns(), height: this.io.rows() },
+      { width: columns, height: rows },
       now,
     );
     this.lastFrame = frame;
