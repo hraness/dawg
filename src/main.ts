@@ -344,6 +344,8 @@ import {
 import { tapeView } from "./tui/tape-view.ts";
 import {
   clampState,
+  focusCable,
+  newCables,
   patchKey,
   patchModel,
   patchPaint,
@@ -352,6 +354,7 @@ import {
 } from "./tui/patch-view.ts";
 import { nodeMenuId } from "./tui/patch-menu.ts";
 import type { PatchPaint } from "../tui/patch.ts";
+import type { Cable } from "../core/patch.ts";
 import { PromptQueue } from "./tui/prompt-queue.ts";
 import { TAPE_ZOOMS, type TapeView, type TapeZoom } from "../tui/tape.ts";
 import type { HitTarget } from "../tui/hits.ts";
@@ -885,7 +888,12 @@ let rangeClipboard: RangeClipboard | undefined;
  * patch, the focused pane, the node, port and matrix cell, the knob).
  * Each key runs a typed `patch …` command.
  */
-const patchView: { on: boolean; state: PatchViewState } = {
+const patchView: {
+  on: boolean;
+  state: PatchViewState;
+  /** The cables last painted, so a new one (typed, agent, other pane) is shown. */
+  cables?: Readonly<{ key: string; list: readonly Cable[] }> | undefined;
+} = {
   on: false,
   state: patchViewState(),
 };
@@ -5709,8 +5717,10 @@ async function enterPatch(fx?: string): Promise<Receipt> {
   closeFader();
   if (menu.open) menu.close();
   if (tape.on) exitTape();
-  if (!patchView.on || patchView.state.fx !== fx)
+  if (!patchView.on || patchView.state.fx !== fx) {
     patchView.state = patchViewState(fx);
+    patchView.cables = undefined;
+  }
   patchView.on = true;
   const patch = model.patch;
   const what = model.preview
@@ -5733,6 +5743,14 @@ function exitPatch(): Receipt {
 function currentPatchPaint(value: TrackScore): PatchPaint | undefined {
   const model = patchModel(value, requestedTrack, patchView.state.fx);
   if (typeof model === "string") return undefined;
+  const cables = model.patch.cables;
+  const key = `${model.track.id} ${model.fx ?? ""}`;
+  const before = patchView.cables;
+  patchView.cables = { key, list: cables };
+  if (before?.key === key && before.list !== cables) {
+    const added = newCables(before.list, cables).at(-1);
+    if (added) focusCable(patchView.state, model, added);
+  }
   clampState(patchView.state, model);
   return patchPaint(model, patchView.state);
 }
