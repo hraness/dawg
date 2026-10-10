@@ -79,8 +79,9 @@ export type NodeSpec = Readonly<{
   outputs: readonly PortSpec[];
   /**
    * Static settings. A number param that shares its name with a control
-   * input is that input's value when nothing is wired (and the base cables
-   * add to); the rest (enums, booleans) are fixed for the note.
+   * input is that input's base: set (or mapped by a macro), cables add to
+   * it; left at its default, it applies only while nothing is wired (a
+   * wired port starts from 0). The rest (enums, booleans) are fixed.
    */
   params: Readonly<Record<string, ParamSpec>>;
   /**
