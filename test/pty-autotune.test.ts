@@ -44,7 +44,7 @@ test.skipIf(!supported)(
         cols: 110,
         rows: 34,
         data(_terminal: unknown, data: Uint8Array) {
-          vt.write(decoder.decode(data, { stream: true }));
+          vt.writeFrames(decoder.decode(data, { stream: true }));
         },
       },
     } as Parameters<typeof Bun.spawn>[1]);

@@ -190,7 +190,8 @@ test.skipIf(!supported)(
     ]);
     await typed.until(() => typed.vt.text().includes("try:"), "offline prompt");
     for (const line of LINES) await typed.send(`${line}\r`);
-    await Bun.sleep(300);
+    // Lines typed faster than they run queue; read the file once all ran.
+    await typed.settle("typed lines applied");
     const byHand = await composition(typed.cwd);
     // The lines really ran (not failed alike in both windows).
     expect(
@@ -210,7 +211,7 @@ test.skipIf(!supported)(
       "finished",
       10_000,
     );
-    await Bun.sleep(300);
+    await streamed.settle("streamed turn applied");
     const byAgent = await composition(streamed.cwd);
     await quit(streamed);
     // Note ids are random per session even when a person types both (the

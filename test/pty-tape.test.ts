@@ -254,8 +254,10 @@ for (const env of [{}, { NO_COLOR: "1" }] as Record<string, string>[])
         await t.send("section verse 1-4\r");
         await t.send("section chorus 5-8\r");
         await t.send("form verse chorus*2\r");
-        await t.until(() => t.vt.text().includes("chorus"), "form set");
-        await t.send("\u0014");
+        // "chorus" is on screen from the section line already: wait for the
+        // queued lines to run, not for a word.
+        await t.settle("form set");
+        await t.type("\u0014", "tape opened");
         await t.until(() => t.vt.text().includes("range: "), "tape");
         const ghost = "░";
         const sect = () =>
@@ -459,7 +461,7 @@ function openPane(dir: string, argv: string[]): Pane {
       cols,
       rows,
       data(_terminal: unknown, data: Uint8Array) {
-        vt.write(decoder.decode(data, { stream: true }));
+        vt.writeFrames(decoder.decode(data, { stream: true }));
       },
     },
   } as Parameters<typeof Bun.spawn>[1]);
