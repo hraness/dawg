@@ -63,7 +63,12 @@ beforeAll(() => {
   const sum = createHash("sha256")
     .update(readFileSync(join(release, asset)))
     .digest("hex");
-  writeFileSync(join(release, "SHA256SUMS"), `${sum}  ${asset}\n`);
+  // A release also lists its native sink libraries; the installer reads only
+  // the tarball's line.
+  writeFileSync(
+    join(release, "SHA256SUMS"),
+    `${sum}  ${asset}\n${"b".repeat(64)}  libdawg_sink-linux-x64.so\n`,
+  );
 }, 60_000);
 
 afterAll(() => {

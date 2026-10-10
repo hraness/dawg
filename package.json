@@ -23,7 +23,9 @@
     "guides/*.md",
     "guides/index.ts",
     "CHANGELOG.md",
-    "DAWG.md"
+    "DAWG.md",
+    "native/prebuilt/manifest.json",
+    "native/prebuilt/*/libdawg_sink.*"
   ],
   "bin": {
     "dawg": "./src/main.ts"
