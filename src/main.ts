@@ -2641,6 +2641,13 @@ async function submit(prompt: string): Promise<string | Receipt> {
       await commitScore(result.next, result.kind, result.payload);
     if (result.log) tui.activity.pushNote(result.log);
     if (!result.ok) return fail(result.message);
+    // A multi-line listing opens as text; the card keeps its first line
+    // so lines never run together on the one-line strip.
+    if (!writes && result.message.includes("\n")) {
+      const [head = "styles", ...rest] = result.message.split("\n");
+      tui.openText(head, rest);
+      return note(head);
+    }
     // A new song: focus its first melodic track, so play and the menu
     // land on something tonal instead of a track the style replaced.
     const melodic = writes

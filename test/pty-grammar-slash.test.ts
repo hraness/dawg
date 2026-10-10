@@ -54,6 +54,10 @@ test.skipIf(!supported)(
       await run("swing", "swing lives on a rhythm row");
       // loop a-b works without a matching section.
       await run("loop 2-3", "loop · bars 2–3");
+      // A multi-line listing opens as text; rows never run together.
+      await run("style ls", "• styles");
+      expect(t.vt.text()).not.toMatch(/cards[a-z]+:/);
+      await t.send("\u001b");
       // export <file>.wav renders offline in the project directory.
       await t.send("export a.wav\r");
       await t.until(
