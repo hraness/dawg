@@ -74,7 +74,7 @@ test.skipIf(!supported)(
       await t.until(() => screen().includes("Project"), "menu root");
       await t.send("jj");
       await t.send("\r");
-      await t.until(() => screen().includes("menu › Effects"), "effects");
+      await t.until(() => screen().includes("≡ Effects"), "effects");
       await t.send("/reverb");
       await t.until(() => screen().includes("/reverb"), "filtered");
       await t.send("\r");

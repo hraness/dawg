@@ -5,6 +5,7 @@ import {
   looksLikeProse,
   helpLines,
   helpText,
+  helpHeadingMarks,
   helpTopicLines,
   editDistance,
   nearestCommand,
@@ -369,5 +370,33 @@ describe("/help arrange and /help panes (op1-ux lane E)", () => {
       expect(text).toContain(word);
     expect(lines.at(-1)).toContain("guide panes");
     expect(helpTopicLines("pane", 80)).toEqual(lines);
+  });
+});
+
+describe("help group marks", () => {
+  test("each heading takes the guides' mark for its kind", () => {
+    const lines = helpTopicLines(undefined)!;
+    const marks = helpHeadingMarks(lines);
+    const at = (heading: string) => marks[lines.indexOf(`── ${heading}`)];
+    expect(at("start here")?.mark).toBe("›");
+    expect(at("topics · help <topic>")?.mark).toBe("→");
+    for (const [index, line] of lines.entries())
+      expect(marks[index] !== undefined).toBe(line.startsWith("── "));
+  });
+
+  test("help all: commands ›, agent ✦, then every key list ⌃", () => {
+    const lines = helpTopicLines("all")!;
+    const marks = helpHeadingMarks(lines);
+    const keys = lines.indexOf("── keys");
+    expect(keys).toBeGreaterThan(0);
+    lines.forEach((line, index) => {
+      if (!line.startsWith("── ")) return;
+      const group = line.slice(3);
+      const want = index >= keys ? "⌃" : group.startsWith("agent") ? "✦" : "›";
+      expect(`${marks[index]?.mark} ${group}`).toBe(`${want} ${group}`);
+    });
+    // Never a knob color: the roles come from the guides' table.
+    const roles = new Set(marks.filter(Boolean).map((mark) => mark!.role));
+    for (const role of roles) expect(role).not.toMatch(/^knob/);
   });
 });

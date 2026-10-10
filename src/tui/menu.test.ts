@@ -90,15 +90,15 @@ describe("edit menu", () => {
     const menu = new EditMenu();
     const ctx = context();
     for (const [section, title] of [
-      ["parameters", "menu › Sound"],
-      ["sounds", "menu › Sound › instruments"],
-      ["track", "menu › Mix"],
-      ["automation", "menu › Mix › automation"],
-      ["transport", "menu › Project"],
-      ["tuning", "menu › Chords and key › tuning"],
-      ["clips", "menu › Voice"],
-      ["agent", "menu › Project › agent"],
-      ["keys", "menu › Project › help and guides"],
+      ["parameters", "≡ Sound"],
+      ["sounds", "≡ Sound › instruments"],
+      ["track", "≡ Mix"],
+      ["automation", "≡ Mix › automation"],
+      ["transport", "≡ Project"],
+      ["tuning", "≡ Chords and key › tuning"],
+      ["clips", "≡ Voice"],
+      ["agent", "≡ Project › agent"],
+      ["keys", "≡ Project › help and guides"],
     ] as const) {
       menu.show(ctx, section);
       expect(menu.view(ctx).title).toBe(title);
@@ -109,11 +109,11 @@ describe("edit menu", () => {
     const menu = new EditMenu();
     const empty = context();
     menu.show(empty, "arrange");
-    expect(menu.view(empty).title).toBe("menu › Arrange");
+    expect(menu.view(empty).title).toBe("≡ Arrange");
     expect(menu.view(empty).items[0]!.label).toStartWith("tracks");
     expect(menu.view(empty).items[1]!.label).toStartWith("sections");
     menu.show(empty, "sections");
-    expect(menu.view(empty).title).toBe("menu › Arrange › sections");
+    expect(menu.view(empty).title).toBe("≡ Arrange › sections");
     expect(menu.view(empty).items[0]!.label).toStartWith("mark bars");
     const ctx = context(
       score().withSections(
@@ -128,7 +128,7 @@ describe("edit menu", () => {
     expect(menu.view(ctx).items[1]!.label).toContain("mutes keys");
     select(menu, ctx, "chorus");
     menu.key("\r", ctx);
-    expect(menu.view(ctx).title).toBe("menu › Arrange › sections › chorus");
+    expect(menu.view(ctx).title).toBe("≡ Arrange › sections › chorus");
     expect(menu.key("\r", ctx)).toEqual({
       type: "run",
       command: "section loop chorus",
@@ -179,7 +179,7 @@ describe("edit menu", () => {
     const menu = new EditMenu();
     const ctx = context();
     menu.show(ctx, "chords");
-    expect(menu.view(ctx).title).toBe("menu › Chords and key");
+    expect(menu.view(ctx).title).toBe("≡ Chords and key");
     select(menu, ctx, "mode");
     expect(menu.key(LEFT, ctx)).toEqual({
       type: "run",
@@ -218,9 +218,9 @@ describe("edit menu", () => {
     menu.show(ctx);
     select(menu, ctx, "Effects");
     menu.key("\r", ctx);
-    expect(menu.view(ctx).title).toBe("menu › Effects");
+    expect(menu.view(ctx).title).toBe("≡ Effects");
     menu.key("\r", ctx);
-    expect(menu.view(ctx).title).toBe("menu › Effects › filter");
+    expect(menu.view(ctx).title).toBe("≡ Effects › filter");
     expect(menu.key(ESC, ctx)).toEqual({ type: "handled" });
     expect(menu.key(ESC, ctx)).toEqual({ type: "handled" });
     expect(menu.key(ESC, ctx)).toEqual({ type: "close" });
@@ -236,7 +236,7 @@ describe("edit menu", () => {
     menu.key("\r", ctx);
     select(menu, ctx, "duck");
     menu.key("\r", ctx);
-    expect(menu.view(ctx).title).toBe("menu › Effects › more effects › duck");
+    expect(menu.view(ctx).title).toBe("≡ Effects › more effects › duck");
     const labels = menu.view(ctx).items.map((row) => row.label);
     expect(labels.some((label) => label.startsWith("orbit"))).toBe(true);
     expect(labels.some((label) => label.startsWith("depth"))).toBe(true);
@@ -255,7 +255,7 @@ describe("edit menu", () => {
     menu.key("\r", ctx);
     select(menu, ctx, "guitar rig");
     menu.key("\r", ctx);
-    expect(menu.view(ctx).title).toBe("menu › Effects › guitar rig");
+    expect(menu.view(ctx).title).toBe("≡ Effects › guitar rig");
     const labels = menu.view(ctx).items.map((row) => row.label);
     expect(labels).toHaveLength(4);
     expect(labels[0]!.startsWith("rig")).toBe(true);
@@ -276,7 +276,7 @@ describe("edit menu", () => {
     menu.key("\r", ctx);
     select(menu, ctx, "shoegaze");
     menu.key("\r", ctx);
-    expect(menu.view(ctx).title).toBe("menu › Effects › shoegaze");
+    expect(menu.view(ctx).title).toBe("≡ Effects › shoegaze");
     const labels = menu.view(ctx).items.map((row) => row.label);
     expect(labels).toHaveLength(4);
     expect(labels[0]).toStartWith("wobble");
@@ -300,7 +300,7 @@ describe("edit menu", () => {
     menu.show(ctx, "sound");
     select(menu, ctx, "guitar");
     menu.key("\r", ctx);
-    expect(menu.view(ctx).title).toBe("menu › Sound › guitar");
+    expect(menu.view(ctx).title).toBe("≡ Sound › guitar");
     select(menu, ctx, "tune");
     expect(menu.key(RIGHT, ctx)).toEqual({
       type: "run",
@@ -451,7 +451,7 @@ describe("edit menu", () => {
     const menu = new EditMenu();
     const ctx = context();
     menu.show(ctx, "tuning");
-    expect(menu.view(ctx).title).toBe("menu › Chords and key › tuning");
+    expect(menu.view(ctx).title).toBe("≡ Chords and key › tuning");
     select(menu, ctx, "tuning");
     expect(menu.key(RIGHT, ctx)).toEqual({
       type: "run",
@@ -467,7 +467,7 @@ describe("edit menu", () => {
     menu.show(ctx, "sound");
     select(menu, ctx, "track tuning");
     menu.key("\r", ctx);
-    expect(menu.view(ctx).title).toBe("menu › Sound › track tuning");
+    expect(menu.view(ctx).title).toBe("≡ Sound › track tuning");
     select(menu, ctx, "tuning");
     expect(menu.key(RIGHT, ctx)).toEqual({
       type: "run",
@@ -535,7 +535,7 @@ describe("edit menu", () => {
       command: "instrument pluck",
     });
     menu.key("\r", ctx);
-    expect(menu.view(ctx).title).toBe("menu › Sound › instrument");
+    expect(menu.view(ctx).title).toBe("≡ Sound › instrument");
     select(menu, ctx, "saw");
     expect(menu.key("\r", ctx)).toEqual({
       type: "run",
@@ -601,7 +601,7 @@ describe("edit menu", () => {
     const menu = new EditMenu();
     let ctx = context();
     menu.show(ctx, "master");
-    expect(menu.view(ctx).title).toBe("menu › Mix › master");
+    expect(menu.view(ctx).title).toBe("≡ Mix › master");
     select(menu, ctx, "target");
     expect(menu.key(RIGHT, ctx)).toEqual({
       type: "run",
@@ -614,7 +614,7 @@ describe("edit menu", () => {
     });
     select(menu, ctx, "glue");
     menu.key("\r", ctx);
-    expect(menu.view(ctx).title).toBe("menu › Mix › master › glue");
+    expect(menu.view(ctx).title).toBe("≡ Mix › master › glue");
     select(menu, ctx, "on");
     expect(menu.key("\r", ctx)).toEqual({
       type: "run",
@@ -674,7 +674,7 @@ describe("edit menu", () => {
     expect(menu.view(ctx).title).toContain("/grid");
     menu.key(ESC, ctx);
     expect(menu.view(ctx).items.length).toBeGreaterThan(1);
-    expect(menu.view(ctx).title).toBe("menu › Project");
+    expect(menu.view(ctx).title).toBe("≡ Project");
   });
 
   test("mix focuses another track before editing it", () => {
@@ -1053,7 +1053,7 @@ describe("key command", () => {
     menu.show(ctx, "parameters");
     select(menu, ctx, "brk");
     menu.key("\r", ctx);
-    expect(menu.view(ctx).title).toBe("menu › Sound › brk");
+    expect(menu.view(ctx).title).toBe("≡ Sound › brk");
     select(menu, ctx, "bpm");
     // Off by default; the first step starts at the song's tempo.
     expect(menu.view(ctx).items[menu.view(ctx).index]!.label).toContain("off");

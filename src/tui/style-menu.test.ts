@@ -30,7 +30,7 @@ describe("Arrange › style browser", () => {
     const menu = new EditMenu();
     const ctx = context();
     menu.show(ctx, "style");
-    expect(menu.view(ctx).title).toBe("menu › Arrange › style");
+    expect(menu.view(ctx).title).toBe("≡ Arrange › style");
     const labels = menu.view(ctx).items.map((row) => row.label);
     expect(labels.some((label) => label.startsWith("find"))).toBe(true);
     expect(labels.some((label) => label.startsWith("Electronic"))).toBe(true);

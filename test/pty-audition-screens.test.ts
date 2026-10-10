@@ -164,7 +164,7 @@ test.skipIf(!supported)(
     try {
       await t.until(() => screen().includes(" NOW "), "prompt");
       await t.send("/menu chords\r");
-      await t.until(() => screen().includes("menu › Chords"), "chords");
+      await t.until(() => screen().includes("≡ Chords"), "chords");
       const committed = await latest(t.cwd);
 
       // Space loops a progression played with the chord settings.
@@ -186,7 +186,7 @@ test.skipIf(!supported)(
       // Esc reverts it; nothing was written.
       await t.send("\u001b");
       await t.until(() => !screen().includes(" ← "), "reverted");
-      expect(screen()).toContain("menu › Chords");
+      expect(screen()).toContain("≡ Chords");
       await Bun.sleep(150);
       expect((await latest(t.cwd)).revision).toBe(committed.revision);
 

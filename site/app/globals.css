@@ -789,7 +789,7 @@ a:hover {
 }
 
 /*
- * Doc marks (app/doc-marks.ts, mirrored from the TUI's /guide): a symbol in
+ * Doc marks (guides/marks.ts, the table the TUI's /guide uses): a symbol in
  * a small filled chip before a guide heading or note. The symbol carries the
  * meaning; the chip color repeats it with a clip color or ink.
  */

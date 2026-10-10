@@ -9,6 +9,11 @@
  * and `/play` (play mode; bare `play` is the transport) keep it.
  */
 import { GUITAR_TUNING_NAMES } from "../../core/chords.ts";
+import {
+  helpGroupMark,
+  SECTION_MARKS,
+  type DocMark,
+} from "../../guides/marks.ts";
 import { KEYS, type KeyScreen } from "../../tui/grammar.ts";
 import { displayWidth, truncate } from "../../tui/text.ts";
 import {
@@ -848,6 +853,24 @@ export function helpTopicLines(
       ? [...command, "", truncate(`see also help ${alias}`, width)]
       : command;
   return alias ? topicLines(alias, width) : undefined;
+}
+
+/**
+ * Each `/help` line's heading mark, or undefined for a row that is not a
+ * `── heading`: guides/marks.ts helpGroupMark by group (`› sound`,
+ * `✦ agent`, `→ topics`), and `⌃` for every heading from `── keys` on,
+ * since the keys always close a page.
+ */
+export function helpHeadingMarks(
+  lines: readonly string[],
+): (DocMark | undefined)[] {
+  let keys = false;
+  return lines.map((line) => {
+    if (!line.startsWith("── ")) return undefined;
+    const group = line.slice(3);
+    if (group === "keys") keys = true;
+    return keys ? SECTION_MARKS.Keys : helpGroupMark(group);
+  });
 }
 
 /** True when a reference row starts with `name` (`/scale`, `scale …`). */

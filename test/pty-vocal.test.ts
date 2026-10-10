@@ -24,12 +24,12 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("Arrange"), "menu root");
       await t.send("/Sound");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("menu › Sound"), "sound");
+      await t.until(() => t.vt.text().includes("≡ Sound"), "sound");
       await t.until(() => t.vt.text().includes("instruments"), "rows");
       // Voice is its own root now, with the clips lane's clips and lyrics.
-      expect(t.vt.text()).toContain("menu › Sound");
+      expect(t.vt.text()).toContain("≡ Sound");
       for (let i = 0; i < 3; i++) await t.send("\u001b");
-      await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
+      await t.until(() => !t.vt.text().includes("≡ "), "menu closed");
       expect(t.vt.text()).not.toContain("error");
     } finally {
       t.terminal.write("\u0003");

@@ -161,7 +161,7 @@ test.skipIf(!supported)(
       await t.send(click(effects.x, effects.y));
       await t.until(() => t.vt.text().includes("› Effects"), "selected");
       await t.send(click(effects.x, effects.y));
-      await t.until(() => t.vt.text().includes("menu › Effects"), "opened");
+      await t.until(() => t.vt.text().includes("≡ Effects"), "opened");
       const filter = locate(t, "filter ");
       await t.send(click(filter.x, filter.y));
       await t.send(click(filter.x, filter.y));

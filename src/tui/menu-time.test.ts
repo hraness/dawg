@@ -64,7 +64,7 @@ describe("Project › Tempo and meter", () => {
     const menu = new EditMenu();
     const ctx = context();
     menu.show(ctx, "tempo");
-    expect(menu.view(ctx).title).toBe("menu › Project › tempo and meter");
+    expect(menu.view(ctx).title).toBe("≡ Project › tempo and meter");
     menu.show(ctx, "project");
     select(menu, ctx, "tempo and meter");
     const row = menu.view(ctx).items[menu.view(ctx).index]!;
@@ -188,7 +188,7 @@ describe("Project › Tempo and meter", () => {
     );
     menu.key("\r", ctx);
     expect(menu.view(ctx).title).toBe(
-      "menu › Project › tempo and meter › keys time",
+      "≡ Project › tempo and meter › keys time",
     );
     select(menu, ctx, "rate");
     expect(menu.key(RIGHT, ctx)).toEqual({
@@ -226,7 +226,7 @@ describe("Project › Tempo and meter", () => {
       command: "track time off",
     });
     menu.key(ESC, ctx);
-    expect(menu.view(ctx).title).toBe("menu › Project › tempo and meter");
+    expect(menu.view(ctx).title).toBe("≡ Project › tempo and meter");
   });
 
   test("every row's command parses as a time command", () => {

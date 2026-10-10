@@ -85,7 +85,7 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("Project"), "menu root");
       await t.send("/sound");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("menu › Sound"), "sound");
+      await t.until(() => t.vt.text().includes("≡ Sound"), "sound");
       await t.send("/performance");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("soft pedal"), "pedal rows");
@@ -103,7 +103,7 @@ test.skipIf(!supported)(
       expect((await sessionTrack(t.cwd))?.sostenuto?.length).toBe(2);
 
       for (let i = 0; i < 8; i++) await t.send("\u001b");
-      await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
+      await t.until(() => !t.vt.text().includes("≡ "), "menu closed");
     } finally {
       t.terminal.write("\u0003");
       await t.proc.exited;

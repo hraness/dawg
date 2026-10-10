@@ -24,6 +24,7 @@ import type { HitMap } from "./hits.ts";
 import { onBackground, type Style, type Theme } from "./theme.ts";
 import { displayWidth, truncate } from "./text.ts";
 import { asciiHint, fitHint } from "./grammar.ts";
+import { paintCrumbs, type Crumbs } from "./crumbs.ts";
 import { knobGlyph, knobStyle, type KnobIndex } from "./knobs.ts";
 
 export type DrawerField =
@@ -59,6 +60,8 @@ export type DrawerField =
 
 export type DrawerView = Readonly<{
   title: string;
+  /** The Ctrl-K breadcrumb, drawn in place of `title` (tui/crumbs.ts). */
+  crumbs?: Crumbs | undefined;
   fields: readonly DrawerField[];
   focus: number;
   /** Digits typed for the focused field (shown in place of its value). */
@@ -286,12 +289,19 @@ export function paintDrawer(
     if (displayWidth(right) + 3 + minTitle > room) right = "";
     const rightWidth = displayWidth(right);
     const titleRoom = Math.max(0, room - (right ? rightWidth + 3 : 0));
-    buffer.text(
-      2,
-      top,
-      ` ${truncate(view.title, Math.max(0, titleRoom - 2))} `,
-      on({ ...roles.text, bold: true }),
-    );
+    if (view.crumbs)
+      paintCrumbs(buffer, 2, top, view.crumbs, titleRoom, {
+        roles,
+        unicode: options.unicode,
+        background: panel,
+      });
+    else
+      buffer.text(
+        2,
+        top,
+        ` ${truncate(view.title, Math.max(0, titleRoom - 2))} `,
+        on({ ...roles.text, bold: true }),
+      );
     if (right) {
       const rx = width - 3 - rightWidth;
       buffer.text(

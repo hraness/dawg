@@ -41,6 +41,7 @@ import { malletsMenu, modalParameterNodes } from "./modal-menu.ts";
 import { windParameterNodes, windsMenu } from "./wind-menu.ts";
 import { singParameterNodes } from "./sing-menu.ts";
 import type { FaderSpec } from "./fader.ts";
+import { crumbText, type Crumbs } from "../../tui/crumbs.ts";
 import { knobFields, type KnobField } from "./knob-fields.ts";
 import { soundFamily } from "./knob-map.ts";
 import {
@@ -353,7 +354,10 @@ export type MenuResult =
   | { type: "pass" };
 
 export type MenuView = Readonly<{
+  /** The breadcrumb as plain text: `≡ Arrange › range · /q`. */
   title: string;
+  /** The same breadcrumb in parts, for tui/crumbs.ts to fit and color. */
+  crumbs: Crumbs;
   items: PickerItem[];
   index: number;
   hint: string;
@@ -4101,9 +4105,13 @@ export class EditMenu {
     });
   }
 
-  /** The breadcrumb, for the drawer's title. */
-  get crumbs(): string {
-    return this.stack.map((level) => level.title).join(" › ");
+  /**
+   * The breadcrumb's steps below the root (`["Arrange", "range"]`), for the
+   * picker's and the drawer's titles; `["menu"]` at the root.
+   */
+  get steps(): readonly string[] {
+    const steps = this.stack.slice(1).map((level) => level.title);
+    return steps.length ? steps : ["menu"];
   }
 
   /** The picker the TUI draws for the current level. */
@@ -4113,15 +4121,19 @@ export class EditMenu {
     const index = frame
       ? clamp(frame.index, 0, Math.max(0, nodes.length - 1))
       : 0;
-    const crumbs = this.stack.map((level) => level.title).join(" › ");
     const selected = nodes[index];
-    let title = crumbs;
-    if (frame?.query || this.filtering) title += ` · /${frame?.query ?? ""}`;
+    let suffix = "";
+    if (frame?.query || this.filtering) suffix += ` · /${frame?.query ?? ""}`;
     if (this.entry)
-      title += ` · ${this.entry.label}: ${this.entry.buffer || placeholderFor(selected)}▏`;
+      suffix += ` · ${this.entry.label}: ${this.entry.buffer || placeholderFor(selected)}▏`;
     const audition = context.audition;
-    if (audition?.dirty) title = `● ${title}`;
-    if (audition?.status && !this.entry) title += ` · ${audition.status}`;
+    if (audition?.status && !this.entry) suffix += ` · ${audition.status}`;
+    const crumbs: Crumbs = {
+      steps: this.steps,
+      ...(audition?.dirty ? { prefix: "● " } : {}),
+      ...(suffix ? { suffix } : {}),
+    };
+    const title = crumbText(crumbs);
     // Changed rows show `staged ← committed` (Elektron's compare, inline).
     const before = new Map<string, string>();
     if (audition?.dirty && frame && !frame.query)
@@ -4169,7 +4181,7 @@ export class EditMenu {
                 : selected?.kind === "action"
                   ? HINTS.action
                   : HINTS.menu;
-    return { title, items, index, hint, note };
+    return { title, crumbs, items, index, hint, note };
   }
 }
 

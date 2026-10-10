@@ -62,7 +62,7 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("Project"), "menu root");
       await t.send("/project");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("menu › Project"), "project");
+      await t.until(() => t.vt.text().includes("≡ Project"), "project");
       await t.send("/tempo and");
       await t.send("\r");
       await t.until(
@@ -124,7 +124,7 @@ test.skipIf(!supported)(
       expect(t.vt.text()).toContain("1.5×");
 
       for (let i = 0; i < 8; i++) await t.send("\u001b");
-      await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
+      await t.until(() => !t.vt.text().includes("≡ "), "menu closed");
     } finally {
       t.terminal.write("\u0003");
       await t.proc.exited;

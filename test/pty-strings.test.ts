@@ -69,7 +69,7 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("Arrange"), "menu root");
       await t.send("/Sound");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("menu › Sound"), "sound");
+      await t.until(() => t.vt.text().includes("≡ Sound"), "sound");
       await t.send("/instruments");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("strings"), "browse");
@@ -82,7 +82,7 @@ test.skipIf(!supported)(
         await Bun.sleep(100);
       expect((await lead())?.string).toEqual({ preset: "koto" });
       for (let i = 0; i < 6; i++) await t.send("\u001b");
-      await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
+      await t.until(() => !t.vt.text().includes("≡ "), "menu closed");
 
       // Play mode on the string track: arm, play two keys, stop.
       await t.send("\u0010");

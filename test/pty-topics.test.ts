@@ -45,7 +45,7 @@ function ready(t: Session): boolean {
 
 /**
  * The word a door's panel title names for each topic id: `help · effects`,
- * `guide · Shaping sound › Effects`, `menu › Mix & automation`.
+ * `guide · Shaping sound › Effects`, `≡ Mix`.
  */
 function namesTopic(text: string, id: string): boolean {
   const title = text.split("\n")[0]?.toLowerCase() ?? "";

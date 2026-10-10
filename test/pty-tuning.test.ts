@@ -55,7 +55,7 @@ test.skipIf(!supported)(
       await t.send("/chords and key");
       await t.send("\r");
       await t.until(
-        () => t.vt.text().includes("menu › Chords and key"),
+        () => t.vt.text().includes("≡ Chords and key"),
         "chords and key",
       );
       await t.send("/tuning");
@@ -88,7 +88,7 @@ test.skipIf(!supported)(
         "hijaz in session",
       );
       for (let i = 0; i < 6; i++) await t.send("\u001b");
-      await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
+      await t.until(() => !t.vt.text().includes("≡ "), "menu closed");
     } finally {
       t.terminal.write("\u0003");
       await t.proc.exited;

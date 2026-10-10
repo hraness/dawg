@@ -38,11 +38,11 @@ test.skipIf(!supported)(
     try {
       await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("/menu project\r");
-      await t.until(() => t.vt.text().includes("menu › Project"), "Project");
+      await t.until(() => t.vt.text().includes("≡ Project"), "Project");
       await t.send("/audio");
       await t.send("\r");
       await t.until(
-        () => t.vt.text().includes("menu › Project › audio"),
+        () => t.vt.text().includes("≡ Project › audio"),
         "audio page",
       );
       expect(t.vt.text()).toContain("output");
@@ -50,7 +50,7 @@ test.skipIf(!supported)(
       await t.send("/output");
       await t.send("\r");
       await t.until(
-        () => t.vt.text().includes("menu › Project › audio › output"),
+        () => t.vt.text().includes("≡ Project › audio › output"),
         "output list",
       );
       expect(t.vt.text()).toContain("Built-in Output");

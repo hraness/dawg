@@ -63,7 +63,7 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("Project"), "menu root");
       await t.send("/sound");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("menu › Sound"), "sound");
+      await t.until(() => t.vt.text().includes("≡ Sound"), "sound");
       // The simple piano rows sit in Sound itself (the full Sound › keys
       // page holds every parameter).
       expect(t.vt.text()).toContain("preset");
@@ -79,7 +79,7 @@ test.skipIf(!supported)(
       expect((await sessionTrack(t.cwd))?.keys?.preset).toBe("felt");
 
       for (let i = 0; i < 8; i++) await t.send("\u001b");
-      await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
+      await t.until(() => !t.vt.text().includes("≡ "), "menu closed");
     } finally {
       t.terminal.write("\u0003");
       await t.proc.exited;

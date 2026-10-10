@@ -84,19 +84,19 @@ test.skipIf(!supported)(
 
       // ctrl-k → Arrange → sections → chorus → loop.
       await t.send("/menu arrange\r");
-      await t.until(() => t.vt.text().includes("menu › Arrange"), "Arrange");
+      await t.until(() => t.vt.text().includes("≡ Arrange"), "Arrange");
       expect(t.vt.text()).toContain("verse");
       expect(t.vt.text()).toContain("chorus");
       await t.send("/sections");
       await t.send("\r");
       await t.until(
-        () => t.vt.text().includes("menu › Arrange › sections"),
+        () => t.vt.text().includes("≡ Arrange › sections"),
         "sections page",
       );
       await t.send("/chorus");
       await t.send("\r");
       await t.until(
-        () => t.vt.text().includes("menu › Arrange › sections › chorus"),
+        () => t.vt.text().includes("≡ Arrange › sections › chorus"),
         "chorus page",
       );
       await t.send("/loop");

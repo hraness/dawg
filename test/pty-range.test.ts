@@ -124,11 +124,11 @@ test.skipIf(!supported)(
 
       // ctrl-k → Arrange → range → loop next.
       await t.send("/menu arrange\r");
-      await t.until(() => t.vt.text().includes("menu › Arrange"), "Arrange");
+      await t.until(() => t.vt.text().includes("≡ Arrange"), "Arrange");
       await t.send("/range");
       await t.send("\r");
       await t.until(
-        () => t.vt.text().includes("menu › Arrange › range"),
+        () => t.vt.text().includes("≡ Arrange › range"),
         "range page",
       );
       expect(t.vt.text()).toContain("loop bars");
