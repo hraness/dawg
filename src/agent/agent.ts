@@ -1,3 +1,4 @@
+import { newId } from "../../core/ids.ts";
 import type { CommandHost } from "./command-agent.ts";
 import { GRANULAR_PARAMS } from "../../core/granular.ts";
 import {
@@ -201,7 +202,7 @@ export type AgentTurnOptions = Readonly<{
   signal?: AbortSignal;
   budget?: AgentBudget;
   tools?: readonly AgentTool[];
-  /** Note ID factory; defaults to `${track}-${revision}-${nonce}${index}`. */
+  /** Note ID factory; defaults to `newId(track)` (core/ids.ts). */
   newNoteId?: (trackId: string, revision: number, index: number) => string;
 }>;
 
@@ -322,11 +323,9 @@ export async function runAgentTurn(
   };
   const tools = options.tools ?? AGENT_TOOLS;
   const chatToolList = chatTools(tools);
-  const nonce = Math.random().toString(36).slice(2, 6);
   const newNoteId =
     options.newNoteId ??
-    ((trackId: string, revision: number, index: number) =>
-      `${trackId.slice(0, 40)}-${revision}-${nonce}${index}`);
+    ((trackId: string, _revision: number, _index: number) => newId(trackId));
   const deadline = turnDeadline(limits.timeoutMs);
   const signal = options.signal
     ? AbortSignal.any([options.signal, deadline.signal])

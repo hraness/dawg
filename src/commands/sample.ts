@@ -24,6 +24,9 @@ import {
   samplerVoiceSlots,
   type Sampler,
   type SampleRef,
+  type PinnedSampleRef,
+  requirePinnedRef,
+  ScoreValidationError,
   type Track,
 } from "../../core/score.ts";
 import { trackDirectories } from "../../core/sdk/print.ts";
@@ -317,8 +320,15 @@ export function addSampleVoice(
   score: TrackScore,
   trackId: string,
   voice: string,
-  ref: SampleRef,
+  ref: PinnedSampleRef,
 ): AddVoiceResult {
+  try {
+    requirePinnedRef(ref, `sample ${voice}`);
+  } catch (error) {
+    if (error instanceof ScoreValidationError)
+      return { ok: false, message: `sample · ${error.message}` };
+    throw error;
+  }
   if (!VOICE.test(voice))
     return {
       ok: false,

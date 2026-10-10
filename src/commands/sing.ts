@@ -19,6 +19,7 @@
  * Any edit makes the track a sing track (`instrument "sing"` plus a `sing`
  * field). One `updateTrack` revision and one undo step per command.
  */
+import { newId } from "../../core/ids.ts";
 import { isGuideInstrument } from "../../core/clips.ts";
 import { parseKey } from "../../core/chords.ts";
 import { FxValidationError } from "../../core/params.ts";
@@ -330,18 +331,13 @@ export function throatDemo(
   if (drone === undefined) return undefined;
   const step = score.ticksPerBeat * 2;
   const total = score.ticksPerBeat * score.beatsPerBar * score.bars;
-  const ids = new Set(score.notes.map((note) => note.id));
   let next = score;
   let count = 0;
   for (const [index, offset] of THROAT_DEMO_STEPS.entries()) {
     const startTick = index * step;
     if (startTick + step > total) break;
-    let id = `${trackId}-demo-${index + 1}`;
-    for (let n = 2; ids.has(id); n += 1)
-      id = `${trackId}-demo-${index + 1}-${n}`;
-    ids.add(id);
     next = addNote(next, {
-      id,
+      id: newId(`${trackId}-demo`),
       trackId,
       startTick,
       durationTicks: step,

@@ -8,6 +8,7 @@
  * through `core/key.ts`, the same estimator `/media analyze` uses), so a
  * long held tonic weighs more than a passing tone.
  */
+import { newId } from "../../core/ids.ts";
 import {
   TrackScore,
   SCORE_LIMITS,
@@ -338,7 +339,7 @@ export function guideNotesScore(
     );
     if (startTick < 0 || startTick >= end) continue;
     notes.push({
-      id: `${trackId}-${notes.length + 1}`,
+      id: newId(trackId),
       trackId,
       startTick,
       durationTicks: Math.max(1, endTick - startTick),

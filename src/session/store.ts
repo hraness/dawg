@@ -39,12 +39,36 @@ export class SessionValidationError extends Error {
   }
 }
 
+/**
+ * Who made an event. Stamped by the authority from the connection's hello,
+ * never trusted from the intent: `actorId` is the person (absent for v1
+ * clients and the file fallback), `clientId` the window, `seq` the
+ * per-(actor, client) intent number used for retry dedupe.
+ */
+export type EventActor = {
+  actorId?: string;
+  clientId: string;
+  seq?: number;
+};
+
 export type SessionEvent = {
   id: string;
   revision: number;
+  /**
+   * Opaque to the store: any bounded string is kept and passed through, so a
+   * newer peer's event kinds survive an older reader.
+   */
   kind: string;
   payload: unknown;
   at: string;
+  actor?: EventActor;
+  /**
+   * The score operations this event applied: sent by an ops intent, or
+   * derived by the authority from a composition intent. Folding `ops` from
+   * the previous composition reproduces this one. Events without `ops` are
+   * snapshots (too large to diff, or not expressible as operations).
+   */
+  ops?: unknown[];
   /**
    * How to recover the composition this event replaced from the one it
    * produced (see `delta.ts`). Absent once compacted away: the store drops
@@ -204,7 +228,10 @@ export async function appendSessionEvent<T>(
   // History is the store's job: a `before` composition in the payload (the
   // pre-rewind convention) is dropped rather than persisted in full.
   const payload = stripBefore(event.payload);
-  const payloadJson = stringifyJson(payload, "session event payload");
+  const payloadJson = stringifyJson(
+    event.ops === undefined ? payload : [payload, event.ops],
+    "session event payload",
+  );
   const payloadBytes = Buffer.byteLength(payloadJson, "utf8");
   if (payloadBytes > MAX_EVENT_BYTES)
     throw new Error(`session event exceeds ${MAX_EVENT_BYTES} bytes`);
@@ -231,6 +258,8 @@ export async function appendSessionEvent<T>(
       revision,
       at,
     };
+    if (event.actor !== undefined) appended.actor = { ...event.actor };
+    if (event.ops !== undefined) appended.ops = [...event.ops];
     const rewind = diffRewind(disk.composition, composition);
     if (Buffer.byteLength(JSON.stringify(rewind), "utf8") <= MAX_REWIND_BYTES)
       appended.rewind = rewind;
@@ -523,7 +552,9 @@ function validateSessionRecord<T>(value: unknown): SessionRecord<T> {
     )
       throw new SessionValidationError("session event timestamp is invalid");
     const payloadJson = stringifyJson(
-      candidate.payload,
+      candidate.ops === undefined
+        ? candidate.payload
+        : [candidate.payload, candidate.ops],
       "session event payload",
     );
     if (Buffer.byteLength(payloadJson, "utf8") > MAX_EVENT_BYTES)
@@ -548,6 +579,13 @@ function validateSessionRecord<T>(value: unknown): SessionRecord<T> {
       at: candidate.at,
     };
     if (rewind !== undefined) parsed.rewind = rewind;
+    if (candidate.actor !== undefined)
+      parsed.actor = parseEventActor(candidate.actor);
+    if (candidate.ops !== undefined) {
+      if (!Array.isArray(candidate.ops))
+        throw new SessionValidationError("session event ops are invalid");
+      parsed.ops = candidate.ops;
+    }
     return parsed;
   });
   let meta: SessionMeta;
@@ -600,4 +638,25 @@ function stringifyJson(value: unknown, label: string): string {
     if (error instanceof SessionValidationError) throw error;
     throw new SessionValidationError(`${label} must be JSON data`);
   }
+}
+
+function parseEventActor(value: unknown): EventActor {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    throw new SessionValidationError("session event actor is invalid");
+  const actor = value as Record<string, unknown>;
+  const valid =
+    typeof actor.clientId === "string" &&
+    actor.clientId.length > 0 &&
+    actor.clientId.length <= 64 &&
+    (actor.actorId === undefined ||
+      (typeof actor.actorId === "string" &&
+        /^a_[a-z2-7]{22}$/.test(actor.actorId))) &&
+    (actor.seq === undefined ||
+      (Number.isSafeInteger(actor.seq) && (actor.seq as number) >= 1));
+  if (!valid)
+    throw new SessionValidationError("session event actor is invalid");
+  const parsed: EventActor = { clientId: actor.clientId as string };
+  if (actor.actorId !== undefined) parsed.actorId = actor.actorId as string;
+  if (actor.seq !== undefined) parsed.seq = actor.seq as number;
+  return parsed;
 }

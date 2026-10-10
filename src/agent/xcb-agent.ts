@@ -1,3 +1,4 @@
+import { newId } from "../../core/ids.ts";
 import { GRANULAR_PARAMS } from "../../core/granular.ts";
 import { compositionBrief } from "./brief.ts";
 import { CHORD_PROCESS } from "../../core/chords.ts";
@@ -125,11 +126,9 @@ export async function runTextAgentTurn(
   };
   const tools = options.tools ?? AGENT_TOOLS;
   const catalog = renderToolCatalog(tools);
-  const nonce = Math.random().toString(36).slice(2, 6);
   const newNoteId =
     options.newNoteId ??
-    ((trackId: string, revision: number, index: number) =>
-      `${trackId.slice(0, 40)}-${revision}-${nonce}${index}`);
+    ((trackId: string, _revision: number, _index: number) => newId(trackId));
   const startedAt = Date.now();
   const deadline = turnDeadline(limits.timeoutMs);
   const signal = options.signal

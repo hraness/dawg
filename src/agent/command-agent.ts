@@ -10,6 +10,7 @@
  * sends about a ninth of the input tokens and finishes in about half the
  * time (docs/show-me.md).
  */
+import { newId } from "../../core/ids.ts";
 import { HELP_SECTIONS } from "../commands/help.ts";
 import { MEDIA_TOOLS } from "../media/tools.ts";
 import {
@@ -132,11 +133,9 @@ export async function runCommandAgentTurn(
   const offered = chatTools(
     allTools.filter((tool) => COMMAND_MODE_TOOL_NAMES.has(tool.name)),
   );
-  const nonce = Math.random().toString(36).slice(2, 6);
   const newNoteId =
     options.newNoteId ??
-    ((trackId: string, revision: number, index: number) =>
-      `${trackId.slice(0, 40)}-${revision}-${nonce}${index}`);
+    ((trackId: string, _revision: number, _index: number) => newId(trackId));
   const deadline = turnDeadline(limits.timeoutMs);
   const signal = options.signal
     ? AbortSignal.any([options.signal, deadline.signal])

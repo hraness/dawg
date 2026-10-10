@@ -12,12 +12,36 @@ import {
 } from "./meta.ts";
 import type { SessionEvent, SessionPaths, SessionRecord } from "./store.ts";
 
+/** Same shape as src/identity/actor.ts ACTOR_ID; kept here to stay leaf. */
+const ACTOR_ID = /^a_[a-z2-7]{22}$/;
+
 /**
  * dawgd wire protocol: newline-delimited JSON over a Unix domain socket.
  * Every frame carries `v`; every inbound frame is parsed from `unknown` and
  * bounded before it can reach the reducer, the store, or the transport.
  */
 export const PROTOCOL_VERSION = 1 as const;
+/**
+ * Negotiated protocol revisions. Frames keep `v: 1` (the framing); `hello`
+ * offers `{vMin, vMax, caps}` and `welcome` answers with the chosen revision
+ * and the daemon's capabilities. A v1-only client sends neither and gets the
+ * original behaviour. Revision 2 adds actors, per-client `seq`, ops on
+ * events and transport `quantum`.
+ */
+export const PROTOCOL_MIN = 1;
+export const PROTOCOL_MAX = 2;
+/** What this build's dawgd offers in `welcome.caps`. */
+export const DAEMON_CAPS = [
+  "actor",
+  "seq",
+  "ops-log",
+  "quantum",
+  "opaque-kinds",
+] as const;
+const MAX_CAPS = 32;
+const MAX_CAP_LENGTH = 32;
+/** Default musical cycle when a transport frame predates `quantum`. */
+export const DEFAULT_QUANTUM = 4;
 /** Client intents carry at most one composition plus a bounded payload. */
 export const MAX_CLIENT_FRAME_BYTES = 2 * 1024 * 1024;
 /** Snapshots carry a full session record, which the store bounds at 4 MiB. */
@@ -38,13 +62,23 @@ export type TransportState = {
   /** Beat position at `atMs`. */
   beat: number;
   bpm: number;
-  /** Daemon monotonic clock expressed on the epoch (timeOrigin + now). */
+  /**
+   * When `beat` held, on the *authority's host clock*: dawgd's monotonic
+   * clock expressed on the epoch (timeOrigin + now). On one machine every
+   * process shares it; a remote reader must convert with its per-client
+   * offset (`SessionPort` applies `clockOffsetMs`, 0 locally) before use.
+   */
   atMs: number;
+  /** Beats per phase cycle (bar or loop), Link-style; defaults to 4. */
+  quantum: number;
 };
 
 /** One live window. dawgd drops the entry when the client disconnects. */
 export type PresenceEntry = {
   clientId: string;
+  /** Who is at this window (src/identity/actor.ts); absent for v1 clients. */
+  actorId?: string;
+  /** Machine-local process id: display only, never identity. */
   pid: number;
   label: string;
   focusedTrackId: string | null;
@@ -58,6 +92,12 @@ export type ClientMessage =
       label: string;
       clientId: string;
       focusedTrackId: string | null;
+      /** Protocol revisions this client speaks; absent means 1..1. */
+      vMin?: number;
+      vMax?: number;
+      caps?: string[];
+      actorId?: string;
+      actorName?: string;
     }
   | { v: 1; type: "focus"; id: string; trackId: string | null }
   /** `draft` asks dawgd to reserve a new `track-N` id when all are open. */
@@ -72,6 +112,12 @@ export type ClientMessage =
       base: number;
       kind: string;
       payload: unknown;
+      /**
+       * Per-(actor, client) sequence number, strictly increasing per intent
+       * and reused on retry: dawgd dedupes on (actorId, clientId, seq) across
+       * restarts, the same way it dedupes on `key`.
+       */
+      seq?: number;
       operations?: unknown[];
       composition?: unknown;
     }
@@ -106,6 +152,9 @@ export type ServerMessage =
       record: SessionRecord<unknown>;
       digest: string;
       transport: TransportState;
+      /** Negotiated revision; absent from a v1-only daemon. */
+      protocol?: number;
+      caps?: string[];
     }
   | {
       v: 1;
@@ -192,7 +241,7 @@ export function parseClientMessage(line: string): ClientMessage {
       throw new ProtocolError("invalid", "hello pid is invalid");
     if (typeof label !== "string" || label.length > MAX_KIND_LENGTH)
       throw new ProtocolError("invalid", "hello label is invalid");
-    return {
+    const message: ClientMessage = {
       v: 1,
       type,
       pid: pid as number,
@@ -200,6 +249,31 @@ export function parseClientMessage(line: string): ClientMessage {
       clientId: requireId(value.clientId, "client id"),
       focusedTrackId: optionalTrackId(value.focusedTrackId),
     };
+    if (value.vMin !== undefined || value.vMax !== undefined) {
+      const vMin = value.vMin ?? 1;
+      const vMax = value.vMax ?? vMin;
+      if (
+        !Number.isSafeInteger(vMin) ||
+        !Number.isSafeInteger(vMax) ||
+        (vMin as number) < 1 ||
+        (vMax as number) < (vMin as number)
+      )
+        throw new ProtocolError("invalid", "hello versions are invalid");
+      message.vMin = vMin as number;
+      message.vMax = vMax as number;
+    }
+    if (value.caps !== undefined) message.caps = requireCaps(value.caps);
+    if (value.actorId !== undefined) {
+      if (typeof value.actorId !== "string" || !ACTOR_ID.test(value.actorId))
+        throw new ProtocolError("invalid", "hello actor is invalid");
+      message.actorId = value.actorId;
+    }
+    if (value.actorName !== undefined) {
+      if (typeof value.actorName !== "string")
+        throw new ProtocolError("invalid", "hello actor name is invalid");
+      message.actorName = value.actorName.slice(0, MAX_ID_LENGTH);
+    }
+    return message;
   }
   if (type === "focus")
     return {
@@ -267,6 +341,11 @@ export function parseClientMessage(line: string): ClientMessage {
       kind,
       payload: value.payload,
     };
+    if (value.seq !== undefined) {
+      if (!Number.isSafeInteger(value.seq) || (value.seq as number) < 1)
+        throw new ProtocolError("invalid", "apply seq is invalid");
+      message.seq = value.seq as number;
+    }
     if (hasOperations) {
       if (
         !Array.isArray(value.operations) ||
@@ -315,7 +394,7 @@ export function parseServerMessage(line: string): ServerMessage {
       throw new ProtocolError("invalid", "welcome session is invalid");
     if (!Number.isSafeInteger(value.pid))
       throw new ProtocolError("invalid", "welcome pid is invalid");
-    return {
+    const message: ServerMessage = {
       v: 1,
       type,
       sessionId: value.sessionId,
@@ -324,6 +403,16 @@ export function parseServerMessage(line: string): ServerMessage {
       digest: requireDigest(value.digest),
       transport: requireTransport(value.transport),
     };
+    if (value.protocol !== undefined) {
+      if (
+        !Number.isSafeInteger(value.protocol) ||
+        (value.protocol as number) < 1
+      )
+        throw new ProtocolError("invalid", "welcome protocol is invalid");
+      message.protocol = value.protocol as number;
+    }
+    if (value.caps !== undefined) message.caps = requireCaps(value.caps);
+    return message;
   }
   if (type === "commit") {
     const event = value.event;
@@ -487,12 +576,43 @@ export function requirePresence(value: unknown): PresenceEntry {
   const entry = value as Record<string, unknown>;
   if (!Number.isSafeInteger(entry.pid) || (entry.pid as number) <= 0)
     throw new ProtocolError("invalid", "presence pid is invalid");
-  return {
+  const parsed: PresenceEntry = {
     clientId: requireId(entry.clientId, "client id"),
     pid: entry.pid as number,
     label: boundedText(entry.label).slice(0, MAX_KIND_LENGTH),
     focusedTrackId: optionalTrackId(entry.focusedTrackId),
   };
+  if (typeof entry.actorId === "string" && ACTOR_ID.test(entry.actorId))
+    parsed.actorId = entry.actorId;
+  return parsed;
+}
+
+/**
+ * Capability names: short tokens. Unknown names are kept (a peer may know
+ * more than we do); callers test membership only.
+ */
+function requireCaps(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length > MAX_CAPS)
+    throw new ProtocolError("invalid", "caps are invalid");
+  return value.map((cap) => {
+    if (
+      typeof cap !== "string" ||
+      cap.length === 0 ||
+      cap.length > MAX_CAP_LENGTH ||
+      !/^[a-z0-9][a-z0-9.-]*$/.test(cap)
+    )
+      throw new ProtocolError("invalid", "caps are invalid");
+    return cap;
+  });
+}
+
+/**
+ * The revision both sides speak: the highest in the overlap of
+ * [vMin, vMax] and [PROTOCOL_MIN, PROTOCOL_MAX], or undefined when none.
+ */
+export function negotiateProtocol(vMin = 1, vMax = vMin): number | undefined {
+  const high = Math.min(vMax, PROTOCOL_MAX);
+  return high >= Math.max(vMin, PROTOCOL_MIN) ? high : undefined;
 }
 
 /**
@@ -596,7 +716,9 @@ function requireTransport(value: unknown): TransportState {
     !isFiniteNonNegative(state.beat) ||
     !isFiniteNonNegative(state.bpm) ||
     (state.bpm as number) <= 0 ||
-    !isFiniteNonNegative(state.atMs)
+    !isFiniteNonNegative(state.atMs) ||
+    (state.quantum !== undefined &&
+      (!isFiniteNonNegative(state.quantum) || (state.quantum as number) <= 0))
   )
     throw new ProtocolError("invalid", "transport is invalid");
   return {
@@ -605,6 +727,7 @@ function requireTransport(value: unknown): TransportState {
     beat: state.beat as number,
     bpm: state.bpm as number,
     atMs: state.atMs as number,
+    quantum: (state.quantum as number | undefined) ?? DEFAULT_QUANTUM,
   };
 }
 
@@ -614,6 +737,19 @@ function isFiniteNonNegative(value: unknown): boolean {
 
 function boundedText(value: unknown): string {
   return typeof value === "string" ? value.slice(0, 512) : "";
+}
+
+/**
+ * Rebases a transport anchor from the authority's host clock to this
+ * client's. `offsetMs` is (authority clock - local clock): 0 for every
+ * process on one machine, measured by a future relay for remote peers.
+ */
+export function toLocalTransport(
+  state: TransportState,
+  offsetMs: number,
+): TransportState {
+  if (offsetMs === 0) return state;
+  return { ...state, atMs: Math.max(0, state.atMs - offsetMs) };
 }
 
 /** Epoch-anchored monotonic milliseconds, comparable across local processes. */

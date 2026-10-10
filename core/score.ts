@@ -555,6 +555,34 @@ export type Sampler = Readonly<{
   mode: "oneshot" | "keyed";
 }>;
 
+/**
+ * A sample reference as created by capture, import or resample: always
+ * content-pinned, so another machine can fetch the exact bytes by hash.
+ * Older refs may lack `sha256`; new ones may not.
+ */
+export type PinnedSampleRef = SampleRef & Readonly<{ sha256: string }>;
+
+/** Rejects a newly created local sample ref that carries no valid sha256. */
+export function requirePinnedRef(
+  ref: SampleRef,
+  label: string,
+): PinnedSampleRef {
+  if (ref.src.startsWith(PACK_PREFIX)) {
+    if (ref.url === undefined && ref.sha256 === undefined)
+      throw new ScoreValidationError(
+        `${label} pack sound must be pinned by url or sha256`,
+        "invalid-track",
+      );
+    return ref as PinnedSampleRef;
+  }
+  if (typeof ref.sha256 !== "string" || !SHA256_HEX.test(ref.sha256))
+    throw new ScoreValidationError(
+      `${label} needs a sha256 content pin`,
+      "invalid-track",
+    );
+  return ref as PinnedSampleRef;
+}
+
 export type SampleRef = Readonly<{
   /**
    * Project-relative path, normally `tracks/<slug>/samples/<file>`, or a

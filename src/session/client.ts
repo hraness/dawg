@@ -8,6 +8,9 @@ import {
   LineDecoder,
   MAX_SERVER_FRAME_BYTES,
   parseServerMessage,
+  PROTOCOL_MAX,
+  PROTOCOL_MIN,
+  ProtocolError,
   type ApplyResult,
   type ClientMessage,
   type PresenceEntry,
@@ -34,6 +37,13 @@ export type DaemonClientOptions = {
   sessionId: string;
   label?: string;
   clientId?: string;
+  /** Who is at this window; see src/identity/actor.ts. */
+  actor?: { id: string; name: string };
+  /**
+   * Protocol range to offer. Defaults to this build's full range; tests pin
+   * `{vMin: 1, vMax: 1}` to act as an old client.
+   */
+  versions?: { vMin: number; vMax: number };
   focusedTrackId?: string | null;
   /** Spawn a detached daemon when none answers. Defaults to true. */
   spawn?: boolean;
@@ -74,6 +84,11 @@ export class DaemonClient {
   public transport!: TransportState;
   public presence: PresenceEntry[] = [];
   public daemonPid = 0;
+  /** Negotiated revision: 1 until a v2 daemon says otherwise. */
+  public protocol = 1;
+  public caps: readonly string[] = [];
+  /** Last intent seq this client issued; retries resend the same one. */
+  private seq = 0;
   private socket: Socket | undefined;
   private decoder = new LineDecoder(MAX_SERVER_FRAME_BYTES);
   private readonly pending = new Map<string, Pending>();
@@ -113,6 +128,8 @@ export class DaemonClient {
     kind: string;
     payload: unknown;
     key?: string;
+    /** Reuse to retry the same intent; a fresh one is drawn otherwise. */
+    seq?: number;
     operations?: unknown[];
     composition?: unknown;
   }): Promise<ApplyResult> {
@@ -125,6 +142,7 @@ export class DaemonClient {
       kind: intent.kind,
       payload: intent.payload,
     };
+    if (this.protocol >= 2) message.seq = intent.seq ?? this.nextSeq();
     if (intent.operations) message.operations = intent.operations;
     else message.composition = intent.composition;
     return this.result(await this.request(message));
@@ -207,6 +225,12 @@ export class DaemonClient {
     throw new Error(
       result.status === "rejected" ? result.message : "dawgd meta failed",
     );
+  }
+
+  /** The next per-(actor, client) intent number. */
+  public nextSeq(): number {
+    this.seq += 1;
+    return this.seq;
   }
 
   public close(): void {
@@ -348,6 +372,17 @@ export class DaemonClient {
             label: (this.options.label ?? "dawg").slice(0, 128),
             clientId: this.clientId,
             focusedTrackId: this.focusedTrackId,
+            ...(this.options.versions ?? {
+              vMin: PROTOCOL_MIN,
+              vMax: PROTOCOL_MAX,
+            }),
+            caps: ["actor", "seq", "quantum"],
+            ...(this.options.actor
+              ? {
+                  actorId: this.options.actor.id,
+                  actorName: this.options.actor.name,
+                }
+              : {}),
           }),
         );
       });
@@ -368,7 +403,11 @@ export class DaemonClient {
       let message: ServerMessage;
       try {
         message = parseServerMessage(line);
-      } catch {
+      } catch (error) {
+        // A newer daemon's message types are skipped, not fatal; a malformed
+        // frame of a known type still drops the connection.
+        if (error instanceof ProtocolError && error.code === "unknown-type")
+          continue;
         socket.destroy();
         return;
       }
@@ -379,6 +418,8 @@ export class DaemonClient {
   private onMessage(message: ServerMessage): void {
     if (message.type === "welcome") {
       this.daemonPid = message.pid;
+      this.protocol = message.protocol ?? 1;
+      this.caps = message.caps ?? [];
       this.record = message.record;
       this.digest = message.digest;
       this.transport = message.transport;

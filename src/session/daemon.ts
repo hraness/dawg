@@ -6,6 +6,7 @@ import {
   type ScoreOperation,
   type TrackScore,
 } from "../../core/score.ts";
+import { DiffError, diffScores } from "../../core/diff.ts";
 import { TransportClock, transportMapFor } from "../audio/clock.ts";
 import { AudioEngine } from "../audio/engine.ts";
 import { acquireSessionLock } from "./lock.ts";
@@ -22,8 +23,12 @@ import {
   encodeFrame,
   LineDecoder,
   MAX_CLIENT_FRAME_BYTES,
+  DAEMON_CAPS,
   monotonicEpochMs,
+  negotiateProtocol,
   parseClientMessage,
+  PROTOCOL_MAX,
+  PROTOCOL_MIN,
   ProtocolError,
   type ApplyResult,
   chooseTrack,
@@ -39,6 +44,7 @@ import {
   SessionConflictError,
   sessionPaths,
   updateSessionMeta,
+  type EventActor,
   type SessionPaths,
   type SessionRecord,
 } from "./store.ts";
@@ -56,7 +62,14 @@ type Client = {
   decoder: LineDecoder;
   ready: boolean;
   presence?: PresenceEntry;
+  /** Negotiated protocol revision (1 for clients that sent no range). */
+  protocol?: number;
 };
+
+/** Retry-dedupe key for an intent: (actor, client, seq). */
+function seqKey(actorId: string | undefined, clientId: string, seq: number) {
+  return `${actorId ?? "-"}\u0000${clientId}\u0000${seq}`;
+}
 
 export type DaemonOptions = {
   workspace: string;
@@ -75,6 +88,8 @@ export class DawgDaemon {
   private readonly graceMs: number;
   private readonly clients = new Set<Client>();
   private readonly keys = new Map<string, number>();
+  /** (actor, client, seq) to the revision it produced; see `seqKey`. */
+  private readonly seqs = new Map<string, number>();
   private readonly clock = new TransportClock();
   private readonly audio: AudioEngine;
   private record!: SessionRecord<Composition>;
@@ -246,13 +261,26 @@ export class DawgDaemon {
 
   private handle(client: Client, message: ClientMessage): void {
     if (message.type === "hello") {
+      const protocol = negotiateProtocol(message.vMin, message.vMax);
+      if (protocol === undefined) {
+        this.fail(
+          client,
+          new ProtocolError(
+            "version",
+            `dawgd speaks protocol ${PROTOCOL_MIN}-${PROTOCOL_MAX}`,
+          ),
+        );
+        return;
+      }
       client.ready = true;
+      client.protocol = protocol;
       client.presence = {
         clientId: message.clientId,
         pid: message.pid,
         label: message.label,
         focusedTrackId: message.focusedTrackId,
       };
+      if (message.actorId) client.presence.actorId = message.actorId;
       this.send(client, {
         v: 1,
         type: "welcome",
@@ -261,6 +289,8 @@ export class DawgDaemon {
         record: this.record,
         digest: this.digest,
         transport: this.transportState(),
+        protocol,
+        caps: [...DAEMON_CAPS],
       });
       this.broadcastPresence();
       return;
@@ -393,7 +423,7 @@ export class DawgDaemon {
       return;
     }
     this.enqueue(async () => {
-      const result = await this.apply(message);
+      const result = await this.apply(message, client);
       this.send(client, { v: 1, type: "result", id: message.id, ...result });
     });
   }
@@ -407,15 +437,35 @@ export class DawgDaemon {
 
   private async apply(
     message: Extract<ClientMessage, { type: "apply" }>,
+    client?: Client,
   ): Promise<ApplyResult> {
     const seen = this.keys.get(message.key);
     if (seen !== undefined) return { status: "duplicate", revision: seen };
+    // The authority stamps who made the event from the connection, never
+    // from the intent body.
+    const actor: EventActor | undefined = client?.presence
+      ? {
+          clientId: client.presence.clientId,
+          ...(client.presence.actorId
+            ? { actorId: client.presence.actorId }
+            : {}),
+          ...(message.seq !== undefined ? { seq: message.seq } : {}),
+        }
+      : undefined;
+    const retryKey =
+      actor?.seq !== undefined
+        ? seqKey(actor.actorId, actor.clientId, actor.seq)
+        : undefined;
+    const retried = retryKey ? this.seqs.get(retryKey) : undefined;
+    if (retried !== undefined)
+      return { status: "duplicate", revision: retried };
+    let operations: ScoreOperation[] | undefined;
     const stale = message.base !== this.record.revision;
     let rebased = false;
     let next: TrackScore;
     try {
       if (message.operations) {
-        const operations = message.operations.map(parseOperation);
+        operations = message.operations.map(parseOperation);
         if (stale) {
           // Operation intents from an older base replay on the current score
           // when nothing they touch changed in between.
@@ -435,6 +485,13 @@ export class DawgDaemon {
       else next = scoreFromJSON(message.composition);
       // Round-trip through the parser so only canonical score data is stored.
       next = scoreFromJSON(next.toJSON());
+      // Composition intents still log as ops, so the log replays as ops.
+      operations ??= derivedOperations(
+        this.score,
+        next,
+        MAX_DERIVED_OPS_BYTES -
+          Buffer.byteLength(JSON.stringify(message.payload ?? null), "utf8"),
+      );
     } catch (error) {
       return {
         status: "rejected",
@@ -459,7 +516,13 @@ export class DawgDaemon {
       this.record = await appendSessionEvent(
         this.paths,
         this.record,
-        { kind: message.kind, payload, id: message.key },
+        {
+          kind: message.kind,
+          payload,
+          id: message.key,
+          ...(actor ? { actor } : {}),
+          ...(operations ? { ops: operations } : {}),
+        },
         next.toJSON(),
       );
     } catch (error) {
@@ -488,6 +551,7 @@ export class DawgDaemon {
     this.score = next;
     this.digest = compositionDigest(this.record.composition);
     this.keys.set(message.key, this.record.revision);
+    if (retryKey) this.seqs.set(retryKey, this.record.revision);
     this.diskMtime = await this.recordMtime();
     const event = this.record.events[this.record.events.length - 1]!;
     this.broadcast({
@@ -578,6 +642,7 @@ export class DawgDaemon {
       beat: this.clock.beatAt(),
       bpm: this.score.tempoBpm,
       atMs,
+      quantum: this.score.beatsPerBar,
     };
   }
 
@@ -621,8 +686,15 @@ export class DawgDaemon {
     this.score = scoreFromJSON(this.record.composition);
     this.digest = compositionDigest(this.record.composition);
     this.keys.clear();
-    for (const event of this.record.events)
+    this.seqs.clear();
+    for (const event of this.record.events) {
       this.keys.set(event.id, event.revision);
+      if (event.actor?.seq !== undefined)
+        this.seqs.set(
+          seqKey(event.actor.actorId, event.actor.clientId, event.actor.seq),
+          event.revision,
+        );
+    }
     this.diskMtime = await this.recordMtime();
   }
 
@@ -711,6 +783,33 @@ const OPERATION_TYPES = new Set([
 ]);
 
 /** Shape gate before the reducer, which validates every field it reads. */
+/**
+ * Serialized budget for payload plus derived ops; the store bounds the two
+ * together at 64 KiB per event.
+ */
+const MAX_DERIVED_OPS_BYTES = 60 * 1024;
+
+/**
+ * The operations turning `before` into `after`, or undefined (a snapshot
+ * event) when the change has no op form or is too large to log as ops.
+ */
+export function derivedOperations(
+  before: TrackScore,
+  after: TrackScore,
+  budgetBytes = MAX_DERIVED_OPS_BYTES,
+): ScoreOperation[] | undefined {
+  let ops: readonly ScoreOperation[];
+  try {
+    ops = diffScores(before, after);
+  } catch (error) {
+    if (error instanceof DiffError) return undefined;
+    throw error;
+  }
+  if (Buffer.byteLength(JSON.stringify(ops), "utf8") > budgetBytes)
+    return undefined;
+  return [...ops];
+}
+
 function parseOperation(value: unknown): ScoreOperation {
   if (
     typeof value !== "object" ||
