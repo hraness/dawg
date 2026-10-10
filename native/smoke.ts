@@ -43,7 +43,7 @@ const rate = 22_050;
 const name = Buffer.from("null\0");
 const out = sink.dawg_sink_open(ptr(name), rate, 2, 128, rate * 2);
 check(out !== null, "open null output");
-const signal = new Float32Array(Math.floor(rate / 4) * 2);
+const signal = new Float32Array(Math.floor(rate / 2) * 2);
 for (let index = 0; index < signal.length; index += 1)
   signal[index] = Math.sin(index / 7) * 0.5;
 const accepted = Number(sink.dawg_sink_write(out, ptr(signal), signal.length));
@@ -55,18 +55,19 @@ const stat = (index: number): number => Number(stats[index] ?? 0n);
 const [queued, played, latencyNs, callbackNs, edgeNs] = [0, 1, 3, 4, 5].map(
   stat,
 ) as [number, number, number, number, number];
+// `played` is stream time: it also counts silence before the write.
 check(
-  queued + played === signal.length / 2,
-  `queued+played ${queued + played}`,
+  played >= signal.length / 2 - queued,
+  `played ${played} queued ${queued}`,
 );
-check(played > rate * 0.05 && played < rate * 0.25, `played ${played}`);
+check(queued > 0 && queued < rate / 2, `queued ${queued}`);
 check(Number(stats[2]) === 0, "no underrun while fed");
 check(latencyNs > 0 && edgeNs >= callbackNs, "timestamps");
 check(
   Number(sink.dawg_sink_clock_ns()) >= callbackNs,
   "clock is monotonic past the callback",
 );
-await Bun.sleep(250);
+await Bun.sleep(700);
 sink.dawg_sink_stats(out, ptr(stats));
 check(Number(stats[0]) === 0, "drained");
 check(Number(stats[2]) === 1, "one underrun when the signal ends");

@@ -54,7 +54,7 @@ struct Shared {
     device_rate: u32,
     device_channels: usize,
     buffer_frames: AtomicU64,
-    /// Output: ring frames played; input: ring frames captured.
+    /// Output: stream frames elapsed (played or, when starved, silent); input: frames captured.
     frames: AtomicU64,
     /// Output: times the ring ran dry after being fed; input: frames dropped on a full ring.
     xruns: AtomicU64,
@@ -169,31 +169,20 @@ impl Converter {
 /// Output callback body: fill `out` (device layout) from the ring.
 fn render(shared: &Shared, conv: &mut Converter, out: &mut [f32]) {
     let dch = shared.device_channels;
-    let sch = shared.channels;
     let frames = out.len() / dch;
     let mut short = false;
     let mut frame = std::mem::take(&mut conv.frame);
     for index in 0..frames {
         if conv.passthrough() {
-            if shared.ring.pop(&mut frame) < sch {
-                frame.iter_mut().for_each(|v| *v = 0.0);
-                short = true;
-            } else {
-                shared.frames.fetch_add(1, Ordering::Relaxed);
-            }
+            short |= pull(shared, &mut frame);
             conv.scratch.copy_from_slice(&frame);
         } else {
             while conv.phase >= 1.0 {
                 conv.phase -= 1.0;
-                if shared.ring.pop(&mut frame) < sch {
-                    frame.iter_mut().for_each(|v| *v = 0.0);
-                    short = true;
-                } else {
-                    shared.frames.fetch_add(1, Ordering::Relaxed);
-                }
+                short |= pull(shared, &mut frame);
                 conv.shift(&frame);
             }
-            for channel in 0..sch {
+            for channel in 0..shared.channels {
                 conv.scratch[channel] = conv.sample(channel);
             }
             conv.phase += conv.step;
@@ -206,6 +195,17 @@ fn render(shared: &Shared, conv: &mut Converter, out: &mut [f32]) {
     if short && shared.primed.swap(false, Ordering::AcqRel) {
         shared.xruns.fetch_add(1, Ordering::Relaxed);
     }
+}
+
+/// Pop one ring frame (silence when starved; true then). Every slot counts
+/// toward `frames`, so it tracks stream time even across an underrun.
+fn pull(shared: &Shared, frame: &mut [f32]) -> bool {
+    shared.frames.fetch_add(1, Ordering::Relaxed);
+    if shared.ring.pop(frame) < frame.len() {
+        frame.iter_mut().for_each(|v| *v = 0.0);
+        return true;
+    }
+    false
 }
 
 /// Map caller channels onto device channels (mono sums, extras stay silent).
@@ -685,15 +685,17 @@ mod tests {
 
     #[test]
     fn null_output_drains_in_real_time() {
-        let sink = unsafe { dawg_sink_open(c"null".as_ptr(), 48_000, 2, 128, 48_000) };
+        let sink = unsafe { dawg_sink_open(c"null".as_ptr(), 48_000, 2, 128, 96_000) };
         assert!(!sink.is_null());
-        let samples = vec![0.25f32; 4_800 * 2];
+        // Half a second: slow CI runners can oversleep 60 ms by a lot.
+        let samples = vec![0.25f32; 24_000 * 2];
         assert_eq!(unsafe { dawg_sink_write(sink, samples.as_ptr(), samples.len()) }, samples.len());
         std::thread::sleep(Duration::from_millis(60));
         let mut stats = [0u64; STAT_COUNT];
         assert_eq!(unsafe { dawg_sink_stats(sink, stats.as_mut_ptr()) }, 0);
-        assert!(stats[1] > 0 && stats[1] < 4_800, "played {}", stats[1]);
-        assert_eq!(stats[0] + stats[1], 4_800);
+        // `frames` is stream time (it also counts silence before the write).
+        assert!(stats[0] > 0 && stats[0] < 24_000, "queued {}", stats[0]);
+        assert!(stats[1] >= 24_000 - stats[0], "frames {}", stats[1]);
         assert_eq!(stats[8], 48_000);
         unsafe { dawg_sink_close(sink) };
     }
