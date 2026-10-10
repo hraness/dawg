@@ -575,7 +575,7 @@ function formatDb(db: number): string {
 export function clipLines(score: TrackScore, track: Track): string[] {
   const clips = track.clips ?? [];
   if (clips.length === 0)
-    return [`${track.name} has no clips · /vocal import <file> [bar]`];
+    return [`${track.name} has no clips · vocal import <file> [bar]`];
   return clips.map((clip) => {
     const flags = [
       clip.gain !== undefined ? formatDb(clipGainDb(clip.gain)) : "",
@@ -596,7 +596,7 @@ function pickClip(
 ): AudioClip {
   const clips = track.clips ?? [];
   if (clips.length === 0)
-    throw new Error(`${track.name} has no clips · /vocal import <file> [bar]`);
+    throw new Error(`${track.name} has no clips · vocal import <file> [bar]`);
   if (id !== undefined) {
     const clip = clips.find((c) => c.id === id);
     if (!clip)
@@ -771,7 +771,7 @@ export async function runClipCommand(
   } catch (error) {
     return {
       ok: false,
-      message: `clip: ${error instanceof Error ? error.message : String(error)}`,
+      message: error instanceof Error ? error.message : String(error),
     };
   }
 }

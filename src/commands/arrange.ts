@@ -30,6 +30,7 @@ import {
   type Section,
   type TrackScore,
 } from "../../core/score.ts";
+import { nearest } from "./nearest.ts";
 import {
   addSection,
   arrangedBars,
@@ -240,41 +241,17 @@ function unknownSection(
   return { type: "section-unknown", sub, name };
 }
 
-function editDistance(a: string, b: string): number {
-  const row = Array.from({ length: b.length + 1 }, (_, index) => index);
-  for (let i = 1; i <= a.length; i += 1) {
-    let previous = row[0]!;
-    row[0] = i;
-    for (let j = 1; j <= b.length; j += 1) {
-      const current = row[j]!;
-      row[j] = Math.min(
-        row[j]! + 1,
-        row[j - 1]! + 1,
-        previous + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
-      previous = current;
-    }
-  }
-  return row[b.length]!;
-}
-
 /** `no section named chrous (sections: …) · did you mean chorus?` */
 function unknownSectionMessage(score: TrackScore, name: string): string {
-  const wanted = name.toLowerCase();
-  let best: { name: string; distance: number } | undefined;
-  for (const section of score.sections) {
-    const distance = editDistance(wanted, section.name.toLowerCase());
-    if (!best || distance < best.distance)
-      best = { name: section.name, distance };
-  }
+  const match = nearest(
+    name,
+    score.sections.map((section) => section.name),
+  );
   const list =
     score.sections.length > 0
       ? ` (sections: ${score.sections.map((s) => s.name).join(", ")})`
       : " (no sections yet: section verse 1-8 marks one)";
-  const near =
-    best && best.distance <= Math.max(2, Math.floor(wanted.length / 3))
-      ? ` · did you mean ${best.name}?`
-      : "";
+  const near = match ? ` · did you mean ${match}?` : "";
   return `section · no section named ${name}${list}${near}`;
 }
 
@@ -946,4 +923,42 @@ function describeVary(vary: { transpose?: number; gain?: number }): string {
     bits.push(`${vary.transpose > 0 ? "+" : ""}${vary.transpose} st`);
   if (vary.gain !== undefined) bits.push(`gain ${vary.gain}`);
   return bits.join(" ");
+}
+
+/**
+ * `loop 2-3` when no section spans those bars: mark the section named
+ * `loop` over them (moving it if it exists) and loop it, as one next score.
+ */
+export function loopSpan(
+  score: TrackScore,
+  trackId: string,
+  from: number,
+  to: number,
+):
+  | Readonly<{ ok: true; next: TrackScore; name: string; message: string }>
+  | Readonly<{ ok: false; message: string }> {
+  const bars = from === to ? `${from}` : `${from}-${to}`;
+  const name = "loop";
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to < from)
+    return { ok: false, message: `loop ${bars} · bars run low-high from 1` };
+  const marked = applySectionCommand(score, trackId, {
+    type: "section-mark",
+    name,
+    startBar: from - 1,
+    bars: to - from + 1,
+  });
+  if (!marked.ok || !marked.next)
+    return { ok: false, message: `loop ${bars} · ${marked.message}` };
+  const looped = applySectionCommand(marked.next, trackId, {
+    type: "section-loop",
+    name,
+  });
+  if (!looped.ok || !looped.next)
+    return { ok: false, message: `loop ${bars} · ${looped.message}` };
+  return {
+    ok: true,
+    next: looped.next,
+    name,
+    message: `loop · bars ${from === to ? from : `${from}–${to}`} · section ${name} · loop off plays the song`,
+  };
 }

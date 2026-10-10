@@ -54,12 +54,13 @@ export function parsePatternCommand(
   const match = command
     .trim()
     .match(
-      /^\/patterns?(?:\s+([a-z0-9][\w-]{0,40}))?(?:\s+(keep-tempo|keep|tempo))?\s*$/i,
+      /^\/?(?:patterns?|grooves?)(?:\s+([a-z0-9][\w-]{0,40}))?(?:\s+(keep-tempo|keep|tempo))?\s*$/i,
     );
   if (!match) return undefined;
   const name = match[1]?.toLowerCase();
   if (!name) return { kind: "browse" };
-  if (name === "list" || name === "ls") return { kind: "list" };
+  if (name === "list" || name === "ls" || name === "presets")
+    return { kind: "list" };
   const flag = match[2]?.toLowerCase();
   return {
     kind: "apply",

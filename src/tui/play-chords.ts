@@ -605,9 +605,11 @@ export function applyChordsCommand(
       return done(`chords preset ${value}`);
     case "style":
       if (!(PROGRESSION_STYLES as readonly string[]).includes(value ?? ""))
-        return bad(`style takes ${PROGRESSION_STYLES.join("|")}`);
+        return bad(
+          `idiom takes ${PROGRESSION_STYLES.join("|")} · chords idiom jazz`,
+        );
       settings.style = value as ProgressionStyle;
-      return done(`chords style ${value}`);
+      return done(`chords idiom ${value}`);
     default:
       return bad(
         "/chords auto|manual|off · voicing · spread · bass · perform · pattern · strokes · speed · rate · octaves · sevenths · preset · style",

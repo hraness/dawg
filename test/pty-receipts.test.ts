@@ -34,12 +34,7 @@ type Session = Awaited<ReturnType<typeof launch>>;
  * bare `pattern` for the agent (A15, with the menu lane's B12 show-me rule);
  * the feel lane closed the transport revision bump (C7).
  */
-const RECEIPT_KNOWN_GAPS: readonly string[] = [
-  "remove n1",
-  "instrument sawtoth",
-  "tempo 900",
-  "agent pattern house",
-];
+const RECEIPT_KNOWN_GAPS: readonly string[] = [];
 
 /**
  * The sync card (`synced · lead window`), not the header's connection
@@ -137,7 +132,12 @@ async function composition(cwd: string): Promise<Record<string, unknown>> {
   throw new Error("no session composition");
 }
 
-type Track = { id: string; instrument?: unknown; notes?: unknown[] };
+type Track = {
+  id: string;
+  instrument?: unknown;
+  notes?: unknown[];
+  rhythm?: unknown[];
+};
 
 /** Each case: its label and whether the screen told the truth. */
 const outcomes = new Map<string, boolean>();
@@ -345,18 +345,33 @@ describe.skipIf(!supported)("real PTY at 80x24: receipts never lie", () => {
     try {
       await t.until(() => ready(t), "prompt");
       await t.send("give me a house beat\r");
+      // A turn that changes the music ends on its musical receipt; the
+      // prose stays in the ctrl-o log.
       await t.until(
-        () => t.vt.text().includes("Four on the floor"),
-        "reply prose",
+        () => /notes on drums/.test(t.vt.text()),
+        "drums receipt",
         10_000,
       );
       await Bun.sleep(500);
+      await t.send("\u000f");
+      await t.until(
+        () => t.vt.text().includes("Four on the floor"),
+        "reply prose in the log",
+        5_000,
+      );
       const text = t.vt.text();
-      const tracks = (await composition(t.cwd).catch(() => ({ tracks: [] })))
-        .tracks as Track[];
-      const drums = tracks.find((track) => track.id === "drums");
-      const wrote = (drums?.notes?.length ?? 0) > 0;
-      const glued = /house\s*Four/.test(text.replace(/\n/g, ""));
+      // The save lands a moment after the receipt.
+      let wrote = false;
+      for (let i = 0; i < 40 && !wrote; i++) {
+        const tracks = (await composition(t.cwd).catch(() => ({ tracks: [] })))
+          .tracks as Track[];
+        const drums = tracks.find((track) => track.id === "drums");
+        // A pattern lands as rhythm rows (or notes, when baked).
+        wrote = (drums?.notes?.length ?? 0) + (drums?.rhythm?.length ?? 0) > 0;
+        if (!wrote) await Bun.sleep(100);
+      }
+      // Glued: the command and the prose on one row of the log.
+      const glued = t.vt.lines().some((line) => /house\s*Four/.test(line));
       record("agent pattern house", wrote && !glued, text);
     } finally {
       await quit(t);

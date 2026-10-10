@@ -2541,7 +2541,7 @@ function patternsMenu(): MenuNode {
       DRUM_PATTERNS.map((entry): MenuNode => ({
         kind: "action",
         label: `${entry.label}  ${entry.tempo.bpm} BPM · ${entry.tags.join(", ")}`,
-        command: `/pattern ${entry.name}`,
+        command: `/groove ${entry.name}`,
       })),
   };
 }

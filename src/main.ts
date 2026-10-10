@@ -1,10 +1,37 @@
 #!/usr/bin/env bun
 import { isGuideInstrument, vocalChainPatch } from "../core/clips.ts";
 import { isSingWord } from "../core/sing.ts";
-import { commandParses } from "./commands/parses.ts";
+import { commandParses, parseExact } from "./commands/parses.ts";
+import { paramRangeError } from "./commands/param-range.ts";
+import { noteName as midiNoteName } from "./media/notes.ts";
 import {
+  EVERYDAY_VERBS,
+  EXPORT_USAGE,
+  elsewhereHint,
+  FREE_TEXT_HINTS,
+  noTrack,
+  stemsReceipt,
+  LOOP_USAGE,
+  WINDOW_VERBS,
+  NO_AGENT,
+  RANGES,
+  canonicalWindowForm,
+  friendlyCoreError,
+  knownVerbs,
+  nearest,
+  noNote,
+  parseExportCommand,
+  parseLoopCommand,
+  recover,
+  usageCard,
+  usageError,
+  verbOf,
+} from "./commands/grammar.ts";
+import {
+  instrumentListLines,
   isUnknownInstrument,
   plainSineAdvice,
+  unknownInstrumentMessage,
 } from "./audio/instrument-check.ts";
 import { randomUUID } from "node:crypto";
 import { readFileSync, writeSync } from "node:fs";
@@ -138,6 +165,7 @@ import { applyStyleCommand, parseStyleCommand } from "./commands/style.ts";
 import { exportSampleRate, measureScoreOffThread } from "./audio/measure.ts";
 import {
   applySectionCommand,
+  loopSpan,
   parseSectionCommand,
 } from "./commands/arrange.ts";
 import {
@@ -245,6 +273,7 @@ import {
   finishHint,
   gestureFor,
   glideValues,
+  agentPathsAllowed,
   isAgentCommand,
   parseShowMe,
   toolCaption,
@@ -345,6 +374,7 @@ import {
   applyScoreOperation,
   createScore,
   isSamplerInstrument,
+  isTrackAudible,
   PACK_PREFIX,
   scoreFromJSON,
   SCORE_LIMITS,
@@ -377,7 +407,7 @@ import {
   type SyncState,
   type TypesIndicator,
 } from "../tui/app.ts";
-import { fail, ok, toneOf, warn, type Receipt } from "../tui/activity.ts";
+import { fail, note, ok, toneOf, warn, type Receipt } from "../tui/activity.ts";
 import { systemRunner } from "./auth/runner.ts";
 import type { MediaServices } from "./media/types.ts";
 import { encodeBuffer } from "../tui/screen.ts";
@@ -389,13 +419,24 @@ import {
   parseSimpleArgv,
   resolveTrackArg,
 } from "./launch-args.ts";
-import { RENDER_USAGE } from "./render.ts";
+import { RENDER_USAGE, runRenderCommand } from "./render.ts";
 import { typecheckProject } from "./project/typecheck.ts";
 import {
   startProjectSync,
   type ProjectSync,
   type SyncHost,
 } from "./project/sync.ts";
+
+/** Set while `submit` runs a grammar reading, so it reads only once. */
+let recovering = false;
+
+/** Slash words `submit` handles itself (no parser in commandParses). */
+const SLASH_HANDLED: ReadonlySet<string> = new Set([
+  ...WINDOW_VERBS,
+  "chords",
+  "click",
+  "help",
+]);
 
 /** Whether a bare command parses (no side effects): for typo suggestions. */
 function parsesLocally(text: string): boolean {
@@ -1151,6 +1192,10 @@ function describeError(command: string, error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   if (detail?.code === "ENOENT" && typeof detail.path === "string")
     return `no such file · ${relative(process.cwd(), detail.path)}`;
+  // `tempo 900` → `tempo 900 · tempo takes 20…300 BPM · tempo 128`: no raw
+  // core keys (`tempoBpm`) on a card.
+  const friendly = friendlyCoreError(truncateForCard(command), message);
+  if (friendly) return friendly;
   const verb = command.trim().split(/\s+/)[0]?.replace(/^\//, "") || "command";
   return `${verb} failed · ${message}`;
 }
@@ -1847,7 +1892,9 @@ async function runInteractive(): Promise<void> {
             if (auditionLoop?.looping && isStageable(input.value))
               hoverItem(input.value, `picker:${input.picker}`);
             else if (input.picker === "pattern")
-              previewPattern(input.value.replace(/^\/pattern\s+/, ""));
+              previewPattern(
+                input.value.replace(/^\/(?:pattern|groove)\s+/, ""),
+              );
           } else if (input.type === "pick-audition") {
             pickerAuditionKey(input.key);
           } else if (input.type === "pick-cancel") {
@@ -1983,10 +2030,10 @@ function unknownCommand(command: string): string {
 
 async function submit(prompt: string): Promise<string | Receipt> {
   const command = prompt.trim();
-  // `model key` is the glossary word for adding an agent (design §8.2);
-  // `/login` stays as its alias and owns the flow.
-  const modelKey = command.match(/^\/?model\s+key\b(.*)$/i);
-  if (modelKey) return submit(`/login${modelKey[1]}`);
+  // Canonical names for window commands: `model key` (login), `models`,
+  // `voice` (the Voice topic).
+  const canonical = canonicalWindowForm(command);
+  if (canonical) return submit(canonical);
   const helpCommand = command.match(/^\/?(?:help|\?)(?:\s+(\S+))?$/i);
   if (helpCommand) {
     const topic = helpCommand[1];
@@ -2031,7 +2078,32 @@ async function submit(prompt: string): Promise<string | Receipt> {
         items.findIndex((item) => item.current),
       ),
     });
-    return ok(`${items.length} track${items.length === 1 ? "" : "s"}`);
+    return note(`${items.length} track${items.length === 1 ? "" : "s"}`);
+  }
+  if (/^\/?(?:instruments|instrument\s+(?:list|ls|presets))$/i.test(command)) {
+    // `instrument list`: every word `instrument <name>` takes, by family.
+    const columns = stdout.columns ?? 80;
+    const lines = instrumentListLines(
+      Math.max(10, columns - (columns >= 60 ? 8 : 4)),
+    );
+    tui.openText("instruments", lines);
+    return note("instruments · instrument <name> on the focused track");
+  }
+  if (/^\/?notes(?:\s+(?:list|ls))?$/i.test(command)) {
+    // `notes`: the focused track's note ids, the names `remove <id>` takes.
+    const notes = score.notes
+      .filter((entry) => entry.trackId === requestedTrack)
+      .slice()
+      .sort((a, b) => a.startTick - b.startTick);
+    const lines = notes.map(
+      (entry) =>
+        `${entry.id} · ${midiNoteName(entry.pitch)} · beat ${+(entry.startTick / score.ticksPerBeat).toFixed(2)}`,
+    );
+    if (lines.length === 0) return note(`notes · ${requestedTrack} has none`);
+    tui.openText(`notes · ${requestedTrack}`, lines);
+    return note(
+      `${lines.length} note${lines.length === 1 ? "" : "s"} · ${requestedTrack} · remove <id>`,
+    );
   }
   const playCommand = command.match(
     /^\/play(?:\s+(on|off|degrees|in-key|chromatic))?$/i,
@@ -2096,14 +2168,33 @@ async function submit(prompt: string): Promise<string | Receipt> {
   }
   const tryCommand = command.match(/^\/try(?:\s+(.+))?$/i);
   if (tryCommand) return tryPrompt(tryCommand[1]?.trim() ?? "");
-  // A bare parameter (`volume`, `pan`, `fx filter`, `fx reverb mix`)
-  // opens the fader drawer on it, with its related params stacked below.
-  if (/^\/?(?:volume|pan|fx\s+\S+(?:\s+\S+)?)$/i.test(command)) {
-    const label = menu.showFader(menuContext(), command);
+  // A bare scalar (`volume`, `pan`, `fx reverb mix`, and the song's
+  // `tempo`, `bars` and `meter`) opens the fader drawer on it, with its
+  // related params stacked below.
+  if (
+    /^\/?(?:volume|pan|tempo|bpm|bars|meter|fx\s+\S+(?:\s+\S+)?)$/i.test(
+      command,
+    )
+  ) {
+    const context = menuContext();
+    const label =
+      menu.showFader(context, command) ?? songFader(context, command);
     if (label) {
+      const field = menu
+        .faderFields(context)
+        .find((candidate) => candidate.label === label);
+      // The receipt names the value it opened on: `tempo · 120 BPM · …`.
+      const value =
+        field?.kind === "number"
+          ? field.value !== undefined
+            ? field.format(field.value)
+            : field.off
+          : undefined;
       openFader(label, true);
       refreshMenu();
-      return ok(`${label} · ←→ adjust · enter keep · esc revert`);
+      return ok(
+        `${label}${value ? ` · ${value}` : ""} · ←→ adjust · enter keep · esc revert`,
+      );
     }
   }
   const menuCommand = command.match(/^\/menu(?:\s+(\S+))?$/i);
@@ -2169,7 +2260,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
         track.id.toLowerCase() === wanted.replace(/ /g, "-") ||
         (track.name ?? "").toLowerCase() === wanted,
     );
-    if (!found) return fail(`no track ${rest} · /tracks lists them`);
+    if (!found) return fail(noTrack(rest));
     if (verb === "move") {
       if (position! < 1 || position! > score.tracks.length)
         return fail(`usage · /track move <name> <1..${score.tracks.length}>`);
@@ -2314,7 +2405,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
   const pattern = parsePatternCommand(command);
   if (pattern) return patternCommand(pattern);
   const kit = parseKitCommand(command);
-  if (kit) return kitCommand(kit, /^\/kit\s*$/i.test(command.trim()));
+  if (kit) return kitCommand(kit, /^\/?kits?\s*$/i.test(command.trim()));
   const wavetable = parseWavetableCommand(command);
   if (wavetable) return wavetableCommand(wavetable);
   const sessionReply = await sessionCommand(command);
@@ -2382,7 +2473,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
     const result = applyRigCommand(score, requestedTrack, rig);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
-    return result.ok ? ok(result.message) : fail(result.message);
+    return readOrDone(result);
   }
   // 0.7 `/formant` and `/vowel`: short forms of `fx formant|vowel`.
   const formant = parseFormantCommand(command) ?? parseVowelCommand(command);
@@ -2410,6 +2501,8 @@ async function submit(prompt: string): Promise<string | Receipt> {
     const result = applyFxCommand(score, requestedTrack, fx, pinnedIr);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
+    // Bare `fx` reads the chain (`•`); it changes nothing.
+    if (result.ok && fx.type === "fx-list") return note(result.message);
     return result.ok ? ok(result.message) : fail(result.message);
   }
   const unknownFx = unknownFxMessage(command);
@@ -2500,7 +2593,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
     const result = applySynthCommand(score, requestedTrack, synth);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
-    return result.ok ? ok(result.message) : fail(result.message);
+    return readOrDone(result);
   }
   const stringCommand = parseStringCommand(command);
   if (stringCommand) {
@@ -2512,7 +2605,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
     const result = applyStringCommand(score, requestedTrack, stringCommand);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
-    return result.ok ? ok(result.message) : fail(result.message);
+    return readOrDone(result);
   }
   const grainHint = grainSrcHint(command);
   if (grainHint) return fail(grainHint);
@@ -2525,17 +2618,49 @@ async function submit(prompt: string): Promise<string | Receipt> {
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
   }
-  const styleCommand = parseStyleCommand(command);
+  const styleCommand = parseStyleCommand(
+    /^\/?styles?\s+presets$/i.test(command) ? "style list" : command,
+  );
   if (styleCommand) {
     const writes =
       styleCommand.type === "style-apply" ||
       styleCommand.type === "style-again";
+    // Bare `style` opens Arrange › style; `style list|ls|presets` lists.
+    if (
+      styleCommand.type === "style-families" &&
+      /^\/?styles?$/i.test(command)
+    ) {
+      openMenu("style");
+      return ok(
+        "style · ↑/↓ browse · enter makes the song · style list prints it",
+      );
+    }
     if (writes) await materializeDraft();
     const result = applyStyleCommand(score, styleCommand);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
     if (result.log) tui.activity.pushNote(result.log);
-    return result.ok ? ok(result.message) : fail(result.message);
+    if (!result.ok) return fail(result.message);
+    // A multi-line listing opens as text; the card keeps its first line
+    // so lines never run together on the one-line strip.
+    if (!writes && result.message.includes("\n")) {
+      const [head = "styles", ...rest] = result.message.split("\n");
+      tui.openText(head, rest);
+      return note(head);
+    }
+    // A new song: focus its first melodic track, so play and the menu
+    // land on something tonal instead of a track the style replaced.
+    const melodic = writes
+      ? result.next?.tracks.find((track) => !isDrumInstrument(track.instrument))
+      : undefined;
+    if (melodic && melodic.id !== requestedTrack) {
+      await port.focus(melodic.id);
+      requestedTrack = melodic.id;
+      draftTrack = false;
+    }
+    return ok(
+      melodic ? `${result.message} · focused ${melodic.id}` : result.message,
+    );
   }
   const masterCommand = parseMasterCommand(command);
   if (masterCommand) {
@@ -2549,7 +2674,33 @@ async function submit(prompt: string): Promise<string | Receipt> {
     const result = applyMasterCommand(score, masterCommand);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
-    return result.ok ? ok(result.message) : fail(result.message);
+    return readOrDone(result);
+  }
+  // `loop <section> | <a>-<b> | off`: what playback loops, a section.
+  const loop = parseLoopCommand(command);
+  if (loop) {
+    if (loop.type === "loop-show")
+      return note(
+        score.loopSection
+          ? `loop · ${score.loopSection} · loop off plays the song`
+          : `loop · the song · ${LOOP_USAGE}`,
+      );
+    if (loop.type === "loop-off") return submit("section loop off");
+    if (loop.type === "loop-section")
+      return submit(`section loop ${loop.name}`);
+    const span = score.sections.find(
+      (section) =>
+        section.startBar + 1 === loop.from &&
+        section.startBar + section.bars === loop.to,
+    );
+    if (span) return submit(`section loop ${span.name}`);
+    // No section spans the bars: mark (or move) the section named `loop`
+    // and loop it, as one revision.
+    await materializeDraft();
+    const result = loopSpan(score, requestedTrack, loop.from, loop.to);
+    if (!result.ok) return fail(result.message);
+    await commitScore(result.next, "score.sections", { loop: result.name });
+    return ok(result.message);
   }
   const arrange = parseSectionCommand(command, score);
   if (arrange) {
@@ -2563,7 +2714,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
     if (result.seekBeat !== undefined) await seekTransport(result.seekBeat);
-    return result.ok ? ok(result.message) : fail(result.message);
+    return readOrDone(result);
   }
   const music = parseMusicCommand(command);
   if (music) {
@@ -2575,20 +2726,21 @@ async function submit(prompt: string): Promise<string | Receipt> {
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
   }
-  const exportCommand = command.match(/^\/?export\s+([^\s]+)$/i);
+  const exportCommand = parseExportCommand(command);
   if (exportCommand) {
-    const path = resolve(exportCommand[1]!);
-    if (/\.midi?$/i.test(path)) {
+    const path = resolve(exportCommand.path);
+    if (exportCommand.format === "mid") {
       await writeFile(path, scoreToMidi(exportScore(score)));
-      return `exported midi · ${exportCommand[1]}`;
+      return `exported midi · ${exportCommand.path}`;
     }
-    // Audio comes from the offline renderer, never JSON under an audio name.
-    if (/\.(wav|aiff?|flac|mp3|ogg|m4a)$/i.test(path))
-      return fail(
-        `/export writes .track.json or .mid · render audio with: dawg render ${exportCommand[1]}`,
-      );
+    // Audio goes through the `dawg render` path, the same bytes as the CLI.
+    if (exportCommand.format === "wav")
+      return exportWav(exportCommand.path, exportCommand.stems);
+    // Other audio names are not formats dawg writes.
+    if (/\.(aiff?|flac|mp3|ogg|m4a)$/i.test(path))
+      return fail(`export · ${exportCommand.path} · ${EXPORT_USAGE}`);
     await writeFile(path, encodeLoop(score), "utf8");
-    return `exported · ${exportCommand[1]}`;
+    return `exported · ${exportCommand.path}`;
   }
   const importCommand = command.match(/^\/?import\s+([^\s]+)$/i);
   if (importCommand) {
@@ -2656,6 +2808,34 @@ async function submit(prompt: string): Promise<string | Receipt> {
       tui.activity.setSpinner(undefined);
     }
   }
+  // The grammar's second reading (design §3): a line no handler took runs
+  // in its other spellings — `/x` ≡ `x`, aliases, `rm|remove|delete`,
+  // `list|presets|ls` — so only lines that failed before get one.
+  // A line the core prompt parser takes is already understood.
+  if (!recovering && !parsePrompt(prompt)) {
+    const retry = recover(
+      command,
+      (candidate) =>
+        parseExact(candidate, score) !== undefined ||
+        // Window verbs get only the slash toggle, never a listing word.
+        (candidate.startsWith("/") &&
+          SLASH_HANDLED.has(verbOf(candidate)) &&
+          candidate.split(/\s+/).length === command.trim().split(/\s+/).length),
+    );
+    if (retry !== undefined) {
+      recovering = true;
+      try {
+        return await submit(retry);
+      } finally {
+        recovering = false;
+      }
+    }
+  }
+  // Bare `rename`, `fork`, `resume`, `login` take free text: a hint only.
+  const freeText = FREE_TEXT_HINTS[command.toLowerCase()];
+  if (freeText !== undefined) return note(freeText);
+  const elsewhere = elsewhereHint(command);
+  if (elsewhere !== undefined) return note(elsewhere);
   // `/model` belongs to its own handler above; every other slash word that
   // reached here is unknown or misused, and never a question for the agent.
   // `/instrument aah` is `instrument aah`; `instrument sing choir` is
@@ -2665,6 +2845,9 @@ async function submit(prompt: string): Promise<string | Receipt> {
     return submit(`instrument ${singWord[1]!.toLowerCase()}`);
   if (/^\/instrument\s/i.test(command) && parsePrompt(command.slice(1)))
     return submit(command.slice(1));
+  // A synth or effect number out of range names its range.
+  const range = paramRangeError(command);
+  if (range) return fail(range);
   if (command.startsWith("/") && !/^\/model\b/i.test(command)) {
     const hint = usageHint(command);
     return fail(
@@ -2679,6 +2862,10 @@ async function submit(prompt: string): Promise<string | Receipt> {
     // A one-letter slip on a command whose arguments parse stays local.
     const fix = typoFix(command, parsesLocally);
     if (fix) return fail(`${truncateForCard(command)} · did you mean ${fix}?`);
+    // A grammar verb (not everyday English) never reaches the agent.
+    const verb = verbOf(command);
+    if (knownVerbs().has(verb) && !EVERYDAY_VERBS.has(verb))
+      return fail(usageCard(truncateForCard(command), `/help ${verb}`));
     if (process.env.DAWG_AI === "0")
       return fail(`unrecognized · ${truncateForCard(command)} · /help`);
     await materializeDraft();
@@ -2708,6 +2895,9 @@ async function submit(prompt: string): Promise<string | Receipt> {
     return parsed.action;
   }
   if (parsed.type === "set-tempo") {
+    const range = RANGES.tempo!;
+    if (parsed.tempoBpm < range.min || parsed.tempoBpm > range.max)
+      return fail(usageError(truncateForCard(command), range));
     const next = score.withTempo(parsed.tempoBpm);
     await commitScore(next, "score.tempo", { tempoBpm: parsed.tempoBpm });
     clock.follow(next);
@@ -2735,13 +2925,8 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (parsed.type === "track") {
     // An unknown word would store and play a plain sine: say so instead.
     const word = parsed.patch.instrument;
-    if (word !== undefined && isUnknownInstrument(word)) {
-      const advice = plainSineAdvice(word) ?? "";
-      const near = advice.match(/did you mean (\S+)\?/)?.[1];
-      return fail(
-        `instrument ${truncateForCard(word)} · not a dawg instrument${near ? ` · did you mean ${near}?` : ""} · /menu sounds lists them`,
-      );
-    }
+    if (word !== undefined && isUnknownInstrument(word))
+      return fail(unknownInstrumentMessage(word));
     // `instrument jangle`: a guitar alias also loads its rig.
     const rigged = parsed.word
       ? {
@@ -2828,6 +3013,9 @@ async function submit(prompt: string): Promise<string | Receipt> {
     return `cleared · ${requestedTrack}`;
   }
   if (parsed.type === "remove-note") {
+    // A receipt never claims a removal that did not happen.
+    if (!score.notes.some((note) => note.id === parsed.noteId))
+      return fail(noNote(parsed.noteId));
     const next = applyScoreOperation(score, {
       type: "removeNote",
       noteId: parsed.noteId,
@@ -3336,10 +3524,21 @@ async function packCommand(command: PackCommand): Promise<Receipt> {
   }
 }
 
+/**
+ * A command result as a receipt: a refusal is ✗, a change is ✓, and a read
+ * that changed nothing (a listing or a show) is •.
+ */
+function readOrDone(
+  result: Readonly<{ ok: boolean; message: string; next?: unknown }>,
+): Receipt {
+  if (!result.ok) return fail(result.message);
+  return result.next ? ok(result.message) : note(result.message);
+}
+
 async function patternCommand(command: PatternCommand): Promise<Receipt> {
   if (command.kind === "list") {
     tui.openText("patterns", DRUM_PATTERNS.map(patternLine));
-    return ok(`patterns · ${DRUM_PATTERNS.length} · /pattern <name>`);
+    return note(`patterns · ${DRUM_PATTERNS.length} · /pattern <name>`);
   }
   if (command.kind === "browse") {
     tui.openPicker({
@@ -3349,14 +3548,14 @@ async function patternCommand(command: PatternCommand): Promise<Receipt> {
       audition: true,
       items: DRUM_PATTERNS.map((entry) => ({
         label: `${entry.label.padEnd(22)} ${entry.tempo.bpm} BPM · ${entry.tags.join(", ")}`,
-        value: `/pattern ${entry.name}`,
+        value: `/groove ${entry.name}`,
       })),
       filterable: true,
       index: 0,
     });
     patternPreview = undefined;
     previewPattern(DRUM_PATTERNS[0]?.name);
-    return ok("patterns · ↑/↓ preview · Enter applies on the focused track");
+    return note("patterns · ↑/↓ preview · Enter applies on the focused track");
   }
   await materializeDraft();
   const result = applyDrumPattern(
@@ -3449,7 +3648,7 @@ async function kitCommand(command: KitCommand, bare = false): Promise<Receipt> {
       .map((entry) => `${entry.name} · synth · ${entry.detail}`);
     lines.push(...kitListLines(await packs().bankAliases(ALIASED_PACK)));
     tui.openText("kits", lines);
-    return ok("kits · /kit <name or nickname> on the focused drum track");
+    return note("kits · /kit <name or nickname> on the focused drum track");
   }
   await materializeDraft();
   const trackId = kitTarget(score, requestedTrack);
@@ -4262,6 +4461,73 @@ function refreshMenu(): void {
 
 /** Enter on a number row (or a bare `volume`, `fx filter`): the drawer. */
 /**
+ * `export song.wav [stems]`: render the song as `dawg render song.wav` would
+ * (the offline renderer, deterministic), then with `stems` one WAV per
+ * audible track beside it (`song-bass.wav`), each that track soloed.
+ */
+async function exportWav(path: string, stems: boolean): Promise<Receipt> {
+  const directory = await mkdtemp(join(tmpdir(), "dawg-export-"));
+  const errors: string[] = [];
+  const sink = { write: (text: string) => errors.push(text.trim()) };
+  const quiet = { write: () => undefined };
+  const render = async (song: TrackScore, target: string): Promise<boolean> => {
+    const file = join(directory, "song.track.json");
+    await writeFile(file, encodeLoop(song), "utf8");
+    const code = await runRenderCommand(
+      ["render", target, "--import", file],
+      process.cwd(),
+      quiet,
+      sink,
+    );
+    return code === 0;
+  };
+  tui.activity.setSpinner(`export ${path}`);
+  try {
+    if (!(await render(score, path)))
+      return fail(errors.at(-1) ?? `export failed · ${path}`);
+    if (!stems) return ok(`exported · ${path}`);
+    const written: string[] = [];
+    const base = path.replace(/\.wav$/i, "");
+    for (const track of score.tracks) {
+      if (!isTrackAudible(score, track.id)) continue;
+      let solo = score;
+      for (const other of score.tracks)
+        solo = applyScoreOperation(solo, {
+          type: "updateTrack",
+          trackId: other.id,
+          patch: { solo: other.id === track.id },
+        });
+      const target = `${base}-${track.id}.wav`;
+      if (!(await render(solo, target)))
+        return fail(errors.at(-1) ?? `export failed · ${target}`);
+      written.push(target);
+    }
+    return ok(stemsReceipt(path, written));
+  } finally {
+    tui.activity.setSpinner(undefined);
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+/** `tempo`, `bars`, `meter`: open Project and name its fader, if it has one. */
+function songFader(context: MenuContext, command: string): string | undefined {
+  // Bare song scalars and the Project fader each opens.
+  const faders: Readonly<Record<string, string>> = {
+    tempo: "tempo",
+    bpm: "tempo",
+    bars: "loop length",
+    meter: "beats per bar",
+  };
+  const label = faders[command.replace(/^\//, "").toLowerCase()];
+  if (!label) return undefined;
+  menu.show(context, "project");
+  if (menu.faderFields(context).some((field) => field.label === label))
+    return label;
+  menu.close();
+  return undefined;
+}
+
+/**
  * Open the drawer on `label`. `standalone` drawers came from a command or a
  * click, not from inside the menu, so closing one closes the menu too.
  */
@@ -4822,9 +5088,7 @@ async function runAgent(text: string): Promise<string | Receipt> {
   if (agentTurn) return warn("agent busy · Esc cancels");
   const selection = await currentProvider();
   if (selection.kind === "offline")
-    return fail(
-      `unrecognized · ${truncateForCard(text)} · ${selection.reason}`,
-    );
+    return fail(`${truncateForCard(text)} · ${NO_AGENT}`);
   const turn = { controller: new AbortController(), steering: [] as string[] };
   agentTurn = turn;
   // The turn ends on one musical receipt of what it changed.
@@ -5100,6 +5364,15 @@ function showMeCommandHost(): AgentHost["commands"] {
   return {
     isCommand: (line) => isAgentCommand(line, score),
     async run(line): Promise<CommandOutcome> {
+      if (!agentPathsAllowed(line)) {
+        const revision = shownRevision(record);
+        return {
+          ok: false,
+          message: `${line} · the agent works only inside this folder`,
+          baseRevision: revision,
+          resultRevision: revision,
+        };
+      }
       const gesture = gestureFor(line, { score, trackId: requestedTrack });
       showMeCaption(gesture.caption);
       showMe.commands.push(line);

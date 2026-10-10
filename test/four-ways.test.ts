@@ -153,7 +153,6 @@ export const FEATURES: readonly Feature[] = [
     sdk: ["cli:dawg render"],
     gap: {
       menu: "export is a window command; ctrl-k has no export row",
-      agent: "the agent previews but has no export tool",
     },
   },
   {

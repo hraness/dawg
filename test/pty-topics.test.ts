@@ -29,9 +29,6 @@ const PTY_KNOWN_GAPS: readonly string[] = [
   "/menu voice",
   "/menu keys",
   "/menu agent",
-  "tempo",
-  "formant 3",
-  "lyrics",
 ];
 
 /** Every case the suites record; a case that throws early still counts. */
@@ -216,9 +213,10 @@ describe.skipIf(!supported)("real PTY at 80x24: topics and first run", () => {
         expect(namesTopic(outcomes.get(label) ?? "", id), label).toBe(true);
       }
     expect(failing.filter((label) => !known.has(label))).toEqual([]);
-    // Once bare tempo works, it opens the fader drawer on the tempo value.
+    // Bare tempo opens the fader drawer on the tempo value (deep-house,
+    // applied just before, sets it).
     if (!failing.includes("tempo") && outcomes.has("tempo"))
-      expect(outcomes.get("tempo")).toMatch(/tempo[\s\S]*120/);
+      expect(outcomes.get("tempo")).toMatch(/tempo\s+\d+ BPM/);
     // A listed gap that now passes must leave the list.
     const ran = PTY_KNOWN_GAPS.filter((label) => outcomes.has(label));
     expect(ran.filter((label) => !failing.includes(label))).toEqual([]);

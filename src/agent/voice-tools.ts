@@ -597,7 +597,7 @@ export const VOCODER_TOOLS: readonly VoiceTool[] = [
     name: "set_vocoder",
     previewable: true,
     description:
-      "Put a vocoder on a track (the carrier: its synth, sampler or the built-in `vocoder` instrument) or change it. src is the modulator track, usually a vocal (id or name slug). preset (classic robot talkbox choir glass whisper smear lofi) keeps overrides; params sets VOCODER_PARAMS keys, null returns one to the preset; reset drops every override (keeps src and preset); off removes the vocoder. The modulator is heard even when muted. Returns a cost hint and the modulator's license. Vocode only the user's own or licensed audio.",
+      "Put a vocoder on a track (the carrier: its synth, sampler or the built-in `vocoder` instrument) or change it. To vocode a vocal, create_track with instrument vocoder, then set_vocoder src <vocal>. src is the modulator track, usually a vocal (id or name slug). preset (classic robot talkbox choir glass whisper smear lofi) keeps overrides; params sets VOCODER_PARAMS keys, null returns one to the preset; reset drops every override (keeps src and preset); off removes the vocoder. The modulator is heard even when muted. Returns a cost hint and the modulator's license. Vocode only the user's own or licensed audio.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -710,8 +710,9 @@ export const VOCODER_TOOLS: readonly VoiceTool[] = [
   {
     name: "vocode",
     previewable: true,
+    hidden: true,
     description:
-      "One step: create a vocoder track driven by a vocal (or any) track, following the song's chords (or a drone on the key's root when there are none) unless follow is given. Mutes the source unless keepSource (the vocoder still hears a muted source). Echoes the source's license. Vocode only the user's own or licensed audio.",
+      "Use set_vocoder. One step: create a vocoder track driven by a vocal (or any) track, following the song's chords (or a drone on the key's root when there are none) unless follow is given. Mutes the source unless keepSource (the vocoder still hears a muted source). Echoes the source's license. Vocode only the user's own or licensed audio.",
     parameters: {
       type: "object",
       additionalProperties: false,

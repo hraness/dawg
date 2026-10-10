@@ -181,7 +181,7 @@ export function applyEditCommand(
     if (points.length === current.length)
       return {
         ok: false,
-        message: `no ${command.parameter} point at beat ${command.beat}`,
+        message: `no ${command.parameter} point at beat ${command.beat} · the ${command.parameter} lane shows them · help automate`,
       };
   }
   return {

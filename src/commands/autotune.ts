@@ -43,7 +43,7 @@ import {
   type TrackScore,
 } from "../../core/score.ts";
 import { autotuneEngineNote, hasGuideNotes } from "../audio/autotune.ts";
-import { nearestWord } from "../audio/instrument-check.ts";
+import { nearest } from "./nearest.ts";
 
 /** A field value from a command: `null` returns it to the preset's value. */
 export type AutotuneValue = number | string | null;
@@ -205,7 +205,7 @@ export function parseAutotuneArgs(raw: readonly string[]): AutotuneCommand {
           : `the preset comes first · autotune ${word} …`,
       };
     if (!name) {
-      const near = nearestWord(word.slice(0, 24), [
+      const near = nearest(word.slice(0, 24), [
         ...FIELD_WORDS,
         ...AUTOTUNE_PRESETS,
       ]);

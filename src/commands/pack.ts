@@ -124,10 +124,10 @@ export type KitCommand =
 
 /** `/kit [bank]` (default kit) and `/kit list`; undefined for other commands. */
 export function parseKitCommand(command: string): KitCommand | undefined {
-  const match = command.trim().match(/^\/kit(?:\s+(\S+))?\s*$/i);
+  const match = command.trim().match(/^\/?kits?(?:\s+(\S+))?\s*$/i);
   if (!match) return undefined;
   const bank = match[1];
-  if (bank && /^(list|ls)$/i.test(bank)) return { kind: "list" };
+  if (bank && /^(list|ls|presets)$/i.test(bank)) return { kind: "list" };
   return { kind: "set", bank: bank ?? DEFAULT_KIT };
 }
 

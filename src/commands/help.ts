@@ -19,6 +19,7 @@ import {
   type TopicId,
 } from "../lang/glossary.ts";
 import { EXPRESSION_USAGE } from "./expression.ts";
+import { editDistance } from "./nearest.ts";
 import { VOCAL_VERBS } from "./vocal.ts";
 
 /** A topic id, or a heading of the start page. */
@@ -499,8 +500,9 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "metronome · /count-in 0-2 · grid 1/16",
       },
       {
-        command: "export <file>",
-        summary: "write track.loop/v1 JSON, or MIDI for .mid",
+        command: "export <file> [stems]",
+        summary:
+          "JSON, MIDI for .mid, WAV for .wav · export song.wav · export mix.wav stems",
       },
       { command: "import <file>", summary: "replace the score from a file" },
       {
@@ -1023,31 +1025,7 @@ const SLASH_ONLY: ReadonlySet<string> = new Set([
   "bpm",
 ]);
 
-/**
- * Optimal-string-alignment distance: insert, delete, substitute, and an
- * adjacent swap (`/hlep` → `/help`) each cost one edit.
- */
-export function editDistance(a: string, b: string): number {
-  let before: number[] = [];
-  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
-  for (let i = 1; i <= a.length; i += 1) {
-    const row = [i];
-    for (let j = 1; j <= b.length; j += 1) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      let best = Math.min(
-        previous[j]! + 1,
-        row[j - 1]! + 1,
-        previous[j - 1]! + cost,
-      );
-      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1])
-        best = Math.min(best, before[j - 2]! + 1);
-      row.push(best);
-    }
-    before = previous;
-    previous = row;
-  }
-  return previous[b.length]!;
-}
+export { editDistance } from "./nearest.ts";
 
 /**
  * The known command nearest to the first word of `command` (`/clik` →

@@ -43,7 +43,7 @@ import {
   type VocoderPresetName,
 } from "../../core/vocoder.ts";
 import { chordTimeline } from "../audio/granular.ts";
-import { nearestWord } from "../audio/instrument-check.ts";
+import { nearest } from "./nearest.ts";
 import { parseParamValue } from "./fx.ts";
 import { VOCAL_VERBS } from "./vocal.ts";
 
@@ -172,8 +172,8 @@ export function parseVocoderCommand(
     const name = vocoderParamName(key);
     if (!name) {
       const word = key.slice(0, 24);
-      const near = nearestWord(word, [...VOCODER_COMMAND_KEYS, "src"]);
-      const asPreset = nearestWord(word, [...VOCODER_PRESET_NAMES]);
+      const near = nearest(word, [...VOCODER_COMMAND_KEYS, "src"]);
+      const asPreset = nearest(word, [...VOCODER_PRESET_NAMES]);
       return {
         type: "vocoder-usage",
         message: `vocoder has no parameter or preset ${word}${near || asPreset ? ` · did you mean ${near ?? asPreset}?` : ""} · ${VOCODER_USAGE}`,
@@ -356,7 +356,7 @@ export function resolveVocoderSrc(
   }
   const found = byId ?? resolveTrackRef(score, text);
   if (!found) {
-    const near = nearestWord(
+    const near = nearest(
       text.slice(0, 48),
       score.tracks.map((track) => track.id),
     );
