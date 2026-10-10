@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { FrameGate, IDLE_HEARTBEAT_MS } from "./frame-gate.ts";
+import {
+  FrameGate,
+  IDLE_HEARTBEAT_MS,
+  MIN_FRAME_GAP_MS,
+} from "./frame-gate.ts";
 
 /** Seeded xorshift32: the fuzz below is reproducible. */
 function rng(seed: number): () => number {
@@ -83,5 +87,25 @@ describe("FrameGate", () => {
         }
       }
     }
+  });
+  test("a burst of forced frames builds at most ~31 a second, dropping none", () => {
+    const gate = new FrameGate(IDLE_HEARTBEAT_MS, MIN_FRAME_GAP_MS);
+    const built: number[] = [];
+    // One second: tick(true) every 2 ms (keystrokes, agent events) beside
+    // the 33 ms timer tick, as src/main.ts runs it.
+    for (let now = 0; now < 1000; now += 1) {
+      if (now % 2 === 0 && gate.shouldBuild({ nowMs: now, force: true }))
+        built.push(now);
+      if (now % 33 === 0 && gate.shouldBuild({ nowMs: now })) built.push(now);
+    }
+    expect(built.length).toBeLessThanOrEqual(31);
+    expect(built.length).toBeGreaterThanOrEqual(28);
+    for (let index = 1; index < built.length; index += 1)
+      expect(built[index]! - built[index - 1]!).toBeGreaterThanOrEqual(
+        MIN_FRAME_GAP_MS,
+      );
+    // The last forced frame was deferred, not dropped: the next timer tick
+    // builds it.
+    expect(gate.shouldBuild({ nowMs: 1056 })).toBe(true);
   });
 });

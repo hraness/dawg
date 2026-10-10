@@ -8,7 +8,12 @@
  */
 
 import { graphemes, graphemeWidth } from "./text.ts";
-import { styleSgr, type Style, type TerminalCapabilities } from "./theme.ts";
+import {
+  foregroundSgr,
+  styleSgr,
+  type Style,
+  type TerminalCapabilities,
+} from "./theme.ts";
 
 export interface Cell {
   /** Grapheme text; "" marks the trailing half of a wide character. */
@@ -17,6 +22,8 @@ export interface Cell {
 }
 
 const EMPTY: Style = {};
+/** Unchanged cells that split a row into two writes (a CUP is ~8 bytes). */
+const SPAN_GAP = 6;
 
 export class CellBuffer {
   readonly width: number;
@@ -120,7 +127,10 @@ export class CellBuffer {
     const differs = (x: number) => {
       const left = this.cells[offset + x]!;
       const right = other.cells[offset + x]!;
-      return left.ch !== right.ch || !sameStyle(left.style, right.style);
+      if (left.ch !== right.ch) return true;
+      // Two blanks look the same whatever their foreground.
+      if (isBlank(left) && isBlank(right)) return false;
+      return !sameStyle(left.style, right.style);
     };
     let from = 0;
     while (from < this.width && !differs(from)) from += 1;
@@ -131,6 +141,48 @@ export class CellBuffer {
     while (from > 0 && this.cells[offset + from]!.ch === "") from -= 1;
     while (to < this.width && this.cells[offset + to]!.ch === "") to += 1;
     return { from, to };
+  }
+
+  /**
+   * The changed runs of row `y`, split wherever at least `gap` unchanged
+   * cells separate them (a cursor move is cheaper than repainting those),
+   * each widened so no edge splits a wide character.
+   */
+  rowSpans(
+    other: CellBuffer,
+    y: number,
+    gap = SPAN_GAP,
+  ): Array<{ from: number; to: number }> {
+    const whole = this.rowSpan(other, y);
+    if (!whole) return [];
+    if (other.width !== this.width) return [whole];
+    const offset = y * this.width;
+    const spans: Array<{ from: number; to: number }> = [];
+    let start = -1;
+    let lastDiff = -1;
+    for (let x = whole.from; x < whole.to; x += 1) {
+      const left = this.cells[offset + x]!;
+      const right = other.cells[offset + x]!;
+      const changed =
+        left.ch !== right.ch ||
+        (!(isBlank(left) && isBlank(right)) &&
+          !sameStyle(left.style, right.style));
+      if (!changed) continue;
+      if (start < 0) start = x;
+      else if (x - lastDiff - 1 >= gap) {
+        spans.push({ from: start, to: lastDiff + 1 });
+        start = x;
+      }
+      lastDiff = x;
+    }
+    if (start >= 0) spans.push({ from: start, to: lastDiff + 1 });
+    for (const span of spans) {
+      while (span.from > 0 && this.cells[offset + span.from]!.ch === "")
+        span.from -= 1;
+      while (span.to < this.width && this.cells[offset + span.to]!.ch === "")
+        span.to += 1;
+    }
+    return spans;
   }
 
   rowEquals(other: CellBuffer, y: number): boolean {
@@ -181,7 +233,22 @@ function sameColor(left: Style["fg"], right: Style["fg"]): boolean {
   return left.r === right.r && left.g === right.g && left.b === right.b;
 }
 
-/** Serialise one row with minimal SGR changes. */
+/** True when only the foreground could differ and none of it shows. */
+function invisibleStyle(style: Style | undefined): boolean {
+  return !style || (!style.bg && !style.reverse && !style.underline);
+}
+
+/** A space whose style draws nothing: its foreground never shows. */
+export function isBlank(cell: Cell): boolean {
+  return cell.ch === " " && invisibleStyle(cell.style);
+}
+
+/**
+ * Serialise one row with minimal SGR changes: a blank keeps the current
+ * colour instead of resetting, and a colour-only change writes just the
+ * foreground code. Playback rows are mostly dim rules between spaces, so
+ * this halves the bytes a frame costs.
+ */
 export function encodeRow(
   buffer: CellBuffer,
   y: number,
@@ -189,16 +256,42 @@ export function encodeRow(
   from = 0,
   to = buffer.width,
 ): string {
+  return encodeSpans(buffer, y, capabilities, [{ from, to }], false);
+}
+
+/**
+ * Serialise several runs of one row; each run after the first (or every
+ * run, with `address`) starts with a cursor move. The colour state carries
+ * across runs, since a cursor move leaves it alone.
+ */
+export function encodeSpans(
+  buffer: CellBuffer,
+  y: number,
+  capabilities: TerminalCapabilities,
+  spans: ReadonlyArray<{ from: number; to: number }>,
+  address = true,
+): string {
   let out = "";
   let current: Style | undefined | null = null;
-  for (let x = from; x < to; x += 1) {
-    const cell = buffer.get(x, y)!;
-    if (cell.ch === "") continue;
-    if (current === null || !sameStyle(current, cell.style)) {
-      out += styleSgr(cell.style ?? EMPTY, capabilities);
-      current = cell.style;
+  for (const [index, span] of spans.entries()) {
+    if (address || index > 0) out += `\u001b[${y + 1};${span.from + 1}H`;
+    for (let x = span.from; x < span.to; x += 1) {
+      const cell = buffer.get(x, y)!;
+      if (cell.ch === "") continue;
+      if (current !== null && isBlank(cell) && invisibleStyle(current)) {
+        out += " ";
+        continue;
+      }
+      if (current === null || !sameStyle(current, cell.style)) {
+        const next = cell.style ?? EMPTY;
+        out +=
+          (current !== null &&
+            foregroundSgr(current ?? EMPTY, next, capabilities)) ||
+          styleSgr(next, capabilities);
+        current = cell.style;
+      }
+      out += cell.ch;
     }
-    out += cell.ch;
   }
   if (capabilities.attributes !== false) out += "\u001b[0m";
   return out;
@@ -263,9 +356,9 @@ export class ScreenWriter {
       }
       // Only the changed run of cells: a moving playhead or a ticking meter
       // rewrites a few columns, not the whole row.
-      const span = buffer.rowSpan(this.previous!, y);
-      if (!span) continue;
-      body += `\u001b[${y + 1};${span.from + 1}H${encodeRow(buffer, y, this.capabilities, span.from, span.to)}`;
+      const spans = buffer.rowSpans(this.previous!, y);
+      if (spans.length === 0) continue;
+      body += encodeSpans(buffer, y, this.capabilities, spans);
       rows += 1;
     }
     const cursorKey = cursor ? `${cursor.x},${cursor.y}` : "hidden";

@@ -358,7 +358,11 @@ import {
   PASTE_FLUSH_MS,
   TerminalInputDecoder,
 } from "../tui/input.ts";
-import { FrameGate } from "../tui/frame-gate.ts";
+import {
+  FrameGate,
+  IDLE_HEARTBEAT_MS,
+  MIN_FRAME_GAP_MS,
+} from "../tui/frame-gate.ts";
 import {
   CARD_GLOW_MS,
   composeFrame,
@@ -1337,7 +1341,7 @@ async function runInteractive(): Promise<void> {
   };
   // Builds a frame only when something can have changed (tui/frame-gate.ts):
   // an idle editor no longer rebuilds the whole view 30 times a second.
-  const frameGate = new FrameGate();
+  const frameGate = new FrameGate(IDLE_HEARTBEAT_MS, MIN_FRAME_GAP_MS);
   const unwatchActivity = tui.activity.subscribe(() => frameGate.markDirty());
   const animating = (): boolean => {
     if (clock.playing || play?.on || auditionLoop?.looping) return true;
@@ -1963,6 +1967,10 @@ function unknownCommand(command: string): string {
 
 async function submit(prompt: string): Promise<string | Receipt> {
   const command = prompt.trim();
+  // `model key` is the glossary word for adding an agent (design §8.2);
+  // `/login` stays as its alias and owns the flow.
+  const modelKey = command.match(/^\/?model\s+key\b(.*)$/i);
+  if (modelKey) return submit(`/login${modelKey[1]}`);
   const helpCommand = command.match(/^\/?(?:help|\?)(?:\s+(\S+))?$/i);
   if (helpCommand) {
     const topic = helpCommand[1];

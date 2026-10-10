@@ -10,6 +10,13 @@
  * nothing reported (a loudness reading, a card ageing out).
  */
 export const IDLE_HEARTBEAT_MS = 500;
+/**
+ * The shortest gap between two built frames in the interactive loop: a
+ * burst of forced frames (keystrokes, edits landing, agent events) is
+ * coalesced to at most about 30 a second. A deferred frame stays dirty, so
+ * the next 33 ms timer tick builds it; nothing is dropped.
+ */
+export const MIN_FRAME_GAP_MS = 33;
 
 export class FrameGate {
   private dirty = true;
@@ -19,7 +26,10 @@ export class FrameGate {
   built = 0;
   skipped = 0;
 
-  constructor(readonly heartbeatMs = IDLE_HEARTBEAT_MS) {}
+  constructor(
+    readonly heartbeatMs = IDLE_HEARTBEAT_MS,
+    readonly minGapMs = 0,
+  ) {}
 
   /** Something visible changed; the next tick builds. */
   markDirty(): void {
@@ -48,6 +58,12 @@ export class FrameGate {
       keyChanged ||
       options.nowMs - this.lastBuiltMs >= this.heartbeatMs;
     if (!build) {
+      this.skipped += 1;
+      return false;
+    }
+    if (options.nowMs - this.lastBuiltMs < this.minGapMs) {
+      // Too soon after the last frame: build on the next tick instead.
+      this.dirty = true;
       this.skipped += 1;
       return false;
     }
