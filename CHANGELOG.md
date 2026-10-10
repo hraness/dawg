@@ -7,9 +7,12 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 ### Added
 
 - **Range commands.** `loop 5-6` sets the loop range, stored as `score.loop` (`loop: "5-6"` in `song.ts`, SDK 1.34.0) instead of a hidden `loop` section; `loop next` and `loop prev` step it. `copy bass 5-6 to 7 x2` tiles bars (`merge`, `insert`), `move`, `clear` and `reverse` take a track, `all` and a range or section, `copy` without `to` fills a per-window clipboard for `paste at 9`, `bars insert 2 at 3` and `bars remove 3-4` shift later sections, clips, automation, tempo points and the loop, `jump 5.3` moves the playhead, `section split chorus at 13` and `section join chorus` cut and merge sections, and `form print` aliases `form bake`. Each is a typed command, a row under ctrl-k **Arrange › range**, the agent's `edit_range` tool and a /help row; the SDK adds `bars()`, `place()`, `reversed()` and `insertBars()`. Songs saved with the old hidden `loop` section load with it as the loop range.
+- **Form on TAPE.** With a form set, Ctrl-T draws the song unrolled in play order: later passes of a section are ghosted `░` (ASCII `~`, dim, never color alone) and labeled `chorus ×2`. A gesture on a ghost edits the source section, and the range line says `edits chorus (plays 2×)`. `form print` answers `printed form to tape · 16 bars`.
+- **`dawg doctor` shows the saved audio choice**: `chosen: output … · input …`, flagging a saved device that is no longer connected.
 
 ### Fixed
 
+- **Drum kit knobs.** The kit's sound page now fills all four knobs (humanize timing, reverb mix, cutoff, volume) instead of two.
 - **Installer hint.** The last line of `site/install.sh` now suggests `dawg model key` to connect a model, not the retired `dawg login` alias.
 
 ## 0.7.0
