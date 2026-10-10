@@ -113,6 +113,23 @@ async function reset(t: Session): Promise<void> {
   await Bun.sleep(100);
 }
 
+/**
+ * Ctrl-C until the process exits. The first-run picker takes the first
+ * Ctrl-C as "skip" and opens the TUI, which needs a second one.
+ */
+async function stop(t: Session): Promise<void> {
+  for (let i = 0; i < 3; i++) {
+    t.terminal.write("\u0003");
+    const done = await Promise.race([
+      t.proc.exited.then(() => true),
+      Bun.sleep(1_500).then(() => false),
+    ]);
+    if (done) return;
+  }
+  t.proc.kill(9);
+  await t.proc.exited;
+}
+
 const outcomes = new Map<string, string>();
 
 function record(label: string, text: string): void {
@@ -132,8 +149,7 @@ describe.skipIf(!supported)("real PTY at 80x24: topics and first run", () => {
           await reset(t);
         }
     } finally {
-      t.terminal.write("\u0003");
-      await t.proc.exited;
+      await stop(t);
     }
   }, 120_000);
 
@@ -147,8 +163,7 @@ describe.skipIf(!supported)("real PTY at 80x24: topics and first run", () => {
       expect(screen(online)).toContain("Esc to skip");
       record("first run", screen(online));
     } finally {
-      online.terminal.write("\u0003");
-      await online.proc.exited;
+      await stop(online);
     }
     const offline = await launch(80, 24, OFFLINE, []);
     try {
@@ -162,8 +177,7 @@ describe.skipIf(!supported)("real PTY at 80x24: topics and first run", () => {
         !/\blogin\b|sign.?in/i.test(text) && text.includes("/model key");
       record("offline first run", ok ? text : `✗ ${text}`);
     } finally {
-      offline.terminal.write("\u0003");
-      await offline.proc.exited;
+      await stop(offline);
     }
     // Two launches in a row; CI runners need more than 30 s for both.
   }, 90_000);
@@ -184,8 +198,7 @@ describe.skipIf(!supported)("real PTY at 80x24: topics and first run", () => {
         await reset(t);
       }
     } finally {
-      t.terminal.write("\u0003");
-      await t.proc.exited;
+      await stop(t);
     }
   }, 60_000);
 

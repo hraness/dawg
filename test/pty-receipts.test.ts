@@ -46,6 +46,14 @@ const RECEIPT_KNOWN_GAPS: readonly string[] = [
   "one-window daemon edit",
 ];
 
+/**
+ * Gaps that depend on timing: allowed to lie, not required to. C12 (feel
+ * lane, PR #140): an agent tool write can come back through the file
+ * watcher after the window records its own revision, which happens on
+ * slower machines (CI) and shows the sync card.
+ */
+const RECEIPT_RACY_GAPS: readonly string[] = ["one-window agent write"];
+
 /** Every case this suite records; a case that throws early still counts. */
 const EXPECTED_LABELS: readonly string[] = [
   "remove n1",
@@ -355,7 +363,7 @@ describe.skipIf(!supported)("real PTY at 80x24: receipts never lie", () => {
     // A case that threw before recording would hide its gap; none may.
     expect(EXPECTED_LABELS.filter((label) => !outcomes.has(label))).toEqual([]);
     const lying = [...outcomes].filter(([, ok]) => !ok).map(([label]) => label);
-    const known = new Set(RECEIPT_KNOWN_GAPS);
+    const known = new Set([...RECEIPT_KNOWN_GAPS, ...RECEIPT_RACY_GAPS]);
     expect(lying.filter((label) => !known.has(label))).toEqual([]);
     // A listed gap that now passes must leave the list.
     const ran = RECEIPT_KNOWN_GAPS.filter((label) => outcomes.has(label));
