@@ -37,6 +37,8 @@ export const DAEMON_CAPS = [
   "ops-log",
   "quantum",
   "opaque-kinds",
+  "panes",
+  "live",
 ] as const;
 const MAX_CAPS = 32;
 const MAX_CAP_LENGTH = 32;
@@ -82,6 +84,78 @@ export type PresenceEntry = {
   pid: number;
   label: string;
   focusedTrackId: string | null;
+  /**
+   * Pane letter (A, B, C in join order, reused when freed), assigned by
+   * dawgd. Display only: identity and per-pane undo key on `clientId`.
+   */
+  pane?: string;
+  /** What the pane shows (see `PaneView`); absent until it reports. */
+  screen?: string;
+  /** The drawer parameter or page the pane has open. */
+  param?: string;
+  /** Recording a pass on `focusedTrackId`, and in which mode. */
+  recording?: "overdub" | "replace";
+  /** In PLAY (live keys) on `focusedTrackId`. */
+  playing?: boolean;
+  /** Locked to its screen and track (`pin`). */
+  pinned?: boolean;
+  /** Follows another pane's focus: its letter, or `*` for the latest. */
+  follow?: string;
+};
+
+/** The per-pane view fields a client reports with `view`. */
+export type PaneView = Pick<
+  PresenceEntry,
+  "screen" | "param" | "recording" | "playing" | "pinned" | "follow"
+>;
+
+/** A live click: on while any pane wants it; count-in from the last arm. */
+export type LiveClick = {
+  on: boolean;
+  volume: number;
+  /** A count-in before the transport starts, on the authority's clock. */
+  countIn?: {
+    startAtMs: number;
+    startBeat: number;
+    beats: number;
+    barBeats: number;
+    clickBeats: number;
+    bpm: number;
+  };
+};
+
+/**
+ * Live notes go to the one engine on this machine. A window never sends
+ * audio: dawgd renders the voice from the score it already holds.
+ */
+export type LiveMessage =
+  | { v: 1; type: "live"; action: "monitor"; id: string; on: boolean }
+  | {
+      v: 1;
+      type: "live";
+      action: "on";
+      /** Window-local voice id; dawgd namespaces it by client. */
+      voice: number;
+      trackId: string;
+      pitch: number;
+      /** 0..1, as score notes store it. */
+      velocity: number;
+      /** How long the key is held (or the longest live note). */
+      seconds: number;
+      /** Transport beat of the press, unwrapped. */
+      beat: number;
+      /** When pressed, on the authority's clock (local clock + offset). */
+      atMs: number;
+    }
+  | { v: 1; type: "live"; action: "off"; voice: number; atMs: number }
+  | ({ v: 1; type: "live"; action: "click" } & LiveClick);
+
+/** dawgd's answer to `live monitor`: how the shared engine sounds. */
+export type LiveStatus = {
+  canMonitor: boolean;
+  sampleRate: number;
+  leadMs: number;
+  note?: string;
 };
 
 export type ClientMessage =
@@ -130,7 +204,10 @@ export type ClientMessage =
       bpm?: number;
     }
   | { v: 1; type: "sync"; id: string }
-  | { v: 1; type: "ping"; id: string };
+  | { v: 1; type: "ping"; id: string }
+  /** Updates this pane's presence view fields; no reply. */
+  | ({ v: 1; type: "view" } & PaneView)
+  | LiveMessage;
 
 export type ApplyResult =
   | { status: "accepted"; revision: number }
@@ -182,6 +259,7 @@ export type ServerMessage =
     }
   | ({ v: 1; type: "result"; id: string } & ApplyResult)
   | { v: 1; type: "pong"; id: string }
+  | ({ v: 1; type: "liveStatus"; id: string } & LiveStatus)
   | { v: 1; type: "error"; code: string; message: string };
 
 export class ProtocolError extends Error {
@@ -383,7 +461,127 @@ export function parseClientMessage(line: string): ClientMessage {
   }
   if (type === "sync" || type === "ping")
     return { v: 1, type, id: requireId(value.id, "request id") };
+  if (type === "view") return { v: 1, type, ...parsePaneView(value) };
+  if (type === "live") return parseLive(value);
   throw new ProtocolError("unknown-type", "unknown message type");
+}
+
+const SCREEN = /^[a-z][a-z0-9-]{0,31}$/;
+const PANE_LETTER = /^[A-Z]$/;
+
+/** The view fields of a `view` frame or a presence entry; junk is dropped. */
+export function parsePaneView(value: Record<string, unknown>): PaneView {
+  const view: PaneView = {};
+  if (typeof value.screen === "string" && SCREEN.test(value.screen))
+    view.screen = value.screen;
+  if (typeof value.param === "string" && value.param.length > 0)
+    view.param = value.param.slice(0, MAX_ID_LENGTH);
+  if (value.recording === "overdub" || value.recording === "replace")
+    view.recording = value.recording;
+  if (value.playing === true) view.playing = true;
+  if (value.pinned === true) view.pinned = true;
+  if (
+    typeof value.follow === "string" &&
+    (value.follow === "*" || PANE_LETTER.test(value.follow))
+  )
+    view.follow = value.follow;
+  return view;
+}
+
+function parseLive(value: Record<string, unknown>): LiveMessage {
+  const action = value.action;
+  if (action === "monitor") {
+    if (typeof value.on !== "boolean")
+      throw new ProtocolError("invalid", "live monitor is invalid");
+    return {
+      v: 1,
+      type: "live",
+      action,
+      id: requireId(value.id, "request id"),
+      on: value.on,
+    };
+  }
+  if (action === "on") {
+    const voice = value.voice;
+    const pitch = value.pitch;
+    if (
+      !Number.isSafeInteger(voice) ||
+      !Number.isSafeInteger(pitch) ||
+      (pitch as number) < 0 ||
+      (pitch as number) > 127 ||
+      !isFiniteNonNegative(value.velocity) ||
+      (value.velocity as number) > 1 ||
+      !isFiniteNonNegative(value.seconds) ||
+      (value.seconds as number) > 600 ||
+      !Number.isFinite(value.beat) ||
+      !isFiniteNonNegative(value.atMs)
+    )
+      throw new ProtocolError("invalid", "live note is invalid");
+    return {
+      v: 1,
+      type: "live",
+      action,
+      voice: voice as number,
+      trackId: requireId(value.trackId, "track id"),
+      pitch: pitch as number,
+      velocity: value.velocity as number,
+      seconds: value.seconds as number,
+      beat: value.beat as number,
+      atMs: value.atMs as number,
+    };
+  }
+  if (action === "off") {
+    if (!Number.isSafeInteger(value.voice) || !isFiniteNonNegative(value.atMs))
+      throw new ProtocolError("invalid", "live note-off is invalid");
+    return {
+      v: 1,
+      type: "live",
+      action,
+      voice: value.voice as number,
+      atMs: value.atMs as number,
+    };
+  }
+  if (action === "click") {
+    if (
+      typeof value.on !== "boolean" ||
+      !isFiniteNonNegative(value.volume) ||
+      (value.volume as number) > 1
+    )
+      throw new ProtocolError("invalid", "live click is invalid");
+    const message: LiveMessage = {
+      v: 1,
+      type: "live",
+      action,
+      on: value.on,
+      volume: value.volume as number,
+    };
+    const count = value.countIn as Record<string, unknown> | undefined;
+    if (count !== undefined) {
+      if (
+        typeof count !== "object" ||
+        count === null ||
+        !isFiniteNonNegative(count.startAtMs) ||
+        !Number.isFinite(count.startBeat) ||
+        !isFiniteNonNegative(count.beats) ||
+        !isFiniteNonNegative(count.barBeats) ||
+        !isFiniteNonNegative(count.clickBeats) ||
+        !isFiniteNonNegative(count.bpm) ||
+        (count.bpm as number) <= 0 ||
+        (count.beats as number) > 64
+      )
+        throw new ProtocolError("invalid", "live count-in is invalid");
+      message.countIn = {
+        startAtMs: count.startAtMs as number,
+        startBeat: count.startBeat as number,
+        beats: count.beats as number,
+        barBeats: count.barBeats as number,
+        clickBeats: count.clickBeats as number,
+        bpm: count.bpm as number,
+      };
+    }
+    return message;
+  }
+  throw new ProtocolError("invalid", "live action is invalid");
 }
 
 export function parseServerMessage(line: string): ServerMessage {
@@ -497,6 +695,24 @@ export function parseServerMessage(line: string): ServerMessage {
   }
   if (type === "pong")
     return { v: 1, type, id: requireId(value.id, "request id") };
+  if (type === "liveStatus") {
+    if (
+      typeof value.canMonitor !== "boolean" ||
+      !isFiniteNonNegative(value.sampleRate) ||
+      !isFiniteNonNegative(value.leadMs)
+    )
+      throw new ProtocolError("invalid", "live status is invalid");
+    const message: ServerMessage = {
+      v: 1,
+      type,
+      id: requireId(value.id, "request id"),
+      canMonitor: value.canMonitor,
+      sampleRate: value.sampleRate as number,
+      leadMs: value.leadMs as number,
+    };
+    if (typeof value.note === "string") message.note = boundedText(value.note);
+    return message;
+  }
   if (type === "error")
     return {
       v: 1,
@@ -584,7 +800,9 @@ export function requirePresence(value: unknown): PresenceEntry {
   };
   if (typeof entry.actorId === "string" && ACTOR_ID.test(entry.actorId))
     parsed.actorId = entry.actorId;
-  return parsed;
+  if (typeof entry.pane === "string" && PANE_LETTER.test(entry.pane))
+    parsed.pane = entry.pane;
+  return { ...parsed, ...parsePaneView(entry) };
 }
 
 /**

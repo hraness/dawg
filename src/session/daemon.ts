@@ -9,7 +9,14 @@ import {
 import { DiffError, diffScores } from "../../core/diff.ts";
 import { TransportClock, transportMapFor } from "../audio/clock.ts";
 import { AudioEngine } from "../audio/engine.ts";
+import {
+  SampleLibrary,
+  hasSamplerTracks,
+  type SampleBank,
+} from "../audio/samples.ts";
+import { PackStore } from "../audio/packs.ts";
 import { acquireSessionLock } from "./lock.ts";
+import { LiveHost } from "./live-host.ts";
 import {
   compositionAt,
   MAX_REBASE_DISTANCE,
@@ -66,6 +73,15 @@ type Client = {
   protocol?: number;
 };
 
+/** The lowest free pane letter (A, B, C in join order, reused when freed). */
+export function freePaneLetter(taken: ReadonlySet<string>): string {
+  for (let code = 65; code <= 90; code += 1) {
+    const letter = String.fromCharCode(code);
+    if (!taken.has(letter)) return letter;
+  }
+  return "Z";
+}
+
 /** Retry-dedupe key for an intent: (actor, client, seq). */
 function seqKey(actorId: string | undefined, clientId: string, seq: number) {
   return `${actorId ?? "-"}\u0000${clientId}\u0000${seq}`;
@@ -92,6 +108,9 @@ export class DawgDaemon {
   private readonly seqs = new Map<string, number>();
   private readonly clock = new TransportClock();
   private readonly audio: AudioEngine;
+  private readonly live: LiveHost;
+  private samples: SampleBank | undefined;
+  private sampleLibrary: SampleLibrary | undefined;
   private record!: SessionRecord<Composition>;
   private score!: TrackScore;
   private digest = "";
@@ -126,6 +145,37 @@ export class DawgDaemon {
         });
       },
     });
+    this.workspace = options.workspace;
+    this.live = new LiveHost({
+      sink: this.audio,
+      score: () => this.score,
+      samples: () => this.samples,
+      transportBeatAt: (ms) =>
+        this.clock.playing ? this.clock.beatAt(ms) : undefined,
+      toMonotonic: (epochMs) => epochMs - performance.timeOrigin,
+      log: (line) => void this.log(line),
+    });
+  }
+
+  private readonly workspace: string;
+
+  /** Notes each client played through the shared engine (tests read it). */
+  public get livePlayed(): ReadonlyMap<string, number> {
+    return this.live.played;
+  }
+
+  /** Decodes sampler voices for live notes, once per score that needs them. */
+  private async loadSamples(): Promise<void> {
+    if (!hasSamplerTracks(this.score)) return;
+    this.sampleLibrary ??= new SampleLibrary({
+      projectRoot: this.workspace,
+      packs: new PackStore(),
+    });
+    try {
+      this.samples = await this.sampleLibrary.load(this.score);
+    } catch (error) {
+      await this.log(`live samples: ${String(error)}`);
+    }
   }
 
   /** Returns false when another live daemon already owns this session. */
@@ -244,7 +294,10 @@ export class DawgDaemon {
     const drop = () => {
       if (!this.clients.delete(client)) return;
       socket.destroy();
-      if (client.presence) this.broadcastPresence();
+      if (client.presence) {
+        void this.live.drop(client.presence.clientId);
+        this.broadcastPresence();
+      }
       if (this.clients.size === 0) this.armGrace();
     };
     socket.on("end", drop);
@@ -274,11 +327,16 @@ export class DawgDaemon {
       }
       client.ready = true;
       client.protocol = protocol;
+      const letters = new Set<string>();
+      for (const other of this.clients)
+        if (other !== client && other.presence?.pane)
+          letters.add(other.presence.pane);
       client.presence = {
         clientId: message.clientId,
         pid: message.pid,
         label: message.label,
         focusedTrackId: message.focusedTrackId,
+        pane: freePaneLetter(letters),
       };
       if (message.actorId) client.presence.actorId = message.actorId;
       this.send(client, {
@@ -407,6 +465,39 @@ export class DawgDaemon {
               },
         );
       });
+      return;
+    }
+    if (message.type === "view") {
+      const presence = client.presence!;
+      const { v: _v, type: _type, ...view } = message;
+      for (const key of [
+        "screen",
+        "param",
+        "recording",
+        "playing",
+        "pinned",
+        "follow",
+      ] as const)
+        delete presence[key];
+      Object.assign(presence, view);
+      this.broadcastPresence();
+      return;
+    }
+    if (message.type === "live") {
+      const clientId = client.presence!.clientId;
+      if (message.action === "monitor")
+        void (async () => {
+          if (message.on) await this.loadSamples();
+          const status = await this.live.handle(clientId, message);
+          if (status)
+            this.send(client, {
+              v: 1,
+              type: "liveStatus",
+              id: message.id,
+              ...status,
+            });
+        })();
+      else void this.live.handle(clientId, message);
       return;
     }
     if (message.type === "transport") {

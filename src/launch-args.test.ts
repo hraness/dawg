@@ -228,3 +228,55 @@ describe("parseSimpleArgv", () => {
     expect(parseSimpleArgv([], 0)).toEqual({ kind: "run", positionals: [] });
   });
 });
+
+describe("dawg pane", () => {
+  const pane = (argv: string[]) => {
+    const parsed = parseLaunchArgs(["pane", ...argv]);
+    if (!parsed.ok) throw new Error(parsed.problem);
+    return { track: parsed.args.track?.id, ...parsed.args.pane };
+  };
+
+  test("screen, track, parameter, pin and follow", () => {
+    expect(pane(["home"])).toEqual({
+      track: undefined,
+      screen: "home",
+      param: undefined,
+      pin: false,
+      follow: undefined,
+    });
+    expect(pane(["play", "drums"])).toMatchObject({
+      screen: "play",
+      track: "drums",
+    });
+    expect(pane(["sound", "bass"])).toMatchObject({
+      track: "bass",
+      param: undefined,
+    });
+    expect(pane(["sound", "pan"])).toMatchObject({
+      track: undefined,
+      param: "pan",
+    });
+    expect(pane(["sound", "bass", "volume", "pin"])).toMatchObject({
+      track: "bass",
+      param: "volume",
+      pin: true,
+    });
+    expect(pane(["menu", "mix"])).toMatchObject({ param: "mix" });
+    expect(pane(["sound", "follow"])).toMatchObject({ follow: "*" });
+    expect(pane(["sound", "follow", "b"])).toMatchObject({ follow: "B" });
+  });
+
+  test("mistakes are one line", () => {
+    for (const argv of [
+      [],
+      ["tape"],
+      ["play", "a", "b"],
+      ["home", "x", "pin", "follow"],
+      ["sound", "--x"],
+    ]) {
+      const parsed = parseLaunchArgs(["pane", ...argv]);
+      expect(parsed.ok).toBe(false);
+      if (!parsed.ok) expect(parsed.problem).not.toContain("\n");
+    }
+  });
+});

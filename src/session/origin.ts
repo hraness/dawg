@@ -152,3 +152,23 @@ export function editedTrack(
   }
   return changed.size === 1 ? [...changed][0] : undefined;
 }
+
+/**
+ * The pane letters that authored `events` (dawgd stamps each event's
+ * clientId), in event order, excluding this pane. Empty when no author is a
+ * live lettered pane (file sessions, v1 daemons, a pane that already left).
+ */
+export function paneLetters(
+  events: readonly Pick<SessionEvent, "actor">[],
+  clients: readonly { clientId: string; pane?: string }[],
+  selfId: string,
+): string[] {
+  const letters: string[] = [];
+  for (const event of events) {
+    const id = event.actor?.clientId;
+    if (!id || id === selfId) continue;
+    const pane = clients.find((client) => client.clientId === id)?.pane;
+    if (pane && !letters.includes(pane)) letters.push(pane);
+  }
+  return letters;
+}

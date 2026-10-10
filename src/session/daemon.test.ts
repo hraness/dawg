@@ -13,6 +13,7 @@ import { FilePresence } from "./presence.ts";
 import {
   compositionDigest,
   daemonLockPath,
+  daemonLogPath,
   daemonSocketPath,
 } from "./protocol.ts";
 import { compositionAt } from "./rebase.ts";
@@ -553,6 +554,132 @@ describe("dawgd", () => {
     third.close();
     await until(() => fourth.presence.length === 3);
     expect(await fourth.claimTrack()).toBe("keys");
+  });
+});
+
+describe("dawgd panes", () => {
+  test("panes get letters in join order, reuse freed ones, and report views", async () => {
+    const { workspace, sessionId } = await session(["bass", "drums"]);
+    const a = await client(workspace, sessionId, "a");
+    const b = await client(workspace, sessionId, "b");
+    await until(() => a.presence.length === 2 && b.self?.pane === "B");
+    expect(a.self?.pane).toBe("A");
+    expect(b.caps).toContain("panes");
+    expect(b.sharedLive).toBe(true);
+    b.setView({ screen: "tape", recording: "overdub", playing: true });
+    await until(
+      () => a.presence.find((entry) => entry.pane === "B")?.screen === "tape",
+    );
+    const seen = a.presence.find((entry) => entry.pane === "B")!;
+    expect(seen.recording).toBe("overdub");
+    expect(seen.playing).toBe(true);
+    // A view replaces the previous one: unset fields clear.
+    b.setView({ screen: "sound", param: "filter" });
+    await until(
+      () => a.presence.find((entry) => entry.pane === "B")?.screen === "sound",
+    );
+    expect(a.presence.find((entry) => entry.pane === "B")?.recording).toBe(
+      undefined,
+    );
+    a.close();
+    await until(() => b.presence.length === 1);
+    const c = await client(workspace, sessionId, "c");
+    await until(() => c.self?.pane !== undefined);
+    expect(c.self?.pane).toBe("A");
+  });
+
+  test("two panes' live notes and clicks go to one engine", async () => {
+    const { workspace, paths, sessionId } = await session(["bass", "drums"]);
+    const out = join(workspace, "player");
+    process.env.DAWG_AUDIO_PLAYER = `${process.execPath} ${FAKE_PLAYER} ${out}`;
+    delete process.env.DAWG_AUDIO;
+    try {
+      const a = await client(workspace, sessionId, "a");
+      const b = await client(workspace, sessionId, "b");
+      const statusA = await a.liveMonitor(true);
+      const statusB = await b.liveMonitor(true);
+      expect(statusA.canMonitor).toBe(true);
+      expect(statusB.sampleRate).toBe(statusA.sampleRate);
+      await until(() => existsSync(`${out}.starts`));
+      const now = Date.now();
+      a.live({
+        v: 1,
+        type: "live",
+        action: "click",
+        on: true,
+        volume: 0.5,
+      });
+      b.live({
+        v: 1,
+        type: "live",
+        action: "click",
+        on: true,
+        volume: 0.5,
+      });
+      for (const [pane, trackId, pitch] of [
+        [a, "bass", 40],
+        [b, "drums", 36],
+      ] as const)
+        pane.live({
+          v: 1,
+          type: "live",
+          action: "on",
+          voice: 1,
+          trackId,
+          pitch,
+          velocity: 0.8,
+          seconds: 0.2,
+          beat: 0,
+          atMs: now,
+        });
+      const log = daemonLogPath(paths);
+      await until(async () => {
+        const text = existsSync(log) ? await readFile(log, "utf8") : "";
+        return (
+          text.includes(`live: note ${a.clientId} bass 40`) &&
+          text.includes(`live: note ${b.clientId} drums 36`)
+        );
+      });
+      // Both panes' notes reach the stream as audio, from one player.
+      await until(async () => {
+        const pcm = new Int16Array(
+          (await readFile(`${out}.pcm`)).buffer.slice(0),
+        );
+        return pcm.some((sample) => sample !== 0);
+      });
+      const starts = (await readFile(`${out}.starts`, "utf8"))
+        .trim()
+        .split("\n");
+      expect(starts).toHaveLength(1);
+      // One pane leaving keeps the engine for the other.
+      await a.liveMonitor(false);
+      b.live({ v: 1, type: "live", action: "off", voice: 1, atMs: now });
+      await b.liveMonitor(false);
+      const text = await readFile(log, "utf8");
+      expect(text.match(/live: monitor on/g)).toHaveLength(1);
+      await until(async () =>
+        (await readFile(log, "utf8")).includes("live: monitor off"),
+      );
+    } finally {
+      delete process.env.DAWG_AUDIO_PLAYER;
+      process.env.DAWG_AUDIO = "0";
+    }
+  });
+
+  test("events carry the writing pane's client id", async () => {
+    const { workspace, paths, sessionId } = await session();
+    const a = await client(workspace, sessionId, "a");
+    const b = await client(workspace, sessionId, "b");
+    const result = await b.apply({
+      base: b.record.revision,
+      kind: "score.operation",
+      payload: {},
+      operations: [addNote("from-b", 0)],
+    });
+    expect(result.status).toBe("accepted");
+    await a.sync();
+    const stored = await loadSession(paths);
+    expect(stored.events.at(-1)?.actor?.clientId).toBe(b.clientId);
   });
 });
 

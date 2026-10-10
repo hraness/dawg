@@ -13,6 +13,9 @@ import {
   ProtocolError,
   type ApplyResult,
   type ClientMessage,
+  type LiveMessage,
+  type LiveStatus,
+  type PaneView,
   type PresenceEntry,
   type ServerMessage,
   type TransportAction,
@@ -97,6 +100,9 @@ export class DaemonClient {
   private reconnecting: Promise<void> | undefined;
   private focusedTrackId: string | null;
   private welcomed: (() => void) | undefined;
+  private view: ClientMessage | undefined;
+  private monitoring = false;
+  private click: LiveMessage | undefined;
 
   private constructor(private readonly options: DaemonClientOptions) {
     this.paths = sessionPaths(options.workspace, options.sessionId);
@@ -225,6 +231,45 @@ export class DaemonClient {
     throw new Error(
       result.status === "rejected" ? result.message : "dawgd meta failed",
     );
+  }
+
+  /** True when dawgd runs live notes and the click (`live` capability). */
+  public get sharedLive(): boolean {
+    return this.caps.includes("live");
+  }
+
+  /** This pane's own presence entry, as dawgd last broadcast it. */
+  public get self(): PresenceEntry | undefined {
+    return this.presence.find((entry) => entry.clientId === this.clientId);
+  }
+
+  /** Reports this pane's view fields; resent after a reconnect. */
+  public setView(view: PaneView): void {
+    this.view = { v: 1, type: "view", ...view };
+    if (this.connected) this.socket!.write(encodeFrame(this.view));
+  }
+
+  /** Turns this pane's share of the shared live engine on or off. */
+  public async liveMonitor(on: boolean): Promise<LiveStatus> {
+    this.monitoring = on;
+    const reply = await this.request({
+      v: 1,
+      type: "live",
+      action: "monitor",
+      id: randomUUID(),
+      on,
+    });
+    if (reply.type !== "liveStatus")
+      throw new Error("dawgd did not answer live monitor");
+    const { v: _v, type: _type, id: _id, ...status } = reply;
+    return status;
+  }
+
+  /** Fire-and-forget live note or click; the click is resent on reconnect. */
+  public live(message: Exclude<LiveMessage, { action: "monitor" }>): void {
+    if (message.action === "click")
+      this.click = message.on || message.countIn ? message : undefined;
+    if (this.connected) this.socket!.write(encodeFrame(message));
   }
 
   /** The next per-(actor, client) intent number. */
@@ -358,7 +403,21 @@ export class DaemonClient {
             socket.destroy();
             this.onClose(socket);
           });
-          // Resend everything that was unanswered on the previous socket.
+          // Resend everything that was unanswered on the previous socket,
+          // after this pane's view and live state (a respawned dawgd knows
+          // neither).
+          if (this.view) socket.write(encodeFrame(this.view));
+          if (this.monitoring)
+            socket.write(
+              encodeFrame({
+                v: 1,
+                type: "live",
+                action: "monitor",
+                id: randomUUID(),
+                on: true,
+              }),
+            );
+          if (this.click) socket.write(encodeFrame(this.click));
           for (const pending of this.pending.values())
             socket.write(pending.frame);
           resolve();
@@ -376,7 +435,7 @@ export class DaemonClient {
               vMin: PROTOCOL_MIN,
               vMax: PROTOCOL_MAX,
             }),
-            caps: ["actor", "seq", "quantum"],
+            caps: ["actor", "seq", "quantum", "panes", "live"],
             ...(this.options.actor
               ? {
                   actorId: this.options.actor.id,

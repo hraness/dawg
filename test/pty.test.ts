@@ -313,16 +313,17 @@ test.skipIf(!supported)(
       "rename hint",
     );
 
-    // A second window claims `main`; drums stays with the first window.
+    // A second window claims `main`; panes may share a track (§12), so
+    // `/track drums` joins the first window there and says so.
     const two = await launch(100, 30, {}, [], t.cwd);
     await two.until(() => two.vt.text().includes(" NOW "), "second window");
     expect(two.vt.lines()[0]).toContain("main");
     await two.send("/track drums\r");
     await two.until(
-      () => two.vt.text().includes("drums is open in another window"),
-      "claimed elsewhere",
+      () => two.vt.text().includes("another pane is on drums too"),
+      "shared track",
     );
-    expect(two.vt.lines()[0]).toContain("main");
+    expect(two.vt.lines()[0]).toContain("drums");
     await two.send("/track drums\r");
     await Bun.sleep(100);
     for (const w of [two, t]) {

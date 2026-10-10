@@ -40,8 +40,27 @@ export const BOOLEAN_FLAGS: readonly string[] = [
 /** A `--track` value resolved to the id `/track` would use. */
 export type TrackArg = { id: string; name: string };
 
+/** Screens a pane can open on (§12.5). */
+export const PANE_SCREENS = ["home", "play", "sound", "menu"] as const;
+export type PaneScreen = (typeof PANE_SCREENS)[number];
+
+/**
+ * `dawg pane <screen> [track] [param] [pin | follow [letter]]`: what this
+ * terminal shows of the session in the current directory. `sound` opens
+ * the drawer on `param` (default volume); `menu` opens `param` as a menu
+ * section. `follow` tracks another pane's focus (`*` = the latest).
+ */
+export type PaneArgs = {
+  screen: PaneScreen;
+  param: string | undefined;
+  pin: boolean;
+  follow: string | undefined;
+};
+
 export type LaunchArgs = {
   subcommand: string | undefined;
+  /** `dawg pane …` (its track is `track`). */
+  pane?: PaneArgs;
   flags: ReadonlySet<string>;
   session: string | undefined;
   track: TrackArg | undefined;
@@ -90,6 +109,7 @@ export function parseLaunchArgs(argv: readonly string[]): LaunchParse {
   const flags = new Set<string>();
   const values = new Map<ValueFlag, string>();
   const first = argv[0];
+  if (first === "pane") return parsePaneArgs(argv.slice(1));
   if (first !== undefined && !first.startsWith("-")) {
     if (SUBCOMMANDS.includes(first))
       return { ok: true, args: emptyArgs(first, flags) };
@@ -146,7 +166,91 @@ export function parseLaunchArgs(argv: readonly string[]): LaunchParse {
   };
 }
 
-function emptyArgs(subcommand: string, flags: Set<string>): LaunchArgs {
+/** Drawer parameters `dawg pane sound <word>` opens (else the word is a track). */
+const SOUND_PARAMS: readonly string[] = [
+  "volume",
+  "pan",
+  "tempo",
+  "bpm",
+  "bars",
+  "meter",
+];
+
+const PANE_USAGE =
+  "usage: dawg pane home|play|sound|menu [track] [volume|pan|section] [pin|follow [A-Z]]";
+
+export function parsePaneArgs(argv: readonly string[]): LaunchParse {
+  const [screenWord, ...rest] = argv;
+  const screen = PANE_SCREENS.find(
+    (name) => name === screenWord?.toLowerCase(),
+  );
+  if (!screen)
+    return {
+      ok: false,
+      problem: screenWord
+        ? `unknown pane screen ${clip(screenWord)} · ${PANE_USAGE}`
+        : PANE_USAGE,
+    };
+  let pin = false;
+  let follow: string | undefined;
+  const words: string[] = [];
+  for (let index = 0; index < rest.length; index += 1) {
+    const word = rest[index]!;
+    if (word === "pin") pin = true;
+    else if (word === "follow") {
+      const letter = rest[index + 1];
+      if (letter !== undefined && /^[A-Z]$/i.test(letter)) {
+        follow = letter.toUpperCase();
+        index += 1;
+      } else follow = "*";
+    } else if (word.startsWith("-"))
+      return {
+        ok: false,
+        problem: `unknown option · ${clip(word)} · ${PANE_USAGE}`,
+      };
+    else words.push(word);
+  }
+  if (pin && follow)
+    return { ok: false, problem: `pin or follow, not both · ${PANE_USAGE}` };
+  if (words.length > 2)
+    return { ok: false, problem: `too many words · ${PANE_USAGE}` };
+  let track: TrackArg | undefined;
+  // `menu mix`, `sound filter`: one word after these is the section or the
+  // parameter; a track then comes first (`sound bass filter`).
+  const [first, second] = words;
+  let param: string | undefined;
+  const trackFirst =
+    words.length === 2 ||
+    (first !== undefined &&
+      (screen === "home" ||
+        screen === "play" ||
+        (screen === "sound" && !SOUND_PARAMS.includes(first.toLowerCase()))));
+  if (trackFirst) {
+    track = normalizeTrackArg(first!);
+    if (!track) return { ok: false, problem: "invalid track name" };
+    param = second;
+  } else param = first;
+  if (param !== undefined && !/^[a-z][a-z0-9 ._-]{0,63}$/i.test(param))
+    return { ok: false, problem: `invalid pane parameter · ${PANE_USAGE}` };
+  if (param !== undefined && (screen === "home" || screen === "play"))
+    return {
+      ok: false,
+      problem: `${screen} takes a track only · ${PANE_USAGE}`,
+    };
+  return {
+    ok: true,
+    args: {
+      ...emptyArgs(undefined, new Set()),
+      track,
+      pane: { screen, param: param?.toLowerCase(), pin, follow },
+    },
+  };
+}
+
+function emptyArgs(
+  subcommand: string | undefined,
+  flags: Set<string>,
+): LaunchArgs {
   return {
     subcommand,
     flags,

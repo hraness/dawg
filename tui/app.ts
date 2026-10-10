@@ -76,8 +76,10 @@ export interface AppView {
   sync?: SyncState | undefined;
   /** Human session name; replaces the short id in the header when set. */
   sessionName?: string | undefined;
-  /** Live windows on this session (presence); shown when more than one. */
+  /** Live panes on this session (presence); shown when more than one. */
   windows?: number | undefined;
+  /** This pane's letter (dawgd), shown beside the count: `3 panes · B`. */
+  pane?: string | undefined;
   /** Project typecheck result; `types ✓` or `types ✗ N` beside sync. */
   types?: TypesIndicator | undefined;
   /**
@@ -506,7 +508,7 @@ function paintHeader(
     });
   if (view.windows !== undefined && view.windows > 1)
     left.push({
-      text: `${view.windows} windows`,
+      text: `${view.windows} panes${view.pane ? ` · ${view.pane}` : ""}`,
       style: roles.muted,
       priority: 4,
     });
