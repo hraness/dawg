@@ -388,10 +388,21 @@ test.skipIf(!supported)(
       () => screens([a, b, c]),
     );
 
+    /** Every pane has seen every edit, so the next step reads one history. */
+    const settle = () =>
+      until(
+        () => {
+          const r = [a, b, c].map(revision);
+          return r.every((x) => x === r[0]);
+        },
+        "panes agree on the revision",
+        () => screens([a, b, c]),
+      );
     // A sets drums volume, then B sets bass volume. A's ctrl-z undoes only
     // A's edit; B's later, unrelated edit stays.
     await edit(a, "volume 0.4");
     await edit(b, "volume 0.6");
+    await settle();
     let before = revision(a);
     a.terminal.write("\u001a");
     await until(
@@ -411,6 +422,7 @@ test.skipIf(!supported)(
     // Two panes on one track: C pans drums (another property), A redoes
     // its volume, and both properties stand.
     await edit(c, "pan -0.3");
+    await settle();
     await edit(a, "redo");
     await until(
       async () => (await volumes(dir)).drums === 0.4,
@@ -420,6 +432,7 @@ test.skipIf(!supported)(
     // Same property: C sets drums volume after A; A's undo refuses and
     // names pane C.
     await edit(c, "volume 0.2");
+    await settle();
     before = revision(a);
     await send(a, "undo");
     await until(
@@ -432,6 +445,7 @@ test.skipIf(!supported)(
 
     // `undo all` steps the shared history whoever wrote it; the receipt
     // names the author pane.
+    await settle();
     await edit(b, "undo all");
     await until(
       () => /\(pane C\)/.test(b.vt.text()),
