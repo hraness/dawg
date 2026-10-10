@@ -60,7 +60,8 @@ async function song(
 /** Plays from the top for `beats` beats at the song tempo. */
 async function playFor(stage: Stage, pty: Pty, beats: number): Promise<void> {
   await stage.type(pty, " ", 4);
-  await stage.until(has(pty, "▶"), "playing", pty);
+  // The header, not any ▶ on screen: TAPE and the highway draw ▶ too.
+  await stage.until(has(pty, /▶ \d+ BPM/), "playing", pty);
   // 121 BPM: a beat is ~496 ms; 25 ms steps keep the highway smooth.
   await stage.step(Math.round((beats * 496) / 25), 25);
 }
