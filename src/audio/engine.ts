@@ -240,7 +240,13 @@ export type AudioStatus = Readonly<{
 const MAX_RESPAWNS = 3;
 /** A player that ran this long before dying resets the respawn budget. */
 const RESPAWN_RESET_MS = 10_000;
-/** Lead grows to this multiple of the last render time. */
+/**
+ * Default queue lead: the edit-to-audible floor while playing. 100 ms leaves
+ * 80 ms of slack over the 20 ms pump tick for main-thread stalls (a frame
+ * costs about 1 ms; play mode already runs at 60 ms).
+ */
+const DEFAULT_LEAD_MS = 100;
+/** Inline renders grow the lead to this multiple of the last render time. */
 const LEAD_RENDER_FACTOR = 1.5;
 
 type Loop = Readonly<{
@@ -334,8 +340,8 @@ type PlayRequest = {
  *
  * Timing: the engine is paced by the same monotonic clock as the transport.
  * Frame `n` of the stream belongs to wall time `start + n / rate`, and the
- * engine keeps a lead of audio queued ahead of now: at least `leadMs`, and
- * 1.5x the last render time when renders are slower than that. The device
+ * engine keeps a lead of audio queued ahead of now: `leadMs`, or 1.5x the
+ * last render time when renders run inline (no worker) and are slower. The device
  * plays the queue at its own rate, so what you hear trails the transport by
  * the player's fixed output latency and never accumulates drift from
  * re-renders. Renders run in a worker; an edit re-renders off-thread and
@@ -401,7 +407,7 @@ export class AudioEngine {
       options.info ?? detectAudioBackend({ sampleRate: this.sampleRate });
     this.lock = new PlaybackLock(options.lockPath);
     this.leadFrames = Math.round(
-      ((options.leadMs ?? 200) * this.sampleRate) / 1000,
+      ((options.leadMs ?? DEFAULT_LEAD_MS) * this.sampleRate) / 1000,
     );
     this.defaultLeadFrames = this.leadFrames;
     this.fadeFrames = Math.max(
@@ -619,14 +625,14 @@ export class AudioEngine {
 
   /** Frames kept queued ahead of the clock right now. */
   public get lead(): number {
-    // Play mode and auditions keep their short lead: renders run
-    // off-thread, so a slow render delays the swap, not the stream.
-    const adaptive =
-      (this.monitoring || this.leadPinned) && this.renderer.offThread
-        ? 0
-        : Math.round(
-            (LEAD_RENDER_FACTOR * this.lastRenderMs * this.sampleRate) / 1000,
-          );
+    // Off-thread renders never stall the pump: a slow render delays the
+    // swap, not the stream, so only inline renders grow the lead (every
+    // frame of lead is a frame of edit latency).
+    const adaptive = this.renderer.offThread
+      ? 0
+      : Math.round(
+          (LEAD_RENDER_FACTOR * this.lastRenderMs * this.sampleRate) / 1000,
+        );
     // The pump never queues more than a second, so the lead stays under it.
     return Math.min(
       Math.max(this.leadFrames, adaptive),

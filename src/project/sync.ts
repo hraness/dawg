@@ -3,7 +3,7 @@
  *
  * files → score: a change to any project source (`song.ts`, track files,
  * helper modules they import, tuning files; fs.watch plus a slow poll,
- * debounced 150 ms) evaluates the project, adopts the session's note ids,
+ * debounced 40 ms) evaluates the project, adopts the session's note ids,
  * diffs against the current score and commits one `files.apply` revision
  * through the session port. A failed evaluation is reported as a card and
  * leaves the score alone.
@@ -45,7 +45,11 @@ import { acquireSessionLock } from "../session/lock.ts";
 import { writeAtomic } from "./init.ts";
 import { typecheckProject, type TypecheckResult } from "./typecheck.ts";
 
-export const SYNC_DEBOUNCE_MS = 150;
+/**
+ * Quiet time after a file event before evaluating: long enough to coalesce
+ * an editor's write-then-rename, short enough that a save feels immediate.
+ */
+export const SYNC_DEBOUNCE_MS = 40;
 export const SYNC_POLL_MS = 1_500;
 const SYNC_STATE_FILE = ".dawg/sync.json";
 const MAX_TRACKED_FILES = 512;
