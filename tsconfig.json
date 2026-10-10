@@ -16,6 +16,7 @@
     "core/**/*.ts",
     "tui/**/*.ts",
     "test/**/*.ts",
-    "bench/**/*.ts"
+    "bench/**/*.ts",
+    "native/**/*.ts"
   ]
 }
