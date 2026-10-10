@@ -26,15 +26,6 @@ const BAD = /\bunknown\b|\bunrecognized\b|no help topic|no guide named/i;
  * and the grammar lane (A2, bare scalars and voice verbs) close them.
  */
 const PTY_KNOWN_GAPS: readonly string[] = [
-  "/help sound",
-  "/help effects",
-  "/help rhythm",
-  "/help mix",
-  "/help project",
-  "/help agent",
-  "/guide voice",
-  "/guide arrange",
-  "/guide agent",
   "/menu voice",
   "/menu keys",
   "/menu agent",
@@ -70,7 +61,9 @@ function ready(t: Session): boolean {
  */
 function namesTopic(text: string, id: string): boolean {
   const title = text.split("\n")[0]?.toLowerCase() ?? "";
-  return title.includes("╭─") && title.includes(id.slice(0, 5));
+  // §4c: the keys guide's title is "Using dawg".
+  const names = id === "keys" ? ["keys", "using dawg"] : [id.slice(0, 5)];
+  return title.includes("╭─") && names.some((name) => title.includes(name));
 }
 
 /** The status line and any open panel: what the person reads after Enter. */
