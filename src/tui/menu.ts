@@ -3107,7 +3107,9 @@ function transportNodes(context: MenuContext): MenuNode[] {
       kind: "menu",
       id: "agent",
       label: "agent",
-      detail: context.showMe ? `show me ${context.showMe}` : "model · model key",
+      detail: context.showMe
+        ? `show me ${context.showMe}`
+        : "model · model key",
       help: "the agent's model, show-me and model key",
       build: agentNodes,
     },
