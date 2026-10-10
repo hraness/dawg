@@ -38,17 +38,34 @@ Never reuse, move or delete a tag that has a published Release.
 
 ## What the workflow does
 
-`release` (permissions `contents: write`, `id-token: write`,
+`sink` runs `.github/workflows/sink.yml` (the same workflow Check runs on every
+pull request) on the tagged commit. It builds the native audio sink,
+`native/sink`, for darwin-arm64 and darwin-x64 on macOS runners and for
+linux-x64 and linux-arm64 on Ubuntu 22.04 runners (glibc 2.35 floor), runs its
+unit tests and the headless null-device smoke test where the runner can execute
+the library, and uploads one library per platform. Check's `package` job also
+stages those libraries, packs, installs and runs `native/verify-install.sh` on
+every pull request, so the release path is exercised before a tag exists.
+
+`release` (needs `sink`; permissions `contents: write`, `id-token: write`,
 `attestations: write`):
 
 1. Checks that the tag is `v` plus the `package.json` version and that the
    tagged commit is on `main`.
-2. Runs `bun run check`, packs `hraness-dawg-<version>.tgz` with
-   `bun pm pack`, writes `SHA256SUMS`, and installs the tarball into a temporary
-   `BUN_INSTALL` to run `dawg --help`.
-3. Attests build provenance for the tarball, attaches the tarball and
-   `SHA256SUMS` to a draft Release, and publishes it in one step so it becomes
-   immutable with both files in place.
+2. Runs `bun run check`, then downloads the four sink libraries into
+   `native/prebuilt/<platform>-<arch>/` and writes
+   `native/prebuilt/manifest.json` with `native/stage-prebuilt.sh`, which
+   fails unless every platform is present.
+3. Packs `hraness-dawg-<version>.tgz` with `bun pm pack`. The package `files`
+   include the libraries and the manifest, so the tarball and npm carry them.
+   Each library is also copied out as `libdawg_sink-<platform>-<arch>.dylib`
+   or `.so`. `SHA256SUMS` lists the tarball first, then the four libraries.
+4. Runs `native/verify-install.sh`: installs the tarball into a temporary
+   `BUN_INSTALL`, runs `dawg --help`, and requires `dawg doctor --json` to
+   report the linux-x64 sink verified and loaded.
+5. Attests build provenance for the tarball and the four libraries, attaches
+   them and `SHA256SUMS` to a draft Release, and publishes it in one step so it
+   becomes immutable with every file in place.
 
 `npm` (environment `npm-release`, permissions `contents: read` and
 `id-token: write` only):
@@ -56,7 +73,8 @@ Never reuse, move or delete a tag that has a published Release.
 1. Installs Node 24.19.0 and requires npm 11.5.1 or newer, the first npm with
    trusted publishing.
 2. Downloads the tarball and `SHA256SUMS` from the published Release, runs
-   `sha256sum -c`, and requires the sha256 the `release` job built.
+   `sha256sum -c --ignore-missing` (the libraries are inside the tarball, so
+   only its line is checked), and requires the sha256 the `release` job built.
 3. Reads the version's integrity from the npm registry. The same sha512 means
    it is already published and the job succeeds. Different bytes fail the job.
    A missing package or version runs
@@ -66,6 +84,30 @@ Never reuse, move or delete a tag that has a published Release.
 The `npm` job runs only after the Release is published and never changes it. If
 npm fails, the GitHub Release stays as it is; fix the cause and rerun the failed
 job with `gh run rerun <run-id> --failed -R hraness/dawg`.
+
+## Native sink at runtime
+
+Nothing is compiled when dawg is installed: the package has no install
+scripts. At startup `src/audio/native.ts` picks
+`native/prebuilt/<platform>-<arch>/`, checks the library's sha256 against
+`manifest.json`, and only then calls `dlopen`. A platform without a prebuilt
+(Windows, musl, 32-bit), a missing or mismatched file, an ABI mismatch, or a
+library that fails to load (for example no `libasound.so.2` on Linux) falls
+back to ffplay, SoX or afplay; `dawg doctor` and the backend detail say why.
+`DAWG_AUDIO_NATIVE=0` turns the sink off, and `DAWG_SINK_LIB=<path>` loads a
+local `cargo build` unverified, for development.
+
+To verify a library from a Release by itself:
+
+```sh
+gh release download v<version> --repo hraness/dawg --pattern 'libdawg_sink-*' --pattern SHA256SUMS
+shasum -a 256 -c --ignore-missing SHA256SUMS
+gh attestation verify libdawg_sink-darwin-arm64.dylib --repo hraness/dawg
+```
+
+The first release that ships the libraries is the first version bump after
+this workflow change; earlier releases have none and always use the
+fallback.
 
 ## Repository settings
 
