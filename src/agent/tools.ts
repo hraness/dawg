@@ -114,6 +114,7 @@ import { STYLE_TOOLS } from "./style-tools.ts";
 import { DRUM_TOOLS } from "./drum-tools.ts";
 import { TIME_TOOLS } from "./time-tools.ts";
 import { SECTION_TOOLS } from "./section-tools.ts";
+import { RANGE_TOOLS } from "./range-tools.ts";
 import { GRANULAR_TOOLS } from "./granular-tools.ts";
 import { RESAMPLE_TOOLS } from "./resample-tool.ts";
 import { VOICE_TOOLS } from "./voice-tools.ts";
@@ -2035,6 +2036,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   ...DRUM_TOOLS,
   ...TIME_TOOLS,
   ...SECTION_TOOLS,
+  ...RANGE_TOOLS,
   ...MEDIA_TOOLS,
   ...PACK_TOOLS,
   ...MASTER_TOOLS,
