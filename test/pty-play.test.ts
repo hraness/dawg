@@ -201,3 +201,66 @@ test.skipIf(!supported)(
   },
   20_000,
 );
+
+test.skipIf(!supported)(
+  "real PTY: r on TAPE records the loop, a pass an undo step; reels turn",
+  async () => {
+    const t = await launch(100, 28, {}, ["--track", "keys"]);
+    try {
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
+      for (const [line, seen] of [
+        ["/count-in 0", "count-in · 0 bars"],
+        ["/tempo 240", "240"],
+        ["/loop 1", "loop"],
+      ] as const) {
+        await t.send(`${line}\r`);
+        await t.until(() => t.vt.text().includes(seen), line);
+      }
+      await t.send("\u0014"); // Ctrl-T: TAPE
+      await t.until(() => t.vt.text().includes("r record"), "tape hint");
+      await t.send("r");
+      await t.until(
+        () => t.vt.text().includes("PLAY") && t.vt.text().includes("rec armed"),
+        "TAPE r arms play mode",
+      );
+      expect(t.vt.text()).toContain("one undo step a pass");
+      await t.send(" ");
+      await t.until(() => t.vt.text().includes("↻ 1 · pass"), "pass header");
+      // A note in each of two passes (a 1-bar loop at 240 BPM is 1 s).
+      await t.send("a");
+      await t.until(
+        () => /pass 1 · \+\d+ notes?/.test(t.vt.text()),
+        "pass 1 committed",
+      );
+      await t.send("g");
+      await t.until(
+        () => /pass ([2-9]|\d\d+) · \+\d+ notes?/.test(t.vt.text()),
+        "a later pass committed",
+      );
+      await t.send(" ");
+      await t.send("\u001b");
+      await t.until(() => !t.vt.text().includes("PLAY MODE"), "left play");
+      // Back on TAPE: space runs the transport and the reels turn a beat.
+      await t.until(() => t.vt.text().includes("r record"), "back on tape");
+      const reel = () => t.vt.lines()[t.vt.findRow(" bar")]?.slice(0, 9) ?? "";
+      expect(reel()).toContain("◐");
+      await t.send(" ");
+      await t.until(() => /[◓◑◒]/.test(reel()), "reel turns");
+      await t.send(" ");
+      const keys = async () =>
+        (await sessionNotes(t.cwd)).filter((note) => note.trackId === "keys");
+      expect((await keys()).length).toBeGreaterThanOrEqual(2);
+      const before = (await keys()).length;
+      // One Ctrl-Z takes back one pass, not the take.
+      await t.send("\u001a");
+      await Bun.sleep(400);
+      const after = (await keys()).length;
+      expect(after).toBeGreaterThan(0);
+      expect(after).toBeLessThan(before);
+    } finally {
+      t.terminal.write("\u0003");
+      await t.proc.exited;
+    }
+  },
+  30_000,
+);

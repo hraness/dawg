@@ -3,6 +3,9 @@ import {
   Delight,
   downbeatGlint,
   GHOST_MS,
+  LOOP_FLASH_MS,
+  loopFlash,
+  reelGlyph,
   SWEEP_MS,
   sweepProgress,
 } from "./delight.ts";
@@ -99,5 +102,69 @@ describe("ghost lanes", () => {
     const delight = new Delight();
     delight.ghost(60, 0);
     expect(delight.glows(10, true)).toEqual([]);
+  });
+});
+
+describe("TAPE reels (§9.1)", () => {
+  const reel = (
+    beat: number,
+    extra: Partial<Parameters<typeof reelGlyph>[0]> = {},
+  ) =>
+    reelGlyph({
+      playing: true,
+      beat,
+      reducedMotion: false,
+      unicode: true,
+      ...extra,
+    });
+
+  test("one step a beat, from the transport clock", () => {
+    expect([0, 1, 2, 3, 4, 5.5].map((beat) => reel(beat))).toEqual([
+      "◐",
+      "◓",
+      "◑",
+      "◒",
+      "◐",
+      "◓",
+    ]);
+  });
+
+  test("still when stopped or with motion off; ASCII spells it", () => {
+    expect(reel(3, { playing: false })).toBe("◐");
+    expect(reel(3, { reducedMotion: true })).toBe("◐");
+    expect(reel(1, { unicode: false })).toBe("/");
+    expect(reel(Number.NaN)).toBe("◐");
+  });
+});
+
+describe("loop-close flash (§9.3)", () => {
+  // A 2-bar loop at 120 BPM: 8 beats, 500 ms a beat.
+  const flash = (
+    beat: number,
+    extra: Partial<Parameters<typeof loopFlash>[0]> = {},
+  ) =>
+    loopFlash({
+      playing: true,
+      beat,
+      loopBeats: 8,
+      bpm: 120,
+      reducedMotion: false,
+      ...extra,
+    });
+
+  test("bright for LOOP_FLASH_MS after each wrap, never on the first pass", () => {
+    expect(flash(0)).toBe(false);
+    expect(flash(0.1)).toBe(false);
+    expect(flash(8)).toBe(true);
+    expect(flash(8 + (LOOP_FLASH_MS - 10) / 500)).toBe(true);
+    expect(flash(8 + (LOOP_FLASH_MS + 10) / 500)).toBe(false);
+    expect(flash(16.05)).toBe(true);
+    expect(flash(12)).toBe(false);
+  });
+
+  test("off when stopped, without a loop, or with motion off", () => {
+    expect(flash(8, { playing: false })).toBe(false);
+    expect(flash(8, { loopBeats: undefined })).toBe(false);
+    expect(flash(8, { reducedMotion: true })).toBe(false);
   });
 });

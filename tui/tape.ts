@@ -67,6 +67,13 @@ export type TapeView = Readonly<{
   selected: KnobIndex;
   /** The gesture row, from the screen's key table. */
   hint: string;
+  /** The reels (`◐◓◑◒`, §9.1), turning on beats while playing. */
+  reel?: string | undefined;
+  /**
+   * The loop just wrapped (a recording pass closed, §9.3): the brackets
+   * draw reversed and bold and the fill turns `━`, so it reads in mono.
+   */
+  loopFlash?: boolean | undefined;
 }>;
 
 /** Glyph for a density level, 1 … 8. */
@@ -154,11 +161,15 @@ export function paintTape(
     { length: cells },
     () => roles.muted,
   );
+  const flash = view.loopFlash === true;
+  const bracketStyle: Style = flash
+    ? { ...roles.knob2, bold: true, reverse: true }
+    : roles.knob2;
   for (let index = 0; index < cells; index += 1) {
     const cell = firstCell + index;
     if (inLoop(cell)) {
-      ruler[index] = unicode ? "═" : "=";
-      rulerStyle[index] = roles.knob2;
+      ruler[index] = flash ? (unicode ? "━" : "#") : unicode ? "═" : "=";
+      rulerStyle[index] = flash ? { ...roles.knob2, bold: true } : roles.knob2;
     }
   }
   for (let index = 0; index < cells; index += 1) {
@@ -182,11 +193,11 @@ export function paintTape(
       const cell = firstCell + index;
       if (barStart(cell) && cellBar(cell) === loopStart && !ghost(cell)) {
         ruler[index] = "[";
-        rulerStyle[index] = roles.knob2;
+        rulerStyle[index] = bracketStyle;
       }
       if (inLoop(cell) && !inLoop(cell + 1)) {
         ruler[index] = "]";
-        rulerStyle[index] = roles.knob2;
+        rulerStyle[index] = bracketStyle;
       }
     }
   }
@@ -202,6 +213,8 @@ export function paintTape(
     }
   }
   buffer.text(rect.x, y, " bar", roles.faint);
+  // The reels sit in the gutter: a glyph that turns, so never color-only.
+  if (view.reel) buffer.text(rect.x + 6, y, view.reel, roles.warning);
   ruler.forEach((ch, index) =>
     buffer.set(left + index, y, ch, rulerStyle[index]),
   );

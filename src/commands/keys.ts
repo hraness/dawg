@@ -210,6 +210,23 @@ export function keysRowMismatch(
   return `${instrument} has no ${wrong.join(" ")} (${familiesReading(wrong[0]!).join("/")} row); its parameters: ${rows.join(" ")}`;
 }
 
+/**
+ * `keys record` / `keys record replace` / `keys record off` (op1-ux §4.7):
+ * arm recording in PLAY, overdub or replace each pass. Not a score write
+ * of its own; each pass the take commits is.
+ */
+export function parseRecordCommand(
+  prompt: string,
+): "overdub" | "replace" | "off" | undefined {
+  const match = prompt
+    .trim()
+    .match(/^\/?keys\s+record(?:\s+(overdub|replace|off))?$/i);
+  if (!match) return undefined;
+  return (match[1]?.toLowerCase() ?? "overdub") as
+    "overdub" | "replace" | "off";
+}
+
+/** Parse one keys / piano / organ command. */
 export function parseKeysCommand(prompt: string): KeysCommand | undefined {
   if (prompt.length > 1_024) return undefined;
   let words = prompt.trim().toLowerCase().split(/\s+/);

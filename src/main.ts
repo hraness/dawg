@@ -155,6 +155,7 @@ import {
   applyKeysCommand,
   newPianoTrack,
   parseKeysCommand,
+  parseRecordCommand,
 } from "./commands/keys.ts";
 import {
   applyTuningCommand,
@@ -384,7 +385,13 @@ import {
   type KeySection,
 } from "../tui/grammar.ts";
 import { renderAudition } from "./audio/audition.ts";
-import { exportScore, playbackTime, scoreBeatAt } from "./audio/arrange.ts";
+import {
+  exportScore,
+  loopedSection,
+  playbackTime,
+  scoreBeatAt,
+} from "./audio/arrange.ts";
+import { loopFlash, reelGlyph } from "../tui/delight.ts";
 import { formatForm } from "../core/sections.ts";
 import type { ArrangeStripView } from "../tui/arrange-strip.ts";
 import { renderScorePcm } from "./audio/wav.ts";
@@ -2758,6 +2765,8 @@ async function submit(prompt: string): Promise<string | Receipt> {
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
   }
+  const recordCommand = parseRecordCommand(command);
+  if (recordCommand) return keysRecord(recordCommand);
   const keysCommand = parseKeysCommand(command);
   if (keysCommand) {
     const reads =
@@ -4300,6 +4309,21 @@ function paneMarks(trackId: string): string {
   return marks.length ? `  ${marks.join(" ")}` : "";
 }
 
+/**
+ * Another pane recording on `trackId` (§12.4): `pane B`, else undefined.
+ * Play refuses to replace a pass while one is, naming it.
+ */
+function recordingPane(trackId: string): string | undefined {
+  const other = panePresence.find(
+    (entry) =>
+      entry.clientId !== port.clientId &&
+      entry.recording !== undefined &&
+      entry.focusedTrackId === trackId,
+  );
+  if (!other) return undefined;
+  return other.pane ? `pane ${other.pane}` : "another pane";
+}
+
 /** A drawer row another pane has open on this track shows its letter. */
 function withPaneMarks(view: DrawerView): DrawerView {
   const others = panePresence.filter(
@@ -5379,6 +5403,24 @@ async function enterPlay(): Promise<Receipt> {
   );
 }
 
+/**
+ * `keys record [replace|off]` (op1-ux §4.7, r / R on TAPE): opens PLAY on
+ * the focused track and arms recording. With a loop set, every pass over
+ * it commits once, so one undo step; esc goes back to TAPE.
+ */
+async function keysRecord(
+  mode: "overdub" | "replace" | "off",
+): Promise<Receipt> {
+  if (mode === "off" && !play?.on) return ok("record off");
+  if (!play?.on) {
+    const entered = await enterPlay();
+    if (!play?.on) return entered;
+  }
+  const result = playSession().recordCommand(mode);
+  reportView();
+  return result.ok ? ok(result.message) : fail(result.message);
+}
+
 async function exitPlay(): Promise<Receipt> {
   if (!play?.on) return ok("play mode is off");
   await play.exit();
@@ -5429,8 +5471,29 @@ function currentTapeView(value: TrackScore, beat: number): TapeView {
     selected: tape.knobs.selected,
     marks: paneMarks,
   });
-  tape.view = view;
-  return view;
+  // §9.1 and §9.3: reels turn on the transport beat; the loop brackets
+  // flash as each pass closes. Both are still with `/motion off`.
+  const reducedMotion = tui.ui.reducedMotion;
+  const withDelight: TapeView = {
+    ...view,
+    reel: reelGlyph({
+      playing: clock.playing,
+      beat,
+      reducedMotion,
+      unicode: tui.capabilities.unicode,
+    }),
+    loopFlash: loopFlash({
+      playing: clock.playing,
+      beat,
+      loopBeats: loopedSection(value)
+        ? loopTicksOf(value) / value.ticksPerBeat
+        : undefined,
+      bpm: bpmAtTick(value, scoreBeatAt(value, beat) * value.ticksPerBeat),
+      reducedMotion,
+    }),
+  };
+  tape.view = withDelight;
+  return withDelight;
 }
 
 /** Whether the clipboard's source bars differ from what the score holds now. */
@@ -5699,6 +5762,9 @@ function playHost() {
     scoreBeat: (beat: number) => scoreBeatAt(score, beat),
     engine: playEngine,
     samples: () => liveSampleBank,
+    // A take is a plain commitScore (it diffs into operations, so dawgd
+    // rebases a pass over other panes' edits); a stale record reloads and
+    // replays the take's operations on what landed meanwhile.
     async commit(
       next: TrackScore,
       kind: string,
@@ -5708,15 +5774,7 @@ function playHost() {
       let target = next;
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
-          record = await port.appendOperations(
-            record,
-            { kind, payload },
-            operations,
-            target.toJSON(),
-          );
-          score = scoreFromJSON(record.composition);
-          if (clock.playing) void audio.play(score);
-          projectSync?.scoreChanged(score);
+          await commitScore(target, kind, payload);
           return;
         } catch (error) {
           if (!(error instanceof SessionConflictError)) throw error;
@@ -5730,6 +5788,7 @@ function playHost() {
       }
       throw new Error("session busy");
     },
+    recordingElsewhere: (trackId: string) => recordingPane(trackId),
     async startTransport(beat: number): Promise<void> {
       if (port.mode === "daemon") {
         await port.transport("play", { beat });

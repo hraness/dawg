@@ -84,6 +84,7 @@ const TYPE_FILLED = [
   "try: copy all 1-4 to 5 · loop 5-8",
   "try: knobs · mix · /help mix",
   "try: panes · pane tape · /help panes",
+  "try: loop 1-2 · keys record · ctrl-z takes back a pass",
 ] as const;
 
 const TYPE_DRUMS = [

@@ -403,6 +403,168 @@ describe("PlaySession", () => {
     );
   });
 
+  describe("loop recording (op1-ux §4.7)", () => {
+    function loopScore(): TrackScore {
+      return createScore({
+        tempoBpm: 120,
+        bars: 8,
+        tracks: [{ id: "lead", name: "keys", instrument: "piano" }],
+      }).withLoop({ startBar: 4, bars: 2 });
+    }
+    const BAR_MS = 2_000;
+    const PASS_MS = 2 * BAR_MS;
+
+    async function looping(score = loopScore()) {
+      const rig = harness(score);
+      rig.host.scoreBeat = (beat) => scoreBeatAt(rig.state.score, beat);
+      await rig.session.enter();
+      rig.session.press("r");
+      rig.state.now = 0;
+      await rig.host.startTransport(0);
+      rig.session.tick();
+      return rig;
+    }
+
+    /** Tap a key at `ms` (released at once), then tick. */
+    function tap(
+      rig: Awaited<ReturnType<typeof looping>>,
+      ms: number,
+      key = "a",
+    ) {
+      rig.state.now = ms;
+      rig.session.tick();
+      rig.session.press(key);
+    }
+
+    test("3 passes over a 2-bar loop are 3 revisions, inside bars 5-6", async () => {
+      const rig = await looping();
+      for (let pass = 0; pass < 3; pass += 1) {
+        tap(rig, pass * PASS_MS + 500, "asd"[pass]);
+        // Crossing the loop's inner bar line commits nothing.
+        rig.state.now = pass * PASS_MS + BAR_MS + 10;
+        rig.session.tick();
+        await Promise.resolve();
+        expect(rig.state.commits).toHaveLength(pass);
+        tap(rig, pass * PASS_MS + BAR_MS + 1_000, "fgh"[pass]);
+        rig.state.now = (pass + 1) * PASS_MS + 10;
+        rig.session.tick();
+        await rig.session["flushing"];
+        expect(rig.state.commits).toHaveLength(pass + 1);
+      }
+      expect(rig.state.commits.map((commit) => commit.payload.pass)).toEqual([
+        1, 2, 3,
+      ]);
+      expect(rig.state.cards.at(-1)).toContain("pass 3 · +2 notes");
+      const ticksPerBar = 4 * rig.state.score.ticksPerBeat;
+      const notes = rig.state.score.notes.filter(
+        (note) => note.trackId === "lead",
+      );
+      expect(notes.length).toBeGreaterThanOrEqual(2);
+      for (const note of notes) {
+        expect(note.startTick).toBeGreaterThanOrEqual(4 * ticksPerBar);
+        expect(note.startTick).toBeLessThan(6 * ticksPerBar);
+      }
+      expect(rig.session.header().pass).toBe("↻ 5–6 · pass 4");
+    });
+
+    test("an empty pass writes nothing", async () => {
+      const rig = await looping();
+      tap(rig, 500);
+      rig.state.now = PASS_MS + 10;
+      rig.session.tick();
+      await rig.session["flushing"];
+      expect(rig.state.commits).toHaveLength(1);
+      rig.state.now = 2 * PASS_MS + 10;
+      rig.session.tick();
+      await rig.session["flushing"];
+      expect(rig.state.commits).toHaveLength(1);
+    });
+
+    test("replace erases only the bars each pass crossed", async () => {
+      const base = loopScore();
+      const ticksPerBar = 4 * base.ticksPerBeat;
+      const seeded = createScore({
+        ...base.toJSON(),
+        notes: [3, 4, 5, 6].map((bar) => ({
+          id: `old-${bar}`,
+          trackId: "lead",
+          pitch: 72,
+          startTick: bar * ticksPerBar,
+          durationTicks: 120,
+          velocity: 0.8,
+        })),
+      } as Parameters<typeof createScore>[0]);
+      const rig = await looping(seeded);
+      rig.session.press("R");
+      expect(rig.session.replace).toBe(true);
+      tap(rig, 500);
+      rig.state.now = PASS_MS + 10;
+      rig.session.tick();
+      await rig.session["flushing"];
+      const ids = rig.state.score.notes.map((note) => note.id);
+      expect(ids).toContain("old-3");
+      expect(ids).toContain("old-6");
+      expect(ids).not.toContain("old-4");
+      expect(ids).not.toContain("old-5");
+    });
+
+    test("replace refuses while another pane records the track, naming it", async () => {
+      const rig = await looping();
+      rig.host.recordingElsewhere = (trackId) =>
+        trackId === "lead" ? "pane B" : undefined;
+      const result = rig.session.recordCommand("replace");
+      expect(result.ok).toBe(false);
+      expect(result.message).toContain("pane B is recording keys");
+      expect(rig.session.replace).toBe(false);
+      // Overdub alongside is fine.
+      expect(rig.session.recordCommand("overdub").ok).toBe(true);
+    });
+
+    test("an armed replace pass lands as overdub once another pane records", async () => {
+      const base = loopScore();
+      const ticksPerBar = 4 * base.ticksPerBeat;
+      const seeded = createScore({
+        ...base.toJSON(),
+        notes: [
+          {
+            id: "theirs",
+            trackId: "lead",
+            pitch: 72,
+            startTick: 4 * ticksPerBar,
+            durationTicks: 120,
+            velocity: 0.8,
+          },
+        ],
+      } as Parameters<typeof createScore>[0]);
+      const rig = await looping(seeded);
+      expect(rig.session.recordCommand("replace").ok).toBe(true);
+      rig.host.recordingElsewhere = () => "pane B";
+      tap(rig, 500);
+      rig.state.now = PASS_MS + 10;
+      rig.session.tick();
+      await rig.session["flushing"];
+      expect(rig.state.score.notes.map((note) => note.id)).toContain("theirs");
+      expect(rig.state.cards.join("\n")).toContain("pass kept as overdub");
+    });
+
+    test("without a loop, each bar is still one revision", async () => {
+      const rig = await looping(
+        createScore({
+          tempoBpm: 120,
+          bars: 8,
+          tracks: [{ id: "lead", name: "keys", instrument: "piano" }],
+        }),
+      );
+      tap(rig, 500);
+      rig.state.now = BAR_MS + 10;
+      rig.session.tick();
+      await rig.session["flushing"];
+      expect(rig.state.commits).toHaveLength(1);
+      expect(rig.state.commits[0]!.payload.pass).toBeUndefined();
+      expect(rig.session.header().pass).toBeUndefined();
+    });
+  });
+
   test("nothing records while the transport is stopped (free play)", async () => {
     const { session, state } = harness(leadScore());
     await session.enter();

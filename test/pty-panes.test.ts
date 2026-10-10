@@ -493,3 +493,65 @@ test.skipIf(!supported)(
   },
   60_000,
 );
+
+test.skipIf(!supported)(
+  "panes: a recording pane is marked, and replace refuses naming it (§12.8)",
+  async () => {
+    const dir = await workspace();
+    const a = open(dir, "A", ["--new", "--track", "keys"]);
+    await ready(a);
+    await edit(a, "loop 1-2");
+    const b = open(dir, "B", ["pane", "play", "keys"]);
+    await ready(b);
+    await until(() => b.vt.text().includes("PLAY "), "B in play");
+    // B arms overdub; A starts the shared transport, so B is recording.
+    b.terminal.write("r");
+    await send(a, "play");
+    await until(
+      () => [a, b].every((p) => header(p).includes("▶")),
+      "▶ in both",
+      () => screens([a, b]),
+    );
+    await until(
+      () => b.vt.text().includes("↻ 1–2"),
+      "B shows the loop pass",
+      () => b.vt.text(),
+    );
+    await send(a, "pane");
+    await until(
+      () => /B play · keys[^│]*● overdub/.test(a.vt.text()),
+      "B listed as recording",
+      () => a.vt.text(),
+    );
+    // A asks to replace the same track: refused, naming B.
+    await send(a, "keys record replace");
+    await until(
+      () => a.vt.text().includes("pane B is recording keys"),
+      "replace refused naming B",
+      () => screens([a, b]),
+    );
+    expect(a.vt.text()).not.toContain("×2");
+    // R in A's play mode is refused the same way (a key, not a command).
+    a.terminal.write("R");
+    await until(
+      () => a.vt.text().includes("✗ pane B is recording keys"),
+      "R refused",
+      () => a.vt.text(),
+    );
+    // Overdub alongside B is allowed (leave play, type the command).
+    a.terminal.write("\u001b");
+    await until(
+      () => !a.vt.text().includes("PLAY MODE"),
+      "A leaves play",
+      () => a.vt.text(),
+    );
+    await send(a, "keys record");
+    await until(
+      () => a.vt.text().includes("record overdub · keys"),
+      "overdub allowed",
+      () => a.vt.text(),
+    );
+    for (const p of [a, b]) await close(p);
+  },
+  60_000,
+);

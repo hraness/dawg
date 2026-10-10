@@ -62,6 +62,55 @@ export function sweepProgress(
   return age / SWEEP_MS;
 }
 
+/** The TAPE reels, one step per beat (op1-ux §9.1). */
+export const REELS = "◐◓◑◒";
+/** ASCII reels for terminals without unicode. */
+export const ASCII_REELS = "|/-\\";
+/** How long the loop brackets stay bright after each wrap (§9.3). */
+export const LOOP_FLASH_MS = 150;
+
+/**
+ * The TAPE reel glyph: turns one step per transport beat while playing,
+ * stands still when stopped or with `/motion off`. A pure function of the
+ * beat, so two panes on one transport turn together.
+ */
+export function reelGlyph(
+  input: Readonly<{
+    playing: boolean;
+    beat: number;
+    reducedMotion: boolean;
+    unicode: boolean;
+  }>,
+): string {
+  const reels = input.unicode ? REELS : ASCII_REELS;
+  if (!input.playing || input.reducedMotion || !Number.isFinite(input.beat))
+    return reels[0]!;
+  const step = Math.floor(Math.max(0, input.beat));
+  return reels[step % reels.length]!;
+}
+
+/**
+ * Whether the loop brackets flash now: within `LOOP_FLASH_MS` after the
+ * transport wraps the loop (each recording pass closes there). Never on
+ * the very first pass, never stopped, never with `/motion off`.
+ */
+export function loopFlash(
+  input: Readonly<{
+    playing: boolean;
+    /** Transport beat, unwrapped. */
+    beat: number;
+    loopBeats?: number | undefined;
+    bpm: number;
+    reducedMotion: boolean;
+  }>,
+): boolean {
+  const loop = input.loopBeats;
+  if (!input.playing || input.reducedMotion || !loop || loop <= 0) return false;
+  if (!Number.isFinite(input.beat) || input.beat < loop) return false;
+  const since = input.beat % loop;
+  return (since * 60_000) / Math.max(1, input.bpm) < LOOP_FLASH_MS;
+}
+
 /** A glowing lane: its pitch and strength (1 at the press, fading to 0). */
 export type LaneGlow = Readonly<{ pitch: number; strength: number }>;
 
