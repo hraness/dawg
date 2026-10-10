@@ -872,6 +872,10 @@ const OPERATION_TYPES = new Set([
   "setSections",
   "setLoop",
   "setClips",
+  "setPatch",
+  "setPatchNode",
+  "setPatchCable",
+  "setPatchMacro",
 ]);
 
 /** Shape gate before the reducer, which validates every field it reads. */

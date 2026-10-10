@@ -188,6 +188,30 @@ export function receiptParts(
       case "setAutomation":
         settings.push(`${prefix(op.trackId)}${op.parameter} automation`);
         break;
+      case "setPatch":
+      case "setPatchNode":
+      case "setPatchCable":
+      case "setPatchMacro": {
+        const where =
+          "library" in op.target
+            ? `patch ${op.target.library}`
+            : `${prefix(op.target.trackId)}${op.target.fx !== undefined ? `fx ${op.target.fx}` : "patch"}`;
+        const what =
+          op.type === "setPatch"
+            ? op.patch === null
+              ? "removed"
+              : "set"
+            : op.type === "setPatchNode"
+              ? `${op.node === null ? "−" : ""}${op.nodeId}`
+              : op.type === "setPatchCable"
+                ? op.cable === null
+                  ? "unwired"
+                  : `${op.cable.from}→${op.cable.to}`
+                : `macro ${op.macroId}${op.macro === null ? " removed" : ""}`;
+        const text = `${where.trim()} ${what}`;
+        if (!settings.includes(text)) settings.push(text);
+        break;
+      }
       case "updateTrack": {
         if (added.has(op.trackId)) break;
         const fields = Object.entries(op.patch)
