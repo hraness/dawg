@@ -9,7 +9,10 @@ const native = (): AudioBackendInfo => ({
   native: fakeSink(),
   detail: "fake",
 });
-const env = { XDG_CONFIG_HOME: "/nowhere/config", DAWG_CONFIG_DIR: "/nowhere/dawg" };
+const env = {
+  XDG_CONFIG_HOME: "/nowhere/config",
+  DAWG_CONFIG_DIR: "/nowhere/dawg",
+};
 
 describe("dawg doctor", () => {
   test("shows the saved output and input from the audio menu", () => {

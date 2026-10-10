@@ -5423,6 +5423,8 @@ function tapeContext(
 function currentTapeView(value: TrackScore, beat: number): TapeView {
   const view = tapeView({
     ...tapeContext(value, beat),
+    // A pending paste's jump has not landed: its bar's first pass shows.
+    transportBeat: pendingTapeBeat(value) === undefined ? beat : undefined,
     zoom: tape.zoom,
     selected: tape.knobs.selected,
     marks: paneMarks,

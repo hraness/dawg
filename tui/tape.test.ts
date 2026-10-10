@@ -178,4 +178,47 @@ describe("paintTape", () => {
       if (count > 9) expect(text).toMatch(/^ {2}›t12/m);
       else expect(text).toContain(" 7›t7");
     });
+
+  test("an unrolled form ghosts its repeats `░`, ASCII `~`, mono too", () => {
+    // verse (bars 0-1) then chorus (bars 2-3) twice: the second pass ghosts.
+    const per = (bars: number[]) => bars.flatMap((bar) => [bar, bar, bar, bar]);
+    const cellBars = per([0, 1, 2, 3, 2, 3]);
+    const unrolled = view(24, {
+      bars: 4,
+      cellBars,
+      playheadCell: 23,
+      loop: undefined,
+      sections: [
+        { name: "verse", startBar: 0, bars: 2 },
+        { name: "chorus ×2", startBar: 2, bars: 2 },
+      ],
+      ghosts: [...Array(16).fill(false), ...Array(8).fill(true)],
+      passes: [...Array(8).fill(0), ...Array(8).fill(1), ...Array(8).fill(2)],
+      passNames: ["verse", "chorus ×2", "chorus ×2"],
+      rows: [
+        {
+          id: "a",
+          name: "a",
+          muted: false,
+          levels: Array(24).fill(5),
+          marks: "",
+        },
+      ],
+      focused: 0,
+    });
+    for (const theme of ["default", "mono"] as const) {
+      const { lines, layout } = paint(80, 12, unrolled, { theme });
+      const row = lines[layout.rowsY]!.slice(9, 33);
+      expect(row.slice(0, 16)).toBe("▅".repeat(16));
+      expect(row.slice(16, 23)).toBe("░".repeat(7));
+      const sect = lines[1]!.slice(9, 33);
+      expect(sect.startsWith("verse")).toBe(true);
+      expect(sect.slice(8)).toStartWith("chorus");
+      // The ghost pass keeps a leading `░`, then its label, then `░`s.
+      expect(sect.slice(16)).toBe("░chorus ×2".slice(0, 8));
+    }
+    const ascii = paint(80, 12, unrolled, { unicode: false });
+    expect(ascii.lines[ascii.layout.rowsY]!.slice(25, 32)).toBe("~".repeat(7));
+    expect(ascii.lines.join("\n")).not.toMatch(/[░▀▅]/);
+  });
 });

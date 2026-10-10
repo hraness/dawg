@@ -5,8 +5,9 @@
  * density level per cell and track, the sections, the loop range, the
  * playhead and the knob slots. This module only draws it, so the layout is
  * testable without a session. Colour is never the only cue: the playhead is
- * `▼`/`│`, the loop `[══]`, the focused row `›`, a muted row dim `·`, and
- * every knob carries its shape glyph (NO_COLOR and the mono theme).
+ * `▼`/`│`, the loop `[══]`, the focused row `›`, a muted row dim `·`, a
+ * form repeat `░` (ASCII `~`), and every knob carries its shape glyph
+ * (NO_COLOR and the mono theme).
  */
 import type { HitMap } from "./hits.ts";
 import { paintKnobStrip, type KnobIndex, type KnobSlots } from "./knobs.ts";
@@ -43,6 +44,15 @@ export type TapeView = Readonly<{
   /** The loop range (`score.loop`, or the looped section's bars). */
   loop?: Readonly<{ startBar: number; bars: number }> | undefined;
   sections: readonly TapeSection[];
+  /**
+   * An unrolled form (op1-ux §4): per cell, whether it is a later pass of a
+   * section (ghosted `░`, ASCII `~`), and which form pass it belongs to
+   * (-1 for bars the form never plays). Absent without a form.
+   */
+  ghosts?: readonly boolean[] | undefined;
+  passes?: readonly number[] | undefined;
+  /** Each form pass's label (`chorus ×2`), indexed by `passes`. */
+  passNames?: readonly string[] | undefined;
   /** The looped section's name, drawn reversed. */
   loopSection?: string | undefined;
   /** Tempo changes (`♩96` marks); empty when the tempo is constant. */
@@ -62,6 +72,9 @@ export type TapeView = Readonly<{
 /** Glyph for a density level, 1 … 8. */
 const LEVELS = " ▁▂▃▄▅▆▇█";
 const ASCII_LEVELS = " .:-=+*#@";
+/** A later pass of a section on an unrolled form. */
+const GHOST = "░";
+const ASCII_GHOST = "~";
 
 /** Columns of the row gutter: ` 2›bass  `. */
 export const TAPE_GUTTER = 9;
@@ -119,12 +132,18 @@ export function paintTape(
   const left = rect.x + TAPE_GUTTER;
   const bottom = rect.y + rect.height;
   const cellBar = (cell: number): number => view.cellBars[cell] ?? view.bars;
+  const ghost = (cell: number): boolean => view.ghosts?.[cell] ?? false;
+  const passOf = (cell: number): number | undefined => view.passes?.[cell];
   const barStart = (cell: number): boolean =>
-    cell === 0 || cellBar(cell) !== cellBar(cell - 1);
+    cell === 0 ||
+    cellBar(cell) !== cellBar(cell - 1) ||
+    passOf(cell) !== passOf(cell - 1);
   const loopStart = view.loop?.startBar;
   const loopEnd = view.loop ? view.loop.startBar + view.loop.bars : undefined;
+  // The loop brackets its source bars, never a ghost pass of them.
   const inLoop = (cell: number): boolean =>
     loopStart !== undefined &&
+    !ghost(cell) &&
     cellBar(cell) >= loopStart &&
     cellBar(cell) < loopEnd!;
 
@@ -146,10 +165,10 @@ export function paintTape(
     const cell = firstCell + index;
     if (!barStart(cell)) continue;
     const bar = cellBar(cell);
-    const edge = bar === loopStart || bar + 1 === loopEnd;
+    const edge = !ghost(cell) && (bar === loopStart || bar + 1 === loopEnd);
     if (bar % 4 !== 0 && !edge && bar !== view.bars - 1) continue;
     const label = String(bar + 1);
-    const at = index + (bar === loopStart ? 1 : 0);
+    const at = index + (edge && bar === loopStart ? 1 : 0);
     // A number never overwrites a neighbour's digits.
     if (ruler.slice(at, at + label.length).some((ch) => /\d/.test(ch)))
       continue;
@@ -161,7 +180,7 @@ export function paintTape(
   if (view.loop) {
     for (let index = 0; index < cells; index += 1) {
       const cell = firstCell + index;
-      if (barStart(cell) && cellBar(cell) === loopStart) {
+      if (barStart(cell) && cellBar(cell) === loopStart && !ghost(cell)) {
         ruler[index] = "[";
         rulerStyle[index] = roles.knob2;
       }
@@ -190,39 +209,65 @@ export function paintTape(
   options.hits?.add(left, y, cells, 1, { kind: "tape-ruler", left, firstCell });
   y += 1;
 
-  // Sections: `▀name▀▀▀`; the looped one reversed.
+  // Sections: `▀name▀▀▀`; the looped one reversed; a form repeat `░name░`.
   if (y < bottom - FOOTER_ROWS) {
     buffer.text(rect.x, y, " sect", roles.faint);
-    for (let index = 0; index < cells; index += 1) {
-      const bar = cellBar(firstCell + index);
-      const section = view.sections.find(
+    const sectionAt = (cell: number): TapeSection | undefined => {
+      const bar = cellBar(cell);
+      return view.sections.find(
         (item) => bar >= item.startBar && bar < item.startBar + item.bars,
       );
+    };
+    const sectionStyle = (section: TapeSection, cell: number): Style => ({
+      ...accentStyle(theme, `section:${section.name}`),
+      ...(ghost(cell) ? { dim: true } : {}),
+      ...(section.name === view.loopSection && !ghost(cell)
+        ? { reverse: true }
+        : {}),
+    });
+    for (let index = 0; index < cells; index += 1) {
+      const cell = firstCell + index;
+      const section = sectionAt(cell);
       if (!section) {
         buffer.set(left + index, y, " ", undefined);
         continue;
       }
-      const looped = section.name === view.loopSection;
-      const style: Style = {
-        ...accentStyle(theme, `section:${section.name}`),
-        ...(looped ? { reverse: true } : {}),
-      };
-      buffer.set(left + index, y, unicode ? "▀" : "-", style);
-    }
-    for (const section of view.sections) {
-      const start = view.cellBars.indexOf(section.startBar);
-      if (start < 0) continue;
-      const at = Math.max(start, firstCell) - firstCell;
-      if (at >= cells) continue;
-      const end = view.cellBars.findIndex(
-        (bar) => bar >= section.startBar + section.bars,
+      buffer.set(
+        left + index,
+        y,
+        ghost(cell) ? (unicode ? GHOST : ASCII_GHOST) : unicode ? "▀" : "-",
+        sectionStyle(section, cell),
       );
-      const room = (end < 0 ? view.cellBars.length : end) - firstCell - at;
-      const label = truncate(section.name, Math.min(room, cells - at), "");
-      buffer.text(left + at, y, label, {
-        ...accentStyle(theme, `section:${section.name}`),
+    }
+    // A label at each section's first cell (each form pass when unrolled).
+    for (let index = 0; index < cells; index += 1) {
+      const cell = firstCell + index;
+      const section = sectionAt(cell);
+      if (!section) continue;
+      const pass = passOf(cell);
+      const starts =
+        cell === firstCell
+          ? true
+          : sectionAt(cell - 1) !== section || pass !== passOf(cell - 1);
+      if (!starts) continue;
+      let room = 1;
+      while (
+        index + room < cells &&
+        sectionAt(cell + room) === section &&
+        passOf(cell + room) === pass
+      )
+        room += 1;
+      const name =
+        pass !== undefined && pass >= 0
+          ? (view.passNames?.[pass] ?? section.name)
+          : section.name;
+      // A ghost keeps a leading `░` so the repeat reads in mono too.
+      if (ghost(cell) && room <= 2) continue;
+      const offset = ghost(cell) ? 1 : 0;
+      const label = truncate(name, room - offset, "");
+      buffer.text(left + index + offset, y, label, {
+        ...sectionStyle(section, cell),
         bold: true,
-        ...(section.name === view.loopSection ? { reverse: true } : {}),
       });
     }
     y += 1;
@@ -274,6 +319,7 @@ export function paintTape(
     for (let column = 0; column < cells; column += 1) {
       const cell = firstCell + column;
       const level = row.levels[cell] ?? 0;
+      const repeat = ghost(cell);
       const style: Style | undefined =
         column === head
           ? // Over a note the playhead reverses it: visible in mono too.
@@ -281,13 +327,19 @@ export function paintTape(
           : row.muted
             ? roles.mutedNote
             : level > 0
-              ? accent
+              ? repeat
+                ? { ...accent, dim: true }
+                : accent
               : barStart(cell)
                 ? roles.barRule
                 : roles.beatRule;
       const ch =
         level > 0
-          ? levels[Math.min(8, level)]!
+          ? repeat
+            ? unicode
+              ? GHOST
+              : ASCII_GHOST
+            : levels[Math.min(8, level)]!
           : column === head
             ? unicode
               ? "│"
