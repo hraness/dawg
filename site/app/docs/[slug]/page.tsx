@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound, permanentRedirect } from "next/navigation";
 
 import { DocsShell, INSTALL_ID } from "../docs-shell";
-import { docsHref, docsPage, docsPages, docsSource } from "../pages";
+import { docsHref, docsPage, docsPages } from "../pages";
 
 export const dynamicParams = false;
 
@@ -49,7 +49,7 @@ export default async function DocsGuidePage({
       id={page.id}
       title={page.title}
       // A guide's first paragraph is its description, so it is not repeated.
-      description={docsSource === "guides" ? "" : page.description}
+      description=""
     >
       {page.render()}
     </DocsShell>

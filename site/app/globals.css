@@ -265,70 +265,37 @@ a:hover {
   color: var(--muted);
 }
 
-.dawg-player {
-  position: relative;
+/* A real screen from docs/screens, as text. Columns set the font size. */
+.dawg-screen {
+  margin: 0;
+  min-width: 0;
+}
+
+.dawg-screen__frame {
+  container-type: inline-size;
   background: var(--dawg-term-bg);
   overflow: hidden;
 }
 
-.dawg-player__screen {
-  position: relative;
-  aspect-ratio: 80 / 48;
-  width: 100%;
-}
-
-.dawg-player__poster,
-.dawg-player__canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.dawg-player[data-ready] .dawg-player__poster {
-  visibility: hidden;
-}
-
-.dawg-poster {
+.dawg-screen__grid {
   margin: 0;
   padding: 0;
-  height: 100%;
-  display: grid;
-  grid-template-rows: repeat(24, 1fr);
   color: var(--dawg-term-fg);
+  background: var(--dawg-term-bg);
   font-family: "JetBrains Mono", var(--font-mono);
-  /* 80 columns across the frame's width. */
-  font-size: calc(100cqw / 48);
-  line-height: 1;
-  overflow: hidden;
+  font-variant-ligatures: none;
+  /* A mono cell is 0.6em wide: cols cells fill the frame exactly. */
+  font-size: calc(100cqw / (var(--cols) * 0.6));
+  line-height: 1.2;
   white-space: pre;
-  container-type: normal;
-}
-
-.dawg-player__screen {
-  container-type: inline-size;
-}
-
-.dawg-poster__row {
-  display: block;
   overflow: hidden;
+  tab-size: 1;
 }
 
-.dawg-player__toggle {
-  position: absolute;
-  right: 0.6rem;
-  bottom: 0.6rem;
-  padding: 0.3rem 0.65rem;
-  border: 1px solid var(--dawg-term-line);
-  border-radius: 0;
-  background: rgb(24 28 37 / 0.85);
-  color: var(--dawg-term-fg);
-  font: 500 0.75rem/1 var(--font-mono);
-  cursor: pointer;
-}
-
-.dawg-player__toggle:hover {
-  border-color: var(--dawg-clip-3);
+.dawg-screen__row {
+  display: block;
+  height: 1.2em;
+  overflow: hidden;
 }
 
 /* Clip row: the four pillars as solid colored cells, the session view's clips. */
@@ -428,179 +395,55 @@ a:hover {
   min-width: 0;
 }
 
-/* Three windows */
-.dawg-band {
+/* A feature: copy, then the real screens that show it. */
+.dawg-feature {
   display: grid;
-  gap: 2rem;
+  gap: 1.5rem;
 }
 
-@media (min-width: 72rem) {
-  .dawg-band {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    align-items: start;
-  }
+.dawg-feature__copy {
+  max-width: 44rem;
 }
 
-.dawg-band__copy p:first-child {
+.dawg-feature__copy > :first-child {
   margin-top: 0;
 }
 
-.dawg-band__windows {
+.dawg-feature__screens {
   display: grid;
-  gap: 0;
-  border: 2px solid var(--foreground);
-}
-
-.dawg-mini {
-  overflow: hidden;
-  background: var(--dawg-term-bg);
-  color: var(--dawg-term-fg);
-  font: 0.8rem/1.5 var(--font-mono);
-}
-
-.dawg-mini:nth-child(2) {
-  margin-left: clamp(0rem, 4vw, 2rem);
-}
-
-.dawg-mini:nth-child(3) {
-  margin-left: clamp(0rem, 8vw, 4rem);
-}
-
-.dawg-mini__bar {
-  display: flex;
-  justify-content: space-between;
-  padding: 0.3rem 0.7rem;
-  background: var(--dawg-term-chrome);
-  color: rgb(160 168 184);
-  font-size: 0.72rem;
-}
-
-.dawg-mini__body {
-  padding: 0.55rem 0.7rem 0.7rem;
-  overflow-wrap: anywhere;
-}
-
-.dawg-mini__track {
-  font-weight: 700;
-  color: var(--dawg-clip-1);
-}
-
-.dawg-mini:nth-child(2) .dawg-mini__track {
-  color: var(--dawg-clip-2);
-}
-
-.dawg-mini:nth-child(3) .dawg-mini__track {
-  color: var(--dawg-clip-3);
-}
-
-.dawg-mini__note {
-  color: rgb(160 168 184);
-}
-
-/* Turn flow */
-/* Turn flow: four numbered cells on a strong rule. */
-.dawg-flow {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  counter-reset: step;
-  border-top: var(--dawg-rule-strong);
-}
-
-@media (min-width: 40rem) {
-  .dawg-flow {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-.dawg-flow li {
-  counter-increment: step;
-  padding: 1rem 1.25rem 1.25rem 0;
-  border-bottom: var(--dawg-rule);
-}
-
-@media (min-width: 40rem) {
-  .dawg-flow li:nth-child(even) {
-    padding-left: 1.25rem;
-    border-left: var(--dawg-rule);
-  }
-}
-
-.dawg-flow li::before {
-  content: counter(step, decimal-leading-zero);
-  display: block;
-  margin-bottom: 0.75rem;
-  font: 700 0.8rem/1 var(--font-mono);
-}
-
-.dawg-flow h3 {
-  margin: 0 0 0.4rem;
-  font-size: 1.1rem;
-  letter-spacing: -0.01em;
-}
-
-.dawg-flow p {
-  margin: 0;
-  font-size: 0.95rem;
-  color: var(--muted);
-}
-
-/* Feature cells: the design kit's pillar grid on full-strength rules. */
-.dawg-cells.hraness-marketing-pillars {
-  border-block: var(--dawg-rule-strong);
-}
-
-.dawg-cells.hraness-marketing-pillars > div {
-  padding: 1.1rem 1.25rem 1.25rem 0;
-}
-
-.dawg-cells.hraness-marketing-pillars > div + div {
-  padding-left: 1.25rem;
-  border-color: var(--line);
-}
-
-@media (min-width: 48rem) {
-  .dawg-cells.hraness-marketing-pillars {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .dawg-cells.hraness-marketing-pillars > div {
-    border-block-start: var(--dawg-rule);
-    border-inline-start: 0;
-  }
-
-  .dawg-cells.hraness-marketing-pillars > div:nth-child(-n + 2) {
-    border-block-start: 0;
-  }
-
-  .dawg-cells.hraness-marketing-pillars > div:nth-child(odd) {
-    padding-left: 0;
-  }
-
-  .dawg-cells.hraness-marketing-pillars > div:nth-child(even) {
-    border-inline-start: var(--dawg-rule);
-  }
+  gap: 1.5rem;
 }
 
 @media (min-width: 72rem) {
-  .dawg-cells.hraness-marketing-pillars {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+  .dawg-feature__screens:has(> :nth-child(2)) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
 
-  .dawg-cells.hraness-marketing-pillars > div:nth-child(-n + 4) {
-    border-block-start: 0;
-  }
+/* Real screens beside a guide on the web docs. */
+.dawg-docs__screens {
+  display: grid;
+  gap: 1.25rem;
+  margin-block: 1.5rem 2rem;
+  max-width: 52rem;
+}
 
-  .dawg-cells.hraness-marketing-pillars > div:nth-child(n) {
-    padding-left: 1.25rem;
-    border-inline-start: var(--dawg-rule);
-  }
+.dawg-prose .dawg-screen {
+  margin-block: 1.5rem;
+  max-width: 52rem;
+}
 
-  .dawg-cells.hraness-marketing-pillars > div:nth-child(4n + 1) {
-    padding-left: 0;
-    border-inline-start: 0;
-  }
+.dawg-prose .dawg-docs__screens .dawg-screen {
+  margin-block: 0;
+}
+
+/* Comparison table: the topic column is narrow, the two tools share the rest. */
+.dawg-compare tbody th {
+  width: 22%;
+}
+
+.dawg-compare td {
+  width: 39%;
 }
 
 /* Install */

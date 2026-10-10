@@ -5,7 +5,7 @@ import { productName, repoUrl } from "./messaging";
 
 export function SiteHeader({
   active,
-}: Readonly<{ active?: "home" | "docs" | "changelog" }>) {
+}: Readonly<{ active?: "home" | "docs" | "changelog" | "strudel" }>) {
   return (
     <div data-hraness-marketing-preset="minimal" className="dawg-header">
       <a className="dawg-skip" href="#main">
@@ -22,6 +22,11 @@ export function SiteHeader({
             href: "/changelog",
             label: "Changelog",
             current: active === "changelog",
+          },
+          {
+            href: "/vs/strudel",
+            label: "vs Strudel",
+            current: active === "strudel",
           },
           { href: repoUrl, label: "GitHub ↗" },
         ]}

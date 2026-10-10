@@ -1,8 +1,28 @@
 import type { ReactNode } from "react";
 
 import { Markdown } from "../markdown";
-import { guideSummary, listGuides, orderTree } from "./guides";
-import { docsTopics } from "./topics";
+import { Screen } from "../screens/screen";
+import { guideScreens, splitIntro } from "./guide-screens";
+import { guideSummary, guidesDirectory, listGuides } from "./guides";
+
+/** A guide as the TUI has it, with its real screens after the opening paragraph. */
+function GuideBody({ id, body }: Readonly<{ id: string; body: string }>) {
+  const screens = guideScreens[id];
+  if (screens === undefined)
+    return <Markdown source={body} headingOffset={1} />;
+  const { intro, rest } = splitIntro(body);
+  return (
+    <>
+      <Markdown source={intro} headingOffset={1} />
+      <div className="dawg-docs__screens">
+        {screens.map((screen) => (
+          <Screen key={screen} id={screen} />
+        ))}
+      </div>
+      {rest === "" ? null : <Markdown source={rest} headingOffset={1} />}
+    </>
+  );
+}
 
 /** One page in the docs tree, from a TUI guide or a fallback topic. */
 export interface DocsPage {
@@ -19,45 +39,23 @@ export interface DocsTreeNode {
   readonly children: readonly DocsTreeNode[];
 }
 
-/** Where the docs come from, for the page footer and tests. */
-export type DocsSource = "guides" | "topics";
-
-function load(): { source: DocsSource; pages: readonly DocsPage[] } {
+function load(): readonly DocsPage[] {
   const guides = listGuides();
-  if (guides.length > 0) {
-    return {
-      source: "guides",
-      pages: guides.map((guide) => ({
-        id: guide.id,
-        title: guide.title,
-        parent: guide.parent,
-        order: guide.order,
-        description: guideSummary(guide.body),
-        render: () => <Markdown source={guide.body} headingOffset={1} />,
-      })),
-    };
-  }
-  return {
-    source: "topics",
-    pages: orderTree(
-      docsTopics.map((topic, index) => ({
-        id: topic.slug,
-        title: topic.title,
-        parent: null,
-        order: index,
-        description: topic.description,
-        render: topic.body,
-      })),
-    ),
-  };
+  // The docs are the TUI's guides; there is no hand-written fallback to drift.
+  if (guides.length === 0)
+    throw new Error(`no guides in ${guidesDirectory}; the docs need them`);
+  return guides.map((guide) => ({
+    id: guide.id,
+    title: guide.title,
+    parent: guide.parent,
+    order: guide.order,
+    description: guideSummary(guide.body),
+    render: () => <GuideBody id={guide.id} body={guide.body} />,
+  }));
 }
 
-const loaded = load();
-
-export const docsSource: DocsSource = loaded.source;
-
 /** Every docs page in tree order. The install page at /docs is separate. */
-export const docsPages: readonly DocsPage[] = loaded.pages;
+export const docsPages: readonly DocsPage[] = load();
 
 export function docsPage(id: string): DocsPage | undefined {
   return docsPages.find((page) => page.id === id);
