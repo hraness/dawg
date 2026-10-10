@@ -13,7 +13,7 @@
  *   meter remove bar <n> · meter clear
  *   track rate <0.125..8>|<a>/<b>|off          polytempo: the track's tempo ratio
  *   track phase <beats>|off                    start the track later
- *   track cycle <beats>|off                    polymeter: loop the first beats
+ *   track loop <beats>|off                     polymeter: loop the first beats (alias cycle)
  *   track phasing <cycle> [over <beats>] [cycles <n>]   Reich-style drift
  *   track phasing <cycle> [hold <n>] [drift <n>] [shift <beats>]
  *                                              stepped, as in Piano Phase
@@ -323,7 +323,10 @@ function meterCommand(rest: readonly string[]): TimeCommand | undefined {
 }
 
 function trackTimeCommand(rest: readonly string[]): TimeCommand | undefined {
-  const [field, value, ...tail] = rest;
+  // `track loop` is the canonical word for a track's own repeat length;
+  // `track cycle` stays as its alias.
+  const [word, value, ...tail] = rest;
+  const field = word === "loop" ? "cycle" : word;
   if (field === "time")
     return rest.length === 2 && (value === "off" || value === "reset")
       ? { type: "track-time-off" }
@@ -806,7 +809,7 @@ function trackTime(
   } else {
     const ticks = Math.round(command.value * tpb);
     if (command.field === "cycle" && ticks < 1)
-      return { ok: false, message: "track cycle · too short" };
+      return { ok: false, message: "track loop · too short" };
     current[command.field] = ticks;
     message = `${trackId} · ${command.field} ${fmt(command.value)} beat${command.value === 1 ? "" : "s"}`;
     if (command.field === "cycle" && loopTicksOf(score) % ticks !== 0) {

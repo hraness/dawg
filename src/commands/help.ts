@@ -426,8 +426,8 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       },
       { command: "track name <text>", summary: "rename this track" },
       {
-        command: "track rate|phase|cycle <n> | off",
-        summary: "polytempo · track rate 3/2 · track cycle 3",
+        command: "track rate|phase|loop <n> | off",
+        summary: "polytempo · track rate 3/2 · track loop 3",
       },
       {
         command: "track phasing <beats> [over <beats>|hold <n>]",
@@ -892,7 +892,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   pattern: "pattern <drum> <beats...> | every <step> · pattern kick every 1",
   clear: "clear · clear <drum> · clear [<lane>] automation",
   track:
-    "track <name> · track drums · track rm <name> · track move <name> <position> · track rate <0.125..8>|<a>/<b>|off · track phase <beats> · track cycle <beats> · track phasing <beats> [over <beats>]",
+    "track <name> · track drums · track rm <name> · track move <name> <position> · track rate <0.125..8>|<a>/<b>|off · track phase <beats> · track loop <beats> · track phasing <beats> [over <beats>]",
   tracks: "tracks",
   sessions: "/sessions",
   resume: "/resume [<n>|<name>|<id>]",

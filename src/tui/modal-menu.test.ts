@@ -56,7 +56,7 @@ describe("Sound › mallets", () => {
     // 12 core presets, the 0.6.1 bells and drums, then the Gamelan group.
     expect(labels.length).toBe(19);
     expect(labels[0]).toStartWith("marimba");
-    expect(labels.at(-1)).toStartWith("Gamelan");
+    expect(labels.at(-1)).toStartWith("gamelan");
     select(menu, ctx, "vibes");
     expect(menu.key("\r", ctx)).toEqual({
       type: "run",

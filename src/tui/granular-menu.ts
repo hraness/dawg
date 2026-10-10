@@ -263,7 +263,7 @@ export function granularMenuNodes(
   return nodes;
 }
 
-/** Sound > browse sounds > Granular: one row per preset. */
+/** Sound › instruments › granular: one row per preset. */
 export function granularBrowseNodes(): GranularMenuNode[] {
   return GRANULAR_PRESET_NAMES.map((name) => ({
     kind: "action",

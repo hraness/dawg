@@ -1494,7 +1494,7 @@ meter 7/8 at bar 5           meter change on a bar line, lasting until the next 
 meter remove bar 5 | meter clear
 track rate 3/2               polytempo: the focused track plays at 1.5× the song tempo (0.125..8 or a/b)
 track phase 0.5              start the track half a beat later
-track cycle 3                polymeter: loop the track's first 3 beats against the song's bars
+track loop 3                 polymeter: loop the track's first 3 beats against the song's bars
 track phasing 3 [over 48]    continuous drift: a 3-beat cycle gains one cycle every 48 beats, then realigns (needs a loop of whole spans)
 track phasing 3 hold 8       stepped, as in Piano Phase: hold in step 8 cycles, move a sixteenth ahead over 2 (drift 2, shift 0.25)
 track time off               follow the song again

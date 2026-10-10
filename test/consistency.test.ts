@@ -50,17 +50,7 @@ import {
  * spelling at the submit fallback) makes the slash optional everywhere;
  * delete each line as it starts to parse.
  */
-const KNOWN_SLASH_GAPS: readonly string[] = [
-  // Bare window verbs: the prompt bar retries them with the slash at
-  // submit (grammar WINDOW_VERBS), which `accepts` does not model.
-  "click 50%",
-  "guide voice",
-  "menu tuning",
-  "sessions",
-  "status",
-  "transcript",
-  "try fx reverb mix 0.6",
-];
+const KNOWN_SLASH_GAPS: readonly string[] = [];
 
 /**
  * Doors that do not open a topic yet, as `door id`. The language lane (D1,
@@ -92,7 +82,7 @@ const CANONICAL_VERBS: Readonly<Record<string, string>> = {
  * `loop`). The test fails as soon as the canonical form parses: flip the
  * rows in src/tui/menu.ts, then delete the line here.
  */
-const KNOWN_ALIAS_ROWS: readonly string[] = ["scale", "track cycle"];
+const KNOWN_ALIAS_ROWS: readonly string[] = [];
 
 /** A trailing `(note)` is commentary, not part of the command. */
 const stripNote = (text: string) => text.replace(/\s*\([^)]*\)\s*$/, "").trim();

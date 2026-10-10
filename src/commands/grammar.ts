@@ -13,6 +13,7 @@
 
 import { HELP_SECTIONS, USAGE } from "./help.ts";
 import { nearest } from "./nearest.ts";
+import { parseTuningCommand } from "./tuning.ts";
 
 /** Words that remove a thing: `section rm verse` ≡ `section remove verse`. */
 export const REMOVE_WORDS: readonly string[] = ["remove", "rm", "delete"];
@@ -52,6 +53,15 @@ const REWRITES: readonly ((words: readonly string[]) => string | undefined)[] =
           ? "scale"
           : "scale list"
         : undefined,
+    // key <mode> keeps the tonic (`key dorian`, `key hijaz`), as scale does.
+    (w) => {
+      if (w[0] !== "key" || w.length < 2) return undefined;
+      const scale = ["scale", ...w.slice(1)].join(" ");
+      const parsed = parseTuningCommand(scale);
+      return parsed?.type === "scale-set" && parsed.scale !== undefined
+        ? scale
+        : undefined;
+    },
     // chords idiom <name> ≡ chords style <name>.
     (w) =>
       w[0] === "chords" && w[1] === "idiom"

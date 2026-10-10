@@ -86,7 +86,7 @@ export function parseModalCommand(prompt: string): ModalCommand | undefined {
   if (rest.length === 1 && rest[0] === "gamelan")
     return {
       type: "modal-hint",
-      message: `gamelan · ${GAMELAN_PRESETS.join(" ")} · modal gangsa to start · pair two tracks with modal pair <track> · tuning slendro or pelog · ctrl-k Sound › browse sounds › Mallets and bells › Gamelan`,
+      message: `gamelan · ${GAMELAN_PRESETS.join(" ")} · modal gangsa to start · pair two tracks with modal pair <track> · tuning slendro or pelog · ctrl-k Sound › instruments › mallets › gamelan`,
     };
   if (rest[0] === "preset") {
     const preset = rest.length === 2 ? modalPresetFor(rest[1]!) : undefined;

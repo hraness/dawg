@@ -507,7 +507,7 @@ describe("edit menu", () => {
     select(menu, ctx, "tonic");
     expect(menu.key(RIGHT, ctx)).toEqual({
       type: "run",
-      command: "scale Eb hijaz",
+      command: "key Eb hijaz",
     });
     menu.show(ctx, "chords");
     select(menu, ctx, "key tonic");

@@ -3347,7 +3347,7 @@ function songTuningNodes(context: MenuContext): MenuNode[] {
       help: "the song scale: modes, minors, pentatonics, maqam, ragas, Messiaen",
       value: scale,
       options: [...MODE_NAMES, ...SCALE_NAMES],
-      command: (option) => `scale ${option}`,
+      command: (option) => `key ${option}`,
     },
     {
       kind: "choice",
@@ -3355,7 +3355,7 @@ function songTuningNodes(context: MenuContext): MenuNode[] {
       help: "the song key's tonic; keeps the scale",
       value: tonic,
       options: TONICS,
-      command: (option) => `scale ${option} ${scale}`,
+      command: (option) => `key ${option} ${scale}`,
     },
     {
       kind: "action",
@@ -3366,7 +3366,7 @@ function songTuningNodes(context: MenuContext): MenuNode[] {
     {
       kind: "action",
       label: "list scales",
-      command: "scale list",
+      command: "key list",
       help: "every mode and scale, by family",
     },
   ];

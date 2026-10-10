@@ -133,13 +133,13 @@ test.skipIf(!supported)(
       await t.send("\u001b");
       await t.until(() => t.vt.text().includes(" NOW "), "prompt again");
 
-      // ctrl-k → Sound › browse sounds › Mallets and bells › Gamelan → gangsa.
+      // ctrl-k → Sound › instruments › mallets › gamelan → gangsa.
       await t.send("/menu sounds\r");
       await t.until(() => t.vt.text().includes("mallets"), "mallets");
       await t.send("/mallets");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("Gamelan"), "gamelan group");
-      await t.send("/Gamelan");
+      await t.until(() => t.vt.text().includes("bronzes"), "gamelan group");
+      await t.send("/gamelan");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("Balinese"), "bronzes");
       await t.send("/gangsa");

@@ -284,9 +284,6 @@ const SOURCES: Source[] = [
 const LOSER_CEILINGS: Readonly<
   Record<string, Readonly<Record<string, number>>>
 > = {
-  help: {
-    cycle: 2,
-  },
   menu: {
     cycle: 1,
   },
@@ -295,7 +292,6 @@ const LOSER_CEILINGS: Readonly<
   "DAWG.md": {
     "drum kit": 1,
     login: 2,
-    cycle: 1,
     region: 1,
     assistant: 3,
     "track <rig>": 4,
@@ -314,12 +310,6 @@ const LOSER_CEILINGS: Readonly<
   "core/styles/electronic.ts": { genre: 1 },
   "core/styles/pop.ts": { genre: 1 },
   "core/tuning.ts": { temperament: 1 },
-  "src/commands/help.ts": {
-    cycle: 2,
-  },
-  "src/commands/modal.ts": { "browse sounds": 1 },
-  "src/commands/time.ts": { cycle: 1 },
-  "src/tui/menu-time.ts": { cycle: 2 },
   "src/agent/agent.ts": { genre: 1 },
   "src/agent/command-agent.ts": { genre: 1 },
   "src/agent/drum-tools.ts": { "drum kit": 1, "drum pattern": 1, genre: 1 },
