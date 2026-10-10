@@ -480,11 +480,11 @@ Usage:
   dawg --import <file> --export <file>   convert a loop file (no session)
   dawg sessions
   ${wrapUsage(RENDER_USAGE.replace(/^usage: /, ""), 76, "               ")}
-  dawg init [dir]      project files: song.ts, tracks/<slug>/track.ts, .dawg/sdk
+  dawg init [dir]      song.ts, tracks/<slug>/track.ts and .dawg/sdk
   dawg check           typecheck + evaluate the project; exit 1 on problems
   dawg <command> --help  usage: sessions render init check media model
   dawg doctor          audio backend, native sink and devices
-  dawg media doctor|download|stems|analyze|notes|sample|lyrics …  (dawg media --help)
+  dawg media doctor|download|stems|analyze|notes|sample|lyrics  (--help)
   dawg --version
 
 Display options:
@@ -494,7 +494,7 @@ Display options:
 
 Prompt:
   Enter submit · Shift-Enter newline · Alt-Enter next · Ctrl-Q now / next
-  Ctrl-Z undo · Ctrl-Y redo · Ctrl-O transcript · Esc cancel/close · Ctrl-C exit
+  Ctrl-Z undo · Ctrl-Y redo · Ctrl-O transcript · Esc close · Ctrl-C exit
   Space on an empty prompt toggles playback
 
 Commands (bare music words; app commands take a slash):
@@ -503,7 +503,7 @@ ${helpText()}
 Agent (optional; the choice is saved and reused until you log out):
   dawg model key               find existing setups and pick a provider
   dawg model key gateway|openrouter|codex|claude
-  dawg model [alias]           pick a model, with the estimated cost per prompt
+  dawg model [alias]           pick a model, with the cost per prompt
   dawg logout [provider] · dawg auth status [--check]
 Unrecognized requests go to the agent once a provider is configured
 (DAWG_PROVIDER=gateway|openrouter|codex|claude|auto, DAWG_MODEL=<alias>;

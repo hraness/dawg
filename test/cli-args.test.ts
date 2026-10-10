@@ -199,7 +199,7 @@ test("a demo frame in a fresh directory creates no .dawg/", async () => {
   expect(await readdir(dir)).toEqual([]);
 });
 
-test("dawg --help lists every flag render accepts, render wrapped to 78 columns", async () => {
+test("dawg --help lists every flag render accepts, every line within 78 columns", async () => {
   const { RENDER_USAGE } = await import("../src/render.ts");
   const help = (await run(await workspace(), ["--help"])).stdout;
   for (const flag of RENDER_USAGE.match(/--[a-z-]+/g) ?? [])
@@ -213,4 +213,6 @@ test("dawg --help lists every flag render accepts, render wrapped to 78 columns"
   );
   expect(render.length).toBeGreaterThan(1);
   expect(render.every((line) => line.length <= 78)).toBe(true);
+  // Every line fits an 80-column terminal with a margin.
+  expect(help.split("\n").filter((line) => line.length > 78)).toEqual([]);
 });

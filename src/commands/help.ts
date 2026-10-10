@@ -59,7 +59,7 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       },
       {
         command:
-          "grain <preset> | <param> <value> | on [voice V] | src synth:<name>|voice V | reset | off",
+          "grain <preset> | <param> <value> | on [voice V] | src synth:<name>|voice V",
         summary:
           "granular cloud · grain cloud · grain scan 0.2 · track swarm-2 · grain presets",
       },
@@ -78,7 +78,7 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       },
       {
         command:
-          "tonewheel [<drawbars>] | combo [<tabs>] [<register>] | pipe [<stops>] [<row> <value> …]",
+          "tonewheel [<drawbars>] | combo [<tabs>] [<register>] | pipe [<stops>]",
         summary:
           "organs · tonewheel 888800008 perc 3rd · gospel · combo 08880 flute · pipe plenum · keys perc 3rd",
       },
@@ -234,7 +234,7 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       },
       {
         command:
-          "vocoder [preset] | src <track> | <param> <value|reset> | reset | off | presets",
+          "vocoder [preset] | src <track> | <param> <value|reset> | off | presets",
         summary:
           "vocode the focused voice onto a synth (classic robot talkbox choir glass whisper smear lofi) · help vocoder lists params",
       },
@@ -246,7 +246,7 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       { command: "vocal", summary: "voice tools: lists every verb" },
       {
         command:
-          "clip [id] gain -3 | gain by -3 | fade .01 .2 | fade in .01 | move 9 | split 7",
+          "clip [id] gain -3 | gain by -3 | fade .01 .2 | fade in .01 | split 7",
         summary: "edit an audio clip (dB, seconds, 1-based bars)",
       },
       {
