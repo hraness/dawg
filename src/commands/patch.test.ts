@@ -27,7 +27,8 @@ function base(): TrackScore {
   return result.next!;
 }
 
-const run = (line: string, score = base()) => applyPatchBatch(score, "lead", [line]);
+const run = (line: string, score = base()) =>
+  applyPatchBatch(score, "lead", [line]);
 
 describe("parse", () => {
   const forms: Record<string, unknown> = {
@@ -53,16 +54,32 @@ describe("parse", () => {
       to: "vcf.cutoff",
       amount: 0.4,
     },
-    "patch wire tone.out vcf.in": { type: "patch-wire", from: "tone.out", to: "vcf.in" },
-    "patch unwire tone.out vcf.in": { type: "patch-unwire", a: "tone.out", b: "vcf.in" },
-    "patch knob cutoff 900": { type: "patch-knob", macro: "cutoff", value: 900 },
+    "patch wire tone.out vcf.in": {
+      type: "patch-wire",
+      from: "tone.out",
+      to: "vcf.in",
+    },
+    "patch unwire tone.out vcf.in": {
+      type: "patch-unwire",
+      a: "tone.out",
+      b: "vcf.in",
+    },
+    "patch knob cutoff 900": {
+      type: "patch-knob",
+      macro: "cutoff",
+      value: 900,
+    },
     "patch rate lfo global": { type: "patch-rate", id: "lfo", rate: "global" },
     "patch rm vcf": { type: "patch-rm", id: "vcf" },
     "patch convert": { type: "patch-convert" },
     "patch detach": { type: "patch-detach" },
     "patch load acid-bass": { type: "patch-load", source: "acid-bass" },
     "patch save mine": { type: "patch-save", name: "mine", scope: "project" },
-    "patch save mine --user": { type: "patch-save", name: "mine", scope: "user" },
+    "patch save mine --user": {
+      type: "patch-save",
+      name: "mine",
+      scope: "user",
+    },
     "patch show": { type: "patch-show" },
     "patch nodes filter": { type: "patch-nodes", family: "filter" },
     "patch wire in.audio crush.in --fx wide": {
@@ -124,7 +141,9 @@ describe("errors name the port and the nearest word", () => {
     expect(run("patch add oscc").message).toContain("did you mean osc?");
   });
   test("an enum value lists the choices", () => {
-    expect(run("patch set vcf mode=lpp").message).toContain("lp, hp, bp, notch");
+    expect(run("patch set vcf mode=lpp").message).toContain(
+      "lp, hp, bp, notch",
+    );
   });
   test("an unknown macro", () => {
     expect(run("patch knob nope 1").message).toContain("no macro nope");
@@ -155,9 +174,11 @@ describe("apply", () => {
     const a = run("patch add lfo").next!;
     const b = run("patch add lfo").next!;
     const id = (score: TrackScore) =>
-      (score.tracks[0]!.patch as unknown as { nodes: { id: string; type: string }[] }).nodes.find(
-        (node) => node.type === "lfo",
-      )!.id;
+      (
+        score.tracks[0]!.patch as unknown as {
+          nodes: { id: string; type: string }[];
+        }
+      ).nodes.find((node) => node.type === "lfo")!.id;
     expect(id(a)).toMatch(/^lfo-/);
     expect(id(a)).not.toBe(id(b));
   });
@@ -190,11 +211,19 @@ describe("apply", () => {
   });
 
   test("show and nodes read without a revision", () => {
-    const show = applyPatchCommand(base(), "lead", parsePatchCommand("patch show")!);
+    const show = applyPatchCommand(
+      base(),
+      "lead",
+      parsePatchCommand("patch show")!,
+    );
     expect(show.ok).toBe(true);
     expect(show.next).toBeUndefined();
     expect(show.message).toContain("patch wire tone.out vcf.in");
-    const nodes = applyPatchCommand(base(), "lead", parsePatchCommand("patch nodes filter")!);
+    const nodes = applyPatchCommand(
+      base(),
+      "lead",
+      parsePatchCommand("patch nodes filter")!,
+    );
     expect(nodes.message).toContain("svf");
   });
 
@@ -244,7 +273,10 @@ describe("apply", () => {
   test("save --user comes back as an effect for the window to write", () => {
     const result = run("patch save mine --user");
     expect(result.ok, result.message).toBe(true);
-    expect(result.effects?.[0]).toMatchObject({ kind: "save-user", name: "mine" });
+    expect(result.effects?.[0]).toMatchObject({
+      kind: "save-user",
+      name: "mine",
+    });
   });
 });
 

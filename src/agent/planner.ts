@@ -196,12 +196,40 @@ function parseOperation(value: unknown): ScoreOperation {
         patch: value.patch === null ? null : (value.patch as TrackPatchValue),
         ...index,
       };
-    if (value.type === "setPatchNode" && isShortId(value.nodeId) && (value.node === null || isRecord(value.node)))
-      return { type: "setPatchNode", target, nodeId: value.nodeId, node: value.node as PatchNode | null };
-    if (value.type === "setPatchCable" && isShortId(value.cableId) && (value.cable === null || isRecord(value.cable)))
-      return { type: "setPatchCable", target, cableId: value.cableId, cable: value.cable as Cable | null };
-    if (value.type === "setPatchMacro" && isShortId(value.macroId) && (value.macro === null || isRecord(value.macro)))
-      return { type: "setPatchMacro", target, macroId: value.macroId, macro: value.macro as Macro | null, ...index };
+    if (
+      value.type === "setPatchNode" &&
+      isShortId(value.nodeId) &&
+      (value.node === null || isRecord(value.node))
+    )
+      return {
+        type: "setPatchNode",
+        target,
+        nodeId: value.nodeId,
+        node: value.node as PatchNode | null,
+      };
+    if (
+      value.type === "setPatchCable" &&
+      isShortId(value.cableId) &&
+      (value.cable === null || isRecord(value.cable))
+    )
+      return {
+        type: "setPatchCable",
+        target,
+        cableId: value.cableId,
+        cable: value.cable as Cable | null,
+      };
+    if (
+      value.type === "setPatchMacro" &&
+      isShortId(value.macroId) &&
+      (value.macro === null || isRecord(value.macro))
+    )
+      return {
+        type: "setPatchMacro",
+        target,
+        macroId: value.macroId,
+        macro: value.macro as Macro | null,
+        ...index,
+      };
   }
   if (value.type === "setMaster" && value.master !== undefined)
     return { type: "setMaster", master: normalizeMaster(value.master) ?? null };
