@@ -179,8 +179,144 @@ Apple M-series, macOS, bun 1.3.14, engine at 22.05 kHz, device at 48 kHz:
 
 ## Changes
 
-Each row: what changed, which metrics moved, and the PR.
+Each row: what changed, which metric moved (median), and the PR. Every
+change below leaves the 16-bit PCM of the bench presets byte-identical (I
+hashed it before and after), so no golden was re-pinned.
 
-| change                                                     | metric                    |            before |   after | PR           |
-| ---------------------------------------------------------- | ------------------------- | ----------------: | ------: | ------------ |
-| native sink backend (cpal callback, 15 ms lead, 5 ms pump) | key → heard, loopback p50 | 78–89 ms (ffplay) | 17.0 ms | sink backend |
+| change                                                                                                  | metric                                      |      before |       after | PR         |
+| ------------------------------------------------------------------------------------------------------- | ------------------------------------------- | ----------: | ----------: | ---------- |
+| default queue lead 200 → 100 ms, never grown for off-thread renders                                     | typed command → audible                     |      229 ms |      113 ms | #145       |
+|                                                                                                         | fader step → audible                        |     93.7 ms |     78.1 ms | #145       |
+| project sync debounce 150 → 40 ms                                                                       | song.ts saved → TUI updated                 |      222 ms |     86.5 ms | #145       |
+| play-mode warm pre-renders every voice, not only sing                                                   | first key render after warm, granular swarm |     46.0 ms |     15.4 ms | #145       |
+|                                                                                                         | same, bowed cello                           |     22.3 ms |     6.39 ms | #145       |
+|                                                                                                         | same, grand                                 |     10.8 ms |     3.72 ms | #145       |
+|                                                                                                         | same, sing choir                            |     21.6 ms |     10.8 ms | #145, #146 |
+|                                                                                                         | same, saw + filter, reverb, delay           |     32.6 ms |     15.1 ms | #145       |
+|                                                                                                         | same, tonewheel                             |     14.3 ms |     5.92 ms | #145       |
+| vocoder hot loops in JIT-friendly helpers, allocation-free formant response, sing loudness aim memoised | render vocoder, 48 kHz                      |  209 ms/bar | 51.9 ms/bar | #146       |
+|                                                                                                         | render sing choir, 48 kHz                   | 76.7 ms/bar | 29.3 ms/bar | #146       |
+| FFT stages walk memory in order; legacy waves pick their tone once per note                             | render reverb hall, 48 kHz                  | 50.2 ms/bar | 12.6 ms/bar | #146       |
+|                                                                                                         | render PSOLA, 48 kHz                        | 38.0 ms/bar | 13.7 ms/bar | #146       |
+|                                                                                                         | render reverb algo, 48 kHz                  | 14.0 ms/bar | 7.63 ms/bar | #146       |
+|                                                                                                         | key render, warm, saw + fx                  |     15.5 ms |     15.1 ms | #146       |
+| bow friction `** -4` → reciprocal squared twice; Thiran Newton step with the closed-form derivative     | render cellos section, 48 kHz               | 72.6 ms/bar | 48.7 ms/bar | #146       |
+
+Unchanged on purpose: in these PTY runs key → audible stays about 65 ms
+because the ffplay path's 60 ms lead (`PLAY_LEAD_MS`) dominates it. The
+native sink (#147, "Heard latency" above) cuts that lead to 15 ms. Frames
+already cost about 1 ms at 200×50, startup is module loading (see below),
+and the patch runner was not changed.
+
+## After (origin/main 8b85a0d, same machine)
+
+Calibration loop 1.77 ms.
+
+| metric                                                        |      median |         p95 |   n | id                              |
+| ------------------------------------------------------------- | ----------: | ----------: | --: | ------------------------------- |
+| startup → first frame                                         |      123 ms |      138 ms |  10 | `startup.frame`                 |
+| startup → first playable note heard                           |      256 ms |      271 ms |  10 | `startup.note`                  |
+| key → audio bytes, first press, sine                          |     2.81 ms |     2.81 ms |   1 | `key.bytes.cold.sine`           |
+| key → audio bytes, later, sine                                |     0.42 ms |     2.38 ms |  12 | `key.bytes.warm.sine`           |
+| key → audible, first press, sine                              |     56.7 ms |     56.7 ms |   1 | `key.cold.sine`                 |
+| key → audible, later, sine                                    |     65.7 ms |     77.4 ms |  12 | `key.warm.sine`                 |
+| key → audio bytes, first press, saw                           |     2.43 ms |     2.43 ms |   1 | `key.bytes.cold.saw`            |
+| key → audio bytes, later, saw                                 |     0.42 ms |     1.51 ms |  12 | `key.bytes.warm.saw`            |
+| key → audible, first press, saw                               |     76.4 ms |     76.4 ms |   1 | `key.cold.saw`                  |
+| key → audible, later, saw                                     |     66.1 ms |     79.7 ms |  12 | `key.warm.saw`                  |
+| key → audio bytes, first press, grand                         |     3.81 ms |     3.81 ms |   1 | `key.bytes.cold.grand`          |
+| key → audio bytes, later, grand                               |     0.40 ms |     2.33 ms |  12 | `key.bytes.warm.grand`          |
+| key → audible, first press, grand                             |     75.7 ms |     75.7 ms |   1 | `key.cold.grand`                |
+| key → audible, later, grand                                   |     66.0 ms |     80.3 ms |  12 | `key.warm.grand`                |
+| key → audio bytes, first press, tonewheel                     |     3.82 ms |     3.82 ms |   1 | `key.bytes.cold.tonewheel`      |
+| key → audio bytes, later, tonewheel                           |     2.78 ms |     6.39 ms |  12 | `key.bytes.warm.tonewheel`      |
+| key → audible, first press, tonewheel                         |     67.9 ms |     67.9 ms |   1 | `key.cold.tonewheel`            |
+| key → audible, later, tonewheel                               |     73.0 ms |     80.0 ms |  12 | `key.warm.tonewheel`            |
+| key → audio bytes, first press, bowed-cello                   |     4.83 ms |     4.83 ms |   1 | `key.bytes.cold.bowed-cello`    |
+| key → audio bytes, later, bowed-cello                         |     0.44 ms |     3.73 ms |  12 | `key.bytes.warm.bowed-cello`    |
+| key → audible, first press, bowed-cello                       |     73.3 ms |     73.3 ms |   1 | `key.cold.bowed-cello`          |
+| key → audible, later, bowed-cello                             |     67.6 ms |     80.4 ms |  12 | `key.warm.bowed-cello`          |
+| key → audio bytes, first press, sing-choir                    |     4.72 ms |     4.72 ms |   1 | `key.bytes.cold.sing-choir`     |
+| key → audio bytes, later, sing-choir                          |     3.92 ms |     19.5 ms |  12 | `key.bytes.warm.sing-choir`     |
+| key → audible, first press, sing-choir                        |     68.5 ms |     68.5 ms |   1 | `key.cold.sing-choir`           |
+| key → audible, later, sing-choir                              |     78.0 ms |     85.3 ms |  12 | `key.warm.sing-choir`           |
+| key → audio bytes, first press, granular-swarm                |     4.74 ms |     4.74 ms |   1 | `key.bytes.cold.granular-swarm` |
+| key → audio bytes, later, granular-swarm                      |     0.72 ms |     22.5 ms |   6 | `key.bytes.warm.granular-swarm` |
+| key → audible, first press, granular-swarm                    |     81.4 ms |     81.4 ms |   1 | `key.cold.granular-swarm`       |
+| key → audible, later, granular-swarm                          |     72.6 ms |     88.3 ms |   6 | `key.warm.granular-swarm`       |
+| typed command → receipt                                       |     47.4 ms |     53.2 ms |  10 | `command.receipt`               |
+| typed command → new audio bytes                               |     13.5 ms |     29.8 ms |  10 | `command.bytes`                 |
+| typed command → audible change                                |      113 ms |      129 ms |  10 | `command.audible`               |
+| fader step → audible change                                   |     78.1 ms |     96.4 ms |  10 | `fader.audible`                 |
+| song.ts saved → TUI updated                                   |     86.5 ms |      152 ms |  10 | `sync.file`                     |
+| agent: Enter → first token shown                              |     25.4 ms |     61.5 ms |  10 | `agent.first-token`             |
+| frame time, playing, 80x24                                    |     0.40 ms |     0.48 ms | 500 | `frame.80x24`                   |
+| bytes per frame, 80x24                                        |    0.93 KiB |    1.56 KiB | 500 | `frame.bytes.80x24`             |
+| frame time, playing, 200x50                                   |     1.32 ms |     1.44 ms | 500 | `frame.200x50`                  |
+| bytes per frame, 200x50                                       |    1.91 KiB |    5.46 KiB | 500 | `frame.bytes.200x50`            |
+| render vocoder, 22.05 kHz                                     | 27.9 ms/bar | 32.9 ms/bar |   5 | `render.vocoder.22.05k`         |
+| render vocoder, 48 kHz                                        | 51.9 ms/bar | 52.0 ms/bar |   5 | `render.vocoder.48k`            |
+| render sing-choir, 22.05 kHz                                  | 13.9 ms/bar | 15.0 ms/bar |   5 | `render.sing-choir.22.05k`      |
+| render sing-choir, 48 kHz                                     | 29.3 ms/bar | 29.5 ms/bar |   5 | `render.sing-choir.48k`         |
+| render cellos-section, 22.05 kHz                              | 23.6 ms/bar | 24.4 ms/bar |   5 | `render.cellos-section.22.05k`  |
+| render cellos-section, 48 kHz                                 | 48.7 ms/bar | 48.8 ms/bar |   5 | `render.cellos-section.48k`     |
+| render granular-swarm, 22.05 kHz                              | 18.5 ms/bar | 24.8 ms/bar |   5 | `render.granular-swarm.22.05k`  |
+| render granular-swarm, 48 kHz                                 | 40.4 ms/bar | 40.7 ms/bar |   5 | `render.granular-swarm.48k`     |
+| render psola, 22.05 kHz                                       | 6.34 ms/bar | 6.36 ms/bar |   5 | `render.psola.22.05k`           |
+| render psola, 48 kHz                                          | 13.7 ms/bar | 13.9 ms/bar |   5 | `render.psola.48k`              |
+| render reverb-hall, 22.05 kHz                                 | 4.80 ms/bar | 7.90 ms/bar |   5 | `render.reverb-hall.22.05k`     |
+| render reverb-hall, 48 kHz                                    | 12.6 ms/bar | 12.7 ms/bar |   5 | `render.reverb-hall.48k`        |
+| render reverb-algo, 22.05 kHz                                 | 3.67 ms/bar | 4.90 ms/bar |   5 | `render.reverb-algo.22.05k`     |
+| render reverb-algo, 48 kHz                                    | 7.63 ms/bar | 7.92 ms/bar |   5 | `render.reverb-algo.48k`        |
+| key render, first press, no pre-warm, saw                     |     6.30 ms |     6.40 ms |   5 | `live.cold.saw`                 |
+| key render, first press after play-mode warm, saw             |     2.93 ms |     3.09 ms |   5 | `live.prewarmed.saw`            |
+| key render, new pitch, warm, saw                              |     1.02 ms |     3.24 ms |  60 | `live.warm.saw`                 |
+| key render, first press, no pre-warm, saw-fx                  |     30.1 ms |     30.7 ms |   5 | `live.cold.saw-fx`              |
+| key render, first press after play-mode warm, saw-fx          |     15.1 ms |     16.1 ms |   5 | `live.prewarmed.saw-fx`         |
+| key render, new pitch, warm, saw-fx                           |     15.1 ms |     20.3 ms |  60 | `live.warm.saw-fx`              |
+| key render, first press, no pre-warm, grand                   |     10.7 ms |     10.8 ms |   5 | `live.cold.grand`               |
+| key render, first press after play-mode warm, grand           |     3.72 ms |     4.58 ms |   5 | `live.prewarmed.grand`          |
+| key render, new pitch, warm, grand                            |     4.10 ms |     10.0 ms |  60 | `live.warm.grand`               |
+| key render, first press, no pre-warm, tonewheel               |     13.7 ms |     13.9 ms |   5 | `live.cold.tonewheel`           |
+| key render, first press after play-mode warm, tonewheel       |     5.92 ms |     6.06 ms |   5 | `live.prewarmed.tonewheel`      |
+| key render, new pitch, warm, tonewheel                        |     4.05 ms |     6.75 ms |  60 | `live.warm.tonewheel`           |
+| key render, first press, no pre-warm, bowed-cello             |     21.0 ms |     22.4 ms |   5 | `live.cold.bowed-cello`         |
+| key render, first press after play-mode warm, bowed-cello     |     6.39 ms |     6.48 ms |   5 | `live.prewarmed.bowed-cello`    |
+| key render, new pitch, warm, bowed-cello                      |     5.84 ms |     8.26 ms |  60 | `live.warm.bowed-cello`         |
+| key render, first press, no pre-warm, sing-choir              |     59.6 ms |     60.0 ms |   5 | `live.cold.sing-choir`          |
+| key render, first press after play-mode warm, sing-choir      |     10.8 ms |     11.5 ms |   5 | `live.prewarmed.sing-choir`     |
+| key render, new pitch, warm, sing-choir                       |     9.41 ms |     13.2 ms |  60 | `live.warm.sing-choir`          |
+| key render, first press, no pre-warm, granular-swarm          |     43.4 ms |     44.6 ms |   5 | `live.cold.granular-swarm`      |
+| key render, first press after play-mode warm, granular-swarm  |     15.4 ms |     16.1 ms |   5 | `live.prewarmed.granular-swarm` |
+| key render, new pitch, warm, granular-swarm                   |     7.26 ms |     22.2 ms |  60 | `live.warm.granular-swarm`      |
+| patch runner, flat interpreter (16 voices x 12 nodes, 48 kHz) |     13.3 ns |     13.7 ns |   7 | `patch.interp`                  |
+| patch runner, fused voice loop                                |     5.63 ns |     18.1 ns |   7 | `patch.fused`                   |
+
+## CI gates
+
+`bench/perf/gate.test.ts` runs in `bun run check`. It renders the
+vocoder, choir, cellos, reverb hall and PSOLA presets at 48 kHz, and times
+the first choir key after the play-mode warm. Each budget is a ratio to the
+calibration loop (`calibrate()` in `stats.ts`): a slow shared runner gets a
+larger budget in proportion. Each budget sits about 3x above today's cost
+and below the cost before this work, so a gate trips only when a fix is
+lost, not on runner noise.
+
+## Not done here, with numbers
+
+- **Startup.** First frame is about 120 ms, and nearly all of it is loading
+  328 modules (5.7 MB of source). Lazy-loading the agent, style and menu
+  modules saves under 3 ms because the cost is spread across all of them.
+  A `bun build --target=bun` bundle of `src/main.ts` halves `dawg --version`
+  (140 → 70 ms). Shipping it changes packaging (`bin`, `files`, the release
+  smoke test), and every `new Worker(new URL(...))` and `import.meta.url`
+  read would need an audit, so it is a proposal for the release lane.
+- **Rust.** No hot spot here gains 2x from Rust over the restructured TS.
+  A prototype of the bowed-string waveguide loop, with the same arithmetic
+  and the same output sum, ran 1.9 ns/sample in Bun against 4.5–5.2
+  ns/sample as a release Rust binary. The language assessment's patcher
+  numbers agree: fused TS matches fused Rust (Rust/TS 0.96x). The wins came
+  from JIT-friendly structure, not from the language.
+- **Math kernel** (polynomial sin/exp so goldens match across platforms):
+  this would re-pin every golden. It buys portability, not speed, so it
+  belongs in its own change.
