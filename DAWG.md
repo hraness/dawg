@@ -1782,7 +1782,7 @@ Rendering is deterministic: tuned spans are cached (128 MB of their own) by the 
 
 Breadcrumbs in the docs and guides use these labels, written `Ctrl-K › Chords and key › tuning`. `/menu <topic>` opens the same section that `/help <topic>` and `/guide <topic>` explain.
 
-`/menu <id>` takes one of the ten topic ids (`sound`, `voice`, `effects`, `rhythm`, `chords`, `mix`, `arrange`, `project`, `keys`, `agent`) or any row name it knows (`tuning`, `performance`, `master`, `export`, `models`, …); an unknown id lists the roots. Labels fit 16 columns. Below the root, sibling labels share one case rule. A row's path reads `Ctrl-K › Chords and key › tuning`, and show-me's finish hint uses the same path.
+`/menu <id>` takes one of the ten topic ids (`sound`, `voice`, `effects`, `rhythm`, `chords`, `mix`, `arrange`, `project`, `keys`, `agent`), any topic alias (`drums`, `mixer`, `fx`) or any row name it knows (`tuning`, `performance`, `master`, `export`, `models`, …). `/menu keys` opens the `?` panel. An unknown id answers `no menu "sond" · did you mean /menu sound? · /menu <topic or row>`. In a fader, `x` resets any number row; tempo, meter and loop length apply at once rather than staging, and the hint says `applies at once`. Labels fit 16 columns. Below the root, sibling labels share one case rule. A row's path reads `Ctrl-K › Chords and key › tuning`, and show-me's finish hint uses the same path.
 
 Every list, picker and editor uses the same keys (see **Keys** below). In the menu:
 
