@@ -594,6 +594,35 @@ export function cardText(card: ActivityCard, unicode: boolean): string {
   return parts.join(" · ");
 }
 
+/** How long each one-time note leads when they cannot all fit at once. */
+export const ONCE_ROTATE_MS = 3_000;
+
+/**
+ * The cards for the strip's width: when the one-time notes cannot all show
+ * whole beside the receipts, they take turns (one every `ONCE_ROTATE_MS`,
+ * on the frame clock), so each is read in full at least once.
+ */
+export function stripCards(
+  cards: readonly ActivityCard[],
+  room: number,
+  nowMs: number,
+  unicode: boolean,
+): ActivityCard[] {
+  const width = (list: readonly ActivityCard[]) =>
+    list.reduce(
+      (sum, card, index) =>
+        sum + (index > 0 ? 3 : 0) + displayWidth(cardText(card, unicode)),
+      0,
+    );
+  if (width(cards) <= room) return [...cards];
+  const steady = cards.filter((card) => !card.once);
+  const once = cards.filter((card) => card.once);
+  if (once.length < 2) return [...cards];
+  const turn =
+    once[Math.floor(Math.max(0, nowMs) / ONCE_ROTATE_MS) % once.length]!;
+  return [...steady, turn];
+}
+
 function paintActivity(
   buffer: CellBuffer,
   y: number,
@@ -638,10 +667,21 @@ function paintActivity(
       x += buffer.text(x, y, truncate(shown, room), roles.faint);
     }
   } else {
-    const cards = activity.visible(nowMs);
+    const cards = stripCards(
+      activity.visible(nowMs),
+      Math.max(0, limit - x),
+      nowMs,
+      capabilities.unicode,
+    );
     cards.forEach((card, index) => {
       if (x >= limit) return;
       const text = cardText(card, capabilities.unicode);
+      // A one-time note behind the first slot shows whole or not at all
+      // (it stays in ctrl-o); a cut note loses its key word.
+      if (index > 0 && card.once && x + 3 + displayWidth(text) > limit) {
+        x = limit;
+        return;
+      }
       if (index > 0) {
         if (x + 3 + Math.min(12, displayWidth(text)) > limit) {
           x = limit;

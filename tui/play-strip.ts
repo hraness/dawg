@@ -114,7 +114,8 @@ export function paintPlayHeader(
   if (view.sustain) put("SUSTAIN", roles.pillQueue);
   if (view.chords) put(view.chords, roles.hit);
   if (view.countIn) put(view.countIn, roles.warning);
-  if (view.beat) {
+  const hintWidth = displayWidth("? keys · esc leave");
+  if (view.beat && x + view.beat.of + 2 <= width - 1 - hintWidth) {
     const cells = Array.from({ length: view.beat.of }, (_, index) =>
       index + 1 === view.beat!.index
         ? unicode
@@ -152,8 +153,10 @@ export function paintPlayHeader(
 }
 
 /**
- * The compressed song header, shortened so a status still fits: whole
- * (`▶ 120 BPM · bass · rev 1`), then its first clause, then nothing.
+ * The compressed song header (`▶ 120 BPM · bass · rev 1`). It is reserved
+ * first: the beat dots and the status give way before it does, and only a
+ * terminal too narrow for it with the badge and the way out shortens it to
+ * its first clause.
  */
 function fitContext(
   view: PlayHeaderView,
@@ -161,14 +164,12 @@ function fitContext(
   unicode: boolean,
 ): string {
   if (!view.context) return "";
-  const status = view.status?.split(" · ")[0] ?? "";
-  if (!status) return view.context;
-  const beat = view.beat ? view.beat.of + 2 : 0;
-  const rest =
-    displayWidth(playHeaderText({ ...view, context: undefined }, unicode)) -
-    displayWidth(view.status ?? "") +
-    displayWidth(status) +
-    beat;
+  const rest = displayWidth(
+    playHeaderText(
+      { ...view, context: undefined, status: undefined, beat: undefined },
+      unicode,
+    ),
+  );
   // Badge padding, the right-hand hint and the gaps between parts.
   const room = width - 2 - displayWidth("? keys · esc leave") - 4 - rest;
   for (const candidate of [view.context, view.context.split(" · ")[0]!])

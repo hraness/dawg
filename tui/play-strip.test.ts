@@ -115,6 +115,26 @@ describe("play header", () => {
     expect(wide).toContain("⏸ 120 BPM · bass · rev 0");
   });
 
+  test("playing at 80 columns keeps the whole song header", () => {
+    const playing = {
+      ...view,
+      context: "▶ 120 BPM · drums · rev 2",
+      range: "drums",
+      armed: false,
+      click: false,
+      sustain: false,
+      chords: undefined,
+      countIn: undefined,
+      status: "no audio",
+      beat: { index: 1, of: 4, flash: false },
+    };
+    const text = row(80, (b) =>
+      paintPlayHeader(b, 0, 80, playing, theme, true),
+    );
+    expect(text).toContain("▶ 120 BPM · drums · rev 2");
+    expect(text.trimEnd().endsWith("? keys · esc leave")).toBe(true);
+  });
+
   test("a wide row shows the beat, the whole status and the hint", () => {
     const text = row(160, (b) => paintPlayHeader(b, 0, 160, view, theme, true));
     expect(text).toContain(" PLAY MODE ");

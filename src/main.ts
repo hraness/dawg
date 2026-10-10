@@ -4492,7 +4492,7 @@ async function enterPlay(): Promise<Receipt> {
   await session.enter();
   if (hasSamplerTracks(score)) void sampleProblems(score);
   return ok(
-    `play mode · ${session.track} · ${session.layout.drums ? "drums" : session.keyboard.range} · ? keys · esc leaves`,
+    `play mode · ${session.track} · ${session.layout.drums ? "kit" : session.keyboard.range} · ? keys · esc leaves`,
   );
 }
 

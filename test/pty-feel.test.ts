@@ -27,6 +27,29 @@ test.skipIf(!supported)(
       );
       expect(t.vt.text()).not.toContain("ctrl-p play ·");
 
+      // Playing an empty track keeps the highway the same height (the ruler
+      // stays on its row) and keeps the hint on its reserved row, never on a
+      // bar or loop rule.
+      const idle = t.vt.lines();
+      const idleRuler = rulerRow(idle);
+      const hintRow = idle.findIndex((line) => line.includes("space play"));
+      expect(idleRuler).toBeGreaterThan(0);
+      expect(hintRow).toBeGreaterThan(0);
+      expect(hintRow).not.toBe(idleRuler);
+      await t.send(" ");
+      await t.until(() => t.vt.text().includes("▶ 120 BPM"), "playing empty");
+      for (let sample = 0; sample < 6; sample += 1) {
+        await Bun.sleep(90);
+        const frame = t.vt.lines();
+        const ruler = frame.findIndex((line) => /^ (↻ ═|[⏸▶] [━─])/.test(line));
+        expect(ruler).toBe(idleRuler);
+        const hint = frame.findIndex((line) => line.includes("space stop"));
+        expect(hint).toBe(hintRow);
+        expect(frame[hint]).not.toMatch(/[━═]{3}/);
+      }
+      await t.send(" ");
+      await t.until(() => t.vt.text().includes("⏸ 120 BPM"), "stopped empty");
+
       // One window: its own edits never draw "synced".
       await t.send("add C3 at 0\r");
       await t.until(() => t.vt.text().includes("✓ added"), "add receipt");
@@ -35,17 +58,18 @@ test.skipIf(!supported)(
       await Bun.sleep(600);
       expect(t.vt.text()).not.toContain("synced ·");
 
-      // Playing keeps the highway's rows and draws no hint over the ruler.
-      const paused = t.vt.lines();
-      const pausedRuler = rulerRow(paused);
+      // With notes, playing keeps the highway's height: the ruler (the hit
+      // line) stays on the same row.
+      const pausedRuler = rulerRow(t.vt.lines());
       expect(pausedRuler).toBeGreaterThan(0);
       await t.send(" ");
       await t.until(() => t.vt.text().includes("▶ 120 BPM"), "playing");
       await Bun.sleep(300);
       const playing = t.vt.lines();
-      const playingRuler = playing.findIndex((line) => /^ ↻ ═/.test(line));
-      expect(playingRuler).toBeGreaterThan(0);
-      expect(playing.length).toBe(paused.length);
+      const playingRuler = playing.findIndex((line) =>
+        /^ (↻ ═|[⏸▶] [━─])/.test(line),
+      );
+      expect(playingRuler).toBe(pausedRuler);
       expect(playing[playingRuler]).not.toMatch(/space|ctrl-/);
       await t.send(" ");
       await t.until(() => t.vt.text().includes("⏸ 120 BPM"), "stopped");
@@ -66,7 +90,8 @@ test.skipIf(!supported)(
       const text = t.vt.text();
       expect(text).toContain("A kick");
       expect(text).toContain("S snare");
-      expect(text).toContain("play mode · drums · drums");
+      expect(text).toContain("play mode · drums · kit");
+      expect(text).not.toContain("drums · drums");
       expect(text).not.toMatch(/A C2\b/);
       await t.send("\u001b");
     } finally {
@@ -96,6 +121,54 @@ test.skipIf(!supported)(
         expect(t.vt.text()).not.toMatch(/[✦✸]/);
       }
       await t.send(" ");
+    } finally {
+      t.terminal.write("\u0003");
+      await Promise.race([t.proc.exited, Bun.sleep(5000)]);
+      t.proc.kill();
+      t.terminal.close();
+    }
+  },
+  30_000,
+);
+
+test.skipIf(!supported)(
+  "real PTY: the first-run card's /model key opens the sign-in flow",
+  async () => {
+    const t = await launch(80, 24, { AI_GATEWAY_API_KEY: "" });
+    try {
+      await t.until(() => t.vt.text().includes("commands only"), "prompt");
+      await t.until(() => t.vt.text().includes("/model key"), "card");
+      await t.send("/model key\r");
+      await t.until(
+        () => t.vt.text().includes("Sign in to dawg's agent"),
+        "sign-in flow",
+      );
+      expect(t.vt.text()).not.toContain("unavailable");
+      expect(t.vt.text()).not.toContain("dawg login");
+      await t.send("\u001b");
+    } finally {
+      t.terminal.write("\u0003");
+      await Promise.race([t.proc.exited, Bun.sleep(5000)]);
+      t.proc.kill();
+      t.terminal.close();
+    }
+  },
+  30_000,
+);
+
+test.skipIf(!supported)(
+  "real PTY: each one-time card shows whole at 80 columns",
+  async () => {
+    const t = await launch(80, 24, { AI_GATEWAY_API_KEY: "" });
+    try {
+      await t.until(() => t.vt.text().includes("commands only"), "prompt");
+      const wanted = [
+        "/model key adds an agent · optional",
+        "created .dawg/ · add it to .gitignore",
+      ];
+      for (const text of wanted)
+        await t.until(() => t.vt.text().includes(text), text, 8000);
+      expect(t.vt.text()).not.toMatch(/gitigno…|agent · …/);
     } finally {
       t.terminal.write("\u0003");
       await Promise.race([t.proc.exited, Bun.sleep(5000)]);
