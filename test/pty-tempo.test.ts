@@ -1,5 +1,5 @@
 /**
- * Project › Tempo & meter end to end: Ctrl-K, a typed tempo ramp, a nudged
+ * Project › Tempo and meter end to end: Ctrl-K, a typed tempo ramp, a nudged
  * meter change and the focused track's rate all land in the session.
  */
 import { expect, test } from "bun:test";
@@ -52,7 +52,7 @@ async function waitFor(
 }
 
 test.skipIf(!supported)(
-  "real PTY: tempo & meter adds a ramp, a meter change and a track rate",
+  "real PTY: tempo and meter adds a ramp, a meter change and a track rate",
   async () => {
     const t = await launch(100, 30, {});
     const song = () => composition(t.cwd);
@@ -63,11 +63,11 @@ test.skipIf(!supported)(
       await t.send("/project");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("menu › Project"), "project");
-      await t.send("/tempo &");
+      await t.send("/tempo and");
       await t.send("\r");
       await t.until(
-        () => t.vt.text().includes("Project › tempo & meter"),
-        "tempo & meter",
+        () => t.vt.text().includes("Project › tempo and meter"),
+        "tempo and meter",
       );
 
       // A typed tempo ramp into bar 2.
@@ -107,7 +107,7 @@ test.skipIf(!supported)(
       await t.send("/bass time");
       await t.send("\r");
       await t.until(
-        () => t.vt.text().includes("tempo & meter › bass time"),
+        () => t.vt.text().includes("tempo and meter › bass time"),
         "track time",
       );
       await t.send("/rate");

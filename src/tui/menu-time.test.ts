@@ -58,15 +58,15 @@ function type(menu: EditMenu, ctx: MenuContext, text: string) {
   return menu.key("\r", ctx);
 }
 
-describe("Project › Tempo & meter", () => {
+describe("Project › Tempo and meter", () => {
   test("/menu tempo opens it under Project; the row summarises the map", () => {
     expect(MENU_SECTIONS).toContain("tempo");
     const menu = new EditMenu();
     const ctx = context();
     menu.show(ctx, "tempo");
-    expect(menu.view(ctx).title).toBe("menu › Project › tempo & meter");
+    expect(menu.view(ctx).title).toBe("menu › Project › tempo and meter");
     menu.show(ctx, "project");
-    select(menu, ctx, "tempo & meter");
+    select(menu, ctx, "tempo and meter");
     const row = menu.view(ctx).items[menu.view(ctx).index]!;
     expect(row.label).toContain("120 BPM");
     expect(row.label).toContain("4/4");
@@ -188,7 +188,7 @@ describe("Project › Tempo & meter", () => {
     );
     menu.key("\r", ctx);
     expect(menu.view(ctx).title).toBe(
-      "menu › Project › tempo & meter › keys time",
+      "menu › Project › tempo and meter › keys time",
     );
     select(menu, ctx, "rate");
     expect(menu.key(RIGHT, ctx)).toEqual({
@@ -226,7 +226,7 @@ describe("Project › Tempo & meter", () => {
       command: "track time off",
     });
     menu.key(ESC, ctx);
-    expect(menu.view(ctx).title).toBe("menu › Project › tempo & meter");
+    expect(menu.view(ctx).title).toBe("menu › Project › tempo and meter");
   });
 
   test("every row's command parses as a time command", () => {

@@ -111,7 +111,10 @@ describe("edit menu", () => {
     menu.show(empty, "arrange");
     expect(menu.view(empty).title).toBe("menu › Arrange");
     expect(menu.view(empty).items[0]!.label).toStartWith("tracks");
-    expect(menu.view(empty).items[1]!.label).toStartWith("mark bars");
+    expect(menu.view(empty).items[1]!.label).toStartWith("sections");
+    menu.show(empty, "sections");
+    expect(menu.view(empty).title).toBe("menu › Arrange › sections");
+    expect(menu.view(empty).items[0]!.label).toStartWith("mark bars");
     const ctx = context(
       score().withSections(
         [
@@ -122,10 +125,10 @@ describe("edit menu", () => {
       ),
     );
     menu.show(ctx, "sections");
-    expect(menu.view(ctx).items[2]!.label).toContain("mutes keys");
+    expect(menu.view(ctx).items[1]!.label).toContain("mutes keys");
     select(menu, ctx, "chorus");
     menu.key("\r", ctx);
-    expect(menu.view(ctx).title).toBe("menu › Arrange › chorus");
+    expect(menu.view(ctx).title).toBe("menu › Arrange › sections › chorus");
     expect(menu.key("\r", ctx)).toEqual({
       type: "run",
       command: "section loop chorus",
@@ -164,6 +167,7 @@ describe("edit menu", () => {
       type: "run",
       command: "section move chorus left",
     });
+    menu.key(ESC, ctx);
     menu.key(ESC, ctx);
     select(menu, ctx, "form");
     expect(menu.view(ctx).items[menu.view(ctx).index]!.label).toContain(

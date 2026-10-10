@@ -359,7 +359,6 @@ describe("aliases parse like their canonical form", () => {
  */
 const KNOWN_MENU_PATH_GAPS: readonly string[] = [
   "guides/voice.md: Ctrl-K › Voice › sing",
-  "guides/music.md: Ctrl-K › Arrange › sections",
 ];
 
 /** `/menu <word>`s the docs use before the menu lane accepts them. */

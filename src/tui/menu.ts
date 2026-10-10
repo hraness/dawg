@@ -587,7 +587,7 @@ export const SECTION_ALIASES: Readonly<Record<string, readonly string[]>> =
     style: ["arrange", "style"],
     styles: ["arrange", "style"],
     genre: ["arrange", "style"],
-    sections: ["arrange"],
+    sections: ["arrange", "sections"],
     form: ["arrange"],
     transport: ["project"],
     tempo: ["project", "tempo"],
@@ -1473,37 +1473,6 @@ function trackNodes(context: MenuContext): MenuNode[] {
     },
     volumeNode(track),
     panNode(track),
-    ...trackOrderNodes(context, track),
-  ];
-}
-
-/**
- * Where the focused track sits in the list, and removing it: the menu rows
- * for `/track move` and `/track remove`. A lone track has neither.
- */
-function trackOrderNodes(context: MenuContext, track: Track): MenuNode[] {
-  const count = context.score.tracks.length;
-  if (count <= 1) return [];
-  const index = context.score.tracks.findIndex((t) => t.id === track.id);
-  return [
-    {
-      kind: "entry",
-      label: "position",
-      value: `${index + 1} of ${count}`,
-      placeholder: `1..${count}`,
-      command: (text) =>
-        /^\d{1,3}$/.test(text.trim())
-          ? `/track move ${track.id} ${text.trim()}`
-          : undefined,
-      example: `/track move ${track.id} 1`,
-      help: "move this track up or down the list",
-    },
-    {
-      kind: "action",
-      label: "remove track",
-      command: `/track remove ${track.id}`,
-      help: "drop this track, its notes and anything that named it · ^z undoes",
-    },
   ];
 }
 
