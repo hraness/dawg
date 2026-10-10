@@ -340,7 +340,7 @@ export class PlaySession {
     const engine = this.host.engine();
     if (engine?.canMonitor) {
       engine.setLeadMs(PLAY_LEAD_MS);
-      // A sing voice's tables and loops are built now, not on the first key.
+      // The voice's tables and loops are built now, not on the first key.
       warmLive(this.host.score(), this.trackId, engine.sampleRate);
       await engine.monitor(true);
     } else this.status = "no audio · keys still record";

@@ -390,8 +390,11 @@ export class LiveSynth {
  * Pays a voice's one-off costs before a key can sound (formant.md 4.5): the
  * sing engine builds its LF glottal tables (about 50 ms) on first use and
  * its inner loops need a pass to compile, so the first sing key of a session
- * would miss the 15 ms first-window budget by 4x. Play mode calls this when
- * it opens on a track; a no-op for every other voice. The warm render goes
+ * would miss the 15 ms first-window budget by 4x. Every other voice has the
+ * same shape at a smaller scale: a cold first press of a grand, a bowed
+ * cello, a granular swarm or a track with effects costs 2-4x a warm one
+ * (docs/perf.md, `live.*`). Play mode calls this when it opens on a track,
+ * so the first key costs what later keys do. The warm render goes
  * through a throwaway synth, so no cache entry or state is left behind.
  */
 export function warmLive(
@@ -400,8 +403,8 @@ export function warmLive(
   sampleRate: number,
 ): void {
   const track = score.tracks.find((candidate) => candidate.id === trackId);
-  if (!track || !singTrack(track)) return;
-  warmGlottal();
+  if (!track) return;
+  if (singTrack(track)) warmGlottal();
   const synth = new LiveSynth(sampleRate);
   for (const pitch of [48, 60])
     synth.render({ score, trackId, pitch, velocity: 0.8, seconds: 0.3 });
