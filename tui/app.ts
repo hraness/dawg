@@ -1546,6 +1546,8 @@ export class TuiApp {
   private writer: ScreenWriter;
   private lastFrame: Frame | undefined;
   private lastFrameAt = Number.NEGATIVE_INFINITY;
+  /** Compose plus encode time of the last rendered frame, in ms. */
+  lastRenderMs = 0;
   /** Minimum interval between frames (~30 fps). */
   frameIntervalMs = 33;
   /**
@@ -1616,6 +1618,7 @@ export class TuiApp {
       return "";
     this.lastFrameAt = now;
     this.watchFirstLoop(view, now);
+    const started = performance.now();
     const frame = composeFrame(
       view,
       this.ui,
@@ -1624,6 +1627,7 @@ export class TuiApp {
     );
     this.lastFrame = frame;
     const out = this.writer.frame(frame.buffer, frame.cursor);
+    this.lastRenderMs = performance.now() - started;
     if (out) {
       const accepted = this.io.write(out);
       this.backoffMs =

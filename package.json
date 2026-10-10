@@ -33,6 +33,7 @@
   "scripts": {
     "dawg": "bun run src/main.ts",
     "bench:perf": "bun bench/perf/run.ts",
+    "sizes": "bun bench/sizes/matrix.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "check": "bun test && bun run typecheck && bun run format",
