@@ -213,7 +213,7 @@ export function paintTape(
     }
   }
   buffer.text(rect.x, y, " bar", roles.faint);
-  // The reels sit in the gutter: a glyph that turns, so never colour-only.
+  // The reels sit in the gutter: a glyph that turns, so never color-only.
   if (view.reel) buffer.text(rect.x + 6, y, view.reel, roles.warning);
   ruler.forEach((ch, index) =>
     buffer.set(left + index, y, ch, rulerStyle[index]),
