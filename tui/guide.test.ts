@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Guide } from "../guides/index.ts";
-import { GuideBrowser, guideLines, wrapRows } from "./guide.ts";
+import { GuideBrowser, guideLines, paginate, wrapRows } from "./guide.ts";
 
 const UP = "\u001b[A";
 const DOWN = "\u001b[B";
@@ -111,21 +111,82 @@ describe("guide browser", () => {
 });
 
 describe("guide text", () => {
-  test("headings, bullets and code spans render plainly", () => {
-    expect(guideLines("## Ask\n- `key A minor` then q")).toEqual([
-      { text: "── Ask", heading: true },
-      { text: "• key A minor then q" },
+  test("headings carry a mark, bullets a dot, code spans a range", () => {
+    expect(guideLines("## Ask\n\n- `key A minor` then q")).toEqual([
+      { text: "✦ Ask", heading: true, mark: { length: 1, role: "agent" } },
+      { text: "• key A minor then q", code: [[2, 13]] },
     ]);
-    expect(guideLines("## Ask", false)[0]!.text).toBe("-- Ask");
+    expect(guideLines("## Mouse")[0]!.text).toBe("── Mouse");
+    expect(guideLines("- Tip: try `undo`")[0]).toEqual({
+      text: "✓ Tip: try undo",
+      mark: { length: 1, role: "success" },
+      code: [[11, 15]],
+    });
+    expect(guideLines("- Careful: loud")[0]!.text).toBe("! Careful: loud");
   });
 
-  test("long bullets wrap under their text", () => {
+  test("without Unicode the marks are ASCII and backticks stay", () => {
+    const rows = guideLines("## Ask\n## Keys\n## Mouse\n- `undo`", false);
+    expect(rows.map((r) => r.text)).toEqual([
+      "* Ask",
+      "^ Keys",
+      "-- Mouse",
+      "- `undo`",
+    ]);
+    expect(rows[3]!.code).toBeUndefined();
+  });
+
+  test("long bullets wrap under their text and code ranges follow", () => {
     const rows = wrapRows([{ text: "• one two three four five" }], 14);
     expect(rows.map((r) => r.text)).toEqual([
       "• one two",
       "  three four",
       "  five",
     ]);
+    const [a, b] = wrapRows(
+      [{ text: "• say hello world now", code: [[6, 17]] }],
+      12,
+    );
+    expect(a).toEqual({ text: "• say hello", code: [[6, 11]] });
+    expect(b).toEqual({ text: "  world now", code: [[2, 7]] });
+  });
+
+  test("pages pack whole sections and never split one", () => {
+    const body = ["intro", "## A", "a1", "a2", "## B", "b1", "## C", "c1"];
+    const pages = paginate(guideLines(body.join("\n")), 6);
+    expect(pages.map((p) => p.map((r) => r.text))).toEqual([
+      ["intro", "", "── A", "a1", "a2"],
+      ["── B", "b1", "", "── C", "c1"],
+    ]);
+  });
+});
+
+describe("guide pages", () => {
+  const sections = (n: number) =>
+    Array.from({ length: n }, (_, i) => `## S${i}\nrow ${i}\nrow ${i}b`).join(
+      "\n",
+    );
+  test("n and p turn pages, then step to the next and previous guide", () => {
+    const b = new GuideBrowser(
+      [
+        guide("one", 1, undefined, sections(4)),
+        guide("two", 2, undefined, "x"),
+      ],
+      "one",
+    );
+    expect(b.view(70, 7).title).toBe("guide · One · 1/2");
+    expect(b.view(70, 7).hint).toContain("n next");
+    b.key("n");
+    expect(b.view(70, 7).title).toBe("guide · One · 2/2");
+    expect(b.view(70, 7).hint).toContain("n next: Two");
+    b.key("n");
+    expect(b.page).toBe("two");
+    expect(b.view(70, 7).title).toBe("guide · Two");
+    b.key("p");
+    expect(b.page).toBe("one");
+    expect(b.view(70, 7).title).toBe("guide · One · 2/2");
+    b.key("\u001b[C");
+    expect(b.page).toBe("two");
   });
 });
 

@@ -5,8 +5,9 @@ parent: project
 order: 1
 ---
 
-`dawg init` writes `song.ts` and one `tracks/<slug>/track.ts` per track.
-Edit them in any editor; every open window picks up the change.
+A dawg project is plain TypeScript you can open in any editor.
+`dawg init` writes `song.ts` and one `tracks/<slug>/track.ts` per
+track; every open window picks up your edits.
 
 ## Ask
 
@@ -14,10 +15,13 @@ Edit them in any editor; every open window picks up the change.
 
 ## Type it yourself
 
-- `dawg init` · `dawg check` · `dawg render out.wav`
+- Shell: `dawg init` · `dawg check` · `dawg render out.wav`
+- Prompt: `export loop.track.json` · `import loop.track.json`
+
+In a track file:
+
 - `import { track, note, euclid, chord } from "dawg"`
 - `notes: [note("C4", 0, 1), ...chord("Am7", 4, 4)]`
-- `export loop.track.json` · `import loop.track.json`
 
 ## Menu
 
@@ -25,7 +29,7 @@ Edit them in any editor; every open window picks up the change.
 
 ## Keys
 
-- Edits land as one undo step · Ctrl-Z undoes a file change
+- A saved file lands as one undo step; Ctrl-Z undoes it
 
 ## Next
 

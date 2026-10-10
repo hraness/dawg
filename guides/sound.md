@@ -5,17 +5,18 @@ order: 3
 ---
 
 Every track plays one instrument. Sound shapes the focused track: its
-instrument, preset, parameters and how notes are played.
+instrument, preset, parameters and how its notes are played.
 
 ## Ask
 
-- "make the lead a bright pluck" · "a felt piano, softer"
+- "make the lead a bright pluck"
+- "a felt piano, softer"
 
 ## Type it yourself
 
 - `instrument piano` · `synth preset pluck` · `synth lpf 800`
 - `piano felt` · `bowed cello` · `wind flute` · `grain cloud`
-- `try synth lpf 400` hear it on a loop first
+- Tip: `try synth lpf 400` lets you hear a change on a loop first
 
 ## Menu
 

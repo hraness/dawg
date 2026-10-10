@@ -4,8 +4,8 @@ title: Voice
 order: 4
 ---
 
-Voice is sung or spoken audio: a built-in singer, imported clips and
-the tools that tune them.
+Voice is sung or spoken audio: a built-in singer, clips you import,
+and tools to tune and shape them.
 
 ## Ask
 
@@ -14,9 +14,15 @@ the tools that tune them.
 
 ## Type it yourself
 
+Sing with the built-in singer:
+
 - `sing choir` · `sing vowels a e i o` · `lyrics sun-lit morn-ing`
+
+Import a take and shape it:
+
 - `vocal import take.wav` · `clip fade in .01` · `vocal pitch`
-- `autotune gentle` · `formant -4` · `vowel a o 0.5` · `vocoder talkbox`
+- `autotune gentle` · `formant -4` · `vowel a o 0.5`
+- `vocoder talkbox`
 
 ## Menu
 

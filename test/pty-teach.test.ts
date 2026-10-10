@@ -38,7 +38,7 @@ test.skipIf(!supported)(
     await door("/help arrange", ["loop 5-6", "copy bass 5-6 to 7"]);
     await door("/help panes", ["pin · unpin", "follow"]);
     await door("/guide tape", [
-      "Ctrl-T shows every track",
+      "TAPE (Ctrl-T) shows every track",
       "copy drums 9-16 to 17",
     ]);
     await door("/guide panes", ["pane tape"]);

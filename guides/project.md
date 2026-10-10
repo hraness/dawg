@@ -4,12 +4,14 @@ title: Project
 order: 10
 ---
 
-Everything is local in `.dawg`. The transport, tempo, files and undo
-live here; windows on one folder stay in sync.
+A project is one folder. Its transport, tempo, sessions and undo live
+in `.dawg` on your machine, and every window on the folder stays in
+sync.
 
 ## Ask
 
-- "export the song as MIDI" · "what changed since the last save?"
+- "export the song as MIDI"
+- "what changed since the last save?"
 
 ## Type it yourself
 
@@ -23,9 +25,9 @@ live here; windows on one folder stay in sync.
 
 ## Keys
 
-- Space plays on an empty prompt · Ctrl-Z · Ctrl-Y
+- Space plays on an empty prompt · Ctrl-Z undo · Ctrl-Y redo
 
 ## Next
 
-- `guide files` · `guide sessions` · `guide agent` · `guide audio`
-- `guide panes`
+- `guide files` · `guide sessions` · `guide agent`
+- `guide audio` · `guide panes`

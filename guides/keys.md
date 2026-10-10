@@ -4,8 +4,8 @@ title: Using dawg
 order: 2
 ---
 
-The same keys work on every screen: arrows move, Enter chooses, Esc goes
-back, `?` lists the keys for the screen you are on.
+The same keys work on every screen: arrows move, Enter chooses, Esc
+goes back. Press `?` to see the keys for the screen you are on.
 
 ## Ask
 
@@ -24,7 +24,7 @@ back, `?` lists the keys for the screen you are on.
 
 - Enter send · Shift-Enter new line · Alt-Enter run next · Esc cancel
 - Ctrl-Z undo · Ctrl-Y redo · Ctrl-L redraw · Ctrl-C exit
-- Lists: ↑↓ or `j` `k` move · Enter choose · `/` filter · Esc back
+- In lists: ↑↓ or `j` `k` move · Enter choose · `/` filter · Esc back
 
 ## Next
 

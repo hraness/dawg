@@ -6,11 +6,13 @@ order: 3
 ---
 
 One tempo map drives playback, the click, recording and MIDI export.
-Positions are beats from 0 or `bar <n>`.
+Change tempo or meter anywhere in the song; positions are beats from 0
+or `bar <n>`.
 
 ## Ask
 
-- "slow down to 80 over the last four bars" · "switch to 7/8 at bar 5"
+- "slow down to 80 over the last four bars"
+- "switch to 7/8 at bar 5"
 
 ## Type it yourself
 

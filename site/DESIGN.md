@@ -82,6 +82,7 @@ dawg.sh uses the shared Hraness packages: `@hraness/design-kit` (palette system,
 - **Clip row.** The design kit's `MarketingPillars`, each cell filled with a clip color.
 - **Feature cells.** `MarketingPillars` again, on rules, four across on wide screens.
 - **Install tabs.** The design kit's `PlatformInstall`, flattened, with analytics on copy.
+- **Doc mark.** A guide heading or note starts with the TUI's mark (✦ Ask, › Type it yourself, ≡ Menu, ⌃ Keys, → Next, ✓ Tip, ! Careful) in a small chip: clip color with ink for Ask, Menu, Keys and Careful, inverse ink for Type and Tip, outline otherwise. The symbol carries the meaning; the table lives in `app/doc-marks.ts` and must match `guides/index.ts`.
 - **Code block.** Terminal colors, a label bar and a copy button. Prompts (`$ `) are dropped when copying.
 - **Flow.** Four numbered cells on a strong rule.
 - **Questions.** Disclosure rows on rules.

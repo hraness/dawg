@@ -5,13 +5,16 @@
  */
 import { describe, expect, test } from "bun:test";
 import { HELP_SECTIONS, USAGE } from "../src/commands/help.ts";
-import { guideLines, wrapRows } from "../tui/guide.ts";
+import { guideLines, paginate, wrapRows } from "../tui/guide.ts";
 import { TOPICS, TOPIC_ALIASES, lintText } from "../src/lang/glossary.ts";
 import { GuideBrowser } from "../tui/guide.ts";
 import { listGuides } from "./index.ts";
 
 /** Rows a guide may take in the pane (80×24 leaves about 20 inside). */
-const LINE_BUDGET = 20;
+/** The guide pane's rows inside an 80x24 terminal (docs/screens/guide). */
+const PAGE_ROWS = 16;
+/** Short guides: a topic that needs more pages wants splitting. */
+const MAX_PAGES = 3;
 /** The pane's text width at 80 columns: 80 − margins − border − padding. */
 const WIDTH = 72;
 
@@ -73,9 +76,14 @@ describe("guides", () => {
   });
 
   for (const guide of guides)
-    test(`${guide.id} fits one pane at 80 columns`, () => {
-      const rows = wrapRows(guideLines(guide.body), WIDTH);
-      expect(rows.length).toBeLessThanOrEqual(LINE_BUDGET);
+    test(`${guide.id} pages fit an 80x24 terminal`, () => {
+      const pages = paginate(
+        wrapRows(guideLines(guide.body), WIDTH),
+        PAGE_ROWS,
+      );
+      for (const page of pages)
+        expect(page.length).toBeLessThanOrEqual(PAGE_ROWS);
+      expect(pages.length).toBeLessThanOrEqual(MAX_PAGES);
       expect(guide.body).not.toMatch(/^# /m);
     });
 

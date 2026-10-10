@@ -5,18 +5,24 @@ parent: sound
 order: 4
 ---
 
-Downloads land in `tracks/<slug>/downloads/`. A missing helper prints
-its install command; `dawg media doctor` checks them all.
+Bring in outside audio: split a song into stems, find its notes, or
+cut a sample from it. Downloads land in `tracks/<slug>/downloads/`.
 
 ## Ask
 
-- "download <url> and split it into stems" · "make a sample of the hook"
+- "download <url> and split it into stems"
+- "make a sample of the hook"
 
 ## Type it yourself
+
+In a shell:
 
 - `dawg media stems <file>` vocals drums bass guitar piano other
 - `dawg media analyze <file>` · `dawg media notes <file> --kind bass`
 - `dawg media sample <file> hook --begin 0.2 --end 0.3`
+
+At the prompt:
+
 - `sample <path> as <sample>` · `sample` lists the track's samples
 
 ## Menu
@@ -29,4 +35,6 @@ its install command; `dawg media doctor` checks them all.
 
 ## Next
 
+- Tip: a missing helper prints its install command; `dawg media doctor`
+  checks them all
 - `guide resample` · `guide voice`

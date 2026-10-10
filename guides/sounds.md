@@ -5,6 +5,10 @@ parent: sound
 order: 1
 ---
 
+dawg has synths, wavetables, pianos and electric keys, organs,
+strings and sample packs. Pick an instrument, then a preset, then
+shape it.
+
 ## Ask
 
 - "make the lead brighter with a slow filter sweep"

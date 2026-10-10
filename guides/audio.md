@@ -5,8 +5,8 @@ parent: project
 order: 3
 ---
 
-One output and one input, or the system default. Saved on this
-machine, not in the song. Needs the native sink (`dawg doctor`).
+Pick which speakers and microphone dawg uses, or leave it on the
+system default. The choice is saved on this machine, not in the song.
 
 ## Ask
 
@@ -14,8 +14,9 @@ machine, not in the song. Needs the native sink (`dawg doctor`).
 
 ## Type it yourself
 
-- `audio` · `audio out USB Audio Interface` · `audio out default`
-- `audio in Built-in Microphone` · `audio test` (tone, input meter)
+- `audio` shows the devices · `audio test` plays a tone, meters input
+- `audio out USB Audio Interface` · `audio out default`
+- `audio in Built-in Microphone`
 
 ## Menu
 
@@ -23,9 +24,11 @@ machine, not in the song. Needs the native sink (`dawg doctor`).
 
 ## Keys
 
-- In a device list: arrows move, Enter picks (a soft blip plays), Esc
+- In a device list arrows move, Enter picks (a soft blip plays), Esc
+  goes back
 
 ## Next
 
-- Unplugged mid-song: playback moves to the default, said once
-- `DAWG_AUDIO_DEVICE` overrides · `guide project`
+- Careful: device choice needs the native sink; `dawg doctor` checks it
+- Unplugged mid-song: playback moves to the default and says so once
+- `DAWG_AUDIO_DEVICE` overrides the choice · `guide project`

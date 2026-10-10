@@ -5,8 +5,9 @@ parent: agent
 order: 2
 ---
 
-Plain requests go to the agent once a provider is set: AI Gateway,
-OpenRouter, or a Codex or Claude subscription.
+The agent needs a provider: a Vercel AI Gateway key, OpenRouter, or a
+Codex or Claude subscription. Set one up once and plain sentences go
+to the agent.
 
 ## Ask
 
@@ -14,7 +15,12 @@ OpenRouter, or a Codex or Claude subscription.
 
 ## Type it yourself
 
+In a shell:
+
 - `dawg model key` finds setups · `dawg model key gateway`
+
+At the prompt:
+
 - `model key` · `model` picker · `model fast` · `logout`
 - `/auth --check` · `DAWG_MODEL=<alias>` · `DAWG_AI=0` no agent
 

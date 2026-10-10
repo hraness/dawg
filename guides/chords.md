@@ -4,6 +4,9 @@ title: Chords and key
 order: 7
 ---
 
+The key sets the scale your notes and chords come from. Write a
+progression by name, or play chords live with one finger.
+
 ## Ask
 
 - "write a sad pop progression in A minor, two beats per chord"
@@ -21,7 +24,9 @@ order: 7
 
 ## Keys
 
-- Ctrl-P play mode, `q`: every key plays a chord in the key
+In play mode (Ctrl-P), `q` turns on chord mode: each key plays a chord
+in the key.
+
 - `1 2 3 4` dim min maj sus · `5 6 7 8` 6, m7, M7, 9
 - `- =` voicing · `9` perform · `b` bass · `n` next chord · `0` clear
 

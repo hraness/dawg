@@ -5,8 +5,8 @@ parent: agent
 order: 3
 ---
 
-The agent can search the web and read public pages, for example to look
-up a song's tempo. Fetches never reach private hosts.
+The agent can search the web and read public pages, for example to
+look up a song's tempo. Fetches never reach private hosts.
 
 ## Ask
 
@@ -15,8 +15,9 @@ up a song's tempo. Fetches never reach private hosts.
 
 ## Type it yourself
 
-- `DAWG_WEB_SEARCH=duckduckgo|openrouter|gateway|brave` pins one
-- otherwise Brave with a key, AI Gateway, OpenRouter, then DuckDuckGo
+- `DAWG_WEB_SEARCH=duckduckgo|openrouter|gateway|brave` picks one
+- Otherwise dawg tries Brave (with a key), AI Gateway, OpenRouter,
+  then DuckDuckGo
 
 ## Menu
 

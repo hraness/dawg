@@ -787,3 +787,65 @@ a:hover {
     scroll-behavior: auto !important;
   }
 }
+
+/*
+ * Doc marks (app/doc-marks.ts, mirrored from the TUI's /guide): a symbol in
+ * a small filled chip before a guide heading or note. The symbol carries the
+ * meaning; the chip color repeats it with a clip color or ink.
+ */
+.dawg-mark {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.5em;
+  height: 1.5em;
+  margin-right: 0.5em;
+  padding: 0 0.2em;
+  border: 1px solid var(--foreground);
+  border-radius: var(--dawg-radius);
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: 0.12em;
+  color: var(--foreground);
+  background: var(--background);
+}
+
+.dawg-mark--agent {
+  background: var(--dawg-clip-1);
+  color: var(--dawg-clip-ink);
+  border-color: var(--dawg-clip-ink);
+}
+
+.dawg-mark--warning {
+  background: var(--dawg-clip-2);
+  color: var(--dawg-clip-ink);
+  border-color: var(--dawg-clip-ink);
+}
+
+.dawg-mark--track {
+  background: var(--dawg-clip-3);
+  color: var(--dawg-clip-ink);
+  border-color: var(--dawg-clip-ink);
+}
+
+.dawg-mark--loopRule {
+  background: var(--dawg-clip-4);
+  color: var(--dawg-clip-ink);
+  border-color: var(--dawg-clip-ink);
+}
+
+.dawg-mark--transport,
+.dawg-mark--success {
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.dawg-prose li.dawg-note {
+  list-style: none;
+  margin-left: -1.25rem;
+}
+
+.dawg-prose li.dawg-note .dawg-mark {
+  font-size: 0.75em;
+}

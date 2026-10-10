@@ -4,17 +4,21 @@ title: Agent
 order: 11
 ---
 
-The agent is optional: commands work offline. With a provider, plain
-requests go to it, and it types the commands it runs so you learn them.
+The agent is optional: every command works offline without it. With
+a provider set, plain sentences go to the agent and it edits the song,
+typing each command it runs so you learn them as you go.
 
 ## Ask
+
+Type what you want in plain words and press Enter.
 
 - "make the reverb wetter and play a C minor arpeggio"
 
 ## Type it yourself
 
-- `model key` · `model` picker · `model fast` · `logout`
-- `showme on` · `showme quiet` · `/auth --check`
+- `model key` sets up a provider · `model` picks a model
+- `model fast` · `logout` · `/auth --check`
+- `showme on` · `showme quiet`
 
 ## Menu
 
@@ -22,7 +26,8 @@ requests go to it, and it types the commands it runs so you learn them.
 
 ## Keys
 
-- Enter sends · Alt-Enter runs next · Ctrl-Q NOW/NEXT · Esc stops
+- Enter sends · Alt-Enter runs next · Esc stops the agent
+- Ctrl-Q switches the prompt between NOW and NEXT
 
 ## Next
 

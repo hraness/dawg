@@ -9,17 +9,17 @@ import { guideSummary, guidesDirectory, listGuides } from "./guides";
 function GuideBody({ id, body }: Readonly<{ id: string; body: string }>) {
   const screens = guideScreens[id];
   if (screens === undefined)
-    return <Markdown source={body} headingOffset={1} />;
+    return <Markdown source={body} headingOffset={1} marks />;
   const { intro, rest } = splitIntro(body);
   return (
     <>
-      <Markdown source={intro} headingOffset={1} />
+      <Markdown source={intro} headingOffset={1} marks />
       <div className="dawg-docs__screens">
         {screens.map((screen) => (
           <Screen key={screen} id={screen} />
         ))}
       </div>
-      {rest === "" ? null : <Markdown source={rest} headingOffset={1} />}
+      {rest === "" ? null : <Markdown source={rest} headingOffset={1} marks />}
     </>
   );
 }
