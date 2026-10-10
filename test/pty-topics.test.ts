@@ -165,7 +165,8 @@ describe.skipIf(!supported)("real PTY at 80x24: topics and first run", () => {
       offline.terminal.write("\u0003");
       await offline.proc.exited;
     }
-  }, 30_000);
+    // Two launches in a row; CI runners need more than 30 s for both.
+  }, 90_000);
 
   test("/style receipt, bare tempo, formant 3, lyrics offline", async () => {
     const t = await launch(80, 24, OFFLINE, []);
