@@ -300,7 +300,7 @@ import {
 } from "./tui/play-session.ts";
 import {
   EditMenu,
-  MENU_USAGE,
+  menuUsage,
   menuSectionPath,
   type MenuContext,
 } from "./tui/menu.ts";
@@ -2209,7 +2209,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (menuCommand) {
     const section = menuCommand[1]?.toLowerCase();
     if (section && !menuSectionPath(menuContext(), section))
-      return fail(MENU_USAGE);
+      return fail(menuUsage(menuContext(), section));
     openMenu(section);
     return ok("menu");
   }

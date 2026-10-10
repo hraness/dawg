@@ -969,7 +969,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   pack: "pack list | info <name> | use <pack>/<sound> | add <url>",
   kit: "/kit [name] · /kit syn909",
   euclid: "euclid [drum] · euclid hat 7 16",
-  menu: "/menu [topic] · /menu sound · Ctrl-K · the same topics as help",
+  menu: "/menu [sound|voice|effects|rhythm|chords|mix|arrange|project|keys|agent] or any row name · /menu tuning · Ctrl-K",
   style:
     "style [list [id]|search <words>|info <id>|<id> [bars] [seed]|blend <a> <b> [w] [bars] [seed]|again] · style deep-house 16 · style blend bebop bossa-nova 0.3",
   master:

@@ -10,6 +10,7 @@
  * patterns are read from the source, so a new window command is covered
  * without editing this file.
  */
+import { canonicalWindowForm } from "../src/commands/grammar.ts";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createScore, type TrackScore } from "../core/score.ts";
@@ -177,6 +178,9 @@ export function accepts(
 ): boolean {
   const command = line.trim();
   if (!command) return false;
+  // `model key`, `models`, `voice`: the window runs their canonical form.
+  const canonical = canonicalWindowForm(command);
+  if (canonical) return accepts(canonical, score);
   if (commandParses(command, score)) return true;
   if (parseStyleCommand(command)) return true;
   if (parseCalibrationCommand(command)) return true;

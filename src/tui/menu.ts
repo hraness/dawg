@@ -14,6 +14,7 @@ import {
   voiceRootNodes,
 } from "./menu-voice.ts";
 import { commandParam, sketchFor } from "./sketch.ts";
+import { nearest } from "../commands/nearest.ts";
 import {
   ARROW_DOWN,
   ARROW_UP,
@@ -885,7 +886,7 @@ function tracksNodes(context: MenuContext): MenuNode[] {
         {
           kind: "action",
           label: `remove ${track.id}`,
-          command: `/track rm ${track.id}`,
+          command: `/track remove ${track.id}`,
           help: "remove the focused track (^z brings it back)",
         },
       );
@@ -4164,8 +4165,40 @@ export const MENU_TOPICS: readonly string[] = Object.freeze(
   MENU_SECTIONS.slice(0, 10),
 );
 
-/** `/menu`'s usage error: the canonical roots, then any row by name. */
-export const MENU_USAGE = `usage: /menu [${MENU_TOPICS.join("|")}] or any row name`;
+/** The names `/menu` and `/help menu` list: one per topic, no aliases. */
+export const MENU_SHOWN_SECTIONS: readonly string[] = MENU_TOPICS;
+
+/** `/menu`'s usage line: the short form; `/help menu` lists every topic. */
+export const MENU_USAGE = "usage: /menu <topic or row> · /help menu lists them";
+
+/**
+ * The error for `/menu <section>` when nothing matches: the nearest topic
+ * or row name first, so it fits 80 columns, then the short usage.
+ */
+export function menuUsage(context: MenuContext, section: string): string {
+  const names = new Set<string>(MENU_SECTIONS);
+  for (const node of rootNodes(context))
+    if (node.kind === "menu") {
+      let children: MenuNode[] = [];
+      try {
+        children = node.build(context);
+      } catch {
+        continue;
+      }
+      for (const child of children)
+        if (child.kind === "menu") names.add(labelName(child.label));
+    }
+  const near = nearest(section, names);
+  return `no menu "${section}"${near ? ` · did you mean /menu ${near}?` : ""} · /menu <topic or row>`;
+}
+
+/** A row label without its padded detail: `granular  12 presets` → `granular`. */
+function labelName(label: string): string {
+  return label
+    .split(/\s{2,}/)[0]!
+    .trim()
+    .toLowerCase();
+}
 
 /**
  * The path of menu ids `/menu <section>` walks: a topic or older id from

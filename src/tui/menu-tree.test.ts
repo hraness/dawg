@@ -8,12 +8,15 @@ import { describe, expect, test } from "bun:test";
 import { createScore, type TrackScore } from "../../core/score.ts";
 import { parseCalibrationCommand } from "../commands/calibration.ts";
 import { commandParses } from "../commands/parses.ts";
+import { helpTopicLines } from "../commands/help.ts";
 import { parseStyleCommand } from "../commands/style.ts";
 import {
   LABEL_WIDTH,
   MENU_SECTIONS,
   MENU_TOPICS,
   MENU_USAGE,
+  MENU_SHOWN_SECTIONS,
+  menuUsage,
   EditMenu,
   menuPath,
   menuSectionPath,
@@ -196,7 +199,20 @@ describe("the ctrl-k tree", () => {
     expect(menuSectionPath(ctx, "reverb")).toEqual(["effects", "reverb"]);
     expect(menuSectionPath(ctx, "nonsense")).toBeUndefined();
     expect(MENU_USAGE).toBe(
-      "usage: /menu [sound|voice|effects|rhythm|chords|mix|arrange|project|keys|agent] or any row name",
+      "usage: /menu <topic or row> · /help menu lists them",
+    );
+    // The full list lives in /help menu, one name per topic.
+    const helpMenu = helpTopicLines("menu", 200).join(" ");
+    for (const topic of MENU_SHOWN_SECTIONS) expect(helpMenu).toContain(topic);
+  });
+
+  test("an unknown /menu id fits 80 columns and suggests the nearest", () => {
+    const ctx = context("piano");
+    const miss = menuUsage(ctx, "tunning");
+    expect(miss).toContain("did you mean /menu tuning?");
+    expect(miss.length + 2).toBeLessThanOrEqual(80);
+    expect(menuUsage(ctx, "nonsense")).toBe(
+      'no menu "nonsense" · /menu <topic or row>',
     );
   });
 
