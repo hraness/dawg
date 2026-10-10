@@ -7,6 +7,7 @@ import { noteName as midiNoteName } from "./media/notes.ts";
 import {
   EVERYDAY_VERBS,
   EXPORT_USAGE,
+  elsewhereHint,
   FREE_TEXT_HINTS,
   LOOP_USAGE,
   WINDOW_VERBS,
@@ -2819,6 +2820,8 @@ async function submit(prompt: string): Promise<string | Receipt> {
   // Bare `rename`, `fork`, `resume`, `login` take free text: a hint only.
   const freeText = FREE_TEXT_HINTS[command.toLowerCase()];
   if (freeText !== undefined) return note(freeText);
+  const elsewhere = elsewhereHint(command);
+  if (elsewhere !== undefined) return note(elsewhere);
   // `/model` belongs to its own handler above; every other slash word that
   // reached here is unknown or misused, and never a question for the agent.
   // `/instrument aah` is `instrument aah`; `instrument sing choir` is

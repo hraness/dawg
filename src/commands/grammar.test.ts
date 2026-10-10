@@ -8,6 +8,7 @@ import { AGENT_TOOLS, chatTools, findAgentTool } from "../agent/tools.ts";
 import { renderToolCatalog } from "../agent/xcb-agent.ts";
 import {
   canonicalWindowForm,
+  elsewhereHint,
   candidates,
   friendlyCoreError,
   knownVerbs,
@@ -192,6 +193,15 @@ describe("refusals", () => {
   test("missing notes and tracks", () => {
     expect(noNote("n1")).toBe("no note n1 · notes lists them");
     expect(noTrack("bass")).toBe("no track bass · tracks lists them");
+  });
+});
+
+describe("words kept elsewhere", () => {
+  test("swing points at rhythm rows, not sing", () => {
+    expect(elsewhereHint("swing")).toContain("euclid hat swing 0.1");
+    expect(elsewhereHint("/swing 2")).toContain("rhythm");
+    expect(elsewhereHint("euclid hat swing 0.1")).toBeUndefined();
+    expect(commandParses("euclid hat swing 0.1", score)).toBe(true);
   });
 });
 

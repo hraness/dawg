@@ -262,6 +262,22 @@ export const FREE_TEXT_HINTS: Readonly<Record<string, string>> = {
 };
 
 /**
+ * Words people reach for that dawg keeps elsewhere: the hint names where,
+ * so `swing` never reads as a typo of `sing`.
+ */
+export const ELSEWHERE_HINTS: Readonly<Record<string, string>> = {
+  swing: "swing lives on a rhythm row · euclid hat swing 0.1 · help rhythm",
+};
+
+/** The hint for a line whose verb dawg keeps elsewhere, if any. */
+export function elsewhereHint(line: string): string | undefined {
+  const verb = verbOf(line);
+  return Object.prototype.hasOwnProperty.call(ELSEWHERE_HINTS, verb)
+    ? ELSEWHERE_HINTS[verb]
+    : undefined;
+}
+
+/**
  * Window verbs that run the same with or without the slash. The prompt bar
  * retries the other spelling of these when the typed one is not handled.
  */
