@@ -98,6 +98,8 @@ export function gauss(rand: () => number): number {
 const SQRT12 = Math.sqrt(12);
 /** Harmonics the level normalization sums (the rest carry under 2%). */
 const NORM_HARMONICS = 40;
+/** Scratch for one filter's complex response (`responsePower`). */
+const RESPONSE = new Float64Array(2);
 /**
  * Level normalization time constants. Gain falls fast (a formant landing
  * on a harmonic is loud at once) and rises slowly: a narrow filter that
@@ -254,10 +256,14 @@ export class VoiceCore {
     const sw = Math.sin(w);
     const c2w = 2 * cw * cw - 1;
     const s2w = 2 * sw * cw;
+    const h = RESPONSE;
     let re = 1;
     let im = 0;
-    for (const r of this.tract.res) {
-      const [hr, hi] = r.response(cw, sw, c2w, s2w);
+    const res = this.tract.res;
+    for (let k = 0; k < res.length; k += 1) {
+      res[k]!.responseInto(cw, sw, c2w, s2w, h);
+      const hr = h[0]!;
+      const hi = h[1]!;
       const nr = re * hr - im * hi;
       im = re * hi + im * hr;
       re = nr;
@@ -265,13 +271,17 @@ export class VoiceCore {
     let addRe = 1;
     let addIm = 0;
     if (s.ring > 0) {
-      const [rr, ri] = this.ringBand.response(cw, sw, c2w, s2w);
-      addRe += rr * s.ring * 3;
-      addIm += ri * s.ring * 3;
+      this.ringBand.responseInto(cw, sw, c2w, s2w, h);
+      addRe += h[0]! * s.ring * 3;
+      addIm += h[1]! * s.ring * 3;
     }
     if (s.overtone > 0) {
-      const [ar, ai] = this.ot1.response(cw, sw, c2w, s2w);
-      const [br, bi] = this.ot2.response(cw, sw, c2w, s2w);
+      this.ot1.responseInto(cw, sw, c2w, s2w, h);
+      const ar = h[0]!;
+      const ai = h[1]!;
+      this.ot2.responseInto(cw, sw, c2w, s2w, h);
+      const br = h[0]!;
+      const bi = h[1]!;
       addRe += (ar * br - ai * bi) * s.overtone * OVERTONE_GAIN;
       addIm += (ar * bi + ai * br) * s.overtone * OVERTONE_GAIN;
     }
@@ -606,36 +616,75 @@ function renderLine(
       }
     }
   }
+  for (const b of shared)
+    shapeBucket(
+      b,
+      line,
+      setup,
+      live,
+      frames,
+      slur,
+      push,
+      ringHz,
+      segmentAt,
+      vowelTable,
+      left,
+      right,
+    );
+}
+
+/**
+ * One shared choir tract over its bucket's summed sources, mixed into the
+ * output. A function of its own so its per-sample loop is optimised even
+ * though `renderLine` runs only once per line.
+ */
+function shapeBucket(
+  b: { core: VoiceCore; st: number; buf: Float64Array; pan: number },
+  line: Planned,
+  setup: Setup,
+  live: Live,
+  frames: number,
+  slur: number,
+  push: number,
+  ringHz: number,
+  segmentAt: (offset: number) => Segment,
+  vowelTable: (
+    offset: number,
+    live: Live,
+    scale: number,
+    hz: number,
+  ) => readonly Formant[],
+  left: Float64Array,
+  right: Float64Array | undefined,
+): void {
+  const head = line.head;
+  const pl = Math.cos(((b.pan + 1) * Math.PI) / 4) * Math.SQRT2;
+  const pr = Math.sin(((b.pan + 1) * Math.PI) / 4) * Math.SQRT2;
   let hz = line.segments[0]!.hz;
-  for (const b of shared) {
-    const pl = Math.cos(((b.pan + 1) * Math.PI) / 4) * Math.SQRT2;
-    const pr = Math.sin(((b.pan + 1) * Math.PI) / 4) * Math.SQRT2;
-    hz = line.segments[0]!.hz;
-    for (let j = 0; j < frames; j += 1) {
-      const index = line.start + j;
-      if (j % SING_CONTROL === 0) {
-        applyLanes(live, setup, index);
-        const seg = segmentAt(j);
-        hz = j === 0 ? seg.hz : seg.hz + (hz - seg.hz) * slur;
-        const scale = 2 ** ((live.formant + b.st) / 12);
-        b.core.setTract(vowelTable(j, live, scale, hz), scale, ringHz);
-        if (j % (SING_CONTROL * NORM_EVERY) === 0) {
-          const rd = Math.min(
-            2.7,
-            Math.max(
-              0.3,
-              2.5 - 2 * live.bright - 1.2 * (head.velocity - 0.6) - push,
-            ),
-          );
-          b.core.aimLevel(hz, rd, live);
-        }
+  for (let j = 0; j < frames; j += 1) {
+    const index = line.start + j;
+    if (j % SING_CONTROL === 0) {
+      applyLanes(live, setup, index);
+      const seg = segmentAt(j);
+      hz = j === 0 ? seg.hz : seg.hz + (hz - seg.hz) * slur;
+      const scale = 2 ** ((live.formant + b.st) / 12);
+      b.core.setTract(vowelTable(j, live, scale, hz), scale, ringHz);
+      if (j % (SING_CONTROL * NORM_EVERY) === 0) {
+        const rd = Math.min(
+          2.7,
+          Math.max(
+            0.3,
+            2.5 - 2 * live.bright - 1.2 * (head.velocity - 0.6) - push,
+          ),
+        );
+        b.core.aimLevel(hz, rd, live);
       }
-      const y = b.core.shape(b.buf[j]!, live) * setup.gainAt(index);
-      if (right) {
-        left[index] = left[index]! + y * pl;
-        right[index] = right[index]! + y * pr;
-      } else left[index] = left[index]! + y;
     }
+    const y = b.core.shape(b.buf[j]!, live) * setup.gainAt(index);
+    if (right) {
+      left[index] = left[index]! + y * pl;
+      right[index] = right[index]! + y * pr;
+    } else left[index] = left[index]! + y;
   }
 }
 

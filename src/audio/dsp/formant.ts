@@ -276,10 +276,23 @@ export class Resonator {
   }
   /** H(e^jw) as [re, im], given cos/sin of w and 2w. */
   response(cw: number, sw: number, c2w: number, s2w: number): [number, number] {
+    const out = new Float64Array(2);
+    this.responseInto(cw, sw, c2w, s2w, out);
+    return [out[0]!, out[1]!];
+  }
+  /** `response` written into `out[0..1]` (no allocation on the hot path). */
+  responseInto(
+    cw: number,
+    sw: number,
+    c2w: number,
+    s2w: number,
+    out: Float64Array,
+  ): void {
     const re = 1 - this.b * cw - this.c * c2w;
     const im = this.b * sw + this.c * s2w;
     const d = re * re + im * im;
-    return [(this.a * re) / d, (-this.a * im) / d];
+    out[0] = (this.a * re) / d;
+    out[1] = (-this.a * im) / d;
   }
   process(x: number): number {
     const y = this.a * x + this.b * this.y1 + this.c * this.y2;
@@ -311,12 +324,25 @@ export class Bandpass {
   }
   /** H(e^jw) as [re, im], given cos/sin of w and 2w. */
   response(cw: number, sw: number, c2w: number, s2w: number): [number, number] {
+    const out = new Float64Array(2);
+    this.responseInto(cw, sw, c2w, s2w, out);
+    return [out[0]!, out[1]!];
+  }
+  /** `response` written into `out[0..1]` (no allocation on the hot path). */
+  responseInto(
+    cw: number,
+    sw: number,
+    c2w: number,
+    s2w: number,
+    out: Float64Array,
+  ): void {
     const nr = this.b0 + this.b2 * c2w;
     const ni = -this.b2 * s2w;
     const dr = 1 + this.a1 * cw + this.a2 * c2w;
     const di = -this.a1 * sw - this.a2 * s2w;
     const d = dr * dr + di * di;
-    return [(nr * dr + ni * di) / d, (ni * dr - nr * di) / d];
+    out[0] = (nr * dr + ni * di) / d;
+    out[1] = (ni * dr - nr * di) / d;
   }
   process(x: number): number {
     const y =

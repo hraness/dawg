@@ -91,6 +91,97 @@ function runBand(
 }
 
 /**
+ * The band filter run twice in cascade, in one pass when the coefficients
+ * are fixed (the same arithmetic per sample as two passes).
+ */
+function runBandTwice(
+  x: Float64Array,
+  filter: Biquad,
+  filterAt: ((i: number) => Biquad) | undefined,
+): void {
+  if (filterAt) {
+    runBand(x, filter, filterAt);
+    runBand(x, filter, filterAt);
+    return;
+  }
+  const { b0, b1, b2, a1, a2 } = filter;
+  let p1 = 0;
+  let p2 = 0;
+  let q1 = 0;
+  let q2 = 0;
+  for (let i = 0; i < x.length; i += 1) {
+    const v = x[i]!;
+    const y = b0 * v + p1;
+    p1 = b1 * v - a1 * y + p2;
+    p2 = b2 * v - a2 * y;
+    const w = b0 * y + q1;
+    q1 = b1 * y - a1 * w + q2;
+    q2 = b2 * y - a2 * w;
+    x[i] = w;
+  }
+}
+
+/** `e[i] *= g[i]` (its own function so the loop is optimised). */
+function multiplyInto(e: Float64Array, g: Float64Array): void {
+  for (let i = 0; i < e.length; i += 1) e[i] = e[i]! * g[i]!;
+}
+
+/** Cross-fades the carrier toward level-matched noise where `u` is unvoiced. */
+function blendUnvoiced(
+  carrier: Float64Array,
+  u: Float64Array,
+  control: VocoderControl,
+  seed: number,
+  origin: number,
+  sr: number,
+): void {
+  const level = follow(carrier, 0.01, 0.1, sr);
+  const curve = control.curves.unvoiced;
+  const fixed = control.settings.unvoiced;
+  for (let i = 0; i < carrier.length; i += 1) {
+    const w = u[i]! * (curve ? curve[i]! : fixed);
+    if (w <= 0) continue;
+    const noise = noiseSample(seed, origin + i);
+    carrier[i] =
+      carrier[i]! * (1 - w) + noise * 1.7 * Math.max(level[i]!, 0.05) * w;
+  }
+}
+
+/**
+ * One synthesis band into `out` with a fixed formant shift and depth: the
+ * envelope interpolated between analysis bands `ea` and `eb` by `fr`, shaped
+ * by `depth`, over the carrier band `syn` (whitened by `ec` when enhancing).
+ * A small function of its own so the JIT optimises the loop: inlined in
+ * `channelVocode`, which runs once per render, it stayed in the baseline tier.
+ */
+function mixBandFixed(
+  out: Float64Array,
+  syn: Float64Array,
+  ea: Float64Array,
+  eb: Float64Array,
+  fr: number,
+  ec: Float64Array | undefined,
+  depth: number,
+  scale: number,
+): void {
+  const n = out.length;
+  const refPow = REF ** (1 - depth);
+  if (ec)
+    for (let i = 0; i < n; i += 1) {
+      const e = ea[i]! * (1 - fr) + eb[i]! * fr;
+      const level = depth === 1 ? e : e ** depth * refPow;
+      const g = level / (ec[i]! + 1e-5);
+      out[i]! += syn[i]! * Math.min(g, 1e3) * scale;
+    }
+  else
+    for (let i = 0; i < n; i += 1) {
+      const e = ea[i]! * (1 - fr) + eb[i]! * fr;
+      const level = depth === 1 ? e : e ** depth * refPow;
+      out[i]! += syn[i]! * level * 8 * scale;
+    }
+}
+
+/**
  * Vocodes each carrier channel with `mod`. The modulator is read up to the
  * largest band advance past each output sample (zero past its end).
  * Returns the wet signal per channel, after `gain` and before the peak guard
@@ -139,13 +230,12 @@ export function channelVocode(
       env.push(new Float64Array(n));
       continue;
     }
-    for (let i = 0; i < n; i += 1) {
-      const j = i + b.advance;
-      band[i] = j < mod.length ? mod[j]! : 0;
-    }
-    const f = filterAt(k, b.advance);
-    runBand(band, b.filter, f);
-    runBand(band, b.filter, f);
+    // The modulator advanced by the band's delay, zero past its end.
+    const from = Math.min(b.advance, mod.length);
+    const take = Math.min(n, mod.length - from);
+    band.set(mod.subarray(from, from + take));
+    band.fill(0, take);
+    runBandTwice(band, b.filter, filterAt(k, b.advance));
     const e = followVarying(
       band,
       p.attack,
@@ -154,7 +244,7 @@ export function channelVocode(
       sr,
       control.hold,
     );
-    if (gate) for (let i = 0; i < n; i += 1) e[i] = e[i]! * gate[i]!;
+    if (gate) multiplyInto(e, gate);
     env.push(e);
   }
   const shiftOf = (i: number): number =>
@@ -176,43 +266,44 @@ export function channelVocode(
   };
   const hiss =
     p.hiss > 0 || control.curves.hiss ? hissPath(mod, n, sr) : undefined;
+  const zeros = new Float64Array(n);
   const outs: Float64Array[] = [];
   for (const car of cars) {
     const carrier = car.slice(0, n);
-    if (u) {
-      const level = follow(carrier, 0.01, 0.1, sr);
-      for (let i = 0; i < n; i += 1) {
-        const w = u[i]! * at(control, "unvoiced", i);
-        if (w <= 0) continue;
-        const noise = noiseSample(seed, origin + i);
-        carrier[i] =
-          carrier[i]! * (1 - w) + noise * 1.7 * Math.max(level[i]!, 0.05) * w;
-      }
-    }
+    if (u) blendUnvoiced(carrier, u, control, seed, origin, sr);
     const out = new Float64Array(n);
     const syn = new Float64Array(n);
     for (let k = 0; k < nb; k += 1) {
       const b = bands[k]!;
       if (!b.live) continue;
       syn.set(carrier);
-      const f = filterAt(k, 0);
-      runBand(syn, b.filter, f);
-      runBand(syn, b.filter, f);
-      if (p.enhance) {
-        const ec = followVarying(
-          syn,
-          p.attack,
-          p.release,
-          control.curves.release,
-          sr,
-        );
+      runBandTwice(syn, b.filter, filterAt(k, 0));
+      // The envelope this band reads: a fixed pair of analysis bands and
+      // weight unless the formant is automated (same arithmetic as
+      // `synthEnv`, without a call per sample).
+      let ea: Float64Array = zeros;
+      let eb: Float64Array = zeros;
+      let fr = 0;
+      if (staticShift !== undefined) {
+        const pos = k - staticShift;
+        const i0 = Math.floor(pos);
+        fr = pos - i0;
+        if (i0 >= 0 && i0 < nb) ea = env[i0]!;
+        if (i0 + 1 >= 0 && i0 + 1 < nb) eb = env[i0 + 1]!;
+      }
+      const ec = p.enhance
+        ? followVarying(syn, p.attack, p.release, control.curves.release, sr)
+        : undefined;
+      if (staticShift !== undefined && depthCurve === undefined)
+        mixBandFixed(out, syn, ea, eb, fr, ec, p.depth, scale);
+      else
         for (let i = 0; i < n; i += 1) {
-          const g = shape(synthEnv(k, i), i) / (ec[i]! + 1e-5);
-          out[i]! += syn[i]! * Math.min(g, 1e3) * scale;
+          const level = shape(synthEnv(k, i), i);
+          if (ec) {
+            const g = level / (ec[i]! + 1e-5);
+            out[i]! += syn[i]! * Math.min(g, 1e3) * scale;
+          } else out[i]! += syn[i]! * level * 8 * scale;
         }
-      } else
-        for (let i = 0; i < n; i += 1)
-          out[i]! += syn[i]! * shape(synthEnv(k, i), i) * 8 * scale;
     }
     if (hiss)
       for (let i = 0; i < n; i += 1)
