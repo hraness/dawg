@@ -249,3 +249,51 @@ test.skipIf(!supported)(
   },
   30_000,
 );
+
+test.skipIf(!supported)(
+  "real PTY: show-me types loop and copy … to; TAPE shows the landed bars",
+  async () => {
+    replies = [
+      gated([
+        [
+          "bars 8",
+          "track bass",
+          "add C2 at 16 for 1",
+          "add G2 at 20 for 1",
+          "loop 5-6",
+          "copy bass 5-6 to 7",
+          "Looped 5-6 and copied it to 7: type copy bass 5-6 to 7.",
+        ].join("\n"),
+      ]),
+    ];
+    const t = await launch(100, 30, env(), ["--track", "main"]);
+    await t.until(() => t.vt.text().includes(" NOW "), "prompt");
+    await t.send("please repeat the bass twice\r");
+    await t.until(
+      () => t.vt.text().includes("do it yourself: type copy bass 5-6 to 7"),
+      "finished",
+      10_000,
+    );
+    await Bun.sleep(300);
+    const saved = await composition(t.cwd);
+    // The agent's turn never used the clipboard.
+    const body = bodies.at(-1) as { messages: { content: unknown }[] };
+    expect(JSON.stringify(body.messages[0]!.content)).toContain(
+      "Never copy to the clipboard",
+    );
+    // loop 5-6 and copy bass 5-6 to 7 landed: bars 7-8 repeat bars 5-6.
+    expect(saved.loop).toEqual({ startBar: 4, bars: 2 });
+    const ticks = (saved.notes as { trackId: string; startTick: number }[])
+      .filter((note) => note.trackId === "bass")
+      .map((note) => note.startTick)
+      .sort((a, b) => a - b);
+    expect(ticks).toEqual([7680, 9600, 11520, 13440]);
+    // TAPE draws the result: the loop bracket and bass in bars 5-8.
+    await t.send("\u0014");
+    await t.until(() => t.vt.text().includes("(loop)"), "tape loop");
+    expect(t.vt.text()).toContain("bars 5–6 (loop)");
+    expect(t.vt.text()).toMatch(/bass\s+┊···┊···┊···┊···▃···▃···▃···▃/);
+    await quit(t);
+  },
+  30_000,
+);

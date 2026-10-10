@@ -622,6 +622,21 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
     ],
   },
   {
+    group: "project · panes",
+    entries: [
+      { command: "panes", summary: "who has this session open, on what" },
+      {
+        command: "pane <screen> [<track>]",
+        summary: "copies dawg pane … for another terminal",
+      },
+      { command: "pin · unpin", summary: "keep this pane on its track" },
+      {
+        command: "follow [<letter>] · unfollow",
+        summary: "follow another pane's track · follow b",
+      },
+    ],
+  },
+  {
     group: "agent",
     entries: [
       {
@@ -680,6 +695,65 @@ export const HELP_GUIDE: readonly HelpSection[] = [
   },
 ];
 
+/**
+ * `/help arrange`: one screen around the range verbs (design F11), each row
+ * a line to type. The full syntax of every arranging command stays in
+ * `/help all` and `/help <command>` (`/help copy`, `/help section`).
+ */
+export const ARRANGE_PAGE: HelpSection = {
+  group: "arrange",
+  entries: [
+    {
+      command: "loop 5-6 · loop chorus",
+      summary: "loop the bars · loop next · loop off",
+    },
+    {
+      command: "copy bass 5-6 to 7",
+      summary: "copy bars · x2 repeats · all = every track",
+    },
+    {
+      command: "move bass 5-6 to 9",
+      summary: "move bars · the source empties",
+    },
+    {
+      command: "clear bass 5-6",
+      summary: "empty bars · reverse bass 5-6 mirrors",
+    },
+    {
+      command: "copy all 1-4 · paste at 9",
+      summary: "the clipboard, for later",
+    },
+    { command: "jump 5 · jump chorus", summary: "move the playhead" },
+    { command: "ctrl-t · tape", summary: "every track across the bars" },
+    {
+      command: "section chorus 9-16",
+      summary: "name bars · section loop chorus",
+    },
+    {
+      command: "form verse verse chorus",
+      summary: "song form · form print lays it out",
+    },
+    {
+      command: "build · drop · fill chorus",
+      summary: "riser · pre-drop cut · drum fill",
+    },
+    { command: "style deep-house 16", summary: "a whole song in a style" },
+  ],
+};
+
+/**
+ * `/help panes`: several terminals on one session (§12). Its rows are the
+ * `project · panes` reference group under a heading of its own.
+ */
+function panesLines(width: number): string[] {
+  const group = HELP_SECTIONS.find((s) => s.group === "project · panes")!;
+  return [
+    ...sectionLines([{ ...group, group: "panes" }], width),
+    "",
+    truncate("dawg pane tape in another terminal · guide panes", width),
+  ];
+}
+
 /** Topics `/help <topic>` takes, besides `all` (aliases resolve too). */
 export const HELP_TOPICS = TOPICS;
 
@@ -737,6 +811,8 @@ export function topicSections(id: TopicId): readonly HelpSection[] {
 /** One topic's page: its groups, then where else the topic opens. */
 function topicLines(id: TopicId, width: number): string[] {
   if (id === "keys") return [...keysLines(width), ...doors(id, width)];
+  if (id === "arrange")
+    return [...sectionLines([ARRANGE_PAGE], width), ...doors(id, width)];
   return [...sectionLines(topicSections(id), width), ...doors(id, width)];
 }
 
@@ -755,6 +831,7 @@ export function helpTopicLines(
     return helpLines(width);
   if ((TOPICS as readonly string[]).includes(name))
     return topicLines(name as TopicId, width);
+  if (name === "panes" || name === "pane") return panesLines(width);
   const spelled = HELP_COMMAND_ALIASES[name];
   if (spelled) return commandTopic(spelled, width, name);
   const alias = resolveTopic(name);
@@ -956,6 +1033,15 @@ export const USAGE: Readonly<Record<string, string>> = {
     "paste [at <bar>] [x<N>] [insert|merge] · paste at 9 · copy bass 5-6 fills the clipboard",
   reverse: "reverse [<track>|all] [<a>-<b>|<section>] · reverse bass 5-6",
   jump: "jump <bar>[.<beat>] | <section> · jump 5 · jump 5.3 · jump chorus",
+  loop: "loop <a>-<b> | <section> | next | prev | off · loop 5-6 · loop chorus · loop off",
+  pane: "pane home|play|tape|sound|menu [<track>] [pin|follow [<letter>]] · pane tape · pane sound bass pin",
+  follow: "follow [<letter>] · follow b · unfollow stops",
+  panes: "panes · who has this session open, on what · pane tape",
+  knobs:
+    "knobs [sound|mix|master|tempo|fx <effect>] · knobs mix · knobs fx reverb",
+  mix: "mix · the mixer page · volume drums 0.5 · pan drums -0.2",
+  audio:
+    "audio [out|in <name|default>] | test · audio out default · audio test",
   extend: "extend <count> bars · extend 4 bars",
   instrument:
     "instrument <name> · sine piano pluck bass sawtooth square triangle wavetable kit · pianos: grand upright felt honkytonk prepared · electric: epiano suitcase dyno wurli clav funkclav · synth: supersaw pulse white pink z_square · voices: vocal aah ooh choir chorale khoomei sygyt kargyraa vocoder…",

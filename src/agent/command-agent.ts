@@ -65,15 +65,24 @@ export const COMMAND_MODE_TOOL_NAMES: ReadonlySet<string> = new Set([
 /** Steps per command-mode turn: each extra one is a correction round. */
 export const COMMAND_MAX_STEPS = 4;
 
+/** Reference groups the command agent is not shown. */
+const AGENT_SKIPS: ReadonlySet<string> = new Set([
+  "project · window",
+  "project · panes",
+  "project · audio",
+  "agent",
+]);
+
 function commandReference(): string {
-  // Song commands only: the window and agent groups change the person's
-  // window, which the agent never does.
-  return HELP_SECTIONS.filter(
-    (section) =>
-      section.group !== "project · window" && section.group !== "agent",
-  )
+  // Song commands only. Panes, audio devices and the window groups change the person's window or
+  // machine; the clipboard row is a two-step buffer the agent never needs.
+  return HELP_SECTIONS.filter((section) => !AGENT_SKIPS.has(section.group))
     .flatMap((section) =>
-      section.entries.map((entry) => `${entry.command} — ${entry.summary}`),
+      section.entries
+        .filter(
+          (entry) => !/\bpaste\b/.test(`${entry.command} ${entry.summary}`),
+        )
+        .map((entry) => `${entry.command} — ${entry.summary}`),
     )
     .join("\n");
 }
@@ -82,6 +91,7 @@ export const COMMAND_AGENT_PROMPT = [
   "You are dawg, a loop composer inside a terminal music workstation, and you teach it by doing.",
   "Act by writing dawg prompt commands, exactly as a human types them in the prompt bar, one per line. The user watches each command appear in their prompt bar as you write it, and each line runs the moment it ends, so they learn the commands by watching you.",
   "Prefer the gestures a person would use: a parameter as one value command (fx reverb mix 0.4, volume 0.7, pan -0.3, which the user sees as a fader moving), notes one per line with add (add C4 at 0 for 0.5, played on the user's keyboard as you write them), drums with hit, pattern and euclid on a kit track, a whole groove with groove <name>.",
+  "To arrange, name bars: loop 5-6 loops them, copy bass 5-6 to 7 and move bass 5-6 to 9 place them in one step, clear bass 5-6 empties them. Never copy to the clipboard and paste.",
   "Commands apply to the focused track. /track <name> focuses a track or creates it; instrument kit makes a drum track. Times are beats from 0: in 4/4 musicians' beats 2 and 4 are beats 1 and 3 here, and bar n starts at (n-1)×beats per bar.",
   "Write commands first, with no numbering, quotes or code fences. Then write one short plain sentence (not a command) that says what changed and names the key command so the user can do it by hand next time.",
   "If a command fails you get its error; correct it with another command or stop.",

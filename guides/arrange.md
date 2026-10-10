@@ -4,18 +4,19 @@ title: Arrange
 order: 9
 ---
 
-Notes make tracks, tracks make sections, sections make the form.
+Notes make tracks, bars make sections, sections make the form. Name a
+range of bars and loop, copy or move it.
 
 ## Ask
 
-- "make 16 bars of deep house" · "add a chorus that lifts at bar 9"
+- "loop bars 5 to 6" · "copy the bass in 5-6 to bar 7 twice"
 
 ## Type it yourself
 
-- `add E4 at 2 for 0.5` · `track bass` · `tracks`
-- `section chorus 9-16` · `form verse verse chorus verse`
-- `build into chorus` · `drop chorus` · `fill chorus`
-- `style deep-house 16` · `bars 8` · `extend 4 bars`
+- `loop 5-6` · `loop chorus` · `loop next` · `loop off`
+- `copy bass 5-6 to 7 x2` · `move bass 5-6 to 9` · `clear bass 5-6`
+- `copy all 1-4` then `paste at 9` · `reverse bass 5-6` · `jump 5`
+- `section chorus 9-16` · `form verse chorus` · `form print`
 
 ## Menu
 
@@ -23,8 +24,8 @@ Notes make tracks, tracks make sections, sections make the form.
 
 ## Keys
 
-- `view all` shows every track · Ctrl-O the transcript
+- Ctrl-T TAPE: every track across the bars · `\` loops the section
 
 ## Next
 
-- `guide notes` · `guide tracks` · `guide tempo` · `guide styles`
+- `guide tape` · `guide notes` · `guide tracks` · `guide panes`

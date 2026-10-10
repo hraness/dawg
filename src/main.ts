@@ -4344,8 +4344,8 @@ function paneLine(entry: PresenceEntry): string {
  * `follow [letter]`, `unfollow`. Undefined: not a pane command.
  */
 function paneCommand(command: string): Receipt | undefined {
-  const text = command.replace(/^\//, "").trim();
-  if (/^panes?$/i.test(text)) {
+  const text = command.trim();
+  if (/^\/?panes?$/i.test(text)) {
     if (port.mode !== "daemon")
       return ok("solo pane · no daemon · DAWG_DAEMON=0 is set");
     const entries = [...panePresence].sort((a, b) =>
@@ -4354,7 +4354,7 @@ function paneCommand(command: string): Receipt | undefined {
     if (entries.length === 0) return ok("1 pane · this one");
     return ok(`${entries.length} panes │ ${entries.map(paneLine).join(" │ ")}`);
   }
-  const open = text.match(/^pane\s+(.+)$/i);
+  const open = text.match(/^\/?pane\s+(.+)$/i);
   if (open) {
     const parsed = parsePaneArgs(open[1]!.split(/\s+/));
     if (!parsed.ok) return fail(parsed.problem);
@@ -4366,17 +4366,17 @@ function paneCommand(command: string): Receipt | undefined {
         : `run in another terminal · ${line} · copied`,
     );
   }
-  if (/^pin$/i.test(text)) {
+  if (/^\/?pin$/i.test(text)) {
     paneOptions.pinned = true;
     paneOptions.follow = undefined;
     return ok(`pinned to ${requestedTrack} · unpin releases`);
   }
-  if (/^unpin$/i.test(text)) {
+  if (/^\/?unpin$/i.test(text)) {
     if (!paneOptions.pinned) return warn("not pinned");
     paneOptions.pinned = false;
     return ok("unpinned");
   }
-  const follow = text.match(/^follow(?:\s+([a-z]))?$/i);
+  const follow = text.match(/^\/?follow(?:\s+([a-z]))?$/i);
   if (follow) {
     if (port.mode !== "daemon") return warn("follow needs dawgd · solo pane");
     paneOptions.pinned = false;
@@ -4388,7 +4388,7 @@ function paneCommand(command: string): Receipt | undefined {
         : `following pane ${paneOptions.follow}`,
     );
   }
-  if (/^unfollow$/i.test(text)) {
+  if (/^\/?unfollow$/i.test(text)) {
     if (!paneOptions.follow) return warn("not following");
     paneOptions.follow = undefined;
     return ok("unfollowed");

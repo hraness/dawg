@@ -80,6 +80,10 @@ const TYPE_FILLED = [
   "try: style again · ctrl-z undo",
   "try: add G4 at 2 · bars 8 · space play",
   "try: volume 0.6 · pan -0.2 · /help",
+  "try: ctrl-t tape · loop 1-2 · space play",
+  "try: copy all 1-4 to 5 · loop 5-8",
+  "try: knobs · mix · /help mix",
+  "try: panes · pane tape · /help panes",
 ] as const;
 
 const TYPE_DRUMS = [

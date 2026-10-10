@@ -12,6 +12,7 @@
  */
 import { knobPageId } from "../src/tui/knob-map.ts";
 import { parseAudioCommand } from "../src/audio/devices.ts";
+import { parsePaneArgs } from "../src/launch-args.ts";
 import { WINDOW_VERBS, canonicalWindowForm } from "../src/commands/grammar.ts";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -77,6 +78,7 @@ export function windowPatterns(): RegExp[] {
   windowCache = [
     ...slashPatterns(functionBody(main, "async function submit(")),
     ...slashPatterns(functionBody(main, "async function sessionCommand(")),
+    ...slashPatterns(functionBody(main, "function paneCommand(")),
     ...slashPatterns(functionBody(app, "  command(text: string)")),
   ].filter(
     // Guards that hand the line on (`/instrument\s`, `/model\b`, a
@@ -111,6 +113,7 @@ const WINDOW_ARGS: Readonly<Record<string, ArgCheck>> = {
   help: helpTopic,
   "?": helpTopic,
   guide: guideTopic,
+  pane: (arg) => parsePaneArgs(arg.split(/\s+/)).ok,
   guides: guideTopic,
   menu: (arg) =>
     (MENU_SECTIONS as readonly string[]).includes(arg.toLowerCase()),

@@ -23,7 +23,12 @@ import {
   parseFxCommand,
   parseEffectName,
 } from "../src/commands/fx.ts";
-import { HELP_SECTIONS, helpTopicLines, USAGE } from "../src/commands/help.ts";
+import {
+  ARRANGE_PAGE,
+  HELP_SECTIONS,
+  helpTopicLines,
+  USAGE,
+} from "../src/commands/help.ts";
 import { LANE_ALIASES } from "../src/commands/music.ts";
 import {
   MENU_SECTIONS,
@@ -90,7 +95,7 @@ const concrete = (text: string) =>
 /** Every concrete line help and usage show, each in its written form. */
 function helpExamples(): string[] {
   const out = new Set<string>();
-  for (const section of HELP_SECTIONS) {
+  for (const section of [...HELP_SECTIONS, ARRANGE_PAGE]) {
     if (section.group === "keys") continue;
     for (const entry of section.entries)
       for (const part of entry.command.split(" · ")) {
