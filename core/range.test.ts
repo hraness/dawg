@@ -110,8 +110,10 @@ describe("copy", () => {
       times: 3,
     });
     expect(next.bars).toBe(12);
-    for (const bar of [6, 8, 10]) expect(pitchesIn(next, "bass", bar)).toEqual([44]);
-    for (const bar of [7, 9, 11]) expect(pitchesIn(next, "bass", bar)).toEqual([45]);
+    for (const bar of [6, 8, 10])
+      expect(pitchesIn(next, "bass", bar)).toEqual([44]);
+    for (const bar of [7, 9, 11])
+      expect(pitchesIn(next, "bass", bar)).toEqual([45]);
   });
   test("merge overdubs", () => {
     const next = copyRange(song(), ["bass"], { startBar: 0, bars: 1 }, 1, {
@@ -130,6 +132,24 @@ describe("copy", () => {
     expect(pitchesIn(next, "bass", 6)).toEqual([44]);
     const lane = next.tracks[0]!.volumeAutomation!;
     expect(lane[lane.length - 1]).toEqual({ tick: 10 * BAR, value: 1 });
+  });
+  test("insert moves later clips, earlier ones stay", () => {
+    const clip = (id: string, bar: number) => ({
+      id,
+      src: "tracks/bass/samples/hit.wav",
+      sha256: "a".repeat(64),
+      startTick: bar * BAR,
+      dur: 0.5,
+    });
+    const withClips = applyScoreOperation(song(), {
+      type: "setClips",
+      trackId: "bass",
+      clips: [clip("early", 1), clip("late", 5)],
+    });
+    const next = insertBars(withClips, 3, 2);
+    expect(next.tracks[0]!.clips?.map((c) => c.startTick / BAR)).toEqual([
+      1, 7,
+    ]);
   });
   test("insert moves later tempo points", () => {
     const timed = applyScoreOperation(song(), {
@@ -213,13 +233,18 @@ describe("score.loop", () => {
   test("creates no section and round-trips", () => {
     const looped = song().withLoop({ startBar: 4, bars: 2 });
     expect(looped.sections.map((s) => s.name)).toEqual(["verse", "chorus"]);
-    expect(scoreFromJSON(looped.toJSON()).loop).toEqual({ startBar: 4, bars: 2 });
+    expect(scoreFromJSON(looped.toJSON()).loop).toEqual({
+      startBar: 4,
+      bars: 2,
+    });
   });
   test("one loop at a time", () => {
     const looped = song().withLoop({ startBar: 1, bars: 1 });
     const section = looped.withSections(looped.sections, looped.form, "chorus");
     expect(section.loop).toBeUndefined();
-    expect(section.withLoop({ startBar: 0, bars: 1 }).loopSection).toBeUndefined();
+    expect(
+      section.withLoop({ startBar: 0, bars: 1 }).loopSection,
+    ).toBeUndefined();
   });
   test("diffs as one setLoop op", () => {
     const looped = song().withLoop({ startBar: 4, bars: 2 });
@@ -235,10 +260,7 @@ describe("score.loop", () => {
   test("migrates the f07 hidden loop section", () => {
     const json = {
       ...song().toJSON(),
-      sections: [
-        ...song().sections,
-        { name: "loop", startBar: 2, bars: 2 },
-      ],
+      sections: [...song().sections, { name: "loop", startBar: 2, bars: 2 }],
       loopSection: "loop",
     };
     const loaded = scoreFromJSON(json);
@@ -290,7 +312,11 @@ describe("split and join", () => {
       ),
       split.form,
     );
-    expect(() => joinSection(muted, "verse")).toThrow("mute or vary differently");
-    expect(joinSection(muted, "verse", { force: true }).sections[0]!.bars).toBe(4);
+    expect(() => joinSection(muted, "verse")).toThrow(
+      "mute or vary differently",
+    );
+    expect(joinSection(muted, "verse", { force: true }).sections[0]!.bars).toBe(
+      4,
+    );
   });
 });

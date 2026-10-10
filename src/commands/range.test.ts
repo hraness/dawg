@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createScore, type TrackScore } from "../../core/score.ts";
+import { parseSectionCommand } from "./arrange.ts";
 import { commandParses } from "./parses.ts";
 import {
   applyRangeCommand,
@@ -99,6 +100,17 @@ describe("range grammar", () => {
       "copy that riff please",
     ])
       expect(parseRangeCommand(line, score), line).toBeUndefined();
+  });
+
+  test("drop stays the energy drop; section copy stays whole-section", () => {
+    const score = song();
+    expect(parseRangeCommand("drop", score)).toBeUndefined();
+    expect(parseSectionCommand("drop", score)?.type).toBe("drop");
+    expect(parseRangeCommand("section copy chorus", score)).toBeUndefined();
+    expect(parseSectionCommand("section copy chorus", score)?.type).toBe(
+      "section-dup",
+    );
+    expect(parseSectionCommand("form print", score)?.type).toBe("form-bake");
   });
 
   test("a known verb with bad words answers with its usage card", () => {

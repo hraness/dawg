@@ -125,6 +125,27 @@ test.skipIf(!supported)(
       await t.until(() => !menuOpen(), "menu closed");
       await t.send("loop off\r");
       await waitFor(async () => !(await session(t.cwd))?.loop, "loop off");
+
+      // Each command is one undo step: loop off, loop next, bars insert.
+      await t.send("\u001a");
+      await waitFor(
+        async () => (await session(t.cwd))?.loop?.startBar === 8,
+        "undo loop off",
+      );
+      await t.send("\u001a");
+      await waitFor(
+        async () => (await session(t.cwd))?.loop?.startBar === 6,
+        "undo loop next",
+      );
+      await t.send("\u001a");
+      await waitFor(
+        async () => (await session(t.cwd))?.bars === 8,
+        "undo bars insert",
+      );
+      const undone = (await session(t.cwd))!;
+      expect(undone.sections?.[0]).toMatchObject({ startBar: 4 });
+      expect(undone.loop).toEqual({ startBar: 4, bars: 2 });
+      expect(undone.notes.length).toBe(3);
     } finally {
       t.terminal.write("\u0003");
       await t.proc.exited;
