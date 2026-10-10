@@ -30,6 +30,7 @@ describe("NODE_SPECS", () => {
       "engine.sing",
       "engine.granular",
       "engine.keys",
+      "engine.vocoder",
     ]);
     for (const type of engines) {
       const spec = NODE_SPECS[type]!;

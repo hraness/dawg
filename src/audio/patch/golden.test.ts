@@ -1,7 +1,7 @@
 /**
  * Lane 3 golden: `convertToPatch` (patchFromTrack) renders bit-identical to
  * the original track for every synth preset and for the modal, string,
- * wind and sampler engines, cold and through the stem cache.
+ * wind, sampler and vocoder engines, cold and through the stem cache.
  */
 import { describe, expect, test } from "bun:test";
 import { convertToPatch } from "../../../core/patch.ts";
@@ -19,14 +19,29 @@ const NOTES = [
   { id: "n4", pitch: 60, startTick: 1_200, durationTicks: 600, velocity: 1 },
 ];
 
+/** A vocoder modulator: a vowel-ish synth on track `m`, a fifth below. */
+const MODULATOR = { id: "m", name: "m", instrument: "pluck", volume: 0 };
+
 function scoreWith(track: Record<string, unknown>) {
+  const modulated = isRecord(track.vocoder) && track.vocoder.src === "m";
   return createScore({
     tempoBpm: 110,
     bars: 1,
-    tracks: [{ id: "t", name: "t", ...track } as TrackInput],
-    notes: NOTES.map((note) => ({ ...note, trackId: "t" })),
+    tracks: [
+      { id: "t", name: "t", ...track } as TrackInput,
+      ...(modulated ? [MODULATOR as TrackInput] : []),
+    ],
+    notes: NOTES.flatMap((note) => [
+      { ...note, trackId: "t" },
+      ...(modulated
+        ? [{ ...note, id: `m${note.id}`, pitch: note.pitch - 7, trackId: "m" }]
+        : []),
+    ]),
   });
 }
+
+const isRecord = (x: unknown): x is Record<string, unknown> =>
+  typeof x === "object" && x !== null;
 
 function ping(): DecodedSample {
   const mono = new Float32Array(4_000);
@@ -68,6 +83,14 @@ const CASES: [string, Record<string, unknown>][] = [
     },
   ],
   [
+    "vocoder carrier with a modulator",
+    { instrument: "vocoder", vocoder: { src: "m", carrier: "supersaw" } },
+  ],
+  [
+    "vocoder stage on a synth track",
+    { instrument: "pluck", vocoder: { src: "m", preset: "robot" } },
+  ],
+  [
     "pluck with effects",
     {
       instrument: "pluck",
@@ -91,6 +114,10 @@ describe("patchFromTrack golden", () => {
       const original = scoreWith(track);
       const patched = scoreWith(convertToPatch({ ...track } as never));
       expect(patched.tracks[0]!.instrument).toBe("patch");
+      if (track.instrument === "vocoder")
+        expect(patched.tracks[0]!.patch).toMatchObject({
+          nodes: [{ type: "engine.vocoder" }],
+        });
       const options = { sampleRate: RATE, samples: BANK };
       const a = renderScorePcm(original, options);
       const b = renderScorePcm(patched, options);

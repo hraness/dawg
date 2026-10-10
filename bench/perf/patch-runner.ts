@@ -83,17 +83,29 @@ export const BENCH_NOTES: readonly PatchNote[] = Array.from(
   }),
 );
 
-/** ns per voice-sample of `runs` renders (after one warm-up). */
-export function patchRunner(runs = 5): number[] {
+/**
+ * ns per voice-sample of `runs` renders (after one warm-up); `fuse: false`
+ * times the reference interpreter instead of the fused voice block.
+ */
+export function patchRunner(runs = 5, fuse = true): number[] {
   const program = compilePatch(BENCH_PATCH);
   const frames = SECONDS * SR;
   const once = () => {
     const started = performance.now();
-    runPatch(program, { frames, sampleRate: SR, notes: BENCH_NOTES });
+    runPatch(program, { frames, sampleRate: SR, notes: BENCH_NOTES, fuse });
     return ((performance.now() - started) * 1e6) / (frames * VOICES);
   };
   once();
   return Array.from({ length: runs }, once);
 }
 
-if (import.meta.main) console.log(patchRunner().map((x) => x.toFixed(2)));
+if (import.meta.main) {
+  console.log(
+    "fused",
+    patchRunner().map((x) => x.toFixed(2)),
+  );
+  console.log(
+    "interp",
+    patchRunner(5, false).map((x) => x.toFixed(2)),
+  );
+}

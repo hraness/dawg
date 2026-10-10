@@ -599,6 +599,16 @@ const ENGINE_TABLES: readonly Readonly<{
     },
     cost: 250,
   },
+  {
+    type: "engine.vocoder",
+    // The carrier reads only its settings; the vocoder stage (modulator
+    // `src`, bands, its `vocoder-*` lanes) stays on the track and runs on
+    // the whole patch output, as the track chain does.
+    doc: "the vocoder's built-in carrier (saw, supersaw, pulse or noise) following the notes",
+    lanes: [],
+    binding: { fields: ["vocoder"], instruments: ["vocoder"] },
+    cost: 60,
+  },
 ];
 
 /**

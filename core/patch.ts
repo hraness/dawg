@@ -1434,6 +1434,15 @@ const ENGINE_FIELDS: readonly string[] = [
 ].sort();
 
 /**
+ * Engine fields that also configure a track stage: `vocoder` is the
+ * built-in carrier's settings and the vocoder stage (its modulator `src`
+ * and lanes), which runs on the track's whole voice. Converting keeps the
+ * field on the track, so the stage shapes the patch's output as it shaped
+ * the engine's.
+ */
+const STAGE_FIELDS: ReadonlySet<string> = new Set(["vocoder"]);
+
+/**
  * The track an `engine.*` node plays as: the patch track without its patch,
  * effect patches, clips or any engine settings field, then the node's
  * instrument word and settings. Everything else (performance, tuning,
@@ -1513,7 +1522,8 @@ export function soundingTracks<T extends WrappableTrack>(
 export function convertToPatch<T extends WrappableTrack>(track: T): T {
   const patch = patchFromTrack(track);
   const out: Record<string, unknown> = { ...track };
-  for (const field of ENGINE_FIELDS) delete out[field];
+  for (const field of ENGINE_FIELDS)
+    if (!STAGE_FIELDS.has(field)) delete out[field];
   out.instrument = PATCH_INSTRUMENT;
   out.patch = patch;
   return out as T;

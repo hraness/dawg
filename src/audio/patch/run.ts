@@ -42,6 +42,7 @@ import {
 import { macro, mix, pan, pass, vca, xfade } from "./nodes/mix.ts";
 import { clock, lfo, random, sh } from "./nodes/modulators.ts";
 import { noise, osc } from "./nodes/sources.ts";
+import { fuseVoice } from "./fuse.ts";
 
 export { BLOCK };
 
@@ -88,6 +89,12 @@ export type PatchRunOptions = Readonly<{
   right?: Float64Array;
   side?: Float64Array;
   buffer?: (io: BufferIo) => void;
+  /**
+   * false runs the voice section through the reference interpreter (per
+   * node `prologue` + `kernel`) instead of the fused block (fuse.ts); the
+   * bytes are the same. For the differential test and the bench.
+   */
+  fuse?: boolean;
 }>;
 
 export type PatchRender = {
@@ -581,7 +588,98 @@ function output(
   }
 }
 
+type Fused = ReturnType<typeof fuseVoice>;
+const FUSED = new WeakMap<PatchProgram, readonly [Fused, Fused]>();
+
+/** Kernel function names for the fused block (fuse.ts `KernelOf`). */
+const KERNEL_NAMES: Readonly<Record<number, string>> = {
+  [Op.Osc]: "osc",
+  [Op.Noise]: "noise",
+  [Op.Svf]: "svf",
+  [Op.Onepole]: "onepole",
+  [Op.Adsr]: "adsr",
+  [Op.Ar]: "ar",
+  [Op.Slew]: "slew",
+  [Op.Follow]: "follow",
+  [Op.Lfo]: "lfo",
+  [Op.Sh]: "sh",
+  [Op.Random]: "random",
+  [Op.Const]: "constant",
+  [Op.Scale]: "scale",
+  [Op.Clamp]: "clamp",
+  [Op.Clock]: "clock",
+  [Op.Vca]: "vca",
+  [Op.Mix]: "mix",
+  [Op.Xfade]: "xfade",
+  [Op.Pan]: "pan",
+  [Op.Pass]: "pass",
+  [Op.Macro]: "macro",
+};
+const BINARY_OPS: Readonly<Record<number, number>> = {
+  [Op.Add]: Binary.Add,
+  [Op.Mul]: Binary.Mul,
+  [Op.Min]: Binary.Min,
+  [Op.Max]: Binary.Max,
+  [Op.Gt]: Binary.Gt,
+  [Op.Lt]: Binary.Lt,
+};
+const UNARY_OPS: Readonly<Record<number, number>> = {
+  [Op.Abs]: Unary.Abs,
+  [Op.Not]: Unary.Not,
+  [Op.Pitch2Hz]: Unary.Pitch2Hz,
+  [Op.Db2Gain]: Unary.Db2Gain,
+};
+
+const kernelOf = (op: number, n: number): string | null =>
+  KERNEL_NAMES[op] !== undefined
+    ? `${KERNEL_NAMES[op]}(f, ${n});`
+    : BINARY_OPS[op] !== undefined
+      ? `binary(f, ${n}, ${BINARY_OPS[op]});`
+      : UNARY_OPS[op] !== undefined
+        ? `unary(f, ${n}, ${UNARY_OPS[op]});`
+        : null;
+
+/** The program's fused voice blocks (first block, later blocks), built once. */
+function fusedOf(program: PatchProgram): readonly [Fused, Fused] {
+  let fused = FUSED.get(program);
+  if (fused) return fused;
+  const deps = {
+    voiceUsed: program.voiceUsed,
+    osc,
+    noise,
+    svf,
+    onepole,
+    adsr,
+    ar,
+    slew,
+    follow,
+    lfo,
+    sh,
+    random,
+    constant,
+    scale,
+    clamp,
+    clock,
+    vca,
+    mix,
+    xfade,
+    pan,
+    pass,
+    macro,
+    binary,
+    unary,
+  };
+  const v = program.voice;
+  fused = [
+    fuseVoice(v, program.consts, true, kernelOf, deps),
+    fuseVoice(v, program.consts, false, kernelOf, deps),
+  ];
+  FUSED.set(program, fused);
+  return fused;
+}
+
 /** Plays every note through the voice section into the global voice-sum slots. */
+
 function runVoices(
   program: PatchProgram,
   options: PatchRunOptions,
@@ -608,6 +706,8 @@ function runVoices(
   const fanOuts = program.fanOuts;
   const sums = program.voiceSums;
   const voiceOp = v.ids.indexOf("voice");
+  const [fusedFirst, fusedNext] = fusedOf(program);
+  const fuse = options.fuse ?? true;
   const macroCount = program.macros.length;
   let stolen = 0;
   let order = 0;
@@ -674,17 +774,23 @@ function runVoices(
     for (let k = 0; k < fanOuts.length; k += 2) {
       const src = fanOuts[k]! * stride + pos;
       const dst = addr(f, fanOuts[k + 1]!);
-      for (let i = 0; i < BLOCK; i += 1) f.m[dst + i] = gm[src + i] ?? 0;
+      const vm = f.m;
+      // Past the end of the song a source reads as silence; the in-range
+      // case stays a plain copy (an out-of-bounds read deoptimizes).
+      if (src + BLOCK <= gm.length)
+        for (let i = 0; i < BLOCK; i += 1) vm[dst + i] = gm[src + i]!;
+      else for (let i = 0; i < BLOCK; i += 1) vm[dst + i] = gm[src + i] ?? 0;
     }
-    const n = v.op.length;
-    for (let node = 0; node < n; node += 1) {
-      if (node === voiceOp) {
-        voiceSources(f, node, voice, sr, program.voiceUsed);
-        continue;
+    if (fuse) (voice.first ? fusedFirst : fusedNext)(f, ctx, voice, sr);
+    else
+      for (let node = 0; node < v.op.length; node += 1) {
+        if (node === voiceOp) {
+          voiceSources(f, node, voice, sr, program.voiceUsed);
+          continue;
+        }
+        prologue(f, v, ctx, node, voice.first);
+        kernel(f, v, node);
       }
-      prologue(f, v, ctx, node, voice.first);
-      kernel(f, v, node);
-    }
     copyDelays(f, v.delays);
     scrubState(voice.st, ctx);
     voice.first = false;
