@@ -369,12 +369,13 @@ export const EVERYDAY_VERBS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * `✗ <line> · <usage> · did you mean <x>?`: one card for a known verb whose
- * arguments did not parse, the same for slash and bare input.
+ * `✗ <line> · did you mean <x>? · <usage>`: one card for a known verb whose
+ * arguments did not parse, the same for slash and bare input, in the order
+ * what failed · nearest match · where to look.
  */
 export function usageCard(line: string, usage: string, near?: string): string {
   return near
-    ? `${line} · ${usage} · did you mean ${near}?`
+    ? `${line} · did you mean ${near}? · ${usage}`
     : `${line} · ${usage}`;
 }
 
@@ -521,4 +522,18 @@ export function canonicalWindowForm(line: string): string | undefined {
   if (models) return `/model${models[1] ?? ""}`;
   if (/^\/?voice$/i.test(text)) return "/help voice";
   return undefined;
+}
+
+/**
+ * `exported · mix.wav · 2 stems mix-lead.wav mix-bass.wav`: the stems
+ * receipt names every file it wrote, counted in the right number.
+ */
+export function stemsReceipt(path: string, stems: readonly string[]): string {
+  const base = (file: string) => file.split(/[\\/]/).at(-1) ?? file;
+  if (stems.length === 0)
+    return `exported · ${path} · no audible tracks for stems`;
+  const count = `${stems.length} stem${stems.length === 1 ? "" : "s"}`;
+  const names = stems.slice(0, 3).map(base);
+  if (stems.length > 3) names.push(`+${stems.length - 3}`);
+  return `exported · ${path} · ${count} ${names.join(" ")}`;
 }

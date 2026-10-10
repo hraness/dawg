@@ -924,3 +924,41 @@ function describeVary(vary: { transpose?: number; gain?: number }): string {
   if (vary.gain !== undefined) bits.push(`gain ${vary.gain}`);
   return bits.join(" ");
 }
+
+/**
+ * `loop 2-3` when no section spans those bars: mark the section named
+ * `loop` over them (moving it if it exists) and loop it, as one next score.
+ */
+export function loopSpan(
+  score: TrackScore,
+  trackId: string,
+  from: number,
+  to: number,
+):
+  | Readonly<{ ok: true; next: TrackScore; name: string; message: string }>
+  | Readonly<{ ok: false; message: string }> {
+  const bars = from === to ? `${from}` : `${from}-${to}`;
+  const name = "loop";
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to < from)
+    return { ok: false, message: `loop ${bars} · bars run low-high from 1` };
+  const marked = applySectionCommand(score, trackId, {
+    type: "section-mark",
+    name,
+    startBar: from - 1,
+    bars: to - from + 1,
+  });
+  if (!marked.ok || !marked.next)
+    return { ok: false, message: `loop ${bars} · ${marked.message}` };
+  const looped = applySectionCommand(marked.next, trackId, {
+    type: "section-loop",
+    name,
+  });
+  if (!looped.ok || !looped.next)
+    return { ok: false, message: `loop ${bars} · ${looped.message}` };
+  return {
+    ok: true,
+    next: looped.next,
+    name,
+    message: `loop · bars ${from === to ? from : `${from}–${to}`} · section ${name} · loop off plays the song`,
+  };
+}

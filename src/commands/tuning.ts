@@ -384,11 +384,11 @@ export function tuningSummary(score: TrackScore, trackId: string): string {
   return `tuning · ${song} · ${trackId} ${own}`;
 }
 
-/** `scale · D bayati · 0 1.5 3 5 7 8 10`. */
+/** `key · D bayati · 0 1.5 3 5 7 8 10` (key is the canonical verb). */
 export function scaleSummary(key: string | null | undefined): string {
   const parsed = parseKey(key ?? undefined);
-  if (!parsed) return "scale · none (C major assumed) · scale <tonic> <name>";
-  return `scale · ${keyName(parsed)} · ${scaleSteps(parsed).map(formatStep).join(" ")}`;
+  if (!parsed) return "key · none (C major assumed) · key <tonic> <scale>";
+  return `key · ${keyName(parsed)} · ${scaleSteps(parsed).map(formatStep).join(" ")}`;
 }
 
 function formatStep(step: number): string {

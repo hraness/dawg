@@ -18,6 +18,8 @@ import {
   parseExportCommand,
   parseLoopCommand,
   RANGES,
+  stemsReceipt,
+  usageCard,
   usageError,
   usageLine,
   workspaceRelative,
@@ -25,6 +27,7 @@ import {
 import { parseFxCommand, unknownFxMessage } from "./fx.ts";
 import { HELP_SECTIONS, USAGE } from "./help.ts";
 import { paramRangeError } from "./param-range.ts";
+import { loopSpan } from "./arrange.ts";
 import { commandParses, parseCommand } from "./parses.ts";
 
 const score = createScore({
@@ -268,5 +271,43 @@ describe("export", () => {
       format: "wav",
       stems: false,
     });
+  });
+});
+
+describe("receipts and refusals", () => {
+  test("the usage card reads failed · nearest · usage", () => {
+    expect(usageCard("fx dela", "help fx", "delay")).toBe(
+      "fx dela · did you mean delay? · help fx",
+    );
+    expect(usageCard("fx", "help fx")).toBe("fx · help fx");
+  });
+
+  test("missing tracks point at a slash-free listing", () => {
+    expect(noTrack("nope")).toBe("no track nope · tracks lists them");
+  });
+
+  test("the stems receipt counts and names its files", () => {
+    expect(stemsReceipt("b.wav", ["/p/b-lead.wav"])).toBe(
+      "exported · b.wav · 1 stem b-lead.wav",
+    );
+    expect(stemsReceipt("m.wav", ["m-a.wav", "m-b.wav"])).toBe(
+      "exported · m.wav · 2 stems m-a.wav m-b.wav",
+    );
+    expect(
+      stemsReceipt("m.wav", ["m-a.wav", "m-b.wav", "m-c.wav", "m-d.wav"]),
+    ).toEndWith("m-c.wav +1");
+  });
+
+  test("loop a-b marks and loops a section when none spans the bars", () => {
+    const score = createScore({ bars: 8 } as never);
+    const result = loopSpan(score, "lead", 2, 3);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.next.loopSection).toBe("loop");
+    const section = result.next.sections.find((item) => item.name === "loop");
+    expect(section).toEqual({ name: "loop", startBar: 1, bars: 2 });
+    const moved = loopSpan(result.next, "lead", 5, 6);
+    expect(moved.ok && moved.next.sections.length).toBe(1);
+    expect(loopSpan(score, "lead", 4, 2).ok).toBe(false);
   });
 });

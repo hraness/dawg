@@ -9,6 +9,8 @@ import {
   EXPORT_USAGE,
   elsewhereHint,
   FREE_TEXT_HINTS,
+  noTrack,
+  stemsReceipt,
   LOOP_USAGE,
   WINDOW_VERBS,
   NO_AGENT,
@@ -163,6 +165,7 @@ import { applyStyleCommand, parseStyleCommand } from "./commands/style.ts";
 import { exportSampleRate, measureScoreOffThread } from "./audio/measure.ts";
 import {
   applySectionCommand,
+  loopSpan,
   parseSectionCommand,
 } from "./commands/arrange.ts";
 import {
@@ -2255,7 +2258,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
         track.id.toLowerCase() === wanted.replace(/ /g, "-") ||
         (track.name ?? "").toLowerCase() === wanted,
     );
-    if (!found) return fail(`no track ${rest} · /tracks lists them`);
+    if (!found) return fail(noTrack(rest));
     if (verb === "move") {
       if (position! < 1 || position! > score.tracks.length)
         return fail(`usage · /track move <name> <1..${score.tracks.length}>`);
@@ -2468,7 +2471,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
     const result = applyRigCommand(score, requestedTrack, rig);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
-    return result.ok ? ok(result.message) : fail(result.message);
+    return readOrDone(result);
   }
   // 0.7 `/formant` and `/vowel`: short forms of `fx formant|vowel`.
   const formant = parseFormantCommand(command) ?? parseVowelCommand(command);
@@ -2588,7 +2591,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
     const result = applySynthCommand(score, requestedTrack, synth);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
-    return result.ok ? ok(result.message) : fail(result.message);
+    return readOrDone(result);
   }
   const stringCommand = parseStringCommand(command);
   if (stringCommand) {
@@ -2600,7 +2603,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
     const result = applyStringCommand(score, requestedTrack, stringCommand);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
-    return result.ok ? ok(result.message) : fail(result.message);
+    return readOrDone(result);
   }
   const grainHint = grainSrcHint(command);
   if (grainHint) return fail(grainHint);
@@ -2662,7 +2665,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
     const result = applyMasterCommand(score, masterCommand);
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
-    return result.ok ? ok(result.message) : fail(result.message);
+    return readOrDone(result);
   }
   // `loop <section> | <a>-<b> | off`: the playback region, a section loop.
   const loop = parseLoopCommand(command);
@@ -2682,11 +2685,13 @@ async function submit(prompt: string): Promise<string | Receipt> {
         section.startBar + section.bars === loop.to,
     );
     if (span) return submit(`section loop ${span.name}`);
-    const bars =
-      loop.from === loop.to ? `${loop.from}` : `${loop.from}-${loop.to}`;
-    return fail(
-      `loop ${bars} · no section spans bars ${bars} · section <name> ${bars}, then loop <name>`,
-    );
+    // No section spans the bars: mark (or move) the section named `loop`
+    // and loop it, as one revision.
+    await materializeDraft();
+    const result = loopSpan(score, requestedTrack, loop.from, loop.to);
+    if (!result.ok) return fail(result.message);
+    await commitScore(result.next, "score.sections", { loop: result.name });
+    return ok(result.message);
   }
   const arrange = parseSectionCommand(command, score);
   if (arrange) {
@@ -2700,7 +2705,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
     if (result.seekBeat !== undefined) await seekTransport(result.seekBeat);
-    return result.ok ? ok(result.message) : fail(result.message);
+    return readOrDone(result);
   }
   const music = parseMusicCommand(command);
   if (music) {
@@ -3510,10 +3515,21 @@ async function packCommand(command: PackCommand): Promise<Receipt> {
   }
 }
 
+/**
+ * A command result as a receipt: a refusal is ✗, a change is ✓, and a read
+ * that changed nothing (a listing or a show) is •.
+ */
+function readOrDone(
+  result: Readonly<{ ok: boolean; message: string; next?: unknown }>,
+): Receipt {
+  if (!result.ok) return fail(result.message);
+  return result.next ? ok(result.message) : note(result.message);
+}
+
 async function patternCommand(command: PatternCommand): Promise<Receipt> {
   if (command.kind === "list") {
     tui.openText("patterns", DRUM_PATTERNS.map(patternLine));
-    return ok(`patterns · ${DRUM_PATTERNS.length} · /pattern <name>`);
+    return note(`patterns · ${DRUM_PATTERNS.length} · /pattern <name>`);
   }
   if (command.kind === "browse") {
     tui.openPicker({
@@ -3530,7 +3546,7 @@ async function patternCommand(command: PatternCommand): Promise<Receipt> {
     });
     patternPreview = undefined;
     previewPattern(DRUM_PATTERNS[0]?.name);
-    return ok("patterns · ↑/↓ preview · Enter applies on the focused track");
+    return note("patterns · ↑/↓ preview · Enter applies on the focused track");
   }
   await materializeDraft();
   const result = applyDrumPattern(
@@ -3623,7 +3639,7 @@ async function kitCommand(command: KitCommand, bare = false): Promise<Receipt> {
       .map((entry) => `${entry.name} · synth · ${entry.detail}`);
     lines.push(...kitListLines(await packs().bankAliases(ALIASED_PACK)));
     tui.openText("kits", lines);
-    return ok("kits · /kit <name or nickname> on the focused drum track");
+    return note("kits · /kit <name or nickname> on the focused drum track");
   }
   await materializeDraft();
   const trackId = kitTarget(score, requestedTrack);
@@ -4477,7 +4493,7 @@ async function exportWav(path: string, stems: boolean): Promise<Receipt> {
         return fail(errors.at(-1) ?? `export failed · ${target}`);
       written.push(target);
     }
-    return ok(`exported · ${path} · ${written.length} stems`);
+    return ok(stemsReceipt(path, written));
   } finally {
     tui.activity.setSpinner(undefined);
     await rm(directory, { recursive: true, force: true });

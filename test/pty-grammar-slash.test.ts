@@ -41,6 +41,19 @@ test.skipIf(!supported)(
       await run("section rm verse", "deleted verse");
       // rig <preset> is canonical.
       await run("rig jangle", "rig jangle");
+      // The canonical listing spelling reads the chain, never an error.
+      await run("fx list", "• fx");
+      expect(t.vt.text()).not.toContain("unknown effect list");
+      // Synth values out of range name the range.
+      await run("synth lpf 99999", "lpf takes 20…20000 Hz");
+      // A missing track points at a slash-free listing.
+      await run("track rm nope", "no track nope · tracks lists them");
+      // Status reads print •.
+      await run("sections", "• no sections");
+      // swing names where it lives instead of suggesting sing.
+      await run("swing", "swing lives on a rhythm row");
+      // loop a-b works without a matching section.
+      await run("loop 2-3", "loop · bars 2–3");
       // export <file>.wav renders offline in the project directory.
       await t.send("export a.wav\r");
       await t.until(

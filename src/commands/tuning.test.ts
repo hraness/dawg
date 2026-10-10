@@ -240,7 +240,7 @@ describe("applying tuning commands", () => {
     const whole = run("scale E phrygian", base);
     expect(whole.next!.key).toBe("E phrygian");
     expect(run("scale", whole.next!).message).toBe(
-      "scale · E phrygian · 0 1 3 5 7 8 10",
+      "key · E phrygian · 0 1 3 5 7 8 10",
     );
     expect(run("scale yaman").next!.key).toBe("C yaman");
   });
