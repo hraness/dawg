@@ -236,6 +236,40 @@ for (const [cols, rows] of [
     60_000,
   );
 
+// Colour and NO_COLOR: the ghost is a glyph, never only a dim colour.
+for (const env of [{}, { NO_COLOR: "1" }] as const)
+  test.skipIf(!supported)(
+    `real PTY: a form draws unrolled, repeats ghosted ░${"NO_COLOR" in env ? " (NO_COLOR)" : ""}`,
+    async () => {
+      const t = await launch(80, 24, env);
+      try {
+        await t.until(() => t.vt.text().includes(" NOW "), "prompt");
+        await t.send("bars 8\r");
+        await t.send("add C4 at 16\r");
+        await t.send("section verse 1-4\r");
+        await t.send("section chorus 5-8\r");
+        await t.send("form verse chorus*2\r");
+        await t.until(() => t.vt.text().includes("chorus"), "form set");
+        await t.send("\u0014");
+        await t.until(() => t.vt.text().includes("range: "), "tape");
+        const ghost = "░";
+        const sect = () =>
+          t.vt.lines().find((line) => line.startsWith(" sect")) ?? "";
+        await t.until(() => sect().includes("chorus ×2"), "pass label");
+        expect(sect()).toContain(`${ghost}chorus`);
+        // At the chorus the range line says an edit lands on both passes.
+        await t.send(".");
+        await t.until(
+          () => t.vt.text().includes("edits chorus (plays 2×)"),
+          "edits chorus (plays 2×)",
+        );
+      } finally {
+        t.proc.kill();
+      }
+    },
+    60_000,
+  );
+
 test.skipIf(!supported)(
   "real PTY: TAPE tiles, inserts, splits, picks, mutes and undoes",
   async () => {
