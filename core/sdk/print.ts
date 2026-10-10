@@ -263,8 +263,17 @@ export function printSong(
     );
   if (score.form.length > 0)
     entries.push(`form: ${printForm(score.form, INDENT)}`);
-  if (score.loopSection !== undefined)
-    entries.push(`loopSection: ${str(score.loopSection)}`);
+  // One field for both: `loop: "5-6"` (1-based bars) or `loop: "chorus"`.
+  if (score.loop)
+    entries.push(
+      `loop: ${str(
+        score.loop.bars === 1
+          ? `${score.loop.startBar + 1}`
+          : `${score.loop.startBar + 1}-${score.loop.startBar + score.loop.bars}`,
+      )}`,
+    );
+  else if (score.loopSection !== undefined)
+    entries.push(`loop: ${str(score.loopSection)}`);
   if (score.calibration) entries.push(`calibration: ${num(score.calibration)}`);
   lines.push("export default song({");
   for (const entry of entries) lines.push(`${INDENT}${entry},`);

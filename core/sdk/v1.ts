@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.33.0";
+export const SDK_VERSION = "1.34.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -4564,8 +4564,13 @@ export type SongInput = Readonly<{
    * Absent plays the bars straight through.
    */
   form?: string | readonly (string | SongFormEntry)[];
-  /** The section playback loops (SDK 1.18.0); export ignores it. */
+  /** The section playback loops (SDK 1.18.0); `loop: "chorus"` says the same. */
   loopSection?: string;
+  /**
+   * What playback loops (SDK 1.34.0): bars `"5-6"` (1-based, as the prompt
+   * shows them) or a section `"chorus"`. Export ignores it.
+   */
+  loop?: string;
   /**
    * Sound calibration (SDK 1.32.0): `1` renders the 0.7 level, pitch and
    * drum-kit fixes (hat choke, tuned toms, crash and ride, level keys,
@@ -4771,6 +4776,8 @@ export type Song = Readonly<{
   form?: readonly SongFormEntry[];
   /** Present only when a section loops (SDK 1.18.0). */
   loopSection?: string;
+  /** Present only when bars loop (SDK 1.34.0): 0-based `startBar`. */
+  loop?: Readonly<{ startBar: number; bars: number }>;
   /** Present only when the song sets one (SDK 1.32.0). */
   calibration?: number;
 }>;
@@ -5009,6 +5016,270 @@ function songSections(
 /** The newest `song({ calibration })` (mirrors core CALIBRATION_LATEST). */
 export const SONG_CALIBRATION_LATEST = 1;
 
+/** `song({ loop })`: bars `"5-6"` → a 0-based range, else a section name. */
+function songLoop(
+  input: unknown,
+  bars: number,
+): string | Readonly<{ startBar: number; bars: number }> {
+  if (typeof input !== "string" || input.trim() === "")
+    throw new DawgSdkError('song loop must be bars "5-6" or a section name');
+  const match = /^\s*(\d{1,4})\s*(?:-|–|\.\.)?\s*(\d{1,4})?\s*$/u.exec(input);
+  if (!match) return input.trim();
+  const from = Number(match[1]);
+  const to = match[2] === undefined ? from : Number(match[2]);
+  if (from < 1 || to < from)
+    throw new DawgSdkError(`song loop "${input}" runs low-high from bar 1`);
+  if (to > bars)
+    throw new DawgSdkError(
+      `song loop "${input}" is past the song's ${bars} bars`,
+    );
+  return Object.freeze({ startBar: from - 1, bars: to - from + 1 });
+}
+
+// ---------------------------------------------------------------------------
+// Range helpers (SDK 1.34.0): the prompt's copy, move and bars insert as
+// pure functions over notes, for files written by hand. Bars are 1-based.
+
+type Timed = Readonly<{ start: number; length: number }>;
+type RangeHelperOptions = Readonly<{ beatsPerBar?: number }>;
+
+function perBar(options: RangeHelperOptions | undefined, what: string): number {
+  return positive(options?.beatsPerBar ?? 4, `${what} beatsPerBar`);
+}
+
+function wholeBar(value: unknown, what: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1)
+    throw new DawgSdkError(`${what} must be a bar from 1`);
+  return value;
+}
+
+/**
+ * The notes (or hits) that start in bars `from..to`, re-based to beat 0
+ * and cut at the range's end: `bars(chorus, 5, 6)`.
+ */
+export function bars<T extends Timed>(
+  notes: readonly T[],
+  from: number,
+  to: number = from,
+  options?: RangeHelperOptions,
+): readonly T[] {
+  if (!Array.isArray(notes))
+    throw new DawgSdkError("bars needs an array of notes");
+  const each = perBar(options, "bars");
+  const first = wholeBar(from, "bars from");
+  const last = wholeBar(to, "bars to");
+  if (last < first)
+    throw new DawgSdkError("bars runs low-high: bars(notes, 5, 6)");
+  const start = (first - 1) * each;
+  const end = last * each;
+  return Object.freeze(
+    notes
+      .filter((item) => item.start >= start && item.start < end)
+      .map((item) =>
+        Object.freeze({
+          ...item,
+          start: item.start - start,
+          length: Math.min(item.length, end - item.start),
+        }),
+      ),
+  );
+}
+
+/**
+ * Notes laid down at bar `at`, repeated `times` times end to end:
+ * `place(bars(bass, 5, 6), { at: 7, times: 2 })`. Each repeat spans
+ * `bars` bars (default: the whole bars the notes reach).
+ */
+export function place<T extends Timed>(
+  notes: readonly T[],
+  options: Readonly<{ at: number; times?: number; bars?: number }> &
+    RangeHelperOptions,
+): readonly T[] {
+  if (!Array.isArray(notes))
+    throw new DawgSdkError("place needs an array of notes");
+  if (!isRecord(options)) throw new DawgSdkError("place needs { at: <bar> }");
+  const each = perBar(options, "place");
+  const at = (wholeBar(options.at, "place at") - 1) * each;
+  const times = options.times ?? 1;
+  if (!Number.isInteger(times) || times < 1 || times > 64)
+    throw new DawgSdkError("place times must be 1..64");
+  const reach = notes.reduce(
+    (most, item) => Math.max(most, item.start + item.length),
+    0,
+  );
+  const span =
+    (options.bars === undefined
+      ? Math.max(1, Math.ceil(reach / each - 1e-9))
+      : wholeBar(options.bars, "place bars")) * each;
+  const out: T[] = [];
+  for (let pass = 0; pass < times; pass += 1)
+    for (const item of notes)
+      out.push(
+        Object.freeze({ ...item, start: at + pass * span + item.start }),
+      );
+  return Object.freeze(out);
+}
+
+/**
+ * The notes mirrored in time over `bars` bars from beat 0 (a note ending
+ * at the span's end starts at 0): `reversed(bars(lead, 5, 6), { bars: 2 })`.
+ */
+export function reversed<T extends Timed>(
+  notes: readonly T[],
+  options: Readonly<{ bars: number }> & RangeHelperOptions,
+): readonly T[] {
+  if (!Array.isArray(notes))
+    throw new DawgSdkError("reversed needs an array of notes");
+  if (!isRecord(options))
+    throw new DawgSdkError("reversed needs { bars: <n> }");
+  const span =
+    wholeBar(options.bars, "reversed bars") * perBar(options, "reversed");
+  return Object.freeze(
+    notes
+      .filter((item) => item.start < span)
+      .map((item) => {
+        const length = Math.min(item.length, span - item.start);
+        return Object.freeze({
+          ...item,
+          start: span - item.start - length,
+          length,
+        });
+      })
+      .sort((a, b) => a.start - b.start),
+  );
+}
+
+/** Shift every `tick` field at or past `at` in an array of points. */
+function shiftTicks(value: unknown, at: number, shift: number): unknown {
+  if (!Array.isArray(value)) return value;
+  if (!value.every((item) => isRecord(item) && typeof item.tick === "number"))
+    return value;
+  return Object.freeze(
+    value.map((item) =>
+      (item as { tick: number }).tick >= at
+        ? Object.freeze({
+            ...(item as object),
+            tick: (item as { tick: number }).tick + shift,
+          })
+        : item,
+    ),
+  );
+}
+
+/**
+ * `bars` empty bars inserted before bar `at` of a `song()` result: later
+ * notes, sections, the loop, tempo marks, fermatas, automation points and
+ * clips move right; a note held across `at` sounds on through the gap.
+ * `export default insertBars(song({...}), { at: 7, bars: 2 })`.
+ */
+export function insertBars(
+  input: Song,
+  options: Readonly<{ at: number; bars: number }>,
+): Song {
+  if (!isRecord(input) || input.format !== "track.loop/v1")
+    throw new DawgSdkError("insertBars needs a song() result");
+  if (!isRecord(options))
+    throw new DawgSdkError("insertBars needs { at, bars }");
+  const atBar = wholeBar(options.at, "insertBars at") - 1;
+  const count = wholeBar(options.bars, "insertBars bars");
+  if (atBar > input.bars)
+    throw new DawgSdkError(
+      `insertBars at ${atBar + 1} is past the song's ${input.bars} bars`,
+    );
+  if (input.bars + count > 256)
+    throw new DawgSdkError("a song has at most 256 bars");
+  if (input.time?.meter?.some((mark) => mark.bar > 0))
+    throw new DawgSdkError(
+      "insertBars needs one meter · use dawg's bars insert",
+    );
+  const barTicks = input.beatsPerBar * input.ticksPerBeat;
+  const at = atBar * barTicks;
+  const shift = count * barTicks;
+  const atBeat = atBar * input.beatsPerBar;
+  const beats = count * input.beatsPerBar;
+  const moveRange = <R extends { startBar: number; bars: number }>(
+    range: R,
+  ): R =>
+    range.startBar >= atBar
+      ? { ...range, startBar: range.startBar + count }
+      : range.startBar + range.bars > atBar
+        ? { ...range, bars: range.bars + count }
+        : range;
+  const tracks = input.tracks.map((track) => {
+    const out: Record<string, unknown> = { ...track };
+    for (const [field, value] of Object.entries(track)) {
+      if (field === "fxAutomation" && isRecord(value)) {
+        out[field] = Object.freeze(
+          Object.fromEntries(
+            Object.entries(value).map(([lane, points]) => [
+              lane,
+              shiftTicks(points, at, shift),
+            ]),
+          ),
+        );
+      } else if (field === "clips" && Array.isArray(value)) {
+        out[field] = Object.freeze(
+          value.map((clip) =>
+            isRecord(clip) && typeof clip.at === "number" && clip.at >= atBeat
+              ? Object.freeze({ ...clip, at: clip.at + beats })
+              : clip,
+          ),
+        );
+      } else out[field] = shiftTicks(value, at, shift);
+    }
+    return Object.freeze(out) as ScoreTrack;
+  });
+  const time = input.time
+    ? Object.freeze({
+        ...input.time,
+        ...(input.time.tempo
+          ? {
+              tempo: shiftTicks(
+                input.time.tempo,
+                at,
+                shift,
+              ) as ScoreTime["tempo"],
+            }
+          : {}),
+        ...(input.time.fermatas
+          ? {
+              fermatas: shiftTicks(
+                input.time.fermatas,
+                at,
+                shift,
+              ) as ScoreTime["fermatas"],
+            }
+          : {}),
+      })
+    : undefined;
+  return Object.freeze({
+    ...input,
+    bars: input.bars + count,
+    ...(time ? { time } : {}),
+    tracks: Object.freeze(tracks),
+    notes: Object.freeze(
+      input.notes.map((item) =>
+        item.startTick >= at
+          ? Object.freeze({ ...item, startTick: item.startTick + shift })
+          : item.startTick + item.durationTicks > at
+            ? Object.freeze({
+                ...item,
+                durationTicks: item.durationTicks + shift,
+              })
+            : item,
+      ),
+    ),
+    ...(input.sections
+      ? {
+          sections: Object.freeze(
+            input.sections.map((section) => Object.freeze(moveRange(section))),
+          ),
+        }
+      : {}),
+    ...(input.loop ? { loop: Object.freeze(moveRange(input.loop)) } : {}),
+  });
+}
+
 export function song(input: SongInput): Song {
   if (!isRecord(input)) throw new DawgSdkError("song() needs an object");
   const tempoBpm = finite(input.tempo ?? 120, "song tempo");
@@ -5238,6 +5509,7 @@ export function song(input: SongInput): Song {
     sections?: readonly SongSection[];
     form?: readonly SongFormEntry[];
     loopSection?: string;
+    loop?: Readonly<{ startBar: number; bars: number }>;
   } = {};
   if (input.sections !== undefined) {
     const sections = songSections(input.sections);
@@ -5251,6 +5523,13 @@ export function song(input: SongInput): Song {
     if (typeof input.loopSection !== "string")
       throw new DawgSdkError("song loopSection must be a section name");
     arrangement.loopSection = input.loopSection;
+  }
+  if (input.loop !== undefined) {
+    if (input.loopSection !== undefined)
+      throw new DawgSdkError("song sets loop or loopSection, not both");
+    const looped = songLoop(input.loop, bars);
+    if (typeof looped === "string") arrangement.loopSection = looped;
+    else arrangement.loop = looped;
   }
   return Object.freeze({
     format: "track.loop/v1",

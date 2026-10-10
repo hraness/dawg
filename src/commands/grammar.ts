@@ -217,7 +217,7 @@ export type LoopCommand =
   | Readonly<{ type: "loop-show" }>;
 
 export const LOOP_USAGE =
-  "loop <a>-<b> | <section> | off · loop 1-4 · loop chorus · loop off";
+  "loop <a>-<b> | <section> | next | prev | off · loop 1-4 · loop chorus · loop next · loop off";
 
 /**
  * `loop 1-4` (bars, 1-based inclusive), `loop 1 4`, `loop chorus`, `loop

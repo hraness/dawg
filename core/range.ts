@@ -247,7 +247,11 @@ function freshIds(used: Set<string>, prefix: string): (stem: string) => string {
 }
 
 /** Remove points in `from..to` and hold the old values at its edges. */
-function blankCurve(points: Points, from: number, to: number): AutomationPoint[] {
+function blankCurve(
+  points: Points,
+  from: number,
+  to: number,
+): AutomationPoint[] {
   const out = points.filter((point) => point.tick < from || point.tick >= to);
   const after = valueAt(points, to);
   if (after !== undefined && !points.some((point) => point.tick === to))
@@ -352,7 +356,10 @@ export function placeRange(
         lanes[field] = sortPoints([
           ...base,
           ...tiles.flatMap((at) =>
-            points.map((point) => ({ tick: point.tick + at, value: point.value })),
+            points.map((point) => ({
+              tick: point.tick + at,
+              value: point.value,
+            })),
           ),
         ]);
       }
@@ -403,11 +410,7 @@ export function copyRange(
   const clip = extractRange(score, trackIds, range);
   const times = options.times ?? 1;
   const end = range.startBar + range.bars;
-  if (
-    options.mode === "insert" &&
-    toBar > range.startBar &&
-    toBar < end
-  )
+  if (options.mode === "insert" && toBar > range.startBar && toBar < end)
     throw new ScoreValidationError(
       `bar ${toBar + 1} is inside ${barsWord(range)} · insert before or after them`,
     );

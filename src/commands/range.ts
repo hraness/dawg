@@ -17,10 +17,7 @@
  * (`rangeOf`), so the typed and keyed forms behave the same. `copy` without
  * `to` fills the clipboard that `paste` lays down.
  */
-import {
-  ScoreValidationError,
-  type TrackScore,
-} from "../../core/score.ts";
+import { ScoreValidationError, type TrackScore } from "../../core/score.ts";
 import { resolveTrackRef } from "../../core/routing.ts";
 import {
   deleteBars,
@@ -78,7 +75,12 @@ export type RangeCommand =
     }>
   | Readonly<{ type: "range-clear"; tracks: RangeTracks; range: RangeRef }>
   | Readonly<{ type: "range-reverse"; tracks: RangeTracks; range: RangeRef }>
-  | Readonly<{ type: "range-paste"; at?: number; times: number; mode: PasteMode }>
+  | Readonly<{
+      type: "range-paste";
+      at?: number;
+      times: number;
+      mode: PasteMode;
+    }>
   | Readonly<{ type: "bars-insert"; count: number; at: number }>
   | Readonly<{ type: "bars-remove"; range: RangeRef }>
   | Readonly<{ type: "loop-step"; direction: 1 | -1 }>
@@ -92,7 +94,8 @@ export const RANGE_USAGE: Readonly<Record<string, string>> = {
   move: "move [<track>|all] [<a>-<b>|<section>] to <bar> [insert] · move bass 5-6 to 9",
   clear:
     "clear [<track>|all] [<a>-<b>|<section>] · clear bass 5-6 · bare clear empties this track",
-  paste: "paste [at <bar>] [x<N>] [insert|merge] · paste at 9 · copy fills the clipboard",
+  paste:
+    "paste [at <bar>] [x<N>] [insert|merge] · paste at 9 · copy fills the clipboard",
   reverse: "reverse [<track>|all] [<a>-<b>|<section>] · reverse bass 5-6",
   bars: "bars <count> | bars insert <n> at <bar> | bars remove <a>-<b> · bars insert 2 at 3",
   jump: "jump <bar>[.<beat>] | <section> · jump 5 · jump 5.3 · jump chorus",
@@ -128,7 +131,16 @@ export type RangeResult = Readonly<{
   delegate?: string;
 }>;
 
-const VERBS = new Set(["copy", "move", "clear", "paste", "reverse", "bars", "jump", "loop"]);
+const VERBS = new Set([
+  "copy",
+  "move",
+  "clear",
+  "paste",
+  "reverse",
+  "bars",
+  "jump",
+  "loop",
+]);
 
 const BARS = /^(\d{1,4})(?:(?:-|\.\.|–)(\d{1,4}))?$/u;
 
@@ -188,10 +200,14 @@ function leadingRange(
   if (first === undefined || isKeyword(first))
     return { range: { kind: "implicit" }, rest: words };
   const bars = parseBarsWord(first);
-  if (bars) return { range: { kind: "bars", range: bars }, rest: words.slice(1) };
+  if (bars)
+    return { range: { kind: "bars", range: bars }, rest: words.slice(1) };
   const section = leadingSection(score, words);
   if (section)
-    return { range: { kind: "section", name: section.name }, rest: section.rest };
+    return {
+      range: { kind: "section", name: section.name },
+      rest: section.rest,
+    };
   return undefined;
 }
 
@@ -200,7 +216,10 @@ function isKeyword(word: string): boolean {
 }
 
 /** `to 7` / `to chorus` / `at 7`: a 0-based bar. */
-function barTarget(score: TrackScore, words: readonly string[]): number | undefined {
+function barTarget(
+  score: TrackScore,
+  words: readonly string[],
+): number | undefined {
   if (words.length === 0) return undefined;
   if (words.length === 1 && /^\d{1,4}$/u.test(words[0]!)) {
     const bar = Number(words[0]);
@@ -240,7 +259,11 @@ function parseTail(
 }
 
 function usage(verb: string): RangeCommand {
-  return { type: "range-usage", verb, message: `${verb} · ${RANGE_USAGE[verb]}` };
+  return {
+    type: "range-usage",
+    verb,
+    message: `${verb} · ${RANGE_USAGE[verb]}`,
+  };
 }
 
 /**
@@ -266,7 +289,8 @@ export function parseRangeCommand(
       return parseTrackRange(score, verb, args);
     case "paste": {
       const tail = parseTail(score, args, "at");
-      if (tail.bad || tail.mode === "insert" && tail.times > 64) return usage("paste");
+      if (tail.bad || (tail.mode === "insert" && tail.times > 64))
+        return usage("paste");
       return {
         type: "range-paste",
         ...(tail.to !== undefined ? { at: tail.to } : {}),
@@ -315,7 +339,11 @@ function parseTrackRange(
   if (!ranged) return usage(verb);
   if (verb === "clear" || verb === "reverse") {
     if (ranged.rest.length > 0) return usage(verb);
-    return { type: verb === "clear" ? "range-clear" : "range-reverse", tracks, range: ranged.range };
+    return {
+      type: verb === "clear" ? "range-clear" : "range-reverse",
+      tracks,
+      range: ranged.range,
+    };
   }
   const tail = parseTail(score, ranged.rest);
   if (tail.bad) return usage(verb);
@@ -351,8 +379,16 @@ function parseBars(
     // bars insert 2 at 3 · bars insert 2 (at the playhead's range start is
     // too implicit to be safe, so `at` is required)
     const count = Number(args[1]);
-    const at = args[2]?.toLowerCase() === "at" ? barTarget(score, args.slice(3)) : undefined;
-    if (!Number.isInteger(count) || count < 1 || count > 256 || at === undefined)
+    const at =
+      args[2]?.toLowerCase() === "at"
+        ? barTarget(score, args.slice(3))
+        : undefined;
+    if (
+      !Number.isInteger(count) ||
+      count < 1 ||
+      count > 256 ||
+      at === undefined
+    )
       return usage("bars");
     return { type: "bars-insert", count, at };
   }
@@ -371,7 +407,9 @@ function parseJump(
   const words = [...(args[0]?.toLowerCase() === "to" ? args.slice(1) : args)];
   if (words.length === 0) return usage("jump");
   if (words.length === 2 && words[0]!.toLowerCase() === "bar") words.shift();
-  const position = /^(\d{1,4})(?:\.(\d{1,2}(?:\.\d+)?))?$/u.exec(words.join(" "));
+  const position = /^(\d{1,4})(?:\.(\d{1,2}(?:\.\d+)?))?$/u.exec(
+    words.join(" "),
+  );
   if (position) {
     const bar = Number(position[1]);
     const beat = position[2] === undefined ? 1 : Number(position[2]);
@@ -385,12 +423,18 @@ function parseJump(
 // ---------------------------------------------------------------------------
 // Apply
 
-function trackIdsOf(tracks: RangeTracks, focused: string): readonly string[] | undefined {
+function trackIdsOf(
+  tracks: RangeTracks,
+  focused: string,
+): readonly string[] | undefined {
   if (tracks.kind === "all") return undefined;
   return [tracks.kind === "track" ? tracks.id : focused];
 }
 
-function whoLabel(score: TrackScore, ids: readonly string[] | undefined): string {
+function whoLabel(
+  score: TrackScore,
+  ids: readonly string[] | undefined,
+): string {
   if (!ids) return "all tracks";
   const track = score.tracks.find((candidate) => candidate.id === ids[0]);
   return track?.name ?? ids[0]!;
@@ -476,7 +520,11 @@ function applyUnchecked(
       return { ok: false, message: command.message };
     case "range-copy": {
       const ids = trackIdsOf(command.tracks, context.trackId);
-      const { range, from } = resolveRange(score, command.range, context.playheadBar);
+      const { range, from } = resolveRange(
+        score,
+        command.range,
+        context.playheadBar,
+      );
       const who = whoLabel(score, ids);
       if (command.to === undefined) {
         const clip = extractRange(score, ids, range);
@@ -498,13 +546,25 @@ function applyUnchecked(
       return edited(
         next,
         `copy · ${who} ${barsWord(range)}${from} → ${rangeLabel(landed)}${command.times > 1 ? ` ×${command.times}` : ""}${command.mode === "overwrite" ? "" : ` ${command.mode}`} · ${notesWord(count)}${next.bars !== score.bars ? ` · ${next.bars} bars` : ""}`,
-        { range, to: command.to, times: command.times, mode: command.mode, tracks: ids ?? "all" },
+        {
+          range,
+          to: command.to,
+          times: command.times,
+          mode: command.mode,
+          tracks: ids ?? "all",
+        },
       );
     }
     case "range-move": {
       const ids = trackIdsOf(command.tracks, context.trackId);
-      const { range, from } = resolveRange(score, command.range, context.playheadBar);
-      const next = moveRange(score, ids, range, command.to, { insert: command.insert });
+      const { range, from } = resolveRange(
+        score,
+        command.range,
+        context.playheadBar,
+      );
+      const next = moveRange(score, ids, range, command.to, {
+        insert: command.insert,
+      });
       const count = notesInRange(score, ids, range);
       return edited(
         next,
@@ -514,7 +574,11 @@ function applyUnchecked(
     }
     case "range-clear": {
       const ids = trackIdsOf(command.tracks, context.trackId);
-      const { range, from } = resolveRange(score, command.range, context.playheadBar);
+      const { range, from } = resolveRange(
+        score,
+        command.range,
+        context.playheadBar,
+      );
       const count = notesInRange(score, ids, range);
       const next = clearRange(score, ids, range);
       if (next === score || (count === 0 && sameMusic(score, next)))
@@ -530,7 +594,11 @@ function applyUnchecked(
     }
     case "range-reverse": {
       const ids = trackIdsOf(command.tracks, context.trackId);
-      const { range, from } = resolveRange(score, command.range, context.playheadBar);
+      const { range, from } = resolveRange(
+        score,
+        command.range,
+        context.playheadBar,
+      );
       const next = reverseRange(score, ids, range);
       return edited(
         next,
@@ -545,7 +613,9 @@ function applyUnchecked(
           ok: false,
           message: "paste · the clipboard is empty · copy bass 5-6 fills it",
         };
-      const at = command.at ?? Math.max(0, Math.min(score.bars, Math.floor(context.playheadBar)));
+      const at =
+        command.at ??
+        Math.max(0, Math.min(score.bars, Math.floor(context.playheadBar)));
       const target = board.clip.all ? undefined : context.trackId;
       if (target && !score.tracks.some((track) => track.id === target))
         return { ok: false, message: `paste · no track ${target}` };
@@ -554,7 +624,10 @@ function applyUnchecked(
         mode: command.mode,
         ...(target ? { target } : {}),
       });
-      const landed: BarRange = { startBar: at, bars: board.clip.bars * command.times };
+      const landed: BarRange = {
+        startBar: at,
+        bars: board.clip.bars * command.times,
+      };
       return edited(
         next,
         `paste · ${board.clip.all ? "all tracks" : whoLabel(score, [target!])} → ${barsWord(landed)}${command.times > 1 ? ` ×${command.times}` : ""}${command.mode === "overwrite" ? "" : ` ${command.mode}`} · ${notesWord(clipNoteCount(board.clip) * command.times)}`,
@@ -575,7 +648,11 @@ function applyUnchecked(
       );
     }
     case "bars-remove": {
-      const { range, from } = resolveRange(score, command.range, context.playheadBar);
+      const { range, from } = resolveRange(
+        score,
+        command.range,
+        context.playheadBar,
+      );
       if (range.startBar >= score.bars)
         return {
           ok: false,
@@ -602,14 +679,22 @@ function applyUnchecked(
           message: `loop · ${rangeLabel(current)} is at the ${command.direction > 0 ? "end" : "start"} of the song`,
         };
       return {
-        ...edited(score.withLoop(stepped), `loop · bars ${rangeLabel(stepped)}`, {
-          loop: stepped,
-        }),
+        ...edited(
+          score.withLoop(stepped),
+          `loop · bars ${rangeLabel(stepped)}`,
+          {
+            loop: stepped,
+          },
+        ),
         kind: "score.loop",
       };
     }
     case "jump-section":
-      return { ok: true, message: "", delegate: `section jump ${command.name}` };
+      return {
+        ok: true,
+        message: "",
+        delegate: `section jump ${command.name}`,
+      };
     case "jump-bar":
       return jumpTo(score, command.bar, command.beat);
   }
@@ -622,7 +707,9 @@ function sameMusic(a: TrackScore, b: TrackScore): boolean {
 function loopedRange(score: TrackScore): BarRange | undefined {
   if (score.loopSection === undefined) return undefined;
   const section = findSection(score, score.loopSection);
-  return section ? { startBar: section.startBar, bars: section.bars } : undefined;
+  return section
+    ? { startBar: section.startBar, bars: section.bars }
+    : undefined;
 }
 
 /** The transport beat for bar.beat (both 0-based) on the score. */
@@ -633,7 +720,8 @@ function jumpTo(score: TrackScore, bar: number, beat: number): RangeResult {
       message: `jump · bar ${bar + 1} is past the song's ${score.bars} bars`,
     };
   const perBar =
-    (barStartTick(score, bar + 1) - barStartTick(score, bar)) / score.ticksPerBeat;
+    (barStartTick(score, bar + 1) - barStartTick(score, bar)) /
+    score.ticksPerBeat;
   if (beat >= perBar)
     return { ok: false, message: `jump · bar ${bar + 1} has ${perBar} beats` };
   const label = `bar ${bar + 1}${beat > 0 ? `.${beat + 1}` : ""}`;
@@ -665,7 +753,11 @@ function jumpTo(score: TrackScore, bar: number, beat: number): RangeResult {
     const perScoreBar = score.beatsPerBar;
     const arranged =
       (segment.startBar + bar - segment.section.startBar) * perScoreBar + beat;
-    return { ok: true, message: `jump · ${label} (${segment.section.name})`, seekBeat: arranged };
+    return {
+      ok: true,
+      message: `jump · ${label} (${segment.section.name})`,
+      seekBeat: arranged,
+    };
   }
   return { ok: true, message: `jump · ${label}`, seekBeat: at };
 }

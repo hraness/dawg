@@ -595,7 +595,7 @@ describe("song sections (0.5)", () => {
     expect(text).toContain(
       '{ name: "intro", startBar: 0, bars: 4, mute: ["pad"] }',
     );
-    expect(text).toContain('loopSection: "intro",');
+    expect(text).toContain('loop: "intro",');
     expect(await prettier.format(text, { parser: "typescript" })).toBe(text);
     const plainForm = printSong(
       arranged.withSections(arranged.sections.slice(0, 1), [

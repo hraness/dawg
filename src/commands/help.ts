@@ -463,8 +463,53 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         command: "style list|search|info · style blend <a> <b> [w]",
         summary: "the style tree · style search maqam",
       },
-      { command: "bars <count>", summary: "loop length, 1–256" },
-      { command: "extend <count> bars", summary: "lengthen the loop" },
+      { command: "bars <count>", summary: "song length, 1–256" },
+      { command: "extend <count> bars", summary: "lengthen the song" },
+    ],
+  },
+  {
+    group: "arrange · range",
+    entries: [
+      {
+        command: "loop <a>-<b> | <section> | next | prev | off",
+        summary: "the loop range · loop 5-6 · loop next steps it along",
+      },
+      {
+        command: "copy [<track>|all] <a>-<b> to <bar> [x<N>] [insert|merge]",
+        summary: "copy bass 5-6 to 7 x2 · copy all chorus to 17 insert",
+      },
+      {
+        command: "move [<track>|all] <a>-<b> to <bar> [insert]",
+        summary: "move bass 5-6 to 9 · the source empties",
+      },
+      {
+        command: "clear [<track>|all] <a>-<b>",
+        summary: "clear bass 5-6 · empty bars, the bars stay",
+      },
+      {
+        command: "copy [<track>|all] <a>-<b> · paste [at <bar>] [x<N>]",
+        summary: "the clipboard · copy all 1-4 · paste at 9",
+      },
+      {
+        command: "reverse [<track>|all] <a>-<b>",
+        summary: "mirror the bars · reverse bass 5-6",
+      },
+      {
+        command: "bars insert <n> at <bar> | bars remove <a>-<b>",
+        summary: "shift later music · sections, clips, automation, tempo",
+      },
+      {
+        command: "jump <bar>[.<beat>] | <section>",
+        summary: "move the playhead · jump 5 · jump 5.3 · jump chorus",
+      },
+      {
+        command: "section split <name> at <bar> | join <name>",
+        summary: "section split chorus at 13 · section join chorus",
+      },
+      {
+        command: "form print",
+        summary: "print form to tape · alias of form bake",
+      },
     ],
   },
   {
@@ -883,11 +928,16 @@ export const USAGE: Readonly<Record<string, string>> = {
   put: "add <note> at <beat> [for <beats>] · add C4 at 0",
   remove: "remove <id> · ids show in the transcript",
   delete: "remove <id> · ids show in the transcript",
-  move: "move <id> to <beat>",
+  move: "move <id> to <beat> · move [<track>|all] <a>-<b> to <bar> [insert] · move bass 5-6 to 9",
   length: "length <id> <beats>",
   velocity: "velocity <id> <0..1>",
   vel: "velocity <id> <0..1>",
-  bars: "bars takes 1…256 · bars 8",
+  bars: "bars <count> (1…256) | bars insert <n> at <bar> | bars remove <a>-<b> · bars 8 · bars insert 2 at 3",
+  copy: "copy [<track>|all] [<a>-<b>|<section>] [to <bar>] [x<N>] [insert|merge] · copy bass 5-6 to 7 x2",
+  paste:
+    "paste [at <bar>] [x<N>] [insert|merge] · paste at 9 · copy bass 5-6 fills the clipboard",
+  reverse: "reverse [<track>|all] [<a>-<b>|<section>] · reverse bass 5-6",
+  jump: "jump <bar>[.<beat>] | <section> · jump 5 · jump 5.3 · jump chorus",
   extend: "extend <count> bars · extend 4 bars",
   instrument:
     "instrument <name> · sine piano pluck bass sawtooth square triangle wavetable kit · pianos: grand upright felt honkytonk prepared · electric: epiano suitcase dyno wurli clav funkclav · synth: supersaw pulse white pink z_square · voices: vocal aah ooh choir chorale khoomei sygyt kargyraa vocoder…",
@@ -908,7 +958,8 @@ export const USAGE: Readonly<Record<string, string>> = {
   automation: "automate <lane> at <beat> <value> · automate volume at 0 0.5",
   hit: "hit <drum> at <beat> · hit kick at 0",
   pattern: "pattern <drum> <beats...> | every <step> · pattern kick every 1",
-  clear: "clear · clear <drum> · clear [<lane>] automation",
+  clear:
+    "clear · clear <drum> · clear [<lane>] automation · clear [<track>|all] <a>-<b> · clear bass 5-6",
   track:
     "track <name> · track drums · track rm <name> · track move <name> <position> · track rate <0.125..8>|<a>/<b>|off · track phase <beats> · track loop <beats> · track phasing <beats> [over <beats>]",
   tracks: "tracks",
@@ -1008,9 +1059,9 @@ export const USAGE: Readonly<Record<string, string>> = {
   velcurve: EXPRESSION_USAGE.velcurve,
   humanize: EXPRESSION_USAGE.humanize,
   section:
-    "section [mark] <name> <a>-<b> | add [<name>] [<n>] | dup | move <name> to <bar> | rename <name> to <new> | delete | unmark | mute | vary | reset | loop <name>|off | jump <name> · section chorus 9-16",
+    "section [mark] <name> <a>-<b> | add [<name>] [<n>] | dup | move <name> to <bar> | rename <name> to <new> | delete | unmark | mute | vary | reset | loop <name>|off | jump <name> | split <name> at <bar> | join <name> · section chorus 9-16",
   sections: "section · lists sections, the form and the loop",
-  form: "form <section…> | off | bake · form verse verse chorus verse · form verse chorus*2",
+  form: "form <section…> | off | bake (print) · form verse verse chorus verse · form verse chorus*2",
   build:
     "build [into <section> | <section> | <a>-<b>] [<n> bars] [riser] [roll] [sweep] [uplifter] · build into chorus",
   drop: "drop [<section> | at <bar>] [cut <beats>] [no impact] · drop chorus",

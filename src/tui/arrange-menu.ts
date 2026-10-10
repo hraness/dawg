@@ -7,6 +7,7 @@
 import type { Section } from "../../core/score.ts";
 import { formatForm } from "../../core/sections.ts";
 import { barsLabel } from "../commands/arrange.ts";
+import { rangeLabel } from "../../core/range.ts";
 import type { MenuContext, MenuNode } from "./menu.ts";
 import { styleMenuDetail, styleMenuNodes } from "./style-menu.ts";
 
@@ -19,6 +20,151 @@ export function arrangeDetail(context: MenuContext): string {
   if (score.form.length) parts.push(`form ${formatForm(score.form)}`);
   if (score.loopSection) parts.push(`loop ${score.loopSection}`);
   return parts.join(" · ");
+}
+
+/** `loop 5–6 · 16 bars`, or the song length alone. */
+export function rangeDetail(context: MenuContext): string {
+  const score = context.score;
+  const bars = `${score.bars} bar${score.bars === 1 ? "" : "s"}`;
+  return score.loop ? `loop ${rangeLabel(score.loop)} · ${bars}` : bars;
+}
+
+/** A bar range typed as `5-6` or `5`: kept as typed, else undefined. */
+function barsText(text: string): string | undefined {
+  const value = text.trim().replace(/\s*(?:–|\.\.)\s*/u, "-");
+  return /^\d{1,4}(?:-\d{1,4})?$/u.test(value) ? value : undefined;
+}
+
+/**
+ * Arrange › range (op1-ux §6.4): each row runs the typed range command on
+ * the focused track, so the menu, the prompt and the agent share one path.
+ */
+export function rangeNodes(context: MenuContext): MenuNode[] {
+  const score = context.score;
+  const track = context.trackId;
+  const nodes: MenuNode[] = [
+    {
+      kind: "entry",
+      label: "loop bars",
+      value: score.loop ? rangeLabel(score.loop) : "the song",
+      placeholder: "bars, e.g. 5-6",
+      example: "loop 5-6",
+      help: "loop these bars in playback; empty plays the song",
+      command: (text) => {
+        if (!text.trim()) return "loop off";
+        const bars = barsText(text);
+        return bars ? `loop ${bars}` : undefined;
+      },
+    },
+  ];
+  if (score.loop)
+    nodes.push(
+      {
+        kind: "action",
+        label: "loop next",
+        command: "loop next",
+        help: "step the loop one length later",
+      },
+      {
+        kind: "action",
+        label: "loop prev",
+        command: "loop prev",
+        help: "step the loop one length earlier",
+      },
+    );
+  nodes.push(
+    {
+      kind: "entry",
+      label: "copy bars",
+      value: "",
+      placeholder: "bars to bar, e.g. 5-6 to 7 x2",
+      example: `copy ${track} 5-6 to 7 x2`,
+      help: "copy this track's bars; x2 tiles, insert shifts later music",
+      command: (text) =>
+        text.trim() ? `copy ${track} ${text.trim()}` : undefined,
+    },
+    {
+      kind: "entry",
+      label: "move bars",
+      value: "",
+      placeholder: "bars to bar, e.g. 5-6 to 9",
+      example: `move ${track} 5-6 to 9`,
+      help: "move this track's bars; the source empties",
+      command: (text) =>
+        text.trim() ? `move ${track} ${text.trim()}` : undefined,
+    },
+    {
+      kind: "entry",
+      label: "clear bars",
+      value: "",
+      placeholder: "bars, e.g. 5-6",
+      example: `clear ${track} 5-6`,
+      help: "empty this track's bars; the bars stay",
+      command: (text) => {
+        const bars = barsText(text);
+        return bars ? `clear ${track} ${bars}` : undefined;
+      },
+    },
+    {
+      kind: "entry",
+      label: "reverse bars",
+      value: "",
+      placeholder: "bars, e.g. 5-6",
+      example: `reverse ${track} 5-6`,
+      help: "mirror this track's bars in time",
+      command: (text) => {
+        const bars = barsText(text);
+        return bars ? `reverse ${track} ${bars}` : undefined;
+      },
+    },
+    {
+      kind: "entry",
+      label: "paste at",
+      value: "",
+      placeholder: "a bar, e.g. 9",
+      example: "paste at 9",
+      help: "lay the clipboard down (copy bars without `to` fills it)",
+      command: (text) =>
+        /^\d{1,4}$/u.test(text.trim()) ? `paste at ${text.trim()}` : undefined,
+    },
+    {
+      kind: "entry",
+      label: "insert bars",
+      value: "",
+      placeholder: "count at bar, e.g. 2 at 3",
+      example: "bars insert 2 at 3",
+      help: "add empty bars; later sections, clips, automation and tempo move right",
+      command: (text) =>
+        /^\d{1,3}\s+at\s+\d{1,4}$/u.test(text.trim())
+          ? `bars insert ${text.trim().replace(/\s+/gu, " ")}`
+          : undefined,
+    },
+    {
+      kind: "entry",
+      label: "remove bars",
+      value: "",
+      placeholder: "bars, e.g. 5-6",
+      example: "bars remove 5-6",
+      help: "cut the bars out; later music moves left",
+      command: (text) => {
+        const bars = barsText(text);
+        return bars ? `bars remove ${bars}` : undefined;
+      },
+    },
+    {
+      kind: "entry",
+      label: "jump",
+      value: "",
+      placeholder: "bar or bar.beat, e.g. 5.3",
+      example: "jump 5.3",
+      help: "move the playhead",
+      command: (text) =>
+        /^\d{1,4}(?:\.\d{1,2})?$/u.test(text.trim())
+          ? `jump ${text.trim()}`
+          : undefined,
+    },
+  );
+  return nodes;
 }
 
 /**
@@ -54,7 +200,7 @@ export function arrangeNodes(context: MenuContext): MenuNode[] {
     if (score.form.length)
       nodes.push({
         kind: "action",
-        label: "bake form",
+        label: "print form to tape",
         command: "form bake",
         help: "write the form out as plain bars, then clear it",
       });
@@ -66,6 +212,14 @@ export function arrangeNodes(context: MenuContext): MenuNode[] {
         help: "play the whole song (or form) again",
       });
   }
+  nodes.push({
+    kind: "menu",
+    id: "range",
+    label: "range",
+    detail: rangeDetail(context),
+    help: "loop bars, copy, move, clear, paste or reverse them, insert or remove bars",
+    build: rangeNodes,
+  });
   // The style browser: a whole song from a style (src/tui/style-menu.ts).
   nodes.push({
     kind: "menu",
