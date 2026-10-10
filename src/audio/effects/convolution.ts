@@ -79,10 +79,13 @@ export function fftInPlace(
   for (let length = 2; length <= n; length <<= 1) {
     const half = length >> 1;
     const stride = n / length;
-    for (let k = 0; k < half; k += 1) {
-      const wr = cos[k * stride]!;
-      const wi = sign * sin[k * stride]!;
-      for (let a = k; a < n; a += length) {
+    // Butterfly groups outer, twiddles inner: memory is walked in order
+    // (the same operations as twiddle-outer, so the same bits).
+    for (let start = 0; start < n; start += length) {
+      for (let k = 0; k < half; k += 1) {
+        const wr = cos[k * stride]!;
+        const wi = sign * sin[k * stride]!;
+        const a = start + k;
         const b = a + half;
         const xr = re[b]! * wr - im[b]! * wi;
         const xi = re[b]! * wi + im[b]! * wr;

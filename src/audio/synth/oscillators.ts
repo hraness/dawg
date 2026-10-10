@@ -110,28 +110,38 @@ function triangle(phase: number): number {
  * names when a track sets synth parameters.
  */
 export function legacyWave(instrument: string, phase: number): number {
+  return legacyWaveFor(instrument)(phase);
+}
+
+/**
+ * `legacyWave` with the tone chosen once: `legacyWaveFor(name)(phase)`
+ * equals `legacyWave(name, phase)`, without matching the name per sample.
+ */
+export function legacyWaveFor(instrument: string): (phase: number) => number {
   const name = instrument.trim().toLowerCase();
-  const cycle = phase - Math.floor(phase);
-  const sine = Math.sin(2 * Math.PI * phase);
-  if (name.includes("square")) return cycle < 0.5 ? 1 : -1;
-  if (name.includes("saw")) return 2 * cycle - 1;
-  if (name.includes("triangle")) return 1 - 4 * Math.abs(cycle - 0.5);
-  if (name.includes("bass")) {
+  if (name.includes("square"))
+    return (phase) => (phase - Math.floor(phase) < 0.5 ? 1 : -1);
+  if (name.includes("saw"))
+    return (phase) => 2 * (phase - Math.floor(phase)) - 1;
+  if (name.includes("triangle"))
+    return (phase) => 1 - 4 * Math.abs(phase - Math.floor(phase) - 0.5);
+  if (name.includes("bass"))
     // A rounded fundamental plus a quiet octave gives bass tracks useful weight.
-    return Math.tanh(
-      0.9 * Math.sin(2 * Math.PI * phase) +
-        0.25 * Math.sin(4 * Math.PI * phase),
-    );
-  }
-  if (name.includes("piano") || name.includes("pluck")) {
+    return (phase) =>
+      Math.tanh(
+        0.9 * Math.sin(2 * Math.PI * phase) +
+          0.25 * Math.sin(4 * Math.PI * phase),
+      );
+  if (name.includes("piano") || name.includes("pluck"))
     // Add stable harmonics; the envelope above supplies the note decay.
-    const harmonic =
-      Math.sin(4 * Math.PI * phase) * 0.28 +
-      Math.sin(6 * Math.PI * phase) * 0.12;
-    return Math.tanh(sine + harmonic);
-  }
+    return (phase) => {
+      const harmonic =
+        Math.sin(4 * Math.PI * phase) * 0.28 +
+        Math.sin(6 * Math.PI * phase) * 0.12;
+      return Math.tanh(Math.sin(2 * Math.PI * phase) + harmonic);
+    };
   // Unknown instruments deliberately fall back to the original sine voice.
-  return sine;
+  return (phase) => Math.sin(2 * Math.PI * phase);
 }
 
 /**
@@ -230,9 +240,9 @@ const BUILT_IN: Readonly<Record<string, OscillatorFactory>> = Object.freeze({
   pulse: (init) => (phase, increment) => pulse(phase, increment, init.width()),
   triangle: (init) => (init.partials ? additive(init) : triangle),
   user: (init) => additive(init),
-  piano: () => (phase) => legacyWave("piano", phase),
-  pluck: () => (phase) => legacyWave("pluck", phase),
-  bass: () => (phase) => legacyWave("bass", phase),
+  piano: () => legacyWaveFor("piano"),
+  pluck: () => legacyWaveFor("pluck"),
+  bass: () => legacyWaveFor("bass"),
   white: (init) => () => (init.random() * 2 - 1) * 0.6,
   pink: (init) => pinkNoise(init.random),
   brown: (init) => {

@@ -42,7 +42,7 @@ import {
   usesSynthVoice,
   type VoiceContext,
 } from "./synth/voice.ts";
-import { legacyWave } from "./synth/oscillators.ts";
+import { legacyWaveFor } from "./synth/oscillators.ts";
 import {
   EMPTY_SAMPLE_BANK,
   sampleKey,
@@ -1487,6 +1487,7 @@ function renderToneNote(
   const performance = (note as PerformedNote).performance;
   const cents = performance?.cents;
   let bent = 0;
+  const wave = legacyWaveFor(instrument);
   for (let index = start; index < end; index += 1) {
     const elapsed = index - start;
     const remaining = end - index;
@@ -1513,7 +1514,7 @@ function renderToneNote(
     const t = elapsed / sampleRate;
     const held =
       damp && t > damp.from ? Math.exp(-(t - damp.from) / damp.tau) : 1;
-    target[index]! += legacyWave(instrument, phase) * envelope * held;
+    target[index]! += wave(phase) * envelope * held;
   }
 }
 
