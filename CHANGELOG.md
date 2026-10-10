@@ -4,6 +4,10 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ## Unreleased
 
+### Fixed
+
+- **Installer hint.** The last line of `site/install.sh` now suggests `dawg model key` to connect a model, not the retired `dawg login` alias.
+
 ## 0.7.0
 
 Voice: pitch tracking, formant shift and vowel morph, sung voices and choirs, audio clips with lyrics, vocoder and talkbox, and autotune. Plus a theory-driven style library with a card for every leaf, show-me command lines, faster agent turns with `/model fast`, a native audio sink, and a coherent design pass with one language, one command grammar and one Ctrl-K tree.

@@ -86,6 +86,9 @@ describe("install.sh", () => {
       });
       expect(out).toContain("verified sha256");
       expect(code).toBe(0);
+      // The closing hint names the current command, not the old alias.
+      expect(out).toContain("dawg model key");
+      expect(out).not.toContain("dawg login");
       expect(existsSync(join(home, "releases", asset))).toBe(true);
       const dawg = join(home, "bun", "bin", "dawg");
       expect(existsSync(dawg)).toBe(true);
