@@ -14,6 +14,12 @@ import { measureLoudness, pcmChannels } from "./loudness.ts";
 import type { MasterReport } from "./master.ts";
 import { levelOf, type SoundLevel } from "./preview.ts";
 import { DEFAULT_SAMPLE_RATE, RENDER_CHANNELS } from "./wav.ts";
+import { statSync } from "node:fs";
+import {
+  audioChoicePath,
+  readAudioChoice,
+  resolveOutputDevice,
+} from "./devices.ts";
 import { playbackTime } from "./arrange.ts";
 import { transportMapFor, type TransportMap } from "./clock.ts";
 import {
@@ -67,6 +73,15 @@ export type DetectOptions = Readonly<{
 }>;
 
 let cachedProbe: NativeProbe | undefined;
+
+/**
+ * Replace the process's native probe (a test preload's fake sink, so a PTY
+ * run can list and switch devices without hardware).
+ */
+export function setNativeProbe(probe: NativeProbe | undefined): void {
+  cachedProbe = probe;
+}
+
 /** The real probe, once per process (dlopen is not repeated). */
 function defaultNativeProbe(): NativeProbe {
   cachedProbe ??= probeNativeSink();
@@ -293,20 +308,49 @@ export type AudioEngineOptions = Readonly<{
   onStatus?: (status: AudioStatus) => void;
   /** Play-mode lead (default 60 ms; 15 ms on the native sink). */
   playLeadMs?: number;
-  /** Native sink output device name (default: system default). */
-  device?: string;
+  /**
+   * Output device name (native sink; sox via AUDIODEV). Default:
+   * DAWG_AUDIO_DEVICE, then the saved choice (src/audio/devices.ts), then
+   * the system default. `null` forces the system default.
+   */
+  device?: string | null;
+  /**
+   * The saved choice to follow (`<config>/audio.json`): checked about once
+   * a second while playing and before each player starts, so a choice made
+   * in another window or the daemon's client moves playback. Defaults to
+   * the real file when the backend is auto-detected (no `info`, no
+   * `spawn`, no `device`); `false` never follows one.
+   */
+  choicePath?: string | false;
   /** Native sink device buffer frames (default 128; 0 = device default). */
   bufferFrames?: number;
 }>;
 
 export type AudioStatus = Readonly<{
-  /** `restarting`: the player died and is being respawned; `stopped`: gave up. */
-  state: "restarting" | "stopped";
+  /**
+   * `restarting`: the player died and is being respawned; `stopped`: gave
+   * up; `device`: the chosen output is gone, playback moved to the default.
+   */
+  state: "restarting" | "stopped" | "device";
   message: string;
 }>;
 
 /** Respawns of a dying player before playback is declared stopped. */
 const MAX_RESPAWNS = 3;
+/** How often a playing engine checks the saved device choice. */
+const CHOICE_CHECK_MS = 1000;
+
+function fileMtime(path: string): number {
+  try {
+    return statSync(path).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
+function cleanEnvDevice(): string | undefined {
+  return resolveOutputDevice(process.env, {});
+}
 /** A player that ran this long before dying resets the respawn budget. */
 const RESPAWN_RESET_MS = 10_000;
 /**
@@ -430,7 +474,14 @@ export class AudioEngine {
   public readonly playLeadMs: number;
   private readonly now: () => number;
   private readonly useTimer: boolean;
-  private readonly spawnPlayer: (command: readonly string[]) => PlayerProcess;
+  private readonly customSpawn:
+    ((command: readonly string[]) => PlayerProcess) | undefined;
+  private readonly bufferFrames: number;
+  /** The output device the next player opens (undefined: system default). */
+  private outputDevice: string | undefined;
+  private readonly choicePath: string | false;
+  private choiceMtime: number;
+  private choiceCheckedMs = Number.NEGATIVE_INFINITY;
   private readonly renderer: LoopRenderer;
   private readonly respawnMs: number;
   private readonly onStatus: ((status: AudioStatus) => void) | undefined;
@@ -494,21 +545,24 @@ export class AudioEngine {
       (native ? NATIVE_PLAY_LEAD_MS : 60);
     this.now = options.now ?? (() => performance.now());
     this.useTimer = options.timer ?? true;
-    const device = options.device ?? process.env.DAWG_AUDIO_DEVICE?.trim();
-    const bufferFrames =
+    this.choicePath =
+      options.choicePath ??
+      (options.info === undefined &&
+      options.spawn === undefined &&
+      options.device === undefined
+        ? audioChoicePath()
+        : false);
+    this.outputDevice =
+      options.device === null
+        ? undefined
+        : ((options.device?.trim() || undefined) ??
+          (this.choicePath
+            ? resolveOutputDevice(process.env, readAudioChoice(this.choicePath))
+            : cleanEnvDevice()));
+    this.choiceMtime = this.choicePath ? fileMtime(this.choicePath) : 0;
+    this.bufferFrames =
       options.bufferFrames ?? envNumber(process.env.DAWG_AUDIO_BUFFER) ?? 128;
-    this.spawnPlayer =
-      options.spawn ??
-      (native
-        ? () =>
-            openNativePlayer(native, {
-              rate: this.sampleRate,
-              channels: RENDER_CHANNELS,
-              ...(device ? { device } : {}),
-              bufferFrames,
-              now: this.now,
-            })
-        : spawnStdinPlayer);
+    this.customSpawn = options.spawn;
     this.respawnMs = options.respawnMs ?? 250;
     this.onStatus = options.onStatus;
     this.renderer = new LoopRenderer({
@@ -900,6 +954,7 @@ export class AudioEngine {
     const child = this.child;
     const loop = this.loop;
     if (!child || (!loop && !this.monitoring)) return;
+    if (this.followChoice()) return;
     let remaining: number;
     if (child.clock) {
       // Device-clocked: top the ring up to the lead. Frames the device
@@ -1103,6 +1158,134 @@ export class AudioEngine {
     this.loop = next;
   }
 
+  /** The output device players open; undefined is the system default. */
+  public get device(): string | undefined {
+    return this.outputDevice;
+  }
+
+  /** Whether this backend can play on a chosen output. */
+  public get choosesDevice(): boolean {
+    return (
+      this.customSpawn === undefined &&
+      (this.info.backend === "native" || this.info.backend === "sox")
+    );
+  }
+
+  /**
+   * Move playback to `device` (undefined: the system default). A running
+   * player is replaced at the frame being heard, so the song carries on.
+   */
+  public setDevice(device: string | undefined): void {
+    const next = device?.trim() || undefined;
+    if (next === this.outputDevice) return;
+    this.outputDevice = next;
+    const child = this.child;
+    if (!child || !this.choosesDevice) return;
+    const loop = this.loop;
+    const heard = this.heardFrame(loop);
+    const at = this.now();
+    const generation = this.generation;
+    this.child = undefined;
+    this.loop = undefined;
+    if (this.timer) clearInterval(this.timer);
+    this.timer = undefined;
+    child.kill();
+    this.starting = child.exited
+      .catch(() => undefined)
+      .then(() => this.lock.release())
+      .then(async () => {
+        if (generation !== this.generation || this.child) return;
+        if (!loop && !this.monitoring) return;
+        const frame = heard + ((this.now() - at) * this.sampleRate) / 1000;
+        await this.start(loop, loop ? beatOfFrame(loop, frame) : 0);
+      })
+      .finally(() => {
+        this.starting = undefined;
+      });
+  }
+
+  /**
+   * Follow the saved choice when its file changed (at most once a second).
+   * Returns true when that moved playback to another device.
+   */
+  private followChoice(force = false): boolean {
+    if (!this.choicePath) return false;
+    const now = this.now();
+    if (!force && now - this.choiceCheckedMs < CHOICE_CHECK_MS) return false;
+    this.choiceCheckedMs = now;
+    const mtime = fileMtime(this.choicePath);
+    if (mtime === this.choiceMtime) return false;
+    this.choiceMtime = mtime;
+    const next = resolveOutputDevice(
+      process.env,
+      readAudioChoice(this.choicePath),
+    );
+    if (next === this.outputDevice) return false;
+    this.setDevice(next);
+    return true;
+  }
+
+  private heardFrame(loop: Loop | undefined): number {
+    return loop
+      ? (((this.cursor - this.queuedFrames()) % loop.frames) + loop.frames) %
+          loop.frames
+      : 0;
+  }
+
+  /** Open a player on the chosen output, or the default when it is gone. */
+  private spawnPlayer(command: readonly string[]): PlayerProcess {
+    if (this.customSpawn) return this.customSpawn(command);
+    this.followChoice(true);
+    const native =
+      this.info.backend === "native" ? this.info.native : undefined;
+    const device = this.outputDevice;
+    if (native) {
+      const open = (name: string | undefined) =>
+        openNativePlayer(native, {
+          rate: this.sampleRate,
+          channels: RENDER_CHANNELS,
+          ...(name ? { device: name } : {}),
+          bufferFrames: this.bufferFrames,
+          now: this.now,
+        });
+      if (!device) return open(undefined);
+      try {
+        return open(device);
+      } catch (error) {
+        const player = open(undefined);
+        this.deviceLost(device, error);
+        return player;
+      }
+    }
+    return spawnStdinPlayer(
+      command,
+      this.info.backend === "sox" && device ? { AUDIODEV: device } : undefined,
+    );
+  }
+
+  /** The chosen output is gone: play on the default and say so once. */
+  private deviceLost(device: string, _error?: unknown): void {
+    if (this.outputDevice !== device) return;
+    this.outputDevice = undefined;
+    this.onStatus?.({
+      state: "device",
+      message: `audio output "${device}" is unavailable · playing on the system default`,
+    });
+  }
+
+  /** After a player died: is its chosen output still there? */
+  private deviceGone(): string | undefined {
+    const device = this.outputDevice;
+    if (!device || !this.choosesDevice) return undefined;
+    if (this.info.backend === "sox") return device;
+    try {
+      const names = this.info.native?.devices(false) ?? [];
+      return names.some((entry) => entry.name === device) ? undefined : device;
+    } catch {
+      return undefined;
+    }
+  }
+
   private async start(loop: Loop | undefined, beat: number): Promise<void> {
     const generation = this.generation;
     if (!(await this.lock.acquire())) return;
@@ -1142,11 +1325,9 @@ export class AudioEngine {
     const loop = this.loop;
     const ranMs = this.now() - this.startMs;
     // Frame the device was playing when the stream ended.
-    const heard = loop
-      ? (((this.cursor - this.queuedFrames()) % loop.frames) + loop.frames) %
-        loop.frames
-      : 0;
+    const heard = this.heardFrame(loop);
     const diedAt = this.now();
+    const lost = this.deviceGone();
     this.child = undefined;
     this.loop = undefined;
     if (this.timer) clearInterval(this.timer);
@@ -1163,10 +1344,13 @@ export class AudioEngine {
       }
       this.respawns += 1;
       const delay = this.respawnMs * 2 ** (this.respawns - 1);
-      this.onStatus?.({
-        state: "restarting",
-        message: `audio player exited; restarting (${this.respawns}/${MAX_RESPAWNS})`,
-      });
+      // An unplugged output: one notice, then the default device.
+      if (lost) this.deviceLost(lost);
+      else
+        this.onStatus?.({
+          state: "restarting",
+          message: `audio player exited; restarting (${this.respawns}/${MAX_RESPAWNS})`,
+        });
       this.respawnTimer = setTimeout(() => {
         this.respawnTimer = undefined;
         if (generation !== this.generation || this.child || this.starting)
@@ -1181,9 +1365,13 @@ export class AudioEngine {
   }
 }
 
-function spawnStdinPlayer(command: readonly string[]): PlayerProcess {
+function spawnStdinPlayer(
+  command: readonly string[],
+  env?: Readonly<Record<string, string>>,
+): PlayerProcess {
   if (command.length === 0) throw new Error("no player command");
   const child = Bun.spawn([...command], {
+    ...(env ? { env: { ...process.env, ...env } } : {}),
     stdin: "pipe",
     stdout: "ignore",
     stderr: "ignore",

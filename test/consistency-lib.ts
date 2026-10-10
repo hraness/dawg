@@ -10,6 +10,7 @@
  * patterns are read from the source, so a new window command is covered
  * without editing this file.
  */
+import { parseAudioCommand } from "../src/audio/devices.ts";
 import { WINDOW_VERBS, canonicalWindowForm } from "../src/commands/grammar.ts";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -113,6 +114,7 @@ const WINDOW_ARGS: Readonly<Record<string, ArgCheck>> = {
   menu: (arg) =>
     (MENU_SECTIONS as readonly string[]).includes(arg.toLowerCase()),
   showme: (arg) => parseShowMe(arg) !== undefined,
+  audio: (arg) => parseAudioCommand(arg) !== undefined,
   click: (arg) =>
     !("error" in parseClickArgument(arg, { on: false, volume: 0.5 })),
   chords: (arg) => applyChordsCommand(defaultChordSettings(), arg).ok,
@@ -269,6 +271,13 @@ export function menuContext(
     clickOn: false,
     countInBars: 1,
     showMe: "on",
+    // Device rows run `/audio out <name>`: names with spaces must parse.
+    audio: {
+      output: "default (Built-in Output)",
+      input: "USB Audio Interface",
+      outputs: ["Built-in Output", "USB Audio Interface"],
+      inputs: ["Built-in Microphone", "USB Audio Interface"],
+    },
   };
 }
 

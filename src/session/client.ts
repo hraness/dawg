@@ -484,7 +484,11 @@ export class DaemonClient {
       this.emit({
         type: "status",
         connected: this.connected,
-        message: `dawgd error · ${message.code}`,
+        // Audio notices (a lost output, a dying player) carry their words.
+        message:
+          message.code === "audio"
+            ? `audio · ${message.message}`
+            : `dawgd error · ${message.code}`,
       });
       return;
     }
