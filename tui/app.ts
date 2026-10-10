@@ -1848,12 +1848,15 @@ export class TuiApp {
         // End then ↑ moves the view on the first press.
         const max = Math.max(0, this.text.lines.length - page);
         const from = Math.min(max, this.text.scroll);
-        this.text.scroll =
+        const next =
           nav === "home"
             ? 0
             : nav === "end"
               ? max
               : Math.max(0, Math.min(max, from + step));
+        // At the last page the panel pins to the end: a resize keeps the
+        // last line in view (paintText clamps Infinity to the new bound).
+        this.text.scroll = max > 0 && next === max ? Infinity : next;
         return { type: "overlay" };
       }
     }
