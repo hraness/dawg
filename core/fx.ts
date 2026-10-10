@@ -1265,7 +1265,7 @@ export function normalizeFx(input: unknown): TrackFx | undefined {
 
 /** Automation lane name of an `fx` parameter, e.g. `distort-drive`. */
 export type FxLane =
-  `${FxName | "reverb" | "synth" | "string" | "keys" | "modal" | "grain" | "wind" | "sing" | "vocoder"}-${string}`;
+  `${FxName | "reverb" | "synth" | "string" | "keys" | "modal" | "grain" | "wind" | "sing" | "vocoder" | "patch"}-${string}`;
 
 /** Every automatable `fx` parameter as `{ lane, effect, param, spec }`. */
 export const FX_LANES: readonly Readonly<{

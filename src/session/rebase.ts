@@ -14,6 +14,7 @@ import {
   applyScoreOperation,
   automationPoints,
   scoreFromJSON,
+  type PatchTarget,
   type ScoreOperation,
   type Track,
   type TrackScore,
@@ -106,6 +107,39 @@ export function rebaseOperations(
         if (!now) return { ok: false, reason: `track ${id} was removed` };
         if (!same(trackSettings(base, id)?.clips ?? null, now.clips ?? null))
           return { ok: false, reason: `${id} clips changed` };
+        break;
+      }
+      // Patch edits conflict per object: another pane's cable edit never
+      // blocks this pane's edit of a different cable in the same patch.
+      case "setPatch":
+      case "setPatchNode":
+      case "setPatchCable":
+      case "setPatchMacro": {
+        const target = operation.target;
+        if (!("library" in target)) {
+          if (added.tracks.has(target.trackId)) break;
+          if (!trackSettings(current, target.trackId))
+            return { ok: false, reason: `track ${target.trackId} was removed` };
+        }
+        const read = (score: TrackScore): unknown => {
+          const patch = patchAt(score, target);
+          if (operation.type === "setPatch") return patch;
+          if (!patch || !("nodes" in patch)) return patch ?? null;
+          if (operation.type === "setPatchNode")
+            return (
+              patch.nodes.find((node) => node.id === operation.nodeId) ?? null
+            );
+          if (operation.type === "setPatchCable")
+            return (
+              patch.cables.find((cable) => cable.id === operation.cableId) ??
+              null
+            );
+          return (
+            patch.macros.find((macro) => macro.id === operation.macroId) ?? null
+          );
+        };
+        if (!same(read(base), read(current)))
+          return { ok: false, reason: `${patchLabel(target)} changed` };
         break;
       }
       case "setAutomation": {
@@ -213,6 +247,23 @@ export function rebaseOperations(
       reason: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+/** The patch an operation target names, or undefined. */
+function patchAt(score: TrackScore, target: PatchTarget) {
+  if ("library" in target) return score.patches[target.library];
+  const track = score.tracks.find(
+    (candidate) => candidate.id === target.trackId,
+  );
+  if (target.fx === undefined) return track?.patch;
+  return track?.fxPatch?.find((stage) => stage.name === target.fx);
+}
+
+function patchLabel(target: PatchTarget): string {
+  if ("library" in target) return `patch ${target.library}`;
+  return target.fx !== undefined
+    ? `${target.trackId} fx ${target.fx}`
+    : `${target.trackId} patch`;
 }
 
 /**

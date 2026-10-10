@@ -165,3 +165,78 @@ describe("tick bound", () => {
     ).toHaveLength(1);
   });
 });
+
+describe("patches", () => {
+  const PATCH = {
+    kind: "patch",
+    role: "effect",
+    name: "lp",
+    nodes: [{ id: "lp", type: "onepole" }],
+    cables: [
+      { id: "a", from: "in.audio", to: "lp.in" },
+      { id: "b", from: "lp.out", to: "out.audio" },
+    ],
+  };
+
+  test("a score with patches round-trips through normalize", () => {
+    const score = createScore({
+      patches: {
+        lp: PATCH,
+        tone: {
+          kind: "patch",
+          name: "tone",
+          nodes: [{ id: "osc", type: "osc" }],
+          cables: [
+            { id: "p", from: "voice.pitch", to: "osc.pitch" },
+            { id: "o", from: "osc.out", to: "out.audio" },
+          ],
+        },
+      },
+      tracks: [
+        { id: "kick", name: "kick", instrument: "drums" },
+        {
+          id: "lead",
+          name: "lead",
+          instrument: "patch",
+          patch: { kind: "patch", ref: "tone" },
+          fxPatch: [{ ...PATCH, side: "kick" }],
+        },
+      ],
+    } as never);
+    const again = createScore(JSON.parse(JSON.stringify(score.toJSON())));
+    expect(again.toJSON()).toEqual(score.toJSON());
+  });
+
+  test("removeTrack drops a dangling side", () => {
+    const score = createScore({
+      tracks: [
+        { id: "kick", name: "kick", instrument: "drums" },
+        {
+          id: "pad",
+          name: "pad",
+          instrument: "sine",
+          fxPatch: [{ ...PATCH, side: "kick" }],
+        },
+      ],
+    } as never);
+    const next = applyScoreOperation(score, {
+      type: "removeTrack",
+      trackId: "kick",
+    });
+    expect(next.tracks[0]!.fxPatch![0]).not.toHaveProperty("side");
+  });
+
+  test("library and node limits come from SCORE_LIMITS", () => {
+    expect(SCORE_LIMITS.maxPatchNodes).toBe(64);
+    expect(SCORE_LIMITS.maxPatches).toBe(32);
+    const patches = Object.fromEntries(
+      Array.from({ length: SCORE_LIMITS.maxPatches + 1 }, (_, i) => [
+        `p${i}`,
+        { ...PATCH, name: `p${i}` },
+      ]),
+    );
+    expect(() => createScore({ patches } as never)).toThrow(
+      ScoreValidationError,
+    );
+  });
+});

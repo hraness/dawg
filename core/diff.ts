@@ -3,16 +3,26 @@
  * score B, so a project edit commits as ordinary session operations that
  * rebase, undo and broadcast like everything else.
  *
- * Order: song settings, note removals, track removals, track additions,
- * track moves, track patches, note updates, note additions. Each track and
+ * Order: song settings, library patch additions and updates, note
+ * removals, track removals, track additions, track moves, track patches
+ * (each followed by its patch edits), library patch removals, note
+ * updates, note additions.
+ *
+ * Patches diff at node, cable and macro level (`setPatchNode`,
+ * `setPatchCable`, `setPatchMacro`), so two writers editing different
+ * cables of one patch never collide under last-writer-wins; a whole-patch
+ * `setPatch` is emitted only when no edit list can express the change. Each track and
  * each note appears at most once per kind. `applyScoreOperations(a,
  * diffScores(a, b))` deep-equals `b` (notes and tracks are stored in
  * canonical order, so insertion order never matters).
  */
 
+import { isPatchRef, patchEdits, type Patch, type PatchEdit } from "./patch.ts";
 import {
   applyScoreOperation,
+  patchContext,
   TrackScore,
+  type PatchTarget,
   type Note,
   type NotePatch,
   type ScoreOperation,
@@ -34,7 +44,7 @@ export class DiffError extends Error {
  * []. The records are keyed by every field of `Note` and `Track`, so a new
  * field fails typechecking until it is classified here.
  */
-type FieldRule = "same" | "set" | "clear" | "zero" | "flag" | "lane";
+type FieldRule = "same" | "set" | "clear" | "zero" | "flag" | "lane" | "patch";
 
 const NOTE_FIELDS: { readonly [K in keyof Note]-?: FieldRule } = {
   id: "same",
@@ -94,6 +104,8 @@ const TRACK_FIELDS: { readonly [K in keyof Track]-?: FieldRule } = {
   clips: "clear",
   takes: "clear",
   autotune: "clear",
+  patch: "patch",
+  fxPatch: "patch",
   glide: "clear",
   pedal: "clear",
   velocityCurve: "clear",
@@ -117,7 +129,8 @@ function fieldPatch(
   for (const [key, rule] of Object.entries(rules)) {
     const before = a[key];
     const after = b[key];
-    if (rule === "same") continue;
+    // Patches diff through their own operations (patchOperations).
+    if (rule === "same" || rule === "patch") continue;
     if (rule === "set") {
       if (!deepEqual(before, after)) patch[key] = after;
     } else if (rule === "zero") {
@@ -140,7 +153,9 @@ export function diffScores(
     throw new DiffError(
       `ticksPerBeat differs (${a.ticksPerBeat} → ${b.ticksPerBeat}); the session resolution is fixed`,
     );
-  const ops: ScoreOperation[] = [...songOperations(a, b)];
+  const song = songOperations(a, b);
+  if (usesPatches(a) || usesPatches(b)) return diffWithPatches(a, b, song);
+  const ops: ScoreOperation[] = [...song];
   const aTracks = new Map(a.tracks.map((track) => [track.id, track]));
   const bTracks = new Map(b.tracks.map((track) => [track.id, track]));
   const aNotes = new Map(a.notes.map((note) => [note.id, note]));
@@ -195,6 +210,223 @@ export function diffScores(
   }
   ops.push(...updates, ...additions);
   return Object.freeze(ops);
+}
+
+function usesPatches(score: TrackScore): boolean {
+  return (
+    Object.keys(score.patches).length > 0 ||
+    score.tracks.some((track) => track.patch || track.fxPatch)
+  );
+}
+
+/**
+ * `diffScores` for scores with patches. Track contents diff against a
+ * working copy without notes (the state the receiver will have when each
+ * operation lands), because a library edit can refit track patches and an
+ * instrument change drops a track's patch before its patch edits apply.
+ */
+function diffWithPatches(
+  a: TrackScore,
+  b: TrackScore,
+  song: readonly ScoreOperation[],
+): readonly ScoreOperation[] {
+  let work = new TrackScore({ ...a.toJSON(), notes: [] });
+  const ops: ScoreOperation[] = [];
+  const emit = (operation: ScoreOperation): void => {
+    work = applyScoreOperation(work, operation);
+    ops.push(operation);
+  };
+  song.forEach(emit);
+  for (const name of libraryOrder(b.patches))
+    libraryOperations(name, () => work, b.patches[name]!).forEach(emit);
+
+  const aTracks = new Map(a.tracks.map((track) => [track.id, track]));
+  const bTracks = new Map(b.tracks.map((track) => [track.id, track]));
+  const aNotes = new Map(a.notes.map((note) => [note.id, note]));
+  const bNotes = new Map(b.notes.map((note) => [note.id, note]));
+  const updates: ScoreOperation[] = [];
+  const additions: ScoreOperation[] = [];
+  const gone = new Set<string>();
+  for (const note of a.notes) {
+    if (aTracks.has(note.trackId) && !bTracks.has(note.trackId)) {
+      gone.add(note.id);
+      continue;
+    }
+    const next = bNotes.get(note.id);
+    if (!next || next.trackId !== note.trackId) {
+      ops.push({ type: "removeNote", noteId: note.id });
+      gone.add(note.id);
+      continue;
+    }
+    const patch = notePatch(note, next);
+    if (patch) updates.push({ type: "updateNote", noteId: note.id, patch });
+  }
+  for (const note of b.notes)
+    if (!aNotes.has(note.id) || gone.has(note.id))
+      additions.push({ type: "addNote", note });
+
+  for (const track of a.tracks)
+    if (!bTracks.has(track.id))
+      emit({ type: "removeTrack", trackId: track.id });
+  const order = a.tracks
+    .filter((track) => bTracks.has(track.id))
+    .map((t) => t.id);
+  for (const track of b.tracks)
+    if (!aTracks.has(track.id)) {
+      emit({ type: "addTrack", track });
+      order.push(track.id);
+    }
+  b.tracks.forEach((track, index) => {
+    if (order[index] === track.id) return;
+    const from = order.indexOf(track.id);
+    order.splice(from, 1);
+    order.splice(index, 0, track.id);
+    emit({ type: "moveTrack", trackId: track.id, index });
+  });
+  const current = (id: string): Track =>
+    work.tracks.find((track) => track.id === id)!;
+  for (const track of b.tracks) {
+    if (!aTracks.has(track.id)) continue;
+    const patch = trackPatch(current(track.id), track);
+    if (patch) emit({ type: "updateTrack", trackId: track.id, patch });
+    trackPatchOperations(track, () => work, current).forEach(emit);
+  }
+  for (const name of Object.keys(work.patches))
+    if (!b.patches[name])
+      emit({ type: "setPatch", target: { library: name }, patch: null });
+  ops.push(...updates, ...additions);
+  return Object.freeze(ops);
+}
+
+/** Library names with every nested patch before the patches that nest it. */
+function libraryOrder(library: Readonly<Record<string, Patch>>): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const visit = (name: string): void => {
+    if (seen.has(name) || !library[name]) return;
+    seen.add(name);
+    for (const node of library[name].nodes)
+      if (node.type.startsWith("patch.")) visit(node.type.slice(6));
+    out.push(name);
+  };
+  for (const name of Object.keys(library)) visit(name);
+  return out;
+}
+
+function editOperations(
+  target: PatchTarget,
+  edits: readonly PatchEdit[],
+): ScoreOperation[] {
+  return edits.map((edit): ScoreOperation => {
+    if (edit.kind === "node")
+      return {
+        type: "setPatchNode",
+        target,
+        nodeId: edit.nodeId,
+        node: edit.node,
+      };
+    if (edit.kind === "cable")
+      return {
+        type: "setPatchCable",
+        target,
+        cableId: edit.cableId,
+        cable: edit.cable,
+      };
+    return {
+      type: "setPatchMacro",
+      target,
+      macroId: edit.macroId,
+      macro: edit.macro,
+      ...(edit.index !== undefined ? { index: edit.index } : {}),
+    };
+  });
+}
+
+/**
+ * Operations turning one patch into another: edits when they can, else a
+ * whole write. A changed role cannot be written over a patch tracks still
+ * use as the old role, so a library patch whose role changes is removed
+ * (its users get inline copies) and added again.
+ */
+function patchOperations(
+  target: PatchTarget,
+  before: Patch | undefined,
+  after: Patch,
+  library: Readonly<Record<string, Patch>>,
+  index?: number,
+): ScoreOperation[] {
+  if (before && deepEqual(before, after) && index === undefined) return [];
+  if (before && index === undefined) {
+    const edits = patchEdits(before, after, patchContext(library));
+    if (edits) return editOperations(target, edits);
+  }
+  const write: ScoreOperation = {
+    type: "setPatch",
+    target,
+    patch: after,
+    ...(index !== undefined ? { index } : {}),
+  };
+  if ("library" in target && before && before.role !== after.role)
+    return [{ type: "setPatch", target, patch: null }, write];
+  return [write];
+}
+
+function libraryOperations(
+  name: string,
+  work: () => TrackScore,
+  after: Patch,
+): ScoreOperation[] {
+  const score = work();
+  return patchOperations(
+    { library: name },
+    score.patches[name],
+    after,
+    score.patches,
+  );
+}
+
+/** A track's instrument and effect patch operations against the working copy. */
+function trackPatchOperations(
+  track: Track,
+  work: () => TrackScore,
+  current: (id: string) => Track,
+): ScoreOperation[] {
+  const ops: ScoreOperation[] = [];
+  const library = work().patches;
+  const was = current(track.id);
+  const target = { trackId: track.id };
+  if (!deepEqual(was.patch, track.patch)) {
+    if (!track.patch) ops.push({ type: "setPatch", target, patch: null });
+    else if (was.patch && !isPatchRef(was.patch) && !isPatchRef(track.patch))
+      ops.push(...patchOperations(target, was.patch, track.patch, library));
+    else ops.push({ type: "setPatch", target, patch: track.patch });
+  }
+  const before = was.fxPatch ?? [];
+  const after = track.fxPatch ?? [];
+  if (deepEqual(before, after)) return ops;
+  const names = new Set(after.map((stage) => stage.name));
+  const order: string[] = [];
+  for (const stage of before)
+    if (!names.has(stage.name))
+      ops.push({
+        type: "setPatch",
+        target: { trackId: track.id, fx: stage.name },
+        patch: null,
+      });
+    else order.push(stage.name);
+  after.forEach((stage, index) => {
+    const fxTarget = { trackId: track.id, fx: stage.name };
+    const at = order.indexOf(stage.name);
+    const previous = before.find((candidate) => candidate.name === stage.name);
+    if (at === index) {
+      ops.push(...patchOperations(fxTarget, previous, stage, library));
+      return;
+    }
+    if (at >= 0) order.splice(at, 1);
+    order.splice(index, 0, stage.name);
+    ops.push(...patchOperations(fxTarget, previous, stage, library, index));
+  });
+  return ops;
 }
 
 /**

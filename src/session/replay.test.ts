@@ -64,6 +64,28 @@ function note(id: string, trackId: string, startTick: number) {
   return { id, trackId, startTick, durationTicks: 120, pitch: 60, velocity: 1 };
 }
 
+/** A small instrument patch: saw into an enveloped amp, one macro. */
+const PATCH = {
+  kind: "patch",
+  role: "instrument",
+  name: "pad",
+  nodes: [
+    { id: "osc1", type: "osc" },
+    { id: "env", type: "adsr" },
+    { id: "amp", type: "vca" },
+  ],
+  cables: [
+    { id: "c1", from: "voice.pitch", to: "osc1.pitch" },
+    { id: "c2", from: "osc1.out", to: "amp.in" },
+    { id: "c3", from: "voice.gate", to: "env.gate" },
+    { id: "c4", from: "env.out", to: "amp.gain" },
+    { id: "c5", from: "amp.out", to: "out.audio" },
+  ],
+  macros: [
+    { id: "level", min: 0, max: 1, default: 0.8, to: [{ port: "osc1.level" }] },
+  ],
+};
+
 /** One operation of every kind, in an order the reducer accepts. */
 const EVERY_OP: ScoreOperation[] = [
   { type: "addTrack", track: { id: "vox", name: "vox", instrument: "sine" } },
@@ -112,6 +134,33 @@ const EVERY_OP: ScoreOperation[] = [
     form: [{ section: "intro" }],
   },
   { type: "setLoop", loop: { startBar: 1, bars: 2 } },
+  { type: "setPatch", target: { library: "pad" }, patch: PATCH },
+  { type: "setPatch", target: { trackId: "main" }, patch: PATCH },
+  {
+    type: "setPatchNode",
+    target: { trackId: "main" },
+    nodeId: "vcf",
+    node: { id: "vcf", type: "svf" },
+  },
+  {
+    type: "setPatchCable",
+    target: { trackId: "main" },
+    cableId: "c2",
+    cable: { id: "c2", from: "osc1.out", to: "vcf.in" },
+  },
+  {
+    type: "setPatchMacro",
+    target: { library: "pad" },
+    macroId: "drive",
+    macro: {
+      id: "drive",
+      min: 0,
+      max: 4,
+      default: 1,
+      to: [{ port: "amp.gain" }],
+    },
+    index: 0,
+  },
   { type: "clearTrack", trackId: "bass" },
   { type: "removeTrack", trackId: "bass" },
 ] as unknown as ScoreOperation[];
@@ -172,6 +221,10 @@ describe("ops log", () => {
       "setClips",
       "setSections",
       "setLoop",
+      "setPatch",
+      "setPatchNode",
+      "setPatchCable",
+      "setPatchMacro",
     ];
     expect([...covered].sort()).toEqual([...all].sort());
   });

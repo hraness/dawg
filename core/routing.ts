@@ -18,6 +18,7 @@ import {
   type TrackScore,
 } from "./score.ts";
 import { trackSlug } from "./slug.ts";
+import { patchSides } from "./patch.ts";
 
 export type TrackRefKind = "audio" | "notes";
 
@@ -161,5 +162,33 @@ registerTrackRefs("autotune.from", {
     // preset stay as the user set them.
     const { from: _from, ...autotune } = track.autotune;
     return { ...track, autotune };
+  },
+});
+
+// patcher: a patch's `side` reads another track's audio (the sidechain
+// boundary node). Removing that track drops `side`; the side node then reads
+// silence.
+registerTrackRefs("patch.side", {
+  refs: (track) =>
+    patchSides(track.patch, track.fxPatch).map((trackId) => ({
+      trackId,
+      kind: "audio" as const,
+    })),
+  drop: (track, removedId) => {
+    let next = track;
+    if (track.patch?.side === removedId) {
+      const { side: _side, ...rest } = track.patch;
+      next = { ...next, patch: rest as typeof track.patch };
+    }
+    if (track.fxPatch?.some((stage) => stage.side === removedId))
+      next = {
+        ...next,
+        fxPatch: track.fxPatch.map((stage) => {
+          if (stage.side !== removedId) return stage;
+          const { side: _side, ...rest } = stage;
+          return rest;
+        }),
+      };
+    return next;
   },
 });

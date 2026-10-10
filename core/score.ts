@@ -44,6 +44,27 @@ import {
 import { normalizeAutotune, type TrackAutotune } from "./autotune.ts";
 // Registers cross-track reference fields (autotune.from, vocoder.src).
 import "./routing.ts";
+import {
+  applyPatchEdit,
+  detachPatch,
+  isPatchLane,
+  isPatchRef,
+  PATCH_LIMITS,
+  PatchValidationError,
+  validateLibrary,
+  validatePatch,
+  validatePatchValue,
+  withoutNested,
+  PATCH_INSTRUMENT,
+  refitPatchValue,
+  type Cable,
+  type Macro,
+  type Patch,
+  type PatchContext,
+  type PatchEdit,
+  type PatchNode,
+  type TrackPatchValue,
+} from "./patch.ts";
 import { normalizeString, type TrackString } from "./strings.ts";
 import {
   isGranularInstrument,
@@ -137,6 +158,12 @@ export const SCORE_LIMITS = Object.freeze({
   maxReverbSize: 1,
   /** Automation lanes kept in `fxAutomation` per track. */
   maxFxLanes: 64,
+  /** Modular patches (core/patch.ts PATCH_LIMITS). */
+  maxPatchNodes: 64,
+  maxPatchCables: 128,
+  maxPatchMacros: 16,
+  maxPatches: 32,
+  maxPatchDepth: 3,
   /** Sampler voices per track (score v2, `sampler` field). */
   maxSamplerVoices: 64,
   maxSamplerVoiceNameLength: 32,
@@ -537,6 +564,13 @@ export type Track = Readonly<{
    * track (`core/autotune.ts`). Absent keeps the sound untouched.
    */
   autotune?: TrackAutotune;
+  /**
+   * Optional (patcher): the instrument patch (`core/patch.ts`), inline or a
+   * reference into `score.patches`; it plays when `instrument` is "patch".
+   */
+  patch?: TrackPatchValue;
+  /** Optional (patcher): effect patches, run in order at the chain's patch stage. */
+  fxPatch?: readonly Patch[];
 }> &
   /**
    * Performance (`core/expression.ts`): glide default, sustain pedal
@@ -866,6 +900,18 @@ const FX_LANE_RANGES: ReadonlyMap<
   FX_LANES.map(({ lane, spec }) => [lane, { min: spec.min, max: spec.max }]),
 );
 
+/** Patch macro lanes (`patch-<macro>`) hold the knob position 0..1. */
+const PATCH_LANE_RANGE = Object.freeze({ min: 0, max: 1 });
+
+function fxLaneRange(
+  lane: string,
+): Readonly<{ min: number; max: number }> | undefined {
+  return (
+    FX_LANE_RANGES.get(lane) ??
+    (isPatchLane(lane) ? PATCH_LANE_RANGE : undefined)
+  );
+}
+
 export function isTrackAutomationParameter(
   value: unknown,
 ): value is TrackAutomationParameter {
@@ -880,7 +926,7 @@ export function isAutomationParameter(
 ): value is AutomationParameter {
   return (
     isTrackAutomationParameter(value) ||
-    (typeof value === "string" && FX_LANE_RANGES.has(value))
+    (typeof value === "string" && fxLaneRange(value) !== undefined)
   );
 }
 
@@ -899,7 +945,7 @@ export function automationRange(
     const { min, max } = AUTOMATION_LANES[parameter];
     return { min, max };
   }
-  const range = FX_LANE_RANGES.get(parameter);
+  const range = fxLaneRange(parameter);
   if (!range)
     throw new ScoreValidationError(
       `unknown automation parameter: ${String(parameter)}`,
@@ -968,6 +1014,8 @@ export type TrackPatch = Readonly<
     takes?: readonly Take[] | null;
     vocoder?: TrackVocoder | null;
     autotune?: TrackAutotune | null;
+    patch?: TrackPatchValue | null;
+    fxPatch?: readonly Patch[] | null;
   }
 >;
 
@@ -1029,6 +1077,8 @@ export type TrackInput = Readonly<
     | "takes"
     | "vocoder"
     | "autotune"
+    | "patch"
+    | "fxPatch"
   > &
     Pick<Track, "id"> & {
       filter?: TrackFilter | null;
@@ -1060,6 +1110,8 @@ export type TrackInput = Readonly<
       takes?: readonly Take[] | null;
       vocoder?: TrackVocoder | null;
       autotune?: TrackAutotune | null;
+      patch?: TrackPatchValue | null;
+      fxPatch?: readonly Patch[] | null;
     }
 >;
 
@@ -1151,6 +1203,8 @@ export type TrackScoreData = Readonly<{
   loop?: LoopRange | null;
   /** Sound calibration (0.7), 0..CALIBRATION_LATEST; absent or 0 is legacy. */
   calibration?: number | null;
+  /** The project patch library (patcher), by name; absent or empty is none. */
+  patches?: Readonly<Record<string, Patch>> | null;
 }>;
 
 /** A loop range: bars `startBar..startBar+bars` (0-based, like sections). */
@@ -1179,6 +1233,8 @@ export class TrackScore {
   readonly form: readonly FormEntry[];
   /** The section playback loops; undefined plays the song. */
   readonly loopSection: string | undefined;
+  /** The project patch library by name (sorted); empty without one. */
+  readonly patches: Readonly<Record<string, Patch>>;
   /** The loop range; absent without one (it wins over `loopSection`). */
   declare readonly loop?: LoopRange;
   /** Sound calibration revision; absent is 0 (legacy engines). */
@@ -1244,7 +1300,12 @@ export class TrackScore {
       () => normalizeTuning(data.tuning, "song tuning"),
       "invalid-score",
     );
-    const tracks = normalizeTracks(data.tracks ?? []);
+    const patches = patchOrThrow(() =>
+      validateLibrary(data.patches, {
+        engineSettings: normalizeEngineSettings,
+      }),
+    );
+    const tracks = normalizeTracks(data.tracks ?? [], patches);
     const notes = normalizeNotes(data.notes ?? []);
     const trackIds = new Set(tracks.map((track) => track.id));
     const orphan = notes.find((note) => !trackIds.has(note.trackId));
@@ -1291,6 +1352,7 @@ export class TrackScore {
     if (time) this.time = time;
     this.tracks = freezeArray(tracks);
     this.notes = freezeArray(notes);
+    this.patches = patches;
     this.sections = freezeArray(sections);
     this.form = freezeArray(form);
     // One loop at a time: a range wins over a looped section.
@@ -1438,6 +1500,9 @@ export class TrackScore {
         : { loopSection: this.loopSection }),
       ...(this.loop ? { loop: this.loop } : {}),
       ...(this.calibration ? { calibration: this.calibration } : {}),
+      ...(Object.keys(this.patches).length > 0
+        ? { patches: this.patches }
+        : {}),
     };
   }
 }
@@ -1555,6 +1620,13 @@ export function updateTrack(
       // (`wind` included) without a wind field leaves the wind engine.
       if (patch.instrument !== undefined && patch.wind === undefined)
         delete next.wind;
+      // An instrument patch leaves with the patch instrument.
+      if (
+        patch.instrument !== undefined &&
+        patch.patch === undefined &&
+        patch.instrument !== PATCH_INSTRUMENT
+      )
+        delete next.patch;
       // Likewise a sing field leaves with the singing instrument.
       if (patch.instrument !== undefined && patch.sing === undefined)
         delete next.sing;
@@ -1799,7 +1871,48 @@ export type ScoreOperation =
       /** The loop range (op1-ux); null clears it. */
       type: "setLoop";
       loop: LoopRange | null;
+    }>
+  | Readonly<{
+      /**
+       * Creates, replaces or removes (null) a whole patch: a track's
+       * instrument patch, one of its effect patches (`index` places a new
+       * one) or a project library patch. Edits inside a patch use the
+       * node, cable and macro operations below.
+       */
+      type: "setPatch";
+      target: PatchTarget;
+      patch: TrackPatchValue | null;
+      index?: number;
+    }>
+  | Readonly<{
+      /** Adds, replaces or removes (null) one node of a patch. */
+      type: "setPatchNode";
+      target: PatchTarget;
+      nodeId: string;
+      node: PatchNode | null;
+    }>
+  | Readonly<{
+      /** Adds, replaces or removes (null) one cable of a patch. */
+      type: "setPatchCable";
+      target: PatchTarget;
+      cableId: string;
+      cable: Cable | null;
+    }>
+  | Readonly<{
+      /** Adds, replaces, moves (`index`) or removes (null) one macro. */
+      type: "setPatchMacro";
+      target: PatchTarget;
+      macroId: string;
+      macro: Macro | null;
+      index?: number;
     }>;
+
+/**
+ * Which patch an operation edits: a track's instrument patch, one of its
+ * effect patches by name (`fx`), or a project library patch.
+ */
+export type PatchTarget =
+  Readonly<{ trackId: string; fx?: string }> | Readonly<{ library: string }>;
 
 export function applyScoreOperation(
   score: TrackScore,
@@ -1846,6 +1959,27 @@ export function applyScoreOperation(
     return clearTrack(score, operation.trackId);
   if (operation.type === "setClips")
     return setClips(score, operation.trackId, operation.clips);
+  if (operation.type === "setPatch")
+    return setPatch(score, operation.target, operation.patch, operation.index);
+  if (operation.type === "setPatchNode")
+    return editPatch(score, operation.target, {
+      kind: "node",
+      nodeId: operation.nodeId,
+      node: operation.node,
+    });
+  if (operation.type === "setPatchCable")
+    return editPatch(score, operation.target, {
+      kind: "cable",
+      cableId: operation.cableId,
+      cable: operation.cable,
+    });
+  if (operation.type === "setPatchMacro")
+    return editPatch(score, operation.target, {
+      kind: "macro",
+      macroId: operation.macroId,
+      macro: operation.macro,
+      ...(operation.index !== undefined ? { index: operation.index } : {}),
+    });
   return assertNever(operation);
 }
 
@@ -1882,6 +2016,7 @@ export function scoreFromJSON(value: unknown): TrackScore {
     loopSection?: string | null;
     loop?: LoopRange | null;
     calibration?: number | null;
+    patches?: Readonly<Record<string, Patch>> | null;
   } = {
     tracks: optionalArray(value.tracks).map(parseTrack),
     notes: optionalArray(value.notes).map(parseNote),
@@ -1925,6 +2060,9 @@ export function scoreFromJSON(value: unknown): TrackScore {
   // The constructor checks the range.
   if (value.calibration !== undefined)
     data.calibration = value.calibration as number | null;
+  // Checked by the constructor (core/patch.ts validateLibrary).
+  if (value.patches !== undefined)
+    data.patches = value.patches as Readonly<Record<string, Patch>> | null;
   return new TrackScore(data);
 }
 
@@ -2177,7 +2315,10 @@ function normalizeForm(
   });
 }
 
-function normalizeTracks(inputs: readonly unknown[]): Track[] {
+function normalizeTracks(
+  inputs: readonly unknown[],
+  library: Readonly<Record<string, Patch>> = {},
+): Track[] {
   if (!Array.isArray(inputs) || inputs.length > SCORE_LIMITS.maxTracks) {
     throw new ScoreValidationError(
       `score cannot contain more than ${SCORE_LIMITS.maxTracks} tracks`,
@@ -2186,7 +2327,7 @@ function normalizeTracks(inputs: readonly unknown[]): Track[] {
   }
   const seen = new Set<string>();
   const tracks = inputs.map((input) => {
-    const track = normalizeTrack(input);
+    const track = normalizeTrack(input, library);
     if (seen.has(track.id))
       throw new ScoreValidationError(
         `track id already exists: ${track.id}`,
@@ -2213,7 +2354,10 @@ function normalizeTracks(inputs: readonly unknown[]): Track[] {
   return tracks;
 }
 
-function normalizeTrack(input: unknown): Track {
+function normalizeTrack(
+  input: unknown,
+  library: Readonly<Record<string, Patch>> = {},
+): Track {
   if (!isRecord(input))
     throw new ScoreValidationError("track must be an object", "invalid-track");
   const id = boundedString(
@@ -2365,6 +2509,8 @@ function normalizeTrack(input: unknown): Track {
       );
     throw error;
   }
+  const patch = normalizeTrackPatch(input.patch, id, instrument, library);
+  const fxPatch = normalizeFxPatches(input.fxPatch, id, library);
   const string = fxOrThrow(() => normalizeString(input.string));
   // A bare `granular` instrument (set_instrument, `instrument granular`)
   // gets an empty object, so the engine plays its defaults.
@@ -2446,7 +2592,126 @@ function normalizeTrack(input: unknown): Track {
     ...(takes ? { takes } : {}),
     ...(vocoder ? { vocoder } : {}),
     ...(autotune ? { autotune } : {}),
+    ...(patch ? { patch } : {}),
+    ...(fxPatch ? { fxPatch } : {}),
   });
+}
+
+/** Validation context for patches in this score: library and engine fields. */
+export function patchContext(
+  library: Readonly<Record<string, Patch>> = {},
+  label?: string,
+): PatchContext {
+  return {
+    library,
+    engineSettings: normalizeEngineSettings,
+    ...(label !== undefined ? { label } : {}),
+  };
+}
+
+/**
+ * An engine node's settings, checked by the Track field normalizers the
+ * engine already uses (`{ modal: {...} }` through normalizeModal).
+ */
+function normalizeEngineSettings(
+  fields: readonly string[],
+  settings: Readonly<Record<string, unknown>>,
+  label: string,
+): Readonly<Record<string, unknown>> {
+  const out: Record<string, unknown> = {};
+  for (const field of fields) {
+    const value = settings[field];
+    if (value === undefined) continue;
+    const normalized = (() => {
+      try {
+        if (field === "synth") return normalizeSynth(value);
+        if (field === "wavetable") return normalizeWavetable(value);
+        if (field === "sampler") return normalizeSampler(value);
+        if (field === "modal") return normalizeModal(value);
+        if (field === "string") return normalizeString(value);
+        if (field === "wind") return normalizeWind(value);
+        if (field === "sing") return normalizeSing(value);
+        if (field === "keys") return normalizeKeys(value);
+        if (field === "granular")
+          return normalizeGranular(value, (ref) =>
+            normalizeSampleRef(ref, "granular src"),
+          );
+      } catch (error) {
+        if (
+          error instanceof FxValidationError ||
+          error instanceof ScoreValidationError
+        )
+          throw new PatchValidationError(`${label} ${field}: ${error.message}`);
+        throw error;
+      }
+      throw new PatchValidationError(`${label}: no engine field "${field}"`);
+    })();
+    if (normalized !== undefined) out[field] = normalized;
+  }
+  return Object.freeze(out);
+}
+
+function normalizeTrackPatch(
+  input: unknown,
+  id: string,
+  instrument: string,
+  library: Readonly<Record<string, Patch>>,
+): TrackPatchValue | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (instrument !== PATCH_INSTRUMENT)
+    throw new ScoreValidationError(
+      `track ${id} has a patch but its instrument is "${instrument}"`,
+      "invalid-track",
+    );
+  const value = patchOrThrow(() =>
+    validatePatchValue(input, patchContext(library, `track ${id} patch`)),
+  );
+  if (!isPatchRef(value) && value.role !== "instrument")
+    throw new ScoreValidationError(
+      `track ${id} patch must be an instrument patch (it is an ${value.role} patch)`,
+      "invalid-track",
+    );
+  if (isPatchRef(value) && library[value.ref]?.role !== "instrument")
+    throw new ScoreValidationError(
+      `track ${id} patch: project patch ${value.ref} is an effect patch`,
+      "invalid-track",
+    );
+  return value;
+}
+
+function normalizeFxPatches(
+  input: unknown,
+  id: string,
+  library: Readonly<Record<string, Patch>>,
+): readonly Patch[] | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (!Array.isArray(input) || input.length > PATCH_LIMITS.maxFxPatches)
+    throw new ScoreValidationError(
+      `track ${id} fxPatch must be a list of at most ${PATCH_LIMITS.maxFxPatches} effect patches`,
+      "invalid-track",
+    );
+  const names = new Set<string>();
+  const out = input.map((value: unknown, index: number) => {
+    const patch = patchOrThrow(() =>
+      validatePatch(
+        value,
+        patchContext(library, `track ${id} fxPatch ${index + 1}`),
+      ),
+    );
+    if (patch.role !== "effect")
+      throw new ScoreValidationError(
+        `track ${id} fxPatch ${patch.name} must be an effect patch`,
+        "invalid-track",
+      );
+    if (names.has(patch.name))
+      throw new ScoreValidationError(
+        `track ${id} has two effect patches named ${patch.name}`,
+        "invalid-track",
+      );
+    names.add(patch.name);
+    return patch;
+  });
+  return out.length > 0 ? Object.freeze(out) : undefined;
 }
 
 /** Track.guitar (0.6.1): a tuning name or open-string pitches plus fretting. */
@@ -2605,7 +2870,7 @@ function normalizeFxAutomation(
       "score-limit",
     );
   for (const key of keys)
-    if (!FX_LANE_RANGES.has(key))
+    if (fxLaneRange(key) === undefined)
       throw new ScoreValidationError(
         `unknown fx automation lane "${key}"`,
         "invalid-track",
@@ -2618,6 +2883,16 @@ function normalizeFxAutomation(
       `fxAutomation ${lane}`,
       spec.min,
       spec.max,
+    );
+    if (points.length > 0) out[lane] = points;
+  }
+  // Patch macro lanes follow, sorted by name.
+  for (const lane of keys.filter(isPatchLane).sort()) {
+    const points = normalizeAutomation(
+      input[lane],
+      `fxAutomation ${lane}`,
+      0,
+      1,
     );
     if (points.length > 0) out[lane] = points;
   }
@@ -4017,6 +4292,186 @@ export function setClips(
   clips: readonly AudioClip[] | null,
 ): TrackScore {
   return updateTrack(score, trackId, { clips });
+}
+
+function patchOrThrow<T>(make: () => T): T {
+  try {
+    return make();
+  } catch (error) {
+    if (
+      error instanceof PatchValidationError ||
+      error instanceof FxValidationError
+    )
+      throw new ScoreValidationError(error.message, "invalid-track");
+    throw error;
+  }
+}
+
+/**
+ * Creates, replaces or removes a whole patch (the `setPatch` operation).
+ * Removing a library patch inlines it into the tracks that referenced it
+ * and unplugs `patch.<name>` nodes elsewhere. An unknown track, or an
+ * effect patch removed that is not there, is a no-op.
+ */
+export function setPatch(
+  score: TrackScore,
+  target: PatchTarget,
+  patch: TrackPatchValue | null,
+  index?: number,
+): TrackScore {
+  if ("library" in target) {
+    const name = target.library;
+    const removed = score.patches[name];
+    if (patch === null) {
+      if (!removed) return score;
+      const { [name]: _gone, ...rest } = score.patches;
+      return new TrackScore({
+        ...score.toJSON(),
+        patches: Object.fromEntries(
+          Object.entries(rest).map(([key, value]) => [
+            key,
+            withoutNested(value, name),
+          ]),
+        ),
+        tracks: score.tracks.map((track) =>
+          track.patch || track.fxPatch
+            ? {
+                ...track,
+                ...(track.patch
+                  ? { patch: detachPatch(track.patch, name, removed) }
+                  : {}),
+                ...(track.fxPatch
+                  ? {
+                      fxPatch: track.fxPatch.map((fx) =>
+                        withoutNested(fx, name),
+                      ),
+                    }
+                  : {}),
+              }
+            : track,
+        ),
+      });
+    }
+    if (isPatchRef(patch))
+      throw new ScoreValidationError(
+        `project patch ${name} must be a patch, not a reference`,
+        "invalid-track",
+      );
+    return withLibrary(score, { ...score.patches, [name]: { ...patch, name } });
+  }
+  const track = score.tracks.find(
+    (candidate) => candidate.id === target.trackId,
+  );
+  if (!track) return score;
+  // Setting an instrument patch makes the track play it.
+  if (target.fx === undefined)
+    return updateTrack(
+      score,
+      track.id,
+      patch ? { instrument: PATCH_INSTRUMENT, patch } : { patch: null },
+    );
+  const stages = track.fxPatch ?? [];
+  const at = stages.findIndex((stage) => stage.name === target.fx);
+  if (patch === null) {
+    if (at < 0) return score;
+    const rest = stages.filter((_, i) => i !== at);
+    return updateTrack(score, track.id, {
+      fxPatch: rest.length > 0 ? rest : null,
+    });
+  }
+  if (isPatchRef(patch))
+    throw new ScoreValidationError(
+      `effect patch ${target.fx} must be a patch, not a reference`,
+      "invalid-track",
+    );
+  const next = { ...patch, name: target.fx };
+  const rest = stages.filter((_, i) => i !== at);
+  const place =
+    index !== undefined && Number.isInteger(index)
+      ? Math.max(0, Math.min(rest.length, index))
+      : at < 0
+        ? rest.length
+        : at;
+  rest.splice(place, 0, next);
+  return updateTrack(score, track.id, { fxPatch: rest });
+}
+
+/**
+ * The score with a changed library: every other patch that nests or
+ * references a library patch is refitted, so a removed macro unplugs its
+ * cables instead of invalidating the project.
+ */
+function withLibrary(
+  score: TrackScore,
+  patches: Readonly<Record<string, Patch>>,
+): TrackScore {
+  return new TrackScore({
+    ...score.toJSON(),
+    patches: Object.fromEntries(
+      Object.entries(patches).map(([key, value]) => [
+        key,
+        refitPatchValue(value, patches),
+      ]),
+    ),
+    tracks: score.tracks.map((track) =>
+      track.patch || track.fxPatch
+        ? {
+            ...track,
+            ...(track.patch
+              ? { patch: refitPatchValue(track.patch, patches) }
+              : {}),
+            ...(track.fxPatch
+              ? {
+                  fxPatch: track.fxPatch.map((fx) =>
+                    refitPatchValue(fx, patches),
+                  ),
+                }
+              : {}),
+          }
+        : track,
+    ),
+  });
+}
+
+/**
+ * One node, cable or macro edit inside a patch. A target that is gone (a
+ * removed track, patch or effect patch, or a library reference standing
+ * where an inline patch was) is a no-op, so concurrent edits replay.
+ */
+export function editPatch(
+  score: TrackScore,
+  target: PatchTarget,
+  edit: PatchEdit,
+): TrackScore {
+  const context = patchContext(score.patches);
+  if ("library" in target) {
+    const current = score.patches[target.library];
+    if (!current) return score;
+    const next = patchOrThrow(() => applyPatchEdit(current, edit, context));
+    if (next === current) return score;
+    return withLibrary(score, { ...score.patches, [target.library]: next });
+  }
+  const track = score.tracks.find(
+    (candidate) => candidate.id === target.trackId,
+  );
+  if (!track) return score;
+  if (target.fx === undefined) {
+    if (!track.patch || isPatchRef(track.patch)) return score;
+    const current = track.patch;
+    const next = patchOrThrow(() => applyPatchEdit(current, edit, context));
+    return next === current
+      ? score
+      : updateTrack(score, track.id, { patch: next });
+  }
+  const stages = track.fxPatch ?? [];
+  const at = stages.findIndex((stage) => stage.name === target.fx);
+  if (at < 0) return score;
+  const current = stages[at]!;
+  const next = patchOrThrow(() => applyPatchEdit(current, edit, context));
+  if (next === current) return score;
+  return updateTrack(score, track.id, {
+    fxPatch: stages.map((stage, i) => (i === at ? next : stage)),
+  });
 }
 
 /**
