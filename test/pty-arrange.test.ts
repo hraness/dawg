@@ -106,7 +106,7 @@ test.skipIf(!supported)(
         "chorus looped",
       );
       // Esc goes back one level at a time until the menu closes.
-      const menuOpen = () => t.vt.text().includes("╭─ menu");
+      const menuOpen = () => t.vt.text().includes("≡ ");
       for (let i = 0; i < 8 && menuOpen(); i++) {
         await t.send("\u001b");
         await Bun.sleep(150);

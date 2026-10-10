@@ -102,11 +102,11 @@ test.skipIf(!supported)(
         async () => (await lead(t.cwd))?.sing?.preset === "khoomei",
         "khoomei in session",
       );
-      for (let i = 0; i < 8 && t.vt.text().includes("╭─ menu"); i++) {
+      for (let i = 0; i < 8 && t.vt.text().includes("≡ "); i++) {
         await t.send("\u001b");
         await Bun.sleep(150);
       }
-      await t.until(() => !t.vt.text().includes("╭─ menu"), "menu closed");
+      await t.until(() => !t.vt.text().includes("≡ "), "menu closed");
       await t.send("/sing\r");
       await t.until(() => t.vt.text().includes("sing · khoomei"), "show");
       expect(t.vt.text()).not.toContain("error");

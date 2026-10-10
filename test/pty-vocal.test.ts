@@ -16,7 +16,7 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("vocal <verb>:"), "vocal list");
       await t.until(() => t.vt.text().includes("/vocal import"), "vocal list");
       await t.send("/help voice\r");
-      await t.until(() => t.vt.text().includes("── voice"), "help voice");
+      await t.until(() => t.vt.text().includes("› voice"), "help voice");
       expect(t.vt.text()).toContain("voice tools: lists every verb");
       await t.send("\u001b");
 

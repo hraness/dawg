@@ -138,7 +138,7 @@ test.skipIf(!supported)(
         async () => (await session(t.cwd))?.loop?.startBar === 8,
         "loop stepped",
       );
-      const menuOpen = () => t.vt.text().includes("╭─ menu");
+      const menuOpen = () => t.vt.text().includes("≡ ");
       for (let i = 0; i < 8 && menuOpen(); i++) {
         await t.send("\u001b");
         await Bun.sleep(150);

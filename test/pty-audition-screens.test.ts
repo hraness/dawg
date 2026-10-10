@@ -176,7 +176,7 @@ test.skipIf(!supported)(
       await t.until(() => /› voicing/.test(screen()), "voicing row");
       await t.send(RIGHT);
       await t.until(() => screen().includes("+1 ← 0"), "voicing staged");
-      expect(screen()).toContain("● menu");
+      expect(screen()).toContain("● ≡ ");
       expect(screen()).toContain("B staged 1");
       await t.send("a");
       await t.until(() => screen().includes("A committed"), "A");
@@ -214,11 +214,11 @@ test.skipIf(!supported)(
       expect(screen()).not.toContain("●");
 
       // Close the menu; one undo takes the key back.
-      for (let i = 0; i < 4 && screen().includes("╭─ menu"); i += 1) {
+      for (let i = 0; i < 4 && screen().includes("≡ "); i += 1) {
         await t.send("\u001b");
         await Bun.sleep(120);
       }
-      await t.until(() => !screen().includes("╭─ menu"), "menu closed");
+      await t.until(() => !screen().includes("≡ "), "menu closed");
       await t.send("\u001a");
       await waitFor(
         async () => (await latest(t.cwd)).key === committed.key,

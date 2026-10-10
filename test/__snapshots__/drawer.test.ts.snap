@@ -2,7 +2,7 @@
 
 exports[`80×24: the drawer docks above the prompt 1`] = `
 [
-  "╭─ menu › Effe… ─── loop off · A/B: 1 change staged · enter keep · esc revert──╮",
+  "╭─ ≡ … › Filter ─── loop off · A/B: 1 change staged · enter keep · esc revert──╮",
   "│   type        lpf │ hpf │ bpf                                                │",
   "│                                                                              │",
   "│ › cutoff     1200 Hz ← 800 Hz                               20 Hz … 20000 Hz │",
@@ -15,7 +15,7 @@ exports[`80×24: the drawer docks above the prompt 1`] = `
 
 exports[`120×40: the drawer docks above the prompt 1`] = `
 [
-  "╭─ menu › Effects › Filter ──────────────────────────────── loop off · A/B: 1 change staged · enter keep · esc revert──╮",
+  "╭─ ≡ Effects › Filter ───────────────────────────────────── loop off · A/B: 1 change staged · enter keep · esc revert──╮",
   "│   type        lpf │ hpf │ bpf                                                                                        │",
   "│                                                                                                                      │",
   "│ › cutoff     1200 Hz ← 800 Hz                                                   20 Hz … 20000 Hz                     │",

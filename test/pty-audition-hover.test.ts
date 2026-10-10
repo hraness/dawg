@@ -98,10 +98,7 @@ test.skipIf(!supported)(
 
       // Back in, move, Enter chooses; Esc out; Enter on a value keeps.
       await t.send("\r");
-      await t.until(
-        () => screen().includes("≡ Sound › table"),
-        "tables 2",
-      );
+      await t.until(() => screen().includes("≡ Sound › table"), "tables 2");
       await t.send("jj");
       await t.until(() => screen().includes("B staged 1"), "hover again");
       const chosen = screen().match(/› (\S+) {2}/)?.[1];

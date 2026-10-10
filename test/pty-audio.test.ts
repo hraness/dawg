@@ -73,7 +73,7 @@ test.skipIf(!supported)(
         await Bun.sleep(50);
       expect(await opened()).toContain("USB Audio Interface");
       // Esc back out, then the typed input.
-      const menuOpen = () => t.vt.text().includes("╭─ menu");
+      const menuOpen = () => t.vt.text().includes("≡ ");
       for (let i = 0; i < 8 && menuOpen(); i++) {
         await t.send("\u001b");
         await Bun.sleep(150);

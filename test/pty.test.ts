@@ -284,13 +284,13 @@ test.skipIf(!supported)(
 
     // /help opens start-here and the ten topics; /help all is everything.
     await t.send("/help\r");
-    await t.until(() => t.vt.text().includes("── start here"), "help guide");
+    await t.until(() => t.vt.text().includes("› start here"), "help guide");
     expect(t.vt.text()).toContain("ctrl-k");
     expect(t.vt.text()).toContain("esc back");
     await t.send("\u001b");
-    await t.until(() => !t.vt.text().includes("── start here"), "guide closed");
+    await t.until(() => !t.vt.text().includes("› start here"), "guide closed");
     await t.send("/help all\r");
-    await t.until(() => t.vt.text().includes("── sound"), "help overlay");
+    await t.until(() => t.vt.text().includes("› sound"), "help overlay");
     await t.send("\u001b[F"); // End: the last page holds the keys
     await t.until(() => t.vt.text().includes("chord mode"), "help end");
     await t.send("\u001b");

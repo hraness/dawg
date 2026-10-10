@@ -33,7 +33,7 @@ test.skipIf(!supported)(
       await closeOverlay(t, "╭─ guide");
 
       await t.send("/help voice\r");
-      await t.until(() => t.vt.text().includes("── voice"), "help voice");
+      await t.until(() => t.vt.text().includes("› voice"), "help voice");
       expect(t.vt.text()).toContain("help · voice");
       await t.send("\u001b[F"); // End: the footer names the other doors
       await t.until(
@@ -71,7 +71,7 @@ test.skipIf(!supported)(
 
       // `login` is an alias: the page is titled model key.
       await t.send("/help login\r");
-      await t.until(() => t.vt.text().includes("── model key"), "help login");
+      await t.until(() => t.vt.text().includes("› model key"), "help login");
       expect(t.vt.text()).toContain("help · model key");
       expect(t.vt.text()).not.toMatch(/help · login|── login/);
       await closeOverlay(t, "╭─ help");
