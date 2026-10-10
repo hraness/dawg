@@ -179,6 +179,18 @@ function parseOperation(value: unknown): ScoreOperation {
     };
   }
   if (
+    value.type === "setLoop" &&
+    (value.loop === null ||
+      (isRecord(value.loop) &&
+        typeof value.loop.startBar === "number" &&
+        typeof value.loop.bars === "number"))
+  )
+    // The reducer checks the range (TrackScore normalizeLoopRange).
+    return {
+      type: "setLoop",
+      loop: value.loop as { startBar: number; bars: number } | null,
+    };
+  if (
     value.type === "updateTrack" &&
     typeof value.trackId === "string" &&
     value.trackId.length <= 64 &&

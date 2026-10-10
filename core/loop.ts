@@ -37,6 +37,8 @@ export type TrackLoopV1 = Readonly<{
   sections?: readonly Section[];
   /** Song form (0.5); omitted when empty. */
   form?: readonly FormEntry[];
+  /** The loop range (0.8), 0-based; absent plays the song. */
+  loop?: Readonly<{ startBar: number; bars: number }>;
 }>;
 
 /** Return the stable object form used by files and IPC messages. */
@@ -62,6 +64,7 @@ export function encodeLoopDocument(score: TrackScore): TrackLoopV1 {
     ...(score.loopSection === undefined
       ? {}
       : { loopSection: score.loopSection }),
+    ...(score.loop ? { loop: score.loop } : {}),
     ...(score.calibration ? { calibration: score.calibration } : {}),
   });
 }

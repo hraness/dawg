@@ -244,6 +244,7 @@ export const CONTENT_TOOLS: ReadonlySet<string> = new Set([
   "set_automation",
   "add_transition",
   "edit_section",
+  "edit_range",
   "set_form",
   "extend_loop",
   "edit_clip",

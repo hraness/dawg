@@ -306,16 +306,16 @@ describe("receipts and refusals", () => {
     ).toEndWith("m-c.wav +1");
   });
 
-  test("loop a-b marks and loops a section when none spans the bars", () => {
+  test("loop a-b sets the loop range and marks no section", () => {
     const score = createScore({ bars: 8 } as never);
-    const result = loopSpan(score, "lead", 2, 3);
+    const result = loopSpan(score, 2, 3);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.next.loopSection).toBe("loop");
-    const section = result.next.sections.find((item) => item.name === "loop");
-    expect(section).toEqual({ name: "loop", startBar: 1, bars: 2 });
-    const moved = loopSpan(result.next, "lead", 5, 6);
-    expect(moved.ok && moved.next.sections.length).toBe(1);
-    expect(loopSpan(score, "lead", 4, 2).ok).toBe(false);
+    expect(result.next.loop).toEqual({ startBar: 1, bars: 2 });
+    expect(result.next.sections).toEqual([]);
+    const moved = loopSpan(result.next, 5, 6);
+    expect(moved.ok && moved.next.loop).toEqual({ startBar: 4, bars: 2 });
+    expect(loopSpan(score, 4, 2).ok).toBe(false);
+    expect(loopSpan(score, 7, 9).ok).toBe(false);
   });
 });

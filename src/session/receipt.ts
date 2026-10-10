@@ -151,6 +151,13 @@ export function receiptParts(
       case "setSections":
         parts.push(plural(op.sections.length, "section"));
         break;
+      case "setLoop":
+        parts.push(
+          op.loop
+            ? `loop ${op.loop.startBar + 1}–${op.loop.startBar + op.loop.bars}`
+            : "loop off",
+        );
+        break;
       case "setCalibration":
         break;
       case "addTrack": {

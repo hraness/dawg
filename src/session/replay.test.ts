@@ -111,6 +111,7 @@ const EVERY_OP: ScoreOperation[] = [
     sections: [{ name: "intro", startBar: 0, bars: 2 }],
     form: [{ section: "intro" }],
   },
+  { type: "setLoop", loop: { startBar: 1, bars: 2 } },
   { type: "clearTrack", trackId: "bass" },
   { type: "removeTrack", trackId: "bass" },
 ] as unknown as ScoreOperation[];
@@ -170,6 +171,7 @@ describe("ops log", () => {
       "setStyle",
       "setClips",
       "setSections",
+      "setLoop",
     ];
     expect([...covered].sort()).toEqual([...all].sort());
   });

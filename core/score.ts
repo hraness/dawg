@@ -1143,9 +1143,18 @@ export type TrackScoreData = Readonly<{
    * the song (or its form). A name that matches no section is dropped.
    */
   loopSection?: string | null;
+  /**
+   * The loop range (op1-ux): an ad hoc run of bars playback loops, set by
+   * `loop 5-6`. It creates no section; when present it wins over
+   * `loopSection`. Absent or null plays the song.
+   */
+  loop?: LoopRange | null;
   /** Sound calibration (0.7), 0..CALIBRATION_LATEST; absent or 0 is legacy. */
   calibration?: number | null;
 }>;
+
+/** A loop range: bars `startBar..startBar+bars` (0-based, like sections). */
+export type LoopRange = Readonly<{ startBar: number; bars: number }>;
 
 /** Canonical immutable score. Use `addNote`/`removeNote` to create a revision. */
 export class TrackScore {
@@ -1170,6 +1179,8 @@ export class TrackScore {
   readonly form: readonly FormEntry[];
   /** The section playback loops; undefined plays the song. */
   readonly loopSection: string | undefined;
+  /** The loop range; absent without one (it wins over `loopSection`). */
+  declare readonly loop?: LoopRange;
   /** Sound calibration revision; absent is 0 (legacy engines). */
   declare readonly calibration?: number;
 
@@ -1282,7 +1293,11 @@ export class TrackScore {
     this.notes = freezeArray(notes);
     this.sections = freezeArray(sections);
     this.form = freezeArray(form);
-    this.loopSection = normalizeLoopSection(data.loopSection, sections);
+    // One loop at a time: a range wins over a looped section.
+    const loop = normalizeLoopRange(data.loop);
+    const looped = normalizeLoopSection(data.loopSection, sections);
+    this.loopSection = loop ? undefined : looped;
+    if (loop) this.loop = loop;
     const calibration = normalizeCalibration(data.calibration);
     if (calibration) this.calibration = calibration;
     Object.freeze(this);
@@ -1306,6 +1321,18 @@ export class TrackScore {
     });
   }
 
+  /**
+   * Set the loop range (or clear it with null). A range clears the looped
+   * section, so one loop plays at a time.
+   */
+  withLoop(loop: LoopRange | null): TrackScore {
+    return new TrackScore({
+      ...this.toJSON(),
+      loop,
+      ...(loop ? { loopSection: null } : {}),
+    });
+  }
+
   withTempo(tempoBpm: number): TrackScore {
     return new TrackScore({ ...this.toJSON(), tempoBpm });
   }
@@ -1324,6 +1351,8 @@ export class TrackScore {
       sections,
       form,
       loopSection: loopSection ?? null,
+      // Looping a section ends the loop range.
+      ...(loopSection ? { loop: null } : {}),
     });
   }
 
@@ -1407,6 +1436,7 @@ export class TrackScore {
       ...(this.loopSection === undefined
         ? {}
         : { loopSection: this.loopSection }),
+      ...(this.loop ? { loop: this.loop } : {}),
       ...(this.calibration ? { calibration: this.calibration } : {}),
     };
   }
@@ -1764,6 +1794,11 @@ export type ScoreOperation =
       form: readonly FormEntry[];
       /** The looped section; absent or null plays the song. */
       loopSection?: string | null;
+    }>
+  | Readonly<{
+      /** The loop range (op1-ux); null clears it. */
+      type: "setLoop";
+      loop: LoopRange | null;
     }>;
 
 export function applyScoreOperation(
@@ -1789,6 +1824,7 @@ export function applyScoreOperation(
       operation.form,
       operation.loopSection ?? null,
     );
+  if (operation.type === "setLoop") return score.withLoop(operation.loop);
   if (operation.type === "addTrack") return addTrack(score, operation.track);
   if (operation.type === "addNote") return addNote(score, operation.note);
   if (operation.type === "removeNote")
@@ -1844,6 +1880,7 @@ export function scoreFromJSON(value: unknown): TrackScore {
     sections?: readonly Section[];
     form?: readonly FormEntry[];
     loopSection?: string | null;
+    loop?: LoopRange | null;
     calibration?: number | null;
   } = {
     tracks: optionalArray(value.tracks).map(parseTrack),
@@ -1883,6 +1920,8 @@ export function scoreFromJSON(value: unknown): TrackScore {
   // The constructor checks the type and drops a name matching no section.
   if (value.loopSection !== undefined)
     data.loopSection = value.loopSection as string | null;
+  if (value.loop !== undefined) data.loop = value.loop as LoopRange | null;
+  migrateHiddenLoop(data);
   // The constructor checks the range.
   if (value.calibration !== undefined)
     data.calibration = value.calibration as number | null;
@@ -2028,6 +2067,61 @@ function normalizeCalibration(value: unknown): number | undefined {
       "invalid-score",
     );
   return value;
+}
+
+/** A loop range, checked: whole bars from 0, at least one, inside the limit. */
+function normalizeLoopRange(value: unknown): LoopRange | undefined {
+  if (value === undefined || value === null) return undefined;
+  const range = value as { startBar?: unknown; bars?: unknown };
+  const { startBar, bars } = range;
+  if (
+    typeof value !== "object" ||
+    typeof startBar !== "number" ||
+    typeof bars !== "number" ||
+    !Number.isInteger(startBar) ||
+    !Number.isInteger(bars) ||
+    startBar < 0 ||
+    bars < 1 ||
+    startBar + bars > SCORE_LIMITS.maxBars
+  )
+    throw new ScoreValidationError(
+      `loop must be {startBar, bars}: whole bars from 0, 1..${SCORE_LIMITS.maxBars}`,
+      "invalid-score",
+    );
+  return Object.freeze({ startBar, bars });
+}
+
+/**
+ * f07 stored `loop 5-6` as a hidden section named `loop`. On load it becomes
+ * the loop range and the section (and its form entries) go.
+ */
+function migrateHiddenLoop(data: {
+  sections?: readonly Section[];
+  form?: readonly FormEntry[];
+  loopSection?: string | null;
+  loop?: LoopRange | null;
+}): void {
+  if (data.loop || typeof data.loopSection !== "string") return;
+  if (data.loopSection.trim().toLowerCase() !== "loop") return;
+  const sections = data.sections ?? [];
+  const hidden = sections.find(
+    (section) =>
+      typeof section?.name === "string" &&
+      section.name.trim().toLowerCase() === "loop",
+  );
+  if (
+    !hidden ||
+    !Number.isInteger(hidden.startBar) ||
+    !Number.isInteger(hidden.bars)
+  )
+    return;
+  data.loop = { startBar: hidden.startBar, bars: hidden.bars };
+  data.loopSection = null;
+  data.sections = sections.filter((section) => section !== hidden);
+  if (data.form)
+    data.form = data.form.filter(
+      (entry) => entry?.section?.trim?.().toLowerCase() !== "loop",
+    );
 }
 
 function normalizeLoopSection(
