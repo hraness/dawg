@@ -547,6 +547,34 @@ describe("PlaySession", () => {
       expect(rig.state.cards.join("\n")).toContain("pass kept as overdub");
     });
 
+    test("recording over a form's repeat (a TAPE ghost) lands in its source", async () => {
+      // Form verse, chorus, verse: transport bar 4 is the verse again, the
+      // ░ ghost pass on TAPE; its notes belong to the verse's bars 0-1.
+      const score = createScore({
+        tempoBpm: 120,
+        bars: 4,
+        tracks: [{ id: "lead", name: "keys", instrument: "piano" }],
+      }).withSections(
+        [
+          { name: "verse", startBar: 0, bars: 2 },
+          { name: "chorus", startBar: 2, bars: 2 },
+        ],
+        [{ section: "verse" }, { section: "chorus" }, { section: "verse" }],
+      );
+      const rig = await looping(score);
+      tap(rig, 4 * BAR_MS + 500);
+      rig.state.now = 5 * BAR_MS + 10;
+      rig.session.tick();
+      await rig.session["flushing"];
+      const notes = rig.state.score.notes.filter(
+        (note) => note.trackId === "lead",
+      );
+      expect(notes).toHaveLength(1);
+      const ticksPerBar = 4 * rig.state.score.ticksPerBeat;
+      expect(notes[0]!.startTick).toBeLessThan(ticksPerBar);
+      expect(rig.state.commits[0]!.payload.pass).toBeUndefined();
+    });
+
     test("without a loop, each bar is still one revision", async () => {
       const rig = await looping(
         createScore({

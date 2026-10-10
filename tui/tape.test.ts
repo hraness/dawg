@@ -260,4 +260,31 @@ describe("TAPE delight (op1-ux §9.1, §9.3)", () => {
     expect(ascii.lines[0]).toContain("#");
     expect(ascii.lines[0]).not.toMatch(/[━═]/);
   });
+
+  test("on an unrolled form only the source bars flash, never a ghost", () => {
+    // Bars 0-3 then a ░ repeat of bars 2-3 (cells 16-23), 4 cells a bar.
+    const cellBars = [
+      ...Array.from({ length: 16 }, (_, i) => Math.floor(i / 4)),
+      ...Array.from({ length: 8 }, (_, i) => 2 + Math.floor(i / 4)),
+    ];
+    const ghosts = cellBars.map((_, i) => i >= 16);
+    const passes = cellBars.map((_, i) => (i >= 16 ? 1 : 0));
+    const unrolled = view(24, {
+      bars: 4,
+      cellBars,
+      ghosts,
+      passes,
+      passNames: ["a", "b ×2"],
+      sections: [],
+      playheadCell: 18,
+      reel: "◑",
+      loopFlash: true,
+      rows: view(24).rows.map((row) => ({ ...row, levels: Array(24).fill(2) })),
+    });
+    const { lines } = paint(80, 16, unrolled);
+    const ruler = lines[0]!.slice(9);
+    expect(lines[0]!.slice(0, 9)).toContain("◑");
+    expect(ruler.slice(8, 16)).toContain("━");
+    expect(ruler.slice(16, 24)).not.toMatch(/[━\[\]]/);
+  });
 });

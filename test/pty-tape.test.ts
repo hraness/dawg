@@ -99,6 +99,11 @@ for (const [cols, rows] of [
           async () => (await session(t.cwd))?.score.notes.length === 2,
           "two notes",
         );
+        // `track bass` lands before Ctrl-T (a loaded runner can lag it).
+        await t.until(
+          () => /· bass\b/.test(t.vt.lines()[0] ?? ""),
+          "bass focused",
+        );
 
         // Ctrl-T: TAPE replaces the highway; the hint row teaches keys.
         await t.send("\u0014");
