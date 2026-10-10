@@ -209,6 +209,8 @@ export type MenuContext = Readonly<{
   countInBars: number;
   /** How much agent turns show (`/showme`); absent hides the row. */
   showMe?: string;
+  /** Project › audio: the chosen devices and the lists to pick from. */
+  audio?: MenuAudioDevices;
   /** The session's name, for Project › session and export file names. */
   sessionName?: string;
   /** Play mode's chord settings (defaults when absent). */
@@ -221,6 +223,18 @@ export type MenuContext = Readonly<{
    * committed value beside the staged one.
    */
   audition?: MenuAudition;
+}>;
+
+/** One output and one input (src/audio/devices.ts); no routing. */
+export type MenuAudioDevices = Readonly<{
+  /** `Speakers` or `default (Speakers)`. */
+  output: string;
+  input: string;
+  /** Output names; empty when the backend cannot list them. */
+  outputs: readonly string[];
+  inputs: readonly string[];
+  /** Why device choice is unavailable (fallback backends). */
+  unavailable?: string;
 }>;
 
 /** What the menu needs from the audition controller. */
@@ -602,6 +616,8 @@ export const SECTION_ALIASES: Readonly<Record<string, readonly string[]>> =
       help: ["project", "help"],
       guides: ["project", "help"],
       model: ["project", "agent"],
+      audio: ["project", "audio"],
+      devices: ["project", "audio"],
       showme: ["project", "agent"],
       models: ["project", "agent"],
       fx: ["effects"],
@@ -3115,11 +3131,86 @@ function transportNodes(context: MenuContext): MenuNode[] {
     },
     {
       kind: "menu",
+      id: "audio",
+      label: "audio",
+      detail: context.audio
+        ? `out ${context.audio.output} · in ${context.audio.input}`
+        : "output · input",
+      help: "pick the audio output and input (one each, saved on this machine)",
+      build: audioNodes,
+    },
+    {
+      kind: "menu",
       id: "help",
       label: "help and guides",
       detail: "help · guides · keys",
       help: "the command reference, the guides and the keys",
       build: helpNodes,
+    },
+  ];
+}
+
+/** Project › audio: two rows, each opening a device list. */
+function audioNodes(context: MenuContext): MenuNode[] {
+  const audio = context.audio;
+  if (!audio || audio.unavailable)
+    return [
+      {
+        kind: "info",
+        label: "devices",
+        value: "system default",
+        help: audio?.unavailable ?? "device choice needs the native sink",
+      },
+      {
+        kind: "action",
+        label: "show audio",
+        command: "/audio",
+        help: "the current output, input and why choice is unavailable",
+      },
+    ];
+  const list = (
+    side: "out" | "in",
+    names: readonly string[],
+    current: string,
+  ): MenuNode[] => [
+    {
+      kind: "action",
+      label: current.startsWith("default") ? "● default" : "default",
+      command: `/audio ${side} default`,
+      help: "the system default device (follows the system setting)",
+    },
+    ...names.map((name): MenuNode => ({
+      kind: "action",
+      label: name === current ? `● ${name}` : name,
+      command: `/audio ${side} ${name}`,
+      help:
+        side === "out"
+          ? `play through ${name} (a soft blip confirms it)`
+          : `listen on ${name} (audio test meters it)`,
+    })),
+  ];
+  return [
+    {
+      kind: "menu",
+      id: "output",
+      label: "output",
+      detail: audio.output,
+      help: "where dawg plays: Enter picks, Esc goes back",
+      build: () => list("out", audio.outputs, audio.output),
+    },
+    {
+      kind: "menu",
+      id: "input",
+      label: "input",
+      detail: audio.input,
+      help: "the input to meter now and record from later",
+      build: () => list("in", audio.inputs, audio.input),
+    },
+    {
+      kind: "action",
+      label: "test",
+      command: "/audio test",
+      help: "a short tone on the output, then a level meter for the input",
     },
   ];
 }

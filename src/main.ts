@@ -291,7 +291,12 @@ import {
   tuiSetModel,
 } from "./auth/tui.ts";
 import { TransportClock, transportMapFor } from "./audio/clock.ts";
-import { AudioEngine } from "./audio/engine.ts";
+import {
+  AudioEngine,
+  detectAudioBackend,
+  type AudioBackendInfo,
+} from "./audio/engine.ts";
+import { audioMenuState, runAudioCommand } from "./audio/audio-command.ts";
 import {
   DEFAULT_GRID,
   GRIDS,
@@ -303,6 +308,7 @@ import {
   EditMenu,
   menuUsage,
   menuSectionPath,
+  type MenuAudioDevices,
   type MenuContext,
 } from "./tui/menu.ts";
 import {
@@ -731,6 +737,8 @@ if (!draftTrack) await ensureFocusedTrack();
 
 const clock = new TransportClock(score.tempoBpm);
 let audio = port.player;
+let audioInfoCache: AudioBackendInfo | undefined;
+let audioMenuCache: { at: number; state: MenuAudioDevices } | undefined;
 /** Session and today's spend, from the usage each response reports. */
 const meter = new SpendMeter(configDir());
 void meter.load().catch(() => undefined);
@@ -2145,6 +2153,23 @@ async function submit(prompt: string): Promise<string | Receipt> {
       chordsCommand[1] ?? "",
       score.tempoBpm,
     );
+    return result.ok ? ok(result.message) : fail(result.message);
+  }
+  const audioCommand = command.match(/^\/audio(?:\s+(.*))?$/i);
+  if (audioCommand) {
+    const result = await runAudioCommand(audioCommand[1] ?? "", {
+      info: audioInfo(),
+      setOutput: (name) => {
+        if (audio instanceof AudioEngine) audio.setDevice(name);
+        monitorEngine?.setDevice(name);
+      },
+      background: (task) => void task,
+    });
+    audioMenuCache = undefined;
+    if (result.ok && result.lines && /^\/audio(\s+test)?\s*$/i.test(command))
+      tui.openText(/test/i.test(command) ? "audio test" : "audio", [
+        ...result.lines,
+      ]);
     return result.ok ? ok(result.message) : fail(result.message);
   }
   const showMeCommand = command.match(/^\/show-?me(?:\s+(\S+))?$/i);
@@ -3921,8 +3946,30 @@ function liveEngine(): LiveEngine | undefined {
 /** The engine this window hears itself through (its own in daemon mode). */
 function previewEngine(): AudioEngine {
   if (audio instanceof AudioEngine) return audio;
-  monitorEngine ??= new AudioEngine({ projectRoot: process.cwd() });
+  monitorEngine ??= new AudioEngine({
+    projectRoot: process.cwd(),
+    onStatus: (status) => {
+      if (status.state === "device")
+        tui.activity.pushCard(`audio · ${status.message}`, { tone: "warning" });
+    },
+  });
   return monitorEngine;
+}
+
+/** This machine's player, without starting an engine just to ask. */
+function audioInfo(): AudioBackendInfo {
+  if (audio instanceof AudioEngine) return audio.info;
+  if (monitorEngine) return monitorEngine.info;
+  audioInfoCache ??= detectAudioBackend();
+  return audioInfoCache;
+}
+
+/** Project › audio's rows; device lists are re-read at most every 3 s. */
+function audioMenu(): MenuAudioDevices {
+  const now = performance.now();
+  if (!audioMenuCache || now - audioMenuCache.at > 3000)
+    audioMenuCache = { at: now, state: audioMenuState(audioInfo()) };
+  return audioMenuCache.state;
 }
 
 /** The play session for the focused track (re-made when focus moves). */
@@ -3949,6 +3996,7 @@ function menuContext(): MenuContext {
     clickOn: session?.clickOn ?? false,
     countInBars: session?.countInBars ?? 1,
     showMe: showMe.level,
+    audio: audioMenu(),
     chords: stagedChordSettings() ?? session?.chords.settings ?? chordSettings,
     projectRoot: process.cwd(),
   };

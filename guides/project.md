@@ -19,7 +19,7 @@ live here; windows on one folder stay in sync.
 
 ## Menu
 
-- Ctrl-K › Project › play · tempo · export · session · agent
+- Ctrl-K › Project › play · tempo · export · session · agent · audio
 
 ## Keys
 
@@ -27,4 +27,4 @@ live here; windows on one folder stay in sync.
 
 ## Next
 
-- `guide files` · `guide sessions` · `guide agent`
+- `guide files` · `guide sessions` · `guide agent` · `guide audio`

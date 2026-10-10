@@ -230,6 +230,7 @@ const MENU: MenuNode = {
     ),
     session: leaves("rename", "fork", "resume"),
     agent: leaves("model", "show-me", "model key"),
+    audio: leaves("output", "input", "test"),
     "help and guides": leaves("help", "guides", "keys"),
   },
 };

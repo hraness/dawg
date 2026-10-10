@@ -541,6 +541,24 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
     ],
   },
   {
+    group: "project · audio",
+    entries: [
+      {
+        command: "audio",
+        summary: "the output and input in use, and the lists",
+      },
+      {
+        command: "audio out <name|default>",
+        summary: "play through one output · saved on this machine",
+      },
+      {
+        command: "audio in <name|default>",
+        summary: "the input to meter (recording takes comes later)",
+      },
+      { command: "audio test", summary: "a short tone, then the input level" },
+    ],
+  },
+  {
     group: "agent",
     entries: [
       {
