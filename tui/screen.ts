@@ -33,10 +33,10 @@ export class CellBuffer {
   constructor(width: number, height: number, fill: Style = EMPTY) {
     this.width = Math.max(0, Math.floor(width));
     this.height = Math.max(0, Math.floor(height));
-    this.cells = Array.from({ length: this.width * this.height }, () => ({
-      ch: " ",
-      style: fill,
-    }));
+    const count = this.width * this.height;
+    this.cells = new Array<Cell>(count);
+    for (let index = 0; index < count; index += 1)
+      this.cells[index] = { ch: " ", style: fill };
   }
 
   get(x: number, y: number): Cell | undefined {
@@ -200,6 +200,9 @@ export class CellBuffer {
   private clearWide(x: number, y: number): void {
     const offset = y * this.width;
     const cell = this.cells[offset + x]!;
+    // Fast path: one UTF-16 unit below U+1100 is never wide (nor a wide
+    // character's empty trail), and it is nearly every cell of a frame.
+    if (cell.ch.length === 1 && cell.ch.charCodeAt(0) < 0x1100) return;
     if (cell.ch === "" && x > 0) {
       const lead = this.cells[offset + x - 1]!;
       if (graphemeWidth(lead.ch) === 2) lead.ch = " ";

@@ -30,9 +30,37 @@ export function graphemeWidth(cluster: string): number {
   return Math.max(0, Math.min(2, width));
 }
 
-/** Segment text into grapheme clusters with code-point offsets and widths. */
-export function graphemes(text: string): Grapheme[] {
+/** Printable ASCII only: one cell per character, no segmentation needed. */
+const PRINTABLE_ASCII = /^[\x20-\x7e]*$/;
+
+/**
+ * Recent segmentations. A frame paints the same strings every tick (help
+ * rows, labels, hints), and segmenting them is most of a large frame's
+ * cost; the cache holds a frame's worth and is dropped whole when full.
+ */
+const segmented = new Map<string, readonly Grapheme[]>();
+const SEGMENTED_MAX = 4096;
+
+/**
+ * Segment text into grapheme clusters with code-point offsets and widths.
+ * The result is shared between calls: read it, never mutate it.
+ */
+export function graphemes(text: string): readonly Grapheme[] {
+  const cached = segmented.get(text);
+  if (cached) return cached;
+  const result = segment(text);
+  if (segmented.size >= SEGMENTED_MAX) segmented.clear();
+  segmented.set(text, result);
+  return result;
+}
+
+function segment(text: string): Grapheme[] {
   const result: Grapheme[] = [];
+  if (PRINTABLE_ASCII.test(text)) {
+    for (let index = 0; index < text.length; index += 1)
+      result.push({ text: text[index]!, start: index, length: 1, width: 1 });
+    return result;
+  }
   let start = 0;
   const clusters = segmenter
     ? Array.from(segmenter.segment(text), (part) => part.segment)
@@ -51,6 +79,7 @@ export function graphemes(text: string): Grapheme[] {
 }
 
 export function displayWidth(text: string): number {
+  if (PRINTABLE_ASCII.test(text)) return text.length;
   let width = 0;
   for (const cluster of graphemes(text)) width += cluster.width;
   return width;
@@ -61,6 +90,10 @@ export function truncate(text: string, width: number, ellipsis = "…"): string 
   if (width <= 0) return "";
   if (displayWidth(text) <= width) return text;
   const room = Math.max(0, width - displayWidth(ellipsis));
+  if (PRINTABLE_ASCII.test(text))
+    return room === 0
+      ? ellipsis.slice(0, width)
+      : `${text.slice(0, room)}${ellipsis}`;
   let used = 0;
   let out = "";
   for (const cluster of graphemes(text)) {

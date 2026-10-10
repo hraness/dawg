@@ -273,7 +273,7 @@ export interface FrameLayout {
 }
 
 /**
- * The smallest terminal the real UI draws in (docs/DAWG.md "Terminal
+ * The smallest terminal the real UI draws in (DAWG.md "Terminal
  * sizes"). Measured with `bun run sizes`: below 60 columns the play-mode
  * key strip and the header's bar position drop out and the prompt's spend
  * line clips; below 16 rows the prompt loses its footer and the drawer its
@@ -286,6 +286,26 @@ export const MIN_HEIGHT = 16;
 export function isTooSmall(size: FrameSize): boolean {
   return !(size.width >= MIN_WIDTH && size.height >= MIN_HEIGHT);
 }
+/**
+ * The longest line a text panel (help, guides, the transcript, menus) sets:
+ * past about 100 columns prose stops being readable and a command table's
+ * two columns drift apart, so on a wide terminal the panel holds this
+ * measure, left-aligned, and the song keeps drawing beside it (see
+ * `SIDE_MIN_WIDTH`).
+ */
+export const TEXT_MEASURE = 100;
+/** The fewest columns beside a capped panel worth drawing the view into. */
+export const SIDE_MIN_WIDTH = 36;
+
+/** Where a text panel sits in a terminal `width` columns wide. */
+export function panelRect(
+  width: number,
+  measure = TEXT_MEASURE,
+): { left: number; boxWidth: number } {
+  const left = width >= 60 ? 2 : 0;
+  return { left, boxWidth: Math.min(width - left * 2, measure + 4) };
+}
+
 export const MAX_PROMPT_ROWS = 8;
 /** New cards glow for this long before settling. */
 export const CARD_GLOW_MS = 700;
@@ -971,8 +991,7 @@ function paintOverlay(
   const box = capabilities.unicode ? UNICODE_BOX : ASCII_BOX;
   const panel = roles.panel;
   const border = onBackground(roles.border, panel);
-  const left = width >= 60 ? 2 : 0;
-  const boxWidth = width - left * 2;
+  const { left, boxWidth } = panelRect(width);
   const top = region.y;
   const height = region.height;
   if (height < 3 || boxWidth < 10) return;
@@ -1056,8 +1075,7 @@ function paintText(
   const text = options.text ?? ui.text;
   if (!text) return;
   const roles = ui.theme.roles;
-  const left = width >= 60 ? 2 : 0;
-  const boxWidth = width - left * 2;
+  const { left, boxWidth } = panelRect(width);
   const height = region.height;
   if (height < 3 || boxWidth < 10) return;
   const panel = paintBox(buffer, ui, {
@@ -1119,8 +1137,7 @@ function paintGuide(
   if (!guide) return;
   const roles = ui.theme.roles;
   const unicode = ui.capabilities.unicode;
-  const left = width >= 60 ? 2 : 0;
-  const boxWidth = width - left * 2;
+  const { left, boxWidth } = panelRect(width);
   const height = region.height;
   if (height < 3 || boxWidth < 10) return;
   const panel = paintBox(buffer, ui, {
@@ -1200,8 +1217,7 @@ function paintPicker(
   const picker = ui.picker;
   if (!picker) return;
   const roles = ui.theme.roles;
-  const left = width >= 60 ? 2 : 0;
-  const boxWidth = width - left * 2;
+  const { left, boxWidth } = panelRect(width);
   const noteRows = picker.note && region.height >= 6 ? 1 : 0;
   const height = Math.min(
     region.height,
@@ -1463,6 +1479,7 @@ export function composeFrame(
       kind: ui.overlay && !ui.drawer ? "text" : "highway",
     });
     // The drawer replaces the menu's list: the piano roll shows above it.
+    let panel: number | undefined = TEXT_MEASURE;
     if (ui.overlay === "log" && !ui.drawer)
       paintOverlay(buffer, ui, layout.highway, width);
     else if (ui.overlay === "picker" && ui.picker && !ui.drawer)
@@ -1471,17 +1488,32 @@ export function composeFrame(
       paintText(buffer, ui, layout.highway, width);
     else if (ui.overlay === "guide" && ui.guide)
       paintGuide(buffer, ui, layout.highway, width);
-    else if (view.tape)
+    else panel = undefined;
+    // A text panel holds its measure; on a wide terminal the song keeps
+    // drawing beside it instead of an empty margin.
+    const { left: panelLeft, boxWidth } = panelRect(width, panel);
+    const sideX = panelLeft + boxWidth + 1;
+    const side =
+      panel !== undefined
+        ? width - sideX >= SIDE_MIN_WIDTH
+          ? { x: sideX, width: width - sideX }
+          : undefined
+        : { x: 0, width };
+    if (side && view.tape)
       paintTape(
         buffer,
-        { x: 0, y: layout.highway.y, width, height: layout.highway.height },
+        { ...side, y: layout.highway.y, height: layout.highway.height },
         view.tape,
-        { theme: ui.theme, unicode: ui.capabilities.unicode, hits },
+        {
+          theme: ui.theme,
+          unicode: ui.capabilities.unicode,
+          ...(panel !== undefined ? {} : { hits }),
+        },
       );
-    else
+    else if (side)
       paintHighway(
         buffer,
-        { x: 0, y: layout.highway.y, width, height: layout.highway.height },
+        { ...side, y: layout.highway.y, height: layout.highway.height },
         view.score,
         beat,
         {

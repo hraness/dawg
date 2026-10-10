@@ -5,6 +5,7 @@
  */
 import { writeFile } from "node:fs/promises";
 import {
+  FRAME_BUDGET_MS,
   FULL_SIZES,
   SCENARIOS,
   runScenario,
@@ -43,6 +44,12 @@ for (const scenario of scenarios) {
   });
   for (const r of results) {
     const ms = Math.max(...r.frameMs, 0);
+    // The budget holds for the steady frame (the median); the first frame
+    // at a new size repaints every cell and may run over once.
+    if (r.frameMs.length && median(r.frameMs) > FRAME_BUDGET_MS)
+      r.problems.push(
+        `frame ${median(r.frameMs).toFixed(1)} ms over the ${FRAME_BUDGET_MS} ms budget`,
+      );
     console.log(
       `${scenario.name.padEnd(14)} ${`${r.size[0]}x${r.size[1]}`.padEnd(8)} ` +
         `${r.tooSmall ? "small " : "      "}max ${ms.toFixed(2).padStart(7)}ms ` +

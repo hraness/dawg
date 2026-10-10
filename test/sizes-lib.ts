@@ -17,7 +17,7 @@
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MIN_HEIGHT, MIN_WIDTH } from "../tui/app.ts";
+import { MIN_HEIGHT, MIN_WIDTH, TEXT_MEASURE } from "../tui/app.ts";
 import { launch } from "./pty-harness.ts";
 
 export type Size = readonly [cols: number, rows: number];
@@ -37,6 +37,13 @@ export const FULL_SIZES: readonly Size[] = [
 ];
 
 /** The sample `bun run check` walks (test/sizes.test.ts). */
+/**
+ * The most a steady frame (compose plus encode) may take at any size, up
+ * to 500x150: half the 33 ms frame interval, so the audio and
+ * input threads keep headroom. `bun run sizes` flags a size over it.
+ */
+export const FRAME_BUDGET_MS = 16;
+
 export const CHECK_SIZES: readonly Size[] = [
   [20, 6],
   [60, 16],
@@ -466,6 +473,15 @@ export function checkScreen(
     if (!footer) problems.push("no bottom row");
     if (!marker) problems.push("screen lost");
     if (focus === false) problems.push("focus not visible");
+    // A text panel (inset two columns: help, guides, menus, the transcript)
+    // holds its reading measure however wide the terminal.
+    for (const line of lines) {
+      const top = /^ {2}╭─.*╮/.exec(line);
+      if (top && top[0].length - 2 > TEXT_MEASURE + 4) {
+        problems.push(`text panel ${top[0].length - 2} wide`);
+        break;
+      }
+    }
   }
   return {
     scenario: scenario.name,

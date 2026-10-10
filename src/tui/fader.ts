@@ -9,7 +9,7 @@
  * field, so repeated nudges replace one staged edit and Enter keeps them
  * all as one revision.
  */
-import type { DrawerField, DrawerView } from "../../tui/drawer.ts";
+import type { DrawerAside, DrawerField, DrawerView } from "../../tui/drawer.ts";
 import type { KnobIndex } from "../../tui/knobs.ts";
 import {
   KEY_BACKSPACE,
@@ -602,6 +602,29 @@ export function drawerView(
           ? FADER_HINT_AT_ONCE
           : FADER_HINT),
   };
+}
+
+/**
+ * The drawer's side list: every param on the page with its value, each one
+ * a knob also drives wearing that knob (matched by label).
+ */
+export function drawerAside(
+  page: readonly FaderSpec[],
+  knobs: readonly FaderSpec[],
+): DrawerAside[] {
+  const knobByLabel = new Map(
+    knobs.map((field) => [field.label, knobOf(field)] as const),
+  );
+  return page.map((field) => ({
+    label: field.label,
+    text:
+      field.kind === "choice"
+        ? field.value
+        : field.value === undefined
+          ? (field.off ?? "off")
+          : field.format(field.value),
+    knob: knobByLabel.get(field.label),
+  }));
 }
 
 /** A knob field's knob (0 blue … 3 orange); plain rows have none. */
