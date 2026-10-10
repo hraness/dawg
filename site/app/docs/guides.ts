@@ -13,8 +13,7 @@ import { join, relative } from "node:path";
  *   order: 2              (optional; sorts siblings, then title)
  *   ---
  *
- * The id defaults to the file name. When ../guides has no guides, the docs
- * fall back to the hand-written topics in ./topics.tsx.
+ * The id defaults to the file name. A build with no guides fails.
  */
 export interface Guide {
   readonly id: string;

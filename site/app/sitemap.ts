@@ -13,6 +13,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: page.parent === null ? 0.7 : 0.6,
     })),
     {
+      url: `${productUrl}/vs/strudel`,
+      changeFrequency: "monthly",
+      priority: 0.6,
+    },
+    {
       url: `${productUrl}/changelog`,
       changeFrequency: "weekly",
       priority: 0.6,

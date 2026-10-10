@@ -8,7 +8,6 @@
     "node": "24.x"
   },
   "scripts": {
-    "demo": "bun scripts/record-demo.ts",
     "sync": "bun scripts/build-theme-bootstrap.ts",
     "dev": "bun run sync && next dev --webpack --hostname 127.0.0.1",
     "prebuild": "bun run sync",
@@ -17,7 +16,7 @@
     "lint": "eslint .",
     "test": "bun test ./tests",
     "typecheck": "tsc --noEmit",
-    "check": "bun run sync && bun scripts/record-demo.ts --check && bun run test && bun run lint && bun run typecheck && bun run build"
+    "check": "bun run sync && bun run test && bun run lint && bun run typecheck && bun run build"
   },
   "dependencies": {
     "@hraness/design-kit": "github:hraness/design-kit#v0.41.3",

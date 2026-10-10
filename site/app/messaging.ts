@@ -15,8 +15,8 @@ export const productMessaging = {
   category: "Terminal music workstation",
   tagline: "A DAW in your terminal, dawg.",
   short:
-    "Chat with an agent to build loops on a piano roll that scrolls above your prompt.",
-  meta: "dawg is a free, open-source music workstation for the terminal. Ask an agent for a groove and watch it land on a scrolling piano roll; open more windows to play more instruments.",
+    "Play it on your keyboard, type short commands, or ask an agent. Songs are typed TypeScript files in your folder.",
+  meta: "dawg is a free, open-source DAW for the terminal. Play notes on your computer keyboard, type commands like tempo 96, or ask an agent; it all runs offline except the agent, and songs are TypeScript files you can edit.",
 } as const;
 
 const rootPackage: unknown = JSON.parse(

@@ -49,12 +49,15 @@ ${installLines}
 - dawgd, one local daemon per session: many terminal windows share one score and one transport; it recovers from crashes and falls back to a file lock if it cannot start.
 - Each new window claims the next unclaimed instrument, so N windows on an N-track song each play a different track.
 - Sessions name themselves from the music; /rename, /fork (numbered), /sessions and /resume.
-- Providers: \`dawg login\` creates a Vercel AI Gateway key (models opus-5.5 or sol-6.1), or \`dawg login --xcb\` uses a Claude, Codex or Devin subscription through xcb (https://xcb.sh).
+- Providers: \`dawg model key\` picks one: a Vercel AI Gateway key, OpenRouter (browser sign-in), or a Claude or ChatGPT/Codex subscription through xcb (https://xcb.sh). \`dawg model\` picks the model; the default is opus-5.5.
+- TAPE (Ctrl-T): copy, move, loop and repeat ranges of bars.
+- Panes: one song in several terminals, one transport, a letter per pane.
 - Themes default, high-contrast and mono; reduced motion; NO_COLOR.
 
 ## Docs
 
 ${docs}
+- [dawg vs Strudel](${productUrl}/vs/strudel): How dawg and Strudel differ and fit together.
 - [Changelog](${productUrl}/changelog): Every release, from CHANGELOG.md.
 - [DAWG.md](${repoUrl}/blob/main/DAWG.md): Architecture and protocol notes.
 `;

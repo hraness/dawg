@@ -1,6 +1,6 @@
 # dawg
 
-dawg is a free, MIT-licensed, local-first music workstation for the terminal, built on Bun. You type at a prompt; direct commands edit the score and anything else goes to an agent that edits through typed, validated tools. The loop scrolls on a piano-roll highway above the prompt. This file records the positioning the dawg.sh site carries.
+dawg is a free, MIT-licensed, local-first music workstation for the terminal, built on Bun. You play notes on the computer keyboard, type short commands, or ask an agent that edits through typed, validated tools. The song scrolls on a piano-roll highway above the prompt, and the project is typed TypeScript files. This file records the positioning the dawg.sh site carries.
 
 ## Platform
 
@@ -12,7 +12,7 @@ dawg is a free, MIT-licensed, local-first music workstation for the terminal, bu
 ## Users
 
 - Developers who live in a terminal and want to sketch music without leaving it.
-- People who already pay for a Claude, Codex or Devin subscription and want to point it at something fun.
+- People who already pay for a Claude or ChatGPT/Codex subscription, or have an OpenRouter or AI Gateway key, and want to point it at something fun.
 - Agent tinkerers who want to see a tool-calling agent edit a structured document they can hear.
 
 ## Positioning
@@ -23,14 +23,14 @@ The hook, used in the site title, hero and share card:
 
 The short line, used under the hook and in package descriptions:
 
-- “Chat with an agent to build loops on a piano roll that scrolls above your prompt.”
+- “Play it on your keyboard, type short commands, or ask an agent. Songs are typed TypeScript files in your folder.”
 
-The four pillars, in order:
+The four pillars, in order (four ways to make the same edit):
 
-1. **Ask for a groove.** Chat-to-compose. A streaming agent edits the score only through typed tools; each call is checked three times and committed as its own revision you can undo.
-2. **Watch it on the highway.** The piano roll scrolls toward a hit line above a live prompt, with a lane per drum voice and sustains stretched across beats.
-3. **Open a window, get a player.** Every window on a session shares one song and one transport through `dawgd`; each new window claims the next instrument, so N windows bring back the whole band.
-4. **Local first, your own models.** The session is a folder in your project. Commands, playback and rendering need no account. The agent runs on a Vercel AI Gateway key or on your own subscription through xcb.
+1. **Play it.** Ctrl-P turns the computer keyboard into a piano; record over the loop with a click and count-in, quantized to the grid.
+2. **Type it.** Every edit is a short command that runs offline, and every key and menu row shows the command it runs.
+3. **Ask for it.** Plain requests go to an agent that types its commands into your prompt as it works (show-me); each change is one undo step.
+4. **Keep it as code.** A project is `song.ts` plus a `track.ts` per track, typed against a small SDK; edit them in any editor and the open song updates.
 
 Category label: “Terminal music workstation.”
 
@@ -45,7 +45,9 @@ Only what `README.md`, `DAWG.md` and `CHANGELOG.md` on `main` describe:
 - `dawgd`: one daemon per session, shared transport, crash recovery, file-lock fallback.
 - Auto-claim of the next instrument per window; draft track beyond the last.
 - Named sessions, `/rename`, numbered `/fork`, `/sessions`, `/resume`, auto-naming from a local fingerprint.
-- `dawg login` (gateway key through the Vercel CLI or pasted), `dawg login --xcb`, `dawg auth status`, `dawg logout`. Models `opus-5.5` and `sol-6.1`.
+- `dawg model key` (AI Gateway, OpenRouter, or a Claude or ChatGPT/Codex subscription through xcb), `dawg model`, `dawg auth status`, `dawg logout`. Default model `opus-5.5`.
+- TAPE (Ctrl-T) for ranges of bars; panes (one song in several terminals, a letter each); play mode (Ctrl-P) and recording; show-me (the agent types the commands it runs).
+- Strudel-format sample packs (`/pack add`), read from the documented manifest format without Strudel code.
 - Themes default, high-contrast and mono; reduced motion; `NO_COLOR`.
 - `dawg render out.wav`, byte-identical across runs.
 
@@ -53,10 +55,10 @@ Only what `README.md`, `DAWG.md` and `CHANGELOG.md` on `main` describe:
 
 - Install lines, in order: the dawg.sh script, then `npm i -g @hraness/dawg` / `bun add -g @hraness/dawg`, then the release tarball.
 - Until a GitHub Release exists, the install script exits with “the first release of dawg is coming soon” and the site shows the source install instead of a tarball link.
-- No MIDI, plugin, DAW-export or sample claims; dawg has none of them.
-- No comparison table against other music tools until it can be sourced; dawg's terminal-and-agent combination has no like-for-like peer worth a table.
+- No live MIDI, plugin or DAW-project-export claims; dawg writes WAV and MIDI files only.
+- Comparisons live on their own pages (`/vs/strudel`), cite the other tool's own docs, say where it is better, and never disparage.
 
 ## Brand commitments
 
-- The hero demo is real: frames from dawg's own renderer and score operations, recorded with a fake clock by `scripts/record-demo.ts`. Regenerate it when the TUI changes (`bun run demo`); `bun run check` fails when the recording is stale.
+- Every screen on the site is real: `test/screens/capture.ts` drives the real `dawg` in a PTY on seeded projects and commits cell grids to `docs/screens/*.json`, rendered as selectable text. Regenerate with `bun run screens`; `bun run check` fails when a screen is stale.
 - Analytics are cookieless PostHog in the shared Hraness project (543691) with `site_id: "dawg"`. Copy events never send copied text.

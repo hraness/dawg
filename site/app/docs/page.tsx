@@ -12,7 +12,7 @@ import { docsHref, docsTree } from "./pages";
 export const revalidate = 3600;
 
 const description =
-  "Install dawg with one command, check a release, and start your first session.";
+  "Install dawg with one command, give the agent a model, and start your first song.";
 
 export const metadata: Metadata = {
   title: "Install",
@@ -27,11 +27,12 @@ export default async function DocsInstall() {
   return (
     <DocsShell id={INSTALL_ID} title="Install dawg" description={description}>
       <p>
-        dawg runs in a terminal on macOS and Linux. It needs{" "}
-        <a href="https://bun.sh">Bun</a> 1.3.14 or newer, Sound plays through
-        dawg&rsquo;s native audio sink, prebuilt for macOS and Linux on arm64
-        and x64; where it cannot load, dawg uses <code>ffplay</code> or SoX, or{" "}
-        <code>afplay</code> on a Mac.
+        dawg runs in a terminal on macOS and Linux on{" "}
+        <a href="https://bun.sh">Bun</a> 1.3.14 or newer; the install script
+        adds Bun if it is missing. Sound plays through dawg&rsquo;s native audio
+        sink, prebuilt for arm64 and x64. Where it cannot load, dawg falls back
+        to <code>ffplay</code>, SoX or, on a Mac, <code>afplay</code>;{" "}
+        <code>dawg doctor</code> says which it uses.
       </p>
       <DawgPlatformInstall installCommand={installCommand} />
       <h2 id="start">Start a session</h2>
@@ -41,6 +42,12 @@ export default async function DocsInstall() {
         again.
       </p>
       <CodeBlock code="$ dawg" />
+      <p>
+        Commands, playing and rendering work offline with no account. To ask the
+        agent, give it a model once: an AI Gateway key, OpenRouter, or a Claude
+        or ChatGPT/Codex subscription.
+      </p>
+      <CodeBlock code="$ dawg model key" />
       {first === undefined ? null : (
         <p>
           Then read <Link href={docsHref(first.id)}>{first.title}</Link>. The
