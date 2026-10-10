@@ -418,10 +418,10 @@ describe("logout and status", () => {
     expect(lines.at(-1)).toStartWith("xcb: not installed");
   });
 
-  test("status with nothing configured points at dawg login", async () => {
+  test("status with nothing configured points at dawg model key", async () => {
     const lines = await authStatus({ auth: env(scriptedRunner([])) });
     expect(lines[0]).toContain("offline");
-    expect(lines[0]).toContain("dawg login");
+    expect(lines[0]).toContain("dawg model key");
     expect(lines[1]).toContain("not set up");
     expect(lines).toHaveLength(6);
   });
@@ -491,7 +491,7 @@ describe("saved provider and model", () => {
     await saveModelChoice(auth, await selectProvider(auth), "sol-6.1");
     const out = io();
     expect(await login("auto", { auth, io: out, hostname: "h" })).toBe(0);
-    expect(out.lines.join("\n")).toContain("Signed in · sol-6.1 · gateway");
+    expect(out.lines.join("\n")).toContain("Agent key · sol-6.1 · gateway");
     expect(out.lines.join("\n")).not.toContain("Looking for existing setups");
     const raw = await readFile(join(dir, "config.json"), "utf8");
     expect(raw).not.toContain(KEY);

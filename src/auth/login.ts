@@ -135,7 +135,7 @@ export async function login(
       const selection = await selectProvider(deps.auth);
       if (selection.kind !== "offline") {
         deps.io.print(
-          `Signed in · ${providerLabel(selection)}. Switch with \`dawg login <gateway|openrouter|codex|claude>\` or \`dawg model\`.`,
+          `Agent key · ${providerLabel(selection)}. Switch with \`dawg model key <gateway|openrouter|codex|claude>\` or \`dawg model\`.`,
         );
         return 0;
       }
@@ -165,7 +165,7 @@ async function loginPick(
     if (!best) {
       io.print("No AI provider is set up, and this is not a terminal.");
       io.print(
-        "Set AI_GATEWAY_API_KEY or OPENROUTER_API_KEY, or run `dawg login` in a terminal.",
+        "Set AI_GATEWAY_API_KEY or OPENROUTER_API_KEY, or run `dawg model key` in a terminal.",
       );
       return 1;
     }
@@ -269,7 +269,7 @@ async function loginGateway(
   if (!who) {
     if (!io.interactive) {
       io.print(
-        "Not logged in to Vercel. Run `vercel login` first, or re-run `dawg login` in a terminal.",
+        "Not logged in to Vercel. Run `vercel login` first, or re-run `dawg model key` in a terminal.",
       );
       return 1;
     }
@@ -319,7 +319,7 @@ async function loginGateway(
     io.print(
       `Could not create a key${detail ? `: ${redactKeys(detail)}` : ` (exit ${created.code})`}.`,
     );
-    io.print("You can paste one instead with `dawg login --key`.");
+    io.print("You can paste one instead with `dawg model key --key`.");
     return 1;
   }
   return saveAndReport(deps, "gateway", key, "created");
@@ -622,7 +622,7 @@ async function loginSubscription(
     );
     io.print(`  Install: ${XCB_INSTALL}`);
     io.print(`  Docs:    ${XCB_DOC_URL}`);
-    io.print(`Then run \`dawg login ${family}\` again (or set XCB_BIN).`);
+    io.print(`Then run \`dawg model key ${family}\` again (or set XCB_BIN).`);
     return 1;
   }
   const read = async (): Promise<XcbAccount[] | undefined> => {
@@ -657,7 +657,7 @@ async function loginSubscription(
     const setup = `xcb setup ${family}${mine.length > 0 ? " --new" : ""}`;
     if (!io.interactive) {
       io.print(
-        `No ${FAMILY_TITLES[family]} is ready. Run \`${setup}\`, then \`dawg login ${family}\`.`,
+        `No ${FAMILY_TITLES[family]} is ready. Run \`${setup}\`, then \`dawg model key ${family}\`.`,
       );
       return 1;
     }
@@ -669,7 +669,9 @@ async function loginSubscription(
       .trim()
       .toLowerCase();
     if (answer !== "" && answer !== "y" && answer !== "yes") {
-      io.print(`Run \`${setup}\` when ready, then \`dawg login ${family}\`.`);
+      io.print(
+        `Run \`${setup}\` when ready, then \`dawg model key ${family}\`.`,
+      );
       return 1;
     }
     const result = await auth.runner.run(bin, setup.split(" ").slice(1), {
@@ -809,7 +811,9 @@ async function loginXcb(deps: LoginDeps, preset?: XcbPreset): Promise<number> {
     );
     io.print(`  Install: ${XCB_INSTALL}`);
     io.print(`  Docs:    ${XCB_DOC_URL}`);
-    io.print("Then run `dawg login --xcb` again (or set XCB_BIN to its path).");
+    io.print(
+      "Then run `dawg model key --xcb` again (or set XCB_BIN to its path).",
+    );
     return 1;
   }
   let accounts: readonly XcbAccount[];
@@ -1065,7 +1069,9 @@ export async function logout(
     patch.provider = undefined;
     patch.gatewayModel = undefined;
     patch.openrouterModel = undefined;
-    io.print("Cleared the saved provider and model; `dawg login` asks again.");
+    io.print(
+      "Cleared the saved provider and model; `dawg model key` asks again.",
+    );
   } else if (target === "gateway") patch.gatewayModel = undefined;
   else if (target === "openrouter") patch.openrouterModel = undefined;
   patch.setup = undefined;

@@ -2768,7 +2768,7 @@ const LEAVES: readonly StyleCard[] = [
   card({
     id: "sri-lankan",
     summary:
-      "Sri Lankan baila and drums: baila's fast 6/8 kaffirinha strum with I-IV-V, the Kandyan geta beraya drum patterns and cymbal pulse",
+      "Sri Lankan baila and drums: baila's fast 6/8 kaffirinha strum with I-IV-V, the Kandyan geta beraya grooves and cymbal pulse",
     tempo: { bpm: [110, 150], typical: 128 },
     meter: { signatures: [["6/8", 1]], hypermeter: [[4, 1]] },
     pitch: {

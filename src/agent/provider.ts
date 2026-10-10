@@ -92,7 +92,7 @@ export function isApiSelection(
   return selection.kind === "gateway" || selection.kind === "openrouter";
 }
 
-export const LOGIN_HINT = "run `dawg login` to enable the agent";
+export const LOGIN_HINT = "run `dawg model key` to enable the agent";
 /** The small, cheap model used for one-line helpers such as session names. */
 export const GATEWAY_SMALL_MODEL = "anthropic/claude-haiku-4.5";
 export const OPENROUTER_SMALL_MODEL = "anthropic/claude-haiku-4.5";
@@ -115,7 +115,7 @@ export function providerChoice(
 
 /**
  * The model for a key-based provider: `DAWG_MODEL`, then the model saved by
- * `/model` or `dawg login`, then Opus 5.5. Throws on an unknown `DAWG_MODEL`.
+ * `/model` or `dawg model key`, then Opus 5.5. Throws on an unknown `DAWG_MODEL`.
  */
 export function apiModelId(
   service: ApiProvider,
@@ -188,14 +188,14 @@ export async function selectProvider(
     }
     if (choice === service)
       return offline(
-        `no ${service === "gateway" ? "AI Gateway" : "OpenRouter"} key any more; run \`dawg login ${service}\``,
+        `no ${service === "gateway" ? "AI Gateway" : "OpenRouter"} key any more; run \`dawg model key ${service}\``,
       );
   }
   const bin = resolveXcbBin(auth.env, auth.runner);
   if (!bin)
     return offline(
       explicit
-        ? `xcb is not installed; run \`dawg login ${choice === "xcb" ? "--xcb" : choice}\``
+        ? `xcb is not installed; run \`dawg model key ${choice === "xcb" ? "--xcb" : choice}\``
         : `no model configured; ${LOGIN_HINT}`,
     );
   let capabilities: XcbCapabilities;
@@ -253,7 +253,7 @@ export async function selectProvider(
                     "<account>",
                     account.id,
                   )
-          }; run \`dawg login ${family === "xcb" ? "--xcb" : family}\``,
+          }; run \`dawg model key ${family === "xcb" ? "--xcb" : family}\``,
         );
     }
     // No saved pick: the first usable account, ready before admission pending.
@@ -276,7 +276,7 @@ export async function selectProvider(
   }
   return offline(
     explicit
-      ? `no ${FAMILY_NAMES[choice] ?? choice} is ready; run \`dawg login ${choice === "xcb" ? "--xcb" : choice}\``
+      ? `no ${FAMILY_NAMES[choice] ?? choice} is ready; run \`dawg model key ${choice === "xcb" ? "--xcb" : choice}\``
       : `no model configured; ${LOGIN_HINT}`,
   );
 }

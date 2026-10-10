@@ -38,7 +38,7 @@ export const DRUM_TOOLS: readonly AgentTool[] = Object.freeze([
   {
     name: "list_drum_patterns",
     description:
-      "List the built-in drum patterns (name · tempo range · genre tags · voices). Filter by a word such as house, trap or 2-step.",
+      "List the built-in grooves (name · tempo range · style tags · drums). Filter by a word such as house, trap or 2-step.",
     parameters: {
       type: "object",
       properties: { filter: { type: "string", maxLength: 40 } },
@@ -105,7 +105,7 @@ export const DRUM_TOOLS: readonly AgentTool[] = Object.freeze([
   },
   {
     name: "set_drum_kit",
-    description: `Choose the synthesized drum kit of a drum track: ${SYNTH_KITS.map((kit) => kit.name).join(", ")}, or default. Offline and instant; sample kits (909, 808, linn, …) go through use_sound.`,
+    description: `Choose the synthesized kit of a drum track: ${SYNTH_KITS.map((kit) => kit.name).join(", ")}, or default. Offline and instant; sample kits (909, 808, linn, …) go through use_sound.`,
     parameters: {
       type: "object",
       properties: {

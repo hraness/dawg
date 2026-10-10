@@ -224,7 +224,7 @@ export const PACK_TOOLS: readonly AgentTool[] = Object.freeze([
   {
     name: "use_sound",
     description:
-      'Put a pack sound on a track through the sampler. sound is <pack>/<sound>[:<n>] (n picks a file, like Strudel s("bd:3")), a kit/bank name or Strudel bank nickname (909, 808, linn, TR909, tr808, sp12, dmx, RolandTR909, tidal-drum-machines/RolandTR707) to load a whole drum kit, or a keyed instrument such as gm/gm_acoustic_grand_piano or piano/piano. The file is fetched and pinned by sha256 so renders stay reproducible. Drum hits on the track keep playing the matching kit voice.',
+      'Put a pack sound on a track through the sampler. sound is <pack>/<sound>[:<n>] (n picks a file, like Strudel s("bd:3")), a kit/bank name or Strudel bank nickname (909, 808, linn, TR909, tr808, sp12, dmx, RolandTR909, tidal-drum-machines/RolandTR707) to load a whole kit, or a keyed instrument such as gm/gm_acoustic_grand_piano or piano/piano. The file is fetched and pinned by sha256 so renders stay reproducible. Drum hits on the track keep playing the matching kit voice.',
     parameters: {
       type: "object",
       properties: {

@@ -673,7 +673,7 @@ describe("drum, effects, solo, and filter tools", () => {
       e.type === "tool-rejected" ? [e.diagnostic] : [],
     );
     expect(diagnostics).toHaveLength(3);
-    expect(diagnostics[0]).toContain("not a drum kit");
+    expect(diagnostics[0]).toContain("not a kit");
   });
 
   test("sets reverb and automates delay mix, feedback, and resonance", async () => {

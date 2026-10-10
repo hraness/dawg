@@ -74,7 +74,13 @@ export const LOSERS: Readonly<
   temperament: { pattern: /\btemperaments?\b/gi, use: "tuning" },
   STEER: { pattern: /\bSTEER\b/g, use: "now" },
   QUEUE: { pattern: /\bQUEUE\b/g, use: "next" },
-  login: { pattern: /\blog ?in\b/gi, use: "model key" },
+  // Other tools' own commands (`vercel login`, `npm login`) and file names
+  // (login.ts) are not dawg words.
+  login: {
+    pattern:
+      /(?<!\b(?:vercel|npm|gh|codex|claude|accounts) |auth\/)\blog ?in\b(?!\.ts)/gi,
+    use: "model key",
+  },
   "sign in": { pattern: /\bsign[- ]in\b/gi, use: "model key" },
   "ctrl-p play": {
     pattern: /\bctrl-p play\b(?! mode)/gi,
@@ -100,7 +106,11 @@ export const LOSERS: Readonly<
     pattern: /\b(?:patch|program) (?:change|name)s?\b/gi,
     use: "preset",
   },
-  assistant: { pattern: /\b(?:AI|assistant|chatbot|bot)\b/g, use: "agent" },
+  // "AI Gateway" is Vercel's product name.
+  assistant: {
+    pattern: /\b(?:AI(?! Gateway)|assistant|chatbot|bot)\b/g,
+    use: "agent",
+  },
   "track <rig>": {
     pattern: new RegExp(
       `\\btrack (?:${Object.keys(RIG_PRESETS).join("|")})\\b`,
@@ -284,43 +294,10 @@ const SOURCES: Source[] = [
 const LOSER_CEILINGS: Readonly<
   Record<string, Readonly<Record<string, number>>>
 > = {
-  menu: {
-    cycle: 1,
-  },
-  "guides/providers.md": { assistant: 1 },
-  "guides/web-search.md": { assistant: 1 },
-  "DAWG.md": {
-    "drum kit": 1,
-    login: 2,
-    region: 1,
-    assistant: 3,
-    "track <rig>": 4,
-  },
-  "README.md": {
-    login: 2,
-    assistant: 2,
-  },
-  "docs/publishing.md": { login: 1 },
-  "docs/model-eval.md": { assistant: 2 },
-  "docs/project-format.md": { "sign in": 1 },
-  "core/fx.ts": { cycle: 1 },
-  "core/sdk/v1.ts": { "drum voice": 1, "drum pattern": 1 },
-  "core/styles/africa-mena-southasia.ts": { "drum pattern": 1 },
-  "core/styles/americas.ts": { "drum kit": 1 },
-  "core/styles/electronic.ts": { genre: 1 },
-  "core/styles/pop.ts": { genre: 1 },
-  "core/tuning.ts": { temperament: 1 },
-  "src/agent/agent.ts": { genre: 1 },
-  "src/agent/command-agent.ts": { genre: 1 },
-  "src/agent/drum-tools.ts": { "drum kit": 1, "drum pattern": 1, genre: 1 },
-  "src/agent/gateway.ts": { login: 2, assistant: 3 },
-  "src/agent/pack-tools.ts": { "drum kit": 1 },
-  "src/agent/provider.ts": { login: 5, assistant: 1 },
-  "src/agent/show-me.ts": { "drum voice": 1, login: 1, "sign in": 1 },
-  "src/agent/tools.ts": { "drum voice": 1, "drum kit": 1 },
-  "src/agent/xcb-agent.ts": { genre: 1 },
-  "src/agent/xcb.ts": { login: 1 },
-  "src/main.ts": { "drum kit": 1, "drum pattern": 1, login: 1 },
+  // Alias rows that name `track <preset>` next to its canonical `rig`.
+  "DAWG.md": { "track <rig>": 2 },
+  // WINDOW_ONLY matches the typed `/login` alias.
+  "src/agent/show-me.ts": { login: 1 },
 };
 
 describe("glossary lint", () => {

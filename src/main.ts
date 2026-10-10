@@ -2798,7 +2798,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
   }
   if (/^\/login\b/i.test(prompt.trim())) {
     const parsed = tuiLoginArgs(prompt.trim());
-    if (typeof parsed === "string") return `login · ${parsed}`;
+    if (typeof parsed === "string") return `model key · ${parsed}`;
     await handoff(() =>
       runTuiLogin(
         parsed.target === "auto" ? "pick" : parsed.target,
@@ -3553,13 +3553,13 @@ function readOrDone(
 
 async function patternCommand(command: PatternCommand): Promise<Receipt> {
   if (command.kind === "list") {
-    tui.openText("patterns", DRUM_PATTERNS.map(patternLine));
-    return note(`patterns · ${DRUM_PATTERNS.length} · /pattern <name>`);
+    tui.openText("grooves", DRUM_PATTERNS.map(patternLine));
+    return note(`grooves · ${DRUM_PATTERNS.length} · groove <name>`);
   }
   if (command.kind === "browse") {
     tui.openPicker({
       id: "pattern",
-      title: "drum patterns",
+      title: "grooves",
       hint: HINTS.audition,
       audition: true,
       items: DRUM_PATTERNS.map((entry) => ({
@@ -3571,7 +3571,7 @@ async function patternCommand(command: PatternCommand): Promise<Receipt> {
     });
     patternPreview = undefined;
     previewPattern(DRUM_PATTERNS[0]?.name);
-    return note("patterns · ↑/↓ preview · Enter applies on the focused track");
+    return note("grooves · ↑/↓ preview · Enter applies on the focused track");
   }
   await materializeDraft();
   const result = applyDrumPattern(
@@ -3632,7 +3632,7 @@ function openKitPicker(): Receipt {
   }));
   tui.openPicker({
     id: "kit",
-    title: "drum kits",
+    title: "kits",
     hint: HINTS.audition,
     audition: true,
     items,

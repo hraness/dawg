@@ -74,7 +74,7 @@ describe("sdk v1 builders", () => {
     expect(t.notes.map((n) => n.pitch)).toEqual([36, 46]);
     expect(() =>
       track({ name: "d", instrument: "kit", notes: [hit("cowbell", 0)] }),
-    ).toThrow(/unknown drum voice/);
+    ).toThrow(/unknown drum "/);
     expect(() =>
       track({ name: "s", instrument: "sine", notes: [hit("kick", 0)] }),
     ).toThrow(/needs instrument "kit"/);

@@ -1987,7 +1987,7 @@ const DOWNTEMPO: readonly StyleCard[] = [
   card({
     id: "leftfield",
     summary:
-      "Leftfield: eclectic genre-blending electronica at 100-120 bpm, dub bass, unusual timbres over four-on-the-floor",
+      "Leftfield: eclectic style-blending electronica at 100-120 bpm, dub bass, unusual timbres over four-on-the-floor",
     tempo: { bpm: [100, 120], typical: 112 },
     rhythm: { onsets: { kick: FOUR_FLOOR, hat: OFFBEAT } },
     harmony: { model: "modal", rhythm: [[0.5, 1]] },

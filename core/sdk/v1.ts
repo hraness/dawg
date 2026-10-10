@@ -1284,7 +1284,7 @@ export function pattern(name: string): readonly RhythmSpec[] {
   const found = findPattern(name);
   if (!found)
     throw new DawgSdkError(
-      `unknown drum pattern "${String(name).slice(0, 40)}" (${DRUM_PATTERNS.map((entry) => entry.name).join(" ")})`,
+      `unknown groove "${String(name).slice(0, 40)}" (${DRUM_PATTERNS.map((entry) => entry.name).join(" ")})`,
     );
   return found.rows;
 }
@@ -3929,7 +3929,7 @@ export function track(input: TrackInput): TrackSpec {
     if (pitch === undefined)
       throw new DawgSdkError(
         kit
-          ? `track ${name}: unknown drum voice "${spec.voice}" (kick snare clap rim tom hat openhat)`
+          ? `track ${name}: unknown drum "${spec.voice}" (kick snare clap rim tom hat openhat)`
           : slots
             ? `track ${name}: unknown sampler voice "${spec.voice}" (${[...slots.keys()].join(" ")})`
             : `track ${name}: hit("${spec.voice}") needs instrument "kit" or sampler(...)`,

@@ -86,7 +86,7 @@ function cleanLine(line: string): string {
 }
 
 /**
- * Prompt-bar commands the agent may not run: they open windows, sign in,
+ * Prompt-bar commands the agent may not run: they open windows, set a model key,
  * quit or change this window's settings, none of which edits the song.
  */
 const WINDOW_ONLY =
@@ -233,7 +233,7 @@ export function keyForPitch(pitch: number, base: number): KeyPress {
   return { key: "a", octave: "" };
 }
 
-/** The GM pitch of a drum voice word (`kick`, `hat`), when it is one. */
+/** The GM pitch of a drum word (`kick`, `hat`), when it is one. */
 export function drumPitch(voice: string): number | undefined {
   const parsed = parseDrumVoice(voice.toLowerCase());
   return parsed === undefined ? undefined : drumVoicePitch(parsed);
