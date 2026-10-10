@@ -535,9 +535,9 @@ export function sectionScore(score: TrackScore, section: Section): TrackScore {
 // ---------------------------------------------------------------------------
 // Automation over time edits
 
-type Points = readonly AutomationPoint[];
+export type Points = readonly AutomationPoint[];
 
-const TRACK_LANES = [
+export const TRACK_LANES = [
   "volumeAutomation",
   "panAutomation",
   "filterAutomation",
@@ -548,7 +548,7 @@ const TRACK_LANES = [
 ] as const;
 
 /** Applies `edit` to every automation lane of `track`. */
-function mapAutomation(track: Track, edit: (points: Points) => Points): Track {
+export function mapAutomation(track: Track, edit: (points: Points) => Points): Track {
   const out: Record<string, unknown> = { ...track };
   let changed = false;
   for (const field of TRACK_LANES) {
@@ -578,7 +578,7 @@ function mapAutomation(track: Track, edit: (points: Points) => Points): Track {
 }
 
 /** The lane value at `tick` (undefined before the first point). */
-function valueAt(points: Points, tick: number): number | undefined {
+export function valueAt(points: Points, tick: number): number | undefined {
   const first = points[0];
   if (!first || tick < first.tick) return undefined;
   for (let index = 1; index < points.length; index += 1) {
@@ -593,7 +593,7 @@ function valueAt(points: Points, tick: number): number | undefined {
   return points[points.length - 1]!.value;
 }
 
-function sortPoints(points: AutomationPoint[]): Points {
+export function sortPoints(points: AutomationPoint[]): Points {
   const byTick = new Map<number, AutomationPoint>();
   for (const point of points) byTick.set(point.tick, point);
   return [...byTick.values()].sort((a, b) => a.tick - b.tick);
@@ -682,7 +682,7 @@ function copyPoints(
 // ---------------------------------------------------------------------------
 // Ripple edits
 
-function checkBars(bars: number): void {
+export function checkBars(bars: number): void {
   if (bars > SCORE_LIMITS.maxBars)
     throw new ScoreValidationError(
       `the song would be ${bars} bars; the limit is ${SCORE_LIMITS.maxBars}`,
@@ -1359,11 +1359,16 @@ export function splitSection(
 }
 
 /**
- * Join a section with the one that starts where it ends. Refused when the
- * two mute or vary differently (joining would change the sound), or when
+ * Join a section with the one that starts where it ends; it keeps the
+ * first one's name, mutes and variations. Refused when the two mute or vary
+ * differently (joining would change the sound) unless `force`, or when
  * the form plays the second anywhere but right after the first.
  */
-export function joinSection(score: TrackScore, name: string): TrackScore {
+export function joinSection(
+  score: TrackScore,
+  name: string,
+  options: Readonly<{ force?: boolean }> = {},
+): TrackScore {
   const section = requireSection(score, name);
   const end = section.startBar + section.bars;
   const next = score.sections.find((candidate) => candidate.startBar === end);
@@ -1374,9 +1379,13 @@ export function joinSection(score: TrackScore, name: string): TrackScore {
   const sameMute =
     JSON.stringify([...(section.mute ?? [])].sort()) ===
     JSON.stringify([...(next.mute ?? [])].sort());
-  if (!sameMute || JSON.stringify(section.vary ?? {}) !== JSON.stringify(next.vary ?? {}))
+  if (
+    !options.force &&
+    (!sameMute ||
+      JSON.stringify(section.vary ?? {}) !== JSON.stringify(next.vary ?? {}))
+  )
     throw new ScoreValidationError(
-      `${section.name} and ${next.name} mute or vary differently · section reset one first`,
+      `${section.name} and ${next.name} mute or vary differently · section join ${section.name} force`,
     );
   const form: FormEntry[] = [];
   const entries = score.form;
