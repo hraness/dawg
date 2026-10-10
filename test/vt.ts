@@ -48,6 +48,33 @@ export class VirtualTerminal {
   lastWrap: string | undefined;
   /** Bytes written so far. */
   bytes = 0;
+  /** Output after the last complete frame, held by `writeFrames`. */
+  private heldFrame = "";
+
+  /**
+   * PTY output as a terminal shows it: dawg wraps each frame in
+   * synchronized-update markers (DEC 2026), and a frame can arrive split
+   * across reads. A terminal paints it only once it is complete; this one
+   * does too, so a test never reads half a frame (a header drawn, the lines
+   * under it not yet, a receipt over the previous screen).
+   */
+  writeFrames(text: string): void {
+    const BEGIN = "\u001b[?2026h";
+    const END = "\u001b[?2026l";
+    const held = this.heldFrame + text;
+    const open = held.lastIndexOf(BEGIN);
+    const closed = held.lastIndexOf(END);
+    let cut = open > closed ? open : held.length;
+    // A begin marker cut off at the end of a read waits for its rest.
+    const esc = held.lastIndexOf("\u001b");
+    if (cut === held.length && esc >= 0 && BEGIN.startsWith(held.slice(esc)))
+      cut = esc;
+    this.heldFrame = held.slice(cut);
+    if (cut > 0) this.write(held.slice(0, cut));
+  }
+
+  /** Each OSC (`ESC ] code ; text BEL`) as it arrives; it draws nothing. */
+  onOsc: ((code: number, text: string) => void) | undefined;
   private style: VtStyle = {};
   private pending = "";
 
@@ -90,6 +117,20 @@ export class VirtualTerminal {
     };
     while (input.length > 0) {
       const ch = input[0]!;
+      if (ch === "\u001b" && input[1] === "]") {
+        flushText();
+        const end = /\u0007|\u001b\\/.exec(input);
+        if (!end) {
+          this.pending = input;
+          return;
+        }
+        const body = input.slice(2, end.index);
+        const split = body.indexOf(";");
+        const code = Number(split < 0 ? body : body.slice(0, split));
+        this.onOsc?.(code, split < 0 ? "" : body.slice(split + 1));
+        input = input.slice(end.index + end[0].length);
+        continue;
+      }
       if (ch === "\u001b") {
         flushText();
         const match = input.match(

@@ -341,6 +341,7 @@ import {
   type TapeContext,
 } from "./tui/tape-mode.ts";
 import { tapeView } from "./tui/tape-view.ts";
+import { PromptQueue } from "./tui/prompt-queue.ts";
 import { TAPE_ZOOMS, type TapeView, type TapeZoom } from "../tui/tape.ts";
 import type { HitTarget } from "../tui/hits.ts";
 import { knobKey, type KnobState } from "../tui/knobs.ts";
@@ -1451,8 +1452,45 @@ async function runInteractive(): Promise<void> {
   // Alternate screen, hidden cursor, bracketed paste.
   stdout.write(`${ESC}?1049h${ESC}?25l${ESC}?2004h${ESC}2J${mouseOn()}`);
   const inputDecoder = new TerminalInputDecoder();
-  const queuedPrompts: string[] = [];
+  const queuedPrompts = new PromptQueue();
   let processingQueue = false;
+  // Undo/redo runs beside the queue (it must not wait on an agent turn), so
+  // a queued line waits for it instead: started before the undo's append
+  // has resolved, it would append against the old revision and fail with a
+  // conflict (Ctrl-Z then V on TAPE: `copy failed · session changed`).
+  let historyStep: Promise<unknown> = Promise.resolve();
+  // `DAWG_STATE_OSC=1` (the PTY tests): each tick ends with an invisible
+  // `OSC 7799 ; <json> BEL` saying how many input bytes the editor has acted
+  // on and whether anything it started is still running, so a test waits
+  // for the editor to settle instead of sleeping or matching early text.
+  const stateOsc = process.env.DAWG_STATE_OSC === "1";
+  let reportedState = "";
+  /** Input bytes received, and of those the ones the key loop finished. */
+  let inputReceived = 0;
+  let inputHandled = 0;
+  /** Key-loop work in flight that is not a queued prompt (Ctrl-T, undo…). */
+  let inflight = 0;
+  const settling = <T>(work: Promise<T>): Promise<T> => {
+    inflight += 1;
+    return work.finally(() => {
+      inflight -= 1;
+      requestFrame();
+    });
+  };
+  const editorState = (): string =>
+    JSON.stringify({
+      in: inputHandled,
+      busy:
+        processingQueue ||
+        queuedPrompts.length > 0 ||
+        inflight > 0 ||
+        agentTurn !== undefined ||
+        inputDecoder.pending() !== undefined,
+      rev: record.revision,
+      track: requestedTrack,
+      screen: paneView().screen,
+      overlay: tui.ui.overlay ?? null,
+    });
   const runPrompt = async (text: string): Promise<void> => {
     const ui = tui.command(text);
     if (ui !== undefined) {
@@ -1495,9 +1533,13 @@ async function runInteractive(): Promise<void> {
     if (processingQueue) return;
     processingQueue = true;
     try {
-      while (queuedPrompts.length > 0) {
-        const nextPrompt = queuedPrompts.shift()!;
+      for (
+        let nextPrompt = queuedPrompts.shift();
+        nextPrompt !== undefined;
+        nextPrompt = queuedPrompts.shift()
+      ) {
         tui.activity.setQueueDepth(queuedPrompts.length);
+        await historyStep;
         await runPrompt(nextPrompt);
         if (pendingAudition && queuedPrompts.length === 0) {
           const voice = pendingAudition;
@@ -1533,10 +1575,17 @@ async function runInteractive(): Promise<void> {
   const tick = (force = false) => {
     if (screenSuspended) return;
     reportView();
+    // A state report always follows a frame built from that state.
+    const state = stateOsc ? editorState() : "";
+    const report = () => {
+      if (state === reportedState) return;
+      reportedState = state;
+      stdout.write(`\u001b]7799;${state}\u0007`);
+    };
     if (
       !frameGate.shouldBuild({
         nowMs: Date.now(),
-        force,
+        force: force || state !== reportedState,
         animating: animating(),
         keys: [
           score,
@@ -1552,8 +1601,10 @@ async function runInteractive(): Promise<void> {
           tui.ui.overlay,
         ],
       })
-    )
+    ) {
+      if (stateOsc) report();
       return;
+    }
     followCommitted();
     tui.delight.song(record.sessionId, record.meta.heardLoop === true);
     play?.tick();
@@ -1570,6 +1621,7 @@ async function runInteractive(): Promise<void> {
         frameLog,
         `${stdout.columns ?? 0}x${stdout.rows ?? 0} ${tui.lastRenderMs.toFixed(3)} ${out.length}\n`,
       );
+    if (stateOsc) report();
   };
   requestFrame = () => tick(true);
   // The first wrap is remembered per song in .dawg metadata, never the score.
@@ -1580,11 +1632,11 @@ async function runInteractive(): Promise<void> {
       .catch(() => undefined);
   };
   runPromptLater = (command) => {
-    queuedPrompts.unshift(command);
+    queuedPrompts.runNow(command);
     void drainQueue();
   };
   runPromptsLater = (commands) => {
-    queuedPrompts.unshift(...commands);
+    queuedPrompts.runNow(...commands);
     void drainQueue();
   };
   reportAgentActivity = () => {
@@ -1791,13 +1843,20 @@ async function runInteractive(): Promise<void> {
   // Input arrives through a detachable listener (not `for await`), so /login
   // can hand the terminal to an interactive shell flow and take it back.
   const inbox: string[] = [];
+  /** `inputReceived` as of each inbox entry: what handling it accounts for. */
+  const inboxBytes: number[] = [];
+  let takenBytes = 0;
   let wake: (() => void) | undefined;
   const onData = (chunk: Buffer | string) => {
+    inputReceived +=
+      typeof chunk === "string" ? Buffer.byteLength(chunk) : chunk.length;
     inbox.push(String(chunk));
+    inboxBytes.push(inputReceived);
     wake?.();
   };
   const onEnd = () => {
     inbox.push("\u0000eof");
+    inboxBytes.push(inputReceived);
     wake?.();
   };
   stdin.on("data", onData);
@@ -1829,6 +1888,7 @@ async function runInteractive(): Promise<void> {
       wake = undefined;
       const next = inbox.shift()!;
       if (next === "\u0000eof") return;
+      takenBytes = inboxBytes.shift() ?? takenBytes;
       yield next;
     }
   }
@@ -1879,9 +1939,11 @@ async function runInteractive(): Promise<void> {
             break;
           }
           if (key === "play")
-            void toggleTransport()
-              .catch((error: unknown) => transportFailed(error))
-              .finally(() => tick(true));
+            void settling(
+              toggleTransport()
+                .catch((error: unknown) => transportFailed(error))
+                .finally(() => tick(true)),
+            );
           continue;
         }
         // A mouse report acts on what the last frame painted under it; some
@@ -1940,7 +2002,7 @@ async function runInteractive(): Promise<void> {
               else leaveAuditionScreen();
             } else if (result.type === "run") {
               if (!stageIfAuditioning(result.command)) {
-                queuedPrompts.unshift(result.command);
+                queuedPrompts.runNow(result.command);
                 if (result.audition) pendingAudition = result.audition;
                 void drainQueue();
               }
@@ -1972,7 +2034,7 @@ async function runInteractive(): Promise<void> {
               leaveAuditionScreen();
             } else if (result.type === "run") {
               if (!stageIfAuditioning(result.command)) {
-                queuedPrompts.unshift(result.command);
+                queuedPrompts.runNow(result.command);
                 void drainQueue();
               }
             } else if (result.type === "audition")
@@ -2037,18 +2099,22 @@ async function runInteractive(): Promise<void> {
         if (value === "\u0014" && tui.ui.overlay === undefined) {
           if (tape.on) receipt(exitTape());
           else
-            void enterTape()
-              .then((outcome) => receipt(outcome))
-              .finally(() => tick(true));
+            void settling(
+              enterTape()
+                .then((outcome) => receipt(outcome))
+                .finally(() => tick(true)),
+            );
           tick(true);
           continue;
         }
         // Ctrl-P enters play mode. A bare `p` would steal the first letter of
         // `pan`, `pattern`, `play` and every prose request starting with p.
         if (value === "\u0010" && tui.ui.overlay === undefined) {
-          void enterPlay()
-            .then((outcome) => receipt(outcome))
-            .finally(() => tick(true));
+          void settling(
+            enterPlay()
+              .then((outcome) => receipt(outcome))
+              .finally(() => tick(true)),
+          );
           continue;
         }
         // The prompt is always focused, so ordinary `q` must remain typeable in
@@ -2064,9 +2130,11 @@ async function runInteractive(): Promise<void> {
         ) {
           // Never await a daemon round trip here: the key loop must stay
           // live for Esc, quit and redraws while the toggle is in flight.
-          void toggleTransport()
-            .catch((error: unknown) => transportFailed(error))
-            .finally(() => tick(true));
+          void settling(
+            toggleTransport()
+              .catch((error: unknown) => transportFailed(error))
+              .finally(() => tick(true)),
+          );
         } else {
           const input = tui.input(value);
           const action = input.type === "action" ? input.action : undefined;
@@ -2078,15 +2146,17 @@ async function runInteractive(): Promise<void> {
             ) {
               const base = baseline();
               const command = input.command;
-              void stepHistory(command)
-                .then((outcome) => receipt(outcome, base))
-                .catch((error: unknown) => {
-                  tui.activity.pushCard(
-                    `${command} failed · ${error instanceof Error ? error.message : String(error)}`,
-                    { tone: "error" },
-                  );
-                })
-                .finally(() => tick(true));
+              historyStep = settling(
+                stepHistory(command)
+                  .then((outcome) => receipt(outcome, base))
+                  .catch((error: unknown) => {
+                    tui.activity.pushCard(
+                      `${command} failed · ${error instanceof Error ? error.message : String(error)}`,
+                      { tone: "error" },
+                    );
+                  })
+                  .finally(() => tick(true)),
+              );
             }
           } else if (input.type === "pick-move") {
             // Moving through a list auditions the row under the cursor on
@@ -2138,7 +2208,7 @@ async function runInteractive(): Promise<void> {
               });
           } else if (input.type === "pick") {
             // Picker choices run as the command they stand for.
-            queuedPrompts.unshift(
+            queuedPrompts.runNow(
               input.picker === "resume"
                 ? `/resume ${input.value}`
                 : input.value,
@@ -2157,7 +2227,7 @@ async function runInteractive(): Promise<void> {
             // A typed command never waits on the agent: it commits its own
             // revision now, and the agent's next call re-reads the score.
             const value = action.value;
-            void runLocalBesideAgent(value).finally(() => tick(true));
+            void settling(runLocalBesideAgent(value).finally(() => tick(true)));
           } else if (action?.kind === "submit" && action.value && agentTurn) {
             // Enter during a turn steers it; Alt-Enter still queues a follow-up.
             agentTurn.steering.push(action.value);
@@ -2166,11 +2236,11 @@ async function runInteractive(): Promise<void> {
               { tone: "agent", hint: "next step" },
             );
           } else if (action?.kind === "submit" && action.value) {
-            queuedPrompts.unshift(action.value);
+            queuedPrompts.runNow(action.value);
             // Do not await: the input loop must stay live so Esc can cancel.
             void drainQueue();
           } else if (action?.kind === "queue" && action.value) {
-            queuedPrompts.push(action.value);
+            queuedPrompts.runNext(action.value);
             tui.activity.setQueueDepth(queuedPrompts.length);
             tui.activity.pushCard(`queued · ${truncateForCard(action.value)}`, {
               tone: "info",
@@ -2182,6 +2252,8 @@ async function runInteractive(): Promise<void> {
         tick(true);
       }
       if (exiting) break;
+      inputHandled = takenBytes;
+      if (stateOsc) tick();
     }
   } finally {
     stdin.off("data", onData);

@@ -92,6 +92,7 @@ export function focusShown(t: Pty): boolean {
 
 async function ready(t: Pty): Promise<void> {
   await t.until(() => t.vt.text().includes(" NOW "), "prompt", 15_000);
+  await t.settle("editor idle at launch");
 }
 
 async function seed(t: Pty): Promise<void> {
@@ -104,6 +105,9 @@ async function seed(t: Pty): Promise<void> {
   await t.send("instrument kit\r");
   await t.send("hit kick at 0\r");
   await t.send("track bass\r");
+  // Lines typed faster than they run queue up: wait for all nine, so the
+  // scenario opens on bass rather than wherever the queue had got to.
+  await t.settle("seed applied");
 }
 
 /**
@@ -195,7 +199,7 @@ export const SCENARIOS: readonly Scenario[] = [
     async open(t) {
       await ready(t);
       await seed(t);
-      await t.send("\u0014");
+      await t.type("\u0014", "tape opened");
       await t.until(() => t.vt.text().includes("range: "), "tape");
     },
     marker: (text) => text.includes("range: "),

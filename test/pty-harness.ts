@@ -32,6 +32,20 @@ interface PtyTerminal {
   close(): void;
 }
 
+/**
+ * What the editor reports after each frame under `DAWG_STATE_OSC=1`
+ * (src/main.ts): input bytes it has acted on, whether anything it started
+ * still runs, and where it stands.
+ */
+export interface EditorState {
+  in: number;
+  busy: boolean;
+  rev: number;
+  track: string;
+  screen: "home" | "tape" | "play" | "sound" | "menu";
+  overlay: string | null;
+}
+
 export async function launch(
   cols: number,
   rows: number,
@@ -59,17 +73,32 @@ export async function launch(
       AI_GATEWAY_API_KEY: "vck_ptytest0000000000000000",
       DAWG_CREDENTIAL_STORE: "file",
       DAWG_CONFIG_DIR: join(cwd, ".config", "dawg"),
+      DAWG_STATE_OSC: "1",
       ...env,
     },
     terminal: {
       cols,
       rows,
       data(_terminal: unknown, data: Uint8Array) {
-        vt.write(decoder.decode(data, { stream: true }));
+        vt.writeFrames(decoder.decode(data, { stream: true }));
       },
     },
   } as Parameters<typeof Bun.spawn>[1]);
-  const terminal = (proc as unknown as { terminal: PtyTerminal }).terminal;
+  const pty = (proc as unknown as { terminal: PtyTerminal }).terminal;
+  let state: EditorState | undefined;
+  vt.onOsc = (code, text) => {
+    if (code === 7799) state = JSON.parse(text) as EditorState;
+  };
+  // Every byte sent is counted, so `settle` knows what the editor still owes.
+  let written = 0;
+  const terminal: PtyTerminal = {
+    write(data) {
+      written += Buffer.byteLength(data);
+      pty.write(data);
+    },
+    resize: (c, r) => pty.resize(c, r),
+    close: () => pty.close(),
+  };
   const until = async (
     predicate: () => boolean,
     label: string,
@@ -86,5 +115,35 @@ export async function launch(
     terminal.write(data);
     await Bun.sleep(60);
   };
-  return { proc, terminal, vt, until, send, cwd };
+  /**
+   * Wait until the editor has acted on every byte sent so far and nothing it
+   * started (a queued line, Ctrl-T, undo, a gesture's commands) still runs;
+   * the frame on screen is then drawn from that settled state. Use it before
+   * an assertion instead of a sleep or a text that can show up early.
+   */
+  const settle = async (label = "settled", timeoutMs = 15_000) => {
+    const owed = written;
+    await until(
+      () => state !== undefined && state.in >= owed && !state.busy,
+      `${label} (editor ${JSON.stringify(state)}, sent ${owed} bytes)`,
+      timeoutMs,
+    );
+    return state!;
+  };
+  /** Send keys, then `settle`. */
+  const type = async (data: string, label?: string) => {
+    terminal.write(data);
+    return settle(label ?? `after ${JSON.stringify(data)}`);
+  };
+  return {
+    proc,
+    terminal,
+    vt,
+    until,
+    send,
+    settle,
+    type,
+    state: () => state,
+    cwd,
+  };
 }

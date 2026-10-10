@@ -77,7 +77,7 @@ function open(workspace: string, name: string, argv: string[] = []): Window {
       cols: COLS,
       rows: ROWS,
       data(_terminal: unknown, data: Uint8Array) {
-        vt.write(decoder.decode(data, { stream: true }));
+        vt.writeFrames(decoder.decode(data, { stream: true }));
       },
     },
   } as Parameters<typeof Bun.spawn>[1]);
