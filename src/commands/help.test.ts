@@ -1,7 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { emptyScore } from "../../core/score.ts";
-import { commandParses } from "./parses.ts";
 import {
   HELP_SECTIONS,
   looksLikeProse,
@@ -297,89 +294,9 @@ test("grain is a known verb: a slip suggests it and usage names it", () => {
   expect(usageHint("grain")).toContain("grain cloud");
 });
 
-/**
- * Commands /help lists that a person cannot yet type both bare and with a
- * slash (or that only the window handles, which `commandParses` cannot
- * see). Lane E ratchets this list down: a row that starts parsing fails
- * the test below until it is removed here.
- */
-const KNOWN_GAPS: ReadonlySet<string> = new Set([
-  "synth <param> <value> | preset <name>",
-  "wtenv|wtattack|wtdecay|wtrate|wtdepth|warp <n>",
-  "keys <param> <value> | preset <name> | reset",
-  "rotary slow|fast|stop [at <beat>]",
-  "bowed [<preset>] | <param> <value> | presets",
-  "velcurve linear|soft|hard|fixed [<v>]",
-  "/sample [<path> [as <sample>]]",
-  "fitmode [repitch|beats|tones|auto] [<sample>]",
-  "len <beats> [<sample>]",
-  "fade [in|out] <seconds> [<sample>]",
-  "resample <track>|orbit <n>|master [section <name>|bars a-b] [grain]",
-  "sing [preset] [param value]",
-  "lyrics [bar] sun-lit morn-ing",
-  "vocoder [preset] | src <track> | <param> <value|reset> | reset | off | presets",
-  "clip [id] gain -3 | gain by -3 | fade .01 .2 | fade in .01 | move 9 | split 7",
-  "clip [id] trim offset 1 dur 4|end | rev | repeat 2 [to 32] | mute | rm",
-  "clear <drum>",
-  "tuning ref <hz> | root <note> | map linear|nearest",
-  "tuning track <…> | track off",
-  "automate <lane> at <beat> <value>",
-  "automate <lane> remove <beat>",
-  "clear [<lane>] automation",
-  "remove <id>",
-  "move <id> to <beat>",
-  "length <id> <beats>",
-  "velocity <id> <0..1>",
-  "section <name> <a>-<b> | add | dup | move | rename | remove",
-  "form <section…> | off | bake",
-  "build | drop | fill [<section> | <a>-<b>]",
-  "style <id> [bars] [seed]",
-  "style list|search|info · style blend <a> <b> [w]",
-  "extend <count> bars",
-  "calibration [0|1|latest|off]",
-  "/view focus|all",
-  "/transcript",
-  "/theme default|high-contrast|mono",
-  "/motion on|off",
-  "/guide [topic]",
-  "/showme on|quiet|off",
-]);
-
-/** Verbs main.ts handles itself (`/^\/kit`, `/^\/?track`, …). */
-function windowVerbs(): Set<string> {
-  const source = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
-  const verbs = new Set<string>();
-  for (const match of source.matchAll(/\/\^\\\/\??\(?(?:\?:)?([a-z|]+)/g))
-    for (const verb of match[1]!.split("|")) if (verb) verbs.add(verb);
-  return verbs;
-}
-
-test("every help command parses bare and with a slash, or is a known gap", () => {
-  const score = emptyScore();
-  const window = windowVerbs();
-  const gaps: string[] = [];
-  for (const section of HELP_SECTIONS)
-    for (const entry of section.entries) {
-      const verb = entry.command.split(/[\s|[]/)[0]!.replace(/^\//, "");
-      if (window.has(verb)) continue;
-      const examples = entry.summary
-        .split(" · ")
-        .filter((segment) => segment.split(" ")[0] === verb);
-      if (!/[<|[…]/.test(entry.command))
-        examples.unshift(entry.command.replace(/^\//, ""));
-      const parses = examples.every(
-        (example) =>
-          commandParses(example, score) && commandParses(`/${example}`, score),
-      );
-      if (examples.length === 0 || !parses) gaps.push(entry.command);
-    }
-  if (process.env.PRINT_GAPS) console.log(JSON.stringify(gaps));
-  const unexpected = gaps.filter((gap) => !KNOWN_GAPS.has(gap));
-  expect(unexpected).toEqual([]);
-  // The ratchet: a gap that now parses must leave KNOWN_GAPS.
-  const fixed = [...KNOWN_GAPS].filter((gap) => !gaps.includes(gap));
-  expect(fixed).toEqual([]);
-});
+// Every /help example running bare and slashed, window verbs included, is
+// checked in test/consistency.test.ts ("help and usage examples parse bare
+// and slashed"), which has no known gaps.
 
 test("no help row uses a glossary loser except in alias notes", () => {
   expect(lintText(helpText())).toEqual([]);

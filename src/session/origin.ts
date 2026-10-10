@@ -1,4 +1,4 @@
-import type { SessionPort } from "./port.ts";
+import { WRITTEN_REVISION, type SessionPort } from "./port.ts";
 import type { SessionEvent, SessionRecord } from "./store.ts";
 
 /**
@@ -20,8 +20,12 @@ export class OwnWrites {
     this.inflight++;
     try {
       const record = await write;
-      const last = record.events[record.events.length - 1];
-      if (last) this.remember(last.id);
+      const revision = WRITTEN_REVISION.get(record);
+      const own =
+        revision === undefined
+          ? record.events[record.events.length - 1]
+          : record.events.find((event) => event.revision === revision);
+      if (own) this.remember(own.id);
       return record;
     } finally {
       this.inflight--;

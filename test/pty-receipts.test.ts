@@ -48,10 +48,7 @@ const SYNC_CARD = /synced · /;
  * watcher after the window records its own revision, which happens on
  * slower machines (CI) and shows the sync card.
  */
-const RECEIPT_RACY_GAPS: readonly string[] = [
-  "one-window edit",
-  "one-window agent write",
-];
+const RECEIPT_RACY_GAPS: readonly string[] = [];
 
 /** Every case this suite records; a case that throws early still counts. */
 const EXPECTED_LABELS: readonly string[] = [

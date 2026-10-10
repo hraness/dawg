@@ -347,9 +347,7 @@ describe("aliases parse like their canonical form", () => {
  * agent, Arrange › tracks, …) that the menu lane (PR #142) builds. Each
  * resolves on that branch; delete the lines as they resolve here.
  */
-const KNOWN_MENU_PATH_GAPS: readonly string[] = [
-  "guides/voice.md: Ctrl-K › Voice › sing",
-];
+const KNOWN_MENU_PATH_GAPS: readonly string[] = [];
 
 /** `/menu <word>`s the docs use before the menu lane accepts them. */
 const KNOWN_MENU_WORD_GAPS: readonly string[] = [];
