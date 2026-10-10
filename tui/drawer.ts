@@ -41,6 +41,8 @@ export type DrawerField =
       maxText: string;
       /** Just caught by a detent: the bar brightens for one frame. */
       flash?: string | undefined;
+      /** Other panes with this parameter open (`B C`), dim at the right. */
+      peers?: string | undefined;
     }>
   | Readonly<{
       kind: "choice";
@@ -48,6 +50,7 @@ export type DrawerField =
       options: readonly string[];
       index: number;
       committedIndex?: number | undefined;
+      peers?: string | undefined;
     }>;
 
 export type DrawerView = Readonly<{
@@ -394,6 +397,17 @@ export function paintDrawer(
             on(roles.muted),
           );
       }
+    }
+    // Other panes with this parameter open: their letters, dim, at the
+    // row's right edge (design §12.7).
+    if (field.peers) {
+      const peers = ` ${field.peers}`;
+      buffer.text(
+        Math.max(valueX, inner.right - displayWidth(peers)),
+        y,
+        peers,
+        on(roles.muted),
+      );
     }
   }
   return layout;

@@ -443,6 +443,7 @@ import {
   type SyncState,
   type TypesIndicator,
 } from "../tui/app.ts";
+import type { DrawerView } from "../tui/drawer.ts";
 import { fail, note, ok, toneOf, warn, type Receipt } from "../tui/activity.ts";
 import { systemRunner } from "./auth/runner.ts";
 import type { MediaServices } from "./media/types.ts";
@@ -1475,6 +1476,7 @@ async function runInteractive(): Promise<void> {
           record.meta.name,
           syncState,
           windowCount,
+          panePresence,
           typesIndicator,
           menu.open,
           euclid.open,
@@ -2144,7 +2146,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
       return {
         label: track.id,
         value: `/track ${track.id}`,
-        detail: `${track.instrument}${samples}${track.muted ? " · muted" : ""}${track.solo ? " · solo" : ""}`,
+        detail: `${track.instrument}${samples}${track.muted ? " · muted" : ""}${track.solo ? " · solo" : ""}${paneMarks(track.id)}`,
         current: track.id === requestedTrack,
       };
     });
@@ -4110,6 +4112,45 @@ async function openPane(pane: PaneArgs): Promise<void> {
   if (result !== undefined) receipt(result);
 }
 
+/**
+ * Other panes on `trackId`, for a track row's gutter (§12.7): their letters,
+ * a red-dot `●` after a pane that is recording. Empty for a solo window.
+ */
+function paneMarks(trackId: string): string {
+  const marks = panePresence
+    .filter(
+      (entry) =>
+        entry.clientId !== port.clientId &&
+        entry.pane &&
+        entry.focusedTrackId === trackId,
+    )
+    .map((entry) => `${entry.pane}${entry.recording ? "●" : ""}`);
+  return marks.length ? `  ${marks.join(" ")}` : "";
+}
+
+/** A drawer row another pane has open on this track shows its letter. */
+function withPaneMarks(view: DrawerView): DrawerView {
+  const others = panePresence.filter(
+    (entry) =>
+      entry.clientId !== port.clientId &&
+      entry.pane &&
+      entry.param &&
+      entry.screen === "sound" &&
+      entry.focusedTrackId === requestedTrack,
+  );
+  if (others.length === 0) return view;
+  return {
+    ...view,
+    fields: view.fields.map((field) => {
+      const peers = others
+        .filter((entry) => entry.param === field.label)
+        .map((entry) => entry.pane)
+        .join(" ");
+      return peers ? { ...field, peers } : field;
+    }),
+  };
+}
+
 /** One pane's line for `pane`: letter, screen, track, parameter, state. */
 function paneLine(entry: PresenceEntry): string {
   const bits = [
@@ -4787,7 +4828,7 @@ function refreshMenu(): void {
     if (fields.length === 0) closeFader();
     else {
       const focusedField = fields[focusIndex(fader, fields)];
-      tui.drawer = drawerView(fader, fields, menu.faderCommitted(context), {
+      const drawer = drawerView(fader, fields, menu.faderCommitted(context), {
         title: menu.crumbs,
         dirty: context.audition?.dirty ?? false,
         status: context.audition?.status,
@@ -4795,6 +4836,7 @@ function refreshMenu(): void {
           focusedField !== undefined &&
           !stageableNow(faderCommand(focusedField)),
       });
+      tui.drawer = withPaneMarks(drawer);
     }
   }
   const view = menu.view(context);

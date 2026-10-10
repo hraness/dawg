@@ -443,3 +443,36 @@ test.skipIf(!supported)(
   },
   60_000,
 );
+
+test.skipIf(!supported)(
+  "panes: presence markers on drawer rows and track rows",
+  async () => {
+    const dir = await workspace();
+    const a = open(dir, "A", ["--new", "--track", "drums"]);
+    await ready(a);
+    await edit(a, "pattern kick every 1");
+    const b = open(dir, "B", ["pane", "sound", "drums", "volume"]);
+    await ready(b);
+    const c = open(dir, "C", ["pane", "sound", "drums", "volume"]);
+    await ready(c);
+    const trio = [a, b, c];
+    // B and C both have drums › volume open: each drawer's volume row shows
+    // the other pane's letter at its right edge.
+    const row = (p: Pane) =>
+      p.vt.lines().find((line) => /^\s*│?\s*[›>]\s+volume\b/.test(line)) ?? "";
+    await until(
+      () => / C\s*│?\s*$/.test(row(b)) && / B\s*│?\s*$/.test(row(c)),
+      "drawer row markers",
+      () => screens(trio),
+    );
+    // A's track list shows B and C beside drums.
+    await send(a, "tracks");
+    await until(
+      () => /drums.*  B C/.test(a.vt.text()),
+      "track row markers",
+      () => a.vt.text(),
+    );
+    for (const p of trio) await close(p);
+  },
+  60_000,
+);
