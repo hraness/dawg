@@ -274,6 +274,13 @@ export class Resonator {
     this.b = 2 * Math.exp(-Math.PI * bw * t) * Math.cos(2 * Math.PI * f * t);
     this.a = 1 - this.b - this.c;
   }
+  /** Writes the coefficients at `out[at..at+2]`; returns the next index. */
+  coeffsInto(out: Float64Array, at: number): number {
+    out[at] = this.a;
+    out[at + 1] = this.b;
+    out[at + 2] = this.c;
+    return at + 3;
+  }
   /** H(e^jw) as [re, im], given cos/sin of w and 2w. */
   response(cw: number, sw: number, c2w: number, s2w: number): [number, number] {
     const out = new Float64Array(2);
@@ -321,6 +328,14 @@ export class Bandpass {
     this.b2 = -alpha / a0;
     this.a1 = (-2 * Math.cos(w)) / a0;
     this.a2 = (1 - alpha) / a0;
+  }
+  /** Writes the coefficients at `out[at..at+3]`; returns the next index. */
+  coeffsInto(out: Float64Array, at: number): number {
+    out[at] = this.b0;
+    out[at + 1] = this.b2;
+    out[at + 2] = this.a1;
+    out[at + 3] = this.a2;
+    return at + 4;
   }
   /** H(e^jw) as [re, im], given cos/sin of w and 2w. */
   response(cw: number, sw: number, c2w: number, s2w: number): [number, number] {

@@ -163,6 +163,9 @@ export class VoiceCore {
   private readonly ringBand = new Bandpass();
   private readonly ot1 = new Bandpass();
   private readonly ot2 = new Bandpass();
+  /** aimLevel's inputs (pitch, source, every filter coefficient). */
+  private readonly aimKey = new Float64Array(6 + 5 * 3 + 3 * 4);
+  private readonly aimLast = new Float64Array(6 + 5 * 3 + 3 * 4);
   constructor(
     private readonly rand: () => number,
     private readonly sampleRate: number,
@@ -227,8 +230,27 @@ export class VoiceCore {
       Math.floor((0.45 * this.sampleRate) / f0),
     );
     if (!(f0 > 0) || top < 1) return;
-    const source = glottalSpectrum(rd, NORM_HARMONICS);
     const spread = Math.max(0.006, s.jitter * 0.01);
+    // A held note re-aims with the same pitch, source and filters almost
+    // every time: the same inputs give the same target, so skip the sum.
+    const key = this.aimKey;
+    let at = 0;
+    key[at++] = f0;
+    key[at++] = rd;
+    key[at++] = a;
+    key[at++] = spread;
+    key[at++] = s.ring;
+    key[at++] = s.overtone;
+    for (const r of this.tract.res) at = r.coeffsInto(key, at);
+    at = this.ringBand.coeffsInto(key, at);
+    at = this.ot1.coeffsInto(key, at);
+    at = this.ot2.coeffsInto(key, at);
+    const last = this.aimLast;
+    let same = this.levelTarget > 0;
+    for (let i = 0; i < at && same; i += 1) same = key[i] === last[i];
+    if (same) return;
+    last.set(key);
+    const source = glottalSpectrum(rd, NORM_HARMONICS);
     let power = 0;
     for (let h = step; h <= top; h += step) {
       const whole = Number.isInteger(h);
