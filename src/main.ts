@@ -483,6 +483,7 @@ Usage:
   dawg init [dir]      project files: song.ts, tracks/<slug>/track.ts, .dawg/sdk
   dawg check           typecheck + evaluate the project; exit 1 on problems
   dawg <command> --help  usage: sessions render init check media model
+  dawg doctor          audio backend, native sink and devices
   dawg media doctor|download|stems|analyze|notes|sample|lyrics …  (dawg media --help)
   dawg --version
 
@@ -558,6 +559,10 @@ if (process.argv[2] === "init" || process.argv[2] === "check") {
   process.exit(
     await command(process.argv.slice(2), process.cwd(), stdout, process.stderr),
   );
+}
+if (process.argv[2] === "doctor") {
+  const { runDoctorCommand } = await import("./audio/doctor.ts");
+  process.exit(await runDoctorCommand(process.argv.slice(3), stdout));
 }
 if (process.argv[2] === "media") {
   const { runMediaCommand } = await import("./media/cli.ts");
@@ -4233,7 +4238,7 @@ async function startAuditionLoop(): Promise<void> {
   loop.focus(requestedTrack);
   // One sound at a time: the song stops while the loop plays.
   if (clock.playing) await setTransport("pause");
-  previewEngine().setLeadMs(PLAY_LEAD_MS);
+  previewEngine().setLeadMs(previewEngine().playLeadMs);
   loop.start();
 }
 

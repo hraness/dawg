@@ -16,6 +16,14 @@ import { levelOf, type SoundLevel } from "./preview.ts";
 import { DEFAULT_SAMPLE_RATE, RENDER_CHANNELS } from "./wav.ts";
 import { playbackTime } from "./arrange.ts";
 import { transportMapFor, type TransportMap } from "./clock.ts";
+import {
+  openNativePlayer,
+  probeNativeSink,
+  type AudioTiming,
+  type NativeProbe,
+  type PlayerClock,
+  type SinkLibrary,
+} from "./native.ts";
 
 /**
  * How dawgd (or a file-mode window) makes sound.
@@ -30,7 +38,8 @@ import { transportMapFor, type TransportMap } from "./clock.ts";
  *   s16le from stdin; tests use it to record the exact byte stream.
  * - `none` makes no sound; the transport clock still runs.
  */
-export type AudioBackend = "ffplay" | "sox" | "afplay" | "command" | "none";
+export type AudioBackend =
+  "native" | "ffplay" | "sox" | "afplay" | "command" | "none";
 
 export type AudioBackendInfo = Readonly<{
   backend: AudioBackend;
@@ -40,6 +49,10 @@ export type AudioBackendInfo = Readonly<{
   command?: readonly string[];
   /** Human-readable reason the backend was chosen. */
   detail: string;
+  /** The loaded sink, for the `native` backend. */
+  native?: SinkLibrary;
+  /** Why the native sink is not in use, when another backend was picked. */
+  nativeUnavailable?: string;
 }>;
 
 type Which = (binary: string) => string | null;
@@ -49,7 +62,16 @@ export type DetectOptions = Readonly<{
   which?: Which;
   platform?: NodeJS.Platform;
   sampleRate?: number;
+  /** Native sink probe; `false` skips it (tests). Default: the real one. */
+  native?: (() => NativeProbe) | false;
 }>;
+
+let cachedProbe: NativeProbe | undefined;
+/** The real probe, once per process (dlopen is not repeated). */
+function defaultNativeProbe(): NativeProbe {
+  cachedProbe ??= probeNativeSink();
+  return cachedProbe;
+}
 
 /** Streaming argv for the known stdin players. */
 export function streamingCommand(
@@ -99,8 +121,9 @@ export function streamingCommand(
 
 /**
  * Pick the audio backend. Order: DAWG_AUDIO=0 (none), DAWG_AUDIO_PLAYER
- * (explicit stdin command), DAWG_AUDIO_BACKEND (forced name), then ffplay,
- * sox `play`, and afplay (macOS) in that order.
+ * (explicit stdin command), DAWG_AUDIO_BACKEND (forced name), then the
+ * native sink, ffplay, sox `play`, and afplay (macOS) in that order. When
+ * the native sink cannot load, the fallback's detail says why.
  */
 export function detectAudioBackend(
   options: DetectOptions = {},
@@ -128,13 +151,40 @@ export function detectAudioBackend(
   }
   const forced = env.DAWG_AUDIO_BACKEND?.trim().toLowerCase();
   const candidates: AudioBackend[] =
+    forced === "native" ||
     forced === "ffplay" ||
     forced === "sox" ||
     forced === "afplay" ||
     forced === "none"
       ? [forced]
-      : ["ffplay", "sox", "afplay"];
+      : ["native", "ffplay", "sox", "afplay"];
+  let unavailable: string | undefined;
+  const why = (info: AudioBackendInfo): AudioBackendInfo =>
+    unavailable
+      ? {
+          ...info,
+          detail: `${info.detail} · native sink unavailable: ${unavailable}`,
+          nativeUnavailable: unavailable,
+        }
+      : info;
   for (const candidate of candidates) {
+    if (candidate === "native") {
+      if (options.native === false) continue;
+      const probe = options.native
+        ? options.native()
+        : env === process.env && options.platform === undefined
+          ? defaultNativeProbe()
+          : probeNativeSink({ env, platform });
+      if (probe.ok)
+        return {
+          backend: "native",
+          streaming: true,
+          native: probe.library,
+          detail: `native sink ${probe.detail} (device callback)`,
+        };
+      unavailable = probe.reason;
+      continue;
+    }
     if (candidate === "none")
       return {
         backend: "none",
@@ -144,26 +194,26 @@ export function detectAudioBackend(
     if (candidate === "ffplay" || candidate === "sox") {
       const binary = which(candidate === "ffplay" ? "ffplay" : "play");
       if (!binary) continue;
-      return {
+      return why({
         backend: candidate,
         streaming: true,
         command: streamingCommand(candidate, binary, sampleRate),
         detail: `${binary} (gapless stream)`,
-      };
+      });
     }
     const binary = platform === "darwin" ? which("afplay") : null;
     if (binary)
-      return {
+      return why({
         backend: "afplay",
         streaming: false,
         detail: `${binary} (re-render on edit; install ffmpeg or sox for gapless playback)`,
-      };
+      });
   }
-  return {
+  return why({
     backend: "none",
     streaming: false,
     detail: "no player found (install ffmpeg or sox)",
-  };
+  });
 }
 
 /** One status line for `dawg auth status` and the header. */
@@ -205,7 +255,20 @@ type PlayerProcess = {
   readonly stdin: Sink;
   readonly exited: Promise<number>;
   kill(): void;
+  /** Device-clocked players (the native sink) pace the pump themselves. */
+  readonly clock?: PlayerClock;
 };
+
+/** Play-mode lead on the native sink: the ring only covers pump jitter. */
+export const NATIVE_PLAY_LEAD_MS = 15;
+/** Pump interval on the native sink. */
+export const NATIVE_TICK_MS = 5;
+
+function envNumber(value: string | undefined): number | undefined {
+  if (value === undefined || value.trim() === "") return undefined;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : undefined;
+}
 
 export type AudioEngineOptions = Readonly<{
   lockPath?: string;
@@ -228,6 +291,12 @@ export type AudioEngineOptions = Readonly<{
   respawnMs?: number;
   /** Player lifecycle notices worth a status line. */
   onStatus?: (status: AudioStatus) => void;
+  /** Play-mode lead (default 60 ms; 15 ms on the native sink). */
+  playLeadMs?: number;
+  /** Native sink output device name (default: system default). */
+  device?: string;
+  /** Native sink device buffer frames (default 128; 0 = device default). */
+  bufferFrames?: number;
 }>;
 
 export type AudioStatus = Readonly<{
@@ -357,6 +426,8 @@ export class AudioEngine {
   private leadFrames: number;
   private readonly defaultLeadFrames: number;
   private readonly tickMs: number;
+  /** The lead play mode and auditions pin (see `setLeadMs`). */
+  public readonly playLeadMs: number;
   private readonly now: () => number;
   private readonly useTimer: boolean;
   private readonly spawnPlayer: (command: readonly string[]) => PlayerProcess;
@@ -414,10 +485,30 @@ export class AudioEngine {
       1,
       Math.round(SWAP_FADE_SECONDS * this.sampleRate),
     );
-    this.tickMs = options.tickMs ?? 20;
+    const native =
+      this.info.backend === "native" ? this.info.native : undefined;
+    this.tickMs = options.tickMs ?? (native ? NATIVE_TICK_MS : 20);
+    this.playLeadMs =
+      options.playLeadMs ??
+      envNumber(process.env.DAWG_PLAY_LEAD_MS) ??
+      (native ? NATIVE_PLAY_LEAD_MS : 60);
     this.now = options.now ?? (() => performance.now());
     this.useTimer = options.timer ?? true;
-    this.spawnPlayer = options.spawn ?? spawnStdinPlayer;
+    const device = options.device ?? process.env.DAWG_AUDIO_DEVICE?.trim();
+    const bufferFrames =
+      options.bufferFrames ?? envNumber(process.env.DAWG_AUDIO_BUFFER) ?? 128;
+    this.spawnPlayer =
+      options.spawn ??
+      (native
+        ? () =>
+            openNativePlayer(native, {
+              rate: this.sampleRate,
+              channels: RENDER_CHANNELS,
+              ...(device ? { device } : {}),
+              bufferFrames,
+              now: this.now,
+            })
+        : spawnStdinPlayer);
     this.respawnMs = options.respawnMs ?? 250;
     this.onStatus = options.onStatus;
     this.renderer = new LoopRenderer({
@@ -456,6 +547,17 @@ export class AudioEngine {
       ms === undefined
         ? this.defaultLeadFrames
         : Math.max(1, Math.round((ms * this.sampleRate) / 1000));
+  }
+
+  /**
+   * A few words on how play mode sounds, for the play strip: the native
+   * sink, or the stdin player and why the sink is not in use.
+   */
+  public get audioNote(): string {
+    if (this.info.backend === "native") return "native sink";
+    return this.info.nativeUnavailable
+      ? `${this.info.backend} · no native sink`
+      : this.info.backend;
   }
 
   /** Lead in milliseconds: how far ahead of now a new live voice sounds. */
@@ -725,7 +827,18 @@ export class AudioEngine {
     );
   }
 
+  /**
+   * Stream timing on the native sink: the host time of the latest device
+   * callback, when a frame is heard, and the device latency. Undefined on
+   * the stdin players (their output latency is unknown).
+   */
+  public get timing(): AudioTiming | undefined {
+    return this.child?.clock?.timing();
+  }
+
   private queuedFrames(): number {
+    const clock = this.child?.clock;
+    if (clock) return clock.queuedFrames();
     const elapsed = Math.floor(
       ((this.now() - this.startMs) * this.sampleRate) / 1000,
     );
@@ -787,10 +900,21 @@ export class AudioEngine {
     const child = this.child;
     const loop = this.loop;
     if (!child || (!loop && !this.monitoring)) return;
-    const due =
-      Math.floor(((this.now() - this.startMs) * this.sampleRate) / 1000) +
-      this.lead;
-    let remaining = due - this.written;
+    let remaining: number;
+    if (child.clock) {
+      // Device-clocked: top the ring up to the lead. Frames the device
+      // played as silence (an underrun) are skipped so the loop stays on
+      // the transport's beat.
+      const slip = child.clock.slipFrames();
+      if (slip > 0 && loop) this.cursor = (this.cursor + slip) % loop.frames;
+      if (slip > 0) this.endFades();
+      remaining = this.lead - child.clock.queuedFrames();
+    } else {
+      const due =
+        Math.floor(((this.now() - this.startMs) * this.sampleRate) / 1000) +
+        this.lead;
+      remaining = due - this.written;
+    }
     if (remaining <= 0) return;
     // Never queue more than one second at once, e.g. after a stalled loop.
     if (remaining > this.sampleRate) {
@@ -870,6 +994,8 @@ export class AudioEngine {
 
   /** Wall time (monotonic ms) stream frame `frame` sounds at. */
   private frameMs(frame: number): number {
+    const clock = this.child?.clock;
+    if (clock) return clock.frameMs(frame);
     return this.startMs + (frame * 1000) / this.sampleRate;
   }
 
