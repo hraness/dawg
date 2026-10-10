@@ -224,8 +224,26 @@ describe("broken agent commands", () => {
     expect(isBrokenCommand("pan 3", score)).toBe(true);
     const receipt = brokenCommandReceipt("tempp 120");
     expect(receipt.startsWith("✗ tempp 120 · ")).toBe(true);
-    expect(receipt).toContain("did you mean tempo?");
+    expect(receipt).toContain("did you mean tempo 120?");
     expect(brokenCommandReceipt("pan 3")).toContain("pan");
+  });
+
+  test("an unknown pattern or kit name is a red receipt with the nearest", () => {
+    expect(isAgentCommand("pattern housee", score)).toBe(false);
+    expect(isBrokenCommand("pattern housee", score)).toBe(true);
+    expect(brokenCommandReceipt("pattern housee")).toBe(
+      "✗ pattern housee · did you mean pattern house?",
+    );
+    expect(brokenCommandReceipt("patern house")).toBe(
+      "✗ patern house · did you mean pattern house?",
+    );
+    expect(brokenCommandReceipt("kit 8o8")).toBe(
+      "✗ kit 8o8 · did you mean kit 808?",
+    );
+    expect(brokenCommandReceipt("pattern zzzzqq")).toContain("pattern list");
+    // A pack bank name is left to the prompt bar.
+    expect(isAgentCommand("kit RolandTR909", score)).toBe(true);
+    expect(isAgentCommand("pattern house keep", score)).toBe(true);
   });
 
   test("prose and working commands are not broken commands", () => {
