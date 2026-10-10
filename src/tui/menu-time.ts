@@ -67,6 +67,11 @@ export function tempoMenuNode(context: MenuContext): MenuNode {
   };
 }
 
+/** What x puts the song's tempo, meter and loop length back to. */
+export const START_TEMPO_BPM = 120;
+export const START_BEATS_PER_BAR = 4;
+export const START_BARS = 8;
+
 /** Rows of Project › Tempo & meter. */
 export function tempoNodes(context: MenuContext): MenuNode[] {
   const score = context.score;
@@ -78,6 +83,7 @@ export function tempoNodes(context: MenuContext): MenuNode[] {
       label: "start tempo",
       help: "beats per minute at the top of the song",
       value: score.tempoBpm,
+      start: START_TEMPO_BPM,
       min: TIME_LIMITS.minBpm,
       max: TIME_LIMITS.maxBpm,
       step: stepBy(1, TIME_LIMITS.minBpm, TIME_LIMITS.maxBpm),
@@ -182,6 +188,7 @@ export function tempoNodes(context: MenuContext): MenuNode[] {
       label: "beats per bar",
       help: "the song's opening meter; meter changes below override it later",
       value: score.beatsPerBar,
+      start: START_BEATS_PER_BAR,
       min: 1,
       max: TIME_LIMITS.maxBeatsPerBar,
       step: stepBy(1, 1, TIME_LIMITS.maxBeatsPerBar),

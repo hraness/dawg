@@ -162,6 +162,22 @@ describe("the ctrl-k tree", () => {
     });
   }
 
+  test("every number row has a value x puts back", () => {
+    // A track's place in the list has no default to go back to.
+    const NO_DEFAULT = /› position$/;
+    const missing = new Set<string>();
+    for (const instrument of INSTRUMENTS)
+      for (const { path, node } of walk(context(instrument)))
+        if (
+          node.kind === "number" &&
+          node.start === undefined &&
+          node.reset === undefined &&
+          !NO_DEFAULT.test(path)
+        )
+          missing.add(path);
+    expect([...missing]).toEqual([]);
+  });
+
   test("root labels are sentence case and in the §4a order", () => {
     const labels = rootNodes(context("saw")).map((node) => node.label);
     expect(labels).toEqual([
