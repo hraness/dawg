@@ -161,6 +161,109 @@ describe("render byte-identity", () => {
   });
 });
 
+/** Patch fixtures (lane 3): a voice patch, an effect patch and a macro lane. */
+function patched(): TrackScore {
+  return createScore({
+    tempoBpm: 100,
+    bars: 1,
+    tracks: [
+      {
+        id: "p",
+        name: "p",
+        instrument: "patch",
+        reverb: { mix: 0.25, size: 0.5 },
+        patch: {
+          kind: "patch",
+          role: "instrument",
+          name: "pluck",
+          nodes: [
+            {
+              id: "env",
+              type: "adsr",
+              params: { attack: 0.002, decay: 0.2, sustain: 0.2 },
+            },
+            { id: "osc", type: "osc", params: { wave: "square" } },
+            { id: "lfo", type: "lfo", params: { rate: 3, depth: 1 } },
+            {
+              id: "span",
+              type: "scale",
+              params: { inmin: -1, inmax: 1, min: 300, max: 1_500 },
+            },
+            { id: "vcf", type: "svf", params: { cutoff: 20, q: 0.4 } },
+            { id: "amp", type: "vca", params: { gain: 0 } },
+          ],
+          cables: [
+            { id: "c1", from: "voice.pitch", to: "osc.pitch" },
+            { id: "c2", from: "voice.gate", to: "env.gate" },
+            { id: "c3", from: "osc.out", to: "vcf.in" },
+            { id: "c4", from: "lfo.out", to: "span.in" },
+            { id: "c8", from: "span.out", to: "vcf.cutoff" },
+            { id: "c5", from: "vcf.out", to: "amp.in" },
+            { id: "c6", from: "env.out", to: "amp.gain", amount: 0.5 },
+            { id: "c7", from: "amp.out", to: "out.audio" },
+          ],
+          macros: [
+            {
+              id: "res",
+              min: 0,
+              max: 1,
+              default: 0.4,
+              to: [{ port: "vcf.q" }],
+            },
+          ],
+        },
+        fxAutomation: {
+          "patch-res": [
+            { tick: 0, value: 0.1 },
+            { tick: 1_800, value: 0.9 },
+          ],
+        },
+        fxPatch: [
+          {
+            kind: "patch",
+            role: "effect",
+            name: "drive",
+            nodes: [{ id: "g", type: "vca", params: { gain: 1.5 } }],
+            cables: [
+              { id: "c1", from: "in.audio", to: "g.in" },
+              { id: "c2", from: "g.out", to: "out.audio" },
+            ],
+            macros: [],
+          },
+        ],
+      },
+    ],
+    notes: [0, 1, 2, 3, 4, 5].map((i) => ({
+      id: `p${i}`,
+      trackId: "p",
+      pitch: 48 + ((i * 5) % 12),
+      startTick: i * 300,
+      durationTicks: 200,
+      velocity: 0.7 + i * 0.05,
+    })),
+  } as never);
+}
+
+describe("patch render byte-identity", () => {
+  test("patch fixtures render the recorded bytes, cold and cached", () => {
+    const options = { sampleRate: 22_050, loop: true } as const;
+    const cold = sha(renderScorePcm(patched(), options).pcm);
+    const renderer = new StemRenderer();
+    renderer.render(patched(), options);
+    expect(sha(renderer.render(patched(), options).pcm)).toBe(cold);
+    expect({
+      "patch loop": cold,
+      "patch wav": sha(renderScoreWav(patched(), { sampleRate: 22_050 })),
+    }).toEqual(PATCH_EXPECTED);
+  });
+});
+
+/** Recorded on the lane 3 patch renderer. */
+const PATCH_EXPECTED = {
+  "patch loop": "3d81f4a3ada19083",
+  "patch wav": "160e21877a5b37ab",
+};
+
 /** Recorded on 0.4.0's renderer (origin/main 45094a6). */
 const EXPECTED: Record<string, string> = {
   "busy loop": "553df4fc83006158",

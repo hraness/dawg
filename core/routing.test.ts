@@ -252,6 +252,48 @@ describe("core/routing", () => {
     expect(routingOrder(score)).toEqual(["mod", "carrier", "tuned"]);
   });
 
+  test("a patch with side: vox renders after vox", () => {
+    const gate = {
+      kind: "patch",
+      role: "effect",
+      name: "gate",
+      side: "vox",
+      nodes: [{ id: "env", type: "follow", params: {} }],
+      cables: [
+        { id: "c1", from: "in.side", to: "env.in" },
+        { id: "c2", from: "in.audio", to: "out.audio" },
+      ],
+      macros: [],
+    };
+    const score = createScore({
+      tempoBpm: 120,
+      bars: 1,
+      tracks: [
+        { id: "pad", name: "pad", instrument: "pad", fxPatch: [gate] },
+        { id: "vox", name: "vox", instrument: "saw" },
+      ],
+    } as never);
+    expect(routingOrder(score)).toEqual(["vox", "pad"]);
+    const instrument = createScore({
+      tempoBpm: 120,
+      bars: 1,
+      tracks: [
+        {
+          id: "pad",
+          name: "pad",
+          instrument: "patch",
+          patch: {
+            ...gate,
+            role: "instrument",
+            cables: [{ id: "c1", from: "in.side", to: "out.audio" }],
+          },
+        },
+        { id: "vox", name: "vox", instrument: "saw" },
+      ],
+    } as never);
+    expect(routingOrder(instrument)).toEqual(["vox", "pad"]);
+  });
+
   test("an audio cycle is a ScoreValidationError naming the cycle", () => {
     const score = routed({ a: "follow:audio:b", b: "follow:audio:a" });
     let error: unknown;

@@ -23,6 +23,7 @@
  * Everything is plain arithmetic over decoded samples: identical files give
  * identical output.
  */
+import { soundingTracks } from "../../core/patch.ts";
 import {
   SCORE_LIMITS,
   samplerVoiceSlots,
@@ -856,7 +857,7 @@ export function samplerTailSeconds(
   const timing = { score, sampleRate, ...(warp ? { warp } : {}) };
   let latest = 0;
   const performance = performanceTimingFor(score);
-  for (const track of score.tracks) {
+  for (const track of soundingTracks(score)) {
     if (!track.sampler) continue;
     const notes = performNotes(
       track,

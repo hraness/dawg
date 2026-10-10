@@ -7,6 +7,7 @@
  * arithmetic on the seeded noise `wav.ts` passes in, so a kit renders the
  * same buffer on every run.
  */
+import { soundingTracks } from "../../core/patch.ts";
 import { type DrumVoice, isDrumInstrument } from "../../core/drums.ts";
 import {
   SYNTH_KITS,
@@ -261,7 +262,7 @@ export function kitTailSeconds(score: TrackScore): number {
   let seconds = 0;
   if ((score.calibration ?? 0) >= 1) {
     const drums = new Set(
-      score.tracks
+      soundingTracks(score)
         .filter((track) => isDrumInstrument(track.instrument))
         .map((track) => track.id),
     );
@@ -274,7 +275,7 @@ export function kitTailSeconds(score: TrackScore): number {
     )
       seconds = METAL_SECONDS;
   }
-  for (const track of score.tracks)
+  for (const track of soundingTracks(score))
     seconds = Math.max(seconds, synthKit(track.kit)?.seconds ?? 0);
   return seconds;
 }

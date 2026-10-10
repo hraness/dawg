@@ -10,6 +10,7 @@
  * mixes it into the stream only. Like auditions, live notes are pre-master
  * (see `audition.ts`): the song master is a whole-mix stage.
  */
+import { PATCH_INSTRUMENT } from "../../core/patch.ts";
 import {
   SCORE_LIMITS,
   TrackScore,
@@ -185,7 +186,9 @@ export class LiveSynth {
           quantChord.tick,
           quantChord.tick +
             durationTicks +
-            Math.ceil(liveEngine!.tailSeconds(track, pitch) * ticksPerSecond),
+            Math.ceil(
+              liveEngine!.tailSeconds(track, pitch, score) * ticksPerSecond,
+            ),
         )
       : undefined;
     const key = JSON.stringify([
@@ -210,6 +213,7 @@ export class LiveSynth {
             liveEngine.assetDigests?.(
               track,
               request.samples ?? EMPTY_SAMPLE_BANK,
+              score,
             ) ?? [],
             score.key ?? null,
           ]
@@ -255,7 +259,8 @@ export class LiveSynth {
         organTick !== undefined ||
         bowedTrack(track) ||
         hasFormant(track) ||
-        singTrack(track)) &&
+        singTrack(track) ||
+        patchTrack(track)) &&
       seconds > LIVE_RIG_WINDOW_SECONDS &&
       !this.cache.has(key);
     if (windowed) {
@@ -283,6 +288,8 @@ export class LiveSynth {
       ...(score.tuning ? { tuning: score.tuning } : {}),
       ...(score.tuning || track.tuning || liveEngine ? { key: score.key } : {}),
       tracks: [liveTrack(track)],
+      // The patch library a patch track's references and nested patches read.
+      ...(score.patches && patchTrack(track) ? { patches: score.patches } : {}),
       notes: [
         {
           id: "live",
@@ -296,7 +303,7 @@ export class LiveSynth {
     });
     // A 0.6 engine's ring-out sets the one-note length and the key release.
     const tail = liveEngine
-      ? Math.max(0, liveEngine.tailSeconds(track, pitch))
+      ? Math.max(0, liveEngine.tailSeconds(track, pitch, score))
       : 0;
     // Fitted sample windows over 8 s fit in the background (silent until
     // ready, never at the wrong pitch); shorter ones fit synchronously.
@@ -450,6 +457,17 @@ function bowedTrack(track: Track): boolean {
  */
 function hasFormant(track: Track): boolean {
   return Boolean(track.fx?.formant);
+}
+
+/**
+ * Whether the track plays a patch (src/audio/patch): an instrument patch or
+ * effect patches. Patches cost by their nodes and the runner is causal (a
+ * feedback cable delays one block), so they window like a rig.
+ */
+function patchTrack(track: Track): boolean {
+  return (
+    track.instrument === PATCH_INSTRUMENT || (track.fxPatch?.length ?? 0) > 0
+  );
 }
 
 /** Whether the track plays through a guitar rig stage. */

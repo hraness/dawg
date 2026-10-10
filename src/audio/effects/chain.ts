@@ -101,6 +101,8 @@ export function applyMonoChain(
     const values = track.fx?.[stage as FxName];
     const apply = MONO[stage as FxName];
     if (values && apply) apply(buffer, track, values, context);
+    // The patch stage: the track's effect patches (`fxPatch`) after distort.
+    if (stage === "distort") context.patchStage?.(buffer);
   }
 }
 

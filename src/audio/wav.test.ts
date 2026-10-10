@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createScore } from "../../core/score.ts";
+import { engineFor, registerEngine, unregisterEngine } from "./instruments.ts";
 import { renderScorePcm, renderScoreWav, StemRenderer } from "./wav.ts";
 
 describe("score WAV renderer", () => {
@@ -214,6 +215,67 @@ describe("score WAV renderer", () => {
     expect(
       cached.render(createScore(fewer), { sampleRate: 8_000 }).pcm,
     ).toEqual(renderScorePcm(createScore(fewer), { sampleRate: 8_000 }).pcm);
+  });
+
+  test("changing one patch macro re-renders only that stem", () => {
+    const patch = {
+      kind: "patch",
+      role: "instrument",
+      name: "tone",
+      nodes: [
+        { id: "osc", type: "osc", params: { wave: "saw", level: 0.3 } },
+        { id: "vcf", type: "svf", params: { cutoff: 800 } },
+      ],
+      cables: [
+        { id: "c1", from: "voice.pitch", to: "osc.pitch" },
+        { id: "c2", from: "osc.out", to: "vcf.in" },
+        { id: "c3", from: "vcf.out", to: "out.audio" },
+      ],
+      macros: [
+        {
+          id: "cut",
+          min: 100,
+          max: 5_000,
+          default: 800,
+          to: [{ port: "vcf.cutoff" }],
+        },
+      ],
+    };
+    const data = (cut: number) => ({
+      tempoBpm: 120,
+      patches: { tone: patch },
+      bars: 1,
+      tracks: ["a", "b", "c"].map((id) => ({
+        id,
+        name: id,
+        instrument: "patch",
+        patch: {
+          kind: "patch",
+          ref: "tone",
+          ...(id === "b" ? { macros: { cut } } : {}),
+        },
+      })),
+      notes: ["a", "b", "c"].map((trackId, i) => ({
+        id: `n${i}`,
+        trackId,
+        pitch: 48 + i * 4,
+        startTick: i * 240,
+        durationTicks: 480,
+        velocity: 0.8,
+      })),
+    });
+    try {
+      const options = { sampleRate: 8_000, loop: true } as const;
+      const cached = new StemRenderer();
+      const first = cached.render(createScore(data(800) as never), options);
+      expect(cached.rendered).toEqual(["a", "b", "c"]);
+      const moved = createScore(data(2_400) as never);
+      const second = cached.render(moved, options);
+      expect(cached.rendered).toEqual(["b"]);
+      expect(second.pcm).not.toEqual(first.pcm);
+      expect(second.pcm).toEqual(renderScorePcm(moved, options).pcm);
+    } finally {
+    }
   });
 
   test("the stem cache stays within its byte budget", () => {
