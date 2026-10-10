@@ -1105,7 +1105,7 @@ Quality and cost. Grains read a shared semitone-level band-limited bank (`src/au
 | `track cloud` · `track hold-2`            | a new granular track named after a preset                           |
 | `track pad grain swarm`                   | focus or create a track and grain it in one step                    |
 
-**Ctrl-K › Sound › granular**: it edits the preset, source and every parameter of a granular track (on any other pitched track it reads **granular (convert)** and offers `grain on` and the presets); **Ctrl-K › Sound › instruments › Granular** lists the presets. `grain` edits stage in the audition loop, so space plays them and `a` compares A/B. The agent's `set_granular {trackId, preset?, src?, voice?, params?, reset?, off?}` tool takes the same names, and the SDK writes:
+**Ctrl-K › Sound › granular**: it edits the preset, source and every parameter of a granular track (on any other pitched track the same row reads `grain this track's synth` and offers `grain on` and the presets); **Ctrl-K › Sound › instruments › Granular** lists the presets. `grain` edits stage in the audition loop, so space plays them and `a` compares A/B. The agent's `set_granular {trackId, preset?, src?, voice?, params?, reset?, off?}` tool takes the same names, and the SDK writes:
 
 ```ts
 instrument: granular("cloud", { scan: 0.1, seed: 7 }),
@@ -1767,7 +1767,7 @@ Rendering is deterministic: tuned spans are cached (128 MB of their own) by the 
 
 ## Menus
 
-`/menu` or `Ctrl-K` (on an empty prompt, in play mode too) opens the edit menu, drawn with the same overlay as the model picker. Every edit the agent can make is reachable from it with keys alone. Each row shows a plain label and the current value with its unit (s, Hz, oct, st, dB, BPM, bars); the line under the list describes the focused row and shows, dimmed, the prompt command the row runs, so the menu teaches the commands. `/menu <section>` opens a section directly (`/menu effects`, `/menu arrange`); the old names `parameters`, `sounds`, `track`, `automation` and `transport` still work.
+`/menu` or `Ctrl-K` (on an empty prompt, in play mode too) opens the edit menu, drawn with the same overlay as the model picker. Every edit the agent can make is reachable from it with keys alone. Each row shows a plain label and the current value with its unit (s, Hz, oct, st, dB, BPM, bars); the line under the list describes the focused row and shows, dimmed, the prompt command the row runs, so the menu teaches the commands. `/menu <section>` opens a section directly (`/menu effects`, `/menu tuning`); the old names `parameters`, `sounds`, `track`, `automation` and `transport` still work.
 
 | Section        | Rows (most used first)                                                                                                                                                                                                                                                                                                                                                                                                           |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1782,19 +1782,26 @@ Rendering is deterministic: tuned spans are cached (128 MB of their own) by the 
 
 Breadcrumbs in the docs and guides use these labels, written `Ctrl-K › Chords and key › tuning`. `/menu <topic>` opens the same section that `/help <topic>` and `/guide <topic>` explain.
 
+`/menu <id>` takes one of the ten topic ids (`sound`, `voice`, `effects`, `rhythm`, `chords`, `mix`, `arrange`, `project`, `keys`, `agent`), any topic alias (`drums`, `mixer`, `fx`) or any row name it knows (`tuning`, `performance`, `master`, `export`, `models`, …). `/menu keys` opens the `?` panel. An unknown id answers `no menu "sond" · did you mean /menu sound? · /menu <topic or row>`. In a fader, `x` resets any number row; tempo, meter and loop length apply at once rather than staging, and the hint says `applies at once`. Labels fit 16 columns. Below the root, sibling labels share one case rule. A row's path reads `Ctrl-K › Chords and key › tuning`, and show-me's finish hint uses the same path.
+
 Every list, picker and editor uses the same keys (see **Keys** below). In the menu:
 
-| Key                         | Does                                                                      |
-| --------------------------- | ------------------------------------------------------------------------- |
-| `↑` `↓` / `k` `j`           | move                                                                      |
-| `Enter` / `→` / `l`         | open a section, pick from a list, or open a number's fader drawer         |
-| `←` `→` / `h` `l` / `-` `+` | adjust a value by its step (cutoff moves 25%) or cycle a choice           |
-| `Space`                     | toggle on/off; elsewhere, hear the focused track (see Previewing changes) |
-| digits                      | type a value; `Enter` stages it in the fader drawer, `Esc` cancels        |
-| `/`                         | filter the current list by name, value or command                         |
-| `x` / `Delete`              | reset the focused value to its default; on an automation point, remove it |
-| `Esc` / `←` / `h`           | clear the filter, then back one level, then close                         |
-| `?`                         | the keys for this screen                                                  |
+| Key                  | Does                                                                                     |
+| -------------------- | ---------------------------------------------------------------------------------------- |
+| `↑` `↓` / `k` `j`    | move                                                                                     |
+| `Enter`              | open or confirm: open a section, run an action, open a number's fader, keep staged edits |
+| `→` / `l`            | go in; on a value row, adjust up                                                         |
+| `←` / `h`            | back one level; on a value row, adjust down                                              |
+| `-` `+`              | adjust a value by its step (cutoff moves 25%) or cycle a choice                          |
+| `Tab` / `Shift-Tab`  | next / previous field (in the fader and the rhythm editor)                               |
+| `Space`              | toggle on/off; elsewhere, hear the focused track (see Previewing changes)                |
+| `0-9` `.`            | type a value; `Enter` stages it in the fader drawer, `Esc` cancels                       |
+| `/`                  | filter the current list by name, value or command                                        |
+| `x` / `d` / `Delete` | reset the focused value to its default; on an automation point, remove it                |
+| `Esc`                | revert staged edits, else clear the filter, then back one level, then close              |
+| `?`                  | the keys for this screen, each key listed once                                           |
+
+The key sets live in `tui/grammar.ts` (`KEY_UP`, `KEY_DOWN`, `KEY_LEFT`, `KEY_RIGHT`, `KEY_TAB`, `KEY_BACKTAB`, …); the menu, fader, rhythm editor and prompt import them. Play mode's `Tab` is a sustain latch, the one documented exception, because letters are notes there.
 
 Automation rows take `beat:value` pairs (`2:800` or `0:200 4:8000`); a ramp is two pairs, start and end, and the renderer interpolates between points. Turning an effect's first field up switches it on with defaults. Each change runs the command it shows through the normal prompt path, so it is one `ScoreOperation`, one receipt, one undo step, and it syncs to other windows and the project files.
 
@@ -1803,7 +1810,7 @@ Automation rows take `beat:value` pairs (`2:800` or `0:200 4:8000`); a ramp is t
 Editing a number opens a fader drawer: a panel docked directly above the prompt, over the bottom of the piano roll, which stays visible above it. It opens from `Enter` (or a second click) on a number row in the menu, or from a bare parameter at the prompt: `volume`, `pan`, `fx filter` (every filter param, focused on the first number) or `fx reverb mix` (focused on mix). The drawer stacks every param of that device (all of the filter's, or the Mix screen's), so one drawer covers a device.
 
 ```text
-╭─ menu › Effects › Filter ─────────── loop off · B staged 1 · ● staged  [keep] [revert]─╮
+╭─ menu › Effects › filter ──── loop off · A/B: 1 change staged · enter keep · esc revert ─╮
 │   type        lpf │ hpf │ bpf                                                         │
 │                                                                                        │
 │ › cutoff     1200 Hz ← 800 Hz                                         20 Hz … 20000 Hz │
@@ -1819,16 +1826,18 @@ Every change is staged on the audition loop (see **Previewing changes**), filed 
 | --------------------------- | ----------------------------------------------------- |
 | `←` `→` / `-` `+` / `h` `l` | step by the param's step                              |
 | `Shift`-`←` `→` / `{` `}`   | coarse step (five steps)                              |
-| `[` `]` / `Alt`-`←` `→`     | fine step (a tenth of a step)                         |
+| `[` `]` / `Alt`-`←` `→`     | fine step (a tenth of a step; skips detents)          |
 | `PgUp` `PgDn`               | big step (twenty)                                     |
 | `Home` `End`                | minimum / maximum                                     |
-| `1`-`9` `.`                 | type an exact value; `Enter` sets it, `Esc` cancels   |
-| `0` / `d`                   | back to the default                                   |
+| `0`-`9` `.`                 | type an exact value; `Enter` sets it, `Esc` cancels   |
+| `x` / `d` / `Delete`        | back to the default                                   |
 | `↑` `↓` / `Tab` `Shift-Tab` | previous / next param of this device                  |
 | `Enter`                     | keep every staged change (one undo step); none: close |
 | `Esc`                       | revert staged changes and close                       |
 | `Space` `a` `c`             | audition loop · A/B · solo ↔ in context               |
 | `?`                         | these keys                                            |
+
+Detents catch the values people reach for: volume 1 (0 dB), pan 0 (center), whole-number tempo, mix 0, 0.5 and 1, and a filter's octave cutoffs. A drag or step that lands within 2% of the range snaps onto the detent, a key step that jumps over one stops on it, and a fine step skips them. The landing flashes the detent's name for one frame unless `/motion off`. While anything is staged the title reads `A/B: 1 change staged · enter keep · esc revert`, and the badge's key words are click targets.
 
 On a choice, `←` `→` move between options and `1`-`9` pick one by number. Sizes: two rows per field (value line, then bar) while the drawer takes at most half the piano roll; one row per field when shorter, as a window that follows the focused field; and at the 8-row terminal minimum a single borderless row with the focused field. The piano roll always keeps at least 40% of its rows above the drawer (at least three).
 
@@ -1836,19 +1845,19 @@ On a choice, `←` `→` move between options and `1`-`9` pick one by number. Si
 
 dawg turns on SGR mouse reporting (modes 1000, 1002 and 1006) and turns it off again on exit, on `SIGTERM`/`SIGHUP`, on a crash, and around external editors. `--no-mouse` or `DAWG_MOUSE=0` (and `TERM=dumb`) leave it off, so the terminal's own selection and scrollback work; a terminal without mouse support ignores the modes and every key still works. Legacy X10 reports are swallowed rather than typed into the prompt.
 
-| Where               | Click / wheel                                                        |
-| ------------------- | -------------------------------------------------------------------- |
-| fader `[−]` `[+]`   | step (shift-click: coarse)                                           |
-| fader bar           | set the value at that point; drag to slide it (past the ends clamps) |
-| fader option        | choose it                                                            |
-| fader name          | focus that field                                                     |
-| `[keep]` `[revert]` | the same as `Enter` / `Esc`                                          |
-| wheel on a fader    | step it (up raises; shift: coarse)                                   |
-| list / menu row     | select it; a click on the selected row opens it (`Enter`)            |
-| wheel on a list     | move through it                                                      |
-| header `▶/⏸ BPM`    | play / pause                                                         |
-| header track name   | the track list (`/tracks`); click a track to focus it                |
-| header model        | the model picker                                                     |
+| Where                           | Click / wheel                                                        |
+| ------------------------------- | -------------------------------------------------------------------- |
+| fader `[−]` `[+]`               | step (shift-click: coarse)                                           |
+| fader bar                       | set the value at that point; drag to slide it (past the ends clamps) |
+| fader option                    | choose it                                                            |
+| fader name                      | focus that field                                                     |
+| badge `enter keep` `esc revert` | the same as `Enter` / `Esc`                                          |
+| wheel on a fader                | step it (up raises; shift: coarse)                                   |
+| list / menu row                 | select it; a click on the selected row opens it (`Enter`)            |
+| wheel on a list                 | move through it                                                      |
+| header `▶/⏸ BPM`                | play / pause                                                         |
+| header track name               | the track list (`/tracks`); click a track to focus it                |
+| header model                    | the model picker                                                     |
 
 Hit-testing uses the same paint pass that draws the frame: each painter records its click regions into the frame's `HitMap` (`tui/hits.ts`), so targets never drift from what is on screen. The piano roll does not place notes on click (a note needs pitch, length and velocity that a click does not carry); clicks there are ignored.
 

@@ -40,21 +40,21 @@ function select(menu: EditMenu, ctx: MenuContext, label: string): void {
 }
 
 describe("strings in the ctrl-k menu", () => {
-  test("Sound > browse sounds > Strings lists every plucked preset", () => {
+  test("Sound > instruments > Strings lists every plucked preset", () => {
     const menu = new EditMenu();
     const ctx = context();
     menu.show(ctx);
     select(menu, ctx, "Sound");
     menu.key("\r", ctx);
-    select(menu, ctx, "browse sounds");
+    select(menu, ctx, "instruments");
     menu.key("\r", ctx);
-    select(menu, ctx, "Strings");
+    select(menu, ctx, "strings");
     menu.key("\r", ctx);
     const labels = menu.view(ctx).items.map((row) => row.label.split(" ")[0]);
     // 0.6.1: the bowed rows sit in a Bowed sub-list after the plucked ones.
     expect(labels).toEqual([
       ...STRING_PRESET_NAMES.filter((n) => !BOWED_PRESET_NAMES.includes(n)),
-      "Bowed",
+      "bowed",
     ]);
     select(menu, ctx, "sitar");
     expect(menu.key("\r", ctx)).toEqual({
@@ -101,11 +101,11 @@ describe("strings in the ctrl-k menu", () => {
     expect(isStageable("bowed presets")).toBe(false);
   });
 
-  test("Strings > Bowed lists the bowed presets and runs `bowed <name>`", () => {
+  test("strings > Bowed lists the bowed presets and runs `bowed <name>`", () => {
     const menu = new EditMenu();
     const ctx = context();
     menu.show(ctx);
-    for (const label of ["Sound", "browse sounds", "Strings", "Bowed"]) {
+    for (const label of ["Sound", "instruments", "strings", "bowed"]) {
       select(menu, ctx, label);
       menu.key("\r", ctx);
     }

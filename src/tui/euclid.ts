@@ -18,7 +18,18 @@
  * `a` flips A/B, `c` solo ↔ in context, Enter keeps the staged changes as
  * one undo step and Esc reverts them.
  */
-import { HINTS } from "../../tui/grammar.ts";
+import {
+  HINTS,
+  KEY_BACKSPACE,
+  KEY_BACKTAB,
+  KEY_DOWN,
+  KEY_ENTER,
+  KEY_LEFT,
+  KEY_RESET,
+  KEY_RIGHT,
+  KEY_TAB,
+  KEY_UP,
+} from "../../tui/grammar.ts";
 import { DRUM_VOICES, isDrumInstrument } from "../../core/drums.ts";
 import {
   DIVISIONS,
@@ -284,15 +295,9 @@ export function ringText(row: RhythmRow | undefined): string {
     .join("");
 }
 
-const KEY_UP = new Set(["\u001b[A", "\u001bOA", "k"]);
-const KEY_DOWN = new Set(["\u001b[B", "\u001bOB", "j"]);
-const KEY_LEFT = new Set(["\u001b[D", "\u001bOD", "h", "-", "_"]);
-const KEY_RIGHT = new Set(["\u001b[C", "\u001bOC", "l", "+", "="]);
-const KEY_NEXT_PARAM = new Set(["\t", "]"]);
-const KEY_PREV_PARAM = new Set(["\u001b[Z", "["]);
-const KEY_ENTER = new Set(["\r", "\n"]);
-const KEY_BACKSPACE = new Set(["\u007f", "\b"]);
-const KEY_OFF = new Set(["x", "\u001b[3~"]);
+/** Tab ] next field, shift-tab [ previous (the brackets are the old keys). */
+const isNextField = (value: string) => KEY_TAB.has(value) || value === "]";
+const isPrevField = (value: string) => KEY_BACKTAB.has(value) || value === "[";
 
 export class EuclidEditor {
   private visible = false;
@@ -394,8 +399,8 @@ export class EuclidEditor {
           lanes.length;
       return { type: "handled" };
     }
-    if (KEY_NEXT_PARAM.has(value) || KEY_PREV_PARAM.has(value)) {
-      const direction = KEY_NEXT_PARAM.has(value) ? 1 : -1;
+    if (isNextField(value) || isPrevField(value)) {
+      const direction = isNextField(value) ? 1 : -1;
       this.param =
         (this.param + direction + EUCLID_PARAMS.length) % EUCLID_PARAMS.length;
       return { type: "handled" };
@@ -437,7 +442,7 @@ export class EuclidEditor {
       this.entry = "";
       return { type: "handled" };
     }
-    if (KEY_OFF.has(value))
+    if (KEY_RESET.has(value))
       return lane.row
         ? { type: "run", command: `euclid ${lane.voice} off` }
         : { type: "handled" };

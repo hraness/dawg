@@ -5,7 +5,9 @@ import {
   finishHint,
   gestureFor,
   glideValues,
+  brokenCommandReceipt,
   isAgentCommand,
+  isBrokenCommand,
   keyForPitch,
   menuPathFor,
   NoteScheduler,
@@ -87,10 +89,18 @@ describe("gestures", () => {
     expect(gesture.param).toBe("fx reverb mix");
     expect(gesture.value).toBe(0.4);
     expect(gesture.caption).toContain("fx reverb mix");
-    expect(menuPathFor("fx reverb mix 0.4")).toBe("ctrl-k › Effects › reverb");
-    expect(menuPathFor("volume 0.7")).toBe(
-      "ctrl-k › Mix & automation › volume",
+    expect(menuPathFor("fx reverb mix 0.4")).toBe("Ctrl-K › Effects › reverb");
+    // Live labels and real places, not the typed effect word.
+    expect(menuPathFor("fx rig preset x")).toBe(
+      "Ctrl-K › Effects › guitar rig",
     );
+    expect(menuPathFor("fx formant shift 2")).toBe("Ctrl-K › Voice");
+    expect(menuPathFor("fx phaser on")).toBe(
+      "Ctrl-K › Effects › more effects › phaser",
+    );
+    expect(menuPathFor("fx bogus on")).toBe("Ctrl-K › Effects");
+    expect(menuPathFor("volume 0.7")).toBe("Ctrl-K › Mix › volume");
+    expect(menuPathFor("tuning just")).toBe("Ctrl-K › Chords and key › tuning");
   });
 
   test("a note names its play-mode key and octave keys", () => {
@@ -134,7 +144,7 @@ describe("gestures", () => {
   test("the finish hint names the command and the menu path", () => {
     expect(finishHint([])).toBeUndefined();
     expect(finishHint(["tempo 96", "fx reverb mix 0.4"])).toBe(
-      "do it yourself: type fx reverb mix 0.4 (+1 more in ^o log) · or ctrl-k › Effects › reverb",
+      "do it yourself: type fx reverb mix 0.4 (+1 more in ^o log) · or Ctrl-K › Effects › reverb",
     );
   });
 
@@ -208,5 +218,48 @@ describe("toolCaption", () => {
     expect(toolCaption("download_audio")).toContain("dawg media download");
     expect(toolCaption("edit_file")).toContain("song.ts");
     expect(toolCaption("explain")).toBeUndefined();
+  });
+});
+
+describe("broken agent commands", () => {
+  test("a bare pattern or kit line is a command", () => {
+    expect(isAgentCommand("pattern house", score)).toBe(true);
+    expect(isAgentCommand("kit 808", score)).toBe(true);
+  });
+
+  test("a command-looking line that fails to parse is a red receipt", () => {
+    expect(isBrokenCommand("/tempp 120", score)).toBe(true);
+    expect(isBrokenCommand("tempp 120", score)).toBe(true);
+    expect(isBrokenCommand("pan 3", score)).toBe(true);
+    const receipt = brokenCommandReceipt("tempp 120");
+    expect(receipt.startsWith("✗ tempp 120 · ")).toBe(true);
+    expect(receipt).toContain("did you mean tempo 120?");
+    expect(brokenCommandReceipt("pan 3")).toContain("pan");
+  });
+
+  test("an unknown pattern or kit name is a red receipt with the nearest", () => {
+    expect(isAgentCommand("pattern housee", score)).toBe(false);
+    expect(isBrokenCommand("pattern housee", score)).toBe(true);
+    expect(brokenCommandReceipt("pattern housee")).toBe(
+      "✗ pattern housee · did you mean pattern house?",
+    );
+    expect(brokenCommandReceipt("patern house")).toBe(
+      "✗ patern house · did you mean pattern house?",
+    );
+    expect(brokenCommandReceipt("kit 8o8")).toBe(
+      "✗ kit 8o8 · did you mean kit 808?",
+    );
+    expect(brokenCommandReceipt("pattern zzzzqq")).toContain("pattern list");
+    // A pack bank name is left to the prompt bar.
+    expect(isAgentCommand("kit RolandTR909", score)).toBe(true);
+    expect(isAgentCommand("pattern house keep", score)).toBe(true);
+  });
+
+  test("prose and working commands are not broken commands", () => {
+    expect(isBrokenCommand("Added a walking bass in A minor.", score)).toBe(
+      false,
+    );
+    expect(isBrokenCommand("tempo 120", score)).toBe(false);
+    expect(isBrokenCommand("sounds good, more reverb next", score)).toBe(false);
   });
 });

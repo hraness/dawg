@@ -1,0 +1,267 @@
+/**
+ * The ctrl-k tree as a whole (design §4a, §7 B1-B8, §8.4): walk every
+ * section for six kinds of track and check that each row's command parses,
+ * labels fit, sibling labels share the sentence-case rule, and every
+ * `/menu <id>` opens something.
+ */
+import { describe, expect, test } from "bun:test";
+import { createScore, type TrackScore } from "../../core/score.ts";
+import { helpTopicLines } from "../commands/help.ts";
+import { accepts } from "../../test/consistency-lib.ts";
+import { canonicalWindowForm } from "../commands/grammar.ts";
+import {
+  LABEL_WIDTH,
+  MENU_SECTIONS,
+  MENU_TOPICS,
+  MENU_USAGE,
+  MENU_SHOWN_SECTIONS,
+  menuUsage,
+  EditMenu,
+  menuPath,
+  menuSectionPath,
+  rootNodes,
+  type MenuContext,
+  type MenuNode,
+} from "./menu.ts";
+
+const INSTRUMENTS = ["saw", "piano", "kit", "organ", "vocal", "strings"];
+
+function score(instrument: string): TrackScore {
+  return createScore({
+    tempoBpm: 120,
+    bars: 8,
+    tracks: [
+      { id: "lead", name: "lead", instrument },
+      { id: "bass", name: "bass", instrument: "bass" },
+    ],
+    notes: [],
+  });
+}
+
+function context(instrument: string): MenuContext {
+  return {
+    score: score(instrument),
+    trackId: "lead",
+    playing: false,
+    grid: "1/16",
+    grids: ["1/8", "1/16"],
+    clickOn: false,
+    countInBars: 1,
+    showMe: "on",
+  };
+}
+
+type Row = { path: string; node: MenuNode; siblings: readonly MenuNode[] };
+
+/** Every row reachable from the root, `depth` menus deep. */
+function walk(ctx: MenuContext, depth = 5): Row[] {
+  const rows: Row[] = [];
+  const visit = (nodes: readonly MenuNode[], path: string, left: number) => {
+    for (const node of nodes) {
+      const at = path ? `${path} › ${node.label}` : node.label;
+      rows.push({ path: at, node, siblings: nodes });
+      if (node.kind === "menu" && left > 0)
+        visit(node.build(ctx), at, left - 1);
+    }
+  };
+  visit(rootNodes(ctx), "", depth);
+  return rows;
+}
+
+/** Every command a row can emit: each option of a choice, both toggles. */
+function rowCommands(node: MenuNode): string[] {
+  switch (node.kind) {
+    case "number":
+      return [node.command(node.value ?? node.start ?? node.min)];
+    case "toggle":
+      return [node.command(true), node.command(false)];
+    case "choice":
+      return node.options
+        .filter((option) => option !== "—")
+        .map((option) => node.command(option));
+    case "action":
+      return [node.command];
+    default:
+      return [];
+  }
+}
+
+/** A label's name, before its two-space detail. */
+function labelName(label: string): string {
+  return label.split(/\s{2,}/)[0]!.trimEnd();
+}
+
+/** Proper names keep their capitals in a lower-case list. */
+const PROPER =
+  /^(?:ZzFX|Strudel|Wurlitzer|Rhodes|Cuban|Hammond|Vox|[A-G][#b]?\d?\b)/;
+
+/** A label's name without its unit note: `filter cutoff (Hz)` → `filter cutoff`. */
+function widthName(label: string): string {
+  return labelName(label).replace(
+    / \((?:Hz|s|ms|st|dB|%|oct|BPM|bars?|beats?|ct|\.[a-z]+)\)$/,
+    "",
+  );
+}
+
+/**
+ * Rows that list a catalog (instruments, kits, styles, presets, lanes):
+ * their label is the entry's own name and description, not a menu label.
+ */
+function isCatalogRow(path: string, node: MenuNode): boolean {
+  if (node.kind === "action")
+    return (
+      /\s{2}| · /.test(node.label) ||
+      / › (?:instruments|kits|style|grooves|patterns) › /.test(path)
+    );
+  // Style titles come from the taxonomy; advanced rows note their aliases.
+  if (path.startsWith("Arrange › style › ")) return true;
+  return / › all lanes › | › advanced › /.test(path);
+}
+
+function isValueRow(node: MenuNode): boolean {
+  return /^(?:number|toggle|choice|point)$/.test(node.kind);
+}
+
+describe("the ctrl-k tree", () => {
+  for (const instrument of INSTRUMENTS) {
+    test(`${instrument}: every row's command parses`, () => {
+      const ctx = context(instrument);
+      const broken: string[] = [];
+      for (const { path, node } of walk(ctx))
+        for (const command of rowCommands(node))
+          if (!accepts(command, ctx.score)) broken.push(`${path}: ${command}`);
+      expect(broken).toEqual([]);
+    });
+
+    test(`${instrument}: labels fit LABEL_WIDTH`, () => {
+      const ctx = context(instrument);
+      const wide = walk(ctx)
+        .filter(({ path, node }) => !isCatalogRow(path, node))
+        .filter(({ node }) => widthName(node.label).length > LABEL_WIDTH)
+        .map(({ path }) => path);
+      expect(wide).toEqual([]);
+    });
+
+    test(`${instrument}: sibling labels share one case rule`, () => {
+      const ctx = context(instrument);
+      const mixed: string[] = [];
+      const seen = new Set<readonly MenuNode[]>();
+      for (const { path, siblings } of walk(ctx, 3)) {
+        if (!path.includes(" › ") || seen.has(siblings)) continue;
+        // Style names are titles from the taxonomy (src/styles), kept as is.
+        if (path.startsWith("Arrange › style › ")) continue;
+        seen.add(siblings);
+        const names = siblings
+          .filter((node) => node.kind === "menu" || isValueRow(node))
+          .map((node) => labelName(node.label))
+          .filter((name) => !PROPER.test(name));
+        const upper = names.filter((name) => /^[A-Z][a-z]/.test(name));
+        if (upper.length > 0 && upper.length < names.length)
+          mixed.push(`${path.replace(/ › [^›]*$/, "")}: ${upper.join(", ")}`);
+      }
+      expect(mixed).toEqual([]);
+    });
+  }
+
+  test("every number row has a value x puts back", () => {
+    // A track's place in the list has no default to go back to.
+    const NO_DEFAULT = /› position$/;
+    const missing = new Set<string>();
+    for (const instrument of INSTRUMENTS)
+      for (const { path, node } of walk(context(instrument)))
+        if (
+          node.kind === "number" &&
+          node.start === undefined &&
+          node.reset === undefined &&
+          !NO_DEFAULT.test(path)
+        )
+          missing.add(path);
+    expect([...missing]).toEqual([]);
+  });
+
+  test("root labels are sentence case and in the §4a order", () => {
+    const labels = rootNodes(context("saw")).map((node) => node.label);
+    expect(labels).toEqual([
+      "Sound",
+      "Voice",
+      "Effects",
+      "Rhythm",
+      "Chords and key",
+      "Mix",
+      "Arrange",
+      "Project",
+    ]);
+  });
+
+  test("the ten topics lead MENU_SECTIONS and every id opens", () => {
+    expect(MENU_TOPICS).toEqual([
+      "sound",
+      "voice",
+      "effects",
+      "rhythm",
+      "chords",
+      "mix",
+      "arrange",
+      "project",
+      "keys",
+      "agent",
+    ]);
+    for (const id of [...MENU_SECTIONS, "fx", "master", "models"]) {
+      const menu = new EditMenu();
+      const ctx = context("saw");
+      menu.show(ctx, id);
+      expect(menu.open).toBe(true);
+      expect(menu.section).toBeDefined();
+    }
+  });
+
+  test("/menu opens any row by name; the usage names the roots", () => {
+    const ctx = context("piano");
+    expect(menuSectionPath(ctx, "tuning")).toEqual(["chords", "tuning"]);
+    expect(menuSectionPath(ctx, "reverb")).toEqual(["effects", "reverb"]);
+    expect(menuSectionPath(ctx, "nonsense")).toBeUndefined();
+    expect(MENU_USAGE).toBe(
+      "usage: /menu <topic or row> · /help menu lists them",
+    );
+    // The full list lives in /help menu, one name per topic.
+    const helpMenu = (helpTopicLines("menu", 200) ?? []).join(" ");
+    for (const topic of MENU_SHOWN_SECTIONS) expect(helpMenu).toContain(topic);
+  });
+
+  test("an unknown /menu id fits 80 columns and suggests the nearest", () => {
+    const ctx = context("piano");
+    const miss = menuUsage(ctx, "tunning");
+    expect(miss).toContain("did you mean /menu tuning?");
+    expect(miss.length + 2).toBeLessThanOrEqual(80);
+    expect(menuUsage(ctx, "nonsense")).toBe(
+      'no menu "nonsense" · /menu <topic or row>',
+    );
+  });
+
+  test("menuPath renders live labels", () => {
+    expect(menuPath("tuning")).toBe("Ctrl-K › Chords and key › tuning");
+    expect(menuPath("agent")).toBe("Ctrl-K › Project › agent");
+    expect(menuPath("voice")).toBe("Ctrl-K › Voice");
+    expect(menuPath("performance")).toBe("Ctrl-K › Sound › performance");
+    expect(menuPath("nonsense")).toBeUndefined();
+  });
+
+  test("Project › agent offers model, show me and model key", () => {
+    const ctx = context("saw");
+    const agent = walk(ctx, 3)
+      .filter(({ path }) => path.startsWith("Project › agent › "))
+      .map(({ node }) => node.label);
+    expect(agent).toEqual(
+      expect.arrayContaining(["model", "show me", "model key"]),
+    );
+    expect(agent).not.toContain("login");
+    // The row runs `model key`, which the prompt bar sends to the sign-in
+    // flow, never to `/model` as a model name (a ✓ over an error).
+    const row = walk(ctx, 3).find(
+      ({ path }) => path === "Project › agent › model key",
+    )?.node;
+    expect(row?.kind).toBe("action");
+    if (row?.kind !== "action") return;
+    expect(canonicalWindowForm(row.command)).toBe("/login");
+  });
+});

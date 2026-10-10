@@ -18,7 +18,16 @@ import {
 } from "../../core/drums.ts";
 import type { TrackScore } from "../../core/score.ts";
 import { workspaceRelative } from "../commands/grammar.ts";
+import { looksLikeProse, nearestCommand, usageHint } from "../commands/help.ts";
+import { DEFAULT_KITS } from "../audio/packs.ts";
+import { SYNTH_KIT_NAMES } from "../../core/kits.ts";
+import { DRUM_PATTERNS, findPattern } from "../../core/sdk/v1.ts";
+import { parsePatternCommand } from "../commands/drums.ts";
+import { parseEffectName } from "../commands/fx.ts";
+import { nearest } from "../commands/nearest.ts";
+import { parseKitCommand } from "../commands/pack.ts";
 import { commandParses } from "../commands/parses.ts";
+import { menuPath } from "../tui/menu.ts";
 import { NOTE_KEYS, defaultBaseFor } from "../tui/play-mode.ts";
 import { parsePrompt } from "./ops.ts";
 
@@ -93,8 +102,49 @@ export function isAgentCommand(line: string, score: TrackScore): boolean {
   if (WINDOW_ONLY.test(line)) return false;
   if (!agentPathsAllowed(line)) return false;
   if (/^\/?track\s+[a-z0-9._ -]{1,64}$/i.test(line)) return true;
-  if (/^\/(?:pattern|kit)\s+\S/i.test(line)) return true;
+  // `pattern housee`, `kit 8088`: parses, but names nothing in the library.
+  if (catalogMiss(line) !== undefined) return false;
   return commandParses(line, score);
+}
+
+/** Kit names show-me knows offline: the synth kits and `/kit` short names. */
+const KIT_NAMES: readonly string[] = [
+  ...SYNTH_KIT_NAMES,
+  ...Object.keys(DEFAULT_KITS),
+];
+
+/**
+ * The corrected line when `pattern <name>` or `kit <name>` names nothing
+ * dawg has but is near a name it does (`pattern housee` → `pattern
+ * house`); `""` for a pattern name with no near match; undefined for any
+ * other line. A kit name far from every short name may be a pack bank, so
+ * it is left to the prompt bar.
+ */
+export function catalogMiss(line: string): string | undefined {
+  const pattern = parsePatternCommand(line);
+  if (pattern?.kind === "apply") {
+    if (findPattern(pattern.name)) return undefined;
+    const near = nearest(
+      pattern.name,
+      DRUM_PATTERNS.map((entry) => entry.name),
+    );
+    return near ? withName(line, near) : "";
+  }
+  const kit = parseKitCommand(line);
+  if (kit?.kind === "set" && /^[a-z0-9]+$/i.test(kit.bank)) {
+    const bank = kit.bank.toLowerCase();
+    if (KIT_NAMES.includes(bank)) return undefined;
+    const near = nearest(bank, KIT_NAMES);
+    return near ? withName(line, near) : undefined;
+  }
+  return undefined;
+}
+
+/** `line` with its second word (the pattern or kit name) replaced. */
+function withName(line: string, name: string): string {
+  const words = line.trim().split(/\s+/);
+  words[1] = name;
+  return words.join(" ");
 }
 
 /** Verbs whose arguments name files on disk. */
@@ -112,6 +162,40 @@ export function agentPathsAllowed(line: string): boolean {
     .split(/\s+/)
     .filter((token) => token.length > 0)
     .every((token) => workspaceRelative(token));
+}
+
+/**
+ * A line the agent meant as a command that does not parse: a slash word,
+ * or a lowercase line led by a known verb (or a near typo of one) that is
+ * not a sentence. Show-me runs nothing for it and shows a red receipt
+ * (brokenCommandReceipt) instead of letting it pass as prose.
+ */
+export function isBrokenCommand(line: string, score: TrackScore): boolean {
+  if (line.length === 0 || line.length > MAX_COMMAND_LINE) return false;
+  if (isAgentCommand(line, score) || WINDOW_ONLY.test(line)) return false;
+  if (catalogMiss(line) !== undefined) return true;
+  if (line.startsWith("/")) return /^\/[a-z]/i.test(line);
+  if (!/^[a-z]/.test(line) || /[.!?:]$/.test(line)) return false;
+  if (looksLikeProse(line) && !usageHint(line)) return false;
+  return usageHint(line) !== undefined || nearestCommand(line) !== undefined;
+}
+
+/**
+ * The red receipt for a broken agent command: what failed, the usage or
+ * the nearest command when there is one. Never prose.
+ */
+export function brokenCommandReceipt(line: string): string {
+  const miss = catalogMiss(line);
+  if (miss !== undefined)
+    return `✗ ${line} · ${miss ? `did you mean ${miss}?` : "no such pattern · pattern list"}`;
+  const usage = usageHint(line);
+  const verb = nearestCommand(line);
+  // `patern house` → `pattern house`: the fixed verb with its arguments.
+  const nearer = verb
+    ? [verb, ...line.trim().split(/\s+/).slice(1)].join(" ")
+    : undefined;
+  const hint = usage ?? (nearer ? `did you mean ${nearer}?` : undefined);
+  return `✗ ${line}${hint ? ` · ${hint}` : " · not a dawg command"}`;
 }
 
 /** One key of the qwerty play keyboard and how to reach its octave. */
@@ -259,19 +343,56 @@ export function gestureFor(
   return { kind: "typed", command, caption: `typing ${command}` };
 }
 
-/** The menu path a command's setting also lives at, for the finish hint. */
+/** Where each command's setting lives in Ctrl-K, as a `/menu` id. */
+const MENU_HOME: Readonly<Record<string, string>> = {
+  synth: "sound",
+  sound: "sound",
+  tempo: "tempo",
+  bpm: "tempo",
+  meter: "tempo",
+  euclid: "rhythm",
+  groove: "patterns",
+  pattern: "patterns",
+  kit: "kits",
+  master: "master",
+  automate: "automation",
+  section: "arrange",
+  form: "arrange",
+  style: "style",
+  tuning: "tuning",
+  key: "chords",
+  chords: "chords",
+  sing: "voice",
+  lyrics: "voice",
+  autotune: "voice",
+  vocode: "voice",
+  export: "export",
+  model: "agent",
+  showme: "agent",
+};
+
+/**
+ * The menu path a command's setting also lives at, for the finish hint:
+ * `Ctrl-K › Effects › reverb`, from the menu's live labels (menuPath).
+ */
 export function menuPathFor(command: string): string | undefined {
   const words = command.replace(/^\//, "").toLowerCase().split(/\s+/);
-  if (words[0] === "volume" || words[0] === "pan")
-    return `ctrl-k › Mix & automation › ${words[0]}`;
-  if (words[0] === "fx" && words[1]) return `ctrl-k › Effects › ${words[1]}`;
-  if (words[0] === "synth") return "ctrl-k › Sound";
-  if (words[0] === "tempo" || words[0] === "bpm")
-    return "ctrl-k › Project › tempo";
-  if (words[0] === "euclid") return "ctrl-k › Rhythm";
-  if (words[0] === "master") return "ctrl-k › Mix & automation › master";
-  if (words[0] === "section" || words[0] === "form") return "ctrl-k › Arrange";
-  return undefined;
+  const verb = words[0] ?? "";
+  if (verb === "volume" || verb === "pan") {
+    const mix = menuPath("mix");
+    return mix && `${mix} › ${verb}`;
+  }
+  if (verb === "fx" && words[1]) {
+    // The row's live label and real place (`more effects › phaser`, the
+    // formant shift under Voice); Effects when nothing names it.
+    const id =
+      words[1] === "rig"
+        ? "guitar rig"
+        : (parseEffectName(words[1]) ?? words[1]);
+    return menuPath(id) ?? menuPath("effects");
+  }
+  const home = MENU_HOME[verb];
+  return home ? menuPath(home) : undefined;
 }
 
 /** Glide length for a fader: short enough to never stall a turn. */

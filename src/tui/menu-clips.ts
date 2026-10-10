@@ -1,5 +1,5 @@
 /**
- * Sound > Voice > Clips and Lyrics, and Sound > browse sounds > Voices >
+ * Voice › Clips and Lyrics, and Voice › voice presets >
  * Vocal (0.7 clips lane). Every row runs a prompt command (`/clip`,
  * `/lyrics`, `/vocal`), so the menu, the prompt and undo stay one path.
  */
@@ -183,7 +183,7 @@ function clipRows(context: MenuContext, id: string): MenuNode[] {
   ];
 }
 
-/** Sound > Voice rows from the clips lane: Clips and Lyrics. */
+/** Voice rows from the clips lane: Clips and Lyrics. */
 export function clipMenuRows(context: MenuContext): MenuNode[] {
   const track = context.score.tracks.find((t) => t.id === context.trackId);
   if (!track) return [];
@@ -194,7 +194,7 @@ export function clipMenuRows(context: MenuContext): MenuNode[] {
     {
       kind: "menu",
       id: "voice:clips",
-      label: "Clips",
+      label: "clips",
       detail: clips.length
         ? `${clips.length} clip${clips.length === 1 ? "" : "s"}`
         : "import a vocal",
@@ -246,7 +246,7 @@ export function clipMenuRows(context: MenuContext): MenuNode[] {
     {
       kind: "menu",
       id: "voice:lyrics",
-      label: "Lyrics",
+      label: "lyrics",
       detail: sung ? sung.slice(0, 32) : "none",
       help: "words on this track's notes: - splits syllables, _ holds, ~ skips",
       build: (inner) => {
@@ -283,15 +283,15 @@ export function clipMenuRows(context: MenuContext): MenuNode[] {
   ];
 }
 
-/** Sound > browse sounds > Voices > Vocal: the guide-note vocal track. */
+/** Voice › voice presets › vocal: the guide-note vocal track. */
 export function vocalBrowseRows(_context: MenuContext): MenuNode[] {
   return [
     {
       kind: "action",
       label:
-        "Vocal  clips sound, notes are a silent guide · hpf 90, 3:1, plate",
+        "vocal  clips sound, notes are a silent guide · hpf 90, 3:1, plate",
       command: "instrument vocal",
-      help: "a vocal track: import a take or stem in Sound > Voice > Clips",
+      help: "a vocal track: import a take or stem in Voice › clips",
     },
   ];
 }

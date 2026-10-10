@@ -1,6 +1,6 @@
 /**
  * The song master end to end in a real PTY, offline: `/master streaming`
- * sets a loudness target, the ctrl-k menu (Mix & automation › master) turns
+ * sets a loudness target, the ctrl-k menu (Mix › master) turns
  * the glue compressor on with keys alone, and both land in the session.
  */
 import { expect, test } from "bun:test";
@@ -67,16 +67,10 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("Project"), "menu root");
       await t.send("/mix");
       await t.send("\r");
-      await t.until(
-        () => t.vt.text().includes("menu › Mix & automation"),
-        "mix",
-      );
+      await t.until(() => t.vt.text().includes("menu › Mix"), "mix");
       await t.send("/master");
       await t.send("\r");
-      await t.until(
-        () => t.vt.text().includes("Mix & automation › master"),
-        "master menu",
-      );
+      await t.until(() => t.vt.text().includes("Mix › master"), "master menu");
       expect(t.vt.text()).toContain("streaming");
       await t.send("/glue");
       await t.send("\r");
@@ -93,7 +87,10 @@ test.skipIf(!supported)(
       await t.send("\r");
       await t.send("4");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("● staged"), "staged ratio");
+      await t.until(
+        () => t.vt.text().includes("change staged"),
+        "staged ratio",
+      );
       await t.send("\r");
       await waitFor(
         async () => (await sessionMaster(t.cwd))?.glue?.ratio === 4,

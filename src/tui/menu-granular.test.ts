@@ -52,10 +52,10 @@ function open(menu: EditMenu, ctx: MenuContext, ...path: string[]): void {
 }
 
 describe("granular in the ctrl-k menu", () => {
-  test("Sound > browse sounds > Granular lists every preset", () => {
+  test("Sound > instruments > Granular lists every preset", () => {
     const menu = new EditMenu();
     const ctx = context();
-    open(menu, ctx, "Sound", "browse sounds", "Granular");
+    open(menu, ctx, "Sound", "instruments", "granular");
     const labels = menu.view(ctx).items.map((row) => row.label.split(" ")[0]);
     expect(labels).toEqual([...GRANULAR_PRESET_NAMES]);
     select(menu, ctx, "swarm");
@@ -68,7 +68,7 @@ describe("granular in the ctrl-k menu", () => {
   test("a synth track shows Granular (convert) with grain on and presets", () => {
     const menu = new EditMenu();
     const ctx = context();
-    open(menu, ctx, "Sound", "granular (convert)");
+    open(menu, ctx, "Sound", "granular");
     const labels = menu.view(ctx).items.map((row) => row.label.split(" ")[0]);
     expect(labels[0]).toBe("grain");
     expect(labels).toContain("cloud");
@@ -122,6 +122,8 @@ describe("granular in the ctrl-k menu", () => {
       while (menu.view(ctx).index < i) menu.key(DOWN, ctx);
       const label = menu.view(ctx).items[i]!.label;
       if (label.startsWith("preset") || label.startsWith("source")) continue;
+      // → on an action row runs it (`grain off`); only value rows adjust.
+      if (!/\s{2,}\S/.test(label)) continue;
       const action = menu.key(RIGHT, ctx) as
         { type: string; command?: string } | undefined;
       if (action?.type !== "run" || !action.command) continue;

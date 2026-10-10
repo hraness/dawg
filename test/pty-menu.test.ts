@@ -65,19 +65,20 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes(" NOW "), "prompt");
       await t.send("\u000b");
       await t.until(() => t.vt.text().includes("Project"), "menu root");
-      expect(t.vt.text()).toContain("Mix & automation");
+      expect(t.vt.text()).toContain("Mix");
       // The footer names the keys for this screen.
       expect(t.vt.text()).toContain("enter open");
 
-      // Effects › Filter › cutoff, typed as digits.
+      // Effects › filter › cutoff, typed as digits.
+      await t.send("j");
       await t.send("j");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("menu › Effects"), "effects");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("› Filter"), "filter");
+      await t.until(() => t.vt.text().includes("› filter"), "filter");
       // `/` filters the list; the focused row's command shows under it.
       await t.send("/cutoff");
-      await t.until(() => t.vt.text().includes("Filter · /cutoff"), "filtered");
+      await t.until(() => t.vt.text().includes("filter · /cutoff"), "filtered");
       await t.until(
         () => t.vt.text().includes("› fx filter cutoff"),
         "command under the list",
@@ -88,7 +89,10 @@ test.skipIf(!supported)(
       // Enter sets the typed value in the fader drawer (staged); a second
       // Enter keeps it.
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("● staged"), "1200 staged");
+      await t.until(
+        () => t.vt.text().includes("1 change staged"),
+        "1200 staged",
+      );
       await t.send("\r");
       await waitFor(
         async () => (await bass())?.filter?.cutoff === 1200,
@@ -96,27 +100,21 @@ test.skipIf(!supported)(
       );
 
       // Back out to the root with Esc, one level each,
-      // then Mix & automation › automation › filter cutoff.
+      // then Mix › automation › filter cutoff.
       // (Enter in the drawer kept the value and closed it; the list's
       // `/cutoff` filter is still up, so Esc clears it first.)
       await t.until(() => t.vt.text().includes("kept 1 change"), "kept");
       await t.send("\u001b");
       await t.send("\u001b");
       await t.send("\u001b");
-      await t.until(
-        () => t.vt.text().includes("Mix & automation"),
-        "back at the root",
-      );
+      await t.until(() => t.vt.text().includes("Mix"), "back at the root");
       await t.send("/mix");
       await t.send("\r");
-      await t.until(
-        () => t.vt.text().includes("menu › Mix & automation"),
-        "mix",
-      );
+      await t.until(() => t.vt.text().includes("menu › Mix"), "mix");
       await t.send("/automation");
       await t.send("\r");
       await t.until(
-        () => t.vt.text().includes("Mix & automation › automation"),
+        () => t.vt.text().includes("Mix › automation"),
         "automation",
       );
       await t.send("/cutoff");
@@ -160,11 +158,11 @@ test.skipIf(!supported)(
       await t.send("\r");
       await t.until(() => t.vt.text().includes("menu › Effects"), "effects");
       // The core effects lead; the Strudel extras are one level down.
-      expect(t.vt.text()).toContain("Tremolo");
+      expect(t.vt.text()).toContain("tremolo");
       expect(t.vt.text()).toContain("more effects");
       await t.send("/tremolo");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("› Tremolo"), "tremolo");
+      await t.until(() => t.vt.text().includes("› tremolo"), "tremolo");
       expect(t.vt.text()).toContain("advanced");
       // Enter on "on" turns the effect on with its defaults.
       await t.send("\r");
@@ -178,7 +176,10 @@ test.skipIf(!supported)(
       // Enter sets the typed value in the fader drawer (staged); a second
       // Enter keeps it.
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("● staged"), "0.8 staged");
+      await t.until(
+        () => t.vt.text().includes("1 change staged"),
+        "0.8 staged",
+      );
       await t.send("\r");
       await waitFor(
         async () => (await bass())?.fx?.tremolo?.depth === 0.8,
@@ -229,7 +230,10 @@ test.skipIf(!supported)(
       // Enter sets the typed value in the fader drawer (staged); a second
       // Enter keeps it.
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("● staged"), "0.2 staged");
+      await t.until(
+        () => t.vt.text().includes("1 change staged"),
+        "0.2 staged",
+      );
       await t.send("\r");
       await waitFor(
         async () => (await bass())?.synth?.attack === 0.2,
@@ -291,6 +295,75 @@ test.skipIf(!supported)(
       );
       for (let i = 0; i < 5; i++) await t.send("\u001b");
       await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
+    } finally {
+      t.terminal.write("\u0003");
+      await t.proc.exited;
+    }
+  },
+  30_000,
+);
+
+test.skipIf(!supported)(
+  "real PTY 80×24: /menu opens topics by id and ← backs out",
+  async () => {
+    const t = await launch(80, 24, {});
+    const open = async (id: string, crumb: string) => {
+      await t.send(`/menu ${id}`);
+      await t.send("\r");
+      await t.until(() => t.vt.text().includes(crumb), `/menu ${id}`);
+    };
+    const close = async () => {
+      for (let i = 0; i < 4; i++) await t.send("\u001b");
+      await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
+    };
+    try {
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
+      await open("voice", "menu › Voice");
+      await close();
+      await open("tuning", "Chords and key › tuning");
+      // ← adjusts a value row; on an action row it goes back, like esc.
+      // (k wraps from the first row to the last: "list scales".)
+      await t.send("k");
+      await t.until(() => t.vt.text().includes("› list scales"), "action row");
+      await t.send("\u001b[D");
+      await t.until(
+        () =>
+          t.vt.text().includes("menu › Chords and key") &&
+          !t.vt.text().includes("› tuning ─"),
+        "back to chords and key",
+      );
+      await close();
+      await open("agent", "Project › agent");
+      expect(t.vt.text()).toContain("model key");
+      await t.send("h");
+      await t.until(
+        () =>
+          t.vt.text().includes("menu › Project") &&
+          !t.vt.text().includes("Project › agent"),
+        "h backs out to project",
+      );
+      await close();
+      await open("performance", "Sound › performance");
+      expect(t.vt.text()).toContain("humanize timing");
+      await close();
+      // An unknown id gets a short usage that fits 80 columns, with the
+      // nearest name when one is close.
+      await t.send("/menu nope");
+      await t.send("\r");
+      await t.until(
+        () => t.vt.text().includes('no menu "nope" · /menu <topic or row>'),
+        "menu error",
+      );
+      await t.send("/menu sond");
+      await t.send("\r");
+      await t.until(
+        () => t.vt.text().includes("did you mean /menu sound?"),
+        "menu did-you-mean",
+      );
+      // The keys topic opens the ? panel (§4).
+      await t.send("/menu keys");
+      await t.send("\r");
+      await t.until(() => t.vt.text().includes("╭─ keys"), "keys panel");
     } finally {
       t.terminal.write("\u0003");
       await t.proc.exited;

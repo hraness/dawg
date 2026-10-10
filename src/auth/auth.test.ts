@@ -21,6 +21,7 @@ import {
   type LoginIO,
 } from "./login.ts";
 import { selectProvider } from "../agent/provider.ts";
+import { tuiSetModel } from "./tui.ts";
 import {
   scriptedRunner,
   systemRunner,
@@ -472,6 +473,17 @@ describe("system runner", () => {
 });
 
 describe("saved provider and model", () => {
+  test("/model with an unknown name reports a refusal, not a success", async () => {
+    const runner = scriptedRunner([]);
+    const auth = env(runner);
+    await storeGatewayKey(auth, KEY);
+    const bad = await tuiSetModel("key", runner, auth);
+    expect(bad.ok).toBe(false);
+    expect(bad.text).toContain('unknown model "key"');
+    const good = await tuiSetModel("sol-6.1", runner, auth);
+    expect(good).toMatchObject({ ok: true });
+  });
+
   test("a valid saved choice is reused silently, without discovery", async () => {
     const runner = scriptedRunner([]);
     const auth = env(runner);

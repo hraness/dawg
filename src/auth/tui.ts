@@ -86,22 +86,31 @@ export async function modelPickerItems(
   }));
 }
 
-/** `/model <value>`: save for the active provider; returns the receipt. */
+/**
+ * `/model <value>`: save for the active provider; returns the receipt and
+ * whether it worked, so the caller shows a refusal as one (never a ✓).
+ */
 export async function tuiSetModel(
   value: string,
   runner: CommandRunner = systemRunner,
-): Promise<string> {
-  const auth = defaultAuthEnv(runner);
+  auth = defaultAuthEnv(runner),
+): Promise<{ readonly ok: boolean; readonly text: string }> {
   const selection = await selectProvider(auth);
   if (selection.kind === "offline")
-    return `model · unavailable: ${selection.reason}`;
+    return { ok: false, text: `model · unavailable: ${selection.reason}` };
   try {
-    return `model · ${await saveModelChoice(auth, selection, value)}`;
+    return {
+      ok: true,
+      text: `model · ${await saveModelChoice(auth, selection, value)}`,
+    };
   } catch (error) {
     const rows = await modelPickerItems(selection, runner).catch(() => []);
-    return `model · ${error instanceof Error ? error.message : String(error)}; try ${rows
-      .slice(0, 8)
-      .map((row) => row.label)
-      .join(", ")} · current ${providerLabel(selection)}`;
+    return {
+      ok: false,
+      text: `model · ${error instanceof Error ? error.message : String(error)}; try ${rows
+        .slice(0, 8)
+        .map((row) => row.label)
+        .join(", ")} · current ${providerLabel(selection)}`,
+    };
   }
 }

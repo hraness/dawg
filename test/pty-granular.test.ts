@@ -70,10 +70,10 @@ test.skipIf(!supported)(
       await t.send("/Sound");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("menu › Sound"), "sound");
-      await t.send("/browse");
+      await t.send("/instruments");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("Granular"), "browse");
-      await t.send("/Granular");
+      await t.until(() => t.vt.text().includes("granular"), "browse");
+      await t.send("/granular");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("swarm"), "granular group");
       await t.send("/swarm");

@@ -21,41 +21,26 @@ export function arrangeDetail(context: MenuContext): string {
   return parts.join(" · ");
 }
 
+/**
+ * Arrange's rows after tracks (§4a): sections (each section, mark bars,
+ * add section), then form and the style browser.
+ */
 export function arrangeNodes(context: MenuContext): MenuNode[] {
   const score = context.score;
-  const nodes: MenuNode[] = score.sections.map((section) => ({
-    kind: "menu",
-    id: `section:${section.name}`,
-    label: section.name,
-    detail: sectionDetail(context, section),
-    help: "loop, jump, mute, vary, move, rename, transitions",
-    build: (next) => sectionNodes(next, section.name),
-  }));
-  nodes.push(
+  const count = score.sections.length;
+  const nodes: MenuNode[] = [
     {
-      kind: "entry",
-      label: "mark bars",
-      value: "",
-      placeholder: "name and bars, e.g. verse 1-8",
-      example: "section verse 1-8",
-      help: "name a bar range; re-marking a name moves its marker",
-      command: (text) => {
-        const trimmed = text.trim();
-        return /\S\s+\d{1,4}(?:[-–]\d{1,4})?$/u.test(trimmed)
-          ? `section ${trimmed}`
-          : undefined;
-      },
+      kind: "menu",
+      id: "sections",
+      label: "sections",
+      detail:
+        count === 0
+          ? "none yet · mark bars"
+          : `${count} · ${score.sections.map((section) => section.name).join(", ")}`,
+      help: "mark bars, add a section, then loop, jump, mute or vary one",
+      build: sectionListNodes,
     },
-    {
-      kind: "entry",
-      label: "add section",
-      value: "",
-      placeholder: "name and bars, e.g. chorus 8 (empty: next name, 8 bars)",
-      example: "section add chorus 8",
-      help: "a new section after the last one (extends the song)",
-      command: (text) => `section add ${text.trim()}`.trim(),
-    },
-  );
+  ];
   if (score.sections.length > 0) {
     nodes.push({
       kind: "entry",
@@ -397,4 +382,43 @@ export function fillNodes(section: Section): MenuNode[] {
           : undefined,
     },
   ];
+}
+
+/** Arrange › sections: one row per section, then mark bars and add section. */
+function sectionListNodes(context: MenuContext): MenuNode[] {
+  const score = context.score;
+  const nodes: MenuNode[] = score.sections.map((section) => ({
+    kind: "menu",
+    id: `section:${section.name}`,
+    label: section.name,
+    detail: sectionDetail(context, section),
+    help: "loop, jump, mute, vary, move, rename, transitions",
+    build: (next) => sectionNodes(next, section.name),
+  }));
+  nodes.push(
+    {
+      kind: "entry",
+      label: "mark bars",
+      value: "",
+      placeholder: "name and bars, e.g. verse 1-8",
+      example: "section verse 1-8",
+      help: "name a bar range; re-marking a name moves its marker",
+      command: (text) => {
+        const trimmed = text.trim();
+        return /\S\s+\d{1,4}(?:[-–]\d{1,4})?$/u.test(trimmed)
+          ? `section ${trimmed}`
+          : undefined;
+      },
+    },
+    {
+      kind: "entry",
+      label: "add section",
+      value: "",
+      placeholder: "name and bars, e.g. chorus 8 (empty: next name, 8 bars)",
+      example: "section add chorus 8",
+      help: "a new section after the last one (extends the song)",
+      command: (text) => `section add ${text.trim()}`.trim(),
+    },
+  );
+  return nodes;
 }

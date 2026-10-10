@@ -8,14 +8,32 @@
  *
  * Rendering reuses the TUI's picker overlay: `view()` returns a picker.
  */
+import { TOPIC_ALIASES } from "../lang/glossary.ts";
 import {
   voiceEffectRows,
-  voiceGroup,
-  voicesBrowseGroup,
-  voiceSoundRows,
+  voiceRootDetail,
+  voiceRootNodes,
 } from "./menu-voice.ts";
 import { commandParam, sketchFor } from "./sketch.ts";
-import { HINTS } from "../../tui/grammar.ts";
+import { nearest } from "../commands/nearest.ts";
+import {
+  ARROW_DOWN,
+  ARROW_UP,
+  HINTS,
+  KEY_BACK,
+  KEY_BACKSPACE,
+  KEY_DOWN,
+  KEY_END,
+  KEY_ENTER,
+  KEY_FORWARD,
+  KEY_HOME,
+  KEY_LEFT,
+  KEY_PAGE_DOWN,
+  KEY_PAGE_UP,
+  KEY_RESET,
+  KEY_RIGHT,
+  KEY_UP,
+} from "../../tui/grammar.ts";
 import { arrangeDetail, arrangeNodes } from "./arrange-menu.ts";
 import { auditionKey, isStageable, type AuditionKey } from "./audition.ts";
 import { performanceDetail, performanceNodes } from "./performance-menu.ts";
@@ -28,6 +46,9 @@ import {
   openingUnit,
   tempoDetail,
   tempoMenuNode,
+  START_BARS,
+  START_BEATS_PER_BAR,
+  START_TEMPO_BPM,
 } from "./menu-time.ts";
 import {
   AUTOMATION_PARAMETERS,
@@ -48,6 +69,7 @@ import {
   type TrackAutomationParameter,
   type TrackScore,
   CALIBRATION_LATEST,
+  createScore,
 } from "../../core/score.ts";
 import {
   CORE_EFFECTS,
@@ -187,6 +209,8 @@ export type MenuContext = Readonly<{
   countInBars: number;
   /** How much agent turns show (`/showme`); absent hides the row. */
   showMe?: string;
+  /** The session's name, for Project › session and export file names. */
+  sessionName?: string;
   /** Play mode's chord settings (defaults when absent). */
   chords?: ChordSettings;
   /** Project root, for the project's own wavetables (none when absent). */
@@ -204,6 +228,8 @@ export type MenuAudition = Readonly<{
   looping: boolean;
   /** Edits are staged (an Enter keeps them, Esc reverts them). */
   dirty: boolean;
+  /** How many edits are staged, for the drawer's A/B badge. */
+  staged?: number;
   /** The committed score, for `staged ← committed` on changed rows. */
   committed: TrackScore;
   /** The footer while auditioning. */
@@ -372,7 +398,7 @@ const TRACK_LANE_LABEL: Readonly<Record<TrackAutomationParameter, string>> = {
   resonance: "filter resonance",
   "delay-feedback": "delay feedback",
   "delay-mix": "delay mix",
-  wt: "wavetable position",
+  wt: "table position",
 };
 
 const FX_LANE_INFO = new Map(FX_LANES.map((entry) => [entry.lane, entry]));
@@ -452,8 +478,16 @@ export function rootNodes(context: MenuContext): MenuNode[] {
       id: "sound",
       label: "Sound",
       detail: `${name} · ${track?.instrument ?? "?"}`,
-      help: "the focused track's instrument and its voice",
+      help: "the focused track's instrument, its controls and performance",
       build: soundSectionNodes,
+    },
+    {
+      kind: "menu",
+      id: "voice",
+      label: "Voice",
+      detail: voiceRootDetail(context),
+      help: "sing, lyrics, clips, pitch, autotune, formant and vocoder",
+      build: voiceRootNodes,
     },
     {
       kind: "menu",
@@ -467,25 +501,33 @@ export function rootNodes(context: MenuContext): MenuNode[] {
       kind: "menu",
       id: "rhythm",
       label: "Rhythm",
-      detail: "euclid editor · patterns · kits",
-      help: "drum hits per voice, ready-made grooves and drum kits",
+      detail: "euclid editor · grooves · kits",
+      help: "hits per drum, ready-made grooves and kits",
       build: rhythmNodes,
     },
     {
       kind: "menu",
       id: "chords",
-      label: "Chords",
+      label: "Chords and key",
       detail: chordsDetail(context),
-      help: "song key and how chords play in play mode (Ctrl-P)",
+      help: "the song key and tuning, and how chords play in play mode (Ctrl-P)",
       build: chordNodes,
     },
     {
       kind: "menu",
       id: "mix",
-      label: "Mix & automation",
+      label: "Mix",
       detail: `${tracks} track${tracks === 1 ? "" : "s"} · ${automated} lane${automated === 1 ? "" : "s"} moving`,
-      help: "volume, pan, mute and solo per track; values that change over time",
+      help: "volume, pan, mute and solo per track, automation and the master",
       build: mixSectionNodes,
+    },
+    {
+      kind: "menu",
+      id: "arrange",
+      label: "Arrange",
+      detail: arrangeDetail(context),
+      help: "tracks, song sections, the form, builds, drops, fills and styles",
+      build: arrangeRootNodes,
     },
     {
       kind: "menu",
@@ -494,50 +536,92 @@ export function rootNodes(context: MenuContext): MenuNode[] {
       detail: context.score.time
         ? `${tempoDetail(context.score)} · ${context.score.bars} bars`
         : `${num(context.score.tempoBpm)} BPM · ${context.score.beatsPerBar}/4 · ${context.score.bars} bars`,
-      help: "tempo, meter, tempo map, loop length, play, click and count-in",
+      help: "play, tempo, meter, loop, click, export, session, agent and help",
       build: transportNodes,
-    },
-    {
-      kind: "menu",
-      id: "arrange",
-      label: "Arrange",
-      detail: arrangeDetail(context),
-      help: "song sections, the form, builds, drops and fills",
-      build: arrangeNodes,
     },
   ];
 }
 
-/** Old section names still open the menu where that content now lives. */
-export const SECTION_ALIASES: Readonly<Record<string, readonly string[]>> = {
-  sound: ["sound"],
-  parameters: ["sound"],
-  sounds: ["sound", "browse"],
-  performance: ["sound", "performance"],
-  expression: ["sound", "performance"],
-  effects: ["effects"],
-  rhythm: ["rhythm"],
-  chords: ["chords"],
-  mix: ["mix"],
-  track: ["mix"],
-  automation: ["mix", "automation"],
-  master: ["mix", "master"],
-  project: ["project"],
-  transport: ["project"],
-  tempo: ["project", "tempo"],
-  meter: ["project", "tempo"],
-  time: ["project", "tempo"],
-  tuning: ["project", "tuning"],
-  scale: ["project", "tuning"],
-  arrange: ["arrange"],
-  style: ["arrange", "style"],
-  styles: ["arrange", "style"],
-  genre: ["arrange", "style"],
-  sections: ["arrange"],
-  form: ["arrange"],
-};
+/**
+ * Where each `/menu <id>` opens: the ten topic ids (sound voice effects
+ * rhythm chords mix arrange project keys agent) first, then every older id,
+ * as a path of menu ids from the root. `keys` opens Project › help and
+ * guides; the ? panel itself belongs to the window.
+ */
+export const SECTION_ALIASES: Readonly<Record<string, readonly string[]>> =
+  Object.freeze(
+    withTopicAliases({
+      sound: ["sound"],
+      voice: ["voice"],
+      effects: ["effects"],
+      rhythm: ["rhythm"],
+      chords: ["chords"],
+      mix: ["mix"],
+      arrange: ["arrange"],
+      project: ["project"],
+      keys: ["project", "help"],
+      agent: ["project", "agent"],
+      // Older ids, kept as aliases.
+      parameters: ["sound"],
+      sounds: ["sound", "browse"],
+      instruments: ["sound", "browse"],
+      performance: ["sound", "performance"],
+      expression: ["sound", "performance"],
+      clips: ["voice"],
+      lyrics: ["voice"],
+      autotune: ["voice"],
+      sing: ["voice"],
+      vocoder: ["voice"],
+      formant: ["voice"],
+      grooves: ["rhythm", "patterns"],
+      groove: ["rhythm", "patterns"],
+      patterns: ["rhythm", "patterns"],
+      kits: ["rhythm", "kits"],
+      euclid: ["rhythm"],
+      tuning: ["chords", "tuning"],
+      scale: ["chords"],
+      key: ["chords"],
+      track: ["mix"],
+      automation: ["mix", "automation"],
+      master: ["mix", "master"],
+      tracks: ["arrange", "tracks"],
+      music: ["arrange"],
+      style: ["arrange", "style"],
+      styles: ["arrange", "style"],
+      genre: ["arrange", "style"],
+      sections: ["arrange", "sections"],
+      form: ["arrange"],
+      transport: ["project"],
+      tempo: ["project", "tempo"],
+      meter: ["project", "tempo"],
+      time: ["project", "tempo"],
+      export: ["project", "export"],
+      session: ["project", "session"],
+      sessions: ["project", "session"],
+      window: ["project", "help"],
+      help: ["project", "help"],
+      guides: ["project", "help"],
+      model: ["project", "agent"],
+      showme: ["project", "agent"],
+      models: ["project", "agent"],
+      fx: ["effects"],
+    }),
+  );
 
-/** Sound: instrument and voice first, then the sound browser. */
+/**
+ * Every glossary topic alias (`/help drums`, `/guide mixer`) opens the same
+ * topic in `/menu` too: a word with no deeper path here opens its topic.
+ */
+function withTopicAliases(
+  paths: Record<string, readonly string[]>,
+): Record<string, readonly string[]> {
+  const all = { ...paths };
+  for (const [word, topic] of Object.entries(TOPIC_ALIASES))
+    if (!all[word] && all[topic]) all[word] = all[topic]!;
+  return all;
+}
+
+/** Sound: the instrument and its controls first, then the instruments. */
 function soundSectionNodes(context: MenuContext): MenuNode[] {
   const track = focused(context);
   const tuning: MenuNode[] =
@@ -546,7 +630,7 @@ function soundSectionNodes(context: MenuContext): MenuNode[] {
           {
             kind: "menu",
             id: "track-tuning",
-            label: "tuning",
+            label: "track tuning",
             detail: track.tuning
               ? tuningLabel(track.tuning)
               : `song · ${tuningLabel(context.score.tuning)}`,
@@ -627,14 +711,6 @@ function soundSectionNodes(context: MenuContext): MenuNode[] {
     ...keys,
     ...guitar,
     ...tuning,
-    // 0.7 Voice: hidden until a lane fills it.
-    ...voiceGroup(
-      "voice",
-      "Voice",
-      "clips, lyrics, pitch and autotune for sung and spoken parts",
-      voiceSoundRows,
-      context,
-    ),
     {
       kind: "menu",
       id: "performance",
@@ -646,9 +722,9 @@ function soundSectionNodes(context: MenuContext): MenuNode[] {
     {
       kind: "menu",
       id: "browse",
-      label: "browse sounds",
+      label: "instruments",
       detail: soundsDetail(focused(context)),
-      help: "instruments, wavetables, sample packs",
+      help: "every instrument: keys, strings, mallets, winds, granular, wavetables, sample packs",
       build: soundNodes,
     },
   ];
@@ -733,20 +809,262 @@ function guitarNodes(track: Track | undefined): MenuNode[] {
 }
 
 /** Rhythm: the euclid editor, then grooves and kits. */
-function rhythmNodes(): MenuNode[] {
+function rhythmNodes(context: MenuContext): MenuNode[] {
   return [
     {
       kind: "action",
       label: "euclid editor",
       command: "/euclid",
-      help: "hits, steps and rotation per drum voice",
+      help: "hits, steps and rotation per drum",
     },
     patternsMenu(),
     kitsMenu(),
+    gridNode(context),
   ];
 }
 
-/** Mix & automation: this track, every track, then automation lanes. */
+/** The record and euclid grid (Rhythm and Project share this row). */
+function gridNode(context: MenuContext): MenuNode {
+  return {
+    kind: "choice",
+    label: "grid",
+    help: "the step play-mode recording and the euclid editor snap to",
+    value: context.grid,
+    options: context.grids,
+    command: (option) => `/grid ${option}`,
+  };
+}
+
+/** Arrange: the tracks first, then sections, form and styles. */
+function arrangeRootNodes(context: MenuContext): MenuNode[] {
+  const count = context.score.tracks.length;
+  return [
+    {
+      kind: "menu",
+      id: "tracks",
+      label: "tracks",
+      detail: `${count} track${count === 1 ? "" : "s"} · add, focus, move, remove`,
+      help: "add a track, focus one, rename, reorder or remove it",
+      build: tracksNodes,
+    },
+    ...arrangeNodes(context),
+  ];
+}
+
+/** Arrange › tracks: add, focus, rename, move and remove. */
+function tracksNodes(context: MenuContext): MenuNode[] {
+  const score = context.score;
+  const track = focused(context);
+  const nodes: MenuNode[] = [
+    {
+      kind: "entry",
+      label: "add a track",
+      value: "",
+      placeholder: "name, e.g. bass or piano b",
+      example: "/track bass",
+      help: "a new track with that name (or focus it when it exists)",
+      command: (text) => {
+        const name = text.trim().replace(/\s+/g, " ");
+        return /^[a-z0-9._ -]{1,64}$/i.test(name)
+          ? `/track ${name}`
+          : undefined;
+      },
+    },
+    ...score.tracks.map((item): MenuNode => ({
+      kind: "action",
+      label: `${item.id === context.trackId ? "● " : ""}${item.name ?? item.id}`,
+      command: `/track ${item.id}`,
+      help: `focus ${item.id} · ${item.instrument}`,
+    })),
+  ];
+  if (track) {
+    nodes.push({
+      kind: "entry",
+      label: "rename",
+      value: track.name,
+      placeholder: "new name",
+      command: (text) =>
+        text.trim() ? `track name ${text.trim()}` : undefined,
+      example: `track name ${track.name}`,
+      help: "rename the focused track",
+    });
+    if (score.tracks.length > 1) {
+      const index = score.tracks.findIndex((item) => item.id === track.id);
+      nodes.push(
+        {
+          kind: "number",
+          label: "position",
+          help: "where the focused track sits in the list",
+          value: index + 1,
+          min: 1,
+          max: score.tracks.length,
+          step: linear(1, 1, score.tracks.length),
+          format: (value) => `${num(value)} of ${score.tracks.length}`,
+          command: (value) => `/track move ${track.id} ${Math.round(value)}`,
+        },
+        {
+          kind: "action",
+          label: `remove ${track.id}`,
+          command: `/track remove ${track.id}`,
+          help: "remove the focused track (^z brings it back)",
+        },
+      );
+    }
+  }
+  return nodes;
+}
+
+/** A file-safe stem for export names: the session's song name or `song`. */
+function exportStem(context: MenuContext): string {
+  const stem = (context.sessionName ?? "song")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  return stem || "song";
+}
+
+/** Project › export: the project file and MIDI; audio renders offline. */
+function exportNodes(context: MenuContext): MenuNode[] {
+  const stem = exportStem(context);
+  return [
+    {
+      kind: "entry",
+      label: "project file",
+      value: "",
+      placeholder: `file name, e.g. ${stem}.track.json`,
+      example: `/export ${stem}.track.json`,
+      help: "the whole song as one .track.json file (open it with /import)",
+      command: (text) => {
+        const name = text.trim() || `${stem}.track.json`;
+        return /^\S+$/.test(name)
+          ? `/export ${/\.json$/i.test(name) ? name : `${name}.track.json`}`
+          : undefined;
+      },
+    },
+    {
+      kind: "entry",
+      label: "MIDI",
+      value: "",
+      placeholder: `file name, e.g. ${stem}.mid`,
+      example: `/export ${stem}.mid`,
+      help: "notes, tempo and tracks as a standard MIDI file",
+      command: (text) => {
+        const name = text.trim() || `${stem}.mid`;
+        return /^\S+$/.test(name)
+          ? `/export ${/\.midi?$/i.test(name) ? name : `${name}.mid`}`
+          : undefined;
+      },
+    },
+    {
+      kind: "info",
+      label: "WAV and stems",
+      value: `dawg render ${stem}.wav`,
+      help: "audio renders offline in the shell: dawg render out.wav (--stems for one file per track)",
+    },
+  ];
+}
+
+/** Project › session: rename, fork and resume (the window's verbs). */
+function sessionNodes(context: MenuContext): MenuNode[] {
+  return [
+    {
+      kind: "entry",
+      label: "rename",
+      value: context.sessionName ?? "",
+      placeholder: "song name (--auto names it for you)",
+      example: "/rename night drive",
+      help: "name this session; --auto hands naming back to dawg",
+      command: (text) => (text.trim() ? `/rename ${text.trim()}` : undefined),
+    },
+    {
+      kind: "action",
+      label: "fork",
+      command: "/fork",
+      help: "a copy of this session to try something; the original stays",
+    },
+    {
+      kind: "action",
+      label: "resume",
+      command: "/resume",
+      help: "pick an earlier session in this folder",
+    },
+    {
+      kind: "action",
+      label: "list sessions",
+      command: "/sessions",
+      help: "every session in this folder, newest first",
+    },
+  ];
+}
+
+/** Project › agent: the model, show-me and the model key. */
+function agentNodes(context: MenuContext): MenuNode[] {
+  return [
+    {
+      kind: "action",
+      label: "model",
+      command: "/model",
+      help: "pick the model the agent runs on",
+    },
+    ...(context.showMe === undefined
+      ? []
+      : [
+          {
+            kind: "choice" as const,
+            label: "show me",
+            help: "agent turns: its commands as ghost text, faders, keys",
+            value: context.showMe,
+            options: ["on", "quiet", "off"],
+            command: (option: string) => `/showme ${option}`,
+          },
+        ]),
+    {
+      kind: "action",
+      label: "model key",
+      command: "/model key",
+      help: "add a model key so typed requests reach the agent (dawg works offline without it)",
+    },
+    {
+      kind: "action",
+      label: "agent help",
+      command: "/help agent",
+      help: "what the agent can do and how its turns show",
+    },
+  ];
+}
+
+/** Project › help and guides: the reference, guides and keys. */
+function helpNodes(): MenuNode[] {
+  return [
+    {
+      kind: "action",
+      label: "help",
+      command: "/help",
+      help: "start here: the ten topics",
+    },
+    {
+      kind: "action",
+      label: "all commands",
+      command: "/help all",
+      help: "the full command reference",
+    },
+    {
+      kind: "action",
+      label: "guides",
+      command: "/guide",
+      help: "short walkthroughs, one screen each",
+    },
+    {
+      kind: "action",
+      label: "keys",
+      command: "/help keys",
+      help: "every key in the window (? shows them too)",
+    },
+  ];
+}
+
+/** Mix: this track, every track, automation lanes, then the master. */
 function mixSectionNodes(context: MenuContext): MenuNode[] {
   const track = focused(context);
   const automated = AUTOMATION_PARAMETERS.filter(
@@ -783,7 +1101,7 @@ function mixSectionNodes(context: MenuContext): MenuNode[] {
   ];
 }
 
-/** Mix & automation > Master: the loudness target, then each unit in order. */
+/** Mix › master: the loudness target, then each unit in order. */
 function masterNodes(context: MenuContext): MenuNode[] {
   const master = context.score.master;
   // A name only when the LUFS and the limiter ceiling both match it, and no
@@ -956,7 +1274,7 @@ function chordsDetail(context: MenuContext): string {
   return `${chords.mode} · ${key ? keyName(key) : "no key"} · ${chords.perform}`;
 }
 
-/** Play mode's chord settings and the song key (`/chords …`, `key …`). */
+/** Chords and key: the song key and tuning, then play mode's chord settings. */
 function chordNodes(context: MenuContext): MenuNode[] {
   const chords = context.chords ?? defaultChordSettings();
   const key = parseKey(context.score.key ?? undefined);
@@ -990,10 +1308,19 @@ function chordNodes(context: MenuContext): MenuNode[] {
       command: (option) => `key ${tonic} ${option}`,
     },
     {
+      kind: "menu",
+      id: "tuning",
+      label: "tuning",
+      detail: `${tuningLabel(context.score.tuning)} · ${keyLabel(context.score.key)}`,
+      help: "the song tuning: 12-TET, EDOs, just, gamelan, Scala, and the scale",
+      build: songTuningNodes,
+    },
+    {
       kind: "number",
       label: "voicing",
       help: "inversion steps up or down (play mode: - =)",
       value: chords.inversion,
+      start: 0,
       min: -MAX_VOICING_STEP,
       max: MAX_VOICING_STEP,
       step: linear(1, -MAX_VOICING_STEP, MAX_VOICING_STEP),
@@ -1080,6 +1407,7 @@ function chordNodes(context: MenuContext): MenuNode[] {
       label: "arp octaves",
       help: "how many octaves an arpeggio climbs",
       value: chords.octaves,
+      start: 1,
       min: 1,
       max: 4,
       step: linear(1, 1, 4),
@@ -1096,15 +1424,15 @@ function chordNodes(context: MenuContext): MenuNode[] {
     },
     {
       kind: "choice",
-      label: "style",
-      help: "the style n suggests next chords in",
+      label: "idiom",
+      help: "the musical idiom n suggests next chords in (pop, jazz, blues…)",
       value: chords.style,
       options: PROGRESSION_STYLES,
       command: (option) => `/chords style ${option}`,
     },
     {
       kind: "entry",
-      label: "write a progression",
+      label: "progression",
       value: "",
       placeholder: "chords, e.g. i7 IV7 each 8",
       help: "sustained, voice-led block chords on this track in the song key",
@@ -1161,37 +1489,6 @@ function trackNodes(context: MenuContext): MenuNode[] {
     },
     volumeNode(track),
     panNode(track),
-    ...trackOrderNodes(context, track),
-  ];
-}
-
-/**
- * Where the focused track sits in the list, and removing it: the menu rows
- * for `/track move` and `/track remove`. A lone track has neither.
- */
-function trackOrderNodes(context: MenuContext, track: Track): MenuNode[] {
-  const count = context.score.tracks.length;
-  if (count <= 1) return [];
-  const index = context.score.tracks.findIndex((t) => t.id === track.id);
-  return [
-    {
-      kind: "entry",
-      label: "position",
-      value: `${index + 1} of ${count}`,
-      placeholder: `1..${count}`,
-      command: (text) =>
-        /^\d{1,3}$/.test(text.trim())
-          ? `/track move ${track.id} ${text.trim()}`
-          : undefined,
-      example: `/track move ${track.id} 1`,
-      help: "move this track up or down the list",
-    },
-    {
-      kind: "action",
-      label: "remove track",
-      command: `/track remove ${track.id}`,
-      help: "drop this track, its notes and anything that named it · ^z undoes",
-    },
   ];
 }
 
@@ -1554,7 +1851,7 @@ function sampleVoiceNodes(context: MenuContext, voice: string): MenuNode[] {
     // 0.6.1 layers: velocity layer (SFZ lovel/hivel) and round-robin group.
     {
       kind: "choice",
-      label: "Velocity layer",
+      label: "velocity layer",
       value: ref.vel ? `${ref.vel[0]}-${ref.vel[1]}` : "off",
       options: velocityLayerOptions(ref.vel),
       command: (option) => set(`vel ${option}`),
@@ -1562,7 +1859,7 @@ function sampleVoiceNodes(context: MenuContext, voice: string): MenuNode[] {
     },
     {
       kind: "entry",
-      label: "Round robin",
+      label: "round robin",
       value: ref.rr ?? "",
       placeholder: "group name, e.g. sn",
       command: (text) => set(`rr ${text.trim() || "off"}`),
@@ -1772,7 +2069,7 @@ function organNodes(track: Track): MenuNode[] {
       ? {
           kind: "menu",
           id: "keys:drawbars",
-          label: "Drawbars",
+          label: "drawbars",
           detail: text("drawbars"),
           help: "nine drawbars 16' to 1' (0 in, 8 full out)",
           build: (inner) => {
@@ -1790,7 +2087,7 @@ function organNodes(track: Track): MenuNode[] {
         ? {
             kind: "menu",
             id: "keys:registers",
-            label: "Registers",
+            label: "registers",
             detail: text("registers"),
             help: "five combo-organ registers 16' to 2' (0 off, 8 full)",
             build: (inner) => {
@@ -1807,7 +2104,7 @@ function organNodes(track: Track): MenuNode[] {
         : {
             kind: "menu",
             id: "keys:stops",
-            label: "Stops",
+            label: "stops",
             detail: text("stops"),
             help: "pipe stops and registrations",
             build: (inner) => {
@@ -1884,9 +2181,9 @@ function synthParamNode(track: Track, key: string, named: boolean): MenuNode {
 
 /** Plain names for the simple synth rows; the note shows the command name. */
 const SYNTH_LABEL: Readonly<Record<string, string>> = {
-  lpf: "filter cutoff",
-  lpq: "filter res",
-  lpenv: "filter env",
+  lpf: "synth filter",
+  lpq: "synth filter res",
+  lpenv: "synth filter env",
   vib: "vibrato",
   fm: "FM amount",
 };
@@ -2070,7 +2367,7 @@ function wavetableNodes(track: Track, projectRoot?: string): MenuNode[] {
     nodes.push({
       kind: "info",
       label: "position automation",
-      value: `${track.wtAutomation!.length} points · Automation › wavetable position`,
+      value: `${track.wtAutomation!.length} points · Automation › table position`,
     });
   return nodes;
 }
@@ -2085,7 +2382,7 @@ function effectNodes(context: MenuContext): MenuNode[] {
     return {
       kind: "menu",
       id: effect,
-      label: spec.label[0]!.toUpperCase() + spec.label.slice(1),
+      label: spec.label,
       detail: values ? effectSummary(effect, values) : "off",
       help: spec.doc,
       build: (inner) => effectParamNodes(inner, effect, false),
@@ -2108,7 +2405,7 @@ function effectNodes(context: MenuContext): MenuNode[] {
   const shoegaze: MenuNode = {
     kind: "menu",
     id: "shoegaze",
-    label: "Shoegaze",
+    label: "shoegaze",
     help: "wobble (tremolo-arm bend), bloom (feedback), swell (volume swell), double (two takes); `rig shoegaze` loads them all",
     detail:
       gazeOn.length === 0
@@ -2122,7 +2419,7 @@ function effectNodes(context: MenuContext): MenuNode[] {
   const rig: MenuNode = {
     kind: "menu",
     id: "guitar rig",
-    label: "Guitar rig",
+    label: "guitar rig",
     help: "stomp box, amp head with noise gate and speaker cabinet; `rig <name>` loads a whole rig",
     detail:
       rigOn.length === 0 ? "off" : (rigPresetOf(track.fx) ?? rigOn.join(" → ")),
@@ -2145,14 +2442,19 @@ function effectNodes(context: MenuContext): MenuNode[] {
     ...CORE_EFFECTS.map(node),
     rig,
     shoegaze,
-    // 0.7 Voice: hidden until a lane fills it.
-    ...voiceGroup(
-      "voice",
-      "Voice",
-      "formant and vocoder for voices",
-      voiceEffectRows,
-      context,
-    ),
+    // Formant and vocoder live under Voice; this row is the way there.
+    ...(voiceEffectRows(context).length > 0
+      ? [
+          {
+            kind: "menu" as const,
+            id: "voice",
+            label: "voice effects",
+            detail: "formant · vocoder · also in Voice",
+            help: "formant and vocoder for voices (the same rows as Ctrl-K › Voice)",
+            build: voiceEffectRows,
+          },
+        ]
+      : []),
     {
       kind: "menu",
       id: "more effects",
@@ -2490,14 +2792,14 @@ function soundsDetail(track: Track | undefined): string {
 }
 
 /**
- * The instrument browser: drum kits and soundfont instruments from the
+ * The instrument browser: kits and soundfont instruments from the
  * built-in packs (fetched on first use), and the pack list.
  */
 function kitsMenu(): MenuNode {
   return {
     kind: "menu",
     id: "kits",
-    label: "drum kits",
+    label: "kits",
     help: "make this a drum track with a synth or sample kit",
     detail: `synth ${SYNTH_KIT_NAMES.join(" ")} · samples ${Object.keys(DEFAULT_KITS).join(" ")}`,
     // Synth kits first (offline), then the pack sample kits.
@@ -2534,8 +2836,8 @@ function patternsMenu(): MenuNode {
   return {
     kind: "menu",
     id: "patterns",
-    label: "drum patterns",
-    detail: `${DRUM_PATTERNS.length} grooves`,
+    label: "grooves",
+    detail: `${DRUM_PATTERNS.length} ready-made drum parts`,
     help: "replace the drum part with a ready-made groove",
     build: () =>
       DRUM_PATTERNS.map((entry): MenuNode => ({
@@ -2553,7 +2855,7 @@ function soundNodes(context: MenuContext): MenuNode[] {
     {
       kind: "menu",
       id: "group:keys",
-      label: "Keys",
+      label: "keys",
       help: "modeled pianos, electric keys and organs, built in (no download)",
       detail: `${PIANO_PRESET_NAMES.join(" ")} · electric: ${ELECTRIC_PRESET_NAMES.join(" ")} · organs: ${ORGAN_PRESET_NAMES.join(" ")}`,
       build: () => [
@@ -2570,7 +2872,7 @@ function soundNodes(context: MenuContext): MenuNode[] {
         {
           kind: "menu",
           id: "group:keys:electric",
-          label: "Electric",
+          label: "electric",
           help: "electric pianos (tine, reed) and the clavinet, modeled",
           detail: ELECTRIC_PRESET_NAMES.join(" "),
           build: () =>
@@ -2587,7 +2889,7 @@ function soundNodes(context: MenuContext): MenuNode[] {
         {
           kind: "menu",
           id: "group:organs",
-          label: "Organs",
+          label: "organs",
           help: "tonewheel, combo and pipe organs on the keys engine",
           detail: ORGAN_PRESET_NAMES.join(" "),
           build: () =>
@@ -2605,7 +2907,7 @@ function soundNodes(context: MenuContext): MenuNode[] {
     },
     {
       kind: "action",
-      label: "wavetable synth  basic shapes morph · built-in",
+      label: "wavetable  basic shapes morph · built-in",
       command: "wt basic",
       help: "switch this track to the morphing wavetable synth",
     },
@@ -2615,7 +2917,7 @@ function soundNodes(context: MenuContext): MenuNode[] {
     {
       kind: "menu",
       id: "strings",
-      label: "Strings",
+      label: "strings",
       help: "plucked strings: guitars, basses, sitar, harpsichord, oud, koto…; Bowed: violin to contrabass, sections",
       detail: `${STRING_PRESET_NAMES.length - BOWED_PRESET_NAMES.length} plucked · ${BOWED_PRESET_NAMES.length} bowed · built-in`,
       build: () => [
@@ -2630,7 +2932,7 @@ function soundNodes(context: MenuContext): MenuNode[] {
         {
           kind: "menu",
           id: "strings:bowed",
-          label: "Bowed",
+          label: "bowed",
           help: "bowed strings: violin, viola, cello, bass, fiddle, erhu, sections",
           detail: BOWED_PRESET_NAMES.join(" "),
           build: () =>
@@ -2646,7 +2948,7 @@ function soundNodes(context: MenuContext): MenuNode[] {
     {
       kind: "menu",
       id: "granular-browse",
-      label: "Granular",
+      label: "granular",
       help: "grain clouds from a built-in synth or this track's own sound",
       detail: `${GRANULAR_PRESETS_COUNT} presets · built-in`,
       build: granularBrowseNodes,
@@ -2654,7 +2956,7 @@ function soundNodes(context: MenuContext): MenuNode[] {
     {
       kind: "menu",
       id: "instruments",
-      label: "instruments",
+      label: "all instruments",
       help: "sampled piano and General MIDI instruments",
       detail: "General MIDI soundfont, piano",
       build: () => [
@@ -2672,21 +2974,13 @@ function soundNodes(context: MenuContext): MenuNode[] {
     },
     {
       kind: "entry",
-      label: "use a sound",
+      label: "use a sample",
       value: "",
-      help: "type a pack sound name, e.g. dirt-samples/bd:3",
+      help: "type a pack sample name, e.g. dirt-samples/bd:3",
       placeholder: "<pack>/<sound>[:<n>]",
       command: (text) => (text.trim() ? `/pack use ${text.trim()}` : undefined),
       example: "/pack use dirt-samples/bd:3",
     },
-    // 0.7 Voice: hidden until a lane fills it.
-    ...voiceGroup(
-      "group:voices",
-      "Voices",
-      "vocal clips, sung choirs and solos, throat singing, vocoders",
-      voicesBrowseGroup,
-      context,
-    ),
     {
       kind: "menu",
       id: "packs",
@@ -2727,6 +3021,7 @@ function transportNodes(context: MenuContext): MenuNode[] {
       label: "tempo",
       help: "beats per minute",
       value: score.tempoBpm,
+      start: START_TEMPO_BPM,
       min: SCORE_LIMITS.minTempoBpm,
       max: SCORE_LIMITS.maxTempoBpm,
       step: linear(1, SCORE_LIMITS.minTempoBpm, SCORE_LIMITS.maxTempoBpm),
@@ -2738,6 +3033,7 @@ function transportNodes(context: MenuContext): MenuNode[] {
       label: "beats per bar",
       help: "the meter",
       value: score.beatsPerBar,
+      start: START_BEATS_PER_BAR,
       min: 1,
       max: SCORE_LIMITS.maxBeatsPerBar,
       step: linear(1, 1, SCORE_LIMITS.maxBeatsPerBar),
@@ -2750,20 +3046,14 @@ function transportNodes(context: MenuContext): MenuNode[] {
       label: "loop length",
       help: "how long the loop is",
       value: score.bars,
+      start: START_BARS,
       min: 1,
       max: SCORE_LIMITS.maxBars,
       step: linear(1, 1, SCORE_LIMITS.maxBars),
       format: (value) => `${num(value)} bar${value === 1 ? "" : "s"}`,
       command: (value) => `bars ${Math.round(value)}`,
     },
-    {
-      kind: "choice",
-      label: "grid",
-      help: "the step play-mode recording and the euclid editor snap to",
-      value: context.grid,
-      options: context.grids,
-      command: (option) => `/grid ${option}`,
-    },
+    gridNode(context),
     {
       kind: "toggle",
       label: "click",
@@ -2778,26 +3068,6 @@ function transportNodes(context: MenuContext): MenuNode[] {
       value: String(context.countInBars),
       options: ["0", "1", "2"],
       command: (option) => `/count-in ${option}`,
-    },
-    ...(context.showMe === undefined
-      ? []
-      : [
-          {
-            kind: "choice" as const,
-            label: "show me",
-            help: "agent turns: its commands as ghost text, faders, keys",
-            value: context.showMe,
-            options: ["on", "quiet", "off"],
-            command: (option: string) => `/showme ${option}`,
-          },
-        ]),
-    {
-      kind: "menu",
-      id: "tuning",
-      label: "tuning & scale",
-      detail: `${tuningLabel(score.tuning)} · ${keyLabel(score.key)}`,
-      help: "the song tuning (12-TET, EDOs, just, gamelan, Scala) and scale",
-      build: songTuningNodes,
     },
     {
       kind: "choice",
@@ -2816,6 +3086,40 @@ function transportNodes(context: MenuContext): MenuNode[] {
       detail: "track · section · bars → new sample track",
       help: "render a track, an orbit or the mix to a pinned WAV on a new sampler or granular track",
       build: resampleNodes,
+    },
+    {
+      kind: "menu",
+      id: "export",
+      label: "export",
+      detail: "project file · MIDI · WAV",
+      help: "save the song as a project file or MIDI; audio renders offline",
+      build: exportNodes,
+    },
+    {
+      kind: "menu",
+      id: "session",
+      label: "session",
+      detail: context.sessionName ?? "rename · fork · resume",
+      help: "rename, fork or resume a session",
+      build: sessionNodes,
+    },
+    {
+      kind: "menu",
+      id: "agent",
+      label: "agent",
+      detail: context.showMe
+        ? `show me ${context.showMe}`
+        : "model · model key",
+      help: "the agent's model, show-me and model key",
+      build: agentNodes,
+    },
+    {
+      kind: "menu",
+      id: "help",
+      label: "help and guides",
+      detail: "help · guides · keys",
+      help: "the command reference, the guides and the keys",
+      build: helpNodes,
     },
   ];
 }
@@ -2864,9 +3168,9 @@ function resampleNodes(context: MenuContext): MenuNode[] {
     },
     {
       kind: "action",
-      label: "mix → sampler (pre-master)",
+      label: "mix → sampler",
       command: "resample orbit 1",
-      help: "render every track on orbit 1 (the default bus) without the song master",
+      help: "pre-master: render every track on orbit 1 (the default bus) without the song master",
     },
     {
       kind: "action",
@@ -3104,14 +3408,7 @@ type Frame = {
   hovering?: boolean;
 };
 
-const KEY_UP = new Set(["\u001b[A", "\u001bOA", "k"]);
-const KEY_DOWN = new Set(["\u001b[B", "\u001bOB", "j"]);
-const KEY_LEFT = new Set(["\u001b[D", "\u001bOD", "h", "-", "_"]);
-const KEY_RIGHT = new Set(["\u001b[C", "\u001bOC", "l", "+", "="]);
-const KEY_ENTER = new Set(["\r", "\n"]);
-const KEY_BACKSPACE = new Set(["\u007f", "\b"]);
-const KEY_DELETE = new Set(["\u001b[3~", "x"]);
-const LABEL_WIDTH = 16;
+export const LABEL_WIDTH = 16;
 
 /**
  * A submenu frame whose rows are rebuilt from the parent's fresh build, so
@@ -3164,10 +3461,8 @@ export class EditMenu {
     this.stack = [{ title: "menu", build: rootNodes, index: 0, query: "" }];
     this.filtering = false;
     this.entry = undefined;
-    // Walk the section path (`automation` is Mix & automation › automation).
-    for (const id of section
-      ? (SECTION_ALIASES[section.toLowerCase()] ?? [])
-      : []) {
+    // Walk the section path (`automation` is Mix › automation).
+    for (const id of section ? (menuSectionPath(context, section) ?? []) : []) {
       const frame = this.stack.at(-1)!;
       const nodes = frame.build(context);
       const index = nodes.findIndex(
@@ -3278,10 +3573,11 @@ export class EditMenu {
     const direct = all.filter((node) =>
       nodeText(node).toLowerCase().includes(needle),
     );
-    // At the root a filter with no direct match looks two levels down for
-    // groups (`/voice`, `/autotune`, `/formant`) and offers them by path.
-    if (direct.length > 0 || this.stack.length !== 1) return direct;
-    return deepGroups(all, context, needle);
+    // At the root a filter also looks two levels down for groups
+    // (`/autotune`, `/formant`, `/tuning`) and offers them by path, after
+    // the roots that match.
+    if (this.stack.length !== 1) return direct;
+    return [...direct, ...deepGroups(all, context, needle)];
   }
 
   private selected(context: MenuContext): MenuNode | undefined {
@@ -3309,11 +3605,7 @@ export class EditMenu {
         frame.index = 0;
         return { type: "handled" };
       }
-      if (
-        KEY_ENTER.has(value) ||
-        value === "\u001b[B" ||
-        value === "\u001b[A"
-      ) {
+      if (KEY_ENTER.has(value) || value === ARROW_DOWN || value === ARROW_UP) {
         this.filtering = false;
         return this.key(value, context);
       }
@@ -3352,11 +3644,11 @@ export class EditMenu {
         frame.index = (frame.index + step + nodes.length) % nodes.length;
       return this.hovered(frame, context);
     }
-    if (value === "\u001b[5~" || value === "\u001b[H") {
+    if (KEY_PAGE_UP.has(value) || KEY_HOME.has(value)) {
       frame.index = 0;
       return this.hovered(frame, context);
     }
-    if (value === "\u001b[6~" || value === "\u001b[F") {
+    if (KEY_PAGE_DOWN.has(value) || KEY_END.has(value)) {
       frame.index = Math.max(0, nodes.length - 1);
       return this.hovered(frame, context);
     }
@@ -3375,11 +3667,19 @@ export class EditMenu {
         node.kind === "info")
     )
       return { type: "keep" };
-    if (KEY_LEFT.has(value) || KEY_RIGHT.has(value)) {
-      const direction = KEY_RIGHT.has(value) ? 1 : -1;
-      return this.nudge(node, direction);
-    }
-    if (KEY_DELETE.has(value) && node.kind === "number") {
+    // ← → adjust a value; on any other row ← h go back and → l go in
+    // (or run the action), and - + do nothing.
+    const isValue = isValueNode(node);
+    if (isValue && (KEY_LEFT.has(value) || KEY_RIGHT.has(value)))
+      return this.nudge(node, KEY_RIGHT.has(value) ? 1 : -1);
+    if (!isValue && KEY_BACK.has(value)) return this.back();
+    if (!isValue && (KEY_LEFT.has(value) || KEY_RIGHT.has(value)))
+      if (!(
+        KEY_FORWARD.has(value) &&
+        (node.kind === "menu" || node.kind === "action")
+      ))
+        return { type: "handled" };
+    if (KEY_RESET.has(value) && node.kind === "number") {
       const reset =
         node.reset ??
         (node.start !== undefined && node.value !== undefined
@@ -3387,7 +3687,7 @@ export class EditMenu {
           : undefined);
       return reset ? { type: "run", command: reset } : { type: "handled" };
     }
-    if (KEY_DELETE.has(value) && node.kind === "point")
+    if (KEY_RESET.has(value) && node.kind === "point")
       return {
         type: "run",
         command: `automate ${node.lane} remove ${num(node.beat)}`,
@@ -3399,7 +3699,7 @@ export class EditMenu {
       this.entry = { label: node.label, buffer: value };
       return { type: "handled" };
     }
-    if (KEY_ENTER.has(value) || value === " ") {
+    if (KEY_ENTER.has(value) || KEY_FORWARD.has(value) || value === " ") {
       if (node.kind === "menu") {
         // Going back lands on the opened row with the filter cleared.
         if (frame.query) {
@@ -3475,15 +3775,16 @@ export class EditMenu {
     return { type: "hover", command: node.command, key: frame.hover };
   }
 
+  /** ← on a row that is not a value: up one level (never past the root). */
+  private back(): MenuResult {
+    if (this.stack.length <= 1) return { type: "handled" };
+    const left = this.stack.pop();
+    if (left?.hover && left.hovering)
+      return { type: "unhover", key: left.hover };
+    return { type: "handled" };
+  }
+
   private nudge(node: MenuNode, direction: 1 | -1): MenuResult {
-    if (node.kind === "menu") {
-      if (direction > 0) {
-        this.stack.push(childFrame(this.stack.at(-1)!, node));
-        return { type: "handled" };
-      }
-      if (this.stack.length > 1) this.stack.pop();
-      return { type: "handled" };
-    }
     if (node.kind === "number") {
       const next =
         node.value === undefined
@@ -3515,11 +3816,6 @@ export class EditMenu {
       return next === undefined || next === node.value
         ? { type: "handled" }
         : { type: "run", command: node.command(next) };
-    }
-    if (direction < 0 && this.stack.length > 1) {
-      const left = this.stack.pop();
-      if (left?.hover && left.hovering)
-        return { type: "unhover", key: left.hover };
     }
     return { type: "handled" };
   }
@@ -3649,6 +3945,16 @@ export class EditMenu {
                   : HINTS.menu;
     return { title, items, index, hint, note };
   }
+}
+
+/** Rows that hold a value: ← → adjust them instead of navigating. */
+function isValueNode(node: MenuNode): boolean {
+  return (
+    node.kind === "number" ||
+    node.kind === "point" ||
+    node.kind === "toggle" ||
+    node.kind === "choice"
+  );
 }
 
 /** The focused row's one-line description. */
@@ -3844,39 +4150,123 @@ function nodeText(node: MenuNode): string {
   return `${node.label} ${valueText(node)} ${commandText(node) ?? ""}`;
 }
 
-/** The sections `/menu` lists in its usage line, one name per root. */
-export const MENU_SHOWN_SECTIONS = [
-  "sound",
-  "effects",
-  "rhythm",
-  "chords",
-  "mix",
-  "master",
-  "project",
-  "arrange",
-  "style",
-] as const;
+/** Every id `/menu <id>` opens: the ten topics first, then older ids. */
+export const MENU_SECTIONS: readonly string[] = Object.freeze(
+  Object.keys(SECTION_ALIASES),
+);
 
-/** Root sections, for `/menu <section>`: the shown ones, then aliases. */
-export const MENU_SECTIONS = [
-  ...MENU_SHOWN_SECTIONS,
-  // Older names, still accepted, never listed.
-  "parameters",
-  "sounds",
-  "track",
-  "automation",
-  "transport",
-  // Subsections.
-  "tempo",
-  "meter",
-  "time",
-  "performance",
-  "expression",
-  "tuning",
-  "scale",
-  // More names for arrange › style and arrange.
-  "styles",
-  "genre",
-  "sections",
-  "form",
-] as const;
+/** The ten topic ids, the roots `/menu` names first. */
+export const MENU_TOPICS: readonly string[] = Object.freeze(
+  MENU_SECTIONS.slice(0, 10),
+);
+
+/** The names `/menu` and `/help menu` list: one per topic, no aliases. */
+export const MENU_SHOWN_SECTIONS: readonly string[] = MENU_TOPICS;
+
+/** `/menu`'s usage line: the short form; `/help menu` lists every topic. */
+export const MENU_USAGE = "usage: /menu <topic or row> · /help menu lists them";
+
+/**
+ * The error for `/menu <section>` when nothing matches: the nearest topic
+ * or row name first, so it fits 80 columns, then the short usage.
+ */
+export function menuUsage(context: MenuContext, section: string): string {
+  const names = new Set<string>(MENU_SECTIONS);
+  for (const node of rootNodes(context))
+    if (node.kind === "menu") {
+      let children: MenuNode[] = [];
+      try {
+        children = node.build(context);
+      } catch {
+        continue;
+      }
+      for (const child of children)
+        if (child.kind === "menu") names.add(labelName(child.label));
+    }
+  const near = nearest(section, names);
+  return `no menu "${section}"${near ? ` · did you mean /menu ${near}?` : ""} · /menu <topic or row>`;
+}
+
+/** A row label without its padded detail: `granular  12 presets` → `granular`. */
+function labelName(label: string): string {
+  return label
+    .split(/\s{2,}/)[0]!
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * The path of menu ids `/menu <section>` walks: a topic or older id from
+ * SECTION_ALIASES, else the first menu row (three levels deep, breadth
+ * first) whose id or label is `section`. Undefined when nothing matches.
+ */
+export function menuSectionPath(
+  context: MenuContext,
+  section: string,
+): readonly string[] | undefined {
+  const needle = section.trim().toLowerCase();
+  if (!needle) return undefined;
+  const alias = SECTION_ALIASES[needle];
+  if (alias) return alias;
+  type Step = { nodes: readonly MenuNode[]; path: readonly string[] };
+  let level: Step[] = [{ nodes: rootNodes(context), path: [] }];
+  for (let depth = 0; depth < 3 && level.length; depth += 1) {
+    const next: Step[] = [];
+    for (const { nodes, path } of level) {
+      for (const node of nodes) {
+        if (node.kind !== "menu") continue;
+        const at = [...path, node.id];
+        if (node.id === needle || node.label.toLowerCase() === needle)
+          return at;
+        if (depth < 2) {
+          try {
+            next.push({ nodes: node.build(context), path: at });
+          } catch {
+            // A section that cannot build here has no rows to match.
+          }
+        }
+      }
+    }
+    level = next;
+  }
+  return undefined;
+}
+
+/** A one-track project, for breadcrumbs asked for without a window. */
+function breadcrumbContext(): MenuContext {
+  return {
+    score: createScore({
+      tempoBpm: 120,
+      bars: 8,
+      tracks: [{ id: "keys", name: "keys", instrument: "piano" }],
+      notes: [],
+    }),
+    trackId: "keys",
+    playing: false,
+    grid: "1/16",
+    grids: ["1/16"],
+    clickOn: false,
+    countInBars: 1,
+  };
+}
+
+/**
+ * `Ctrl-K › Chords and key › tuning`: where `/menu <id>` opens, from the
+ * live labels. Undefined when `id` opens nothing.
+ */
+export function menuPath(
+  id: string,
+  context: MenuContext = breadcrumbContext(),
+): string | undefined {
+  const path = menuSectionPath(context, id);
+  if (!path) return undefined;
+  const labels: string[] = [];
+  let nodes: readonly MenuNode[] = rootNodes(context);
+  for (const step of path) {
+    const node = nodes.find((row) => row.kind === "menu" && row.id === step);
+    if (node?.kind !== "menu") return undefined;
+    labels.push(node.label);
+    nodes = node.build(context);
+  }
+  return ["Ctrl-K", ...labels].join(" › ");
+}

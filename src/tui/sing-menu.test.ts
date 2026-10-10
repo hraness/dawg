@@ -64,17 +64,17 @@ function select(menu: EditMenu, ctx: MenuContext, label: string): void {
 }
 
 describe("Sound › Voices (sing)", () => {
-  test("browse sounds › Voices › Throat plays a throat preset", () => {
+  test("Voice › voice presets › throat plays a throat preset", () => {
     const menu = new EditMenu();
     const ctx = context(score());
-    menu.show(ctx, "sounds");
-    select(menu, ctx, "Voices");
+    menu.show(ctx, "voice");
+    select(menu, ctx, "voice presets");
     menu.key("\r", ctx);
     const groups = menu.view(ctx).items.map((row) => row.label.split(" ")[0]);
     // The clips lane's Vocal row comes first, then the sing groups, then
     // the vocoder lane's carrier.
-    expect(groups).toEqual(["Vocal", "Choir", "Solo", "Throat", "Vocoder"]);
-    select(menu, ctx, "Throat");
+    expect(groups).toEqual(["vocal", "choir", "solo", "throat", "vocoder"]);
+    select(menu, ctx, "throat");
     menu.key("\r", ctx);
     select(menu, ctx, "khoomei");
     expect(menu.key("\r", ctx)).toEqual({
@@ -89,7 +89,7 @@ describe("Sound › Voices (sing)", () => {
     const ctx = context(value);
     menu.show(ctx, "parameters");
     const labels = menu.view(ctx).items.map((row) => row.label);
-    for (const label of ["preset", "vowel", "voices", "Throat", "advanced"])
+    for (const label of ["preset", "vowel", "voices", "throat", "advanced"])
       expect(labels.some((row) => row.startsWith(label))).toBe(true);
     select(menu, ctx, "bright");
     const result = menu.key(RIGHT, ctx);
@@ -100,19 +100,19 @@ describe("Sound › Voices (sing)", () => {
     expect(next.tracks[0]!.sing!.bright).toBeGreaterThan(0.5);
     expect(isStageable(result.command)).toBe(true);
     // The Throat sub-menu: drone turns throat mode on with a note name.
-    select(menu, ctx, "Throat");
+    select(menu, ctx, "throat");
     menu.key("\r", ctx);
     select(menu, ctx, "drone");
     const drone = menu.key(RIGHT, ctx);
     expect(drone).toEqual({ type: "run", command: "sing drone D3" });
   });
 
-  test("Performance › Vowels steps the notes' vowel", () => {
+  test("Performance › vowels steps the notes' vowel", () => {
     const value = run(score(), "sing aah");
     const menu = new EditMenu();
     const ctx = context(value);
     menu.show(ctx, "performance");
-    select(menu, ctx, "Vowels");
+    select(menu, ctx, "vowels");
     menu.key("\r", ctx);
     select(menu, ctx, "vowel");
     const result = menu.key(RIGHT, ctx);
@@ -127,6 +127,6 @@ describe("Sound › Voices (sing)", () => {
     const ctx = context(score());
     menu.show(ctx, "performance");
     const labels = menu.view(ctx).items.map((row) => row.label);
-    expect(labels.some((row) => row.startsWith("Vowels"))).toBe(false);
+    expect(labels.some((row) => row.startsWith("vowels"))).toBe(false);
   });
 });

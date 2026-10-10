@@ -1,7 +1,9 @@
 /**
- * 0.7 Voice menu rows. The contract mounts three groups once (Sound > Voice,
- * Effects > Voice and Sound > browse sounds > Voices) and hides each while
- * every lane's rows are empty. Each lane fills only its own function below.
+ * 0.7 Voice menu rows. The Voice root (Ctrl-K › Voice) gathers every lane:
+ * sing, clips and lyrics, pitch, autotune, formant and vocoder, then the
+ * voice presets. It is always shown; on a track that is not a voice yet it
+ * opens on "turn this track into a voice". Effects keeps a "voice effects"
+ * row for formant and vocoder. Each lane fills only its own function below.
  */
 import { effectSpec } from "../../core/fx.ts";
 import { effectValues } from "../commands/fx.ts";
@@ -17,7 +19,13 @@ import {
   type MenuContext,
   type MenuNode,
 } from "./menu.ts";
-import { singBrowseRows } from "./sing-menu.ts";
+import {
+  singBrowseRows,
+  singParameterNodes,
+  singVowelNodes,
+} from "./sing-menu.ts";
+import { parseKey } from "../../core/chords.ts";
+import type { Track } from "../../core/score.ts";
 import { clipMenuRows, vocalBrowseRows } from "./menu-clips.ts";
 import { vocoderBrowseNode, vocoderEffectNode } from "./vocoder-menu.ts";
 import {
@@ -31,12 +39,12 @@ import {
 } from "../../core/autotune.ts";
 import { autotuneEngineNote } from "../audio/autotune.ts";
 
-/** Sound > Voice: Clips and Lyrics (clips lane). */
+/** Voice: Clips and Lyrics (clips lane). */
 export function clipsSoundRows(context: MenuContext): MenuNode[] {
   return clipMenuRows(context);
 }
 
-/** Sound > Voice: Pitch with trace, detected key and Make notes (pitch lane). */
+/** Voice: Pitch with trace, detected key and Make notes (pitch lane). */
 export function pitchSoundRows(context: MenuContext): MenuNode[] {
   const track = context.score.tracks.find((t) => t.id === context.trackId);
   if (!track || pitchTargets(track).length === 0) return [];
@@ -45,7 +53,7 @@ export function pitchSoundRows(context: MenuContext): MenuNode[] {
     {
       kind: "menu",
       id: "voice-pitch",
-      label: "Pitch",
+      label: "pitch",
       detail: summary
         ? `${summary.key ?? "key unclear"} · ${hzName(summary.median)}`
         : "detect key and melody",
@@ -55,13 +63,13 @@ export function pitchSoundRows(context: MenuContext): MenuNode[] {
   ];
 }
 
-/** Sound > Voice > Pitch. */
+/** Voice › Pitch. */
 export function pitchMenuRows(context: MenuContext): MenuNode[] {
   const summary = pitchSummary(context.trackId);
   return [
     {
       kind: "action",
-      label: "Analyze",
+      label: "analyze",
       command: "/vocal pitch",
       help: "track the pitch of the focused clip or sample (cached in .dawg/analysis)",
     },
@@ -87,7 +95,7 @@ export function pitchMenuRows(context: MenuContext): MenuNode[] {
     },
     {
       kind: "action",
-      label: "Make notes",
+      label: "make notes",
       command: "/vocal notes",
       help: "a new guide-notes track with one note per sung note",
     },
@@ -95,7 +103,7 @@ export function pitchMenuRows(context: MenuContext): MenuNode[] {
 }
 
 /**
- * Sound > Voice: Autotune (autotune lane). One sub-menu on a track with
+ * Voice: Autotune (autotune lane). One sub-menu on a track with
  * audio to tune (clips, a sampler, the `vocal` word, or autotune set): Preset (off or one of nine), To, From, Key, the AUTOTUNE_PARAMS
  * numbers and Voice. Each row runs an `autotune …` command, so space
  * auditions it with staged A/B and x puts a field back to the preset's.
@@ -120,7 +128,7 @@ export function autotuneSoundRows(context: MenuContext): MenuNode[] {
     {
       kind: "menu",
       id: "voice:autotune",
-      label: "Autotune",
+      label: "autotune",
       detail: current
         ? `${describeAutotune(current)}${autotuneEngineNote()}`
         : "off",
@@ -142,7 +150,7 @@ function autotuneRows(context: MenuContext): MenuNode[] {
   const nodes: MenuNode[] = [
     {
       kind: "choice",
-      label: "Preset",
+      label: "preset",
       value: current ? (current.preset ?? "pop") : "off",
       options: ["off", ...AUTOTUNE_PRESETS],
       command: (option) =>
@@ -153,7 +161,7 @@ function autotuneRows(context: MenuContext): MenuNode[] {
     },
     {
       kind: "choice",
-      label: "To",
+      label: "to",
       value: own.to === undefined ? "preset" : String(own.to),
       options: ["preset", ...AUTOTUNE_TARGETS],
       command: (option) =>
@@ -162,7 +170,7 @@ function autotuneRows(context: MenuContext): MenuNode[] {
     },
     {
       kind: "choice",
-      label: "From",
+      label: "from",
       value: current?.from ?? "own notes",
       options: [
         "own notes",
@@ -180,7 +188,7 @@ function autotuneRows(context: MenuContext): MenuNode[] {
     },
     {
       kind: "entry",
-      label: "Key",
+      label: "key",
       value: current?.key ?? (context.score.key ? "song" : "none (chromatic)"),
       placeholder: "a key: A minor, D bayati, C# major",
       command: (text) =>
@@ -200,7 +208,7 @@ function autotuneRows(context: MenuContext): MenuNode[] {
         number | undefined) ?? spec.def;
     nodes.push({
       kind: "number",
-      label: spec.label,
+      label: spec.label.toLowerCase(),
       value: current ? (value ?? fallback) : undefined,
       min: spec.min,
       max: spec.max,
@@ -229,7 +237,7 @@ function autotuneRows(context: MenuContext): MenuNode[] {
   }
   nodes.push({
     kind: "choice",
-    label: "Voice",
+    label: "voice",
     value: current?.voice ?? "auto",
     options: AUTOTUNE_VOICES,
     command: (option) => `autotune voice ${option}`,
@@ -260,7 +268,7 @@ export function formantEffectRows(context: MenuContext): MenuNode[] {
     {
       kind: "menu",
       id: "formant",
-      label: "Formant",
+      label: "formant",
       detail: values
         ? `shift ${values.shift} st · mix ${values.mix}`
         : "off · shift the throat, keep the pitch",
@@ -276,7 +284,7 @@ export function vocoderEffectRows(context: MenuContext): MenuNode[] {
 }
 
 /**
- * Sound > browse sounds > Voices: Vocal (clips), Choir, Solo and Throat
+ * Voice › voice presets: Vocal (clips), Choir, Solo and Throat
  * (sing), Vocoder (vocoder).
  */
 export function voicesBrowseGroup(context: MenuContext): MenuNode[] {
@@ -287,7 +295,7 @@ export function voicesBrowseGroup(context: MenuContext): MenuNode[] {
   ];
 }
 
-/** Every Sound > Voice row, in lane order. */
+/** Every Voice row, in lane order. */
 export function voiceSoundRows(context: MenuContext): MenuNode[] {
   return [
     ...clipsSoundRows(context),
@@ -296,32 +304,90 @@ export function voiceSoundRows(context: MenuContext): MenuNode[] {
   ];
 }
 
-/** Every Effects > Voice row, in lane order. */
+/** Voice effects (formant, vocoder), in lane order; Effects links here. */
 export function voiceEffectRows(context: MenuContext): MenuNode[] {
   return [...formantEffectRows(context), ...vocoderEffectRows(context)];
 }
 
+/** True when the focused track already sings, speaks or carries vocals. */
+export function isVoiceTrack(track: Track | undefined): boolean {
+  if (!track) return false;
+  return (
+    track.instrument === "vocal" ||
+    track.instrument === "sing" ||
+    (track.clips?.length ?? 0) > 0 ||
+    track.autotune !== undefined ||
+    track.vocoder !== undefined
+  );
+}
+
+/** The Voice root's detail: what the focused track's voice is now. */
+export function voiceRootDetail(context: MenuContext): string {
+  const track = context.score.tracks.find((t) => t.id === context.trackId);
+  if (!isVoiceTrack(track)) return "turn this track into a voice";
+  const parts: string[] = [];
+  if (track!.instrument === "sing")
+    parts.push(`sing${track!.sing?.preset ? ` ${track!.sing.preset}` : ""}`);
+  const clips = track!.clips?.length ?? 0;
+  if (clips) parts.push(`${clips} clip${clips === 1 ? "" : "s"}`);
+  if (track!.autotune) parts.push("autotune");
+  if (track!.vocoder) parts.push("vocoder");
+  if (parts.length === 0) parts.push(track!.instrument);
+  return parts.join(" · ");
+}
+
+/** Ctrl-K › Voice › voice presets: vocal, choirs, solos, throat, vocoders. */
+function voicePresetsNode(detail: string): MenuNode {
+  return {
+    kind: "menu",
+    id: "voice:presets",
+    label: "voice presets",
+    detail,
+    help: "vocal clips, sung choirs and solos, throat singing, vocoders",
+    build: voicesBrowseGroup,
+  };
+}
+
 /**
- * A sub-menu that exists only while it has rows: `[]` when `rows` is empty,
- * so a group no lane has filled never shows.
+ * Ctrl-K › Voice. Always shown: a track that is not a voice yet opens on
+ * the voice presets ("turn this track into a voice"), then clips and lyrics
+ * so a take can be imported straight away.
  */
-export function voiceGroup(
-  id: string,
-  label: string,
-  help: string,
-  rows: (context: MenuContext) => MenuNode[],
-  context: MenuContext,
-): MenuNode[] {
-  const now = rows(context);
-  if (now.length === 0) return [];
+export function voiceRootNodes(context: MenuContext): MenuNode[] {
+  const track = context.score.tracks.find((t) => t.id === context.trackId);
+  if (!track) return [];
+  const voice = isVoiceTrack(track);
+  const sing: MenuNode[] =
+    track.instrument === "sing" && track.sing
+      ? [
+          {
+            kind: "menu",
+            id: "voice:sing",
+            label: "sing",
+            detail: track.sing.preset ?? "custom",
+            help: "the built-in singing voice: preset, vowel, voices, breath, formant, throat",
+            build: (inner) => {
+              const now = inner.score.tracks.find(
+                (t) => t.id === inner.trackId,
+              );
+              return now
+                ? [
+                    ...singParameterNodes(
+                      now,
+                      parseKey(inner.score.key ?? undefined)?.tonic,
+                    ),
+                    ...singVowelNodes(inner),
+                  ]
+                : [];
+            },
+          },
+        ]
+      : [];
   return [
-    {
-      kind: "menu",
-      id,
-      label,
-      detail: now.map((row) => row.label).join(" · "),
-      help,
-      build: rows,
-    },
+    ...(voice ? [] : [voicePresetsNode("turn this track into a voice")]),
+    ...sing,
+    ...voiceSoundRows(context),
+    ...voiceEffectRows(context),
+    ...(voice ? [voicePresetsNode("vocal, choir, solo, throat, vocoder")] : []),
   ];
 }

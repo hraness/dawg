@@ -1,6 +1,6 @@
 /**
  * Ctrl-k menu rows for the sing engine (0.7): the Choir, Solo and Throat
- * groups under Sound › browse sounds › Voices, the SING_PARAMS rows under
+ * groups under Voice › voice presets, the SING_PARAMS rows under
  * Sound › Parameters on a sing track (with a Throat sub-menu) and the
  * Vowels row under Sound › Performance. Every row runs a `sing …` or
  * `note vowel …` command, so it stages for the audition loop's A/B.
@@ -32,12 +32,12 @@ function presetRow(name: SingPreset): MenuNode {
   };
 }
 
-/** Sound › browse sounds › Voices: Choir, Solo and Throat (sing lane). */
+/** Voice › voice presets: choir, solo and throat (sing lane). */
 export function singBrowseRows(): MenuNode[] {
   return SING_GROUPS.map((group): MenuNode => ({
     kind: "menu",
     id: `voices:${group.label.toLowerCase()}`,
-    label: group.label,
+    label: group.label.toLowerCase(),
     detail: group.presets.slice(0, 4).join(", ") + " …",
     help:
       group.label === "Throat"
@@ -179,7 +179,7 @@ export function singParameterNodes(track: Track, keyRoot?: number): MenuNode[] {
   nodes.push({
     kind: "menu",
     id: "sing:throat",
-    label: "Throat",
+    label: "throat",
     detail:
       resolved.drone === undefined
         ? "off · drone, overtone, harmonics, sub"
@@ -234,7 +234,7 @@ export function singVowelNodes(context: MenuContext): MenuNode[] {
     {
       kind: "menu",
       id: "sing:vowels",
-      label: "Vowels",
+      label: "vowels",
       detail: `${current} · ${notes.length} notes`,
       help: "the sung vowel of every note on the track (a note's vowel wins over the track's)",
       build: (inner) => {

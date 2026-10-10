@@ -55,7 +55,7 @@ const KNOWN_SLASH_GAPS: readonly string[] = [
   // submit (grammar WINDOW_VERBS), which `accepts` does not model.
   "click 50%",
   "guide voice",
-  "menu sound",
+  "menu tuning",
   "sessions",
   "status",
   "transcript",
@@ -67,11 +67,7 @@ const KNOWN_SLASH_GAPS: readonly string[] = [
  * D3, D4: help groups and guides for every id) and the menu lane (B1:
  * MENU_SECTIONS from every topic id) close them.
  */
-const KNOWN_TOPIC_GAPS: readonly string[] = [
-  "menu voice",
-  "menu keys",
-  "menu agent",
-];
+const KNOWN_TOPIC_GAPS: readonly string[] = [];
 
 /** True until src/commands/grammar.ts lands (grammar lane, PR #141). */
 const GRAMMAR_PENDING = true;
@@ -223,8 +219,7 @@ describe("window commands check their arguments", () => {
   });
 
   test("/menu lists only one name per root; aliases stay accepted", () => {
-    const usage = read("src/main.ts");
-    expect(usage).toContain("MENU_SHOWN_SECTIONS.join");
+    expect(read("src/main.ts")).toContain("menuUsage(");
     for (const name of MENU_SHOWN_SECTIONS)
       expect(MENU_SECTIONS as readonly string[]).toContain(name);
     expect(MENU_SHOWN_SECTIONS as readonly string[]).not.toContain("genre");
@@ -363,43 +358,11 @@ describe("aliases parse like their canonical form", () => {
  * resolves on that branch; delete the lines as they resolve here.
  */
 const KNOWN_MENU_PATH_GAPS: readonly string[] = [
-  "guides/agent.md: Ctrl-K › Project › agent › model",
-  "guides/arrange.md: Ctrl-K › Arrange › tracks",
-  "guides/files.md: Ctrl-K › Project › export",
-  "guides/keys.md: Ctrl-K › Project › help",
-  "guides/media.md: Ctrl-K › Sound › instruments › use a sample",
-  "guides/providers.md: Ctrl-K › Project › agent › model",
-  "guides/sessions.md: Ctrl-K › Project › session › rename",
-  "guides/show-me.md: Ctrl-K › Project › agent › show-me",
-  "guides/sounds.md: Ctrl-K › Sound › instruments › Strings › Bowed",
-  "guides/sounds.md: Ctrl-K › Sound › instruments › Wavetable",
-  "guides/tracks.md: Ctrl-K › Arrange › tracks",
-  "guides/tuning.md: Ctrl-K › Chords › tuning",
   "guides/voice.md: Ctrl-K › Voice › sing",
-  "guides/music.md: Ctrl-K › Arrange › sections",
-  "guides/web-search.md: Ctrl-K › Project › agent › model",
-  "DAWG.md: Ctrl-K › Arrange › tracks",
-  "DAWG.md: Ctrl-K › Sound › instruments › Keys",
-  "DAWG.md: Ctrl-K › Sound › instruments › Keys › Organs;",
-  "DAWG.md: Ctrl-K › Sound › instruments",
-  "DAWG.md: Ctrl-K › Sound › instruments › Granular",
-  "DAWG.md: Ctrl-K › Sound › instruments › Mallets",
-  "DAWG.md: Ctrl-K › Chords › tuning",
-  "DAWG.md: Ctrl-K › Rhythm › grooves",
-  "DAWG.md: Ctrl-K › Voice",
-  "DAWG.md: Ctrl-K › Voice › clips",
-  "DAWG.md: Ctrl-K › Voice › voice presets",
-  "DAWG.md: Ctrl-K › Voice › formant",
-  "DAWG.md: Ctrl-K › Voice › voice presets",
-  "DAWG.md: Ctrl-K › Voice › pitch",
-  "DAWG.md: Ctrl-K › Voice › vocoder",
-  "DAWG.md: Ctrl-K › Voice › voice presets",
-  "DAWG.md: Ctrl-K › Voice › autotune",
-  "DAWG.md: Ctrl-K › Chords › tuning",
 ];
 
 /** `/menu <word>`s the docs use before the menu lane accepts them. */
-const KNOWN_MENU_WORD_GAPS: readonly string[] = ["voice"];
+const KNOWN_MENU_WORD_GAPS: readonly string[] = [];
 
 describe("Ctrl-K paths in the docs resolve", () => {
   const sources = [

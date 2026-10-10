@@ -1,5 +1,5 @@
 /**
- * Project › Tempo & meter: the song's tempo map, meter changes and
+ * Project › Tempo and meter: the song's tempo map, meter changes and
  * fermatas, and the focused track's rate, phase and cycle. Every row runs a
  * prompt command from `src/commands/time.ts`, so the menu and the prompt
  * stay one grammar.
@@ -28,7 +28,7 @@ export function openingMeterCommand(score: TimeScore, value: number): string {
   return unit === 4 ? `meter ${beats}` : `meter ${beats}/${unit}`;
 }
 
-/** One-line summary for the Project row and the Tempo & meter row. */
+/** One-line summary for the Project row and the Tempo and meter row. */
 export function tempoDetail(score: TimeScore): string {
   const time = score.time;
   const parts: string[] = [];
@@ -55,19 +55,24 @@ export function tempoDetail(score: TimeScore): string {
   return parts.join(" · ");
 }
 
-/** The Tempo & meter submenu node for Project. */
+/** The Tempo and meter submenu node for Project. */
 export function tempoMenuNode(context: MenuContext): MenuNode {
   return {
     kind: "menu",
     id: "tempo",
-    label: "tempo & meter",
+    label: "tempo and meter",
     detail: tempoDetail(context.score),
     help: "tempo changes, rit. and accel., fermatas, meter changes, track rate and phase",
     build: tempoNodes,
   };
 }
 
-/** Rows of Project › Tempo & meter. */
+/** What x puts the song's tempo, meter and loop length back to. */
+export const START_TEMPO_BPM = 120;
+export const START_BEATS_PER_BAR = 4;
+export const START_BARS = 8;
+
+/** Rows of Project › Tempo and meter. */
 export function tempoNodes(context: MenuContext): MenuNode[] {
   const score = context.score;
   const tpb = score.ticksPerBeat;
@@ -78,6 +83,7 @@ export function tempoNodes(context: MenuContext): MenuNode[] {
       label: "start tempo",
       help: "beats per minute at the top of the song",
       value: score.tempoBpm,
+      start: START_TEMPO_BPM,
       min: TIME_LIMITS.minBpm,
       max: TIME_LIMITS.maxBpm,
       step: stepBy(1, TIME_LIMITS.minBpm, TIME_LIMITS.maxBpm),
@@ -182,6 +188,7 @@ export function tempoNodes(context: MenuContext): MenuNode[] {
       label: "beats per bar",
       help: "the song's opening meter; meter changes below override it later",
       value: score.beatsPerBar,
+      start: START_BEATS_PER_BAR,
       min: 1,
       max: TIME_LIMITS.maxBeatsPerBar,
       step: stepBy(1, 1, TIME_LIMITS.maxBeatsPerBar),

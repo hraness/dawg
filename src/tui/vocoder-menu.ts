@@ -1,7 +1,7 @@
 /**
  * Ctrl-k rows for the vocoder (0.7, vocoder.md §8): Effects › Voice ›
  * Vocoder (Source picker, Preset, one row per VOCODER_PARAMS key in table
- * order) and Sound › browse sounds › Voices › Vocoder. Every row runs a
+ * order) and Voice › voice presets › Vocoder. Every row runs a
  * `vocoder …` command, so it stages for the audition loop like any other.
  */
 import type { NumberParam } from "../../core/params.ts";
@@ -111,7 +111,7 @@ export function vocoderRows(context: MenuContext): MenuNode[] {
       return [
         {
           kind: "action",
-          label: "vocode this voice",
+          label: "vocode",
           command: "vocoder",
           help: "adds a vocoder track driven by this voice (follows the song's chords, or drones on the key's root); mutes it",
         },
@@ -183,11 +183,11 @@ export function vocoderEffectNode(context: MenuContext): MenuNode[] {
     {
       kind: "menu",
       id: "voice:vocoder",
-      label: "Vocoder",
+      label: "vocoder",
       detail: vocoder
         ? `${vocoder.preset ?? DEFAULT_VOCODER_PRESET}${vocoder.src ? ` · from ${vocoder.src}` : " · no source"}`
         : trackHasAudio(track)
-          ? "vocode this voice"
+          ? "vocode"
           : "off",
       help: "a voice shapes this track's sound: robot, talkbox, choir",
       build: vocoderRows,
@@ -195,14 +195,14 @@ export function vocoderEffectNode(context: MenuContext): MenuNode[] {
   ];
 }
 
-/** Sound › browse sounds › Voices › Vocoder: the built-in carrier. */
+/** Voice › voice presets › Vocoder: the built-in carrier. */
 export function vocoderBrowseNode(context: MenuContext): MenuNode[] {
   const track = trackOf(context);
   return [
     {
       kind: "menu",
       id: "voices:vocoder",
-      label: "Vocoder",
+      label: "vocoder",
       detail: `${VOCODER_PRESET_NAMES.length} presets · robot, talkbox, choir …`,
       help: "a built-in synth carrier spoken through a voice track",
       build: (inner) => {
@@ -211,7 +211,7 @@ export function vocoderBrowseNode(context: MenuContext): MenuNode[] {
           return [
             {
               kind: "action",
-              label: "vocode this voice",
+              label: "vocode",
               command: "vocoder",
               help: "adds a vocoder track driven by this voice",
             },
@@ -220,7 +220,7 @@ export function vocoderBrowseNode(context: MenuContext): MenuNode[] {
           return [
             {
               kind: "action",
-              label: "make this a vocoder",
+              label: "make a vocoder",
               command: `instrument ${VOCODER_INSTRUMENT}`,
               help: "a supersaw carrier; then pick its presets and source here",
             },

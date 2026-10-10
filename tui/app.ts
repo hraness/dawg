@@ -1380,7 +1380,11 @@ export function composeFrame(
         layout.highway,
         width,
         ui.drawer,
-        { theme: ui.theme, unicode: ui.capabilities.unicode },
+        {
+          theme: ui.theme,
+          unicode: ui.capabilities.unicode,
+          reducedMotion: ui.reducedMotion,
+        },
         hits,
       );
   }

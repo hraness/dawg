@@ -81,7 +81,7 @@ test.skipIf(!supported)(
       await t.send("\u000b");
       await t.until(() => t.vt.text().includes("menu"), "menu");
       expectFits(t);
-      await expectKeysPanel(t, "open a section", "menu");
+      await expectKeysPanel(t, "value: fader or list", "menu");
       await expectFilter(t, "rhy", "menu");
       await closeWithEsc(t, "menu ·");
 

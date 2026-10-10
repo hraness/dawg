@@ -45,12 +45,12 @@ function select(menu: EditMenu, ctx: MenuContext, label: string): void {
   for (let i = now; i > target; i--) menu.key(UP, ctx);
 }
 
-describe("Sound › Mallets and bells", () => {
-  test("browse sounds lists the group and enter plays a preset", () => {
+describe("Sound › mallets", () => {
+  test("instruments lists the group and enter plays a preset", () => {
     const menu = new EditMenu();
     const ctx = context(score());
     menu.show(ctx, "sounds");
-    select(menu, ctx, "Mallets and bells");
+    select(menu, ctx, "mallets");
     menu.key("\r", ctx);
     const labels = menu.view(ctx).items.map((row) => row.label);
     // 12 core presets, the 0.6.1 bells and drums, then the Gamelan group.

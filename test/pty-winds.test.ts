@@ -89,8 +89,8 @@ test.skipIf(!supported)(
 
       // ctrl-k → Sound › browse sounds › Winds and brass › Flutes → flute.
       await t.send("/menu sounds\r");
-      await t.until(() => t.vt.text().includes("Winds and brass"), "group");
-      await t.send("/Winds");
+      await t.until(() => t.vt.text().includes("winds and brass"), "group");
+      await t.send("/winds");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("Flutes"), "families");
       await t.send("/Flutes");
@@ -135,8 +135,8 @@ test.skipIf(!supported)(
 
       // ctrl-k → Sound › browse sounds › Mallets and bells › Gamelan → gangsa.
       await t.send("/menu sounds\r");
-      await t.until(() => t.vt.text().includes("Mallets and bells"), "mallets");
-      await t.send("/Mallets");
+      await t.until(() => t.vt.text().includes("mallets"), "mallets");
+      await t.send("/mallets");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("Gamelan"), "gamelan group");
       await t.send("/Gamelan");

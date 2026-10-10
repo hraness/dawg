@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { TOPIC_ALIASES } from "./lang/glossary.ts";
 import { isGuideInstrument, vocalChainPatch } from "../core/clips.ts";
 import { isSingWord } from "../core/sing.ts";
 import { commandParses, parseExact } from "./commands/parses.ts";
@@ -275,6 +276,8 @@ import {
   glideValues,
   agentPathsAllowed,
   isAgentCommand,
+  isBrokenCommand,
+  brokenCommandReceipt,
   parseShowMe,
   toolCaption,
   type ShowMeLevel,
@@ -298,13 +301,14 @@ import {
 } from "./tui/play-session.ts";
 import {
   EditMenu,
-  MENU_SECTIONS,
-  MENU_SHOWN_SECTIONS,
+  menuUsage,
+  menuSectionPath,
   type MenuContext,
 } from "./tui/menu.ts";
 import {
   drawerView,
   faderChoose,
+  faderCommand,
   faderKeyPress,
   faderSetPosition,
   faderStep,
@@ -326,7 +330,15 @@ import {
   isStageable,
 } from "./tui/audition.ts";
 import { EuclidEditor, type EuclidContext } from "./tui/euclid.ts";
-import { HINTS, KEYS, keyLines, type KeySection } from "../tui/grammar.ts";
+import {
+  ARROW_DOWN,
+  ARROW_UP,
+  closesKeys,
+  HINTS,
+  KEYS,
+  keyLines,
+  type KeySection,
+} from "../tui/grammar.ts";
 import { renderAudition } from "./audio/audition.ts";
 import { exportScore, playbackTime, scoreBeatAt } from "./audio/arrange.ts";
 import { formatForm } from "../core/sections.ts";
@@ -801,8 +813,6 @@ if (!process.env.DAWG_SHOWME)
       if (config.showMe) showMe.level = config.showMe;
     })
     .catch(() => undefined);
-const KEY_UP = "\u001b[A";
-const KEY_DOWN = "\u001b[B";
 /** The fader bar a left-button drag started on. */
 let dragging: { field: number; left: number; width: number } | undefined;
 /** The open drawer came from a command, not the menu. */
@@ -1730,9 +1740,9 @@ async function runInteractive(): Promise<void> {
             continue;
           }
         }
-        // The `?` panel closes on any key (Ctrl-C still quits).
+        // The `?` panel closes on esc or ?; other keys wait (Ctrl-C quits).
         if (tui.ui.keys && typeof value === "string" && value !== "\u0003") {
-          tui.closeKeys();
+          if (closesKeys(value)) tui.closeKeys();
           tick(true);
           continue;
         }
@@ -2200,8 +2210,13 @@ async function submit(prompt: string): Promise<string | Receipt> {
   const menuCommand = command.match(/^\/menu(?:\s+(\S+))?$/i);
   if (menuCommand) {
     const section = menuCommand[1]?.toLowerCase();
-    if (section && !(MENU_SECTIONS as readonly string[]).includes(section))
-      return fail(`usage · /menu [${MENU_SHOWN_SECTIONS.join("|")}]`);
+    // §4: the keys topic has no menu page; it opens the ? panel.
+    if (section && (section === "keys" || TOPIC_ALIASES[section] === "keys")) {
+      tui.showKeys("keys", keyLines(KEYS.prompt));
+      return ok("keys");
+    }
+    if (section && !menuSectionPath(menuContext(), section))
+      return fail(menuUsage(menuContext(), section));
     openMenu(section);
     return ok("menu");
   }
@@ -2775,10 +2790,10 @@ async function submit(prompt: string): Promise<string | Receipt> {
         tui.activity.setSpinner(undefined);
       }
     }
-    const receiptText = await tuiSetModel(modelMatch[1]);
+    const result = await tuiSetModel(modelMatch[1]);
     provider = undefined;
     await currentProvider();
-    return receiptText;
+    return result.ok ? result.text : fail(result.text);
   }
   if (/^\/login\b/i.test(prompt.trim())) {
     const parsed = tuiLoginArgs(prompt.trim());
@@ -3926,6 +3941,7 @@ function menuContext(): MenuContext {
       committedChords: chordSettings,
     },
     trackId: requestedTrack,
+    sessionName: record.meta.name,
     playing: clock.playing,
     grid: session?.grid ?? DEFAULT_GRID,
     grids: GRIDS.map((grid) => grid.label),
@@ -4437,12 +4453,17 @@ function refreshMenu(): void {
   if (fader) {
     const fields = menu.faderFields(context);
     if (fields.length === 0) closeFader();
-    else
+    else {
+      const focusedField = fields[focusIndex(fader, fields)];
       tui.drawer = drawerView(fader, fields, menu.faderCommitted(context), {
         title: menu.crumbs,
         dirty: context.audition?.dirty ?? false,
         status: context.audition?.status,
+        atOnce:
+          focusedField !== undefined &&
+          !stageableNow(faderCommand(focusedField)),
       });
+    }
   }
   const view = menu.view(context);
   tui.openPicker({
@@ -4629,7 +4650,7 @@ function mouseInput(event: MouseEvent): string[] {
       return [];
     }
     if (fader) return [];
-    if (tui.ui.overlay) return [event.delta < 0 ? KEY_UP : KEY_DOWN];
+    if (tui.ui.overlay) return [event.delta < 0 ? ARROW_UP : ARROW_DOWN];
     return [];
   }
   // A drag keeps moving the fader it started on, even past the bar's ends.
@@ -5362,7 +5383,8 @@ function soundStreamedNote(
 /** The command host the show-me agent loop runs lines through. */
 function showMeCommandHost(): AgentHost["commands"] {
   return {
-    isCommand: (line) => isAgentCommand(line, score),
+    isCommand: (line) =>
+      isAgentCommand(line, score) || isBrokenCommand(line, score),
     async run(line): Promise<CommandOutcome> {
       if (!agentPathsAllowed(line)) {
         const revision = shownRevision(record);
@@ -5371,6 +5393,17 @@ function showMeCommandHost(): AgentHost["commands"] {
           message: `${line} · the agent works only inside this folder`,
           baseRevision: revision,
           resultRevision: revision,
+        };
+      }
+      if (isBrokenCommand(line, score)) {
+        // A command that does not parse is a red receipt, never prose.
+        const base = baseline();
+        receipt(fail(brokenCommandReceipt(line)), base);
+        return {
+          ok: false,
+          message: brokenCommandReceipt(line),
+          baseRevision: base.revision,
+          resultRevision: base.revision,
         };
       }
       const gesture = gestureFor(line, { score, trackId: requestedTrack });

@@ -82,17 +82,13 @@ test.skipIf(!supported)(
         () => vt.text().includes("did you mean /autotune"),
         "typo hint",
       );
-      await send("/menu sound\r");
-      await until(() => vt.text().includes("Voice"), "Sound > Voice");
-      // Filter to the Voice group and open it, then Autotune.
-      await send("/voice");
-      await send("\r");
-      await until(() => vt.text().includes("Autotune"), "Voice > Autotune");
-      // Clips, Lyrics and Pitch sit above it: filter to Autotune, then open.
+      await send("/menu voice\r");
+      await until(() => vt.text().includes("autotune"), "Voice > autotune");
+      // Clips, lyrics and pitch sit above it: filter to autotune, then open.
       await send("/autotune");
       await send("\r");
       await until(
-        () => vt.text().includes("Preset") && vt.text().includes("Flex"),
+        () => vt.text().includes("preset") && vt.text().includes("flex"),
         "autotune rows",
       );
       expect(vt.text()).toContain("gentle");

@@ -82,15 +82,18 @@ test.skipIf(!supported)(
       expect(track?.instrument).toBe("sing");
       expect(track?.sing).toEqual({ preset: "choir", voices: 4 });
 
-      // ctrl-k → Sound › browse sounds › Voices › Throat → khoomei.
-      await t.send("/menu sounds\r");
-      await t.until(() => t.vt.text().includes("Voices"), "voices group");
-      await t.send("/Voices");
+      // ctrl-k → Voice › voice presets › throat → khoomei.
+      await t.send("/menu voice\r");
+      await t.until(
+        () => t.vt.text().includes("voice presets"),
+        "voice presets",
+      );
+      await t.send("/voice presets");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("Throat"), "sing groups");
-      expect(t.vt.text()).toContain("Choir");
-      expect(t.vt.text()).toContain("Solo");
-      await t.send("/Throat");
+      await t.until(() => t.vt.text().includes("throat"), "sing groups");
+      expect(t.vt.text()).toContain("choir");
+      expect(t.vt.text()).toContain("solo");
+      await t.send("/throat");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("kargyraa"), "throat rows");
       await t.send("/khoomei");

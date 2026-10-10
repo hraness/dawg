@@ -14,6 +14,52 @@
  */
 import { displayWidth } from "./text.ts";
 
+// ── key sets: the one definition every screen imports ─────────────────
+
+type Keys = ReadonlySet<string>;
+const keys = (...values: string[]): Keys => Object.freeze(new Set(values));
+
+/** The raw arrow sequences, for code that synthesizes a key press. */
+export const ARROW_UP = "\u001b[A";
+export const ARROW_DOWN = "\u001b[B";
+/** ↑ k: move up (a row, a voice, a param). */
+export const KEY_UP = keys(ARROW_UP, "\u001bOA", "k");
+/** ↓ j: move down. */
+export const KEY_DOWN = keys(ARROW_DOWN, "\u001bOB", "j");
+/** ← h - _: back on a row that is not a value; adjust down on a value. */
+export const KEY_LEFT = keys("\u001b[D", "\u001bOD", "h", "-", "_");
+/** → l + =: go in or apply; adjust up on a value. */
+export const KEY_RIGHT = keys("\u001b[C", "\u001bOC", "l", "+", "=");
+/** ← h only: the keys that go back from a row that is not a value. */
+export const KEY_BACK = keys("\u001b[D", "\u001bOD", "h");
+/** → l only: the keys that go into a row that is not a value. */
+export const KEY_FORWARD = keys("\u001b[C", "\u001bOC", "l");
+/** Tab: the next field (fader, rhythm editor, forms). */
+export const KEY_TAB = keys("\t");
+/** Shift-tab: the previous field. */
+export const KEY_BACKTAB = keys("\u001b[Z");
+/** Enter: open or confirm, everywhere. */
+export const KEY_ENTER = keys("\r", "\n");
+export const KEY_BACKSPACE = keys("\u007f", "\b");
+/** x d Delete: reset a value (delete an automation point, turn a row off). */
+export const KEY_RESET = keys("x", "d", "\u001b[3~");
+/** Shift-← → { }: a coarse step. */
+export const KEY_COARSE_LEFT = keys("\u001b[1;2D", "{");
+export const KEY_COARSE_RIGHT = keys("\u001b[1;2C", "}");
+/** [ ] alt-← →: a fine step (skips detents). */
+export const KEY_FINE_LEFT = keys("\u001b[1;3D", "\u001b[1;5D", "\u001bb", "[");
+export const KEY_FINE_RIGHT = keys(
+  "\u001b[1;3C",
+  "\u001b[1;5C",
+  "\u001bf",
+  "]",
+);
+export const KEY_PAGE_UP = keys("\u001b[5~");
+export const KEY_PAGE_DOWN = keys("\u001b[6~");
+export const KEY_HOME = keys("\u001b[H", "\u001bOH", "\u001b[1~");
+export const KEY_END = keys("\u001b[F", "\u001bOF", "\u001b[4~");
+export const KEY_ESC = "\u001b";
+
 /** A `key  action` pair for the `?` panel. */
 export type KeyRow = readonly [keys: string, action: string];
 export type KeySection = Readonly<{ title: string; rows: readonly KeyRow[] }>;
@@ -75,39 +121,46 @@ export const HINTS = {
     " ↑↓ hear · enter keep · space loop · a A/B · c mix · / filter · esc back · ? keys ",
   filtering: " type to filter · enter choose · esc clear · ? keys ",
   menu: " ↑↓ move · enter open · / filter · esc back · ? keys ",
-  value: " ←→ adjust · enter type · x reset · esc back · ? keys ",
+  value: " ←→ adjust · enter open · 0-9 type · x reset · esc back · ? keys ",
   point: " ←→ adjust · enter type · x delete · esc back · ? keys ",
   action: " ↑↓ move · enter apply · / filter · esc back · ? keys ",
-  typing: " type a value · enter apply · esc cancel ",
+  typing: " type a value · enter apply · esc clear ",
   euclid:
-    " ↑↓ voice · ←→ adjust · tab field · space loop · x off · esc back · ? keys ",
+    " ↑↓ drum · ←→ adjust · tab field · space loop · x off · esc back · ? keys ",
   text: " ↑↓ scroll · pgup pgdn page · esc back · ? keys ",
   log: " ↑↓ scroll · / filter · esc back · ? keys ",
-  keys: " any key closes ",
+  keys: " esc or ? closes ",
 } as const;
 
 // ── the `?` panel ─────────────────────────────────────────────────────
+//
+// Each screen lists every key once: a key that means different things on
+// different rows says so on its one line.
 
 /** The audition loop's keys, shared by the menu and the rhythm editor. */
-const AUDITIONING: readonly KeySection[] = [
-  {
-    title: "auditioning",
-    rows: [
-      ["space", "loop the focused track · again stops"],
-      ["c", "solo ↔ in context (the whole mix)"],
-      ["a", "A/B: committed ↔ staged"],
-      ["enter", "keep staged changes (one undo step)"],
-      ["esc", "revert staged changes"],
-    ],
-  },
-  {
-    title: "every change",
-    rows: [
-      ["", "while looping, stages; otherwise runs the command shown"],
-      ["ctrl-z", "undoes it"],
-    ],
-  },
+const AUDITION_ROWS: readonly KeyRow[] = [
+  ["space", "loop the track · again stops"],
+  ["a", "A/B: committed ↔ staged"],
+  ["c", "solo ↔ in context (the whole mix)"],
+  ["ctrl-z", "undo a kept change"],
 ];
+
+/** The ctrl-k menu roots, in order (src/tui/menu.ts builds them). */
+export const MENU_ROOTS = Object.freeze([
+  "Sound",
+  "Voice",
+  "Effects",
+  "Rhythm",
+  "Chords and key",
+  "Mix",
+  "Arrange",
+  "Project",
+]);
+
+/** Keys that close the `?` panel; every other key is ignored while open. */
+export function closesKeys(value: string): boolean {
+  return value === KEY_ESC || value === "?";
+}
 
 const LIST: readonly KeyRow[] = [
   ["↑ ↓  j k", "move"],
@@ -122,12 +175,9 @@ export const KEYS = {
     {
       title: "start here",
       rows: [
-        ["type + enter", "ask for a change in plain words, or a command"],
-        ["ctrl-p", "play notes on the keyboard (chords: q)"],
-        [
-          "ctrl-k",
-          "menu: sound, effects, rhythm, chords, performance, mix, master",
-        ],
+        ["type", "ask in plain words, or type a command"],
+        ["ctrl-p", "play mode: notes on the keyboard (chords: q)"],
+        ["ctrl-k", `menu: ${MENU_ROOTS.length} sections · /menu <topic>`],
         ["space", "play / pause (empty prompt)"],
         ["/help", "what dawg can do · /help <topic> for more"],
       ],
@@ -137,10 +187,11 @@ export const KEYS = {
       rows: [
         ["enter", "send"],
         ["shift-enter ctrl-j", "new line"],
-        ["alt-enter ctrl-q", "queue after the current request"],
+        ["alt-enter", "send next, after the current request"],
+        ["ctrl-q", "switch now/next (what enter does)"],
         ["ctrl-z ctrl-y", "undo / redo"],
         ["ctrl-o", "transcript"],
-        ["esc", "cancel the agent · close a panel"],
+        ["esc", "cancel the agent · back from a panel"],
         ["ctrl-c", "quit"],
       ],
     },
@@ -150,7 +201,7 @@ export const KEYS = {
         ["click ▶/⏸ BPM", "play / pause"],
         ["click track name", "track list (click one to focus it)"],
         ["click model", "model picker"],
-        ["volume · fx filter", "a bare param opens its fader drawer"],
+        ["click volume · fx filter", "a bare param opens its fader drawer"],
       ],
     },
   ],
@@ -184,20 +235,18 @@ export const KEYS = {
       title: "menu",
       rows: [
         ["↑ ↓  j k", "move"],
-        ["enter → l", "open a section"],
-        ["esc ← h", "back one level"],
+        [
+          "enter",
+          "open · run · value: fader or list · staged: keep (one undo)",
+        ],
+        ["→ l", "go in · run an action · on a value: adjust up"],
+        ["← h", "back one level · on a value: adjust down"],
+        ["- +", "adjust a value"],
+        ["esc", "revert staged changes, else back (a filter clears first)"],
         ["/", "filter this level"],
-      ],
-    },
-    {
-      title: "on a value",
-      rows: [
-        ["← →  h l  - +", "adjust"],
-        ["0-9", "type a value, enter applies"],
-        ["enter", "type a value · pick from a list"],
-        ["space", "toggle on/off (elsewhere: hear the track)"],
-        ["x  delete", "reset to default (deletes an automation point)"],
-        ["enter (number)", "open its fader drawer"],
+        ["0-9 .", "type a value, enter applies"],
+        ["x d delete", "reset to default (deletes an automation point)"],
+        ...AUDITION_ROWS,
       ],
     },
     {
@@ -207,33 +256,32 @@ export const KEYS = {
         ["wheel", "move through the list"],
       ],
     },
-    ...AUDITIONING,
   ],
   fader: [
     {
       title: "fader drawer",
       rows: [
-        ["← →  - +", "step the value (staged, heard on the loop)"],
-        ["shift-← →  { }", "coarse step (five)"],
-        ["[ ]  alt-← →", "fine step (a tenth)"],
+        ["← →  h l  - +", "step (tempo, meter, bars apply at once)"],
+        ["shift-← shift-→  { }", "coarse step (five)"],
+        ["[ ]  alt-← alt-→", "fine step (a tenth; skips detents)"],
         ["pgup pgdn", "big step (twenty)"],
         ["home end", "minimum / maximum"],
         ["0-9 .", "type an exact value, enter sets it"],
-        ["0  d", "back to the default"],
-        ["↑ ↓  tab shift-tab", "next / previous param of this device"],
-        ["enter", "keep every staged change (one undo step)"],
+        ["x d delete", "back to the default"],
+        ["↑ ↓  j k  tab shift-tab", "previous / next param of this device"],
+        ["enter", "keep every staged change (one undo)"],
         ["esc", "revert and close"],
-        ["space  a  c", "loop · A/B · solo ↔ in context"],
+        ...AUDITION_ROWS,
       ],
     },
     {
       title: "mouse",
       rows: [
         ["click [−] [+]", "step (shift-click: coarse)"],
-        ["click / drag bar", "set the value there"],
+        ["click or drag the bar", "set the value there"],
         ["wheel on a fader", "step it (shift: coarse)"],
         ["click an option", "choose it"],
-        ["[keep] [revert]", "same as enter / esc"],
+        ["click enter keep · esc revert", "same as the keys"],
       ],
     },
   ],
@@ -241,17 +289,17 @@ export const KEYS = {
     {
       title: "rhythm editor",
       rows: [
-        ["↑ ↓  j k", "voice"],
+        ["↑ ↓  j k", "drum"],
         ["← →  h l  - +", "adjust the field"],
         ["tab shift-tab  ] [", "next / previous field"],
         ["0-9", "type a value, enter applies"],
-        ["enter", "add a row (or type a value)"],
-        ["x", "turn the row off"],
+        ["enter", "add a row (or type a value) · staged: keep"],
+        ["x d delete", "turn the row off"],
         ["f", "freeze into plain hits"],
-        ["esc", "back"],
+        ["esc", "revert staged changes, else back"],
+        ...AUDITION_ROWS,
       ],
     },
-    ...AUDITIONING,
   ],
   text: [
     {
@@ -296,9 +344,10 @@ export const KEYS = {
         ["w e t y u o p", "black keys"],
         ["z x", "octave down / up"],
         ["c v", "velocity down / up"],
-        ["shift · tab", "sustain while held · sustain latch"],
+        ["shift", "sustain while held"],
+        ["tab", "sustain latch (play mode only)"],
         ["space", "play / pause (with count-in)"],
-        ["r · R", "record · record replacing"],
+        ["r R", "record · record replacing"],
         ["m", "metronome click"],
         ["i", "scale degrees ⇄ chromatic (home row in key)"],
         ["q", "chord mode: auto ⇄ manual"],
@@ -319,7 +368,6 @@ export const KEYS = {
         ["9", "next perform mode (block, strum, arp…)"],
         ["b", "next bass mode"],
         ["n", "play the suggested next chord"],
-        ["q", "auto (chords fit the key) ⇄ manual"],
       ],
     },
   ],

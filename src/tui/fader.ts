@@ -10,6 +10,25 @@
  * all as one revision.
  */
 import type { DrawerField, DrawerView } from "../../tui/drawer.ts";
+import {
+  KEY_BACKSPACE,
+  KEY_BACKTAB,
+  KEY_COARSE_LEFT,
+  KEY_COARSE_RIGHT,
+  KEY_DOWN,
+  KEY_END,
+  KEY_ENTER,
+  KEY_FINE_LEFT,
+  KEY_FINE_RIGHT,
+  KEY_HOME,
+  KEY_LEFT,
+  KEY_PAGE_DOWN,
+  KEY_PAGE_UP,
+  KEY_RESET,
+  KEY_RIGHT,
+  KEY_TAB,
+  KEY_UP,
+} from "../../tui/grammar.ts";
 
 export type FaderNumber = Readonly<{
   kind: "number";
@@ -22,7 +41,7 @@ export type FaderNumber = Readonly<{
   command: (value: number) => string;
   /** Typed text → command; undefined when it does not parse or fit. */
   parse: (text: string) => string | undefined;
-  /** The command `0` / `d` runs to put the value back to its default. */
+  /** The command `x` / `d` / Delete runs to put the value back. */
   reset?: string | undefined;
   /** Starting value for a nudge while off. */
   start?: number | undefined;
@@ -44,6 +63,8 @@ export interface FaderState {
   label: string;
   /** Digits typed for the focused field. */
   typing?: string | undefined;
+  /** The field that just snapped onto a detent: flashes for one frame. */
+  flash?: string | undefined;
 }
 
 export type FaderResult =
@@ -111,6 +132,85 @@ function snap(spec: FaderNumber, raw: number): number {
   return Math.min(spec.max, Math.max(spec.min, best));
 }
 
+/**
+ * Detents: values a fader catches on its way past, so the common resting
+ * points are easy to hit by feel. Volume 1 (0 dB), pan 0 (center), whole
+ * BPM, mix 0 / 0.5 / 1 and filter cutoffs on the octaves of A (27.5 Hz,
+ * 55 Hz … 14080 Hz). Read off the field's command, so every row that runs
+ * `volume`, `pan`, `tempo`, `… mix` or a cutoff gets them.
+ */
+export type Detents = readonly number[] | "integer";
+
+/** How close (as a share of the bar) a value must be to catch a detent. */
+export const DETENT_REACH = 0.02;
+
+const A_OCTAVES = Object.freeze(
+  Array.from({ length: 10 }, (_, octave) => 27.5 * 2 ** octave),
+);
+
+export function detentsFor(spec: FaderNumber): Detents | undefined {
+  const probe = spec.value ?? spec.start ?? spec.min;
+  const command = spec.command(probe).replace(/\s+\S+$/, "");
+  const words = command.split(/\s+/);
+  const verb = words[0]?.replace(/^\//, "");
+  if (verb === "tempo" && words.length === 1) return "integer";
+  if (words.includes("volume")) return [1];
+  if (words.includes("pan")) return [0];
+  if (words.at(-1) === "mix") return [0, 0.5, 1];
+  if (/^(cutoff|lpf|hpf)$/.test(words.at(-1) ?? "")) return A_OCTAVES;
+  return undefined;
+}
+
+/** The detents of `spec` that fall inside its range. */
+function detentList(spec: FaderNumber, detents: Detents): number[] {
+  if (detents === "integer") return [];
+  return detents.filter((d) => d >= spec.min - 1e-9 && d <= spec.max + 1e-9);
+}
+
+/**
+ * `value` caught by a detent, or undefined when none is in reach. With
+ * `from` (a key step) a detent also catches a step that jumps over it or
+ * lands near it while moving toward it, so leaving a detent never sticks.
+ */
+export function detentSnap(
+  spec: FaderNumber,
+  value: number,
+  from?: number,
+): number | undefined {
+  const detents = detentsFor(spec);
+  if (!detents) return undefined;
+  if (detents === "integer") {
+    const whole = Math.min(spec.max, Math.max(spec.min, Math.round(value)));
+    return Math.abs(whole - value) < 1e-9 ? undefined : whole;
+  }
+  const at = (v: number) => faderPosition(spec, v);
+  let best: number | undefined;
+  for (const detent of detentList(spec, detents)) {
+    // Landing on a detent exactly counts as a catch (it flashes) unless
+    // the value was already there.
+    if (Math.abs(detent - value) < 1e-9)
+      return from !== undefined && Math.abs(detent - from) > 1e-9
+        ? detent
+        : undefined;
+    const near = Math.abs(at(value) - at(detent)) <= DETENT_REACH;
+    let caught = near;
+    if (from !== undefined) {
+      const toward = Math.sign(detent - from) === Math.sign(value - from);
+      const crossed =
+        (from < detent && detent < value) || (value < detent && detent < from);
+      caught = Math.abs(detent - from) > 1e-9 && (crossed || (near && toward));
+    }
+    if (
+      caught &&
+      (best === undefined ||
+        Math.abs(at(detent) - at(from ?? value)) <
+          Math.abs(at(best) - at(from ?? value)))
+    )
+      best = detent;
+  }
+  return best;
+}
+
 /** Fine (a tenth of a step), normal, coarse (five steps) or page (twenty). */
 export type StepSize = "fine" | "normal" | "coarse" | "page";
 
@@ -142,20 +242,9 @@ export function stepValue(
   return value;
 }
 
-const LEFT = new Set(["\u001b[D", "\u001bOD", "h", "-", "_"]);
-const RIGHT = new Set(["\u001b[C", "\u001bOC", "l", "+", "="]);
-const COARSE_LEFT = new Set(["\u001b[1;2D", "{"]);
-const COARSE_RIGHT = new Set(["\u001b[1;2C", "}"]);
-const FINE_LEFT = new Set(["\u001b[1;3D", "\u001b[1;5D", "\u001bb", "["]);
-const FINE_RIGHT = new Set(["\u001b[1;3C", "\u001b[1;5C", "\u001bf", "]"]);
-const UP = new Set(["\u001b[A", "\u001bOA", "k", "\u001b[Z"]);
-const DOWN = new Set(["\u001b[B", "\u001bOB", "j", "\t"]);
-const PAGE_UP = "\u001b[5~";
-const PAGE_DOWN = "\u001b[6~";
-const HOME = new Set(["\u001b[H", "\u001bOH", "\u001b[1~"]);
-const END = new Set(["\u001b[F", "\u001bOF", "\u001b[4~"]);
-const ENTER = new Set(["\r", "\n"]);
-const BACKSPACE = new Set(["\u007f", "\b"]);
+/** ↑ and shift-tab: the previous param; ↓ and tab: the next. */
+const isUp = (value: string) => KEY_UP.has(value) || KEY_BACKTAB.has(value);
+const isDown = (value: string) => KEY_DOWN.has(value) || KEY_TAB.has(value);
 
 export interface FaderKeyOptions {
   /** Edits are staged (Enter keeps, Esc reverts). */
@@ -183,6 +272,32 @@ function setNumber(spec: FaderNumber, value: number): FaderResult {
     command: spec.command(value),
     key: faderKey(spec.label),
   };
+}
+
+/**
+ * Set `value`, caught by a detent unless the step is fine. `from` is the
+ * value a key step left (undefined for a drag or a click on the bar).
+ */
+function setSnapped(
+  state: FaderState,
+  spec: FaderNumber,
+  value: number,
+  from: number | undefined,
+  size: StepSize | "drag",
+): FaderResult {
+  const snapped =
+    size === "fine"
+      ? undefined
+      : size === "drag"
+        ? (detentSnap(spec, value) ??
+          (spec.value !== undefined &&
+          detentSnap(spec, value, spec.value) === value
+            ? value
+            : undefined))
+        : detentSnap(spec, value, from);
+  const result = setNumber(spec, snapped ?? value);
+  if (snapped !== undefined && result.type === "set") state.flash = spec.label;
+  return result;
 }
 
 function setChoice(spec: FaderChoice, index: number): FaderResult {
@@ -215,12 +330,12 @@ export function faderKeyPress(
       state.typing = undefined;
       return { type: "handled" };
     }
-    if (BACKSPACE.has(value)) {
+    if (KEY_BACKSPACE.has(value)) {
       state.typing = state.typing.slice(0, -1);
       if (!state.typing) state.typing = undefined;
       return { type: "handled" };
     }
-    if (ENTER.has(value) || value === "\t") {
+    if (KEY_ENTER.has(value) || KEY_TAB.has(value)) {
       const text = state.typing;
       state.typing = undefined;
       const command = field.kind === "number" ? field.parse(text) : undefined;
@@ -236,9 +351,9 @@ export function faderKeyPress(
   }
   if (value === "\u001b")
     return options.dirty ? { type: "revert" } : { type: "close" };
-  if (ENTER.has(value))
+  if (KEY_ENTER.has(value))
     return options.dirty ? { type: "keep" } : { type: "close" };
-  const move = UP.has(value) ? -1 : DOWN.has(value) ? 1 : 0;
+  const move = isUp(value) ? -1 : isDown(value) ? 1 : 0;
   if (move) {
     state.label = fields[(index + move + fields.length) % fields.length]!.label;
     return { type: "handled" };
@@ -250,30 +365,46 @@ export function faderKeyPress(
   }
   if (field.kind === "choice") {
     const at = Math.max(0, field.options.indexOf(field.value));
-    if (LEFT.has(value) || FINE_LEFT.has(value) || COARSE_LEFT.has(value))
+    if (
+      KEY_LEFT.has(value) ||
+      KEY_FINE_LEFT.has(value) ||
+      KEY_COARSE_LEFT.has(value)
+    )
       return setChoice(field, at - 1);
-    if (RIGHT.has(value) || FINE_RIGHT.has(value) || COARSE_RIGHT.has(value))
+    if (
+      KEY_RIGHT.has(value) ||
+      KEY_FINE_RIGHT.has(value) ||
+      KEY_COARSE_RIGHT.has(value)
+    )
       return setChoice(field, at + 1);
-    if (HOME.has(value) || value === PAGE_DOWN) return setChoice(field, 0);
-    if (END.has(value) || value === PAGE_UP)
+    if (KEY_HOME.has(value) || KEY_PAGE_DOWN.has(value))
+      return setChoice(field, 0);
+    if (KEY_END.has(value) || KEY_PAGE_UP.has(value))
       return setChoice(field, field.options.length - 1);
     // 1…9 picks an option by number.
     if (/^[1-9]$/.test(value)) return setChoice(field, Number(value) - 1);
     return { type: "handled" };
   }
   const step = (direction: 1 | -1, size: StepSize) =>
-    setNumber(field, stepValue(field, direction, size));
-  if (LEFT.has(value)) return step(-1, "normal");
-  if (RIGHT.has(value)) return step(1, "normal");
-  if (COARSE_LEFT.has(value)) return step(-1, "coarse");
-  if (COARSE_RIGHT.has(value)) return step(1, "coarse");
-  if (FINE_LEFT.has(value)) return step(-1, "fine");
-  if (FINE_RIGHT.has(value)) return step(1, "fine");
-  if (value === PAGE_UP) return step(1, "page");
-  if (value === PAGE_DOWN) return step(-1, "page");
-  if (HOME.has(value)) return setNumber(field, field.min);
-  if (END.has(value)) return setNumber(field, field.max);
-  if (value === "0" || value === "d") {
+    setSnapped(
+      state,
+      field,
+      stepValue(field, direction, size),
+      field.value,
+      size,
+    );
+  if (KEY_LEFT.has(value)) return step(-1, "normal");
+  if (KEY_RIGHT.has(value)) return step(1, "normal");
+  if (KEY_COARSE_LEFT.has(value)) return step(-1, "coarse");
+  if (KEY_COARSE_RIGHT.has(value)) return step(1, "coarse");
+  if (KEY_FINE_LEFT.has(value)) return step(-1, "fine");
+  if (KEY_FINE_RIGHT.has(value)) return step(1, "fine");
+  if (KEY_PAGE_UP.has(value)) return step(1, "page");
+  if (KEY_PAGE_DOWN.has(value)) return step(-1, "page");
+  if (KEY_HOME.has(value)) return setNumber(field, field.min);
+  if (KEY_END.has(value)) return setNumber(field, field.max);
+  // x, d and Delete put the value back; 0-9 and . start typing.
+  if (KEY_RESET.has(value)) {
     const reset =
       field.reset ??
       (field.start !== undefined ? field.command(field.start) : undefined);
@@ -281,7 +412,7 @@ export function faderKeyPress(
       ? { type: "set", command: reset, key: faderKey(field.label) }
       : { type: "handled" };
   }
-  if (/^[1-9.]$/.test(value)) {
+  if (/^[0-9.]$/.test(value)) {
     state.typing = value === "." ? "0." : value;
     return { type: "handled" };
   }
@@ -302,7 +433,13 @@ export function faderSetPosition(
       field,
       Math.round(position * Math.max(0, field.options.length - 1)),
     );
-  return setNumber(field, faderValueAt(field, position));
+  return setSnapped(
+    state,
+    field,
+    faderValueAt(field, position),
+    undefined,
+    "drag",
+  );
 }
 
 /** A [−] / [+] click or a wheel notch on a field. */
@@ -319,7 +456,13 @@ export function faderStep(
     const at = Math.max(0, field.options.indexOf(field.value));
     return setChoice(field, at + direction);
   }
-  return setNumber(field, stepValue(field, direction, size));
+  return setSnapped(
+    state,
+    field,
+    stepValue(field, direction, size),
+    field.value,
+    size,
+  );
 }
 
 /** A click on one option of a choice field. */
@@ -334,8 +477,25 @@ export function faderChoose(
   return setChoice(field, option);
 }
 
-const HINT =
-  "←→ adjust · ⇧←→ coarse · [ ] fine · ↑↓ param · 0-9 type · d default · enter keep · esc revert";
+/**
+ * Most important first: fitHint trims the middle from the right, so at 80
+ * columns the coarse and fine steps go before `enter keep` or `x reset`.
+ */
+export const FADER_HINT =
+  "←→ adjust · enter keep · x reset · 0-9 type · ↑↓ param · ⇧←→ coarse · [ ] fine · esc revert";
+
+/**
+ * The hint for a field the loop cannot stage (tempo, meter, loop length):
+ * each step is a new revision, so there is nothing to keep or revert.
+ */
+export const FADER_HINT_AT_ONCE =
+  "←→ adjust · applies at once · x reset · 0-9 type · ↑↓ param · ⇧←→ coarse · [ ] fine · esc back";
+
+/** The value a field's next step starts from (for checking what it runs). */
+export function faderCommand(field: FaderSpec): string {
+  if (field.kind === "choice") return field.command(field.value);
+  return field.command(field.value ?? field.start ?? field.min);
+}
 
 /** The drawer's paint model for `fields` (staged) beside `committed`. */
 export function drawerView(
@@ -345,11 +505,18 @@ export function drawerView(
   options: {
     title: string;
     dirty: boolean;
+    /** How many edits are staged (defaults to 1 while dirty). */
+    staged?: number | undefined;
     status?: string | undefined;
     hint?: string;
+    /** The focused field applies at once (cannot stage on the loop). */
+    atOnce?: boolean | undefined;
   },
 ): DrawerView {
   const before = new Map(committed.map((field) => [field.label, field]));
+  // A detent flash lasts one view: consume it here.
+  const flash = state.flash;
+  state.flash = undefined;
   const drawn: DrawerField[] = fields.map((field) => {
     const was = before.get(field.label);
     if (field.kind === "choice") {
@@ -395,15 +562,35 @@ export function drawerView(
           : undefined,
       minText: field.format(field.min),
       maxText: field.format(field.max),
+      ...(flash === field.label && field.value !== undefined
+        ? { flash: detentLabel(field, field.value) }
+        : {}),
     };
   });
+  const staged = options.staged ?? (options.dirty ? 1 : 0);
   return {
     title: options.title,
     fields: drawn,
     focus: focusIndex(state, fields),
     typing: state.typing,
     dirty: options.dirty,
+    badge: options.dirty ? stagedBadge(staged) : undefined,
     status: options.status,
-    hint: options.hint ?? HINT,
+    hint: options.hint ?? (options.atOnce ? FADER_HINT_AT_ONCE : FADER_HINT),
   };
+}
+
+/** `A/B: 1 change staged · enter keep · esc revert`. */
+export function stagedBadge(count: number): string {
+  const n = Math.max(1, count);
+  return `A/B: ${n} change${n === 1 ? "" : "s"} staged · enter keep · esc revert`;
+}
+
+/** The faint word a detent flashes: `0 dB`, `center`, or the value. */
+export function detentLabel(spec: FaderNumber, value: number): string {
+  const text = spec.format(value);
+  // Volume formats as `1 · 0.0 dB`; the flash names the detent itself.
+  const db = /(-?[\d.]+) dB$/.exec(text);
+  if (db && Number(db[1]) === 0) return "0 dB";
+  return text;
 }

@@ -25,24 +25,43 @@ function mix(ctx: MenuContext): MenuNode[] {
   return node.build(ctx);
 }
 
-describe("Mix › position and remove track", () => {
+describe("Mix leaves track order to Arrange › tracks", () => {
+  test("Mix has no position or remove rows (§4a)", () => {
+    const labels = mix(context(["lead", "pad"])).map((n) => n.label);
+    expect(labels).not.toContain("position");
+    expect(labels).not.toContain("remove track");
+  });
+});
+
+function arrangeTracks(ctx: MenuContext): MenuNode[] {
+  const arrange = rootNodes(ctx).find(
+    (n) => n.kind === "menu" && n.id === "arrange",
+  );
+  if (arrange?.kind !== "menu") throw new Error("no arrange menu");
+  const tracks = arrange
+    .build(ctx)
+    .find((n) => n.kind === "menu" && n.id === "tracks");
+  if (tracks?.kind !== "menu") throw new Error("no tracks menu");
+  return tracks.build(ctx);
+}
+
+describe("Arrange › tracks › position and remove", () => {
   test("rows run /track move and /track remove on the focused track", () => {
-    const rows = mix(context(["lead", "pad"]));
+    const rows = arrangeTracks(context(["lead", "pad"]));
     const position = rows.find((n) => n.label === "position");
-    const remove = rows.find((n) => n.label === "remove track");
-    expect(position?.kind).toBe("entry");
-    if (position?.kind !== "entry") return;
-    expect(position.value).toBe("2 of 2");
-    expect(position.command("1")).toBe("/track move pad 1");
-    expect(position.command("top")).toBeUndefined();
+    const remove = rows.find((n) => n.label.startsWith("remove"));
+    expect(position?.kind).toBe("number");
+    if (position?.kind !== "number") return;
+    expect(position.value).toBe(2);
+    expect(position.command(1)).toBe("/track move pad 1");
     expect(remove?.kind === "action" && remove.command).toBe(
       "/track remove pad",
     );
   });
 
   test("a lone track has neither row", () => {
-    const labels = mix(context(["lead"])).map((n) => n.label);
+    const labels = arrangeTracks(context(["lead"])).map((n) => n.label);
     expect(labels).not.toContain("position");
-    expect(labels).not.toContain("remove track");
+    expect(labels.some((label) => label.startsWith("remove"))).toBe(false);
   });
 });
