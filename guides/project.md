@@ -28,3 +28,4 @@ live here; windows on one folder stay in sync.
 ## Next
 
 - `guide files` · `guide sessions` · `guide agent` · `guide audio`
+- `guide panes`

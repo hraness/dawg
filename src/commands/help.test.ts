@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  ARRANGE_PAGE,
   HELP_SECTIONS,
   looksLikeProse,
   helpLines,
@@ -14,6 +15,8 @@ import {
   helpTitle,
 } from "./help.ts";
 import { KEYS, type KeySection } from "../../tui/grammar.ts";
+import { createScore } from "../../core/score.ts";
+import { commandParses } from "./parses.ts";
 import {
   lintText,
   resolveTopic,
@@ -321,4 +324,50 @@ test("/help <command> does not repeat its usage line", () => {
   }
   const scale = helpTopicLines("scale")!.join("\n");
   expect(scale.match(/scale D hijaz/g)).toHaveLength(1);
+});
+
+describe("/help arrange and /help panes (op1-ux lane E)", () => {
+  const score = createScore({
+    bars: 16,
+    tracks: [
+      { id: "main", instrument: "saw" },
+      { id: "bass", instrument: "saw" },
+    ],
+    sections: [
+      { name: "verse", startBar: 1, bars: 8 },
+      { name: "chorus", startBar: 9, bars: 8 },
+    ],
+  } as Parameters<typeof createScore>[0]);
+
+  test("arrange is one screen around the range verbs; first line fits 80", () => {
+    const lines = helpTopicLines("arrange", 80)!;
+    expect(lines.length).toBeLessThanOrEqual(14);
+    expect(lines.every((line) => line.length <= 80)).toBe(true);
+    expect(lines.some((line) => line.includes("…"))).toBe(false);
+    const body = lines.slice(1).join("\n");
+    for (const verb of ["loop 5-6", "copy bass 5-6 to 7", "move bass", "paste"])
+      expect(body).toContain(verb);
+  });
+
+  test("every arrange row is a line the prompt runs", () => {
+    // Window lines the consistency gate covers (test/consistency.test.ts).
+    const window = new Set(["ctrl-t", "tape", "style deep-house 16"]);
+    for (const entry of ARRANGE_PAGE.entries)
+      for (const line of entry.command.split(" · ")) {
+        if (window.has(line)) continue;
+        expect(commandParses(line, score), line).toBe(true);
+      }
+  });
+
+  test("panes lists pane, pin and follow and points at the guide", () => {
+    const lines = helpTopicLines("panes", 80)!;
+    expect(lines[0]).toBe("── panes");
+    expect(lines.length).toBeLessThanOrEqual(14);
+    expect(lines.every((line) => line.length <= 80)).toBe(true);
+    const text = lines.join("\n");
+    for (const word of ["pane <screen>", "pin · unpin", "follow"])
+      expect(text).toContain(word);
+    expect(lines.at(-1)).toContain("guide panes");
+    expect(helpTopicLines("pane", 80)).toEqual(lines);
+  });
 });

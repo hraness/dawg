@@ -60,6 +60,7 @@ once with the error, for a correction round (`COMMAND_MAX_STEPS` = 4).
 | a drum hit or row (`hit kick at 0`, `pattern hat 0 0.5`)                  | the drum key for that voice                                                                                 | Ctrl-P on a kit track                                                         |
 | a groove, style or chords (`/pattern house`, `chords …`)                  | the typed command                                                                                           | the command, or Ctrl-K › Rhythm, or Ctrl-K › Chords and key                   |
 | a track (`/track pad`, `/track rm pad`, `/track move pad 1`)              | the typed command                                                                                           | the command, or click the track name                                          |
+| bars (`loop 5-6`, `copy bass 5-6 to 7`, `move bass 5-6 to 9`)             | the typed command; a TAPE pane draws the bars landing                                                       | the command, or Ctrl-T and the tape keys (`\`, `c`, `v`)                      |
 
 Notes and timing: each streamed note is scheduled on the grid behind the
 stream (`NoteScheduler`). If the model streams faster than the tempo, notes
@@ -79,6 +80,8 @@ entry. Notes are never held back, and the score already has them.
 | Download, stems, analyze, transcribe, lyrics, wavetable from audio         | JSON media tools; the caption names `dawg media <verb>`                                                                  | These are the CLI's `dawg media` commands; no in-TUI surface                                 |
 | `explain`, `measure_mix`, `preview_sound`                                  | JSON tools                                                                                                               | Read-only; `/try` and `master measure` are the human forms                                   |
 | Window-only commands (`/model`, `model key`, `/quit`, `/showme`, `/theme`) | Never run by the agent                                                                                                   | They change the person's window, not the song                                                |
+| `tape`, `knobs`, `mix`, `panes`, `pin`, `follow`, `audio`                  | Never run by the agent                                                                                                   | They change a pane or this machine's devices, not the song                                   |
+| The clipboard (`copy` without `to`, `paste`)                               | Never used; the agent types `copy … to` and `move … to`                                                                  | One revision each, and the agent's surface stays equal to the person's                       |
 | Subscription providers, `/showme off`, non-TTY                             | JSON tool loop                                                                                                           | No streaming text channel we can parse line by line, or nobody watching                      |
 
 ## Operations without a human surface

@@ -53,6 +53,38 @@ describe("CommandLines", () => {
   });
 });
 
+describe("show-me types the op1-ux range commands", () => {
+  const song = createScore({
+    bars: 8,
+    tracks: [
+      { id: "main", instrument: "saw" },
+      { id: "bass", instrument: "saw" },
+    ],
+  } as Parameters<typeof createScore>[0]);
+  for (const line of [
+    "loop 5-6",
+    "loop off",
+    "copy bass 5-6 to 7",
+    "copy bass 5-6 to 7 x2",
+    "move bass 5-6 to 3",
+    "clear bass 5-6",
+    "reverse bass 5-6",
+    "jump 5",
+    "bars insert 2 at 3",
+    "form print",
+    "volume bass 0.5",
+  ])
+    test(line, () => {
+      expect(isAgentCommand(line, song)).toBe(true);
+      expect(gestureFor(line, { score: song, trackId: "main" })).toEqual({
+        kind: "typed",
+        command: line,
+        caption: `typing ${line}`,
+      });
+      expect(finishHint([line])).toStartWith(`do it yourself: type ${line}`);
+    });
+});
+
 describe("isAgentCommand", () => {
   test("accepts commands a human types and rejects prose", () => {
     expect(isAgentCommand("tempo 96", score)).toBe(true);
@@ -67,6 +99,21 @@ describe("isAgentCommand", () => {
   test("never runs window-only commands for the agent", () => {
     expect(isAgentCommand("/quit", score)).toBe(false);
     expect(isAgentCommand("/showme off", score)).toBe(false);
+    // Window lines: they change this pane or machine, not the song.
+    for (const line of [
+      "tape",
+      "/tape",
+      "mix",
+      "knobs",
+      "panes",
+      "pane tape",
+      "pin",
+      "follow b",
+      "audio test",
+    ]) {
+      expect(isAgentCommand(line, score), line).toBe(false);
+      expect(isBrokenCommand(line, score), line).toBe(false);
+    }
   });
 
   test("keeps agent file paths inside the workspace", () => {

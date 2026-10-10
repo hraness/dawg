@@ -398,6 +398,24 @@ export const TERMS: readonly Term[] = [
     losers: ["STEER", "QUEUE"],
     aliases: [],
   },
+  {
+    term: "range",
+    meaning: "bars a to b on one track or all (copy bass 5-6 to 7)",
+    losers: [],
+    aliases: [],
+  },
+  {
+    term: "clipboard",
+    meaning: "what copy without `to` holds until paste (tape c, x, v)",
+    losers: [],
+    aliases: [],
+  },
+  {
+    term: "pane",
+    meaning: "one terminal on a shared session, with a letter and own undo",
+    losers: [],
+    aliases: [],
+  },
 ];
 
 /** British spellings dawg writes the American way (lowercase keys). */

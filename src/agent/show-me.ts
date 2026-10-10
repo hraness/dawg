@@ -90,7 +90,7 @@ function cleanLine(line: string): string {
  * quit or change this window's settings, none of which edits the song.
  */
 const WINDOW_ONLY =
-  /^\/(?:help|guide|menu|play|login|logout|auth|model|quit|exit|sessions?|new|showme|status|undo|redo|tracks|euclid|try|record|grid|count-?in|click|chords|theme|motion|view|transcript)\b/i;
+  /^\/(?:help|guide|menu|play|login|logout|auth|model|quit|exit|sessions?|new|showme|status|undo|redo|tracks|euclid|try|record|grid|count-?in|click|chords|theme|motion|view|transcript)\b|^\/?(?:tape|knobs|mix|panes?|pin|unpin|follow|unfollow|audio)(?:\s|$)/i;
 
 /**
  * Whether a complete line is a command the agent runs: one a human could

@@ -193,4 +193,14 @@ describe("command-mode agent turn", () => {
     expect(commandAgentSystemPrompt()).toContain("tempo");
     expect(commandAgentSystemPrompt()).toContain("names the key command");
   });
+
+  test("the prompt teaches stateless range verbs, never the clipboard", () => {
+    const prompt = commandAgentSystemPrompt();
+    expect(prompt).toContain("loop 5-6");
+    expect(prompt).toContain("copy bass 5-6 to 7");
+    expect(prompt).toContain("move bass 5-6 to 9");
+    const reference = prompt.split("\nCommands:\n")[1]!;
+    expect(reference).not.toMatch(/\bpaste\b/);
+    expect(reference).not.toMatch(/^(panes|pane |audio|pin )/m);
+  });
 });
