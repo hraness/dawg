@@ -14,14 +14,14 @@ watching it work.
   `typing tempo 96`, `fader · reverb mix → 0.4 · or type fx reverb mix 0.4`
   or `playing on keys: D (C4) · ctrl-p play mode · or type add C4 at 0`.
 - **Finish hint.** At the end of the turn the caption says how to do it
-  yourself, for example `do it yourself: type fx reverb mix 0.4 · or ctrl-k
-› Effects › reverb`. All lines are in the Ctrl-O log as `agent › …`.
+  yourself, for example `do it yourself: type fx reverb mix 0.4 · or Ctrl-K
+› Effects › Reverb`. All lines are in the Ctrl-O log as `agent › …`.
 - **Nothing is replayed.** There is no queue after the turn and you never
   press a key to get the result. Typing, play mode and the next turn are
   never blocked.
 
-`/showme on|quiet|off` (default `on`), the `show me` row in ctrl-k ›
-Project, and `showMe` in `config.json` choose how much is shown. `quiet`
+`/showme on|quiet|off` (default `on`), the show-me row in Ctrl-K ›
+Project › agent, and `showMe` in `config.json` choose how much is shown. `quiet`
 keeps command mode and ghost text but drops captions, glides and note
 sounds. `off` goes back to the JSON tool loop. Show-me needs a terminal.
 Non-TTY runs, `dawg` subcommands, scripts and subscription providers
@@ -55,10 +55,10 @@ once with the error, for a correction round (`COMMAND_MAX_STEPS` = 4).
 | What the agent does                                                       | What you see and hear                                                                                       | Do it yourself                                                                |
 | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | any command                                                               | ghost text, `typing …`                                                                                      | type the line, Enter                                                          |
-| a parameter value (`volume`, `pan`, `fx <device> <param> <v>`, `synth …`) | the value glides ~150 ms in 30 ms steps through the staged audition path while the loop plays, then commits | the command, or the fader drawer: type the command without a value, or ctrl-k |
+| a parameter value (`volume`, `pan`, `fx <device> <param> <v>`, `synth …`) | the value glides ~150 ms in 30 ms steps through the staged audition path while the loop plays, then commits | the command, or the fader drawer: type the command without a value, or Ctrl-K |
 | a note (`add C4 at 0`)                                                    | the play-mode key and octave keys in the caption; the note sounds on the audition voice in time             | Ctrl-P play mode, the named key                                               |
 | a drum hit or row (`hit kick at 0`, `pattern hat 0 0.5`)                  | the drum key for that voice                                                                                 | Ctrl-P on a kit track                                                         |
-| a groove, style or chords (`/pattern house`, `chords …`)                  | the typed command                                                                                           | the command, or ctrl-k › Rhythm / Chords                                      |
+| a groove, style or chords (`/pattern house`, `chords …`)                  | the typed command                                                                                           | the command, or Ctrl-K › Rhythm, or Ctrl-K › Chords and key                   |
 | a track (`/track pad`, `/track rm pad`, `/track move pad 1`)              | the typed command                                                                                           | the command, or click the track name                                          |
 
 Notes and timing: each streamed note is scheduled on the grid behind the
@@ -68,18 +68,18 @@ entry. Notes are never held back, and the score already has them.
 
 ## Exceptions, decided
 
-| Case                                                                    | Decision                                                                                                                 | Why                                                                                          |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| Long or bulk edits (a 64-bar style, 500 notes)                          | One command line (`/pattern`, `style`, `chords`) instead of note lines; notes past the stream's pace sound as step entry | Typing 500 `add` lines is slower than the human way. The command is what a person would use. |
-| Fader glides                                                            | Only while the loop plays, ≤150 ms                                                                                       | Without audio nothing is heard, and a longer glide would delay the result                    |
-| Menu paths                                                              | Shown in the caption and finish hint, never as an animated cursor walk                                                   | A walk costs time and teaches less than the path                                             |
-| Play-mode keys                                                          | Named in the caption; the on-screen keyboard is not pressed                                                              | Pressing play mode would switch your window's mode under you mid-typing                      |
-| Workspace files (`song.ts`, `tracks/`)                                  | JSON tools `read_file`/`write_file`/`edit_file`; the activity log shows the file                                         | No prompt command edits source; the files are the manual path                                |
-| Web search, fetch                                                       | JSON tools, shown as tool lines                                                                                          | No manual UI beyond asking the agent                                                         |
-| Download, stems, analyze, transcribe, lyrics, wavetable from audio      | JSON media tools; the caption names `dawg media <verb>`                                                                  | These are the CLI's `dawg media` commands; no in-TUI surface                                 |
-| `explain`, `measure_mix`, `preview_sound`                               | JSON tools                                                                                                               | Read-only; `/try` and `master measure` are the human forms                                   |
-| Window-only commands (`/model`, `/login`, `/quit`, `/showme`, `/theme`) | Never run by the agent                                                                                                   | They change the person's window, not the song                                                |
-| Subscription providers, `/showme off`, non-TTY                          | JSON tool loop                                                                                                           | No streaming text channel we can parse line by line, or nobody watching                      |
+| Case                                                                       | Decision                                                                                                                 | Why                                                                                          |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| Long or bulk edits (a 64-bar style, 500 notes)                             | One command line (`/pattern`, `style`, `chords`) instead of note lines; notes past the stream's pace sound as step entry | Typing 500 `add` lines is slower than the human way. The command is what a person would use. |
+| Fader glides                                                               | Only while the loop plays, ≤150 ms                                                                                       | Without audio nothing is heard, and a longer glide would delay the result                    |
+| Menu paths                                                                 | Shown in the caption and finish hint, never as an animated cursor walk                                                   | A walk costs time and teaches less than the path                                             |
+| Play-mode keys                                                             | Named in the caption; the on-screen keyboard is not pressed                                                              | Pressing play mode would switch your window's mode under you mid-typing                      |
+| Workspace files (`song.ts`, `tracks/`)                                     | JSON tools `read_file`/`write_file`/`edit_file`; the activity log shows the file                                         | No prompt command edits source; the files are the manual path                                |
+| Web search, fetch                                                          | JSON tools, shown as tool lines                                                                                          | No manual UI beyond asking the agent                                                         |
+| Download, stems, analyze, transcribe, lyrics, wavetable from audio         | JSON media tools; the caption names `dawg media <verb>`                                                                  | These are the CLI's `dawg media` commands; no in-TUI surface                                 |
+| `explain`, `measure_mix`, `preview_sound`                                  | JSON tools                                                                                                               | Read-only; `/try` and `master measure` are the human forms                                   |
+| Window-only commands (`/model`, `model key`, `/quit`, `/showme`, `/theme`) | Never run by the agent                                                                                                   | They change the person's window, not the song                                                |
+| Subscription providers, `/showme off`, non-TTY                             | JSON tool loop                                                                                                           | No streaming text channel we can parse line by line, or nobody watching                      |
 
 ## Operations without a human surface
 

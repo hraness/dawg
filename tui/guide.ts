@@ -7,6 +7,7 @@
  *   page   ↑↓ (j k) scroll · pgup pgdn home end · ← h esc back to the tree
  */
 import type { Guide } from "../guides/index.ts";
+import { resolveTopic } from "../src/lang/glossary.ts";
 import { overlayKey } from "./keys.ts";
 import { displayWidth } from "./text.ts";
 
@@ -77,6 +78,36 @@ export function wrapRows(rows: readonly GuideRow[], width: number): GuideRow[] {
   return out;
 }
 
+/**
+ * Words that open a child guide rather than their topic's root guide
+ * (`/guide expression` is the performance guide, not Sound).
+ */
+export const GUIDE_ALIASES: Readonly<Record<string, string>> = {
+  expression: "performance",
+  instrument: "sounds",
+  instruments: "sounds",
+  presets: "sounds",
+  samples: "media",
+  stems: "media",
+  grains: "resample",
+  granular: "resample",
+  scl: "tuning",
+  edo: "tuning",
+  meter: "tempo",
+  time: "tempo",
+  style: "styles",
+  sections: "music",
+  form: "music",
+  automate: "automation",
+  showme: "show-me",
+  model: "providers",
+  models: "providers",
+  search: "web-search",
+  web: "web-search",
+  mouse: "faders",
+  menu: "audition",
+};
+
 export class GuideBrowser {
   readonly guides: readonly Guide[];
   /** Expanded parents in the tree. */
@@ -95,13 +126,20 @@ export class GuideBrowser {
     if (open) this.open(open);
   }
 
-  /** Open a guide by id or title word (`/guide chords`); false if unknown. */
+  /**
+   * Open a guide by id, topic alias or title word (`/guide chords`,
+   * `/guide scale`, `/guide using`); false if unknown.
+   */
   open(name: string): boolean {
-    const word = name.trim().toLowerCase();
+    const word = name.trim().toLowerCase().replace(/^\//, "");
+    const alias = GUIDE_ALIASES[word] ?? resolveTopic(word);
     const guide =
       this.guides.find((g) => g.id === word) ??
-      this.guides.find((g) => g.title.toLowerCase().startsWith(word)) ??
-      this.guides.find((g) => g.id.includes(word));
+      (alias ? this.guides.find((g) => g.id === alias) : undefined) ??
+      (word.length >= 3
+        ? (this.guides.find((g) => g.title.toLowerCase().startsWith(word)) ??
+          this.guides.find((g) => g.id.includes(word)))
+        : undefined);
     if (!guide) return false;
     for (let p = guide.parent; p; p = this.byId(p)?.parent)
       this.expanded.add(p);

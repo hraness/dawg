@@ -1,26 +1,32 @@
 ---
 id: audition
 title: Menu and audition loop
-parent: sound
-order: 5
+parent: keys
+order: 1
 ---
 
-Ctrl-K (or `/menu`) holds every edit the agent can make. Each row shows
-its value and, dimmed, the command it runs, so the menu teaches commands.
+Each menu row shows its value and, dimmed, the command it runs, so the
+menu teaches the commands. Changes are staged on a loop until you keep.
 
-## Menu keys
+## Ask
 
-- ↑↓ move · → or Enter open · ←→ adjust a value
-- Enter on a number opens its fader drawer (see Faders and the mouse)
-- `x` reset · `/` filter · Esc back
-- `/menu effects` opens a section (sound effects rhythm chords mix project)
+- "try a darker filter on the lead before keeping it"
 
-## Audition loop
+## Type it yourself
 
-- Space loops the focused track; changes are staged, not kept
-- `a` A/B: committed sound against staged · `c` solo or in context
+- `menu effects` opens a topic · `try fx reverb mix 0.6` stages one
+
+## Menu
+
+- Ctrl-K opens Sound, Voice, Effects, Rhythm, Chords and key, Mix,
+  Arrange and Project: the same topics as `help` and `guide`
+
+## Keys
+
+- ↑↓ move · → or Enter open · ←→ adjust a value · `x` reset · Esc back
+- Space loops the track · `a` A/B · `c` solo or in context
 - Enter keeps every staged change as one undo step · Esc reverts
 
-## Try a command
+## Next
 
-- `/try fx reverb mix 0.6` · `/try synth lpf 800` stage on the loop
+- `guide faders` · `guide keys`

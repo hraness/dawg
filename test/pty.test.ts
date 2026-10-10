@@ -264,7 +264,7 @@ test.skipIf(!supported)(
     await t.send("pan 3\r");
     await t.until(() => t.vt.text().includes("pan takes -1…1"), "usage");
     await t.send("/export\r");
-    await t.until(() => t.vt.text().includes("/export <file>"), "export usage");
+    await t.until(() => t.vt.text().includes("export <file>"), "export usage");
     await t.send("/export song.wav\r");
     await t.until(
       () => t.vt.text().includes("render audio with: dawg render song.wav"),
@@ -276,7 +276,7 @@ test.skipIf(!supported)(
       "enoent",
     );
 
-    // /help opens the short task guide; /help all is the full reference.
+    // /help opens start-here and the ten topics; /help all is everything.
     await t.send("/help\r");
     await t.until(() => t.vt.text().includes("── start here"), "help guide");
     expect(t.vt.text()).toContain("ctrl-k");
@@ -284,16 +284,22 @@ test.skipIf(!supported)(
     await t.send("\u001b");
     await t.until(() => !t.vt.text().includes("── start here"), "guide closed");
     await t.send("/help all\r");
-    await t.until(() => t.vt.text().includes("── music"), "help overlay");
-    await t.send("\u001b[F"); // End: the last page holds keys
-    await t.until(() => t.vt.text().includes("── keys"), "help end");
+    await t.until(() => t.vt.text().includes("── sound"), "help overlay");
+    await t.send("\u001b[F"); // End: the last page holds the keys
+    await t.until(() => t.vt.text().includes("chord mode"), "help end");
     await t.send("\u001b");
-    await t.until(() => !t.vt.text().includes("── keys"), "help all closed");
-    // The window group: its own topic, since the voice group follows it.
-    await t.send("/help window\r");
-    await t.until(() => t.vt.text().includes("/help [topic]"), "help window");
+    await t.until(() => !t.vt.text().includes("chord mode"), "help all closed");
+    // An old topic id still opens: session is now project.
+    await t.send("/help session\r");
+    await t.until(
+      () => t.vt.text().includes("╭─ help · project"),
+      "help project",
+    );
     await t.send("\u001b");
-    await t.until(() => !t.vt.text().includes("/help [topic]"), "help closed");
+    await t.until(
+      () => !t.vt.text().includes("╭─ help · project"),
+      "help closed",
+    );
     await t.send("/status\r");
     await t.until(
       () => t.vt.text().includes("saved locally · no daemon"),

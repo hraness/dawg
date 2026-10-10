@@ -65,8 +65,11 @@ export const COMMAND_MODE_TOOL_NAMES: ReadonlySet<string> = new Set([
 export const COMMAND_MAX_STEPS = 4;
 
 function commandReference(): string {
+  // Song commands only: the window and agent groups change the person's
+  // window, which the agent never does.
   return HELP_SECTIONS.filter(
-    (section) => section.group === "music" || section.group === "voice",
+    (section) =>
+      section.group !== "project · window" && section.group !== "agent",
   )
     .flatMap((section) =>
       section.entries.map((entry) => `${entry.command} — ${entry.summary}`),

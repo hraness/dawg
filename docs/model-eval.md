@@ -161,7 +161,7 @@ at p50 and passes less.
   the composition brief do most of the work: single edits pass at 95% or
   more for every model above 70%.
 - **`compose` separates the ladder.** Clave and son patterns, the ii-V-I
-  walk and genre grooves are where cheap models fail: they write a correct
+  walk and style grooves are where cheap models fail: they write a correct
   pattern in the wrong phase (2-3 instead of 3-2) or a bass that leaps
   instead of walking. `files` is easy for most models; gpt-oss-120b fails it because
   it usually answers without editing the files at all.

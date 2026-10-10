@@ -195,26 +195,32 @@ test("/guide opens the guide tree; → opens a guide; Esc steps back out", () =>
   expect(h.app.command("/guide")).toContain("guides");
   let lines = h.frame();
   expect(lines.some((line) => line.includes("Getting started"))).toBe(true);
-  expect(lines.some((line) => line.includes("Writing music"))).toBe(true);
+  expect(lines.some((line) => line.includes("Using dawg"))).toBe(true);
   expect(h.app.input(DOWN).type).toBe("overlay");
   h.app.input("\u001b[C");
   lines = h.frame();
-  expect(lines.some((line) => line.includes("Tracks and instruments"))).toBe(
-    true,
-  );
+  expect(lines.some((line) => line.includes("Play mode"))).toBe(true);
   h.app.input(DOWN);
   h.app.input("\r");
   lines = h.frame();
-  expect(lines.some((line) => line.includes("guide · Writing music ›"))).toBe(
+  expect(lines.some((line) => line.includes("guide · Using dawg ›"))).toBe(
     true,
   );
   for (const line of lines) expect([...line].length).toBeLessThanOrEqual(80);
   h.app.input(ESC);
   h.app.input(ESC);
   expect(h.app.ui.overlay).toBeUndefined();
-  expect(h.app.command("/guide nonsense")).toContain("no guide named");
+  // A miss is a refusal (✗), the same tone as a /help miss.
+  expect(h.app.command("/guide nonsense")).toEqual({
+    ok: false,
+    text: "no topic nonsense · /help",
+  });
+  expect(h.app.command("/guide vocie")).toEqual({
+    ok: false,
+    text: "no topic vocie · did you mean voice · /help",
+  });
   expect(h.app.ui.overlay).toBeUndefined();
   h.app.command("/guide chords");
   lines = h.frame();
-  expect(lines.some((line) => line.includes("/chords auto"))).toBe(true);
+  expect(lines.some((line) => line.includes("chords auto"))).toBe(true);
 });

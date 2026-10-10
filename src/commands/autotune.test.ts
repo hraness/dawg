@@ -151,7 +151,7 @@ describe("/autotune apply", () => {
 describe("/autotune in /help", () => {
   test("listed in the Voice section and typo-matched", async () => {
     const { helpTopicLines, nearestCommand } = await import("./help.ts");
-    expect(helpTopicLines("voice")!.some((l) => l.includes("/autotune"))).toBe(
+    expect(helpTopicLines("voice")!.some((l) => l.startsWith("autotune"))).toBe(
       true,
     );
     expect(nearestCommand("/autotne")).toBe("/autotune");

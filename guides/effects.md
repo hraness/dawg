@@ -1,30 +1,31 @@
 ---
 id: effects
 title: Effects
-parent: sound
-order: 2
+order: 5
 ---
 
-Chain: filter, auto filter, distortion, tremolo, compressor, pan,
-chorus, delay, reverb, and more (phaser, bitcrush, vowel, leslie).
+Each track has a fixed chain: filter, auto filter, distortion, tremolo,
+compressor, chorus, delay, reverb, and more (phaser, bitcrush, vowel).
 
 ## Ask
 
-- "add a dub delay to the snare" · "more room on the keys"
-- "give the guitar a crunchy amp"
+- "add a dub delay to the snare" · "give the guitar a crunchy amp"
 
 ## Type it yourself
 
-- `fx` list the focused track's effects
-- `fx delay mix 0.3` · `fx filter type hpf cutoff 300`
-- `fx distort drive 4 tone 5000` · `fx reverb ir builtin:reverse`
-- `fx chorus on` · `fx chorus off` · `fx chorus reset`
-- `fx compressor preset <name>` load a preset
-- `rig crunch` guitar rig · `head lead` · `cab 4x12` · `stomp fuzz`
-- `rig shoegaze` · `fx wobble depth 30` · `fx bloom` · `fx swell` · `fx double`
-- `filter 1200 0.6` · `delay 0.375 0.3` · `reverb 0.4 0.8` · `filter off`
+- `fx` lists the focused track's effects · `fx delay mix 0.3`
+- `fx filter type hpf cutoff 300` · `fx chorus on` · `fx chorus reset`
+- `rig crunch` · `rig shoegaze` · `head lead` · `stomp fuzz`
+- `filter 1200 0.6` · `delay 0.375 0.3` · `reverb 0.4 0.8`
 
 ## Menu
 
-- Ctrl-K › Effects: core effects, Guitar rig, Shoegaze, more, advanced
-- `fx filter` alone opens the filter's faders, stacked
+- Ctrl-K › Effects › Delay · Reverb · Guitar rig · Shoegaze
+
+## Keys
+
+- `fx filter` alone opens its faders, stacked · Tab next param
+
+## Next
+
+- `guide mix` · `guide automation`

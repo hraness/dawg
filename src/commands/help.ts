@@ -1,15 +1,28 @@
 /**
  * The command reference, in one place: `/help` renders it in the overlay,
- * `dawg --help` prints it, and the docs mirror it. Music words are bare;
- * app commands take a slash (bare aliases keep working but are listed once,
- * in their canonical form).
+ * `dawg --help` prints it, and the docs mirror it. Groups are the ten topic
+ * ids (src/lang/glossary.ts), the same ids `/guide` and `/menu` take.
+ * A topic may have sub-groups (`sound · performance`) so no group runs
+ * past about fifteen rows. Commands are written bare, since the slash is
+ * optional; only the free-text window verbs (`/rename`, `/fork`,
+ * `/resume`), `/auth`, `/bpm` (a sample's tempo; bare `bpm` is song tempo)
+ * and `/play` (play mode; bare `play` is the transport) keep it.
  */
 import { GUITAR_TUNING_NAMES } from "../../core/chords.ts";
-import { truncate } from "../../tui/text.ts";
+import { KEYS, type KeyScreen } from "../../tui/grammar.ts";
+import { displayWidth, truncate } from "../../tui/text.ts";
+import {
+  resolveTopic,
+  topicMiss,
+  TOPIC_SUMMARY,
+  TOPICS,
+  type TopicId,
+} from "../lang/glossary.ts";
 import { EXPRESSION_USAGE } from "./expression.ts";
 import { VOCAL_VERBS } from "./vocal.ts";
 
-export type HelpGroup = "music" | "session" | "window" | "voice" | "keys";
+/** A topic id, or a heading of the start page. */
+export type HelpGroup = string;
 
 export type HelpEntry = Readonly<{
   /** Canonical form, e.g. `pan <-1..1>`. */
@@ -25,34 +38,16 @@ export type HelpSection = Readonly<{
 
 export const HELP_SECTIONS: readonly HelpSection[] = [
   {
-    group: "music",
+    group: "sound",
     entries: [
-      { command: "play", summary: "start the transport" },
-      { command: "pause", summary: "stop the transport" },
-      { command: "tempo <bpm>", summary: "20–300 BPM" },
-      { command: "add <note> at <beat> [for <beats>]", summary: "add C4 at 0" },
-      { command: "remove <id>", summary: "delete a note" },
-      { command: "move <id> to <beat>", summary: "shift a note" },
-      { command: "length <id> <beats>", summary: "resize a note" },
-      { command: "velocity <id> <0..1>", summary: "note loudness" },
-      { command: "bars <count>", summary: "loop length, 1–256" },
-      { command: "extend <count> bars", summary: "lengthen the loop" },
       {
         command: "instrument <name>",
-        summary: "sine piano pluck bass saw square triangle wavetable kit",
+        summary: "sine piano pluck bass sawtooth square triangle wavetable kit",
       },
-      { command: "volume <0..1>", summary: "track level" },
-      { command: "pan <-1..1>", summary: "left … right" },
-      { command: "mute", summary: "silence this track" },
-      { command: "unmute", summary: "hear it again" },
-      { command: "solo", summary: "only this track" },
-      { command: "unsolo", summary: "every track again" },
       {
-        command: "track rm|move <name> [<position>]",
-        summary:
-          "remove a track and any vocoder src or autotune from naming it (^z undo), or move it",
+        command: "synth <param> <value> | preset <name>",
+        summary: "the synth · synth lpf 1200 · synth alone lists every param",
       },
-      { command: "clear", summary: "remove this track's notes" },
       {
         command: "wt <table> | wt <0..1> | wt list",
         summary: "wavetable synth · wt basic · wt wt_digital:2 · wt 0.5",
@@ -66,58 +61,6 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
           "grain <preset> | <param> <value> | on [voice V] | src synth:<name>|voice V | reset | off",
         summary:
           "granular cloud · grain cloud · grain scan 0.2 · track swarm-2 · grain presets",
-      },
-      {
-        command: "fx <effect> <param> <value> | on | off | preset <name>",
-        summary: "effects · fx delay mix 0.3 · fx reverb on · fx lists them",
-      },
-      {
-        command: "synth <param> <value> | preset <name>",
-        summary: "synth voice · synth lpf 1200 · synth lists every param",
-      },
-      {
-        command: "string <preset> | <param> <value> | presets | reset | off",
-        summary:
-          "plucked strings · string sitar · string buzz 0.8 · string ring 6",
-      },
-      {
-        command: "bowed [<preset>] | <param> <value> | presets",
-        summary:
-          "bowed strings · bowed violin · bowed cellos · bowed pressure 0.7 · bowed sord 1",
-      },
-      {
-        command: "rig <preset> | reset",
-        summary:
-          "guitar rig · rig crunch · rig metal · rig shoegaze · rig lists them",
-      },
-      {
-        command:
-          "guitar tune <name|notes> | capo | hand | ring | position | reset",
-        summary: "guitar fretting · guitar tune dadgad · guitar capo 2",
-      },
-      {
-        command: "progression <chords> [each 4] [at 0] [bass]",
-        summary:
-          "sustained voice-led chords · progression i7 IV7 each 8 · progression Am7 D9 bass",
-      },
-      {
-        command: "strum [chords] [pattern] [strokes D-DU-UDU] [speed 22ms]",
-        summary:
-          "strummed guitar chords · strum G D Em C folk · strum I V vi IV · strum alone strums the track's chords",
-      },
-      {
-        command: "fx wobble|bloom|swell|double [param value]",
-        summary:
-          "shoegaze · fx wobble depth 30 · fx double · fx reverb ir builtin:reverse",
-      },
-      {
-        command: "track jangle|punk|funk|ragged|gtr-lead|gtr-metal|bachata",
-        summary: "new guitar track with that rig",
-      },
-      {
-        command: "stomp|head|cab <type> | <param> <value>",
-        summary:
-          "pedal, amp, cabinet · stomp rat · head gain 7 gate -55 · cab 4x12",
       },
       {
         command: "piano [<preset>] | grand | upright | felt | honkytonk",
@@ -134,7 +77,7 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       },
       {
         command:
-          "tonewheel [<drawbars>] | combo [<registers>] [<voice>] | pipe [<stops>] [<row> <value> …]",
+          "tonewheel [<drawbars>] | combo [<tabs>] [<register>] | pipe [<stops>] [<row> <value> …]",
         summary:
           "organs · tonewheel 888800008 perc 3rd · gospel · combo 08880 flute · pipe plenum · keys perc 3rd",
       },
@@ -142,6 +85,21 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         command: "rotary slow|fast|stop [at <beat>]",
         summary:
           "organ rotary speaker speed · rotary fast at 16 writes the keys-rotary lane",
+      },
+      {
+        command: "string <preset> | <param> <value> | presets | reset | off",
+        summary:
+          "plucked strings · string sitar · string buzz 0.8 · string ring 6",
+      },
+      {
+        command: "bowed [<preset>] | <param> <value> | presets",
+        summary:
+          "bowed strings · bowed violin · bowed cellos · bowed pressure 0.7 · bowed sord 1",
+      },
+      {
+        command:
+          "guitar tune <name|notes> | capo | hand | ring | position | reset",
+        summary: "guitar fretting · guitar tune dadgad · guitar capo 2",
       },
       {
         command:
@@ -154,6 +112,15 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary:
           "winds and brass · wind flute · wind sax · wind players 4 · wind presets",
       },
+      {
+        command: "/try <sound command>",
+        summary: "hear it on a loop first · a A/B · enter keep",
+      },
+    ],
+  },
+  {
+    group: "sound · performance",
+    entries: [
       {
         command: "art <articulation>|off [target]",
         summary:
@@ -191,66 +158,180 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
           "seeded feel at render · humanize 10 8 5 · humanize 20 bars 2-3",
       },
       { command: "expression", summary: "this track's performance settings" },
-      { command: "filter <hz> [res]", summary: "low-pass · filter off" },
-      { command: "delay <beats> [fb] [mix]", summary: "ping-pong · delay off" },
-      { command: "reverb <mix> [size]", summary: "room · reverb off" },
+    ],
+  },
+  {
+    group: "sound · samples",
+    entries: [
       {
-        command: "automate <lane> at <beat> <value>",
-        summary: "volume pan filter resonance delay-feedback delay-mix wt",
+        command: "/sample [<path> [as <sample>]]",
+        summary: "add a sample · alone lists the samples",
       },
       {
-        command: "automate <lane> points <b:v>...",
-        summary: "several points · automate pan points 0:-1 4:1",
+        command: "/bpm <n> [<sample>]",
+        summary: "a sample's own tempo (the slash matters: bare bpm is tempo)",
       },
       {
-        command: "automate <lane> remove <beat>",
-        summary: "drop one point",
+        command: "fitmode [repitch|beats|tones|auto] [<sample>]",
+        summary: "how it fits · alone suggests one from the sound",
       },
-      { command: "clear [<lane>] automation", summary: "drop a lane's points" },
       {
-        command: "master <unit> on|off | preset <name> | <param> <value>",
+        command: "len <beats> [<sample>]",
+        summary: "the sample lasts n beats of the song",
+      },
+      {
+        command: "shift <semitones> [formant keep|follow|<n>] [<sample>]",
         summary:
-          "song master · eq glue tape width limiter · master glue ratio 4",
+          "a sample's pitch without changing its length · shift 0 clears",
       },
       {
-        command: "master <target> | target <lufs> | measure | off",
+        command: "fade [in|out] <seconds> [<sample>]",
+        summary: "a sample's fade in and out (Strudel fadeInTime/fadeTime)",
+      },
+      {
+        command:
+          "resample <track>|orbit <n>|master [section <name>|bars a-b] [grain]",
+        summary: "render to a pinned WAV on a new sampler (or granular) track",
+      },
+    ],
+  },
+  {
+    group: "voice",
+    entries: [
+      {
+        command: "sing [preset] [param value]",
         summary:
-          "loudness · master streaming · master target -9 · master measure",
+          "built-in singing voice: aah ooh choir chorale airy glass lament soprano basso, throat: drone khoomei sygyt kargyraa",
       },
       {
-        command: "style <id> [bars] [seed]",
-        summary: "song from a style · style bebop 16 3 · style again",
+        command: "sing vowels <v> …",
+        summary:
+          "vowels for the track's notes in order, cycled · sing vowels a e i o",
       },
       {
-        command: "style list|search|info · style blend <a> <b> [w]",
-        summary: "the style tree · style search maqam",
-      },
-      { command: "track name <text>", summary: "rename this track" },
-      { command: "meter <1..16>", summary: "beats per bar" },
-      {
-        command: "tempo <bpm> at <beat>|bar <n> [ramp|exp]",
-        summary: "tempo change · tempo 90 at bar 9 ramp · tempo clear",
+        command: "note vowel <v|a>u> [target]",
+        summary: "sung vowel for selected notes · note vowel o bar 2",
       },
       {
-        command: "rit|accel [<n> bars] [to <bpm>] [at bar <n>]",
-        summary: "gradual · rit 4 bars to 80 · a tempo · tempo primo",
+        command: "lyrics [bar] sun-lit morn-ing",
+        summary: "syllables onto the notes (- splits, _ holds, ~ skips)",
       },
       {
-        command: "fermata [at <beat>|at bar <n>|at end] [<extra beats>]",
-        summary: "hold a beat · fermata at 31 2 · fermata clear",
+        command: "autotune [preset] [field value …] | off | presets",
+        summary:
+          "pitch correction · autotune hard · autotune gentle · autotune to notes melody · autotune key D bayati",
       },
       {
-        command: "meter <n>/<d> [at bar <n>]",
-        summary: "meter change · meter 7/8 at bar 5 · meter clear",
+        command:
+          "/formant <-12..12> [mix] | deep | giant | bright | tiny | on | off",
+        summary:
+          "formant shift at constant pitch · /formant -4 deeper · /formant 3 smaller",
       },
       {
-        command: "track rate|phase|cycle <n> | off",
-        summary: "polytempo · track rate 3/2 · track cycle 3",
+        command:
+          "/vowel <v> [<to> [<morph>]] | ee | to <v>|off | morph <0..1> | off",
+        summary: "vowel filter · /vowel a · /vowel a o 0.5 morphs a toward o",
       },
       {
-        command: "track phasing <beats> [over <beats>|hold <n>]",
-        summary: "Reich phasing · track phasing 3 hold 8 · track time off",
+        command:
+          "vocoder [preset] | src <track> | <param> <value|reset> | reset | off | presets",
+        summary:
+          "vocode the focused voice onto a synth (classic robot talkbox choir glass whisper smear lofi) · help vocoder lists params",
       },
+    ],
+  },
+  {
+    group: "voice · clips",
+    entries: [
+      { command: "vocal", summary: "voice tools: lists every verb" },
+      {
+        command:
+          "clip [id] gain -3 | gain by -3 | fade .01 .2 | fade in .01 | move 9 | split 7",
+        summary: "edit an audio clip (dB, seconds, 1-based bars)",
+      },
+      {
+        command:
+          "clip [id] trim offset 1 dur 4|end | rev | repeat 2 [to 32] | mute | rm",
+        summary: "trim, reverse, repeat, mute or remove a clip",
+      },
+      ...VOCAL_VERBS.map((verb) => ({
+        command: `vocal ${verb.usage}`,
+        summary: verb.summary,
+      })),
+    ],
+  },
+  {
+    group: "effects",
+    entries: [
+      {
+        command: "fx <effect> <param> <value> | on | off | preset <name>",
+        summary:
+          "effects · fx delay mix 0.3 · fx reverb on · fx alone lists them",
+      },
+      {
+        command: "filter <hz> [res] · delay <beats> [fb] [mix] · reverb <mix>",
+        summary:
+          "shortcuts for fx filter, delay and reverb · filter 1200 · delay 0.5 · reverb 0.3",
+      },
+      {
+        command: "rig <preset> | reset",
+        summary:
+          "guitar amp and pedals · rig crunch · rig jangle · rig metal · rig alone lists them",
+      },
+      {
+        command: "stomp|head|cab <type> | <param> <value>",
+        summary:
+          "pedal, amp, cabinet · stomp rat · head gain 7 gate -55 · cab 4x12",
+      },
+      {
+        command: "fx wobble|bloom|swell|double [param value]",
+        summary:
+          "shoegaze · fx wobble depth 30 · fx double · fx reverb ir builtin:reverse",
+      },
+    ],
+  },
+  {
+    group: "rhythm",
+    entries: [
+      {
+        command: "hit <drum> at <beat>",
+        summary: "one hit on a kit track · hit kick at 0",
+      },
+      {
+        command: "pattern <drum> <beats...> | every <step>",
+        summary: "a drum on beats · pattern kick every 1",
+      },
+      { command: "clear <drum>", summary: "remove one drum's hits" },
+      {
+        command: "euclid <drum> <pulses> [<steps>] [rotate <n>]",
+        summary: "generated rhythm · euclid hat 7 16 rotate 2",
+      },
+      {
+        command: "euclid <drum> <field> <value> | off | freeze",
+        summary: "repeats pace accent prob swing …",
+      },
+      { command: "grid <drum> <x.X.>", summary: "explicit steps · X accent" },
+      {
+        command: "pattern [name]",
+        summary: "groove picker · hear each groove move",
+      },
+      {
+        command: "/kit [name]",
+        summary: "kit picker · synth kits, then sample kits",
+      },
+      {
+        command: "pack list|info|use|add",
+        summary: "sample packs · pack use 909/bd",
+      },
+      {
+        command: "euclid [drum]",
+        summary: "euclid rhythm editor · Ctrl-K › Rhythm",
+      },
+    ],
+  },
+  {
+    group: "chords",
+    entries: [
       {
         command: "key <tonic> <mode> | none",
         summary: "song key · key A minor · key F# dorian",
@@ -272,16 +353,95 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "this track's tuning · off follows the song",
       },
       {
-        command: "calibration [0|1|latest|off]",
-        summary: "sound fixes · 1 chokes hats, levels keys · 0 legacy",
-      },
-      {
         command: "cents <id> <±c>",
         summary: "detune one note · cents n3 -14 · add E4-14c at 0",
       },
       {
-        command: "section <name> <a>-<b> | add | dup | move | rename | delete",
-        summary: "song sections · section chorus 9-16 · section lists them",
+        command: "progression <chords> [each 4] [at 0] [bass]",
+        summary:
+          "sustained voice-led chords · progression i7 IV7 each 8 · progression Am7 D9 bass",
+      },
+      {
+        command: "strum [chords] [pattern] [strokes D-DU-UDU] [speed 22ms]",
+        summary:
+          "strummed guitar chords · strum G D Em C folk · strum I V vi IV · strum alone strums the track's chords",
+      },
+      {
+        command: "/chords auto|manual|off",
+        summary: "chords in play mode · /chords alone shows settings",
+      },
+      {
+        command: "play degrees|in-key|chromatic",
+        summary:
+          "in play mode the home row plays the key's degrees (any tuning)",
+      },
+    ],
+  },
+  {
+    group: "mix",
+    entries: [
+      { command: "volume <0..1>", summary: "track level" },
+      { command: "pan <-1..1>", summary: "left … right" },
+      { command: "mute", summary: "silence this track" },
+      { command: "unmute", summary: "hear it again" },
+      { command: "solo", summary: "only this track" },
+      { command: "unsolo", summary: "every track again" },
+      {
+        command: "automate <lane> at <beat> <value>",
+        summary: "volume pan filter resonance delay-feedback delay-mix wt",
+      },
+      {
+        command: "automate <lane> points <b:v>...",
+        summary: "several points · automate pan points 0:-1 4:1",
+      },
+      { command: "automate <lane> remove <beat>", summary: "drop one point" },
+      { command: "clear [<lane>] automation", summary: "drop a lane's points" },
+      {
+        command: "master <unit> on|off | preset <name> | <param> <value>",
+        summary:
+          "song master · eq glue tape width limiter · master glue ratio 4",
+      },
+      {
+        command: "master <target> | target <lufs> | measure | off",
+        summary:
+          "loudness · master streaming · master target -9 · master measure",
+      },
+    ],
+  },
+  {
+    group: "arrange",
+    entries: [
+      { command: "add <note> at <beat> [for <beats>]", summary: "add C4 at 0" },
+      { command: "remove <id>", summary: "delete a note" },
+      { command: "move <id> to <beat>", summary: "shift a note" },
+      { command: "length <id> <beats>", summary: "resize a note" },
+      { command: "velocity <id> <0..1>", summary: "note loudness" },
+      { command: "clear", summary: "remove this track's notes" },
+      { command: "track <name>", summary: "focus a track, creating it if new" },
+      { command: "tracks", summary: "list tracks" },
+      {
+        command: "track rm|move <name> [<position>]",
+        summary:
+          "remove a track (Ctrl-Z undoes) or move it · rm and delete are aliases",
+      },
+      { command: "track name <text>", summary: "rename this track" },
+      {
+        command: "track rate|phase|cycle <n> | off",
+        summary: "polytempo · track rate 3/2 · track cycle 3",
+      },
+      {
+        command: "track phasing <beats> [over <beats>|hold <n>]",
+        summary: "Reich phasing · track phasing 3 hold 8 · track time off",
+      },
+    ],
+  },
+  {
+    group: "arrange · song",
+    entries: [
+      {
+        command: "section <name> <a>-<b> | add | dup | move | rename | remove",
+        summary:
+          "song sections · section chorus 9-16 · section alone lists them",
       },
       {
         command: "section loop | jump | mute | vary <name>",
@@ -296,355 +456,212 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "riser, roll, sweep · pre-drop cut and impact · drum fill",
       },
       {
-        command: "hit <voice> at <beat>",
-        summary: "kit tracks · hit kick at 0",
+        command: "style <id> [bars] [seed]",
+        summary: "a whole song in a style · style bebop 16 3 · style again",
       },
       {
-        command: "pattern <voice> <beats...> | every <step>",
-        summary: "pattern kick every 1",
+        command: "style list|search|info · style blend <a> <b> [w]",
+        summary: "the style tree · style search maqam",
       },
-      { command: "clear <voice>", summary: "remove one drum voice" },
+      { command: "bars <count>", summary: "loop length, 1–256" },
+      { command: "extend <count> bars", summary: "lengthen the loop" },
+    ],
+  },
+  {
+    group: "project",
+    entries: [
+      { command: "play", summary: "start the transport" },
+      { command: "pause", summary: "stop the transport" },
       {
-        command: "euclid <voice> <pulses> [<steps>] [rotate <n>]",
-        summary: "generated rhythm · euclid hat 7 16 rotate 2",
+        command: "/play [on|off]",
+        summary: "play mode: the computer keyboard plays notes · ctrl-p",
+      },
+      { command: "tempo <bpm>", summary: "20–300 BPM" },
+      {
+        command: "tempo <bpm> at <beat>|bar <n> [ramp|exp]",
+        summary: "tempo change · tempo 90 at bar 9 ramp · tempo clear",
       },
       {
-        command: "euclid <voice> <field> <value> | off | freeze",
-        summary: "repeats pace accent prob swing …",
-      },
-      { command: "grid <voice> <x.X.>", summary: "explicit steps · X accent" },
-      {
-        command: "shift <semitones> [formant keep|follow|<n>] [<voice>]",
-        summary:
-          "a sample's pitch without changing its length · shift 0 clears",
+        command: "rit|accel [<n> bars] [to <bpm>] [at bar <n>]",
+        summary: "gradual · rit 4 bars to 80 · a tempo · tempo primo",
       },
       {
-        command: "fade [in|out] <seconds> [<voice>]",
-        summary: "a sample's fade in and out (Strudel fadeInTime/fadeTime)",
+        command: "fermata [at <beat>|at bar <n>|at end] [<extra beats>]",
+        summary: "hold a beat · fermata at 31 2 · fermata clear",
+      },
+      { command: "meter <1..16>", summary: "beats per bar" },
+      {
+        command: "meter <n>/<d> [at bar <n>]",
+        summary: "meter change · meter 7/8 at bar 5 · meter clear",
       },
       {
-        command:
-          "resample <track>|orbit <n>|master [section <name>|bars a-b] [grain]",
-        summary: "render to a pinned WAV on a new sampler (or granular) track",
+        command: "/click on|off|<volume>",
+        summary: "metronome · /count-in 0-2 · grid 1/16",
+      },
+      {
+        command: "export <file>",
+        summary: "write track.loop/v1 JSON, or MIDI for .mid",
+      },
+      { command: "import <file>", summary: "replace the score from a file" },
+      {
+        command: "calibration [0|1|latest|off]",
+        summary: "sound fixes · 1 chokes hats, levels keys · 0 legacy",
       },
       { command: "undo", summary: "step back · Ctrl-Z" },
       { command: "redo", summary: "step forward · Ctrl-Y" },
-    ],
-  },
-  {
-    group: "session",
-    entries: [
-      { command: "/sessions", summary: "list sessions in this workspace" },
-      { command: "/resume [<n>|<name>|<id>]", summary: "switch session" },
-      { command: "/rename <name>|--auto", summary: "name this session" },
-      { command: "/fork [<name>]", summary: "copy into a new session" },
       { command: "/status", summary: "name · revision · digest · storage" },
-      {
-        command: "/export <file>",
-        summary: "write track.loop/v1 JSON, or MIDI for .mid",
-      },
-      { command: "/import <file>", summary: "replace the score from a file" },
-      {
-        command: "/sample [<path> [as <voice>]]",
-        summary: "add a sample voice · list voices",
-      },
-      {
-        command: "/bpm <n> [<voice>]",
-        summary:
-          "the sample's own tempo (slash needed: bare bpm is song tempo)",
-      },
-      {
-        command: "/fitmode [repitch|beats|tones|auto] [<voice>]",
-        summary: "how it fits · alone suggests one from the sound",
-      },
-      {
-        command: "/len <beats> [<voice>]",
-        summary: "the sample lasts n beats of the song",
-      },
     ],
   },
   {
-    group: "window",
+    group: "project · window",
     entries: [
-      {
-        command: "/track <name>",
-        summary: "focus a track, creating it if new",
-      },
-      { command: "/tracks", summary: "list tracks" },
       { command: "/view focus|all", summary: "one track or every track" },
       { command: "/transcript", summary: "scrollable log · Ctrl-O" },
       { command: "/theme default|high-contrast|mono", summary: "colors" },
       { command: "/motion on|off", summary: "animation" },
       {
-        command: "/showme on|quiet|off",
-        summary: "agent types its commands in the prompt bar as it streams",
+        command: "/menu [section]",
+        summary: "every setting by hand · Ctrl-K · /menu <topic>",
       },
+      {
+        command: "help [topic]",
+        summary: "start here · help <topic> · help all for everything",
+      },
+      { command: "/guide [topic]", summary: "short how-to guides · F1" },
+    ],
+  },
+  {
+    group: "project · session",
+    entries: [
+      { command: "/sessions", summary: "list sessions in this workspace" },
+      { command: "/resume [<n>|<name>|<id>]", summary: "switch session" },
+      { command: "/rename <name>|--auto", summary: "name this session" },
+      { command: "/fork [<name>]", summary: "copy into a new session" },
+    ],
+  },
+  {
+    group: "agent",
+    entries: [
       {
         command: "/model [alias]",
-        summary: "pick a model · cost per prompt · fast",
+        summary: "pick the agent's model · /model lists them · /model fast",
       },
       {
-        command: "/login [gateway|openrouter|codex|claude]",
-        summary: "sign in to a provider",
+        command: "/model key [gateway|openrouter|codex|claude]",
+        summary: "add an agent key (optional) · finds existing setups first",
       },
       {
         command: "/logout [provider]",
         summary: "forget keys and the saved choice",
       },
       { command: "/auth [--check]", summary: "provider and audio status" },
-      { command: "/play [on|off]", summary: "keyboard play mode · Ctrl-P" },
       {
-        command: "/play degrees|in-key|chromatic",
-        summary: "home row plays the key's scale degrees (any tuning) · i",
-      },
-      {
-        command: "/pattern [name]",
-        summary: "drum groove picker · moving previews",
-      },
-      {
-        command: "/kit [name]",
-        summary: "drum kit picker · synth kits, then samples",
-      },
-      {
-        command: "/pack list|info|use|add",
-        summary: "sample packs · /pack use 909/bd",
-      },
-      {
-        command: "/euclid [voice]",
-        summary: "T-1 style rhythm editor · Rhythm in /menu",
-      },
-      {
-        command: "/menu [section]",
-        summary: "every setting by hand · Ctrl-K",
-      },
-      {
-        command: "/try <sound command>",
-        summary: "hear it on a loop first · a A/B · enter keep",
-      },
-      {
-        command: "/click on|off|<volume>",
-        summary: "metronome · /count-in 0-2 · /grid 1/16",
-      },
-      {
-        command: "/chords auto|manual|off",
-        summary: "play-mode chords · /chords for settings",
-      },
-      {
-        command: "/help [topic]",
-        summary: "start here · /help all for everything",
-      },
-      {
-        command: "/guide [topic]",
-        summary: "short how-to guides · F1",
-      },
-    ],
-  },
-  // 0.7 Voice: built from the /vocal verb table, so a lane's verb is
-  // listed (and typo-matched) once it registers.
-  {
-    group: "voice",
-    entries: [
-      { command: "/vocal", summary: "voice tools: lists every verb" },
-      {
-        command:
-          "/formant <-12..12> [mix] | deep | giant | bright | tiny | on | off",
+        command: "/showme on|quiet|off",
         summary:
-          "formant shift at constant pitch · /formant -4 deeper · /formant 3 smaller",
+          "the agent types its commands in your prompt bar as it streams",
       },
-      {
-        command:
-          "/vowel <v> [<to> [<morph>]] | ee | to <v>|off | morph <0..1> | off",
-        summary: "vowel filter · /vowel a · /vowel a o 0.5 morphs a toward o",
-      },
-      // f07-sing
-      {
-        command: "/sing [preset] [param value]",
-        summary:
-          "built-in singing voice: aah ooh choir chorale airy glass lament soprano basso, throat: drone khoomei sygyt kargyraa",
-      },
-      {
-        command: "/sing vowels <v> …",
-        summary:
-          "vowels for the track's notes in order, cycled · sing vowels a e i o",
-      },
-      {
-        command: "/note vowel <v|a>u> [target]",
-        summary: "sung vowel for selected notes · note vowel o bar 2",
-      },
-      {
-        command: "/autotune [preset] [field value …] | off | presets",
-        summary:
-          "pitch correction · autotune hard · autotune gentle · autotune to notes melody · autotune key D bayati",
-      },
-      ...VOCAL_VERBS.map((verb) => ({
-        command: `/vocal ${verb.usage}`,
-        summary: verb.summary,
-      })),
-      // clips lane
-      {
-        command:
-          "/clip [id] gain -3 | gain by -3 | fade .01 .2 | fade in .01 | move 9 | split 7",
-        summary: "edit an audio clip (dB, seconds, 1-based bars)",
-      },
-      {
-        command:
-          "/clip [id] trim offset 1 dur 4|end | rev | repeat 2 [to 32] | mute | rm",
-        summary: "trim, reverse, repeat, mute or remove a clip",
-      },
-      {
-        command: "/lyrics [bar] sun-lit morn-ing",
-        summary: "syllables onto the notes (- splits, _ holds, ~ skips)",
-      },
-      // f07-vocoder
-      {
-        command:
-          "/vocoder [preset] | src <track> | <param> <value|reset> | reset | off | presets",
-        summary:
-          "vocode the focused vocal onto a synth (classic robot talkbox choir glass whisper smear lofi); /help vocoder lists params",
-      },
-    ],
-  },
-  {
-    group: "keys",
-    entries: [
-      { command: "Enter", summary: "submit" },
-      { command: "Shift-Enter", summary: "newline" },
-      { command: "Alt-Enter", summary: "queue the request" },
-      { command: "Ctrl-Q", summary: "toggle queue mode" },
-      { command: "Ctrl-Z / Ctrl-Y", summary: "undo / redo" },
-      { command: "Ctrl-O", summary: "transcript" },
-      { command: "Esc", summary: "cancel the agent · back one level" },
-      { command: "?", summary: "keys for the screen you are on" },
-      { command: "Space", summary: "play/pause on an empty prompt" },
-      {
-        command: "Ctrl-P",
-        summary: "play mode · Z/X octave · R record · Q chords",
-      },
-      {
-        command: "Ctrl-K",
-        summary: "menu · ←→ adjust · / filter · x reset",
-      },
-      { command: "Ctrl-C", summary: "exit" },
     ],
   },
 ];
 
 /**
- * `/help` with no topic: a short, task-first guide. Each row is something to
- * type or press, then what it does. The full reference is `/help all` (or one
- * group: `/help music`).
+ * `/help` with no topic: start here, then the ten topics. Each row is
+ * something to type or press, then what it does. The full reference is
+ * `/help all`; one topic is `/help <topic>`.
  */
 export const HELP_GUIDE: readonly HelpSection[] = [
   {
-    group: "start here" as HelpGroup,
+    group: "start here",
     entries: [
-      { command: "type a request", summary: "“add a walking bass in A minor”" },
-      { command: "ctrl-p", summary: "play notes on the computer keyboard" },
       {
-        command: "ctrl-k",
-        summary: "menu: sound, effects, performance, mix, master, arrange …",
+        command: "type a request",
+        summary: "“add a walking bass in A minor” (with an agent)",
       },
+      {
+        command: "style deep-house",
+        summary: "a whole song in a style · style list",
+      },
+      {
+        command: "space · ctrl-p",
+        summary: "play · play mode: the keyboard plays notes",
+      },
+      { command: "ctrl-k", summary: "menu: every setting by hand" },
       { command: "? · ctrl-z · ctrl-y", summary: "keys here · undo · redo" },
     ],
   },
   {
-    group: "play notes" as HelpGroup,
+    group: "topics · help <topic>",
     entries: [
-      {
-        command: "ctrl-p, a s d f …",
-        summary: "piano keys · z x octave · esc leave",
-      },
-      {
-        command: "r, then space",
-        summary: "record over the loop (one undo a bar)",
-      },
-    ],
-  },
-  {
-    group: "make drums" as HelpGroup,
-    entries: [
-      {
-        command: "/pattern · /kit",
-        summary: "pick a groove · pick a drum kit",
-      },
-      { command: "/euclid", summary: "rhythm editor: pulses, steps, rotation" },
-    ],
-  },
-  {
-    group: "shape the sound" as HelpGroup,
-    entries: [
-      {
-        command: "ctrl-k › Sound",
-        summary: "instrument, strings, envelope, filter, wavetable",
-      },
-      { command: "ctrl-k › Effects", summary: "delay, reverb, distortion …" },
-      {
-        command: "master streaming",
-        summary: "finish: -14 LUFS, limiter · master measure",
-      },
-      { command: "/try fx reverb mix 0.6", summary: "hear it before keeping" },
-    ],
-  },
-  {
-    group: "shape the performance" as HelpGroup,
-    entries: [
-      {
-        command: "art staccato bar 2",
-        summary: "humanize 8 5 · ctrl-k › Sound › performance",
-      },
-    ],
-  },
-  {
-    group: "chords" as HelpGroup,
-    entries: [
-      { command: "key A minor", summary: "set the song key" },
-      {
-        command: "ctrl-p, then q",
-        summary: "chord mode · 1–4 type · 5–8 extension · n next",
-      },
-    ],
-  },
-  {
-    group: "song structure" as HelpGroup,
-    entries: [
-      {
-        command: "section verse 1-8",
-        summary: "name bars · form verse chorus*2 · build drop fill",
-      },
-      {
-        command: "style bebop 16 · Arrange › style",
-        summary: "a whole song in a style · style search samba",
-      },
-    ],
-  },
-  {
-    group: "more" as HelpGroup,
-    entries: [
-      {
-        command: "rit 4 bars to 80",
-        summary: "tempo, fermatas, meter · tuning pelog · scale yaman",
-      },
-      {
-        command: "/help all",
-        summary: "every command and key · /guide feature guides · F1",
-      },
+      ...TOPICS.map((id) => ({ command: id, summary: TOPIC_SUMMARY[id] })),
+      { command: "all", summary: "every command · /guide <topic> · F1" },
     ],
   },
 ];
 
-/** Topics `/help <topic>` takes, besides `all`. */
-export const HELP_TOPICS = [
-  "music",
-  "session",
-  "window",
-  "voice",
-  "keys",
-  "arrange",
-] as const;
+/** Topics `/help <topic>` takes, besides `all` (aliases resolve too). */
+export const HELP_TOPICS = TOPICS;
 
 /**
- * Rows for `/help [topic]`: the guide with no topic, the full reference for
- * `all`, one group for its name; undefined for an unknown topic.
+ * `/help keys`: every screen's `?` panel, straight from tui/grammar.ts
+ * KEYS, so the reference and the panels never disagree.
+ */
+export function keysLines(width = 80): string[] {
+  const seen = new Set<string>();
+  const sections = (Object.keys(KEYS) as KeyScreen[]).flatMap((screen) =>
+    KEYS[screen].map((section) => ({
+      title:
+        section.title === screen || screen === "prompt"
+          ? section.title
+          : `${screen} · ${section.title}`,
+      rows: section.rows,
+    })),
+  );
+  const column =
+    Math.min(
+      24,
+      Math.max(
+        ...sections.flatMap((s) => s.rows.map(([keys]) => displayWidth(keys))),
+      ),
+    ) + 2;
+  const lines = ["── keys"];
+  for (const section of sections) {
+    const key = JSON.stringify(section.rows);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    lines.push("", truncate(`── ${section.title}`, width));
+    for (const [keys, action] of section.rows)
+      lines.push(
+        truncate(
+          `${keys}${" ".repeat(Math.max(1, column - displayWidth(keys)))}${action}`,
+          width,
+        ),
+      );
+  }
+  return lines;
+}
+
+/** The last rows of a topic page: the same id in the other two doors. */
+function doors(id: TopicId, width: number): string[] {
+  return ["", truncate(`guide ${id} · menu ${id} · help all`, width)];
+}
+
+/** A topic's groups: `sound`, then `sound · performance`, `sound · samples`. */
+export function topicSections(id: TopicId): readonly HelpSection[] {
+  return HELP_SECTIONS.filter(
+    (section) => section.group === id || section.group.startsWith(`${id} · `),
+  );
+}
+
+/** One topic's page: its groups, then where else the topic opens. */
+function topicLines(id: TopicId, width: number): string[] {
+  if (id === "keys") return [...keysLines(width), ...doors(id, width)];
+  return [...sectionLines(topicSections(id), width), ...doors(id, width)];
+}
+
+/**
+ * Rows for `/help [topic]`: the start page with no topic, the full
+ * reference for `all`, a topic for its id or an alias, a command's rows
+ * for its verb (`/help vocoder`); undefined for an unknown word.
  */
 export function helpTopicLines(
   topic: string | undefined,
@@ -654,11 +671,30 @@ export function helpTopicLines(
   if (!name) return sectionLines(HELP_GUIDE, width, 20);
   if (name === "all" || name === "commands" || name === "reference")
     return helpLines(width);
-  if (name === "arrange" || name === "arrangement" || name === "sections")
-    return sectionLines([arrangeSection()], width);
-  const group = HELP_SECTIONS.find((section) => section.group === name);
-  if (group) return sectionLines([group], width);
-  return commandTopic(name, width);
+  if ((TOPICS as readonly string[]).includes(name))
+    return topicLines(name as TopicId, width);
+  const spelled = HELP_COMMAND_ALIASES[name];
+  if (spelled) return commandTopic(spelled, width, name);
+  const alias = resolveTopic(name);
+  // A topic alias wins unless a reference row starts with the word:
+  // `/help sections` is the arrange topic, `/help scale` the command.
+  const command =
+    alias && !hasRow(name) ? undefined : commandTopic(name, width);
+  if (command)
+    return alias
+      ? [...command, "", truncate(`see also help ${alias}`, width)]
+      : command;
+  return alias ? topicLines(alias, width) : undefined;
+}
+
+/** True when a reference row starts with `name` (`/scale`, `scale …`). */
+function hasRow(name: string): boolean {
+  const verb = name.replace(/[^a-z0-9-]/g, "");
+  return HELP_SECTIONS.some((section) =>
+    section.entries.some((entry) =>
+      new RegExp(`^/?${verb}(\\s|$)`, "i").test(entry.command),
+    ),
+  );
 }
 
 /**
@@ -666,48 +702,59 @@ export function helpTopicLines(
  * from every group, then its full usage wrapped; undefined when no command
  * has that name.
  */
-function commandTopic(name: string, width: number): string[] | undefined {
+function commandTopic(
+  name: string,
+  width: number,
+  usageKey = name,
+): string[] | undefined {
+  const pattern = name
+    .replace(/[^a-z0-9 -]/g, "")
+    .trim()
+    .replace(/ +/g, "\\s+");
   const own = (command: string) =>
-    new RegExp(`^/?${name.replace(/[^a-z0-9-]/g, "")}(\\s|$)`, "i").test(
-      command,
-    );
+    new RegExp(`^/?${pattern}(\\s|$)`, "i").test(command);
   const rows = HELP_SECTIONS.flatMap((section) =>
     section.entries.filter((entry) => own(entry.command)),
   );
-  const usage = USAGE[name];
+  const usage = USAGE[usageKey] ?? USAGE[name];
   if (rows.length === 0 && !usage) return undefined;
   const wrap = Math.max(30, width - 2);
+  // A usage line that repeats a row keeps only what it adds (examples).
+  const extra = usage
+    ? rows.reduce((text, entry) => {
+        const bare = (value: string) =>
+          value.replace(/^\//, "").replace(/\s*\|\s*/g, "|");
+        return bare(text).startsWith(bare(entry.command))
+          ? bare(text)
+              .slice(bare(entry.command).length)
+              .replace(/^\s*·\s*/, "")
+          : text;
+      }, usage)
+    : "";
+  // Examples a row summary already shows are not repeated.
+  const shown = rows.map((entry) => entry.summary).join(" · ");
+  const added = extra
+    .split(" · ")
+    .filter((part) => part && !shown.split(" · ").includes(part))
+    .join(" · ");
   return [
     `── ${name}`,
     ...rows.flatMap((entry) => [
       ...wrapWords(entry.command, wrap),
       ...wrapWords(entry.summary, wrap - 2).map((line) => `  ${line}`),
     ]),
-    ...(usage ? ["", ...wrapWords(usage, wrap)] : []),
+    ...(added ? ["", ...wrapWords(added, wrap)] : []),
   ];
 }
 
-/** `/help arrange`: every arranging command with its full usage. */
-function arrangeSection(): HelpSection {
-  const verbs = ["section", "sections", "form", "build", "drop", "fill"];
-  return {
-    group: "arrange" as HelpGroup,
-    entries: [
-      // Usage strings run long: wrapped onto continuation rows.
-      ...verbs.flatMap((verb) =>
-        wrapWords(USAGE[verb] ?? "", 46).map((summary, index) => ({
-          command: index === 0 ? verb : "",
-          summary,
-        })),
-      ),
-      { command: "/menu arrange", summary: "the Arrange menu (ctrl-k)" },
-      {
-        command: "dawg render --section <name>",
-        summary: "export one section",
-      },
-    ],
-  };
-}
+/**
+ * Typed aliases that /help shows under their one word (design §8.2): the
+ * alias opens the page and the title, heading and rows name the canonical
+ * command.
+ */
+export const HELP_COMMAND_ALIASES: Readonly<Record<string, string>> = {
+  login: "model key",
+};
 
 function wrapWords(text: string, width: number): string[] {
   const rows: string[] = [];
@@ -749,7 +796,10 @@ function sectionLines(
   return lines;
 }
 
-/** Overlay rows: a heading per group, then `command  summary` lines. */
+/**
+ * `/help all`: a heading per topic, then `command  summary` lines, then
+ * the keys of every screen.
+ */
 export function helpLines(width = 80): string[] {
   const lines: string[] = [];
   const column = Math.min(
@@ -768,19 +818,17 @@ export function helpLines(width = 80): string[] {
       );
     }
   }
-  return lines;
+  return [...lines, "", ...keysLines(width)];
 }
 
 /** The `Commands:` block of `dawg --help`. */
 export function helpText(): string {
-  return HELP_SECTIONS.filter((section) => section.group !== "keys")
-    .map(
-      (section) =>
-        `${section.group}:\n${section.entries
-          .map((entry) => `  ${entry.command}`)
-          .join("\n")}`,
-    )
-    .join("\n");
+  return HELP_SECTIONS.map(
+    (section) =>
+      `${section.group}:\n${section.entries
+        .map((entry) => `  ${entry.command}`)
+        .join("\n")}`,
+  ).join("\n");
 }
 
 /** Usage for a known verb, shown instead of sending a near-miss to the agent. */
@@ -794,14 +842,14 @@ export const USAGE: Readonly<Record<string, string>> = {
   tuning:
     "tuning <name> | edo <n> | ratios … | cents … | scl <file> [kbm <file>] | ref <hz> | root <note> | map linear|nearest | track … | off · tuning 19-edo",
   calibration: "calibration [0|1|latest|off] · calibration latest",
-  tune: "tuning <name> | edo <n> | scl <file> | off · tuning list · pitch correction is /autotune",
+  tune: "tuning <name> | edo <n> | scl <file> | off · tuning list · pitch correction is autotune",
   autotune:
     "autotune [hard|robot|warble|trap|pop|natural|gentle|guided|locked] | to scale|chromatic|chord|notes [track] | key <key> | speed hold glide <ms> | relax amount center drift <0..1> | flex <0..100> | vib <Hz> vibmod <st> | voice auto|bass|tenor|alto|soprano | reset | off | presets · autotune hard · autotune natural flex 40",
   cents: "cents <id> <±cents> · cents n3 -14",
-  grid: "/grid 1/4|1/8|1/8T|1/16|1/16T|1/32",
+  grid: "grid 1/4|1/8|1/8T|1/16|1/16T|1/32",
   tempo:
     "tempo takes 20…300 · tempo 120 · tempo 90 at bar 9 [ramp|exp] · tempo remove bar 9 · tempo clear · tempo map",
-  bpm: "tempo takes 20…300 · tempo 120 · a sample's own tempo: /bpm 174 [<voice>] · /bpm off",
+  bpm: "tempo takes 20…300 · tempo 120 · a sample's own tempo: /bpm 174 [<sample>] · /bpm off",
   rit: "rit [<n> bars|beats] [to <bpm>] [at bar <n>|<beat>] [exp] · rit 4 bars to 80",
   ritardando:
     "rit [<n> bars|beats] [to <bpm>] [at bar <n>|<beat>] [exp] · rit 4 bars to 80",
@@ -823,7 +871,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   bars: "bars takes 1…256 · bars 8",
   extend: "extend <count> bars · extend 4 bars",
   instrument:
-    "instrument <name> · sine piano pluck bass saw square triangle wavetable kit · pianos: grand upright felt honkytonk prepared · electric: epiano suitcase dyno wurli clav funkclav · synth: sawtooth supersaw pulse white pink z_square · voices: vocal aah ooh choir chorale khoomei sygyt kargyraa vocoder…",
+    "instrument <name> · sine piano pluck bass sawtooth square triangle wavetable kit · pianos: grand upright felt honkytonk prepared · electric: epiano suitcase dyno wurli clav funkclav · synth: supersaw pulse white pink z_square · voices: vocal aah ooh choir chorale khoomei sygyt kargyraa vocoder…",
   volume: "volume takes 0…1 · volume 0.8",
   vol: "volume takes 0…1 · volume 0.8",
   pan: "pan takes -1…1 · pan -0.5",
@@ -839,28 +887,28 @@ export const USAGE: Readonly<Record<string, string>> = {
   reverb: "reverb <mix> [size] · reverb 0.3 0.6 · reverb off",
   automate: "automate <lane> at <beat> <value> · automate volume at 0 0.5",
   automation: "automate <lane> at <beat> <value> · automate volume at 0 0.5",
-  hit: "hit <voice> at <beat> · hit kick at 0",
-  pattern: "pattern <voice> <beats...> | every <step> · pattern kick every 1",
-  clear: "clear · clear <voice> · clear [<lane>] automation",
+  hit: "hit <drum> at <beat> · hit kick at 0",
+  pattern: "pattern <drum> <beats...> | every <step> · pattern kick every 1",
+  clear: "clear · clear <drum> · clear [<lane>] automation",
   track:
-    "/track <name> · /track drums · /track rm <name> · /track move <name> <position> · track rate <0.125..8>|<a>/<b>|off · track phase <beats> · track cycle <beats> · track phasing <beats> [over <beats>]",
-  tracks: "/tracks",
+    "track <name> · track drums · track rm <name> · track move <name> <position> · track rate <0.125..8>|<a>/<b>|off · track phase <beats> · track cycle <beats> · track phasing <beats> [over <beats>]",
+  tracks: "tracks",
   sessions: "/sessions",
   resume: "/resume [<n>|<name>|<id>]",
   rename: "/rename <name> | --auto",
   fork: "/fork [<name>]",
   status: "/status",
-  export: "/export <file> · /export loop.track.json",
-  import: "/import <file> · /import loop.track.json",
+  export: "export <file> · export loop.track.json",
+  import: "import <file> · import loop.track.json",
   sample:
-    "/sample <path> [as <voice>] · /sample set <voice> <control> <value>… · /sample set brk fit on clip 1 · /sample set soft vel 0-63 rr a",
-  samples: "/sample · lists the focused track's voices",
+    "/sample <path> [as <sample>] · /sample set <sample> <control> <value>… · /sample set brk fit on clip 1 · /sample set soft vel 0-63 rr a",
+  samples: "/sample · lists the focused track's samples",
   fitmode:
-    "/fitmode [repitch|beats|tones|auto|off] [<voice>] · /fitmode beats · /fitmode auto brk",
-  len: "/len <beats> [<voice>] · /len 16 · /len off",
+    "fitmode [repitch|beats|tones|auto|off] [<sample>] · fitmode beats · fitmode auto brk",
+  len: "len <beats> [<sample>] · len 16 · len off",
   shift:
-    "shift <semitones> [formant keep|follow|<n>] [<voice>] · shift 7 formant keep · shift 0",
-  fade: "fade [in|out] <seconds> [<voice>] · fade out 0.5 · fade in 0.05 · fade off",
+    "shift <semitones> [formant keep|follow|<n>] [<sample>] · shift 7 formant keep · shift 0",
+  fade: "fade [in|out] <seconds> [<sample>] · fade out 0.5 · fade in 0.05 · fade off",
   resample:
     "resample <track>|orbit <n>|master [section <name>|bars a-b] [post] [grain] [as <id>] · resample lead · resample drums bars 1-2 grain · resample master section chorus",
   bounce: "resample <track>|orbit <n>|master [section <name>|bars a-b] [grain]",
@@ -869,12 +917,14 @@ export const USAGE: Readonly<Record<string, string>> = {
   log: "/transcript",
   theme: "/theme default | high-contrast | mono",
   motion: "/motion on | off",
-  model: "/model [fast | alias | vendor/model]",
-  login: "/login [gateway | openrouter | codex | claude]",
+  model:
+    "/model [fast | alias | vendor/model] · /model key [gateway | openrouter | codex | claude]",
+  models: "/model [fast | alias | vendor/model] · /model key [provider]",
+  login: "/model key [gateway | openrouter | codex | claude]",
   logout: "/logout [provider]",
   auth: "/auth [--check]",
-  help: "/help [topic] · /help all · /help music|session|window|keys",
-  guide: "/guide [topic] · /guide chords · F1",
+  help: "help [topic] · help all · help sound|voice|effects|rhythm|chords|mix|arrange|project|keys|agent",
+  guide: "/guide [topic] · /guide voice · F1 · the same topics as help",
   fx: "fx <effect> <param> <value> | on | off | preset <name> · fx delay mix 0.3",
   synth: "synth <param> <value> | preset <name> · synth lpf 1200",
   string:
@@ -914,16 +964,16 @@ export const USAGE: Readonly<Record<string, string>> = {
   sing: "sing <preset> | <param> <value> | drone <D3> | vowels a e i … | reset | off | presets · sing choir · sing khoomei drone D3 · sing vowel o voices 6",
   vocoder:
     "vocoder [preset] | src <track> | <param> <value|reset> | reset | off | presets · vocoder talkbox · vocoder src vox · vocoder formant +3 · vocoder gate auto · params: tap mode carrier follow root spread bands lo hi width attack release formant unvoiced sens hiss gate enhance depth freeze mix gain seed",
-  pack: "/pack list | info <name> | use <pack>/<sound> | add <url>",
+  pack: "pack list | info <name> | use <pack>/<sound> | add <url>",
   kit: "/kit [name] · /kit syn909",
-  euclid: "/euclid [voice] · euclid hat 7 16",
-  menu: "/menu [sound|effects|rhythm|chords|mix|master|project|tuning]",
+  euclid: "euclid [drum] · euclid hat 7 16",
+  menu: "/menu [topic] · /menu sound · Ctrl-K · the same topics as help",
   style:
-    "/style [list [id]|search <words>|info <id>|<id> [bars] [seed]|blend <a> <b> [w] [bars] [seed]|again] · style deep-house 16 · style blend bebop bossa-nova 0.3",
+    "style [list [id]|search <words>|info <id>|<id> [bars] [seed]|blend <a> <b> [w] [bars] [seed]|again] · style deep-house 16 · style blend bebop bossa-nova 0.3",
   master:
     "master <unit> on|off|preset <name>|<param> <value> · master streaming|club|loud · master target -14 · master measure · master off",
   try: "/try <sound command> · /try fx reverb mix 0.6",
-  play: "/play [on|off|degrees|in-key|chromatic] · Ctrl-P · i toggles degrees",
+  play: "/play [on|off|degrees|in-key|chromatic] · ctrl-p play mode · i toggles degrees",
   meter:
     "meter <1..16> · meter 3 · meter 7/8 [at bar <n>] · meter remove bar <n> · meter clear",
   art: EXPRESSION_USAGE.art,
@@ -948,19 +998,30 @@ export const USAGE: Readonly<Record<string, string>> = {
   redo: "redo · Ctrl-Y",
 };
 
-/** Verbs a typo can be matched against, slash or bare as they are typed. */
+/** Verbs a typo can be matched against, without their slash. */
 const KNOWN_VERBS: readonly string[] = [
   ...new Set(
     [
       ...HELP_SECTIONS.flatMap((section) =>
-        section.group === "keys"
-          ? []
-          : section.entries.map((entry) => entry.command.split(/[\s|[]/)[0]!),
+        section.entries.map((entry) => entry.command.split(/[\s|[]/)[0]!),
       ),
       ...Object.values(USAGE).map((usage) => usage.split(/[\s|[]/)[0]!),
-    ].filter((verb) => /^\/?[a-z][\w-]*$/i.test(verb)),
+    ]
+      .map((verb) => verb.replace(/^\//, ""))
+      .filter((verb) => /^[a-z][\w-]*$/i.test(verb)),
   ),
 ];
+
+/** Window verbs whose free text would otherwise read as a typo fix. */
+const SLASH_ONLY: ReadonlySet<string> = new Set([
+  "rename",
+  "fork",
+  "resume",
+  "login",
+  "logout",
+  "auth",
+  "bpm",
+]);
 
 /**
  * Optimal-string-alignment distance: insert, delete, substitute, and an
@@ -994,19 +1055,25 @@ export function editDistance(a: string, b: string): number {
  */
 export function nearestCommand(command: string): string | undefined {
   const word = command.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
+  const slash = word.startsWith("/");
   const bare = word.replace(/^\//, "");
   if (!bare) return undefined;
   let best: { verb: string; distance: number; score: number } | undefined;
   for (const verb of KNOWN_VERBS) {
-    const distance = editDistance(bare, verb.replace(/^\//, ""));
-    if (distance === 0 && verb === word) continue;
-    // Ties go to the form typed: `/patern` → `/pattern`, not `pattern`.
-    const sameForm = verb.startsWith("/") === word.startsWith("/");
-    const score = distance * 2 + (sameForm ? 0 : 1);
+    const distance = editDistance(bare, verb);
+    if (distance === 0 && !slash) continue;
+    // Ties go to a dropped letter (`/clik` → `/click`, not `/clip`), the
+    // commonest slip, then a changed one, then an extra one.
+    const shape =
+      verb.length > bare.length ? 0 : verb.length === bare.length ? 1 : 2;
+    const score = distance * 3 + shape;
     if (!best || score < best.score) best = { verb, distance, score };
   }
   const limit = bare.length <= 4 ? 1 : 2;
-  return best && best.distance <= limit ? best.verb : undefined;
+  if (!best || best.distance > limit) return undefined;
+  // Answer in the form typed (`/clik` → `/click`), except an exact word
+  // that failed with a slash (`/fx delay on` → `fx`): its slash was wrong.
+  return slash && best.distance > 0 ? `/${best.verb}` : best.verb;
 }
 
 /**
@@ -1023,7 +1090,7 @@ export function typoFix(
   const [first, ...rest] = text.split(/\s+/);
   const word = first!.toLowerCase();
   for (const verb of KNOWN_VERBS) {
-    if (verb.startsWith("/") || verb === word) continue;
+    if (SLASH_ONLY.has(verb) || verb === word) continue;
     if (editDistance(word, verb) !== 1) continue;
     const candidate = [verb, ...rest].join(" ");
     if (parses(candidate)) return candidate;
@@ -1063,7 +1130,18 @@ export function usageHint(command: string): string | undefined {
     !words.slice(1).some((word) => /\d/.test(word) || ARRANGE_WORDS.has(word))
   )
     return undefined;
-  return USAGE[verb];
+  const usage = USAGE[verb];
+  return usage === undefined ? undefined : usageForm(usage);
+}
+
+/**
+ * Every usage line reads `usage · <cmd> <args>`; a range refusal keeps
+ * its own template (`pan takes -1…1 · pan -0.5`).
+ */
+export function usageForm(usage: string): string {
+  return / takes /.test(usage) || usage.startsWith("usage · ")
+    ? usage
+    : `usage · ${usage}`;
 }
 
 const ARRANGE_VERBS: ReadonlySet<string> = new Set([
@@ -1090,3 +1168,30 @@ const ARRANGE_WORDS: ReadonlySet<string> = new Set([
   "bake",
   "off",
 ]);
+
+/** The overlay title for `/help [topic]`: an alias shows its topic. */
+export function helpTitle(topic: string | undefined): string {
+  const name = topic?.trim().toLowerCase().replace(/^\//, "");
+  if (!name) return "help";
+  const spelled = HELP_COMMAND_ALIASES[name];
+  if (spelled) return `help · ${spelled}`;
+  const id = (TOPICS as readonly string[]).includes(name)
+    ? name
+    : USAGE[name] || commandHelpExists(name)
+      ? name
+      : (resolveTopic(name) ?? name);
+  return `help · ${id}`;
+}
+
+function commandHelpExists(name: string): boolean {
+  return HELP_SECTIONS.some((section) =>
+    section.entries.some((entry) =>
+      entry.command.replace(/^\//, "").startsWith(`${name} `),
+    ),
+  );
+}
+
+/** `no topic X · did you mean Y · /help`, for `/help X` with no page. */
+export function helpMiss(topic: string): string {
+  return topicMiss(topic, ["all"]);
+}

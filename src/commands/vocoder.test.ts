@@ -249,7 +249,7 @@ describe("/vocoder apply", () => {
     const commands = HELP_SECTIONS.flatMap((group) =>
       group.entries.map((entry) => entry.command),
     );
-    expect(commands.some((command) => command.startsWith("/vocoder"))).toBe(
+    expect(commands.some((command) => command.startsWith("vocoder"))).toBe(
       true,
     );
     expect(nearestCommand("vocodr")).toContain("vocoder");

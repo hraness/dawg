@@ -24,19 +24,20 @@ import { selectProvider } from "../agent/provider.ts";
 import { audioStatusLine } from "../audio/engine.ts";
 
 export const AUTH_USAGE = `Usage:
-  dawg login                  find existing setups and pick a provider (reuses a saved one)
-  dawg login gateway          Vercel AI Gateway: existing key, or create one with the Vercel CLI
-  dawg login openrouter       OpenRouter: sign in through your browser (OAuth PKCE)
-  dawg login codex            ChatGPT/Codex subscription through xcb
-  dawg login claude           Claude subscription through xcb
-  dawg login --pick           show the picker even when a provider is saved
-  dawg login --key            paste an AI Gateway key (hidden input)
-  dawg login --xcb            any xcb account (Devin included)
-  dawg login gateway --budget <dollars>   spend limit for a created key
-  dawg login codex|claude [--account <id>] [--model <key>]
+  dawg model key              find existing setups and pick a provider (reuses a saved one)
+  dawg model key gateway      Vercel AI Gateway: existing key, or create one with the Vercel CLI
+  dawg model key openrouter   OpenRouter: authorize in your browser (OAuth PKCE)
+  dawg model key codex        ChatGPT/Codex subscription through xcb
+  dawg model key claude       Claude subscription through xcb
+  dawg model key --pick       show the picker even when a provider is saved
+  dawg model key --key        paste an AI Gateway key (hidden input)
+  dawg model key --xcb        any xcb account (Devin included)
+  dawg model key gateway --budget <dollars>   spend limit for a created key
+  dawg model key codex|claude [--account <id>] [--model <key>]
   dawg model [<alias>|<vendor/model>]     pick the model (cost per prompt shown)
   dawg logout [gateway|openrouter|codex|claude|xcb]   forget keys and the saved choice
-  dawg auth status [--check]  every provider: detected, active, validated`;
+  dawg auth status [--check]  every provider: detected, active, validated
+The older spelling of \`model key\` still works as an alias.`;
 
 /** Entry for `dawg login|logout|auth|model`. Returns the process exit code. */
 export async function runAuthCommand(argv: readonly string[]): Promise<number> {

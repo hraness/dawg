@@ -26,15 +26,6 @@ const BAD = /\bunknown\b|\bunrecognized\b|no help topic|no guide named/i;
  * and the grammar lane (A2, bare scalars and voice verbs) close them.
  */
 const PTY_KNOWN_GAPS: readonly string[] = [
-  "/help sound",
-  "/help effects",
-  "/help rhythm",
-  "/help mix",
-  "/help project",
-  "/help agent",
-  "/guide voice",
-  "/guide arrange",
-  "/guide agent",
   "/menu voice",
   "/menu keys",
   "/menu agent",
@@ -70,7 +61,9 @@ function ready(t: Session): boolean {
  */
 function namesTopic(text: string, id: string): boolean {
   const title = text.split("\n")[0]?.toLowerCase() ?? "";
-  return title.includes("╭─") && title.includes(id.slice(0, 5));
+  // §4c: the keys guide's title is "Using dawg".
+  const names = id === "keys" ? ["keys", "using dawg"] : [id.slice(0, 5)];
+  return title.includes("╭─") && names.some((name) => title.includes(name));
 }
 
 /** The status line and any open panel: what the person reads after Enter. */
@@ -120,6 +113,23 @@ async function reset(t: Session): Promise<void> {
   await Bun.sleep(100);
 }
 
+/**
+ * Ctrl-C until the process exits. The first-run picker takes the first
+ * Ctrl-C as "skip" and opens the TUI, which needs a second one.
+ */
+async function stop(t: Session): Promise<void> {
+  for (let i = 0; i < 3; i++) {
+    t.terminal.write("\u0003");
+    const done = await Promise.race([
+      t.proc.exited.then(() => true),
+      Bun.sleep(1_500).then(() => false),
+    ]);
+    if (done) return;
+  }
+  t.proc.kill(9);
+  await t.proc.exited;
+}
+
 const outcomes = new Map<string, string>();
 
 function record(label: string, text: string): void {
@@ -139,8 +149,7 @@ describe.skipIf(!supported)("real PTY at 80x24: topics and first run", () => {
           await reset(t);
         }
     } finally {
-      t.terminal.write("\u0003");
-      await t.proc.exited;
+      await stop(t);
     }
   }, 120_000);
 
@@ -154,8 +163,7 @@ describe.skipIf(!supported)("real PTY at 80x24: topics and first run", () => {
       expect(screen(online)).toContain("Esc to skip");
       record("first run", screen(online));
     } finally {
-      online.terminal.write("\u0003");
-      await online.proc.exited;
+      await stop(online);
     }
     const offline = await launch(80, 24, OFFLINE, []);
     try {
@@ -169,10 +177,10 @@ describe.skipIf(!supported)("real PTY at 80x24: topics and first run", () => {
         !/\blogin\b|sign.?in/i.test(text) && text.includes("/model key");
       record("offline first run", ok ? text : `✗ ${text}`);
     } finally {
-      offline.terminal.write("\u0003");
-      await offline.proc.exited;
+      await stop(offline);
     }
-  }, 30_000);
+    // Two launches in a row; CI runners need more than 30 s for both.
+  }, 90_000);
 
   test("/style receipt, bare tempo, formant 3, lyrics offline", async () => {
     const t = await launch(80, 24, OFFLINE, []);
@@ -190,8 +198,7 @@ describe.skipIf(!supported)("real PTY at 80x24: topics and first run", () => {
         await reset(t);
       }
     } finally {
-      t.terminal.write("\u0003");
-      await t.proc.exited;
+      await stop(t);
     }
   }, 60_000);
 
