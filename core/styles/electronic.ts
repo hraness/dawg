@@ -2168,6 +2168,7 @@ const AMBIENT: readonly StyleCard[] = [
     id: "space-ambient",
     summary:
       "Space ambient: lydian raised-fourth shimmer over a sub pedal, slow cloud textures, vast reverb",
+    tempo: { bpm: [48, 66], typical: 56 },
     pitch: { scales: [["lydian", 1]] },
     texture: {
       roles: {
