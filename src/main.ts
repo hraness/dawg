@@ -1,6 +1,8 @@
 #!/usr/bin/env bun
 import { TOPIC_ALIASES } from "./lang/glossary.ts";
 import { isGuideInstrument, vocalChainPatch } from "../core/clips.ts";
+import { newId } from "../core/ids.ts";
+import { currentActor } from "./identity/actor.ts";
 import { isSingWord } from "../core/sing.ts";
 import { commandParses, parseExact } from "./commands/parses.ts";
 import { paramRangeError } from "./commands/param-range.ts";
@@ -685,8 +687,11 @@ const session = await ensureSession(initial.toJSON(), {
   ...sessionOptions,
   ...(ephemeralWorkspace ? { workspace: ephemeralWorkspace } : {}),
 });
+// Who is at this window; also salts collision-free ids (core/ids.ts).
+const actor = await currentActor();
 // dawgd when connected, the file-lock path otherwise (see src/session/port.ts).
 let port = await openSessionPort<ReturnType<TrackScore["toJSON"]>>({
+  actor,
   paths: session.paths,
   sessionId: session.record.sessionId,
   label: explicitTrack ?? "window",
@@ -2466,7 +2471,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
       score,
       requestedTrack,
       progression,
-      () => randomUUID().slice(0, 12),
+      () => newId("n"),
     );
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
@@ -2476,7 +2481,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (strum) {
     if (strum.type === "strum") await materializeDraft();
     const result = applyStrumCommand(score, requestedTrack, strum, () =>
-      randomUUID().slice(0, 12),
+      newId("n"),
     );
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
@@ -2736,7 +2741,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (music) {
     await materializeDraft();
     const result = applyMusicCommand(score, requestedTrack, music, () =>
-      randomUUID().slice(0, 12),
+      newId("n"),
     );
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
@@ -3079,7 +3084,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
     const latest = attempt === 0 ? record : await port.load();
     const latestScore = scoreFromJSON(latest.composition);
     const note = {
-      id: `${requestedTrack}-${latest.revision + 1}-${randomUUID().slice(0, 6)}`,
+      id: newId(requestedTrack),
       trackId: requestedTrack,
       startTick: Math.round(parsed.start * latestScore.ticksPerBeat),
       durationTicks: Math.max(
@@ -3892,6 +3897,7 @@ async function switchSession(sessionId: string): Promise<void> {
     setCurrent: true,
   });
   port = await openSessionPort<ReturnType<TrackScore["toJSON"]>>({
+    actor,
     paths: next.paths,
     sessionId,
     label: "window",
@@ -4886,7 +4892,7 @@ function playHost() {
             tone === "success" ? shownRevision(record) : undefined,
         });
     },
-    newNoteId: () => randomUUID().slice(0, 12),
+    newNoteId: () => newId("n"),
   };
 }
 

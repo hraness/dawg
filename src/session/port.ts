@@ -5,10 +5,11 @@ import type { TrackScore } from "../../core/score.ts";
 import { AudioEngine } from "../audio/engine.ts";
 import { DaemonClient, type DaemonClientOptions } from "./client.ts";
 import { FilePresence } from "./presence.ts";
-import type {
-  PresenceEntry,
-  TransportAction,
-  TransportState,
+import {
+  toLocalTransport,
+  type PresenceEntry,
+  type TransportAction,
+  type TransportState,
 } from "./protocol.ts";
 import type { MetaExpect, MetaPatch, SessionMeta } from "./meta.ts";
 import {
@@ -16,6 +17,7 @@ import {
   loadSession,
   SessionConflictError,
   updateSessionMeta,
+  type EventActor,
   type SessionEvent,
   type SessionPaths,
   type SessionRecord,
@@ -126,6 +128,8 @@ export type OpenPortOptions = {
   sessionId: string;
   label: string;
   focusedTrackId: string | null;
+  /** Who is at this window; stamped on events and presence. */
+  actor?: { id: string; name: string };
   /** Set false for one-shot commands (demo, export) that must not spawn dawgd. */
   daemon?: boolean;
   daemonArgs?: string[];
@@ -148,6 +152,7 @@ export async function openSessionPort<T>(
         label: options.label,
         focusedTrackId: options.focusedTrackId,
       };
+      if (options.actor) clientOptions.actor = options.actor;
       if (options.daemonArgs) clientOptions.daemonArgs = options.daemonArgs;
       const client = await DaemonClient.connect(clientOptions);
       return new DaemonPort<T>(client);
@@ -176,6 +181,12 @@ class DaemonPort<T> implements SessionPort<T> {
   public status: string;
   public sync: SyncStatus = "synced";
   private readonly syncListeners = new Set<(sync: SyncStatus) => void>();
+  /**
+   * (authority clock - this machine's clock), applied to every transport
+   * `atMs` before the window sees it. Always 0 on one machine; the hook a
+   * future relay fills from its clock-sync exchange.
+   */
+  public clockOffsetMs = 0;
 
   public constructor(private readonly client: DaemonClient) {
     this.status = `dawgd pid ${client.daemonPid}`;
@@ -257,7 +268,10 @@ class DaemonPort<T> implements SessionPort<T> {
   }
 
   public subscribe(listener: (update: PortUpdate<T>) => void): () => void {
-    listener({ type: "transport", transport: this.client.transport });
+    listener({
+      type: "transport",
+      transport: toLocalTransport(this.client.transport, this.clockOffsetMs),
+    });
     const onSync = (sync: SyncStatus) => listener({ type: "sync", sync });
     this.syncListeners.add(onSync);
     const unsubscribe = this.client.subscribe((update) => {
@@ -269,7 +283,12 @@ class DaemonPort<T> implements SessionPort<T> {
         this.status = update.message;
         this.setSync(update.connected ? "synced" : "offline");
         listener({ type: "status", message: update.message });
-      } else listener(update);
+      } else if (update.type === "transport")
+        listener({
+          type: "transport",
+          transport: toLocalTransport(update.transport, this.clockOffsetMs),
+        });
+      else listener(update);
     });
     return () => {
       this.syncListeners.delete(onSync);
@@ -346,6 +365,7 @@ class FilePort<T> implements SessionPort<T> {
       pid: process.pid,
       label: options.label.slice(0, 128),
       focusedTrackId: options.focusedTrackId,
+      ...(options.actor ? { actorId: options.actor.id } : {}),
     });
   }
 
@@ -361,17 +381,33 @@ class FilePort<T> implements SessionPort<T> {
     event: Omit<SessionEvent, "id" | "revision" | "at">,
     composition: T,
   ): Promise<SessionRecord<T>> {
-    return appendSessionEvent(this.options.paths, current, event, composition);
+    const actor: EventActor = { clientId: this.clientId };
+    if (this.options.actor) actor.actorId = this.options.actor.id;
+    return appendSessionEvent(
+      this.options.paths,
+      current,
+      { ...event, actor },
+      composition,
+    );
   }
 
-  /** No daemon to rebase against: commit the full composition. */
+  /**
+   * No daemon to rebase against: commit the full composition, and keep the
+   * operations on the event so the log still replays as ops.
+   */
   public appendOperations(
     current: SessionRecord<T>,
     event: Omit<SessionEvent, "id" | "revision" | "at">,
-    _operations: readonly unknown[],
+    operations: readonly unknown[],
     composition: T,
   ): Promise<SessionRecord<T>> {
-    return this.append(current, event, composition);
+    return this.append(
+      current,
+      operations.length > 0 && operations.length <= MAX_INTENT_OPERATIONS
+        ? { ...event, ops: [...operations] }
+        : event,
+      composition,
+    );
   }
 
   public load(): Promise<SessionRecord<T>> {

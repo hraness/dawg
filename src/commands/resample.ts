@@ -8,6 +8,7 @@
  * track (the `cloud` preset) holding one note across the range. The source
  * stays as it is; mute it to hear only the resample.
  */
+import { newId } from "../../core/ids.ts";
 import { mkdir, realpath, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MAX_ORBIT } from "../../core/fx.ts";
@@ -18,6 +19,7 @@ import {
   TrackScore,
   addTrack,
   type SampleRef,
+  requirePinnedRef,
   type TrackInput,
 } from "../../core/score.ts";
 import { trackDirectories } from "../../core/sdk/print.ts";
@@ -155,13 +157,16 @@ export function addResampleTrack(
   trackId: string,
   src: string,
 ): TrackScore {
-  const ref: SampleRef = {
-    src,
-    sha256: render.sha256,
-    from: render.from,
-    // A bounce starts at full level: no anti-click fade-in.
-    ...(command.grain ? {} : { gain: RESAMPLE_GAIN, fadeInTime: 0 }),
-  };
+  const ref: SampleRef = requirePinnedRef(
+    {
+      src,
+      sha256: render.sha256,
+      from: render.from,
+      // A bounce starts at full level: no anti-click fade-in.
+      ...(command.grain ? {} : { gain: RESAMPLE_GAIN, fadeInTime: 0 }),
+    },
+    "resample",
+  );
   const track: TrackInput = command.grain
     ? {
         id: trackId,
@@ -183,15 +188,13 @@ export function addResampleTrack(
   // plays the source at its own pitch.
   const pitch = command.grain ? 60 : 36;
   const notes = next.notes;
-  let n = 1;
-  while (notes.some((note) => note.id === `${trackId}-${n}`)) n += 1;
   const ticks = Math.min(render.durationTicks, next.bars * barTicks(next));
   next = new TrackScore({
     ...next.toJSON(),
     notes: [
       ...notes,
       {
-        id: `${trackId}-${n}`,
+        id: newId(trackId),
         trackId,
         startTick: render.startTick,
         durationTicks: Math.max(1, ticks),

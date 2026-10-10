@@ -3,10 +3,18 @@ import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createScore } from "../../core/score.ts";
+import {
+  applyScoreOperation,
+  createScore,
+  type ScoreOperation,
+} from "../../core/score.ts";
 import { DaemonClient } from "./client.ts";
 import { FilePresence } from "./presence.ts";
-import { daemonLockPath, daemonSocketPath } from "./protocol.ts";
+import {
+  compositionDigest,
+  daemonLockPath,
+  daemonSocketPath,
+} from "./protocol.ts";
 import { compositionAt } from "./rebase.ts";
 import {
   ensureSession,
@@ -219,6 +227,112 @@ describe("dawgd", () => {
     expect(first.record.revision).toBe(1);
     expect(second.record.revision).toBe(1);
     expect(first.digest).toBe(second.digest);
+  });
+
+  test("events carry the authority-stamped actor and retries dedupe by seq", async () => {
+    const { workspace, sessionId, paths } = await session();
+    const actor = { id: `a_${"b".repeat(22)}`, name: "ben" };
+    const pane = await DaemonClient.connect({
+      workspace,
+      sessionId,
+      label: "pane",
+      actor,
+      daemonArgs: DAEMON_ARGS,
+    });
+    clients.push(pane);
+    expect(pane.protocol).toBe(2);
+    expect(pane.caps).toContain("actor");
+    expect(pane.transport.quantum).toBe(4);
+    const seq = pane.nextSeq();
+    const first = await pane.apply({
+      base: 0,
+      kind: "score.operation",
+      payload: {},
+      seq,
+      operations: [addNote("n1")],
+    });
+    expect(first).toEqual({ status: "accepted", revision: 1 });
+    // A retry with a fresh idempotency key but the same seq is a no-op.
+    const retry = await pane.apply({
+      base: 0,
+      kind: "score.operation",
+      payload: {},
+      seq,
+      operations: [addNote("n1")],
+    });
+    expect(retry).toEqual({ status: "duplicate", revision: 1 });
+    const stored = await loadSession(paths);
+    const event = stored.events[0]!;
+    expect(event.actor).toEqual({
+      actorId: actor.id,
+      clientId: pane.clientId,
+      seq,
+    });
+    // Ops, not snapshots: the event names exactly what changed.
+    expect(event.ops).toEqual([addNote("n1")]);
+    await until(() => pane.presence.length === 1);
+    expect(pane.presence[0]?.actorId).toBe(actor.id);
+  });
+
+  test("a v1-only client still edits and sees v2 commits", async () => {
+    const { workspace, sessionId } = await session();
+    const old = await DaemonClient.connect({
+      workspace,
+      sessionId,
+      label: "old",
+      versions: { vMin: 1, vMax: 1 },
+      daemonArgs: DAEMON_ARGS,
+    });
+    clients.push(old);
+    const current = await client(workspace, sessionId, "new");
+    expect(old.protocol).toBe(1);
+    expect(current.protocol).toBe(2);
+    expect(
+      await old.apply({
+        base: 0,
+        kind: "score.operation",
+        payload: {},
+        operations: [addNote("old")],
+      }),
+    ).toEqual({ status: "accepted", revision: 1 });
+    expect(
+      await current.apply({
+        base: 1,
+        kind: "a-future-kind",
+        payload: { opaque: true },
+        operations: [addNote("new", 240)],
+      }),
+    ).toEqual({ status: "accepted", revision: 2 });
+    await until(() => old.record.revision === 2);
+    expect(old.digest).toBe(current.digest);
+  });
+
+  test("replaying the ops log rebuilds the same composition", async () => {
+    const { workspace, sessionId, paths } = await session();
+    const a = await client(workspace, sessionId, "a");
+    const b = await client(workspace, sessionId, "b");
+    for (let index = 0; index < 6; index += 1) {
+      const pane = index % 2 === 0 ? a : b;
+      await pane.sync();
+      const result = await pane.apply({
+        base: pane.record.revision,
+        kind: "score.operation",
+        payload: {},
+        operations: [addNote(`n${index}`, index * 120)],
+      });
+      expect(result.status).toBe("accepted");
+    }
+    const stored = await loadSession(paths);
+    let replay = createScore({
+      tracks: [{ id: "main", name: "main", instrument: "sine" }],
+    });
+    for (const event of stored.events)
+      for (const op of event.ops ?? [])
+        replay = applyScoreOperation(replay, op as ScoreOperation);
+    expect(compositionDigest(replay.toJSON())).toBe(
+      compositionDigest(stored.composition),
+    );
+    expect(new Set(stored.events.map((e) => e.actor?.clientId)).size).toBe(2);
   });
 
   test("stale operation intents rebase when nothing they touch changed", async () => {

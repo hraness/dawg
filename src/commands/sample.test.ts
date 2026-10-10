@@ -17,6 +17,8 @@ import {
   type SampleControlValue,
 } from "./sample.ts";
 
+const SHA = "a".repeat(64);
+
 const roots: string[] = [];
 afterAll(async () => {
   for (const root of roots) await rm(root, { recursive: true, force: true });
@@ -47,6 +49,7 @@ describe("/sample", () => {
     expect(samplerTarget(score, "main")).toBe("main");
     const first = addSampleVoice(score, "main", "snare", {
       src: "samples/snare.wav",
+      sha256: SHA,
     });
     if (!first.ok) throw new Error(first.message);
     expect(first.message).toContain("slot 36");
@@ -64,6 +67,7 @@ describe("/sample", () => {
     // `kick` sorts first and takes slot 36; the snare hit moves to 37.
     const second = addSampleVoice(score, "main", "kick", {
       src: "samples/kick.wav",
+      sha256: SHA,
     });
     if (!second.ok) throw new Error(second.message);
     expect(second.next.notes[0]!.pitch).toBe(37);
@@ -77,11 +81,24 @@ describe("/sample", () => {
     expect(freeVoiceName(second.next, "main", "kick")).toBe("kick_2");
     const duplicate = addSampleVoice(second.next, "main", "kick", {
       src: "samples/x.wav",
+      sha256: SHA,
     });
     expect(duplicate.ok).toBe(false);
-    expect(addSampleVoice(score, "main", "Bad-Name", { src: "a.wav" }).ok).toBe(
-      false,
-    );
+    expect(
+      addSampleVoice(score, "main", "Bad-Name", { src: "a.wav", sha256: SHA })
+        .ok,
+    ).toBe(false);
+  });
+
+  test("a new sample voice must carry a sha256 pin", () => {
+    const score = createScore({
+      tracks: [{ id: "main", name: "main", instrument: "sine" }],
+    });
+    const unpinned = addSampleVoice(score, "main", "kick", {
+      src: "samples/kick.wav",
+    } as never);
+    expect(unpinned.ok).toBe(false);
+    if (!unpinned.ok) expect(unpinned.message).toContain("sha256");
   });
 
   test("a focused synth track with notes gets a new samples track", () => {
@@ -100,7 +117,10 @@ describe("/sample", () => {
     });
     const target = samplerTarget(score, "lead");
     expect(target).toBe("samples");
-    const result = addSampleVoice(score, target, "kick", { src: "a.wav" });
+    const result = addSampleVoice(score, target, "kick", {
+      src: "a.wav",
+      sha256: SHA,
+    });
     if (!result.ok) throw new Error(result.message);
     expect(result.next.tracks.map((t) => [t.id, t.instrument])).toEqual([
       ["lead", "saw"],
