@@ -219,6 +219,18 @@ export const FEATURES: readonly Feature[] = [
     },
   },
   {
+    feature: "tape",
+    command: "/tape on",
+    menu: "Arrange › tape",
+    tools: [],
+    agentWords: /tape/,
+    sdk: ["cli:Ctrl-T"],
+    gap: {
+      agent:
+        "TAPE is a screen; the agent edits ranges with edit_range, the commands TAPE echoes",
+    },
+  },
+  {
     feature: "rig",
     command: "rig crunch",
     menu: "Effects › Guitar rig",
@@ -315,6 +327,7 @@ describe("four doors to every feature", () => {
       "model",
       "show-me",
       "play mode",
+      "tape",
       "rig",
     ]);
   });

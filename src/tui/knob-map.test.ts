@@ -99,7 +99,10 @@ describe("knob table", () => {
     const score = songWith({ instrument: "sawtooth" });
     const context = menuContext("t", score);
     for (const page of Object.keys(KNOB_MAPS)) {
-      if (page.startsWith("sound:") || page === "euclid") continue;
+      // TAPE's knobs are its own (src/tui/tape-mode.ts tapeKnobs, tested
+      // there): playhead and loop are not menu fields.
+      if (page.startsWith("sound:") || page === "euclid" || page === "tape")
+        continue;
       const slots = knobSlots(context, page);
       KNOB_MAPS[page]!.forEach((path, index) => {
         if (!path) return;
