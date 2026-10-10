@@ -34,6 +34,7 @@ import {
   type WebHost,
   type WorkspaceHost,
 } from "./tools.ts";
+import { PATCH_PROMPT } from "./patch-tools.ts";
 import { projectOutline, type ProjectOutline } from "./workspace.ts";
 
 /** Hard ceilings for one agent turn. Callers may only tighten them. */
@@ -288,6 +289,7 @@ export const AGENT_SYSTEM_PROMPT = [
   "Wavetable synth: set_wavetable picks a table (built-ins offline, Strudel wt_ sets fetched once) and scans it by position wt.",
   `Granular: set_granular makes a track a grain cloud (presets cloud hold sparkle swarm stutter microloop backwards dust) of a synth source (src synth:pad, the default; synth:<name>@<note>) or one of its own sampler voices, and overrides params (${Object.keys(GRANULAR_PARAMS).join(" ")}; repeat and hold latch the head for beat repeats, begin and end pick a region, root takes a MIDI number or note name); off returns to the previous voice; the same seed gives the same grains. Grain play: sync "1/16" puts grain onsets on the tempo grid, quant scale|chord snaps grain pitches, mono true glides legato notes through one cloud, pedal true freezes the head while the sustain pedal is down; set_automation grain-<param> lanes (grain-pos, grain-scan, grain-pitch …) move a parameter over beats. Resample: the resample tool renders a track, orbit or the mix (a section or bars) to a pinned WAV and adds a sampler track, or with grain a granular track, that plays it; set_sample shift (semitones, length kept, formant 0 keeps a voice's character) and fadeInTime/fadeTime shape a sampler voice.`,
   "Mastering: set_master sets the song master and loudness target; measure_mix reports LUFS, true peak, balance and correlation. Master only when asked for loudness or a finished sound, and measure before and after.",
+  PATCH_PROMPT,
   "If a call is rejected, read the diagnostic and either fix the arguments or stop.",
   WORKSPACE_PROMPT,
   MEDIA_PROMPT,

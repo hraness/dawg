@@ -17,8 +17,15 @@ import {
   type NotePatch,
   type FormEntry,
   type ScoreOperation,
+  type PatchTarget,
   type Section,
 } from "../../core/score.ts";
+import type {
+  Cable,
+  Macro,
+  PatchNode,
+  TrackPatchValue,
+} from "../../core/patch.ts";
 import { NOTE_EXPRESSION_FIELDS } from "../../core/expression.ts";
 import { DRUM_VOICES } from "../../core/drums.ts";
 import { synthKit } from "../../core/kits.ts";
@@ -63,6 +70,20 @@ export function parseCompositionPlan(text: string): CompositionPlan {
  * Validate one foreign operation against the bounded planner contract. Every
  * tool call and legacy JSON plan passes through here before the reducer sees it.
  */
+function isShortId(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= 64;
+}
+
+function isPatchTarget(value: unknown): value is PatchTarget {
+  if (!isRecord(value)) return false;
+  if (isShortId(value.library)) return Object.keys(value).length === 1;
+  return (
+    isShortId(value.trackId) &&
+    (value.fx === undefined || isShortId(value.fx)) &&
+    Object.keys(value).every((key) => key === "trackId" || key === "fx")
+  );
+}
+
 export function validateAgentOperation(value: unknown): ScoreOperation {
   return parseOperation(value);
 }
@@ -154,6 +175,34 @@ function parseOperation(value: unknown): ScoreOperation {
   )
     return { type: "setCalibration", calibration: value.calibration };
   // The master reuses its bounded validator; null removes it.
+  // Patcher ops: the shape is checked here, the patch itself by the
+  // reducer (validatePatch), so a bad node or cable throws before commit.
+  if (
+    (value.type === "setPatch" ||
+      value.type === "setPatchNode" ||
+      value.type === "setPatchCable" ||
+      value.type === "setPatchMacro") &&
+    isPatchTarget(value.target)
+  ) {
+    const target = value.target;
+    const index =
+      typeof value.index === "number" && Number.isInteger(value.index)
+        ? { index: value.index }
+        : {};
+    if (value.type === "setPatch" && value.patch !== undefined)
+      return {
+        type: "setPatch",
+        target,
+        patch: value.patch === null ? null : (value.patch as TrackPatchValue),
+        ...index,
+      };
+    if (value.type === "setPatchNode" && isShortId(value.nodeId) && (value.node === null || isRecord(value.node)))
+      return { type: "setPatchNode", target, nodeId: value.nodeId, node: value.node as PatchNode | null };
+    if (value.type === "setPatchCable" && isShortId(value.cableId) && (value.cable === null || isRecord(value.cable)))
+      return { type: "setPatchCable", target, cableId: value.cableId, cable: value.cable as Cable | null };
+    if (value.type === "setPatchMacro" && isShortId(value.macroId) && (value.macro === null || isRecord(value.macro)))
+      return { type: "setPatchMacro", target, macroId: value.macroId, macro: value.macro as Macro | null, ...index };
+  }
   if (value.type === "setMaster" && value.master !== undefined)
     return { type: "setMaster", master: normalizeMaster(value.master) ?? null };
   if (value.type === "setStyle" && value.style !== undefined)

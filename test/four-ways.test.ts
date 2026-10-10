@@ -37,6 +37,12 @@ type Feature = Readonly<{
   gap?: Readonly<Partial<Record<"menu" | "agent" | "sdk", string>>>;
 }>;
 
+// TODO(patcher lane 4): drop this gap when the SDK builder merges; the
+// test fails as soon as the door opens.
+const PATCH_GAPS = {
+  sdk: "patch(), fxPatch(), macro(), track.patch and song.patches land with patcher lane 4 (SDK 1.34.0)",
+} as const;
+
 export const FEATURES: readonly Feature[] = [
   {
     feature: "notes",
@@ -237,12 +243,158 @@ export const FEATURES: readonly Feature[] = [
     tools: ["set_rig"],
     sdk: ["sdk:rig", "track.fx"],
   },
+  // Patcher (design §6.1, §7.4): every `patch` verb. The Sound › Patch rows
+  // live in src/tui/patch-menu.ts, the SDK builder lands with lane 4
+  // (SDK 1.34.0: patch(), fxPatch(), macro(), track.patch, song.patches).
+  {
+    feature: "patch new",
+    command: "patch new mine",
+    menu: "Sound › Patch › New patch…",
+    tools: ["patch_edit"],
+    sdk: ["sdk:patch", "sdk:fxPatch", "song.patches"],
+    gap: PATCH_GAPS,
+  },
+  {
+    feature: "patch add",
+    command: "patch add osc as tone",
+    menu: "Sound › Patch › Add node…",
+    tools: ["patch_edit"],
+    sdk: ["sdk:patch"],
+    gap: PATCH_GAPS,
+  },
+  {
+    feature: "patch set",
+    command: "patch set tone wave=saw",
+    menu: "Sound › Patch › Set node",
+    tools: ["patch_edit"],
+    sdk: ["sdk:patch"],
+    gap: PATCH_GAPS,
+  },
+  {
+    feature: "patch wire",
+    command: "patch wire tone.out out.audio",
+    menu: "Sound › Patch › Wire…",
+    tools: ["patch_edit"],
+    sdk: ["sdk:patch"],
+    gap: PATCH_GAPS,
+  },
+  {
+    feature: "patch unwire",
+    command: "patch unwire tone.out out.audio",
+    menu: "Sound › Patch › Unwire…",
+    tools: ["patch_edit"],
+    sdk: ["sdk:patch"],
+    gap: PATCH_GAPS,
+  },
+  {
+    feature: "patch macro",
+    command: "patch macro cutoff vcf.cutoff",
+    menu: "Sound › Patch › Map to knob…",
+    tools: ["patch_edit"],
+    sdk: ["sdk:macro"],
+    gap: PATCH_GAPS,
+  },
+  {
+    feature: "patch knob",
+    command: "patch knob cutoff 900",
+    menu: "Sound › Patch › Turn knob",
+    tools: ["patch_edit"],
+    sdk: ["track.patch"],
+    gap: PATCH_GAPS,
+  },
+  {
+    feature: "patch rate",
+    command: "patch rate tone global",
+    menu: "Sound › Patch › Node rate…",
+    tools: ["patch_edit"],
+    sdk: ["sdk:patch"],
+    gap: PATCH_GAPS,
+  },
+  {
+    feature: "patch rm",
+    command: "patch rm tone",
+    menu: "Sound › Patch › Remove node…",
+    tools: ["patch_edit"],
+    sdk: ["sdk:patch"],
+    gap: PATCH_GAPS,
+  },
+  {
+    feature: "patch convert",
+    command: "patch convert",
+    menu: "Sound › Patch › Convert to patch",
+    tools: ["patch_edit"],
+    sdk: ["track.patch"],
+    gap: PATCH_GAPS,
+  },
+  {
+    feature: "patch detach",
+    command: "patch detach",
+    menu: "Sound › Patch › Detach",
+    tools: ["patch_edit"],
+    sdk: ["track.patch"],
+    gap: PATCH_GAPS,
+  },
+  {
+    feature: "patch save",
+    command: "patch save mine",
+    menu: "Sound › Patch › Save patch…",
+    tools: ["patch_edit"],
+    sdk: ["song.patches"],
+    gap: PATCH_GAPS,
+  },
+  {
+    feature: "patch load",
+    command: "patch load acid-bass",
+    menu: "Sound › Patch › Load patch…",
+    tools: ["patch_edit"],
+    sdk: ["track.patch"],
+    gap: PATCH_GAPS,
+  },
+  {
+    feature: "patch show",
+    command: "patch show",
+    menu: "Sound › Patch › Show as text",
+    tools: ["patch_edit"],
+    sdk: ["sdk:patch"],
+    gap: PATCH_GAPS,
+  },
+  {
+    feature: "patch nodes",
+    command: "patch nodes",
+    menu: "Sound › Patch › List node types",
+    tools: ["patch_edit"],
+    sdk: ["sdk:patch"],
+    gap: PATCH_GAPS,
+  },
+  {
+    feature: "effect patch",
+    command: "patch new wobble effect",
+    menu: "Effects › Add effect patch",
+    tools: ["patch_edit"],
+    sdk: ["sdk:fxPatch"],
+    gap: PATCH_GAPS,
+  },
+  {
+    feature: "patch mod",
+    command: "patch mod cutoff sine.slow(4)",
+    menu: "verb:patch mod",
+    tools: ["patch_edit"],
+    sdk: ["track.mods"],
+    // TODO(patcher lane 4): pattern signals (sine.range(…), pat("…")) are
+    // SDK 1.34.0; the typed verb parses and says so until then.
+    gap: {
+      menu: "a pattern is typed text; ctrl-k gets a row once patterns land with lane 4",
+      sdk: "track mods: and pattern signals land with patcher lane 4 (SDK 1.34.0)",
+    },
+  },
 ];
 
 const walked = walkAll().flatMap((entry) => entry.walked);
 const verbs = new Set<string>();
+const commandPrefixes: string[] = [];
 for (const { node } of walked)
   for (const command of nodeCommands(node)) {
+    commandPrefixes.push(command.replace(/^\//, ""));
     const word = command.split(/\s/)[0]!;
     verbs.add(word.replace(/^\//, ""));
     // A slash verb also counts under `verb:/x`, for rows where the bare
@@ -265,6 +417,11 @@ const songFields = inputFields("SongInput");
 const trackFields = inputFields("TrackInput");
 
 function menuDoor(menu: string): boolean {
+  // `verb:patch knob`: some walked node runs a command with that prefix.
+  if (menu.startsWith("verb:") && menu.includes(" "))
+    return commandPrefixes.some((command) =>
+      `${command} `.startsWith(`${menu.slice(5)} `),
+    );
   if (menu.startsWith("verb:")) return verbs.has(menu.slice(5));
   return resolveMenuPath(menu.split(" › ")) !== undefined;
 }
@@ -329,6 +486,23 @@ describe("four doors to every feature", () => {
       "play mode",
       "tape",
       "rig",
+      "patch new",
+      "patch add",
+      "patch set",
+      "patch wire",
+      "patch unwire",
+      "patch macro",
+      "patch knob",
+      "patch rate",
+      "patch rm",
+      "patch convert",
+      "patch detach",
+      "patch save",
+      "patch load",
+      "patch show",
+      "patch nodes",
+      "effect patch",
+      "patch mod",
     ]);
   });
 
@@ -359,6 +533,12 @@ describe("four doors to every feature", () => {
 
       test("SDK: a field the printer writes, an export, or a CLI pointer", () => {
         expect(row.sdk.length).toBeGreaterThan(0);
+        if (row.gap?.sdk) {
+          expect(row.sdk.every(sdkDoor), `gap listed: ${row.gap.sdk}`).toBe(
+            false,
+          );
+          return;
+        }
         for (const ref of row.sdk) expect(sdkDoor(ref), ref).toBe(true);
       });
     });

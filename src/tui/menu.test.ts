@@ -405,7 +405,7 @@ describe("edit menu", () => {
     });
   });
 
-  test("Sound: instrument, synth preset, simple params, advanced, performance, browse", () => {
+  test("Sound: instrument, synth preset, simple params, advanced, patch, performance, browse", () => {
     const menu = new EditMenu();
     const ctx = context();
     menu.show(ctx);
@@ -415,10 +415,12 @@ describe("edit menu", () => {
       .view(ctx)
       .items.map((row) => row.label.slice(0, 16).trim());
     expect(labels.slice(0, 3)).toEqual(["instrument", "preset", "attack"]);
-    expect(labels.at(-5)).toBe("advanced");
+    expect(labels.at(-6)).toBe("advanced");
     // 0.6: a pitched track can be turned into a grain cloud.
-    expect(labels.at(-4)).toBe("granular");
-    expect(labels.at(-3)).toBe("track tuning");
+    expect(labels.at(-5)).toBe("granular");
+    expect(labels.at(-4)).toBe("track tuning");
+    // Patcher §7.4: Sound › patch.
+    expect(labels.at(-3)).toBe("patch");
     // 0.7: voice rows live in the Voice root now.
     expect(labels).not.toContain("Voice");
     expect(labels.at(-2)).toBe("performance");

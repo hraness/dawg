@@ -61,7 +61,11 @@ export type AgentOperation =
       points: readonly { beat: number; value: number }[];
     }
   | { type: "clear-track" }
-  | { type: "transport"; action: "play" | "pause" | "toggle" };
+  | { type: "transport"; action: "play" | "pause" | "toggle" }
+  /** One `patch …` line (src/commands/patch.ts) on a track's patch. */
+  | { type: "patch-edit"; line: string; trackId?: string }
+  /** `patch …` lines applied in order as one revision, all or nothing. */
+  | { type: "patch-batch"; lines: readonly string[]; trackId?: string };
 
 export function parsePrompt(prompt: string): AgentOperation | undefined {
   const text = prompt.trim().toLowerCase();

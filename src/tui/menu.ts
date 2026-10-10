@@ -8,6 +8,7 @@
  *
  * Rendering reuses the TUI's picker overlay: `view()` returns a picker.
  */
+import { effectPatchMenuNode, patchMenuNode } from "./patch-menu.ts";
 import { TOPIC_ALIASES } from "../lang/glossary.ts";
 import {
   voiceEffectRows,
@@ -733,6 +734,7 @@ function soundSectionNodes(context: MenuContext): MenuNode[] {
     ...keys,
     ...guitar,
     ...tuning,
+    patchMenuNode(context),
     {
       kind: "menu",
       id: "performance",
@@ -2514,6 +2516,7 @@ function effectNodes(context: MenuContext): MenuNode[] {
           : more.map((effect) => effectSpec(effect).label).join(", "),
       build: () => more.map(node),
     },
+    effectPatchMenuNode(),
   ];
 }
 
