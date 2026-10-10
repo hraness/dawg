@@ -41,7 +41,7 @@ import {
   updateTrack,
   type TrackScore,
 } from "../../core/score.ts";
-import { nearestWord } from "../audio/instrument-check.ts";
+import { nearest } from "./nearest.ts";
 import { parseParamValue } from "./fx.ts";
 
 export type WindCommand =
@@ -107,7 +107,7 @@ export function parseWindCommand(prompt: string): WindCommand | undefined {
     const name = windParamName(rest[index]!);
     if (!name) {
       const word = rest[index]!.slice(0, 24);
-      const near = nearestWord(word, Object.keys(WIND_PARAMS));
+      const near = nearest(word, Object.keys(WIND_PARAMS));
       return {
         type: "wind-usage",
         message: `wind has no parameter ${word}${near ? ` · did you mean ${near}?` : ""} · ${WIND_SIMPLE.join(" ")} …`,

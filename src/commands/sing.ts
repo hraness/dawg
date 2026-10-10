@@ -45,7 +45,7 @@ import {
   updateTrack,
   type TrackScore,
 } from "../../core/score.ts";
-import { nearestWord } from "../audio/instrument-check.ts";
+import { nearest } from "./nearest.ts";
 import {
   describeTarget,
   parseNoteTarget,
@@ -186,7 +186,7 @@ export function parseSingCommand(prompt: string): SingCommand | undefined {
   if (rest.length === 1) {
     const preset = presetFor(rest[0]!);
     if (preset) return { type: "sing-set", preset, values: {} };
-    const near = nearestWord(rest[0]!.slice(0, 24), SING_PRESET_NAMES);
+    const near = nearest(rest[0]!.slice(0, 24), SING_PRESET_NAMES);
     return {
       type: "sing-usage",
       message: near ? `sing · did you mean ${near}?` : SING_USAGE,
@@ -209,7 +209,7 @@ export function parseSingCommand(prompt: string): SingCommand | undefined {
     const name = singParamName(rest[index]!);
     if (!name) {
       const word = rest[index]!.slice(0, 24);
-      const near = nearestWord(word, PARAM_NAMES);
+      const near = nearest(word, PARAM_NAMES);
       return {
         type: "sing-usage",
         message: `sing has no parameter ${word}${near ? ` · did you mean ${near}?` : ""} · vowel voices bright breath vib drone …`,

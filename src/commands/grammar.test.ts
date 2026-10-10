@@ -21,6 +21,7 @@ import {
   usageLine,
   workspaceRelative,
 } from "./grammar.ts";
+import { parseFxCommand, unknownFxMessage } from "./fx.ts";
 import { HELP_SECTIONS, USAGE } from "./help.ts";
 import { commandParses, parseCommand } from "./parses.ts";
 
@@ -154,6 +155,22 @@ describe("nearest", () => {
     expect(nearest("reverb", ["reverb"])).toBeUndefined();
     expect(nearest("xyzzy", ["reverb"])).toBeUndefined();
     expect(nearest("hta", ["hat"])).toBe("hat");
+  });
+  test("effects and instruments use the same matcher", () => {
+    expect(unknownFxMessage("fx zz")).not.toContain("did you mean");
+    expect(unknownFxMessage("fx dela mix 0.3")).toContain(
+      "did you mean delay?",
+    );
+    expect(unknownInstrumentMessage("sawtoth")).toContain(
+      "did you mean sawtooth?",
+    );
+    expect(unknownInstrumentMessage("zz")).not.toContain("did you mean");
+  });
+  test("fx list, ls and presets are the fx read", () => {
+    for (const word of ["list", "ls", "presets"]) {
+      expect(parseFxCommand(`fx ${word}`)).toEqual({ type: "fx-list" });
+      expect(unknownFxMessage(`fx ${word}`)).toBeUndefined();
+    }
   });
   test("known verbs include the canonical forms", () => {
     for (const verb of ["groove", "rig", "loop", "export", "fx", "tempo"])

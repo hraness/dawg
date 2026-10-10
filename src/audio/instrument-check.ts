@@ -11,6 +11,7 @@ import { isDrumInstrument } from "../../core/drums.ts";
 import { INSTRUMENT_WORDS, LEGACY_WORDS } from "../../core/instruments.ts";
 import { KEYS_FAMILIES } from "../../core/keys.ts";
 import { isSamplerInstrument, type Track } from "../../core/score.ts";
+import { nearest } from "../commands/nearest.ts";
 import { engineFor, registeredEngines } from "./instruments.ts";
 import { resolveOscillator } from "./synth/oscillators.ts";
 import { AVAILABLE_INSTRUMENTS } from "./wav.ts";
@@ -93,11 +94,11 @@ export function plainSineAdvice(
     const advice = LEGACY_ADVICE[name];
     return `"${name}" is dawg's plain sine (kept for old projects)${advice ? ` · ${advice}` : ""}`;
   }
-  const near = nearestWord(name, knownWords());
   // A resolver word stored raw (an older project): the word itself now
   // picks a voice when typed again.
-  if (near === name)
+  if (knownWords().includes(name))
     return `"${name}" is stored as a bare word and plays a plain sine · type instrument ${name} again for its voice`;
+  const near = nearest(name, knownWords());
   return `"${name}" is not a dawg instrument and plays a plain sine${near ? ` · did you mean ${near}?` : ""}`;
 }
 
@@ -136,9 +137,9 @@ export function isUnknownInstrument(word: string): boolean {
  */
 export function unknownInstrumentMessage(word: string): string {
   const name = word.trim().toLowerCase();
-  const near = nearestWord(name, [...knownWords(), ...LEGACY_TONES, "sine"]);
+  const near = nearest(name, [...knownWords(), ...LEGACY_TONES, "sine"]);
   const shown = name.length > 32 ? `${name.slice(0, 31)}…` : name;
-  return `instrument ${shown}${near && near !== name ? ` · did you mean ${near}?` : ""} · instrument list`;
+  return `instrument ${shown}${near ? ` · did you mean ${near}?` : ""} · instrument list`;
 }
 
 /** `dawg check` warnings for every track that plays the plain sine. */
@@ -149,39 +150,4 @@ export function plainSineWarnings(tracks: readonly Track[]): string[] {
     if (advice) out.push(`track ${track.id}: instrument ${advice}`);
   }
   return out;
-}
-
-/** The closest of `words` to `word` within two edits, if any. */
-export function nearestWord(
-  word: string,
-  words: readonly string[],
-): string | undefined {
-  let best: string | undefined;
-  let bestDistance = 3;
-  for (const candidate of words) {
-    const distance = editDistance(word, candidate);
-    if (distance < bestDistance) {
-      best = candidate;
-      bestDistance = distance;
-    }
-  }
-  return best;
-}
-
-function editDistance(a: string, b: string): number {
-  const row = Array.from({ length: b.length + 1 }, (_, index) => index);
-  for (let i = 1; i <= a.length; i += 1) {
-    let previous = row[0]!;
-    row[0] = i;
-    for (let j = 1; j <= b.length; j += 1) {
-      const saved = row[j]!;
-      row[j] = Math.min(
-        row[j]! + 1,
-        row[j - 1]! + 1,
-        previous + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
-      previous = saved;
-    }
-  }
-  return row[b.length]!;
 }

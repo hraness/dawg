@@ -19,7 +19,7 @@
  * on/off/true/false; enums take one of their values. Each command is one
  * `updateTrack` revision and one undo step.
  */
-import { nearestWord } from "../audio/instrument-check.ts";
+import { nearest } from "./nearest.ts";
 import {
   EFFECT_NAMES,
   FX_PRESETS,
@@ -177,10 +177,15 @@ const COMMON_FIRST: readonly string[] = [
   "compressor",
 ];
 
+const FX_LIST_WORDS: readonly string[] = ["list", "ls", "presets"];
+
 export function parseFxCommand(prompt: string): FxCommand | undefined {
   const words = prompt.trim().split(/\s+/);
   if (words[0]?.toLowerCase() !== "fx") return undefined;
   if (words.length === 1) return { type: "fx-list" };
+  // `fx list`, `fx ls`, `fx presets`: the same read as bare `fx`.
+  if (words.length === 2 && FX_LIST_WORDS.includes(words[1]!.toLowerCase()))
+    return { type: "fx-list" };
   if (prompt.length > 1_024) return undefined;
   const irWord = (word: string | undefined) =>
     word !== undefined && ["ir", "iresponse"].includes(word.toLowerCase());
@@ -254,7 +259,8 @@ export function unknownFxMessage(prompt: string): string | undefined {
     return FORMANT_FX_USAGE;
   if (parseEffectName(name) || ["ir", "iresponse", "amp"].includes(name))
     return undefined;
-  const near = nearestWord(name, [
+  if (words.length === 2 && FX_LIST_WORDS.includes(name)) return undefined;
+  const near = nearest(name, [
     ...EFFECT_NAMES,
     ...Object.keys(EFFECT_ALIASES),
     "reverb",

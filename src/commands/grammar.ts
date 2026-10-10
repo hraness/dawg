@@ -11,7 +11,8 @@
  * command for typo fixes, show-me and the agent's command mode.
  */
 
-import { editDistance, HELP_SECTIONS, USAGE } from "./help.ts";
+import { HELP_SECTIONS, USAGE } from "./help.ts";
+import { nearest } from "./nearest.ts";
 
 /** Words that remove a thing: `section rm verse` ≡ `section remove verse`. */
 export const REMOVE_WORDS: readonly string[] = ["remove", "rm", "delete"];
@@ -364,30 +365,7 @@ export function usageCard(line: string, usage: string, near?: string): string {
 // ---------------------------------------------------------------------------
 // One vocabulary matcher, one error template
 
-/**
- * The word in `vocabulary` nearest to `word` (edit distance, adjacent swaps
- * cost one), within one edit for words of four letters or fewer and two
- * otherwise; undefined when nothing is that close or `word` is itself in it.
- * Every vocabulary (instrument, effect, style, kit, groove, track, section,
- * verb) goes through this one function.
- */
-export function nearest(
-  word: string,
-  vocabulary: Iterable<string>,
-): string | undefined {
-  const typed = word.trim().toLowerCase();
-  if (!typed) return undefined;
-  const limit = typed.length <= 4 ? 1 : 2;
-  let best: { word: string; distance: number } | undefined;
-  for (const candidate of vocabulary) {
-    const lower = candidate.toLowerCase();
-    if (lower === typed) return undefined;
-    const distance = editDistance(typed, lower);
-    if (distance <= limit && (!best || distance < best.distance))
-      best = { word: candidate, distance };
-  }
-  return best?.word;
-}
+export { nearest } from "./nearest.ts";
 
 /** Every verb help and the usage table know, bare (`fx`, `tempo`, …). */
 export function knownVerbs(): ReadonlySet<string> {
