@@ -50,9 +50,10 @@ export type InstrumentEngine = Readonly<{
   /**
    * Ring-out after the last note ends, in seconds (the live length cap).
    * `lowestPitch`, when given, is the track's lowest note, for engines
-   * whose ring depends on pitch.
+   * whose ring depends on pitch. `score` is the song, for engines that
+   * read its patch library.
    */
-  tailSeconds(track: Track, lowestPitch?: number): number;
+  tailSeconds(track: Track, lowestPitch?: number, score?: TrackScore): number;
   /**
    * The live note-off fade for one key at its sounding `hz`, in seconds
    * (a piano's damper); absent uses `tailSeconds`.
@@ -129,9 +130,12 @@ export function engineFor(
 export function engineTailSeconds(
   track: Track | undefined,
   lowestPitch?: number,
+  score?: TrackScore,
 ): number {
   const engine = engineFor(track);
-  return engine ? Math.max(0, engine.tailSeconds(track!, lowestPitch)) : 0;
+  return engine
+    ? Math.max(0, engine.tailSeconds(track!, lowestPitch, score))
+    : 0;
 }
 
 // 0.6 lanes register their engines below, one line each.

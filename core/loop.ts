@@ -1,3 +1,4 @@
+import type { Patch } from "./patch.ts";
 import type { SongTime } from "./tempo.ts";
 import {
   SCORE_VERSION,
@@ -39,6 +40,8 @@ export type TrackLoopV1 = Readonly<{
   form?: readonly FormEntry[];
   /** The loop range (0.8), 0-based; absent plays the song. */
   loop?: Readonly<{ startBar: number; bars: number }>;
+  /** The project patch library (patcher); omitted when empty. */
+  patches?: Readonly<Record<string, Patch>>;
 }>;
 
 /** Return the stable object form used by files and IPC messages. */
@@ -55,6 +58,9 @@ export function encodeLoopDocument(score: TrackScore): TrackLoopV1 {
     key: score.key,
     ...(score.time ? { time: score.time } : {}),
     ...(score.tuning ? { tuning: score.tuning } : {}),
+    ...(Object.keys(score.patches).length > 0
+      ? { patches: score.patches }
+      : {}),
     tracks: score.tracks,
     notes: score.notes,
     ...(score.master ? { master: score.master } : {}),

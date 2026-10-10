@@ -35,6 +35,11 @@ export type EffectContext = Readonly<{
    * renderer's `seedSeconds`): the formant stage anchors its frames there.
    */
   seedSeconds?: number;
+  /**
+   * The track's effect patches at the chain's patch stage (after distort;
+   * src/audio/patch/engine.ts), run on one mono channel. Absent: none.
+   */
+  patchStage?: (buffer: Float64Array) => void;
 }>;
 
 /** One note as a note-aware effect sees it: where it sounds and its pitch. */

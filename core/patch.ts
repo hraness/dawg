@@ -21,6 +21,7 @@ import {
   BOUNDARY_SPECS,
   findPort,
   nodeSpec,
+  NODE_SPECS,
   NODE_TYPES,
   type NodeSpec,
   type PortKind,
@@ -381,6 +382,24 @@ function normalizeNodeParams(
   for (const [name, param] of Object.entries(spec.params)) {
     const value = input[name];
     if (value === undefined) continue;
+    // An engine that plays any instrument word (engine.synth: every synth
+    // sound, legacy voice, drum kit, sampler or wavetable) takes a word.
+    if (
+      name === "instrument" &&
+      spec.engine &&
+      spec.engine.instruments.length === 0
+    ) {
+      if (
+        typeof value !== "string" ||
+        value.trim() === "" ||
+        value.length > PATCH_LIMITS.maxNameLength
+      )
+        fail(
+          `node ${id}.instrument must be an instrument word (at most ${PATCH_LIMITS.maxNameLength} characters)`,
+        );
+      out[name] = value.trim();
+      continue;
+    }
     try {
       out[name] = normalizeParam(param, value, `${id}.${name}`);
     } catch (error) {
@@ -1341,4 +1360,161 @@ export function patchEdits(
     throw error;
   }
   return JSON.stringify(work) === JSON.stringify(b) ? edits : undefined;
+}
+
+/** The Track fields `patchFromTrack` reads (the instrument word and its settings). */
+export type WrappableTrack = Readonly<{ instrument: string }> &
+  Readonly<Record<string, unknown>>;
+
+/**
+ * The engine node type that plays `instrument`: the engine whose binding
+ * names the word and whose settings field the track carries, else
+ * `engine.synth` (synth sounds, legacy voices, drum kits, samplers and
+ * wavetables).
+ */
+export function engineTypeFor(track: WrappableTrack): string {
+  for (const spec of Object.values(NODE_SPECS)) {
+    const binding = spec.engine;
+    if (!binding || binding.instruments.length === 0) continue;
+    if (
+      binding.instruments.includes(track.instrument) &&
+      binding.fields.some((field) => isRecord(track[field]))
+    )
+      return spec.type;
+  }
+  return "engine.synth";
+}
+
+/**
+ * "Convert instrument to patch" (design §9 step 1): a one-node instrument
+ * patch that plays the track's instrument through its `engine.*` node,
+ * with the track's settings fields copied into the node. Wired as
+ * `in.notes → engine → out.audio / out.right`, it renders bit-identical
+ * to the track (a mono engine's right output equals its left, and a patch
+ * whose channels match plays mono). The track's stock effect chain stays
+ * on the track. Fresh node and cable ids (core/ids.ts).
+ */
+export function patchFromTrack(track: WrappableTrack): Patch {
+  const type = engineTypeFor(track);
+  const spec = NODE_SPECS[type]!;
+  const settings: Record<string, unknown> = {};
+  for (const field of spec.engine!.fields)
+    if (isRecord(track[field])) settings[field] = track[field];
+  const id = newNodeId(type);
+  const params: Record<string, PatchParamValue> = {
+    instrument: track.instrument,
+    ...(Object.keys(settings).length > 0
+      ? { settings: settings as PatchParamValue }
+      : {}),
+  };
+  const word = track.instrument
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^[^a-z0-9]+/, "")
+    .slice(0, PATCH_LIMITS.maxNameLength);
+  return {
+    kind: "patch",
+    role: "instrument",
+    name: word || "instrument",
+    nodes: [{ id, type, params }],
+    cables: [
+      { id: newCableId(), from: "in.notes", to: `${id}.notes` },
+      { id: newCableId(), from: `${id}.out`, to: "out.audio" },
+      { id: newCableId(), from: `${id}.right`, to: "out.right" },
+    ],
+    macros: [],
+  };
+}
+
+/** Every Track field an engine node reads its settings from. */
+const ENGINE_FIELDS: readonly string[] = [
+  ...new Set(
+    Object.values(NODE_SPECS).flatMap((spec) => spec.engine?.fields ?? []),
+  ),
+].sort();
+
+/**
+ * The track an `engine.*` node plays as: the patch track without its patch,
+ * effect patches, clips or any engine settings field, then the node's
+ * instrument word and settings. Everything else (performance, tuning,
+ * automation lanes) carries over, so a wrapped instrument renders exactly
+ * as it did on the track. A node naming "patch" plays a sine (a patch
+ * never recurses through a word).
+ */
+export function engineTrack<T extends WrappableTrack>(
+  track: T,
+  node: Readonly<{ params?: Readonly<Record<string, unknown>> }>,
+): T {
+  const out: Record<string, unknown> = { ...track };
+  delete out.patch;
+  delete out.fxPatch;
+  delete out.clips;
+  for (const field of ENGINE_FIELDS) delete out[field];
+  const word = node.params?.instrument;
+  out.instrument =
+    typeof word === "string" && word !== PATCH_INSTRUMENT ? word : "sine";
+  const settings = node.params?.settings;
+  if (isRecord(settings))
+    for (const [field, value] of Object.entries(settings)) out[field] = value;
+  return out as T;
+}
+
+/**
+ * The engine tracks an instrument patch track plays (one per `engine.*`
+ * node, nested patches included, in node order), for sample loading and
+ * tails; `[track]` for every other track.
+ */
+export function engineTracks<T extends WrappableTrack>(
+  track: T,
+  library: Readonly<Record<string, Patch>> = {},
+): T[] {
+  const value = track.patch as TrackPatchValue | undefined;
+  if (track.instrument !== PATCH_INSTRUMENT || !value) return [track];
+  const out: T[] = [];
+  const walk = (patch: Patch | undefined, depth: number) => {
+    if (!patch || depth > PATCH_LIMITS.maxDepth) return;
+    for (const node of patch.nodes) {
+      if (node.type.startsWith("engine.")) out.push(engineTrack(track, node));
+      else if (node.type.startsWith("patch."))
+        walk(library[node.type.slice(6)], depth + 1);
+    }
+  };
+  walk(resolvePatch(value, library), 0);
+  return out;
+}
+
+/**
+ * The tracks whose voices a render plays: each instrument patch track,
+ * then the engine track of every `engine.*` node it holds (same id, so
+ * sample loading, sampler tails and kits see the wrapped instrument);
+ * every other track as is.
+ */
+export function soundingTracks<T extends WrappableTrack>(
+  score: Readonly<{
+    tracks: readonly T[];
+    patches?: Readonly<Record<string, Patch>> | null;
+  }>,
+): readonly T[] {
+  if (!score.tracks.some((track) => track.instrument === PATCH_INSTRUMENT))
+    return score.tracks;
+  return score.tracks.flatMap((track) =>
+    track.instrument === PATCH_INSTRUMENT && track.patch
+      ? [track, ...engineTracks(track, score.patches ?? {})]
+      : [track],
+  );
+}
+
+/**
+ * "Convert instrument to patch" on a whole track: the same track playing
+ * `patchFromTrack(track)` inline, its engine settings fields moved into
+ * the patch's engine node. Every other field (effects, automation,
+ * performance, tuning) stays on the track, so it renders bit-identical.
+ */
+export function convertToPatch<T extends WrappableTrack>(track: T): T {
+  const patch = patchFromTrack(track);
+  const out: Record<string, unknown> = { ...track };
+  for (const field of ENGINE_FIELDS) delete out[field];
+  out.instrument = PATCH_INSTRUMENT;
+  out.patch = patch;
+  return out as T;
 }

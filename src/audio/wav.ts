@@ -32,9 +32,22 @@ import { seededRandom } from "./random.ts";
 import {
   engineFor,
   engineTailSeconds,
+  registerEngine,
   RING_OUT_FADE_SECONDS,
   type InstrumentEngine,
 } from "./instruments.ts";
+import {
+  applyPostPatches,
+  effectPatches,
+  isPatchTrack,
+  patchDigests,
+  patchEngine,
+  patchStageFor,
+  readsSide,
+  renderPatchTrack,
+  type PatchRenderer,
+} from "./patch/engine.ts";
+import { PATCH_INSTRUMENT } from "../../core/patch.ts";
 import {
   isStereoVoice,
   renderSynthNote,
@@ -280,7 +293,7 @@ function oneShotEngineTail(score: TrackScore, ringing = false): number {
         (lowest === undefined || note.pitch < lowest)
       )
         lowest = note.pitch;
-    tail = Math.max(tail, engineTailSeconds(track, lowest));
+    tail = Math.max(tail, engineTailSeconds(track, lowest, score));
   }
   return Math.min(MAX_ENGINE_TAIL_SECONDS, tail);
 }
@@ -377,6 +390,8 @@ export class StemRenderer {
   >();
   private cacheBytes = 0;
   private renders = 0;
+  /** Track ids whose voices ran in the latest render (tests, diagnostics). */
+  private voicePasses: string[] = [];
   /** Vocoder modulator taps by source key (0.7), kept one render. */
   private readonly modSources = new Map<
     string,
@@ -403,6 +418,11 @@ export class StemRenderer {
       0,
       options.maxCacheBytes ?? DEFAULT_STEM_CACHE_BYTES,
     );
+  }
+
+  /** Tracks whose voices the latest render ran (not from the cache). */
+  public get rendered(): readonly string[] {
+    return this.voicePasses;
   }
 
   /** Cached stems and their total size, for tests and diagnostics. */
@@ -432,7 +452,9 @@ export class StemRenderer {
         samplerTailSeconds(score, bank, sampleRate),
         ...score.tracks.map(synthTailSeconds),
         // Zero without a registered 0.6 instrument engine.
-        ...score.tracks.map((track) => engineTailSeconds(track)),
+        ...score.tracks.map((track) =>
+          engineTailSeconds(track, undefined, score),
+        ),
       ),
     );
     return oneShotSeconds(
@@ -462,7 +484,9 @@ export class StemRenderer {
         samplerTailSeconds(score, bank, sampleRate),
         ...score.tracks.map(synthTailSeconds),
         // Zero without a registered 0.6 instrument engine.
-        ...score.tracks.map((track) => engineTailSeconds(track)),
+        ...score.tracks.map((track) =>
+          engineTailSeconds(track, undefined, score),
+        ),
       ),
     );
     let frames: number;
@@ -515,6 +539,7 @@ export class StemRenderer {
       ...(options.quantChord ? { quantChord: options.quantChord } : {}),
     };
     this.renders += 1;
+    this.voicePasses = [];
     const { dry, dryR, left, right, mixL, mixR } = this.scratchFor(samples);
     const nonFinite: { samples: number; tracks: string[] } = {
       samples: 0,
@@ -608,9 +633,24 @@ export class StemRenderer {
         : baseDigests;
       // 0.7 autotune: its targets (guide notes, chords, key, tuning) and the
       // pitch engine version join the stem key; absent adds nothing.
-      const engineDigests = track?.autotune
+      const tunedDigests = track?.autotune
         ? [...(withVocoder ?? []), ...autotuneStemDigests(track, score)]
         : withVocoder;
+      // Patches (src/audio/patch): an effect patch's digest (an instrument
+      // patch's comes with its engine) and the side track's tap.
+      const sideSource = readsSide(track)
+        ? sideSourceOf(track!, groups, performed, context, bank)
+        : undefined;
+      const patchKeys = [
+        ...(track && engine?.id !== PATCH_INSTRUMENT
+          ? patchDigests(track, score.patches)
+          : []),
+        ...(sideSource ? [sideSource.key] : []),
+      ];
+      const engineDigests =
+        patchKeys.length > 0
+          ? [...(tunedDigests ?? []), ...patchKeys]
+          : tunedDigests;
       // Wavetable hook: the oscillator factory for a wavetable track (its
       // table id joins the stem key), undefined for every other instrument.
       const wavetable = track ? wavetableHook(track, bank, context) : undefined;
@@ -630,8 +670,13 @@ export class StemRenderer {
       // A cached track with a reverb also keeps its pre-reverb pair and the
       // tail before its mix gain, keyed without the mix: a mix-only edit
       // re-adds the tail instead of re-running the voices and the room.
+      // Post-chain effect patches run after the reverb, so no room split.
       const room =
-        caching && track && busOrbit === undefined && reverbActive(track)
+        caching &&
+        track &&
+        busOrbit === undefined &&
+        reverbActive(track) &&
+        effectPatches(track, "post").length === 0
           ? stemKey(
               roomTrack(track),
               notes,
@@ -665,7 +710,11 @@ export class StemRenderer {
               right: new Float64Array(samples),
             }
           : { left, right };
+        this.voicePasses.push(trackId);
         dry.fill(0);
+        const side = sideSource
+          ? this.vocoderTap(sideSource, context, bank)
+          : undefined;
         const stereo = renderVoiceInto(
           dry,
           dryR,
@@ -679,6 +728,7 @@ export class StemRenderer {
           wavetable,
           tuning,
           options.guide === true,
+          side,
         );
         // The vocoder stage (0.7): after the voice, before the chain.
         if (track && vocoderSource)
@@ -693,10 +743,15 @@ export class StemRenderer {
         // A non-finite source sample would poison every feedback stage.
         let bad = scrubNonFinite(dry) + (stereo ? scrubNonFinite(dryR) : 0);
         // Note-aware stages (bloom, swell) see the notes; others never do.
-        const chain =
+        const noted =
           track && needsEffectNotes(track)
             ? { ...context, notes: effectNotes(played, context, tuning) }
             : context;
+        // The chain's patch stage (after distort), when the track has one.
+        const patchStage = track
+          ? patchStageFor(track, context, bank, PATCH_RENDERER, side)
+          : undefined;
+        const chain = patchStage ? { ...noted, patchStage } : noted;
         if (track) applyMonoChain(dry, track, chain);
         if (stereo && track) applyMonoChain(dryR, track, chain);
         applyPan(
@@ -736,6 +791,16 @@ export class StemRenderer {
             track,
             chain,
             busOrbit === undefined,
+          );
+        if (track)
+          applyPostPatches(
+            target.left,
+            target.right,
+            track,
+            context,
+            bank,
+            PATCH_RENDERER,
+            side,
           );
         bad += scrubNonFinite(target.left) + scrubNonFinite(target.right);
         stem = {
@@ -1127,6 +1192,32 @@ type VocoderSource = Readonly<{
   gateDb: number;
 }>;
 
+/**
+ * The track a patch's `in.side` reads (the instrument patch's `side`, else
+ * the first effect patch's): that track's dry voice, cached as a vocoder
+ * tap is.
+ */
+function sideSourceOf(
+  track: Track,
+  groups: ReadonlyMap<string, readonly Note[]>,
+  performed: ReadonlyMap<string, readonly PerformedNote[]>,
+  context: RenderContext,
+  bank: SampleBank,
+): VocoderSource | undefined {
+  const src =
+    (isPatchTrack(track) ? track.patch.side : undefined) ??
+    (track.fxPatch ?? []).find((patch) => patch.side !== undefined)?.side;
+  if (src === undefined) return undefined;
+  const source = vocoderSourceOf(
+    { ...track, vocoder: { src, tap: "dry", gate: 0 } } as Track,
+    groups,
+    performed,
+    context,
+    bank,
+  );
+  return source ? { ...source, key: `side:${source.key}` } : undefined;
+}
+
 /** True for a built-in carrier that sounds without notes (chords, drone). */
 function vocoderPlaysWithoutNotes(track: Track): boolean {
   if (!track.vocoder || track.instrument !== VOCODER_INSTRUMENT) return false;
@@ -1299,13 +1390,28 @@ function renderVoiceInto(
   wavetable: ReturnType<typeof wavetableHook> | undefined,
   tuning: TuningTable | undefined,
   guide: boolean,
+  side?: Float64Array,
 ): boolean {
   const synthVoice = !engine && !sampler && usesSynthVoice(track);
   let stereo = engine
     ? engine.stereo(track!)
     : synthVoice && isStereoVoice(track);
   if (stereo) dryR.fill(0);
-  if (engine && track) {
+  if (engine && track && isPatchTrack(track)) {
+    // An instrument patch (src/audio/patch): stereo only when its right
+    // channel differs from its left, so a wrapped mono voice stays mono.
+    dryR.fill(0);
+    stereo = renderPatchTrack(
+      dry,
+      dryR,
+      played,
+      track,
+      { ...context, ...(tuning ? { tuning } : {}) },
+      bank,
+      PATCH_RENDERER,
+      side,
+    );
+  } else if (engine && track) {
     engine.render(
       dry,
       stereo ? dryR : undefined,
@@ -1845,3 +1951,49 @@ export function withWavCues(
   view.setUint32(4, out.byteLength - 8, true);
   return out;
 }
+
+/**
+ * What a patch reads from the stem pass (src/audio/patch/engine.ts): the
+ * voice of a wrapped engine track and the chain stage of an `fx.*` node.
+ */
+const PATCH_RENDERER: PatchRenderer = {
+  voice(dry, dryR, played, track, context, bank) {
+    const { score } = context;
+    return renderVoiceInto(
+      dry,
+      dryR,
+      played,
+      track,
+      context,
+      score,
+      bank,
+      engineFor(track),
+      isSamplerInstrument(track.instrument),
+      wavetableHook(track, bank, context),
+      resolveTuning(score.tuning, track.tuning, score.key),
+      false,
+    );
+  },
+  stage(stage, left, right, track, context) {
+    if (right === undefined) applyMonoChain(left, track, context);
+    else applyStereoChain(left, right, track, context);
+  },
+  digests(track, bank, score) {
+    const engine = engineFor(track);
+    return [
+      `engine:${track.instrument}`,
+      ...(engine?.assetDigests?.(track, bank, score) ?? []),
+      ...(track.sampler ? samplerVoiceDigest(track, bank) : []),
+      ...(track.wavetable ? [JSON.stringify(track.wavetable)] : []),
+      ...(track.clips
+        ? [`clips:${clipsDigest(track, bank, false) ?? ""}`]
+        : []),
+    ];
+  },
+  span: noteSpan,
+  tail: (track, lowestPitch) =>
+    Math.max(synthTailSeconds(track), engineTailSeconds(track, lowestPitch)),
+};
+
+// The patcher's instrument (design §13 lane 3).
+registerEngine(patchEngine(PATCH_RENDERER));

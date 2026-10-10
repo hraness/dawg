@@ -15,6 +15,7 @@
  * Loading never throws for project problems: a voice that cannot load is
  * reported as a `<what> · <why> · <next step>` problem and renders silent.
  */
+import { soundingTracks } from "../../core/patch.ts";
 import { createHash } from "node:crypto";
 import {
   mkdir,
@@ -96,7 +97,7 @@ export const EMPTY_SAMPLE_BANK: SampleBank = Object.freeze({
  * wavetable track playing a pack table.
  */
 export function hasSamplerTracks(score: TrackScore): boolean {
-  return score.tracks.some(
+  return soundingTracks(score).some(
     (track) =>
       (isSamplerInstrument(track.instrument) &&
         track.sampler !== undefined &&
@@ -636,7 +637,9 @@ export class SampleLibrary implements SampleSource {
     return this.loadFile(src);
   }
 
-  public async load(score: TrackScore): Promise<SampleBank> {
+  public async load(full: TrackScore): Promise<SampleBank> {
+    // Wrapped engines of patch tracks load as their own tracks (same id).
+    const score = { ...full, tracks: soundingTracks(full) } as TrackScore;
     const voices = new Map<string, DecodedSample>();
     const problems: SampleProblem[] = [];
     let dirs: ReadonlyMap<string, string> | undefined;
