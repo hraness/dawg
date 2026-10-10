@@ -5,3 +5,5 @@ site/public/theme-bootstrap.js
 site/public/demo/
 # Verbatim web fixtures (HTML and provider responses) used by src/web tests.
 src/web/fixtures/
+# Generated docs screens (bun run screens; test/screens checks them).
+docs/screens/

@@ -35,6 +35,7 @@
     "bench:perf": "bun bench/perf/run.ts",
     "sizes": "bun bench/sizes/matrix.ts",
     "test": "bun test",
+    "screens": "bun test/screens/capture.ts",
     "typecheck": "tsc --noEmit",
     "check": "bun test && bun run typecheck && bun run format",
     "format": "prettier --check ."
