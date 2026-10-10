@@ -479,6 +479,10 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
     group: "arrange · range",
     entries: [
       {
+        command: "/tape [on|off]",
+        summary: "every track across the bars · c copy x cut v paste · ctrl-t",
+      },
+      {
         command: "loop <a>-<b> | <section> | next | prev | off",
         summary: "the loop range · loop 5-6 · loop next steps it along",
       },
@@ -1060,6 +1064,7 @@ export const USAGE: Readonly<Record<string, string>> = {
     "master <unit> on|off|preset <name>|<param> <value> · master streaming|club|loud · master target -14 · master measure · master off",
   try: "/try <sound command> · /try fx reverb mix 0.6",
   play: "/play [on|off|degrees|in-key|chromatic] · ctrl-p play mode · i toggles degrees",
+  tape: "/tape [on|off] · ctrl-t · every track across the bars · c copy · x cut · v paste · \\ loop",
   meter:
     "meter <1..16> · meter 3 · meter 7/8 [at bar <n>] · meter remove bar <n> · meter clear",
   art: EXPRESSION_USAGE.art,

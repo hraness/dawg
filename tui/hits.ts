@@ -27,7 +27,13 @@ export type HitTarget =
   /** The piano roll / highway area. */
   | { kind: "highway" }
   /** Scrollable text (`/help`, the transcript, the `?` panel). */
-  | { kind: "text" };
+  | { kind: "text" }
+  /** TAPE's ruler: column `x - left + firstCell` is a cell (jump, loop drag). */
+  | { kind: "tape-ruler"; left: number; firstCell: number }
+  /** A TAPE track row (focus; shift-drag sets the loop). */
+  | { kind: "tape-row"; row: number; left: number; firstCell: number }
+  /** TAPE's clipboard chip (click pastes). */
+  | { kind: "tape-clipboard" };
 
 export interface HitRegion {
   x: number;

@@ -12,6 +12,7 @@
  * injectable `TerminalIO`.
  */
 
+import { paintTape, type TapeView } from "./tape.ts";
 import {
   ActivityFeed,
   ERROR_FADE_MS,
@@ -97,6 +98,8 @@ export interface AppView {
     { ghost?: string | undefined; caption?: string | undefined } | undefined;
   /** Play mode: replaces the header and adds the keyboard strip row. */
   play?: PlayHeaderView | undefined;
+  /** TAPE (op1-ux §6): replaces the highway and the arrange strip. */
+  tape?: TapeView | undefined;
   /** Song master meter: integrated LUFS and true peak of the playing loop. */
   loudness?: LoudnessView | undefined;
   /** Song sections over the timeline (0.5); no row when absent. */
@@ -1383,7 +1386,7 @@ export function composeFrame(
       hits,
       view.beat ?? resolveBeat(view.score, nowMs),
     );
-  if (view.arrange && layout.highway.height > 4) {
+  if (view.arrange && !view.tape && layout.highway.height > 4) {
     paintArrangeStrip(
       buffer,
       layout.highway.y,
@@ -1412,6 +1415,13 @@ export function composeFrame(
       paintText(buffer, ui, layout.highway, width);
     else if (ui.overlay === "guide" && ui.guide)
       paintGuide(buffer, ui, layout.highway, width);
+    else if (view.tape)
+      paintTape(
+        buffer,
+        { x: 0, y: layout.highway.y, width, height: layout.highway.height },
+        view.tape,
+        { theme: ui.theme, unicode: ui.capabilities.unicode, hits },
+      );
     else
       paintHighway(
         buffer,

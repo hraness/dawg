@@ -330,6 +330,26 @@ import {
 } from "./tui/menu.ts";
 import { KNOB_PAGE_WORDS, knobPageId } from "./tui/knob-map.ts";
 import {
+  beatOfBar,
+  cutArmed,
+  focusCommand,
+  foldBase,
+  knobNoun,
+  tapeKey,
+  tapeKnobs,
+  type TapeContext,
+} from "./tui/tape-mode.ts";
+import { tapeView } from "./tui/tape-view.ts";
+import { TAPE_ZOOMS, type TapeView, type TapeZoom } from "../tui/tape.ts";
+import type { HitTarget } from "../tui/hits.ts";
+import { knobKey, type KnobState } from "../tui/knobs.ts";
+import {
+  clipboardPath,
+  loadClipboard,
+  saveClipboard,
+} from "./session/clipboard.ts";
+import { extractRange } from "../core/range.ts";
+import {
   drawerView,
   faderChoose,
   faderCommand,
@@ -837,14 +857,45 @@ const CHORDS_COMMAND = /^\/chords\s+(.+)$/i;
 let chordScreenWas = false;
 /** The range clipboard (`copy bass 5-6`, then `paste at 9`); per window. */
 let rangeClipboard: RangeClipboard | undefined;
+/**
+ * TAPE (op1-ux §6): on, its zoom, its knob strip, the last view painted
+ * (mouse hits map cells to bars through it), a ruler drag in progress, and
+ * the pending cut (the score before and after its clear) so the first
+ * paste after it runs `move` against the score the cut came from.
+ */
+const tape: {
+  on: boolean;
+  zoom: TapeZoom;
+  knobs: KnobState;
+  view?: TapeView | undefined;
+  drag?: { from: number; to: number; left: number; first: number } | undefined;
+  cut?: { before: TrackScore; after?: TrackScore | undefined } | undefined;
+  /** Set by `x`: the score before it, until its `clear` lands. */
+  cutArmed?: TrackScore | undefined;
+  /** Set by the first `v` after a cut: its `move` reads `cut.before`. */
+  foldArmed?: boolean | undefined;
+  /**
+   * Where a paste's queued `jump` will put the playhead (a score beat),
+   * so a quick `v v v` tiles before that jump has run.
+   */
+  pending?: { beat: number; until: number } | undefined;
+} = { on: false, zoom: "beat", knobs: { selected: 0 } };
 let stageCapture: { next?: TrackScore; committed?: TrackScore } | undefined;
 /** Redraw soon (the audition reports renders between frames). */
 let requestFrame: () => void = () => undefined;
 /** Queue a prompt to run as if typed (set by the interactive loop). */
 let runPromptLater: (command: string) => void = () => undefined;
+/** Queue several prompts, in order, ahead of anything already queued. */
+let runPromptsLater: (commands: readonly string[]) => void = () => undefined;
 /** The fader drawer's focus and typing, while one is open over the menu. */
 let fader: FaderState | undefined;
 /** Show-me state (see the show-me section below). */
+/** A TAPE gesture's typed command, echoed dimly in the prompt row. */
+const gestureEcho: {
+  text?: string | undefined;
+  clear?: ReturnType<typeof setTimeout> | undefined;
+} = {};
+
 const showMe: {
   level: ShowMeLevel;
   ghost?: string | undefined;
@@ -1120,13 +1171,16 @@ function appView(value: TrackScore, beat: number): AppView {
     showMe:
       showMe.ghost || showMe.caption
         ? { ghost: showMe.ghost, caption: showMe.caption }
-        : undefined,
+        : gestureEcho.text
+          ? { caption: gestureEcho.text }
+          : undefined,
     sync: syncState,
     sessionName: record.meta.name,
     windows: windowCount,
     pane: port.pane,
     types: typesIndicator,
     play: play?.on ? play.header() : undefined,
+    tape: tape.on && !play?.on ? currentTapeView(value, beat) : undefined,
     loudness: masterLoudness(value),
   };
 }
@@ -1509,6 +1563,10 @@ async function runInteractive(): Promise<void> {
   };
   runPromptLater = (command) => {
     queuedPrompts.unshift(command);
+    void drainQueue();
+  };
+  runPromptsLater = (commands) => {
+    queuedPrompts.unshift(...commands);
     void drainQueue();
   };
   reportAgentActivity = () => {
@@ -1937,6 +1995,20 @@ async function runInteractive(): Promise<void> {
           tick(true);
           continue;
         }
+        if (typeof value === "string" && tape.on && tapeInput(value)) {
+          tick(true);
+          continue;
+        }
+        // Ctrl-T opens TAPE (op1-ux §6); again (or esc) goes home.
+        if (value === "\u0014" && tui.ui.overlay === undefined) {
+          if (tape.on) receipt(exitTape());
+          else
+            void enterTape()
+              .then((outcome) => receipt(outcome))
+              .finally(() => tick(true));
+          tick(true);
+          continue;
+        }
         // Ctrl-P enters play mode. A bare `p` would steal the first letter of
         // `pan`, `pattern`, `play` and every prose request starting with p.
         if (value === "\u0010" && tui.ui.overlay === undefined) {
@@ -2200,6 +2272,13 @@ async function submit(prompt: string): Promise<string | Receipt> {
     return note(
       `${lines.length} note${lines.length === 1 ? "" : "s"} · ${requestedTrack} · remove <id>`,
     );
+  }
+  const tapeCommand = command.match(/^\/tape(?:\s+(on|off))?$/i);
+  if (tapeCommand) {
+    const wanted = tapeCommand[1]?.toLowerCase();
+    if (wanted === "off" || (wanted === undefined && tape.on))
+      return exitTape();
+    return enterTape();
   }
   const playCommand = command.match(
     /^\/play(?:\s+(on|off|degrees|in-key|chromatic))?$/i,
@@ -2850,8 +2929,21 @@ async function submit(prompt: string): Promise<string | Receipt> {
       rangeCommand.type === "jump-section" ||
       (rangeCommand.type === "range-copy" && rangeCommand.to === undefined);
     if (!reads) await materializeDraft();
+    // TAPE's first paste after a cut (§6.2): the `move` reads the bars from
+    // the score before the cut's clear, so cut and paste land as one move.
+    const folded =
+      rangeCommand.type === "range-move" &&
+      tape.foldArmed &&
+      tape.cut &&
+      cutArmed(tape.cut.after, score)
+        ? foldBase(tape.cut.before, score)
+        : undefined;
+    tape.foldArmed = undefined;
+    const cutBase =
+      rangeCommand.type === "range-clear" ? tape.cutArmed : undefined;
+    if (rangeCommand.type === "range-clear") tape.cutArmed = undefined;
     const result = applyRangeCommand(
-      score,
+      folded ?? score,
       {
         trackId: requestedTrack,
         playheadBar: playheadBar(),
@@ -2860,9 +2952,17 @@ async function submit(prompt: string): Promise<string | Receipt> {
       rangeCommand,
     );
     if (result.delegate) return submit(result.delegate);
-    if (result.clipboard) rangeClipboard = result.clipboard;
+    if (result.clipboard) {
+      rangeClipboard = result.clipboard;
+      tape.cut = undefined;
+      void saveClipboard(paneClipboardPath(), rangeClipboard).catch(
+        () => undefined,
+      );
+    }
     if (result.next && result.kind)
       await commitScore(result.next, result.kind, result.payload);
+    if (cutBase && result.next) tape.cut = { before: cutBase, after: score };
+    else if (result.next && result.kind) tape.cut = undefined;
     if (result.seekBeat !== undefined) await seekTransport(result.seekBeat);
     return readOrDone(result);
   }
@@ -4142,11 +4242,13 @@ function paneView(): PaneView {
   const view: PaneView = {
     screen: session?.on
       ? "play"
-      : fader
-        ? "sound"
-        : menu.open
-          ? "menu"
-          : "home",
+      : tape.on
+        ? "tape"
+        : fader
+          ? "sound"
+          : menu.open
+            ? "menu"
+            : "home",
   };
   if (fader) view.param = fader.label.slice(0, 64);
   if (session?.on) view.playing = true;
@@ -4174,6 +4276,7 @@ async function openPane(pane: PaneArgs): Promise<void> {
   paneOptions.follow = pane.follow;
   let result: string | Receipt | undefined;
   if (pane.screen === "play") result = await enterPlay();
+  else if (pane.screen === "tape") result = await enterTape();
   else if (pane.screen === "sound")
     result = await submit(pane.param ?? "volume");
   else if (pane.screen === "menu")
@@ -4414,6 +4517,7 @@ function keysScreen(): readonly KeySection[] | undefined {
   if (prompt.value.length > 0) return undefined;
   if (play?.on)
     return play.chords.on ? [...KEYS.play, ...KEYS.chords] : KEYS.play;
+  if (tape.on) return KEYS.tape;
   return KEYS.prompt;
 }
 
@@ -5115,6 +5219,10 @@ function mouseInput(event: MouseEvent): string[] {
   const frame = tui.frame;
   if (!frame) return [];
   const target = frame.hits.at(event.x, event.y)?.target;
+  if (tape.on && !play?.on && !tui.ui.overlay && !menu.open) {
+    const handled = tapeMouse(event, target);
+    if (handled) return handled;
+  }
   if (event.kind === "wheel") {
     const fields = fader && menu.open ? menu.faderFields(menuContext()) : [];
     if (
@@ -5275,6 +5383,278 @@ async function exitPlay(): Promise<Receipt> {
   if (!play?.on) return ok("play mode is off");
   await play.exit();
   return ok("play off");
+}
+
+// ── TAPE (op1-ux §6) ─────────────────────────────────────────────────
+
+/** This pane's clipboard file in `.dawg` (§6.3); undefined in a demo. */
+function paneClipboardPath(): string | undefined {
+  if (demo || !record.sessionId) return undefined;
+  return clipboardPath(process.cwd(), record.sessionId, port.pane);
+}
+
+/** The paste's target beat until its `jump` lands (or a moment passes). */
+function pendingTapeBeat(value: TrackScore): number | undefined {
+  const pending = tape.pending;
+  if (!pending) return undefined;
+  const here = scoreBeatAt(value, clock.beatAt());
+  if (Date.now() > pending.until || clock.playing || here >= pending.beat) {
+    tape.pending = undefined;
+    return undefined;
+  }
+  return pending.beat;
+}
+
+/** What TAPE's reducer and view read: the score, focus, playhead, clipboard. */
+function tapeContext(
+  value: TrackScore = score,
+  beat = clock.beatAt(),
+): TapeContext {
+  const board = rangeClipboard;
+  return {
+    score: value,
+    trackId: requestedTrack,
+    beat: pendingTapeBeat(value) ?? scoreBeatAt(value, beat),
+    clipboard: board ? { source: board.source, range: board.range } : undefined,
+    cut: cutArmed(tape.cut?.after, value),
+  };
+}
+
+function currentTapeView(value: TrackScore, beat: number): TapeView {
+  const view = tapeView({
+    ...tapeContext(value, beat),
+    zoom: tape.zoom,
+    selected: tape.knobs.selected,
+    marks: paneMarks,
+  });
+  tape.view = view;
+  return view;
+}
+
+/** Whether the clipboard's source bars differ from what the score holds now. */
+function clipboardStale(): boolean {
+  const board = rangeClipboard;
+  if (!board) return false;
+  try {
+    const ids = board.clip.all ? undefined : [board.source];
+    const now = extractRange(score, ids, board.range);
+    return JSON.stringify(now) !== JSON.stringify(board.clip);
+  } catch {
+    return true;
+  }
+}
+
+/** Typed commands from a TAPE gesture: each echoes and runs as if typed. */
+function runTyped(commands: readonly string[]): void {
+  echoGesture(commands);
+  runPromptsLater(commands);
+}
+
+/**
+ * The prompt row echoes a gesture's typed command dimly for one beat
+ * (op1-ux §10.1: type what you see), at least long enough to read.
+ */
+function echoGesture(commands: readonly string[]): void {
+  if (commands.length === 0) return;
+  gestureEcho.text = commands.join(" · ");
+  if (gestureEcho.clear) clearTimeout(gestureEcho.clear);
+  const beatMs = 60_000 / Math.max(1, score.tempoBpm);
+  gestureEcho.clear = setTimeout(
+    () => {
+      gestureEcho.text = undefined;
+      gestureEcho.clear = undefined;
+      requestFrame();
+    },
+    Math.max(800, beatMs),
+  );
+  gestureEcho.clear.unref?.();
+  requestFrame();
+}
+
+async function enterTape(): Promise<Receipt> {
+  if (play?.on) await play.exit();
+  if (tape.on) return ok("tape · esc goes home");
+  closeFader();
+  if (menu.open) menu.close();
+  tape.on = true;
+  tape.knobs.selected = 0;
+  if (!rangeClipboard) {
+    rangeClipboard = await loadClipboard(paneClipboardPath());
+  }
+  return ok(
+    `tape · ${score.tracks.length} track${score.tracks.length === 1 ? "" : "s"} · ${score.bars} bars · ? keys · esc home`,
+  );
+}
+
+function exitTape(): Receipt {
+  if (!tape.on) return ok("tape is off");
+  tape.on = false;
+  tape.view = undefined;
+  tape.drag = undefined;
+  return ok("home");
+}
+
+/**
+ * One key on TAPE. True when TAPE consumed it; false sends it on (the
+ * prompt once a command is typed, overlays, ctrl keys).
+ */
+function tapeInput(value: string): boolean {
+  if (!tape.on || play?.on) return false;
+  if (tui.ui.overlay !== undefined || menu.open) return false;
+  if (prompt.value.length > 0) return false;
+  if (value === "/" || value === "\u0003") return false;
+  const base = tapeContext();
+  // After a cut the source bars are empty on purpose: not stale.
+  const context = { ...base, stale: !base.cut && clipboardStale() };
+  const action = tapeKey(context, value);
+  switch (action.type) {
+    case "run":
+      if (action.cut) tape.cutArmed = score;
+      runTyped(action.commands);
+      return true;
+    case "paste": {
+      if (action.fold) tape.foldArmed = true;
+      const commands = [action.command];
+      // The playhead moves past the paste so `v v v` tiles.
+      if (action.end < score.bars) {
+        commands.push(`jump ${action.end + 1}`);
+        tape.pending = {
+          beat: beatOfBar(score, action.end),
+          until: Date.now() + 2000,
+        };
+      }
+      runTyped(commands);
+      return true;
+    }
+    case "note":
+      tui.activity.pushCard(action.message, { tone: "info" });
+      return true;
+    case "zoom": {
+      const index = TAPE_ZOOMS.indexOf(tape.zoom) + action.direction;
+      tape.zoom =
+        TAPE_ZOOMS[Math.max(0, Math.min(TAPE_ZOOMS.length - 1, index))]!;
+      return true;
+    }
+    case "focus": {
+      const command = focusCommand(score, action.row);
+      if (command) runTyped([command]);
+      return true;
+    }
+    case "transport":
+      void toggleTransport().catch((error: unknown) => transportFailed(error));
+      return true;
+    case "keys":
+      showKeys();
+      return true;
+    case "exit":
+      receipt(exitTape());
+      return true;
+    case "pass":
+      break;
+  }
+  const knob = knobKey(tape.knobs, tapeKnobs(context), value);
+  if (knob.type === "run") {
+    runTyped([knob.command]);
+    return true;
+  }
+  if (knob.type === "open") {
+    runTyped([knobNoun(context, knob.knob)]);
+    return true;
+  }
+  if (knob.type === "handled") return true;
+  // Unmapped printable keys are swallowed (as in play mode); control keys
+  // (enter, ctrl-z, ctrl-k) keep their bindings.
+  return value.length === 1 && value >= " " && value !== "\u007f";
+}
+
+/**
+ * The mouse on TAPE: a ruler click jumps there and a ruler drag sets the
+ * loop, a row click focuses it, the clipboard chip pastes, and the wheel
+ * turns the selected knob. Each runs its typed command. Undefined: not a
+ * TAPE gesture, so the ordinary mouse path takes it.
+ */
+function tapeMouse(
+  event: MouseEvent,
+  target: HitTarget | undefined,
+): string[] | undefined {
+  if (event.kind === "wheel") {
+    if (!target || (target.kind !== "tape-ruler" && target.kind !== "tape-row"))
+      return undefined;
+    // The wheel walks the playhead a bar at a time (never a tempo knob).
+    const bar = playheadBar();
+    const next = Math.max(
+      0,
+      Math.min(score.bars - 1, bar + (event.delta < 0 ? -1 : 1)),
+    );
+    if (next !== bar) runTyped([`jump ${next + 1}`]);
+    return [];
+  }
+  const drag = tape.drag;
+  if (drag && (event.kind === "drag" || event.kind === "up")) {
+    const view = tape.view;
+    const first = drag.first;
+    const bar =
+      view && first !== undefined
+        ? tapeBarAt(event.x, drag.left, first)
+        : undefined;
+    if (bar !== undefined) drag.to = bar;
+    if (event.kind === "up") {
+      tape.drag = undefined;
+      if (drag.to !== drag.from) {
+        const start = Math.min(drag.from, drag.to);
+        const end = Math.max(drag.from, drag.to);
+        runTyped([`loop ${start + 1}-${end + 1}`]);
+      }
+    }
+    return [];
+  }
+  if (event.kind !== "down" || event.button !== "left" || !target)
+    return undefined;
+  if (target.kind === "tape-ruler") {
+    const bar = tapeBarAt(event.x, target.left, target.firstCell);
+    if (bar === undefined) return [];
+    tape.drag = {
+      from: bar,
+      to: bar,
+      left: target.left,
+      first: target.firstCell,
+    };
+    runTyped([`jump ${bar + 1}`]);
+    return [];
+  }
+  if (target.kind === "tape-row") {
+    // A drag along a row sets the loop over those bars, like the ruler.
+    const bar = tapeBarAt(event.x, target.left, target.firstCell);
+    if (bar !== undefined)
+      tape.drag = {
+        from: bar,
+        to: bar,
+        left: target.left,
+        first: target.firstCell,
+      };
+    const command = focusCommand(score, target.row);
+    if (command && score.tracks[target.row]?.id !== requestedTrack)
+      runTyped([command]);
+    return [];
+  }
+  if (target.kind === "tape-clipboard") {
+    tapeInput("v");
+    return [];
+  }
+  return undefined;
+}
+
+/** The bar under a TAPE column, from the last painted view. */
+function tapeBarAt(
+  x: number,
+  left: number,
+  firstCell: number,
+): number | undefined {
+  const view = tape.view;
+  if (!view) return undefined;
+  const cell = x - left + firstCell;
+  if (cell < 0 || cell >= view.cellBars.length) return undefined;
+  return view.cellBars[cell];
 }
 
 /**

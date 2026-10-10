@@ -269,7 +269,7 @@ describe("dawg pane", () => {
   test("mistakes are one line", () => {
     for (const argv of [
       [],
-      ["tape"],
+      ["reels"],
       ["play", "a", "b"],
       ["home", "x", "pin", "follow"],
       ["sound", "--x"],

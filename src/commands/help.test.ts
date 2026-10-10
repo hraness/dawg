@@ -85,6 +85,7 @@ describe("help reference", () => {
         "/sessions",
         "/showme",
         "/status",
+        "/tape",
         "/theme",
         "/transcript",
         "/try",

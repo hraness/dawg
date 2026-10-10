@@ -212,6 +212,13 @@ export function arrangeNodes(context: MenuContext): MenuNode[] {
         help: "play the whole song (or form) again",
       });
   }
+  // TAPE (op1-ux §6): every track across the bars, copy/cut/paste keys.
+  nodes.push({
+    kind: "action",
+    label: "tape",
+    command: "/tape",
+    help: "every track across the bars · c copy, x cut, v paste · ctrl-t",
+  });
   nodes.push({
     kind: "menu",
     id: "range",

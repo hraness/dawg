@@ -131,6 +131,12 @@ export const KNOB_MAPS: Readonly<Record<string, KnobMap>> = Object.freeze({
    * Blue picks the drum row; ←→ on it moves between rows.
    */
   euclid: ["drum", "pulses", "rotate", "velocity"],
+  /**
+   * TAPE (design §7.3): its own values, not menu paths. Blue the playhead
+   * (a beat; ⇧ a bar), green the loop length, white the tempo of the
+   * segment under the playhead, orange the focused track's volume.
+   */
+  tape: ["playhead", "loop", "tempo", "volume"],
   "fx:distort": [
     undefined,
     "effects/distort/drive",
