@@ -45,6 +45,7 @@ import {
   type FxCommand,
   type FxResult,
 } from "./fx.ts";
+import { nearest } from "./nearest.ts";
 
 export type RigCommand =
   | { type: "rig-show" }
@@ -67,31 +68,9 @@ function isStage(word: string): word is RigStage {
 
 /** `unknown rig crunh · did you mean crunch? · rigs clean crunch …` */
 function unknownRigMessage(name: string): string {
-  let best: { name: string; distance: number } | undefined;
-  for (const candidate of RIG_PRESET_NAMES) {
-    const distance = editDistance(name, candidate);
-    if (!best || distance < best.distance) best = { name: candidate, distance };
-  }
-  const near =
-    best && best.distance <= Math.max(2, Math.floor(name.length / 3))
-      ? ` · did you mean ${best.name}?`
-      : "";
+  const match = nearest(name, RIG_PRESET_NAMES);
+  const near = match ? ` · did you mean ${match}?` : "";
   return `unknown rig ${name}${near} · rigs ${RIG_PRESET_NAMES.join(" ")} reset`;
-}
-
-function editDistance(a: string, b: string): number {
-  let row = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    const next = [i];
-    for (let j = 1; j <= b.length; j++)
-      next[j] = Math.min(
-        row[j]! + 1,
-        next[j - 1]! + 1,
-        row[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
-    row = next;
-  }
-  return row[b.length]!;
 }
 
 export function parseRigCommand(prompt: string): RigCommand | undefined {

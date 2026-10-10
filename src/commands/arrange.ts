@@ -30,6 +30,7 @@ import {
   type Section,
   type TrackScore,
 } from "../../core/score.ts";
+import { nearest } from "./nearest.ts";
 import {
   addSection,
   arrangedBars,
@@ -240,41 +241,17 @@ function unknownSection(
   return { type: "section-unknown", sub, name };
 }
 
-function editDistance(a: string, b: string): number {
-  const row = Array.from({ length: b.length + 1 }, (_, index) => index);
-  for (let i = 1; i <= a.length; i += 1) {
-    let previous = row[0]!;
-    row[0] = i;
-    for (let j = 1; j <= b.length; j += 1) {
-      const current = row[j]!;
-      row[j] = Math.min(
-        row[j]! + 1,
-        row[j - 1]! + 1,
-        previous + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
-      previous = current;
-    }
-  }
-  return row[b.length]!;
-}
-
 /** `no section named chrous (sections: …) · did you mean chorus?` */
 function unknownSectionMessage(score: TrackScore, name: string): string {
-  const wanted = name.toLowerCase();
-  let best: { name: string; distance: number } | undefined;
-  for (const section of score.sections) {
-    const distance = editDistance(wanted, section.name.toLowerCase());
-    if (!best || distance < best.distance)
-      best = { name: section.name, distance };
-  }
+  const match = nearest(
+    name,
+    score.sections.map((section) => section.name),
+  );
   const list =
     score.sections.length > 0
       ? ` (sections: ${score.sections.map((s) => s.name).join(", ")})`
       : " (no sections yet: section verse 1-8 marks one)";
-  const near =
-    best && best.distance <= Math.max(2, Math.floor(wanted.length / 3))
-      ? ` · did you mean ${best.name}?`
-      : "";
+  const near = match ? ` · did you mean ${match}?` : "";
   return `section · no section named ${name}${list}${near}`;
 }
 
