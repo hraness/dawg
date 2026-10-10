@@ -107,8 +107,10 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("menu › Voice"), "voice");
       await t.send("/clips");
       await t.send("\r");
-      await t.until(() => t.vt.text().includes("import a file"), "clips rows");
-      expect(t.vt.text()).toContain(clip.id);
+      // "import a file" is also the clips item's description in the Voice
+      // menu, so wait for the submenu's own row: the clip.
+      await t.until(() => t.vt.text().includes(clip.id), "clips rows");
+      expect(t.vt.text()).toContain("import a file");
       for (let i = 0; i < 6; i++) await t.send("\u001b");
       await t.until(() => !t.vt.text().includes("menu ›"), "menu closed");
       expect(t.vt.text()).not.toContain("error");

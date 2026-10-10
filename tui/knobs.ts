@@ -207,6 +207,9 @@ export function knobStripText(
  * glyph in its knob colour, the label, the value and a short gauge. The
  * selected slot's label is reverse video. Returns the cells used.
  */
+/** The widest one knob-strip slot gets (label, value and gauge). */
+export const KNOB_CELL_MAX = 40;
+
 export function paintKnobStrip(
   buffer: CellBuffer,
   x: number,
@@ -216,7 +219,9 @@ export function paintKnobStrip(
   selected: KnobIndex,
   options: { theme: Theme; unicode: boolean; background?: Style },
 ): number {
-  const cell = Math.floor(width / 4);
+  // Past KNOB_CELL_MAX a slot's gauge only stretches; the strip stays
+  // left-aligned and the rest of the row is free.
+  const cell = Math.min(KNOB_CELL_MAX, Math.floor(width / 4));
   if (cell < 6) return 0;
   const background = options.background ?? {};
   const on = (style: Style): Style => ({ ...background, ...style });

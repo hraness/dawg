@@ -280,7 +280,10 @@ export function pitchProjection(
 }
 
 /** Choose the projection a snapshot implies. */
-export function projectionFor(score: TrackScoreSnapshot): LaneProjection {
+export function projectionFor(
+  score: TrackScoreSnapshot,
+  minimumSpan = 12,
+): LaneProjection {
   if (score.projection) return score.projection;
   const explicit =
     score.laneLabels !== undefined ||
@@ -297,7 +300,7 @@ export function projectionFor(score: TrackScoreSnapshot): LaneProjection {
     .flatMap((layer) => layer.notes);
   return pitchProjection(
     melodic.length ? [...score.notes, ...melodic] : score.notes,
-    12,
+    minimumSpan,
     score.tuningPeriod,
   );
 }
@@ -496,6 +499,28 @@ export interface HighwayLayout {
   legendRow: number | undefined;
 }
 
+/**
+ * The widest a lane gets. A wider terminal shows more pitches (up to
+ * `MAX_PITCH_SPAN`) instead of fatter tiles, and past that the lanes stay
+ * this wide, centred.
+ */
+export const MAX_LANE_WIDTH = 10;
+/** The most semitones a melodic highway spreads across on a wide terminal. */
+export const MAX_PITCH_SPAN = 36;
+/**
+ * The tallest a beat gets. A taller terminal looks further ahead (more bars
+ * coming) instead of stretching each note.
+ */
+export const MAX_ROWS_PER_BEAT = 4;
+
+/** The pitch span a highway `width` columns wide fits: one to three octaves. */
+export function pitchSpanFor(width: number): number {
+  return Math.max(
+    12,
+    Math.min(MAX_PITCH_SPAN, Math.floor((width - 3) / MAX_LANE_WIDTH)),
+  );
+}
+
 export function highwayLayout(
   region: HighwayRegion,
   projection: LaneProjection,
@@ -507,13 +532,21 @@ export function highwayLayout(
   const gutter = region.width >= 40 ? 3 : 0;
   const area = Math.max(1, region.width - gutter);
   const laneCount = projection.laneCount;
-  const laneWidth = laneCount <= area ? Math.floor(area / laneCount) : 0;
+  const laneWidth =
+    laneCount <= area
+      ? Math.min(MAX_LANE_WIDTH, Math.floor(area / laneCount))
+      : 0;
   const used = laneWidth > 0 ? laneWidth * laneCount : area;
   const laneLeft = gutter + Math.floor((area - used) / 2);
   const tileWidth =
     laneWidth >= 4 ? laneWidth - 1 : Math.max(1, laneWidth || 1);
   const lookahead =
-    lookaheadBeats ?? Math.max(2, Math.min(8, Math.round(hitRow / 2.5)));
+    lookaheadBeats ??
+    Math.max(
+      2,
+      Math.min(8, Math.round(hitRow / 2.5)),
+      Math.floor(hitRow / MAX_ROWS_PER_BEAT),
+    );
   return {
     hitRow,
     gutter,
@@ -563,7 +596,7 @@ export function paintHighway(
   const glyphs = glyphsFor(capabilities);
   const background = options.background ?? roles.canvas;
   const bg = (style: Style): Style => onBackground(style, background);
-  const projection = projectionFor(score);
+  const projection = projectionFor(score, pitchSpanFor(region.width));
   const layout = highwayLayout(region, projection, options.lookaheadBeats);
   const { hitRow, rowsPerBeat, gutter } = layout;
   const areaWidth = Math.max(1, region.width - gutter);

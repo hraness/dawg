@@ -4081,6 +4081,15 @@ export class EditMenu {
     return rows;
   }
 
+  /**
+   * Every param of the current level, whichever drawer page is up: the
+   * side list a wide drawer shows beside the four knobs.
+   */
+  pageFields(context: MenuContext): FaderSpec[] {
+    const frame = this.stack.at(-1);
+    return frame ? faderSpecs(frame.build(context)) : [];
+  }
+
   /** The same fields as committed, for the drawer's `staged ← committed`. */
   faderCommitted(context: MenuContext): FaderSpec[] {
     const audition = context.audition;

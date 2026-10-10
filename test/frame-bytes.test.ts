@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { best, budget } from "./perf.ts";
 import { MAX_BACKOFF_MS, TuiApp } from "../tui/app.ts";
 import { generateStyle, styleScore } from "../core/styles/generate.ts";
 import type { TrackScoreSnapshot } from "../tui/highway.ts";
@@ -258,5 +259,30 @@ describe("frame writer", () => {
     // About 3.5 KB a frame today; the bound leaves room for richer rows.
     expect(run.perFrame).toBeLessThan(6_000);
     expect(run.largest).toBeLessThan(16_000);
+  });
+});
+
+describe("CellBuffer at large sizes", () => {
+  test("the wide-character repair still holds beside the narrow fast path", () => {
+    const buffer = new CellBuffer(6, 1);
+    buffer.text(0, 0, "a界b", undefined);
+    expect(buffer.get(1, 0)!.ch).toBe("界");
+    expect(buffer.get(2, 0)!.ch).toBe("");
+    // A narrow write over a wide character's trail blanks its lead.
+    buffer.set(2, 0, "x", undefined);
+    expect(buffer.get(1, 0)!.ch).toBe(" ");
+    // And over its lead blanks the trail.
+    buffer.text(3, 0, "界", undefined);
+    buffer.set(3, 0, "y", undefined);
+    expect(buffer.get(4, 0)!.ch).toBe(" ");
+  });
+
+  test("a 500x150 buffer allocates and fills well inside a frame", () => {
+    const ms = best(() => {
+      const buffer = new CellBuffer(500, 150);
+      buffer.fill(0, 0, 500, 150, { fg: { r: 255, g: 255, b: 255 } });
+    });
+    // About 0.5 ms on the reference Mac; a frame is 33 ms.
+    expect(ms).toBeLessThan(budget(4));
   });
 });

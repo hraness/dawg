@@ -1927,6 +1927,27 @@ dawg turns on SGR mouse reporting (modes 1000, 1002 and 1006) and turns it off a
 
 Hit-testing uses the same paint pass that draws the frame: each painter records its click regions into the frame's `HitMap` (`tui/hits.ts`), so targets never drift from what is on screen. The piano roll does not place notes on click (a note needs pitch, length and velocity that a click does not carry); clicks there are ignored.
 
+## Terminal sizes
+
+80x24 is the design target; the UI also works from **60x16** up to as large as the terminal goes, and redraws cleanly on every resize.
+
+**Minimum.** Below 60 columns the play-mode key strip and the header's bar position drop out and the prompt's spend line clips; below 16 rows the prompt loses its footer and the drawer its last knob. So under 60x16 dawg shows `terminal too small · W×H · need ≥ 60×16`, centered, updating as you resize (ASCII without unicode). Playback, the daemon and the agent keep running; `ctrl-c` and `q` quit, `space` plays or pauses, and every other key is ignored, so nothing changes until the real UI returns, on the first frame the size allows. A 1x1 or 0-column terminal draws nothing and never throws.
+
+**Resize.** `SIGWINCH` bursts from a drag coalesce into at most one frame per 33 ms plus a trailing one (72 signals measured as about 16 repaints). Each size change clears the screen and resets the frame diff, so no stale cells survive. Focus, the selected knob, the menu path, drawer state, the loop and the playhead view are model state and are untouched; scroll positions re-clamp to the new page, and a panel scrolled to its end (the transcript, a guide) stays pinned to the end. Agent streaming and show-me typing carry on through it.
+
+**Large terminals.** Data views use the space, text holds a measure, and no glyph is stretched past legibility:
+
+| View                                      | On a large terminal                                                                                                                                                  |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| highway                                   | lanes stop at 10 columns; a wider highway shows more pitches (one to three octaves) and centers the rest; a taller one looks further ahead (at most 4 rows per beat) |
+| TAPE                                      | more bars across and every track down, until the song runs out                                                                                                       |
+| drawer (knobs, mixer)                     | rows stop at 96 columns; a wide drawer lists every param of the page beside the four knobs (what Tab shows); a taller drawer fits more mixer tracks                  |
+| knob strip                                | each slot at most 40 columns, left-aligned                                                                                                                           |
+| help, guides, menus, transcript, `?` keys | a panel at most 100 columns of text, left-aligned; with 36 or more columns free, the song keeps drawing beside it                                                    |
+| prompt, header, footer, cards             | full width (one line each; long text truncates with `…`)                                                                                                             |
+
+A steady frame (compose plus encode) stays under 16 ms at 500x150 (measured 2 to 3 ms; text measurement skips grapheme segmentation for ASCII and caches the rest). `bun run sizes` walks every screen through the full size matrix and flags a frame over budget, a wrapped or scrolled frame, a lost header, footer, screen or focus, and a text panel past its measure; `bun run check` runs a sample of it.
+
 ## Previewing changes
 
 Hear a sound change before you keep it. In the edit menu (every section: Sound, Effects, Rhythm, Chords, Mix), `Space` starts a short loop of the focused track; `Space` again stops it. The song pauses while the loop plays, so only one thing sounds at a time.

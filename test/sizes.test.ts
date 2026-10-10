@@ -4,11 +4,13 @@
  * draw without a throw, a wrap or a scroll; usable sizes keep the screen,
  * its header and bottom row. `bun run sizes` runs the full matrix.
  */
+import { budget } from "./perf.ts";
 import { afterAll, expect, test } from "bun:test";
 import { supported } from "./pty-harness.ts";
 import {
   CHECK_SCENARIOS,
   CHECK_SIZES,
+  FRAME_BUDGET_MS,
   SCENARIOS,
   runScenario,
   stopGateway,
@@ -34,6 +36,17 @@ test.skipIf(!supported)(
         r.problems.map((p) => `${r.scenario} ${r.size[0]}x${r.size[1]}: ${p}`),
       );
     expect(problems).toEqual([]);
+    // The steady frame at 500x150 stays within the frame interval even on a
+    // loaded check machine: test/perf.ts scales the budget by host speed.
+    const slow = runs
+      .flat()
+      .filter((r) => r.size[0] === 500 && r.frameMs.length)
+      .map((r) => ({
+        scenario: r.scenario,
+        ms: r.frameMs.slice().sort((a, b) => a - b)[r.frameMs.length >> 1]!,
+      }))
+      .filter((r) => r.ms > budget(FRAME_BUDGET_MS));
+    expect(slow).toEqual([]);
     for (const results of runs) expect(results.length).toBe(CHECK_SIZES.length);
   },
   90_000,

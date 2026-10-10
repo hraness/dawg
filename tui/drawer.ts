@@ -70,7 +70,34 @@ export type DrawerView = Readonly<{
   /** `♪ solo · B` while the audition loop plays. */
   status?: string | undefined;
   hint: string;
+  /**
+   * Every param on the page behind Tab, while the drawer shows the four
+   * knobs: a wide drawer lists them beside the knobs (`DRAWER_MEASURE`).
+   */
+  aside?: readonly DrawerAside[] | undefined;
 }>;
+
+/** One row of the drawer's side list: a param and its value. */
+export type DrawerAside = Readonly<{
+  label: string;
+  text: string;
+  knob?: KnobIndex | undefined;
+}>;
+
+/**
+ * The widest a drawer row (label, value, bar, range) runs: a fader bar past
+ * this is no easier to read or aim. Room right of it lists the page's other
+ * params when the view has an aside, else stays panel.
+ */
+export const DRAWER_MEASURE = 96;
+/** The fewest columns the side list needs beside the rows. */
+export const ASIDE_MIN_WIDTH = 28;
+
+/** Columns the side list gets in a drawer `width` wide (0: none). */
+export function asideWidth(width: number): number {
+  const room = width - 4 - DRAWER_MEASURE - 3;
+  return room >= ASIDE_MIN_WIDTH ? Math.min(room, 48) : 0;
+}
 
 export type DrawerMode = "full" | "compact" | "line";
 
@@ -96,12 +123,20 @@ export function keepAbove(regionHeight: number): number {
  * its bottom, as tall as its fields need within the budget.
  */
 export function drawerLayout(
-  view: Pick<DrawerView, "fields" | "focus">,
+  view: Pick<DrawerView, "fields" | "focus"> &
+    Partial<Pick<DrawerView, "aside">>,
   region: { y: number; height: number },
+  width = 0,
 ): DrawerLayout {
   const total = Math.max(1, view.fields.length);
   const bottom = region.y + region.height;
   const budget = region.height - keepAbove(region.height);
+  // A side list beside the knobs may make a full drawer taller, never
+  // past half the region.
+  const aside =
+    view.aside && asideWidth(width) > 0
+      ? Math.min(view.aside.length + 1, Math.floor(region.height / 2) - 2)
+      : 0;
   const window = (rows: number): { first: number; count: number } => {
     const count = Math.max(1, Math.min(total, rows));
     const focus = Math.min(Math.max(0, view.focus), total - 1);
@@ -109,7 +144,7 @@ export function drawerLayout(
     return { first, count };
   };
   if (2 + 2 * total <= Math.floor(region.height / 2)) {
-    const height = 2 + 2 * total;
+    const height = 2 + Math.max(2 * total, aside);
     return {
       mode: "full",
       top: bottom - height,
@@ -204,7 +239,7 @@ export function paintDrawer(
 ): DrawerLayout | undefined {
   if (region.height <= 0 || width < 16 || view.fields.length === 0)
     return undefined;
-  const layout = drawerLayout(view, region);
+  const layout = drawerLayout(view, region, width);
   const flashing = !options.reducedMotion && !flashed.has(view);
   if (view.fields.some((field) => field.kind === "number" && field.flash))
     flashed.add(view);
@@ -297,6 +332,19 @@ export function paintDrawer(
         on(roles.muted),
       );
   }
+  const outer = inner;
+  inner = {
+    left: inner.left,
+    right: Math.min(inner.right, inner.left + DRAWER_MEASURE),
+  };
+  if (layout.bordered && view.aside)
+    paintAside(buffer, layout, outer.right, view.aside, {
+      glyphs,
+      roles,
+      on,
+      theme: options.theme,
+      unicode: options.unicode,
+    });
   const labelWidth = Math.min(
     layout.mode === "full" ? 22 : 16,
     Math.max(...view.fields.map((field) => displayWidth(field.label))),
@@ -437,6 +485,68 @@ export function paintDrawer(
     }
   }
   return layout;
+}
+
+/**
+ * `all params · tab` and every param on the page, one per row, beside the
+ * knobs: what Tab would show, without leaving the knobs.
+ */
+function paintAside(
+  buffer: CellBuffer,
+  layout: DrawerLayout,
+  right: number,
+  aside: readonly DrawerAside[],
+  paint: {
+    glyphs: Glyphs;
+    roles: Theme["roles"];
+    on: (style: Style) => Style;
+    theme: Theme;
+    unicode: boolean;
+  },
+): void {
+  const width = asideWidth(right + 2);
+  if (width === 0) return;
+  const { roles, on } = paint;
+  const left = right - width;
+  const rows = layout.height - 2;
+  if (rows < 2) return;
+  const top = layout.top + 1;
+  const rule = paint.unicode ? "│" : "|";
+  for (let y = top; y < top + rows; y += 1)
+    buffer.set(left - 2, y, rule, on(roles.faint));
+  buffer.text(left, top, truncate("all params · tab", width), on(roles.muted));
+  const room = rows - 1;
+  const shown =
+    aside.length > room ? aside.slice(0, Math.max(0, room - 1)) : aside;
+  const labelWidth = Math.min(
+    Math.floor(width / 2),
+    Math.max(0, ...shown.map((row) => displayWidth(row.label))),
+  );
+  shown.forEach((row, index) => {
+    const y = top + 1 + index;
+    if (row.knob !== undefined)
+      buffer.text(
+        left,
+        y,
+        knobGlyph(row.knob, paint.unicode),
+        on(knobStyle(row.knob, paint.theme)),
+      );
+    buffer.text(left + 2, y, truncate(row.label, labelWidth), on(roles.text));
+    const valueX = left + 2 + labelWidth + 1;
+    buffer.text(
+      valueX,
+      y,
+      truncate(row.text, Math.max(0, right - valueX)),
+      on(roles.muted),
+    );
+  });
+  if (shown.length < aside.length)
+    buffer.text(
+      left + 2,
+      top + room,
+      truncate(`+${aside.length - shown.length} more · tab`, width - 2),
+      on(roles.faint),
+    );
 }
 
 function knobFill(field: DrawerField, theme: Theme): Style | undefined {

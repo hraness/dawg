@@ -351,6 +351,7 @@ import {
 } from "./session/clipboard.ts";
 import { extractRange } from "../core/range.ts";
 import {
+  drawerAside,
   drawerView,
   faderChoose,
   faderCommand,
@@ -5060,7 +5061,11 @@ function refreshMenu(): void {
           !stageableNow(faderCommand(focusedField)),
         knobs: menu.knobPage,
       });
-      tui.drawer = withPaneMarks(drawer);
+      tui.drawer = withPaneMarks(
+        menu.knobPage === "knobs"
+          ? { ...drawer, aside: drawerAside(menu.pageFields(context), fields) }
+          : drawer,
+      );
     }
   }
   const view = menu.view(context);
