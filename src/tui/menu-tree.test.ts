@@ -8,6 +8,7 @@ import { describe, expect, test } from "bun:test";
 import { createScore, type TrackScore } from "../../core/score.ts";
 import { helpTopicLines } from "../commands/help.ts";
 import { accepts } from "../../test/consistency-lib.ts";
+import { canonicalWindowForm } from "../commands/grammar.ts";
 import {
   LABEL_WIDTH,
   MENU_SECTIONS,
@@ -254,5 +255,13 @@ describe("the ctrl-k tree", () => {
       expect.arrayContaining(["model", "show me", "model key"]),
     );
     expect(agent).not.toContain("login");
+    // The row runs `model key`, which the prompt bar sends to the sign-in
+    // flow, never to `/model` as a model name (a ✓ over an error).
+    const row = walk(ctx, 3).find(
+      ({ path }) => path === "Project › agent › model key",
+    )?.node;
+    expect(row?.kind).toBe("action");
+    if (row?.kind !== "action") return;
+    expect(canonicalWindowForm(row.command)).toBe("/login");
   });
 });

@@ -2783,10 +2783,10 @@ async function submit(prompt: string): Promise<string | Receipt> {
         tui.activity.setSpinner(undefined);
       }
     }
-    const receiptText = await tuiSetModel(modelMatch[1]);
+    const result = await tuiSetModel(modelMatch[1]);
     provider = undefined;
     await currentProvider();
-    return receiptText;
+    return result.ok ? result.text : fail(result.text);
   }
   if (/^\/login\b/i.test(prompt.trim())) {
     const parsed = tuiLoginArgs(prompt.trim());
