@@ -191,7 +191,8 @@ export const docsTopics: readonly DocsTopic[] = [
       <>
         <p>
           <Link href="/docs">Install dawg</Link> first. You need Bun 1.3.14 or
-          newer, and <code>ffplay</code> or SoX for sound.
+          newer; sound plays through dawg&rsquo;s native sink, or{" "}
+          <code>ffplay</code> or SoX where it cannot load.
         </p>
         <h2 id="first-loop">Make a loop</h2>
         <p>Open a terminal in any project folder and run:</p>

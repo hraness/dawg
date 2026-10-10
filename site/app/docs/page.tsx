@@ -28,9 +28,10 @@ export default async function DocsInstall() {
     <DocsShell id={INSTALL_ID} title="Install dawg" description={description}>
       <p>
         dawg runs in a terminal on macOS and Linux. It needs{" "}
-        <a href="https://bun.sh">Bun</a> 1.3.14 or newer, and{" "}
-        <code>ffplay</code> or SoX to play sound. On a Mac without either, dawg
-        falls back to <code>afplay</code>.
+        <a href="https://bun.sh">Bun</a> 1.3.14 or newer, Sound plays through
+        dawg&rsquo;s native audio sink, prebuilt for macOS and Linux on arm64
+        and x64; where it cannot load, dawg uses <code>ffplay</code> or SoX, or{" "}
+        <code>afplay</code> on a Mac.
       </p>
       <DawgPlatformInstall installCommand={installCommand} />
       <h2 id="start">Start a session</h2>
