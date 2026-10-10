@@ -10,6 +10,7 @@
  * all as one revision.
  */
 import type { DrawerField, DrawerView } from "../../tui/drawer.ts";
+import type { KnobIndex } from "../../tui/knobs.ts";
 import {
   KEY_BACKSPACE,
   KEY_BACKTAB,
@@ -488,6 +489,14 @@ export const FADER_HINT =
  * The hint for a field the loop cannot stage (tempo, meter, loop length):
  * each step is a new revision, so there is nothing to keep or revert.
  */
+/** The knob front page (design §8.6): the four knobs, then Tab for all. */
+export const KNOB_FADER_HINT =
+  "↑↓ knob · ←→ turn · tab all · enter keep · ⇧ coarse · x reset · esc revert";
+
+/** Every param behind Tab: Tab goes back to the four knobs. */
+export const ALL_FADER_HINT =
+  "←→ adjust · ↑↓ param · tab knobs · enter keep · ⇧ coarse · x reset · esc revert";
+
 export const FADER_HINT_AT_ONCE =
   "←→ adjust · applies at once · x reset · 0-9 type · ↑↓ param · ⇧←→ coarse · [ ] fine · esc back";
 
@@ -511,6 +520,8 @@ export function drawerView(
     hint?: string;
     /** The focused field applies at once (cannot stage on the loop). */
     atOnce?: boolean | undefined;
+    /** The drawer has a knob page: which side of Tab is up. */
+    knobs?: "knobs" | "all" | undefined;
   },
 ): DrawerView {
   const before = new Map(committed.map((field) => [field.label, field]));
@@ -528,6 +539,7 @@ export function drawerView(
       return {
         kind: "choice",
         label: field.label,
+        knob: knobOf(field),
         options: field.options,
         index,
         committedIndex:
@@ -550,6 +562,7 @@ export function drawerView(
     return {
       kind: "number",
       label: field.label,
+      knob: knobOf(field),
       text,
       committed: changed ? wasText : undefined,
       position:
@@ -576,8 +589,25 @@ export function drawerView(
     dirty: options.dirty,
     badge: options.dirty ? stagedBadge(staged) : undefined,
     status: options.status,
-    hint: options.hint ?? (options.atOnce ? FADER_HINT_AT_ONCE : FADER_HINT),
+    hint:
+      options.hint ??
+      (options.knobs
+        ? (options.knobs === "knobs" ? KNOB_FADER_HINT : ALL_FADER_HINT)
+            .replace(
+              "enter keep",
+              options.atOnce ? "applies at once" : "enter keep",
+            )
+            .replace("esc revert", options.atOnce ? "esc back" : "esc revert")
+        : options.atOnce
+          ? FADER_HINT_AT_ONCE
+          : FADER_HINT),
   };
+}
+
+/** A knob field's knob (0 blue … 3 orange); plain rows have none. */
+function knobOf(field: FaderSpec): KnobIndex | undefined {
+  const knob = (field as FaderSpec & { knob?: KnobIndex }).knob;
+  return knob;
 }
 
 /** `A/B: 1 change staged · enter keep · esc revert`. */

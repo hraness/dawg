@@ -122,9 +122,11 @@ describe("? panels", () => {
     );
   });
 
-  test("ctrl-q says what it switches; euclid says drum", () => {
+  test("ctrl-q says what it switches; euclid says knob", () => {
     const lines = keyLines(KEYS.prompt).join("\n");
     expect(lines).toContain("switch now/next");
-    expect(keyLines(KEYS.euclid).join("\n")).toMatch(/↑ ↓ {2}j k\s+drum/);
+    expect(keyLines(KEYS.euclid).join("\n")).toMatch(
+      /↑ ↓ {2}j k\s+knob: ● drum/,
+    );
   });
 });

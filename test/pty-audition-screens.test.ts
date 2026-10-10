@@ -106,7 +106,9 @@ test.skipIf(!supported)(
       await t.until(() => screen().includes("♪ solo"), "auditioning");
       expect(screen()).toContain("space stop");
 
-      // Two nudges stage: the row shows staged ← committed; nothing lands.
+      // ↓ picks the green knob (pulses), then two turns stage: the row
+      // shows staged ← committed; nothing lands.
+      await t.send("\u001b[B");
       await t.send(RIGHT);
       await t.until(() => screen().includes("E(5,16) ← E(4,16)"), "nudge 1");
       await t.send(RIGHT);

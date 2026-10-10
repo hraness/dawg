@@ -56,7 +56,12 @@ export type SemanticRole =
   | "promptBg"
   | "promptText"
   | "pillSteer"
-  | "pillQueue";
+  | "pillQueue"
+  /** The four knobs (design §7.1): reserved, never reused for other things. */
+  | "knob1"
+  | "knob2"
+  | "knob3"
+  | "knob4";
 
 export interface Rgb {
   readonly r: number;
@@ -115,6 +120,10 @@ const defaultTheme: Theme = {
     promptText: { fg: rgb(232, 237, 246) },
     pillSteer: { fg: rgb(17, 20, 26), bg: rgb(91, 211, 145), bold: true },
     pillQueue: { fg: rgb(17, 20, 26), bg: rgb(255, 193, 87), bold: true },
+    knob1: { fg: rgb(80, 160, 255), bold: true },
+    knob2: { fg: rgb(90, 210, 140), bold: true },
+    knob3: { fg: rgb(225, 228, 236), bold: true },
+    knob4: { fg: rgb(255, 140, 60), bold: true },
   },
   accents: [
     rgb(95, 181, 255),
@@ -160,6 +169,10 @@ const highContrastTheme: Theme = {
     promptText: { fg: rgb(255, 255, 255), bold: true },
     pillSteer: { fg: rgb(0, 0, 0), bg: rgb(0, 255, 0), bold: true },
     pillQueue: { fg: rgb(0, 0, 0), bg: rgb(255, 255, 0), bold: true },
+    knob1: { fg: rgb(60, 150, 255), bold: true },
+    knob2: { fg: rgb(60, 255, 140), bold: true },
+    knob3: { fg: rgb(236, 240, 255), bold: true },
+    knob4: { fg: rgb(255, 130, 30), bold: true },
   },
   accents: [
     rgb(0, 200, 255),
@@ -206,6 +219,11 @@ const monoTheme: Theme = {
     promptText: {},
     pillSteer: { reverse: true, bold: true },
     pillQueue: { reverse: true, bold: true, underline: true },
+    // No hue: the knob glyphs (● ▲ ■ ◆) carry which knob is which.
+    knob1: { bold: true },
+    knob2: { bold: true },
+    knob3: { bold: true },
+    knob4: { bold: true },
   },
   accents: [],
 };

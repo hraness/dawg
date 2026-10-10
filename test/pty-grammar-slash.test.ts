@@ -28,7 +28,7 @@ test.skipIf(!supported)(
       await run("tempo 900", "tempo takes 20…300 BPM");
       expect(t.vt.text()).not.toContain("tempoBpm");
       // A bare scalar opens its fader.
-      await run("tempo", "←→ adjust");
+      await run("tempo", "←→ turn");
       await t.send("\u001b");
       await Bun.sleep(300);
       // An instrument typo is refused, never stored.

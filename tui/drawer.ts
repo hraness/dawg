@@ -24,6 +24,7 @@ import type { HitMap } from "./hits.ts";
 import { onBackground, type Style, type Theme } from "./theme.ts";
 import { displayWidth, truncate } from "./text.ts";
 import { asciiHint, fitHint } from "./grammar.ts";
+import { knobGlyph, knobStyle, type KnobIndex } from "./knobs.ts";
 
 export type DrawerField =
   | Readonly<{
@@ -43,6 +44,8 @@ export type DrawerField =
       flash?: string | undefined;
       /** Other panes with this parameter open (`B C`), dim at the right. */
       peers?: string | undefined;
+      /** The knob this row is (front page): its glyph and colour. */
+      knob?: KnobIndex | undefined;
     }>
   | Readonly<{
       kind: "choice";
@@ -51,6 +54,7 @@ export type DrawerField =
       index: number;
       committedIndex?: number | undefined;
       peers?: string | undefined;
+      knob?: KnobIndex | undefined;
     }>;
 
 export type DrawerView = Readonly<{
@@ -311,12 +315,25 @@ export function paintDrawer(
     const labelStyle = focused
       ? on({ ...roles.borderFocus, bold: true })
       : on(roles.text);
-    buffer.text(inner.left, y, marker, labelStyle);
+    if (field.knob !== undefined) {
+      // A knob row: its shape glyph in its colour, then the marker, so
+      // colour is never the only cue (NO_COLOR keeps the shape).
+      buffer.text(
+        inner.left,
+        y,
+        knobGlyph(field.knob, options.unicode),
+        on(knobStyle(field.knob, options.theme)),
+      );
+      buffer.text(inner.left + 1, y, focused ? glyphs.marker : " ", labelStyle);
+    } else buffer.text(inner.left, y, marker, labelStyle);
     buffer.text(
       inner.left + 2,
       y,
       truncate(field.label, labelWidth),
-      labelStyle,
+      // The selected knob's label is reverse video (§7.2).
+      field.knob !== undefined && focused
+        ? on({ ...roles.text, bold: true, reverse: true })
+        : labelStyle,
     );
     const valueX = inner.left + 2 + labelWidth + 2;
     const typing = focused && view.typing !== undefined;
@@ -356,6 +373,7 @@ export function paintDrawer(
           flashing,
           roles,
           on,
+          knob: knobFill(field, options.theme),
           ...(hits ? { hits } : {}),
         });
       } else {
@@ -376,7 +394,15 @@ export function paintDrawer(
           inner.right,
           field,
           index,
-          { glyphs, focused, flashing, roles, on, ...(hits ? { hits } : {}) },
+          {
+            glyphs,
+            focused,
+            flashing,
+            roles,
+            on,
+            knob: knobFill(field, options.theme),
+            ...(hits ? { hits } : {}),
+          },
         );
       }
     } else {
@@ -413,6 +439,10 @@ export function paintDrawer(
   return layout;
 }
 
+function knobFill(field: DrawerField, theme: Theme): Style | undefined {
+  return field.knob === undefined ? undefined : knobStyle(field.knob, theme);
+}
+
 interface RowPaint {
   glyphs: Glyphs;
   focused: boolean;
@@ -421,6 +451,8 @@ interface RowPaint {
   roles: Theme["roles"];
   on: (style: Style) => Style;
   hits?: HitMap;
+  /** A knob row's bar fills in its knob colour. */
+  knob?: Style | undefined;
 }
 
 /** `[−] ━━━━━●─────── [+]` from `left` to `right`, with its hit regions. */
@@ -471,9 +503,11 @@ function paintBar(
   const filled = on(
     flash
       ? { ...roles.success, bold: true }
-      : paint.focused
-        ? roles.borderFocus
-        : roles.text,
+      : paint.knob
+        ? paint.knob
+        : paint.focused
+          ? roles.borderFocus
+          : roles.text,
   );
   const empty = on(roles.faint);
   for (let column = 0; column < barWidth; column += 1) {

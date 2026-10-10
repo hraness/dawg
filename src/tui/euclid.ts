@@ -9,7 +9,8 @@
  * runs through the normal prompt path, so every change is one revision and
  * one undo step and the row's detail teaches the command.
  *
- * Keys: ↑↓ voice · ←→ (h l + -) nudge · tab / shift-tab (] [) parameter ·
+ * Keys: ↑↓ knob (● drum ▲ pulses ■ rotate ◆ velocity) · ←→ (h l + -) turn ·
+ * tab / shift-tab (] [) every parameter ·
  * digits type a value · enter add/edit · space loop · x off · f freeze ·
  * esc back.
  *
@@ -48,6 +49,8 @@ import {
 import type { PickerItem } from "../../tui/app.ts";
 import { auditionKey, type AuditionKey } from "./audition.ts";
 import type { MenuAudition } from "./menu.ts";
+import { KNOB_MAPS } from "./knob-map.ts";
+import { knobGlyph, KNOBS, nextKnob, type KnobIndex } from "../../tui/knobs.ts";
 
 export type EuclidContext = Readonly<{
   /** The score shown: the staged one while auditioning. */
@@ -295,6 +298,28 @@ export function ringText(row: RhythmRow | undefined): string {
     .join("");
 }
 
+/**
+ * The four knobs (KNOB_MAPS.euclid): blue `drum` picks the row, the others
+ * name EUCLID_PARAMS fields.
+ */
+const EUCLID_KNOBS = KNOB_MAPS.euclid!;
+
+/** After the strip, the knob keys, then the way out; fitHint drops the knob keys first. */
+const KNOB_KEYS = "↑↓ knob · ←→ turn · esc back · ? keys";
+
+/** The knob that turns `param`, if one does. */
+function knobOfParam(param: number): KnobIndex | undefined {
+  const at = EUCLID_KNOBS.indexOf(EUCLID_PARAMS[param]!.field);
+  return at < 0 ? undefined : (at as KnobIndex);
+}
+
+/** EUCLID_PARAMS index a knob turns; undefined for the drum knob. */
+function paramOfKnob(knob: KnobIndex): number | undefined {
+  const field = EUCLID_KNOBS[knob];
+  const at = EUCLID_PARAMS.findIndex((param) => param.field === field);
+  return at < 0 ? undefined : at;
+}
+
 /** Tab ] next field, shift-tab [ previous (the brackets are the old keys). */
 const isNextField = (value: string) => KEY_TAB.has(value) || value === "]";
 const isPrevField = (value: string) => KEY_BACKTAB.has(value) || value === "[";
@@ -303,6 +328,8 @@ export class EuclidEditor {
   private visible = false;
   private lane = 0;
   private param = 0;
+  /** True while the blue knob (which drum) has focus, not a field. */
+  private onDrum = true;
   private entry: string | undefined;
   /** Where Esc returns to (`menu` when opened from `/menu`). */
   private origin: string | undefined;
@@ -327,6 +354,10 @@ export class EuclidEditor {
     this.origin = origin;
     const lanes = this.lanes(context);
     const at = voice ? lanes.findIndex((lane) => lane.voice === voice) : -1;
+    // Opened on a named drum, the green knob (pulses) has focus; otherwise
+    // the blue one, to pick the drum.
+    this.onDrum = at < 0;
+    if (!this.onDrum) this.param = paramOfKnob(1) ?? 0;
     if (at >= 0) this.lane = at;
     else {
       // Land on the first voice that already has a row.
@@ -352,9 +383,14 @@ export class EuclidEditor {
     return lanes[Math.min(this.lane, lanes.length - 1)]?.voice;
   }
 
-  /** Parameter under the cursor. */
+  /** Parameter under the cursor (`drum` on the blue knob). */
   get selectedParam(): string {
-    return EUCLID_PARAMS[this.param]!.field;
+    return this.onDrum ? "drum" : EUCLID_PARAMS[this.param]!.field;
+  }
+
+  /** The knob with focus; undefined on a field no knob turns. */
+  get selectedKnob(): KnobIndex | undefined {
+    return this.onDrum ? 0 : knobOfParam(this.param);
   }
 
   key(value: string, context: EuclidContext): EuclidResult {
@@ -376,7 +412,8 @@ export class EuclidEditor {
       if (KEY_ENTER.has(value)) {
         const text = this.entry.trim();
         this.entry = undefined;
-        if (!lane || !/^-?[0-9./tT]+$/.test(text)) return { type: "handled" };
+        if (this.onDrum || !lane || !/^-?[0-9./tT]+$/.test(text))
+          return { type: "handled" };
         return {
           type: "run",
           command: `euclid ${lane.voice} ${param.field} ${text}`,
@@ -392,21 +429,45 @@ export class EuclidEditor {
       return audition?.dirty ? { type: "revert" } : { type: "close" };
     const loopKey = audition ? auditionKey(value) : undefined;
     if (loopKey) return { type: "loop", key: loopKey };
+    // ↑↓ pick a knob (design §8.7); from a field no knob turns, ↑ lands
+    // on orange and ↓ on blue.
     if (KEY_UP.has(value) || KEY_DOWN.has(value)) {
-      if (lanes.length)
-        this.lane =
-          (this.lane + (KEY_UP.has(value) ? -1 : 1) + lanes.length) %
-          lanes.length;
+      const up = KEY_UP.has(value);
+      const from = this.selectedKnob;
+      const knob =
+        from === undefined
+          ? up
+            ? 3
+            : 0
+          : nextKnob(from, up ? -1 : 1, (index) =>
+              index === 0 ? true : paramOfKnob(index) !== undefined,
+            );
+      this.onDrum = knob === 0;
+      if (!this.onDrum) this.param = paramOfKnob(knob) ?? this.param;
       return { type: "handled" };
     }
+    // Tab walks every field (the full list behind the knobs).
     if (isNextField(value) || isPrevField(value)) {
       const direction = isNextField(value) ? 1 : -1;
-      this.param =
-        (this.param + direction + EUCLID_PARAMS.length) % EUCLID_PARAMS.length;
+      if (this.onDrum) {
+        this.onDrum = false;
+        this.param = direction > 0 ? 0 : EUCLID_PARAMS.length - 1;
+      } else
+        this.param =
+          (this.param + direction + EUCLID_PARAMS.length) %
+          EUCLID_PARAMS.length;
       return { type: "handled" };
     }
     if (!lane) return { type: "handled" };
     if (value === " ") return { type: "audition", voice: lane.voice };
+    if (this.onDrum && (KEY_LEFT.has(value) || KEY_RIGHT.has(value))) {
+      // The blue knob turns which drum row has focus.
+      if (lanes.length)
+        this.lane =
+          (this.lane + (KEY_RIGHT.has(value) ? 1 : -1) + lanes.length) %
+          lanes.length;
+      return { type: "handled" };
+    }
     if (KEY_LEFT.has(value) || KEY_RIGHT.has(value)) {
       const direction = KEY_RIGHT.has(value) ? 1 : -1;
       const row: RhythmRow = lane.row ?? { voice: lane.voice };
@@ -427,7 +488,7 @@ export class EuclidEditor {
         audition: lane.voice,
       };
     }
-    if (/^[0-9]$/.test(value)) {
+    if (/^[0-9]$/.test(value) && !this.onDrum) {
       this.entry = value;
       return { type: "handled" };
     }
@@ -439,7 +500,7 @@ export class EuclidEditor {
           command: `euclid ${lane.voice} ${RHYTHM_DEFAULTS.pulses} ${RHYTHM_DEFAULTS.steps}`,
           audition: lane.voice,
         };
-      this.entry = "";
+      if (!this.onDrum) this.entry = "";
       return { type: "handled" };
     }
     if (KEY_RESET.has(value))
@@ -452,6 +513,23 @@ export class EuclidEditor {
         : { type: "handled" };
     // Swallow other printable keys so nothing leaks into the prompt.
     return { type: "handled" };
+  }
+
+  /**
+   * The knob strip for the hint row: `●›kick ▲ pulses 4 ■ rotate 0 ◆ velocity
+   * 0.8`, the focused knob marked `›`. Glyphs carry which knob is which.
+   */
+  private strip(drum: string | undefined, row: RhythmRow | undefined): string {
+    const focused = this.selectedKnob;
+    return KNOBS.map((knob) => {
+      const mark = knob.index === focused ? "›" : " ";
+      if (knob.index === 0) return `${knob.glyph}${mark}${drum ?? "·"}`;
+      const at = paramOfKnob(knob.index);
+      if (at === undefined) return `${knob.glyph} ·`;
+      const param = EUCLID_PARAMS[at]!;
+      const shown = row ? formatValue(param.value(row)) : "—";
+      return `${knob.glyph}${mark}${param.label} ${shown}`;
+    }).join(" ");
   }
 
   view(context: EuclidContext): EuclidView {
@@ -489,7 +567,10 @@ export class EuclidEditor {
     const voice = lanes[index]?.voice ?? "";
     const row = lanes[index]?.row;
     const value = row ? formatValue(param.value(row)) : "—";
-    let title = `rhythm › ${context.trackId}${voice ? ` · ${voice}` : ""} · ${param.label} ${value}`;
+    const focus = this.onDrum
+      ? `${knobGlyph(0, true)} drum`
+      : `${param.label} ${value}`;
+    let title = `rhythm › ${context.trackId}${voice ? ` · ${voice}` : ""} · ${focus}`;
     if (this.entry !== undefined) title += ` · ${param.label}: ${this.entry}▏`;
     if (audition?.dirty) title = `● ${title}`;
     if (audition?.status && this.entry === undefined)
@@ -499,7 +580,7 @@ export class EuclidEditor {
         ? HINTS.typing
         : audition && (audition.looping || audition.dirty)
           ? audition.hint
-          : HINTS.euclid;
+          : `${this.strip(lanes[index]?.label.trim(), row)} · ${KNOB_KEYS}`;
     return {
       title,
       items: items.length

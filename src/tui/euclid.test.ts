@@ -6,6 +6,7 @@ import { EuclidEditor, ringText } from "./euclid.ts";
 const RIGHT = "\u001b[C";
 const LEFT = "\u001b[D";
 const DOWN = "\u001b[B";
+const UP = "\u001b[A";
 
 function kit() {
   return createScore({ bars: 1, tracks: [{ id: "drums", instrument: "kit" }] });
@@ -98,11 +99,49 @@ describe("euclid editor", () => {
     });
     expect(editor.key("q", ctx)).toEqual({ type: "handled" });
     expect(editor.key(" ", ctx)).toEqual({ type: "audition", voice: "snare" });
-    editor.key(DOWN, ctx);
+    // The blue knob has focus: → turns to the next drum row.
+    editor.key(RIGHT, ctx);
     expect(editor.selectedVoice(ctx)).toBe("clap");
     expect(editor.key("x", ctx)).toEqual({ type: "handled" });
     expect(editor.key("\u0003", ctx)).toEqual({ type: "pass" });
     expect(editor.key("\u001b", ctx)).toEqual({ type: "close" });
+  });
+
+  test("four knobs: ● drum ▲ pulses ■ rotate ◆ velocity, ↑↓ pick, ←→ turn", () => {
+    const editor = new EuclidEditor();
+    const score = run(kit(), "euclid kick 4 16");
+    const ctx = { score, trackId: "drums" };
+    editor.show(ctx);
+    expect(editor.selectedKnob).toBe(0);
+    expect(editor.view(ctx).hint).toContain(
+      "●›kick ▲ pulses 4 ■ rotate 0 ◆ velocity",
+    );
+    expect(editor.view(ctx).hint).toContain("↑↓ knob · ←→ turn");
+    editor.key(RIGHT, ctx);
+    expect(editor.selectedVoice(ctx)).toBe("snare");
+    editor.key(LEFT, ctx);
+    const turned: string[] = [];
+    for (const field of ["pulses", "rotate", "velocity"]) {
+      editor.key(DOWN, ctx);
+      expect(editor.selectedParam).toBe(field);
+      const result = editor.key(RIGHT, ctx);
+      if (result.type === "run") turned.push(result.command);
+    }
+    expect(turned).toEqual([
+      "euclid kick pulses 5",
+      "euclid kick rotate 1",
+      "euclid kick velocity 0.85",
+    ]);
+    // ↓ from orange wraps to blue; ↑ from blue to orange.
+    editor.key(DOWN, ctx);
+    expect(editor.selectedKnob).toBe(0);
+    editor.key(UP, ctx);
+    expect(editor.selectedParam).toBe("velocity");
+    // Tab reaches fields no knob turns; ↓ comes back to blue.
+    editor.key("\t", ctx);
+    expect(editor.selectedKnob).toBeUndefined();
+    editor.key(DOWN, ctx);
+    expect(editor.selectedKnob).toBe(0);
   });
 
   test("a grid row's shape nudges back into a Euclidean row", () => {
@@ -141,6 +180,7 @@ describe("euclid editor while auditioning", () => {
       audition: audition(committed, true),
     };
     editor.show(clean);
+    editor.key(DOWN, clean);
     expect(editor.key(" ", clean)).toEqual({ type: "loop", key: "loop" });
     expect(editor.key("a", clean)).toEqual({ type: "loop", key: "ab" });
     expect(editor.key("c", clean)).toEqual({ type: "loop", key: "context" });

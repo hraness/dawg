@@ -96,7 +96,9 @@ test.skipIf(!supported)(
       // Four per bar, repeated over the four-bar loop.
       expect((await kickStarts()).length).toBe(16);
 
-      // → raises pulses (the first parameter) to 5.
+      // ↓ picks the green knob (pulses); → turns it up to 5.
+      await t.send("\u001b[B");
+      await t.until(() => t.vt.text().includes("▲›pulses"), "pulses knob");
       await t.send("\u001b[C");
       await waitFor(async () => (await kickRow())?.pulses === 5, "pulses 5");
       await t.until(() => t.vt.text().includes("E(5,16)"), "E(5,16)");

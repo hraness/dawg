@@ -41,6 +41,8 @@ import { malletsMenu, modalParameterNodes } from "./modal-menu.ts";
 import { windParameterNodes, windsMenu } from "./wind-menu.ts";
 import { singParameterNodes } from "./sing-menu.ts";
 import type { FaderSpec } from "./fader.ts";
+import { knobFields, type KnobField } from "./knob-fields.ts";
+import { soundFamily } from "./knob-map.ts";
 import {
   openingMeterCommand,
   openingUnit,
@@ -1090,6 +1092,14 @@ function mixSectionNodes(context: MenuContext): MenuNode[] {
     ...trackNodes(context),
     {
       kind: "menu",
+      id: "mixer",
+      label: "mixer",
+      detail: `${context.score.tracks.length} levels on one page`,
+      help: "every track's level as a fader, the drawer's all-tracks page (mix) · tab flips to this track",
+      build: mixerNodes,
+    },
+    {
+      kind: "menu",
       id: "tracks",
       label: "all tracks",
       detail: `${context.score.tracks.length} · focus another track`,
@@ -1506,6 +1516,24 @@ function trackNodes(context: MenuContext): MenuNode[] {
     volumeNode(track),
     panNode(track),
   ];
+}
+
+/**
+ * Mix › mixer: one level fader per track (design §8.5), each a typed
+ * `volume <track> <0..1>`, so the page sets any track without moving the
+ * focus. Labels are numbered, so two tracks with one name stay apart.
+ */
+export function mixerNodes(context: MenuContext): MenuNode[] {
+  return context.score.tracks.map((track, index): MenuNode => {
+    const base = volumeNode(track);
+    return {
+      ...(base as Extract<MenuNode, { kind: "number" }>),
+      label: `${index + 1}${track.id === context.trackId ? "›" : " "}${track.name}`,
+      command: (value: number) => `volume ${track.id} ${num(value)}`,
+      reset: `volume ${track.id} 1`,
+      help: `${track.name}'s level; 1 is unity (0 dB) · x resets`,
+    };
+  });
 }
 
 function instrumentNode(track: Track): MenuNode {
@@ -3530,6 +3558,11 @@ function childFrame(
 export class EditMenu {
   private stack: Frame[] = [];
   private filtering = false;
+  /**
+   * The fader drawer's front page (design §8.6): the open level's knob page
+   * and whether Tab paged to every param. Undefined: plain rows.
+   */
+  private knobView: { page: string; all: boolean } | undefined;
   /** Typed value for the selected row (`entry` holds the row's label). */
   private entry: { label: string; buffer: string } | undefined;
 
@@ -3564,6 +3597,21 @@ export class EditMenu {
       frame.index = index;
       this.stack.push(childFrame(frame, node));
     }
+  }
+
+  /** Step into the open level's submenu `id`; false when it has none. */
+  enter(context: MenuContext, id: string): boolean {
+    const frame = this.stack.at(-1);
+    if (!frame) return false;
+    const nodes = frame.build(context);
+    const index = nodes.findIndex(
+      (node) => node.kind === "menu" && node.id === id,
+    );
+    const node = nodes[index];
+    if (node?.kind !== "menu") return false;
+    frame.index = index;
+    this.stack.push(childFrame(frame, node));
+    return true;
   }
 
   /**
@@ -3652,6 +3700,77 @@ export class EditMenu {
     this.stack = [];
     this.filtering = false;
     this.entry = undefined;
+    this.knobView = undefined;
+  }
+
+  /**
+   * The knob page of the open level (design §7.3), or undefined where the
+   * level has no knobs: Sound (by engine), Mix and its mixer (this track),
+   * the master, Project (tempo) and one effect.
+   */
+  knobPageHere(context: MenuContext): string | undefined {
+    const ids = this.stack.slice(1).map((frame) => frame.id ?? "");
+    const [top, sub] = ids;
+    const track = focused(context);
+    if (top === "sound" && ids.length === 1)
+      return track ? `sound:${soundFamily(track)}` : undefined;
+    if (
+      top === "mix" &&
+      (ids.length === 1 || (ids.length === 2 && sub === "mixer"))
+    )
+      return "mix";
+    if (top === "mix" && ids.length === 2 && sub === "master") return "master";
+    if (top === "project" && ids.length === 1) return "tempo";
+    const last = ids.at(-1) ?? "";
+    if (top === "effects" && (EFFECT_NAMES as readonly string[]).includes(last))
+      return `fx:${last}`;
+    return undefined;
+  }
+
+  /**
+   * Turn the drawer's knob front page on for the open level. `label` is the
+   * row the drawer opens on: when it is not one of the knobs (or the level
+   * is the mixer), the drawer opens on every param instead. Returns the
+   * label to focus, or undefined when the level has no knob page.
+   */
+  openKnobs(context: MenuContext, label?: string): string | undefined {
+    const page = this.knobPageHere(context);
+    this.knobView = undefined;
+    if (!page) return undefined;
+    const frame = this.stack.at(-1)!;
+    const fallback = faderSpecs(frame.build(context));
+    const knobs = knobFields(context, page, fallback);
+    if (knobs.length === 0) return undefined;
+    const mixer = frame.id === "mixer";
+    const onKnob =
+      label === undefined || knobs.some((knob) => knob.label === label);
+    this.knobView = { page, all: mixer || !onKnob };
+    if (this.knobView.all) return label ?? fallback[0]?.label;
+    return label ?? knobs[0]!.label;
+  }
+
+  /** Which drawer page is up: the four knobs, every param, or no knobs. */
+  get knobPage(): "knobs" | "all" | undefined {
+    return this.knobView ? (this.knobView.all ? "all" : "knobs") : undefined;
+  }
+
+  /** The knob page id behind the drawer (`sound:synth`, `mix`), if any. */
+  get knobPageId(): string | undefined {
+    return this.knobView?.page;
+  }
+
+  /**
+   * Tab in the drawer: flip between the four knobs and every param (on the
+   * mixer, between all tracks and this track). Returns the label to focus:
+   * `keep` when it is on the new page, else the page's first field.
+   */
+  pageKnobs(context: MenuContext, keep: string): string | undefined {
+    if (!this.knobView) return undefined;
+    this.knobView = { ...this.knobView, all: !this.knobView.all };
+    const fields = this.faderFields(context);
+    return fields.some((field) => field.label === keep)
+      ? keep
+      : fields[0]?.label;
   }
 
   /** The visible rows of the current level (filtered). */
@@ -3949,10 +4068,17 @@ export class EditMenu {
    * related params: every filter control, every reverb control), built
    * from `context` (the staged score while auditioning).
    */
-  faderFields(context: MenuContext): FaderSpec[] {
+  faderFields(context: MenuContext): (FaderSpec | KnobField)[] {
     const frame = this.stack.at(-1);
     if (!frame) return [];
-    return faderSpecs(frame.build(context));
+    const rows = faderSpecs(frame.build(context));
+    if (!this.knobView) return rows;
+    if (!this.knobView.all)
+      return knobFields(context, this.knobView.page, rows);
+    // The mixer's rows are all levels: each wears the orange knob.
+    if (frame.id === "mixer")
+      return rows.map((row) => ({ ...row, knob: 3 as const }));
+    return rows;
   }
 
   /** The same fields as committed, for the drawer's `staged ← committed`. */

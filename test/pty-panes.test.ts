@@ -214,7 +214,7 @@ test.skipIf(!supported)(
     await until(
       () =>
         // B's PLAY header replaces the HOME header; `pane` names it below.
-        header(a).includes("3 panes · A") && header(c).includes("3 panes · C"),
+        header(a).includes("A ⧉3") && header(c).includes("C ⧉3"),
       "pane letters in every header",
       () => screens(trio),
     );
@@ -285,14 +285,14 @@ test.skipIf(!supported)(
     // Leaving frees the letter; the next pane reuses it.
     await close(b);
     await until(
-      () => header(a).includes("2 panes · A"),
+      () => header(a).includes("A ⧉2"),
       "count drops",
       () => a.vt.text(),
     );
     const d = open(dir, "D", ["--track", "drums"]);
     await ready(d);
     await until(
-      () => header(d).includes("3 panes · B"),
+      () => header(d).includes("B ⧉3"),
       "freed letter reused",
       () => d.vt.text(),
     );
@@ -383,7 +383,7 @@ test.skipIf(!supported)(
     const c = open(dir, "C", ["--track", "drums"]);
     await ready(c);
     await until(
-      () => header(a).includes("3 panes"),
+      () => header(a).includes("⧉3"),
       "three panes",
       () => screens([a, b, c]),
     );
@@ -472,8 +472,11 @@ test.skipIf(!supported)(
     const trio = [a, b, c];
     // B and C both have drums › volume open: each drawer's volume row shows
     // the other pane's letter at its right edge.
+    // `volume` opens the knob front page: the orange knob's row.
     const row = (p: Pane) =>
-      p.vt.lines().find((line) => /^\s*│?\s*[›>]\s+volume\b/.test(line)) ?? "";
+      p.vt
+        .lines()
+        .find((line) => /^\s*│?\s*[◆*]?\s*[›>]\s*volume\b/.test(line)) ?? "";
     await until(
       () => / C\s*│?\s*$/.test(row(b)) && / B\s*│?\s*$/.test(row(c)),
       "drawer row markers",

@@ -78,7 +78,7 @@ export interface AppView {
   sessionName?: string | undefined;
   /** Live panes on this session (presence); shown when more than one. */
   windows?: number | undefined;
-  /** This pane's letter (dawgd), shown beside the count: `3 panes · B`. */
+  /** This pane's letter (dawgd), shown beside the count: `B ⧉3` (`B 3 panes` in ASCII). */
   pane?: string | undefined;
   /** Project typecheck result; `types ✓` or `types ✗ N` beside sync. */
   types?: TypesIndicator | undefined;
@@ -452,6 +452,54 @@ export function playContext(
   ].join(" · ");
 }
 
+/** `5.3`: the 1-based bar and beat of a song beat. */
+export function barBeatLabel(
+  beat: number,
+  beatsPerBar: number,
+  barBeats?: readonly number[],
+): string {
+  const at = Number.isFinite(beat) ? Math.max(0, beat) : 0;
+  if (barBeats && barBeats.length > 0) {
+    let bar = 0;
+    while (bar + 1 < barBeats.length && barBeats[bar + 1]! <= at + 1e-9)
+      bar += 1;
+    return `${bar + 1}.${Math.floor(at - barBeats[bar]! + 1e-9) + 1}`;
+  }
+  const per = Math.max(1, beatsPerBar);
+  const bar = Math.floor(at / per + 1e-9);
+  return `${bar + 1}.${Math.floor(at - bar * per + 1e-9) + 1}`;
+}
+
+/** `↻ 5–6` (`loop 5-6` without Unicode): the loop range, 1-based bars. */
+export function loopRangeLabel(
+  range: Readonly<{ startBar: number; bars: number }>,
+  unicode: boolean,
+): string {
+  const first = range.startBar + 1;
+  const last = range.startBar + range.bars;
+  const bars =
+    first === last ? `${first}` : `${first}${unicode ? "–" : "-"}${last}`;
+  return unicode ? `↻ ${bars}` : `loop ${bars}`;
+}
+
+/** `B ⧉3`: this pane's letter and how many panes are live. */
+export function paneLabel(
+  windows: number,
+  pane: string | undefined,
+  unicode: boolean,
+): string {
+  const count = unicode ? `⧉${windows}` : `${windows} panes`;
+  return pane ? `${pane} ${count}` : count;
+}
+
+/** The footer's right side: the session name, then the spend line. */
+export function footerStatus(view: AppView, sessionId?: string): string {
+  const session =
+    view.sessionName ??
+    (sessionId ? `session ${sessionId.slice(0, 8)}` : undefined);
+  return [session, view.spend].filter(Boolean).join(" · ");
+}
+
 function paintHeader(
   buffer: CellBuffer,
   view: AppView,
@@ -477,14 +525,11 @@ function paintHeader(
   });
   const transport = `${playing ? (unicode ? "▶" : ">") : unicode ? "⏸" : "||"} ${score.bpm ?? 120} BPM`;
   const name = score.trackName ?? score.trackId ?? "track";
+  // dawg · ▶ BPM · bar.beat · ↻ loop · track ··· key · model · rev · pane
+  // (design §8.2): where you are in the song reads first; the session name
+  // lives in the footer.
   const left: Segment[] = [
     { text: "dawg", style: { ...roles.muted, bold: true }, priority: 6 },
-    {
-      text: name,
-      style: { ...accentStyle(theme, score.trackId ?? name), bold: true },
-      priority: 0,
-      target: { kind: "tracks" },
-    },
     {
       text: transport,
       style: playing
@@ -495,24 +540,29 @@ function paintHeader(
       priority: 0,
       target: { kind: "transport" },
     },
+    {
+      text: barBeatLabel(beat, score.beatsPerBar ?? 4, score.barBeats),
+      style: roles.text,
+      priority: 2,
+    },
   ];
-  if (score.key)
-    left.push({ text: score.key, style: roles.muted, priority: 5 });
-  if (view.sessionName)
-    left.push({ text: view.sessionName, style: roles.muted, priority: 3 });
-  else if (score.sessionId)
+  if (score.loopRange)
     left.push({
-      text: `session ${score.sessionId.slice(0, 8)}`,
-      style: roles.muted,
+      text: loopRangeLabel(score.loopRange, unicode),
+      // The loop is the green knob's (§8.1): it wears that colour.
+      style: roles.knob2,
       priority: 3,
     });
-  if (view.windows !== undefined && view.windows > 1)
-    left.push({
-      text: `${view.windows} panes${view.pane ? ` · ${view.pane}` : ""}`,
-      style: roles.muted,
-      priority: 4,
-    });
+  left.push({
+    text: name,
+    style: { ...accentStyle(theme, score.trackId ?? name), bold: true },
+    priority: 0,
+    target: { kind: "tracks" },
+  });
   const right: Segment[] = [];
+  // The key never drops before the model, rev or sync at 80 columns.
+  if (score.key)
+    right.push({ text: score.key, style: roles.muted, priority: 1 });
   if (view.model)
     right.push({
       text: view.model,
@@ -525,6 +575,12 @@ function paintHeader(
       text: `rev ${score.revision}`,
       style: roles.text,
       priority: 1,
+    });
+  if (view.windows !== undefined && view.windows > 1)
+    right.push({
+      text: paneLabel(view.windows, view.pane, unicode),
+      style: roles.muted,
+      priority: 4,
     });
   if (view.types)
     right.push({
@@ -770,6 +826,7 @@ function paintPrompt(
   if (view.spend) {
     if (!layout.footer) status.push(view.spend);
   } else if (view.model) status.push(view.model);
+  if (!layout.footer && view.sessionName) status.unshift(view.sessionName);
   if (activity.queueDepth > 0) status.push(`queue ${activity.queueDepth}`);
   const layoutInfo = prompt.layout(rows);
   if (layoutInfo.total > rows)
@@ -847,7 +904,8 @@ function paintPrompt(
           : width >= 52
             ? " enter · ctrl-q now/next · ctrl-z undo · ctrl-o log "
             : "";
-    const spend = view.spend ? ` ${view.spend} ` : "";
+    const right = footerStatus(view, view.score.sessionId);
+    const spend = right ? ` ${right} ` : "";
     const spendWidth = displayWidth(spend);
     // Spend wins over hints when both do not fit.
     const shown =

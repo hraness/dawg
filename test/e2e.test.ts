@@ -102,6 +102,8 @@ async function until(
 }
 
 const header = (w: Window) => w.vt.lines()[0] ?? "";
+/** The session name lives in the footer (design §13). */
+const footer = (w: Window) => w.vt.lines().at(-1) ?? "";
 const screens = (ws: readonly Window[]) =>
   ws.map((w) => `--- ${w.name}\n${w.vt.text()}`).join("\n");
 
@@ -154,7 +156,7 @@ async function status(w: Window): Promise<Status> {
       return (
         found !== null &&
         Number(found[2]) === revision(w) &&
-        header(w).includes(found[1]!)
+        footer(w).includes(found[1]!)
       );
     },
     `${w.name} /status`,
@@ -190,7 +192,7 @@ async function converged(ws: readonly Window[]): Promise<Status> {
     expect(s.digest).toBe(statuses[0]!.digest);
     expect(s.name).toBe(statuses[0]!.name);
   }
-  for (const w of ws) expect(header(w)).toContain(statuses[0]!.name);
+  for (const w of ws) expect(footer(w)).toContain(statuses[0]!.name);
   return statuses[0]!;
 }
 
@@ -319,7 +321,7 @@ test.skipIf(!supported)(
     // 2. /rename propagates to every header.
     await send(drums, "/rename night drive");
     await until(
-      () => trio.every((w) => header(w).includes("night drive")),
+      () => trio.every((w) => footer(w).includes("night drive")),
       "renamed header in every window",
       () => screens(trio),
     );
@@ -391,7 +393,7 @@ test.skipIf(!supported)(
     // 4. /fork numbers the new session and moves only this window.
     await send(four, "/fork");
     await until(
-      () => header(four).includes("night drive 2"),
+      () => footer(four).includes("night drive 2"),
       "fork header",
       () => four.vt.text(),
     );
@@ -405,7 +407,7 @@ test.skipIf(!supported)(
     expect(forked.name).toBe("night drive 2");
     expect(forked.digest).toBe(replayed.digest);
     for (const w of [one, two, three])
-      expect(header(w)).not.toContain("night drive 2");
+      expect(footer(w)).not.toContain("night drive 2");
     const stayed = await converged([one, two, three]);
     expect(stayed.name).toBe("night drive");
 

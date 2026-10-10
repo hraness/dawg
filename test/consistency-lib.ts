@@ -10,6 +10,7 @@
  * patterns are read from the source, so a new window command is covered
  * without editing this file.
  */
+import { knobPageId } from "../src/tui/knob-map.ts";
 import { parseAudioCommand } from "../src/audio/devices.ts";
 import { WINDOW_VERBS, canonicalWindowForm } from "../src/commands/grammar.ts";
 import { readFileSync, readdirSync } from "node:fs";
@@ -135,6 +136,7 @@ const WINDOW_ARGS: Readonly<Record<string, ArgCheck>> = {
   fx: (arg) => parseEffectName(arg.split(/\s+/)[0]!) !== undefined,
   login: (arg) => typeof tuiLoginArgs(`/login ${arg}`) !== "string",
   sessions: () => false,
+  knobs: (arg, score) => knobPageId(arg, score.tracks[0]) !== undefined,
 };
 
 /** Verbs whose argument is a name or a path the person picks. */

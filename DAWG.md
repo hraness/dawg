@@ -15,7 +15,7 @@ Run `dawg` from any directory. It creates `.dawg/session` on first use and reuse
 
 ### One command grammar
 
-Every prompt-bar command reads the same with or without its slash (`/fx reverb on` is `fx reverb on`). `remove`, `rm` and `delete` are one verb on every object, and `list`, `presets`, `ls` and a bare noun are one listing. Aliases run their canonical form: `rig <preset>` (`track <preset>` still works), `model key` (`login`), `chords idiom` (`chords style`), `synth filter` (`synth cutoff`), `loop a-b|off` (`loop 2-3` sets the loop range; it makes no section), `export <file>.wav [stems]` (the `dawg render` path; agent paths are workspace-relative), and a bare `pattern <groove>` or `kit <name>`. A known verb that fails answers with one usage card, `✗ tempo 900 · tempo takes 20…300 BPM · tempo 128`, with a nearest suggestion and never a raw core key; it never reaches the agent, and without a provider nothing does. Instruments are checked exactly on write (`✗ instrument sawtoth · did you mean sawtooth? · instrument list`), while stored projects still load. `remove n1` checks the note exists (`✗ no note n1 · notes lists them`). Status reads such as bare `fx` and `tracks` print `•`, and a bare scalar (`tempo`, `volume`) opens its fader. The agent tools `set_effects`, `vocode` and `add_drums` still run but are not advertised; use `set_fx`, `set_vocoder` and `set_rhythm`.
+Every prompt-bar command reads the same with or without its slash (`/fx reverb on` is `fx reverb on`). `remove`, `rm` and `delete` are one verb on every object, and `list`, `presets`, `ls` and a bare noun are one listing. Aliases run their canonical form: `rig <preset>` (`track <preset>` still works), `model key` (`login`), `chords idiom` (`chords style`), `synth filter` (`synth cutoff`), `loop a-b|off` (`loop 2-3` sets the loop range; it makes no section), `export <file>.wav [stems]` (the `dawg render` path; agent paths are workspace-relative), and a bare `pattern <groove>` or `kit <name>`. A known verb that fails answers with one usage card, `✗ tempo 900 · tempo takes 20…300 BPM · tempo 128`, with a nearest suggestion and never a raw core key; it never reaches the agent, and without a provider nothing does. Instruments are checked exactly on write (`✗ instrument sawtoth · did you mean sawtooth? · instrument list`), while stored projects still load. `remove n1` checks the note exists (`✗ no note n1 · notes lists them`). Status reads such as bare `fx` and `tracks` print `•`, and a bare scalar (`tempo`, `volume`) opens its fader (on its four knobs where it is one; see **Four knobs**). The agent tools `set_effects`, `vocode` and `add_drums` still run but are not advertised; use `set_fx`, `set_vocoder` and `set_rhythm`.
 
 ### Sessions, names and forks
 
@@ -1273,19 +1273,19 @@ Rows regenerate when the loop length or meter changes. Editing a generated lane 
 
 Prompt grammar: `euclid kick 4 16`, `euclid hat 7 16 rotate 2`, `euclid hat swing 0.2 prob 0.8 seed 3` (named fields merge into the existing row, `default` resets one), `euclid snare off|freeze`, `grid snare ....X.......x...`. The agent's `set_rhythm` tool takes the same rows and its prompt prefers it for drums.
 
-**Editor.** `/euclid [voice]`, or Rhythm in `/menu`, opens a T-1-style editor on the focused kit or oneshot sampler track: one row per voice with its step grid (`x` hit, `X` accent, `·` rest) and summary (`E(4,16)`). Every change runs one `euclid …` command, so it is one receipt and one undo step, and the edited voice plays once (audition) after it lands. The hits show on the highway like any notes.
+**Editor.** `/euclid [voice]`, or Rhythm in `/menu`, opens a T-1-style editor on the focused kit or oneshot sampler track: one row per voice with its step grid (`x` hit, `X` accent, `·` rest) and summary (`E(4,16)`). Every change runs one `euclid …` command, so it is one receipt and one undo step, and the edited voice plays once (audition) after it lands. The hits show on the highway like any notes. The bottom row is the four-knob strip (see **Four knobs**; `KNOB_MAPS.euclid`): `●›kick ▲ pulses 4 ■ rotate 0 ◆ velocity 0.8`. `/euclid hat` opens on `▲` pulses; bare `/euclid` on `●`.
 
-| Key                         | Action                                            |
-| --------------------------- | ------------------------------------------------- |
-| `↑ ↓` / `j k`               | select voice                                      |
-| `← →` / `h l` / `- +`       | nudge the selected parameter                      |
-| `Tab` / `Shift-Tab` (`] [`) | next / previous parameter                         |
-| digits, `.`, `-`, Backspace | type a value, Enter applies                       |
-| Enter                       | add a row for a voice without one; keep (looping) |
-| Space                       | start or stop the audition loop (staging)         |
-| `a` / `c`                   | A/B / solo ↔ in context, while the loop plays     |
-| `x` / Delete, `f`           | remove the row and its notes / freeze it to notes |
-| Esc                         | cancel typing, revert staged changes, then close  |
+| Key                         | Action                                                      |
+| --------------------------- | ----------------------------------------------------------- |
+| `↑ ↓` / `j k`               | pick a knob: `●` drum, `▲` pulses, `■` rotate, `◆` velocity |
+| `← →` / `h l` / `- +`       | turn it (`●` moves to the next or previous drum row)        |
+| `Tab` / `Shift-Tab` (`] [`) | next / previous parameter, every field                      |
+| digits, `.`, `-`, Backspace | type a value, Enter applies                                 |
+| Enter                       | add a row for a voice without one; keep (looping)           |
+| Space                       | start or stop the audition loop (staging)                   |
+| `a` / `c`                   | A/B / solo ↔ in context, while the loop plays               |
+| `x` / Delete, `f`           | remove the row and its notes / freeze it to notes           |
+| Esc                         | cancel typing, revert staged changes, then close            |
 
 ## Chords
 
@@ -1799,7 +1799,7 @@ Rendering is deterministic: tuned spans are cached (128 MB of their own) by the 
 | Effects        | Filter, Auto filter, Distortion, Tremolo, Compressor, Chorus, Delay, Reverb, Guitar rig, Shoegaze, **more effects** (dj filter, vowel, bitcrush, phaser, leslie, post gain, …); a "voice effects → Voice" row                                                                                                                                                                                                                    |
 | Rhythm         | the **euclid editor** (`/euclid`), **grooves** (`/pattern`), **kits** (`/kit`, synth then samples), **grid**                                                                                                                                                                                                                                                                                                                     |
 | Chords and key | **key** (tonic, scale), **tuning** (song tuning, reference, root, equal steps, Scala file, ratios, cents, keyboard map), **play** (mode, voicing, spread, bass, sevenths, perform, pattern, arp rate, arp octaves), **progression**, **idiom**                                                                                                                                                                                   |
-| Mix            | the focused track's name, mute, solo, volume, pan; **all tracks** (choosing one focuses it); **automation** (each lane with its points as `beat N  value` rows, add points, ramp, clear lane); **master**                                                                                                                                                                                                                        |
+| Mix            | the focused track's name, mute, solo, volume, pan; **mixer** (every track's level, the drawer's `mix` page); **all tracks** (choosing one focuses it); **automation** (each lane with its points as `beat N  value` rows, add points, ramp, clear lane); **master**                                                                                                                                                              |
 | Arrange        | **tracks** (add, focus, rename, move, remove), **sections** (each section's loop, jump, mute, transpose, gain, build, drop, fill, duplicate, move, rename, remove; mark bars, add section), **form**, **style** (find, blend, families)                                                                                                                                                                                          |
 | Project        | play, tempo, beats per bar, **tempo and meter**, loop length, grid, click, count-in bars, calibration, **export** (project file, MIDI, WAV, stems), **resample**, **session** (rename, fork, resume), **agent** (model, show-me, model key), **help and guides** (help, guides, keys)                                                                                                                                            |
 
@@ -1845,20 +1845,53 @@ Each field shows its name, current value with unit, the committed value while a 
 
 Every change is staged on the audition loop (see **Previewing changes**), filed under its field so repeated nudges replace one staged edit; the piano roll and the loop, when it plays, follow at once. `Enter` keeps everything staged as one revision and one undo step; `Esc` reverts. A setting the loop cannot stage (tempo, loop length) applies directly.
 
-| Key                         | In the drawer                                         |
-| --------------------------- | ----------------------------------------------------- |
-| `←` `→` / `-` `+` / `h` `l` | step by the param's step                              |
-| `Shift`-`←` `→` / `{` `}`   | coarse step (five steps)                              |
-| `[` `]` / `Alt`-`←` `→`     | fine step (a tenth of a step; skips detents)          |
-| `PgUp` `PgDn`               | big step (twenty)                                     |
-| `Home` `End`                | minimum / maximum                                     |
-| `0`-`9` `.`                 | type an exact value; `Enter` sets it, `Esc` cancels   |
-| `x` / `d` / `Delete`        | back to the default                                   |
-| `↑` `↓` / `Tab` `Shift-Tab` | previous / next param of this device                  |
-| `Enter`                     | keep every staged change (one undo step); none: close |
-| `Esc`                       | revert staged changes and close                       |
-| `Space` `a` `c`             | audition loop · A/B · solo ↔ in context               |
-| `?`                         | these keys                                            |
+| Key                         | In the drawer                                                                                                 |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `←` `→` / `-` `+` / `h` `l` | step by the param's step                                                                                      |
+| `Shift`-`←` `→` / `{` `}`   | coarse step (five steps)                                                                                      |
+| `[` `]` / `Alt`-`←` `→`     | fine step (a tenth of a step; skips detents)                                                                  |
+| `PgUp` `PgDn`               | big step (twenty)                                                                                             |
+| `Home` `End`                | minimum / maximum                                                                                             |
+| `0`-`9` `.`                 | type an exact value; `Enter` sets it, `Esc` cancels                                                           |
+| `x` / `d` / `Delete`        | back to the default                                                                                           |
+| `↑` `↓` / `Tab` `Shift-Tab` | previous / next param of this device (on a knob page `↑` `↓` pick a knob and `Tab` pages knobs ↔ every param) |
+| `Enter`                     | keep every staged change (one undo step); none: close                                                         |
+| `Esc`                       | revert staged changes and close                                                                               |
+| `Space` `a` `c`             | audition loop · A/B · solo ↔ in context                                                                       |
+| `?`                         | these keys                                                                                                    |
+
+### Four knobs
+
+Where a level has them, the drawer opens on four knobs first: the OP-1's four color encoders, the same four on every screen.
+
+| Knob | Color  | Means  | Examples                                     |
+| ---- | ------ | ------ | -------------------------------------------- |
+| `●`  | blue   | moves  | preset, position, pan, filter type, tempo    |
+| `▲`  | green  | sizes  | attack, decay, length, reverb send, feedback |
+| `■`  | white  | shapes | filter, tone, brightness, cutoff             |
+| `◆`  | orange | level  | track volume, effect mix, loudness target    |
+
+```text
+╭─ menu › Sound ───────────────────────────────────────────────────────────────╮
+│ ●›preset         pad │ lead │ pluck │ bass │ sub │ acid │ keys │ bell │ ›    │
+│ ▲ attack        0.003 s            [−] ───────────────────────────────── [+] │
+│ ■ synth filter  off                [−] ───────────────────────────────── [+] │
+│ ◆ volume        1 · 0.0 dB         [−] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━● [+] │
+╰─────────── ↑↓ knob · ←→ turn · tab all · enter keep · ⇧ coarse · esc revert ─╯
+```
+
+The shape glyph always goes with the color, so `NO_COLOR` and the mono theme keep every cue; without Unicode the glyphs are `o ^ # *`. `↑` `↓` pick a knob (an empty slot, drawn `·`, is skipped), `←` `→` turn it, `Shift` turns it coarse and `x` resets it. `Tab` pages to every param of the level (today's drawer) and back. Every turn runs the row's own command (`synth cutoff 1760`, `fx reverb mix 0.3`, `volume 0.8`), so the receipt teaches the words and show-me types the same lines.
+
+The drawer has knobs on Sound (by engine: synth, wavetable, piano, electric, organ, string, wind, modal, sing, granular, sampler, kit), Mix, Mix › master, Project (tempo, loop length, beats per bar) and each effect. Which row each knob turns is one table, `src/tui/knob-map.ts` (`KNOB_MAPS`): four Ctrl-K paths per page, checked against every instrument family by a test, so a patch's macros can later map onto the same four knobs by adding rows. An effect without a row takes its first three number params and its mix.
+
+| Command                                          | Opens                                                                                     |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `synth`                                          | the focused track's sound knobs (and the synth summary receipt)                           |
+| `knobs [sound\|mix\|master\|tempo\|fx <effect>]` | that page's four knobs (bare: sound)                                                      |
+| `volume` / `pan` / `fx reverb mix`               | the level's knobs, on that knob (a param that is not a knob opens every param)            |
+| `mix`                                            | the mixer page: every track's level as an orange fader; `Tab` flips to this track's knobs |
+
+The mixer page is also `Ctrl-K › Mix › mixer`. Each row runs `volume <track> <0..1>` (`volume drums 0.5`, and `pan <track> <-1..1>`), which sets that track without moving the focus.
 
 Detents catch the values people reach for: volume 1 (0 dB), pan 0 (center), whole-number tempo, mix 0, 0.5 and 1, and a filter's octave cutoffs. A drag or step that lands within 2% of the range snaps onto the detent, a key step that jumps over one stops on it, and a fine step skips them. The landing flashes the detent's name for one frame unless `/motion off`. While anything is staged the title reads `A/B: 1 change staged · enter keep · esc revert`, and the badge's key words are click targets.
 
