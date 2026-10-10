@@ -51,6 +51,36 @@ describe("sing level parity", () => {
     });
   }
 
+  // A legato line that changes vowel on every note (lyrics la li la li)
+  // clicked at each change, peaking at -0.2 dBFS on a -19 LUFS part.
+  test("a legato line that changes vowel leaves headroom", () => {
+    for (const preset of ["aah", "chorale"]) {
+      const s = song({
+        tempo: 72,
+        bars: 2,
+        tracks: [
+          track({
+            name: "t",
+            instrument: sing(preset) as never,
+            notes: [59, 59, 60, 55, 57, 55, 57, 55].map((pitch, i) => ({
+              ...note(pitch, i, 1, 0.8),
+              lyric: i % 2 ? "li" : "la",
+            })) as never,
+          }),
+        ],
+      });
+      const audio = renderScorePcm(createScore(s as never), {
+        sampleRate: 22_050,
+      });
+      const [l, r] = pcmChannels(audio.pcm);
+      const m = measureLoudness(l, r, audio.sampleRate, { truePeak: false });
+      expect({ preset, peak: m.samplePeak < -6 }).toEqual({
+        preset,
+        peak: true,
+      });
+    }
+  });
+
   test("velocity still scales the sung level", () => {
     const loud = level(sing("aah"), 60, 0.8).lufs;
     const soft = level(sing("aah"), 60, 0.3).lufs;
