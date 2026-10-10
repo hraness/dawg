@@ -962,6 +962,8 @@ export const USAGE: Readonly<Record<string, string>> = {
     "/formant <-12..12> [mix] | deep|giant|bright|tiny | on | off · /formant -4 · /formant 3 0.5",
   vowel:
     "/vowel <v> [<to> [<morph 0..1>]] | ee | to <v>|off | morph <0..1> | mix <0..1> | off · /vowel a o 0.5",
+  lyrics:
+    'lyrics [bar] <syllables> | clear [bar] · lyrics "sun-lit morn-ing" (- splits, _ holds, ~ skips)',
   sing: "sing <preset> | <param> <value> | drone <D3> | vowels a e i … | reset | off | presets · sing choir · sing khoomei drone D3 · sing vowel o voices 6",
   vocoder:
     "vocoder [preset] | src <track> | <param> <value|reset> | reset | off | presets · vocoder talkbox · vocoder src vox · vocoder formant +3 · vocoder gate auto · params: tap mode carrier follow root spread bands lo hi width attack release formant unvoiced sens hiss gate enhance depth freeze mix gain seed",

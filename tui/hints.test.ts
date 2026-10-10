@@ -72,7 +72,7 @@ describe("seeded hints", () => {
       "kit · empty · hit kick at 0 · space play · ctrl-p play mode · ctrl-k menu",
     );
     expect(emptyHint({ ...state, vocal: true }, "vox", 120)).toBe(
-      "vox · empty · /lyrics la la · sing ooh · ctrl-k › Voice · space play · ctrl-p play mode · ctrl-k menu",
+      'vox · empty · lyrics "la la" · sing ooh · ctrl-k › Voice · space play · ctrl-p play mode · ctrl-k menu',
     );
     // A vocal lead that does not fit drops before the keys do.
     expect(emptyHint({ ...state, vocal: true }, "vox", 80)).toBe(
@@ -120,9 +120,7 @@ describe("seeded hints", () => {
         if (/^(ctrl|space|then|ask|say|type|describe|queue)\b/.test(clause))
           continue;
         const verb = clause.replace(/^\//, "").split(" ")[0]!;
-        // Slash-only commands (`/lyrics`) are listed under their own topic.
-        const slash = clause.startsWith("/") && verb === "lyrics";
-        expect({ hint, verb, known: known.has(verb) || slash }).toEqual({
+        expect({ hint, verb, known: known.has(verb) }).toEqual({
           hint,
           verb,
           known: true,
