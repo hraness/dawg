@@ -19,6 +19,7 @@ import { AGENT_TOOL_DOCS } from "../agent/tool-docs.ts";
 export {
   AGENTS_BEGIN,
   AGENTS_END,
+  AgentsMdMarkerError,
   renderAgentsMd,
   upsertAgentsMd,
 } from "./agents-md.ts";
@@ -294,27 +295,52 @@ export function findAgentDoc(ref: string): AgentDocPage | undefined {
   );
 }
 
-/** Pages whose title or body mention `query`, with the first hit line. */
+/** Pages naming the words of `query` (all of them when any page does, else any), best first, each with its best line. */
 export function searchAgentDocs(query: string, max = 12): string {
-  const needle = query.trim().toLowerCase();
-  if (!needle) return agentDocsIndex();
-  const hits: string[] = [];
+  const phrase = query.trim().toLowerCase().replace(/\s+/g, " ");
+  if (!phrase) return agentDocsIndex();
+  const terms = [...new Set(phrase.split(" "))];
+  type Hit = { id: string; line: string; score: number; all: boolean };
+  const hits: Hit[] = [];
   for (const page of agentDocs()) {
     const lower = page.body.toLowerCase();
-    const at = lower.indexOf(needle);
-    if (at < 0 && !page.id.includes(needle)) continue;
-    const lineStart = at < 0 ? 0 : lower.lastIndexOf("\n", at) + 1;
-    const lineEnd = at < 0 ? -1 : lower.indexOf("\n", at);
-    const line = page.body
-      .slice(lineStart, lineEnd < 0 ? undefined : lineEnd)
-      .trim()
-      .slice(0, 120);
-    hits.push(`${page.id}: ${line}`);
+    const id = page.id.toLowerCase();
+    const matched = terms.filter(
+      (term) => lower.includes(term) || id.includes(term),
+    );
+    if (matched.length === 0) continue;
+    // The line naming the most query words (the phrase itself wins).
+    let line = "";
+    let best = 0;
+    for (const raw of page.body.split("\n")) {
+      const text = raw.toLowerCase();
+      const score =
+        terms.filter((term) => text.includes(term)).length +
+        (terms.length > 1 && text.includes(phrase) ? terms.length : 0);
+      if (score > best) {
+        best = score;
+        line = raw;
+      }
+    }
+    hits.push({
+      id: page.id,
+      line: line.trim().slice(0, 120),
+      score: matched.length * 100 + best,
+      all: matched.length === terms.length,
+    });
   }
-  if (hits.length === 0) return `no docs mention "${query.slice(0, 40)}"`;
-  const shown = hits.slice(0, max);
-  if (hits.length > max)
-    shown.push(`(${hits.length - max} more; narrow the search)`);
+  // Every word (AND) when any page has them all; otherwise any word (OR).
+  const pool = hits.some((hit) => hit.all)
+    ? hits.filter((hit) => hit.all)
+    : hits;
+  if (pool.length === 0) return `no docs mention "${query.slice(0, 40)}"`;
+  const ranked = pool
+    .map((hit, index) => ({ hit, index }))
+    .sort((a, b) => b.hit.score - a.hit.score || a.index - b.index)
+    .map(({ hit }) => `${hit.id}: ${hit.line}`);
+  const shown = ranked.slice(0, max);
+  if (ranked.length > max)
+    shown.push(`(${ranked.length - max} more; narrow the search)`);
   return shown.join("\n");
 }
 

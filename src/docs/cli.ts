@@ -101,7 +101,14 @@ export async function runDocsCommand(
       } catch {
         existing = undefined;
       }
-      const next = docs.upsertAgentsMd(existing);
+      let next: string;
+      try {
+        next = docs.upsertAgentsMd(existing);
+      } catch (error) {
+        if (!(error instanceof docs.AgentsMdMarkerError)) throw error;
+        stderr.write(`dawg docs: ${error.message}; AGENTS.md left as is\n`);
+        return 1;
+      }
       if (next === existing) {
         stdout.write("AGENTS.md up to date\n");
         return 0;

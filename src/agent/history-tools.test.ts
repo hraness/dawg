@@ -10,7 +10,12 @@ import type {
   HistoryHandle,
   HistoryRow,
 } from "../history/types.ts";
-import { runAgentTurn, type AgentHost } from "./agent.ts";
+import {
+  executeCall,
+  runAgentTurn,
+  type AgentHost,
+  type AgentTurnResult,
+} from "./agent.ts";
 import { createGatewayClient } from "./gateway.ts";
 import {
   autoCommentText,
@@ -200,6 +205,127 @@ describe("agent comments", () => {
       host: agentHost,
     });
     expect(comments()).toEqual([]);
+  });
+
+  test("a human edit during a read-only call is not credited to the agent", async () => {
+    const { state, host: agentHost, history } = host();
+    // The human commits while history_query runs: the revision rises but
+    // the agent changed nothing, so no #auto comment (design §3.4).
+    const query = history.query;
+    const moving: AgentHost = {
+      ...agentHost,
+      history: {
+        ...history,
+        query: (filter) => {
+          state.revision += 1;
+          return query(filter);
+        },
+      },
+    };
+    const result = await runAgentTurn({
+      prompt: "any notes for me?",
+      model: "opus-5.5",
+      turnId: "t1",
+      client: client([
+        [
+          ...toolCallChunks(0, "q1", "history_query", { kind: ["comment"] }),
+          finishChunk("tool_calls"),
+        ],
+        [textChunk("No comments yet; nothing to change."), finishChunk("stop")],
+      ]),
+      host: moving,
+    });
+    expect(result.type).toBe("done");
+    expect(state.revision).toBeGreaterThan(10);
+    expect(comments()).toEqual([]);
+  });
+
+  const childDone: AgentTurnResult = {
+    type: "done",
+    reason: "stop",
+    text: "ok",
+    applied: 1,
+    rejected: 0,
+    revision: 0,
+  };
+
+  async function dispatchTurn(childComments: boolean) {
+    const { host: agentHost } = host();
+    return runAgentTurn({
+      prompt: "bass and drums",
+      model: "opus-5.5",
+      turnId: "turn-d",
+      client: client([
+        [
+          ...toolCallChunks(0, "d1", "dispatch", {
+            tasks: [
+              { id: "low", prompt: "bass", tracks: ["bass"] },
+              { id: "kit", prompt: "drums", tracks: ["drums"] },
+            ],
+          }),
+          finishChunk("tool_calls"),
+        ],
+        [textChunk("Bass and drums are in."), finishChunk("stop")],
+      ]),
+      host: {
+        ...agentHost,
+        subagents: {
+          concurrency: 1,
+          runTurn: async (input) => {
+            const track = input.prompt.includes("subagent low")
+              ? "bass"
+              : "drums";
+            await executeCall(
+              {
+                id: `${track}-add`,
+                name: "add_notes",
+                arguments: JSON.stringify({
+                  trackId: track,
+                  notes: [{ pitch: 40, start: 0, duration: 1 }],
+                }),
+              },
+              {
+                tools: AGENT_TOOLS,
+                host: input.host,
+                newNoteId: (id, _rev, index) => `${id}-${index}`,
+                ...(input.turnId ? { turnId: input.turnId } : {}),
+              },
+            );
+            if (childComments)
+              await executeCall(
+                {
+                  id: `${track}-note`,
+                  name: "comment",
+                  arguments: JSON.stringify({ text: `${track} in #groove` }),
+                },
+                {
+                  tools: AGENT_TOOLS,
+                  host: input.host,
+                  newNoteId: (id, _rev, index) => `${id}-${index}`,
+                  ...(input.turnId ? { turnId: input.turnId } : {}),
+                },
+              );
+            return childDone;
+          },
+        },
+      },
+    });
+  }
+
+  test("subagent comments suppress the parent's #auto fallback", async () => {
+    await dispatchTurn(true);
+    const rows = comments();
+    expect(rows.length).toBe(2);
+    expect(rows.every((row) => row.sub !== "auto")).toBe(true);
+    expect(rows.every((row) => row.actor.kind === "subagent")).toBe(true);
+  });
+
+  test("subagent edits without comments get one parent #auto comment", async () => {
+    await dispatchTurn(false);
+    const rows = comments();
+    expect(rows.length).toBe(1);
+    expect(rows[0]!.sub).toBe("auto");
+    expect(rows[0]!.body).toBe("Bass and drums are in.");
   });
 
   test("autoCommentText clips and falls back to edit summaries", () => {
