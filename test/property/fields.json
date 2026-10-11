@@ -169,8 +169,14 @@
         "volume": 1,
         "pan": 0,
         "volumeAutomation": [
-          { "tick": 0, "value": 1 },
-          { "tick": 960, "value": 0.5 }
+          {
+            "tick": 0,
+            "value": 1
+          },
+          {
+            "tick": 960,
+            "value": 0.5
+          }
         ],
         "panAutomation": []
       },
@@ -182,8 +188,14 @@
         "volume": 1,
         "pan": 0,
         "volumeAutomation": [
-          { "tick": 0, "value": 1 },
-          { "tick": 960, "value": 0.25 }
+          {
+            "tick": 0,
+            "value": 1
+          },
+          {
+            "tick": 960,
+            "value": 0.25
+          }
         ],
         "panAutomation": []
       }
@@ -207,7 +219,12 @@
         "volume": 1,
         "pan": 0,
         "volumeAutomation": [],
-        "panAutomation": [{ "tick": 480, "value": 0.5 }]
+        "panAutomation": [
+          {
+            "tick": 480,
+            "value": 0.5
+          }
+        ]
       },
       {
         "id": "bass",
@@ -217,12 +234,30 @@
         "volume": 0.8,
         "pan": -0.25,
         "volumeAutomation": [
-          { "tick": 0, "value": 1 },
-          { "tick": 1920, "value": 0.5 }
+          {
+            "tick": 0,
+            "value": 1
+          },
+          {
+            "tick": 1920,
+            "value": 0.5
+          }
         ],
-        "panAutomation": [{ "tick": 0, "value": 0 }],
-        "filter": { "cutoff": 800, "resonance": 0.2 },
-        "delay": { "beats": 0.5, "feedback": 0.3, "mix": 0.2 },
+        "panAutomation": [
+          {
+            "tick": 0,
+            "value": 0
+          }
+        ],
+        "filter": {
+          "cutoff": 800,
+          "resonance": 0.2
+        },
+        "delay": {
+          "beats": 0.5,
+          "feedback": 0.3,
+          "mix": 0.2
+        },
         "reverb": {
           "mix": 0.1,
           "size": 0.5,
@@ -244,7 +279,14 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "fxAutomation": { "tremolo-depth": [{ "tick": 0, "value": 0.8 }] }
+        "fxAutomation": {
+          "tremolo-depth": [
+            {
+              "tick": 0,
+              "value": 0.8
+            }
+          ]
+        }
       },
       {
         "id": "a",
@@ -255,7 +297,14 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "fxAutomation": { "tremolo-depth": [{ "tick": 0, "value": 0.2 }] }
+        "fxAutomation": {
+          "tremolo-depth": [
+            {
+              "tick": 0,
+              "value": 0.2
+            }
+          ]
+        }
       },
       {
         "id": "sitar",
@@ -268,11 +317,21 @@
         "panAutomation": [],
         "fxAutomation": {
           "string-bright": [
-            { "tick": 0, "value": 0.3 },
-            { "tick": 960, "value": 0.9 }
+            {
+              "tick": 0,
+              "value": 0.3
+            },
+            {
+              "tick": 960,
+              "value": 0.9
+            }
           ]
         },
-        "string": { "preset": "sitar", "buzz": 0.8, "sym": 0.5 }
+        "string": {
+          "preset": "sitar",
+          "buzz": 0.8,
+          "sym": 0.5
+        }
       }
     ],
     "keys": [
@@ -296,7 +355,9 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "keys": { "trem": 0.6 }
+        "keys": {
+          "trem": 0.6
+        }
       },
       {
         "id": "vox",
@@ -307,7 +368,9 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "keys": { "registers": "08080" }
+        "keys": {
+          "registers": "08080"
+        }
       }
     ],
     "filter": [
@@ -320,7 +383,10 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "filter": { "cutoff": 800, "resonance": 0.2 }
+        "filter": {
+          "cutoff": 800,
+          "resonance": 0.2
+        }
       },
       {
         "id": "b",
@@ -331,7 +397,10 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "filter": { "cutoff": 2000, "resonance": 0.2 }
+        "filter": {
+          "cutoff": 2000,
+          "resonance": 0.2
+        }
       },
       {
         "id": "lead",
@@ -359,7 +428,9 @@
           "size": 0.6,
           "fade": 3,
           "predelay": 0.02,
-          "ir": { "src": "builtin:hall" }
+          "ir": {
+            "src": "builtin:hall"
+          }
         },
         "fx": {
           "autofilter": {
@@ -380,19 +451,47 @@
             "mix": 1,
             "postgain": 1
           },
-          "chorus": { "rate": 0.8, "depth": 0.4, "mix": 0.5 },
-          "orbit": { "orbit": 4 },
-          "duck": { "orbit": 3, "depth": 0.7, "attack": 0.1, "onset": 0.003 }
+          "chorus": {
+            "rate": 0.8,
+            "depth": 0.4,
+            "mix": 0.5
+          },
+          "orbit": {
+            "orbit": 4
+          },
+          "duck": {
+            "orbit": 3,
+            "depth": 0.7,
+            "attack": 0.1,
+            "onset": 0.003
+          }
         },
         "fxAutomation": {
           "autofilter-cutoff": [
-            { "tick": 0, "value": 400 },
-            { "tick": 1920, "value": 4000 }
+            {
+              "tick": 0,
+              "value": 400
+            },
+            {
+              "tick": 1920,
+              "value": 4000
+            }
           ],
-          "reverb-mix": [{ "tick": 0, "value": 0.2 }],
+          "reverb-mix": [
+            {
+              "tick": 0,
+              "value": 0.2
+            }
+          ],
           "synth-lpf": [
-            { "tick": 0, "value": 600 },
-            { "tick": 1920, "value": 3000 }
+            {
+              "tick": 0,
+              "value": 600
+            },
+            {
+              "tick": 1920,
+              "value": 3000
+            }
           ]
         },
         "synth": {
@@ -414,7 +513,12 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "filterAutomation": [{ "tick": 0, "value": 1000 }]
+        "filterAutomation": [
+          {
+            "tick": 0,
+            "value": 1000
+          }
+        ]
       },
       {
         "id": "e",
@@ -425,7 +529,12 @@
         "pan": 0.25,
         "volumeAutomation": [],
         "panAutomation": [],
-        "filterAutomation": [{ "tick": 0, "value": 500 }]
+        "filterAutomation": [
+          {
+            "tick": 0,
+            "value": 500
+          }
+        ]
       }
     ],
     "reverb": [
@@ -438,7 +547,10 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "reverb": { "mix": 0.2, "size": 0.5 }
+        "reverb": {
+          "mix": 0.2,
+          "size": 0.5
+        }
       },
       {
         "id": "bass",
@@ -448,12 +560,30 @@
         "volume": 0.8,
         "pan": -0.25,
         "volumeAutomation": [
-          { "tick": 0, "value": 1 },
-          { "tick": 1920, "value": 0.5 }
+          {
+            "tick": 0,
+            "value": 1
+          },
+          {
+            "tick": 1920,
+            "value": 0.5
+          }
         ],
-        "panAutomation": [{ "tick": 0, "value": 0 }],
-        "filter": { "cutoff": 800, "resonance": 0.2 },
-        "delay": { "beats": 0.5, "feedback": 0.3, "mix": 0.2 },
+        "panAutomation": [
+          {
+            "tick": 0,
+            "value": 0
+          }
+        ],
+        "filter": {
+          "cutoff": 800,
+          "resonance": 0.2
+        },
+        "delay": {
+          "beats": 0.5,
+          "feedback": 0.3,
+          "mix": 0.2
+        },
         "reverb": {
           "mix": 0.1,
           "size": 0.5,
@@ -490,7 +620,9 @@
           "size": 0.6,
           "fade": 3,
           "predelay": 0.02,
-          "ir": { "src": "builtin:hall" }
+          "ir": {
+            "src": "builtin:hall"
+          }
         },
         "fx": {
           "autofilter": {
@@ -511,19 +643,47 @@
             "mix": 1,
             "postgain": 1
           },
-          "chorus": { "rate": 0.8, "depth": 0.4, "mix": 0.5 },
-          "orbit": { "orbit": 4 },
-          "duck": { "orbit": 3, "depth": 0.7, "attack": 0.1, "onset": 0.003 }
+          "chorus": {
+            "rate": 0.8,
+            "depth": 0.4,
+            "mix": 0.5
+          },
+          "orbit": {
+            "orbit": 4
+          },
+          "duck": {
+            "orbit": 3,
+            "depth": 0.7,
+            "attack": 0.1,
+            "onset": 0.003
+          }
         },
         "fxAutomation": {
           "autofilter-cutoff": [
-            { "tick": 0, "value": 400 },
-            { "tick": 1920, "value": 4000 }
+            {
+              "tick": 0,
+              "value": 400
+            },
+            {
+              "tick": 1920,
+              "value": 4000
+            }
           ],
-          "reverb-mix": [{ "tick": 0, "value": 0.2 }],
+          "reverb-mix": [
+            {
+              "tick": 0,
+              "value": 0.2
+            }
+          ],
           "synth-lpf": [
-            { "tick": 0, "value": 600 },
-            { "tick": 1920, "value": 3000 }
+            {
+              "tick": 0,
+              "value": 600
+            },
+            {
+              "tick": 1920,
+              "value": 3000
+            }
           ]
         },
         "synth": {
@@ -545,7 +705,11 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "delay": { "beats": 0.5, "feedback": 0.3, "mix": 0.4 }
+        "delay": {
+          "beats": 0.5,
+          "feedback": 0.3,
+          "mix": 0.4
+        }
       },
       {
         "id": "d",
@@ -556,7 +720,11 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "delay": { "beats": 0.5, "feedback": 0.3, "mix": 0.2 }
+        "delay": {
+          "beats": 0.5,
+          "feedback": 0.3,
+          "mix": 0.2
+        }
       },
       {
         "id": "lead",
@@ -584,7 +752,9 @@
           "size": 0.6,
           "fade": 3,
           "predelay": 0.02,
-          "ir": { "src": "builtin:hall" }
+          "ir": {
+            "src": "builtin:hall"
+          }
         },
         "fx": {
           "autofilter": {
@@ -605,19 +775,47 @@
             "mix": 1,
             "postgain": 1
           },
-          "chorus": { "rate": 0.8, "depth": 0.4, "mix": 0.5 },
-          "orbit": { "orbit": 4 },
-          "duck": { "orbit": 3, "depth": 0.7, "attack": 0.1, "onset": 0.003 }
+          "chorus": {
+            "rate": 0.8,
+            "depth": 0.4,
+            "mix": 0.5
+          },
+          "orbit": {
+            "orbit": 4
+          },
+          "duck": {
+            "orbit": 3,
+            "depth": 0.7,
+            "attack": 0.1,
+            "onset": 0.003
+          }
         },
         "fxAutomation": {
           "autofilter-cutoff": [
-            { "tick": 0, "value": 400 },
-            { "tick": 1920, "value": 4000 }
+            {
+              "tick": 0,
+              "value": 400
+            },
+            {
+              "tick": 1920,
+              "value": 4000
+            }
           ],
-          "reverb-mix": [{ "tick": 0, "value": 0.2 }],
+          "reverb-mix": [
+            {
+              "tick": 0,
+              "value": 0.2
+            }
+          ],
           "synth-lpf": [
-            { "tick": 0, "value": 600 },
-            { "tick": 1920, "value": 3000 }
+            {
+              "tick": 0,
+              "value": 600
+            },
+            {
+              "tick": 1920,
+              "value": 3000
+            }
           ]
         },
         "synth": {
@@ -639,7 +837,12 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "fx": { "formant": { "shift": 0, "mix": 1 } }
+        "fx": {
+          "formant": {
+            "shift": 0,
+            "mix": 1
+          }
+        }
       },
       {
         "id": "v",
@@ -650,8 +853,15 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "fx": { "formant": { "shift": -4, "mix": 1 } },
-        "sing": { "preset": "choir" }
+        "fx": {
+          "formant": {
+            "shift": -4,
+            "mix": 1
+          }
+        },
+        "sing": {
+          "preset": "choir"
+        }
       },
       {
         "id": "c",
@@ -686,7 +896,10 @@
         "panAutomation": [],
         "sampler": {
           "voices": {
-            "kick": { "src": "tracks/e/samples/kick.wav", "gain": 0.5 }
+            "kick": {
+              "src": "tracks/e/samples/kick.wav",
+              "gain": 0.5
+            }
           },
           "mode": "keyed"
         }
@@ -702,7 +915,10 @@
         "panAutomation": [],
         "sampler": {
           "voices": {
-            "kick": { "src": "tracks/d/samples/kick.wav", "gain": 1 }
+            "kick": {
+              "src": "tracks/d/samples/kick.wav",
+              "gain": 1
+            }
           },
           "mode": "oneshot"
         }
@@ -718,7 +934,10 @@
         "panAutomation": [],
         "sampler": {
           "voices": {
-            "kick": { "src": "tracks/d/samples/kick.wav", "gain": 0.5 }
+            "kick": {
+              "src": "tracks/d/samples/kick.wav",
+              "gain": 0.5
+            }
           },
           "mode": "keyed"
         }
@@ -758,7 +977,9 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "modal": { "preset": "vibes" }
+        "modal": {
+          "preset": "vibes"
+        }
       },
       {
         "id": "m",
@@ -769,7 +990,10 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "modal": { "preset": "vibes", "ring": 2 }
+        "modal": {
+          "preset": "vibes",
+          "ring": 2
+        }
       }
     ],
     "glide": [
@@ -782,8 +1006,13 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "glide": { "time": 0.05, "mode": "legato" },
-        "velocityCurve": { "curve": "soft" }
+        "glide": {
+          "time": 0.05,
+          "mode": "legato"
+        },
+        "velocityCurve": {
+          "curve": "soft"
+        }
       },
       {
         "id": "lead",
@@ -794,14 +1023,32 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "glide": { "time": 0.08, "mode": "legato" },
+        "glide": {
+          "time": 0.08,
+          "mode": "legato"
+        },
         "pedal": [
-          { "tick": 0, "state": "down" },
-          { "tick": 1920, "state": "up" },
-          { "tick": 2400, "state": "half" }
+          {
+            "tick": 0,
+            "state": "down"
+          },
+          {
+            "tick": 1920,
+            "state": "up"
+          },
+          {
+            "tick": 2400,
+            "state": "half"
+          }
         ],
-        "velocityCurve": { "curve": "soft" },
-        "humanize": { "timing": 8, "velocity": 5, "seed": 7 }
+        "velocityCurve": {
+          "curve": "soft"
+        },
+        "humanize": {
+          "timing": 8,
+          "velocity": 5,
+          "seed": 7
+        }
       },
       {
         "id": "keys",
@@ -812,14 +1059,36 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "glide": { "time": 0.12, "mode": "poly" },
-        "pedal": [{ "tick": 0, "state": "down" }],
-        "velocityCurve": { "curve": "fixed", "fixed": 0.6 },
-        "softPedal": [
-          { "tick": 0, "state": "half" },
-          { "tick": 960, "state": "up" }
+        "glide": {
+          "time": 0.12,
+          "mode": "poly"
+        },
+        "pedal": [
+          {
+            "tick": 0,
+            "state": "down"
+          }
         ],
-        "sostenuto": [{ "tick": 480, "state": "down" }]
+        "velocityCurve": {
+          "curve": "fixed",
+          "fixed": 0.6
+        },
+        "softPedal": [
+          {
+            "tick": 0,
+            "state": "half"
+          },
+          {
+            "tick": 960,
+            "state": "up"
+          }
+        ],
+        "sostenuto": [
+          {
+            "tick": 480,
+            "state": "down"
+          }
+        ]
       }
     ],
     "velocityCurve": [
@@ -832,8 +1101,13 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "glide": { "time": 0.05, "mode": "legato" },
-        "velocityCurve": { "curve": "soft" }
+        "glide": {
+          "time": 0.05,
+          "mode": "legato"
+        },
+        "velocityCurve": {
+          "curve": "soft"
+        }
       },
       {
         "id": "organ",
@@ -844,8 +1118,14 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "velocityCurve": { "curve": "fixed", "fixed": 0.8 },
-        "humanize": { "length": 10, "seed": 0 }
+        "velocityCurve": {
+          "curve": "fixed",
+          "fixed": 0.8
+        },
+        "humanize": {
+          "length": 10,
+          "seed": 0
+        }
       },
       {
         "id": "keys",
@@ -856,14 +1136,36 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "glide": { "time": 0.12, "mode": "poly" },
-        "pedal": [{ "tick": 0, "state": "down" }],
-        "velocityCurve": { "curve": "fixed", "fixed": 0.6 },
-        "softPedal": [
-          { "tick": 0, "state": "half" },
-          { "tick": 960, "state": "up" }
+        "glide": {
+          "time": 0.12,
+          "mode": "poly"
+        },
+        "pedal": [
+          {
+            "tick": 0,
+            "state": "down"
+          }
         ],
-        "sostenuto": [{ "tick": 480, "state": "down" }]
+        "velocityCurve": {
+          "curve": "fixed",
+          "fixed": 0.6
+        },
+        "softPedal": [
+          {
+            "tick": 0,
+            "state": "half"
+          },
+          {
+            "tick": 960,
+            "state": "up"
+          }
+        ],
+        "sostenuto": [
+          {
+            "tick": 480,
+            "state": "down"
+          }
+        ]
       }
     ],
     "rhythm": [
@@ -876,7 +1178,13 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "rhythm": [{ "voice": "hat", "pulses": 7, "rotate": 2 }]
+        "rhythm": [
+          {
+            "voice": "hat",
+            "pulses": 7,
+            "rotate": 2
+          }
+        ]
       },
       {
         "id": "drums",
@@ -893,7 +1201,11 @@
             "grid": "x......x..x.....x.x....x..x.....",
             "swing": 0.12
           },
-          { "voice": "snare", "grid": "....x.......x...", "swing": 0.12 },
+          {
+            "voice": "snare",
+            "grid": "....x.......x...",
+            "swing": 0.12
+          },
           {
             "voice": "hat",
             "pulses": 8,
@@ -915,7 +1227,9 @@
         "volumeAutomation": [],
         "panAutomation": [],
         "rhythm": [
-          { "voice": "kick" },
+          {
+            "voice": "kick"
+          },
           {
             "voice": "hat",
             "pulses": 7,
@@ -927,9 +1241,18 @@
             "accents": 3,
             "probability": 0.9,
             "seed": 3,
-            "cycles": [{}, { "pulses": 9, "rotate": 1 }]
+            "cycles": [
+              {},
+              {
+                "pulses": 9,
+                "rotate": 1
+              }
+            ]
           },
-          { "voice": "openhat", "grid": "..X...x." }
+          {
+            "voice": "openhat",
+            "grid": "..X...x."
+          }
         ]
       }
     ],
@@ -1039,7 +1362,9 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "string": { "preset": "nylon" }
+        "string": {
+          "preset": "nylon"
+        }
       },
       {
         "id": "sitar",
@@ -1052,11 +1377,21 @@
         "panAutomation": [],
         "fxAutomation": {
           "string-bright": [
-            { "tick": 0, "value": 0.3 },
-            { "tick": 960, "value": 0.9 }
+            {
+              "tick": 0,
+              "value": 0.3
+            },
+            {
+              "tick": 960,
+              "value": 0.9
+            }
           ]
         },
-        "string": { "preset": "sitar", "buzz": 0.8, "sym": 0.5 }
+        "string": {
+          "preset": "sitar",
+          "buzz": 0.8,
+          "sym": 0.5
+        }
       }
     ],
     "granular": [
@@ -1080,7 +1415,9 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "granular": { "preset": "cloud" }
+        "granular": {
+          "preset": "cloud"
+        }
       },
       {
         "id": "kept",
@@ -1091,7 +1428,10 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "granular": { "preset": "dust", "gain": 0.5 }
+        "granular": {
+          "preset": "dust",
+          "gain": 0.5
+        }
       }
     ],
     "kit": [
@@ -1110,7 +1450,11 @@
             "grid": "x......x..x.....x.x....x..x.....",
             "swing": 0.12
           },
-          { "voice": "snare", "grid": "....x.......x...", "swing": 0.12 },
+          {
+            "voice": "snare",
+            "grid": "....x.......x...",
+            "swing": 0.12
+          },
           {
             "voice": "hat",
             "pulses": 8,
@@ -1133,8 +1477,18 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "pedal": [{ "tick": 0, "state": "down" }],
-        "sing": { "breath": 0, "jitter": 0, "shimmer": 0, "vibmod": 0 }
+        "pedal": [
+          {
+            "tick": 0,
+            "state": "down"
+          }
+        ],
+        "sing": {
+          "breath": 0,
+          "jitter": 0,
+          "shimmer": 0,
+          "vibmod": 0
+        }
       },
       {
         "id": "v",
@@ -1145,8 +1499,18 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "pedal": [{ "tick": 0, "state": "half" }],
-        "sing": { "breath": 0, "jitter": 0, "shimmer": 0, "vibmod": 0 }
+        "pedal": [
+          {
+            "tick": 0,
+            "state": "half"
+          }
+        ],
+        "sing": {
+          "breath": 0,
+          "jitter": 0,
+          "shimmer": 0,
+          "vibmod": 0
+        }
       },
       {
         "id": "lead",
@@ -1157,14 +1521,32 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "glide": { "time": 0.08, "mode": "legato" },
+        "glide": {
+          "time": 0.08,
+          "mode": "legato"
+        },
         "pedal": [
-          { "tick": 0, "state": "down" },
-          { "tick": 1920, "state": "up" },
-          { "tick": 2400, "state": "half" }
+          {
+            "tick": 0,
+            "state": "down"
+          },
+          {
+            "tick": 1920,
+            "state": "up"
+          },
+          {
+            "tick": 2400,
+            "state": "half"
+          }
         ],
-        "velocityCurve": { "curve": "soft" },
-        "humanize": { "timing": 8, "velocity": 5, "seed": 7 }
+        "velocityCurve": {
+          "curve": "soft"
+        },
+        "humanize": {
+          "timing": 8,
+          "velocity": 5,
+          "seed": 7
+        }
       }
     ],
     "softPedal": [
@@ -1177,12 +1559,31 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "pedal": [{ "tick": 0, "state": "down" }],
-        "keys": { "sym": 0.5, "preset": "grand" },
-        "softPedal": [{ "tick": 0, "state": "down" }],
+        "pedal": [
+          {
+            "tick": 0,
+            "state": "down"
+          }
+        ],
+        "keys": {
+          "sym": 0.5,
+          "preset": "grand"
+        },
+        "softPedal": [
+          {
+            "tick": 0,
+            "state": "down"
+          }
+        ],
         "sostenuto": [
-          { "tick": 480, "state": "down" },
-          { "tick": 1920, "state": "up" }
+          {
+            "tick": 480,
+            "state": "down"
+          },
+          {
+            "tick": 1920,
+            "state": "up"
+          }
         ]
       },
       {
@@ -1194,14 +1595,36 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "glide": { "time": 0.12, "mode": "poly" },
-        "pedal": [{ "tick": 0, "state": "down" }],
-        "velocityCurve": { "curve": "fixed", "fixed": 0.6 },
-        "softPedal": [
-          { "tick": 0, "state": "half" },
-          { "tick": 960, "state": "up" }
+        "glide": {
+          "time": 0.12,
+          "mode": "poly"
+        },
+        "pedal": [
+          {
+            "tick": 0,
+            "state": "down"
+          }
         ],
-        "sostenuto": [{ "tick": 480, "state": "down" }]
+        "velocityCurve": {
+          "curve": "fixed",
+          "fixed": 0.6
+        },
+        "softPedal": [
+          {
+            "tick": 0,
+            "state": "half"
+          },
+          {
+            "tick": 960,
+            "state": "up"
+          }
+        ],
+        "sostenuto": [
+          {
+            "tick": 480,
+            "state": "down"
+          }
+        ]
       }
     ],
     "sostenuto": [
@@ -1214,12 +1637,31 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "pedal": [{ "tick": 0, "state": "down" }],
-        "keys": { "sym": 0.5, "preset": "grand" },
-        "softPedal": [{ "tick": 0, "state": "down" }],
+        "pedal": [
+          {
+            "tick": 0,
+            "state": "down"
+          }
+        ],
+        "keys": {
+          "sym": 0.5,
+          "preset": "grand"
+        },
+        "softPedal": [
+          {
+            "tick": 0,
+            "state": "down"
+          }
+        ],
         "sostenuto": [
-          { "tick": 480, "state": "down" },
-          { "tick": 1920, "state": "up" }
+          {
+            "tick": 480,
+            "state": "down"
+          },
+          {
+            "tick": 1920,
+            "state": "up"
+          }
         ]
       },
       {
@@ -1231,14 +1673,36 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "glide": { "time": 0.12, "mode": "poly" },
-        "pedal": [{ "tick": 0, "state": "down" }],
-        "velocityCurve": { "curve": "fixed", "fixed": 0.6 },
-        "softPedal": [
-          { "tick": 0, "state": "half" },
-          { "tick": 960, "state": "up" }
+        "glide": {
+          "time": 0.12,
+          "mode": "poly"
+        },
+        "pedal": [
+          {
+            "tick": 0,
+            "state": "down"
+          }
         ],
-        "sostenuto": [{ "tick": 480, "state": "down" }]
+        "velocityCurve": {
+          "curve": "fixed",
+          "fixed": 0.6
+        },
+        "softPedal": [
+          {
+            "tick": 0,
+            "state": "half"
+          },
+          {
+            "tick": 960,
+            "state": "up"
+          }
+        ],
+        "sostenuto": [
+          {
+            "tick": 480,
+            "state": "down"
+          }
+        ]
       }
     ],
     "humanize": [
@@ -1251,8 +1715,14 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "velocityCurve": { "curve": "fixed", "fixed": 0.8 },
-        "humanize": { "length": 10, "seed": 0 }
+        "velocityCurve": {
+          "curve": "fixed",
+          "fixed": 0.8
+        },
+        "humanize": {
+          "length": 10,
+          "seed": 0
+        }
       },
       {
         "id": "lead",
@@ -1263,14 +1733,32 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "glide": { "time": 0.08, "mode": "legato" },
+        "glide": {
+          "time": 0.08,
+          "mode": "legato"
+        },
         "pedal": [
-          { "tick": 0, "state": "down" },
-          { "tick": 1920, "state": "up" },
-          { "tick": 2400, "state": "half" }
+          {
+            "tick": 0,
+            "state": "down"
+          },
+          {
+            "tick": 1920,
+            "state": "up"
+          },
+          {
+            "tick": 2400,
+            "state": "half"
+          }
         ],
-        "velocityCurve": { "curve": "soft" },
-        "humanize": { "timing": 8, "velocity": 5, "seed": 7 }
+        "velocityCurve": {
+          "curve": "soft"
+        },
+        "humanize": {
+          "timing": 8,
+          "velocity": 5,
+          "seed": 7
+        }
       }
     ],
     "time": [
@@ -1283,7 +1771,11 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "time": { "rate": 1.0833333333333333, "phase": -120, "cycle": 2880 }
+        "time": {
+          "rate": 1.0833333333333333,
+          "phase": -120,
+          "cycle": 2880
+        }
       }
     ],
     "wavetable": [
@@ -1297,15 +1789,23 @@
         "volumeAutomation": [],
         "panAutomation": [],
         "wavetable": {
-          "table": { "src": "builtin:formant" },
+          "table": {
+            "src": "builtin:formant"
+          },
           "wt": 0.25,
           "wtenv": -0.5,
           "warp": 0.3,
           "warpmode": "bendmp"
         },
         "wtAutomation": [
-          { "tick": 0, "value": 0.25 },
-          { "tick": 960, "value": 0.75 }
+          {
+            "tick": 0,
+            "value": 0.25
+          },
+          {
+            "tick": 960,
+            "value": 0.75
+          }
         ]
       },
       {
@@ -1338,15 +1838,23 @@
         "volumeAutomation": [],
         "panAutomation": [],
         "wavetable": {
-          "table": { "src": "builtin:formant" },
+          "table": {
+            "src": "builtin:formant"
+          },
           "wt": 0.25,
           "wtenv": -0.5,
           "warp": 0.3,
           "warpmode": "bendmp"
         },
         "wtAutomation": [
-          { "tick": 0, "value": 0.25 },
-          { "tick": 960, "value": 0.75 }
+          {
+            "tick": 0,
+            "value": 0.25
+          },
+          {
+            "tick": 960,
+            "value": 0.75
+          }
         ]
       }
     ],
@@ -1360,7 +1868,9 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "guitar": { "tune": [67, 60, 64, 69] }
+        "guitar": {
+          "tune": [67, 60, 64, 69]
+        }
       },
       {
         "id": "gtr",
@@ -1407,7 +1917,9 @@
           "size": 0.6,
           "fade": 3,
           "predelay": 0.02,
-          "ir": { "src": "builtin:hall" }
+          "ir": {
+            "src": "builtin:hall"
+          }
         },
         "fx": {
           "autofilter": {
@@ -1428,19 +1940,47 @@
             "mix": 1,
             "postgain": 1
           },
-          "chorus": { "rate": 0.8, "depth": 0.4, "mix": 0.5 },
-          "orbit": { "orbit": 4 },
-          "duck": { "orbit": 3, "depth": 0.7, "attack": 0.1, "onset": 0.003 }
+          "chorus": {
+            "rate": 0.8,
+            "depth": 0.4,
+            "mix": 0.5
+          },
+          "orbit": {
+            "orbit": 4
+          },
+          "duck": {
+            "orbit": 3,
+            "depth": 0.7,
+            "attack": 0.1,
+            "onset": 0.003
+          }
         },
         "fxAutomation": {
           "autofilter-cutoff": [
-            { "tick": 0, "value": 400 },
-            { "tick": 1920, "value": 4000 }
+            {
+              "tick": 0,
+              "value": 400
+            },
+            {
+              "tick": 1920,
+              "value": 4000
+            }
           ],
-          "reverb-mix": [{ "tick": 0, "value": 0.2 }],
+          "reverb-mix": [
+            {
+              "tick": 0,
+              "value": 0.2
+            }
+          ],
           "synth-lpf": [
-            { "tick": 0, "value": 600 },
-            { "tick": 1920, "value": 3000 }
+            {
+              "tick": 0,
+              "value": 600
+            },
+            {
+              "tick": 1920,
+              "value": 3000
+            }
           ]
         },
         "synth": {
@@ -1462,7 +2002,9 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "tuning": { "name": "pelog" }
+        "tuning": {
+          "name": "pelog"
+        }
       },
       {
         "id": "pad",
@@ -1473,7 +2015,10 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "tuning": { "ratios": ["9/8", "5/4", "3/2", "2/1"], "map": "nearest" }
+        "tuning": {
+          "ratios": ["9/8", "5/4", "3/2", "2/1"],
+          "map": "nearest"
+        }
       }
     ],
     "sing": [
@@ -1497,7 +2042,9 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "sing": { "voices": 6 }
+        "sing": {
+          "voices": 6
+        }
       },
       {
         "id": "v",
@@ -1508,7 +2055,9 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "sing": { "voices": 1 }
+        "sing": {
+          "voices": 1
+        }
       }
     ],
     "wind": [
@@ -1521,7 +2070,9 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "wind": { "preset": "sax" }
+        "wind": {
+          "preset": "sax"
+        }
       },
       {
         "id": "w",
@@ -1532,7 +2083,9 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "wind": { "preset": "flute" }
+        "wind": {
+          "preset": "flute"
+        }
       },
       {
         "id": "w",
@@ -1543,7 +2096,9 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "wind": { "preset": "trumpet" }
+        "wind": {
+          "preset": "trumpet"
+        }
       }
     ],
     "vocoder": [
@@ -1567,7 +2122,9 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "vocoder": { "preset": "robot" }
+        "vocoder": {
+          "preset": "robot"
+        }
       },
       {
         "id": "v",
@@ -1578,7 +2135,9 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "vocoder": { "preset": "talkbox" }
+        "vocoder": {
+          "preset": "talkbox"
+        }
       }
     ],
     "autotune": [
@@ -1591,7 +2150,9 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "autotune": { "preset": "hard" }
+        "autotune": {
+          "preset": "hard"
+        }
       },
       {
         "id": "v",
@@ -1602,7 +2163,10 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "autotune": { "preset": "pop", "speed": 40 }
+        "autotune": {
+          "preset": "pop",
+          "speed": 40
+        }
       },
       {
         "id": "v",
@@ -1613,7 +2177,10 @@
         "pan": 0,
         "volumeAutomation": [],
         "panAutomation": [],
-        "autotune": { "to": "chromatic", "amount": 0.5 }
+        "autotune": {
+          "to": "chromatic",
+          "amount": 0.5
+        }
       }
     ],
     "patch": [
@@ -1866,6 +2433,41 @@
           }
         ]
       }
+    ],
+    "vox": [
+      {
+        "id": "v",
+        "name": "v",
+        "instrument": "sing",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "vox": {
+          "engine": "formant",
+          "voice": "formant:default"
+        }
+      },
+      {
+        "id": "w",
+        "name": "v",
+        "instrument": "sing",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "vox": {
+          "engine": "formant",
+          "voice": "formant:robot",
+          "lang": "en",
+          "fit": "psola",
+          "p": {
+            "bright": 0.3
+          }
+        }
+      }
     ]
   },
   "notes": {
@@ -2010,7 +2612,12 @@
         "durationTicks": 480,
         "pitch": 60,
         "velocity": 0.5,
-        "bend": [{ "at": 1, "cents": 100 }]
+        "bend": [
+          {
+            "at": 1,
+            "cents": 100
+          }
+        ]
       },
       {
         "id": "b",
@@ -2021,8 +2628,14 @@
         "velocity": 0.8,
         "glide": 0.05,
         "bend": [
-          { "at": 0, "cents": -200 },
-          { "at": 0.25, "cents": 0 }
+          {
+            "at": 0,
+            "cents": -200
+          },
+          {
+            "at": 0.25,
+            "cents": 0
+          }
         ]
       },
       {
@@ -2034,8 +2647,17 @@
         "velocity": 0.55,
         "articulation": "tenuto",
         "glide": 0.1,
-        "bend": [{ "at": 0.5, "cents": 100 }],
-        "vibrato": { "rate": 5.5, "depth": 30, "delay": 0.2 }
+        "bend": [
+          {
+            "at": 0.5,
+            "cents": 100
+          }
+        ],
+        "vibrato": {
+          "rate": 5.5,
+          "depth": 30,
+          "delay": 0.2
+        }
       }
     ],
     "lyric": [
@@ -2066,8 +2688,14 @@
         "durationTicks": 1920,
         "pitch": 48,
         "velocity": 0.7,
-        "vibrato": { "rate": 4, "depth": 10 },
-        "humanize": { "timing": 12, "velocity": 4 }
+        "vibrato": {
+          "rate": 4,
+          "depth": 10
+        },
+        "humanize": {
+          "timing": 12,
+          "velocity": 4
+        }
       },
       {
         "id": "c",
@@ -2078,8 +2706,17 @@
         "velocity": 0.55,
         "articulation": "tenuto",
         "glide": 0.1,
-        "bend": [{ "at": 0.5, "cents": 100 }],
-        "vibrato": { "rate": 5.5, "depth": 30, "delay": 0.2 }
+        "bend": [
+          {
+            "at": 0.5,
+            "cents": 100
+          }
+        ],
+        "vibrato": {
+          "rate": 5.5,
+          "depth": 30,
+          "delay": 0.2
+        }
       }
     ],
     "humanize": [
@@ -2090,8 +2727,14 @@
         "durationTicks": 1920,
         "pitch": 48,
         "velocity": 0.7,
-        "vibrato": { "rate": 4, "depth": 10 },
-        "humanize": { "timing": 12, "velocity": 4 }
+        "vibrato": {
+          "rate": 4,
+          "depth": 10
+        },
+        "humanize": {
+          "timing": 12,
+          "velocity": 4
+        }
       }
     ],
     "glide": [
@@ -2104,8 +2747,14 @@
         "velocity": 0.8,
         "glide": 0.05,
         "bend": [
-          { "at": 0, "cents": -200 },
-          { "at": 0.25, "cents": 0 }
+          {
+            "at": 0,
+            "cents": -200
+          },
+          {
+            "at": 0.25,
+            "cents": 0
+          }
         ]
       },
       {
@@ -2117,8 +2766,17 @@
         "velocity": 0.55,
         "articulation": "tenuto",
         "glide": 0.1,
-        "bend": [{ "at": 0.5, "cents": 100 }],
-        "vibrato": { "rate": 5.5, "depth": 30, "delay": 0.2 }
+        "bend": [
+          {
+            "at": 0.5,
+            "cents": 100
+          }
+        ],
+        "vibrato": {
+          "rate": 5.5,
+          "depth": 30,
+          "delay": 0.2
+        }
       }
     ],
     "cents": [
@@ -2207,6 +2865,33 @@
         "velocity": 0.7,
         "drift": 1
       }
+    ],
+    "vox": [
+      {
+        "id": "n1",
+        "trackId": "vox",
+        "startTick": 0,
+        "durationTicks": 960,
+        "pitch": 60,
+        "velocity": 0.8,
+        "lyric": "star",
+        "vox": {
+          "ph": ["s", "t", "aa", "r"],
+          "breath": 0.2
+        }
+      },
+      {
+        "id": "n2",
+        "trackId": "vox",
+        "startTick": 960,
+        "durationTicks": 960,
+        "pitch": 62,
+        "velocity": 0.8,
+        "lyric": "hel-",
+        "vox": {
+          "cons": 0.5
+        }
+      }
     ]
   },
   "song": {
@@ -2216,15 +2901,40 @@
     "ticksPerBeat": [480],
     "key": [null, "C major", "A minor"],
     "sections": [
-      [{ "name": "intro", "startBar": 0, "bars": 2 }],
       [
-        { "name": "verse", "startBar": 0, "bars": 4 },
-        { "name": "chorus", "startBar": 4, "bars": 4 }
+        {
+          "name": "intro",
+          "startBar": 0,
+          "bars": 2
+        }
+      ],
+      [
+        {
+          "name": "verse",
+          "startBar": 0,
+          "bars": 4
+        },
+        {
+          "name": "chorus",
+          "startBar": 4,
+          "bars": 4
+        }
       ]
     ],
     "form": [
-      [{ "section": "intro" }],
-      [{ "section": "verse" }, { "section": "chorus" }]
+      [
+        {
+          "section": "intro"
+        }
+      ],
+      [
+        {
+          "section": "verse"
+        },
+        {
+          "section": "chorus"
+        }
+      ]
     ],
     "loopSection": ["chorus"],
     "master": [
@@ -2240,7 +2950,10 @@
           "mix": 1,
           "hpf": 0
         },
-        "width": { "width": 1.2, "mono": 120 },
+        "width": {
+          "width": 1.2,
+          "mono": 120
+        },
         "target": -9
       },
       {
@@ -2266,22 +2979,55 @@
       }
     ],
     "time": [
-      { "tempo": [{ "tick": 1920, "bpm": 100, "ramp": "linear" }] },
       {
         "tempo": [
-          { "tick": 1920, "bpm": 132 },
-          { "tick": 5760, "bpm": 70, "ramp": "exp" },
-          { "tick": 7680, "bpm": 96, "ramp": "linear" }
+          {
+            "tick": 1920,
+            "bpm": 100,
+            "ramp": "linear"
+          }
+        ]
+      },
+      {
+        "tempo": [
+          {
+            "tick": 1920,
+            "bpm": 132
+          },
+          {
+            "tick": 5760,
+            "bpm": 70,
+            "ramp": "exp"
+          },
+          {
+            "tick": 7680,
+            "bpm": 96,
+            "ramp": "linear"
+          }
         ],
         "meter": [
-          { "bar": 2, "beatsPerBar": 7, "beatUnit": 8 },
-          { "bar": 4, "beatsPerBar": 3 }
+          {
+            "bar": 2,
+            "beatsPerBar": 7,
+            "beatUnit": 8
+          },
+          {
+            "bar": 4,
+            "beatsPerBar": 3
+          }
         ],
-        "fermatas": [{ "tick": 9600, "beats": 3 }]
+        "fermatas": [
+          {
+            "tick": 9600,
+            "beats": 3
+          }
+        ]
       }
     ],
     "tuning": [
-      { "name": "19-edo" },
+      {
+        "name": "19-edo"
+      },
       {
         "name": "shruti",
         "cents": [
