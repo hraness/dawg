@@ -23,7 +23,7 @@ import {
 } from "../session/store.ts";
 import { listSessions } from "../session/list.ts";
 import { commentAppend, resolveCommentRef, writeComment } from "./comments.ts";
-import { HistoryDb, historyPath } from "./db.ts";
+import { HistoryDb, historyPath, readMirroredComments } from "./db.ts";
 import { formatDetail, formatRow } from "./format.ts";
 import { filterFromFlags, type Composition } from "./filter.ts";
 import { reconcileHistory } from "./record.ts";
@@ -147,7 +147,30 @@ async function importAll(db: HistoryDb, workspace: string): Promise<number> {
       // A damaged record stays out of history; `dawg sessions` reports it.
     }
   }
+  // Comments only the mirror still holds (a DB restored from an older copy).
+  imported += db.importComments(readMirroredComments(workspace));
   return imported;
+}
+
+/**
+ * Before a list read: when the record's newest event has no row at its
+ * revision (a crash between the JSON commit and the DB write, or a record
+ * restored from an older copy), reconcile that record. One indexed lookup
+ * otherwise; a busy or read-only DB leaves the read as it is.
+ */
+function catchUp(workspace: string, record: SessionRecord<unknown>): void {
+  const last = record.events.at(-1);
+  if (last === undefined) return;
+  let db: HistoryDb | undefined;
+  try {
+    db = HistoryDb.open(workspace, { busyMs: 2000 });
+    if (db.byRev(record.sessionId, last.revision)?.id !== last.id)
+      reconcileHistory(db, record);
+  } catch {
+    // The read below still shows what the DB has.
+  } finally {
+    db?.close();
+  }
 }
 
 function hasSessions(workspace: string): boolean {
@@ -296,7 +319,7 @@ export async function runHistoryCommand(
       await importAll(db, workspace);
       db.close();
     }
-  }
+  } else if (record !== undefined) catchUp(workspace, record);
   const db = HistoryDb.open(workspace, { readonly: true, busyMs: 2000 });
   try {
     const page = db.query({ ...built.filter, order: asc ? "asc" : "desc" });

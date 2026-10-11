@@ -31,7 +31,14 @@ import {
   type SessionPaths,
   type SessionRecord,
 } from "../session/store.ts";
-import { HISTORY_LIMITS, HistoryDb, historyPath } from "./db.ts";
+import { runHistoryCommand } from "./cli.ts";
+import { commentAppend, writeComment } from "./comments.ts";
+import {
+  HISTORY_LIMITS,
+  HistoryDb,
+  historyPath,
+  readMirroredComments,
+} from "./db.ts";
 import { historyHook } from "./hook.ts";
 import { closeHistories, openHistory } from "./open.ts";
 import {
@@ -461,5 +468,189 @@ describe("history stays bounded", () => {
       n: 2,
     });
     raw.close();
+  });
+});
+
+describe("history survives restores and damage", () => {
+  test("comments come back from comments.jsonl when a damaged DB is rebuilt", async () => {
+    const { workspace, record } = await fixture(3, true);
+    const db = openHistory(workspace)!;
+    const parent = db.byRev(record.sessionId, 3)!;
+    const written = writeComment(
+      db,
+      commentAppend(
+        record.sessionId,
+        { ref: { type: "last" }, text: "great bass", tags: ["keep"] },
+        { kind: "human", pane: "A" },
+        {
+          rev: 3,
+          focus: { trackId: "bass", trackName: "bass", instrument: "bass" },
+          playhead: { beat: 4, bar: 2, beatInBar: 1, label: "2.1" },
+        },
+        parent,
+      ),
+    );
+    closeHistories();
+    await writeFile(historyPath(workspace), "not a database at all, sorry");
+    const rebuilt = HistoryDb.open(workspace);
+    expect(rebuilt.report.quarantined).toBeDefined();
+    expect(rebuilt.report.restoredComments).toBe(1);
+    expect(reconcileHistory(rebuilt, record).imported).toBe(3);
+    const comments = rebuilt.query({
+      sessionId: record.sessionId,
+      kinds: ["comment"],
+    }).rows;
+    expect(comments.map((row) => row.id)).toEqual([written.id]);
+    const back = comments[0]!;
+    expect(back.body).toBe("great bass");
+    expect(back.tags).toEqual(["keep"]);
+    expect(back.parentId).toBe(parent.id);
+    expect(back.at).toBe(written.at);
+    expect(back.context?.playhead?.label).toBe("2.1");
+    expect(
+      rebuilt.query({ sessionId: record.sessionId, track: "bass", tag: "keep" })
+        .rows.length,
+    ).toBe(1);
+    rebuilt.close();
+    // Reopening (or a second import) never duplicates them.
+    const again = HistoryDb.open(workspace);
+    expect(again.importComments(readMirroredComments(workspace))).toBe(0);
+    expect(again.count({ kinds: ["comment"] })).toBe(1);
+    again.close();
+  });
+
+  test("a record restored from an older copy supersedes the abandoned edits", async () => {
+    const { workspace, paths, record } = await fixture(2, true);
+    const db = openHistory(workspace)!;
+    const copy = await readFile(paths.record, "utf8");
+    let current = record;
+    let score = scoreFromJSON(current.composition);
+    const edit = async (pitch: number) => {
+      const next = score.addNote({
+        id: `p${pitch}`,
+        trackId: "bass",
+        startTick: pitch * 4,
+        durationTicks: 96,
+        pitch,
+        velocity: 0.7,
+      });
+      current = await appendSessionEvent(
+        paths,
+        current,
+        {
+          kind: "score.operation",
+          payload: {},
+          ops: [...diffScores(score, next)],
+        },
+        next.toJSON(),
+        historyHook(workspace, record.sessionId),
+      );
+      score = next;
+    };
+    for (const pitch of [60, 61, 62]) await edit(pitch);
+    const abandoned = db
+      .query({ sessionId: record.sessionId, rev: [3, 5] })
+      .rows.map((row) => row.id);
+    expect(abandoned.length).toBe(3);
+    // git checkout / backup restore: the record goes back to revision 2.
+    await writeFile(paths.record, copy);
+    current = await loadSession<unknown>(paths);
+    score = scoreFromJSON(current.composition);
+    for (const pitch of [50, 51]) await edit(pitch);
+    const live = db.query({
+      sessionId: record.sessionId,
+      limit: 50,
+      order: "asc",
+    }).rows;
+    expect(live.map((row) => row.rev)).toEqual([1, 2, 3, 4]);
+    expect(live.slice(2).map((row) => row.id)).toEqual(
+      current.events.slice(-2).map((event) => event.id),
+    );
+    for (const id of abandoned) {
+      const row = db.get(id)!;
+      expect(row.origin).toBe("superseded");
+      expect(row.rev).toBeNull();
+    }
+    expect(
+      db.query({
+        sessionId: record.sessionId,
+        includeSuperseded: true,
+        limit: 50,
+      }).rows.length,
+    ).toBe(7);
+    expect(db.byRev(record.sessionId, 3)?.id).toBe(current.events.at(-2)?.id);
+  });
+
+  test("reconcile also moves off an abandoned timeline", async () => {
+    const { workspace, paths, record } = await fixture(2);
+    const db = HistoryDb.open(workspace);
+    const copy = await readFile(paths.record, "utf8");
+    let current = record;
+    let score = scoreFromJSON(current.composition);
+    const edit = async (bpm: number) => {
+      const next = score.withTempo(bpm);
+      current = await appendSessionEvent(
+        paths,
+        current,
+        {
+          kind: "score.operation",
+          payload: {},
+          ops: [...diffScores(score, next)],
+        },
+        next.toJSON(),
+      );
+      score = next;
+    };
+    for (const bpm of [100, 101, 102]) await edit(bpm);
+    expect(reconcileHistory(db, current).imported).toBe(5);
+    await writeFile(paths.record, copy);
+    current = await loadSession<unknown>(paths);
+    score = scoreFromJSON(current.composition);
+    for (const bpm of [80, 81]) await edit(bpm);
+    expect(reconcileHistory(db, current).imported).toBe(2);
+    const live = db.query({ sessionId: record.sessionId, order: "asc" }).rows;
+    expect(live.map((row) => row.id)).toEqual(
+      current.events.map((event) => event.id),
+    );
+    db.close();
+  });
+
+  test("dawg history lists an edit whose DB write was lost", async () => {
+    const { workspace, paths, record } = await fixture(3, true);
+    closeHistories();
+    let score = scoreFromJSON(record.composition);
+    const next = score.withTempo(133);
+    // Committed to the record; the DB write never happened (a crash).
+    await appendSessionEvent(
+      paths,
+      record,
+      {
+        kind: "score.operation",
+        payload: {},
+        ops: [...diffScores(score, next)],
+      },
+      next.toJSON(),
+    );
+    score = next;
+    const lines: string[] = [];
+    const out = { write: (text: string) => lines.push(text) };
+    const err = { write: (_text: string) => undefined };
+    for (let run = 0; run < 2; run += 1) {
+      lines.length = 0;
+      expect(
+        await runHistoryCommand(
+          ["history", "--json", "--asc"],
+          workspace,
+          out,
+          err,
+        ),
+      ).toBe(0);
+      const revs = lines
+        .join("")
+        .trim()
+        .split("\n")
+        .map((line) => (JSON.parse(line) as { rev: number }).rev);
+      expect(revs).toEqual([1, 2, 3, 4]);
+    }
   });
 });

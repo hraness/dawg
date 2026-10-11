@@ -406,6 +406,7 @@ import {
   patchModel,
   patchPaint,
   patchViewState,
+  portRows,
   type PatchViewState,
 } from "./tui/patch-view.ts";
 import { nodeMenuId } from "./tui/patch-menu.ts";
@@ -1077,12 +1078,32 @@ const historyHost: HistoryHost = {
   focusedTrack: () => requestedTrack,
   playheadBeat: () => scoreBeatAt(score, clock.beatAt()),
   playing: () => clock.playing,
-  focusedParam: () => fader?.label.slice(0, 64),
-  patchNode: () => undefined,
+  focusedParam: () =>
+    fader?.label.slice(0, 64) ?? patchFocus(score, requestedTrack)?.param,
+  patchNode: () => patchFocus(score, requestedTrack)?.node,
   screen: () => paneView().screen ?? "home",
   ascii: () => !tui.capabilities.unicode,
 };
 const history = wireHistory(historyHost);
+/**
+ * The patch view's focus for a comment's context: the selected node, and
+ * the param on the ports pane (`osc.cutoff`). Undefined when it is closed.
+ */
+function patchFocus(
+  value: TrackScore,
+  trackId: string,
+): { node: string; param?: string } | undefined {
+  if (!patchView.on) return undefined;
+  const model = patchModel(value, trackId, patchView.state.fx);
+  if (typeof model === "string") return undefined;
+  const node = model.nodes[patchView.state.node];
+  if (node === undefined) return undefined;
+  if (patchView.state.pane !== "ports") return { node: node.id };
+  const row = portRows(model, node.id)[patchView.state.port];
+  return row?.kind === "param" || row?.kind === "in"
+    ? { node: node.id, param: `${node.id}.${row.name}`.slice(0, 64) }
+    : { node: node.id };
+}
 /** Whom an external file edit credits: dawg's agent, a coding agent, a save. */
 const attributor = new Attributor(process.cwd());
 /** The last drawn frame as text (crash rows carry it; dev writes it out). */

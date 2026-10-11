@@ -10,7 +10,8 @@
  */
 import { newId } from "../../core/ids.ts";
 import type { TrackScore } from "../../core/score.ts";
-import { barStartTick } from "../../core/tempo.ts";
+import { rangeOf } from "../../core/range.ts";
+import { barAt, barStartTick } from "../../core/tempo.ts";
 import {
   parseHistoryCommand,
   type HistoryCommand,
@@ -70,6 +71,43 @@ export function loopBeats(
   }
 }
 
+/**
+ * The selection a comment captures: the gesture range typed range commands
+ * act on (`copy`, `move` with no range: the loop, else the section under
+ * the playhead, else its bar) over the focused track, with its note count.
+ */
+export function gestureSelection(
+  score: TrackScore,
+  trackId: string | undefined,
+  playheadBeat: number | undefined,
+): CommentContext["selection"] | undefined {
+  if (trackId === undefined || score.bars <= 0) return undefined;
+  if (!score.tracks.some((track) => track.id === trackId)) return undefined;
+  try {
+    const tick = Math.max(
+      0,
+      Math.round((playheadBeat ?? 0) * score.ticksPerBeat),
+    );
+    const { range } = rangeOf(score, barAt(score, tick).bar);
+    const from = barStartTick(score, range.startBar);
+    const to = barStartTick(score, range.startBar + range.bars);
+    const notes = score.notes.filter(
+      (note) =>
+        note.trackId === trackId &&
+        note.startTick >= from &&
+        note.startTick < to,
+    ).length;
+    return {
+      trackId,
+      fromBeat: from / score.ticksPerBeat,
+      toBeat: to / score.ticksPerBeat,
+      notes,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 /** The adapter design §3.2 asks main.ts for. */
 export function contextSource(host: HistoryHost): ContextSource {
   const own = host.presence();
@@ -91,7 +129,11 @@ export function contextSource(host: HistoryHost): ContextSource {
     revision: host.revision(),
     playheadBeat: host.playheadBeat(),
     loop: loopBeats(score),
-    selection: undefined,
+    selection: gestureSelection(
+      score,
+      host.focusedTrack(),
+      host.playheadBeat(),
+    ),
     focusedParam: host.focusedParam(),
     patchNode: host.patchNode(),
     transport: {

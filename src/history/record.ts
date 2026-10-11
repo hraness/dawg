@@ -201,18 +201,25 @@ export function recordSessionEvent(
 ): void {
   try {
     if (db.readonly) return;
-    db.append(
-      sessionEventRow(
-        sessionId,
-        event,
-        diskBefore.composition,
-        after.composition,
-        "local",
-        pane,
-      ),
+    const row = sessionEventRow(
+      sessionId,
+      event,
+      diskBefore.composition,
+      after.composition,
+      "local",
+      pane,
     );
-  } catch (error) {
-    if (isDuplicate(error)) return;
+    try {
+      db.append(row);
+    } catch (error) {
+      if (!isDuplicate(error)) throw error;
+      if (db.has(event.id)) return;
+      // The revision is taken by another event: the record was restored
+      // from an older copy and this edit starts a new timeline there.
+      db.supersedeFrom(sessionId, event.revision);
+      db.append(row);
+    }
+  } catch {
     dirty.add(sessionId);
   }
 }
@@ -238,8 +245,19 @@ export function reconcileHistory(
   if (record.meta.forkOf !== undefined)
     db.recordSession(record.sessionId, record.meta.forkOf);
   else db.recordSession(record.sessionId);
-  const have = db.revs(record.sessionId);
+  let have = db.revIds(record.sessionId);
   const events = record.events;
+  // The first revision whose row names a different event is where the
+  // record left the DB's timeline (a restored copy edited again): rows
+  // from there on are superseded, kept, and the record's events go in.
+  const fork = events.find((event) => {
+    const id = have.get(event.revision);
+    return id !== undefined && id !== event.id;
+  });
+  if (fork !== undefined) {
+    db.supersedeFrom(record.sessionId, fork.revision);
+    have = db.revIds(record.sessionId);
+  }
   const missing: number[] = [];
   for (let index = 0; index < events.length; index += 1) {
     const event = events[index]!;

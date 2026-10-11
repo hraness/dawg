@@ -5,8 +5,9 @@
  * Every append runs in `BEGIN IMMEDIATE`, and `lamport`/`seq` are assigned
  * inside it, so any number of writer connections (the daemon, file-mode
  * panes, the CLI) never mint duplicates. Rows are never updated except by
- * retention nulling rewinds and payloads, and never deleted except `log`
- * rows with no revision and old `focus` rows.
+ * retention nulling rewinds and payloads and by `supersedeFrom` marking an
+ * abandoned timeline's edits, and never deleted except `log` rows with no
+ * revision and old `focus` rows.
  */
 import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
@@ -24,6 +25,7 @@ import {
 import { dirname, join } from "node:path";
 import { parseRewind, type Rewind } from "../session/delta.ts";
 import { STATE_DIR } from "../session/store.ts";
+import { contextTargets } from "./targets.ts";
 import {
   ACTOR_KINDS,
   HISTORY_KINDS,
@@ -101,6 +103,8 @@ export type OpenReport = Readonly<{
   created: boolean;
   quarantined?: string;
   newerSchema: boolean;
+  /** Comments a fresh or rebuilt DB re-imported from `comments.jsonl`. */
+  restoredComments?: number;
 }>;
 
 export function historyPath(workspace: string): string {
@@ -355,7 +359,12 @@ export class HistoryDb {
     readonly: boolean,
     busyMs: number,
     opts: OpenOptions,
-    report: { created: boolean; quarantined?: string; newerSchema: boolean },
+    report: {
+      created: boolean;
+      quarantined?: string;
+      newerSchema: boolean;
+      restoredComments?: number;
+    },
   ): HistoryDb {
     const db = readonly
       ? openReadonly(path)
@@ -380,7 +389,11 @@ export class HistoryDb {
   }
 
   private init(
-    report: { created: boolean; newerSchema: boolean },
+    report: {
+      created: boolean;
+      newerSchema: boolean;
+      restoredComments?: number;
+    },
     opts: OpenOptions,
   ): void {
     const hasMeta =
@@ -421,6 +434,12 @@ export class HistoryDb {
     }
     this.fts = this.metaGet("fts") === "1";
     this.replica = this.metaGet("replica_id") ?? "unknown";
+    // A fresh or rebuilt DB: comments are the one thing no session record
+    // can rebuild, so their fsync'd mirror comes back in (design §2.8b).
+    if (report.created && !this.readonly && !this.newer)
+      report.restoredComments = this.importComments(
+        readMirroredComments(this.workspace),
+      );
   }
 
   /** True when this binary is older than the DB's schema (read + insert only). */
@@ -479,6 +498,88 @@ export class HistoryDb {
 
   public has(id: string): boolean {
     return this.db.query("SELECT 1 FROM events WHERE id = ?").get(id) !== null;
+  }
+
+  /** Each revision this session has a row for, with that row's event id. */
+  public revIds(sessionId: string): Map<number, string> {
+    const rows = this.db
+      .query<{ rev: number; id: string }, [string]>(
+        "SELECT rev, id FROM events WHERE session_id = ? AND rev IS NOT NULL",
+      )
+      .all(sessionId);
+    return new Map(rows.map((row) => [row.rev, row.id]));
+  }
+
+  /**
+   * Marks this session's rows at revision `rev` and later as superseded:
+   * the record moved to another timeline (restored from an older copy, then
+   * edited), so those revisions now name different events. The rows stay,
+   * with `rev` cleared and `origin = 'superseded'`; nothing is deleted.
+   * Returns how many rows moved.
+   */
+  public supersedeFrom(sessionId: string, rev: number): number {
+    if (this.readonly) return 0;
+    return this.write(
+      () =>
+        this.db
+          .query(
+            "UPDATE events SET origin = 'superseded', rev = NULL WHERE session_id = ? AND rev >= ?",
+          )
+          .run(sessionId, rev).changes,
+    );
+  }
+
+  /**
+   * Re-imports mirrored comment rows (from `comments.jsonl`) the DB lacks,
+   * by id, keeping their id, time, author, context and tags. Targets come
+   * back from the captured context and the parent row. Returns the count.
+   */
+  public importComments(rows: readonly HistoryRow[]): number {
+    if (this.readonly) return 0;
+    const missing = rows.filter(
+      (row) => row.kind === "comment" && !this.has(row.id),
+    );
+    if (missing.length === 0) return 0;
+    const appends: HistoryAppend[] = missing.map((row) => {
+      const parent =
+        row.parentId !== null && row.parentId !== undefined
+          ? this.get(row.parentId)
+          : undefined;
+      const fromParent = (parent?.targets ?? []).filter(
+        (target) =>
+          target.type === "track" ||
+          target.type === "instrument" ||
+          target.type === "param",
+      );
+      const seen = new Set<string>();
+      const targets = [...contextTargets(row.context), ...fromParent].filter(
+        (target) => {
+          const key = `${target.type}\u0000${target.key}\u0000${target.trackId ?? ""}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        },
+      );
+      return {
+        id: row.id,
+        sessionId: row.sessionId,
+        kind: "comment",
+        ...(row.sub !== null && row.sub !== undefined ? { sub: row.sub } : {}),
+        atRev: Number.isFinite(row.atRev) ? row.atRev : 0,
+        ...(row.parentId !== null && row.parentId !== undefined
+          ? { parentId: row.parentId }
+          : {}),
+        actor: row.actor ?? { kind: "system" },
+        ...(typeof row.at === "string" ? { at: row.at } : {}),
+        summary: typeof row.summary === "string" ? row.summary : "",
+        ...(typeof row.body === "string" ? { body: row.body } : {}),
+        ...(row.context !== undefined ? { context: row.context } : {}),
+        ...(row.payload !== undefined ? { payload: row.payload } : {}),
+        targets,
+        tags: row.tags ?? [],
+      };
+    });
+    return this.appendMany(appends);
   }
 
   /** Revisions this session already has rows for (import dedupe by rev). */
@@ -760,7 +861,10 @@ export class HistoryDb {
         atRev: raw.at_rev,
         lamport: raw.lamport,
         replicaId: raw.replica_id,
-        origin: raw.origin === "imported" ? "imported" : "local",
+        origin:
+          raw.origin === "imported" || raw.origin === "superseded"
+            ? raw.origin
+            : "local",
         parentId: raw.parent_id,
         kind: (HISTORY_KINDS.includes(raw.kind as HistoryKind)
           ? raw.kind
@@ -883,6 +987,8 @@ export class HistoryDb {
       where.push("e.parent_id = ?");
       args.push(filter.parentId);
     }
+    if (filter.includeSuperseded !== true)
+      where.push("e.origin != 'superseded'");
     const asc = filter.order === "asc";
     const pageWhere = [...where];
     const pageArgs = [...args];
