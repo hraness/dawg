@@ -757,7 +757,7 @@ export async function executeCall(
   if (context.host.untrusted && context.turnState)
     context.turnState.untrusted = true;
   const outcome = await executeCallInner(call, context);
-  if (outcome.ok && context.turnState && UNTRUSTED_TOOLS.has(call.name))
+  if (outcome.ok && context.turnState && untrustedCall(call))
     context.turnState.untrusted = true;
   const ledger = context.turnState?.ledger;
   if (ledger) {
@@ -801,6 +801,26 @@ export const UNTRUSTED_TOOLS: ReadonlySet<string> = new Set([
   "web_search",
   "download_audio",
 ]);
+
+/**
+ * Whether a finished call read third-party text: an UNTRUSTED_TOOLS call,
+ * or exec running yt-dlp (its --print/-J output is titles and descriptions).
+ */
+export function untrustedCall(call: {
+  name: string;
+  arguments: string;
+}): boolean {
+  if (UNTRUSTED_TOOLS.has(call.name)) return true;
+  if (call.name !== "exec") return false;
+  try {
+    const raw = JSON.parse(call.arguments) as unknown;
+    const argv =
+      raw && typeof raw === "object" ? (raw as { argv?: unknown }).argv : [];
+    return Array.isArray(argv) && argv[0] === "yt-dlp";
+  } catch {
+    return false;
+  }
+}
 
 /** The workspace with the human's read roots (`.dawg/agent.json`) filled in. */
 async function withReadRoots(workspace: WorkspaceHost): Promise<WorkspaceHost> {

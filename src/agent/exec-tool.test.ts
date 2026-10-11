@@ -14,6 +14,7 @@ import { systemRunner, type CommandRunner } from "../auth/runner.ts";
 import type { MediaRunContext } from "../media/types.ts";
 import { EXEC_TOOL, readExecSettings } from "./exec-tool.ts";
 import { AGENT_TOOLS, type ToolContext } from "./tools.ts";
+import { untrustedCall } from "./agent.ts";
 
 const dirs: string[] = [];
 afterAll(() => {
@@ -104,6 +105,19 @@ describe("exec agent tool", () => {
     mkdirSync(join(root, ".dawg"), { recursive: true });
     writeFileSync(join(root, ".dawg", "agent.json"), "{nope");
     expect(readExecSettings(root)).toEqual({ shell: false, readRoots: [] });
+  });
+
+  test("exec running yt-dlp marks the turn untrusted; other exec does not", () => {
+    const call = (argv: unknown) => ({
+      name: "exec",
+      arguments: JSON.stringify({ argv }),
+    });
+    expect(untrustedCall(call(["yt-dlp", "-J", "https://x.test/v"]))).toBe(
+      true,
+    );
+    expect(untrustedCall(call(["ffprobe", "a.wav"]))).toBe(false);
+    expect(untrustedCall({ name: "exec", arguments: "{nope" })).toBe(false);
+    expect(untrustedCall({ name: "fetch_url", arguments: "{}" })).toBe(true);
   });
 
   test("argv must be strings", () => {

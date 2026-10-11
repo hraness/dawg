@@ -44,7 +44,12 @@ import {
   writeAudio,
   type Pcm,
 } from "./pcm.ts";
-import { fmtSeconds, parseTime, type TimeSpec } from "./time.ts";
+import {
+  fmtSeconds,
+  parseTime,
+  parseTimeInFile,
+  type TimeSpec,
+} from "./time.ts";
 import {
   CHOP_ANALYSIS_OPS,
   CHOP_OPS,
@@ -229,7 +234,9 @@ function range(
 ): { start: number; end: number } {
   const total = seconds(pcm);
   const from =
-    args.from !== undefined ? parseTime(args.from, total, ctx.tempo) : 0;
+    args.from !== undefined
+      ? parseTimeInFile(args.from, total, "from", ctx.tempo)
+      : 0;
   const to =
     args.to !== undefined ? parseTime(args.to, total, ctx.tempo) : total;
   if (to <= from)

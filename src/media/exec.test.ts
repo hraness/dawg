@@ -16,6 +16,7 @@ import {
   checkExecArgv,
   EXEC_LIMITS,
   ExecError,
+  EXEC_UNTRUSTED,
   readExecLog,
   runExec,
   type ExecContext,
@@ -280,6 +281,174 @@ describe("exec argument policy", () => {
   });
 });
 
+describe("exec audit fixes (lane audio)", () => {
+  test("filter outputs: ametadata file= is an output checked by the write scope", () => {
+    mkdirSync(join(root, ".dawg"), { recursive: true });
+    writeFileSync(join(root, ".dawg/agent.json"), "{}");
+    const base = ["ffmpeg", "-y", "-i", "in.wav", "-af"];
+    const tail = ["-f", "null", "nul.out"];
+    expect(
+      refused([...base, "ametadata=mode=print:file=.dawg/agent.json", ...tail]),
+    ).toMatch(/outside the write scope/);
+    expect(
+      refused([
+        ...base,
+        "ametadata=print:file=in/../.dawg/agent.json",
+        ...tail,
+      ]),
+    ).toMatch(/write scope|outside/);
+    // By position: metadata's sixth option is file.
+    expect(
+      refused([
+        ...base,
+        "ametadata=print:k:v:equal:x:.dawg/agent.json",
+        ...tail,
+      ]),
+    ).toMatch(/name the options/);
+    // ffmpeg unescapes option values: .daw\g is .dawg to it.
+    expect(
+      refused([...base, "ametadata=print:file=.daw\\g/agent.json", ...tail]),
+    ).toMatch(/escapes and quotes/);
+    expect(
+      refused([...base, "astats,ametadata=print:file=.git/config", ...tail]),
+    ).toMatch(/write scope/);
+    const ok = checkExecArgv(
+      [...base, "ametadata=print:file=tracks/lead/meta.txt", ...tail],
+      ctx(),
+    );
+    expect(ok.ok && ok.outputs).toContain("tracks/lead/meta.txt");
+  });
+
+  test("filter outputs: running ametadata at .dawg/agent.json never truncates it", async () => {
+    mkdirSync(join(root, ".dawg"), { recursive: true });
+    writeFileSync(join(root, ".dawg/agent.json"), '{"shell":false}');
+    await expect(
+      runExec(
+        {
+          argv: [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "in.wav",
+            "-af",
+            "ametadata=mode=print:file=.dawg/agent.json",
+            "-f",
+            "null",
+            "nul.out",
+          ],
+        },
+        ctx(),
+      ),
+    ).rejects.toThrow(/write scope/);
+    expect(readFileSync(join(root, ".dawg/agent.json"), "utf8")).toBe(
+      '{"shell":false}',
+    );
+  });
+
+  test("playlists and manifests are refused as inputs (HLS, concat, pls)", () => {
+    mkdirSync(join(root, "samples"), { recursive: true });
+    writeFileSync(
+      join(root, "samples/x.m3u8"),
+      `#EXTM3U\n#EXTINF:1,\n${join(outside, "secret.wav")}\n`,
+    );
+    writeFileSync(
+      join(root, "samples/sneaky.wav"),
+      `#EXTM3U\n${join(outside, "secret.wav")}\n`,
+    );
+    writeFileSync(
+      join(root, "samples/list.txt"),
+      "ffconcat version 1.0\nfile '/etc/hosts'\n",
+    );
+    writeFileSync(
+      join(root, "samples/radio.pls"),
+      "[playlist]\nFile1=/etc/hosts\n",
+    );
+    for (const file of ["x.m3u8", "sneaky.wav", "list.txt"])
+      expect(
+        refused([
+          "ffmpeg",
+          "-y",
+          "-i",
+          `samples/${file}`,
+          "samples/stolen.wav",
+        ]),
+      ).toMatch(/playlist or manifest/);
+    expect(refused(["sox", "samples/radio.pls", "samples/stolen.wav"])).toMatch(
+      /playlist or manifest/,
+    );
+    expect(
+      checkExecArgv(["ffmpeg", "-i", "in.wav", "samples/fine.wav"], ctx()).ok,
+    ).toBe(true);
+  });
+
+  test("trusted shell falls back to the allowlist after untrusted content", async () => {
+    expect(refused(["sleeper"], { shell: true, untrusted: true })).toBe(
+      `sleeper is not allowed: ${EXEC_UNTRUSTED}`,
+    );
+    await expect(
+      runExec({ argv: ["sleeper"] }, ctx({ shell: true, untrusted: true })),
+    ).rejects.toThrow(/untrusted content seen this turn/);
+    expect(
+      checkExecArgv(
+        ["ffmpeg", "-i", "in.wav", "samples/u.wav"],
+        ctx({ shell: true, untrusted: true }),
+      ).ok,
+    ).toBe(true);
+  });
+
+  test("top-level outputs are stat'ed, never a root walk (no log or .dawg files)", async () => {
+    const result = await runExec(
+      { argv: ["ffmpeg", "-i", "in.wav", "top.wav"] },
+      ctx(),
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.outputs).toEqual(["top.wav"]);
+  });
+
+  test("uv-launched demucs keeps the real HOME and caches; the per-run tmp is removed", async () => {
+    const uvBin = mkdtempSync(join(tmpdir(), "dawg-exec-uv-"));
+    try {
+      writeFileSync(
+        join(uvBin, "uv"),
+        `#!/bin/sh\nif [ "$1" = tool ] && [ "$2" = list ]; then echo "demucs v4.0.1"; echo "- demucs"; exit 0; fi\necho "HOME=$HOME"\necho "TMPDIR=$TMPDIR"\necho "UV_OFFLINE=$UV_OFFLINE"\necho "UV_CACHE_DIR=$UV_CACHE_DIR"\nfor a in "$@"; do echo "arg:$a"; done\n`,
+      );
+      chmodSync(join(uvBin, "uv"), 0o755);
+      const saved = process.env.UV_CACHE_DIR;
+      process.env.UV_CACHE_DIR = "/tmp/dawg-uv-cache-test";
+      let result;
+      try {
+        result = await runExec(
+          { argv: ["demucs", "-o", "tracks/lead/stems", "in.wav"] },
+          ctx({
+            runner: {
+              ...runnerFor(uvBin),
+              run: (command, args, options) =>
+                systemRunner.run(join(uvBin, command), args, options),
+            },
+            path: `${uvBin}:/usr/bin:/bin`,
+          }),
+        );
+      } finally {
+        if (saved === undefined) delete process.env.UV_CACHE_DIR;
+        else process.env.UV_CACHE_DIR = saved;
+      }
+      expect(result.exitCode).toBe(0);
+      expect(result.stdoutTail).toContain(`HOME=${process.env.HOME}\n`);
+      expect(result.stdoutTail).toContain(
+        "UV_CACHE_DIR=/tmp/dawg-uv-cache-test",
+      );
+      expect(result.stdoutTail).toContain("UV_OFFLINE=1");
+      expect(result.stdoutTail).toContain("arg:--offline");
+      expect(result.stdoutTail).toContain(`.dawg/tmp/exec/${result.logId}`);
+      expect(existsSync(join(root, ".dawg/tmp/exec", result.logId))).toBe(
+        false,
+      );
+    } finally {
+      rmSync(uvBin, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("exec runs", () => {
   test("runs with a minimal env, logs, and reports new files", async () => {
     const result = await runExec(
@@ -302,6 +471,9 @@ describe("exec runs", () => {
     expect(result.stdoutTail).toContain("arg:--no-exec");
     expect(result.stdoutTail).toContain("arg:tracks/lead/downloads");
     expect(result.stdoutTail).toContain(`.dawg/tmp/exec/${result.logId}`);
+    // The private HOME is per run and removed afterwards.
+    expect(result.stdoutTail).not.toContain(`HOME=${process.env.HOME}\n`);
+    expect(existsSync(join(root, ".dawg/tmp/exec", result.logId))).toBe(false);
   });
 
   test("a timeout kills the whole process group", async () => {

@@ -11,7 +11,10 @@ import { systemRunner, type CommandRunner } from "../../auth/runner.ts";
 import { trackSlug } from "../../media/paths.ts";
 import { MediaAbortError } from "../../media/process.ts";
 import { errorMessage } from "../../media/vendor/util.ts";
+import { evaluateProject } from "../../../core/sdk/eval.ts";
+import { isProject } from "../../project/init.ts";
 import { runChop } from "./run.ts";
+import type { Tempo } from "./time.ts";
 import type { ChopResult } from "./types.ts";
 import { chopFromWords, chopUsage } from "./words.ts";
 
@@ -21,7 +24,7 @@ export const CHOP_HELP = `dawg media chop — inspect and chop audio (guides/cho
 
 ${chopUsage("dawg media chop ")}
 
-Times: seconds (1.5), 1.5s, 350ms, 1:02.5, bar:9.1 or beat:32 (with --bpm-of N),
+Times: seconds (1.5), 1.5s, 350ms, 1:02.5, bar:9.1 or beat:32 (--bpm-of N, else the project tempo),
 negative counts from the end (-2s). Cuts snap to zero crossings (--snap zero|onset|beat|none).
 Outputs: 24-bit WAV with a .json sidecar (sha256, source, op) in tracks/<track>/samples/
 (or samples/ without --track); --out PATH picks the file. Never overwrites unless --out names it.
@@ -33,7 +36,12 @@ export async function runChopCli(
   cwd: string,
   stdout: Output,
   stderr: Output,
-  options: { runner?: CommandRunner; signal?: AbortSignal } = {},
+  options: {
+    runner?: CommandRunner;
+    signal?: AbortSignal;
+    /** Default: evaluate song.ts when cwd is a dawg project. */
+    projectTempo?: (cwd: string) => Promise<Tempo | undefined>;
+  } = {},
 ): Promise<number> {
   const words: string[] = [];
   let folder: string | undefined;
@@ -70,6 +78,12 @@ export async function runChopCli(
       throw new Error(
         "--pattern loads slices into a sampler track; that needs a session · use /chop slice … in dawg",
       );
+    const tempo: Tempo | undefined =
+      bpm && Number.isFinite(bpm)
+        ? { bpm, beatsPerBar: 4 }
+        : words.some((word) => /(?:^|[\s=-])(?:bar|beat):/i.test(word))
+          ? await (options.projectTempo ?? readProjectTempo)(cwd)
+          : undefined;
     const result: ChopResult = await runChop(op, args, {
       root: cwd,
       runner: options.runner ?? systemRunner,
@@ -81,9 +95,7 @@ export async function runChopCli(
             outDir: `tracks/${trackSlug(folder)}/samples`,
           }
         : {}),
-      ...(bpm && Number.isFinite(bpm)
-        ? { tempo: { bpm, beatsPerBar: 4 } }
-        : {}),
+      ...(tempo ? { tempo } : {}),
     });
     if (!json) stderr.write(`✓ ${result.summary}\n`);
     stdout.write(`${JSON.stringify(result, null, 2)}\n`);
@@ -98,4 +110,17 @@ export async function runChopCli(
   } finally {
     process.off("SIGINT", onInterrupt);
   }
+}
+
+/** The tempo and meter of the dawg project at `cwd`, or undefined. */
+export async function readProjectTempo(
+  cwd: string,
+): Promise<Tempo | undefined> {
+  if (!(await isProject(cwd))) return undefined;
+  const evaluated = await evaluateProject(cwd);
+  if (!evaluated.ok) return undefined;
+  return {
+    bpm: evaluated.score.tempoBpm,
+    beatsPerBar: evaluated.score.beatsPerBar,
+  };
 }
