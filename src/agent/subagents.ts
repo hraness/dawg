@@ -29,6 +29,8 @@ import {
 } from "./agent.ts";
 import { trackSlug } from "../../core/slug.ts";
 export { globMatch } from "./workspace.ts";
+import { globMatch } from "./workspace.ts";
+import { defaultWriteScope } from "../audio/chop/run.ts";
 import {
   SUBAGENT_LIMITS,
   SubagentScopeError,
@@ -141,6 +143,11 @@ export type SubagentParent = Readonly<{
   onEvent?: (event: AgentEvent) => void;
   /** Overrides SUBAGENT_LIMITS.wallClockMs (tests). */
   wallClockMs?: number;
+  /**
+   * The parent turn had seen untrusted content: every child starts
+   * untrusted, so a relayed prompt cannot launder code writes (§6.2).
+   */
+  untrusted?: boolean;
 }>;
 
 /** Resolve a track reference by id, then by case-insensitive name. */
@@ -157,8 +164,44 @@ export function resolveTrack(score: TrackScore, ref: string): string {
   throw new SubagentScopeError(`no track ${ref.slice(0, 40)}`);
 }
 
+/** A task glob as the workspace matches it: `/` separators, no `./`. */
+export function normalizeGlob(glob: string): string {
+  return glob
+    .replace(/\\/g, "/")
+    .replace(/\/{2,}/g, "/")
+    .replace(/^(?:\.\/)+/, "")
+    .replace(/\/(?:\.\/)+/g, "/");
+}
+
+/** The glob up to its first wildcard: every path it matches starts so. */
+function literalPrefix(glob: string): string {
+  const at = glob.search(/[*?[{]/);
+  return at < 0 ? glob : glob.slice(0, at);
+}
+
+/**
+ * Whether two write globs could match one path. Conservative: a shared
+ * literal prefix counts as overlap even if the wildcards would differ, and
+ * case is ignored (the project may sit on a case-insensitive disk).
+ */
+export function globsOverlap(a: string, b: string): boolean {
+  const x = normalizeGlob(a).toLowerCase();
+  const y = normalizeGlob(b).toLowerCase();
+  if (x === y) return true;
+  const px = literalPrefix(x);
+  const py = literalPrefix(y);
+  const xLiteral = px === x;
+  const yLiteral = py === y;
+  if (xLiteral && yLiteral)
+    // Two plain paths overlap only when one is the other's folder.
+    return x.startsWith(`${y}/`) || y.startsWith(`${x}/`);
+  if (xLiteral) return globMatch(y, x) || x.startsWith(py);
+  if (yLiteral) return globMatch(x, y) || y.startsWith(px);
+  return px.startsWith(py) || py.startsWith(px);
+}
+
 function badGlob(glob: string): string | undefined {
-  const normalized = glob.replace(/\\/g, "/").replace(/^\.\//, "");
+  const normalized = normalizeGlob(glob);
   if (normalized.startsWith("/") || /(^|\/)\.\.(\/|$)/.test(normalized))
     return "must stay under the project";
   const first = normalized.split("/")[0]!.toLowerCase();
@@ -215,7 +258,7 @@ export function buildScopes(
       ...[...trackIds].map(
         (id) => `tracks/${trackSlug(trackName(score, id))}/**`,
       ),
-      ...(task.files ?? []),
+      ...(task.files ?? []).map(normalizeGlob),
       ...(task.global ? ["song.ts"] : []),
     ];
     scopes.set(task.id, {
@@ -226,16 +269,21 @@ export function buildScopes(
       global: task.global === true,
     });
   }
-  // Explicit file globs must not overlap across tasks either.
-  const globOwner = new Map<string, string>();
-  for (const [id, scope] of scopes)
-    for (const glob of scope.fileGlobs) {
-      const other = globOwner.get(glob);
-      if (other && other !== id)
-        throw new SubagentScopeError(
-          `tasks ${other} and ${id} both write ${glob}; give each file to one task`,
-        );
-      globOwner.set(glob, id);
+  // File globs (explicit, the implicit tracks/<slug>/** and song.ts) must
+  // not overlap across tasks either: compared pairwise, not as strings.
+  const entries = [...scopes];
+  for (let i = 0; i < entries.length; i++)
+    for (let j = i + 1; j < entries.length; j++) {
+      const [idA, scopeA] = entries[i]!;
+      const [idB, scopeB] = entries[j]!;
+      for (const globA of scopeA.fileGlobs)
+        for (const globB of scopeB.fileGlobs)
+          if (globsOverlap(globA, globB))
+            throw new SubagentScopeError(
+              globA === globB
+                ? `tasks ${idA} and ${idB} both write ${globA}; give each file to one task`
+                : `tasks ${idA} (${globA}) and ${idB} (${globB}) could write the same files; give each file to one task`,
+            );
     }
   return scopes;
 }
@@ -447,7 +495,18 @@ export function scopedHost(
         }
       : {}),
     ...(host.web ? { web: host.web } : {}),
-    ...(host.media ? { media: host.media } : {}),
+    ...(host.media
+      ? {
+          // The audio toolkit checks every output against this, so a child
+          // cannot write samples into another task's folder (§6.1).
+          media: {
+            ...host.media,
+            writeScope: (rel: string) =>
+              (host.media!.writeScope ?? defaultWriteScope)(rel) &&
+              scope.fileGlobs.some((glob) => globMatch(glob, rel)),
+          },
+        }
+      : {}),
     ...(host.packs ? { packs: host.packs } : {}),
   };
 }
@@ -530,13 +589,16 @@ export async function runSubagents(
         };
         continue;
       }
-      const host = scopedHost(
+      const scoped = scopedHost(
         parent.host,
         scopes.get(task.id)!,
         task.id,
         queue,
         state,
       );
+      const host: AgentHost = parent.untrusted
+        ? { ...scoped, untrusted: true }
+        : scoped;
       let result: AgentTurnResult | undefined;
       let failure = "";
       const childTurnId = newId("turn");

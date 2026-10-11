@@ -66,7 +66,7 @@ function chopContext(
     MediaRunContext,
     "projectRoot" | "trackSlug" | "runner" | "signal"
   > &
-    Partial<Pick<MediaRunContext, "progress" | "chopHistory">>,
+    Partial<Pick<MediaRunContext, "progress" | "chopHistory" | "writeScope">>,
   tool: ToolContext,
 ): ChopContext {
   return {
@@ -79,6 +79,8 @@ function chopContext(
     ...(base.progress ? { progress: base.progress } : {}),
     // An explicit handle wins; otherwise runChop uses historySink().
     ...(base.chopHistory ? { history: base.chopHistory } : {}),
+    // A dispatch child's task scope, or the untrusted-turn code refusal.
+    ...(base.writeScope ? { writeScope: base.writeScope } : {}),
   };
 }
 
@@ -138,6 +140,9 @@ function planAudio(raw: Record<string, unknown>, tool: ToolContext): ToolPlan {
             bpm: tool.score.tempoBpm,
             beatsPerBar: tool.score.beatsPerBar,
           },
+          ...(action.media?.writeScope
+            ? { writeScope: action.media.writeScope }
+            : {}),
           ...(action.preview?.playFile
             ? {
                 audition: async (path: string, from?: number, to?: number) => {
@@ -173,6 +178,9 @@ function planAudio(raw: Record<string, unknown>, tool: ToolContext): ToolPlan {
               signal: action.signal ?? new AbortController().signal,
               ...(action.media?.chopHistory
                 ? { chopHistory: action.media.chopHistory }
+                : {}),
+              ...(action.media?.writeScope
+                ? { writeScope: action.media.writeScope }
                 : {}),
             },
             tool,
