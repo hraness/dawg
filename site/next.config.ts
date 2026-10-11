@@ -12,6 +12,11 @@ const nextConfig: NextConfig = {
   // The home page, the docs and llms.txt regenerate hourly to pick up a new
   // release; those runtime renders read these files from disk.
   outputFileTracingIncludes: {
+    // Every page's metadata loads the share-card module (app/social.ts), which
+    // reads public/marks/dawg.svg and ../package.json. Vercel serves public/
+    // from the CDN and leaves it out of functions, so without this every
+    // hourly regeneration throws ENOENT and the stale page is kept for good.
+    "/**": ["./public/marks/dawg.svg", "../package.json"],
     "/": [
       "../package.json",
       "../docs/screens/*.json",

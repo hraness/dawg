@@ -4,45 +4,124 @@ export type ReleaseState =
   | Readonly<{ published: true; version: string; url: string }>
   | Readonly<{ published: false }>;
 
-const LATEST = "https://api.github.com/repos/hraness/dawg/releases/latest";
+const GITHUB_LATEST =
+  "https://api.github.com/repos/hraness/dawg/releases/latest";
+const NPM_LATEST = "https://registry.npmjs.org/@hraness%2fdawg/latest";
 
 /** How often pages that show install commands re-check for a release, in seconds. */
 export const RELEASE_REVALIDATE = 3600;
 
+/** What one source says: a release, nothing published, or it could not tell. */
+type SourceResult =
+  | Readonly<{ kind: "release"; version: string; url: string }>
+  | Readonly<{ kind: "none" }>
+  | Readonly<{ kind: "error"; reason: string }>;
+
+const VERSION = /^\d+\.\d+\.\d+$/u;
+
+function field(body: unknown, key: string): unknown {
+  return typeof body === "object" && body !== null
+    ? (body as Record<string, unknown>)[key]
+    : undefined;
+}
+
+export function releasePageUrl(version: string): string {
+  return `https://github.com/hraness/dawg/releases/tag/v${version}`;
+}
+
+async function getJson(
+  url: string,
+  accept: string,
+): Promise<Readonly<{ status: number; body?: unknown }>> {
+  const response = await fetch(url, {
+    headers: { accept, "user-agent": "dawg.sh" },
+    next: { revalidate: RELEASE_REVALIDATE },
+  });
+  if (!response.ok) return { status: response.status };
+  return { status: response.status, body: await response.json() };
+}
+
+/** GitHub's REST API. Unauthenticated, so a shared egress IP can hit 403/429. */
+async function fromGitHub(): Promise<SourceResult> {
+  try {
+    const { status, body } = await getJson(
+      GITHUB_LATEST,
+      "application/vnd.github+json",
+    );
+    if (status === 404) return { kind: "none" };
+    if (body === undefined) return { kind: "error", reason: `GitHub ${status}` };
+    const tag = field(body, "tag_name");
+    if (typeof tag !== "string" || !/^v\d+\.\d+\.\d+$/u.test(tag))
+      return { kind: "error", reason: "GitHub: unexpected body" };
+    const version = tag.slice(1);
+    const url = field(body, "html_url");
+    return {
+      kind: "release",
+      version,
+      url: typeof url === "string" ? url : releasePageUrl(version),
+    };
+  } catch (error) {
+    return { kind: "error", reason: `GitHub: ${String(error)}` };
+  }
+}
+
+/** The npm registry, which mirrors each GitHub Release byte for byte. */
+async function fromNpm(): Promise<SourceResult> {
+  try {
+    const { status, body } = await getJson(NPM_LATEST, "application/json");
+    if (status === 404) return { kind: "none" };
+    if (body === undefined) return { kind: "error", reason: `npm ${status}` };
+    const version = field(body, "version");
+    if (typeof version !== "string" || !VERSION.test(version))
+      return { kind: "error", reason: "npm: unexpected body" };
+    return { kind: "release", version, url: releasePageUrl(version) };
+  } catch (error) {
+    return { kind: "error", reason: `npm: ${String(error)}` };
+  }
+}
+
 /**
- * The latest published GitHub Release of hraness/dawg. Pages that show the
- * release tarball regenerate hourly, so the first release appears without a
- * site deploy. A 404 means nothing is published yet. Any other failure keeps
- * the previously generated page during revalidation, and during the build it
- * falls back to "not published", which only hides a link.
+ * Combines both sources. The newest release either reports wins, so a failed
+ * or lagging source never hides a release the other one knows about. With no
+ * release, GitHub's 404 means nothing is published; otherwise both sources
+ * failed and this throws.
+ */
+export function resolveRelease(
+  github: SourceResult,
+  npm: SourceResult,
+): ReleaseState {
+  const releases = [github, npm].filter(
+    (result): result is Extract<SourceResult, { kind: "release" }> =>
+      result.kind === "release",
+  );
+  const newest = releases.reduce<
+    Extract<SourceResult, { kind: "release" }> | undefined
+  >(
+    (best, next) =>
+      best === undefined || !atLeast(best.version, next.version) ? next : best,
+    undefined,
+  );
+  if (newest !== undefined)
+    return { published: true, version: newest.version, url: newest.url };
+  if (github.kind === "none") return { published: false };
+  const reasons = [github, npm]
+    .map((result) => (result.kind === "error" ? result.reason : "none"))
+    .join("; ");
+  throw new Error(`Release lookup failed: ${reasons}`);
+}
+
+/**
+ * The latest published release of hraness/dawg, from GitHub Releases and its
+ * npm mirror. Pages that show the release tarball regenerate hourly, so a new
+ * release appears without a site deploy. If one source is rate limited or
+ * down, the other decides. If both fail, regeneration keeps the previously
+ * generated page, and the build falls back to "not published", which only
+ * hides a link.
  */
 export const latestRelease = cache(async (): Promise<ReleaseState> => {
+  const [github, npm] = await Promise.all([fromGitHub(), fromNpm()]);
   try {
-    const response = await fetch(LATEST, {
-      headers: {
-        accept: "application/vnd.github+json",
-        "user-agent": "dawg.sh",
-      },
-      next: { revalidate: RELEASE_REVALIDATE },
-    });
-    if (response.status === 404) return { published: false };
-    if (!response.ok) throw new Error(`GitHub releases: ${response.status}`);
-    const body: unknown = await response.json();
-    const tag =
-      typeof body === "object" && body !== null
-        ? (body as { tag_name?: unknown }).tag_name
-        : undefined;
-    const url =
-      typeof body === "object" && body !== null
-        ? (body as { html_url?: unknown }).html_url
-        : undefined;
-    if (
-      typeof tag !== "string" ||
-      !/^v\d+\.\d+\.\d+$/u.test(tag) ||
-      typeof url !== "string"
-    )
-      throw new Error("GitHub releases: unexpected body");
-    return { published: true, version: tag.slice(1), url };
+    return resolveRelease(github, npm);
   } catch (error) {
     if (process.env.NEXT_PHASE === "phase-production-build")
       return { published: false };
