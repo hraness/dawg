@@ -58,10 +58,17 @@ function render(s: TrackScore): Float64Array {
   return dry;
 }
 
-const hash = (x: Float64Array) =>
-  createHash("sha256")
-    .update(new Uint8Array(x.buffer, x.byteOffset, x.byteLength))
-    .digest("hex");
+/**
+ * Hash of the render quantized to 16-bit PCM, as a WAV would store it. Raw
+ * float bits differ across platforms' libm in the last place; the audio
+ * does not, so the golden holds on macOS and Linux alike.
+ */
+const hash = (x: Float64Array) => {
+  const q = new Int16Array(x.length);
+  for (let i = 0; i < x.length; i += 1)
+    q[i] = Math.round(Math.max(-1, Math.min(1, x[i]!)) * 32767);
+  return createHash("sha256").update(new Uint8Array(q.buffer)).digest("hex");
+};
 
 /** Power spectrum of a Hann frame (direct DFT; small n). */
 function spectrum(x: Float64Array, from: number, n = 512): Float64Array {
