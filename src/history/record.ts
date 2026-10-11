@@ -39,6 +39,18 @@ export function clearHistoryDirty(sessionId: string): void {
   dirty.delete(sessionId);
 }
 
+/**
+ * A `files.apply` event's attributed writer (`claude-code`, `file`, a
+ * subagent label): the window's identity did not write those files.
+ */
+function fileActor(event: Pick<SessionEvent, "kind" | "payload">) {
+  if (event.kind !== "files.apply" || !isObj(event.payload)) return undefined;
+  const by = event.payload.by;
+  return isObj(by) && typeof by.id === "string" && by.id.length > 0
+    ? by.id.slice(0, 64)
+    : undefined;
+}
+
 /** The history `kind` of a session event kind. */
 export function historyKindOf(eventKind: string): HistoryKind {
   if (eventKind === "score.undo") return "undo";
@@ -54,7 +66,12 @@ export function actorKindOf(
   const payload = isObj(event.payload) ? event.payload : {};
   if (typeof payload.subagent === "string") return "subagent";
   if (event.kind.startsWith("agent.")) return "agent";
-  if (event.kind === "files.apply") return "external";
+  if (event.kind === "files.apply")
+    // The sync's attribution (design §5.3): dawg's own agent's file writes
+    // credit the agent; anything else stays external.
+    return isObj(payload.by) && payload.by.kind === "agent"
+      ? "agent"
+      : "external";
   if (event.kind === "score.fork" || event.kind === "session.migrate")
     return "system";
   return "human";
@@ -147,9 +164,11 @@ export function sessionEventRow(
     atRev: event.revision,
     actor: {
       kind: actorKindOf(event),
-      ...(event.actor?.actorId !== undefined
-        ? { actorId: event.actor.actorId }
-        : {}),
+      ...(fileActor(event) !== undefined
+        ? { actorId: fileActor(event) }
+        : event.actor?.actorId !== undefined
+          ? { actorId: event.actor.actorId }
+          : {}),
       ...(event.actor?.clientId !== undefined
         ? { clientId: event.actor.clientId }
         : {}),

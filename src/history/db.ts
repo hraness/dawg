@@ -673,6 +673,26 @@ export class HistoryDb {
     return raw === null ? undefined : this.hydrate([raw])[0];
   }
 
+  /**
+   * Credits a hot-reloaded file edit to the coding agent whose `dawg check`
+   * arrived after it (design §5.3). Only an edit row still credited to
+   * `file` changes, and only its `actor_id`: the summary, ops and every
+   * other row stay as written. True when a row changed.
+   */
+  public creditFileEdit(
+    sessionId: string,
+    rev: number,
+    actorId: string,
+  ): boolean {
+    if (this.readonly) return false;
+    const result = this.db
+      .query(
+        `UPDATE events SET actor_id = ? WHERE session_id = ? AND rev = ? AND kind = 'edit' AND actor_kind = 'external' AND actor_id = 'file'`,
+      )
+      .run(actorId.slice(0, 64), sessionId, rev);
+    return result.changes > 0;
+  }
+
   /** Raw stored rewind/inverse/rewind_bytes of one row (tests, show --full). */
   public internals(
     id: string,

@@ -17,6 +17,10 @@ import { clipPinDiagnostics } from "./clip-pins.ts";
 import { isProject } from "./init.ts";
 import { parseSimpleArgv } from "../argv.ts";
 import { typecheckProject } from "./typecheck.ts";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { projectSourceFiles } from "./sync.ts";
+import { cleanActor, sha256, writeHeartbeat } from "../dev/attribution.ts";
 
 export type CheckDeps = Readonly<{
   typecheck?: typeof typecheckProject;
@@ -73,7 +77,35 @@ export async function checkProject(
 }
 
 export const CHECK_USAGE =
-  "usage: dawg check · typecheck and evaluate the project in this directory; exit 1 on problems";
+  "usage: dawg check [--as <name>] · typecheck and evaluate the project in this directory; exit 1 on problems · --as (or DAWG_ACTOR) credits the running editor's reload of these files to <name>";
+
+/**
+ * Who is running `dawg check`: `--as`, else DAWG_ACTOR, else `claude-code`
+ * inside Claude Code (CLAUDECODE=1). Undefined: nobody is credited.
+ */
+export function checkActor(
+  as: string | undefined,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): string | undefined {
+  return (
+    cleanActor(as) ??
+    cleanActor(env.DAWG_ACTOR) ??
+    (env.CLAUDECODE === "1" ? "claude-code" : undefined)
+  );
+}
+
+/** Hashes of the project's sources, as the running editor's sync sees them. */
+async function sourceHashes(project: string): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  for (const path of await projectSourceFiles(project)) {
+    try {
+      out.set(path, sha256(await readFile(join(project, path), "utf8")));
+    } catch {
+      // vanished between the walk and the read
+    }
+  }
+  return out;
+}
 
 export async function runCheckCommand(
   argv: readonly string[],
@@ -82,7 +114,20 @@ export async function runCheckCommand(
   stderr: { write(text: string): unknown },
   deps: CheckDeps = {},
 ): Promise<number> {
-  const parsed = parseSimpleArgv(argv.slice(1), 0);
+  // `--as <name>` is lifted out before the shared contract sees the rest.
+  const rest = [...argv.slice(1)];
+  let as: string | undefined;
+  const asAt = rest.indexOf("--as");
+  if (asAt >= 0) {
+    const value = rest[asAt + 1];
+    if (value === undefined || value.startsWith("-") || !cleanActor(value)) {
+      stderr.write(`--as needs a name · ${CHECK_USAGE}\n`);
+      return 2;
+    }
+    as = value;
+    rest.splice(asAt, 2);
+  }
+  const parsed = parseSimpleArgv(rest, 0);
   if (parsed.kind === "help") {
     stdout.write(`${CHECK_USAGE}\n`);
     return 0;
@@ -99,6 +144,13 @@ export async function runCheckCommand(
     return 1;
   }
   const report = await checkProject(project, deps);
+  // The heartbeat credits the editor's next reload of exactly these
+  // contents to this actor (design §5.3); a human's later save differs.
+  const actor = checkActor(as);
+  if (actor !== undefined)
+    await writeHeartbeat(project, actor, await sourceHashes(project)).catch(
+      () => undefined,
+    );
   for (const diagnostic of report.diagnostics)
     stderr.write(`${formatDiagnostic(diagnostic)}\n`);
   for (const warning of report.warnings) stderr.write(`warning: ${warning}\n`);

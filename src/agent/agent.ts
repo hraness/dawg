@@ -187,9 +187,13 @@ export type AgentHost = Readonly<{
   /**
    * Runs after a successful write_file/edit_file with the project-relative
    * path (the project sync hooks in here to typecheck and apply `*.ts`).
-   * Returned text is appended to the tool result the model reads.
+   * Returned text is appended to the tool result the model reads. `by`
+   * names the subagent that wrote it (a dispatch child), for attribution.
    */
-  onWorkspaceWrite?(path: string): Promise<string | void> | string | void;
+  onWorkspaceWrite?(
+    path: string,
+    by?: Readonly<{ subagent?: string }>,
+  ): Promise<string | void> | string | void;
   /** Overrides for web_search/fetch_url (fetch, DNS lookup, Brave key). */
   web?: WebHost;
   /** Runner and env for the media tools (root and slug come from `workspace`); absent → rejected. */
