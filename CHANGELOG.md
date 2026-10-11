@@ -6,6 +6,7 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 
 ### Added
 
+- **Lyrics you can edit (machine vox V0).** Notes and tracks can carry a `vox` field (phones, breath, consonant timing, dynamics; a track voice) with the score version unchanged. The lyric grammar adds a stored trailing `-` for word continuation, `[hh eh l]` phone overrides, `,` breaths and `/` line breaks; 0.7 lines read as before. `/lyrics 5-8 <text>` retypes a bar range without touching notes, `/lyrics reflow` re-seats words after notes move, `/note split` holds the second half (`_`) and `/note join` reports dropped syllables. `song.ts` prints and reads `vox` byte-stably (SDK 1.36.0, `vox()` helper), MIDI export writes lyric meta events, the highway draws a one-row lyric strip, `dawg history` records `lyrics` and `vox` targets, and the agent gets `inspect_vox`, `set_vox` and a ranged `set_lyrics`.
 - **Subagents.** The agent's `dispatch` tool runs up to four subagents in parallel on the same provider (the fast model by default), each confined to its own tracks, bars and files. Overlapping scopes are refused before anything runs; edits to different tracks rebase onto each other, a real clash is reported as a conflict rather than forced, and every child edit is its own `[task]`-labelled revision you can undo on its own. Esc cancels them all, and their spend joins the turn's.
 
 ## 0.9.0

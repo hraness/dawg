@@ -210,3 +210,41 @@ describe("/sing", () => {
     expect(peak).toBeGreaterThan(0.01);
   });
 });
+
+describe("note split and join", () => {
+  test("split holds `_`, join drops and reports", async () => {
+    const { applyScoreOperations } = await import("../../core/diff.ts");
+    const { retypeLyrics } = await import("../../core/vox-edit.ts");
+    let s = score();
+    const trackId = s.tracks[0]!.id;
+    s = applyScoreOperations(
+      s,
+      retypeLyrics(s, trackId, {}, "a b c d e f g h").operations,
+    );
+    expect(parseSingCommand("note split")).toMatchObject({
+      type: "sing-usage",
+    });
+    const split = applySingCommand(
+      s,
+      trackId,
+      parseSingCommand("note split last")!,
+    );
+    expect(split.ok).toBe(true);
+    const lyrics = [...split.next!.notes]
+      .filter((n) => n.trackId === trackId)
+      .sort((a, b) => a.startTick - b.startTick)
+      .map((n) => n.lyric);
+    expect(lyrics.at(-1)).toBe("_");
+    const ids = s.notes
+      .filter((n) => n.trackId === trackId)
+      .slice(0, 2)
+      .map((n) => n.id);
+    const join = applySingCommand(
+      s,
+      trackId,
+      parseSingCommand(`note join ${ids.join(" ")}`)!,
+    );
+    expect(join.ok).toBe(true);
+    expect(join.message).toContain("dropped syllables: b");
+  });
+});

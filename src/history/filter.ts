@@ -11,7 +11,22 @@ import {
   type ActorKind,
   type HistoryFilter,
   type HistoryKind,
+  type TargetRef,
 } from "./types.ts";
+
+/** Target types a `target` filter accepts (`target lyrics`, `--target vox`). */
+export const TARGET_TYPES: readonly TargetRef["type"][] = [
+  "track",
+  "instrument",
+  "effect",
+  "node",
+  "param",
+  "bars",
+  "file",
+  "sample",
+  "lyrics",
+  "vox",
+];
 
 /** Filter words that take a value (`track bass`, `--track bass`, `track:bass`). */
 export const FILTER_KEYS: readonly string[] = [
@@ -24,6 +39,7 @@ export const FILTER_KEYS: readonly string[] = [
   "node",
   "param",
   "bars",
+  "target",
   "pane",
   "tag",
   "grep",
@@ -107,6 +123,15 @@ export function filterFromFlags(
     if (value !== undefined)
       filter[key] =
         key === "tag" ? value.replace(/^#/, "").toLowerCase() : value;
+  }
+  const target = values.get("target");
+  if (target !== undefined) {
+    const type = target.toLowerCase();
+    if (!(TARGET_TYPES as readonly string[]).includes(type))
+      return {
+        error: `unknown target ${target.slice(0, 20)} · one of ${TARGET_TYPES.join(", ")}`,
+      };
+    filter.target = type as TargetRef["type"];
   }
   const bars = values.get("bars");
   if (bars !== undefined) {

@@ -17,30 +17,126 @@ export type LyricToken = Readonly<{
   /** First syllable of its word. */
   first: boolean;
   kind: "syl" | "hold" | "rest";
+  /** (0.9) The word goes on: the stored lyric ends in `-`. */
+  cont?: boolean;
+  /** (0.9) Phones typed in brackets, `[hh eh l]`, replacing letter-to-sound. */
+  ph?: readonly string[];
+  /** (0.9) A `,` came before this token: a breath before its note. */
+  breath?: boolean;
 }>;
+
+/** Splits on spaces outside `[...]`. */
+function lyricWords(text: string): string[] {
+  const out: string[] = [];
+  let word = "";
+  let depth = 0;
+  for (const ch of text) {
+    if (ch === "[") depth += 1;
+    else if (ch === "]") depth = Math.max(0, depth - 1);
+    if (depth === 0 && /\s/u.test(ch)) {
+      if (word) out.push(word);
+      word = "";
+    } else word += ch;
+  }
+  if (word) out.push(word);
+  return out;
+}
+
+/** `text[ph ones]` into its text and phones (lower case, stress dropped). */
+function lyricSyl(raw: string): { text: string; ph?: string[] } {
+  const at = raw.indexOf("[");
+  if (at < 0) return { text: raw.replace(/\]/g, "") };
+  const ph = raw
+    .slice(at + 1)
+    .replace(/\].*$/u, "")
+    .trim()
+    .split(/\s+/u)
+    .filter(Boolean)
+    .map((p) => p.toLowerCase().replace(/[0-2]$/u, ""));
+  const text = raw.slice(0, at).replace(/[[\]]/g, "");
+  return ph.length
+    ? { text: text || ph.join(""), ph }
+    : { text: text || raw.replace(/[[\]\s]/g, "") };
+}
 
 /**
  * The lyric grammar: words split by spaces, syllables by `-`, `_` holds the
  * previous syllable over the next note (melisma), `~` skips a note.
- * "sun-lit morn-ing _ glow" gives sun lit morn ing _ glow.
+ * "sun-lit morn-ing _ glow" gives sun- lit morn- ing _ glow (0.9: every
+ * syllable but a word's last keeps a trailing `-`; a word typed with a
+ * trailing `-` continues into the next one, so stored text reads back).
+ * 0.9 also reads `[hh eh l]` phones after a syllable, `,` for a breath
+ * before the next syllable, and `/` as a line break (printing only).
  */
 export function parseLyric(text: string): LyricToken[] {
   const out: LyricToken[] = [];
   let word = -1;
-  for (const raw of text.trim().split(/\s+/u)) {
-    if (raw === "") continue;
-    if (raw === "_") out.push({ syl: "_", word, first: false, kind: "hold" });
-    else if (raw === "~")
-      out.push({ syl: "~", word, first: false, kind: "rest" });
-    else {
-      word += 1;
-      raw
-        .split("-")
-        .filter(Boolean)
-        .forEach((syl, index) =>
-          out.push({ syl, word, first: index === 0, kind: "syl" }),
-        );
+  let breath = false;
+  let open = false;
+  const push = (token: LyricToken) => {
+    out.push(breath ? { ...token, breath: true } : token);
+    breath = false;
+  };
+  for (const raw of lyricWords(text.trim())) {
+    if (raw === ",") {
+      breath = true;
+      continue;
     }
+    if (raw === "/") continue;
+    const hold = raw.match(/^_(?:\[([^\]]*)\])?$/u);
+    if (hold) {
+      const ph = lyricSyl(`_[${hold[1] ?? ""}]`).ph;
+      push({
+        syl: "_",
+        word,
+        first: false,
+        kind: "hold",
+        ...(ph ? { ph } : {}),
+      });
+      continue;
+    }
+    if (raw === "~") {
+      push({ syl: "~", word, first: false, kind: "rest" });
+      continue;
+    }
+    // A leading `,` glued to the word is a breath too (`,hel-lo`).
+    let body = raw;
+    if (body.startsWith(",")) {
+      breath = true;
+      body = body.replace(/^,+/u, "");
+    }
+    const trailingComma = body.endsWith(",") && !body.endsWith("[,");
+    if (trailingComma) body = body.replace(/,+$/u, "");
+    const parts: string[] = [];
+    let part = "";
+    let depth = 0;
+    for (const ch of body) {
+      if (ch === "[") depth += 1;
+      else if (ch === "]") depth = Math.max(0, depth - 1);
+      if (ch === "-" && depth === 0) {
+        parts.push(part);
+        part = "";
+      } else part += ch;
+    }
+    parts.push(part);
+    const continues = parts.length > 1 && parts.at(-1) === "";
+    const syls = parts.filter(Boolean);
+    if (syls.length === 0) continue;
+    if (!open) word += 1;
+    syls.forEach((rawSyl, index) => {
+      const { text: syl, ph } = lyricSyl(rawSyl);
+      const last = index === syls.length - 1;
+      push({
+        syl,
+        word,
+        first: !open && index === 0,
+        kind: "syl",
+        ...(!last || continues ? { cont: true } : {}),
+        ...(ph ? { ph } : {}),
+      });
+    });
+    open = continues;
+    if (trailingComma) breath = true;
   }
   return out;
 }
@@ -213,6 +309,10 @@ export function autoSyllabify(word: string): string[] {
 export type LyricAssignment = Readonly<{
   /** Note id to its lyric (`_` holds); notes `~` skipped are absent. */
   lyrics: ReadonlyMap<string, string>;
+  /** (0.9) Note id to the phones typed in brackets for it. */
+  ph: ReadonlyMap<string, readonly string[]>;
+  /** (0.9) Notes a `,` put a breath before. */
+  breaths: ReadonlySet<string>;
   /** Syllables left over after the last note. */
   dropped: readonly string[];
   /** Words split automatically. */
@@ -225,7 +325,8 @@ export type LyricAssignment = Readonly<{
  * whole are split by `autoSyllabify`, and any notes still left hold the
  * last syllable (melisma) instead of failing. Syllables past the last note
  * are reported in `dropped`. Notes sharing an onset take one token, on
- * the top note, with `_` on the others. Each lyric is cut to the 32-character limit.
+ * the top note, with `_` on the others. Each lyric is cut to the 32-character
+ * limit; a syllable whose word goes on keeps a trailing `-`.
  */
 export function assignLyrics(
   text: string,
@@ -257,6 +358,8 @@ export function assignLyrics(
       const whole =
         token.kind === "syl" &&
         token.first &&
+        !token.cont &&
+        !token.ph &&
         !tokens.some((t) => t.word === token.word && !t.first);
       if (!whole) {
         out.push(token);
@@ -265,7 +368,14 @@ export function assignLyrics(
       const parts = autoSyllabify(token.syl);
       if (parts.length > 1) words.push(token.syl);
       parts.forEach((syl, index) =>
-        out.push({ syl, word: token.word, first: index === 0, kind: "syl" }),
+        out.push({
+          syl,
+          word: token.word,
+          first: index === 0,
+          kind: "syl",
+          ...(index < parts.length - 1 ? { cont: true } : {}),
+          ...(index === 0 && token.breath ? { breath: true } : {}),
+        }),
       );
     }
     if (out.length <= ordered.length) {
@@ -274,6 +384,8 @@ export function assignLyrics(
     }
   }
   const lyrics = new Map<string, string>();
+  const ph = new Map<string, readonly string[]>();
+  const breaths = new Set<string>();
   const limit = LYRIC_LIMIT;
   ordered.forEach((note, index) => {
     const token = tokens[index];
@@ -282,10 +394,16 @@ export function assignLyrics(
         for (const id of [note.id, ...under.get(note.id)!]) lyrics.set(id, "_");
       return;
     }
+    if (token.breath) breaths.add(note.id);
     if (token.kind === "rest") return;
+    if (token.ph) ph.set(note.id, token.ph);
     lyrics.set(
       note.id,
-      token.kind === "hold" ? "_" : token.syl.slice(0, limit),
+      token.kind === "hold"
+        ? "_"
+        : token.cont
+          ? `${token.syl.slice(0, limit - 1)}-`
+          : token.syl.slice(0, limit),
     );
     for (const id of under.get(note.id)!) lyrics.set(id, "_");
   });
@@ -293,5 +411,35 @@ export function assignLyrics(
     .slice(ordered.length)
     .filter((token) => token.kind === "syl")
     .map((token) => token.syl);
-  return { lyrics, dropped, split };
+  return { lyrics, ph, breaths, dropped, split };
+}
+
+/**
+ * The lyric line of notes in time order, in the grammar `parseLyric` reads
+ * back: `hel[hh eh l]-lo _ , world`. A note without a lyric is `~` (trailing
+ * ones are left out); `ph` and `breath` come from each note's `vox`.
+ */
+export function lyricLine(
+  notes: readonly Readonly<{
+    lyric?: string;
+    vox?: Readonly<{ ph?: readonly string[]; breath?: number }>;
+  }>[],
+): string {
+  let end = notes.length;
+  while (end > 0 && notes[end - 1]!.lyric === undefined) end -= 1;
+  let out = "";
+  let joined = false;
+  for (const note of notes.slice(0, end)) {
+    const lyric = note.lyric ?? "~";
+    const ph = note.vox?.ph;
+    const dash = lyric.length > 1 && lyric.endsWith("-");
+    const body = dash ? lyric.slice(0, -1) : lyric;
+    const cell = `${body}${ph && ph.length && lyric !== "~" ? `[${ph.join(" ")}]` : ""}${dash ? "-" : ""}`;
+    const breath = note.vox?.breath ? ", " : "";
+    if (out === "") out = `${breath}${cell}`;
+    else if (joined && !breath && lyric !== "_" && lyric !== "~") out += cell;
+    else out += ` ${breath}${cell}`;
+    joined = dash;
+  }
+  return out;
 }

@@ -24,7 +24,8 @@
  * tuned track gets a real-time single-note tuning change SysEx (F0 7F 7F
  * 08 02) carrying every key's frequency as a tuning program, selected on
  * its channel with RPN 3 (tuning program select). Synths that honour MTS
- * play the tuning; others play 12-TET keys. Section starts are FF 06
+ * play the tuning; others play 12-TET keys. Sung syllables are FF 05 lyric
+ * events before their note-on. Section starts are FF 06
  * marker events on the conductor track.
  *
  * Pure and dependency-free apart from the score modules.
@@ -398,6 +399,27 @@ export function scoreToMidi(
       });
     }
     if (!drum) events.push(...pitchBendEvents(notes, channel, timing, at));
+    // Lyric meta (FF 05) at each sung syllable's note-on, the karaoke way:
+    // a trailing "-" (the word continues) stays, a "_" hold writes nothing,
+    // and a chord writes one syllable per onset (its top note's).
+    const sungAt = new Set<number>();
+    for (const note of [...notes].sort(
+      (a, b) => a.startTick - b.startTick || b.pitch - a.pitch,
+    )) {
+      const lyric = (note as { lyric?: string }).lyric;
+      if (lyric === undefined || lyric === "_" || lyric === "~") continue;
+      if (note.pitch < 0 || note.pitch > 127) continue;
+      const start = at(note.startTick);
+      if (start >= at(end) || sungAt.has(start)) continue;
+      sungAt.add(start);
+      const text = [...new TextEncoder().encode(lyric)].slice(0, 127);
+      events.push({
+        tick: start,
+        // After note-offs and the pedal, before the note-on it names.
+        order: 0.9,
+        bytes: [0xff, 0x05, ...varLen(text.length), ...text],
+      });
+    }
     for (const note of notes) {
       if (note.pitch < 0 || note.pitch > 127) continue;
       const start = at(note.startTick);

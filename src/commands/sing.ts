@@ -20,6 +20,8 @@
  * field). One `updateTrack` revision and one undo step per command.
  */
 import { newId } from "../../core/ids.ts";
+import { applyScoreOperations } from "../../core/diff.ts";
+import { joinNotes, splitNotes } from "../../core/vox-edit.ts";
 import { isGuideInstrument } from "../../core/clips.ts";
 import { parseKey } from "../../core/chords.ts";
 import { FxValidationError } from "../../core/params.ts";
@@ -66,6 +68,9 @@ export type SingCommand =
   | { type: "sing-usage"; message: string }
   | { type: "sing-vowels"; vowels: readonly string[] }
   | { type: "note-vowel"; vowel: string | null; target: NoteTarget }
+  /** `note split|join [target]` (design 3.4: split holds `_`, join drops). */
+  | { type: "note-split"; target: NoteTarget }
+  | { type: "note-join"; target: NoteTarget }
   | {
       type: "sing-set";
       /** A preset applied before the values (`sing khoomei drone D3`). */
@@ -148,6 +153,19 @@ export function parseSingCommand(prompt: string): SingCommand | undefined {
   if (words[0] === "note" && words[1] === "vowel") {
     if (prompt.length > 1_024) return undefined;
     return parseNoteVowel(words.slice(2));
+  }
+  if (words[0] === "note" && (words[1] === "split" || words[1] === "join")) {
+    if (prompt.length > 1_024) return undefined;
+    const target =
+      words.length > 2 ? parseNoteTarget(words.slice(2)) : undefined;
+    if (!target)
+      return {
+        type: "sing-usage",
+        message: `note ${words[1]} <last|bar <n>|bars <a>-<b>|<ids>|all>`,
+      };
+    return words[1] === "split"
+      ? { type: "note-split", target }
+      : { type: "note-join", target };
   }
   if (words[0] === "presets" && words[1] === "sing" && words.length === 2)
     return { type: "sing-list" };
@@ -374,6 +392,39 @@ export function applySingCommand(
     };
   const track = score.tracks.find((candidate) => candidate.id === trackId);
   if (!track) return { ok: false, message: `no track · ${trackId}` };
+  if (command.type === "note-split" || command.type === "note-join") {
+    const verb = command.type === "note-split" ? "split" : "join";
+    const notes = targetNotes(score, trackId, command.target);
+    if (notes.length < (verb === "join" ? 2 : 1))
+      return {
+        ok: false,
+        message: `note ${verb} · ${verb === "join" ? "needs two or more notes" : "no notes"} in ${describeTarget(command.target)}`,
+      };
+    const ids = notes.map((note) => note.id);
+    if (verb === "split") {
+      const edit = splitNotes(score, ids);
+      return {
+        ok: true,
+        message: `note split · ${edit.split} note${edit.split === 1 ? "" : "s"} · second halves hold (_)`,
+        next: applyScoreOperations(score, edit.operations),
+        kind: "lyrics.set",
+        payload: { trackId, noteIds: ids },
+      };
+    }
+    const edit = joinNotes(score, ids);
+    if (edit.joined === 0)
+      return {
+        ok: false,
+        message: "note join · the notes do not touch or overlap",
+      };
+    return {
+      ok: true,
+      message: `note join · ${edit.joined} note${edit.joined === 1 ? "" : "s"} merged${edit.dropped.length ? ` · dropped syllables: ${edit.dropped.join(" ")}` : ""}`,
+      next: applyScoreOperations(score, edit.operations),
+      kind: "lyrics.set",
+      payload: { trackId, noteIds: ids },
+    };
+  }
   if (command.type === "note-vowel") {
     const notes = targetNotes(score, trackId, command.target);
     if (notes.length === 0)

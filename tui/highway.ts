@@ -45,7 +45,7 @@ export interface NoteSnapshot {
    * from (`D` for a `D−47` tag), since the lane is the key, not the sound.
    */
   centsFrom?: string | undefined;
-  /** Sung syllable (`Note.lyric`), drawn beside the head like the cents tag. */
+  /** Sung syllable (`Note.lyric`), drawn in the lyric strip under the hit line. */
   lyric?: string | undefined;
 }
 
@@ -982,8 +982,8 @@ export function paintHighway(
             !note.muted
               ? centsTag(note.cents, note.centsFrom)
               : "";
-          const lyric = note.lyric && !note.muted ? note.lyric.slice(0, 8) : "";
-          const tag = [cents, lyric].filter(Boolean).join(" ");
+          // Lyrics read in the strip below the hit line, not beside heads.
+          const tag = cents;
           if (tag && x + width + tag.length <= region.width)
             for (let index = 0; index < tag.length; index += 1)
               painter.put(x + width + index, headRow, tag[index]!, roles.muted);
@@ -1098,6 +1098,35 @@ export function paintHighway(
         painter.put(x + offset, hitRow, glyphs.hitStrong, style);
     }
   }
+  const stripRow = hitRow + 1;
+  if (region.width >= 24 && stripRow <= lastNoteRow) {
+    const sung = score.notes.filter((note) => note.lyric !== undefined);
+    if (sung.length > 0) {
+      const clipColumn = score.clips && score.clips.length > 0 ? 1 : 0;
+      const stripWidth = region.width - gutter - clipColumn;
+      const strip = lyricStrip(sung, {
+        beat,
+        loop,
+        width: stripWidth,
+        colsPerBeat: (stripWidth * rowsPerBeat) / Math.max(1, hitRow),
+        ascii: glyphs === ASCII_GLYPHS,
+      });
+      for (let column = gutter; column < gutter + stripWidth; column += 1)
+        painter.put(column, stripRow, " ", roles.canvas);
+      for (const cell of strip.cells)
+        for (let index = 0; index < cell.text.length; index += 1)
+          painter.put(
+            gutter + cell.x + index,
+            stripRow,
+            cell.text[index]!,
+            cell.now
+              ? { ...accent, bold: true }
+              : cell.muted
+                ? roles.mutedNote
+                : roles.muted,
+          );
+    }
+  }
   if (score.clips && score.clips.length > 0 && region.width >= 24)
     paintClipRow(painter, score, {
       beat,
@@ -1111,6 +1140,123 @@ export function paintHighway(
       roles,
     });
   return layout;
+}
+
+/** The status hint the lyric strip shows when syllables are too dense. */
+export const LYRIC_ZOOM_HINT = "lyrics: zoom in";
+
+/** One drawn piece of the lyric strip: columns from the strip's left edge. */
+export type LyricStripCell = Readonly<{
+  x: number;
+  text: string;
+  /** The syllable sounding at the transport beat. */
+  now: boolean;
+  muted: boolean;
+}>;
+
+/**
+ * The lyric strip (one row under the hit line): the focused track's
+ * syllables left to right in time from the transport beat, each at its
+ * note's column and cut to the note's width minus one (`…`, `.` in ASCII).
+ * A hold (`_`) draws `‿` (`_` in ASCII); a word's trailing `-` shows only
+ * when it fits. A chord sings its top note's syllable. When there is more
+ * than one syllable per two columns, only word-initial syllables draw and
+ * `dense` is set, with `lyrics: zoom in` at the right edge when it fits.
+ */
+export function lyricStrip(
+  notes: readonly NoteSnapshot[],
+  at: Readonly<{
+    beat: number;
+    loop: number | undefined;
+    width: number;
+    colsPerBeat: number;
+    ascii: boolean;
+  }>,
+): { cells: LyricStripCell[]; dense: boolean } {
+  const ordered = notes
+    .filter((note) => note.lyric !== undefined)
+    .sort(
+      (a, b) =>
+        a.startBeat - b.startBeat ||
+        (a.lyric === "_" ? 1 : 0) - (b.lyric === "_" ? 1 : 0) ||
+        (b.pitch ?? 0) - (a.pitch ?? 0),
+    );
+  // One syllable per onset; word-initial when the previous one ends no word.
+  type Sung = { note: NoteSnapshot; lyric: string; initial: boolean };
+  const sung: Sung[] = [];
+  let continues = false;
+  for (const note of ordered) {
+    const previous = sung.at(-1);
+    if (previous && Math.abs(previous.note.startBeat - note.startBeat) < 1e-9)
+      continue;
+    const lyric = note.lyric!;
+    const hold = lyric === "_";
+    sung.push({ note, lyric, initial: !hold && !continues });
+    if (!hold) continues = lyric.endsWith("-");
+  }
+  const cpb = Math.max(1e-6, at.colsPerBeat);
+  const windowBeats = at.width / cpb;
+  const offsets = at.loop
+    ? [-1, 0, 1].map((k) => (Math.floor(at.beat / at.loop!) + k) * at.loop!)
+    : [0];
+  type Placed = Sung & { start: number; end: number };
+  const visible: Placed[] = [];
+  for (const offset of offsets)
+    for (const item of sung) {
+      const start = offset + item.note.startBeat;
+      const end = start + Math.max(0, item.note.durationBeats ?? 0.25);
+      if (end <= at.beat || start >= at.beat + windowBeats) continue;
+      visible.push({ ...item, start, end });
+    }
+  visible.sort((a, b) => a.start - b.start);
+  const syllables = visible.filter((item) => item.lyric !== "_").length;
+  const dense = syllables * 2 > at.width;
+  const shown = dense ? visible.filter((item) => item.initial) : visible;
+  // Dense rows keep the right edge for the zoom hint when there is room.
+  const hint = dense && at.width >= LYRIC_ZOOM_HINT.length + 12;
+  const limit = hint ? at.width - LYRIC_ZOOM_HINT.length - 1 : at.width;
+  const column = (beat: number): number =>
+    Math.max(0, Math.round((beat - at.beat) * cpb));
+  const cells: LyricStripCell[] = [];
+  const ellipsis = at.ascii ? "." : "…";
+  let free = 0;
+  shown.forEach((item, index) => {
+    const x = Math.max(free, column(item.start));
+    if (x >= limit) return;
+    const next = shown[index + 1];
+    const right = Math.min(
+      limit,
+      column(item.end),
+      next ? column(next.start) : limit,
+    );
+    const room = Math.max(1, right - x - 1);
+    let text =
+      item.lyric === "_"
+        ? at.ascii
+          ? "_"
+          : "‿"
+        : item.lyric.length > room && item.lyric.endsWith("-")
+          ? item.lyric.slice(0, -1)
+          : item.lyric;
+    if (text.length > room)
+      text = room >= 2 ? `${text.slice(0, room - 1)}${ellipsis}` : text[0]!;
+    text = text.slice(0, limit - x);
+    cells.push({
+      x,
+      text,
+      now: item.start <= at.beat && at.beat < item.end,
+      muted: item.note.muted === true,
+    });
+    free = x + text.length + 1;
+  });
+  if (hint)
+    cells.push({
+      x: at.width - LYRIC_ZOOM_HINT.length,
+      text: LYRIC_ZOOM_HINT,
+      now: false,
+      muted: true,
+    });
+  return { cells, dense };
 }
 
 function rowHasOnlyRule(

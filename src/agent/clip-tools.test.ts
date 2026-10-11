@@ -42,6 +42,8 @@ describe("clip tools", () => {
       "place_clip",
       "edit_clip",
       "set_lyrics",
+      "inspect_vox",
+      "set_vox",
     ]);
     expect(VOICE_PREVIEWABLE_TOOLS).toContain("place_clip");
   });
@@ -125,7 +127,7 @@ describe("clip tools", () => {
       base(),
       tool("set_lyrics").plan({ text: "hel-lo _" }, context(base())),
     );
-    expect(sung.notes.map((n) => n.lyric)).toEqual(["hel", "lo", "_"]);
+    expect(sung.notes.map((n) => n.lyric)).toEqual(["hel-", "lo", "_"]);
     const cleared = apply(
       sung,
       tool("set_lyrics").plan({ clear: true }, context(sung)),
@@ -134,5 +136,107 @@ describe("clip tools", () => {
     expect(() =>
       tool("edit_clip").plan({ id: "zz", rev: true }, context(base())),
     ).toThrow("no clip zz");
+  });
+
+  test("set_lyrics keeps 0.7 behaviour: continuations stored with -", () => {
+    const sung = apply(
+      base(),
+      tool("set_lyrics").plan({ text: "hel-lo _" }, context(base())),
+    );
+    expect(sung.notes.map((n) => n.lyric)).toEqual(["hel-", "lo", "_"]);
+  });
+
+  test("set_lyrics range assign touches only lyric and vox", () => {
+    const score = base();
+    const plan = tool("set_lyrics").plan(
+      { text: "hel[hh eh l]-lo", range: { from: 1, to: 1 } },
+      context(score),
+    );
+    if (plan.kind !== "score") throw new Error(plan.kind);
+    for (const op of plan.operations) {
+      expect(op.type).toBe("updateNote");
+      const patch = (op as { patch: Record<string, unknown> }).patch;
+      for (const key of Object.keys(patch))
+        expect(["lyric", "vox"]).toContain(key);
+    }
+    const next = apply(score, plan);
+    expect(next.notes.map((n) => n.lyric)).toEqual(["hel-", "lo", "_"]);
+    expect(next.notes[0]!.vox?.ph).toEqual(["hh", "eh", "l"]);
+    expect(next.notes.map((n) => [n.startTick, n.pitch])).toEqual(
+      score.notes.map((n) => [n.startTick, n.pitch]),
+    );
+  });
+
+  test("set_lyrics reflow on unchanged notes is a no-op; clear by range", () => {
+    const sung = apply(
+      base(),
+      tool("set_lyrics").plan({ text: "sun-lit , morn" }, context(base())),
+    );
+    const reflow = tool("set_lyrics").plan(
+      { mode: "reflow", range: { from: 1, to: 1 } },
+      context(sung),
+    );
+    expect(reflow.kind === "score" && reflow.operations).toEqual([]);
+    expect(reflow.kind === "score" && reflow.summary).toContain("unchanged");
+    const cleared = apply(
+      sung,
+      tool("set_lyrics").plan(
+        { mode: "clear", range: { from: 1 } },
+        context(sung),
+      ),
+    );
+    expect(cleared.notes.every((n) => n.lyric === undefined)).toBe(true);
+    expect(cleared.notes.every((n) => n.vox?.breath === undefined)).toBe(true);
+    expect(() =>
+      tool("set_lyrics").plan({ text: "la", section: "nope" }, context(sung)),
+    ).toThrow("no section nope");
+    expect(() =>
+      tool("set_lyrics").plan(
+        { text: "la", range: { from: 0 } },
+        context(sung),
+      ),
+    ).toThrow("range");
+  });
+
+  test("inspect_vox shows voice, phrases and lint", async () => {
+    const sung = apply(
+      base(),
+      tool("set_lyrics").plan({ text: "_ hel- ~" }, context(base())),
+    );
+    const plan = tool("inspect_vox").plan({}, context(sung));
+    if (plan.kind !== "action") throw new Error(plan.kind);
+    const { content } = await plan.run({} as never);
+    expect(content).toContain("none: today's sing sound");
+    expect(content).toContain("b1");
+    expect(content).toContain("orphan-hold");
+    expect(content).toContain("continuation");
+  });
+
+  test("set_vox validates, sets and clears", async () => {
+    const score = base();
+    const on = apply(
+      score,
+      tool("set_vox").plan(
+        { engine: "formant", voice: "formant:robot" },
+        context(score),
+      ),
+    );
+    expect(on.tracks[0]!.vox).toEqual({
+      engine: "formant",
+      voice: "formant:robot",
+    });
+    const plan = tool("inspect_vox").plan({}, context(on));
+    if (plan.kind !== "action") throw new Error(plan.kind);
+    expect((await plan.run({} as never)).content).toContain(
+      "formant · formant:robot",
+    );
+    expect(() =>
+      tool("set_vox").plan({ engine: "nope" }, context(score)),
+    ).toThrow("engine");
+    expect(() =>
+      tool("set_vox").plan({ voice: "has space" }, context(score)),
+    ).toThrow("voice");
+    const off = apply(on, tool("set_vox").plan({ clear: true }, context(on)));
+    expect(off.tracks[0]!.vox).toBeUndefined();
   });
 });

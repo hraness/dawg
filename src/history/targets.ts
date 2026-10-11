@@ -19,7 +19,13 @@ type ScoreShape = {
   tracks: Map<string, { instrument?: string }>;
   notes: Map<
     string,
-    { trackId: string; startTick: number; durationTicks: number }
+    {
+      trackId: string;
+      startTick: number;
+      durationTicks: number;
+      /** Carries a lyric or per-note vox. */
+      sung: boolean;
+    }
   >;
 };
 
@@ -35,10 +41,7 @@ function shape(composition: unknown): ScoreShape {
         : {},
     );
   }
-  const notes = new Map<
-    string,
-    { trackId: string; startTick: number; durationTicks: number }
-  >();
+  const notes: ScoreShape["notes"] = new Map();
   for (const note of Array.isArray(value.notes) ? value.notes : []) {
     if (
       !isObj(note) ||
@@ -51,6 +54,7 @@ function shape(composition: unknown): ScoreShape {
       startTick: typeof note.startTick === "number" ? note.startTick : 0,
       durationTicks:
         typeof note.durationTicks === "number" ? note.durationTicks : 0,
+      sung: note.lyric !== undefined || note.vox !== undefined,
     });
   }
   return {
@@ -71,6 +75,7 @@ class Collector {
   private readonly out: TargetRef[] = [];
   private readonly keys = new Set<string>();
   private readonly bars = new Map<string, { from: number; to: number }>();
+  private readonly lyricBars = new Map<string, { from: number; to: number }>();
 
   public add(ref: TargetRef): void {
     const key = `${ref.type}\0${ref.key}\0${ref.trackId ?? ""}`;
@@ -95,6 +100,7 @@ class Collector {
     startTick: number,
     durationTicks: number,
     s: ScoreShape,
+    into: Map<string, { from: number; to: number }> = this.bars,
   ): void {
     const ticksPerBar = s.ticksPerBeat * s.beatsPerBar;
     const from = Math.floor(startTick / ticksPerBar) + 1;
@@ -102,8 +108,8 @@ class Collector {
       Math.floor(
         Math.max(startTick, startTick + durationTicks - 1) / ticksPerBar,
       ) + 1;
-    const known = this.bars.get(trackId);
-    this.bars.set(
+    const known = into.get(trackId);
+    into.set(
       trackId,
       known
         ? { from: Math.min(known.from, from), to: Math.max(known.to, to) }
@@ -111,7 +117,25 @@ class Collector {
     );
   }
 
+  /** A lyric edit on `trackId` over a note's bars (merged per track). */
+  public lyrics(
+    trackId: string,
+    startTick: number,
+    durationTicks: number,
+    s: ScoreShape,
+  ): void {
+    this.span(trackId, startTick, durationTicks, s, this.lyricBars);
+  }
+
   public done(limit = 64): TargetRef[] {
+    for (const [trackId, range] of this.lyricBars)
+      this.add({
+        type: "lyrics",
+        key: trackId,
+        trackId,
+        barFrom: range.from,
+        barTo: range.to,
+      });
     for (const [trackId, range] of this.bars)
       this.add({
         type: "bars",
@@ -158,6 +182,7 @@ function trackPatch(
       c.param(trackId, "name");
       continue;
     }
+    if (field === "vox") c.add({ type: "vox", key: trackId, trackId });
     const mapped = TRACK_PARAM[field];
     if (mapped) {
       c.param(trackId, mapped);
@@ -280,6 +305,8 @@ function fromOperation(
             ? note.duration * tpb
             : 0;
       c.span(note.trackId, start, duration, before);
+      if (note.lyric !== undefined || note.vox !== undefined)
+        c.lyrics(note.trackId, start, duration, before);
       return;
     }
     case "removeNote":
@@ -292,6 +319,16 @@ function fromOperation(
       const moved = after?.notes.get(noteId);
       if (moved)
         c.span(moved.trackId, moved.startTick, moved.durationTicks, before);
+      // A lyric edit (`lyric` or per-note `vox` in the patch), or a removed
+      // note that carried one, is a `lyrics` target over its bars.
+      const sung =
+        o.type === "updateNote"
+          ? isObj(o.patch) && ("lyric" in o.patch || "vox" in o.patch)
+          : (before.notes.get(noteId)?.sung ?? false);
+      if (sung) {
+        const at = moved ?? note;
+        c.lyrics(at.trackId, at.startTick, at.durationTicks, before);
+      }
       return;
     }
     case "setTempo":
