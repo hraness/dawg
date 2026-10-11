@@ -49,7 +49,8 @@ async function fromGitHub(): Promise<SourceResult> {
       "application/vnd.github+json",
     );
     if (status === 404) return { kind: "none" };
-    if (body === undefined) return { kind: "error", reason: `GitHub ${status}` };
+    if (body === undefined)
+      return { kind: "error", reason: `GitHub ${status}` };
     const tag = field(body, "tag_name");
     if (typeof tag !== "string" || !/^v\d+\.\d+\.\d+$/u.test(tag))
       return { kind: "error", reason: "GitHub: unexpected body" };

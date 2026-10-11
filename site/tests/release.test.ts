@@ -26,8 +26,7 @@ function stubFetch(github: Reply, npm: Reply): string[] {
         ? npm
         : 500;
     if (reply instanceof Error) throw reply;
-    if (typeof reply === "number")
-      return new Response("{}", { status: reply });
+    if (typeof reply === "number") return new Response("{}", { status: reply });
     return Response.json(reply.body, { status: reply.status ?? 200 });
   }) as typeof fetch;
   return calls;
