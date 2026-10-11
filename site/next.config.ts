@@ -12,7 +12,12 @@ const nextConfig: NextConfig = {
   // The home page, the docs and llms.txt regenerate hourly to pick up a new
   // release; those runtime renders read these files from disk.
   outputFileTracingIncludes: {
-    "/": ["../package.json", "../docs/screens/*.json"],
+    "/": [
+      "../package.json",
+      "../docs/screens/*.json",
+      "../docs/screens/frames/*.json",
+    ],
+    "/screens/[file]": ["../docs/screens/frames/*.json"],
     "/docs": ["../package.json", "../guides/**/*.md"],
     "/docs/[slug]": [
       "../package.json",

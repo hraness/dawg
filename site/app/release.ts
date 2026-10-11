@@ -53,3 +53,13 @@ export const latestRelease = cache(async (): Promise<ReleaseState> => {
 export function releaseTarballUrl(version: string): string {
   return `https://github.com/hraness/dawg/releases/download/v${version}/hraness-dawg-${version}.tgz`;
 }
+
+/** Whether release `version` is at or after `min`; both are x.y.z. */
+export function atLeast(version: string, min: string): boolean {
+  const a = version.split(".").map(Number);
+  const b = min.split(".").map(Number);
+  for (let i = 0; i < 3; i += 1) {
+    if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0);
+  }
+  return true;
+}

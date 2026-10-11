@@ -1,8 +1,10 @@
 # dawg
 
-A music workstation in your terminal. Play notes on your computer
-keyboard, type short commands like `tempo 120`, or ask an agent in plain
-words. Projects are typed TypeScript files you can edit anywhere.
+Make music in your terminal. Press Ctrl-P and your keyboard is a piano;
+type `knobs` and four colored knobs shape the sound. When you want more,
+dawg opens up into a modular patcher (`/patch`), an agent you can ask in
+plain words, and songs saved as typed TypeScript files you can edit
+anywhere. Easy on day one, deep when you want it.
 
 Everything runs on your machine: the song lives in `.dawg` in your
 folder, there is no account, and the commands work offline. The agent
