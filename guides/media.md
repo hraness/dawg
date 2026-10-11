@@ -8,6 +8,11 @@ order: 4
 Bring in outside audio: split a song into stems, find its notes, or
 cut a sample from it. Downloads land in `tracks/<slug>/downloads/`.
 
+
+```agent
+Order: download_audio (once per video), analyze_audio, split_stems, then transcribe_notes on one stem for a time range. Results are files beside the source; the brief lists downloads, stems and analyses already made, so never repeat them. Recipe: recipe/stems-to-midi. For CLIs these tools do not wrap, use exec (recipe/exec-cli).
+```
+
 ## Ask
 
 - "download <url> and split it into stems"

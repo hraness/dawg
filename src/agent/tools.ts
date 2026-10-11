@@ -99,6 +99,9 @@ import type { ChatTool } from "./gateway.ts";
 import { MEDIA_TOOLS } from "../media/tools.ts";
 import { DISPATCH_TOOLS } from "./dispatch-tool.ts";
 import { INSPECT_TOOLS } from "./inspect-tools.ts";
+import { HISTORY_TOOLS, type TurnInfo } from "./history-tools.ts";
+import { DOCS_TOOLS } from "./docs-tool.ts";
+import type { HistoryHandle } from "../history/types.ts";
 import type { SubagentTask } from "./subagent-tasks.ts";
 import { AUDIO_TOOL } from "./audio-tool.ts";
 import { EXEC_TOOL } from "./exec-tool.ts";
@@ -279,6 +282,10 @@ export type ActionContext = Readonly<{
   preview?: PreviewHost;
   /** Local command runner and history seam for `audio` (slice to sampler). */
   media?: MediaServices;
+  /** Session history for `comment` and `history_query`; absent: history is off. */
+  history?: HistoryHandle;
+  /** The running turn (id, start revision, subagent) for history rows. */
+  turn?: TurnInfo;
 }>;
 
 export type ActionResult = Readonly<{
@@ -2234,6 +2241,8 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   ...VOICE_TOOLS,
   ...DISPATCH_TOOLS,
   ...INSPECT_TOOLS,
+  ...HISTORY_TOOLS,
+  ...DOCS_TOOLS,
   // Looks tools up at call time, so it can plan any of the above.
   previewSoundTool((name) => findAgentTool(name)),
 ] satisfies AgentTool[]);

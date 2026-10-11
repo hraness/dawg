@@ -33,6 +33,11 @@ import type { ChatMessage, ChatToolCall } from "./gateway.ts";
 import { CommandLines } from "./show-me.ts";
 import { AGENT_TOOLS, chatTools } from "./tools.ts";
 import { SseBudgetError } from "./sse.ts";
+import {
+  historyBriefSection,
+  newTurnLedger,
+  recordTurnEnd,
+} from "./history-tools.ts";
 
 /** What a host does with one complete command line. */
 export type CommandOutcome = Readonly<{
@@ -61,6 +66,9 @@ export const COMMAND_MODE_TOOL_NAMES: ReadonlySet<string> = new Set([
   "explain",
   "preview_sound",
   "measure_mix",
+  "comment",
+  "history_query",
+  "docs",
   ...MEDIA_TOOLS.map((tool) => tool.name),
 ]);
 
@@ -147,7 +155,12 @@ export async function runCommandAgentTurn(
     allTools.filter((tool) => COMMAND_MODE_TOOL_NAMES.has(tool.name)),
   );
   const turnId = options.turnId ?? newId("turn");
-  const turnState: TurnState = { untrusted: false };
+  const turnState: TurnState = {
+    untrusted: false,
+    startRevision: options.host.snapshot().revision,
+    ledger: newTurnLedger(),
+  };
+  const historyNow = historyBriefSection(options.host.history);
   const newNoteId =
     options.newNoteId ??
     ((trackId: string, _revision: number, _index: number) => newId(trackId));
@@ -168,6 +181,20 @@ export async function runCommandAgentTurn(
   ];
   const finish = (result: AgentTurnResult): AgentTurnResult => {
     deadline.clear();
+    recordTurnEnd({
+      history: options.host.history,
+      ...(options.host.subagentId !== undefined
+        ? { subagentId: options.host.subagentId }
+        : {}),
+      turnId,
+      startRevision: turnState.startRevision ?? 0,
+      ledger: turnState.ledger ?? newTurnLedger(),
+      prompt: options.prompt,
+      model: String(options.model),
+      outcome: result.type === "done" ? result.reason : result.type,
+      finalText: result.type === "done" ? result.text : "",
+      score: options.host.snapshot().score,
+    });
     emit(result);
     return result;
   };
@@ -198,7 +225,10 @@ export async function runCommandAgentTurn(
       const briefText =
         snapshot.revision === turnStartRevision
           ? `Composition brief (JSON): ${brief}`
-          : `Composition brief (JSON, current score at revision ${snapshot.revision}: it already includes every command you ran this turn; do not repeat them): ${brief}`;
+          : `Composition brief (JSON, current score at revision ${snapshot.revision}: it already includes every command you ran this turn; do not repeat them): ${brief}`
+      const briefWithHistory = historyNow
+        ? `${briefText}\nNow and recent history (history_query for more):\n${historyNow}`
+        : briefText;
       const remaining = limits.maxResponseBytes - bytesUsed;
       if (remaining <= 0) throw new SseBudgetError(limits.maxResponseBytes);
 
@@ -232,7 +262,10 @@ export async function runCommandAgentTurn(
           }
           emit({ type: "command", line, ...outcome });
           if (outcome.ok) {
-            if (outcome.resultRevision !== outcome.baseRevision) applied += 1;
+            if (outcome.resultRevision !== outcome.baseRevision) {
+              applied += 1;
+              turnState.ledger?.edits.push(line);
+            }
             results.push(`${line} → ${outcome.message}`);
           } else {
             failed += 1;
@@ -254,7 +287,7 @@ export async function runCommandAgentTurn(
             : {}),
           messages: [
             { role: "system", content: commandAgentSystemPrompt() },
-            { role: "system", content: briefText },
+            { role: "system", content: briefWithHistory },
             ...messages,
           ],
           ...(offered.length > 0 ? { tools: offered } : {}),

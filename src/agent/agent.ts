@@ -46,6 +46,12 @@ import { PATCH_PROMPT } from "./patch-tools.ts";
 import { projectOutline, type ProjectOutline } from "./workspace.ts";
 import type { HistoryHandle } from "../history/types.ts";
 import { toolRow } from "../history/agent-rows.ts";
+import {
+  historyBriefSection,
+  newTurnLedger,
+  recordTurnEnd,
+  type TurnLedger,
+} from "./history-tools.ts";
 
 /** Hard ceilings for one agent turn. Callers may only tighten them. */
 export const AGENT_LIMITS = Object.freeze({
@@ -338,6 +344,7 @@ export const AGENT_SYSTEM_PROMPT = [
   WORKSPACE_PROMPT,
   MEDIA_PROMPT,
   DISPATCH_PROMPT,
+  "History: the brief's \"now and recent history\" lines show the human's focus, playhead and newest comments; read comments on a part with history_query before rewriting it (#love marks what to keep). After you edit, call comment once with what changed and why. docs reads tool pages and recipes (docs {page:\"recipe/chop-a-break\"}).",
   DONE_PROMPT,
 ].join(" ");
 
@@ -372,7 +379,12 @@ export async function runAgentTurn(
   const tools = options.tools ?? AGENT_TOOLS;
   const chatToolList = chatTools(tools);
   const turnId = options.turnId ?? newId("turn");
-  const turnState: TurnState = { untrusted: false };
+  const turnState: TurnState = {
+    untrusted: false,
+    startRevision: options.host.snapshot().revision,
+    ledger: newTurnLedger(),
+  };
+  const historyNow = historyBriefSection(options.host.history);
   const newNoteId =
     options.newNoteId ??
     ((trackId: string, _revision: number, _index: number) => newId(trackId));
@@ -395,6 +407,20 @@ export async function runAgentTurn(
   const toolResultStep = new Map<number, number>();
   const finish = (result: AgentTurnResult): AgentTurnResult => {
     deadline.clear();
+    recordTurnEnd({
+      history: options.host.history,
+      ...(options.host.subagentId !== undefined
+        ? { subagentId: options.host.subagentId }
+        : {}),
+      turnId,
+      startRevision: turnState.startRevision ?? 0,
+      ledger: turnState.ledger ?? newTurnLedger(),
+      prompt: options.prompt,
+      model: String(options.model),
+      outcome: result.type === "done" ? result.reason : result.type,
+      finalText: result.type === "done" ? result.text : "",
+      score: options.host.snapshot().score,
+    });
     emit(result);
     return result;
   };
@@ -428,6 +454,14 @@ export async function runAgentTurn(
       const request: ChatMessage[] = [
         messages[0]!,
         { role: "system", content: briefMessage(brief, snapshot.revision) },
+        ...(historyNow
+          ? [
+              {
+                role: "system" as const,
+                content: `Now and recent history (history_query for more):\n${historyNow}`,
+              },
+            ]
+          : []),
         ...messages.slice(1).map((message, offset) => {
           const producedAt = toolResultStep.get(offset + 1);
           return message.role === "tool" &&
@@ -697,12 +731,28 @@ export async function executeCall(
   const outcome = await executeCallInner(call, context);
   if (outcome.ok && context.turnState && UNTRUSTED_TOOLS.has(call.name))
     context.turnState.untrusted = true;
+  const ledger = context.turnState?.ledger;
+  if (ledger) {
+    ledger.calls += 1;
+    if (outcome.ok && call.name === "comment") ledger.commented = true;
+    if (
+      outcome.ok &&
+      outcome.event.resultRevision > outcome.event.baseRevision
+    )
+      ledger.edits.push(outcome.event.summary);
+  }
   recordToolRow(call, context, outcome, performance.now() - started);
   return outcome;
 }
 
 /** Mutable per-turn flags; one object per turn, shared by its calls. */
-export type TurnState = { untrusted: boolean };
+export type TurnState = {
+  untrusted: boolean;
+  /** Score revision when the turn started (history: last edit, auto comment). */
+  startRevision?: number;
+  /** Edits, comment calls and call count for the end-of-turn rows. */
+  ledger?: TurnLedger;
+};
 
 /**
  * Tools whose results carry third-party text: after one succeeds, code
@@ -851,6 +901,19 @@ async function executeCallInner(
       ...(context.host.packs ? { packs: context.host.packs } : {}),
       ...(context.host.preview ? { preview: context.host.preview } : {}),
       ...(context.host.media ? { media: context.host.media } : {}),
+      ...(context.host.history ? { history: context.host.history } : {}),
+      ...(context.turnId
+        ? {
+            turn: {
+              id: context.turnId,
+              startRevision:
+                context.turnState?.startRevision ?? snapshot.revision,
+              ...(context.host.subagentId !== undefined
+                ? { subagentId: context.host.subagentId }
+                : {}),
+            },
+          }
+        : {}),
       ...(context.signal ? { signal: context.signal } : {}),
     };
     try {

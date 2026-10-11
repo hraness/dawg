@@ -9,6 +9,11 @@ Cut, slice and reshape any audio file into new samples: find the
 hits, cut on them, stretch or pitch the result and load the slices
 on a sampler. Your original file is never changed.
 
+
+```agent
+Use the `audio` tool (op + input), not exec, for chopping: cuts snap to zero crossings, outputs get sidecars and history rows. Look first (info, onsets, beats, segments), then cut/slice. Every edit writes a new file; read the output path from the result. slice with track (and pattern) loads slices on a sampler. Recipes: recipe/chop-a-break, recipe/pitch-a-vocal, recipe/fix-tempo.
+```
+
 ## Ask
 
 - "slice the break into its hits and put them on a sampler"

@@ -23,6 +23,7 @@
     "guides/*.md",
     "guides/index.ts",
     "guides/marks.ts",
+    "docs/agent/recipes/*.md",
     "CHANGELOG.md",
     "DAWG.md",
     "native/prebuilt/manifest.json",

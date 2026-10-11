@@ -9,6 +9,8 @@
  *   .dawg/sdk/tsconfig.json compiler options the root config extends
  *   .dawg/tsbuild/         incremental typecheck state
  *   .dawg/sync.json        hashes of files dawg wrote (echo suppression)
+ *   AGENTS.md, CLAUDE.md   notes for coding agents (only when absent;
+ *                          `dawg docs --agent --write` refreshes the block)
  *
  * `initProject` is idempotent, writes only under `dir`, and reports each
  * file it created or refreshed exactly once.
@@ -20,6 +22,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseSimpleArgv } from "../argv.ts";
 import { durableWrite } from "../fs/durable.ts";
+import { CLAUDE_MD, renderAgentsMd } from "../docs/agents-md.ts";
 
 export const PROJECT_FILE = "dawg.json";
 export const PROJECT_FORMAT = "dawg.project/v1";
@@ -134,6 +137,8 @@ function newer(candidate: string, current: string | undefined): boolean {
 export type InitOptions = Readonly<{
   /** SDK source to vendor; defaults to the shipped `core/sdk/v1.ts`. */
   sdkSource?: string;
+  /** Write AGENTS.md (and CLAUDE.md) when absent; default true. */
+  agentDocs?: boolean;
 }>;
 
 /**
@@ -198,6 +203,18 @@ export async function initProject(
     );
     wrote.push("song.ts");
   }
+  if (options.agentDocs !== false) {
+    const agents = await readOptional(join(dir, "AGENTS.md"));
+    const claude = await readOptional(join(dir, "CLAUDE.md"));
+    if (agents === undefined) {
+      await writeAtomic(join(dir, "AGENTS.md"), renderAgentsMd());
+      wrote.push("AGENTS.md");
+      if (claude === undefined) {
+        await writeAtomic(join(dir, "CLAUDE.md"), CLAUDE_MD);
+        wrote.push("CLAUDE.md");
+      }
+    }
+  }
   const gitignore = (await readOptional(join(dir, ".gitignore"))) ?? "";
   const present = new Set(gitignore.split("\n").map((line) => line.trim()));
   const missing = GITIGNORE_LINES.filter((line) => !present.has(line));
@@ -214,7 +231,7 @@ export async function initProject(
 }
 
 export const INIT_USAGE =
-  "usage: dawg init [dir] · writes song.ts, dawg.json, tsconfig.json and .dawg/sdk (existing files are kept)";
+  "usage: dawg init [dir] · writes song.ts, dawg.json, tsconfig.json, .dawg/sdk and AGENTS.md (existing files are kept)";
 
 /** `dawg init [dir]`: creates the project and prints what it wrote. */
 export async function runInitCommand(

@@ -487,7 +487,14 @@ describe("dispatch through a parent turn", () => {
         .sort(),
     ).toEqual(["kit", "low"]);
     expect(childTools.every((row) => row.sub === "error")).toBe(true);
-    const turns = rows.filter((row) => row.kind === "turn");
+    // The parent turn closes with its own turn row (agentdocs); the child
+    // turns hang off it.
+    expect(
+      rows.some((row) => row.kind === "turn" && row.id === "turn-parent"),
+    ).toBe(true);
+    const turns = rows.filter(
+      (row) => row.kind === "turn" && row.id !== "turn-parent",
+    );
     expect(turns.map((row) => row.parentId)).toEqual([
       "turn-parent",
       "turn-parent",

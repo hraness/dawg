@@ -74,7 +74,12 @@ export function parseGuide(source: string, fallbackId: string): Guide {
     parent: parent === undefined || parent === "" ? null : parent,
     order: Number.isFinite(order) ? order : 0,
     // The page renders the title itself, so a leading title heading is dropped.
-    body: body.replace(/^\s*#\s+.+\n/u, "").trim(),
+    // ```agent blocks are for the agent docs lens (`dawg docs --agent`) only.
+    body: body
+      .replace(/^```agent[ \t]*\n[\s\S]*?^```[ \t]*$\n?/gmu, "")
+      .replace(/\n{3,}/gu, "\n\n")
+      .replace(/^\s*#\s+.+\n/u, "")
+      .trim(),
   };
 }
 

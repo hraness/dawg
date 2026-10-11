@@ -605,7 +605,8 @@ Usage:
   ${wrapUsage(RENDER_USAGE.replace(/^usage: /, ""), 76, "               ")}
   dawg init [dir]      song.ts, tracks/<slug>/track.ts and .dawg/sdk
   dawg check           typecheck + evaluate the project; exit 1 on problems
-  dawg <command> --help  usage: sessions history render init check media model
+  dawg docs --agent [page]  agent docs: tool reference, recipes (--help)
+  dawg <command> --help  usage: sessions history render init check docs media model
   dawg doctor          audio backend, native sink and devices
   dawg media doctor|download|stems|analyze|notes|sample|lyrics  (--help)
   dawg --version
@@ -709,6 +710,17 @@ if (process.argv[2] === "history") {
       stdout,
       process.stderr,
       abort.signal,
+    ),
+  );
+}
+if (process.argv[2] === "docs") {
+  const { runDocsCommand } = await import("./docs/cli.ts");
+  process.exit(
+    await runDocsCommand(
+      process.argv.slice(2),
+      process.cwd(),
+      stdout,
+      process.stderr,
     ),
   );
 }
