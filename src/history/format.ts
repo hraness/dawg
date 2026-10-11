@@ -33,7 +33,7 @@ function clock(at: string, timeZone?: string): string {
   });
 }
 
-/** `A human`, `agent`, `sub:drums`, `external`. */
+/** `A human`, `agent`, `sub:drums`, `external`, `A claude-code`. */
 export function actorLabel(row: HistoryRow): string {
   const payload =
     typeof row.payload === "object" && row.payload !== null
@@ -41,9 +41,20 @@ export function actorLabel(row: HistoryRow): string {
       : {};
   if (row.actor.kind === "subagent" && typeof payload.subagent === "string")
     return `sub:${payload.subagent}`;
-  if (row.actor.pane !== undefined)
-    return `${row.actor.pane} ${row.actor.kind}`;
-  return row.actor.kind;
+  const who = externalName(row) ?? row.actor.kind;
+  if (row.actor.pane !== undefined) return `${row.actor.pane} ${who}`;
+  return who;
+}
+
+/**
+ * The named external actor (`claude-code`, `codex`, a `DAWG_ACTOR`): a file
+ * edit credited by `dawg check --as` or a CLI comment. The generic ids
+ * (`file`, `external`) stay as the plain kind.
+ */
+function externalName(row: HistoryRow): string | undefined {
+  const id = row.actor.actorId;
+  if (row.actor.kind !== "external" || id === undefined) return undefined;
+  return id === "file" || id === "external" ? undefined : id;
 }
 
 /** The most useful single target: a track name, else a param, else bars. */
@@ -114,7 +125,10 @@ export function formatRowShort(
 ): string {
   const width = opts.width ?? 60;
   const who =
-    row.actor.pane ?? (row.actor.kind === "human" ? "you" : row.actor.kind);
+    row.actor.pane ??
+    (row.actor.kind === "human"
+      ? "you"
+      : (externalName(row) ?? row.actor.kind));
   const rev = row.rev !== null ? ` r${row.rev}` : "";
   const where = row.kind === "comment" ? contextLabel(row.context) : "";
   return clip(
