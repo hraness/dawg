@@ -757,8 +757,10 @@ describe("windowed renders keep the piano pedals (0.6.1)", () => {
   }
 
   // Three full 56-70 s renders, deterministic (same bytes every run): about
-  // 0.5-1 s on CI runners, but 5.2 s once on a stalled runner, past bun's
-  // default 5 s. The budget is for the runner, not for variable work.
+  // 0.5-1 s on CI runners. It took 4.7-5.5 s on runners that trap subnormal
+  // doubles while the piano body EQ circled in them through the silent bars
+  // (fixed in keys/dsp.ts). The budget is for the runner, not for variable
+  // work.
   test("una corda and sostenuto past bar 20 match the one-pass render", () => {
     const windowed = renderArrangedPcm(score(true), { sampleRate: rate });
     const single = renderScorePcm(applySectionChanges(score(true)), {

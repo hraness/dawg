@@ -14,6 +14,11 @@ export const LN1000 = 6.907755278982137;
 export const CONTROL = 32;
 /** Highest mode frequency kept, as a share of the sample rate. */
 export const MODE_CEILING = 0.45;
+/**
+ * Feedback state below this (-600 dB) is flushed to exact zero, as in the
+ * patch nodes (`patch/nodes/frame.ts`).
+ */
+export const FLUSH = 1e-30;
 
 export const clamp = (x: number, lo: number, hi: number): number =>
   Math.min(hi, Math.max(lo, x));
@@ -249,8 +254,14 @@ export class Biquad2 {
 
   process(x: number): number {
     const y = this.b0 * x + this.z1;
-    this.z1 = this.b1 * x - this.a1 * y + this.z2;
-    this.z2 = this.b2 * x - this.a2 * y;
+    const z1 = this.b1 * x - this.a1 * y + this.z2;
+    const z2 = this.b2 * x - this.a2 * y;
+    // Once the input stops, the state decays toward the subnormal doubles
+    // and, through rounding, circles just above them for the rest of the
+    // buffer, with subnormal products every sample. x86 cores that trap
+    // subnormals then run this loop several times slower (q08 CI timeouts).
+    this.z1 = z1 < FLUSH && z1 > -FLUSH ? 0 : z1;
+    this.z2 = z2 < FLUSH && z2 > -FLUSH ? 0 : z2;
     return y;
   }
 }

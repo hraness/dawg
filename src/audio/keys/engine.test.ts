@@ -325,6 +325,21 @@ describe("keys engine: tails and determinism", () => {
     expect(late / peak).toBeLessThan(1e-3);
   });
 
+  // A deterministic proxy for a CPU-dependent cost: subnormal doubles run
+  // several times slower on some x86 runners, and the body EQ used to
+  // circle in them for the whole silent rest of a render (q08 CI timeouts:
+  // about 80% of the samples of a 12 s buffer).
+  test("the body EQ never leaves subnormal samples in a silent tail", () => {
+    for (const body of ["grand", "upright", "felt", "honkytonk", "prepared"]) {
+      const [left, right] = render(score({ body }, [{ pitch: 60 }]), 12);
+      let subnormal = 0;
+      for (const buffer of [left, right])
+        for (const x of buffer)
+          if (x !== 0 && Math.abs(x) < 2.2250738585072014e-308) subnormal += 1;
+      expect(`${body}: ${subnormal}`).toBe(`${body}: 0`);
+    }
+  });
+
   test("byte-identical renders; legacy piano unchanged by the engine", () => {
     const song = score({ preset: "grand" }, [
       { pitch: 60 },
