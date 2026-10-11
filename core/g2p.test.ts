@@ -55,7 +55,8 @@ describe("letter-to-sound", () => {
   test("phone names: ARPAbet with or without stress digits", () => {
     expect(normalizePhone("AH0")).toBe("ah");
     expect(normalizePhone(" S ")).toBe("s");
-    expect(normalizePhone("q")).toBeUndefined();
+    expect(normalizePhone("xx")).toBeUndefined();
+    expect(normalizePhone("Q")).toBe("q");
     for (const name of VOX_PHONE_NAMES) expect(VOX_PHONES[name]).toBeDefined();
   });
 });

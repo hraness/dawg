@@ -112,7 +112,10 @@ const K_BURST: readonly VoxBand[] = [
   [5500, 2500, -16],
 ];
 
-/** Every phone, ARPAbet without stress digits, plus `ax` schwa. */
+/**
+ * Every phone, ARPAbet without stress digits, plus `ax` (schwa), `q`
+ * (glottal stop) and `dx` (flap).
+ */
 export const VOX_PHONES: Readonly<Record<string, VoxPhone>> = Object.freeze({
   // vowels
   iy: V([300, 2200, 2960], "i"),
@@ -374,6 +377,28 @@ export const VOX_PHONES: Readonly<Record<string, VoxPhone>> = Object.freeze({
     noise: SH_BANDS,
     noiseLevel: 0.3,
     av: 0.35,
+  }),
+  // glottal stop: a short closure, no burst
+  q: ph({
+    kind: "stop",
+    voiced: false,
+    f: [500, 1500, 2500],
+    bw: [200, 200, 300],
+    dur: 0.005,
+    closure: 0.04,
+    av: 0,
+  }),
+  // flap: a brief voiced tap ("butter")
+  dx: ph({
+    kind: "stop",
+    voiced: true,
+    f: [250, 1650, 2600],
+    bw: [70, 120, 200],
+    dur: 0.008,
+    closure: 0.018,
+    noise: T_BURST,
+    noiseLevel: 0.12,
+    av: 0,
   }),
 });
 
