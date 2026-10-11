@@ -173,6 +173,32 @@ export type AgentCommit = Readonly<{
   parentCallId?: string;
 }>;
 
+/**
+ * The session event a host appends for an agent commit. A dispatch child's
+ * commit carries its task id as `subagent` (and `task`) plus the parent's
+ * dispatch call, so history records it as `actor_kind='subagent'` (design §6.1).
+ */
+export function agentCommitEvent(change: AgentCommit): {
+  kind: "agent.tool";
+  payload: Record<string, unknown>;
+} {
+  return {
+    kind: "agent.tool",
+    payload: {
+      tool: change.toolName,
+      callId: change.callId,
+      summary: change.summary,
+      operations: change.operations,
+      ...(change.subagent !== undefined
+        ? { subagent: change.subagent, task: change.subagent }
+        : {}),
+      ...(change.parentCallId !== undefined
+        ? { parentCallId: change.parentCallId }
+        : {}),
+    },
+  };
+}
+
 /** Thrown by a host when the session moved past `baseRevision`. */
 export class StaleRevisionError extends Error {
   constructor(

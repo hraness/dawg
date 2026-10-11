@@ -318,6 +318,7 @@ import { drumVoicePitch, isDrumInstrument } from "../core/drums.ts";
 import {
   describeAgentEvent,
   StaleRevisionError,
+  agentCommitEvent,
   type AgentEvent,
   type AgentHost,
 } from "./agent/agent.ts";
@@ -7590,15 +7591,7 @@ function agentHost(
       try {
         record = await port.appendOperations(
           { ...record, revision: change.baseRevision },
-          {
-            kind: "agent.tool",
-            payload: {
-              tool: change.toolName,
-              callId: change.callId,
-              summary: change.summary,
-              operations: change.operations,
-            },
-          },
+          agentCommitEvent(change),
           change.operations,
           change.next.toJSON(),
         );
