@@ -18,7 +18,13 @@ import { phrasePhones } from "../../../core/g2p.ts";
 const TPB = 480;
 const SR = 22_050;
 
-type N = { pitch?: number; start: number; length: number; lyric?: string };
+type N = {
+  pitch?: number;
+  start: number;
+  length: number;
+  lyric?: string;
+  ph?: readonly string[];
+};
 
 function score(sing: TrackSing, notes: readonly N[], bars = 2): TrackScore {
   return createScore({
@@ -33,6 +39,7 @@ function score(sing: TrackSing, notes: readonly N[], bars = 2): TrackScore {
       pitch: n.pitch ?? 57,
       velocity: 0.8,
       ...(n.lyric !== undefined ? { lyric: n.lyric } : {}),
+      ...(n.ph ? { vox: { ph: n.ph } } : {}),
     })),
   } as never);
 }
@@ -225,6 +232,20 @@ describe("machine vox rendering", () => {
       share(spectrum(y, at(1.52)), 4000, SR / 2);
     expect(hiss(on)).toBeGreaterThan(0.5);
     expect(hiss(off)).toBeLessThan(0.1);
+  });
+
+  test("a note's vox.ph replaces letter-to-sound", () => {
+    const said = (lyric: string, ph?: readonly string[]) =>
+      hash(
+        render(
+          score(ROBOT, [{ start: 0, length: 2, lyric, ...(ph ? { ph } : {}) }]),
+        ),
+      );
+    // "sun" spelled out by hand renders exactly as the rules read it
+    expect(said("sun", ["s", "ah", "n"])).toBe(said("sun"));
+    // and a different phone list changes what is sung
+    expect(said("sun", ["m", "ah", "n"])).toBe(said("mun"));
+    expect(said("sun", ["m", "ah", "n"])).not.toBe(said("sun"));
   });
 
   test("an articulating line without lyrics sings as before", () => {

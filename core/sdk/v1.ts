@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.36.0";
+export const SDK_VERSION = "1.37.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -2374,7 +2374,7 @@ export type SingParams = Readonly<{
   /** Throat melody harmonic range `[lo, hi]`, 2..24. */
   harmonics?: readonly [number, number];
   sub?: number;
-  /** Machine vox: consonant strength 0..1 (0 sings vowels only). */
+  /** Machine vox (SDK 1.37.0): consonant strength 0..1 (0 sings vowels only). */
   articulate?: number;
   gain?: number;
 }>;

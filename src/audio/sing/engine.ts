@@ -1008,7 +1008,8 @@ export function renderSingTrack(
 /**
  * Machine vox: what each note says, from the lyrics of the whole track in
  * time order (the top note of a chord first), so a word continued across
- * notes (`hel-` + `lo`) is read whole.
+ * notes (`hel-` + `lo`) is read whole. A note's `vox.ph` replaces the
+ * letter-to-sound rules for that note.
  */
 export function voxSyllables(
   notes: readonly PerformedNote[],
@@ -1016,7 +1017,12 @@ export function voxSyllables(
   const ordered = [...notes].sort(
     (a, b) => a.startTick - b.startTick || b.pitch - a.pitch,
   );
-  const sylls = phrasePhones(ordered.map((note) => ({ lyric: note.lyric })));
+  const sylls = phrasePhones(
+    ordered.map((note) => ({
+      ...(note.lyric !== undefined ? { lyric: note.lyric } : {}),
+      ...(note.vox?.ph ? { ph: note.vox.ph } : {}),
+    })),
+  );
   return new Map(ordered.map((note, k) => [note, sylls[k]!]));
 }
 

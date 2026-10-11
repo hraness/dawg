@@ -16,7 +16,7 @@ import {
   isVoxPhone,
   normalizePhone,
   VOX_PHONE_NAMES,
-  VOX_PHONES,
+  VOX_PHONE_TABLE,
 } from "./vox-phones.ts";
 
 const say = (w: string) => wordPhones(w).join(" ");
@@ -57,7 +57,12 @@ describe("letter-to-sound", () => {
     expect(normalizePhone(" S ")).toBe("s");
     expect(normalizePhone("xx")).toBeUndefined();
     expect(normalizePhone("Q")).toBe("q");
-    for (const name of VOX_PHONE_NAMES) expect(VOX_PHONES[name]).toBeDefined();
+    for (const name of VOX_PHONE_NAMES)
+      expect(VOX_PHONE_TABLE[name]).toBeDefined();
+    // one source of truth: the table covers exactly core/vox.ts VOX_PHONES
+    expect(Object.keys(VOX_PHONE_TABLE).sort()).toEqual(
+      [...VOX_PHONE_NAMES].sort(),
+    );
   });
 });
 

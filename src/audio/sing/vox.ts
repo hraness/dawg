@@ -22,7 +22,7 @@
  * noise pass, whose generator is seeded per line: deterministic.
  */
 import type { VoxSyllable } from "../../../core/g2p.ts";
-import { VOX_PHONES, type VoxPhone } from "../../../core/vox-phones.ts";
+import { VOX_PHONE_TABLE, type VoxPhone } from "../../../core/vox-phones.ts";
 import {
   Bandpass,
   morphVowel,
@@ -113,7 +113,7 @@ function vowelTables(
   phone: string | undefined,
   spec: string,
 ): { from: Formant[]; to?: Formant[]; late: boolean } {
-  const p = phone ? VOX_PHONES[phone] : undefined;
+  const p = phone ? VOX_PHONE_TABLE[phone] : undefined;
   const sung = p ? p.sung : spec;
   if (sung !== undefined) {
     const morph = sung.includes(">");
@@ -220,7 +220,7 @@ export class Articulation {
     // voiceless hiss falls silent; a nasal or liquid keeps humming)
     const last = this.spans[this.spans.length - 1];
     if (last) {
-      const p = lastConsonant ? VOX_PHONES[lastConsonant] : undefined;
+      const p = lastConsonant ? VOX_PHONE_TABLE[lastConsonant] : undefined;
       const endTable = last.to ?? last.from;
       const silent =
         p !== undefined &&
@@ -255,7 +255,7 @@ export class Articulation {
   }
 
   private phoneLength(name: string, lineStart: boolean): number {
-    const p = VOX_PHONES[name];
+    const p = VOX_PHONE_TABLE[name];
     if (!p) return 0;
     if (p.kind === "vowel") return p.dur;
     const closure = lineStart ? 0 : (p.closure ?? 0);
@@ -271,7 +271,7 @@ export class Articulation {
     voice: VoiceType,
     lineStart: boolean,
   ): number {
-    const p: VoxPhone | undefined = VOX_PHONES[name];
+    const p: VoxPhone | undefined = VOX_PHONE_TABLE[name];
     if (!p) return at;
     const len = (s: number) =>
       Math.max(1, Math.round(s * squeeze * sampleRate));
