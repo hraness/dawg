@@ -13,7 +13,7 @@ import {
   type ScoreOperation,
   type TrackScore,
 } from "../../core/score.ts";
-import { DaemonClient } from "./client.ts";
+import { DaemonClient, DaemonClosedError } from "./client.ts";
 import { compositionDigest } from "./protocol.ts";
 import { ensureSession, loadSession, type SessionRecord } from "./store.ts";
 
@@ -259,11 +259,15 @@ describe("ops log", () => {
 /**
  * Forwards every event `from` accepts to `to` as an ops intent, keyed by the
  * source event id so an echo back is a duplicate, never a second write.
+ * Forwarding stops once `to` is closed; any other failure is kept for
+ * `settled()` to throw, so no forwarded write rejects unobserved.
  */
 function relay(from: DaemonClient, to: DaemonClient, seen: Set<string>) {
   let forwarded = from.record.revision;
   let chain = Promise.resolve();
-  return from.subscribe((update) => {
+  let stopped = false;
+  const failures: unknown[] = [];
+  const unsubscribe = from.subscribe((update) => {
     if (update.type !== "record") return;
     const fresh = update.record.events.filter(
       (event) => event.revision > forwarded,
@@ -272,21 +276,39 @@ function relay(from: DaemonClient, to: DaemonClient, seen: Set<string>) {
     for (const event of fresh) {
       if (seen.has(event.id) || !event.ops) continue;
       seen.add(event.id);
-      chain = chain.then(async () => {
-        for (let attempt = 0; attempt < 20; attempt += 1) {
-          const result = await to.apply({
-            base: to.record.revision,
-            kind: event.kind,
-            payload: event.payload,
-            key: event.id,
-            operations: event.ops,
-          });
-          if (result.status !== "rebase") return;
-          await to.sync();
-        }
-      });
+      chain = chain
+        .then(async () => {
+          if (stopped) return;
+          for (let attempt = 0; attempt < 20; attempt += 1) {
+            const result = await to.apply({
+              base: to.record.revision,
+              kind: event.kind,
+              payload: event.payload,
+              key: event.id,
+              operations: event.ops,
+            });
+            if (result.status !== "rebase") return;
+            await to.sync();
+          }
+        })
+        .catch((error: unknown) => {
+          if (error instanceof DaemonClosedError) stopped = true;
+          else failures.push(error);
+        });
     }
   });
+  return {
+    unsubscribe,
+    /** Waits for every queued forward; throws the first failure. */
+    async settled() {
+      let current;
+      do {
+        current = chain;
+        await current;
+      } while (current !== chain);
+      if (failures.length > 0) throw failures[0];
+    },
+  };
 }
 
 describe("relay simulation", () => {
@@ -296,8 +318,8 @@ describe("relay simulation", () => {
     const a = await connect(left.workspace, left.sessionId, "a");
     const b = await connect(right.workspace, right.sessionId, "b");
     const seen = new Set<string>();
-    relay(a, b, seen);
-    relay(b, a, seen);
+    const ab = relay(a, b, seen);
+    const ba = relay(b, a, seen);
     const edits: Promise<unknown>[] = [];
     for (let index = 0; index < 6; index += 1) {
       const side = index % 2 === 0 ? a : b;
@@ -332,5 +354,43 @@ describe("relay simulation", () => {
     expect(compositionDigest(a.record.composition)).toBe(
       compositionDigest(b.record.composition),
     );
+    await Promise.all([ab.settled(), ba.settled()]);
+  });
+
+  // PR #215's CI failed on an unhandled "dawgd client closed" in afterEach:
+  // a forward was still in flight when teardown closed its target.
+  test("closing the target mid-forward ends the relay without an unhandled rejection", async () => {
+    const left = await daemonSession();
+    const right = await daemonSession();
+    const a = await connect(left.workspace, left.sessionId, "a");
+    const b = await connect(right.workspace, right.sessionId, "b");
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      // Close `b` the moment a forward is sent, while it is still pending.
+      const apply = b.apply.bind(b);
+      let sent = 0;
+      b.apply = (intent) => {
+        sent += 1;
+        const reply = apply(intent);
+        b.close();
+        return reply;
+      };
+      const forward = relay(a, b, new Set());
+      await a.apply({
+        base: a.record.revision,
+        kind: "score.operation",
+        payload: {},
+        operations: [{ type: "addNote", note: note("x", "main", 0) }],
+      });
+      await until(() => sent === 1);
+      await forward.settled();
+      await Bun.sleep(20);
+      expect(unhandled).toEqual([]);
+      await expect(b.sync()).rejects.toBeInstanceOf(DaemonClosedError);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
   });
 });
