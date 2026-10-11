@@ -7,7 +7,9 @@
  * so project sync and the audio engine need no handle. It is a no-op unless
  * dev mode is on (`dawg --dev`, `dawg dev`, `DAWG_DEV=1`), except
  * `level=error`, which is written in every mode. At most 20 rows a second
- * are written; the excess is counted into one `dropped N` row.
+ * are written; the excess is counted into one `dropped N` row, written
+ * when the next window opens or by `flushDevLog` (on exit). Error rows are
+ * never rate limited: a crash during a burst must still be recorded.
  */
 import { historySink } from "./sink.ts";
 import type { TargetRef } from "./types.ts";
@@ -91,25 +93,18 @@ export function devLog(
   if (!sink) return;
   const at = now();
   if (at - windowStart >= WINDOW_MS) {
-    const lost = dropped;
     windowStart = at;
     written = 0;
-    dropped = 0;
-    if (lost > 0) {
-      written += 1;
-      append(
-        "error",
-        "warn",
-        `dropped ${lost} log row${lost === 1 ? "" : "s"} (over ${DEV_LOG_RATE}/s)`,
-        { topic: "error", dropped: lost },
-      );
-    }
+    if (flushDropped()) written += 1;
   }
-  if (written >= DEV_LOG_RATE) {
+  if (level === "error") {
+    // Errors bypass the budget (and report what a burst dropped first).
+    flushDropped();
+  } else if (written >= DEV_LOG_RATE) {
     dropped += 1;
     return;
   }
-  written += 1;
+  if (level !== "error") written += 1;
   const bounded = boundPayload(payload);
   append(
     topic,
@@ -118,6 +113,28 @@ export function devLog(
     { topic, ...(bounded === undefined ? {} : { data: bounded }) },
     options.targets,
   );
+}
+
+/** Writes the pending `dropped N` row, if any; true when one was written. */
+function flushDropped(): boolean {
+  const lost = dropped;
+  if (lost === 0) return false;
+  dropped = 0;
+  append(
+    "error",
+    "warn",
+    `dropped ${lost} log row${lost === 1 ? "" : "s"} (over ${DEV_LOG_RATE}/s)`,
+    { topic: "error", dropped: lost },
+  );
+  return true;
+}
+
+/**
+ * Writes the pending `dropped N` row now (process exit), so a burst that
+ * ends the process is still accounted for. Never throws.
+ */
+export function flushDevLog(): void {
+  flushDropped();
 }
 
 function append(

@@ -494,6 +494,12 @@ export function scopedHost(
             scopedWorkspaceWrite(path, { subagent: label }),
         }
       : {}),
+    ...(host.noteWorkspaceWrite
+      ? {
+          noteWorkspaceWrite: (path: string) =>
+            host.noteWorkspaceWrite!(path, { subagent: label }),
+        }
+      : {}),
     ...(host.web ? { web: host.web } : {}),
     ...(host.media
       ? {

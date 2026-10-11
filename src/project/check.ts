@@ -17,10 +17,11 @@ import { clipPinDiagnostics } from "./clip-pins.ts";
 import { isProject } from "./init.ts";
 import { parseSimpleArgv } from "../argv.ts";
 import { typecheckProject } from "./typecheck.ts";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { projectSourceFiles } from "./sync.ts";
-import { cleanActor, sha256, writeHeartbeat } from "../dev/attribution.ts";
+import {
+  cleanActor,
+  projectSourceHashes,
+  writeHeartbeat,
+} from "../dev/attribution.ts";
 
 export type CheckDeps = Readonly<{
   typecheck?: typeof typecheckProject;
@@ -77,7 +78,7 @@ export async function checkProject(
 }
 
 export const CHECK_USAGE =
-  "usage: dawg check [--as <name>] · typecheck and evaluate the project in this directory; exit 1 on problems · --as (or DAWG_ACTOR) credits the running editor's reload of these files to <name>";
+  "usage: dawg check [--as <name>] [--files <path,...>] · typecheck and evaluate the project in this directory; exit 1 on problems · --as (or DAWG_ACTOR) credits the running editor's reload of these files to <name> · --files names the files you changed, so a reload that already happened is credited too";
 
 /**
  * Who is running `dawg check`: `--as`, else DAWG_ACTOR, else `claude-code`
@@ -92,19 +93,6 @@ export function checkActor(
     cleanActor(env.DAWG_ACTOR) ??
     (env.CLAUDECODE === "1" ? "claude-code" : undefined)
   );
-}
-
-/** Hashes of the project's sources, as the running editor's sync sees them. */
-async function sourceHashes(project: string): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
-  for (const path of await projectSourceFiles(project)) {
-    try {
-      out.set(path, sha256(await readFile(join(project, path), "utf8")));
-    } catch {
-      // vanished between the walk and the read
-    }
-  }
-  return out;
 }
 
 export async function runCheckCommand(
@@ -127,6 +115,23 @@ export async function runCheckCommand(
     as = value;
     rest.splice(asAt, 2);
   }
+  // `--files a,b`: the files this actor changed. Only these may claim a
+  // reload that already landed as a plain save (design §5.3).
+  let files: string[] | undefined;
+  const filesAt = rest.indexOf("--files");
+  if (filesAt >= 0) {
+    const value = rest[filesAt + 1];
+    const list = (value ?? "")
+      .split(",")
+      .map((path) => path.trim().replace(/\\/g, "/").replace(/^\.\//, ""))
+      .filter((path) => path.length > 0);
+    if (value === undefined || value.startsWith("-") || list.length === 0) {
+      stderr.write(`--files needs a comma-separated list · ${CHECK_USAGE}\n`);
+      return 2;
+    }
+    files = list;
+    rest.splice(filesAt, 2);
+  }
   const parsed = parseSimpleArgv(rest, 0);
   if (parsed.kind === "help") {
     stdout.write(`${CHECK_USAGE}\n`);
@@ -143,12 +148,24 @@ export async function runCheckCommand(
     );
     return 1;
   }
+  const hashes = await projectSourceHashes(project);
+  if (files !== undefined) {
+    const unknown = files.filter((path) => !hashes.has(path));
+    if (unknown.length > 0) {
+      stderr.write(
+        `--files: not a project source: ${unknown.slice(0, 4).join(", ")} · ${CHECK_USAGE}\n`,
+      );
+      return 2;
+    }
+  }
   const report = await checkProject(project, deps);
   // The heartbeat credits the editor's next reload of exactly these
   // contents to this actor (design §5.3); a human's later save differs.
+  // Only `--files` may claim a reload that already happened: a plain check
+  // hashes every source, including saves the actor never made.
   const actor = checkActor(as);
   if (actor !== undefined)
-    await writeHeartbeat(project, actor, await sourceHashes(project)).catch(
+    await writeHeartbeat(project, actor, hashes, new Date(), files).catch(
       () => undefined,
     );
   for (const diagnostic of report.diagnostics)

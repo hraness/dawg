@@ -302,6 +302,9 @@ export function reconcileHistory(
     );
   });
   const imported = db.appendMany(rows);
+  // Late credits live only in history.db and credits.jsonl; a rebuilt DB
+  // gets them back from the mirror (design §5.3).
+  if (imported > 0) db.replayCredits(record.sessionId);
   dirty.delete(record.sessionId);
   return {
     imported,
