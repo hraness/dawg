@@ -119,7 +119,7 @@ const depths: readonly {
     ),
   },
   {
-    title: "151 presets",
+    title: "More than 150 presets",
     body: (
       <>
         Seventeen categories, each preset with four named knobs.{" "}
