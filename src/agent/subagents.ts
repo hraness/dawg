@@ -79,6 +79,8 @@ export type SubagentResult = Readonly<{
   revisions: readonly number[];
   summary: string;
   spend: string;
+  /** True when the child wrote a history comment (the parent skips its #auto one). */
+  commented?: boolean;
 }>;
 
 /** One child turn on the parent's provider path. */
@@ -425,7 +427,12 @@ export function scopedHost(
   scope: WriteScope,
   label: string,
   queue: CommitQueue,
-  state: { revisions: number[]; conflict?: string; parentCallId?: string } = {
+  state: {
+    revisions: number[];
+    conflict?: string;
+    parentCallId?: string;
+    commented?: boolean;
+  } = {
     revisions: [],
   },
 ): AgentHost {
@@ -438,9 +445,23 @@ export function scopedHost(
       bases.delete(bases.keys().next().value as number);
   };
   const scopedWorkspaceWrite = host.onWorkspaceWrite;
+  const history = host.history;
   return {
     subagentId: label,
-    ...(host.history ? { history: host.history } : {}),
+    ...(history
+      ? {
+          // Notes when the child comments, so the parent turn does not add
+          // a duplicate #auto comment for the same edits (design §3.4).
+          history: {
+            append: (row) => {
+              if (row.kind === "comment") state.commented = true;
+              return history.append(row);
+            },
+            query: (filter) => history.query(filter),
+            context: () => history.context(),
+          },
+        }
+      : {}),
     snapshot() {
       const snapshot = host.snapshot();
       remember(snapshot.revision, snapshot.score);
@@ -581,6 +602,7 @@ export async function runSubagents(
         revisions: number[];
         conflict?: string;
         parentCallId?: string;
+        commented?: boolean;
       } = {
         revisions: [],
         parentCallId: parent.callId,
@@ -646,6 +668,7 @@ export async function runSubagents(
         revisions: state.revisions,
         summary: resultSummary(result, state, failure || "no result"),
         spend: spend.line(),
+        ...(state.commented ? { commented: true } : {}),
       };
       recordChildTurn(parent, task, results[index]!, {
         id: childTurnId,

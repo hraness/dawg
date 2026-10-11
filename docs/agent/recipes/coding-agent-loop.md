@@ -30,7 +30,22 @@ dawg history --follow
 dawg history --actor external --limit 5
 ```
 
-4. See what the human said about it:
+`--as` (or `DAWG_ACTOR`) credits the reload to you instead of `external`; `--files` names the files you changed.
+
+4. When the human runs `dawg dev`, dawg also writes `log` rows (file sync evaluations, typecheck results as file:line, rejected evaluations, tool arguments, errors), and each pane writes its current frame as text:
+
+```dawg
+dawg history --follow --kind log
+dawg dev screen A
+```
+
+```tool
+{"tool":"history_query","args":{"kind":["log"],"limit":10}}
+```
+
+`dawg dev --reload` is for working on dawg's own source from a checkout: it restarts the editor after each change that imports cleanly.
+
+5. See what the human said about it:
 
 ```tool
 {"tool":"history_query","args":{"actor":["human"],"kind":["comment"],"limit":5}}

@@ -716,6 +716,10 @@ export type CallOutcome =
       mutated: boolean;
       content: string;
       explanation?: string;
+      /** dispatch: revisions committed by its subagents. */
+      childRevisions?: number;
+      /** dispatch: a subagent wrote a history comment. */
+      childCommented?: boolean;
       event: Extract<AgentEvent, { type: "tool-applied" }>;
     }
   | { ok: false; content: string; diagnostic: string };
@@ -762,8 +766,16 @@ export async function executeCall(
   const ledger = context.turnState?.ledger;
   if (ledger) {
     ledger.calls += 1;
-    if (outcome.ok && call.name === "comment") ledger.commented = true;
-    if (outcome.ok && outcome.event.resultRevision > outcome.event.baseRevision)
+    if (outcome.ok && (call.name === "comment" || outcome.childCommented))
+      ledger.commented = true;
+    // Only this call's own changes count: the human (or a file reload) may
+    // move the revision while a read-only tool runs (design §3.4).
+    if (
+      outcome.ok &&
+      ((outcome.mutated &&
+        outcome.event.resultRevision > outcome.event.baseRevision) ||
+        (outcome.childRevisions ?? 0) > 0)
+    )
       ledger.edits.push(outcome.event.summary);
   }
   recordToolRow(call, context, outcome, performance.now() - started);
@@ -1099,9 +1111,17 @@ async function executeCallInner(
         },
       });
       const done = results.filter((result) => result.status === "done").length;
+      const childRevisions = results.reduce(
+        (sum, result) => sum + result.revisions.length,
+        0,
+      );
       return {
         ok: true,
         mutated: false,
+        ...(childRevisions > 0 ? { childRevisions } : {}),
+        ...(results.some((result) => result.commented)
+          ? { childCommented: true }
+          : {}),
         content: formatResults(results, spend),
         event: appliedEvent(
           `dispatch · ${done}/${results.length} done`,

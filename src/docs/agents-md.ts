@@ -29,6 +29,13 @@ files; the open dawg window reloads when a file changes.
    To be credited for an edit the open window already reloaded, name your files:
    \`dawg check --as <you> --files tracks/bass/track.ts\`.
 
+## Dev mode
+- The human runs \`dawg dev\` (or passes --dev): the same editor, plus \`log\` rows in history
+  (file sync evaluations, typecheck results as file:line, rejected evaluations, tool args, errors).
+- \`dawg history --follow --kind log\`: stream those rows; \`--json\` for one object per line.
+- \`dawg dev screen A\`: print what dev pane A shows right now, as plain text.
+- \`dawg dev --reload\`: for dawg's own source checkout; restarts the editor after each good change.
+
 ## History and comments
 - \`dawg history\`: newest edits, undo/redo, comments and agent turns, one line each.
 - Filter: \`dawg history --track bass --kind comment\`, \`--bars 9-16\`, \`--param cutoff\`,
@@ -55,17 +62,37 @@ export function renderAgentsMd(): string {
 /** `CLAUDE.md` written next to a fresh AGENTS.md. */
 export const CLAUDE_MD = "@AGENTS.md\n";
 
+/** The markers in AGENTS.md are not one clean pair; nothing was written. */
+export class AgentsMdMarkerError extends Error {
+  override name = "AgentsMdMarkerError";
+}
+
+function countOf(text: string, needle: string): number {
+  let count = 0;
+  for (
+    let at = text.indexOf(needle);
+    at >= 0;
+    at = text.indexOf(needle, at + 1)
+  )
+    count += 1;
+  return count;
+}
+
 /**
  * Refreshes the dawg block in `existing` (undefined: a new file). Text
  * outside the markers is kept byte for byte; a file without markers gets the
  * block appended once. Returns the same string when nothing changes.
+ *
+ * Throws AgentsMdMarkerError when the markers are not exactly one ordered
+ * begin/end pair (say a hand edit removed the end marker): guessing where
+ * the block ends could replace the human's own text.
  */
 export function upsertAgentsMd(existing: string | undefined): string {
   const block = renderAgentsMd();
   if (existing === undefined || existing.length === 0) return block;
-  const begin = existing.indexOf(AGENTS_BEGIN);
-  const end = existing.indexOf(AGENTS_END, begin + AGENTS_BEGIN.length);
-  if (begin < 0 || end < 0) {
+  const begins = countOf(existing, AGENTS_BEGIN);
+  const ends = countOf(existing, AGENTS_END);
+  if (begins === 0 && ends === 0) {
     const sep = existing.endsWith("\n\n")
       ? ""
       : existing.endsWith("\n")
@@ -73,6 +100,12 @@ export function upsertAgentsMd(existing: string | undefined): string {
         : "\n\n";
     return `${existing}${sep}${block}`;
   }
+  const begin = existing.indexOf(AGENTS_BEGIN);
+  const end = existing.indexOf(AGENTS_END);
+  if (begins !== 1 || ends !== 1 || end < begin)
+    throw new AgentsMdMarkerError(
+      `AGENTS.md has ${begins} "${AGENTS_BEGIN}" and ${ends} "${AGENTS_END}" markers; keep exactly one pair around the dawg block (or remove both) and run again`,
+    );
   let after = end + AGENTS_END.length;
   if (existing[after] === "\n") after += 1;
   return `${existing.slice(0, begin)}${block}${existing.slice(after)}`;

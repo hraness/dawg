@@ -15,6 +15,7 @@ import {
   AGENT_DOCS_INDEX_BYTES,
   AGENTS_BEGIN,
   AGENTS_END,
+  AgentsMdMarkerError,
   agentDocs,
   agentDocsIndex,
   findAgentDoc,
@@ -31,6 +32,14 @@ import { AGENTS_MD_MAX_BYTES } from "./agents-md.ts";
 import { parseDocsArgv, runDocsCommand } from "./cli.ts";
 
 const advertised = AGENT_TOOLS.filter((tool) => !tool.hidden);
+
+/** `dawg dev …` is routed in src/main.ts before launch-args parses. */
+const COMMANDS = [...SUBCOMMANDS, "dev"];
+function expectDevArgv(rest: readonly string[]) {
+  const first = rest[0];
+  if (first === "screen") expect(rest.length <= 2).toBe(true);
+  else if (first !== undefined) expect(["--reload", "--help"]).toContain(first);
+}
 
 function baseScore(): TrackScore {
   return createScore({
@@ -181,8 +190,9 @@ describe("recipes", () => {
         if (example.kind !== "dawg") continue;
         const [bin, sub, ...rest] = example.argv;
         expect(bin).toBe("dawg");
-        expect(SUBCOMMANDS).toContain(sub!);
-        if (sub === "media" && rest[0] === "chop") {
+        expect(COMMANDS).toContain(sub!);
+        if (sub === "dev") expectDevArgv(rest);
+        else if (sub === "media" && rest[0] === "chop") {
           const words = rest.slice(1).filter((word, index, all) => {
             const prev = all[index - 1];
             return (
@@ -301,10 +311,58 @@ describe("AGENTS.md and dawg docs --agent", () => {
     expect(refreshed).not.toContain("old text");
   });
 
+  test("broken markers are refused, never guessed: user text survives", () => {
+    const orphan = `# My rules\n${AGENTS_BEGIN}\nold dawg text\n\n## My own section\nNEVER push to main\n`;
+    expect(() => upsertAgentsMd(orphan)).toThrow(AgentsMdMarkerError);
+    // An end marker before its begin, a stray end, and two pairs.
+    for (const bad of [
+      `${AGENTS_END}\nmine\n${AGENTS_BEGIN}\n`,
+      `mine\n${AGENTS_END}\n`,
+      `${renderAgentsMd()}mine\n${renderAgentsMd()}`,
+    ])
+      expect(() => upsertAgentsMd(bad)).toThrow(AgentsMdMarkerError);
+  });
+
+  test("dawg docs --agent --write leaves a file with a lost end marker alone", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "dawg-docs-"));
+    try {
+      let err = "";
+      const stdout = { write: (_text: string) => undefined };
+      const stderr = { write: (text: string) => (err += text) };
+      const orphan = `# My rules\n${AGENTS_BEGIN}\nold dawg text\n\n## My own section\nNEVER push to main\n`;
+      await writeFile(join(dir, "AGENTS.md"), orphan);
+      for (let run = 0; run < 2; run += 1)
+        expect(
+          await runDocsCommand(
+            ["docs", "--agent", "--write"],
+            dir,
+            stdout,
+            stderr,
+          ),
+        ).toBe(1);
+      expect(await readFile(join(dir, "AGENTS.md"), "utf8")).toBe(orphan);
+      expect(err).toContain("left as is");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("search matches words, not only the exact phrase", () => {
+    const pitch = searchAgentDocs("pitch shift");
+    expect(pitch).not.toContain("no docs mention");
+    expect(pitch).toContain("tool/audio");
+    expect(searchAgentDocs("time stretch")).not.toContain("no docs mention");
+    // Pages with every word rank before pages with some.
+    const lines = searchAgentDocs("dev reload history").split("\n");
+    expect(lines[0]).toMatch(/coding-agent-loop|guide\//);
+    expect(searchAgentDocs("zzqx nothing-here")).toContain("no docs mention");
+  });
+
   test("every dawg command AGENTS.md names parses", () => {
     for (const match of renderAgentsMd().matchAll(/`(dawg [^`]+)`/g)) {
-      const [, sub] = shellWords(match[1]!);
-      expect(SUBCOMMANDS).toContain(sub!);
+      const [, sub, ...rest] = shellWords(match[1]!);
+      expect(COMMANDS).toContain(sub!);
+      if (sub === "dev") expectDevArgv(rest);
     }
   });
 
