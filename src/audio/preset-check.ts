@@ -39,7 +39,7 @@ export const CATEGORY_LUFS: Readonly<Record<PresetCategory, number>> =
     chain: -18,
   });
 
-/** The limits every built-in preset meets (test/presets-quality.test.ts). */
+/** The limits every built-in preset meets (core/presets/presets.test.ts). */
 export const PRESET_LIMITS = Object.freeze({
   /** |integrated − category target|, LU. */
   loudnessLu: 2,
