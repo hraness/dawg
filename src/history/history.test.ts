@@ -39,6 +39,7 @@ import {
   historyPath,
   readMirroredComments,
 } from "./db.ts";
+import { formatRow } from "./format.ts";
 import { historyHook } from "./hook.ts";
 import { closeHistories, openHistory } from "./open.ts";
 import {
@@ -209,6 +210,10 @@ describe("history migration from session JSON", () => {
     expect(db.creditFileEdit("credit", 1, "codex")).toBe(true);
     expect(db.creditFileEdit("credit", 1, "codex")).toBe(false);
     expect(actor()).toMatchObject({ kind: "external", actorId: "codex" });
+    // The row names who it was credited to, not the bare kind.
+    const row = db.query({ sessionId: "credit", limit: 5 }).rows[0]!;
+    expect(formatRow(row, { width: 120 })).toContain("codex");
+    expect(formatRow(row, { width: 120 })).not.toContain("external");
     db.close();
     closeHistories();
     await writeFile(historyPath(workspace), "not a database at all, sorry");
