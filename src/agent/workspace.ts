@@ -62,11 +62,12 @@ const CODE_FILE = /\.(?:[cm]?[jt]sx?)$/i;
  * under `tracks/<slug>/` (design §6.2): `song.ts`, `lib/**`, new `.ts`.
  */
 function untrustedRefused(scope: WorkspaceScope, rel: string): boolean {
-  return (
-    scope.untrusted === true &&
-    CODE_FILE.test(rel) &&
-    !/^tracks\/[^/]+\//i.test(rel)
-  );
+  return scope.untrusted === true && untrustedCodePath(rel);
+}
+
+/** A project-relative path the untrusted-turn rule refuses to write. */
+export function untrustedCodePath(rel: string): boolean {
+  return CODE_FILE.test(rel) && !/^tracks\/[^/]+\//i.test(rel);
 }
 /** Where delete_file keeps a copy of what it removed. */
 export const TRASH_DIR = `${RUNTIME_DIR}/trash`;

@@ -17,6 +17,7 @@ import {
   type AgentSettings,
 } from "./settings.ts";
 import type { AgentTool, ToolPlan } from "./tools.ts";
+import { UNTRUSTED_WRITE } from "./workspace.ts";
 
 export type ExecSettings = Pick<AgentSettings, "shell" | "readRoots">;
 
@@ -94,6 +95,10 @@ function planExec(raw: Record<string, unknown>): ToolPlan {
     summary: `exec ${argv.slice(0, 6).join(" ")}`.slice(0, 120),
     run: async (media) => {
       const settings = readExecSettings(media.projectRoot);
+      // After untrusted content the trusted shell is off for the turn
+      // (design §6.2, §7.4): only the allowlist runs, and code outputs are
+      // refused through media.writeScope.
+      const shell = settings.shell && media.untrusted !== true;
       const result = await runExec(
         {
           argv: argv as string[],
@@ -105,12 +110,19 @@ function planExec(raw: Record<string, unknown>): ToolPlan {
           runner: media.runner,
           signal: media.signal,
           progress: media.progress,
-          shell: settings.shell,
+          shell,
           readRoots: settings.readRoots,
+          ...(media.writeScope ? { writeScope: media.writeScope } : {}),
           actor: { kind: "agent" },
           ...(media.chopHistory ? { history: media.chopHistory } : {}),
         },
-      );
+      ).catch((error: unknown) => {
+        if (settings.shell && !shell && error instanceof ExecError)
+          throw new ExecError(
+            `${error.message} (trusted shell is off: ${UNTRUSTED_WRITE})`,
+          );
+        throw error;
+      });
       const status = result.timedOut ? "timed out" : `exit ${result.exitCode}`;
       const { argv: ran, ...rest } = result;
       return {

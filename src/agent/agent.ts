@@ -43,7 +43,12 @@ import {
   type WorkspaceHost,
 } from "./tools.ts";
 import { PATCH_PROMPT } from "./patch-tools.ts";
-import { projectOutline, type ProjectOutline } from "./workspace.ts";
+import {
+  projectOutline,
+  untrustedCodePath,
+  type ProjectOutline,
+} from "./workspace.ts";
+import { defaultWriteScope } from "../audio/chop/run.ts";
 import type { HistoryHandle } from "../history/types.ts";
 import { toolRow } from "../history/agent-rows.ts";
 import {
@@ -225,6 +230,11 @@ export type AgentHost = Readonly<{
   subagents?: SubagentHost;
   /** Set on a dispatch child's scoped host: its task id, for history rows. */
   subagentId?: string;
+  /**
+   * Set on a dispatch child's host when the parent turn had seen untrusted
+   * content: every child turn starts untrusted too (design §6.2).
+   */
+  untrusted?: boolean;
 }>;
 
 export type SubagentHost = Readonly<{
@@ -732,6 +742,9 @@ export async function executeCall(
   },
 ): Promise<CallOutcome> {
   const started = performance.now();
+  // A child dispatched after untrusted content inherits the flag.
+  if (context.host.untrusted && context.turnState)
+    context.turnState.untrusted = true;
   const outcome = await executeCallInner(call, context);
   if (outcome.ok && context.turnState && UNTRUSTED_TOOLS.has(call.name))
     context.turnState.untrusted = true;
@@ -745,6 +758,19 @@ export async function executeCall(
   recordToolRow(call, context, outcome, performance.now() - started);
   return outcome;
 }
+
+/** True once this turn (or the parent that dispatched it) saw untrusted content. */
+function turnUntrusted(context: {
+  host: AgentHost;
+  turnState?: TurnState;
+}): boolean {
+  return (
+    context.turnState?.untrusted === true || context.host.untrusted === true
+  );
+}
+
+/** Media tools that check every output against `MediaServices.writeScope`. */
+const SCOPED_MEDIA_TOOLS: ReadonlySet<string> = new Set(["audio", "exec"]);
 
 /** Mutable per-turn flags; one object per turn, shared by its calls. */
 export type TurnState = {
@@ -891,7 +917,7 @@ async function executeCallInner(
       : undefined;
     const action: ActionContext = {
       ...(workspace ? { workspace } : {}),
-      ...(context.turnState?.untrusted ? { untrusted: true } : {}),
+      ...(turnUntrusted(context) ? { untrusted: true } : {}),
       ...(context.host.onWorkspaceWrite
         ? {
             onWorkspaceWrite: (path: string) =>
@@ -939,12 +965,31 @@ async function executeCallInner(
     const workspace = context.host.workspace;
     if (!media || !workspace)
       return reject("media tools are unavailable in this host");
+    // A child's outputs must stay in its task scope; only `audio` and `exec`
+    // check each output against it, so other media writers stay with the
+    // parent (design §6.1).
+    if (
+      context.host.subagentId !== undefined &&
+      !SCOPED_MEDIA_TOOLS.has(call.name)
+    )
+      return reject(
+        `${call.name} is not available in a dispatch task (its outputs could land outside the task's scope); leave it to the parent or use audio`,
+      );
     if (context.signal?.aborted) throw context.signal.reason;
+    const untrusted = turnUntrusted(context);
+    const baseScope = media.writeScope ?? defaultWriteScope;
     const resume = context.suspendTimeout?.();
     let lastLine = "";
     try {
       const result = await plan.run({
         ...media,
+        ...(untrusted
+          ? {
+              untrusted: true,
+              writeScope: (rel: string) =>
+                baseScope(rel) && !untrustedCodePath(rel),
+            }
+          : {}),
         projectRoot: workspace.root,
         trackSlug: focusedTrackSlug(context.host.snapshot()),
         signal: context.signal ?? new AbortController().signal,
@@ -993,6 +1038,7 @@ async function executeCallInner(
         signal: context.signal ?? new AbortController().signal,
         spend,
         callId: call.id,
+        ...(turnUntrusted(context) ? { untrusted: true } : {}),
         ...(context.turnId ? { turnId: context.turnId } : {}),
         ...(model ? { model } : {}),
         ...(subagents.wallClockMs !== undefined

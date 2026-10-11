@@ -51,6 +51,13 @@ export type MediaServices = Readonly<{
    * Unset means the process-global `historySink()`.
    */
   chopHistory?: ChopHistory;
+  /**
+   * Project-relative output predicate the audio toolkit (`audio`, `exec`)
+   * checks before writing; unset means the default denylist. A dispatch
+   * child's host narrows it to the task's write scope (design §6.1), and an
+   * untrusted turn refuses code files through it (§6.2).
+   */
+  writeScope?: (relative: string) => boolean;
 }>;
 
 /** What every media tool runs with. Paths are absolute. */
@@ -67,6 +74,11 @@ export type MediaRunContext = MediaHost &
     signal: AbortSignal;
     /** Short progress line for the activity feed, e.g. `demucs 42%`. */
     progress: (line: string) => void;
+    /**
+     * The turn has seen untrusted content (design §6.2): trusted shell is
+     * off for the rest of it.
+     */
+    untrusted?: boolean;
   }>;
 
 /** What a finished media tool reports; `content` goes back to the model. */
