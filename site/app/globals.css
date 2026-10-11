@@ -145,11 +145,25 @@ a:hover {
   content: " →";
 }
 
-/* Hero: oversized type, then lede and install side by side, then the demo. */
+/* Hero: headline, one line, install; the live screen beside it on wide screens. */
 .dawg-hero {
   display: grid;
-  gap: clamp(1.5rem, 3vw, 2.5rem);
-  padding-block: clamp(2.5rem, 6vw, 4.5rem) clamp(2.5rem, 5vw, 4rem);
+  gap: clamp(2rem, 4vw, 3rem);
+  align-items: center;
+  padding-block: clamp(2.5rem, 6vw, 5rem) clamp(3rem, 6vw, 5rem);
+}
+
+@media (min-width: 72rem) {
+  .dawg-hero {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: 3.5rem;
+  }
+}
+
+.dawg-hero__copy {
+  display: grid;
+  gap: 1.5rem;
+  min-width: 0;
 }
 
 .dawg-hero__eyebrow {
@@ -158,12 +172,12 @@ a:hover {
 
 .dawg-hero__title {
   margin: 0;
-  font-size: var(--dawg-display);
+  font-size: clamp(2.6rem, 1.4rem + 5vw, 5.25rem);
   font-weight: 700;
-  line-height: 0.94;
+  line-height: 0.96;
   letter-spacing: -0.045em;
   text-wrap: balance;
-  max-width: 14ch;
+  max-width: 12ch;
 }
 
 .dawg-hero__dawg {
@@ -175,21 +189,14 @@ a:hover {
   padding-inline: 0.08em;
 }
 
-.dawg-hero__row {
-  display: grid;
-  gap: 1.75rem;
-  align-items: start;
-}
-
-@media (min-width: 60rem) {
-  .dawg-hero__row {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 3rem;
-  }
-}
-
 .dawg-hero__install {
   min-width: 0;
+  max-width: 34rem;
+}
+
+.dawg-hero__install .dawg-code pre {
+  font-size: clamp(0.78rem, 0.7rem + 0.35vw, 0.95rem);
+  overflow-x: auto;
 }
 
 .dawg-hero__links {
@@ -204,13 +211,117 @@ a:hover {
   font-weight: 600;
 }
 
+.dawg-hero__links a::after {
+  content: " ↓";
+}
+
 .dawg-hero__links span {
   color: var(--muted);
 }
 
 .dawg-hero__demo {
   min-width: 0;
-  margin-top: 0.5rem;
+}
+
+/* Pillars: one per row, copy beside a live screen, sides alternating. */
+.dawg-pillar {
+  display: grid;
+  gap: 1.75rem;
+  align-items: center;
+  padding-block: clamp(3rem, 6vw, 5rem);
+  border-top: var(--dawg-rule-strong);
+  scroll-margin-top: 4rem;
+}
+
+@media (min-width: 60rem) {
+  .dawg-pillar {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: 3.5rem;
+  }
+
+  .dawg-pillar:nth-of-type(odd) .dawg-pillar__copy {
+    order: 2;
+  }
+}
+
+.dawg-pillar__copy {
+  min-width: 0;
+  max-width: 34rem;
+}
+
+.dawg-pillar__copy .dawg-section__title {
+  margin-bottom: 1.25rem;
+}
+
+.dawg-pillar__copy p:not(.dawg-eyebrow) {
+  font-size: 1.08rem;
+  line-height: 1.55;
+}
+
+.dawg-pillar__screen {
+  min-width: 0;
+}
+
+.dawg-pillar__chip {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  margin-right: 0.35rem;
+  background: var(--dawg-clip-1);
+  color: var(--dawg-clip-ink);
+}
+
+.dawg-pillar[data-clip="2"] .dawg-pillar__chip {
+  background: var(--dawg-clip-2);
+}
+
+.dawg-pillar[data-clip="3"] .dawg-pillar__chip {
+  background: var(--dawg-clip-3);
+}
+
+.dawg-pillar[data-clip="4"] .dawg-pillar__chip {
+  background: var(--dawg-clip-4);
+}
+
+kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 0 0.3em;
+  border: 1px solid currentColor;
+  font: 600 0.85em/1.5 var(--font-mono);
+  text-align: center;
+}
+
+/* Goes deep: a dense grid of one-line features on rules. */
+.dawg-deep {
+  display: grid;
+  margin: 0 0 2rem;
+  padding: 0;
+  list-style: none;
+  border-top: var(--dawg-rule);
+}
+
+@media (min-width: 40rem) {
+  .dawg-deep {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 2rem;
+  }
+}
+
+.dawg-deep li {
+  padding-block: 1rem;
+  border-bottom: var(--dawg-rule);
+}
+
+.dawg-deep h3 {
+  margin: 0 0 0.3rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.dawg-deep p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
 }
 
 /* Install tabs from the design kit, flattened. */
@@ -292,60 +403,15 @@ a:hover {
   tab-size: 1;
 }
 
+/* IntersectionObserver needs a box, so the player is a plain block. */
+.dawg-screen__player {
+  display: block;
+}
+
 .dawg-screen__row {
   display: block;
   height: 1.2em;
   overflow: hidden;
-}
-
-/* Clip row: the four pillars as solid colored cells, the session view's clips. */
-.dawg-clips {
-  margin-inline: calc(var(--dawg-gutter) * -1);
-  border-block: var(--dawg-rule-strong);
-}
-
-@media (min-width: 80rem) {
-  .dawg-clips {
-    margin-inline: 0;
-    border-inline: var(--dawg-rule-strong);
-  }
-}
-
-.dawg-clips .dawg-clips__grid {
-  border-block: 0;
-  gap: 0;
-}
-
-.dawg-clips .dawg-clips__grid > div {
-  padding: clamp(1.25rem, 2.5vw, 1.75rem);
-  background: var(--dawg-clip-1);
-  color: var(--dawg-clip-ink);
-  border-color: var(--dawg-clip-ink);
-  border-width: 2px;
-}
-
-.dawg-clips .dawg-clips__grid > div:nth-child(2) {
-  background: var(--dawg-clip-2);
-}
-
-.dawg-clips .dawg-clips__grid > div:nth-child(3) {
-  background: var(--dawg-clip-3);
-}
-
-.dawg-clips .dawg-clips__grid > div:nth-child(4) {
-  background: var(--dawg-clip-4);
-}
-
-.dawg-clips .dawg-clips__grid dt {
-  font-size: 1.3rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
-}
-
-.dawg-clips .dawg-clips__grid dd {
-  color: var(--dawg-clip-ink);
-  font-size: 0.95rem;
 }
 
 /* Sections: a label and title column beside a body column, between rules. */
@@ -354,10 +420,6 @@ a:hover {
   gap: 1.5rem 3rem;
   padding-block: clamp(3rem, 6vw, 4.5rem);
   border-top: var(--dawg-rule-strong);
-}
-
-.dawg-clips + .dawg-section {
-  border-top: 0;
 }
 
 @media (min-width: 60rem) {

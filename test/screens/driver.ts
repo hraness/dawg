@@ -53,6 +53,12 @@ export class Stage {
   readonly cwd: string;
   private readonly clockFile: string;
   private ms = 0;
+  /**
+   * Frames recorded with `frame()` on the way to the final capture, each
+   * with the frozen clock time it was drawn at, so the site can replay them
+   * at the speed dawg drew them.
+   */
+  readonly frames: { t: number; screen: ScreenFile }[] = [];
   private readonly ptys: Pty[] = [];
   private readonly cleanups: (() => void | Promise<void>)[] = [];
 
@@ -156,6 +162,16 @@ export class Stage {
   }
 
   /**
+   * Types a key that must change the picture, and waits until it has, so a
+   * loaded machine cannot capture the frame before the key is drawn.
+   */
+  async press(pty: Pty, data: string, label: string): Promise<void> {
+    const before = snapshotKey(pty.vt);
+    await this.type(pty, data);
+    await this.until(() => snapshotKey(pty.vt) !== before, label, pty);
+  }
+
+  /**
    * Waits until the screen stops changing between clock steps of zero
    * length (only real-time work left), then returns its cells.
    */
@@ -174,6 +190,17 @@ export class Stage {
       last = now;
     }
     return toScreen(pty.vt, id);
+  }
+
+  /** The frozen clock, in ms since the scene started. */
+  get now(): number {
+    return this.ms;
+  }
+
+  /** Captures an in-between frame for the animated screen. */
+  async frame(pty: Pty): Promise<void> {
+    const screen = await this.capture(pty, "frame");
+    this.frames.push({ t: this.ms, screen });
   }
 
   async close(): Promise<void> {

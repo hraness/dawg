@@ -12,11 +12,11 @@ export const productUrl = "https://dawg.sh";
 export const repoUrl = "https://github.com/hraness/dawg";
 
 export const productMessaging = {
-  category: "Terminal music workstation",
-  tagline: "A DAW in your terminal, dawg.",
+  category: "A music app for your terminal",
+  tagline: "Make music in your terminal, dawg.",
   short:
-    "Play it on your keyboard, type short commands, or ask an agent. Songs are typed TypeScript files in your folder.",
-  meta: "dawg is a free, open-source DAW for the terminal. Play notes on your computer keyboard, type commands like tempo 96, or ask an agent; it all runs offline except the agent, and songs are TypeScript files you can edit.",
+    "Play it on your keyboard and shape it with four knobs. When you want more, it opens up into a modular patcher, an agent you can talk to, and songs saved as code.",
+  meta: "dawg is a free, open-source music app for the terminal. Play notes on your computer keyboard, turn four knobs, patch your own sounds or ask an agent. It runs offline except the agent, and songs can be saved as TypeScript files.",
 } as const;
 
 const rootPackage: unknown = JSON.parse(

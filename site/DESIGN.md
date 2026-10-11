@@ -61,7 +61,7 @@ dawg.sh uses the shared Hraness packages: `@hraness/design-kit` (palette system,
 - **High contrast.** Near-black ink on near-white paper, and the reverse in dark mode.
 - **Grid first.** Full-strength 2px rules separate sections; 1px rules divide cells inside them. Sections put a sticky label column (4 of 12) beside the content (8 of 12) on wide screens.
 - **Bold type.** Oversized display headings with tight tracking, in sentence case. Small uppercase mono labels carry structure.
-- **Color in blocks.** The four clip colors fill whole cells with black ink on top: the pillar row, the dawg wordmark and the notice bar. They appear nowhere as thin accents or text color.
+- **Color in blocks.** The four clip colors fill whole cells with black ink on top: the pillar number chips, the dawg wordmark and the notice bar. They appear nowhere as thin accents or text color.
 - **Dense and functional.** Short copy, real product frames and commands, nothing decorative.
 
 ## Colors
@@ -72,15 +72,15 @@ dawg.sh uses the shared Hraness packages: `@hraness/design-kit` (palette system,
 
 ## Layout
 
-- Home: hero (eyebrow, display heading, lede beside install, live demo), the clip row of four pillars, three windows, what happens on Enter, in the box, install, questions.
+- Home: hero (eyebrow, heading, one line and the install command on the left, the animated hero screen on the right; stacked below 72rem), four pillars (one per row, copy beside an animated screen, sides alternating, a clip-colored number chip each), the "goes deep" list with a code sample, install, questions.
 - Docs: the install page plus the shared guides from `../guides`, in the same tree as the TUI's guide browser. The tree is a sticky rail on wide screens and a disclosure menu on phones. The current page is an inverse block.
 - Changelog: rendered from the repository's `CHANGELOG.md` at build time.
 
 ## Components
 
-- **Highway player.** A canvas that replays `public/demo/highway.cast` through a small VT interpreter (`app/highway/vt.ts`). The server renders the last frame as styled text, so the page has a real picture with JavaScript off and before the canvas is ready. It pauses off-screen, honors reduced motion by showing the final frame, and has a play/pause control.
-- **Clip row.** The design kit's `MarketingPillars`, each cell filled with a clip color.
-- **Feature cells.** `MarketingPillars` again, on rules, four across on wide screens.
+- **Animated screen.** `Screen` with `animate` renders the committed still as text, then `ScreenPlayer` fetches `/screens/<id>.json` (from `docs/screens/frames`, the frames dawg drew while `bun run screens` captured it) and swaps row text in place, so nothing reflows. It starts when the screen scrolls into view, pauses offscreen and in hidden tabs, holds the last frame before looping, and stays on the still under reduced motion. `site/tests/screen-frames.test.ts` fails if the home page's screens lose their frames.
+- **Pillar.** A verb heading, two short paragraphs and an animated screen; the number chip takes the pillar's clip color.
+- **Goes deep.** One-line items on rules, two across from 40rem.
 - **Install tabs.** The design kit's `PlatformInstall`, flattened, with analytics on copy.
 - **Doc mark.** A guide heading or note starts with the TUI's mark (✦ Ask, › Type it yourself, ≡ Menu, ⌃ Keys, → Next, ✓ Tip, ! Careful) in a small chip: clip color with ink for Ask, Menu, Keys and Careful, inverse ink for Type and Tip, outline otherwise. The symbol carries the meaning; the table lives in `app/doc-marks.ts` and must match `guides/index.ts`.
 - **Code block.** Terminal colors, a label bar and a copy button. Prompts (`$ `) are dropped when copying.
@@ -89,7 +89,7 @@ dawg.sh uses the shared Hraness packages: `@hraness/design-kit` (palette system,
 
 ## Do's and don'ts
 
-- Do use real TUI output for any picture of the product. Re-record with `bun run demo`.
+- Do use real TUI output for any picture of the product. Re-capture with `bun run screens`.
 - Do keep the terminal dark in light mode.
 - Don't round corners or add shadows, gradients, waveforms, equalizer bars or stock music imagery.
 - Don't introduce colors beyond the palette tokens, terminal colors and four clip colors.

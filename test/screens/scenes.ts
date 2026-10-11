@@ -32,6 +32,7 @@ const CTRL = (letter: string) =>
 const UP = `${ESC}[A`;
 const DOWN = `${ESC}[B`;
 const RIGHT = `${ESC}[C`;
+const LEFT = `${ESC}[D`;
 
 const has = (pty: Pty, needle: string | RegExp) => () =>
   typeof needle === "string"
@@ -57,13 +58,29 @@ async function song(
   return pty;
 }
 
-/** Plays from the top for `beats` beats at the song tempo. */
-async function playFor(stage: Stage, pty: Pty, beats: number): Promise<void> {
+/**
+ * Plays from the top for `beats` beats at the song tempo. With `framed`, a
+ * frame is recorded every quarter beat for the site's animated screens.
+ */
+async function playFor(
+  stage: Stage,
+  pty: Pty,
+  beats: number,
+  framed = false,
+): Promise<void> {
   await stage.type(pty, " ", 4);
   // The header, not any ▶ on screen: TAPE and the highway draw ▶ too.
   await stage.until(has(pty, /▶ \d+ BPM/), "playing", pty);
   // 121 BPM: a beat is ~496 ms; 25 ms steps keep the highway smooth.
-  await stage.step(Math.round((beats * 496) / 25), 25);
+  if (!framed) {
+    await stage.step(Math.round((beats * 496) / 25), 25);
+    return;
+  }
+  // A frame's capture moves the clock 50 ms, so 3 steps + capture ≈ ¼ beat.
+  for (let i = 0; i < beats * 4; i += 1) {
+    await stage.frame(pty);
+    await stage.step(3, 25);
+  }
 }
 
 export const SCENES: Scene[] = [
@@ -75,7 +92,7 @@ export const SCENES: Scene[] = [
     rows: 24,
     async run(stage, size) {
       const pty = await song(stage, size, ["--track", "bass"]);
-      await playFor(stage, pty, 6);
+      await playFor(stage, pty, 6, true);
       return stage.capture(pty, "highway");
     },
   },
@@ -115,7 +132,7 @@ export const SCENES: Scene[] = [
       ]);
       const pty = await song(stage, size, ["--track", "chords"], gateway.env);
       await stage.type(pty, "loop 1-4\r");
-      await playFor(stage, pty, 3);
+      await playFor(stage, pty, 3, true);
       await stage.type(pty, "make it slower and wetter\r", 1);
       await stage.until(() => gateway.requests > 0, "request", pty);
       release();
@@ -138,8 +155,11 @@ export const SCENES: Scene[] = [
       const pty = await song(stage, size, ["--track", "bass"]);
       await stage.type(pty, "knobs\r");
       await stage.until(has(pty, "≡ Sound"), "knobs", pty);
-      await stage.type(pty, RIGHT);
-      await stage.type(pty, RIGHT);
+      // Two presets along, then a turn of the second and third knobs.
+      for (const key of [RIGHT, RIGHT, DOWN, RIGHT, RIGHT, DOWN, LEFT, LEFT]) {
+        await stage.frame(pty);
+        await stage.press(pty, key, `knobs ${key}`);
+      }
       return stage.capture(pty, "knobs");
     },
   },
@@ -164,8 +184,10 @@ export const SCENES: Scene[] = [
       const pty = await song(stage, size, ["--track", "keys"]);
       await stage.type(pty, CTRL("p"));
       await stage.until(has(pty, /PLAY/), "play mode", pty);
-      await stage.type(pty, "a");
-      await stage.type(pty, "d");
+      for (const key of ["a", "s", "d", "f", "g", "d"]) {
+        await stage.frame(pty);
+        await stage.press(pty, key, `play ${key}`);
+      }
       return stage.capture(pty, "play-mode");
     },
   },
@@ -181,7 +203,10 @@ export const SCENES: Scene[] = [
       await stage.until(has(pty, "now plays patch acid-bass"), "loaded", pty);
       await stage.type(pty, "/patch\r");
       await stage.until(has(pty, "CABLES"), "patch view", pty);
-      for (let i = 0; i < 5; i++) await stage.type(pty, DOWN);
+      for (let i = 0; i < 5; i++) {
+        await stage.frame(pty);
+        await stage.press(pty, DOWN, "patch row");
+      }
       await stage.until(has(pty, "▸vcf"), "vcf selected", pty);
       return stage.capture(pty, "patch");
     },
@@ -236,7 +261,11 @@ export const SCENES: Scene[] = [
       await stage.until(() => gateway.requests > 0, "request", pty);
       release(2);
       await Bun.sleep(400);
-      await stage.step(40, 25);
+      // The typing runs on the clock: a frame every 75 ms of it.
+      for (let i = 0; i < 16; i += 1) {
+        await stage.frame(pty);
+        await stage.step(1, 25);
+      }
       await stage.until(has(pty, "fx rev▏"), "ghost", pty);
       await stage.until(has(pty, "112 BPM"), "tempo lands", pty);
       return stage.capture(pty, "showme");
@@ -348,11 +377,24 @@ export function sceneById(id: string): Scene {
   return scene;
 }
 
+export interface Shot {
+  screen: ScreenFile;
+  /** The frames recorded on the way, ending with `screen`; empty for a still. */
+  frames: { t: number; screen: ScreenFile }[];
+}
+
 /** Runs one scene in a fresh workspace. */
-export async function shoot(scene: Scene): Promise<ScreenFile> {
+export async function shoot(scene: Scene): Promise<Shot> {
   const stage = new Stage(scene.env, scene.preloads);
   try {
-    return await scene.run(stage, { cols: scene.cols, rows: scene.rows });
+    const screen = await scene.run(stage, {
+      cols: scene.cols,
+      rows: scene.rows,
+    });
+    const frames = stage.frames.length
+      ? [...stage.frames, { t: stage.now, screen }]
+      : [];
+    return { screen, frames };
   } finally {
     await stage.close();
   }

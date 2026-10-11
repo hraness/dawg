@@ -5,7 +5,7 @@
  */
 import { expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { captureAll, screenPath, SCREENS_DIR } from "./capture.ts";
+import { captureAll, FRAMES_DIR, screenPath, SCREENS_DIR } from "./capture.ts";
 import { screenText, supported, type ScreenFile } from "./driver.ts";
 import { SCENES } from "./scenes.ts";
 
@@ -15,6 +15,30 @@ test("every committed screen has a scene and every scene a screen", () => {
     .map((name) => name.slice(0, -5))
     .sort();
   expect(files).toEqual(SCENES.map((scene) => scene.id).sort());
+});
+
+/** The screens dawg.sh plays as animations; see site/app/screens. */
+const ANIMATED = ["hero", "highway", "knobs", "patch", "play-mode", "showme"];
+
+test("the animated screens keep their frames", () => {
+  const files = readdirSync(FRAMES_DIR)
+    .filter((name) => name.endsWith(".json"))
+    .map((name) => name.slice(0, -5))
+    .sort();
+  expect(files).toEqual(ANIMATED);
+  for (const id of ANIMATED) {
+    const { frames } = JSON.parse(
+      readFileSync(screenPath(`frames/${id}`), "utf8"),
+    ) as { frames: { t: number; rows: unknown[] }[] };
+    expect(frames.length, id).toBeGreaterThanOrEqual(3);
+    // Time moves on, and most frames change the picture.
+    for (let i = 1; i < frames.length; i += 1)
+      expect(frames[i]!.t, `${id} frame ${i}`).toBeGreaterThan(
+        frames[i - 1]!.t,
+      );
+    const moving = frames.slice(1).filter((frame) => frame.rows.length > 0);
+    expect(moving.length, id).toBeGreaterThanOrEqual((frames.length - 1) / 2);
+  }
 });
 
 test("the README's patch screen is the committed capture", () => {
@@ -39,6 +63,10 @@ test.skipIf(!supported)(
       const path = screenPath(id);
       const committed = existsSync(path) ? readFileSync(path, "utf8") : "";
       if (committed === text) continue;
+      if (id.startsWith("frames/")) {
+        stale.push(`${id} (animation frames)`);
+        continue;
+      }
       const before = committed
         ? screenText(JSON.parse(committed) as ScreenFile)
         : [];

@@ -1,40 +1,184 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { MarketingPillars } from "@hraness/design-kit/react/server";
 
 import { CodeBlock } from "./code-block";
 import {
   installCommand,
   productMessaging,
-  repoUrl,
   sourceInstallCommands,
 } from "./messaging";
-import { DawgPlatformInstall } from "./platform-install";
-import { latestRelease, releaseTarballUrl } from "./release";
+import { atLeast, latestRelease, releaseTarballUrl } from "./release";
 import { Screen } from "./screens/screen";
 import { SiteHeader } from "./site-header";
 
 // Re-check for a new release hourly (RELEASE_REVALIDATE); Next needs a literal.
 export const revalidate = 3600;
 
+/**
+ * The four things a new player does first, in order. Each shows a real
+ * screen that replays the frames dawg drew while it was captured.
+ */
 const pillars = [
   {
-    title: "Play it",
-    body: "Ctrl-P turns the computer keyboard into a piano. Record over the loop with a click and count-in, quantized to the grid.",
+    id: "play",
+    clip: 1,
+    label: "Play",
+    heading: "Play it with your keyboard",
+    screen: "play-mode",
+    body: (
+      <>
+        <p>
+          Press <kbd>Ctrl-P</kbd> and your keyboard turns into a piano:{" "}
+          <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> are the white
+          keys, <kbd>W</kbd> <kbd>E</kbd> <kbd>T</kbd> the black ones.
+        </p>
+        <p>
+          Press <kbd>R</kbd>, then <kbd>Space</kbd>: dawg counts you in, records
+          over the loop and snaps what you play to the beat.
+        </p>
+      </>
+    ),
   },
   {
-    title: "Type it",
-    body: "tempo 96, loop chorus, reverb 0.3. Every edit is a short command that runs offline, and every key and menu row shows the command it runs.",
+    id: "knobs",
+    clip: 2,
+    label: "Shape",
+    heading: "Shape it with four knobs",
+    screen: "knobs",
+    body: (
+      <>
+        <p>
+          Four colored knobs, inspired by the OP-1, sit under every sound: ↑↓
+          picks one, ←→ turns it. Type <code>knobs</code> to open them.
+        </p>
+        <p>
+          The same four knobs turn a synth&rsquo;s filter, a track&rsquo;s
+          volume, the whole mix or the tempo.
+        </p>
+      </>
+    ),
   },
   {
-    title: "Ask for it",
-    body: "Plain requests go to an agent. It types its commands into your prompt as it works, so you see each one land and can type it yourself next time.",
+    id: "patch",
+    clip: 3,
+    label: "Patch",
+    heading: "Patch your own sounds",
+    screen: "patch",
+    body: (
+      <>
+        <p>
+          When you want more, open <code>/patch</code>: oscillators, filters and
+          envelopes joined by cables, like a modular synth.
+        </p>
+        <p>
+          Start from one of eight built-in patches, such as{" "}
+          <code>patch load acid-bass</code>. Its first four controls land on the
+          four knobs.
+        </p>
+      </>
+    ),
   },
   {
-    title: "Keep it as code",
-    body: "A project is song.ts plus one track.ts per track, typed against a small SDK. Edit them in any editor and the open song updates.",
+    id: "ask",
+    clip: 4,
+    label: "Ask",
+    heading: "Ask for what you want",
+    screen: "showme",
+    body: (
+      <>
+        <p>
+          Type &ldquo;make it slower and wetter&rdquo; and the agent does it,
+          typing each command into your prompt so you learn them as you go.
+        </p>
+        <p>
+          Every change it makes undoes on its own. The agent is optional:
+          playing, recording and everything you type works offline.
+        </p>
+      </>
+    ),
   },
 ] as const;
+
+/**
+ * The deeper end, one line each. Every item is in README, DAWG.md or
+ * CHANGELOG on main; an item with `since` is merged but unreleased, and
+ * appears once the latest GitHub Release reaches that version.
+ */
+const depths: readonly {
+  title: string;
+  body: ReactNode;
+  since?: string;
+}[] = [
+  {
+    title: "Start from a style",
+    body: (
+      <>
+        <code>style deep-house 16</code> writes drums, bass, chords and a melody
+        in one of about 850 styles.
+      </>
+    ),
+  },
+  {
+    title: "More than 150 presets",
+    body: (
+      <>
+        Seventeen categories, each preset with four named knobs.{" "}
+        <code>/presets</code> browses them.
+      </>
+    ),
+    since: "0.10.0",
+  },
+  {
+    title: "TAPE",
+    body: (
+      <>
+        <kbd>Ctrl-T</kbd> shows every track across the bars. Copy, cut and loop
+        sections with one key.
+      </>
+    ),
+  },
+  {
+    title: "History and comments",
+    body: (
+      <>
+        <code>/comment</code> pins a note to the moment; <code>/history</code>{" "}
+        jumps back to it.
+      </>
+    ),
+    since: "0.10.0",
+  },
+  {
+    title: "Stems and samples",
+    body: (
+      <>
+        <code>dawg media</code> splits a song into stems, finds its tempo and
+        key, and turns audio into notes, with tools you install.
+      </>
+    ),
+  },
+  {
+    title: "Your coding agent",
+    body: (
+      <>
+        <code>dawg init</code> saves the song as TypeScript files. Edit them in
+        any editor, or with your coding agent, and the song updates.
+      </>
+    ),
+  },
+  {
+    title: "Many windows, one song",
+    body: <>Open the same song in several terminals, each with its own undo.</>,
+  },
+  {
+    title: "WAV and MIDI out",
+    body: (
+      <>
+        <code>dawg render song.wav</code> writes the same audio every time;{" "}
+        <code>song.mid</code> writes MIDI.
+      </>
+    ),
+  },
+];
 
 const questions = [
   {
@@ -76,39 +220,6 @@ export default track({
   ],
 });`;
 
-/** One feature: label column on the left, copy and real screens on the right. */
-function Feature({
-  id,
-  index,
-  label,
-  heading,
-  screens,
-  children,
-}: Readonly<{
-  id: string;
-  index: string;
-  label: string;
-  heading: string;
-  screens?: readonly string[];
-  children: ReactNode;
-}>) {
-  return (
-    <section className="dawg-section" aria-labelledby={id}>
-      <SectionHead id={id} index={index} label={label} heading={heading} />
-      <div className="dawg-section__body dawg-feature">
-        <div className="dawg-feature__copy">{children}</div>
-        {screens === undefined ? null : (
-          <div className="dawg-feature__screens">
-            {screens.map((screen) => (
-              <Screen key={screen} id={screen} />
-            ))}
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
 /** A section's mono label and heading, in the left column of the studio grid. */
 function SectionHead({
   id,
@@ -138,287 +249,100 @@ function SectionHead({
 
 export default async function Home() {
   const release = await latestRelease();
+  const shipped = depths.filter(
+    (item) =>
+      item.since === undefined ||
+      (release.published && atLeast(release.version, item.since)),
+  );
   return (
     <>
       <SiteHeader active="home" />
       <main id="main" tabIndex={-1} className="dawg-main">
         <section className="dawg-hero" aria-labelledby="hero-title">
-          <p className="dawg-eyebrow dawg-hero__eyebrow">
-            {productMessaging.category}
-          </p>
-          <h1 id="hero-title" className="dawg-hero__title">
-            A DAW in your terminal,{" "}
-            <span className="dawg-hero__dawg">dawg</span>.
-          </h1>
-          <div className="dawg-hero__row">
+          <div className="dawg-hero__copy">
+            <p className="dawg-eyebrow dawg-hero__eyebrow">
+              {productMessaging.category}
+            </p>
+            <h1 id="hero-title" className="dawg-hero__title">
+              Make music in your terminal,{" "}
+              <span className="dawg-hero__dawg">dawg</span>.
+            </h1>
             <p className="dawg-lede">{productMessaging.short}</p>
             <div className="dawg-hero__install">
-              <DawgPlatformInstall installCommand={installCommand} />
+              <CodeBlock code={`$ ${installCommand}`} />
               <p className="dawg-hero__links">
-                <Link href="/docs" data-analytics-cta>
-                  Read the docs
-                </Link>
-                <a href={repoUrl}>Source on GitHub</a>
-                <span>MIT · macOS and Linux</span>
+                <a href="#play" data-analytics-cta>
+                  See how it works
+                </a>
+                <span>Free · macOS and Linux · no account</span>
               </p>
             </div>
           </div>
           <div className="dawg-hero__demo">
             <Screen
               id="hero"
-              caption="A real frame: four tracks playing in a loop of bars 1 to 4 while the agent types its next command into the prompt."
+              animate
+              caption="The real app: four tracks looping while the agent types its next command."
             />
           </div>
         </section>
 
-        <section className="dawg-clips" aria-labelledby="pillars-title">
-          <h2 id="pillars-title" className="dawg-visually-hidden">
-            Four ways to make the same edit
-          </h2>
-          <MarketingPillars
-            ariaLabel="Four ways to make the same edit"
-            className="dawg-clips__grid"
-            columns={4}
-            pillars={pillars.map((pillar) => ({
-              label: pillar.title,
-              summary: pillar.body,
-            }))}
-          />
+        {pillars.map((pillar, i) => (
+          <section
+            key={pillar.id}
+            id={pillar.id}
+            className="dawg-pillar"
+            data-clip={pillar.clip}
+            aria-labelledby={`${pillar.id}-title`}
+          >
+            <div className="dawg-pillar__copy">
+              <p className="dawg-eyebrow">
+                <span className="dawg-pillar__chip" aria-hidden="true">
+                  {String(i + 1).padStart(2, "0")}
+                </span>{" "}
+                {pillar.label}
+              </p>
+              <h2 id={`${pillar.id}-title`} className="dawg-section__title">
+                {pillar.heading}
+              </h2>
+              {pillar.body}
+            </div>
+            <div className="dawg-pillar__screen">
+              <Screen id={pillar.screen} animate caption={false} />
+            </div>
+          </section>
+        ))}
+
+        <section className="dawg-section" aria-labelledby="deep-title">
+          <SectionHead
+            id="deep-title"
+            index="05"
+            label="Goes deep"
+            heading="Simple on day one. Deep when you want it."
+          >
+            <p>
+              Under the keyboard and the knobs there&rsquo;s a full studio. Open
+              each part when you need it; nothing here is required to start.
+            </p>
+          </SectionHead>
+          <div className="dawg-section__body">
+            <ul className="dawg-deep">
+              {shipped.map((item) => (
+                <li key={item.title}>
+                  <h3>{item.title}</h3>
+                  <p>{item.body}</p>
+                </li>
+              ))}
+            </ul>
+            <div className="dawg-deep__code">
+              <CodeBlock
+                code={projectCode}
+                label="tracks/drums/track.ts"
+                copy={false}
+              />
+            </div>
+          </div>
         </section>
-
-        <Feature
-          id="highway-title"
-          index="01"
-          label="Highway"
-          heading="Notes fall toward the hit line"
-          screens={["highway"]}
-        >
-          <p>
-            The main view is a piano roll turned on its side. Every track
-            scrolls down to the hit line in its own color, with the focused
-            track bright, sustains stretched across beats and a lane per drum
-            voice. The prompt stays live underneath, so you edit while the loop
-            plays.
-          </p>
-          <p>
-            The header shows the transport, tempo, bar.beat, loop, key and
-            model. Space on an empty prompt plays and pauses.
-          </p>
-        </Feature>
-
-        <Feature
-          id="play-title"
-          index="02"
-          label="Play and record"
-          heading="Your keyboard is a piano"
-          screens={["play-mode"]}
-        >
-          <p>
-            Ctrl-P turns the home row into white keys and the row above into
-            black keys. <code>z</code> and <code>x</code> shift octaves,{" "}
-            <code>q</code> plays chords, and <code>r</code> records over the
-            loop with a click and count-in, quantized to the grid you set with{" "}
-            <code>grid 1/16</code>.
-          </p>
-          <p>
-            Live keys go through a native audio sink. On macOS a key is heard
-            about 17 ms after the press, measured on a loopback (
-            <code>bench/sink-latency.ts</code>).
-          </p>
-        </Feature>
-
-        <Feature
-          id="tape-title"
-          index="03"
-          label="Tape"
-          heading="Every track across the bars"
-          screens={["tape"]}
-        >
-          <p>
-            Ctrl-T opens TAPE: one row per track, sections and the loop bracket
-            on top. Each key runs one command and echoes it on the prompt, so{" "}
-            <code>c</code> shows you <code>copy</code> and <code>\</code> loops
-            the section under the playhead.
-          </p>
-          <p>
-            Copy, cut, paste, insert and clear bars; repeats of the song form
-            are shaded, and an edit there tells you which copies it changes.
-          </p>
-        </Feature>
-
-        <Feature
-          id="sound-title"
-          index="04"
-          label="Sound and mix"
-          heading="Four knobs and a mixer"
-          screens={["knobs", "mix"]}
-        >
-          <p>
-            The knobs drawer puts four parameters of the focused track on four
-            colored, shaped knobs (● ▲ ■ ◆). ↑↓ picks one, ←→ turns it. The same
-            drawer turns the mix, the master, tempo or any effect.
-          </p>
-          <p>
-            Instruments include synths, wavetables, pianos and electric keys,
-            organs, strings, winds, mallets, a sampler and a drum kit. Filter,
-            delay, reverb and the other effects take automation lanes. The
-            sampler loads Strudel-format sample packs;{" "}
-            <Link href="/vs/strudel">dawg vs Strudel</Link> covers how the two
-            relate.
-          </p>
-        </Feature>
-
-        <Feature
-          id="patch-title"
-          index="05"
-          label="Patches"
-          heading="Build a sound from modules"
-          screens={["patch"]}
-        >
-          <p>
-            A patch is a small modular synth or effect: oscillators, filters,
-            envelopes and math, plus dawg&rsquo;s own engines and effects as
-            nodes, joined by cables. <code>/patch</code> shows the focused
-            track&rsquo;s nodes in signal order, the ports of the selected one
-            and a cable matrix. <code>a</code> adds a node, <code>w</code> wires
-            it and <code>m</code> maps a parameter to a knob; each key runs a
-            typed <code>patch</code> command and echoes it. The first four
-            macros are the four knobs.
-          </p>
-          <p>
-            Eight patches ship built in, such as <code>acid-bass</code>,{" "}
-            <code>fm-bell</code> and the <code>sidechain-pump</code> effect.{" "}
-            <code>patch save mybass --user</code> keeps one in your library and{" "}
-            <code>patch load github:user/repo/name</code> fetches one pinned by
-            hash. The agent edits patches with the same commands, and{" "}
-            <code>song.ts</code> builds them with <code>patch()</code> and
-            Strudel-style signals such as{" "}
-            <code>sine.range(300, 2400).slow(4)</code>.
-          </p>
-        </Feature>
-
-        <Feature
-          id="menu-title"
-          index="06"
-          label="Menu"
-          heading="Ctrl-K opens every control"
-          screens={["menu"]}
-        >
-          <p>
-            Ctrl-K opens a menu of everything dawg can do, grouped by topic.
-            Each row shows its value and, dimmed, the command it runs, so the
-            menu teaches the commands as you use it. Changes are staged on a
-            loop until you keep them.
-          </p>
-          <p>
-            <code>?</code> lists the keys for the screen you are on, and F1
-            opens the guides.
-          </p>
-        </Feature>
-
-        <Feature
-          id="styles-title"
-          index="07"
-          label="Styles and voice"
-          heading="Start from a style, add a singer"
-        >
-          <p>
-            <code>style deep-house 16</code> writes a whole song from a style
-            card: meter, groove, scale, harmony and form. The taxonomy covers
-            about 850 styles in eight families. The same style, bars and seed
-            always make the same song, and <code>style blend</code> mixes two.
-          </p>
-          <p>
-            A built-in singer sings your melody on vowels or lyrics (
-            <code>sing choir</code>, <code>lyrics sun-lit morn-ing</code>).
-            Import vocal takes and tune them with autotune, formant shift and a
-            vocoder.
-          </p>
-        </Feature>
-
-        <Feature
-          id="agent-title"
-          index="08"
-          label="Agent"
-          heading="Watch the agent type its commands"
-          screens={["showme", "agent"]}
-        >
-          <p>
-            Anything that isn&rsquo;t a command goes to the agent. With show-me
-            on, it types dawg commands into your prompt as it writes them, and
-            each runs as its line ends. The card at the end lists what changed
-            and the command to do it yourself.
-          </p>
-          <p>
-            It edits only through typed tools. Each call is validated and
-            dry-run against the score before it commits as its own revision, so
-            Ctrl-Z removes exactly that change. Esc stops a turn and keeps what
-            landed.
-          </p>
-          <p>
-            Bring a Vercel AI Gateway or OpenRouter key, or a ChatGPT/Codex or
-            Claude subscription through{" "}
-            <a href="https://github.com/hraness/xcb">xcb</a>.{" "}
-            <code>dawg model key</code> finds what you have.
-          </p>
-        </Feature>
-
-        <Feature
-          id="panes-title"
-          index="09"
-          label="Panes"
-          heading="One song in several terminals"
-          screens={["panes"]}
-        >
-          <p>
-            Open the same song in more terminals: one plays, one shows TAPE, one
-            the knobs. A small local daemon, <code>dawgd</code>, keeps one score
-            and one transport for all of them. Each pane has a letter and its
-            own undo; <code>follow b</code> mirrors pane B.
-          </p>
-          <p>
-            Every edit is written to disk before any window sees it, so a
-            crashed pane or daemon loses nothing; the next window picks up the
-            session.
-          </p>
-        </Feature>
-
-        <Feature
-          id="files-title"
-          index="10"
-          label="Project files"
-          heading="Songs are typed TypeScript"
-        >
-          <p>
-            <code>dawg init</code> writes <code>song.ts</code> and one{" "}
-            <code>tracks/&lt;slug&gt;/track.ts</code> per track. Edit them in
-            any editor, or let the agent, and every open window applies the
-            change as one undo step. Edit in the TUI and the file is reprinted.{" "}
-            <code>dawg check</code> typechecks the project.
-          </p>
-          <CodeBlock code={projectCode} />
-        </Feature>
-
-        <Feature
-          id="local-title"
-          index="11"
-          label="Offline"
-          heading="Offline, low-latency, exact renders"
-          screens={["audio"]}
-        >
-          <p>
-            Commands, playback, recording and rendering need no account or
-            network. Live keys play through a native audio sink, about 17 ms
-            from key to sound on macOS. Pick output and input devices with{" "}
-            <code>audio out</code> and <code>audio in</code>; the choice is
-            saved on this machine, not in the song.
-          </p>
-          <p>
-            <code>dawg render out.wav</code> writes the song through the same
-            renderer that plays it, byte-identical across runs, and prints the
-            sha256. <code>out.mid</code> writes MIDI.
-          </p>
-        </Feature>
 
         <section
           className="dawg-section dawg-install"
@@ -427,7 +351,7 @@ export default async function Home() {
         >
           <SectionHead
             id="install-title"
-            index="12"
+            index="06"
             label="Get started"
             heading="Install"
           >
@@ -487,7 +411,7 @@ export default async function Home() {
         <section className="dawg-section" aria-labelledby="faq-title">
           <SectionHead
             id="faq-title"
-            index="13"
+            index="07"
             label="FAQ"
             heading="Questions"
           />
