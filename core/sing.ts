@@ -53,6 +53,8 @@ export const SING_PRESET_NAMES = Object.freeze([
   "khoomei",
   "sygyt",
   "kargyraa",
+  "robot",
+  "speak",
 ] as const);
 export type SingPreset = (typeof SING_PRESET_NAMES)[number];
 
@@ -78,6 +80,7 @@ export const SING_GROUPS: readonly Readonly<{
   },
   { label: "Solo", presets: ["lament", "soprano", "basso"] },
   { label: "Throat", presets: ["drone", "khoomei", "sygyt", "kargyraa"] },
+  { label: "Machine vox", presets: ["robot", "speak"] },
 ]);
 
 const num = (
@@ -179,6 +182,13 @@ export const SING_PARAMS: Readonly<Record<string, ParamSpec>> = Object.freeze({
   sub: num(0, 1, 0, 0.05, "kargyraa subharmonic (an octave below)", {
     automate: true,
   }),
+  articulate: num(
+    0,
+    1,
+    0,
+    0.05,
+    "machine vox: sing the lyric's consonants (0 sings vowels only, as before)",
+  ),
   gain: num(0, 2, 0.8, 0.05, "engine output"),
 });
 
@@ -221,6 +231,8 @@ export type TrackSing = Readonly<{
   overtone?: number;
   harmonics?: readonly [number, number];
   sub?: number;
+  /** Consonant strength; 0 (the default) sings vowels only. */
+  articulate?: number;
   gain?: number;
 }>;
 
@@ -246,6 +258,7 @@ export type SingSettings = Readonly<{
   overtone: number;
   harmonics: readonly [number, number];
   sub: number;
+  articulate: number;
   gain: number;
 }>;
 
@@ -269,6 +282,7 @@ export const SING_DEFAULTS: SingSettings = Object.freeze({
   overtone: 0,
   harmonics: Object.freeze([6, 12]) as readonly [number, number],
   sub: 0,
+  articulate: 0,
   gain: 0.8,
 });
 
@@ -402,6 +416,33 @@ export const SING_PRESETS: Readonly<Record<SingPreset, SingPresetEntry>> =
       },
       "Tuvan kargyraa: an A2 growl with a sub an octave below",
       "Tuvan kargyraa",
+    ),
+    robot: preset(
+      {
+        articulate: 1,
+        bright: 0.75,
+        breath: 0.04,
+        jitter: 0,
+        shimmer: 0,
+        vibmod: 0,
+        attack: 0.01,
+        release: 0.06,
+      },
+      "machine vox: every consonant of the lyric, steady pitch, no vibrato",
+      "Kraftwerk, Daft Punk, Speak & Spell",
+    ),
+    speak: preset(
+      {
+        articulate: 0.8,
+        bright: 0.55,
+        breath: 0.1,
+        vibmod: 0.12,
+        vibdelay: 0.4,
+        attack: 0.02,
+        release: 0.1,
+      },
+      "machine vox: sung words, softer consonants, a little vibrato",
+      "Laurie Anderson, Imogen Heap, vocoder leads",
     ),
   });
 

@@ -65,6 +65,7 @@ describe("0.7 Voice root", () => {
       "choir",
       "solo",
       "throat",
+      "machine",
       "vocoder",
     ]);
     // Sound no longer carries voice rows; Effects links to Voice.
