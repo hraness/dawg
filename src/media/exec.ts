@@ -25,6 +25,7 @@ import {
   readSync,
   readdirSync,
   realpathSync,
+  rmSync,
   statSync,
   writeSync,
 } from "node:fs";
@@ -38,6 +39,7 @@ import {
   EXEC_POLICY,
   FFMPEG_REFUSED_FILTERS,
   FILTER_FILE_KEYS,
+  FILTER_WRITE_KEYS,
   SOX_ALL_EFFECTS,
   SOX_EFFECT_SET,
   type ArgRole,
@@ -91,6 +93,33 @@ export const EXEC_INSTALL: Readonly<Record<ExecTool, string>> = {
 
 export class ExecError extends Error {}
 
+/** Why trusted shell is off after untrusted content (design §6.2). */
+export const EXEC_UNTRUSTED =
+  "trusted exec is off for this turn: untrusted content seen this turn; ask the user and continue next turn";
+
+/**
+ * Tools that keep the user's real HOME and caches: uv-installed demucs and
+ * basic-pitch resolve their environment and models (torch hub) from there,
+ * and offline uv cannot start them from an empty HOME.
+ */
+const REAL_HOME_TOOLS: ReadonlySet<string> = new Set(["demucs", "basic-pitch"]);
+const CACHE_ENV = [
+  "XDG_CACHE_HOME",
+  "XDG_DATA_HOME",
+  "TORCH_HOME",
+  "UV_CACHE_DIR",
+  "UV_TOOL_DIR",
+  "UV_TOOL_BIN_DIR",
+  "UV_PYTHON_INSTALL_DIR",
+] as const;
+
+/** Never walked when looking for new files. */
+const SKIP_DIRS: ReadonlySet<string> = new Set([
+  ".dawg",
+  ".git",
+  "node_modules",
+]);
+
 export type ExecRequest = Readonly<{
   argv: readonly string[];
   timeoutMs?: number;
@@ -107,6 +136,11 @@ export type ExecContext = Readonly<{
   readRoots?: readonly string[];
   /** Human-enabled trusted shell: any CLI on PATH, no argument policy. */
   shell?: boolean;
+  /**
+   * The turn has read third-party text (fetch_url, web_search, a download):
+   * trusted shell runs are refused until the next turn (design §6.2).
+   */
+  untrusted?: boolean;
   /** Relative-path predicate for outputs; default refuses .dawg/.git/node_modules. */
   writeScope?: (relative: string) => boolean;
   signal?: AbortSignal;
@@ -181,7 +215,11 @@ function checkOrThrow(
   if (!NAME.test(tool) || tool.includes("/"))
     throw new ExecError(`argv[0] must be a bare tool name (no path): ${tool}`);
   const args = argv.slice(1);
-  if (ctx.shell) return { argv: [tool, ...args], outputs: [], outdirs: [] };
+  // After untrusted content the trusted shell is off for the turn: only the
+  // allowlist runs (design §6.2).
+  const tainted = ctx.shell === true && ctx.untrusted === true;
+  if (ctx.shell && !tainted)
+    return { argv: [tool, ...args], outputs: [], outdirs: [] };
   if (tool === "uv" || tool === "uvx")
     throw new ExecError(
       "uv is not accepted; demucs and basic-pitch run through their uv install automatically",
@@ -189,7 +227,9 @@ function checkOrThrow(
   const policy = EXEC_POLICY[tool];
   if (!policy || !(EXEC_ALLOW as readonly string[]).includes(tool))
     throw new ExecError(
-      `${tool} is not allowed; allowed: ${EXEC_ALLOW.join(", ")} (the user can enable any CLI with /agent shell on)`,
+      tainted
+        ? `${tool} is not allowed: ${EXEC_UNTRUSTED}`
+        : `${tool} is not allowed; allowed: ${EXEC_ALLOW.join(", ")} (the user can enable any CLI with /agent shell on)`,
     );
   const state = new Checker(tool, policy, ctx);
   return tool === "sox" ? state.sox(args) : state.generic(args);
@@ -516,6 +556,8 @@ class Checker {
         );
       if (eq < 0) continue;
       const options = body.slice(eq + 1);
+      const writes = FILTER_WRITE_KEYS[name];
+      let unnamed = 0;
       for (const part of options.split(":")) {
         const kv = part.indexOf("=");
         const key = kv < 0 ? "" : part.slice(0, kv).trim().toLowerCase();
@@ -526,12 +568,36 @@ class Checker {
           throw new ExecError(
             `${this.tool} ${where}: URLs are refused in filters`,
           );
+        if (!key) unnamed += 1;
+        // A writer filter's file can sit at an option position; only the
+        // metadata mode word may be unnamed.
+        if (
+          writes &&
+          !key &&
+          !(
+            unnamed === 1 &&
+            (name === "metadata" || name === "ametadata") &&
+            /^[a-z_]+$/.test(value)
+          )
+        )
+          throw new ExecError(
+            `${this.tool} ${where}: name the options of ${name} (key=value); it writes files`,
+          );
+        const writesFile = writes !== undefined && writes.has(key);
         const pathLike =
           value.startsWith("/") ||
           value.startsWith("~") ||
           value.includes("..");
-        if ((key && FILTER_FILE_KEYS.has(key)) || pathLike)
-          this.input(value, `${where} ${name}`);
+        const fileKey = (key && FILTER_FILE_KEYS.has(key)) || writesFile;
+        if (!fileKey && !pathLike) continue;
+        // ffmpeg unescapes \ and quotes inside option values, so the path it
+        // opens could differ from the one checked here.
+        if (/[\\'"]/.test(value))
+          throw new ExecError(
+            `${this.tool} ${where} ${name}: escapes and quotes are refused in file paths`,
+          );
+        if (writesFile) this.output(value, `${where} ${name} ${key}`, false);
+        else this.input(value, `${where} ${name}`);
       }
     }
   }
@@ -561,6 +627,10 @@ class Checker {
     if (!this.inside(real, roots))
       throw new ExecError(
         `${this.tool} ${where}: ${value} is outside the project`,
+      );
+    if (isPlaylist(real))
+      throw new ExecError(
+        `${this.tool} ${where}: ${value} is a playlist or manifest; its entries could name files outside the project, so pass the media files themselves`,
       );
     return relative(this.root, real).split(sep).join("/");
   }
@@ -626,6 +696,33 @@ class Checker {
   }
 }
 
+/** Extensions of playlist and manifest formats that point at other files. */
+const PLAYLIST_EXT =
+  /\.(m3u8?|pls|xspf|asx|wpl|ffconcat|concat|mpd|ism|f4m|sdp|cue)$/i;
+/** First-bytes signatures of the same, whatever the file is called. */
+const PLAYLIST_MAGIC =
+  /^(?:\uFEFF)?\s*(?:#EXTM3U|#EXTINF|ffconcat\s+version|\[playlist\]|<\?xml[^>]*>\s*<(?:MPD|playlist|asx|smil)|<(?:MPD|playlist|asx|smil)\b|v=0\s)/i;
+
+/**
+ * A playlist (HLS, concat, pls, DASH, sdp…) makes ffmpeg or sox open the
+ * files it lists, which input confinement never sees; refuse them.
+ */
+function isPlaylist(real: string): boolean {
+  if (PLAYLIST_EXT.test(real)) return true;
+  let fd: number | undefined;
+  try {
+    if (!statSync(real).isFile()) return false;
+    fd = openSync(real, "r");
+    const head = Buffer.alloc(512);
+    const read = readSync(fd, head, 0, head.length, 0);
+    return PLAYLIST_MAGIC.test(head.subarray(0, read).toString("latin1"));
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
 function safeReal(path: string): string | undefined {
   try {
     return realpathSync(path);
@@ -669,9 +766,30 @@ async function acquire(signal?: AbortSignal): Promise<() => void> {
 
 // ------------------------------------------------------------------ run
 
-/** Files (relative) with size+mtime under `dirs`, bounded. */
-function snapshot(root: string, dirs: readonly string[]): Map<string, string> {
+/**
+ * Files (relative) with size+mtime under `dirs` plus the declared `files`,
+ * bounded. The project root is never walked (declared top-level outputs are
+ * stat'ed instead) and .dawg/.git/node_modules are skipped, so exec's own
+ * log and unrelated autosaves never read as outputs.
+ */
+function snapshot(
+  root: string,
+  dirs: readonly string[],
+  files: readonly string[],
+): Map<string, string> {
   const seen = new Map<string, string>();
+  const stamp = (path: string) => {
+    try {
+      const info = statSync(path);
+      if (!info.isFile()) return;
+      seen.set(
+        relative(root, path).split(sep).join("/"),
+        `${info.size}:${info.mtimeMs}`,
+      );
+    } catch {
+      // Missing, or gone between readdir and stat.
+    }
+  };
   const walk = (abs: string, depth: number) => {
     if (seen.size > 4000 || depth > 4) return;
     let entries;
@@ -682,21 +800,18 @@ function snapshot(root: string, dirs: readonly string[]): Map<string, string> {
     }
     for (const entry of entries) {
       const path = join(abs, entry.name);
-      if (entry.isDirectory()) walk(path, depth + 1);
-      else if (entry.isFile()) {
-        try {
-          const info = statSync(path);
-          seen.set(
-            relative(root, path).split(sep).join("/"),
-            `${info.size}:${info.mtimeMs}`,
-          );
-        } catch {
-          // Gone between readdir and stat.
-        }
-      }
+      if (entry.isDirectory()) {
+        if (!SKIP_DIRS.has(entry.name.toLowerCase())) walk(path, depth + 1);
+      } else if (entry.isFile()) stamp(path);
     }
   };
-  for (const dir of new Set(dirs)) walk(join(root, dir), 0);
+  for (const dir of new Set(dirs)) {
+    if (dir === "." || dir === "") continue;
+    const top = dir.split("/")[0]!.toLowerCase();
+    if (SKIP_DIRS.has(top)) continue;
+    walk(join(root, dir), 0);
+  }
+  for (const file of files) stamp(join(root, file));
   return seen;
 }
 
@@ -762,8 +877,15 @@ export async function runExec(
   const logDir = join(root, ".dawg", "logs", "exec");
   mkdirSync(tmp, { recursive: true });
   mkdirSync(logDir, { recursive: true });
-  env.HOME = tmp;
   env.TMPDIR = tmp;
+  const realHome = process.env.HOME;
+  if (REAL_HOME_TOOLS.has(tool) && realHome) {
+    env.HOME = realHome;
+    for (const key of CACHE_ENV) {
+      const value = process.env[key];
+      if (value) env[key] = value;
+    }
+  } else env.HOME = tmp;
   const logPath = join(logDir, `${logId}.log`);
   const watch = [
     ...checked.outputs.map((path) => dirname(path)),
@@ -773,7 +895,7 @@ export async function runExec(
       : []),
     ...(tool === "demucs" && checked.outdirs.length === 0 ? ["separated"] : []),
   ];
-  const before = snapshot(root, watch);
+  const before = snapshot(root, watch, checked.outputs);
   for (const out of checked.outputs)
     mkdirSync(join(root, dirname(out)), { recursive: true });
   for (const out of checked.outdirs)
@@ -871,9 +993,10 @@ export async function runExec(
   } finally {
     release();
     closeSync(fd);
+    rmSync(tmp, { recursive: true, force: true });
   }
   const ms = Date.now() - started;
-  const after = snapshot(root, watch);
+  const after = snapshot(root, watch, checked.outputs);
   const outputs: string[] = [];
   for (const [path, stamp] of after) {
     if (before.get(path) === stamp) continue;

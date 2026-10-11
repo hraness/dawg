@@ -110,6 +110,24 @@ export const FFMPEG_REFUSED_FILTERS = Object.freeze([
   "libplacebo",
 ] as const);
 
+/**
+ * Filters that write a file, with the option names (and positional index
+ * for unnamed options) that name it. Those values are outputs: checked with
+ * the write scope, never as inputs. Unnamed options are refused on these
+ * filters so a file cannot slip in by position.
+ */
+export const FILTER_WRITE_KEYS: Readonly<Record<string, ReadonlySet<string>>> =
+  Object.freeze({
+    metadata: new Set(["file"]),
+    ametadata: new Set(["file"]),
+    psnr: new Set(["stats_file", "f"]),
+    ssim: new Set(["stats_file", "f"]),
+    libvmaf: new Set(["log_path"]),
+    vmaf: new Set(["log_path"]),
+    signature: new Set(["filename"]),
+    vidstabdetect: new Set(["result"]),
+  });
+
 /** Filter option names whose value is a file. */
 export const FILTER_FILE_KEYS = new Set([
   "file",

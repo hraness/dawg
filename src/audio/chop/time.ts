@@ -10,6 +10,27 @@ export type TimeSpec = number | string;
 
 export type Tempo = Readonly<{ bpm: number; beatsPerBar: number }>;
 
+/**
+ * Seconds for `spec` without clamping, or a ChopError naming `label` when it
+ * falls outside the file (1 ms of slack), so `cut a.wav 5s 9s` on a 4 s file
+ * says so instead of reporting two clamped times. Range starts use it; ends
+ * past the file still clamp (to the end).
+ */
+export function parseTimeInFile(
+  spec: TimeSpec,
+  total: number,
+  label: string,
+  tempo?: Tempo,
+): number {
+  const value = rawTime(spec, total, tempo);
+  if (!Number.isFinite(value)) throw new ChopError(`bad time ${String(spec)}`);
+  if (value > total + 0.001 || value < -0.001)
+    throw new ChopError(
+      `${label} ${String(spec)} (${fmtSeconds(value)}) is outside the file (0s to ${fmtSeconds(total)})`,
+    );
+  return Math.max(0, Math.min(total, value));
+}
+
 /** Seconds for `spec` in a file `total` seconds long, clamped to [0, total]. */
 export function parseTime(
   spec: TimeSpec,
@@ -33,7 +54,7 @@ function rawTime(spec: TimeSpec, total: number, tempo?: Tempo): number {
   if (musical) {
     if (!tempo)
       throw new ChopError(
-        `${spec} needs a tempo · pass bpm (CLI --bpm, tool tempo) or run inside a project`,
+        `${spec} needs a tempo · pass --bpm-of N (dawg media chop) or run inside a dawg project`,
       );
     const beat = 60 / tempo.bpm;
     if (musical[1] === "beat") return Number(musical[2]) * beat;

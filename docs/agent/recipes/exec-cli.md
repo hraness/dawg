@@ -22,4 +22,4 @@ Long output is truncated; the result names a log id. Page it with `log` and `off
 {"tool":"exec","args":{"log":"exec-1","offset":4000}}
 ```
 
-Prefer `audio` for cut, slice, stretch, pitch, fades and analysis: it snaps cuts, writes sidecars and records history rows. Use exec for format quirks, filters and tools audio does not wrap. After the current turn reads web content, trusted exec is refused until the next turn.
+Prefer `audio` for cut, slice, stretch, pitch, fades and analysis: it snaps cuts, writes sidecars and records history rows. Use exec for format quirks, filters and tools audio does not wrap. After the current turn reads web content (fetch_url, web_search, download_audio or exec yt-dlp), trusted shell exec is refused until the next turn; allowlisted exec still runs.

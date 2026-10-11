@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { systemRunner, type CommandRunner } from "../../auth/runner.ts";
 import { encodeWav24, makePcm, type Pcm } from "./pcm.ts";
 import { resolveOutput, runChop } from "./run.ts";
+import { runChopCli } from "./cli.ts";
 import type { ChopContext, ChopHistory } from "./types.ts";
 import { closeHistory, openHistory } from "../../history/open.ts";
 import { newId } from "../../../core/ids.ts";
@@ -299,5 +300,61 @@ describe("chop rows in the history store", () => {
     } finally {
       closeHistory(root);
     }
+  });
+});
+
+describe("chop time errors (lane audio fixes)", () => {
+  test("a start past the end of the file says so before clamping", async () => {
+    // loop.wav is 2 s long.
+    await expect(
+      runChop("cut", { input: "loop.wav", from: "5s", to: "9s" }, ctx),
+    ).rejects.toThrow("from 5s (5s) is outside the file (0s to 2s)");
+    // An end past the file still clamps to the end.
+    const ok = await runChop(
+      "cut",
+      { input: "loop.wav", from: "1s", to: "9s", snap: "none" },
+      ctx,
+    );
+    expect(ok.outputs).toHaveLength(1);
+  });
+
+  test("the tempo hint names --bpm-of, and the CLI reads the project tempo", async () => {
+    const out: string[] = [];
+    const err: string[] = [];
+    const sink = (lines: string[]) => ({
+      write: (text: string) => {
+        lines.push(text);
+        return true;
+      },
+    });
+    const noProject = await runChopCli(
+      ["cut", "loop.wav", "bar:1", "bar:2"],
+      root,
+      sink(out),
+      sink(err),
+      { runner: noTools, projectTempo: async () => undefined },
+    );
+    expect(noProject).toBe(1);
+    expect(err.join("")).toContain("pass --bpm-of N");
+    expect(err.join("")).not.toContain("--bpm,");
+    err.length = 0;
+    // 120 bpm 4/4: bar:1 to bar:1.3 is 0 s to 1 s in a 2 s file.
+    const asked: string[] = [];
+    const code = await runChopCli(
+      ["cut", "loop.wav", "bar:1", "bar:1.3", "--snap", "none", "--json"],
+      root,
+      sink(out),
+      sink(err),
+      {
+        runner: noTools,
+        projectTempo: async (cwd) => {
+          asked.push(cwd);
+          return { bpm: 120, beatsPerBar: 4 };
+        },
+      },
+    );
+    expect(err.join("")).toBe("");
+    expect(code).toBe(0);
+    expect(asked).toEqual([root]);
   });
 });
