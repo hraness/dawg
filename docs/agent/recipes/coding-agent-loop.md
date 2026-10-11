@@ -25,7 +25,7 @@ Goal: a coding agent (or you, through the file tools) edits the project files wh
 3. From a shell, check and watch:
 
 ```dawg
-dawg check
+dawg check --as codex --files tracks/bass/track.ts
 dawg history --follow
 dawg history --actor external --limit 5
 ```

@@ -299,14 +299,22 @@ export async function runHistoryCommand(
   }
   const db = HistoryDb.open(workspace, { readonly: true, busyMs: 2000 });
   try {
+    // The follow cursor is read before the backlog, never after it: a row
+    // the editor commits between the two reads would otherwise be in
+    // neither. Backlog rows past it are remembered so none prints twice.
+    const start = follow ? db.lastSeq() : 0;
     const page = db.query({ ...built.filter, order: asc ? "asc" : "desc" });
     const rows = asc || !follow ? page.rows : [...page.rows].reverse();
-    for (const row of rows) print(row);
+    const shown = new Set<number>();
+    for (const row of rows) {
+      print(row);
+      if (row.seq > start) shown.add(row.seq);
+    }
     if (!json && page.next !== undefined && !follow)
       out.write(`-- next: dawg history --before ${page.next}\n`);
     if (!follow) return 0;
     if (!json) err.write("-- following · Ctrl-C stops\n");
-    let cursor = Math.max(db.lastSeq(), built.sinceSeq ?? 0);
+    let cursor = Math.max(start, built.sinceSeq ?? 0);
     let polls = 0;
     let sessionId = record?.sessionId;
     while (!signal?.aborted) {
@@ -344,7 +352,7 @@ export async function runHistoryCommand(
         limit: 500,
       });
       for (const row of fresh.rows) {
-        print(row);
+        if (!shown.delete(row.seq)) print(row);
         cursor = Math.max(cursor, row.seq);
       }
     }

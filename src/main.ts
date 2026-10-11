@@ -78,9 +78,11 @@ import {
   devLog,
   enableDev,
   errorPayload,
+  flushDevLog,
 } from "./history/devlog.ts";
-import { Attributor } from "./dev/attribution.ts";
+import { Attributor, attributionLabel } from "./dev/attribution.ts";
 import { screenSnapshots } from "./dev/screen.ts";
+import { RELOAD_CHECKOUT_ENV, reloadTypecheck } from "./dev/reload.ts";
 import { undoEvents } from "./history/undo-source.ts";
 import {
   ALL_TRACKS_OPEN_HINT,
@@ -1589,6 +1591,8 @@ async function runInteractive(): Promise<void> {
     }
   };
   process.once("exit", restoreTerminal);
+  // A burst that ends the process still leaves its `dropped N` row.
+  process.once("exit", flushDevLog);
   // A kill or a closed terminal: restore it, then exit as killed.
   for (const [signal, code] of [
     ["SIGTERM", 143],
@@ -2073,6 +2077,16 @@ async function runInteractive(): Promise<void> {
     projectSync = startProjectSync(syncHost());
     startLateCredit();
   }
+  // Started by `dawg dev --reload`: the smoke import cannot see type
+  // errors, so check dawg's own source now and say so without blocking.
+  const reloadCheckout = process.env[RELOAD_CHECKOUT_ENV];
+  if (reloadCheckout)
+    void reloadTypecheck(reloadCheckout).then((problem) => {
+      if (problem === undefined) return;
+      devLog("reload", "warn", problem, { checkout: reloadCheckout });
+      tui.activity.pushCard(`dawg dev · ${problem}`, { tone: "warning" });
+      requestFrame();
+    });
   void currentProvider().then(() => tick(true));
   tickUi = () => tick(true);
   reportSampleProblems(score);
@@ -6864,9 +6878,11 @@ function timingChanged(previous: TrackScore, next: TrackScore): boolean {
 
 /** The window's side of the project file sync (see src/project/sync.ts). */
 /**
- * Credits hot-reloaded plain saves to a coding agent whose `dawg check
- * --as` heartbeat trails them (design §5.3): the history row gains the
- * actor and a card says so. Polls only while a recent save is claimable.
+ * Credits hot-reloaded plain saves late (design §5.3): to dawg's agent
+ * when its write (an `exec` run, another window's watcher winning the race)
+ * is noted just after the apply, or to a coding agent whose `dawg check
+ * --files` heartbeat trails them. The history row gains the actor and a
+ * card says so. Polls only while a recent save is claimable.
  */
 function startLateCredit(): void {
   let busy = false;
@@ -6876,18 +6892,21 @@ function startLateCredit(): void {
     void attributor
       .claimLate()
       .then((claims) => {
-        for (const { rev, actor } of claims) {
+        for (const { rev, who } of claims) {
           const db = history.db();
           const credited =
-            db?.creditFileEdit(record.sessionId, rev, actor) ?? false;
+            db?.creditFileEdit(record.sessionId, rev, who.id, who.kind) ??
+            false;
           if (!credited) continue;
-          tui.activity.pushCard(`files · rev ${rev} · by ${actor}`, {
+          const label = attributionLabel(who);
+          tui.activity.pushCard(`files · rev ${rev} · ${label}`, {
             tone: "info",
           });
-          devLog("sync", "info", `rev ${rev} credited to ${actor}`, {
+          devLog("sync", "info", `rev ${rev} credited ${label}`, {
             event: "sync.credit",
             rev,
-            actor,
+            actor: who.id,
+            actorKind: who.kind,
           });
           requestFrame();
         }
@@ -7604,6 +7623,15 @@ function agentHost(
     workspace: { root: process.cwd() },
     // A written project source is applied before the tool result returns,
     // so the model reads the outcome and any type errors in the same step.
+    async noteWorkspaceWrite(path, by) {
+      if (!projectSync || !/\.ts$/.test(path)) return;
+      try {
+        const text = await readFile(join(process.cwd(), path), "utf8");
+        attributor.noteAgentWrite(path, text, by?.subagent);
+      } catch {
+        // deleted or unreadable: the apply stays unattributed
+      }
+    },
     async onWorkspaceWrite(path, by) {
       if (!projectSync || !/\.ts$/.test(path)) return;
       // Credit the apply this write causes to the agent (or its subagent).

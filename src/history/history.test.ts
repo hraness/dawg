@@ -175,6 +175,76 @@ describe("history migration from session JSON", () => {
     db.close();
   });
 
+  // Regression (fix-dev): a late credit lived only in history.db, so a
+  // rebuilt DB (the quarantine path) silently lost it.
+  test("a late file-edit credit survives a quarantined, rebuilt DB", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "dawg-history-"));
+    const created = await ensureSession<unknown>(band().toJSON(), {
+      workspace,
+      sessionId: "credit",
+    });
+    const next = band().withTempo(97);
+    const record = await appendSessionEvent(
+      created.paths,
+      created.record as SessionRecord<unknown>,
+      {
+        kind: "files.apply",
+        payload: { summary: "tempo", by: { kind: "external", id: "file" } },
+        ops: [...diffScores(band(), next)],
+      },
+      next.toJSON(),
+    );
+    const db = HistoryDb.open(workspace);
+    expect(reconcileHistory(db, record).imported).toBe(1);
+    const actor = () =>
+      db.query({ sessionId: "credit", limit: 5 }).rows[0]!.actor;
+    expect(actor()).toMatchObject({ kind: "external", actorId: "file" });
+    expect(db.creditFileEdit("credit", 1, "codex")).toBe(true);
+    expect(db.creditFileEdit("credit", 1, "codex")).toBe(false);
+    expect(actor()).toMatchObject({ kind: "external", actorId: "codex" });
+    db.close();
+    closeHistories();
+    await writeFile(historyPath(workspace), "not a database at all, sorry");
+    const rebuilt = HistoryDb.open(workspace);
+    expect(rebuilt.report.quarantined).toBeDefined();
+    expect(reconcileHistory(rebuilt, record).imported).toBe(1);
+    expect(
+      rebuilt.query({ sessionId: "credit", limit: 5 }).rows[0]!.actor,
+    ).toMatchObject({ kind: "external", actorId: "codex" });
+    rebuilt.close();
+  });
+
+  test("an agent's late credit keeps its kind across a rebuild", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "dawg-history-"));
+    const created = await ensureSession<unknown>(band().toJSON(), {
+      workspace,
+      sessionId: "credit2",
+    });
+    const next = band().withTempo(99);
+    const record = await appendSessionEvent(
+      created.paths,
+      created.record as SessionRecord<unknown>,
+      {
+        kind: "files.apply",
+        payload: { summary: "tempo", by: { kind: "external", id: "file" } },
+        ops: [...diffScores(band(), next)],
+      },
+      next.toJSON(),
+    );
+    const db = HistoryDb.open(workspace);
+    reconcileHistory(db, record);
+    expect(db.creditFileEdit("credit2", 1, "drums", "subagent")).toBe(true);
+    db.close();
+    closeHistories();
+    await writeFile(historyPath(workspace), "garbage");
+    const rebuilt = HistoryDb.open(workspace);
+    reconcileHistory(rebuilt, record);
+    expect(
+      rebuilt.query({ sessionId: "credit2", limit: 5 }).rows[0]!.actor,
+    ).toMatchObject({ kind: "subagent", actorId: "drums" });
+    rebuilt.close();
+  });
+
   test("a newer schema opens for reads and known-column inserts only", async () => {
     const { workspace, record } = await fixture(2);
     const db = HistoryDb.open(workspace);

@@ -26,6 +26,8 @@ files; the open dawg window reloads when a file changes.
 1. Edit \`song.ts\` or \`tracks/<slug>/track.ts\`.
 2. Run \`dawg check\`: typecheck and evaluate; exit 1 lists problems with file:line.
 3. Watch \`dawg history --follow\` in another terminal to see each edit land as a revision.
+   To be credited for an edit the open window already reloaded, name your files:
+   \`dawg check --as <you> --files tracks/bass/track.ts\`.
 
 ## History and comments
 - \`dawg history\`: newest edits, undo/redo, comments and agent turns, one line each.

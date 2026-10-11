@@ -1,4 +1,5 @@
 import { realpath } from "node:fs/promises";
+import { changedSources, projectSourceHashes } from "../dev/attribution.ts";
 import { readAgentSettings } from "./settings.ts";
 import { newId } from "../../core/ids.ts";
 import type { CommandHost } from "./command-agent.ts";
@@ -205,6 +206,16 @@ export type AgentHost = Readonly<{
     path: string,
     by?: Readonly<{ subagent?: string }>,
   ): Promise<string | void> | string | void;
+  /**
+   * Notes that the agent (or subagent `by`) wrote `path` without applying
+   * it yet: an `exec` run that changed several sources notes each, then
+   * applies once through `onWorkspaceWrite`, so the one `files.apply`
+   * revision credits the agent (design §5.3).
+   */
+  noteWorkspaceWrite?(
+    path: string,
+    by?: Readonly<{ subagent?: string }>,
+  ): Promise<void> | void;
   /** Overrides for web_search/fetch_url (fetch, DNS lookup, Brave key). */
   web?: WebHost;
   /** Runner and env for the media tools (root and slug come from `workspace`); absent → rejected. */
@@ -981,6 +992,14 @@ async function executeCallInner(
     const resume = context.suspendTimeout?.();
     let lastLine = "";
     try {
+      // An `exec` run (shell enabled) may edit project sources; hash them
+      // around the run so its edits are credited to the agent, not to
+      // `external` · `file`.
+      const watchSources =
+        call.name === "exec" && context.host.onWorkspaceWrite !== undefined;
+      const sourcesBefore = watchSources
+        ? await projectSourceHashes(workspace.root)
+        : undefined;
       const result = await plan.run({
         ...media,
         ...(untrusted
@@ -1000,6 +1019,14 @@ async function executeCallInner(
           context.onProgress?.(text);
         },
       });
+      const sourceNote =
+        sourcesBefore !== undefined
+          ? await noteExecSourceWrites(
+              context.host,
+              sourcesBefore,
+              await projectSourceHashes(workspace.root),
+            )
+          : undefined;
       return {
         ok: true,
         mutated: false,
@@ -1008,6 +1035,7 @@ async function executeCallInner(
           summary: result.summary,
           ...result.content,
           outputs: result.outputs,
+          ...(sourceNote !== undefined ? { sources: sourceNote } : {}),
         }),
         event: appliedEvent(result.summary, context.host.snapshot().revision),
       };
@@ -1311,4 +1339,27 @@ export function describeAgentEvent(event: AgentEvent): string | undefined {
         ? `canceled · kept rev ${event.revision}`
         : `agent ${event.code}: ${event.message}`;
   }
+}
+
+/**
+ * Notes every project source an `exec` run changed as the agent's write
+ * (the host's subagent wrapper adds the label), then applies them once.
+ * Returns the apply's note for the tool result, or undefined when no
+ * source changed.
+ */
+export async function noteExecSourceWrites(
+  host: Pick<AgentHost, "onWorkspaceWrite" | "noteWorkspaceWrite">,
+  before: ReadonlyMap<string, string>,
+  after: ReadonlyMap<string, string>,
+): Promise<string | undefined> {
+  const changed = changedSources(before, after);
+  const last = changed.at(-1);
+  if (last === undefined || !host.onWorkspaceWrite) return undefined;
+  for (const path of changed.slice(0, -1))
+    await host.noteWorkspaceWrite?.(path);
+  const note = await host.onWorkspaceWrite(last);
+  const head = `changed ${changed.slice(0, 8).join(", ")}${changed.length > 8 ? ` +${changed.length - 8}` : ""}`;
+  return typeof note === "string" && note.length > 0
+    ? `${head}\n${note}`
+    : head;
 }

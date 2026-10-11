@@ -40,6 +40,8 @@ import {
 
 export const HISTORY_FILE = "history.db";
 export const COMMENTS_FILE = "comments.jsonl";
+/** Late credits of file edits (design §5.3), replayed into a rebuilt DB. */
+export const CREDITS_FILE = "credits.jsonl";
 export const SCHEMA_VERSION = 1;
 
 export const HISTORY_LIMITS = Object.freeze({
@@ -105,6 +107,10 @@ export type OpenReport = Readonly<{
 
 export function historyPath(workspace: string): string {
   return join(workspace, STATE_DIR, HISTORY_FILE);
+}
+
+export function creditsPath(workspace: string): string {
+  return join(workspace, STATE_DIR, CREDITS_FILE);
 }
 
 export function commentsPath(workspace: string): string {
@@ -674,23 +680,64 @@ export class HistoryDb {
   }
 
   /**
-   * Credits a hot-reloaded file edit to the coding agent whose `dawg check`
-   * arrived after it (design §5.3). Only an edit row still credited to
-   * `file` changes, and only its `actor_id`: the summary, ops and every
-   * other row stay as written. True when a row changed.
+   * Credits a hot-reloaded file edit late (design §5.3): to the coding
+   * agent whose `dawg check --files` arrived after it, or to dawg's own
+   * agent or a subagent. Only an edit row still credited to `file` changes,
+   * and only its actor: the summary, ops and every other row stay as
+   * written. The credit is also appended to `.dawg/credits.jsonl`, so a
+   * rebuilt DB replays it (`replayCredits`). True when a row changed.
    */
   public creditFileEdit(
     sessionId: string,
     rev: number,
     actorId: string,
+    actorKind: "external" | "agent" | "subagent" = "external",
+    options: { mirror?: boolean } = {},
   ): boolean {
     if (this.readonly) return false;
+    const id = actorId.slice(0, 64);
     const result = this.db
       .query(
-        `UPDATE events SET actor_id = ? WHERE session_id = ? AND rev = ? AND kind = 'edit' AND actor_kind = 'external' AND actor_id = 'file'`,
+        `UPDATE events SET actor_kind = ?, actor_id = ? WHERE session_id = ? AND rev = ? AND kind = 'edit' AND actor_kind = 'external' AND actor_id = 'file'`,
       )
-      .run(actorId.slice(0, 64), sessionId, rev);
-    return result.changes > 0;
+      .run(actorKind, id, sessionId, rev);
+    const changed = result.changes > 0;
+    if (changed && options.mirror !== false)
+      try {
+        mirrorCredit(this.workspace, {
+          sessionId,
+          rev,
+          actorKind,
+          actorId: id,
+          at: new Date().toISOString(),
+        });
+      } catch {
+        // The row is credited; only a rebuild would lose it.
+      }
+    return changed;
+  }
+
+  /**
+   * Re-applies the credits `.dawg/credits.jsonl` holds for a session (after
+   * an import rebuilt its rows). Idempotent: a credited row no longer reads
+   * `file`. Returns rows changed.
+   */
+  public replayCredits(sessionId: string): number {
+    if (this.readonly) return 0;
+    let changed = 0;
+    for (const credit of readCredits(this.workspace))
+      if (
+        credit.sessionId === sessionId &&
+        this.creditFileEdit(
+          sessionId,
+          credit.rev,
+          credit.actorId,
+          credit.actorKind,
+          { mirror: false },
+        )
+      )
+        changed += 1;
+    return changed;
   }
 
   /** Raw stored rewind/inverse/rewind_bytes of one row (tests, show --full). */
@@ -1289,6 +1336,62 @@ export function readMirroredComments(workspace: string): HistoryRow[] {
       const row = JSON.parse(line) as HistoryRow;
       if (typeof row.id === "string" && typeof row.sessionId === "string")
         out.push({ ...row, targets: [], tags: row.tags ?? [] });
+    } catch {
+      // a torn last line after a crash
+    }
+  }
+  return out;
+}
+
+export type FileCredit = Readonly<{
+  sessionId: string;
+  rev: number;
+  actorKind: "external" | "agent" | "subagent";
+  actorId: string;
+  at: string;
+}>;
+
+/** One fsync'd JSON line per late credit: the copy a rebuilt DB replays. */
+export function mirrorCredit(workspace: string, credit: FileCredit): void {
+  const path = creditsPath(workspace);
+  mkdirSync(dirname(path), { recursive: true });
+  const fd = openSync(path, "a");
+  try {
+    writeSync(fd, `${JSON.stringify(credit)}\n`);
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** Credits mirrored in `credits.jsonl`, skipping damaged lines. */
+export function readCredits(workspace: string): FileCredit[] {
+  let text: string;
+  try {
+    text = readFileSync(creditsPath(workspace), "utf8");
+  } catch {
+    return [];
+  }
+  const out: FileCredit[] = [];
+  for (const line of text.split("\n")) {
+    if (line.trim().length === 0) continue;
+    try {
+      const value = JSON.parse(line) as Record<string, unknown>;
+      const kind = value.actorKind;
+      if (
+        typeof value.sessionId === "string" &&
+        typeof value.rev === "number" &&
+        typeof value.actorId === "string" &&
+        value.actorId.length > 0 &&
+        (kind === "external" || kind === "agent" || kind === "subagent")
+      )
+        out.push({
+          sessionId: value.sessionId,
+          rev: value.rev,
+          actorKind: kind,
+          actorId: value.actorId.slice(0, 64),
+          at: typeof value.at === "string" ? value.at : "",
+        });
     } catch {
       // a torn last line after a crash
     }

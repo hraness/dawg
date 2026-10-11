@@ -12,9 +12,17 @@
  * The session lives in the session store and dawgd, so it survives; the
  * new editor reopens the newest session in the folder.
  *
+ * The smoke import catches syntax errors and module-load throws, not type
+ * errors. A reloaded editor therefore typechecks the checkout itself in the
+ * background (`DAWG_RELOAD_CHECKOUT`, `reloadTypecheck`) and reports errors
+ * as a card and a `reload` log row; it never blocks the reload.
+ *
  * An editor that dies on its own (not stopped by us) leaves the terminal
  * restored, a one-line notice, and the supervisor waiting for the next
- * source change to retry. A clean quit (exit 0) ends the supervisor.
+ * source change to retry. A clean quit (exit 0) ends the supervisor. A
+ * SIGTERM/SIGHUP to the supervisor waits (up to 3 s) for the editor to
+ * restore the terminal before it resolves, so the shell never redraws over
+ * a raw-mode alternate screen.
  */
 import { existsSync, watch as fsWatch } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -23,6 +31,10 @@ export const RELOAD_DEBOUNCE_MS = 300;
 /** An editor that exits within this long after a start crashed on startup. */
 export const STARTUP_CRASH_MS = 5000;
 export const WATCHED_DIRS = ["src", "core", "tui"] as const;
+/** How long `stop` waits for the editor to exit before restoring anyway. */
+export const STOP_GRACE_MS = 3000;
+/** Env var naming the checkout a reloaded editor typechecks. */
+export const RELOAD_CHECKOUT_ENV = "DAWG_RELOAD_CHECKOUT";
 
 export type ChildHandle = Readonly<{
   exited: Promise<number>;
@@ -42,12 +54,16 @@ export type ReloadDeps = Readonly<{
   notice(text: string): void;
   now?: () => number;
   debounceMs?: number;
+  stopGraceMs?: number;
 }>;
 
 export type Supervisor = Readonly<{
   /** Resolves with the exit code when the editor quits cleanly or `stop` runs. */
   done: Promise<number>;
-  /** Forwards a signal to the editor and ends the supervisor. */
+  /**
+   * Forwards a signal to the editor and ends the supervisor once the editor
+   * exited (or the grace period passed), with the terminal restored.
+   */
   stop(signal: "SIGTERM" | "SIGHUP"): void;
   /** Tests: resolves once a pending change has been handled. */
   idle(): Promise<void>;
@@ -68,6 +84,7 @@ export function startSupervisor(deps: ReloadDeps): Supervisor {
   let startedAt = 0;
   let restarting = false;
   let ended = false;
+  let stopping = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let changes: string[] = [];
   let work: Promise<void> = Promise.resolve();
@@ -91,7 +108,7 @@ export function startSupervisor(deps: ReloadDeps): Supervisor {
     void handle.exited.then((code) => {
       if (child !== handle) return;
       child = undefined;
-      if (restarting || ended) return;
+      if (restarting || ended || stopping) return;
       if (code === 0) return end(0);
       deps.restoreTerminal();
       const early = now() - startedAt < STARTUP_CRASH_MS;
@@ -106,7 +123,7 @@ export function startSupervisor(deps: ReloadDeps): Supervisor {
     changes = [];
     if (batch.length === 0 || ended) return;
     const failure = await deps.smoke();
-    if (ended) return;
+    if (ended || stopping) return;
     if (failure !== undefined) {
       // The running editor keeps going; only a terminal-less notice when
       // nothing runs (a running editor owns the screen).
@@ -123,11 +140,11 @@ export function startSupervisor(deps: ReloadDeps): Supervisor {
       await running.exited;
       restarting = false;
     }
-    if (!ended) start();
+    if (!ended && !stopping) start();
   };
 
   const stopWatching = deps.watch((path) => {
-    if (!triggersReload(path) || ended) return;
+    if (!triggersReload(path) || ended || stopping) return;
     changes.push(path);
     if (timer !== undefined) clearTimeout(timer);
     timer = setTimeout(() => {
@@ -140,8 +157,27 @@ export function startSupervisor(deps: ReloadDeps): Supervisor {
   return {
     done,
     stop(signal) {
-      child?.kill(signal);
-      end(signal === "SIGTERM" ? 143 : 129);
+      const code = signal === "SIGTERM" ? 143 : 129;
+      if (ended || stopping) return;
+      stopping = true;
+      if (timer !== undefined) clearTimeout(timer);
+      timer = undefined;
+      const running = child;
+      if (!running) return end(code);
+      running.kill(signal);
+      let grace: ReturnType<typeof setTimeout> | undefined;
+      void Promise.race([
+        running.exited.then(() => undefined),
+        new Promise<void>((resolveGrace) => {
+          grace = setTimeout(resolveGrace, deps.stopGraceMs ?? STOP_GRACE_MS);
+        }),
+      ]).then(() => {
+        if (grace !== undefined) clearTimeout(grace);
+        // The editor restores the terminal on SIGTERM; a hung or killed
+        // one may not have, so restore again (idempotent escapes).
+        deps.restoreTerminal();
+        end(code);
+      });
     },
     async idle() {
       while (timer !== undefined) await new Promise((r) => setTimeout(r, 5));
@@ -183,7 +219,11 @@ export async function runReload(
     spawnEditor() {
       const proc = Bun.spawn([bun, entry, "--dev", ...editorArgs], {
         stdio: ["inherit", "inherit", "inherit"],
-        env: { ...process.env, DAWG_DEV: "1" },
+        env: {
+          ...process.env,
+          DAWG_DEV: "1",
+          [RELOAD_CHECKOUT_ENV]: checkout,
+        },
       });
       return {
         exited: proc.exited,
@@ -239,4 +279,50 @@ export async function runReload(
   // Ctrl-C reaches the supervisor only while no editor holds raw mode.
   process.once("SIGINT", () => supervisor.stop("SIGTERM"));
   return supervisor.done;
+}
+
+export type TypecheckRunner = (
+  argv: readonly string[],
+  cwd: string,
+) => Promise<{ code: number; output: string }>;
+
+const bunRunner: TypecheckRunner = async (argv, cwd) => {
+  const proc = Bun.spawn([...argv], {
+    cwd,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const [code, out, err] = await Promise.all([
+    proc.exited,
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+  return { code, output: `${out}${err}` };
+};
+
+/**
+ * Typechecks dawg's own checkout after a reload (the smoke import cannot
+ * see type errors). Uses the checkout's installed `tsc` only, never an
+ * install: undefined when it is missing or the check passes, otherwise
+ * `types ✗ N · <first error>`.
+ */
+export async function reloadTypecheck(
+  checkout: string,
+  run: TypecheckRunner = bunRunner,
+): Promise<string | undefined> {
+  const tsc = join(checkout, "node_modules", ".bin", "tsc");
+  if (!existsSync(tsc)) return undefined;
+  let result: { code: number; output: string };
+  try {
+    result = await run([tsc, "--noEmit", "--pretty", "false"], checkout);
+  } catch {
+    return undefined;
+  }
+  if (result.code === 0) return undefined;
+  const errors = result.output
+    .split("\n")
+    .filter((line) => /error TS\d+/.test(line));
+  const first = (errors[0] ?? result.output.trim().split("\n")[0] ?? "")
+    .trim()
+    .slice(0, 160);
+  return `types ✗ ${Math.max(errors.length, 1)} · ${first}`;
 }
