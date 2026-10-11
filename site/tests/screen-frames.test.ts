@@ -25,12 +25,23 @@ function frames(id: string): FramesFile {
   ) as FramesFile;
 }
 
+/** The visible text of a painted row: its spans' contents, entities decoded. */
 function text(html: string): string {
-  return html
-    .replace(/<[^>]+>/gu, "")
-    .replace(/&lt;/gu, "<")
-    .replace(/&gt;/gu, ">")
-    .replace(/&amp;/gu, "&");
+  const entities: Record<string, string> = {
+    "&lt;": "<",
+    "&gt;": ">",
+    "&amp;": "&",
+    "&quot;": '"',
+    "&#39;": "'",
+  };
+  let out = "";
+  let inTag = false;
+  for (const ch of html) {
+    if (ch === "<") inTag = true;
+    else if (ch === ">") inTag = false;
+    else if (!inTag) out += ch;
+  }
+  return out.replace(/&(?:lt|gt|amp|quot|#39);/gu, (m) => entities[m] ?? m);
 }
 
 describe("animated screens", () => {
