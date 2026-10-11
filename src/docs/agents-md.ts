@@ -69,7 +69,11 @@ export class AgentsMdMarkerError extends Error {
 
 function countOf(text: string, needle: string): number {
   let count = 0;
-  for (let at = text.indexOf(needle); at >= 0; at = text.indexOf(needle, at + 1))
+  for (
+    let at = text.indexOf(needle);
+    at >= 0;
+    at = text.indexOf(needle, at + 1)
+  )
     count += 1;
   return count;
 }
