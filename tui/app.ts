@@ -92,6 +92,8 @@ export interface AppView {
   pane?: string | undefined;
   /** Project typecheck result; `types ✓` or `types ✗ N` beside sync. */
   types?: TypesIndicator | undefined;
+  /** Dev mode (`dawg --dev`): the word `dev` in the header, never colour alone. */
+  dev?: boolean | undefined;
   /**
    * The line under the prompt: `$0.12 session · $0.48 today · opus-5.5 ·
    * gateway`, or `commands only`. The caller sizes it to the width.
@@ -655,6 +657,7 @@ function paintHeader(
       style: roles.muted,
       priority: 4,
     });
+  if (view.dev) right.push({ text: "dev", style: roles.warning, priority: 2 });
   if (view.types)
     right.push({
       text: view.types.ok

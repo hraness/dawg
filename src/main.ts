@@ -73,6 +73,14 @@ import {
   printSessions,
 } from "./session/list.ts";
 import { openHistory } from "./history/open.ts";
+import {
+  devEnabled,
+  devLog,
+  enableDev,
+  errorPayload,
+} from "./history/devlog.ts";
+import { Attributor } from "./dev/attribution.ts";
+import { screenSnapshots } from "./dev/screen.ts";
 import { undoEvents } from "./history/undo-source.ts";
 import {
   ALL_TRACKS_OPEN_HINT,
@@ -529,6 +537,7 @@ import {
 import {
   CARD_GLOW_MS,
   composeFrame,
+  frameText,
   isTooSmall,
   tooSmallKey,
   TuiApp,
@@ -560,6 +569,10 @@ import {
   type ProjectSync,
   type SyncHost,
 } from "./project/sync.ts";
+
+// `dawg dev --reload` smoke-imports this entry with DAWG_SMOKE=1: every
+// module loaded, nothing run.
+if (process.env.DAWG_SMOKE === "1") process.exit(0);
 
 /** Set while `submit` runs a grammar reading, so it reads only once. */
 let recovering = false;
@@ -607,6 +620,8 @@ Usage:
   dawg check           typecheck + evaluate the project; exit 1 on problems
   dawg <command> --help  usage: sessions history render init check media model
   dawg doctor          audio backend, native sink and devices
+  dawg dev [options]   the editor in dev mode: log rows in history (--dev)
+  dawg dev screen [A]  print a dev-mode pane's last frame as text
   dawg media doctor|download|stems|analyze|notes|sample|lyrics  (--help)
   dawg --version
 
@@ -631,7 +646,34 @@ Agent (optional; the choice is saved and reused until you log out):
 Unrecognized requests go to the agent once a provider is configured
 (DAWG_PROVIDER=gateway|openrouter|codex|claude|auto, DAWG_MODEL=<alias>;
 DAWG_AI=0 disables the agent).`;
+// `dawg dev [screen …]`: dev mode (design §5.1). `dawg dev screen` prints a
+// pane's last frame; plain `dawg dev …` is the editor with `--dev`.
+if (process.argv[2] === "dev") {
+  if (process.argv[3] === "screen" || process.argv[3] === "--help") {
+    const { runDevCommand } = await import("./dev/cli.ts");
+    process.exit(
+      await runDevCommand(
+        process.argv.slice(3),
+        process.cwd(),
+        stdout,
+        process.stderr,
+      ),
+    );
+  }
+  if (process.argv.includes("--reload")) {
+    const { runReload } = await import("./dev/reload.ts");
+    process.exit(
+      await runReload(
+        import.meta.path,
+        process.argv.slice(3).filter((arg) => arg !== "--reload"),
+        process.stderr,
+      ),
+    );
+  }
+  process.argv.splice(2, 1, "--dev");
+}
 const args = new Set(process.argv.slice(2));
+if (args.has("--dev")) enableDev();
 /** One parse for every launch flag; problems are reported below. */
 const launch = parseLaunchArgs(process.argv.slice(2));
 const launchArgs = launch.ok ? launch.args : undefined;
@@ -1029,6 +1071,18 @@ const historyHost: HistoryHost = {
   ascii: () => !tui.capabilities.unicode,
 };
 const history = wireHistory(historyHost);
+/** Whom an external file edit credits: dawg's agent, a coding agent, a save. */
+const attributor = new Attributor(process.cwd());
+/** The last drawn frame as text (crash rows carry it; dev writes it out). */
+function lastScreenText(limit = 3000): string | undefined {
+  const frame = tui.frame;
+  return frame ? frameText(frame).slice(0, limit) : undefined;
+}
+/** Dev mode: `.dawg/dev/screen-<letter>.txt` for `dawg dev screen`. */
+const devScreens =
+  devEnabled() && !ephemeralWorkspace
+    ? screenSnapshots(process.cwd(), () => port.pane)
+    : undefined;
 /** Show-me state (see the show-me section below). */
 /** A TAPE gesture's typed command, echoed dimly in the prompt row. */
 const gestureEcho: {
@@ -1326,6 +1380,7 @@ function appView(value: TrackScore, beat: number): AppView {
     sync: syncState,
     sessionName: record.meta.name,
     windows: windowCount,
+    dev: devEnabled() || undefined,
     pane: port.pane,
     types: typesIndicator,
     play: play?.on ? play.header() : undefined,
@@ -1534,6 +1589,12 @@ async function runInteractive(): Promise<void> {
   // An exception nothing caught leaves the editor in an unknown state: leave
   // the alternate screen first, so the stack lands in the shell, then exit.
   const onUncaught = (error: unknown) => {
+    // Written in every mode (design §5.2): the crash is in history for
+    // `dawg history --kind log` and the next agent turn.
+    devLog("error", "error", `uncaught · ${errorPayload(error).message}`, {
+      ...errorPayload(error),
+      screen: lastScreenText(),
+    });
     restoreTerminal();
     try {
       writeSync(2, crashText(error));
@@ -1546,6 +1607,10 @@ async function runInteractive(): Promise<void> {
   // editor: report it on the activity strip and repaint over anything the
   // runtime wrote.
   const onRejection = (error: unknown) => {
+    devLog("error", "error", `rejected · ${errorPayload(error).message}`, {
+      ...errorPayload(error),
+      screen: lastScreenText(),
+    });
     if (terminalRestored || screenSuspended) {
       try {
         writeSync(2, crashText(error));
@@ -1768,6 +1833,7 @@ async function runInteractive(): Promise<void> {
     // approved frame that lands just after a forced one, and the gate would
     // not ask again until the heartbeat.
     const out = tui.render(appView(score, clock.beatAt()), { force: true });
+    devScreens?.drawn(() => lastScreenText(64 * 1024) ?? "");
     if (frameLog)
       appendFileSync(
         frameLog,
@@ -1991,8 +2057,10 @@ async function runInteractive(): Promise<void> {
   void launchCard?.then((card) => {
     if (card) tui.activity.pushCard(card.text, { tone: card.tone, once: true });
   });
-  if (await isProject(process.cwd()))
+  if (await isProject(process.cwd())) {
     projectSync = startProjectSync(syncHost());
+    startLateCredit();
+  }
   void currentProvider().then(() => tick(true));
   tickUi = () => tick(true);
   reportSampleProblems(score);
@@ -6783,6 +6851,43 @@ function timingChanged(previous: TrackScore, next: TrackScore): boolean {
 }
 
 /** The window's side of the project file sync (see src/project/sync.ts). */
+/**
+ * Credits hot-reloaded plain saves to a coding agent whose `dawg check
+ * --as` heartbeat trails them (design §5.3): the history row gains the
+ * actor and a card says so. Polls only while a recent save is claimable.
+ */
+function startLateCredit(): void {
+  let busy = false;
+  const timer = setInterval(() => {
+    if (busy || !attributor.claimable) return;
+    busy = true;
+    void attributor
+      .claimLate()
+      .then((claims) => {
+        for (const { rev, actor } of claims) {
+          const db = history.db();
+          const credited =
+            db?.creditFileEdit(record.sessionId, rev, actor) ?? false;
+          if (!credited) continue;
+          tui.activity.pushCard(`files · rev ${rev} · by ${actor}`, {
+            tone: "info",
+          });
+          devLog("sync", "info", `rev ${rev} credited to ${actor}`, {
+            event: "sync.credit",
+            rev,
+            actor,
+          });
+          requestFrame();
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        busy = false;
+      });
+  }, 400);
+  timer.unref?.();
+}
+
 function syncHost(): SyncHost {
   return {
     project: process.cwd(),
@@ -6790,13 +6895,24 @@ function syncHost(): SyncHost {
     // stays detached instead of reprinting over them.
     sessionId: () => record.sessionId,
     current: () => score,
-    async commit(plan, summary) {
+    async commit(plan, summary, meta) {
       const baseRevision = record.revision;
       record = await port.appendOperations(
         record,
         {
           kind: "files.apply",
-          payload: { summary },
+          payload: {
+            summary,
+            ...(meta
+              ? {
+                  by: meta.attribution,
+                  files: meta.files,
+                  ...(meta.attribution.kind === "subagent"
+                    ? { subagent: meta.attribution.id }
+                    : {}),
+                }
+              : {}),
+          },
         },
         plan.operations,
         plan.next.toJSON(),
@@ -6806,6 +6922,14 @@ function syncHost(): SyncHost {
       if (clock.playing) void audio.play(score);
       reportSampleProblems(score);
       void baseRevision;
+      // A plain save may still be a coding agent's edit whose `dawg check`
+      // has not run yet (design §5.3): remember it for a late credit.
+      if (
+        meta?.hashes &&
+        meta.attribution.kind === "external" &&
+        meta.attribution.id === "file"
+      )
+        attributor.noteUnattributed(record.revision, meta.hashes);
       return score;
     },
     card(text, tone, hint) {
@@ -6821,6 +6945,20 @@ function syncHost(): SyncHost {
     types(state) {
       typesIndicator = state;
     },
+    attribute: (changed) => attributor.attribute(changed),
+    ...(devEnabled()
+      ? {
+          log(sub: string, summary: string, payload?: Record<string, unknown>) {
+            const failed = sub === "sync.rejected";
+            devLog(
+              sub === "sync.types" ? "typecheck" : "sync",
+              failed ? "warn" : "info",
+              summary,
+              { event: sub, ...payload },
+            );
+          },
+        }
+      : {}),
   };
 }
 
@@ -7454,8 +7592,15 @@ function agentHost(
     workspace: { root: process.cwd() },
     // A written project source is applied before the tool result returns,
     // so the model reads the outcome and any type errors in the same step.
-    async onWorkspaceWrite(path) {
+    async onWorkspaceWrite(path, by) {
       if (!projectSync || !/\.ts$/.test(path)) return;
+      // Credit the apply this write causes to the agent (or its subagent).
+      try {
+        const text = await readFile(join(process.cwd(), path), "utf8");
+        attributor.noteAgentWrite(path, text, by?.subagent);
+      } catch {
+        // deleted or unreadable: the apply stays unattributed
+      }
       const outcome = await projectSync.checkFiles();
       const types = await typecheckProject(process.cwd());
       const errors = types.diagnostics.slice(0, 8).map(formatDiagnostic);

@@ -46,7 +46,14 @@ filters:
   --since 10m|2h|1d|ISO|seq:N         --rev N|A-B
 
 Newest first, one line per row; --json prints JSON Lines of rows (ops only with --full).
+--follow prints the last 10 rows oldest first, then each new row as it lands, and
+follows the folder's current session; run it in a second terminal beside the editor
+(dawg history --follow --kind log shows dev-mode logs from dawg dev).
 @ref: @last, @agent, @rev N or an event id prefix.`;
+
+/** Rows a follower prints before it starts following (without --limit). */
+export const FOLLOW_BACKLOG = 10;
+const FOLLOW_POLL_MS = 250;
 
 const VALUE = new Set([
   "session",
@@ -163,6 +170,15 @@ export async function runHistoryCommand(
     return 0;
   }
   const verb = parsed.positional[0];
+  const followFlag = parsed.flags.has("follow");
+  if (followFlag && verb === undefined && !hasSessions(workspace)) {
+    // A watcher started before the editor: wait for the first session.
+    err.write("dawg history: waiting for a dawg session in this folder…\n");
+    while (!hasSessions(workspace)) {
+      if (signal?.aborted) return 0;
+      await Bun.sleep(250);
+    }
+  }
   if (!hasSessions(workspace)) {
     err.write(
       "dawg history: no dawg sessions here (.dawg/sessions) · run dawg in this folder first\n",
@@ -245,12 +261,15 @@ export async function runHistoryCommand(
     return 2;
   }
 
-  const record = await currentRecord(workspace, parsed.values.get("session"));
-  const built = filterFromFlags(
-    parsed.values,
-    record?.sessionId,
-    record?.composition,
-  );
+  const pinnedSession = parsed.values.get("session");
+  let record = await currentRecord(workspace, pinnedSession);
+  // A follower's backlog is short and chronological: context for what
+  // comes next, not a page to scroll.
+  const values =
+    follow && !parsed.values.has("limit")
+      ? new Map([...parsed.values, ["limit", String(FOLLOW_BACKLOG)]])
+      : parsed.values;
+  let built = filterFromFlags(values, record?.sessionId, record?.composition);
   if ("error" in built) {
     err.write(`dawg history: ${built.error}\n`);
     return 2;
@@ -258,7 +277,7 @@ export async function runHistoryCommand(
   const json = parsed.flags.has("json");
   const full = parsed.flags.has("full");
   const asc = parsed.flags.has("asc");
-  const trackName = names(record);
+  let trackName = names(record);
   const print = (row: HistoryRow): void => {
     out.write(`${json ? jsonRow(row, full) : formatRow(row, { trackName })}\n`);
   };
@@ -279,15 +298,42 @@ export async function runHistoryCommand(
   const db = HistoryDb.open(workspace, { readonly: true, busyMs: 2000 });
   try {
     const page = db.query({ ...built.filter, order: asc ? "asc" : "desc" });
-    const rows = asc ? page.rows : [...page.rows];
+    const rows = asc || !follow ? page.rows : [...page.rows].reverse();
     for (const row of rows) print(row);
     if (!json && page.next !== undefined && !follow)
       out.write(`-- next: dawg history --before ${page.next}\n`);
     if (!follow) return 0;
+    if (!json) err.write("-- following · Ctrl-C stops\n");
     let cursor = Math.max(db.lastSeq(), built.sinceSeq ?? 0);
+    let polls = 0;
+    let sessionId = record?.sessionId;
     while (!signal?.aborted) {
-      await Bun.sleep(250);
+      await Bun.sleep(FOLLOW_POLL_MS);
       if (signal?.aborted) break;
+      // Without --session the follower tracks the folder's current session
+      // (a /new or /fork in the editor switches it).
+      polls += 1;
+      if (pinnedSession === undefined && polls % 4 === 0) {
+        const id = await readCurrentSessionId(workspace).catch(() => undefined);
+        if (id !== undefined && id !== sessionId) {
+          const next = await currentRecord(workspace, undefined);
+          const rebuilt = filterFromFlags(
+            values,
+            next?.sessionId,
+            next?.composition,
+          );
+          if (next && !("error" in rebuilt)) {
+            record = next;
+            built = rebuilt;
+            sessionId = next.sessionId;
+            trackName = names(record);
+            if (!json)
+              err.write(
+                `-- session ${next.meta.name ?? next.sessionId.slice(0, 8)}\n`,
+              );
+          }
+        }
+      }
       const fresh = db.query({
         ...built.filter,
         beforeSeq: undefined,

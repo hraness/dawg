@@ -42,6 +42,11 @@ import {
 } from "../../core/sdk/eval.ts";
 import { printProject } from "../../core/sdk/print.ts";
 import { acquireSessionLock } from "../session/lock.ts";
+import {
+  attributionLabel,
+  FILE_ATTRIBUTION,
+  type Attribution,
+} from "../dev/attribution.ts";
 import { writeAtomic } from "./init.ts";
 import { typecheckProject, type TypecheckResult } from "./typecheck.ts";
 
@@ -82,6 +87,15 @@ export function applyFiles(
   return Object.freeze({ next, operations });
 }
 
+/** Who and what a `files.apply` commit came from. */
+export type FilesApplyMeta = Readonly<{
+  attribution: Attribution;
+  /** Project-relative paths whose change this apply evaluated. */
+  files: readonly string[];
+  /** Those paths' applied contents (sha256; undefined when deleted). */
+  hashes?: ReadonlyMap<string, string | undefined>;
+}>;
+
 /** What the sync needs from its window. */
 export type SyncHost = Readonly<{
   project: string;
@@ -96,7 +110,23 @@ export type SyncHost = Readonly<{
    * Commits the plan as one `files.apply` revision. Resolves with the
    * score the session now holds (it may be ahead after a rebase).
    */
-  commit(plan: FilesApplyPlan, summary: string): Promise<TrackScore>;
+  commit(
+    plan: FilesApplyPlan,
+    summary: string,
+    meta?: FilesApplyMeta,
+  ): Promise<TrackScore>;
+  /**
+   * Whom an apply of these changed files (path → sha256, undefined when
+   * deleted) credits (design §5.3). Omitted, every apply is `external file`.
+   */
+  attribute?(
+    changed: ReadonlyMap<string, string | undefined>,
+  ): Promise<Attribution>;
+  /**
+   * Dev-mode observability (design §5.2): the sync reports what it did as
+   * `log` rows. The window only passes this under `dawg --dev`.
+   */
+  log?(sub: string, summary: string, payload?: Record<string, unknown>): void;
   card(
     text: string,
     tone: "info" | "success" | "warning" | "error",
@@ -333,9 +363,20 @@ export function startProjectSync(
         return (lastOutcome = "files match the score");
       }
     }
+    const changedNow = changedPaths(current, seen);
+    const startedEval = Date.now();
     const result = await evaluate(project);
+    host.log?.(
+      "sync.eval",
+      `eval ${result.ok ? "ok" : "failed"} · ${changedNow.length} file${changedNow.length === 1 ? "" : "s"} · ${Date.now() - startedEval} ms`,
+      { files: changedNow.slice(0, 32), ok: result.ok, mode },
+    );
     if (!result.ok) {
       const text = result.diagnostics.map(formatDiagnostic).join("; ");
+      host.log?.("sync.rejected", `files rejected · ${firstLine(text)}`, {
+        files: changedNow.slice(0, 32),
+        diagnostics: result.diagnostics.slice(0, 8),
+      });
       if (text !== lastRejection) {
         lastRejection = text;
         host.card(
@@ -367,11 +408,26 @@ export function startProjectSync(
     }
     const summary = summarize(plan.operations);
     try {
-      const committed = await host.commit(plan, summary);
+      const changedHashes = new Map(
+        changedNow.map((path) => [path, current.get(path)] as const),
+      );
+      let attribution: Attribution = FILE_ATTRIBUTION;
+      try {
+        if (host.attribute) attribution = await host.attribute(changedHashes);
+      } catch {
+        // attribution is a label; never let it block the apply
+      }
+      const committed = await host.commit(plan, summary, {
+        attribution,
+        files: changedNow.slice(0, 32),
+        hashes: changedHashes,
+      });
       filesEqual = encodeLoop(committed);
       await recordSynced(current);
-      host.card(`applied from files · ${summary}`, "success");
-      lastOutcome = `applied from files · ${summary}`;
+      const by = attributionLabel(attribution);
+      const text = `applied from files · ${summary}${by ? ` · ${by}` : ""}`;
+      host.card(text, "success");
+      lastOutcome = text;
     } catch (error) {
       host.card(
         `files not applied · ${firstLine(error instanceof Error ? error.message : String(error))}`,
@@ -473,6 +529,13 @@ export function startProjectSync(
     try {
       const result = await typecheck(project);
       host.types({ ok: result.ok, errors: result.diagnostics.length });
+      host.log?.(
+        "sync.types",
+        result.ok
+          ? `types ok · ${result.ms} ms`
+          : `types ${result.diagnostics.length} error${result.diagnostics.length === 1 ? "" : "s"} · ${result.ms} ms`,
+        { ok: result.ok, diagnostics: result.diagnostics.slice(0, 8) },
+      );
     } catch {
       host.types({ ok: false, errors: 1 });
     } finally {

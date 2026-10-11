@@ -36,6 +36,7 @@ export const BOOLEAN_FLAGS: readonly string[] = [
   "-v",
   "--reduce-motion",
   "--no-mouse",
+  "--dev",
 ];
 
 /** A `--track` value resolved to the id `/track` would use. */

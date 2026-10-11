@@ -439,7 +439,12 @@ export function scopedHost(
         }
       : {}),
     ...(scopedWorkspaceWrite
-      ? { onWorkspaceWrite: (path: string) => scopedWorkspaceWrite(path) }
+      ? {
+          // The label rides along so the project sync credits the file
+          // edit to this subagent (design §5.3).
+          onWorkspaceWrite: (path: string) =>
+            scopedWorkspaceWrite(path, { subagent: label }),
+        }
       : {}),
     ...(host.web ? { web: host.web } : {}),
     ...(host.media ? { media: host.media } : {}),
