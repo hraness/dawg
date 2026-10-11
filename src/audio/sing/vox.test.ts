@@ -63,7 +63,8 @@ function spectrum(x: Float64Array, from: number, n = 512): Float64Array {
     let re = 0;
     let im = 0;
     for (let i = 0; i < n; i += 1) {
-      const v = (x[from + i] ?? 0) * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / n));
+      const v =
+        (x[from + i] ?? 0) * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / n));
       re += v * Math.cos((2 * Math.PI * k * i) / n);
       im -= v * Math.sin((2 * Math.PI * k * i) / n);
     }
@@ -180,7 +181,14 @@ describe("machine vox consonant classes", () => {
 
   test("diphthong: /ay/ glides from an open to a front vowel", () => {
     const art = new Articulation(
-      [{ at: 0, end: SR, vowel: "a", syllable: phrasePhones([{ lyric: "I" }])[0]! }],
+      [
+        {
+          at: 0,
+          end: SR,
+          vowel: "a",
+          syllable: phrasePhones([{ lyric: "I" }])[0]!,
+        },
+      ],
       "tenor",
       SR,
       1,
@@ -213,13 +221,17 @@ describe("machine vox rendering", () => {
     const on = render(score(ROBOT, phrase));
     expect(hash(on)).not.toBe(hash(off));
     // the /s/ of "stops" at 1.5 s: hiss with articulation, none without
-    const hiss = (y: Float64Array) => share(spectrum(y, at(1.52)), 4000, SR / 2);
+    const hiss = (y: Float64Array) =>
+      share(spectrum(y, at(1.52)), 4000, SR / 2);
     expect(hiss(on)).toBeGreaterThan(0.5);
     expect(hiss(off)).toBeLessThan(0.1);
   });
 
   test("an articulating line without lyrics sings as before", () => {
-    const plain = [{ start: 0, length: 2 }, { start: 2, length: 2, pitch: 60 }];
+    const plain = [
+      { start: 0, length: 2 },
+      { start: 2, length: 2, pitch: 60 },
+    ];
     expect(hash(render(score(ROBOT, plain)))).toBe(
       hash(render(score({ ...ROBOT, articulate: 0 }, plain))),
     );
@@ -232,13 +244,26 @@ describe("machine vox rendering", () => {
         start: i * 0.5,
         length: 0.5,
         pitch: 57 + (i % 5),
-        lyric: ["sing-", "ing", "the", "stars", "shine", "bright", "to-", "night"][i % 8],
+        lyric: [
+          "sing-",
+          "ing",
+          "the",
+          "stars",
+          "shine",
+          "bright",
+          "to-",
+          "night",
+        ][i % 8],
       })),
       2,
     );
     const plain = score(
       { preset: "robot", articulate: 0 },
-      Array.from({ length: 16 }, (_, i) => ({ start: i * 0.5, length: 0.5, pitch: 57 + (i % 5) })),
+      Array.from({ length: 16 }, (_, i) => ({
+        start: i * 0.5,
+        length: 0.5,
+        pitch: 57 + (i % 5),
+      })),
       2,
     );
     const time = (s: TrackScore) => best(() => render(s), 3);

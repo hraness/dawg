@@ -44,7 +44,9 @@ describe("letter-to-sound", () => {
   test("every rule and dictionary phone is in the table", () => {
     for (const phones of Object.values(VOX_DICT))
       for (const p of phones) expect(isVoxPhone(p)).toBe(true);
-    for (const w of "the quick brown fox jumps over the lazy dog xylophone yacht".split(" "))
+    for (const w of "the quick brown fox jumps over the lazy dog xylophone yacht".split(
+      " ",
+    ))
       for (const p of rulePhones(w)) expect(isVoxPhone(p)).toBe(true);
     expect(VOX_DICT_SIZE).toBe(Object.keys(VOX_DICT).length);
     expect(VOX_DICT_SIZE).toBeGreaterThan(20);
@@ -96,7 +98,12 @@ describe("syllables over notes", () => {
       { lyric: "xyz", ph: ["S", "IH1", "NG"] },
       { lyric: "night" },
     ]);
-    expect(out[0]).toEqual({ onset: ["s"], nucleus: "ih", coda: ["ng"], hold: false });
+    expect(out[0]).toEqual({
+      onset: ["s"],
+      nucleus: "ih",
+      coda: ["ng"],
+      hold: false,
+    });
     expect(out[1]!.nucleus).toBe("ay");
   });
 

@@ -424,21 +424,27 @@ function matchRight(pattern: string, word: string, at: number): boolean {
       let i = at;
       while (isVowel(word[i])) i += 1;
       // greedy then back off
-      for (let j = i; j > at; j -= 1) if (matchRight(rest, word, j)) return true;
+      for (let j = i; j > at; j -= 1)
+        if (matchRight(rest, word, j)) return true;
       return false;
     }
     case ":": {
       let i = at;
       while (isConsonant(word[i])) i += 1;
-      for (let j = i; j >= at; j -= 1) if (matchRight(rest, word, j)) return true;
+      for (let j = i; j >= at; j -= 1)
+        if (matchRight(rest, word, j)) return true;
       return false;
     }
     case "^":
       return isConsonant(ch) && matchRight(rest, word, at + 1);
     case ".":
-      return ch !== undefined && VOICED.has(ch) && matchRight(rest, word, at + 1);
+      return (
+        ch !== undefined && VOICED.has(ch) && matchRight(rest, word, at + 1)
+      );
     case "+":
-      return ch !== undefined && FRONT.has(ch) && matchRight(rest, word, at + 1);
+      return (
+        ch !== undefined && FRONT.has(ch) && matchRight(rest, word, at + 1)
+      );
     case "&":
       if (word.startsWith("ch", at) || word.startsWith("sh", at))
         return matchRight(rest, word, at + 2);
@@ -468,13 +474,15 @@ function matchLeft(pattern: string, word: string, at: number): boolean {
       if (!isVowel(ch)) return false;
       let k = i;
       while (isVowel(word[k])) k -= 1;
-      for (let j = k + 1; j <= i; j += 1) if (matchLeft(rest, word, j)) return true;
+      for (let j = k + 1; j <= i; j += 1)
+        if (matchLeft(rest, word, j)) return true;
       return false;
     }
     case ":": {
       let k = i;
       while (isConsonant(word[k])) k -= 1;
-      for (let j = k + 1; j <= at; j += 1) if (matchLeft(rest, word, j)) return true;
+      for (let j = k + 1; j <= at; j += 1)
+        if (matchLeft(rest, word, j)) return true;
       return false;
     }
     case "^":
@@ -486,7 +494,10 @@ function matchLeft(pattern: string, word: string, at: number): boolean {
     case "&":
       return ch !== undefined && SIBILANT.has(ch) && matchLeft(rest, word, i);
     case "@":
-      if (word.slice(i - 1, i + 1) === "th" || word.slice(i - 1, i + 1) === "ch")
+      if (
+        word.slice(i - 1, i + 1) === "th" ||
+        word.slice(i - 1, i + 1) === "ch"
+      )
         return matchLeft(rest, word, i - 1);
       return ch !== undefined && U_LONG.has(ch) && matchLeft(rest, word, i);
     default:
@@ -658,7 +669,11 @@ function onsetCount(cluster: readonly string[]): number {
   const n = cluster.length;
   if (n === 0) return 0;
   if (n === 1) return cluster[0] === "ng" ? 0 : 1;
-  if (n >= 3 && cluster[n - 3] === "s" && ONSETS.has(cluster.slice(n - 2).join(" ")))
+  if (
+    n >= 3 &&
+    cluster[n - 3] === "s" &&
+    ONSETS.has(cluster.slice(n - 2).join(" "))
+  )
     return 3;
   if (ONSETS.has(cluster.slice(n - 2).join(" "))) return 2;
   return 1;
@@ -687,7 +702,8 @@ export function splitSyllables(
         hold: false,
       }),
     );
-    while (out.length < count) out.push(Object.freeze({ ...EMPTY, hold: true }));
+    while (out.length < count)
+      out.push(Object.freeze({ ...EMPTY, hold: true }));
     return out;
   }
   const used = Math.min(count, vowels.length);
@@ -736,9 +752,7 @@ const SUNG = /^(a|e|i|o|u|ah|eh|ee|oh|oo)(>(a|e|i|o|u|ah|eh|ee|oh|oo))?$/;
  * track vowel (an empty syllable). A note's `ph` replaces the rules for
  * that note alone: a note with `ph` ends any word in progress.
  */
-export function phrasePhones(
-  notes: readonly VoxNoteInput[],
-): VoxSyllable[] {
+export function phrasePhones(notes: readonly VoxNoteInput[]): VoxSyllable[] {
   const out: VoxSyllable[] = new Array(notes.length);
   let word: number[] = [];
   let text = "";
@@ -756,8 +770,7 @@ export function phrasePhones(
     if (note.ph && note.ph.length > 0) {
       flush();
       const phones = cleanPhones(note.ph);
-      out[index] =
-        phones.length > 0 ? splitSyllables(phones, 1)[0]! : EMPTY;
+      out[index] = phones.length > 0 ? splitSyllables(phones, 1)[0]! : EMPTY;
       return;
     }
     if (lyric === "_") {

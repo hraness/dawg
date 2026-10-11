@@ -149,13 +149,24 @@ export class Articulation {
       const len = Math.max(1, seg.end - seg.at);
       const onset = syllable.hold ? [] : syllable.onset;
       const coda = syllable.coda;
-      const onSec = onset.reduce((t, p, i) => t + this.phoneLength(p, k === 0 && i === 0), 0);
+      const onSec = onset.reduce(
+        (t, p, i) => t + this.phoneLength(p, k === 0 && i === 0),
+        0,
+      );
       const coSec = coda.reduce((t, p) => t + this.phoneLength(p, false), 0);
       const want = sec(onSec + coSec);
-      const squeeze = want > len * CONSONANT_SHARE ? (len * CONSONANT_SHARE) / want : 1;
+      const squeeze =
+        want > len * CONSONANT_SHARE ? (len * CONSONANT_SHARE) / want : 1;
       let at = Math.max(seg.at, this.spans[this.spans.length - 1]?.end ?? 0);
       onset.forEach((p, i) => {
-        at = this.pushPhone(p, at, squeeze, sampleRate, voice, k === 0 && i === 0);
+        at = this.pushPhone(
+          p,
+          at,
+          squeeze,
+          sampleRate,
+          voice,
+          k === 0 && i === 0,
+        );
       });
       const codaLen = Math.round(sec(coSec) * squeeze);
       const vowelEnd = Math.max(at + 1, seg.end - codaLen);
@@ -210,7 +221,9 @@ export class Articulation {
     if (last) {
       const p = lastConsonant ? VOX_PHONES[lastConsonant] : undefined;
       const endTable = last.to ?? last.from;
-      const silent = p !== undefined && (p.kind === "stop" || p.kind === "affricate" || !p.voiced);
+      const silent =
+        p !== undefined &&
+        (p.kind === "stop" || p.kind === "affricate" || !p.voiced);
       this.spans.push({
         at: last.end,
         end: Number.MAX_SAFE_INTEGER,
@@ -229,7 +242,9 @@ export class Articulation {
     for (let i = 0; i < this.spans.length; i += 1) {
       const span = this.spans[i]!;
       if (!span.aspirate) continue;
-      const next = this.spans.slice(i + 1).find((s) => s.av > 0.9 && s.part === "main");
+      const next = this.spans
+        .slice(i + 1)
+        .find((s) => s.av > 0.9 && s.part === "main");
       if (next) span.from = next.from;
     }
     for (const span of this.spans) {
@@ -257,7 +272,8 @@ export class Articulation {
   ): number {
     const p: VoxPhone | undefined = VOX_PHONES[name];
     if (!p) return at;
-    const len = (s: number) => Math.max(1, Math.round(s * squeeze * sampleRate));
+    const len = (s: number) =>
+      Math.max(1, Math.round(s * squeeze * sampleRate));
     const trans = Math.round(TRANSITION_SECONDS * sampleRate);
     const table = phoneTable(voice, p.f, p.bw);
     const push = (span: Omit<VoxSpan, "at" | "end">, seconds: number): void => {
@@ -364,7 +380,9 @@ export class Articulation {
     if (span.to) {
       const len = Math.max(1, span.end - span.at);
       const u = Math.min(1, Math.max(0, (offset - span.at) / len));
-      const t = span.late ? Math.min(1, Math.max(0, (u - 0.55) / 0.45)) : u * morph;
+      const t = span.late
+        ? Math.min(1, Math.max(0, (u - 0.55) / 0.45))
+        : u * morph;
       if (t > 0) table = morphVowel(span.from, span.to, t);
     }
     if (i > 0 && span.trans > 1) {
@@ -424,7 +442,11 @@ export class Articulation {
           if (span.aspirate) {
             const f = formants(j);
             for (let b = 0; b < 3; b += 1) {
-              bands[b]!.set(f[b]![0] * scale, Math.max(150, f[b]![2] * 2), sampleRate);
+              bands[b]!.set(
+                f[b]![0] * scale,
+                Math.max(150, f[b]![2] * 2),
+                sampleRate,
+              );
               gains[b] = [1, 0.6, 0.35][b]!;
             }
           } else if (span.bands) {

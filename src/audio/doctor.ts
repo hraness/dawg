@@ -1,8 +1,8 @@
 /**
  * `dawg doctor`: how dawg makes sound on this machine. The backend and why
  * it was chosen, the native sink's verification (or why it fell back), the
- * audio devices, the output and input saved from the audio menu, and the
- * play-mode lead.
+ * audio devices, the output and input saved from the audio menu, the
+ * play-mode lead, and the voice engines (voice-doctor.ts).
  */
 import {
   AudioEngine,
@@ -143,15 +143,17 @@ export async function runDoctorCommand(
 ): Promise<number> {
   if (args.some((arg) => arg === "--help" || arg === "-h")) {
     stdout.write(
-      "usage: dawg doctor [--json]  audio backend, native sink, devices, saved choice\n",
+      "usage: dawg doctor [--json]  audio backend, native sink, devices, saved choice, voice engines\n",
     );
     return 0;
   }
   const report = audioDoctor();
+  const { voiceDoctor, formatVoiceDoctor } = await import("./voice-doctor.ts");
+  const voice = voiceDoctor();
   stdout.write(
     args.includes("--json")
-      ? `${JSON.stringify(report, null, 2)}\n`
-      : `${formatAudioDoctor(report).join("\n")}\n`,
+      ? `${JSON.stringify({ ...report, voice }, null, 2)}\n`
+      : `${[...formatAudioDoctor(report), ...formatVoiceDoctor(voice)].join("\n")}\n`,
   );
   return 0;
 }

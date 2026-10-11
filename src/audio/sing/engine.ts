@@ -58,7 +58,11 @@ import { interpolateAutomation } from "../effects/common.ts";
 import type { EngineContext, InstrumentEngine } from "../instruments.ts";
 import { applyModalKnee } from "../resonators.ts";
 import { windLines } from "../winds/engine.ts";
-import { G2P_VERSION, phrasePhones, type VoxSyllable } from "../../../core/g2p.ts";
+import {
+  G2P_VERSION,
+  phrasePhones,
+  type VoxSyllable,
+} from "../../../core/g2p.ts";
 import { Antiresonator, Articulation, VOX_AV_SECONDS } from "./vox.ts";
 
 /** Control-rate period in samples (tract, vibrato and lanes). */
