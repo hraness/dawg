@@ -17,7 +17,6 @@ and tools to tune and shape them.
 Sing with the built-in singer:
 
 - `sing choir` · `sing vowels a e i o` · `lyrics sun-lit morn-ing`
-- Sing words: `sing robot` · `lyrics hel-lo world`
 
 Import a take and shape it:
 

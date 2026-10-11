@@ -15,7 +15,7 @@
  * copied.
  */
 
-/** Phone classes the engine synthesises differently. */
+/** Phone classes the engine synthesizes differently. */
 export type VoxPhoneKind =
   | "vowel"
   | "stop"

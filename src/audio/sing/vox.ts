@@ -16,7 +16,7 @@
  *   current formants.
  *
  * Structure after klatt-syn (https://github.com/chdh/klatt-syn, MIT
- * licence, Copyright (c) Christian d'Heureuse), read as a reference for the
+ * license, Copyright (c) Christian d'Heureuse), read as a reference for the
  * Klatt 1980 parallel branch; no klatt-syn code is copied here.
  * Everything is a pure function of the offset into the line except the
  * noise pass, whose generator is seeded per line: deterministic.
