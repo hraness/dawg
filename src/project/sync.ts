@@ -300,16 +300,19 @@ export function startProjectSync(
     return { ok: true };
   };
 
+  /** Records these hashes as synced; the caller holds the lock. */
+  const writeSynced = async (hashes: Map<string, string>): Promise<void> => {
+    const state = await readState();
+    const files = { ...state.files };
+    for (const [path, hash] of hashes) files[path] = hash;
+    for (const path of Object.keys(files))
+      if (!hashes.has(path) && !(await exists(join(project, path))))
+        delete files[path];
+    await writeState({ ...state, files });
+  };
+
   const recordSynced = async (hashes: Map<string, string>): Promise<void> => {
-    await locked(async () => {
-      const state = await readState();
-      const files = { ...state.files };
-      for (const [path, hash] of hashes) files[path] = hash;
-      for (const path of Object.keys(files))
-        if (!hashes.has(path) && !(await exists(join(project, path))))
-          delete files[path];
-      await writeState({ ...state, files });
-    });
+    await locked(() => writeSynced(hashes));
   };
 
   /**
@@ -364,6 +367,9 @@ export function startProjectSync(
       }
     }
     const changedNow = changedPaths(current, seen);
+    // Only a look after an accepted one may treat files another window
+    // already synced as an echo when it comes to commit (see below).
+    const echoable = seen.size > 0 && !lastRejection;
     const startedEval = Date.now();
     const result = await evaluate(project);
     host.log?.(
@@ -408,22 +414,50 @@ export function startProjectSync(
     }
     const summary = summarize(plan.operations);
     try {
-      const changedHashes = new Map(
-        changedNow.map((path) => [path, current.get(path)] as const),
-      );
-      let attribution: Attribution = FILE_ATTRIBUTION;
-      try {
-        if (host.attribute) attribution = await host.attribute(changedHashes);
-      } catch {
-        // attribution is a label; never let it block the apply
-      }
-      const committed = await host.commit(plan, summary, {
-        attribution,
-        files: changedNow.slice(0, 32),
-        hashes: changedHashes,
+      // Every window on a session watches the same files. The commit and
+      // its synced record happen under the sync lock, so a second window
+      // that evaluated the same save finds it already synced and stands
+      // down instead of committing against a stale revision (which failed
+      // with a spurious "files not applied" card). Only files whose
+      // contents dawg has not synced are the save: a file another window
+      // printed is not the author's, and must not stop a coding agent's
+      // `dawg check --files` from claiming it.
+      const applied = await locked(async () => {
+        const state = await readState();
+        const edited = changedNow.filter((path) => {
+          const hash = current.get(path);
+          return hash === undefined
+            ? state.files[path] !== undefined
+            : state.files[path] !== hash;
+        });
+        if (echoable && edited.length === 0) return undefined;
+        const paths = edited.length > 0 ? edited : changedNow;
+        const changedHashes = new Map(
+          paths.map((path) => [path, current.get(path)] as const),
+        );
+        let attribution: Attribution = FILE_ATTRIBUTION;
+        try {
+          if (host.attribute) attribution = await host.attribute(changedHashes);
+        } catch {
+          // attribution is a label; never let it block the apply
+        }
+        const committed = await host.commit(plan, summary, {
+          attribution,
+          files: paths.slice(0, 32),
+          hashes: changedHashes,
+        });
+        await writeSynced(current);
+        return { committed, attribution };
       });
+      if (applied === undefined) {
+        host.log?.("sync.echo", "files already applied by another window", {
+          files: changedNow.slice(0, 32),
+        });
+        void runTypecheck();
+        return (lastOutcome = "files match the score");
+      }
+      const { committed, attribution } = applied;
       filesEqual = encodeLoop(committed);
-      await recordSynced(current);
       const by = attributionLabel(attribution);
       const text = `applied from files · ${summary}${by ? ` · ${by}` : ""}`;
       host.card(text, "success");
