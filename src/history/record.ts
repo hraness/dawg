@@ -51,6 +51,14 @@ function fileActor(event: Pick<SessionEvent, "kind" | "payload">) {
     : undefined;
 }
 
+/** A dispatch child's task id on an agent commit: the row's actor id. */
+function subagentActor(event: Pick<SessionEvent, "kind" | "payload">) {
+  if (!event.kind.startsWith("agent.") || !isObj(event.payload))
+    return undefined;
+  const id = event.payload.subagent;
+  return typeof id === "string" && id.length > 0 ? id.slice(0, 64) : undefined;
+}
+
 /** The history `kind` of a session event kind. */
 export function historyKindOf(eventKind: string): HistoryKind {
   if (eventKind === "score.undo") return "undo";
@@ -166,9 +174,11 @@ export function sessionEventRow(
       kind: actorKindOf(event),
       ...(fileActor(event) !== undefined
         ? { actorId: fileActor(event) }
-        : event.actor?.actorId !== undefined
-          ? { actorId: event.actor.actorId }
-          : {}),
+        : subagentActor(event) !== undefined
+          ? { actorId: subagentActor(event) }
+          : event.actor?.actorId !== undefined
+            ? { actorId: event.actor.actorId }
+            : {}),
       ...(event.actor?.clientId !== undefined
         ? { clientId: event.actor.clientId }
         : {}),
