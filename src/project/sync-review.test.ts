@@ -27,13 +27,15 @@ function window(
   sessionId?: string,
 ) {
   const cards: Card[] = [];
+  const files: (readonly string[] | undefined)[] = [];
   let commits = 0;
   const api: SyncHost = {
     project,
     ...(sessionId === undefined ? {} : { sessionId: () => sessionId }),
     current: () => shared.score,
-    async commit(plan) {
+    async commit(plan, _summary, meta) {
       commits += 1;
+      files.push(meta?.files);
       shared.score = applyScoreOperations(shared.score, plan.operations);
       return shared.score;
     },
@@ -43,6 +45,7 @@ function window(
   return {
     api,
     cards,
+    files,
     get commits() {
       return commits;
     },
@@ -258,6 +261,81 @@ describe("echo suppression across windows", () => {
         );
         expect(c.commits).toBe(0);
         await sc.stop();
+      } finally {
+        await sa.stop();
+        await sb.stop();
+      }
+    }));
+});
+
+describe("one save seen by two windows on a session", () => {
+  const MAIN = "tracks/main/track.ts";
+  const edit = async (dir: string) => {
+    const text = await read(dir, MAIN);
+    await writeAtomic(
+      join(dir, MAIN),
+      text.replace(/notes:\s*\[/, 'notes: [note("D#4", 3),'),
+    );
+  };
+
+  test("commits once and never reports a spurious conflict", () =>
+    withProject(async (dir) => {
+      const s = session(twoTracks);
+      const a = window(dir, s, "shared");
+      const b = window(dir, s, "shared");
+      // Each window commits against its own copy of the session, which
+      // only catches up after its commit; a commit on a copy another
+      // window has moved past is refused, as dawgd refuses it.
+      const lagging = (api: SyncHost): SyncHost => {
+        let view = s.score;
+        return {
+          ...api,
+          current: () => view,
+          async commit(plan, summary, meta) {
+            if (view !== s.score)
+              throw new Error("session changed in another dawg window");
+            view = await api.commit(plan, summary, meta);
+            return view;
+          },
+        };
+      };
+      const sa = start(lagging(a.api));
+      const sb = start(lagging(b.api));
+      try {
+        await sa.checkFiles();
+        await sb.checkFiles();
+        await edit(dir);
+        await Promise.all([sa.checkFiles(), sb.checkFiles()]);
+        expect(a.commits + b.commits).toBe(1);
+        expect(s.score.notes.filter((n) => n.pitch === 63)).toHaveLength(1);
+        for (const w of [a, b])
+          expect(w.cards.some((c) => /not applied/.test(c.text))).toBe(false);
+      } finally {
+        await sa.stop();
+        await sb.stop();
+      }
+    }));
+
+  test("names only the saved file, not another window's reprint", () =>
+    withProject(async (dir) => {
+      const s = session(twoTracks);
+      const a = window(dir, s, "shared");
+      const b = window(dir, s, "shared");
+      const sa = start(a.api);
+      const sb = start(b.api);
+      try {
+        await sa.checkFiles();
+        await sb.checkFiles();
+        // A's edit reprints the keys file; B's watcher has not looked yet.
+        s.score = note(s.score, "k1", "keys", 65);
+        sa.scoreChanged(s.score);
+        await sa.flushScore();
+        await edit(dir);
+        await sb.checkFiles();
+        expect(b.commits).toBe(1);
+        // A coding agent's `dawg check --files tracks/main/track.ts` must
+        // be able to claim this apply late.
+        expect(b.files).toEqual([[MAIN]]);
       } finally {
         await sa.stop();
         await sb.stop();
