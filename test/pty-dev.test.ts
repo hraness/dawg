@@ -1,7 +1,8 @@
 /**
  * Dev mode and hot reload end to end at 80x24 (design §5): a second
  * process (a coding agent in another terminal) edits a track file and runs
- * `dawg check --as claude-code`; the running editor hot-reloads it as one
+ * `dawg check --as claude-code --files tracks/bass/track.ts`; the running
+ * editor hot-reloads it as one
  * revision, the card names the coding agent, and history holds the edit
  * credited to it. Under `dawg dev` the sync also writes `log` rows; a
  * plain launch never does.
@@ -58,7 +59,17 @@ async function walk(env: Record<string, string>, argv: string[], dev: boolean) {
     );
     expect(before).not.toContain(`note("G2", 2)`);
     const check = Bun.spawn(
-      [process.execPath, MAIN, "check", "--as", "claude-code"],
+      [
+        process.execPath,
+        MAIN,
+        "check",
+        "--as",
+        "claude-code",
+        // Names the file it changed, so a reload that landed first is
+        // still credited (a plain check never claims an earlier save).
+        "--files",
+        "tracks/bass/track.ts",
+      ],
       {
         cwd: dir,
         env: { PATH: process.env.PATH ?? "", HOME: dir, NO_COLOR: "1" },
