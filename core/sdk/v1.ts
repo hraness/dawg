@@ -2662,8 +2662,15 @@ function trackVoxInput(value: unknown, label: string): TrackVoxSpec {
       `${label} engine must be one of ${VOX_ENGINE_WORDS.join(" ")}`,
     );
   const voice = value.voice ?? `${engine}:default`;
-  if (typeof voice !== "string" || voice.length === 0 || voice.length > 64)
-    throw new DawgSdkError(`${label} voice must be 1..64 characters`);
+  if (
+    typeof voice !== "string" ||
+    voice.length === 0 ||
+    voice.length > 64 ||
+    /\s/.test(voice)
+  )
+    throw new DawgSdkError(
+      `${label} voice must be 1..64 characters without spaces`,
+    );
   const out: Record<string, unknown> = { engine, voice };
   if (value.lang !== undefined) {
     if (typeof value.lang !== "string")
