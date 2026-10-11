@@ -831,6 +831,7 @@ export class HistoryDb {
         `${escapeLike(filter.param)}.%`,
         `%.${escapeLike(filter.param)}`,
       );
+    if (filter.target !== undefined) target("t.type = ?", filter.target);
     if (filter.bars !== undefined)
       target(
         "t.type = 'bars' AND t.bar_from <= ? AND t.bar_to >= ?",

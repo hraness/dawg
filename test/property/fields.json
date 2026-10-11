@@ -1866,6 +1866,36 @@
           }
         ]
       }
+    ],
+    "vox": [
+      {
+        "id": "v",
+        "name": "v",
+        "instrument": "sing",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "vox": { "engine": "formant", "voice": "formant:default" }
+      },
+      {
+        "id": "w",
+        "name": "v",
+        "instrument": "sing",
+        "muted": false,
+        "volume": 1,
+        "pan": 0,
+        "volumeAutomation": [],
+        "panAutomation": [],
+        "vox": {
+          "engine": "formant",
+          "voice": "formant:robot",
+          "lang": "en",
+          "fit": "psola",
+          "p": { "bright": 0.3 }
+        }
+      }
     ]
   },
   "notes": {
@@ -2206,6 +2236,28 @@
         "pitch": 48,
         "velocity": 0.7,
         "drift": 1
+      }
+    ],
+    "vox": [
+      {
+        "id": "n1",
+        "trackId": "vox",
+        "startTick": 0,
+        "durationTicks": 960,
+        "pitch": 60,
+        "velocity": 0.8,
+        "lyric": "star",
+        "vox": { "ph": ["s", "t", "aa", "r"], "breath": 0.2 }
+      },
+      {
+        "id": "n2",
+        "trackId": "vox",
+        "startTick": 960,
+        "durationTicks": 960,
+        "pitch": 62,
+        "velocity": 0.8,
+        "lyric": "hel-",
+        "vox": { "cons": 0.5 }
       }
     ]
   },

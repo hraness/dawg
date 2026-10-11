@@ -30,7 +30,16 @@ import {
   type Track,
   type TrackScore,
 } from "../../core/score.ts";
+import { applyScoreOperations } from "../../core/diff.ts";
 import { trackSlug } from "../../core/slug.ts";
+import {
+  clearLyrics,
+  rangeLyricLine,
+  rangeNotes,
+  reflowLyrics,
+  retypeLyrics,
+} from "../../core/vox-edit.ts";
+import { lintVox } from "../../core/vox.ts";
 import { barStartTick } from "../../core/tempo.ts";
 import { importSample } from "../media/import.ts";
 import {
@@ -779,41 +788,76 @@ export async function runClipCommand(
 // ---------------------------------------------------------------------------
 // /lyrics
 
+/** A lyric range as typed: `5` (bar 5 on), `5.3`, `5-8` (bars 5 to 8). */
+export type LyricRangeWords = Readonly<{ bar?: string; to?: string }>;
+
 export type LyricsCommand =
   | Readonly<{ kind: "show" }>
-  | Readonly<{ kind: "clear"; bar?: string }>
-  | Readonly<{ kind: "set"; bar?: string; text: string }>;
+  | (Readonly<{ kind: "clear" }> & LyricRangeWords)
+  | (Readonly<{ kind: "reflow" }> & LyricRangeWords)
+  | (Readonly<{ kind: "set"; text: string }> & LyricRangeWords);
 
-/** `/lyrics [bar] <text>`, `/lyrics clear [bar]`, bare `/lyrics` shows. */
+const LYRIC_RANGE = /^(?:bars?\s+)?(\d+(?:\.\d+)?)(?:-(\d+))?$/i;
+
+function lyricRange(words: string): LyricRangeWords | undefined {
+  const match = words.trim().match(LYRIC_RANGE);
+  if (!match) return undefined;
+  return { bar: match[1], ...(match[2] ? { to: match[2] } : {}) };
+}
+
+/**
+ * `/lyrics [range] <text>`, `/lyrics clear [range]`, `/lyrics reflow
+ * [range]`, bare `/lyrics` shows. A range is `5` (bar 5 to the end, as in
+ * 0.7), `5.3` or `5-8` (bars 5 to 8 only).
+ */
 export function parseLyricsCommand(command: string): LyricsCommand | undefined {
   const match = command.trim().match(/^\/lyrics?(?:\s+(.*))?$/i);
   if (!match) return undefined;
   const rest = (match[1] ?? "").trim();
   if (!rest) return { kind: "show" };
-  const clear = rest.match(/^clear(?:\s+(\d+(?:\.\d+)?))?$/i);
-  if (clear) return { kind: "clear", ...(clear[1] ? { bar: clear[1] } : {}) };
-  const bar = rest.match(/^(\d+(?:\.\d+)?)\s+(.+)$/);
-  if (bar)
-    return {
-      kind: "set",
-      bar: bar[1],
-      text: bar[2]!.replace(/^["']|["']$/g, ""),
-    };
+  const verb = rest.match(/^(clear|reflow)(?:\s+(.+))?$/i);
+  if (verb) {
+    const kind = verb[1]!.toLowerCase() as "clear" | "reflow";
+    if (!verb[2]) return { kind };
+    const range = lyricRange(verb[2]);
+    if (range) return { kind, ...range };
+    if (kind === "reflow") return undefined;
+  }
+  const bar = rest.match(/^((?:bars?\s+)?\d+(?:\.\d+)?(?:-\d+)?)\s+(.+)$/i);
+  if (bar) {
+    const range = lyricRange(bar[1]!);
+    if (range)
+      return {
+        kind: "set",
+        ...range,
+        text: bar[2]!.replace(/^["']|["']$/g, ""),
+      };
+  }
   return { kind: "set", text: rest.replace(/^["']|["']$/g, "") };
 }
 
-/** Notes on a track from `fromTick`, in sung order. */
-function sungNotes(
+/** The tick range a typed lyric range covers. */
+function lyricTicks(
   score: TrackScore,
-  trackId: string,
-  fromTick: number,
-): Note[] {
-  return score.notes
-    .filter((note) => note.trackId === trackId && note.startTick >= fromTick)
-    .sort((a, b) => a.startTick - b.startTick || b.pitch - a.pitch);
+  words: LyricRangeWords,
+): { fromTick: number; toTick?: number } {
+  const fromTick = words.bar ? userBarTick(score, words.bar) : 0;
+  if (!words.to) return { fromTick };
+  const to = Number(words.to);
+  const from = Number(words.bar!.split(".")[0]);
+  if (to < from) throw new Error(`bars ${words.bar}-${words.to} run backwards`);
+  return { fromTick, toTick: barStartTick(score, to) };
 }
 
-/** Put lyrics on a track's notes (or clear them). */
+function rangeWord(words: LyricRangeWords): string {
+  if (!words.bar) return "";
+  return words.to ? ` bars ${words.bar}-${words.to}` : ` from bar ${words.bar}`;
+}
+
+/**
+ * Put lyrics on a track's notes (or clear or re-flow them). Only lyric
+ * fields change (`core/vox-edit.ts`); one command is one revision.
+ */
 export function applyLyrics(
   score: TrackScore,
   trackId: string,
@@ -821,60 +865,56 @@ export function applyLyrics(
 ): VocalResult {
   try {
     const track = focusedTrack(score, trackId);
-    const from =
-      command.kind !== "show" && command.bar
-        ? userBarTick(score, command.bar)
-        : 0;
-    const notes = sungNotes(score, trackId, from);
     if (command.kind === "show") {
-      const sung = notes.filter((n) => n.lyric !== undefined);
+      const line = rangeLyricLine(score, trackId, {});
+      const findings = lintVox(score, trackId);
       return {
         ok: true,
-        message: sung.length
-          ? `lyrics on ${track.name}: ${sung.map((n) => n.lyric).join(" ")}`
+        message: line
+          ? `lyrics on ${track.name}: ${line}${findings.length ? ` · ${findings.length} lint: ${findings[0]!.message}` : ""}`
           : `${track.name} has no lyrics · /lyrics sun-lit morn-ing`,
       };
     }
+    const range = lyricTicks(score, command);
+    const notes = rangeNotes(score, trackId, range);
     if (notes.length === 0)
       return {
         ok: false,
-        message: `lyrics: ${track.name} has no notes${from ? " from there" : ""} to sing on`,
+        message: `lyrics: ${track.name} has no notes${range.fromTick || range.toTick ? " there" : ""} to sing on`,
       };
-    let next = score;
-    if (command.kind === "clear") {
-      for (const note of notes)
-        if (note.lyric !== undefined)
-          next = updateNote(next, note.id, { lyric: null });
+    const where = rangeWord(command);
+    const edit =
+      command.kind === "clear"
+        ? clearLyrics(score, trackId, range)
+        : command.kind === "reflow"
+          ? reflowLyrics(score, trackId, range)
+          : retypeLyrics(score, trackId, range, command.text);
+    const next = applyScoreOperations(score, edit.operations);
+    if (command.kind === "clear")
       return {
         ok: true,
-        message: `lyrics cleared on ${track.name}`,
+        message: `lyrics cleared on ${track.name}${where}`,
         next,
         kind: "lyrics.set",
         payload: {},
       };
-    }
-    // Chords sing one syllable on their top note.
-    const tops = notes.filter(
-      (note, index) =>
-        index === 0 || note.startTick !== notes[index - 1]!.startTick,
-    );
-    const { lyrics, dropped, split } = assignLyrics(command.text, tops);
-    for (const note of tops) {
-      const lyric = lyrics.get(note.id);
-      if (lyric !== note.lyric)
-        next = updateNote(next, note.id, { lyric: lyric ?? null });
-    }
-    const shown = tops.map((note) => lyrics.get(note.id) ?? "~").join(" ");
-    const extra = dropped.length
-      ? ` · ${dropped.length} syllable${dropped.length === 1 ? "" : "s"} left over: ${dropped.join(" ")}`
+    if (command.kind === "reflow" && edit.operations.length === 0)
+      return {
+        ok: true,
+        message: edit.line
+          ? `lyrics on ${track.name}${where} already flow: ${edit.line}`
+          : `${track.name} has no lyrics${where} to re-flow`,
+      };
+    const extra = edit.dropped.length
+      ? ` · ${edit.dropped.length} syllable${edit.dropped.length === 1 ? "" : "s"} left over: ${edit.dropped.join(" ")}`
       : "";
-    const auto = split.length ? ` · split ${split.join(", ")}` : "";
+    const auto = edit.split.length ? ` · split ${edit.split.join(", ")}` : "";
     return {
       ok: true,
-      message: `lyrics on ${track.name}: ${shown}${auto}${extra}`,
+      message: `lyrics${command.kind === "reflow" ? " re-flowed" : ""} on ${track.name}${where}: ${edit.line}${auto}${extra}`,
       next,
       kind: "lyrics.set",
-      payload: { notes: tops.length },
+      payload: { notes: edit.notes },
     };
   } catch (error) {
     return {

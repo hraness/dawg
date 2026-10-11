@@ -382,3 +382,67 @@ describe("MIDI export of pitch expression", () => {
     expect(bends.every(([tick]) => tick < 960)).toBe(true);
   });
 });
+
+describe("MIDI export of lyrics", () => {
+  test("syllables write FF 05 before their note-on; holds write nothing (golden)", () => {
+    const score = createScore({
+      tempoBpm: 120,
+      bars: 1,
+      tracks: [{ id: "v", name: "v", instrument: "piano" }],
+      notes: [
+        {
+          id: "a",
+          trackId: "v",
+          startTick: 0,
+          durationTicks: 480,
+          pitch: 60,
+          velocity: 1,
+          lyric: "hel-",
+        },
+        {
+          id: "b",
+          trackId: "v",
+          startTick: 480,
+          durationTicks: 480,
+          pitch: 62,
+          velocity: 1,
+          lyric: "lo",
+        },
+        {
+          id: "c",
+          trackId: "v",
+          startTick: 960,
+          durationTicks: 480,
+          pitch: 64,
+          velocity: 1,
+          lyric: "_",
+        },
+        {
+          id: "d",
+          trackId: "v",
+          startTick: 480,
+          durationTicks: 480,
+          pitch: 55,
+          velocity: 1,
+          lyric: "_",
+        },
+      ],
+    });
+    const bytes = scoreToMidi(score);
+    const hex = Buffer.from(bytes).toString("hex");
+    // The second track chunk: name, then lyric + note events, then the end.
+    const at = hex.indexOf("4d54726b", hex.indexOf("4d54726b") + 8);
+    expect(hex.slice(at)).toBe(
+      "4d54726b0000003b" +
+        "00ff030176" + // track name "v"
+        "00ff050468656c2d" + // FF 05 "hel-"
+        "00903c7f" + // C4 on
+        "8360803c00" + // C4 off at 480
+        "00ff05026c6f" + // FF 05 "lo" (the chord's top note), no event for its "_"
+        "0090377f00903e7f" + // G3 and D4 on
+        "836080370000803e00" + // both off at 960
+        "0090407f" + // E4 on, a "_" hold: no lyric event
+        "83608040008360ff2f00", // off at 1440, end of track at 1920
+    );
+  });
+});

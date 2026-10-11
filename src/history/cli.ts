@@ -43,6 +43,7 @@ filters:
   --session ID|*   --kind edit,comment,...   --actor human,agent,subagent,external,system
   --track NAME|ID  --instrument KIND  --effect NAME  --node ID  --param PATH
   --bars A-B       --pane LETTER      --tag TAG      --grep 'words'
+  --target lyrics|vox|track|param|...
   --since 10m|2h|1d|ISO|seq:N         --rev N|A-B
 
 Newest first, one line per row; --json prints JSON Lines of rows (ops only with --full).
@@ -65,6 +66,7 @@ const VALUE = new Set([
   "node",
   "param",
   "bars",
+  "target",
   "pane",
   "tag",
   "grep",

@@ -292,7 +292,7 @@ describe("/lyrics", () => {
     );
     expect(r.ok).toBe(true);
     expect(r.next!.notes.map((n) => n.lyric)).toEqual([
-      "sil",
+      "sil-",
       "ver",
       "sun",
       "_",
@@ -300,7 +300,7 @@ describe("/lyrics", () => {
     ]);
     expect(r.message).toContain("split silver");
     const shown = applyLyrics(r.next!, "vox", { kind: "show" });
-    expect(shown.message).toContain("sil ver sun _");
+    expect(shown.message).toContain("sil-ver sun _");
     const cleared = applyLyrics(
       r.next!,
       "vox",
@@ -324,5 +324,55 @@ describe("/lyrics", () => {
       "la",
     ]);
     expect(r.message).toContain("2 syllables left over");
+  });
+});
+
+describe("/lyrics ranges, reflow and note split/join (0.9)", () => {
+  test("parses ranges, reflow and the new grammar as text", () => {
+    expect(parseLyricsCommand("/lyrics 2-3 hel[hh eh l]-lo , world")).toEqual({
+      kind: "set",
+      bar: "2",
+      to: "3",
+      text: "hel[hh eh l]-lo , world",
+    });
+    expect(parseLyricsCommand("/lyrics reflow")).toEqual({ kind: "reflow" });
+    expect(parseLyricsCommand("/lyrics reflow 2-4")).toEqual({
+      kind: "reflow",
+      bar: "2",
+      to: "4",
+    });
+    expect(parseLyricsCommand("/lyrics clear 2-3")).toEqual({
+      kind: "clear",
+      bar: "2",
+      to: "3",
+    });
+    expect(parseLyricsCommand("/lyrics reflow me")).toBeUndefined();
+  });
+
+  test("a bar range retypes only its notes and keeps the music", () => {
+    const sung = applyLyrics(
+      base(),
+      "vox",
+      parseLyricsCommand("/lyrics a b c d e")!,
+    ).next!;
+    const r = applyLyrics(sung, "vox", parseLyricsCommand("/lyrics 2-2 zed")!);
+    expect(r.ok).toBe(true);
+    expect(r.next!.notes.map((n) => n.lyric)).toEqual([
+      "a",
+      "b",
+      "c",
+      "d",
+      "zed",
+    ]);
+    expect(r.next!.notes.map((n) => n.startTick)).toEqual(
+      sung.notes.map((n) => n.startTick),
+    );
+    const again = applyLyrics(
+      r.next!,
+      "vox",
+      parseLyricsCommand("/lyrics reflow")!,
+    );
+    expect(again.next).toBeUndefined();
+    expect(again.message).toContain("already flow");
   });
 });

@@ -276,6 +276,44 @@ export function clipMenuRows(context: MenuContext): MenuNode[] {
                 : undefined,
             example: "/lyrics 9 la la la",
           },
+          {
+            kind: "entry",
+            label: "retype bars",
+            value: "",
+            help: "new words for a bar range only, notes untouched: type `5-8 hel-lo world`",
+            placeholder: "<a-b> <words>",
+            command: (typed) =>
+              /^\d+(?:\.\d+)?-\d+\s+\S/.test(typed.trim())
+                ? `/lyrics ${typed.trim()}`
+                : undefined,
+            example: "/lyrics 5-8 hel-lo world",
+          },
+          {
+            kind: "action",
+            label: "reflow lyrics",
+            help: "re-seat the words on the notes in time order after moving notes",
+            command: "/lyrics reflow",
+          },
+          {
+            kind: "entry",
+            label: "split notes",
+            value: "",
+            help: "each note becomes two; the second half holds the syllable (_): type `last`, `bar 3` or note ids",
+            placeholder: "last | bar <n> | <ids>",
+            command: (typed) =>
+              typed.trim() ? `/note split ${typed.trim()}` : undefined,
+            example: "/note split bar 3",
+          },
+          {
+            kind: "entry",
+            label: "join notes",
+            value: "",
+            help: "merge notes into one; dropped syllables are reported: type `bar 3`, `bars 2-3` or note ids",
+            placeholder: "last | bar <n> | <ids>",
+            command: (typed) =>
+              typed.trim() ? `/note join ${typed.trim()}` : undefined,
+            example: "/note join bar 3",
+          },
           { kind: "action", label: "clear lyrics", command: "/lyrics clear" },
         ];
       },

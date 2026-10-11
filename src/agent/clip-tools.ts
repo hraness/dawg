@@ -8,7 +8,6 @@ import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { basename, extname, relative, resolve } from "node:path";
 import {
-  assignLyrics,
   CLIP_GAIN_MAX_DB,
   CLIP_GAIN_MIN_DB,
   clipGainDb,
@@ -25,6 +24,24 @@ import {
   type Track,
 } from "../../core/score.ts";
 import { trackSlug } from "../../core/slug.ts";
+import { barStartTick } from "../../core/tempo.ts";
+import {
+  clearLyrics,
+  rangeNotes,
+  reflowLyrics,
+  retypeLyrics,
+  type TickRange,
+} from "../../core/vox-edit.ts";
+import {
+  lintVox,
+  normalizeTrackVox,
+  voxCompact,
+  VoxValidationError,
+  VOX_ENGINES,
+  VOX_FITS,
+  VOX_LIMITS,
+  type TrackVox,
+} from "../../core/vox.ts";
 import { wavInfo } from "../commands/clips.ts";
 import { ToolArgumentError } from "./tool-error.ts";
 import type { ToolContext } from "./tools.ts";
@@ -378,15 +395,81 @@ const editClip: VoiceTool = {
   },
 };
 
+const LYRIC_MODES = ["assign", "reflow", "clear"] as const;
+
+/** The tick range of `range: {from, to}` bars, a `section`, or `from` beats. */
+function lyricRange(
+  args: Record<string, unknown>,
+  context: ToolContext,
+): Readonly<{ range: TickRange; words: string }> {
+  const score = context.score;
+  if (args.section !== undefined) {
+    if (typeof args.section !== "string")
+      throw new ToolArgumentError("section must be a section name");
+    const name = args.section.toLowerCase();
+    const section = (score.sections ?? []).find(
+      (s) => s.name.toLowerCase() === name,
+    );
+    if (!section)
+      throw new ToolArgumentError(
+        `no section ${args.section}; sections: ${(score.sections ?? []).map((s) => s.name).join(", ") || "none"}`,
+      );
+    return {
+      range: {
+        fromTick: barStartTick(score, section.startBar),
+        toTick: barStartTick(score, section.startBar + section.bars),
+      },
+      words: section.name,
+    };
+  }
+  if (args.range !== undefined) {
+    const range = args.range as Record<string, unknown>;
+    const from = range?.from;
+    const to = range?.to ?? from;
+    if (
+      typeof from !== "number" ||
+      typeof to !== "number" ||
+      !Number.isInteger(from) ||
+      !Number.isInteger(to) ||
+      from < 1 ||
+      to < from ||
+      to > SCORE_LIMITS.maxBars
+    )
+      throw new ToolArgumentError(
+        "range must be {from, to} bars, 1-based and inclusive",
+      );
+    return {
+      range: {
+        fromTick: barStartTick(score, from - 1),
+        toTick: barStartTick(score, to),
+      },
+      words: from === to ? `bar ${from}` : `bars ${from}-${to}`,
+    };
+  }
+  const from = tickOf(context, beats(args.from, "from") ?? 0);
+  return { range: { fromTick: from }, words: from ? "from there" : "" };
+}
+
 const setLyrics: VoiceTool = {
   name: "set_lyrics",
   description:
-    "Put lyrics on a track's notes in time order: spaces separate syllables, hyphens split words, _ holds (melisma), ~ skips; from starts later, clear removes.",
+    "Lyrics on a track's notes in time order: hel-lo splits a word, _ holds, ~ skips, [hh eh l] phones, , breath. range {from,to} bars or section; mode assign|reflow|clear. Touches no note timing or pitch.",
   parameters: {
     type: "object",
     properties: {
       trackId: { type: "string", maxLength: SCORE_LIMITS.maxIdLength },
       text: { type: "string", maxLength: SCORE_LIMITS.maxClipTextLength },
+      range: {
+        type: "object",
+        properties: {
+          from: { type: "integer", minimum: 1 },
+          to: { type: "integer", minimum: 1 },
+        },
+        required: ["from"],
+        additionalProperties: false,
+      },
+      section: { type: "string", maxLength: 32 },
+      mode: { type: "string", enum: [...LYRIC_MODES] },
       from: { type: "number", minimum: 0 },
       clear: { type: "boolean" },
     },
@@ -394,52 +477,186 @@ const setLyrics: VoiceTool = {
   },
   plan(args, context) {
     const track = trackOf(args, context);
-    const from = tickOf(context, beats(args.from, "from") ?? 0);
-    const notes = context.score.notes
-      .filter((n) => n.trackId === track.id && n.startTick >= from)
-      .sort((a, b) => a.startTick - b.startTick || b.pitch - a.pitch);
-    const tops = notes.filter(
-      (note, index) =>
-        index === 0 || note.startTick !== notes[index - 1]!.startTick,
-    );
-    const operations: ScoreOperation[] = [];
-    if (args.clear === true) {
-      for (const note of notes)
-        if (note.lyric !== undefined)
-          operations.push({
-            type: "updateNote",
-            noteId: note.id,
-            patch: { lyric: null },
-          } as ScoreOperation);
+    const { range, words } = lyricRange(args, context);
+    const mode =
+      args.mode === undefined
+        ? args.clear === true
+          ? "clear"
+          : "assign"
+        : args.mode;
+    if (!(LYRIC_MODES as readonly unknown[]).includes(mode))
+      throw new ToolArgumentError(`mode must be ${LYRIC_MODES.join(", ")}`);
+    const where = words ? ` (${words})` : "";
+    if (mode === "clear") {
+      const edit = clearLyrics(context.score, track.id, range);
       return {
         kind: "score",
-        operations,
-        summary: `cleared lyrics on ${track.name}`,
+        operations: edit.operations,
+        summary: `cleared lyrics on ${track.name}${where}`,
+        trackId: track.id,
+      };
+    }
+    if (rangeNotes(context.score, track.id, range).length === 0)
+      throw new ToolArgumentError(
+        `${track.name} has no notes${where} to sing on; add notes first`,
+      );
+    if (mode === "reflow") {
+      const edit = reflowLyrics(context.score, track.id, range);
+      return {
+        kind: "score",
+        operations: edit.operations,
+        summary: `reflowed lyrics on ${track.name}${where}: ${edit.line || "none"}${
+          edit.operations.length === 0 ? " (unchanged)" : ""
+        }${edit.dropped.length ? `; ${edit.dropped.length} syllables left over: ${edit.dropped.join(" ")}` : ""}`,
         trackId: track.id,
       };
     }
     if (typeof args.text !== "string" || !args.text.trim())
-      throw new ToolArgumentError("text is required (or clear: true)");
-    if (tops.length === 0)
-      throw new ToolArgumentError(
-        `${track.name} has no notes to sing on; add notes first`,
-      );
-    const { lyrics, dropped, split } = assignLyrics(args.text, tops);
-    for (const note of tops) {
-      const lyric = lyrics.get(note.id);
-      if (lyric !== note.lyric)
-        operations.push({
-          type: "updateNote",
-          noteId: note.id,
-          patch: { lyric: lyric ?? null },
-        } as ScoreOperation);
+      throw new ToolArgumentError("text is required (or mode clear)");
+    const edit = retypeLyrics(context.score, track.id, range, args.text);
+    return {
+      kind: "score",
+      operations: edit.operations,
+      summary: `lyrics on ${track.name}${where}: ${edit.line}${
+        edit.split.length ? ` (split ${edit.split.join(", ")})` : ""
+      }${edit.dropped.length ? `; ${edit.dropped.length} syllables left over: ${edit.dropped.join(" ")}` : ""}`,
+      trackId: track.id,
+    };
+  },
+};
+
+const inspectVox: VoiceTool = {
+  name: "inspect_vox",
+  description:
+    "Read-only: a track's machine vox engine and voice, its lyrics per phrase (bar, beat pitch:syllable) and lyric lint findings. bars {from,to} limits it.",
+  parameters: {
+    type: "object",
+    properties: {
+      trackId: { type: "string", maxLength: SCORE_LIMITS.maxIdLength },
+      bars: {
+        type: "object",
+        properties: {
+          from: { type: "integer", minimum: 1 },
+          to: { type: "integer", minimum: 1 },
+        },
+        required: ["from"],
+        additionalProperties: false,
+      },
+    },
+    additionalProperties: false,
+  },
+  plan(args, context) {
+    const track = trackOf(args, context);
+    const score = context.score;
+    let from: number | undefined;
+    let to: number | undefined;
+    if (args.bars !== undefined) {
+      const bars = args.bars as Record<string, unknown>;
+      from = bars?.from as number;
+      to = (bars?.to ?? from) as number;
+      if (
+        !Number.isInteger(from) ||
+        !Number.isInteger(to) ||
+        from < 1 ||
+        to < from
+      )
+        throw new ToolArgumentError("bars must be {from, to}, 1-based");
+    }
+    const vox = track.vox;
+    const voice = vox
+      ? `${vox.engine} · ${vox.voice}${vox.lang ? ` · ${vox.lang}` : ""}${vox.fit ? ` · fit ${vox.fit}` : ""}`
+      : "none: today's sing sound";
+    const lines = voxCompact(score, track.id, {
+      ...(from !== undefined ? { from } : {}),
+      ...(to !== undefined ? { to } : {}),
+      maxLines: 60,
+      barStartTick: (bar) => barStartTick(score, bar),
+    });
+    const findings = lintVox(score, track.id);
+    const content = [
+      `vox ${track.name} · ${voice} · ${lines.length} phrase line${lines.length === 1 ? "" : "s"}`,
+      ...(lines.length ? lines : ["no lyrics · set_lyrics to add some"]),
+      ...(findings.length
+        ? [
+            `lint: ${findings.length}`,
+            ...findings.slice(0, 20).map((f) => `  ${f.rule}: ${f.message}`),
+          ]
+        : ["lint: ok"]),
+    ].join("\n");
+    return {
+      kind: "action",
+      summary: `inspect vox ${track.name}`,
+      run: async () => ({ content, summary: `inspected vox ${track.name}` }),
+    };
+  },
+};
+
+const setVox: VoiceTool = {
+  name: "set_vox",
+  description:
+    "Make a track a machine vox track: engine (formant is built in), voice, lang, fit, params; clear removes it. Lyrics come from set_lyrics.",
+  parameters: {
+    type: "object",
+    properties: {
+      trackId: { type: "string", maxLength: SCORE_LIMITS.maxIdLength },
+      engine: { type: "string", enum: [...VOX_ENGINES] },
+      voice: { type: "string", maxLength: VOX_LIMITS.maxVoiceLength },
+      lang: { type: "string", maxLength: 16 },
+      fit: { type: "string", enum: [...VOX_FITS] },
+      params: {
+        type: "object",
+        additionalProperties: { type: "number" },
+        maxProperties: VOX_LIMITS.maxParams,
+      },
+      clear: { type: "boolean" },
+    },
+    additionalProperties: false,
+  },
+  previewable: true,
+  plan(args, context) {
+    const track = trackOf(args, context);
+    if (args.clear === true)
+      return {
+        kind: "score",
+        operations: track.vox
+          ? [
+              {
+                type: "updateTrack",
+                trackId: track.id,
+                patch: { vox: null },
+              } as ScoreOperation,
+            ]
+          : [],
+        summary: `machine vox off on ${track.name}`,
+        trackId: track.id,
+      };
+    const prev: Record<string, unknown> = { ...(track.vox ?? {}) };
+    if (args.engine !== undefined && args.engine !== prev.engine) {
+      prev.engine = args.engine;
+      if (args.voice === undefined) delete prev.voice;
+    }
+    if (args.voice !== undefined) prev.voice = args.voice;
+    if (args.lang !== undefined) prev.lang = args.lang;
+    if (args.fit !== undefined) prev.fit = args.fit;
+    if (args.params !== undefined) prev.p = args.params;
+    let vox: TrackVox | undefined;
+    try {
+      vox = normalizeTrackVox(prev, "vox");
+    } catch (error) {
+      if (error instanceof VoxValidationError)
+        throw new ToolArgumentError(error.message);
+      throw error;
     }
     return {
       kind: "score",
-      operations,
-      summary: `lyrics on ${track.name}: ${tops.map((n) => lyrics.get(n.id) ?? "~").join(" ")}${
-        split.length ? ` (split ${split.join(", ")})` : ""
-      }${dropped.length ? `; ${dropped.length} syllables left over: ${dropped.join(" ")}` : ""}`,
+      operations: [
+        {
+          type: "updateTrack",
+          trackId: track.id,
+          patch: { vox: vox ?? null },
+        } as ScoreOperation,
+      ],
+      summary: `machine vox on ${track.name}: ${vox ? `${vox.engine} · ${vox.voice}` : "off"}`,
       trackId: track.id,
     };
   },
@@ -450,4 +667,6 @@ export const CLIP_TOOL_LIST: readonly VoiceTool[] = [
   placeClip,
   editClip,
   setLyrics,
+  inspectVox,
+  setVox,
 ];

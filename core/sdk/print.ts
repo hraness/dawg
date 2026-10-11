@@ -41,6 +41,7 @@ import {
   type TrackVocoder,
 } from "../vocoder.ts";
 import { AUTOTUNE_FIELDS, type TrackAutotune } from "../autotune.ts";
+import { NOTE_VOX_KEYS, type NoteVox, type TrackVox } from "../vox.ts";
 import { rhythmVoicePitch, rowInSync } from "../rhythm.ts";
 import {
   BUILTIN_TABLE_PREFIX,
@@ -697,6 +698,7 @@ export function printTrack(score: TrackScore, track: Track): string {
     if (call.startsWith("autotune(")) used.add("autotune");
     entries.push(`autotune: ${call}`);
   }
+  if (track.vox) entries.push(`vox: ${printTrackVox(track.vox, INDENT)}`);
   const lanes: [string, readonly AutomationPoint[] | undefined][] = [
     ["volume", track.volumeAutomation],
     ["pan", track.panAutomation],
@@ -928,7 +930,68 @@ function expressionEntries(
   if (note.vowel) entries.push(["vowel", str(note.vowel)]);
   if (note.lyric !== undefined) entries.push(["lyric", str(note.lyric)]);
   if (note.drift !== undefined) entries.push(["drift", num(note.drift)]);
+  if (note.vox) entries.push(["vox", printNoteVox(note.vox, indent)]);
   return entries.length === 0 ? undefined : entries;
+}
+
+/**
+ * A note's `vox` (design 3.5): keys in NOTE_VOX_KEYS order, `ph` as one
+ * space-joined string the SDK splits back.
+ */
+function printNoteVox(vox: NoteVox, indent: string): string {
+  const entries: (readonly [string, string])[] = [];
+  const inner = indent + INDENT;
+  for (const key of NOTE_VOX_KEYS) {
+    const field = vox[key];
+    if (field === undefined) continue;
+    if (key === "ph") entries.push(["ph", str(vox.ph!.join(" "))]);
+    else if (key === "lang") entries.push(["lang", str(vox.lang!)]);
+    else if (key === "cons")
+      entries.push([
+        "cons",
+        typeof vox.cons === "number"
+          ? num(vox.cons)
+          : `{ s: ${num(vox.cons!.s)} }`,
+      ]);
+    else if (key === "dyn") {
+      const points = vox.dyn!.map(
+        (p) => `{ at: ${num(p.at)}, v: ${num(p.v)} }`,
+      );
+      entries.push(["dyn", list(points, inner, "dyn: ".length, 1)]);
+    } else if (key === "p")
+      entries.push([
+        "p",
+        obj(
+          Object.entries(vox.p!).map(([k, v]) => [k, num(v)] as const),
+          inner,
+          "p: ".length,
+          1,
+        ),
+      ]);
+    else entries.push([key, num(field as number)]);
+  }
+  return obj(entries, indent, "vox: ".length, 1);
+}
+
+/** A track's `vox: { engine, voice, lang?, fit?, p? }`. */
+function printTrackVox(vox: TrackVox, indent: string): string {
+  const entries: (readonly [string, string])[] = [
+    ["engine", str(vox.engine)],
+    ["voice", str(vox.voice)],
+  ];
+  if (vox.lang !== undefined) entries.push(["lang", str(vox.lang)]);
+  if (vox.fit !== undefined) entries.push(["fit", str(vox.fit)]);
+  if (vox.p)
+    entries.push([
+      "p",
+      obj(
+        Object.entries(vox.p).map(([k, v]) => [k, num(v)] as const),
+        indent + INDENT,
+        "p: ".length,
+        1,
+      ),
+    ]);
+  return obj(entries, indent, "vox: ".length, 1);
 }
 
 /**

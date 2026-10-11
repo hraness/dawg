@@ -58,7 +58,11 @@ export type TargetRef = Readonly<{
     | "param"
     | "bars"
     | "file"
-    | "sample";
+    | "sample"
+    /** Lyric edits: key = track id, barFrom/barTo = the touched bars. */
+    | "lyrics"
+    /** Voice settings (`Track.vox`): key = track id. */
+    | "vox";
   key: string;
   trackId?: string;
   barFrom?: number;
@@ -183,6 +187,8 @@ export type HistoryFilter = Readonly<{
   /** Param path, e.g. "volume", "synth.cutoff", "fx.reverb.mix" (prefix match). */
   param?: string;
   bars?: readonly [number, number];
+  /** Target type, e.g. "lyrics" or "vox" (any `TargetRef` type). */
+  target?: TargetRef["type"];
   /** Letter, pane_key or clientId. */
   pane?: string;
   tag?: string;

@@ -262,8 +262,19 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         summary: "sung vowel for selected notes · note vowel o bar 2",
       },
       {
-        command: "lyrics [bar] sun-lit morn-ing",
-        summary: "syllables onto the notes (- splits, _ holds, ~ skips)",
+        command: "lyrics [bar|a-b] sun-lit morn-ing",
+        summary:
+          "syllables onto the notes (- splits, _ holds, ~ skips, [hh eh l] phones, , breath, / line); retyping never moves notes",
+      },
+      {
+        command: "lyrics reflow [a-b] | clear [a-b]",
+        summary:
+          "re-seat a range's words on its notes in time order, or clear them",
+      },
+      {
+        command: "note split | note join <last|bar n|ids>",
+        summary:
+          "split notes in two (the second half holds _) or join them (dropped syllables are reported)",
       },
       {
         command: "autotune [preset] [field value …] | off | presets",
@@ -1240,7 +1251,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   vowel:
     "/vowel <v> [<to> [<morph 0..1>]] | ee | to <v>|off | morph <0..1> | mix <0..1> | off · /vowel a o 0.5",
   lyrics:
-    'lyrics [bar] <syllables> | clear [bar] · lyrics "sun-lit morn-ing" (- splits, _ holds, ~ skips)',
+    'lyrics [bar|a-b] <syllables> | reflow [a-b] | clear [a-b] · lyrics "sun-lit morn-ing" · lyrics 5-8 hel[hh eh l]-lo , world (- splits, _ holds, ~ skips, [..] phones, , breath, / line)',
   sing: "sing <preset> | <param> <value> | drone <D3> | vowels a e i … | reset | off | presets · sing choir · sing khoomei drone D3 · sing vowel o voices 6",
   vocoder:
     "vocoder [preset] | src <track> | <param> <value|reset> | reset | off | presets · vocoder talkbox · vocoder src vox · vocoder formant +3 · vocoder gate auto · params: tap mode carrier follow root spread bands lo hi width attack release formant unvoiced sens hiss gate enhance depth freeze mix gain seed",

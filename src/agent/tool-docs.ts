@@ -220,7 +220,15 @@ export const AGENT_TOOL_DOCS: Readonly<Record<string, AgentToolDoc>> =
     },
     set_lyrics: {
       details:
-        "Put lyrics on a track's notes in time order (chords sing on their top note): spaces separate syllables, hyphens split words (nev-er), _ holds the previous syllable over a note (melisma), ~ skips a note. Words typed whole are split automatically when there are more notes than syllables. from (beats) starts later; clear removes lyrics from there on. Lyrics are text on notes; they guide sing and future TTS and show on the highway.",
+        "Put lyrics on a track's notes in time order (chords sing on their top note). Grammar: spaces separate syllables, hyphens split words (nev-er; stored as nev- then er, so a word reads back whole), a trailing - continues a word into the next token, _ holds the previous syllable over a note (melisma), ~ skips a note, [hh eh l] after a syllable overrides its phones (ARPAbet, no stress digits), a lone , puts a breath before the next syllable, / is a line break for printing only. Words typed whole are split automatically when there are more notes than syllables; spare notes hold and leftover syllables are reported. range {from, to} (bars, 1-based, inclusive) or section limits it; from (beats) starts later. mode assign (default) retypes, reflow re-assigns the range's current text onto its current notes (after re-recording or reversing; unchanged notes give no edits), clear removes lyrics, phones and breaths (clear: true still works). Only lyric and vox fields change; note timing, pitch and velocity never do. One undo step.",
+    },
+    inspect_vox: {
+      details:
+        "Read-only view of a track's machine vox: the engine and voice (track vox, or none when it uses today's sing sound), its lyric phrases one line each (bar, then beat pitch:syllable with _ holds, , breaths and [phones]; at most 60 lines; bars {from, to} limits it) and lint findings: a continuation (hel-) with no later syllable in its phrase, an orphan hold (_ starting a phrase), and onset timing that fills the note.",
+    },
+    set_vox: {
+      details:
+        "Set a track's machine vox: engine (formant is the built-in voice; espeak-ng kokoro piper openutau say are external and later), voice (an engine voice id like formant:robot; changing the engine without a voice picks engine:default), lang (letter-to-sound language, default en-us), fit (psola world none, for external engines), params (at most 8 numbers). clear removes the vox field. Notes keep their lyrics; set_lyrics writes them.",
     },
     set_formant: {
       details:

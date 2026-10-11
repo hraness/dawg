@@ -104,6 +104,13 @@ import {
 export type { Tuning } from "./tuning.ts";
 import { normalizeMaster, type SongMaster } from "./master.ts";
 import {
+  normalizeNoteVox,
+  normalizeTrackVox,
+  VoxValidationError,
+  type NoteVox,
+  type TrackVox,
+} from "./vox.ts";
+import {
   normalizeSongStyle,
   SongStyleError,
   type SongStyle,
@@ -547,6 +554,11 @@ export type Track = Readonly<{
    * instrument with this field is rejected.
    */
   sing?: TrackSing;
+  /**
+   * Optional (0.9): machine vox, the engine and voice that sing this
+   * track's lyrics (`core/vox.ts`). Absent: today's sound.
+   */
+  vox?: TrackVox;
   /**
    * Optional (0.7): audio clips placed on the timeline. Shapes only in the
    * contract; the renderer ignores them until the clips lane.
@@ -1010,6 +1022,7 @@ export type TrackPatch = Readonly<
     guitar?: TrackGuitar | null;
     wind?: TrackWind | null;
     sing?: TrackSing | null;
+    vox?: TrackVox | null;
     clips?: readonly AudioClip[] | null;
     takes?: readonly Take[] | null;
     vocoder?: TrackVocoder | null;
@@ -1042,6 +1055,8 @@ export type Note = Readonly<{
   lyric?: string;
   /** Optional (0.7): the sung vowel, `"a"` or a morph `"a>u"` (sing). */
   vowel?: string;
+  /** Optional (0.9): how this note is voiced on a vox track (`core/vox.ts`). */
+  vox?: NoteVox;
 }> &
   NoteExpression;
 
@@ -1073,6 +1088,7 @@ export type TrackInput = Readonly<
     | "guitar"
     | "wind"
     | "sing"
+    | "vox"
     | "clips"
     | "takes"
     | "vocoder"
@@ -1106,6 +1122,7 @@ export type TrackInput = Readonly<
       guitar?: TrackGuitar | null;
       wind?: TrackWind | null;
       sing?: TrackSing | null;
+      vox?: TrackVox | null;
       clips?: readonly AudioClip[] | null;
       takes?: readonly Take[] | null;
       vocoder?: TrackVocoder | null;
@@ -1131,6 +1148,7 @@ export type NoteInput = Readonly<{
   cents?: number;
   lyric?: string | null;
   vowel?: string | null;
+  vox?: NoteVox | null;
 }> &
   NoteExpressionPatch;
 
@@ -1569,7 +1587,11 @@ export type NotePatch = Readonly<
     Pick<Note, "startTick" | "durationTicks" | "pitch" | "velocity" | "cents">
   >
 > &
-  Readonly<{ lyric?: string | null; vowel?: string | null }> &
+  Readonly<{
+    lyric?: string | null;
+    vowel?: string | null;
+    vox?: NoteVox | null;
+  }> &
   NoteExpressionPatch;
 
 export function updateNote(
@@ -2460,6 +2482,10 @@ function normalizeTrack(
       `track ${id} has sing settings but its instrument is "${instrument}"`,
       "invalid-track",
     );
+  const vox = voxOrThrow(
+    () => normalizeTrackVox(input.vox, `track ${id} vox`),
+    "invalid-track",
+  );
   const sampler = normalizeSampler(input.sampler);
   const takes = normalizeTakes(input.takes, id);
   const vocoder = fxOrThrow(() => normalizeVocoder(input.vocoder));
@@ -2588,6 +2614,7 @@ function normalizeTrack(
     ...(guitar ? { guitar } : {}),
     ...(wind ? { wind } : {}),
     ...(sing ? { sing } : {}),
+    ...(vox ? { vox } : {}),
     ...(clips ? { clips } : {}),
     ...(takes ? { takes } : {}),
     ...(vocoder ? { vocoder } : {}),
@@ -3700,6 +3727,10 @@ function normalizeNote(input: unknown): Note {
     input.vowel === undefined || input.vowel === null
       ? undefined
       : vowelOrThrow(input.vowel, id);
+  const vox = voxOrThrow(
+    () => normalizeNoteVox(input.vox, `note ${id} vox`),
+    "invalid-note",
+  );
   return Object.freeze({
     id,
     trackId,
@@ -3711,7 +3742,21 @@ function normalizeNote(input: unknown): Note {
     ...(cents !== undefined ? { cents } : {}),
     ...(lyric !== undefined ? { lyric } : {}),
     ...(vowel !== undefined ? { vowel } : {}),
+    ...(vox !== undefined ? { vox } : {}),
   });
+}
+
+function voxOrThrow<T>(
+  run: () => T,
+  code: "invalid-note" | "invalid-track",
+): T {
+  try {
+    return run();
+  } catch (error) {
+    if (error instanceof VoxValidationError)
+      throw new ScoreValidationError(error.message, code);
+    throw error;
+  }
 }
 
 function parseTrack(value: unknown): TrackInput {

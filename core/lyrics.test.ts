@@ -47,7 +47,7 @@ describe("assignLyrics", () => {
       pitch: 60,
     }));
     const { lyrics, split } = assignLyrics("so-meth ing", notes);
-    expect([...lyrics.values()]).toEqual(["so", "meth", "ing"]);
+    expect([...lyrics.values()]).toEqual(["so-", "meth", "ing"]);
     expect(split).toEqual([]);
   });
 });

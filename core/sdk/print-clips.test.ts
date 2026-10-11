@@ -134,8 +134,9 @@ describe("audio clips in the SDK", () => {
 
   test("lyrics() splits syllables, holds melismas and skips with ~", () => {
     const sung = lyrics("nev-er gon _ ~ na", seq("C4 D4 E4 F4 G4 A4"));
+    // SDK 1.36.0: a syllable whose word goes on keeps a trailing `-`.
     expect(sung.map((n) => (n as { lyric?: string }).lyric)).toEqual([
-      "nev",
+      "nev-",
       "er",
       "gon",
       "_",
@@ -145,7 +146,7 @@ describe("audio clips in the SDK", () => {
     // Whole words split by vowel groups when there are notes to spare.
     const auto = lyrics("hello", [note("C4", 0), note("D4", 1)]);
     expect(auto.map((n) => (n as { lyric?: string }).lyric)).toEqual([
-      "hel",
+      "hel-",
       "lo",
     ]);
   });

@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.35.0";
+export const SDK_VERSION = "1.36.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -251,6 +251,11 @@ export type Expression = Readonly<{
    * removed, 0..1, overriding the track's `autotune` drift.
    */
   drift?: number;
+  /**
+   * How this note is voiced on a vox track (SDK 1.36.0):
+   * `{ ph: "hh eh l", breath: 0.2 }`. `ph` takes phones as one string.
+   */
+  vox?: NoteVoxInput;
 }>;
 
 /** The expression a built note carries; fields are present only when set. */
@@ -263,6 +268,7 @@ export type NoteExpressionSpec = Readonly<{
   vowel?: string;
   lyric?: string;
   drift?: number;
+  vox?: NoteVoxSpec;
 }>;
 
 const DEFAULT_VIBRATO_RATE = 5.5;
@@ -287,10 +293,11 @@ function expression(
         "vowel",
         "lyric",
         "drift",
+        "vox",
       ].includes(key)
     )
       throw new DawgSdkError(
-        `${label} expression has an unknown field "${key.slice(0, 32)}" (articulation glide bend vibrato humanize vowel lyric drift)`,
+        `${label} expression has an unknown field "${key.slice(0, 32)}" (articulation glide bend vibrato humanize vowel lyric drift vox)`,
       );
   const out: {
     articulation?: Articulation;
@@ -305,6 +312,7 @@ function expression(
     vowel?: string;
     lyric?: string;
     drift?: number;
+    vox?: NoteVoxSpec;
   } = {};
   const articulation = input.articulation ?? input.art;
   if (articulation !== undefined) {
@@ -383,6 +391,10 @@ function expression(
     if (drift < 0 || drift > 1)
       throw new DawgSdkError(`${label} drift must be 0..1`);
     out.drift = drift;
+  }
+  if (input.vox !== undefined) {
+    const vox_ = noteVoxInput(input.vox, `${label} vox`);
+    if (vox_) out.vox = vox_;
   }
   return out;
 }
@@ -2502,6 +2514,203 @@ function trackSing(
   );
 }
 
+// ---- machine vox (lane V0, SDK 1.36.0) ----
+
+/** Vox engines (core/vox.ts VOX_ENGINES); only `formant` is built in. */
+export const VOX_ENGINE_WORDS: readonly string[] = Object.freeze([
+  "formant",
+  "espeak-ng",
+  "kokoro",
+  "piper",
+  "openutau",
+  "say",
+]);
+
+/** A breath a `,` in lyrics() writes (core/vox.ts DEFAULT_BREATH). */
+export const VOX_DEFAULT_BREATH = 0.2;
+
+/** `note(..., { vox })` as written: `ph` may be one string of phones. */
+export type NoteVoxInput = Readonly<{
+  /** Phones replacing letter-to-sound, `"hh eh l"` (ARPAbet, stress dropped). */
+  ph?: string | readonly string[];
+  /** Language for letter-to-sound, `"en-us"`. */
+  lang?: string;
+  /** Onset consonants: a share of the note 0..0.9, or `{ s }` seconds. */
+  cons?: number | Readonly<{ s: number }>;
+  /** Seconds the onset starts before the note, 0..0.25. */
+  lead?: number;
+  /** Syllable timing offset in seconds, -0.25..0.25. */
+  shift?: number;
+  /** A breath before this note, seconds 0.05..1. */
+  breath?: number;
+  /** Loudness over the note: `{ at, v }` points. */
+  dyn?: readonly Readonly<{ at: number; v: number }>[];
+  /** Engine params, at most 8. */
+  p?: Readonly<Record<string, number>>;
+}>;
+
+/** A stored note `vox`: `ph` as an array; dawg checks the ranges. */
+export type NoteVoxSpec = Readonly<
+  Omit<NoteVoxInput, "ph"> & { ph?: readonly string[] }
+>;
+
+/** A track's `vox`: engine, voice and optional language, fit and params. */
+export type TrackVoxSpec = Readonly<{
+  engine: string;
+  voice: string;
+  lang?: string;
+  fit?: "psola" | "world" | "none";
+  p?: Readonly<Record<string, number>>;
+}>;
+
+/** Result of `vox()`; pass it as a track's `vox`. */
+export type VoxSpec = Readonly<{ kind: "vox" } & TrackVoxSpec>;
+
+const NOTE_VOX_FIELDS: readonly string[] = Object.freeze([
+  "ph",
+  "lang",
+  "cons",
+  "lead",
+  "shift",
+  "breath",
+  "dyn",
+  "p",
+]);
+
+function voxParams(value: unknown, label: string): Record<string, number> {
+  if (!isRecord(value))
+    throw new DawgSdkError(`${label} must be an object of numbers`);
+  const out: Record<string, number> = {};
+  for (const key of Object.keys(value).sort())
+    out[key] = finite(value[key], `${label}.${key}`);
+  return Object.freeze(out);
+}
+
+/** Phones from `"hh eh l"` or an array: lower case, stress digits dropped. */
+function voxPhones(value: unknown, label: string): readonly string[] {
+  const list =
+    typeof value === "string"
+      ? value.trim().split(/\s+/u).filter(Boolean)
+      : Array.isArray(value)
+        ? value
+        : undefined;
+  if (!list || list.length === 0 || list.length > 12)
+    throw new DawgSdkError(`${label} must be 1..12 phones like "hh eh l"`);
+  return Object.freeze(
+    list.map((phone: unknown) => {
+      if (typeof phone !== "string" || !/^[a-z]{1,3}[0-2]?$/iu.test(phone))
+        throw new DawgSdkError(`${label} phones are words like hh eh l`);
+      return phone.toLowerCase().replace(/[0-2]$/u, "");
+    }),
+  );
+}
+
+/** A note's `vox`, keys in canonical order; undefined when empty. */
+function noteVoxInput(value: unknown, label: string): NoteVoxSpec | undefined {
+  if (value === null) return undefined;
+  if (!isRecord(value)) throw new DawgSdkError(`${label} must be an object`);
+  for (const key of Object.keys(value))
+    if (!NOTE_VOX_FIELDS.includes(key))
+      throw new DawgSdkError(
+        `${label} has no field "${key.slice(0, 32)}" (${NOTE_VOX_FIELDS.join(" ")})`,
+      );
+  const out: Record<string, unknown> = {};
+  for (const key of NOTE_VOX_FIELDS) {
+    const field = value[key];
+    if (field === undefined) continue;
+    if (key === "ph") out.ph = voxPhones(field, `${label} ph`);
+    else if (key === "lang") {
+      if (typeof field !== "string")
+        throw new DawgSdkError(`${label} lang must be a tag like en-us`);
+      out.lang = field.toLowerCase();
+    } else if (key === "cons") {
+      out.cons = isRecord(field)
+        ? Object.freeze({ s: finite(field.s, `${label} cons.s`) })
+        : finite(field, `${label} cons`);
+    } else if (key === "dyn") {
+      if (!Array.isArray(field))
+        throw new DawgSdkError(`${label} dyn must be { at, v } points`);
+      out.dyn = Object.freeze(
+        field.map((point: unknown, index: number) => {
+          if (!isRecord(point))
+            throw new DawgSdkError(`${label} dyn[${index}] must be { at, v }`);
+          return Object.freeze({
+            at: finite(point.at, `${label} dyn[${index}].at`),
+            v: finite(point.v, `${label} dyn[${index}].v`),
+          });
+        }),
+      );
+    } else if (key === "p") out.p = voxParams(field, `${label} p`);
+    else out[key] = finite(field, `${label} ${key}`);
+  }
+  return Object.keys(out).length > 0
+    ? (Object.freeze(out) as NoteVoxSpec)
+    : undefined;
+}
+
+function trackVoxInput(value: unknown, label: string): TrackVoxSpec {
+  if (!isRecord(value))
+    throw new DawgSdkError(`${label} must be vox(engine, voice) or an object`);
+  for (const key of Object.keys(value))
+    if (!["kind", "engine", "voice", "lang", "fit", "p"].includes(key))
+      throw new DawgSdkError(
+        `${label} has no field "${key.slice(0, 32)}" (engine voice lang fit p)`,
+      );
+  const engine = value.engine ?? "formant";
+  if (typeof engine !== "string" || !VOX_ENGINE_WORDS.includes(engine))
+    throw new DawgSdkError(
+      `${label} engine must be one of ${VOX_ENGINE_WORDS.join(" ")}`,
+    );
+  const voice = value.voice ?? `${engine}:default`;
+  if (
+    typeof voice !== "string" ||
+    voice.length === 0 ||
+    voice.length > 64 ||
+    /\s/.test(voice)
+  )
+    throw new DawgSdkError(
+      `${label} voice must be 1..64 characters without spaces`,
+    );
+  const out: Record<string, unknown> = { engine, voice };
+  if (value.lang !== undefined) {
+    if (typeof value.lang !== "string")
+      throw new DawgSdkError(`${label} lang must be a tag like en-us`);
+    out.lang = value.lang.toLowerCase();
+  }
+  if (value.fit !== undefined) {
+    if (!["psola", "world", "none"].includes(value.fit as string))
+      throw new DawgSdkError(`${label} fit must be psola, world or none`);
+    out.fit = value.fit;
+  }
+  if (value.p !== undefined) out.p = voxParams(value.p, `${label} p`);
+  return Object.freeze(out) as TrackVoxSpec;
+}
+
+/**
+ * Machine vox (SDK 1.36.0): the engine and voice that sing a track's
+ * lyrics. `formant` is built in; the rest are external engines.
+ *
+ * vox: vox("formant", "formant:robot")
+ * vox: vox("kokoro", "kokoro:af_heart", { lang: "en-us", fit: "psola" })
+ */
+export function vox(
+  engine: string = "formant",
+  voice?: string,
+  opts: Readonly<{
+    lang?: string;
+    fit?: "psola" | "world" | "none";
+    p?: Readonly<Record<string, number>>;
+  }> = {},
+): VoxSpec {
+  return Object.freeze({
+    kind: "vox" as const,
+    ...trackVoxInput(
+      { engine, ...(voice !== undefined ? { voice } : {}), ...opts },
+      "vox",
+    ),
+  });
+}
+
 // ---- autotune (f07-autotune, SDK 1.33.0) ----
 
 /** Autotune presets, gentle to hard (core/autotune.ts AUTOTUNE_PRESETS). */
@@ -3447,6 +3656,12 @@ export type TrackInput = Readonly<{
    * preset word (`"hard"`), or `autotune("pop", { speed: 40 })`.
    */
   autotune?: AutotunePresetName | AutotuneSpec;
+  /**
+   * Machine vox (SDK 1.36.0): the engine and voice that sing this track's
+   * lyrics, `{ engine: "formant", voice: "formant:robot" }` or
+   * `vox("formant", "formant:robot")`.
+   */
+  vox?: VoxSpec | TrackVoxSpec | null;
   /** `note()`/`seq()` for pitched tracks, `hit()`/`hits()` for kits and one-shot samplers. */
   notes?: readonly (NoteSpec | HitSpec)[];
   /**
@@ -3589,6 +3804,8 @@ export type TrackSpec = Readonly<{
   vocoder?: Readonly<{ preset?: VocoderPresetName } & VocoderParams>;
   /** Pitch correction (SDK 1.32.0); present only when set. */
   autotune?: AutotuneSettings;
+  /** Machine vox (SDK 1.36.0); present only when set. */
+  vox?: TrackVoxSpec;
   /** The patch this track plays (SDK 1.35.0); instrument is then `"patch"`. */
   patch?: PatchSpec | PatchRefSpec;
   /** Effect patches (SDK 1.35.0), in order. */
@@ -4160,6 +4377,9 @@ export function track(input: TrackInput): TrackSpec {
     ...(vocoderSpec ? { vocoder: vocoderSpec } : {}),
     ...(input.autotune !== undefined
       ? { autotune: autotuneInput(input.autotune, `track ${name}`) }
+      : {}),
+    ...(input.vox !== undefined && input.vox !== null
+      ? { vox: trackVoxInput(input.vox, `track ${name} vox`) }
       : {}),
     ...(patchValue ? { patch: patchValue } : {}),
     ...(fxPatches ? { fxPatch: fxPatches } : {}),
@@ -4759,6 +4979,10 @@ export type ScoreNote = Readonly<{
   cents?: number;
   /** Sung vowel (SDK 1.32.0); absent sings the lyric's or the track's. */
   vowel?: string;
+  /** The sung syllable (SDK 1.32.0); a trailing `-` continues the word. */
+  lyric?: string;
+  /** Machine vox voicing (SDK 1.36.0). */
+  vox?: NoteVoxSpec;
 }>;
 
 /** A stored automation point: integer tick. */
@@ -4851,6 +5075,8 @@ export type ScoreTrack = Readonly<{
   vocoder?: TrackSpec["vocoder"];
   /** Pitch correction (SDK 1.32.0). */
   autotune?: AutotuneSettings;
+  /** Machine vox (SDK 1.36.0). */
+  vox?: TrackVoxSpec;
   glide?: TrackSpec["glide"];
   pedal?: readonly Readonly<{ tick: number; state: PedalState }>[];
   softPedal?: readonly Readonly<{ tick: number; state: PedalState }>[];
@@ -5561,6 +5787,7 @@ export function song(input: SongInput): Song {
             },
       );
     if (t.autotune) stored.autotune = t.autotune;
+    if (t.vox) stored.vox = t.vox;
     if (t.rhythm && t.rhythm.length > 0)
       stored.rhythm = Object.freeze(
         t.rhythm.map((row) => {
@@ -5604,6 +5831,7 @@ export function song(input: SongInput): Song {
           ...(n.cents ? { cents: n.cents } : {}),
           ...(n.vowel ? { vowel: n.vowel } : {}),
           ...(n.lyric !== undefined ? { lyric: n.lyric } : {}),
+          ...(n.vox ? { vox: n.vox } : {}),
         }),
       );
     }
@@ -6680,30 +6908,126 @@ type LyricToken = Readonly<{
   /** First syllable of its word. */
   first: boolean;
   kind: "syl" | "hold" | "rest";
+  /** (0.9) The word goes on: the stored lyric ends in `-`. */
+  cont?: boolean;
+  /** (0.9) Phones typed in brackets, `[hh eh l]`, replacing letter-to-sound. */
+  ph?: readonly string[];
+  /** (0.9) A `,` came before this token: a breath before its note. */
+  breath?: boolean;
 }>;
+
+/** Splits on spaces outside `[...]`. */
+function lyricWords(text: string): string[] {
+  const out: string[] = [];
+  let word = "";
+  let depth = 0;
+  for (const ch of text) {
+    if (ch === "[") depth += 1;
+    else if (ch === "]") depth = Math.max(0, depth - 1);
+    if (depth === 0 && /\s/u.test(ch)) {
+      if (word) out.push(word);
+      word = "";
+    } else word += ch;
+  }
+  if (word) out.push(word);
+  return out;
+}
+
+/** `text[ph ones]` into its text and phones (lower case, stress dropped). */
+function lyricSyl(raw: string): { text: string; ph?: string[] } {
+  const at = raw.indexOf("[");
+  if (at < 0) return { text: raw.replace(/\]/g, "") };
+  const ph = raw
+    .slice(at + 1)
+    .replace(/\].*$/u, "")
+    .trim()
+    .split(/\s+/u)
+    .filter(Boolean)
+    .map((p) => p.toLowerCase().replace(/[0-2]$/u, ""));
+  const text = raw.slice(0, at).replace(/[[\]]/g, "");
+  return ph.length
+    ? { text: text || ph.join(""), ph }
+    : { text: text || raw.replace(/[[\]\s]/g, "") };
+}
 
 /**
  * The lyric grammar: words split by spaces, syllables by `-`, `_` holds the
  * previous syllable over the next note (melisma), `~` skips a note.
- * "sun-lit morn-ing _ glow" gives sun lit morn ing _ glow.
+ * "sun-lit morn-ing _ glow" gives sun- lit morn- ing _ glow (0.9: every
+ * syllable but a word's last keeps a trailing `-`; a word typed with a
+ * trailing `-` continues into the next one, so stored text reads back).
+ * 0.9 also reads `[hh eh l]` phones after a syllable, `,` for a breath
+ * before the next syllable, and `/` as a line break (printing only).
  */
 function parseLyric(text: string): LyricToken[] {
   const out: LyricToken[] = [];
   let word = -1;
-  for (const raw of text.trim().split(/\s+/u)) {
-    if (raw === "") continue;
-    if (raw === "_") out.push({ syl: "_", word, first: false, kind: "hold" });
-    else if (raw === "~")
-      out.push({ syl: "~", word, first: false, kind: "rest" });
-    else {
-      word += 1;
-      raw
-        .split("-")
-        .filter(Boolean)
-        .forEach((syl, index) =>
-          out.push({ syl, word, first: index === 0, kind: "syl" }),
-        );
+  let breath = false;
+  let open = false;
+  const push = (token: LyricToken) => {
+    out.push(breath ? { ...token, breath: true } : token);
+    breath = false;
+  };
+  for (const raw of lyricWords(text.trim())) {
+    if (raw === ",") {
+      breath = true;
+      continue;
     }
+    if (raw === "/") continue;
+    const hold = raw.match(/^_(?:\[([^\]]*)\])?$/u);
+    if (hold) {
+      const ph = lyricSyl(`_[${hold[1] ?? ""}]`).ph;
+      push({
+        syl: "_",
+        word,
+        first: false,
+        kind: "hold",
+        ...(ph ? { ph } : {}),
+      });
+      continue;
+    }
+    if (raw === "~") {
+      push({ syl: "~", word, first: false, kind: "rest" });
+      continue;
+    }
+    // A leading `,` glued to the word is a breath too (`,hel-lo`).
+    let body = raw;
+    if (body.startsWith(",")) {
+      breath = true;
+      body = body.replace(/^,+/u, "");
+    }
+    const trailingComma = body.endsWith(",") && !body.endsWith("[,");
+    if (trailingComma) body = body.replace(/,+$/u, "");
+    const parts: string[] = [];
+    let part = "";
+    let depth = 0;
+    for (const ch of body) {
+      if (ch === "[") depth += 1;
+      else if (ch === "]") depth = Math.max(0, depth - 1);
+      if (ch === "-" && depth === 0) {
+        parts.push(part);
+        part = "";
+      } else part += ch;
+    }
+    parts.push(part);
+    const continues = parts.length > 1 && parts.at(-1) === "";
+    const syls = parts.filter(Boolean);
+    if (syls.length === 0) continue;
+    if (!open) word += 1;
+    syls.forEach((rawSyl, index) => {
+      const { text: syl, ph } = lyricSyl(rawSyl);
+      const last = index === syls.length - 1;
+      push({
+        syl,
+        word,
+        first: !open && index === 0,
+        kind: "syl",
+        ...(!last || continues ? { cont: true } : {}),
+        ...(ph ? { ph } : {}),
+      });
+    });
+    open = continues;
+    if (trailingComma) breath = true;
   }
   return out;
 }
@@ -6876,6 +7200,10 @@ function autoSyllabify(word: string): string[] {
 type LyricAssignment = Readonly<{
   /** Note id to its lyric (`_` holds); notes `~` skipped are absent. */
   lyrics: ReadonlyMap<string, string>;
+  /** (0.9) Note id to the phones typed in brackets for it. */
+  ph: ReadonlyMap<string, readonly string[]>;
+  /** (0.9) Notes a `,` put a breath before. */
+  breaths: ReadonlySet<string>;
   /** Syllables left over after the last note. */
   dropped: readonly string[];
   /** Words split automatically. */
@@ -6888,7 +7216,8 @@ type LyricAssignment = Readonly<{
  * whole are split by `autoSyllabify`, and any notes still left hold the
  * last syllable (melisma) instead of failing. Syllables past the last note
  * are reported in `dropped`. Notes sharing an onset take one token, on
- * the top note, with `_` on the others. Each lyric is cut to the 32-character limit.
+ * the top note, with `_` on the others. Each lyric is cut to the 32-character
+ * limit; a syllable whose word goes on keeps a trailing `-`.
  */
 function assignLyrics(
   text: string,
@@ -6920,6 +7249,8 @@ function assignLyrics(
       const whole =
         token.kind === "syl" &&
         token.first &&
+        !token.cont &&
+        !token.ph &&
         !tokens.some((t) => t.word === token.word && !t.first);
       if (!whole) {
         out.push(token);
@@ -6928,7 +7259,14 @@ function assignLyrics(
       const parts = autoSyllabify(token.syl);
       if (parts.length > 1) words.push(token.syl);
       parts.forEach((syl, index) =>
-        out.push({ syl, word: token.word, first: index === 0, kind: "syl" }),
+        out.push({
+          syl,
+          word: token.word,
+          first: index === 0,
+          kind: "syl",
+          ...(index < parts.length - 1 ? { cont: true } : {}),
+          ...(index === 0 && token.breath ? { breath: true } : {}),
+        }),
       );
     }
     if (out.length <= ordered.length) {
@@ -6937,6 +7275,8 @@ function assignLyrics(
     }
   }
   const lyrics = new Map<string, string>();
+  const ph = new Map<string, readonly string[]>();
+  const breaths = new Set<string>();
   const limit = LYRIC_LIMIT;
   ordered.forEach((note, index) => {
     const token = tokens[index];
@@ -6945,10 +7285,16 @@ function assignLyrics(
         for (const id of [note.id, ...under.get(note.id)!]) lyrics.set(id, "_");
       return;
     }
+    if (token.breath) breaths.add(note.id);
     if (token.kind === "rest") return;
+    if (token.ph) ph.set(note.id, token.ph);
     lyrics.set(
       note.id,
-      token.kind === "hold" ? "_" : token.syl.slice(0, limit),
+      token.kind === "hold"
+        ? "_"
+        : token.cont
+          ? `${token.syl.slice(0, limit - 1)}-`
+          : token.syl.slice(0, limit),
     );
     for (const id of under.get(note.id)!) lyrics.set(id, "_");
   });
@@ -6956,7 +7302,37 @@ function assignLyrics(
     .slice(ordered.length)
     .filter((token) => token.kind === "syl")
     .map((token) => token.syl);
-  return { lyrics, dropped, split };
+  return { lyrics, ph, breaths, dropped, split };
+}
+
+/**
+ * The lyric line of notes in time order, in the grammar `parseLyric` reads
+ * back: `hel[hh eh l]-lo _ , world`. A note without a lyric is `~` (trailing
+ * ones are left out); `ph` and `breath` come from each note's `vox`.
+ */
+function lyricLine(
+  notes: readonly Readonly<{
+    lyric?: string;
+    vox?: Readonly<{ ph?: readonly string[]; breath?: number }>;
+  }>[],
+): string {
+  let end = notes.length;
+  while (end > 0 && notes[end - 1]!.lyric === undefined) end -= 1;
+  let out = "";
+  let joined = false;
+  for (const note of notes.slice(0, end)) {
+    const lyric = note.lyric ?? "~";
+    const ph = note.vox?.ph;
+    const dash = lyric.length > 1 && lyric.endsWith("-");
+    const body = dash ? lyric.slice(0, -1) : lyric;
+    const cell = `${body}${ph && ph.length && lyric !== "~" ? `[${ph.join(" ")}]` : ""}${dash ? "-" : ""}`;
+    const breath = note.vox?.breath ? ", " : "";
+    if (out === "") out = `${breath}${cell}`;
+    else if (joined && !breath && lyric !== "_" && lyric !== "~") out += cell;
+    else out += ` ${breath}${cell}`;
+    joined = dash;
+  }
+  return out;
 }
 // END lyrics
 
@@ -10335,6 +10711,9 @@ export function take(
  * (melisma), `~` skips a note. With fewer syllables than notes, words typed
  * whole split by vowel groups and leftover notes hold the last syllable;
  * syllables past the last note are dropped. Same rules as `/lyrics`.
+ * SDK 1.36.0: a syllable whose word goes on keeps a trailing `-`;
+ * `hel[hh eh l]-lo` sets the note's `vox.ph`, `,` puts a breath
+ * (`vox.breath` 0.2) before the next syllable, `/` is a line break.
  *
  * ```ts
  * notes: lyrics("sun-lit morn-ing glow", seq("C4 D4 E4 G4 E4"))
@@ -10353,15 +10732,32 @@ export function lyrics<N extends NoteSpec>(
     startTick: Math.round(n.start * 960),
     pitch: n.pitch,
   }));
-  const { lyrics: sung } = assignLyrics(text, keyed);
+  const { lyrics: sung, ph, breaths } = assignLyrics(text, keyed);
   return Object.freeze(
     notes.map((n, index) => {
-      const lyric = sung.get(String(index));
-      if (lyric === undefined) {
-        const { lyric: _drop, ...rest } = n as N & { lyric?: string };
-        return Object.freeze(rest) as unknown as N;
-      }
-      return Object.freeze({ ...n, lyric }) as N;
+      const key = String(index);
+      const lyric = sung.get(key);
+      // Retyping replaces typed phones and breaths; other vox fields stay.
+      const {
+        lyric: _drop,
+        vox: oldVox,
+        ...rest
+      } = n as N & { lyric?: string; vox?: NoteVoxSpec };
+      const { ph: _ph, breath: _breath, ...kept } = oldVox ?? {};
+      const phones = ph.get(key);
+      const voxFields = noteVoxInput(
+        {
+          ...(phones ? { ph: phones } : {}),
+          ...kept,
+          ...(breaths.has(key) ? { breath: VOX_DEFAULT_BREATH } : {}),
+        },
+        "lyrics vox",
+      );
+      return Object.freeze({
+        ...rest,
+        ...(lyric !== undefined ? { lyric } : {}),
+        ...(voxFields ? { vox: voxFields } : {}),
+      }) as unknown as N;
     }),
   );
 }
