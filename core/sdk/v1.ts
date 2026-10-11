@@ -2326,7 +2326,9 @@ export type SingPresetName =
   | "drone"
   | "khoomei"
   | "sygyt"
-  | "kargyraa";
+  | "kargyraa"
+  | "robot"
+  | "speak";
 
 const SING_PRESET_WORDS: readonly string[] = Object.freeze([
   "aah",
@@ -2343,6 +2345,8 @@ const SING_PRESET_WORDS: readonly string[] = Object.freeze([
   "khoomei",
   "sygyt",
   "kargyraa",
+  "robot",
+  "speak",
 ]);
 
 /** Sing overrides (core/sing.ts SING_PARAMS). */
@@ -2370,6 +2374,8 @@ export type SingParams = Readonly<{
   /** Throat melody harmonic range `[lo, hi]`, 2..24. */
   harmonics?: readonly [number, number];
   sub?: number;
+  /** Machine vox: consonant strength 0..1 (0 sings vowels only). */
+  articulate?: number;
   gain?: number;
 }>;
 
@@ -2400,6 +2406,7 @@ const SING_RANGES: Readonly<Record<string, readonly [number, number]>> =
     ring: [0, 1],
     overtone: [0, 1],
     sub: [0, 1],
+    articulate: [0, 1],
     gain: [0, 2],
   });
 

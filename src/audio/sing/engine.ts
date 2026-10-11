@@ -58,6 +58,8 @@ import { interpolateAutomation } from "../effects/common.ts";
 import type { EngineContext, InstrumentEngine } from "../instruments.ts";
 import { applyModalKnee } from "../resonators.ts";
 import { windLines } from "../winds/engine.ts";
+import { G2P_VERSION, phrasePhones, type VoxSyllable } from "../../../core/g2p.ts";
+import { Antiresonator, Articulation, VOX_AV_SECONDS } from "./vox.ts";
 
 /** Control-rate period in samples (tract, vibrato and lanes). */
 export const SING_CONTROL = 32;
@@ -168,6 +170,8 @@ export class VoiceCore {
   private readonly riseRate: number;
   private readonly fallRate: number;
   readonly tract = new Cascade();
+  /** Machine vox: the nasal zero after the tract (null: not articulating). */
+  zero: Antiresonator | null = null;
   private readonly ringBand = new Bandpass();
   private readonly ot1 = new Bandpass();
   private readonly ot2 = new Bandpass();
@@ -322,6 +326,7 @@ export class VoiceCore {
   /** Tract, singer's formant and overtone filter (shared by a bucket). */
   shape(x: number, s: Shape): number {
     let y = this.tract.process(x);
+    if (this.zero !== null) y = this.zero.process(y);
     if (s.ring > 0) y += this.ringBand.process(y) * s.ring * 3;
     if (s.overtone > 0)
       y += this.ot2.process(this.ot1.process(y)) * s.overtone * OVERTONE_GAIN;
@@ -447,7 +452,13 @@ type Live = {
   -readonly [K in keyof SingSettings]: SingSettings[K];
 };
 
-type Segment = { at: number; end: number; hz: number; vowel: string };
+type Segment = {
+  at: number;
+  end: number;
+  hz: number;
+  vowel: string;
+  note: PerformedNote;
+};
 
 type Planned = {
   start: number;
@@ -468,6 +479,8 @@ type Setup = {
   seedTick: number;
   /** `voice: "auto"`: the part's voice type, from its median pitch. */
   partVoice?: VoiceType;
+  /** Machine vox (`articulate` > 0): what each note says. */
+  syllables?: Map<PerformedNote, VoxSyllable>;
 };
 
 /** Applies the automation lanes at sample `index` onto `live`. */
@@ -567,6 +580,28 @@ function renderLine(
       );
     return tuneToPitch(table, hz, scale);
   };
+  const artic = setup.syllables
+    ? new Articulation(
+        line.segments.map((seg) => ({
+          at: seg.at,
+          end: seg.end,
+          vowel: seg.vowel,
+          syllable: setup.syllables!.get(seg.note) ?? {
+            onset: [],
+            coda: [],
+            hold: false,
+          },
+        })),
+        voice,
+        sampleRate,
+        s.articulate,
+      )
+    : undefined;
+  const tableAt = artic
+    ? (offset: number, live: Live, scale: number, hz: number) =>
+        tuneToPitch(artic.formantsAt(offset, live.morph), hz, scale)
+    : vowelTable;
+  const avRate = 1 - Math.exp(-1 / (VOX_AV_SECONDS * sampleRate));
 
   // Shared tracts: one per bucket, fed by the sum of its members' sources.
   const shared: {
@@ -601,6 +636,9 @@ function renderLine(
     // voice that holds its pitch); a choir always scatters by 6.
     const driftCents = ens ? 6 : 3 * Math.min(1, s.jitter / 0.3);
     const bucket = buckets > 0 ? shared[m % buckets] : undefined;
+    if (artic && !bucket) core.zero = new Antiresonator();
+    let av = 1;
+    let avTarget = 1;
     let ratio = 1;
     let hz = line.segments[0]!.hz;
     let rd = baseRd;
@@ -614,7 +652,12 @@ function renderLine(
         hz = offset === 0 ? seg.hz : seg.hz + (hz - seg.hz) * slur;
         const scale = 2 ** ((live.formant + memberSt) / 12);
         if (!bucket)
-          core.setTract(vowelTable(offset, live, scale, hz), scale, ringHz);
+          core.setTract(tableAt(offset, live, scale, hz), scale, ringHz);
+        if (artic) {
+          avTarget = artic.avAt(offset);
+          if (offset === 0) av = avTarget;
+          core.zero?.set((artic.zeroAt(offset) ?? 0) * scale, 120, sampleRate);
+        }
         // A note's own vibrato (performance.cents) replaces the voice's.
         const vibDepth = ownVibrato
           ? 0
@@ -644,6 +687,10 @@ function renderLine(
       // Half pedal: the level fades from damp.from with time constant tau.
       if (damp && offset / sampleRate > damp.from)
         g *= Math.exp(-(offset / sampleRate - damp.from) / damp.tau);
+      if (artic) {
+        av += (avTarget - av) * avRate;
+        g *= av;
+      }
       if (index >= line.steal)
         g *=
           index - line.steal >= stealFade
@@ -670,7 +717,28 @@ function renderLine(
       push,
       ringHz,
       segmentAt,
-      vowelTable,
+      tableAt,
+      left,
+      right,
+      artic,
+    );
+  if (artic)
+    artic.renderNoise(
+      seed,
+      line.start,
+      frames,
+      sampleRate,
+      2 ** (s.formant / 12),
+      SING_CONTROL,
+      (index) => {
+        let g = s.gain * head.velocity * setup.gainAt(index);
+        if (index >= line.steal) {
+          const k = (index - line.steal) / stealFade;
+          g *= k >= 1 ? 0 : 0.5 + 0.5 * Math.cos(Math.PI * k);
+        }
+        return g;
+      },
+      (offset) => artic.formantsAt(offset, s.morph),
       left,
       right,
     );
@@ -699,8 +767,10 @@ function shapeBucket(
   ) => readonly Formant[],
   left: Float64Array,
   right: Float64Array | undefined,
+  artic?: Articulation,
 ): void {
   const head = line.head;
+  if (artic) b.core.zero = new Antiresonator();
   const pl = Math.cos(((b.pan + 1) * Math.PI) / 4) * Math.SQRT2;
   const pr = Math.sin(((b.pan + 1) * Math.PI) / 4) * Math.SQRT2;
   let hz = line.segments[0]!.hz;
@@ -712,6 +782,8 @@ function shapeBucket(
       hz = j === 0 ? seg.hz : seg.hz + (hz - seg.hz) * slur;
       const scale = 2 ** ((live.formant + b.st) / 12);
       b.core.setTract(vowelTable(j, live, scale, hz), scale, ringHz);
+      if (artic)
+        b.core.zero?.set((artic.zeroAt(j) ?? 0) * scale, 120, setup.sampleRate);
       if (j % (SING_CONTROL * NORM_EVERY) === 0) {
         const rd = Math.min(
           2.7,
@@ -884,6 +956,7 @@ export function renderSingTrack(
     if (part) setup.partVoice = part;
   }
   const throat = s.drone !== undefined;
+  if (s.articulate > 0 && !throat) setup.syllables = voxSyllables(notes);
   const melisma = heldVowels(notes, s.vowel);
   const lines = windLines(notes, context, track.glide === undefined);
   const planned: Planned[] = lines.map((line) => ({
@@ -899,6 +972,7 @@ export function renderSingTrack(
       vowel: ((note) => melisma.get(note) ?? noteVowel(note, s.vowel))(
         line.notes[k] ?? line.notes[0]!,
       ),
+      note: line.notes[k] ?? line.notes[0]!,
     })),
   }));
   if (throat) {
@@ -927,6 +1001,21 @@ export function renderSingTrack(
   if (dryR) applyModalKnee(dryR, samples);
 }
 
+/**
+ * Machine vox: what each note says, from the lyrics of the whole track in
+ * time order (the top note of a chord first), so a word continued across
+ * notes (`hel-` + `lo`) is read whole.
+ */
+export function voxSyllables(
+  notes: readonly PerformedNote[],
+): Map<PerformedNote, VoxSyllable> {
+  const ordered = [...notes].sort(
+    (a, b) => a.startTick - b.startTick || b.pitch - a.pitch,
+  );
+  const sylls = phrasePhones(ordered.map((note) => ({ lyric: note.lyric })));
+  return new Map(ordered.map((note, k) => [note, sylls[k]!]));
+}
+
 /** Whether a sing track renders stereo (an ensemble outside throat mode). */
 export function singStereo(track: Track): boolean {
   const s = resolveSing(track.sing);
@@ -945,5 +1034,8 @@ export const SING_ENGINE: InstrumentEngine = Object.freeze({
   stereo: singStereo,
   assetDigests: (track: Track) => [
     `sing:${SING_VERSION}:${singPresetOf(track.sing)}`,
+    // the letter-to-sound rules and phone table join the digest only when
+    // a track articulates, so vowel-only stems keep their digest
+    ...(resolveSing(track.sing).articulate > 0 ? [`vox:${G2P_VERSION}`] : []),
   ],
 });

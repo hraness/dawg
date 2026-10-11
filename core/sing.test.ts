@@ -17,7 +17,7 @@ describe("normalizeSing", () => {
   });
 
   test("every preset normalizes to itself and resolves", () => {
-    expect(SING_PRESET_NAMES.length).toBe(14);
+    expect(SING_PRESET_NAMES.length).toBe(16);
     for (const preset of SING_PRESET_NAMES) {
       expect(normalizeSing({ preset })).toEqual({ preset });
       expect(resolveSing({ preset }).voices).toBeGreaterThanOrEqual(1);
