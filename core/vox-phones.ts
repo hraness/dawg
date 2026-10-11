@@ -12,7 +12,7 @@
  * closure plus burst plus aspiration for stops, a nasal pole-zero pair)
  * follows klatt-syn by Christian d'Heureuse (MIT,
  * https://github.com/chdh/klatt-syn), used as a reference; no code was
- * copied. See NOTICE.
+ * copied.
  */
 
 /** Phone classes the engine synthesises differently. */
