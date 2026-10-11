@@ -278,6 +278,49 @@ export const AGENT_TOOL_DOCS: Readonly<Record<string, AgentToolDoc>> =
         to: "3.4s",
       },
     },
+    comment: {
+      details:
+        "Leave a breadcrumb in the session transcript after you edit: one or two sentences on what changed and why. The human reads it in /history and /comments, a coding agent in `dawg history`, and you (or a later turn) with history_query. It links to your newest edit this turn by default (about last_edit); about turn links the whole turn, rev:N a revision, none nothing. The human's live context is captured with it: open pane and screen, focused track/instrument/param, playhead, loop and transport. #words in the text become tags (also tags: [...], at most 4). A turn that edits without calling comment gets an automatic one (your final reply, clipped, tagged #auto), so prefer writing your own.",
+      example: {
+        text: "Thinned the hats in bars 9-16 so the vocal breathes #groove",
+        about: "last_edit",
+      },
+    },
+    history_query: {
+      details:
+        "This session's history, newest first: edits (with revision and targets), undo/redo, human and agent comments, tool calls, agent turns, dev logs and assets. Default 20 one-line rows `#seq time actor kind summary @context`, ≤ 6 KiB; a final `next: before=<seq>` line pages older rows. Filters combine: kind [edit undo redo comment tool turn asset log …], actor [human agent subagent external system], track (id or name), instrument, param (e.g. cutoff, volume, fx.reverb.mix), bars \"A-B\", tag, grep (full-text), since (10m, 2h, 1d, ISO time or seq:N). show <seq|id> returns one row in full (ops, context, payload). Read the human's comments on a part before rewriting it: #love marks what to keep.",
+      example: { track: "bass", kind: ["comment", "edit"], limit: 10 },
+    },
+    docs: {
+      details:
+        "The agent docs lens: the same source as the human guides, seen for an agent. No args returns the index (≤ 2 KiB): recipes, guide ids and how pages are named. page reads one page, tool/<name> (arguments generated from the schema, details, example, recipes that use it), recipe/<id> (worked tool-call sequences) or guide/<id> (agent notes first, then the guide); long pages return 6 KiB with a cursor line. search finds pages mentioning a word. A coding agent reads the same pages with `dawg docs --agent <page>`.",
+      example: { page: "recipe/chop-a-break" },
+    },
+    exec: {
+      details:
+        "Runs one allowlisted CLI with an argv array: no shell, pipes or globbing, cwd the project folder. Allowed: ffmpeg ffprobe sox rubberband yt-dlp demucs basic-pitch aubio* whisper-cli, each with its own argument policy; any command only when the human turned on shell (/agent shell on). Paths must stay inside the project (symlink escapes refused) and never write into .dawg/; network only for download tools. timeoutSec bounds the run (the whole process group is killed). Long output returns tails plus a log id: page it with {log, offset}. After a turn reads web or read-root content, trusted exec is refused until the next turn. Subagents never get exec. Prefer audio for cuts, slices, stretch, pitch, fades and analysis (zero-crossing snaps, sidecars, history rows); use exec for filters and formats audio does not wrap.",
+      example: {
+        argv: [
+          "ffprobe",
+          "-hide_banner",
+          "-show_format",
+          "tracks/drums/downloads/break.wav",
+        ],
+        timeoutSec: 30,
+      },
+    },
+    analyze_audio: {
+      details:
+        "Tempo, key, beat grid and sections of a downloaded or project audio file, saved beside it as a .json sidecar so later transcribe_notes and fit_sample align to the same grid. Run it once per file; the brief lists analyses already made.",
+    },
+    import_sample: {
+      details:
+        "Copies an audio file (a stem, an audio cut/slice output, a download) into the focused track's samples/ folder as 48 kHz wav and returns the sampler({...}) snippet to paste into track.ts with write_file. begin/end trim by fraction of the file and root names the note the sample plays at (default C4). To pick a region in seconds or beats, cut it with the audio tool first; audio slice with track loads slices on a sampler in one call instead.",
+    },
+    pitch_to_notes: {
+      details:
+        "Turns a track's sung or played audio (a clip or a sampler voice) into a new guide-notes track, one note per detected note, placed through the tempo map where that audio plays; the audio track is unchanged. Run analyze_pitch first to see whether the pitch track is clean, then pitch_to_notes, then give the guide track an instrument (use_preset) to double the melody.",
+    },
     preview_sound: {
       details:
         "Hear a track, or a candidate sound change, without committing it. changes: sound tool calls to try ({tool, args} for set_fx, set_rig, set_synth, set_string, set_modal, set_wind, set_wavetable, set_instrument, set_sample, fit_sample, set_mix, set_automation, set_drum_kit, use_sound), applied to a copy. Renders the track's notes over up to 4 bars (or a short phrase by role when it has none), solo or in context, and returns RMS/peak dBFS, spectral centroid and a one-line description for the current and the candidate sound. When the user's window is open it plays the snippet once. Then commit with the normal tools if it sounds right.",

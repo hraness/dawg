@@ -20,6 +20,7 @@ const guide = (
   parent,
   order,
   body,
+  agentBody: "",
 });
 
 const GUIDES = [

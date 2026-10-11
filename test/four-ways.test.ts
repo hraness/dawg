@@ -226,14 +226,14 @@ export const FEATURES: readonly Feature[] = [
     feature: "comments",
     command: "/comment nice groove",
     menu: "Project › session › comment",
-    tools: [],
+    tools: ["comment"],
     sdk: ['cli:dawg history comment "<text>"'],
   },
   {
     feature: "history",
     command: "/history",
     menu: "Project › session › history",
-    tools: [],
+    tools: ["history_query"],
     sdk: ["cli:dawg history"],
   },
   {

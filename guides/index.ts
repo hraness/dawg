@@ -18,8 +18,37 @@ export interface Guide {
   parent: string | undefined;
   /** Position among its siblings, smallest first. */
   order: number;
-  /** Markdown after the frontmatter, without leading or trailing blank lines. */
+  /**
+   * Markdown after the frontmatter, without leading or trailing blank lines
+   * and without ```agent blocks: what humans read (`/guide`, the site).
+   */
   body: string;
+  /**
+   * The text of the guide's ```agent fenced blocks, joined: concise rules,
+   * tool names and pitfalls for the agent docs lens (src/docs/agent-docs.ts).
+   * Empty when the guide has none.
+   */
+  agentBody: string;
+}
+
+const AGENT_BLOCK = /^```agent[ \t]*\n([\s\S]*?)^```[ \t]*$\n?/gm;
+
+/** Splits a guide body into the human text and its ```agent blocks. */
+export function splitAgentBlocks(markdown: string): {
+  body: string;
+  agentBody: string;
+} {
+  const agent: string[] = [];
+  const body = markdown
+    .replace(AGENT_BLOCK, (_match, inner: string) => {
+      agent.push(inner.replace(/\s+$/, ""));
+      return "";
+    })
+    .replace(/\n{3,}/g, "\n\n");
+  return {
+    body: body.replace(/^\n+|\s+$/g, ""),
+    agentBody: agent.join("\n\n"),
+  };
 }
 
 /** This directory, where the `.md` guides live next to this file. */
@@ -43,12 +72,14 @@ export function parseGuide(text: string, file = "guide"): Guide {
   if (!id || !/^[a-z0-9-]+$/.test(id)) throw new Error(`${file}: bad id`);
   if (!title) throw new Error(`${file}: missing title`);
   if (!Number.isFinite(order)) throw new Error(`${file}: bad order`);
+  const { body, agentBody } = splitAgentBlocks(match[2]!);
   return {
     id,
     title,
     parent: fields.get("parent") || undefined,
     order,
-    body: match[2]!.replace(/^\n+|\s+$/g, ""),
+    body,
+    agentBody,
   };
 }
 

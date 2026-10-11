@@ -27,6 +27,8 @@ describe("initProject", () => {
         "dawg.json",
         "tsconfig.json",
         "song.ts",
+        "AGENTS.md",
+        "CLAUDE.md",
         ".gitignore",
       ]);
       expect(first.sdkVersion).toBe(SDK_VERSION);
@@ -48,6 +50,8 @@ describe("initProject", () => {
       expect((await readdir(dir)).sort()).toEqual([
         ".dawg",
         ".gitignore",
+        "AGENTS.md",
+        "CLAUDE.md",
         "dawg.json",
         "song.ts",
         "tracks",
@@ -113,7 +117,7 @@ describe("initProject", () => {
       let out = "";
       const stdout = { write: (text: string) => (out += text) };
       expect(await runInitCommand(["init"], dir, stdout, stdout)).toBe(0);
-      expect(out.split("\n").filter(Boolean).length).toBe(6);
+      expect(out.split("\n").filter(Boolean).length).toBe(8);
       expect(out).toContain("wrote song.ts\n");
       out = "";
       expect(await runInitCommand(["init"], dir, stdout, stdout)).toBe(0);
@@ -128,6 +132,31 @@ describe("initProject", () => {
         0,
       );
       expect(await isProject(join(dir, "rel"))).toBe(true);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("an existing AGENTS.md or CLAUDE.md is never touched", async () => {
+    const dir = await scratch();
+    try {
+      await writeFile(join(dir, "AGENTS.md"), "mine\n");
+      const first = await initProject(dir);
+      expect(first.wrote).not.toContain("AGENTS.md");
+      expect(first.wrote).not.toContain("CLAUDE.md");
+      expect(await readFile(join(dir, "AGENTS.md"), "utf8")).toBe("mine\n");
+      const other = await scratch();
+      try {
+        await writeFile(join(other, "CLAUDE.md"), "theirs\n");
+        const second = await initProject(other);
+        expect(second.wrote).toContain("AGENTS.md");
+        expect(second.wrote).not.toContain("CLAUDE.md");
+        expect(await readFile(join(other, "CLAUDE.md"), "utf8")).toBe(
+          "theirs\n",
+        );
+      } finally {
+        await rm(other, { recursive: true, force: true });
+      }
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

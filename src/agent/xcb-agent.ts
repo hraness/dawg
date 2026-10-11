@@ -21,6 +21,7 @@ import {
 import { AGENT_TOOLS, type AgentTool } from "./tools.ts";
 import { parseTextReply, XcbError, type TextReply } from "./xcb.ts";
 import { SseBudgetError } from "./sse.ts";
+import { newTurnLedger, recordTurnEnd } from "./history-tools.ts";
 
 /** Steps per xcb turn. Each step is one full model call, so keep it small. */
 export const XCB_MAX_STEPS = 3;
@@ -132,7 +133,11 @@ export async function runTextAgentTurn(
   const tools = options.tools ?? AGENT_TOOLS;
   const catalog = renderToolCatalog(tools);
   const turnId = options.turnId ?? newId("turn");
-  const turnState: TurnState = { untrusted: false };
+  const turnState: TurnState = {
+    untrusted: false,
+    startRevision: options.host.snapshot().revision,
+    ledger: newTurnLedger(),
+  };
   const newNoteId =
     options.newNoteId ??
     ((trackId: string, _revision: number, _index: number) => newId(trackId));
@@ -152,6 +157,20 @@ export async function runTextAgentTurn(
   const currentRevision = () => options.host.snapshot().revision;
   const finish = (result: AgentTurnResult): AgentTurnResult => {
     deadline.clear();
+    recordTurnEnd({
+      history: options.host.history,
+      ...(options.host.subagentId !== undefined
+        ? { subagentId: options.host.subagentId }
+        : {}),
+      turnId,
+      startRevision: turnState.startRevision ?? 0,
+      ledger: turnState.ledger ?? newTurnLedger(),
+      prompt: options.prompt,
+      model: "xcb",
+      outcome: result.type === "done" ? result.reason : result.type,
+      finalText: result.type === "done" ? result.text : "",
+      score: options.host.snapshot().score,
+    });
     emit(result);
     return result;
   };
