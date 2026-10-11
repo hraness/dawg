@@ -130,7 +130,13 @@ export type HistoryRow = Readonly<{
   atRev: number;
   lamport: number;
   replicaId: string;
-  origin: "local" | "imported";
+  /**
+   * `superseded`: an edit from a timeline the session record abandoned (a
+   * restored older copy then edited again). Kept, never deleted; its `rev`
+   * is cleared so the revision belongs to the live timeline, and queries
+   * leave it out unless `includeSuperseded`.
+   */
+  origin: "local" | "imported" | "superseded";
   parentId: string | null;
   kind: HistoryKind;
   sub: string | null;
@@ -194,6 +200,8 @@ export type HistoryFilter = Readonly<{
   tag?: string;
   /** FTS5 query over summary+body (LIKE fallback without FTS5). */
   grep?: string;
+  /** Also list edits from an abandoned timeline (`origin: superseded`). */
+  includeSuperseded?: boolean;
   /** Exclusive. */
   sinceSeq?: number;
   /** ISO timestamp (callers parse relative forms like "10m"). */
