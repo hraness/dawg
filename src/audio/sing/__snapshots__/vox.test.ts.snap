@@ -1,0 +1,5 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`machine vox rendering two runs are identical; the golden hash holds 1`] = `"0407d60d8134d6ac94ec81d426dd531dc0d81ac7b6b81587fd735b759193e32b"`;
+
+exports[`machine vox rendering two runs are identical; the golden hash holds 2`] = `"b56cb2771d64b16c985879214acab01a67750599493eedc3f2a92562dcd17621"`;
