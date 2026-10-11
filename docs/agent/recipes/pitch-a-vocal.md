@@ -3,6 +3,7 @@ id: pitch-a-vocal
 title: Pitch, trim and fade a vocal phrase
 tools: [audio, analyze_pitch, comment]
 ---
+
 Goal: move a vocal phrase into the song's key and make it sit cleanly.
 
 1. Find the phrase: `segments` with silence splits a take into phrases.

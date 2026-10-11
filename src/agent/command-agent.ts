@@ -225,7 +225,7 @@ export async function runCommandAgentTurn(
       const briefText =
         snapshot.revision === turnStartRevision
           ? `Composition brief (JSON): ${brief}`
-          : `Composition brief (JSON, current score at revision ${snapshot.revision}: it already includes every command you ran this turn; do not repeat them): ${brief}`
+          : `Composition brief (JSON, current score at revision ${snapshot.revision}: it already includes every command you ran this turn; do not repeat them): ${brief}`;
       const briefWithHistory = historyNow
         ? `${briefText}\nNow and recent history (history_query for more):\n${historyNow}`
         : briefText;

@@ -39,7 +39,12 @@ export type Recipe = Readonly<{
 
 /** One fenced example in a recipe: ```tool JSON or a ```dawg command line. */
 export type RecipeExample =
-  | Readonly<{ kind: "tool"; recipe: string; tool: string; args: Record<string, unknown> }>
+  | Readonly<{
+      kind: "tool";
+      recipe: string;
+      tool: string;
+      args: Record<string, unknown>;
+    }>
   | Readonly<{ kind: "dawg"; recipe: string; argv: readonly string[] }>;
 
 export const RECIPES_DIR = fileURLToPath(
@@ -55,7 +60,15 @@ export function parseRecipe(text: string, file = "recipe"): Recipe {
     .match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
   if (!match) throw new Error(`${file}: missing frontmatter`);
   const fields = new Map<string, string>();
+  // Prettier may fold a long `tools: [...]` onto indented lines; join
+  // continuation lines onto their field first.
+  const lines: string[] = [];
   for (const line of match[1]!.split("\n")) {
+    if (/^\s/.test(line) && lines.length > 0)
+      lines[lines.length - 1] += ` ${line.trim()}`;
+    else lines.push(line);
+  }
+  for (const line of lines) {
     const field = line.match(/^([a-z]+):\s*(.*)$/);
     if (!field) throw new Error(`${file}: bad frontmatter line "${line}"`);
     fields.set(field[1]!, field[2]!.trim());
@@ -117,7 +130,11 @@ export function recipeExamples(recipe: Recipe): RecipeExample[] {
       for (const line of text.split("\n")) {
         const trimmed = line.trim();
         if (!trimmed || trimmed.startsWith("#")) continue;
-        out.push({ kind: "dawg", recipe: recipe.id, argv: shellWords(trimmed) });
+        out.push({
+          kind: "dawg",
+          recipe: recipe.id,
+          argv: shellWords(trimmed),
+        });
       }
   }
   return out;
@@ -258,9 +275,17 @@ export function agentDocsIndex(): string {
 /** A page by id (`tool/audio`) or bare name (`audio`, `chop-a-break`). */
 export function findAgentDoc(ref: string): AgentDocPage | undefined {
   const pages = agentDocs();
-  const key = ref.trim().toLowerCase().replace(/^tool:/, "tool/");
+  const key = ref
+    .trim()
+    .toLowerCase()
+    .replace(/^tool:/, "tool/");
   if (key === "index")
-    return { id: "index", title: "index", kind: "index", body: agentDocsIndex() };
+    return {
+      id: "index",
+      title: "index",
+      kind: "index",
+      body: agentDocsIndex(),
+    };
   return (
     pages.find((page) => page.id === key) ??
     pages.find((page) => page.id === `tool/${key}`) ??
@@ -288,12 +313,17 @@ export function searchAgentDocs(query: string, max = 12): string {
   }
   if (hits.length === 0) return `no docs mention "${query.slice(0, 40)}"`;
   const shown = hits.slice(0, max);
-  if (hits.length > max) shown.push(`(${hits.length - max} more; narrow the search)`);
+  if (hits.length > max)
+    shown.push(`(${hits.length - max} more; narrow the search)`);
   return shown.join("\n");
 }
 
 /** `maxBytes` of `body` from line `cursor`, ending "(cursor=N for more)". */
-export function pageSlice(body: string, cursor: number, maxBytes: number): string {
+export function pageSlice(
+  body: string,
+  cursor: number,
+  maxBytes: number,
+): string {
   const lines = body.split("\n");
   const out: string[] = [];
   let bytes = 0;
@@ -302,7 +332,9 @@ export function pageSlice(body: string, cursor: number, maxBytes: number): strin
     const size = Buffer.byteLength(lines[index]!) + 1;
     if (bytes + size > maxBytes - 32 && out.length > 0) break;
     out.push(
-      size > maxBytes - 32 ? lines[index]!.slice(0, maxBytes - 64) : lines[index]!,
+      size > maxBytes - 32
+        ? lines[index]!.slice(0, maxBytes - 64)
+        : lines[index]!,
     );
     bytes += size;
   }

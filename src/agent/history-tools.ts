@@ -216,8 +216,9 @@ const commentTool: AgentTool = {
       throw new ToolArgumentError(
         'about must be "last_edit", "turn", "rev:N" or "none"',
       );
-    const tags = [...new Set([...tagsOf(args.tags), ...inlineTags(text)])]
-      .slice(0, HISTORY_TOOL_LIMITS.maxTags);
+    const tags = [
+      ...new Set([...tagsOf(args.tags), ...inlineTags(text)]),
+    ].slice(0, HISTORY_TOOL_LIMITS.maxTags);
     return {
       kind: "action",
       summary: `comment · ${text.slice(0, 60)}`,
@@ -256,7 +257,11 @@ const commentTool: AgentTool = {
           content: JSON.stringify({
             ok: true,
             id: written.id,
-            ...(parent ? { about: parent.id } : parentId ? { about: parentId } : {}),
+            ...(parent
+              ? { about: parent.id }
+              : parentId
+                ? { about: parentId }
+                : {}),
             ...(where ? { context: where } : {}),
             ...(tags.length > 0 ? { tags } : {}),
           }),
@@ -445,8 +450,11 @@ const historyQueryTool: AgentTool = {
     additionalProperties: false,
   },
   plan(args, toolContext) {
-    const show = args.show === undefined ? undefined : str(args.show, "show", 64);
-    const filter = show ? undefined : historyFilterFromArgs(args, toolContext.score);
+    const show =
+      args.show === undefined ? undefined : str(args.show, "show", 64);
+    const filter = show
+      ? undefined
+      : historyFilterFromArgs(args, toolContext.score);
     return {
       kind: "action",
       summary: show ? `history · show ${show}` : "history · query",
@@ -564,7 +572,10 @@ export function recordTurnEnd(input: {
 }): void {
   const history = input.history;
   if (!history || input.subagentId !== undefined) return;
-  const turn: TurnInfo = { id: input.turnId, startRevision: input.startRevision };
+  const turn: TurnInfo = {
+    id: input.turnId,
+    startRevision: input.startRevision,
+  };
   try {
     const text = autoCommentText(input.ledger, input.finalText);
     if (text !== undefined) {
@@ -612,7 +623,7 @@ export function historyBriefSection(
     const context = history.context();
     const now = [
       context.view?.screen ? `screen ${context.view.screen}` : undefined,
-      context.focus?.trackName ?? context.focus?.trackId
+      (context.focus?.trackName ?? context.focus?.trackId)
         ? `focus ${context.focus?.trackName ?? context.focus?.trackId}${context.focus?.param ? `/${context.focus.param}` : ""}`
         : undefined,
       context.playhead ? `playhead ${context.playhead.label}` : undefined,
@@ -633,7 +644,9 @@ export function historyBriefSection(
       limit: 5,
     }).rows;
     for (const row of [...comments].reverse())
-      lines.push(`human comment #${row.seq}: ${formatRowShort(row, { width: 120 })}`);
+      lines.push(
+        `human comment #${row.seq}: ${formatRowShort(row, { width: 120 })}`,
+      );
     const others = history.query({
       kinds: ["edit", "undo", "redo"],
       actors: ["human", "external"],
@@ -641,7 +654,9 @@ export function historyBriefSection(
       ...(lastTurn ? { sinceSeq: lastTurn.seq } : {}),
     }).rows;
     for (const row of [...others].reverse())
-      lines.push(`edit by ${row.actor.kind}: ${formatRowShort(row, { width: 120 })}`);
+      lines.push(
+        `edit by ${row.actor.kind}: ${formatRowShort(row, { width: 120 })}`,
+      );
     if (lines.length === 0) return undefined;
     let text = lines.join("\n");
     while (Buffer.byteLength(text) > maxBytes && lines.length > 1) {

@@ -606,7 +606,7 @@ Usage:
   dawg init [dir]      song.ts, tracks/<slug>/track.ts and .dawg/sdk
   dawg check           typecheck + evaluate the project; exit 1 on problems
   dawg docs --agent [page]  agent docs: tool reference, recipes (--help)
-  dawg <command> --help  usage: sessions history render init check docs media model
+  dawg <command> --help  sessions history render init check docs media model
   dawg doctor          audio backend, native sink and devices
   dawg media doctor|download|stems|analyze|notes|sample|lyrics  (--help)
   dawg --version

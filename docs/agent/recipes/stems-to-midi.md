@@ -1,8 +1,17 @@
 ---
 id: stems-to-midi
 title: Split a song into stems and turn a stem into notes
-tools: [split_stems, analyze_audio, transcribe_notes, create_track, add_notes, comment]
+tools:
+  [
+    split_stems,
+    analyze_audio,
+    transcribe_notes,
+    create_track,
+    add_notes,
+    comment,
+  ]
 ---
+
 Goal: learn a bass line or a drum groove from a recording.
 
 1. Split the downloaded wav into six stems (vocals drums bass guitar piano other) in `<file>.stems/`. This can take minutes.

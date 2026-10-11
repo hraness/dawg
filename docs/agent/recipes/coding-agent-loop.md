@@ -3,6 +3,7 @@ id: coding-agent-loop
 title: Edit a dawg project from a coding agent in another terminal
 tools: [read_file, edit_file, grep, history_query]
 ---
+
 Goal: a coding agent (or you, through the file tools) edits the project files while the human plays the song in dawg.
 
 1. The project is plain TypeScript: `song.ts` and `tracks/<slug>/track.ts`. Find what to change:

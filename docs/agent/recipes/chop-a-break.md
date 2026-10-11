@@ -3,6 +3,7 @@ id: chop-a-break
 title: Chop a break into a playable sampler
 tools: [download_audio, audio, inspect, comment]
 ---
+
 Goal: take a drum break from a video, find its hits, slice it and play the slices from a sampler track.
 
 1. Download once (check the brief's downloads first; never fetch the same video twice).

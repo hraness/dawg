@@ -344,7 +344,7 @@ export const AGENT_SYSTEM_PROMPT = [
   WORKSPACE_PROMPT,
   MEDIA_PROMPT,
   DISPATCH_PROMPT,
-  "History: the brief's \"now and recent history\" lines show the human's focus, playhead and newest comments; read comments on a part with history_query before rewriting it (#love marks what to keep). After you edit, call comment once with what changed and why. docs reads tool pages and recipes (docs {page:\"recipe/chop-a-break\"}).",
+  'History: the brief\'s "now and recent history" lines show the human\'s focus, playhead and newest comments; read comments on a part with history_query before rewriting it (#love marks what to keep). After you edit, call comment once with what changed and why. docs reads tool pages and recipes (docs {page:"recipe/chop-a-break"}).',
   DONE_PROMPT,
 ].join(" ");
 
@@ -735,10 +735,7 @@ export async function executeCall(
   if (ledger) {
     ledger.calls += 1;
     if (outcome.ok && call.name === "comment") ledger.commented = true;
-    if (
-      outcome.ok &&
-      outcome.event.resultRevision > outcome.event.baseRevision
-    )
+    if (outcome.ok && outcome.event.resultRevision > outcome.event.baseRevision)
       ledger.edits.push(outcome.event.summary);
   }
   recordToolRow(call, context, outcome, performance.now() - started);

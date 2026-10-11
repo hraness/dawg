@@ -3,6 +3,7 @@ id: read-history-before-editing
 title: Read history and comments before editing, comment after
 tools: [history_query, comment, inspect]
 ---
+
 Goal: respect what the human liked or disliked, and leave a breadcrumb they can find.
 
 1. The brief's "now and recent history" lines show the human's focus, playhead and newest comments. For more, ask history for comments on the part you are about to change:

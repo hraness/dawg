@@ -3,6 +3,7 @@ id: parallel-arrangement
 title: Arrange several parts at once with subagents
 tools: [dispatch, history_query, inspect, comment]
 ---
+
 Goal: write 2-4 independent parts in parallel, each by its own subagent.
 
 1. Split the work by track. Each task names the tracks it may change; `[]` means new tracks only; `bars` narrows note edits; one task at most may be `global` (tempo, form, master).

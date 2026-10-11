@@ -151,7 +151,9 @@ describe("initProject", () => {
         const second = await initProject(other);
         expect(second.wrote).toContain("AGENTS.md");
         expect(second.wrote).not.toContain("CLAUDE.md");
-        expect(await readFile(join(other, "CLAUDE.md"), "utf8")).toBe("theirs\n");
+        expect(await readFile(join(other, "CLAUDE.md"), "utf8")).toBe(
+          "theirs\n",
+        );
       } finally {
         await rm(other, { recursive: true, force: true });
       }

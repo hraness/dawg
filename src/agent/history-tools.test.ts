@@ -31,7 +31,12 @@ const SESSION = "s-test";
 const CONTEXT: CommentContext = {
   pane: "A",
   view: { screen: "patch" },
-  focus: { trackId: "bass", trackName: "Bass", instrument: "bass", param: "cutoff" },
+  focus: {
+    trackId: "bass",
+    trackName: "Bass",
+    instrument: "bass",
+    param: "cutoff",
+  },
   playhead: { beat: 32, bar: 9, beatInBar: 1, label: "9.1" },
   loop: { fromBeat: 32, toBeat: 64, label: "9.1–17.1" },
   transport: { playing: true, recording: false, bpm: 120 },
@@ -66,7 +71,11 @@ function host(initial?: TrackScore) {
   };
   const history: HistoryHandle = {
     append(event) {
-      const row = db.append({ ...event, sessionId: SESSION, atRev: state.revision });
+      const row = db.append({
+        ...event,
+        sessionId: SESSION,
+        atRev: state.revision,
+      });
       return { id: row.id, done: Promise.resolve(row) };
     },
     query: (filter) => db.query({ sessionId: SESSION, ...filter }),
@@ -125,7 +134,10 @@ describe("agent comments", () => {
       turnId: "turn-1",
       client: client([
         [...addBass("c1"), finishChunk("tool_calls")],
-        [textChunk("Added a low E on beat 1 of the bass."), finishChunk("stop")],
+        [
+          textChunk("Added a low E on beat 1 of the bass."),
+          finishChunk("stop"),
+        ],
       ]),
       host: agentHost,
     });
@@ -143,9 +155,9 @@ describe("agent comments", () => {
     expect(comment!.context?.loop?.label).toBe("9.1–17.1");
     expect(comment!.context?.view?.screen).toBe("patch");
     expect(comment!.context?.rev).toBe(11);
-    expect(comment!.targets.some((t) => t.type === "track" && t.key === "bass")).toBe(
-      true,
-    );
+    expect(
+      comment!.targets.some((t) => t.type === "track" && t.key === "bass"),
+    ).toBe(true);
     // The turn row closes the turn, after the comment.
     const turn = db.query({ sessionId: SESSION, kinds: ["turn"] }).rows[0]!;
     expect(turn.id).toBe("turn-1");
@@ -210,7 +222,9 @@ describe("agent comments", () => {
       newNoteId: () => "n",
     };
     expect(() => tool.plan({ text: " " }, ctx)).toThrow("text");
-    expect(() => tool.plan({ text: "a", about: "yesterday" }, ctx)).toThrow("about");
+    expect(() => tool.plan({ text: "a", about: "yesterday" }, ctx)).toThrow(
+      "about",
+    );
   });
 });
 
@@ -243,7 +257,13 @@ describe("history_query", () => {
         ...(index % 3 === 0 ? {} : { rev: index + 1 }),
         actor: { kind: index % 3 === 0 ? "human" : "agent" },
         summary: `row ${index}`,
-        targets: [{ type: "track", key: index % 2 ? "bass" : "drums", trackId: index % 2 ? "bass" : "drums" }],
+        targets: [
+          {
+            type: "track",
+            key: index % 2 ? "bass" : "drums",
+            trackId: index % 2 ? "bass" : "drums",
+          },
+        ],
         tags: index === 3 ? ["love"] : [],
       });
     const first = await query({}, score);
@@ -274,19 +294,24 @@ describe("history_query", () => {
     const detail = await query({ show: String(row.seq) }, score);
     expect(detail).toContain("love this part");
     expect(detail).toContain("9.1");
-    await expect(query({ show: "999999" }, score)).rejects.toThrow("no history row");
+    await expect(query({ show: "999999" }, score)).rejects.toThrow(
+      "no history row",
+    );
     await expect(query({ bars: "nine" }, score)).rejects.toThrow("bars");
     await expect(query({ kind: ["nope"] }, score)).rejects.toThrow("kind");
   });
 
   test("history off: a clear error, not a crash", async () => {
     const tool = AGENT_TOOLS.find((t) => t.name === "history_query")!;
-    const plan = tool.plan({}, {
-      score: createScore({}),
-      focusedTrackId: "x",
-      revision: 1,
-      newNoteId: () => "n",
-    });
+    const plan = tool.plan(
+      {},
+      {
+        score: createScore({}),
+        focusedTrackId: "x",
+        revision: 1,
+        newNoteId: () => "n",
+      },
+    );
     if (plan.kind !== "action") throw new Error(plan.kind);
     await expect(plan.run({})).rejects.toThrow("history is off");
   });
@@ -324,8 +349,9 @@ describe("brief section", () => {
     expect(text).toContain("focus Bass/cutoff");
     expect(text).toContain("playhead 9.1");
     expect(text).toContain("chorus bass is perfect");
-    expect(Buffer.byteLength(text)).toBeLessThanOrEqual(HISTORY_TOOL_LIMITS.briefBytes);
+    expect(Buffer.byteLength(text)).toBeLessThanOrEqual(
+      HISTORY_TOOL_LIMITS.briefBytes,
+    );
     expect(historyBriefSection(undefined)).toBeUndefined();
   });
-
 });

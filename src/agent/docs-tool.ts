@@ -42,7 +42,10 @@ const docsTool: AgentTool = {
       async run(): Promise<ActionResult> {
         const docs = await import("../docs/agent-docs.ts");
         if (search !== undefined) {
-          return { content: docs.searchAgentDocs(search), summary: "docs search" };
+          return {
+            content: docs.searchAgentDocs(search),
+            summary: "docs search",
+          };
         }
         if (page === undefined)
           return { content: docs.agentDocsIndex(), summary: "docs index" };
@@ -52,7 +55,11 @@ const docsTool: AgentTool = {
             `no docs page "${page}" · call docs with no args for the index`,
           );
         return {
-          content: docs.pageSlice(found.body, cursor as number, DOCS_PAGE_BYTES),
+          content: docs.pageSlice(
+            found.body,
+            cursor as number,
+            DOCS_PAGE_BYTES,
+          ),
           summary: `docs ${found.id}`,
         };
       },

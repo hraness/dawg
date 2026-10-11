@@ -81,16 +81,15 @@ describe("tool reference", () => {
       const page = findAgentDoc(`tool/${tool.name}`);
       expect(page?.kind).toBe("tool");
       expect(page!.body).toContain(tool.description);
-      const props = Object.keys(
-        (tool.parameters as Schema).properties ?? {},
-      );
+      const props = Object.keys((tool.parameters as Schema).properties ?? {});
       for (const prop of props) expect(page!.body).toContain(`- ${prop}`);
     }
   });
 
   test("AGENT_TOOL_DOCS names only real tools", () => {
     const names = new Set(AGENT_TOOLS.map((tool) => tool.name));
-    for (const name of Object.keys(AGENT_TOOL_DOCS)) expect(names).toContain(name);
+    for (const name of Object.keys(AGENT_TOOL_DOCS))
+      expect(names).toContain(name);
   });
 
   test("the power tools carry details and a valid example", () => {
@@ -246,7 +245,9 @@ describe("guides through the agent lens", () => {
 describe("index, search and paging", () => {
   test("the index fits 2 KiB and lists every recipe", () => {
     const index = agentDocsIndex();
-    expect(Buffer.byteLength(index)).toBeLessThanOrEqual(AGENT_DOCS_INDEX_BYTES);
+    expect(Buffer.byteLength(index)).toBeLessThanOrEqual(
+      AGENT_DOCS_INDEX_BYTES,
+    );
     for (const recipe of listRecipes())
       expect(index).toContain(`recipe/${recipe.id}`);
   });
@@ -260,7 +261,10 @@ describe("index, search and paging", () => {
   });
 
   test("pageSlice pages by line and keeps each page bounded", () => {
-    const body = Array.from({ length: 400 }, (_, i) => `line ${i} ${"x".repeat(40)}`).join("\n");
+    const body = Array.from(
+      { length: 400 },
+      (_, i) => `line ${i} ${"x".repeat(40)}`,
+    ).join("\n");
     const first = pageSlice(body, 0, 2048);
     expect(Buffer.byteLength(first)).toBeLessThanOrEqual(2048);
     const cursor = Number(/cursor=(\d+)/.exec(first)![1]);
@@ -311,21 +315,38 @@ describe("AGENTS.md and dawg docs --agent", () => {
       let err = "";
       const stdout = { write: (text: string) => (out += text) };
       const stderr = { write: (text: string) => (err += text) };
-      expect(await runDocsCommand(["docs", "--agent"], dir, stdout, stderr)).toBe(0);
+      expect(
+        await runDocsCommand(["docs", "--agent"], dir, stdout, stderr),
+      ).toBe(0);
       expect(out).toContain("recipe/");
       out = "";
       expect(
-        await runDocsCommand(["docs", "--agent", "tool/comment"], dir, stdout, stderr),
+        await runDocsCommand(
+          ["docs", "--agent", "tool/comment"],
+          dir,
+          stdout,
+          stderr,
+        ),
       ).toBe(0);
       expect(out).toContain("# comment");
       expect(
-        await runDocsCommand(["docs", "--agent", "no-such"], dir, stdout, stderr),
+        await runDocsCommand(
+          ["docs", "--agent", "no-such"],
+          dir,
+          stdout,
+          stderr,
+        ),
       ).toBe(1);
       expect(await runDocsCommand(["docs"], dir, stdout, stderr)).toBe(2);
       expect(err).toContain("usage");
       await writeFile(join(dir, "AGENTS.md"), "# Mine\n");
       expect(
-        await runDocsCommand(["docs", "--agent", "--write"], dir, stdout, stderr),
+        await runDocsCommand(
+          ["docs", "--agent", "--write"],
+          dir,
+          stdout,
+          stderr,
+        ),
       ).toBe(0);
       const written = await readFile(join(dir, "AGENTS.md"), "utf8");
       expect(written.startsWith("# Mine\n")).toBe(true);

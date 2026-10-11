@@ -3,6 +3,7 @@ id: fix-tempo
 title: Fit a loop to the song's tempo
 tools: [audio, fit_sample, set_tempo]
 ---
+
 Goal: a sample recorded at another tempo should play in time.
 
 1. Measure its tempo.

@@ -34,7 +34,10 @@ export function parseDocsArgv(argv: readonly string[]): DocsArgv {
     if (arg === "--agent") agent = true;
     else if (arg === "--write") write = true;
     else if (arg === "--search") {
-      const value = args.slice(index + 1).join(" ").trim();
+      const value = args
+        .slice(index + 1)
+        .join(" ")
+        .trim();
       if (!value) return { kind: "error", problem: "--search needs words" };
       search = value;
       break;
@@ -45,7 +48,8 @@ export function parseDocsArgv(argv: readonly string[]): DocsArgv {
   if (!agent)
     return {
       kind: "error",
-      problem: "only the agent lens is here; humans read /guide in dawg or DAWG.md",
+      problem:
+        "only the agent lens is here; humans read /guide in dawg or DAWG.md",
     };
   if (positional.length > 1)
     return { kind: "error", problem: "one page at a time" };

@@ -292,7 +292,12 @@ export const AGENT_TOOL_DOCS: Readonly<Record<string, AgentToolDoc>> =
       details:
         "Runs one allowlisted CLI with an argv array: no shell, pipes or globbing, cwd the project folder. Allowed: ffmpeg ffprobe sox rubberband yt-dlp demucs basic-pitch aubio* whisper-cli, each with its own argument policy; any command only when the human turned on shell (/agent shell on). Paths must stay inside the project (symlink escapes refused) and never write into .dawg/; network only for download tools. timeoutSec bounds the run (the whole process group is killed). Long output returns tails plus a log id: page it with {log, offset}. After a turn reads web or read-root content, trusted exec is refused until the next turn. Subagents never get exec. Prefer audio for cuts, slices, stretch, pitch, fades and analysis (zero-crossing snaps, sidecars, history rows); use exec for filters and formats audio does not wrap.",
       example: {
-        argv: ["ffprobe", "-hide_banner", "-show_format", "tracks/drums/downloads/break.wav"],
+        argv: [
+          "ffprobe",
+          "-hide_banner",
+          "-show_format",
+          "tracks/drums/downloads/break.wav",
+        ],
         timeoutSec: 30,
       },
     },
