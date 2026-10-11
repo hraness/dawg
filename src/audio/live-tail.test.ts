@@ -41,6 +41,9 @@ const TRACKS: [string, Record<string, unknown>][] = [
 ];
 
 describe("live note tails (q08)", () => {
+  // A sweep of full renders: 6-11 s on CI runners. It took 25-33 s, past
+  // the budget, on runners that trap subnormal doubles while the piano body
+  // EQ circled in them through each silent tail (fixed in keys/dsp.ts).
   test("the release-sized render equals the full-window render", () => {
     for (const [name, track] of TRACKS) {
       const s = score(track);
@@ -64,7 +67,7 @@ describe("live note tails (q08)", () => {
           expect(a.releaseSeconds).toBe(b.releaseSeconds);
         }
     }
-  }, 30_000); // a sweep of full renders; CI runners take ~7 s
+  }, 30_000);
 
   // The budget the reviewer measured as 21 ms warm: a deterministic proxy
   // (rendered frames), not wall-clock time. A damped grand key at 48 kHz

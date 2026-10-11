@@ -9,6 +9,10 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 - **Lyrics you can edit (machine vox V0).** Notes and tracks can carry a `vox` field (phones, breath, consonant timing, dynamics; a track voice) with the score version unchanged. The lyric grammar adds a stored trailing `-` for word continuation, `[hh eh l]` phone overrides, `,` breaths and `/` line breaks; 0.7 lines read as before. `/lyrics 5-8 <text>` retypes a bar range without touching notes, `/lyrics reflow` re-seats words after notes move, `/note split` holds the second half (`_`) and `/note join` reports dropped syllables. `song.ts` prints and reads `vox` byte-stably (SDK 1.36.0, `vox()` helper), MIDI export writes lyric meta events, the highway draws a one-row lyric strip, `dawg history` records `lyrics` and `vox` targets, and the agent gets `inspect_vox`, `set_vox` and a ranged `set_lyrics`.
 - **Subagents.** The agent's `dispatch` tool runs up to four subagents in parallel on the same provider (the fast model by default), each confined to its own tracks, bars and files. Overlapping scopes are refused before anything runs; edits to different tracks rebase onto each other, a real clash is reported as a conflict rather than forced, and every child edit is its own `[task]`-labelled revision you can undo on its own. Esc cancels them all, and their spend joins the turn's.
 
+### Fixed
+
+- **Piano tails no longer stall on subnormal numbers.** The piano body EQ's state decayed into subnormal doubles after a note ended and stayed there for the rest of the render; x86 CPUs that trap subnormals ran those silent seconds several times slower (sporadic 30 s test timeouts on CI). The state now flushes to zero below 1e-30, as the patch nodes already did; audible output is unchanged.
+
 ## 0.9.0
 
 The patcher: modular instruments and effects built from nodes and cables, played by the song render, the loop and live keys, edited from a `/patch` view, typed `patch` commands, the agent and `song.ts`, with eight built-in patches and four macro knobs. Plus Ctrl-K breadcrumbs, short guide pages, real screens on dawg.sh and fixes for typed-ahead input.
