@@ -65,6 +65,17 @@ type Pending = {
 
 const DAEMON_ENTRY = join(import.meta.dir, "..", "daemon.ts");
 
+/**
+ * A request still pending when this client was closed locally, or issued
+ * after. Callers that abandon work on shutdown can recognise it.
+ */
+export class DaemonClosedError extends Error {
+  public constructor() {
+    super("dawgd client closed");
+    this.name = "DaemonClosedError";
+  }
+}
+
 export class DaemonUnavailableError extends Error {
   public constructor(message: string) {
     super(message);
@@ -282,7 +293,7 @@ export class DaemonClient {
     this.closed = true;
     for (const [id, pending] of this.pending) {
       clearTimeout(pending.timer);
-      pending.reject(new Error("dawgd client closed"));
+      pending.reject(new DaemonClosedError());
       this.pending.delete(id);
     }
     this.socket?.destroy();
@@ -308,7 +319,7 @@ export class DaemonClient {
   private request(
     message: ClientMessage & { id: string },
   ): Promise<ServerMessage> {
-    if (this.closed) return Promise.reject(new Error("dawgd client closed"));
+    if (this.closed) return Promise.reject(new DaemonClosedError());
     const frame = encodeFrame(message);
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
