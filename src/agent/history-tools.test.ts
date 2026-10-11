@@ -34,7 +34,7 @@ const CONTEXT: CommentContext = {
   focus: { trackId: "bass", trackName: "Bass", instrument: "bass", param: "cutoff" },
   playhead: { beat: 32, bar: 9, beatInBar: 1, label: "9.1" },
   loop: { fromBeat: 32, toBeat: 64, label: "9.1–17.1" },
-  transport: { playing: true, bpm: 120 },
+  transport: { playing: true, recording: false, bpm: 120 },
   rev: 10,
 };
 
@@ -112,7 +112,7 @@ const addBass = (id: string) =>
     notes: [{ pitch: 40, start: 0, duration: 1 }],
   });
 
-function comments(): HistoryRow[] {
+function comments(): readonly HistoryRow[] {
   return db.query({ sessionId: SESSION, kinds: ["comment"] }).rows;
 }
 
