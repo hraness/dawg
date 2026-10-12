@@ -18,7 +18,7 @@
  *                                             unison, single, solo)
  *   n         play the suggested next chord (dawg's progression engine;
  *             the session routes it through the root's note key)
- *   q         auto ⇄ manual
+ *   q         auto → manual → notes → auto
  *
  * Pure: the session asks for a chord per note key and owns sound and time.
  */
@@ -245,10 +245,15 @@ export class ChordPad {
   /** Handle a chord key; `pass` for anything else. */
   public press(value: string): PadResult {
     const s = this.settings;
-    if (value === "q" && s.mode !== "off") {
-      s.mode = s.mode === "auto" ? "manual" : "auto";
+    if (value === "q") {
+      s.mode =
+        s.mode === "auto" ? "manual" : s.mode === "manual" ? "off" : "auto";
       s.explicit = true;
-      return { type: "status", status: `chords ${s.mode}` };
+      return {
+        type: "status",
+        status:
+          s.mode === "off" ? "notes · q chords" : `chords ${s.mode} · q mode`,
+      };
     }
     if (!this.on) return { type: "pass" };
     const type = TYPE_KEYS[value];
@@ -405,7 +410,7 @@ export class ChordPad {
   /** The header at a glance: mode, key, last chord, next, latches. */
   public glance(keySet: boolean): string {
     const s = this.settings;
-    if (s.mode === "off") return "";
+    if (s.mode === "off") return "Notes · q chords";
     const key = this.key;
     const flats = keyUsesFlats(key);
     const parts = [

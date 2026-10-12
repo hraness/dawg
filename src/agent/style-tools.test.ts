@@ -41,6 +41,8 @@ describe("style tools", () => {
   test("list_styles: families, children and search", async () => {
     const families = await read("list_styles", {});
     expect(families.families.length).toBe(8);
+    expect(families.starters.length).toBe(16);
+    expect(families.starters[0].id).toBe("warehouse");
     const jazz = await read("list_styles", { parent: "jazz" });
     expect(jazz.children.length).toBeGreaterThan(0);
     const found = await read("list_styles", { query: "house" });

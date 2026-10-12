@@ -70,8 +70,8 @@ test.skipIf(!supported)(
       expect(t.vt.text()).toContain("enter open");
 
       // Effects › filter › cutoff, typed as digits.
-      await t.send("j");
-      await t.send("j");
+      await t.send("\u001b[B");
+      await t.send("\u001b[B");
       await t.send("\r");
       await t.until(() => t.vt.text().includes("≡ Effects"), "effects");
       await t.send("\r");
@@ -322,8 +322,8 @@ test.skipIf(!supported)(
       await close();
       await open("tuning", "Chords and key › tuning");
       // ← adjusts a value row; on an action row it goes back, like esc.
-      // (k wraps from the first row to the last: "list scales".)
-      await t.send("k");
+      // (↑ wraps from the first row to the last: "list scales".)
+      await t.send("\u001b[A");
       await t.until(() => t.vt.text().includes("› list scales"), "action row");
       await t.send("\u001b[D");
       await t.until(
@@ -335,12 +335,12 @@ test.skipIf(!supported)(
       await close();
       await open("agent", "Project › agent");
       expect(t.vt.text()).toContain("model key");
-      await t.send("h");
+      await t.send("\u001b[D");
       await t.until(
         () =>
           t.vt.text().includes("≡ Project") &&
           !t.vt.text().includes("Project › agent"),
-        "h backs out to project",
+        "left backs out to project",
       );
       await close();
       await open("performance", "Sound › performance");

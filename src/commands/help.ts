@@ -15,7 +15,7 @@ import {
   type DocMark,
 } from "../../guides/marks.ts";
 import { KEYS, type KeyScreen } from "../../tui/grammar.ts";
-import { displayWidth, truncate } from "../../tui/text.ts";
+import { displayWidth, wrapWords } from "../../tui/text.ts";
 import {
   resolveTopic,
   topicMiss,
@@ -836,7 +836,7 @@ function panesLines(width: number): string[] {
   return [
     ...sectionLines([{ ...group, group: "panes" }], width),
     "",
-    truncate("dawg pane tape in another terminal · guide panes", width),
+    ...wrapWords("dawg pane tape in another terminal · guide panes", width),
   ];
 }
 
@@ -870,10 +870,10 @@ export function keysLines(width = 80): string[] {
     const key = JSON.stringify(section.rows);
     if (seen.has(key)) continue;
     seen.add(key);
-    lines.push("", truncate(`── ${section.title}`, width));
+    lines.push("", ...wrapWords(`── ${section.title}`, width));
     for (const [keys, action] of section.rows)
       lines.push(
-        truncate(
+        ...wrapWords(
           `${keys}${" ".repeat(Math.max(1, column - displayWidth(keys)))}${action}`,
           width,
         ),
@@ -884,7 +884,7 @@ export function keysLines(width = 80): string[] {
 
 /** The last rows of a topic page: the same id in the other two doors. */
 function doors(id: TopicId, width: number): string[] {
-  return ["", truncate(`guide ${id} · menu ${id} · help all`, width)];
+  return ["", ...wrapWords(`guide ${id} · menu ${id} · help all`, width)];
 }
 
 /** A topic's groups: `sound`, then `sound · performance`, `sound · samples`. */
@@ -927,7 +927,7 @@ export function helpTopicLines(
     alias && !hasRow(name) ? undefined : commandTopic(name, width);
   if (command)
     return alias
-      ? [...command, "", truncate(`see also help ${alias}`, width)]
+      ? [...command, "", ...wrapWords(`see also help ${alias}`, width)]
       : command;
   return alias ? topicLines(alias, width) : undefined;
 }
@@ -981,7 +981,7 @@ function commandTopic(
   );
   const usage = USAGE[usageKey] ?? USAGE[name];
   if (rows.length === 0 && !usage) return undefined;
-  const wrap = Math.max(30, width - 2);
+  const wrap = Math.max(1, width - 2);
   // A usage line that repeats a row keeps only what it adds (examples).
   const extra = usage
     ? rows.reduce((text, entry) => {
@@ -1001,7 +1001,7 @@ function commandTopic(
     .filter((part) => part && !shown.split(" · ").includes(part))
     .join(" · ");
   return [
-    `── ${name}`,
+    ...wrapWords(`── ${name}`, width),
     ...rows.flatMap((entry) => [
       ...wrapWords(entry.command, wrap),
       ...wrapWords(entry.summary, wrap - 2).map((line) => `  ${line}`),
@@ -1019,19 +1019,6 @@ export const HELP_COMMAND_ALIASES: Readonly<Record<string, string>> = {
   login: "model key",
 };
 
-function wrapWords(text: string, width: number): string[] {
-  const rows: string[] = [];
-  let row = "";
-  for (const word of text.split(" ")) {
-    if (row && row.length + 1 + word.length > width) {
-      rows.push(row);
-      row = word;
-    } else row = row ? `${row} ${word}` : word;
-  }
-  if (row) rows.push(row);
-  return rows;
-}
-
 function sectionLines(
   sections: readonly HelpSection[],
   width: number,
@@ -1048,11 +1035,14 @@ function sectionLines(
     );
   for (const section of sections) {
     if (lines.length > 0) lines.push("");
-    lines.push(truncate(`── ${section.group}`, width));
+    lines.push(...wrapWords(`── ${section.group}`, width));
     for (const entry of section.entries) {
       const pad = Math.max(1, column - entry.command.length);
       lines.push(
-        truncate(`${entry.command}${" ".repeat(pad)}${entry.summary}`, width),
+        ...wrapWords(
+          `${entry.command}${" ".repeat(pad)}${entry.summary}`,
+          width,
+        ),
       );
     }
   }
@@ -1073,11 +1063,14 @@ export function helpLines(width = 80): string[] {
   );
   for (const section of HELP_SECTIONS) {
     if (lines.length > 0) lines.push("");
-    lines.push(truncate(`── ${section.group}`, width));
+    lines.push(...wrapWords(`── ${section.group}`, width));
     for (const entry of section.entries) {
       const pad = Math.max(1, column - entry.command.length);
       lines.push(
-        truncate(`${entry.command}${" ".repeat(pad)}${entry.summary}`, width),
+        ...wrapWords(
+          `${entry.command}${" ".repeat(pad)}${entry.summary}`,
+          width,
+        ),
       );
     }
   }

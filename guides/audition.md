@@ -26,7 +26,8 @@ Changes play on a loop and only stick when you keep them.
 ## Keys
 
 - ↑↓ move · → or Enter open · ←→ adjust a value · Esc back
-- `x` reset · Space loops the track · `a` A/B · `c` solo or in context
+- Type to search · Delete reset · Space loops the track
+- Ctrl-A A/B · Ctrl-O solo or in context
 - Enter keeps every staged change as one undo step · Esc reverts
 
 ## Next

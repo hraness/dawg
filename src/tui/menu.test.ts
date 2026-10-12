@@ -147,7 +147,7 @@ describe("edit menu", () => {
       type: "run",
       command: "section vary chorus keys -1",
     });
-    expect(menu.key("x", ctx)).toEqual({
+    expect(menu.key("\u001b[3~", ctx)).toEqual({
       type: "run",
       command: "section vary chorus keys off",
     });
@@ -348,7 +348,7 @@ describe("edit menu", () => {
     expect(menu.key(RIGHT, ctx)).toEqual({ type: "handled" });
     expect(menu.key("-", ctx)).toEqual({ type: "run", command: "volume 0.95" });
     select(menu, ctx, "pan");
-    expect(menu.key("l", ctx)).toEqual({ type: "run", command: "pan 0.1" });
+    expect(menu.key(RIGHT, ctx)).toEqual({ type: "run", command: "pan 0.1" });
     select(menu, ctx, "mute");
     expect(menu.key("\r", ctx)).toEqual({ type: "run", command: "mute" });
   });
@@ -590,7 +590,7 @@ describe("edit menu", () => {
       type: "run",
       command: "automate filter points 2:1000",
     });
-    expect(menu.key("x", ctx)).toEqual({
+    expect(menu.key("\u001b[3~", ctx)).toEqual({
       type: "run",
       command: "automate filter remove 2",
     });
@@ -630,13 +630,13 @@ describe("edit menu", () => {
       type: "run",
       command: "master glue ratio 2.5",
     });
-    expect(menu.key("x", ctx)).toEqual({
+    expect(menu.key("\u001b[3~", ctx)).toEqual({
       type: "run",
       command: "master glue ratio 2",
     });
     menu.key(ESC, ctx);
     select(menu, ctx, "target LUFS");
-    expect(menu.key("x", ctx)).toEqual({
+    expect(menu.key("\u001b[3~", ctx)).toEqual({
       type: "run",
       command: "master target off",
     });
@@ -672,13 +672,83 @@ describe("edit menu", () => {
     menu.key("/", ctx);
     for (const ch of "grid") menu.key(ch, ctx);
     const rows = menu.view(ctx).items;
-    expect(rows).toHaveLength(1);
+    expect(rows.length).toBeGreaterThanOrEqual(1);
     expect(rows[0]!.label).toStartWith("grid");
     expect(menu.view(ctx).note).toEndWith("› /grid 1/16");
     expect(menu.view(ctx).title).toContain("/grid");
     menu.key(ESC, ctx);
     expect(menu.view(ctx).items.length).toBeGreaterThan(1);
     expect(menu.view(ctx).title).toBe("≡ Project");
+  });
+
+  test("typing immediately searches and exact names outrank fuzzy descriptions", () => {
+    const menu = new EditMenu();
+    const ctx = context();
+    menu.show(ctx, "mix");
+    for (const ch of "vol")
+      expect(menu.key(ch, ctx)).toEqual({ type: "handled" });
+    expect(menu.view(ctx).items[0]!.label).toStartWith("volume");
+    expect(menu.view(ctx).title).toContain("/vol");
+    expect(menu.typing).toBe(true);
+    // Navigating pauses typing, while backspace still edits the query.
+    menu.key("\u001bOB", ctx);
+    menu.key("\u007f", ctx);
+    expect(menu.view(ctx).title).toContain("/vo");
+    menu.key(ESC, ctx);
+    expect(menu.view(ctx).title).toBe("≡ Mix");
+    expect(menu.view(ctx).items.every((item) => item.topic === "Mix")).toBe(
+      true,
+    );
+  });
+
+  test("former letter shortcuts always search instead of mutating a value", () => {
+    const ctx = context();
+    for (const letter of "hjklxacd") {
+      const menu = new EditMenu();
+      menu.show(ctx, "mix");
+      select(menu, ctx, "pan");
+      expect(menu.key(letter, ctx)).toEqual({ type: "handled" });
+      expect(menu.view(ctx).title).toContain(`/${letter}`);
+      expect(menu.typing).toBe(true);
+    }
+    const menu = new EditMenu();
+    menu.show(ctx, "mix");
+    select(menu, ctx, "pan");
+    expect(menu.key("\u0018", ctx)).toEqual({ type: "run", command: "pan 0" });
+  });
+
+  test("fuzzy root search finds nested groups, retains their area, and is bounded", () => {
+    const menu = new EditMenu();
+    const ctx = context();
+    menu.show(ctx);
+    for (const ch of "autmtn") menu.key(ch, ctx);
+    const rows = menu.view(ctx).items;
+    const at = rows.findIndex((row) => row.label.includes("Mix › automation"));
+    expect(at).toBeGreaterThanOrEqual(0);
+    expect(rows[at]!.topic).toBe("Mix");
+    menu.select(ctx, at);
+    menu.key("\r", ctx);
+    expect(menu.view(ctx).items.every((item) => item.topic === "Mix")).toBe(
+      true,
+    );
+    menu.key("x".repeat(5000), ctx);
+    expect(menu.view(ctx).title.length).toBeLessThan(100);
+  });
+
+  test("numeric rows retain direct entry and explicit search can match numbers", () => {
+    const menu = new EditMenu();
+    const ctx = context();
+    menu.show(ctx, "project");
+    select(menu, ctx, "tempo");
+    menu.key("9", ctx);
+    menu.key("8", ctx);
+    expect(menu.key("\r", ctx)).toEqual({ type: "run", command: "tempo 98" });
+    menu.key("/", ctx);
+    menu.key("120", ctx);
+    expect(menu.view(ctx).title).toContain("/120");
+    expect(
+      menu.view(ctx).items.some((row) => row.label.startsWith("tempo")),
+    ).toBe(true);
   });
 
   test("mix focuses another track before editing it", () => {
@@ -826,7 +896,7 @@ describe("Sound › performance", () => {
       type: "run",
       command: "humanize 11 5 0",
     });
-    expect(menu.key("x", ctx)).toEqual({
+    expect(menu.key("\u001b[3~", ctx)).toEqual({
       type: "run",
       command: "humanize off",
     });
@@ -852,22 +922,33 @@ describe("auditioning in the menu", () => {
     },
   });
 
-  test("Space, a and c reach the audition; a toggle row still switches on Space", () => {
+  test("Space, Ctrl-A and Ctrl-O reach the audition; a toggle row still switches on Space", () => {
     const menu = new EditMenu();
     const ctx = auditioning(score(), score(), false);
     menu.show(ctx, "mix");
     select(menu, ctx, "volume");
     expect(menu.key(" ", ctx)).toEqual({ type: "audition", key: "loop" });
-    expect(menu.key("a", ctx)).toEqual({ type: "audition", key: "ab" });
-    expect(menu.key("c", ctx)).toEqual({ type: "audition", key: "context" });
+    expect(menu.key("\u0001", ctx)).toEqual({ type: "audition", key: "ab" });
+    expect(menu.key("\u000f", ctx)).toEqual({
+      type: "audition",
+      key: "context",
+    });
     // Nudges still run their command; the window decides to stage it.
     expect(menu.key("-", ctx)).toEqual({ type: "run", command: "volume 0.95" });
     select(menu, ctx, "mute");
     expect(menu.key(" ", ctx)).toEqual({ type: "run", command: "mute" });
-    // Without an audition host the keys keep their old meaning.
+    // Ordinary letters start typeahead, without requiring a slash.
     const plain = new EditMenu();
     plain.show(context(), "mix");
     expect(plain.key("a", context())).toEqual({ type: "handled" });
+    expect(plain.view(context()).title).toContain("/a");
+    menu.key("v", ctx);
+    expect(menu.key("\u0001", ctx)).toEqual({ type: "audition", key: "ab" });
+    expect(menu.key("\u000f", ctx)).toEqual({
+      type: "audition",
+      key: "context",
+    });
+    expect(menu.view(ctx).title).toContain("/v");
   });
 
   test("staged rows show staged ← committed; Enter keeps; Esc reverts first", () => {
@@ -1065,7 +1146,7 @@ describe("key command", () => {
       type: "run",
       command: "/bpm 128 brk",
     });
-    expect(menu.key("x", ctx)).toEqual({
+    expect(menu.key("\u001b[3~", ctx)).toEqual({
       type: "run",
       command: "/bpm off brk",
     });

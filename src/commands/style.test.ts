@@ -71,6 +71,36 @@ describe("style command parsing", () => {
 });
 
 describe("style command results", () => {
+  test("curated starters are the front door and the full catalog stays available", () => {
+    expect(run("styles").message).toContain("16 reusable starters");
+    expect(run("styles").message).toContain("warehouse");
+    expect(run("style list all").message).toContain("in the tree");
+    expect(run("style list breaks").message).toContain("jungle-cut");
+    expect(run("style info Warehouse").message).toContain(
+      "each part has its own track",
+    );
+    const starter = run("style warehouse 4 7");
+    expect(starter.ok).toBe(true);
+    expect(starter.next!.style?.id).toBe("warehouse");
+    expect(starter.next!.tracks.map((track) => track.id)).toEqual([
+      "drums",
+      "chords",
+    ]);
+  });
+
+  test("legacy accompaniment leaves space for melody and keeps its existing id", () => {
+    const result = run("style deep-house 4 7");
+    expect(result.next!.style?.id).toBe("deep-house");
+    expect(
+      result.next!.tracks.some((track) =>
+        ["lead", "counter", "arp"].includes(track.id),
+      ),
+    ).toBe(false);
+    expect(result.next!.notes.length).toBeGreaterThan(0);
+    for (const id of ["sound-poetry", "kulning", "chinese-folk"])
+      expect(run(`style ${id} 4 1`).next!.notes.length).toBeGreaterThan(0);
+  });
+
   test("browsing reads and never writes", () => {
     for (const text of [
       "style",

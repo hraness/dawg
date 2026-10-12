@@ -141,7 +141,7 @@ describe("Project › Tempo and meter", () => {
       type: "run",
       command: "tempo 89 at 16 ramp",
     });
-    expect(menu.key("x", ctx)).toEqual({
+    expect(menu.key("\u001b[3~", ctx)).toEqual({
       type: "run",
       command: "tempo remove 16",
     });
@@ -163,7 +163,7 @@ describe("Project › Tempo and meter", () => {
       type: "run",
       command: "meter 8/8 at bar 3",
     });
-    expect(menu.key("x", ctx)).toEqual({
+    expect(menu.key("\u001b[3~", ctx)).toEqual({
       type: "run",
       command: "meter remove bar 3",
     });
@@ -172,7 +172,7 @@ describe("Project › Tempo and meter", () => {
       type: "run",
       command: "fermata at 27 1.75",
     });
-    expect(menu.key("x", ctx)).toEqual({
+    expect(menu.key("\u001b[3~", ctx)).toEqual({
       type: "run",
       command: "fermata remove 27",
     });
@@ -195,7 +195,7 @@ describe("Project › Tempo and meter", () => {
       type: "run",
       command: "track rate 1.01",
     });
-    expect(menu.key("x", ctx)).toEqual({
+    expect(menu.key("\u001b[3~", ctx)).toEqual({
       type: "run",
       command: "track rate off",
     });

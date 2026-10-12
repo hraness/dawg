@@ -111,7 +111,7 @@ describe("PlaySession", () => {
       bars: 1,
       tracks: [{ id: "drums", name: "drums", instrument: "kit" }],
     });
-    const { session } = harness(score, "drums", { mode: "auto" });
+    const { session, engine } = harness(score, "drums", { mode: "auto" });
     await session.enter();
     const keys = session.strip(0);
     const label = (key: string) => keys.find((k) => k.key === key)?.label;
@@ -124,6 +124,10 @@ describe("PlaySession", () => {
     expect(view.range).toBe("drums");
     expect(view.chords).toBeUndefined();
     expect(view.legend).toBeUndefined();
+    session.press("q");
+    session.press("3");
+    session.press("a");
+    expect(engine.on.size).toBe(1);
   });
 
   test("enter drops the lead and monitors; exit restores", async () => {
@@ -938,6 +942,23 @@ describe("PlaySession chord mode", () => {
 });
 
 describe("scale degrees (i)", () => {
+  test("scale mode leaves automatic and latched manual chords for single notes", async () => {
+    for (const mode of ["auto", "manual"] as const) {
+      const { session, engine } = harness(leadScore(), "lead", {
+        mode,
+        explicit: true,
+      });
+      await session.enter();
+      session.press("3");
+      session.press("i");
+      expect(session.chords.settings.mode).toBe("off");
+      expect(session.chords.settings.explicit).toBe(true);
+      session.press("a");
+      expect(engine.on.size).toBe(1);
+      expect(session.header().chords).toContain("Notes");
+      await session.exit();
+    }
+  });
   test("i toggles degree mode, which follows the song key and tuning", async () => {
     const { session, state } = harness(
       leadScore().withKey("D dorian"),

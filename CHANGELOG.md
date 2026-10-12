@@ -2,6 +2,19 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.11.0
+
+### Changed
+
+- **Searchable menus and command suggestions.** Type directly to fuzzy-search menus, guides and command choices. Suggestions sit above the prompt, wrap by terminal cell width and share semantic colors and symbols. Arrows select; Tab inserts a suggestion; Enter runs the accepted text. Searchable menus use Ctrl-A for A/B and Ctrl-O for audition context so letters stay available for search. Long command listings wrap instead of clipping tokens.
+- **Visible playback and keyboard controls.** A clickable action row exposes Play/Pause, previous/next scene, Menu, Keys and Help. Scene labels jump directly, Ctrl-Left/Right navigate scenes, and play mode exposes Notes, Chords, Scale, Chromatic, Record and Exit. `q` cycles Auto chords → Manual chords → Notes; Scale explicitly plays individual notes.
+- **A focused groove library.** Sixteen modular starters replace the sprawling style tree as the first view: Machines, Breaks, Pocket and Cycles. Short names identify distinct rhythmic references, from Warehouse and Trap Door to Clave Club and Frame Seven. They use separate drums, bass, rhythm and pad tracks without lead melodies. The full style catalog and historical IDs remain available under All styles; legacy accompaniment drops lead/counter/arp layers while solo examples remain playable.
+
+### Fixed
+
+- **Faster QWERTY sound preparation.** Interactive notes render a byte-identical opening while a worker completes the tail. Worker sample transfers include only the active track's assets, reuse unchanged banks and serialize wavetable data safely. Pending tails cannot revive released or replaced notes. Measured render and dispatch timings, including their limits, are recorded in `docs/perf.md`; these are not end-to-end device-latency claims.
+- **Reliable scene and pointer navigation.** Scene stepping follows the visible loop position, including repeated passes and gaps before the first scene. Wrapped menu continuations keep their complete click target; current selection remains visible alongside semantic category marks. Narrow menus retain their Enter action and Esc guidance.
+
 ## 0.10.0
 
 History and comments, a preset library and an agent that works on files: every edit, comment and agent turn lands in a per-project SQLite history you can search with `/history`, `dawg history` or the agent, `/comment` pins a note to the moment, 157 presets in 17 categories pass measured loudness and peak limits and open from a browser, the agent gains file, inspect, history, audio chop and allowlisted exec tools and can dispatch subagents, dev mode credits hot reloads to the coding agent that made them, and the lyric model and machine vox let the built-in singer sing words. Plus a QWERTY play-mode keyboard, a friendlier dawg.sh with moving real screens, and fixes for PTY settling, auto-naming across windows and piano tails.

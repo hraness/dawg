@@ -40,6 +40,13 @@ tempo 120
 
 Space on an empty prompt plays and pauses; Ctrl-Z undoes any step.
 
+For a ready groove, type `style` or open `/menu style`. Sixteen original
+starters cover Machines, Breaks, Pocket and Cycles, with drums first and
+separate bass, rhythm or pad parts where they fit. They leave the melody
+to you. `style warehouse 4 3` loads four bars with seed 3, replacing the
+song in one undo step. Their style and artist listening cues describe
+rhythm and sound; the patterns are original. See [Styles](./DAWG.md#styles).
+
 ## Four ways to do anything
 
 Every guide shows the same four ways, so you can pick the one you like:
@@ -47,9 +54,9 @@ Every guide shows the same four ways, so you can pick the one you like:
 - **Ask.** Type a plain sentence ("make the hats swing") and the agent
   edits the song, typing each command it runs so you learn them.
 - **Type it yourself.** Short commands such as `loop 5-6`, `reverb 0.4`
-  or `style deep-house 16`. `/help` lists them all.
-- **Menu.** Ctrl-K opens a menu of settings; a number row opens a
-  fader you can drag or step.
+  or `style warehouse 4`. `/help` lists them all.
+- **Menu.** Ctrl-K opens settings. Type to fuzzy-search names and
+  commands; arrows move and Enter chooses. A number opens a fader.
 - **Keys.** Ctrl-P turns the keyboard into a piano; Ctrl-T opens TAPE,
   every track across the bars; `?` shows the keys for any screen.
 
@@ -161,10 +168,15 @@ A track named `drums` (or `kit`) starts with the `kit` instrument; `instrument k
 
 ## The screen
 
-The screen has four parts. A one-line header shows `dawg` · track · ▶/⏸ BPM · key · session · window count (when more than one) on the left and model · rev · sync state on the right; narrower terminals drop the least important segments first. The highway overlays every unmuted track, each in its own stable accent, with the focused track bright and the others dimmed; `/view focus` shows only the focused track and `/view all` (the default) brings the rest back. A track with no hits shows `main · empty · add C4 at 0 to start` in place of lane labels. Below it, an activity strip shows operation cards (`✓ +8 bass notes · rev 41→42 · ^z undo`; the undo hint accompanies the first three score edits), queue depth, a braille spinner while the agent works, and errors in red with an `✗` prefix in one shape, `<what> · <why> · <next step>` (`no such file · nope.json`). The prompt panel is filled with a background color. It wraps by grapheme, grows from 1 to 8 rows (capped at 30% of the screen, then scrolls internally) and keeps the draft when the terminal is resized. Narrow terminals collapse the header and hints. Below 60×16 the screen shows `terminal too small · W×H · need ≥ 60×16`, centered and updating as you resize; playback, the daemon and the agent keep going, space plays and stops, q and ctrl-c quit, other keys are dropped, and the real UI comes back unchanged once the terminal is big enough.
+The screen keeps transport, navigation and editing within reach. A one-line header shows `dawg` · track · ▶/⏸ BPM · key · session · window count (when more than one) on the left and model · rev · sync state on the right; narrower terminals drop the least important segments first. The highway overlays every unmuted track, each in its own stable accent, with the focused track bright and the others dimmed; `/view focus` shows only the focused track and `/view all` (the default) brings the rest back. A track with no hits shows `main · empty · add C4 at 0 to start` in place of lane labels. Below it, an activity strip shows operation cards (`✓ +8 bass notes · rev 41→42 · ^z undo`; the undo hint accompanies the first three score edits), queue depth, a braille spinner while the agent works, and errors in red with an `✗` prefix in one shape, `<what> · <why> · <next step>` (`no such file · nope.json`). The prompt panel is filled with a background color. It wraps by grapheme, grows from 1 to 8 rows (capped at 30% of the screen, then scrolls internally) and keeps the draft when the terminal is resized. Narrow terminals collapse the header and hints. Below 60×16 the screen shows `terminal too small · W×H · need ≥ 60×16`, centered and updating as you resize; playback, the daemon and the agent keep going, space plays and stops, q and ctrl-c quit, other keys are dropped, and the real UI comes back unchanged once the terminal is big enough.
+
+A persistent action shelf exposes playback, previous/next scene, Menu, Keys and Help; click any control or use its displayed shortcut. Scene labels are clickable too. In Keys, selected Notes/Chords and Scale/Chromatic controls show a check mark, alongside Record and Exit.
+
+Type directly to fuzzy-search menu choices. Command suggestions appear as quiet, wrapped rows above the prompt: ↑/↓ selects, Tab or a click inserts, and Enter executes the accepted text. Esc hides suggestions. Lists such as `style` use the same scrollable, wrapped panel. Semantic symbols and colors distinguish sounds, effects, rhythm, harmony, arrangement and project actions.
 
 | Key                   | Action                                                                       |
 | --------------------- | ---------------------------------------------------------------------------- |
+| Ctrl-← / Ctrl-→       | previous / next scene                                                        |
 | Space (empty prompt)  | play / pause                                                                 |
 | Enter                 | send now (NOW) or run after the agent turn (NEXT)                            |
 | Shift-Enter, Ctrl-J   | newline                                                                      |
@@ -188,6 +200,7 @@ A patch is a small modular synth or effect: oscillators, filters, envelopes and 
 
 ```text
  ⏸ 121 BPM · 1.1 · bass        Bb dorian · opus-5.5 · gateway · rev 2 · ○ local
+  ▶ Play Space   ‹ Scene ^←   Scene › ^→   ☰ Menu ^K   ♪ Keys ^P   ? Help
  patch bass ▸ acid-bass (instrument · 7 nodes · 10 cables · 1 voice)
  NODES                        │ vcf  svf · voice
  voice    ◆                   │▸mode    lp
@@ -196,7 +209,6 @@ A patch is a small modular synth or effect: oscillators, filters, envelopes and 
  envamt   ◆ scale lin         │ q       ← ·
  amp      ◆ adsr              │ out     → vca.in
 ▸vcf      ◆ svf lp            │
- vca      ◆                   │
 ────────────────────────────────────────────────────────────────────────────────
  CABLES     vcf.in vcf.cutoff vcf.q vca.in
  tone.out   ~      ·          ·     ·

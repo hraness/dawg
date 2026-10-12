@@ -17,6 +17,7 @@ import { EUROPE_ASIA_PACIFIC_CARDS } from "./europe-asia-pacific.ts";
 import { POP_CARDS } from "./pop.ts";
 import { ROCK_CARDS } from "./rock.ts";
 import { ROOTS_CARDS } from "./roots.ts";
+import { GROOVE_CARDS } from "./starters.ts";
 import type {
   ResolvedStyle,
   StyleBody,
@@ -126,6 +127,7 @@ export function stylePath(id: StyleId): StyleId[] {
 export const STYLE_CARDS: ReadonlyMap<StyleId, StyleCard> = (() => {
   const out = new Map<StyleId, StyleCard>();
   for (const list of [
+    GROOVE_CARDS,
     ART_CARDS,
     ROOTS_CARDS,
     ROCK_CARDS,

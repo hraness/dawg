@@ -60,7 +60,10 @@ import { paintArrangeStrip, type ArrangeStripView } from "./arrange-strip.ts";
 import { CellBuffer, ScreenWriter, type CursorPosition } from "./screen.ts";
 import { paintDrawer, type DrawerLayout, type DrawerView } from "./drawer.ts";
 import { HitMap, type HitTarget } from "./hits.ts";
-import { displayWidth, truncate } from "./text.ts";
+import { displayWidth, truncate, wrapWords } from "./text.ts";
+import { fuzzyScore } from "./search.ts";
+import { topicMark } from "./semantics.ts";
+import { paintActions } from "./actions.ts";
 import { paintCrumbs, type Crumbs } from "./crumbs.ts";
 import {
   accentStyle,
@@ -165,6 +168,7 @@ export interface UiState {
   /** Transcript scroll (entries up from the newest) and filter. */
   log?: LogView | undefined;
   picker?: PickerState | undefined;
+  completion?: PickerState | undefined;
   text?: TextView | undefined;
   /** The `?` panel: keys for the screen underneath, drawn over it. */
   keys?: TextView | undefined;
@@ -254,6 +258,7 @@ export interface PickerState {
 }
 
 export interface PickerItem {
+  topic?: string | undefined;
   label: string;
   /** Opaque value returned on Enter. */
   value: string;
@@ -1126,12 +1131,17 @@ function paintText(
     height,
   });
   const inner = height - 2;
-  const maxScroll = Math.max(0, text.lines.length - inner);
+  const wrapped = text.lines.flatMap((line, source) =>
+    wrapWords(line, boxWidth - 4).map((value, part) => ({
+      value,
+      source,
+      part,
+    })),
+  );
+  const maxScroll = Math.max(0, wrapped.length - inner);
   const scroll = Math.max(0, Math.min(maxScroll, text.scroll));
   const position =
-    maxScroll > 0
-      ? ` · ${scroll + 1}-${scroll + inner}/${text.lines.length}`
-      : "";
+    maxScroll > 0 ? ` · ${scroll + 1}-${scroll + inner}/${wrapped.length}` : "";
   buffer.text(
     left + 2,
     region.y,
@@ -1151,30 +1161,37 @@ function paintText(
       hint,
       onBackground(roles.muted, panel),
     );
-  text.lines.slice(scroll, scroll + inner).forEach((line, index) => {
-    const heading = line.startsWith("── ");
-    const y = region.y + 1 + index;
-    // The heading's mark, as in /guide (guides/marks.ts): the symbol says
-    // what the group is, its role's color repeats it.
-    const mark = heading
-      ? (text.marks?.[scroll + index] ?? RULE_MARK)
-      : undefined;
-    const sign = mark ? (ui.capabilities.unicode ? mark.mark : mark.ascii) : "";
-    buffer.text(
-      left + 2,
-      y,
-      truncate(heading ? `${sign} ${line.slice(3)}` : line, boxWidth - 4),
-      onBackground(heading ? { ...roles.text, bold: true } : roles.text, panel),
-    );
-    if (mark)
+  wrapped
+    .slice(scroll, scroll + inner)
+    .forEach(({ value: line, source, part }, index) => {
+      const heading = part === 0 && line.startsWith("── ");
+      const y = region.y + 1 + index;
+      // The heading's mark, as in /guide (guides/marks.ts): the symbol says
+      // what the group is, its role's color repeats it.
+      const mark = heading ? (text.marks?.[source] ?? RULE_MARK) : undefined;
+      const sign = mark
+        ? ui.capabilities.unicode
+          ? mark.mark
+          : mark.ascii
+        : "";
       buffer.text(
         left + 2,
         y,
-        sign,
-        onBackground({ ...roles[mark.role], bold: true }, panel),
-        boxWidth - 4,
+        truncate(heading ? `${sign} ${line.slice(3)}` : line, boxWidth - 4),
+        onBackground(
+          heading ? { ...roles.text, bold: true } : roles.text,
+          panel,
+        ),
       );
-  });
+      if (mark)
+        buffer.text(
+          left + 2,
+          y,
+          sign,
+          onBackground({ ...roles[mark.role], bold: true }, panel),
+          boxWidth - 4,
+        );
+    });
 }
 
 function paintGuide(
@@ -1286,12 +1303,27 @@ function paintPicker(
   const roles = ui.theme.roles;
   const { left, boxWidth } = panelRect(width);
   const note = picker.items[picker.index]?.note ?? picker.note;
-  const noteRows = note && region.height >= 6 ? 1 : 0;
+  const noteLines = note ? wrapWords(note, boxWidth - 4).slice(0, 3) : [];
+  const noteRows =
+    region.height >= 6 ? Math.min(noteLines.length, region.height - 5) : 0;
+  const room = boxWidth - 9;
+  const rows = picker.items.map((item) =>
+    wrapWords(
+      item.detail ? `${item.label}  ·  ${item.detail}` : item.label,
+      room,
+    ),
+  );
   const height = Math.min(
     region.height,
-    Math.max(1, picker.items.length) + 2 + noteRows,
+    Math.max(
+      1,
+      rows.reduce((sum, lines) => sum + lines.length, 0),
+    ) +
+      2 +
+      noteRows,
   );
   if (height < 3 || boxWidth < 10) return;
+  region = { y: region.y + region.height - height, height };
   const panel = paintBox(buffer, ui, {
     left,
     top: region.y,
@@ -1330,61 +1362,82 @@ function paintPicker(
       onBackground(roles.muted, panel),
     );
   const inner = height - 2 - noteRows;
-  if (noteRows && note)
-    buffer.text(
-      left + 2,
-      region.y + height - 2,
-      truncate(note, boxWidth - 4),
-      onBackground(roles.muted, panel),
+  noteLines
+    .slice(0, noteRows)
+    .forEach((line, index) =>
+      buffer.text(
+        left + 2,
+        region.y + height - 1 - noteRows + index,
+        line,
+        onBackground(roles.muted, panel),
+      ),
     );
-  const first = Math.max(
-    0,
-    Math.min(picker.items.length - inner, picker.index - inner + 1),
-  );
-  const marks = (picker.all ?? picker.items).some(
-    (item) => item.current !== undefined,
-  );
-  if (picker.items.length === 0)
+  // Keep the focused item fully visible. Continuations share its click target.
+  let first = Math.max(0, Math.min(picker.index, rows.length - 1));
+  let usedRows = Math.min(inner, rows[first]?.length ?? 1);
+  while (first > 0 && usedRows + rows[first - 1]!.length <= inner) {
+    first--;
+    usedRows += rows[first]!.length;
+  }
+  let offset = 0;
+  if (!picker.items.length)
     buffer.text(
       left + 4,
       region.y + 1,
       "no matches",
       onBackground(roles.muted, panel),
     );
-  picker.items.slice(first, first + inner).forEach((item, offset) => {
-    const index = first + offset;
-    const y = region.y + 1 + offset;
-    hits?.add(left + 1, y, boxWidth - 2, 1, { kind: "picker-row", index });
+  for (
+    let index = first;
+    index < picker.items.length && offset < inner;
+    index++
+  ) {
+    const item = picker.items[index]!;
     const selected = index === picker.index;
-    const marker = selected ? (ui.capabilities.unicode ? "›" : ">") : " ";
-    const style = selected
-      ? onBackground({ ...roles.borderFocus, bold: true }, panel)
-      : onBackground(roles.text, panel);
-    buffer.text(left + 2, y, marker, style);
-    // A column for the current-item mark only when the picker uses one.
-    const pad = marks ? 2 : 0;
-    if (item.current)
-      buffer.text(
-        left + 4,
-        y,
-        ui.capabilities.unicode ? "●" : "*",
-        onBackground(roles.success, panel),
-      );
-    const room = boxWidth - 6 - pad;
-    const used = buffer.text(
-      left + 4 + pad,
-      y,
-      truncate(item.label, room),
-      style,
+    const mark = topicMark(item.topic ?? item.label);
+    const style = onBackground(
+      selected ? { ...roles.borderFocus, bold: true } : roles.muted,
+      panel,
     );
-    if (item.detail && used + 3 < room)
-      buffer.text(
-        left + 4 + pad + used + 2,
-        y,
-        truncate(item.detail, room - used - 2),
-        onBackground(roles.muted, panel),
-      );
-  });
+    const lines = rows[index]!;
+    const count = Math.min(inner - offset, lines.length);
+    hits?.add(
+      left + 1,
+      region.y + 1 + offset,
+      boxWidth - 2,
+      count,
+      picker.id === "completion"
+        ? { kind: "completion-row", index }
+        : { kind: "picker-row", index },
+    );
+    for (let line = 0; line < count; line++) {
+      const y = region.y + 1 + offset++;
+      if (line === 0) {
+        buffer.text(
+          left + 5,
+          y,
+          selected ? (ui.capabilities.unicode ? "›" : ">") : " ",
+          style,
+        );
+        if (mark)
+          buffer.text(
+            left + 2,
+            y,
+            ui.capabilities.unicode ? mark.mark : mark.ascii,
+            onBackground({ ...roles[mark.role], bold: true }, panel),
+            2,
+          );
+        if (item.current)
+          buffer.text(
+            left + 4,
+            y,
+            ui.capabilities.unicode ? "●" : "*",
+            onBackground(roles.success, panel),
+          );
+      }
+      buffer.text(left + 7, y, lines[line]!, style, room);
+    }
+  }
 }
 
 /** The `?` panel sits at the bottom of the highway, as tall as it needs. */
@@ -1563,6 +1616,14 @@ export function composeFrame(
       hits,
       view.beat ?? resolveBeat(view.score, nowMs),
     );
+  const actionRows =
+    ui.overlay || ui.keys
+      ? 0
+      : paintActions(buffer, layout.highway.y, width, view, ui, hits);
+  layout.highway = {
+    y: layout.highway.y + actionRows,
+    height: layout.highway.height - actionRows,
+  };
   if (view.arrange && !view.tape && !view.patch && layout.highway.height > 4) {
     paintArrangeStrip(
       buffer,
@@ -1571,6 +1632,7 @@ export function composeFrame(
       view.arrange,
       ui.theme,
       ui.capabilities.unicode,
+      hits,
     );
     layout.highway = {
       y: layout.highway.y + 1,
@@ -1662,6 +1724,16 @@ export function composeFrame(
         hits,
       );
   }
+  if (!ui.overlay && !ui.keys && ui.completion && layout.highway.height > 2) {
+    const height = Math.min(9, layout.highway.height);
+    paintPicker(
+      buffer,
+      { ...ui, picker: ui.completion },
+      { y: layout.highway.y + layout.highway.height - height, height },
+      width,
+      hits,
+    );
+  }
   if (ui.keys && layout.highway.height > 0)
     paintText(buffer, ui, keysRegion(layout.highway, ui.keys), width, {
       text: ui.keys,
@@ -1744,6 +1816,42 @@ export class TuiApp {
   overlay: Overlay;
   log: LogView = { scroll: 0, filter: "all" };
   picker: PickerState | undefined;
+  completionSource?: (text: string) => readonly PickerItem[];
+  completion: PickerState | undefined;
+  private completedText = "";
+  private dismissedText: string | undefined;
+
+  private refreshCompletion(): void {
+    const text = this.prompt.value;
+    if (!this.completionSource) {
+      this.completion = undefined;
+      this.completedText = "";
+      return;
+    }
+    if (text === this.completedText) return;
+    this.completedText = text;
+    const items =
+      text === this.dismissedText ? [] : (this.completionSource?.(text) ?? []);
+    this.completion = items.length
+      ? {
+          id: "completion",
+          title: "Commands",
+          items,
+          index: 0,
+          hint: " ↑↓ choose · tab insert · enter run typed text · esc hide ",
+        }
+      : undefined;
+  }
+
+  acceptCompletion(index = this.completion?.index ?? 0): void {
+    const item = this.completion?.items[index];
+    if (!item) return;
+    this.prompt.handle("CTRL+HOME");
+    this.prompt.handle("CTRL+K");
+    this.prompt.handle({ type: "paste", text: item.value + " " });
+    this.dismissedText = this.prompt.value;
+    this.completion = undefined;
+  }
   text: TextView | undefined;
   /** The fader drawer's paint model while one is open. */
   drawer: DrawerView | undefined;
@@ -1793,6 +1901,10 @@ export class TuiApp {
       overlay: this.overlay,
       log: this.log,
       picker: this.picker,
+      completion:
+        this.prompt.snapshot.cursor === Array.from(this.prompt.value).length
+          ? this.completion
+          : undefined,
       text: this.text,
       keys: this.keys,
       guide: this.guide,
@@ -1816,6 +1928,7 @@ export class TuiApp {
    * (empty when throttled or nothing changed).
    */
   render(view: AppView, options: { force?: boolean } = {}): string {
+    this.refreshCompletion();
     const now = this.clock();
     if (
       !options.force &&
@@ -1886,6 +1999,29 @@ export class TuiApp {
         type: "action",
         action: this.prompt.handle({ type: "paste", text: value.text }),
       };
+    this.refreshCompletion();
+    if (
+      !this.overlay &&
+      this.completion &&
+      this.prompt.snapshot.cursor === Array.from(this.prompt.value).length
+    ) {
+      if (value === "\t") {
+        this.acceptCompletion();
+        return { type: "overlay" };
+      }
+      if (["\u001b[A", "\u001b[B", "\u001bOA", "\u001bOB"].includes(value)) {
+        const step = value.endsWith("A") ? -1 : 1;
+        this.completion.index =
+          (this.completion.index + step + this.completion.items.length) %
+          this.completion.items.length;
+        return { type: "overlay" };
+      }
+      if (value === "\u001b") {
+        this.dismissedText = this.prompt.value;
+        this.completion = undefined;
+        return { type: "overlay" };
+      }
+    }
     const key = classifyKey(value);
     if (this.overlay === "picker" && this.picker) {
       const picker = this.picker;
@@ -1921,6 +2057,20 @@ export class TuiApp {
         }
         this.closePicker();
         return { type: "pick-cancel", picker: picker.id };
+      }
+      if (picker.audition && (value === "\u0001" || value === "\u000f"))
+        return {
+          type: "pick-audition",
+          picker: picker.id,
+          key: value === "\u0001" ? "ab" : "context",
+        };
+      if (
+        picker.filterable &&
+        (value === "\u007f" || value === "\b") &&
+        picker.query
+      ) {
+        this.filterPicker(Array.from(picker.query).slice(0, -1).join(""));
+        return this.pickerMoved(this.picker!);
       }
       if (picker.filterable && picker.filtering) {
         if (value === "\u007f" || value === "\b") {
@@ -2032,7 +2182,12 @@ export class TuiApp {
                   : 0;
         // Clamp to the last full page, the same bound paintText uses, so
         // End then ↑ moves the view on the first press.
-        const max = Math.max(0, this.text.lines.length - page);
+        const max = Math.max(
+          0,
+          this.text.lines.flatMap((line) =>
+            wrapWords(line, panelRect(this.io.columns()).boxWidth - 4),
+          ).length - page,
+        );
         const from = Math.min(max, this.text.scroll);
         const next =
           nav === "home"
@@ -2131,11 +2286,12 @@ export class TuiApp {
   }
 
   openPicker(picker: Omit<PickerState, "index"> & { index?: number }): void {
-    const items = picker.rank
-      ? picker.items
-      : picker.items.slice(0, MAX_PICKER_ITEMS);
+    const items = picker.items;
     if (items.length === 0) return;
     this.picker = {
+      filterable: true,
+      typeToFilter: true,
+      rank: (query, item) => fuzzyScore(query, item.label, item.detail ?? ""),
       ...picker,
       items,
       index: Math.max(0, Math.min(items.length - 1, picker.index ?? 0)),

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { commandCompletions } from "./tui/completion.ts";
 import { TOPIC_ALIASES } from "./lang/glossary.ts";
 import { isGuideInstrument, vocalChainPatch } from "../core/clips.ts";
 import { newId } from "../core/ids.ts";
@@ -389,6 +390,7 @@ import {
   type MenuAudioDevices,
   type MenuContext,
 } from "./tui/menu.ts";
+import { nextScene, sceneBarAt } from "./tui/scene-nav.ts";
 import { KNOB_PAGE_WORDS, knobPageId } from "./tui/knob-map.ts";
 import {
   beatOfBar,
@@ -1397,6 +1399,14 @@ function renderOnce(
 }
 
 function appView(value: TrackScore, beat: number): AppView {
+  tui.completionSource =
+    play?.on || tape.on || patchView.on
+      ? undefined
+      : (text) =>
+          commandCompletions(text, {
+            tracks: score.tracks,
+            sections: score.sections,
+          });
   return {
     score: snapshot(value, beat),
     // The highway shows score time: inside the looped section or form pass.
@@ -1496,7 +1506,7 @@ function arrangeStripView(
     bars: value.bars,
     sections: value.sections,
     loop: value.loopSection,
-    playheadBar: scoreBeatAt(value, beat) / value.beatsPerBar,
+    playheadBar: sceneBarAt(value, beat),
     form: value.form.length ? formatForm(value.form) : undefined,
   };
 }
@@ -2357,6 +2367,17 @@ async function runInteractive(): Promise<void> {
           tui.ui.overlay === undefined
         ) {
           openMenu();
+          tick(true);
+          continue;
+        }
+        if (
+          !tui.ui.overlay &&
+          !tui.prompt.value &&
+          !tape.on &&
+          !patchView.on &&
+          (value === "\u001b[1;5D" || value === "\u001b[1;5C")
+        ) {
+          stepScene(value.endsWith("D") ? -1 : 1);
           tick(true);
           continue;
         }
@@ -5727,7 +5748,7 @@ async function tryPrompt(command: string): Promise<Receipt> {
       { label: "revert", value: "revert", detail: "drop it" },
     ],
   });
-  return ok(`trying · ${command} · a A/B · enter keep · esc revert`);
+  return ok(`trying · ${command} · ctrl-a A/B · enter keep · esc revert`);
 }
 
 /** Audition a list's highlighted item in place of its previous hover. */
@@ -6090,6 +6111,12 @@ function faderOutcome(result: FaderResult): void {
  * Acts directly (a fader, the transport) or returns keys to run through the
  * ordinary key path (a list row is Enter, a wheel notch is an arrow).
  */
+function stepScene(direction: 1 | -1): void {
+  const next = nextScene(score, clock.beatAt(), direction);
+  if (next) runPromptLater(`section jump ${next.name}`);
+  else openMenu("arrange");
+}
+
 function mouseInput(event: MouseEvent): string[] {
   const frame = tui.frame;
   if (!frame) return [];
@@ -6194,6 +6221,27 @@ function mouseInput(event: MouseEvent): string[] {
     }
   }
   switch (target.kind) {
+    case "completion-row":
+      if (!tui.ui.overlay) tui.acceptCompletion(target.index);
+      return [];
+    case "command":
+      if (menu.open) {
+        menu.close();
+        closeFader();
+      }
+      tui.closePicker();
+      tui.closeText();
+      runPromptLater(target.command);
+      return [];
+    case "play-key":
+      if (!tui.ui.overlay && play?.on) playKey(target.key, true);
+      return [];
+    case "scene":
+      if (!tui.ui.overlay) runPromptLater(`section jump ${target.name}`);
+      return [];
+    case "scene-step":
+      if (!tui.ui.overlay) stepScene(target.direction);
+      return [];
     case "picker-row": {
       const picker = tui.ui.picker;
       if (!picker) return [];
@@ -6736,12 +6784,13 @@ function tapeBarAt(
  * One key in play mode. True when play mode consumed it; false sends it on
  * to the normal bindings (overlays, a command being typed, Ctrl-C, arrows).
  */
-function playKey(value: string): boolean {
+function playKey(value: string, fromPointer = false): boolean {
   const session = play;
   if (!session?.on) return false;
   if (tui.ui.overlay !== undefined) return false;
   // `/play off`, `/click 50%`: once a command is being typed, keys are text.
-  if (prompt.value.length > 0) return false;
+  // An explicit click on a play control still acts, leaving the draft intact.
+  if (!fromPointer && prompt.value.length > 0) return false;
   if (value === "/") return false;
   if (value === "\u0003") return false;
   const result = session.press(value);

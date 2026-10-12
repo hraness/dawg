@@ -17,6 +17,14 @@ Run `dawg` from any directory. It creates `.dawg/session` on first use and reuse
 
 Every prompt-bar command reads the same with or without its slash (`/fx reverb on` is `fx reverb on`). `remove`, `rm` and `delete` are one verb on every object, and `list`, `presets`, `ls` and a bare noun are one listing. Aliases run their canonical form: `rig <preset>` (`track <preset>` still works), `model key` (`login`), `chords idiom` (`chords style`), `synth filter` (`synth cutoff`), `loop a-b|off` (`loop 2-3` sets the loop range; it makes no section), `export <file>.wav [stems]` (the `dawg render` path; agent paths are workspace-relative), and a bare `pattern <groove>` or `kit <name>`. A known verb that fails answers with one usage card, `✗ tempo 900 · tempo takes 20…300 BPM · tempo 128`, with a nearest suggestion and never a raw core key; it never reaches the agent, and without a provider nothing does. Instruments are checked exactly on write (`✗ instrument sawtoth · did you mean sawtooth? · instrument list`), while stored projects still load. `remove n1` checks the note exists (`✗ no note n1 · notes lists them`). Status reads such as bare `fx` and `tracks` print `•`, and a bare scalar (`tempo`, `volume`) opens its fader (on its four knobs where it is one; see **Four knobs**). The agent tools `set_effects`, `vocode` and `add_drums` still run but are not advertised; use `set_fx`, `set_vocoder` and `set_rhythm`.
 
+### Command discovery and controls
+
+The action shelf is always visible when a modal does not own input: playback, previous/next scene (`Ctrl-←` / `Ctrl-→`), Menu, Keys and Help. Every painted control has a matching click target; scene names jump directly to that section. Modal controls replace the shelf while a picker, audition or text list is open, so clicks cannot fall through to obscured controls.
+
+Menus and pickers accept fuzzy typeahead directly, with case-insensitive prefix, substring and ordered-character matching. Command suggestions sit above the prompt and include local track names and scenes. Up/Down changes the selected suggestion, Tab or a click inserts it, and Enter runs only the accepted prompt text. Escape dismisses suggestions until the text changes. This keeps free-form agent requests and partially typed commands under the same explicit execution rule. Labels, descriptions, command-token lists and help text wrap by terminal display width; continuation rows preserve their parent click target. Color and symbols carry the same feature meaning across menus without relying on color alone.
+
+In Keys, the shelf marks the active Notes/Chords and Scale/Chromatic mapping. `q` cycles Auto → Manual → Notes; choosing Scale enters single-note mode. Scale/Chromatic, recording and leaving Keys are also direct click actions. Sound-key layouts hide pitched-only controls. Discrete choices use a searchable panel; playback, scene jumps and mode switches are direct actions, while continuous parameters retain the existing audition/fader treatment.
+
 ### Sessions, names and forks
 
 Each session record carries bounded metadata alongside the score: `name` (1–40 printable characters), `nameSource` (`auto` or `user`), an optional `forkOf {sessionId, revision}`, the fingerprint the current auto-name was computed from, and a `version` counter. Records written before metadata existed load with an id-based auto name. Metadata writes are conditional (`expect {name?, nameSource?}`) and never touch the score revision or event log. Through `dawgd` they are a `meta` frame that the daemon applies, persists atomically and broadcasts; on the file fallback they run under the session lock, and polling windows pick up the newer `meta.version`. `/rename <name>` is unconditional and sets `nameSource=user`, so it wins over any auto-name computed against the old name, which arrives `stale` and is dropped. `/rename --auto` sets `nameSource=auto` and clears the stored fingerprint.
@@ -59,7 +67,7 @@ Other code reports into the activity strip through `ActivityFeed` (`tui/activity
 
 `/help` opens a short start page (type a request or a style, Ctrl-P, Ctrl-K, `?`, undo) and the ten topics: **sound**, **voice**, **effects**, **rhythm**, **chords**, **mix**, **arrange**, **project**, **keys** and **agent**. The same ids open the same subject in all three doors: `/help voice` lists its commands, `/guide voice` explains it, `/menu voice` opens its Ctrl-K section. `/help all` is the full reference and `/help <command>` (`/help autotune`) shows one command's usage. Entries are written bare (`tempo 96`, `track drums`); only the free-text window verbs keep the slash (`/rename`, `/fork`, `/resume`, `/auth`), and `/play` (play mode, Ctrl-P) keeps it because bare `play` is the transport. Groups follow the Ctrl-K root order and stay within about fifteen rows, with sub-groups such as `sound · samples`; guitar amp presets are `rig <preset>` under effects, and the agent key is `model key` (`login` is an alias, not listed). Placeholders read `<drum>`, `<sample>`, `<register>` and `<lane>`. `/help keys` is drawn from the key table in `tui/grammar.ts`, so it always matches the keys. Old topic names still open their topic as aliases (music → arrange, session → project, window → keys, tuning → chords, performance → sound, and more in `src/lang/glossary.ts`). An unknown topic answers `no topic X · did you mean Y · /help`.
 
-`/guide` (or F1) opens the user guides (`guides/*.md`, shipped in the package and rendered unchanged on dawg.sh/docs). The tree follows the topics: Getting started, then Using dawg (`keys`: the menu, faders, play mode), Sound, Voice, Effects, Rhythm, Chords (with Tuning), Mix (with Automation), Arrange (notes, tracks, tempo, styles, sections), Project (files, sessions) and Agent (show-me, providers, web search). Every guide uses one template, **Ask**, **Type it yourself**, **Menu**, **Keys** and **Next**, so the same answer is always in the same place. The pane: ↑↓ (j k) move, → l or Enter expand a section then open a guide, ← h collapse or go to the parent and back from a page, `/` filters by title and text, Esc clears the filter, then steps back, then closes. A guide splits into pages that fit the pane, whole sections at a time (`paginate` in `tui/guide.ts`); the title shows `· 1/2`, n (→, space, pgdn at the end) turns the page and then opens the next guide, p (pgup) goes back, and the last page's hint names the next guide. Each line kind has a mark from `guides/index.ts` (✦ Ask, › Type it yourself, ≡ Menu, ⌃ Keys, → Next, ── other headings, ✓ Tip, ! Careful; ASCII under TERM=dumb), colored with a theme role but never a knob color, so a page reads the same under NO_COLOR; typed commands lose their backticks and are drawn bold. `/help` headings use the same ── mark, and dawg.sh/docs mirrors the table (`site/app/doc-marks.ts`, checked by `site/tests/doc-marks.test.ts`). `/guide <topic>` opens one guide directly and accepts every topic id and alias (`/guide scale` opens Chords). `guides/guides.test.ts` keeps every page within 16 rows at 72 columns (the pane in an 80x24 terminal) and every guide within three pages, checks the template, every `/command` and every `Ctrl-K ›` path, and lints the words against the glossary.
+`/guide` (or F1) opens the user guides (`guides/*.md`, shipped in the package and rendered unchanged on dawg.sh/docs). The tree follows the topics: Getting started, then Using dawg (`keys`: the menu, faders, play mode), Sound, Voice, Effects, Rhythm, Chords (with Tuning), Mix (with Automation), Arrange (notes, tracks, tempo, styles, sections), Project (files, sessions) and Agent (show-me, providers, web search). Every guide uses one template, **Ask**, **Type it yourself**, **Menu**, **Keys** and **Next**, so the same answer is always in the same place. The tree: ↑↓ move, → or Enter expand a section then open a guide, ← collapses or goes to the parent. Typing fuzzy-searches guide names and searches words in their text; `/` also starts search. Esc clears the search, then closes. While reading a page, j/k scroll and ←, h or Esc returns to the tree. A guide splits into pages that fit the pane, whole sections at a time (`paginate` in `tui/guide.ts`); the title shows `· 1/2`, n (→, space, pgdn at the end) turns the page and then opens the next guide, p (pgup) goes back, and the last page's hint names the next guide. Each line kind has a mark from `guides/index.ts` (✦ Ask, › Type it yourself, ≡ Menu, ⌃ Keys, → Next, ── other headings, ✓ Tip, ! Careful; ASCII under TERM=dumb), colored with a theme role but never a knob color, so a page reads the same under NO_COLOR; typed commands lose their backticks and are drawn bold. `/help` headings use the same ── mark, and dawg.sh/docs mirrors the table (`site/app/doc-marks.ts`, checked by `site/tests/doc-marks.test.ts`). `/guide <topic>` opens one guide directly and accepts every topic id and alias (`/guide scale` opens Chords). `guides/guides.test.ts` keeps every page within 16 rows at 72 columns (the pane in an 80x24 terminal) and every guide within three pages, checks the template, every `/command` and every `Ctrl-K ›` path, and lints the words against the glossary.
 
 The local command path understands requests such as:
 
@@ -1148,7 +1156,7 @@ instrument: stringed("sitar", { buzz: 0.8, sym: 0.5 }),
 | `string <param> off` · `string reset`      | back to the preset's value · drop every override                  |
 | `string off`                               | back to the legacy `pluck` voice                                  |
 
-The menu has the presets under Sound › instruments › Strings and every string parameter on the Sound page of a string track (left/right adjust, `x` resets, space auditions with staged A/B). The agent's `set_string {trackId?, preset?, params?, reset?, off?}` runs the same command. SDK 1.21.0: `stringed(preset, params)` as a track's `instrument`, or `track({ instrument: "string", string: { preset: "koto", ring: 4 } })`; the printer writes `stringed(...)` back.
+The menu has the presets under Sound › instruments › Strings and every string parameter on the Sound page of a string track (left/right adjust, Delete resets, space auditions with staged A/B). The agent's `set_string {trackId?, preset?, params?, reset?, off?}` runs the same command. SDK 1.21.0: `stringed(preset, params)` as a track's `instrument`, or `track({ instrument: "string", string: { preset: "koto", ring: 4 } })`; the printer writes `stringed(...)` back.
 
 ### Bowed strings
 
@@ -1505,7 +1513,7 @@ Scales (`core/chords.ts`). The song key string now names any scale: `"D dorian"`
 
 Chords. The chord engine stays twelve-tone: a scale outside the seven diatonic modes uses the nearest diatonic mode for key-mode chords. In a twelve-key tuning chords keep their keys (so in `just` they sound pure); in a linear non-12 tuning such as 19-EDO, the chord tools and play-mode chord phrases move each written pitch to the key that sounds nearest, so a C major triad becomes steps 0, 6 and 11.
 
-Play mode. `i` (or `/play degrees`) toggles scale-degree mapping: the home row `A S D F G H J K L ; '` plays consecutive degrees of the song scale, or every step of a linear non-12 tuning (the nearest step to each scale note when a key is set), and the upper row is off. When a tuning has more steps than the home row (19- or 31-EDO with no key), `Z`/`X` page by eleven degrees instead of a period, so every step is reachable. `/play chromatic` turns it back off. The header shows the scale and tuning.
+Play mode. `i` (or `/play degrees`) toggles scale-degree mapping and selects single notes: the home row `A S D F G H J K L ; '` plays consecutive degrees of the song scale, or every step of a linear non-12 tuning (the nearest step to each scale note when a key is set), and the upper row is off. When a tuning has more steps than the home row (19- or 31-EDO with no key), `Z`/`X` page by eleven degrees instead of a period, so every step is reachable. `/play chromatic` turns it back off. The header shows the scale and tuning. `q` cycles back into chords when wanted.
 
 Highway. A note that sounds more than half a cent away from 12-TET shows a compact cents tag (`+14`, `−32`) after its label when there is room. In a twelve-key table the tag is measured from the note's own lane. In a linear non-12 table (19-EDO, slendro) the lane is only the key, so the tag names the 12-TET pitch it is measured from (`D#−47`, or `C` when it sounds right on it), and lane labels mark the tuning's periods (every 19 keys from the root) instead of every C.
 
@@ -1582,7 +1590,7 @@ Terminals send no key releases, so the Orchid's held left-hand buttons are latch
 
 | Key       | Does (chord mode on)                                                                    |
 | --------- | --------------------------------------------------------------------------------------- |
-| `Q`       | auto ⇄ manual                                                                           |
+| `Q`       | auto → manual → notes (off) → auto                                                      |
 | `1 2 3 4` | latch chord type dim / min / maj / sus (two latched make a combined chord)              |
 | `5 6 7 8` | latch extension 6 / m7 / M7 / 9 (any number; on top of the type or auto chord)          |
 | `0`       | clear every latch                                                                       |
@@ -1760,23 +1768,37 @@ With a form set (`form verse chorus*2`), TAPE draws the song unrolled, in the or
 
 ## Styles
 
-`/style` writes a whole song in a style: drums, bass, chords, melody and form, generated from a **style card**, a set of theory patterns rather than recordings. A card names the meter (signature, additive grouping, hypermeter, cycles such as tala, iqa, gongan or clave timelines), the tempo range, the groove (subdivision, swing ratio, microtiming, per-role lay-back, seeded humanisation), the onset grids per role as abstract step weights, the pitch space (12-TET scales and modes, or a tuning such as maqam quarter tones, with scale weights), the harmony as a grammar (Roman-numeral presets, fixed forms such as the 12-bar blues, a Markov chain and cadences), melody contour, range and interval statistics, the texture (which roles are required) and the form. Cards inherit: a leaf patches its branch, which patches its family root, so `deep-house` only states what differs from `house` and `electronic`.
+`/style` lists sixteen reusable groove starters. Drums define each one; bass, rhythm chords or a pad support the groove where they fit. Each part has its own track to mute, replace or build on, and the starters leave lead melodies to you. Their names and listening cues describe a rhythmic feel and sound palette. All patterns are original, with no literal song transcriptions.
 
-The taxonomy (`core/styles/taxonomy.ts`) has eight families and about 850 styles; every leaf is present, and a leaf without its own card generates from its nearest ancestor's card. Generation is deterministic: the same style, bars and seed always write the same song, and nothing is random beyond the seed.
+| Group    | Starters                                          |
+| -------- | ------------------------------------------------- |
+| Machines | Warehouse, Motor City, Wire Step, Disco Dusk      |
+| Breaks   | Night Garage, Jungle Cut, Dust Pocket, Trap Door  |
+| Pocket   | Pocket One, Half Stack, Blue Shuffle, Small Hours |
+| Cycles   | Tape Skank, Bossa Side, Clave Club, Frame Seven   |
 
-| Command                                      | Does                                                                             |
-| -------------------------------------------- | -------------------------------------------------------------------------------- |
-| `style`                                      | the families and their root styles                                               |
-| `style list [<id>]`                          | the children of a style                                                          |
-| `style search <words>`                       | ranked search over ids, names, aliases and regions                               |
-| `style info <id>`                            | path, meter, tempo, groove, tuning, harmony and roles                            |
-| `style <id> [bars] [seed]`                   | replace the song with one in that style (1 to 64 bars, default 8; one undo step) |
-| `style blend <a> <b> [weight] [bars] [seed]` | mix two cards; weight 0 is `a`, 1 is `b` (default 0.5)                           |
-| `style again`                                | the song's style with the next seed                                              |
+The collection spans 808, 909, Linn, acoustic and lo-fi kits, physical bass, electric keys, pads and modal percussion. Its rhythms include four-floor drive, broken beats, swing, shuffle, clave and a 7/8 cycle. `style warehouse 4 3` loads four bars with seed 3. The same style, bar count and seed reproduce the same result. Loading a style replaces the song in one undo step.
 
-Every generated song is checked by `core/styles/validate.ts` before it is written: meter and tempo in range, onsets on the card's grid within tolerance, the swing ratio measured from the notes, every pitch in the scale or tuning, the chord sequence accepted by the harmony grammar, melody range and interval statistics, and every instrument resolving. The summary line reports how many checks passed. The song records its provenance in `style` (`{ id, seed, bars, blend? }`), which `/style again` reads.
+Historical names and aliases remain available through `style list all` and **All styles** in the menu. Their accompaniment omits lead, counter-melody and arpeggio layers when a playable backing remains; historical solo styles remain playable. The full catalog keeps its eight historical families and inherited cards.
 
-Menu: **Ctrl-K › Arrange › style** (`/menu style`) walks the taxonomy, with `find`, `blend` and, once the song has a style, `again`; each style offers make 4, 8, 16 or 32 bars and about. Agent tools: `list_styles` (families, children or a query), `style_info` and `apply_style` (`id`, `bars`, `seed`, `blend`, `weight`). In `song.ts`: `song({ style: style("deep-house", { seed: 3, bars: 8 }) })` records the provenance (SDK 1.33.0); the notes live in the tracks as usual.
+| Command                                      | Does                                                                 |
+| -------------------------------------------- | -------------------------------------------------------------------- |
+| `style`                                      | list the sixteen groove starters by group                            |
+| `style list <group\|id\|family>`             | list a starter group, a style's children or a family's roots         |
+| `style list all`                             | list the full catalog's families and roots                           |
+| `style search <words>`                       | ranked search over ids, names, aliases and regions                   |
+| `style info <id>`                            | listening cue, path, meter, tempo, groove, tuning, harmony and roles |
+| `style <id> [bars] [seed]`                   | replace the song (1 to 64 bars, default 8; one undo step)            |
+| `style blend <a> <b> [weight] [bars] [seed]` | mix two cards; weight 0 is `a`, 1 is `b` (default 0.5)               |
+| `style again`                                | regenerate the song's style with the next seed                       |
+
+A **style card** defines meter, tempo, groove, onset grids, pitch space, harmony, texture and form. Historical cards also describe melody range and contour for solo styles. Cards inherit: a leaf patches its branch, which patches its family root, so `deep-house` states what differs from `house` and `electronic`. A leaf without its own card uses its nearest ancestor's card. The starter cards live in `core/styles/starters.ts`; the complete tree lives in `core/styles/taxonomy.ts`.
+
+`core/styles/validate.ts` checks the generated meter, tempo, grid placement, swing, pitch space, harmony, applicable melody statistics and instruments. The command log reports the checks; the receipt reports the style, key, tempo, bars and track count. The song records its provenance in `style` (`{ id, seed, bars, blend? }`), which `/style again` reads.
+
+Menu: **Ctrl-K › Arrange › style** (`/menu style`) starts with Machines, Breaks, Pocket and Cycles, alongside **All styles**, `find`, `blend` and, after loading a style, `again`. Type to filter; each starter offers make 4, 8, 16 or 32 bars and about. **All styles** opens the historical families and their branches.
+
+Agent tools: `list_styles` returns the curated starters and full-catalog families by default, or accepts a `query` or `parent`; `style_info` describes one style; `apply_style` accepts `id`, `bars`, `seed`, `blend` and `weight`. In `song.ts`, `song({ style: style("warehouse", { seed: 3, bars: 4 }) })` records provenance; the notes live in the tracks as usual.
 
 ## Voice
 
@@ -1843,7 +1865,7 @@ Shifts of 2 to 4 st sound natural; 7 and beyond are a cartoon. The shift is a ce
 
 Before 0.7, `fx formant` was an alias of the vowel filter. `/fx formant o` and `set_fx {effect: "formant", vowel}` now answer "formant now shifts formants at constant pitch; the vowel filter is `vowel`".
 
-Ctrl-K › Voice › **formant**: shift and mix (left/right adjust, `x` resets, space auditions with staged A/B); **Effects › more effects › vowel** gains To and Morph. Mix lists the `formant-shift`, `formant-mix` and `vowel-morph` lanes. The agent's `set_formant` tool takes `shift`, `mix`, `preset` and `off` and can be previewed with `preview_sound`; `set_fx vowel` takes `to` and `morph`. In the SDK: `fx: { formant: { shift: -4 }, vowel: { vowel: "a", to: "o", morph: 0.5 } }`.
+Ctrl-K › Voice › **formant**: shift and mix (left/right adjust, Delete resets, space auditions with staged A/B); **Effects › more effects › vowel** gains To and Morph. Mix lists the `formant-shift`, `formant-mix` and `vowel-morph` lanes. The agent's `set_formant` tool takes `shift`, `mix`, `preset` and `off` and can be previewed with `preview_sound`; `set_fx vowel` takes `to` and `morph`. In the SDK: `fx: { formant: { shift: -4 }, vowel: { vowel: "a", to: "o", morph: 0.5 } }`.
 
 ### Singing voice
 
@@ -1944,7 +1966,7 @@ Targets (`to`): `scale` (the default) uses the track or song key and the 0.5 tun
 
 Parameters: `speed` 0..400 ms (retune time, 0 is instant; `0.2s` reads as 200 ms), `relax` 0..1 (slower retune on held notes), `hold` 50..1000 ms (when a note counts as held), `flex` 0..100 (higher only pulls notes already near a target, like Antares Flex-Tune), `glide` 0..500 ms (time between targets; a bare number is ms, `40ms` and `0.04s` also work, as with `/glide`), `amount` 0..1, `vib` 0..12 Hz and `vibmod` 0..1 semitones (added vibrato, on voiced frames only), `center` and `drift` 0..1 (notes targets), `key` (overrides the song key) and `voice` (`auto`, `bass`, `tenor`, `alto`, `soprano`: the tracker's range). Corrections are weighted by voicing, guarded against octave errors, and use hysteresis so vibrato does not flip targets.
 
-Reach it as `/autotune [preset] [param value …]`, `/autotune off`, `/autotune presets`, `/vocal autotune …`, Ctrl-K › Voice › autotune (rows for every parameter; left/right adjusts, `x` resets, space auditions), the agent tool `autotune_vocal`, and the SDK: `track({ autotune: "hard" })` or `autotune("pop", { speed: 40 })`. `/tune` stays the tuning command; `/tune hard` hints at `/autotune`.
+Reach it as `/autotune [preset] [param value …]`, `/autotune off`, `/autotune presets`, `/vocal autotune …`, Ctrl-K › Voice › autotune (rows for every parameter; left/right adjusts, Delete resets, space auditions), the agent tool `autotune_vocal`, and the SDK: `track({ autotune: "hard" })` or `autotune("pop", { speed: 40 })`. `/tune` stays the tuning command; `/tune hard` hints at `/autotune`.
 
 Rendering is deterministic: tuned spans are cached (128 MB of their own) by the audio's identity (a shifted or fitted sample by its shift or fit key), the settings, the targets and the engine version; with chord or note targets a sampler voice tunes only the frames it plays, and stereo samples keep both channels. In play mode a span longer than 0.25 s plays untuned until its correction is ready; the correction runs in slices so play mode stays responsive. Correction uses the pitch tracker and PSOLA of `/vocal pitch`; a clip is tuned once per placement (its offset and take nudge join the key), and a reversed clip or voice plays untuned. License lines for tuned clips made by `/vocal say` come with `say` in 0.7.1.
 
@@ -1967,24 +1989,24 @@ Breadcrumbs in the docs and guides use these labels, written `Ctrl-K › Chords 
 
 `/menu <id>` takes one of the ten topic ids (`sound`, `voice`, `effects`, `rhythm`, `chords`, `mix`, `arrange`, `project`, `keys`, `agent`), any topic alias (`drums`, `mixer`, `fx`) or any row name it knows (`tuning`, `performance`, `master`, `export`, `models`, …). `/menu keys` opens the `?` panel. An unknown id answers `no menu "sond" · did you mean /menu sound? · /menu <topic or row>`. In a fader, `x` resets any number row; tempo, meter and loop length apply at once rather than staging, and the hint says `applies at once`. Labels fit 16 columns. Below the root, sibling labels share one case rule. A row's path reads `Ctrl-K › Chords and key › tuning`, and show-me's finish hint uses the same path.
 
-Every list, picker and editor uses the same keys (see **Keys** below). In the menu:
+Searchable lists reserve letters for immediate fuzzy typeahead. Names, commands and descriptions match; exact names and word starts rank first. At the root, search also finds nested groups. Editors keep their letter shortcuts. In the menu:
 
-| Key                  | Does                                                                                     |
-| -------------------- | ---------------------------------------------------------------------------------------- |
-| `↑` `↓` / `k` `j`    | move                                                                                     |
-| `Enter`              | open or confirm: open a section, run an action, open a number's fader, keep staged edits |
-| `→` / `l`            | go in; on a value row, adjust up                                                         |
-| `←` / `h`            | back one level; on a value row, adjust down                                              |
-| `-` `+`              | adjust a value by its step (cutoff moves 25%) or cycle a choice                          |
-| `Tab` / `Shift-Tab`  | next / previous field (in the fader and the rhythm editor)                               |
-| `Space`              | toggle on/off; elsewhere, hear the focused track (see Previewing changes)                |
-| `0-9` `.`            | type a value; `Enter` stages it in the fader drawer, `Esc` cancels                       |
-| `/`                  | filter the current list by name, value or command                                        |
-| `x` / `d` / `Delete` | reset the focused value to its default; on an automation point, remove it                |
-| `Esc`                | revert staged edits, else clear the filter, then back one level, then close              |
-| `?`                  | the keys for this screen, each key listed once                                           |
+| Key                 | Does                                                                                     |
+| ------------------- | ---------------------------------------------------------------------------------------- |
+| `↑` `↓`             | move                                                                                     |
+| `Enter`             | open or confirm: open a section, run an action, open a number's fader, keep staged edits |
+| `→`                 | go in; on a value row, adjust up                                                         |
+| `←`                 | back one level; on a value row, adjust down                                              |
+| `-` `+`             | adjust a value by its step (cutoff moves 25%) or cycle a choice                          |
+| `Tab` / `Shift-Tab` | next / previous field (in the fader and the rhythm editor)                               |
+| `Space`             | toggle on/off; elsewhere, hear the focused track (see Previewing changes)                |
+| `0-9` `.`           | type a value; `Enter` stages it in the fader drawer, `Esc` cancels                       |
+| type or `/`         | fuzzy-search this list by name, value, command or description                            |
+| `Delete`            | reset the focused value to its default; on an automation point, remove it                |
+| `Esc`               | revert staged edits, else clear the filter, then back one level, then close              |
+| `?`                 | the keys for this screen, each key listed once                                           |
 
-The key sets live in `tui/grammar.ts` (`KEY_UP`, `KEY_DOWN`, `KEY_LEFT`, `KEY_RIGHT`, `KEY_TAB`, `KEY_BACKTAB`, …); the menu, fader, rhythm editor and prompt import them. Play mode's `Tab` is a sustain latch, the one documented exception, because letters are notes there.
+The key sets and screen hints live in `tui/grammar.ts`; the menu, fader, rhythm editor and prompt import them. Searchable menus use arrows for navigation and letters for search; faders and the rhythm editor also accept vim movement. Play mode uses letters for notes and `Tab` for a sustain latch.
 
 Automation rows take `beat:value` pairs (`2:800` or `0:200 4:8000`); a ramp is two pairs, start and end, and the renderer interpolates between points. Turning an effect's first field up switches it on with defaults. Each change runs the command it shows through the normal prompt path, so it is one `ScoreOperation`, one receipt, one undo step, and it syncs to other windows and the project files.
 
@@ -2103,11 +2125,11 @@ A steady frame (compose plus encode) stays under 16 ms at 500x150 (measured 2 to
 
 Hear a sound change before you keep it. In the edit menu (every section: Sound, Effects, Rhythm, Chords, Mix), `Space` starts a short loop of the focused track; `Space` again stops it. The song pauses while the loop plays, so only one thing sounds at a time.
 
-The loop is the track's own notes over its loop when that is four bars or shorter, otherwise the two bars under the playhead (or the track's first two bars with notes, if those are empty). A track with no notes plays a short phrase by role: a chord for pads and keys, a riff for bass and leads, a groove for kits and drums, and one held note for wavetables so position and envelope changes are audible. It plays solo by default; `c` switches to the whole mix with the track in it.
+The loop is the track's own notes over its loop when that is four bars or shorter, otherwise the two bars under the playhead (or the track's first two bars with notes, if those are empty). A track with no notes plays a short phrase by role: a chord for pads and keys, a riff for bass and leads, a groove for kits and drums, and one held note for wavetables so position and envelope changes are audible. It plays solo by default; Ctrl-O in searchable menus (c in dedicated editors) switches to the whole mix with the track in it.
 
 While the loop plays, each change you make is **staged**, not committed. The loop re-renders only the changed track through the normal renderer and stem cache, in the render worker, and swaps it in within about 100 ms (a reverb mix change re-mixes the cached tail and is heard in about 65 ms). Every swap, here and in the song player, crossfades old to new over 20 ms at the same beat, so changes never click; renders and exports never pass through the crossfade. Held keys are coalesced so only the latest value renders. The menu title shows `●` and `B staged N`, and each changed row shows the staged value beside the committed one (`mix  0.5 ← 0.3`).
 
-| Key     | While auditioning                                            |
+| Key     | While auditioning in a value editor                          |
 | ------- | ------------------------------------------------------------ |
 | `Space` | start or stop the loop of the focused track                  |
 | `c`     | solo ↔ in context (the whole mix with the track)             |
@@ -2119,18 +2141,20 @@ While the loop plays, each change you make is **staged**, not committed. The loo
 
 Kept changes are one `ScoreOperation` (`preview.commit`, listing the commands), so `Ctrl-Z` takes them all back at once, and they sync to other windows and the project files like any edit. If the score changes underneath (another window, the agent, an undo), the staged commands are re-applied on top of the new score; any that no longer apply are dropped, with a notice. Leaving the menu reverts anything staged. With the loop off, the menu behaves as before: each change is committed right away.
 
-**The rhythm editor and the chord settings stage too.** `/euclid` and the chord settings (the menu's Chords section, `/menu chords`) use the same loop and keys. In `/euclid`, `Space` loops the drum track; pulses, steps, rotate, typed values, a new row, `off` and `freeze` are staged, the title shows `●` and `B staged N`, and a changed lane shows `E(5,16) ← E(4,16)`. Chord settings are window settings rather than score edits, so while the Chords section is open the loop plays the focused track's chord phrase (two bars of the song key's progression, voiced and performed by the current settings: inversion, spread, bass, sevenths, block/strum/arp, pattern); a staged setting changes the B phrase, and `a` flips back to the committed settings. `Enter` keeps every staged change as one undo step: rhythm edits as one `preview.commit` revision, and chord settings applied at once (a key change, the only one stored in the score, as one revision). `Esc` reverts with nothing written. With the loop off, both screens commit each change at once, as before.
+In searchable menus and pickers, **Ctrl-A** flips A/B and **Ctrl-O** switches solo/context, leaving ordinary letters available for search. Faders and the rhythm editor keep `a` and `c`.
+
+**The rhythm editor and the chord settings stage too.** `/euclid` and the chord settings (the menu's Chords section, `/menu chords`) use the same loop and keys. In `/euclid`, `Space` loops the drum track; pulses, steps, rotate, typed values, a new row, `off` and `freeze` are staged, the title shows `●` and `B staged N`, and a changed lane shows `E(5,16) ← E(4,16)`. Chord settings are window settings rather than score edits, so while the Chords section is open the loop plays the focused track's chord phrase (two bars of the song key's progression, voiced and performed by the current settings: inversion, spread, bass, sevenths, block/strum/arp, pattern); a staged setting changes the B phrase, and Ctrl-A flips back to the committed settings. `Enter` keeps every staged change as one undo step: rhythm edits as one `preview.commit` revision, and chord settings applied at once (a key change, the only one stored in the score, as one revision). `Esc` reverts with nothing written. With the loop off, both screens commit each change at once, as before.
 
 **Lists audition on hover.** With the loop on, moving the cursor through a list plays the highlighted item on the loop: the wavetable list (built-in, pack and project tables), instruments, kits and grooves, and every choice list (filter type, warp mode, presets). It is the browser-preview model of Ableton and Bitwig, applied to the loop you are already hearing. Each move replaces the previous hover, so the staged count stays at one, and fast moves skip straight to the latest item. A pack item that has to be fetched shows `fetching…` in the title; the cursor keeps moving and the item plays once it arrives. `Enter` chooses the item (it stays staged until you keep), `Esc` or `←` leaves the list and drops the hover. The `/kit` and `/pattern` pickers work the same way: `Space` starts the loop, moving hears each kit or groove, `Enter` keeps it, `Esc` cancels.
 
-| Key in a list | While auditioning                                   |
-| ------------- | --------------------------------------------------- |
-| `↑` `↓`       | move and hear the highlighted item on the loop      |
-| `Enter`       | choose it (menu) or keep it (picker), one undo step |
-| `Esc` / `←`   | leave the list; the hover is dropped                |
-| `a` / `c`     | A/B against the committed sound / solo ↔ in context |
+| Key in a list       | While auditioning                                   |
+| ------------------- | --------------------------------------------------- |
+| `↑` `↓`             | move and hear the highlighted item on the loop      |
+| `Enter`             | choose it (menu) or keep it (picker), one undo step |
+| `Esc` / `←`         | leave the list; the hover is dropped                |
+| `Ctrl-A` / `Ctrl-O` | A/B against the committed sound / solo ↔ in context |
 
-**Try a prompt command.** `/try <sound command>` stages one command on the loop instead of committing it: `/try fx reverb mix 0.6`, `/try synth cutoff 800`, `/try wt pwm`. A small panel offers keep or revert; `a` flips A/B, `Enter` on keep commits it as one undo step, `Esc` drops it. Only sound commands can be tried (fx, synth, wt, kit, pattern, pack use, volume, pan and similar).
+**Try a prompt command.** `/try <sound command>` stages one command on the loop instead of committing it: `/try fx reverb mix 0.6`, `/try synth cutoff 800`, `/try wt pwm`. A small panel offers keep or revert; Ctrl-A flips A/B, `Enter` on keep commits it as one undo step, `Esc` drops it. Only sound commands can be tried (fx, synth, wt, kit, pattern, pack use, volume, pan and similar).
 
 **What you see.** While the loop plays, the menu title adds a level meter of the looping track or mix: RMS as an eight-cell bar over -48..0 dBFS, the peak in dB, and `!` in the last cell when the loop clips (`♪ solo · B staged 2 · 64 ms · █████··· -9 dB`; the `ms` is the last key-to-swap time). A focused cutoff row draws its low- or high-pass curve on a log axis, an attack/decay/sustain/release row draws the envelope with the other stages, and the wavetable position row marks its place in the table:
 
@@ -2159,7 +2183,7 @@ One grammar for every picker (`/model`, `/pattern`, `/kit`, `/resume`, the wavet
 
 The fader drawer adds coarse, fine and big steps, Home/End and `0`/`d` default (see **Fader drawer**); clicks and the wheel mirror these keys (see **Mouse**).
 
-Every screen ends in a one-line footer of its keys that fits 80 columns (parts drop from the middle when narrower; `esc` and `? keys` stay). `?` on an empty prompt lists the prompt keys and the three ways in. Play mode is the one exception: its letters and number row are piano keys and chord latches (the GarageBand "Musical Typing" convention); its `?` panel says so.
+Every screen ends in a one-line footer of its keys that fits 80 columns (secondary controls drop when narrower; Enter, `esc` and `? keys` stay longest). `?` on an empty prompt lists the prompt keys and the three ways in. Play mode is the one exception: its letters and number row are piano keys and chord latches (the GarageBand "Musical Typing" convention); its `?` panel says so.
 
 ## Release
 

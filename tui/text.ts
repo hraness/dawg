@@ -85,6 +85,33 @@ export function displayWidth(text: string): number {
   return width;
 }
 
+/** Wrap at word boundaries, splitting only tokens wider than the panel. */
+export function wrapWords(text: string, width: number): string[] {
+  const room = Math.max(1, Math.floor(width));
+  if (!text.includes("\n") && displayWidth(text) <= room) return [text];
+  const rows: string[] = [];
+  for (const paragraph of text.split("\n")) {
+    let line = "";
+    for (const word of paragraph.split(/\s+/u).filter(Boolean)) {
+      if (line && displayWidth(`${line} ${word}`) <= room) {
+        line += ` ${word}`;
+        continue;
+      }
+      if (line) rows.push(line);
+      line = "";
+      for (const cluster of graphemes(word)) {
+        if (line && displayWidth(line) + cluster.width > room) {
+          rows.push(line);
+          line = "";
+        }
+        line += cluster.text;
+      }
+    }
+    rows.push(line);
+  }
+  return rows;
+}
+
 /** Truncate to a display width, appending an ellipsis when content is cut. */
 export function truncate(text: string, width: number, ellipsis = "…"): string {
   if (width <= 0) return "";

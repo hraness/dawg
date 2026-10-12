@@ -239,6 +239,7 @@ export class DawgDaemon {
   private async shutdown(reason: string): Promise<void> {
     if (this.graceTimer) clearTimeout(this.graceTimer);
     if (this.diskTimer) clearInterval(this.diskTimer);
+    this.live.close();
     await this.audio.dispose();
     for (const client of this.clients) client.socket.destroy();
     this.clients.clear();

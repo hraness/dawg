@@ -17,7 +17,14 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes("/vocal import"), "vocal list");
       await t.send("/help voice\r");
       await t.until(() => t.vt.text().includes("› voice"), "help voice");
-      expect(t.vt.text()).toContain("voice tools: lists every verb");
+      // Long descriptions now wrap in full instead of losing their tail;
+      // the clip commands consequently begin on the following page.
+      expect(t.vt.text()).toContain("drone khoomei sygyt kargyraa");
+      await t.type("\u001b[6~", "page down through voice help");
+      await t.until(
+        () => t.vt.text().includes("voice tools: lists every verb"),
+        "voice clip commands",
+      );
       await t.send("\u001b");
 
       await t.send("\u000b");

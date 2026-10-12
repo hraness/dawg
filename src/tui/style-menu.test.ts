@@ -26,23 +26,24 @@ function select(menu: EditMenu, ctx: MenuContext, label: string): void {
 }
 
 describe("Arrange › style browser", () => {
-  test("/menu style opens it; families lead to leaves whose rows run /style", () => {
+  test("/menu style opens the curated shelf and keeps the catalog one level deeper", () => {
     const menu = new EditMenu();
     const ctx = context();
     menu.show(ctx, "style");
     expect(menu.view(ctx).title).toBe("≡ Arrange › style");
     const labels = menu.view(ctx).items.map((row) => row.label);
     expect(labels.some((label) => label.startsWith("find"))).toBe(true);
-    expect(labels.some((label) => label.startsWith("Electronic"))).toBe(true);
-    select(menu, ctx, "Electronic");
+    expect(labels.some((label) => label.startsWith("Machines"))).toBe(true);
+    expect(labels.some((label) => label.startsWith("All styles"))).toBe(true);
+    select(menu, ctx, "Machines");
     menu.key("\r", ctx);
-    select(menu, ctx, "Electronic");
+    select(menu, ctx, "Warehouse");
     menu.key("\r", ctx);
     const rows = menu.view(ctx).items.map((row) => row.label);
     expect(rows[0]).toStartWith("make 4 bars");
     expect(menu.key("\r", ctx)).toEqual({
       type: "run",
-      command: "/style electronic 4",
+      command: "/style warehouse 4",
     });
   });
 
@@ -70,15 +71,34 @@ describe("Arrange › style browser", () => {
     }
   });
 
-  test("again appears once the song has a style", () => {
+  test("curated groups lead the menu before tools, including when again is available", () => {
     const song = styleScore(generateStyle("deep-house", { bars: 2, seed: 4 }));
-    const menu = new EditMenu();
-    const ctx = context(song);
-    menu.show(ctx, "style");
-    expect(menu.view(ctx).items[0]!.label).toStartWith("again");
-    expect(menu.key("\r", ctx)).toEqual({
-      type: "run",
-      command: "/style again",
-    });
+    for (const score of [createScore(), song]) {
+      const menu = new EditMenu();
+      const ctx = context(score);
+      menu.show(ctx, "style");
+      const expected = [
+        "Machines",
+        "Breaks",
+        "Pocket",
+        "Cycles",
+        ...(score.style ? ["again"] : []),
+        "find",
+        "blend",
+        "All styles",
+      ];
+      const rows = menu.view(ctx).items;
+      expect(rows).toHaveLength(expected.length);
+      expected.forEach((label, index) =>
+        expect(rows[index]!.label).toStartWith(label),
+      );
+      if (score.style) {
+        select(menu, ctx, "again");
+        expect(menu.key("\r", ctx)).toEqual({
+          type: "run",
+          command: "/style again",
+        });
+      }
+    }
   });
 });

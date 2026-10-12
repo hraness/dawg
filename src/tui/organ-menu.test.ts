@@ -132,7 +132,7 @@ describe("organ menu review fixes", () => {
     select(menu, ctx, "drawbars");
     menu.key("\r", ctx);
     select(menu, ctx, "1'");
-    expect(menu.key("x", ctx)).toEqual({
+    expect(menu.key("\u001b[3~", ctx)).toEqual({
       type: "run",
       command: "keys drawbars 888800000",
     });

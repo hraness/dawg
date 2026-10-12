@@ -9,7 +9,7 @@ exports[`80×24: the drawer docks above the prompt 1`] = `
   "│   [−] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┃━━━●───────────────────────── [+] │",
   "│   resonance  0.2                                                       0 … 1 │",
   "│   [−] ━━━━━━━━━━━━━●──────────────────────────────────────────────────── [+] │",
-  "╰─────── ←→ adjust · ⇧←→ coarse · [ ] fine · ↑↓ param · 0-9 type · esc revert ─╯",
+  "╰───── ←→ adjust · ⇧←→ coarse · [ ] fine · ↑↓ param · enter keep · esc revert ─╯",
 ]
 `;
 

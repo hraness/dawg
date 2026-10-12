@@ -1,10 +1,11 @@
 /**
- * ctrl-k › Style: the style taxonomy as a menu tree (families, then each
- * branch down to its leaves). Every row is a `style` command, so the menu
- * and the prompt share one grammar; typing filters the rows of a level.
+ * ctrl-k › Style: curated groove groups first, then tools and the full
+ * style taxonomy. Every action is a `style` command, so the menu and the
+ * prompt share one grammar; typing filters the rows of a level.
  */
 import { hasCard, STYLE_TREE } from "../../core/styles/index.ts";
 import { STYLE_FAMILIES } from "../../core/styles/taxonomy.ts";
+import { GROOVE_GROUPS, GROOVE_STARTERS } from "../../core/styles/starters.ts";
 import type { StyleId } from "../../core/styles/schema.ts";
 import type { MenuContext, MenuNode } from "./menu.ts";
 
@@ -13,7 +14,7 @@ const BAR_CHOICES = [4, 8, 16, 32] as const;
 /** The Style row's detail: the song's style, or a hint. */
 export function styleMenuDetail(context: MenuContext): string {
   const style = context.score.style;
-  if (!style) return "a whole song from a style";
+  if (!style) return "16 grooves · drums, bass & harmony";
   const name = style.blend ? `${style.id} + ${style.blend.id}` : style.id;
   return `${name} · seed ${style.seed}`;
 }
@@ -25,7 +26,7 @@ function styleActions(id: StyleId): MenuNode[] {
       kind: "action",
       label: `make ${bars} bars`,
       command: `/style ${id} ${bars}`,
-      help: `replace the song with ${bars} bars of ${node.title} (undo restores it)`,
+      help: `load ${bars} bars of ${node.title}; each part on its own track · undo restores the song`,
     })),
     {
       kind: "action",
@@ -54,10 +55,28 @@ function styleNode(id: StyleId): MenuNode {
   };
 }
 
-/** Style: again, find, then the families. */
+/** Style: four groove groups, then again, find, blend and the full catalog. */
 export function styleMenuNodes(context: MenuContext): MenuNode[] {
   const current = context.score.style;
   return [
+    ...GROOVE_GROUPS.map((group): MenuNode => ({
+      kind: "menu",
+      id: `grooves:${group.id}`,
+      label: group.title,
+      detail: group.detail,
+      help: "original reusable grooves · no lead · independent parts",
+      build: () =>
+        GROOVE_STARTERS.filter((entry) => entry.group === group.id).map(
+          (entry): MenuNode => ({
+            kind: "menu",
+            id: `style:${entry.id}`,
+            label: entry.title,
+            detail: entry.detail,
+            help: entry.touchstone,
+            build: () => styleActions(entry.id),
+          }),
+        ),
+    })),
     ...(current
       ? [
           {
@@ -92,13 +111,23 @@ export function styleMenuNodes(context: MenuContext): MenuNode[] {
       example: "/style blend bebop bossa-nova 0.3",
       help: "mix two styles; weight 0 is the first, 1 the second",
     },
-    ...STYLE_FAMILIES.map((family): MenuNode => ({
+    {
       kind: "menu",
-      id: `family:${family.key}`,
-      label: family.title,
-      detail: family.roots.join(" · "),
-      help: `${family.key} family`,
-      build: () => family.roots.map((root) => styleNode(root)),
-    })),
+      id: "style:catalog",
+      label: "All styles",
+      detail: "full style catalog",
+      help: "legacy styles and aliases · accompaniment where available",
+      build: () =>
+        STYLE_FAMILIES.filter((family) => family.key !== "grooves").map(
+          (family): MenuNode => ({
+            kind: "menu",
+            id: `family:${family.key}`,
+            label: family.title,
+            detail: family.roots.join(" · "),
+            help: `${family.key} family`,
+            build: () => family.roots.map((root) => styleNode(root)),
+          }),
+        ),
+    },
   ];
 }

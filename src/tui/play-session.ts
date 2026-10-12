@@ -268,11 +268,11 @@ export class PlaySession {
   private degreeKey: string | undefined;
   private active = false;
   private synth: LiveSynth | undefined;
-  /** Rig voices awaiting their full render: id → released since. */
-  private readonly windows = new Map<number, boolean>();
+  /** Only the most recent full render of a still-held voice may replace it. */
+  private readonly windows = new Map<number, object>();
   /** f07-sing: the sounding key on a throat track (one drone, mono). */
   private throatId: number | undefined;
-  private readonly fullRenderer = new LiveFullRenderer();
+  private fullRenderer: LiveFullRenderer | undefined;
   private readonly pending = new Map<number, Pending>();
   /** Sustain changes while recording (Tab latch or Shift), as pedal events. */
   private pendingPedal: { beat: number; state: PedalState }[] = [];
@@ -383,6 +383,9 @@ export class PlaySession {
     await this.stopRecording();
     this.active = false;
     this.countIn = undefined;
+    this.windows.clear();
+    this.fullRenderer?.close();
+    this.fullRenderer = undefined;
     const engine = this.host.engine();
     if (engine) {
       if (engine.remoteClick) this.sendClick(engine.remoteClick.bind(engine));
@@ -540,6 +543,10 @@ export class PlaySession {
   public press(value: string): PlayKeyResult {
     const now = this.host.now();
     this.syncDegrees();
+    if (value === "q" && this.layout.labels.size > 0) {
+      this.status = "Sound keys · each key plays one hit";
+      return { type: "handled" };
+    }
     let key = value;
     if (this.chords.on && value === "n") {
       // Route the suggestion through the note key of its root, so holding
@@ -600,7 +607,10 @@ export class PlaySession {
         this.release(action.released, now);
         // A key that is not recording glows its lane for a moment.
         if (!this.recording) this.host.ghost?.(action.note.pitch);
-        const chord = this.chords.chordFor(action.note.pitch);
+        const chord =
+          this.layout.labels.size === 0
+            ? this.chords.chordFor(action.note.pitch)
+            : undefined;
         if (chord) {
           const played = this.chords.voice(chord, action.note.pitch);
           this.startChord(action.note, played);
@@ -700,6 +710,10 @@ export class PlaySession {
   public toggleDegrees(on = !this.degreesOn): string {
     if (on && this.layout.labels.size > 0)
       return "scale degrees need a melodic track";
+    if (on) {
+      this.chords.settings.mode = "off";
+      this.chords.settings.explicit = true;
+    }
     this.degreesOn = on;
     this.degreeKey = undefined;
     this.syncDegrees();
@@ -755,12 +769,14 @@ export class PlaySession {
       pitch: note.pitch,
       velocity: note.velocity / 127,
       seconds,
+      firstWindow: true,
       ...(samples ? { samples } : {}),
       ...(score.time?.tempo
         ? { tick: loopTickAt(score, this.host.beatAt(note.atMs)) }
         : {}),
     };
     const synth = this.synth;
+    const renderStartedAtMs = this.host.now();
     const pcm = synth.render(request);
     if (!pcm) return;
     if (pcm.fitting) {
@@ -776,15 +792,16 @@ export class PlaySession {
       return;
     }
     const scheduled = engine.noteOn(id, pcm);
-    this.lastLatencyMs = Math.max(0, scheduled - this.host.now());
+    this.lastLatencyMs = Math.max(0, scheduled - renderStartedAtMs);
     // A guitar rig sounds its first window now; the rest renders after the
     // key event and replaces the voice in place while it is still sounding.
     this.windows.delete(id);
-    if (pcm.partial) this.windows.set(id, false);
+    const token = {};
+    if (pcm.partial) this.windows.set(id, token);
     // The full pass runs on a worker, in key order, so a strummed chord or a
     // fast run never stalls key handling behind an oversampled render.
     if (pcm.partial)
-      void this.fullRenderer
+      void (this.fullRenderer ??= new LiveFullRenderer())
         .full(
           synth,
           pcm.clock === undefined ? request : { ...request, clock: pcm.clock },
@@ -793,11 +810,11 @@ export class PlaySession {
           // Not after note-off: a swap would cancel the release fade.
           if (
             full &&
-            this.windows.get(id) === false &&
+            this.windows.get(id) === token &&
             engine.voicePosition?.(id) !== undefined
           )
             engine.noteOn(id, full);
-          this.windows.delete(id);
+          if (this.windows.get(id) === token) this.windows.delete(id);
         });
   }
 
@@ -805,7 +822,7 @@ export class PlaySession {
     const engine = this.host.engine();
     for (const id of ids) {
       engine?.noteOff(id);
-      if (this.windows.has(id)) this.windows.set(id, true);
+      this.windows.delete(id);
       const live = this.liveChords.get(id);
       if (live) live.releaseAtMs = Math.min(live.releaseAtMs, atMs);
       const pending = this.pending.get(id);
@@ -1362,6 +1379,8 @@ export class PlaySession {
       countIn,
       beat,
       grid: `grid ${this.grid}`,
+      chordMode: this.layout.labels.size ? "off" : this.chords.settings.mode,
+      degrees: this.degreesOn,
       // A kit plays drums, not harmony: no chord row and no key chip.
       chords: this.layout.drums
         ? undefined

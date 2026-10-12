@@ -131,6 +131,53 @@ Calibration loop 1.91 ms.
   time, but an edit to an eight-bar vocoder loop waits well over a second
   before it is heard.
 
+## Interactive first windows (2026-10-13)
+
+`bun bench/perf/key-window.ts` compares the original render policy with the
+interactive path, alternating their order for each of 48 distinct pitches
+(36–83). This is synchronous render cost at 44.1 kHz after `warmLive`, on
+darwin-arm64 with Bun 1.3.14. These render rows exclude worker dispatch and
+startup, transport, and speaker latency. Tap gates are 125 ms; held gates
+are 8 seconds. They are not a measurement of end-to-end heard latency.
+
+| workload                           | before median / p95 | after median / p95 |
+| ---------------------------------- | ------------------: | -----------------: |
+| saw + delay/reverb, tap            |      13.9 / 14.8 ms |     3.07 / 3.34 ms |
+| saw + delay/reverb, held           |      31.0 / 34.7 ms |     2.79 / 3.23 ms |
+| grand piano, held                  |      19.6 / 27.3 ms |     3.16 / 4.24 ms |
+| granular swarm, held               |      34.5 / 69.4 ms |     3.82 / 5.09 ms |
+| bowed cello, tap                   |      4.43 / 7.40 ms |     1.44 / 2.16 ms |
+| tonewheel, held (already windowed) |      3.49 / 4.23 ms |     3.48 / 4.37 ms |
+
+The input path now renders at most one second and hands the engine its first
+750 ms, retaining 250 ms of lookahead for effects. The full render follows
+on a worker. The shared-session host uses that worker too: previously its
+deferred full render still blocked the daemon's audio pump. Request tokens
+prevent late renders from reviving released notes or replacing a newer
+extension of the same voice. Workers close when play mode or the daemon
+closes. Ring-out instruments keep their full tail because key release does
+not stop their sound.
+
+`src/audio/live-window.test.ts` checks exact PCM prefixes for taps and held
+notes across the seven benchmark voices, bounds rendered frames, and checks
+ring-out preservation. These checks protect sound quality independently of
+wall-clock noise. The native sink's queue lead is unchanged; the improvement
+is the render work that must finish before a key reaches that queue.
+
+The same bench also reports synchronous worker dispatch (or run
+`bun bench/perf/key-window.ts --dispatch-only`). With a 64 MiB unrelated
+decoded sample in the project and 24 new notes after worker startup, copying
+the whole sample bank cost **2.04 ms median / 4.62 ms p95**. Dispatching only
+the played track's assets and retaining them across notes cost **0.01 ms /
+0.03 ms**. This separately measures handoff cost, excluding the initial
+worker startup and audio rendering. Voices, granular sources, wavetables and
+impulse responses for other tracks are never sent. A bank or track change
+replaces the worker's one retained bank; unchanged assets are not copied
+again. Loaded wavetable spectra are serialized explicitly because their
+runtime objects contain lazy functions. `live-samples.test.ts` checks asset
+isolation, replacement/clearing, and exact sampler/wavetable audio through
+the real worker.
+
 ## Heard latency (loopback)
 
 The PTY rows above stop at the time the engine scheduled a sound. The

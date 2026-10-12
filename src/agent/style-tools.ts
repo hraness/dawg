@@ -14,6 +14,7 @@ import {
 } from "../../core/styles/generate.ts";
 import { STYLE_FAMILIES } from "../../core/styles/taxonomy.ts";
 import { resolveStyle } from "../../core/styles/index.ts";
+import { GROOVE_STARTERS } from "../../core/styles/starters.ts";
 import {
   describeStyle,
   findStyle,
@@ -69,7 +70,7 @@ export const STYLE_TOOLS = Object.freeze([
   {
     name: "list_styles",
     description:
-      "Browse the style taxonomy (read-only): query searches, parent lists children, neither lists families.",
+      "Browse styles (read-only): start with the curated groove starters; query searches, parent lists children, neither lists starters and full-catalog families.",
     parameters: {
       type: "object",
       properties: {
@@ -102,13 +103,21 @@ export const STYLE_TOOLS = Object.freeze([
         summary = `styles · ${node.children.length} under ${id}`;
       } else {
         result = {
-          families: STYLE_FAMILIES.map((family) => ({
+          starters: GROOVE_STARTERS.map(({ id, title, group, detail }) => ({
+            id,
+            title,
+            group,
+            detail,
+          })),
+          families: STYLE_FAMILIES.filter(
+            (family) => family.key !== "grooves",
+          ).map((family) => ({
             family: family.key,
             title: family.title,
             roots: family.roots.map(nodeJSON),
           })),
         };
-        summary = "styles · families";
+        summary = "styles · 16 groove starters · full catalog";
       }
       const content = JSON.stringify(result);
       return {
