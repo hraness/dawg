@@ -23,7 +23,7 @@ export const productMessaging = {
   hero: {
     heading: "Make music in your terminal, dawg.",
     summary:
-      "dawg is a music workstation that runs in your terminal. Notes stream down a piano roll as they play, every window shares one local session, and your agent writes the next loop beside you. No account, no cloud, just sound.",
+      "dawg is a music workstation that runs in your terminal, with no account and no cloud, just sound. Notes stream down a piano roll as they play, every window shares one local session, and your agent writes the next loop beside you.",
     primaryAction: "Install dawg",
     secondaryAction: "Watch it play",
   },
