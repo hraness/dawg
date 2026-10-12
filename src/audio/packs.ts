@@ -16,6 +16,12 @@
  */
 import { createHash } from "node:crypto";
 import {
+  BUNDLED_SAMPLE_BASE,
+  BUNDLED_SAMPLES,
+  bundledSample,
+} from "../../core/bundled-samples.ts";
+import { bundledSampleForUrl, readBundledSample } from "./bundled-samples.ts";
+import {
   cacheUsage,
   packsCacheMax,
   pruneLru,
@@ -230,6 +236,13 @@ export function resolveBankAlias(
 export const PACK_CATALOG: readonly PackInfo[] = Object.freeze(
   (
     [
+      {
+        name: "studio",
+        title: "Studio · original offline vocals, hits and transitions",
+        source: `${BUNDLED_SAMPLE_BASE}manifest.json`,
+        license: "CC0-1.0",
+        kind: "strudel",
+      },
       {
         name: "tidal-drum-machines",
         title: "Tidal drum machines (TR-808, TR-909, LinnDrum, …)",
@@ -993,6 +1006,21 @@ export class PackStore {
     pack: PackInfo,
     refresh: boolean,
   ): Promise<Manifest> {
+    if (pack.name === "studio")
+      return parseManifest(
+        {
+          _base: BUNDLED_SAMPLE_BASE,
+          ...Object.fromEntries(
+            BUNDLED_SAMPLES.map((sample) => [
+              sample.id,
+              sample.tags.includes("vocal")
+                ? { C4: `${sample.id}.wav` }
+                : [`${sample.id}.wav`],
+            ]),
+          ),
+        },
+        pack.manifestUrl,
+      );
     const path = this.manifestPath(pack.name);
     const parse = (text: string) => {
       const json: unknown = JSON.parse(text);
@@ -1132,7 +1160,8 @@ export class PackStore {
         `${ref.pack} has no sound ${ref.sound} · /pack info ${ref.pack} lists them`,
       );
     let file: string;
-    let root: number | undefined;
+    let root: number | undefined =
+      pack.name === "studio" ? bundledSample(soundName)?.root : undefined;
     if (sound.kind === "list") {
       const index = typeof ref.n === "number" ? ref.n : 0;
       file = sound.files[index % sound.files.length]!;
@@ -1223,6 +1252,24 @@ export class PackStore {
     expectSha256?: string,
   ): Promise<FetchedFile> {
     checkFetchUrl(url, this.allowLoopbackHttp);
+    if (url.startsWith(BUNDLED_SAMPLE_BASE)) {
+      const sample = bundledSampleForUrl(url);
+      if (!sample) throw new PackError("unknown bundled studio sample");
+      try {
+        const file = await readBundledSample(sample.id, expectSha256);
+        return {
+          url,
+          sha256: file.sha256,
+          bytes: file.bytes,
+          path: file.path,
+          cached: true,
+        };
+      } catch (error) {
+        throw new PackError(
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
     const filesDir = join(this.dir, "files");
     const path = this.filePath(url);
     try {
@@ -1308,7 +1355,10 @@ export class PackStore {
         continue;
       }
       for (const [name, sound] of manifest.sounds) {
-        const haystack = `${pack.name}/${name}`.toLowerCase();
+        const metadata =
+          pack.name === "studio" ? bundledSample(name) : undefined;
+        const haystack =
+          `${pack.name}/${name} ${metadata?.description ?? ""} ${metadata?.tags.join(" ") ?? ""}`.toLowerCase();
         if (!words.every((word) => haystack.includes(word))) continue;
         out.push({
           pack: pack.name,
@@ -1318,6 +1368,15 @@ export class PackStore {
           count:
             sound.kind === "zones" ? sound.zones.length : sound.files.length,
           license: pack.license,
+          ...(metadata
+            ? {
+                description: metadata.description,
+                tags: metadata.tags,
+                root: metadata.root,
+                seconds: metadata.seconds,
+                slices: metadata.slices,
+              }
+            : {}),
         });
         if (out.length >= limit) return out;
       }
@@ -1335,6 +1394,11 @@ export type SoundMatch = Readonly<{
   /** Files (oneshot) or zones (keyed). */
   count: number;
   license: string;
+  description?: string;
+  tags?: readonly string[];
+  root?: number;
+  seconds?: number;
+  slices?: readonly Readonly<{ name: string; begin: number; end: number }>[];
 }>;
 
 function caseKey(manifest: Manifest, sound: string): string | undefined {

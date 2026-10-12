@@ -1,6 +1,6 @@
 /**
  * Time specs every chop op accepts: seconds as a number or "1.25s",
- * milliseconds "350ms", clock "1:23.5", musical "bar:9.1" (bar 9 beat 1,
+ * milliseconds "350ms", source percentages "25%", clock "1:23.5", musical "bar:9.1" (bar 9 beat 1,
  * both 1-based) or "beat:32" (32 beats in), "end", and a leading "-" that
  * counts back from the end ("-2s"). Bars and beats need the project tempo.
  */
@@ -45,6 +45,9 @@ export function parseTime(
 function rawTime(spec: TimeSpec, total: number, tempo?: Tempo): number {
   if (typeof spec === "number") return spec < 0 ? total + spec : spec;
   const text = spec.trim().toLowerCase();
+  const percent = /^(\d+(?:\.\d+)?)%$/.exec(text);
+  if (percent && Number(percent[1]) <= 100)
+    return (Number(percent[1]) / 100) * total;
   if (text === "end") return total;
   if (text === "start") return 0;
   if (text.startsWith("-")) return total - rawTime(text.slice(1), total, tempo);

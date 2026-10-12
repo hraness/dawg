@@ -122,6 +122,7 @@ import { CALIBRATION_TOOLS } from "./calibration-tools.ts";
 import { MASTER_TOOLS } from "./master-tools.ts";
 import { PATCH_TOOLS } from "./patch-tools.ts";
 import { STYLE_TOOLS } from "./style-tools.ts";
+import { DEMO_TOOLS } from "./demo-tools.ts";
 import { DRUM_TOOLS } from "./drum-tools.ts";
 import { TIME_TOOLS } from "./time-tools.ts";
 import { SECTION_TOOLS } from "./section-tools.ts";
@@ -191,6 +192,13 @@ export type ScorePlan = Readonly<{
 }>;
 
 export type ToolPlan =
+  | Readonly<{
+      /** Canonical library scores only; whole-song changes never rebase. */
+      kind: "replace";
+      next: TrackScore;
+      summary: string;
+      trackId?: string;
+    }>
   | Readonly<{
       kind: "score";
       operations: readonly ScoreOperation[];
@@ -2233,6 +2241,7 @@ export const AGENT_TOOLS: readonly AgentTool[] = Object.freeze([
   ...PATCH_TOOLS,
   ...PRESET_TOOLS,
   ...STYLE_TOOLS,
+  ...DEMO_TOOLS,
   ...GRANULAR_TOOLS,
   ...RESAMPLE_TOOLS,
   AUDIO_TOOL,

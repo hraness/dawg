@@ -14,6 +14,7 @@ import { parseHistoryCommand } from "./comment.ts";
 import { parsePatternCommand } from "./drums.ts";
 import { parseProgressionCommand } from "./progression.ts";
 import { parseEditCommand } from "./edit.ts";
+import { parseDemoCommand } from "./demo.ts";
 import { parseExpressionCommand } from "./expression.ts";
 import { parseFitCommand } from "./fit.ts";
 import { parseFormantCommand, parseVowelCommand } from "./formant.ts";
@@ -96,6 +97,7 @@ function parsers(score: TrackScore): ((text: string) => unknown)[] {
     parsePrompt,
     parseMusicCommand,
     parseEditCommand,
+    parseDemoCommand,
     parseRhythmCommand,
     parsePatchCommand,
     parsePresetCommand,

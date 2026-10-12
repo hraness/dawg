@@ -46,6 +46,8 @@ unit tests and the headless null-device smoke test where the runner can execute
 the library, and uploads one library per platform. Check's `package` job also
 stages those libraries, packs, installs and runs `native/verify-install.sh` on
 every pull request, so the release path is exercised before a tag exists.
+The installed package also builds every demo and resolves its sample references
+with network access disabled, checking every bundled sample against its hash.
 
 `release` (needs `sink`; permissions `contents: write`, `id-token: write`,
 `attestations: write`):
@@ -62,7 +64,8 @@ every pull request, so the release path is exercised before a tag exists.
    or `.so`. `SHA256SUMS` lists the tarball first, then the four libraries.
 4. Runs `native/verify-install.sh`: installs the tarball into a temporary
    `BUN_INSTALL`, runs `dawg --help`, and requires `dawg doctor --json` to
-   report the linux-x64 sink verified and loaded.
+   report the linux-x64 sink verified and loaded. It then checks the demo and
+   sample catalogs from that installed package with network access disabled.
 5. Attests build provenance for the tarball and the four libraries, attaches
    them and `SHA256SUMS` to a draft Release, and publishes it in one step so it
    becomes immutable with every file in place.

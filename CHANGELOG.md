@@ -2,6 +2,22 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.12.0
+
+### Added
+
+- **Editable demo songs.** Eleven original arrangements cover deep and acid techno, deep house, garage, synth pop, hyperpop, melodic EDM, jungle, trip hop and neo soul. Named scenes, layered instruments, automation, transitions and production notes make each song a starting point for learning and editing. `demo` opens a fuzzy-searchable shelf; `demo info <id>` explains the arrangement; loading is one undoable edit. Agents use the same library through `list_demos` and `load_demo`.
+- **An offline sample shelf.** Eight original synthetic phrases, vowels, hits and a riser ship as hash-pinned assets with CC0 provenance. Preview, add and chop actions are available in the Sound menu and through `sample library`, `sample preview`, `sample use` and `sample chop`. Four, eight or sixteen slices become a separate playable sampler in one edit. Pack discovery and the agent audio toolkit use the same installed assets.
+
+### Changed
+
+- **Navigation for larger arrangements.** TAPE keeps track and scene navigation, zoom and editing controls visible and clickable. Track paging and wheel navigation retain focus; readable mute, solo, automation and effect indicators adapt to narrow terminals. Clicking through an unfinished prompt preserves its text. Cached arrangement occupancy avoids scanning every note for every cell; the dense 32-track benchmark and terminal-size evidence are recorded in `docs/perf.md`.
+- **Faster synthesized hats.** Reusing exact oscillator sums reduces repeated hi-hat work while retaining each hit's noise and expression. A fresh-process full Signal Bloom render measured 8.75 → 7.60 seconds with identical PCM; longer demos still require complete rendering before playback. The bounded cache, benchmark and measurement limits are documented in `docs/perf.md`.
+
+### Fixed
+
+- **Sample editing and agent song fidelity.** Loading a sample preserves occupied instruments and existing keyed performances. Chopping focuses the resulting sampler, and one undo removes the complete score edit. Agent note validation retains slides, expression and vocal metadata so loading a demo through the agent reproduces its score.
+
 ## 0.11.0
 
 ### Changed

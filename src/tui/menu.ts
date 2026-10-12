@@ -9,6 +9,7 @@
  * Rendering reuses the TUI's picker overlay: `view()` returns a picker.
  */
 import { PRESETS } from "../../core/presets/index.ts";
+import { sampleLibraryNodes } from "./sample-menu.ts";
 import { fuzzyScore } from "../../tui/search.ts";
 import { CHOP_OPS } from "../audio/chop/types.ts";
 import { CHOP_USAGE } from "../audio/chop/words.ts";
@@ -593,6 +594,7 @@ export const SECTION_ALIASES: Readonly<Record<string, readonly string[]>> =
       // Older ids, kept as aliases.
       parameters: ["sound"],
       sounds: ["sound", "browse"],
+      samples: ["sound", "samples"],
       instruments: ["sound", "browse"],
       performance: ["sound", "performance"],
       expression: ["sound", "performance"],
@@ -615,6 +617,8 @@ export const SECTION_ALIASES: Readonly<Record<string, readonly string[]>> =
       master: ["mix", "master"],
       tracks: ["arrange", "tracks"],
       music: ["arrange"],
+      demo: ["arrange", "demos"],
+      demos: ["arrange", "demos"],
       style: ["arrange", "style"],
       styles: ["arrange", "style"],
       genre: ["arrange", "style"],
@@ -760,6 +764,14 @@ function soundSectionNodes(context: MenuContext): MenuNode[] {
       detail: soundsDetail(focused(context)),
       help: "every instrument: keys, strings, mallets, winds, granular, wavetables, sample packs",
       build: soundNodes,
+    },
+    {
+      kind: "menu",
+      id: "samples",
+      label: "sample library",
+      detail: "original voices, hits and textures · offline",
+      help: "search original sounds · add a sample track or chop directly into a playable pattern",
+      build: sampleLibraryNodes,
     },
     {
       kind: "action",

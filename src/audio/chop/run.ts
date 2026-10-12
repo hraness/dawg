@@ -6,6 +6,9 @@
  * `audio` tool, typed `/chop` and `dawg media chop`.
  */
 import { historySink } from "../../history/sink.ts";
+import { bundledSample } from "../../../core/bundled-samples.ts";
+import { readBundledSample } from "../bundled-samples.ts";
+import { parsePackRef } from "../../../core/score.ts";
 import { copyFile, lstat, mkdir, realpath } from "node:fs/promises";
 import {
   basename,
@@ -93,6 +96,14 @@ async function resolveIn(
 ): Promise<Resolved> {
   if (!file) throw new ChopError(`${label} is required`);
   try {
+    if (file.startsWith("pack:studio/")) {
+      const ref = parsePackRef(file);
+      const sample =
+        ref?.pack === "studio" ? bundledSample(ref.sound) : undefined;
+      if (!sample) throw new ChopError("unknown bundled studio sample");
+      const verified = await readBundledSample(sample.id);
+      return { absolute: verified.path, relative: `pack:studio/${sample.id}` };
+    }
     const found = await resolveInput(
       { projectRoot: ctx.root, trackSlug: ctx.trackSlug ?? "main" },
       file,

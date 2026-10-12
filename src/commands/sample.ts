@@ -30,9 +30,19 @@ import {
   type Track,
 } from "../../core/score.ts";
 import { trackDirectories } from "../../core/sdk/print.ts";
+import {
+  bundledSample,
+  searchBundledSamples,
+} from "../../core/bundled-samples.ts";
+import type { ChopArgs } from "../audio/chop/types.ts";
 
 export type SampleCommand =
   | Readonly<{ kind: "list" }>
+  | Readonly<{ kind: "library"; query: string }>
+  | Readonly<{ kind: "use"; id: string }>
+  | Readonly<{ kind: "preview"; id: string }>
+  | Readonly<{ kind: "chop"; id?: string; count: 4 | 8 | 16 }>
+  | Readonly<{ kind: "error"; message: string }>
   | Readonly<{ kind: "add"; path: string; voice?: string }>
   | Readonly<{
       kind: "set";
@@ -98,6 +108,34 @@ export function parseSampleCommand(command: string): SampleCommand | undefined {
   if (!match) return undefined;
   const rest = match[1];
   if (!rest) return { kind: "list" };
+  const library = rest.match(/^(?:library|browse|search)(?:\s+(.*))?$/i);
+  if (library) return { kind: "library", query: library[1]?.trim() ?? "" };
+  const use = rest.match(/^(use|preview)(?:\s+(.*))?$/i);
+  if (use) {
+    const sample = bundledSample(use[2]?.trim() ?? "");
+    return sample
+      ? { kind: use[1]!.toLowerCase() as "use" | "preview", id: sample.id }
+      : {
+          kind: "error",
+          message: `sample · /sample ${use[1]!.toLowerCase()} <id> · /sample library lists the offline sounds`,
+        };
+  }
+  const chop = rest.match(/^chop(?:\s+(.*))?$/i);
+  if (chop) {
+    const words = (chop[1] ?? "").split(/\s+/).filter(Boolean);
+    const numeric = words.length > 0 && /^\d+$/.test(words.at(-1)!);
+    const count = numeric ? Number(words.pop()) : 4;
+    if (words.length > 1 || ![4, 8, 16].includes(count))
+      return {
+        kind: "error",
+        message: "sample · /sample chop [id or voice] [4|8|16]",
+      };
+    return {
+      kind: "chop",
+      ...(words[0] ? { id: words[0] } : {}),
+      count: count as 4 | 8 | 16,
+    };
+  }
   const set = rest.match(/^set\s+([A-Za-z][A-Za-z0-9_]*)\s+(.+)$/i);
   if (set) {
     const tokens = set[2]!.split(/\s+/);
@@ -111,6 +149,78 @@ export function parseSampleCommand(command: string): SampleCommand | undefined {
   return named
     ? { kind: "add", path, voice: named[2]! }
     : { kind: "add", path };
+}
+
+/** A compact offline collection; detailed metadata is also available to agents. */
+export function sampleLibraryLines(query = ""): string[] {
+  const matches = searchBundledSamples(query);
+  return [
+    "Original DAWG sounds · CC0 · bundled and ready offline",
+    "Synthetic voices, no recorded singers or third-party samples.",
+    "",
+    ...matches.flatMap((sample) => [
+      `${sample.id} · ${sample.seconds}s${sample.bpm ? ` · ${sample.bpm} BPM` : ""} · ${sample.tags.join(" / ")}`,
+      sample.description,
+      "",
+    ]),
+    ...(matches.length
+      ? []
+      : ["No matches · try vocal, pad, percussion or fx."]),
+    "/sample use <id> · play it from QWERTY or add notes",
+    "/sample preview <id> · hear it while playback is paused; no edits",
+    "/sample chop <id> 4 · four slices and a playable pattern",
+    "/sample chop [voice] 8 · chop a loaded local or bundled sample",
+    "/sample <path> · import your own audio",
+  ];
+}
+
+/** Same slice request used by /chop and the agent audio tool. */
+export function sampleChopArgs(
+  score: TrackScore,
+  focusedTrackId: string,
+  targetTrackId: string,
+  id?: string,
+  count: 4 | 8 | 16 = 4,
+): ChopArgs {
+  const bundled = id ? bundledSample(id) : undefined;
+  let input = bundled ? `pack:studio/${bundled.id}` : undefined;
+  let region: Pick<ChopArgs, "from" | "to" | "snap"> = {};
+  if (!input) {
+    const voices =
+      score.tracks.find((track) => track.id === focusedTrackId)?.sampler
+        ?.voices ?? {};
+    const names = Object.keys(voices);
+    const voice = id ?? (names.length === 1 ? names[0] : undefined);
+    const ref = voice ? voices[voice] : undefined;
+    if (!ref)
+      throw new SamplePlacementError(
+        names.length > 1
+          ? `choose a voice: ${names.join(", ")} · /sample chop <voice> 4`
+          : "choose an offline sample · /sample chop hold-on 4",
+      );
+    if (ref.src.startsWith("pack:") && !ref.src.startsWith("pack:studio/"))
+      throw new SamplePlacementError(
+        "chop a local file or an offline studio sound · /chop slice <file> 4 --method grid",
+      );
+    input =
+      ref.src.startsWith("pack:") || ref.src.startsWith("tracks/")
+        ? ref.src
+        : `tracks/${trackDirectories(score).get(focusedTrackId) ?? focusedTrackId}/${ref.src.replace(/^\.\//, "")}`;
+    if (ref.begin !== undefined || ref.end !== undefined)
+      region = {
+        from: `${((ref.begin ?? 0) * 100).toFixed(12)}%`,
+        to: `${((ref.end ?? 1) * 100).toFixed(12)}%`,
+        snap: "none",
+      };
+  }
+  return {
+    input,
+    ...region,
+    method: "grid",
+    count,
+    track: targetTrackId,
+    pattern: true,
+  };
 }
 
 function parseControlToken(token: string | undefined): SampleControlValue {
@@ -308,6 +418,42 @@ export function samplerTarget(score: TrackScore, focusedId: string): string {
   for (let n = 2; score.tracks.some((track) => track.id === id); n += 1)
     id = `samples-${n}`;
   return id;
+}
+
+function freeSampleTrackId(score: TrackScore, stem: string): string {
+  let id = stem;
+  for (let n = 2; score.tracks.some((track) => track.id === id); n += 1)
+    id = `${stem}-${n}`;
+  return id;
+}
+
+/** Shelf picks add an instrument without replacing a performance or loaded voices. */
+export function sampleLibraryTarget(
+  score: TrackScore,
+  focusedId: string,
+): string {
+  const focused = score.tracks.find((track) => track.id === focusedId);
+  if (!focused) return focusedId;
+  const occupied =
+    score.notes.some((note) => note.trackId === focusedId) ||
+    (focused.clips?.length ?? 0) > 0 ||
+    (focused.takes?.length ?? 0) > 0 ||
+    Object.keys(focused.sampler?.voices ?? {}).length > 0;
+  return occupied ? freeSampleTrackId(score, "samples") : focusedId;
+}
+
+/** Slices need a one-shot track; keep keyed voices and existing note slots intact. */
+export function sampleChopTarget(score: TrackScore, focusedId: string): string {
+  const focused = score.tracks.find((track) => track.id === focusedId);
+  if (!focused) return focusedId;
+  if (
+    isSamplerInstrument(focused.instrument) &&
+    focused.sampler?.mode === "oneshot" &&
+    !score.notes.some((note) => note.trackId === focusedId) &&
+    !(focused.clips?.length || focused.takes?.length)
+  )
+    return focusedId;
+  return freeSampleTrackId(score, "slices");
 }
 
 /**

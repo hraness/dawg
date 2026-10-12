@@ -293,7 +293,7 @@ test.skipIf(!supported)(
     await t.send("\u0014");
     await t.until(() => t.vt.text().includes("(loop)"), "tape loop");
     expect(t.vt.text()).toContain("bars 5–6 (loop)");
-    expect(t.vt.text()).toMatch(/bass\s+┊···┊···┊···┊···▃···▃···▃···▃/);
+    expect(t.vt.text()).toMatch(/bass\s+····\s+┊···┊···┊···┊···▃···▃···▃···▃/);
     await quit(t);
   },
   30_000,

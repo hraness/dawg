@@ -9,6 +9,7 @@ import { guideLines, paginate, wrapRows } from "../tui/guide.ts";
 import { TOPICS, TOPIC_ALIASES, lintText } from "../src/lang/glossary.ts";
 import { GuideBrowser } from "../tui/guide.ts";
 import { listGuides } from "./index.ts";
+import { resolveMenuPath } from "../test/consistency-lib.ts";
 
 /** Rows a guide may take in the pane (80×24 leaves about 20 inside). */
 /** The guide pane's rows inside an 80x24 terminal (docs/screens/guide). */
@@ -150,109 +151,9 @@ describe("guides", () => {
   });
 });
 
-/**
- * The ctrl-k labels from design §4a. Lane E replaces this with menuPath once
- * the menu lane lands, so breadcrumbs come from the live tree.
- */
-type MenuNode = { readonly [label: string]: MenuNode };
-const LEAF: MenuNode = {};
-const leaves = (...labels: string[]): MenuNode =>
-  Object.fromEntries(labels.map((label) => [label, LEAF]));
-const MENU: MenuNode = {
-  Sound: {
-    ...leaves(
-      "instrument",
-      "preset",
-      "preset library",
-      "advanced",
-      "synth filter",
-      "keys",
-      "organ",
-      "guitar",
-      "granular",
-      "track tuning",
-      "performance",
-    ),
-    instruments: {
-      Keys: leaves("Electric", "Organs"),
-      Strings: leaves("Bowed"),
-      ...leaves(
-        "Mallets and bells",
-        "Winds and brass",
-        "Granular",
-        "Wavetable",
-        "all instruments",
-        "sample packs",
-        "use a sample",
-      ),
-    },
-  },
-  Voice: leaves(
-    "sing",
-    "lyrics",
-    "clips",
-    "pitch",
-    "autotune",
-    "formant",
-    "vocoder",
-    "voice presets",
-  ),
-  Effects: leaves(
-    "Filter",
-    "Auto filter",
-    "Distortion",
-    "Tremolo",
-    "Compressor",
-    "Chorus",
-    "Delay",
-    "Reverb",
-    "Guitar rig",
-    "Shoegaze",
-    "more effects",
-  ),
-  Rhythm: leaves("euclid editor", "grooves", "kits", "grid"),
-  "Chords and key": leaves("key", "tuning", "play", "progression", "idiom"),
-  Mix: leaves(
-    "name",
-    "mute",
-    "solo",
-    "volume",
-    "pan",
-    "all tracks",
-    "automation",
-    "master",
-  ),
-  Arrange: leaves("tracks", "sections", "form", "style"),
-  Project: {
-    ...leaves(
-      "play",
-      "tempo",
-      "beats per bar",
-      "tempo and meter",
-      "loop length",
-      "grid",
-      "click",
-      "count-in bars",
-      "calibration",
-      "export",
-      "resample",
-    ),
-    session: leaves("rename", "fork", "resume"),
-    media: leaves("chop", "chop help"),
-    agent: leaves("model", "show-me", "model key"),
-    audio: leaves("output", "input", "test"),
-    "help and guides": leaves("help", "guides", "keys"),
-  },
-};
-
-/** `A › b › c · d`: each step is a child of the one before; `·` siblings. */
+/** `A › b › c · d`: resolve each sibling against the real menu tree. */
 function menuPathOk(path: string): boolean {
   const steps = path.split(" › ");
-  let node = MENU;
-  for (const [index, step] of steps.entries()) {
-    const names = index === steps.length - 1 ? step.split(" · ") : [step];
-    for (const name of names) if (!(name.trim() in node)) return false;
-    node = node[names[0]!.trim()]!;
-  }
-  return true;
+  const names = steps.pop()!.split(" · ");
+  return names.every((name) => resolveMenuPath([...steps, name.trim()]));
 }

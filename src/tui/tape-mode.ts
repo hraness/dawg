@@ -58,9 +58,9 @@ export type TapeAction =
   /** Not a TAPE key: the prompt, arrows for the knobs, ctrl keys. */
   | Readonly<{ type: "pass" }>;
 
-/** The hint row: six gestures, the rest are in `?` (KEYS.tape). */
+/** Compact editing actions; navigation has a separate visible shelf. */
 export const TAPE_HINT =
-  "c copy · x cut · v paste · \\ loop · r record · 1-9 track · ? keys";
+  "r record · c copy · x cut · v paste · \\ loop · h mute · H solo · ? keys";
 
 /** `5-6` or `5`, as typed (1-based, ASCII hyphen). */
 export function typedRange(range: BarRange): string {
@@ -223,11 +223,34 @@ export function tapeKey(context: TapeContext, value: string): TapeAction {
     case "=":
     case "+":
       return { type: "zoom", direction: 1 };
-    case "\t": {
+    case "\t":
+    case "\u001b[Z": {
       const index = score.tracks.findIndex(
         (item) => item.id === context.trackId,
       );
-      return { type: "focus", row: (index + 1) % score.tracks.length };
+      const direction = value === "\t" ? 1 : -1;
+      return {
+        type: "focus",
+        row:
+          (Math.max(0, index) + direction + score.tracks.length) %
+          score.tracks.length,
+      };
+    }
+    case "\u001b[5~":
+    case "\u001b[6~": {
+      const index = score.tracks.findIndex(
+        (item) => item.id === context.trackId,
+      );
+      return {
+        type: "focus",
+        row: Math.max(
+          0,
+          Math.min(
+            score.tracks.length - 1,
+            index + (value === "\u001b[6~" ? 8 : -8),
+          ),
+        ),
+      };
     }
     case "c":
     case "C":

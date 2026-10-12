@@ -26,6 +26,7 @@ shape it.
 
 - Ctrl-K › Sound › instruments › Strings › Bowed
 - Ctrl-K › Sound › instruments › Wavetable · sample packs
+- Ctrl-K › Sound › sample library (original offline sounds)
 
 ## Keys
 

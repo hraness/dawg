@@ -5,6 +5,10 @@
  */
 import { SCORE_LIMITS, type TrackScore } from "../../core/score.ts";
 import {
+  BUNDLED_SAMPLES,
+  bundledSampleRef,
+} from "../../core/bundled-samples.ts";
+import {
   PackError,
   PackStore,
   banksOf,
@@ -174,6 +178,15 @@ export const PACK_TOOLS: readonly AgentTool[] = Object.freeze([
               ...(info.attribution ? { attribution: info.attribution } : {}),
               kits: await kitsWithNicknames(packs, info.name, manifest),
               sounds,
+              ...(info.name === "studio"
+                ? {
+                    offline: true,
+                    samples: BUNDLED_SAMPLES.map((sample) => ({
+                      ...sample,
+                      ref: bundledSampleRef(sample.id),
+                    })),
+                  }
+                : {}),
               total: manifest.sounds.size,
             }),
             summary: `${info.name} · ${manifest.sounds.size} sounds`,
@@ -185,7 +198,7 @@ export const PACK_TOOLS: readonly AgentTool[] = Object.freeze([
   {
     name: "search_sounds",
     description:
-      "Search pack sounds by name (e.g. 'bd', '909 hh', 'piano', 'gm guitar'). Returns pack:<pack>/<sound> refs for use_sound; keyed sounds are pitched instruments.",
+      "Search pack sounds by name (e.g. 'bd', '909 hh', 'piano', 'gm guitar'). Start with pack: 'studio' for eight original offline CC0 vocals, hits and transitions; its descriptive tags also match (vocal, phrase, garage, pad). Returns pack:<pack>/<sound> refs for use_sound; keyed sounds are pitched instruments.",
     parameters: {
       type: "object",
       properties: {
@@ -224,7 +237,7 @@ export const PACK_TOOLS: readonly AgentTool[] = Object.freeze([
   {
     name: "use_sound",
     description:
-      "Put a pack sound on a track through the sampler: <pack>/<sound>[:n], a kit/bank name (909, 808 …) or a keyed instrument; pinned by sha256.",
+      "Put a pack sound on a track through the sampler: <pack>/<sound>[:n], a kit/bank name (909, 808 …) or a keyed instrument; pinned by sha256. studio/hold-on and studio/stay-up are offline C4 phrases; studio/vowel-ah and studio/vowel-oh are playable vowels. For chops use audio op:slice input:pack:studio/hold-on method:grid count:4 track:<id> pattern:true.",
     parameters: {
       type: "object",
       properties: {

@@ -86,6 +86,42 @@ function paint(
 }
 
 describe("paintTape", () => {
+  test("state badges dispatch mute and focused solo; repeated labels retain source scene names", () => {
+    const value = view();
+    const decorated = {
+      ...value,
+      focused: 1,
+      rows: value.rows.map((row) => ({
+        ...row,
+        automation: true,
+        effects: true,
+      })),
+      sections: value.sections.map((section) => ({
+        ...section,
+        sourceName: section.name,
+        name: `${section.name} ×2`,
+      })),
+    };
+    const { hits, layout, lines } = paint(80, 12, decorated);
+    expect(lines[0]).toContain("MSAF");
+    expect(hits.at(layout.gutter - 5, layout.rowsY)?.target).toEqual({
+      kind: "command",
+      command: "mute drums",
+    });
+    expect(hits.at(layout.gutter - 5, layout.rowsY + 2)?.target).toEqual({
+      kind: "command",
+      command: "unmute pad",
+    });
+    expect(hits.at(layout.gutter - 4, layout.rowsY + 1)?.target).toEqual({
+      kind: "tape-key",
+      key: "H",
+    });
+    expect(hits.at(layout.gutter, 1)?.target).toEqual({
+      kind: "scene",
+      name: "build",
+    });
+  });
+
   for (const width of [80, 120, 160]) {
     test(`ruler, loop, rows and footer fit at ${width} columns`, () => {
       const { lines, layout } = paint(width, 16, view(16));
@@ -160,6 +196,61 @@ describe("paintTape", () => {
     expect(lines.join("\n")).toContain("bass");
   });
 
+  for (const [width, height] of [
+    [40, 10],
+    [60, 12],
+    [80, 16],
+    [120, 28],
+    [160, 42],
+  ]) {
+    test(`dense arrangement stays navigable at ${width}x${height}`, () => {
+      const rows = Array.from({ length: 32 }, (_, index) => ({
+        id: `t${index}`,
+        name: `Electric piano ${index + 1}`,
+        muted: index % 7 === 0,
+        solo: index === 31,
+        automation: true,
+        effects: true,
+        levels: Array(400).fill(4),
+        marks: "",
+      }));
+      const value = view(400, { rows, focused: 31, playheadCell: 350 });
+      const { lines, layout, hits } = paint(width!, height!, value);
+      expect(layout.rowCount).toBeGreaterThan(0);
+      expect(
+        lines.slice(layout.rowsY, layout.rowsY + layout.rowCount).join("\n"),
+      ).toContain("32›");
+      expect(lines.join("\n")).toContain("32/32");
+      const targets = hits.regions.map((region) => region.target);
+      for (const key of [
+        "\t",
+        "\u001b[Z",
+        ",",
+        ".",
+        "-",
+        "=",
+        "r",
+        "c",
+        "x",
+        "v",
+        "\\",
+      ])
+        expect(targets).toContainEqual({ kind: "tape-key", key });
+      if (width! >= 60) {
+        expect(targets).toContainEqual({ kind: "command", command: "/mix" });
+        expect(targets).toContainEqual({
+          kind: "command",
+          command: "/menu sound",
+        });
+        expect(targets).toContainEqual({
+          kind: "command",
+          command: "/help tape",
+        });
+      }
+      if (width! >= 80) expect(lines.join("\n")).toContain("SAF");
+    });
+  }
+
   for (const count of [7, 12])
     test(`${count} tracks at 80x24: the focused row stays on screen`, () => {
       const rows = Array.from({ length: count }, (_, i) => ({
@@ -174,8 +265,8 @@ describe("paintTape", () => {
       const text = lines.join("\n");
       expect(text).toContain(`›t${count}`);
       expect(layout.rowCount).toBeLessThanOrEqual(count);
-      // Past 9 the number key column is blank (1-9 pick tracks).
-      if (count > 9) expect(text).toMatch(/^ {2}›t12/m);
+      // Numbers remain informative after the nine direct shortcuts.
+      if (count > 9) expect(text).toMatch(/^ 12›t12/m);
       else expect(text).toContain(" 7›t7");
     });
 
@@ -208,17 +299,22 @@ describe("paintTape", () => {
     });
     for (const theme of ["default", "mono"] as const) {
       const { lines, layout } = paint(80, 12, unrolled, { theme });
-      const row = lines[layout.rowsY]!.slice(9, 33);
+      const row = lines[layout.rowsY]!.slice(layout.gutter, layout.gutter + 24);
       expect(row.slice(0, 16)).toBe("▅".repeat(16));
       expect(row.slice(16, 23)).toBe("░".repeat(7));
-      const sect = lines[1]!.slice(9, 33);
+      const sect = lines[1]!.slice(layout.gutter, layout.gutter + 24);
       expect(sect.startsWith("verse")).toBe(true);
       expect(sect.slice(8)).toStartWith("chorus");
       // The ghost pass keeps a leading `░`, then its label, then `░`s.
       expect(sect.slice(16)).toBe("░chorus ×2".slice(0, 8));
     }
     const ascii = paint(80, 12, unrolled, { unicode: false });
-    expect(ascii.lines[ascii.layout.rowsY]!.slice(25, 32)).toBe("~".repeat(7));
+    expect(
+      ascii.lines[ascii.layout.rowsY]!.slice(
+        ascii.layout.gutter + 16,
+        ascii.layout.gutter + 23,
+      ),
+    ).toBe("~".repeat(7));
     expect(ascii.lines.join("\n")).not.toMatch(/[░▀▅]/);
   });
 });
@@ -281,9 +377,9 @@ describe("TAPE delight (op1-ux §9.1, §9.3)", () => {
       loopFlash: true,
       rows: view(24).rows.map((row) => ({ ...row, levels: Array(24).fill(2) })),
     });
-    const { lines } = paint(80, 16, unrolled);
-    const ruler = lines[0]!.slice(9);
-    expect(lines[0]!.slice(0, 9)).toContain("◑");
+    const { lines, layout } = paint(80, 16, unrolled);
+    const ruler = lines[0]!.slice(layout.gutter);
+    expect(lines[0]!.slice(0, layout.gutter)).toContain("◑");
     expect(ruler.slice(8, 16)).toContain("━");
     expect(ruler.slice(16, 24)).not.toMatch(/[━\[\]]/);
   });

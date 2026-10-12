@@ -9,7 +9,7 @@ import { launch, supported } from "./pty-harness.ts";
 
 type Run = Awaited<ReturnType<typeof launch>>;
 
-/** The guide pane's title row, e.g. `guide · Arrange › TAPE · 1/2`. */
+/** The guide pane's title row, e.g. `guide · Arrange › TAPE · 1/3`. */
 const title = (t: Run) =>
   t.vt
     .text()
@@ -37,7 +37,7 @@ test.skipIf(!supported)(
     const t = await launch(80, 24, { NO_COLOR: "1" });
     try {
       await openTape(t);
-      expect(title(t)).toContain("· 1/2");
+      expect(title(t)).toContain("· 1/3");
       expect(t.vt.text()).toContain("✦ Ask");
       expect(t.vt.text()).toContain("› Type it yourself");
       expect(t.vt.text()).toMatch(/n next/);
@@ -45,12 +45,19 @@ test.skipIf(!supported)(
       // NO_COLOR: no foreground color anywhere on the mark.
       expect(markCell(t, "✦")?.style.fg).toBeUndefined();
       await t.send("n");
-      await t.until(() => title(t).includes("· 2/2"), "page 2");
+      await t.until(() => title(t).includes("· 2/3"), "page 2");
+      expect(t.vt.text()).toContain("⌃ Keys");
+      expect(t.vt.wrapsSinceClear).toBe(0);
+      await t.send("n");
+      await t.until(() => title(t).includes("· 3/3"), "page 3");
+      expect(t.vt.text()).toContain("Mouse");
       expect(t.vt.text()).toContain("→ Next");
       expect(t.vt.text()).toContain("✓ Tip:");
       expect(t.vt.text()).toMatch(/n next: \S/);
       await t.send("p");
-      await t.until(() => title(t).includes("· 1/2"), "back to page 1");
+      await t.until(() => title(t).includes("· 2/3"), "back to page 2");
+      await t.send("p");
+      await t.until(() => title(t).includes("· 1/3"), "back to page 1");
       await t.send("p");
       await t.until(() => !title(t).includes("TAPE"), "previous guide");
       expect(title(t)).toMatch(/· 2\/2|guide · [^·]+$/);

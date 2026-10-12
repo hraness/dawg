@@ -10,6 +10,7 @@ import { barsLabel } from "../commands/arrange.ts";
 import { rangeLabel } from "../../core/range.ts";
 import type { MenuContext, MenuNode } from "./menu.ts";
 import { styleMenuDetail, styleMenuNodes } from "./style-menu.ts";
+import { demoMenuNodes } from "./demo-menu.ts";
 
 /** `3 sections · form A×2 B · loop chorus`, or how to start. */
 export function arrangeDetail(context: MenuContext): string {
@@ -175,6 +176,14 @@ export function arrangeNodes(context: MenuContext): MenuNode[] {
   const score = context.score;
   const count = score.sections.length;
   const nodes: MenuNode[] = [
+    {
+      kind: "menu",
+      id: "demos",
+      label: "demo songs",
+      detail: "complete editable songs · offline",
+      help: "browse complete arrangements, original vocal samples and production techniques",
+      build: demoMenuNodes,
+    },
     {
       kind: "menu",
       id: "sections",

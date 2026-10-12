@@ -2,6 +2,8 @@
 import { HELP_SECTIONS } from "../commands/help.ts";
 import { PRESETS } from "../../core/presets/index.ts";
 import { GROOVE_STARTERS } from "../../core/styles/starters.ts";
+import { DEMOS } from "../../core/demos/index.ts";
+import { BUNDLED_SAMPLES } from "../../core/bundled-samples.ts";
 import { MODE_NAMES, SCALE_NAMES, PERFORM_MODES } from "../../core/chords.ts";
 import { STYLE_TREE } from "../../core/styles/index.ts";
 import { TOPICS, TOPIC_SUMMARY } from "../lang/glossary.ts";
@@ -82,7 +84,40 @@ export function commandCompletions(
     });
     if (["menu", "guide", "help"].includes(verb))
       choices = TOPICS.map((name) => item(name, TOPIC_SUMMARY[name], name));
-    else if (["style", "styles"].includes(verb))
+    else if (["demo", "demos"].includes(verb)) {
+      const action = query.match(/^(info|load)\s+(.*)$/u);
+      if (action) query = action[2]!;
+      choices = DEMOS.map((demo) => ({
+        ...item(
+          demo.title,
+          `${demo.id} · ${demo.style} · ${demo.features.join(" ")}`,
+          "arrange",
+        ),
+        value: `${prefix}${action ? action[1] + " " : ""}${demo.id}`,
+      }));
+    } else if (["sample", "samples"].includes(verb)) {
+      const action = query.match(/^(use|preview|chop|library|search)\s+(.*)$/u);
+      if (action) {
+        query = action[2]!;
+        choices = BUNDLED_SAMPLES.map((sample) => ({
+          ...item(
+            sample.title,
+            `${sample.id} · ${sample.description} · ${sample.tags.join(" ")}`,
+            "sound",
+          ),
+          value: `${prefix}${action[1]} ${sample.id}${action[1] === "chop" ? " 4" : ""}`,
+        }));
+      } else
+        choices = ["library", "preview", "use", "chop"].map((action) =>
+          item(
+            action,
+            action === "library"
+              ? "browse original offline samples"
+              : `sample ${action} <id>`,
+            "sound",
+          ),
+        );
+    } else if (["style", "styles"].includes(verb))
       choices = [
         ...GROOVE_STARTERS.map((s) => ({
           ...item(s.title, `${s.id} · ${s.detail} · ${s.touchstone}`, "rhythm"),

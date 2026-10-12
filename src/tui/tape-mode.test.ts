@@ -4,8 +4,9 @@
  * (loop, else section, else bar), and the view turns a score into cells.
  */
 import { describe, expect, test } from "bun:test";
-import { createScore, type TrackScore } from "../../core/score.ts";
+import { createScore, updateTrack, type TrackScore } from "../../core/score.ts";
 import { commandParses } from "../commands/parses.ts";
+import { arrangementFixture } from "../../test/arrangement-fixture.ts";
 import {
   clipboardLabel,
   cutArmed,
@@ -140,6 +141,18 @@ describe("TAPE keys echo typed commands", () => {
     expect(focusCommand(song(), 0)).toBe("track drums");
   });
 
+  test("backward and page navigation reach every row of a dense arrangement", () => {
+    const score = arrangementFixture();
+    const first = context({ score, trackId: "layer-1" });
+    const last = context({ score, trackId: "layer-32" });
+    expect(tapeKey(first, "\u001b[Z")).toEqual({ type: "focus", row: 31 });
+    expect(tapeKey(last, "\t")).toEqual({ type: "focus", row: 0 });
+    expect(tapeKey(first, "\u001b[6~")).toEqual({ type: "focus", row: 8 });
+    expect(tapeKey(last, "\u001b[6~")).toEqual({ type: "focus", row: 31 });
+    expect(tapeKey(first, "\u001b[5~")).toEqual({ type: "focus", row: 0 });
+    expect(tapeKey(last, "\u001b[5~")).toEqual({ type: "focus", row: 23 });
+  });
+
   test("mute, solo, exit, zoom and pass-through", () => {
     expect(commands(tapeKey(context(), "h"))).toEqual(["mute bass"]);
     expect(commands(tapeKey(context(), "H"))).toEqual(["solo"]);
@@ -183,6 +196,23 @@ describe("TAPE knobs", () => {
 });
 
 describe("TAPE view", () => {
+  test("the effects indicator follows reverb-only edits and removal", () => {
+    const dry = song();
+    const wet = updateTrack(dry, "bass", { reverb: { mix: 0.25, size: 0.5 } });
+    const restored = updateTrack(wet, "bass", { reverb: null });
+    const effects = (score: TrackScore) =>
+      tapeView({
+        ...context({ score }),
+        zoom: "bar",
+        selected: 0,
+        marks: () => "",
+      }).rows.find((row) => row.id === "bass")!.effects;
+    expect(effects(dry)).toBe(false);
+    expect(effects(wet)).toBe(true);
+    expect(effects(restored)).toBe(false);
+    expect(effects(wet)).toBe(true);
+  });
+
   test("cells follow the zoom; density marks the notes", () => {
     const score = song({ startBar: 4, bars: 2 });
     expect(tapeCells(score, "bar").bars).toHaveLength(8);
@@ -212,6 +242,35 @@ describe("TAPE view", () => {
         range: { startBar: 0, bars: 2 },
       }),
     ).toBe("clipboard: all tracks · 2 bars");
+  });
+
+  test("cached grids retain live focus, playhead and presence and invalidate after edits", () => {
+    const score = song();
+    const input = {
+      ...context({ score, beat: 0 }),
+      zoom: "bar" as const,
+      selected: 0 as const,
+      marks: () => "",
+    };
+    const before = tapeView(input);
+    const moving = tapeView({
+      ...input,
+      beat: 17,
+      trackId: "drums",
+      marks: () => "B●",
+    });
+    expect(moving.playheadCell).toBe(4);
+    expect(moving.focused).toBe(0);
+    expect(moving.rows[0]!.marks).toBe("B●");
+    expect(before.rows[0]!.marks).toBe("");
+    expect(moving.rows[1]!.levels).toBe(before.rows[1]!.levels);
+    const edited = tapeView({ ...input, score: score.removeNote("b1") });
+    expect(edited.rows[1]!.levels).not.toBe(before.rows[1]!.levels);
+    expect(edited.rows[1]!.levels).not.toEqual(before.rows[1]!.levels);
+    expect(edited.rows[0]!.automation).toBe(false);
+    expect(tapeView({ ...input, zoom: "half" }).cellBars.length).toBe(
+      before.cellBars.length * 8,
+    );
   });
 });
 

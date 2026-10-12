@@ -469,6 +469,10 @@ export function scopedHost(
       return focus ? { ...snapshot, focusedTrackId: focus } : snapshot;
     },
     async commit(change: AgentCommit) {
+      if (change.replace)
+        throw new SubagentScopeError(
+          `[${label}] replacing the whole song is outside a subagent task's scope`,
+        );
       const base = bases.get(change.baseRevision) ?? host.snapshot().score;
       const outside = checkScope(change.operations, scope, base, owned);
       if (outside) throw new SubagentScopeError(`[${label}] ${outside}`);

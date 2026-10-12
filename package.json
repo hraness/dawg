@@ -1,6 +1,6 @@
 {
   "name": "@hraness/dawg",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -21,6 +21,7 @@
     "tui/**/*.ts",
     "!tui/**/*.test.ts",
     "guides/*.md",
+    "assets/samples/**",
     "guides/index.ts",
     "guides/marks.ts",
     "docs/agent/recipes/*.md",

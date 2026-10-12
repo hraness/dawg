@@ -11,6 +11,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { launch, MAIN, supported } from "./pty-harness.ts";
 import { VirtualTerminal } from "./vt.ts";
+import { arrangementFixture } from "./arrangement-fixture.ts";
+import { ensureSession } from "../src/session/store.ts";
 
 type SessionScore = {
   bars: number;
@@ -77,6 +79,87 @@ async function waitFor(
 /** SGR mouse: press and release at a 0-based cell. */
 const click = (x: number, y: number) =>
   `\u001b[<0;${x + 1};${y + 1}M\u001b[<0;${x + 1};${y + 1}m`;
+
+test.skipIf(!supported)(
+  "real PTY: dense arrangement controls, track scrolling and drafts survive resize",
+  async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "dawg-arrangement-"));
+    await ensureSession(arrangementFixture().toJSON(), { workspace: cwd });
+    const t = await launch(80, 24, {}, ["--track", "layer-1"], cwd);
+    const clickText = async (text: string) => {
+      const y = t.vt.lines().findIndex((line) => line.includes(text));
+      expect(y).toBeGreaterThanOrEqual(0);
+      const x = t.vt.lines()[y]!.indexOf(text);
+      await t.type(click(x + 1, y), `click ${text}`);
+    };
+    try {
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
+      await t.type("\u0014", "tape");
+      for (const [cols, rows] of [
+        [60, 20],
+        [80, 24],
+        [120, 36],
+        [160, 50],
+      ]) {
+        t.vt.resize(cols!, rows!);
+        t.terminal.resize(cols!, rows!);
+        await t.type("/track layer-1\r", "focus first");
+        await t.until(() => t.vt.text().includes("1/32"), "track counter");
+        await clickText("‹ track");
+        await t.until(() => t.vt.text().includes("32/32"), "last track");
+        expect(t.vt.text()).toMatch(/32›/u);
+        expect(t.vt.text()).toContain("range: Percussion 4");
+        await clickText("track ›");
+        await t.until(() => t.vt.text().includes("1/32"), "first track");
+        await t.type("\u001b[6~", "page down");
+        await t.until(() => t.vt.text().includes("9/32"), "ninth track");
+        const row = t.vt.lines().findIndex((line) => /9›/u.test(line));
+        expect(row).toBeGreaterThan(0);
+        await t.type(`\u001b[<65;6;${row + 1}M`, "wheel next track");
+        await t.until(
+          () => t.vt.text().includes("10/32"),
+          "wheel focused tenth",
+        );
+        await t.type("/unfinished", "command draft");
+        await clickText("‹ track");
+        await t.until(
+          () => t.vt.text().includes("9/32"),
+          "draft click focused ninth",
+        );
+        expect(t.vt.text()).toContain("/unfinished");
+        await t.type("\u007f".repeat("/unfinished".length), "clear draft");
+        await clickText("scene ›");
+        await t.until(() => t.vt.text().includes("Verse 1"), "next scene");
+        await clickText("mix");
+        await t.until(
+          () => t.vt.text().includes("mixer") || t.vt.text().includes("Mixer"),
+          "mixer opens",
+        );
+        for (let n = 0; n < 6 && !t.vt.text().includes("c copy"); n++)
+          await t.type("\u001b", "close mixer");
+        await t.until(
+          () => t.vt.text().includes("c copy"),
+          "arrangement returns",
+        );
+      }
+      t.vt.resize(40, 16);
+      t.terminal.resize(40, 16);
+      await t.until(
+        () => t.vt.text().includes("60×16"),
+        "minimum-size guidance",
+      );
+      expect(t.vt.text()).toContain("space play");
+      t.vt.resize(80, 24);
+      t.terminal.resize(80, 24);
+      await t.until(() => t.vt.text().includes("9/32"), "arrangement restored");
+    } finally {
+      t.terminal.write("\u0003");
+      await t.proc.exited;
+      await rm(cwd, { recursive: true, force: true });
+    }
+  },
+  60_000,
+);
 
 for (const [cols, rows] of [
   [80, 24],
@@ -200,7 +283,13 @@ for (const [cols, rows] of [
           .lines()
           .findIndex((line) => line.startsWith(" bar"));
         expect(rulerY).toBeGreaterThan(0);
-        const left = 9; // TAPE_GUTTER
+        // The timeline starts at its first note cell, after the adaptive
+        // track labels and M/S/automation/effect indicators.
+        const left = t.vt
+          .lines()
+          .find((line) => line.includes("›bass"))!
+          .search(/[┊▁▂▃▄▅▆▇█│]/u);
+        expect(left).toBeGreaterThan(9);
         const cellsPerBar = 4; // beat zoom in 4/4
         const at = (bar: number) => left + bar * cellsPerBar;
         t.terminal.write(`\u001b[<0;${at(1) + 1};${rulerY + 1}M`);

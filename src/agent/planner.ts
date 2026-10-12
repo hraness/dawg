@@ -32,6 +32,25 @@ import { synthKit } from "../../core/kits.ts";
 
 const MAX_RESPONSE_BYTES = 64 * 1024;
 const MAX_OPERATIONS = 32;
+const NOTE_METADATA_FIELDS = [
+  ...NOTE_EXPRESSION_FIELDS,
+  "cents",
+  "lyric",
+  "vowel",
+  "vox",
+] as const;
+
+/** Preserve the score's allowlisted note metadata; its reducer validates values. */
+function noteMetadata(
+  input: Record<string, unknown>,
+): Pick<NotePatch, (typeof NOTE_METADATA_FIELDS)[number]> {
+  return Object.fromEntries(
+    NOTE_METADATA_FIELDS.filter((key) => key in input).map((key) => [
+      key,
+      input[key],
+    ]),
+  );
+}
 
 export type CompositionPlan = Readonly<{
   operations: readonly ScoreOperation[];
@@ -358,13 +377,10 @@ function parseOperation(value: unknown): ScoreOperation {
       if (typeof patch[key] === "number" && Number.isFinite(patch[key]))
         safe[key] = patch[key];
     }
-    // Expression fields pass through; the reducer validates them.
-    for (const key of NOTE_EXPRESSION_FIELDS)
-      if (key in patch) safe[key] = patch[key];
     return {
       type: "updateNote",
       noteId: value.noteId,
-      patch: safe as NotePatch,
+      patch: { ...safe, ...noteMetadata(patch) } as NotePatch,
     };
   }
   if (value.type === "addNote" && isRecord(value.note)) {
@@ -403,6 +419,7 @@ function parseOperation(value: unknown): ScoreOperation {
           : { start, duration }),
         pitch: note.pitch,
         velocity: note.velocity,
+        ...noteMetadata(note),
       },
     };
   }

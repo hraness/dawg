@@ -175,6 +175,24 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
     group: "sound · samples",
     entries: [
       {
+        command: "/sample library [<words>]",
+        summary:
+          "search offline voices, hits and textures · bare opens the sample shelf",
+      },
+      {
+        command: "/sample use <id>",
+        summary:
+          "add an original sample on an editable track · preserve existing music",
+      },
+      {
+        command: "/sample preview <id>",
+        summary: "hear an offline sound while playback is paused · no edits",
+      },
+      {
+        command: "/sample chop [<id or voice>] [4|8|16]",
+        summary: "slice a bundled or loaded sound into a playable pattern",
+      },
+      {
         command: "/sample [<path> [as <sample>]]",
         summary: "add a sample · alone lists the samples",
       },
@@ -522,6 +540,11 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
       {
         command: "build | drop | fill [<section> | <a>-<b>]",
         summary: "riser, roll, sweep · pre-drop cut and impact · drum fill",
+      },
+      {
+        command: "demo [<id>|list|search <words>|info <id>]",
+        summary:
+          "complete editable songs · demo opens the shelf · Ctrl-Z restores after loading",
       },
       {
         command: "style <id> [bars] [seed]",
@@ -1254,6 +1277,8 @@ export const USAGE: Readonly<Record<string, string>> = {
   menu: "/menu [sound|voice|effects|rhythm|chords|mix|arrange|project|keys|agent] or any row name · /menu tuning · Ctrl-K",
   style:
     "style [list [id]|search <words>|info <id>|<id> [bars] [seed]|blend <a> <b> [w] [bars] [seed]|again] · style deep-house 16 · style blend bebop bossa-nova 0.3",
+  demo: "demo [<id>|list|search <words>|info <id>] · complete editable songs · Ctrl-Z restores after loading",
+  demos: "demo · opens the song shelf · demo list prints it",
   master:
     "master <unit> on|off|preset <name>|<param> <value> · master streaming|club|loud · master target -14 · master measure · master off",
   try: "/try <sound command> · /try fx reverb mix 0.6",
