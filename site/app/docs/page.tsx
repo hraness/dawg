@@ -6,7 +6,7 @@ import { installCommand, repoUrl, sourceInstallCommands } from "../messaging";
 import { DawgPlatformInstall } from "../platform-install";
 import { latestRelease } from "../release";
 import { DocsShell, INSTALL_ID } from "./docs-shell";
-import { docsHref, docsTree } from "./pages";
+import { docsHref, docsPage, docsTree } from "./pages";
 
 // Re-check for a new release hourly (RELEASE_REVALIDATE); Next needs a literal.
 export const revalidate = 3600;
@@ -21,19 +21,47 @@ export const metadata: Metadata = {
   openGraph: { title: "Install dawg", description, url: "/docs" },
 };
 
+/** Where to go next, by what you want to do; each id is a guide in guides/. */
+const tasks = [
+  { task: "Start a song and learn the screen", id: "getting-started" },
+  { task: "Play the keyboard, record a take", id: "play" },
+  { task: "Pick a sound and turn its knobs", id: "sound" },
+  { task: "Load a groove starter or a style", id: "styles" },
+  { task: "Add effects and mix the tracks", id: "mix" },
+  { task: "Arrange bars, sections and the loop", id: "arrange" },
+  { task: "Open the song in a second terminal", id: "panes" },
+  { task: "Save the song as TypeScript files", id: "files" },
+  { task: "Ask the agent and watch it type", id: "agent" },
+  { task: "Export audio or pick an audio device", id: "audio" },
+] as const;
+
 export default async function DocsInstall() {
   const release = await latestRelease();
   const first = docsTree()[0]?.page;
   return (
     <DocsShell id={INSTALL_ID} title="Install dawg" description={description}>
-      <p>
-        dawg runs in a terminal on macOS and Linux on{" "}
-        <a href="https://bun.sh">Bun</a> 1.3.14 or newer; the install script
-        adds Bun if it is missing. Sound plays through dawg&rsquo;s native audio
-        sink, prebuilt for arm64 and x64. Where it cannot load, dawg falls back
-        to <code>ffplay</code>, SoX or, on a Mac, <code>afplay</code>;{" "}
-        <code>dawg doctor</code> says which it uses.
-      </p>
+      <h2 id="requirements">What it needs</h2>
+      <ul>
+        <li>
+          A terminal on macOS or Linux, arm64 or x64. Windows is not supported.
+        </li>
+        <li>
+          <a href="https://bun.sh">Bun</a> 1.3.14 or newer. The install script
+          adds it when it is missing.
+        </li>
+        <li>
+          Sound: dawg&rsquo;s native audio sink ships prebuilt for macOS and
+          Linux. Where it cannot load, dawg falls back to <code>ffplay</code>{" "}
+          (from FFmpeg), SoX <code>play</code> or, on a Mac, <code>afplay</code>
+          ; <code>dawg doctor</code> says which one it uses. Playing live keys
+          through a fallback player adds latency.
+        </li>
+        <li>
+          The agent needs a model from a provider you already have; commands,
+          playing, recording and rendering work offline without one.
+        </li>
+      </ul>
+      <h2 id="install">Install</h2>
       <DawgPlatformInstall installCommand={installCommand} />
       <h2 id="start">Start a session</h2>
       <p>
@@ -43,15 +71,33 @@ export default async function DocsInstall() {
       </p>
       <CodeBlock code="$ dawg" />
       <p>
-        Commands, playing and rendering work offline with no account. To ask the
-        agent, give it a model once: an AI Gateway key, OpenRouter, or a Claude
-        or ChatGPT/Codex subscription.
+        To ask the agent, give it a model once: a Vercel AI Gateway or
+        OpenRouter key, or a Claude or ChatGPT/Codex subscription through xcb.
+        Agent turns are billed by that account.
       </p>
       <CodeBlock code="$ dawg model key" />
+      <h2 id="guides">Find a guide by task</h2>
+      <p>
+        The guides here are the ones dawg shows in the terminal under{" "}
+        <code>/guide</code>. Each one answers in the same four ways: ask, type,
+        menu, keys.
+      </p>
+      <ul>
+        {tasks.map(({ task, id }) => {
+          const page = docsPage(id);
+          if (page === undefined) throw new Error(`no guide ${id} for a task`);
+          return (
+            <li key={id}>
+              <Link href={docsHref(id)}>{task}</Link>{" "}
+              <span className="dawg-small">({page.title})</span>
+            </li>
+          );
+        })}
+      </ul>
       {first === undefined ? null : (
         <p>
-          Then read <Link href={docsHref(first.id)}>{first.title}</Link>. The
-          guides here are the ones dawg shows in the terminal.
+          New here? Read <Link href={docsHref(first.id)}>{first.title}</Link>{" "}
+          first; the pager at the bottom of each page walks the whole tree.
         </p>
       )}
       {release.published ? (
@@ -59,7 +105,7 @@ export default async function DocsInstall() {
           <h2 id="release">Check a release first</h2>
           <p>
             Each <a href={release.url}>release</a> is immutable and ships the
-            tarball, a <code>SHA256SUMS</code> file and a build provenance
+            tarball, a <code>SHA256SUMS</code> file and a GitHub build
             attestation.
           </p>
           <CodeBlock

@@ -40,11 +40,7 @@ const rows = [
     "Cycles; patterns repeat and transform",
     "Bars and beats on a timeline, with a song form",
   ],
-  [
-    "Saved as",
-    "Code you share as a link",
-    "Typed TypeScript files in your folder",
-  ],
+  ["Saved as", "Code you share as a link", "TypeScript files in your folder"],
   [
     "Sound",
     "Web Audio synths and samples; MIDI and OSC out",
@@ -172,9 +168,9 @@ export default function StrudelPage() {
             is one undo step.
           </li>
           <li>
-            <strong>Typed project files.</strong> A song is <code>song.ts</code>{" "}
-            plus a <code>track.ts</code> per track, checked by TypeScript. Edit
-            them in any editor and the open song updates.
+            <strong>Project files as code.</strong> A song is{" "}
+            <code>song.ts</code> plus a <code>track.ts</code> per track, checked
+            by TypeScript. Edit them in any editor and the open song updates.
           </li>
           <li>
             <strong>Native audio.</strong> A native sink plays live keys about
