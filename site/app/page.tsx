@@ -132,6 +132,28 @@ const depths: readonly {
     since: "0.10.0",
   },
   {
+    title: "Demo songs",
+    body: (
+      <>
+        <code>demo</code> opens eleven complete, editable songs with named
+        scenes and production notes; <code>demo info glass-arc</code> explains
+        one before you load it.
+      </>
+    ),
+    since: "0.12.0",
+  },
+  {
+    title: "Sample library",
+    body: (
+      <>
+        <code>sample library</code> lists eight original sounds that ship with
+        dawg and work offline; <code>sample chop hold-on 4</code> turns one into
+        a playable four-slice sampler.
+      </>
+    ),
+    since: "0.12.0",
+  },
+  {
     title: "TAPE",
     body: (
       <>

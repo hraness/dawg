@@ -27,6 +27,8 @@ const tasks = [
   { task: "Play the keyboard, record a take", id: "play" },
   { task: "Pick a sound and turn its knobs", id: "sound" },
   { task: "Load a groove starter or a style", id: "styles" },
+  { task: "Open a complete demo song and read its notes", id: "demos" },
+  { task: "Browse the sounds that ship with dawg", id: "sample-library" },
   { task: "Add effects and mix the tracks", id: "mix" },
   { task: "Arrange bars, sections and the loop", id: "arrange" },
   { task: "Open the song in a second terminal", id: "panes" },
