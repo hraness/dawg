@@ -225,7 +225,7 @@ a:hover {
 }
 
 .dawg-button--quiet::after {
-  content: " ↓";
+  content: "\00a0↓";
 }
 
 .dawg-hero__status {
@@ -482,8 +482,8 @@ kbd {
   background: var(--dawg-term-bg);
   color: var(--dawg-term-fg);
   font-size: 0.85rem;
-  white-space: nowrap;
-  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .dawg-flow__arrow {
@@ -687,6 +687,10 @@ kbd {
 
 .dawg-section__head > p:not(.dawg-eyebrow) {
   color: var(--muted);
+}
+
+.dawg-section__head > .dawg-section__title + p {
+  margin-top: 1.25rem;
 }
 
 @media (min-width: 60rem) {
