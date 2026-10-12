@@ -47,6 +47,19 @@ to you. `style warehouse 4 3` loads four bars with seed 3, replacing the
 song in one undo step. Their style and artist listening cues describe
 rhythm and sound; the patterns are original. See [Styles](./DAWG.md#styles).
 
+For a complete song, type `demo`. Eleven editable arrangements cover
+techno, house, garage, jungle, hyperpop, melodic EDM and soul.
+Each includes production notes, named scenes, instruments, effects and
+automation. `demo glass-arc` loads one and opens TAPE; Space plays,
+Tab changes tracks, and `,` / `.` changes scenes. Loading is one undo step.
+
+`sample library` opens eight original sounds that work offline, including
+synthetic vocal phrases, vowels, hits and a riser. Preview a sound with
+`sample preview hold-on`, add it with `sample use hold-on`, or create
+playable slices with `sample chop hold-on 4`. The same library is available
+to the agent. See [Demo songs](./guides/demos.md) and
+[Sample library](./guides/sample-library.md).
+
 ## Four ways to do anything
 
 Every guide shows the same four ways, so you can pick the one you like:

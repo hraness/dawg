@@ -8,6 +8,7 @@ export type HitTarget =
   | { kind: "completion-row"; index: number }
   | { kind: "command"; command: string }
   | { kind: "play-key"; key: string }
+  | { kind: "tape-key"; key: string }
   | { kind: "scene-step"; direction: 1 | -1 }
   | { kind: "scene"; name: string }
   /** A row of the open picker (or the menu), by index into its items. */

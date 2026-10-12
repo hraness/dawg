@@ -6,6 +6,7 @@ import type { CommandHost } from "./command-agent.ts";
 import { GRANULAR_PARAMS } from "../../core/granular.ts";
 import {
   applyScoreOperation,
+  scoreFromJSON,
   type ScoreOperation,
   type TrackScore,
 } from "../../core/score.ts";
@@ -162,6 +163,8 @@ export type AgentSnapshot = Readonly<{
 /** The score change a validated tool call asks the host to commit. */
 export type AgentCommit = Readonly<{
   next: TrackScore;
+  /** A complete library song; require exact revision and never rebase. */
+  replace?: true;
   operations: readonly ScoreOperation[];
   baseRevision: number;
   toolName: string;
@@ -189,6 +192,7 @@ export function agentCommitEvent(change: AgentCommit): {
       callId: change.callId,
       summary: change.summary,
       operations: change.operations,
+      ...(change.replace ? { replace: true } : {}),
       ...(change.subagent !== undefined
         ? { subagent: change.subagent, task: change.subagent }
         : {}),
@@ -382,6 +386,7 @@ export const AGENT_SYSTEM_PROMPT = [
   "Voices (0.7): set_instrument aah ooh choir chorale (or set_sing preset oohchoir airy glass lament soprano basso drone) plays the built-in singing voice, a synthetic glottal source through formants (never a cloned voice); set_sing params voice (auto soprano alto tenor bass), vowel (a e i o u or a>o), voices 2..8 (an ensemble), breath, vib, jitter, bright; set_vowels puts vowels on notes. Throat singing: khoomei, sygyt (whistle) and kargyraa (sub growl) hold a drone (set_sing params drone D2) and each note picks a harmonic of it.",
   "Vocoder: a vocoder is a carrier track whose vocoder.src is the modulator (usually the user's vocal). make one with create_track (instrument vocoder), then set_vocoder with src set to the vocal, and mute the vocal; talkbox suits funk and soul, choir and glass suit hyperpop, robot and smear suit electronic or ambient. Vocode only the user's own or licensed audio, never an identifiable third party's speech unless the user confirms they hold the rights.",
   "Sampler voices: set_sample sets Strudel sample controls per voice (begin end speed unit loop loopBegin loopEnd clip/legato fit loopAt accelerate squiz cut); splice = slices with fit.",
+  "Demo songs: list_demos finds complete offline arrangements with production notes; load_demo replaces the song in one undo step only when the user asks to load a demo. For original reusable samples use list_packs with pack studio; use_sound adds a pinned sound, and audio slice accepts pack:studio/<id> for one-step chops and a playable pattern.",
   "Fitting samples (0.6): fit_sample sets a voice's own bpm (or len in beats) so it follows the song's tempo map; fitmode beats for drums and speech (hits stay sharp), tones for pads and vocals (pitch kept), repitch (default) like tape.",
   "Effects (set_fx and set_automation): the brief's effects list is the fixed chain order with each effect's simple params. set_fx turns an effect on with good defaults, loads a preset or sets params by dawg or Strudel name. Lanes: volume, pan, filter, resonance, delay-feedback, delay-mix, wt and <effect>-<param> (e.g. autofilter-cutoff). Sidechain: put pads/bass on `orbit` 2 and give the kick `duck` (orbit 2, preset pump); a ducker never ducks itself.",
   "Guitar rig (set_rig): rig loads a whole rig (clean crunch punk ragged lead metal fuzz octave funk wah bachata spring bassdrive reese jangle alt) on a guitar or bass track; stomp, head and cab tweak the pedal, amp (level-matched, gate in dB) and cabinet. Tracks named jangle punk funk ragged gtr-lead gtr-metal bachata start with a guitar voice and that rig. `amp` is Strudel gain; the guitar amp is head.",
@@ -1177,15 +1182,21 @@ async function executeCallInner(
   }
   let next = snapshot.score;
   const operations: ScoreOperation[] = [];
+  const replace = plan.kind === "replace";
   try {
-    for (const candidate of plan.operations) {
-      const operation = validateAgentOperation(candidate);
-      next = applyScoreOperation(next, operation);
-      operations.push(operation);
-    }
+    if (plan.kind === "replace") {
+      if (call.name !== "load_demo")
+        throw new Error("only a canonical demo may replace the score");
+      next = scoreFromJSON(plan.next.toJSON());
+    } else
+      for (const candidate of plan.operations) {
+        const operation = validateAgentOperation(candidate);
+        next = applyScoreOperation(next, operation);
+        operations.push(operation);
+      }
     // Keep rhythm rows and their lanes consistent (regenerate after a loop
     // resize, freeze a row whose lane the tool edited by hand).
-    const reconciled = reconcileRhythm(snapshot.score, next);
+    const reconciled = replace ? next : reconcileRhythm(snapshot.score, next);
     if (reconciled !== next) {
       operations.push(...diffScores(next, reconciled));
       next = reconciled;
@@ -1205,8 +1216,14 @@ async function executeCallInner(
       event: appliedEvent("no change", snapshot.revision, plan.trackId),
     };
   try {
+    if (replace && context.host.snapshot().revision !== snapshot.revision)
+      throw new StaleRevisionError(
+        snapshot.revision,
+        context.host.snapshot().revision,
+      );
     const { revision } = await context.host.commit({
       next,
+      ...(replace ? { replace: true as const } : {}),
       operations,
       baseRevision: snapshot.revision,
       toolName: call.name,

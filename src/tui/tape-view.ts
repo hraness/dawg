@@ -10,7 +10,12 @@
  * gesture on a ghost acts on the source section.
  */
 import { formPositionAt, formSegments } from "../../core/sections.ts";
-import type { TrackScore } from "../../core/score.ts";
+import {
+  AUTOMATION_PARAMETERS,
+  automationPoints,
+  type Note,
+  type TrackScore,
+} from "../../core/score.ts";
 import { barStartTick, bpmAtTick } from "../../core/tempo.ts";
 import type { KnobIndex } from "../../tui/knobs.ts";
 import type {
@@ -118,10 +123,11 @@ export function trackLevels(
   trackId: string,
   starts: readonly number[],
   end: number,
+  notes: readonly Note[] = score.notes,
 ): number[] {
   const weight = starts.map(() => 0);
   const held = starts.map(() => false);
-  for (const note of score.notes) {
+  for (const note of notes) {
     if (note.trackId !== trackId || note.startTick >= end) continue;
     const cell = cellAt(starts, note.startTick);
     if (cell < 0) continue;
@@ -157,14 +163,145 @@ export function trackLevels(
   );
 }
 
+type TapeGrid = Readonly<{
+  starts: readonly number[];
+  end: number;
+  unrolled: readonly Unrolled[] | undefined;
+  view: Pick<
+    TapeView,
+    | "bars"
+    | "cellBars"
+    | "ghosts"
+    | "passes"
+    | "passNames"
+    | "sections"
+    | "loopSection"
+    | "loop"
+    | "tempo"
+    | "rows"
+  >;
+}>;
+
+// TrackScore is immutable. Keep at most its three zooms; old revisions are
+// weakly held so editing a song cannot retain historical grids indefinitely.
+const grids = new WeakMap<TrackScore, Map<TapeZoom, TapeGrid>>();
+
+function buildGrid(score: TrackScore, zoom: TapeZoom): TapeGrid {
+  const { starts, bars } = tapeCells(score, zoom);
+  const end = barStartTick(score, score.bars);
+  const unrolled = unroll(score, bars);
+  // A section the form plays more than once shows `×N` after its name.
+  const passes = formPasses(score);
+  const named = (name: string): string => {
+    const times = passes.get(name) ?? 1;
+    return times > 1 ? `${name} ×${times}` : name;
+  };
+  const sections: TapeSection[] = score.sections.map((section) => ({
+    name: named(section.name),
+    sourceName: section.name,
+    startBar: section.startBar,
+    bars: section.bars,
+  }));
+  const loopSection =
+    score.loop === undefined && score.loopSection !== undefined
+      ? sections[
+          score.sections.findIndex(
+            (section) => section.name === score.loopSection,
+          )
+        ]?.name
+      : undefined;
+  const tempo = [...(score.time?.tempo ?? [])]
+    .filter((event) => event.tick > 0 && event.tick < end)
+    .sort((a, b) => a.tick - b.tick);
+  const pick = <T>(values: readonly T[]): T[] =>
+    unrolled ? unrolled.map((item) => values[item.cell]!) : [...values];
+  const notes = new Map<string, Note[]>();
+  for (const note of score.notes) {
+    const trackNotes = notes.get(note.trackId);
+    if (trackNotes) trackNotes.push(note);
+    else notes.set(note.trackId, [note]);
+  }
+  const rows: TapeRow[] = score.tracks.map((track) => ({
+    id: track.id,
+    name: track.name,
+    muted: track.muted,
+    levels: pick(
+      trackLevels(score, track.id, starts, end, notes.get(track.id) ?? []),
+    ),
+    marks: "",
+    solo: track.solo === true,
+    volume: track.volume,
+    instrument: track.instrument,
+    automation: AUTOMATION_PARAMETERS.some(
+      (lane) => automationPoints(track, lane).length > 0,
+    ),
+    effects: Boolean(
+      track.filter ||
+      track.delay ||
+      track.reverb ||
+      track.fx ||
+      track.fxPatch?.length,
+    ),
+  }));
+  // Tempo marks land on the cell their tick starts (the first pass).
+  const tempoCell = (at: number): number => {
+    const cell = Math.max(0, cellAt(starts, at));
+    return unrolled
+      ? Math.max(
+          0,
+          unrolled.findIndex((item) => item.cell === cell),
+        )
+      : cell;
+  };
+  return {
+    starts,
+    end,
+    unrolled,
+    view: {
+      bars: score.bars,
+      cellBars: pick(bars),
+      ...(unrolled
+        ? {
+            ghosts: unrolled.map((item) => item.ghost),
+            passes: unrolled.map((item) => item.segment),
+            passNames: formSegments(score).map((segment) =>
+              named(segment.section.name),
+            ),
+          }
+        : {}),
+      loop: loopRange(score),
+      sections,
+      loopSection,
+      tempo:
+        tempo.length > 0
+          ? [
+              { cell: 0, bpm: Math.round(score.tempoBpm) },
+              ...tempo.map((event) => ({
+                cell: tempoCell(event.tick),
+                bpm: Math.round(event.bpm),
+              })),
+            ]
+          : [],
+      rows,
+    },
+  };
+}
+
 export function tapeView(input: TapeViewInput): TapeView {
   const score = input.score;
-  const { starts, bars } = tapeCells(score, input.zoom);
-  const end = barStartTick(score, score.bars);
+  let zooms = grids.get(score);
+  if (!zooms) {
+    zooms = new Map();
+    grids.set(score, zooms);
+  }
+  let grid = zooms.get(input.zoom);
+  if (!grid) {
+    grid = buildGrid(score, input.zoom);
+    zooms.set(input.zoom, grid);
+  }
+  const { starts, end, unrolled } = grid;
   const tick = Math.max(0, Math.round(input.beat * score.ticksPerBeat));
   const scoreHead = Math.max(0, cellAt(starts, Math.min(end - 1, tick)));
-  const unrolled = unroll(score, bars);
-  // The pass under the transport, so the playhead walks through ghosts.
   const pass =
     unrolled && input.transportBeat !== undefined
       ? formPositionAt(score, input.transportBeat).index
@@ -181,75 +318,18 @@ export function tapeView(input: TapeViewInput): TapeView {
           : unrolled.findIndex((item) => item.cell === scoreHead),
       )
     : scoreHead;
-  // A section the form plays more than once shows `×N` after its name.
-  const passes = formPasses(score);
-  const named = (name: string): string => {
-    const times = passes.get(name) ?? 1;
-    return times > 1 ? `${name} ×${times}` : name;
-  };
-  const sections: TapeSection[] = score.sections.map((section) => ({
-    name: named(section.name),
-    startBar: section.startBar,
-    bars: section.bars,
-  }));
-  const loopSection =
-    score.loop === undefined && score.loopSection !== undefined
-      ? sections.find((section) => section.name.startsWith(score.loopSection!))
-          ?.name
-      : undefined;
-  const tempo = [...(score.time?.tempo ?? [])]
-    .filter((event) => event.tick > 0 && event.tick < end)
-    .sort((a, b) => a.tick - b.tick);
-  const pick = <T>(values: readonly T[]): T[] =>
-    unrolled ? unrolled.map((item) => values[item.cell]!) : [...values];
-  const rows: TapeRow[] = score.tracks.map((track) => ({
-    id: track.id,
-    name: track.name,
-    muted: track.muted,
-    levels: pick(trackLevels(score, track.id, starts, end)),
-    marks: input.marks(track.id).trim(),
-  }));
-  // Tempo marks land on the cell their tick starts (the first pass).
-  const tempoCell = (at: number): number => {
-    const cell = Math.max(0, cellAt(starts, at));
-    return unrolled
-      ? Math.max(
-          0,
-          unrolled.findIndex((item) => item.cell === cell),
-        )
-      : cell;
-  };
   const focused = Math.max(
     0,
     score.tracks.findIndex((track) => track.id === input.trackId),
   );
   return {
-    bars: score.bars,
-    cellBars: pick(bars),
-    ...(unrolled
-      ? {
-          ghosts: unrolled.map((item) => item.ghost),
-          passes: unrolled.map((item) => item.segment),
-          passNames: formSegments(score).map((segment) =>
-            named(segment.section.name),
-          ),
-        }
-      : {}),
+    ...grid.view,
+    // Presence and focus can change without a score edit.
+    rows: grid.view.rows.map((row) => ({
+      ...row,
+      marks: input.marks(row.id).trim(),
+    })),
     playheadCell,
-    loop: loopRange(score),
-    sections,
-    loopSection,
-    tempo:
-      tempo.length > 0
-        ? [
-            { cell: 0, bpm: Math.round(score.tempoBpm) },
-            ...tempo.map((event) => ({
-              cell: tempoCell(event.tick),
-              bpm: Math.round(event.bpm),
-            })),
-          ]
-        : [],
-    rows,
     focused,
     range: rangeLine(input),
     clipboard: clipboardLabel(score, input.clipboard),

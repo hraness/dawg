@@ -906,6 +906,12 @@ The organ models are dawg's own, from public descriptions of the tonewheel gener
 
 ## Samples
 
+### Offline studio library and demo songs
+
+`demo` opens eight original, fully editable songs: Night Relay (deep techno), Coil Driver (acid techno), Velvet Circuit (deep house), Glass Arc (hyperpop), Signal Bloom (melodic EDM), Copper Wire (jungle), Low Tide (UK garage), and Amber Room (broken beat). `demo search <words>` filters metadata; `demo info <id>` shows form, feature and mix notes. `demo <id>` replaces the composition in one undoable edit, pauses transport at the start and opens TAPE. Browsing is read-only. The agent exposes the same songs through `list_demos` and `load_demo`.
+
+`sample library [query]` opens the bundled studio shelf; `sample preview <id>` listens while transport is paused; `sample use <id>` adds a hash-pinned sound without replacing an occupied instrument. `sample chop <id> [4|8|16]` creates a separate sampler with slices and editable notes. The eight original synthetic samples ship in the package, need no download, and include provenance and a CC0 dedication in `assets/samples/studio/`. Their registered `pack:studio/<id>` sources use the normal pack loader and agent `search_sounds` / `use_sound` tools. `guide demos` and `guide sample-library` explain the manual and agent routes. These are original compositions and machine voices, with no commercial song recordings or borrowed vocal performances.
+
 A track whose instrument is `sampler(...)` plays audio files instead of a synth. Voices live in `tracks/<slug>/samples/` and `src` is relative to the track directory (`samples/kick.wav`); a project-relative `tracks/<slug>/samples/kick.wav` works too.
 
 ```ts

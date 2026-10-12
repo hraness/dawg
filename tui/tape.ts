@@ -9,7 +9,7 @@
  * form repeat `░` (ASCII `~`), and every knob carries its shape glyph
  * (NO_COLOR and the mono theme).
  */
-import type { HitMap } from "./hits.ts";
+import type { HitMap, HitTarget } from "./hits.ts";
 import { paintKnobStrip, type KnobIndex, type KnobSlots } from "./knobs.ts";
 import type { CellBuffer } from "./screen.ts";
 import { displayWidth, truncate } from "./text.ts";
@@ -23,10 +23,17 @@ export type TapeRow = Readonly<{
   levels: readonly number[];
   /** Other panes on this track (§12.7): `B`, `C●`; empty when none. */
   marks: string;
+  solo?: boolean;
+  volume?: number;
+  instrument?: string;
+  automation?: boolean;
+  effects?: boolean;
 }>;
 
 export type TapeSection = Readonly<{
   name: string;
+  /** The editable source, without the form's display-only ×N suffix. */
+  sourceName?: string;
   startBar: number;
   bars: number;
 }>;
@@ -83,14 +90,12 @@ const ASCII_LEVELS = " .:-=+*#@";
 const GHOST = "░";
 const ASCII_GHOST = "~";
 
-/** Columns of the row gutter: ` 2›bass  `. */
-export const TAPE_GUTTER = 9;
-
-/** The rows the tape keeps below the tracks: range, knobs, hints. */
-const FOOTER_ROWS = 3;
+/** The rows kept below tracks: range, knobs, navigation, editing. */
+const FOOTER_ROWS = 4;
 
 /** First visible cell: pages so the playhead stays on screen. */
 export function tapeFirstCell(view: TapeView, cells: number): number {
+  if (cells <= 0) return 0;
   if (view.cellBars.length <= cells) return 0;
   const page = Math.floor(view.playheadCell / cells);
   return Math.min(page * cells, view.cellBars.length - cells);
@@ -98,6 +103,7 @@ export function tapeFirstCell(view: TapeView, cells: number): number {
 
 /** First visible track row: keeps the focused row on screen. */
 export function tapeFirstRow(view: TapeView, rows: number): number {
+  if (rows <= 0) return Math.max(0, view.focused);
   if (view.rows.length <= rows) return 0;
   return Math.max(
     0,
@@ -119,6 +125,7 @@ export type TapeLayout = Readonly<{
   firstRow: number;
   rowsY: number;
   rowCount: number;
+  gutter: number;
 }>;
 
 export function paintTape(
@@ -129,14 +136,21 @@ export function paintTape(
 ): TapeLayout {
   const { theme, unicode } = options;
   const roles = theme.roles;
+  const digits = String(view.rows.length).length;
+  const badgeWidth = rect.width >= 80 ? 4 : 2;
+  const nameRoom = Math.min(
+    Math.max(6, ...view.rows.map((row) => displayWidth(row.name))),
+    rect.width >= 120 ? 20 : rect.width >= 80 ? 16 : rect.width >= 60 ? 12 : 6,
+  );
+  const gutter = 1 + digits + 1 + nameRoom + 1 + badgeWidth + 1;
   // ` B C●`: room for up to three pane letters right of the cells.
   const marksWidth = view.rows.some((row) => row.marks) ? 7 : 0;
   const cells = Math.max(
     0,
-    Math.min(view.cellBars.length, rect.width - TAPE_GUTTER - marksWidth),
+    Math.min(view.cellBars.length, rect.width - gutter - marksWidth),
   );
   const firstCell = tapeFirstCell(view, cells);
-  const left = rect.x + TAPE_GUTTER;
+  const left = rect.x + gutter;
   const bottom = rect.y + rect.height;
   const cellBar = (cell: number): number => view.cellBars[cell] ?? view.bars;
   const ghost = (cell: number): boolean => view.ghosts?.[cell] ?? false;
@@ -215,6 +229,12 @@ export function paintTape(
   buffer.text(rect.x, y, " bar", roles.faint);
   // The reels sit in the gutter: a glyph that turns, so never color-only.
   if (view.reel) buffer.text(rect.x + 6, y, view.reel, roles.warning);
+  buffer.text(
+    left - badgeWidth - 1,
+    y,
+    badgeWidth === 4 ? "MSAF" : "MS",
+    roles.muted,
+  );
   ruler.forEach((ch, index) =>
     buffer.set(left + index, y, ch, rulerStyle[index]),
   );
@@ -223,7 +243,7 @@ export function paintTape(
   y += 1;
 
   // Sections: `▀name▀▀▀`; the looped one reversed; a form repeat `░name░`.
-  if (y < bottom - FOOTER_ROWS) {
+  if (y < bottom - FOOTER_ROWS - 1) {
     buffer.text(rect.x, y, " sect", roles.faint);
     const sectionAt = (cell: number): TapeSection | undefined => {
       const bar = cellBar(cell);
@@ -251,6 +271,10 @@ export function paintTape(
         ghost(cell) ? (unicode ? GHOST : ASCII_GHOST) : unicode ? "▀" : "-",
         sectionStyle(section, cell),
       );
+      options.hits?.add(left + index, y, 1, 1, {
+        kind: "scene",
+        name: section.sourceName ?? section.name,
+      });
     }
     // A label at each section's first cell (each form pass when unrolled).
     for (let index = 0; index < cells; index += 1) {
@@ -287,7 +311,7 @@ export function paintTape(
   }
 
   // Tempo marks, only when the tempo changes.
-  if (view.tempo.length > 0 && y < bottom - FOOTER_ROWS) {
+  if (view.tempo.length > 0 && y < bottom - FOOTER_ROWS - 1) {
     buffer.text(rect.x, y, " tempo", roles.faint);
     for (const mark of view.tempo) {
       const at = mark.cell - firstCell;
@@ -311,16 +335,16 @@ export function paintTape(
   visible.forEach((row, offset) => {
     const index = firstRow + offset;
     const focused = index === view.focused;
-    const number = index < 9 ? String(index + 1) : " ";
+    const number = String(index + 1).padStart(digits);
     const accent = accentStyle(theme, row.id);
     buffer.text(rect.x, y, ` ${number}`, roles.faint);
-    buffer.text(rect.x + 2, y, focused ? (unicode ? "›" : ">") : " ", {
+    buffer.text(rect.x + digits + 1, y, focused ? (unicode ? "›" : ">") : " ", {
       ...roles.text,
       bold: true,
     });
-    const name = truncate(row.name, 6, "").padEnd(6);
+    const name = truncate(row.name, nameRoom, unicode ? "…" : "~");
     buffer.text(
-      rect.x + 3,
+      rect.x + digits + 2,
       y,
       name,
       focused
@@ -385,6 +409,34 @@ export function paintTape(
       left,
       firstCell,
     });
+    // Semantic state has a letter as well as colour. M/S are buttons, so
+    // a mix change does not require leaving the arrangement or its range.
+    const badges = [
+      {
+        text: "M",
+        active: row.muted,
+        command: `${row.muted ? "unmute" : "mute"} ${row.id}`,
+      },
+      { text: "S", active: row.solo === true },
+      { text: "A", active: row.automation === true },
+      { text: "F", active: row.effects === true },
+    ];
+    badges.slice(0, badgeWidth).forEach((badge, index) => {
+      const x = left - badgeWidth - 1 + index;
+      buffer.set(
+        x,
+        y,
+        badge.active ? badge.text : "·",
+        badge.active ? (index < 2 ? roles.warning : roles.track) : roles.faint,
+      );
+      if (badge.command)
+        options.hits?.add(x, y, 1, 1, {
+          kind: "command",
+          command: badge.command,
+        });
+      else if (index === 1 && focused)
+        options.hits?.add(x, y, 1, 1, { kind: "tape-key", key: "H" });
+    });
     y += 1;
   });
 
@@ -421,12 +473,70 @@ export function paintTape(
         unicode,
       },
     );
-    buffer.text(
-      rect.x + 1,
-      footerY + 2,
-      truncate(view.hint, rect.width - 2),
-      roles.muted,
-    );
+    type Control = Readonly<{
+      label: string;
+      target: HitTarget;
+      active?: boolean;
+    }>;
+    const key = (label: string, value: string, active = false): Control => ({
+      label,
+      target: { kind: "tape-key", key: value },
+      active,
+    });
+    const command = (label: string, value: string): Control => ({
+      label,
+      target: { kind: "command", command: value },
+    });
+    const narrow = rect.width < 60;
+    const rows: readonly Control[][] = [
+      [
+        key(narrow ? "‹" : "‹ track", "\u001b[Z"),
+        command(`${view.focused + 1}/${view.rows.length}`, "/tracks"),
+        key(narrow ? "›" : "track ›", "\t"),
+        key("‹ scene", ","),
+        key("scene ›", "."),
+        key("−", "-"),
+        key("+", "="),
+      ],
+      [
+        key(narrow ? "rec" : "r record", "r"),
+        key(narrow ? "copy" : "c copy", "c"),
+        key(narrow ? "cut" : "x cut", "x"),
+        key(narrow ? "paste" : "v paste", "v"),
+        key(narrow ? "loop" : "\\ loop", "\\", view.loop !== undefined),
+        command("mix", "/mix"),
+        command("sound", "/menu sound"),
+        command("?", "/help tape"),
+      ],
+    ];
+    rows.forEach((controls, row) => {
+      let x = rect.x + 1;
+      for (const control of controls) {
+        const label = unicode
+          ? control.label
+          : control.label
+              .replaceAll("‹", "<")
+              .replaceAll("›", ">")
+              .replaceAll("−", "-");
+        const text = ` ${label} `;
+        const width = displayWidth(text);
+        if (x + width > rect.x + rect.width) break;
+        buffer.text(
+          x,
+          footerY + 2 + row,
+          text,
+          control.active
+            ? { ...roles.success, reverse: true }
+            : row === 0
+              ? roles.track
+              : control.target.kind === "tape-key" && control.target.key === "r"
+                ? roles.error
+                : roles.text,
+        );
+        options.hits?.add(x, footerY + 2 + row, width, 1, control.target);
+        x += width;
+      }
+    });
   }
   return {
     rulerY,
@@ -435,5 +545,6 @@ export function paintTape(
     firstRow,
     rowsY,
     rowCount: visible.length,
+    gutter,
   };
 }

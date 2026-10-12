@@ -32,7 +32,7 @@ const str = { type: "string" };
 export const AUDIO_TOOL: AgentTool = {
   name: "audio",
   description:
-    'Inspect and chop audio files; edits write new WAVs to tracks/<slug>/samples/. Read ops: info peaks onsets beats segments find audition. Times: 1.5, "350ms", "1:02", "bar:9.1", "-2s"; cuts snap to zero crossings. op "help" lists every op and arg.',
+    'Inspect and chop audio. Edits write new WAVs to tracks/<slug>/samples/. Offline inputs: pack:studio/hold-on (also stay-up, vowel-ah). Playable chops: op:slice, method:grid, count:4, track:<id>, pattern:true. Read ops: info peaks onsets beats segments find audition. Times: 1.5, "350ms", "1:02", "bar:9.1", "-2s". Cuts snap to zero crossings. op:help lists ops and args.',
   parameters: {
     type: "object",
     properties: {

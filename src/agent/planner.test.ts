@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { parseCompositionPlan, validateAgentOperation } from "./planner.ts";
+import {
+  applyScoreOperation,
+  createScore,
+  type NoteInput,
+} from "../../core/score.ts";
 
 describe("composition planner", () => {
   test("accepts bounded fenced JSON and rejects prose", () => {
@@ -80,6 +85,98 @@ describe("composition planner", () => {
 });
 
 describe("agent operation validator", () => {
+  test("add and update preserve expressive and vocal metadata through score validation", () => {
+    const base = createScore({
+      tracks: [{ id: "voice", name: "Voice", instrument: "sine" }],
+    });
+    const metadata = {
+      articulation: "legato",
+      glide: 0.08,
+      bend: [
+        { at: 0, cents: 0 },
+        { at: 1, cents: 200 },
+      ],
+      vibrato: { rate: 5, depth: 0.15 },
+      humanize: { velocity: 0.05 },
+      drift: 0.2,
+      cents: -12,
+      lyric: "hold",
+      vowel: "a",
+      vox: { breath: 0.2 },
+    };
+    const note = {
+      id: "sung",
+      trackId: "voice",
+      startTick: 0,
+      durationTicks: 240,
+      pitch: 60,
+      velocity: 0.7,
+    };
+    const added = applyScoreOperation(
+      base,
+      validateAgentOperation({
+        type: "addNote",
+        note: { ...note, ...metadata, ignored: true },
+      }),
+    );
+    const expected = createScore({
+      ...base.toJSON(),
+      notes: [{ ...note, ...metadata } as NoteInput],
+    });
+    expect(added.toJSON()).toEqual(expected.toJSON());
+    const plain = applyScoreOperation(
+      base,
+      validateAgentOperation({ type: "addNote", note }),
+    );
+    const updated = applyScoreOperation(
+      plain,
+      validateAgentOperation({
+        type: "updateNote",
+        noteId: note.id,
+        patch: metadata,
+      }),
+    );
+    expect(updated.toJSON()).toEqual(expected.toJSON());
+    const cleared = applyScoreOperation(
+      updated,
+      validateAgentOperation({
+        type: "updateNote",
+        noteId: note.id,
+        patch: Object.fromEntries(
+          Object.keys(metadata).map((key) => [key, null]),
+        ),
+      }),
+    );
+    expect(cleared.toJSON()).toEqual(plain.toJSON());
+    for (const invalid of [
+      { glide: -1 },
+      { bend: [{ at: 0, cents: Infinity }] },
+      { cents: "loud" },
+      { lyric: "two words" },
+      { vowel: "invalid" },
+      { vox: { command: "unsafe" } },
+    ]) {
+      expect(() =>
+        applyScoreOperation(
+          base,
+          validateAgentOperation({
+            type: "addNote",
+            note: { ...note, ...invalid },
+          }),
+        ),
+      ).toThrow();
+      expect(() =>
+        applyScoreOperation(
+          plain,
+          validateAgentOperation({
+            type: "updateNote",
+            noteId: note.id,
+            patch: invalid,
+          }),
+        ),
+      ).toThrow();
+    }
+  });
   test("rejects unsupported and malformed operations", () => {
     expect(() => validateAgentOperation({ type: "dropTable" })).toThrow(
       "unsupported",

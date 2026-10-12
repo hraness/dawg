@@ -71,6 +71,15 @@ describe("preview_sound", () => {
     expect(JSON.stringify(tool.parameters)).toContain("set_wavetable");
   });
 
+  test("whole-song loading cannot enter a track preview candidate", () => {
+    expect(() =>
+      tool.plan(
+        { changes: [{ tool: "load_demo", args: { id: "signal-bloom" } }] },
+        context(song),
+      ),
+    ).toThrow("load_demo cannot be previewed");
+  });
+
   test("measures the current sound without committing", async () => {
     const { json, summary } = await run({});
     expect(json.committed).toBe(false);

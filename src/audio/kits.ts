@@ -43,6 +43,45 @@ export function newKitVoiceState(): KitVoiceState {
 /** 808 hi-hat oscillator frequencies (six detuned squares). */
 const METAL_HZ = [205.3, 304.4, 369.6, 522.7, 540, 800] as const;
 
+/** At most two rate/calibration pairs, each bounded by the longest kit hit. */
+const hatWaves = new Map<string, { samples: Float64Array; filled: number }>();
+const MAX_KIT_SECONDS = Math.max(...SYNTH_KITS.map((kit) => kit.seconds));
+
+/** Reuse only the deterministic oscillator sum; noise and filters stay per hit. */
+export function kitHatWave(
+  sampleRate: number,
+  calibrated: boolean,
+  count: number,
+): Readonly<Float64Array> | undefined {
+  if (!Number.isInteger(sampleRate) || sampleRate < 1 || sampleRate > 48_000)
+    return undefined;
+  const key = `${sampleRate}:${calibrated}`;
+  let wave = hatWaves.get(key);
+  if (!wave) {
+    if (hatWaves.size >= 2) hatWaves.delete(hatWaves.keys().next().value!);
+    wave = {
+      samples: new Float64Array(Math.ceil(MAX_KIT_SECONDS * sampleRate)),
+      filled: 0,
+    };
+    hatWaves.set(key, wave);
+  }
+  // A short keyboard audition only computes the short range it actually uses.
+  const end = Math.min(wave.samples.length, count);
+  for (let index = wave.filled; index < end; index += 1) {
+    const t = index / sampleRate;
+    let square = 0;
+    for (const hz of METAL_HZ)
+      square += calibrated
+        ? blepSquare(hz, t, sampleRate)
+        : (t * hz) % 1 < 0.5
+          ? 1
+          : -1;
+    wave.samples[index] = square;
+  }
+  wave.filled = Math.max(wave.filled, end);
+  return wave.samples;
+}
+
 function body(
   params: DrumBodyParams,
   t: number,
@@ -93,21 +132,23 @@ function hat(
   bright: number,
   state: KitVoiceState,
   sampleRate = 0,
+  cachedSquare?: number,
 ): number {
   state.dark += 0.3 * (noise - state.dark);
   const noisy = params.tone * bright + (1 - params.tone) * state.dark * 0.8;
   let source = noisy;
   if (params.metal > 0) {
-    let square = 0;
+    let square = cachedSquare ?? 0;
     // Calibrated (sampleRate > 0): band-limited squares, so the metal
     // does not alias and sounds the same at every rate.
-    for (const hz of METAL_HZ)
-      square +=
-        sampleRate > 0
-          ? blepSquare(hz, t, sampleRate)
-          : (t * hz) % 1 < 0.5
-            ? 1
-            : -1;
+    if (cachedSquare === undefined)
+      for (const hz of METAL_HZ)
+        square +=
+          sampleRate > 0
+            ? blepSquare(hz, t, sampleRate)
+            : (t * hz) % 1 < 0.5
+              ? 1
+              : -1;
     // First difference: keep the metallic top end, drop the low beating.
     const metal = (square / METAL_HZ.length - state.metalPrevious) * 1.6;
     state.metalPrevious = square / METAL_HZ.length;
@@ -127,6 +168,8 @@ export function kitDrumSample(
   sampleRate: number,
   /** Calibration 1+ (0.7): pitch ratio for toms, band-limited metal. */
   calibrated?: Readonly<{ tomRatio: number }>,
+  /** Optional exact oscillator sum for a hat at this sample. */
+  hatSquare?: number,
 ): number {
   let sample: number;
   const metalRate = calibrated ? sampleRate : 0;
@@ -159,9 +202,9 @@ export function kitDrumSample(
       p.level *
       (burst + 0.8 * Math.exp(-(t - span) * p.tail) * +(t >= span));
   } else if (voice === "hat")
-    sample = hat(kit.hat, t, noise, bright, state, metalRate);
+    sample = hat(kit.hat, t, noise, bright, state, metalRate, hatSquare);
   else if (voice === "openhat")
-    sample = hat(kit.openhat, t, noise, bright, state, metalRate);
+    sample = hat(kit.openhat, t, noise, bright, state, metalRate, hatSquare);
   else {
     const p = kit.rim;
     sample =

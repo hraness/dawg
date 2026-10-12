@@ -71,9 +71,10 @@ describe("0.7 Voice root", () => {
     // Sound no longer carries voice rows; Effects links to Voice.
     const sound = open(root, "sound", ctx);
     expect(labels(sound)).not.toContain("Voice");
-    expect(labels(sound).slice(-3)).toEqual([
+    expect(labels(sound).slice(-4)).toEqual([
       "performance",
       "instruments",
+      "sample library",
       "preset library",
     ]);
     expect(labels(open(sound, "browse", ctx))).not.toContain("Voices");

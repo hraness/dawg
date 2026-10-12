@@ -26,7 +26,7 @@ Name sections and put them in order:
 
 ## Menu
 
-- Ctrl-K › Arrange › tracks · sections · form · style
+- Ctrl-K › Arrange › demo songs · tracks · sections · form · style
 
 ## Keys
 
@@ -35,4 +35,5 @@ Name sections and put them in order:
 
 ## Next
 
-- `guide tape` · `guide notes` · `guide tracks` · `guide panes`
+- `guide demos` · `guide tape` · `guide notes`
+- `guide tracks` · `guide panes`

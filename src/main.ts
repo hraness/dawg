@@ -224,6 +224,8 @@ import {
   parseMasterCommand,
 } from "./commands/master.ts";
 import { applyStyleCommand, parseStyleCommand } from "./commands/style.ts";
+import { applyDemoCommand, parseDemoCommand } from "./commands/demo.ts";
+import { readBundledSample } from "./audio/bundled-samples.ts";
 import { exportSampleRate, measureScoreOffThread } from "./audio/measure.ts";
 import {
   applySectionCommand,
@@ -260,6 +262,10 @@ import {
   freeVoiceName,
   listSampleVoices,
   parseSampleCommand,
+  sampleLibraryLines,
+  sampleChopArgs,
+  sampleChopTarget,
+  sampleLibraryTarget,
   setSampleControls,
   placeSampleFile,
   samplerTarget,
@@ -3316,6 +3322,33 @@ async function submit(prompt: string): Promise<string | Receipt> {
       await commitScore(result.next, result.kind, result.payload);
     return result.ok ? ok(result.message) : fail(result.message);
   }
+  const demoCommand = parseDemoCommand(command);
+  if (demoCommand) {
+    if (
+      demoCommand.type === "demo-list" &&
+      /^\/?demos?$/iu.test(command) &&
+      !stageCapture
+    ) {
+      openMenu("demos");
+      return note(
+        "demo songs · type to find a style or technique · Enter opens song actions",
+      );
+    }
+    const result = applyDemoCommand(demoCommand);
+    if (!result.ok) return fail(result.message);
+    if (result.next && result.kind) {
+      if (!stageCapture && clock.playing) await setTransport("pause");
+      await commitScore(result.next, result.kind, result.payload);
+      if (!stageCapture) await revealLoadedDemo();
+      return ok(result.message);
+    }
+    if (!stageCapture && result.message.includes("\n")) {
+      const [title = "Demo songs", ...lines] = result.message.split("\n");
+      tui.openText(title, lines);
+      return note(title);
+    }
+    return note(result.message);
+  }
   const styleCommand = parseStyleCommand(
     /^\/?styles?\s+presets$/i.test(command) ? "style list" : command,
   );
@@ -4078,7 +4111,6 @@ async function chopCommand(
     tui.activity.setSpinner(undefined);
   }
   if (command.op === "slice" && command.args.track) {
-    await materializeDraft();
     const trackId = command.args.track;
     let loaded;
     try {
@@ -4104,6 +4136,11 @@ async function chopCommand(
       trackId,
       voices: loaded.voices,
     });
+    if (!stageCapture) {
+      if (trackId !== requestedTrack) await port.focus(trackId);
+      requestedTrack = trackId;
+      draftTrack = false;
+    }
     await projectSync?.flushScore();
     return ok(
       `${result.summary} · ${loaded.voices.length} voices on ${trackId}${loaded.notes ? ` · ${loaded.notes} notes` : ""} · ctrl-z undoes`,
@@ -4193,6 +4230,78 @@ async function resampleCommand(
 async function sampleCommand(
   command: NonNullable<ReturnType<typeof parseSampleCommand>>,
 ): Promise<Receipt> {
+  if (command.kind === "error") return fail(command.message);
+  if (command.kind === "library") {
+    if (!command.query) {
+      openMenu("samples");
+      return note(
+        "sample library · type to search · Enter opens sample actions",
+      );
+    }
+    tui.openText(
+      "sample library",
+      sampleLibraryLines(command.query === "all" ? "" : command.query),
+    );
+    return note("sample library · /sample use <id> · /sample chop <id> 4");
+  }
+  if (command.kind === "use") {
+    try {
+      const result = await useSound(
+        packs(),
+        score,
+        sampleLibraryTarget(score, requestedTrack),
+        `studio/${command.id}`,
+      );
+      const failed = await commitPackEdit(
+        result.operations,
+        result.trackId,
+        "sample.library",
+        { trackId: result.trackId, sample: command.id },
+      );
+      return (
+        failed ??
+        ok(
+          `sample · ${result.summary} · Ctrl-P plays keys · /sample chop ${command.id} 4`,
+        )
+      );
+    } catch (error) {
+      if (error instanceof PackError) return fail(`sample · ${error.message}`);
+      throw error;
+    }
+  }
+  if (command.kind === "preview") {
+    if (stageCapture)
+      return note("sample preview runs outside an edit preview");
+    if (clock.playing || auditionLoop?.looping)
+      return warn("sample · pause playback to preview this sound");
+    try {
+      const bundled = await readBundledSample(command.id);
+      const played = await playFileForAgent(bundled.path);
+      return played
+        ? ok(`sample · previewing ${bundled.sample.title} · no edits`)
+        : warn("sample · preview unavailable; enable audio to hear this sound");
+    } catch (error) {
+      return fail(
+        `sample preview · ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+  if (command.kind === "chop") {
+    try {
+      const args = sampleChopArgs(
+        score,
+        requestedTrack,
+        sampleChopTarget(score, requestedTrack),
+        command.id,
+        command.count,
+      );
+      return chopCommand({ kind: "run", op: "slice", args });
+    } catch (error) {
+      if (error instanceof SamplePlacementError)
+        return fail(`sample · ${error.message}`);
+      throw error;
+    }
+  }
   if (command.kind === "list") {
     const track = score.tracks.find((item) => item.id === requestedTrack);
     const lines = listSampleVoices(track);
@@ -4256,8 +4365,8 @@ async function sampleCommand(
   if (trackId !== requestedTrack) {
     await port.focus(trackId);
     requestedTrack = trackId;
-    draftTrack = false;
   }
+  draftTrack = false;
   await projectSync?.flushScore();
   return ok(
     `${result.message}${placed.copied ? ` · copied to ${placed.src}` : ""}`,
@@ -4303,8 +4412,8 @@ async function commitPackEdit(
   if (trackId !== requestedTrack) {
     await port.focus(trackId);
     requestedTrack = trackId;
-    draftTrack = false;
   }
+  draftTrack = false;
   await projectSync?.flushScore();
   return undefined;
 }
@@ -6225,6 +6334,7 @@ function mouseInput(event: MouseEvent): string[] {
       if (!tui.ui.overlay) tui.acceptCompletion(target.index);
       return [];
     case "command":
+      if (tui.ui.overlay) return [];
       if (menu.open) {
         menu.close();
         closeFader();
@@ -6235,6 +6345,9 @@ function mouseInput(event: MouseEvent): string[] {
       return [];
     case "play-key":
       if (!tui.ui.overlay && play?.on) playKey(target.key, true);
+      return [];
+    case "tape-key":
+      if (!tui.ui.overlay && tape.on) tapeInput(target.key, true);
       return [];
     case "scene":
       if (!tui.ui.overlay) runPromptLater(`section jump ${target.name}`);
@@ -6435,6 +6548,43 @@ function echoGesture(commands: readonly string[]): void {
   requestFrame();
 }
 
+/** Typed and agent demo loads reveal the same committed arrangement. */
+async function revealLoadedDemo(): Promise<void> {
+  const warnings: string[] = [];
+  const navigate = async (label: string, action: () => Promise<unknown>) => {
+    try {
+      await action();
+    } catch (error) {
+      warnings.push(
+        `${label}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  };
+  // The score is already durable. A lost presence/transport connection may
+  // limit navigation, but must never turn an accepted edit into a refusal.
+  try {
+    if (clock.playing) await navigate("pause", () => setTransport("pause"));
+    stopAuditionLoop();
+    const first = score.tracks[0];
+    if (first) {
+      requestedTrack = first.id;
+      draftTrack = false;
+      await navigate("focus", () => port.focus(first.id));
+    }
+    await navigate("seek", () => seekTransport(0));
+    menu.close();
+    tui.closePicker();
+    await navigate("arrangement", () => enterTape());
+  } catch (error) {
+    warnings.push(error instanceof Error ? error.message : String(error));
+  }
+  if (warnings.length)
+    tui.activity.pushCard(
+      `demo loaded · navigation needs attention · ${warnings.join(" · ")}`,
+      { tone: "warning" },
+    );
+}
+
 async function enterTape(): Promise<Receipt> {
   if (play?.on) await play.exit();
   if (tape.on) return ok("tape · esc goes home");
@@ -6585,10 +6735,10 @@ function exitTape(): Receipt {
  * One key on TAPE. True when TAPE consumed it; false sends it on (the
  * prompt once a command is typed, overlays, ctrl keys).
  */
-function tapeInput(value: string): boolean {
+function tapeInput(value: string, fromPointer = false): boolean {
   if (!tape.on || play?.on) return false;
   if (tui.ui.overlay !== undefined || menu.open) return false;
-  if (prompt.value.length > 0) return false;
+  if (prompt.value.length > 0 && !fromPointer) return false;
   if (value === "/" || value === "\u0003") return false;
   // A key that types commands reduces from the score and playhead, which
   // queued commands have not changed yet: `[ [` pressed before the first
@@ -6703,6 +6853,18 @@ function tapeMouse(
   if (event.kind === "wheel") {
     if (!target || (target.kind !== "tape-ruler" && target.kind !== "tape-row"))
       return undefined;
+    if (target.kind === "tape-row" && event.x < target.left) {
+      const focused = score.tracks.findIndex(
+        (track) => track.id === requestedTrack,
+      );
+      const index = Math.max(
+        0,
+        Math.min(score.tracks.length - 1, focused + (event.delta < 0 ? -1 : 1)),
+      );
+      const command = focusCommand(score, index);
+      if (command && index !== focused) runTyped([command]);
+      return [];
+    }
     // The wheel walks the playhead a bar at a time (never a tempo knob).
     const bar = playheadBar();
     const next = Math.max(
@@ -7145,6 +7307,18 @@ async function stepHistory(
     );
     // Compare with what was undone, which another window may have written.
     score = scoreFromJSON(record.composition);
+    clock.follow(score);
+    if (
+      before.tracks.some((track) => track.id === requestedTrack) &&
+      !score.tracks.some((track) => track.id === requestedTrack)
+    ) {
+      const first = score.tracks[0];
+      if (first) {
+        await port.focus(first.id);
+        requestedTrack = first.id;
+      }
+      draftTrack = !first;
+    }
     if (clock.playing) void audio.play(score);
     return ok(
       historyReceipt(
@@ -7635,18 +7809,27 @@ function agentHost(
     async commit(change) {
       // dawgd rebases operation intents onto newer revisions when nothing
       // they touch changed; the file port keeps the strict base check.
-      if (port.mode !== "daemon" && change.baseRevision !== record.revision)
+      if (
+        (change.replace || port.mode !== "daemon") &&
+        change.baseRevision !== record.revision
+      )
         throw new StaleRevisionError(change.baseRevision, record.revision);
       try {
-        record = await port.appendOperations(
-          { ...record, revision: change.baseRevision },
-          agentCommitEvent(change),
-          change.operations,
-          change.next.toJSON(),
-        );
+        const base = { ...record, revision: change.baseRevision };
+        record = change.replace
+          ? await port.append(
+              base,
+              agentCommitEvent(change),
+              change.next.toJSON(),
+            )
+          : await port.appendOperations(
+              base,
+              agentCommitEvent(change),
+              change.operations,
+              change.next.toJSON(),
+            );
         // A rebased commit lands on a newer score than `change.next`.
         score = scoreFromJSON(record.composition);
-        if (clock.playing) void audio.play(score);
       } catch (error) {
         if (error instanceof SessionConflictError)
           throw new StaleRevisionError(
@@ -7656,12 +7839,15 @@ function agentHost(
         throw error;
       }
       if (
+        change.replace ||
         change.operations.some(
           (operation) =>
             operation.type === "setTempo" || operation.type === "setTime",
         )
       )
         clock.follow(score);
+      if (change.toolName === "load_demo") await revealLoadedDemo();
+      else if (clock.playing) void audio.play(score);
       return { revision: record.revision };
     },
     async transport(action) {

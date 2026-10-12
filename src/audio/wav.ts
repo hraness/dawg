@@ -65,6 +65,7 @@ import {
 import { synthKit } from "../../core/kits.ts";
 import {
   kitDrumSample,
+  kitHatWave,
   kitTailSeconds,
   METAL_SECONDS,
   metalKindForPitch,
@@ -1690,6 +1691,10 @@ function renderDrumNote(
       ),
   );
   const voice = drumVoiceForPitch(note.pitch);
+  const hatWave =
+    kit && (voice === "hat" || voice === "openhat") && kit[voice].metal > 0
+      ? kitHatWave(sampleRate, calibrated, end - start)
+      : undefined;
   const random = seededRandom(
     `${note.id}:${note.startTick + (context.seedTick ?? 0)}`,
   );
@@ -1717,6 +1722,7 @@ function renderDrumNote(
         kitState,
         sampleRate,
         calibrated ? { tomRatio: ratio } : undefined,
+        hatWave?.[index - start],
       );
     else if (voice === "kick") {
       const frequency = 45 + 105 * Math.exp(-t * 28);

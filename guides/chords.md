@@ -20,7 +20,8 @@ progression by name, or play chords live with one finger.
 
 ## Menu
 
-- Ctrl-K › Chords and key › key · play · progression · idiom
+- Ctrl-K › Chords and key › mode · key tonic · key mode
+- Ctrl-K › Chords and key › progression · idiom
 
 ## Keys
 

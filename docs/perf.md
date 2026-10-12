@@ -20,6 +20,10 @@ The harness lives in `bench/perf/`:
   rendered PCM reached the player, which isolates render cost from the queue
   lead.
 - `frame.ts` times `TuiApp.render` with a moving playhead.
+- `arrangement.ts` times the TAPE view model plus full frames for 16-track /
+  12-scene and 32-track / 24-scene songs with repeated sections, automation
+  and effects, at 40×16, 60×20, 80×24, 120×36 and 160×50. The 40-column
+  case measures resize guidance; the full editor requires at least 60×16.
 - `render.ts` times offline `renderScorePcm` per bar for the heavy presets.
 - `live.ts` times `LiveSynth.render` for one key press in-process: a fresh
   process, a fresh process after the play-mode pre-warm, and later pitches.
@@ -28,6 +32,67 @@ The harness lives in `bench/perf/`:
 
 Medians and p95 are over the sample count `n`. Cold rows are one sample per
 process; `live.ts` cold rows spawn a process per sample.
+
+## Dense arrangements
+
+`bun run bench:perf -- arrangement` reproduces the arrangement measurement.
+On macOS arm64 with Bun 1.3.14, 180 measured frames after 40 warm-up frames,
+the 32-track / 24-scene fixture measured as follows (milliseconds):
+
+| Terminal | Model median | Full frame median | Full frame p95 |
+| -------- | -----------: | ----------------: | -------------: |
+| 60×20    |         0.09 |              0.15 |           0.19 |
+| 80×24    |         0.09 |              0.17 |           0.20 |
+| 120×36   |         0.09 |              0.26 |           0.37 |
+| 160×50   |         0.09 |              0.37 |           0.41 |
+
+At 80×24 the previous model took about 2.5 ms, and the previous full frame
+median was 2.65 ms, compared with 0.17 ms after caching.
+
+The old model rescanned every note for every track and rebuilt the unrolled
+grid every frame. The revised model groups notes once per immutable score
+and caches its three zoom levels in a weak map. A score edit creates a new
+grid; playhead, track focus, pane presence, range and clipboard are updated
+on each frame. These measurements cover rendering, not device audio
+latency. Resize, mouse and keyboard behavior are exercised separately in
+`test/pty-tape.test.ts`.
+
+## Demo drum rendering (2026-10-13)
+
+Profiling a full Signal Bloom render found repeated six-oscillator hi-hat
+calculations in the drum loop. Synthesized hats now reuse the exact Float64
+oscillator sums for a sample rate and calibration mode. Noise, envelopes,
+filters, drive, choking and note seeds remain independent for every hit.
+The cache fills only the requested prefix, so a short keyboard preview does
+not synthesize a complete drum tail. Two retained waveforms use at most
+1,228,800 bytes total at 48 kHz; eviction cannot mutate a playing note's data.
+
+Re-run the bounded kernel comparison with `bun bench/perf/kits.ts`. It renders
+64 Linn hats at 22,050 Hz, alternates cached and uncached order over nine
+trials, includes the first cache fill, and rejects any change in sample sum.
+On this Apple Silicon host with Bun 1.3.14:
+
+| Workload                         |    Before |    After | Evidence                                                   |
+| -------------------------------- | --------: | -------: | ---------------------------------------------------------- |
+| 64 Linn hats, median             | 170.94 ms | 30.20 ms | Nine alternating trials; identical samples                 |
+| Signal Bloom, full render median |    8.86 s |   6.84 s | Three alternating trials per implementation; identical PCM |
+| Signal Bloom, fresh process      |    8.75 s |   7.60 s | One process per implementation; identical PCM              |
+
+The full-song comparison uses the original 64-bar, 13-track Signal Bloom
+score, loaded offline samples, a new `StemRenderer({ maxCacheBytes: 0 })`,
+`renderArranged(..., { sampleRate: 22050, samples, loop: false })`, and the
+complete master chain. It produces 3,230,815 stereo frames with SHA256
+`5875bebb5e7b752f8b652ca5d98893c9ada44a1f6e7591e20b161e69965845a2`
+before and after. Alternating full-song times ranged from 8.66–9.30 s before
+and 6.69–9.86 s after; the first candidate run includes JIT warmup. The
+fresh-process pair is corroborating evidence, not a latency percentile.
+
+These are offline render timings, not measured speaker latency. Playback
+still waits for its whole arranged buffer to finish: multi-second startup
+remains for long, layered demos. This change does not introduce partially
+rendered buffers or change seek/loop behavior. Reverb loop reordering and
+static-gain special casing were investigated but discarded because controlled
+comparisons did not establish a reliable improvement.
 
 ## Baseline (origin/main 7c02ebc, Apple M-series, bun 1.3.14)
 

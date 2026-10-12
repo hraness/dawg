@@ -274,6 +274,33 @@ describe("dispatch subagents", () => {
     expect(state.revision).toBe(10);
   });
 
+  test("a whole-song replacement cannot escape a child track scope", async () => {
+    const { state, host } = strictHost();
+    const runTurn: ChildTurnRunner = async (input) => {
+      const snapshot = input.host.snapshot();
+      await expect(
+        input.host.commit({
+          next: createScore(),
+          replace: true,
+          operations: [],
+          baseRevision: snapshot.revision,
+          toolName: "load_demo",
+          callId: "load",
+          summary: "demo",
+        }),
+      ).rejects.toThrow(
+        "replacing the whole song is outside a subagent task's scope",
+      );
+      return done("refused");
+    };
+    await runSubagents(
+      parseTasks([{ id: "bassline", prompt: "x", tracks: ["bass"] }]),
+      parent(host, runTurn),
+    );
+    expect(state.revision).toBe(10);
+    expect(state.commits).toHaveLength(0);
+  });
+
   test("aborting the parent cancels every running child", async () => {
     const { host } = strictHost();
     const controller = new AbortController();

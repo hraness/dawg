@@ -3,7 +3,12 @@ import { createHash } from "node:crypto";
 import { DRUM_VOICES } from "../../core/drums.ts";
 import { SYNTH_KITS, synthKit } from "../../core/kits.ts";
 import { createScore, ScoreValidationError } from "../../core/score.ts";
-import { kitCatalog } from "./kits.ts";
+import {
+  kitCatalog,
+  kitDrumSample,
+  kitHatWave,
+  newKitVoiceState,
+} from "./kits.ts";
 import { DEFAULT_KITS } from "./packs.ts";
 import { renderScorePcm, renderScoreWav } from "./wav.ts";
 
@@ -94,5 +99,79 @@ describe("synth kits", () => {
     expect(new Set(catalog.map((entry) => entry.name)).size).toBe(
       catalog.length,
     );
+  });
+});
+
+describe("shared hi-hat oscillator", () => {
+  test("cached hats preserve the exact sample sequence and independent hit state", () => {
+    // The cache may be evicted between voices or while a previous note still
+    // owns its buffer. Both calibration modes and supported render rates must
+    // agree with the uncached oscillator, including mixed metal/noise kits.
+    for (const sampleRate of [8_000, 22_050, 48_000]) {
+      for (const calibrated of [false, true]) {
+        const count = Math.ceil(sampleRate * 0.08);
+        const wave = kitHatWave(sampleRate, calibrated, count)!;
+        for (const kit of SYNTH_KITS) {
+          for (const voice of ["hat", "openhat"] as const) {
+            const reference = new Float64Array(count);
+            const cached = new Float64Array(count);
+            const plainState = newKitVoiceState();
+            const cachedState = newKitVoiceState();
+            for (let index = 0; index < count; index += 1) {
+              const noise = (((index * 17) % 101) - 50) / 50;
+              const bright = (((index * 31) % 83) - 41) / 41;
+              const args = [
+                kit,
+                voice,
+                index / sampleRate,
+                noise,
+                bright,
+              ] as const;
+              const calibration = calibrated ? { tomRatio: 1 } : undefined;
+              reference[index] = kitDrumSample(
+                ...args,
+                plainState,
+                sampleRate,
+                calibration,
+              );
+              cached[index] = kitDrumSample(
+                ...args,
+                cachedState,
+                sampleRate,
+                calibration,
+                wave[index],
+              );
+            }
+            expect(cached).toEqual(reference);
+            expect(cachedState).toEqual(plainState);
+          }
+        }
+      }
+    }
+  });
+
+  test("short prefixes grow without changing earlier audio, and eviction is safe", () => {
+    const initial = kitHatWave(8_000, false, 96)!;
+    const prefix = initial.slice(0, 96);
+    const grown = kitHatWave(8_000, false, 1_200)!;
+    expect(grown).toBe(initial);
+    expect(grown.slice(0, 96)).toEqual(prefix);
+    expect(grown.slice(96, 1_200).some((sample) => sample !== 0)).toBe(true);
+    const expected = grown.slice(0, 1_200);
+    kitHatWave(22_050, true, 96);
+    kitHatWave(48_000, true, 96);
+    const restored = kitHatWave(8_000, false, 1_200)!;
+    expect(restored).not.toBe(initial);
+    expect(restored.slice(0, 1_200)).toEqual(expected);
+    expect(initial.slice(0, 1_200)).toEqual(expected);
+  });
+
+  test("cache allocation is bounded and unsupported rates fall back to synthesis", () => {
+    const longest = Math.max(...SYNTH_KITS.map((kit) => kit.seconds));
+    expect(kitHatWave(48_000, true, Infinity)!.length).toBe(
+      Math.ceil(longest * 48_000),
+    );
+    for (const rate of [0, -1, NaN, Infinity, 44_100.5, 96_000])
+      expect(kitHatWave(rate, true, 100)).toBeUndefined();
   });
 });

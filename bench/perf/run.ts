@@ -13,6 +13,7 @@
  */
 import { writeFile } from "node:fs/promises";
 import { frames } from "./frame.ts";
+import { arrangementFrames } from "./arrangement.ts";
 import { live } from "./live.ts";
 import { patch } from "./patch.ts";
 import * as pty from "./pty.ts";
@@ -36,6 +37,7 @@ const GROUPS: Record<string, () => Promise<Metric[]> | Metric[]> = {
   sync: () => pty.sync(n(10, 3)),
   agent: () => pty.agent(n(10, 3)),
   frame: () => frames(undefined, n(600, 200)),
+  arrangement: () => arrangementFrames(n(220, 80)),
   render: () => render(n(5, 2)),
   live: () => live(n(5, 2)),
   patch: () => patch(n(7, 3)),
