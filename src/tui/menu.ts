@@ -9,6 +9,7 @@
  * Rendering reuses the TUI's picker overlay: `view()` returns a picker.
  */
 import { PRESETS } from "../../core/presets/index.ts";
+import { fuzzyScore } from "../../tui/search.ts";
 import { CHOP_OPS } from "../audio/chop/types.ts";
 import { CHOP_USAGE } from "../audio/chop/words.ts";
 import {
@@ -25,8 +26,6 @@ import {
 import { commandParam, sketchFor } from "./sketch.ts";
 import { nearest } from "../commands/nearest.ts";
 import {
-  ARROW_DOWN,
-  ARROW_UP,
   HINTS,
   KEY_BACK,
   KEY_BACKSPACE,
@@ -43,7 +42,7 @@ import {
   KEY_UP,
 } from "../../tui/grammar.ts";
 import { arrangeDetail, arrangeNodes } from "./arrange-menu.ts";
-import { auditionKey, isStageable, type AuditionKey } from "./audition.ts";
+import { isStageable, type AuditionKey } from "./audition.ts";
 import { performanceDetail, performanceNodes } from "./performance-menu.ts";
 import { malletsMenu, modalParameterNodes } from "./modal-menu.ts";
 import { windParameterNodes, windsMenu } from "./wind-menu.ts";
@@ -287,7 +286,7 @@ type NumberField = Readonly<{
   off?: string;
   /** Starting value for a nudge while off. */
   start?: number;
-  /** The command `x` runs to put the value back to its default. */
+  /** The command Delete or Ctrl-X runs to restore the default. */
   reset?: string;
 }>;
 
@@ -344,7 +343,7 @@ export type MenuResult =
   | { type: "handled" }
   | { type: "close" }
   | { type: "run"; command: string }
-  /** Space (loop), `a` (A/B) or `c` (context) for the audition loop. */
+  /** Space (loop), Ctrl-A (A/B) or Ctrl-O (context) for the audition loop. */
   | { type: "audition"; key: AuditionKey }
   /** Commit the staged edits as one operation. */
   | { type: "keep" }
@@ -3887,16 +3886,20 @@ export class EditMenu {
     const frame = this.stack.at(-1);
     if (!frame) return [];
     const all = frame.build(context);
-    const needle = frame.query.toLowerCase();
+    const needle = frame.query.trim();
     if (!needle) return all;
-    const direct = all.filter((node) =>
-      nodeText(node).toLowerCase().includes(needle),
-    );
     // At the root a filter also looks two levels down for groups
-    // (`/autotune`, `/formant`, `/tuning`) and offers them by path, after
-    // the roots that match.
-    if (this.stack.length !== 1) return direct;
-    return [...direct, ...deepGroups(all, context, needle)];
+    // (`autotune`, `formant`, `tuning`) and offers them by path. Rank the
+    // whole set so a close nested match beats incidental descriptive text.
+    const candidates =
+      this.stack.length === 1
+        ? [...all, ...deepGroups(all, context, needle)]
+        : all;
+    return candidates
+      .map((node, at) => ({ node, at, score: nodeScore(needle, node) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score || a.at - b.at)
+      .map(({ node }) => node);
   }
 
   private selected(context: MenuContext): MenuNode | undefined {
@@ -3912,6 +3915,10 @@ export class EditMenu {
     if (!frame) return { type: "pass" };
     if (value === "\u0003" || value === "\u000c") return { type: "pass" };
     if (this.entry) return this.entryKey(value, context);
+    // Search owns letters; audition uses explicit modifiers even while a
+    // query is active. Ctrl-C remains the application's interrupt key.
+    if (context.audition && (value === "\u0001" || value === "\u000f"))
+      return { type: "audition", key: value === "\u0001" ? "ab" : "context" };
     if (this.filtering) {
       if (value === "\u001b") {
         frame.query = "";
@@ -3919,16 +3926,27 @@ export class EditMenu {
         return { type: "handled" };
       }
       if (KEY_BACKSPACE.has(value)) {
-        frame.query = frame.query.slice(0, -1);
+        frame.query = Array.from(frame.query).slice(0, -1).join("");
         if (!frame.query) this.filtering = false;
         frame.index = 0;
         return { type: "handled" };
       }
-      if (KEY_ENTER.has(value) || value === ARROW_DOWN || value === ARROW_UP) {
+      if (
+        KEY_ENTER.has(value) ||
+        (value.length > 1 &&
+          (KEY_DOWN.has(value) ||
+            KEY_UP.has(value) ||
+            KEY_LEFT.has(value) ||
+            KEY_RIGHT.has(value) ||
+            KEY_PAGE_UP.has(value) ||
+            KEY_PAGE_DOWN.has(value) ||
+            KEY_HOME.has(value) ||
+            KEY_END.has(value)))
+      ) {
         this.filtering = false;
         return this.key(value, context);
       }
-      if (value.length === 1 && value >= " ") {
+      if (value && !/[\u0000-\u001f\u007f]/.test(value)) {
         frame.query = (frame.query + value).slice(0, 40);
         frame.index = 0;
         return { type: "handled" };
@@ -3957,6 +3975,31 @@ export class EditMenu {
       frame.query = "";
       return { type: "handled" };
     }
+    if (KEY_BACKSPACE.has(value) && frame.query) {
+      frame.query = Array.from(frame.query).slice(0, -1).join("");
+      this.filtering = Boolean(frame.query);
+      frame.index = 0;
+      return { type: "handled" };
+    }
+    // Ordinary letters are always typeahead, including former vim-style
+    // navigation/audition/reset letters. Keep numeric entry and operator
+    // nudges when a value is focused; `/` can explicitly search those.
+    if (
+      value &&
+      !/[\u0000-\u001f\u007f]/.test(value) &&
+      value !== " " &&
+      value !== "?" &&
+      !(
+        (node?.kind === "number" || node?.kind === "point") &&
+        /^[0-9.]$/.test(value)
+      ) &&
+      !["-", "_", "+", "="].includes(value)
+    ) {
+      this.filtering = true;
+      frame.query = (frame.query + value).slice(0, 40);
+      frame.index = 0;
+      return { type: "handled" };
+    }
     if (KEY_UP.has(value) || KEY_DOWN.has(value)) {
       const step = KEY_UP.has(value) ? -1 : 1;
       if (nodes.length)
@@ -3971,9 +4014,8 @@ export class EditMenu {
       frame.index = Math.max(0, nodes.length - 1);
       return this.hovered(frame, context);
     }
-    // Space hears the focused track (it still switches a toggle row);
-    // `a` and `c` are A/B and context while the window hosts an audition.
-    const audition = context.audition ? auditionKey(value) : undefined;
+    // Space hears the focused track (it still switches a toggle row).
+    const audition = context.audition && value === " " ? "loop" : undefined;
     if (audition && !(audition === "loop" && node?.kind === "toggle"))
       return { type: "audition", key: audition };
     if (!node) return { type: "handled" };
@@ -3986,7 +4028,7 @@ export class EditMenu {
         node.kind === "info")
     )
       return { type: "keep" };
-    // ← → adjust a value; on any other row ← h go back and → l go in
+    // ← → adjust a value; on any other row ← goes back and → goes in
     // (or run the action), and - + do nothing.
     const isValue = isValueNode(node);
     if (isValue && (KEY_LEFT.has(value) || KEY_RIGHT.has(value)))
@@ -3998,7 +4040,10 @@ export class EditMenu {
         (node.kind === "menu" || node.kind === "action")
       ))
         return { type: "handled" };
-    if (KEY_RESET.has(value) && node.kind === "number") {
+    if (
+      (KEY_RESET.has(value) || value === "\u0018") &&
+      node.kind === "number"
+    ) {
       const reset =
         node.reset ??
         (node.start !== undefined && node.value !== undefined
@@ -4006,7 +4051,7 @@ export class EditMenu {
           : undefined);
       return reset ? { type: "run", command: reset } : { type: "handled" };
     }
-    if (KEY_RESET.has(value) && node.kind === "point")
+    if ((KEY_RESET.has(value) || value === "\u0018") && node.kind === "point")
       return {
         type: "run",
         command: `automate ${node.lane} remove ${num(node.beat)}`,
@@ -4257,6 +4302,9 @@ export class EditMenu {
       return {
         label: `${node.label.padEnd(LABEL_WIDTH)} ${shown}`.trimEnd(),
         value: String(at),
+        topic:
+          this.stack[1]?.title.split(" › ")[0] ??
+          (node.kind === "menu" ? node.label.split(" › ")[0] : undefined),
       };
     });
     const command = selected ? commandText(selected) : undefined;
@@ -4286,7 +4334,21 @@ export class EditMenu {
                 : selected?.kind === "action"
                   ? HINTS.action
                   : HINTS.menu;
-    return { title, crumbs, items, index, hint, note };
+    // The audition controller also serves non-search editors where a/c
+    // remain useful; describe this menu's unambiguous modifier bindings.
+    const menuHint = hint
+      .replace(/(^|[ ·])a A\/B/g, "$1ctrl-a A/B")
+      .replace(/(^|[ ·])c (context|mix)/g, "$1ctrl-o $2")
+      .replace(/\bx (reset|delete)/g, "del $1")
+      .replace("/ filter", "type search");
+    return {
+      title,
+      crumbs,
+      items,
+      index,
+      hint: menuHint,
+      note: note.replace(/\bx (resets|deletes)/g, "del $1"),
+    };
   }
 }
 
@@ -4306,14 +4368,14 @@ function describe(node: MenuNode): string {
   switch (node.kind) {
     case "number":
       return node.reset || node.start !== undefined
-        ? "←→ adjust · type a number · x resets"
+        ? "←→ adjust · type a number · del resets"
         : "←→ adjust · type a number";
     case "toggle":
       return "space or enter switches it";
     case "choice":
       return `${node.options.length} choices · enter lists them`;
     case "point":
-      return "←→ change · type beat:value · x deletes";
+      return "←→ change · type beat:value · del deletes";
     case "entry":
       return "enter, then type";
     default:
@@ -4461,7 +4523,7 @@ function commandText(node: MenuNode): string | undefined {
   }
 }
 
-/** Menu groups below `nodes` (two levels) whose label matches `needle`. */
+/** Best matching groups below `nodes` (two levels), with their full path. */
 function deepGroups(
   nodes: readonly MenuNode[],
   context: MenuContext,
@@ -4470,9 +4532,9 @@ function deepGroups(
   const found: MenuNode[] = [];
   const visit = (list: readonly MenuNode[], path: string, depth: number) => {
     for (const node of list) {
-      if (node.kind !== "menu" || found.length >= 12) continue;
+      if (node.kind !== "menu") continue;
       const label = path ? `${path} › ${node.label}` : node.label;
-      if (path && node.label.toLowerCase().includes(needle))
+      if (path && nodeScore(needle, { ...node, label }) > 0)
         found.push({ ...node, label });
       if (depth < 2) {
         let children: MenuNode[] = [];
@@ -4486,11 +4548,19 @@ function deepGroups(
     }
   };
   visit(nodes, "", 0);
-  return found;
+  return found
+    .map((node, at) => ({ node, at, score: nodeScore(needle, node) }))
+    .sort((a, b) => b.score - a.score || a.at - b.at)
+    .slice(0, 12)
+    .map(({ node }) => node);
 }
 
-function nodeText(node: MenuNode): string {
-  return `${node.label} ${valueText(node)} ${commandText(node) ?? ""}`;
+function nodeScore(query: string, node: MenuNode): number {
+  return fuzzyScore(
+    query,
+    node.label.split(" › ").at(-1) ?? node.label,
+    `${node.label} ${valueText(node)} ${commandText(node) ?? ""} ${node.help ?? ""}`,
+  );
 }
 
 /** Every id `/menu <id>` opens: the ten topics first, then older ids. */

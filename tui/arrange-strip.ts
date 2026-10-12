@@ -9,6 +9,7 @@
  * The shape is structural so the TUI does not depend on core.
  */
 import type { CellBuffer } from "./screen.ts";
+import type { HitMap } from "./hits.ts";
 import { displayWidth, truncate } from "./text.ts";
 import { accentStyle, onBackground, type Style, type Theme } from "./theme.ts";
 
@@ -124,6 +125,7 @@ export function paintArrangeStrip(
   view: ArrangeStripView,
   theme: Theme,
   unicode: boolean,
+  hits?: HitMap,
 ): void {
   const roles = theme.roles;
   buffer.fill(0, y, width, 1, roles.canvas);
@@ -149,6 +151,7 @@ export function paintArrangeStrip(
       return;
     }
     const section = view.sections[cell.section]!;
+    hits?.add(x, y, 1, 1, { kind: "scene", name: section.name });
     const accent = accentStyle(theme, section.name);
     const looped = view.loop === section.name;
     const style: Style = {

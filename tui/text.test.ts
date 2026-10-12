@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { displayWidth, graphemes, truncate } from "./text.ts";
+import { displayWidth, graphemes, truncate, wrapWords } from "./text.ts";
 
 test("ASCII takes the fast path with the same answers", () => {
   expect(displayWidth("help · all")).toBe(10);
@@ -31,4 +31,18 @@ test("a repeated string returns the cached segmentation", () => {
   // The cache bounds itself rather than growing per distinct string.
   for (let index = 0; index < 5000; index += 1) graphemes(`row ${index} 界`);
   expect(graphemes(line).length).toBe(Array.from(line).length);
+});
+
+test("word wrapping preserves labels, full tokens, blank rows and graphemes", () => {
+  expect(wrapWords("kick  909", 20)).toEqual(["kick  909"]);
+  expect(wrapWords("dry drums and warm bass", 10)).toEqual([
+    "dry drums",
+    "and warm",
+    "bass",
+  ]);
+  expect(wrapWords("", 10)).toEqual([""]);
+  const long = "é界é界é界";
+  const lines = wrapWords(long, 4);
+  expect(lines.join("")).toBe(long);
+  for (const line of lines) expect(displayWidth(line)).toBeLessThanOrEqual(4);
 });

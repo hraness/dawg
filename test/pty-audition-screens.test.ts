@@ -172,15 +172,15 @@ test.skipIf(!supported)(
       await t.until(() => screen().includes("♪ solo"), "auditioning");
 
       // Voicing stages (window state): staged ← committed in the row.
-      await t.send("jjjj");
-      await t.until(() => /› voicing/.test(screen()), "voicing row");
+      await t.send("\u001b[B".repeat(4));
+      await t.until(() => /›.*voicing/.test(screen()), "voicing row");
       await t.send(RIGHT);
       await t.until(() => screen().includes("+1 ← 0"), "voicing staged");
       expect(screen()).toContain("● ≡ ");
       expect(screen()).toContain("B staged 1");
-      await t.send("a");
+      await t.send("\u0001");
       await t.until(() => screen().includes("A committed"), "A");
-      await t.send("a");
+      await t.send("\u0001");
       await t.until(() => screen().includes("B staged 1"), "B");
 
       // Esc reverts it; nothing was written.
@@ -191,11 +191,11 @@ test.skipIf(!supported)(
       expect((await latest(t.cwd)).revision).toBe(committed.revision);
 
       // Stage the key tonic (a score edit) and the voicing, then keep both.
-      await t.send("kkk");
+      await t.send("\u001b[A".repeat(3));
       await t.until(() => /› key tonic/.test(screen()), "key tonic row");
       await t.send(RIGHT);
       await t.until(() => screen().includes("B staged 1"), "key staged");
-      await t.send("jjj");
+      await t.send("\u001b[B".repeat(3));
       await t.send(RIGHT);
       await t.until(() => screen().includes("B staged 2"), "both staged");
       await Bun.sleep(150);

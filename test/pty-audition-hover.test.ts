@@ -74,15 +74,15 @@ test.skipIf(!supported)(
 
       await t.send("/menu sound\r");
       await t.until(() => screen().includes("≡ Sound"), "sound");
-      await t.send("j");
+      await t.send("\u001b[B");
       await t.send("\r");
       await t.until(() => screen().includes("≡ Sound › table"), "tables");
       // Space loops; moving now hears each table on the loop.
       await t.send(" ");
       await t.until(() => screen().includes("♪ solo"), "auditioning");
-      await t.send("j");
+      await t.send("\u001b[B");
       await t.until(() => screen().includes("B staged 1"), "hover 1");
-      await t.send("jj");
+      await t.send("\u001b[B".repeat(2));
       await t.until(() => screen().includes("B staged 1"), "hover 3");
       // Hovers replace each other: still one staged change, nothing written.
       expect(screen()).not.toContain("staged 2");
@@ -99,14 +99,14 @@ test.skipIf(!supported)(
       // Back in, move, Enter chooses; Esc out; Enter on a value keeps.
       await t.send("\r");
       await t.until(() => screen().includes("≡ Sound › table"), "tables 2");
-      await t.send("jj");
+      await t.send("\u001b[B".repeat(2));
       await t.until(() => screen().includes("B staged 1"), "hover again");
       const chosen = screen().match(/› (\S+) {2}/)?.[1];
       await t.send("\r");
       await t.send("\u001b");
       await t.until(() => /› table +/.test(screen()), "back to sound");
       expect(screen()).toContain("B staged 1");
-      await t.send("j");
+      await t.send("\u001b[B");
       await t.send("\r");
       await t.until(() => screen().includes("one undo step"), "kept");
       await waitFor(
@@ -140,8 +140,8 @@ test.skipIf(!supported)(
       await t.send(" ");
       await t.until(() => screen().includes("♪ solo"), "auditioning");
       await t.until(() => screen().includes("B staged 1"), "first hover");
-      await t.send("j");
-      await t.send("j");
+      await t.send("\u001b[B");
+      await t.send("\u001b[B");
       await t.until(() => screen().includes("B staged 1"), "hover");
       expect(screen()).not.toContain("staged 2");
       capture.picker = screen();
@@ -154,9 +154,9 @@ test.skipIf(!supported)(
       await t.send("/try fx reverb mix 0.6\r");
       await t.until(() => screen().includes("try · fx reverb mix 0.6"), "try");
       await t.until(() => screen().includes("B staged 1"), "staged");
-      await t.send("a");
+      await t.send("\u0001");
       await t.until(() => screen().includes("A committed"), "A");
-      await t.send("a");
+      await t.send("\u0001");
       await t.until(() => screen().includes("B staged 1"), "B");
       capture.tried = screen();
       expect((await latest(t.cwd)).revision).toBe(before.revision);

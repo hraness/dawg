@@ -59,7 +59,7 @@ test.skipIf(!supported)(
         "chords and key",
       );
       await t.send("/tuning");
-      await t.until(() => t.vt.text().includes("› tuning"), "row");
+      await t.until(() => /›.*tuning/.test(t.vt.text()), "row");
       await t.send("\r");
       await t.until(
         () => t.vt.text().includes("Chords and key › tuning"),

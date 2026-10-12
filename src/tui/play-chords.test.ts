@@ -36,14 +36,26 @@ describe("ChordPad", () => {
     expect(p.voice(p.chordFor(48)!, 48).name).toBe("Cm");
   });
 
-  test("q toggles auto and manual; off frees every chord key", () => {
+  test("q cycles automatic chords, manual chords and single notes", () => {
     const p = pad();
-    expect(p.press("q")).toEqual({ type: "status", status: "chords manual" });
+    expect(p.press("q")).toEqual({
+      type: "status",
+      status: "chords manual · q mode",
+    });
     expect(p.settings.explicit).toBe(true);
-    p.settings.mode = "off";
-    for (const key of ["1", "5", "9", "0", "-", "=", "b", "q"])
+    expect(p.press("q")).toEqual({
+      type: "status",
+      status: "notes · q chords",
+    });
+    expect(p.glance(true)).toBe("Notes · q chords");
+    for (const key of ["1", "5", "9", "0", "-", "=", "b"])
       expect(p.press(key)).toEqual({ type: "pass" });
     expect(p.chordFor(48)).toBeUndefined();
+    expect(p.press("q")).toEqual({
+      type: "status",
+      status: "chords auto · q mode",
+    });
+    expect(p.settings.mode).toBe("auto");
   });
 
   test("voicing dial, perform cycle and bass", () => {

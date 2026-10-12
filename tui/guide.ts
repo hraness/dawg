@@ -2,8 +2,8 @@
  * The `/guide` pane: the user guides (`guides/*.md`) as a tree that opens a
  * guide into a page. Pure: keys go in, rows come out; `tui/app.ts` paints.
  *
- *   tree   ↑↓ (j k) move · → l enter expand, then open · ← h collapse or
- *          go to the parent · / filter (title and text) · esc back
+ *   tree   ↑↓ move · → enter expand, then open · ← collapse or
+ *          go to the parent · type to fuzzy-search title and text · esc back
  *   page   ↑↓ (j k) scroll · pgup pgdn home end · ← h esc back to the tree
  */
 import {
@@ -15,6 +15,7 @@ import {
 } from "../guides/index.ts";
 import { resolveTopic } from "../src/lang/glossary.ts";
 import { overlayKey } from "./keys.ts";
+import { fuzzyScore } from "./search.ts";
 import { displayWidth } from "./text.ts";
 
 export type GuideRow = Readonly<{
@@ -44,7 +45,7 @@ export type GuideView = Readonly<{
 }>;
 
 export const GUIDE_HINTS = {
-  tree: " ↑↓ move · → open · ← close · / filter · esc back · ? keys ",
+  tree: " ↑↓ move · enter open · type search · esc back · ? keys ",
   filtering: " type to filter · enter open · esc clear · ? keys ",
   page: " n next · p prev · ← guides · esc back · ? keys ",
 } as const;
@@ -301,15 +302,25 @@ export class GuideBrowser {
   }
 
   /** Guides matching the filter, plus their ancestors; all when no filter. */
-  private matches(): Set<string> | undefined {
-    const query = this.query.trim().toLowerCase();
+  private matches(): Map<string, number> | undefined {
+    const query = this.query.trim();
     if (!query) return undefined;
-    const keep = new Set<string>();
+    const keep = new Map<string, number>();
     for (const guide of this.guides) {
-      const text = `${guide.title}\n${guide.body}`.toLowerCase();
-      if (!text.includes(query)) continue;
+      // Fuzzy names are useful; scattered letters across a whole document
+      // turn almost every guide into a match. Search body words literally.
+      const body = guide.body.toLowerCase();
+      const bodyMatch = query
+        .toLowerCase()
+        .split(/\s+/)
+        .every((term) => body.includes(term));
+      const score = Math.max(
+        fuzzyScore(query, guide.title, guide.id),
+        bodyMatch ? 1 : 0,
+      );
+      if (!score) continue;
       for (let g: Guide | undefined = guide; g; g = this.byId(g.parent ?? ""))
-        keep.add(g.id);
+        keep.set(g.id, Math.max(score, keep.get(g.id) ?? 0));
     }
     return keep;
   }
@@ -319,7 +330,10 @@ export class GuideBrowser {
     const keep = this.matches();
     const out: { guide: Guide; depth: number }[] = [];
     const visit = (parent: string | undefined, depth: number) => {
-      for (const guide of this.children(parent)) {
+      const children = this.children(parent);
+      if (keep)
+        children.sort((a, b) => (keep.get(b.id) ?? 0) - (keep.get(a.id) ?? 0));
+      for (const guide of children) {
         if (keep && !keep.has(guide.id)) continue;
         out.push({ guide, depth });
         if (keep || this.expanded.has(guide.id)) visit(guide.id, depth + 1);
@@ -462,7 +476,7 @@ export class GuideBrowser {
         return "handled";
       }
       if (value === "\u007f" || value === "\b") {
-        this.query = this.query.slice(0, -1);
+        this.query = Array.from(this.query).slice(0, -1).join("");
         if (!this.query) this.filtering = false;
         this.settle();
         return "handled";
@@ -477,15 +491,15 @@ export class GuideBrowser {
         this.move(nav === "up" ? -1 : 1);
         return "handled";
       }
-      if (!value.startsWith("\u001b") && value >= " " && value.length <= 4) {
-        this.query = (this.query + value).slice(0, 40);
+      if (value && !/[\u0000-\u001f\u007f]/.test(value)) {
+        this.query = (this.query + value).slice(0, 160);
         this.settle();
         return "handled";
       }
       return "handled";
     }
-    if (nav === "up" || value === "k") return this.moved(-1);
-    if (nav === "down" || value === "j") return this.moved(1);
+    if (nav === "up") return this.moved(-1);
+    if (nav === "down") return this.moved(1);
     if (nav === "pgup") return this.moved(-pageRows);
     if (nav === "pgdn") return this.moved(pageRows);
     if (nav === "home") return this.moved(-this.guides.length);
@@ -494,14 +508,26 @@ export class GuideBrowser {
       this.filtering = true;
       return "handled";
     }
+    if (value !== "?" && value && !/[\u0000-\u001f\u007f]/.test(value)) {
+      this.filtering = true;
+      this.query = (this.query + value).slice(0, 160);
+      this.settle();
+      return "handled";
+    }
+    if (this.query && (value === "\u007f" || value === "\b")) {
+      this.query = Array.from(this.query).slice(0, -1).join("");
+      this.filtering = this.query.length > 0;
+      this.settle();
+      return "handled";
+    }
     const hasChildren = this.children(this.selected).length > 0;
     const open = this.query !== "" || this.expanded.has(this.selected);
-    if (right || value === "l" || nav === "enter") {
+    if (right || nav === "enter") {
       if (hasChildren && !open) this.expanded.add(this.selected);
       else this.openSelected();
       return "handled";
     }
-    if (left || value === "h") {
+    if (left) {
       if (hasChildren && this.expanded.has(this.selected) && !this.query)
         this.expanded.delete(this.selected);
       else {

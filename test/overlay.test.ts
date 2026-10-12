@@ -122,14 +122,14 @@ test("picker moves with arrows, picks with Enter, cancels with Esc", () => {
     ],
   });
   let lines = h.frame();
-  expect(lines.some((line) => line.includes("› night drive"))).toBe(true);
+  expect(lines.some((line) => /›.*night drive/.test(line))).toBe(true);
   expect(lines.some((line) => line.includes("rev 4"))).toBe(true);
   h.app.input(DOWN);
   h.app.input(DOWN);
   h.app.input(DOWN); // clamps at the last row
   h.app.input(UP);
   lines = h.frame();
-  expect(lines.some((line) => line.includes("› dub sketch"))).toBe(true);
+  expect(lines.some((line) => /›.*dub sketch/.test(line))).toBe(true);
   expect(h.app.input("\r")).toEqual({
     type: "pick",
     picker: "resume",
@@ -144,6 +144,7 @@ test("picker moves with arrows, picks with Enter, cancels with Esc", () => {
     items: [{ label: "a", value: "a" }],
   });
   expect(h.app.input("x").type).toBe("overlay");
+  expect(h.app.input(ESC)).toEqual({ type: "overlay" }); // clear typeahead first
   expect(h.app.input(ESC)).toEqual({ type: "pick-cancel", picker: "resume" });
   expect(h.app.picker).toBeUndefined();
   expect(h.app.prompt.snapshot.text).toBe("");
@@ -156,10 +157,11 @@ test("picker moves with arrows, picks with Enter, cancels with Esc", () => {
       { label: "b", value: "b" },
     ],
   });
-  // Digits never pick (rows are not numbered); j/k move like arrows.
+  // Digits search, never pick; arrows move after clearing the query.
   expect(h.app.input("2")).toEqual({ type: "overlay" });
+  h.app.input(ESC);
   // Each move names the highlighted row (the live-preview hook).
-  expect(h.app.input("j")).toEqual({
+  expect(h.app.input(DOWN)).toEqual({
     type: "pick-move",
     picker: "n",
     value: "b",
@@ -175,8 +177,9 @@ test("picker moves with arrows, picks with Enter, cancels with Esc", () => {
       { label: "snare", value: "s" },
     ],
   });
-  expect(h.app.input("s").type).toBe("overlay");
-  expect(h.app.picker?.items).toHaveLength(2);
+  expect(h.app.input("s").type).toBe("pick-move");
+  expect(h.app.picker?.items).toHaveLength(1);
+  h.app.input(ESC);
   h.app.input("/");
   h.app.input("s");
   h.app.input("n");

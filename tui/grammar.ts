@@ -3,14 +3,14 @@
  * the one-line footer hint each screen shows, and the `?` panel listing the
  * keys of the current screen.
  *
- *   ↑↓ (j k)        move              Enter   open or confirm
+ *   ↑↓              move              Enter   open or confirm
  *   ←→ (h l, - +)   adjust a value    Space   audition or toggle
- *   /               filter            Esc     back one level (filter first)
+ *   type or /       search            Esc     back one level (filter first)
  *   ?               keys for this screen
  *   digits          type a value, only where a value is focused
  *
- * Play mode is the one exception (its letters are piano keys, by the
- * GarageBand "Musical Typing" convention); its panel says so.
+ * Searchable lists reserve letters for typeahead. Editors retain vim
+ * movement; play mode reserves letters for piano keys. Panels say which.
  */
 import { displayWidth } from "./text.ts";
 
@@ -66,8 +66,8 @@ export type KeySection = Readonly<{ title: string; rows: readonly KeyRow[] }>;
 
 /**
  * Fit a ` a · b · esc back · ? keys ` hint into `width` columns by dropping
- * parts from the middle: the way out (`esc …`) and `? keys` stay longest,
- * since they are how a user leaves or learns the rest. Returns "" when not
+ * secondary parts first: Enter, the way out (`esc …`) and `? keys` stay
+ * longest, so users can finish, leave or learn the rest. Returns "" when not
  * even `? keys` fits.
  */
 export function fitHint(hint: string, width: number): string {
@@ -97,8 +97,12 @@ function fitHintUncached(hint: string, width: number): string {
   for (;;) {
     const text = ` ${[...head, ...tail].join(" · ")} `;
     if (displayWidth(text) <= width) return text;
-    if (head.length > 0) head.pop();
-    else if (tail.length > 1) tail.shift();
+    if (head.length > 0) {
+      let secondary = head.length - 1;
+      while (secondary >= 0 && head[secondary]!.startsWith("enter "))
+        secondary--;
+      head.splice(secondary < 0 ? head.length - 1 : secondary, 1);
+    } else if (tail.length > 1) tail.shift();
     else return "";
   }
 }
@@ -114,16 +118,17 @@ export function asciiHint(hint: string): string {
 // ── footer hints, one per screen ──────────────────────────────────────
 
 export const HINTS = {
-  list: " ↑↓ move · enter choose · / filter · esc back · ? keys ",
-  preview: " ↑↓ preview · enter apply · / filter · esc back · ? keys ",
-  hover: " ↑↓ hear · enter choose · a A/B · c context · esc back · ? keys ",
+  list: " ↑↓ move · enter choose · type search · esc back · ? keys ",
+  preview: " ↑↓ preview · enter apply · type search · esc back · ? keys ",
+  hover:
+    " ↑↓ hear · enter choose · ctrl-a A/B · ctrl-o context · esc back · ? keys ",
   audition:
-    " ↑↓ hear · enter keep · space loop · a A/B · c mix · / filter · esc back · ? keys ",
+    " ↑↓ hear · enter keep · space loop · ctrl-a A/B · ctrl-o mix · type search · esc back · ? keys ",
   filtering: " type to filter · enter choose · esc clear · ? keys ",
-  menu: " ↑↓ move · enter open · / filter · esc back · ? keys ",
-  value: " ←→ adjust · enter open · 0-9 type · x reset · esc back · ? keys ",
-  point: " ←→ adjust · enter type · x delete · esc back · ? keys ",
-  action: " ↑↓ move · enter apply · / filter · esc back · ? keys ",
+  menu: " ↑↓ move · enter open · type search · esc back · ? keys ",
+  value: " ←→ adjust · enter open · 0-9 type · del reset · esc back · ? keys ",
+  point: " ←→ adjust · enter type · del delete · esc back · ? keys ",
+  action: " ↑↓ move · enter apply · type search · esc back · ? keys ",
   typing: " type a value · enter apply · esc clear ",
   euclid:
     " ↑↓ knob · ←→ turn · tab field · space loop · x off · esc back · ? keys ",
@@ -137,13 +142,21 @@ export const HINTS = {
 // Each screen lists every key once: a key that means different things on
 // different rows says so on its one line.
 
-/** The audition loop's keys, shared by the menu and the rhythm editor. */
+/** The audition loop's keys in editors without typeahead. */
 const AUDITION_ROWS: readonly KeyRow[] = [
   ["space", "loop the track · again stops"],
   ["a", "A/B: committed ↔ staged"],
   ["c", "solo ↔ in context (the whole mix)"],
   ["ctrl-z", "undo a kept change"],
 ];
+
+/** Searchable lists reserve bare letters for typeahead. */
+const LIST_AUDITION_ROWS: readonly KeyRow[] = AUDITION_ROWS.map(
+  ([key, label]) => [
+    key === "a" ? "ctrl-a" : key === "c" ? "ctrl-o" : key,
+    label,
+  ],
+);
 
 /** The ctrl-k menu roots, in order (src/tui/menu.ts builds them). */
 export const MENU_ROOTS = Object.freeze([
@@ -163,10 +176,10 @@ export function closesKeys(value: string): boolean {
 }
 
 const LIST: readonly KeyRow[] = [
-  ["↑ ↓  j k", "move"],
+  ["↑ ↓", "move"],
   ["pgup pgdn", "page"],
   ["enter", "choose"],
-  ["/", "filter (type, then enter or esc)"],
+  ["type /", "fuzzy search (enter chooses, esc clears)"],
   ["esc", "clear the filter, then back"],
 ];
 
@@ -211,12 +224,12 @@ export const KEYS = {
       title: "auditioning list",
       rows: [
         ["space", "loop the focused track · again stops"],
-        ["↑ ↓  j k", "move; while looping, hear the row on the loop"],
-        ["a", "A/B: before ↔ the highlighted row"],
-        ["c", "solo ↔ in context (the whole mix)"],
+        ["↑ ↓", "move; while looping, hear the row on the loop"],
+        ["ctrl-a", "A/B: before ↔ the highlighted row"],
+        ["ctrl-o", "solo ↔ in context (the whole mix)"],
         ["enter", "keep it (one undo step)"],
         ["esc", "back; nothing changes"],
-        ["/", "filter (type, then enter or esc)"],
+        ["type /", "fuzzy search (enter chooses, esc clears)"],
       ],
     },
   ],
@@ -239,7 +252,7 @@ export const KEYS = {
     {
       title: "patterns",
       rows: [
-        ["↑ ↓  j k", "move and hear the pattern"],
+        ["↑ ↓", "move and hear the pattern"],
         ["enter", "apply it to the focused track"],
         ...LIST.slice(3),
       ],
@@ -249,19 +262,19 @@ export const KEYS = {
     {
       title: "menu",
       rows: [
-        ["↑ ↓  j k", "move"],
+        ["↑ ↓", "move"],
         [
           "enter",
           "open · run · value: fader or list · staged: keep (one undo)",
         ],
-        ["→ l", "go in · run an action · on a value: adjust up"],
-        ["← h", "back one level · on a value: adjust down"],
+        ["→", "go in · run an action · on a value: adjust up"],
+        ["←", "back one level · on a value: adjust down"],
         ["- +", "adjust a value"],
         ["esc", "revert staged changes, else back (a filter clears first)"],
-        ["/", "filter this level"],
+        ["type /", "fuzzy search names, commands and descriptions"],
         ["0-9 .", "type a value, enter applies"],
-        ["x d delete", "reset to default (deletes an automation point)"],
-        ...AUDITION_ROWS,
+        ["delete", "reset to default (deletes an automation point)"],
+        ...LIST_AUDITION_ROWS,
       ],
     },
     {
@@ -331,10 +344,12 @@ export const KEYS = {
     {
       title: "guides",
       rows: [
-        ["↑ ↓  j k", "move · scroll a guide"],
-        ["→ l enter", "expand a section, then open the guide"],
-        ["← h", "collapse · go to the parent · back from a guide"],
-        ["/", "filter by title and text (enter opens)"],
+        ["↑ ↓", "move in the tree · scroll a guide"],
+        ["→ enter", "expand a section, then open the guide"],
+        ["←", "collapse · go to the parent · back from a guide"],
+        ["type /", "tree: fuzzy-search title and text (enter opens)"],
+        ["n p", "page: next / previous page or guide"],
+        ["j k", "page: scroll down / up"],
         ["esc", "clear the filter, then back, then close"],
         ["f1", "open or close the guides"],
       ],
@@ -366,7 +381,7 @@ export const KEYS = {
         ["m", "metronome click"],
         ["i", "scale degrees ⇄ chromatic (home row in key)"],
         [", .", "previous / next preset (preset prev, preset next)"],
-        ["q", "chord mode: auto ⇄ manual"],
+        ["q", "chord mode: auto → manual → notes → auto"],
         ["/", "type a command, still in play mode"],
         ["ctrl-k", "menu"],
         ["esc", "leave play mode"],

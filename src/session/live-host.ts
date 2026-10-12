@@ -11,7 +11,11 @@
  */
 import type { ClickBus } from "../audio/engine.ts";
 import { countInClicks, meterClickGrid } from "../audio/click.ts";
-import { LiveSynth, type LiveNotePcm } from "../audio/live.ts";
+import {
+  LiveFullRenderer,
+  LiveSynth,
+  type LiveNotePcm,
+} from "../audio/live.ts";
 import type { SampleBank } from "../audio/samples.ts";
 import { hasMeterChanges, loopTickAt } from "../../core/tempo.ts";
 import type { TrackScore } from "../../core/score.ts";
@@ -41,6 +45,8 @@ export type LiveHostOptions = {
   /** Authority clock (epoch ms) to local monotonic ms. */
   toMonotonic(epochMs: number): number;
   log?(line: string): void;
+  /** Injectable worker boundary for deterministic lifecycle tests. */
+  fullRenderer?: Pick<LiveFullRenderer, "full" | "close">;
 };
 
 /** Longest a held live note renders before its key-up arrives. */
@@ -52,10 +58,21 @@ export class LiveHost {
   private readonly voices = new Map<string, number>();
   private nextVoice = 1;
   private synth: LiveSynth | undefined;
+  private readonly windows = new Map<string, object>();
+  private fullRenderer: Pick<LiveFullRenderer, "full" | "close"> | undefined;
   /** Notes played since start, by client (tests and the log read it). */
   public readonly played = new Map<string, number>();
 
-  public constructor(private readonly options: LiveHostOptions) {}
+  public constructor(private readonly options: LiveHostOptions) {
+    this.fullRenderer = options.fullRenderer;
+  }
+
+  /** Stop pending background audio before the daemon releases its sink. */
+  public close(): void {
+    this.windows.clear();
+    this.fullRenderer?.close();
+    this.fullRenderer = undefined;
+  }
 
   public status(): LiveStatus {
     const sink = this.options.sink;
@@ -95,6 +112,7 @@ export class LiveHost {
       if (key.startsWith(`${client}:`)) {
         this.options.sink.noteOff(id);
         this.voices.delete(key);
+        this.windows.delete(key);
       }
     this.clicks.delete(client);
     this.applyClick();
@@ -150,6 +168,7 @@ export class LiveHost {
       pitch: message.pitch,
       velocity: message.velocity,
       seconds: Math.min(message.seconds, MAX_SECONDS),
+      firstWindow: true,
       ...(samples ? { samples } : {}),
       ...(score.time?.tempo ? { tick: loopTickAt(score, message.beat) } : {}),
     };
@@ -161,19 +180,29 @@ export class LiveHost {
     const id = previous ?? this.nextVoice++;
     this.voices.set(key, id);
     sink.noteOn(id, pcm);
-    // A rig's first window sounds now; the whole note follows off the key
-    // path and swaps in place while the voice still sounds.
-    if (pcm.partial)
-      setTimeout(() => {
-        if (this.voices.get(key) !== id) return;
-        const full = synth.render({
+    // A timer still blocked the shared audio pump on the complete render.
+    // Use the same worker as a solo window and reject superseded requests,
+    // even when a key extension reuses its voice id.
+    this.windows.delete(key);
+    if (pcm.partial) {
+      const token = {};
+      this.windows.set(key, token);
+      void (this.fullRenderer ??= new LiveFullRenderer())
+        .full(synth, {
           ...request,
-          full: true,
           ...(pcm.clock === undefined ? {} : { clock: pcm.clock }),
+        })
+        .then((full) => {
+          if (this.windows.get(key) !== token) return;
+          this.windows.delete(key);
+          if (
+            full &&
+            this.voices.get(key) === id &&
+            sink.voicePosition?.(id) !== undefined
+          )
+            sink.noteOn(id, full);
         });
-        if (full && sink.voicePosition?.(id) !== undefined)
-          sink.noteOn(id, full);
-      }, 0);
+    }
   }
 
   private noteOff(client: string, voice: number): void {
@@ -181,6 +210,7 @@ export class LiveHost {
     const id = this.voices.get(key);
     if (id === undefined) return;
     this.voices.delete(key);
+    this.windows.delete(key);
     this.options.sink.noteOff(id);
   }
 

@@ -17,10 +17,23 @@ import {
   KEY_RIGHT,
   KEY_TAB,
   KEY_UP,
+  fitHint,
   keyLines,
 } from "./grammar.ts";
 
 const ROOT = join(import.meta.dir, "..");
+
+test("narrow audition hints preserve the action that keeps staged work", () => {
+  const hint =
+    " space stop · ctrl-a A/B · ctrl-o context · enter keep · esc revert · ? keys ";
+  for (const width of [72, 60, 40]) {
+    const fitted = fitHint(hint, width);
+    expect(displayWidth(fitted)).toBeLessThanOrEqual(width);
+    expect(fitted).toContain("enter keep");
+    expect(fitted).toContain("esc revert");
+    expect(fitted).toContain("? keys");
+  }
+});
 
 /** Files that read keys; they import the sets instead of spelling them. */
 const READERS = [

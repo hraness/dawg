@@ -61,15 +61,15 @@ describe("guide browser", () => {
     expect(b.key(ESC)).toBe("close");
   });
 
-  test("j k move and clamp at the ends", () => {
+  test("arrows move and clamp at the ends", () => {
     const b = new GuideBrowser(GUIDES);
     b.key(UP);
     expect(b.selected).toBe("start");
-    b.key("j");
-    b.key("j");
-    b.key("j");
+    b.key(DOWN);
+    b.key(DOWN);
+    b.key(DOWN);
     expect(b.selected).toBe("keys");
-    b.key("k");
+    b.key(UP);
     expect(b.selected).toBe("music");
   });
 
@@ -90,6 +90,33 @@ describe("guide browser", () => {
     b.key(ESC);
     expect(b.query).toBe("");
     expect(b.key(ESC)).toBe("close");
+  });
+
+  test("tree letters start fuzzy search and exact titles rank above body matches", () => {
+    const b = new GuideBrowser([
+      guide("start", 1, undefined, "how to use keys"),
+      guide("keys", 2),
+    ]);
+    b.key("k");
+    b.key("ys");
+    expect(b.typing).toBe(true);
+    expect(b.query).toBe("kys");
+    expect(b.visible()[0]?.guide.id).toBe("keys");
+    expect(b.key(ESC)).toBe("handled");
+    expect(b.query).toBe("");
+    b.key("j");
+    expect(b.query).toBe("j"); // j searches instead of moving.
+  });
+
+  test("tree fuzzy search accepts reversed words and Unicode backspace", () => {
+    const b = new GuideBrowser(GUIDES);
+    b.key("minor progression");
+    expect(b.visible().map((row) => row.guide.id)).toEqual(["music", "chords"]);
+    b.key(ESC);
+    b.key("🎹");
+    b.key("\u007f");
+    expect(b.query).toBe("");
+    expect(b.typing).toBe(false);
   });
 
   test("open() jumps to a guide by id or title, expanding its parents", () => {

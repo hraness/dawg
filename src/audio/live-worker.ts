@@ -1,13 +1,14 @@
 /**
- * Off-thread full pass for live guitar-rig notes. The key path renders only
- * the first `LIVE_RIG_WINDOW_SECONDS` of a rig note; this worker renders the
- * whole note so the TUI thread never blocks on an oversampled 8 s render.
+ * Off-thread full pass for live keys. The key path renders only the first
+ * `LIVE_RIG_WINDOW_SECONDS`; this worker renders the whole note so the TUI
+ * thread never blocks on a sustained voice or a long effect tail.
  * Requests are handled in arrival order, so a strummed chord's strings swap
  * in the order they were played.
  */
 import { scoreFromJSON } from "../../core/score.ts";
 import { LiveSynth, type LiveNotePcm } from "./live.ts";
 import type { SampleBank } from "./samples.ts";
+import { liveSamplesFromData, type LiveSampleData } from "./live-samples.ts";
 
 export type LiveFullRequest = Readonly<{
   id: number;
@@ -19,7 +20,8 @@ export type LiveFullRequest = Readonly<{
   seconds: number;
   tick?: number;
   clock?: number;
-  samples?: SampleBank;
+  sampleVersion: number;
+  samples?: LiveSampleData;
 }>;
 
 export type LiveFullReply = Readonly<{
@@ -31,10 +33,25 @@ export type LiveFullReply = Readonly<{
 declare const self: Worker;
 
 let synth: LiveSynth | undefined;
+let sampleVersion = 0;
+let samples: SampleBank | undefined;
 
 self.onmessage = (event: MessageEvent<LiveFullRequest>) => {
-  const { id, sampleRate, score, samples, tick, clock, ...note } = event.data;
+  const {
+    id,
+    sampleRate,
+    score,
+    tick,
+    clock,
+    samples: nextSamples,
+    sampleVersion: nextVersion,
+    ...note
+  } = event.data;
   try {
+    if (sampleVersion !== nextVersion) {
+      sampleVersion = nextVersion;
+      samples = nextSamples ? liveSamplesFromData(nextSamples) : undefined;
+    }
     if (synth?.rate !== sampleRate) synth = new LiveSynth(sampleRate);
     const pcm = synth.render({
       ...note,

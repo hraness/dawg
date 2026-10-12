@@ -228,7 +228,7 @@ describe("Voice › pitch (pitch lane)", () => {
     for (const ch of "autotune") menu.key(ch, ctx);
     const found = menu.view(ctx).items.map((item) => item.label);
     const deep = found.findIndex((label) => label.includes("Voice › autotune"));
-    expect(deep).toBeGreaterThan(0);
+    expect(deep).toBe(0); // Exact nested names outrank descriptive root matches.
     for (let i = 0; i < deep; i++) menu.key("\x1b[B", ctx);
     menu.key("\r", ctx);
     expect(menu.view(ctx).items[0]!.label).toStartWith("preset");

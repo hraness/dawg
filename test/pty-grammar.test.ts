@@ -104,7 +104,11 @@ test.skipIf(!supported)(
           command,
         );
         await expectFits(t);
-        await expectKeysPanel(t, "filter (type, then enter or esc)", title);
+        await expectKeysPanel(
+          t,
+          "fuzzy search (enter chooses, esc clears)",
+          title,
+        );
         await expectFilter(t, query, title);
         await closeWithEsc(t, title);
       }

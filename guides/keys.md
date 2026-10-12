@@ -24,7 +24,7 @@ goes back. Press `?` to see the keys for the screen you are on.
 
 - Enter send · Shift-Enter new line · Alt-Enter run next · Esc cancel
 - Ctrl-Z undo · Ctrl-Y redo · Ctrl-L redraw · Ctrl-C exit
-- In lists: ↑↓ or `j` `k` move · Enter choose · `/` filter · Esc back
+- Menus: type to search · ↑↓ move · Enter choose · Esc clear or back
 
 ## Next
 

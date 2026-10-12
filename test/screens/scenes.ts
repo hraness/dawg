@@ -359,6 +359,30 @@ export const SCENES: Scene[] = [
     },
   },
   {
+    id: "typeahead",
+    title: "Fuzzy suggestions wrap above the prompt; Tab inserts, Enter runs",
+    cols: 80,
+    rows: 24,
+    async run(stage, size) {
+      const pty = await song(stage, size);
+      await stage.type(pty, "style 909");
+      await stage.until(has(pty, "Warehouse"), "suggestions", pty);
+      return stage.capture(pty, "typeahead");
+    },
+  },
+  {
+    id: "grooves",
+    title: "Modular groove starters, grouped by feel",
+    cols: 80,
+    rows: 24,
+    async run(stage, size) {
+      const pty = await song(stage, size);
+      await stage.type(pty, "/style\r");
+      await stage.until(has(pty, "Machines"), "groove shelf", pty);
+      return stage.capture(pty, "grooves");
+    },
+  },
+  {
     id: "too-small",
     title: "Below 60x16 dawg says so and keeps playing",
     cols: 50,

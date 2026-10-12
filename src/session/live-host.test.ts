@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createScore } from "../../core/score.ts";
 import type { ClickBus } from "../audio/engine.ts";
-import type { LiveNotePcm } from "../audio/live.ts";
+import type { LiveNotePcm, LiveFullRenderer } from "../audio/live.ts";
 import { LiveHost, type LiveSink } from "./live-host.ts";
 
 class FakeSink implements LiveSink {
@@ -33,7 +33,11 @@ class FakeSink implements LiveSink {
   }
 }
 
-function host(sink = new FakeSink(), playing = true) {
+function host(
+  sink = new FakeSink(),
+  playing = true,
+  fullRenderer?: Pick<LiveFullRenderer, "full" | "close">,
+) {
   const score = createScore({
     tracks: [
       { id: "bass", name: "bass", instrument: "sine" },
@@ -47,6 +51,7 @@ function host(sink = new FakeSink(), playing = true) {
       score: () => score,
       transportBeatAt: (ms) => (playing ? ms / 500 : undefined),
       toMonotonic: (ms) => ms,
+      ...(fullRenderer ? { fullRenderer } : {}),
     }),
   };
 }
@@ -66,6 +71,49 @@ const note = (voice: number, trackId: string) =>
   }) as const;
 
 describe("LiveHost", () => {
+  test("full renders cannot revive released panes or overwrite newer notes", async () => {
+    const pending: ((value: LiveNotePcm) => void)[] = [];
+    let closed = false;
+    const { sink, live } = host(new FakeSink(), true, {
+      full: () =>
+        new Promise((resolve) => {
+          pending.push(resolve);
+        }),
+      close: () => {
+        closed = true;
+      },
+    });
+    Object.assign(sink, { voicePosition: () => 0 });
+    const full = { pcm: new Int16Array([10, 10]), frames: 1 };
+    await live.handle("a", note(1, "bass"));
+    await live.handle("a", { ...note(1, "bass"), seconds: 8 });
+    pending[0]!(full);
+    await Promise.resolve();
+    expect([...sink.on.values()][0]!.partial).toBe(true);
+    pending[1]!(full);
+    await Promise.resolve();
+    expect([...sink.on.values()][0]).toBe(full);
+
+    await live.handle("b", note(1, "bass"));
+    await live.drop("b");
+    pending[2]!(full);
+    await Promise.resolve();
+    expect([...sink.on.values()][1]!.partial).toBe(true);
+
+    await live.handle("a", note(2, "bass"));
+    await live.handle("a", {
+      v: 1,
+      type: "live",
+      action: "off",
+      voice: 2,
+      atMs: 0,
+    });
+    pending[3]!(full);
+    await Promise.resolve();
+    expect([...sink.on.values()][2]!.partial).toBe(true);
+    live.close();
+    expect(closed).toBe(true);
+  });
   test("one engine monitor for any number of panes", async () => {
     const { sink, live } = host();
     await live.handle("a", {

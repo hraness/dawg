@@ -1,6 +1,6 @@
 /**
  * Auditioning end to end: Space loops the focused track in the menu, nudges
- * stage instead of committing, `a` flips A/B, Esc reverts with the score
+ * stage instead of committing, Ctrl-A flips A/B, Esc reverts with the score
  * unchanged, and Enter keeps every staged nudge as one revision that one
  * undo takes back.
  */
@@ -72,7 +72,7 @@ test.skipIf(!supported)(
       await t.until(() => screen().includes(" NOW "), "prompt");
       await t.send("\u000b");
       await t.until(() => screen().includes("Project"), "menu root");
-      await t.send("jj");
+      await t.send("\u001b[B".repeat(2));
       await t.send("\r");
       await t.until(() => screen().includes("≡ Effects"), "effects");
       await t.send("/reverb");
@@ -86,7 +86,7 @@ test.skipIf(!supported)(
       const committed = await latest(t.cwd);
 
       // Down to mix, Space: the loop starts and the title says so.
-      await t.send("jjj");
+      await t.send("\u001b[B".repeat(3));
       await t.until(() => /› mix +0\.3/.test(screen()), "mix row");
       await t.send(" ");
       await t.until(() => screen().includes("♪ solo"), "auditioning");
@@ -104,9 +104,9 @@ test.skipIf(!supported)(
       expect((await latest(t.cwd)).revision).toBe(committed.revision);
 
       // A/B: the committed sound, then the staged one again.
-      await t.send("a");
+      await t.send("\u0001");
       await t.until(() => screen().includes("A committed"), "A");
-      await t.send("a");
+      await t.send("\u0001");
       await t.until(() => screen().includes("B staged 2"), "B");
 
       // Esc reverts: the row is back and no revision was written.

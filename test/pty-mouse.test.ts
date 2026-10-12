@@ -72,6 +72,38 @@ function locate(t: Pty, needle: string, from = 0): { x: number; y: number } {
 }
 
 test.skipIf(!supported)(
+  "real PTY: Record clicks work beside a command draft while typed keys stay text",
+  async () => {
+    const t = await launch(100, 30, {});
+    try {
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
+      await t.type("\u0010", "enter play mode");
+      await t.type("/style r", "draft a command while playing keys");
+      expect(t.vt.text()).not.toContain("rec armed");
+      expect(t.vt.text()).toContain("/style r");
+
+      const record = locate(t, "Record");
+      await t.type(click(record.x, record.y), "click Record with draft intact");
+      await t.until(() => t.vt.text().includes("rec armed"), "armed by click");
+      expect(t.vt.text()).toContain("/style r");
+
+      // A literal r must still edit the draft instead of toggling recording.
+      await t.type("r", "type r into the existing draft");
+      expect(t.vt.text()).toContain("/style rr");
+      expect(t.vt.text()).toContain("rec armed");
+      const armed = locate(t, "Record");
+      await t.type(click(armed.x, armed.y), "click Record to disarm");
+      expect(t.vt.text()).not.toContain("rec armed");
+      expect(t.vt.text()).toContain("/style rr");
+    } finally {
+      t.terminal.write("\u0003");
+      await t.proc.exited;
+    }
+  },
+  20_000,
+);
+
+test.skipIf(!supported)(
   "real PTY: a fader drawer driven by the mouse; mouse off after exit",
   async () => {
     const t = await launch(100, 30, {});

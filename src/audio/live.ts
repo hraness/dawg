@@ -32,6 +32,7 @@ import { resolveString } from "../../core/strings.ts";
 import { singTrack } from "../../core/sing.ts";
 import { warmGlottal } from "./dsp/glottal.ts";
 import { withSingHorizon } from "./sing/engine.ts";
+import { LiveSampleTransfer } from "./live-samples.ts";
 
 /** A rendered live note: interleaved stereo 16-bit PCM. */
 export type LiveNotePcm = Readonly<{
@@ -78,15 +79,22 @@ export type LiveNoteRequest = Readonly<{
   tick?: number;
   /** Render the whole note even through a guitar rig (the background pass). */
   full?: boolean;
+  /**
+   * Interactive key path: render a bounded prefix, including short notes'
+   * effect tails. The full pass follows off-thread with the same request.
+   */
+  firstWindow?: boolean;
   /** An organ note's clock tick from its first window (`LiveNotePcm.clock`). */
   clock?: number;
 }>;
 
 /**
- * A guitar rig (stomp, head, cab) is oversampled and costs 15-25 ms per
- * track-second, so a held note through one first renders only this window,
- * at render quality, and the rest follows in the background. Every rig stage
- * is causal, so the window is the exact prefix of the full note.
+ * Interactive keys first render only this window, at render quality; the
+ * rest follows in the background. This also bounds short taps with long
+ * effect tails. The render includes another 250 ms for non-causal effects'
+ * lookahead, so the delivered window is the exact prefix of the full note.
+ * Ring-out engines retain a whole render: releasing their key deliberately
+ * leaves their decay sounding, after the ordinary worker swap is canceled.
  */
 export const LIVE_RIG_WINDOW_SECONDS = 0.75;
 
@@ -200,6 +208,10 @@ export class LiveSynth {
       score.ticksPerBeat,
       this.sampleRate,
       samplerDigest(track, request.samples),
+      // Loaded tables and reverb impulses can change without a score edit.
+      // Both the local prefix and worker full pass use this same identity.
+      request.samples?.wavetables?.get(track.id)?.id ?? null,
+      request.samples?.irs?.get(track.id)?.sha256 ?? null,
       // Assets a 0.6 engine reads (a granular sample source).
       ...engineDigest(track, request.samples),
       // The song tuning and key (the default tuning root) retune live notes.
@@ -255,13 +267,15 @@ export class LiveSynth {
     // Organs too: wheels, rotors and drive cost 4-8 ms per note-second.
     const windowed =
       request.full !== true &&
-      (hasRig(track) ||
-        organTick !== undefined ||
-        bowedTrack(track) ||
-        hasFormant(track) ||
-        singTrack(track) ||
-        patchTrack(track)) &&
-      seconds > LIVE_RIG_WINDOW_SECONDS &&
+      ((request.firstWindow === true &&
+        liveEngine?.ringOut?.(track) !== true) ||
+        ((hasRig(track) ||
+          organTick !== undefined ||
+          bowedTrack(track) ||
+          hasFormant(track) ||
+          singTrack(track) ||
+          patchTrack(track)) &&
+          seconds > LIVE_RIG_WINDOW_SECONDS)) &&
       !this.cache.has(key);
     if (windowed) {
       const first = this.cache.get(`${key}#window`);
@@ -544,7 +558,7 @@ function audibleFrames(pcm: Int16Array): number {
 }
 
 /**
- * Renders whole guitar-rig notes on a worker (`live-worker.ts`), in request
+ * Renders whole live notes on a worker (`live-worker.ts`), in request
  * order. When a worker cannot start, `full` falls back to rendering on the
  * calling thread in a later tick, as before.
  */
@@ -552,6 +566,7 @@ export class LiveFullRenderer {
   private worker: Bun.Worker | undefined;
   private broken = false;
   private nextId = 1;
+  private readonly samples = new LiveSampleTransfer();
   private readonly pending = new Map<
     number,
     (pcm: LiveNotePcm | undefined) => void
@@ -583,7 +598,7 @@ export class LiveFullRenderer {
         seconds: request.seconds,
         ...(request.tick === undefined ? {} : { tick: request.tick }),
         ...(request.clock === undefined ? {} : { clock: request.clock }),
-        ...(request.samples ? { samples: request.samples } : {}),
+        ...this.samples.forTrack(request.samples, request.trackId),
       };
       try {
         worker.postMessage(message);

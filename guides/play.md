@@ -27,7 +27,8 @@ or on a kit its drum (kick on `a`, snare on `s`), lit while it sounds.
 
 - `a s d f g h j k l` white keys · `w e t y u o p` black keys
 - `z` `x` octave · `c` `v` velocity · Shift + note sustains · Tab latch
-- `r` record · `R` replace · Space play · `m` click · `q` chord mode
+- `r` record · `R` replace · Space play · `m` click
+- `q` auto → manual → notes · `i` scale degrees or chromatic
 
 ## Next
 

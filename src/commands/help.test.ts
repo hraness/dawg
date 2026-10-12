@@ -16,6 +16,7 @@ import {
   helpTitle,
 } from "./help.ts";
 import { KEYS, type KeySection } from "../../tui/grammar.ts";
+import { displayWidth } from "../../tui/text.ts";
 import { createScore } from "../../core/score.ts";
 import { commandParses } from "./parses.ts";
 import {
@@ -122,6 +123,19 @@ describe("help reference", () => {
     expect(headings[HELP_SECTIONS.length]).toStartWith("── keys");
     expect(lines.every((line) => line.length <= 72)).toBe(true);
     expect(lines.some((line) => line.startsWith("pan <-1..1>"))).toBe(true);
+  });
+
+  test("narrow help wraps every command, description and key without losing text", () => {
+    const content = (lines: readonly string[]) =>
+      lines.join("").replace(/\s/gu, "");
+    for (const topic of [undefined, "all", "keys", "voice", "panes", "scale"]) {
+      const full = content(helpTopicLines(topic, 10_000)!);
+      for (const width of [24, 40, 72]) {
+        const wrapped = helpTopicLines(topic, width)!;
+        expect(wrapped.every((line) => displayWidth(line) <= width)).toBe(true);
+        expect(content(wrapped)).toBe(full);
+      }
+    }
   });
 
   test("the CLI block lists the same commands without the key table", () => {

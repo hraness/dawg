@@ -9,7 +9,10 @@
  * is any id that is some row's parent; the rest are leaves.
  */
 
+import { GROOVE_STARTERS } from "./starters.ts";
+
 export type StyleFamilyKey =
+  | "grooves"
   | "art"
   | "roots"
   | "rock"
@@ -35,14 +38,15 @@ export const STYLE_FAMILIES: readonly Readonly<{
   title: string;
   roots: readonly string[];
 }>[] = Object.freeze([
+  { key: "grooves", title: "Grooves", roots: ["grooves"] },
   {
     key: "art",
-    title: "Art, experimental, screen and functional",
+    title: "Art & screen",
     roots: ["western-art", "experimental", "screen-stage", "childrens"],
   },
   {
     key: "roots",
-    title: "Jazz, blues, soul, gospel, country and North American folk",
+    title: "Jazz & roots",
     roots: [
       "jazz",
       "blues",
@@ -52,36 +56,38 @@ export const STYLE_FAMILIES: readonly Readonly<{
       "north-american-folk",
     ],
   },
-  { key: "rock", title: "Rock, punk and metal", roots: ["rock-family"] },
+  { key: "rock", title: "Rock & metal", roots: ["rock-family"] },
   {
     key: "pop",
-    title: "Pop, hip hop and breakbeat bass",
+    title: "Pop & beats",
     roots: ["pop", "hip-hop", "breakbeat-family"],
   },
   {
     key: "electronic",
-    title: "Electronic dance, ambient and experimental electronic",
+    title: "Electronic",
     roots: ["electronic"],
   },
   {
     key: "americas",
-    title: "Caribbean and Latin America",
+    title: "Latin & Caribbean",
     roots: ["caribbean", "latin-america"],
   },
   {
     key: "africa-mena-southasia",
-    title: "Sub-Saharan Africa, Middle East and North Africa, South Asia",
+    title: "Africa to India",
     roots: ["africa", "mena", "south-asia"],
   },
   {
     key: "europe-asia-pacific",
-    title: "European folk, East and Southeast Asia, Oceania",
+    title: "Folk & Pacific",
     roots: ["europe-folk", "east-asia", "southeast-asia", "oceania"],
   },
 ]);
 
 // prettier-ignore
 export const TAXONOMY_ROWS: readonly TaxonomyRow[] = Object.freeze([
+  ["grooves", null, "grooves", "Grooves", ["starters"], [], null, null],
+  ...GROOVE_STARTERS.map((entry): TaxonomyRow => [entry.id, "grooves", "grooves", entry.title, [], [], null, null]),
   ["western-art", null, "art", "Western art music", [], [], null, null],
   ["early-music", "western-art", "art", "Medieval and Renaissance", ["Early", "Medieval", "Renaissance"], [], null, null],
   ["baroque", "western-art", "art", "Baroque", [], [], null, null],

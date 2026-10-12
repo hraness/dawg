@@ -24,6 +24,7 @@ import {
   type PresetListKind,
 } from "../commands/preset.ts";
 import type { PickerItem, PickerState } from "../../tui/app.ts";
+import { fuzzyScore } from "../../tui/search.ts";
 
 export const BROWSER_PICKERS = Object.freeze(["presets", "preset"]);
 
@@ -87,16 +88,14 @@ export function browserRank(query: string, item: PickerItem): number {
     const preset = presetByName(item.value.slice(7));
     return preset ? presetScore(preset, query) : 0;
   }
-  const text = `${item.label} ${item.detail ?? ""}`.toLowerCase();
   // A category matches its own name strongly, its gist weakly.
   const name = item.value.replace(/^\/presets\s+/, "");
-  if (name.startsWith(query.trim())) return 90;
-  return query
-    .trim()
-    .split(/\s+/)
-    .every((word) => text.includes(word))
-    ? 5
-    : 0;
+  // Keep category matches below an exact preset (100), while sharing
+  // subsequences, word order and normalization with every other menu.
+  return Math.min(
+    90,
+    fuzzyScore(query, name, `${item.label} ${item.detail ?? ""}`) / 60,
+  );
 }
 
 /** The first picker: favorites, similar, then every category. */

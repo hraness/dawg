@@ -2,8 +2,8 @@
  * The `style` prompt command: browse the style taxonomy (core/styles) and
  * generate a song from a style card.
  *
- *   style                          the families and their roots
- *   style list [id|family]         children of a node (or a family's roots)
+ *   style                          the curated groove shelf
+ *   style list [all|id|family]     full catalog, a node or a family's roots
  *   style search <words>           ranked name, alias and region search
  *   style info <id>                one style: path, meter, tempo, pitch, harmony
  *   style <id> [bars] [seed]       generate the song from a style (replaces it)
@@ -37,6 +37,11 @@ import {
   type GeneratedStyle,
 } from "../../core/styles/generate.ts";
 import { STYLE_FAMILIES } from "../../core/styles/taxonomy.ts";
+import {
+  accompanimentStyle,
+  GROOVE_GROUPS,
+  GROOVE_STARTERS,
+} from "../../core/styles/starters.ts";
 import type { ResolvedStyle, StyleId } from "../../core/styles/schema.ts";
 import { validateGenerated } from "../../core/styles/validate.ts";
 
@@ -177,6 +182,21 @@ function nodeLabel(node: StyleNode): string {
 }
 
 export function styleFamiliesText(): string {
+  return [
+    `grooves · ${GROOVE_STARTERS.length} reusable starters · drums first, room for your melody`,
+    ...GROOVE_GROUPS.map(
+      (group) =>
+        `${group.title}: ${GROOVE_STARTERS.filter(
+          (entry) => entry.group === group.id,
+        )
+          .map((entry) => entry.id)
+          .join(" ")}`,
+    ),
+    "style <id> [bars] [seed] · style info <id> · style list all for the full catalog",
+  ].join("\n");
+}
+
+function allStyleFamiliesText(): string {
   const lines = STYLE_FAMILIES.map(
     (family) =>
       `${family.key}: ${family.roots.map((id) => nodeLabel(STYLE_TREE.get(id)!)).join(" ")}`,
@@ -189,6 +209,22 @@ export function styleFamiliesText(): string {
 }
 
 export function styleListText(text: string): StyleResult {
+  if (["grooves", "starters"].includes(text.trim().toLowerCase()))
+    return { ok: true, message: styleFamiliesText() };
+  if (["all", "catalog"].includes(text.trim().toLowerCase()))
+    return { ok: true, message: allStyleFamiliesText() };
+  const group = GROOVE_GROUPS.find(
+    (entry) => entry.id === text.trim().toLowerCase(),
+  );
+  if (group)
+    return {
+      ok: true,
+      message: `${group.title}: ${GROOVE_STARTERS.filter(
+        (entry) => entry.group === group.id,
+      )
+        .map((entry) => entry.id)
+        .join(" ")}`,
+    };
   const family = STYLE_FAMILIES.find((entry) => entry.key === text.trim());
   if (family)
     return {
@@ -236,6 +272,7 @@ function weightedText<T>(
 
 /** The facts of a resolved style, one per line, for /style info and tools. */
 export function describeStyle(style: ResolvedStyle): string[] {
+  style = accompanimentStyle(style);
   const node = STYLE_TREE.get(style.id);
   const roles = Object.entries(style.texture.roles)
     .filter(([, role]) => role)
@@ -271,6 +308,11 @@ export function styleInfoText(text: string): StyleResult {
   const id = findStyle(text);
   if (!id) return { ok: false, message: unknown(text) };
   const lines = describeStyle(resolveStyle(id));
+  const starter = GROOVE_STARTERS.find((entry) => entry.id === id);
+  if (starter)
+    lines.push(
+      "loop · each part has its own track · mute or replace parts to build your own song",
+    );
   const node = STYLE_TREE.get(id)!;
   if (!node.leaf) lines.push(`children ${node.children.join(" ")}`);
   if (!hasCard(id) && STYLE_CARDS.size > 0)
@@ -299,10 +341,17 @@ export function generateFromCommand(
     );
   if (command.seed !== undefined && command.seed > STYLE_LIMITS.maxSeed)
     throw new StyleError(`style · seed takes 0..${STYLE_LIMITS.maxSeed}`);
-  return generateStyle(style, {
+  const options = {
     ...(command.bars !== undefined ? { bars: command.bars } : {}),
     ...(command.seed !== undefined ? { seed: command.seed } : {}),
-  });
+  };
+  const generated = generateStyle(accompanimentStyle(style), options);
+  // A few historical solo styles retain optional accompaniment in their
+  // card, or a form maps every section exclusively to the melody. Keep
+  // those legacy ids usable rather than returning a silent score.
+  return generated.data.notes?.length
+    ? generated
+    : generateStyle(style, options);
 }
 
 /** One line about a generated song. */

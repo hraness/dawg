@@ -234,13 +234,13 @@ export function arrangeNodes(context: MenuContext): MenuNode[] {
     help: "loop bars, copy, move, clear, paste or reverse them, insert or remove bars",
     build: rangeNodes,
   });
-  // The style browser: a whole song from a style (src/tui/style-menu.ts).
+  // Curated grooves and the full style catalog (src/tui/style-menu.ts).
   nodes.push({
     kind: "menu",
     id: "style",
     label: "style",
     detail: styleMenuDetail(context),
-    help: "make a whole song from a style: the style tree, find and blend",
+    help: "16 reusable grooves with independent parts · find, blend, or open the full style catalog",
     build: styleMenuNodes,
   });
   return nodes;

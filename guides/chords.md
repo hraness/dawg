@@ -24,8 +24,8 @@ progression by name, or play chords live with one finger.
 
 ## Keys
 
-In play mode (Ctrl-P), `q` turns on chord mode: each key plays a chord
-in the key.
+In play mode (Ctrl-P), `q` cycles auto → manual → notes. Auto plays
+a chord per key; notes turns chords off. `i` changes the scale layout.
 
 - `1 2 3 4` dim min maj sus · `5 6 7 8` 6, m7, M7, 9
 - `- =` voicing · `9` perform · `b` bass · `n` next chord · `0` clear

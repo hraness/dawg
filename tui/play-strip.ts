@@ -50,6 +50,8 @@ export type PlayHeaderView = Readonly<{
   grid: string;
   /** Chord mode: `AUTO C major · Dm (ii) → G · arp-up`, empty when off. */
   chords?: string | undefined;
+  chordMode?: "off" | "auto" | "manual" | undefined;
+  degrees?: boolean | undefined;
   /** Short status (`octave C2`, `no audio`). */
   status?: string | undefined;
   keys: readonly PlayStripKey[];
