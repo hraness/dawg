@@ -1,25 +1,63 @@
 # dawg
 
-Make music in your terminal. Press Ctrl-P and your keyboard is a piano;
-type `knobs` and four colored knobs shape the sound. When you want more,
-dawg opens up into a modular patcher (`/patch`), an agent you can ask in
-plain words, and songs saved as typed TypeScript files you can edit
-anywhere. Easy on day one, deep when you want it.
+dawg is a terminal music workstation. Open several windows on one local
+session, keep a track in each, and ask your agent to shape the next loop
+while notes stream through the piano roll.
 
-Everything runs on your machine: the song lives in `.dawg` in your
-folder, there is no account, and the commands work offline. The agent
-is optional.
+Notes stream down the piano roll toward the hit line as they play. A prompt
+at the bottom takes short commands (`tempo 120`, `reverb 0.4`, `loop 5-6`),
+each one its own undo step, and anything else goes to an agent that types
+the commands it runs so you learn them. Sessions stay on your machine in
+`.dawg/` in your folder, the song can be saved as TypeScript files you can
+read, and playback needs no account. The agent is optional.
+
+```text
+ ▶ 121 BPM · 2.3 · bass        Bb dorian · opus-5.5 · gateway · rev 1 · ○ local
+  Ⅱ Pause Space   ‹ Scene ^←   Scene › ^→   ☰ Menu ^K   ♪ Keys ^P   ? Help
+ ▏build         ▼                       ▏drop
+                     ┃       ┃    ┃         ┃      ┃ ┃┃     ┃
+   ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ▒ ┈ ┈ ┈ ┃ ┈ ┈▒┈ ┈ ┈ ┈ ┈┃┈ ┈ ┈ ┃ ┃┃┈ ┈ ┈┃┃ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈
+                     ┃     ╻ ▓              ┃      ┃ ┃┃     ┃▒
+   ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ▒ ┈ ┈ ┃ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈┃┈ ┈ ┈ ┃ ┃▒┈ ┈ ┈┃┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈
+                           ┃                ┃      ┃ ┃▒     ┃
+   ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ▒ ┈ ┈ ▒ ┃ ┈ ┈▒┈ ┈ ┈ ┈ ┈┃┈ ┈ ┈ ┃ ┃┃┈ ┈ ┈┃┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈
+                             ┃              ┃      ┃ ┃┃     ┃
+                     ┃  ┃    ▓              ┃      ┃ ┃┃     ┃
+ 3 ──────────────────▒──┃───────────────────▒──────▒─▒┃─────▒───────────────────
+                        ▒                  ┃    ┃  ┃  ▒   ┃
+   ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ▒ ┈ ┈ ┈ ┈ ┈ ┈▒┈ ┈ ┈ ┈ ┃ ┈ ┈┃┈ ┃ ┈┃┈ ┈┃┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈
+                        ▓                  ┃    ┃  ┃  ▒   ┃
+ ▶ ──────────────────▒◆─━──────────────────▒────▒──▒──▒───▒─────────────────────
+   ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈
+
+   ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈▫┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈
+                          C2          C3          C4
+ ✓ renamed · night drive   ✓ deep-house · Bb dorian · 121 BPM · 8 bars · 4 tra…
+╭─ NOW ────────────────────────────────────────────────────────────────────────╮
+│ ›  describe a change — “double the melody an octave up”                      │
+╰─────────────────── night drive · $0 session · $0 today · opus-5.5 · gateway ─╯
+```
 
 Docs: [dawg.sh/docs](https://dawg.sh/docs) (the same guides as `/guide`
-in the app) · [dawg vs Strudel](https://dawg.sh/vs/strudel)
+in the app) · [dawg vs Strudel](https://dawg.sh/vs/strudel) ·
+[changelog](./CHANGELOG.md)
 
 ## Install
 
-dawg needs [Bun](https://bun.sh) 1.3.14 or newer.
+dawg runs on macOS and Linux and needs [Bun](https://bun.sh) 1.3.14 or
+newer; the script installs Bun if it is missing, downloads the latest
+release from GitHub, checks it against the release's `SHA256SUMS` and
+installs it with `bun add -g`. Read [the script](https://dawg.sh/install)
+before you pipe it.
 
 ```sh
 curl -fsSL https://dawg.sh/install | sh
 ```
+
+Sound plays through dawg's native audio sink, prebuilt for arm64 and x64.
+Where it cannot load, dawg falls back to `ffplay` (from FFmpeg), SoX `play`
+or, on a Mac, `afplay`; `dawg doctor` says which one it uses. Other ways
+to install are [below](#other-ways-to-install).
 
 ## Start a song
 
@@ -28,7 +66,8 @@ mkdir my-song && cd my-song
 dawg
 ```
 
-Then try:
+The first launch creates `.dawg/` in the folder (add it to `.gitignore`)
+and later launches pick the same session up again. Then try:
 
 ```text
 track drums
@@ -38,7 +77,9 @@ add C2 at 0 for 1
 tempo 120
 ```
 
-Space on an empty prompt plays and pauses; Ctrl-Z undoes any step.
+Each line lands as one revision and the status line says what changed
+(`✓ +1 bass note · rev 3→4 · ^z undo`). Space on an empty prompt plays and
+pauses; Ctrl-Z undoes any step.
 
 For a ready groove, type `style` or open `/menu style`. Sixteen original
 starters cover Machines, Breaks, Pocket and Cycles, with drums first and
@@ -60,6 +101,11 @@ playable slices with `sample chop hold-on 4`. The same library is available
 to the agent. See [Demo songs](./guides/demos.md) and
 [Sample library](./guides/sample-library.md).
 
+To ask the agent, give it a model once with `dawg model key`: a key for
+Vercel AI Gateway or OpenRouter, or a Claude or ChatGPT/Codex subscription
+through [xcb](https://xcb.sh). Agent turns are billed by that account;
+everything else works offline.
+
 ## Four ways to do anything
 
 Every guide shows the same four ways, so you can pick the one you like:
@@ -78,28 +124,28 @@ and its own undo, and they share one transport (`guide panes`).
 
 ## Other ways to install
 
-Install the release tarball from GitHub directly:
-
-```sh
-bun add -g https://github.com/hraness/dawg/releases/download/v0.10.0/hraness-dawg-0.10.0.tgz
-dawg --help
-```
-
-Each [release](https://github.com/hraness/dawg/releases) is immutable and ships the tarball, a `SHA256SUMS` file and a build provenance attestation. To check a download before installing it:
-
-```sh
-gh release download v0.10.0 --repo hraness/dawg
-shasum -a 256 -c SHA256SUMS
-gh attestation verify hraness-dawg-0.10.0.tgz --repo hraness/dawg
-bun add -g "$PWD/hraness-dawg-0.10.0.tgz"
-```
-
-dawg is also on npm as [`@hraness/dawg`](https://www.npmjs.com/package/@hraness/dawg):
+dawg is on npm as [`@hraness/dawg`](https://www.npmjs.com/package/@hraness/dawg):
 
 ```sh
 npm i -g @hraness/dawg
 # or
 bun add -g @hraness/dawg
+```
+
+Or install the release tarball from GitHub directly:
+
+```sh
+bun add -g https://github.com/hraness/dawg/releases/download/v0.12.0/hraness-dawg-0.12.0.tgz
+dawg --help
+```
+
+Each [release](https://github.com/hraness/dawg/releases) is immutable and ships the tarball, a `SHA256SUMS` file and a GitHub build attestation. To check a download before installing it:
+
+```sh
+gh release download v0.12.0 --repo hraness/dawg
+shasum -a 256 -c SHA256SUMS
+gh attestation verify hraness-dawg-0.12.0.tgz --repo hraness/dawg
+bun add -g "$PWD/hraness-dawg-0.12.0.tgz"
 ```
 
 To run from source instead:
@@ -209,36 +255,9 @@ A NOW send runs ahead of work waiting as NEXT. Bracketed paste preserves multili
 
 ## Patches
 
-A patch is a small modular synth or effect: oscillators, filters, envelopes and math, plus dawg's own engines and effects as nodes, joined by cables. `patch load acid-bass` puts a built-in on the focused track and `/patch` opens it (Ctrl-K › Sound › patch):
+A patch is a small modular synth or effect: oscillators, filters, envelopes and math, plus dawg's own engines and effects as nodes, joined by cables. `patch load acid-bass` puts a built-in on the focused track and `/patch` opens it (Ctrl-K › Sound › patch); the screen shows the nodes in signal order, the selected node's ports and the cable matrix.
 
-```text
- ⏸ 121 BPM · 1.1 · bass        Bb dorian · opus-5.5 · gateway · rev 2 · ○ local
-  ▶ Play Space   ‹ Scene ^←   Scene › ^→   ☰ Menu ^K   ♪ Keys ^P   ? Help
- patch bass ▸ acid-bass (instrument · 7 nodes · 10 cables · 1 voice)
- NODES                        │ vcf  svf · voice
- voice    ◆                   │▸mode    lp
- tone     ◆ osc saw           │ in      ← tone.out
- env      ◆ adsr              │ cutoff  ← envamt.out
- envamt   ◆ scale lin         │ q       ← ·
- amp      ◆ adsr              │ out     → vca.in
-▸vcf      ◆ svf lp            │
-────────────────────────────────────────────────────────────────────────────────
- CABLES     vcf.in vcf.cutoff vcf.q vca.in
- tone.out   ~      ·          ·     ·
- envamt.out ·      ▪          ·     ·
- vcf.out    ·      ·          ·     ~
- Cutoff            ▪
- Reso                         ▪
- ◆ voice ● global ~ audio ▪ control ♪ notes Σ voice sum ✕ dropped
- ● Cutoff 600 ███── ▲ Reso 0.7 █████── ■ Env 2400 ███──── ◆ Drive 2.5 ██────
- tab pane · enter edit · a add · w wire · x remove · m knob · ? keys
- ✓ patch bass ▸ acid-bass · 7 nodes · 10 cables · ? keys · esc home
-╭─ NOW ────────────────────────────────────────────────────────────────────────╮
-│ ›  describe a change — “double the melody an octave up”                      │
-╰─────────────────── night drive · $0 session · $0 today · opus-5.5 · gateway ─╯
-```
-
-Nodes run in signal order (`◆` per voice, `●` once), the selected node's ports sit beside them, and the cable matrix shows outputs down and inputs across. `a` adds a node, `w` wires, `x` removes, `m` maps a parameter to a knob, and each key runs a typed `patch …` command that echoes on the prompt (`patch add svf as vcf`, `patch wire tone.out vcf.in`, `patch macro …`). The first four macros are the four knobs. Eight patches ship built in: `acid-bass`, `supersaw-pad`, `fm-bell`, `pluck-ks` and `wobble` instruments, and `sidechain-pump`, `wide-crush` and `formant-vox` effects (`--fx <name>` edits an effect patch). `patch save <name> --user` keeps one in your library, `patch load github:<user>/<repo>/<name>` fetches one pinned by hash, and `patch show` prints the lines that rebuild a patch. The agent edits patches with the `patch_edit` tool, and `song.ts` builds them with `patch()` and Strudel-style signals (`mods: { cutoff: sine.range(300, 2400).slow(4) }`). See **Patches** in [DAWG.md](./DAWG.md#patches) and `/help sound`.
+Nodes run in signal order (`◆` per voice, `●` once). `a` adds a node, `w` wires, `x` removes, `m` maps a parameter to a knob, and each key runs a typed `patch …` command that echoes on the prompt (`patch add svf as vcf`, `patch wire tone.out vcf.in`, `patch macro …`). The first four macros are the four knobs. Eight patches ship built in: `acid-bass`, `supersaw-pad`, `fm-bell`, `pluck-ks` and `wobble` instruments, and `sidechain-pump`, `wide-crush` and `formant-vox` effects (`--fx <name>` edits an effect patch). `patch save <name> --user` keeps one in your library, `patch load github:<user>/<repo>/<name>` fetches one pinned by hash, and `patch show` prints the lines that rebuild a patch. The agent edits patches with the `patch_edit` tool, and `song.ts` builds them with `patch()` and Strudel-style signals (`mods: { cutoff: sine.range(300, 2400).slow(4) }`). See **Patches** in [DAWG.md](./DAWG.md#patches) and `/help sound`.
 
 ## Themes and accessibility
 
@@ -246,7 +265,7 @@ Nodes run in signal order (`◆` per voice, `●` once), the selected node's por
 
 ## Project files
 
-`dawg init` turns the current directory into a project: `song.ts` and one `tracks/<slug>/track.ts` per track, written with a small typed SDK (`import { track, note, hit } from "dawg"`). Edit them in any editor (or let the agent edit them) and every open window applies the change as one revision; edit in the TUI and the affected file is reprinted. `dawg check` typechecks and evaluates the files and exits 1 with `file:line:col` diagnostics. See **Project files and SDK** in [DAWG.md](./DAWG.md).
+`dawg init` turns the current directory into a project: `song.ts` and one `tracks/<slug>/track.ts` per track, written with a small TypeScript SDK (`import { track, note, hit } from "dawg"`). Edit them in any editor (or let the agent edit them) and every open window applies the change as one revision; edit in the TUI and the affected file is reprinted. `dawg check` typechecks and evaluates the files and exits 1 with `file:line:col` diagnostics. See **Project files and SDK** in [DAWG.md](./DAWG.md).
 
 ## Agent and models
 
@@ -267,15 +286,15 @@ Run `dawg model key` (or just `dawg` the first time) to give the agent a model; 
 - `dawg auth status` (also `/auth`; `--check` verifies keys online) lists all four options with detected, active and validated state, plus the installed xcb version and the audio backend. Keys appear only masked (`vck_…abcd`).
 - Keys go to the macOS Keychain (service `dawg`, passed to `security -i` on stdin so a key never appears in a process list) or `~/.config/dawg/credentials.json` (0600, directory 0700). They are never written to `.dawg/`. Environment keys always win.
 - Provider order: `DAWG_PROVIDER`, then the saved choice, then auto (AI Gateway, then OpenRouter, then a ready subscription). `DAWG_AI=0` turns the agent off. The header shows `<model> · <provider>`.
-- Subscriptions need xcb 0.20.0 or newer. An account is usable when xcb reports it `available`; one still in automatic admission (`admission: pending`) works, but its first turn can take up to a minute longer. Accounts whose catalog is missing are refreshed once (`xcb accounts refresh`) during discovery.
+- Subscriptions need xcb 0.20.0 or newer. An account is usable when xcb reports it `available`; an account xcb is still checking works too, but its first turn can take up to a minute longer. Accounts whose catalog is missing are refreshed once (`xcb accounts refresh`) during discovery.
 
 On the gateway and OpenRouter, unrecognized requests go to a streaming, tool-calling agent through the OpenAI-compatible chat API. The default is `opus-5.5` (`anthropic/claude-opus-5.5`); `DAWG_MODEL=<alias|vendor/model>` overrides it, and an unknown value is an error at startup that lists the choices. xcb has no tool calling, so dawg asks for one JSON object of ops per call and runs each op through the same checks; it retries with diagnostics up to 3 calls per turn.
 
-The agent edits the score only through typed tools: `add_notes`, `add_drums`, `remove_notes`, `update_notes`, `set_instrument`, `set_mix` (with solo), `set_effects` (filter, delay and reverb), `set_automation` (volume, pan, filter cutoff and resonance, delay feedback and mix), `extend_loop`, `set_tempo`, `create_track`, `transport` and `explain`. Each call is validated, then committed as its own revision, and the status line shows its result (for example `✓ +8 bass notes`). While the agent is working, Esc cancels and keeps every change accepted so far. Enter sends a NOW message that the agent reads at its next step. A NEXT submit (Ctrl-Q toggles now / next) waits until the turn ends.
+The agent edits the score only through its tools, each with a checked schema: `add_notes`, `add_drums`, `remove_notes`, `update_notes`, `set_instrument`, `set_mix` (with solo), `set_effects` (filter, delay and reverb), `set_automation` (volume, pan, filter cutoff and resonance, delay feedback and mix), `extend_loop`, `set_tempo`, `create_track`, `transport` and `explain`. Each call is validated, then committed as its own revision, and the status line shows its result (for example `✓ +8 bass notes`). While the agent is working, Esc cancels and keeps every change accepted so far. Enter sends a NOW message that the agent reads at its next step. A NEXT submit (Ctrl-Q toggles now / next) waits until the turn ends.
 
 ## Sound and audio
 
-Playback renders deterministic stereo PCM with sine, piano, pluck, bass, saw, square, and triangle voices plus a synthesized kit (pitch-swept sine kick, seeded-noise snare and hats), applies per-track volume, equal-power pan (-1 left to 1 right), low-pass filter, ping-pong delay, and a Freeverb-style reverb, and honors mute and solo. Renders are byte-identical across runs. Live keys play through the native sink (a small Rust library with a real audio callback, about 17 ms key to heard on macOS) when a verified prebuilt ships for the platform; otherwise playback falls back to the stdin players, and `dawg doctor` says which and why. Playback is gapless: one long-lived player (the native sink, else `ffplay`, else SoX `play`) reads a seamless loop as raw PCM on stdin, and edits, tempo changes and seeks swap the buffer in place at the current position without restarting it, so the transport stays aligned with what you hear. On macOS without either, `afplay` replays a re-rendered loop on each edit. `dawg auth status` shows the backend; `DAWG_AUDIO=0` runs headless (see Environment for the other switches). `dawg --export file.track.json` and `dawg --import file.track.json` exchange the bounded `track.loop/v1` document. `dawg render out.wav` writes the current session (or `--session <name|id>`, or `--import file.track.json`) to a WAV through the same renderer, without starting dawgd or playing audio; the same score always produces the same bytes, and the command prints the file's sha256. `/status` prints the session name, revision, composition digest and storage (`shared via dawgd` or `saved locally · no daemon`).
+Playback renders deterministic stereo PCM with sine, piano, pluck, bass, saw, square, and triangle voices plus a synthesized kit (pitch-swept sine kick, seeded-noise snare and hats), applies per-track volume, equal-power pan (-1 left to 1 right), low-pass filter, ping-pong delay, and a Freeverb-style reverb, and honors mute and solo. Renders are byte-identical across runs. Live keys play through the native sink (a small Rust library with a real audio callback, about 17 ms key to heard on macOS) when a verified prebuilt ships for the platform; otherwise playback falls back to the stdin players, and `dawg doctor` says which and why. Playback is gapless: one long-lived player (the native sink, else `ffplay`, else SoX `play`) reads a seamless loop as raw PCM on stdin, and edits, tempo changes and seeks swap the buffer in place at the current position without restarting it, so the transport stays aligned with what you hear. On macOS without either, `afplay` replays a re-rendered loop on each edit. `dawg auth status` shows the backend; `DAWG_AUDIO=0` runs headless (see Environment for the other switches). `dawg --export file.track.json` and `dawg --import file.track.json` exchange the `track.loop/v1` document. `dawg render out.wav` writes the current session (or `--session <name|id>`, or `--import file.track.json`) to a WAV through the same renderer, without starting dawgd or playing audio; the same score always produces the same bytes, and the command prints the file's sha256. `/status` prints the session name, revision, composition digest and storage (`shared via dawgd` or `saved locally · no daemon`).
 
 The agent can download a YouTube reference, split stems, analyze tempo and key, transcribe notes and lyrics, and import samples into `tracks/<slug>/`; `dawg media doctor` shows which local binaries or StemDeck it will use (see [DAWG.md](./DAWG.md#media-tools)).
 
@@ -302,17 +321,17 @@ The agent can download a YouTube reference, split stems, analyze tempo and key, 
 
 ## Architecture
 
-- `core/` defines the bounded immutable `track.loop/v1` score and operations.
+- `core/` defines the immutable `track.loop/v1` score and its operations.
 - `src/session/` provides an append-only local event log, atomic snapshots, and `dawgd`: one local daemon per session (`src/daemon.ts`), started automatically by the first window. Windows connect over a Unix socket, send idempotent intents, and receive accepted changes, presence, and one shared transport clock. If the daemon cannot start, windows fall back to the file-lock path and say so in the status line. `dawg sessions` lists the workspace's sessions with revision, update time, and live daemon.
-- `src/agent/` runs the bounded streaming tool-calling agent: the SSE gateway client, the tool registry, the composition brief, and operation validation.
-- `src/agent/workspace.ts` and `src/web/` give the agent bounded project file access (writes scoped to `song.ts` and the focused `tracks/<slug>/`) and web search and fetch with injectable network.
+- `src/agent/` runs the streaming tool-calling agent: the SSE gateway client, the tool registry, the composition brief, and operation validation.
+- `src/agent/workspace.ts` and `src/web/` give the agent project file access (writes scoped to `song.ts` and the focused `tracks/<slug>/`) and web search and fetch with injectable network.
 - `core/sdk/` and `src/project/` make a directory with `dawg.json` a project of typechecked TypeScript files (`song.ts`, `tracks/<slug>/track.ts`) kept in two-way sync with the session.
 - `src/audio/` owns the transport clock, deterministic instrument-bank WAV rendering, and per-session playback lock. When `dawgd` is running it is the only process that plays audio.
 - `tui/` owns terminal capability detection, semantic colors, animation phases, piano-roll rendering, and the multiline prompt editor.
 
-The runtime is intentionally adapter-shaped. The local synthesizer is deterministic and works without a sound device; native or sample-backed players can replace it behind the same score boundary.
+The runtime is intentionally adapter-shaped. The local synthesizer is deterministic and works without a sound device; native or sample-backed players can replace it behind the same score interface.
 
-See [DAWG.md](./DAWG.md) for the detailed command and interaction contract.
+See [DAWG.md](./DAWG.md) for the full command and interaction reference.
 
 ## Development
 
@@ -325,8 +344,8 @@ bun run check
 
 ## Releasing
 
-Bump `version` in `package.json` and add its section to `CHANGELOG.md` in a pull request, then merge it. When Check passes on `main`, the annotated `v<version>` tag, the immutable GitHub Release (tarball, `SHA256SUMS` and a provenance attestation) and the npm publish of `@hraness/dawg` follow automatically. See [docs/publishing.md](./docs/publishing.md).
+Bump `version` in `package.json` and add its section to `CHANGELOG.md` in a pull request, then merge it. Once the merge passes on `main`, the annotated `v<version>` tag, the immutable GitHub Release (tarball, `SHA256SUMS` and a build attestation) and the npm publish of `@hraness/dawg` follow automatically. See [docs/publishing.md](./docs/publishing.md).
 
 ## License
 
-dawg is MIT licensed. Contributions should preserve bounded inputs, deterministic score operations, local session safety, and a working terminal fallback when color or animation is unavailable.
+dawg is MIT licensed. Contributions should keep inputs checked, score operations deterministic, local sessions safe, and the terminal working when color or animation is unavailable.

@@ -41,13 +41,13 @@ test("the animated screens keep their frames", () => {
   }
 });
 
-test("the README's patch screen is the committed capture", () => {
+test("the README's highway screen is the committed capture", () => {
   const readme = readFileSync(
     new URL("../../README.md", import.meta.url),
     "utf8",
   );
   const screen = JSON.parse(
-    readFileSync(screenPath("patch"), "utf8"),
+    readFileSync(screenPath("highway"), "utf8"),
   ) as ScreenFile;
   expect(readme).toContain(
     `\`\`\`text\n${screenText(screen).join("\n")}\n\`\`\``,

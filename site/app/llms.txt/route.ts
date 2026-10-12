@@ -31,9 +31,11 @@ export async function GET(): Promise<Response> {
   ].join("\n");
   const body = `# dawg
 
-> ${productMessaging.tagline} ${productMessaging.short}
+> ${productMessaging.tagline} ${productMessaging.short}.
 
-dawg is a free, MIT-licensed, local-first music workstation for the terminal, built on Bun (1.3.14 or newer). You type at a prompt; typed commands such as \`tempo 96\`, \`pattern kick 0 1 2 3\` or \`reverb 0.3\` edit the score directly, and anything else goes to a streaming agent that edits only through typed, validated tools. Every edit is committed as a revision in a shared session log, so undo and redo work from any window. The score scrolls on a piano-roll "highway" above the prompt.
+${productMessaging.long}
+
+dawg is free and MIT licensed, runs on macOS and Linux on Bun (1.3.14 or newer), and needs no account. Typed commands such as \`tempo 96\`, \`pattern kick 0 1 2 3\` or \`reverb 0.3\` edit the score directly; anything else goes to a streaming agent whose every tool call is checked before it commits as its own revision, so undo and redo work from any window. The agent types each command it runs into the prompt so the chat teaches the manual way.
 
 ## Install
 

@@ -189,33 +189,48 @@ a:hover {
   padding-inline: 0.08em;
 }
 
-.dawg-hero__install {
-  min-width: 0;
-  max-width: 34rem;
-}
-
-.dawg-hero__install .dawg-code pre {
-  font-size: clamp(0.78rem, 0.7rem + 0.35vw, 0.95rem);
-  overflow-x: auto;
-}
-
-.dawg-hero__links {
+.dawg-hero__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem 1.25rem;
-  margin: 0.9rem 0 0;
-  font-size: 0.95rem;
+  gap: 0.75rem;
 }
 
-.dawg-hero__links a {
-  font-weight: 600;
+/* Buttons: flat ink rectangles, and the quiet one is a rule around paper. */
+.dawg-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0.5rem 1.25rem;
+  border: 2px solid var(--foreground);
+  background: var(--foreground);
+  color: var(--background);
+  font-weight: 700;
+  text-decoration: none;
 }
 
-.dawg-hero__links a::after {
-  content: " ↓";
+.dawg-button:hover {
+  background: var(--background);
+  color: var(--foreground);
+  text-decoration: none;
 }
 
-.dawg-hero__links span {
+.dawg-button--quiet {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.dawg-button--quiet:hover {
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.dawg-button--quiet::after {
+  content: "\00a0↓";
+}
+
+.dawg-hero__status {
+  margin: -0.5rem 0 0;
+  font: 500 0.85rem/1.4 var(--font-mono);
   color: var(--muted);
 }
 
@@ -322,6 +337,244 @@ kbd {
   margin: 0;
   color: var(--muted);
   font-size: 0.95rem;
+}
+
+/* The highway: the real score as an SVG, in the terminal's own colors. */
+.dawg-section--highway .dawg-section__body {
+  align-self: start;
+}
+
+.dawg-highway {
+  margin: 0;
+  border: var(--dawg-rule-strong);
+  background: var(--dawg-term-bg);
+  color: var(--dawg-term-fg);
+  overflow: hidden;
+}
+
+.dawg-highway svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  font: 500 13px var(--font-mono);
+}
+
+.dawg-highway__bg,
+.dawg-highway__played {
+  fill: var(--dawg-term-bg);
+}
+
+.dawg-highway__roll {
+  transform: translateY(0);
+  animation: dawg-highway-scroll var(--dawg-highway-seconds, 16s) linear
+    infinite;
+}
+
+@keyframes dawg-highway-scroll {
+  from {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(var(--dawg-highway-loop, 1088px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dawg-highway__roll {
+    animation: none;
+    transform: translateY(var(--dawg-highway-still, 170px));
+  }
+}
+
+@media (forced-colors: active) {
+  .dawg-highway {
+    background: Canvas;
+  }
+
+  .dawg-highway__bg,
+  .dawg-highway__played {
+    fill: Canvas;
+  }
+
+  .dawg-highway__note {
+    fill: CanvasText;
+    fill-opacity: 1;
+  }
+
+  .dawg-highway__hit {
+    stroke: CanvasText;
+  }
+
+  .dawg-highway__text,
+  .dawg-highway__text tspan {
+    fill: CanvasText;
+  }
+}
+
+/* How it works: four cells on one strong rule, an arrow between them. */
+.dawg-flow {
+  display: grid;
+  margin: 0 0 2.5rem;
+  padding: 0;
+  list-style: none;
+  border-top: var(--dawg-rule-strong);
+  border-bottom: var(--dawg-rule-strong);
+}
+
+@media (min-width: 60rem) {
+  .dawg-flow {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.dawg-flow__cell {
+  position: relative;
+  min-width: 0;
+  padding: 1.25rem 1.5rem 1.25rem 0;
+  border-bottom: var(--dawg-rule);
+}
+
+@media (min-width: 60rem) {
+  .dawg-flow__cell {
+    padding: 1.25rem 2rem 1.25rem 0;
+    border-bottom: 0;
+  }
+
+  .dawg-flow__cell + .dawg-flow__cell {
+    padding-left: 1.25rem;
+    border-left: var(--dawg-rule);
+  }
+}
+
+.dawg-flow__cell:last-child {
+  border-bottom: 0;
+}
+
+.dawg-flow__chip {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  margin-right: 0.35rem;
+  background: var(--dawg-clip-1);
+  color: var(--dawg-clip-ink);
+}
+
+.dawg-flow__cell[data-clip="2"] .dawg-flow__chip {
+  background: var(--dawg-clip-2);
+}
+
+.dawg-flow__cell[data-clip="3"] .dawg-flow__chip {
+  background: var(--dawg-clip-3);
+}
+
+.dawg-flow__cell[data-clip="4"] .dawg-flow__chip {
+  background: var(--dawg-clip-4);
+}
+
+.dawg-flow__body {
+  margin: 0 0 0.75rem;
+  font-size: 0.98rem;
+}
+
+.dawg-flow__code {
+  display: block;
+  padding: 0.35rem 0.6rem;
+  background: var(--dawg-term-bg);
+  color: var(--dawg-term-fg);
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.dawg-flow__arrow {
+  position: absolute;
+  right: 0.25rem;
+  top: 1.1rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+@media (max-width: 59.99rem) {
+  .dawg-flow__arrow {
+    display: none;
+  }
+}
+
+/* Who it is for: three columns on rules. */
+.dawg-columns {
+  display: grid;
+  gap: 1.5rem;
+}
+
+@media (min-width: 48rem) {
+  .dawg-columns {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 2rem;
+  }
+}
+
+.dawg-columns > div {
+  min-width: 0;
+  padding-top: 1rem;
+  border-top: var(--dawg-rule-strong);
+}
+
+.dawg-columns h3,
+.dawg-example h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.dawg-columns p,
+.dawg-example p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.dawg-prose-block {
+  max-width: 44rem;
+}
+
+.dawg-prose-block p {
+  margin: 0 0 1rem;
+  font-size: 1.08rem;
+  line-height: 1.55;
+}
+
+.dawg-prose-block p:last-child {
+  margin-bottom: 0;
+}
+
+.dawg-section--lead {
+  padding-bottom: 0;
+  border-top: var(--dawg-rule-strong);
+}
+
+.dawg-section--lead + .dawg-pillar {
+  border-top: 0;
+}
+
+/* The real example beside the flow: typed commands and the same song as code. */
+.dawg-example {
+  display: grid;
+  gap: 1.5rem;
+}
+
+@media (min-width: 60rem) {
+  .dawg-example {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2rem;
+  }
+}
+
+.dawg-example > div {
+  min-width: 0;
+}
+
+.dawg-example p {
+  margin-bottom: 0.75rem;
 }
 
 /* Install tabs from the design kit, flattened. */
@@ -434,6 +687,10 @@ kbd {
 
 .dawg-section__head > p:not(.dawg-eyebrow) {
   color: var(--muted);
+}
+
+.dawg-section__head > .dawg-section__title + p {
+  margin-top: 1.25rem;
 }
 
 @media (min-width: 60rem) {
