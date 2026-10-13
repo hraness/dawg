@@ -6,7 +6,7 @@ colors:
   surface: "studio --surface: #ffffff light, #181818 dark"
   ink: "studio --foreground: #0f0f0f light, #f2f2ee dark"
   secondary-ink: "palette --muted"
-  action: "studio --primary: ink-colored buttons, inverse text"
+  action: "the portfolio ingot: graphite with pale text in light, silver with dark text in dark (the one gradient and shadow on the site)"
   terminal-bg: "rgb(24 28 37), the TUI default theme panel, in both modes"
   terminal-fg: "rgb(225 231 239)"
   clip-colors: "#eb6f92, #f6c177, #9ccfd8, #c4a7e7 (track accents, in order), always with #0f0f0f ink"
@@ -57,7 +57,7 @@ dawg.sh uses the shared Hraness packages: `@hraness/design-kit` (palette system,
 
 ## Principles
 
-- **Flat.** No shadows, gradients, glows, blur on content or rounded corners.
+- **Flat.** No shadows, gradients, glows, blur on content or rounded corners, with one exception: the primary button is the portfolio's shared ingot (`.dawg-button`, the header action), vendored in `app/globals.css` with its hairline edge, soft shadow and 0.625rem radius.
 - **High contrast.** Near-black ink on near-white paper, and the reverse in dark mode.
 - **Grid first.** Full-strength 2px rules separate sections; 1px rules divide cells inside them. Sections put a sticky label column (4 of 12) beside the content (8 of 12) on wide screens.
 - **Bold type.** Oversized display headings with tight tracking, in sentence case. Small uppercase mono labels carry structure.
@@ -72,14 +72,14 @@ dawg.sh uses the shared Hraness packages: `@hraness/design-kit` (palette system,
 
 ## Layout
 
-- Home: hero (eyebrow, heading, one line and the install command on the left, the animated hero screen on the right; stacked below 72rem), four pillars (one per row, copy beside an animated screen, sides alternating, a clip-colored number chip each), the "goes deep" list with a code sample, install, questions.
+- Home: hero (eyebrow, heading, the registry summary, the ingot and one text link on the left, the animated hero screen on the right; stacked below 72rem), then seven ruled sections, each an eyebrow, a heading, one sentence and one object: the highway, "Four ways in" (the four pillars, one sentence beside an animated screen each, sides alternating, a clip-colored number chip each), the four-cell flow, one TypeScript code block, the "goes deep" list of one-liners, install (one code block and a link line), questions. No section has two paragraphs; detail lives in the docs.
 - Docs: the install page plus the shared guides from `../guides`, in the same tree as the TUI's guide browser. The tree is a sticky rail on wide screens and a disclosure menu on phones. The current page is an inverse block.
 - Changelog: rendered from the repository's `CHANGELOG.md` at build time.
 
 ## Components
 
 - **Animated screen.** `Screen` with `animate` renders the committed still as text, then `ScreenPlayer` fetches `/screens/<id>.json` (from `docs/screens/frames`, the frames dawg drew while `bun run screens` captured it) and swaps row text in place, so nothing reflows. It starts when the screen scrolls into view, pauses offscreen and in hidden tabs, holds the last frame before looping, and stays on the still under reduced motion. `site/tests/screen-frames.test.ts` fails if the home page's screens lose their frames.
-- **Pillar.** A verb heading, two short paragraphs and an animated screen; the number chip takes the pillar's clip color.
+- **Pillar.** A verb heading, one sentence and an animated screen inside the "Four ways in" section; the number chip takes the pillar's clip color.
 - **Goes deep.** One-line items on rules, two across from 40rem.
 - **Install tabs.** The design kit's `PlatformInstall`, flattened, with analytics on copy.
 - **Doc mark.** A guide heading or note starts with the TUI's mark (✦ Ask, › Type it yourself, ≡ Menu, ⌃ Keys, → Next, ✓ Tip, ! Careful) in a small chip: clip color with ink for Ask, Menu, Keys and Careful, inverse ink for Type and Tip, outline otherwise. The symbol carries the meaning; the table lives in `app/doc-marks.ts` and must match `guides/index.ts`.
@@ -91,7 +91,7 @@ dawg.sh uses the shared Hraness packages: `@hraness/design-kit` (palette system,
 
 - Do use real TUI output for any picture of the product. Re-capture with `bun run screens`.
 - Do keep the terminal dark in light mode.
-- Don't round corners or add shadows, gradients, waveforms, equalizer bars or stock music imagery.
+- Don't round corners or add shadows, gradients, waveforms, equalizer bars or stock music imagery; the ingot button is the one shared exception.
 - Don't introduce colors beyond the palette tokens, terminal colors and four clip colors.
 - Don't use third-party brand assets, typefaces or wording.
 
