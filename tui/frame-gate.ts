@@ -11,17 +11,20 @@
  */
 export const IDLE_HEARTBEAT_MS = 500;
 /**
- * The shortest gap between two built frames in the interactive loop: a
- * burst of forced frames (keystrokes, edits landing, agent events) is
- * coalesced to at most about 30 a second. A deferred frame stays dirty, so
- * the next 33 ms timer tick builds it; nothing is dropped.
+ * The shortest gap between ordinary animation frames in the interactive
+ * loop: playback is coalesced to at most about 30 frames a second.
+ * Interactive frames use a shorter bounded gap and an explicit due timer,
+ * so input does not wait for the next animation tick.
  */
 export const MIN_FRAME_GAP_MS = 33;
+/** Coalesce fast input bursts without adding a full animation frame of delay. */
+export const INTERACTIVE_FRAME_GAP_MS = 8;
 
 export class FrameGate {
   private dirty = true;
   private lastBuiltMs = Number.NEGATIVE_INFINITY;
   private lastKeys: readonly unknown[] = [];
+  private deferredUntilMs: number | undefined;
   /** Frames built and ticks skipped, for tests and diagnostics. */
   built = 0;
   skipped = 0;
@@ -29,11 +32,19 @@ export class FrameGate {
   constructor(
     readonly heartbeatMs = IDLE_HEARTBEAT_MS,
     readonly minGapMs = 0,
+    readonly interactiveGapMs = minGapMs,
   ) {}
 
   /** Something visible changed; the next tick builds. */
   markDirty(): void {
     this.dirty = true;
+  }
+
+  /** Milliseconds until a deferred frame is due; absent when none is pending. */
+  deferredDelayMs(nowMs: number): number | undefined {
+    return this.deferredUntilMs === undefined
+      ? undefined
+      : Math.max(0, Math.ceil(this.deferredUntilMs - nowMs));
   }
 
   /**
@@ -61,13 +72,20 @@ export class FrameGate {
       this.skipped += 1;
       return false;
     }
-    if (options.nowMs - this.lastBuiltMs < this.minGapMs) {
-      // Too soon after the last frame: build on the next tick instead.
+    const gap = options.force === true ? this.interactiveGapMs : this.minGapMs;
+    const due = Math.min(
+      this.deferredUntilMs ?? Number.POSITIVE_INFINITY,
+      this.lastBuiltMs + gap,
+    );
+    if (options.nowMs < due) {
+      // Keep the earliest deadline, including input priority on a normal tick.
+      this.deferredUntilMs = due;
       this.dirty = true;
       this.skipped += 1;
       return false;
     }
     this.dirty = false;
+    this.deferredUntilMs = undefined;
     this.lastKeys = keys;
     this.lastBuiltMs = options.nowMs;
     this.built += 1;

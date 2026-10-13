@@ -424,6 +424,24 @@ describe("gapless streaming engine", () => {
 });
 
 describe("engine resilience", () => {
+  test("stop cancels pending preparation and queued edits; later play starts normally", async () => {
+    const clock = { ms: 0 };
+    const fake = fakeSpawn();
+    const engine = engineAt(clock, fake.spawn);
+    try {
+      const first = engine.play(score(60), 0);
+      const queued = engine.play(score(61), 0);
+      await engine.stopAsync();
+      await Promise.all([first, queued]);
+      expect(fake.starts.length).toBe(0);
+      await engine.play(score(62), 0);
+      expect(fake.starts.length).toBe(1);
+      expect(fake.bytes().some((value) => value !== 0)).toBe(true);
+    } finally {
+      await engine.dispose();
+    }
+  });
+
   test("renders in flight coalesce and the newest score wins", async () => {
     const clock = { ms: 0 };
     const fake = fakeSpawn();

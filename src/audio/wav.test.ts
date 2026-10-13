@@ -308,4 +308,37 @@ describe("score WAV renderer", () => {
     expect(small.cache.bytes).toBeLessThanOrEqual(perStem * 2);
     expect(small.render(score, options).pcm).toEqual(oneStem.pcm);
   });
+
+  test("uncached windows release retained stems and preserve reverb PCM", () => {
+    const score = createScore({
+      tempoBpm: 120,
+      bars: 1,
+      tracks: ["a", "b"].map((id) => ({
+        id,
+        instrument: "sine",
+        reverb: { size: 0.7, mix: 0.3 },
+      })),
+      notes: ["a", "b"].map((trackId, i) => ({
+        id: trackId,
+        trackId,
+        pitch: 48 + i * 7,
+        startTick: i * 240,
+        durationTicks: 480,
+        velocity: 0.7,
+      })),
+    });
+    const options = { sampleRate: 8_000, loop: true } as const;
+    const renderer = new StemRenderer();
+    const first = renderer.render(score, options);
+    expect(renderer.cache.stems).toBe(2);
+    expect(
+      renderer.render(score, { ...options, cacheStems: false }).pcm,
+    ).toEqual(first.pcm);
+    expect(renderer.cache).toEqual({ stems: 0, bytes: 0 });
+    // Returning to a short editable loop restores stem reuse.
+    expect(renderer.render(score, options).pcm).toEqual(first.pcm);
+    renderer.render(score, options);
+    expect(renderer.rendered).toEqual([]);
+    expect(renderer.cache.stems).toBe(2);
+  });
 });

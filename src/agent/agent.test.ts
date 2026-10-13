@@ -1117,7 +1117,11 @@ describe("media tools in the loop", () => {
         host: {
           ...host,
           workspace: { root },
-          web: { fetch: webFetch },
+          web: {
+            fetch: webFetch,
+            lookup: async (hostname) =>
+              hostname === "example.com" ? ["93.184.216.34"] : [],
+          },
           media: { runner },
         },
         onEvent: (event) => events.push(event),

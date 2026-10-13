@@ -1,7 +1,7 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { createScore, type TrackScore } from "../../core/score.ts";
-import { LoopRenderer } from "./renderer.ts";
-import { renderScorePcm } from "./wav.ts";
+import { LoopRenderer, RenderCancelledError } from "./renderer.ts";
+import { StemRenderer, renderScorePcm } from "./wav.ts";
 import { SampleLibrary } from "./samples.ts";
 import { dc, wavBytes } from "./sample-fixtures.ts";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -43,6 +43,92 @@ const score = (pitch: number) =>
   });
 
 describe("loop renderer", () => {
+  test("finished loops replay without rendering and callers own their PCM", async () => {
+    const render = spyOn(StemRenderer.prototype, "render");
+    const inline = new LoopRenderer({ sampleRate: 8_000, worker: false });
+    const worker = new LoopRenderer({ sampleRate: 8_000 });
+    try {
+      const song = score(60);
+      const first = await inline.render(song);
+      const original = first.pcm.slice();
+      const calls = render.mock.calls.length;
+      first.pcm.fill(0);
+      expect((await inline.render(score(60))).pcm).toEqual(original);
+      expect(render.mock.calls.length).toBe(calls);
+      expect((await inline.render(score(61))).pcm).not.toEqual(original);
+      expect(render.mock.calls.length).toBeGreaterThan(calls);
+      const fromWorker = await worker.render(song);
+      fromWorker.pcm.fill(0);
+      expect((await worker.render(score(60))).pcm).toEqual(original);
+      // An idle stop keeps this worker and its cached loop usable.
+      worker.cancelPending();
+      expect((await worker.render(song)).pcm).toEqual(original);
+    } finally {
+      inline.dispose();
+      worker.dispose();
+      render.mockRestore();
+    }
+  });
+
+  test("cancel and dispose never fall back inline; cancel permits a fresh worker", async () => {
+    const render = spyOn(StemRenderer.prototype, "render");
+    const worker = new LoopRenderer({ sampleRate: 8_000 });
+    try {
+      const pending = worker.render(score(60));
+      worker.cancelPending();
+      await expect(pending).rejects.toBeInstanceOf(RenderCancelledError);
+      expect(render).not.toHaveBeenCalled();
+      expect((await worker.render(score(60))).pcm.length).toBeGreaterThan(0);
+      const next = worker.render(score(61));
+      worker.dispose();
+      await expect(next).rejects.toThrow("disposed");
+      expect(render).not.toHaveBeenCalled();
+    } finally {
+      worker.dispose();
+      render.mockRestore();
+    }
+  });
+
+  test("stopping during inline sample loading skips the stale DSP render", async () => {
+    let finish!: (bank: Awaited<ReturnType<SampleLibrary["load"]>>) => void;
+    const load = spyOn(SampleLibrary.prototype, "load").mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const render = spyOn(StemRenderer.prototype, "render");
+    const inline = new LoopRenderer({
+      sampleRate: 8000,
+      worker: false,
+      projectRoot: tmpdir(),
+    });
+    try {
+      const sampled = createScore({
+        tracks: [
+          {
+            id: "sample",
+            name: "sample",
+            instrument: "sampler",
+            sampler: {
+              mode: "oneshot",
+              voices: { kick: { src: "samples/kick.wav" } },
+            },
+          },
+        ],
+      });
+      const pending = inline.render(sampled);
+      inline.cancelPending();
+      finish({ voices: new Map(), problems: [] });
+      await expect(pending).rejects.toBeInstanceOf(RenderCancelledError);
+      expect(render).not.toHaveBeenCalled();
+    } finally {
+      inline.dispose();
+      load.mockRestore();
+      render.mockRestore();
+    }
+  });
+
   test("renders in a worker byte-identical to the calling thread", async () => {
     const worker = new LoopRenderer({ sampleRate: 8_000 });
     const inline = new LoopRenderer({ sampleRate: 8_000, worker: false });
@@ -296,12 +382,20 @@ describe("loop renderer with sampler tracks", () => {
           expect(a.pcm).toEqual(first.pcm);
           expect(b.pcm).toEqual(first.pcm);
         }
-        // Same score, new file contents: the cached stem must not be reused.
+        // Same score, new file contents: neither stems nor loops may be reused.
         await writeFile(file, wavBytes(dc(600, 0.2), { sampleRate: 22_050 }));
         const second = await expected();
         expect(second.pcm).not.toEqual(first.pcm);
         expect((await worker.render(sampled)).pcm).toEqual(second.pcm);
         expect((await inline.render(sampled)).pcm).toEqual(second.pcm);
+        await rm(file);
+        const missing = await expected();
+        expect(missing.pcm).not.toEqual(second.pcm);
+        expect((await worker.render(sampled)).pcm).toEqual(missing.pcm);
+        expect((await inline.render(sampled)).pcm).toEqual(missing.pcm);
+        await writeFile(file, wavBytes(dc(600, 0.7), { sampleRate: 22_050 }));
+        expect((await worker.render(sampled)).pcm).toEqual(first.pcm);
+        expect((await inline.render(sampled)).pcm).toEqual(first.pcm);
       } finally {
         worker.dispose();
         inline.dispose();

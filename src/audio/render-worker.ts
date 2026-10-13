@@ -8,6 +8,7 @@ import { SampleLibrary, hasSamplerTracks } from "./samples.ts";
 import type { MasterReport } from "./master.ts";
 import { renderArranged } from "./arrange.ts";
 import { StemRenderer } from "./wav.ts";
+import { LoopCache, loopCacheKey } from "./loop-cache.ts";
 
 export type RenderRequest = Readonly<{
   id: number;
@@ -15,6 +16,7 @@ export type RenderRequest = Readonly<{
   sampleRate: number;
   /** Project root sampler voices resolve under; omitted = samplers silent. */
   projectRoot?: string;
+  maxLoopCacheBytes?: number;
 }>;
 
 export type RenderReply =
@@ -35,9 +37,10 @@ declare const self: Worker;
 
 const renderer = new StemRenderer();
 let library: SampleLibrary | undefined;
+let loopCache: LoopCache | undefined;
 
 self.onmessage = async (event: MessageEvent<RenderRequest>) => {
-  const { id, score, sampleRate, projectRoot } = event.data;
+  const { id, score, sampleRate, projectRoot, maxLoopCacheBytes } = event.data;
   try {
     const started = performance.now();
     const parsed = scoreFromJSON(score);
@@ -47,13 +50,19 @@ self.onmessage = async (event: MessageEvent<RenderRequest>) => {
         library = new SampleLibrary({ projectRoot });
       samples = await library.load(parsed);
     }
-    const audio = renderArranged(renderer, parsed, {
-      sampleRate,
-      loop: true,
-      // The live loop sounds a vocal track's guide notes (0.7 clips).
-      guide: true,
-      samples,
-    });
+    loopCache ??= new LoopCache(maxLoopCacheBytes);
+    const key = loopCacheKey(parsed, sampleRate, samples);
+    const cached = loopCache.get(key);
+    const audio =
+      cached ??
+      renderArranged(renderer, parsed, {
+        sampleRate,
+        loop: true,
+        // The live loop sounds a vocal track's guide notes (0.7 clips).
+        guide: true,
+        samples,
+      });
+    if (!cached) loopCache.set(key, audio);
     const reply: RenderReply = {
       id,
       ok: true,
