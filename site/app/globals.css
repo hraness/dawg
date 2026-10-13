@@ -43,6 +43,18 @@ kbd {
   font-family: var(--font-mono);
 }
 
+/* No horizontal page scroll on phones: every code block scrolls inside itself. */
+pre {
+  max-inline-size: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+pre:focus-visible {
+  outline: 2px solid var(--focus, var(--primary));
+  outline-offset: 2px;
+}
+
 :where(.dawg-main, .dawg-page, .dawg-docs) :not(pre) > code {
   font-size: 0.88em;
   padding: 0.05em 0.3em;
@@ -195,37 +207,95 @@ a:hover {
   gap: 0.75rem;
 }
 
-/* Buttons: flat ink rectangles, and the quiet one is a rule around paper. */
+/* Buttons: the primary is the portfolio ingot; the quiet one is a text link. */
 .dawg-button {
   display: inline-flex;
   align-items: center;
+  gap: 0.35rem;
   min-height: 2.75rem;
   padding: 0.5rem 1.25rem;
-  border: 2px solid var(--foreground);
-  background: var(--foreground);
-  color: var(--background);
-  font-weight: 700;
   text-decoration: none;
 }
 
 .dawg-button:hover {
-  background: var(--background);
-  color: var(--foreground);
   text-decoration: none;
 }
 
 .dawg-button--quiet {
-  background: var(--background);
-  color: var(--foreground);
+  padding-inline: 0.25rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
 }
 
 .dawg-button--quiet:hover {
-  background: var(--foreground);
-  color: var(--background);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
 }
 
 .dawg-button--quiet::after {
   content: "\00a0↓";
+}
+
+/* Ingot primary action. Shared across the portfolio, 2026-10-13. */
+.hraness-marketing-action[data-emphasis="primary"],
+.ingot,
+.dawg-button:not(.dawg-button--quiet) {
+  --ingot-ink: var(--foreground, CanvasText);
+  --ingot-paper: var(--background, Canvas);
+  --ingot-metal: color-mix(in oklch, var(--ingot-ink) 88%, var(--ingot-paper));
+  --ingot-metal-light: color-mix(in oklch, var(--ingot-ink) 72%, var(--ingot-paper));
+  --ingot-text: var(--ingot-paper);
+  position: relative;
+  isolation: isolate;
+  border: 1px solid color-mix(in oklch, var(--ingot-ink) 92%, var(--ingot-paper));
+  border-radius: 0.625rem;
+  background-color: var(--ingot-metal);
+  background-image:
+    linear-gradient(180deg, color-mix(in srgb, white 16%, transparent) 0%, transparent 46%, color-mix(in srgb, black 10%, transparent) 100%),
+    linear-gradient(115deg,
+      color-mix(in srgb, var(--hraness-foil-1, oklch(0.89 0.065 337)) 9%, transparent),
+      color-mix(in srgb, var(--hraness-foil-2, oklch(0.875 0.05 277)) 9%, transparent),
+      color-mix(in srgb, var(--hraness-foil-3, oklch(0.92 0.05 170)) 9%, transparent),
+      color-mix(in srgb, var(--hraness-foil-4, oklch(0.95 0.045 96)) 9%, transparent),
+      color-mix(in srgb, var(--hraness-foil-5, oklch(0.9 0.05 55)) 9%, transparent),
+      color-mix(in srgb, var(--hraness-foil-6, oklch(0.875 0.06 305)) 9%, transparent)),
+    linear-gradient(115deg, var(--ingot-metal-light) 0%, var(--ingot-metal) 28%, var(--ingot-metal-light) 52%, var(--ingot-metal) 74%, var(--ingot-metal-light) 100%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 28%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, black 18%, transparent),
+    0 1px 2px color-mix(in srgb, var(--ingot-ink) 18%, transparent),
+    0 6px 16px -8px color-mix(in srgb, var(--ingot-ink) 35%, transparent);
+  color: var(--ingot-text);
+  font-weight: 550;
+  letter-spacing: 0.005em;
+  text-shadow: 0 1px 0 color-mix(in srgb, black 22%, transparent);
+  transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+}
+.hraness-marketing-action[data-emphasis="primary"]:hover,
+.ingot:hover,
+.dawg-button:not(.dawg-button--quiet):hover { filter: brightness(1.06); }
+.hraness-marketing-action[data-emphasis="primary"]:active,
+.ingot:active,
+.dawg-button:not(.dawg-button--quiet):active { transform: translateY(1px); box-shadow: inset 0 1px 0 color-mix(in srgb, white 10%, transparent), inset 0 2px 6px color-mix(in srgb, black 30%, transparent), 0 1px 1px color-mix(in srgb, var(--ingot-ink) 12%, transparent); }
+.hraness-marketing-action[data-emphasis="primary"]:focus-visible,
+.ingot:focus-visible,
+.dawg-button:not(.dawg-button--quiet):focus-visible { outline: 2px solid var(--hraness-marketing-accent, var(--primary)); outline-offset: 3px; }
+:where([data-theme="dark"], .dark) .hraness-marketing-action[data-emphasis="primary"],
+:where([data-theme="dark"], .dark) .ingot,
+:where([data-theme="dark"], .dark) .dawg-button:not(.dawg-button--quiet) {
+  /* Silver on dark: the ingot is the pale metal and the text is the page ink. */
+  --ingot-metal: color-mix(in oklch, var(--ingot-ink) 90%, var(--ingot-paper));
+  --ingot-metal-light: color-mix(in oklch, var(--ingot-ink) 76%, var(--ingot-paper));
+  text-shadow: 0 1px 0 color-mix(in srgb, white 30%, transparent);
+}
+@media (forced-colors: active) {
+  .hraness-marketing-action[data-emphasis="primary"], .ingot, .dawg-button:not(.dawg-button--quiet) { background: ButtonFace; color: ButtonText; border-color: ButtonText; box-shadow: none; text-shadow: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hraness-marketing-action[data-emphasis="primary"], .ingot, .dawg-button:not(.dawg-button--quiet) { transition: none; }
+  .hraness-marketing-action[data-emphasis="primary"]:active, .ingot:active, .dawg-button:not(.dawg-button--quiet):active { transform: none; }
 }
 
 .dawg-hero__status {
@@ -800,6 +870,8 @@ kbd {
 /* Code blocks: always the terminal's colors, square. */
 .dawg-code {
   overflow: hidden;
+  min-inline-size: 0;
+  max-inline-size: 100%;
   background: var(--dawg-term-bg);
   color: var(--dawg-term-fg);
   margin-block: 0.75rem;

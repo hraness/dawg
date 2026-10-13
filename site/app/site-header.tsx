@@ -30,7 +30,7 @@ export function SiteHeader({
           },
           { href: repoUrl, label: "GitHub ↗" },
         ]}
-        action={{ href: "/#install", label: "Install", emphasis: "secondary" }}
+        action={{ href: "/#install", label: "Install", emphasis: "primary" }}
         trailing={<ThemeMenuButton aria-label="Appearance" />}
       />
     </div>
