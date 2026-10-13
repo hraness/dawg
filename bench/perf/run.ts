@@ -7,12 +7,13 @@
  *   bun run bench:perf -- --quick      fewer samples (a smoke run)
  *   bun run bench:perf -- --out f.json write results there
  *
- * Groups: startup, keys, command, fader, sync, agent (the real TUI in a PTY,
+ * Groups: startup, keys, command, fader, sync, agent, input (the real TUI in a PTY,
  * audio to bench/perf/sink.ts), frame, render, live, patch (in-process).
  * Run it on a quiet machine; the PTY groups take a couple of minutes.
  */
 import { writeFile } from "node:fs/promises";
 import { frames } from "./frame.ts";
+import { interactiveInput } from "./interactive.ts";
 import { arrangementFrames } from "./arrangement.ts";
 import { live } from "./live.ts";
 import { patch } from "./patch.ts";
@@ -36,6 +37,7 @@ const GROUPS: Record<string, () => Promise<Metric[]> | Metric[]> = {
   fader: () => pty.fader(n(10, 3)),
   sync: () => pty.sync(n(10, 3)),
   agent: () => pty.agent(n(10, 3)),
+  input: () => interactiveInput(n(24, 6)),
   frame: () => frames(undefined, n(600, 200)),
   arrangement: () => arrangementFrames(n(220, 80)),
   render: () => render(n(5, 2)),

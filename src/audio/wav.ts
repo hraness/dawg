@@ -121,6 +121,11 @@ export type WavOptions = Readonly<{ sampleRate?: number; maxSeconds?: number }>;
 export type RenderOptions = WavOptions &
   Readonly<{
     /**
+     * Retain track and bus stems for later edits. Defaults on for a single
+     * pass, off for long arrangement windows whose absolute seeds differ.
+     */
+    cacheStems?: boolean;
+    /**
      * Render exactly one loop and fold every tail (release, delay, reverb)
      * back onto the loop start, so the buffer repeats seamlessly. This is
      * what the streaming engine plays; exports keep the default one-shot.
@@ -466,6 +471,12 @@ export class StemRenderer {
   }
 
   public render(score: TrackScore, options: RenderOptions = {}): RenderedAudio {
+    const caching = this.maxCacheBytes > 0 && options.cacheStems !== false;
+    if (!caching) {
+      this.stems.clear();
+      this.cacheBytes = 0;
+      this.buses.clear();
+    }
     const sampleRate = clampSampleRate(options.sampleRate);
     const maxSeconds = Math.max(1, Math.min(60, options.maxSeconds ?? 30));
     const loopSeconds = loopSecondsOf(score);
@@ -667,7 +678,6 @@ export class StemRenderer {
         engineDigests,
       );
       let stem = this.stems.get(trackId);
-      const caching = this.maxCacheBytes > 0;
       // A cached track with a reverb also keeps its pre-reverb pair and the
       // tail before its mix gain, keyed without the mix: a mix-only edit
       // re-adds the tail instead of re-running the voices and the room.
@@ -842,7 +852,7 @@ export class StemRenderer {
       let wet = this.buses.get(orbit);
       if (wet?.key !== key) {
         wet = { key, ...renderOrbitBus(bus, context) };
-        if (this.maxCacheBytes > 0) this.buses.set(orbit, wet);
+        if (caching) this.buses.set(orbit, wet);
       }
       // (x * 1 === x, so an unducked bus adds its plain samples.)
       addStem(

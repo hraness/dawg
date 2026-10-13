@@ -75,7 +75,7 @@ export function tempoAtSample(
     : context.tempoBpm;
 }
 
-/** Resolve a piecewise-linear automation lane, holding the static value before its first point. */
+/** Resolve an ordered piecewise-linear lane, holding the static value before its first point. */
 export function interpolateAutomation(
   points: readonly AutomationPoint[],
   tick: number,
@@ -86,15 +86,26 @@ export function interpolateAutomation(
   if (tick < first.tick) return fallback;
   const last = points[points.length - 1]!;
   if (tick >= last.tick) return last.value;
-  for (let index = 1; index < points.length; index += 1) {
-    const right = points[index]!;
-    if (tick > right.tick) continue;
-    const left = points[index - 1]!;
-    const span = right.tick - left.tick;
-    const ratio = span <= 0 ? 1 : (tick - left.tick) / span;
-    return left.value + (right.value - left.value) * ratio;
+  let index = 1;
+  // Patch control cables can produce thousands of ordered points. Starting
+  // every read at point zero makes those lanes quadratic over a song. Keep
+  // the cheap linear path for ordinary short score lanes, and find the first
+  // right endpoint at or beyond `tick` in logarithmic time for dense lanes.
+  if (points.length > 8) {
+    let end = points.length - 1;
+    while (index < end) {
+      const middle = (index + end) >>> 1;
+      if (points[middle]!.tick < tick) index = middle + 1;
+      else end = middle;
+    }
+  } else {
+    while (index < points.length - 1 && tick > points[index]!.tick) index += 1;
   }
-  return last.value;
+  const right = points[index]!;
+  const left = points[index - 1]!;
+  const span = right.tick - left.tick;
+  const ratio = span <= 0 ? 1 : (tick - left.tick) / span;
+  return left.value + (right.value - left.value) * ratio;
 }
 
 /**

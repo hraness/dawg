@@ -437,6 +437,10 @@ function renderWindows(
     }
     const audio = renderer.render(window, {
       ...options,
+      // Each window replaces every track's cached stem, so keeping its
+      // pre-reverb pairs and tails only creates large temporary allocations.
+      // Borrow the renderer's scratch buffers; short edited loops still cache.
+      cacheStems: options.cacheStems ?? false,
       sampleRate,
       loop: false,
       seedTick: preTick,

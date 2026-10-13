@@ -1,7 +1,11 @@
 import type { TrackScore } from "../../core/score.ts";
 import { PlaybackLock } from "./lock.ts";
 import { LoopPlayer } from "./player.ts";
-import { LoopRenderer, type LoopRender } from "./renderer.ts";
+import {
+  LoopRenderer,
+  RenderCancelledError,
+  type LoopRender,
+} from "./renderer.ts";
 import {
   clickSounds,
   clicksIn,
@@ -825,6 +829,10 @@ export class AudioEngine {
       while (this.queued) {
         const request = this.queued;
         this.queued = undefined;
+        if (request.generation !== this.generation) {
+          for (const waiter of request.waiters) waiter.resolve();
+          continue;
+        }
         try {
           const render = await this.renderer.render(request.score);
           this.lastRenderMs = render.renderMs;
@@ -836,6 +844,13 @@ export class AudioEngine {
           }
           for (const waiter of request.waiters) waiter.resolve();
         } catch (error) {
+          if (
+            error instanceof RenderCancelledError &&
+            request.generation !== this.generation
+          ) {
+            for (const waiter of request.waiters) waiter.resolve();
+            continue;
+          }
           for (const waiter of request.waiters)
             waiter.reject(
               error instanceof Error ? error : new Error(String(error)),
@@ -905,6 +920,7 @@ export class AudioEngine {
 
   public async stopAsync(): Promise<void> {
     this.generation += 1;
+    this.renderer.cancelPending();
     this.lastLoopPcm = undefined;
     this.lastMaster = undefined;
     this.respawns = 0;

@@ -134,8 +134,9 @@ describe("arranged rendering", () => {
     expect(audio.frames).toBeGreaterThanOrEqual(264 * 8000);
     const end = audio.pcm.subarray(263 * 8000 * 2, 264 * 8000 * 2);
     expect(end.some((sample) => sample !== 0)).toBe(true);
-    // Repeated passes share their window scores, so stems are reused.
-    expect(renderer.cache.stems).toBeLessThan(6);
+    // Absolute window seeds differ: don't retain stems that the next window
+    // immediately replaces, or their much larger pre-reverb buffers.
+    expect(renderer.cache).toEqual({ stems: 0, bytes: 0 });
   });
 
   test("the highway shows the score beat of the pass that plays", () => {

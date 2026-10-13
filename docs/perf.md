@@ -19,6 +19,10 @@ The harness lives in `bench/perf/`:
   10–40 ms), which no PTY measurement can see. **Audio bytes** is when the
   rendered PCM reached the player, which isolates render cost from the queue
   lead.
+- `interactive.ts` measures a four-character prompt burst to its first fully
+  synchronized visible frame in the 13-track Signal Bloom arrangement. It
+  disables audio, varies the idle gap after clearing the prompt, and avoids
+  test-only state-report timing. Run it with `bun run bench:perf -- input`.
 - `frame.ts` times `TuiApp.render` with a moving playhead.
 - `arrangement.ts` times the TAPE view model plus full frames for 16-track /
   12-scene and 32-track / 24-scene songs with repeated sections, automation
@@ -93,6 +97,81 @@ remains for long, layered demos. This change does not introduce partially
 rendered buffers or change seek/loop behavior. Reverb loop reordering and
 static-gain special casing were investigated but discarded because controlled
 comparisons did not establish a reliable improvement.
+
+## Prepared playback loops (2026-10-13)
+
+`bun bench/perf/loop-prep.ts` measures the full playback preparation path for
+Signal Bloom and Glass Arc, including worker transfer and current asset
+loading. Add `--no-cache` for a controlled comparison without finished-loop
+reuse, or supply demo IDs to bound the workload. Each demo starts a fresh
+worker; the script prints cold, replay, reconstructed-score, edit and edited
+replay rows, along with PCM hashes and process RSS. Run it through the host
+scheduler when one is installed.
+
+The renderer now retains one completed stereo loop, up to 64 MiB, alongside
+its bounded stem cache. A replay checks the complete score, output rate, and
+loaded sample, table and impulse hashes. Asset loading runs before lookup,
+so a replaced, missing or restored file cannot return stale audio. Cached
+PCM stays independently owned: caller edits and worker transfers cannot
+change or detach the retained buffer. Stop cancels pending worker work and
+stale inline preparation; stopping an idle song preserves its replay cache.
+
+On macOS arm64 with Bun 1.3.14 at 22,050 Hz, one controlled sequence per demo
+measured the following request-to-PCM times:
+
+| Workload                          | Before |   After |
+| --------------------------------- | -----: | ------: |
+| Signal Bloom, first render        | 8.77 s |  8.77 s |
+| Signal Bloom, replay              | 7.38 s | 6.51 ms |
+| Signal Bloom, reconstructed score | 7.20 s | 3.07 ms |
+| Signal Bloom, edited replay       | 7.51 s | 6.38 ms |
+| Glass Arc, first render           | 4.44 s |  4.04 s |
+| Glass Arc, replay                 | 4.22 s | 3.63 ms |
+| Glass Arc, reconstructed score    | 3.85 s | 2.35 ms |
+| Glass Arc, edited replay          | 3.72 s | 4.08 ms |
+
+All ten output hashes match between the before and after sequences,
+including edited scores. Retained PCM is 12,544,000 bytes for Signal Bloom
+and 9,817,044 bytes for Glass Arc. These single-run numbers demonstrate cache
+reuse, not a latency distribution or speaker timing. The after sequence also
+contains the dense automation lookup optimization; no first-render speedup
+is attributed to this cache. Changed arrangements still render in full, and
+loops over the byte cap are returned normally without retention. Cold
+startup remains multi-second for these larger songs.
+
+## Interactive input (2026-10-13)
+
+Ordinary playback animation retains its 33 ms minimum frame gap and idle
+screens retain a 500 ms heartbeat. Input redraws use a separate 8 ms minimum
+gap, with one timer waking at the earliest deferred deadline. A normal
+animation tick cannot postpone an input deadline. Typed characters in one
+terminal input batch render together; actions that need an earlier frame
+still request it directly. Drag resizing retains the animation budget.
+
+`bun run bench:perf -- input` drives the real TUI at 120×36 with Signal Bloom
+loaded and audio disabled. Each row measures 24 four-character prompt bursts
+after four warmups, with 0, 10, 20 or 100 ms of idle time after a completely
+cleared prompt. The observer waits for synchronized-update completion and
+visible text rather than the test-only settled-state OSC. These are terminal
+frame timings; they do not include device audio or physical display latency.
+
+Measured on Apple Silicon with Bun 1.3.14 against the original UI scheduler
+at `eb33204`, using isolated baseline files and the same surrounding imports:
+
+| Idle gap after the clear frame | Before median / p95 | After median / p95 |
+| ------------------------------ | ------------------: | -----------------: |
+| 0 ms                           |    35.44 / 37.44 ms |    9.11 / 10.38 ms |
+| 10 ms                          |    23.66 / 27.70 ms |     1.95 / 2.90 ms |
+| 20 ms                          |    12.71 / 15.19 ms |     3.78 / 4.45 ms |
+| 100 ms                         |    42.52 / 71.31 ms |     3.87 / 6.50 ms |
+
+The old input loop could paint the first character immediately after an idle
+period, then defer the remaining characters until an animation tick. This
+accounts for the longer complete-burst latency in the final baseline row.
+
+The frame gate's unit tests check earliest-deadline retention, 8 ms burst
+coalescing and eventual delivery. Real-terminal menu and resize regressions
+exercise picker actions, playback, overlays and drag-resize coalescing.
 
 ## Baseline (origin/main 7c02ebc, Apple M-series, bun 1.3.14)
 
@@ -432,3 +511,71 @@ lost, not on runner noise.
 - **Math kernel** (polynomial sin/exp so goldens match across platforms):
   this would re-pin every golden. It buys portability, not speed, so it
   belongs in its own change.
+
+## Dense automation and distortion setup (2026-10-13)
+
+Patch control cables can create thousands of automation points. Effect readers
+previously searched every lane from its first point at each control block. Dense
+lanes now use a lower-bound search, while lanes of eight points or fewer retain a
+linear search. The interpolation formula and its evaluation order are unchanged;
+lookup remains stateless so reverse seeks and replaced lane values work.
+
+`bun bench/perf/automation.ts` compares the original scan and current lookup with
+identical values and alternating order. On macOS arm64, Bun 1.3.14, six measured
+trials after warmup produced these medians:
+
+| Lane          | Reads per trial | Original | Current |
+| ------------- | --------------: | -------: | ------: |
+| 7 points      |       1,000,000 |  8.29 ms | 10.1 ms |
+| 1,000 points  |          10,000 |  2.55 ms | 0.51 ms |
+| 16,000 points |          10,000 |  36.7 ms | 0.95 ms |
+
+The small-lane branch costs about 2 ns per read in this run. Dense lookup is the
+intended win, not a claim that every lane is faster. Regression cases compare the
+original formula exactly at the search threshold, duplicate endpoints, before
+and after lanes, non-finite queries, reverse seeks, and replaced values.
+
+Distortion also reuses the same 64 sine reference inputs for level compensation,
+and recalculates compensation only when the drive value changes. It preserves
+all curve, filter and mixing arithmetic. A controlled comparison with the old
+implementation checked exact Float64 output for all ten curves under static,
+held, ramping and plateau automation; all 40 cases matched.
+
+## Full-song cold render (2026-10-13)
+
+`bun bench/perf/cold-song.ts [source-root] [demo-id] [playback|export]`
+loads each demo and its bundled samples offline, then renders it in a fresh Bun
+process. The source-root argument allows an archived baseline and the candidate
+to use the same harness. Each result includes the score and PCM SHA256, frames,
+mastering result, rendering time, sample-load time and process peak RSS.
+
+This comparison used baseline `eb33204d9c17fa386d579a71848172402dd0bfa9`,
+macOS arm64, Bun 1.3.14, 22,050 Hz stereo output, with three fresh processes for
+each source and song. Baseline/candidate execution order alternated by trial.
+The playback path renders a full arranged loop with guide notes and a fresh
+`StemRenderer`; it excludes TUI dispatch, worker startup, device buffering and
+speaker latency. The effects changes above are combined here with bounded scene
+stem retention and direct copying into the arranged mix. These are measured
+medians, not an attribution to any one change.
+
+| Song           | Before render | After render | Before peak RSS | After peak RSS |
+| -------------- | ------------: | -----------: | --------------: | -------------: |
+| Signal Bloom   |      8,776 ms |     8,226 ms |       2,432 MiB |      1,382 MiB |
+| Velvet Circuit |      4,676 ms |     4,446 ms |       1,390 MiB |        833 MiB |
+| Copper Wire    |      7,112 ms |     6,537 ms |       1,423 MiB |        925 MiB |
+
+Cold rendering still takes seconds. The small trial count also matters: Copper
+Wire's baseline ranged from 5,917 to 7,168 ms, while the candidate ranged from
+6,523 to 6,555 ms. Do not infer a speedup on every run from the median. The RSS
+measurement covers the whole process, including runtime and imports; Bun 1.3 on
+Darwin returns native `maxRSS` bytes, normalized to MiB here and cross-checked
+with `/usr/bin/time -l`.
+
+All 18 playback renders produced exactly matching score hashes, PCM bytes,
+frame counts and mastering results for their song. An additional fresh-process
+export pair per song also matched exactly (six renders). Export timings were
+mixed and were collected for equality qualification, not an export speed claim.
+The measured work changes neither tempo, notes, sound choices nor render quality,
+and does not stream incomplete audio. Repeated playback benefits from the
+separate bounded completed-loop cache; these fresh-process measurements do not
+include that reuse.

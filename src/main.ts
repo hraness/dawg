@@ -544,6 +544,7 @@ import {
 import {
   FrameGate,
   IDLE_HEARTBEAT_MS,
+  INTERACTIVE_FRAME_GAP_MS,
   MIN_FRAME_GAP_MS,
 } from "../tui/frame-gate.ts";
 import {
@@ -1823,7 +1824,16 @@ async function runInteractive(): Promise<void> {
   };
   // Builds a frame only when something can have changed (tui/frame-gate.ts):
   // an idle editor no longer rebuilds the whole view 30 times a second.
-  const frameGate = new FrameGate(IDLE_HEARTBEAT_MS, MIN_FRAME_GAP_MS);
+  const frameGate = new FrameGate(
+    IDLE_HEARTBEAT_MS,
+    MIN_FRAME_GAP_MS,
+    INTERACTIVE_FRAME_GAP_MS,
+  );
+  let deferredFrame: ReturnType<typeof setTimeout> | undefined;
+  const cancelDeferredFrame = () => {
+    clearTimeout(deferredFrame);
+    deferredFrame = undefined;
+  };
   // `DAWG_FRAME_LOG=<file>`: one `WxH ms bytes` line per frame (the size
   // matrix in test/sizes-lib.ts reads frame times from it).
   const frameLog = process.env.DAWG_FRAME_LOG;
@@ -1872,10 +1882,19 @@ async function runInteractive(): Promise<void> {
     ) {
       // No report here: a new state forces a build, so a skip means the
       // gate deferred that frame (too soon after the last). It stays dirty
-      // and the next tick draws it, then reports; reporting now would tell a
+      // and its due timer draws it, then reports; reporting now would tell a
       // waiting test the editor settled while the screen is a frame behind.
+      const delay = frameGate.deferredDelayMs(Date.now());
+      if (delay !== undefined) {
+        cancelDeferredFrame();
+        deferredFrame = setTimeout(() => {
+          deferredFrame = undefined;
+          tick();
+        }, delay);
+      }
       return;
     }
+    cancelDeferredFrame();
     followCommitted();
     tui.delight.song(record.sessionId, record.meta.heardLoop === true);
     play?.tick();
@@ -1938,7 +1957,9 @@ async function runInteractive(): Promise<void> {
   let timer = setInterval(tick, tui.frameIntervalMs);
   const onResize = () => {
     tui.invalidate();
-    tick(true);
+    // Drag-resize stays on the animation budget; typed input is immediate.
+    frameGate.markDirty();
+    tick();
   };
   stdout.on("resize", onResize);
   const ownWrites = new OwnWrites();
@@ -2185,6 +2206,7 @@ async function runInteractive(): Promise<void> {
     if (screenSuspended) return flow();
     screenSuspended = true;
     clearInterval(timer);
+    cancelDeferredFrame();
     stdin.off("data", onData);
     stdin.pause();
     stdin.setRawMode?.(false);
@@ -2571,16 +2593,20 @@ async function runInteractive(): Promise<void> {
           }
         }
         if (exiting) break;
-        tick(true);
+        // One terminal read can contain many ordinary keys. Draw its final
+        // prompt once, instead of painting the first character then deferring
+        // the rest. Explicit actions above may still request an earlier frame.
+        frameGate.markDirty();
       }
       if (exiting) break;
       inputHandled = takenBytes;
-      if (stateOsc) tick();
+      tick(true);
     }
   } finally {
     stdin.off("data", onData);
     stdin.off("end", onEnd);
     clearInterval(timer);
+    cancelDeferredFrame();
     clearInterval(presenceTimer);
     stdout.off("resize", onResize);
     // The terminal first: a teardown step that throws (a read-only .dawg,

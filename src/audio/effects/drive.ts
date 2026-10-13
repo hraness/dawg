@@ -85,6 +85,11 @@ export function shapeCurve(type: string, x: number, amount: number): number {
 const COMPENSATION_LEVEL = 0.25;
 const COMPENSATION_RMS = COMPENSATION_LEVEL / Math.SQRT2;
 const COMPENSATION_POINTS = 64;
+const COMPENSATION_INPUTS = Float64Array.from(
+  { length: COMPENSATION_POINTS },
+  (_, index) =>
+    COMPENSATION_LEVEL * Math.sin((2 * Math.PI * index) / COMPENSATION_POINTS),
+);
 
 /**
  * Distortion: pre-gain from `drive` (0..10 → 0..36 dB), the chosen curve,
@@ -111,8 +116,7 @@ export function applyDistort(
     // folders (whose output is not monotonic in level) compensate too.
     let sum = 0;
     for (let k = 0; k < COMPENSATION_POINTS; k += 1) {
-      const x =
-        COMPENSATION_LEVEL * Math.sin((2 * Math.PI * k) / COMPENSATION_POINTS);
+      const x = COMPENSATION_INPUTS[k]!;
       sum += shapeCurve(type, pregain * x, amount) ** 2;
     }
     const reference = Math.sqrt(sum / COMPENSATION_POINTS);
@@ -123,12 +127,19 @@ export function applyDistort(
     );
     return { amount, pregain, compensation };
   };
-  let state = setDrive(drive.at(0));
+  let driveValue = drive.at(0);
+  let state = setDrive(driveValue);
   const lowpass = new OnePole(tone.at(0), context.sampleRate);
   let wet = mix.at(0);
   for (let index = 0; index < buffer.length; index += 1) {
     if (index % CONTROL_SAMPLES === 0) {
-      if (drive.automated) state = setDrive(drive.at(index));
+      if (drive.automated) {
+        const next = drive.at(index);
+        if (!Object.is(next, driveValue)) {
+          driveValue = next;
+          state = setDrive(next);
+        }
+      }
       if (tone.automated) lowpass.set(tone.at(index), context.sampleRate);
       if (mix.automated) wet = mix.at(index);
     }

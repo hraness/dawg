@@ -2,6 +2,18 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.12.1
+
+### Changed
+
+- **Fast song replay.** The playback worker retains one finished loop within a 64 MiB budget. Replaying an unchanged Signal Bloom demo prepares in about 6.5 ms instead of 7.4 seconds; current sample and impulse hashes remain part of the cache key, and returned audio owns its buffer.
+- **Less work in full-song rendering.** Long arrangement windows reuse scratch buffers instead of retaining stems and reverb intermediates that the following window replaces. Dense effect automation uses logarithmic lookup while short lanes retain their simple path. Audio stays deterministic; reproducible full-song and automation benchmarks are documented in `docs/perf.md`.
+- **Responsive terminal input.** Typing, menus and navigation get a short, bounded frame deadline instead of waiting for the next playback animation tick. Idle heartbeat and animation pacing remain bounded.
+
+### Fixed
+
+- Stopping playback cancels unfinished worker renders and skips obsolete queued requests. Disposing a renderer no longer starts an expensive synchronous fallback, and a stopped renderer can start a fresh worker on the next play.
+
 ## 0.12.0
 
 ### Added

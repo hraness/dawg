@@ -109,3 +109,49 @@ describe("FrameGate", () => {
     expect(gate.shouldBuild({ nowMs: 1056 })).toBe(true);
   });
 });
+
+describe("interactive frame priority", () => {
+  test("a deferred input redraw becomes due before the animation timer", () => {
+    const gate = new FrameGate(500, 33, 8);
+    expect(gate.shouldBuild({ nowMs: 0 })).toBe(true);
+    expect(gate.shouldBuild({ nowMs: 2, force: true })).toBe(false);
+    expect(gate.deferredDelayMs(2)).toBe(6);
+    // The due-frame callback is a normal tick; it retains input priority.
+    expect(gate.shouldBuild({ nowMs: 7 })).toBe(false);
+    expect(gate.deferredDelayMs(7)).toBe(1);
+    expect(gate.shouldBuild({ nowMs: 8 })).toBe(true);
+    expect(gate.deferredDelayMs(8)).toBeUndefined();
+    expect(gate.shouldBuild({ nowMs: 9 })).toBe(false);
+    expect(gate.deferredDelayMs(9)).toBeUndefined();
+  });
+
+  test("input advances a pending animation without delaying its deadline", () => {
+    const gate = new FrameGate(500, 33, 8);
+    gate.shouldBuild({ nowMs: 0 });
+    expect(gate.shouldBuild({ nowMs: 1, animating: true })).toBe(false);
+    expect(gate.deferredDelayMs(1)).toBe(32);
+    expect(gate.shouldBuild({ nowMs: 4, force: true })).toBe(false);
+    expect(gate.deferredDelayMs(4)).toBe(4);
+    expect(gate.shouldBuild({ nowMs: 6, force: true })).toBe(false);
+    expect(gate.deferredDelayMs(6)).toBe(2);
+    expect(gate.shouldBuild({ nowMs: 8 })).toBe(true);
+    // Ordinary animation still respects the 33 ms budget.
+    expect(gate.shouldBuild({ nowMs: 33, animating: true })).toBe(false);
+    expect(gate.deferredDelayMs(33)).toBe(8);
+    expect(gate.shouldBuild({ nowMs: 41, animating: true })).toBe(true);
+  });
+
+  test("input bursts stay bounded and finish with the latest state", () => {
+    const gate = new FrameGate(500, 33, 8);
+    const built: number[] = [];
+    for (let now = 0; now < 1000; now += 1) {
+      if (gate.shouldBuild({ nowMs: now, force: now % 2 === 0 }))
+        built.push(now);
+    }
+    expect(built.length).toBe(125);
+    expect(gate.deferredDelayMs(999)).toBe(1);
+    expect(gate.shouldBuild({ nowMs: 1000 })).toBe(true);
+    for (let index = 1; index < built.length; index += 1)
+      expect(built[index]! - built[index - 1]!).toBeGreaterThanOrEqual(8);
+  });
+});

@@ -4,6 +4,7 @@ import type { RenderReply, RenderRequest } from "./render-worker.ts";
 import { SampleLibrary, hasSamplerTracks } from "./samples.ts";
 import { renderArranged } from "./arrange.ts";
 import { StemRenderer } from "./wav.ts";
+import { LoopCache, loopCacheKey } from "./loop-cache.ts";
 
 export type LoopRender = Readonly<{
   pcm: Int16Array;
@@ -24,6 +25,8 @@ export type LoopRendererOptions = Readonly<{
    * inline on fallback). Without it sampler tracks render silent.
    */
   projectRoot?: string;
+  /** Retained finished PCM budget; zero disables it (diagnostics). */
+  maxLoopCacheBytes?: number;
 }>;
 
 /**
@@ -40,7 +43,10 @@ export class LoopRenderer {
   private inline: StemRenderer | undefined;
   private library: SampleLibrary | undefined;
   private readonly projectRoot: string | undefined;
+  private readonly maxLoopCacheBytes: number | undefined;
+  private readonly loopCache: LoopCache;
   private nextId = 1;
+  private epoch = 0;
   private readonly pending = new Map<
     number,
     { resolve: (render: LoopRender) => void; reject: (error: Error) => void }
@@ -51,6 +57,8 @@ export class LoopRenderer {
     this.sampleRate = options.sampleRate;
     this.useWorker = options.worker ?? true;
     this.projectRoot = options.projectRoot;
+    this.maxLoopCacheBytes = options.maxLoopCacheBytes;
+    this.loopCache = new LoopCache(options.maxLoopCacheBytes);
   }
 
   /** True while renders run in the worker. */
@@ -60,23 +68,38 @@ export class LoopRenderer {
 
   public async render(score: TrackScore): Promise<LoopRender> {
     if (this.disposed) throw new Error("renderer disposed");
+    const epoch = this.epoch;
     if (this.offThread) {
       try {
         return await this.renderInWorker(score);
       } catch (error) {
+        if (this.disposed) throw error;
         if (!(error instanceof WorkerLostError)) throw error;
       }
     }
-    return this.renderInline(score);
+    return this.renderInline(score, epoch);
   }
 
-  /** Stops the worker; in-flight renders fall back inline on their callers. */
+  /** Cancel pending work without discarding an idle worker's finished cache. */
+  public cancelPending(): void {
+    this.epoch += 1;
+    if (this.pending.size > 0)
+      this.failWorker(new RenderCancelledError("render cancelled"), false);
+  }
+
+  /** Stops the worker and rejects in-flight renders without starting new work. */
   public dispose(): void {
     this.disposed = true;
     this.failWorker(new WorkerLostError("renderer disposed"));
+    this.loopCache.clear();
+    this.inline = undefined;
+    this.library = undefined;
   }
 
-  private async renderInline(score: TrackScore): Promise<LoopRender> {
+  private async renderInline(
+    score: TrackScore,
+    epoch: number,
+  ): Promise<LoopRender> {
     this.inline ??= new StemRenderer();
     const started = performance.now();
     let samples;
@@ -84,13 +107,21 @@ export class LoopRenderer {
       this.library ??= new SampleLibrary({ projectRoot: this.projectRoot });
       samples = await this.library.load(score);
     }
-    const audio = renderArranged(this.inline, score, {
-      sampleRate: this.sampleRate,
-      loop: true,
-      // The live loop sounds a vocal track's guide notes (0.7 clips).
-      guide: true,
-      samples,
-    });
+    if (this.disposed) throw new Error("renderer disposed");
+    if (epoch !== this.epoch)
+      throw new RenderCancelledError("render cancelled");
+    const key = loopCacheKey(score, this.sampleRate, samples);
+    const cached = this.loopCache.get(key);
+    const audio =
+      cached ??
+      renderArranged(this.inline, score, {
+        sampleRate: this.sampleRate,
+        loop: true,
+        // The live loop sounds a vocal track's guide notes (0.7 clips).
+        guide: true,
+        samples,
+      });
+    if (!cached) this.loopCache.set(key, audio);
     return {
       pcm: audio.pcm,
       frames: audio.frames,
@@ -110,6 +141,7 @@ export class LoopRenderer {
         id,
         score: score.toJSON(),
         sampleRate: this.sampleRate,
+        maxLoopCacheBytes: this.maxLoopCacheBytes,
         ...(this.projectRoot === undefined
           ? {}
           : { projectRoot: this.projectRoot }),
@@ -155,6 +187,7 @@ export class LoopRenderer {
       else waiter.reject(new Error(reply.error));
     });
     worker.addEventListener("error", (event: Event) => {
+      if (this.worker !== worker) return;
       const message = (event as Partial<ErrorEvent>).message;
       this.failWorker(
         new WorkerLostError(
@@ -168,8 +201,8 @@ export class LoopRenderer {
     return worker;
   }
 
-  private failWorker(error: WorkerLostError): void {
-    this.workerBroken = true;
+  private failWorker(error: Error, broken = true): void {
+    this.workerBroken = broken;
     const worker = this.worker;
     this.worker = undefined;
     worker?.terminate();
@@ -180,3 +213,6 @@ export class LoopRenderer {
 }
 
 class WorkerLostError extends Error {}
+
+/** An intentional cancellation must never trigger a costly inline fallback. */
+export class RenderCancelledError extends Error {}
