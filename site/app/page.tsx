@@ -38,8 +38,8 @@ const pillars = [
     screen: "knobs",
     body: (
       <>
-        Four colored knobs sit under every sound: ↑↓ picks one, ←→ turns it,
-        and the same four shape a synth, a track or the mix.
+        Four colored knobs sit under every sound: ↑↓ picks one, ←→ turns it, and
+        the same four shape a synth, a track or the mix.
       </>
     ),
   },
@@ -343,8 +343,8 @@ export default async function Home() {
                 style {highwayFacts.style} {highwayFacts.bars}{" "}
                 {highwayFacts.seed}
               </code>{" "}
-              · {highwayFacts.tracks.join(", ")} · {highwayFacts.notes} notes
-              at {highwayFacts.tempoBpm} BPM in {highwayFacts.key}
+              · {highwayFacts.tracks.join(", ")} · {highwayFacts.notes} notes at{" "}
+              {highwayFacts.tempoBpm} BPM in {highwayFacts.key}
             </p>
           </div>
         </section>
