@@ -308,14 +308,37 @@ a:hover {
   min-width: 0;
 }
 
+/* The gallery section stacks its head over the four pillars. */
+.dawg-section--gallery {
+  display: block;
+}
+
+.dawg-section--gallery .dawg-section__head {
+  position: static;
+  max-width: 44rem;
+}
+
+.dawg-gallery {
+  margin-top: clamp(2rem, 4vw, 3rem);
+}
+
 /* Pillars: one per row, copy beside a live screen, sides alternating. */
 .dawg-pillar {
   display: grid;
   gap: 1.75rem;
   align-items: center;
-  padding-block: clamp(3rem, 6vw, 5rem);
-  border-top: var(--dawg-rule-strong);
+  padding-block: clamp(2.5rem, 5vw, 4rem);
+  border-top: var(--dawg-rule);
   scroll-margin-top: 4rem;
+}
+
+.dawg-pillar__title {
+  margin: 0 0 1rem;
+  font-size: clamp(1.6rem, 1.1rem + 2vw, 2.6rem);
+  font-weight: 700;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
 }
 
 @media (min-width: 60rem) {
@@ -332,10 +355,6 @@ a:hover {
 .dawg-pillar__copy {
   min-width: 0;
   max-width: 34rem;
-}
-
-.dawg-pillar__copy .dawg-section__title {
-  margin-bottom: 1.25rem;
 }
 
 .dawg-pillar__copy p:not(.dawg-eyebrow) {
@@ -570,84 +589,6 @@ kbd {
   }
 }
 
-/* Who it is for: three columns on rules. */
-.dawg-columns {
-  display: grid;
-  gap: 1.5rem;
-}
-
-@media (min-width: 48rem) {
-  .dawg-columns {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 2rem;
-  }
-}
-
-.dawg-columns > div {
-  min-width: 0;
-  padding-top: 1rem;
-  border-top: var(--dawg-rule-strong);
-}
-
-.dawg-columns h3,
-.dawg-example h3 {
-  margin: 0 0 0.5rem;
-  font-size: 1.15rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
-.dawg-columns p,
-.dawg-example p {
-  margin: 0;
-  color: var(--muted);
-}
-
-.dawg-prose-block {
-  max-width: 44rem;
-}
-
-.dawg-prose-block p {
-  margin: 0 0 1rem;
-  font-size: 1.08rem;
-  line-height: 1.55;
-}
-
-.dawg-prose-block p:last-child {
-  margin-bottom: 0;
-}
-
-.dawg-section--lead {
-  padding-bottom: 0;
-  border-top: var(--dawg-rule-strong);
-}
-
-.dawg-section--lead + .dawg-pillar {
-  border-top: 0;
-}
-
-/* The real example beside the flow: typed commands and the same song as code. */
-.dawg-example {
-  display: grid;
-  gap: 1.5rem;
-}
-
-@media (min-width: 60rem) {
-  .dawg-example {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 2rem;
-  }
-}
-
-.dawg-example > div {
-  min-width: 0;
-}
-
-.dawg-example p {
-  margin-bottom: 0.75rem;
-}
-
-/* Install tabs from the design kit, flattened. */
 .dawg-install :where(.hraness-platform-install) {
   --radius: 0;
   border-radius: 0;
@@ -784,6 +725,12 @@ kbd {
   min-width: 0;
 }
 
+.dawg-section__note {
+  margin: 0.75rem 0 0;
+  font: 500 0.8rem/1.5 var(--font-mono);
+  color: var(--muted);
+}
+
 /* A feature: copy, then the real screens that show it. */
 .dawg-feature {
   display: grid;
@@ -833,30 +780,6 @@ kbd {
 
 .dawg-compare td {
   width: 39%;
-}
-
-/* Install */
-.dawg-install__grid {
-  display: grid;
-  gap: 1.5rem;
-  margin-block: 0 1.5rem;
-}
-
-@media (min-width: 60rem) {
-  .dawg-install__grid {
-    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-  }
-}
-
-.dawg-install__grid > div {
-  min-width: 0;
-}
-
-.dawg-install__grid h3 {
-  margin: 0 0 0.5rem;
-  font: 600 0.78rem/1.3 var(--font-mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 .dawg-notice {

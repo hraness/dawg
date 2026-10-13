@@ -4,12 +4,8 @@ import type { ReactNode } from "react";
 import { CodeBlock } from "./code-block";
 import { Flow } from "./flow";
 import { Highway, highwayFacts } from "./highway/highway";
-import {
-  installCommand,
-  productMessaging,
-  sourceInstallCommands,
-} from "./messaging";
-import { atLeast, latestRelease, releaseTarballUrl } from "./release";
+import { installCommand, productMessaging } from "./messaging";
+import { atLeast, latestRelease } from "./release";
 import { Screen } from "./screens/screen";
 import { SiteHeader } from "./site-header";
 
@@ -17,8 +13,8 @@ import { SiteHeader } from "./site-header";
 export const revalidate = 3600;
 
 /**
- * The four things a new player does first, in order. Each shows a real
- * screen that replays the frames dawg drew while it was captured.
+ * The four things a new player does first, in order. Each is one sentence
+ * beside a real screen that replays the frames dawg drew while it was captured.
  */
 const pillars = [
   {
@@ -29,15 +25,8 @@ const pillars = [
     screen: "play-mode",
     body: (
       <>
-        <p>
-          Press <kbd>Ctrl-P</kbd> and your keyboard turns into a piano:{" "}
-          <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> <kbd>F</kbd> are the white
-          keys, <kbd>W</kbd> <kbd>E</kbd> <kbd>T</kbd> the black ones.
-        </p>
-        <p>
-          Press <kbd>R</kbd>, then <kbd>Space</kbd>: dawg counts you in, records
-          over the loop and snaps what you play to the beat.
-        </p>
+        <kbd>Ctrl-P</kbd> turns the keyboard into a piano; <kbd>R</kbd> records
+        over the loop, counted in and snapped to the beat.
       </>
     ),
   },
@@ -49,14 +38,8 @@ const pillars = [
     screen: "knobs",
     body: (
       <>
-        <p>
-          Four colored knobs sit under every sound: ↑↓ picks one, ←→ turns it.
-          Type <code>knobs</code> to open them.
-        </p>
-        <p>
-          The same four knobs turn a synth&rsquo;s filter, a track&rsquo;s
-          volume, the whole mix or the tempo.
-        </p>
+        Four colored knobs sit under every sound: ↑↓ picks one, ←→ turns it,
+        and the same four shape a synth, a track or the mix.
       </>
     ),
   },
@@ -68,15 +51,9 @@ const pillars = [
     screen: "patch",
     body: (
       <>
-        <p>
-          When you want more, open <code>/patch</code>: oscillators, filters and
-          envelopes joined by cables, like a modular synth.
-        </p>
-        <p>
-          Start from one of eight built-in patches, such as{" "}
-          <code>patch load acid-bass</code>. Its first four controls land on the
-          four knobs.
-        </p>
+        <code>/patch</code> joins oscillators, filters and envelopes with
+        cables; eight built-in patches put their first four controls on the
+        knobs.
       </>
     ),
   },
@@ -88,14 +65,8 @@ const pillars = [
     screen: "showme",
     body: (
       <>
-        <p>
-          Type &ldquo;make the hats swing&rdquo; and the agent does it, typing
-          each command into your prompt so you learn them as you go.
-        </p>
-        <p>
-          Every change it makes undoes on its own. The agent is optional:
-          playing, recording and everything you type works offline.
-        </p>
+        Type &ldquo;make the hats swing&rdquo; and the agent types each command
+        into your prompt; every change it makes undoes on its own.
       </>
     ),
   },
@@ -112,12 +83,10 @@ const depths: readonly {
   since?: string;
 }[] = [
   {
-    title: "Start from a groove",
+    title: "Groove starters",
     body: (
       <>
-        <code>style warehouse 4 3</code> loads four bars of one of sixteen
-        groove starters; the full catalog of about 850 styles sits under{" "}
-        <em>All styles</em>.
+        <code>style warehouse 4 3</code>: four bars from one of sixteen.
       </>
     ),
   },
@@ -125,8 +94,7 @@ const depths: readonly {
     title: "More than 150 presets",
     body: (
       <>
-        Seventeen categories, each preset with four named knobs.{" "}
-        <code>/presets</code> browses them.
+        <code>/presets</code> browses them, four named knobs each.
       </>
     ),
     since: "0.10.0",
@@ -135,9 +103,7 @@ const depths: readonly {
     title: "Demo songs",
     body: (
       <>
-        <code>demo</code> opens eleven complete, editable songs with named
-        scenes and production notes; <code>demo info glass-arc</code> explains
-        one before you load it.
+        <code>demo</code> opens eleven complete, editable songs.
       </>
     ),
     since: "0.12.0",
@@ -146,9 +112,7 @@ const depths: readonly {
     title: "Sample library",
     body: (
       <>
-        <code>sample library</code> lists eight original sounds that ship with
-        dawg and work offline; <code>sample chop hold-on 4</code> turns one into
-        a playable four-slice sampler.
+        Eight original sounds; <code>sample chop</code> slices one.
       </>
     ),
     since: "0.12.0",
@@ -157,8 +121,7 @@ const depths: readonly {
     title: "TAPE",
     body: (
       <>
-        <kbd>Ctrl-T</kbd> shows every track across the bars. Copy, cut and loop
-        sections with one key.
+        <kbd>Ctrl-T</kbd>: copy, cut and loop bars with one key.
       </>
     ),
   },
@@ -166,8 +129,7 @@ const depths: readonly {
     title: "History and comments",
     body: (
       <>
-        <code>/comment</code> pins a note to the moment; <code>/history</code>{" "}
-        jumps back to it.
+        <code>/comment</code> pins a note; <code>/history</code> jumps back.
       </>
     ),
     since: "0.10.0",
@@ -176,9 +138,7 @@ const depths: readonly {
     title: "Stems and samples",
     body: (
       <>
-        The agent splits a reference into stems, finds its tempo and key, and
-        turns audio into notes with tools you install;{" "}
-        <code>dawg media doctor</code> shows which.
+        Split a reference into stems and notes; <code>dawg media doctor</code>.
       </>
     ),
   },
@@ -186,26 +146,19 @@ const depths: readonly {
     title: "Your coding agent",
     body: (
       <>
-        <code>dawg init</code> saves the song as TypeScript files. Edit them in
-        any editor, or with your coding agent, and the song updates.
+        <code>dawg init</code> saves the song as TypeScript files.
       </>
     ),
   },
   {
     title: "Many windows, one song",
-    body: (
-      <>
-        Open the same song in several terminals: each pane gets a letter and its
-        own undo, and they share one transport.
-      </>
-    ),
+    body: <>A letter and its own undo per pane, one transport.</>,
   },
   {
     title: "WAV and MIDI out",
     body: (
       <>
-        <code>dawg render song.wav</code> writes the same bytes every time;{" "}
-        <code>song.mid</code> writes MIDI.
+        <code>dawg render song.wav</code>, the same bytes every time.
       </>
     ),
   },
@@ -216,48 +169,33 @@ const flow = [
     title: "One local session",
     body: (
       <>
-        Run <code>dawg</code> in a folder. The song lives in <code>.dawg/</code>{" "}
-        there, and one local daemon keeps the score and the transport.
+        Run <code>dawg</code> in a folder; the song lives in <code>.dawg/</code>
+        .
       </>
     ),
     code: "$ dawg",
   },
   {
     title: "Several windows",
-    body: (
-      <>
-        Open more terminals on the same folder. Each window takes the next
-        unclaimed track and its own undo; all of them hear one clock.
-      </>
-    ),
+    body: <>More terminals on the same folder, each with its own track.</>,
     code: "$ dawg --track bass",
   },
   {
     title: "Prompt and agent",
-    body: (
-      <>
-        Type a command and it lands as one revision. Type a sentence and the
-        agent runs its commands through the same prompt.
-      </>
-    ),
+    body: <>A command lands as one revision; a sentence goes to the agent.</>,
     code: "› make the hats swing",
   },
   {
     title: "Sound out",
-    body: (
-      <>
-        Playback runs through dawg&rsquo;s native audio sink and stays gapless
-        through edits. <code>dawg render</code> writes the same audio to a WAV.
-      </>
-    ),
+    body: <>Gapless playback, and the same audio to a WAV.</>,
     code: "$ dawg render song.wav",
   },
 ] as const;
 
-const questions = [
+const questions: readonly { q: string; a: ReactNode }[] = [
   {
-    q: "Do I need an account?",
-    a: "No. The session lives in .dawg/ in your folder, and commands, playback, recording and rendering work offline. You only need a provider for the agent.",
+    q: "Is it free, and do I need an account?",
+    a: "dawg is free and MIT licensed, and there is no account. Commands, playback, recording and rendering work offline; agent turns are billed by your gateway or OpenRouter account, or count against your subscription.",
   },
   {
     q: "Which models does the agent use?",
@@ -276,16 +214,17 @@ const questions = [
     a: "dawg render song.wav writes a WAV through the same renderer that plays, byte-identical across runs; dawg render song.mid writes MIDI. The project files are plain TypeScript in your folder.",
   },
   {
-    q: "What does it cost?",
-    a: "dawg is free and MIT licensed. Agent turns are billed by your gateway or OpenRouter account, or count against your subscription.",
+    q: "Coming from live coding or a DAW?",
+    a: (
+      <>
+        dawg keeps bars, beats, tracks and a song form on a timeline, and reads
+        the same sample packs the live-coding world shares.{" "}
+        <Link href="/vs/strudel">dawg vs Strudel</Link> puts the two side by
+        side.
+      </>
+    ),
   },
-] as const;
-
-const startCode = `track drums
-pattern house
-track bass
-add C2 at 0 for 1
-tempo 120`;
+];
 
 const projectCode = `// tracks/drums/track.ts
 import { track, euclid, grid } from "dawg";
@@ -300,7 +239,7 @@ export default track({
   ],
 });`;
 
-/** A section's mono label and heading, in the left column of the studio grid. */
+/** A section's mono label, heading and one sentence, in the left column. */
 function SectionHead({
   id,
   index,
@@ -393,183 +332,117 @@ export default async function Home() {
             heading="Notes stream down toward the hit line."
           >
             <p>
-              Every track plays on one piano roll. A note is a bar in its
-              track&rsquo;s color; it slides down, crosses the line, and you
-              hear it. The focused track is bright and the others sit behind it.
-            </p>
-            <p>
-              This is the score every screen on this page plays:{" "}
-              <code>
-                style {highwayFacts.style} {highwayFacts.bars}{" "}
-                {highwayFacts.seed}
-              </code>
-              , {highwayFacts.tracks.join(", ")}, {highwayFacts.notes} notes at{" "}
-              {highwayFacts.tempoBpm} BPM in {highwayFacts.key}. The terminal
-              draws the same notes as glyphs.
+              Every track plays on one piano roll: a note slides down in its
+              track&rsquo;s color, crosses the line, and you hear it.
             </p>
           </SectionHead>
           <div className="dawg-section__body">
             <Highway />
-          </div>
-        </section>
-
-        <section className="dawg-section" aria-labelledby="who-title">
-          <SectionHead
-            id="who-title"
-            index="02"
-            label="Who it is for"
-            heading="People who already live in a terminal."
-          />
-          <div className="dawg-section__body dawg-columns">
-            <div>
-              <h3>You play</h3>
-              <p>
-                You want a loop going in the time it takes to open a tab. The
-                keyboard is a piano, four knobs shape the sound, and a groove
-                starter gives you drums, bass and a pad to play over.
-              </p>
-            </div>
-            <div>
-              <h3>You type</h3>
-              <p>
-                You already think in commands. <code>tempo 120</code>,{" "}
-                <code>reverb 0.4</code>, <code>loop 5-6</code>: short words that
-                edit the score directly, each one an undo step.
-              </p>
-            </div>
-            <div>
-              <h3>You work with an agent</h3>
-              <p>
-                You run coding agents all day and want the same loop for music:
-                describe the groove, hear it, refine it. The song is TypeScript
-                files your coding agent can edit too.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <section className="dawg-section" aria-labelledby="idea-title">
-          <SectionHead
-            id="idea-title"
-            index="03"
-            label="The idea"
-            heading="The coding-agent loop, for music."
-          />
-          <div className="dawg-section__body dawg-prose-block">
-            <p>
-              A terminal is already a studio for people who build software: one
-              session, many windows, a prompt, an agent that works beside you.
-              dawg gives music the same shape. Notes stream down a piano roll as
-              they play, every window you open shares one local session, and a
-              prompt at the bottom lets you add notes, extend loops, move the
-              transport, or ask an agent to write the next change.
-            </p>
-            <p>
-              Every guide in dawg shows the same four ways to do a thing: ask
-              the agent, type the command, pick it from the menu, or press the
-              key. When the agent edits the song it types each command into your
-              prompt, so the chat teaches the manual way.
-            </p>
-            <p>
-              Sessions stay on your machine, the score is a file you can read,
-              and playback needs no account.
+            <p className="dawg-section__note">
+              <code>
+                style {highwayFacts.style} {highwayFacts.bars}{" "}
+                {highwayFacts.seed}
+              </code>{" "}
+              · {highwayFacts.tracks.join(", ")} · {highwayFacts.notes} notes
+              at {highwayFacts.tempoBpm} BPM in {highwayFacts.key}
             </p>
           </div>
         </section>
 
         <section
-          className="dawg-section dawg-section--lead"
-          aria-labelledby="does-title"
+          className="dawg-section dawg-section--gallery"
+          id="ways"
+          aria-labelledby="ways-title"
         >
           <SectionHead
-            id="does-title"
-            index="04"
-            label="What it does"
-            heading="Four ways in. Each one is the real screen."
+            id="ways-title"
+            index="02"
+            label="Four ways in"
+            heading="Play, shape, patch, ask."
           >
             <p>
-              Play, shape, patch, ask. Every picture below is a capture of the
-              app, replaying the frames it drew.
+              Every picture below is a capture of the app, replaying the frames
+              it drew.
             </p>
           </SectionHead>
+          <div className="dawg-gallery">
+            {pillars.map((pillar, i) => (
+              <article
+                key={pillar.id}
+                id={pillar.id}
+                className="dawg-pillar"
+                data-clip={pillar.clip}
+                aria-labelledby={`${pillar.id}-title`}
+              >
+                <div className="dawg-pillar__copy">
+                  <p className="dawg-eyebrow">
+                    <span className="dawg-pillar__chip" aria-hidden="true">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>{" "}
+                    {pillar.label}
+                  </p>
+                  <h3 id={`${pillar.id}-title`} className="dawg-pillar__title">
+                    {pillar.heading}
+                  </h3>
+                  <p>{pillar.body}</p>
+                </div>
+                <div className="dawg-pillar__screen">
+                  <Screen id={pillar.screen} animate caption={false} />
+                </div>
+              </article>
+            ))}
+          </div>
         </section>
-
-        {pillars.map((pillar, i) => (
-          <section
-            key={pillar.id}
-            id={pillar.id}
-            className="dawg-pillar"
-            data-clip={pillar.clip}
-            aria-labelledby={`${pillar.id}-title`}
-          >
-            <div className="dawg-pillar__copy">
-              <p className="dawg-eyebrow">
-                <span className="dawg-pillar__chip" aria-hidden="true">
-                  {String(i + 1).padStart(2, "0")}
-                </span>{" "}
-                {pillar.label}
-              </p>
-              <h2 id={`${pillar.id}-title`} className="dawg-section__title">
-                {pillar.heading}
-              </h2>
-              {pillar.body}
-            </div>
-            <div className="dawg-pillar__screen">
-              <Screen id={pillar.screen} animate caption={false} />
-            </div>
-          </section>
-        ))}
 
         <section className="dawg-section" aria-labelledby="how-title">
           <SectionHead
             id="how-title"
-            index="05"
+            index="03"
             label="How it works"
             heading="One session. Many windows. One sound."
           >
             <p>
-              The first window starts a small local daemon for the folder. Every
-              other window connects to it, and all of them hear the same clock.
+              The first window starts a small local daemon for the folder; every
+              other window connects to it and hears the same clock.
             </p>
           </SectionHead>
           <div className="dawg-section__body">
             <Flow steps={flow} />
-            <div className="dawg-example">
-              <div>
-                <h3>Start a song</h3>
-                <p>
-                  Run <code>dawg</code> in an empty folder and type these at the
-                  prompt. Space plays and pauses; <kbd>Ctrl-Z</kbd> undoes any
-                  step.
-                </p>
-                <CodeBlock code={startCode} label="dawg" />
-              </div>
-              <div>
-                <h3>Or save it as code</h3>
-                <p>
-                  <code>dawg init</code> writes the song as TypeScript. Edit a
-                  file and every open window applies the change as one revision.
-                </p>
-                <CodeBlock
-                  code={projectCode}
-                  label="tracks/drums/track.ts"
-                  copy={false}
-                />
-              </div>
-            </div>
+          </div>
+        </section>
+
+        <section className="dawg-section" aria-labelledby="code-title">
+          <SectionHead
+            id="code-title"
+            index="04"
+            label="Songs as code"
+            heading="Save it as TypeScript."
+          >
+            <p>
+              <code>dawg init</code> writes the song as files. Edit one in any
+              editor, or with your coding agent, and every open window applies
+              the change.
+            </p>
+          </SectionHead>
+          <div className="dawg-section__body">
+            <CodeBlock
+              code={projectCode}
+              label="tracks/drums/track.ts"
+              copy={false}
+            />
           </div>
         </section>
 
         <section className="dawg-section" aria-labelledby="deep-title">
           <SectionHead
             id="deep-title"
-            index="06"
+            index="05"
             label="Goes deep"
             heading="Simple on day one. Deep when you want it."
           >
             <p>
-              Under the keyboard and the knobs there is a full studio. Open each
-              part when you need it; nothing here is required to start.
+              Open each part when you need it; nothing here is required to
+              start.
             </p>
           </SectionHead>
           <div className="dawg-section__body">
@@ -591,79 +464,22 @@ export default async function Home() {
         >
           <SectionHead
             id="install-title"
-            index="07"
+            index="06"
             label="Get started"
             heading="Install dawg"
           >
             <p>
-              One script on macOS or Linux. It installs Bun if it is missing,
-              downloads the latest release from GitHub, checks it against the
-              release&rsquo;s SHA256SUMS and installs it with{" "}
-              <code>bun add -g</code>.
-            </p>
-            <p>
-              <Link href="/docs">
-                Requirements, audio backends and the agent setup
-              </Link>{" "}
-              are on the install page.
+              One script on macOS or Linux: it installs Bun if it is missing,
+              downloads the latest release, checks it against the
+              release&rsquo;s SHA256SUMS and installs it.
             </p>
           </SectionHead>
           <div className="dawg-section__body">
-            <div className="dawg-install__grid">
-              <div>
-                <h3>Install script</h3>
-                <CodeBlock code={`$ ${installCommand}`} />
-                <p className="dawg-small">
-                  <a href="/install">Read the script</a> before you pipe it.
-                </p>
-              </div>
-              {release.published ? (
-                <div>
-                  <h3>Release tarball with Bun</h3>
-                  <CodeBlock
-                    code={`$ bun add -g ${releaseTarballUrl(release.version)}`}
-                  />
-                  <p className="dawg-small">
-                    Each <a href={release.url}>release</a> ships the tarball and
-                    its SHA256SUMS.
-                  </p>
-                </div>
-              ) : null}
-              <div>
-                <h3>From source</h3>
-                <CodeBlock
-                  code={sourceInstallCommands
-                    .map((line) => `$ ${line}`)
-                    .join("\n")}
-                />
-              </div>
-            </div>
-            <p>
-              Then run <code>dawg</code> in any folder. To ask the agent, give
-              it a model once with <code>dawg model key</code>; everything else
-              works without one.
-            </p>
-          </div>
-        </section>
-
-        <section className="dawg-section" aria-labelledby="compare-title">
-          <SectionHead
-            id="compare-title"
-            index="08"
-            label="Compare"
-            heading="Coming from live coding or a DAW?"
-          />
-          <div className="dawg-section__body dawg-prose-block">
-            <p>
-              dawg keeps bars, beats, tracks and a song form on a timeline, and
-              reads the same sample packs the live-coding world shares. The
-              comparison page puts it beside a browser pattern language, row by
-              row.
-            </p>
-            <p>
-              <Link className="dawg-more" href="/vs/strudel">
-                dawg vs Strudel
-              </Link>
+            <CodeBlock code={`$ ${installCommand}`} />
+            <p className="dawg-small">
+              <a href="/install">Read the script</a> before you pipe it. npm,
+              the release tarball, source and the agent setup are on the{" "}
+              <Link href="/docs">install page</Link>.
             </p>
           </div>
         </section>
@@ -671,7 +487,7 @@ export default async function Home() {
         <section className="dawg-section" aria-labelledby="faq-title">
           <SectionHead
             id="faq-title"
-            index="09"
+            index="07"
             label="FAQ"
             heading="Questions"
           />
