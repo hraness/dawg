@@ -230,6 +230,41 @@ describe("dawgd", () => {
     expect(first.digest).toBe(second.digest);
   });
 
+  test("a note batch commits one revision and a later invalid edit rolls it all back", async () => {
+    const { workspace, sessionId, paths } = await session();
+    const pane = await client(workspace, sessionId);
+    const operations = Array.from({ length: 256 }, (_, i) =>
+      addNote(`batch-${i}`, i * 120),
+    );
+    const result = await pane.apply({
+      base: 0,
+      kind: "score.paste",
+      key: "batch",
+      payload: {},
+      operations,
+    });
+    expect(result).toEqual({ status: "accepted", revision: 1 });
+    const before = await loadSession<{ notes: unknown[] }>(paths);
+    expect(before.composition.notes).toHaveLength(256);
+    expect(before.events).toHaveLength(1);
+    const invalid = await pane.apply({
+      base: 1,
+      kind: "score.import",
+      key: "invalid-batch",
+      payload: {},
+      operations: [
+        addNote("new1"),
+        addNote("new2"),
+        { type: "updateNote", noteId: "batch-0", patch: { pitch: 999 } },
+      ],
+    });
+    expect(invalid.status).toBe("rejected");
+    const after = await loadSession(paths);
+    expect(after.revision).toBe(1);
+    expect(after.composition).toEqual(before.composition);
+    expect(after.events).toEqual(before.events);
+  });
+
   test("events carry the authority-stamped actor and retries dedupe by seq", async () => {
     const { workspace, sessionId, paths } = await session();
     const actor = { id: `a_${"b".repeat(22)}`, name: "ben" };

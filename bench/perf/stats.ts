@@ -18,6 +18,15 @@ export type Metric = Readonly<{
   median: number;
   p95: number;
   n: number;
+  samples?: {
+    sent: number;
+    observed: number;
+    missing: number;
+    late: number;
+    lateAfterMs: number;
+    timeoutMs: number;
+  };
+  audio?: import("./sink-protocol.ts").SinkMetadata;
 }>;
 
 export function metric(
@@ -47,11 +56,11 @@ export function table(metrics: readonly Metric[]): string {
           ? value.toFixed(1)
           : value.toFixed(2);
   return [
-    "| metric | median | p95 | n | id |",
-    "| --- | ---: | ---: | ---: | --- |",
+    "| metric | median | p95 | n | sent/seen/late/missing | id |",
+    "| --- | ---: | ---: | ---: | --- | --- |",
     ...metrics.map(
       (m) =>
-        `| ${m.label} | ${fmt(m.median)} ${m.unit} | ${fmt(m.p95)} ${m.unit} | ${m.n} | \`${m.id}\` |`,
+        `| ${m.label} | ${fmt(m.median)} ${m.unit} | ${fmt(m.p95)} ${m.unit} | ${m.n} | ${m.samples ? `${m.samples.sent}/${m.samples.observed}/${m.samples.late}/${m.samples.missing}` : ""} | \`${m.id}\` |`,
     ),
   ].join("\n");
 }

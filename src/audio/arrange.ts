@@ -39,9 +39,11 @@ import {
 import {
   barStartTick,
   bpmAtTick,
+  fermataSpan,
   loopSecondsOf,
   loopTicksOf,
   secondsAtTick,
+  tickAtSeconds,
   type TimeScore,
 } from "../../core/tempo.ts";
 import {
@@ -55,6 +57,18 @@ import {
   type WavCue,
 } from "./wav.ts";
 import { engineFor } from "./instruments.ts";
+import { applyMonitorMaster } from "./master.ts";
+import { WindowCache, windowCacheKey } from "./window-cache.ts";
+
+export type ArrangedRenderOptions = RenderOptions &
+  Readonly<{
+    /** Owned by a long-lived renderer; omitted by one-off exports. */
+    windowCache?: WindowCache;
+    /** Bounded fixed-gain audition window containing this loop frame. */
+    monitorFrame?: number;
+    /** Internal raw loop-tail request; never used by exact rendering. */
+    monitorTailOnly?: boolean;
+  }>;
 
 /** What one default render pass holds before the renderer cuts it. */
 const DEFAULT_PASS_SECONDS = 30;
@@ -185,11 +199,12 @@ export function scoreBeatAt(score: TrackScore, beat: number): number {
 export function renderArranged(
   renderer: StemRenderer,
   score: TrackScore,
-  options: RenderOptions = {},
+  options: ArrangedRenderOptions = {},
 ): RenderedAudio {
   // Clips cut at sections, forms and windows need their files' real ends.
   score = withClipLengths(score, options.samples);
   if (
+    options.monitorFrame === undefined &&
     !(options.loop && loopedSection(score)) &&
     formSegments(score).length === 0 &&
     applySectionChanges(score) === score &&
@@ -205,7 +220,7 @@ export function renderArranged(
 function renderArrangedBaked(
   renderer: StemRenderer,
   score: TrackScore,
-  options: RenderOptions,
+  options: ArrangedRenderOptions,
 ): RenderedAudio {
   score = bakeTrackTime(score);
   const section = options.loop ? loopedSection(score) : undefined;
@@ -214,7 +229,11 @@ function renderArrangedBaked(
   let played = section
     ? sectionScore(score, section)
     : applySectionChanges(score);
-  if (played === score && fitsOnePass(renderer, score, options))
+  if (
+    options.monitorFrame === undefined &&
+    played === score &&
+    fitsOnePass(renderer, score, options)
+  )
     return renderer.render(score, options);
   const ticks = barTicks(played);
   const seconds = secondsAtTick(played, played.bars * ticks);
@@ -223,7 +242,7 @@ function renderArrangedBaked(
       `the song plays ${Math.round(seconds)} s; the limit is ${MAX_SONG_SECONDS} s`,
       "score-limit",
     );
-  if (seconds <= SINGLE_PASS_SECONDS)
+  if (options.monitorFrame === undefined && seconds <= SINGLE_PASS_SECONDS)
     return renderer.render(played, { ...options, maxSeconds: 60 });
   // Windows pick notes by start tick, so timed tracks (cycle, rate) must be
   // placed into song ticks first, sections or not.
@@ -252,7 +271,7 @@ function renderArrangedBaked(
 function fitsOnePass(
   renderer: StemRenderer,
   score: TrackScore,
-  options: RenderOptions,
+  options: ArrangedRenderOptions,
 ): boolean {
   if (options.maxSeconds !== undefined) return true;
   return options.loop
@@ -268,7 +287,7 @@ function fitsOnePass(
 function renderForm(
   renderer: StemRenderer,
   score: TrackScore,
-  options: RenderOptions,
+  options: ArrangedRenderOptions,
 ): RenderedAudio {
   const total = arrangedBars(score);
   const timeline = playbackTime(score);
@@ -292,7 +311,7 @@ function renderForm(
 /** `renderScorePcm` for arranged songs. */
 export function renderArrangedPcm(
   score: TrackScore,
-  options: RenderOptions = {},
+  options: ArrangedRenderOptions = {},
 ): RenderedAudio {
   return renderArranged(new StemRenderer({ maxCacheBytes: 0 }), score, options);
 }
@@ -304,6 +323,227 @@ export function renderArrangedWav(
 ): Uint8Array {
   const audio = renderArrangedPcm(score, { ...options, loop: false });
   return encodeWav(audio.pcm, audio.sampleRate, RENDER_CHANNELS);
+}
+
+/**
+ * Cursor-first audition windows are measured in frames, not whole bars: a
+ * legal slow/compound bar can exceed the renderer's entire 60-second budget.
+ * Source slices may begin within a bar; their integral bar count just provides
+ * enough automation and notes for the bounded, explicitly timed render.
+ */
+function renderMonitorWindow(
+  renderer: StemRenderer,
+  score: TrackScore,
+  timeline: TimeScore,
+  notesIn: (from: number, to: number) => Note[],
+  frame: (from: number, bars: number) => TrackScore,
+  options: ArrangedRenderOptions,
+): RenderedAudio {
+  const sampleRate = clampSampleRate(options.sampleRate);
+  const ticks = barTicks(score);
+  const totalTicks = loopTicksOf(timeline);
+  const loopFrames = Math.max(
+    1,
+    Math.round(loopSecondsOf(timeline) * sampleRate),
+  );
+  const target =
+    ((Math.floor(options.monitorFrame!) % loopFrames) + loopFrames) %
+    loopFrames;
+  const span = Math.round(4 * sampleRate);
+  const start = Math.floor(target / span) * span;
+  // An arbitrary seek can land one frame before an aligned seam. Retain a
+  // full window beyond that cursor so the next job has time to finish.
+  const end = Math.min(loopFrames, Math.ceil((target + span) / span) * span);
+  const frameAt = (tick: number) =>
+    Math.round(secondsAtTick(timeline, tick) * sampleRate);
+  const tickAt = (sample: number) =>
+    tickAtSeconds(timeline, sample / sampleRate);
+  const overhang = Math.max(
+    OVERHANG_SECONDS,
+    ...score.tracks.map((track) => vocoderPrerollSeconds(track.vocoder)),
+  );
+  // Keep a fermata with its whole felt beat: slicing into its stretched span
+  // would drop the hold and place all subsequent notes at the wrong time.
+  const beforeHold = (tick: number) => {
+    let result = Math.max(0, Math.floor(tick));
+    const holds = timeline.time?.fermatas ?? [];
+    // The normalized list is ordered. Walking backward also catches an
+    // earlier overlapping hold exposed by moving to a later hold's start.
+    for (let index = holds.length - 1; index >= 0; index--) {
+      const hold = holds[index]!;
+      if (
+        hold.tick <= result &&
+        hold.tick + fermataSpan(timeline, hold.tick) > result
+      )
+        result = Math.min(result, hold.tick);
+    }
+    return result;
+  };
+  let preTick = beforeHold(tickAt(Math.max(0, start - overhang * sampleRate)));
+  const startTick = tickAt(start);
+  const last = end === loopFrames;
+  const noteEnd = Math.min(totalTicks, Math.ceil(tickAt(end)) + ticks);
+  const all = notesIn(
+    Math.max(0, startTick / ticks - SCORE_LIMITS.maxBars),
+    noteEnd / ticks,
+  );
+  // Pull reachable held notes into the pre-roll; restart older drones inside
+  // the same bounded budget, as the exact renderer does at long seams.
+  const earliest = Math.max(0, end - WINDOW_BUDGET_SECONDS * sampleRate);
+  for (const note of all) {
+    const candidate = beforeHold(note.startTick);
+    if (
+      note.startTick < startTick &&
+      frameAt(note.startTick + note.durationTicks) + overhang * sampleRate >
+        start &&
+      frameAt(candidate) >= earliest
+    )
+      preTick = Math.min(preTick, candidate);
+  }
+  const preFrame = frameAt(preTick);
+  const notes: Note[] = [];
+  for (const note of all) {
+    if (note.startTick >= noteEnd) continue;
+    const stop = note.startTick + note.durationTicks;
+    if (note.startTick >= preTick)
+      notes.push({ ...note, startTick: note.startTick - preTick });
+    else if (stop > preTick)
+      notes.push({ ...note, startTick: 0, durationTicks: stop - preTick });
+  }
+  const bars = Math.max(1, Math.ceil((noteEnd - preTick) / ticks));
+  const window = withNoteCap(
+    BAKED_NOTE_CAP,
+    () =>
+      new TrackScore({
+        ...frame(preTick / ticks, bars).toJSON(),
+        notes,
+        master: null,
+      }),
+  );
+  const seedState: Record<string, string> = {};
+  if (
+    preTick > 0 &&
+    window.tracks.some((track) => engineFor(track)?.windowSeed)
+  ) {
+    const history = frame(0, Math.max(1, Math.ceil(preTick / ticks)));
+    for (const track of history.tracks) {
+      const seed = engineFor(track)?.windowSeed?.(
+        history,
+        track,
+        preFrame,
+        sampleRate,
+      );
+      if (seed !== undefined) seedState[track.id] = seed;
+    }
+  }
+  const windowOptions: RenderOptions = {
+    ...options,
+    cacheStems: options.cacheStems ?? false,
+    sampleRate,
+    loop: false,
+    seedTick: preTick,
+    ...(preTick > 0 ? { seedSeconds: secondsAtTick(timeline, preTick) } : {}),
+    ...(Object.keys(seedState).length ? { seedState } : {}),
+    // Render beyond the retained seam so endpoint fades do not land in it.
+    // The last window also supplies a bounded tail to the start of the loop.
+    maxSeconds: Math.min(
+      60,
+      (end - preFrame) / sampleRate + (last ? overhang : 1),
+    ),
+  };
+  const key = options.windowCache
+    ? windowCacheKey(window, windowOptions)
+    : undefined;
+  const cached = key === undefined ? undefined : options.windowCache?.get(key);
+  const audio = cached ?? renderer.render(window, windowOptions);
+  if (!cached && key !== undefined) options.windowCache?.set(key, audio);
+  if (options.monitorTailOnly) {
+    const tail = audio.pcm.slice(
+      Math.max(0, loopFrames - preFrame) * RENDER_CHANNELS,
+    );
+    return {
+      sampleRate,
+      channels: RENDER_CHANNELS,
+      frames: tail.length / RENDER_CHANNELS,
+      pcm: tail,
+    };
+  }
+  let input = audio.pcm;
+  if (options.loop && preFrame < overhang * sampleRate) {
+    const tail = renderMonitorWindow(
+      renderer,
+      score,
+      timeline,
+      notesIn,
+      frame,
+      {
+        ...options,
+        monitorFrame: loopFrames - 1,
+        monitorTailOnly: true,
+      },
+    );
+    const from = preFrame * RENDER_CHANNELS;
+    if (from < tail.pcm.length) {
+      input = input.slice();
+      const take = Math.min(input.length, tail.pcm.length - from);
+      for (let i = 0; i < take; i++)
+        input[i] = Math.max(
+          -32768,
+          Math.min(32767, input[i]! + tail.pcm[from + i]!),
+        );
+    }
+  }
+  const monitored = applyMonitorMaster(input, sampleRate, score.master);
+  const overlap = Math.min(
+    Math.round(SEAM_FADE_SECONDS * sampleRate),
+    start - preFrame,
+  );
+  const begin = start - preFrame - overlap;
+  let frames = Math.min(end - start + overlap, audio.frames - begin);
+  if (begin < 0 || frames <= 0 || start - overlap + frames <= target)
+    throw new ScoreValidationError(
+      "monitor render did not cover the requested frame",
+      "score-limit",
+    );
+  let pcm = monitored.slice(
+    begin * RENDER_CHANNELS,
+    (begin + frames) * RENDER_CHANNELS,
+  );
+  let nonFinite = audio.nonFinite;
+  // A cursor at the song's last frame needs the same runway through the
+  // loop boundary. The buffer splits this contiguous result at loopFrames.
+  // Tail-only recursion returned above; a head window cannot recurse here.
+  if (start > 0 && last && target + span > loopFrames) {
+    const head = renderMonitorWindow(
+      renderer,
+      score,
+      timeline,
+      notesIn,
+      frame,
+      { ...options, monitorFrame: 0 },
+    );
+    const headFrames = Math.min(head.frames, start + 2 * span - loopFrames);
+    const joined = new Int16Array(pcm.length + headFrames * RENDER_CHANNELS);
+    joined.set(pcm);
+    joined.set(head.pcm.subarray(0, headFrames * RENDER_CHANNELS), pcm.length);
+    pcm = joined;
+    frames += headFrames;
+    if (head.nonFinite)
+      nonFinite = {
+        samples: (nonFinite?.samples ?? 0) + head.nonFinite.samples,
+        tracks: [
+          ...new Set([...(nonFinite?.tracks ?? []), ...head.nonFinite.tracks]),
+        ],
+      };
+  }
+  return {
+    sampleRate,
+    channels: RENDER_CHANNELS,
+    frames,
+    pcm,
+    monitor: { startFrame: start - overlap, loopFrames },
+    ...(nonFinite ? { nonFinite } : {}),
+  };
 }
 
 /**
@@ -328,8 +568,17 @@ function renderWindows(
   totalBars: number,
   notesIn: (from: number, to: number) => Note[],
   frame: (from: number, bars: number) => TrackScore,
-  options: RenderOptions,
+  options: ArrangedRenderOptions,
 ): RenderedAudio {
+  if (options.monitorFrame !== undefined)
+    return renderMonitorWindow(
+      renderer,
+      score,
+      timeline,
+      notesIn,
+      frame,
+      options,
+    );
   const sampleRate = clampSampleRate(options.sampleRate);
   const ticks = barTicks(score);
   // A tempo map changes how long bars are: ring and reach plan with the
@@ -435,7 +684,7 @@ function renderWindows(
         if (seed !== undefined) seedState[track.id] = seed;
       }
     }
-    const audio = renderer.render(window, {
+    const windowOptions: RenderOptions = {
       ...options,
       // Each window replaces every track's cached stem, so keeping its
       // pre-reverb pairs and tails only creates large temporary allocations.
@@ -455,7 +704,14 @@ function renderWindows(
             secondsAtTick(timeline, noteTo * ticks) -
               secondsAtTick(timeline, pre * ticks),
           ),
-    });
+    };
+    const key = options.windowCache
+      ? windowCacheKey(window, windowOptions)
+      : undefined;
+    const cached =
+      key === undefined ? undefined : options.windowCache?.get(key);
+    const audio = cached ?? renderer.render(window, windowOptions);
+    if (!cached && key !== undefined) options.windowCache?.set(key, audio);
     if (audio.nonFinite) {
       nonFinite.samples += audio.nonFinite.samples;
       for (const id of audio.nonFinite.tracks)

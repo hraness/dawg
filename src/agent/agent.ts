@@ -5,7 +5,7 @@ import { newId } from "../../core/ids.ts";
 import type { CommandHost } from "./command-agent.ts";
 import { GRANULAR_PARAMS } from "../../core/granular.ts";
 import {
-  applyScoreOperation,
+  applyScoreOperations,
   scoreFromJSON,
   type ScoreOperation,
   type TrackScore,
@@ -1188,12 +1188,17 @@ async function executeCallInner(
       if (call.name !== "load_demo")
         throw new Error("only a canonical demo may replace the score");
       next = scoreFromJSON(plan.next.toJSON());
-    } else
-      for (const candidate of plan.operations) {
-        const operation = validateAgentOperation(candidate);
-        next = applyScoreOperation(next, operation);
-        operations.push(operation);
+    } else {
+      const candidates = plan.operations;
+      function* validatedOperations() {
+        for (const candidate of candidates) {
+          const operation = validateAgentOperation(candidate);
+          yield operation;
+          operations.push(operation);
+        }
       }
+      next = applyScoreOperations(next, validatedOperations());
+    }
     // Keep rhythm rows and their lanes consistent (regenerate after a loop
     // resize, freeze a row whose lane the tool edited by hand).
     const reconciled = replace ? next : reconcileRhythm(snapshot.score, next);

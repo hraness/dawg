@@ -73,6 +73,9 @@ describe("help reference", () => {
       [
         "/agent",
         "/auth",
+        "/back",
+        "/home",
+        "/jump",
         "/bpm",
         "/chords",
         "/click",

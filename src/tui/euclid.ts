@@ -48,6 +48,7 @@ import {
 } from "../../core/score.ts";
 import type { PickerItem } from "../../tui/app.ts";
 import { auditionKey, type AuditionKey } from "./audition.ts";
+import { parseRhythmCommand, mergeRhythmRow } from "../commands/rhythm.ts";
 import type { MenuAudition } from "./menu.ts";
 import { KNOB_MAPS } from "./knob-map.ts";
 import { knobGlyph, KNOBS, nextKnob, type KnobIndex } from "../../tui/knobs.ts";
@@ -331,8 +332,31 @@ export class EuclidEditor {
   /** True while the blue knob (which drum) has focus, not a field. */
   private onDrum = true;
   private entry: string | undefined;
+  private entryError: string | undefined;
   /** Where Esc returns to (`menu` when opened from `/menu`). */
   private origin: string | undefined;
+
+  saveNavigation() {
+    return {
+      visible: this.visible,
+      lane: this.lane,
+      param: this.param,
+      onDrum: this.onDrum,
+      entry: this.entry,
+      entryError: this.entryError,
+      origin: this.origin,
+    };
+  }
+
+  restoreNavigation(state: ReturnType<EuclidEditor["saveNavigation"]>): void {
+    this.visible = state.visible;
+    this.lane = state.lane;
+    this.param = state.param;
+    this.onDrum = state.onDrum;
+    this.entry = state.entry;
+    this.entryError = state.entryError;
+    this.origin = state.origin;
+  }
 
   get open(): boolean {
     return this.visible;
@@ -393,8 +417,24 @@ export class EuclidEditor {
     return this.onDrum ? 0 : knobOfParam(this.param);
   }
 
+  paste(text: string, context: EuclidContext): EuclidResult {
+    if (!this.visible) return { type: "pass" };
+    if (this.onDrum) {
+      this.onDrum = false;
+      this.param = paramOfKnob(1) ?? 0;
+    }
+    this.entry = (
+      (this.entry ?? "") +
+      text.replace(/[\u0000-\u001f\u007f-\u009f]/g, "").trim()
+    ).slice(0, 32);
+    this.entryError = undefined;
+    return { type: "handled" };
+  }
+
   key(value: string, context: EuclidContext): EuclidResult {
     if (!this.visible) return { type: "pass" };
+    if (value === "?" && this.entry === undefined) return { type: "pass" };
+    if (!KEY_ENTER.has(value)) this.entryError = undefined;
     if (value === "\u0003" || value === "\u000c") return { type: "pass" };
     const lanes = this.lanes(context);
     if (lanes.length > 0) this.lane = Math.min(this.lane, lanes.length - 1);
@@ -411,12 +451,25 @@ export class EuclidEditor {
       }
       if (KEY_ENTER.has(value)) {
         const text = this.entry.trim();
-        this.entry = undefined;
-        if (this.onDrum || !lane || !/^-?[0-9./tT]+$/.test(text))
+        const command = lane
+          ? `euclid ${lane.voice} ${param.field} ${text}`
+          : "";
+        const parsed = parseRhythmCommand(command);
+        if (this.onDrum || !lane || parsed?.type !== "rhythm-set") {
+          this.entryError = `Invalid ${param.label} · edit value or Esc cancel`;
           return { type: "handled" };
+        }
+        try {
+          mergeRhythmRow(lane.row, lane.voice, parsed.fields);
+        } catch (error) {
+          this.entryError = `${error instanceof Error ? error.message : String(error)} · edit or Esc cancel`;
+          return { type: "handled" };
+        }
+        this.entry = undefined;
+        this.entryError = undefined;
         return {
           type: "run",
-          command: `euclid ${lane.voice} ${param.field} ${text}`,
+          command,
           audition: lane.voice,
         };
       }
@@ -577,7 +630,7 @@ export class EuclidEditor {
       title += ` · ${audition.status}`;
     const hint =
       this.entry !== undefined
-        ? HINTS.typing
+        ? (this.entryError ?? HINTS.typing)
         : audition && (audition.looping || audition.dirty)
           ? audition.hint
           : `${this.strip(lanes[index]?.label.trim(), row)} · ${KNOB_KEYS}`;

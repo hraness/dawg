@@ -4,6 +4,7 @@
  */
 import type { Track } from "../../../core/score.ts";
 import type { DecodedSample } from "../samples.ts";
+import { nativeReverbKernel, type ReverbKernel } from "../native-dsp.ts";
 import {
   addConvolved,
   builtinImpulse,
@@ -328,6 +329,28 @@ export function reverbWet(
   const { sampleRate } = context;
   const impulse = reverbImpulse(track, sampleRate, context.irs);
   if (impulse) return convolutionWet(left, right, track, context, impulse);
+  return algorithmicReverbWet(left, right, reverb, sampleRate);
+}
+
+/** Exported for exact reference/native qualification; mix and convolution
+ * remain in the shared TypeScript pipeline. null forces the reference path. */
+export function algorithmicReverbWet(
+  left: Float64Array,
+  right: Float64Array,
+  reverb: NonNullable<Track["reverb"]>,
+  sampleRate: number,
+  kernel: ReverbKernel | null | undefined = nativeReverbKernel(),
+): ReverbWet {
+  if (kernel && left.length === right.length) {
+    const wet = nativeAlgorithmicReverb(
+      left,
+      right,
+      reverb,
+      sampleRate,
+      kernel,
+    );
+    if (wet) return wet;
+  }
   const scale = sampleRate / 44_100;
   const sizeFeedback = 0.7 + 0.28 * reverb.size;
   const damp =
@@ -397,6 +420,63 @@ export function reverbWet(
     wetR[index] = process(sides[1], input);
   }
   return { left: wetL, right: wetR };
+}
+
+/** Parameter/input arithmetic stays in JS: transcendental functions retain
+ * their exact platform behavior and only the fixed-order delay loop crosses. */
+function nativeAlgorithmicReverb(
+  left: Float64Array,
+  right: Float64Array,
+  reverb: NonNullable<Track["reverb"]>,
+  sampleRate: number,
+  kernel: ReverbKernel,
+): ReverbWet | undefined {
+  const scale = sampleRate / 44_100;
+  const lengths = new Uint32Array(24),
+    gains = new Float64Array(16);
+  const tuning = [...COMB_TUNING, ...ALLPASS_TUNING];
+  for (let side = 0; side < 2; side += 1)
+    for (let j = 0; j < 12; j += 1) {
+      const length = Math.max(
+        1,
+        Math.round((tuning[j]! + side * STEREO_SPREAD) * scale),
+      );
+      lengths[side * 12 + j] = length;
+      if (j < 8)
+        gains[side * 8 + j] =
+          reverb.fade === undefined
+            ? 0.7 + 0.28 * reverb.size
+            : Math.min(0.995, 10 ** ((-3 * length) / sampleRate / reverb.fade));
+    }
+  const damp =
+    reverb.dim === undefined
+      ? 0.2 + 0.3 * reverb.size
+      : Math.exp(
+          (-2 * Math.PI * Math.min(reverb.dim, sampleRate * 0.45)) / sampleRate,
+        );
+  const filter =
+    reverb.lowpass === undefined
+      ? undefined
+      : new OnePole(reverb.lowpass, sampleRate);
+  const pre = Math.round((reverb.predelay ?? 0) * sampleRate);
+  const delay = pre > 0 ? new Float64Array(pre) : undefined;
+  const input = new Float64Array(left.length);
+  for (let i = 0; i < input.length; i += 1) {
+    let value = (left[i]! + right[i]!) * REVERB_INPUT_GAIN;
+    if (filter) value = filter.process(value);
+    if (delay) {
+      const slot = i % pre;
+      const previous = delay[slot]!;
+      delay[slot] = value;
+      value = previous;
+    }
+    input[i] = value;
+  }
+  const wetL = new Float64Array(left.length),
+    wetR = new Float64Array(left.length);
+  return kernel(input, wetL, wetR, lengths, gains, damp)
+    ? { left: wetL, right: wetR }
+    : undefined;
 }
 
 /**

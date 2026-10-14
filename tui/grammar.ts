@@ -13,6 +13,7 @@
  * movement; play mode reserves letters for piano keys. Panels say which.
  */
 import { displayWidth } from "./text.ts";
+import { NAVIGATION_ACTIONS } from "./navigation.ts";
 
 // ── key sets: the one definition every screen imports ─────────────────
 
@@ -134,7 +135,7 @@ export const HINTS = {
     " ↑↓ knob · ←→ turn · tab field · space loop · x off · esc back · ? keys ",
   text: " ↑↓ scroll · pgup pgdn page · esc back · ? keys ",
   log: " ↑↓ scroll · / filter · esc back · ? keys ",
-  keys: " esc or ? closes ",
+  keys: " ↑↓ scroll · pgup pgdn page · esc or ? back ",
 } as const;
 
 // ── the `?` panel ─────────────────────────────────────────────────────
@@ -183,13 +184,29 @@ const LIST: readonly KeyRow[] = [
   ["esc", "clear the filter, then back"],
 ];
 
+/** The same global actions drive dispatch, the shelf and contextual help. */
+export const NAVIGATION_KEYS: KeySection = {
+  title: "anywhere",
+  rows: [
+    ...NAVIGATION_ACTIONS.map((action): KeyRow => [
+      action.hint.split(" ")[0]!,
+      action.id === "jump"
+        ? "Jump: places, tracks and commands"
+        : "Back: restore draft and selection",
+    ]),
+    ["F1", "guides · esc returns to the editor"],
+  ],
+};
+
 export const KEYS = {
+  navigation: [NAVIGATION_KEYS],
   prompt: [
     {
       title: "start here",
       rows: [
         ["type", "ask in plain words, or type a command"],
         ["ctrl-p", "play mode: notes on the keyboard (chords: q)"],
+        ["ctrl-t", "TAPE: all tracks across the bars"],
         ["ctrl-k", `menu: ${MENU_ROOTS.length} sections · /menu <topic>`],
         ["space", "play / pause (empty prompt)"],
         ["/help", "what dawg can do · /help <topic> for more"],
@@ -204,7 +221,7 @@ export const KEYS = {
         ["ctrl-q", "switch now/next (what enter does)"],
         ["ctrl-z ctrl-y", "undo / redo"],
         ["ctrl-o", "transcript"],
-        ["esc", "cancel the agent · back from a panel"],
+        ["esc", "cancel agent · back · keep the prompt draft"],
         ["ctrl-c", "quit"],
       ],
     },
@@ -437,7 +454,7 @@ export const KEYS = {
         ["s", "save to the library · patch save acid-bass"],
         ["space", "audition loop (the track solo)"],
         ["/", "type a command, staying here"],
-        ["esc", "back home · patch off"],
+        ["esc", "previous location · patch off"],
       ],
     },
   ],
@@ -461,6 +478,8 @@ export type KeyScreen = keyof typeof KEYS;
 
 /** `?` panel lines: a heading per section, then aligned `keys  action`. */
 export function keyLines(sections: readonly KeySection[]): string[] {
+  if (!sections.includes(NAVIGATION_KEYS))
+    sections = [NAVIGATION_KEYS, ...sections];
   const column =
     Math.max(
       0,

@@ -5,9 +5,11 @@
  * stats; then capture from the null input. Usage: bun native/smoke.ts <lib>
  */
 import { dlopen, FFIType, ptr } from "bun:ffi";
+import { dspSmoke } from "./dsp-smoke.ts";
 
 const path = process.argv[2];
 if (!path) throw new Error("usage: bun native/smoke.ts <library>");
+dspSmoke(path);
 const lib = dlopen(path, {
   dawg_sink_abi_version: { args: [], returns: FFIType.u32 },
   dawg_sink_clock_ns: { args: [], returns: FFIType.u64 },

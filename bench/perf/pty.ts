@@ -4,9 +4,9 @@
  *
  * Audio goes to bench/perf/sink.ts through DAWG_AUDIO_PLAYER. The sink logs
  * each silence→sound edge with the wall time its bytes arrived and the wall
- * time the engine scheduled them for (the device then adds its own output
- * buffer, which no PTY measurement can see). "Audible" below means the
- * scheduled time.
+ * time on a synthetic clock anchored to the first chunk received. That
+ * estimate includes external-player queueing; it is not the engine or
+ * native device clock. No physical output latency is measured.
  *
  * Each scenario runs in its own temp directory with a temp HOME.
  */
@@ -15,6 +15,12 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { VirtualTerminal } from "../../test/vt.ts";
 import { epoch, metric, type Metric } from "./stats.ts";
+import { OnsetSamples, ONSET_TIMEOUT_MS } from "./onsets.ts";
+import {
+  parseSinkLog,
+  type SinkEdge,
+  type SinkMetadata,
+} from "./sink-protocol.ts";
 
 const MAIN = resolve(import.meta.dir, "../../src/main.ts");
 const SINK = resolve(import.meta.dir, "sink.ts");
@@ -24,8 +30,6 @@ interface PtyTerminal {
   write(data: string): void;
   close(): void;
 }
-
-type Edge = { arrival: number; scheduled: number; on: boolean };
 
 export type Session = Awaited<ReturnType<typeof open>>;
 
@@ -106,25 +110,17 @@ export async function open(
     terminal.write(data);
     return at;
   };
-  const edges = async (): Promise<Edge[]> => {
+  const sinkLog = async () => {
     const raw = await readFile(log, "utf8").catch(() => "");
-    return raw
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => {
-        const [arrival, scheduled, state] = line.split(" ");
-        return {
-          arrival: Number(arrival),
-          scheduled: Number(scheduled),
-          on: state === "on",
-        };
-      });
+    return parseSinkLog(raw);
   };
+  const edges = async () => (await sinkLog()).edges;
+  const audioContext = async () => (await sinkLog()).metadata;
   /** The first sound edge that arrived after `since`. */
   const soundAfter = async (
     since: number,
-    timeoutMs = 5_000,
-  ): Promise<Edge | undefined> => {
+    timeoutMs = ONSET_TIMEOUT_MS,
+  ): Promise<SinkEdge | undefined> => {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       const hit = (await edges()).find((e) => e.on && e.arrival >= since);
@@ -149,6 +145,7 @@ export async function open(
     until,
     send,
     edges,
+    audioContext,
     soundAfter,
     close,
   };
@@ -159,7 +156,8 @@ const ready = (s: Session) => s.until((t) => t.includes(" NOW "), "prompt");
 /** Spawn to the first full frame, and to the first note heard. */
 export async function startup(runs: number): Promise<Metric[]> {
   const frame: number[] = [];
-  const note: number[] = [];
+  const note = new OnsetSamples();
+  let metadata: SinkMetadata | undefined;
   for (let i = 0; i < runs; i += 1) {
     const s = await open({ audio: true });
     try {
@@ -170,14 +168,26 @@ export async function startup(runs: number): Promise<Metric[]> {
       await s.until((t) => t.includes("PLAY MODE"), "play mode");
       const pressed = s.send("a");
       const edge = await s.soundAfter(pressed);
-      if (edge) note.push(edge.scheduled - s.spawnedAt);
+      note.record(s.spawnedAt, edge);
+      metadata = await s.audioContext();
     } finally {
       await s.close();
     }
   }
   return [
     metric("startup.frame", "startup → first frame", frame),
-    metric("startup.note", "startup → first playable note heard", note),
+    note.metric(
+      "startup.note.bytes",
+      "startup → first playable PCM bytes",
+      "bytes",
+      metadata,
+    ),
+    note.metric(
+      "startup.note",
+      "startup → synthetic first note",
+      "synthetic",
+      metadata,
+    ),
   ];
 }
 
@@ -206,33 +216,41 @@ export async function keys(presses: number): Promise<Metric[]> {
       s.send("/play\r");
       await s.until((t) => t.includes("PLAY MODE"), "play mode");
       await Bun.sleep(400);
-      const cold: number[] = [];
-      const warm: number[] = [];
-      const bytesCold: number[] = [];
-      const bytesWarm: number[] = [];
+      const cold = new OnsetSamples();
+      const warm = new OnsetSamples();
       for (let i = 0; i <= presses; i += 1) {
         const pressed = s.send(KEYS[i % KEYS.length]!);
         const edge = await s.soundAfter(pressed);
-        if (edge) {
-          (i === 0 ? cold : warm).push(edge.scheduled - pressed);
-          (i === 0 ? bytesCold : bytesWarm).push(edge.arrival - pressed);
-        }
+        (i === 0 ? cold : warm).record(pressed, edge);
         // Let the note (one grid step) and its tail clear the sink.
         await Bun.sleep(i < KEYS.length ? 700 : 450);
       }
+      const metadata = await s.audioContext();
       out.push(
-        metric(
+        cold.metric(
           `key.bytes.cold.${id}`,
-          `key → audio bytes, first press, ${id}`,
-          bytesCold,
+          `key → PCM bytes, first press, ${id}`,
+          "bytes",
+          metadata,
         ),
-        metric(
+        warm.metric(
           `key.bytes.warm.${id}`,
-          `key → audio bytes, later, ${id}`,
-          bytesWarm,
+          `key → PCM bytes, later, ${id}`,
+          "bytes",
+          metadata,
         ),
-        metric(`key.cold.${id}`, `key → audible, first press, ${id}`, cold),
-        metric(`key.warm.${id}`, `key → audible, later, ${id}`, warm),
+        cold.metric(
+          `key.cold.${id}`,
+          `key → synthetic onset, first press, ${id}`,
+          "synthetic",
+          metadata,
+        ),
+        warm.metric(
+          `key.warm.${id}`,
+          `key → synthetic onset, later, ${id}`,
+          "synthetic",
+          metadata,
+        ),
       );
     } finally {
       await s.close();
@@ -245,8 +263,8 @@ export async function keys(presses: number): Promise<Metric[]> {
 export async function command(cycles: number): Promise<Metric[]> {
   const s = await open({ audio: true });
   const receipt: number[] = [];
-  const audible: number[] = [];
-  const bytes: number[] = [];
+  const onsets = new OnsetSamples();
+  let metadata: SinkMetadata | undefined;
   try {
     await ready(s);
     s.send("add C4 at 0 for 16\r");
@@ -265,30 +283,39 @@ export async function command(cycles: number): Promise<Metric[]> {
       rev += 1;
       receipt.push(shown - sent);
       const edge = await s.soundAfter(sent);
-      if (edge) {
-        audible.push(edge.scheduled - sent);
-        bytes.push(edge.arrival - sent);
-      }
+      onsets.record(sent, edge);
       await Bun.sleep(300);
       s.send("volume 0\r");
       await s.until((t) => t.includes(`rev ${rev}→${rev + 1}`), "silence");
       rev += 1;
       await Bun.sleep(500);
     }
+    metadata = await s.audioContext();
   } finally {
     await s.close();
   }
   return [
     metric("command.receipt", "typed command → receipt", receipt),
-    metric("command.bytes", "typed command → new audio bytes", bytes),
-    metric("command.audible", "typed command → audible change", audible),
+    onsets.metric(
+      "command.bytes",
+      "typed command → new PCM bytes",
+      "bytes",
+      metadata,
+    ),
+    onsets.metric(
+      "command.audible",
+      "typed command → synthetic onset",
+      "synthetic",
+      metadata,
+    ),
   ];
 }
 
 /** Menu fader (volume row, auditioning): arrow → audible change. */
 export async function fader(cycles: number): Promise<Metric[]> {
   const s = await open({ audio: true });
-  const audible: number[] = [];
+  const onsets = new OnsetSamples();
+  let metadata: SinkMetadata | undefined;
   try {
     await ready(s);
     s.send("add C4 at 0 for 16\r");
@@ -296,8 +323,11 @@ export async function fader(cycles: number): Promise<Metric[]> {
     s.send("volume 0\r");
     await s.until((t) => t.includes("rev 1→2"), "silent");
     s.send("/menu mix\r");
-    await s.until((t) => t.includes("menu › Mix"), "mix menu");
-    s.send("jjj");
+    await s.until(
+      (t) => t.includes("≡ Mix") || t.includes("menu › Mix"),
+      "mix menu",
+    );
+    s.send("\u001b[B\u001b[B\u001b[B");
     await s.until((t) => t.includes("› volume"), "volume row");
     s.send(" ");
     await s.until((t) => t.includes("♪ solo"), "audition");
@@ -305,15 +335,29 @@ export async function fader(cycles: number): Promise<Metric[]> {
     for (let i = 0; i < cycles; i += 1) {
       const sent = s.send("\u001b[C");
       const edge = await s.soundAfter(sent);
-      if (edge) audible.push(edge.scheduled - sent);
+      onsets.record(sent, edge);
       await Bun.sleep(400);
       s.send("\u001b[D");
       await Bun.sleep(600);
     }
+    metadata = await s.audioContext();
   } finally {
     await s.close();
   }
-  return [metric("fader.audible", "fader step → audible change", audible)];
+  return [
+    onsets.metric(
+      "fader.bytes",
+      "fader step → new PCM bytes",
+      "bytes",
+      metadata,
+    ),
+    onsets.metric(
+      "fader.audible",
+      "fader step → synthetic onset",
+      "synthetic",
+      metadata,
+    ),
+  ];
 }
 
 /** Two-way sync: song.ts saved in an editor → the TUI shows it. */

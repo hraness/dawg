@@ -14,6 +14,7 @@
 import { writeFile } from "node:fs/promises";
 import { frames } from "./frame.ts";
 import { interactiveInput } from "./interactive.ts";
+import { historyReplay } from "./history.ts";
 import { arrangementFrames } from "./arrangement.ts";
 import { live } from "./live.ts";
 import { patch } from "./patch.ts";
@@ -38,6 +39,7 @@ const GROUPS: Record<string, () => Promise<Metric[]> | Metric[]> = {
   sync: () => pty.sync(n(10, 3)),
   agent: () => pty.agent(n(10, 3)),
   input: () => interactiveInput(n(24, 6)),
+  history: () => historyReplay(n(5, 2)),
   frame: () => frames(undefined, n(600, 200)),
   arrangement: () => arrangementFrames(n(220, 80)),
   render: () => render(n(5, 2)),

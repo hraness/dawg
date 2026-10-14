@@ -11,7 +11,7 @@
  * the usual `rebase` reply. The reducer still validates every operation.
  */
 import {
-  applyScoreOperation,
+  applyScoreOperations,
   automationPoints,
   scoreFromJSON,
   type PatchTarget,
@@ -237,9 +237,7 @@ export function rebaseOperations(
     }
   }
   try {
-    let next = current;
-    for (const operation of operations)
-      next = applyScoreOperation(next, operation);
+    const next = applyScoreOperations(current, operations);
     return { ok: true, next: scoreFromJSON(next.toJSON()) };
   } catch (error) {
     return {

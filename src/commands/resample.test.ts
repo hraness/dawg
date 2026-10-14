@@ -1,9 +1,21 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createScore, TrackScore, updateTrack } from "../../core/score.ts";
+import {
+  createScore,
+  SCORE_LIMITS,
+  TrackScore,
+  updateTrack,
+} from "../../core/score.ts";
 import { printProject } from "../../core/sdk/print.ts";
 import { renderArrangedPcm } from "../audio/arrange.ts";
 import { resampleScore, scoreSha256 } from "../audio/resample.ts";
@@ -306,6 +318,84 @@ describe("runResample", () => {
       command: parseResampleCommand("resample lead bars 2-9")!,
     });
     expect(bars.ok).toBe(false);
+  });
+
+  test("a full note budget is validated before publishing or replacing a resample", async () => {
+    const root = await project();
+    const source = song();
+    const score = new TrackScore({
+      ...source.toJSON(),
+      notes: Array.from({ length: SCORE_LIMITS.maxNotes }, (_, i) => ({
+        ...source.notes[0]!,
+        id: `full-${i}`,
+      })),
+    });
+    const dir = join(root, "tracks", "lead-rs", "samples");
+    await mkdir(dir, { recursive: true });
+    const target = join(dir, "lead.wav");
+    const previous = Buffer.from("previous user-owned resample");
+    await writeFile(target, previous);
+    // Computation is injected so this checks publication without rendering 4096 voices.
+    const render = () => ({
+      wav: new Uint8Array([1, 2, 3]),
+      sha256: "a".repeat(64),
+      sampleRate: 22050,
+      seconds: 1,
+      startTick: 0,
+      durationTicks: 480,
+      from: { source: "track:lead", score: "b".repeat(64) },
+    });
+    await expect(
+      runResample({
+        projectRoot: root,
+        score,
+        command: parseResampleCommand("resample lead")!,
+        render,
+      }),
+    ).rejects.toThrow("notes");
+    expect(await readFile(target)).toEqual(previous);
+    expect(await readdir(dir)).toEqual(["lead.wav"]);
+  });
+
+  test("cancellation and a stale revision preserve existing assets and remove temporary files", async () => {
+    for (const stoppedAt of ["render", "publication"] as const) {
+      const root = await project();
+      const dir = join(root, "tracks", "lead-rs", "samples");
+      await mkdir(dir, { recursive: true });
+      const target = join(dir, "lead.wav");
+      const previous = Buffer.from("previous user-owned resample");
+      await writeFile(target, previous);
+      const controller = new AbortController();
+      let checks = 0;
+      const result = runResample({
+        projectRoot: root,
+        score: song(),
+        command: parseResampleCommand("resample lead")!,
+        signal: controller.signal,
+        assertCurrent: () => {
+          checks += 1;
+          if (stoppedAt === "publication" && checks === 2)
+            throw new Error("source revision changed");
+        },
+        render: () => {
+          if (stoppedAt === "render") controller.abort();
+          return {
+            wav: new Uint8Array([1, 2, 3]),
+            sha256: "a".repeat(64),
+            sampleRate: 22050,
+            seconds: 1,
+            startTick: 0,
+            durationTicks: 480,
+            from: { source: "track:lead", score: "b".repeat(64) },
+          };
+        },
+      });
+      await expect(result).rejects.toThrow(
+        stoppedAt === "render" ? "abort" : "revision changed",
+      );
+      expect(await readFile(target)).toEqual(previous);
+      expect(await readdir(dir)).toEqual(["lead.wav"]);
+    }
   });
 });
 

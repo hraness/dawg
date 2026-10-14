@@ -8,6 +8,7 @@ import {
   faderCommand,
   stagedBadge,
   faderKeyPress,
+  faderPaste,
   faderPosition,
   faderSetPosition,
   faderStep,
@@ -399,4 +400,21 @@ describe("fader detents", () => {
     expect(fitted).not.toContain("esc revert");
     expect(fitted).toContain("x reset");
   });
+});
+
+test("invalid fader values stay editable and paste cannot execute shortcuts", () => {
+  const state: FaderState = { label: mix.label };
+  faderPaste(state, [mix], "99\r");
+  expect(state.typing).toBe("99");
+  expect(
+    faderKeyPress(state, [mix], "\r", { dirty: false, audition: false }),
+  ).toEqual({ type: "handled" });
+  expect(state.typing).toBe("99");
+  expect(state.error).toContain("Use");
+  faderKeyPress(state, [mix], "\u001b", { dirty: false, audition: false });
+  faderPaste(state, [mix], "0.25");
+  expect(
+    faderKeyPress(state, [mix], "\r", { dirty: false, audition: false }),
+  ).toMatchObject({ type: "set", command: "fx reverb mix 0.25" });
+  expect(state.typing).toBeUndefined();
 });

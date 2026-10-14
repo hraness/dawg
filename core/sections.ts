@@ -489,7 +489,9 @@ function sliceTrackClips(
  */
 export function sectionScore(score: TrackScore, section: Section): TrackScore {
   const ticks = barTicks(score);
-  const from = section.startBar * ticks;
+  // Render windows may start inside a bar; avoid fractional tick noise from
+  // round-tripping an integral tick through its bar ratio (31 / 480 * 480).
+  const from = Math.round(section.startBar * ticks);
   const to = from + section.bars * ticks;
   const tracks = new Map(score.tracks.map((track) => [track.id, track]));
   const notes: Note[] = [];
@@ -1564,8 +1566,10 @@ export function arrangedNotes(
     const sectionTo = sectionFrom + section.bars * ticks;
     const start = Math.max(segment.startBar, fromBar);
     const stop = Math.min(segment.startBar + segment.bars, toBar);
-    const from = (section.startBar + start - segment.startBar) * ticks;
-    const to = stop > start ? from + (stop - start) * ticks : from;
+    const from = Math.round(
+      (section.startBar + start - segment.startBar) * ticks,
+    );
+    const to = stop > start ? Math.round(from + (stop - start) * ticks) : from;
     const origin = (segment.startBar - section.startBar) * ticks;
     for (const note of score.notes) {
       if (note.startTick < sectionFrom || note.startTick >= sectionTo) continue;
@@ -1650,11 +1654,13 @@ export function arrangedSlice(
     if (segEnd <= fromBar || segment.startBar >= end) continue;
     const start = Math.max(segment.startBar, fromBar);
     const stop = Math.min(segEnd, end);
-    const from = (segment.section.startBar + start - segment.startBar) * ticks;
+    const from = Math.round(
+      (segment.section.startBar + start - segment.startBar) * ticks,
+    );
     const piece = {
       from,
-      to: from + (stop - start) * ticks,
-      offset: (start - fromBar) * ticks,
+      to: Math.round(from + (stop - start) * ticks),
+      offset: Math.round((start - fromBar) * ticks),
     };
     pieces.push(piece);
     const straight =
@@ -1663,7 +1669,9 @@ export function arrangedSlice(
     clipPieces.push({
       ...piece,
       section: segment.section,
-      ...(stop < segEnd ? { to: from + (segEnd - start) * ticks } : {}),
+      ...(stop < segEnd
+        ? { to: Math.round(from + (segEnd - start) * ticks) }
+        : {}),
       ...(clipPieces.length === 0 &&
       fromBar > 0 &&
       (start > segment.startBar || straight)
@@ -1671,7 +1679,7 @@ export function arrangedSlice(
         : {}),
     });
   }
-  const shift = fromBar * ticks;
+  const shift = Math.round(fromBar * ticks);
   const timed = sliceSongTime(score, pieces);
   return new TrackScore({
     ...score.toJSON(),

@@ -2005,6 +2005,146 @@ export function applyScoreOperation(
   return assertNever(operation);
 }
 
+/**
+ * Apply one transaction in order. Note-only runs validate each intermediate
+ * edit, but rebuild the immutable score just once. Other operations flush the
+ * run first: a later track addition, removal or resize cannot make an invalid
+ * earlier note edit valid. Nothing is published if any operation throws.
+ */
+export function applyScoreOperations(
+  score: TrackScore,
+  operations: Iterable<ScoreOperation>,
+): TrackScore {
+  let next = score;
+  let notes: Map<string, Note> | undefined;
+  let tracks: Set<string> | undefined;
+  let plainIds: boolean | undefined;
+  let changed = false;
+  const flush = () => {
+    if (changed)
+      next = new TrackScore({ ...next.toJSON(), notes: [...notes!.values()] });
+    notes = undefined;
+    tracks = undefined;
+    plainIds = undefined;
+    changed = false;
+  };
+  const checkCap = (length: number) => {
+    if (length > noteCap)
+      throw new ScoreValidationError(
+        `score cannot contain more than ${noteCap} notes`,
+        "score-limit",
+      );
+  };
+  const checkTrack = (note: Note) => {
+    if (!tracks!.has(note.trackId))
+      throw new ScoreValidationError(
+        `note ${note.id} is on track ${note.trackId}, which does not exist`,
+        "invalid-note",
+      );
+  };
+  for (const operation of operations) {
+    if (
+      operation.type !== "addNote" &&
+      operation.type !== "removeNote" &&
+      operation.type !== "updateNote" &&
+      operation.type !== "clearTrack"
+    ) {
+      flush();
+      next = applyScoreOperation(next, operation);
+      continue;
+    }
+    // Keep the single-operation boundary's validation for foreign scores.
+    if (!(next instanceof TrackScore)) {
+      next = applyScoreOperation(next, operation);
+      continue;
+    }
+    // localeCompare can equate distinct Unicode ids. Stable sorting after
+    // each edit then affects later ties, so retain the sequential path for
+    // those ids instead of changing canonical note order.
+    plainIds ??= next.notes.every((note) => /^[\x20-\x7e]+$/.test(note.id));
+    const editId =
+      operation.type === "addNote"
+        ? operation.note?.id
+        : operation.type === "updateNote"
+          ? (operation.patch as NotePatch & { id?: unknown })?.id
+          : undefined;
+    if (
+      !plainIds ||
+      (typeof editId === "string" && !/^[\x20-\x7e]+$/.test(editId))
+    ) {
+      flush();
+      next = applyScoreOperation(next, operation);
+      continue;
+    }
+    notes ??= new Map(next.notes.map((note) => [note.id, note]));
+    tracks ??= new Set(next.tracks.map((track) => track.id));
+    if (operation.type === "addNote") {
+      const note = normalizeNote(operation.note);
+      if (notes.has(note.id))
+        throw new ScoreValidationError(
+          `note id already exists: ${note.id}`,
+          "duplicate-note",
+        );
+      // addNote always enforces the stored-score cap, even in withNoteCap.
+      if (notes.size >= SCORE_LIMITS.maxNotes)
+        throw new ScoreValidationError(
+          `score cannot contain more than ${SCORE_LIMITS.maxNotes} notes`,
+          "score-limit",
+        );
+      checkCap(notes.size + 1);
+      checkTrack(note);
+      notes.set(note.id, note);
+      changed = true;
+    } else if (operation.type === "updateNote") {
+      const current = notes.get(operation.noteId);
+      if (!current)
+        throw new ScoreValidationError(
+          `unknown note: ${operation.noteId}`,
+          "invalid-note",
+        );
+      checkCap(notes.size);
+      const note = normalizeNote({ ...current, ...operation.patch });
+      if (note.id !== current.id && notes.has(note.id))
+        throw new ScoreValidationError(
+          `note id already exists: ${note.id}`,
+          "duplicate-note",
+        );
+      checkTrack(note);
+      if (note.id !== current.id) notes.delete(current.id);
+      notes.set(note.id, note);
+      changed = true;
+    } else if (operation.type === "removeNote") {
+      const id = operation.noteId;
+      if (
+        typeof id !== "string" ||
+        id.length === 0 ||
+        id.length > SCORE_LIMITS.maxIdLength
+      )
+        throw new ScoreValidationError(
+          "noteId must be a non-empty short string",
+          "invalid-note",
+        );
+      if (notes.delete(id)) {
+        checkCap(notes.size);
+        changed = true;
+      }
+    } else {
+      let removed = false;
+      for (const [id, note] of notes)
+        if (note.trackId === operation.trackId) {
+          notes.delete(id);
+          removed = true;
+        }
+      if (removed) {
+        checkCap(notes.size);
+        changed = true;
+      }
+    }
+  }
+  flush();
+  return next;
+}
+
 export function scoreFromJSON(value: unknown): TrackScore {
   if (!isRecord(value))
     throw new ScoreValidationError("score must be an object");

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { encodeLoop } from "../core/loop.ts";
 import { createScore } from "../core/score.ts";
 import { clippedSamples, runRenderCommand } from "./render.ts";
+import { AudioCompute } from "./audio/compute.ts";
 
 describe("render clip warning", () => {
   test("counts samples on the 16-bit rails only", () => {
@@ -20,7 +21,7 @@ describe("render rate note", () => {
   afterAll(async () => {
     for (const dir of dirs) await rm(dir, { recursive: true, force: true });
   });
-  const run = async (args: string[], master: boolean) => {
+  const run = async (args: string[], master: boolean, worker = false) => {
     const dir = await mkdtemp(join(tmpdir(), "dawg-rate-"));
     dirs.push(dir);
     const score = createScore({
@@ -31,12 +32,19 @@ describe("render rate note", () => {
     await writeFile(join(dir, "in.track.json"), encodeLoop(score), "utf8");
     let out = "";
     let err = "";
-    const code = await runRenderCommand(
-      ["render", "out.wav", "--import", "in.track.json", ...args],
-      dir,
-      { write: (text: string) => ((out += text), true) },
-      { write: (text: string) => ((err += text), true) },
-    );
+    const compute = worker ? new AudioCompute() : undefined;
+    let code: number;
+    try {
+      code = await runRenderCommand(
+        ["render", "out.wav", "--import", "in.track.json", ...args],
+        dir,
+        { write: (text: string) => ((out += text), true) },
+        { write: (text: string) => ((err += text), true) },
+        compute ? { compute, signal: new AbortController().signal } : undefined,
+      );
+    } finally {
+      compute?.dispose();
+    }
     expect(code).toBe(0);
     expect(err).toBe("");
     return out;
@@ -46,6 +54,17 @@ describe("render rate note", () => {
     expect(await run([], false)).toMatch(
       / · 22050 Hz \(--rate 48000 for full band\) · /,
     );
+  });
+
+  test("--measure reports loudness without sample attribution for inline and worker exports", async () => {
+    for (const worker of [false, true]) {
+      expect(
+        await run(["--rate", "8000", "--measure"], false, worker),
+      ).toContain("loudness · ");
+      expect(await run(["--rate", "8000"], false, worker)).not.toContain(
+        "loudness · ",
+      );
+    }
   });
 
   test("an explicit rate or a master shows the rate alone", async () => {

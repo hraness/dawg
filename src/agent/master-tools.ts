@@ -22,11 +22,8 @@ import {
 } from "../../core/master.ts";
 import { FxValidationError } from "../../core/params.ts";
 import { ScoreValidationError, type TrackScore } from "../../core/score.ts";
-import {
-  exportSampleRate,
-  measureScore,
-  type ScoreMeasurement,
-} from "../audio/measure.ts";
+import { exportSampleRate, type ScoreMeasurement } from "../audio/measure.ts";
+import { withAudioCompute } from "../audio/compute.ts";
 import { nextMaster, type MasterCommand } from "../commands/master.ts";
 import type { AgentTool } from "./tools.ts";
 import type { PreviewHost } from "./preview-tool.ts";
@@ -186,10 +183,16 @@ async function measureWith(
   preview: PreviewHost | undefined,
   score: TrackScore,
   sampleRate: number,
+  signal?: AbortSignal,
 ): Promise<ScoreMeasurement> {
-  return preview?.measure
-    ? await preview.measure(score, { sampleRate })
-    : measureScore(score, { sampleRate });
+  signal?.throwIfAborted();
+  const measured = preview?.measure
+    ? await preview.measure(score, { sampleRate, signal })
+    : await withAudioCompute(signal, (compute) =>
+        compute.measure(score, undefined, { sampleRate }),
+      );
+  signal?.throwIfAborted();
+  return measured;
 }
 
 export const MASTER_TOOLS = Object.freeze([
@@ -283,6 +286,7 @@ export const MASTER_TOOLS = Object.freeze([
             action.preview,
             score,
             exportSampleRate(context.score),
+            action.signal,
           );
           const result = measurementJSON(measured, score.master);
           const integrated = result.integrated;

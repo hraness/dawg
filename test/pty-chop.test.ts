@@ -26,6 +26,9 @@ test.skipIf(!supported)(
       expect(text).toMatch(/1(\.0+)?\s?s|0:01/);
       expect(text).toContain("44100 Hz");
       expect(text).toContain("peak -6 dB");
+      // The report owns input until dismissed; commands never leak behind it.
+      expect(t.state()?.overlay).toBe("text");
+      await t.type("\u001b", "close chop info");
       await t.type("/chop reverse tone.wav\r", "chop reverse");
       const samples = await readdir(
         join(dir, "tracks", "lead", "samples"),

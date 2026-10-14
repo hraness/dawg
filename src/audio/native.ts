@@ -1,8 +1,8 @@
 /**
  * The native audio sink (native/sink, Rust + cpal) loaded through bun:ffi.
  *
- * The engine still renders and mixes every sample in TypeScript; the sink
- * only plays them from a lock-free ring drained by the device's own audio
+ * The engine renders and mixes in TypeScript (with optional separately
+ * versioned DSP kernels). The sink plays from a lock-free ring drained by the device's own audio
  * callback (and captures input into another ring). That removes the stdin
  * pipe and the external player's buffer from the output path.
  *

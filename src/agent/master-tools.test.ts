@@ -3,6 +3,7 @@ import { applyScoreOperations } from "../../core/diff.ts";
 import { createScore, type TrackScore } from "../../core/score.ts";
 import { compositionBrief } from "./brief.ts";
 import { MASTER_TOOLS, measurementJSON } from "./master-tools.ts";
+import { measureScore } from "../audio/measure.ts";
 import { AGENT_TOOLS, type ActionContext, type ToolContext } from "./tools.ts";
 
 const song = () =>
@@ -143,12 +144,15 @@ describe("measure_mix", () => {
 
   test("uses the host's measure hook when it has one", async () => {
     let called = 0;
+    const controller = new AbortController();
     const { json } = await measure(
       song(),
       {},
       {
+        signal: controller.signal,
         preview: {
-          measure: async (score) => {
+          measure: async (score, options) => {
+            expect(options?.signal).toBe(controller.signal);
             called += 1;
             const { measureScore } = await import("../audio/measure.ts");
             return measureScore(score);
@@ -158,6 +162,41 @@ describe("measure_mix", () => {
     );
     expect(called).toBe(1);
     expect(json.integrated).not.toBeNull();
+  });
+
+  test("aborted measurements reject before hosts and discard late host replies", async () => {
+    const measured = measureScore(song(), { sampleRate: 8000 });
+    for (const immediate of [true, false]) {
+      const controller = new AbortController();
+      if (immediate) controller.abort();
+      let called = 0;
+      await expect(
+        measure(
+          song(),
+          {},
+          {
+            signal: controller.signal,
+            preview: {
+              measure: async (_score, options) => {
+                called += 1;
+                expect(options?.signal).toBe(controller.signal);
+                await new Promise<void>((resolve) => setImmediate(resolve));
+                controller.abort();
+                return measured;
+              },
+            },
+          },
+        ),
+      ).rejects.toMatchObject({ name: "AbortError" });
+      expect(called).toBe(immediate ? 0 : 1);
+    }
+  });
+
+  test("the default measurement worker accepts turn cancellation", async () => {
+    const controller = new AbortController();
+    const pending = measure(song(), {}, { signal: controller.signal });
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
   });
 
   test("silence reports null loudness and a note", () => {

@@ -13,16 +13,26 @@ The harness lives in `bench/perf/`:
 
 - `pty.ts` drives the real `dawg` TUI in a pseudo-terminal (temp dir, temp
   HOME). Audio goes through `DAWG_AUDIO_PLAYER` to `sink.ts`, which logs each
-  silence→sound edge with the wall time its bytes arrived and the time the
-  engine scheduled them to play. **Audible** means the scheduled time; a real
-  device adds its own output buffer on top (ffplay and CoreAudio: roughly
-  10–40 ms), which no PTY measurement can see. **Audio bytes** is when the
-  rendered PCM reached the player, which isolates render cost from the queue
-  lead.
+  silence→sound edge with byte-arrival time, PCM frame index and a synthetic
+  schedule anchored to the first chunk received. The synthetic clock includes
+  the external player's queue policy; it is not the engine's native clock or
+  measured speaker latency. PCM receipt isolates work before the silent sink.
+  JSON records the command backend, discard sink, sample rate, stereo format,
+  detector threshold and clock model. Every audio row reports sent, observed,
+  late (>20 ms at that row's boundary) and missing onsets (4-second timeout).
+  Missing attacks remain in these counts even when percentile sample count
+  `n` is zero. Granular or overlapping tails may prevent a new silence→sound
+  edge; missing does not by itself prove a dropped key. A native device-clock
+  or physical loopback measurement is required for native latency claims.
 - `interactive.ts` measures a four-character prompt burst to its first fully
   synchronized visible frame in the 13-track Signal Bloom arrangement. It
   disables audio, varies the idle gap after clearing the prompt, and avoids
   test-only state-report timing. Run it with `bun run bench:perf -- input`.
+- `history.ts` replays the complete Signal Bloom demo and a 3,768-note dense
+  arrangement through batch apply, rebase and per-pane redo. Every result must
+  reproduce the target score's canonical SHA256. Run `bun bench/perf/history.ts
+--sequential` to include the original single-operation reducer as a control;
+  this intentionally takes longer and belongs on the host compute scheduler.
 - `frame.ts` times `TuiApp.render` with a moving playhead.
 - `arrangement.ts` times the TAPE view model plus full frames for 16-track /
   12-scene and 32-track / 24-scene songs with repeated sections, automation
@@ -91,10 +101,11 @@ before and after. Alternating full-song times ranged from 8.66–9.30 s before
 and 6.69–9.86 s after; the first candidate run includes JIT warmup. The
 fresh-process pair is corroborating evidence, not a latency percentile.
 
-These are offline render timings, not measured speaker latency. Playback
-still waits for its whole arranged buffer to finish: multi-second startup
-remains for long, layered demos. This change does not introduce partially
-rendered buffers or change seek/loop behavior. Reverb loop reordering and
+These are historical offline render timings, not measured speaker latency.
+At this stage playback waited for its whole arranged buffer to finish, so
+long, layered demos had multi-second startup. The 0.13 monitoring path below
+supersedes that preparation behavior for long songs. This drum-cache change
+itself did not alter seek/loop behavior. Reverb loop reordering and
 static-gain special casing were investigated but discarded because controlled
 comparisons did not establish a reliable improvement.
 
@@ -108,7 +119,7 @@ worker; the script prints cold, replay, reconstructed-score, edit and edited
 replay rows, along with PCM hashes and process RSS. Run it through the host
 scheduler when one is installed.
 
-The renderer now retains one completed stereo loop, up to 64 MiB, alongside
+This historical playback path retained one completed stereo loop, up to 64 MiB, alongside
 its bounded stem cache. A replay checks the complete score, output rate, and
 loaded sample, table and impulse hashes. Asset loading runs before lookup,
 so a replaced, missing or restored file cannot return stale audio. Cached
@@ -135,9 +146,10 @@ including edited scores. Retained PCM is 12,544,000 bytes for Signal Bloom
 and 9,817,044 bytes for Glass Arc. These single-run numbers demonstrate cache
 reuse, not a latency distribution or speaker timing. The after sequence also
 contains the dense automation lookup optimization; no first-render speedup
-is attributed to this cache. Changed arrangements still render in full, and
-loops over the byte cap are returned normally without retention. Cold
-startup remains multi-second for these larger songs.
+is attributed to this cache. In this version, changed arrangements rendered
+in full and loops over the byte cap were returned without retention. The
+0.13 monitoring path below supersedes this behavior for long songs; short
+loops still use the completed-loop cache.
 
 ## Interactive input (2026-10-13)
 
@@ -552,7 +564,7 @@ mastering result, rendering time, sample-load time and process peak RSS.
 This comparison used baseline `eb33204d9c17fa386d579a71848172402dd0bfa9`,
 macOS arm64, Bun 1.3.14, 22,050 Hz stereo output, with three fresh processes for
 each source and song. Baseline/candidate execution order alternated by trial.
-The playback path renders a full arranged loop with guide notes and a fresh
+This historical playback path renders a full arranged loop with guide notes and a fresh
 `StemRenderer`; it excludes TUI dispatch, worker startup, device buffering and
 speaker latency. The effects changes above are combined here with bounded scene
 stem retention and direct copying into the arranged mix. These are measured
@@ -576,6 +588,149 @@ frame counts and mastering results for their song. An additional fresh-process
 export pair per song also matched exactly (six renders). Export timings were
 mixed and were collected for equality qualification, not an export speed claim.
 The measured work changes neither tempo, notes, sound choices nor render quality,
-and does not stream incomplete audio. Repeated playback benefits from the
+and did not stream incomplete audio. Repeated playback benefited from the
 separate bounded completed-loop cache; these fresh-process measurements do not
-include that reuse.
+include that reuse. The 0.13 monitoring results below describe the later bounded
+playback path for long songs.
+
+## Batched history and optional native reverb
+
+`bun bench/perf/history.ts --sequential` compares sequential score operations,
+transactional note runs, rebase and the actual full-song redo path. Every sample
+checks canonical score SHA-256. The reducer validates each note operation in
+order, including temporary note-cap violations, and flushes before track or song
+operations. Unicode IDs with collating ties use the original sequential path.
+
+The optional reverb kernel uses a separate DSP ABI inside the existing verified
+native sink artifact; the audio-device ABI is unchanged. It processes only the
+fixed-order float64 comb/allpass loops. Parameter calculations, input filtering,
+predelay, mixing, convolution and mastering keep their JavaScript arithmetic.
+`DAWG_NATIVE_DSP=0` forces the reference implementation for controlled comparisons.
+Missing artifacts, hash mismatches, unsupported ABI/capabilities or kernel failure
+fall back to JavaScript; no build or download happens on the user's machine.
+
+Native CI executes `native/dsp-smoke.ts` through the existing sink smoke test,
+comparing exact stereo output hashes across five sample rates and four reverb
+parameter sets. Only darwin-arm64, linux-x64 and linux-arm64 are enabled: their
+release jobs execute this comparison. darwin-x64 remains on JavaScript because
+its library is cross-compiled without an executing parity check. The kernel never
+opens an audio device and these checks make no physical latency claim.
+
+## Responsive jobs and song monitoring (0.13)
+
+Export, resampling and sample analysis/transforms run in owned workers. Their
+completion time and the main thread's timer delay are separate metrics. A worker
+does not make a long render instantaneous, but leaves navigation and cancellation
+available. Sample PCM remains in the worker across operations within a chop job,
+with an explicit memory budget; descriptors avoid repeated large copies.
+
+Agent previews and explicit loudness measurements share that worker lifecycle.
+Optional header measurements wait for one second of idle time, yield to input
+and foreground jobs, and keep captured samples separate from the live keyboard.
+A controlled four-track, four-bar preview probe at 24 kHz reduced the largest
+main-thread timer gap from 171 ms to 1.70 ms with identical PCM and statistics.
+Total completion increased from 170 ms to 213 ms because of worker startup
+(n=1); this demonstrates responsiveness, not improved rendering throughput.
+Full sample-bank transfer still has finite copying costs.
+
+Playback of songs over 45 seconds renders a bounded window around the playhead
+and prefetches upcoming windows. A bounded LRU reuses unchanged effective windows,
+including their pre-roll, sidechain and sample/impulse dependencies. The monitor
+uses fixed master settings instead of a global loudness-target search. Export and
+measurement retain the complete deterministic master; monitor audio does not
+claim byte parity with the mastered export. Short loops keep the existing path.
+
+`bun bench/perf/history.ts` measures batched construction, session rebase and full
+history restoration against a canonical score hash. Add `--sequential` to retain
+the old repeated-construction control. Report scheduled sink onset together with
+sent, observed and missing note counts; neither that metric nor timer delay is a
+physical speaker-latency measurement.
+
+### Production render measurements (2026-10-13)
+
+The production `AudioEngine`, `LoopRenderer`, `AudioCompute` and render command
+were measured against an isolated v0.12.1 source archive (`8ae0c91`) on macOS
+arm64 with Bun 1.3.14. Child processes ran sequentially through the host
+scheduler, with bundled offline samples, network access disabled and a discard
+sink. A 5 ms heartbeat measured main-thread timer delay; PCM/WAV hashing ran
+outside the timed intervals. Peak RSS covers the process, workers and transient
+allocations, normalized from macOS bytes to MiB. These are preparation and sink
+receipt timings, not physical audio latency. The native measurements qualify
+only the rebuilt darwin-arm64 library.
+
+Exact 48 kHz Signal Bloom WAV export, with medians across fresh processes:
+
+| Metric                       | v0.12.1 (n=2) | 0.13 JS (n=3) | 0.13 native (n=2) |
+| ---------------------------- | ------------: | ------------: | ----------------: |
+| Export wall time             |      29.666 s |      27.473 s |          24.274 s |
+| Largest timer delay, median  |      27.654 s |       4.89 ms |           5.12 ms |
+| Largest timer delay, maximum |      29.546 s |      16.51 ms |           5.28 ms |
+| Process peak RSS, median     |      2505 MiB |      2654 MiB |          2470 MiB |
+
+Every WAV has SHA-256
+`fa2a8560efca4dee1745f27da86facaae51f9f6f6781083ee874d6c93ec6daba`.
+Native reverb reduced the candidate JS median by 11.6%. The small sample counts
+do not support precise attribution of the JS difference from baseline. Moving
+export to a worker primarily restores responsiveness: exact export still takes
+24–27 seconds here and does not consistently use less memory.
+
+The initial repeated monitoring suite measured Signal Bloom cold startup at
+13.444 s for v0.12.1 (n=2), 1.296 s for candidate JS (n=3) and 1.193 s for native
+(n=2). Median peak RSS fell from 2021 MiB to 503 MiB JS and 554 MiB native. Copper
+Wire changed from 9.998 s to 0.756 s, and Velvet Circuit from 6.978 s to 0.380 s
+(n=1 each, JS). Those runs preceded the seam repair described below; the work at
+frame zero is unchanged.
+
+A final follow-up measured Signal Bloom with the cursor inside the changed
+note's window, 0.1 beat after the note at 140 seconds (n=1 per variant):
+
+| Operation                                     | 0.13 JS | 0.13 native |
+| --------------------------------------------- | ------: | ----------: |
+| Cold start                                    | 1.285 s |     1.170 s |
+| Seek into an already synthesized final window | 0.123 s |     0.126 s |
+| Edit the note inside the current window       | 0.815 s |     0.737 s |
+| Repeat the same score and cursor              | 0.121 s |     0.121 s |
+| Maximum timer delay across operations         | 2.30 ms |     2.16 ms |
+| Process peak RSS                              | 488 MiB |     501 MiB |
+
+The same active-note edit took 10.899 s on v0.12.1 (n=1). The follow-up monitor
+hash changes with note velocity and agrees exactly between JS and native. This
+proves that the returned window contains the edit; an earlier probe with its
+cursor before that note did not establish that. Monitoring deliberately uses
+fixed master controls and omits global loudness targeting, so it is not expected
+to equal the fully mastered export.
+
+The advancing-clock probe also exposed a seam underrun when starting at 3.99 s.
+Monitoring now retains at least four seconds beyond the requested frame, bounded
+to eight seconds plus a 50 ms seam, and appends the required loop-head audio near
+the song end. The buffer splits wrapped PCM into independently owned tail/head
+allocations. Repeated probes at 3.99 s and 142.21 s reported no buffering at the
+first sink write or after 100 ms. Regressions cover both 64 s and 66 s songs,
+including cursors one frame before a window seam or the song end. This verifies
+those boundaries, not every possible slow-renderer or device underrun.
+
+Exact 22.05 kHz output still applies whole-song mastering. The production worker
+took 14.064 s cold and 4.945 s after a local final-note edit (n=1). A separate
+inline inspection run exposed the raw-window cache counters:
+
+| Exact output operation |     Time | Hits / misses | Retained cache |
+| ---------------------- | -------: | ------------: | -------------: |
+| Cold                   | 13.033 s |         0 / 8 |      20.36 MiB |
+| All windows warm       |  2.269 s |         8 / 0 |      20.36 MiB |
+| Local note edit        |  4.267 s |         6 / 2 |      25.21 MiB |
+| Track-wide change      | 11.238 s |         0 / 8 |      45.57 MiB |
+
+This sequence had a 1990 MiB process peak: retained-cache bounds do not bound
+transient DSP memory. Exact edited PCM matched the baseline, worker, cached
+renderer and fresh uncached oracle, with SHA-256
+`d69ccc755c2cd7f4605f8b6418dbd8aa4360a4ffd2bc159c2da6a7a3274e3965`.
+Even an all-warm raw cache spends time in whole-song mastering.
+
+There are remaining tradeoffs. Cold monitoring and local edits are not under
+100 ms. The old completed whole-song cache supported arbitrary seeks around
+0.3 ms and repeated play around 8 ms; progressive monitoring renders uncached
+destinations and reruns bounded mastering even when raw windows are cached. The
+123 ms seek above is specifically a cached destination, not an arbitrary-seek
+guarantee. A completed mastered-window cache or stateful DSP would be further
+work. These measurements and focused regressions are evidence for the described
+paths, not a substitute for the final integration gate after all lanes converge.

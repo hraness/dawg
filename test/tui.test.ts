@@ -515,7 +515,7 @@ test("an empty track shows a start hint instead of lane and bar labels", () => {
   expect(h.vt.text()).not.toContain("snare");
 });
 
-test("text overlay shows titled lines, scrolls, closes on Esc and on submit", () => {
+test("text overlay shows titled lines, scrolls, and owns input until Esc", () => {
   const h = harness(80, 16, MONO);
   const lines = Array.from({ length: 30 }, (_, index) =>
     index % 10 === 0 ? `── group ${index / 10}` : `line ${index}`,
@@ -543,6 +543,9 @@ test("text overlay shows titled lines, scrolls, closes on Esc and on submit", ()
   h.type("tempo 100");
   expect(h.app.overlay).toBe("text");
   h.app.input("\r");
+  expect(h.app.overlay).toBe("text");
+  expect(h.app.prompt.value).toBe("");
+  h.app.input("\u001b");
   expect(h.app.overlay).toBeUndefined();
 });
 
@@ -654,8 +657,8 @@ test("below the minimum only quit and play keys act", () => {
 
 test("shrinking below the minimum and back keeps the draft and the overlay", () => {
   const h = harness(80, 24, MONO);
-  h.app.openText("help", ["one", "two", "three"]);
   h.type("a draft");
+  h.app.openText("help", ["one", "two", "three"]);
   h.frame(1);
   expect(h.vt.text()).toContain("help");
   h.io.size(40, 10);

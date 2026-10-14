@@ -212,3 +212,20 @@ describe("euclid editor while auditioning", () => {
     expect(view.hint).toContain("enter keep");
   });
 });
+
+test("invalid rhythm paste preserves the value and valid paste waits for Enter", () => {
+  const editor = new EuclidEditor();
+  const ctx = { score: run(kit(), "euclid kick 4 16"), trackId: "drums" };
+  editor.show(ctx, "kick");
+  editor.paste("999\r", ctx);
+  expect(editor.key("\r", ctx)).toEqual({ type: "handled" });
+  expect(editor.typing).toBe(true);
+  expect(editor.view(ctx).hint).toContain("edit");
+  editor.key("\u001b", ctx);
+  expect(editor.paste("8", ctx)).toEqual({ type: "handled" });
+  expect(editor.key("\r", ctx)).toMatchObject({
+    type: "run",
+    command: "euclid kick pulses 8",
+  });
+  expect(editor.key("?", ctx)).toEqual({ type: "pass" });
+});

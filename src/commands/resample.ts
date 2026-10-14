@@ -9,7 +9,7 @@
  * stays as it is; mute it to hear only the resample.
  */
 import { newId } from "../../core/ids.ts";
-import { mkdir, realpath, rename, writeFile } from "node:fs/promises";
+import { mkdir, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MAX_ORBIT } from "../../core/fx.ts";
 import { GRANULAR_INSTRUMENT } from "../../core/granular.ts";
@@ -227,6 +227,15 @@ export async function runResample(
     score: TrackScore;
     command: ResampleCommand;
     samples?: SampleBank;
+    /** Interactive callers keep rendering off the input thread. */
+    render?:
+      | typeof renderResample
+      | ((
+          ...args: Parameters<typeof renderResample>
+        ) => Promise<ResampleRender>);
+    signal?: AbortSignal;
+    /** Checked after computation and immediately before publishing the asset. */
+    assertCurrent?: () => void;
   }>,
 ): Promise<ResampleResult> {
   const { score, command } = options;
@@ -237,7 +246,12 @@ export async function runResample(
     };
   let render: ResampleRender;
   try {
-    render = renderResample(score, command, options.samples);
+    options.signal?.throwIfAborted();
+    render = await (options.render ?? renderResample)(
+      score,
+      command,
+      options.samples,
+    );
   } catch (error) {
     if (error instanceof ScoreValidationError)
       return {
@@ -246,6 +260,8 @@ export async function runResample(
       };
     throw error;
   }
+  options.signal?.throwIfAborted();
+  options.assertCurrent?.();
   const trackId =
     command.as ??
     freeTrackId(
@@ -257,16 +273,24 @@ export async function runResample(
   // The directory follows the score that will hold the track.
   const probe = addTrack(score, { id: trackId, name: trackId });
   const slug = trackDirectories(probe).get(trackId) ?? trackId;
+  const name = `${resampleFileName(command)}.wav`;
+  const src = `samples/${name}`;
+  // Validate the complete score before touching project files. In particular,
+  // adding this track's note may exceed the note budget even when the track fits.
+  const next = addResampleTrack(score, command, render, trackId, src);
   const root = await realpath(options.projectRoot);
   const dir = join(root, "tracks", slug, "samples");
   await mkdir(dir, { recursive: true });
-  const name = `${resampleFileName(command)}.wav`;
   const target = join(dir, name);
   const temporary = `${target}.${process.pid}.tmp`;
-  await writeFile(temporary, render.wav);
-  await rename(temporary, target);
-  const src = `samples/${name}`;
-  const next = addResampleTrack(score, command, render, trackId, src);
+  try {
+    await writeFile(temporary, render.wav);
+    options.signal?.throwIfAborted();
+    options.assertCurrent?.();
+    await rename(temporary, target);
+  } finally {
+    await rm(temporary, { force: true });
+  }
   const what =
     command.source.kind === "track"
       ? command.source.trackId

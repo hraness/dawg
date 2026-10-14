@@ -64,6 +64,7 @@ export function applyMaster(
   sampleRate: number,
   master: SongMaster | undefined,
   loop: boolean,
+  inputPcm?: Int16Array,
 ): MasterOutput | undefined {
   if (!masterActive(master) || frames <= 0) return undefined;
   const song = master!;
@@ -85,8 +86,10 @@ export function applyMaster(
   for (let index = 0; index < length; index += 1) {
     const source = loop ? index % frames : index;
     if (source < frames) {
-      left[index] = mixL[source]!;
-      right[index] = mixR[source]!;
+      left[index] = inputPcm ? inputPcm[source * 2]! / 32767 : mixL[source]!;
+      right[index] = inputPcm
+        ? inputPcm[source * 2 + 1]! / 32767
+        : mixR[source]!;
     }
   }
   if (song.eq) applyEq(left, right, song.eq, sampleRate);
@@ -169,6 +172,64 @@ export function applyMaster(
     ...(song.limiter && song.target !== undefined ? { runs } : {}),
   };
   return Object.freeze({ left: outL, right: outR, report });
+}
+
+/** Decode directly into master-owned buffers instead of holding a second float pair. */
+export function applyMasterPcm(
+  pcm: Int16Array,
+  frames: number,
+  sampleRate: number,
+  master: SongMaster | undefined,
+  loop: boolean,
+): MasterOutput | undefined {
+  return applyMaster(
+    EMPTY_INPUT,
+    EMPTY_INPUT,
+    frames,
+    sampleRate,
+    master,
+    loop,
+    pcm,
+  );
+}
+const EMPTY_INPUT = new Float64Array(0);
+
+/**
+ * Bounded audition: fixed manual limiter drive, no target normalization,
+ * whole-buffer trim or loudness scan. Filter state warms in the render window's
+ * pre-roll; this deliberately does not claim exact whole-song mastering.
+ */
+export function applyMonitorMaster(
+  pcm: Int16Array,
+  sampleRate: number,
+  song: SongMaster | undefined,
+): Int16Array {
+  if (!song || !masterActive(song)) return pcm;
+  const frames = pcm.length / 2;
+  const left = new Float64Array(frames),
+    right = new Float64Array(frames);
+  for (let i = 0; i < frames; i++) {
+    left[i] = pcm[i * 2]! / 32767;
+    right[i] = pcm[i * 2 + 1]! / 32767;
+  }
+  if (song.eq) applyEq(left, right, song.eq, sampleRate);
+  if (song.glue) applyGlue(left, right, song.glue, sampleRate);
+  if (song.tape) applyTape(left, right, song.tape, sampleRate);
+  if (song.width) applyWidth(left, right, song.width, sampleRate);
+  let outputL: Float64Array = left,
+    outputR: Float64Array = right;
+  if (song.limiter) {
+    const limiter = new Limiter(left, right, song.limiter, sampleRate);
+    limiter.run(Number(song.limiter.gain));
+    outputL = limiter.left;
+    outputR = limiter.right;
+  }
+  const out = new Int16Array(pcm.length);
+  for (let i = 0; i < frames; i++) {
+    out[i * 2] = Math.round(Math.max(-1, Math.min(1, outputL[i]!)) * 32767);
+    out[i * 2 + 1] = Math.round(Math.max(-1, Math.min(1, outputR[i]!)) * 32767);
+  }
+  return out;
 }
 
 function clampGain(gainDb: number): number {

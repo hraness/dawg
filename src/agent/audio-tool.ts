@@ -13,7 +13,8 @@ import {
 } from "../audio/chop/args.ts";
 import { CHOP_USAGE } from "../audio/chop/words.ts";
 import { ChopError } from "../audio/chop/pcm.ts";
-import { runChop, stemOf } from "../audio/chop/run.ts";
+import { stemOf } from "../audio/chop/run.ts";
+import { runBackgroundChop as runChop } from "../audio/chop/background.ts";
 import { slicesToSampler } from "../audio/chop/sampler.ts";
 import {
   CHOP_OPS,

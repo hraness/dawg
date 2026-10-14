@@ -110,7 +110,7 @@ import {
 import { sampleWarpFor, warpedSpan, type SampleWarp } from "./warp.ts";
 import { clipsDigest, hasClips, renderClips } from "./clips.ts";
 import { isGuideInstrument } from "../../core/clips.ts";
-import { applyMaster, type MasterReport } from "./master.ts";
+import { applyMaster, applyMasterPcm, type MasterReport } from "./master.ts";
 import type { SongMaster } from "../../core/master.ts";
 import { resolveTrackRef } from "../../core/routing.ts";
 import { resolveVocoder, VOCODER_INSTRUMENT } from "../../core/vocoder.ts";
@@ -164,7 +164,10 @@ export type RenderOptions = WavOptions &
   }>;
 
 /** Interleaved stereo 16-bit PCM plus its frame count. */
+export type MonitorRange = Readonly<{ startFrame: number; loopFrames: number }>;
+
 export type RenderedAudio = Readonly<{
+  monitor?: MonitorRange;
   sampleRate: number;
   channels: 2;
   frames: number;
@@ -1069,13 +1072,7 @@ export function masterSummedPcm(
   master: SongMaster | undefined,
   loop: boolean,
 ): { pcm: Int16Array; report: MasterReport } | undefined {
-  const left = new Float64Array(frames);
-  const right = new Float64Array(frames);
-  for (let index = 0; index < frames; index += 1) {
-    left[index] = pcm[index * 2]! / 32767;
-    right[index] = pcm[index * 2 + 1]! / 32767;
-  }
-  const mastered = applyMaster(left, right, frames, sampleRate, master, loop);
+  const mastered = applyMasterPcm(pcm, frames, sampleRate, master, loop);
   if (!mastered) return undefined;
   return {
     pcm: toPcm(mastered.left, mastered.right, frames, true),

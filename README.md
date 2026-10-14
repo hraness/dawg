@@ -13,7 +13,7 @@ read, and playback needs no account. The agent is optional.
 
 ```text
  ▶ 121 BPM · 2.3 · bass        Bb dorian · opus-5.5 · gateway · rev 1 · ○ local
-  Ⅱ Pause Space   ‹ Scene ^←   Scene › ^→   ☰ Menu ^K   ♪ Keys ^P   ? Help
+  Jump ^G   Back ^B   Pause   Menu ^K   Keys ^P   Guide F1   ‹ Scene   Scene ›
  ▏build         ▼                       ▏drop
                      ┃       ┃    ┃         ┃      ┃ ┃┃     ┃
    ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ▒ ┈ ┈ ┈ ┃ ┈ ┈▒┈ ┈ ┈ ┈ ┈┃┈ ┈ ┈ ┃ ┃┃┈ ┈ ┈┃┃ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈
@@ -35,7 +35,7 @@ read, and playback needs no account. The agent is optional.
  ✓ renamed · night drive   ✓ deep-house · Bb dorian · 121 BPM · 8 bars · 4 tra…
 ╭─ NOW ────────────────────────────────────────────────────────────────────────╮
 │ ›  describe a change — “double the melody an octave up”                      │
-╰─────────────────── night drive · $0 session · $0 today · opus-5.5 · gateway ─╯
+╰─ ^G jump · ^B back ──────────────────────────────────────────────────────────╯
 ```
 
 Docs: [dawg.sh/docs](https://dawg.sh/docs) (the same guides as `/guide`
@@ -80,6 +80,15 @@ tempo 120
 Each line lands as one revision and the status line says what changed
 (`✓ +1 bass note · rev 3→4 · ^z undo`). Space on an empty prompt plays and
 pauses; Ctrl-Z undoes any step.
+
+Ctrl-G opens **Jump** from every editor: search for a track, scene, PLAY, TAPE,
+PATCH, knobs, sound, sample, parameter, guide, or command. Results say whether Enter opens a
+place or inserts a command for you to finish. Ctrl-B returns with the
+previous draft, cursor, search and selection. F1 opens guides over your
+current editor; Escape closes the guide and returns you there. Escape
+first cancels local typing or a filter, then backs out, and keeps an
+unsubmitted prompt. Jump also includes Back and Home. Use those entries
+if your terminal reserves a shortcut (tmux commonly reserves Ctrl-B).
 
 For a ready groove, type `style` or open `/menu style`. Sixteen original
 starters cover Machines, Breaks, Pocket and Cycles, with drums first and
