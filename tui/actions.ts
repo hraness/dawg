@@ -3,6 +3,7 @@ import type { CellBuffer } from "./screen.ts";
 import type { HitMap, HitTarget } from "./hits.ts";
 import { displayWidth } from "./text.ts";
 import { onBackground } from "./theme.ts";
+import { NAVIGATION_ACTIONS } from "./navigation.ts";
 
 /** A persistent command shelf: visible controls and exact mouse targets. */
 export function paintActions(
@@ -24,23 +25,17 @@ export function paintActions(
   };
   const rows: Action[][] = [
     [
+      ...NAVIGATION_ACTIONS.map((action): Action => ({
+        label: action.id === "jump" ? "Jump ^G" : "Back ^B",
+        compact: action.id === "jump" ? "Jump ^G" : "Back ^B",
+        target: { kind: "command", command: action.command },
+        role: "borderFocus",
+      })),
       {
         label: `${view.score.playing ? (unicode ? "Ⅱ Pause" : "| Pause") : unicode ? "▶ Play" : "> Play"} Space`,
         compact: view.score.playing ? "Pause" : "Play",
         target: { kind: "transport" },
         role: "transport",
-      },
-      {
-        label: "‹ Scene ^←",
-        compact: "‹ Scene",
-        target: { kind: "scene-step", direction: -1 },
-        role: "loopRule",
-      },
-      {
-        label: "Scene › ^→",
-        compact: "Scene ›",
-        target: { kind: "scene-step", direction: 1 },
-        role: "loopRule",
       },
       {
         label: "☰ Menu ^K",
@@ -55,10 +50,22 @@ export function paintActions(
         role: "track",
       },
       {
-        label: "? Help",
-        compact: "? Help",
-        target: { kind: "command", command: "/help" },
+        label: "Guide F1",
+        compact: "Guide F1",
+        target: { kind: "command", command: "/guide" },
         role: "borderFocus",
+      },
+      {
+        label: "‹ Scene ^←",
+        compact: "‹ Scene",
+        target: { kind: "scene-step", direction: -1 },
+        role: "loopRule",
+      },
+      {
+        label: "Scene › ^→",
+        compact: "Scene ›",
+        target: { kind: "scene-step", direction: 1 },
+        role: "loopRule",
       },
     ],
   ];

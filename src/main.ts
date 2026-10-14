@@ -1,8 +1,12 @@
 #!/usr/bin/env bun
 import { commandCompletions } from "./tui/completion.ts";
+import { NavigationHistory, navigationAction } from "../tui/navigation.ts";
+import { jumpItems, parseJumpChoice } from "./tui/jump.ts";
 import { TOPIC_ALIASES } from "./lang/glossary.ts";
 import { isGuideInstrument, vocalChainPatch } from "../core/clips.ts";
 import { newId } from "../core/ids.ts";
+import { AudioJobs, type AudioJob } from "./audio/jobs.ts";
+import { withAudioCompute } from "./audio/compute.ts";
 import { deepEqual, DiffError, diffScores } from "../core/diff.ts";
 import { currentActor } from "./identity/actor.ts";
 import {
@@ -226,7 +230,8 @@ import {
 import { applyStyleCommand, parseStyleCommand } from "./commands/style.ts";
 import { applyDemoCommand, parseDemoCommand } from "./commands/demo.ts";
 import { readBundledSample } from "./audio/bundled-samples.ts";
-import { exportSampleRate, measureScoreOffThread } from "./audio/measure.ts";
+import { exportSampleRate } from "./audio/measure.ts";
+import { IdleMeasurement } from "./audio/idle-measure.ts";
 import {
   applySectionCommand,
   loopSpan,
@@ -439,6 +444,7 @@ import {
   faderChoose,
   faderCommand,
   faderKeyPress,
+  faderPaste,
   faderSetPosition,
   faderStep,
   focusIndex,
@@ -520,6 +526,7 @@ import { SharedLiveEngine, type LiveLink } from "./session/shared-live.ts";
 import {
   addNote,
   applyScoreOperation,
+  applyScoreOperations,
   createScore,
   isSamplerInstrument,
   isTrackAudible,
@@ -600,7 +607,9 @@ const SLASH_HANDLED: ReadonlySet<string> = new Set([
 
 /** Whether a bare command parses (no side effects): for typo suggestions. */
 function parsesLocally(text: string): boolean {
-  return commandParses(text, score);
+  return (
+    /^\/?(?:jump|back|home)$/i.test(text.trim()) || commandParses(text, score)
+  );
 }
 
 const ESC = "\u001b[";
@@ -646,7 +655,8 @@ Display options:
 
 Prompt:
   Enter submit · Shift-Enter newline · Alt-Enter next · Ctrl-Q now / next
-  Ctrl-Z undo · Ctrl-Y redo · Ctrl-O transcript · Esc close · Ctrl-C exit
+  Ctrl-G jump · Ctrl-B back · F1 guides · Esc cancel/back (draft retained)
+  Ctrl-Z undo · Ctrl-Y redo · Ctrl-O transcript · Ctrl-C exit
   Space on an empty prompt toggles playback
 
 Commands (bare music words; app commands take a slash):
@@ -1077,6 +1087,124 @@ let promptQueueBusy: () => boolean = () => false;
 let runStepLater: (step: () => readonly string[]) => void = () => undefined;
 /** The fader drawer's focus and typing, while one is open over the menu. */
 let fader: FaderState | undefined;
+const navigation = new NavigationHistory<ReturnType<typeof saveLocation>>();
+let returningLocation = false;
+
+function saveLocation() {
+  return {
+    track: requestedTrack,
+    surface: tui.saveNavigation(),
+    menu: menu.saveNavigation(),
+    euclid: euclid.saveNavigation(),
+    fader: fader ? { ...fader } : undefined,
+    standalone: faderStandalone,
+    play: play?.on ?? false,
+    tape: { on: tape.on, zoom: tape.zoom, knobs: { ...tape.knobs } },
+    patch: { on: patchView.on, state: structuredClone(patchView.state) },
+  };
+}
+
+/** Suspend navigation state; staged score and the live clock keep their identity. */
+function rememberLocation(): void {
+  if (returningLocation) return;
+  navigation.push(saveLocation());
+  prompt.resetDraft();
+  menu.close();
+  euclid.close();
+  fader = undefined;
+  faderStandalone = false;
+  tui.clearSurfaces();
+}
+
+async function returnLocation(): Promise<Receipt> {
+  const controller =
+    tui.ui.overlay === "picker" &&
+    (tui.ui.picker?.id === "menu" || tui.ui.picker?.id === "euclid");
+  if (tui.ui.keys || (tui.ui.overlay && !controller)) {
+    tui.backOverlay();
+    return ok("back");
+  }
+  if (controller) {
+    menu.close();
+    euclid.close();
+    fader = undefined;
+    faderStandalone = false;
+    tui.backOverlay();
+  }
+  const previous = navigation.back();
+  if (!previous) return note("at the first location · ctrl-g jump");
+  returningLocation = true;
+  try {
+    if (play?.on) await play.exit();
+    if (score.tracks.some((track) => track.id === previous.track)) {
+      await port.focus(previous.track);
+      requestedTrack = previous.track;
+    } else
+      tui.activity.pushCard(
+        "previous track no longer exists · kept current track",
+        { tone: "warning" },
+      );
+    Object.assign(tape, previous.tape, { view: undefined, drag: undefined });
+    patchView.on = previous.patch.on;
+    patchView.state = previous.patch.state;
+    patchView.cables = undefined;
+    if (
+      patchView.on &&
+      typeof patchModel(score, requestedTrack, patchView.state.fx) === "string"
+    ) {
+      patchView.on = false;
+      tui.activity.pushCard(
+        "previous patch no longer exists · returned to track",
+        { tone: "warning" },
+      );
+    }
+    if (previous.play) await enterPlay();
+    menu.restoreNavigation(previous.menu);
+    euclid.restoreNavigation(previous.euclid);
+    fader = previous.fader;
+    faderStandalone = previous.standalone;
+    tui.restoreNavigation(previous.surface);
+    refreshMenu();
+    refreshEuclid();
+    return ok("back · restored draft and selection");
+  } finally {
+    returningLocation = false;
+    requestFrame();
+  }
+}
+
+function openJump(): void {
+  if (tui.ui.picker?.id === "jump" && tui.ui.overlay === "picker") {
+    tui.backOverlay();
+    return;
+  }
+  tui.openPicker({
+    id: "jump",
+    title: "Jump · open a place or prepare a command",
+    items: jumpItems(menuContext()),
+    filterable: true,
+    typeToFilter: true,
+    hint: " type search · ↑↓ choose · enter open / insert · esc back · ctrl-b return ",
+  });
+}
+
+async function chooseJump(value: string): Promise<Receipt> {
+  const choice = parseJumpChoice(value);
+  if (!choice) return fail("jump · invalid destination");
+  if (choice.kind === "insert") {
+    rememberLocation();
+    if (play?.on) await play.exit();
+    tape.on = false;
+    patchView.on = false;
+    prompt.resetDraft(`${choice.command} `);
+    return note(
+      "command inserted · add arguments, enter to run · ctrl-b returns to your draft",
+    );
+  }
+  if (/^\/track /.test(choice.command)) rememberLocation();
+  runPromptLater(choice.command);
+  return note(`jump · ${choice.command}`);
+}
 /** Session history (src/history/wire.ts): the handle, /comment, /history. */
 const historyHost: HistoryHost = {
   workspace: ephemeralWorkspace ?? process.cwd(),
@@ -1172,6 +1300,29 @@ const faderSeq = new Map<string, number>();
 let liveSampleBank: SampleBank | undefined;
 /** The in-flight agent turn: Esc aborts it, Enter steers it. */
 let agentTurn: { controller: AbortController; steering: string[] } | undefined;
+/** Export-rate loudness is optional work: wait for idle and yield to input. */
+const exportMeter = new IdleMeasurement<TrackScore, LoudnessView>(1000, () =>
+  requestFrame(),
+);
+const audioJobs = new AudioJobs((label) => {
+  if (label) exportMeter.pause();
+  tui.activity.setSpinner(label);
+});
+
+async function runAudioJob(
+  label: string,
+  work: (job: AudioJob) => Promise<Receipt>,
+): Promise<Receipt> {
+  try {
+    return await audioJobs.run(label, work);
+  } catch (error) {
+    return error instanceof Error && error.name === "AbortError"
+      ? note(`${label} canceled`)
+      : fail(
+          `${label} · ${error instanceof Error ? error.message : String(error)}`,
+        );
+  }
+}
 let reportAgentActivity: (text: string) => void = () => undefined;
 // Declared before `await runInteractive()` runs, or assigning it is a TDZ error.
 let agentEventSink: (event: AgentEvent) => void = () => undefined;
@@ -1447,14 +1598,6 @@ function appView(value: TrackScore, beat: number): AppView {
 }
 
 /**
- * The 48 kHz reading of the mastered song (what `master measure` and the
- * export read), for the score it measured; one measurement at a time, in a
- * worker, started when the loop plays a mastered score it has not read.
- */
-let exportMeter:
-  { score: TrackScore; view?: LoudnessView; running: boolean } | undefined;
-
-/**
  * The header meter: loudness of the loop the local engine is playing. With
  * a master the engine monitors at its own rate, so the meter shows the
  * export-rate reading once it is in and the monitor's (marked as an
@@ -1463,7 +1606,10 @@ let exportMeter:
 function masterLoudness(value: TrackScore): LoudnessView | undefined {
   const engine = audio instanceof AudioEngine ? audio : monitorEngine;
   const report = engine?.loudness;
-  if (!report) return undefined;
+  if (!report) {
+    exportMeter.clear();
+    return undefined;
+  }
   const ceiling =
     typeof value.master?.limiter?.ceiling === "number"
       ? value.master.limiter.ceiling
@@ -1478,29 +1624,27 @@ function masterLoudness(value: TrackScore): LoudnessView | undefined {
     target,
     ceiling,
   };
-  if (!value.master || exportSampleRate(value) === engine.sampleRate)
+  if (!value.master || exportSampleRate(value) === engine.sampleRate) {
+    exportMeter.clear();
     return monitor;
-  if (exportMeter?.score === value && exportMeter.view) return exportMeter.view;
-  if (!exportMeter?.running) {
-    const measuring = { score: value, running: true } as NonNullable<
-      typeof exportMeter
-    >;
-    exportMeter = measuring;
-    void measureScoreOffThread(value, { projectRoot: process.cwd() })
-      .then((measured) => {
-        measuring.view = {
-          integrated: measured.mix.loudness.integrated,
-          truePeak: measured.mix.loudness.truePeak,
-          target,
-          ceiling,
-        };
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        measuring.running = false;
-      });
   }
-  return { ...monitor, estimate: true };
+  const measured = exportMeter.read(
+    value,
+    !engine.preparing && !audioJobs.busy && !agentTurn && !play?.on,
+    async (signal) => {
+      const samples = await jobSamples(value, signal);
+      const result = await withAudioCompute(signal, (compute) =>
+        compute.measure(value, samples),
+      );
+      return {
+        integrated: result.mix.loudness.integrated,
+        truePeak: result.mix.loudness.truePeak,
+        target,
+        ceiling,
+      };
+    },
+  );
+  return measured ?? { ...monitor, estimate: true };
 }
 
 /** The arrangement strip over the timeline; absent without sections. */
@@ -1792,16 +1936,17 @@ async function runInteractive(): Promise<void> {
     }
   };
   const drainQueue = async (): Promise<void> => {
-    if (processingQueue) return;
+    if (processingQueue || terminalRestored) return;
     processingQueue = true;
     try {
       for (
         let nextPrompt = queuedPrompts.shift();
-        nextPrompt !== undefined;
+        nextPrompt !== undefined && !terminalRestored;
         nextPrompt = queuedPrompts.shift()
       ) {
         tui.activity.setQueueDepth(queuedPrompts.length);
         await historyStep;
+        if (terminalRestored) break;
         if (typeof nextPrompt === "function") {
           // A deferred step (a TAPE key typed ahead): its prompts run next,
           // reduced from what the lines before it left.
@@ -1810,6 +1955,7 @@ async function runInteractive(): Promise<void> {
           continue;
         }
         await runPrompt(nextPrompt);
+        if (terminalRestored) break;
         if (pendingAudition && queuedPrompts.length === 0) {
           const voice = pendingAudition;
           pendingAudition = undefined;
@@ -1851,7 +1997,7 @@ async function runInteractive(): Promise<void> {
     );
   };
   const tick = (force = false) => {
-    if (screenSuspended) return;
+    if (screenSuspended || terminalRestored) return;
     reportView();
     // A state report always follows a frame built from that state.
     const state = stateOsc ? editorState() : "";
@@ -2158,6 +2304,7 @@ async function runInteractive(): Promise<void> {
   let takenBytes = 0;
   let wake: (() => void) | undefined;
   const onData = (chunk: Buffer | string) => {
+    exportMeter.pause();
     inputReceived +=
       typeof chunk === "string" ? Buffer.byteLength(chunk) : chunk.length;
     inbox.push(String(chunk));
@@ -2215,14 +2362,16 @@ async function runInteractive(): Promise<void> {
     try {
       return await flow();
     } finally {
-      stdout.write(`${ESC}?1049h${ESC}?25l${ESC}?2004h${ESC}2J${mouseOn()}`);
-      stdin.setRawMode?.(true);
-      stdin.on("data", onData);
-      stdin.resume();
-      screenSuspended = false;
-      timer = setInterval(tick, tui.frameIntervalMs);
-      tui.invalidate();
-      tick(true);
+      if (!terminalRestored) {
+        stdout.write(`${ESC}?1049h${ESC}?25l${ESC}?2004h${ESC}2J${mouseOn()}`);
+        stdin.setRawMode?.(true);
+        stdin.on("data", onData);
+        stdin.resume();
+        screenSuspended = false;
+        timer = setInterval(tick, tui.frameIntervalMs);
+        tui.invalidate();
+        tick(true);
+      }
     }
   };
   tick(true);
@@ -2257,6 +2406,82 @@ async function runInteractive(): Promise<void> {
             );
           continue;
         }
+        const navAction =
+          typeof value === "string" ? navigationAction(value) : undefined;
+        if (navAction === "jump") {
+          openJump();
+          tick(true);
+          continue;
+        }
+        if (navAction === "back") {
+          void settling(
+            returnLocation()
+              .then(receipt)
+              .finally(() => tick(true)),
+          );
+          continue;
+        }
+        const globalKey =
+          value === "\u001a" ||
+          value === "\u0019" ||
+          value === "\u0003" ||
+          value === "\u000c";
+        if (value === "\u001bOP" || value === "\u001b[11~") {
+          if (tui.ui.keys) {
+            tui.closeKeys();
+            if (tui.ui.overlay !== "guide") tui.openGuide();
+          } else if (tui.ui.overlay === "guide") tui.closeGuide();
+          else tui.openGuide();
+          tick(true);
+          continue;
+        }
+        if (value === "\u0014" || value === "\u0010") {
+          const same = value === "\u0014" ? tape.on : play?.on;
+          void settling(
+            (same
+              ? returnLocation()
+              : value === "\u0014"
+                ? enterTape()
+                : enterPlay()
+            )
+              .then(receipt)
+              .finally(() => tick(true)),
+          );
+          continue;
+        }
+        if (value === "\u0003") audioJobs.cancel();
+        if (
+          value === "\u001b" &&
+          !tui.ui.overlay &&
+          !tui.ui.keys &&
+          audioJobs.busy
+        ) {
+          audioJobs.cancel();
+          tick(true);
+          continue;
+        }
+        if (
+          value === "\u001b" &&
+          !tui.ui.overlay &&
+          !prompt.value &&
+          navigation.depth > 0
+        ) {
+          void settling(
+            returnLocation()
+              .then(receipt)
+              .finally(() => tick(true)),
+          );
+          continue;
+        }
+        if (
+          tui.ui.keys &&
+          !globalKey &&
+          !(typeof value === "string" && isMouseSequence(value))
+        ) {
+          tui.input(value);
+          tick(true);
+          continue;
+        }
         // A mouse report acts on what the last frame painted under it; some
         // become keys (a list row, a wheel notch) and run through below.
         if (typeof value === "string" && isMouseSequence(value)) {
@@ -2266,7 +2491,13 @@ async function runInteractive(): Promise<void> {
           continue;
         }
         // The fader drawer owns every key while it is up.
-        if (typeof value === "string" && fader && menu.open) {
+        if (
+          !globalKey &&
+          fader &&
+          menu.open &&
+          tui.ui.overlay === "picker" &&
+          tui.ui.picker?.id === "menu"
+        ) {
           // Tab flips the knob front page and every param (design §8.6).
           if (value === "\t" && menu.knobPage && fader.typing === undefined) {
             const label = menu.pageKnobs(menuContext(), fader.label);
@@ -2275,12 +2506,15 @@ async function runInteractive(): Promise<void> {
             tick(true);
             continue;
           }
-          const result = faderKeyPress(
-            fader,
-            menu.faderFields(menuContext()),
-            value,
-            faderKeyOptions(),
-          );
+          const result =
+            typeof value === "string"
+              ? faderKeyPress(
+                  fader,
+                  menu.faderFields(menuContext()),
+                  value,
+                  faderKeyOptions(),
+                )
+              : faderPaste(fader, menu.faderFields(menuContext()), value.text);
           if (result.type !== "pass") {
             faderOutcome(result);
             refreshMenu();
@@ -2288,29 +2522,37 @@ async function runInteractive(): Promise<void> {
             continue;
           }
         }
-        // The `?` panel closes on esc or ?; other keys wait (Ctrl-C quits).
-        if (tui.ui.keys && typeof value === "string" && value !== "\u0003") {
-          if (closesKeys(value)) tui.closeKeys();
-          tick(true);
-          continue;
-        }
         if (value === "?" && keysScreen()) {
           showKeys();
           tick(true);
           continue;
         }
         // The rhythm editor owns every key while it is up (Esc backs out).
-        if (typeof value === "string" && euclid.open) {
-          if (tui.ui.overlay !== "picker" || tui.ui.picker?.id !== "euclid")
-            euclid.close();
-          else {
-            const result = euclid.key(value, euclidContext());
+        if (
+          !globalKey &&
+          euclid.open &&
+          tui.ui.overlay === "picker" &&
+          tui.ui.picker?.id === "euclid"
+        ) {
+          {
+            const result =
+              typeof value === "string"
+                ? euclid.key(value, euclidContext())
+                : euclid.paste(value.text, euclidContext());
             if (result.type === "close") {
               const back = euclid.returnTo;
               euclid.close();
-              tui.closePicker();
-              if (back === "menu") openMenu();
-              else leaveAuditionScreen();
+              if (navigation.depth > 0)
+                void settling(
+                  returnLocation()
+                    .then(receipt)
+                    .finally(() => tick(true)),
+                );
+              else {
+                tui.closePicker();
+                if (back === "menu") openMenu();
+                else leaveAuditionScreen();
+              }
             } else if (result.type === "run") {
               if (!stageIfAuditioning(result.command)) {
                 queuedPrompts.runNow(result.command);
@@ -2335,14 +2577,26 @@ async function runInteractive(): Promise<void> {
           }
         }
         // The edit menu owns every key while it is up (Esc backs out).
-        if (typeof value === "string" && menu.open) {
-          if (tui.ui.overlay !== "picker" || tui.ui.picker?.id !== "menu")
-            menu.close();
-          else {
-            const result = menu.key(value, menuContext());
+        if (
+          !globalKey &&
+          menu.open &&
+          tui.ui.overlay === "picker" &&
+          tui.ui.picker?.id === "menu"
+        ) {
+          {
+            const result =
+              typeof value === "string"
+                ? menu.key(value, menuContext())
+                : menu.paste(value.text, menuContext());
             if (result.type === "close") {
-              tui.closePicker();
               leaveAuditionScreen();
+              if (navigation.depth > 0)
+                void settling(
+                  returnLocation()
+                    .then(receipt)
+                    .finally(() => tick(true)),
+                );
+              else tui.closePicker();
             } else if (result.type === "run") {
               if (!stageIfAuditioning(result.command)) {
                 queuedPrompts.runNow(result.command);
@@ -2377,16 +2631,6 @@ async function runInteractive(): Promise<void> {
             }
           }
         }
-        // F1 opens the guides from anywhere the prompt has focus.
-        if (
-          (value === "\u001bOP" || value === "\u001b[11~") &&
-          (tui.ui.overlay === undefined || tui.ui.overlay === "guide")
-        ) {
-          if (tui.ui.overlay === "guide") tui.closeGuide();
-          else tui.openGuide();
-          tick(true);
-          continue;
-        }
         // Ctrl-K opens the menu on an empty prompt (in play mode too); with
         // text it keeps its kill-to-end-of-line meaning.
         if (
@@ -2394,6 +2638,7 @@ async function runInteractive(): Promise<void> {
           prompt.value.length === 0 &&
           tui.ui.overlay === undefined
         ) {
+          rememberLocation();
           openMenu();
           tick(true);
           continue;
@@ -2421,28 +2666,6 @@ async function runInteractive(): Promise<void> {
           tick(true);
           continue;
         }
-        // Ctrl-T opens TAPE (op1-ux §6); again (or esc) goes home.
-        if (value === "\u0014" && tui.ui.overlay === undefined) {
-          if (tape.on) receipt(exitTape());
-          else
-            void settling(
-              enterTape()
-                .then((outcome) => receipt(outcome))
-                .finally(() => tick(true)),
-            );
-          tick(true);
-          continue;
-        }
-        // Ctrl-P enters play mode. A bare `p` would steal the first letter of
-        // `pan`, `pattern`, `play` and every prose request starting with p.
-        if (value === "\u0010" && tui.ui.overlay === undefined) {
-          void settling(
-            enterPlay()
-              .then((outcome) => receipt(outcome))
-              .finally(() => tick(true)),
-          );
-          continue;
-        }
         // The prompt is always focused, so ordinary `q` must remain typeable in
         // requests (for example, "quiet hi-hat"). Ctrl-C is the unambiguous
         // shell exit key; Ctrl-Q is reserved for prompt mode switching.
@@ -2451,8 +2674,7 @@ async function runInteractive(): Promise<void> {
         if (
           value === " " &&
           prompt.value.length === 0 &&
-          !(tui.ui.overlay === "picker" && tui.ui.picker?.audition) &&
-          tui.ui.overlay !== "guide"
+          tui.ui.overlay === undefined
         ) {
           // Never await a daemon round trip here: the key loop must stay
           // live for Esc, quit and redraws while the toggle is in flight.
@@ -2484,6 +2706,12 @@ async function runInteractive(): Promise<void> {
                   .finally(() => tick(true)),
               );
             }
+          } else if (input.type === "pick" && input.picker === "jump") {
+            void settling(
+              chooseJump(input.value)
+                .then(receipt)
+                .finally(() => tick(true)),
+            );
           } else if (input.type === "pick-key") {
             void presetPickerKey(input.picker, input.key, input.value).finally(
               () => tick(true),
@@ -2561,7 +2789,7 @@ async function runInteractive(): Promise<void> {
           } else if (action?.kind === "exit") exiting = true;
           else if (action?.kind === "cancel" && agentTurn) {
             agentTurn.controller.abort();
-            tui.activity.setSpinner("cancelling");
+            tui.activity.setSpinner("canceling");
           } else if (
             action?.kind === "submit" &&
             action.value &&
@@ -2620,6 +2848,9 @@ async function runInteractive(): Promise<void> {
     // Each step on its own: one failure does not skip the rest.
     const failures: unknown[] = [];
     const steps: Array<() => unknown> = [
+      () => exportMeter.dispose(),
+      () => agentTurn?.controller.abort(),
+      () => audioJobs.shutdown(),
       () => projectSync?.stop(),
       () => namer.dispose(),
       () => unsubscribe(),
@@ -2652,6 +2883,18 @@ function unknownCommand(command: string): string {
 
 async function submit(prompt: string): Promise<string | Receipt> {
   const command = prompt.trim();
+  if (/^\/?jump$/i.test(command)) {
+    openJump();
+    return note("jump · type to search");
+  }
+  if (/^\/?back$/i.test(command)) return returnLocation();
+  if (/^\/?home$/i.test(command)) {
+    rememberLocation();
+    if (play?.on) await play.exit();
+    tape.on = false;
+    patchView.on = false;
+    return ok("home · ctrl-b returns");
+  }
   // Canonical names for window commands: `model key` (login), `models`,
   // `voice` (the Voice topic).
   const canonical = canonicalWindowForm(command);
@@ -2732,14 +2975,15 @@ async function submit(prompt: string): Promise<string | Receipt> {
   );
   if (patchViewMatch) {
     const wanted = patchViewMatch[1]?.toLowerCase();
-    if (wanted === "off") return exitPatch();
+    if (wanted === "off")
+      return patchView.on && navigation.depth ? returnLocation() : exitPatch();
     return enterPatch(patchViewMatch[2]?.toLowerCase());
   }
   const tapeCommand = command.match(/^\/tape(?:\s+(on|off))?$/i);
   if (tapeCommand) {
     const wanted = tapeCommand[1]?.toLowerCase();
     if (wanted === "off" || (wanted === undefined && tape.on))
-      return exitTape();
+      return tape.on && navigation.depth ? returnLocation() : exitTape();
     return enterTape();
   }
   const playCommand = command.match(
@@ -2748,7 +2992,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (playCommand) {
     const wanted = playCommand[1]?.toLowerCase();
     if (wanted === "off" || (wanted === undefined && play?.on))
-      return exitPlay();
+      return play?.on && navigation.depth ? returnLocation() : exitPlay();
     if (wanted && wanted !== "on") {
       const message = playSession().toggleDegrees(wanted !== "chromatic");
       if (message.startsWith("scale degrees need")) return fail(message);
@@ -2824,10 +3068,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
   const euclidCommand = command.match(/^\/euclid(?:\s+(\S+))?$/i);
   if (euclidCommand) {
     const from = menu.open ? "menu" : undefined;
-    if (menu.open) {
-      menu.close();
-      tui.closePicker();
-    }
+    rememberLocation();
     openEuclid(euclidCommand[1]?.toLowerCase(), from);
     return ok("rhythm editor");
   }
@@ -2841,6 +3082,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
       command,
     )
   ) {
+    const previous = saveLocation();
     const context = menuContext();
     const opened =
       menu.showFader(context, command) ?? songFader(context, command);
@@ -2848,6 +3090,9 @@ async function submit(prompt: string): Promise<string | Receipt> {
     // level has one and the param is a knob: the four knobs up front.
     const label = opened && (menu.openKnobs(context, opened) ?? opened);
     if (label) {
+      navigation.push(previous);
+      tui.clearSurfaces();
+      euclid.close();
       const field = menu
         .faderFields(context)
         .find((candidate) => candidate.label === label);
@@ -2875,15 +3120,22 @@ async function submit(prompt: string): Promise<string | Receipt> {
   if (knobsCommand) {
     const context = menuContext();
     const track = context.score.tracks.find((t) => t.id === context.trackId);
+    if (!knobsCommand[1] && !knobPageId(knobsCommand[2], track))
+      return fail(
+        `knobs ${knobsCommand[2] ?? ""} · no such page · knobs ${KNOB_PAGE_WORDS.join("|")}`,
+      );
+    rememberLocation();
     const label = knobsCommand[1]
       ? openMixer(context)
       : openKnobPage(context, knobsCommand[2], track);
-    if (!label)
+    if (!label) {
+      await returnLocation();
       return fail(
         knobsCommand[1]
           ? "mix · no tracks yet · track <name>"
           : `knobs ${knobsCommand[2] ?? ""} · no such page · knobs ${KNOB_PAGE_WORDS.join("|")}`,
       );
+    }
     openFader(label, true);
     refreshMenu();
     return ok(
@@ -2902,6 +3154,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
     }
     if (section && !menuSectionPath(menuContext(), section))
       return fail(menuUsage(menuContext(), section));
+    rememberLocation();
     openMenu(section);
     return ok("menu");
   }
@@ -3421,8 +3674,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
   }
   const masterCommand = parseMasterCommand(command);
   if (masterCommand) {
-    if (masterCommand.type === "master-measure")
-      return ok(await measureLine(score));
+    if (masterCommand.type === "master-measure") return measureLine(score);
     if (
       masterCommand.type !== "master-list" &&
       masterCommand.type !== "master-show"
@@ -3988,30 +4240,45 @@ async function focusTrack(
   );
 }
 
-/** Decode every sampler voice (cached) and return what failed to load. */
-async function sampleProblems(
+/** Capture a job's samples without changing the live keyboard's sample bank. */
+async function jobSamples(
   value: TrackScore,
-): Promise<readonly SampleProblem[]> {
-  if (!hasSamplerTracks(value)) return [];
+  signal?: AbortSignal,
+): Promise<SampleBank | undefined> {
+  signal?.throwIfAborted();
+  if (!hasSamplerTracks(value)) return undefined;
   sampleLibrary ??= new SampleLibrary({
     projectRoot: process.cwd(),
     packs: packs(),
   });
   try {
     const bank = await sampleLibrary.load(value);
-    liveSampleBank = bank;
-    return bank.problems;
+    signal?.throwIfAborted();
+    return bank;
   } catch (error) {
-    return [
-      {
-        trackId: "",
-        voice: "",
-        src: "",
-        level: "error",
-        message: `samples · ${error instanceof Error ? error.message : String(error)} · check the sample files`,
-      },
-    ];
+    signal?.throwIfAborted();
+    return {
+      voices: new Map(),
+      problems: [
+        {
+          trackId: "",
+          voice: "",
+          src: "",
+          level: "error",
+          message: `samples · ${error instanceof Error ? error.message : String(error)} · check the sample files`,
+        },
+      ],
+    };
   }
+}
+
+/** Decode the current score; an older or proposed score cannot replace live samples. */
+async function sampleProblems(
+  value: TrackScore,
+): Promise<readonly SampleProblem[]> {
+  const bank = await jobSamples(value);
+  if (value === score) liveSampleBank = bank;
+  return bank?.problems ?? [];
 }
 
 /** Surface sample load problems once per distinct set, as receipts. */
@@ -4108,75 +4375,84 @@ async function chopCommand(
     return ok("chop · /chop <op> <file> …");
   }
   if (command.kind === "error") return fail(command.message);
-  const focused = score.tracks.find((track) => track.id === requestedTrack);
-  const slug = chopTrackSlug(focused?.name ?? requestedTrack);
-  tui.activity.setSpinner(`chop ${command.op}`);
-  let result: ChopResult;
-  try {
-    result = await runChop(command.op, command.args, {
-      root: process.cwd(),
-      runner: systemRunner,
-      signal: new AbortController().signal,
-      trackSlug: slug,
-      tempo: { bpm: score.tempoBpm, beatsPerBar: score.beatsPerBar },
-      actor: { kind: "human" },
-      ascii: !tui.capabilities.unicode,
-      audition: async (path, from, to) => {
-        await playFileForAgent(path, from, to);
-      },
-      // Default: historySink(), set when the session opens (lane hist).
-      ...(mediaServices().chopHistory
-        ? { history: mediaServices().chopHistory! }
-        : {}),
-    });
-  } catch (error) {
-    return fail(
-      `chop ${command.op} · ${error instanceof Error ? error.message : String(error)}`,
-    );
-  } finally {
-    tui.activity.setSpinner(undefined);
-  }
-  if (command.op === "slice" && command.args.track) {
-    const trackId = command.args.track;
-    let loaded;
+  return runAudioJob(`chop ${command.op}`, async (job) => {
+    const sourceRevision = record.revision;
+    const sourceSession = record.sessionId;
+    const focused = score.tracks.find((track) => track.id === requestedTrack);
+    const slug = chopTrackSlug(focused?.name ?? requestedTrack);
+    let result: ChopResult;
     try {
-      loaded = slicesToSampler(
-        score,
-        trackId,
-        stemOf(command.args.input ?? "slice"),
-        result.outputs,
-        {
-          ...(command.args.pattern ? { pattern: true } : {}),
-          newNoteId: (index) => `${trackId}-chop-${record.revision}-${index}`,
+      result = await runChop(command.op, command.args, {
+        root: process.cwd(),
+        runner: systemRunner,
+        signal: job.signal,
+        compute: job.compute.chop,
+        progress: job.progress,
+        trackSlug: slug,
+        tempo: { bpm: score.tempoBpm, beatsPerBar: score.beatsPerBar },
+        actor: { kind: "human" },
+        ascii: !tui.capabilities.unicode,
+        audition: async (path, from, to) => {
+          await playFileForAgent(path, from, to);
         },
-      );
+        // Default: historySink(), set when the session opens (lane hist).
+        ...(mediaServices().chopHistory
+          ? { history: mediaServices().chopHistory! }
+          : {}),
+      });
     } catch (error) {
-      return fail(
-        `chop slice · ${error instanceof Error ? error.message : String(error)}`,
+      throw error;
+    }
+    if (job.signal.aborted)
+      return note(
+        `${result.summary} · finished before cancellation${command.op === "slice" && command.args.track ? " · sampler not attached" : ""}`,
+      );
+    if (command.op === "slice" && command.args.track) {
+      if (
+        record.sessionId !== sourceSession ||
+        record.revision !== sourceRevision
+      )
+        return warn(
+          `${result.summary} · song changed; slices saved, track unchanged · retry slice to attach them`,
+        );
+      const trackId = command.args.track;
+      let loaded;
+      try {
+        loaded = slicesToSampler(
+          score,
+          trackId,
+          stemOf(command.args.input ?? "slice"),
+          result.outputs,
+          {
+            ...(command.args.pattern ? { pattern: true } : {}),
+            newNoteId: (index) => `${trackId}-chop-${record.revision}-${index}`,
+          },
+        );
+      } catch (error) {
+        return fail(
+          `chop slice · ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      const next = applyScoreOperations(score, loaded.operations);
+      await commitScore(next, "audio.slice", {
+        trackId,
+        voices: loaded.voices,
+      });
+      if (!stageCapture) {
+        if (trackId !== requestedTrack) await port.focus(trackId);
+        requestedTrack = trackId;
+        draftTrack = false;
+      }
+      await projectSync?.flushScore();
+      return ok(
+        `${result.summary} · ${loaded.voices.length} voices on ${trackId}${loaded.notes ? ` · ${loaded.notes} notes` : ""} · ctrl-z undoes`,
       );
     }
-    let next = score;
-    for (const operation of loaded.operations)
-      next = applyScoreOperation(next, operation);
-    await commitScore(next, "audio.slice", {
-      trackId,
-      voices: loaded.voices,
-    });
-    if (!stageCapture) {
-      if (trackId !== requestedTrack) await port.focus(trackId);
-      requestedTrack = trackId;
-      draftTrack = false;
-    }
-    await projectSync?.flushScore();
-    return ok(
-      `${result.summary} · ${loaded.voices.length} voices on ${trackId}${loaded.notes ? ` · ${loaded.notes} notes` : ""} · ctrl-z undoes`,
-    );
-  }
-  const lines = chopResultLines(result);
-  if (lines.length > 1) tui.openText(`chop ${command.op}`, lines);
-  return ok(result.summary);
+    const lines = chopResultLines(result);
+    if (lines.length > 1) tui.openText(`chop ${command.op}`, lines);
+    return ok(result.summary);
+  });
 }
-
 function chopResultLines(result: ChopResult): string[] {
   const lines = [result.summary];
   if (result.info)
@@ -4226,33 +4502,52 @@ async function playFileForAgent(
 async function resampleCommand(
   command: NonNullable<ReturnType<typeof parseResampleCommand>>,
 ): Promise<Receipt> {
-  await materializeDraft();
-  // The source's own samples must be loaded for the render.
-  if (hasSamplerTracks(score)) await sampleProblems(score);
-  const result = await runResample({
-    projectRoot: process.cwd(),
-    score,
-    command,
-    ...(liveSampleBank ? { samples: liveSampleBank } : {}),
+  return runAudioJob("resample", async (job) => {
+    await materializeDraft();
+    const sourceScore = score;
+    const sourceRevision = record.revision;
+    const sourceSession = record.sessionId;
+    const assertCurrent = () => {
+      job.signal.throwIfAborted();
+      if (
+        record.sessionId !== sourceSession ||
+        record.revision !== sourceRevision
+      )
+        throw new Error(
+          "song changed during resampling · retry on the current revision",
+        );
+    };
+    // The source's own samples must be loaded for the render.
+    if (hasSamplerTracks(score)) await sampleProblems(score);
+    const result = await runResample({
+      projectRoot: process.cwd(),
+      score: sourceScore,
+      command,
+      signal: job.signal,
+      assertCurrent,
+      render: (song, request, samples) =>
+        job.compute.resample(song, request, samples),
+      ...(liveSampleBank ? { samples: liveSampleBank } : {}),
+    });
+    if (!result.ok) return fail(result.message);
+    const problems = (await sampleProblems(result.next)).filter(
+      (problem) =>
+        problem.trackId === result.trackId && problem.level === "error",
+    );
+    if (problems.length > 0) return fail(`resample · ${problems[0]!.message}`);
+    assertCurrent();
+    await commitScore(result.next, "resample", {
+      trackId: result.trackId,
+      src: result.src,
+      sha256: result.sha256,
+    });
+    await port.focus(result.trackId);
+    requestedTrack = result.trackId;
+    draftTrack = false;
+    await projectSync?.flushScore();
+    return ok(result.message);
   });
-  if (!result.ok) return fail(result.message);
-  const problems = (await sampleProblems(result.next)).filter(
-    (problem) =>
-      problem.trackId === result.trackId && problem.level === "error",
-  );
-  if (problems.length > 0) return fail(`resample · ${problems[0]!.message}`);
-  await commitScore(result.next, "resample", {
-    trackId: result.trackId,
-    src: result.src,
-    sha256: result.sha256,
-  });
-  await port.focus(result.trackId);
-  requestedTrack = result.trackId;
-  draftTrack = false;
-  await projectSync?.flushScore();
-  return ok(result.message);
 }
-
 async function sampleCommand(
   command: NonNullable<ReturnType<typeof parseSampleCommand>>,
 ): Promise<Receipt> {
@@ -4426,9 +4721,7 @@ async function commitPackEdit(
   kind: string,
   payload: Record<string, unknown>,
 ): Promise<Receipt | undefined> {
-  let next = score;
-  for (const operation of operations)
-    next = applyScoreOperation(next, operation);
+  const next = applyScoreOperations(score, operations);
   const problems = (await sampleProblems(next)).filter(
     (problem) => problem.trackId === trackId && problem.level === "error",
   );
@@ -5522,11 +5815,16 @@ function menuContext(): MenuContext {
 
 /** The screen `?` describes, or undefined while `?` is typed text. */
 function keysScreen(): readonly KeySection[] | undefined {
-  if (euclid.open) return euclid.typing ? undefined : KEYS.euclid;
-  if (fader && menu.open)
-    return fader.typing !== undefined ? undefined : KEYS.fader;
-  if (menu.open) return menu.typing ? undefined : KEYS.menu;
   const overlay = tui.ui.overlay;
+  if (overlay === "text") return KEYS.text;
+  if (overlay === "log") return KEYS.log;
+  if (overlay === "guide") return tui.guideTyping ? undefined : KEYS.guide;
+  if (overlay === "picker" && tui.ui.picker?.id === "euclid" && euclid.open)
+    return euclid.typing ? undefined : KEYS.euclid;
+  if (overlay === "picker" && tui.ui.picker?.id === "menu" && menu.open) {
+    if (fader) return fader.typing !== undefined ? undefined : KEYS.fader;
+    return menu.typing ? undefined : KEYS.menu;
+  }
   if (overlay === "picker")
     return tui.pickerTyping
       ? undefined
@@ -5535,9 +5833,6 @@ function keysScreen(): readonly KeySection[] | undefined {
         : AUDITION_PICKERS.has(tui.ui.picker?.id ?? "")
           ? KEYS.audition
           : KEYS.list;
-  if (overlay === "text") return KEYS.text;
-  if (overlay === "log") return KEYS.log;
-  if (overlay === "guide") return tui.guideTyping ? undefined : KEYS.guide;
   if (prompt.value.length > 0) return undefined;
   if (play?.on)
     return play.chords.on ? [...KEYS.play, ...KEYS.chords] : KEYS.play;
@@ -5584,10 +5879,11 @@ function openEuclid(voice?: string, origin?: string): void {
 
 function refreshEuclid(): void {
   if (!euclid.open) return;
-  if (tui.ui.overlay !== undefined && tui.ui.picker?.id !== "euclid") {
-    euclid.close();
+  if (
+    tui.ui.overlay &&
+    (tui.ui.overlay !== "picker" || tui.ui.picker?.id !== "euclid")
+  )
     return;
-  }
   const view = euclid.view(euclidContext());
   tui.openPicker({
     id: "euclid",
@@ -6014,12 +6310,11 @@ function refreshMenu(): void {
     closeFader();
     return;
   }
-  if (tui.ui.overlay !== undefined && tui.ui.picker?.id !== "menu") {
-    // Another overlay (help, a picker) replaced the menu.
-    menu.close();
-    leaveAuditionScreen();
+  if (
+    tui.ui.overlay &&
+    (tui.ui.overlay !== "picker" || tui.ui.picker?.id !== "menu")
+  )
     return;
-  }
   const context = menuContext();
   if (fader) {
     const fields = menu.faderFields(context);
@@ -6066,49 +6361,66 @@ function refreshMenu(): void {
  * audible track beside it (`song-bass.wav`), each that track soloed.
  */
 async function exportWav(path: string, stems: boolean): Promise<Receipt> {
-  const directory = await mkdtemp(join(tmpdir(), "dawg-export-"));
-  const errors: string[] = [];
-  const sink = { write: (text: string) => errors.push(text.trim()) };
-  const quiet = { write: () => undefined };
-  const render = async (song: TrackScore, target: string): Promise<boolean> => {
-    const file = join(directory, "song.track.json");
-    await writeFile(file, encodeLoop(song), "utf8");
-    const code = await runRenderCommand(
-      ["render", target, "--import", file],
-      process.cwd(),
-      quiet,
-      sink,
-    );
-    return code === 0;
-  };
-  tui.activity.setSpinner(`export ${path}`);
-  try {
-    if (!(await render(score, path)))
-      return fail(errors.at(-1) ?? `export failed · ${path}`);
-    if (!stems) return ok(`exported · ${path}`);
+  return runAudioJob(`export ${path}`, async (job) => {
+    const sourceScore = score;
+    const directory = await mkdtemp(join(tmpdir(), "dawg-export-"));
+    const errors: string[] = [];
     const written: string[] = [];
-    const base = path.replace(/\.wav$/i, "");
-    for (const track of score.tracks) {
-      if (!isTrackAudible(score, track.id)) continue;
-      let solo = score;
-      for (const other of score.tracks)
-        solo = applyScoreOperation(solo, {
-          type: "updateTrack",
-          trackId: other.id,
-          patch: { solo: other.id === track.id },
-        });
-      const target = `${base}-${track.id}.wav`;
-      if (!(await render(solo, target)))
-        return fail(errors.at(-1) ?? `export failed · ${target}`);
-      written.push(target);
+    const saved = () =>
+      written.length ? ` · saved ${written.join(", ")}` : "";
+    const sink = { write: (text: string) => errors.push(text.trim()) };
+    const quiet = { write: () => undefined };
+    const render = async (
+      song: TrackScore,
+      target: string,
+    ): Promise<boolean> => {
+      job.signal.throwIfAborted();
+      job.progress(target);
+      const file = join(directory, "song.track.json");
+      await writeFile(file, encodeLoop(song), "utf8");
+      const code = await runRenderCommand(
+        ["render", target, "--import", file],
+        process.cwd(),
+        quiet,
+        sink,
+        job,
+      );
+      if (code === 0) written.push(target);
+      return code === 0;
+    };
+    try {
+      if (!(await render(sourceScore, path)))
+        return fail((errors.at(-1) ?? `export failed · ${path}`) + saved());
+      if (!stems) return ok(`exported · ${path}`);
+      const base = path.replace(/\.wav$/i, "");
+      for (const track of sourceScore.tracks) {
+        if (!isTrackAudible(sourceScore, track.id)) continue;
+        const solo = applyScoreOperations(
+          sourceScore,
+          sourceScore.tracks.map((other) => ({
+            type: "updateTrack" as const,
+            trackId: other.id,
+            patch: { solo: other.id === track.id },
+          })),
+        );
+        const target = `${base}-${track.id}.wav`;
+        if (!(await render(solo, target)))
+          return fail((errors.at(-1) ?? `export failed · ${target}`) + saved());
+      }
+      return ok(stemsReceipt(path, written.slice(1)));
+    } catch (error) {
+      // Each WAV commits atomically. Cancellation may stop later stems, but
+      // must still disclose the complete files that already crossed that point.
+      if (written.length)
+        return warn(
+          `${job.signal.aborted ? "export canceled" : "export failed"}${saved()}${job.signal.aborted ? "" : ` · ${error instanceof Error ? error.message : String(error)}`}`,
+        );
+      throw error;
+    } finally {
+      await rm(directory, { recursive: true, force: true });
     }
-    return ok(stemsReceipt(path, written));
-  } finally {
-    tui.activity.setSpinner(undefined);
-    await rm(directory, { recursive: true, force: true });
-  }
+  });
 }
-
 /** `mix`: Mix › mixer in the drawer, on the focused track's level. */
 function openMixer(context: MenuContext): string | undefined {
   if (context.score.tracks.length === 0) return undefined;
@@ -6253,17 +6565,27 @@ function stepScene(direction: 1 | -1): void {
 }
 
 function mouseInput(event: MouseEvent): string[] {
+  if (tui.ui.keys)
+    return event.kind === "wheel"
+      ? [event.delta < 0 ? ARROW_UP : ARROW_DOWN]
+      : [];
   const frame = tui.frame;
   if (!frame) return [];
   const target = frame.hits.at(event.x, event.y)?.target;
+  const activeFader =
+    fader &&
+    menu.open &&
+    tui.ui.overlay === "picker" &&
+    tui.ui.picker?.id === "menu";
   if (tape.on && !play?.on && !tui.ui.overlay && !menu.open) {
     const handled = tapeMouse(event, target);
     if (handled) return handled;
   }
   if (event.kind === "wheel") {
-    const fields = fader && menu.open ? menu.faderFields(menuContext()) : [];
+    const fields = activeFader ? menu.faderFields(menuContext()) : [];
     if (
       fader &&
+      activeFader &&
       target &&
       (target.kind === "fader-bar" ||
         target.kind === "fader-row" ||
@@ -6282,12 +6604,18 @@ function mouseInput(event: MouseEvent): string[] {
       refreshMenu();
       return [];
     }
-    if (fader) return [];
+    if (activeFader) return [];
     if (tui.ui.overlay) return [event.delta < 0 ? ARROW_UP : ARROW_DOWN];
     return [];
   }
   // A drag keeps moving the fader it started on, even past the bar's ends.
-  if (event.kind === "drag" && event.button === "left" && fader && dragging) {
+  if (
+    event.kind === "drag" &&
+    event.button === "left" &&
+    fader &&
+    activeFader &&
+    dragging
+  ) {
     const fields = menu.faderFields(menuContext());
     faderOutcome(
       faderSetPosition(
@@ -6304,7 +6632,7 @@ function mouseInput(event: MouseEvent): string[] {
     return [];
   }
   if (event.kind !== "down" || event.button !== "left" || !target) return [];
-  if (fader && menu.open) {
+  if (fader && activeFader) {
     const fields = menu.faderFields(menuContext());
     let result: FaderResult | undefined;
     switch (target.kind) {
@@ -6360,6 +6688,15 @@ function mouseInput(event: MouseEvent): string[] {
       if (!tui.ui.overlay) tui.acceptCompletion(target.index);
       return [];
     case "command":
+      if (target.command === "/jump") return ["\u0007"];
+      if (target.command === "/back") return ["\u0002"];
+      if (target.command === "/play") return ["\u0010"];
+      if (target.command === "/help") return ["\u001bOP"];
+      if (target.command === "/menu") {
+        rememberLocation();
+        openMenu();
+        return [];
+      }
       if (tui.ui.overlay) return [];
       if (menu.open) {
         menu.close();
@@ -6432,6 +6769,9 @@ function playSession(): PlaySession {
 
 async function enterPlay(): Promise<Receipt> {
   if (play?.on) return ok(`play mode · ${play.track} · esc leaves`);
+  rememberLocation();
+  tape.on = false;
+  patchView.on = false;
   await materializeDraft();
   const session = playSession();
   await session.enter();
@@ -6612,8 +6952,9 @@ async function revealLoadedDemo(): Promise<void> {
 }
 
 async function enterTape(): Promise<Receipt> {
+  if (tape.on && !play?.on) return ok("tape · esc returns");
+  rememberLocation();
   if (play?.on) await play.exit();
-  if (tape.on) return ok("tape · esc goes home");
   exitPatch();
   closeFader();
   if (menu.open) menu.close();
@@ -6623,7 +6964,7 @@ async function enterTape(): Promise<Receipt> {
     rangeClipboard = await loadClipboard(paneClipboardPath());
   }
   return ok(
-    `tape · ${score.tracks.length} track${score.tracks.length === 1 ? "" : "s"} · ${score.bars} bars · ? keys · esc home`,
+    `tape · ${score.tracks.length} track${score.tracks.length === 1 ? "" : "s"} · ${score.bars} bars · ? keys · esc back`,
   );
 }
 
@@ -6631,6 +6972,8 @@ async function enterTape(): Promise<Receipt> {
 async function enterPatch(fx?: string): Promise<Receipt> {
   const model = patchModel(score, requestedTrack, fx);
   if (typeof model === "string") return fail(model);
+  if (!patchView.on || patchView.state.fx !== fx || tui.ui.overlay)
+    rememberLocation();
   if (play?.on) await play.exit();
   closeFader();
   if (menu.open) menu.close();
@@ -6647,7 +6990,7 @@ async function enterPatch(fx?: string): Promise<Receipt> {
       ? `library ${model.ref} · patch detach edits it`
       : `${patch.nodes.length} nodes · ${patch.cables.length} cables`;
   return ok(
-    `patch ${model.track.id} ▸ ${patch.name} · ${what} · ? keys · esc home`,
+    `patch ${model.track.id} ▸ ${patch.name} · ${what} · ? keys · esc back`,
   );
 }
 
@@ -7027,10 +7370,7 @@ function playHost() {
           if (!(error instanceof SessionConflictError)) throw error;
           record = await port.load();
           score = scoreFromJSON(record.composition);
-          target = operations.reduce(
-            (value, operation) => applyScoreOperation(value, operation),
-            score,
-          );
+          target = applyScoreOperations(score, operations);
         }
       }
       throw new Error("session busy");
@@ -7574,20 +7914,18 @@ function mediaServices(): MediaServices {
 /**
  * `master measure`: render the song as the loop that plays and measure
  * loudness, peaks and balance at the export rate. The render, master and
- * meter run in a worker (`measureScoreOffThread`), so the header, input and
+ * meter run in an owned worker, so the header, input and
  * playback keep going on a long loop.
  */
-async function measureLine(value: TrackScore): Promise<string> {
-  await sampleProblems(value);
-  tui.activity.setSpinner("measuring");
-  try {
-    const measured = await measureScoreOffThread(value, {
-      projectRoot: process.cwd(),
-    });
-    return `master measure · ${measurementLine(measured.mix, measured.master)} · ${measured.sampleRate / 1000} kHz`;
-  } finally {
-    tui.activity.setSpinner(undefined);
-  }
+async function measureLine(value: TrackScore): Promise<Receipt> {
+  return runAudioJob("master measure", async (job) => {
+    const samples = await jobSamples(value, job.signal);
+    const measured = await job.compute.measure(value, samples);
+    job.signal.throwIfAborted();
+    return ok(
+      `master measure · ${measurementLine(measured.mix, measured.master)} · ${measured.sampleRate / 1000} kHz`,
+    );
+  });
 }
 
 /**
@@ -7597,31 +7935,35 @@ async function measureLine(value: TrackScore): Promise<string> {
  */
 function agentPreviewHost(): PreviewHost {
   return {
-    render: async (value) => {
-      await sampleProblems(value);
-      return renderScorePcm(value, {
-        sampleRate: previewEngine().sampleRate,
-        ...(liveSampleBank ? { samples: liveSampleBank } : {}),
-      });
+    render: async (value, options) => {
+      options?.signal?.throwIfAborted();
+      const samples = await jobSamples(value, options?.signal);
+      return withAudioCompute(options?.signal, (compute) =>
+        compute.preview(value, samples, previewEngine().sampleRate),
+      );
     },
     // Off the UI thread, at the export rate (see measureLine).
     measure: async (value, options) => {
-      await sampleProblems(value);
-      return measureScoreOffThread(value, {
-        projectRoot: process.cwd(),
-        ...(options?.sampleRate === undefined
-          ? {}
-          : { sampleRate: options.sampleRate }),
-      });
+      options?.signal?.throwIfAborted();
+      const samples = await jobSamples(value, options?.signal);
+      return withAudioCompute(options?.signal, (compute) =>
+        compute.measure(value, samples, {
+          ...(options?.sampleRate === undefined
+            ? {}
+            : { sampleRate: options.sampleRate }),
+        }),
+      );
     },
     playFile: (path, from, to) => playFileForAgent(path, from, to),
-    play: async (rendered) => {
+    play: async (rendered, options) => {
+      options?.signal?.throwIfAborted();
       if (!agentPreviewPlays || clock.playing || auditionLoop?.looping)
         return false;
       const engine = liveEngine();
       if (!engine?.canMonitor || rendered.frames === 0) return false;
       try {
         await engine.monitor(true);
+        options?.signal?.throwIfAborted();
         engine.noteOn(AGENT_PREVIEW_VOICE, {
           pcm: rendered.pcm,
           frames: rendered.frames,

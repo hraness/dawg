@@ -57,10 +57,18 @@ const MAX_CHANGES = 8;
 
 /** How the host renders and plays a preview; both optional. */
 export type PreviewHost = Readonly<{
-  /** Render a preview score (the host adds decoded samples); default in-thread. */
-  render?: (score: TrackScore) => Promise<RenderedAudio> | RenderedAudio;
+  /** Render with decoded samples; optional stats avoid a second in-thread analysis. */
+  render?: (
+    score: TrackScore,
+    options?: Readonly<{ signal?: AbortSignal }>,
+  ) =>
+    | Promise<RenderedAudio & { stats?: SoundStats }>
+    | (RenderedAudio & { stats?: SoundStats });
   /** Play the snippet once; returns false when nothing could sound. */
-  play?: (audio: RenderedAudio) => boolean | Promise<boolean>;
+  play?: (
+    audio: RenderedAudio,
+    options?: Readonly<{ signal?: AbortSignal }>,
+  ) => boolean | Promise<boolean>;
   /** Play a project file (seconds range) for `audio` audition; false when silent. */
   playFile?: (
     path: string,
@@ -73,7 +81,7 @@ export type PreviewHost = Readonly<{
    */
   measure?: (
     score: TrackScore,
-    options?: Readonly<{ sampleRate?: number }>,
+    options?: Readonly<{ sampleRate?: number; signal?: AbortSignal }>,
   ) => Promise<ScoreMeasurement>;
 }>;
 
@@ -123,10 +131,12 @@ async function applyChanges(
   let score = context.score;
   const summaries: string[] = [];
   for (const change of changes) {
+    action.signal?.throwIfAborted();
     const tool = lookup(change.tool);
     if (!tool) throw new PreviewToolError(`unknown tool ${change.tool}`);
     let plan: ToolPlan = tool.plan(change.args, { ...context, score });
     if (plan.kind === "prepare") plan = await plan.run(action);
+    action.signal?.throwIfAborted();
     if (plan.kind !== "score")
       throw new PreviewToolError(`${change.tool} does not change the score`);
     score = applyScoreOperations(score, plan.operations);
@@ -226,12 +236,14 @@ export function previewSoundTool(
           ? `preview ${trackId} · ${changes.map((change) => change.tool).join(", ")}`
           : `preview ${trackId}`,
         run: async (action) => {
+          action.signal?.throwIfAborted();
           const candidate = await applyChanges(
             changes,
             { ...context, focusedTrackId: trackId },
             action,
             lookup,
           );
+          action.signal?.throwIfAborted();
           const after = previewScore(candidate.score, trackId, {
             context: inContext,
           });
@@ -239,7 +251,7 @@ export function previewSoundTool(
           const region = bars
             ? { startBar: after.region.startBar, bars }
             : after.region;
-          const render =
+          const render: NonNullable<PreviewHost["render"]> =
             action.preview?.render ?? ((value) => renderScorePcm(value));
           const snippet = async (value: TrackScore, masterGainDb?: number) => {
             const preview = previewScore(value, trackId, {
@@ -248,8 +260,15 @@ export function previewSoundTool(
               ...(masterGainDb === undefined ? {} : { masterGainDb }),
             });
             if (!preview) return undefined;
-            const audio = await render(preview.score);
-            return { audio, stats: analyzePcm(audio.pcm, audio.sampleRate) };
+            action.signal?.throwIfAborted();
+            const audio = await render(preview.score, {
+              signal: action.signal,
+            });
+            action.signal?.throwIfAborted();
+            return {
+              audio,
+              stats: audio.stats ?? analyzePcm(audio.pcm, audio.sampleRate),
+            };
           };
           const before =
             changes.length > 0 &&
@@ -267,8 +286,12 @@ export function previewSoundTool(
           const next = await snippet(candidate.score, fixedGain);
           if (!next) throw new PreviewToolError(`unknown track ${trackId}`);
           let played = false;
+          action.signal?.throwIfAborted();
           if (play && action.preview?.play)
-            played = await action.preview.play(next.audio);
+            played = await action.preview.play(next.audio, {
+              signal: action.signal,
+            });
+          action.signal?.throwIfAborted();
           const describe = describeSound(next.stats);
           const comparison = before
             ? compareSounds(before.stats, next.stats)

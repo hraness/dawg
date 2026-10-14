@@ -12,6 +12,7 @@ import {
   type ResampleCommand,
 } from "../commands/resample.ts";
 import { hasSamplerTracks, SampleLibrary } from "../audio/samples.ts";
+import { withAudioCompute } from "../audio/compute.ts";
 import type { AgentTool } from "./tools.ts";
 
 class ResampleToolError extends Error {
@@ -102,12 +103,17 @@ export const RESAMPLE_TOOLS: readonly AgentTool[] = Object.freeze([
                 ...(action.packs ? { packs: action.packs } : {}),
               }).load(context.score)
             : undefined;
-          const result = await runResample({
-            projectRoot: root,
-            score: context.score,
-            command,
-            ...(samples ? { samples } : {}),
-          });
+          const result = await withAudioCompute(action.signal, (compute) =>
+            runResample({
+              projectRoot: root,
+              score: context.score,
+              command,
+              signal: action.signal,
+              render: (score, request, bank) =>
+                compute.resample(score, request, bank),
+              ...(samples ? { samples } : {}),
+            }),
+          );
           if (!result.ok) throw new ResampleToolError(result.message);
           const track = result.next.tracks.find(
             (t) => t.id === result.trackId,

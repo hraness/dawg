@@ -10,6 +10,33 @@ export type LiveSampleData = Omit<SampleBank, "wavetables"> & {
   wavetables?: ReadonlyMap<string, TableData>;
 };
 
+/**
+ * Capture a full bank for a worker without cloning Wavetable's lazy function.
+ * Each spectrum is bounded by the table format; yield between frames so a
+ * large, previously unread table cannot monopolize input or delay cancellation.
+ * Input buffers stay owned by the caller and are cloned by postMessage.
+ */
+export async function sampleBankData(
+  bank: SampleBank,
+  signal?: AbortSignal,
+): Promise<LiveSampleData> {
+  signal?.throwIfAborted();
+  const { wavetables, ...samples } = bank;
+  if (!wavetables) return samples;
+  const tables = new Map<string, TableData>();
+  for (const [id, table] of wavetables) {
+    const spectra: ReturnType<Wavetable["spectrum"]>[] = [];
+    for (let frame = 0; frame < table.frames; frame += 1) {
+      signal?.throwIfAborted();
+      spectra.push(table.spectrum(frame));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    tables.set(id, { name: table.name, id: table.id, spectra });
+  }
+  signal?.throwIfAborted();
+  return { ...samples, wavetables: tables };
+}
+
 /** Only the currently played track can contribute to a live single-note render. */
 export function liveTrackSamples(
   bank: SampleBank,

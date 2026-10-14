@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { createScore, type TrackScore } from "../../core/score.ts";
-import { previewScore } from "../audio/preview.ts";
+import { analyzePcm, previewScore } from "../audio/preview.ts";
 import { renderScorePcm, type RenderedAudio } from "../audio/wav.ts";
 import { compareSounds } from "./preview-tool.ts";
 import { AGENT_TOOLS, isActionDiagnostic, type ToolContext } from "./tools.ts";
@@ -143,6 +143,63 @@ describe("preview_sound", () => {
     });
     expect(plays).toBe(0);
     expect(json.played).toBe(false);
+  });
+
+  test("host-rendered stats are reused and the same turn signal reaches render/play", async () => {
+    const controller = new AbortController();
+    const audio = renderScorePcm(previewScore(song, "lead")!.score);
+    const stats = analyzePcm(audio.pcm, audio.sampleRate);
+    const plan = tool.plan({}, context(song));
+    if (plan.kind !== "action") throw new Error("not an action");
+    let plays = 0;
+    const result = await plan.run({
+      signal: controller.signal,
+      preview: {
+        render: (_score, options) => {
+          expect(options?.signal).toBe(controller.signal);
+          // Precomputed stats must not be replaced by another main-thread DFT.
+          return { ...audio, pcm: new Int16Array(audio.pcm.length), stats };
+        },
+        play: (_audio, options) => {
+          expect(options?.signal).toBe(controller.signal);
+          plays += 1;
+          return true;
+        },
+      },
+    });
+    expect(JSON.parse(result.content).sound.rmsDb).toBeGreaterThan(-60);
+    expect(plays).toBe(1);
+  });
+
+  test("aborted previews never render or start playback, including late custom hosts", async () => {
+    const audio = renderScorePcm(previewScore(song, "lead")!.score);
+    for (const before of [true, false]) {
+      const controller = new AbortController();
+      if (before) controller.abort();
+      let renders = 0;
+      let plays = 0;
+      const plan = tool.plan({}, context(song));
+      if (plan.kind !== "action") throw new Error("not an action");
+      await expect(
+        plan.run({
+          signal: controller.signal,
+          preview: {
+            render: async () => {
+              renders += 1;
+              await new Promise<void>((resolve) => setImmediate(resolve));
+              controller.abort();
+              return audio;
+            },
+            play: () => {
+              plays += 1;
+              return true;
+            },
+          },
+        }),
+      ).rejects.toMatchObject({ name: "AbortError" });
+      expect(renders).toBe(before ? 0 : 1);
+      expect(plays).toBe(0);
+    }
   });
 
   test("an empty track plays the default phrase for its role", async () => {

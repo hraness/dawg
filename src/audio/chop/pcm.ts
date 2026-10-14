@@ -137,6 +137,7 @@ export async function readAudio(
   path: string,
   runner: CommandRunner,
   signal?: AbortSignal,
+  decode: (bytes: Uint8Array) => Pcm | Promise<Pcm> = decodeWavBytes,
 ): Promise<Pcm> {
   const file = Bun.file(path);
   if (file.size > MAX_INPUT_BYTES)
@@ -144,7 +145,8 @@ export async function readAudio(
       `${path} is over the ${MAX_INPUT_BYTES / 1024 / 1024} MiB input cap`,
     );
   const bytes = new Uint8Array(await file.arrayBuffer());
-  if (isRiff(bytes)) return decodeWavBytes(bytes);
+  signal?.throwIfAborted();
+  if (isRiff(bytes)) return decode(bytes);
   if (!runner.which("ffmpeg"))
     throw new ChopError(
       "only WAV decodes without ffmpeg · install it with: brew install ffmpeg (macOS) or apt install ffmpeg",
@@ -183,7 +185,8 @@ export async function readAudio(
       throw new ChopError(
         `ffmpeg could not decode ${path}: ${result.stderr.trim().slice(0, 200)}`,
       );
-    return decodeWavBytes(new Uint8Array(await Bun.file(out).arrayBuffer()));
+    signal?.throwIfAborted();
+    return await decode(new Uint8Array(await Bun.file(out).arrayBuffer()));
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => undefined);
   }
@@ -229,10 +232,18 @@ export function encodeWav24(pcm: Pcm): Uint8Array {
 }
 
 /** Write `pcm` to `path` atomically (temp file then rename). */
-export async function writeAudio(path: string, pcm: Pcm): Promise<void> {
+export async function writeAudio(
+  path: string,
+  pcm: Pcm,
+  encode: (pcm: Pcm) => Uint8Array | Promise<Uint8Array> = encodeWav24,
+  signal?: AbortSignal,
+): Promise<void> {
   const temp = `${path}.part-${process.pid}`;
   try {
-    await Bun.write(temp, encodeWav24(pcm));
+    const bytes = await encode(pcm);
+    signal?.throwIfAborted();
+    await Bun.write(temp, bytes);
+    signal?.throwIfAborted();
     await rename(temp, path);
   } catch (error) {
     await rm(temp, { force: true }).catch(() => undefined);

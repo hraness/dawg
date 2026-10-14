@@ -25,8 +25,12 @@ so try anything.
 
 ## Keys
 
+- Ctrl-G Jump: tracks, scenes, editors, sounds, parameters and commands
+- Ctrl-B Back: return with your draft and selection
 - Ctrl-P play mode · Ctrl-K menu · Ctrl-T TAPE
 - `?` keys · F1 guides · Ctrl-Q NOW/NEXT
+- Escape cancels typing or a filter, then backs out; prompt drafts stay
+- If the terminal reserves Ctrl-B or F1, use Jump → Back or Guides
 
 ## Next
 

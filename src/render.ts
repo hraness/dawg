@@ -6,7 +6,7 @@
  * record from disk and never starts dawgd or plays audio.
  */
 import { createHash } from "node:crypto";
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   scoreFromJSON,
@@ -16,8 +16,9 @@ import {
 } from "../core/score.ts";
 import { decodeLoop } from "../core/loop.ts";
 import { scoreToMidi } from "../core/midi.ts";
-import { RENDER_CHANNELS, encodeWav, withWavCues } from "./audio/wav.ts";
-import { exportSampleRate, measureRendered } from "./audio/measure.ts";
+import { exportSampleRate } from "./audio/measure.ts";
+import { renderExportAudio } from "./audio/export-audio.ts";
+import type { AudioCompute } from "./audio/compute.ts";
 import {
   applyMasterCommand,
   loudnessLine,
@@ -30,18 +31,13 @@ import {
   findSection,
   sectionScore,
 } from "../core/sections.ts";
-import {
-  exportScore,
-  renderArrangedPcm,
-  sectionCues,
-} from "./audio/arrange.ts";
+import { exportScore } from "./audio/arrange.ts";
 import { SampleLibrary, hasSamplerTracks } from "./audio/samples.ts";
 import { withClipLengths } from "./audio/clips.ts";
 import {
   PackStore,
   creditsLine,
   packCredits,
-  withWavComment,
   writeCredits,
 } from "./audio/packs.ts";
 import { evaluateProject, formatDiagnostic } from "../core/sdk/eval.ts";
@@ -65,6 +61,7 @@ export async function runRenderCommand(
   workspace: string,
   stdout: Output,
   stderr: Output,
+  job?: Readonly<{ compute: AudioCompute; signal: AbortSignal }>,
 ): Promise<number> {
   const rest = argv.slice(1);
   if (rest.includes("--help") || rest.includes("-h")) {
@@ -203,36 +200,55 @@ export async function runRenderCommand(
     );
     return 2;
   }
+  // Resolve the attribution before dispatch so its full-WAV copy and digest
+  // happen in the same worker as encoding.
+  const refs = score.tracks.flatMap((track) =>
+    Object.values(track.sampler?.voices ?? {}),
+  );
+  const creditedPacks = refs.some((ref) => ref.src.startsWith("pack:"))
+    ? packCredits(refs, await new PackStore().list())
+    : undefined;
+  const credits = creditedPacks ? creditsLine(creditedPacks) : undefined;
+  const comment = credits ? `samples: ${credits}` : undefined;
   let audio;
   try {
-    audio = renderArrangedPcm(score, { samples, sampleRate });
+    job?.signal.throwIfAborted();
+    audio = job
+      ? await job.compute.export(
+          score,
+          samples,
+          sampleRate,
+          only === undefined,
+          options.has("--measure"),
+          comment,
+        )
+      : renderExportAudio(
+          score.toJSON(),
+          samples,
+          sampleRate,
+          only === undefined,
+          options.has("--measure"),
+          comment,
+        );
   } catch (error) {
     if (!(error instanceof ScoreValidationError)) throw error;
     stderr.write(`render failed · ${error.message}\n`);
     return 1;
   }
-  let wav = encodeWav(audio.pcm, audio.sampleRate, RENDER_CHANNELS);
-  // Section starts as cue points (a --section render is one section).
-  if (only === undefined)
-    wav = withWavCues(wav, sectionCues(score, audio.sampleRate));
-  // Pack sounds: name the packs (and CC-BY attributions) in the WAV's INFO
-  // comment and on stdout; CREDITS.md in a project keeps the attributions.
-  const refs = score.tracks.flatMap((track) =>
-    Object.values(track.sampler?.voices ?? {}),
-  );
-  let credits: string | undefined;
-  if (refs.some((ref) => ref.src.startsWith("pack:"))) {
-    const list = packCredits(refs, await new PackStore().list());
-    credits = creditsLine(list);
-    if (credits) wav = withWavComment(wav, `samples: ${credits}`);
-    if (await isProject(workspace).catch(() => false))
-      await writeCredits(workspace, list).catch(() => undefined);
-  }
+  const wav = audio.wav;
+  if (creditedPacks && (await isProject(workspace).catch(() => false)))
+    await writeCredits(workspace, creditedPacks).catch(() => undefined);
   const path = resolve(workspace, target);
   const temporary = `${path}.${process.pid}.tmp`;
-  await writeFile(temporary, wav);
-  await rename(temporary, path);
-  const sha = createHash("sha256").update(wav).digest("hex");
+  job?.signal.throwIfAborted();
+  try {
+    await writeFile(temporary, wav);
+    job?.signal.throwIfAborted();
+    await rename(temporary, path);
+  } finally {
+    await rm(temporary, { force: true });
+  }
+  const sha = audio.sha256;
   const seconds = audio.frames / audio.sampleRate;
   stdout.write(
     `rendered · ${target} · ${seconds.toFixed(2)} s · ${audio.sampleRate} Hz${
@@ -244,7 +260,7 @@ export async function runRenderCommand(
     } · ${wav.byteLength} bytes · ${sha}\n`,
   );
   if (credits) stdout.write(`credits · ${credits}\n`);
-  const clipped = clippedSamples(audio.pcm);
+  const clipped = audio.clipped;
   if (clipped > 0)
     stderr.write(
       `warning · ${clipped} ${clipped === 1 ? "sample clips" : "samples clip"} at full scale · ${
@@ -259,7 +275,7 @@ export async function runRenderCommand(
     );
   if (options.has("--measure"))
     stdout.write(
-      `loudness · ${measurementLine(measureRendered(audio, false).mix, audio.master)}\n`,
+      `loudness · ${measurementLine(audio.measurement!, audio.master)}\n`,
     );
   else if (audio.master)
     stdout.write(`loudness · ${loudnessLine(audio.master)}\n`);

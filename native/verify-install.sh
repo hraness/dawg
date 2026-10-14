@@ -29,9 +29,16 @@ DAWG_BIN="${prefix}/bin/dawg" DAWG_OFFLINE="${prefix}/offline" bun -e '
   const root = pathToFileURL(resolve(dirname(main), "..") + "/");
   const load = (path) => import(new URL(path, root).href);
   globalThis.fetch = async () => { throw new Error("offline install attempted network access"); };
+  const { probeNativeDSP, DSP_TARGETS } = await load("src/audio/native-dsp.ts");
+  const dsp = probeNativeDSP();
+  if (DSP_TARGETS.includes(`${process.platform}-${process.arch}`) && !dsp.ok)
+    throw new Error(`installed native DSP unavailable: ${dsp.reason}`);
+  if (dsp.ok) { dsp.close(); console.log(`native DSP ${dsp.detail}`); }
+  else console.log(`native DSP uses JavaScript: ${dsp.reason}`);
   const { DEMOS, createDemo } = await load("core/demos/index.ts");
   const { BUNDLED_SAMPLES, bundledSampleRef } = await load("core/bundled-samples.ts");
   const { createScore } = await load("core/score.ts");
+  const { AudioCompute } = await load("src/audio/compute.ts");
   const { readBundledSample } = await load("src/audio/bundled-samples.ts");
   const { PackStore } = await load("src/audio/packs.ts");
   const { SampleLibrary } = await load("src/audio/samples.ts");
@@ -48,5 +55,27 @@ DAWG_BIN="${prefix}/bin/dawg" DAWG_OFFLINE="${prefix}/offline" bun -e '
     const bank = await samples.load(score);
     if (bank.problems.length) throw new Error(`${id}: ${JSON.stringify(bank.problems)}`);
   }
+  // Exercise the installed worker URL and its runtime import graph, not only
+  // source imports. A short synthesized note needs no device or external pack.
+  const compute = new AudioCompute(AbortSignal.timeout(15_000));
+  try {
+    const score = createScore({ tempoBpm: 120, bars: 1,
+      tracks: [{ id: "bass", name: "Bass", instrument: "bass" }],
+      notes: [{ id: "n", trackId: "bass", pitch: 48,
+        startTick: 0, durationTicks: 480, velocity: 0.6 }],
+    });
+    const rendered = await compute.export(score, undefined, 8000, true, true);
+    if (!(rendered.wav instanceof Uint8Array) || rendered.wav.length <= 44 ||
+        new TextDecoder().decode(rendered.wav.subarray(0, 4)) !== "RIFF")
+      throw new Error("installed compute worker produced no WAV");
+    const pcm = await compute.chop.decodeWavBytes(rendered.wav);
+    const peak = await compute.chop.peak(pcm);
+    const quieter = await compute.chop.gain(pcm, -6);
+    const quieterPeak = await compute.chop.peak(quieter);
+    if (!(peak > 0.001) || !Number.isFinite(peak) || !Number.isFinite(quieterPeak) ||
+        Math.abs(quieterPeak / peak - 10 ** (-6 / 20)) > 0.00001)
+      throw new Error("installed compute worker export/chop audio check failed");
+    console.log(`installed compute worker verified: ${rendered.frames} frames, export/decode/gain/peak`);
+  } finally { compute.dispose(); }
   console.log(`offline install verified: ${DEMOS.length} demos and ${BUNDLED_SAMPLES.length} SHA-256 pinned samples`);
 '

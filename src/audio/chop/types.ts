@@ -5,6 +5,7 @@
  */
 import type { HistoryActor, HistoryHandle } from "../../history/types.ts";
 import type { CommandRunner } from "../../auth/runner.ts";
+import type { ChopComputer } from "./compute.ts";
 import type { Tempo, TimeSpec } from "./time.ts";
 
 export type { Tempo, TimeSpec };
@@ -186,6 +187,8 @@ export type ChopContext = Readonly<{
   writeScope?: (rel: string) => boolean;
   runner: CommandRunner;
   signal: AbortSignal;
+  /** Pure audio arithmetic may run in a cancellable worker; file commits stay here. */
+  compute?: ChopComputer;
   /** Default output folder, project-relative (default `samples`). */
   outDir?: string;
   /** Focused track slug, so `tracks/<slug>/downloads/<file>` resolves. */

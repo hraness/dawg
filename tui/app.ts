@@ -31,6 +31,7 @@ import {
   type TrackScoreSnapshot,
 } from "./highway.ts";
 import { placeholderHint } from "./hints.ts";
+import { NavigationHistory, NAVIGATION_ACTIONS } from "./navigation.ts";
 import {
   Delight,
   downbeatGlint,
@@ -881,7 +882,7 @@ function paintPrompt(
   ui: UiState,
   layout: FrameLayout,
   width: number,
-): { cursor: CursorPosition; rows: number } {
+): { cursor: CursorPosition | undefined; rows: number } {
   const { theme, capabilities, prompt, activity } = ui;
   const roles = theme.roles;
   const box = capabilities.unicode ? UNICODE_BOX : ASCII_BOX;
@@ -891,6 +892,23 @@ function paintPrompt(
   const height = layout.prompt.height;
   buffer.fill(0, top, width, height, panel);
   const rows = layout.promptRows;
+  const owner = ui.keys
+    ? "KEY GUIDE"
+    : ui.overlay === "picker"
+      ? ui.drawer
+        ? "KNOBS"
+        : ui.picker?.id === "jump"
+          ? "JUMP"
+          : "PICKER"
+      : ui.overlay
+        ? ui.overlay.toUpperCase()
+        : view.play && !prompt.value
+          ? "PLAY"
+          : view.tape && !prompt.value
+            ? "TAPE"
+            : view.patch && !prompt.value
+              ? "PATCH"
+              : undefined;
 
   // Top border with the mode pill and right-aligned status.
   buffer.set(0, top, box.tl, border);
@@ -899,7 +917,14 @@ function paintPrompt(
   const mode = prompt.snapshot.mode;
   const pillStyle = mode === "queue" ? roles.pillQueue : roles.pillSteer;
   let x = 2;
-  if (!view.agentOffline) x += buffer.text(x, top, pill(mode), pillStyle);
+  if (owner)
+    x += buffer.text(
+      x,
+      top,
+      ` ${owner} · draft saved `,
+      onBackground(roles.muted, panel),
+    );
+  else if (!view.agentOffline) x += buffer.text(x, top, pill(mode), pillStyle);
   const status: string[] = [];
   // The model shows once, in the header; the spend line carries it here.
   // Views without a spend line (embedders such as the site demo) keep the
@@ -956,16 +981,18 @@ function paintPrompt(
     // Seeded per session (tui/hints.ts): the words stay put while you
     // work and change between sessions, chosen by agent and song state.
     const score = view.score;
-    const placeholder = placeholderHint({
-      seed: score.sessionId ?? "dawg",
-      agent: !view.agentOffline,
-      filled:
-        score.notes.length > 0 ||
-        (score.clips ?? []).length > 0 ||
-        (score.layers ?? []).some((layer) => layer.notes.length > 0),
-      drums: projectionFor(score).kind !== "pitch",
-      queue: mode === "queue",
-    });
+    const placeholder = owner
+      ? `${owner.toLowerCase()} has input · ctrl-g jump · ctrl-b back · F1 guide`
+      : placeholderHint({
+          seed: score.sessionId ?? "dawg",
+          agent: !view.agentOffline,
+          filled:
+            score.notes.length > 0 ||
+            (score.clips ?? []).length > 0 ||
+            (score.layers ?? []).some((layer) => layer.notes.length > 0),
+          drums: projectionFor(score).kind !== "pitch",
+          queue: mode === "queue",
+        });
     buffer.text(5, top + 1, truncate(placeholder, editorWidth - 1), faint);
   }
 
@@ -977,20 +1004,31 @@ function paintPrompt(
       buffer.set(column, y, box.h, border);
     buffer.set(width - 1, y, box.br, border);
     // One notation everywhere: ctrl-<key>, as /help and the menu spell it.
-    const hints =
-      width >= 112
-        ? " enter send · shift-enter newline · ctrl-q now/next · ctrl-z undo · ctrl-o log · ctrl-c quit "
+    const navigationHints = NAVIGATION_ACTIONS.map(
+      (action) => action.hint,
+    ).join(" · ");
+    const hints = owner
+      ? ` ${navigationHints} · F1 guide · esc cancel/back `
+      : width >= 112
+        ? ` enter send · ctrl-j newline · ${navigationHints} · ctrl-z undo · ctrl-o log `
         : width >= 80
-          ? " enter send · ctrl-j newline · ctrl-q now/next · ctrl-z undo · ctrl-o log "
+          ? ` enter send · ${navigationHints} · ctrl-z undo `
           : width >= 52
-            ? " enter · ctrl-q now/next · ctrl-z undo · ctrl-o log "
+            ? ` ${navigationHints} · ? keys `
             : "";
     const right = footerStatus(view, view.score.sessionId);
-    const spend = right ? ` ${right} ` : "";
-    const spendWidth = displayWidth(spend);
-    // Spend wins over hints when both do not fit.
-    const shown =
-      hints && displayWidth(hints) + spendWidth + 6 <= width ? hints : "";
+    let spend = right ? ` ${right} ` : "";
+    let spendWidth = displayWidth(spend);
+    // Always leave a discoverable exit, including in a compact overlay.
+    const candidates = [hints, ` ${navigationHints} `, " ^G jump · ^B back "];
+    let shown = candidates.find(
+      (candidate) => displayWidth(candidate) + spendWidth + 6 <= width,
+    );
+    if (!shown) {
+      shown = candidates.at(-1)!;
+      spend = "";
+      spendWidth = 0;
+    }
     if (shown) buffer.text(2, y, shown, onBackground(roles.muted, panel));
     if (spend && spendWidth + 4 <= width)
       buffer.text(
@@ -1002,6 +1040,7 @@ function paintPrompt(
   }
 
   // Cursor: shown as a reverse cell and as the real terminal cursor.
+  if (owner) return { cursor: undefined, rows };
   const cursorX = Math.min(width - 2, 4 + layoutInfo.cursorColumn);
   const cursorY = top + 1 + Math.min(rows - 1, layoutInfo.cursorRow);
   const under = buffer.get(cursorX, cursorY);
@@ -1816,6 +1855,78 @@ export class TuiApp {
   overlay: Overlay;
   log: LogView = { scroll: 0, filter: "all" };
   picker: PickerState | undefined;
+  private overlayHistory = new NavigationHistory<
+    ReturnType<TuiApp["saveSurface"]>
+  >();
+
+  /** UI state only: safe to restore after the committed score changes. */
+  saveSurface() {
+    return {
+      overlay: this.overlay,
+      picker: this.picker ? { ...this.picker } : undefined,
+      text: this.text ? { ...this.text } : undefined,
+      keys: this.keys ? { ...this.keys } : undefined,
+      guide: this.guide,
+      log: { ...this.log },
+      drawer: this.drawer,
+      draft: this.prompt.saveDraft(),
+    };
+  }
+
+  restoreSurface(surface: ReturnType<TuiApp["saveSurface"]>): void {
+    this.overlay = surface.overlay;
+    this.picker = surface.picker;
+    this.text = surface.text;
+    this.guide = surface.guide;
+    this.log = surface.log;
+    this.drawer = surface.drawer;
+    this.prompt.restoreDraft(surface.draft);
+    this.keys = surface.keys;
+    this.completion = undefined;
+    this.completedText = "";
+  }
+
+  /** Suspend a panel when a temporary detour covers it. */
+  private coverSurface(): void {
+    this.overlayHistory.push(this.saveSurface());
+    this.drawer = undefined;
+    this.keys = undefined;
+  }
+
+  saveNavigation() {
+    return {
+      surface: this.saveSurface(),
+      frames: this.overlayHistory.snapshot(),
+    };
+  }
+  restoreNavigation(state: ReturnType<TuiApp["saveNavigation"]>): void {
+    this.restoreSurface(state.surface);
+    this.overlayHistory.restore(state.frames);
+  }
+
+  backOverlay(): boolean {
+    if (this.keys) {
+      this.closeKeys();
+      return true;
+    }
+    if (!this.overlay) return false;
+    const previous = this.overlayHistory.back();
+    if (previous) this.restoreSurface(previous);
+    else {
+      this.overlay = undefined;
+      this.drawer = undefined;
+    }
+    return true;
+  }
+
+  clearSurfaces(): void {
+    this.overlayHistory.clear();
+    this.overlay = undefined;
+    this.picker = undefined;
+    this.text = undefined;
+    this.drawer = undefined;
+    this.keys = undefined;
+  }
   completionSource?: (text: string) => readonly PickerItem[];
   completion: PickerState | undefined;
   private completedText = "";
@@ -1994,11 +2105,80 @@ export class TuiApp {
 
   /** Decode one key sequence (from TerminalInputDecoder) into an input. */
   input(value: string | { type: "paste"; text: string }): AppInput {
-    if (typeof value !== "string")
+    // The key guide is an exclusive reader; its scroll keys never reach
+    // the fader, picker or live keyboard underneath it.
+    if (this.keys) {
+      if (typeof value !== "string") return { type: "overlay" };
+      if (value === "\u0003" || value === "\u000c") {
+        if (value === "\u000c") this.invalidate();
+        return { type: "ui", command: value === "\u0003" ? "quit" : "redraw" };
+      }
+      const nav = overlayKey(value);
+      if (nav && nav !== "enter") {
+        const page = Math.max(1, this.overlayRows() - 2);
+        const max = Math.max(
+          0,
+          this.keys.lines.flatMap((line) =>
+            wrapWords(line, panelRect(this.io.columns()).boxWidth - 4),
+          ).length - page,
+        );
+        const from = Math.min(max, this.keys.scroll);
+        this.keys.scroll =
+          nav === "home"
+            ? 0
+            : nav === "end"
+              ? max
+              : Math.max(
+                  0,
+                  Math.min(
+                    max,
+                    from +
+                      (nav === "up"
+                        ? -1
+                        : nav === "down"
+                          ? 1
+                          : nav === "pgup"
+                            ? -page
+                            : page),
+                  ),
+                );
+      } else if (value === "?" || value === "\u001b") this.closeKeys();
+      return { type: "overlay" };
+    }
+    if (typeof value !== "string") {
+      if (this.overlay === "picker" && this.picker?.filterable) {
+        this.picker.filtering = true;
+        this.filterPicker(
+          (
+            (this.picker.query ?? "") + value.text.replace(/[\r\n\t]+/g, " ")
+          ).slice(0, 80),
+        );
+        return this.picker
+          ? this.pickerMoved(this.picker)
+          : { type: "overlay" };
+      }
+      if (this.overlay === "guide" && this.guide && !this.guide.page) {
+        for (const character of Array.from(
+          value.text.replace(/[\r\n\t]+/g, " ").slice(0, 80),
+        ))
+          this.guide.key(character, this.overlayRows());
+        return { type: "overlay" };
+      }
+      if (this.overlay) return { type: "overlay" };
       return {
         type: "action",
         action: this.prompt.handle({ type: "paste", text: value.text }),
       };
+    }
+    if (value === "\u001a" || value === "\u0019")
+      return { type: "ui", command: value === "\u001a" ? "undo" : "redo" };
+    if (
+      value === "\u000f" &&
+      !(this.overlay === "picker" && this.picker?.audition)
+    ) {
+      this.toggleLog();
+      return { type: "ui", command: "toggle-log" };
+    }
     this.refreshCompletion();
     if (
       !this.overlay &&
@@ -2239,16 +2419,20 @@ export class TuiApp {
         return { type: "overlay" };
       }
     }
+    if (
+      (this.overlay === "text" || this.overlay === "log") &&
+      key.type !== "ui"
+    )
+      return { type: "overlay" };
     switch (key.type) {
       case "ui":
         if (key.command === "toggle-log") {
-          this.overlay = this.overlay === "log" ? undefined : "log";
-          if (this.overlay === "log") this.log = { ...this.log, scroll: 0 };
+          this.toggleLog();
           return { type: "ui", command: key.command };
         }
         if (key.command === "close-overlay") {
           if (this.overlay) {
-            this.overlay = undefined;
+            this.backOverlay();
             return { type: "ui", command: key.command };
           }
           return { type: "action", action: this.prompt.handle("ESC") };
@@ -2288,6 +2472,8 @@ export class TuiApp {
   openPicker(picker: Omit<PickerState, "index"> & { index?: number }): void {
     const items = picker.items;
     if (items.length === 0) return;
+    if (this.overlay !== "picker" || this.picker?.id !== picker.id)
+      this.coverSurface();
     this.picker = {
       filterable: true,
       typeToFilter: true,
@@ -2333,8 +2519,7 @@ export class TuiApp {
   }
 
   closePicker(): void {
-    this.picker = undefined;
-    if (this.overlay === "picker") this.overlay = undefined;
+    if (this.overlay === "picker") this.backOverlay();
   }
 
   /**
@@ -2356,6 +2541,7 @@ export class TuiApp {
     lines: readonly string[],
     marks?: readonly (DocMark | undefined)[],
   ): void {
+    this.coverSurface();
     this.text = {
       title,
       lines: lines.slice(0, 512),
@@ -2392,20 +2578,21 @@ export class TuiApp {
    * (and opens nothing) when `topic` names no guide.
    */
   openGuide(topic?: string): boolean {
-    const browser = this.guide ?? new GuideBrowser(listGuides());
+    const browser = new GuideBrowser(listGuides());
     if (topic && !browser.open(topic)) return false;
     if (!topic) {
       browser.page = undefined;
       browser.query = "";
       browser.filtering = false;
     }
+    this.coverSurface();
     this.guide = browser;
     this.overlay = "guide";
     return true;
   }
 
   closeGuide(): void {
-    if (this.overlay === "guide") this.overlay = undefined;
+    if (this.overlay === "guide") this.backOverlay();
   }
 
   /** True while the guide filter takes typed text (so `?` is a letter). */
@@ -2414,8 +2601,16 @@ export class TuiApp {
   }
 
   closeText(): void {
-    this.text = undefined;
-    if (this.overlay === "text") this.overlay = undefined;
+    if (this.overlay === "text") this.backOverlay();
+  }
+
+  toggleLog(): void {
+    if (this.overlay === "log") this.backOverlay();
+    else {
+      this.coverSurface();
+      this.overlay = "log";
+      this.log = { ...this.log, scroll: 0 };
+    }
   }
 
   /**
@@ -2426,8 +2621,7 @@ export class TuiApp {
   command(text: string): string | Receipt | undefined {
     const command = text.trim();
     if (/^\/(log|transcript)$/i.test(command)) {
-      this.overlay = this.overlay === "log" ? undefined : "log";
-      if (this.overlay === "log") this.log = { ...this.log, scroll: 0 };
+      this.toggleLog();
       return this.overlay
         ? "transcript open · esc closes"
         : "transcript closed";

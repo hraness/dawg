@@ -497,12 +497,7 @@ function songOperations(a: TrackScore, b: TrackScore): ScoreOperation[] {
 }
 
 /** Applies operations in order; the inverse of `diffScores`. */
-export function applyScoreOperations(
-  score: TrackScore,
-  operations: readonly ScoreOperation[],
-): TrackScore {
-  return operations.reduce(applyScoreOperation, score);
-}
+export { applyScoreOperations } from "./score.ts";
 
 function notePatch(a: Note, b: Note): NotePatch | undefined {
   return fieldPatch(NOTE_FIELDS, a, b) as NotePatch | undefined;

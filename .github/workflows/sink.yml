@@ -67,7 +67,7 @@ jobs:
           rustup toolchain install 1.97.1 --profile minimal --target "${{ matrix.target }}"
           rustup default 1.97.1
           rustc --version
-      - name: Unit tests (ring, null device)
+      - name: Unit tests (ring, null device, DSP)
         if: matrix.test
         run: cargo test --locked --release --target "${{ matrix.target }}"
       - name: Build
@@ -78,7 +78,7 @@ jobs:
           mkdir -p "${dest}"
           cp "target/${{ matrix.target }}/release/${{ matrix.file }}" "${dest}/"
           ls -l "${dest}"
-      - name: Headless smoke test through bun:ffi
+      - name: Headless sink and exact DSP parity through bun:ffi
         if: matrix.test
         working-directory: .
         run: bun native/smoke.ts "native/prebuilt/${{ matrix.platform }}/${{ matrix.file }}"

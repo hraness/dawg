@@ -3684,7 +3684,23 @@ export class EditMenu {
    */
   private knobView: { page: string; all: boolean } | undefined;
   /** Typed value for the selected row (`entry` holds the row's label). */
-  private entry: { label: string; buffer: string } | undefined;
+  private entry: { label: string; buffer: string; error?: string } | undefined;
+
+  saveNavigation() {
+    return {
+      stack: this.stack.map((frame) => ({ ...frame })),
+      filtering: this.filtering,
+      knobView: this.knobView ? { ...this.knobView } : undefined,
+      entry: this.entry ? { ...this.entry } : undefined,
+    };
+  }
+
+  restoreNavigation(state: ReturnType<EditMenu["saveNavigation"]>): void {
+    this.stack = state.stack.map((frame) => ({ ...frame }));
+    this.filtering = state.filtering;
+    this.knobView = state.knobView ? { ...state.knobView } : undefined;
+    this.entry = state.entry ? { ...state.entry } : undefined;
+  }
 
   get open(): boolean {
     return this.stack.length > 0;
@@ -4198,6 +4214,7 @@ export class EditMenu {
 
   private entryKey(value: string, context: MenuContext): MenuResult {
     const entry = this.entry!;
+    if (!KEY_ENTER.has(value)) entry.error = undefined;
     if (value === "\u001b") {
       this.entry = undefined;
       return { type: "handled" };
@@ -4208,9 +4225,12 @@ export class EditMenu {
     }
     if (KEY_ENTER.has(value)) {
       const node = this.selected(context);
-      this.entry = undefined;
       const command = node ? entryCommand(node, entry.buffer) : undefined;
-      if (!command) return { type: "handled" };
+      if (!command) {
+        entry.error = `Invalid value · ${placeholderFor(node)} · edit or Esc cancel`;
+        return { type: "handled" };
+      }
+      this.entry = undefined;
       // A committed value clears the filter so its result (a new automation
       // point, a renamed row) is in view, keeping the cursor on the row.
       const frame = this.stack.at(-1)!;
@@ -4225,6 +4245,20 @@ export class EditMenu {
     }
     if (value.length >= 1 && !value.startsWith("\u001b") && value >= " ") {
       entry.buffer = (entry.buffer + value).slice(0, 200);
+    }
+    return { type: "handled" };
+  }
+
+  paste(text: string, context: MenuContext): MenuResult {
+    if (!this.open) return { type: "pass" };
+    const value = text.replace(/[\u0000-\u001f\u007f-\u009f]/g, "");
+    if (this.entry) return this.entryKey(value, context);
+    // Search owns paste outside a value editor, including strings of digits.
+    const frame = this.stack.at(-1);
+    if (frame) {
+      frame.query = (frame.query + value).slice(0, 200);
+      frame.index = 0;
+      this.filtering = true;
     }
     return { type: "handled" };
   }
@@ -4330,7 +4364,7 @@ export class EditMenu {
       .filter(Boolean)
       .join("  ");
     const hint = this.entry
-      ? HINTS.typing
+      ? (this.entry.error ?? HINTS.typing)
       : this.filtering
         ? HINTS.filtering
         : audition?.looping && frame?.hover && selected?.kind === "action"

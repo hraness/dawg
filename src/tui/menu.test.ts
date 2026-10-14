@@ -370,6 +370,9 @@ describe("edit menu", () => {
     menu.key("9", ctx);
     menu.key("9", ctx);
     expect(menu.key("\r", ctx)).toEqual({ type: "handled" });
+    // Invalid entry is preserved until explicitly cancelled.
+    expect(menu.typing).toBe(true);
+    menu.key("\u001b", ctx);
     select(menu, ctx, "beats per bar");
     expect(menu.key(LEFT, ctx)).toEqual({ type: "run", command: "meter 3" });
   });
@@ -1202,4 +1205,22 @@ describe("show me row", () => {
       menu.view(ctx).items.some((row) => row.label.startsWith("show me")),
     ).toBe(false);
   });
+});
+
+test("invalid menu values stay in place and pasted text is owned by the drawer", () => {
+  const menu = new EditMenu();
+  const ctx = context();
+  menu.show(ctx, "project");
+  select(menu, ctx, "tempo");
+  menu.key("9", ctx);
+  menu.paste("999\r", ctx);
+  expect(menu.key("\r", ctx)).toEqual({ type: "handled" });
+  expect(menu.typing).toBe(true);
+  expect(menu.view(ctx).hint).toContain("Invalid value");
+  expect(menu.view(ctx).title).toContain("9999");
+  menu.key("\u001b", ctx);
+  menu.paste("tempo", ctx);
+  expect(
+    menu.view(ctx).items.some((item) => item.label.includes("tempo")),
+  ).toBe(true);
 });

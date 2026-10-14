@@ -3,10 +3,12 @@ import type { MasterReport } from "./master.ts";
 import type { RenderReply, RenderRequest } from "./render-worker.ts";
 import { SampleLibrary, hasSamplerTracks } from "./samples.ts";
 import { renderArranged } from "./arrange.ts";
-import { StemRenderer } from "./wav.ts";
+import { StemRenderer, type MonitorRange } from "./wav.ts";
 import { LoopCache, loopCacheKey } from "./loop-cache.ts";
+import { WindowCache } from "./window-cache.ts";
 
 export type LoopRender = Readonly<{
+  monitor?: MonitorRange;
   pcm: Int16Array;
   frames: number;
   sampleRate: number;
@@ -27,6 +29,7 @@ export type LoopRendererOptions = Readonly<{
   projectRoot?: string;
   /** Retained finished PCM budget; zero disables it (diagnostics). */
   maxLoopCacheBytes?: number;
+  maxWindowCacheBytes?: number;
 }>;
 
 /**
@@ -45,6 +48,8 @@ export class LoopRenderer {
   private readonly projectRoot: string | undefined;
   private readonly maxLoopCacheBytes: number | undefined;
   private readonly loopCache: LoopCache;
+  private readonly windowCache: WindowCache;
+  private readonly maxWindowCacheBytes: number | undefined;
   private nextId = 1;
   private epoch = 0;
   private readonly pending = new Map<
@@ -59,6 +64,8 @@ export class LoopRenderer {
     this.projectRoot = options.projectRoot;
     this.maxLoopCacheBytes = options.maxLoopCacheBytes;
     this.loopCache = new LoopCache(options.maxLoopCacheBytes);
+    this.maxWindowCacheBytes = options.maxWindowCacheBytes;
+    this.windowCache = new WindowCache(options.maxWindowCacheBytes);
   }
 
   /** True while renders run in the worker. */
@@ -66,18 +73,21 @@ export class LoopRenderer {
     return this.useWorker && !this.workerBroken;
   }
 
-  public async render(score: TrackScore): Promise<LoopRender> {
+  public async render(
+    score: TrackScore,
+    monitorFrame?: number,
+  ): Promise<LoopRender> {
     if (this.disposed) throw new Error("renderer disposed");
     const epoch = this.epoch;
     if (this.offThread) {
       try {
-        return await this.renderInWorker(score);
+        return await this.renderInWorker(score, monitorFrame);
       } catch (error) {
         if (this.disposed) throw error;
         if (!(error instanceof WorkerLostError)) throw error;
       }
     }
-    return this.renderInline(score, epoch);
+    return this.renderInline(score, epoch, monitorFrame);
   }
 
   /** Cancel pending work without discarding an idle worker's finished cache. */
@@ -92,6 +102,7 @@ export class LoopRenderer {
     this.disposed = true;
     this.failWorker(new WorkerLostError("renderer disposed"));
     this.loopCache.clear();
+    this.windowCache.clear();
     this.inline = undefined;
     this.library = undefined;
   }
@@ -99,6 +110,7 @@ export class LoopRenderer {
   private async renderInline(
     score: TrackScore,
     epoch: number,
+    monitorFrame?: number,
   ): Promise<LoopRender> {
     this.inline ??= new StemRenderer();
     const started = performance.now();
@@ -110,8 +122,11 @@ export class LoopRenderer {
     if (this.disposed) throw new Error("renderer disposed");
     if (epoch !== this.epoch)
       throw new RenderCancelledError("render cancelled");
-    const key = loopCacheKey(score, this.sampleRate, samples);
-    const cached = this.loopCache.get(key);
+    const key =
+      monitorFrame === undefined
+        ? loopCacheKey(score, this.sampleRate, samples)
+        : undefined;
+    const cached = key === undefined ? undefined : this.loopCache.get(key);
     const audio =
       cached ??
       renderArranged(this.inline, score, {
@@ -120,9 +135,12 @@ export class LoopRenderer {
         // The live loop sounds a vocal track's guide notes (0.7 clips).
         guide: true,
         samples,
+        windowCache: this.windowCache,
+        monitorFrame,
       });
-    if (!cached) this.loopCache.set(key, audio);
+    if (!cached && key !== undefined) this.loopCache.set(key, audio);
     return {
+      ...(audio.monitor ? { monitor: audio.monitor } : {}),
       pcm: audio.pcm,
       frames: audio.frames,
       sampleRate: audio.sampleRate,
@@ -131,7 +149,10 @@ export class LoopRenderer {
     };
   }
 
-  private renderInWorker(score: TrackScore): Promise<LoopRender> {
+  private renderInWorker(
+    score: TrackScore,
+    monitorFrame?: number,
+  ): Promise<LoopRender> {
     const worker = this.ensureWorker();
     const id = this.nextId;
     this.nextId += 1;
@@ -139,9 +160,11 @@ export class LoopRenderer {
       this.pending.set(id, { resolve, reject });
       const request: RenderRequest = {
         id,
+        monitorFrame,
         score: score.toJSON(),
         sampleRate: this.sampleRate,
         maxLoopCacheBytes: this.maxLoopCacheBytes,
+        maxWindowCacheBytes: this.maxWindowCacheBytes,
         ...(this.projectRoot === undefined
           ? {}
           : { projectRoot: this.projectRoot }),
@@ -178,6 +201,7 @@ export class LoopRenderer {
       this.pending.delete(reply.id);
       if (reply.ok)
         waiter.resolve({
+          ...(reply.monitor ? { monitor: reply.monitor } : {}),
           pcm: reply.pcm,
           frames: reply.frames,
           sampleRate: reply.sampleRate,

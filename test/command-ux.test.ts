@@ -250,7 +250,7 @@ describe("picker and mouse parity", () => {
   });
 
   test("the action shelf and scene strip expose exact painted mouse targets", () => {
-    const h = harness();
+    const h = harness(80);
     const frame = h.render({
       arrange: {
         bars: 8,

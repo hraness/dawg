@@ -65,6 +65,7 @@ export interface FaderState {
   label: string;
   /** Digits typed for the focused field. */
   typing?: string | undefined;
+  error?: string | undefined;
   /** The field that just snapped onto a detent: flashes for one frame. */
   flash?: string | undefined;
 }
@@ -327,6 +328,7 @@ export function faderKeyPress(
   const index = focusIndex(state, fields);
   const field = fields[index]!;
   state.label = field.label;
+  if (!KEY_ENTER.has(value) && !KEY_TAB.has(value)) state.error = undefined;
   if (state.typing !== undefined) {
     if (value === "\u001b") {
       state.typing = undefined;
@@ -339,8 +341,16 @@ export function faderKeyPress(
     }
     if (KEY_ENTER.has(value) || KEY_TAB.has(value)) {
       const text = state.typing;
-      state.typing = undefined;
       const command = field.kind === "number" ? field.parse(text) : undefined;
+      if (!command) {
+        state.error =
+          field.kind === "number"
+            ? `Use ${field.format(field.min)}–${field.format(field.max)} · edit value or Esc cancel`
+            : "Choose an option";
+        return { type: "handled" };
+      }
+      state.typing = undefined;
+      state.error = undefined;
       return command
         ? { type: "set", command, key: faderKey(field.label) }
         : { type: "handled" };
@@ -414,10 +424,25 @@ export function faderKeyPress(
       ? { type: "set", command: reset, key: faderKey(field.label) }
       : { type: "handled" };
   }
-  if (/^[0-9.]$/.test(value)) {
+  if (/^[0-9.\-]$/.test(value)) {
     state.typing = value === "." ? "0." : value;
     return { type: "handled" };
   }
+  return { type: "handled" };
+}
+
+/** Paste is text for the focused value, never a stream of shortcuts or commands. */
+export function faderPaste(
+  state: FaderState,
+  fields: readonly FaderSpec[],
+  text: string,
+): FaderResult {
+  const field = fields[focusIndex(state, fields)];
+  if (field?.kind !== "number") return { type: "handled" };
+  const value = text.replace(/[\u0000-\u001f\u007f-\u009f]/g, "").trim();
+  state.label = field.label;
+  state.typing = ((state.typing ?? "") + value).slice(0, 32);
+  state.error = undefined;
   return { type: "handled" };
 }
 
@@ -592,7 +617,7 @@ export function drawerView(
     typing: state.typing,
     dirty: options.dirty,
     badge: options.dirty ? stagedBadge(staged) : undefined,
-    status: options.status,
+    status: state.error ?? options.status,
     hint:
       options.hint ??
       (options.knobs

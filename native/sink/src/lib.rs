@@ -1,7 +1,8 @@
 //! dawg's native audio sink: a ring buffer drained by a real audio callback.
 //!
-//! The TypeScript engine renders every sample; this library only plays them
-//! (output) and captures them (input). It keeps no score or session state.
+//! The TypeScript engine renders the score. This library plays/captures audio
+//! and optionally runs a bulk reverb kernel under a separate DSP ABI.
+//! It keeps no score or session state.
 //! Everything is reached through a small C ABI loaded with `bun:ffi`.
 //!
 //! The ring carries interleaved frames at the caller's sample rate. The
@@ -12,6 +13,7 @@
 //! The device name `"null"` opens a headless device: a thread that drains
 //! (or fills with silence) the ring in real time, for CI and tests.
 
+mod dsp;
 mod ring;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};

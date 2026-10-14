@@ -2,6 +2,25 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.13.0
+
+### Added
+
+- **Jump and return.** Ctrl-G searches destinations, tracks, guides and commands from every editor. Ctrl-B returns to the previous location with its draft, search, selection and view state. Jump, Back and transport actions remain visible and clickable; Escape dismisses the foreground layer.
+- **Progressive song monitoring.** Playback prepares a bounded window around the playhead and prefetches the following audio. It follows newer edits and seeks, preserves tempo and meter timing, and reports buffering without freezing navigation. Monitoring uses fixed master settings; exported WAVs retain exact whole-song loudness targeting and mastering.
+
+### Changed
+
+- **Background audio jobs.** Export, bounce and sample DSP run in owned, cancellable workers. Encoding, attribution, metering and WAV hashing stay off the input thread. Agent previews and explicit loudness measurements also run off the input thread; optional header measurements wait for idle and yield to input. Sample processing retains bounded worker-owned buffers instead of copying every intermediate between threads. Prepared chop files remain private until computation completes; cancelled work does not replace existing output.
+- **Fast dense edits and history.** Consecutive note operations share one validated construction while retaining ordered validation and atomic session commits. Dense restore, imports, paste and agent operations avoid rebuilding a whole score for each note.
+- **Reuse audio after edits.** A bounded arrangement-window cache retains unchanged synthesis; keys include timing, sample, impulse and wavetable dependencies. Mastering decodes directly into its own buffers to reduce peak memory. Optional verified Rust reverb accelerates the fixed-order delay kernel, with the deterministic TypeScript implementation retained as a fallback.
+- **Honest latency measurements.** Benchmarks report sent, observed and missing notes together with backend and queue settings. Synthetic sink timings remain distinct from physical device latency.
+
+### Fixed
+
+- Help and foreground overlays consume input before underlying editors. Paste stays in its foreground field; invalid values remain editable. Global navigation and undo shortcuts reach their intended owner.
+- Newer seeks survive render completion, obsolete edits cannot replace current audio, and very long bars use bounded monitoring windows instead of repeated empty refills.
+
 ## 0.12.1
 
 ### Changed

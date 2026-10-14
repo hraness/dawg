@@ -3,6 +3,7 @@ import {
   mkdtemp,
   mkdir,
   readFile,
+  readdir,
   rm,
   symlink,
   writeFile,
@@ -12,6 +13,7 @@ import { join } from "node:path";
 import { systemRunner, type CommandRunner } from "../../auth/runner.ts";
 import { encodeWav24, makePcm, type Pcm } from "./pcm.ts";
 import { resolveOutput, runChop } from "./run.ts";
+import { chopComputer } from "./compute.ts";
 import { runChopCli } from "./cli.ts";
 import type { ChopContext, ChopHistory } from "./types.ts";
 import { closeHistory, openHistory } from "../../history/open.ts";
@@ -56,6 +58,91 @@ afterEach(async () => {
 });
 
 describe("runChop", () => {
+  test("invalid sidecar destination is rejected before replacing audio", async () => {
+    await mkdir(join(root, "samples", "result.chop.json"), { recursive: true });
+    const original = encodeWav24(hits());
+    await writeFile(join(root, "samples", "result.wav"), original);
+    await expect(
+      runChop(
+        "gain",
+        { input: "loop.wav", output: "samples/result.wav", db: -6 },
+        ctx,
+      ),
+    ).rejects.toThrow("output metadata is occupied");
+    expect(
+      Buffer.from(await readFile(join(root, "samples", "result.wav"))).equals(
+        Buffer.from(original),
+      ),
+    ).toBe(true);
+    expect((await readdir(join(root, "samples"))).sort()).toEqual([
+      "result.chop.json",
+      "result.wav",
+    ]);
+  });
+
+  test("cancellation during output analysis leaves existing audio and metadata untouched", async () => {
+    await mkdir(join(root, "samples"));
+    const original = encodeWav24(hits());
+    await writeFile(join(root, "samples", "result.wav"), original);
+    await writeFile(
+      join(root, "samples", "result.chop.json"),
+      "original metadata",
+    );
+    const controller = new AbortController();
+    const compute = chopComputer();
+    const result = await runChop(
+      "gain",
+      { input: "loop.wav", output: "samples/result.wav", db: -6 },
+      {
+        ...ctx,
+        signal: controller.signal,
+        compute: {
+          ...compute,
+          peak: async (pcm) => {
+            controller.abort();
+            return compute.peak(pcm);
+          },
+        },
+      },
+    ).catch((error) => error);
+    expect(result.message).toContain("cancelled");
+    expect(
+      Buffer.from(await readFile(join(root, "samples", "result.wav"))).equals(
+        Buffer.from(original),
+      ),
+    ).toBe(true);
+    expect(
+      await readFile(join(root, "samples", "result.chop.json"), "utf8"),
+    ).toBe("original metadata");
+    expect((await readdir(join(root, "samples"))).sort()).toEqual([
+      "result.chop.json",
+      "result.wav",
+    ]);
+  });
+
+  test("cancelling a slice batch before commit publishes none of its prepared slices", async () => {
+    const controller = new AbortController();
+    const compute = chopComputer();
+    let outputs = 0;
+    await runChop(
+      "slice",
+      { input: "loop.wav", method: "grid", count: 4 },
+      {
+        ...ctx,
+        signal: controller.signal,
+        compute: {
+          ...compute,
+          peak: async (pcm) => {
+            if (++outputs === 2) controller.abort();
+            return compute.peak(pcm);
+          },
+        },
+      },
+    ).catch(() => undefined);
+    expect(outputs).toBe(2);
+    expect(await readdir(join(root, "samples"))).toEqual([]);
+  });
+
   test("info reports length, rate, channels and levels", async () => {
     const result = await runChop("info", { input: "loop.wav" }, ctx);
     expect(result.info).toMatchObject({

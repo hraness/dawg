@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createDemo } from "../../core/demos/index.ts";
 import { diffRewind, IDENTITY_REWIND } from "../session/delta.ts";
 import {
   addNote,
@@ -48,6 +49,53 @@ function harness() {
 }
 
 describe("undo/redo history", () => {
+  test("restores a full demo through per-pane undo and redo with unrelated edits intact", () => {
+    const empty = createScore({
+      tracks: [{ id: "main", name: "main", instrument: "sine" }],
+    });
+    const demo = createDemo("signal-bloom");
+    const events = [
+      {
+        revision: 1,
+        kind: "demo.load",
+        rewind: diffRewind(empty.toJSON(), demo.toJSON()),
+        actor: { clientId: "a" },
+      },
+    ];
+    const undo = paneHistoryStep(demo.toJSON(), events, "undo", "a");
+    expect(undo?.ok).toBe(true);
+    if (!undo?.ok) throw new Error("expected undo");
+    expect(undo.next.toJSON()).toEqual(empty.toJSON());
+    const undoEvent = {
+      revision: 2,
+      kind: UNDO_KIND,
+      rewind: diffRewind(demo.toJSON(), empty.toJSON()),
+      actor: { clientId: "a" },
+      payload: { undoneRevision: 1 },
+    };
+    const concurrent = empty.withLoop({ startBar: 0, bars: 1 });
+    const redo = paneHistoryStep(
+      concurrent.toJSON(),
+      [
+        ...events,
+        undoEvent,
+        {
+          revision: 3,
+          kind: "score.loop",
+          rewind: diffRewind(empty.toJSON(), concurrent.toJSON()),
+          actor: { clientId: "b" },
+        },
+      ],
+      "redo",
+      "a",
+    );
+    expect(redo?.ok).toBe(true);
+    if (!redo?.ok) throw new Error("expected redo");
+    expect(redo.next.toJSON()).toEqual(
+      demo.withLoop({ startBar: 0, bars: 1 }).toJSON(),
+    );
+  });
+
   test("undo then redo restores states in order", () => {
     const h = harness();
     h.edit("s1");

@@ -32,6 +32,39 @@ const note = (id: string, trackId = "a"): ScoreOperation => ({
 });
 
 describe("rebaseOperations", () => {
+  test("batched note runs remain atomic and retain concurrent edits", () => {
+    const operations = Array.from({ length: 512 }, (_, i) =>
+      note(`batch-${i}`),
+    );
+    const current = base.withTempo(137);
+    const before = current.toJSON();
+    const result = rebaseOperations(base, current, operations);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.next.notes).toHaveLength(513);
+      expect(result.next.tempoBpm).toBe(137);
+    }
+    expect(
+      rebaseOperations(base, current, [...operations, note("batch-0")]),
+    ).toMatchObject({
+      ok: false,
+      reason: "note id already exists: batch-0",
+    });
+    const collision = current.addNote({
+      id: "batch-0",
+      trackId: "a",
+      startTick: 0,
+      durationTicks: 120,
+      pitch: 72,
+      velocity: 0.8,
+    });
+    expect(rebaseOperations(base, collision, operations)).toMatchObject({
+      ok: false,
+      reason: "note batch-0 was added concurrently",
+    });
+    expect(current.toJSON()).toEqual(before);
+  });
+
   test("replays independent edits on the newer score", () => {
     const current = base.withTempo(140);
     const result = rebaseOperations(base, current, [

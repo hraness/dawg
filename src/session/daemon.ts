@@ -1,7 +1,7 @@
 import { appendFile, rm, stat, truncate } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import {
-  applyScoreOperation,
+  applyScoreOperations,
   scoreFromJSON,
   type ScoreOperation,
   type TrackScore,
@@ -569,11 +569,7 @@ export class DawgDaemon {
           if (!result.ok) return this.rebaseReply(message.base, result.reason);
           next = result.next;
           rebased = true;
-        } else {
-          next = this.score;
-          for (const operation of operations)
-            next = applyScoreOperation(next, operation);
-        }
+        } else next = applyScoreOperations(this.score, operations);
       } else if (stale) return this.rebaseReply(message.base);
       else next = scoreFromJSON(message.composition);
       // Round-trip through the parser so only canonical score data is stored.

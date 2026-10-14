@@ -664,6 +664,20 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
     ],
   },
   {
+    group: "project · navigation",
+    entries: [
+      {
+        command: "/jump",
+        summary: "find a place, track, guide or command · ctrl-g",
+      },
+      {
+        command: "/back",
+        summary: "return with the previous draft and selection · ctrl-b",
+      },
+      { command: "/home", summary: "open the command prompt · ctrl-b returns" },
+    ],
+  },
+  {
     group: "project · window",
     entries: [
       { command: "/view focus|all", summary: "one track or every track" },
@@ -792,6 +806,10 @@ export const HELP_GUIDE: readonly HelpSection[] = [
         summary: "play · play mode: the keyboard plays notes",
       },
       { command: "ctrl-k", summary: "menu: every setting by hand" },
+      {
+        command: "ctrl-g · ctrl-b",
+        summary: "jump anywhere · return with your draft",
+      },
       { command: "? · ctrl-z · ctrl-y", summary: "keys here · undo · redo" },
     ],
   },

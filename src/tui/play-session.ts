@@ -16,7 +16,7 @@
  * so the score holds exactly what an agent's `write_chords` would write.
  */
 import {
-  applyScoreOperation,
+  applyScoreOperations,
   type ScoreOperation,
   type TrackScore,
 } from "../../core/score.ts";
@@ -1290,9 +1290,7 @@ export class PlaySession {
       pedalNote = ` · pedal not recorded (${error.message})`;
     }
     if (operations.length === 0) return;
-    let next = score;
-    for (const operation of operations)
-      next = applyScoreOperation(next, operation);
+    const next = applyScoreOperations(score, operations);
     const added = operations.filter((op) => op.type === "addNote").length;
     const removed = operations.filter((op) => op.type === "removeNote").length;
     await this.host.commit(next, "score.record", {

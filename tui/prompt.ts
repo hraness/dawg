@@ -325,7 +325,8 @@ export function applyPromptKey(
     case "NEWLINE":
       return textAction(state, "\n", options);
     case "ESC":
-      return { kind: "cancel", state: createPromptState("", state.mode) };
+      // Escape cancels the current operation, never an unsubmitted draft.
+      return { kind: "cancel", state };
     case "CTRL+C":
       return { kind: "exit", state };
     case "CTRL+Q":
@@ -544,6 +545,31 @@ export class PromptModel {
   }
   public get snapshot(): PromptState {
     return { ...this.state };
+  }
+  public saveDraft() {
+    return {
+      state: this.snapshot,
+      historyIndex: this.historyIndex,
+      historyEntry:
+        this.historyIndex >= 0
+          ? this.history[this.history.length - 1 - this.historyIndex]
+          : undefined,
+      draftBeforeHistory: this.draftBeforeHistory,
+    };
+  }
+  public restoreDraft(draft: ReturnType<PromptModel["saveDraft"]>): void {
+    this.state = normalized(draft.state, this.options);
+    const entry =
+      draft.historyEntry === undefined
+        ? -1
+        : this.history.lastIndexOf(draft.historyEntry);
+    this.historyIndex = entry < 0 ? -1 : this.history.length - 1 - entry;
+    this.draftBeforeHistory = draft.draftBeforeHistory;
+  }
+  public resetDraft(text = ""): void {
+    this.state = createPromptState(text, this.state.mode, this.options);
+    this.historyIndex = -1;
+    this.draftBeforeHistory = "";
   }
   public get width(): number {
     return this.options.width;

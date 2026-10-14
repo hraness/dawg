@@ -17,7 +17,7 @@
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MIN_HEIGHT, MIN_WIDTH, TEXT_MEASURE } from "../tui/app.ts";
+import { MIN_HEIGHT, MIN_WIDTH, panelRect, TEXT_MEASURE } from "../tui/app.ts";
 import { launch } from "./pty-harness.ts";
 
 export type Size = readonly [cols: number, rows: number];
@@ -89,10 +89,22 @@ export interface Scenario {
 export const ESC = "\u001b";
 const UP = `${ESC}[A`;
 
-/** Any cell drawn in reverse video or the prompt cursor shown. */
+/** Visible prompt, reverse selection, or the active panel's row pointer. */
 export function focusShown(t: Pty): boolean {
   if (t.vt.cursorVisible) return true;
-  return t.vt.cells.some((row) => row.some((cell) => cell.style.reverse));
+  if (t.vt.cells.some((row) => row.some((cell) => cell.style.reverse)))
+    return true;
+  const overlay = t.state()?.overlay;
+  if (overlay !== "picker" && overlay !== "guide") return false;
+  const { left } = panelRect(t.vt.cols);
+  const column = left + (overlay === "picker" ? 5 : 2);
+  // Pickers and guide trees use a pointer plus bold, not reverse video.
+  // Check its body-row position so a breadcrumb or footer is not focus.
+  return t.vt.cells.some(
+    (row) =>
+      ["│", "|"].includes(row[left]?.ch ?? "") &&
+      ["›", ">"].includes(row[column]?.ch ?? ""),
+  );
 }
 
 /** Play mode's 18 note keys, each a cap of its own under the header. */

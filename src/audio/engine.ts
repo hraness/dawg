@@ -1,3 +1,5 @@
+import { loopSecondsOf } from "../../core/tempo.ts";
+import { MonitorBuffer } from "./monitor-buffer.ts";
 import type { TrackScore } from "../../core/score.ts";
 import { PlaybackLock } from "./lock.ts";
 import { LoopPlayer } from "./player.ts";
@@ -304,6 +306,8 @@ export type AudioEngineOptions = Readonly<{
   spawn?: (command: readonly string[]) => PlayerProcess;
   /** Set false to render on the calling thread instead of a worker. */
   worker?: boolean;
+  /** Cursor-first fixed-gain windows for arrangements over 45 seconds. */
+  progressive?: boolean;
   /** Project root for sampler voices; without it samplers render silent. */
   projectRoot?: string;
   /** Base delay before a dead player is respawned; doubles per attempt. */
@@ -367,6 +371,7 @@ const DEFAULT_LEAD_MS = 100;
 const LEAD_RENDER_FACTOR = 1.5;
 
 type Loop = Readonly<{
+  monitor?: { score: TrackScore; buffer: MonitorBuffer };
   pcm: Int16Array;
   frames: number;
   framesPerBeat: number;
@@ -443,6 +448,8 @@ type LiveVoice = {
 export const MAX_RING_OUT_VOICES = 32;
 
 type PlayRequest = {
+  revision: number;
+  seekRevision: number;
   score: TrackScore;
   beat: number | undefined;
   /** Monotonic ms when `beat` was observed. */
@@ -452,8 +459,9 @@ type PlayRequest = {
 };
 
 /**
- * The gapless audio engine. It renders the score into one seamless loop
- * (tails folded onto the start) and streams it to a long-lived stdin player.
+ * The gapless audio engine. Short songs render into one seamless loop; long
+ * streaming arrangements use bounded fixed-gain monitoring windows. Exact
+ * whole-song loudness remains an export operation.
  *
  * Timing: the engine is paced by the same monotonic clock as the transport.
  * Frame `n` of the stream belongs to wall time `start + n / rate`, and the
@@ -487,6 +495,15 @@ export class AudioEngine {
   private choiceMtime: number;
   private choiceCheckedMs = Number.NEGATIVE_INFINITY;
   private readonly renderer: LoopRenderer;
+  private readonly progressive: boolean;
+  private renderRevision = 0;
+  private seekRevision = 0;
+  private seekAnchor: { beat: number; atMs: number } | undefined;
+  private monitorRevision = 0;
+  private filling: Loop | undefined;
+  private monitorFailed: Loop | undefined;
+  private monitorBuffering = false;
+  private monitorWanted = false;
   private readonly respawnMs: number;
   private readonly onStatus: ((status: AudioStatus) => void) | undefined;
   private fallback: LoopPlayer | undefined;
@@ -569,6 +586,7 @@ export class AudioEngine {
     this.customSpawn = options.spawn;
     this.respawnMs = options.respawnMs ?? 250;
     this.onStatus = options.onStatus;
+    this.progressive = options.progressive ?? true;
     this.renderer = new LoopRenderer({
       sampleRate: this.sampleRate,
       ...(options.worker === undefined ? {} : { worker: options.worker }),
@@ -595,6 +613,13 @@ export class AudioEngine {
     return this.lastRenderMs;
   }
 
+  /** Foreground synthesis takes priority over optional full-song analysis. */
+  public get preparing(): boolean {
+    return (
+      this.draining || this.queued !== undefined || this.filling !== undefined
+    );
+  }
+
   /**
    * Set the queue lead (play mode drops it to ~60 ms so a key sounds soon
    * after it is pressed); `undefined` restores the constructed lead.
@@ -612,10 +637,13 @@ export class AudioEngine {
    * sink, or the stdin player and why the sink is not in use.
    */
   public get audioNote(): string {
-    if (this.info.backend === "native") return "native sink";
+    const monitor = this.loop?.monitor
+      ? ` · causal monitor${this.loop.monitor.score.master?.target !== undefined ? " · target on export" : ""}${this.monitorBuffering ? " · buffering" : ""}${this.monitorFailed === this.loop ? " · unavailable" : ""}`
+      : "";
+    if (this.info.backend === "native") return "native sink" + monitor;
     return this.info.nativeUnavailable
-      ? `${this.info.backend} · no native sink`
-      : this.info.backend;
+      ? `${this.info.backend} · no native sink${monitor}`
+      : this.info.backend + monitor;
   }
 
   /** Lead in milliseconds: how far ahead of now a new live voice sounds. */
@@ -644,6 +672,7 @@ export class AudioEngine {
    * any render.
    */
   public get loudness(): MasterReport | undefined {
+    if (this.loop?.monitor) return undefined;
     const pcm = this.lastLoopPcm;
     if (!pcm) return undefined;
     if (this.lastMaster) return this.lastMaster;
@@ -808,10 +837,16 @@ export class AudioEngine {
   public play(score: TrackScore, beat?: number): Promise<void> {
     if (this.info.backend === "none") return Promise.resolve();
     if (this.fallback) return this.fallback.play(score, beat);
+    this.monitorWanted = true;
+    const revision = ++this.renderRevision;
+    this.monitorRevision += 1;
+    this.renderer.cancelPending();
     return new Promise<void>((resolve, reject) => {
       const waiters = this.queued?.waiters ?? [];
       waiters.push({ resolve, reject });
       this.queued = {
+        revision,
+        seekRevision: this.seekRevision,
         score,
         beat,
         atMs: this.now(),
@@ -834,19 +869,56 @@ export class AudioEngine {
           continue;
         }
         try {
-          const render = await this.renderer.render(request.score);
+          const timeline = playbackTime(request.score);
+          const map = transportMapFor(timeline);
+          const beat =
+            request.beat ??
+            (this.loop ? beatOfFrame(this.loop, this.cursor) : 0);
+          const seconds = map
+            ? map.seconds(
+                ((beat % map.loopBeats) + map.loopBeats) % map.loopBeats,
+              )
+            : (beat * 60) / timeline.tempoBpm;
+          const monitorFrame =
+            this.progressive &&
+            this.info.streaming &&
+            loopSecondsOf(timeline) > 45
+              ? Math.max(0, Math.round(seconds * this.sampleRate))
+              : undefined;
+          const render = await this.renderer.render(
+            request.score,
+            monitorFrame,
+          );
+          if (render.monitor && monitorFrame !== undefined) {
+            const target = monitorFrame % render.monitor.loopFrames;
+            if (
+              !(render.monitor.loopFrames > 0) ||
+              render.monitor.startFrame > target ||
+              render.monitor.startFrame + render.frames <= target
+            )
+              throw new Error(
+                "monitor render did not cover the requested frame",
+              );
+          }
+
           this.lastRenderMs = render.renderMs;
           // Stopped while rendering: the result is stale, not an error.
-          if (request.generation === this.generation) {
+          if (
+            request.generation === this.generation &&
+            request.revision === this.renderRevision
+          ) {
             await this.apply(this.toLoop(render, request.score), request);
-            this.lastLoopPcm = render.pcm;
-            this.lastMaster = render.master;
+            if (request.revision === this.renderRevision) {
+              this.lastLoopPcm = render.pcm;
+              this.lastMaster = render.master;
+            }
           }
           for (const waiter of request.waiters) waiter.resolve();
         } catch (error) {
           if (
             error instanceof RenderCancelledError &&
-            request.generation !== this.generation
+            (request.generation !== this.generation ||
+              request.revision !== this.renderRevision)
           ) {
             for (const waiter of request.waiters) waiter.resolve();
             continue;
@@ -859,41 +931,58 @@ export class AudioEngine {
       }
     } finally {
       this.draining = false;
+      this.prefetchMonitor();
     }
   }
 
-  private async apply(loop: Loop, request: PlayRequest): Promise<void> {
+  private beatForRequest(loop: Loop, request: PlayRequest): number | undefined {
     // The transport kept moving while the render ran.
-    const beat =
-      request.beat === undefined
-        ? undefined
-        : beatAfter(
-            loop,
-            request.beat,
-            ((this.now() - request.atMs) * this.sampleRate) / 1000,
-          );
+    // A seek is newer transport intent even when it did not replace the score.
+    const anchor =
+      request.seekRevision !== this.seekRevision && this.seekAnchor
+        ? this.seekAnchor
+        : request;
+    return anchor.beat === undefined
+      ? undefined
+      : beatAfter(
+          loop,
+          anchor.beat,
+          ((this.now() - anchor.atMs) * this.sampleRate) / 1000,
+        );
+  }
+
+  private async apply(loop: Loop, request: PlayRequest): Promise<void> {
     if (this.child) {
-      this.swap(loop, beat);
+      this.swap(loop, this.beatForRequest(loop, request));
       return;
     }
     if (this.starting) {
       await this.starting;
-      if (this.child) this.swap(loop, beat);
+      if (this.child && request.revision === this.renderRevision)
+        this.swap(loop, this.beatForRequest(loop, request));
       return;
     }
-    this.starting = this.start(loop, beat ?? 0).finally(() => {
-      this.starting = undefined;
-    });
+    this.starting = this.start(loop, 0, request.revision, request).finally(
+      () => {
+        this.starting = undefined;
+      },
+    );
     await this.starting;
   }
 
   /** Jump to transport `beat` (as of now) without restarting the player. */
   public seek(beat: number): void {
+    this.seekRevision += 1;
+    this.seekAnchor = { beat, atMs: this.now() };
     if (!this.loop || !this.child) return;
+    this.monitorRevision += 1;
+    this.monitorFailed = undefined;
+    if (!this.draining) this.renderer.cancelPending();
     this.cursor = this.frameForBeat(
       this.loop,
       beatAfter(this.loop, beat, this.queuedFrames()),
     );
+    this.prefetchMonitor();
   }
 
   /**
@@ -920,6 +1009,10 @@ export class AudioEngine {
 
   public async stopAsync(): Promise<void> {
     this.generation += 1;
+    this.renderRevision += 1;
+    this.monitorRevision += 1;
+    this.monitorBuffering = false;
+    this.monitorWanted = false;
     this.renderer.cancelPending();
     this.lastLoopPcm = undefined;
     this.lastMaster = undefined;
@@ -996,18 +1089,29 @@ export class AudioEngine {
       remaining = this.sampleRate;
     }
     const out = new Int16Array(remaining * RENDER_CHANNELS);
+    const wasBuffering = this.monitorBuffering;
+    this.monitorBuffering = false;
     let offset = 0;
     while (loop && offset < remaining) {
       const take = Math.min(remaining - offset, loop.frames - this.cursor);
-      out.set(
-        loop.pcm.subarray(
-          this.cursor * RENDER_CHANNELS,
-          (this.cursor + take) * RENDER_CHANNELS,
-        ),
-        offset * RENDER_CHANNELS,
-      );
+      if (loop.monitor) {
+        if (!loop.monitor.buffer.copy(this.cursor, take, out, offset))
+          this.monitorBuffering = true;
+      } else
+        out.set(
+          loop.pcm.subarray(
+            this.cursor * RENDER_CHANNELS,
+            (this.cursor + take) * RENDER_CHANNELS,
+          ),
+          offset * RENDER_CHANNELS,
+        );
       offset += take;
       this.cursor = (this.cursor + take) % loop.frames;
+    }
+    this.prefetchMonitor();
+    if (loop?.monitor && wasBuffering && !this.monitorBuffering) {
+      this.endFades();
+      this.fadeIn = 0;
     }
     if (loop) this.crossfade(out, remaining);
     this.mixLive(out, this.written, remaining);
@@ -1044,8 +1148,14 @@ export class AudioEngine {
         const g =
           fade.from * Math.cos((Math.PI / 2) * (fade.done / this.fadeFrames));
         const from = fade.cursor * RENDER_CHANNELS;
-        left += fade.loop.pcm[from]! * g;
-        right += fade.loop.pcm[from + 1]! * g;
+        left +=
+          (fade.loop.monitor
+            ? fade.loop.monitor.buffer.sample(fade.cursor, 0)
+            : fade.loop.pcm[from]!) * g;
+        right +=
+          (fade.loop.monitor
+            ? fade.loop.monitor.buffer.sample(fade.cursor, 1)
+            : fade.loop.pcm[from + 1]!) * g;
         fade.cursor = (fade.cursor + 1) % fade.loop.frames;
         fade.done += 1;
       }
@@ -1130,13 +1240,64 @@ export class AudioEngine {
   private toLoop(render: LoopRender, score: TrackScore): Loop {
     const timeline = playbackTime(score);
     const map = transportMapFor(timeline);
+    const buffer = render.monitor
+      ? new MonitorBuffer(render.monitor.loopFrames)
+      : undefined;
+    buffer?.add(render);
     return {
-      pcm: render.pcm,
-      frames: render.frames,
+      ...(buffer ? { monitor: { score, buffer } } : {}),
+      pcm: render.monitor ? new Int16Array(0) : render.pcm,
+      frames: render.monitor?.loopFrames ?? render.frames,
       framesPerBeat: (60 * this.sampleRate) / timeline.tempoBpm,
       sampleRate: this.sampleRate,
       ...(map ? { map } : {}),
     };
+  }
+
+  /** One bounded job at a time, with current cursor before two-window read-ahead. */
+  private prefetchMonitor(): void {
+    const loop = this.loop;
+    if (
+      !this.monitorWanted ||
+      !loop?.monitor ||
+      this.filling ||
+      this.draining ||
+      this.queued ||
+      this.monitorFailed === loop
+    )
+      return;
+    const current = loop.monitor.buffer.at(this.cursor);
+    let target = this.cursor;
+    if (current) {
+      target = current.end % loop.frames;
+      const next = loop.monitor.buffer.at(target);
+      if (next) return;
+    }
+    const revision = this.monitorRevision;
+    this.filling = loop;
+    void this.renderer
+      .render(loop.monitor.score, target)
+      .then((render) => {
+        if (this.loop !== loop || revision !== this.monitorRevision) return;
+        loop.monitor!.buffer.add(render);
+        // An invalid or truncated window must not recursively re-request the
+        // same missing frame, especially when a cache answers synchronously.
+        if (!loop.monitor!.buffer.at(target))
+          throw new Error("monitor render did not cover the requested frame");
+        this.lastLoopPcm = render.pcm;
+      })
+      .catch((error: unknown) => {
+        if (
+          !(error instanceof RenderCancelledError) &&
+          this.loop === loop &&
+          revision === this.monitorRevision
+        )
+          this.monitorFailed = loop;
+      })
+      .finally(() => {
+        if (this.filling === loop) this.filling = undefined;
+        this.prefetchMonitor();
+      });
   }
 
   private frameForBeat(loop: Loop, beat: number): number {
@@ -1302,10 +1463,18 @@ export class AudioEngine {
     }
   }
 
-  private async start(loop: Loop | undefined, beat: number): Promise<void> {
+  private async start(
+    loop: Loop | undefined,
+    beat: number,
+    revision?: number,
+    request?: PlayRequest,
+  ): Promise<void> {
     const generation = this.generation;
     if (!(await this.lock.acquire())) return;
-    if (generation !== this.generation) {
+    if (
+      generation !== this.generation ||
+      (revision !== undefined && revision !== this.renderRevision)
+    ) {
       await this.lock.release();
       return;
     }
@@ -1322,7 +1491,12 @@ export class AudioEngine {
     this.endFades();
     this.startMs = this.now();
     this.written = 0;
-    this.cursor = loop ? this.frameForBeat(loop, beat) : 0;
+    this.cursor = loop
+      ? this.frameForBeat(
+          loop,
+          request ? (this.beatForRequest(loop, request) ?? 0) : beat,
+        )
+      : 0;
     void child.exited.then(() => {
       if (this.child !== child) return;
       this.onPlayerExit(generation);

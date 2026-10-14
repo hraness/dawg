@@ -52,6 +52,11 @@ export interface CompletionContext {
   sections: readonly { name: string }[];
 }
 
+/** Jump searches the complete command vocabulary; choosing inserts, never runs. */
+export function commandVocabulary(): readonly PickerItem[] {
+  return commands;
+}
+
 export function commandCompletions(
   text: string,
   context: CompletionContext,
