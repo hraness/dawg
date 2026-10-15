@@ -944,10 +944,25 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
     "electro",
     0,
     [
+      // Euclidean layers around a tight kick. Per-pass rotations move the
+      // interlock across four bars without changing its density.
       euclid("kick", 4, 16),
-      euclid("rim", 5, 16, 3, { velocity: 0.6 }),
-      euclid("hat", 7, 16, 2, { velocity: 0.45, accent: 0.5, accents: 3 }),
-      euclid("tom", 3, 16, 6, { velocity: 0.5 }),
+      euclid("rim", 5, 16, 3, {
+        velocity: 0.55,
+        accent: 0.3,
+        cycles: [{}, {}, { rotate: 5 }, { rotate: 1 }],
+      }),
+      euclid("hat", 7, 16, 2, {
+        velocity: 0.42,
+        accent: 0.45,
+        accents: 3,
+        cycles: [{}, { rotate: 4 }, {}, { pulses: 9, rotate: 4 }],
+      }),
+      euclid("openhat", 4, 16, 2, { velocity: 0.26 }),
+      euclid("tom", 3, 16, 6, {
+        velocity: 0.45,
+        cycles: [{}, { velocity: 0.35 }, {}, { pulses: 4, rotate: 7 }],
+      }),
     ],
   ),
   drumPattern(
@@ -958,10 +973,32 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
     "electro",
     0,
     [
-      grid("kick", "x.....x..x......"),
-      grid("snare", "....x.......x..."),
-      euclid("hat", 16, 16, 0, { velocity: 0.4, accent: 0.5, accents: 4 }),
-      grid("clap", "....x.......x..x", { velocity: 0.6 }),
+      // Straight and robotic: syncopated 808 kick with a pickup every
+      // other bar and a busier fourth bar.
+      grid(
+        "kick",
+        "X......x..x.....X......x..x...x.X......x..x.....X..x...x..x.x...",
+        { velocity: 0.85, accent: 0.3 },
+      ),
+      grid(
+        "snare",
+        "....X.......X.......X.......X.......X.......X.......X.......X.xx",
+        { velocity: 0.72, accent: 0.3 },
+      ),
+      // The clap doubles the backbeat a few ms late, Miami-bass style.
+      grid("clap", "....x.......x...", { velocity: 0.48, nudge: 0.04 }),
+      // 16ths: soft downbeat, faint e and a, accented "&"; the closed hat
+      // rests where the open hat closes bars 2 and 4.
+      grid(
+        "hat",
+        "xgXgxgXgxgXgxgXgxgXgxgXgxgXgxg..xgXgxgXgxgXgxgXgxgXgxgXgxgXgxg..",
+        { velocity: 0.5, accent: 0.35 },
+      ),
+      grid(
+        "openhat",
+        "..............................x...............................X.",
+        { velocity: 0.45, accent: 0.3 },
+      ),
     ],
   ),
   drumPattern(
@@ -969,13 +1006,33 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
     "Breakbeat",
     ["breaks", "big beat"],
     [120, 140, 130],
-    "acoustic",
-    0,
+    "breaks",
+    0.06,
     [
-      grid("kick", "x.........x.x...x.x.......x....."),
-      grid("snare", "....x.......x.......x..x....x..."),
-      euclid("hat", 8, 16, 0, { velocity: 0.5 }),
+      // A re-sequenced funk break: syncopated kick, a late snare in bars
+      // 2 and 4, ghosts between, and a 16th fill to turn the phrase.
+      grid(
+        "kick",
+        "X.........X..x..X.x.......X.....X.........X..x..X.x.......X..x..",
+        { velocity: 0.86, accent: 0.3 },
+      ),
+      grid(
+        "snare",
+        "....X..g....X..g....X..x.g..X.......X..g....X..g....X..x.g..X.xx",
+        { velocity: 0.7, accent: 0.4 },
+      ),
+      grid(
+        "hat",
+        "X.x.X.x.X.xxX.x.X.x.X.x.X.x.X...X.x.X.x.X.xxX.x.X.x.X.x.X.x.X...",
+        { velocity: 0.5, accent: 0.3 },
+      ),
+      grid(
+        "openhat",
+        "..............................x...............................x.",
+        { velocity: 0.42 },
+      ),
     ],
+    { timing: 6, velocity: 10 },
   ),
   drumPattern(
     "amen-style",
@@ -983,15 +1040,32 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
     ["breaks", "jungle", "drum and bass"],
     [160, 176, 170],
     "acoustic",
-    0,
+    0.04,
     [
-      grid("kick", "x.x.......xx....x.x.......x....."),
-      grid("snare", "....X..x.x..X..x....X..x.x....X.", {
-        velocity: 0.55,
-        accent: 0.4,
-      }),
-      euclid("hat", 8, 16, 0, { velocity: 0.45 }),
+      // Four bars: two alike, a third that delays its last snare and a
+      // fourth with its own kick push; the ride (not hats) keeps 8ths.
+      grid(
+        "kick",
+        "X.x.......xx....X.x.......xx....X.x.......x.....X.x...x...x..x..",
+        { velocity: 0.85, accent: 0.25 },
+      ),
+      grid(
+        "snare",
+        "....X..x.g..X..g....X..x.g..X..g....X..x.g....X.....X..x.g.gX.xX",
+        { velocity: 0.55, accent: 0.45 },
+      ),
+      grid(
+        "ride",
+        "X.x.X.x.X.x.X.x.X.x.X.x.X.x.X.x.X.x.X.x.X.x.X.x.X.x.X.x.X.x.X...",
+        { velocity: 0.42, accent: 0.3 },
+      ),
+      grid(
+        "crash",
+        "..............................................................x.",
+        { velocity: 0.55 },
+      ),
     ],
+    { timing: 5, velocity: 10 },
   ),
   drumPattern(
     "dnb",
@@ -999,13 +1073,33 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
     ["drum and bass", "jungle"],
     [168, 178, 174],
     "syn909",
-    0,
+    0.06,
     [
-      grid("kick", "x.........x....."),
-      grid("snare", "....x.......x..."),
-      euclid("hat", 8, 16, 1, { velocity: 0.45 }),
-      grid("openhat", "..............x.", { velocity: 0.4 }),
+      // Two-step: kick on 1 and the "&" of 3, a pickup kick ending bar 2.
+      grid(
+        "kick",
+        "X.........X.....X.........X....xX.........X.....X.x.......X.....",
+        { velocity: 0.88, accent: 0.2 },
+      ),
+      // Backbeat with ghost snares around it and a pickup into bar 1.
+      grid(
+        "snare",
+        "....X..g....X.......X..g..g.X..g....X..g....X.......X..g..g.X.xx",
+        { velocity: 0.72, accent: 0.35 },
+      ),
+      // Quiet shuffled hats; they rest under the open hat in bars 2 and 4.
+      grid(
+        "hat",
+        "x.Xgx.X.x.Xgx.X.x.Xgx.X.x.Xgx...x.Xgx.X.x.Xgx.X.x.Xgx.X.x.Xgx...",
+        { velocity: 0.38, accent: 0.3, swing: 0.1 },
+      ),
+      grid(
+        "openhat",
+        "..............................x...............................x.",
+        { velocity: 0.38 },
+      ),
     ],
+    { timing: 3, velocity: 8 },
   ),
   drumPattern(
     "halftime",
@@ -1015,9 +1109,28 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
     "syn909",
     0,
     [
-      grid("kick", "x.........x.....x......x.x......"),
-      grid("snare", "........x.......", { velocity: 0.95 }),
-      euclid("hat", 8, 16, 0, { velocity: 0.4, probability: 0.85, seed: 3 }),
+      // Snare on 3 only; sparse kicks answer it, and the hats and rim carry
+      // the 170 motion with a roll into the next phrase.
+      grid(
+        "kick",
+        "X.........x.....X.....x...x.....X.........x.....X.x.......x...x.",
+        { velocity: 0.9, accent: 0.2 },
+      ),
+      grid(
+        "snare",
+        "........X...............X.....g.........X.............g.X...g.gx",
+        { velocity: 0.85, accent: 0.3 },
+      ),
+      grid(
+        "hat",
+        "X.x.X.xgX.x.X.x.X.x.X.xgX.x.X.xxX.x.X.xgX.x.X.x.X.x.X.xgX.xxXxxx",
+        { velocity: 0.4, accent: 0.3, swing: 0.12 },
+      ),
+      grid("rim", "...x......x.....", {
+        velocity: 0.3,
+        probability: 0.8,
+        seed: 3,
+      }),
     ],
   ),
   drumPattern(
@@ -1055,13 +1168,38 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
     ["hip hop", "lo-fi", "chill"],
     [70, 90, 80],
     "lofi",
-    0.18,
+    0.24,
     [
-      grid("kick", "x.........x.....x......x..x....."),
-      grid("snare", "....x.......x..."),
-      euclid("hat", 8, 16, 0, { velocity: 0.4, probability: 0.9, seed: 11 }),
-      grid("rim", "...............x", { velocity: 0.4 }),
+      // About 62% swing. The kick stays near the grid, the snare drags
+      // about 20 ms and the hats lean a touch early, Dilla-style.
+      grid(
+        "kick",
+        "X.........x.....X......x..x..x..X.........x...x.X......x...x..x.",
+        { velocity: 0.8, accent: 0.3 },
+      ),
+      grid(
+        "snare",
+        "....X.......X.......X.......X..g....X..g....X.......X.......X.g.",
+        { velocity: 0.68, accent: 0.25, nudge: 0.11 },
+      ),
+      grid(
+        "hat",
+        "x.X.x.X.x.X.x.Xgx.X.x.X.x.X.xgX.x.X.x.X.x.X.x.Xgx.X.x.X.x.Xgx.X.",
+        {
+          velocity: 0.34,
+          accent: 0.25,
+          nudge: -0.05,
+          probability: 0.94,
+          seed: 11,
+        },
+      ),
+      grid(
+        "rim",
+        "...............x.......x.......................x...........x....",
+        { velocity: 0.32 },
+      ),
     ],
+    { timing: 8, velocity: 10 },
   ),
   drumPattern(
     "trap",
@@ -1098,9 +1236,24 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
     ],
   ),
   drumPattern("drill", "Drill", ["drill", "trap"], [138, 146, 142], "trap", 0, [
-    grid("kick", "x.....x.........x..x......x....."),
-    grid("snare", "........x..........x....x......."),
-    grid("hat", "x..x..x.x..x..x.", { velocity: 0.45 }),
+    // The 808 figure leaves room for the skippy snares: beat 3, a late
+    // hit on the "a" of 1 in bars 2 and 4, and one more ending the phrase.
+    grid(
+      "kick",
+      "X.....x.........x.........x.....X.....x...x.....x......x........",
+      { velocity: 0.68, accent: 0.25 },
+    ),
+    grid(
+      "snare",
+      "........X..........x....X...............X..........x....X....x..",
+      { velocity: 0.74, accent: 0.2 },
+    ),
+    // 3-3-2 hats in 32nds with a double in bar 1 and a flick in bar 2.
+    grid(
+      "hat",
+      "X.....x.....x...X.....xx....x...X.....x.....x...X.....x...xxx.x.",
+      { division: "1/32", velocity: 0.42, accent: 0.35 },
+    ),
   ]),
   // Caribbean, African and Latin grooves.
   drumPattern(
@@ -1263,13 +1416,27 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
     ["uk garage", "2-step", "dance"],
     [128, 136, 132],
     "syn909",
-    0.15,
+    0.24,
     [
-      grid("kick", "x.........x..x..x.......x.x....."),
-      grid("snare", "....x.......x..."),
-      euclid("hat", 12, 16, 0, { velocity: 0.4 }),
-      euclid("openhat", 4, 16, 2, { velocity: 0.35 }),
+      // About 62% swing. The kick skips beat 1 of every other bar: the
+      // "2-step" itself.
+      grid(
+        "kick",
+        "X.........x..x....x.......X.....X.........x..x....x.......X..x.x",
+        { velocity: 0.85, accent: 0.2 },
+      ),
+      grid(
+        "snare",
+        "....X.......X.......X.......X..g....X.......X.......X..g....X.g.",
+        { velocity: 0.75, accent: 0.3 },
+      ),
+      // Shaker-like 16ths that rest under the offbeat open hat, so each
+      // open hat rings for one swung 16th before the next closes it.
+      grid("hat", "xg.xxg.xxg.xxg.x", { velocity: 0.36 }),
+      grid("openhat", "..x...x...x...x.", { velocity: 0.36 }),
+      grid("rim", "...........x.......x.......x....", { velocity: 0.3 }),
     ],
+    { timing: 4, velocity: 8 },
   ),
   drumPattern(
     "jersey-club",
@@ -1279,9 +1446,18 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
     "syn808",
     0,
     [
-      grid("kick", "x...x...x..x.x..x...x...x.x.x.x."),
-      grid("clap", "....x.......x..."),
-      euclid("hat", 8, 16, 0, { velocity: 0.4 }),
+      // The 4-4-3-3-2 kick (1, 2, 3, the "a" of 3, the "&" of 4) for three
+      // bars, then the switch-up run.
+      grid(
+        "kick",
+        "X...x...x..x..x.X...x...x..x..x.X...x...x..x..x.X...x...x.x.x.xx",
+        { velocity: 0.8, accent: 0.25 },
+      ),
+      grid("clap", "....X.......X.......X..x....X...", {
+        velocity: 0.7,
+        accent: 0.25,
+      }),
+      grid("hat", "..x...x...x...x.", { velocity: 0.32 }),
     ],
   ),
   drumPattern(
@@ -1292,10 +1468,27 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
     "syn808",
     0,
     [
-      grid("kick", "x..x..x...x..x..x..x..x...x.x.x."),
-      grid("clap", "............x..."),
-      euclid("hat", 6, 16, 2, { velocity: 0.45 }),
-      euclid("tom", 3, 16, 8, { velocity: 0.5 }),
+      // 3-3-2 kicks against triplet hats: the footwork polyrhythm. The
+      // clap sits on 3, moves to 4 in bar 2 and stutters at the turn.
+      grid(
+        "kick",
+        "X..x..x.x..x..x.X..x..x...x..x..X..x..x.x..x..x.X..x..x...x.x.xx",
+        { velocity: 0.8, accent: 0.25 },
+      ),
+      grid(
+        "clap",
+        "........X...................X...........X...............X..x..x.",
+        { velocity: 0.72, accent: 0.2 },
+      ),
+      grid("hat", "X.xX.xX.xX.xX.xX.xX.xXxxX.xX.xX.xX.xX.xX.xXxxXxx", {
+        division: "1/8t",
+        velocity: 0.38,
+        accent: 0.3,
+      }),
+      euclid("tom", 3, 16, 8, {
+        velocity: 0.45,
+        cycles: [{}, { rotate: 5 }, {}, { pulses: 5, rotate: 3 }],
+      }),
     ],
   ),
   // Band grooves: rock, funk and shuffles.
