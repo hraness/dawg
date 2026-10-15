@@ -501,10 +501,19 @@ function drums(s: Composer, b: number): void {
 function shakerAndRim(s: Composer, b: number): void {
   if (b >= 62) return;
   const middle = inMiddle(b);
+  // Low lights breathes: 8ths only for four bars, then 16ths that rise back
+  // into the return.
   const gain =
-    b < 4 ? 0.6 + b * 0.08 : middle ? 0.62 : b >= 58 ? 1 - (b - 57) * 0.12 : 1;
+    b < 4
+      ? 0.6 + b * 0.08
+      : middle
+        ? 0.56 + Math.max(0, b - 35) * 0.08
+        : b >= 58
+          ? 1 - (b - 57) * 0.12
+          : 1;
   const shape = [0.2, 0.11, 0.31, 0.15];
   for (let i = 0; i < 16; i++) {
+    if (b >= 32 && b < 36 && i % 2) continue;
     const lean = i >= 12 && b % 2 ? 1.12 : 1;
     s.note(
       "percussion",
