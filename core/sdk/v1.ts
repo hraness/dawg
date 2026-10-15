@@ -27,7 +27,7 @@
  */
 
 /** SDK release; dawg refreshes the vendored copy when its own is newer. */
-export const SDK_VERSION = "1.37.0";
+export const SDK_VERSION = "1.38.0";
 /** Major of `SDK_VERSION`; `dawg.json` records it as `sdk`. */
 export const SDK_MAJOR = 1;
 
@@ -787,6 +787,13 @@ export type DrumPattern = Readonly<{
   /** A synthesized kit that suits it (see `kit` on `track()`). */
   kit: string;
   rows: readonly RhythmSpec[];
+  /**
+   * The player's feel (SDK 1.38.0): seeded timing scatter in ms either side
+   * and velocity scatter in percent, as a track's `humanize`. dawg's
+   * `/pattern` sets it on a kit track that has no humanize of its own.
+   * Absent for machine-tight grooves.
+   */
+  humanize?: Readonly<{ timing?: number; velocity?: number }>;
 }>;
 
 function drumPattern(
@@ -797,6 +804,7 @@ function drumPattern(
   kit: string,
   swing: number,
   rows: readonly RhythmSpec[],
+  humanize?: Readonly<{ timing?: number; velocity?: number }>,
 ): DrumPattern {
   return Object.freeze({
     name,
@@ -806,6 +814,7 @@ function drumPattern(
     beatsPerBar: 4,
     swing,
     kit,
+    ...(humanize ? { humanize: Object.freeze({ ...humanize }) } : {}),
     rows: Object.freeze(
       rows.map((row) =>
         swing !== 0 && row.swing === undefined && row.division === undefined
@@ -1223,6 +1232,7 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
       grid("snare", ".x..X..x.x..X..x", { velocity: 0.4, accent: 0.9 }),
       euclid("hat", 16, 16, 0, { velocity: 0.35, accent: 0.4, accents: 4 }),
     ],
+    { timing: 6, velocity: 8 },
   ),
   // The blues and rock shuffle is a triplet-8th feel: each beat is three
   // 8th-note triplets with the first and third struck (long-short).
