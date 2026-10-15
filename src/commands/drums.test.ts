@@ -31,8 +31,8 @@ const empty = (tempoBpm = 120, bars = 1) =>
   });
 
 describe("pattern library", () => {
-  test("has 20-30+ uniquely named, well-formed patterns", () => {
-    expect(DRUM_PATTERNS.length).toBeGreaterThanOrEqual(20);
+  test("has sixteen uniquely named, well-formed patterns", () => {
+    expect(DRUM_PATTERNS).toHaveLength(16);
     const names = DRUM_PATTERNS.map((entry) => entry.name);
     expect(new Set(names).size).toBe(names.length);
     for (const entry of DRUM_PATTERNS) {

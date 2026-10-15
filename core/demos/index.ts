@@ -3,31 +3,23 @@
  * developed on its own. Groove starters live in styles/.
  */
 import { TrackScore } from "../score.ts";
-import { nightRelay } from "./night-relay.ts";
 import { coilDriver } from "./coil-driver.ts";
 import { velvetCircuit } from "./velvet-circuit.ts";
-import { glassArc } from "./glass-arc.ts";
 import { signalBloom } from "./signal-bloom.ts";
 import { copperWire } from "./copper-wire.ts";
 import { lowTide } from "./low-tide.ts";
 import { amberRoom } from "./amber-room.ts";
 import { candyFault } from "./candy-fault.ts";
-import { afterHours } from "./after-hours.ts";
-import { skylineCurrent } from "./skyline-current.ts";
 export type { DemoInfo } from "./types.ts";
 
 const definitions = [
-  nightRelay,
   coilDriver,
   velvetCircuit,
-  glassArc,
   signalBloom,
   copperWire,
   lowTide,
   amberRoom,
   candyFault,
-  afterHours,
-  skylineCurrent,
 ] as const;
 export const DEMOS = Object.freeze(definitions.map(({ info }) => info));
 const templates = new Map<string, TrackScore>();
