@@ -622,50 +622,53 @@ const GHOSTS: readonly (readonly number[])[] = [
   [1.75, 2.5, 3.25, 3.75],
 ];
 /** Rhodes comping cells: [beat, length, velocity, push into the next bar]. */
-const COMP: readonly (readonly (readonly [number, number, number, number?])[])[] =
+const COMP: readonly (readonly (readonly [
+  number,
+  number,
+  number,
+  number?,
+])[])[] = [
   [
-    [
-      [0, 1.6, 0.6],
-      [2.5, 0.3, 0.4],
-      [2.75, 0.9, 0.48],
-    ],
-    [
-      [0.5, 1.3, 0.56],
-      [2.25, 0.35, 0.42],
-      [3.5, 0.4, 0.4],
-    ],
-    [
-      [0, 2.3, 0.6],
-      [3.5, 0.9, 0.54, 1],
-    ],
-    [
-      [0, 0.9, 0.58],
-      [1.5, 0.35, 0.42],
-      [2.5, 1.3, 0.52],
-    ],
-  ];
+    [0, 1.6, 0.6],
+    [2.5, 0.3, 0.4],
+    [2.75, 0.9, 0.48],
+  ],
+  [
+    [0.5, 1.3, 0.56],
+    [2.25, 0.35, 0.42],
+    [3.5, 0.4, 0.4],
+  ],
+  [
+    [0, 2.3, 0.6],
+    [3.5, 0.9, 0.54, 1],
+  ],
+  [
+    [0, 0.9, 0.58],
+    [1.5, 0.35, 0.42],
+    [2.5, 1.3, 0.52],
+  ],
+];
 
 /** Left-hand shells under the keys solo, [beat, length, velocity]. */
-const LEFT_HAND: readonly (readonly (readonly [number, number, number])[])[] =
+const LEFT_HAND: readonly (readonly (readonly [number, number, number])[])[] = [
   [
-    [
-      [0, 1.4, 0.44],
-      [2.75, 0.9, 0.38],
-    ],
-    [
-      [0.5, 1.1, 0.42],
-      [2.5, 0.35, 0.34],
-      [3.25, 0.6, 0.36],
-    ],
-    [
-      [0, 2.2, 0.44],
-      [3.5, 0.4, 0.36],
-    ],
-    [
-      [0.75, 0.9, 0.4],
-      [2.25, 1.4, 0.4],
-    ],
-  ];
+    [0, 1.4, 0.44],
+    [2.75, 0.9, 0.38],
+  ],
+  [
+    [0.5, 1.1, 0.42],
+    [2.5, 0.35, 0.34],
+    [3.25, 0.6, 0.36],
+  ],
+  [
+    [0, 2.2, 0.44],
+    [3.5, 0.4, 0.36],
+  ],
+  [
+    [0.75, 0.9, 0.4],
+    [2.25, 1.4, 0.4],
+  ],
+];
 
 export const amberRoom: DemoDefinition = {
   info: demoInfo({
@@ -699,6 +702,7 @@ export const amberRoom: DemoDefinition = {
       "Each layer sits at its own distance from the grid: kick a hair early, snare and bass late, Rhodes rolled and later, sax furthest back.",
       "The bass carries every root and walks Eb-D-Db-C under the head; rootless Rhodes voicings move by the smallest steps above it.",
       "The sax scoops into phrases, falls off their ends and only vibratos late on held notes; the bridge trades hats for ride and the middle hands the tune to the Rhodes.",
+      "The head return lifts with a clap 12 ms behind each snare and an open hat every second bar, and the vibes answer from just behind the kit.",
     ],
   }),
   build() {
@@ -847,8 +851,7 @@ export const amberRoom: DemoDefinition = {
       pitch: number,
       velocity: number,
       length = 0.12,
-    ): void =>
-      s.note("drums", bar, beat, pitch, length, Math.min(1, velocity));
+    ): void => s.note("drums", bar, beat, pitch, length, Math.min(1, velocity));
     const hats = (bar: number, level: number, open: boolean): void => {
       const shape = [0.58, 0.16, 0.42, 0.24];
       for (let step = 0; step < 16; step++) {
@@ -876,8 +879,17 @@ export const amberRoom: DemoDefinition = {
         drum(bar, 3 + late + 0.02, 39, 0.5 + 0.06 * rand());
       }
       for (const beat of GHOSTS[(index + 2 * pass) % 4]!)
-        drum(bar, beat + SWING * (beat % 0.5 ? 1 : 0), 38, 0.13 + 0.12 * rand());
-      hats(bar, last ? 1.06 : 1, last ? index % 2 === 1 : index === 3 || index === 7);
+        drum(
+          bar,
+          beat + SWING * (beat % 0.5 ? 1 : 0),
+          38,
+          0.13 + 0.12 * rand(),
+        );
+      hats(
+        bar,
+        last ? 1.06 : 1,
+        last ? index % 2 === 1 : index === 3 || index === 7,
+      );
     };
     const pocket = (bar: number, index: number): void => {
       for (let step = 0; step < 8; step++) {
@@ -890,7 +902,12 @@ export const amberRoom: DemoDefinition = {
       drum(bar, 1 + SNARE, 38, 0.74 + 0.05 * rand());
       drum(bar, 3 + SNARE, 38, 0.78 + 0.05 * rand());
       for (const beat of GHOSTS[index % 4]!.slice(0, 2))
-        drum(bar, beat + SWING * (beat % 0.5 ? 1 : 0), 38, 0.12 + 0.08 * rand());
+        drum(
+          bar,
+          beat + SWING * (beat % 0.5 ? 1 : 0),
+          38,
+          0.12 + 0.08 * rand(),
+        );
       for (const beat of [1, 3]) drum(bar, beat + 0.006, 44, 0.3);
     };
     const quiet = (bar: number, index: number): void => {
@@ -949,7 +966,14 @@ export const amberRoom: DemoDefinition = {
         const [beat2, root2] = spans[1]!;
         bassNote(bar, 0, root, beat2 - 0.6, 0.78 * g);
         bassNote(bar, beat2 - 0.5, root + 12, 0.2, 0.5 * g, "g");
-        bassNote(bar, beat2, root2, 3.6 - beat2, 0.74 * g, root2 !== root ? "s" : "");
+        bassNote(
+          bar,
+          beat2,
+          root2,
+          3.6 - beat2,
+          0.74 * g,
+          root2 !== root ? "s" : "",
+        );
         if (Math.abs(root2 - next) > 1)
           bassNote(bar, 3.75, approach, 0.22, 0.58 * g, "p");
         return;
@@ -964,7 +988,13 @@ export const amberRoom: DemoDefinition = {
           break;
         case 1:
           bassNote(bar, 0, root, 2.2, 0.78 * g, "s");
-          bassNote(bar, 2.75, root + seventh - 12 >= 26 ? root + seventh - 12 : root + seventh, 0.4, 0.6 * g);
+          bassNote(
+            bar,
+            2.75,
+            root + seventh - 12 >= 26 ? root + seventh - 12 : root + seventh,
+            0.4,
+            0.6 * g,
+          );
           bassNote(bar, 3.75, approach, 0.25, 0.6 * g, "p");
           break;
         case 2:
@@ -1001,7 +1031,10 @@ export const amberRoom: DemoDefinition = {
           beat + KEYS + i * spread,
           pitch,
           Math.max(0.1, length - i * spread),
-          Math.min(1, (top ? velocity + 0.05 : velocity * 0.9) * (0.96 + 0.08 * rand())),
+          Math.min(
+            1,
+            (top ? velocity + 0.05 : velocity * 0.9) * (0.96 + 0.08 * rand()),
+          ),
         );
       });
     };
@@ -1025,7 +1058,13 @@ export const amberRoom: DemoDefinition = {
       ])[]) {
         if (wasPushed && beat < 0.25) continue;
         if (push) {
-          roll(bar, beat, voicings.get(`${bar + 1}:0`)!, length, velocity * gain);
+          roll(
+            bar,
+            beat,
+            voicings.get(`${bar + 1}:0`)!,
+            length,
+            velocity * gain,
+          );
           pushed = true;
         } else roll(bar, beat, chordAt(bar, beat), length, velocity * gain);
       }
@@ -1056,13 +1095,34 @@ export const amberRoom: DemoDefinition = {
       const pass = bar < 12 ? 0 : bar < 20 ? 1 : 2;
       if (head) {
         groove(bar, index, pass);
-        bassBar(bar, [[0, 1, 2, 3, 0, 1], [1, 3, 0, 2, 3, 0], [0, 2, 3, 1, 2, 3]][pass]![index] ?? 0, bar >= 36 ? 1.04 : 1);
-        comp(bar, [0, 1, 2, 3, 3, 2, 0, 0][index]!, bar < 12 ? 0.94 : bar >= 36 ? 1.04 : 1);
+        bassBar(
+          bar,
+          [
+            [0, 1, 2, 3, 0, 1],
+            [1, 3, 0, 2, 3, 0],
+            [0, 2, 3, 1, 2, 3],
+          ][pass]![index] ?? 0,
+          bar >= 36 ? 1.04 : 1,
+        );
+        comp(
+          bar,
+          [0, 1, 2, 3, 3, 2, 0, 0][index]!,
+          bar < 12 ? 0.94 : bar >= 36 ? 1.04 : 1,
+        );
       } else if (bar < 28) {
         pocket(bar, bar - 20);
         bassNote(bar, 0, harmony(bar)[0]![1], 3.1, 0.74, bar % 2 ? "" : "s");
-        if (bar % 2) bassNote(bar, 2.75, harmony(bar)[0]![1] + 12, 0.15, 0.3, "g");
-        if (bar !== 27) bassNote(bar, 3.5, nextRoot(bar) - 1 >= 28 ? nextRoot(bar) - 1 : nextRoot(bar) + 1, 0.4, 0.56, "p");
+        if (bar % 2)
+          bassNote(bar, 2.75, harmony(bar)[0]![1] + 12, 0.15, 0.3, "g");
+        if (bar !== 27)
+          bassNote(
+            bar,
+            3.5,
+            nextRoot(bar) - 1 >= 28 ? nextRoot(bar) - 1 : nextRoot(bar) + 1,
+            0.4,
+            0.56,
+            "p",
+          );
         roll(bar, 0, chordAt(bar, 0), 2.4, 0.52, 0.03);
         roll(bar, 2.75, chordAt(bar, 2.75), 1.1, 0.42, 0.02);
       } else {
