@@ -1435,8 +1435,9 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
         { velocity: 0.75, accent: 0.3 },
       ),
       // Shaker-like 16ths that rest under the offbeat open hat, so each
-      // open hat rings for one swung 16th before the next closes it.
-      grid("hat", "xg.xxg.xxg.xxg.x", { velocity: 0.36 }),
+      // open hat rings for one swung 16th before the next closes it. The
+      // swung "e" stays about 6 dB under the rest: soft, but heard.
+      grid("hat", "Xx.XXx.XXx.XXx.X", { velocity: 0.18, accent: 0.25 }),
       grid("openhat", "..x...x...x...x.", { velocity: 0.36 }),
       grid("rim", "...........x.......x.......x....", { velocity: 0.3 }),
     ],
@@ -1448,20 +1449,29 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
     ["jersey club", "club"],
     [135, 145, 140],
     "syn808",
-    0,
+    0.08,
     [
-      // The 4-4-3-3-2 kick (1, 2, 3, the "a" of 3, the "&" of 4) for three
-      // bars, then the switch-up run.
+      // The 4-4-3-3-2 kick (1, 2, 3, the "a" of 3, the "&" of 4). The two
+      // syncopated kicks sit about 5 dB under the beat kicks, which is the
+      // bounce, and a light 54% swing pushes the "a" of 3 a few ms late.
+      // Bar 2 doubles the last kick and bar 4 is the switch-up run.
       grid(
         "kick",
-        "X...x...x..x..x.X...x...x..x..x.X...x...x..x..x.X...x...x.x.x.xx",
-        { velocity: 0.8, accent: 0.25 },
+        "X...X...X..x..x.X...X...X..x..xxX...X...X..x..x.X...X...X.x.x.xx",
+        { velocity: 0.5, accent: 0.7 },
       ),
-      grid("clap", "....X.......X.......X..x....X...", {
-        velocity: 0.7,
-        accent: 0.25,
+      // Claps on 2 and 4, with a pickup into beat 3 every other bar and
+      // one more answering the switch-up.
+      grid(
+        "clap",
+        "....X.......X.......X..x....X.......X.......X.......X..x....X..x",
+        { velocity: 0.62, accent: 0.3 },
+      ),
+      // Thin offbeat hats, the "&" of 2 and 4 a little stronger.
+      grid("hat", "..x...X...x...X...x...X...x...X.", {
+        velocity: 0.26,
+        accent: 0.35,
       }),
-      grid("hat", "..x...x...x...x.", { velocity: 0.32 }),
     ],
   ),
   drumPattern(
