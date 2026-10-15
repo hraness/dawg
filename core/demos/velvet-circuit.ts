@@ -1,14 +1,6 @@
 /** Velvet Circuit: the UK garage demo song. */
 import { bundledSampleRef } from "../bundled-samples.ts";
-import {
-  Composer,
-  hall,
-  lanes,
-  orbit,
-  preset,
-  room,
-  voice,
-} from "./build.ts";
+import { Composer, hall, lanes, orbit, preset, room, voice } from "./build.ts";
 import type { NoteInput } from "../score.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
@@ -162,11 +154,19 @@ const chordAt = (bar: number): Chord => {
 };
 
 /** One bass event: 16th step, semitones over the root, 16ths held, velocity. */
-type BassHit = readonly [step: number, interval: number, len: number, vel: number];
+type BassHit = readonly [
+  step: number,
+  interval: number,
+  len: number,
+  vel: number,
+];
 
 /** Bass cells, two bars each: [first bar, second bar]. `null` interval marks the approach note. */
 const BASS: Readonly<
-  Record<"pocket" | "hook" | "turn", readonly [readonly BassHit[], readonly BassHit[]]>
+  Record<
+    "pocket" | "hook" | "turn",
+    readonly [readonly BassHit[], readonly BassHit[]]
+  >
 > = {
   // Sparse sub blips on one with the kick, then replies in the kick's gaps.
   pocket: [
@@ -344,7 +344,7 @@ export const velvetCircuit: DemoDefinition = {
       }),
     );
     s.track(
-      voice("drums", "Shuffle hats", "kit", 0.5, {
+      voice("drums", "Shuffle hats", "kit", 0.55, {
         kit: "synlinn",
         pan: -0.1,
         humanize: { timing: 5, velocity: 5, length: 10, seed: 23 },
@@ -357,11 +357,21 @@ export const velvetCircuit: DemoDefinition = {
         pan: 0.34,
         humanize: { timing: 7, velocity: 8, length: 15, seed: 29 },
         filter: { type: "hpf", cutoff: 2400, resonance: 0.1 },
+        // Builds through the Lift and the Turnaround into each hook.
+        volumeAutomation: lanes(
+          [0, 0.8],
+          [15.9, 0.8],
+          [16, 0.7],
+          [23.9, 1],
+          [39.9, 1],
+          [40, 0.78],
+          [47.9, 1],
+        ),
         reverb: { mix: 0.08, size: 0.3, fade: 0.9 },
       }),
     );
     s.track(
-      preset("bass", "Round sub", "sub-sine", 0.62, {
+      preset("bass", "Round sub", "sub-sine", 0.58, {
         humanize: { timing: 3, velocity: 4, seed: 31 },
         glide: { time: 0.05, mode: "legato" },
         // A mix ride: the sub sits back in the pocket and opens up in the hooks.
@@ -412,6 +422,14 @@ export const velvetCircuit: DemoDefinition = {
         },
         humanize: { timing: 4, velocity: 6, length: 10, seed: 41 },
         filter: { type: "hpf", cutoff: 260, resonance: 0.1 },
+        volumeAutomation: lanes(
+          [16, 0.8],
+          [23.9, 0.92],
+          [39.9, 0.92],
+          [40, 0.86],
+          [47.9, 0.96],
+          [48, 1],
+        ),
         reverb: room,
         fx: orbit,
       }),
@@ -421,7 +439,7 @@ export const velvetCircuit: DemoDefinition = {
       ["on", "On", 0.25, 0.5, 0.14, 47],
     ] as const)
       s.track(
-        voice(id, name, "sampler", 0.66, {
+        voice(id, name, "sampler", 0.7, {
           pan,
           sampler: {
             mode: "keyed",
@@ -532,7 +550,8 @@ export const velvetCircuit: DemoDefinition = {
       len: number,
       vel: number,
       roll = 0.012,
-    ) =>
+    ) => {
+      const hand = vel + jitter(0.04);
       pitches.forEach((pitch, i) =>
         s.note(
           track,
@@ -540,9 +559,10 @@ export const velvetCircuit: DemoDefinition = {
           at(step) + i * roll,
           pitch,
           len / 4,
-          vel * (i === pitches.length - 1 ? 1 : i === 0 ? 0.84 : 0.78),
+          hand * (i === pitches.length - 1 ? 1 : i === 0 ? 0.84 : 0.78),
         ),
       );
+    };
 
     /** Bars with a bassline: none in the intro, the breakdown or the last four bars. */
     const bassPlays = (bar: number) => {
@@ -550,6 +570,8 @@ export const velvetCircuit: DemoDefinition = {
       return name !== "Warm-up" && name !== "Suspended" && bar < 60;
     };
     let slideIn = false;
+    /** The Rhodes pushed the chord over the bar line into this bar. */
+    let pushed = false;
 
     for (let b = 0; b < 64; b++) {
       const sec = sectionOf(b);
@@ -564,8 +586,7 @@ export const velvetCircuit: DemoDefinition = {
       const outro = sec === "Afterglow";
       // The last beat before each hook (and the turnaround) drops out.
       const dropOut = b === 23 || b === 47 || b === 7;
-      const grooveOn =
-        !breakdown && !(intro && b < 4) && !(outro && b >= 62);
+      const grooveOn = !breakdown && !(intro && b < 4) && !(outro && b >= 62);
       const kickOn = grooveOn && !(outro && b >= 60);
 
       // ---------- kick ----------
@@ -587,7 +608,15 @@ export const velvetCircuit: DemoDefinition = {
             if (dropOut && step === 12) continue;
             const v = step === 12 ? 0.86 : 0.8;
             hit("drums", b, step, 39, v + jitter(0.03), 1, 0);
-            hit("drums", b, step, 38, (step === 12 ? 0.56 : 0.5) + jitter(0.03), 1, 0);
+            hit(
+              "drums",
+              b,
+              step,
+              38,
+              (step === 12 ? 0.56 : 0.5) + jitter(0.03),
+              1,
+              0,
+            );
           }
         // Hats: open on the offbeat 8ths with a closed hat on the 16th before
         // most of them; busier closed 16ths from the Lift on.
@@ -677,7 +706,15 @@ export const velvetCircuit: DemoDefinition = {
           if (dropOut && step >= 12) continue;
           if (!busyShaker(sec) && step % 2 === 1 && step % 4 !== 3) continue;
           const accent = step % 4 === 2 ? 0.52 : step % 2 ? 0.28 : 0.36;
-          hit("perc", b, step, 42, accent + jitter(0.06), 0.6, HAT_SWING + 0.01);
+          hit(
+            "perc",
+            b,
+            step,
+            42,
+            accent + jitter(0.06),
+            0.6,
+            HAT_SWING + 0.01,
+          );
         }
 
       // ---------- bass ----------
@@ -727,23 +764,47 @@ export const velvetCircuit: DemoDefinition = {
         }
       } else if (!(outro && b >= 62)) {
         const soft = intro ? 0.82 : 1;
+        // Pushes: the next chord lands a 16th early and holds over the bar
+        // line, every fourth bar in the first hook and the turnaround and
+        // on every change in the last hook.
+        const push =
+          second &&
+          !dropOut &&
+          sectionOf(b + 1) === sec &&
+          ((sec === "Last call" && b % 2 === 1) ||
+            ((hook || sec === "Turnaround") && b % 4 === 3));
         if (!second) {
-          stab("keys", b, 2, chord.rh, 4, 0.62 * soft);
-          stab("keys", b, 7, chord.rh, 2, 0.48 * soft);
-          if (!dropOut) stab("keys", b, 14, chord.rh, 2, 0.44 * soft);
+          if (!pushed) stab("keys", b, 2, chord.rh, 4, 0.64 * soft);
+          stab("keys", b, 7, chord.rh, 2, 0.46 * soft);
+          if (!dropOut) stab("keys", b, 14, chord.rh, 2, 0.42 * soft);
+        } else if (push) {
+          stab("keys", b, 3, chord.rh, 3, 0.56);
+          stab("keys", b, 10, chord.rh, 3, 0.54);
+          stab("keys", b, 15, next.rh, 6, 0.68);
         } else {
           stab("keys", b, 3, chord.rh, 3, 0.56 * soft);
           if (!dropOut) stab("keys", b, 10, chord.rh, 5, 0.6 * soft);
         }
+        pushed = push;
+        // In the pocket and the outro a short falling answer in the top
+        // voice fills the gap every fourth bar.
+        if ((sec === "Pocket" || sec === "Afterglow") && b % 4 === 2) {
+          const top = chord.rh[chord.rh.length - 1]!;
+          hit("keys", b, 10, top + 5, 0.42 + jitter(0.03), 1);
+          hit("keys", b, 11, top + 3, 0.36 + jitter(0.03), 1);
+          hit("keys", b, 12, top, 0.4 + jitter(0.03), 2);
+        }
       }
-      if (outro && b === 62) stab("keys", b, 0, GM9.rh.concat(74), 30, 0.5, 0.04);
+      if (outro && b === 62)
+        stab("keys", b, 0, GM9.rh.concat(74), 30, 0.5, 0.04);
 
       // ---------- organ stabs ----------
       const organOn = lift || hook;
       if (organOn && !dropOut) {
         const pattern = second ? [6, 9, 14] : [3, 11];
         for (const step of pattern) {
-          const v = 0.5 + (step === 11 || step === 14 ? 0.06 : 0) + jitter(0.03);
+          const v =
+            0.5 + (step === 11 || step === 14 ? 0.06 : 0) + jitter(0.03);
           stab("organ", b, step, chord.org, 1, v, 0.004);
         }
       } else if (organOn && dropOut) {
@@ -773,10 +834,7 @@ export const velvetCircuit: DemoDefinition = {
         // Call on the first bar, answer on the second, rising to the hook.
         const top = chord.org[chord.org.length - 1]!;
         if (!second)
-          chops.push(
-            [2, "hold", top, 2, 0.68],
-            [7, "on", top - 2, 2, 0.64],
-          );
+          chops.push([2, "hold", top, 2, 0.68], [7, "on", top - 2, 2, 0.64]);
         else
           chops.push(
             [6, "on", chord.org[1]!, 2, 0.6],
@@ -797,7 +855,8 @@ export const velvetCircuit: DemoDefinition = {
           [13, "hold", 74, 1, 0.66],
           [14, "on", 72, 2, 0.74],
         );
-      if (outro && b === 62) chops.push([2, "hold", 67, 4, 0.6], [10, "on", 74, 8, 0.58]);
+      if (outro && b === 62)
+        chops.push([2, "hold", 67, 4, 0.6], [10, "on", 74, 8, 0.58]);
       for (const [step, syllable, pitch, len, vel] of chops) {
         // A small scoop into the longer notes, like a sung chop.
         const extra: Partial<NoteInput> =
