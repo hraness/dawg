@@ -805,7 +805,7 @@ export const amberRoom: DemoDefinition = {
     title: "Amber Room",
     style: "Neo soul",
     description:
-      "A six-note sax theme sings behind a Dilla-leaning pocket: late snares, early kicks and swung hats over a flatwound bass that walks down by half steps, with rolled rootless Rhodes chords and a bridge that borrows the minor iv.",
+      "A six-note sax theme phrases over a Dilla-leaning pocket while the Rhodes answers in its rests, ties 4-3 and 9-8 suspensions across every cadence and lets a muted guitar and vibes interlock under the second head; the bass falls where the sax rises, an ooh pad sighs through the minor-iv bridge, and vocal chops, hat ratchets and one tape stop tint the turnarounds.",
     tempoBpm: 96,
     key: "F",
     bars: 48,
@@ -815,8 +815,12 @@ export const amberRoom: DemoDefinition = {
       "physical bass",
       "expressive sax",
       "rootless ninths",
+      "prepared suspensions",
+      "call and answer",
+      "interlocking arpeggios",
       "ghost-note pocket",
-      "electric-piano variation",
+      "vocal chops",
+      "tape stop",
       "laid-back layers",
     ],
     arrangement: [
@@ -830,9 +834,10 @@ export const amberRoom: DemoDefinition = {
     ],
     mixNotes: [
       "Each layer sits at its own distance from the grid: kick a hair early, snare and bass late, Rhodes rolled and later, sax furthest back.",
-      "The bass carries every root and walks Eb-D-Db-C under the head; rootless Rhodes voicings move by the smallest steps above it.",
-      "The sax scoops into phrases, falls off their ends and only vibratos late on held notes; the bridge trades hats for ride and the middle hands the tune to the Rhodes.",
-      "The head return lifts with a clap 12 ms behind each snare and an open hat every second bar, and the vibes answer from just behind the kit.",
+      "The sax rests for the last beat and a half of every two-bar phrase and the Rhodes answers there with three falling notes, the last tied over the barline and resolved by step; at each cadence the voice carrying the third holds the fourth from the chord before and falls to the third after the downbeat.",
+      "The bass falls through the seventh and fifth under every rising sax phrase and climbs under the falling ones; in the second head a muted guitar arpeggiates the voicing on the eighths and the vibes echo its first four tones a swung sixteenth later an octave up.",
+      "The bridge rides with a bit-crushed kit under a two-voice ooh pad; hat ratchets close bars 11, 19, 27 and 35, a reverse swell and a tape-stopped oh turn bar 35 into the head return, and a pitched oh takes two sax notes in the climb and the peak.",
+      "The head return lifts with a clap 12 ms behind each snare and an open hat every second bar, and the kick sits out the first four bars of the keys solo.",
     ],
   }),
   build() {
@@ -1234,10 +1239,21 @@ export const amberRoom: DemoDefinition = {
           // seventh and fifth below, lands on the low root, then climbs
           // through the approach note into the next change.
           const high = root < 34 ? root + 12 : root;
+          const low = ((bar >> 1) + (bar >> 3)) % 2;
           bassNote(bar, 0, high, 1.4, 0.8 * g);
           bassNote(bar, 1.75, high + seventh - 12, 0.4, 0.6 * g);
-          bassNote(bar, 2.5, high + fifth - 12, 0.55, 0.62 * g);
-          if ((bar >> 1) % 2) bassNote(bar, 3.25, root, 0.3, 0.5 * g, "g");
+          // Every other phrase the fall lands on the third instead of the
+          // fifth, so the two-bar shapes do not repeat verbatim.
+          bassNote(
+            bar,
+            2.5,
+            low || high + third - 12 < 28
+              ? high + fifth - 12
+              : high + third - 12,
+            0.55,
+            0.62 * g,
+          );
+          if (low) bassNote(bar, 3.25, root, 0.3, 0.5 * g, "g");
           else bassNote(bar, 3, root, 0.5, 0.56 * g, "s");
           bassNote(bar, 3.75, approach, 0.22, 0.6 * g, "p");
           break;
@@ -1279,78 +1295,175 @@ export const amberRoom: DemoDefinition = {
       });
     };
     /**
-     * The downbeat chord with its suspension: the suspended voice holds
-     * until `resolve`, then steps down to the chord tone.
+     * The suspension a SUS bar asks for, read off its downbeat voicing: the
+     * index of the voice that carries the third (or ninth), the tone it
+     * holds, the tone it falls to and the beat it falls on.
+     */
+    const suspension = (
+      bar: number,
+    ):
+      | {
+          i: number;
+          pitches: number[];
+          held: number;
+          to: number;
+          resolve: number;
+        }
+      | undefined => {
+      const sus = SUS.find(([at]) => at === bar);
+      if (!sus) return undefined;
+      const [, kind, resolve] = sus;
+      const [, root, chord] = harmony(bar)[0]!;
+      const pitches = voicings.get(`${bar}:0`)!;
+      const want = kind === "4-3" ? chord.third % 12 : 2;
+      const i = pitches.findIndex(
+        (p) => (((p - root) % 12) + 12) % 12 === want,
+      );
+      if (i < 0) return undefined;
+      const p = pitches[i]!;
+      return {
+        i,
+        pitches,
+        held: kind === "4-3" ? p + 5 - chord.third : p,
+        to: kind === "4-3" ? p : p - 2,
+        resolve,
+      };
+    };
+    /**
+     * The downbeat chord with its suspension prepared: the suspended tone
+     * (a chord tone of the bar before) ties over the barline, the other
+     * voices roll under it, and it steps down to the chord tone at
+     * `resolve`. When the previous hit already holds the tone (`prepared`)
+     * no new preparation is struck.
      */
     const suspend = (
       bar: number,
       beat: number,
       length: number,
       velocity: number,
+      prepared: boolean,
     ): boolean => {
-      const sus = SUS.find(([at]) => at === bar);
-      if (!sus) return false;
-      const [, kind, resolve] = sus;
-      const [, root, chord] = harmony(bar)[spanAt(bar, beat)]!;
-      const pitches = chordAt(bar, beat);
-      const want = kind === "4-3" ? chord.third % 12 : 2;
-      const i = pitches.findIndex(
-        (p) => (((p - root) % 12) + 12) % 12 === want,
-      );
-      if (i < 0) return false;
-      const held = pitches.map((p, j) =>
-        j === i && kind === "4-3" ? p + 5 - chord.third : p,
-      );
+      const sus = suspension(bar);
+      if (!sus || spanAt(bar, beat) !== 0) return false;
+      const { i, pitches, held, to, resolve } = sus;
+      if (!prepared)
+        s.note(
+          "keys",
+          bar - 1,
+          3.5 + KEYS,
+          held,
+          0.5 + resolve,
+          velocity * 0.9,
+        );
       roll(
         bar,
         beat,
-        held,
+        pitches.filter((_, j) => j !== i),
         length,
         velocity,
-        0.014,
-        held.map((_, j) => (j === i ? resolve - beat : length)),
       );
       s.note(
         "keys",
         bar,
         resolve + KEYS,
-        kind === "4-3" ? pitches[i]! : pitches[i]! - 2,
+        to,
         Math.max(0.3, length - (resolve - beat)),
         velocity * 0.92,
       );
       return true;
     };
     let pushed = false;
+    let prepared = false;
     const comp = (bar: number, cell: number, gain = 1): void => {
       const spans = harmony(bar);
-      const hits =
+      const hits = (
         spans.length > 1
           ? [
               [0, spans[1]![0] - 0.25, 0.58],
               [spans[1]![0], 3.8 - spans[1]![0], 0.55],
             ]
-          : COMP[cell]!;
+          : COMP[cell]!
+      ) as readonly (readonly [number, number, number, number?])[];
       const wasPushed = pushed;
+      const wasPrepared = prepared;
       pushed = false;
-      for (const [beat, length, velocity, push] of hits as readonly (readonly [
-        number,
-        number,
-        number,
-        number?,
-      ])[]) {
-        if (wasPushed && beat < 0.25) continue;
+      prepared = false;
+      const next = suspension(bar + 1);
+      const here = suspension(bar);
+      hits.forEach(([beat, length, velocity, push], h) => {
+        const last = h === hits.length - 1;
+        if (wasPushed && beat < 0.25) return;
         if (push) {
+          // The pushed chord anticipates the next bar; when that bar opens
+          // on a suspension the push carries the suspended tone, which
+          // resolves after the barline.
+          const coming = voicings.get(`${bar + 1}:0`)!;
+          if (next) {
+            roll(
+              bar,
+              beat,
+              coming.map((p, j) => (j === next.i ? next.held : p)),
+              length,
+              velocity * gain,
+              0.014,
+              coming.map((_, j) =>
+                j === next.i ? 4 - beat + next.resolve : length,
+              ),
+            );
+            s.note(
+              "keys",
+              bar + 1,
+              next.resolve + KEYS,
+              next.to,
+              Math.max(0.3, length - next.resolve),
+              velocity * gain * 0.92,
+            );
+            prepared = true;
+          } else roll(bar, beat, coming, length, velocity * gain);
+          pushed = true;
+          return;
+        }
+        const pitches = chordAt(bar, beat);
+        if (
+          beat < 0.75 &&
+          !wasPushed &&
+          suspend(bar, beat, length, velocity * gain, wasPrepared)
+        )
+          return;
+        if (wasPushed && wasPrepared && here && beat < here.resolve) {
+          // A second hit before the pushed suspension resolves keeps it.
           roll(
             bar,
             beat,
-            voicings.get(`${bar + 1}:0`)!,
+            pitches.map((p, j) => (j === here.i ? here.held : p)),
             length,
             velocity * gain,
+            0.014,
+            pitches.map((_, j) =>
+              j === here.i ? here.resolve - beat : length,
+            ),
           );
-          pushed = true;
-        } else if (beat >= 0.75 || !suspend(bar, beat, length, velocity * gain))
-          roll(bar, beat, chordAt(bar, beat), length, velocity * gain);
-      }
+          return;
+        }
+        if (last && next && pitches.includes(next.held)) {
+          // The last hit already holds the next bar's suspended tone: tie
+          // it over the barline instead of striking it again.
+          roll(
+            bar,
+            beat,
+            pitches,
+            length,
+            velocity * gain,
+            0.014,
+            pitches.map((p) =>
+              p === next.held ? 4 - beat + next.resolve : length,
+            ),
+          );
+          prepared = true;
+          return;
+        }
+        roll(bar, beat, pitches, length, velocity * gain);
+      });
     };
 
     // Doorway: the Rhodes alone on the last four chords of the cycle -------
