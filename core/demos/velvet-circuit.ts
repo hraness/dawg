@@ -112,6 +112,35 @@ const HOME = [GM9, GM9, EBMAJ9, EBMAJ9, CM9, CM9, D7SUS, D7B9] as const;
 /** The climbing lift into each hook: iv9 - v11 - VImaj9 - VII13sus. */
 const CLIMB = [CM9, CM9, DM11, DM11, EBMAJ9, EBMAJ9, F13SUS, F13SUS] as const;
 
+/**
+ * The bass's approach into the next chord: a tone of the current chord a
+ * step or two from the next root, so the slide stays in key.
+ */
+const APPROACH: Readonly<Record<string, number>> = {
+  "Gm9>Ebmaj9": 38, // D, the fifth, up a half step
+  "Ebmaj9>Cm9": 34, // Bb, the fifth, up a whole step
+  "Cm9>D7sus4(b9)": 39, // Eb, the third, down a half step
+  "D7(b9)>Gm9": 33, // A, the fifth, down a whole step
+  "D7(b9)>Cm9": 34, // Bb up a whole step
+  "Cm9>Dm11": 39, // Eb down a half step
+  "Dm11>Ebmaj9": 41, // F, the third, down a whole step
+  "Ebmaj9>F13sus4": 43, // G, the third, down a whole step
+  "F13sus4>Gm9": 34, // Bb, the fourth, down a minor third
+};
+
+/** G natural minor pitch classes, for harmonies the chord does not cover. */
+const SCALE = new Set([7, 9, 10, 0, 2, 3, 5]);
+
+/** A harmony a third or fourth below a pitch: a chord tone if one fits, else a scale tone. */
+const below = (chord: Chord, pitch: number): number => {
+  const tones = new Set(
+    [chord.root, ...chord.rh, ...chord.org].map((p) => p % 12),
+  );
+  for (const pool of [tones, SCALE])
+    for (let p = pitch - 3; p >= pitch - 5; p--) if (pool.has(p % 12)) return p;
+  return pitch - 5;
+};
+
 const SECTIONS = [
   "Warm-up",
   "Pocket",
@@ -139,20 +168,19 @@ type BassHit = readonly [step: number, interval: number, len: number, vel: numbe
 const BASS: Readonly<
   Record<"pocket" | "hook" | "turn", readonly [readonly BassHit[], readonly BassHit[]]>
 > = {
-  // Sub on one with the kick, then replies in the kick's gaps.
+  // Sparse sub blips on one with the kick, then replies in the kick's gaps.
   pocket: [
     [
-      [0, 0, 5, 0.92],
-      [7, 12, 1, 0.5],
-      [11, 0, 2, 0.74],
-      [14, 7, 2, 0.6],
+      [0, 0, 4, 0.9],
+      [7, 12, 1, 0.48],
+      [11, 0, 2, 0.7],
+      [14, 7, 1, 0.56],
     ],
     [
-      [2, 0, 3, 0.82],
-      [6, 12, 1, 0.46],
-      [8, 0, 2, 0.7],
-      [11, -1, 1, 0.56],
-      [13, -99, 3, 0.66],
+      [2, 0, 2, 0.8],
+      [6, 12, 1, 0.44],
+      [11, -1, 1, 0.54],
+      [13, -99, 3, 0.64],
     ],
   ],
   // Bubbling hook line with octave pops and a seventh.
@@ -160,12 +188,12 @@ const BASS: Readonly<
     [
       [0, 0, 3, 0.94],
       [3, 12, 1, 0.56],
-      [6, 0, 2, 0.76],
+      [6, 0, 3, 0.78],
       [11, 12, 1, 0.6],
       [14, 7, 2, 0.7],
     ],
     [
-      [0, 0, 2, 0.84],
+      [0, 0, 3, 0.86],
       [3, 0, 1, 0.6],
       [6, -1, 2, 0.7],
       [9, 7, 1, 0.62],
@@ -336,6 +364,20 @@ export const velvetCircuit: DemoDefinition = {
       preset("bass", "Round sub", "sub-sine", 0.62, {
         humanize: { timing: 3, velocity: 4, seed: 31 },
         glide: { time: 0.05, mode: "legato" },
+        // A mix ride: the sub sits back in the pocket and opens up in the hooks.
+        volumeAutomation: lanes(
+          [8, 0.84],
+          [15.9, 0.84],
+          [16, 0.9],
+          [23.9, 0.9],
+          [24, 1],
+          [31.9, 1],
+          [40, 0.93],
+          [47.9, 0.93],
+          [48, 1],
+          [55.9, 1],
+          [56, 0.9],
+        ),
         fx: orbit,
       }),
     );
@@ -502,6 +544,13 @@ export const velvetCircuit: DemoDefinition = {
         ),
       );
 
+    /** Bars with a bassline: none in the intro, the breakdown or the last four bars. */
+    const bassPlays = (bar: number) => {
+      const name = sectionOf(Math.min(63, bar));
+      return name !== "Warm-up" && name !== "Suspended" && bar < 60;
+    };
+    let slideIn = false;
+
     for (let b = 0; b < 64; b++) {
       const sec = sectionOf(b);
       const inBar = b % 8;
@@ -579,6 +628,13 @@ export const velvetCircuit: DemoDefinition = {
         // Ghost snares in the hook and the turnaround.
         if ((hook || sec === "Turnaround") && b % 2 === 0)
           hit("drums", b, 7, 38, 0.16 + jitter(0.03), 1);
+        // The last hook adds a soft ride on the beats for lift.
+        if (sec === "Last call")
+          for (const step of [0, 4, 8, 12]) {
+            if (step === 0 && b === 48) continue;
+            const v = step === 0 ? 0.3 : step === 8 ? 0.26 : 0.22;
+            hit("drums", b, step, 51, v + jitter(0.03), 2, 0);
+          }
       }
       // Crash on the big downbeats, softer hats after it come from the jitter.
       if ([8, 24, 40, 48].includes(b))
@@ -625,29 +681,38 @@ export const velvetCircuit: DemoDefinition = {
         }
 
       // ---------- bass ----------
-      const bassOn =
-        !intro && !(outro && b >= 60) && (!breakdown || b >= 36);
-      if (bassOn && breakdown) {
-        // Held sub roots under the second half of the breakdown.
-        if (b % 2 === 0) s.note("bass", b, 0, chord.root, 7.5, 0.6);
-      } else if (bassOn) {
+      // Silent through the intro and the breakdown so each drop lands.
+      if (bassPlays(b)) {
         const cell =
           sec === "Turnaround" ? BASS.turn : hook ? BASS.hook : BASS.pocket;
         const hits = cell[second ? 1 : 0];
-        for (const [step, interval, len, vel] of hits) {
-          if (dropOut && step >= 12) continue;
+        const slide = slideIn;
+        slideIn = false;
+        hits.forEach(([step, interval, len, vel], i) => {
+          if (dropOut && step >= 12) return;
           let pitch = chord.root + interval;
           let extra: Partial<NoteInput> = {};
           if (interval === -99) {
-            // Approach note: a step below the next chord's root, sliding in.
-            const target = next.root;
-            pitch = target + (target > chord.root ? -2 : 1);
-            extra = { glide: 0.06 };
+            if (bassPlays(b + 1)) {
+              // An in-key approach tone; the next downbeat slides out of it.
+              pitch = APPROACH[`${chord.name}>${next.name}`] ?? next.root + 2;
+              slideIn = true;
+            } else {
+              // Nothing follows: the octave dives down into the gap.
+              pitch = chord.root + 12;
+              extra = {
+                bend: [
+                  { at: 0.2, cents: 0 },
+                  { at: 1, cents: -1200 },
+                ],
+              };
+            }
           } else if (interval === -1) {
             pitch = chord.root + chord.sev;
           }
+          if (i === 0 && slide) extra = { ...extra, glide: 0.08 };
           hit("bass", b, step, pitch, vel + jitter(0.03), len, SWING, extra);
-        }
+        });
       }
 
       // ---------- Rhodes ----------
@@ -688,11 +753,12 @@ export const velvetCircuit: DemoDefinition = {
       // ---------- vocal chops ----------
       const chops: Chop[] = [];
       if (hook) {
-        for (const chop of HOOK[inBar]!) chops.push(chop);
-        if (sec === "Last call" && inBar % 2 === 1) {
-          // Chipmunk answers an octave up in the final hook.
-          const last = HOOK[inBar]![HOOK[inBar]!.length - 1]!;
-          chops.push([15, last[1], last[2] + 12, 1, 0.42]);
+        for (const chop of HOOK[inBar]!) {
+          chops.push(chop);
+          // The last hook doubles each longer "hold" a third or fourth below.
+          const [step, syllable, pitch, len, vel] = chop;
+          if (sec === "Last call" && syllable === "hold" && len >= 2)
+            chops.push([step, "hold", below(chord, pitch), len, vel * 0.62]);
         }
       } else if (sec === "Pocket" || sec === "Afterglow") {
         // Sparse calls: one "hold on" per two bars, the answer moving.
