@@ -438,7 +438,7 @@ export const signalBloom: DemoDefinition = {
     ],
     mixNotes: [
       "Only the snare gets ambience, a short gated room; the kick and hats stay dry and the kick alone ducks the bass, chords and halo.",
-      "Chords sit below B4 and the string answer below G4, so the singer owns C4-E5 and the two arpeggios share C5-D6, one panned each side with the glass pluck quieter and brighter.",
+      "Chords sit below B4 and the string answer below C5, so the singer owns C4-F5 and the two arpeggios share C5-D6, one panned each side with the glass pluck quieter and brighter; the canon pluck sits further right at two thirds of the main arp's level.",
       "The bitcrush lives on the pad only, swept from 16 bits to 4 over the last pre-chorus bar and snapped clean on the chorus downbeat; the octave-up double is a soprano at a fifth of the lead's level.",
     ],
   }),
@@ -1428,7 +1428,6 @@ export const signalBloom: DemoDefinition = {
       hocket(chorus + 1, 2.5, HOCKET_A, lift);
       hocket(chorus + 3, 2.5, HOCKET_B, lift);
       hocket(chorus + 5, 2.5, HOCKET_A, lift);
-      hocket(chorus + 7, 3, HOCKET_B.slice(0, 4), lift);
     }
     // Pre-chorus: the chops fill the breath between "line" and the pickup.
     for (const bar of [17, 45]) {
