@@ -307,8 +307,8 @@ const CHIP: Readonly<Record<string, Phrase>> = {
     [1.75, 81, 0.2, 0.7],
     [2, 85, 0.2, 0.74],
     [2.5, 83, 0.2, 0.64],
-    [3, 81, 0.2, 0.66],
-    [3.25, 80, 0.2, 0.6],
+    [3, 80, 0.2, 0.6],
+    [3.25, 81, 0.2, 0.66],
   ],
 };
 
@@ -490,7 +490,6 @@ function lineB(bar: number, words: readonly string[]): Line {
   const head: Phrase =
     words.length === 6
       ? [
-          [0, 78, 0.5, 0.84, w(0)],
           [0.5, 76, 0.5, 0.76, "_"],
           [1, 73, 0.4, 0.7, w(1)],
           [1.5, 76, 0.4, 0.68, w(2)],
@@ -498,7 +497,6 @@ function lineB(bar: number, words: readonly string[]): Line {
           [3, 78, 0.85, 0.76, w(4)],
         ]
       : [
-          [0, 78, 0.45, 0.84, w(0)],
           [0.5, 76, 0.45, 0.76, w(1)],
           [1, 73, 0.9, 0.8, w(2)],
           [2, 76, 0.4, 0.68, w(3)],
@@ -506,6 +504,9 @@ function lineB(bar: number, words: readonly string[]): Line {
           [3, 80, 0.85, 0.84, w(5)],
         ];
   return [
+    // The first word is sung on the and-of-four over V and held into the
+    // vi bar: a prepared 4-3 that resolves on the half beat.
+    [bar - 1, [[3.5, 78, 1, 0.84, w(0)]]],
     [bar, head],
     [bar + 1, [[0, 76, 1.5, 0.8, w(words.length - 1)]]],
   ];
@@ -534,9 +535,10 @@ function lineC(
               [2.75, 83, 0.2, 0.8, w(4)],
             ] as const)
           : ([[2.5, 83, 0.45, 0.9, w(4)]] as const)),
-        [3, end, 1.5, 0.84, w(5)],
+        [3, end + 2, 1.5, 0.84, w(5)],
       ],
     ],
+    [bar + 1, [[0.5, end, 0.5, 0.72, "_"]]],
   ];
 }
 
@@ -550,55 +552,50 @@ const BRIDGE: Line = [
     48,
     [
       [0.5, 73, 1, 0.5, "Slow"],
-      [1.5, 73, 4.5, 0.54, "down"],
+      [1.5, 73, 3.5, 0.54, "down"],
     ],
   ],
   [
     49,
     [
-      [2, 71, 1.5, 0.5, "_"],
-      [3.5, 71, 2.5, 0.5, "let"],
+      [1, 71, 2.5, 0.5, "_"],
+      [3.5, 71, 1.5, 0.5, "let"],
     ],
   ],
   [
     50,
     [
-      [2, 69, 1.5, 0.48, "_"],
-      [3.5, 69, 2.5, 0.5, "the"],
+      [1, 69, 2.5, 0.48, "_"],
+      [3.5, 69, 1.5, 0.5, "the"],
     ],
   ],
   [
     51,
     [
-      [2, 68, 1.5, 0.48, "_"],
-      [3.5, 68, 2.5, 0.52, "col-"],
+      [1, 68, 2.5, 0.48, "_"],
+      [3.5, 68, 1.5, 0.52, "col-"],
     ],
   ],
   [
     52,
     [
-      [2, 66, 1.5, 0.5, "ors"],
-      [3.5, 66, 2.5, 0.52, "run"],
+      [1, 66, 2.5, 0.5, "ors"],
+      [3.5, 66, 1.5, 0.52, "run"],
     ],
   ],
-  [53, [[2, 64, 2, 0.5, "_"]]],
+  [53, [[1, 64, 2.5, 0.5, "_"]]],
   [
     54,
     [
       [0.5, 69, 0.4, 0.52, "Hold"],
       [1, 71, 0.4, 0.54, "the"],
-      [1.5, 73, 1.2, 0.58, "light"],
-      [3, 73, 0.4, 0.56, "till"],
-      [3.5, 76, 0.4, 0.58, "it's"],
+      [1.5, 73, 1, 0.58, "light"],
+      [2.5, 73, 0.4, 0.56, "till"],
+      [3, 76, 0.4, 0.58, "it's"],
+      [3.5, 76, 1.5, 0.64, "un-"],
     ],
   ],
-  [
-    55,
-    [
-      [0, 76, 1, 0.64, "un-"],
-      [1, 75, 1.4, 0.62, "done"],
-    ],
-  ],
+  [55, [[1, 75, 1.4, 0.62, "done"]]],
 ];
 
 const LAST: Line = [
@@ -1508,25 +1505,38 @@ export const candyFault: DemoDefinition = {
         rolled("keys", b, 0, [52, 56, 59, 63, 66], 3.9, 0.4, 0.05);
       if (liftLike) {
         // Suspensions in the supersaw: 9-8 over Aadd9, 4-3 over each B sus.
+        // Each suspended voice is prepared on the and-of-four of the bar
+        // before, sits on the downbeat and resolves down on beat two.
         const gain = 0.5 + inPart * 0.03;
         if (inPart === 0) {
+          s.note("chords", b - 1, 3.5, 83, 1.5, gain * 0.9);
           s.chord("chords", b, 0, h.saw.slice(0, 3), 3.9, gain);
-          s.note("chords", b, 0, 83, 2.45, gain);
-          s.note("chords", b, 2.5, 81, 1.4, gain * 0.95);
+          s.note("chords", b, 1, 81, 2.9, gain * 0.95);
+          s.note("chords", b, 3.5, 76, 1.5, gain);
         } else if (inPart === 1) {
           s.chord("chords", b, 0, [71, 78, 83], 3.9, gain);
-          s.note("chords", b, 0, 76, 1.95, gain);
-          s.note("chords", b, 2, 75, 1.9, gain * 0.95);
-        } else if (inPart === 2) s.chord("chords", b, 0, h.saw, 3.9, gain);
-        else {
+          s.note("chords", b, 1, 75, 2.9, gain * 0.95);
+        } else if (inPart === 2) {
+          s.chord("chords", b, 0, h.saw, 3.9, gain);
+          s.note("chords", b, 3.5, 88, 1.5, gain);
+        } else {
           s.chord("chords", b, 0, [78, 83, 90], 3.9, gain);
-          s.note("chords", b, 0, 88, 2.45, gain);
-          s.note("chords", b, 2.5, 87, 1.4, gain * 0.95);
+          s.note("chords", b, 1, 87, 2.9, gain * 0.95);
         }
       }
       if (chorusLike) {
+        // The stack sits an octave under the singer (C#3..E4); the octave
+        // stabs and the Overload top voice carry the sparkle above her.
         const top = part === "over" ? [h.saw[h.saw.length - 1]! + 12] : [];
-        s.chord("chords", b, 0, [...h.saw, ...top], 3.8, 0.6);
+        const low = h.saw.map((p) => p - 12);
+        s.chord(
+          "chords",
+          b,
+          0,
+          [...low, ...top],
+          3.8,
+          part === "over" ? 0.64 : 0.58,
+        );
         if (part === "return" || part === "over")
           for (const beat of [0.5, 1.5, 2.5, 3.5])
             s.chord(
@@ -1540,13 +1550,14 @@ export const candyFault: DemoDefinition = {
       }
       if (part === "glitch") {
         // A crushed stack that stutters, then the tape stop into verse two.
-        if (inPart === 1) s.chord("chords", b, 2, h.saw, 1.9, 0.5);
+        const low = h.saw.map((p) => p - 12);
+        if (inPart === 1) s.chord("chords", b, 2, low, 1.9, 0.56);
         if (inPart === 2) {
-          stutter("chords", b, 0, 8, 1 / 8, [h.saw[2]!, h.saw[3]!], 0.62, 0.3);
-          s.chord("chords", b, 2, h.saw, 1.9, 0.52);
+          stutter("chords", b, 0, 8, 1 / 8, [h.saw[2]!, h.saw[3]!], 0.7, 0.3);
+          s.chord("chords", b, 2, low, 1.9, 0.58);
         }
         if (inPart === 3) {
-          stutter("chords", b, 0, 4, 0.25, [h.saw[3]!], 0.55, 0.4);
+          stutter("chords", b, 0, 4, 0.25, [h.saw[3]!], 0.62, 0.4);
           stutter(
             "chords",
             b,
@@ -1554,10 +1565,10 @@ export const candyFault: DemoDefinition = {
             8,
             1 / 8,
             [h.saw[3]!, h.saw[3]! + 12],
-            0.6,
+            0.68,
             0.35,
           );
-          s.chord("chords", b, 2, h.saw, 1.95, 0.56);
+          s.chord("chords", b, 2, low, 1.95, 0.62);
         }
       }
 
@@ -1793,7 +1804,7 @@ export const candyFault: DemoDefinition = {
       [26, 2.5, 6, 0.125, 83],
       [27, 0, 8, 1 / 16, 83],
     ] as const)
-      stutter("vocal", bar, beat, count, step, [pitch], 0.74, 0.42, {
+      stutter("vocal", bar, beat, count, step, [pitch], 0.82, 0.42, {
         lyric: "pix",
       });
     shadow(lift(12).slice(2), "third", 0.62);
