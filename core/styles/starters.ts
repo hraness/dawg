@@ -276,24 +276,38 @@ export const GROOVE_STARTERS: readonly GrooveStarter[] = Object.freeze([
     "James Brown-era funk: weight on the one, syncopated kick and dry ghost notes",
     102,
     {
+      // Hats run sixteenths with the eighths accented and a light swing
+      // (about 54%, as in most early funk); ghost snares sit around each
+      // backbeat at a third of its weight, and the snare leans back a hair.
       rhythm: {
         onsets: {
-          kick: grid("x..x..x...x..x.."),
-          snare: grid("...2x..2...3x..."),
+          kick: grid("x.3...x...x..4.."),
+          snare: grid("....x..3.2..x..3"),
           hat: grid("xxxxxxxxxxxxxxxx"),
+          openhat: grid("..............4."),
         },
+        locks: [{ kind: "avoid", a: "openhat", b: "hat" }],
       },
       bass: {
         behaviour: [["root-fifth", 1]],
-        range: [33, 48],
-        onsets: grid("x..x..x...x..x.."),
-        kickLock: 1,
+        range: [31, 50],
+        onsets: grid("x..x..x...x.4x.."),
+        kickLock: 0.5,
       },
-      texture: { roles: { ...kitRoles("acoustic"), bass: role("motown") } },
+      texture: {
+        roles: {
+          ...kitRoles("acoustic", ["kick", "snare", "hat", "openhat"]),
+          bass: role("motown"),
+        },
+      },
       groove: {
-        velocity: [1, 0.4, 0.7, 0.4],
-        humanize: { timingMs: 2, velocity: 0.05 },
+        swingRatio: [1.14, 1.2],
+        velocity: [1, 0.34, 0.74, 0.42],
+        roleOffset: { snare: 0.05 },
+        humanize: { timingMs: 4, velocity: 0.08 },
       },
+      expression: { dynamics: [0.6, 0.9] },
+      mix: { levels: { kick: -3, snare: -4, hat: -12, openhat: -15, bass: -5 } },
     },
   ),
   starter(
