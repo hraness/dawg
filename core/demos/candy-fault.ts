@@ -582,21 +582,22 @@ export const candyFault: DemoDefinition = {
     ] as const)
       s.section(name, start, bars);
     s.track(
-      voice("kick", "Rubber kick", "kit", 0.74, {
-        kit: "syn808",
+      // A short clicky kick; the 808 track owns everything under 60 Hz.
+      voice("kick", "Rubber kick", "kit", 0.55, {
+        kit: "syn707",
         fx: { duck: { orbit: 2, depth: 0.55, attack: 0.1 } },
       }),
     );
     s.track(
-      voice("snap", "Snap & clap", "kit", 0.5, {
+      voice("snap", "Snap & clap", "kit", 0.3, {
         kit: "synlinn",
         reverb: { mix: 0.08, size: 0.25, fade: 0.5 },
         humanize: { timing: 2, velocity: 4, seed: 11 },
       }),
     );
     s.track(
-      voice("hats", "Needle hats", "kit", 0.3, {
-        kit: "syn808",
+      voice("hats", "Needle hats", "kit", 0.6, {
+        kit: "syn909",
         pan: 0.14,
         humanize: { timing: 3, velocity: 6, seed: 12 },
       }),
@@ -617,7 +618,7 @@ export const candyFault: DemoDefinition = {
       }),
     );
     s.track(
-      voice("hook", "Plastic hook", "pulse", 0.2, {
+      voice("hook", "Plastic hook", "pulse", 0.45, {
         pan: 0.08,
         synth: {
           attack: 0.003,
@@ -656,7 +657,7 @@ export const candyFault: DemoDefinition = {
       }),
     );
     s.track(
-      voice("chords", "Sugar stack", "supersaw", 0.12, {
+      voice("chords", "Sugar stack", "supersaw", 0.5, {
         synth: {
           attack: 0.012,
           decay: 0.35,
@@ -692,7 +693,7 @@ export const candyFault: DemoDefinition = {
       }),
     );
     s.track(
-      voice("arp", "Chip arp", "square", 0.09, {
+      voice("arp", "Chip arp", "square", 0.32, {
         pan: -0.26,
         synth: {
           attack: 0.002,
@@ -708,7 +709,7 @@ export const candyFault: DemoDefinition = {
       }),
     );
     s.track(
-      voice("vocal", "Candy singer", "sing", 0.5, {
+      voice("vocal", "Candy singer", "sing", 0.62, {
         sing: {
           preset: "aah",
           voice: "soprano",
@@ -734,7 +735,7 @@ export const candyFault: DemoDefinition = {
       }),
     );
     s.track(
-      voice("harm", "Candy double", "sing", 0.26, {
+      voice("harm", "Candy double", "sing", 0.5, {
         pan: 0.32,
         sing: {
           preset: "aah",
