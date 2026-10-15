@@ -38,12 +38,15 @@ type Quality = Readonly<{
   third: number;
   fifth: number;
   seventh: number;
+  /** Forms a pianist swaps in when the tune would rub against a form. */
+  alts: readonly (readonly number[])[];
 }>;
 const quality = (
   forms: Quality["forms"],
   shells: Quality["shells"],
   [third, fifth, seventh]: readonly [number, number, number],
-): Quality => ({ forms, shells, third, fifth, seventh });
+  alts: Quality["alts"] = [],
+): Quality => ({ forms, shells, third, fifth, seventh, alts });
 const M9 = quality(
   [
     [3, 7, 10, 14],
@@ -54,6 +57,10 @@ const M9 = quality(
     [10, 15, 19],
   ],
   [3, 7, 10],
+  [
+    [3, 7, 10, 17],
+    [5, 10, 15, 19],
+  ],
 );
 /** m11 as the quartal "So What" stack, or b3 5 b7 11. */
 const M11 = quality(
@@ -66,6 +73,7 @@ const M11 = quality(
     [5, 10, 15],
   ],
   [3, 7, 10],
+  [[3, 10, 14, 17]],
 );
 const MAJ9 = quality(
   [
@@ -77,6 +85,10 @@ const MAJ9 = quality(
     [11, 16, 21],
   ],
   [4, 7, 11],
+  [
+    [4, 7, 9, 14],
+    [9, 14, 16, 19],
+  ],
 );
 /** Lydian: 3 7 9 #11, or the major seventh a fifth up over the root. */
 const MAJ9S11 = quality(
@@ -89,6 +101,10 @@ const MAJ9S11 = quality(
     [11, 16, 21],
   ],
   [4, 7, 11],
+  [
+    [4, 7, 11, 14],
+    [11, 14, 16, 19],
+  ],
 );
 const DOM13 = quality(
   [
@@ -100,6 +116,10 @@ const DOM13 = quality(
     [10, 16, 21],
   ],
   [4, 7, 10],
+  [
+    [4, 10, 14, 19],
+    [10, 14, 16, 19],
+  ],
 );
 /** The "Bbmaj7 over C" sus sound. */
 const SUS13 = quality(
@@ -112,6 +132,7 @@ const SUS13 = quality(
     [10, 17, 21],
   ],
   [5, 7, 10],
+  [[5, 10, 14, 19]],
 );
 /** 3 b7 #9 b13; the bass leans on the seventh, never the fifth. */
 const ALT = quality(
@@ -124,6 +145,11 @@ const ALT = quality(
     [10, 16, 20],
   ],
   [4, 10, 10],
+  [
+    [4, 10, 13, 20],
+    [4, 10, 13],
+    [10, 13, 16],
+  ],
 );
 const SHARP9 = quality(
   [
@@ -194,22 +220,24 @@ function harmony(bar: number): readonly Span[] {
 }
 
 /**
- * The shape nearest the previous voicing: each form in the two octaves
+ * The shape nearest the previous voicing: each shape in the two octaves
  * whose bottom note sits at or above `low`, scored by how far the voices
- * move plus a pull toward `centre`. A form whose top note climbs past
- * `top` (into the sax) costs extra, so the chain stays in its own register.
+ * move plus a pull toward `centre`. A shape whose top note climbs past
+ * `top` (into the sax) costs extra, and so does every voice a half step or
+ * a minor ninth from a note the tune holds over the chord (weighted by how
+ * long it is held, less two octaves apart), so the chain steps around
+ * the rubs a pianist would hear. Each shape carries its own colour cost.
  */
 function lead(
   previous: readonly number[],
   root: number,
-  shapes: readonly (readonly number[])[],
-  low: number,
-  centre: number,
-  top: number,
+  shapes: readonly (readonly [number, readonly number[]])[],
+  [low, centre, top]: readonly [number, number, number],
+  tune: readonly (readonly [number, number])[],
 ): number[] {
   let best: number[] = [];
   let bestCost = Infinity;
-  for (const shape of shapes) {
+  for (const [colour, shape] of shapes) {
     const lift = Math.ceil((low - root - shape[0]!) / 12) * 12;
     for (const octave of [0, 12]) {
       const pitches = shape.map((tone) => root + tone + lift + octave);
@@ -219,8 +247,17 @@ function lead(
         (sum, pitch, i) => sum + Math.abs(pitch - (previous[i] ?? pitch)),
         0,
       );
+      let rub = 0;
+      for (const [sung, held] of tune)
+        for (const pitch of pitches) {
+          const gap = Math.abs(sung - pitch);
+          if (gap % 12 === 1)
+            rub += (gap <= 13 ? 20 : gap <= 25 ? 8 : 0) * Math.max(0.3, held);
+        }
       const cost =
+        colour +
         moved +
+        rub +
         0.5 * Math.abs(mean - centre) +
         4 * Math.max(0, pitches.at(-1)! - top);
       if (cost < bestCost) {
@@ -284,7 +321,7 @@ const ANSWER: Line = [
   [0.75, 65, 0.5, 0.58, "s"],
   [1.5, 67, 0.45, 0.6],
   [2.25, 69, 0.6, 0.68],
-  [3.25, 64, 0.6, 0.56, "g"],
+  [3.25, 64, 0.25, 0.56, "g"],
   [4.5, 62, 0.45, 0.56],
   [5.25, 65, 0.45, 0.6],
   [6, 67, 1.6, 0.64, "vf"],
@@ -295,7 +332,7 @@ const THEME_DOWN: Line = [
   [2, 76, 0.75, 0.78, "a"],
   [3, 74, 1.4, 0.7, "v"],
   [5, 72, 0.7, 0.62],
-  [6.25, 68, 1.35, 0.64, "vf"],
+  [6.25, 68, 1.2, 0.64, "vf"],
 ];
 const TURN: Line = [
   [0.5, 67, 0.3, 0.55, "g"],
@@ -335,7 +372,7 @@ const THEME_HIGH: Line = [
   [3, 72, 1.2, 0.68, "v"],
   [5, 75, 0.5, 0.66],
   [5.75, 72, 0.4, 0.62],
-  [6.25, 68, 1.4, 0.64, "vf"],
+  [6.25, 68, 1.2, 0.64, "vf"],
 ];
 const TURN_OUT: Line = [
   [0.5, 70, 0.4, 0.58],
@@ -394,7 +431,7 @@ const PEAK: Line = [
   [1, 77, 0.6, 0.82],
   [1.75, 79, 1.35, 0.88, "sv"],
   [3.25, 77, 0.4, 0.74],
-  [3.75, 76, 0.4, 0.72, "g"],
+  [3.75, 76, 0.25, 0.72, "g"],
   [4.5, 75, 0.4, 0.72],
   [5, 72, 0.4, 0.68],
   [5.5, 79, 1.3, 0.82, "svf"],
@@ -480,6 +517,76 @@ const KEYS_SOLO: Line = [
   [31, 72, 0.3, 0.56],
   [31.5, 70, 0.4, 0.56],
 ];
+
+/** The Rhodes top line over the doorway's held chords (bars 0 to 3). */
+const DOOR_TOP: Line = [
+  [2.5, 76, 1.2, 0.46],
+  [6.5, 79, 1.2, 0.46],
+  [9.5, 81, 0.5, 0.42],
+  [10.5, 80, 1, 0.46],
+  [13, 76, 1, 0.44],
+  [15, 77, 0.8, 0.44],
+];
+
+/** Where the sax sings: [bar, line, gain]. */
+const SAX_PLAN: readonly (readonly [number, Line, number])[] = [
+  [4, THEME, 0.94],
+  [6, ANSWER, 0.94],
+  [8, THEME_DOWN, 0.95],
+  [10, TURN, 0.95],
+  [12, THEME_GRACE, 1],
+  [14, ANSWER_UP, 1],
+  [16, THEME_HIGH, 1],
+  [18, TURN_OUT, 1],
+  [20, BRIDGE_SAX, 0.94],
+  [36, CLIMB, 1.04],
+  [40, PEAK, 1.04],
+  [44, GOODNIGHT_SAX, 1],
+];
+
+/** The vibes' high answers in the head return: [bar, line]. */
+const VIBES_ANSWERS: readonly (readonly [number, Line])[] = [
+  [
+    37,
+    [
+      [3.25, 81, 0.4, 0.42],
+      [3.5, 79, 0.8, 0.38],
+    ],
+  ],
+  [
+    39,
+    [
+      [3, 82, 0.4, 0.4],
+      [3.25, 79, 0.4, 0.38],
+      [3.5, 74, 0.8, 0.36],
+    ],
+  ],
+  [
+    42,
+    [
+      [3.25, 80, 0.4, 0.42],
+      [3.5, 75, 0.9, 0.38],
+    ],
+  ],
+];
+
+/** Every sung line over the band, in absolute beats: [start, end, pitch]. */
+function tunes(): [number, number, number][] {
+  const out: [number, number, number][] = [];
+  const add = (bar: number, line: Line, offset: number): void => {
+    for (const [beat, pitch, length, , code = ""] of line) {
+      const start = bar * 4 + beat + offset;
+      // A ghost or grace note weighs less than a sung one.
+      const weight = code.includes("g") ? 0.4 : 1;
+      out.push([start, start + length * weight, pitch]);
+    }
+  };
+  add(0, DOOR_TOP, KEYS);
+  for (const [bar, line] of SAX_PLAN) add(bar, line, SAX);
+  add(28, KEYS_SOLO, KEYS);
+  for (const [bar, line] of VIBES_ANSWERS) add(bar, line, 0);
+  return out;
+}
 
 /** Kick figures: 1 / a-of-2 / and-of-3 and its cousins (beat, velocity). */
 const KICKS: readonly (readonly (readonly [number, number])[])[] = [
@@ -607,14 +714,42 @@ export const amberRoom: DemoDefinition = {
     // Voice-led rootless voicings for every chord span, in time order: the
     // four-note comping forms sit between F3 and D5, under the sax, and the
     // left-hand shells for the keys solo sit an octave lower.
+    // Each chord hears the tune from half a beat before it (the comping
+    // anticipates) to the next change.
+    const tune = tunes();
+    const heard = (bar: number, i: number): [number, number][] => {
+      const spans = harmony(bar);
+      const from = bar * 4 + spans[i]![0] - 0.5;
+      const to = bar * 4 + (spans[i + 1]?.[0] ?? 4);
+      return tune.flatMap(([start, end, pitch]) => {
+        const held = Math.min(to, end) - Math.max(from, start);
+        return held > 0 ? [[pitch, held] as [number, number]] : [];
+      });
+    };
     const voicings = new Map<string, number[]>();
     const shells = new Map<string, number[]>();
     let previous: number[] = [60, 64, 65, 69];
     let previousShell: number[] = [52, 57, 60];
     for (let bar = 0; bar < 48; bar++)
       harmony(bar).forEach(([, root, chord], i) => {
-        previous = lead(previous, root, chord.forms, 53, 64.5, 74);
-        previousShell = lead(previousShell, root, chord.shells, 48, 56, 66);
+        const sung = heard(bar, i);
+        previous = lead(
+          previous,
+          root,
+          [
+            ...chord.forms.map((shape) => [0, shape] as const),
+            ...chord.alts.map((shape) => [3, shape] as const),
+          ],
+          [53, 64.5, 74],
+          sung,
+        );
+        previousShell = lead(
+          previousShell,
+          root,
+          chord.shells.map((shape) => [0, shape] as const),
+          [48, 56, 66],
+          sung,
+        );
         voicings.set(`${bar}:${i}`, previous);
         shells.set(`${bar}:${i}`, previousShell);
       });
@@ -887,20 +1022,12 @@ export const amberRoom: DemoDefinition = {
     };
 
     // Doorway: the Rhodes alone on the last four chords of the cycle -------
-    const doorTop: Line = [
-      [2.5, 76, 1.2, 0.46],
-      [6.5, 79, 1.2, 0.46],
-      [9.5, 81, 0.5, 0.42],
-      [10.5, 80, 1, 0.46],
-      [13, 76, 1, 0.44],
-      [15, 77, 0.8, 0.44],
-    ];
     for (let bar = 0; bar < 4; bar++)
       for (const [beat] of harmony(bar)) {
         const span = harmony(bar).length > 1 ? 1.9 : 3.8;
         roll(bar, beat, chordAt(bar, beat), span, 0.5, 0.045);
       }
-    for (const [beat, pitch, length, velocity] of doorTop)
+    for (const [beat, pitch, length, velocity] of DOOR_TOP)
       s.note("keys", 0, beat + KEYS, pitch, length, velocity);
     bassNote(2, 0, 36, 1.8, 0.56, "s");
     bassNote(2, 2, 36, 1.6, 0.52);
@@ -947,28 +1074,21 @@ export const amberRoom: DemoDefinition = {
       s.note("keys", 28, beat + KEYS, pitch, length, velocity);
 
     // Sax lines.
-    sax(4, THEME, 0.94);
-    sax(6, ANSWER, 0.94);
-    sax(8, THEME_DOWN, 0.95);
-    sax(10, TURN, 0.95);
-    sax(12, THEME_GRACE);
-    sax(14, ANSWER_UP);
-    sax(16, THEME_HIGH);
-    sax(18, TURN_OUT);
-    sax(20, BRIDGE_SAX, 0.94);
-    sax(36, CLIMB, 1.04);
-    sax(40, PEAK, 1.04);
-    sax(44, GOODNIGHT_SAX);
+    for (const [bar, line, gain] of SAX_PLAN) sax(bar, line, gain);
 
     // Vibes: soft answers in the bridge and the head return, and the last word.
-    for (const bar of [21, 23, 25])
-      for (const [i, pitch] of chordAt(bar, 0).slice(-2).entries())
+    // The bridge bells double the top of the Rhodes chord an octave up,
+    // skipping a voice that sits a half step over another (it would ring
+    // as a minor ninth against the chord below).
+    for (const bar of [21, 23, 25]) {
+      const chord = chordAt(bar, 0);
+      const bells = chord
+        .filter((p) => !chord.some((q) => (p - q + 120) % 12 === 1))
+        .slice(-2);
+      for (const [i, pitch] of bells.entries())
         s.note("vibes", bar, 2.5 + i * 0.25, pitch + 12, 1.2, 0.36);
-    for (const [bar, line] of [
-      [37, [[3.25, 81, 0.4, 0.42], [3.5, 79, 0.8, 0.38]]],
-      [39, [[3, 82, 0.4, 0.4], [3.25, 79, 0.4, 0.38], [3.5, 74, 0.8, 0.36]]],
-      [42, [[3.25, 80, 0.4, 0.42], [3.5, 75, 0.9, 0.38]]],
-    ] as const)
+    }
+    for (const [bar, line] of VIBES_ANSWERS)
       for (const [beat, pitch, length, velocity] of line)
         s.note("vibes", bar, beat, pitch, length, velocity);
 
