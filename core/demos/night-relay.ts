@@ -115,7 +115,7 @@ type Cell = keyof typeof CELLS;
 
 /** Eight bars of stab cells per section: something moves every two bars. */
 const STABS: Record<SectionName, readonly Cell[]> = {
-  Signal: ["lone", "rest", "lone", "rest", "lone", "echo", "lone", "push"],
+  Signal: ["lone", "echo", "lone", "echo", "lone", "echo", "lone", "push"],
   Pulse: ["lone", "pair", "lone", "pair", "lone", "pair", "lift", "push"],
   Weave: ["pair", "lift", "lone", "push", "pair", "lift", "pair", "push"],
   Open: ["pair", "lift", "roll", "push", "pair", "lift", "roll", "lone"],
@@ -125,11 +125,11 @@ const STABS: Record<SectionName, readonly Cell[]> = {
   Dissolve: ["lone", "rest", "lone", "echo", "lone", "rest", "rest", "rest"],
 };
 const STAB_GAIN: Record<SectionName, number> = {
-  Signal: 0.74,
+  Signal: 0.9,
   Pulse: 0.84,
   Weave: 0.9,
   Open: 0.95,
-  Air: 0.86,
+  Air: 1,
   Return: 0.94,
   Crest: 1,
   Dissolve: 0.82,
@@ -171,17 +171,17 @@ const BASS_PLAN: Partial<Record<SectionName, readonly (keyof typeof BASS)[]>> =
   };
 /** The sub comes back alone in the breakdown, long and soft. */
 const AIR_BASS: Record<number, Line> = {
-  36: [[0, 0, 3.6, 0.52]],
+  36: [[0, 0, 3.6, 0.4]],
   37: [
-    [0.5, 0, 1.4, 0.46],
-    [2.5, 0, 1.2, 0.5],
+    [0.5, 0, 1.4, 0.34],
+    [2.5, 0, 1.2, 0.38],
   ],
-  38: [[0, 0, 3.6, 0.56]],
+  38: [[0, 0, 3.6, 0.44]],
   39: [
-    [0.5, 0, 0.4, 0.6],
-    [1.5, 0, 0.36, 0.62],
-    [2.5, 0, 0.4, 0.68],
-    [3.5, -5, 0.3, 0.62],
+    [0.5, 0, 0.4, 0.5],
+    [1.5, 0, 0.36, 0.54],
+    [2.5, 0, 0.4, 0.6],
+    [3.5, -5, 0.3, 0.58],
   ],
 };
 
@@ -256,7 +256,7 @@ export const nightRelay: DemoDefinition = {
     s.track(
       voice("hats", "Open hats", "kit", 0.44, {
         kit: "syn909",
-        pan: 0.2,
+        pan: 0.3,
         humanize: { timing: 3, velocity: 4, seed: 46 },
         delay: { beats: 0.75, feedback: 0.28, mix: 0.1, pingpong: true },
         reverb: room,
@@ -265,7 +265,7 @@ export const nightRelay: DemoDefinition = {
     s.track(
       voice("ticks", "Closed hats", "kit", 0.3, {
         kit: "syn909",
-        pan: -0.24,
+        pan: -0.32,
         humanize: { timing: 4, velocity: 5, seed: 42 },
         reverb: { mix: 0.05, size: 0.2, fade: 0.5 },
       }),
@@ -273,7 +273,7 @@ export const nightRelay: DemoDefinition = {
     s.track(
       voice("perc", "Clap & rim", "kit", 0.5, {
         kit: "syn909",
-        pan: -0.1,
+        pan: -0.14,
         humanize: { timing: 2, velocity: 4, seed: 39 },
         delay: {
           beats: 0.75,
@@ -336,21 +336,21 @@ export const nightRelay: DemoDefinition = {
         reverb: hall,
         // One long dub pass: cutoff, feedback and send ridden by hand.
         filterAutomation: lanes(
-          [0, 520],
-          [8, 900],
+          [0, 700],
+          [8, 1000],
           [16, 1400],
           [24, 2100],
           [31, 3600],
-          [32, 900],
-          [36, 1300],
-          [39.5, 2600],
+          [32, 1500],
+          [36, 2000],
+          [39.5, 3000],
           [40, 1700],
           [47, 3000],
           [48, 2400],
           [55, 5200],
           [56, 2600],
-          [60, 900],
-          [63, 500],
+          [60, 1800],
+          [63, 1000],
         ),
         resonanceAutomation: lanes(
           [0, 0.25],
@@ -361,8 +361,8 @@ export const nightRelay: DemoDefinition = {
           [56, 0.3],
         ),
         delayFeedbackAutomation: lanes(
-          [0, 0.42],
-          [7.5, 0.5],
+          [0, 0.62],
+          [7.5, 0.66],
           [8, 0.46],
           [15, 0.55],
           [16, 0.5],
@@ -383,7 +383,7 @@ export const nightRelay: DemoDefinition = {
           [63, 0.6],
         ),
         delayMixAutomation: lanes(
-          [0, 0.22],
+          [0, 0.36],
           [8, 0.26],
           [24, 0.3],
           [31, 0.34],
@@ -395,8 +395,8 @@ export const nightRelay: DemoDefinition = {
           [55, 0.36],
           [55.5, 0.44],
           [56, 0.33],
-          [60, 0.4],
-          [63, 0.45],
+          [60, 0.45],
+          [63, 0.48],
         ),
         fx: {
           ...orbit,
@@ -411,14 +411,24 @@ export const nightRelay: DemoDefinition = {
         },
         // The breakdown chords sustain and ring; read at each onset.
         fxAutomation: {
-          "synth-sustain": lanes([0, 0.06], [32, 0.32], [40, 0.06]),
-          "synth-release": lanes([0, 0.28], [32, 0.9], [40, 0.28]),
+          "synth-sustain": lanes(
+            [0, 0.06],
+            [32, 0.32],
+            [40, 0.06],
+            [60, 0.3],
+          ),
+          "synth-release": lanes(
+            [0, 0.28],
+            [32, 0.9],
+            [40, 0.28],
+            [60, 1.4],
+          ),
         },
       }),
     );
     s.track(
       voice("metal", "Metal reply", "sampler", 0.27, {
-        pan: 0.3,
+        pan: 0.42,
         sampler: {
           mode: "keyed",
           voices: {
@@ -439,20 +449,23 @@ export const nightRelay: DemoDefinition = {
           overlap: 3,
           spread: 0.9,
           scan: 0.09,
-          gain: 0.5,
+          gain: 0.9,
         },
+        filter: { cutoff: 200, resonance: 0, type: "hpf" },
         reverb: hall,
         volumeAutomation: lanes(
-          [0, 0.14],
-          [8, 0.16],
-          [24, 0.2],
-          [31.5, 0.2],
-          [32, 0.3],
-          [39.5, 0.36],
-          [40, 0.18],
-          [55, 0.22],
-          [56, 0.24],
-          [63.9, 0.02],
+          [0, 0.42],
+          [6, 0.36],
+          [8, 0.2],
+          [24, 0.22],
+          [31.5, 0.22],
+          [32, 0.42],
+          [39.5, 0.5],
+          [40, 0.2],
+          [55, 0.24],
+          [56, 0.34],
+          [62, 0.3],
+          [63.9, 0],
         ),
         fx: orbit,
       }),
@@ -462,12 +475,13 @@ export const nightRelay: DemoDefinition = {
         synth: { attack: 0.8, sustain: 1, release: 2 },
         filter: { cutoff: 3200, resonance: 0, type: "hpf" },
         volumeAutomation: lanes(
-          [0, 0.07],
-          [8, 0.05],
-          [31, 0.05],
-          [32, 0.08],
-          [40, 0.045],
-          [56, 0.06],
+          [0, 0.2],
+          [7, 0.16],
+          [8, 0.08],
+          [31, 0.08],
+          [32, 0.14],
+          [40, 0.07],
+          [56, 0.1],
           [63.9, 0],
         ),
       }),
@@ -552,6 +566,9 @@ export const nightRelay: DemoDefinition = {
         }
       }
       const rimFill: Record<number, readonly (readonly [number, number])[]> = {
+        1: [[3.75, 0.3]],
+        3: [[3.75, 0.34]],
+        5: [[3.75, 0.32]],
         6: [[2.75, 0.3]],
         7: [
           [1.75, 0.28],
@@ -613,7 +630,7 @@ export const nightRelay: DemoDefinition = {
       }
       if (b === 60)
         [53, 56, 60, 63, 67].forEach((pitch, i) =>
-          s.note("chords", b, ms(i * 3), pitch, 2, i === 4 ? 0.74 : 0.64),
+          s.note("chords", b, ms(i * 3), pitch, 6, i === 4 ? 0.8 : 0.7),
         );
 
       // Metal answers on chord tones: a call, then a reply a bar later.
