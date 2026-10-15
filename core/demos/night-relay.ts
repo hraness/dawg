@@ -103,6 +103,10 @@ const CELLS = {
   ],
   wash: [[0.5, 1.6, 0.6]],
   echo: [[2.75, 0.5, 0.44]],
+  drift: [
+    [1.75, 0.36, 0.4],
+    [2.75, 0.6, 0.5],
+  ],
   climb: [
     [0.5, 0.2, 0.42],
     [1.5, 0.2, 0.5],
@@ -119,7 +123,7 @@ const STABS: Record<SectionName, readonly Cell[]> = {
   Pulse: ["lone", "pair", "lone", "pair", "lone", "pair", "lift", "push"],
   Weave: ["pair", "lift", "lone", "push", "pair", "lift", "pair", "push"],
   Open: ["pair", "lift", "roll", "push", "pair", "lift", "roll", "lone"],
-  Air: ["wash", "echo", "wash", "echo", "wash", "echo", "wash", "climb"],
+  Air: ["wash", "drift", "wash", "drift", "wash", "echo", "wash", "climb"],
   Return: ["lift", "pair", "lone", "push", "lift", "pair", "roll", "push"],
   Crest: ["pair", "roll", "lift", "push", "pair", "roll", "lift", "lone"],
   Dissolve: ["lone", "rest", "lone", "echo", "lone", "rest", "rest", "rest"],
@@ -336,8 +340,8 @@ export const nightRelay: DemoDefinition = {
         reverb: hall,
         // One long dub pass: cutoff, feedback and send ridden by hand.
         filterAutomation: lanes(
-          [0, 700],
-          [8, 1000],
+          [0, 850],
+          [8, 1100],
           [16, 1400],
           [24, 2100],
           [31, 3600],
@@ -411,6 +415,17 @@ export const nightRelay: DemoDefinition = {
         },
         // The breakdown chords sustain and ring; read at each onset.
         fxAutomation: {
+          "synth-gain": lanes(
+            [0, 1.9],
+            [7.75, 1.6],
+            [8, 1],
+            [31.75, 1],
+            [32, 1.3],
+            [39.75, 1.2],
+            [40, 1],
+            [59.75, 1],
+            [60, 1.25],
+          ),
           "synth-sustain": lanes(
             [0, 0.06],
             [32, 0.32],
@@ -454,8 +469,8 @@ export const nightRelay: DemoDefinition = {
         filter: { cutoff: 200, resonance: 0, type: "hpf" },
         reverb: hall,
         volumeAutomation: lanes(
-          [0, 0.42],
-          [6, 0.36],
+          [0, 0.62],
+          [6, 0.52],
           [8, 0.2],
           [24, 0.22],
           [31.5, 0.22],
@@ -471,17 +486,17 @@ export const nightRelay: DemoDefinition = {
       }),
     );
     s.track(
-      voice("hiss", "Tape hiss", "pink", 0.06, {
+      voice("hiss", "Tape hiss", "pink", 0.3, {
         synth: { attack: 0.8, sustain: 1, release: 2 },
-        filter: { cutoff: 3200, resonance: 0, type: "hpf" },
+        filter: { cutoff: 2400, resonance: 0, type: "hpf" },
         volumeAutomation: lanes(
-          [0, 0.2],
-          [7, 0.16],
-          [8, 0.08],
-          [31, 0.08],
-          [32, 0.14],
-          [40, 0.07],
-          [56, 0.1],
+          [0, 0.26],
+          [7, 0.2],
+          [8, 0.1],
+          [31, 0.1],
+          [32, 0.17],
+          [40, 0.09],
+          [56, 0.12],
           [63.9, 0],
         ),
       }),
