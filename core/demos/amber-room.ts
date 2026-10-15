@@ -18,6 +18,8 @@ const SWING = 0.03;
 const BASS = 0.034;
 const KEYS = 0.026;
 const SAX = 0.048;
+/** The vibes sit with the Rhodes, a little behind the kit. */
+const VIBES = 0.02;
 const TICKS_PER_BAR = 1920;
 const TICKS_PER_BEAT = 480;
 
@@ -584,7 +586,7 @@ function tunes(): [number, number, number][] {
   add(0, DOOR_TOP, KEYS);
   for (const [bar, line] of SAX_PLAN) add(bar, line, SAX);
   add(28, KEYS_SOLO, KEYS);
-  for (const [bar, line] of VIBES_ANSWERS) add(bar, line, 0);
+  for (const [bar, line] of VIBES_ANSWERS) add(bar, line, VIBES);
   return out;
 }
 
@@ -865,9 +867,17 @@ export const amberRoom: DemoDefinition = {
       if (index % 4 === 3) drum(bar, 3 + late - 0.03, 38, 0.38);
       drum(bar, 1 + SNARE, 38, 0.84 + 0.06 * rand());
       drum(bar, 3 + late, 38, 0.88 + 0.06 * rand());
+      // The last head doubles the backbeat with a clap a hair behind the
+      // snare (the ragged flam Questlove uses to lift a chorus) and opens
+      // the hat every second bar instead of every fourth.
+      const last = pass === 2;
+      if (last) {
+        drum(bar, 1 + SNARE + 0.02, 39, 0.46 + 0.06 * rand());
+        drum(bar, 3 + late + 0.02, 39, 0.5 + 0.06 * rand());
+      }
       for (const beat of GHOSTS[(index + 2 * pass) % 4]!)
         drum(bar, beat + SWING * (beat % 0.5 ? 1 : 0), 38, 0.13 + 0.12 * rand());
-      hats(bar, 1, index === 3 || index === 7);
+      hats(bar, last ? 1.06 : 1, last ? index % 2 === 1 : index === 3 || index === 7);
     };
     const pocket = (bar: number, index: number): void => {
       for (let step = 0; step < 8; step++) {
@@ -1086,11 +1096,11 @@ export const amberRoom: DemoDefinition = {
         .filter((p) => !chord.some((q) => (p - q + 120) % 12 === 1))
         .slice(-2);
       for (const [i, pitch] of bells.entries())
-        s.note("vibes", bar, 2.5 + i * 0.25, pitch + 12, 1.2, 0.36);
+        s.note("vibes", bar, 2.5 + i * 0.25 + VIBES, pitch + 12, 1.2, 0.36);
     }
     for (const [bar, line] of VIBES_ANSWERS)
       for (const [beat, pitch, length, velocity] of line)
-        s.note("vibes", bar, beat, pitch, length, velocity);
+        s.note("vibes", bar, beat + VIBES, pitch, length, velocity);
 
     // Fills and cymbals: few, as Questlove would.
     drum(4, 0.004, 49, 0.4, 1.5);
@@ -1133,7 +1143,7 @@ export const amberRoom: DemoDefinition = {
     bassNote(44, 2, 30, 1.8, 0.62);
     bassNote(45, 0, 29, 8, 0.64, "s");
     for (const [i, pitch] of [72, 76, 79, 84].entries())
-      s.note("vibes", 45, 1 + i * 0.5, pitch, 4, 0.3);
+      s.note("vibes", 45, 1 + i * 0.5 + VIBES, pitch, 4, 0.3);
 
     return s.finish();
   },
