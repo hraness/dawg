@@ -147,11 +147,13 @@ function ride(
 
 /**
  * The highest a note's filter envelope may sweep, in Hz. A real 303 never
- * opens past a few kilohertz, and the engine's ladder rings at the Nyquist
+ * opens much past 10 kHz, and the engine's ladder rings at the Nyquist
  * frequency once a resonant sweep passes about 12 kHz, which wastes the
  * headroom on a whistle nobody can hear.
  */
-const PEAK_HZ = 8000;
+const PEAK_HZ = 11000;
+/** Env mod the 303 keeps even at full cutoff, in octaves: the squelch. */
+const MIN_ENV = 0.7;
 /** Octaves an accent adds to each 303's filter sweep (`faccent`). */
 const ACID_ACCENT = 1.5;
 const SQUARE_ACCENT = 1.2;
@@ -170,27 +172,37 @@ function laneAt(points: readonly AutomationPoint[], tick: number): number {
 }
 
 /**
- * Turn the env mod down wherever cutoff × 2^(env mod + accent) would sweep an
- * accented note past `PEAK_HZ`, the way the knob runs out of travel.
+ * Fit a cutoff ride and an env mod ride inside the 303's travel. The cutoff
+ * eases into a soft ceiling (a knob near the end of its turn) low enough
+ * that every note keeps at least `MIN_ENV` octaves of sweep, and the env mod
+ * comes down wherever cutoff × 2^(env mod + accent) would pass `PEAK_HZ`.
  */
-function capEnvMod(
-  envMod: readonly AutomationPoint[],
+function fitSweep(
   cutoff: readonly AutomationPoint[],
+  envMod: readonly AutomationPoint[],
   accent: number,
-): AutomationPoint[] {
+): { cutoff: AutomationPoint[]; envMod: AutomationPoint[] } {
+  const top = Math.log2(PEAK_HZ) - MIN_ENV - accent;
+  const knee = 0.3;
+  const fit = (hz: number) =>
+    2 ** (top - knee * Math.log2(1 + 2 ** ((top - Math.log2(hz)) / knee)));
+  const fitted = cutoff.map((p) => ({ tick: p.tick, value: fit(p.value) }));
   const ticks = [...new Set([...envMod, ...cutoff].map((p) => p.tick))].sort(
     (a, b) => a - b,
   );
-  return ticks.map((tick) => ({
-    tick,
-    value: Math.max(
-      0,
-      Math.min(
-        laneAt(envMod, tick),
-        Math.log2(PEAK_HZ / laneAt(cutoff, tick)) - accent,
+  return {
+    cutoff: fitted,
+    envMod: ticks.map((tick) => ({
+      tick,
+      value: Math.max(
+        0,
+        Math.min(
+          laneAt(envMod, tick),
+          Math.log2(PEAK_HZ / laneAt(fitted, tick)) - accent,
+        ),
       ),
-    ),
-  }));
+    })),
+  };
 }
 
 export const coilDriver: DemoDefinition = {
@@ -397,6 +409,7 @@ export const coilDriver: DemoDefinition = {
       0,
       10,
     );
+    const acidSweep = fitSweep(cutoff, envMod, ACID_ACCENT);
     s.track(
       voice("acid", "Acid circuit", "saw", 1, {
         synth: {
@@ -440,9 +453,9 @@ export const coilDriver: DemoDefinition = {
           [63, 0.42],
         ),
         fxAutomation: {
-          "synth-lpf": cutoff,
+          "synth-lpf": acidSweep.cutoff,
           "synth-lpq": resonance,
-          "synth-lpenv": capEnvMod(envMod, cutoff, ACID_ACCENT),
+          "synth-lpenv": acidSweep.envMod,
           "synth-lpdecay": decay,
           "distort-drive": drive,
         },
@@ -466,6 +479,11 @@ export const coilDriver: DemoDefinition = {
       2.7,
       60,
       9000,
+    );
+    const squareSweep = fitSweep(
+      squareCutoff,
+      [{ tick: 0, value: 3 }],
+      SQUARE_ACCENT,
     );
     s.track(
       voice("acid2", "Square circuit", "square", 0.46, {
@@ -493,12 +511,8 @@ export const coilDriver: DemoDefinition = {
           pingpong: true,
         },
         fxAutomation: {
-          "synth-lpf": squareCutoff,
-          "synth-lpenv": capEnvMod(
-            [{ tick: 0, value: 3 }],
-            squareCutoff,
-            SQUARE_ACCENT,
-          ),
+          "synth-lpf": squareSweep.cutoff,
+          "synth-lpenv": squareSweep.envMod,
           "synth-lpq": ride(
             [
               [44, 7],
