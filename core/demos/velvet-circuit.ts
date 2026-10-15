@@ -98,7 +98,7 @@ const EBMAJ9: Chord = {
     [67, 70, 72],
   ],
   arp: [82, 79, 77, 74, 79, 75, 82, 79],
-  tail: [77, 75, 74, 70],
+  tail: [84, 82, 79, 75],
 };
 const CM9: Chord = {
   name: "Cm9",
@@ -728,14 +728,14 @@ export const velvetCircuit: DemoDefinition = {
         glide: { time: 0.05, mode: "legato" },
         // A mix ride: the sub sits back in the pocket and opens up in the hooks.
         volumeAutomation: lanes(
-          [8, 0.78],
-          [15.9, 0.78],
+          [8, 0.72],
+          [15.9, 0.72],
           [16, 0.88],
           [23.9, 0.88],
           [24, 0.96],
           [31.9, 0.96],
-          [32, 0.7],
-          [39.9, 0.76],
+          [32, 0.6],
+          [39.9, 0.66],
           [40, 0.92],
           [47.9, 0.92],
           [48, 1],
@@ -1086,7 +1086,7 @@ export const velvetCircuit: DemoDefinition = {
       // The arc: the pocket sits back, the lift and the switch-up a touch
       // under the hooks, the last call at full weight.
       const weight =
-        sec === "Pocket" ? 0.86 : lift ? 0.94 : half ? 0.94 : outro ? 0.9 : 1;
+        sec === "Pocket" ? 0.8 : lift ? 0.94 : half ? 0.94 : outro ? 0.9 : 1;
       // Hats skip in the pocket and the first hook: open hats on two of the
       // four offbeats only, with ghosted 16ths after the others.
       const skippy = sec === "Pocket" || sec === "Hold on";
@@ -1314,7 +1314,7 @@ export const velvetCircuit: DemoDefinition = {
         // on the second bar of each pair, the bass steps down under it.
         // One hit a bar: the chain is held, never re-struck.
         const link = CHAIN[inBar]!;
-        stab("keys", b, 0, link.rh, inBar % 2 ? 14 : 15, 0.46, 0.03);
+        stab("keys", b, 0, link.rh, inBar % 2 ? 14 : 15, 0.42, 0.03);
       } else if (half) {
         // Half-time: long chords after the organ's downbeat stab, the sus
         // held through bar seven's change.
@@ -1493,9 +1493,10 @@ export const velvetCircuit: DemoDefinition = {
       }
       if (intro && b === 6) chops.push([10, "hold", 74, 3, 0.6]);
       if (intro && b === 7) chops.push([13, "on", 70, 3, 0.64]);
-      if (tapeStop) chops.push([12, "hold", 70, 4, 0.7]);
+      if (tapeStop) chops.push([12, "hold", 72, 4, 0.7]);
       // The pocket sings under the drop; the last call leans in.
-      const lean = sec === "Pocket" ? -0.06 : last ? 0.08 : 0;
+      const lean =
+        sec === "Pocket" ? -0.09 : breakdown ? -0.04 : last ? 0.08 : 0;
       for (const [step, syllable, pitch, len, vel0, swing] of chops) {
         const vel = vel0 + lean;
         const scoop: Partial<NoteInput> =
@@ -1537,7 +1538,7 @@ export const velvetCircuit: DemoDefinition = {
       if (breakdown) {
         // Under the chain the cloud sings the hook motif in whole notes, the
         // second time resolving its G to F# with the cadence.
-        s.note("grains", b, 0.5, BREAK_PAD[inBar]!, 3.4, 0.32);
+        s.note("grains", b, 0.5, BREAK_PAD[inBar]!, 3.4, 0.3);
       } else if (padOn && b % 2 === 0 && b < 62) {
         // Root and fifth as the cloud's dyad, so the chord reads even where
         // the sub is silent.
