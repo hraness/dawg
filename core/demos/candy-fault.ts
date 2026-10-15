@@ -299,6 +299,13 @@ const HATS_DRIVE = [
   "8465846584658466",
   "84658465846.....",
 ];
+/** Chorus backbeat with a ghost that moves each bar. */
+const SNAP_CHORUS = [
+  "....9.......9...",
+  "....9.....3.9...",
+  "....9.......9..3",
+  "....9..3....9...",
+];
 
 // ── hook motifs (the plastic pulse lead) ─────────────────────────────────
 const MOTIF: Phrase = [
@@ -756,7 +763,22 @@ const chorusLines = (c: number, second: boolean, stutter: boolean): Line => [
 ];
 const CHORUS_ONE = chorusLines(16, false, false);
 const CHORUS_TWO = chorusLines(40, true, false);
-const OVERLOAD = chorusLines(56, false, true);
+/**
+ * The final chorus lands: its last bar turns to the tonic at the half bar,
+ * so her held F# becomes a 9th over E and steps down to the root.
+ */
+const OVERLOAD: Line = chorusLines(56, false, true).map(
+  (entry): Line[number] =>
+    entry[0] === 63
+      ? [
+          63,
+          [
+            [0.5, 78, 2, 0.74, "_"],
+            [2.5, 76, 1.5, 0.8, "_"],
+          ],
+        ]
+      : entry,
+);
 
 /** Step automation: each value holds until the next listed bar, then jumps. */
 const steps = (
@@ -811,7 +833,7 @@ export const candyFault: DemoDefinition = {
     title: "Candy Fault",
     style: "Hyperpop",
     description:
-      "A sugar-rush hyperpop single: a pitched-up machine singer whose hook lands on 9ths and resolves, a chip pluck that finishes her lines, two interlocking chip arpeggios, a distorted 808 that slides between roots, a kick-less glitch break, a Rhodes bridge sung as a 7-6 chain over a falling bass, then a silent beat that slams the final chorus up a half step.",
+      "A sugar-rush hyperpop single: a pitched-up machine singer whose hook lands on 9ths and resolves, a chip pluck that finishes her lines, two interlocking chip arpeggios, a distorted 808 that slides between roots and pops an octave at phrase ends, a kick-less glitch break, a Rhodes bridge sung as a 7-6 chain over a falling bass, then a silent beat that slams the final chorus up a half step and lands it on the tonic.",
     tempoBpm: 156,
     key: "E",
     bars: BARS,
@@ -822,10 +844,12 @@ export const candyFault: DemoDefinition = {
       "hook appoggiaturas on the downbeat and a 9th that resolves",
       "vocal and chip pluck hocket: the chip plays where the singer rests",
       "two interlocking chip arpeggios on complementary sixteenths",
-      "a sung 7-6 suspension chain over a descending bass",
+      "an open supersaw stack under the singer with octave stabs that grow from two a bar to four",
+      "a sung 7-6 suspension chain over a descending bass, doubled a 10th above the bass",
       "pre-chorus 9-8 and 4-3 suspensions with a crush sweep and beat repeat",
-      "808 slides, octave drops and a tape-stop power-down",
+      "808 phrasing: slides, held roots, passing tones, octave pops and a tape-stop power-down",
       "stutter ramps, pitched chop jumps and a half-step lift after a silent beat",
+      "a different fill at every phrase end and a final chorus that lands on the tonic under a crash",
     ],
     arrangement: [
       "Boot sparkle 4",
@@ -841,11 +865,11 @@ export const candyFault: DemoDefinition = {
       "Last pixel 4",
     ],
     mixNotes: [
-      "The 808 follows every kick hit, slides into each new root and drops an octave onto the chorus downbeats; in the bridge it walks down alone, E to F#, under the Rhodes.",
-      "The singer is pitched bright with a formant lift; a softer double sings thirds below (sixths at the bridge cadence) and a thin octave-up double joins the final chorus; dotted-eighth delay throws catch the last word of each line.",
-      "Two chip arps split the sixteenths, the square on the beat and the pulse between, with inversions that walk the top note down then up each phrase; the plastic pulse hook finishes the singer's lines and answers verse two in the gap above the 808.",
-      "The supersaw stack sits an octave under the singer (C#3 to E4) so her line stays clear; short octave stabs and the Overload top voice carry the sparkle above her, and the Rhodes voicings in the verses top out under her lowest notes.",
-      "The pre-chorus bit-crushes and formant-shifts into a stuttered 'me' before the 808 lets go for the drop; the glitch break drops the kick for four bars of stuttered syllables and ends on a tape stop. After one beat of silence the final chorus jumps from E to F, detunes the supersaw from pretty to harsh and stutters the hook; the song powers down with the 808 and the last chip fragment diving an octave.",
+      "The 808 follows the kick but phrases across the bar: one verse bar in four holds its root, the octave pop comes only before the phrase-end IV, vi and I are reached by step or a passing tone, and it rests on beat three under 'oh'; in the bridge it walks down alone, E to F#, under the Rhodes.",
+      "The singer is pitched bright with a formant lift; a softer double sings thirds below (in the bridge, the 10th above the walking bass, so her 7-6 and its 4-3 resolve together) and a thin octave-up double joins every line of the final chorus; dotted-eighth delay throws catch the last word of each line.",
+      "Two chip arps split the sixteenths, the square on the beat and the pulse between, with inversions that walk the top note down then up each phrase; the plastic pulse hook finishes the singer's lines, owns the fourth bar of each chorus phrase, and answers verse two an octave above her.",
+      "The pre-chorus supersaw sits close under the singer (A3 to D#5) with its top voice climbing A4 B4 C#5 D#5 into the drop; the chorus opens the stack to E3..B4 so her line stays clear, with octave stabs above her from chorus one (two a bar, then four) and a held top voice in the Overload; the Rhodes voicings in the verses top out under her lowest notes.",
+      "The pre-chorus bit-crushes and formant-shifts into a stuttered 'me' before the 808 lets go for the drop; the glitch break drops the kick for four bars of stuttered syllables and ends on a tape stop. Every phrase end gets its own fill (a tom climb in chorus one, a hats-only glitch fill in chorus two's dropout bar, a 32nd ratchet in the Overload), and the drums leave a half-bar hole under the Overload's stuttered 'pix-els' before the landing. After one beat of silence the final chorus jumps from E to F, detunes the supersaw from pretty to harsh and stutters the hook; its last bar turns to the tonic on beat three under a crash, her held F# becoming a 9th that resolves, and the song powers down with the 808 and the last chip fragment diving an octave.",
     ],
   }),
   build() {
@@ -885,7 +909,7 @@ export const candyFault: DemoDefinition = {
         // Each chorus pass is a little bigger than the last.
         volumeAutomation: steps(
           [0, 0.86],
-          [16, 1],
+          [16, 0.88],
           [24, 0.7],
           [28, 0.86],
           [40, 1],
@@ -1359,10 +1383,15 @@ export const candyFault: DemoDefinition = {
         hold?: boolean;
         /** Grid steps the 808 leaves empty (the kick still plays). */
         rest?: readonly number[];
+        /** The step where the last 808 note ends (default: the bar end). */
+        cut?: number;
+        /** Kick and 808 level (chorus one sits a notch under the later ones). */
+        level?: number;
       } = {},
     ) => {
       if (!grid) return;
-      s.grid("kick", b, 36, grid);
+      const level = opts.level ?? 1;
+      s.grid("kick", b, 36, grid, level);
       const root = H[PROG[b]!]!.root;
       const next = b + 1 < BARS ? H[PROG[b + 1]!]!.root : root;
       const prev = b > 0 ? H[PROG[b - 1]!]!.root : root;
@@ -1385,7 +1414,7 @@ export const candyFault: DemoDefinition = {
           step * 0.25,
           root,
           (16 - step) * 0.25 - 0.04,
-          Math.min(0.9, (Number(grid[step]) / 10) * 0.95),
+          Math.min(0.9, (Number(grid[step]) / 10) * 0.95 * level),
           entry,
         );
         return;
@@ -1393,7 +1422,7 @@ export const candyFault: DemoDefinition = {
       const last = opts.last;
       onsets.forEach((step, k) => {
         if (opts.rest?.includes(step)) return;
-        const end = k + 1 < onsets.length ? onsets[k + 1]! : 16;
+        const end = k + 1 < onsets.length ? onsets[k + 1]! : (opts.cut ?? 16);
         const velocity = Number(grid[step]) / 10;
         const lastHit = k === onsets.length - 1;
         const leaves =
@@ -1413,7 +1442,7 @@ export const candyFault: DemoDefinition = {
           step * 0.25,
           pitch,
           length,
-          Math.min(0.9, velocity * 0.95),
+          Math.min(0.9, velocity * 0.95 * level),
           extra,
         );
       });
@@ -1457,7 +1486,11 @@ export const candyFault: DemoDefinition = {
         if (inPart % 4 === 1) roll("hats", b, 3.5, 4, 0.125, 42, 0.35, 0.6);
         if (inPart % 4 === 2) roll("hats", b, 3, 6, 1 / 6, 42, 0.3, 0.62, [3]);
         if (inPart % 4 === 3) hit("hats", b, 3.5, 46, 0.5, 0.4);
-        if (inPart === 3) roll("snap", b, 3.5, 8, 1 / 16, 38, 0.55, 0.2);
+        // Verse one ratchets into its second half; verse two claps instead.
+        if (inPart === 3 && part === "verse")
+          roll("snap", b, 3.5, 8, 1 / 16, 38, 0.55, 0.2);
+        if (inPart === 3 && part === "verse2")
+          roll("snap", b, 3, 4, 0.25, 39, 0.35, 0.72);
         if (part === "verse2" && inPart === 7)
           roll(
             "snap",
@@ -1497,7 +1530,7 @@ export const candyFault: DemoDefinition = {
             0.9,
           );
         }
-        s.grid("hats", b, 42, "6363636363636363", 0.52 + inPart * 0.08);
+        s.grid("hats", b, 42, "6363636363636363", 0.48 + inPart * 0.08);
         if (inPart === 3) roll("hats", b, 2, 8, 0.125, 42, 0.4, 0.8);
       }
       if (chorusLike) {
@@ -1507,37 +1540,80 @@ export const candyFault: DemoDefinition = {
         // The 808's phrase: the octave kick-up only at the phrase end, vi
         // reached by step on the downbeat, IV through a passing B, and a
         // rest on beat three under "oh" (not in the Overload).
-        kickBar(
-          b,
-          last
-            ? "9...8...9......."
-            : dropout
+        // The Overload's seventh bar drops the drums for its second half
+        // (her stuttered "pix-els" stands alone); its last bar lands: IV
+        // for two beats, then the tonic at full width under a crash.
+        const half = part === "over" && inPart === 6;
+        const land = part === "over" && last;
+        if (land) {
+          s.grid("kick", b, 36, "9...8...9...8...");
+          s.note("sub", b, 0, 33, 1.94, 0.85);
+          s.note("sub", b, 1, 33, 0.94, 0.76);
+          s.note("sub", b, 2, 28, 1.98, 0.88, { glide: 0.07 });
+        } else
+          kickBar(
+            b,
+            dropout || half
               ? "9...8..........."
-              : grids[inPart % 4]!,
-          {
-            drop: inPart === 0,
-            last: inPart % 4 === 3 ? "pop" : inPart % 4 === 2 ? 35 : undefined,
-            rest: inPart % 4 === 1 && part !== "over" ? [8] : [],
-          },
-        );
+              : last
+                ? "9...8...9......."
+                : grids[inPart % 4]!,
+            {
+              drop: inPart === 0,
+              last:
+                inPart % 4 === 3 ? "pop" : inPart % 4 === 2 ? 35 : undefined,
+              rest: inPart % 4 === 1 && part !== "over" ? [8] : [],
+              cut: half ? 8 : undefined,
+              level: part === "chorus" ? 0.9 : 1,
+            },
+          );
+        const shift = part === "return" ? 1 : part === "over" ? 2 : 0;
         s.grid(
           "snap",
           b,
           38,
-          dropout ? "....9..........." : "....9.......9...",
+          dropout || half
+            ? "....9..........."
+            : SNAP_CHORUS[(inPart + shift) % 4]!,
         );
         s.grid(
           "snap",
           b,
           39,
-          dropout ? "....8..........." : "....8.......8...",
+          dropout || half ? "....8..........." : "....8.......8...",
         );
-        if (inPart % 4 === 3 && !last && !dropout)
+        if (inPart % 4 === 3 && !last && !dropout && !half)
           s.grid("snap", b, 38, "..............45");
-        if (dropout)
-          roll("snap", b, 2.5, 6, 0.25, [45, 45, 47, 47, 48, 50], 0.45, 0.9);
-        if (inPart === 3 && part !== "return")
+        // Overload: a clap flam and the 32nd ratchet on its fourth bar.
+        if (part === "over" && inPart === 3) {
+          s.grid("snap", b, 39, ".....3.......3..");
           roll("snap", b, 3.5, 8, 1 / 16, 38, 0.6, 0.18);
+        }
+        // Three phrase-end fills: a tom climb in chorus one, a hats-only
+        // glitch fill in chorus two's dropout bar, the ratchet in the Overload.
+        if (inPart === 3 && part === "chorus")
+          roll(
+            "snap",
+            b,
+            3,
+            8,
+            0.125,
+            [38, 38, 41, 43, 45, 47, 48, 50],
+            0.5,
+            0.88,
+          );
+        if (dropout) {
+          roll("hats", b, 2, 4, 0.25, 42, 0.3, 0.5);
+          roll("hats", b, 3, 8, 1 / 16, 42, 0.5, 0.9);
+          hit("hats", b, 3.5, 46, 0.7, 0.5);
+        }
+        if (land) {
+          // A 32nd snare run into the crash on beat three.
+          roll("snap", b, 0.5, 12, 0.125, 38, 0.35, 0.95);
+          hit("snap", b, 2, 38, 0.95);
+          hit("snap", b, 2, 39, 0.8);
+          hit("hats", b, 2, 49, 0.9, 2);
+        }
         if (last && part === "chorus")
           roll(
             "snap",
@@ -1551,8 +1627,6 @@ export const candyFault: DemoDefinition = {
           );
         if (last && part === "return")
           roll("snap", b, 2, 4, 0.25, 38, 0.6, 0.85);
-        if (last && part === "over")
-          roll("snap", b, 2, 16, 0.125, 38, 0.35, 0.95);
         if (inPart === 0)
           hit("hats", b, 0, 49, part === "chorus" ? 0.75 : 0.85, 2);
         if (!dropout) {
@@ -1561,8 +1635,14 @@ export const candyFault: DemoDefinition = {
             "hats",
             b,
             42,
-            last ? "8465846584658..." : drive,
-            part === "over" ? 1.12 : 1,
+            half
+              ? "84658465........"
+              : land
+                ? "8465846584658465"
+                : last
+                  ? "8465846584658..."
+                  : drive,
+            part === "over" ? 1.18 : 1,
           );
           const variant =
             (inPart + (part === "return" ? 1 : part === "over" ? 2 : 0)) % 4;
@@ -1570,12 +1650,12 @@ export const candyFault: DemoDefinition = {
             variant % 2
               ? roll("hats", b, 3.25, 6, 0.125, 42, 0.38, 0.78, [3])
               : roll("hats", b, 3, 6, 1 / 6, 42, 0.35, 0.75);
-          if (inPart % 4 === 3 && !last) {
+          if (inPart % 4 === 3 && !last && !half) {
             roll("hats", b, 2.75, 10, 0.125, 42, 0.4, 0.82, [4, 9]);
             hit("hats", b, 3.5, 46, 0.55, 0.45);
           }
           // The final chorus doubles the hats: 32nd bursts on every bar.
-          if (part === "over")
+          if (part === "over" && !half)
             roll(
               "hats",
               b,
@@ -1691,7 +1771,7 @@ export const candyFault: DemoDefinition = {
         // voice is prepared on the and-of-four of the bar before (or held
         // from the chord before), sits on the downbeat and resolves down
         // on beat two.
-        const gain = 0.44 + inPart * 0.03;
+        const gain = 0.4 + inPart * 0.03;
         if (inPart === 0) {
           s.note("chords", b - 1, 3.5, 71, 1.5, gain * 0.9);
           s.chord("chords", b, 0, [57, 61, 64], 3.9, gain);
@@ -1717,8 +1797,20 @@ export const candyFault: DemoDefinition = {
         // the stack on three and four so the next phrase is pushed into.
         const over = part === "over";
         const stack = [...h.saw, ...(over ? [h.stab[1]!] : [])];
-        const gain = part === "chorus" ? 0.64 : part === "return" ? 0.68 : 0.8;
-        if (inPart % 4 === 3) {
+        const gain = part === "chorus" ? 0.58 : part === "return" ? 0.7 : 0.96;
+        const land = over && inPart === 7;
+        if (land) {
+          // IV for two beats, then the whole tonic stack with both stabs.
+          s.chord("chords", b, 0, stack, 1.9, gain);
+          s.chord(
+            "chords",
+            b,
+            2,
+            [...H.E!.saw, ...H.E!.stab],
+            1.95,
+            Math.min(1, gain * 1.08),
+          );
+        } else if (inPart % 4 === 3) {
           s.chord("chords", b, 0, stack, 1.9, gain);
           s.chord("chords", b, 2, stack, 0.9, gain * 0.92);
           s.chord("chords", b, 3, stack, 0.95, gain * 1.02);
@@ -1735,9 +1827,9 @@ export const candyFault: DemoDefinition = {
             "chords",
             b,
             beat,
-            h.stab,
+            land && beat > 2 ? H.E!.stab : h.stab,
             0.22,
-            part === "chorus" ? 0.4 : over ? 0.5 : 0.44,
+            part === "chorus" ? 0.36 : over ? 0.56 : 0.44,
           );
       }
       if (part === "glitch") {
@@ -1781,18 +1873,26 @@ export const candyFault: DemoDefinition = {
       if (chorusLike) {
         const phraseEnd = inPart % 4 === 3;
         const tones = inPart < 4 ? h.lo : h.hi;
-        const gain = part === "chorus" ? 0.8 : part === "return" ? 0.9 : 1.12;
-        arp("arp", b, tones, gain, phraseEnd ? ARP_DOWN : ARP_UP);
-        // The second arp joins for the second half of chorus one, then always.
-        if (part !== "chorus" || inPart >= 4)
-          arp(
-            "arp2",
-            b,
-            tones,
-            gain * 0.9,
-            phraseEnd ? ARP_UP : ARP_ROCK,
-            0.25,
-          );
+        const gain = part === "chorus" ? 0.74 : part === "return" ? 0.9 : 1.24;
+        if (part === "over" && inPart === 7) {
+          // The landing bar: IV down for two beats, then the tonic set.
+          arp("arp", b, tones, gain, ARP_DOWN.slice(0, 4));
+          arp("arp", b, H.E!.hi, gain, ARP_DOWN.slice(4), 2);
+          arp("arp2", b, tones, gain * 0.9, ARP_UP.slice(0, 4), 0.25);
+          arp("arp2", b, H.E!.hi, gain * 0.95, ARP_UP.slice(4), 2.25);
+        } else {
+          arp("arp", b, tones, gain, phraseEnd ? ARP_DOWN : ARP_UP);
+          // The second arp joins for the second half of chorus one, then always.
+          if (part !== "chorus" || inPart >= 4)
+            arp(
+              "arp2",
+              b,
+              tones,
+              gain * 0.9,
+              phraseEnd ? ARP_UP : ARP_ROCK,
+              0.25,
+            );
+        }
       }
       if (part === "glitch")
         arp(
@@ -1868,13 +1968,22 @@ export const candyFault: DemoDefinition = {
         if (part === "over" && inPart === 3)
           stutter("hook", b, 3.5, 4, 0.125, [80, 87], 0.7, 0.5);
       }
+      // The Overload's last hook phrase turns with the harmony and ends on E.
       if (chorusLike && inPart === 7)
         hook(
           b,
-          MOTIF_IV.map(
-            ([beat, pitch, length, velocity]) =>
-              [beat + 1, pitch, length, velocity] as const,
-          ),
+          part === "over"
+            ? [
+                [1, 88, 0.32, 0.78],
+                [1.75, 85, 0.2, 0.63],
+                [2.25, 83, 0.42, 0.75],
+                [2.75, 85, 0.34, 0.64],
+                [3, 88, 1, 0.8],
+              ]
+            : MOTIF_IV.map(
+                ([beat, pitch, length, velocity]) =>
+                  [beat + 1, pitch, length, velocity] as const,
+              ),
           part === "over" ? 1 : 0.85,
         );
       if (part === "over" && inPart === 7)
@@ -2008,7 +2117,7 @@ export const candyFault: DemoDefinition = {
     sing("vocal", lift(36));
     sing("vocal", CHORUS_TWO);
     sing("vocal", BRIDGE);
-    sing("vocal", OVERLOAD, 0, 1.06);
+    sing("vocal", OVERLOAD, 0, 1.1);
     sing("vocal", LAST);
     // The glitch break stutters the hook's last word.
     for (const [bar, beat, count, step, pitch] of [
@@ -2026,7 +2135,27 @@ export const candyFault: DemoDefinition = {
     shadow(lift(36).slice(2), "third", 0.62);
     shadow(CHORUS_ONE, "third", 0.6);
     shadow(CHORUS_TWO, "third", 0.66);
-    shadow(OVERLOAD, "third", 0.66);
+    // The landing bar's double: the 3rd of IV under her held F#, then the
+    // 3rd of the tonic under her resolution (a plain third would be D#
+    // against A).
+    shadow(
+      OVERLOAD.filter(([bar]) => bar !== 63),
+      "third",
+      0.66,
+    );
+    plain(
+      "harm",
+      [
+        [
+          63,
+          [
+            [0.5, 73, 2, 0.74, "_"],
+            [2.5, 68, 1.5, 0.8, "_"],
+          ],
+        ],
+      ],
+      0.66,
+    );
     plain("harm", BRIDGE_HARM, 1);
     shadow(BRIDGE.slice(6), "sixth", 0.52, 0.4);
     // The octave-up double sings all four hook lines of the final chorus;
