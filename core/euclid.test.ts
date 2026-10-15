@@ -439,6 +439,36 @@ function drumScore(): TrackScore {
 }
 
 describe("rhythm on a score", () => {
+  test("kit rows name the ride, crash, cowbell and tuned toms", () => {
+    const named = {
+      crash: 49,
+      ride: 51,
+      cowbell: 56,
+      floortom: 41,
+      midtom: 47,
+      hitom: 50,
+    };
+    for (const [voice, pitch] of Object.entries(named)) {
+      const score = setRhythmRow(
+        drumScore(),
+        "drums",
+        normalizeRhythmRow({ voice, grid: "x.x." }),
+      );
+      const played = score.notes.filter((note) => note.id.startsWith("rh."));
+      expect(played.length).toBeGreaterThan(0);
+      expect(new Set(played.map((note) => note.pitch))).toEqual(
+        new Set([pitch]),
+      );
+    }
+    expect(() =>
+      setRhythmRow(
+        drumScore(),
+        "keys",
+        normalizeRhythmRow({ voice: "ride", grid: "x" }),
+      ),
+    ).toThrow();
+  });
+
   test("a row owns its lane and nothing else", () => {
     const score = setRhythmRow(
       drumScore(),
@@ -462,7 +492,7 @@ describe("rhythm on a score", () => {
     const frozen = removeRhythmRow(fewer, "drums", "kick", true);
     expect(frozen.notes.filter((note) => note.pitch === 36)).toHaveLength(4);
     expect(() =>
-      setRhythmRow(score, "drums", normalizeRhythmRow({ voice: "cowbell" })),
+      setRhythmRow(score, "drums", normalizeRhythmRow({ voice: "gong" })),
     ).toThrow(/no voice/);
   });
 

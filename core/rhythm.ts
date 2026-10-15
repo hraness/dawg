@@ -25,6 +25,23 @@ import {
 import { NOTE_EXPRESSION_FIELDS } from "./expression.ts";
 import { loopTicksOf } from "./tempo.ts";
 
+/**
+ * Kit voices beyond the seven drum lanes, as General MIDI numbers. On a
+ * calibrated score (calibration 1+) the kit plays 49 as a crash, 51 as a
+ * ride, 56 as a cowbell and tunes 41..50 as toms; older scores fall back to
+ * the nearest lane.
+ */
+export const KIT_EXTRA_VOICES: Readonly<Record<string, number>> = Object.freeze(
+  {
+    crash: 49,
+    ride: 51,
+    cowbell: 56,
+    floortom: 41,
+    midtom: 47,
+    hitom: 50,
+  },
+);
+
 /** MIDI pitch a row's voice plays on `track`, or undefined when unknown. */
 export function rhythmVoicePitch(
   track: Track,
@@ -38,6 +55,8 @@ export function rhythmVoicePitch(
   if (isDrumInstrument(track.instrument)) {
     const drum = parseDrumVoice(name);
     if (drum) return drumVoicePitch(drum);
+    const extra = KIT_EXTRA_VOICES[name.toLowerCase()];
+    if (extra !== undefined) return extra;
   }
   if (/^\d{1,3}$/.test(name)) {
     const midi = Number(name);

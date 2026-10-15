@@ -1404,6 +1404,8 @@ export default track({
 });
 ```
 
+On a `kit` track a row's voice is one of the seven lanes (`kick`, `snare`, `clap`, `rim`, `tom`, `hat`, `openhat`), one of `ride`, `crash`, `cowbell`, `floortom`, `midtom` and `hitom`, or a General MIDI number. A calibrated score plays the ride, crash and cowbell as cymbals and a bell and tunes the three toms.
+
 | Field                | Range (default)                      | T-1 parameter    | Behavior                                                                                      |
 | -------------------- | ------------------------------------ | ---------------- | --------------------------------------------------------------------------------------------- |
 | `steps`              | 1..64 (16)                           | Steps            | Length of one pass; the row repeats every pass to the end of the loop.                        |
