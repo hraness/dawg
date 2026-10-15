@@ -367,24 +367,24 @@ const HOOK_C: Record<number, Phrase> = {
 const HOOK_C_FULL: Record<number, Phrase> = {
   // The double anticipates each phrase's downbeat by a 16th.
   0: [
-    [-0.25, 76, 0.4, 0.44],
-    [1.5, 83, 0.3, 0.42],
+    [-0.25, 76, 0.4, 0.52],
+    [1.5, 83, 0.3, 0.5],
   ],
   1: [
-    [0, 78, 0.3, 0.38],
-    [1, 76, 0.8, 0.4],
+    [0, 78, 0.3, 0.46],
+    [1, 76, 0.8, 0.48],
   ],
   4: [
-    [-0.25, 81, 0.4, 0.44],
-    [3, 84, 0.3, 0.4],
+    [-0.25, 81, 0.4, 0.52],
+    [3, 84, 0.3, 0.48],
   ],
   5: [
-    [0, 83, 0.3, 0.38],
-    [1, 81, 0.8, 0.4],
+    [0, 83, 0.3, 0.46],
+    [1, 81, 0.8, 0.48],
   ],
   6: [
-    [-0.25, 86, 0.4, 0.44],
-    [2, 81, 0.3, 0.4],
+    [-0.25, 86, 0.4, 0.52],
+    [2, 81, 0.3, 0.48],
   ],
 };
 /** Rhodes answer in the tune's rests over Cmaj9: rise B D E, fall D B G. */
@@ -474,15 +474,15 @@ export const copperWire: DemoDefinition = {
     title: "Copper Wire",
     style: "Jungle",
     description:
-      "Two breaks hocket, one re-sliced every two bars and a shadow break playing the gaps, over a reese that moves against a slow string top line; a vocal chop and a chip split one hook, Rhodes answers in its rests, a 7-6 chain falls through the breakdown, and the drop returns from a crushed, silent beat.",
+      "Two breaks hocket, one re-sliced every two bars with its own ride per cell and a shadow break playing the gaps, over a reese that moves against a slow string top line; a vocal chop and a chip split one pushed, syncopated hook across the stereo field, Rhodes answers in its rests, a 7-6 chain falls through the breakdown, the drop returns from a crushed, silent beat, and the end thins to ghosts and strings.",
     tempoBpm: 170,
     key: "Em",
     bars: 80,
     highlightBar: 48,
     trackId: "break",
     features: [
-      "two break voices hocketing, re-sequenced every two bars",
-      "vocal chop and chip pluck splitting one singable hook",
+      "two break voices hocketing, re-sequenced every two bars with a ride written into each cell",
+      "vocal chop and chip pluck splitting one singable hook, pushed off the beat and panned across the field",
       "7-6 suspension chain over a descending bass in the breakdown",
       "half-time turn after a tape stop; crush sweep and a silent beat before the second drop",
       "interlocking chip and Rhodes arpeggios in canon at the peak",
@@ -498,9 +498,9 @@ export const copperWire: DemoDefinition = {
       "Coast 8",
     ],
     mixNotes: [
-      "The main break (left) is authored from Amen-shaped cells on a synthesized kit with the Amen's measured 1.2:1 swing; the shadow break (right, high-passed) plays ghost 16ths where the main rests and takes the back half of every fourth bar.",
-      "The sub carries the fundamental and ducks under the machine kick; the reese sits an octave up with a slow detune and a low-pass that opens across each run. The vacuum has no sub, only the reese stepping down E D C B under the suspensions.",
-      "Registers are kept apart: sub 28-40, reese 40-52 (down to B1 in the vacuum, where it is the only bass), pad 52-69 with a top line that climbs to D5 in the vacuum and E5 at the end, vocal chop 64-74, Rhodes 64-78, chip 76-88. The crush on the break is clean everywhere except the last two bars of the vacuum.",
+      "The main break (left) is authored from Amen-shaped cells on a synthesized kit with the Amen's measured 1.2:1 swing, each cell carrying its own ride pattern; the shadow break (right, high-passed, doubled wide) plays ghost 16ths where the main rests, takes the back half of every fourth bar, carries the double-time hats at the peak while the main ride drops out, and is all that is left of the drums in the coast.",
+      "The motor's first eight bars are the low-passed reese alone on the roots; the sub, the machine kick and the full reese phrase arrive together at bar 16. The sub ducks under the kick; the reese sits an octave up, chorused for width, with a slow detune on its Width knob, and from the second drop takes a second answer shape (octave, then down by step, a 16th pickup into each chord). The vacuum has no sub, only the reese stepping down E D C B under the suspensions.",
+      "Registers are kept apart: sub 28-40, reese 40-52 (down to B1 in the vacuum, where it is the only bass), pad 52-69 with a top line that climbs to D5 in the vacuum and E5 at the end, vocal chop 64-74, Rhodes 64-78, chip 76-88. The field: vocal left of centre, chip right, Rhodes left, glass right, the strings doubled hard left and right, sub, reese and kick in the middle. The crush on the break is clean everywhere except the last two bars of the vacuum.",
       "Pitched break hits are a tape-struck sample with a falling rate, jumping +7, +12, -5 and +4 semitones; reverse swells of the same sample lead into phrase downbeats.",
     ],
   }),
@@ -519,7 +519,7 @@ export const copperWire: DemoDefinition = {
     s.track(
       voice("break", "Wire break", "kit", 0.66, {
         kit: "breaks",
-        pan: -0.25,
+        pan: -0.3,
         filter: { type: "hpf", cutoff: 40, resonance: 0.2 },
         filterAutomation: lanes(
           [0, 1500],
@@ -639,7 +639,8 @@ export const copperWire: DemoDefinition = {
           [40, 1],
           [47.7, 1],
           [48, 0.72],
-          [64, 0.8],
+          [63.9, 0.78],
+          [64, 0.96],
           [72, 0.9],
           [77, 0.9],
           [79.75, 0.45],
@@ -1091,7 +1092,7 @@ export const copperWire: DemoDefinition = {
           unit(b, LIVE[i]!, i, 1, {
             ride: 0,
             hats: true,
-            machine: 0.9,
+            machine: 0.95,
             density: 0.4,
             lastUntil: b === 66 ? 3 : b === 70 ? 1 : 4,
             doubleHats: true,
