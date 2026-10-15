@@ -25,19 +25,82 @@ function random(seed: number): () => number {
   };
 }
 
-type Chord = Readonly<{ root: number; keys: readonly number[] }>;
+/**
+ * A chord: the bass root, the bass's chord tones above it (so every passing
+ * note in the bass line agrees with the Rhodes), and the Rhodes voicing.
+ */
+type Chord = Readonly<{
+  root: number;
+  third: number;
+  fifth: number;
+  seventh: number;
+  keys: readonly number[];
+}>;
 /** Rootless Rhodes voicings, Eb3 to D4; the top voice moves by step. */
-const CM9: Chord = { root: 36, keys: [51, 55, 58, 62] };
-const AM7B5: Chord = { root: 33, keys: [51, 55, 57, 60] };
-const ABMAJ9: Chord = { root: 32, keys: [51, 55, 58, 60] };
-const G7ALT: Chord = { root: 31, keys: [51, 53, 56, 59] };
-const FM9: Chord = { root: 41, keys: [51, 55, 56, 60] };
-const DBMAJ9: Chord = { root: 37, keys: [51, 53, 56, 60] };
+const CM9: Chord = {
+  root: 36,
+  third: 3,
+  fifth: 7,
+  seventh: 10,
+  keys: [51, 55, 58, 62],
+};
+const AM7B5: Chord = {
+  root: 33,
+  third: 3,
+  fifth: 6,
+  seventh: 10,
+  keys: [51, 55, 57, 60],
+};
+const ABMAJ9: Chord = {
+  root: 32,
+  third: 4,
+  fifth: 7,
+  seventh: 11,
+  keys: [51, 55, 58, 60],
+};
+/** G7 flat nine, rootless: F, Ab, B, D; B falls to Bb and Ab to G in Cm9. */
+const G7B9: Chord = {
+  root: 31,
+  third: 4,
+  fifth: 7,
+  seventh: 10,
+  keys: [53, 56, 59, 62],
+};
+const FM9: Chord = {
+  root: 41,
+  third: 3,
+  fifth: 7,
+  seventh: 10,
+  keys: [51, 55, 56, 60],
+};
+const DBMAJ9: Chord = {
+  root: 37,
+  third: 4,
+  fifth: 7,
+  seventh: 11,
+  keys: [51, 53, 56, 60],
+};
 /** The lament: C, A, Ab, G under the verses. */
-const VERSE = [CM9, AM7B5, ABMAJ9, G7ALT];
+const VERSE = [CM9, AM7B5, ABMAJ9, G7B9];
 /** Fm9 and the Neapolitan Dbmaj9 under the refrain. */
-const REFRAIN = [FM9, DBMAJ9, ABMAJ9, G7ALT];
-const DUB = [CM9, ABMAJ9, CM9, G7ALT];
+const REFRAIN = [FM9, DBMAJ9, ABMAJ9, G7B9];
+const DUB = [CM9, ABMAJ9, CM9, G7B9];
+
+/** C minor with the raised leading tone: where a bass approach note may land. */
+const SCALE = new Set([0, 2, 3, 5, 7, 8, 10, 11]);
+/**
+ * A scale-step approach into the next root, from above when the line falls
+ * and from below when it rises. None when the roots already move by step.
+ * B is only allowed under G7, where it is the chord's own third.
+ */
+function approach(from: number, to: number): number | undefined {
+  if (Math.abs(to - from) <= 2) return undefined;
+  const side = to < from ? 1 : -1;
+  const fits = (pitch: number) =>
+    SCALE.has(pitch % 12) && (pitch % 12 !== 11 || from % 12 === 7);
+  const near = to + side;
+  return fits(near) ? near : to + 2 * side;
+}
 
 /** The chord for each two-bar span, bar 0 to 55. */
 const PLAN: readonly Chord[] = [
@@ -224,6 +287,17 @@ export const lowTide: DemoDefinition = {
         kit: "lofi",
         reverb: { mix: 0.07, size: 0.24, fade: 0.7 },
         humanize: { timing: 5, velocity: 5, seed: 84 },
+        // Low water: the break arrives muffled, as if heard from under the
+        // surface, and opens over bar 11 as the voice comes in.
+        filterAutomation: lanes(
+          [0, 760],
+          [10, 760],
+          [10.5, 1100],
+          [11, 1700],
+          [11.5, 3400],
+          [11.75, 7000],
+          [12, 20000],
+        ),
       }),
     );
     s.track(
@@ -312,6 +386,24 @@ export const lowTide: DemoDefinition = {
       }),
     );
     s.track(
+      voice("double", "Refrain double", "sing", 0.3, {
+        sing: {
+          preset: "airy",
+          voice: "alto",
+          articulate: 1,
+          vib: 5.4,
+          vibmod: 0.12,
+          breath: 0.24,
+          jitter: 0.16,
+          attack: 0.06,
+        },
+        pan: 0.34,
+        reverb: { mix: 0.16, size: 0.36, fade: 1.8 },
+        filter: { type: "hpf", cutoff: 220, resonance: 0 },
+        humanize: { timing: 14, velocity: 4, length: 5, seed: 31 },
+      }),
+    );
+    s.track(
       voice("strings", "Tide strings", "violins", 0.3, {
         pan: 0.18,
         reverb: { ...hall, mix: 0.26 },
@@ -351,7 +443,7 @@ export const lowTide: DemoDefinition = {
     s.track(
       voice("dust", "Vinyl dust", "kit", 0.2, {
         kit: "lofi",
-        filter: { type: "hpf", cutoff: 2600, resonance: 0 },
+        filter: { type: "hpf", cutoff: 4200, resonance: 0 },
       }),
     );
 
@@ -364,7 +456,7 @@ export const lowTide: DemoDefinition = {
       const dub = bar >= 28 && bar < 36;
       const last = bar >= 54;
       if (dub) {
-        // Dub skank: short chords on two and four, echoed.
+        // Dub skank: short chords on two and four, a lazy 25 ms behind.
         for (const b of [bar, bar + 1])
           for (const beat of [1, 3]) {
             if (b === 35 && beat === 3) continue;
@@ -372,7 +464,7 @@ export const lowTide: DemoDefinition = {
               s.note(
                 "keys",
                 b,
-                beat + 0.012 * v + SW,
+                beat + LATE + 0.008 * v,
                 pitch,
                 0.32,
                 0.4 + 0.03 * v,
@@ -385,13 +477,20 @@ export const lowTide: DemoDefinition = {
         return;
       }
       const lift =
-        bar >= 44 && bar < 52 ? 1.08 : bar < 4 || bar >= 52 ? 0.88 : 1;
+        bar >= 44 && bar < 52
+          ? 1.14
+          : bar >= 20 && bar < 28
+            ? 1.09
+            : bar < 4 || bar >= 52
+              ? 0.88
+              : 1;
       const length = last ? 7.9 : 7.6;
+      // Rolled bottom to top over about 25 ms, the top voice a touch louder.
       chord.keys.forEach((pitch, v) =>
         s.note(
           "keys",
           bar,
-          0.03 + v * 0.024,
+          0.006 + v * 0.011,
           pitch,
           length,
           Math.min(0.9, (v === 3 ? 0.62 : 0.5 + v * 0.02) * lift),
@@ -403,46 +502,159 @@ export const lowTide: DemoDefinition = {
         // A soft restrike of the top two voices breathes in the second bar.
         const top = chord.keys.slice(2);
         top.forEach((pitch, v) =>
-          s.note("keys", bar + 1, 1.5 + SW + v * 0.02, pitch, 1.6, 0.36 * lift),
+          s.note(
+            "keys",
+            bar + 1,
+            1.5 + 0.012 + v * 0.011,
+            pitch,
+            1.6,
+            0.36 * lift,
+          ),
         );
       }
     });
 
-    // ── Bass: sustained roots locked to the kick, octave lifts, slides ──
+    // ── Kick rows, shared by the drums and the bass so the two always land
+    // together. The first groove is sparse, the refrains push with pickups,
+    // and the second tide moves the second kick to the "and" of two. ──
+    const KICKS = {
+      verse: [
+        "9..6......8.....",
+        "8.....5...8.....",
+        "9..6......8....4",
+        "8.....5..7......",
+      ],
+      refrain: [
+        "9..6......8.....",
+        "8.....5...8..5..",
+        "9..6...4..8.....",
+        "8.....5..7....5.",
+      ],
+      tide: [
+        "9.....5...8..5..",
+        "8..5......8.....",
+        "9.....5...8....4",
+        "8..5..6..7......",
+      ],
+    } as const;
+    const FILL_KICKS: Readonly<Record<number, string>> = {
+      19: "8.....5...8.....",
+      27: "9..6............",
+      43: "8.....5.........",
+      51: "9..6......8.....",
+    };
+    const kickRow = (bar: number): string =>
+      FILL_KICKS[bar] ??
+      KICKS[bar < 20 ? "verse" : bar >= 36 && bar < 44 ? "tide" : "refrain"][
+        bar % 4
+      ]!;
+    const kickSteps = (bar: number) =>
+      [...kickRow(bar)].flatMap((hit, step) => (hit === "." ? [] : [step]));
+
+    // ── Bass: plays with the kick, holds, lifts to the octave, slides ──
     const bassBars = (bar: number) => bar >= 4 && bar < 52;
     PLAN.forEach((chord, i) => {
       const bar = i * 2;
       if (!bassBars(bar)) return;
-      const r = chord.root;
-      const next = PLAN[i + 1]?.root ?? 36;
-      const dub = bar >= 28 && bar < 36;
-      const approach = next < r ? next + 1 : next - 1;
-      if (dub) {
-        // The dub riff: long root, a climb to the octave, space.
+      const { root: r, third, fifth, seventh } = chord;
+      const next = PLAN[i + 1] ?? CM9;
+      const lead = approach(r, next.root);
+      /** The octave, or the fifth when the octave would crowd the Rhodes. */
+      const top = r + 12 <= 48 ? r + 12 : r + fifth;
+      const color = r + seventh <= 48 ? r + seventh : r + seventh - 12;
+      if (bar >= 28 && bar < 36) {
+        // The dub riff: long root, a climb through the chord, then space.
         s.note("bass", bar, 0, r, 1.3, 0.86, { articulation: "tenuto" });
-        s.note("bass", bar, 1.5, r + 7, 0.4, 0.6);
-        s.note("bass", bar, 2, r + 10, 0.4, 0.62);
-        s.note("bass", bar, 2.5, r + 12, 0.85, 0.7);
-        s.note("bass", bar, 3.5, r + 7, 0.35, 0.55);
+        s.note("bass", bar, 1.5, r + fifth, 0.4, 0.6);
+        s.note("bass", bar, 2, color, 0.4, 0.62);
+        s.note("bass", bar, 2.5, top, 0.85, 0.7);
+        s.note("bass", bar, 3.5, r + fifth, 0.35, 0.55);
         s.note("bass", bar + 1, 0, r, 2.4, 0.84);
-        s.note("bass", bar + 1, 3, r + 3, 0.4, 0.56);
-        s.note("bass", bar + 1, 3.5, approach, 0.45, 0.6, {
-          articulation: "legato",
-        });
+        s.note(
+          "bass",
+          bar + 1,
+          3,
+          lead === r + third ? r + fifth : r + third,
+          0.4,
+          0.56,
+        );
+        if (lead !== undefined)
+          s.note("bass", bar + 1, 3.5, lead, 0.45, 0.6, {
+            articulation: "legato",
+          });
         return;
       }
-      const busy = bar >= 36;
-      s.note("bass", bar, 0, r, 0.62, 0.84, { articulation: "tenuto" });
-      s.note("bass", bar, 0.75 + SW, r, 1.45, 0.64);
-      s.note("bass", bar, 2.5, i % 2 ? r + 12 : r + 7, 0.42, 0.62);
-      s.note("bass", bar, 3, i % 2 ? r + 10 : r + 7, 0.8, 0.58);
-      s.note("bass", bar + 1, 0, r, busy ? 1.4 : 1.85, 0.82);
-      if (busy) s.note("bass", bar + 1, 1.5, r + 12, 0.4, 0.56);
-      s.note("bass", bar + 1, 2.5, r, 0.6, 0.68);
-      if (next !== r)
-        s.note("bass", bar + 1, 3.25 + SW, approach, 0.7, 0.6, {
-          articulation: "legato",
+      // Quieter in the first verse, leaning in at the refrains.
+      const weight =
+        bar < 12
+          ? 0.9
+          : bar < 20
+            ? 0.95
+            : bar >= 44
+              ? 1.06
+              : bar < 28
+                ? 1.02
+                : 1;
+      const play = (
+        b: number,
+        beat: number,
+        pitch: number,
+        length: number,
+        velocity: number,
+        legato = false,
+      ) =>
+        s.note(
+          "bass",
+          b,
+          beat,
+          pitch,
+          length,
+          Math.min(0.95, velocity * weight),
+          {
+            ...(beat === 0 ? { articulation: "tenuto" as const } : {}),
+            ...(legato ? { articulation: "legato" as const } : {}),
+          },
+        );
+      for (const b of [bar, bar + 1]) {
+        const second = b === bar + 1;
+        const steps = kickSteps(b);
+        const pickup = second && steps.some((step) => step >= 13);
+        steps.forEach((step, k) => {
+          const beat = at(step);
+          const until = k + 1 < steps.length ? at(steps[k + 1]!) : 4;
+          const room = Math.max(0.2, until - beat - 0.1);
+          if (step === 0) {
+            play(
+              b,
+              0,
+              r,
+              Math.min(room, second ? 1.85 : 1.4),
+              second ? 0.82 : 0.86,
+            );
+          } else if (step <= 4) {
+            play(b, beat, r, Math.min(room, 1.45), 0.64);
+          } else if (step <= 8) {
+            play(b, beat, second ? r + fifth : r, Math.min(room, 0.9), 0.56);
+          } else if (step <= 11) {
+            if (second) play(b, beat, r, Math.min(room, 0.6), 0.66);
+            else play(b, beat, top, 0.42, 0.62);
+          } else if (second) {
+            // A kick near the bar line carries the slide into the next chord.
+            play(b, beat, lead ?? r, 4 - beat, 0.6, true);
+          } else {
+            play(b, beat, r + fifth, Math.min(room, 0.4), 0.52);
+          }
         });
+        if (!second) {
+          // The octave falls to the seventh before the bar line.
+          if (!steps.some((step) => step >= 11 && step <= 13))
+            play(b, 3, color, steps.includes(15) ? 0.62 : 0.8, 0.56);
+        } else if (!pickup) {
+          if (lead !== undefined) play(b, 3.5, lead, 0.5, 0.6, true);
+          // Roots a step apart: the last note slides into the next chord.
+          else play(b, 3.25 + SW, r, 0.6, 0.58, true);
+        }
+      }
     });
     // The shore: one long low C under the last chords.
     s.note("bass", 52, 0, 36, 7.4, 0.78);
@@ -450,12 +662,6 @@ export const lowTide: DemoDefinition = {
     s.note("bass", 55, 0, 36, 3.9, 0.6);
 
     // ── Drums: a four-bar break, side stick first, snare from the refrain ──
-    const kicks = [
-      "9..6......8.....",
-      "8.....5...8..5..",
-      "9..6......8....4",
-      "8.....5..7......",
-    ];
     const ghosts = [
       [7, 15],
       [3, 9],
@@ -469,7 +675,7 @@ export const lowTide: DemoDefinition = {
       });
     const groove = (bar: number, mode: "rim" | "snare" | "double") => {
       const cycle = bar % 4;
-      kick(bar, kicks[cycle]!);
+      kick(bar, kickRow(bar));
       const backbeat = mode === "rim" ? 37 : 38;
       const strength = mode === "rim" ? 0.62 : 0.8;
       s.note("drums", bar, 1 + LATE, backbeat, 0.14, strength * shade(0.94, 1));
@@ -509,7 +715,7 @@ export const lowTide: DemoDefinition = {
     s.note("drums", 11, 3.62, 38, 0.06, 0.2);
     s.note("drums", 11, 3.7, 38, 0.06, 0.28);
     // Bar 19: a tom pickup into the refrain; hats drop out on four.
-    kick(19, "8.....5...8.....");
+    kick(19, kickRow(19));
     s.note("drums", 19, 1 + LATE, 37, 0.14, 0.6);
     for (const step of [0, 2, 4, 6, 8, 10])
       s.note("drums", 19, at(step), 42, 0.1, shade(0.26, 0.4));
@@ -521,18 +727,18 @@ export const lowTide: DemoDefinition = {
     ] as const)
       s.note("drums", 19, beat, pitch, 0.3, velocity);
     // Bar 27: the floor gives way; one snare goes into the echo.
-    kick(27, "9..6............");
+    kick(27, kickRow(27));
     s.note("drums", 27, 1 + LATE, 38, 0.14, 0.78);
     s.note("drums", 27, 0, 42, 0.1, 0.34);
     s.note("drums", 27, 0.5, 42, 0.1, 0.3);
     s.note("throws", 27, 3 + LATE, 38, 0.14, 0.8);
     // Bar 43: a rising ghost roll under the tape swell.
-    kick(43, "8.....5.........");
+    kick(43, kickRow(43));
     s.note("drums", 43, 1 + LATE, 38, 0.14, 0.76);
     for (let step = 8; step < 16; step++)
       s.note("drums", 43, at(step), 38, 0.07, 0.14 + (step - 8) * 0.07);
     // Bar 51: the break thins to kick and a last open hat.
-    kick(51, "9..6......8.....");
+    kick(51, kickRow(51));
     s.note("drums", 51, 1 + LATE, 38, 0.14, 0.72);
     s.note("drums", 51, at(10), 46, 0.6, 0.3);
     // Crashes mark the refrains and the return of the full break.
@@ -562,7 +768,16 @@ export const lowTide: DemoDefinition = {
     s.note("throws", 53, 3 + LATE, 37, 0.14, 0.5);
 
     // ── Vocal ──
-    const sing = (bar: number, line: readonly Sung[], gain = 1) =>
+    /**
+     * The refrains are double-tracked: a second take of the same line, a few
+     * cents sharp, about 20 ms late and panned away, as on a tape double.
+     */
+    const sing = (
+      bar: number,
+      line: readonly Sung[],
+      gain = 1,
+      doubled = false,
+    ) =>
       line.forEach(([beat, pitch, length, velocity, lyric], i) => {
         const first = i === 0;
         const final = i === line.length - 1;
@@ -574,21 +789,44 @@ export const lowTide: DemoDefinition = {
             ? { vibrato: { rate: 5.3, depth: 16, delay: 0.4 } }
             : {}),
         });
+        if (doubled)
+          s.note(
+            "double",
+            bar,
+            beat + 0.028,
+            pitch,
+            Math.max(0.2, length - 0.06),
+            velocity * gain * 0.84,
+            {
+              lyric,
+              cents: 7,
+              ...(final
+                ? { vibrato: { rate: 5.6, depth: 13, delay: 0.5 } }
+                : {}),
+            },
+          );
       });
     VERSE_ONE.forEach((line, i) => sing(12 + i * 2, line));
-    REFRAIN_LINES.forEach((line, i) => sing(20 + i * 2, line));
+    REFRAIN_LINES.forEach((line, i) => sing(20 + i * 2, line, 1, true));
     VERSE_TWO.forEach((line, i) => sing(36 + i * 2, line, 1.04));
-    sing(44, REFRAIN_HIGH);
+    sing(44, REFRAIN_HIGH, 1, true);
     REFRAIN_LINES.slice(1, 3).forEach((line, i) =>
-      sing(46 + i * 2, line, 1.06),
+      sing(46 + i * 2, line, 1.06, true),
     );
     // The last "turns" leans on B and rises to C as the shore arrives.
     const lastLine = REFRAIN_LINES[3]!;
-    lastLine
-      .slice(0, -1)
-      .forEach(([beat, pitch, length, velocity, lyric]) =>
-        s.note("vocal", 50, beat, pitch, length, velocity * 1.06, { lyric }),
+    lastLine.slice(0, -1).forEach(([beat, pitch, length, velocity, lyric]) => {
+      s.note("vocal", 50, beat, pitch, length, velocity * 1.06, { lyric });
+      s.note(
+        "double",
+        50,
+        beat + 0.028,
+        pitch,
+        Math.max(0.2, length - 0.06),
+        velocity * 0.88,
+        { lyric, cents: 7 },
       );
+    });
     s.note("vocal", 50, 2, 59, 10, 0.72, {
       lyric: "turns",
       bend: [
@@ -637,6 +875,13 @@ export const lowTide: DemoDefinition = {
       [24, 0, 75, 7.8, 0.54],
       [26, 0, 68, 3.9, 0.5],
       [27, 0, 71, 3.9, 0.52],
+      // The second voice moves against it: thirds and sixths, then the
+      // tritone F under B that the dub room resolves.
+      [20, 0, 68, 7.8, 0.4],
+      [22, 0, 65, 3.9, 0.42],
+      [23, 0, 68, 3.9, 0.42],
+      [24, 0, 67, 7.8, 0.44],
+      [26, 0, 65, 7.8, 0.44],
       // Second tide: a pedal G under the lament.
       [36, 0, 67, 7.8, 0.36],
       [38, 0, 67, 7.8, 0.38],
@@ -719,20 +964,27 @@ export const lowTide: DemoDefinition = {
     s.note("swell", 43, 1.2, 60, 2.8, 0.7);
     s.note("swell", 19, 1.4, 58, 2.6, 0.45);
 
-    // ── Vinyl dust: sparse, quiet, never on the grid ──
+    // ── Vinyl dust: tiny clicks, never on the grid, mostly faint with the
+    // odd pop; clearest in the room tone and the shore, where the band is
+    // quiet, and thinned out under the full break. ──
     const dust = random(77);
-    for (let bar = 0; bar < 56; bar++)
-      for (let k = 0; k < 9; k++) {
-        const beat = Math.floor(dust() * 3.9 * 32) / 32 + 0.011;
+    for (let bar = 0; bar < 56; bar++) {
+      const open = bar < 4 || bar >= 52;
+      const count = open ? 8 : bar >= 28 && bar < 36 ? 6 : 4;
+      for (let k = 0; k < count; k++) {
+        const beat = Math.floor(dust() * 3.9 * 48) / 48 + 0.007;
+        const grain = dust();
+        const pop = grain > 0.93;
         s.note(
           "dust",
           bar,
           beat,
-          dust() < 0.8 ? 42 : 37,
-          0.05,
-          0.05 + dust() * 0.16,
+          42,
+          0.03,
+          (pop ? 0.09 + grain * 0.04 : 0.025 + grain * 0.04) * (open ? 1.2 : 1),
         );
       }
+    }
 
     return s.finish();
   },
