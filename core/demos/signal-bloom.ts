@@ -406,14 +406,14 @@ export const signalBloom: DemoDefinition = {
       s.section(name, start, bars);
 
     s.track(
-      voice("kick", "Linn kick", "kit", 0.8, {
+      voice("kick", "Linn kick", "kit", 0.64, {
         kit: "synlinn",
         fx: { duck: { orbit: 2, depth: 0.3, attack: 0.16 } },
         humanize: { timing: 2, velocity: 3, seed: 11 },
       }),
     );
     s.track(
-      voice("snare", "Gated snare", "kit", 0.56, {
+      voice("snare", "Gated snare", "kit", 0.48, {
         kit: "synlinn",
         reverb: {
           mix: 0.34,
@@ -426,7 +426,7 @@ export const signalBloom: DemoDefinition = {
       }),
     );
     s.track(
-      voice("hats", "Linn hats", "kit", 0.42, {
+      voice("hats", "Linn hats", "kit", 0.56, {
         kit: "synlinn",
         pan: 0.2,
         humanize: { timing: 5, velocity: 7, seed: 13 },
@@ -441,13 +441,13 @@ export const signalBloom: DemoDefinition = {
       }),
     );
     s.track(
-      preset("bass", "Analog bass", "moog-bass", 0.55, {
+      preset("bass", "Analog bass", "moog-bass", 0.5, {
         fx: orbit,
         humanize: { timing: 3, velocity: 4, length: 6, seed: 15 },
       }),
     );
     s.track(
-      voice("chords", "Warm polysynth", "saw", 0.25, {
+      voice("chords", "Warm polysynth", "saw", 0.48, {
         fx: { ...orbit, chorus: { rate: 0.55, depth: 0.5, mix: 0.45 } },
         synth: {
           attack: 0.06,
@@ -481,7 +481,7 @@ export const signalBloom: DemoDefinition = {
       }),
     );
     s.track(
-      preset("arp", "Glass arpeggio", "pulse-seq", 0.24, {
+      preset("arp", "Glass arpeggio", "pulse-seq", 0.3, {
         pan: -0.24,
         delay: { beats: 0.75, feedback: 0.3, mix: 0.2, pingpong: true },
         filter: { type: "hpf", cutoff: 220, resonance: 0 },
@@ -497,7 +497,7 @@ export const signalBloom: DemoDefinition = {
       }),
     );
     s.track(
-      voice("vocal", "Signal singer", "sing", 0.6, {
+      voice("vocal", "Signal singer", "sing", 0.8, {
         sing: {
           preset: "aah",
           voice: "alto",
@@ -564,7 +564,7 @@ export const signalBloom: DemoDefinition = {
       }),
     );
     s.track(
-      voice("halo", "Wavetable halo", "wavetable", 0.13, {
+      voice("halo", "Wavetable halo", "wavetable", 0.2, {
         wavetable: {
           table: { src: "builtin:basic" },
           wt: 0.19,
@@ -653,9 +653,21 @@ export const signalBloom: DemoDefinition = {
         note("kick", bar, beat, 36, 0.2, velocity),
       );
     // The gated snare sits 5 ms late for weight; the clap trails it by 15 ms.
-    const backbeat = (bar: number, beats: readonly number[], clap: boolean) =>
+    const backbeat = (
+      bar: number,
+      beats: readonly number[],
+      clap: boolean,
+      gain = 1,
+    ) =>
       beats.forEach((beat) => {
-        note("snare", bar, beat + 0.01, 38, 0.2, beat === 3 ? 0.94 : 0.9);
+        note(
+          "snare",
+          bar,
+          beat + 0.01,
+          38,
+          0.2,
+          Math.min(1, (beat === 3 ? 0.94 : 0.9) * gain),
+        );
         if (clap) note("perc", bar, beat + 0.027, 39, 0.2, 0.64);
       });
     const roll = (bar: number, from: number, to: number, low: number) => {
@@ -754,7 +766,7 @@ export const signalBloom: DemoDefinition = {
           note("perc", b, 3, 37, 0.1, 0.54);
           hats(b, "soft");
         } else {
-          backbeat(b, [1, 3], false);
+          backbeat(b, [1, 3], false, b < 12 ? 0.82 : 0.88);
           if (odd) note("snare", b, 3.75, 38, 0.1, 0.2);
           hats(b, "8");
         }
@@ -795,18 +807,24 @@ export const signalBloom: DemoDefinition = {
           [3, 0.8],
           ...(phraseEnd ? ([[3.5, 0.6]] as const) : []),
         ]);
-        backbeat(b, [1, 3], true);
+        backbeat(b, [1, 3], true, part === "chorus" ? 1.05 : 1);
         hats(b, part === "post" && !odd ? "16" : "open");
         if (b % 4 === 0) crash(b, b === 20 || b === 48 ? 0.85 : 0.6);
         if (b === 27 || b === 55) toms(b, FILL_SHORT);
         if (b === 31 || b === 59) toms(b, FILL_LONG);
       } else if (part === "bridge") {
-        kick(b, [
-          [0, 0.9],
-          [1.5, 0.52],
-          ...(b >= 36 ? ([[2.5, 0.5]] as const) : []),
-        ]);
-        backbeat(b, [2], false);
+        // The first half is a breakdown: one kick, the toms and the snare.
+        kick(
+          b,
+          b < 36
+            ? [[0, 0.8]]
+            : [
+                [0, 0.9],
+                [1.5, 0.54],
+                [2.5, 0.5],
+              ],
+        );
+        backbeat(b, [2], false, b < 36 ? 0.88 : 0.96);
         if (b === 32) crash(b, 0.55);
         if (b >= 36) hats(b, "soft");
         toms(b, b === 39 ? TOM_RIDE.slice(0, 3) : TOM_RIDE);
@@ -843,8 +861,8 @@ export const signalBloom: DemoDefinition = {
             b,
             i / 2,
             root + (octave ? 12 : 0),
-            0.42,
-            velocity * (part === "pulse" ? 0.86 : 1),
+            i % 2 ? 0.28 : 0.36,
+            velocity * (part === "pulse" ? 0.82 : b < 12 ? 0.86 : 0.92),
           );
         });
       } else if (part === "pre") {
@@ -866,8 +884,8 @@ export const signalBloom: DemoDefinition = {
           note("bass", b, i / 2, bass + (i % 2 ? 12 : 0), 0.4, velocity);
         });
       } else if (part === "bridge") {
-        note("bass", b, 0, root, 3.3, 0.82);
-        note("bass", b, 3.5, b === 39 ? A : root + 12, 0.4, 0.6);
+        note("bass", b, 0, root, 3.3, b < 36 ? 0.62 : 0.74);
+        note("bass", b, 3.5, b === 39 ? A : root + 12, 0.4, b < 36 ? 0.5 : 0.6);
       } else if (b >= 60) {
         if (b < 62) note("bass", b, 0, root, 3.8, 0.74);
         else if (b === 62) note("bass", b, 0, A, 7.8, 0.7);
@@ -880,13 +898,17 @@ export const signalBloom: DemoDefinition = {
           : part === "pulse"
             ? 0.44
             : part === "verse"
-              ? 0.48
+              ? b < 12
+                ? 0.38
+                : 0.44
               : part === "bridge"
-                ? 0.46
+                ? b < 36
+                  ? 0.4
+                  : 0.5
                 : part === "chorus"
                   ? b >= 48
-                    ? 0.66
-                    : 0.6
+                    ? 0.7
+                    : 0.64
                   : 0.58;
       if (part === "pre") {
         // Off-beat stabs build momentum under the climbing bass.
@@ -920,25 +942,29 @@ export const signalBloom: DemoDefinition = {
         .sort((x, y) => x - y)
         .slice(0, 4)
         .map((p) => p + (high ? 12 : 0));
+      // Verse 1 opens with no arpeggio; the bridge starts in eighths and
+      // doubles back to sixteenths for its second half.
       const sixteenths =
         part === "pulse" ||
         part === "pre" ||
         part === "chorus" ||
         part === "post" ||
-        part === "bridge";
+        (part === "bridge" && b >= 36);
       const arpGain =
         part === "bridge"
-          ? 0.62
+          ? b < 36
+            ? 0.46
+            : 0.44 + (b - 36) * 0.05
           : part === "post"
             ? 0.6
             : part === "pre"
               ? 0.44 + (b % 4) * 0.05
               : part === "chorus"
-                ? 0.46
+                ? 0.5
                 : part === "verse"
-                  ? 0.42
+                  ? 0.36
                   : 0.5;
-      if (!(b >= 62) && !(b === 47)) {
+      if (!(b >= 62) && !(b === 47) && !(b >= 8 && b < 12)) {
         const steps = sixteenths ? 16 : 8;
         for (let i = 0; i < steps; i++) {
           const beat = (i * 4) / steps,
