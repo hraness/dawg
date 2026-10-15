@@ -202,7 +202,8 @@ export const GROOVE_STARTERS: readonly GrooveStarter[] = Object.freeze([
           ["root", 2],
           ["octave", 1],
         ],
-        range: [28, 40],
+        // E2: an octave above the 808 kick's G1 boom, so the two never smear.
+        range: [31, 43],
         onsets: grid("x......x..x...6."),
         kickLock: 0.8,
       },
@@ -380,13 +381,13 @@ export const GROOVE_STARTERS: readonly GrooveStarter[] = Object.freeze([
       },
       texture: {
         roles: {
-          ...kitRoles("lofi", ["kick", "snare", "hat", "openhat"]),
+          ...kitRoles("breaks", ["kick", "snare", "hat", "openhat"]),
           bass: role("triangle"),
           pad: role("aah"),
         },
       },
       expression: { articulation: { bass: [["tenuto", 1]] } },
-      mix: { levels: { bass: -6, pad: -16, hat: -14 }, space: 0.1 },
+      mix: { levels: { bass: -3, pad: -16, hat: -14 }, space: 0.1 },
     },
   ),
   starter(
@@ -437,7 +438,7 @@ export const GROOVE_STARTERS: readonly GrooveStarter[] = Object.freeze([
         roles: {
           ...kitRoles("lofi"),
           chords: role("wurli"),
-          bass: role("bassguitar"),
+          bass: role("doublebass"),
         },
       },
       expression: {
@@ -448,7 +449,7 @@ export const GROOVE_STARTERS: readonly GrooveStarter[] = Object.freeze([
           ],
         },
       },
-      mix: { levels: { chords: -10, bass: -6 }, space: 0.12 },
+      mix: { levels: { chords: -12, bass: -4 }, space: 0.12 },
     },
   ),
   starter(
@@ -459,7 +460,8 @@ export const GROOVE_STARTERS: readonly GrooveStarter[] = Object.freeze([
     "early Southern trap: long kick tails, half-time clap and short hat bursts",
     142,
     {
-      pitch: { scales: [["harmonic-minor", 1]], tonic: [[1, 1]] },
+      // The kit's long 808 rings near F1 (43 Hz): the key sits on it.
+      pitch: { scales: [["harmonic-minor", 1]], tonic: [[5, 1]] },
       rhythm: {
         onsets: {
           kick: grid("x.....x....x..6."),
