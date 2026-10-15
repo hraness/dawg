@@ -36,7 +36,21 @@ function harmonyAt(bar: number): Harmony {
   if (bar === 18 || bar === 46) return ASUS;
   if ([19, 58, 59].includes(bar)) return A;
   if (bar >= 60) return BM;
+  // Drop one starts its loop on i, so the rise lands VI-VII-i and each
+  // hook phrase sits on the chord it was written for.
+  if (bar >= 20 && bar < 28) return LOOP[bar - 20]!;
   return LOOP[bar % 8]!;
+}
+
+/** Small seeded generator (mulberry32): ghost notes vary, renders do not. */
+function seeded(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), a | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 // The hook: a syncopated 3-3-2 call (F#-A-B) that the answers develop.
@@ -288,7 +302,7 @@ export const skylineCurrent: DemoDefinition = {
         fx: orbit,
         humanize: { timing: 3, velocity: 7, length: 8, seed: 3 },
         filterAutomation: lanes(
-          [0, 950],
+          [0, 1300],
           [15, 3700],
           [19, 7100],
           [20, 2700],
@@ -372,6 +386,8 @@ export const skylineCurrent: DemoDefinition = {
     s.track(
       voice("piano", "Open-air piano", "ballad", 0.36, {
         pan: 0.08,
+        // Keeps the hammer thump below the lowest note (G2) out of the sub.
+        filter: { type: "hpf", cutoff: 60, resonance: 0 },
         reverb: hall,
         humanize: { timing: 8, velocity: 7, length: 5, seed: 2 },
         pedal: [32, 34, 36, 38, 40, 42, 60, 62].flatMap((bar) => [
@@ -459,6 +475,7 @@ export const skylineCurrent: DemoDefinition = {
       velocity: number,
       ms = 0,
     ) => s.note("drums", bar, step / 4 + ms * MS, pitch, 0.13, velocity);
+    const ghost = seeded(128);
     /** 0 kick and hats, 1 adds the clap, 2 the drop kit, 3 ghosts, 4 ride. */
     const groove = (bar: number, level: number) => {
       s.grid("kick", bar, 36, "9...8...9...8...", level >= 2 ? 1 : 0.74);
@@ -478,9 +495,20 @@ export const skylineCurrent: DemoDefinition = {
         hit(bar, 4, 38, 0.3, -2);
         hit(bar, 12, 38, 0.34, -2);
       }
+      // Ghost sixteenths breathe like a player's: louder before the beat,
+      // a little different every bar, and the odd one left out.
       if (level >= 3)
-        for (const step of [1, 3, 5, 7, 9, 11, 13, 15])
-          hit(bar, step, 42, step % 4 === 3 ? 0.3 : 0.17, 6);
+        for (const step of [1, 3, 5, 7, 9, 11, 13, 15]) {
+          const r = ghost();
+          if (r < 0.12 && step % 4 === 1) continue;
+          hit(
+            bar,
+            step,
+            42,
+            (step % 4 === 3 ? 0.3 : 0.17) * (0.82 + r * 0.36),
+            6,
+          );
+        }
       if (level >= 4)
         for (const step of [0, 4, 8, 12])
           hit(bar, step, 51, step % 8 ? 0.24 : 0.3, 2);
@@ -647,7 +675,7 @@ export const skylineCurrent: DemoDefinition = {
       }
 
       // Pluck: 3-3-2 pulse, sixteenths under the drops, the hook after drop one.
-      if (b < 8) arp(b, "332", 0.92);
+      if (b < 8) arp(b, "332", 1);
       else if (b < 12) arp(b, "332", 1);
       else if (b < 16) arp(b, "16", 0.86);
       else if (b < 18) arp(b, "332", 1);
