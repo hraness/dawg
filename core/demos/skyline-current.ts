@@ -238,6 +238,7 @@ export const skylineCurrent: DemoDefinition = {
           release: 0.2,
           unison: 5,
           detune: 0.21,
+          spread: 0.9,
           lpf: 6500,
         },
         filter: { type: "hpf", cutoff: 270, resonance: 0 },
@@ -264,6 +265,25 @@ export const skylineCurrent: DemoDefinition = {
       preset("arp", "Horizon pluck", "house-pluck", 0.28, {
         pan: -0.16,
         delay: { beats: 0.75, feedback: 0.27, mix: 0.18, pingpong: true },
+        // Delay throws: the last pluck notes before each silent beat echo on.
+        delayFeedbackAutomation: lanes(
+          [0, 0.27],
+          [19, 0.27],
+          [19.7, 0.6],
+          [20, 0.27],
+          [46.9, 0.27],
+          [47.45, 0.6],
+          [48, 0.27],
+        ),
+        delayMixAutomation: lanes(
+          [0, 0.18],
+          [19, 0.18],
+          [19.7, 0.32],
+          [20, 0.18],
+          [46.9, 0.18],
+          [47.45, 0.32],
+          [48, 0.18],
+        ),
         reverb: room,
         fx: orbit,
         humanize: { timing: 3, velocity: 7, length: 8, seed: 3 },
@@ -291,6 +311,7 @@ export const skylineCurrent: DemoDefinition = {
           release: 0.18,
           unison: 3,
           detune: 0.11,
+          spread: 0.3,
           lpf: 7800,
         },
         filter: { type: "hpf", cutoff: 420, resonance: 0 },
@@ -321,6 +342,7 @@ export const skylineCurrent: DemoDefinition = {
           release: 0.22,
           unison: 7,
           detune: 0.28,
+          spread: 1,
           lpf: 6400,
         },
         filter: { type: "hpf", cutoff: 300, resonance: 0 },
@@ -363,11 +385,18 @@ export const skylineCurrent: DemoDefinition = {
         synth: { attack: 0.7, decay: 0.2, sustain: 0.7, release: 0.15 },
         filter: { type: "hpf", cutoff: 1800, resonance: 0 },
         reverb: room,
+        // Short swells into Gather and the breakdown, long ones into the drops.
         volumeAutomation: lanes(
           [0, 0.01],
+          [6, 0.01],
+          [7.95, 0.07],
+          [8, 0.01],
           [16, 0.02],
           [19, 0.11],
           [20, 0.01],
+          [30, 0.01],
+          [31.95, 0.05],
+          [32, 0.01],
           [40, 0.01],
           [43, 0.05],
           [47, 0.14],
@@ -377,9 +406,15 @@ export const skylineCurrent: DemoDefinition = {
         fxAutomation: {
           "synth-lpf": lanes(
             [0, 1800],
+            [6, 1800],
+            [7.95, 7000],
+            [8, 1800],
             [16, 2400],
             [19, 11000],
             [20, 1800],
+            [30, 1800],
+            [31.95, 6000],
+            [32, 1800],
             [40, 1600],
             [47, 13000],
             [48, 1800],
@@ -396,6 +431,7 @@ export const skylineCurrent: DemoDefinition = {
           release: 0.35,
           unison: 5,
           detune: 0.3,
+          spread: 1,
           lpf: 6000,
         },
         filter: { type: "hpf", cutoff: 600, resonance: 0 },
@@ -571,7 +607,9 @@ export const skylineCurrent: DemoDefinition = {
       if (drop || (b >= 12 && b < 16)) rollingSub(b, drop ? 1 : 0.62);
       else if ((b >= 8 && b < 12) || (b >= 28 && b < 32))
         s.note("sub", b, 0, h.root, 2.1, 0.61);
-      else if (air) s.note("sub", b, 0, h.root, 3.5, 0.38);
+      // The breakdown opens with no sub at all; it returns softly for bars 36-39.
+      else if (air && b >= 36)
+        s.note("sub", b, 0, h.root, 3.5, 0.28 + (b - 36) * 0.02);
       else if (b === 60) s.note("sub", b, 0, h.root, 7, 0.42);
 
       // Saw chords: pumping in the drops, filtered sus stabs in the rises.
@@ -649,17 +687,18 @@ export const skylineCurrent: DemoDefinition = {
         s.chord("piano", b, 0.05, [59, 62, 66, 73], 7.5, 0.3);
       }
 
-      if ((air || b < 8 || build || last) && b % 2 === 0)
+      // The choir: intro, breakdown, rises, and from bar 52 under the drop.
+      if ((air || b < 8 || build || last || (b >= 52 && b < 60)) && b % 2 === 0)
         s.chord(
           "vowel",
           b,
           0,
           h.chord.map((n) => n + 12),
           7.5,
-          air ? 0.62 : 0.46,
+          air ? 0.62 : b < 8 ? 0.54 : drop2 ? 0.4 : 0.46,
         );
       if (b < 8 && b % 4 === 0)
-        s.phrase("bell", b, b === 0 ? call : open, 0, 0.6);
+        s.phrase("bell", b, b === 0 ? call : open, 0, 0.68);
       if (b >= 36 && b < 40 && b % 2 === 1)
         s.phrase("bell", b, [
           [1.5, 90, 0.5, 0.34],
@@ -691,6 +730,7 @@ export const skylineCurrent: DemoDefinition = {
         }
         if (b % 2 === 0) s.note("rise", b, 0, 60, 7.6, 0.6);
       }
+      if (b === 6 || b === 30) s.note("rise", b, 0, 60, 7.9, 0.5);
       if (b === 18)
         s.note("lift", b, 0, 66, 7, 0.6, {
           bend: [
@@ -710,14 +750,23 @@ export const skylineCurrent: DemoDefinition = {
       if (b === 28) s.note("impact", b, 0, 49, 2.5, 0.4);
       if ([20, 48].includes(b)) s.note("impact", b, 0, 49, 2.5, 0.64);
       if (b === 56) s.note("impact", b, 0, 49, 2.5, 0.56);
+      if (b === 60) s.note("impact", b, 0, 49, 3, 0.36);
       if (b === 62) s.note("bell", b, 0, 83, 3.6, 0.45);
     }
-    // Dry space before the main landing; any reverb tails remain musical.
-    for (let i = s.notes.length - 1; i >= 0; i--) {
-      const n = s.notes[i]!;
-      if (n.startTick! >= 47 * BAR + 960 && n.startTick! < 48 * BAR)
-        s.notes.splice(i, 1);
-    }
+    // Silent space before each landing: nothing starts in the gap and held
+    // notes stop at its edge, so only reverb and delay tails ring on.
+    for (const [from, to] of [
+      [19 * BAR + 1440, 20 * BAR],
+      [47 * BAR + 960, 48 * BAR],
+    ] as const)
+      for (let i = s.notes.length - 1; i >= 0; i--) {
+        const n = s.notes[i]!,
+          start = n.startTick!,
+          end = start + n.durationTicks!;
+        if (start >= from && start < to) s.notes.splice(i, 1);
+        else if (start < from && end > from)
+          s.notes[i] = { ...n, durationTicks: from - start };
+      }
     return s.finish();
   },
 };
