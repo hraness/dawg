@@ -343,31 +343,31 @@ const ANSWERS: readonly Phrase[] = [
   ],
 ];
 /**
- * Verse-two counter-melody: a three-note idea in the gap between the 808
- * and the singer, answering each sung line in its rest. It steps down
- * where the singer's next line climbs.
+ * Verse-two counter-melody: a three-note idea above the singer, answering
+ * each sung line in its rest. Verse one's answers climb; these fall, until
+ * the last one climbs into the bVII lift.
  */
 const COUNTER: Readonly<Record<string, Phrase>> = {
   Cm: [
-    [2.5, 64, 0.22, 0.6],
-    [3, 63, 0.22, 0.54],
-    [3.5, 61, 0.6, 0.62],
+    [2.5, 76, 0.22, 0.6],
+    [3, 75, 0.22, 0.54],
+    [3.5, 73, 0.6, 0.62],
   ],
   A: [
-    [2.5, 64, 0.22, 0.6],
-    [3, 61, 0.22, 0.54],
-    [3.5, 57, 0.6, 0.62],
+    [2.5, 76, 0.22, 0.6],
+    [3, 73, 0.22, 0.54],
+    [3.5, 69, 0.6, 0.62],
   ],
   E: [
-    [2.5, 63, 0.22, 0.6],
-    [3, 59, 0.22, 0.54],
-    [3.5, 56, 0.6, 0.62],
+    [2.5, 75, 0.22, 0.6],
+    [3, 71, 0.22, 0.54],
+    [3.5, 68, 0.6, 0.62],
   ],
   D: [
-    [2, 62, 0.22, 0.58],
-    [2.5, 66, 0.22, 0.6],
-    [3, 69, 0.22, 0.62],
-    [3.5, 74, 0.6, 0.66],
+    [2, 74, 0.22, 0.58],
+    [2.5, 78, 0.22, 0.6],
+    [3, 81, 0.22, 0.62],
+    [3.5, 86, 0.6, 0.66],
   ],
 };
 /**
@@ -1348,7 +1348,18 @@ export const candyFault: DemoDefinition = {
     const kickBar = (
       b: number,
       grid: string,
-      opts: { drop?: boolean; pops?: boolean } = {},
+      opts: {
+        drop?: boolean;
+        /**
+         * What the last offbeat hit before a root change plays: an octave
+         * pop, an approach pitch, or (unset) the root held into the change.
+         */
+        last?: "pop" | number;
+        /** One root held for the whole bar, whatever the kick does. */
+        hold?: boolean;
+        /** Grid steps the 808 leaves empty (the kick still plays). */
+        rest?: readonly number[];
+      } = {},
     ) => {
       if (!grid) return;
       s.grid("kick", b, 36, grid);
@@ -1356,32 +1367,51 @@ export const candyFault: DemoDefinition = {
       const next = b + 1 < BARS ? H[PROG[b + 1]!]!.root : root;
       const prev = b > 0 ? H[PROG[b - 1]!]!.root : root;
       const onsets = [...grid].flatMap((c, i) => (c === "." ? [] : [i]));
-      onsets.forEach((step, k) => {
-        const end = k + 1 < onsets.length ? onsets[k + 1]! : 16;
-        const velocity = Number(grid[step]) / 10;
-        const lastHit = k === onsets.length - 1;
-        // Pops: the last offbeat hit of a bar jumps an octave before a root change.
-        const pop = opts.pops && lastHit && step >= 10 && next !== root;
-        const length =
-          (end - step) * 0.25 - (lastHit && next !== root ? -0.02 : 0.06);
-        const extra: Extra =
-          k === 0 && opts.drop
-            ? {
-                bend: [
-                  { at: 0, cents: 1200 },
-                  { at: 0.3, cents: 0 },
-                ],
-              }
-            : k === 0 && prev !== root
-              ? { glide: 0.07 }
-              : pop
-                ? { glide: 0.05 }
-                : {};
+      const entry: Extra = opts.drop
+        ? {
+            bend: [
+              { at: 0, cents: 1200 },
+              { at: 0.3, cents: 0 },
+            ],
+          }
+        : prev !== root
+          ? { glide: 0.07 }
+          : {};
+      if (opts.hold) {
+        const step = onsets[0] ?? 0;
         s.note(
           "sub",
           b,
           step * 0.25,
-          pop ? root + 12 : root,
+          root,
+          (16 - step) * 0.25 - 0.04,
+          Math.min(0.9, (Number(grid[step]) / 10) * 0.95),
+          entry,
+        );
+        return;
+      }
+      const last = opts.last;
+      onsets.forEach((step, k) => {
+        if (opts.rest?.includes(step)) return;
+        const end = k + 1 < onsets.length ? onsets[k + 1]! : 16;
+        const velocity = Number(grid[step]) / 10;
+        const lastHit = k === onsets.length - 1;
+        const leaves =
+          lastHit && step >= 10 && next !== root && last !== undefined;
+        const pitch =
+          !leaves || last === undefined
+            ? root
+            : last === "pop"
+              ? root + 12
+              : last;
+        const length =
+          (end - step) * 0.25 - (lastHit && next !== root ? -0.02 : 0.06);
+        const extra: Extra = k === 0 ? entry : leaves ? { glide: 0.05 } : {};
+        s.note(
+          "sub",
+          b,
+          step * 0.25,
+          pitch,
           length,
           Math.min(0.9, velocity * 0.95),
           extra,
@@ -1404,9 +1434,13 @@ export const candyFault: DemoDefinition = {
         hit("snap", b, 3.5, 39, 0.5);
       }
       if (verseLike) {
+        // One bar in four holds its root; one pop in four (into IV); the
+        // move into I walks down through its 3rd; the rest change on the
+        // downbeat with a glide.
         kickBar(b, KICK.verse![inPart % 4]!, {
-          pops: true,
           drop: inPart === 0,
+          hold: inPart % 4 === 0,
+          last: inPart % 4 === 1 ? "pop" : inPart === 3 ? 32 : undefined,
         });
         s.grid("snap", b, 38, "........9.......");
         s.grid("snap", b, 39, "........7.......");
@@ -1437,7 +1471,9 @@ export const candyFault: DemoDefinition = {
           );
       }
       if (liftLike) {
-        kickBar(b, KICK.lift![inPart]!, { pops: true });
+        kickBar(b, KICK.lift![inPart]!, {
+          last: inPart === 3 ? "pop" : undefined,
+        });
         if (inPart < 2) {
           s.grid(
             "snap",
@@ -1468,6 +1504,9 @@ export const candyFault: DemoDefinition = {
         const grids = part === "over" ? KICK.over! : KICK.chorus!;
         const last = inPart === 7;
         const dropout = part === "return" && inPart === 3;
+        // The 808's phrase: the octave kick-up only at the phrase end, vi
+        // reached by step on the downbeat, IV through a passing B, and a
+        // rest on beat three under "oh" (not in the Overload).
         kickBar(
           b,
           last
@@ -1475,7 +1514,11 @@ export const candyFault: DemoDefinition = {
             : dropout
               ? "9...8..........."
               : grids[inPart % 4]!,
-          { pops: true, drop: inPart === 0 },
+          {
+            drop: inPart === 0,
+            last: inPart % 4 === 3 ? "pop" : inPart % 4 === 2 ? 35 : undefined,
+            rest: inPart % 4 === 1 && part !== "over" ? [8] : [],
+          },
         );
         s.grid(
           "snap",
@@ -1797,22 +1840,25 @@ export const candyFault: DemoDefinition = {
       if (part === "verse" && (inPart === 5 || inPart === 7))
         hook(b, ANSWERS[inPart === 5 ? 0 : 1]!, 0.5);
       // Verse two: the counter-melody answers each sung line in its rest.
-      if (part === "verse2" && inPart % 2 === 1) hook(b, COUNTER[name]!, 0.58);
+      if (part === "verse2" && inPart % 2 === 1) hook(b, COUNTER[name]!, 0.95);
+      // The counter-line carries on into the second pre-chorus: a rising B
+      // arpeggio echoing "breaks", then the same shape under the held "me"
+      // (a third below her A, out of the way of its beat repeat).
       if (part === "lift2" && inPart % 2 === 1)
         hook(
           b,
           inPart === 1
             ? [
-                [2, 59, 0.22, 0.56],
-                [2.5, 63, 0.22, 0.58],
-                [3, 66, 0.9, 0.62],
+                [2, 71, 0.22, 0.56],
+                [2.5, 75, 0.22, 0.58],
+                [3, 78, 0.9, 0.62],
               ]
             : [
-                [2, 63, 0.22, 0.58],
-                [2.5, 66, 0.22, 0.6],
-                [3, 68, 0.9, 0.64],
+                [1.5, 71, 0.22, 0.58],
+                [2, 75, 0.22, 0.6],
+                [2.5, 78, 0.9, 0.64],
               ],
-          0.6,
+          0.8,
         );
       if (b === 13)
         hook(b, [...ANSWERS[0]!.slice(0, 4), [3, 83, 0.85, 0.82]], 0.62);
@@ -1924,7 +1970,10 @@ export const candyFault: DemoDefinition = {
           stutter("chops", b, 1.5, 4, 0.125, [base, base - 5], 0.6, 0.3);
         }
       }
-      if (chorusLike && (inPart === 3 || inPart === 7)) {
+      // The fourth bar of each phrase belongs to the hook pluck: the chops
+      // only echo its last two notes an octave up in chorus two, or flick
+      // 32nds in the Overload. The eighth bar is theirs after "pix-els".
+      if (chorusLike && inPart === 7) {
         s.phrase("chops", b, [
           [2, 83, 0.25, 0.66],
           [2.5, 83, 0.25, 0.6],
@@ -1934,6 +1983,13 @@ export const candyFault: DemoDefinition = {
         if (part === "over")
           stutter("chops", b, 3.5, 4, 0.125, [88, 88, 95, 92], 0.66, 0.42);
       }
+      if (part === "return" && inPart === 3)
+        s.phrase("chops", b, [
+          [3.5, 92, 0.2, 0.58],
+          [3.75, 93, 0.3, 0.62],
+        ]);
+      if (part === "over" && inPart === 3)
+        stutter("chops", b, 3.5, 4, 0.125, [88, 88, 95, 92], 0.66, 0.42);
       if (part === "over" && inPart % 2 === 0)
         stutter("chops", b, 3.5, 4, 0.125, [88, 95], 0.48, 0.32);
       if (b === 67) stutter("chops", b, 1.5, 6, 0.125, [92, 87, 80], 0.5, 0.2);
