@@ -1,9 +1,19 @@
-/** Complete, original demonstration songs. Groove starters live in styles/. */
+/**
+ * Complete, original demonstration songs, one file per song so each can be
+ * developed on its own. Groove starters live in styles/.
+ */
 import { TrackScore } from "../score.ts";
-import { coilDriver, nightRelay, signalBloom } from "./electronic.ts";
-import { amberRoom, copperWire } from "./organic.ts";
-import { glassArc, lowTide, velvetCircuit } from "./vocal.ts";
-import { afterHours, candyFault, skylineCurrent } from "./dance.ts";
+import { nightRelay } from "./night-relay.ts";
+import { coilDriver } from "./coil-driver.ts";
+import { velvetCircuit } from "./velvet-circuit.ts";
+import { glassArc } from "./glass-arc.ts";
+import { signalBloom } from "./signal-bloom.ts";
+import { copperWire } from "./copper-wire.ts";
+import { lowTide } from "./low-tide.ts";
+import { amberRoom } from "./amber-room.ts";
+import { candyFault } from "./candy-fault.ts";
+import { afterHours } from "./after-hours.ts";
+import { skylineCurrent } from "./skyline-current.ts";
 export type { DemoInfo } from "./types.ts";
 
 const definitions = [

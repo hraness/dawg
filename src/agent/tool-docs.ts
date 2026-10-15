@@ -90,7 +90,7 @@ export const AGENT_TOOL_DOCS: Readonly<Record<string, AgentToolDoc>> =
     },
     set_rhythm: {
       details:
-        "Preferred for drums: one row per voice of a kit/oneshot track; its notes regenerate from the row. pulses (4) over steps (16..64) Euclidean, rotate later; division 1/32..1/1 (1/16) is one step, and the steps×division cycle repeats from beat 0 to fill the loop (E(4,16) at 1/16 = a hit every beat, four on the floor; a backbeat on counts 2 and 4 is grid '....x.......x...' or E(2,16) rotate 4; offbeat 'and's are grid '..x.' ); grid 'x.X.' explicit (X accent); repeats 0..16 after each pulse every time, pace -1..1, ramp -1..1; velocity (0.8); accent 0..1 on E(accents,pulses); gate; legato; probability+seed; swing/nudge ±0.5 step; cycles [{pulses,rotate,repeats,probability,velocity}] per pass. remove [voices] (freeze keeps notes).",
+        "Preferred for drums: one row per voice of a kit/oneshot track; its notes regenerate from the row. pulses (4) over steps (16..64) Euclidean, rotate later; division 1/32..1/1 (1/16) is one step, and the steps×division cycle repeats from beat 0 to fill the loop (E(4,16) at 1/16 = a hit every beat, four on the floor; a backbeat on counts 2 and 4 is grid '....x.......x...' or E(2,16) rotate 4; offbeat 'and's are grid '..x.' ); grid 'x.X.' explicit (X accent, g ghost, f flam); repeats 0..16 after each pulse every time, pace -1..1, ramp -1..1; velocity (0.8); accent 0..1 on E(accents,pulses); gate; legato; probability+seed; swing/nudge ±0.5 step; cycles [{pulses,rotate,repeats,probability,velocity}] per pass. remove [voices] (freeze keeps notes).",
     },
     suggest_progression: {
       details:
@@ -102,7 +102,7 @@ export const AGENT_TOOL_DOCS: Readonly<Record<string, AgentToolDoc>> =
     },
     strum_chords: {
       details:
-        "Strum chords as fretted guitar notes (set_guitar). chords omitted strums the track's block chords. strokes down|folk|pop|punk|funk|reggae|waltz|jangle|island or a DUdux-. grid; speed ms/stroke (22); step grid beats; each beats/chord (a bar).",
+        "Strum chords as fretted guitar notes (set_guitar). chords omitted strums the track's block chords. strokes down|folk|pop|punk|funk|reggae|waltz|jangle|island|chuck|soul or a DUdux-. grid (- rings on, . damps); speed ms/stroke (22); step grid beats; each beats/chord (a bar).",
     },
     set_guitar: {
       details:

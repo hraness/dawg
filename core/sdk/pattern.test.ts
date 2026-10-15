@@ -47,6 +47,8 @@ test("kit and pattern() round-trip through song.ts", async () => {
         '  name: "drums",',
         '  instrument: "kit",',
         '  kit: "dusty",',
+        // boom-bap carries a player feel, which /pattern applies with it.
+        "  humanize: { timing: 4, velocity: 8, seed: 1 },",
         '  rhythm: pattern("boom-bap"),',
         "});",
         "",

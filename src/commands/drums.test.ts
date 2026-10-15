@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { DRUM_VOICES, parseDrumVoice } from "../../core/drums.ts";
-import { expandRow, normalizeRhythmRow } from "../../core/euclid.ts";
+import { parseDrumVoice } from "../../core/drums.ts";
+import {
+  divisionBeats,
+  expandRow,
+  normalizeRhythmRow,
+} from "../../core/euclid.ts";
 import { synthKit } from "../../core/kits.ts";
+import { KIT_EXTRA_VOICES, rhythmVoicePitch } from "../../core/rhythm.ts";
 import { createScore } from "../../core/score.ts";
 import { pattern } from "../../core/sdk/v1.ts";
 import { renderScorePcm } from "../audio/wav.ts";
@@ -15,10 +20,10 @@ import {
   patternLine,
 } from "./drums.ts";
 
-const empty = (tempoBpm = 120) =>
+const empty = (tempoBpm = 120, bars = 1) =>
   createScore({
     tempoBpm,
-    bars: 1,
+    bars,
     tracks: [
       { id: "drums", name: "drums", instrument: "kit" },
       { id: "keys", name: "keys", instrument: "piano" },
@@ -42,18 +47,62 @@ describe("pattern library", () => {
       for (const [index, spec] of entry.rows.entries()) {
         const { kind: _kind, ...fields } = spec;
         const row = normalizeRhythmRow(fields, `${entry.name}[${index}]`);
-        expect(parseDrumVoice(row.voice)).toBeDefined();
-        // Every row plays something in one 4/4 bar.
         expect(
-          expandRow(row, { ticksPerBeat: 480, loopTicks: 1920 }).length,
+          parseDrumVoice(row.voice) ?? KIT_EXTRA_VOICES[row.voice],
+        ).toBeDefined();
+        // Every row plays something in one pass of its own length (a fill
+        // row may sit in the last bar of a four-bar phrase).
+        const passBeats =
+          (row.grid?.length ?? row.steps ?? 16) *
+          (divisionBeats(row.division ?? "1/16") ?? 0.25);
+        const loopTicks = Math.max(1, Math.ceil(passBeats / 4)) * 1920;
+        expect(
+          expandRow(row, { ticksPerBeat: 480, loopTicks }).length,
         ).toBeGreaterThan(0);
+      }
+      if (entry.humanize) {
+        expect(entry.humanize.timing ?? 0).toBeGreaterThanOrEqual(0);
+        expect(entry.humanize.timing ?? 0).toBeLessThanOrEqual(30);
+        expect(entry.humanize.velocity ?? 0).toBeGreaterThanOrEqual(0);
+        expect(entry.humanize.velocity ?? 0).toBeLessThanOrEqual(25);
       }
     }
   });
 
+  test("a pattern's feel lands on a track without humanize and spares one with it", () => {
+    const felt = DRUM_PATTERNS.find((entry) => entry.humanize);
+    if (!felt) return;
+    const fresh = applyDrumPattern(empty(), "drums", felt.name, "set");
+    expect(fresh.ok).toBe(true);
+    const placed = fresh.next!.tracks.find((track) => track.id === "drums");
+    expect(placed?.humanize?.timing).toBe(felt.humanize?.timing ?? 0);
+    expect(fresh.message).toContain("feel");
+    const own = createScore({
+      tempoBpm: 120,
+      bars: 1,
+      tracks: [
+        {
+          id: "drums",
+          name: "drums",
+          instrument: "kit",
+          humanize: { timing: 3, velocity: 2, seed: 9 },
+        },
+      ],
+    });
+    const kept = applyDrumPattern(own, "drums", felt.name, "set");
+    expect(
+      kept.next!.tracks.find((track) => track.id === "drums")?.humanize,
+    ).toEqual({ timing: 3, velocity: 2, seed: 9 });
+  });
+
   test("every pattern applies to a kit track and renders audible audio", () => {
     for (const entry of DRUM_PATTERNS) {
-      const result = applyDrumPattern(empty(), "drums", entry.name, "set");
+      const result = applyDrumPattern(
+        empty(120, 4),
+        "drums",
+        entry.name,
+        "set",
+      );
       expect(result.ok).toBe(true);
       const next = result.next!;
       expect(next.tempoBpm).toBe(entry.tempo.bpm);
@@ -66,12 +115,7 @@ describe("pattern library", () => {
       // Every voice of the pattern produced hits.
       const pitches = new Set(notes.map((note) => note.pitch));
       for (const row of entry.rows)
-        expect(
-          pitches.has(
-            DRUM_VOICES.find((v) => v.voice === parseDrumVoice(row.voice))!
-              .pitch,
-          ),
-        ).toBe(true);
+        expect(pitches.has(rhythmVoicePitch(drums, row.voice)!)).toBe(true);
       const { pcm } = renderScorePcm(next, { sampleRate: 8_000 });
       let peak = 0;
       for (const value of pcm) peak = Math.max(peak, Math.abs(value));

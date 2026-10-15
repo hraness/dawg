@@ -19,6 +19,7 @@ import {
   parseDrumVoice,
 } from "../../core/drums.ts";
 import { normalizeRhythmRow, type RhythmRow } from "../../core/euclid.ts";
+import { normalizeHumanize } from "../../core/expression.ts";
 import { synthKit, SYNTH_KITS } from "../../core/kits.ts";
 import { rhythmVoicePitch, withTrackRhythm } from "../../core/rhythm.ts";
 import {
@@ -26,6 +27,7 @@ import {
   samplerVoiceSlots,
   ScoreValidationError,
   TrackScore,
+  updateTrack,
   type Note,
   type Track,
 } from "../../core/score.ts";
@@ -170,8 +172,15 @@ export function applyDrumPattern(
     notes: target.score.notes.filter((note) => note.trackId !== trackId),
   });
   let next: TrackScore;
+  // The pattern's feel lands only on a track without humanize of its own,
+  // so a player's chosen amounts survive a pattern swap.
+  const feel =
+    entry.humanize && !target.track.humanize
+      ? normalizeHumanize({ ...entry.humanize, seed: 1 })
+      : undefined;
   try {
     next = withTrackRhythm(cleared, trackId, playable);
+    if (feel) next = updateTrack(next, trackId, { humanize: feel });
   } catch (error) {
     if (error instanceof ScoreValidationError)
       return { ok: false, message: `pattern · ${error.message}` };
@@ -179,6 +188,8 @@ export function applyDrumPattern(
   }
   const parts = [`pattern ${entry.name} on ${trackId}`];
   if (moveTempo) parts.push(`${entry.tempo.bpm} BPM`);
+  if (feel)
+    parts.push(`feel ±${feel.timing ?? 0}ms ±${feel.velocity ?? 0}% vel`);
   if (skipped.length) parts.push(`no ${skipped.join("/")}`);
   const track = next.tracks.find((candidate) => candidate.id === trackId);
   if (isDrumInstrument(track?.instrument) && !track?.kit)

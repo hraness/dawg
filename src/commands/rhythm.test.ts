@@ -85,6 +85,50 @@ describe("rhythm grammar", () => {
     expect(grid.next!.tracks[0]!.rhythm).toEqual([
       { voice: "hat", grid: "x.X." },
     ]);
+    // g ghost and f flam, in the grid verb and as a field.
+    expect(parseRhythmCommand("grid snare ..g.X.gf")).toEqual({
+      type: "rhythm-set",
+      voice: "snare",
+      fields: { grid: "..g.X.gf" },
+    });
+    expect(parseRhythmCommand("euclid snare grid f-g-")).toEqual({
+      type: "rhythm-set",
+      voice: "snare",
+      fields: { grid: "f-g-" },
+    });
+    expect(parseRhythmCommand("euclid snare grid x.o.")).toBeUndefined();
+    const ghosts = applyRhythmCommand(
+      grid.next!,
+      "drums",
+      parseRhythmCommand("grid hat x.g.f..g")!,
+    );
+    expect(ghosts.ok).toBe(true);
+    expect(ghosts.next!.tracks[0]!.rhythm).toEqual([
+      { voice: "hat", grid: "x.g.f..g" },
+    ]);
+    // Two passes per bar; each flam adds a half-velocity grace 20 ticks early.
+    expect(
+      ghosts.next!.notes.map((note) => [note.startTick, note.velocity]),
+    ).toEqual([
+      [0, 0.8],
+      [240, 0.2],
+      [460, 0.4],
+      [480, 0.8],
+      [840, 0.2],
+      [960, 0.8],
+      [1200, 0.2],
+      [1420, 0.4],
+      [1440, 0.8],
+      [1800, 0.2],
+    ]);
+    // The verb is case-insensitive, so capital G and F fail validation.
+    expect(
+      applyRhythmCommand(
+        grid.next!,
+        "drums",
+        parseRhythmCommand("grid hat x.G.")!,
+      ),
+    ).toMatchObject({ ok: false });
     const off = applyRhythmCommand(
       grid.next!,
       "drums",

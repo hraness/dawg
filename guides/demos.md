@@ -11,12 +11,12 @@ Every part works offline. Open a song's notes to explore its production.
 - Night Relay · deep techno · dub chords, FM bass
 - Coil Driver · acid techno · slides, accents, moving filter
 - After Hours · deep house · swung percussion, Rhodes, organ
-- Velvet Circuit · UK garage · two-step swing, vocal chops
+- Velvet Circuit · UK garage · two-step swing, organ stabs, vocal chops
 - Glass Arc · future garage · granular vowels, reverse swells
 - Copper Wire · jungle · break edits, reese bass, half-time turn
 - Candy Fault · hyperpop · sung hook, vocal stutters, 808 slides
 - Skyline Current · melodic EDM · supersaw drops, snare builds
-- Signal Bloom · synth pop · 13 tracks, 12 scenes, sung doubles
+- Signal Bloom · synth pop · gated snare, sung hook, harmony double
 - Low Tide · trip hop · laid-back drums, physical bass, tape
 - Amber Room · neo soul · rootless keys, sax, ghost notes
 

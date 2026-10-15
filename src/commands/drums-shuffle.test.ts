@@ -2,26 +2,49 @@ import { describe, expect, test } from "bun:test";
 import { expandRow, normalizeRhythmRow } from "../../core/euclid.ts";
 import { findPattern } from "./drums.ts";
 
-const onsets = (name: string, voice: string) => {
+const hits = (name: string, voice: string) => {
   const entry = findPattern(name)!;
   const spec = entry.rows.find((row) => row.voice === voice)!;
   const { kind: _kind, ...fields } = spec;
   return expandRow(normalizeRhythmRow(fields, name), {
     ticksPerBeat: 480,
     loopTicks: 1920,
-  }).map((hit) => hit.startTick);
+  });
 };
+
+const onsets = (name: string, voice: string) =>
+  hits(name, voice).map((hit) => hit.startTick);
+
+// Ghost notes sit around a quarter of the row velocity; the backbeat that
+// defines the feel is the loud stroke.
+const accented = (name: string, voice: string) =>
+  hits(name, voice)
+    .filter((hit) => hit.velocity >= 0.5)
+    .map((hit) => hit.startTick);
 
 describe("shuffle feels", () => {
   test("shuffle is triplet 8ths: long-short on every beat", () => {
     const hats = onsets("shuffle", "hat");
     expect(hats).toEqual([0, 320, 480, 800, 960, 1280, 1440, 1760]);
     expect(onsets("shuffle", "kick")).toEqual([0, 960]);
-    expect(onsets("shuffle", "snare")).toEqual([480, 1440]);
+    expect(accented("shuffle", "snare")).toEqual([480, 1440]);
   });
 
   test("half-time-shuffle keeps swung 16ths with the backbeat on 3", () => {
     expect(onsets("half-time-shuffle", "hat")).toHaveLength(16);
-    expect(onsets("half-time-shuffle", "snare")).toEqual([960]);
+    expect(accented("half-time-shuffle", "snare")).toEqual([960]);
+  });
+
+  test("ghost snares sit on the skip partials, never on the backbeat", () => {
+    // Shuffle ghosts fall on the last triplet of beats 1 and 3.
+    const shuffleGhosts = hits("shuffle", "snare")
+      .filter((hit) => hit.velocity < 0.5)
+      .map((hit) => hit.startTick);
+    expect(shuffleGhosts).toEqual([320, 1280]);
+    // Half-time shuffle ghosts fall on the middle partial of each 8th.
+    const halfTimeGhosts = hits("half-time-shuffle", "snare")
+      .filter((hit) => hit.velocity < 0.5)
+      .map((hit) => hit.startTick);
+    for (const tick of halfTimeGhosts) expect(tick % 240).toBe(80);
   });
 });

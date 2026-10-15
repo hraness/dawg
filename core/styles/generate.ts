@@ -22,6 +22,7 @@ import {
   parseRoman,
   chordPitchClasses,
   SCALES,
+  strokeGrid,
   voiceChord,
   type Key,
   type ModeName,
@@ -1038,9 +1039,6 @@ function playRoles(plan: Plan, rng: (salt: string) => Random): Draft[] {
       gauss(random) * plan.humanizeTicks
     );
   };
-  const humanVelocity = (velocity: number, random: Random) =>
-    clamp(velocity * (1 + gauss(random) * groove.humanize.velocity), 0.05, 1);
-
   // --- Kit and percussion grids
   const totalSteps = plan.bars * plan.stepsPerBar;
   const gridOf = (role: RoleName) => {
@@ -1069,6 +1067,7 @@ function playRoles(plan: Plan, rng: (salt: string) => Random): Draft[] {
   }
   // Fills: toms and snare in the last beat of each `every`-bar phrase.
   const fills = style.rhythm.fills;
+  const fillBeat = new Map<number, number>();
   if (fills && kitTrack) {
     const random = rng("fills");
     const beatSteps = Math.max(
@@ -1079,6 +1078,7 @@ function playRoles(plan: Plan, rng: (salt: string) => Random): Draft[] {
       const density = between(fills.density, random);
       const start = (bar + 1) * plan.stepsPerBar - beatSteps;
       for (let step = start; step < (bar + 1) * plan.stepsPerBar; step += 1) {
+        fillBeat.set(step, (step - start + 1) / beatSteps);
         if (random() >= density) continue;
         const role: RoleName =
           kitTrack.roles.includes("tom") && random() < 0.5 ? "tom" : "snare";
@@ -1096,12 +1096,29 @@ function playRoles(plan: Plan, rng: (salt: string) => Random): Draft[] {
       if ((lock.kind === "with") !== a.has(step)) b.delete(step);
   }
   const timingRandom = rng("timing");
+  const dynamicsRandom = rng("dynamics");
+  const grids = new Map<RoleName, readonly number[] | undefined>();
+  for (const role of kitOnsets.keys()) grids.set(role, gridOf(role));
+  const beatSteps = Math.max(
+    1,
+    Math.round(plan.stepsPerBar / plan.beatsPerBar),
+  );
   for (const [role, steps] of kitOnsets) {
     const owner = plan.tracks.find((track) => track.roles.includes(role))!;
     const onKit = owner.instrument === "drums";
+    const grid = grids.get(role);
     for (const step of [...steps].sort((x, y) => x - y)) {
       const bar = Math.floor(step / plan.stepsPerBar);
       const section = sectionAt(plan, bar);
+      const touch = kitTouch(
+        role,
+        step,
+        grid?.[step % plan.stepsPerBar] ?? 0,
+        fillBeat.get(step),
+        plan,
+        beatSteps,
+        dynamicsRandom,
+      );
       const key = onKit
         ? (KIT_PITCH[role] ?? PERC_ON_KIT[role] ?? KIT_PITCH.rim!)
         : role === "bell"
@@ -1114,9 +1131,12 @@ function playRoles(plan: Plan, rng: (salt: string) => Random): Draft[] {
         duration: Math.max(30, plan.stepTicks * 0.9),
         key,
         cents: 0,
-        velocity: humanVelocity(
-          velocityAt(step, section.energy, role),
-          timingRandom,
+        velocity: clamp(
+          velocityAt(step, section.energy, role) *
+            touch.accent *
+            (1 + gauss(timingRandom) * groove.humanize.velocity * touch.spread),
+          0.05,
+          1,
         ),
       });
     }
@@ -1136,7 +1156,16 @@ function playRoles(plan: Plan, rng: (salt: string) => Random): Draft[] {
   if (has("drone")) drafts.push(...playDrone(plan));
   if (has("arp")) drafts.push(...playArp(plan, rng("arp")));
   if (has("bass"))
-    drafts.push(...playBass(plan, kick, rng("bass"), timeOf, velocityAt));
+    drafts.push(
+      ...playBass(
+        plan,
+        kick,
+        rng("bass"),
+        timeOf,
+        velocityAt,
+        rng("bass-touch"),
+      ),
+    );
   const lead = has("lead")
     ? playMelody(plan, "lead", rng("melody"))
     : { drafts: [], phrases: [] };
@@ -1394,6 +1423,9 @@ function playChords(plan: Plan, role: RoleName, random: Random): Draft[] {
   const grid = style.rhythm.onsets[role];
   const type = pickWeighted(style.harmony.voicing.types, random);
   const strum = style.harmony.voicing.strokes?.length ? 14 : 0;
+  const strokes = style.harmony.voicing.strokes?.length
+    ? strokeGrid(pickWeighted(style.harmony.voicing.strokes, random))
+    : undefined;
   let previous: number[] | undefined;
   const key = plan.keyText ? parseKey(plan.keyText) : undefined;
   for (const chord of plan.chords) {
@@ -1431,21 +1463,166 @@ function playChords(plan: Plan, role: RoleName, random: Random): Draft[] {
       if (!section.roles.includes(role)) return;
       const next = hits[i + 1] ?? endTick;
       const [lo, hi] = style.expression.dynamics;
-      const velocity = clamp((lo + (hi - lo) * section.energy) * 0.85, 0.05, 1);
-      pitches.forEach((pitch, v) => {
+      const base = (lo + (hi - lo) * section.energy) * 0.85;
+      const feel = compFeel(plan, tick, next, endTick, random);
+      // A strum follows the card's stroke pattern (D down, U up, d and u
+      // light, x a muted chuck): a downstroke sounds every string low to
+      // high; an upstroke catches the top strings high to low, lighter.
+      const stroke = strum ? strokeAt(plan, strokes, tick, feel.onBeat) : "";
+      const up = stroke === "U" || stroke === "u";
+      const light = stroke === "d" || stroke === "u" ? 0.85 : 1;
+      const chuck = stroke === "x";
+      const keep = stroke === "u" ? 3 : up || stroke === "d" ? 4 : 99;
+      const voices =
+        pitches.length > keep ? pitches.slice(pitches.length - keep) : pitches;
+      const order = up ? [...voices].reverse() : voices;
+      const top = Math.max(...voices.map((p) => p.key));
+      const bottom = Math.min(...voices.map((p) => p.key));
+      let roll = 0;
+      order.forEach((pitch, v) => {
+        const melody = pitch.key === top && voices.length > 1;
+        // A strum sweeps the strings one after another. A keyboard hand
+        // lands its fingers a few milliseconds apart, the top (melody)
+        // finger first and loudest.
+        if (strum) {
+          if (v > 0) roll += strum * (up ? 0.7 : 1) * (0.8 + 0.4 * random());
+        } else
+          roll = melody ? 0 : (0.3 + 0.7 * random()) * plan.humanizeTicks * 0.6;
+        const voice = melody ? 1.08 : pitch.key === bottom ? 1 : 0.92;
         out.push({
           trackId: role,
           role,
-          tick: tick + v * strum,
-          duration: Math.max(30, (next - tick) * 0.92 - v * strum),
+          tick: tick + feel.shift + roll,
+          duration: chuck
+            ? Math.max(30, Math.min(next - tick, plan.stepTicks) * 0.5)
+            : Math.max(30, (next - tick) * feel.gate - roll - feel.shift),
           key: pitch.key,
           cents: pitch.cents,
-          velocity,
+          velocity: clamp(
+            base *
+              feel.accent *
+              voice *
+              light *
+              (up ? 0.9 : 1) *
+              (chuck ? 0.7 : 1) *
+              (1 + gauss(random) * 0.03),
+            0.05,
+            1,
+          ),
         });
       });
     });
   }
   return out;
+}
+
+/**
+ * How hard a drummer plays one kit or hand-percussion hit, on top of the
+ * card's per-step accent shape. Snare strokes the card plays only some of
+ * the time, between beats, are ghost notes at a third to a half of a main
+ * stroke, each a little different. Optional hat and kick strokes are
+ * lighter. A fill builds through its beat into the next phrase (a
+ * backbeat inside it keeps its weight). The one of each bar lands a
+ * little harder, and the one of each four-bar phrase harder still. Kicks vary
+ * least from stroke to stroke and hats and shakers most.
+ */
+function kitTouch(
+  role: RoleName,
+  step: number,
+  odds: number,
+  fill: number | undefined,
+  plan: Plan,
+  beatSteps: number,
+  random: Random,
+): { accent: number; spread: number } {
+  const barStep = step % plan.stepsPerBar;
+  const bar = Math.floor(step / plan.stepsPerBar);
+  const onBeat = barStep % beatSteps === 0;
+  const spread =
+    role === "kick"
+      ? 0.6
+      : role === "snare" || role === "clap"
+        ? 0.8
+        : role === "hat" || role === "shaker" || role === "openhat"
+          ? 1.4
+          : 1.1;
+  if (fill !== undefined && (role === "snare" || role === "tom"))
+    return {
+      accent: Math.max(odds >= 1 ? 1 : 0, 0.86 + 0.24 * fill),
+      spread: 0.6,
+    };
+  if (odds < 1 && !onBeat) {
+    if (role === "snare" || role === "rim")
+      return {
+        accent: plan.humanizeTicks > 0 ? 0.42 + 0.16 * random() : 0.5,
+        spread: 0.5,
+      };
+    if (role === "kick") return { accent: 0.85, spread };
+    if (role === "hat" || role === "shaker") return { accent: 0.8, spread };
+  }
+  if (barStep !== 0) return { accent: 1, spread };
+  return { accent: bar % 4 === 0 ? 1.08 : 1.04, spread };
+}
+
+/**
+ * The stroke a strummed hit takes from the card's pattern, one character
+ * per eighth from the bar line. A hit between eighths is an upstroke; a
+ * hit where the pattern rests takes the stroke the beat implies.
+ */
+function strokeAt(
+  plan: Plan,
+  grid: string | undefined,
+  tick: number,
+  onBeat: boolean,
+): string {
+  const eighth = plan.barTicks / plan.beatsPerBar / 2;
+  const inBar = mod(tick, plan.barTicks);
+  const index = Math.round(inBar / eighth);
+  if (!grid || Math.abs(inBar - index * eighth) >= plan.stepTicks / 2)
+    return onBeat ? "D" : "U";
+  const char = grid[index % grid.length]!;
+  return /[DUdux]/.test(char) ? char : onBeat ? "D" : "U";
+}
+
+/**
+ * How one comping hit is played. A pianist or guitarist leans on the bar's
+ * downbeat, plays the other beats a little lighter and the off-beat stabs
+ * lighter still, except the last stab before a chord change, which pushes
+ * into it. Each hit lands with the groove's human timing and a slightly
+ * different length; the last hit of a chord holds to the change.
+ */
+function compFeel(
+  plan: Plan,
+  tick: number,
+  next: number,
+  endTick: number,
+  random: Random,
+): { accent: number; shift: number; gate: number; onBeat: boolean } {
+  const beatTicks = plan.barTicks / plan.beatsPerBar;
+  const inBar = mod(tick, plan.barTicks);
+  const onBeat =
+    Math.abs(inBar - Math.round(inBar / beatTicks) * beatTicks) <
+    plan.stepTicks / 2;
+  const downbeat = inBar < plan.stepTicks / 2;
+  const half =
+    plan.beatsPerBar % 2 === 0 &&
+    Math.abs(inBar - plan.barTicks / 2) < plan.stepTicks / 2;
+  const push = !onBeat && next >= endTick && endTick - tick <= beatTicks;
+  const metric = downbeat ? 1 : half ? 0.94 : onBeat ? 0.9 : push ? 0.97 : 0.84;
+  // A sequenced part (no timing humanise) keeps only its programmed
+  // accents; a played part never sounds two strokes exactly alike.
+  const card = plan.style.groove.humanize.velocity;
+  const human = plan.humanizeTicks > 0 ? Math.max(0.04, card) : card;
+  const accent = metric * (1 + gauss(random) * human);
+  // The comping hand sits a touch behind the beat, never ahead of it
+  // (on-beat notes run late in recorded grooves), by up to a third of a
+  // step.
+  const shift = Math.min(
+    Math.abs(gauss(random)) * plan.humanizeTicks * 0.7,
+    plan.stepTicks / 3,
+  );
+  const gate = next >= endTick ? 0.97 : 0.84 + 0.1 * random();
+  return { accent, shift, gate, onBeat };
 }
 
 function playSustain(plan: Plan, role: RoleName): Draft[] {
@@ -1580,6 +1757,7 @@ function playBass(
   random: Random,
   timeOf: (role: RoleName, step: number, random: Random) => number,
   velocityAt: (step: number, energy: number, role: RoleName) => number,
+  touch: Random,
 ): Draft[] {
   const style = plan.style;
   const behaviour = pickWeighted(style.bass.behaviour, random);
@@ -1773,17 +1951,99 @@ function playBass(
         pitch = root;
     }
     const next = steps[i + 1] ?? Math.min(totalSteps, step + plan.stepsPerBar);
+    const nextChord = chordAt(plan.chords, next / plan.stepsPerBar);
+    const lands =
+      step === 0 ||
+      chordAt(plan.chords, (step - 1) / plan.stepsPerBar) !== chord;
+    // Into a chord change the bass walks a scale step to the new root
+    // (Jamerson's approach tones), on the side the line is already on.
+    let approach = false;
+    if (
+      APPROACH_BEHAVIOURS.has(behaviour) &&
+      steps[i + 1] !== undefined &&
+      next - step <= beatSteps &&
+      nextChord &&
+      nextChord !== chord &&
+      !lands &&
+      touch() < (APPROACH_BEHAVIOURS.get(behaviour) ?? 0)
+    ) {
+      const step2 = approachTone(plan, rootPitch(nextChord), pitch, fold);
+      if (step2) {
+        pitch = step2;
+        approach = true;
+      }
+    }
+    // A bassist digs in with the kick and on each new chord, plays the
+    // notes between a little lighter, and varies every stroke slightly.
+    const accent =
+      (kick.has(step) ? 1.04 : 0.95) *
+      (lands ? 1.03 : 1) *
+      (approach ? 0.93 : 1);
+    const card = style.groove.humanize.velocity;
+    const human = (plan.humanizeTicks > 0 ? Math.max(0.03, card) : card) * 0.8;
+    const offBeat = step % beatSteps !== 0;
+    const gate =
+      (approach ? 0.8 : offBeat && next - step <= beatSteps / 2 ? 0.74 : 0.9) +
+      0.06 * (touch() - 0.5);
     out.push({
       trackId: "bass",
       role: "bass",
       tick: timeOf("bass", step, timing),
-      duration: Math.max(30, (next - step) * plan.stepTicks * 0.9),
+      duration: Math.max(30, (next - step) * plan.stepTicks * gate),
       key: pitch.key,
       cents: pitch.cents,
-      velocity: clamp(velocityAt(step, section.energy, "bass"), 0.05, 1),
+      velocity: clamp(
+        velocityAt(step, section.energy, "bass") *
+          accent *
+          (1 + gauss(touch) * human),
+        0.05,
+        1,
+      ),
     });
   });
   return out;
+}
+
+/**
+ * How often each bass behaviour walks a step into a chord change: the
+ * two-beat (root-fifth) and disco-octave players do it most, a bassist
+ * pounding roots only now and then.
+ */
+const APPROACH_BEHAVIOURS: ReadonlyMap<string, number> = new Map([
+  ["root-fifth", 0.6],
+  ["octave", 0.45],
+  ["root", 0.3],
+]);
+
+/**
+ * The scale tone next to `target` on the side `from` sits (below when the
+ * line climbs to it, above when it falls), folded into the bass range.
+ * Undefined when the line already moves by step or no scale tone lies
+ * within a minor third of the target.
+ */
+function approachTone(
+  plan: Plan,
+  target: Pitch,
+  from: Pitch,
+  fold: (pitch: Pitch) => Pitch,
+): Pitch | undefined {
+  if (Math.abs(from.semis - target.semis) <= 2.01) return undefined;
+  const dir = from.semis < target.semis ? -1 : 1;
+  let index = indexNear(plan, target.semis);
+  for (let guard = 0; guard < 8; guard += 1) {
+    const tone = toneAt(plan, index);
+    if (
+      dir < 0
+        ? tone.semis < target.semis - 0.01
+        : tone.semis > target.semis + 0.01
+    ) {
+      if (Math.abs(tone.semis - target.semis) > 3.01) return undefined;
+      const folded = fold(tone);
+      return Math.abs(folded.semis - target.semis) <= 3.01 ? folded : undefined;
+    }
+    index += dir;
+  }
+  return undefined;
 }
 
 const CONTOUR_TARGETS: Readonly<Record<string, (x: number) => number>> =
