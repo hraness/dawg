@@ -23,19 +23,123 @@ const TICKS_PER_BEAT = 480;
 
 /** [beat in the bar (may run past 4), pitch, length, velocity, ornament] */
 type Line = readonly (readonly [number, number, number, number, string?])[];
-/** [beat in the bar, bass root, rootless chord tones above the root] */
-type Span = readonly [number, number, readonly number[]];
 
-// Rootless voicings as semitones above the root; the bass plays the roots.
-const M9 = [3, 7, 10, 14];
-const M11 = [3, 10, 14, 17];
-const MAJ9 = [4, 7, 11, 14];
-const MAJ9S11 = [4, 11, 14, 18];
-const MAJ7S11 = [4, 7, 11, 18];
-const DOM13 = [10, 14, 16, 21];
-const SUS13 = [5, 10, 14, 21];
-const ALT = [4, 10, 15, 20];
-const SHARP9 = [4, 10, 15, 21];
+/**
+ * A chord quality, as semitones above the root (the bass plays the root):
+ * the A and B rootless forms a pianist alternates between so one or two
+ * voices move per change (after Mark Levine), the three-note left-hand
+ * shells (third and seventh plus one colour, a fourth or wider at the
+ * bottom so they stay clear low down) for when the right hand has the
+ * tune, and the third, fifth and seventh the bass walks through.
+ */
+type Quality = Readonly<{
+  forms: readonly (readonly number[])[];
+  shells: readonly (readonly number[])[];
+  third: number;
+  fifth: number;
+  seventh: number;
+}>;
+const quality = (
+  forms: Quality["forms"],
+  shells: Quality["shells"],
+  [third, fifth, seventh]: readonly [number, number, number],
+): Quality => ({ forms, shells, third, fifth, seventh });
+const M9 = quality(
+  [
+    [3, 7, 10, 14],
+    [10, 14, 15, 19],
+  ],
+  [
+    [3, 10, 14],
+    [10, 15, 19],
+  ],
+  [3, 7, 10],
+);
+/** m11 as the quartal "So What" stack, or b3 5 b7 11. */
+const M11 = quality(
+  [
+    [5, 10, 15, 19],
+    [3, 7, 10, 17],
+  ],
+  [
+    [3, 10, 17],
+    [5, 10, 15],
+  ],
+  [3, 7, 10],
+);
+const MAJ9 = quality(
+  [
+    [4, 7, 11, 14],
+    [11, 14, 16, 19],
+  ],
+  [
+    [4, 11, 14],
+    [11, 16, 21],
+  ],
+  [4, 7, 11],
+);
+/** Lydian: 3 7 9 #11, or the major seventh a fifth up over the root. */
+const MAJ9S11 = quality(
+  [
+    [4, 11, 14, 18],
+    [7, 11, 14, 18],
+  ],
+  [
+    [4, 11, 18],
+    [11, 16, 21],
+  ],
+  [4, 7, 11],
+);
+const DOM13 = quality(
+  [
+    [10, 14, 16, 21],
+    [4, 9, 10, 14],
+  ],
+  [
+    [4, 10, 14],
+    [10, 16, 21],
+  ],
+  [4, 7, 10],
+);
+/** The "Bbmaj7 over C" sus sound. */
+const SUS13 = quality(
+  [
+    [10, 14, 17, 21],
+    [5, 9, 10, 14],
+  ],
+  [
+    [5, 10, 14],
+    [10, 17, 21],
+  ],
+  [5, 7, 10],
+);
+/** 3 b7 #9 b13; the bass leans on the seventh, never the fifth. */
+const ALT = quality(
+  [
+    [4, 10, 15, 20],
+    [10, 16, 20, 27],
+  ],
+  [
+    [4, 10, 15],
+    [10, 16, 20],
+  ],
+  [4, 10, 10],
+);
+const SHARP9 = quality(
+  [
+    [4, 10, 15, 19],
+    [10, 16, 19, 27],
+  ],
+  [
+    [4, 10, 15],
+    [10, 16, 21],
+  ],
+  [4, 7, 10],
+);
+const MAJ7S11 = MAJ9S11;
+
+/** [beat in the bar, bass root, chord quality] */
+type Span = readonly [number, number, Quality];
 
 /**
  * The head: the ii-V-I-bVII "Glasper cycle" (Gm9 C13 Fmaj9 Ebmaj9) into a
@@ -90,41 +194,41 @@ function harmony(bar: number): readonly Span[] {
 }
 
 /**
- * The rootless voicing nearest the previous one (fewest semitones moved),
- * kept between F3 and D5 and pulled gently toward the middle so the chain
- * never drifts into the bass.
+ * The shape nearest the previous voicing: each form in the two octaves
+ * whose bottom note sits at or above `low`, scored by how far the voices
+ * move plus a pull toward `centre`. A form whose top note climbs past
+ * `top` (into the sax) costs extra, so the chain stays in its own register.
  */
 function lead(
   previous: readonly number[],
   root: number,
-  tones: readonly number[],
+  shapes: readonly (readonly number[])[],
+  low: number,
+  centre: number,
+  top: number,
 ): number[] {
-  const classes = tones.map((tone) => (root + tone) % 12);
   let best: number[] = [];
   let bestCost = Infinity;
-  const walk = (index: number, chosen: number[]): void => {
-    if (index === classes.length) {
-      const sorted = [...chosen].sort((a, b) => a - b);
-      if (new Set(sorted).size !== sorted.length) return;
-      if (sorted.at(-1)! - sorted[0]! > 13) return;
-      if (sorted[1]! - sorted[0]! < 2) return;
-      const centre = sorted.reduce((sum, pitch) => sum + pitch, 0) / 4;
+  for (const shape of shapes) {
+    const lift = Math.ceil((low - root - shape[0]!) / 12) * 12;
+    for (const octave of [0, 12]) {
+      const pitches = shape.map((tone) => root + tone + lift + octave);
+      const mean =
+        pitches.reduce((sum, pitch) => sum + pitch, 0) / pitches.length;
+      const moved = pitches.reduce(
+        (sum, pitch, i) => sum + Math.abs(pitch - (previous[i] ?? pitch)),
+        0,
+      );
       const cost =
-        sorted.reduce(
-          (sum, pitch, i) => sum + Math.abs(pitch - (previous[i] ?? pitch)),
-          0,
-        ) +
-        0.35 * Math.abs(centre - 63.5);
+        moved +
+        0.5 * Math.abs(mean - centre) +
+        4 * Math.max(0, pitches.at(-1)! - top);
       if (cost < bestCost) {
         bestCost = cost;
-        best = sorted;
+        best = pitches;
       }
-      return;
     }
-    for (let pitch = 53; pitch <= 74; pitch++)
-      if (pitch % 12 === classes[index]) walk(index + 1, [...chosen, pitch]);
-  };
-  walk(0, []);
+  }
   return best;
 }
 
@@ -432,6 +536,28 @@ const COMP: readonly (readonly (readonly [number, number, number, number?])[])[]
     ],
   ];
 
+/** Left-hand shells under the keys solo, [beat, length, velocity]. */
+const LEFT_HAND: readonly (readonly (readonly [number, number, number])[])[] =
+  [
+    [
+      [0, 1.4, 0.44],
+      [2.75, 0.9, 0.38],
+    ],
+    [
+      [0.5, 1.1, 0.42],
+      [2.5, 0.35, 0.34],
+      [3.25, 0.6, 0.36],
+    ],
+    [
+      [0, 2.2, 0.44],
+      [3.5, 0.4, 0.36],
+    ],
+    [
+      [0.75, 0.9, 0.4],
+      [2.25, 1.4, 0.4],
+    ],
+  ];
+
 export const amberRoom: DemoDefinition = {
   info: demoInfo({
     id: "amber-room",
@@ -478,13 +604,19 @@ export const amberRoom: DemoDefinition = {
     ] as const)
       s.section(name, start, bars);
 
-    // Voice-led rootless voicings for every chord span, in time order.
+    // Voice-led rootless voicings for every chord span, in time order: the
+    // four-note comping forms sit between F3 and D5, under the sax, and the
+    // left-hand shells for the keys solo sit an octave lower.
     const voicings = new Map<string, number[]>();
-    let previous: number[] = [58, 62, 65, 69];
+    const shells = new Map<string, number[]>();
+    let previous: number[] = [60, 64, 65, 69];
+    let previousShell: number[] = [52, 57, 60];
     for (let bar = 0; bar < 48; bar++)
-      harmony(bar).forEach(([, root, tones], i) => {
-        previous = lead(previous, root, tones);
+      harmony(bar).forEach(([, root, chord], i) => {
+        previous = lead(previous, root, chord.forms, 53, 64.5, 74);
+        previousShell = lead(previousShell, root, chord.shells, 48, 56, 66);
         voicings.set(`${bar}:${i}`, previous);
+        shells.set(`${bar}:${i}`, previousShell);
       });
     const spanAt = (bar: number, beat: number): number => {
       const spans = harmony(bar);
@@ -496,6 +628,8 @@ export const amberRoom: DemoDefinition = {
     };
     const chordAt = (bar: number, beat: number): number[] =>
       voicings.get(`${bar}:${spanAt(bar, beat)}`)!;
+    const shellAt = (bar: number, beat: number): number[] =>
+      shells.get(`${bar}:${spanAt(bar, beat)}`)!;
 
     // Sustain pedal: caught just after each chord change in the doorway, the
     // bridge and the ending; the comped head and the keys solo stay dry so
@@ -653,16 +787,16 @@ export const amberRoom: DemoDefinition = {
             { at: 1, cents: -500 },
           ],
         });
-      s.note("bass", bar, beat + BASS, pitch, length, velocity, extra);
+      // Approach notes lean into the next chord; ghosts drag a little.
+      const lean = code.includes("p") ? -0.014 : code.includes("g") ? 0.01 : 0;
+      s.note("bass", bar, beat + BASS + lean, pitch, length, velocity, extra);
     };
     const nextRoot = (bar: number): number => harmony(bar + 1)[0]![1];
     const bassBar = (bar: number, pattern: number, gain = 1): void => {
       const spans = harmony(bar);
       const next = nextRoot(bar);
-      const [, root, tones] = spans[0]!;
-      const fifth = tones === ALT ? 10 : 7;
-      const seventh = tones.includes(11) ? 11 : 10;
-      const third = tones[0]!;
+      const [, root, chord] = spans[0]!;
+      const { third, fifth, seventh } = chord;
       const approach =
         bar % 2 ? next + 1 : next - 1 >= 28 ? next - 1 : next + 1;
       const g = gain;
@@ -672,7 +806,7 @@ export const amberRoom: DemoDefinition = {
         bassNote(bar, beat2 - 0.5, root + 12, 0.2, 0.5 * g, "g");
         bassNote(bar, beat2, root2, 3.6 - beat2, 0.74 * g, root2 !== root ? "s" : "");
         if (Math.abs(root2 - next) > 1)
-          bassNote(bar, 3.75, approach, 0.22, 0.58 * g);
+          bassNote(bar, 3.75, approach, 0.22, 0.58 * g, "p");
         return;
       }
       switch (pattern) {
@@ -681,19 +815,19 @@ export const amberRoom: DemoDefinition = {
           bassNote(bar, 1.75, root, 0.12, 0.3 * g, "g");
           bassNote(bar, 2.5, root + fifth, 0.4, 0.62 * g);
           bassNote(bar, 3.25, root + 12, 0.2, 0.56 * g);
-          bassNote(bar, 3.75, approach, 0.22, 0.6 * g);
+          bassNote(bar, 3.75, approach, 0.22, 0.6 * g, "p");
           break;
         case 1:
           bassNote(bar, 0, root, 2.2, 0.78 * g, "s");
           bassNote(bar, 2.75, root + seventh - 12 >= 26 ? root + seventh - 12 : root + seventh, 0.4, 0.6 * g);
-          bassNote(bar, 3.75, approach, 0.25, 0.6 * g);
+          bassNote(bar, 3.75, approach, 0.25, 0.6 * g, "p");
           break;
         case 2:
           bassNote(bar, 0.5, root, 0.9, 0.74 * g);
           bassNote(bar, 1.75, root + 12, 0.2, 0.52 * g);
           bassNote(bar, 2, root + fifth, 0.4, 0.6 * g);
           bassNote(bar, 2.75, root + seventh, 0.5, 0.6 * g);
-          bassNote(bar, 3.75, approach, 0.25, 0.58 * g);
+          bassNote(bar, 3.75, approach, 0.25, 0.58 * g, "p");
           break;
         default:
           bassNote(bar, 0, root, 0.9, 0.78 * g);
@@ -701,7 +835,7 @@ export const amberRoom: DemoDefinition = {
           bassNote(bar, 1.5, root + third, 0.4, 0.58 * g);
           bassNote(bar, 2.25, root + fifth, 0.6, 0.64 * g);
           bassNote(bar, 3, root + seventh, 0.45, 0.58 * g);
-          bassNote(bar, 3.75, approach, 0.25, 0.6 * g);
+          bassNote(bar, 3.75, approach, 0.25, 0.6 * g, "p");
       }
     };
 
@@ -791,17 +925,22 @@ export const amberRoom: DemoDefinition = {
         pocket(bar, bar - 20);
         bassNote(bar, 0, harmony(bar)[0]![1], 3.1, 0.74, bar % 2 ? "" : "s");
         if (bar % 2) bassNote(bar, 2.75, harmony(bar)[0]![1] + 12, 0.15, 0.3, "g");
-        if (bar !== 27) bassNote(bar, 3.5, nextRoot(bar) - 1 >= 28 ? nextRoot(bar) - 1 : nextRoot(bar) + 1, 0.4, 0.56);
+        if (bar !== 27) bassNote(bar, 3.5, nextRoot(bar) - 1 >= 28 ? nextRoot(bar) - 1 : nextRoot(bar) + 1, 0.4, 0.56, "p");
         roll(bar, 0, chordAt(bar, 0), 2.4, 0.52, 0.03);
         roll(bar, 2.75, chordAt(bar, 2.75), 1.1, 0.42, 0.02);
       } else {
         quiet(bar, index);
-        bassBar(bar, 1, 0.86);
-        const shell = [...new Set(chordAt(bar, 0).map((p) => (p > 66 ? p - 12 : p)))]
-          .sort((a, b) => a - b)
-          .slice(0, 3);
-        roll(bar, 0.5, shell, 1.2, 0.42, 0.02);
-        roll(bar, 2.75, shell, 0.9, 0.38, 0.02);
+        bassBar(bar, index % 4 === 2 ? 2 : 1, 0.86);
+        const change = harmony(bar)[1]?.[0];
+        const cell =
+          change === undefined
+            ? LEFT_HAND[index % 4]!
+            : ([
+                [0, change - 0.2, 0.42],
+                [change, 3.7 - change, 0.4],
+              ] as const);
+        for (const [beat, length, velocity] of cell)
+          roll(bar, beat, shellAt(bar, beat), length, velocity, 0.018);
       }
     }
     for (const [beat, pitch, length, velocity] of KEYS_SOLO)
