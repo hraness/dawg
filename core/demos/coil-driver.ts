@@ -245,24 +245,27 @@ export const coilDriver: DemoDefinition = {
 
     // Drums: one 909 split over three tracks so the hats can sit apart.
     s.track(
-      voice("kick", "Kick", "kit", 0.84, {
+      voice("kick", "Kick", "kit", 0.6, {
         kit: "syn909",
         fx: { duck: { orbit: 2, depth: 0.48, attack: 0.17 } },
         humanize: { velocity: 2, seed: 7 },
       }),
     );
     s.track(
-      voice("drums", "Clap, snare & toms", "kit", 0.5, {
+      voice("drums", "Clap, snare & toms", "kit", 0.36, {
         kit: "syn909",
-        reverb: { mix: 0.06, size: 0.28, fade: 0.6 },
+        reverb: { mix: 0.1, size: 0.36, fade: 0.6 },
         humanize: { timing: 4, velocity: 4, seed: 23 },
       }),
     );
     s.track(
-      voice("hats", "Hats & cymbals", "kit", 0.44, {
+      voice("hats", "Hats & cymbals", "kit", 0.31, {
         kit: "syn909",
-        pan: 0.14,
+        pan: 0.16,
         reverb: { mix: 0.05, size: 0.22, fade: 0.5 },
+        // A second hat a few milliseconds late on the other side: width
+        // without moving the hats off the center of the groove.
+        fx: { double: { time: 7, drift: 0.5, width: 0.55 } },
         humanize: { timing: 3, velocity: 4, seed: 19 },
       }),
     );
@@ -395,7 +398,7 @@ export const coilDriver: DemoDefinition = {
       10,
     );
     s.track(
-      voice("acid", "Acid circuit", "saw", 0.9, {
+      voice("acid", "Acid circuit", "saw", 1, {
         synth: {
           attack: 0.002,
           decay: 0.2,
@@ -465,7 +468,7 @@ export const coilDriver: DemoDefinition = {
       9000,
     );
     s.track(
-      voice("acid2", "Square circuit", "square", 0.42, {
+      voice("acid2", "Square circuit", "square", 0.46, {
         pan: -0.24,
         synth: {
           attack: 0.002,
@@ -512,21 +515,23 @@ export const coilDriver: DemoDefinition = {
         fx: {
           ...orbit,
           distort: { type: "diode", drive: 1.4, mix: 0.3, tone: 6000 },
+          // Hardfloor-style: the second box swims in a slow stereo chorus.
+          chorus: { rate: 0.45, depth: 0.55, mix: 0.45 },
         },
       }),
     );
     s.track(
-      voice("rim", "Rim machine", "kit", 0.3, {
+      voice("rim", "Rim machine", "kit", 0.22, {
         kit: "syn808",
-        pan: -0.3,
+        pan: -0.36,
         delay: { beats: 0.75, feedback: 0.22, mix: 0.12, pingpong: true },
         humanize: { timing: 2, velocity: 5, seed: 41 },
       }),
     );
     s.track(
-      voice("bell", "Steel alarm", "modal", 0.17, {
+      voice("bell", "Steel alarm", "modal", 0.13, {
         modal: { preset: "crotales" },
-        pan: 0.3,
+        pan: 0.36,
         reverb: hall,
         delay: {
           beats: 0.75,
@@ -540,7 +545,7 @@ export const coilDriver: DemoDefinition = {
     );
     // Risers sweep a resonant high-pass up; downlifters sweep it down.
     s.track(
-      voice("noise", "Pressure release", "white", 0.13, {
+      voice("noise", "Pressure release", "white", 0.11, {
         synth: { attack: 0.3, decay: 0.2, sustain: 0.5, release: 0.7 },
         filter: { type: "hpf", cutoff: 2800, resonance: 0.6 },
         reverb: room,
