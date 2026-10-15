@@ -34,28 +34,28 @@ type Harmony = Readonly<{
 const H: Readonly<Record<string, Harmony>> = {
   E: {
     root: 28,
-    keys: [56, 59, 63, 66],
+    keys: [54, 56, 59, 63],
     saw: [64, 68, 71, 76],
     lo: [85, 88, 92, 95, 100],
     hi: [80, 83, 88, 90, 95],
   },
   B: {
     root: 35,
-    keys: [54, 59, 61, 63],
+    keys: [51, 54, 59, 61],
     saw: [63, 66, 71, 75],
     lo: [87, 90, 95, 97, 99],
     hi: [83, 87, 90, 95, 97],
   },
   Cm: {
     root: 37,
-    keys: [56, 59, 61, 64],
+    keys: [52, 56, 59, 61],
     saw: [64, 68, 73, 76],
     lo: [85, 88, 92, 95, 97],
     hi: [88, 92, 95, 97, 99],
   },
   A: {
     root: 33,
-    keys: [57, 61, 64, 68],
+    keys: [52, 57, 61, 64],
     saw: [64, 69, 73, 76],
     lo: [81, 85, 88, 93, 95],
     hi: [85, 88, 93, 97, 100],
@@ -63,7 +63,7 @@ const H: Readonly<Record<string, Harmony>> = {
   /** The bVII lift at the end of verse two. */
   D: {
     root: 38,
-    keys: [57, 62, 66, 69],
+    keys: [54, 57, 62, 66],
     saw: [62, 66, 69, 74],
     lo: [81, 86, 90, 93, 98],
     hi: [86, 90, 93, 98, 100],
@@ -226,6 +226,7 @@ const HATS_DRIVE = [
 const MOTIF: Phrase = [
   [0, 76, 0.32, 0.78],
   [0.75, 75, 0.2, 0.63],
+  [1, 76, 0.22, 0.66],
   [1.25, 71, 0.42, 0.75],
   [2, 68, 0.34, 0.64],
   [2.75, 71, 0.7, 0.76],
@@ -235,7 +236,7 @@ const MOTIF_IV: Phrase = [
   [0, 76, 0.32, 0.78],
   [0.75, 73, 0.2, 0.63],
   [1.25, 69, 0.42, 0.75],
-  [2, 68, 0.34, 0.64],
+  [2, 71, 0.34, 0.64],
   [2.75, 73, 0.7, 0.76],
 ];
 /** Answers to the singer only ever climb (hyperpop leads move up). */
@@ -251,7 +252,8 @@ const ANSWERS: readonly Phrase[] = [
     [2, 76, 0.22, 0.68],
     [2.5, 75, 0.2, 0.58],
     [2.75, 76, 0.22, 0.66],
-    [3, 83, 0.85, 0.84],
+    [3, 78, 0.2, 0.7],
+    [3.25, 83, 0.7, 0.84],
   ],
   [
     [2, 80, 0.2, 0.7],
@@ -270,8 +272,8 @@ const ANSWERS: readonly Phrase[] = [
 const COUNTER: Readonly<Record<string, Phrase>> = {
   Cm: [
     [2.5, 64, 0.22, 0.6],
-    [3, 61, 0.22, 0.54],
-    [3.5, 59, 0.6, 0.62],
+    [3, 63, 0.22, 0.54],
+    [3.5, 61, 0.6, 0.62],
   ],
   A: [
     [2.5, 64, 0.22, 0.6],
@@ -287,7 +289,7 @@ const COUNTER: Readonly<Record<string, Phrase>> = {
     [2, 62, 0.22, 0.58],
     [2.5, 66, 0.22, 0.6],
     [3, 69, 0.22, 0.62],
-    [3.5, 71, 0.6, 0.66],
+    [3.5, 74, 0.6, 0.66],
   ],
 };
 /**
@@ -307,6 +309,7 @@ const CHIP: Readonly<Record<string, Phrase>> = {
     [1.75, 81, 0.2, 0.7],
     [2, 85, 0.2, 0.74],
     [2.5, 83, 0.2, 0.64],
+    [2.75, 81, 0.2, 0.62],
     [3, 80, 0.2, 0.6],
     [3.25, 81, 0.2, 0.66],
   ],
@@ -724,6 +727,7 @@ export const candyFault: DemoDefinition = {
       "The 808 follows every kick hit, slides into each new root and drops an octave onto the chorus downbeats; in the bridge it walks down alone, E to F#, under the Rhodes.",
       "The singer is pitched bright with a formant lift; a softer double sings thirds below (sixths at the bridge cadence) and a thin octave-up double joins the final chorus; dotted-eighth delay throws catch the last word of each line.",
       "Two chip arps split the sixteenths, the square on the beat and the pulse between, with inversions that walk the top note down then up each phrase; the plastic pulse hook finishes the singer's lines and answers verse two in the gap above the 808.",
+      "The supersaw stack sits an octave under the singer (C#3 to E4) so her line stays clear; short octave stabs and the Overload top voice carry the sparkle above her, and the Rhodes voicings in the verses top out under her lowest notes.",
       "The pre-chorus bit-crushes and formant-shifts into a stuttered 'me' before the 808 lets go for the drop; the glitch break drops the kick for four bars of stuttered syllables and ends on a tape stop. After one beat of silence the final chorus jumps from E to F, detunes the supersaw from pretty to harsh and stutters the hook; the song powers down with the 808 and the last chip fragment diving an octave.",
     ],
   }),
@@ -993,7 +997,7 @@ export const candyFault: DemoDefinition = {
     );
     s.track(
       // The octave-up double for the final chorus: thin, bright, tucked under.
-      voice("high", "Pixel double", "sing", 0.3, {
+      voice("high", "Pixel double", "sing", 0.36, {
         pan: -0.28,
         sing: {
           preset: "glass",
@@ -1433,7 +1437,7 @@ export const candyFault: DemoDefinition = {
             "4.3.4.3.4.3.4.3.",
             "4.3.4.3.4.3.....",
           ][inPart]!,
-          0.8,
+          0.95,
         );
         if (inPart === 1) roll("hats", b, 3, 8, 0.125, 42, 0.2, 0.5, [2, 5]);
         if (inPart === 3) roll("hats", b, 2, 8, 0.125, 46, 0.5, 0.15);
@@ -1535,7 +1539,7 @@ export const candyFault: DemoDefinition = {
           0,
           [...low, ...top],
           3.8,
-          part === "over" ? 0.64 : 0.58,
+          part === "over" ? 0.68 : 0.58,
         );
         if (part === "return" || part === "over")
           for (const beat of [0.5, 1.5, 2.5, 3.5])
@@ -1580,7 +1584,7 @@ export const candyFault: DemoDefinition = {
       if (chorusLike) {
         const phraseEnd = inPart % 4 === 3;
         const tones = inPart < 4 ? h.lo : h.hi;
-        const gain = part === "chorus" ? 0.72 : part === "return" ? 0.82 : 0.95;
+        const gain = part === "chorus" ? 0.72 : part === "return" ? 0.82 : 1;
         arp("arp", b, tones, gain, phraseEnd ? ARP_DOWN : ARP_UP);
         // The second arp joins for the second half of chorus one, then always.
         if (part !== "chorus" || inPart >= 4)
@@ -1656,7 +1660,8 @@ export const candyFault: DemoDefinition = {
               ],
           0.6,
         );
-      if (b === 13) hook(b, ANSWERS[0]!, 0.62);
+      if (b === 13)
+        hook(b, [...ANSWERS[0]!.slice(0, 4), [3, 83, 0.85, 0.82]], 0.62);
       if (chorusLike && inPart % 2 === 1 && inPart !== 7) {
         const gain = part === "chorus" ? 0.9 : 1;
         hook(b, CHIP[name]!, gain);
@@ -1804,7 +1809,7 @@ export const candyFault: DemoDefinition = {
       [26, 2.5, 6, 0.125, 83],
       [27, 0, 8, 1 / 16, 83],
     ] as const)
-      stutter("vocal", bar, beat, count, step, [pitch], 0.82, 0.42, {
+      stutter("vocal", bar, beat, count, step, [pitch], 0.88, 0.42, {
         lyric: "pix",
       });
     shadow(lift(12).slice(2), "third", 0.62);
