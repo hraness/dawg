@@ -256,6 +256,8 @@ function lead(
           const gap = Math.abs(sung - pitch);
           if (gap % 12 === 1)
             rub += (gap <= 13 ? 20 : gap <= 25 ? 8 : 0) * Math.max(0.3, held);
+          // A voice on the very pitch a line holds would only double it.
+          else if (gap === 0) rub += 8 * Math.max(0.3, held);
         }
       const cost =
         colour +
@@ -321,7 +323,7 @@ const THEME: Line = [
   [5.5, 67, 1, 0.64, "vf"],
 ];
 const ANSWER: Line = [
-  [0.75, 65, 0.5, 0.58, "s"],
+  [1, 65, 0.4, 0.58, "s"],
   [1.5, 67, 0.45, 0.6],
   [2.25, 69, 0.6, 0.68],
   [3.25, 64, 0.25, 0.56, "g"],
@@ -343,16 +345,17 @@ const TURN: Line = [
   [1.75, 69, 0.5, 0.64],
   [2.5, 68, 0.5, 0.66, "s"],
   [3.25, 67, 0.4, 0.58],
-  [3.75, 64, 0.6, 0.6],
-  [4.5, 69, 1.7, 0.64, "v"],
+  [3.75, 64, 0.5, 0.6],
+  // The A lands with the comp's 4-3 resolution, not over the suspension.
+  [5, 69, 1.3, 0.64, "v"],
 ];
+/** Bar 12 keeps the head's A C D C shape; the section's F5 waits for bar 16. */
 const THEME_GRACE: Line = [
   [0.3, 68, 0.1, 0.42, "g"],
   [0.42, 69, 0.4, 0.68],
   [1.25, 72, 0.4, 0.64],
-  [2, 74, 0.45, 0.76],
-  [2.5, 77, 0.45, 0.72, "s"],
-  [3, 74, 1.3, 0.7, "v"],
+  [2, 74, 0.8, 0.76, "a"],
+  [3, 72, 1.3, 0.7, "v"],
   [4.75, 72, 0.4, 0.62],
   [5.25, 69, 0.4, 0.6],
   [5.75, 67, 0.9, 0.66, "vf"],
@@ -364,14 +367,15 @@ const ANSWER_UP: Line = [
   [2.5, 74, 0.35, 0.6, "g"],
   [3, 72, 0.9, 0.64],
   [4.25, 74, 0.45, 0.66],
-  [5, 77, 0.45, 0.7, "s"],
+  [5, 76, 0.45, 0.7, "s"],
   [5.75, 74, 0.9, 0.7, "vf"],
 ];
+/** Enters after the Rhodes' G5 to F5 has resolved; the F5 is the peak. */
 const THEME_HIGH: Line = [
-  [0.5, 76, 0.5, 0.72, "s"],
-  [1.25, 77, 0.4, 0.7],
-  [2, 76, 0.4, 0.68],
-  [2.5, 74, 0.4, 0.64, "g"],
+  [1.5, 76, 0.4, 0.72, "s"],
+  [2, 77, 0.45, 0.74],
+  [2.5, 76, 0.3, 0.66],
+  [2.75, 74, 0.25, 0.62, "g"],
   [3, 72, 1.2, 0.68, "v"],
   [4.5, 75, 0.5, 0.66],
   [5.25, 72, 0.4, 0.62],
@@ -424,24 +428,26 @@ const CLIMB: Line = [
   [9.5, 72, 0.4, 0.66, "g"],
   [10, 74, 0.5, 0.7],
   [10.75, 76, 0.9, 0.74, "v"],
-  [12.5, 77, 0.4, 0.76],
-  [13, 79, 0.5, 0.8, "s"],
+  // Bar 39 climbs C Eb F and stops at F5: the G5 belongs to bar 40.
+  [12.5, 72, 0.4, 0.7],
+  [13, 75, 0.5, 0.76, "s"],
   [14, 77, 1, 0.76, "vf"],
 ];
+/** The one G5 of the song is bar 40's; bar 41 answers it from F5. */
 const PEAK: Line = [
   [0.5, 76, 0.4, 0.78, "s"],
   [1, 77, 0.6, 0.82],
   [1.75, 79, 1.35, 0.88, "sv"],
   [3.25, 77, 0.4, 0.74],
   [3.75, 76, 0.25, 0.72, "g"],
-  [5.5, 79, 1.3, 0.82, "svf"],
+  [5.5, 77, 1.3, 0.8, "svf"],
   [8.5, 74, 0.4, 0.68],
   [9, 72, 0.4, 0.66, "g"],
   [9.5, 70, 0.45, 0.64],
   [10.25, 68, 0.6, 0.68, "s"],
   [11, 67, 0.4, 0.62],
   [11.5, 64, 0.5, 0.6],
-  [12.25, 69, 1.7, 0.66, "v"],
+  [13, 69, 1.3, 0.66, "v"],
   [14.75, 72, 0.5, 0.6],
   [15.5, 70, 0.5, 0.58, "g"],
 ];
@@ -453,122 +459,109 @@ const GOODNIGHT_SAX: Line = [
   [4.5, 69, 5.2, 0.6, "svf"],
 ];
 
-/** The Rhodes alone in the middle: the theme's shape, sung on the keys. */
+/**
+ * The Rhodes alone in the middle, built like the sax theme: the three-note
+ * idea A C D with its answer and two-beat rests (bars 28-29), the same a
+ * third higher (30-31), a denser development capped at E5 then F5 (32-33),
+ * one peak A5 handed to the vibes over the sus chord (34) and a long C5
+ * that holds through the tape stop and the Ab13 (35).
+ */
 const KEYS_SOLO: Line = [
-  [0.25, 70, 0.2, 0.55],
-  [0.5, 74, 0.4, 0.62],
-  [1, 77, 0.5, 0.66],
-  [1.75, 76, 0.25, 0.56],
-  [2, 74, 0.3, 0.6],
-  [2.5, 72, 0.3, 0.56],
-  [3, 69, 0.8, 0.6],
-  [4.75, 69, 0.25, 0.54],
-  [5, 70, 0.25, 0.56],
-  [5.25, 72, 0.25, 0.6],
-  [5.5, 76, 0.5, 0.66],
-  [6.25, 74, 0.25, 0.58],
-  [6.5, 72, 0.25, 0.56],
-  [6.75, 69, 0.5, 0.58],
-  [7.5, 67, 0.4, 0.54],
-  [8, 69, 0.5, 0.58],
-  [8.75, 72, 0.25, 0.58],
-  [9, 76, 0.9, 0.65],
-  [10.25, 79, 0.3, 0.62],
-  [10.5, 76, 0.3, 0.58],
-  [11, 72, 0.4, 0.56],
-  [11.5, 74, 0.4, 0.58],
-  [12, 74, 0.5, 0.6],
-  [12.5, 77, 0.3, 0.62],
-  [13, 79, 0.4, 0.64],
-  [13.5, 81, 0.6, 0.68],
-  [14.5, 79, 0.3, 0.6],
-  [15, 74, 0.3, 0.56],
-  [15.25, 70, 0.5, 0.56],
-  [16, 69, 0.25, 0.56],
-  [16.25, 72, 0.25, 0.58],
-  [16.5, 76, 0.25, 0.6],
-  [16.75, 77, 1, 0.66],
-  [18, 76, 0.25, 0.58],
-  [18.25, 74, 0.25, 0.56],
-  [18.5, 72, 0.25, 0.56],
-  [18.75, 69, 0.7, 0.58],
+  [0.5, 69, 0.4, 0.58],
+  [1.25, 72, 0.4, 0.6],
+  [2, 74, 1.3, 0.64],
+  [4.75, 72, 0.3, 0.56],
+  [5.5, 69, 0.45, 0.58],
+  [6.25, 67, 1, 0.56],
+  [8.5, 72, 0.4, 0.6],
+  [9.25, 74, 0.4, 0.62],
+  [10, 76, 1.3, 0.66],
+  [12.75, 74, 0.3, 0.58],
+  [13.5, 70, 0.45, 0.58],
+  [14.25, 67, 1.2, 0.56],
+  [16.25, 69, 0.25, 0.56],
+  [16.5, 72, 0.25, 0.58],
+  [16.75, 74, 0.25, 0.6],
+  [17, 76, 0.5, 0.66],
+  [17.75, 74, 0.25, 0.58],
+  [18.25, 72, 0.25, 0.56],
+  [18.75, 69, 0.3, 0.56],
+  [19.25, 67, 0.6, 0.58],
   [20.5, 68, 0.25, 0.56],
   [20.75, 72, 0.25, 0.58],
   [21, 75, 0.25, 0.6],
-  [21.25, 79, 0.75, 0.7],
-  [22.25, 77, 0.25, 0.6],
-  [22.5, 75, 0.25, 0.58],
-  [22.75, 72, 0.5, 0.58],
-  [23.5, 68, 0.4, 0.54],
-  [24, 70, 0.5, 0.58],
+  [21.25, 77, 0.6, 0.68],
+  [22, 75, 0.3, 0.6],
+  [22.5, 72, 0.3, 0.58],
+  [23, 68, 0.8, 0.56],
+  [24.25, 70, 0.25, 0.58],
   [24.5, 74, 0.25, 0.6],
-  [24.75, 77, 0.5, 0.64],
-  [25.5, 81, 0.4, 0.68],
-  [26, 80, 0.5, 0.7],
-  [26.5, 75, 0.25, 0.6],
-  [26.75, 76, 0.25, 0.58],
-  [27, 70, 0.4, 0.56],
-  [27.5, 68, 0.4, 0.54],
-  [28, 69, 1, 0.6],
-  [29, 72, 0.25, 0.56],
-  [29.25, 76, 0.25, 0.58],
-  [29.5, 79, 0.5, 0.62],
-  [30.5, 77, 0.4, 0.6],
-  [31, 72, 0.3, 0.56],
-  [31.5, 70, 0.4, 0.56],
+  [24.75, 77, 0.25, 0.64],
+  [25, 81, 1.2, 0.7],
+  [26.5, 80, 0.4, 0.62],
+  [27, 75, 0.4, 0.58],
+  [27.5, 70, 0.5, 0.56],
+  [28.25, 69, 0.3, 0.56],
+  [28.5, 72, 3.4, 0.62],
 ];
 
 /**
- * Two backing "ooh" voices: the bridge's modal-mixture sighs (D to Db over
- * Bbmaj9 to Bbm9), a 4-3 over Gm11 and over Fmaj9, the head return's held
- * ninths with a 9-8 into Gm9, F to E over the sus and its altered dominant,
- * and a last 9-8 over the final Fmaj9. [bar, beat, pitch, length, velocity]
+ * Two backing "ooh" voices a third or a fourth apart, sitting above the
+ * Rhodes and around the sax's held notes. The bridge: the modal-mixture
+ * sigh (D to Db over Bbmaj9 to Bbm9), a 6-5 over Gm11 (Eb falling to D
+ * around the sax's held Bb), the b7 of Gb13 kept as the 7th of Fmaj9 over
+ * a 4-3 appoggiatura. The head return: a 4-3 in thirds with the Rhodes'
+ * 9-8 into Gm9, a 6-5 over Fmaj9, a dip under the sax's climb, then the
+ * lower voice holds an F pedal from the Dm9 cadence through the sus chord
+ * and falls to E on the altered dominant while the upper voice walks C Bb
+ * A Ab, and a last 9-8 over the final Fmaj9. [bar, beat, pitch, length,
+ * velocity]
  */
 const PAD: readonly (readonly [number, number, number, number, number])[] = [
   [20, 0, 74, 4, 0.5],
   [20, 0, 69, 4, 0.46],
   [21, 0, 73, 4, 0.5],
   [21, 0, 68, 4, 0.46],
-  [22, 0, 72, 4, 0.5],
+  [22, 0, 76, 4, 0.48],
   [22, 0, 67, 4, 0.46],
   [23, 0, 72, 4, 0.48],
   [23, 0, 69, 4, 0.46],
-  [24, 0, 72, 2, 0.5],
-  [24, 2, 70, 2, 0.48],
-  [24, 0, 65, 4, 0.46],
-  [25, 0, 70, 4, 0.48],
-  [25, 0, 61, 4, 0.44],
+  [24, 0, 75, 2, 0.5],
+  [24, 2, 74, 2, 0.48],
+  [24, 0, 67, 4, 0.46],
+  [25, 0, 76, 4, 0.48],
+  [25, 0, 70, 4, 0.46],
+  [26, 0, 76, 4, 0.48],
   [26, 0, 70, 0.5, 0.5],
   [26, 0.5, 69, 3.5, 0.48],
-  [26, 0, 64, 4, 0.44],
-  [27, 0, 72, 4.5, 0.5],
-  [27, 0, 66, 4, 0.46],
+  [27, 0, 75, 4.5, 0.5],
+  [27, 0, 72, 4, 0.46],
   [28, 0.5, 70, 1.2, 0.44],
-  [36, 0, 69, 1, 0.44],
-  [36, 1, 67, 3, 0.42],
-  [36, 0, 62, 4, 0.4],
-  [37, 0, 67, 4, 0.42],
-  [37, 0, 65, 1.5, 0.42],
-  [37, 1.5, 64, 2.5, 0.4],
-  [38, 0, 67, 2, 0.42],
-  [38, 2, 65, 2, 0.4],
-  [38, 0, 60, 4, 0.38],
-  [39, 0, 65, 4, 0.42],
-  [39, 0, 62, 4, 0.38],
+  [36, 0, 72, 1, 0.46],
+  [36, 1, 70, 3, 0.44],
+  [36, 0, 65, 4, 0.4],
+  [37, 0, 74, 4, 0.44],
+  [37, 0, 70, 4, 0.42],
+  [38, 0, 74, 2, 0.44],
+  [38, 2, 72, 2, 0.42],
+  [38, 0, 70, 1.5, 0.42],
+  [38, 1.5, 69, 2.5, 0.42],
+  [39, 0, 70, 4, 0.42],
+  [39, 0, 67, 4, 0.4],
+  [40, 0, 72, 8, 0.46],
   [40, 0, 67, 1, 0.44],
-  [40, 1, 65, 3, 0.42],
-  [40, 0, 62, 4, 0.38],
-  [41, 0, 65, 4, 0.42],
-  [41, 0, 60, 4, 0.38],
-  [42, 0, 65, 2, 0.44],
+  [40, 1, 65, 5, 0.42],
+  [42, 0, 72, 2, 0.46],
+  [42, 2, 70, 2, 0.44],
   [42, 2, 64, 2, 0.42],
-  [42, 0, 58, 4, 0.38],
-  [43, 0, 64, 2.5, 0.42],
+  [43, 0, 70, 1, 0.44],
+  [43, 1, 69, 1.5, 0.44],
+  [43, 2.5, 68, 1.5, 0.42],
+  [43, 0, 65, 2.5, 0.42],
   [43, 2.5, 63, 1.5, 0.4],
-  [43, 0, 60, 4, 0.38],
   [45, 0, 69, 4, 0.42],
   [46, 0, 67, 6, 0.4],
-  [45, 0, 60, 10, 0.36],
+  [45, 0, 64, 10, 0.36],
 ];
 
 /** Bars whose last half beat is a hat ratchet (a 32nd-note glitch fill). */
@@ -630,6 +623,53 @@ const ANSWERS: readonly (readonly [number, Line])[] = [
     ],
   ],
 ];
+/**
+ * The second head varies the answer as the sax varies the theme: the first
+ * rises to its suspension instead of falling, the second and third are
+ * four-note versions that land a quarter beat later, and the last turns
+ * the fall into a climb that folds back onto the suspended C.
+ */
+const ANSWERS_2: readonly (readonly [number, Line])[] = [
+  [
+    12,
+    [
+      [7, 67, 0.35, 0.5],
+      [7.5, 69, 0.3, 0.5],
+      [7.75, 70, 0.75, 0.54],
+      [8.5, 69, 0.9, 0.48],
+    ],
+  ],
+  [
+    14,
+    [
+      [7, 74, 0.3, 0.48],
+      [7.25, 77, 0.3, 0.5],
+      [7.5, 74, 0.3, 0.48],
+      [7.75, 79, 1, 0.54],
+      [8.75, 77, 0.7, 0.48],
+    ],
+  ],
+  [
+    16,
+    [
+      [7, 72, 0.3, 0.48],
+      [7.25, 75, 0.3, 0.5],
+      [7.5, 80, 0.3, 0.5],
+      [7.75, 77, 2, 0.54],
+      [10, 76, 0.8, 0.48],
+    ],
+  ],
+  [
+    18,
+    [
+      [7, 72, 0.3, 0.48],
+      [7.25, 75, 0.3, 0.5],
+      [7.5, 78, 0.3, 0.5],
+      [7.75, 72, 1, 0.54],
+      [8.75, 70, 0.7, 0.48],
+    ],
+  ],
+];
 
 /**
  * Cadence suspensions in the comp: 4-3 (the voice that would play the third
@@ -652,6 +692,24 @@ const SUS: readonly (readonly [number, "4-3" | "9-8", number])[] = [
   [40, "4-3", 1],
   [43, "4-3", 1],
 ];
+/**
+ * Cadences where another voice carries the suspension on top: the Rhodes
+ * answer motif at 6, 8, 14 and 16 (its last note ties over the barline and
+ * falls by step) and the ooh pad at 38. The comp leaves that voice out of
+ * the downbeat chord instead of doubling the suspension an octave below.
+ */
+const CARRIED: ReadonlySet<number> = new Set([6, 8, 14, 16, 38]);
+
+/**
+ * Voicings pinned where the chain's choice fought the pad or the sax: bar
+ * 36 puts the ninth on top so the 9-8 is the Rhodes's own and the pad moves
+ * in thirds above it; bar 44 keeps the Rhodes's Bb an octave under the
+ * sax's A instead of a semitone above it.
+ */
+const PINNED: ReadonlyMap<string, number[]> = new Map([
+  ["36:0", [58, 62, 65, 69]],
+  ["44:0", [58, 62, 65, 72]],
+]);
 
 /** Where the sax sings: [bar, line, gain]. */
 const SAX_PLAN: readonly (readonly [number, Line, number])[] = [
@@ -664,8 +722,8 @@ const SAX_PLAN: readonly (readonly [number, Line, number])[] = [
   [16, THEME_HIGH, 1],
   [18, TURN_OUT, 1],
   [20, BRIDGE_SAX, 0.94],
-  [36, CLIMB, 1.04],
-  [40, PEAK, 1.04],
+  [36, CLIMB, 1.1],
+  [40, PEAK, 1.1],
   [44, GOODNIGHT_SAX, 1],
 ];
 
@@ -708,10 +766,7 @@ function tunes(): [number, number, number][] {
   };
   add(0, DOOR_TOP, KEYS);
   for (const [bar, line] of SAX_PLAN) add(bar, line, SAX);
-  for (const [bar, line] of ANSWERS) {
-    add(bar, line, KEYS);
-    if (bar < 10) add(bar + 8, line, KEYS);
-  }
+  for (const [bar, line] of [...ANSWERS, ...ANSWERS_2]) add(bar, line, KEYS);
   add(28, KEYS_SOLO, KEYS);
   for (const [bar, line] of VIBES_ANSWERS) add(bar, line, VIBES);
   for (const [bar, beat, pitch, length] of PAD)
@@ -776,6 +831,11 @@ const COMP: readonly (readonly (readonly [
     [1.5, 0.35, 0.42],
     [2.5, 1.3, 0.52],
   ],
+  // Under the guitar arpeggios: a touch on the and-of-2 and the push.
+  [
+    [2.5, 0.35, 0.42],
+    [3.5, 0.9, 0.54, 1],
+  ],
 ];
 
 /** Left-hand shells under the keys solo, [beat, length, velocity]. */
@@ -805,7 +865,7 @@ export const amberRoom: DemoDefinition = {
     title: "Amber Room",
     style: "Neo soul",
     description:
-      "A six-note sax theme phrases over a Dilla-leaning pocket while the Rhodes answers in its rests, ties 4-3 and 9-8 suspensions across every cadence and lets a muted guitar and vibes interlock under the second head; the bass falls where the sax rises, an ooh pad sighs through the minor-iv bridge, and vocal chops, hat ratchets and one tape stop tint the turnarounds.",
+      "A six-note sax theme phrases over a Dilla-leaning pocket while the Rhodes answers in its rests and ties a 4-3 or 9-8 suspension across every cadence; a muted guitar carries the second head in eighths that interlock with the vibes, the bass falls where the sax rises, an ooh pad sighs a fourth above the Rhodes through the minor-iv bridge, the keys solo hands its one high note to the vibes, and vocal chops, hat ratchets and one tape stop tint the turnarounds.",
     tempoBpm: 96,
     key: "F",
     bars: 48,
@@ -834,10 +894,10 @@ export const amberRoom: DemoDefinition = {
     ],
     mixNotes: [
       "Each layer sits at its own distance from the grid: kick a hair early, snare and bass late, Rhodes rolled and later, sax furthest back.",
-      "The sax rests for the last beat and a half of every two-bar phrase and the Rhodes answers there with three falling notes, the last tied over the barline and resolved by step; at each cadence the voice carrying the third holds the fourth from the chord before and falls to the third after the downbeat.",
-      "The bass falls through the seventh and fifth under every rising sax phrase and climbs under the falling ones; in the second head a muted guitar arpeggiates the voicing on the eighths and the vibes echo its first four tones a swung sixteenth later an octave up.",
-      "The bridge rides with a bit-crushed kit under a two-voice ooh pad; hat ratchets close bars 11, 19, 27 and 35, a reverse swell and a tape-stopped oh turn bar 35 into the head return, and a pitched oh takes two sax notes in the climb and the peak.",
-      "The head return lifts with a clap 12 ms behind each snare and an open hat every second bar, and the kick sits out the first four bars of the keys solo.",
+      "The sax rests for the last beat and a half of every two-bar phrase and the Rhodes answers there with three falling notes (inverted, extended or shifted in the second head), the last tied over the barline and resolved by step; at each cadence one voice holds the fourth or the ninth from the chord before and falls after the downbeat, and where the answer or the pad carries that voice the comp leaves it out rather than doubling it an octave below.",
+      "The bass falls through the seventh and fifth under every rising sax phrase and climbs under the falling ones; in the second head the band sits back 1.3 dB while a muted guitar arpeggiates the voicing on the eighths, the vibes play the complementary off-sixteenths an octave up and the Rhodes only touches the and-of-two and pushes the next chord.",
+      "The bridge rides with a bit-crushed kit under a two-voice ooh pad voiced a fourth above the comp; hat ratchets close bars 11, 19, 27 and 35, a reverse swell and a tape-stopped oh turn bar 35 into the head return, and a pitched oh takes two sax notes in the climb and the peak.",
+      "The keys solo states a three-note idea with rests, moves it a third up, thickens it and hands its one A5 to the vibes before a long C5 over the tape stop, with the kick out for its first four bars; the head return lifts with a clap 12 ms behind each snare, the hats on their own track panned against the Rhodes's antiphase vibrato and the sax's single G5 at bar 40, and the last chord decays over the final two bars.",
     ],
   }),
   build() {
@@ -875,15 +935,20 @@ export const amberRoom: DemoDefinition = {
     for (let bar = 0; bar < 48; bar++)
       harmony(bar).forEach(([, root, chord], i) => {
         const sung = heard(bar, i);
-        // On a 4-3 bar the third should sit in the top two voices, where
-        // the suspension is heard as a line rather than a smudge.
-        const high = (shape: readonly number[]): number =>
-          i === 0 &&
-          SUS.some(([at, kind]) => at === bar && kind === "4-3") &&
-          shape.findIndex((tone) => tone % 12 === chord.third % 12) <
+        // On a 4-3 bar the third should sit in the top two voices, and on
+        // a 9-8 bar the ninth on top, where the suspension is heard as a
+        // line rather than a smudge.
+        const kind = SUS.find(([at]) => at === bar)?.[1];
+        const high = (shape: readonly number[]): number => {
+          if (i !== 0 || !kind) return 0;
+          if (kind === "9-8") return shape.at(-1)! % 12 === 2 ? 0 : 6;
+          return shape.findIndex((tone) => tone % 12 === chord.third % 12) <
             shape.length - 2
             ? 6
             : 0;
+        };
+        // The comp sits between A3 and D5: under the sax, above the bass's
+        // top octave, with nothing below 220 Hz to thicken the low mids.
         previous = lead(
           previous,
           root,
@@ -891,9 +956,10 @@ export const amberRoom: DemoDefinition = {
             ...chord.forms.map((shape) => [high(shape), shape] as const),
             ...chord.alts.map((shape) => [3 + high(shape), shape] as const),
           ],
-          [53, 64.5, 74],
+          [57, 66, 74],
           sung,
         );
+        previous = PINNED.get(`${bar}:${i}`) ?? previous;
         previousShell = lead(
           previousShell,
           root,
@@ -934,39 +1000,64 @@ export const amberRoom: DemoDefinition = {
     pedal.push({ tick: tickOf(4, 0) - 20, state: "up" });
     pedal.push({ tick: tickOf(28, 0) - 20, state: "up" });
 
+    // The band sits back 1.3 dB under the guitar and vibes for the second
+    // head, so the interlock reads as the second chorus's texture rather
+    // than a layer on top of the first.
+    const sitBack = (...rest: [number, number][]) =>
+      lanes([0, 1], [11.95, 1], [12, 0.86], [19.95, 0.86], [20, 1], ...rest);
+
+    // The bridge's kit goes through a light bitcrush, a sampled beat tape
+    // under the live band, and snaps clean for the keys solo.
+    const crushed = {
+      fx: { crush: { bits: 7, coarse: 3, mix: 0 } },
+      fxAutomation: {
+        "crush-mix": lanes(
+          [0, 0],
+          [19.95, 0],
+          [20, 0.32],
+          [27.5, 0.32],
+          [27.95, 0],
+        ),
+      },
+    } as const;
     s.track(
       voice("drums", "Small-room kit", "kit", 0.6, {
         kit: "acoustic",
         reverb: { mix: 0.07, size: 0.25, fade: 0.7 },
         humanize: { timing: 5, velocity: 5, seed: 7 },
-        // The bridge's kit goes through a light bitcrush, a sampled beat
-        // tape under the live band, and snaps clean for the keys solo.
-        fx: { crush: { bits: 7, coarse: 3, mix: 0 } },
-        fxAutomation: {
-          "crush-mix": lanes(
-            [0, 0],
-            [19.95, 0],
-            [20, 0.32],
-            [27.5, 0.32],
-            [27.95, 0],
-          ),
-        },
+        volumeAutomation: sitBack(),
+        ...crushed,
       }),
     );
     s.track(
-      voice("bass", "Flatwound bass", "fender", 0.62, {
+      voice("hats", "Hats and ride", "kit", 0.6, {
+        kit: "acoustic",
+        pan: 0.3,
+        reverb: { mix: 0.07, size: 0.25, fade: 0.7 },
+        humanize: { timing: 5, velocity: 5, seed: 11 },
+        volumeAutomation: sitBack(),
+        ...crushed,
+      }),
+    );
+    s.track(
+      voice("bass", "Flatwound bass", "fender", 0.7, {
         string: { preset: "ebass", mute: 0.3, bright: 0.36 },
         pan: -0.03,
+        volumeAutomation: sitBack(),
         humanize: { timing: 8, velocity: 5, length: 8, seed: 19 },
       }),
     );
     s.track(
       voice("keys", "Amber Rhodes", "rhodes", 0.5, {
-        keys: { vibe: 0.3, vibehz: 3.6, bark: 0.3, bell: 0.42 },
-        pan: -0.16,
+        // The suitcase vibrato pans the Rhodes left and right in antiphase.
+        keys: { vibe: 0.5, vibehz: 3.6, bark: 0.3, bell: 0.42 },
+        pan: -0.12,
         reverb: room,
         humanize: { timing: 6, velocity: 4, seed: 23 },
         pedal: pedal.sort((a, b) => a.tick - b.tick),
+        // Sits back under the guitar in the second head; the last chord
+        // decays into the room rather than stopping.
+        volumeAutomation: sitBack([46, 1], [47.9, 0.2]),
       }),
     );
     s.track(
@@ -977,25 +1068,26 @@ export const amberRoom: DemoDefinition = {
         delay: { beats: 0.75, feedback: 0.14, mix: 0.06 },
         filter: { type: "hpf", cutoff: 170, resonance: 0 },
         humanize: { timing: 9, velocity: 4, seed: 31 },
+        volumeAutomation: sitBack(),
       }),
     );
     s.track(
-      voice("guitar", "Muted guitar", "steel", 0.3, {
-        string: { preset: "steel", mute: 0.5, bright: 0.3 },
+      voice("guitar", "Muted guitar", "steel", 0.5, {
+        string: { preset: "steel", mute: 0.5, bright: 0.34 },
         pan: 0.3,
         reverb: room,
         humanize: { timing: 7, velocity: 6, seed: 41 },
       }),
     );
     s.track(
-      voice("vibes", "High answer", "vibes", 0.22, {
-        pan: 0.32,
+      voice("vibes", "High answer", "vibes", 0.28, {
+        pan: -0.3,
         reverb: hall,
         humanize: { timing: 6, velocity: 5, seed: 37 },
       }),
     );
     s.track(
-      voice("oohs", "Ooh pad", "sing", 0.24, {
+      voice("oohs", "Ooh pad", "sing", 0.4, {
         sing: {
           preset: "oohchoir",
           voice: "alto",
@@ -1013,6 +1105,7 @@ export const amberRoom: DemoDefinition = {
         reverb: hall,
         filter: { type: "hpf", cutoff: 180, resonance: 0 },
         humanize: { timing: 14, velocity: 4, seed: 43 },
+        volumeAutomation: lanes([0, 1], [46.5, 1], [47.9, 0.25]),
       }),
     );
     s.track(
@@ -1066,13 +1159,23 @@ export const amberRoom: DemoDefinition = {
     };
 
     // Drums ----------------------------------------------------------------
+    // Hats, pedal hat and ride play from their own track, panned right of
+    // the kit, so the top of the groove has width.
     const drum = (
       bar: number,
       beat: number,
       pitch: number,
       velocity: number,
       length = 0.12,
-    ): void => s.note("drums", bar, beat, pitch, length, Math.min(1, velocity));
+    ): void =>
+      s.note(
+        [42, 44, 46, 51].includes(pitch) ? "hats" : "drums",
+        bar,
+        beat,
+        pitch,
+        length,
+        Math.min(1, velocity),
+      );
     const hats = (bar: number, level: number, open: boolean): void => {
       const shape = [0.58, 0.16, 0.42, 0.24];
       const ratchet = (RATCHETS as readonly number[]).includes(bar);
@@ -1346,6 +1449,15 @@ export const amberRoom: DemoDefinition = {
       const sus = suspension(bar);
       if (!sus || spanAt(bar, beat) !== 0) return false;
       const { i, pitches, held, to, resolve } = sus;
+      roll(
+        bar,
+        beat,
+        pitches.filter((_, j) => j !== i),
+        length,
+        velocity,
+      );
+      // The answer motif already sings this suspension on top.
+      if (CARRIED.has(bar)) return true;
       if (!prepared)
         s.note(
           "keys",
@@ -1355,13 +1467,6 @@ export const amberRoom: DemoDefinition = {
           0.5 + resolve,
           velocity * 0.9,
         );
-      roll(
-        bar,
-        beat,
-        pitches.filter((_, j) => j !== i),
-        length,
-        velocity,
-      );
       s.note(
         "keys",
         bar,
@@ -1398,7 +1503,18 @@ export const amberRoom: DemoDefinition = {
           // on a suspension the push carries the suspended tone, which
           // resolves after the barline.
           const coming = voicings.get(`${bar + 1}:0`)!;
-          if (next) {
+          if (next && CARRIED.has(bar + 1)) {
+            // The answer motif strikes and resolves the suspended voice;
+            // the push plays the other three under it.
+            roll(
+              bar,
+              beat,
+              coming.filter((_, j) => j !== next.i),
+              length,
+              velocity * gain,
+            );
+            prepared = true;
+          } else if (next) {
             roll(
               bar,
               beat,
@@ -1431,21 +1547,36 @@ export const amberRoom: DemoDefinition = {
         )
           return;
         if (wasPushed && wasPrepared && here && beat < here.resolve) {
-          // A second hit before the pushed suspension resolves keeps it.
-          roll(
-            bar,
-            beat,
-            pitches.map((p, j) => (j === here.i ? here.held : p)),
-            length,
-            velocity * gain,
-            0.014,
-            pitches.map((_, j) =>
-              j === here.i ? here.resolve - beat : length,
-            ),
-          );
+          // A second hit before the pushed suspension resolves keeps it
+          // (or, when the answer motif holds it, stays out of its way).
+          if (CARRIED.has(bar))
+            roll(
+              bar,
+              beat,
+              pitches.filter((_, j) => j !== here.i),
+              length,
+              velocity * gain,
+            );
+          else
+            roll(
+              bar,
+              beat,
+              pitches.map((p, j) => (j === here.i ? here.held : p)),
+              length,
+              velocity * gain,
+              0.014,
+              pitches.map((_, j) =>
+                j === here.i ? here.resolve - beat : length,
+              ),
+            );
           return;
         }
-        if (last && next && pitches.includes(next.held)) {
+        if (
+          last &&
+          next &&
+          !CARRIED.has(bar + 1) &&
+          pitches.includes(next.held)
+        ) {
           // The last hit already holds the next bar's suspended tone: tie
           // it over the barline instead of striking it again.
           roll(
@@ -1502,12 +1633,11 @@ export const amberRoom: DemoDefinition = {
           ][pass]![index] ?? 0,
           bar >= 36 ? 1.04 : 1,
         );
-        // Under the guitar arpeggios the Rhodes holds its chords.
+        // Under the guitar arpeggios the Rhodes only touches the and-of-2
+        // and pushes the next chord; the guitar carries the harmony.
         comp(
           bar,
-          pass === 1
-            ? [2, 2, 0, 2, 2, 2, 0, 0][index]!
-            : [0, 1, 2, 3, 3, 2, 0, 0][index]!,
+          pass === 1 ? 4 : [0, 1, 2, 3, 3, 2, 0, 0][index]!,
           bar < 12 ? 0.94 : bar >= 36 ? 1.04 : 1,
         );
       } else if (bar < 28) {
@@ -1551,10 +1681,9 @@ export const amberRoom: DemoDefinition = {
 
     // Sax lines, and the Rhodes answering in their rests.
     for (const [bar, line, gain] of SAX_PLAN) sax(bar, line, gain);
-    for (const [bar, line] of ANSWERS)
-      for (const at of bar < 10 ? [bar, bar + 8] : [bar])
-        for (const [beat, pitch, length, velocity] of line)
-          s.note("keys", at, beat + KEYS, pitch, length, velocity);
+    for (const [bar, line] of [...ANSWERS, ...ANSWERS_2])
+      for (const [beat, pitch, length, velocity] of line)
+        s.note("keys", bar, beat + KEYS, pitch, length, velocity);
 
     // Interlocking arpeggios. In the second head the muted guitar plays
     // the voice-led chord tones up and down on the eighths (its top note
@@ -1589,12 +1718,18 @@ export const amberRoom: DemoDefinition = {
         return;
       }
     };
-    const ARP = [0, 1, 2, 3, 2, 1, 2] as const;
+    // The guitar climbs the voicing on the on-eighths and comes back down;
+    // the vibes answer on the swung off-sixteenths of the first two beats
+    // an octave up, falling while the guitar rises, so the two make one
+    // sixteenth-note line in contrary motion and the guitar finishes the
+    // bar alone.
+    const ARP = [0, 1, 2, 3, 2, 1, 0] as const;
+    const COUNTER = [3, 2, 1, 2] as const;
     for (let bar = 12; bar < 20; bar++) {
-      const tones = chordAt(bar, 2);
       ARP.forEach((index, step) => {
-        const beat = 0.5 + step * 0.5;
-        const accent = beat === 2 || beat === 1 ? 0.5 : 0.4;
+        const beat = step * 0.5;
+        const tones = chordAt(bar, beat);
+        const accent = beat === 0 || beat === 2 ? 0.68 : 0.58;
         pluck("guitar", bar, beat, tones, index, 0.45, accent, KEYS);
         if (step < 4 && bar !== 19)
           pluck(
@@ -1602,9 +1737,9 @@ export const amberRoom: DemoDefinition = {
             bar,
             beat + 0.25 + SWING,
             tones.map((p) => p + 12),
-            index,
+            COUNTER[step]!,
             0.3,
-            0.24,
+            0.42,
             VIBES,
           );
       });
@@ -1619,7 +1754,7 @@ export const amberRoom: DemoDefinition = {
           tones,
           index,
           0.4,
-          0.42 + 0.05 * step,
+          0.5 + 0.06 * step,
           KEYS,
         ),
       );
