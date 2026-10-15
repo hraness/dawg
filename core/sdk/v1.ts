@@ -1308,6 +1308,10 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
   ),
   // The blues and rock shuffle is a triplet-8th feel: each beat is three
   // 8th-note triplets with the first and third struck (long-short).
+  // A four-bar blues phrase: quarter-note hat accents over soft skips, the
+  // left hand ghosting the skip before each backbeat, a kick pickup into
+  // bar 2's third beat, a barking open hat closing bar 2, and a triplet
+  // drag into the last backbeat with a floor-tom-and-kick turnaround.
   drumPattern(
     "shuffle",
     "Shuffle (triplet 8ths)",
@@ -1316,16 +1320,40 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
     "acoustic",
     0,
     [
-      grid("kick", "x.....x.....", { division: "1/8t" }),
-      grid("snare", "...x.....x..", { division: "1/8t" }),
-      grid("hat", "X.xx.xX.xx.x", {
+      grid(
+        "kick",
+        "X.....X....." + "X....xX....." + "X.....X....." + "X.....X....X",
+        { division: "1/8t", velocity: 0.7, accent: 0.5 },
+      ),
+      grid(
+        "snare",
+        "..gX....gX.." + "...X....gX.g" + "..gX....gX.." + "..gX..gxxX..",
+        { division: "1/8t", velocity: 0.75, accent: 0.65 },
+      ),
+      grid(
+        "hat",
+        "X.xX.xX.xX.x" + "X.xX.xX.xX.." + "X.xX.xX.xX.x" + "X.xX.xX.xX..",
+        { division: "1/8t", velocity: 0.38, accent: 0.45 },
+      ),
+      grid("openhat", "-".repeat(12) + "...........x" + "-".repeat(24), {
         division: "1/8t",
-        velocity: 0.35,
-        accent: 0.5,
+        velocity: 0.5,
+      }),
+      grid("crash", "x" + "-".repeat(47), {
+        division: "1/8t",
+        velocity: 0.62,
+      }),
+      grid("floortom", "-".repeat(36) + "...........x", {
+        division: "1/8t",
+        velocity: 0.85,
       }),
     ],
+    { timing: 7, velocity: 8 },
   ),
-  // The half-time shuffle swings 16ths against a backbeat on 3.
+  // The half-time (Purdie) shuffle: hats on the first and last partial of
+  // each 8th-note triplet, ghost snares on the middle partial, the backbeat
+  // on 3, a second backbeat on 4 closing the two-bar snare phrase, and an
+  // open hat and kick on the "and" of 4 at the end of four bars.
   drumPattern(
     "half-time-shuffle",
     "Half-time shuffle (swung 16ths)",
@@ -1334,10 +1362,65 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
     "acoustic",
     0.33,
     [
-      grid("kick", "x.........x....."),
-      grid("snare", "........x......."),
-      euclid("hat", 16, 16, 0, { velocity: 0.35, accent: 0.5, accents: 8 }),
+      grid(
+        "kick",
+        "x.........x....." +
+          "x.........x....x" +
+          "x......x..x....." +
+          "x.........x...x.",
+        { velocity: 0.82 },
+      ),
+      grid(
+        "snare",
+        ".g..g..g..g.X...g..g..g." + ".g..g..g..g.X...g.X...g.",
+        { division: "1/16t", velocity: 0.75, accent: 0.7 },
+      ),
+      grid(
+        "hat",
+        "XxXxXxXxXxXxXxXx".repeat(3) + "XxXxXxXxXxXxXx..",
+        { velocity: 0.4, accent: 0.45 },
+      ),
+      grid("openhat", "-".repeat(48) + "..............x.", { velocity: 0.55 }),
     ],
+    { timing: 6, velocity: 8 },
+  ),
+  // Jazz swing: the ride's spang-a-lang (quarters with a skip on the last
+  // triplet of 2 and 4), the hat foot on 2 and 4, a feathered kick on every
+  // beat, sparse soft snare comping, and a kick bomb with a crash on the
+  // last triplet of bar 4 anticipating the next phrase.
+  drumPattern(
+    "jazz-swing",
+    "Jazz swing (ride spang-a-lang)",
+    ["jazz", "swing", "bebop"],
+    [110, 200, 150],
+    "acoustic",
+    0,
+    [
+      grid(
+        "ride",
+        "X..X.xX..X.x" + "X..X.xX..X.x" + "X..X.xX.xX.x" + "X..X.xX..X..",
+        { division: "1/8t", velocity: 0.5, accent: 0.5 },
+      ),
+      grid("hat", "...x.....x..".repeat(4), {
+        division: "1/8t",
+        velocity: 0.45,
+      }),
+      grid(
+        "kick",
+        "x..x..x..x.." + "x..x..x..x.." + "x..x..x..x.." + "x..x..x..x.X",
+        { division: "1/8t", velocity: 0.28, accent: 0.75 },
+      ),
+      grid(
+        "snare",
+        ".....g......" + "........x..." + "..g.....g..." + "......g.x...",
+        { division: "1/8t", velocity: 0.55 },
+      ),
+      grid("crash", "-".repeat(36) + "...........x", {
+        division: "1/8t",
+        velocity: 0.65,
+      }),
+    ],
+    { timing: 8, velocity: 10 },
   ),
   // Generative.
   drumPattern(
