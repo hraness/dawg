@@ -561,7 +561,7 @@ export const signalBloom: DemoDefinition = {
     // Arpeggio A on the on-sixteenths (left), arpeggio B on the offs (right,
     // a brighter glass pluck), the echo pluck three sixteenths behind A.
     s.track(
-      preset("arp", "Pulse arpeggio", "pulse-seq", 0.3, {
+      preset("arp", "Pulse arpeggio", "pulse-seq", 0.38, {
         pan: -0.3,
         delay: { beats: 0.75, feedback: 0.26, mix: 0.16, pingpong: true },
         filter: { type: "hpf", cutoff: 220, resonance: 0 },
@@ -569,7 +569,7 @@ export const signalBloom: DemoDefinition = {
       }),
     );
     s.track(
-      preset("arp2", "Glass arpeggio", "glass-pluck", 0.22, {
+      preset("arp2", "Glass arpeggio", "glass-pluck", 0.3, {
         pan: 0.3,
         filter: { type: "hpf", cutoff: 300, resonance: 0 },
         reverb: { ...room, mix: 0.1 },
@@ -577,7 +577,7 @@ export const signalBloom: DemoDefinition = {
       }),
     );
     s.track(
-      preset("echo", "Canon pluck", "pluck-arp", 0.2, {
+      preset("echo", "Canon pluck", "pluck-arp", 0.26, {
         pan: 0.42,
         filter: { type: "hpf", cutoff: 320, resonance: 0 },
         reverb: { ...room, mix: 0.14 },
@@ -621,7 +621,7 @@ export const signalBloom: DemoDefinition = {
       }),
     );
     s.track(
-      voice("stay", "Stay chop", "sampler", 0.26, {
+      voice("stay", "Stay chop", "sampler", 0.32, {
         pan: -0.3,
         sampler: {
           mode: "keyed",
@@ -641,7 +641,7 @@ export const signalBloom: DemoDefinition = {
       }),
     );
     s.track(
-      voice("up", "Up reply", "sampler", 0.26, {
+      voice("up", "Up reply", "sampler", 0.32, {
         pan: 0.3,
         sampler: {
           mode: "keyed",
@@ -661,7 +661,7 @@ export const signalBloom: DemoDefinition = {
       }),
     );
     s.track(
-      preset("answer", "String answer", "synth-strings", 0.26, {
+      preset("answer", "String answer", "synth-strings", 0.4, {
         pan: 0.26,
         filter: { type: "hpf", cutoff: 200, resonance: 0 },
         reverb: { ...hall, mix: 0.18 },
@@ -1032,6 +1032,15 @@ export const signalBloom: DemoDefinition = {
       [33, 45, 33, 45, 36, 40, 45, 43],
       [31, 43, 31, 43, 31, 35, 38, 40],
     ];
+    // The second phrase of each chorus answers "light up the window" in
+    // contrary motion (C A E G under C-E, E-D, D-B) and walks G B D E up to
+    // E3 under the held "room", so the bass peaks late in the phrase.
+    const CHORUS_BASS_2 = [
+      CHORUS_BASS[0]!,
+      CHORUS_BASS[1]!,
+      [33, 45, 33, 45, 36, 33, 40, 43],
+      [31, 43, 31, 43, 43, 47, 50, 52],
+    ];
     const rotate = (set: readonly number[], by: number) =>
       set.map((_, i) => set[(i + by) % set.length]!);
     for (let b = 0; b < 64; b++) {
@@ -1070,7 +1079,9 @@ export const signalBloom: DemoDefinition = {
             ROOT_PULSE[i]! * (0.9 + (b % 4) * 0.04),
           );
       } else if (part === "chorus") {
-        CHORUS_BASS[b % 4]!.forEach((pitch, i) =>
+        ((b >= 48 ? b - 48 : b - 20) >= 4 ? CHORUS_BASS_2 : CHORUS_BASS)[
+          b % 4
+        ]!.forEach((pitch, i) =>
           note(
             "bass",
             b,
@@ -1093,7 +1104,7 @@ export const signalBloom: DemoDefinition = {
             "bass",
             b,
             3.5,
-            b === 39 ? A : root + 12,
+            b === 39 ? A : b === 34 ? C : root + 12,
             0.4,
             b < 36 ? 0.5 : 0.6,
           );
@@ -1196,8 +1207,7 @@ export const signalBloom: DemoDefinition = {
           : part === "pre"
             ? 0.74
             : 0.66;
-      const bUp =
-        (part === "chorus" && b >= 52) || (part === "post" && b >= 56);
+      const bUp = part === "post" && b >= 56;
       for (let i = 0; i < steps; i++) {
         const beat = i / 4,
           set = thenArp && beat >= 2 ? thenArp : arpSet,
@@ -1484,8 +1494,8 @@ export const signalBloom: DemoDefinition = {
       [3.5, 64, 0.9, 0.5],
     ]);
     s.phrase("answer", 37, [
-      [3, 68, 0.45, 0.52],
-      [3.5, 64, 0.9, 0.5],
+      [3, 67, 0.45, 0.52],
+      [3.5, 69, 0.9, 0.5],
     ]);
     // An E pedal under the second half of the bridge: the 9th of Dm9, the
     // 5th of Am/C, the 7th of Fmaj7 and the root of E.
