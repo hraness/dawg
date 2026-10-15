@@ -1221,12 +1221,48 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
     [100, 140, 120],
     "acoustic",
     0,
+    // A four-bar phrase: a crash on its downbeat (the hat waits a beat),
+    // quarter-note hat accents, an open hat and kick pickup lifting bar 2
+    // into bar 3, and a snare-to-toms fill on the last beat.
     [
-      grid("kick", "x.......x.x....."),
-      grid("snare", "....x.......x..."),
-      euclid("hat", 8, 16, 0, { velocity: 0.55, accent: 0.3, accents: 4 }),
+      grid(
+        "kick",
+        "x.......x.x....." +
+          "x.......x.x...x." +
+          "x.x.....x.x....." +
+          "x.......x.......",
+        { velocity: 0.85 },
+      ),
+      grid(
+        "snare",
+        "....X.......X..." +
+          "....X......gX..." +
+          "....X.......X..." +
+          "....X.......Xx..",
+        { velocity: 0.8, accent: 0.6 },
+      ),
+      grid(
+        "hat",
+        "..x.X.x.X.x.X.x." +
+          "X.x.X.x.X.x.X..." +
+          "X.x.X.x.X.x.X.x." +
+          "X.x.X.x.X.x.....",
+        { velocity: 0.5, accent: 0.4 },
+      ),
+      grid("openhat", "................" + "..............x." + "-".repeat(32), {
+        velocity: 0.6,
+      }),
+      grid("crash", "x" + "-".repeat(63), { velocity: 0.75 }),
+      grid("midtom", "-".repeat(48) + "..............x.", { velocity: 0.8 }),
+      grid("floortom", "-".repeat(48) + "...............x", {
+        velocity: 0.88,
+      }),
     ],
+    { timing: 5, velocity: 6 },
   ),
+  // Funk: ghost snares at about a fifth of the backbeat, 8th-note hat
+  // accents pushed a few ms ahead, a 54% 16th swing, open hats on the
+  // "and" of 4, and a displaced backbeat turning the phrase around.
   drumPattern(
     "funk",
     "Funk with ghost notes",
@@ -1235,9 +1271,38 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
     "acoustic",
     0.08,
     [
-      grid("kick", "x.x.......x..x.."),
-      grid("snare", ".x..X..x.x..X..x", { velocity: 0.4, accent: 0.9 }),
-      euclid("hat", 16, 16, 0, { velocity: 0.35, accent: 0.4, accents: 4 }),
+      grid(
+        "kick",
+        "x.x.......x..x.." +
+          "x..x......x....." +
+          "x.x.......x..x.." +
+          "x..x...x..x....x",
+        { velocity: 0.85 },
+      ),
+      grid(
+        "snare",
+        "....X..g.g..X..g" +
+          ".g..X..g.g..X.g." +
+          "....X..g.g..X..g" +
+          "....X..g.gX..gX.",
+        { velocity: 0.75, accent: 0.85 },
+      ),
+      grid(
+        "hat",
+        "XxXxXxXxXxXxXx.x" +
+          "XxXxXxXxXxXxXxXx" +
+          "XxXxXx.xXxXxXxXx" +
+          "XxXxXxXxXxXxXx.x",
+        { velocity: 0.42, accent: 0.5, nudge: -0.04 },
+      ),
+      grid(
+        "openhat",
+        "..............x." +
+          "................" +
+          "......x........." +
+          "..............x.",
+        { velocity: 0.55, nudge: -0.04 },
+      ),
     ],
     { timing: 6, velocity: 8 },
   ),
