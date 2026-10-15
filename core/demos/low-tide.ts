@@ -315,15 +315,19 @@ export const lowTide: DemoDefinition = {
       }),
     );
     s.track(
-      voice("bass", "Dub bass", "motown", 0.6, {
-        string: { preset: "motown", mute: 0.34, bright: 0.3 },
+      voice("bass", "Dub bass", "motown", 0.82, {
+        // The preset's calibrated trim (0.227) left the bass about 28 dB
+        // under the mix, inaudible; trip hop wants it heavy and in front.
+        string: { preset: "motown", mute: 0.34, bright: 0.3, gain: 2 },
         glide: { time: 0.07, mode: "legato" },
         humanize: { timing: 4, velocity: 4, seed: 12 },
       }),
     );
     s.track(
-      voice("keys", "Tape Rhodes", "rhodes", 0.46, {
+      voice("keys", "Tape Rhodes", "rhodes", 0.42, {
         pan: -0.14,
+        // Thin the pedalled low end so the bass and the voice have room.
+        filter: { type: "hpf", cutoff: 150, resonance: 0 },
         reverb: { mix: 0.14, size: 0.45, fade: 1.8, lowpass: 6000 },
         delay: { beats: 0.75, feedback: 0.26, mix: 0.1, highcut: 2800 },
         delayMixAutomation: lanes(
@@ -341,7 +345,7 @@ export const lowTide: DemoDefinition = {
       }),
     );
     s.track(
-      voice("vocal", "Low tide singer", "sing", 0.58, {
+      voice("vocal", "Low tide singer", "sing", 0.64, {
         sing: {
           preset: "airy",
           voice: "alto",
