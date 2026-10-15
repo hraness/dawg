@@ -73,12 +73,16 @@ function acid(text: string): readonly AcidStep[] {
 const A = acid("F2! . F2 F3~ F2 . Ab2! F2 C3 - F2 Eb3!~ F2 . Db3 C3~");
 const A2 = acid("F2! . F2 F3~ F2 . Ab2! F2 C3 - F2 Eb3!~ F2 F3 Db3 C3~");
 const A_TURN = acid("F2! . F2 F3~ F2 . Ab2! F2 C3 - F2 Eb3!~ F3~ Eb3 C3 Ab2~");
-const A_WIND = acid("F2! . F2 F3~ F2 . Ab2! F2 C3 - F2 Eb3!~ F2 Ab2~ C3~ Eb3!~");
+const A_WIND = acid(
+  "F2! . F2 F3~ F2 . Ab2! F2 C3 - F2 Eb3!~ F2 Ab2~ C3~ Eb3!~",
+);
 // The second cell jumps octaves and leans on the flat second.
 const B = acid("F2! F3 F2 . F2 F3~ Gb3 F3~ F2! . Ab2 F2 Bb2~ C3! . Eb3");
 const B2 = acid("F2! F3 F2 . F2 F3~ Gb3 F3~ F2! . Ab2 F2 Bb2~ C3! F3 Eb3");
 const B_TURN = acid("F2! F3 F2 . F2 F3~ Gb3 F3~ F2! . Ab2 F2 C3! - Eb3~ F3!~");
-const B_FALL = acid("F2! F3 F2 . F2 F3~ Gb3 F3~ F2! F3 Ab3~ F3 Eb3~ C3~ Bb2~ Ab2~");
+const B_FALL = acid(
+  "F2! F3 F2 . F2 F3~ Gb3 F3~ F2! F3 Ab3~ F3 Eb3~ C3~ Bb2~ Ab2~",
+);
 const MURMUR = acid("F2! . F2 . F2 . . F2 F2 . F2 F3~ . F2 . Eb2");
 const BREAK = acid("F2! - - F3~ - . F2 . Ab2! - F2 Eb3~ - . C3 Db3~");
 // The square 303 answers an octave above the main line, mostly off the beat.
@@ -238,6 +242,7 @@ export const coilDriver: DemoDefinition = {
     mixNotes: [
       "The 303 is quantized hard with half-step gates; slides hold the gate into the next step for 75 ms and accents open the ladder. The human part is the knob ride: cutoff, resonance, env mod, decay and drive move across all 64 bars.",
       "The kick owns the sub and ducks both 303s; a 45 Hz high-pass on the acid keeps filter energy off the kick fundamental.",
+      "The cutoff eases into a soft ceiling like a knob at the end of its turn, so even the loudest accent keeps its squelch below 11 kHz instead of whistling at the top of the spectrum. The square 303 swims in a slow chorus and the hats carry a 7 ms double for width; kick, clap and acid stay centered.",
       "Hats swing 54% with a shaped sixteenth line, the clap sits about 8 ms late, and percussion thins out after every crash.",
       "Vacuum drops the kick for eight bars: the 303 alone near self-oscillation, then a snare roll and noise riser cut a sixteenth before the re-entry. The second peak changes the cell and the harmony instead of only adding volume.",
     ],
@@ -748,10 +753,11 @@ export const coilDriver: DemoDefinition = {
       // Hats and cymbals.
       if (section === 0) {
         if (b < 2) hats(b, 0.5);
-        else hats(b, b < 4 ? 0.62 : 0.74, {
-          sixteenths: true,
-          open: b >= 6 ? [14] : [],
-        });
+        else
+          hats(b, b < 4 ? 0.62 : 0.74, {
+            sixteenths: true,
+            open: b >= 6 ? [14] : [],
+          });
       } else if (section === 1) {
         hats(b, 0.9, {
           sixteenths: true,
