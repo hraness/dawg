@@ -521,14 +521,14 @@ export const lowTide: DemoDefinition = {
       }),
     );
     s.track(
-      voice("keys", "Tape Rhodes", "rhodes", 0.33, {
+      voice("keys", "Tape Rhodes", "rhodes", 0.36, {
         pan: -0.14,
         // A slow drift across the stereo field, a tape machine's wander.
         panAutomation: Array.from(
           { length: 2 * Math.ceil(END / 2.5) + 1 },
           (_, i) => ({
             tick: Math.round(Math.min(END, i * 1.25) * BAR),
-            value: i % 2 ? 0.14 : -0.36,
+            value: i % 2 ? 0.28 : -0.5,
           }),
         ),
         // Thin the pedalled low end so the bass and the voice have room.
@@ -584,7 +584,7 @@ export const lowTide: DemoDefinition = {
           bright: 0.55,
           ring: 0.3,
         },
-        reverb: { mix: 0.09, size: 0.32, fade: 1.6 },
+        reverb: { mix: 0.1, size: 0.4, fade: 1.6 },
         delay: {
           beats: 0.75,
           feedback: 0.3,
@@ -637,7 +637,7 @@ export const lowTide: DemoDefinition = {
           jitter: 0.16,
           attack: 0.06,
         },
-        pan: -0.3,
+        pan: -0.36,
         reverb: { mix: 0.16, size: 0.36, fade: 1.8 },
         filter: { type: "hpf", cutoff: 220, resonance: 0 },
         humanize: { timing: 14, velocity: 4, length: 5, seed: 31 },
@@ -646,17 +646,23 @@ export const lowTide: DemoDefinition = {
     s.track(
       voice("reply", "Harmon reply", "harmon", 0.22, {
         wind: { preset: "harmon", breath: 0.72, bright: 0.62 },
-        pan: 0.22,
+        pan: 0.3,
         reverb: { ...hall, mix: 0.3 },
-        delay: { beats: 0.75, feedback: 0.3, mix: 0.16, highcut: 3000 },
+        delay: {
+          beats: 0.75,
+          feedback: 0.3,
+          mix: 0.16,
+          highcut: 3000,
+          pingpong: true,
+        },
         filter: { type: "hpf", cutoff: 200, resonance: 0 },
         fx: orbit,
         humanize: { timing: 9, velocity: 5, length: 4, seed: 41 },
       }),
     );
     s.track(
-      voice("strings", "Tide strings", "violins", 0.7, {
-        pan: 0.4,
+      voice("strings", "Tide strings", "violins", 0.76, {
+        pan: 0.5,
         reverb: { ...hall, mix: 0.26 },
         fx: orbit,
         humanize: { timing: 10, velocity: 3, seed: 21 },
@@ -665,7 +671,7 @@ export const lowTide: DemoDefinition = {
     s.track(
       voice("cellos", "Tide cellos", "cellos", 0.66, {
         string: { preset: "cellos" },
-        pan: -0.22,
+        pan: -0.3,
         reverb: { ...hall, mix: 0.24 },
         fx: orbit,
         humanize: { timing: 12, velocity: 3, seed: 23 },
@@ -673,7 +679,7 @@ export const lowTide: DemoDefinition = {
     );
     s.track(
       voice("vibes", "Amber reply", "vibes", 0.31, {
-        pan: -0.4,
+        pan: -0.5,
         reverb: hall,
         delay: { beats: 0.75, feedback: 0.24, mix: 0.13 },
         fx: { ...orbit, wobble: { depth: 5, rate: 0.37, drift: 0.6 } },
@@ -719,10 +725,12 @@ export const lowTide: DemoDefinition = {
     for (let bar = 0; bar < END; bar++) {
       const chord = chordAt(bar);
       if (inDub(bar)) {
-        // Dub skank: short chords on two and four, a lazy 25 ms behind.
+        // Dub skank: short chords on two and four, a lazy 25 ms behind;
+        // three notes under the singer, four where the voice rests.
+        const skank = bar % 2 === 0 && bar < DUB + 6 ? chord.low : chord.keys;
         for (const beat of [1, 3]) {
           if (bar === VERSE2 - 1 && beat === 3) continue;
-          chord.keys.forEach((pitch, v) =>
+          skank.forEach((pitch, v) =>
             s.note(
               "keys",
               bar,
