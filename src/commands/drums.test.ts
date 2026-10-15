@@ -19,10 +19,10 @@ import {
   patternLine,
 } from "./drums.ts";
 
-const empty = (tempoBpm = 120) =>
+const empty = (tempoBpm = 120, bars = 1) =>
   createScore({
     tempoBpm,
-    bars: 1,
+    bars,
     tracks: [
       { id: "drums", name: "drums", instrument: "kit" },
       { id: "keys", name: "keys", instrument: "piano" },
@@ -94,7 +94,12 @@ describe("pattern library", () => {
 
   test("every pattern applies to a kit track and renders audible audio", () => {
     for (const entry of DRUM_PATTERNS) {
-      const result = applyDrumPattern(empty(), "drums", entry.name, "set");
+      const result = applyDrumPattern(
+        empty(120, 4),
+        "drums",
+        entry.name,
+        "set",
+      );
       expect(result.ok).toBe(true);
       const next = result.next!;
       expect(next.tempoBpm).toBe(entry.tempo.bpm);
