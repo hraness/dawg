@@ -31,7 +31,7 @@ type Line = readonly (readonly [number, number, number, number, string?])[];
  * A chord quality, as semitones above the root (the bass plays the root):
  * the A and B rootless forms a pianist alternates between so one or two
  * voices move per change (after Mark Levine), the three-note left-hand
- * shells (third and seventh plus one colour, a fourth or wider at the
+ * shells (third and seventh plus one color, a fourth or wider at the
  * bottom so they stay clear low down) for when the right hand has the
  * tune, and the third, fifth and seventh the bass walks through.
  */
@@ -225,22 +225,22 @@ function harmony(bar: number): readonly Span[] {
 /**
  * The shape nearest the previous voicing: each shape in the two octaves
  * whose bottom note sits at or above `low`, scored by how far the voices
- * move plus a pull toward `centre`. A shape whose top note climbs past
+ * move plus a pull toward `center`. A shape whose top note climbs past
  * `top` (into the sax) costs extra, and so does every voice a half step or
  * a minor ninth from a note the tune holds over the chord (weighted by how
  * long it is held, less two octaves apart), so the chain steps around
- * the rubs a pianist would hear. Each shape carries its own colour cost.
+ * the rubs a pianist would hear. Each shape carries its own color cost.
  */
 function lead(
   previous: readonly number[],
   root: number,
   shapes: readonly (readonly [number, readonly number[]])[],
-  [low, centre, top]: readonly [number, number, number],
+  [low, center, top]: readonly [number, number, number],
   tune: readonly (readonly [number, number])[],
 ): number[] {
   let best: number[] = [];
   let bestCost = Infinity;
-  for (const [colour, shape] of shapes) {
+  for (const [color, shape] of shapes) {
     const lift = Math.ceil((low - root - shape[0]!) / 12) * 12;
     for (const octave of [0, 12]) {
       const pitches = shape.map((tone) => root + tone + lift + octave);
@@ -260,10 +260,10 @@ function lead(
           else if (gap === 0) rub += 8 * Math.max(0.3, held);
         }
       const cost =
-        colour +
+        color +
         moved +
         rub +
-        0.5 * Math.abs(mean - centre) +
+        0.5 * Math.abs(mean - center) +
         4 * Math.max(0, pitches.at(-1)! - top);
       if (cost < bestCost) {
         bestCost = cost;

@@ -400,7 +400,7 @@ const ANSWER: readonly [Phrase, Phrase] = [
     [3, 67, 0.7, 0.46],
   ],
 ];
-/** The second time the answer lifts to F sharp (the lydian colour) first. */
+/** The second time the answer lifts to F sharp (the lydian color) first. */
 const ANSWER_LIFT: Phrase = [
   [0.5, 78, 0.45, 0.52],
   [1.5, 76, 0.5, 0.5],
@@ -500,7 +500,7 @@ export const copperWire: DemoDefinition = {
     mixNotes: [
       "The main break (left) is authored from Amen-shaped cells on a synthesized kit with the Amen's measured 1.2:1 swing, each cell carrying its own ride pattern; the shadow break (right, high-passed, doubled wide) plays ghost 16ths where the main rests, takes the back half of every fourth bar, carries the double-time hats at the peak while the main ride drops out, and is all that is left of the drums in the coast.",
       "The motor's first eight bars are the low-passed reese alone on the roots; the sub, the machine kick and the full reese phrase arrive together at bar 16. The sub ducks under the kick; the reese sits an octave up, chorused for width, with a slow detune on its Width knob, and from the second drop takes a second answer shape (octave, then down by step, a 16th pickup into each chord). The vacuum has no sub, only the reese stepping down E D C B under the suspensions.",
-      "Registers are kept apart: sub 28-40, reese 40-52 (down to B1 in the vacuum, where it is the only bass), pad 52-69 with a top line that climbs to D5 in the vacuum and E5 at the end, vocal chop 64-74, Rhodes 64-78, chip 76-88. The field: vocal left of centre, chip right, Rhodes left, glass right, the strings doubled hard left and right, sub, reese and kick in the middle. The crush on the break is clean everywhere except the last two bars of the vacuum.",
+      "Registers are kept apart: sub 28-40, reese 40-52 (down to B1 in the vacuum, where it is the only bass), pad 52-69 with a top line that climbs to D5 in the vacuum and E5 at the end, vocal chop 64-74, Rhodes 64-78, chip 76-88. The field: vocal left of center, chip right, Rhodes left, glass right, the strings doubled hard left and right, sub, reese and kick in the middle. The crush on the break is clean everywhere except the last two bars of the vacuum.",
       "Pitched break hits are a tape-struck sample with a falling rate, jumping +7, +12, -5 and +4 semitones; reverse swells of the same sample lead into phrase downbeats.",
     ],
   }),
@@ -578,7 +578,7 @@ export const copperWire: DemoDefinition = {
       preset("bass", "Reese current", "reese", 0.32, {
         filter: { cutoff: 900, resonance: 0.15 },
         // A stereo chorus on the saws: the reese has width without
-        // leaving the centre.
+        // leaving the center.
         fx: { ...orbit, chorus: { rate: 0.35, depth: 0.45, mix: 0.45 } },
         glide: { time: 0.11, mode: "legato" },
         filterAutomation: lanes(

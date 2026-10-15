@@ -169,7 +169,7 @@ const H: Readonly<Record<string, Harmony>> = {
     lo: NONE,
     hi: NONE,
   },
-  /** The borrowed ii half-diminished (F# A C# E), the minor-iv colour. */
+  /** The borrowed ii half-diminished (F# A C# E), the minor-iv color. */
   Fh: {
     root: 30,
     keys: [54, 57, 61, 64],

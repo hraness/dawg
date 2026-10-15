@@ -1708,6 +1708,8 @@ Patterns: `house`, `techno`, `euclid-poly`, `amen-style`, `boom-bap`, `trap`, `r
 | `electro`  | tight short kick, clicky rim, ticking hats (alias `minimal`) |
 | `trap`     | distorted long 808, crisp hats, high snare                   |
 
+Kits are not loudness-matched. At equal velocity the `syn808` hats sit far below the `syn909` hats, and the `acoustic` and `lofi` kits land several decibels under the synth kits, so revisit the track gain when you switch kits.
+
 Sample kits from packs (`/kit 909` and the rest, see **Sample packs**) sit in the same picker after the synth kits. `/kit syn909` on a sampler kit turns it back into a synth kit track, moving hits and rows to the drums of the same name. The agent has `list_drum_patterns`, `apply_drum_pattern {name, trackId?, tempo: auto|keep|set}` and `set_drum_kit {kit, trackId?}`, and its prompt starts style grooves from a groove.
 
 ## Arrange (sections and form)

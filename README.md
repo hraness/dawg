@@ -144,17 +144,17 @@ bun add -g @hraness/dawg
 Or install the release tarball from GitHub directly:
 
 ```sh
-bun add -g https://github.com/hraness/dawg/releases/download/v0.14.0/hraness-dawg-0.14.0.tgz
+bun add -g https://github.com/hraness/dawg/releases/download/v0.15.0/hraness-dawg-0.15.0.tgz
 dawg --help
 ```
 
 Each [release](https://github.com/hraness/dawg/releases) is immutable and ships the tarball, a `SHA256SUMS` file and a GitHub build attestation. To check a download before installing it:
 
 ```sh
-gh release download v0.14.0 --repo hraness/dawg
+gh release download v0.15.0 --repo hraness/dawg
 shasum -a 256 -c SHA256SUMS
-gh attestation verify hraness-dawg-0.14.0.tgz --repo hraness/dawg
-bun add -g "$PWD/hraness-dawg-0.14.0.tgz"
+gh attestation verify hraness-dawg-0.15.0.tgz --repo hraness/dawg
+bun add -g "$PWD/hraness-dawg-0.15.0.tgz"
 ```
 
 To run from source instead:

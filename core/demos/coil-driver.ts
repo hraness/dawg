@@ -327,7 +327,7 @@ export const coilDriver: DemoDefinition = {
       "Power down 8",
     ],
     mixNotes: [
-      "The saw 303 is the bass voice of the pair, centred with a 9 ms double for width; the square box plays an octave up, panned hard left in a slow chorus, with its own filter ride and a short delay so the hocket's holes stay holes.",
+      "The saw 303 is the bass voice of the pair, centered with a 9 ms double for width; the square box plays an octave up, panned hard left in a slow chorus, with its own filter ride and a short delay so the hocket's holes stay holes.",
       "The sub pedal is a sine on F1 that only plays off the kick (and ducks under it); it sits out the first two bars of the breakdown and arrives quietly on the Eb, then walks Eb Db C with glides into each root while the crotale holds each 7th over the new root, the saw rests, and the stabs answer with the 6/3 chord (an open fifth on V).",
       "Dub stabs run through a dotted-eighth ping-pong delay whose feedback and send are thrown every two bars; the tone climbs across Vacuum and the last throw is cut dead for the silent half bar.",
       "The crush sweep (bits 14 to 4, mix 0 to 0.9) rides the acid and the snare roll over the last bar and a half of the build and snaps clean on the drop; the drop lands a downbeat stab thrown into the delay with the square box doubling the saw an octave up for two bars and the kick's duck pumping.",
@@ -586,7 +586,7 @@ export const coilDriver: DemoDefinition = {
           ...orbit,
           crush: { bits: 16, coarse: 1, mix: 0 },
           distort: { type: "diode", drive: 0.8, mix: 0.42, tone: 5200 },
-          // A 9 ms second take on the other side: the saw stays the centre
+          // A 9 ms second take on the other side: the saw stays the center
           // voice (the master folds everything under 120 Hz to mono) but
           // its squelch spreads, which is where the width of the mix lives.
           double: { time: 9, drift: 0.4, width: 0.7 },
