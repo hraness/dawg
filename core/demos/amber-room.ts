@@ -1,7 +1,8 @@
 /** Amber Room: the neo soul demo song. */
+import { bundledSampleRef } from "../bundled-samples.ts";
 import type { PedalEvent } from "../expression.ts";
 import type { NoteInput } from "../score.ts";
-import { Composer, hall, room, voice } from "./build.ts";
+import { Composer, hall, lanes, room, voice } from "./build.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
 /*
@@ -517,6 +518,62 @@ const KEYS_SOLO: Line = [
   [31.5, 70, 0.4, 0.56],
 ];
 
+/**
+ * Two backing "ooh" voices: the bridge's modal-mixture sighs (D to Db over
+ * Bbmaj9 to Bbm9), a 4-3 over Gm11 and over Fmaj9, the head return's held
+ * ninths with a 9-8 into Gm9, F to E over the sus and its altered dominant,
+ * and a last 9-8 over the final Fmaj9. [bar, beat, pitch, length, velocity]
+ */
+const PAD: readonly (readonly [number, number, number, number, number])[] = [
+  [20, 0, 74, 4, 0.5],
+  [20, 0, 69, 4, 0.46],
+  [21, 0, 73, 4, 0.5],
+  [21, 0, 68, 4, 0.46],
+  [22, 0, 72, 4, 0.5],
+  [22, 0, 67, 4, 0.46],
+  [23, 0, 72, 4, 0.48],
+  [23, 0, 69, 4, 0.46],
+  [24, 0, 72, 2, 0.5],
+  [24, 2, 70, 2, 0.48],
+  [24, 0, 65, 4, 0.46],
+  [25, 0, 70, 4, 0.48],
+  [25, 0, 61, 4, 0.44],
+  [26, 0, 70, 0.5, 0.5],
+  [26, 0.5, 69, 3.5, 0.48],
+  [26, 0, 64, 4, 0.44],
+  [27, 0, 72, 4.5, 0.5],
+  [27, 0, 66, 4, 0.46],
+  [28, 0.5, 70, 1.2, 0.44],
+  [36, 0, 69, 1, 0.44],
+  [36, 1, 67, 3, 0.42],
+  [36, 0, 62, 4, 0.4],
+  [37, 0, 67, 4, 0.42],
+  [37, 0, 65, 1.5, 0.42],
+  [37, 1.5, 64, 2.5, 0.4],
+  [38, 0, 67, 2, 0.42],
+  [38, 2, 65, 2, 0.4],
+  [38, 0, 60, 4, 0.38],
+  [39, 0, 65, 4, 0.42],
+  [39, 0, 62, 4, 0.38],
+  [40, 0, 67, 1, 0.44],
+  [40, 1, 65, 3, 0.42],
+  [40, 0, 62, 4, 0.38],
+  [41, 0, 65, 4, 0.42],
+  [41, 0, 60, 4, 0.38],
+  [42, 0, 65, 2, 0.44],
+  [42, 2, 64, 2, 0.42],
+  [42, 0, 58, 4, 0.38],
+  [43, 0, 64, 2.5, 0.42],
+  [43, 2.5, 63, 1.5, 0.4],
+  [43, 0, 60, 4, 0.38],
+  [45, 0, 69, 4, 0.42],
+  [46, 0, 67, 6, 0.4],
+  [45, 0, 60, 10, 0.36],
+];
+
+/** Bars whose last half beat is a hat ratchet (a 32nd-note glitch fill). */
+const RATCHETS = [11, 19, 27, 35] as const;
+
 /** The Rhodes top line over the doorway's held chords (bars 0 to 3). */
 const DOOR_TOP: Line = [
   [2.5, 76, 1.2, 0.46],
@@ -657,6 +714,8 @@ function tunes(): [number, number, number][] {
   }
   add(28, KEYS_SOLO, KEYS);
   for (const [bar, line] of VIBES_ANSWERS) add(bar, line, VIBES);
+  for (const [bar, beat, pitch, length] of PAD)
+    out.push([bar * 4 + beat, bar * 4 + beat + length, pitch]);
   return out;
 }
 
@@ -875,6 +934,18 @@ export const amberRoom: DemoDefinition = {
         kit: "acoustic",
         reverb: { mix: 0.07, size: 0.25, fade: 0.7 },
         humanize: { timing: 5, velocity: 5, seed: 7 },
+        // The bridge's kit goes through a light bitcrush, a sampled beat
+        // tape under the live band, and snaps clean for the keys solo.
+        fx: { crush: { bits: 7, coarse: 3, mix: 0 } },
+        fxAutomation: {
+          "crush-mix": lanes(
+            [0, 0],
+            [19.95, 0],
+            [20, 0.32],
+            [27.5, 0.32],
+            [27.95, 0],
+          ),
+        },
       }),
     );
     s.track(
@@ -918,6 +989,62 @@ export const amberRoom: DemoDefinition = {
         humanize: { timing: 6, velocity: 5, seed: 37 },
       }),
     );
+    s.track(
+      voice("oohs", "Ooh pad", "sing", 0.24, {
+        sing: {
+          preset: "oohchoir",
+          voice: "alto",
+          voices: 4,
+          breath: 0.3,
+          bright: 0.3,
+          attack: 0.22,
+          release: 0.5,
+          vib: 4.6,
+          vibmod: 0.08,
+          vibdelay: 0.5,
+          spread: 12,
+        },
+        pan: -0.08,
+        reverb: hall,
+        filter: { type: "hpf", cutoff: 180, resonance: 0 },
+        humanize: { timing: 14, velocity: 4, seed: 43 },
+      }),
+    );
+    s.track(
+      voice("chop", "Oh chops", "sampler", 0.3, {
+        sampler: {
+          mode: "keyed",
+          voices: {
+            // Notes from 36 play the reverse-shaped riser, from 48 the
+            // "oh" slowing to a stop (the tape stop), from 60 the "oh".
+            rise: {
+              ...bundledSampleRef("riser"),
+              root: 36,
+              fit: true,
+              fadeInTime: 0.3,
+              fadeTime: 0.03,
+            },
+            stop: {
+              ...bundledSampleRef("vowel-oh"),
+              root: 48,
+              accelerate: -1,
+              fadeTime: 0.02,
+            },
+            oh: {
+              ...bundledSampleRef("vowel-oh"),
+              root: 60,
+              fadeInTime: 0.003,
+              fadeTime: 0.01,
+            },
+          },
+        },
+        pan: -0.22,
+        filter: { type: "hpf", cutoff: 260, resonance: 0 },
+        reverb: room,
+        fx: { crush: { bits: 9, coarse: 2, mix: 0.2 } },
+        delay: { beats: 0.75, feedback: 0.18, mix: 0.1, pingpong: true },
+      }),
+    );
 
     const rand = grain(0x5eed);
     const sax = (bar: number, line: Line, gain = 1): void => {
@@ -943,8 +1070,10 @@ export const amberRoom: DemoDefinition = {
     ): void => s.note("drums", bar, beat, pitch, length, Math.min(1, velocity));
     const hats = (bar: number, level: number, open: boolean): void => {
       const shape = [0.58, 0.16, 0.42, 0.24];
+      const ratchet = (RATCHETS as readonly number[]).includes(bar);
+      if (ratchet) open = false;
       for (let step = 0; step < 16; step++) {
-        if (open && step >= 14) continue;
+        if ((open || ratchet) && step >= 14) continue;
         if (step % 4 === 1 && rand() < 0.55) continue;
         const v = shape[step % 4]! * level * (0.9 + 0.2 * rand());
         drum(bar, step / 4 + (step % 2 ? SWING : 0) + 0.004, 42, v);
@@ -982,6 +1111,7 @@ export const amberRoom: DemoDefinition = {
     };
     const pocket = (bar: number, index: number): void => {
       for (let step = 0; step < 8; step++) {
+        if (bar === 27 && step === 7) continue;
         const v = (step % 2 ? 0.28 : 0.46) * (0.9 + 0.2 * rand());
         drum(bar, step / 2 + (step % 2 ? SWING : 0), 51, v, 0.5);
       }
@@ -999,18 +1129,23 @@ export const amberRoom: DemoDefinition = {
         );
       for (const beat of [1, 3]) drum(bar, beat + 0.006, 44, 0.3);
     };
+    // The keys solo: side stick and eighth hats; the kick sits out its
+    // first four bars (the break the head return comes back from).
     const quiet = (bar: number, index: number): void => {
-      drum(bar, 0 + KICK + 0.004, 36, 0.6);
-      drum(bar, (index % 2 ? 2.25 : 2.5) + KICK, 36, 0.46);
+      if (bar >= 32) {
+        drum(bar, 0 + KICK + 0.004, 36, 0.6);
+        drum(bar, (index % 2 ? 2.25 : 2.5) + KICK, 36, 0.46);
+      }
       drum(bar, 1 + SNARE, 37, 0.52 + 0.06 * rand());
       drum(bar, 3 + SNARE, 37, 0.56 + 0.06 * rand());
       for (let step = 0; step < 8; step++)
-        drum(
-          bar,
-          step / 2 + (step % 2 ? SWING : 0) + 0.004,
-          42,
-          (step % 2 ? 0.2 : 0.34) * (0.9 + 0.2 * rand()),
-        );
+        if (!(bar === 35 && step === 7))
+          drum(
+            bar,
+            step / 2 + (step % 2 ? SWING : 0) + 0.004,
+            42,
+            (step % 2 ? 0.2 : 0.34) * (0.9 + 0.2 * rand()),
+          );
     };
 
     // Bass -------------------------------------------------------------------
@@ -1254,9 +1389,12 @@ export const amberRoom: DemoDefinition = {
           ][pass]![index] ?? 0,
           bar >= 36 ? 1.04 : 1,
         );
+        // Under the guitar arpeggios the Rhodes holds its chords.
         comp(
           bar,
-          [0, 1, 2, 3, 3, 2, 0, 0][index]!,
+          pass === 1
+            ? [2, 2, 0, 2, 2, 2, 0, 0][index]!
+            : [0, 1, 2, 3, 3, 2, 0, 0][index]!,
           bar < 12 ? 0.94 : bar >= 36 ? 1.04 : 1,
         );
       } else if (bar < 28) {
@@ -1290,8 +1428,13 @@ export const amberRoom: DemoDefinition = {
           roll(bar, beat, shellAt(bar, beat), length, velocity, 0.018);
       }
     }
+    // The solo is a hocket: the Rhodes rests on its highest notes and the
+    // vibes play them, so the line is one tune across two timbres.
     for (const [beat, pitch, length, velocity] of KEYS_SOLO)
-      s.note("keys", 28, beat + KEYS, pitch, length, velocity);
+      if (pitch >= 79)
+        s.note("vibes", 28, beat + VIBES, pitch, length, velocity + 0.04);
+      else s.note("keys", 28, beat + KEYS, pitch, length, velocity);
+    drum(32, 0.004, 49, 0.3, 1.5);
 
     // Sax lines, and the Rhodes answering in their rests.
     for (const [bar, line, gain] of SAX_PLAN) sax(bar, line, gain);
@@ -1401,10 +1544,43 @@ export const amberRoom: DemoDefinition = {
       [2.75, 50, 0.44],
       [3, 47, 0.6],
       [3.25, 47, 0.5],
-      [3.5, 41, 0.7],
-      [3.75, 38, 0.74],
     ] as const)
       drum(35, beat + SWING * (beat % 0.5 ? 1 : 0), pitch, v);
+    // Glitch fills: a 32nd-note hat ratchet over the last half beat of a
+    // phrase, ramping up into a bigger section (the snare joins its last
+    // two hits before the pocket and the head return) and down into the
+    // solo.
+    for (const bar of RATCHETS) {
+      const up = bar !== 27;
+      for (let i = 0; i < 6; i++) {
+        const t = i / 5;
+        drum(
+          bar,
+          3.5 + i / 12,
+          42,
+          up ? 0.22 + 0.42 * t : 0.6 - 0.42 * t,
+          0.07,
+        );
+        if ((bar === 19 || bar === 35) && i >= 4)
+          drum(bar, 3.5 + i / 12 + 0.004, 38, 0.46 + 0.22 * (i - 4));
+      }
+    }
+    // The chops: a reverse swell and a tape stop into the head return, the
+    // "oh" taking two notes of the sax's climb and peak (a hocket with a
+    // pitch jump) and a stutter fading into the last chord.
+    s.note("chop", 35, 0, 36, 4, 0.5);
+    s.note("chop", 35, 3, 48, 1, 0.62);
+    for (const [bar, beat, pitch, length, velocity] of [
+      [37, 1.5, 74, 0.3, 0.62],
+      [37, 1.8, 62, 0.45, 0.5],
+      [41, 0.5, 75, 0.35, 0.62],
+      [41, 1, 72, 0.4, 0.58],
+    ] as const)
+      s.note("chop", bar, beat + SAX, pitch, length, velocity);
+    for (let i = 0; i < 6; i++)
+      s.note("chop", 43, 3.5 + i / 12, 67, 0.08, 0.55 - 0.07 * i);
+    for (const [bar, beat, pitch, length, velocity] of PAD)
+      s.note("oohs", bar, beat + 0.03, pitch, length, velocity);
     for (const [beat, v] of [
       [3.25, 0.36],
       [3.5, 0.52],
