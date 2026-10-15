@@ -15,87 +15,137 @@ import { demoInfo, type DemoDefinition } from "./types.ts";
 
 /*
  * Arranged from a synth-pop style sheet (LinnDrum and DX-era records, Kate
- * Bush, Tears for Fears, Depeche Mode, CHVRCHES, The Weeknd): a gated Linn
- * snare on 2 and 4 with a clap 15 ms behind it, dry kick and swung hats,
- * an octave-pulse bass in the chorus, 4-note arpeggios, a pre-chorus whose
- * bass climbs D-E-F-G, a VI-VII-i chorus that pushes into the VII with the
- * singer, a half-time tom bridge that turns to E major, and a final chorus
- * where the double sings a third above. Every lyric is original.
+ * Bush, Tears for Fears, Depeche Mode, CHVRCHES, The Weeknd) and built as
+ * the shelf's arpeggio and counterpoint showcase: two arpeggios share the
+ * sixteenths (one on the on-sixteenths, one on the offs, the same chord
+ * tones rotated by two so the sum is a broken-thirds line), a third pluck
+ * plays the pattern three sixteenths late as a Reich canon, a string line
+ * answers the singer's held words, the bass moves against the hook, and a
+ * 4-3 or 9-8 suspension sits at every cadence. The glitch tint is seasoning:
+ * chopped syllables hocketing with the singer, 1/32 stutter ramps at phrase
+ * ends, a bitcrush sweep over the last pre-chorus bar, and a final chorus
+ * with 32nd-note hats, an octave-up double and a silent beat before it.
+ * Every lyric is original.
  */
 
-// Voicings sit between F3 and B4 so the singer owns the octave above them.
+// Pad voicings sit between F3 and B4 so the singer owns the octave above.
 const AM9 = [57, 60, 64, 67, 71],
   FMAJ9 = [53, 57, 60, 64, 67],
   CADD9 = [55, 60, 62, 64, 67],
-  G_B = [55, 59, 62, 67],
-  DM7 = [57, 60, 62, 65],
-  EM7 = [55, 59, 62, 64, 67],
+  DM9 = [57, 60, 64, 65],
+  DM7 = [53, 57, 60, 62],
+  EM7 = [55, 59, 62, 64],
   FMAJ7 = [57, 60, 64, 65],
   GSUS4 = [55, 60, 62, 67],
   G = [55, 59, 62, 67],
   FADD9 = [57, 60, 65, 67],
+  // Pre-chorus voicings keep the 9ths under the top voice so the singer's
+  // F4 G4 A4 climb sits a third or more above the stabs.
+  DM9_PRE = [53, 57, 60, 64],
+  FADD9_PRE = [55, 60, 64, 65],
+  FMAJ7_PRE = [53, 60, 64, 65],
   AM7 = [57, 60, 64, 67],
   C_G = [55, 60, 64, 67],
-  DM9 = [57, 60, 64, 65],
+  AM_C_SUS = [57, 62, 64, 69],
   AM_C = [57, 60, 64, 69],
-  ESUS4 = [57, 59, 64, 69],
-  E = [56, 59, 64, 68],
+  ESUS4 = [57, 59, 64],
   E7 = [56, 59, 62, 64],
   G6 = [55, 59, 62, 64];
-// Bass roots in the A1..E2 octave; the chorus pulse adds the octave above.
+// Shells for the pulse and verses: three voices between A2 and D4 under the
+// singer, the top voice a slow line G3 G3 D4 C4-B3 (the 9ths move to the
+// arpeggios and the halo); and for the half-time break, bars 32-35.
+const AM_SHELL = [45, 52, 55],
+  C_SHELL = [48, 55, 62],
+  GSUS_SHELL = [50, 55, 60],
+  G_SHELL = [50, 55, 59],
+  DM_SHELL = [50, 57, 60],
+  AMC_SUS_SHELL = [48, 52, 62],
+  AMC_SHELL = [48, 52, 60],
+  F_SHELL = [48, 52, 57],
+  ESUS_SHELL = [47, 52, 57],
+  E_SHELL = [47, 52, 56];
+// Bass roots in the A1..E2 octave; the chorus patterns add the octave above.
 const A = 33,
-  B = 35,
   C = 36,
   D = 38,
   EB = 40,
   F = 29,
   GB = 31;
 
-type Harmony = readonly [
-  voicing: readonly number[],
+/**
+ * One bar of harmony: the pad voicing, the bass root, four arpeggio tones
+ * (low to high, C5..D6) that outline the chord's 9th, and optionally the
+ * chord and tones from beat 2 when the bar carries a suspension resolving.
+ */
+type Harmony = Readonly<{
+  chord: readonly number[];
+  root: number;
+  arp: readonly number[];
+  then?: readonly number[];
+  thenArp?: readonly number[];
+}>;
+const H = (
+  chord: readonly number[],
   root: number,
-  /** A second chord from beat 2 (suspension resolving). */
+  arp: readonly number[],
   then?: readonly number[],
-];
+  thenArp?: readonly number[],
+): Harmony => ({ chord, root, arp, then, thenArp });
+
+// Arpeggio top notes walk in a line: verse B A G A, pre-chorus A B C D,
+// chorus A A B C, bridge C B A B.
 const VERSE: readonly Harmony[] = [
-  [AM9, A],
-  [FMAJ9, F],
-  [CADD9, C],
-  [G_B, B],
+  H(AM9, A, [72, 76, 79, 83]),
+  H(FMAJ9, F, [72, 76, 79, 81]),
+  H(CADD9, C, [72, 74, 76, 79]),
+  // 4-3: the C of Cadd9 is held over the G bass and resolves to B.
+  H(GSUS4, GB, [72, 74, 79, 81], G, [71, 74, 79, 81]),
+];
+// The sung verses and the pulse use the shells; the pad holds A2 E3 G3 while
+// the bass moves A to F, then C3 G3 D4 and the 4-3 at the top, D3 G3 C4-B3.
+const VERSE_LOW: readonly Harmony[] = [
+  H(AM_SHELL, A, [72, 76, 79, 83]),
+  H(AM_SHELL, F, [72, 76, 79, 81]),
+  H(C_SHELL, C, [72, 74, 76, 79]),
+  H(GSUS_SHELL, GB, [72, 74, 79, 81], G_SHELL, [71, 74, 79, 81]),
 ];
 const PRE: readonly Harmony[] = [
-  [DM7, D],
-  [EM7, EB],
-  [FMAJ7, F],
-  [GSUS4, GB, G],
+  // 9-8: E over the D bass resolves to D.
+  H(DM9_PRE, D, [72, 74, 77, 81], DM7, [72, 74, 77, 81]),
+  H(EM7, EB, [74, 76, 79, 83]),
+  // 9-8: G over the F bass resolves to F.
+  H(FADD9_PRE, F, [76, 79, 81, 84], FMAJ7_PRE, [76, 79, 81, 84]),
+  H(GSUS4, GB, [74, 79, 84, 86], G, [74, 79, 83, 86]),
 ];
 const CHORUS: readonly Harmony[] = [
-  [FADD9, F],
-  [G, GB],
-  [AM7, A],
-  [C_G, GB],
+  H(FADD9, F, [72, 76, 79, 81]),
+  H(GSUS4, GB, [72, 74, 79, 81], G, [71, 74, 79, 81]),
+  H(AM7, A, [72, 76, 79, 83]),
+  H(C_G, GB, [72, 76, 79, 84]),
 ];
 const POST: readonly Harmony[] = [
-  [FADD9, F],
-  [G, GB],
-  [AM7, A],
-  [AM7, A],
+  H(FADD9, F, [72, 76, 79, 81]),
+  H(GSUS4, GB, [72, 74, 79, 81], G, [71, 74, 79, 81]),
+  H(AM7, A, [72, 76, 79, 83]),
+  H(AM7, A, [72, 76, 79, 83]),
 ];
 const BRIDGE: readonly Harmony[] = [
-  [DM9, D],
-  [AM_C, C],
-  [FMAJ7, F],
-  [ESUS4, EB, E],
-  [DM9, D],
-  [AM_C, C],
-  [FMAJ7, F],
-  [E7, EB],
+  // The break (no kick, no arpeggio): shells under the low vocal line.
+  H(DM_SHELL, D, [74, 77, 81, 84]),
+  // 9-8 over the C bass: the D of Dm9 resolves to C.
+  H(AMC_SUS_SHELL, C, [74, 76, 79, 83], AMC_SHELL, [72, 76, 79, 83]),
+  H(F_SHELL, F, [72, 76, 79, 81]),
+  H(ESUS_SHELL, EB, [71, 76, 81, 83], E_SHELL, [71, 76, 80, 83]),
+  H(DM9, D, [74, 77, 81, 84]),
+  H(AM_C_SUS, C, [74, 76, 79, 83], AM_C, [72, 76, 79, 83]),
+  H(FMAJ7, F, [72, 76, 79, 81]),
+  H(ESUS4, EB, [71, 76, 81, 83], E7, [71, 74, 80, 83]),
 ];
 const OUTRO: readonly Harmony[] = [
-  [FADD9, F],
-  [G6, GB],
-  [AM9, A],
-  [AM9, A],
+  H(FADD9, F, [72, 76, 79, 81]),
+  H(GSUS4, GB, [72, 74, 79, 81], G6, [71, 74, 79, 81]),
+  H(AM9, A, [72, 76, 79, 83]),
+  H(AM9, A, [72, 76, 79, 83]),
 ];
 
 type Part =
@@ -136,7 +186,9 @@ const harmonyAt = (bar: number): Harmony => {
           ? POST
           : part === "outro"
             ? OUTRO
-            : VERSE;
+            : part === "intro"
+              ? VERSE
+              : VERSE_LOW;
   return table[bar % 4]!;
 };
 
@@ -182,14 +234,15 @@ const RIFF_AM = riff([
   [6, 69],
 ]);
 
-// Verse: syllabic, about one note per beat, inside a ninth (C4..C5).
+// Verse: syllabic, about one note per beat, inside a sixth (E4..C5) above
+// the pad shells; the held words lean down a step onto chord tones.
 const LATE_NIGHT: Phrase = [
   [0.5, 64, 0.45, 0.62, "Late"],
   [1.5, 67, 0.45, 0.68, "night"],
-  [2.5, 64, 0.4, 0.56, "and"],
-  [3, 62, 0.4, 0.54, "the"],
-  [3.5, 60, 0.45, 0.6, "ci"],
-  [4, 62, 0.45, 0.58, "ty"],
+  [2.5, 69, 0.4, 0.56, "and"],
+  [3, 67, 0.4, 0.54, "the"],
+  [3.5, 64, 0.45, 0.6, "ci"],
+  [4, 65, 0.45, 0.58, "ty"],
   [4.5, 64, 1.9, 0.68, "hums"],
 ];
 const STATIC_WHERE: Phrase = [
@@ -199,7 +252,8 @@ const STATIC_WHERE: Phrase = [
   [2, 69, 0.4, 0.58, "your"],
   [2.5, 69, 0.9, 0.72, "voice"],
   [3.5, 67, 0.45, 0.6, "comes"],
-  [4.5, 62, 1.8, 0.64, "from"],
+  // The 7th over G, resolving to the next phrase's E.
+  [4.5, 65, 1.8, 0.64, "from"],
 ];
 const WINDOW_WIDE: Phrase = [
   [0.5, 64, 0.45, 0.62, "I"],
@@ -214,11 +268,11 @@ const WINDOW_WIDE: Phrase = [
 const LIGHT_OUTSIDE: Phrase = [
   [0.5, 67, 0.45, 0.64, "wait"],
   [1, 64, 0.45, 0.56, "ing"],
-  [1.5, 62, 0.45, 0.56, "for"],
-  [2, 64, 0.4, 0.58, "a"],
-  [2.5, 67, 0.9, 0.72, "light"],
-  [3.5, 64, 0.45, 0.6, "out"],
-  [4.5, 62, 1.6, 0.64, "side"],
+  [1.5, 65, 0.45, 0.56, "for"],
+  [2, 67, 0.4, 0.58, "a"],
+  [2.5, 69, 0.9, 0.72, "light"],
+  [3.5, 67, 0.45, 0.6, "out"],
+  [4.5, 64, 1.6, 0.64, "side"],
 ];
 const words = (shape: Phrase, lyric: readonly string[]): Phrase =>
   shape.map(([beat, pitch, length, velocity], i) => [
@@ -273,19 +327,22 @@ const COMING_THROUGH = (
 ];
 
 // Chorus: the highest part of the song (G4..E5), pushing "bloom" an eighth
-// ahead of the VII chord so the band and the singer land together.
+// ahead of the VII chord so the band and the singer land together. "out"
+// and "light" start a step above their chord tone and lean down onto it
+// (appoggiaturas on the downbeat).
 const SIGNAL: Phrase = [
   [0, 72, 0.7, 0.84, "Send"],
   [0.75, 69, 0.25, 0.64, "me"],
   [1, 72, 0.45, 0.72, "your"],
-  [1.5, 76, 0.7, 0.9, "sig"],
+  [1.5, 76, 0.7, 0.78, "sig"],
   [2.25, 74, 0.25, 0.68, "nal"],
   [2.5, 72, 0.45, 0.7, "let"],
   [3, 69, 0.45, 0.66, "it"],
   [3.5, 74, 2.6, 0.84, "bloom"],
 ];
 const INTO_THE_ROOM: Phrase = [
-  [0, 72, 0.45, 0.78, "out"],
+  [0, 74, 0.3, 0.8, "out"],
+  [0.3, 72, 0.2, 0.7, "_"],
   [0.5, 71, 0.25, 0.6, "of"],
   [0.75, 69, 0.25, 0.58, "the"],
   [1, 72, 0.45, 0.74, "stat"],
@@ -296,7 +353,8 @@ const INTO_THE_ROOM: Phrase = [
   [4, 67, 2.4, 0.74, "room"],
 ];
 const LIGHT_UP: Phrase = [
-  [0, 76, 0.7, 0.88, "light"],
+  [0, 77, 0.3, 0.9, "light"],
+  [0.3, 76, 0.45, 0.82, "_"],
   [0.75, 74, 0.25, 0.66, "up"],
   [1, 72, 0.45, 0.7, "the"],
   [1.5, 74, 0.45, 0.74, "win"],
@@ -314,8 +372,8 @@ const LIGHTS_GO_OUT: Phrase = [
   [2, 65, 0.9, 0.66, "lights"],
   [3, 64, 0.45, 0.58, "go"],
   [3.5, 62, 0.45, 0.58, "out"],
-  [4, 64, 0.45, 0.6, "to"],
-  [4.5, 60, 2.4, 0.64, "night"],
+  [4, 65, 0.45, 0.6, "to"],
+  [4.5, 64, 2.4, 0.64, "night"],
 ];
 const FADES_TO_WHITE: Phrase = [
   [1, 65, 0.45, 0.58, "and"],
@@ -336,12 +394,45 @@ const BY_YOUR_LIGHT: Phrase = [
   [4, 71, 0.45, 0.66, "your"],
   [4.5, 72, 2.4, 0.78, "light"],
 ];
+// The cry falls by step E5 D5 C5 B4 to a held A4, the 4th over the E bass,
+// and resolves to G#4 on beat 3 of bar 39 together with the pad and the arp.
 const BRIDGE_CRY: Phrase = [
   [0.5, 76, 1.4, 0.76, "oh"],
   [2, 74, 0.45, 0.64],
   [2.5, 72, 0.45, 0.62],
-  [3, 71, 0.9, 0.64],
-  [4, 68, 2.6, 0.68, "oh"],
+  [3, 71, 0.45, 0.64],
+  [3.5, 69, 2.5, 0.7, "oh"],
+  [6, 68, 1.6, 0.66, "_"],
+];
+
+// The string answer: a tenor motif, a rising fourth then a step down (the
+// inversion of the singer's falling tails), that speaks in the gap after each
+// held word between the pad shells and the singer (A3..E4). Stated in the
+// pulse, answered in the verse, turned a third higher, then handed to the
+// pre-chorus pickup on the note below it.
+const ANSWER_1: Phrase = [
+  [2.25, 57, 0.25, 0.54],
+  [2.5, 62, 0.45, 0.58],
+  [3, 60, 0.45, 0.56],
+  [3.5, 57, 0.9, 0.56],
+];
+const ANSWER_2: Phrase = [
+  [2.25, 57, 0.25, 0.54],
+  [2.5, 62, 0.45, 0.58],
+  [3, 64, 0.45, 0.58],
+  [3.5, 62, 0.9, 0.56],
+  [4.5, 60, 1.2, 0.52],
+];
+const ANSWER_3: Phrase = [
+  [2.25, 60, 0.25, 0.54],
+  [2.5, 65, 0.45, 0.58],
+  [3, 64, 0.45, 0.56],
+  [3.5, 60, 0.9, 0.56],
+];
+const ANSWER_4: Phrase = [
+  [2.25, 57, 0.3, 0.54],
+  [2.75, 62, 0.3, 0.58],
+  [3, 64, 0.5, 0.6],
 ];
 
 export const signalBloom: DemoDefinition = {
@@ -350,22 +441,26 @@ export const signalBloom: DemoDefinition = {
     title: "Signal Bloom",
     style: "Synth pop",
     description:
-      "A synth-pop song in A minor: gated Linn snare, octave-pulse bass and glass arpeggios carry an original sung hook through a climbing pre-chorus, a half-time tom bridge and a final chorus with a harmony double.",
+      "A synth-pop song in A minor built on two interlocking arpeggios and a Reich-offset pluck: a gated Linn snare, a sequenced bass that moves against the sung hook, a string motif answering in the singer's rests, a wavetable halo singing the comping's top voice, suspensions at every cadence, and a glitch tint of chopped syllables, stutter ramps, a bitcrush pre-chorus and a silent beat before the final chorus.",
     tempoBpm: 108,
     key: "Am",
     bars: 64,
     highlightBar: 20,
     trackId: "vocal",
     features: [
+      "two arpeggios on complementary sixteenths",
+      "Reich-offset second pluck",
+      "string counter-motif in the vocal's rests",
+      "arpeggio cells that change per section (quarters, eighths, a dotted-eighth hocket, locked sixteenths, a rest)",
+      "wavetable halo as a slow top-voice line",
+      "bass in contrary motion to the hook",
+      "4-3 and 9-8 suspensions at the cadences",
       "gated Linn snare with a late clap",
-      "original sung hook",
-      "octave-pulse analog bass",
-      "sequenced arpeggios",
-      "climbing pre-chorus",
-      "half-time tom bridge",
-      "harmony double",
-      "original vocal chops",
-      "wavetable halo",
+      "original sung hook with appoggiaturas",
+      "chopped-syllable hocket and stutter ramps",
+      "bitcrush pre-chorus sweep",
+      "silent beat into a double-time final chorus",
+      "octave-up vocal double",
     ],
     arrangement: [
       "Glass intro 4",
@@ -383,8 +478,10 @@ export const signalBloom: DemoDefinition = {
     ],
     mixNotes: [
       "Only the snare gets ambience, a short gated room; the kick and hats stay dry and the kick alone ducks the bass, chords and halo.",
-      "Chords sit below B4 with a stereo chorus, so the singer owns the octave above; the double sings a third higher, quieter and panned, only in the last chorus.",
-      "The arpeggio moves an octave up whenever the singer rests, the glass riff is kept for the intro and post-choruses, and chops answer in the gaps after each held word.",
+      "In the pulse, the verses and the bridge break the pad plays three-voice shells between A2 and D4 and the string motif sits in the tenor above them, so the singer owns E4-F5; the full five-voice stack returns for the pre-chorus and chorus below B4.",
+      "The two arpeggios share C5-D6 and sit wide, the pulse arp hard left and the glass pluck hard right (an octave up from bar 52), the canon pluck further right at two thirds of the main arp's level; the chops sit at plus and minus 0.6 and the halo, one slow voice at G5-C6, in the middle.",
+      "The bitcrush lives on the pad only, swept from 16 bits to 4 over the last pre-chorus bar and snapped clean on the chorus downbeat; the octave-up double is a soprano at about a third of the lead's level.",
+      "Before the final chorus every tonal source stops at beat 3 of bar 47 and the delay mix of the voice, the arp and the chop ramps to zero, so the silent beat holds only reverb tails.",
     ],
   }),
   build() {
@@ -449,9 +546,33 @@ export const signalBloom: DemoDefinition = {
         humanize: { timing: 3, velocity: 4, length: 6, seed: 15 },
       }),
     );
+    // The pad carries the bitcrush: 16 bits is clean, the lane dives to 4
+    // over the last pre-chorus bar and snaps back on the chorus downbeat.
+    const crushSweep = lanes(
+      [0, 16],
+      [18, 16],
+      [19, 11],
+      [19.75, 4],
+      [19.98, 4],
+      [20, 16],
+      [46, 16],
+      [47, 10],
+      [47.45, 4],
+      [47.49, 4],
+      [47.5, 16],
+    );
+    // The delays fall silent for the silent beat (bar 47 beat 4) and return
+    // on the final-chorus downbeat.
+    const delayGate = (mix: number) =>
+      lanes([0, mix], [47.4, mix], [47.46, 0], [48, 0], [48.02, mix]);
     s.track(
       voice("chords", "Warm polysynth", "saw", 0.48, {
-        fx: { ...orbit, chorus: { rate: 0.55, depth: 0.5, mix: 0.45 } },
+        fx: {
+          ...orbit,
+          chorus: { rate: 0.55, depth: 0.5, mix: 0.45 },
+          crush: { bits: 16, coarse: 1, mix: 0.6 },
+        },
+        fxAutomation: { "crush-bits": crushSweep },
         synth: {
           attack: 0.06,
           decay: 0.3,
@@ -469,26 +590,45 @@ export const signalBloom: DemoDefinition = {
           [15, 1500],
           [16, 1300],
           [19.9, 3400],
-          [20, 3600],
-          [31, 3300],
+          [20, 4000],
+          [31, 3600],
           [32, 1000],
           [39, 2000],
           [40, 1200],
           [44, 1400],
-          [47.9, 3800],
-          [48, 4200],
-          [59, 4600],
+          [47.4, 3800],
+          [48, 5000],
+          [59, 5600],
           [60, 2600],
           [63.9, 600],
         ),
       }),
     );
+    // Arpeggio A on the on-sixteenths (left), arpeggio B on the offs (right,
+    // a brighter glass pluck), the echo pluck three sixteenths behind A.
     s.track(
-      preset("arp", "Glass arpeggio", "pulse-seq", 0.3, {
-        pan: -0.24,
-        delay: { beats: 0.75, feedback: 0.3, mix: 0.2, pingpong: true },
+      preset("arp", "Pulse arpeggio", "pulse-seq", 0.38, {
+        pan: -0.7,
+        delay: { beats: 0.75, feedback: 0.26, mix: 0.16, pingpong: true },
+        delayMixAutomation: delayGate(0.16),
         filter: { type: "hpf", cutoff: 220, resonance: 0 },
         humanize: { timing: 2, velocity: 5, seed: 18 },
+      }),
+    );
+    s.track(
+      preset("arp2", "Glass arpeggio", "glass-pluck", 0.34, {
+        pan: 0.7,
+        filter: { type: "hpf", cutoff: 300, resonance: 0 },
+        reverb: { ...room, mix: 0.1 },
+        humanize: { timing: 2, velocity: 6, seed: 23 },
+      }),
+    );
+    s.track(
+      preset("echo", "Canon pluck", "pluck-arp", 0.28, {
+        pan: 0.8,
+        filter: { type: "hpf", cutoff: 320, resonance: 0 },
+        reverb: { ...room, mix: 0.14 },
+        humanize: { timing: 3, velocity: 6, seed: 24 },
       }),
     );
     s.track(
@@ -514,22 +654,23 @@ export const signalBloom: DemoDefinition = {
         },
         reverb: { ...hall, mix: 0.16, predelay: 0.03 },
         delay: { beats: 0.75, feedback: 0.2, mix: 0.1, pingpong: true },
+        delayMixAutomation: delayGate(0.1),
         filter: { type: "hpf", cutoff: 150, resonance: 0 },
         humanize: { timing: 9, velocity: 4, length: 4, seed: 19 },
       }),
     );
     s.track(
-      voice("double", "Harmony double", "sing", 0.2, {
+      voice("double", "Octave double", "sing", 0.3, {
         pan: -0.26,
-        sing: { preset: "choir", vowel: "o", breath: 0.2 },
+        sing: { preset: "soprano", vowel: "o", breath: 0.22, vib: 4.6 },
         reverb: hall,
-        filter: { type: "hpf", cutoff: 240, resonance: 0 },
+        filter: { type: "hpf", cutoff: 300, resonance: 0 },
         humanize: { timing: 14, velocity: 5, seed: 20 },
       }),
     );
     s.track(
-      voice("stay", "Stay chop", "sampler", 0.24, {
-        pan: -0.3,
+      voice("stay", "Stay chop", "sampler", 0.32, {
+        pan: -0.6,
         sampler: {
           mode: "keyed",
           voices: {
@@ -541,15 +682,16 @@ export const signalBloom: DemoDefinition = {
             },
           },
         },
-        delay: { beats: 0.75, feedback: 0.24, mix: 0.18, pingpong: true },
+        delay: { beats: 0.75, feedback: 0.24, mix: 0.16, pingpong: true },
+        delayMixAutomation: delayGate(0.16),
         reverb: room,
         filter: { type: "hpf", cutoff: 180, resonance: 0 },
         humanize: { timing: 4, velocity: 5, seed: 21 },
       }),
     );
     s.track(
-      voice("up", "Up reply", "sampler", 0.25, {
-        pan: 0.3,
+      voice("up", "Up reply", "sampler", 0.32, {
+        pan: 0.6,
         sampler: {
           mode: "keyed",
           voices: {
@@ -568,14 +710,22 @@ export const signalBloom: DemoDefinition = {
       }),
     );
     s.track(
-      voice("halo", "Wavetable halo", "wavetable", 0.2, {
+      preset("answer", "String answer", "synth-strings", 0.46, {
+        pan: -0.34,
+        filter: { type: "hpf", cutoff: 200, resonance: 0 },
+        reverb: { ...hall, mix: 0.18 },
+        humanize: { timing: 8, velocity: 5, length: 5, seed: 25 },
+      }),
+    );
+    s.track(
+      voice("halo", "Wavetable halo", "wavetable", 0.3, {
         wavetable: {
           table: { src: "builtin:basic" },
           wt: 0.19,
           wtrate: 0.18,
           wtdepth: 0.1,
         },
-        synth: { attack: 0.7, release: 1.4, lpf: 2600 },
+        synth: { attack: 0.35, release: 1.2, lpf: 4200 },
         filter: { type: "hpf", cutoff: 330, resonance: 0 },
         fx: { ...orbit, chorus: { rate: 0.3, depth: 0.6, mix: 0.5 } },
         wtAutomation: lanes(
@@ -590,9 +740,11 @@ export const signalBloom: DemoDefinition = {
         ),
         pan: 0.08,
         reverb: hall,
+        humanize: { timing: 10, velocity: 4, seed: 26 },
       }),
     );
-    // Risers sweep a high-passed noise bed up into each arrival.
+    // Risers sweep a high-passed noise bed up into each arrival; the one
+    // before the final chorus stops at beat 2, with every other tonal source.
     const risers = [3, 19, 31, 39, 47, 55];
     s.track(
       voice("lift", "Breath lifts", "white", 0.09, {
@@ -605,13 +757,14 @@ export const signalBloom: DemoDefinition = {
             (bar) =>
               [
                 [bar, 900],
-                [bar + 0.97, 7200],
-                [bar + 1, 1200],
+                [bar + (bar === 47 ? 0.49 : 0.97), 7200],
+                [bar + (bar === 47 ? 0.5 : 1), 1200],
               ] as const,
           ),
           [62, 1600],
           [63.9, 5200],
         ),
+        humanize: { timing: 6, velocity: 3, seed: 27 },
       }),
     );
 
@@ -628,12 +781,13 @@ export const signalBloom: DemoDefinition = {
       for (const [beat, pitch, length, velocity = 0.7, lyric] of phrase) {
         const extra: Partial<NoteInput> = {};
         if (lyric) Object.assign(extra, { lyric });
-        // Held words bloom into vibrato; stressed words scoop up from below.
+        // Held words bloom into vibrato; stressed words scoop up from below
+        // (never an appoggiatura's resolution, which already leans down).
         if (length >= 1.4)
           Object.assign(extra, {
             vibrato: { rate: 5.2, depth: 22, delay: 0.32 },
           });
-        if (velocity >= 0.8 && track === "vocal")
+        if (velocity >= 0.8 && track === "vocal" && lyric !== "_")
           Object.assign(extra, {
             bend: [
               { at: 0, cents: -70 },
@@ -642,7 +796,12 @@ export const signalBloom: DemoDefinition = {
           });
         // Unstressed syllables sit a hair behind the beat (about 9 ms) and
         // the double trails the lead by about 17 ms, as a sung double does.
-        const lag = track === "vocal" ? (velocity < 0.62 ? 0.016 : 0) : 0.03;
+        const lag =
+          track === "vocal"
+            ? velocity < 0.62 && lyric !== "_"
+              ? 0.016
+              : 0
+            : 0.03;
         note(
           track,
           bar,
@@ -685,15 +844,21 @@ export const signalBloom: DemoDefinition = {
         );
         if (clap) note("perc", bar, beat + 0.027, 39, 0.2, 0.64);
       });
-    const roll = (bar: number, from: number, to: number, low: number) => {
-      const steps = Math.round((to - from) * 4);
+    const roll = (
+      bar: number,
+      from: number,
+      to: number,
+      low: number,
+      step = 0.25,
+    ) => {
+      const steps = Math.round((to - from) / step);
       for (let i = 0; i < steps; i++)
         note(
           "snare",
           bar,
-          from + i / 4,
+          from + i * step,
           38,
-          0.12,
+          step * 0.5,
           low + ((0.96 - low) * i) / Math.max(1, steps - 1),
         );
     };
@@ -704,13 +869,19 @@ export const signalBloom: DemoDefinition = {
     ];
     // Each 4-bar phrase leans forward: the hats grow a little bar by bar, an
     // open hat lifts into the next phrase, and no hat plays under a crash.
+    // "double" is the final chorus: straight sixteenths with a 32nd-note
+    // ratchet on the "and" of 2 and of 4.
     const CRASH_BARS = new Set([8, 16, 20, 24, 28, 32, 40, 44, 48, 52, 56, 60]);
-    const hats = (bar: number, mode: "8" | "16" | "open" | "soft") => {
+    const hats = (
+      bar: number,
+      mode: "8" | "16" | "open" | "soft" | "double",
+      until = 16,
+    ) => {
       const lean = 0.94 + (bar % 4) * 0.03,
-        lift = bar % 4 === 3 && mode !== "soft";
-      for (let i = 0; i < 16; i++) {
+        lift = bar % 4 === 3 && mode !== "soft" && until === 16;
+      for (let i = 0; i < until; i++) {
         const offbeat8 = i % 4 === 2,
-          beat = i / 4 + (i % 2 ? 0.025 : 0);
+          beat = i / 4 + (i % 2 && mode !== "double" ? 0.025 : 0);
         if (i === 0 && CRASH_BARS.has(bar)) continue;
         if (lift && i >= 14) {
           if (i === 14) note("hats", bar, beat, 46, 0.55, 0.58 * lean);
@@ -725,7 +896,19 @@ export const signalBloom: DemoDefinition = {
           note("hats", bar, beat, 46, 0.4, 0.5 * lean);
           continue;
         }
-        const scale = mode === "soft" ? 0.62 : mode === "8" ? 1.08 : 1;
+        if (mode === "double" && (i === 6 || i === 14)) {
+          for (let r = 0; r < 2; r++)
+            note("hats", bar, beat + r / 8, 42, 0.06, (0.3 + r * 0.1) * lean);
+          continue;
+        }
+        const scale =
+          mode === "soft"
+            ? 0.62
+            : mode === "8"
+              ? 1.08
+              : mode === "double"
+                ? 1.1
+                : 1;
         note("hats", bar, beat, 42, 0.1, HAT_16[i]! * scale * lean);
       }
     };
@@ -757,6 +940,14 @@ export const signalBloom: DemoDefinition = {
       [1.5, 45, 0.5],
       [2.5, 41, 0.56],
       [3.25, 43, 0.46],
+    ];
+    const TOM_RIDE_B = [
+      [0, 45, 0.62],
+      [1, 43, 0.46],
+      [1.5, 45, 0.5],
+      [2.5, 41, 0.56],
+      [3, 41, 0.4],
+      [3.5, 43, 0.5],
     ];
 
     for (let b = 0; b < 64; b++) {
@@ -800,7 +991,8 @@ export const signalBloom: DemoDefinition = {
         if (b === 43) toms(b, FILL_SHORT);
       } else if (part === "pre") {
         const last = b === 19 || b === 47,
-          first = b === 16 || b === 44;
+          first = b === 16 || b === 44,
+          silent = b === 47;
         kick(
           b,
           last
@@ -808,7 +1000,7 @@ export const signalBloom: DemoDefinition = {
                 [0, 0.92],
                 [1, 0.8],
                 [2, 0.86],
-                [3, 0.84],
+                ...(silent ? [] : ([[3, 0.84]] as const)),
               ]
             : [
                 [0, 0.92],
@@ -818,44 +1010,81 @@ export const signalBloom: DemoDefinition = {
         );
         if (last) {
           backbeat(b, [1], false);
-          roll(b, 2, b === 47 ? 3.5 : 4, 0.3);
+          // Chorus 1: a sixteenth roll to the bar line. Final chorus: a
+          // 32nd-note ratchet that cuts dead at beat 3, the silent beat.
+          if (silent) roll(b, 2, 3, 0.3, 0.125);
+          else roll(b, 2, 4, 0.3);
         } else if (b % 4 < 2) backbeat(b, [2], false);
         else backbeat(b, [1, 3], false);
-        hats(b, b % 4 < 2 ? "8" : "16");
+        hats(b, b % 4 < 2 ? "8" : "16", silent ? 8 : 16);
         if (first) crash(b, 0.42);
-        if (last) toms(b, [[3, 45, 0.5]]);
+        if (last && !silent) toms(b, [[3, 45, 0.5]]);
       } else if (part === "chorus" || part === "post") {
-        kick(b, [
+        const final = b >= 48;
+        // The first chorus holds back so the final one has somewhere to go.
+        const kickGain = part === "chorus" && !final ? 0.9 : 1;
+        const kickHits: (readonly [number, number])[] = [
           [0, 0.95],
           [1, 0.8],
           [2, 0.9],
           [3, 0.8],
           ...(phraseEnd ? ([[3.5, 0.6]] as const) : []),
-        ]);
-        backbeat(b, [1, 3], true, part === "chorus" ? 1.05 : 1);
+          ...(final && part === "chorus" && odd
+            ? ([[2.75, 0.5]] as const)
+            : []),
+        ];
+        kick(
+          b,
+          kickHits.map(([beat, v]) => [beat, v * kickGain] as const),
+        );
+        backbeat(b, [1, 3], true, part === "chorus" && final ? 1.1 : 1);
         // Ghost strokes before the backbeat keep the machine breathing.
         if (odd && !phraseEnd) note("snare", b, 2.75, 38, 0.1, 0.18);
         if (b % 4 === 2) note("snare", b, 1.75, 38, 0.1, 0.16);
-        hats(b, part === "post" && !odd ? "16" : "open");
+        hats(
+          b,
+          part === "chorus" && final
+            ? "double"
+            : part === "post" && !odd
+              ? "16"
+              : "open",
+        );
         if (b % 4 === 0) crash(b, b === 20 || b === 48 ? 0.85 : 0.6);
-        if (b === 27 || b === 55) toms(b, FILL_SHORT);
+        if (b === 27 || b === 55) {
+          toms(b, FILL_SHORT.slice(0, 2));
+          // Glitch fill: a 32nd snare ratchet rising into the post-chorus.
+          roll(b, 3.5, 4, 0.34, 0.125);
+        }
         if (b === 31 || b === 59) toms(b, FILL_LONG);
       } else if (part === "bridge") {
-        // The first half is a breakdown: one kick, the toms and the snare.
-        kick(
-          b,
-          b < 36
-            ? [[0, 0.8]]
-            : [
-                [0, 0.9],
-                [1.5, 0.54],
-                [2.5, 0.5],
-              ],
-        );
-        backbeat(b, [2], false, b < 36 ? 0.88 : 0.96);
+        // The first half is the break: no kick for four bars, just the
+        // snare on 3, the toms and the arpeggio; the kick returns at 36.
+        if (b >= 36)
+          kick(b, [
+            [0, 0.9],
+            [1.5, 0.54],
+            [2.5, 0.5],
+          ]);
+        backbeat(b, [2], false, b < 36 ? 0.84 : 0.96);
         if (b === 32) crash(b, 0.55);
         if (b >= 36) hats(b, "soft");
-        toms(b, b === 39 ? TOM_RIDE.slice(0, 3) : TOM_RIDE);
+        // The tom cell changes every bar pair: the full ride, the ride
+        // without its last hit, a variant with a pickup, a flam into 36.
+        toms(
+          b,
+          b === 39
+            ? TOM_RIDE.slice(0, 3)
+            : b % 4 === 1
+              ? TOM_RIDE.slice(0, 4)
+              : b % 4 === 2
+                ? TOM_RIDE_B
+                : TOM_RIDE,
+        );
+        if (b === 35)
+          toms(b, [
+            [3.5, 43, 0.46],
+            [3.56, 45, 0.6],
+          ]);
         if (b === 39) {
           roll(b, 3, 4, 0.36);
           toms(b, [
@@ -870,15 +1099,39 @@ export const signalBloom: DemoDefinition = {
       }
     }
 
-    // ---- Harmony: bass, chords, arpeggio, halo -------------------------
+    // ---- Harmony: bass, chords, arpeggios, halo ------------------------
     const OCTAVE_PULSE = [0.86, 0.58, 0.72, 0.58, 0.82, 0.58, 0.72, 0.62];
     const ROOT_PULSE = [0.78, 0.46, 0.6, 0.46, 0.72, 0.46, 0.62, 0.52];
+    // Chorus bass, one bar each over F, G, Am7 and C/G: it dips to A1-G1 as
+    // "sig-nal... bloom" rises, climbs A B while "bloom" holds, climbs C E A
+    // as "out of the static" falls, and walks G B D E up into the F.
+    const CHORUS_BASS = [
+      [41, 29, 29, 29, 36, 29, 33, 31],
+      [31, 43, 31, 43, 31, 43, 33, 35],
+      [33, 45, 33, 45, 36, 40, 45, 43],
+      [31, 43, 31, 43, 31, 35, 38, 40],
+    ];
+    // The second phrase of each chorus answers "light up the window" in
+    // contrary motion (C A E G under C-E, E-D, D-B) and walks G B D E up to
+    // E3 under the held "room", so the bass peaks late in the phrase.
+    const CHORUS_BASS_2 = [
+      [29, 41, 29, 41, 36, 40, 33, 31],
+      [31, 43, 38, 43, 31, 43, 35, 38],
+      [33, 45, 33, 45, 36, 33, 40, 43],
+      [31, 43, 31, 43, 43, 47, 50, 52],
+    ];
+    const rotate = (set: readonly number[], by: number) =>
+      set.map((_, i) => set[(i + by) % set.length]!);
     for (let b = 0; b < 64; b++) {
       const part = partOf(b),
-        [voicing, root, then] = harmonyAt(b),
-        next = b < 63 ? harmonyAt(b + 1) : harmonyAt(b);
-      // Chorus pushes: the VII arrives an eighth early with the word "bloom".
-      const push = part === "chorus" && b % 4 === 0 ? next[1] : undefined;
+        { chord: voicing, root, then } = harmonyAt(b),
+        next = harmonyAt(Math.min(63, b + 1)),
+        silent = b === 47,
+        phraseEnd = b % 4 === 3;
+      // Chorus pushes: the VII arrives an eighth early with the word "bloom",
+      // suspended (G C D) and resolving to G on beat 3 of the next bar.
+      const pushBar = part === "chorus" && b % 4 === 0,
+        resolveBar = part === "chorus" && b % 4 === 1;
 
       // Bass
       if (part === "pulse" || part === "verse") {
@@ -895,8 +1148,7 @@ export const signalBloom: DemoDefinition = {
         });
       } else if (part === "pre") {
         const last = b === 19 || b === 47;
-        for (let i = 0; i < 8; i++) {
-          if (b === 47 && i === 7) break;
+        for (let i = 0; i < (silent ? 4 : 8); i++)
           note(
             "bass",
             b,
@@ -905,21 +1157,33 @@ export const signalBloom: DemoDefinition = {
             0.42,
             ROOT_PULSE[i]! * (0.9 + (b % 4) * 0.04),
           );
-        }
-      } else if (part === "chorus" || part === "post") {
-        OCTAVE_PULSE.forEach((velocity, i) => {
-          const bass = push !== undefined && i === 7 ? push : root;
-          note("bass", b, i / 2, bass + (i % 2 ? 12 : 0), 0.4, velocity);
-        });
+      } else if (part === "chorus") {
+        ((b >= 48 ? b - 48 : b - 20) >= 4 ? CHORUS_BASS_2 : CHORUS_BASS)[
+          b % 4
+        ]!.forEach((pitch, i) =>
+          note(
+            "bass",
+            b,
+            i / 2,
+            pitch,
+            0.4,
+            OCTAVE_PULSE[i]! * (b >= 48 ? 1.08 : 0.94),
+          ),
+        );
+      } else if (part === "post") {
+        OCTAVE_PULSE.forEach((velocity, i) =>
+          note("bass", b, i / 2, root + (i % 2 ? 12 : 0), 0.4, velocity),
+        );
       } else if (part === "bridge") {
-        // "If the lights go out": the bass drops out for two bars.
+        // "If the lights go out": the bass waits two bars, then holds each
+        // root under the suspension chain, D C F E.
         if (b >= 34) {
           note("bass", b, 0, root, 3.3, b < 36 ? 0.62 : 0.74);
           note(
             "bass",
             b,
             3.5,
-            b === 39 ? A : root + 12,
+            b === 39 ? A : b === 34 ? C : root + 12,
             0.4,
             b < 36 ? 0.5 : 0.6,
           );
@@ -934,7 +1198,7 @@ export const signalBloom: DemoDefinition = {
         part === "intro"
           ? 0.4
           : part === "pulse"
-            ? 0.44
+            ? 0.4
             : part === "verse"
               ? b < 12
                 ? 0.38
@@ -945,124 +1209,245 @@ export const signalBloom: DemoDefinition = {
                   : 0.5
                 : part === "chorus"
                   ? b >= 48
-                    ? 0.72
-                    : 0.6
-                  : 0.58;
+                    ? 0.8
+                    : 0.54
+                  : part === "pre"
+                    ? 0.54
+                    : 0.58;
       if (part === "pre") {
-        // Off-beat stabs build momentum under the climbing bass.
-        for (let i = 0; i < 8; i++) {
-          if (b === 47 && i === 7) break;
+        // Off-beat stabs build momentum under the climbing bass; the 9-8
+        // and 4-3 resolve on the stab at beat 3.
+        for (let i = 0; i < (silent ? 4 : 8); i++) {
           const chordNow = then && i >= 4 ? then : voicing;
           chord(
             b,
             i / 2,
             chordNow,
             i % 2 ? 0.3 : 0.4,
-            (i % 2 ? 0.5 : 0.42) + (b % 4) * 0.04,
+            (i % 2 ? 0.46 : 0.4) + (b % 4) * 0.04,
           );
         }
       } else if (part === "outro") {
-        if (b < 62) chord(b, 0, voicing, 3.85, 0.5);
+        if (b === 61) {
+          chord(b, 0, voicing, 1.9, 0.5);
+          chord(b, 2, then!, 1.9, 0.48);
+        } else if (b < 62) chord(b, 0, voicing, 3.85, 0.5);
         else if (b === 62) chord(b, 0, AM9, 7.8, 0.46);
+      } else if (pushBar) {
+        chord(b, 0, voicing, 3.4, level);
+        chord(b, 3.5, next.chord, 2.4, level);
+      } else if (resolveBar) {
+        chord(b, 2, then!, 1.9, level);
       } else if (then) {
         chord(b, 0, voicing, 1.9, level);
         chord(b, 2, then, 1.9, level);
-      } else if (push !== undefined) {
-        chord(b, 0, voicing, 3.4, level);
       } else {
-        const pushed = part === "chorus" && b % 4 === 1;
-        chord(b, pushed ? -0.5 : 0, voicing, pushed ? 4.4 : 3.85, level);
+        chord(b, 0, voicing, 3.85, level);
       }
 
-      // Arpeggio: 4-note runs, an octave up whenever the singer rests.
-      const high = ["intro", "post", "bridge", "outro"].includes(part);
-      const tones = [...voicing]
-        .sort((x, y) => x - y)
-        .slice(0, 4)
-        .map((p) => p + (high ? 12 : 0));
-      // Verse 1 opens with no arpeggio; the bridge starts in eighths and
-      // doubles back to sixteenths for its second half.
-      const sixteenths =
-        part === "pulse" ||
-        part === "pre" ||
-        part === "chorus" ||
-        part === "post" ||
-        (part === "bridge" && b >= 36);
-      const arpGain =
+      // Two arpeggios share the sixteenths. A runs the chord's four tones
+      // upward; B runs the same tones rotated by two, so the sum is a0 a2 a1
+      // a3 a2 a0 a3 a1, a line in broken thirds. The rhythm cell changes
+      // with the section: quarter-note plucks in the intro and outro, even
+      // eighths for the pulse and the first verse half, A and B locked on
+      // complementary sixteenths from bar 12, a dotted-eighth hocket
+      // (3-3-3-3-2-2) through the pre-chorus that resolves to even
+      // sixteenths in its last bar, a rest for the half-time break, and
+      // eighths with the echo pluck three sixteenths behind (a canon) in the
+      // bridge's second half. The last bar of each phrase runs downward.
+      const { arp: arpSet, thenArp } = harmonyAt(b);
+      type Cell = "rest" | "quarter" | "eighth" | "lock" | "dotted";
+      const cell: Cell =
+        part === "intro" || b === 60 || b === 61
+          ? "quarter"
+          : part === "bridge"
+            ? b < 36
+              ? "rest"
+              : "eighth"
+            : part === "pre"
+              ? b % 4 < 3
+                ? "dotted"
+                : "lock"
+              : part === "pulse" || (part === "verse" && b < 12)
+                ? "eighth"
+                : b >= 62
+                  ? "rest"
+                  : "lock";
+      const slotsA =
+        cell === "quarter"
+          ? [0, 4, 8, 12]
+          : cell === "dotted"
+            ? [0, 3, 6, 9, 12, 14]
+            : cell === "rest"
+              ? []
+              : [0, 2, 4, 6, 8, 10, 12, 14];
+      const slotsB =
+        cell === "lock"
+          ? [1, 3, 5, 7, 9, 11, 13, 15]
+          : cell === "dotted"
+            ? [2, 5, 8, 11, 13, 15]
+            : [];
+      // The stutter ramps own the last beat of bars 19, 27 and 55; bar 47
+      // hands its last two beats to the snare ratchet and the silent beat.
+      const until = silent ? 8 : b === 19 || b === 27 || b === 55 ? 12 : 16;
+      const withEcho = part === "post" || (part === "bridge" && b >= 36);
+      const gainA =
         part === "bridge"
           ? b < 36
-            ? 0.46
-            : 0.44 + (b - 36) * 0.05
+            ? 0.42
+            : 0.44 + (b - 36) * 0.04
           : part === "post"
-            ? 0.6
+            ? 0.56
             : part === "pre"
               ? 0.44 + (b % 4) * 0.05
               : part === "chorus"
                 ? b >= 48
-                  ? 0.56
+                  ? 0.6
                   : 0.48
                 : part === "verse"
-                  ? 0.36
-                  : 0.5;
-      if (!(b >= 62) && !(b === 47) && !(b >= 8 && b < 12)) {
-        const steps = sixteenths ? 16 : 8;
-        for (let i = 0; i < steps; i++) {
-          const beat = (i * 4) / steps,
-            chordNow = then && beat >= 2 ? then : voicing,
-            arp =
-              then && beat >= 2
-                ? [...chordNow]
-                    .sort((x, y) => x - y)
-                    .slice(0, 4)
-                    .map((p) => p + (high ? 12 : 0))
-                : tones;
+                  ? b < 12
+                    ? 0.34
+                    : 0.4
+                  : part === "intro"
+                    ? 0.4
+                    : part === "outro"
+                      ? 0.46
+                      : 0.5;
+      const gainB =
+        part === "chorus"
+          ? b >= 48
+            ? 0.84
+            : 0.7
+          : part === "pre"
+            ? 0.74
+            : 0.66;
+      // The glass pluck lifts an octave from the final chorus's second
+      // phrase through the Bloom.
+      const bUp = b >= 52 && b < 60;
+      const setAt = (slot: number) => {
+        const set = thenArp && slot >= 8 ? thenArp : arpSet;
+        return phraseEnd ? [...set].reverse() : set;
+      };
+      slotsA.forEach((slot, k) => {
+        if (slot >= until) return;
+        const pitch = setAt(slot)[k % 4]!;
+        note("arp", b, slot / 4, pitch, 0.2, gainA * (k % 4 === 0 ? 1 : 0.74));
+        if (withEcho && b < 63)
           note(
-            "arp",
+            "echo",
             b,
-            beat,
-            arp[i % 4]!,
-            sixteenths ? 0.2 : 0.4,
-            arpGain * (i % 4 === 0 ? 1 : 0.72),
-          );
-        }
-      }
-      if (b === 47)
-        for (let i = 0; i < 14; i++)
-          note(
-            "arp",
-            b,
-            i / 4,
-            tones[i % 4]! + (i >= 8 ? 12 : 0),
+            slot / 4 + 0.75,
+            pitch,
             0.2,
-            0.4 + i * 0.025,
+            gainA * 0.62 * (k % 4 === 2 ? 1 : 0.8),
           );
+      });
+      slotsB.forEach((slot, k) => {
+        if (slot >= until) return;
+        note(
+          "arp2",
+          b,
+          slot / 4,
+          rotate(setAt(slot), 2)[k % 4]! + (bUp ? 12 : 0),
+          0.18,
+          gainA * gainB * (k % 2 ? 0.78 : 0.9),
+        );
+      });
       if (b === 62)
         [0, 1, 2, 3, 4, 5, 6, 7].forEach((i) =>
           note("arp", b, i / 2, AM9[i % 5]! + 12, 0.45, 0.5 - i * 0.04),
         );
-
-      // Halo: the wavetable shimmer opens only at the peaks.
-      if (
-        (part === "chorus" && b % 4 === 0) ||
-        (part === "post" && b % 4 === 0) ||
-        (part === "bridge" && b % 4 === 0) ||
-        b === 0 ||
-        b === 60
-      ) {
-        const top = [...voicing]
-          .sort((x, y) => x - y)
-          .slice(-3)
-          .map((p) => p + 12);
-        s.chord(
-          "halo",
-          b,
-          0,
-          top,
-          b === 60 ? 15.5 : 15.6,
-          part === "chorus" ? 0.5 : 0.44,
-        );
-      }
     }
+
+    // ---- Halo: the comping's top voice as a slow melody -----------------
+    // One voice, one or two notes a bar, moving by step: it carries the 4-3
+    // at the pushed G (C6 to B5), the 9-8 of the bridge (D5 to C5) and
+    // otherwise holds the common tone, above the singer and below the glass
+    // pluck's octave lift.
+    const haloLine = (
+      bar: number,
+      line: readonly (readonly [number, number, number])[],
+      velocity: number,
+    ) =>
+      line.forEach(([beat, pitch, length]) =>
+        note("halo", bar, beat, pitch, length, velocity),
+      );
+    haloLine(
+      0,
+      [
+        [0, 81, 7.9],
+        [8, 79, 3.9],
+        [12, 74, 3.9],
+      ],
+      0.46,
+    );
+    for (const bar of [20, 48]) {
+      haloLine(
+        bar,
+        [
+          [0, 79, 3.4],
+          [3.5, 84, 2.4],
+          [6, 83, 1.9],
+          [8, 81, 3.9],
+          [12, 79, 3.9],
+        ],
+        0.56,
+      );
+      haloLine(
+        bar + 4,
+        [
+          [0, 81, 3.4],
+          [3.5, 84, 2.4],
+          [6, 83, 1.9],
+          [8, 84, 3.9],
+          [12, 79, 3.9],
+        ],
+        0.56,
+      );
+    }
+    for (const bar of [28, 56])
+      haloLine(
+        bar,
+        [
+          [0, 79, 3.9],
+          [4, 84, 1.9],
+          [6, 83, 1.9],
+          [8, 81, 3.9],
+          [12, 76, 3.9],
+        ],
+        0.5,
+      );
+    haloLine(
+      32,
+      [
+        [0, 76, 3.9],
+        [4, 74, 1.9],
+        [6, 72, 1.9],
+        [8, 72, 3.9],
+        [12, 71, 3.9],
+      ],
+      0.5,
+    );
+    haloLine(
+      36,
+      [
+        [0, 81, 3.9],
+        [4, 76, 3.9],
+        [8, 81, 3.9],
+        [12, 83, 3.9],
+      ],
+      0.52,
+    );
+    haloLine(
+      60,
+      [
+        [0, 81, 3.9],
+        [4, 84, 1.9],
+        [6, 83, 1.9],
+        [8, 81, 7.8],
+      ],
+      0.48,
+    );
 
     // ---- Glass riff and chorus answers -------------------------------
     s.phrase("hook", 0, RIFF_AM_F, 0, 0.92);
@@ -1141,29 +1526,29 @@ export const signalBloom: DemoDefinition = {
       [2, 69, 5.6, 0.6, "room"],
     ]);
 
-    // ---- Final-chorus double: a third above on the long words ----------
-    const THIRD_ABOVE_SIGNAL: Phrase = [
-      [0, 76, 0.7, 0.52],
-      [1.5, 79, 0.7, 0.56],
-      [3.5, 77, 2.6, 0.54],
+    // ---- Final-chorus double: the hook's long words an octave up --------
+    const OCTAVE_SIGNAL: Phrase = [
+      [0, 84, 0.7, 0.42],
+      [1.5, 88, 0.7, 0.46],
+      [3.5, 86, 2.6, 0.44],
     ];
-    sing(48, THIRD_ABOVE_SIGNAL, "double");
+    sing(48, OCTAVE_SIGNAL, "double");
     sing(
       50,
       [
-        [0, 76, 0.45, 0.5],
-        [1, 76, 0.45, 0.5],
-        [4, 72, 2.4, 0.52],
+        [0, 84, 0.45, 0.4],
+        [1, 84, 0.45, 0.4],
+        [4, 79, 2.4, 0.42],
       ],
       "double",
     );
-    sing(52, THIRD_ABOVE_SIGNAL, "double");
+    sing(52, OCTAVE_SIGNAL, "double");
     sing(
       54,
       [
-        [0, 79, 0.7, 0.56],
-        [2.5, 79, 0.45, 0.54],
-        [4, 76, 2.9, 0.56],
+        [0, 88, 0.7, 0.46],
+        [2.5, 88, 0.45, 0.44],
+        [4, 84, 2.9, 0.46],
       ],
       "double",
     );
@@ -1181,16 +1566,54 @@ export const signalBloom: DemoDefinition = {
       "double",
     );
 
-    // ---- Chops answer the held words ----------------------------------
-    const answer = (bar: number, stay: number, up: number, at = 2.5) => {
-      note("stay", bar, at, stay, 0.35, 0.66);
-      note("up", bar, at + 0.75, up, 0.32, 0.6);
-    };
-    for (const bar of [21, 25, 49, 53]) answer(bar, 67, 71);
+    // ---- Chopped syllables: a hocket in the singer's rests -------------
+    // "stay" and "up" trade sixteenths after "bloom" and "room", jumping
+    // +5, +7 and +12 from the chop's own pitch; the final chorus lifts the
+    // last two an octave.
+    const hocket = (
+      bar: number,
+      from: number,
+      pattern: readonly (readonly [number, number])[],
+      lift = 0,
+    ) =>
+      pattern.forEach(([step, pitch], i) =>
+        note(
+          i % 2 ? "up" : "stay",
+          bar,
+          from + step / 4,
+          pitch + (lift && i >= pattern.length - 2 ? 12 : 0),
+          0.22,
+          0.54 + (i % 2 ? 0.06 : 0) + i * 0.02,
+        ),
+      );
+    const HOCKET_A = [
+      [0, 60],
+      [1, 67],
+      [2, 60],
+      [3, 65],
+      [4, 67],
+      [5, 72],
+    ] as const;
+    const HOCKET_B = [
+      [0, 60],
+      [2, 67],
+      [3, 60],
+      [4, 72],
+      [5, 65],
+    ] as const;
+    for (const chorus of [20, 48]) {
+      const lift = chorus === 48 ? 1 : 0;
+      hocket(chorus + 1, 2.5, HOCKET_A, lift);
+      hocket(chorus + 3, 2.5, HOCKET_B, lift);
+      hocket(chorus + 5, 2.5, HOCKET_A, lift);
+    }
     // Pre-chorus: the chops fill the breath between "line" and the pickup.
-    for (const bar of [17, 45]) answer(bar, 64, 67, 1.25);
+    for (const bar of [17, 45]) {
+      note("stay", bar, 1.25, 64, 0.35, 0.66);
+      note("up", bar, 2, 67, 0.32, 0.6);
+    }
     for (const bar of [28, 29, 30, 31, 56, 57, 58, 59]) {
-      const [voicing] = harmonyAt(bar),
+      const { chord: voicing } = harmonyAt(bar),
         top = Math.max(...voicing);
       note("stay", bar, 0.5, top, 0.3, 0.6);
       note("up", bar, 1.75, top + (bar % 2 ? 2 : 0), 0.3, 0.52);
@@ -1199,8 +1622,70 @@ export const signalBloom: DemoDefinition = {
     note("stay", 35, 3, 68, 0.35, 0.5);
     note("up", 39, 2.5, 68, 0.35, 0.5);
 
+    // ---- Stutter ramps at the phrase ends ------------------------------
+    // 1/32 retriggers of one chop: a rising ramp into each chorus (the one
+    // before the final chorus ends at beat 3, where the silent beat starts)
+    // and a falling ramp out of each chorus into the post-chorus.
+    const stutter = (
+      bar: number,
+      from: number,
+      track: string,
+      pitches: readonly number[],
+      low: number,
+      high: number,
+    ) =>
+      pitches.forEach((pitch, i) =>
+        note(
+          track,
+          bar,
+          from + i / 8,
+          pitch,
+          0.1,
+          low + ((high - low) * i) / (pitches.length - 1),
+          { humanize: {} },
+        ),
+      );
+    const RISE = [60, 60, 65, 65, 67, 67, 72, 72],
+      FALL = [72, 72, 67, 67, 65, 65, 60, 60];
+    stutter(19, 3, "stay", RISE, 0.3, 0.8);
+    stutter(47, 2, "stay", RISE, 0.32, 0.84);
+    stutter(27, 3, "up", FALL, 0.72, 0.24);
+    stutter(
+      55,
+      3,
+      "up",
+      FALL.map((p) => p + 12),
+      0.74,
+      0.24,
+    );
+
+    // ---- The string answer ---------------------------------------------
+    // Stated twice in the pulse before the singer arrives, then answering
+    // each held word of the verses; it plays only where the pad is shelled,
+    // so it never doubles an inner voice.
+    s.phrase("answer", 5, ANSWER_1, 0, 0.94);
+    s.phrase("answer", 7, ANSWER_2, 0, 0.94);
+    s.phrase("answer", 9, ANSWER_1);
+    s.phrase("answer", 11, ANSWER_2);
+    s.phrase("answer", 13, ANSWER_3);
+    s.phrase("answer", 15, ANSWER_4);
+    s.phrase("answer", 41, ANSWER_1, 0, 1.06);
+    s.phrase("answer", 43, ANSWER_4, 0, 1.06);
+    // The break: after "to-night" and under the held "oh".
+    s.phrase("answer", 33, [
+      [3, 57, 0.4, 0.54],
+      [3.5, 62, 0.4, 0.56],
+      [4, 60, 0.9, 0.54],
+    ]);
+    s.phrase("answer", 35, [
+      [2.5, 59, 0.45, 0.54],
+      [3, 64, 0.45, 0.56],
+      [3.5, 59, 0.45, 0.52],
+    ]);
+
     // ---- Risers --------------------------------------------------------
-    for (const bar of risers) note("lift", bar, 0, 60, 3.9, 0.62);
+    for (const bar of risers)
+      note("lift", bar, 0, 60, bar === 47 ? 1.9 : 3.9, 0.62);
     note("lift", 62, 0, 60, 7.8, 0.4);
 
     return s.finish();
