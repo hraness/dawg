@@ -543,7 +543,9 @@ export const GROOVE_STARTERS: readonly GrooveStarter[] = Object.freeze([
         humanize: { timingMs: 4, velocity: 0.08 },
       },
       expression: { dynamics: [0.6, 0.9] },
-      mix: { levels: { kick: -3, snare: -4, hat: -12, openhat: -15, bass: -5 } },
+      mix: {
+        levels: { kick: -3, snare: -4, hat: -12, openhat: -15, bass: -5 },
+      },
     },
   ),
   starter(

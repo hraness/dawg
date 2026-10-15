@@ -241,7 +241,7 @@ export const nightRelay: DemoDefinition = {
       "Dissolve 8",
     ],
     mixNotes: [
-      "Kick and FM sub stay centred and dry; the sub, pad and chord echoes yield to the kick's bus trigger.",
+      "Kick and FM sub stay centered and dry; the sub, pad and chord echoes yield to the kick's bus trigger.",
       "Chord stabs feed a dotted-eighth ping-pong delay whose cutoff, feedback and mix are ridden by hand, with throws into Air, Crest and Dissolve.",
       "Open hats sit right with a short echo, closed hats and rim sit left; pink tape hiss and a granular pad form the back layer, loudest where the drums drop out.",
     ],

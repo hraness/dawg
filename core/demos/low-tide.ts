@@ -264,7 +264,7 @@ export const lowTide: DemoDefinition = {
     mixNotes: [
       "The kick sits on the grid; the backbeat lands about 26 ms late and the off sixteenths swing near 57%, so the break leans back without dragging.",
       "A side stick carries the first groove and a full snare takes over at the refrain; ghost strokes stay between 0.12 and 0.22.",
-      "Bass and kick share their onsets and the centre; the Rhodes stays rootless above C3 with a slow tape wobble and no wobble on the bass.",
+      "Bass and kick share their onsets and the center; the Rhodes stays rootless above C3 with a slow tape wobble and no wobble on the bass.",
       "The voice is close and nearly dry in the verses; its echo opens on line ends, floods the dub room and the shore.",
     ],
   }),
