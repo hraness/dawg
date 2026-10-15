@@ -1537,7 +1537,11 @@ export type PerformOptions = Readonly<{
   octaves?: number;
   /** Strum gap between voices in beats, default 1/32 beat. */
   strum?: number;
-  /** Seed for arp-random and slop. */
+  /**
+   * Seed for arp-random and slop; in pattern and guitar mode a seed asks
+   * for a played take (seeded timing, roll and dynamics) instead of an
+   * exact grid.
+   */
   seed?: number;
   /** Slop amount 0..1: each voice lands up to `slop` × 1/8 beat late. */
   slop?: number;
@@ -1551,11 +1555,17 @@ export type PerformOptions = Readonly<{
   step?: number;
   /** Guitar mode: seconds a full six-string down stroke takes, default 0.022. */
   speed?: number;
-  /** Guitar mode: tempo in BPM that `speed` converts with, default 120. */
+  /**
+   * Tempo in BPM, default 120: guitar `speed` and a seeded pattern's feel
+   * (its roll and timing, in ms) convert to beats with it.
+   */
   tempo?: number;
   /** Guitar mode: the guitar's tuning, capo, hand, ring and position. */
   guitar?: GuitarSetup;
-  /** Guitar mode: the chord's root pitch class (default: the lowest note). */
+  /**
+   * The chord's root pitch class (default: the lowest note): guitar mode
+   * voices from it and pattern bass hits play it.
+   */
   root?: number;
   /**
    * Guitar mode: a slash bass pitch class that must sound lowest, even when
@@ -1597,14 +1607,48 @@ export type PatternHit = Readonly<{
   velocity: number;
   /** Octave shift for these voices (the bass half of oom-pah is -1). */
   octave?: number;
+  /**
+   * A bass hit: play the chord's root (or its fifth, or the slash bass)
+   * at or below the lowest voice shifted by `octave` (default -1) instead
+   * of `voices`. Without a known root (PerformOptions.root) it plays the
+   * lowest voice an octave down, as before.
+   */
+  bass?: "root" | "fifth";
+}>;
+
+/**
+ * How a seeded take plays a pattern. Unseeded, every hit sits exactly on
+ * its written beat; a seed asks for a player: each hit lands a few ms either
+ * side of the beat, its voices roll in over up to `roll` ms (the top voice
+ * first, the way a pianist's louder melody finger leads), velocities and
+ * lengths breathe a few percent, 8th offbeats are delayed by `swing` beats
+ * and the whole part sits `lay` ms behind (+) or ahead of (-) the beat.
+ * `tight` keeps a programmed part exact even when seeded.
+ */
+export type PatternFeel = Readonly<{
+  tight?: boolean;
+  /** Most the voices of one hit spread, ms (default 7). */
+  roll?: number;
+  /** Beats each 8th offbeat lands late in a seeded take. */
+  swing?: number;
+  /** Ms the part sits behind (+) or ahead of (-) the beat. */
+  lay?: number;
+  /** Ms either side of the beat a hit can land (default 10). */
+  timing?: number;
 }>;
 
 export type ChordPattern = Readonly<{
   name: string;
   description: string;
-  /** Cycle length in beats; the pattern repeats from the press. */
+  /**
+   * Cycle length in beats; the pattern repeats from the press. A figure
+   * longer than a bar keeps its place in the phrase: a chord that starts on
+   * the second bar of an 8-beat cycle (counted from beat 0) plays the
+   * figure's second bar.
+   */
   beats: number;
   hits: readonly PatternHit[];
+  feel?: PatternFeel;
 }>;
 
 const everyStep = (
@@ -1617,151 +1661,186 @@ const everyStep = (
     ...hit(index),
   }));
 
+/** Beat accents in a 4/4 bar: 1 strongest, then 3, then 2 and 4. */
+const BAR_ACCENT = [1, 0.84, 0.93, 0.86] as const;
+
 /**
  * Pattern mode. Orchid's own patterns are not published (manual 7.2: "Plays
  * chord notes in pre-determined rhythmic patterns", tempo-synced, the
  * rhythm independent of the chord's note count, with per-note velocities
  * scaled by the press; 11 at launch and two more in firmware 3.84). These
  * 13 are dawg's own design in that spirit: each hit names voices by index
- * so the rhythm holds for triads and 9th chords alike.
+ * so the rhythm holds for triads and 9th chords alike. Accents follow a
+ * working player's hands: the bar's 1 over its 3 over 2 and 4, offbeats
+ * lighter and often thinner (the upper voices only), stabs short and
+ * anticipations held over the beat they push.
  */
 export const CHORD_PATTERNS: readonly ChordPattern[] = Object.freeze([
   {
     name: "eighths",
-    description: "straight 8ths, beats accented",
+    description:
+      "straight 8ths: the full chord on the beat, upper voices between",
     beats: 4,
-    hits: everyStep(0.5, 4, (i) => ({
-      length: 0.45,
-      voices: "all",
-      velocity: i % 2 === 0 ? 1 : 0.7,
-    })),
+    hits: everyStep(0.5, 4, (i) =>
+      i % 2 === 0
+        ? { length: 0.42, voices: "all", velocity: BAR_ACCENT[i / 2]! }
+        : { length: 0.3, voices: "upper", velocity: i === 7 ? 0.76 : 0.66 },
+    ),
+    feel: { roll: 6 },
   },
   {
     name: "sixteenths",
-    description: "straight 16ths, 1-e-&-a accents",
+    description:
+      "straight 16ths: full on the beat, the & lighter, e and a thin",
     beats: 4,
-    hits: everyStep(0.25, 4, (i) => ({
-      length: 0.2,
-      voices: "all",
-      velocity: [1, 0.55, 0.8, 0.55][i % 4]!,
-    })),
+    hits: everyStep(0.25, 4, (i) => {
+      const beat = Math.floor(i / 4);
+      const place = i % 4;
+      if (place === 0)
+        return { length: 0.2, voices: "all", velocity: BAR_ACCENT[beat]! };
+      if (place === 2) return { length: 0.16, voices: "all", velocity: 0.76 };
+      return {
+        length: 0.13,
+        voices: "upper",
+        velocity: place === 1 ? 0.54 : 0.62,
+      };
+    }),
+    feel: { roll: 4, timing: 7 },
   },
   {
     name: "offbeat",
-    description: "short stabs on every &",
+    description: "short stabs on every &, programmed tight",
     beats: 4,
     hits: everyStep(1, 4, () => ({
       length: 0.25,
       voices: "all",
       velocity: 0.9,
     })).map((hit) => ({ ...hit, at: hit.at + 0.5 })),
+    feel: { tight: true },
   },
   {
     name: "pop",
-    description: "syncopated pop comp with 16th pushes",
+    description: "syncopated pop comp: 16th pushes, the & of 2 held over 3",
     beats: 4,
     hits: [
-      { at: 0, length: 0.5, voices: "all", velocity: 1 },
-      { at: 0.75, length: 0.5, voices: "upper", velocity: 0.7 },
-      { at: 1.5, length: 0.75, voices: "all", velocity: 0.85 },
-      { at: 2.5, length: 0.5, voices: "upper", velocity: 0.7 },
-      { at: 3, length: 0.25, voices: "all", velocity: 0.6 },
-      { at: 3.5, length: 0.5, voices: "all", velocity: 0.85 },
+      { at: 0, length: 0.55, voices: "all", velocity: 1 },
+      { at: 0.75, length: 0.2, voices: "upper", velocity: 0.6 },
+      { at: 1.5, length: 0.9, voices: "all", velocity: 0.9 },
+      { at: 2.5, length: 0.3, voices: "upper", velocity: 0.64 },
+      { at: 3, length: 0.2, voices: "upper", velocity: 0.52 },
+      { at: 3.5, length: 0.45, voices: "all", velocity: 0.86 },
     ],
+    feel: { roll: 6, lay: -3 },
   },
   {
     name: "charleston",
-    description: "dotted quarter, then the & of 2",
+    description: "jazz Charleston: a short 1, then the accented & of 2",
     beats: 4,
     hits: [
-      { at: 0, length: 0.75, voices: "all", velocity: 1 },
-      { at: 1.5, length: 0.5, voices: "all", velocity: 0.85 },
+      { at: 0, length: 0.5, voices: "all", velocity: 0.86 },
+      { at: 1.5, length: 0.42, voices: "all", velocity: 0.95 },
     ],
+    feel: { roll: 9, swing: 0.08 },
   },
   {
     name: "bossa",
-    description: "two-bar bossa comp over a root-fifth pulse",
+    description:
+      "two-bar bossa: thumb on 1 and 3 (the 3 heavier), fingers on the clave",
     beats: 8,
     hits: [
-      ...everyStep(2, 8, () => ({
-        length: 1.5,
+      ...everyStep(2, 8, (i) => ({
+        length: 1.7,
         voices: [0],
-        velocity: 0.85,
+        velocity: i % 2 === 0 ? 0.78 : 0.86,
         octave: -1,
+        bass: i % 2 === 0 ? ("root" as const) : ("fifth" as const),
       })),
-      ...[0, 1.5, 3, 4.5, 6].map((at) => ({
+      ...[0, 1.5, 3, 5, 6.5].map((at) => ({
         at,
-        length: 0.5,
+        length: at === 3 || at === 6.5 ? 0.7 : 0.5,
         voices: "upper" as const,
-        velocity: at === 0 ? 0.9 : 0.75,
+        velocity: at % 1 === 0 ? 0.68 : 0.74,
       })),
     ],
+    feel: { roll: 10, timing: 8 },
   },
   {
     name: "skank",
-    description: "reggae skank: short upper stabs on 2 and 4",
+    description: "reggae skank: choked upper chops on 2 and 4, laid back",
     beats: 4,
     hits: [1, 3].map((at) => ({
       at,
-      length: 0.2,
+      length: 0.18,
       voices: "upper" as const,
-      velocity: 0.95,
+      velocity: at === 1 ? 0.92 : 0.97,
     })),
+    feel: { roll: 3, lay: 8, timing: 6 },
   },
   {
     name: "gallop",
     description: "gallop: an 8th and two 16ths per beat",
     beats: 4,
-    hits: everyStep(1, 4, () => ({
-      length: 0.4,
+    hits: everyStep(1, 4, (i) => ({
+      length: 0.38,
       voices: "all",
-      velocity: 1,
+      velocity: BAR_ACCENT[i]!,
     })).flatMap((hit) => [
       hit,
-      { ...hit, at: hit.at + 0.5, length: 0.2, velocity: 0.7 },
-      { ...hit, at: hit.at + 0.75, length: 0.2, velocity: 0.75 },
+      { ...hit, at: hit.at + 0.5, length: 0.18, velocity: 0.62 },
+      { ...hit, at: hit.at + 0.75, length: 0.18, velocity: 0.7 },
     ]),
+    feel: { roll: 3, timing: 6 },
   },
   {
     name: "half-time",
-    description: "half-time: a long hit and a pickup per two bars",
+    description: "half-time: a long rolled hit and a pickup per two bars",
     beats: 8,
     hits: [
-      { at: 0, length: 3.5, voices: "all", velocity: 1 },
-      { at: 4, length: 1.5, voices: "all", velocity: 0.8 },
-      { at: 7.5, length: 0.5, voices: "upper", velocity: 0.65 },
+      { at: 0, length: 3.6, voices: "all", velocity: 0.96 },
+      { at: 4, length: 2.2, voices: "all", velocity: 0.8 },
+      { at: 6.5, length: 0.8, voices: "upper", velocity: 0.56 },
+      { at: 7.5, length: 0.45, voices: "upper", velocity: 0.68 },
     ],
+    feel: { roll: 11 },
   },
   {
     name: "tresillo",
     description: "tresillo 3+3+2",
     beats: 4,
     hits: [
-      { at: 0, length: 1.25, voices: "all", velocity: 1 },
-      { at: 1.5, length: 1.25, voices: "all", velocity: 0.8 },
-      { at: 3, length: 0.75, voices: "all", velocity: 0.9 },
+      { at: 0, length: 1, voices: "all", velocity: 1 },
+      { at: 1.5, length: 1, voices: "all", velocity: 0.84 },
+      { at: 3, length: 0.6, voices: "all", velocity: 0.92 },
     ],
+    feel: { roll: 5 },
   },
   {
     name: "oom-pah",
-    description: "alternating bass and chord: low root, upper chord",
+    description: "alternating bass and chord: low root, detached upper chord",
     beats: 4,
     hits: everyStep(1, 4, (i) =>
       i % 2 === 0
-        ? { length: 0.9, voices: [0], velocity: 1, octave: -1 }
-        : { length: 0.8, voices: "upper", velocity: 0.75 },
+        ? {
+            length: 0.85,
+            voices: [0],
+            velocity: i === 0 ? 1 : 0.9,
+            octave: -1,
+            bass: i === 0 ? ("root" as const) : ("fifth" as const),
+          }
+        : { length: 0.5, voices: "upper", velocity: i === 1 ? 0.72 : 0.76 },
     ),
+    feel: { roll: 4 },
   },
   {
     name: "roll",
     description: "broken-chord roll up in 16ths, ringing to the half bar",
     beats: 4,
-    hits: [0, 2].flatMap((bar) =>
+    hits: [0, 2].flatMap((half) =>
       [0, 1, 2, 3].map((step) => ({
-        at: bar + step * 0.25,
+        at: half + step * 0.25,
         length: 2 - step * 0.25,
         voices: [step],
-        velocity: 0.7 + step * 0.08,
+        velocity: (half === 0 ? 1 : 0.92) * [0.84, 0.64, 0.7, 0.78][step]!,
       })),
     ),
   },
@@ -1770,10 +1849,11 @@ export const CHORD_PATTERNS: readonly ChordPattern[] = Object.freeze([
     description: "broken-chord picking: low, high, middle, high in 8ths",
     beats: 4,
     hits: everyStep(0.5, 4, (i) => ({
-      length: 0.5,
+      length: i % 4 === 0 ? 1.9 : 0.9,
       voices: [[0, -1, 1, -1][i % 4]!],
-      velocity: i % 4 === 0 ? 0.95 : 0.7,
+      velocity: [i < 4 ? 0.92 : 0.84, 0.7, 0.6, 0.66][i % 4]!,
     })),
+    feel: { timing: 8 },
   },
 ]);
 
@@ -1788,8 +1868,31 @@ export function findChordPattern(
   return CHORD_PATTERNS.find((pattern) => pattern.name === text);
 }
 
-function patternVoices(notes: readonly number[], hit: PatternHit): number[] {
+function patternVoices(
+  notes: readonly number[],
+  hit: PatternHit,
+  root?: number,
+  slash?: number,
+): number[] {
   const n = notes.length;
+  if (hit.bass && root !== undefined) {
+    // The slash bass, else the root or the chord's own fifth (b5 or #5 in
+    // a diminished or augmented chord; the root when it has none), at or
+    // below the target.
+    const fifth = [7, 6, 8].find((step) =>
+      notes.some((pitch) => mod12(pitch - root) === step),
+    );
+    const pc = mod12(
+      slash !== undefined
+        ? slash
+        : hit.bass === "fifth"
+          ? root + (fifth ?? 0)
+          : root,
+    );
+    const target = notes[0]! + 12 * (hit.octave ?? -1);
+    const pitch = target - mod12(target - pc);
+    return pitch >= 0 && pitch <= 127 ? [pitch] : [];
+  }
   const indices =
     hit.voices === "all"
       ? notes.map((_, i) => i)
@@ -1807,6 +1910,113 @@ function patternVoices(notes: readonly number[], hit: PatternHit): number[] {
     if (pitch >= 0 && pitch <= 127) out.add(pitch);
   }
   return [...out].sort((a, b) => a - b);
+}
+
+/** Milliseconds as beats at `tempo` BPM. */
+const msToBeats = (ms: number, tempo: number): number =>
+  (ms / 1000) * (tempo / 60);
+
+/**
+ * Voice weight inside one hit: the top voice sings a little over the rest
+ * and the inner voices sit under it, as a comping pianist's hand voices a
+ * chord. Single voices and tight patterns stay flat.
+ */
+function voiceWeight(index: number, count: number, tight: boolean): number {
+  if (tight || count < 2) return 1;
+  if (index === count - 1) return 1;
+  return index === 0 ? 0.95 : 0.89;
+}
+
+/**
+ * Keep one key from sounding twice at once: a note that would still ring
+ * when the same pitch strikes again is released just before it.
+ */
+function releaseRestrikes(notes: PerformedNote[]): PerformedNote[] {
+  const last = new Map<number, number>();
+  const sorted = notes.sort((a, b) => a.start - b.start || a.pitch - b.pitch);
+  sorted.forEach((note, index) => {
+    const before = last.get(note.pitch);
+    if (before !== undefined) {
+      const held = sorted[before]!;
+      if (held.start + held.length > note.start + 1e-6)
+        sorted[before] = {
+          ...held,
+          length: round6(Math.max(1e-3, note.start - held.start - 1e-3)),
+        };
+    }
+    last.set(note.pitch, index);
+  });
+  return sorted;
+}
+
+/**
+ * Pattern mode: repeat `pattern` from `start` to `end`. Unseeded, the hits
+ * land exactly where they are written. With `options.seed` the pattern is
+ * played (see PatternFeel): seeded timing, roll, swing, lay-back, and
+ * velocity and length that breathe, all deterministic per seed.
+ */
+function performPattern(
+  pattern: ChordPattern,
+  notes: readonly number[],
+  start: number,
+  end: number,
+  velocity: number,
+  options: PerformOptions,
+): PerformedNote[] {
+  const feel = pattern.feel ?? {};
+  const tight = feel.tight === true;
+  const human = options.seed !== undefined && !tight;
+  const random = mulberry32(((options.seed ?? 0) * 7919 + 101) >>> 0);
+  // Two uniforms: a soft bell between -1 and 1.
+  const wobble = () => random() + random() - 1;
+  const tempo = options.tempo && options.tempo > 0 ? options.tempo : 120;
+  const bar = 4;
+  const into = ((start % pattern.beats) + pattern.beats) % pattern.beats;
+  const phase = pattern.beats > bar ? Math.floor((into + 1e-9) / bar) * bar : 0;
+  const out: PerformedNote[] = [];
+  for (let cycle = start - phase; cycle < end - 1e-9; cycle += pattern.beats)
+    for (const hit of pattern.hits) {
+      const from = cycle + hit.at;
+      if (from < start - 1e-9 || from >= end - 1e-9) continue;
+      const voices = patternVoices(notes, hit, options.root, options.slash);
+      let onset = from;
+      let length = hit.length;
+      let level = velocity * hit.velocity;
+      if (human) {
+        const offbeat = Math.abs((hit.at % 1) - 0.5) < 1e-9;
+        onset +=
+          (offbeat ? (feel.swing ?? 0) : 0) +
+          msToBeats((feel.lay ?? 0) + wobble() * (feel.timing ?? 10), tempo);
+        length *= 1 + wobble() * 0.1;
+        level *= 1 + wobble() * 0.07;
+      }
+      onset = Math.max(start, onset);
+      if (onset >= end - 1e-9) continue;
+      const to = Math.min(end, onset + length);
+      voices.forEach((pitch, index) => {
+        // The top voice leads; the others roll in behind it.
+        const roll =
+          human && voices.length > 1
+            ? msToBeats(
+                (feel.roll ?? 7) *
+                  (index === voices.length - 1 ? 0.15 : 0.35 + 0.65 * random()),
+                tempo,
+              )
+            : 0;
+        const from = Math.min(onset + roll, to - 1e-3);
+        const weight = voiceWeight(index, voices.length, tight);
+        const scatter = human ? 1 + wobble() * 0.04 : 1;
+        out.push({
+          pitch,
+          start: round6(from),
+          length: round6(Math.max(1e-3, to - from)),
+          velocity: round6(
+            Math.max(0.02, Math.min(1, level * weight * scatter)),
+          ),
+        });
+      });
+    }
+  return releaseRestrikes(out);
 }
 
 /**
@@ -1861,23 +2071,15 @@ export function perform(
       const late = Math.min(amount * MAX_SLOP, length / 2);
       return notes.map((pitch) => at(pitch, start + random() * late, end));
     }
-    case "pattern": {
-      const pattern =
-        findChordPattern(options.pattern ?? 1) ?? CHORD_PATTERNS[0]!;
-      const out: PerformedNote[] = [];
-      for (let cycle = start; cycle < end - 1e-9; cycle += pattern.beats)
-        for (const hit of pattern.hits) {
-          const from = cycle + hit.at;
-          if (from >= end - 1e-9) continue;
-          const to = Math.min(end, from + hit.length);
-          for (const pitch of patternVoices(notes, hit))
-            out.push({
-              ...at(pitch, from, to),
-              velocity: round6(velocity * hit.velocity),
-            });
-        }
-      return out.sort((a, b) => a.start - b.start || a.pitch - b.pitch);
-    }
+    case "pattern":
+      return performPattern(
+        findChordPattern(options.pattern ?? 1) ?? CHORD_PATTERNS[0]!,
+        notes,
+        start,
+        end,
+        velocity,
+        options,
+      );
     case "guitar": {
       const bass = options.slash ?? notes[0]!;
       const voicing = voiceGuitar(
@@ -2697,7 +2899,8 @@ export function renderProgression(options: RenderOptions): RenderedProgression {
         ...perform(chord.pitches, at, span, {
           ...options.perform,
           seed: (options.perform?.seed ?? 0) + index,
-          ...(options.perform?.mode === "guitar"
+          ...(options.perform?.mode === "guitar" ||
+          options.perform?.mode === "pattern"
             ? {
                 root: options.chords[index]!.root,
                 ...(options.chords[index]!.bass !== undefined

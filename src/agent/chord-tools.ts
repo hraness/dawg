@@ -281,12 +281,12 @@ export const CHORD_TOOLS: readonly AgentTool[] = Object.freeze([
           ...(octaves !== undefined ? { octaves } : {}),
           ...(velocity !== undefined ? { velocity } : {}),
           seed: integer(args, "seed", 0, 2 ** 31) ?? 0,
+          tempo: context.score.tempoBpm,
           ...(typeof pattern === "string" ? { pattern } : {}),
           ...(mode === "guitar"
             ? {
                 ...(typeof strokes === "string" ? { strokes } : {}),
                 speed: (speedMs ?? DEFAULT_STROKE_SPEED * 1000) / 1000,
-                tempo: context.score.tempoBpm,
                 ...(guitarOf(context, trackId)
                   ? { guitar: guitarOf(context, trackId) }
                   : {}),
