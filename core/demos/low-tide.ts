@@ -421,7 +421,7 @@ export const lowTide: DemoDefinition = {
       "a sung line and a muted-horn answer in its rests, each answer swelling to its long note",
       "a four-note hook sung twice per refrain, the second time a third up",
       "voice and horn hocket the hook in a kick-less dub room",
-      "string pedal with 4-3 and 9-8 suspensions at the cadences",
+      "string pedal with 4-3, 9-8 and flat-six-five suspensions at the cadences",
       "chromatic bass descent under the second verse",
       "swung crushed break with a late backbeat and ghost notes",
       "stuttered syllables, a tape stop and a ratchet glitch fill",
@@ -441,7 +441,7 @@ export const lowTide: DemoDefinition = {
     mixNotes: [
       "The kick has its own track and ducks the keys, strings and horn a little; the backbeat lands about 26 ms late and the off sixteenths swing near 57%.",
       "The drum bus runs through a light bitcrush that sweeps down over the bar before the last refrain and snaps clean on its downbeat.",
-      "Bass and kick share their onsets and the center; the Rhodes plays three-note rootless voicings topping at Bb3 under the singer and adds its top note only in the horn's bars, with a slow tape wobble and a slow pan drift.",
+      "Bass and kick share their onsets and the center; the Rhodes plays three-note rootless voicings topping at Bb3 under the singer, adds its top note only in the horn's bars and leaves the third out of the G7 while the singer holds it, with a slow tape wobble, a light chorus and a slow pan drift.",
       "The voice is close and nearly dry in the verses with a touch of singer's-formant ring; its ping-pong echo throws on line ends, floods the dub room and the shore.",
       "Strings sit right and vibes left, the horn a little right of the voice, so the answers come from different places in the room.",
     ],
