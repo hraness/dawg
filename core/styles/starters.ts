@@ -56,6 +56,7 @@ function starter(
 }
 
 export const GROOVE_STARTERS: readonly GrooveStarter[] = Object.freeze([
+  // Machines and breaks.
   starter(
     "warehouse",
     "Warehouse",
@@ -266,6 +267,7 @@ export const GROOVE_STARTERS: readonly GrooveStarter[] = Object.freeze([
       mix: { space: 0.04 },
     },
   ),
+  // Pocket and cycles.
   starter(
     "pocket-one",
     "Pocket One",

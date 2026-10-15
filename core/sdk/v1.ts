@@ -834,6 +834,7 @@ function drumPattern(
  * short so they are easy to vary.
  */
 export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
+  // Machine grooves: house, techno, electro, breaks, hip hop and trap.
   drumPattern(
     "house",
     "House four-on-the-floor",
@@ -1016,6 +1017,7 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
     grid("snare", "........x..........x....x......."),
     grid("hat", "x..x..x.x..x..x.", { velocity: 0.45 }),
   ]),
+  // Caribbean, African and Latin grooves.
   drumPattern(
     "reggaeton",
     "Reggaeton / dembow",
@@ -1169,6 +1171,7 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
       euclid("openhat", 4, 16, 2, { velocity: 0.4 }),
     ],
   ),
+  // UK and US club grooves.
   drumPattern(
     "garage",
     "UK garage 2-step",
@@ -1210,6 +1213,7 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
       euclid("tom", 3, 16, 8, { velocity: 0.5 }),
     ],
   ),
+  // Band grooves: rock, funk and shuffles.
   drumPattern(
     "rock",
     "Rock basic",
@@ -1270,6 +1274,7 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
       euclid("hat", 16, 16, 0, { velocity: 0.35, accent: 0.5, accents: 8 }),
     ],
   ),
+  // Generative.
   drumPattern(
     "euclid-poly",
     "Euclidean polymeter",
