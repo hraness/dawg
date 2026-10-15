@@ -1156,7 +1156,16 @@ function playRoles(plan: Plan, rng: (salt: string) => Random): Draft[] {
   if (has("drone")) drafts.push(...playDrone(plan));
   if (has("arp")) drafts.push(...playArp(plan, rng("arp")));
   if (has("bass"))
-    drafts.push(...playBass(plan, kick, rng("bass"), timeOf, velocityAt));
+    drafts.push(
+      ...playBass(
+        plan,
+        kick,
+        rng("bass"),
+        timeOf,
+        velocityAt,
+        rng("bass-touch"),
+      ),
+    );
   const lead = has("lead")
     ? playMelody(plan, "lead", rng("melody"))
     : { drafts: [], phrases: [] };
@@ -1544,7 +1553,10 @@ function kitTouch(
     };
   if (odds < 1 && !onBeat) {
     if (role === "snare" || role === "rim")
-      return { accent: 0.42 + 0.16 * random(), spread: 0.5 };
+      return {
+        accent: plan.humanizeTicks > 0 ? 0.42 + 0.16 * random() : 0.5,
+        spread: 0.5,
+      };
     if (role === "kick") return { accent: 0.85, spread };
     if (role === "hat" || role === "shaker") return { accent: 0.8, spread };
   }
@@ -1597,7 +1609,10 @@ function compFeel(
     Math.abs(inBar - plan.barTicks / 2) < plan.stepTicks / 2;
   const push = !onBeat && next >= endTick && endTick - tick <= beatTicks;
   const metric = downbeat ? 1 : half ? 0.94 : onBeat ? 0.9 : push ? 0.97 : 0.84;
-  const human = Math.max(0.04, plan.style.groove.humanize.velocity);
+  // A sequenced part (no timing humanise) keeps only its programmed
+  // accents; a played part never sounds two strokes exactly alike.
+  const card = plan.style.groove.humanize.velocity;
+  const human = plan.humanizeTicks > 0 ? Math.max(0.04, card) : card;
   const accent = metric * (1 + gauss(random) * human);
   // The comping hand sits a touch behind the beat, never ahead of it
   // (on-beat notes run late in recorded grooves), by up to a third of a
@@ -1742,6 +1757,7 @@ function playBass(
   random: Random,
   timeOf: (role: RoleName, step: number, random: Random) => number,
   velocityAt: (step: number, energy: number, role: RoleName) => number,
+  touch: Random,
 ): Draft[] {
   const style = plan.style;
   const behaviour = pickWeighted(style.bass.behaviour, random);
@@ -1935,17 +1951,99 @@ function playBass(
         pitch = root;
     }
     const next = steps[i + 1] ?? Math.min(totalSteps, step + plan.stepsPerBar);
+    const nextChord = chordAt(plan.chords, next / plan.stepsPerBar);
+    const lands =
+      step === 0 ||
+      chordAt(plan.chords, (step - 1) / plan.stepsPerBar) !== chord;
+    // Into a chord change the bass walks a scale step to the new root
+    // (Jamerson's approach tones), on the side the line is already on.
+    let approach = false;
+    if (
+      APPROACH_BEHAVIOURS.has(behaviour) &&
+      steps[i + 1] !== undefined &&
+      next - step <= beatSteps &&
+      nextChord &&
+      nextChord !== chord &&
+      !lands &&
+      touch() < (APPROACH_BEHAVIOURS.get(behaviour) ?? 0)
+    ) {
+      const step2 = approachTone(plan, rootPitch(nextChord), pitch, fold);
+      if (step2) {
+        pitch = step2;
+        approach = true;
+      }
+    }
+    // A bassist digs in with the kick and on each new chord, plays the
+    // notes between a little lighter, and varies every stroke slightly.
+    const accent =
+      (kick.has(step) ? 1.04 : 0.95) *
+      (lands ? 1.03 : 1) *
+      (approach ? 0.93 : 1);
+    const card = style.groove.humanize.velocity;
+    const human = (plan.humanizeTicks > 0 ? Math.max(0.03, card) : card) * 0.8;
+    const offBeat = step % beatSteps !== 0;
+    const gate =
+      (approach ? 0.8 : offBeat && next - step <= beatSteps / 2 ? 0.74 : 0.9) +
+      0.06 * (touch() - 0.5);
     out.push({
       trackId: "bass",
       role: "bass",
       tick: timeOf("bass", step, timing),
-      duration: Math.max(30, (next - step) * plan.stepTicks * 0.9),
+      duration: Math.max(30, (next - step) * plan.stepTicks * gate),
       key: pitch.key,
       cents: pitch.cents,
-      velocity: clamp(velocityAt(step, section.energy, "bass"), 0.05, 1),
+      velocity: clamp(
+        velocityAt(step, section.energy, "bass") *
+          accent *
+          (1 + gauss(touch) * human),
+        0.05,
+        1,
+      ),
     });
   });
   return out;
+}
+
+/**
+ * How often each bass behaviour walks a step into a chord change: the
+ * two-beat (root-fifth) and disco-octave players do it most, a bassist
+ * pounding roots only now and then.
+ */
+const APPROACH_BEHAVIOURS: ReadonlyMap<string, number> = new Map([
+  ["root-fifth", 0.6],
+  ["octave", 0.45],
+  ["root", 0.3],
+]);
+
+/**
+ * The scale tone next to `target` on the side `from` sits (below when the
+ * line climbs to it, above when it falls), folded into the bass range.
+ * Undefined when the line already moves by step or no scale tone lies
+ * within a minor third of the target.
+ */
+function approachTone(
+  plan: Plan,
+  target: Pitch,
+  from: Pitch,
+  fold: (pitch: Pitch) => Pitch,
+): Pitch | undefined {
+  if (Math.abs(from.semis - target.semis) <= 2.01) return undefined;
+  const dir = from.semis < target.semis ? -1 : 1;
+  let index = indexNear(plan, target.semis);
+  for (let guard = 0; guard < 8; guard += 1) {
+    const tone = toneAt(plan, index);
+    if (
+      dir < 0
+        ? tone.semis < target.semis - 0.01
+        : tone.semis > target.semis + 0.01
+    ) {
+      if (Math.abs(tone.semis - target.semis) > 3.01) return undefined;
+      const folded = fold(tone);
+      return Math.abs(folded.semis - target.semis) <= 3.01 ? folded : undefined;
+    }
+    index += dir;
+  }
+  return undefined;
 }
 
 const CONTOUR_TARGETS: Readonly<Record<string, (x: number) => number>> =
