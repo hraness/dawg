@@ -1868,6 +1868,9 @@ export function findChordPattern(
   return CHORD_PATTERNS.find((pattern) => pattern.name === text);
 }
 
+/** The lowest pitch a pattern's bass hit plays (C2). */
+const BASS_FLOOR = 36;
+
 function patternVoices(
   notes: readonly number[],
   hit: PatternHit,
@@ -1890,7 +1893,9 @@ function patternVoices(
           : root,
     );
     const target = notes[0]! + 12 * (hit.octave ?? -1);
-    const pitch = target - mod12(target - pc);
+    const below = target - mod12(target - pc);
+    // Not under C2: a lower fifth turns up an octave, over the root.
+    const pitch = below < BASS_FLOOR ? below + 12 : below;
     return pitch >= 0 && pitch <= 127 ? [pitch] : [];
   }
   const indices =
@@ -1919,12 +1924,13 @@ const msToBeats = (ms: number, tempo: number): number =>
 /**
  * Voice weight inside one hit: the top voice sings a little over the rest
  * and the inner voices sit under it, as a comping pianist's hand voices a
- * chord. Single voices and tight patterns stay flat.
+ * chord, with the hit's overall level kept. Single voices and tight
+ * patterns stay flat.
  */
 function voiceWeight(index: number, count: number, tight: boolean): number {
   if (tight || count < 2) return 1;
-  if (index === count - 1) return 1;
-  return index === 0 ? 0.95 : 0.89;
+  if (index === count - 1) return 1.07;
+  return index === 0 ? 1 : 0.95;
 }
 
 /**
@@ -2094,6 +2100,7 @@ export function perform(
         ...(options.step !== undefined ? { step: options.step } : {}),
         ...(options.speed !== undefined ? { speed: options.speed } : {}),
         ...(options.tempo !== undefined ? { tempo: options.tempo } : {}),
+        ...(options.seed !== undefined ? { seed: options.seed } : {}),
         velocity,
         strings: guitarStrings(options.guitar?.tune).length,
       });
@@ -2373,16 +2380,18 @@ export function guitarTab(frets: readonly number[]): string {
 /**
  * Stroke grids for perform mode `guitar`, one character per step: D down
  * (all strings), U up (top four), d light down (top four), u light up (top
- * three), x muted chuck, `-` or `.` rest (strings ring on). After the
- * design lane's STRUM_PATTERNS.
+ * three), x muted chuck, `-` rest (strings ring on), `.` rest with the
+ * strings damped: a stroke right before a `.` is choked about 120 ms after
+ * it speaks, so `.U.U` chops like a reggae skank. After the design lane's
+ * STRUM_PATTERNS.
  */
 export const STROKE_PATTERNS = Object.freeze({
   down: "D",
   folk: "D-DU-UDU",
   pop: "D-DU-UD-",
   punk: "DDDDDDDD",
-  funk: "xUxUDUxUxUDUxUxU",
-  reggae: "-D-D",
+  funk: "xuxuDuxuxuDuxuxu",
+  reggae: ".U.U",
   waltz: "Ddd",
   jangle: "D-DUDUDU",
   island: "D-DU-UDU",
@@ -2406,13 +2415,35 @@ export function strokeGrid(text: string | undefined): string | undefined {
     : undefined;
 }
 
+/** Ms either side of the grid a seeded stroke can land. */
+const STROKE_TIMING = 8;
+/** Ms an upstroke lands late on average: the hand comes back up. */
+const UPSTROKE_LAG = 3;
+/** Ms a stroke rings before a following `.` chokes it (a skank chop). */
+const CHOP_MS = 120;
+
+/**
+ * Accent for a stroke `beat` beats into the chord: the 1 and 3 full, 2 and
+ * 4 a little under, 8th offbeats lighter and 16th e and a lighter still.
+ */
+function strokeAccent(beat: number): number {
+  const near = (value: number) => Math.abs(value - Math.round(value)) < 1e-9;
+  if (near(beat)) return Math.round(beat) % 2 === 0 ? 1 : 0.92;
+  return near(beat * 2) ? 0.82 : 0.74;
+}
+
 /**
  * Strum fretted `voicing` from `start` for `length` beats with stroke grid
  * `strokes` (repeats every grid length, one step per `step` beats). A full
  * down stroke sweeps the six strings in `speed` seconds at `tempo` BPM;
- * each struck string rings until it is struck again or the chord ends; a
- * chuck (x) is a short muted hit that stops the strings. Velocity accents
- * downbeats and lightens upstrokes.
+ * each struck string rings until it is struck again, a `.` damps it or the
+ * chord ends; a stroke right before a `.` is choked short; a chuck (x) is
+ * a short muted hit that stops the strings.
+ * Velocity accents downbeats and lightens upstrokes; a chuck on 2 or 4
+ * cracks like the backbeat. With a `seed` the grid is played: each stroke
+ * lands a few ms off the grid (upstrokes a touch late), the strings of one
+ * stroke fall unevenly inside the same sweep, and dynamics breathe, all
+ * deterministic per seed.
  */
 export function strokeVoicing(
   voicing: GuitarVoicing,
@@ -2425,6 +2456,7 @@ export function strokeVoicing(
     tempo?: number;
     velocity?: number;
     strings?: number;
+    seed?: number;
   }> = {},
 ): PerformedNote[] {
   const grid = strokeGrid(options.strokes) ?? "D";
@@ -2435,6 +2467,11 @@ export function strokeVoicing(
     (Math.max(0, options.speed ?? DEFAULT_STROKE_SPEED) * tempo) / 60;
   const base = options.velocity ?? 0.8;
   const total = Math.max(2, options.strings ?? 6);
+  const human = options.seed !== undefined;
+  const random = mulberry32(((options.seed ?? 0) * 7919 + 211) >>> 0);
+  // Two uniforms: a soft bell between -1 and 1.
+  const wobble = () => random() + random() - 1;
+  const ms = (value: number) => (value / 1000) * (tempo / 60);
   const sounding = voicing.strings;
   const end = start + length;
   type Open = { note: PerformedNote; index: number };
@@ -2450,20 +2487,25 @@ export function strokeVoicing(
     ringing.delete(string);
   };
   const steps = Math.max(1, Math.round(length / step));
+  // The grid's strongest stroke plays full: a skank on every & is the
+  // accent, not a light offbeat.
+  const struck = Array.from({ length: steps }, (_, s) => s).filter(
+    (s) => !"-.".includes(grid[s % grid.length]!),
+  );
+  const top = Math.max(0.5, ...struck.map((s) => strokeAccent(s * step)));
   for (let s = 0; s < steps; s += 1) {
     const ch = grid[s % grid.length]!;
-    if (ch === "-" || ch === ".") continue;
     const t0 = start + s * step;
     if (t0 >= end - 1e-9) break;
-    const beat = s * step;
-    const accent =
-      Math.abs(beat - Math.round(beat)) < 1e-9
-        ? Math.round(beat) % 2 === 0
-          ? 1
-          : 0.92
-        : 0.82;
+    if (ch === "-") continue;
+    if (ch === ".") {
+      // The fretting hand lifts: whatever rings stops here.
+      for (const string of [...ringing.keys()]) stop(string, t0);
+      continue;
+    }
+    const accent = strokeAccent(s * step);
     let order: number[];
-    let velocity = base * accent;
+    let velocity = (base * accent) / top;
     let ring = end - t0;
     const all = sounding.map((_, k) => k);
     switch (ch) {
@@ -2484,21 +2526,54 @@ export function strokeVoicing(
         break;
       default:
         order = all;
-        velocity *= 0.5;
+        // A chuck on 2 or 4 is the guitar's snare.
+        velocity *= accent === 0.92 ? 0.62 : 0.5;
         ring = Math.min(ring, 0.03 * (tempo / 60));
     }
-    const first = sounding[order[0]!]!;
+    const up = ch === "U" || ch === "u";
+    const onset = human
+      ? Math.max(
+          start,
+          t0 + ms(wobble() * STROKE_TIMING + (up ? UPSTROKE_LAG : 0)),
+        )
+      : t0;
+    if (human) velocity *= 1 + wobble() * 0.06;
+    // A stroke right before a `.` is choked soon after it speaks: the
+    // fretting hand lets go and every string stops at once.
+    const choke =
+      grid[(s + 1) % grid.length] === "."
+        ? onset + Math.min(step, ms(CHOP_MS * (human ? 1 + wobble() * 0.1 : 1)))
+        : end;
+    // Each string's offset into the sweep: by string distance, and in a
+    // played take unevenly spaced inside the same overall sweep.
+    const gaps = order.map((k, position) =>
+      position === 0
+        ? 0
+        : (Math.abs(sounding[k]! - sounding[order[position - 1]!]!) /
+            (total - 1)) *
+          sweep,
+    );
+    const even = gaps.reduce((sum, gap) => sum + gap, 0);
+    const uneven = human ? gaps.map((gap) => gap * (1 + wobble() * 0.3)) : gaps;
+    const scale =
+      human && even > 0 ? even / uneven.reduce((a, b) => a + b, 0) : 1;
+    let offset = 0;
     order.forEach((k, position) => {
+      offset += uneven[position]! * scale;
       const string = sounding[k]!;
-      const at = t0 + (Math.abs(string - first) / (total - 1)) * sweep;
+      const at = onset + offset;
       if (at >= end - 1e-9) return;
       stop(string, at);
+      const scatter = human ? 1 + wobble() * 0.04 : 1;
       const note: PerformedNote = {
         pitch: voicing.pitches[k]!,
         start: round6(at),
-        length: round6(Math.max(1e-3, Math.min(ring, end - at))),
+        length: round6(Math.max(1e-3, Math.min(ring, end - at, choke - at))),
         velocity: round6(
-          Math.max(0.05, Math.min(1, velocity * (1 - 0.04 * position))),
+          Math.max(
+            0.05,
+            Math.min(1, velocity * (1 - 0.04 * position) * scatter),
+          ),
         ),
       };
       out.push(note);
