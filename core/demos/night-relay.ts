@@ -427,18 +427,8 @@ export const nightRelay: DemoDefinition = {
             [59.75, 1],
             [60, 1.25],
           ),
-          "synth-sustain": lanes(
-            [0, 0.06],
-            [32, 0.32],
-            [40, 0.06],
-            [60, 0.3],
-          ),
-          "synth-release": lanes(
-            [0, 0.28],
-            [32, 0.9],
-            [40, 0.28],
-            [60, 1.4],
-          ),
+          "synth-sustain": lanes([0, 0.06], [32, 0.32], [40, 0.06], [60, 0.3]),
+          "synth-release": lanes([0, 0.28], [32, 0.9], [40, 0.28], [60, 1.4]),
         },
       }),
     );
@@ -561,7 +551,14 @@ export const nightRelay: DemoDefinition = {
         });
       } else if (b === 39) {
         for (let i = 0; i < 16; i++)
-          s.note("ticks", b, i / 4 + (i % 2 ? 0.02 : 0), 42, 0.1, 0.16 + i * 0.03);
+          s.note(
+            "ticks",
+            b,
+            i / 4 + (i % 2 ? 0.02 : 0),
+            42,
+            0.1,
+            0.16 + i * 0.03,
+          );
       }
 
       // Clap a few milliseconds late on two and four; rim in twelve steps.
