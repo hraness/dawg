@@ -2383,7 +2383,9 @@ export function guitarTab(frets: readonly number[]): string {
  * three), x muted chuck, `-` rest (strings ring on), `.` rest with the
  * strings damped: a stroke right before a `.` is choked about 120 ms after
  * it speaks, so `.U.U` chops like a reggae skank. After the design lane's
- * STRUM_PATTERNS.
+ * STRUM_PATTERNS. `chuck` is the folk strum with the 2 and 4 slapped muted,
+ * the percussive acoustic-pop strum; `soul` chops the full chord on 2 and 4
+ * only, the soul and R&B backbeat guitar.
  */
 export const STROKE_PATTERNS = Object.freeze({
   down: "D",
@@ -2395,6 +2397,8 @@ export const STROKE_PATTERNS = Object.freeze({
   waltz: "Ddd",
   jangle: "D-DUDUDU",
   island: "D-DU-UDU",
+  chuck: "D-xU-UxU",
+  soul: "..D...D.",
 } as const satisfies Record<string, string>);
 export const STROKE_PATTERN_NAMES = Object.keys(STROKE_PATTERNS);
 const STROKE_CHARS = /^[DUdux.\-]+$/;
@@ -2526,8 +2530,9 @@ export function strokeVoicing(
         break;
       default:
         order = all;
-        // A chuck on 2 or 4 is the guitar's snare.
-        velocity *= accent === 0.92 ? 0.62 : 0.5;
+        // A chuck on 2 or 4 is the guitar's snare: near full arm weight,
+        // choked at once. Elsewhere it is a scratch that keeps time.
+        velocity *= accent === 0.92 ? 0.8 : 0.5;
         ring = Math.min(ring, 0.03 * (tempo / 60));
     }
     const up = ch === "U" || ch === "u";
