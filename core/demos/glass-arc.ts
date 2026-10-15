@@ -255,7 +255,7 @@ export const glassArc: DemoDefinition = {
     mixNotes: [
       "Kick and sub stay mono in the center and lock together; the kick is a short dusty thud so it never beats against the sub, and the sub grows from Half-step to Open sky. Rims, ticks and the glass sit off-center with their own delays.",
       "Every snare and rim lands 10 to 20 ms late and every hat swings near 62%, nudged hit by hit, so no bar repeats exactly.",
-      "The crackle bed rises in the empty sections and falls back under the full arcs; the bridge removes the sub and kick completely.",
+      "A dense high-passed crackle and a faint pink surface hiss rise in the empty sections and fall back under the full arcs; the vowel cloud sits below the vocals so the 'stay up' call leads; the bridge removes the sub and kick completely.",
       "The 'stay up' call and the high 'hold on' answer trade two-bar phrases; the vocal reverb is long and dark, the chop delay a dotted eighth.",
     ],
   }),
@@ -315,7 +315,7 @@ export const glassArc: DemoDefinition = {
       }),
     );
     s.track(
-      voice("grains", "Vowel clouds", "granular", 0.33, {
+      voice("grains", "Vowel clouds", "granular", 0.28, {
         granular: {
           src: bundledSampleRef("vowel-ah"),
           root: 60,
@@ -351,7 +351,7 @@ export const glassArc: DemoDefinition = {
       }),
     );
     s.track(
-      voice("chop", "Stay up", "sampler", 0.6, {
+      voice("chop", "Stay up", "sampler", 0.67, {
         pan: -0.08,
         sampler: {
           mode: "keyed",
@@ -390,7 +390,7 @@ export const glassArc: DemoDefinition = {
       }),
     );
     s.track(
-      voice("hold", "Hold on (high)", "sampler", 0.42, {
+      voice("hold", "Hold on (high)", "sampler", 0.46, {
         pan: 0.2,
         sampler: {
           mode: "keyed",
@@ -424,7 +424,7 @@ export const glassArc: DemoDefinition = {
     // shifted up a fifth with its formants kept, so it hangs instead of
     // running out like the tape-pitched chops.
     s.track(
-      voice("drift", "Stretched vowel", "sampler", 0.46, {
+      voice("drift", "Stretched vowel", "sampler", 0.52, {
         pan: 0.14,
         sampler: {
           mode: "keyed",
@@ -456,7 +456,7 @@ export const glassArc: DemoDefinition = {
       }),
     );
     s.track(
-      voice("glass", "Glass bells", "sampler", 0.32, {
+      voice("glass", "Glass bells", "sampler", 0.46, {
         pan: -0.3,
         sampler: {
           mode: "keyed",
@@ -496,10 +496,14 @@ export const glassArc: DemoDefinition = {
         reverb: hall,
       }),
     );
+    // Vinyl rain: sparse pops through a small room, plus a band of surface
+    // hiss. Both swell in the empty sections and sink under the arcs.
     s.track(
-      voice("rain", "Vinyl rain", "crackle", 0.23, {
-        synth: { attack: 1.5, release: 3, density: 0.02, noise: 0.3 },
-        filter: { type: "hpf", cutoff: 320, resonance: 0.1 },
+      // Many small ticks rather than a few big pops: the bed is audible
+      // without single clicks hitting the master limiter.
+      voice("rain", "Vinyl rain", "crackle", 0.8, {
+        synth: { attack: 1.5, release: 3, density: 0.25, gain: 2.5 },
+        filter: { type: "hpf", cutoff: 900, resonance: 0.1 },
         reverb: room,
         panAutomation: lanes(
           [0, -0.25],
@@ -508,6 +512,14 @@ export const glassArc: DemoDefinition = {
           [48, 0.25],
           [63, 0],
         ),
+      }),
+    );
+    s.track(
+      voice("hiss", "Surface hiss", "pink", 0.03, {
+        synth: { attack: 2.5, release: 4, hpf: 2400 },
+        filter: { type: "lpf", cutoff: 7000, resonance: 0.1 },
+        pan: 0.1,
+        reverb: room,
       }),
     );
 
@@ -929,8 +941,10 @@ export const glassArc: DemoDefinition = {
       [40, 0.42],
       [48, 0.36],
       [56, 0.92],
-    ] as const)
+    ] as const) {
       s.note("rain", bar, 0, 60, 32.5, velocity);
+      s.note("hiss", bar, 0, 60, 32.5, velocity);
+    }
     return s.finish();
   },
 };
