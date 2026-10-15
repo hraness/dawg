@@ -483,9 +483,12 @@ export const GROOVE_STARTERS: readonly GrooveStarter[] = Object.freeze([
       harmony: {
         model: "functional",
         presets: null,
+        // Two bars a chord; the long form lands on the harmonic-minor V
+        // (its raised leading tone) at the end of the eight-bar loop.
         forms: [
           [["i", "bVI"], 2],
           [["i", "iv"], 1],
+          [["i", "bVI", "iv", "V"], 2],
         ],
         rhythm: [[0.5, 1]],
         sevenths: 0,
