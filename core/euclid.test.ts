@@ -11,8 +11,12 @@ import {
   divisionBeats,
   euclidRot,
   expandRow,
+  FLAM_GRACE_VELOCITY,
+  flamTicks,
+  GHOST_VELOCITY,
   normalizeRhythmRow,
   patternText,
+  rowPattern,
   rowSummary,
 } from "./euclid.ts";
 import {
@@ -204,6 +208,206 @@ describe("rhythm rows", () => {
       { ticksPerBeat: 480, loopTicks: 960 },
     );
     expect(hits.map((hit) => hit.durationTicks)).toEqual([360, 360, 240]);
+  });
+
+  test("ghost steps play at GHOST_VELOCITY and are never accented", () => {
+    // Drum and sampler gain is linear in velocity: 12..18 dB below a hit.
+    const db = 20 * Math.log10(GHOST_VELOCITY);
+    expect(db).toBeLessThanOrEqual(-12);
+    expect(db).toBeGreaterThanOrEqual(-18);
+    const context = { ticksPerBeat: 480, loopTicks: 480 };
+    const row = normalizeRhythmRow({
+      voice: "snare",
+      grid: "Xgxg",
+      velocity: 0.8,
+      accent: 1,
+    });
+    expect(rowPattern(row)).toEqual([1, 1, 1, 1]);
+    expect(
+      expandRow(row, context).map((hit) => [hit.startTick, hit.velocity]),
+    ).toEqual([
+      [0, 1],
+      [120, 0.2],
+      [240, 0.8],
+      [360, 0.2],
+    ]);
+    // Repeats ramp from the ghost's velocity like any pulse.
+    const repeated = expandRow(
+      normalizeRhythmRow({ voice: "sd", grid: "g...", repeats: 1, ramp: -0.5 }),
+      context,
+    );
+    expect(repeated.map((hit) => [hit.startTick, hit.velocity])).toEqual([
+      [0, 0.2],
+      [120, 0.1],
+    ]);
+  });
+
+  test("flams add a half-velocity grace hit a 1/96 note early", () => {
+    expect(FLAM_GRACE_VELOCITY).toBe(0.5);
+    expect(flamTicks(480)).toBe(20);
+    expect(flamTicks(96)).toBe(4);
+    // Flams are never accented; the grace at tick 0 would land before 0.
+    const row = normalizeRhythmRow({
+      voice: "snare",
+      grid: "f...f...",
+      accent: 1,
+    });
+    expect(rowPattern(row)).toEqual([1, 0, 0, 0, 1, 0, 0, 0]);
+    const hits = expandRow(row, { ticksPerBeat: 480, loopTicks: 960 });
+    expect(
+      hits.map((hit) => [hit.startTick, hit.velocity, hit.grace ?? false]),
+    ).toEqual([
+      [0, 0.8, false],
+      [460, 0.4, true],
+      [480, 0.8, false],
+    ]);
+    expect(hits[1]).toMatchObject({ pass: 0, step: 4, repeat: 0 });
+    expect(hits[1]!.durationTicks).toBe(120);
+    // Nudged later, the first flam's grace fits after tick 0.
+    const nudged = expandRow(normalizeRhythmRow({ ...row, nudge: 0.25 }), {
+      ticksPerBeat: 480,
+      loopTicks: 480,
+    });
+    expect(nudged.map((hit) => [hit.startTick, hit.velocity])).toEqual([
+      [10, 0.4],
+      [30, 0.8],
+    ]);
+    // Legato: the grace lasts until its main hit.
+    const legato = expandRow(normalizeRhythmRow({ ...row, legato: true }), {
+      ticksPerBeat: 480,
+      loopTicks: 960,
+    });
+    expect(legato.map((hit) => hit.durationTicks)).toEqual([480, 20, 480]);
+  });
+
+  test("a flam's grace is dropped on or before the previous hit; it never repeats", () => {
+    const grace = (grid: string, division: string) =>
+      expandRow(normalizeRhythmRow({ voice: "sd", grid, division }), {
+        ticksPerBeat: 480,
+        loopTicks: 480,
+      }).map((hit) => [hit.startTick, hit.grace ?? false]);
+    // 1/64 steps are 30 ticks apart: the grace (10) follows the hit at 0.
+    expect(grace("xf", "1/64").slice(0, 3)).toEqual([
+      [0, false],
+      [10, true],
+      [30, false],
+    ]);
+    // 1/96 steps are 20 ticks apart: the grace would collide with tick 0.
+    expect(grace("xf", "1/96").slice(0, 2)).toEqual([
+      [0, false],
+      [20, false],
+    ]);
+    // Repeats every 1/32t (40 ticks) reach 520, where the grace would land.
+    const swung = expandRow(
+      normalizeRhythmRow({
+        voice: "sd",
+        grid: "x....f..",
+        swing: -0.5,
+        repeats: 16,
+        time: "1/32t",
+      }),
+      { ticksPerBeat: 480, loopTicks: 960 },
+    );
+    expect(swung.filter((hit) => hit.grace)).toHaveLength(0);
+    expect(swung.find((hit) => hit.step === 5)!.startTick).toBe(540);
+    // Kept graces add one hit each and no repeats.
+    const repeated = expandRow(
+      normalizeRhythmRow({ voice: "sd", grid: "x...f...", repeats: 16 }),
+      { ticksPerBeat: 480, loopTicks: 960 },
+    );
+    expect(
+      repeated.map((hit) => [hit.startTick, hit.repeat, hit.grace ?? false]),
+    ).toEqual([
+      [0, 0, false],
+      [120, 1, false],
+      [240, 2, false],
+      [360, 3, false],
+      [460, 0, true],
+      [480, 0, false],
+      [600, 1, false],
+      [720, 2, false],
+      [840, 3, false],
+    ]);
+  });
+
+  test("ghosts and flams obey swing and probability", () => {
+    const base = { voice: "sd", grid: "gfgf", seed: 7 };
+    // Odd steps (the flams) swing half a step (60 ticks) late; graces follow.
+    const swung = expandRow(normalizeRhythmRow({ ...base, swing: 0.5 }), {
+      ticksPerBeat: 480,
+      loopTicks: 480,
+    });
+    expect(
+      swung.map((hit) => [hit.startTick, hit.velocity, hit.grace ?? false]),
+    ).toEqual([
+      [0, 0.2, false],
+      [160, 0.4, true],
+      [180, 0.8, false],
+      [240, 0.2, false],
+      [400, 0.4, true],
+      [420, 0.8, false],
+    ]);
+    // The same seeded draw keeps or drops a flam together with its grace.
+    const hits = expandRow(normalizeRhythmRow({ ...base, probability: 0.5 }), {
+      ticksPerBeat: 480,
+      loopTicks: 1920,
+    });
+    const kept: number[][] = [];
+    for (let pass = 0; pass < 4; pass += 1)
+      for (let step = 0; step < 4; step += 1)
+        if (chance(7, "sd", pass, step) < 0.5) kept.push([pass, step]);
+    expect(kept.length).toBeGreaterThan(0);
+    expect(kept.length).toBeLessThan(16);
+    const at = (grace: boolean) =>
+      hits
+        .filter((hit) => (hit.grace ?? false) === grace)
+        .map((hit) => [hit.pass, hit.step]);
+    expect(at(false)).toEqual(kept);
+    expect(at(true)).toEqual(kept.filter(([, step]) => step! % 2 === 1));
+  });
+
+  test("grids accept x X g f . - and nothing else", () => {
+    expect(normalizeRhythmRow({ voice: "sd", grid: "x-gf" })).toEqual({
+      voice: "sd",
+      grid: "x.gf",
+    });
+    for (const grid of ["xG..", "xF..", "xo..", "x a.", "", "g".repeat(65)])
+      expect(() => normalizeRhythmRow({ voice: "sd", grid })).toThrow(
+        "grid must be 1..64 of x X g f . -",
+      );
+  });
+
+  test("plain grids expand as before", () => {
+    const hits = expandRow(
+      normalizeRhythmRow({ voice: "sd", grid: "x.X.-x..", swing: 0.2 }),
+      { ticksPerBeat: 480, loopTicks: 960 },
+    );
+    expect(hits).toEqual([
+      {
+        startTick: 0,
+        durationTicks: 120,
+        velocity: 0.8,
+        pass: 0,
+        step: 0,
+        repeat: 0,
+      },
+      {
+        startTick: 240,
+        durationTicks: 120,
+        velocity: 0.85,
+        pass: 0,
+        step: 2,
+        repeat: 0,
+      },
+      {
+        startTick: 624,
+        durationTicks: 120,
+        velocity: 0.8,
+        pass: 0,
+        step: 5,
+        repeat: 0,
+      },
+    ]);
   });
 
   test("summary", () => {

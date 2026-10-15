@@ -1410,7 +1410,7 @@ export default track({
 | `pulses`             | 0..steps (4)                         | Pulses           | Hits spread over the steps by Bjorklund's algorithm.                                          |
 | `rotate`             | -64..64 (0)                          | Rotate           | Shifts the pattern later by n steps (negative: earlier), Strudel's direction.                 |
 | `division`           | 1/32, 1/16t, 1/16, 1/8t … 1/1 (1/16) | Division         | Length of one step.                                                                           |
-| `grid`               | `x` hit, `X` accent, `.` rest        | per-step editing | Explicit steps instead of pulses; its length is the step count.                               |
+| `grid`               | `x` `X` `g` `f`, `.` or `-` rest     | per-step editing | Explicit steps: `x` hit, `X` accent, `g` ghost, `f` flam; its length is the step count.       |
 | `repeats`            | 0..16 (0)                            | Repeats          | Extra hits after each pulse, cut off by the next pulse (T-1 "choke" mode).                    |
 | `time`               | a division (= `division`)            | Time             | Spacing of those repeats.                                                                     |
 | `pace`               | -1..1 (0)                            | Pace             | > 0 slows the repeats down progressively, < 0 speeds them up.                                 |
@@ -1425,9 +1425,11 @@ export default track({
 
 Rows regenerate when the loop length or meter changes. Editing a generated lane by hand (play-mode recording, `hit`, the agent's `add_drums`) freezes that row: the row is dropped and its notes stay as plain notes. `euclid <voice> freeze` does the same on purpose, `euclid <voice> off` removes the row and its notes.
 
+In a grid, `g` is a ghost note: `GHOST_VELOCITY` (0.25) of the row's velocity, about 12 dB under a hit, and never accented. `f` is a flam: the hit at the row's velocity plus a grace hit at half of it a 1/96 note earlier (about 25 ms at 100 BPM). The grace is dropped before tick 0 or on or before the previous hit, and it never repeats. Both follow probability, swing, nudge, repeats and gate like any step.
+
 Prompt grammar: `euclid kick 4 16`, `euclid hat 7 16 rotate 2`, `euclid hat swing 0.2 prob 0.8 seed 3` (named fields merge into the existing row, `default` resets one), `euclid snare off|freeze`, `grid snare ....X.......x...`. The agent's `set_rhythm` tool takes the same rows and its prompt prefers it for drums.
 
-**Editor.** `/euclid [voice]`, or Rhythm in `/menu`, opens a T-1-style editor on the focused kit or oneshot sampler track: one row per voice with its step grid (`x` hit, `X` accent, `·` rest) and summary (`E(4,16)`). Every change runs one `euclid …` command, so it is one receipt and one undo step, and the edited voice plays once (audition) after it lands. The hits show on the highway like any notes. The bottom row is the four-knob strip (see **Four knobs**; `KNOB_MAPS.euclid`): `●›kick ▲ pulses 4 ■ rotate 0 ◆ velocity 0.8`. `/euclid hat` opens on `▲` pulses; bare `/euclid` on `●`.
+**Editor.** `/euclid [voice]`, or Rhythm in `/menu`, opens a T-1-style editor on the focused kit or oneshot sampler track: one row per voice with its step grid (`x` hit, `X` accent, `g` ghost, `f` flam, `·` rest) and summary (`E(4,16)`). Every change runs one `euclid …` command, so it is one receipt and one undo step, and the edited voice plays once (audition) after it lands. The hits show on the highway like any notes. The bottom row is the four-knob strip (see **Four knobs**; `KNOB_MAPS.euclid`): `●›kick ▲ pulses 4 ■ rotate 0 ◆ velocity 0.8`. `/euclid hat` opens on `▲` pulses; bare `/euclid` on `●`.
 
 | Key                         | Action                                                      |
 | --------------------------- | ----------------------------------------------------------- |

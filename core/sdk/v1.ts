@@ -708,8 +708,11 @@ export function euclidLegato(
 }
 
 /**
- * An explicit step row: `grid("snare", "....x.......x...")`. `X` is an
- * accented hit; the string's length is the step count.
+ * An explicit step row: `grid("snare", "....x.......x...")`. `x` is a
+ * hit, `X` an accented hit, `g` a ghost note (a quarter of the velocity,
+ * never accented) and `f` a flam (the hit plus a half-velocity grace hit a
+ * 1/96 note earlier; SDK 1.38.0); `.` or `-` rests. The string's length is
+ * the step count.
  */
 export function grid(
   voice: string,

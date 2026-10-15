@@ -6,7 +6,7 @@
  *   euclid <voice> <pulses> [<steps>] [<field> <value> ...]
  *   euclid <voice> <field> <value> [<field> <value> ...]
  *   euclid <voice> off | freeze           remove the row (freeze keeps notes)
- *   grid <voice> <steps>                  explicit steps: x hit, X accent, . rest
+ *   grid <voice> <steps>                  steps: x hit, X accent, g ghost, f flam, . rest
  *
  * Fields: steps, pulses, rotate (rot), division (div), repeats (rep), time,
  * pace, ramp, velocity (vel), accent, accents, gate, legato on|off,
@@ -73,7 +73,7 @@ const VOICE = /^[A-Za-z0-9#_-]{1,32}$/;
 export function parseRhythmCommand(prompt: string): RhythmCommand | undefined {
   const text = prompt.trim().replace(/\s+/g, " ");
   if (text.length > 512) return undefined;
-  const grid = text.match(/^grid ([A-Za-z0-9#_-]{1,32}) ([xX.\-]{1,64})$/i);
+  const grid = text.match(/^grid ([A-Za-z0-9#_-]{1,32}) ([xXgf.\-]{1,64})$/i);
   if (grid)
     return {
       type: "rhythm-set",
@@ -113,7 +113,7 @@ export function parseRhythmCommand(prompt: string): RhythmCommand | undefined {
       if (!division) return undefined;
       fields[key] = division;
     } else if (key === "grid") {
-      if (!/^[xX.\-]{1,64}$/.test(raw)) return undefined;
+      if (!/^[xXgf.\-]{1,64}$/.test(raw)) return undefined;
       fields[key] = raw;
     } else {
       if (!NUMBER.test(raw)) return undefined;

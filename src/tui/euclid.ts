@@ -289,13 +289,17 @@ export function euclidLanes(track: Track): Lane[] {
   return lanes;
 }
 
-/** `x...x...` with accents as `X`, rests as `·`. */
+/** `x...x...` with accents as `X`, ghosts `g`, flams `f`, rests as `·`. */
 export function ringText(row: RhythmRow | undefined): string {
   if (!row) return "·".repeat(RHYTHM_DEFAULTS.steps);
   const pattern = rowPattern(row);
   const grid = row.grid;
   return pattern
-    .map((on, index) => (on ? (grid?.[index] === "X" ? "X" : "x") : "·"))
+    .map((on, index) => {
+      const char = grid?.[index];
+      if (!on) return "·";
+      return char === "X" || char === "g" || char === "f" ? char : "x";
+    })
     .join("");
 }
 

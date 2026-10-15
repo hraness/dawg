@@ -388,7 +388,10 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         command: "euclid <drum> <field> <value> | off | freeze",
         summary: "repeats pace accent prob swing …",
       },
-      { command: "grid <drum> <x.X.>", summary: "explicit steps · X accent" },
+      {
+        command: "grid <drum> <x.X.>",
+        summary: "explicit steps · X accent · g ghost · f flam",
+      },
       {
         command: "pattern [name]",
         summary: "groove picker · hear each groove move",

@@ -118,7 +118,9 @@ export type RhythmRow = Readonly<{
   division?: string;
   /**
    * Explicit steps instead of a Euclidean pattern (T-1 manual pulses):
-   * `x` hit, `X` accented hit, `.` or `-` rest. Its length is the step count.
+   * `x` hit, `X` accented hit, `g` ghost note (`GHOST_VELOCITY` of the
+   * base velocity, never accented), `f` flam (a hit plus a softer grace hit
+   * a 1/96 note before it), `.` or `-` rest. Its length is the step count.
    */
   grid?: string;
   /** Extra triggers after each pulse, 0..16 (T-1 Repeats); default 0. */
@@ -221,7 +223,27 @@ export function canonicalDivision(value: string): string | undefined {
     : value.trim().toLowerCase();
 }
 
-const GRID = /^[xX.\-]{1,64}$/;
+const GRID = /^[xXgf.\-]{1,64}$/;
+
+/** Grid step characters that sound: hit, accent, ghost and flam. */
+const isGridHit = (char: string) =>
+  char === "x" || char === "X" || char === "g" || char === "f";
+
+/**
+ * Velocity of a ghost step (`g`) as a fraction of the row's base velocity.
+ * Drum synth and sampler gain is linear in velocity (and a track has no
+ * velocity curve by default), so 0.25 puts a ghost 12 dB below a plain hit.
+ * A ghost is never accented.
+ */
+export const GHOST_VELOCITY = 0.25;
+
+/** Velocity of a flam's (`f`) grace hit as a fraction of its main hit's. */
+export const FLAM_GRACE_VELOCITY = 0.5;
+
+/** Ticks a flam's grace hit lands before its main hit: a 1/96 note. */
+export function flamTicks(ticksPerBeat: number): number {
+  return Math.round(ticksPerBeat / 24);
+}
 
 /** Steps in a row (the grid's length when it has one). */
 export function rowSteps(row: RhythmRow): number {
@@ -231,7 +253,7 @@ export function rowSteps(row: RhythmRow): number {
 /** The row's on/off pattern for one pass (cycle overrides applied). */
 export function rowPattern(row: RhythmRow, pass = 0): number[] {
   if (row.grid !== undefined)
-    return [...row.grid].map((char) => (char === "x" || char === "X" ? 1 : 0));
+    return [...row.grid].map((char) => (isGridHit(char) ? 1 : 0));
   const cycle = cycleFor(row, pass);
   return euclidRot(
     cycle.pulses ?? row.pulses ?? RHYTHM_DEFAULTS.pulses,
@@ -270,7 +292,7 @@ export function normalizeRhythmRow(
   let steps: number = RHYTHM_DEFAULTS.steps;
   if (value.grid !== undefined) {
     if (typeof value.grid !== "string" || !GRID.test(value.grid))
-      throw new Error(`${label} grid must be 1..64 of x X . -`);
+      throw new Error(`${label} grid must be 1..64 of x X g f . -`);
     out.grid = value.grid.replace(/-/g, ".");
     steps = value.grid.length;
     if (value.steps !== undefined && value.steps !== steps)
@@ -512,6 +534,8 @@ export type RhythmHit = Readonly<{
   step: number;
   /** 0 for the pulse, 1.. for its repeats. */
   repeat: number;
+  /** True on a flam's grace hit (repeat 0, just before its pulse). */
+  grace?: true;
 }>;
 
 export type ExpandContext = Readonly<{
@@ -553,6 +577,7 @@ export function expandRow(row: RhythmRow, context: ExpandContext): RhythmHit[] {
     pass: number;
     step: number;
     repeats: number;
+    flam: boolean;
   };
   const pulses: Pulse[] = [];
   for (let pass = 0; pass < passes; pass += 1) {
@@ -562,15 +587,14 @@ export function expandRow(row: RhythmRow, context: ExpandContext): RhythmHit[] {
     const probability = cycle.probability ?? row.probability ?? 1;
     const repeats = cycle.repeats ?? row.repeats ?? 0;
     const count = pattern.reduce((sum, on) => sum + on, 0);
-    const accented =
+    // One kind per sounding step: grid characters, or E(accents, pulses).
+    const kinds: string[] =
       row.grid !== undefined
-        ? [...row.grid]
-            .filter((char) => char !== ".")
-            .map((char) => (char === "X" ? 1 : 0))
+        ? [...row.grid].filter(isGridHit)
         : bjorklund(
             Math.min(row.accents ?? RHYTHM_DEFAULTS.accents, count),
             count,
-          );
+          ).map((on) => (on ? "X" : "x"));
     let ordinal = 0;
     for (let step = 0; step < steps; step += 1) {
       if (!pattern[step]) continue;
@@ -582,10 +606,21 @@ export function expandRow(row: RhythmRow, context: ExpandContext): RhythmHit[] {
       if (start >= context.loopTicks) continue;
       if (probability < 1 && chance(seed, row.voice, pass, step) >= probability)
         continue;
-      const lifted = accented[index]
-        ? velocity + (1 - velocity) * accent
-        : velocity;
-      pulses.push({ start, velocity: lifted, pass, step, repeats });
+      const kind = kinds[index];
+      const lifted =
+        kind === "X"
+          ? velocity + (1 - velocity) * accent
+          : kind === "g"
+            ? velocity * GHOST_VELOCITY
+            : velocity;
+      pulses.push({
+        start,
+        velocity: lifted,
+        pass,
+        step,
+        repeats,
+        flam: kind === "f",
+      });
     }
   }
   pulses.sort((a, b) => a.start - b.start);
@@ -593,11 +628,27 @@ export function expandRow(row: RhythmRow, context: ExpandContext): RhythmHit[] {
   const hits: RhythmHit[] = [];
   const minInterval = Math.max(1, Math.round(tpb / 32));
   const factor = 1 + 0.5 * pace;
+  const flamOffset = flamTicks(tpb);
   pulses.forEach((pulse, index) => {
     const cutoff = pulses[index + 1]?.start ?? context.loopTicks;
     const length = row.legato
       ? Math.max(1, cutoff - pulse.start)
       : Math.max(1, Math.round(gate * stepTicks));
+    if (pulse.flam && flamOffset > 0) {
+      // The grace hit is dropped before tick 0 or on/before the last hit.
+      const grace = pulse.start - flamOffset;
+      const last = hits[hits.length - 1];
+      if (grace >= 0 && (last === undefined || grace > last.startTick))
+        push(
+          hits,
+          grace,
+          row.legato ? flamOffset : length,
+          pulse.velocity * FLAM_GRACE_VELOCITY,
+          pulse,
+          0,
+          true,
+        );
+    }
     push(hits, pulse.start, length, pulse.velocity, pulse, 0);
     let at = pulse.start;
     let interval = timeTicks;
@@ -626,6 +677,7 @@ function push(
   velocity: number,
   pulse: Readonly<{ pass: number; step: number }>,
   repeat: number,
+  grace = false,
 ): void {
   const clamped = Math.round(Math.min(1, Math.max(0, velocity)) * 1000) / 1000;
   if (clamped < MIN_VELOCITY) return;
@@ -637,6 +689,7 @@ function push(
       pass: pulse.pass,
       step: pulse.step,
       repeat,
+      ...(grace ? { grace: true as const } : {}),
     }),
   );
 }

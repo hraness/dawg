@@ -154,6 +154,15 @@ describe("euclid editor", () => {
       command: "euclid kick 3 8",
     });
   });
+
+  test("a grid row shows ghosts as g and flams as f", () => {
+    const editor = new EuclidEditor();
+    const score = run(kit(), "grid snare X.g.f-.x");
+    const ctx = { score, trackId: "drums" };
+    expect(ringText(score.tracks[0]!.rhythm![0])).toBe("X·g·f··x");
+    editor.show(ctx, "snare");
+    expect(editor.view(ctx).items[1]!.label).toBe("snare X·g·f··x");
+  });
 });
 
 describe("euclid editor while auditioning", () => {
