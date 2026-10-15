@@ -904,6 +904,14 @@ export const amberRoom: DemoDefinition = {
       }),
     );
     s.track(
+      voice("guitar", "Muted guitar", "steel", 0.3, {
+        string: { preset: "steel", mute: 0.5, bright: 0.3 },
+        pan: 0.3,
+        reverb: room,
+        humanize: { timing: 7, velocity: 6, seed: 41 },
+      }),
+    );
+    s.track(
       voice("vibes", "High answer", "vibes", 0.22, {
         pan: 0.32,
         reverb: hall,
@@ -1085,7 +1093,22 @@ export const amberRoom: DemoDefinition = {
           bassNote(bar, 2.75, root + seventh, 0.5, 0.6 * g);
           bassNote(bar, 3.75, approach, 0.25, 0.58 * g, "p");
           break;
+        case 4: {
+          // Contrary motion under a rising sax phrase: the line falls from
+          // the root (its octave pop when the root is low) through the
+          // seventh and fifth below, lands on the low root, then climbs
+          // through the approach note into the next change.
+          const high = root < 34 ? root + 12 : root;
+          bassNote(bar, 0, high, 1.4, 0.8 * g);
+          bassNote(bar, 1.75, high + seventh - 12, 0.4, 0.6 * g);
+          bassNote(bar, 2.5, high + fifth - 12, 0.55, 0.62 * g);
+          if ((bar >> 1) % 2) bassNote(bar, 3.25, root, 0.3, 0.5 * g, "g");
+          else bassNote(bar, 3, root, 0.5, 0.56 * g, "s");
+          bassNote(bar, 3.75, approach, 0.22, 0.6 * g, "p");
+          break;
+        }
         default:
+          // Rising under a falling or held sax note.
           bassNote(bar, 0, root, 0.9, 0.78 * g);
           bassNote(bar, 1, root, 0.15, 0.28 * g, "g");
           bassNote(bar, 1.5, root + third, 0.4, 0.58 * g);
@@ -1220,12 +1243,14 @@ export const amberRoom: DemoDefinition = {
       const pass = bar < 12 ? 0 : bar < 20 ? 1 : 2;
       if (head) {
         groove(bar, index, pass);
+        // The bass falls (4) where the sax phrase rises and rises (3)
+        // where it falls or holds; the Eb D Db C walk keeps long roots (1).
         bassBar(
           bar,
           [
-            [0, 1, 2, 3, 0, 1],
-            [1, 3, 0, 2, 3, 0],
-            [0, 2, 3, 1, 2, 3],
+            [4, 3, 4, 1, 4, 1],
+            [4, 0, 4, 1, 3, 2],
+            [4, 3, 0, 1, 4, 2],
           ][pass]![index] ?? 0,
           bar >= 36 ? 1.04 : 1,
         );
@@ -1274,6 +1299,75 @@ export const amberRoom: DemoDefinition = {
       for (const at of bar < 10 ? [bar, bar + 8] : [bar])
         for (const [beat, pitch, length, velocity] of line)
           s.note("keys", at, beat + KEYS, pitch, length, velocity);
+
+    // Interlocking arpeggios. In the second head the muted guitar plays
+    // the voice-led chord tones up and down on the eighths (its top note
+    // walks with the voicing chain) while the vibes echo the first four
+    // tones one swung sixteenth later an octave up, a Reich offset; in the
+    // head return the guitar only plays the pickup into each bar under the
+    // full comp. A tone that would sit on or a step from a note the sax or
+    // the Rhodes line holds drops to the voice below or stays silent.
+    const sings = (start: number, pitch: number): boolean =>
+      tune.some(([from, to, sung]) => {
+        const gap = Math.abs(sung - pitch);
+        return (
+          from < start + 0.2 &&
+          start < to &&
+          (gap <= 2 || gap === 11 || gap === 13)
+        );
+      });
+    const pluck = (
+      track: string,
+      bar: number,
+      beat: number,
+      tones: readonly number[],
+      index: number,
+      length: number,
+      velocity: number,
+      offset: number,
+    ): void => {
+      for (let i = Math.min(index, tones.length - 1); i >= 0; i--) {
+        const pitch = tones[i]!;
+        if (sings(bar * 4 + beat, pitch)) continue;
+        s.note(track, bar, beat + offset, pitch, length, velocity);
+        return;
+      }
+    };
+    const ARP = [0, 1, 2, 3, 2, 1, 2] as const;
+    for (let bar = 12; bar < 20; bar++) {
+      const tones = chordAt(bar, 2);
+      ARP.forEach((index, step) => {
+        const beat = 0.5 + step * 0.5;
+        const accent = beat === 2 || beat === 1 ? 0.5 : 0.4;
+        pluck("guitar", bar, beat, tones, index, 0.45, accent, KEYS);
+        if (step < 4 && bar !== 19)
+          pluck(
+            "vibes",
+            bar,
+            beat + 0.25 + SWING,
+            tones.map((p) => p + 12),
+            index,
+            0.3,
+            0.24,
+            VIBES,
+          );
+      });
+    }
+    for (let bar = 36; bar < 44; bar++) {
+      const tones = chordAt(bar, 2.5);
+      [1, 2, 3].forEach((index, step) =>
+        pluck(
+          "guitar",
+          bar,
+          2.5 + step * 0.5,
+          tones,
+          index,
+          0.4,
+          0.42 + 0.05 * step,
+          KEYS,
+        ),
+      );
+    }
 
     // Vibes: soft answers in the bridge and the head return, and the last word.
     // The bridge bells double the top of the Rhodes chord an octave up,
