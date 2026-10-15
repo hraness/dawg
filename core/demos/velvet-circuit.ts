@@ -730,10 +730,10 @@ export const velvetCircuit: DemoDefinition = {
         volumeAutomation: lanes(
           [8, 0.72],
           [15.9, 0.72],
-          [16, 0.88],
-          [23.9, 0.88],
-          [24, 0.96],
-          [31.9, 0.96],
+          [16, 0.84],
+          [23.9, 0.84],
+          [24, 0.9],
+          [31.9, 0.9],
           [32, 0.6],
           [39.9, 0.66],
           [40, 0.92],
@@ -1086,7 +1086,17 @@ export const velvetCircuit: DemoDefinition = {
       // The arc: the pocket sits back, the lift and the switch-up a touch
       // under the hooks, the last call at full weight.
       const weight =
-        sec === "Pocket" ? 0.8 : lift ? 0.94 : half ? 0.94 : outro ? 0.9 : 1;
+        sec === "Pocket"
+          ? 0.8
+          : lift
+            ? 0.9
+            : half
+              ? 0.94
+              : hook && !last
+                ? 0.95
+                : outro
+                  ? 0.9
+                  : 1;
       // Hats skip in the pocket and the first hook: open hats on two of the
       // four offbeats only, with ghosted 16ths after the others.
       const skippy = sec === "Pocket" || sec === "Hold on";
