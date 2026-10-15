@@ -515,6 +515,19 @@ const OVERLOAD: Line = [
   ...lineC(50, ["Break", "me", "in", "to", "pix", "els"], true, 80),
 ];
 
+/** Step automation: each value holds until the next listed bar, then jumps. */
+const steps = (
+  ...points: readonly (readonly [bar: number, value: number])[]
+): AutomationPoint[] =>
+  points.flatMap(([bar, value], i) =>
+    i === 0
+      ? [{ tick: Math.round(bar * BAR), value }]
+      : [
+          { tick: Math.round(bar * BAR) - 1, value: points[i - 1]![1] },
+          { tick: Math.round(bar * BAR), value },
+        ],
+  );
+
 /** Short dub throws on the last word of each line (dotted-eighth delay). */
 function throws(bars: readonly number[], base: number, peak: number) {
   const points: AutomationPoint[] = [{ tick: 0, value: base }];
@@ -534,7 +547,7 @@ export const candyFault: DemoDefinition = {
     title: "Candy Fault",
     style: "Hyperpop",
     description:
-      "A sugar-rush hyperpop song: a pitched-up machine singer, a distorted 808 that slides between roots, wide supersaw chords and chip arpeggios, broken by a glassy electric-piano bridge and a silent beat before the overload.",
+      "A sugar-rush hyperpop song: a pitched-up machine singer, a distorted 808 that slides between roots, wide supersaw chords and chip arpeggios, broken by a glassy electric-piano bridge, then a silent beat that slams the overload up a half step.",
     tempoBpm: 156,
     key: "E",
     bars: 56,
@@ -548,6 +561,7 @@ export const candyFault: DemoDefinition = {
       "backing thirds and octave doubles",
       "pretty-to-harsh supersaw detune",
       "borrowed minor iv in the bridge",
+      "half-step key change into the final chorus",
     ],
     arrangement: [
       "Boot sparkle 4",
@@ -564,7 +578,7 @@ export const candyFault: DemoDefinition = {
       "The 808 follows every kick hit, slides into each new root and drops an octave onto the chorus downbeats; the supersaw starts above 300 Hz and pumps under the kick.",
       "The singer is pitched bright with a formant lift; a softer double sings thirds below, and dotted-eighth delay throws catch the last word of each chorus line.",
       "Hats move in shaped sixteenths with 32nd and triplet rolls; the bridge drops the kick, hook and supersaw for electric piano, glass and a borrowed A minor 6.",
-      "The final chorus detunes the supersaw from pretty to harsh, stutters the singer on 'pixels', and the song powers down with the 808 diving an octave.",
+      "After one beat of silence the final chorus jumps from E to F major, detunes the supersaw from pretty to harsh and stutters the singer on 'pixels'; the song powers down in F with the 808 diving an octave.",
     ],
   }),
   build() {
@@ -599,6 +613,8 @@ export const candyFault: DemoDefinition = {
       voice("hats", "Needle hats", "kit", 0.6, {
         kit: "syn909",
         pan: 0.14,
+        // Each chorus pass is a little bigger than the last.
+        volumeAutomation: steps([0, 0.86], [36, 0.93], [44, 1], [52, 0.86]),
         humanize: { timing: 3, velocity: 6, seed: 12 },
       }),
     );
@@ -671,6 +687,7 @@ export const candyFault: DemoDefinition = {
         filter: { type: "hpf", cutoff: 300, resonance: 0 },
         reverb: room,
         fx: orbit,
+        volumeAutomation: steps([0, 0.8], [36, 0.9], [44, 1]),
         fxAutomation: {
           "synth-lpf": lanes(
             [0, 5200],
@@ -705,11 +722,12 @@ export const candyFault: DemoDefinition = {
         filter: { type: "hpf", cutoff: 600, resonance: 0 },
         delay: { beats: 0.75, feedback: 0.3, mix: 0.16, pingpong: true },
         fx: orbit,
+        volumeAutomation: steps([0, 0.82], [36, 0.9], [44, 1]),
         humanize: { timing: 2, velocity: 6, seed: 18 },
       }),
     );
     s.track(
-      voice("vocal", "Candy singer", "sing", 0.62, {
+      voice("vocal", "Candy singer", "sing", 0.76, {
         sing: {
           preset: "aah",
           voice: "soprano",
@@ -735,7 +753,7 @@ export const candyFault: DemoDefinition = {
       }),
     );
     s.track(
-      voice("harm", "Candy double", "sing", 0.5, {
+      voice("harm", "Candy double", "sing", 0.55, {
         pan: 0.32,
         sing: {
           preset: "aah",
@@ -1138,6 +1156,13 @@ export const candyFault: DemoDefinition = {
     s.note("tear", 14, 2.75, 48, 5.2, 0.62);
     s.note("tear", 34, 2.75, 48, 5.2, 0.66);
     s.note("tear", 42, 2, 48, 5, 0.6);
+
+    // After the silent beat the overload and the outro lift a half step, E to F.
+    const LIFTED = new Set(["sub", "hook", "keys", "chords", "arp", "vocal", "harm", "chops", "spark"]);
+    for (let i = 0; i < s.notes.length; i++) {
+      const n = s.notes[i]!;
+      if (LIFTED.has(n.trackId!) && n.startTick! >= 44 * BAR) s.notes[i] = { ...n, pitch: n.pitch! + 1 };
+    }
 
     // A whole-mix silent beat before Overload: nothing starts or rings in it.
     const gapBegin = 44 * BAR - 480,
