@@ -8,13 +8,13 @@ order: 0
 Seven complete, editable songs, with original patterns and sounds.
 Every part works offline. Open a song's notes to explore its production.
 
-- Candy Fault · hyperpop · sung hook, vocal and chip hockets, glitch breaks
+- Candy Fault · hyperpop · sung hook, vocal-chip hockets, glitch breaks
 - Coil Driver · acid techno · two 303s, slides, dub-delay breakdown
 - Velvet Circuit · UK garage · two-step swing, hocketing vocal chops
 - Copper Wire · jungle · re-sliced breaks, reese bass, half-time turn
 - Low Tide · trip hop · laid-back drums, a voice and its answer, tape
 - Amber Room · neo soul · rootless keys, sax counterpoint, ghost notes
-- Signal Bloom · synth pop · interlocking arpeggios, gated snare, sung hook
+- Signal Bloom · synth pop · interlocking arps, gated snare, sung hook
 
 ## Ask
 

@@ -112,7 +112,8 @@ comparisons did not establish a reliable improvement.
 ## Prepared playback loops (2026-10-13)
 
 `bun bench/perf/loop-prep.ts` measures the full playback preparation path for
-Signal Bloom and Glass Arc, including worker transfer and current asset
+Signal Bloom and Copper Wire (Glass Arc when the table below was taken),
+including worker transfer and current asset
 loading. Add `--no-cache` for a controlled comparison without finished-loop
 reuse, or supply demo IDs to bound the workload. Each demo starts a fresh
 worker; the script prints cold, replay, reconstructed-score, edit and edited
