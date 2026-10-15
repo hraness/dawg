@@ -1893,9 +1893,9 @@ function patternVoices(
           : root,
     );
     const target = notes[0]! + 12 * (hit.octave ?? -1);
-    const below = target - mod12(target - pc);
     // Not under C2: a lower fifth turns up an octave, over the root.
-    const pitch = below < BASS_FLOOR ? below + 12 : below;
+    let pitch = target - mod12(target - pc);
+    while (pitch < BASS_FLOOR) pitch += 12;
     return pitch >= 0 && pitch <= 127 ? [pitch] : [];
   }
   const indices =
@@ -2403,7 +2403,7 @@ export const STROKE_PATTERNS = Object.freeze({
 export const STROKE_PATTERN_NAMES = Object.keys(STROKE_PATTERNS);
 const STROKE_CHARS = /^[DUdux.\-]+$/;
 
-/** Default seconds a full six-string down stroke takes (22 ms). */
+/** Default seconds a full six-string down stroke takes at 120 BPM (22 ms). */
 export const DEFAULT_STROKE_SPEED = 0.022;
 /** Default stroke grid step in beats (8ths). */
 export const DEFAULT_STROKE_STEP = 0.5;
@@ -2439,10 +2439,11 @@ function strokeAccent(beat: number): number {
 /**
  * Strum fretted `voicing` from `start` for `length` beats with stroke grid
  * `strokes` (repeats every grid length, one step per `step` beats). A full
- * down stroke sweeps the six strings in `speed` seconds at `tempo` BPM;
- * each struck string rings until it is struck again, a `.` damps it or the
- * chord ends; a stroke right before a `.` is choked short; a chuck (x) is
- * a short muted hit that stops the strings.
+ * down stroke sweeps the six strings in `speed` seconds at 120 BPM, a little
+ * slower at a slower `tempo` and quicker at a faster one; each struck string
+ * rings until it is struck again, a `.` damps it or the chord ends; a stroke
+ * right before a `.` is choked short; a chuck (x) is a short muted hit that
+ * stops the strings.
  * Velocity accents downbeats and lightens upstrokes; a chuck on 2 or 4
  * cracks like the backbeat. With a `seed` the grid is played: each stroke
  * lands a few ms off the grid (upstrokes a touch late), the strings of one
@@ -2467,8 +2468,12 @@ export function strokeVoicing(
   const step =
     options.step && options.step > 0 ? options.step : DEFAULT_STROKE_STEP;
   const tempo = options.tempo && options.tempo > 0 ? options.tempo : 120;
+  // `speed` is the sweep at 120 BPM. A player strums a touch slower at a
+  // slow tempo and quicker at a fast one: by the square root of the tempo
+  // ratio, within 0.7 to 1.4 (22 ms is about 31 ms at 60 BPM, 18 at 180).
+  const pace = Math.min(1.4, Math.max(0.7, Math.sqrt(120 / tempo)));
   const sweep =
-    (Math.max(0, options.speed ?? DEFAULT_STROKE_SPEED) * tempo) / 60;
+    (Math.max(0, options.speed ?? DEFAULT_STROKE_SPEED) * pace * tempo) / 60;
   const base = options.velocity ?? 0.8;
   const total = Math.max(2, options.strings ?? 6);
   const human = options.seed !== undefined;

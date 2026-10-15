@@ -433,6 +433,52 @@ describe("rhythm patterns", () => {
       [1, 67],
     ]);
   });
+
+  test("a seeded take is deterministic, varied and near the grid", () => {
+    const take = (seed: number) =>
+      perform([60, 64, 67], 0, 4, {
+        mode: "pattern",
+        pattern: "eighths",
+        velocity: 0.8,
+        seed,
+        tempo: 104,
+      });
+    expect(take(3)).toEqual(take(3));
+    expect(take(3)).not.toEqual(take(4));
+    for (const note of take(3)) {
+      const off = Math.abs(note.start - Math.round(note.start * 2) / 2);
+      expect((off * 60000) / 104).toBeLessThan(25);
+      expect(note.velocity).toBeGreaterThan(0);
+      expect(note.velocity).toBeLessThanOrEqual(1);
+    }
+  });
+
+  test("the top voice of a block hit sings over the others", () => {
+    const notes = perform([60, 64, 67], 0, 1, {
+      mode: "pattern",
+      pattern: "eighths",
+      velocity: 0.8,
+    }).filter((n) => n.start === 0);
+    const top = notes.find((n) => n.pitch === 67)!;
+    for (const n of notes)
+      expect(top.velocity).toBeGreaterThanOrEqual(n.velocity);
+  });
+
+  test("bass hits take the chord root and fifth, never under C2", () => {
+    const bossa = (voicing: number[], root: number) =>
+      perform(voicing, 0, 4, {
+        mode: "pattern",
+        pattern: "bossa",
+        velocity: 0.8,
+        seed: 1,
+        tempo: 128,
+        root,
+      });
+    const dm9 = bossa([62, 65, 69, 72, 76], 2).filter((n) => n.pitch < 55);
+    expect(dm9.map((n) => n.pitch % 12)).toEqual([2, 9]);
+    const low = bossa([40, 43, 47, 50], 4);
+    expect(Math.min(...low.map((n) => n.pitch))).toBeGreaterThanOrEqual(36);
+  });
 });
 
 describe("bass modes", () => {
