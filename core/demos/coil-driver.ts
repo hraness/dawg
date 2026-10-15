@@ -71,7 +71,20 @@ function acid(text: string): readonly AcidStep[] {
 // The main coil: root pulse, an octave slide, the minor third and flat
 // seventh accented off the beat, and a semitone slide home.
 const A = acid("F2! . F2 F3~ F2 . Ab2! F2 C3 - F2 Eb3!~ F2 . Db3 C3~");
+// The first two bars of each phrase lean down to the flat seventh instead
+// of the octave, so the octave jump is an event when it returns.
+const A_LOW = acid("F2! . F2 Eb2~ F2 . Ab2! F2 C3 - F2 Eb3!~ F2 . Db3 C3~");
 const A2 = acid("F2! . F2 F3~ F2 . Ab2! F2 C3 - F2 Eb3!~ F2 F3 Db3 C3~");
+// The golden bars: bar 6 of a section climbs once past the octave, higher
+// each time it comes round (Ab3, then a 4-3 slide onto Ab3 from Bb3, then
+// C4). Steps 1, 5 and 13 stay empty so the hocket partner's peak lands.
+const A_GOLD_1 = acid("F2! . F2 F3~ F2 . Ab2! F2 C3 - F2 Eb3!~ Ab3~ . Eb3 C3~");
+const A_GOLD_2 = acid(
+  "F2! . F2 F3~ F2 . Ab2! F2 C3 - F2 Eb3!~ Ab3 . Bb3!~ Ab3~",
+);
+const A_GOLD_3 = acid(
+  "F2! . F2 F3~ F2 . Ab2! F2 C3 - F2 Eb3!~ Ab3~ . C4! Ab3~",
+);
 const A_TURN = acid("F2! . F2 F3~ F2 . Ab2! F2 C3 - F2 Eb3!~ F3~ Eb3 C3 Ab2~");
 const A_WIND = acid(
   "F2! . F2 F3~ F2 . Ab2! F2 C3 - F2 Eb3!~ F2 Ab2~ C3~ Eb3!~",
@@ -125,11 +138,48 @@ function shift(cell: readonly AcidStep[], by: number): readonly AcidStep[] {
     .map((n) => ({ ...n, step: (n.step + by) % 16 }))
     .sort((a, b) => a.step - b.step);
 }
-/** Four-bar phrases end on a turnaround; eight-bar phrases wind upward. */
+/** F natural minor as semitones above the root. */
+const MINOR = [0, 2, 3, 5, 7, 8, 10];
+/**
+ * The same cell moved `degrees` scale steps inside F minor, so a cell on i
+ * lands on VI or VII with that chord's own third and seventh instead of a
+ * literal copy's Fb and Cb against the major stabs. A chromatic note (the
+ * flat-second lean) stays the upper neighbour of the degree below it.
+ */
+function diatonic(
+  cell: readonly AcidStep[],
+  degrees: number,
+): readonly AcidStep[] {
+  if (degrees === 0) return cell;
+  const move = (pitch: number) => {
+    const rel = (((pitch - 5) % 12) + 12) % 12;
+    let degree = MINOR.indexOf(rel);
+    let lift = 0;
+    if (degree < 0) {
+      degree = MINOR.filter((s) => s < rel).length - 1;
+      lift = 1;
+    }
+    const target = degree + degrees;
+    const octave = Math.floor(target / 7);
+    return pitch - rel + MINOR[((target % 7) + 7) % 7]! + 12 * octave + lift;
+  };
+  return cell.map((n) => ({ ...n, pitch: move(n.pitch) }));
+}
+/**
+ * Four-bar phrases end on a turnaround; eight-bar phrases open low, peak
+ * once on their sixth bar (higher each section) and wind upward.
+ */
 function mainCell(bar: number): readonly AcidStep[] {
   const inPhrase = bar % 8;
   if (inPhrase === 7) return A_WIND;
+  if (inPhrase === 6) {
+    const section = Math.floor(bar / 8);
+    if (section === 1) return A_GOLD_1;
+    if (section === 2) return A_GOLD_2;
+    if (section === 5) return A_GOLD_3;
+  }
   if (inPhrase === 3) return A_TURN;
+  if (inPhrase < 2) return A_LOW;
   return inPhrase === 2 ? A2 : A;
 }
 
@@ -193,7 +243,7 @@ function ride(
  */
 const PEAK_HZ = 11000;
 /** Env mod the 303 keeps even at full cutoff, in octaves: the squelch. */
-const MIN_ENV = 0.7;
+const MIN_ENV = 0.35;
 /** Octaves an accent adds to each 303's filter sweep (`faccent`). */
 const ACID_ACCENT = 1.5;
 const SQUARE_ACCENT = 1.2;
@@ -251,14 +301,14 @@ export const coilDriver: DemoDefinition = {
     title: "Coil Driver",
     style: "Acid techno",
     description:
-      "Two F-minor 303s hocket one sixteenth line between them, trade halves, then chase each other a beat apart over a shuffled 909 and a sub pedal; the kick drops out for dub chord stabs under a crotale that holds a 7-6 suspension chain over a falling bass, a bit-crushed roll and half a bar of silence, and the drop brings both boxes back screaming before the knobs wind down.",
+      "Two F-minor 303s hocket one sixteenth line between them, trade halves, then chase each other a beat apart over a shuffled 909 and a sub pedal, the line lifting onto VI and VII by scale step; the kick drops out for dub chord stabs under a crotale that holds a 7-6 suspension chain over a falling bass, a bit-crushed roll and half a bar of silence, and the drop lands a thrown stab with both boxes in octaves before the knobs wind down.",
     tempoBpm: 134,
     key: "Fm",
     bars: 64,
     highlightBar: 40,
     trackId: "acid",
     features: [
-      "two 303s in a hocket: the square box plays the saw's holes an octave up",
+      "two 303s in a hocket: the square box plays the saw's holes an octave up; each 8-bar phrase opens low and peaks once on its sixth bar, higher every section",
       "trade bars (call and response) and a Reich-style one-beat offset canon",
       "dub chord stabs with delay throws under a crotale 7-6 suspension chain over i VII VI V, a last 4-3 over the pedal",
       "sub pedal under the VI-VII lift, walking bass in the breakdown",
@@ -277,10 +327,10 @@ export const coilDriver: DemoDefinition = {
       "Power down 8",
     ],
     mixNotes: [
-      "The saw 303 sits centered as the bass voice of the pair; the square box plays an octave up, panned left, with its own filter ride and a dry, short delay so the hocket's holes stay holes.",
-      "The sub pedal is a sine on F1 that only plays off the kick (and ducks under it); in the breakdown it walks F Eb Db C with glides into each new root while the crotale holds each 7th over the new root and the stabs answer with the 6/3 chord.",
+      "The saw 303 is the bass voice of the pair, centred with a 9 ms double for width; the square box plays an octave up, panned hard left in a slow chorus, with its own filter ride and a short delay so the hocket's holes stay holes.",
+      "The sub pedal is a sine on F1 that only plays off the kick (and ducks under it); it sits out the first two bars of the breakdown and arrives quietly on the Eb, then walks Eb Db C with glides into each root while the crotale holds each 7th over the new root, the saw rests, and the stabs answer with the 6/3 chord (an open fifth on V).",
       "Dub stabs run through a dotted-eighth ping-pong delay whose feedback and send are thrown every two bars; the tone climbs across Vacuum and the last throw is cut dead for the silent half bar.",
-      "The crush sweep (bits 14 to 4, mix 0 to 0.9) rides the acid and the snare roll over the last bar and a half of the build and snaps clean on the drop; the drop lands at full width with the kick's duck pumping.",
+      "The crush sweep (bits 14 to 4, mix 0 to 0.9) rides the acid and the snare roll over the last bar and a half of the build and snaps clean on the drop; the drop lands a downbeat stab thrown into the delay with the square box doubling the saw an octave up for two bars and the kick's duck pumping.",
       "The cutoff eases into a soft ceiling so even the loudest accent keeps its squelch below 11 kHz; hats swing 54% with a 7 ms double for width, the clap sits 8 ms late.",
     ],
   }),
@@ -319,7 +369,7 @@ export const coilDriver: DemoDefinition = {
       }),
     );
     s.track(
-      voice("drums", "Clap, snare & toms", "kit", 0.36, {
+      voice("drums", "Clap, snare & toms", "kit", 0.44, {
         kit: "syn909",
         reverb: { mix: 0.1, size: 0.36, fade: 0.6 },
         humanize: { timing: 4, velocity: 4, seed: 23 },
@@ -330,11 +380,11 @@ export const coilDriver: DemoDefinition = {
     s.track(
       voice("hats", "Hats & cymbals", "kit", 0.31, {
         kit: "syn909",
-        pan: 0.16,
+        pan: 0.2,
         reverb: { mix: 0.05, size: 0.22, fade: 0.5 },
         // A second hat a few milliseconds late on the other side: width
         // without moving the hats off the center of the groove.
-        fx: { double: { time: 7, drift: 0.5, width: 0.55 } },
+        fx: { double: { time: 11, drift: 0.5, width: 0.9 } },
         humanize: { timing: 3, velocity: 4, seed: 19 },
       }),
     );
@@ -450,15 +500,15 @@ export const coilDriver: DemoDefinition = {
     const drive = ride(
       [
         [0, 0.6],
-        [16, 0.9],
-        [24, 1.2],
-        [31, 1.8],
-        [32, 1],
-        [39, 2.2],
-        [40, 1.6],
-        [48, 2.4],
-        [55, 3.2],
-        [56, 1.6],
+        [16, 1.2],
+        [24, 1.6],
+        [31, 2.4],
+        [32, 1.2],
+        [39, 2.9],
+        [40, 2.1],
+        [48, 3.1],
+        [55, 4.2],
+        [56, 2],
         [63.75, 0.6],
       ],
       0.05,
@@ -494,23 +544,35 @@ export const coilDriver: DemoDefinition = {
         // Dub throws on phrase ends, a wetter break and a long tail; the
         // send is cut for the silent half bar.
         delayMixAutomation: lanes(
-          [0, 0.1],
-          [15.7, 0.1],
-          [15.75, 0.3],
-          [16.25, 0.1],
-          [31.7, 0.1],
-          [31.75, 0.34],
+          [0, 0.14],
+          [15.7, 0.14],
+          [15.75, 0.34],
+          [16.25, 0.14],
+          [31.7, 0.14],
+          [31.75, 0.36],
           [32, 0.24],
           [39.45, 0.2],
           [39.5, 0],
-          [40, 0.12],
-          [47.7, 0.12],
-          [47.75, 0.3],
-          [48.25, 0.12],
-          [61, 0.14],
+          [40, 0.16],
+          [47.7, 0.16],
+          [47.75, 0.34],
+          [48.25, 0.16],
+          [61, 0.16],
           [63, 0.42],
         ),
-        volumeAutomation: gate,
+        // Vacuum: the saw sits 3 dB back for its two bars of BREAK, rests
+        // while the chain is exposed, and comes back under the roll.
+        volumeAutomation: [
+          ...lanes(
+            [0, 1],
+            [31.9, 1],
+            [32, 0.65],
+            [35.9, 0.65],
+            [36, 0.8],
+            [38, 1],
+          ),
+          ...gate,
+        ],
         fxAutomation: {
           "synth-lpf": acidSweep.cutoff,
           "synth-lpq": resonance,
@@ -523,7 +585,11 @@ export const coilDriver: DemoDefinition = {
         fx: {
           ...orbit,
           crush: { bits: 16, coarse: 1, mix: 0 },
-          distort: { type: "diode", drive: 0.8, mix: 0.28, tone: 5200 },
+          distort: { type: "diode", drive: 0.8, mix: 0.42, tone: 5200 },
+          // A 9 ms second take on the other side: the saw stays the centre
+          // voice (the master folds everything under 120 Hz to mono) but
+          // its squelch spreads, which is where the width of the mix lives.
+          double: { time: 9, drift: 0.4, width: 0.7 },
         },
       }),
     );
@@ -533,18 +599,18 @@ export const coilDriver: DemoDefinition = {
       [
         [12, 360],
         [16, 520],
-        [20, 700],
-        [23.75, 1200],
-        [24, 650],
-        [28, 1000],
-        [31.75, 1800],
+        [20, 800],
+        [23.75, 1500],
+        [24, 800],
+        [28, 1300],
+        [31.75, 2300],
         [32, 300],
-        [40, 900],
-        [44, 1200],
-        [47.75, 1900],
-        [48, 1300],
-        [52, 2100],
-        [55.75, 3000],
+        [40, 1200],
+        [44, 1500],
+        [47.75, 2400],
+        [48, 1700],
+        [52, 2600],
+        [55.75, 3600],
         [56, 1500],
         [58, 600],
         [62, 300],
@@ -575,8 +641,8 @@ export const coilDriver: DemoDefinition = {
       SQUARE_ACCENT,
     );
     s.track(
-      voice("acid2", "Square circuit", "square", 0.5, {
-        pan: -0.3,
+      voice("acid2", "Square circuit", "square", 0.62, {
+        pan: -0.55,
         synth: {
           attack: 0.002,
           decay: 0.18,
@@ -602,14 +668,14 @@ export const coilDriver: DemoDefinition = {
           pingpong: true,
         },
         delayMixAutomation: lanes(
-          [0, 0.08],
-          [23.7, 0.08],
-          [23.75, 0.3],
-          [24.25, 0.1],
+          [0, 0.12],
+          [23.7, 0.12],
+          [23.75, 0.32],
+          [24.25, 0.12],
           [39.5, 0],
-          [40, 0.08],
-          [48, 0.14],
-          [56, 0.1],
+          [40, 0.12],
+          [48, 0.16],
+          [56, 0.12],
           [60, 0.3],
         ),
         volumeAutomation: gate,
@@ -638,7 +704,7 @@ export const coilDriver: DemoDefinition = {
           ...orbit,
           distort: { type: "diode", drive: 1.4, mix: 0.3, tone: 6000 },
           // Hardfloor-style: the second box swims in a slow stereo chorus.
-          chorus: { rate: 0.45, depth: 0.55, mix: 0.4 },
+          chorus: { rate: 0.45, depth: 0.7, mix: 0.55 },
         },
       }),
     );
@@ -662,7 +728,7 @@ export const coilDriver: DemoDefinition = {
     // climbs across the breakdown, the send and feedback are thrown every
     // two bars, and the last throw is cut dead for the silent half bar.
     s.track(
-      voice("stabs", "Dub coil", "supersaw", 0.4, {
+      voice("stabs", "Dub coil", "supersaw", 0.46, {
         pan: 0.14,
         synth: {
           attack: 0.004,
@@ -671,23 +737,24 @@ export const coilDriver: DemoDefinition = {
           release: 0.14,
           unison: 3,
           detune: 0.12,
-          spread: 0.6,
-          lpf: 3200,
+          spread: 1,
+          lpf: 4500,
           lpenv: 0.8,
           lpdecay: 0.2,
           hpf: 150,
         },
-        filter: { type: "lpf", cutoff: 900, resonance: 0.3 },
+        filter: { type: "lpf", cutoff: 1200, resonance: 0.3 },
         filterAutomation: lanes(
-          [0, 900],
-          [34, 1300],
-          [38, 2400],
-          [39.4, 3400],
-          [39.5, 900],
-          [48, 1500],
-          [55, 2600],
-          [56, 1200],
-          [62, 800],
+          [0, 1200],
+          [34, 1500],
+          [38, 2600],
+          [39.4, 3600],
+          [39.5, 2200],
+          [41, 1400],
+          [48, 2200],
+          [55, 3800],
+          [56, 1400],
+          [62, 900],
         ),
         delay: {
           beats: 0.75,
@@ -710,6 +777,9 @@ export const coilDriver: DemoDefinition = {
           [38.7, 0.54],
           [38.75, 0.86],
           [39.5, 0.4],
+          [39.99, 0.4],
+          [40, 0.7],
+          [41, 0.5],
           [48, 0.5],
           [55.4, 0.5],
           [55.5, 0.8],
@@ -731,7 +801,9 @@ export const coilDriver: DemoDefinition = {
           [38.75, 0.7],
           [39.45, 0.7],
           [39.5, 0],
-          [40, 0.2],
+          [39.99, 0],
+          [40, 0.62],
+          [40.75, 0.2],
           [55.4, 0.2],
           [55.5, 0.5],
           [56, 0.26],
@@ -744,17 +816,18 @@ export const coilDriver: DemoDefinition = {
       }),
     );
     s.track(
-      voice("rim", "Rim machine", "kit", 0.22, {
+      voice("rim", "Rim machine", "kit", 0.3, {
         kit: "syn808",
-        pan: -0.36,
+        pan: -0.5,
         delay: { beats: 0.75, feedback: 0.22, mix: 0.12, pingpong: true },
         humanize: { timing: 2, velocity: 5, seed: 41 },
+        fx: orbit,
       }),
     );
     s.track(
-      voice("bell", "Steel alarm", "modal", 0.13, {
+      voice("bell", "Steel alarm", "modal", 0.2, {
         modal: { preset: "crotales" },
-        pan: 0.36,
+        pan: 0.6,
         reverb: hall,
         delay: {
           beats: 0.75,
@@ -894,7 +967,7 @@ export const coilDriver: DemoDefinition = {
 
     // --- 909 parts ---------------------------------------------------------
     // The arc lives in the drums too: Ignition sits a few dB under Sparks.
-    const KICK_GAIN = [0.78, 0.9, 0.95, 1, 1, 1, 1, 0.92];
+    const KICK_GAIN = [0.78, 0.9, 0.95, 1, 1, 1, 1.06, 0.92];
     const kick = (bar: number, beats = 4, pickup = false) => {
       const shape = [0.97, 0.9, 0.94, 0.9];
       const gain = KICK_GAIN[Math.floor(bar / 8)]!;
@@ -905,7 +978,7 @@ export const coilDriver: DemoDefinition = {
           beat,
           36,
           0.3,
-          (shape[beat]! + jitter(0.015)) * gain,
+          Math.min(1, (shape[beat]! + jitter(0.015)) * gain),
         );
       if (pickup) s.note("kick", bar, 3.75, 36, 0.2, 0.6 * gain);
     };
@@ -932,7 +1005,7 @@ export const coilDriver: DemoDefinition = {
         // The bar leans into its last beat.
         const lean = 1 + (step >= 12 ? 0.06 : 0);
         if (open.includes(step)) {
-          s.note("hats", bar, beat, 46, 0.24, (0.6 + jitter(0.04)) * gain);
+          s.note("hats", bar, beat, 46, 0.24, (0.66 + jitter(0.04)) * gain);
           continue;
         }
         if (!opts.sixteenths && pos !== 2) continue;
@@ -962,8 +1035,13 @@ export const coilDriver: DemoDefinition = {
     };
     const crash = (bar: number, velocity = 0.78) =>
       s.note("hats", bar, 0, 49, 2, velocity);
-    const clap = (bar: number, gain = 1, snare = false) => {
-      for (const beat of [1, 3]) {
+    const clap = (
+      bar: number,
+      gain = 1,
+      snare = false,
+      beats: readonly number[] = [1, 3],
+    ) => {
+      for (const beat of beats) {
         const velocity = (beat === 1 ? 0.8 : 0.86) + jitter(0.03);
         s.note("drums", bar, beat + CLAP_LATE, 39, 0.2, velocity * gain);
         if (snare) s.note("drums", bar, beat, 38, 0.2, 0.42 * gain);
@@ -1059,7 +1137,8 @@ export const coilDriver: DemoDefinition = {
     const F_T = [56, 60, 65]; // Ab C F     plain triads for the bar of each
     const EB_T = [55, 58, 63]; // G Bb Eb   bass change: the held bell is
     const DB_T = [53, 56, 61]; // F Ab Db   the only 7th in the room until
-    const C_T = [52, 55, 60]; // E G C     it falls to the 6th
+    const C_T = [48, 55, 60]; // C G C     it falls to the 6th (an open
+    //                           fifth: the leading tone waits for bar 39)
     const F_6 = [53, 56, 61]; // F Ab Db   the 6/3 chords each resolution
     const EB_6 = [55, 60, 63]; // G C Eb    lands on: Db/F, Cm/Eb, Bbm/Db,
     const DB_6 = [53, 58, 61]; // F Bb Db   Ab/C, first inversions chained
@@ -1114,14 +1193,14 @@ export const coilDriver: DemoDefinition = {
         if (b === 38) hats(b, 0.6, { sixteenths: true });
         if (b === 39) hats(b, 0.7, { sixteenths: true, until: 8 });
       } else if (section === 5 || section === 6) {
-        hats(b, 1, {
+        hats(b, section === 6 ? 1.06 : 1, {
           sixteenths: true,
           afterCrash: crashBar,
           ...hatVar(b),
           ...(b === 47 ? { until: 12 } : {}),
         });
         if (section === 5 && b >= 44) ride8(b, 0.85, false);
-        if (section === 6) ride8(b, 0.95, true);
+        if (section === 6) ride8(b, 1.05, true);
       } else {
         if (b < 60)
           hats(b, 0.95, {
@@ -1136,7 +1215,12 @@ export const coilDriver: DemoDefinition = {
       // Clap, snare and fills.
       if (b === 7) s.note("drums", b, 3 + CLAP_LATE, 39, 0.2, 0.55);
       if ((b >= 8 && b < 32) || (b >= 40 && b < 60))
-        clap(b, b >= 56 ? 0.9 : 1, section === 6);
+        clap(
+          b,
+          b >= 56 ? 0.9 : section === 6 ? 1.1 : 1,
+          section === 6,
+          b === 23 ? [1] : [1, 3],
+        );
       if (b === 15) snareFill(b);
       if (b === 23) clapRepeat(b);
       if (b === 31) tomFill(b, 2);
@@ -1170,7 +1254,7 @@ export const coilDriver: DemoDefinition = {
 
       // Rim polymeter from Pressure, with a cowbell cell at the peak.
       if ((b >= 16 && b < 32) || (b >= 40 && b < 58))
-        rim(b, b >= 56 ? 0.75 : 1, section === 6);
+        rim(b, b >= 56 ? 0.75 : section === 6 ? 1.15 : 1, section === 6);
 
       // --- the two 303s ----------------------------------------------------
       if (b >= 4 && b < 8) play("acid", b, MURMUR, 0, 0.6);
@@ -1186,14 +1270,17 @@ export const coilDriver: DemoDefinition = {
       } else if (b >= 24 && b < 32) {
         // Sparks: the peak cell with a VI - VII lift over the sub pedal;
         // the square box chases its accents one beat late, an octave up.
-        const transpose = [0, 0, 0, 0, -4, -4, -2, 0][inSection]!;
-        const cell = b === 31 ? B_TURN : peakCell(b);
-        play("acid", b, cell, transpose);
+        // The lift is diatonic: the cell moves by scale steps onto VI and
+        // VII, so Db bars carry F and C, Eb bars G and Db.
+        const degrees = [0, 0, 0, 0, -2, -2, -1, 0][inSection]!;
+        const cell = diatonic(b === 31 ? B_TURN : peakCell(b), degrees);
+        // The beat repeat replaces the last half beat it re-fires.
+        play("acid", b, cell, 0, 0.64, 0, b === 31 ? 14 : 16);
         if (b >= 25 && b < 31)
-          play("acid2", b, shift(B_THIN, 4), transpose + 12, 0.5);
-        // Beat repeat fading into the break.
+          play("acid2", b, diatonic(shift(B_THIN, 4), degrees), 12, 0.5);
         if (b === 31) stutter("acid", b, cell, 0, 0.66, 0.3);
-      } else if (b >= 32 && b < 36) play("acid", b, BREAK, 0, 0.6);
+      } else if (b >= 32 && b < 34) play("acid", b, BREAK, 0, 0.6);
+      // 34-35: the saw rests while the chain is exposed over the new bass.
       else if (b >= 36 && b < 39) play("acid", b, b === 38 ? A2 : A, 0, 0.62);
       else if (b === 39) play("acid", b, A, 0, 0.64, 0, 8);
       else if (b >= 40 && b < 48) {
@@ -1201,24 +1288,27 @@ export const coilDriver: DemoDefinition = {
         if (inSection === 3 || inSection === 7) trade(b, cell, 0.66, false);
         else {
           play("acid", b, cell, 0, 0.66);
-          hocket(b, cell, 0.56);
+          // The drop lands something new: for two bars the square box
+          // doubles the saw an octave up, then the hocket resumes.
+          if (b < 42) play("acid2", b, cell, 12, 0.6);
+          else hocket(b, cell, 0.56);
         }
       } else if (b >= 48 && b < 56) {
         // Overdrive: i - VI - VII - i in two-bar steps, the square box
         // answering in the rests with a top line that walks up and down.
-        const transpose = [0, 0, -4, -4, -2, -2, 0, 0][inSection]!;
-        play("acid", b, peakCell(b), transpose, 0.66);
+        const degrees = [0, 0, -2, -2, -1, -1, 0, 0][inSection]!;
+        play("acid", b, diatonic(peakCell(b), degrees), 0, 0.7);
         play(
           "acid2",
           b,
-          b === 55 ? SQ_TOP : b % 2 ? SQ_DOWN : SQ_UP,
-          transpose,
+          diatonic(b === 55 ? SQ_TOP : b % 2 ? SQ_DOWN : SQ_UP, degrees),
+          0,
           0.6,
         );
-      } else if (b >= 56 && b < 62) {
+      } else if (b >= 56 && b < 59) {
         play("acid", b, mainCell(b), 0, 0.62);
         if (b < 58) hocket(b, mainCell(b), 0.44);
-      } else if (b === 62) play("acid", b, MURMUR, 0, 0.58);
+      } else if (b >= 59 && b < 63) play("acid", b, MURMUR, 0, 0.5);
       else if (b === 63)
         s.note("acid", b, 0, 41, 0.6, 0.62, { articulation: "accent" });
 
@@ -1239,9 +1329,10 @@ export const coilDriver: DemoDefinition = {
         }
       }
       // The breakdown walk: i VII VI V, each root slid into from the last.
-      if (b === 32) sub(b, 0, 29, 8.1, 0.62);
-      if (b === 34) sub(b, 0, 27, 8.1, 0.62, 0.12);
-      if (b === 36) sub(b, 0, 25, 8.1, 0.64, 0.12);
+      // The sub is out for the first two bars (the saw's BREAK holds the F)
+      // and arrives quietly with the Eb the first suspension falls onto.
+      if (b === 34) sub(b, 0, 27, 8.1, 0.44, 0.12);
+      if (b === 36) sub(b, 0, 25, 8.1, 0.56, 0.12);
       if (b === 38) sub(b, 0, 24, 6, 0.66, 0.12);
       if (b === 56) sub(b, 0, 29, 16, 0.5);
       if (b === 60) sub(b, 0, 29, 15.9, 0.48);
@@ -1295,20 +1386,24 @@ export const coilDriver: DemoDefinition = {
       // last 4-3 over the pedal: bar 59's late stab strikes the sus4 and
       // its Bb rings across the barline over a bare fifth, falls to Ab on
       // beat 2, and bar 61 confirms the minor third.
-      if (b === 48) stab(b, 0.75, FM, 0.6);
-      if (b === 50) stab(b, 0.75, VI, 0.62);
-      if (b === 52) stab(b, 0.75, VII, 0.64);
-      if (b === 54) stab(b, 0.75, FM, 0.6);
-      if (b === 55) stab(b, 2.5, FM, 0.66, 0.26);
+      // The drop: one stab dead on the downbeat, thrown into the delay.
+      if (b === 40) stab(b, 0, FM, 0.74, 0.5);
+      if (b === 48) stab(b, 0.75, FM, 0.66);
+      if (b === 50) stab(b, 0.75, VI, 0.68);
+      if (b === 52) stab(b, 0.75, VII, 0.7);
+      if (b === 54) stab(b, 0.75, FM, 0.66);
+      if (b === 55) stab(b, 2.5, FM, 0.72, 0.26);
       if (b === 59) {
-        stab(b, 2.5, FSUS, 0.5, 0.9);
-        s.note("stabs", b, 2.515, 58, 2.25, 0.54);
+        stab(b, 2.5, FSUS, 0.6, 0.9);
+        s.note("stabs", b, 2.515, 58, 2.25, 0.64);
       }
       if (b === 60) {
-        stab(b, 0.5, [53, 60, 65], 0.48, 1);
-        s.note("stabs", b, 0.75, 56, 1.5, 0.5);
+        stab(b, 0.5, [53, 60, 65], 0.58, 1);
+        s.note("stabs", b, 0.75, 56, 1.5, 0.6);
       }
-      if (b === 61) stab(b, 0.75, [56, 60, 65], 0.52, 0.8);
+      if (b === 61) stab(b, 0.75, [56, 60, 65], 0.6, 0.8);
+      // The tail: a root-position Fm left ringing under the last bell.
+      if (b === 62) stab(b, 0.5, [53, 56, 60], 0.46, 2.5);
 
       // Steel alarm: a call, its repeat, then an answer that climbs; in the
       // breakdown it is the voice that holds the 7-6 chain.
@@ -1359,11 +1454,14 @@ export const coilDriver: DemoDefinition = {
             : [
                 [0, 77 + (bellRoot === -2 ? 2 : 0), 1.6, 0.5],
                 [1.5, 75, 0.6, 0.38],
-                [2.25, 72 + bellRoot, 1.5, 0.46],
+                // Over Db the answer lands on C (its seventh), over Eb on
+                // Db: never the fifth the square box accents at the same
+                // tick.
+                [2.25, bellRoot === -2 ? 73 : 72, 1.5, 0.46],
               ],
         );
       if (b === 58) s.note("bell", b, 0, 77, 2, 0.34);
-      if (b === 63) s.note("bell", b, 0, 72, 3.5, 0.36);
+      if (b === 63) s.note("bell", b, 0, 77, 3.5, 0.36);
 
       // Noise: risers into sections, downlifters out of the peaks.
       if ([15, 23, 47].includes(b)) s.note("noise", b, 0, 72, 3.95, 0.7);
