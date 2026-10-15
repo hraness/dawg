@@ -243,7 +243,7 @@ export const nightRelay: DemoDefinition = {
     mixNotes: [
       "Kick and FM sub stay centred and dry; the sub, pad and chord echoes yield to the kick's bus trigger.",
       "Chord stabs feed a dotted-eighth ping-pong delay whose cutoff, feedback and mix are ridden by hand, with throws into Air, Crest and Dissolve.",
-      "Open hats sit right, closed hats and rim left, each with short echoes; pink tape hiss and a granular pad form the back layer.",
+      "Open hats sit right with a short echo, closed hats and rim sit left; pink tape hiss and a granular pad form the back layer, loudest where the drums drop out.",
     ],
   }),
   build() {
@@ -267,7 +267,7 @@ export const nightRelay: DemoDefinition = {
       }),
     );
     s.track(
-      voice("ticks", "Closed hats", "kit", 0.3, {
+      voice("ticks", "Closed hats", "kit", 0.7, {
         kit: "syn909",
         pan: -0.32,
         humanize: { timing: 4, velocity: 5, seed: 42 },
@@ -418,7 +418,8 @@ export const nightRelay: DemoDefinition = {
           "synth-gain": lanes(
             [0, 1.9],
             [7.75, 1.6],
-            [8, 1],
+            [8, 1.3],
+            [12, 1],
             [31.75, 1],
             [32, 1.3],
             [39.75, 1.2],
@@ -442,7 +443,7 @@ export const nightRelay: DemoDefinition = {
       }),
     );
     s.track(
-      voice("metal", "Metal reply", "sampler", 0.27, {
+      voice("metal", "Metal reply", "sampler", 0.85, {
         pan: 0.42,
         sampler: {
           mode: "keyed",
@@ -457,7 +458,7 @@ export const nightRelay: DemoDefinition = {
       }),
     );
     s.track(
-      voice("air", "Soft horizon", "granular", 0.2, {
+      voice("air", "Soft horizon", "granular", 0.36, {
         granular: {
           src: "synth:pad",
           grain: 0.14,
@@ -469,13 +470,13 @@ export const nightRelay: DemoDefinition = {
         filter: { cutoff: 200, resonance: 0, type: "hpf" },
         reverb: hall,
         volumeAutomation: lanes(
-          [0, 0.62],
-          [6, 0.52],
+          [0, 0.42],
+          [6, 0.36],
           [8, 0.2],
           [24, 0.22],
           [31.5, 0.22],
-          [32, 0.42],
-          [39.5, 0.5],
+          [32, 0.32],
+          [39.5, 0.42],
           [40, 0.2],
           [55, 0.24],
           [56, 0.34],
@@ -490,13 +491,13 @@ export const nightRelay: DemoDefinition = {
         synth: { attack: 0.8, sustain: 1, release: 2 },
         filter: { cutoff: 2400, resonance: 0, type: "hpf" },
         volumeAutomation: lanes(
-          [0, 0.26],
-          [7, 0.2],
-          [8, 0.1],
-          [31, 0.1],
-          [32, 0.17],
-          [40, 0.09],
-          [56, 0.12],
+          [0, 0.36],
+          [7, 0.28],
+          [8, 0.14],
+          [31, 0.14],
+          [32, 0.24],
+          [40, 0.13],
+          [56, 0.18],
           [63.9, 0],
         ),
       }),
@@ -581,13 +582,13 @@ export const nightRelay: DemoDefinition = {
         }
       }
       const rimFill: Record<number, readonly (readonly [number, number])[]> = {
-        1: [[3.75, 0.3]],
-        3: [[3.75, 0.34]],
-        5: [[3.75, 0.32]],
-        6: [[2.75, 0.3]],
+        1: [[3.75, 0.42]],
+        3: [[3.75, 0.46]],
+        5: [[3.75, 0.44]],
+        6: [[2.75, 0.4]],
         7: [
-          [1.75, 0.28],
-          [3.25, 0.34],
+          [1.75, 0.38],
+          [3.25, 0.46],
         ],
         15: [
           [3.25, 0.38],
@@ -653,15 +654,15 @@ export const nightRelay: DemoDefinition = {
       if (inside(b, 16, 32) || inside(b, 40, 58)) {
         const gain = name === "Crest" ? 1.1 : name === "Dissolve" ? 0.8 : 1;
         if (b % 2 === 0) {
-          s.note("metal", b, 0.75, high, 0.3, 0.5 * gain);
-          s.note("metal", b, 2.5 + ms(6), low, 0.25, 0.38 * gain);
+          s.note("metal", b, 0.75, high, 0.3, 0.58 * gain);
+          s.note("metal", b, 2.5 + ms(6), low, 0.25, 0.46 * gain);
         } else {
-          s.note("metal", b, 1.25, reply, 0.22, 0.42 * gain);
+          s.note("metal", b, 1.25, reply, 0.22, 0.5 * gain);
           if (b % 4 === 3 || name === "Crest")
-            s.note("metal", b, 3.25, tail, 0.2, 0.34 * gain);
+            s.note("metal", b, 3.25, tail, 0.2, 0.4 * gain);
         }
       } else if (b === 33 || b === 35 || b === 37) {
-        s.note("metal", b, 1.5, high, 0.5, 0.42);
+        s.note("metal", b, 1.5, high, 0.5, 0.5);
       }
 
       // Pad and hiss: the back layer that slips in and melts away.
