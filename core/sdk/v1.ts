@@ -1167,7 +1167,7 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
       grid("snare", ".......x........" + ".......x.....x..", {
         velocity: 0.3,
       }),
-      grid("hat", "XxXxXxXxXxXxXxXx", { velocity: 0.28, accent: 0.4 }),
+      grid("hat", "XxXxXxXxXxXxXxXx", { velocity: 0.36, accent: 0.4 }),
     ],
   ),
   // Afro-Cuban bembe in 12/8 (each beat three triplet 8ths): the seven-
@@ -1185,7 +1185,7 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
     [
       grid("cowbell", "X.x.xx.x.x.x", {
         division: "1/8t",
-        velocity: 0.55,
+        velocity: 0.62,
         accent: 0.3,
       }),
       grid("kick", "X..x..X..x..", {
@@ -1259,8 +1259,9 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
   ),
   // Bossa nova at a true 8th-note pulse (the clave spans two bars): the
   // cross-stick bossa clave (3-2), the feet's surdo figure (1 and 3 with
-  // soft pickups on the "and"s of 2 and 4), and straight 8th hats with the
-  // quarter notes leaning forward.
+  // soft pickups on the "and"s of 2 and 4), straight 8th hats with the
+  // quarter notes leaning forward, and a soft snare pickup with the kick
+  // on the "and" of 4 closing the four-bar phrase.
   drumPattern(
     "bossa-nova",
     "Bossa nova",
@@ -1271,14 +1272,22 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
     [
       grid("kick", "X..xX..x", {
         division: "1/8",
-        velocity: 0.5,
+        velocity: 0.56,
         accent: 0.35,
       }),
-      grid("rim", "x..x..x...x..x..", { division: "1/8", velocity: 0.55 }),
+      grid("rim", "X..x..x...x..x..", {
+        division: "1/8",
+        velocity: 0.64,
+        accent: 0.3,
+      }),
       grid("hat", "XxXxXxXx", {
         division: "1/8",
-        velocity: 0.28,
+        velocity: 0.34,
         accent: 0.35,
+      }),
+      grid("snare", "-".repeat(24) + "......gx", {
+        division: "1/8",
+        velocity: 0.42,
       }),
     ],
     { timing: 6, velocity: 7 },
@@ -1558,7 +1567,7 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
       grid(
         "ride",
         "X..X.xX..X.x" + "X..X.xX..X.x" + "X..X.xX.xX.x" + "X..X.xX..X..",
-        { division: "1/8t", velocity: 0.5, accent: 0.5 },
+        { division: "1/8t", velocity: 0.56, accent: 0.5 },
       ),
       grid("hat", "...x.....x..".repeat(4), {
         division: "1/8t",
@@ -1582,6 +1591,11 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
     { timing: 8, velocity: 10 },
   ),
   // Generative.
+  // Euclidean polymeter: a 5-in-16 kick and a 2-in-16 backbeat anchor the
+  // bar while a 7-in-12 hat (three beats long) and a 4-in-10 rim with
+  // seeded drop-outs drift against it, meeting the downbeat again only
+  // every 15 bars. Per-pass cycles turn bar 4 around: the kick grows to 6
+  // in 16 and the snare answers 3 in 16 (2, the "e" of 3, the "and" of 4).
   drumPattern(
     "euclid-poly",
     "Euclidean polymeter",
@@ -1590,8 +1604,16 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
     "electro",
     0,
     [
-      euclid("kick", 5, 16),
-      euclid("snare", 3, 8, 2, { velocity: 0.7 }),
+      euclid("kick", 5, 16, 0, {
+        velocity: 0.7,
+        accent: 0.5,
+        accents: 2,
+        cycles: [{}, {}, {}, { pulses: 6 }],
+      }),
+      euclid("snare", 2, 16, 4, {
+        velocity: 0.8,
+        cycles: [{}, {}, {}, { pulses: 3 }],
+      }),
       euclid("hat", 7, 12, 0, { velocity: 0.45, accent: 0.5, accents: 3 }),
       euclid("rim", 4, 10, 1, { velocity: 0.5, probability: 0.8, seed: 21 }),
     ],
