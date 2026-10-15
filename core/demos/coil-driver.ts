@@ -145,6 +145,54 @@ function ride(
   return out;
 }
 
+/**
+ * The highest a note's filter envelope may sweep, in Hz. A real 303 never
+ * opens past a few kilohertz, and the engine's ladder rings at the Nyquist
+ * frequency once a resonant sweep passes about 12 kHz, which wastes the
+ * headroom on a whistle nobody can hear.
+ */
+const PEAK_HZ = 8000;
+/** Octaves an accent adds to each 303's filter sweep (`faccent`). */
+const ACID_ACCENT = 1.5;
+const SQUARE_ACCENT = 1.2;
+
+/** A lane's value at `tick`, joining points with straight lines. */
+function laneAt(points: readonly AutomationPoint[], tick: number): number {
+  const after = points.findIndex((point) => point.tick >= tick);
+  if (after < 0) return points[points.length - 1]!.value;
+  const right = points[after]!;
+  const left = points[after - 1];
+  if (!left || right.tick === left.tick) return right.value;
+  return (
+    left.value +
+    ((right.value - left.value) * (tick - left.tick)) / (right.tick - left.tick)
+  );
+}
+
+/**
+ * Turn the env mod down wherever cutoff × 2^(env mod + accent) would sweep an
+ * accented note past `PEAK_HZ`, the way the knob runs out of travel.
+ */
+function capEnvMod(
+  envMod: readonly AutomationPoint[],
+  cutoff: readonly AutomationPoint[],
+  accent: number,
+): AutomationPoint[] {
+  const ticks = [...new Set([...envMod, ...cutoff].map((p) => p.tick))].sort(
+    (a, b) => a - b,
+  );
+  return ticks.map((tick) => ({
+    tick,
+    value: Math.max(
+      0,
+      Math.min(
+        laneAt(envMod, tick),
+        Math.log2(PEAK_HZ / laneAt(cutoff, tick)) - accent,
+      ),
+    ),
+  }));
+}
+
 export const coilDriver: DemoDefinition = {
   info: demoInfo({
     id: "coil-driver",
@@ -347,7 +395,7 @@ export const coilDriver: DemoDefinition = {
       10,
     );
     s.track(
-      voice("acid", "Acid circuit", "saw", 0.4, {
+      voice("acid", "Acid circuit", "saw", 0.9, {
         synth: {
           attack: 0.002,
           decay: 0.2,
@@ -359,7 +407,7 @@ export const coilDriver: DemoDefinition = {
           lpdecay: 0.18,
           lpsustain: 0,
           ftype: "ladder",
-          faccent: 1.5,
+          faccent: ACID_ACCENT,
         },
         glide: { time: SLIDE, mode: "legato" },
         filter: { type: "hpf", cutoff: 45, resonance: 0.4 },
@@ -391,7 +439,7 @@ export const coilDriver: DemoDefinition = {
         fxAutomation: {
           "synth-lpf": cutoff,
           "synth-lpq": resonance,
-          "synth-lpenv": envMod,
+          "synth-lpenv": capEnvMod(envMod, cutoff, ACID_ACCENT),
           "synth-lpdecay": decay,
           "distort-drive": drive,
         },
@@ -401,8 +449,23 @@ export const coilDriver: DemoDefinition = {
         },
       }),
     );
+    const squareCutoff = ride(
+      [
+        [44, 480],
+        [47.75, 1400],
+        [48, 1100],
+        [52, 1900],
+        [55.75, 2800],
+        [56, 1500],
+        [58, 420],
+      ],
+      0.07,
+      2.7,
+      60,
+      9000,
+    );
     s.track(
-      voice("acid2", "Square circuit", "square", 0.2, {
+      voice("acid2", "Square circuit", "square", 0.42, {
         pan: -0.24,
         synth: {
           attack: 0.002,
@@ -415,7 +478,7 @@ export const coilDriver: DemoDefinition = {
           lpdecay: 0.16,
           lpsustain: 0,
           ftype: "ladder",
-          faccent: 1.2,
+          faccent: SQUARE_ACCENT,
         },
         glide: { time: SLIDE, mode: "legato" },
         filter: { type: "hpf", cutoff: 220, resonance: 0.3 },
@@ -427,20 +490,11 @@ export const coilDriver: DemoDefinition = {
           pingpong: true,
         },
         fxAutomation: {
-          "synth-lpf": ride(
-            [
-              [44, 480],
-              [47.75, 1400],
-              [48, 1100],
-              [52, 1900],
-              [55.75, 2800],
-              [56, 1500],
-              [58, 420],
-            ],
-            0.07,
-            2.7,
-            60,
-            9000,
+          "synth-lpf": squareCutoff,
+          "synth-lpenv": capEnvMod(
+            [{ tick: 0, value: 3 }],
+            squareCutoff,
+            SQUARE_ACCENT,
           ),
           "synth-lpq": ride(
             [
