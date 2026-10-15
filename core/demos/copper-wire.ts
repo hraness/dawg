@@ -1143,6 +1143,17 @@ export const copperWire: DemoDefinition = {
       if (b === 4 || b === 40 || b === 44)
         s.note("glass", b, 0, b === 44 ? 76 : 83, 0.5, 0.38);
       if (b === 79) s.note("glass", b, 0, 83, 1, 0.32);
+      // Glass pings an octave over the pad top line into each chord of the
+      // motor's second half and the half-time turn, where the vocal is alone.
+      if (((b >= 15 && b < 23) || (b >= 33 && b < 39)) && b % 2 === 1)
+        s.note(
+          "glass",
+          b,
+          3.5,
+          ({ e: 78, c: 79, a: 81, bm: 78, b7: 76 } as const)[chordAt(b + 1)],
+          1,
+          0.3,
+        );
       if ([7, 23, 31, 39, 63, 71].includes(b))
         s.note("rise", b, 0, 60, 3.9, 0.6);
       if (b === 46) s.note("rise", b, 0, 60, 6.9, 0.62);
