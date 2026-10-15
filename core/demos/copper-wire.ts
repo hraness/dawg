@@ -184,6 +184,31 @@ const LINE: Record<number, Phrase> = {
     [4, 71, 3, 0.5],
   ],
 };
+/** At the peak the line climbs past its breakdown shape and lands on F sharp. */
+const LINE_PEAK: Record<number, Phrase> = {
+  0: [
+    [0, 71, 4, 0.5],
+    [4, 74, 4, 0.52],
+  ],
+  2: [
+    [0, 76, 5.5, 0.56],
+    [5.5, 79, 2.5, 0.6],
+  ],
+  4: [
+    [0, 78, 2, 0.6],
+    [2, 76, 6, 0.54],
+  ],
+  6: [
+    [0, 75, 4, 0.54],
+    [4, 78, 3.5, 0.58],
+  ],
+};
+/** The motor's sub leaves room: root, a re-struck root, then the pickup. */
+const sparse = (phrase: Phrase): Phrase => [
+  [0, phrase[0]![1], 3, 0.84],
+  [4.5, phrase[0]![1], 1.25, 0.72],
+  phrase[phrase.length - 1]!,
+];
 const DIVE = [
   { at: 0, cents: 0 },
   { at: 0.4, cents: 0 },
@@ -261,8 +286,9 @@ export const copperWire: DemoDefinition = {
           [44, 700],
           [47.5, 220],
           [48, 40],
-          [72, 40],
-          [79, 1800],
+          [76, 40],
+          [77.9, 700],
+          [78, 40],
         ),
         reverb: { mix: 0.07, size: 0.22, fade: 0.5 },
         humanize: { timing: 3, velocity: 6, seed: 170 },
@@ -278,6 +304,8 @@ export const copperWire: DemoDefinition = {
       preset("sub", "Sub weight", "sub-sine", 0.5, {
         fx: orbit,
         glide: { time: 0.07, mode: "legato" },
+        // The last low E fades under the strings instead of stopping.
+        volumeAutomation: lanes([78, 1], [79.7, 0.15]),
       }),
     );
     s.track(
@@ -300,7 +328,15 @@ export const copperWire: DemoDefinition = {
           [72, 1800],
           [79, 300],
         ),
-        volumeAutomation: lanes([71.9, 1], [79, 0.35]),
+        // The reese creeps in under the vacuum and opens for the drop.
+        volumeAutomation: lanes(
+          [43.9, 1],
+          [44, 0.45],
+          [47.75, 0.85],
+          [48, 1],
+          [71.9, 1],
+          [79, 0.35],
+        ),
       }),
     );
     s.track(
@@ -327,6 +363,7 @@ export const copperWire: DemoDefinition = {
         delay: { beats: 0.75, feedback: 0.38, mix: 0.26, pingpong: true },
         reverb: room,
         fx: orbit,
+        humanize: { timing: 6, velocity: 9, seed: 31 },
       }),
     );
     s.track(
@@ -359,6 +396,7 @@ export const copperWire: DemoDefinition = {
           voices: { glass: bundledSampleRef("glass-hit") },
         },
         delay: { beats: 0.75, feedback: 0.32, mix: 0.2, pingpong: true },
+        humanize: { timing: 4, velocity: 12, seed: 7 },
       }),
     );
     s.track(
@@ -473,9 +511,11 @@ export const copperWire: DemoDefinition = {
         }
       } else if (b < 24) {
         const name = b === 19 ? "r" : (["a", "a", "c", "d"] as const)[b % 4]!;
+        // The raw break carries the first eight bars; the machine kick locks
+        // in with the reese at bar 16.
         drums(b, name, 1, {
           ride: 1,
-          machine: 0.85,
+          machine: b >= 16 ? 0.85 : 0,
           until: b === 15 ? 3 : b === 23 ? 2 : 4,
         });
         if (b === 15) roll(15, 3, 4, 0.25, 0.4, 0.75);
@@ -538,7 +578,14 @@ export const copperWire: DemoDefinition = {
         drums(b, (["a", "c", "t", "d"] as const)[b % 4]!, b < 76 ? 0.9 : 0.7, {
           ride: 0.9,
           machine: b < 76 ? 0.7 : 0,
+          until: b === 77 ? 3 : 4,
         });
+        if (b === 77) roll(77, 3, 4, 0.125, 0.3, 0.72);
+      } else if (b === 78) {
+        // The last word: kick, crash and the low E, then everything rings out.
+        s.note("break", b, 0, 36, 0.25, 0.86);
+        s.note("break", b, 0, 49, 2, 0.58);
+        s.note("kick", b, 0, 36, 0.25, 0.8);
       }
       if ([8, 24, 48, 52, 64, 68].includes(b))
         s.note("break", b, 0, 49, 1, 0.62);
@@ -563,6 +610,13 @@ export const copperWire: DemoDefinition = {
               vibrato: { rate: 5.2, depth: 14, delay: 0.5 },
             });
         }
+        if (b >= 64 && b < 72)
+          for (const [beat, pitch, length, velocity = 0.5] of LINE_PEAK[
+            b - 64
+          ]!)
+            s.note("pad", b, beat, pitch, length, velocity, {
+              vibrato: { rate: 5.4, depth: 16, delay: 0.4 },
+            });
         if (b >= 72) {
           const line: Phrase =
             b === 78
@@ -576,13 +630,14 @@ export const copperWire: DemoDefinition = {
               vibrato: { rate: 5.2, depth: 12, delay: 0.5 },
             });
         }
-        // Sub: half-speed roots that glide on. The vacuum drops it for four
-        // bars so the strings carry; the coast holds roots and lets go.
-        if (b >= 44 && b < 48)
-          s.note("sub", b, 0, SUB[chord][0]![1], cut ? 7 : 7.8, 0.66);
-        else if (b >= 72 && b < 78)
+        // Sub: half-speed roots that glide on, sparse for the first eight
+        // bars of the motor. The whole vacuum goes without it so the drop
+        // brings it back; the coast holds roots, then one last low E.
+        if (b >= 72 && b < 78)
           s.note("sub", b, 0, SUB[chord][0]![1], b === 76 ? 7.2 : 7.8, 0.76);
-        else if (b >= 8 && b < 72 && (b < 40 || b >= 48))
+        else if (b === 78) s.note("sub", b, 0, 28, 7.6, 0.8);
+        else if (b >= 8 && b < 16) s.phrase("sub", b, sparse(SUB[chord]));
+        else if (b >= 16 && b < 72 && (b < 40 || b >= 48))
           s.phrase("sub", b, SUB[chord]);
         // Reese from the second half of the motor on.
         if ((b >= 16 && b < 40) || (b >= 52 && b < 72))
@@ -620,11 +675,13 @@ export const copperWire: DemoDefinition = {
           );
         else if (b >= 72 && b < 78)
           s.note("bass", b, 0, REESE[chord][0]![1], b === 76 ? 7.2 : 7.8, 0.66);
+        else if (b === 78) s.note("bass", b, 0, 40, 5, 0.6);
         // Rhodes stabs behind the beat; held chords in the vacuum.
         if ((b >= 24 && b < 38) || (b >= 52 && b < 76)) {
           strum("keys", b, 1.5, KEYS[chord], 0.45, 0.5);
           strum("keys", b, 4.75, KEYS[chord], 0.4, 0.42);
-        } else if (b >= 40 && b < 46) strum("keys", b, 0.5, KEYS[chord], 3, 0.36);
+        } else if (b >= 40 && b < 46)
+          strum("keys", b, 0.5, KEYS[chord], 3, 0.36);
       }
 
       // Vocal call, glass answer; stutters in the second half.
@@ -654,7 +711,8 @@ export const copperWire: DemoDefinition = {
       if (b === 47)
         for (let i = 0; i < 8; i++)
           s.note("chop", 47, 1.5 + i / 8, 64, 0.1, 0.36 + i * 0.05);
-      if (b === 73 || b === 77) s.note("chop", b, 1.5, b === 73 ? 64 : 67, 1.6, 0.42);
+      if (b === 73 || b === 77)
+        s.note("chop", b, 1.5, b === 73 ? 64 : 67, 1.6, 0.42);
       if (b === 4 || b === 40 || b === 44)
         s.note("glass", b, 0, b === 44 ? 76 : 83, 0.5, 0.38);
       if (b === 79) s.note("glass", b, 0, 83, 1, 0.32);
