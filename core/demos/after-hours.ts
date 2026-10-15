@@ -69,24 +69,49 @@ export const afterHours: DemoDefinition = {
       }),
     );
     s.track(
-      voice("drums", "Clap & hats", "kit", 0.5, {
+      voice("drums", "Clap & hats", "kit", 0.54, {
         kit: "syn909",
         reverb: { mix: 0.035, size: 0.18, fade: 0.45 },
         humanize: { timing: 3, velocity: 6, seed: 7 },
+        // Hats and claps lean in a little more with every section (the
+        // lane scales the track volume).
+        volumeAutomation: lanes(
+          [0, 0.86],
+          [8, 0.86],
+          [16, 0.93],
+          [24, 0.96],
+          [32, 0.93],
+          [40, 0.93],
+          [48, 1],
+          [56, 0.93],
+          [63, 0.86],
+        ),
       }),
     );
     s.track(
-      voice("percussion", "Shaker & rim", "kit", 0.42, {
+      voice("percussion", "Shaker & rim", "kit", 0.46, {
         kit: "acoustic",
-        pan: 0.27,
+        pan: 0.36,
         reverb: { mix: 0.05, size: 0.24, fade: 0.6 },
         humanize: { timing: 4, velocity: 10, seed: 5 },
+        // The shaker carries the motion through Low lights.
+        volumeAutomation: lanes(
+          [0, 0.8],
+          [8, 0.83],
+          [16, 0.9],
+          [32, 0.97],
+          [39, 1],
+          [40, 0.9],
+          [48, 0.97],
+          [56, 0.9],
+          [63, 0.8],
+        ),
       }),
     );
     // Congas: a near-harmonic hand drum tuned to the tonic and fifth, damped
     // at note-off so short strokes are muted and open tones ring.
     s.track(
-      voice("hands", "Congas", "tabla", 0.36, {
+      voice("hands", "Congas", "tabla", 0.4, {
         modal: {
           preset: "tabla",
           ring: 0.45,
@@ -99,20 +124,53 @@ export const afterHours: DemoDefinition = {
           release: 0.07,
           gain: 2,
         },
-        pan: -0.26,
+        pan: -0.34,
         reverb: { mix: 0.07, size: 0.3, fade: 0.8 },
         humanize: { timing: 5, velocity: 7, seed: 11 },
+        volumeAutomation: lanes(
+          [0, 0.82],
+          [8, 0.86],
+          [16, 0.9],
+          [48, 1],
+          [56, 0.9],
+        ),
       }),
     );
     s.track(
       preset("bass", "Elastic bass", "pluck-bass", 0.55, {
         fx: orbit,
         filter: { cutoff: 1500, resonance: 0.16 },
+        volumeAutomation: lanes(
+          [0, 0.88],
+          [8, 0.88],
+          [16, 0.94],
+          [24, 0.97],
+          [32, 0.9],
+          [40, 0.94],
+          [48, 1],
+          [56, 0.94],
+          [63, 0.88],
+        ),
+        // One long filter ride: dark in the first groove, opening through the
+        // refrains, a murmur under Low lights, widest in Open windows.
+        filterAutomation: lanes(
+          [0, 700],
+          [8, 750],
+          [16, 1100],
+          [31, 1500],
+          [32, 450],
+          [39, 900],
+          [40, 1300],
+          [48, 1700],
+          [55, 1900],
+          [56, 1400],
+          [63, 700],
+        ),
       }),
     );
     s.track(
       voice("keys", "Late Rhodes", "rhodes", 0.47, {
-        pan: -0.13,
+        pan: -0.16,
         reverb: room,
         fx: orbit,
         filterAutomation: lanes(
@@ -129,7 +187,8 @@ export const afterHours: DemoDefinition = {
     );
     s.track(
       preset("organ", "Round organ", "jazz-organ", 0.28, {
-        pan: 0.2,
+        pan: 0.3,
+        humanize: { timing: 4, velocity: 6, seed: 17 },
         filter: { type: "hpf", cutoff: 210, resonance: 0 },
         delay: { beats: 0.75, feedback: 0.17, mix: 0.11 },
         reverb: room,
@@ -154,17 +213,88 @@ export const afterHours: DemoDefinition = {
         pan: 0.07,
         delay: { beats: 1.5, feedback: 0.29, mix: 0.2, pingpong: true },
         reverb: room,
+        humanize: { timing: 6, velocity: 5, seed: 13 },
+        // Delay throws: the last chop before the break, the lone breakdown
+        // call and the last word of the outro echo out.
+        delayMixAutomation: lanes(
+          [0, 0.2],
+          [30.6, 0.2],
+          [30.65, 0.42],
+          [32.9, 0.42],
+          [33, 0.2],
+          [36.1, 0.2],
+          [36.2, 0.45],
+          [38.9, 0.45],
+          [39, 0.2],
+          [58.1, 0.2],
+          [58.2, 0.45],
+        ),
+        delayFeedbackAutomation: lanes(
+          [0, 0.29],
+          [30.6, 0.29],
+          [30.65, 0.5],
+          [32.9, 0.5],
+          [33, 0.29],
+          [36.1, 0.29],
+          [36.2, 0.52],
+          [38.9, 0.52],
+          [39, 0.29],
+          [58.1, 0.29],
+          [58.2, 0.5],
+        ),
       }),
     );
     s.track(
-      preset("air", "Soft ceiling", "choir-pad", 0.13, {
+      preset("air", "Soft ceiling", "choir-pad", 0.17, {
         filter: { type: "hpf", cutoff: 500, resonance: 0 },
         reverb: hall,
         fx: orbit,
+        // The pad steps forward when the kick leaves.
+        volumeAutomation: lanes(
+          [0, 0.72],
+          [31, 0.76],
+          [32, 1],
+          [39, 1],
+          [40, 0.76],
+          [56, 0.76],
+          [63, 0.88],
+        ),
       }),
     );
     s.track(
-      voice("bell", "Window chime", "vibes", 0.18, { pan: 0.31, reverb: hall }),
+      voice("bell", "Window chime", "vibes", 0.18, { pan: 0.38, reverb: hall }),
+    );
+    // Filtered noise swells into the groove, the return and the top refrain.
+    s.track(
+      voice("swell", "Tape swell", "white", 0.06, {
+        filter: { cutoff: 800, resonance: 0.35 },
+        reverb: hall,
+        filterAutomation: lanes(
+          [0, 600],
+          [6, 600],
+          [8, 6000],
+          [36, 500],
+          [39.875, 9000],
+          [46, 600],
+          [48, 8000],
+        ),
+        volumeAutomation: lanes(
+          [0, 0],
+          [6, 0],
+          [7, 0.15],
+          [7.75, 0.4],
+          [8, 0],
+          [36, 0],
+          [37.5, 0.18],
+          [39, 0.55],
+          [39.85, 1],
+          [39.875, 0],
+          [46, 0],
+          [47, 0.22],
+          [47.75, 0.65],
+          [48, 0],
+        ),
+      }),
     );
     const roots = [26, 31, 36, 33],
       chords = [
@@ -174,57 +304,23 @@ export const afterHours: DemoDefinition = {
         [55, 58, 61, 64],
       ];
     for (let b = 0; b < 64; b++) {
-      const middle = b >= 32 && b < 40,
-        outro = b >= 56,
-        c = outro ? 0 : Math.floor(b / 2) % 4,
-        chord = chords[c]!,
-        root = roots[c]!;
+      const c = b >= 56 ? 0 : Math.floor(b / 2) % 4;
       drums(s, b);
       shakerAndRim(s, b);
       congas(s, b);
       if (b % 2 === 0) {
         bassSpan(s, b, c, roots);
         keysSpan(s, b, c, chords);
-      }
+        padSpan(s, b, c);
+      } else organSpan(s, b, c, chords);
       if (((b >= 16 && b < 24) || (b >= 40 && b < 56)) && b % 4 === 0)
         refrain(s, b);
-      if (((b >= 24 && b < 32) || (b >= 44 && b < 56)) && b % 2 === 1) {
-        s.chord(
-          "organ",
-          b,
-          1.27,
-          chord.slice(0, 3).map((n) => n + 12),
-          0.31,
-          0.59,
-        );
-        s.chord(
-          "organ",
-          b,
-          3.28,
-          chord.slice(0, 3).map((n) => n + 12),
-          0.39,
-          0.52,
-        );
-      }
-      if (((b >= 16 && b < 32) || (b >= 40 && b < 56)) && b % 4 === 2) {
-        s.note("vocal", b, 0.75, 65, 0.52, 0.68);
-        s.note("vocal", b, 2.5, 69, 0.48, 0.54);
-      }
-      if (b % 8 === 0)
-        s.chord(
-          "air",
-          b,
-          0,
-          [chord[0]! + 12, chord[2]! + 12, chord[3]! + 12],
-          middle ? 15 : 7.5,
-          0.51,
-        );
-      if ([0, 16, 32, 40, 48, 60].includes(b))
-        s.phrase("bell", b, [
-          [0.75, 81, 0.9, 0.42],
-          [2.75, 76, 1.2, 0.35],
-        ]);
+      vocals(s, b);
+      bell(s, b);
     }
+    s.note("swell", 6, 0, 60, 8, 0.7);
+    s.note("swell", 36, 0, 60, 15.5, 0.7);
+    s.note("swell", 46, 0, 60, 8, 0.7);
     return s.finish();
   },
 };
@@ -288,7 +384,17 @@ function drums(s: Composer, b: number): void {
   }
   const outro = b >= 56;
   const level =
-    b < 4 ? 0.66 : b < 8 ? 0.8 : outro ? 0.9 - (b - 56) * 0.035 : 0.95;
+    b < 4
+      ? 0.66
+      : b < 8
+        ? 0.8
+        : outro
+          ? 0.9 - (b - 56) * 0.035
+          : b < 16
+            ? 0.92
+            : b >= 48
+              ? 0.98
+              : 0.95;
   for (let beat = 0; beat < 4; beat++) {
     if (b === 31 && beat === 3) continue; // drop the last kick into the break
     s.note(
@@ -314,10 +420,15 @@ function drums(s: Composer, b: number): void {
         (beat === 3 ? 0.76 : 0.7) * (outro ? 0.86 : 1) +
           wobble(b, beat + 20) * 0.05,
       );
-  // Offbeat hats: closed and thin in the intro, open from the groove on.
+  // Offbeat hats: closed and thin in the intro, fuller from the groove,
+  // open from bar 12 so the first groove still has somewhere to go.
   if (b >= 4) {
-    const open = b >= 8;
-    const shape = open ? [0.38, 0.46, 0.4, 0.52] : [0.28, 0.34, 0.3, 0.38];
+    const open = b >= 12;
+    const shape = open
+      ? [0.38, 0.46, 0.4, 0.52]
+      : b >= 8
+        ? [0.34, 0.42, 0.36, 0.46]
+        : [0.28, 0.34, 0.3, 0.38];
     shape.forEach((v, k) => {
       const soft = crash && k === 0 ? 0.75 : 1;
       const lift = k === 3 && b % 4 === 3 ? 1.18 : 1;
@@ -788,4 +899,153 @@ function refrain(s: Composer, b: number): void {
       len,
       vel * 0.86 + wobble(b, beat * 4 + 160) * 0.04,
     );
+}
+
+/** Organ answers on the second bar of each chord: [beat, length, velocity]. */
+type Stab = readonly [beat: number, len: number, vel: number];
+const ORGAN: readonly (readonly Stab[])[] = [
+  [
+    [1.25, 0.3, 0.6],
+    [3.25, 0.4, 0.52],
+  ],
+  [
+    [0.5, 0.22, 0.5],
+    [1.25, 0.25, 0.58],
+    [2, 0.6, 0.6],
+  ],
+  [
+    [1.25, 0.3, 0.58],
+    [2.75, 0.22, 0.48],
+    [3.5, 0.4, 0.56],
+  ],
+  [
+    [0.75, 0.25, 0.52],
+    [2.25, 0.3, 0.58],
+    [3.25, 0.45, 0.6],
+  ],
+];
+
+/** Organ for odd bar `b`: clipped upper-structure stabs, fuller at the top. */
+function organSpan(
+  s: Composer,
+  b: number,
+  c: number,
+  chords: readonly (readonly number[])[],
+): void {
+  if (!((b >= 24 && b < 32) || (b >= 44 && b < 56))) return;
+  const top = b >= 48;
+  const chord = chords[c]!;
+  const pitches = (top ? chord : chord.slice(0, 3)).map((n) => n + 12);
+  const k = ((b - 1) / 2 + (b >= 44 ? 1 : 0) + (top ? 1 : 0)) % 4;
+  for (const [beat, len, vel] of ORGAN[k]!)
+    pitches.forEach((pitch, i) =>
+      s.note(
+        "organ",
+        b,
+        swung(beat) + 0.01 + i * 0.006,
+        pitch,
+        len,
+        vel * (i === pitches.length - 1 ? 1.05 : 0.95) +
+          wobble(b * 3 + i, beat * 4 + 180) * 0.04,
+      ),
+    );
+}
+
+/** "Hold on" chops: a call over G13, an answer over A7b9, lifted at the top. */
+const VOCAL: Readonly<Record<"call" | "answer" | "lift" | "far", Phrase>> = {
+  call: [
+    [0.75, 65, 0.52, 0.68],
+    [2.5, 69, 0.48, 0.56],
+  ],
+  answer: [
+    [0.75, 69, 0.4, 0.62],
+    [1.75, 67, 0.28, 0.5],
+    [2.5, 64, 0.6, 0.58],
+  ],
+  lift: [
+    [0.75, 69, 0.4, 0.68],
+    [1.5, 71, 0.5, 0.64],
+    [2.5, 69, 0.5, 0.58],
+  ],
+  far: [[0.75, 69, 0.9, 0.52]],
+};
+
+function vocals(s: Composer, b: number): void {
+  const sung = ((b >= 16 && b < 32) || (b >= 40 && b < 56)) && b % 4 === 2;
+  const line =
+    b === 36 || b === 58
+      ? VOCAL.far
+      : !sung
+        ? undefined
+        : b % 8 === 6
+          ? VOCAL.answer
+          : b >= 48
+            ? VOCAL.lift
+            : VOCAL.call;
+  if (!line) return;
+  // A singer sits a touch behind the beat.
+  for (const [beat, pitch, len, vel = 0.6] of line)
+    s.note(
+      "vocal",
+      b,
+      swung(beat) + 0.02,
+      pitch,
+      len,
+      vel + wobble(b, beat * 4 + 200) * 0.04,
+    );
+}
+
+/** Pad voicings that move by step with the Rhodes: Dm9, G13, Cmaj9, A7b9. */
+const PAD = [
+  [69, 72, 76],
+  [69, 71, 76],
+  [67, 71, 74],
+  [67, 70, 73],
+];
+
+function padSpan(s: Composer, b: number, c: number): void {
+  if (b >= 56) {
+    // The outro holds one chord and lets it fade.
+    if (b === 56 || b === 60) s.chord("air", b, 0, PAD[0]!, 16, 0.46);
+    return;
+  }
+  const vel = b < 8 ? 0.42 : inMiddle(b) ? 0.5 : b >= 48 ? 0.52 : 0.47;
+  s.chord("air", b, 0, PAD[c]!, 8, vel);
+}
+
+/** The window chime: a two-note figure that grows, then resolves to D. */
+const BELLS: Readonly<Record<number, Phrase>> = {
+  0: [
+    [0.75, 81, 0.9, 0.42],
+    [2.75, 76, 1.2, 0.35],
+  ],
+  16: [
+    [0.75, 81, 0.9, 0.4],
+    [2.75, 76, 0.7, 0.33],
+    [5.5, 77, 1.4, 0.3],
+  ],
+  32: [
+    [0.75, 77, 1.5, 0.38],
+    [2.75, 76, 1, 0.32],
+    [4.75, 72, 2, 0.3],
+  ],
+  40: [
+    [0.75, 81, 0.9, 0.42],
+    [2.75, 76, 1.2, 0.35],
+  ],
+  48: [
+    [0.75, 84, 0.7, 0.4],
+    [1.5, 81, 0.7, 0.36],
+    [2.75, 76, 1.2, 0.34],
+  ],
+  60: [
+    [0.75, 81, 1, 0.36],
+    [2.75, 77, 1, 0.32],
+    [4.75, 74, 3, 0.3],
+  ],
+};
+
+function bell(s: Composer, b: number): void {
+  const line = BELLS[b];
+  if (line) s.phrase("bell", b, line);
 }
