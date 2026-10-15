@@ -227,7 +227,7 @@ export const glassArc: DemoDefinition = {
     title: "Glass Arc",
     style: "Future garage",
     description:
-      "Hand-placed 2-step drums under vinyl rain, a falling Bbmaj9 to Dm/A to Gm9 loop, an original 'stay up' call with a high formant-shifted 'hold on' answer, and glass bells; the final arc doubles the hat motion.",
+      "Hand-placed 2-step drums under vinyl rain, a falling Bbmaj9 to Dm/A to Gm9 loop, an original 'stay up' call whose held notes stretch into a ghostly vowel, a high formant-shifted 'hold on' answer, and glass bells; the final arc doubles the hat motion and lifts into four on the floor.",
     tempoBpm: 138,
     key: "Dm",
     bars: 64,
@@ -237,6 +237,7 @@ export const glassArc: DemoDefinition = {
       "hand-placed 2-step pocket",
       "granular vowel bed",
       "formant-shifted vocal answers",
+      "time-stretched vocal holds",
       "glass sampler countermelody",
       "reverse swells and risers",
       "vinyl crackle bed",
@@ -252,7 +253,7 @@ export const glassArc: DemoDefinition = {
       "Mist 8",
     ],
     mixNotes: [
-      "Kick and sub stay mono in the center and lock together; rims, ticks and the glass sit off-center with their own delays.",
+      "Kick and sub stay mono in the center and lock together; the kick is a short dusty thud so it never beats against the sub, and the sub grows from Half-step to Open sky. Rims, ticks and the glass sit off-center with their own delays.",
       "Every snare and rim lands 10 to 20 ms late and every hat swings near 62%, nudged hit by hit, so no bar repeats exactly.",
       "The crackle bed rises in the empty sections and falls back under the full arcs; the bridge removes the sub and kick completely.",
       "The 'stay up' call and the high 'hold on' answer trade two-bar phrases; the vocal reverb is long and dark, the chop delay a dotted eighth.",
@@ -271,9 +272,10 @@ export const glassArc: DemoDefinition = {
       "Mist",
     ].forEach((name, i) => s.section(name, i * 8, 8));
 
+    // A short dusty thud: a long 808 boom at 49 Hz beat against the sub.
     s.track(
-      voice("kick", "Low pulse", "kit", 0.8, {
-        kit: "syn808",
+      voice("kick", "Low pulse", "kit", 0.86, {
+        kit: "lofi",
         fx: { duck: { orbit: 2, depth: 0.4, attack: 0.22 } },
         humanize: { velocity: 3, seed: 11 },
       }),
@@ -295,7 +297,7 @@ export const glassArc: DemoDefinition = {
         humanize: { timing: 4, velocity: 7, seed: 31 },
       }),
     );
-    s.track(preset("bass", "Sub floor", "sub-sine", 0.64, { fx: orbit }));
+    s.track(preset("bass", "Sub floor", "sub-sine", 0.6, { fx: orbit }));
     s.track(
       preset("reese", "Warm reese", "reese", 0.15, {
         fx: orbit,
@@ -418,6 +420,41 @@ export const glassArc: DemoDefinition = {
         humanize: { timing: 7, velocity: 5, length: 8, seed: 43 },
       }),
     );
+    // The long notes: the "stay" vowel time-stretched to the note's length,
+    // shifted up a fifth with its formants kept, so it hangs instead of
+    // running out like the tape-pitched chops.
+    s.track(
+      voice("drift", "Stretched vowel", "sampler", 0.46, {
+        pan: 0.14,
+        sampler: {
+          mode: "keyed",
+          voices: {
+            stay: {
+              ...bundledSampleRef("stay-up"),
+              root: 67,
+              begin: 0.05,
+              end: 0.5,
+              fit: true,
+              fitmode: "tones",
+              shift: 7,
+              formant: 0,
+              fadeInTime: 0.06,
+              fadeTime: 0.35,
+            },
+          },
+        },
+        delay: {
+          beats: 1.5,
+          feedback: 0.34,
+          mix: 0.16,
+          pingpong: true,
+          highcut: 2600,
+        },
+        reverb: { ...cave, mix: 0.42 },
+        filter: { type: "hpf", cutoff: 280, resonance: 0.1 },
+        fx: orbit,
+      }),
+    );
     s.track(
       voice("glass", "Glass bells", "sampler", 0.32, {
         pan: -0.3,
@@ -460,7 +497,7 @@ export const glassArc: DemoDefinition = {
       }),
     );
     s.track(
-      voice("rain", "Vinyl rain", "crackle", 0.2, {
+      voice("rain", "Vinyl rain", "crackle", 0.23, {
         synth: { attack: 1.5, release: 3, density: 0.02, noise: 0.3 },
         filter: { type: "hpf", cutoff: 320, resonance: 0.1 },
         reverb: room,
@@ -521,8 +558,9 @@ export const glassArc: DemoDefinition = {
                   ],
                 }
               : {};
+        // A call's held notes move to the stretched vowel, so they last.
         s.note(
-          track,
+          track === "chop" && length >= 3 ? "drift" : track,
           bar + at,
           beat + Math.round(dice(12) - (beat % 1 === 0.5 ? 6 : 0)) / TPB,
           pitch + shift,
@@ -538,12 +576,12 @@ export const glassArc: DemoDefinition = {
       const part: Part = PARTS[Math.floor(bar / 8)]!;
       const padGain = {
         rain: 0.5,
-        half: 0.52,
-        gather: 0.55,
+        half: 0.48,
+        gather: 0.53,
         arc: 0.6,
         air: 0.62,
-        arc2: 0.6,
-        sky: 0.62,
+        arc2: 0.62,
+        sky: 0.68,
         mist: 0.5,
       }[part];
       const length = bars * 4 - (part === "mist" && bar === 60 ? 0 : 0.08);
@@ -594,7 +632,14 @@ export const glassArc: DemoDefinition = {
 
       // Reese: a long filtered tone an octave over the sub in the second half.
       if (part === "arc2" || part === "sky") {
-        s.note("reese", bar, 0, root + 12, bars * 4 - 0.25, 0.62);
+        s.note(
+          "reese",
+          bar,
+          0,
+          root + 12,
+          bars * 4 - 0.25,
+          part === "sky" ? 0.74 : 0.62,
+        );
         if (part === "sky" && bars === 2)
           s.note("reese", bar + 1, 2.5, root + 12, 1.4, 0.5);
       }
@@ -644,6 +689,8 @@ export const glassArc: DemoDefinition = {
       if (part === "mist") kicks = pos % 2 ? [0] : [0, 10];
       if (b === 23 || b === 47) kicks = [0];
       if (b === 15 || b === 31) kicks = [0, 10];
+      // Ghost Hardware's lift: four on the floor plus the "and" of four.
+      if (b >= 52 && b <= 54) kicks = [0, 4, 8, 12, 14];
       if (b === 55) kicks = [0, 7];
       for (const step of kicks)
         hit(
@@ -660,11 +707,16 @@ export const glassArc: DemoDefinition = {
         );
 
       // Sub: locks with the kick, rests between, octave pickups at slot ends.
+      // The sub grows section by section: lighter in Half-step, fullest at the top.
+      const weight =
+        { half: 0.66, gather: 0.73, arc: 0.8, arc2: 0.8, sky: 0.86 }[
+          part as "half"
+        ] ?? 0.7;
       if (part !== "mist") {
         const second = kicks.find((step) => step >= 6 && step <= 11);
         const pickup =
           slotEnd && (part === "sky" || (part !== "half" && (slotBar / 2) % 2));
-        s.note("bass", b, 0, root, second ? second / 4 - 0.15 : 3.2, 0.8, {
+        s.note("bass", b, 0, root, second ? second / 4 - 0.15 : 3.2, weight, {
           ...(b === 24 || b === 40 || b === 48 ? { glide: 0.09 } : {}),
           ...(pos > 0 && b - 1 === slotBar + slotBars - 1
             ? { glide: 0.05 }
@@ -677,7 +729,7 @@ export const glassArc: DemoDefinition = {
             second / 4,
             root,
             pickup ? 0.8 : half ? 1 : 1.35,
-            0.68,
+            weight - 0.12,
           );
         if (pickup) {
           const next = slotAt(Math.min(63, b + 1))[2];
@@ -785,7 +837,7 @@ export const glassArc: DemoDefinition = {
 
     // ── vocals ───────────────────────────────────────────────────────────
     // Rain glass and Half-step: stray fragments, the words barely there.
-    s.note("chop", 4, 1, 62, 3, 0.42, {
+    s.note("drift", 4, 1, 62, 3, 0.42, {
       bend: [
         { at: 0, cents: -40 },
         { at: 0.1, cents: 0 },
@@ -821,7 +873,7 @@ export const glassArc: DemoDefinition = {
       [36, 69],
       [38, 64],
     ] as const)
-      s.note("chop", bar, 0.5 + Math.round(dice(10)) / TPB, pitch, 3.5, 0.6, {
+      s.note("drift", bar, 0.5 + Math.round(dice(10)) / TPB, pitch, 3.5, 0.62, {
         bend: [
           { at: 0, cents: -50 },
           { at: 0.1, cents: 0 },
@@ -840,7 +892,7 @@ export const glassArc: DemoDefinition = {
     sing("hold", 40, ANSWER_HIGH);
     // Open sky: the call with its turn, octave-up doubles, the high answer.
     sing("chop", 48, CALL_TURN);
-    sing("chop", 48, CALL_TURN, 0.42, 12, (at) => at % 2 === 0 && at < 6);
+    sing("chop", 48, CALL_TURN, 0.5, 12, (at) => at % 2 === 0 && at < 6);
     sing("hold", 48, ANSWER_HIGH, 1.05);
     for (const bar of [48, 50, 52])
       s.note("hold", bar, 3.5 + Math.round(dice(8)) / TPB, 81, 0.5, 0.4);
