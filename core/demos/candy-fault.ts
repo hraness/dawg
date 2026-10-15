@@ -610,7 +610,7 @@ export const candyFault: DemoDefinition = {
       }),
     );
     s.track(
-      voice("hats", "Needle hats", "kit", 0.6, {
+      voice("hats", "Needle hats", "kit", 0.72, {
         kit: "syn909",
         pan: 0.14,
         // Each chorus pass is a little bigger than the last.
@@ -1164,15 +1164,40 @@ export const candyFault: DemoDefinition = {
       if (LIFTED.has(n.trackId!) && n.startTick! >= 44 * BAR) s.notes[i] = { ...n, pitch: n.pitch! + 1 };
     }
 
+    // The 808 lets go for the last beat of the pre-chorus so the first drop lands.
+    const suck = 15 * BAR + 3 * 480;
+    for (let i = 0; i < s.notes.length; i++) {
+      const n = s.notes[i]!;
+      if (n.trackId === "sub" && n.startTick! < suck && n.startTick! + n.durationTicks! > suck)
+        s.notes[i] = { ...n, durationTicks: suck - n.startTick! };
+    }
+
     // A whole-mix silent beat before Overload: nothing starts or rings in it.
+    // Whatever is still sounding dives an octave over the beat before, like a
+    // tape machine losing power, then the overload slams in a half step up.
     const gapBegin = 44 * BAR - 480,
       gapEnd = 44 * BAR;
     for (let i = s.notes.length - 1; i >= 0; i--) {
       const n = s.notes[i]!;
       const start = n.startTick!;
       if (start >= gapBegin && start < gapEnd) s.notes.splice(i, 1);
-      else if (start < gapBegin && start + n.durationTicks! > gapBegin)
-        s.notes[i] = { ...n, durationTicks: gapBegin - start };
+      else if (start < gapBegin && start + n.durationTicks! > gapBegin) {
+        const duration = gapBegin - start;
+        const dive = Math.max(0, (duration - 480) / duration);
+        s.notes[i] = {
+          ...n,
+          durationTicks: duration,
+          ...(["kick", "snap", "hats", "tear"].includes(n.trackId!)
+            ? {}
+            : {
+                bend: [
+                  { at: 0, cents: 0 },
+                  ...(dive > 0 ? [{ at: dive, cents: 0 }] : []),
+                  { at: 1, cents: -1200 },
+                ],
+              }),
+        };
+      }
     }
     return s.finish();
   },
