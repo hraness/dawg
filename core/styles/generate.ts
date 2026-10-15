@@ -22,6 +22,7 @@ import {
   parseRoman,
   chordPitchClasses,
   SCALES,
+  strokeGrid,
   voiceChord,
   type Key,
   type ModeName,
@@ -1394,6 +1395,9 @@ function playChords(plan: Plan, role: RoleName, random: Random): Draft[] {
   const grid = style.rhythm.onsets[role];
   const type = pickWeighted(style.harmony.voicing.types, random);
   const strum = style.harmony.voicing.strokes?.length ? 14 : 0;
+  const strokes = style.harmony.voicing.strokes?.length
+    ? strokeGrid(pickWeighted(style.harmony.voicing.strokes, random))
+    : undefined;
   let previous: number[] | undefined;
   const key = plan.keyText ? parseKey(plan.keyText) : undefined;
   for (const chord of plan.chords) {
@@ -1431,21 +1435,115 @@ function playChords(plan: Plan, role: RoleName, random: Random): Draft[] {
       if (!section.roles.includes(role)) return;
       const next = hits[i + 1] ?? endTick;
       const [lo, hi] = style.expression.dynamics;
-      const velocity = clamp((lo + (hi - lo) * section.energy) * 0.85, 0.05, 1);
-      pitches.forEach((pitch, v) => {
+      const base = (lo + (hi - lo) * section.energy) * 0.85;
+      const feel = compFeel(plan, tick, next, endTick, random);
+      // A strum follows the card's stroke pattern (D down, U up, d and u
+      // light, x a muted chuck): a downstroke sounds every string low to
+      // high; an upstroke catches the top strings high to low, lighter.
+      const stroke = strum ? strokeAt(plan, strokes, tick, feel.onBeat) : "";
+      const up = stroke === "U" || stroke === "u";
+      const light = stroke === "d" || stroke === "u" ? 0.85 : 1;
+      const chuck = stroke === "x";
+      const keep = stroke === "u" ? 3 : up || stroke === "d" ? 4 : 99;
+      const voices =
+        pitches.length > keep ? pitches.slice(pitches.length - keep) : pitches;
+      const order = up ? [...voices].reverse() : voices;
+      const top = Math.max(...voices.map((p) => p.key));
+      const bottom = Math.min(...voices.map((p) => p.key));
+      let roll = 0;
+      order.forEach((pitch, v) => {
+        const melody = pitch.key === top && voices.length > 1;
+        // A strum sweeps the strings one after another. A keyboard hand
+        // lands its fingers a few milliseconds apart, the top (melody)
+        // finger first and loudest.
+        if (strum) {
+          if (v > 0) roll += strum * (up ? 0.7 : 1) * (0.8 + 0.4 * random());
+        } else
+          roll = melody ? 0 : (0.3 + 0.7 * random()) * plan.humanizeTicks * 0.6;
+        const voice = melody ? 1.08 : pitch.key === bottom ? 1 : 0.92;
         out.push({
           trackId: role,
           role,
-          tick: tick + v * strum,
-          duration: Math.max(30, (next - tick) * 0.92 - v * strum),
+          tick: tick + feel.shift + roll,
+          duration: chuck
+            ? Math.max(30, Math.min(next - tick, plan.stepTicks) * 0.5)
+            : Math.max(30, (next - tick) * feel.gate - roll - feel.shift),
           key: pitch.key,
           cents: pitch.cents,
-          velocity,
+          velocity: clamp(
+            base *
+              feel.accent *
+              voice *
+              light *
+              (up ? 0.9 : 1) *
+              (chuck ? 0.7 : 1) *
+              (1 + gauss(random) * 0.03),
+            0.05,
+            1,
+          ),
         });
       });
     });
   }
   return out;
+}
+
+/**
+ * The stroke a strummed hit takes from the card's pattern, one character
+ * per eighth from the bar line. A hit between eighths is an upstroke; a
+ * hit where the pattern rests takes the stroke the beat implies.
+ */
+function strokeAt(
+  plan: Plan,
+  grid: string | undefined,
+  tick: number,
+  onBeat: boolean,
+): string {
+  const eighth = plan.barTicks / plan.beatsPerBar / 2;
+  const inBar = mod(tick, plan.barTicks);
+  const index = Math.round(inBar / eighth);
+  if (!grid || Math.abs(inBar - index * eighth) >= plan.stepTicks / 2)
+    return onBeat ? "D" : "U";
+  const char = grid[index % grid.length]!;
+  return /[DUdux]/.test(char) ? char : onBeat ? "D" : "U";
+}
+
+/**
+ * How one comping hit is played. A pianist or guitarist leans on the bar's
+ * downbeat, plays the other beats a little lighter and the off-beat stabs
+ * lighter still, except the last stab before a chord change, which pushes
+ * into it. Each hit lands with the groove's human timing and a slightly
+ * different length; the last hit of a chord holds to the change.
+ */
+function compFeel(
+  plan: Plan,
+  tick: number,
+  next: number,
+  endTick: number,
+  random: Random,
+): { accent: number; shift: number; gate: number; onBeat: boolean } {
+  const beatTicks = plan.barTicks / plan.beatsPerBar;
+  const inBar = mod(tick, plan.barTicks);
+  const onBeat =
+    Math.abs(inBar - Math.round(inBar / beatTicks) * beatTicks) <
+    plan.stepTicks / 2;
+  const downbeat = inBar < plan.stepTicks / 2;
+  const half =
+    plan.beatsPerBar % 2 === 0 &&
+    Math.abs(inBar - plan.barTicks / 2) < plan.stepTicks / 2;
+  const push = !onBeat && next >= endTick && endTick - tick <= beatTicks;
+  const metric = downbeat ? 1 : half ? 0.94 : onBeat ? 0.9 : push ? 0.97 : 0.84;
+  const human = Math.max(0.04, plan.style.groove.humanize.velocity);
+  const accent = metric * (1 + gauss(random) * human);
+  // The comping hand sits a touch behind the beat, never ahead of it
+  // (on-beat notes run late in recorded grooves), by up to a third of a
+  // step.
+  const shift = Math.min(
+    Math.abs(gauss(random)) * plan.humanizeTicks * 0.7,
+    plan.stepTicks / 3,
+  );
+  const gate = next >= endTick ? 0.97 : 0.84 + 0.1 * random();
+  return { accent, shift, gate, onBeat };
 }
 
 function playSustain(plan: Plan, role: RoleName): Draft[] {
