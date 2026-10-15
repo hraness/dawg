@@ -110,7 +110,7 @@ describe("Low Tide", () => {
         ),
       ).toBe(true);
     }
-    // The voice lands B3 on "turns" at the two sung cadences.
+    // The voice lands B3 on "turns" at the two sung cadences...
     for (const cadence of [22, 46])
       expect(
         notes("vocal").some(
@@ -120,6 +120,31 @@ describe("Low Tide", () => {
             n.startTick === cadence * BAR + 2 * TPB,
         ),
       ).toBe(true);
+    // ...and while it holds that B into the next bar the Rhodes strikes G7
+    // without its third: F, A flat and D, the singer completing the chord.
+    for (const next of [23, 47]) {
+      const struck = notes("keys")
+        .filter((n) => bar(n.startTick) === next && beat(n.startTick) < 0.5)
+        .map((n) => n.pitch)
+        .sort((a, b) => a - b);
+      expect(struck).toEqual([53, 56, 62]);
+    }
+    // The shore's G7 leaves out the D under the voice's last "tide" (E flat);
+    // the strings suspend that E flat and resolve it to D on beat two.
+    const shoreSeven = notes("keys")
+      .filter((n) => bar(n.startTick) === 50 && beat(n.startTick) < 0.5)
+      .map((n) => n.pitch)
+      .sort((a, b) => a - b);
+    expect(shoreSeven).toEqual([53, 56, 59]);
+    expect(
+      notes("vocal").some(
+        (n) =>
+          n.lyric === "tide" &&
+          n.pitch === 63 &&
+          bar(n.startTick) === 49 &&
+          n.startTick + n.durationTicks > 50 * BAR,
+      ),
+    ).toBe(true);
   });
 
   test("the drum bed is crushed and sweeps down into the last refrain", () => {

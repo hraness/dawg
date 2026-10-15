@@ -553,7 +553,7 @@ export const lowTide: DemoDefinition = {
         fx: {
           ...orbit,
           wobble: { depth: 7, rate: 0.42, drift: 0.55 },
-          chorus: { rate: 0.28, depth: 0.18, mix: 0.26 },
+          chorus: { rate: 0.28, depth: 0.24, mix: 0.34 },
         },
         // The tape wows at the turnaround into the second verse.
         fxAutomation: {
@@ -588,7 +588,7 @@ export const lowTide: DemoDefinition = {
         delay: {
           beats: 0.75,
           feedback: 0.3,
-          mix: 0.08,
+          mix: 0.1,
           highcut: 3200,
           pingpong: true,
         },
@@ -664,7 +664,8 @@ export const lowTide: DemoDefinition = {
       voice("strings", "Tide strings", "violins", 0.76, {
         pan: 0.5,
         reverb: { ...hall, mix: 0.26 },
-        fx: orbit,
+        // A second take spread wide: the pedal is the room's width.
+        fx: { ...orbit, double: { time: 24, drift: 3, width: 0.8 } },
         humanize: { timing: 10, velocity: 3, seed: 21 },
       }),
     );
@@ -779,8 +780,19 @@ export const lowTide: DemoDefinition = {
       const sus = SUS_BARS.has(bar);
       const cadence = CADENCE_BARS.has(bar);
       // Under the singer only the low three voices; the full voicing where
-      // the horn answers and in the instrumental bars.
-      const voicing = SUNG_BARS.has(bar) ? chord.low : chord.keys;
+      // the horn answers and in the instrumental bars. Where the voice holds
+      // "turns" on B the Rhodes leaves the third out (F Ab D over the bass
+      // G, the singer completing the chord), and under the shore's last
+      // "tide" (an E flat the strings suspend too) it leaves out the D.
+      const turnsBar =
+        chord === G7B9 && (bar === REFRAIN1 + 7 || bar === REFRAIN2 + 7);
+      const voicing = turnsBar
+        ? [53, 56, 62]
+        : chord === G7B9 && bar === SHORE + 2
+          ? [53, 56, 59]
+          : SUNG_BARS.has(bar)
+            ? chord.low
+            : chord.keys;
       const topVoice = voicing.length - 1;
       const length = sus ? 7.6 : span * 4 - 0.4;
       // Rolled bottom to top over about 25 ms, the top voice a touch louder.
