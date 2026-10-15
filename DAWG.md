@@ -914,7 +914,7 @@ The organ models are dawg's own, from public descriptions of the tonewheel gener
 
 ### Offline studio library and demo songs
 
-`demo` opens eleven original, fully editable songs: Night Relay (deep techno), Coil Driver (acid techno), After Hours (deep house), Velvet Circuit (UK garage), Glass Arc (future garage), Copper Wire (jungle), Candy Fault (hyperpop), Skyline Current (melodic EDM), Signal Bloom (synth pop), Low Tide (trip hop), and Amber Room (neo soul). `demo search <words>` filters metadata; `demo info <id>` shows form, feature and mix notes. `demo <id>` replaces the composition in one undoable edit, pauses transport at the start and opens TAPE. Browsing is read-only. The agent exposes the same songs through `list_demos` and `load_demo`.
+`demo` opens seven original, fully editable songs: Candy Fault (hyperpop), Coil Driver (acid techno), Velvet Circuit (UK garage), Copper Wire (jungle), Low Tide (trip hop), Amber Room (neo soul) and Signal Bloom (synth pop). `demo search <words>` filters metadata; `demo info <id>` shows form, feature and mix notes. `demo <id>` replaces the composition in one undoable edit, pauses transport at the start and opens TAPE. Browsing is read-only. The agent exposes the same songs through `list_demos` and `load_demo`.
 
 `sample library [query]` opens the bundled studio shelf; `sample preview <id>` listens while transport is paused; `sample use <id>` adds a hash-pinned sound without replacing an occupied instrument. `sample chop <id> [4|8|16]` creates a separate sampler with slices and editable notes. The eight original synthetic samples ship in the package, need no download, and include provenance and a CC0 dedication in `assets/samples/studio/`. Their registered `pack:studio/<id>` sources use the normal pack loader and agent `search_sounds` / `use_sound` tools. `guide demos` and `guide sample-library` explain the manual and agent routes. These are original compositions and machine voices, with no commercial song recordings or borrowed vocal performances.
 
@@ -1683,7 +1683,7 @@ The menu has the same controls under **Ctrl-K › Project › tempo and meter** 
 
 ## Grooves and kits
 
-**Patterns.** dawg ships a library of 31 starting grooves, written for dawg from the defining placements of each style (no transcriptions). A pattern is a set of rhythm rows, one per voice, so after applying it every part is still a few Euclidean or grid parameters you can change in `/euclid`, with the prompt grammar, or in `track.ts`.
+**Patterns.** dawg ships a library of 16 starting grooves, written for dawg from the defining placements of each style (no transcriptions). A pattern is a set of rhythm rows, one per voice, so after applying it every part is still a few Euclidean or grid parameters you can change in `/euclid`, with the prompt grammar, or in `track.ts`.
 
 | Command                                | Does                                                                                                                                                 |
 | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1694,7 +1694,7 @@ The menu has the same controls under **Ctrl-K › Project › tempo and meter** 
 
 Applying to a missing track creates a kit track; an empty melodic track becomes a kit track; a melodic track with notes is refused. Voices the track lacks (a sampler kit without a rim, say) are skipped and named in the receipt. Every apply is one revision and one undo step. In `track.ts`, `pattern("boom-bap")` returns the rows: `rhythm: pattern("boom-bap")`, or `[...pattern("house"), euclid("rim", 5, 16)]` to add one.
 
-Patterns: `house`, `disco`, `techno`, `minimal`, `electro`, `breakbeat`, `amen-style`, `dnb`, `halftime`, `boom-bap`, `lofi`, `trap`, `drill`, `reggaeton`, `dancehall`, `one-drop`, `afrobeat`, `afrobeats`, `bembe`, `tresillo`, `son-clave`, `bossa-nova`, `samba`, `cumbia`, `garage`, `jersey-club`, `footwork`, `rock`, `funk`, `shuffle` (triplet 8ths), `half-time-shuffle`, `euclid-poly`. Ctrl-K › Rhythm › grooves lists them too.
+Patterns: `house`, `techno`, `euclid-poly`, `amen-style`, `boom-bap`, `trap`, `reggaeton`, `one-drop`, `afrobeats`, `bembe`, `garage`, `jersey-club`, `rock`, `funk`, `half-time-shuffle` and `jazz-swing`. Ctrl-K › Rhythm › grooves lists them too.
 
 **Kits.** A `kit` track plays the built-in drum synth. `kit: "<name>"` on the track (`/kit <name>`, or `set_drum_kit` for the agent) chooses one of six synthesized kits, all offline and deterministic; a track without `kit` sounds exactly as before.
 

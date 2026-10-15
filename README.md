@@ -97,10 +97,10 @@ to you. `style warehouse 4 3` loads four bars with seed 3, replacing the
 song in one undo step. Their style and artist listening cues describe
 rhythm and sound; the patterns are original. See [Styles](./DAWG.md#styles).
 
-For a complete song, type `demo`. Eleven editable arrangements cover
-techno, house, garage, jungle, hyperpop, melodic EDM and soul.
-Each includes production notes, named scenes, instruments, effects and
-automation. `demo glass-arc` loads one and opens TAPE; Space plays,
+For a complete song, type `demo`. Seven editable arrangements cover
+hyperpop, acid techno, UK garage, jungle, trip hop, neo soul and synth
+pop, each with production notes, named scenes, instruments, effects and
+automation. `demo candy-fault` loads one and opens TAPE; Space plays,
 Tab changes tracks, and `,` / `.` changes scenes. Loading is one undo step.
 
 `sample library` opens eight original sounds that work offline, including
