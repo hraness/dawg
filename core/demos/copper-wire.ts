@@ -139,29 +139,33 @@ const KEYS: Record<Chord, readonly number[]> = {
 };
 /** Two-bar half-speed sub: a held root, then a pickup that glides on. */
 const SUB: Record<Chord, Phrase> = {
+  // E, then G and B walk up a step into C.
   e: [
     [0, 28, 5.5, 0.86],
-    [6, 35, 0.9, 0.64],
-    [7, 31, 1.1, 0.7],
+    [6, 31, 0.9, 0.64],
+    [7, 35, 1.1, 0.7],
   ],
+  // C, then E and B step down into A.
   c: [
     [0, 36, 5.5, 0.84],
-    [6, 31, 0.9, 0.62],
+    [6, 40, 0.9, 0.62],
     [7, 35, 1.1, 0.68],
   ],
+  // A, then E and D fall into B.
   a: [
     [0, 33, 5.5, 0.84],
     [6, 40, 0.9, 0.6],
-    [7, 36, 1.1, 0.66],
+    [7, 38, 1.1, 0.66],
   ],
+  // B, then G and F sharp step down home to E.
   bm: [
     [0, 35, 5.5, 0.84],
-    [6, 38, 0.9, 0.62],
+    [6, 31, 0.9, 0.62],
     [7, 30, 1.1, 0.68],
   ],
   b7: [
     [0, 35, 5.5, 0.84],
-    [6, 39, 0.9, 0.62],
+    [6, 35, 0.9, 0.62],
     [7, 30, 1.1, 0.68],
   ],
 };
@@ -338,7 +342,26 @@ const COAST_LINE: Phrase = [
 /** Interlocking arps: the chip states Cmaj9 and the Rhodes follows a beat later an octave down. */
 const ARP: readonly number[] = [76, 79, 83, 86, 79, 83, 86, 88];
 /** Time-stretch pitches for the pitched break hits: up 7, up 12, down 5, up 5. */
-const STRETCH: readonly number[] = [67, 72, 55, 65];
+const STRETCH: readonly number[] = [67, 72, 55, 64];
+/** The half-time turn: the vocal alone states the tune at double length. */
+const SLOW: readonly Phrase[] = [
+  [
+    [0, 64, 2.2, 0.66],
+    [4, 71, 2.2, 0.7],
+  ],
+  [
+    [0, 66, 2.2, 0.64],
+    [4, 64, 3.2, 0.66],
+  ],
+  [
+    [0, 69, 2.2, 0.66],
+    [4, 72, 2.2, 0.68],
+  ],
+  [
+    [0, 74, 2.2, 0.7],
+    [4, 66, 2.4, 0.66],
+  ],
+];
 
 /** Bars 72 to 79 resolve E, C, B7, E instead of continuing the cycle. */
 function chordAt(bar: number): Chord {
@@ -381,10 +404,10 @@ export const copperWire: DemoDefinition = {
       "Coast 8",
     ],
     mixNotes: [
-      "The main break (left) is authored from Amen-shaped cells on a synthesized kit with the Amen's measured 1.2:1 swing; the shadow break (right, high-passed) plays ghost 16ths where the main rests and takes the back half of every other odd bar.",
+      "The main break (left) is authored from Amen-shaped cells on a synthesized kit with the Amen's measured 1.2:1 swing; the shadow break (right, high-passed) plays ghost 16ths where the main rests and takes the back half of every fourth bar.",
       "The sub carries the fundamental and ducks under the machine kick; the reese sits an octave up with a slow detune and a low-pass that opens across each run. The vacuum has no sub, only the reese stepping down E D C B under the suspensions.",
-      "Registers are kept apart: sub 28-40, reese 40-52, pad 52-69, vocal chop 64-74, Rhodes shells 67-78, chip 76-88. The crush on the break is clean everywhere except the last two bars of the vacuum.",
-      "Pitched break hits are a tape-struck sample with a falling rate, jumping +7, +12, -5 and +5 semitones; reverse swells of the same sample lead into phrase downbeats.",
+      "Registers are kept apart: sub 28-40, reese 40-52 (down to B1 in the vacuum, where it is the only bass), pad 52-69 with a top line that climbs to D5 in the vacuum and E5 at the end, vocal chop 64-74, Rhodes 64-78, chip 76-88. The crush on the break is clean everywhere except the last two bars of the vacuum.",
+      "Pitched break hits are a tape-struck sample with a falling rate, jumping +7, +12, -5 and +4 semitones; reverse swells of the same sample lead into phrase downbeats.",
     ],
   }),
   build() {
@@ -420,7 +443,13 @@ export const copperWire: DemoDefinition = {
         fx: { crush: { bits: 16, coarse: 1, mix: 0 } },
         fxAutomation: {
           "crush-bits": lanes([0, 16], [46, 16], [47.7, 4.5], [47.75, 16]),
-          "crush-mix": lanes([0, 0], [46, 0], [46.05, 0.3], [47.7, 0.9], [47.75, 0]),
+          "crush-mix": lanes(
+            [0, 0],
+            [46, 0],
+            [46.05, 0.3],
+            [47.7, 0.9],
+            [47.75, 0],
+          ),
         },
         reverb: { mix: 0.07, size: 0.22, fade: 0.5 },
         humanize: { timing: 3, velocity: 6, seed: 170 },
@@ -658,9 +687,11 @@ export const copperWire: DemoDefinition = {
       hits("break", bar, 36, cut(cell.k, 0, until), gain);
       hits("break", bar, 38, cut(cell.s, 0, until), gain);
       if (cell.o) hits("break", bar, 46, cut(cell.o, 0, until), gain);
-      if (opts.ride) hits("break", bar, 51, cut(RIDE, 0, until), gain * opts.ride);
+      if (opts.ride)
+        hits("break", bar, 51, cut(RIDE, 0, until), gain * opts.ride);
       if (opts.hats) hits("break", bar, 42, cut(HATS, 0, until), gain);
-      if (opts.machine) hits("kick", bar, 36, cut(cell.m, 0, until), opts.machine);
+      if (opts.machine)
+        hits("kick", bar, 36, cut(cell.m, 0, until), opts.machine);
     };
     // The shadow break plays the 16ths the main break rests on: ghost
     // snares between the beats, now and then a kick pickup, from a seeded
@@ -725,14 +756,19 @@ export const copperWire: DemoDefinition = {
           "bass",
           bar,
           beat,
-          pitch + (i === 2 ? lift : 0),
+          pitch + (i === 2 && pitch + lift <= 60 ? lift : 0),
           dive && last ? 2.3 : length,
           velocity,
           dive && last ? { bend: DIVE } : {},
         );
       });
     /** Pad chord with the 4-3 on B7: E held a bar, then D sharp. */
-    const pad = (bar: number, chord: Chord, home: boolean, velocity: number) => {
+    const pad = (
+      bar: number,
+      chord: Chord,
+      home: boolean,
+      velocity: number,
+    ) => {
       const start = bar === 0 ? 0 : -0.5;
       if (chord !== "b7") {
         strum("pad", bar, start, home ? PAD_HOME : PAD[chord], 8.3, velocity);
@@ -740,7 +776,7 @@ export const copperWire: DemoDefinition = {
       }
       strum("pad", bar, start, PAD.b7.slice(0, 3), 8.3, velocity);
       s.note("pad", bar, start, 64, 4.4, velocity);
-      s.note("pad", bar + 1, 0, 63, 4.3, velocity * 1.04);
+      s.note("pad", bar + 1, 0, 63, 3.4, velocity * 1.04);
     };
     // A two-bar unit of break: the main cells, the shadow's ghosts, and on
     // the odd units a half-bar swap. The last bar of the unit may be cut
@@ -761,7 +797,11 @@ export const copperWire: DemoDefinition = {
     ) => {
       const density = opts.density ?? 0.3;
       const swapHere = index % 2 === 1 && (opts.lastUntil ?? 4) === 4;
-      drums(bar, cells[0], gain, { ride: opts.ride, hats: opts.hats, machine: opts.machine });
+      drums(bar, cells[0], gain, {
+        ride: opts.ride,
+        hats: opts.hats,
+        machine: opts.machine,
+      });
       shadow(bar, cells[0], density, { hats: opts.doubleHats });
       drums(bar + 1, cells[1], gain, {
         ride: opts.ride,
@@ -783,12 +823,22 @@ export const copperWire: DemoDefinition = {
     /** Pitched break hit: a stretched snare on the late-snare slot. */
     let stretchIndex = 0;
     const stretched = (bar: number, beat: number, velocity = 0.56) => {
-      s.note("stretch", bar, beat, STRETCH[stretchIndex % STRETCH.length]!, 0.5, velocity);
+      s.note(
+        "stretch",
+        bar,
+        beat,
+        STRETCH[stretchIndex % STRETCH.length]!,
+        0.5,
+        velocity,
+      );
       stretchIndex += 1;
     };
     const hookV = (bar: number, p: number, vary: boolean) => {
       const phrase = (vary && HOOK_V_VARY[p]) || HOOK_V[p];
       if (phrase) s.phrase("chop", bar, phrase);
+      // The tape stop into the half-time turn: the vocal's last A falls an
+      // octave over the beat before bar 32.
+      if (bar === 31) s.note("chop", 31, 1, 66, 2.6, 0.64, { bend: DIVE });
     };
     const hookC = (bar: number, p: number, full: boolean) => {
       if (HOOK_C[p]) s.phrase("chip", bar, HOOK_C[p]!);
@@ -831,7 +881,7 @@ export const copperWire: DemoDefinition = {
         if (b === 23) {
           roll(23, 2, 3, 0.25, 0.35, 0.6);
           roll(23, 3, 4, 0.125, 0.55, 0.98);
-          s.note("swell", 23, 3, 60, 1, 0.5);
+          s.note("swell", 23, 2.7, 60, 1.3, 0.5);
         }
         if (b === 19 || b === 21) stretched(b, 3.75, 0.5);
       } else if (b < 32) {
@@ -849,7 +899,7 @@ export const copperWire: DemoDefinition = {
         if (b === 31) {
           // Into the half-time turn: a 32nd roll and the tape stop.
           roll(31, 3, 4, 0.125, 0.4, 0.9);
-          s.note("swell", 31, 3, 60, 1, 0.5);
+          s.note("swell", 31, 2.7, 60, 1.3, 0.5);
         }
       } else if (b < 40) {
         // The half-time turn: kick 1, snare 3, the same bass underneath,
@@ -866,14 +916,17 @@ export const copperWire: DemoDefinition = {
         if (b === 35) stretched(35, 2.75, 0.5);
         if (b === 39) {
           roll(39, 3, 4, 0.125, 0.4, 0.86);
-          s.note("swell", 39, 3, 60, 1, 0.5);
+          s.note("swell", 39, 2.7, 60, 1.3, 0.5);
         }
       } else if (b < 48) {
         // Vacuum: no kick track for eight bars. The filtered break returns
         // at 44 in half time; the crush eats it over 46 and 47 and the last
         // beat of 47 is silent before the drop.
         if (b >= 44) {
-          drums(b, b % 2 ? "g" : "h", 0.8, { ride: 0.7, until: b === 47 ? 1 : 4 });
+          drums(b, b % 2 ? "g" : "h", 0.8, {
+            ride: 0.7,
+            until: b === 47 ? 1 : 4,
+          });
           shadow(b, b % 2 ? "g" : "h", 0.3, { until: b === 47 ? 1 : 4 });
         }
         if (b === 47) {
@@ -898,12 +951,12 @@ export const copperWire: DemoDefinition = {
         if (b === 51 || b === 59) stretched(b, 1.75, 0.5);
         if (b === 55) {
           roll(55, 3, 4, 0.125, 0.4, 0.8);
-          s.note("swell", 55, 3, 60, 1, 0.46);
+          s.note("swell", 55, 2.7, 60, 1.3, 0.46);
         }
         if (b === 63) {
           roll(63, 2, 3, 0.25, 0.35, 0.6);
           roll(63, 3, 4, 0.125, 0.55, 1);
-          s.note("swell", 63, 3, 60, 1, 0.52);
+          s.note("swell", 63, 2.7, 60, 1.3, 0.52);
         }
       } else if (b < 72) {
         if (b % 2 === 0) {
@@ -928,11 +981,11 @@ export const copperWire: DemoDefinition = {
             s.note("break", 67, beat, pitch, 0.2, velocity);
         if (b === 71) {
           // The glitch fill: 32nds on the main break, the stretched hit
-          // ratcheting up 2, 5, 7 and 12 semitones in the last beat.
+          // ratcheting up 2, 4, 7 and 12 semitones in the last beat.
           roll(71, 1, 2, 0.25, 0.3, 0.5);
           roll(71, 2, 3, 0.125, 0.45, 0.85);
           roll(71, 3, 4, 0.125, 0.5, 1, "break2");
-          for (const [i, pitch] of [60, 62, 65, 67, 72].entries())
+          for (const [i, pitch] of [60, 62, 64, 67, 72].entries())
             s.note("stretch", 71, 3 + i * 0.2, pitch, 0.18, 0.5 + i * 0.08);
         }
       } else if (b < 78) {
@@ -962,13 +1015,27 @@ export const copperWire: DemoDefinition = {
         if (b >= 40 && b < 48) {
           // The vacuum: three-note pad under the suspension chain, the
           // reese stepping down E D C B, no sub until the drop.
-          strum("pad", b, b === 40 ? -0.5 : -0.5, CHAIN_PAD[(b - 40) / 2]!, b === 46 ? 7.4 : 8.3, 0.46);
+          strum(
+            "pad",
+            b,
+            -0.5,
+            CHAIN_PAD[(b - 40) / 2]!,
+            b === 46 ? 7.4 : 8.3,
+            0.46,
+          );
           if (b === 40)
             for (const [beat, pitch, length, velocity = 0.5] of CHAIN)
               s.note("pad", 40, beat, pitch, length, velocity, {
                 vibrato: { rate: 5.2, depth: 14, delay: 0.6 },
               });
-          s.note("bass", b, 0, [40, 38, 36, 35][(b - 40) / 2]!, b === 46 ? 7.4 : 7.9, 0.72);
+          s.note(
+            "bass",
+            b,
+            0,
+            [40, 38, 36, 35][(b - 40) / 2]!,
+            b === 46 ? 7.4 : 7.9,
+            0.72,
+          );
         } else pad(b, chord, home, b >= 72 ? 0.42 : 0.38);
         if (b === 72)
           for (const [beat, pitch, length, velocity = 0.5] of COAST_LINE)
@@ -977,7 +1044,8 @@ export const copperWire: DemoDefinition = {
             });
         // Sub: half-speed roots that glide on, sparse for the first eight
         // bars of the motor, a pedal E under the coast, one last low E.
-        if (b >= 72 && b < 78) s.note("sub", b, 0, 28, b === 76 ? 7.2 : 7.8, 0.74);
+        if (b >= 72 && b < 78)
+          s.note("sub", b, 0, 28, b === 76 ? 7.2 : 7.8, 0.74);
         else if (b === 78) s.note("sub", b, 0, 28, 7.6, 0.8);
         else if (b >= 8 && b < 16) s.phrase("sub", b, sparse(SUB[chord]));
         else if (b >= 16 && b < 72 && (b < 40 || b >= 48))
@@ -1013,7 +1081,7 @@ export const copperWire: DemoDefinition = {
       // bars 2-3, the arp canon at 58 and 66, the full tune doubled at the
       // peak.
       if (runs) {
-        const vary = b % 16 >= 8;
+        const vary = b >= 56 && b < 64;
         hookV(b, p, vary);
         hookC(b, p, b >= 64);
         if (p === 2 || p === 3) {
@@ -1021,54 +1089,45 @@ export const copperWire: DemoDefinition = {
             const start = (b % 2) * 4;
             for (let i = 0; i < 4; i++) {
               s.note("chip", b, i, ARP[start + i]!, 0.3, 0.5);
-              s.note("keys", b, i + 1 - (b % 2 === 1 && i === 3 ? 0 : 0), ARP[start + i]! - 12, 0.6, 0.46);
+              s.note("keys", b, i + 1, ARP[start + i]! - 12, 0.6, 0.46);
             }
           } else
-            s.phrase("keys", b, p === 2 ? ANSWER[0] : vary ? ANSWER_LIFT : ANSWER[1]);
+            s.phrase(
+              "keys",
+              b,
+              p === 2 ? ANSWER[0] : vary ? ANSWER_LIFT : ANSWER[1],
+            );
         }
       }
       // The half-time turn: the vocal alone states the tune at double length.
-      if (b >= 32 && b < 40 && b % 2 === 0) {
-        const slow: Phrase = [
-          [
-            [0, 64, 2.2, 0.66],
-            [4, 71, 2.2, 0.7],
-          ],
-          [
-            [0, 66, 2.2, 0.64],
-            [4, 64, 3.2, 0.66],
-          ],
-          [
-            [0, 69, 2.2, 0.66],
-            [4, 72, 2.2, 0.68],
-          ],
-          [
-            [0, 74, 2.2, 0.7],
-            [4, 66, 2.4, 0.66],
-          ],
-        ][(b - 32) / 2]!;
-        s.phrase("chop", b, slow);
-      }
+      if (b >= 32 && b < 40 && b % 2 === 0)
+        s.phrase("chop", b, SLOW[(b - 32) / 2]!);
       // Teasers and fragments outside the runs.
       if (b === 5) s.note("chip", b, 1.5, 76, 0.4, 0.4);
       if (b === 5) s.note("chip", b, 2.5, 83, 0.6, 0.42);
-      if (b === 22) s.phrase("chop", b, [
-        [2, 64, 0.5, 0.6],
-        [3, 71, 0.8, 0.62],
-      ]);
-      if (b === 42 || b === 44) s.note("chop", b, 1, b === 42 ? 72 : 71, 1.6, 0.5);
-      if (b === 46) s.note("chop", b, 1, 69, 1.6, 0.52);
+      if (b === 22)
+        s.phrase("chop", b, [
+          [2, 64, 0.5, 0.6],
+          [3, 71, 0.8, 0.62],
+        ]);
+      // Vacuum fragments sit a third under the suspension chain: the fifth
+      // of each chord, then a stuttered F sharp the drop's E resolves.
+      if (b === 42 || b === 44)
+        s.note("chop", b, 1, b === 42 ? 69 : 67, 1.6, 0.5);
+      if (b === 46) s.note("chop", b, 1, 66, 1.6, 0.52);
       if (b === 47)
         for (let i = 0; i < 8; i++)
-          s.note("chop", 47, 0.5 + i / 8, 67, 0.1, 0.34 + i * 0.05);
-      if (b === 76) s.phrase("chop", b, [
-        [0, 74, 0.5, 0.56],
-        [2, 71, 0.5, 0.54],
-      ]);
-      if (b === 77) s.phrase("chop", b, [
-        [0, 69, 0.5, 0.52],
-        [1, 66, 1.2, 0.5],
-      ]);
+          s.note("chop", 47, 0.5 + i / 8, 66, 0.1, 0.34 + i * 0.05);
+      if (b === 76)
+        s.phrase("chop", b, [
+          [0, 74, 0.5, 0.56],
+          [2, 71, 0.5, 0.54],
+        ]);
+      if (b === 77)
+        s.phrase("chop", b, [
+          [0, 69, 0.5, 0.52],
+          [1, 66, 1.2, 0.5],
+        ]);
       if (b === 78) {
         s.note("chop", 78, 0, 64, 2.4, 0.56);
         // The last chip fragment: the tune's opening as a slow arpeggio,
@@ -1084,7 +1143,8 @@ export const copperWire: DemoDefinition = {
       if (b === 4 || b === 40 || b === 44)
         s.note("glass", b, 0, b === 44 ? 76 : 83, 0.5, 0.38);
       if (b === 79) s.note("glass", b, 0, 83, 1, 0.32);
-      if ([7, 23, 31, 39, 63, 71].includes(b)) s.note("rise", b, 0, 60, 3.9, 0.6);
+      if ([7, 23, 31, 39, 63, 71].includes(b))
+        s.note("rise", b, 0, 60, 3.9, 0.6);
       if (b === 46) s.note("rise", b, 0, 60, 6.9, 0.62);
     }
     return s.finish();
