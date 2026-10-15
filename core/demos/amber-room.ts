@@ -315,26 +315,26 @@ const THEME: Line = [
   [0.5, 69, 0.55, 0.66, "s"],
   [1.25, 72, 0.45, 0.62],
   [2, 74, 0.75, 0.76, "a"],
-  [3, 72, 1.5, 0.68, "v"],
-  [5, 69, 0.7, 0.6],
-  [6.25, 67, 1.35, 0.64, "vf"],
+  [3, 72, 1.3, 0.68, "v"],
+  [4.75, 69, 0.5, 0.6],
+  [5.5, 67, 1, 0.64, "vf"],
 ];
 const ANSWER: Line = [
   [0.75, 65, 0.5, 0.58, "s"],
   [1.5, 67, 0.45, 0.6],
   [2.25, 69, 0.6, 0.68],
   [3.25, 64, 0.25, 0.56, "g"],
-  [4.5, 62, 0.45, 0.56],
-  [5.25, 65, 0.45, 0.6],
-  [6, 67, 1.6, 0.64, "vf"],
+  [4.25, 62, 0.45, 0.56],
+  [5, 65, 0.45, 0.6],
+  [5.75, 67, 0.9, 0.64, "vf"],
 ];
 const THEME_DOWN: Line = [
   [0.5, 69, 0.55, 0.66, "s"],
   [1.25, 72, 0.45, 0.64],
   [2, 76, 0.75, 0.78, "a"],
-  [3, 74, 1.4, 0.7, "v"],
-  [5, 72, 0.7, 0.62],
-  [6.25, 68, 1.2, 0.64, "vf"],
+  [3, 74, 1.3, 0.7, "v"],
+  [4.75, 72, 0.5, 0.62],
+  [5.5, 68, 1, 0.64, "vf"],
 ];
 const TURN: Line = [
   [0.5, 67, 0.3, 0.55, "g"],
@@ -351,10 +351,10 @@ const THEME_GRACE: Line = [
   [1.25, 72, 0.4, 0.64],
   [2, 74, 0.45, 0.76],
   [2.5, 77, 0.45, 0.72, "s"],
-  [3, 74, 1.4, 0.7, "v"],
-  [5, 72, 0.45, 0.62],
-  [5.5, 69, 0.4, 0.6],
-  [6.25, 67, 1.4, 0.66, "vf"],
+  [3, 74, 1.3, 0.7, "v"],
+  [4.75, 72, 0.4, 0.62],
+  [5.25, 69, 0.4, 0.6],
+  [5.75, 67, 0.9, 0.66, "vf"],
 ];
 const ANSWER_UP: Line = [
   [0.5, 72, 0.4, 0.62, "s"],
@@ -362,9 +362,9 @@ const ANSWER_UP: Line = [
   [1.5, 76, 0.75, 0.74],
   [2.5, 74, 0.35, 0.6, "g"],
   [3, 72, 0.9, 0.64],
-  [4.5, 74, 0.5, 0.66],
-  [5.25, 77, 0.5, 0.7, "s"],
-  [6, 74, 1.6, 0.7, "vf"],
+  [4.25, 74, 0.45, 0.66],
+  [5, 77, 0.45, 0.7, "s"],
+  [5.75, 74, 0.9, 0.7, "vf"],
 ];
 const THEME_HIGH: Line = [
   [0.5, 76, 0.5, 0.72, "s"],
@@ -372,9 +372,9 @@ const THEME_HIGH: Line = [
   [2, 76, 0.4, 0.68],
   [2.5, 74, 0.4, 0.64, "g"],
   [3, 72, 1.2, 0.68, "v"],
-  [5, 75, 0.5, 0.66],
-  [5.75, 72, 0.4, 0.62],
-  [6.25, 68, 1.2, 0.64, "vf"],
+  [4.5, 75, 0.5, 0.66],
+  [5.25, 72, 0.4, 0.62],
+  [5.75, 68, 0.9, 0.64, "vf"],
 ];
 const TURN_OUT: Line = [
   [0.5, 70, 0.4, 0.58],
@@ -384,9 +384,9 @@ const TURN_OUT: Line = [
   [3.25, 63, 0.4, 0.56, "g"],
   [3.75, 64, 0.5, 0.6],
   [4.5, 65, 0.4, 0.58],
-  [5, 69, 1.2, 0.64, "v"],
-  [6.5, 72, 0.5, 0.62],
-  [7.25, 70, 0.6, 0.6, "f"],
+  [5, 69, 1, 0.64, "v"],
+  [6, 72, 0.35, 0.62],
+  [6.4, 70, 0.5, 0.6, "f"],
 ];
 const BRIDGE_SAX: Line = [
   [0.5, 69, 2.8, 0.58, "sv"],
@@ -417,8 +417,7 @@ const CLIMB: Line = [
   [2.5, 77, 0.45, 0.78, "s"],
   [3, 74, 1.4, 0.74, "v"],
   [5, 72, 0.4, 0.66],
-  [5.5, 74, 0.4, 0.68],
-  [6, 76, 1.6, 0.74, "vf"],
+  [6, 76, 1.1, 0.74, "vf"],
   [8.5, 77, 0.4, 0.74, "s"],
   [9, 76, 0.4, 0.72],
   [9.5, 72, 0.4, 0.66, "g"],
@@ -426,7 +425,7 @@ const CLIMB: Line = [
   [10.75, 76, 0.9, 0.74, "v"],
   [12.5, 77, 0.4, 0.76],
   [13, 79, 0.5, 0.8, "s"],
-  [14, 77, 1.5, 0.76, "vf"],
+  [14, 77, 1, 0.76, "vf"],
 ];
 const PEAK: Line = [
   [0.5, 76, 0.4, 0.78, "s"],
@@ -434,8 +433,6 @@ const PEAK: Line = [
   [1.75, 79, 1.35, 0.88, "sv"],
   [3.25, 77, 0.4, 0.74],
   [3.75, 76, 0.25, 0.72, "g"],
-  [4.5, 75, 0.4, 0.72],
-  [5, 72, 0.4, 0.68],
   [5.5, 79, 1.3, 0.82, "svf"],
   [8.5, 74, 0.4, 0.68],
   [9, 72, 0.4, 0.66, "g"],
@@ -530,6 +527,75 @@ const DOOR_TOP: Line = [
   [15, 77, 0.8, 0.44],
 ];
 
+/**
+ * The Rhodes answers in the sax's rests, one motif every time: three notes
+ * falling over the last beat and a half of the phrase, the last held over
+ * the barline as a suspension that resolves by step once the new chord is
+ * in (Bb to A over Fmaj9, G to F over Dm9, F held into the sus and dropping
+ * to E when the altered dominant lands, C to Bb over Gm9).
+ * [phrase bar, line in beats from that bar]
+ */
+const ANSWERS: readonly (readonly [number, Line])[] = [
+  [
+    4,
+    [
+      [6.75, 74, 0.4, 0.5],
+      [7.25, 72, 0.4, 0.5],
+      [7.75, 70, 1, 0.54],
+      [8.75, 69, 0.7, 0.48],
+    ],
+  ],
+  [
+    6,
+    [
+      [6.75, 77, 0.4, 0.5],
+      [7.25, 74, 0.4, 0.5],
+      [7.75, 79, 1, 0.54],
+      [8.75, 77, 0.7, 0.48],
+    ],
+  ],
+  [
+    8,
+    [
+      [6.75, 80, 0.4, 0.5],
+      [7.25, 75, 0.4, 0.5],
+      [7.75, 77, 2, 0.54],
+      [10, 76, 0.8, 0.48],
+    ],
+  ],
+  [
+    10,
+    [
+      [6.75, 78, 0.4, 0.5],
+      [7.25, 75, 0.4, 0.5],
+      [7.75, 72, 1, 0.54],
+      [8.75, 70, 0.7, 0.48],
+    ],
+  ],
+];
+
+/**
+ * Cadence suspensions in the comp: 4-3 (the voice that would play the third
+ * plays the fourth on the downbeat and falls to the third at `resolve`) and
+ * 9-8 (the ninth falls to the octave). [bar, kind, resolve beat]
+ */
+const SUS: readonly (readonly [number, "4-3" | "9-8", number])[] = [
+  [4, "9-8", 1],
+  [5, "4-3", 1.5],
+  [6, "4-3", 1.5],
+  [8, "4-3", 1],
+  [11, "4-3", 1],
+  [13, "4-3", 1.5],
+  [14, "4-3", 1.5],
+  [16, "4-3", 1],
+  [19, "4-3", 1],
+  [36, "9-8", 1],
+  [37, "4-3", 1.5],
+  [38, "4-3", 1.5],
+  [40, "4-3", 1],
+  [43, "4-3", 1],
+];
+
 /** Where the sax sings: [bar, line, gain]. */
 const SAX_PLAN: readonly (readonly [number, Line, number])[] = [
   [4, THEME, 0.94],
@@ -564,10 +630,10 @@ const VIBES_ANSWERS: readonly (readonly [number, Line])[] = [
     ],
   ],
   [
-    42,
+    41,
     [
-      [3.25, 80, 0.4, 0.42],
-      [3.5, 75, 0.9, 0.38],
+      [3, 80, 0.4, 0.42],
+      [3.25, 75, 0.9, 0.38],
     ],
   ],
 ];
@@ -585,6 +651,10 @@ function tunes(): [number, number, number][] {
   };
   add(0, DOOR_TOP, KEYS);
   for (const [bar, line] of SAX_PLAN) add(bar, line, SAX);
+  for (const [bar, line] of ANSWERS) {
+    add(bar, line, KEYS);
+    if (bar < 10) add(bar + 8, line, KEYS);
+  }
   add(28, KEYS_SOLO, KEYS);
   for (const [bar, line] of VIBES_ANSWERS) add(bar, line, VIBES);
   return out;
@@ -692,7 +762,8 @@ export const amberRoom: DemoDefinition = {
     ],
     arrangement: [
       "Doorway 4",
-      "Head 16",
+      "Head 8",
+      "Second head 8",
       "Pocket 8",
       "Keys alone 8",
       "Head return 8",
@@ -709,7 +780,8 @@ export const amberRoom: DemoDefinition = {
     const s = new Composer(amberRoom.info);
     for (const [name, start, bars] of [
       ["Doorway", 0, 4],
-      ["Head", 4, 16],
+      ["Head", 4, 8],
+      ["Second head", 12, 8],
       ["Pocket", 20, 8],
       ["Keys alone", 28, 8],
       ["Head return", 36, 8],
@@ -739,12 +811,21 @@ export const amberRoom: DemoDefinition = {
     for (let bar = 0; bar < 48; bar++)
       harmony(bar).forEach(([, root, chord], i) => {
         const sung = heard(bar, i);
+        // On a 4-3 bar the third should sit in the top two voices, where
+        // the suspension is heard as a line rather than a smudge.
+        const high = (shape: readonly number[]): number =>
+          i === 0 &&
+          SUS.some(([at, kind]) => at === bar && kind === "4-3") &&
+          shape.findIndex((tone) => tone % 12 === chord.third % 12) <
+            shape.length - 2
+            ? 6
+            : 0;
         previous = lead(
           previous,
           root,
           [
-            ...chord.forms.map((shape) => [0, shape] as const),
-            ...chord.alts.map((shape) => [3, shape] as const),
+            ...chord.forms.map((shape) => [high(shape), shape] as const),
+            ...chord.alts.map((shape) => [3 + high(shape), shape] as const),
           ],
           [53, 64.5, 74],
           sung,
@@ -1022,6 +1103,7 @@ export const amberRoom: DemoDefinition = {
       length: number,
       velocity: number,
       spread = 0.014,
+      lengths: readonly number[] = [],
     ): void => {
       pitches.forEach((pitch, i) => {
         const top = i === pitches.length - 1;
@@ -1030,13 +1112,55 @@ export const amberRoom: DemoDefinition = {
           bar,
           beat + KEYS + i * spread,
           pitch,
-          Math.max(0.1, length - i * spread),
+          Math.max(0.1, (lengths[i] ?? length) - i * spread),
           Math.min(
             1,
             (top ? velocity + 0.05 : velocity * 0.9) * (0.96 + 0.08 * rand()),
           ),
         );
       });
+    };
+    /**
+     * The downbeat chord with its suspension: the suspended voice holds
+     * until `resolve`, then steps down to the chord tone.
+     */
+    const suspend = (
+      bar: number,
+      beat: number,
+      length: number,
+      velocity: number,
+    ): boolean => {
+      const sus = SUS.find(([at]) => at === bar);
+      if (!sus) return false;
+      const [, kind, resolve] = sus;
+      const [, root, chord] = harmony(bar)[spanAt(bar, beat)]!;
+      const pitches = chordAt(bar, beat);
+      const want = kind === "4-3" ? chord.third % 12 : 2;
+      const i = pitches.findIndex(
+        (p) => (((p - root) % 12) + 12) % 12 === want,
+      );
+      if (i < 0) return false;
+      const held = pitches.map((p, j) =>
+        j === i && kind === "4-3" ? p + 5 - chord.third : p,
+      );
+      roll(
+        bar,
+        beat,
+        held,
+        length,
+        velocity,
+        0.014,
+        held.map((_, j) => (j === i ? resolve - beat : length)),
+      );
+      s.note(
+        "keys",
+        bar,
+        resolve + KEYS,
+        kind === "4-3" ? pitches[i]! : pitches[i]! - 2,
+        Math.max(0.3, length - (resolve - beat)),
+        velocity * 0.92,
+      );
+      return true;
     };
     let pushed = false;
     const comp = (bar: number, cell: number, gain = 1): void => {
@@ -1066,7 +1190,8 @@ export const amberRoom: DemoDefinition = {
             velocity * gain,
           );
           pushed = true;
-        } else roll(bar, beat, chordAt(bar, beat), length, velocity * gain);
+        } else if (beat >= 0.75 || !suspend(bar, beat, length, velocity * gain))
+          roll(bar, beat, chordAt(bar, beat), length, velocity * gain);
       }
     };
 
@@ -1143,8 +1268,12 @@ export const amberRoom: DemoDefinition = {
     for (const [beat, pitch, length, velocity] of KEYS_SOLO)
       s.note("keys", 28, beat + KEYS, pitch, length, velocity);
 
-    // Sax lines.
+    // Sax lines, and the Rhodes answering in their rests.
     for (const [bar, line, gain] of SAX_PLAN) sax(bar, line, gain);
+    for (const [bar, line] of ANSWERS)
+      for (const at of bar < 10 ? [bar, bar + 8] : [bar])
+        for (const [beat, pitch, length, velocity] of line)
+          s.note("keys", at, beat + KEYS, pitch, length, velocity);
 
     // Vibes: soft answers in the bridge and the head return, and the last word.
     // The bridge bells double the top of the Rhodes chord an octave up,
