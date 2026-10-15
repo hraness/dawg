@@ -316,12 +316,14 @@ export const copperWire: DemoDefinition = {
           [48, 0.72],
           [64, 0.8],
           [72, 0.9],
+          [77, 0.9],
+          [79.75, 0.45],
         ),
       }),
     );
     s.track(
       preset("keys", "Rhodes answers", "rhodes", 0.22, {
-        pan: -0.18,
+        pan: -0.26,
         delay: { beats: 0.75, feedback: 0.38, mix: 0.26, pingpong: true },
         reverb: room,
         fx: orbit,
@@ -329,6 +331,8 @@ export const copperWire: DemoDefinition = {
     );
     s.track(
       voice("chop", "Up fragments", "sampler", 0.45, {
+        pan: 0.12,
+        // Natural-speed syllable cut at the note's end, pitched by key only.
         sampler: {
           mode: "keyed",
           voices: {
@@ -336,8 +340,7 @@ export const copperWire: DemoDefinition = {
               ...bundledSampleRef("stay-up"),
               begin: 0.25,
               end: 0.5,
-              fit: true,
-              fadeTime: 0.008,
+              fadeTime: 0.012,
               fadeInTime: 0.003,
             },
           },
@@ -350,7 +353,7 @@ export const copperWire: DemoDefinition = {
     );
     s.track(
       voice("glass", "Signal glass", "sampler", 0.28, {
-        pan: 0.3,
+        pan: 0.36,
         sampler: {
           mode: "keyed",
           voices: { glass: bundledSampleRef("glass-hit") },
@@ -551,7 +554,7 @@ export const copperWire: DemoDefinition = {
           b,
           b === 0 ? 0 : -0.5,
           home ? PAD_HOME : PAD[chord],
-          cut ? 7.5 : 8.3,
+          cut ? 7.5 : b === 78 ? 7.6 : 8.3,
           b >= 40 && b < 48 ? 0.5 : 0.38,
         );
         if (b >= 40 && b < 48) {
@@ -565,7 +568,7 @@ export const copperWire: DemoDefinition = {
             b === 78
               ? [
                   [0, 71, 3.5, 0.46],
-                  [4, 67, 4, 0.42],
+                  [4, 67, 3.2, 0.42],
                 ]
               : LINE[b === 76 ? 6 : b - 72]!;
           for (const [beat, pitch, length, velocity = 0.5] of line)
@@ -573,12 +576,14 @@ export const copperWire: DemoDefinition = {
               vibrato: { rate: 5.2, depth: 12, delay: 0.5 },
             });
         }
-        // Sub: half-speed roots that glide on; whole notes in the vacuum and coast.
-        if (b >= 40 && b < 48)
-          s.note("sub", b, 0, SUB[chord][0]![1], cut ? 7 : 7.8, 0.8);
-        else if (b >= 72)
-          s.note("sub", b, 0, SUB[chord][0]![1], 7.8, b === 78 ? 0.7 : 0.8);
-        else if (b >= 8) s.phrase("sub", b, SUB[chord]);
+        // Sub: half-speed roots that glide on. The vacuum drops it for four
+        // bars so the strings carry; the coast holds roots and lets go.
+        if (b >= 44 && b < 48)
+          s.note("sub", b, 0, SUB[chord][0]![1], cut ? 7 : 7.8, 0.66);
+        else if (b >= 72 && b < 78)
+          s.note("sub", b, 0, SUB[chord][0]![1], b === 76 ? 7.2 : 7.8, 0.76);
+        else if (b >= 8 && b < 72 && (b < 40 || b >= 48))
+          s.phrase("sub", b, SUB[chord]);
         // Reese from the second half of the motor on.
         if ((b >= 16 && b < 40) || (b >= 52 && b < 72))
           reese(
@@ -613,7 +618,8 @@ export const copperWire: DemoDefinition = {
                   [7, 47, 1.1, 0.64],
                 ],
           );
-        else if (b >= 72) s.note("bass", b, 0, REESE[chord][0]![1], 7.8, 0.66);
+        else if (b >= 72 && b < 78)
+          s.note("bass", b, 0, REESE[chord][0]![1], b === 76 ? 7.2 : 7.8, 0.66);
         // Rhodes stabs behind the beat; held chords in the vacuum.
         if ((b >= 24 && b < 38) || (b >= 52 && b < 76)) {
           strum("keys", b, 1.5, KEYS[chord], 0.45, 0.5);
@@ -622,11 +628,16 @@ export const copperWire: DemoDefinition = {
       }
 
       // Vocal call, glass answer; stutters in the second half.
-      const runs = (b >= 26 && b < 38) || (b >= 52 && b < 72);
+      // An eight-bar question and answer: call, glass, rest, low call, glass,
+      // rest, then a fragment or stutter into the next phrase. The live wire
+      // adds a fragment halfway.
+      const runs = (b >= 24 && b < 38) || (b >= 52 && b < 72);
       if (runs) {
-        if (b % 4 === 0) s.phrase("chop", b, CALL);
-        if (b % 4 === 2) s.phrase("chop", b, CALL_LOW);
-        if (b % 4 === 3) s.phrase("chop", b, b >= 52 ? STUTTER : FRAGMENT);
+        const p = b % 8;
+        if (p === 0) s.phrase("chop", b, CALL);
+        if (p === 4) s.phrase("chop", b, CALL_LOW);
+        if (p === 7) s.phrase("chop", b, b >= 52 ? STUTTER : FRAGMENT);
+        if (p === 3 && b >= 64) s.phrase("chop", b, FRAGMENT);
       }
       if ((b >= 24 && b < 40) || (b >= 48 && b < 72)) {
         const [high, low] = GLASS[chord];
