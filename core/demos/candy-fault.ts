@@ -8,6 +8,7 @@ import {
   lanes,
   orbit,
   room,
+  TPB,
   voice,
   type Phrase,
 } from "./build.ts";
@@ -15,14 +16,19 @@ import { demoInfo, type DemoDefinition } from "./types.ts";
 
 type Extra = Partial<NoteInput>;
 type Harmony = Readonly<{
-  /** 808 root (E1 to C#2). */
+  /** 808 root. */
   root: number;
-  /** Rootless electric-piano voicing around middle C. */
+  /** Electric-piano voicing around middle C. */
   keys: readonly number[];
   /** Supersaw stack, voiced high so the sub owns the lows. */
   saw: readonly number[];
-  /** Chip arpeggio tones in the 2 to 6 kHz zone. */
-  arp: readonly number[];
+  /**
+   * Two five-note chip arpeggio sets (with the 6th or 9th). Across a
+   * I-V-vi-IV phrase `lo` walks its top note down a line (E D# C# B) and
+   * `hi` walks it up (B C# D# E).
+   */
+  lo: readonly number[];
+  hi: readonly number[];
 }>;
 
 const H: Readonly<Record<string, Harmony>> = {
@@ -30,86 +36,134 @@ const H: Readonly<Record<string, Harmony>> = {
     root: 28,
     keys: [56, 59, 63, 66],
     saw: [64, 68, 71, 76],
-    arp: [76, 80, 83, 88],
+    lo: [85, 88, 92, 95, 100],
+    hi: [80, 83, 88, 90, 95],
   },
   B: {
     root: 35,
     keys: [54, 59, 61, 63],
     saw: [63, 66, 71, 75],
-    arp: [75, 78, 83, 87],
+    lo: [87, 90, 95, 97, 99],
+    hi: [83, 87, 90, 95, 97],
   },
   Cm: {
     root: 37,
     keys: [56, 59, 61, 64],
     saw: [64, 68, 73, 76],
-    arp: [76, 80, 85, 88],
+    lo: [85, 88, 92, 95, 97],
+    hi: [88, 92, 95, 97, 99],
   },
   A: {
     root: 33,
     keys: [57, 61, 64, 68],
     saw: [64, 69, 73, 76],
-    arp: [76, 81, 85, 88],
+    lo: [81, 85, 88, 93, 95],
+    hi: [85, 88, 93, 97, 100],
+  },
+  /** The bVII lift at the end of verse two. */
+  D: {
+    root: 38,
+    keys: [57, 62, 66, 69],
+    saw: [62, 66, 69, 74],
+    lo: [81, 86, 90, 93, 98],
+    hi: [86, 90, 93, 98, 100],
+  },
+  /** Pre-chorus: Aadd9 and two B sus chords (the sus voice resolves in code). */
+  A9: {
+    root: 33,
+    keys: [57, 61, 64, 68],
+    saw: [69, 73, 76, 83],
+    lo: [81, 85, 88, 93, 95],
+    hi: [85, 88, 93, 97, 100],
   },
   Bs: {
     root: 35,
     keys: [57, 59, 64, 66],
-    saw: [64, 66, 71, 76],
-    arp: [76, 78, 83, 88],
+    saw: [71, 76, 78, 83],
+    lo: [87, 90, 95, 97, 99],
+    hi: [83, 87, 90, 95, 97],
   },
-  // Soft reset colours: E/G#, F#m11, B7sus4 and the borrowed A minor 6.
-  EG: { root: 32, keys: [59, 63, 64, 68], saw: [], arp: [80, 83, 87, 88] },
-  Fm: { root: 30, keys: [57, 59, 61, 64], saw: [], arp: [81, 85, 88, 90] },
-  B7: { root: 35, keys: [57, 59, 64, 66], saw: [], arp: [78, 81, 83, 88] },
-  Am6: { root: 33, keys: [57, 60, 64, 66], saw: [], arp: [76, 78, 81, 84] },
+  Cm7: {
+    root: 37,
+    keys: [56, 59, 61, 64],
+    saw: [73, 76, 80, 85],
+    lo: [85, 88, 92, 95, 97],
+    hi: [88, 92, 95, 97, 99],
+  },
+  Bs2: {
+    root: 35,
+    keys: [57, 59, 64, 66],
+    saw: [78, 83, 88, 90],
+    lo: [87, 90, 95, 97, 99],
+    hi: [83, 87, 90, 95, 97],
+  },
+  // Bridge: a bass line walking down E D# C# B A G# F# then V. The keys
+  // leave out the suspended voice; the singer carries the 7-6 chain.
+  E8: { root: 40, keys: [52, 56, 59, 64], saw: [], lo: [], hi: [] },
+  BD: { root: 39, keys: [51, 54, 59, 63], saw: [], lo: [], hi: [] },
+  Cm8: { root: 37, keys: [52, 56, 61, 64], saw: [], lo: [], hi: [] },
+  B8: { root: 35, keys: [54, 59, 63, 66], saw: [], lo: [], hi: [] },
+  A8: { root: 33, keys: [52, 57, 61, 64], saw: [], lo: [], hi: [] },
+  EG: { root: 32, keys: [52, 56, 59, 68], saw: [], lo: [], hi: [] },
+  /** The borrowed ii half-diminished (F# A C# E), the minor-iv colour. */
+  Fh: { root: 30, keys: [54, 57, 61, 64], saw: [], lo: [], hi: [] },
+  B7s: { root: 35, keys: [54, 57, 59, 66], saw: [], lo: [], hi: [] },
 };
 
-/** One chord name per bar: I-IV-V intro, vi-IV-I-V verse, I-V-vi-IV chorus. */
+/** One chord name per bar. */
 const PROG = [
-  ...["E", "E", "A", "B"],
-  ...["Cm", "Cm", "A", "A", "E", "E", "B", "B"],
-  ...["A", "B", "Cm", "Bs"],
-  ...["E", "B", "Cm", "A", "E", "B", "Cm", "A"],
-  ...["A", "EG", "Fm", "B7", "A", "Am6", "EG", "Bs"],
-  ...["Cm", "A", "Bs", "B"],
-  ...["E", "B", "Cm", "A", "E", "B", "Cm", "A"],
-  ...["E", "B", "Cm", "A", "E", "B", "Cm", "A"],
-  ...["E", "B", "A", "E"],
+  ...["E", "E", "A", "B"], // 0 intro
+  ...["Cm", "Cm", "A", "A", "E", "E", "B", "B"], // 4 verse 1
+  ...["A9", "Bs", "Cm7", "Bs2"], // 12 pre-chorus
+  ...["E", "B", "Cm", "A", "E", "B", "Cm", "A"], // 16 chorus 1
+  ...["E", "E", "A", "B"], // 24 glitch break
+  ...["Cm", "Cm", "A", "A", "E", "E", "D", "D"], // 28 verse 2 (bVII lift)
+  ...["A9", "Bs", "Cm7", "Bs2"], // 36 pre-chorus 2
+  ...["E", "B", "Cm", "A", "E", "B", "Cm", "A"], // 40 chorus 2
+  ...["E8", "BD", "Cm8", "B8", "A8", "EG", "Fh", "B7s"], // 48 bridge
+  ...["E", "B", "Cm", "A", "E", "B", "Cm", "A"], // 56 final chorus (lifted to F)
+  ...["E", "B", "A", "E"], // 64 outro
 ] as const;
+const BARS = PROG.length;
 
 type Part =
   | "boot"
   | "verse"
   | "lift"
   | "chorus"
-  | "soft"
-  | "rebuild"
+  | "glitch"
+  | "verse2"
+  | "lift2"
   | "return"
+  | "bridge"
   | "over"
   | "last";
 
-const partOf = (b: number): Part =>
-  b < 4
-    ? "boot"
-    : b < 12
-      ? "verse"
-      : b < 16
-        ? "lift"
-        : b < 24
-          ? "chorus"
-          : b < 32
-            ? "soft"
-            : b < 36
-              ? "rebuild"
-              : b < 44
-                ? "return"
-                : b < 52
-                  ? "over"
-                  : "last";
+const PARTS: readonly (readonly [Part, start: number])[] = [
+  ["boot", 0],
+  ["verse", 4],
+  ["lift", 12],
+  ["chorus", 16],
+  ["glitch", 24],
+  ["verse2", 28],
+  ["lift2", 36],
+  ["return", 40],
+  ["bridge", 48],
+  ["over", 56],
+  ["last", 64],
+];
+const partOf = (b: number): readonly [Part, inPart: number] => {
+  let found = PARTS[0]!;
+  for (const entry of PARTS) if (b >= entry[1]) found = entry;
+  return [found[0], b - found[1]];
+};
 
-/** A down-a-diatonic-third shadow in E major for the backing singer. */
+/** Diatonic shadows in E major for the backing singer. */
 const E_MAJOR = new Set([4, 6, 8, 9, 11, 1, 3]);
 const thirdBelow = (pitch: number): number =>
   E_MAJOR.has((pitch - 3 + 120) % 12) ? pitch - 3 : pitch - 4;
+const sixthBelow = (pitch: number): number =>
+  E_MAJOR.has((pitch - 8 + 120) % 12) ? pitch - 8 : pitch - 9;
 
 /** Scoop into a note from below, the hard-tune snap of a pitched vocal. */
 const scoop = (cents = -90, at = 0.12): Extra => ({
@@ -152,12 +206,6 @@ const KICK: Readonly<Record<string, readonly string[]>> = {
     "9...8..69..68...",
     "9...8...9.7.8.79",
   ],
-  rebuild: [
-    "9...8...9...8...",
-    "9...8...9...8...",
-    "9.8.9.8.9.8.9.8.",
-    "9.8.9.8.9.8.....",
-  ],
   last: ["9.........7.....", "9.....7.........", "", ""],
 };
 
@@ -174,6 +222,7 @@ const HATS_DRIVE = [
   "84658465846.....",
 ];
 
+// ── hook motifs (the plastic pulse lead) ─────────────────────────────────
 const MOTIF: Phrase = [
   [0, 76, 0.32, 0.78],
   [0.75, 75, 0.2, 0.63],
@@ -213,68 +262,153 @@ const ANSWERS: readonly Phrase[] = [
     [3.5, 88, 0.45, 0.84],
   ],
 ];
+/**
+ * Verse-two counter-melody: a three-note idea in the gap between the 808
+ * and the singer, answering each sung line in its rest. It steps down
+ * where the singer's next line climbs.
+ */
+const COUNTER: Readonly<Record<string, Phrase>> = {
+  Cm: [
+    [2.5, 64, 0.22, 0.6],
+    [3, 61, 0.22, 0.54],
+    [3.5, 59, 0.6, 0.62],
+  ],
+  A: [
+    [2.5, 64, 0.22, 0.6],
+    [3, 61, 0.22, 0.54],
+    [3.5, 57, 0.6, 0.62],
+  ],
+  E: [
+    [2.5, 63, 0.22, 0.6],
+    [3, 59, 0.22, 0.54],
+    [3.5, 56, 0.6, 0.62],
+  ],
+  D: [
+    [2, 62, 0.22, 0.58],
+    [2.5, 66, 0.22, 0.6],
+    [3, 69, 0.22, 0.62],
+    [3.5, 71, 0.6, 0.66],
+  ],
+};
+/**
+ * Chorus hocket: where the singer rests, the chip pluck plays the next
+ * syllables of the tune an octave up, so voice and chip add up to one line.
+ */
+const CHIP: Readonly<Record<string, Phrase>> = {
+  // After "oh" resolves on B: the tune continues B G# F# B.
+  B: [
+    [2, 83, 0.2, 0.74],
+    [2.5, 80, 0.2, 0.62],
+    [3, 78, 0.2, 0.66],
+    [3.5, 83, 0.45, 0.78],
+  ],
+  // After "circuit" on A: A C# B A G#.
+  A: [
+    [1.75, 81, 0.2, 0.7],
+    [2, 85, 0.2, 0.74],
+    [2.5, 83, 0.2, 0.64],
+    [3, 81, 0.2, 0.66],
+    [3.25, 80, 0.2, 0.6],
+  ],
+};
 
 // ── topline (all lyrics original) ────────────────────────────────────────
 type Line = readonly (readonly [bar: number, phrase: Phrase])[];
-
-const VERSE: Line = [
-  [
-    4,
-    [
-      [0.5, 68, 0.42, 0.62, "Pink"],
-      [1, 68, 0.7, 0.68, "light"],
-      [2, 66, 0.42, 0.56, "on"],
-      [2.5, 68, 0.9, 0.66, "low"],
-      [3.5, 71, 0.42, 0.62, "bat"],
-    ],
-  ],
-  [
-    5,
-    [
-      [0, 69, 0.45, 0.64, "ter"],
-      [0.5, 68, 1.7, 0.66, "y"],
-    ],
-  ],
-  [
-    6,
-    [
-      [0.5, 64, 0.4, 0.58, "I"],
-      [1, 68, 0.7, 0.68, "keep"],
-      [2, 69, 0.42, 0.6, "you"],
-      [2.5, 71, 0.42, 0.64, "in"],
-      [3, 73, 0.42, 0.66, "my"],
-    ],
-  ],
-  [7, [[0, 71, 1.9, 0.72, "cache"]]],
-  [
-    8,
-    [
-      [0.5, 68, 0.4, 0.62, "Sug"],
-      [1, 68, 0.4, 0.6, "ar"],
-      [1.5, 71, 0.42, 0.64, "on"],
-      [2, 73, 0.42, 0.62, "the"],
-      [2.5, 76, 0.9, 0.74, "cir"],
-      [3.5, 75, 0.45, 0.64, "cuit"],
-    ],
-  ],
-  [9, [[0, 71, 1.8, 0.7, "board"]]],
-  [
-    10,
-    [
-      [0.5, 71, 0.4, 0.64, "ev"],
-      [1, 73, 0.4, 0.64, "ery"],
-      [1.5, 75, 0.9, 0.74, "kiss"],
-      [2.5, 73, 0.42, 0.62, "a"],
-      [3, 71, 0.42, 0.62, "lit"],
-      [3.5, 73, 0.45, 0.66, "tle"],
-    ],
-  ],
-  [11, [[0, 75, 1.5, 0.76, "crash"]]],
+type Slot = readonly [
+  bar: number,
+  beat: number,
+  pitch: number,
+  length: number,
+  velocity: number,
 ];
 
-const LIFT: Line = [
+/** Split lyrics into syllables; a trailing `-` tells the voice the word goes on. */
+const syllables = (text: string): string[] =>
+  text.split(" ").flatMap((word) => {
+    const parts = word.split("-");
+    return parts.map((part, i) => (i < parts.length - 1 ? `${part}-` : part));
+  });
+
+/** Put syllables on a melody template, one per slot, in time order. */
+const withWords = (
+  start: number,
+  slots: readonly Slot[],
+  words: readonly string[],
+): Line => {
+  if (words.length !== slots.length)
+    throw new Error(
+      `candy-fault: ${words.length} syllables for ${slots.length} notes`,
+    );
+  const byBar = new Map<number, Phrase[number][]>();
+  slots.forEach(([bar, beat, pitch, length, velocity], i) => {
+    const list = byBar.get(start + bar) ?? [];
+    list.push([beat, pitch, length, velocity, words[i]!]);
+    byBar.set(start + bar, list);
+  });
+  return [...byBar.entries()].map(([bar, phrase]) => [bar, phrase] as const);
+};
+
+/** The verse melody: vi vi IV IV I I V V, a four-line stanza of 7 6 7 7. */
+const VERSE_SLOTS: readonly Slot[] = [
+  [0, 0.5, 68, 0.42, 0.62],
+  [0, 1, 68, 0.7, 0.68],
+  [0, 2, 66, 0.42, 0.56],
+  [0, 2.5, 68, 0.9, 0.66],
+  [0, 3.5, 71, 0.42, 0.62],
+  [1, 0, 69, 0.45, 0.64],
+  [1, 0.5, 68, 1.7, 0.66],
+  [2, 0.5, 64, 0.4, 0.58],
+  [2, 1, 69, 0.7, 0.68],
+  [2, 2, 68, 0.42, 0.6],
+  [2, 2.5, 71, 0.42, 0.64],
+  [2, 3, 73, 0.42, 0.66],
+  [3, 0, 71, 1.9, 0.72],
+  [4, 0.5, 68, 0.4, 0.62],
+  [4, 1, 68, 0.4, 0.6],
+  [4, 1.5, 71, 0.42, 0.64],
+  [4, 2, 73, 0.42, 0.62],
+  [4, 2.5, 76, 0.9, 0.74],
+  [4, 3.5, 75, 0.45, 0.64],
+  [5, 0, 71, 1.8, 0.7],
+];
+/** Last two bars over V (verse one) or over the borrowed bVII (verse two). */
+const VERSE_END_V: readonly Slot[] = [
+  [6, 0.5, 71, 0.4, 0.64],
+  [6, 1, 73, 0.4, 0.64],
+  [6, 1.5, 75, 0.9, 0.74],
+  [6, 2.5, 73, 0.42, 0.62],
+  [6, 3, 71, 0.42, 0.62],
+  [6, 3.5, 73, 0.45, 0.66],
+  [7, 0, 75, 1.5, 0.76],
+];
+const VERSE_END_VII: readonly Slot[] = [
+  [6, 0.5, 69, 0.4, 0.64],
+  [6, 1, 71, 0.4, 0.64],
+  [6, 1.5, 74, 0.9, 0.74],
+  [6, 2.5, 71, 0.42, 0.62],
+  [6, 3, 69, 0.42, 0.62],
+  [6, 3.5, 71, 0.45, 0.66],
+  [7, 0, 74, 1.5, 0.76],
+];
+const VERSE_ONE = withWords(
+  4,
+  [...VERSE_SLOTS, ...VERSE_END_V],
+  syllables(
+    "Pink light on low bat-ter-y I keep you in my cache Sug-ar on the cir-cuit board ev-ery kiss a lit-tle crash",
+  ),
+);
+const VERSE_TWO = withWords(
+  28,
+  [...VERSE_SLOTS, ...VERSE_END_VII],
+  syllables(
+    "Blue screen in the morn-ing light you're buf-fer-ing my heart Can-dy coat-ed er-ror code I don't want it to re-start",
+  ),
+);
+
+/** Pre-chorus: a rising line that ends on the 7th of V, unresolved. */
+const lift = (bar: number): Line => [
   [
-    12,
+    bar,
     [
       [0, 73, 0.4, 0.66, "Turn"],
       [0.5, 73, 0.4, 0.62, "it"],
@@ -284,9 +418,9 @@ const LIFT: Line = [
       [3, 78, 0.42, 0.7, "it"],
     ],
   ],
-  [13, [[0, 78, 1.6, 0.78, "breaks"]]],
+  [bar + 1, [[0, 78, 1.6, 0.78, "breaks"]]],
   [
-    14,
+    bar + 2,
     [
       [0, 76, 0.7, 0.7, "Hold"],
       [1, 78, 0.7, 0.74, "on"],
@@ -294,21 +428,43 @@ const LIFT: Line = [
       [3.5, 78, 0.45, 0.72, "to"],
     ],
   ],
-  [15, [[0, 83, 2.4, 0.86, "me"]]],
+  [
+    bar + 3,
+    [
+      [0, 81, 2.4, 0.86, "me"],
+      // The beat repeat: the last syllable re-fired in sixteenths.
+      [2.5, 81, 0.2, 0.8, "me"],
+      [2.75, 81, 0.2, 0.74, "me"],
+      [3, 81, 0.2, 0.68, "me"],
+      [3.25, 81, 0.18, 0.62, "me"],
+    ],
+  ],
 ];
 
-/** "We glow in the static, oh": the title line, with or without a pickup. */
+/**
+ * "We glow in the static, oh": the title line. "Glow" lands on the 9th
+ * over I and resolves down to the root; "oh" is the 9th over V resolving
+ * to its root. `flip` answers with a second "oh" that climbs instead.
+ */
 function lineA(bar: number, pickup: boolean, flip: boolean): Line {
   return [
-    ...(pickup ? ([[bar - 1, [[3.5, 68, 0.45, 0.72, "We"]]]] as const) : []),
+    ...(pickup ? ([[bar - 1, [[3.5, 71, 0.45, 0.72, "We"]]]] as const) : []),
     [
       bar,
       [
-        ...(pickup ? [] : ([[0, 68, 0.45, 0.8, "We"]] as const)),
-        [pickup ? 0 : 0.5, 71, pickup ? 1.4 : 0.95, 0.84, "glow"],
+        ...(pickup
+          ? ([
+              [0, 78, 0.5, 0.86, "glow"],
+              [0.5, 76, 1, 0.8, "_"],
+            ] as const)
+          : ([
+              [0, 71, 0.4, 0.8, "We"],
+              [0.5, 78, 0.4, 0.86, "glow"],
+              [0.9, 76, 0.6, 0.8, "_"],
+            ] as const)),
         [1.5, 73, 0.4, 0.7, "in"],
         [2, 75, 0.4, 0.72, "the"],
-        [2.5, 76, 0.9, 0.84, "sta"],
+        [2.5, 76, 0.9, 0.84, "sta-"],
         [3.5, 75, 0.45, 0.72, "tic"],
       ],
     ],
@@ -316,10 +472,14 @@ function lineA(bar: number, pickup: boolean, flip: boolean): Line {
       bar + 1,
       flip
         ? [
-            [0, 78, 0.9, 0.84, "oh"],
-            [1, 83, 1, 0.88, "oh"],
+            [0, 73, 0.75, 0.84, "oh"],
+            [0.75, 71, 0.5, 0.76, "_"],
+            [1.5, 78, 1, 0.88, "oh"],
           ]
-        : [[0, 78, 1.9, 0.86, "oh"]],
+        : [
+            [0, 73, 1, 0.86, "oh"],
+            [1, 71, 1, 0.8, "_"],
+          ],
     ],
   ];
 }
@@ -330,27 +490,28 @@ function lineB(bar: number, words: readonly string[]): Line {
   const head: Phrase =
     words.length === 6
       ? [
-          [0, 80, 0.85, 0.84, w(0)],
-          [1, 78, 0.4, 0.7, w(1)],
+          [0, 78, 0.5, 0.84, w(0)],
+          [0.5, 76, 0.5, 0.76, "_"],
+          [1, 73, 0.4, 0.7, w(1)],
           [1.5, 76, 0.4, 0.68, w(2)],
-          [2, 80, 0.85, 0.82, w(3)],
+          [2, 80, 0.9, 0.84, w(3)],
           [3, 78, 0.85, 0.76, w(4)],
         ]
       : [
-          [0, 80, 0.45, 0.82, w(0)],
-          [0.5, 80, 0.45, 0.76, w(1)],
-          [1, 78, 0.9, 0.8, w(2)],
+          [0, 78, 0.45, 0.84, w(0)],
+          [0.5, 76, 0.45, 0.76, w(1)],
+          [1, 73, 0.9, 0.8, w(2)],
           [2, 76, 0.4, 0.68, w(3)],
-          [2.5, 76, 0.4, 0.7, w(4)],
-          [3, 80, 0.85, 0.82, w(5)],
+          [2.5, 78, 0.4, 0.7, w(4)],
+          [3, 80, 0.85, 0.84, w(5)],
         ];
   return [
     [bar, head],
-    [bar + 1, [[0, 76, 1.75, 0.8, w(words.length - 1)]]],
+    [bar + 1, [[0, 76, 1.5, 0.8, w(words.length - 1)]]],
   ];
 }
 
-/** The closing line; `stutter` breaks the last word into sung sixteenths. */
+/** The closing line with the section's one peak on "pix"; `stutter` chops it. */
 function lineC(
   bar: number,
   words: readonly string[],
@@ -362,158 +523,123 @@ function lineC(
     [
       bar,
       [
-        [0, 80, 0.7, 0.84, w(0)],
-        [0.75, 80, 0.6, 0.78, w(1)],
-        [1.5, 78, 0.4, 0.7, w(2)],
-        [2, 76, stutter ? 0.22 : 0.4, 0.7, w(3)],
+        [0, 80, 0.7, 0.86, w(0)],
+        [0.75, 80, 0.6, 0.8, w(1)],
+        [1.5, 78, 0.4, 0.72, w(2)],
+        [2, 76, stutter ? 0.22 : 0.4, 0.72, w(3)],
         ...(stutter
           ? ([
-              [2.25, 80, 0.2, 0.82, w(4)],
-              [2.5, 80, 0.2, 0.72, w(4)],
+              [2.25, 83, 0.2, 0.84, w(4).replace(/-$/, "")],
+              [2.5, 83, 0.2, 0.74, w(4).replace(/-$/, "")],
               [2.75, 83, 0.2, 0.8, w(4)],
             ] as const)
-          : ([[2.5, 80, 0.45, 0.82, w(4)]] as const)),
-        [3, end, 1.6, 0.84, w(5)],
+          : ([[2.5, 83, 0.45, 0.9, w(4)]] as const)),
+        [3, end, 1.5, 0.84, w(5)],
       ],
     ],
   ];
 }
 
-const SOFT: Line = [
+/**
+ * The bridge: a lament. Each word is held across the bar line so it becomes
+ * a 7th over the new bass note, then steps down to the 6th: a 7-6 chain
+ * over E D# C# B A G#, then the borrowed ii half-diminished and a 4-3 on V.
+ */
+const BRIDGE: Line = [
   [
-    24,
+    48,
     [
       [0.5, 73, 1, 0.5, "Slow"],
-      [1.5, 71, 1.4, 0.52, "down"],
-      [3, 68, 0.4, 0.44, "let"],
-      [3.5, 69, 0.4, 0.46, "the"],
+      [1.5, 73, 4.5, 0.54, "down"],
     ],
   ],
   [
-    25,
+    49,
     [
-      [0, 71, 0.9, 0.52, "screen"],
-      [1, 68, 0.5, 0.48, "go"],
-      [1.5, 64, 2.2, 0.5, "dark"],
+      [2, 71, 1.5, 0.5, "_"],
+      [3.5, 71, 2.5, 0.5, "let"],
     ],
   ],
   [
-    26,
+    50,
     [
-      [0.5, 69, 0.4, 0.46, "I"],
-      [1, 69, 0.4, 0.48, "can"],
-      [1.5, 73, 1, 0.54, "hear"],
-      [2.5, 71, 0.4, 0.48, "your"],
-      [3, 69, 0.5, 0.48, "stat"],
-      [3.5, 68, 0.4, 0.46, "ic"],
-    ],
-  ],
-  [27, [[0, 71, 2.6, 0.54, "heart"]]],
-  [
-    28,
-    [
-      [0.5, 73, 0.4, 0.5, "Sug"],
-      [1, 73, 0.4, 0.5, "ar"],
-      [1.5, 76, 1, 0.58, "melts"],
-      [2.5, 73, 0.4, 0.5, "the"],
+      [2, 69, 1.5, 0.48, "_"],
+      [3.5, 69, 2.5, 0.5, "the"],
     ],
   ],
   [
-    29,
+    51,
     [
-      [0, 72, 0.75, 0.56, "col"],
-      [0.75, 71, 0.5, 0.5, "ors"],
-      [1.25, 69, 2.2, 0.54, "run"],
+      [2, 68, 1.5, 0.48, "_"],
+      [3.5, 68, 2.5, 0.52, "col-"],
     ],
   ],
   [
-    30,
+    52,
     [
-      [0.5, 68, 0.75, 0.52, "Hold"],
-      [1.25, 68, 0.4, 0.48, "the"],
-      [1.75, 71, 1.2, 0.56, "light"],
-      [3, 73, 0.4, 0.54, "till"],
-      [3.5, 75, 0.4, 0.58, "it's"],
+      [2, 66, 1.5, 0.5, "ors"],
+      [3.5, 66, 2.5, 0.52, "run"],
+    ],
+  ],
+  [53, [[2, 64, 2, 0.5, "_"]]],
+  [
+    54,
+    [
+      [0.5, 69, 0.4, 0.52, "Hold"],
+      [1, 71, 0.4, 0.54, "the"],
+      [1.5, 73, 1.2, 0.58, "light"],
+      [3, 73, 0.4, 0.56, "till"],
+      [3.5, 76, 0.4, 0.58, "it's"],
     ],
   ],
   [
-    31,
+    55,
     [
-      [0, 76, 0.75, 0.62, "un"],
-      [0.75, 78, 2.2, 0.68, "done"],
+      [0, 76, 1, 0.64, "un-"],
+      [1, 75, 1.4, 0.62, "done"],
     ],
   ],
-];
-
-const REBUILD: Line = [
-  [
-    32,
-    [
-      [0, 73, 0.4, 0.62, "Turn"],
-      [0.5, 73, 0.4, 0.58, "it"],
-      [1, 76, 0.9, 0.68, "up"],
-    ],
-  ],
-  [
-    33,
-    [
-      [0, 76, 0.4, 0.66, "Turn"],
-      [0.5, 76, 0.4, 0.62, "it"],
-      [1, 78, 0.9, 0.72, "up"],
-    ],
-  ],
-  [
-    34,
-    [
-      [0, 78, 0.4, 0.7, "Turn"],
-      [0.5, 78, 0.4, 0.66, "it"],
-      [1, 80, 0.9, 0.76, "up"],
-      [2.5, 78, 0.4, 0.68, "turn"],
-      [3, 80, 0.4, 0.72, "it"],
-      [3.5, 83, 0.45, 0.78, "up"],
-    ],
-  ],
-  [35, [[0, 83, 2.6, 0.86, "up"]]],
 ];
 
 const LAST: Line = [
   [
-    52,
+    64,
     [
       [0.5, 68, 0.45, 0.5, "We"],
       [1, 71, 1.4, 0.56, "glow"],
     ],
   ],
   [
-    53,
+    65,
     [
       [0.5, 73, 0.4, 0.5, "in"],
       [1, 75, 0.4, 0.5, "the"],
-      [1.5, 76, 1, 0.56, "sta"],
+      [1.5, 76, 1, 0.56, "sta-"],
       [2.5, 75, 0.45, 0.5, "tic"],
     ],
   ],
-  [54, [[0, 76, 5.5, 0.56, "oh"]]],
+  [66, [[0, 76, 5.5, 0.56, "oh"]]],
 ];
 
-const CHORUS_ONE: Line = [
-  ...lineA(16, true, false),
-  ...lineB(18, ["Sweet", "as", "a", "short", "cir", "cuit"]),
-  ...lineA(20, false, true),
-  ...lineC(22, ["Break", "me", "in", "to", "pix", "els"], false, 76),
+const chorusLines = (c: number, second: boolean, stutter: boolean): Line => [
+  ...lineA(c, c !== 56, false),
+  ...lineB(
+    c + 2,
+    syllables(
+      second ? "Su-gar rush on a live wire" : "Sweet as a short cir-cuit",
+    ),
+  ),
+  ...lineA(c + 4, true, true),
+  ...lineC(
+    c + 6,
+    syllables(second ? "Burn me sweet-er high-er" : "Break me in-to pix-els"),
+    stutter,
+    78,
+  ),
 ];
-const CHORUS_TWO: Line = [
-  ...lineA(36, true, false),
-  ...lineB(38, ["Sug", "ar", "rush", "on", "a", "live", "wire"]),
-  ...lineA(40, false, true),
-  ...lineC(42, ["Burn", "me", "sweet", "er", "high", "er"], false, 83),
-];
-const OVERLOAD: Line = [
-  ...lineA(44, false, false),
-  ...lineB(46, ["Sweet", "as", "a", "short", "cir", "cuit"]),
-  ...lineA(48, false, true),
-  ...lineC(50, ["Break", "me", "in", "to", "pix", "els"], true, 80),
-];
+const CHORUS_ONE = chorusLines(16, false, false);
+const CHORUS_TWO = chorusLines(40, true, false);
+const OVERLOAD = chorusLines(56, false, true);
 
 /** Step automation: each value holds until the next listed bar, then jumps. */
 const steps = (
@@ -541,44 +667,67 @@ function throws(bars: readonly number[], base: number, peak: number) {
   return points;
 }
 
+/**
+ * A lane that rests at `base` and sweeps to `peak` over each listed bar
+ * (`from` to `to` within it), snapping back to `base` at the next bar.
+ */
+function sweeps(
+  base: number,
+  peak: number,
+  bars: readonly number[],
+  from = 0,
+  to = 1,
+): AutomationPoint[] {
+  const points: AutomationPoint[] = [{ tick: 0, value: base }];
+  for (const bar of bars)
+    points.push(
+      { tick: Math.round((bar + from) * BAR), value: base },
+      { tick: Math.round((bar + to) * BAR) - 1, value: peak },
+      { tick: Math.round((bar + to) * BAR), value: base },
+    );
+  return points;
+}
+
 export const candyFault: DemoDefinition = {
   info: demoInfo({
     id: "candy-fault",
     title: "Candy Fault",
     style: "Hyperpop",
     description:
-      "A sugar-rush hyperpop song: a pitched-up machine singer, a distorted 808 that slides between roots, wide supersaw chords and chip arpeggios, broken by a glassy electric-piano bridge, then a silent beat that slams the overload up a half step.",
+      "A sugar-rush hyperpop single: a pitched-up machine singer whose hook lands on 9ths and resolves, a chip pluck that finishes her lines, two interlocking chip arpeggios, a distorted 808 that slides between roots, a kick-less glitch break, a Rhodes bridge sung as a 7-6 chain over a falling bass, then a silent beat that slams the final chorus up a half step.",
     tempoBpm: 156,
     key: "E",
-    bars: 56,
-    highlightBar: 44,
+    bars: BARS,
+    highlightBar: 56,
     trackId: "chops",
     features: [
-      "original verse, pre-chorus, two choruses and a bridge",
-      "808 slides and octave drops",
-      "hat rolls in 32nds and triplets",
-      "pitched vocal stutters",
-      "backing thirds and octave doubles",
-      "pretty-to-harsh supersaw detune",
-      "borrowed minor iv in the bridge",
-      "half-step key change into the final chorus",
+      "original verses, pre-choruses, three choruses, a glitch break and a bridge",
+      "hook appoggiaturas on the downbeat and a 9th that resolves",
+      "vocal and chip pluck hocket: the chip plays where the singer rests",
+      "two interlocking chip arpeggios on complementary sixteenths",
+      "a sung 7-6 suspension chain over a descending bass",
+      "pre-chorus 9-8 and 4-3 suspensions with a crush sweep and beat repeat",
+      "808 slides, octave drops and a tape-stop power-down",
+      "stutter ramps, pitched chop jumps and a half-step lift after a silent beat",
     ],
     arrangement: [
       "Boot sparkle 4",
       "Half-time 8",
       "Sugar lift 4",
       "Bright fault 8",
-      "Soft reset 8",
-      "Rebuild 4",
+      "Glitch break 4",
+      "Second cache 8",
+      "Second lift 4",
       "Fault return 8",
+      "Soft reset 8",
       "Overload 8",
       "Last pixel 4",
     ],
     mixNotes: [
-      "The 808 follows every kick hit, slides into each new root and drops an octave onto the chorus downbeats; the supersaw starts above 300 Hz and pumps under the kick.",
-      "The singer is pitched bright with a formant lift; a softer double sings thirds below, and dotted-eighth delay throws catch the last word of each chorus line.",
-      "Hats move in shaped sixteenths with 32nd and triplet rolls; the chip arp cascades left and right through chorus and pingpong delay; the bridge drops the kick, hook and supersaw for electric piano, glass and a borrowed A minor 6.",
-      "The 808 lets go for the last beat before the first drop; before the overload everything still ringing dives an octave like a stopping tape. After one beat of silence the final chorus jumps from E to F major, detunes the supersaw from pretty to harsh and stutters the singer on 'pixels'; the song powers down in F with the 808 diving an octave.",
+      "The 808 follows every kick hit, slides into each new root and drops an octave onto the chorus downbeats; in the bridge it walks down alone, E to F#, under the Rhodes.",
+      "The singer is pitched bright with a formant lift; a softer double sings thirds below (sixths at the bridge cadence) and a thin octave-up double joins the final chorus; dotted-eighth delay throws catch the last word of each line.",
+      "Two chip arps split the sixteenths, the square on the beat and the pulse between, with inversions that walk the top note down then up each phrase; the plastic pulse hook finishes the singer's lines and answers verse two in the gap above the 808.",
+      "The pre-chorus bit-crushes and formant-shifts into a stuttered 'me' before the 808 lets go for the drop; the glitch break drops the kick for four bars of stuttered syllables and ends on a tape stop. After one beat of silence the final chorus jumps from E to F, detunes the supersaw from pretty to harsh and stutters the hook; the song powers down with the 808 and the last chip fragment diving an octave.",
     ],
   }),
   build() {
@@ -588,11 +737,13 @@ export const candyFault: DemoDefinition = {
       ["Half-time", 4, 8],
       ["Sugar lift", 12, 4],
       ["Bright fault", 16, 8],
-      ["Soft reset", 24, 8],
-      ["Rebuild", 32, 4],
-      ["Fault return", 36, 8],
-      ["Overload", 44, 8],
-      ["Last pixel", 52, 4],
+      ["Glitch break", 24, 4],
+      ["Second cache", 28, 8],
+      ["Second lift", 36, 4],
+      ["Fault return", 40, 8],
+      ["Soft reset", 48, 8],
+      ["Overload", 56, 8],
+      ["Last pixel", 64, 4],
     ] as const)
       s.section(name, start, bars);
     s.track(
@@ -614,7 +765,14 @@ export const candyFault: DemoDefinition = {
         kit: "syn909",
         pan: 0.14,
         // Each chorus pass is a little bigger than the last.
-        volumeAutomation: steps([0, 0.86], [36, 0.93], [44, 1], [52, 0.86]),
+        volumeAutomation: steps(
+          [0, 0.86],
+          [24, 0.7],
+          [28, 0.86],
+          [40, 0.93],
+          [56, 1],
+          [64, 0.86],
+        ),
         humanize: { timing: 3, velocity: 6, seed: 12 },
       }),
     );
@@ -644,7 +802,7 @@ export const candyFault: DemoDefinition = {
           pw: 0.22,
           lpf: 6500,
         },
-        filter: { type: "hpf", cutoff: 260, resonance: 0 },
+        filter: { type: "hpf", cutoff: 200, resonance: 0 },
         fx: {
           ...orbit,
           distort: { type: "fold", drive: 1.2, mix: 0.28, tone: 6200 },
@@ -657,10 +815,11 @@ export const candyFault: DemoDefinition = {
             [0, 0.22],
             [16, 0.37],
             [23, 0.18],
-            [36, 0.28],
-            [44, 0.42],
-            [51, 0.12],
-            [56, 0.3],
+            [28, 0.3],
+            [40, 0.28],
+            [56, 0.42],
+            [63, 0.12],
+            [68, 0.3],
           ),
         },
       }),
@@ -686,32 +845,35 @@ export const candyFault: DemoDefinition = {
         },
         filter: { type: "hpf", cutoff: 300, resonance: 0 },
         reverb: room,
-        fx: orbit,
-        volumeAutomation: steps([0, 0.8], [36, 0.9], [44, 1]),
+        fx: { ...orbit, crush: { bits: 16, coarse: 1, mix: 0 } },
+        volumeAutomation: steps([0, 0.8], [40, 0.9], [56, 1]),
         fxAutomation: {
           "synth-lpf": lanes(
             [0, 5200],
             [12, 900],
             [15.9, 5200],
-            [31, 900],
-            [35.9, 5600],
-            [44, 6400],
+            [36, 900],
+            [39.9, 5600],
             [56, 6400],
+            [68, 6400],
           ),
           // A. G. Cook's move: one layer drifts from pretty to harsh.
           "synth-detune": lanes(
             [0, 0.26],
-            [36, 0.32],
-            [44, 0.4],
-            [51.5, 0.85],
-            [52, 0.3],
+            [40, 0.32],
+            [56, 0.4],
+            [63.5, 0.85],
+            [64, 0.3],
           ),
+          // The crush sweeps in over the last pre-chorus bar, clean on the drop.
+          "crush-bits": sweeps(16, 3, [15, 39], 0.25, 1),
+          "crush-mix": sweeps(0, 0.85, [15, 39], 0.25, 1),
         },
       }),
     );
     s.track(
-      voice("arp", "Chip arp", "square", 0.56, {
-        pan: -0.2,
+      voice("arp", "Chip arp", "square", 0.5, {
+        pan: -0.24,
         synth: {
           attack: 0.002,
           decay: 0.09,
@@ -721,10 +883,37 @@ export const candyFault: DemoDefinition = {
         },
         filter: { type: "hpf", cutoff: 600, resonance: 0 },
         // Dotted-eighth pingpong plus a slow chorus: the arp cascades side to side.
-        delay: { beats: 0.75, feedback: 0.34, mix: 0.26, pingpong: true },
-        fx: { ...orbit, chorus: { rate: 0.45, depth: 0.35, mix: 0.45 } },
-        volumeAutomation: steps([0, 0.82], [36, 0.9], [44, 1]),
+        delay: { beats: 0.75, feedback: 0.3, mix: 0.22, pingpong: true },
+        fx: {
+          ...orbit,
+          chorus: { rate: 0.45, depth: 0.35, mix: 0.45 },
+          crush: { bits: 16, coarse: 1, mix: 0 },
+        },
+        volumeAutomation: steps([0, 0.82], [40, 0.9], [56, 1]),
+        fxAutomation: {
+          // The glitch break bit-crushes the arp deeper bar by bar.
+          "crush-bits": lanes([0, 16], [24, 12], [27.9, 4], [28, 16], [68, 16]),
+          "crush-mix": lanes([0, 0], [24, 0.5], [27.9, 0.9], [28, 0], [68, 0]),
+        },
         humanize: { timing: 2, velocity: 6, seed: 18 },
+      }),
+    );
+    s.track(
+      voice("arp2", "Pulse arp", "pulse", 0.42, {
+        pan: 0.3,
+        synth: {
+          attack: 0.002,
+          decay: 0.08,
+          sustain: 0.1,
+          release: 0.05,
+          pw: 0.33,
+          lpf: 7000,
+        },
+        filter: { type: "hpf", cutoff: 700, resonance: 0 },
+        delay: { beats: 0.5, feedback: 0.22, mix: 0.16, pingpong: true },
+        fx: orbit,
+        volumeAutomation: steps([0, 0.85], [56, 1]),
+        humanize: { timing: 2, velocity: 6, seed: 19 },
       }),
     );
     s.track(
@@ -743,12 +932,43 @@ export const candyFault: DemoDefinition = {
           ring: 0.38,
         },
         filter: { type: "hpf", cutoff: 230, resonance: 0 },
+        fx: { crush: { bits: 16, coarse: 1, mix: 0 } },
         delay: { beats: 0.75, feedback: 0.28, mix: 0.08 },
         delayMixAutomation: throws(
-          [13, 17, 19, 21, 23, 25, 27, 29, 31, 37, 39, 41, 43, 45, 47, 49],
+          [13, 17, 19, 21, 23, 37, 41, 43, 45, 47, 49, 51, 57, 59, 61, 63],
           0.07,
           0.34,
         ),
+        fxAutomation: {
+          // Formant lifts through the pre-chorus peak; wobbles through the break.
+          "sing-formant": [
+            ...lanes([0, 2.5], [15.5, 2.5], [15.95, 7], [16, 2.5]),
+            ...lanes(
+              [24, 2.5],
+              [25, -2],
+              [26, 6],
+              [27, -1],
+              [27.9, 5],
+              [28, 2.5],
+            ),
+            ...lanes(
+              [39.5, 2.5],
+              [39.95, 7],
+              [40, 2.5],
+              [55, 2.5],
+              [55.6, 5.5],
+              [56, 2.5],
+            ),
+          ],
+          "crush-mix": lanes(
+            [0, 0],
+            [24, 0.2],
+            [26, 0.6],
+            [27.9, 0.7],
+            [28, 0],
+          ),
+          "crush-bits": lanes([0, 16], [24, 10], [27.9, 5], [28, 16]),
+        },
         reverb: room,
         humanize: { timing: 6, velocity: 5, length: 4, seed: 16 },
       }),
@@ -772,6 +992,26 @@ export const candyFault: DemoDefinition = {
         filter: { type: "hpf", cutoff: 300, resonance: 0 },
         reverb: hall,
         humanize: { timing: 9, velocity: 6, seed: 17 },
+      }),
+    );
+    s.track(
+      // The octave-up double for the final chorus: thin, bright, tucked under.
+      voice("high", "Pixel double", "sing", 0.3, {
+        pan: -0.28,
+        sing: {
+          preset: "glass",
+          voice: "soprano",
+          formant: 4.5,
+          bright: 0.6,
+          articulate: 1,
+          breath: 0.1,
+          vib: 6,
+          vibmod: 0.08,
+          vibdelay: 0.2,
+        },
+        filter: { type: "hpf", cutoff: 500, resonance: 0 },
+        reverb: hall,
+        humanize: { timing: 5, velocity: 5, seed: 21 },
       }),
     );
     s.track(
@@ -860,32 +1100,47 @@ export const candyFault: DemoDefinition = {
           const long = length >= 1.4;
           s.note(track, bar, beat, pitch + transpose, length, velocity * gain, {
             ...(lyric ? { lyric } : {}),
-            ...(length >= 0.85 ? scoop(-80, 0.1) : {}),
+            ...(length >= 0.85 && lyric !== "_" ? scoop(-80, 0.1) : {}),
             ...(long && pitch >= 75
               ? { vibrato: { rate: 5.8, depth: 32, delay: 0.28 } }
               : {}),
           });
         }
     };
-    /** Backing singer: thirds under the held notes (octave below when asked). */
-    const shadow = (line: Line, octave: boolean, gain: number) => {
+    /** Backing singer: thirds (or sixths) under the held notes, octave when asked. */
+    const shadow = (
+      line: Line,
+      mode: "third" | "sixth" | "octave",
+      gain: number,
+      minLength = 0.8,
+    ) => {
       for (const [bar, phrase] of line)
         for (const [beat, pitch, length, velocity = 0.7, lyric] of phrase)
-          if (octave || length >= 0.8)
+          if (mode === "octave" || length >= minLength)
             s.note(
               "harm",
               bar,
               beat,
-              octave ? pitch - 12 : thirdBelow(pitch),
+              mode === "octave"
+                ? pitch - 12
+                : mode === "sixth"
+                  ? sixthBelow(pitch)
+                  : thirdBelow(pitch),
               length,
               velocity * gain,
               lyric ? { lyric } : {},
             );
     };
-    const hook = (bar: number, phrase: Phrase, gain = 1, transpose = 0) => {
+    const hook = (
+      bar: number,
+      phrase: Phrase,
+      gain = 1,
+      transpose = 0,
+      track = "hook",
+    ) => {
       phrase.forEach(([beat, pitch, length, velocity = 0.7], i) => {
         const last = i === phrase.length - 1;
-        s.note("hook", bar, beat, pitch + transpose, length, velocity * gain, {
+        s.note(track, bar, beat, pitch + transpose, length, velocity * gain, {
           ...(i > 0 && !last ? { glide: 0.035 } : {}),
           ...(last ? scoop(-140, 0.18) : {}),
           ...(last && length >= 0.7
@@ -894,24 +1149,31 @@ export const candyFault: DemoDefinition = {
         });
       });
     };
+    /**
+     * Interlocking arpeggios: `arp` takes the on-sixteenths, `arp2` the offs.
+     * `order` indexes the five chord tones; a phrase end turns the direction.
+     */
+    const ARP_UP = [0, 1, 2, 3, 1, 2, 3, 4];
+    const ARP_DOWN = [4, 3, 2, 1, 3, 2, 1, 0];
+    const ARP_ROCK = [2, 3, 4, 3, 2, 1, 0, 1];
     const arp = (
+      track: "arp" | "arp2",
       bar: number,
       tones: readonly number[],
       gain: number,
       order: readonly number[],
+      offset = 0,
     ) =>
       order.forEach((index, i) =>
         s.note(
-          "arp",
+          track,
           bar,
-          i * 0.25,
+          offset + i * 0.5,
           tones[index]!,
           0.2,
-          (i % 4 === 0 ? 0.82 : i % 2 === 0 ? 0.62 : 0.5) * gain,
+          (i % 2 === 0 ? 0.78 : 0.56) * gain,
         ),
       );
-    const ARP_UP = [0, 1, 2, 3, 0, 1, 2, 3, 1, 2, 3, 2, 1, 2, 3, 2];
-    const ARP_CASCADE = [3, 2, 1, 0, 3, 2, 1, 0, 3, 2, 1, 2, 3, 2, 1, 2];
     const rolled = (
       track: string,
       bar: number,
@@ -931,6 +1193,29 @@ export const candyFault: DemoDefinition = {
           velocity * (i === pitches.length - 1 ? 1.06 : 0.9),
         ),
       );
+    /** A stutter: one pitch (or a list of jumps) re-fired `count` times, velocity ramped. */
+    const stutter = (
+      track: string,
+      bar: number,
+      beat: number,
+      count: number,
+      step: number,
+      pitches: readonly number[],
+      from: number,
+      to: number,
+      extra: Extra = {},
+    ) => {
+      for (let i = 0; i < count; i++)
+        s.note(
+          track,
+          bar,
+          beat + i * step,
+          pitches[i % pitches.length]!,
+          step * 0.9,
+          from + ((to - from) * i) / Math.max(1, count - 1),
+          extra,
+        );
+    };
 
     /** Kick plus an 808 that locks to it: each hit sustains to the next. */
     const kickBar = (
@@ -941,7 +1226,7 @@ export const candyFault: DemoDefinition = {
       if (!grid) return;
       s.grid("kick", b, 36, grid);
       const root = H[PROG[b]!]!.root;
-      const next = b + 1 < 56 ? H[PROG[b + 1]!]!.root : root;
+      const next = b + 1 < BARS ? H[PROG[b + 1]!]!.root : root;
       const prev = b > 0 ? H[PROG[b - 1]!]!.root : root;
       const onsets = [...grid].flatMap((c, i) => (c === "." ? [] : [i]));
       onsets.forEach((step, k) => {
@@ -977,45 +1262,54 @@ export const candyFault: DemoDefinition = {
       });
     };
 
-    for (let b = 0; b < 56; b++) {
-      const part = partOf(b);
-      const h = H[PROG[b]!]!;
-      const inPart =
-        b -
-        [0, 4, 12, 16, 24, 32, 36, 44, 52][
-          [
-            "boot",
-            "verse",
-            "lift",
-            "chorus",
-            "soft",
-            "rebuild",
-            "return",
-            "over",
-            "last",
-          ].indexOf(part)
-        ]!;
+    for (let b = 0; b < BARS; b++) {
+      const [part, inPart] = partOf(b);
+      const name = PROG[b]!;
+      const h = H[name]!;
       const chorusLike =
         part === "chorus" || part === "return" || part === "over";
+      const verseLike = part === "verse" || part === "verse2";
+      const liftLike = part === "lift" || part === "lift2";
 
       // ── drums ─────────────────────────────────────────────────────────
       if (part === "boot" && b === 3) {
         s.grid("hats", b, 42, "1122334455667788", 0.75);
         hit("snap", b, 3.5, 39, 0.5);
       }
-      if (part === "verse") {
-        kickBar(b, KICK.verse![inPart % 4]!, { pops: true, drop: b === 4 });
+      if (verseLike) {
+        kickBar(b, KICK.verse![inPart % 4]!, {
+          pops: true,
+          drop: inPart === 0,
+        });
         s.grid("snap", b, 38, "........9.......");
         s.grid("snap", b, 39, "........7.......");
         if (inPart % 4 === 1) s.grid("snap", b, 38, "..........2....3");
         if (inPart % 4 === 3) s.grid("snap", b, 38, "...2..........3.");
-        s.grid("hats", b, 42, HATS_HALF[inPart % 4]!);
+        const busy = part === "verse2" && inPart >= 4;
+        s.grid(
+          "hats",
+          b,
+          42,
+          busy ? "7465746574657465" : HATS_HALF[inPart % 4]!,
+          busy ? 0.78 : 1,
+        );
         if (inPart % 4 === 1) roll("hats", b, 3.5, 4, 0.125, 42, 0.35, 0.6);
         if (inPart % 4 === 2) roll("hats", b, 3, 6, 1 / 6, 42, 0.3, 0.62, [3]);
         if (inPart % 4 === 3) hit("hats", b, 3.5, 46, 0.5, 0.4);
-        if (b === 7) roll("snap", b, 3.5, 8, 1 / 16, 38, 0.55, 0.2);
+        if (inPart === 3) roll("snap", b, 3.5, 8, 1 / 16, 38, 0.55, 0.2);
+        if (part === "verse2" && inPart === 7)
+          roll(
+            "snap",
+            b,
+            3,
+            8,
+            0.125,
+            [38, 38, 41, 41, 43, 45, 47, 48],
+            0.4,
+            0.8,
+          );
       }
-      if (part === "lift") {
+      if (liftLike) {
         kickBar(b, KICK.lift![inPart]!, { pops: true });
         if (inPart < 2) {
           s.grid(
@@ -1028,6 +1322,7 @@ export const candyFault: DemoDefinition = {
         } else if (inPart === 2) s.grid("snap", b, 38, "4.5.5.6.6.7.7.8.");
         else {
           s.grid("snap", b, 38, "5566778899......");
+          // The ratchet glitch fill: a snare roll climbing in pitch.
           roll(
             "snap",
             b,
@@ -1053,10 +1348,7 @@ export const candyFault: DemoDefinition = {
             : dropout
               ? "9...8..........."
               : grids[inPart % 4]!,
-          {
-            pops: true,
-            drop: inPart === 0,
-          },
+          { pops: true, drop: inPart === 0 },
         );
         s.grid(
           "snap",
@@ -1112,77 +1404,72 @@ export const candyFault: DemoDefinition = {
             roll("hats", b, 2.75, 10, 0.125, 42, 0.4, 0.82, [4, 9]);
             hit("hats", b, 3.5, 46, 0.55, 0.45);
           }
-          if (part === "over" && inPart % 2 === 0)
-            roll("hats", b, 1.5, 4, 0.125, 42, 0.32, 0.55);
+          // The final chorus doubles the hats: 32nd bursts on every bar.
+          if (part === "over")
+            roll(
+              "hats",
+              b,
+              inPart % 2 === 0 ? 1.5 : 3.5,
+              inPart % 2 === 0 ? 4 : 4,
+              0.125,
+              42,
+              0.32,
+              0.6,
+            );
         }
       }
-      if (part === "soft") {
-        if (b === 24) hit("hats", b, 0, 49, 0.42, 2);
-        if (b >= 28) {
-          s.grid(
-            "hats",
-            b,
-            42,
-            b === 31 ? "3.2.3.2.4.3.4.35" : "3.2.3.2.3.2.3.2.",
-            0.9,
-          );
-          if (b === 29) roll("hats", b, 3, 6, 1 / 6, 42, 0.18, 0.4);
-          s.grid("snap", b, 37, "........4.......");
-          if (b === 31) roll("snap", b, 2, 8, 0.25, 38, 0.15, 0.62);
-        }
+      if (part === "glitch") {
+        // Kick-less. A clap on three, hats as sparse crushed eighths.
+        s.grid(
+          "snap",
+          b,
+          39,
+          inPart === 3 ? "........6..5..4." : "........7.......",
+        );
+        s.grid(
+          "hats",
+          b,
+          42,
+          [
+            "4.3.4.3.4.3.4.3.",
+            "4.3...3.4.3...3.",
+            "4.3.4.3.4.3.4.3.",
+            "4.3.4.3.4.3.....",
+          ][inPart]!,
+          0.8,
+        );
+        if (inPart === 1) roll("hats", b, 3, 8, 0.125, 42, 0.2, 0.5, [2, 5]);
+        if (inPart === 3) roll("hats", b, 2, 8, 0.125, 46, 0.5, 0.15);
+        s.note("sub", b, 0, h.root, inPart === 3 ? 2.4 : 3.6, 0.42, {
+          ...(inPart > 0 && h.root !== H[PROG[b - 1]!]!.root
+            ? { glide: 0.12 }
+            : {}),
+        });
       }
-      if (part === "rebuild") {
-        const grid = KICK.rebuild![inPart]!;
-        s.grid("kick", b, 36, grid);
+      if (part === "bridge") {
+        // Kick-less. The 808 walks the descending line alone.
         s.note(
           "sub",
           b,
           0,
           h.root,
-          inPart === 3 ? 2.9 : 3.95,
-          0.7,
-          inPart > 0 && h.root !== H[PROG[b - 1]!]!.root ? { glide: 0.09 } : {},
+          inPart === 7 ? 2.4 : 3.8,
+          inPart < 6 ? 0.4 : 0.46,
+          inPart > 0 ? { glide: 0.1 } : {},
         );
-        if (inPart === 3)
-          s.note("sub", b, 3, h.root + 12, 0.95, 0.62, {
-            glide: 0.05,
-            ...fall(-1200, 0.2),
-          });
-        s.grid(
-          "snap",
-          b,
-          38,
-          [
-            "....7.......7...",
-            "....7...5...7.6.",
-            "6.6.7.7.8.8.9.9.",
-            "6677889999......",
-          ][inPart]!,
-        );
-        s.grid(
-          "snap",
-          b,
-          39,
-          inPart < 2 ? "....6.......6..." : "................",
-        );
-        if (inPart === 3)
-          roll(
-            "snap",
+        if (inPart === 0) hit("hats", b, 0, 49, 0.42, 2);
+        if (inPart >= 4) {
+          s.grid(
+            "hats",
             b,
-            2.5,
-            10,
-            0.125,
-            [41, 41, 43, 43, 45, 45, 47, 48, 50, 50],
-            0.5,
-            0.95,
+            42,
+            inPart === 7 ? "3.2.3.2.4.3....." : "3.2.3.2.3.2.3.2.",
+            0.9,
           );
-        s.grid(
-          "hats",
-          b,
-          42,
-          inPart < 2 ? "6.4.6.4.6.4.6.4." : "6464646464646464",
-          0.8 + inPart * 0.08,
-        );
+          if (inPart === 5) roll("hats", b, 3, 6, 1 / 6, 42, 0.18, 0.4);
+          s.grid("snap", b, 37, "........4.......");
+          if (inPart === 7) roll("snap", b, 1.5, 4, 0.25, 38, 0.15, 0.5);
+        }
       }
       if (part === "last") {
         kickBar(b, KICK.last![inPart]!, {});
@@ -1190,58 +1477,56 @@ export const candyFault: DemoDefinition = {
           s.grid("snap", b, 38, "........6.......", 0.8);
           s.grid("hats", b, 42, "5.3.4.3.5.3.4.3.", 0.7 - inPart * 0.15);
         }
-        if (b === 52) hit("hats", b, 0, 49, 0.6, 2);
-        if (b === 54) s.note("sub", b, 0, h.root, 3.9, 0.55);
-        if (b === 55) s.note("sub", b, 0, h.root, 3.6, 0.55, fall(-1200, 0.45));
-      }
-      if (part === "soft") {
-        // Sub stays (pinned silence covers kick, hook and supersaw only).
-        s.note(
-          "sub",
-          b,
-          0,
-          h.root,
-          3.6,
-          0.38,
-          b > 24 && h.root !== H[PROG[b - 1]!]!.root ? { glide: 0.12 } : {},
-        );
+        if (inPart === 0) hit("hats", b, 0, 49, 0.6, 2);
+        if (inPart === 2) s.note("sub", b, 0, h.root, 3.9, 0.55);
+        if (inPart === 3)
+          s.note("sub", b, 0, h.root, 3.6, 0.55, fall(-1200, 0.45));
       }
 
       // ── harmony ───────────────────────────────────────────────────────
       if (part === "boot") rolled("keys", b, 0, h.keys, 3.85, 0.42);
-      if (part === "verse" && inPart % 2 === 0) {
+      if (verseLike && inPart % 2 === 0) {
         rolled("keys", b, 0, h.keys, 2.9, 0.46);
         rolled("keys", b, 3, h.keys.slice(1), 0.9, 0.34, 0.02);
         rolled("keys", b + 1, 1.5, h.keys.slice(1), 2.3, 0.38, 0.02);
       }
-      if (part === "soft") {
+      if (part === "bridge") {
+        rolled("keys", b, 0, h.keys, 2.4, inPart < 4 ? 0.58 : 0.54, 0.045);
         rolled(
           "keys",
           b,
-          0,
-          [h.root + 12, ...h.keys],
-          2.4,
-          b < 28 ? 0.6 : 0.56,
-          0.045,
+          2.5,
+          h.keys.slice(1),
+          inPart === 7 ? 0.4 : 1.4,
+          0.4,
+          0.03,
         );
-        rolled("keys", b, 2.5, h.keys.slice(1), 1.4, 0.42, 0.03);
       }
-      if (part === "last" && b < 55)
+      if (part === "last" && inPart < 3)
         rolled("keys", b, 0, h.keys, 3.85, 0.44 - inPart * 0.04);
-      if (b === 55) rolled("keys", b, 0, [52, 56, 59, 63, 66], 3.9, 0.4, 0.05);
-      if (
-        (part === "lift" || part === "rebuild" || chorusLike) &&
-        h.saw.length
-      ) {
+      if (part === "last" && inPart === 3)
+        rolled("keys", b, 0, [52, 56, 59, 63, 66], 3.9, 0.4, 0.05);
+      if (liftLike) {
+        // Suspensions in the supersaw: 9-8 over Aadd9, 4-3 over each B sus.
+        const gain = 0.5 + inPart * 0.03;
+        if (inPart === 0) {
+          s.chord("chords", b, 0, h.saw.slice(0, 3), 3.9, gain);
+          s.note("chords", b, 0, 83, 2.45, gain);
+          s.note("chords", b, 2.5, 81, 1.4, gain * 0.95);
+        } else if (inPart === 1) {
+          s.chord("chords", b, 0, [71, 78, 83], 3.9, gain);
+          s.note("chords", b, 0, 76, 1.95, gain);
+          s.note("chords", b, 2, 75, 1.9, gain * 0.95);
+        } else if (inPart === 2) s.chord("chords", b, 0, h.saw, 3.9, gain);
+        else {
+          s.chord("chords", b, 0, [78, 83, 90], 3.9, gain);
+          s.note("chords", b, 0, 88, 2.45, gain);
+          s.note("chords", b, 2.5, 87, 1.4, gain * 0.95);
+        }
+      }
+      if (chorusLike) {
         const top = part === "over" ? [h.saw[h.saw.length - 1]! + 12] : [];
-        s.chord(
-          "chords",
-          b,
-          0,
-          [...h.saw, ...top],
-          part === "lift" || part === "rebuild" ? 3.9 : 3.8,
-          part === "lift" ? 0.5 : 0.6,
-        );
+        s.chord("chords", b, 0, [...h.saw, ...top], 3.8, 0.6);
         if (part === "return" || part === "over")
           for (const beat of [0.5, 1.5, 2.5, 3.5])
             s.chord(
@@ -1253,21 +1538,62 @@ export const candyFault: DemoDefinition = {
               0.42,
             );
       }
-      if (b === 15) s.chord("chords", b, 2, H.B!.saw, 1.9, 0.5);
-      if (b === 35) s.chord("chords", b, 0, H.B!.saw, 3, 0.62);
+      if (part === "glitch") {
+        // A crushed stack that stutters, then the tape stop into verse two.
+        if (inPart === 1) s.chord("chords", b, 2, h.saw, 1.9, 0.5);
+        if (inPart === 2) {
+          stutter("chords", b, 0, 8, 1 / 8, [h.saw[2]!, h.saw[3]!], 0.62, 0.3);
+          s.chord("chords", b, 2, h.saw, 1.9, 0.52);
+        }
+        if (inPart === 3) {
+          stutter("chords", b, 0, 4, 0.25, [h.saw[3]!], 0.55, 0.4);
+          stutter(
+            "chords",
+            b,
+            1,
+            8,
+            1 / 8,
+            [h.saw[3]!, h.saw[3]! + 12],
+            0.6,
+            0.35,
+          );
+          s.chord("chords", b, 2, h.saw, 1.95, 0.56);
+        }
+      }
 
-      // ── chip arps: hint in the intro, second half of chorus one, then all ─
-      if (b === 2 || b === 3) arp(b, h.arp, 0.45 + (b - 2) * 0.15, ARP_UP);
-      if ((part === "chorus" && inPart >= 4) || part === "return")
+      // ── chip arps ───────────────────────────────────────────────────────
+      if (b === 2 || b === 3) {
+        arp("arp", b, h.lo, 0.45 + (b - 2) * 0.15, ARP_UP);
+        if (b === 3) arp("arp2", b, h.hi, 0.4, ARP_DOWN, 0.25);
+      }
+      if (chorusLike) {
+        const phraseEnd = inPart % 4 === 3;
+        const tones = inPart < 4 ? h.lo : h.hi;
+        const gain = part === "chorus" ? 0.72 : part === "return" ? 0.82 : 0.95;
+        arp("arp", b, tones, gain, phraseEnd ? ARP_DOWN : ARP_UP);
+        // The second arp joins for the second half of chorus one, then always.
+        if (part !== "chorus" || inPart >= 4)
+          arp(
+            "arp2",
+            b,
+            tones,
+            gain * 0.9,
+            phraseEnd ? ARP_UP : ARP_ROCK,
+            0.25,
+          );
+      }
+      if (part === "glitch")
         arp(
+          "arp",
           b,
-          h.arp,
-          part === "chorus" ? 0.7 : 0.8,
-          inPart % 2 ? ARP_CASCADE : ARP_UP,
+          h.lo,
+          0.5 - inPart * 0.06,
+          // The last bar stops short of the tape stop.
+          inPart === 3 ? ARP_DOWN.slice(0, 6) : inPart % 2 ? ARP_DOWN : ARP_UP,
         );
-      if (part === "over")
-        arp(b, h.arp, 0.95, inPart % 2 ? ARP_CASCADE : ARP_UP);
-      if (part === "soft" && b >= 28) {
+      if (part === "lift2")
+        arp("arp2", b, h.hi, 0.42 + inPart * 0.08, ARP_UP, 0.25);
+      if (part === "bridge" && inPart >= 4) {
         for (const [beat, index] of [
           [0.5, 3],
           [1.25, 2],
@@ -1275,10 +1601,18 @@ export const candyFault: DemoDefinition = {
           [2.75, 2],
           [3.5, 3],
         ] as const)
-          s.note("spark", b, beat, h.arp[index]!, 0.5, 0.28 + (b - 28) * 0.04);
+          if (inPart < 7 || beat < 2.5)
+            s.note(
+              "spark",
+              b,
+              beat,
+              h.keys[index]! + 24,
+              0.5,
+              0.26 + (inPart - 4) * 0.04,
+            );
       }
 
-      // ── hook: identity motif in the intro, answers between sung lines ───
+      // ── hook: identity motif in the intro, hockets in the chorus ──────────
       if (part === "boot") {
         if (b % 2 === 0) hook(b, b === 2 ? MOTIF_IV : MOTIF, 0.72);
         else
@@ -1291,11 +1625,33 @@ export const candyFault: DemoDefinition = {
             0.66,
           );
       }
-      if (b === 9) hook(b, ANSWERS[0]!, 0.5);
-      if (b === 11) hook(b, ANSWERS[1]!, 0.56);
+      if (part === "verse" && (inPart === 5 || inPart === 7))
+        hook(b, ANSWERS[inPart === 5 ? 0 : 1]!, 0.5);
+      // Verse two: the counter-melody answers each sung line in its rest.
+      if (part === "verse2" && inPart % 2 === 1) hook(b, COUNTER[name]!, 0.58);
+      if (part === "lift2" && inPart % 2 === 1)
+        hook(
+          b,
+          inPart === 1
+            ? [
+                [2, 59, 0.22, 0.56],
+                [2.5, 63, 0.22, 0.58],
+                [3, 66, 0.9, 0.62],
+              ]
+            : [
+                [2, 63, 0.22, 0.58],
+                [2.5, 66, 0.22, 0.6],
+                [3, 68, 0.9, 0.64],
+              ],
+          0.6,
+        );
       if (b === 13) hook(b, ANSWERS[0]!, 0.62);
-      if (chorusLike && (inPart === 1 || inPart === 5))
-        hook(b, ANSWERS[inPart === 1 ? 0 : 2]!, part === "chorus" ? 0.9 : 1);
+      if (chorusLike && inPart % 2 === 1 && inPart !== 7) {
+        const gain = part === "chorus" ? 0.9 : 1;
+        hook(b, CHIP[name]!, gain);
+        if (part === "over" && inPart === 3)
+          stutter("hook", b, 3.5, 4, 0.125, [80, 87], 0.7, 0.5);
+      }
       if (chorusLike && inPart === 7)
         hook(
           b,
@@ -1305,18 +1661,38 @@ export const candyFault: DemoDefinition = {
           ),
           part === "over" ? 1 : 0.85,
         );
-      if (part === "rebuild" && inPart < 3)
-        hook(b, ANSWERS[inPart === 2 ? 2 : inPart]!, 0.62 + inPart * 0.08);
-      if (b === 55) hook(b, MOTIF, 0.5);
+      if (part === "over" && inPart === 7)
+        stutter("hook", b, 0, 4, 0.25, [85, 85, 88, 92], 0.5, 0.78);
+      if (b === 67) hook(b, MOTIF, 0.5);
 
-      // ── chops: up-pixel answers and stutters ─────────────────────────────
-      if (b === 7)
+      // ── chops: pitched fragments, beat repeats and stutters ───────────────
+      if (part === "boot" && b % 2 === 1)
+        // A pitched vocal fragment hocketing with the arp's off-sixteenths.
+        s.phrase(
+          "chops",
+          b,
+          b === 1
+            ? [
+                [1.75, 80, 0.2, 0.5],
+                [2.25, 87, 0.2, 0.52],
+                [2.75, 92, 0.2, 0.56],
+                [3.25, 87, 0.45, 0.5],
+              ]
+            : [
+                [0.75, 80, 0.2, 0.52],
+                [1.25, 92, 0.2, 0.56],
+                [1.75, 85, 0.2, 0.5],
+                [2.25, 87, 0.2, 0.54],
+                [2.75, 92, 0.6, 0.58],
+              ],
+        );
+      if (verseLike && inPart === 3)
         s.phrase("chops", b, [
           [2.5, 80, 0.25, 0.6],
           [3, 83, 0.25, 0.62],
           [3.5, 85, 0.25, 0.58],
         ]);
-      if (b === 11)
+      if (verseLike && inPart === 7)
         roll(
           "chops",
           b,
@@ -1327,8 +1703,57 @@ export const candyFault: DemoDefinition = {
           0.45,
           0.7,
         );
-      if (b === 15 || b === 35)
-        roll("chops", b, 2.5, 4, 0.25, [83, 85, 87, 88], 0.5, 0.72);
+      if (liftLike && inPart === 3) {
+        // The beat repeat: 32nds jumping +7 and +12, fading into the drop.
+        stutter("chops", b, 2.5, 4, 0.125, [83, 90], 0.6, 0.7);
+        stutter("chops", b, 3, 8, 1 / 16, [83, 90, 95, 90], 0.72, 0.3);
+      }
+      if (part === "glitch") {
+        const base = 80;
+        if (inPart === 0) {
+          stutter("chops", b, 0, 4, 0.25, [base, base + 7], 0.66, 0.5);
+          stutter(
+            "chops",
+            b,
+            2,
+            8,
+            0.125,
+            [base + 12, base + 7, base, base + 12],
+            0.7,
+            0.35,
+          );
+        }
+        if (inPart === 1) {
+          stutter("chops", b, 0.5, 6, 0.125, [base + 5, base], 0.55, 0.66);
+          stutter(
+            "chops",
+            b,
+            2.5,
+            8,
+            1 / 16,
+            [base + 12, base + 12, base + 7, base + 7],
+            0.72,
+            0.3,
+          );
+        }
+        if (inPart === 2) {
+          stutter(
+            "chops",
+            b,
+            0,
+            8,
+            0.125,
+            [base, base + 7, base + 12, base + 7],
+            0.3,
+            0.72,
+          );
+          stutter("chops", b, 2, 4, 0.25, [base + 12], 0.7, 0.4);
+        }
+        if (inPart === 3) {
+          stutter("chops", b, 0, 16, 1 / 16, [base + 7, base + 12], 0.72, 0.25);
+          stutter("chops", b, 1.5, 4, 0.125, [base, base - 5], 0.6, 0.3);
+        }
+      }
       if (chorusLike && (inPart === 3 || inPart === 7)) {
         s.phrase("chops", b, [
           [2, 83, 0.25, 0.66],
@@ -1337,45 +1762,72 @@ export const candyFault: DemoDefinition = {
           [3.25, 78, 0.22, 0.6],
         ]);
         if (part === "over")
-          roll("chops", b, 3.5, 4, 0.125, [88, 88, 85, 83], 0.66, 0.45);
+          stutter("chops", b, 3.5, 4, 0.125, [88, 88, 95, 92], 0.66, 0.42);
       }
       if (part === "over" && inPart % 2 === 0)
-        s.note("chops", b, 3.75, 88, 0.12, 0.42);
+        stutter("chops", b, 3.5, 4, 0.125, [88, 95], 0.48, 0.32);
+      if (b === 67) stutter("chops", b, 1.5, 6, 0.125, [92, 87, 80], 0.5, 0.2);
 
       // ── sparkle and tape ──────────────────────────────────────────────
-      if ([0, 4, 12, 16, 24, 32, 36, 44, 52].includes(b))
+      if (PARTS.some(([, start]) => start === b))
         s.note("spark", b, part === "boot" ? 0.5 : 0, 88, 1.2, 0.6);
       if (b === 1) s.note("spark", b, 2.5, 83, 1, 0.42);
     }
 
     // ── topline ───────────────────────────────────────────────────────────
-    sing("vocal", VERSE);
-    sing("vocal", LIFT);
+    sing("vocal", VERSE_ONE);
+    sing("vocal", lift(12));
     sing("vocal", CHORUS_ONE);
-    sing("vocal", SOFT, 0, 1);
-    sing("vocal", REBUILD);
+    sing("vocal", VERSE_TWO);
+    sing("vocal", lift(36));
     sing("vocal", CHORUS_TWO);
+    sing("vocal", BRIDGE);
     sing("vocal", OVERLOAD);
     sing("vocal", LAST);
-    shadow(LIFT.slice(2), false, 0.62);
-    shadow(CHORUS_ONE, false, 0.6);
-    shadow(CHORUS_TWO, false, 0.66);
-    shadow(OVERLOAD, true, 0.6);
-    shadow(SOFT.slice(4), false, 0.5);
+    // The glitch break stutters the hook's last word.
+    for (const [bar, beat, count, step, pitch] of [
+      [24, 0, 4, 0.25, 83],
+      [24, 2, 6, 0.125, 83],
+      [25, 1, 8, 1 / 16, 80],
+      [26, 0, 3, 0.5, 78],
+      [26, 2.5, 6, 0.125, 83],
+      [27, 0, 8, 1 / 16, 83],
+    ] as const)
+      stutter("vocal", bar, beat, count, step, [pitch], 0.74, 0.42, {
+        lyric: "pix",
+      });
+    shadow(lift(12).slice(2), "third", 0.62);
+    shadow(lift(36).slice(2), "third", 0.62);
+    shadow(CHORUS_ONE, "third", 0.6);
+    shadow(CHORUS_TWO, "third", 0.66);
+    shadow(OVERLOAD, "octave", 0.6);
+    shadow(BRIDGE.slice(0, 6), "third", 0.5, 1.4);
+    shadow(BRIDGE.slice(6), "sixth", 0.52, 0.4);
+    // The octave-up double sings the hook line of the final chorus.
+    for (const [bar, phrase] of [
+      ...lineA(56, false, false),
+      ...lineA(60, true, true),
+    ])
+      for (const [beat, pitch, length, velocity = 0.7, lyric] of phrase)
+        if (pitch <= 78)
+          s.note("high", bar, beat, pitch + 12, length, velocity * 0.9, {
+            ...(lyric ? { lyric } : {}),
+          });
 
-    // Transitions: tape tears, risers into both choruses.
+    // Transitions: tape tears, risers into every chorus.
     for (const [bar, beat] of [
       [3, 3],
       [11, 3.5],
       [23, 3],
-      [31, 3.5],
-      [43, 2.5],
-      [51, 3],
+      [35, 3.5],
+      [47, 3],
+      [55, 2.5],
+      [63, 3],
     ] as const)
       s.note("tear", bar, beat, 60, 0.45, 0.78);
     s.note("tear", 14, 2.75, 48, 5.2, 0.62);
-    s.note("tear", 34, 2.75, 48, 5.2, 0.66);
-    s.note("tear", 42, 2, 48, 5, 0.6);
+    s.note("tear", 38, 2.75, 48, 5.2, 0.66);
+    s.note("tear", 54, 2, 48, 5, 0.6);
 
     // After the silent beat the overload and the outro lift a half step, E to F.
     const LIFTED = new Set([
@@ -1384,56 +1836,66 @@ export const candyFault: DemoDefinition = {
       "keys",
       "chords",
       "arp",
+      "arp2",
       "vocal",
       "harm",
+      "high",
       "chops",
       "spark",
     ]);
     for (let i = 0; i < s.notes.length; i++) {
       const n = s.notes[i]!;
-      if (LIFTED.has(n.trackId!) && n.startTick! >= 44 * BAR)
+      if (LIFTED.has(n.trackId!) && n.startTick! >= 56 * BAR)
         s.notes[i] = { ...n, pitch: n.pitch! + 1 };
     }
 
-    // The 808 lets go for the last beat of the pre-chorus so the first drop lands.
-    const suck = 15 * BAR + 3 * 480;
-    for (let i = 0; i < s.notes.length; i++) {
-      const n = s.notes[i]!;
-      if (
-        n.trackId === "sub" &&
-        n.startTick! < suck &&
-        n.startTick! + n.durationTicks! > suck
-      )
-        s.notes[i] = { ...n, durationTicks: suck - n.startTick! };
-    }
-
-    // A whole-mix silent beat before Overload: nothing starts or rings in it.
-    // Whatever is still sounding dives an octave over the beat before, like a
-    // tape machine losing power, then the overload slams in a half step up.
-    const gapBegin = 44 * BAR - 480,
-      gapEnd = 44 * BAR;
-    for (let i = s.notes.length - 1; i >= 0; i--) {
-      const n = s.notes[i]!;
-      const start = n.startTick!;
-      if (start >= gapBegin && start < gapEnd) s.notes.splice(i, 1);
-      else if (start < gapBegin && start + n.durationTicks! > gapBegin) {
-        const duration = gapBegin - start;
-        const dive = Math.max(0, (duration - 480) / duration);
-        s.notes[i] = {
-          ...n,
-          durationTicks: duration,
-          ...(["kick", "snap", "hats", "tear"].includes(n.trackId!)
-            ? {}
-            : {
-                bend: [
-                  { at: 0, cents: 0 },
-                  ...(dive > 0 ? [{ at: dive, cents: 0 }] : []),
-                  { at: 1, cents: -1200 },
-                ],
-              }),
-        };
+    // The 808 lets go for the last beat of each pre-chorus so the drop lands.
+    for (const suck of [15 * BAR + 3 * TPB, 39 * BAR + 3 * TPB])
+      for (let i = 0; i < s.notes.length; i++) {
+        const n = s.notes[i]!;
+        if (
+          n.trackId === "sub" &&
+          n.startTick! < suck &&
+          n.startTick! + n.durationTicks! > suck
+        )
+          s.notes[i] = { ...n, durationTicks: suck - n.startTick! };
       }
-    }
+
+    /**
+     * A tape stop: whatever rings into [from, to) dives an octave over its
+     * last beat and is cut at `to`; with `silent` nothing may start inside.
+     */
+    const powerDown = (from: number, to: number, silent: boolean) => {
+      for (let i = s.notes.length - 1; i >= 0; i--) {
+        const n = s.notes[i]!;
+        const start = n.startTick!;
+        if (start >= from && start < to) {
+          if (silent) s.notes.splice(i, 1);
+          continue;
+        }
+        if (start < from && start + n.durationTicks! > from) {
+          const duration = Math.min(start + n.durationTicks!, to) - start;
+          const dive = Math.max(0, (duration - TPB) / duration);
+          s.notes[i] = {
+            ...n,
+            durationTicks: duration,
+            ...(["kick", "snap", "hats", "tear"].includes(n.trackId!)
+              ? {}
+              : {
+                  bend: [
+                    { at: 0, cents: 0 },
+                    ...(dive > 0 ? [{ at: dive, cents: 0 }] : []),
+                    { at: 1, cents: -1200 },
+                  ],
+                }),
+          };
+        }
+      }
+    };
+    // The glitch break ends on a tape stop over its last beat.
+    powerDown(27 * BAR + 3 * TPB, 28 * BAR, false);
+    // A whole-mix silent beat before Overload: nothing starts or rings in it.
+    powerDown(56 * BAR - TPB, 56 * BAR, true);
     return s.finish();
   },
 };
