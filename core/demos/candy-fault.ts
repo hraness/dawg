@@ -865,7 +865,7 @@ export const candyFault: DemoDefinition = {
       "Last pixel 4",
     ],
     mixNotes: [
-      "The 808 follows the kick but phrases across the bar: one verse bar in four holds its root, the octave pop comes only before the phrase-end IV, vi and I are reached by step or a passing tone, and it rests on beat three under 'oh'; in the bridge it walks down alone, E to F#, under the Rhodes.",
+      "The 808 follows the kick but phrases across the bar: one verse bar in four holds its root, the octave pop comes only before the phrase-end IV, vi and I are reached by step, IV from a half step below, and it rests on beat three under 'oh'; in the bridge it walks down alone, E to F#, under the Rhodes.",
       "The singer is pitched bright with a formant lift; a softer double sings thirds below (in the bridge, the 10th above the walking bass, so her 7-6 and its 4-3 resolve together) and a thin octave-up double joins every line of the final chorus; dotted-eighth delay throws catch the last word of each line.",
       "Two chip arps split the sixteenths, the square on the beat and the pulse between, with inversions that walk the top note down then up each phrase; the plastic pulse hook finishes the singer's lines, owns the fourth bar of each chorus phrase, and answers verse two an octave above her.",
       "The pre-chorus supersaw sits close under the singer (A3 to D#5) with its top voice climbing A4 B4 C#5 D#5 into the drop; the chorus opens the stack to E3..B4 so her line stays clear, with octave stabs above her from chorus one (two a bar, then four) and a held top voice in the Overload; the Rhodes voicings in the verses top out under her lowest notes.",
@@ -1538,8 +1538,9 @@ export const candyFault: DemoDefinition = {
         const last = inPart === 7;
         const dropout = part === "return" && inPart === 3;
         // The 808's phrase: the octave kick-up only at the phrase end, vi
-        // reached by step on the downbeat, IV through a passing B, and a
-        // rest on beat three under "oh" (not in the Overload).
+        // reached by step on the downbeat, IV from a half step below (the
+        // 5th of vi, so it never runs in fifths with her falling line), and
+        // a rest on beat three under "oh" (not in the Overload).
         // The Overload's seventh bar drops the drums for its second half
         // (her stuttered "pix-els" stands alone); its last bar lands: IV
         // for two beats, then the tonic at full width under a crash.
@@ -1561,7 +1562,7 @@ export const candyFault: DemoDefinition = {
             {
               drop: inPart === 0,
               last:
-                inPart % 4 === 3 ? "pop" : inPart % 4 === 2 ? 35 : undefined,
+                inPart % 4 === 3 ? "pop" : inPart % 4 === 2 ? 32 : undefined,
               rest: inPart % 4 === 1 && part !== "over" ? [8] : [],
               cut: half ? 8 : undefined,
               level: part === "chorus" ? 0.9 : 1,
