@@ -33,12 +33,17 @@ const AM9 = [57, 60, 64, 67, 71],
   FMAJ9 = [53, 57, 60, 64, 67],
   CADD9 = [55, 60, 62, 64, 67],
   DM9 = [57, 60, 64, 65],
-  DM7 = [57, 60, 62, 65],
-  EM7 = [55, 59, 62, 64, 67],
+  DM7 = [53, 57, 60, 62],
+  EM7 = [55, 59, 62, 64],
   FMAJ7 = [57, 60, 64, 65],
   GSUS4 = [55, 60, 62, 67],
   G = [55, 59, 62, 67],
   FADD9 = [57, 60, 65, 67],
+  // Pre-chorus voicings keep the 9ths under the top voice so the singer's
+  // F4 G4 A4 climb sits a third or more above the stabs.
+  DM9_PRE = [53, 57, 60, 64],
+  FADD9_PRE = [55, 60, 64, 65],
+  FMAJ7_PRE = [53, 60, 64, 65],
   AM7 = [57, 60, 64, 67],
   C_G = [55, 60, 64, 67],
   AM_C_SUS = [57, 62, 64, 69],
@@ -106,10 +111,10 @@ const VERSE_LOW: readonly Harmony[] = [
 ];
 const PRE: readonly Harmony[] = [
   // 9-8: E over the D bass resolves to D.
-  H(DM9, D, [72, 74, 77, 81], DM7, [72, 74, 77, 81]),
+  H(DM9_PRE, D, [72, 74, 77, 81], DM7, [72, 74, 77, 81]),
   H(EM7, EB, [74, 76, 79, 83]),
   // 9-8: G over the F bass resolves to F.
-  H(FADD9, F, [76, 79, 81, 84], FMAJ7, [76, 79, 81, 84]),
+  H(FADD9_PRE, F, [76, 79, 81, 84], FMAJ7_PRE, [76, 79, 81, 84]),
   H(GSUS4, GB, [74, 79, 84, 86], G, [74, 79, 83, 86]),
 ];
 const CHORUS: readonly Harmony[] = [
@@ -1016,7 +1021,9 @@ export const signalBloom: DemoDefinition = {
         if (last && !silent) toms(b, [[3, 45, 0.5]]);
       } else if (part === "chorus" || part === "post") {
         const final = b >= 48;
-        kick(b, [
+        // The first chorus holds back so the final one has somewhere to go.
+        const kickGain = part === "chorus" && !final ? 0.9 : 1;
+        const kickHits: (readonly [number, number])[] = [
           [0, 0.95],
           [1, 0.8],
           [2, 0.9],
@@ -1025,8 +1032,12 @@ export const signalBloom: DemoDefinition = {
           ...(final && part === "chorus" && odd
             ? ([[2.75, 0.5]] as const)
             : []),
-        ]);
-        backbeat(b, [1, 3], true, part === "chorus" ? 1.05 : 1);
+        ];
+        kick(
+          b,
+          kickHits.map(([beat, v]) => [beat, v * kickGain] as const),
+        );
+        backbeat(b, [1, 3], true, part === "chorus" && final ? 1.1 : 1);
         // Ghost strokes before the backbeat keep the machine breathing.
         if (odd && !phraseEnd) note("snare", b, 2.75, 38, 0.1, 0.18);
         if (b % 4 === 2) note("snare", b, 1.75, 38, 0.1, 0.16);
@@ -1156,7 +1167,7 @@ export const signalBloom: DemoDefinition = {
             i / 2,
             pitch,
             0.4,
-            OCTAVE_PULSE[i]! * (b >= 48 ? 1.08 : 1),
+            OCTAVE_PULSE[i]! * (b >= 48 ? 1.08 : 0.94),
           ),
         );
       } else if (part === "post") {
@@ -1198,9 +1209,11 @@ export const signalBloom: DemoDefinition = {
                   : 0.5
                 : part === "chorus"
                   ? b >= 48
-                    ? 0.76
-                    : 0.6
-                  : 0.58;
+                    ? 0.8
+                    : 0.54
+                  : part === "pre"
+                    ? 0.54
+                    : 0.58;
       if (part === "pre") {
         // Off-beat stabs build momentum under the climbing bass; the 9-8
         // and 4-3 resolve on the stab at beat 3.
@@ -1211,7 +1224,7 @@ export const signalBloom: DemoDefinition = {
             i / 2,
             chordNow,
             i % 2 ? 0.3 : 0.4,
-            (i % 2 ? 0.5 : 0.42) + (b % 4) * 0.04,
+            (i % 2 ? 0.46 : 0.4) + (b % 4) * 0.04,
           );
         }
       } else if (part === "outro") {
