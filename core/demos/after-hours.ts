@@ -173,13 +173,6 @@ export const afterHours: DemoDefinition = {
         [52, 55, 59, 62],
         [55, 58, 61, 64],
       ];
-    const refrain: Phrase = [
-      [0.75, 77, 0.4, 0.65],
-      [1.5, 76, 0.7, 0.7],
-      [3, 72, 0.63, 0.66],
-      [4.75, 69, 0.55, 0.59],
-      [6, 72, 1.1, 0.68],
-    ];
     for (let b = 0; b < 64; b++) {
       const middle = b >= 32 && b < 40,
         outro = b >= 56,
@@ -189,30 +182,12 @@ export const afterHours: DemoDefinition = {
       drums(s, b);
       shakerAndRim(s, b);
       congas(s, b);
-      if (b >= 8 && !middle && b < 60) {
-        s.phrase("bass", b, [
-          [0.5, root, 0.38, 0.8],
-          [1.75, root + 7, 0.22, 0.61],
-          [2.5, root + 12, 0.4, 0.72],
-          [3.5, root + (b % 2 ? 10 : 7), 0.25, 0.58],
-        ]);
-      } else if (middle && b % 4 === 0) s.note("bass", b, 0, root, 2.6, 0.42);
-      if (b < 62) {
-        const voicing =
-          b >= 48 && b < 56 ? [...chord.slice(1), chord[0]! + 12] : chord;
-        s.chord(
-          "keys",
-          b,
-          b % 2 ? 0.56 : 0.04,
-          voicing,
-          middle ? 2.7 : 0.9,
-          middle ? 0.54 : 0.58,
-        );
-        if (!middle && b >= 8 && !outro)
-          s.chord("keys", b, 2.78, voicing, 0.48, 0.43);
+      if (b % 2 === 0) {
+        bassSpan(s, b, c, roots);
+        keysSpan(s, b, c, chords);
       }
       if (((b >= 16 && b < 24) || (b >= 40 && b < 56)) && b % 4 === 0)
-        s.phrase("keys", b, refrain, 0, 0.82);
+        refrain(s, b);
       if (((b >= 24 && b < 32) || (b >= 44 && b < 56)) && b % 2 === 1) {
         s.chord(
           "organ",
@@ -249,10 +224,6 @@ export const afterHours: DemoDefinition = {
           [0.75, 81, 0.9, 0.42],
           [2.75, 76, 1.2, 0.35],
         ]);
-      if (b === 62) {
-        s.chord("keys", b, 0, chords[0]!, 7.5, 0.45);
-        s.note("bass", b, 0, 26, 5, 0.5);
-      }
     }
     return s.finish();
   },
@@ -533,4 +504,288 @@ function congas(s: Composer, b: number): void {
       vel * gain + wobble(b, i + 90) * 0.05,
     );
   }
+}
+
+/** Swing any beat that falls on an odd 16th. */
+const swung = (beat: number): number =>
+  beat + (Math.round(beat * 4) % 2 ? SWING : 0);
+
+/**
+ * Two-bar bass figures over one chord: [beat 0..8, interval, length,
+ * velocity]. Interval 10 is the chord's seventh (major on Cmaj9) and NEXT
+ * is a half-step approach into the next chord's root. Every note ends
+ * before the next kick so the pair never fights.
+ */
+const NEXT = 99;
+type BassStep = readonly [
+  beat: number,
+  interval: number,
+  len: number,
+  vel: number,
+];
+const BASS: Readonly<Record<"room" | "pocket" | "walk", readonly BassStep[]>> =
+  {
+    room: [
+      [0.5, 0, 0.42, 0.82],
+      [1.75, 12, 0.18, 0.62],
+      [2.5, 0, 0.36, 0.76],
+      [3.5, 10, 0.22, 0.6],
+      [3.75, 12, 0.16, 0.5],
+      [4.5, 0, 0.42, 0.8],
+      [5.5, 7, 0.22, 0.62],
+      [6.5, 12, 0.3, 0.7],
+      [7.5, NEXT, 0.3, 0.66],
+    ],
+    pocket: [
+      [0, 0, 0.2, 0.62],
+      [0.75, 0, 0.2, 0.78],
+      [1.5, 12, 0.2, 0.6],
+      [2.5, 0, 0.4, 0.78],
+      [3.25, 7, 0.18, 0.56],
+      [3.5, 10, 0.3, 0.64],
+      [4.5, 0, 0.3, 0.8],
+      [5.25, 0, 0.14, 0.4],
+      [5.5, 12, 0.2, 0.66],
+      [6.5, 7, 0.3, 0.7],
+      [7.25, 10, 0.2, 0.56],
+      [7.75, NEXT, 0.18, 0.66],
+    ],
+    // The seventh rising into the root, Kerri Chandler style.
+    walk: [
+      [0.5, 10, 0.18, 0.64],
+      [0.75, 12, 0.2, 0.82],
+      [1.75, 0, 0.2, 0.62],
+      [2.5, 12, 0.36, 0.76],
+      [3.25, 10, 0.2, 0.58],
+      [3.5, 7, 0.3, 0.66],
+      [4.5, 0, 0.4, 0.8],
+      [5.5, 12, 0.2, 0.66],
+      [5.75, 10, 0.18, 0.54],
+      [6.5, 7, 0.3, 0.72],
+      [7.5, NEXT, 0.3, 0.68],
+    ],
+  };
+const SEVENTHS = [10, 10, 11, 10];
+
+/** Bass for the two bars starting at even bar `b` over chord `c`. */
+function bassSpan(
+  s: Composer,
+  b: number,
+  c: number,
+  roots: readonly number[],
+): void {
+  const root = roots[c]!;
+  if (b === 62) {
+    s.note("bass", b, 0, 26, 6, 0.6);
+    return;
+  }
+  if (inMiddle(b)) {
+    // Low lights: a pedal on D, then on A for tension, then pulsing 8ths
+    // that swell and stop half a beat before the return.
+    const pedal = b < 36 ? 26 : 33;
+    s.note("bass", b, 0, pedal, 3.6, 0.5);
+    if (b < 38) s.note("bass", b + 1, 0, pedal, 3.6, 0.44);
+    else
+      for (let i = 0; i < 7; i++)
+        s.note("bass", b + 1, i / 2, 33, 0.3, 0.34 + i * 0.055);
+    return;
+  }
+  if (b < 8 || b >= 60) return;
+  const unit = b - (b % 4);
+  const figure =
+    unit >= 48 && unit < 56
+      ? BASS.walk
+      : [16, 20, 28, 44].includes(unit)
+        ? BASS.pocket
+        : BASS.room;
+  const outro = b >= 56;
+  const next = roots[outro ? 0 : (c + 1) % 4]!;
+  for (const [beat, interval, len, vel] of figure) {
+    if (outro && b === 58 && beat >= 6) break; // leave the last bar open
+    const pitch =
+      interval === NEXT
+        ? next === root
+          ? root + 7
+          : next + (next > root ? -1 : 1)
+        : root + (interval === 10 ? SEVENTHS[c]! : interval);
+    const run = b % 8 === 6 && beat === 6.5 && !outro;
+    if (run) {
+      // Phrase end: a falling three-note run replaces the octave.
+      s.note("bass", b, swung(6.25), root + 12, 0.15, 0.6);
+      s.note("bass", b, 6.5, root + SEVENTHS[c]!, 0.15, 0.58);
+      s.note("bass", b, swung(6.75), root + 7, 0.18, 0.64);
+      continue;
+    }
+    s.note(
+      "bass",
+      b,
+      swung(beat),
+      pitch,
+      len,
+      vel * (outro ? 0.9 : 1) + wobble(b, beat * 4 + 120) * 0.05,
+    );
+  }
+}
+
+/** A Rhodes chord rolled about 6 ms per note, top voice lifted. */
+function rhodes(
+  s: Composer,
+  b: number,
+  beat: number,
+  pitches: readonly number[],
+  len: number,
+  vel: number,
+): void {
+  pitches.forEach((pitch, i) =>
+    s.note(
+      "keys",
+      b,
+      swung(beat) + i * 0.012,
+      pitch,
+      Math.max(0.1, len - i * 0.012),
+      vel * (i === pitches.length - 1 ? 1.08 : 0.9) +
+        wobble(b * 5 + i, beat * 4 + 140) * 0.04,
+    ),
+  );
+}
+
+/**
+ * Two-bar Rhodes comps: [beat, length, velocity, next?]. Stabs sit in the
+ * gaps the bass leaves, and `next` anticipates the coming chord on the
+ * last 16th so the change arrives early, the way house keys push.
+ */
+type Comp = readonly (readonly [number, number, number, boolean?])[];
+const COMPS: Readonly<Record<"intro" | "room" | "pocket" | "low", Comp>> = {
+  intro: [
+    [0, 2.5, 0.5],
+    [2.75, 0.6, 0.42],
+    [4.75, 1.8, 0.46],
+    [7.75, 1.2, 0.5, true],
+  ],
+  room: [
+    [0, 1.3, 0.56],
+    [1.5, 0.28, 0.42],
+    [3.25, 0.45, 0.46],
+    [5.25, 0.28, 0.4],
+    [6, 0.4, 0.44],
+    [7.75, 1.3, 0.54, true],
+  ],
+  pocket: [
+    [0, 1.0, 0.54],
+    [1.75, 0.3, 0.44],
+    [3.75, 0.5, 0.48],
+    [5.75, 0.3, 0.42],
+    [7, 0.5, 0.46],
+  ],
+  low: [
+    [0, 3.6, 0.52],
+    [4.75, 3.0, 0.44],
+  ],
+};
+
+/** Keys for the two bars starting at even bar `b` over chord `c`. */
+function keysSpan(
+  s: Composer,
+  b: number,
+  c: number,
+  chords: readonly (readonly number[])[],
+): void {
+  if (b === 62) {
+    rhodes(s, b, 0, chords[0]!, 7.5, 0.5);
+    s.note("keys", b, 1.5, 69, 6, 0.36); // the fifth on top, late, to close
+    return;
+  }
+  const open = b >= 48 && b < 56;
+  const voice = (k: number) => {
+    const chord = chords[k]!;
+    return open ? [...chord.slice(1), chord[0]! + 12] : chord;
+  };
+  const outro = b >= 56;
+  const unit = b - (b % 4);
+  const comp = inMiddle(b)
+    ? COMPS.low
+    : b < 8 || outro
+      ? COMPS.intro
+      : [16, 20, 28, 44].includes(unit)
+        ? COMPS.pocket
+        : COMPS.room;
+  // The previous span pushed this chord early unless it was a pocket comp,
+  // the break, or the span before the break.
+  const anticipated =
+    b > 0 &&
+    !inMiddle(b) &&
+    !inMiddle(b - 2) &&
+    b - 2 !== 30 &&
+    ![16, 20, 28, 44].includes(b - 2 - ((b - 2) % 4));
+  const nextChord = outro ? 0 : (c + 1) % 4;
+  for (const [beat, len, vel, next] of comp) {
+    if (beat === 0 && anticipated) continue;
+    if (outro && b === 60 && beat > 4) break;
+    if (next && (b === 30 || b === 38 || b === 60)) continue;
+    rhodes(
+      s,
+      b,
+      beat,
+      voice(next ? nextChord : c),
+      len,
+      vel * (outro ? 0.88 : 1),
+    );
+  }
+}
+
+/**
+ * The Rhodes refrain: a motif over Dm9, its answer a step lower over
+ * Cmaj9, and in Open windows the same shape lifted a third to the peak.
+ */
+const REFRAIN: Readonly<Record<"call" | "answer" | "peak" | "home", Phrase>> = {
+  call: [
+    [0.75, 77, 0.4, 0.65],
+    [1.5, 76, 0.7, 0.7],
+    [3, 72, 0.63, 0.66],
+    [4.75, 69, 0.55, 0.59],
+    [6, 72, 1.1, 0.68],
+  ],
+  answer: [
+    [0.75, 76, 0.4, 0.62],
+    [1.5, 74, 0.7, 0.68],
+    [3, 71, 0.63, 0.64],
+    [4.75, 67, 0.55, 0.57],
+    [6, 71, 1.6, 0.66],
+  ],
+  peak: [
+    [0.75, 81, 0.4, 0.7],
+    [1.5, 79, 0.5, 0.72],
+    [2.25, 77, 0.4, 0.62],
+    [3, 76, 0.63, 0.68],
+    [4.75, 72, 0.55, 0.6],
+    [5.5, 74, 0.3, 0.58],
+    [6, 77, 1.4, 0.72],
+  ],
+  home: [
+    [0.75, 79, 0.4, 0.66],
+    [1.5, 76, 0.7, 0.68],
+    [3, 74, 0.63, 0.64],
+    [4.75, 71, 0.55, 0.58],
+    [6, 72, 1.8, 0.66],
+  ],
+};
+
+function refrain(s: Composer, b: number): void {
+  const line =
+    b >= 48
+      ? b % 8 === 0
+        ? REFRAIN.peak
+        : REFRAIN.home
+      : b % 8 === 0
+        ? REFRAIN.call
+        : REFRAIN.answer;
+  for (const [beat, pitch, len, vel = 0.7] of line)
+    s.note(
+      "keys",
+      b,
+      swung(beat) + 0.006,
+      pitch,
+      len,
+      vel * 0.86 + wobble(b, beat * 4 + 160) * 0.04,
+    );
 }
