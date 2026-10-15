@@ -1039,9 +1039,6 @@ function playRoles(plan: Plan, rng: (salt: string) => Random): Draft[] {
       gauss(random) * plan.humanizeTicks
     );
   };
-  const humanVelocity = (velocity: number, random: Random) =>
-    clamp(velocity * (1 + gauss(random) * groove.humanize.velocity), 0.05, 1);
-
   // --- Kit and percussion grids
   const totalSteps = plan.bars * plan.stepsPerBar;
   const gridOf = (role: RoleName) => {
@@ -1070,6 +1067,7 @@ function playRoles(plan: Plan, rng: (salt: string) => Random): Draft[] {
   }
   // Fills: toms and snare in the last beat of each `every`-bar phrase.
   const fills = style.rhythm.fills;
+  const fillBeat = new Map<number, number>();
   if (fills && kitTrack) {
     const random = rng("fills");
     const beatSteps = Math.max(
@@ -1080,6 +1078,7 @@ function playRoles(plan: Plan, rng: (salt: string) => Random): Draft[] {
       const density = between(fills.density, random);
       const start = (bar + 1) * plan.stepsPerBar - beatSteps;
       for (let step = start; step < (bar + 1) * plan.stepsPerBar; step += 1) {
+        fillBeat.set(step, (step - start + 1) / beatSteps);
         if (random() >= density) continue;
         const role: RoleName =
           kitTrack.roles.includes("tom") && random() < 0.5 ? "tom" : "snare";
@@ -1097,12 +1096,29 @@ function playRoles(plan: Plan, rng: (salt: string) => Random): Draft[] {
       if ((lock.kind === "with") !== a.has(step)) b.delete(step);
   }
   const timingRandom = rng("timing");
+  const dynamicsRandom = rng("dynamics");
+  const grids = new Map<RoleName, readonly number[] | undefined>();
+  for (const role of kitOnsets.keys()) grids.set(role, gridOf(role));
+  const beatSteps = Math.max(
+    1,
+    Math.round(plan.stepsPerBar / plan.beatsPerBar),
+  );
   for (const [role, steps] of kitOnsets) {
     const owner = plan.tracks.find((track) => track.roles.includes(role))!;
     const onKit = owner.instrument === "drums";
+    const grid = grids.get(role);
     for (const step of [...steps].sort((x, y) => x - y)) {
       const bar = Math.floor(step / plan.stepsPerBar);
       const section = sectionAt(plan, bar);
+      const touch = kitTouch(
+        role,
+        step,
+        grid?.[step % plan.stepsPerBar] ?? 0,
+        fillBeat.get(step),
+        plan,
+        beatSteps,
+        dynamicsRandom,
+      );
       const key = onKit
         ? (KIT_PITCH[role] ?? PERC_ON_KIT[role] ?? KIT_PITCH.rim!)
         : role === "bell"
@@ -1115,9 +1131,12 @@ function playRoles(plan: Plan, rng: (salt: string) => Random): Draft[] {
         duration: Math.max(30, plan.stepTicks * 0.9),
         key,
         cents: 0,
-        velocity: humanVelocity(
-          velocityAt(step, section.energy, role),
-          timingRandom,
+        velocity: clamp(
+          velocityAt(step, section.energy, role) *
+            touch.accent *
+            (1 + gauss(timingRandom) * groove.humanize.velocity * touch.spread),
+          0.05,
+          1,
         ),
       });
     }
@@ -1486,6 +1505,51 @@ function playChords(plan: Plan, role: RoleName, random: Random): Draft[] {
     });
   }
   return out;
+}
+
+/**
+ * How hard a drummer plays one kit or hand-percussion hit, on top of the
+ * card's per-step accent shape. Snare strokes the card plays only some of
+ * the time, between beats, are ghost notes at a third to a half of a main
+ * stroke, each a little different. Optional hat and kick strokes are
+ * lighter. A fill builds through its beat into the next phrase (a
+ * backbeat inside it keeps its weight). The one of each bar lands a
+ * little harder, and the one of each four-bar phrase harder still. Kicks vary
+ * least from stroke to stroke and hats and shakers most.
+ */
+function kitTouch(
+  role: RoleName,
+  step: number,
+  odds: number,
+  fill: number | undefined,
+  plan: Plan,
+  beatSteps: number,
+  random: Random,
+): { accent: number; spread: number } {
+  const barStep = step % plan.stepsPerBar;
+  const bar = Math.floor(step / plan.stepsPerBar);
+  const onBeat = barStep % beatSteps === 0;
+  const spread =
+    role === "kick"
+      ? 0.6
+      : role === "snare" || role === "clap"
+        ? 0.8
+        : role === "hat" || role === "shaker" || role === "openhat"
+          ? 1.4
+          : 1.1;
+  if (fill !== undefined && (role === "snare" || role === "tom"))
+    return {
+      accent: Math.max(odds >= 1 ? 1 : 0, 0.86 + 0.24 * fill),
+      spread: 0.6,
+    };
+  if (odds < 1 && !onBeat) {
+    if (role === "snare" || role === "rim")
+      return { accent: 0.42 + 0.16 * random(), spread: 0.5 };
+    if (role === "kick") return { accent: 0.85, spread };
+    if (role === "hat" || role === "shaker") return { accent: 0.8, spread };
+  }
+  if (barStep !== 0) return { accent: 1, spread };
+  return { accent: bar % 4 === 0 ? 1.08 : 1.04, spread };
 }
 
 /**
