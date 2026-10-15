@@ -384,10 +384,10 @@ export const skylineCurrent: DemoDefinition = {
       }),
     );
     s.track(
-      voice("piano", "Open-air piano", "ballad", 0.36, {
+      voice("piano", "Open-air piano", "ballad", 0.32, {
         pan: 0.08,
         // Keeps the hammer thump below the lowest note (G2) out of the sub.
-        filter: { type: "hpf", cutoff: 60, resonance: 0 },
+        filter: { type: "hpf", cutoff: 75, resonance: 0 },
         reverb: hall,
         humanize: { timing: 8, velocity: 7, length: 5, seed: 2 },
         pedal: [32, 34, 36, 38, 40, 42, 60, 62].flatMap((bar) => [
@@ -598,14 +598,30 @@ export const skylineCurrent: DemoDefinition = {
         ),
       );
     };
+    /**
+     * Two bars of ballad piano: an open left hand (root, fifth, octave
+     * spread over the bar instead of stacked) under a right-hand chord
+     * rolled upward over about 20 ms with the top note lifted.
+     */
     const pianoChord = (bar: number, gain: number) => {
       const h = harmonyAt(bar);
+      const rolled = (beat: number, velocity: number, length: number) =>
+        h.chord.forEach((pitch, i) =>
+          s.note(
+            "piano",
+            bar,
+            beat + 0.03 + i * 0.022,
+            pitch,
+            length,
+            velocity * (i === h.chord.length - 1 ? 1.12 : 0.9),
+          ),
+        );
       s.note("piano", bar, 0, h.root + 12, 7.6, 0.5 * gain);
-      s.note("piano", bar, 0.02, h.root + 24, 7.6, 0.4 * gain);
-      s.note("piano", bar, 2.5, h.root + 19, 1.4, 0.3 * gain);
-      s.note("piano", bar, 5, h.root + 24, 2.4, 0.28 * gain);
-      s.chord("piano", bar, 0, h.chord, 3.8, 0.34 * gain);
-      s.chord("piano", bar, 4, h.chord, 3.6, 0.3 * gain);
+      s.note("piano", bar, 1.5, h.root + 19, 1.6, 0.3 * gain);
+      s.note("piano", bar, 3, h.root + 24, 1.2, 0.26 * gain);
+      s.note("piano", bar, 5, h.root + 19, 2.4, 0.26 * gain);
+      rolled(0, 0.34 * gain, 3.8);
+      rolled(4, 0.3 * gain, 3.6);
     };
 
     for (let b = 0; b < 64; b++) {
