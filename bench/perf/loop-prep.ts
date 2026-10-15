@@ -22,7 +22,7 @@ console.log(
     note: "wallMs covers render request to returned PCM, excluding hashing; each cold row has a fresh worker",
   }),
 );
-for (const id of ids.length ? ids : ["signal-bloom", "glass-arc"]) {
+for (const id of ids.length ? ids : ["signal-bloom", "copper-wire"]) {
   const score = createDemo(id);
   const renderer = new LoopRenderer({
     sampleRate,

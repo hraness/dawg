@@ -97,10 +97,10 @@ to you. `style warehouse 4 3` loads four bars with seed 3, replacing the
 song in one undo step. Their style and artist listening cues describe
 rhythm and sound; the patterns are original. See [Styles](./DAWG.md#styles).
 
-For a complete song, type `demo`. Eleven editable arrangements cover
-techno, house, garage, jungle, hyperpop, melodic EDM and soul.
-Each includes production notes, named scenes, instruments, effects and
-automation. `demo glass-arc` loads one and opens TAPE; Space plays,
+For a complete song, type `demo`. Seven editable arrangements cover
+hyperpop, acid techno, UK garage, jungle, trip hop, neo soul and synth
+pop, each with production notes, named scenes, instruments, effects and
+automation. `demo candy-fault` loads one and opens TAPE; Space plays,
 Tab changes tracks, and `,` / `.` changes scenes. Loading is one undo step.
 
 `sample library` opens eight original sounds that work offline, including
@@ -144,17 +144,17 @@ bun add -g @hraness/dawg
 Or install the release tarball from GitHub directly:
 
 ```sh
-bun add -g https://github.com/hraness/dawg/releases/download/v0.14.0/hraness-dawg-0.14.0.tgz
+bun add -g https://github.com/hraness/dawg/releases/download/v0.15.0/hraness-dawg-0.15.0.tgz
 dawg --help
 ```
 
 Each [release](https://github.com/hraness/dawg/releases) is immutable and ships the tarball, a `SHA256SUMS` file and a GitHub build attestation. To check a download before installing it:
 
 ```sh
-gh release download v0.14.0 --repo hraness/dawg
+gh release download v0.15.0 --repo hraness/dawg
 shasum -a 256 -c SHA256SUMS
-gh attestation verify hraness-dawg-0.14.0.tgz --repo hraness/dawg
-bun add -g "$PWD/hraness-dawg-0.14.0.tgz"
+gh attestation verify hraness-dawg-0.15.0.tgz --repo hraness/dawg
+bun add -g "$PWD/hraness-dawg-0.15.0.tgz"
 ```
 
 To run from source instead:

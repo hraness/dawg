@@ -22,25 +22,13 @@ const accented = (name: string, voice: string) =>
     .filter((hit) => hit.velocity >= 0.5)
     .map((hit) => hit.startTick);
 
-describe("shuffle feels", () => {
-  test("shuffle is triplet 8ths: long-short on every beat", () => {
-    const hats = onsets("shuffle", "hat");
-    expect(hats).toEqual([0, 320, 480, 800, 960, 1280, 1440, 1760]);
-    expect(onsets("shuffle", "kick")).toEqual([0, 960]);
-    expect(accented("shuffle", "snare")).toEqual([480, 1440]);
-  });
-
+describe("the half-time shuffle feel", () => {
   test("half-time-shuffle keeps swung 16ths with the backbeat on 3", () => {
     expect(onsets("half-time-shuffle", "hat")).toHaveLength(16);
     expect(accented("half-time-shuffle", "snare")).toEqual([960]);
   });
 
   test("ghost snares sit on the skip partials, never on the backbeat", () => {
-    // Shuffle ghosts fall on the last triplet of beats 1 and 3.
-    const shuffleGhosts = hits("shuffle", "snare")
-      .filter((hit) => hit.velocity < 0.5)
-      .map((hit) => hit.startTick);
-    expect(shuffleGhosts).toEqual([320, 1280]);
     // Half-time shuffle ghosts fall on the middle partial of each 8th.
     const halfTimeGhosts = hits("half-time-shuffle", "snare")
       .filter((hit) => hit.velocity < 0.5)

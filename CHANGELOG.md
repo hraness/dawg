@@ -2,6 +2,19 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.15.0
+
+### Changed
+
+- **A seven-song shelf.** The demos are now seven songs in seven styles with nothing alike between them, each carrying a glitch and hyperpop tint: Candy Fault (hyperpop), Coil Driver (acid techno), Velvet Circuit (UK garage), Copper Wire (jungle), Low Tide (trip hop), Amber Room (neo soul) and Signal Bloom (synth pop). Every song was rewritten for melody and counterpoint: hooks that land on chord tones and resolve by step, answering lines in the singer's rests, interlocking arpeggios and hockets, suspensions tied across every cadence, a break where the drums thin or the kick drops out, a tape stop or silent beat before the last drop, and an ending that thins instead of stopping.
+- **Candy Fault is the flagship.** A pitched-up machine singer sings an intelligible hook that lands on ninths and resolves, a chip pluck finishes her lines, two chip arpeggios interlock, a distorted 808 slides between roots and pops an octave at phrase ends, the kick leaves for a glitch break, a Rhodes bridge sings a 7-6 chain over a falling bass, and a silent beat slams the final chorus up a half step onto the tonic. Every phrase end has its own fill.
+- **The other six.** Coil Driver hockets one sixteenth line between two 303s, trades halves, chases itself a beat apart and drops the kick for dub stabs under a crotale suspension chain. Velvet Circuit hockets a "hold on" hook between two vocal slices with an organ reply, minor-ninth Rhodes that suspend before every turnaround and a sub that climbs while the chops fall. Copper Wire runs two breaks in hocket, one re-sliced every two bars, under a vocal chop and a chip pluck that split one hook across the stereo field, a reese that moves against the string top line and a half-time turn after a tape stop. Low Tide answers a close sung voice with a muted horn, hockets the hook in a kick-less dub room and suspends a string pedal at the cadences. Amber Room phrases a six-note sax theme over a Dilla-leaning pocket while the Rhodes answers in its rests, with a muted guitar and vibes interlocking in the second head and the bass falling where the sax rises. Signal Bloom builds on two interlocking arpeggios and a Reich-offset pluck, with a string motif answering the singer, a wavetable halo singing the comping's top voice and a bitcrush pre-chorus.
+- **Sixteen grooves as phrases.** Every drum groove is a four-bar phrase with a bar-two variation and a bar-four fill or turnaround, and its parts interlock instead of stacking. Techno is rebuilt apart from house. Reggaeton and jersey-club ship on the `synlinn` kit and afrobeats on `syn707`, so their hats, rims and claps are audible, and the afrobeats shaker is a humanized two-bar contour. The loudness spread across the grooves narrowed from 9.5 to 7.6 LU. `DAWG.md` notes that kits are not loudness-matched.
+
+### Removed
+
+- **Four demos and seventeen grooves.** Night Relay, Glass Arc, After Hours and Skyline Current are gone; their styles overlapped the songs that remain. The grooves disco, minimal, electro, breakbeat, dnb, halftime, lofi, drill, dancehall, afrobeat, tresillo, son-clave, bossa-nova, samba, cumbia, footwork and shuffle are retired (SDK 1.39.0); `pattern()` of a retired name throws `unknown groove`, so spread your own rows instead. Saved songs keep their rows and still load. The shelf is now house, techno, euclid-poly, amen-style, boom-bap, trap, reggaeton, one-drop, afrobeats, bembe, garage, jersey-club, rock, funk, half-time-shuffle and jazz-swing.
+
 ## 0.14.0
 
 ### Changed

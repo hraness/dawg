@@ -103,7 +103,7 @@ const depths: readonly {
     title: "Demo songs",
     body: (
       <>
-        <code>demo</code> opens eleven complete, editable songs.
+        <code>demo</code> opens seven complete, editable songs.
       </>
     ),
     since: "0.12.0",

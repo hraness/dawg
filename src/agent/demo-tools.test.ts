@@ -31,7 +31,7 @@ describe("agent demo songs", () => {
     const plan = tool("list_demos").plan({}, context());
     if (plan.kind !== "action") throw new Error("expected read-only discovery");
     const result = JSON.parse((await plan.run({} as ActionContext)).content);
-    expect(result.demos).toHaveLength(11);
+    expect(result.demos).toHaveLength(7);
     expect(result.demos[0].mixNotes.length).toBeGreaterThan(0);
     expect(() => tool("list_demos").plan({ query: 7 }, context())).toThrow();
     expect(() =>

@@ -43,13 +43,13 @@ test.skipIf(!supported)(
       await t.until(() => t.state() !== undefined, "ready");
       await t.settle();
       await t.type("/demos\r", "song shelf");
-      await t.until(() => screen().includes("Night Relay"), "demo shelf");
-      await t.type("night relay", "filter song");
+      await t.until(() => screen().includes("Coil Driver"), "demo shelf");
+      await t.type("coil driver", "filter song");
       await t.type("\r", "song actions");
       await t.until(() => screen().includes("load song"), "song actions");
       await closeMenu();
       const before = await read();
-      await t.type("demo night-relay\r", "load demo");
+      await t.type("demo coil-driver\r", "load demo");
       await t.until(() => t.state()?.screen === "tape", "demo timeline");
       const demo = await read();
       expect(demo.revision).toBe(before.revision + 1);

@@ -5,20 +5,16 @@ parent: arrange
 order: 0
 ---
 
-Eleven complete, editable songs, with original patterns and sounds.
+Seven complete, editable songs, with original patterns and sounds.
 Every part works offline. Open a song's notes to explore its production.
 
-- Night Relay · deep techno · dub chords, FM bass
-- Coil Driver · acid techno · slides, accents, moving filter
-- After Hours · deep house · swung percussion, Rhodes, organ
-- Velvet Circuit · UK garage · two-step swing, organ stabs, vocal chops
-- Glass Arc · future garage · granular vowels, reverse swells
-- Copper Wire · jungle · break edits, reese bass, half-time turn
-- Candy Fault · hyperpop · sung hook, vocal stutters, 808 slides
-- Skyline Current · melodic EDM · supersaw drops, snare builds
-- Signal Bloom · synth pop · gated snare, sung hook, harmony double
-- Low Tide · trip hop · laid-back drums, physical bass, tape
-- Amber Room · neo soul · rootless keys, sax, ghost notes
+- Candy Fault · hyperpop · sung hook, vocal-chip hockets, glitch breaks
+- Coil Driver · acid techno · two 303s, slides, dub-delay breakdown
+- Velvet Circuit · UK garage · two-step swing, hocketing vocal chops
+- Copper Wire · jungle · re-sliced breaks, reese bass, half-time turn
+- Low Tide · trip hop · laid-back drums, a voice and its answer, tape
+- Amber Room · neo soul · rootless keys, sax counterpoint, ghost notes
+- Signal Bloom · synth pop · interlocking arps, gated snare, sung hook
 
 ## Ask
 
@@ -27,8 +23,8 @@ Every part works offline. Open a song's notes to explore its production.
 ## Type it yourself
 
 - `demo` opens the song shelf · `demo search techno`
-- `demo info glass-arc` explains its arrangement and mix
-- `demo night-relay` loads the song and opens TAPE, paused
+- `demo info candy-fault` explains its arrangement and mix
+- `demo coil-driver` loads the song and opens TAPE, paused
 - `sample library` browses the bundled sounds
 - `sample chop hold-on 4` makes a playable four-slice pattern
 
