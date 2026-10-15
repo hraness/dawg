@@ -862,13 +862,13 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
           { velocity: 0.62 },
         ],
       }),
-      // Closed hats leave the open hat's steps free: loud on the beat, a
-      // ghost on the e, a lift on the a.
-      grid(
-        "hat",
-        "Xg.xXg.xXg.xXg.xXg.xXg.xXg.xXx.xXg.xXg.xXg.xXg.xXg.xXg.xXg.xXx.x",
-        { velocity: 0.4, accent: 0.4 },
-      ),
+      // Closed hats leave the open hat's steps free. The 909's two levels:
+      // accented on the beat, the shuffled e and a about 6 dB softer, and
+      // an accented a at the end of bar 2 pushing into the next downbeat.
+      grid("hat", "Xx.xXx.xXx.xXx.xXx.xXx.xXx.xXx.X", {
+        velocity: 0.3,
+        accent: 0.45,
+      }),
     ],
   ),
   drumPattern(
