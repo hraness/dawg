@@ -52,10 +52,22 @@ type Chord = Readonly<{
   sev: number;
   /** Rootless Rhodes voicing; the top note is a slow melody across chords. */
   rh: readonly number[];
-  /** Short organ stab voicing in the gap between Rhodes and chops. */
+  /** Short organ stab voicing for the single downbeat and gap stabs. */
   org: readonly number[];
-  /** The organ answer's second stab: the same chord with its top voice lifted. */
-  up: readonly number[];
+  /**
+   * The organ's three-stab reply in the chops' rests, voiced above the
+   * Rhodes (F4..F5): the top voice is a shape that answers the chop tune,
+   * not a neighbour-note wobble. Only the first voicing plays in the
+   * resolution bar, where the reply is one stab.
+   */
+  reply: readonly (readonly number[])[];
+  /**
+   * The lift riff's interlocking arp: eight pitches for the even bar (hold
+   * on the offbeat 8ths, on the 16th after each) and a four-note tail for
+   * the odd bar's second half that leads by step into the next chord.
+   */
+  arp: readonly number[];
+  tail: readonly number[];
 }>;
 
 const GM9: Chord = {
@@ -64,7 +76,14 @@ const GM9: Chord = {
   sev: 10,
   rh: [58, 62, 65, 69],
   org: [62, 65, 70],
-  up: [62, 65, 72],
+  // Bb C D rising: the hook's own bar-two answer, pre-echoed.
+  reply: [
+    [62, 65, 70],
+    [65, 69, 72],
+    [65, 70, 74],
+  ],
+  arp: [79, 74, 82, 77, 79, 72, 74, 79],
+  tail: [74, 77, 79, 82],
 };
 const EBMAJ9: Chord = {
   name: "Ebmaj9",
@@ -72,7 +91,14 @@ const EBMAJ9: Chord = {
   sev: 11,
   rh: [58, 62, 65, 67],
   org: [62, 67, 70],
-  up: [62, 67, 72],
+  // G Bb C: up through the third and fifth to the sixth.
+  reply: [
+    [62, 65, 67],
+    [65, 67, 70],
+    [67, 70, 72],
+  ],
+  arp: [82, 79, 77, 74, 79, 75, 82, 79],
+  tail: [77, 75, 74, 70],
 };
 const CM9: Chord = {
   name: "Cm9",
@@ -80,7 +106,14 @@ const CM9: Chord = {
   sev: 10,
   rh: [58, 62, 63, 67],
   org: [62, 63, 67],
-  up: [63, 67, 70],
+  // Eb D C falling into the sus bar.
+  reply: [
+    [67, 70, 75],
+    [67, 70, 74],
+    [67, 70, 72],
+  ],
+  arp: [79, 75, 82, 77, 79, 74, 75, 79],
+  tail: [75, 77, 79, 82],
 };
 /** The sus bar: G hangs over D before it falls to F# (a 4-3 at the cadence). */
 const D7SUS: Chord = {
@@ -89,7 +122,13 @@ const D7SUS: Chord = {
   sev: 10,
   rh: [57, 60, 63, 67],
   org: [60, 62, 67],
-  up: [62, 67, 69],
+  reply: [
+    [62, 67, 72],
+    [67, 69, 74],
+    [62, 67, 72],
+  ],
+  arp: [79, 74, 84, 79, 81, 74, 79, 81],
+  tail: [79, 77, 75, 74],
 };
 const D7B9: Chord = {
   name: "D7(b9)",
@@ -97,7 +136,14 @@ const D7B9: Chord = {
   sev: 10,
   rh: [57, 60, 63, 66],
   org: [60, 63, 66],
-  up: [63, 66, 69],
+  // One F# A C stab: the resolution the chop then sings.
+  reply: [
+    [66, 69, 72],
+    [66, 69, 72],
+    [66, 69, 72],
+  ],
+  arp: [78, 75, 81, 78, 81, 75, 78, 81],
+  tail: [78, 75, 74, 72],
 };
 const DM11: Chord = {
   name: "Dm11",
@@ -105,7 +151,14 @@ const DM11: Chord = {
   sev: 10,
   rh: [57, 60, 62, 67],
   org: [60, 62, 65],
-  up: [62, 65, 67],
+  // C D F rising over the minor eleventh.
+  reply: [
+    [65, 69, 72],
+    [67, 72, 74],
+    [69, 72, 77],
+  ],
+  arp: [81, 77, 79, 76, 77, 74, 76, 81],
+  tail: [76, 77, 79, 81],
 };
 /** The lift's sus bar: Bb hangs over F before it falls to A. */
 const F13SUS: Chord = {
@@ -114,7 +167,13 @@ const F13SUS: Chord = {
   sev: 10,
   rh: [62, 63, 67, 70],
   org: [63, 65, 70],
-  up: [65, 70, 72],
+  reply: [
+    [65, 70, 75],
+    [65, 70, 75],
+    [65, 70, 75],
+  ],
+  arp: [82, 77, 84, 79, 82, 75, 77, 82],
+  tail: [79, 77, 75, 74],
 };
 const F13: Chord = {
   name: "F13",
@@ -122,34 +181,48 @@ const F13: Chord = {
   sev: 10,
   rh: [62, 63, 67, 69],
   org: [63, 65, 69],
-  up: [65, 69, 72],
+  // One A C Eb stab under the chop's A.
+  reply: [
+    [69, 72, 75],
+    [69, 72, 75],
+    [69, 72, 75],
+  ],
+  arp: [81, 77, 84, 79, 81, 75, 77, 81],
+  tail: [79, 77, 75, 74],
 };
 
 /** i9 - VImaj9 - iv9 - V7sus(b9) - V7(b9), two bars a chord; the top voice walks A G G G F#. */
 const HOME = [GM9, GM9, EBMAJ9, EBMAJ9, CM9, CM9, D7SUS, D7B9] as const;
 /** The climbing lift into each hook: iv9 - v11 - VImaj9 - VII13sus - VII13. */
 const CLIMB = [CM9, CM9, DM11, DM11, EBMAJ9, EBMAJ9, F13SUS, F13] as const;
+/**
+ * The half-time switch-up: the hook's own harmony under the augmented tune,
+ * then iv9 and the VII13 sus into the last drop.
+ */
+const SWITCH = [GM9, GM9, EBMAJ9, EBMAJ9, CM9, CM9, F13SUS, F13] as const;
 
 /**
  * The breakdown: a 7-6 chain over a sub that walks down G F Eb D, then a
- * 4-3 at the cadence. Each bar is the bass note, a three-note Rhodes
- * voicing whose top holds the suspension and lets it fall, and the chop
- * pitch singing the same line an octave up.
+ * 4-3 at the cadence. Each bar is the bass note and a three-note Rhodes
+ * voicing whose top holds the suspension and lets it fall; the chops sing
+ * the chain an octave up (`BREAK`).
  */
 const CHAIN: readonly Readonly<{
   bass: number;
   rh: readonly number[];
-  chop: number;
 }>[] = [
-  { bass: 43, rh: [58, 62, 65], chop: 77 }, // Gm7: F is the 7th over G
-  { bass: 43, rh: [58, 62, 63], chop: 75 }, // ...falls to Eb, the 6th
-  { bass: 41, rh: [57, 60, 63], chop: 75 }, // F7: Eb is now the 7th over F
-  { bass: 41, rh: [57, 60, 62], chop: 74 }, // ...falls to D
-  { bass: 39, rh: [55, 58, 62], chop: 74 }, // Ebmaj7: D the 7th over Eb
-  { bass: 39, rh: [55, 58, 60], chop: 72 }, // ...falls to C
-  { bass: 38, rh: [55, 57, 60], chop: 67 }, // D7sus4: G hangs over D
-  { bass: 38, rh: [54, 57, 60], chop: 66 }, // ...falls to F#
+  { bass: 43, rh: [58, 62, 65] }, // Gm7: F is the 7th over G
+  { bass: 43, rh: [58, 62, 63] }, // ...falls to Eb, the 6th
+  { bass: 41, rh: [57, 60, 63] }, // F7: Eb is now the 7th over F
+  { bass: 41, rh: [57, 60, 62] }, // ...falls to D
+  { bass: 39, rh: [55, 58, 62] }, // Ebmaj7: D the 7th over Eb
+  { bass: 39, rh: [55, 58, 60] }, // ...falls to C
+  { bass: 38, rh: [55, 57, 60] }, // D7sus4: G hangs over D
+  { bass: 38, rh: [57, 60, 66] }, // ...falls to F#, voiced up with the others
 ];
+
+/** The grains under the chain: the hook motif in whole notes, its last note resolving to F#. */
+const BREAK_PAD = [74, 70, 69, 67, 74, 70, 69, 66] as const;
 
 /**
  * The bass's approach into the next chord: a tone of the current chord a
@@ -164,6 +237,7 @@ const APPROACH: Readonly<Record<string, number>> = {
   "Cm9>Dm11": 39, // Eb down a half step
   "Dm11>Ebmaj9": 41, // F, the third, down a whole step
   "Ebmaj9>F13sus4": 43, // G, the third, down a whole step
+  "Cm9>F13sus4": 43, // G, the fifth, down a whole step
   "F13>Gm9": 33, // A, the third, down a whole step
 };
 
@@ -182,7 +256,8 @@ type SectionName = (typeof SECTIONS)[number];
 const sectionOf = (bar: number): SectionName => SECTIONS[Math.floor(bar / 8)]!;
 const chordAt = (bar: number): Chord => {
   const name = sectionOf(bar);
-  const progression = name === "Lift" || name === "Switch-up" ? CLIMB : HOME;
+  const progression =
+    name === "Lift" ? CLIMB : name === "Switch-up" ? SWITCH : HOME;
   if (name === "Afterglow" && bar >= 62) return GM9;
   return progression[bar % 8]!;
 };
@@ -203,10 +278,30 @@ type BassHit = readonly [
  */
 const BASS: Readonly<
   Record<
-    "pocket" | "hook" | "lift" | "half",
+    "pocket" | "hook" | "hookB" | "lift" | "half",
     readonly [readonly BassHit[], readonly BassHit[]]
   >
 > = {
+  // The hook's first two pairs: a downbeat root anchors the odd bars, so
+  // the tune has a beat one to push against; the turnaround pairs keep the
+  // skip (`hook`).
+  hookB: [
+    [
+      [0, 0, 3, 0.94],
+      [4, 7, 1, 0.56],
+      [6, 12, 1, 0.6],
+      [10, 12, 2, 0.72],
+      [14, 7, 1, 0.6],
+    ],
+    [
+      [0, 0, 1, 0.84],
+      [1, 12, 1, 0.58],
+      [3, 7, 1, 0.54],
+      [8, 0, 3, 0.82],
+      [11, -1, 1, 0.6],
+      [13, -99, 3, 0.68],
+    ],
+  ],
   // Sparse sub on one with the kick, replies in the kick's gaps.
   pocket: [
     [
@@ -317,19 +412,21 @@ const HOOK: readonly (readonly Chop[])[] = [
     [2, "hold", 74, 3, 0.8],
     [6, "on", 70, 2, 0.72],
     [10, "hold", 69, 2, 0.74],
-    [13, "on", 67, 3, 0.76],
+    [13, "on", 67, 2.7, 0.76],
   ],
   [
     [8, "hold", 70, 2, 0.66],
     [11, "on", 72, 2, 0.7],
     [14, "hold", 74, 1, 0.62],
-    [15, "on", 74, 1, 0.7],
+    [15, "on", 74, 0.6, 0.7],
   ],
+  // The restatement squares up: the D D pickup lands on the downbeat and
+  // the phrase sits on the beats, the one place the tune stops floating.
   [
-    [2, "hold", 74, 3, 0.8],
-    [6, "on", 70, 2, 0.72],
-    [10, "hold", 67, 2, 0.72],
-    [13, "on", 65, 3, 0.74],
+    [0, "hold", 74, 3, 0.8],
+    [4, "on", 70, 2, 0.72],
+    [8, "hold", 67, 2, 0.72],
+    [12, "on", 65, 3, 0.74],
   ],
   [
     [8, "hold", 67, 2, 0.64],
@@ -341,7 +438,7 @@ const HOOK: readonly (readonly Chop[])[] = [
     [2, "hold", 75, 3, 0.82],
     [6, "on", 74, 2, 0.74],
     [10, "hold", 70, 2, 0.72],
-    [13, "on", 67, 3, 0.74],
+    [13, "on", 67, 2.7, 0.74],
   ],
   [
     [8, "hold", 72, 2, 0.68],
@@ -397,32 +494,160 @@ const ramp = (jumps: boolean): Chop[] =>
   ]);
 
 /**
- * The lift riff: a percussive chop line on the chord's top organ tone and
- * the tone below it, strictly alternating slices. `jump` sends the "on"
- * answers down a fourth (a -5 pitched chop) in the half-time section.
+ * The last drop's exit: a two-beat ramp of straight 32nds whose pitch climbs
+ * a beat at a time (+0, +5, +12, +17) while the velocity fades; the track's
+ * bitcrush automation bites on the last two repeats only.
  */
-const riff = (chord: Chord, second: boolean, jump: boolean): Chop[] => {
-  // The riff sits an octave over the organ's voicing: the chops lift clear of
-  // the Rhodes and the stabs, and the +12 pitch is part of the tint.
-  const t = chord.org[2]! + 12;
-  const m = chord.org[1]! + 12;
-  const o = jump ? m - 5 : m;
-  return second
-    ? [
-        [6, "on", o, 1, 0.62],
-        [8, "hold", t, 1, 0.64],
-        [10, "on", m, 1, 0.62],
-        [11, "hold", t, 1, 0.6],
-        [13, "on", o, 2, 0.66],
-      ]
-    : [
-        [2, "hold", t, 2, 0.7],
-        [6, "on", m, 2, 0.64],
-        [10, "hold", t, 1, 0.6],
-        [11, "on", m, 1, 0.62],
-        [13, "hold", t, 2, 0.7],
-      ];
+const climb = (): Chop[] => {
+  const out: Chop[] = [];
+  const steps = [0, 5, 12, 17];
+  for (let k = 0; k < 16; k++) {
+    const step = 8 + k / 2;
+    out.push([
+      step,
+      k % 2 ? "on" : "hold",
+      72 + steps[Math.floor(k / 4)]!,
+      0.5,
+      0.76 - k * 0.025,
+      0,
+    ]);
+  }
+  return out;
 };
+
+/**
+ * The lift riff: an interlocking arp over the +12 register. In the even bar
+ * the hold slice takes the offbeat 8ths and the on slice the 16th after
+ * each, so the merged line is the chord's arpeggio with its own contour; in
+ * the odd bar the organ owns the first half and a four-note tail leads by
+ * step into the next chord. The on's last 16th is the pickup into the
+ * organ's downbeat stab.
+ */
+const riff = (chord: Chord, second: boolean): Chop[] => {
+  if (second)
+    return chord.tail.map((pitch, i): Chop => [
+      [8, 9, 12, 13][i]!,
+      i % 2 ? "on" : "hold",
+      pitch,
+      1,
+      i % 2 ? 0.62 : 0.68,
+    ]);
+  return chord.arp.map((pitch, i): Chop => [
+    2 + Math.floor(i / 2) * 4 + (i % 2),
+    i % 2 ? "on" : "hold",
+    pitch,
+    1,
+    i % 2 ? 0.62 : i % 4 === 0 ? 0.72 : 0.66,
+  ]);
+};
+
+/**
+ * The switch-up's chops: the hook motif and its answer in half-time
+ * augmentation over bars 40-43 (every step and length doubled, so the
+ * half-time flip is heard in the tune), then the riff augmented to 8ths
+ * over bars 44-45. Bars 46-47 are the sus bar and the tape stop.
+ */
+const SWITCH_CHOPS: readonly (readonly Chop[])[] = [
+  [
+    [4, "hold", 74, 6, 0.8],
+    [12, "on", 70, 4, 0.72],
+  ],
+  [
+    [4, "hold", 69, 4, 0.74],
+    [10, "on", 67, 6, 0.76],
+  ],
+  // The organ's augmented answer owns this bar.
+  [],
+  [
+    [0, "hold", 70, 4, 0.68],
+    [6, "on", 72, 4, 0.7],
+    [12, "hold", 74, 2, 0.64],
+    [14, "on", 74, 2, 0.7],
+  ],
+];
+
+/**
+ * The last call develops the hook instead of repeating it: the motif (bars
+ * one and two of `HOOK`), its inversion led by the on slice with a mid-phrase
+ * retrigger, then the hocket doubled to 16th-level alternation rising to the
+ * song's peak G5 late in bar six, then the sus bar and the climbing ramp.
+ */
+const LAST: readonly (readonly Chop[])[] = [
+  HOOK[0]!,
+  HOOK[1]!,
+  // G A Bb D: the motif inverted, answered by the organ in the next bar.
+  [
+    [2, "on", 67, 3, 0.74],
+    [6, "hold", 69, 2, 0.72],
+    [10, "on", 70, 2, 0.72],
+    [13, "hold", 74, 2, 0.78],
+  ],
+  // D C Bb Bb: the answer inverted; the on syllable stutters -5 then +12.
+  [
+    [8, "on", 74, 1, 0.7],
+    [9, "on", 74, 0.5, 0.62, 0],
+    [9.5, "on", 69, 0.5, 0.56, 0],
+    [10, "on", 86, 0.5, 0.5, 0],
+    [11, "hold", 72, 2, 0.7],
+    [14, "on", 70, 1, 0.64],
+    [15, "hold", 70, 1, 0.7],
+  ],
+  // Eb D Bb G | C D Eb F on consecutive 16ths.
+  [
+    [2, "hold", 75, 1, 0.78],
+    [3, "on", 74, 0.65, 0.72],
+    [4, "hold", 70, 1, 0.74],
+    [5, "on", 67, 1, 0.72],
+    [10, "hold", 72, 1, 0.74],
+    [11, "on", 74, 0.65, 0.74],
+    [12, "hold", 75, 1, 0.78],
+    [13, "on", 77, 2, 0.8],
+  ],
+  // D Eb F Eb G: the peak, the loudest chop in the song.
+  [
+    [8, "hold", 74, 1, 0.74],
+    [9, "on", 75, 1, 0.74],
+    [11, "hold", 77, 0.65, 0.78],
+    [12, "on", 75, 1, 0.74],
+    [14, "hold", 79, 2, 0.9],
+  ],
+  HOOK[6]!,
+  [
+    [2, "on", 66, 3, 0.74],
+    [6, "hold", 69, 2, 0.7],
+  ],
+];
+
+/**
+ * The break's chops: the 7-6 chain sung an octave up and tied across the
+ * bar line, so the sixth is held while the sub steps down under it (it
+ * becomes the seventh) and the other slice resolves it on step two. Bar
+ * seven holds G over D7 until F# answers: the 4-3.
+ */
+const BREAK: readonly (readonly Chop[])[] = [
+  [[0, "hold", 77, 8, 0.64]],
+  [
+    [0, "on", 75, 6, 0.6],
+    [8, "hold", 75, 9.8, 0.58],
+  ],
+  [[2, "on", 74, 6, 0.6]],
+  [
+    [1, "hold", 86, 1, 0.4],
+    [4, "on", 69, 2, 0.44],
+    [8, "hold", 74, 9.8, 0.58],
+  ],
+  [[2, "on", 72, 6, 0.6]],
+  [
+    [1, "hold", 84, 1, 0.4],
+    [4, "on", 67, 2, 0.44],
+    [8, "hold", 72, 9.8, 0.58],
+  ],
+  [
+    [2, "on", 70, 3, 0.6],
+    [6, "hold", 67, 11.8, 0.62],
+  ],
+  [[2, "on", 66, 4, 0.62]],
+];
 
 export const velvetCircuit: DemoDefinition = {
   info: demoInfo({
@@ -430,7 +655,7 @@ export const velvetCircuit: DemoDefinition = {
     title: "Velvet Circuit",
     style: "UK garage",
     description:
-      "A swung two-step pocket under a 'hold on' hook hocketed between two vocal slices, organ stabs answering in its rests, minor-ninth Rhodes that suspend before every turnaround and a sub that climbs while the chops fall; a half-time switch-up and a tape stop set up the last drop.",
+      "A swung two-step pocket under a 'hold on' hook hocketed between two vocal slices, an organ reply shaped to answer it, minor-ninth Rhodes that suspend before every turnaround and a sub that climbs while the chops fall; the switch-up plays the tune in half-time, a tape stop sets up the last drop, and the last call inverts the hook and doubles the hocket to a peak.",
     tempoBpm: 130,
     key: "Gm",
     bars: 64,
@@ -438,21 +663,23 @@ export const velvetCircuit: DemoDefinition = {
     trackId: "hold",
     features: [
       "two-step swing",
-      "vocal-chop hocket",
+      "vocal-chop hocket that inverts and doubles",
       "organ call and response",
+      "interlocking chop arpeggio",
       "Rhodes ninths with 4-3 suspensions",
       "contrary sub bass",
       "granular vowel pad",
       "half-time switch-up",
-      "tape stop and retrigger ramps",
+      "tape stop, retrigger ramps and a bitcrushed exit",
     ],
     arrangement: SECTIONS.map((name) => `${name} 8`),
     mixNotes: [
-      "Kick and clap sit dead on the grid; hats, shaker, rims, bass and chops swing about 65% so the groove skips without smearing.",
-      "The two syllable tracks never sound together: 'hold' and 'on' trade one tune, the organ's three-stab answer fills the first half of every second bar, and the Rhodes comps on the ands.",
-      "The sub climbs to its octave while the chops fall and walks down the seventh while they rise; it slides into each chord change from an in-key approach tone and never doubles the kick.",
-      "Suspensions carry the richness: a 4-3 in the Rhodes top voice before every turnaround, a 7-6 chain over the descending sub in the break, the chop line singing the same resolutions an octave up.",
-      "Glitch on the phrase grid only: retrigger ramps with -5/+5/+12 jumps at phrase ends, DJ-filter flicks on single organ stabs, the half-time switch-up, and a tape stop plus a silent beat into the last drop.",
+      "Kick and clap sit dead on the grid; hats, shaker, rims, bass and chops swing about 65% so the groove skips without smearing, and the pocket's hats open on only two of the four offbeats.",
+      "The two syllable tracks never sound together: 'hold' and 'on' trade one tune, the organ's reply is voiced above the Rhodes with its own top-voice shape in the first half of every second bar, and the Rhodes leaves that half to it.",
+      "The sub climbs to its octave while the chops fall and walks down the seventh while they rise; it anchors beat one of the hook's first odd bars, slides into each change from an in-key approach tone and never doubles the kick.",
+      "Suspensions carry the richness: a 4-3 in the Rhodes top voice before every turnaround, a 7-6 chain in the break whose sixths are held across the bar line while the sub steps down, the chops singing the chain an octave up.",
+      "The arc climbs: the pocket sits back, the break drops to a quiet pedal and a motif in the vowel cloud, the last call adds a second clap, a ride on every 8th and the loudest chops, then exits on a climbing, bitcrushed ramp.",
+      "Glitch on the phrase grid only: retrigger ramps and a mid-phrase stutter, DJ-filter flicks on single stabs and one chop, a reversed syllable before the peak, the half-time switch-up, and a tape stop plus a silent beat into the last drop.",
     ],
   }),
   build() {
@@ -501,19 +728,19 @@ export const velvetCircuit: DemoDefinition = {
         glide: { time: 0.05, mode: "legato" },
         // A mix ride: the sub sits back in the pocket and opens up in the hooks.
         volumeAutomation: lanes(
-          [8, 0.84],
-          [15.9, 0.84],
-          [16, 0.9],
-          [23.9, 0.9],
-          [24, 1],
-          [31.9, 1],
-          [32, 0.8],
-          [39.9, 0.86],
-          [40, 0.95],
-          [47.9, 0.95],
+          [8, 0.78],
+          [15.9, 0.78],
+          [16, 0.88],
+          [23.9, 0.88],
+          [24, 0.96],
+          [31.9, 0.96],
+          [32, 0.7],
+          [39.9, 0.76],
+          [40, 0.92],
+          [47.9, 0.92],
           [48, 1],
           [55.9, 1],
-          [56, 0.9],
+          [56, 0.86],
         ),
         fx: orbit,
       }),
@@ -576,8 +803,8 @@ export const velvetCircuit: DemoDefinition = {
             [0, 0.5],
             ...flick(27, 3),
             ...flick(29, 0),
-            ...flick(43, 5),
-            ...flick(45, 3),
+            ...flick(43, 2),
+            ...flick(45, 0),
             ...flick(49, 3),
             ...flick(51, 0),
             ...flick(53, 5),
@@ -586,6 +813,24 @@ export const velvetCircuit: DemoDefinition = {
         },
       }),
     );
+    // The bitcrush bites on the last two repeats of the final ramp (bar 55,
+    // beat four) and is clean everywhere else.
+    const crushLanes = {
+      "crush-mix": lanes(
+        [0, 0],
+        [55.75 - 0.004, 0],
+        [55.75, 1],
+        [56 - 0.004, 1],
+        [56, 0],
+      ),
+      "crush-bits": lanes(
+        [0, 16],
+        [55.75 - 0.004, 16],
+        [55.75, 6],
+        [56 - 0.004, 4],
+        [56, 16],
+      ),
+    };
     for (const [id, name, begin, end, pan, seed] of [
       ["hold", "Hold", 0, 0.25, -0.1, 43],
       ["on", "On", 0.25, 0.5, 0.14, 47],
@@ -607,6 +852,19 @@ export const velvetCircuit: DemoDefinition = {
           },
           humanize: { timing: 3, velocity: 4, seed },
           filter: { type: "hpf", cutoff: 190, resonance: 0.25 },
+          fx: {
+            ...orbit,
+            crush: { bits: 16, coarse: 1, mix: 0 },
+            ...(id === "hold" ? { djf: { value: 0.5 } } : {}),
+          },
+          fxAutomation: {
+            ...crushLanes,
+            // One DJ-filter flick on the hold slice's riff note in the
+            // switch-up, so the tint touches the chops too.
+            ...(id === "hold"
+              ? { "djf-value": lanes([0, 0.5], ...flick(44, 4), [63, 0.5]) }
+              : {}),
+          },
           reverb: room,
           delay: { beats: 0.75, feedback: 0.24, mix: 0.12, pingpong: true },
           delayMixAutomation: lanes(
@@ -631,7 +889,6 @@ export const velvetCircuit: DemoDefinition = {
             [55.9, 0.22],
             [56, 0.38],
           ),
-          fx: orbit,
         }),
       );
     // A granular cloud of the "oh" vowel: the pad under the empty sections,
@@ -680,14 +937,16 @@ export const velvetCircuit: DemoDefinition = {
           [39.9, 1],
           [40, 0.7],
           [47.9, 0.85],
-          [48, 0.62],
-          [55.9, 0.62],
+          [48, 0.85],
+          [55.9, 0.85],
           [56, 0.9],
         ),
         reverb: hall,
         fx: orbit,
       }),
     );
+    // Reverse swells into the drops (`ah`, played below C5) and one reversed
+    // "on" syllable (`onrev`, keyed from C5 up) that sucks into the peak bar.
     s.track(
       voice("swell", "Reverse breath", "sampler", 0.22, {
         sampler: {
@@ -695,10 +954,22 @@ export const velvetCircuit: DemoDefinition = {
           voices: {
             ah: {
               ...bundledSampleRef("vowel-ah"),
+              root: 48,
               speed: -1,
               fit: true,
               fadeInTime: 0.15,
               fadeTime: 0.015,
+            },
+            onrev: {
+              ...bundledSampleRef("hold-on"),
+              root: 72,
+              begin: 0.25,
+              end: 0.5,
+              gain: 1.6,
+              speed: -1,
+              fit: true,
+              fadeInTime: 0.02,
+              fadeTime: 0.008,
             },
           },
         },
@@ -743,9 +1014,16 @@ export const velvetCircuit: DemoDefinition = {
         Math.max(0.05, Math.min(1, vel)),
         extra,
       );
-    const row = (track: string, bar: number, pitch: number, grid: string) =>
+    const row = (
+      track: string,
+      bar: number,
+      pitch: number,
+      grid: string,
+      scale = 1,
+    ) =>
       [...grid].forEach((ch, step) => {
-        if (ch !== ".") hit(track, bar, step, pitch, Number(ch) / 10, 1);
+        if (ch !== ".")
+          hit(track, bar, step, pitch, (Number(ch) / 10) * scale, 1);
       });
     /** A chord, top voice leading, inner voices softer, slightly rolled. */
     const stab = (
@@ -805,6 +1083,13 @@ export const velvetCircuit: DemoDefinition = {
       const dropOut = b === 23 || tapeStop || b === 7;
       const grooveOn = !breakdown && !(intro && b < 4) && !(outro && b >= 62);
       const kickOn = grooveOn && !(outro && b >= 60);
+      // The arc: the pocket sits back, the lift and the switch-up a touch
+      // under the hooks, the last call at full weight.
+      const weight =
+        sec === "Pocket" ? 0.86 : lift ? 0.94 : half ? 0.94 : outro ? 0.9 : 1;
+      // Hats skip in the pocket and the first hook: open hats on two of the
+      // four offbeats only, with ghosted 16ths after the others.
+      const skippy = sec === "Pocket" || sec === "Hold on";
 
       // ---------- kick ----------
       if (kickOn) {
@@ -819,7 +1104,7 @@ export const velvetCircuit: DemoDefinition = {
         if (last && second && b % 4 === 1) pattern = KICKS.roll;
         if (last && !second && b % 4 === 2) pattern = KICKS.hyper;
         if (dropOut) pattern = pattern.slice(0, 12) + "....";
-        row("kick", b, 36, pattern);
+        row("kick", b, 36, pattern, weight);
       }
 
       // ---------- clap, snare, hats, rims (drums) ----------
@@ -828,17 +1113,20 @@ export const velvetCircuit: DemoDefinition = {
         if (clapOn)
           for (const step of half ? [8] : [4, 12]) {
             if (dropOut && step === 12) continue;
-            const v = step === 12 || half ? 0.86 : 0.8;
+            const v = (step === 12 || half ? 0.86 : 0.8) * weight;
             hit("drums", b, step, 39, v + jitter(0.03), 1, 0);
             hit(
               "drums",
               b,
               step,
               38,
-              (step === 12 || half ? 0.56 : 0.5) + jitter(0.03),
+              (step === 12 || half ? 0.56 : 0.5) * weight + jitter(0.03),
               1,
               0,
             );
+            // The last call layers a second, late clap on four for width.
+            if (last && step === 12)
+              hit("drums", b, 12.1, 39, 0.5 + jitter(0.03), 1, 0);
           }
         // Hats: open on the offbeat 8ths with a closed hat on the 16th before
         // most of them; busier closed 16ths from the Lift on, every 16th in
@@ -846,7 +1134,8 @@ export const velvetCircuit: DemoDefinition = {
         const busy = lift || hook || half || (outro && b < 60);
         for (let step = 0; step < 16; step++) {
           if (dropOut && step >= 12) continue;
-          const open = half ? step === 6 || step === 14 : step % 4 === 2;
+          const open =
+            half || skippy ? step === 6 || step === 14 : step % 4 === 2;
           if (open) {
             // The last open hat of the bar breathes softer; skip one now and
             // then so the line never loops exactly.
@@ -857,7 +1146,12 @@ export const velvetCircuit: DemoDefinition = {
           }
           const before = step % 4 === 1;
           const onBeat = step % 4 === 0;
-          if (before && !(step === 9 && second && !busy)) {
+          if (skippy && (step === 3 || step === 11)) {
+            // The ghost after the missing open hat: the skip.
+            hit("drums", b, step, 42, 0.2 + jitter(0.04), 0.5, HAT_SWING);
+          } else if (skippy && (step === 2 || step === 10)) {
+            continue;
+          } else if (before && !(step === 9 && second && !busy)) {
             hit("drums", b, step, 42, 0.36 + jitter(0.05), 0.5, HAT_SWING);
           } else if (last) {
             const v = onBeat ? 0.3 : step % 4 === 2 ? 0.24 : 0.2;
@@ -892,17 +1186,19 @@ export const velvetCircuit: DemoDefinition = {
           hit("drums", b, 11, 38, 0.18 + jitter(0.03), 1);
           if (second) hit("drums", b, 15, 38, 0.22 + jitter(0.03), 1);
         }
-        // The last hook adds a soft ride on the beats for lift.
+        // The last hook adds a ride on every 8th for lift, the beats louder.
         if (last)
-          for (const step of [0, 4, 8, 12]) {
+          for (let step = 0; step < 16; step += 2) {
             if (step === 0 && b === 48) continue;
-            const v = step === 0 ? 0.3 : step === 8 ? 0.26 : 0.22;
+            if (dropOut && step >= 12) continue;
+            const v =
+              step === 0 ? 0.3 : step === 8 ? 0.26 : step % 4 ? 0.17 : 0.22;
             hit("drums", b, step, 51, v + jitter(0.03), 2, 0);
           }
       }
-      // Crash on the big downbeats.
-      if ([8, 24, 40, 48].includes(b))
-        hit("drums", b, 0, 49, b === 48 || b === 24 ? 0.62 : 0.5, 8, 0);
+      // Crash on the big downbeats; the pocket enters without one.
+      if ([16, 24, 40, 48].includes(b))
+        hit("drums", b, 0, 49, b === 48 ? 0.66 : b === 16 ? 0.42 : 0.52, 8, 0);
       if (b === 56) hit("drums", b, 0, 49, 0.4, 8, 0);
 
       // ---------- fills ----------
@@ -945,7 +1241,11 @@ export const velvetCircuit: DemoDefinition = {
         for (let step = 0; step < 16; step++) {
           if (dropOut && step >= 12) continue;
           if (!busyShaker(sec) && step % 2 === 1 && step % 4 !== 3) continue;
-          const accent = step % 4 === 2 ? 0.52 : step % 2 ? 0.28 : 0.36;
+          // The break's shaker sneaks in as quiet 8ths, then 16ths under the roll.
+          if (breakdown && b < 38 && step % 2) continue;
+          const accent = breakdown
+            ? (b < 38 ? 0.18 : 0.24) + (step % 4 === 2 ? 0.06 : 0)
+            : (step % 4 === 2 ? 0.52 : step % 2 ? 0.28 : 0.36) * weight;
           hit(
             "perc",
             b,
@@ -963,7 +1263,7 @@ export const velvetCircuit: DemoDefinition = {
         // under the 7-6 chain, fading in from nothing.
         if (b % 2 === 0) {
           const low = CHAIN[inBar]!.bass;
-          s.note("bass", b, 0, low, 7.6, 0.4 + inBar * 0.05, {
+          s.note("bass", b, 0, low, 7.6, 0.24 + inBar * 0.025, {
             glide: b > 32 ? 0.12 : undefined,
           });
         }
@@ -973,7 +1273,9 @@ export const velvetCircuit: DemoDefinition = {
           : lift
             ? BASS.lift
             : hook
-              ? BASS.hook
+              ? inBar < 4
+                ? BASS.hookB
+                : BASS.hook
               : BASS.pocket;
         const hits = cell[second ? 1 : 0];
         const slide = slideIn;
@@ -1010,24 +1312,28 @@ export const velvetCircuit: DemoDefinition = {
       if (breakdown) {
         // The 7-6 chain: each voicing holds its bar; the top voice falls
         // on the second bar of each pair, the bass steps down under it.
+        // One hit a bar: the chain is held, never re-struck.
         const link = CHAIN[inBar]!;
-        stab("keys", b, 0, link.rh, inBar % 2 ? 14 : 15, 0.5, 0.03);
-        if (inBar % 2 === 0 && inBar < 6)
-          // A soft restrike on the "and" of three keeps the chain breathing.
-          stab("keys", b, 10, link.rh.slice(0, 2), 4, 0.34, 0.02);
+        stab("keys", b, 0, link.rh, inBar % 2 ? 14 : 15, 0.46, 0.03);
       } else if (half) {
-        // Half-time: long chords, the sus held through bar seven's change.
-        const soft = 0.88;
-        if (inBar === 7) stab("keys", b, 2, chord.rh, 5, 0.56 * soft, 0.03);
-        else stab("keys", b, 0, chord.rh, second ? 7 : 6, 0.56 * soft, 0.03);
-        if (inBar === 6) stab("keys", b, 8, chord.rh, 9.5, 0.5 * soft, 0.02);
-        else if (!tapeStop) stab("keys", b, 8, chord.rh, 6, 0.46 * soft, 0.02);
-        else {
+        // Half-time: long chords after the organ's downbeat stab, the sus
+        // held through bar seven's change.
+        const soft = 0.84;
+        if (inBar === 6) {
+          stab("keys", b, 0, chord.rh, 6, 0.56 * soft, 0.03);
+          stab("keys", b, 8, chord.rh, 9.5, 0.5 * soft, 0.02);
+        } else if (tapeStop) {
+          stab("keys", b, 2, chord.rh, 5, 0.56 * soft, 0.03);
           stab("keys", b, 8, chord.rh, 4, 0.46 * soft, 0.02);
           stab("keys", b, 12, chord.rh, 4, 0.5, 0.02, TAPE);
+        } else {
+          // Bar three of the section belongs to the organ's augmented answer.
+          if (inBar !== 2) stab("keys", b, 2, chord.rh, 4, 0.5 * soft, 0.03);
+          stab("keys", b, 8, chord.rh, 6, 0.46 * soft, 0.02);
         }
       } else if (!(outro && b >= 62)) {
-        const soft = intro ? 0.82 : 1;
+        // Softer under the organ's replies so the two keyboards never blur.
+        const soft = intro ? 0.82 : lift || hook ? 0.92 : 1;
         // Pushes: the next chord lands a 16th early and holds over the bar
         // line, every fourth bar in the first hook and the lift and on
         // every change in the last hook.
@@ -1049,14 +1355,15 @@ export const velvetCircuit: DemoDefinition = {
           else stab("keys", b, 10, chord.rh, 2, 0.5 * soft);
         } else if (!second) {
           if (!pushed) stab("keys", b, 4, chord.rh, 2, 0.6 * soft);
-          stab("keys", b, 7, chord.rh, 2, 0.46 * soft);
+          stab("keys", b, 7, chord.rh, inBar === 2 ? 0.65 : 2, 0.46 * soft);
           if (!dropOut) stab("keys", b, 14, chord.rh, 2, 0.42 * soft);
         } else if (push) {
-          stab("keys", b, 3, chord.rh, 3, 0.56);
-          stab("keys", b, 10, chord.rh, 3, 0.54);
-          stab("keys", b, 15, next.rh, 6, 0.68);
+          // The organ owns the first half of the odd bars it answers in.
+          if (!(lift || hook)) stab("keys", b, 3, chord.rh, 3, 0.56);
+          stab("keys", b, 10, chord.rh, 3, 0.54 * soft);
+          stab("keys", b, 15, next.rh, 6, 0.68 * soft);
         } else {
-          stab("keys", b, 3, chord.rh, 3, 0.56 * soft);
+          if (!(lift || hook)) stab("keys", b, 3, chord.rh, 3, 0.56 * soft);
           if (!dropOut) stab("keys", b, 10, chord.rh, 5, 0.6 * soft);
         }
         pushed = push;
@@ -1077,48 +1384,69 @@ export const velvetCircuit: DemoDefinition = {
       // chop tune rests; the middle stab lifts the top voice. The sus bar
       // (bar seven) keeps the organ out so the Rhodes suspension is heard.
       const organOn = lift || hook || half;
-      if (organOn && second && !tapeStop) {
-        if (inBar === 7) {
-          // The resolution chord, then a stab without the third: the chop
-          // is singing F# (or A) at that moment and owns it.
-          stab("organ", b, 0, chord.org, 1, 0.54, 0.004);
-          stab(
-            "organ",
-            b,
-            4,
-            [chord.org[0]!, chord.org[1]!, chord.up[2]!],
-            1,
-            0.48,
-            0.004,
-          );
+      // The last call pushes the organ a touch harder.
+      const ov = last ? 0.05 : 0;
+      const [r0, r1, r2] = chord.reply as [number[], number[], number[]];
+      if (half && !tapeStop && inBar !== 6) {
+        if (b === 42) {
+          // The augmented answer, where the augmented tune rests.
+          stab("organ", b, 0, r0, 2, 0.52, 0.004);
+          stab("organ", b, 6, r1, 2, 0.56, 0.004);
+          stab("organ", b, 10, r2, 4, 0.48, 0.004);
+        } else if (b === 43) {
+          // The chops' own answer lands on this downbeat.
+        } else if (second) {
+          // Two stabs on the downbeat, then the chops take the bar.
+          stab("organ", b, 0, r0, 1.5, 0.5, 0.004);
+          stab("organ", b, 2, r1, 1.5, 0.54, 0.004);
         } else {
-          stab("organ", b, 0, chord.org, 1, 0.5, 0.004);
-          stab("organ", b, 3, chord.up, 1, 0.56, 0.004);
-          stab("organ", b, 5, chord.org, 2, 0.46, 0.004);
+          stab("organ", b, 0, chord.org, 2, 0.5, 0.004);
+        }
+      } else if (organOn && second && !tapeStop) {
+        if (inBar === 7) {
+          // The resolution bar: one stab, the chord the chop then sings.
+          stab("organ", b, 0, r0, 1.5, 0.54 + ov, 0.004);
+        } else {
+          stab("organ", b, 0, r0, 1, 0.5 + ov, 0.004);
+          stab("organ", b, 3, r1, 1, 0.56 + ov, 0.004);
+          stab("organ", b, 5, r2, 2, 0.46 + ov, 0.004);
         }
       }
-      if (organOn && !second && hook && inBar !== 6)
+      if (hook && !second && inBar !== 6 && (last ? inBar !== 4 : inBar !== 2))
         // A single 16th in the gap the chops leave before their last note.
-        stab("organ", b, 12, chord.org, 1, 0.42, 0.004);
-      if ((lift || half) && !second)
-        // A pickup into the answer bar.
-        stab("organ", b, 15, chord.up, 1, 0.44, 0.004);
+        stab("organ", b, 12, chord.org, 1, 0.42 + ov, 0.004);
       if (tapeStop) {
         stab("organ", b, 0, chord.org, 1, 0.52, 0.004);
         stab("organ", b, 12, chord.org.slice(0, 2), 4, 0.5, 0.004, TAPE);
       }
+      if (outro && !second && b < 60) {
+        // The afterglow hands the motif to the organ at half velocity: its
+        // top voice alone, the Rhodes answering in the odd bars as before.
+        for (const [step, , pitch, len, vel] of HOOK[inBar]!)
+          hit("organ", b, step, pitch, vel * 0.46, len, SWING);
+      }
 
       // ---------- vocal chops ----------
       const chops: Chop[] = [];
-      if (hook) {
-        if (inBar === 7) chops.push(...HOOK[7]!, ...ramp(last));
-        else chops.push(...HOOK[inBar]!);
-        if (last && !second && inBar !== 6) {
-          // The last chop of each even bar echoes itself an octave up.
+      if (last) {
+        if (inBar === 7) chops.push(...LAST[7]!, ...climb());
+        else chops.push(...LAST[inBar]!);
+        if (inBar === 0 || inBar === 2) {
+          // The last chop of the motif bars re-fires an octave up on the
+          // last 16th: a pitched pickup into the next bar.
           const [step, syllable, pitch, , vel] = chops[chops.length - 1]!;
           chops[chops.length - 1] = [step, syllable, pitch, 2, vel];
-          chops.push([15.5, "on", pitch + 12, 0.5, 0.5]);
+          chops.push([
+            15,
+            syllable === "hold" ? "on" : "hold",
+            pitch + 12,
+            1,
+            0.62,
+          ]);
         }
+      } else if (hook) {
+        if (inBar === 7) chops.push(...HOOK[7]!, ...ramp(false));
+        else chops.push(...HOOK[inBar]!);
       } else if (sec === "Pocket") {
         // The motif stated: calls on the even bars, the Rhodes answers in the
         // odd ones; bars seven and eight carry the sus and its resolution.
@@ -1139,28 +1467,37 @@ export const velvetCircuit: DemoDefinition = {
             [8, "on", 67, 2, 0.66],
             ...(tapeStop ? [] : ramp(true)),
           );
-        else chops.push(...riff(chord, second, half));
-      } else if (breakdown) {
-        // The chain sung an octave up: long throws into the delay, the
-        // syllables alternating with each suspension and its fall.
-        const link = CHAIN[inBar]!;
-        if (inBar % 2 === 0) chops.push([0, "hold", link.chop, 6, 0.64]);
-        else chops.push([0, "on", link.chop, inBar === 7 ? 4 : 6, 0.6]);
-        if (inBar === 3 || inBar === 5)
-          // A pitched echo: the fall re-fired up an octave, then down a fourth.
+        else if (half && inBar < 4) chops.push(...SWITCH_CHOPS[inBar]!);
+        else if (half)
+          // The riff augmented to 8ths: one arp bar across two bars.
           chops.push(
-            [10, "hold", link.chop + 12, 1, 0.42],
-            [13, "on", link.chop - 5, 2, 0.46],
+            ...chord.arp
+              .slice(inBar === 4 ? 0 : 4, inBar === 4 ? 4 : 8)
+              .map((pitch, i): Chop => [
+                [4, 6, 12, 14][i]!,
+                i % 2 ? "on" : "hold",
+                pitch,
+                2,
+                i % 2 ? 0.64 : 0.7,
+              ]),
           );
+        else chops.push(...riff(chord, second));
+      } else if (breakdown) {
+        chops.push(...BREAK[inBar]!);
       } else if (outro) {
-        if (b < 62 && !second && inBar < 5) chops.push(...HOOK[inBar]!);
+        // One fragment of the motif, then the tail.
+        if (b === 60)
+          chops.push([2, "hold", 74, 3, 0.6], [6, "on", 70, 2, 0.56]);
         if (b === 62)
           chops.push([2, "hold", 67, 4, 0.6], [10, "on", 74, 8, 0.58]);
       }
       if (intro && b === 6) chops.push([10, "hold", 74, 3, 0.6]);
       if (intro && b === 7) chops.push([13, "on", 70, 3, 0.64]);
       if (tapeStop) chops.push([12, "hold", 70, 4, 0.7]);
-      for (const [step, syllable, pitch, len, vel, swing] of chops) {
+      // The pocket sings under the drop; the last call leans in.
+      const lean = sec === "Pocket" ? -0.06 : last ? 0.08 : 0;
+      for (const [step, syllable, pitch, len, vel0, swing] of chops) {
+        const vel = vel0 + lean;
         const scoop: Partial<NoteInput> =
           len >= 3
             ? {
@@ -1197,21 +1534,20 @@ export const velvetCircuit: DemoDefinition = {
       // ---------- granular pad ----------
       const padOn =
         intro || breakdown || outro || hook || half || (lift && b >= 20);
-      if (padOn && b % 2 === 0 && b < 62) {
+      if (breakdown) {
+        // Under the chain the cloud sings the hook motif in whole notes, the
+        // second time resolving its G to F# with the cadence.
+        s.note("grains", b, 0.5, BREAK_PAD[inBar]!, 3.4, 0.32);
+      } else if (padOn && b % 2 === 0 && b < 62) {
         // Root and fifth as the cloud's dyad, so the chord reads even where
-        // the sub is silent; the chain keeps its own voicings.
+        // the sub is silent.
         const rootUp = ((((chord.root - 55) % 12) + 12) % 12) + 55;
-        const lo = breakdown ? CHAIN[inBar]!.rh[0]! : rootUp;
         // The fifth sits above or below the root so the dyad stays under the
         // chops (G3..F4).
         const fifth = rootUp + 7 > 66 ? rootUp - 5 : rootUp + 7;
-        const hi = breakdown ? CHAIN[inBar]!.rh[2]! : fifth;
-        const gain = intro || breakdown || outro ? 0.5 : 0.36;
-        s.note("grains", b, 0.5, lo, 7.4, gain);
-        s.note("grains", b, 1, hi, 6.9, gain * 0.8);
-        if (breakdown && inBar % 2 === 0 && inBar < 6)
-          // The chain's falling voice two bars later, an octave up.
-          s.note("grains", b + 1, 0.5, CHAIN[inBar + 1]!.rh[2]! + 12, 3.4, 0.3);
+        const gain = intro || outro || last ? 0.5 : 0.36;
+        s.note("grains", b, 0.5, rootUp, 7.4, gain);
+        s.note("grains", b, 1, fifth, 6.9, gain * 0.8);
       }
       if (b === 62) {
         s.note("grains", b, 0.5, 55, 7.4, 0.5);
@@ -1220,7 +1556,9 @@ export const velvetCircuit: DemoDefinition = {
 
       // ---------- FX ----------
       if ([15, 23, 31, 39, 47, 55].includes(b))
-        s.note("swell", b, 2, 67, 1.9, b === 47 ? 0.8 : 0.7);
+        s.note("swell", b, 2, 55, 1.9, b === 47 ? 0.8 : 0.7);
+      // One "on" syllable played backwards, sucking into the peak bar's entry.
+      if (b === 53) s.note("swell", b, 1.25, 74, 0.7, 0.9);
       if (b === 38) s.note("fx", b, 0, 36, 7.8, 0.7);
       if (b === 22) s.note("fx", b, 0, 36, 7.8, 0.55);
       if (b === 46) s.note("fx", b, 0, 36, 7.6, 0.66);
