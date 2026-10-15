@@ -577,8 +577,8 @@ export const candyFault: DemoDefinition = {
     mixNotes: [
       "The 808 follows every kick hit, slides into each new root and drops an octave onto the chorus downbeats; the supersaw starts above 300 Hz and pumps under the kick.",
       "The singer is pitched bright with a formant lift; a softer double sings thirds below, and dotted-eighth delay throws catch the last word of each chorus line.",
-      "Hats move in shaped sixteenths with 32nd and triplet rolls; the bridge drops the kick, hook and supersaw for electric piano, glass and a borrowed A minor 6.",
-      "After one beat of silence the final chorus jumps from E to F major, detunes the supersaw from pretty to harsh and stutters the singer on 'pixels'; the song powers down in F with the 808 diving an octave.",
+      "Hats move in shaped sixteenths with 32nd and triplet rolls; the chip arp cascades left and right through chorus and pingpong delay; the bridge drops the kick, hook and supersaw for electric piano, glass and a borrowed A minor 6.",
+      "The 808 lets go for the last beat before the first drop; before the overload everything still ringing dives an octave like a stopping tape. After one beat of silence the final chorus jumps from E to F major, detunes the supersaw from pretty to harsh and stutters the singer on 'pixels'; the song powers down in F with the 808 diving an octave.",
     ],
   }),
   build() {
