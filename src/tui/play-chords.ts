@@ -695,6 +695,7 @@ export function chordPhrase(
       strum: mode === "harp" ? DEFAULT_STRUM * 2 : DEFAULT_STRUM,
       seed: 1,
       velocity: 0.8,
+      tempo: score.tempoBpm,
       ...(mode === "pattern" ? { pattern: settings.pattern } : {}),
       ...(mode === "guitar" ? guitarPerform(settings, score, track) : {}),
     },

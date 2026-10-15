@@ -116,6 +116,30 @@ describe("strokes", () => {
     expect(low[0]!.length).toBeCloseTo(1, 6);
   });
 
+  test("a chuck on 2 or 4 slaps harder than one on 1 or 3", () => {
+    const notes = strokeVoicing(e, 0, 4, { strokes: "x-", step: 0.5 });
+    const loudest = (beat: number) =>
+      Math.max(
+        ...notes
+          .filter((n) => Math.abs(n.start - beat) < 0.1)
+          .map((n) => n.velocity),
+      );
+    expect(loudest(1)).toBeGreaterThan(loudest(0));
+    expect(loudest(3)).toBeGreaterThan(loudest(2));
+    expect(strokeGrid("chuck")).toBe("D-xU-UxU");
+    expect(strokeGrid("soul")).toBe("..D...D.");
+  });
+
+  test("a played strum is quicker at a fast tempo, slower at a slow one", () => {
+    const spreadMs = (tempo: number) => {
+      const notes = strokeVoicing(e, 0, 1, { strokes: "D", step: 1, tempo });
+      return ((notes.at(-1)!.start - notes[0]!.start) * 60000) / tempo;
+    };
+    expect(spreadMs(60)).toBeGreaterThan(spreadMs(120));
+    expect(spreadMs(180)).toBeLessThan(spreadMs(120));
+    expect(spreadMs(60)).toBeLessThanOrEqual(22 * 1.4 + 1);
+  });
+
   test("grids parse by name or literal; bad ones are refused", () => {
     expect(strokeGrid("folk")).toBe("D-DU-UDU");
     expect(strokeGrid("D U x .")).toBe("DUx.");

@@ -102,7 +102,7 @@ export const AGENT_TOOL_DOCS: Readonly<Record<string, AgentToolDoc>> =
     },
     strum_chords: {
       details:
-        "Strum chords as fretted guitar notes (set_guitar). chords omitted strums the track's block chords. strokes down|folk|pop|punk|funk|reggae|waltz|jangle|island or a DUdux-. grid; speed ms/stroke (22); step grid beats; each beats/chord (a bar).",
+        "Strum chords as fretted guitar notes (set_guitar). chords omitted strums the track's block chords. strokes down|folk|pop|punk|funk|reggae|waltz|jangle|island|chuck|soul or a DUdux-. grid (- rings on, . damps); speed ms/stroke (22); step grid beats; each beats/chord (a bar).",
     },
     set_guitar: {
       details:

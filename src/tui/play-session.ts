@@ -926,6 +926,9 @@ export class PlaySession {
       seed: note.id,
       pattern: settings.pattern,
       velocity: 1,
+      tempo: this.currentBpm(),
+      root: played.chord.root,
+      ...(played.chord.bass !== undefined ? { slash: played.chord.bass } : {}),
       ...(mode === "guitar" ? this.guitarOptions(played) : {}),
     });
     if (played.bass !== undefined)
