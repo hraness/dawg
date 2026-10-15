@@ -2,6 +2,16 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.14.0
+
+### Changed
+
+- **Demo songs played like records.** All eleven demos were reworked from style research so their parts sound performed. Night Relay is dub techno with off-beat minor-ninth stabs riding a moving dotted-eighth echo. Coil Driver's two 303s get accents, slides and hand-ridden cutoff, resonance and drive over a shuffled 909. After Hours adds tumbao congas, a swung shaker, two-bar bass figures and an answering Rhodes. Velvet Circuit is swung 2-step garage with Rhodes ninths, organ stabs and a chopped vocal hook. Glass Arc is future garage with late rims, a gliding sub and a stretched vocal.
+- **More demo reworks.** Copper Wire's break follows the Amen's measured swing, with ghost snares, rolls and a gliding sub under a reese. Candy Fault gets performed drums with hat rolls, an 808 that locks to the kick, a full topline and a half-step lift into the last chorus. Skyline Current's hook is a 3-3-2 call and answer, with a ballad piano breakdown. Signal Bloom gets a gated Linn snare, a climbing pre-chorus and a harmony double. Low Tide is a 56-bar trip-hop lament with an audible bass and an original doubled vocal. Amber Room sits each player at its own distance behind the beat, with rootless Rhodes chords, a walking bass and a sax that scoops and falls.
+- **Phrased drum grooves.** The machine grooves (house through footwork) and the band grooves (rock, funk, shuffles, Caribbean, African and Latin) are now phrased performances, mostly four bars long. They carry shaped hat accents, audible ghost notes, kick pickups and a fill or turnaround at the phrase end. Several carry a seeded player feel that `/pattern` applies to a track without its own humanize. A jazz swing groove is new.
+- **Played comping.** Chord patterns and guitar strums sing the top voice, roll and sit a few milliseconds off the grid, and each pattern has its own pocket. Bass hits take the chord's root and fifth. Strums accent the beat, choke skank chops, hit backbeat chucks hard and pace the sweep by tempo. Two strum grids are new, `chuck` and `soul`.
+- **Played styles and starters.** Generated styles accent comping by beat, let the top voice lead and sit just behind the beat. Their drums play ghost notes and building fills, and the bass digs in with the kick. Cards with no timing humanize keep their programmed grid. The machines and breaks starters were reworked with idiomatic onsets, swing, keys and chord progressions, and Pocket One gets a light swing with ghost snares.
+
 ## 0.13.0
 
 ### Added
