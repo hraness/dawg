@@ -65,15 +65,35 @@ export const GROOVE_STARTERS: readonly GrooveStarter[] = Object.freeze([
     "early Chicago house: steady floor, open offbeats, short warm stabs",
     122,
     {
+      pitch: { scales: [["dorian", 1]], tonic: [[5, 1]] },
       rhythm: {
         onsets: {
           kick: FLOOR,
           snare: null,
           clap: BACK,
-          hat: grid(".2.x.2.x.2.x.2.x"),
+          // Shuffled closed hats on the e and a, the open hat owns the and.
+          hat: grid("3x.x3x.x3x.x3x.x"),
           openhat: OFF,
-          chords: OFF,
+          // Minor-ninth stabs planed between two chords, pushed off the beat.
+          chords: grid("..x..6....x..x.."),
         },
+      },
+      groove: {
+        swingRatio: [1.25, 1.25],
+        velocity: [1, 0.5, 0.82, 0.64],
+        humanize: { timingMs: 2, velocity: 0.04 },
+      },
+      harmony: {
+        model: "functional",
+        presets: null,
+        forms: [
+          [["i9", "IV9"], 2],
+          [["i9", "v9"], 1],
+        ],
+        rhythm: [[0.5, 1]],
+        sevenths: 0,
+        cadences: [],
+        voicing: { types: [["close", 1]], range: [53, 72], notes: [3, 5] },
       },
       texture: {
         roles: {
@@ -82,10 +102,8 @@ export const GROOVE_STARTERS: readonly GrooveStarter[] = Object.freeze([
           chords: role("rhodes"),
         },
       },
-      harmony: {
-        voicing: { types: [["close", 1]], range: [52, 69], notes: [3, 3] },
-      },
-      mix: { levels: { chords: -10, openhat: -14 }, space: 0.16 },
+      expression: { articulation: { chords: [["staccato", 1]] } },
+      mix: { levels: { chords: -9, openhat: -14 }, space: 0.18 },
     },
   ),
   starter(
@@ -96,21 +114,52 @@ export const GROOVE_STARTERS: readonly GrooveStarter[] = Object.freeze([
     "Detroit techno: dry machine drive and a distant sustained chord",
     130,
     {
+      pitch: { scales: [["minor", 1]], tonic: [[2, 1]] },
       rhythm: {
         onsets: {
           kick: FLOOR,
-          snare: BACK,
-          hat: grid("x.xx..xxx.xx..xx"),
-          tom: grid("...x......x...x."),
+          snare: null,
+          clap: BACK,
+          hat: grid("x5.xx5.xx5.xx5.x"),
+          openhat: OFF,
+          // A three-step rim loop that turns over against the four-bar.
+          rim: grid("..5..x..5..x..5."),
         },
+      },
+      groove: {
+        velocity: [1, 0.5, 0.9, 0.62],
+        humanize: { timingMs: 1.5, velocity: 0.05 },
+      },
+      harmony: {
+        model: "functional",
+        presets: null,
+        forms: [
+          [["i9", "bVImaj7"], 2],
+          [["i7", "iv9"], 1],
+        ],
+        rhythm: [[0.5, 1]],
+        sevenths: 0,
+        cadences: [],
+        voicing: { types: [["open", 1]], range: [55, 79], notes: [3, 5] },
+      },
+      bass: {
+        behaviour: [
+          ["root", 3],
+          ["octave", 1],
+        ],
+        range: [33, 45],
+        onsets: grid("..x...x...x...xx"),
       },
       texture: {
         roles: {
-          ...kitRoles("syn909", ["kick", "snare", "hat", "tom"]),
+          ...kitRoles("syn909", ["kick", "clap", "hat", "openhat", "rim"]),
+          snare: null,
           pad: role("strings"),
+          bass: role("bass"),
         },
       },
-      mix: { levels: { pad: -18, tom: -10 }, space: 0.24 },
+      expression: { articulation: { bass: [["staccato", 1]] } },
+      mix: { levels: { pad: -15, bass: -7 }, space: 0.22 },
     },
   ),
   starter(
@@ -121,25 +170,54 @@ export const GROOVE_STARTERS: readonly GrooveStarter[] = Object.freeze([
     "Planet Rock-era electro: broken kick and clipped machine backbeat",
     114,
     {
+      pitch: { scales: [["phrygian", 1]], tonic: [[4, 1]] },
       rhythm: {
         onsets: {
-          kick: grid("x.....x...x.x..."),
+          kick: grid("x......x..x...6."),
           snare: BACK,
-          hat: grid("x.x.xx..x.x.x.xx"),
           clap: grid("............x..."),
+          hat: grid("x.x.x.xxx.x.x.xx"),
+          // Cold stabs that answer the kick.
+          chords: grid("...x..x......4.."),
         },
       },
+      groove: {
+        velocity: [1, 0.7, 0.85, 0.8],
+        humanize: { timingMs: 1, velocity: 0.03 },
+      },
+      harmony: {
+        model: "functional",
+        presets: null,
+        forms: [
+          [["i", "bII"], 2],
+          [["i", "bvii", "bVI", "bII"], 1],
+        ],
+        rhythm: [[0.5, 1]],
+        sevenths: 0,
+        cadences: [],
+        voicing: { types: [["close", 1]], range: [60, 76], notes: [3, 3] },
+      },
       bass: {
-        behaviour: [["root", 1]],
+        behaviour: [
+          ["root", 2],
+          ["octave", 1],
+        ],
+        // E2: an octave above the 808 kick's G1 boom, so the two never smear.
         range: [31, 43],
-        onsets: grid("x.....x...x..x.."),
+        onsets: grid("x......x..x...6."),
+        kickLock: 0.8,
       },
       texture: {
         roles: {
           ...kitRoles("syn808", ["kick", "snare", "hat", "clap"]),
           bass: role("bass"),
+          chords: role("saw"),
         },
       },
+      expression: {
+        articulation: { bass: [["staccato", 1]], chords: [["staccato", 1]] },
+      },
+      mix: { levels: { chords: -14, bass: -5 }, space: 0.1 },
     },
   ),
   starter(
@@ -150,21 +228,55 @@ export const GROOVE_STARTERS: readonly GrooveStarter[] = Object.freeze([
     "Chic-era disco: even kick, lifted offbeat hats and octave propulsion",
     118,
     {
+      pitch: { scales: [["dorian", 1]], tonic: [[4, 1]] },
       rhythm: {
-        onsets: { kick: FLOOR, snare: BACK, hat: EIGHTHS, openhat: OFF },
+        onsets: {
+          kick: FLOOR,
+          snare: grid("....x..2....x..."),
+          hat: grid("x..6x..6x..6x..6"),
+          openhat: OFF,
+          chords: grid("....x..4....x..."),
+        },
+      },
+      groove: {
+        velocity: [1, 0.5, 0.86, 0.6],
+        roleOffset: { snare: 0.03 },
+        humanize: { timingMs: 4, velocity: 0.06 },
+      },
+      harmony: {
+        model: "functional",
+        presets: null,
+        forms: [
+          [["i7", "IV7"], 2],
+          [["i7", "i7", "IV7", "bVII"], 1],
+        ],
+        rhythm: [[1, 1]],
+        sevenths: 0,
+        cadences: [],
+        voicing: { types: [["close", 1]], range: [55, 74], notes: [3, 4] },
       },
       bass: {
         behaviour: [["octave", 1]],
-        range: [33, 52],
-        onsets: grid("x.x.x.xx..x.x.xx"),
+        range: [28, 47],
+        onsets: grid("x.x.x.x.x.x.x.x."),
       },
-      groove: { humanize: { timingMs: 3, velocity: 0.045 } },
       texture: {
         roles: {
           ...kitRoles("acoustic", ["kick", "snare", "hat", "openhat"]),
           bass: role("fender"),
+          chords: role("funk"),
         },
       },
+      expression: {
+        articulation: {
+          bass: [
+            ["staccato", 3],
+            ["tenuto", 1],
+          ],
+          chords: [["staccato", 1]],
+        },
+      },
+      mix: { levels: { chords: -12, bass: -5 }, space: 0.14 },
     },
   ),
   starter(
@@ -175,18 +287,52 @@ export const GROOVE_STARTERS: readonly GrooveStarter[] = Object.freeze([
     "late-90s UK garage: skipped kicks, swung hats and a firm backbeat",
     132,
     {
+      pitch: { scales: [["minor", 1]], tonic: [[5, 1]] },
       rhythm: {
         onsets: {
-          kick: grid("x.....x....x...."),
+          kick: grid("x.....x..x......"),
           snare: BACK,
-          hat: grid("x.xx..x.x.xx..x."),
-          rim: grid("...2......2....x"),
+          hat: grid("..x...x7..x...x7"),
+          openhat: grid("...x.......x...."),
+          rim: grid(".4.....6.....4.."),
+          chords: grid("...x.....x......"),
         },
       },
-      groove: { swingRatio: [1.5, 1.5], velocity: [1, 0.45, 0.8, 0.55] },
-      texture: {
-        roles: { ...kitRoles("syn909", ["kick", "snare", "hat", "rim"]) },
+      groove: {
+        swingRatio: [1.5, 1.5],
+        velocity: [1, 0.72, 0.85, 0.6],
+        humanize: { timingMs: 3, velocity: 0.05 },
       },
+      harmony: {
+        model: "functional",
+        presets: null,
+        forms: [
+          [["i9", "iv9"], 2],
+          [["i9", "bVImaj7", "iv9", "v7"], 1],
+        ],
+        rhythm: [[0.5, 1]],
+        sevenths: 0,
+        cadences: [],
+        voicing: { types: [["close", 1]], range: [55, 72], notes: [3, 5] },
+      },
+      bass: {
+        behaviour: [
+          ["root", 3],
+          ["octave", 1],
+        ],
+        range: [29, 41],
+        onsets: grid("x.....x..x....4."),
+        kickLock: 0.75,
+      },
+      texture: {
+        roles: {
+          ...kitRoles("syn909", ["kick", "snare", "hat", "openhat", "rim"]),
+          bass: role("bass"),
+          chords: role("hammond"),
+        },
+      },
+      expression: { articulation: { chords: [["staccato", 1]] } },
+      mix: { levels: { chords: -12, bass: -6 }, space: 0.12 },
     },
   ),
   starter(
@@ -197,26 +343,51 @@ export const GROOVE_STARTERS: readonly GrooveStarter[] = Object.freeze([
     "early jungle: displaced snares, sixteenth ghosts and roomy sub notes",
     164,
     {
+      pitch: { scales: [["minor", 1]], tonic: [[7, 1]] },
       rhythm: {
         onsets: {
-          kick: grid("x.........x..x.."),
-          snare: grid("....x..3....x..x"),
-          hat: grid("x.xxx.x.x.xxxx.x"),
-          openhat: grid("......x........."),
+          kick: grid("x.x.......x6...."),
+          // Backbeat with the break's pickups; the last snare sometimes
+          // jumps to the and of four.
+          snare: grid("....x..x.x..7.3x"),
+          hat: grid("x.x.x.x.x.x.x.x."),
+          openhat: grid("..........3....."),
         },
       },
+      groove: {
+        microtiming: [0, 0.08, 0.03, 0.1],
+        velocity: [1, 0.5, 0.82, 0.62],
+        humanize: { timingMs: 3, velocity: 0.06 },
+      },
+      harmony: {
+        model: "functional",
+        presets: null,
+        forms: [
+          [["i9", "bVImaj7"], 2],
+          [["i9", "iv9"], 1],
+        ],
+        rhythm: [[0.5, 1]],
+        sevenths: 0,
+        cadences: [],
+        voicing: { types: [["open", 1]], range: [55, 79], notes: [3, 5] },
+      },
       bass: {
-        behaviour: [["root", 1]],
+        behaviour: [
+          ["root", 3],
+          ["ostinato", 1],
+        ],
         range: [28, 40],
-        onsets: grid("x.......x......."),
+        onsets: grid("x.........x....."),
       },
       texture: {
         roles: {
-          ...kitRoles("lofi", ["kick", "snare", "hat", "openhat"]),
+          ...kitRoles("breaks", ["kick", "snare", "hat", "openhat"]),
           bass: role("triangle"),
+          pad: role("aah"),
         },
       },
-      mix: { levels: { bass: -8, hat: -14 }, space: 0.06 },
+      expression: { articulation: { bass: [["tenuto", 1]] } },
+      mix: { levels: { bass: -3, pad: -16, hat: -14 }, space: 0.1 },
     },
   ),
   starter(
@@ -227,21 +398,58 @@ export const GROOVE_STARTERS: readonly GrooveStarter[] = Object.freeze([
     "90s boom bap: laid-back snare, sparse kick and soft electric-piano punctuation",
     88,
     {
+      pitch: { scales: [["minor", 1]], tonic: [[9, 1]] },
       rhythm: {
         onsets: {
-          kick: grid("x..2..x...x....."),
-          snare: BACK,
-          hat: grid("x.6.x.8.x.6.x.8."),
-          chords: grid("x.........x....."),
+          kick: grid("x......x..x...3."),
+          snare: grid("....x.....2.x..2"),
+          hat: grid("x.7.x.8.x.7.x.86"),
+          chords: grid("x.....3...x....."),
         },
       },
       groove: {
         swingRatio: [1.45, 1.45],
-        roleOffset: { snare: 0.09 },
-        humanize: { timingMs: 4, velocity: 0.06 },
+        velocity: [1, 0.45, 0.72, 0.66],
+        roleOffset: { snare: 0.09, hat: -0.04 },
+        humanize: { timingMs: 5, velocity: 0.07 },
       },
-      texture: { roles: { ...kitRoles("lofi"), chords: role("wurli") } },
-      mix: { levels: { chords: -11 }, space: 0.12 },
+      harmony: {
+        model: "functional",
+        presets: null,
+        forms: [
+          [["i9", "iv9"], 2],
+          [["i9", "bVII", "bVImaj7", "v7"], 1],
+        ],
+        rhythm: [[1, 1]],
+        sevenths: 0,
+        cadences: [],
+        voicing: { types: [["close", 1]], range: [55, 72], notes: [3, 5] },
+      },
+      bass: {
+        behaviour: [
+          ["root", 3],
+          ["root-fifth", 1],
+        ],
+        range: [33, 47],
+        onsets: grid("x......x..x...3."),
+        kickLock: 0.8,
+      },
+      texture: {
+        roles: {
+          ...kitRoles("lofi"),
+          chords: role("wurli"),
+          bass: role("doublebass"),
+        },
+      },
+      expression: {
+        articulation: {
+          bass: [
+            ["tenuto", 2],
+            ["staccato", 1],
+          ],
+        },
+      },
+      mix: { levels: { chords: -12, bass: -4 }, space: 0.12 },
     },
   ),
   starter(
@@ -252,19 +460,47 @@ export const GROOVE_STARTERS: readonly GrooveStarter[] = Object.freeze([
     "early Southern trap: long kick tails, half-time clap and short hat bursts",
     142,
     {
+      // The kit's long 808 rings near F1 (43 Hz): the key sits on it.
+      pitch: { scales: [["harmonic-minor", 1]], tonic: [[5, 1]] },
       rhythm: {
         onsets: {
-          kick: grid("x.....x....x..x."),
+          kick: grid("x.....x....x..6."),
           snare: null,
           clap: grid("........x......."),
-          hat: grid("x.x.xx.xx.x.xxxx"),
+          // 32nd steps: eighths, a sixteenth pair on beat 3, and a roll
+          // into the next bar that only sometimes fills in.
+          hat: grid("x...x...|x...x...|x...x.x.|x.x.x6x6"),
+          chords: grid("x..x..x........."),
         },
       },
       texture: {
-        roles: { ...kitRoles("trap", ["kick", "clap", "hat"]), snare: null },
+        roles: {
+          ...kitRoles("trap", ["kick", "clap", "hat"]),
+          snare: null,
+          chords: role("celesta"),
+        },
       },
-      groove: { velocity: [1, 0.45, 0.7, 0.38] },
-      mix: { space: 0.04 },
+      harmony: {
+        model: "functional",
+        presets: null,
+        // Two bars a chord; the long form lands on the harmonic-minor V
+        // (its raised leading tone) at the end of the eight-bar loop.
+        forms: [
+          [["i", "bVI"], 2],
+          [["i", "iv"], 1],
+          [["i", "bVI", "iv", "V"], 2],
+        ],
+        rhythm: [[0.5, 1]],
+        sevenths: 0,
+        cadences: [],
+        voicing: { types: [["close", 1]], range: [60, 79], notes: [3, 3] },
+      },
+      groove: {
+        subdivision: 8,
+        velocity: [1, 0.55, 0.72, 0.55, 0.88, 0.6, 0.82, 0.62],
+        humanize: { timingMs: 1, velocity: 0.04 },
+      },
+      mix: { levels: { chords: -12 }, space: 0.08 },
     },
   ),
   // Pocket and cycles.
