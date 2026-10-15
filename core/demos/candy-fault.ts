@@ -710,8 +710,8 @@ export const candyFault: DemoDefinition = {
       }),
     );
     s.track(
-      voice("arp", "Chip arp", "square", 0.32, {
-        pan: -0.26,
+      voice("arp", "Chip arp", "square", 0.56, {
+        pan: -0.2,
         synth: {
           attack: 0.002,
           decay: 0.09,
@@ -720,8 +720,9 @@ export const candyFault: DemoDefinition = {
           lpf: 7500,
         },
         filter: { type: "hpf", cutoff: 600, resonance: 0 },
-        delay: { beats: 0.75, feedback: 0.3, mix: 0.16, pingpong: true },
-        fx: orbit,
+        // Dotted-eighth pingpong plus a slow chorus: the arp cascades side to side.
+        delay: { beats: 0.75, feedback: 0.34, mix: 0.26, pingpong: true },
+        fx: { ...orbit, chorus: { rate: 0.45, depth: 0.35, mix: 0.45 } },
         volumeAutomation: steps([0, 0.82], [36, 0.9], [44, 1]),
         humanize: { timing: 2, velocity: 6, seed: 18 },
       }),
@@ -857,19 +858,13 @@ export const candyFault: DemoDefinition = {
       for (const [bar, phrase] of line)
         for (const [beat, pitch, length, velocity = 0.7, lyric] of phrase) {
           const long = length >= 1.4;
-          s.note(
-            track,
-            bar,
-            beat,
-            pitch + transpose,
-            length,
-            velocity * gain,
-            {
-              ...(lyric ? { lyric } : {}),
-              ...(length >= 0.85 ? scoop(-80, 0.1) : {}),
-              ...(long && pitch >= 75 ? { vibrato: { rate: 5.8, depth: 32, delay: 0.28 } } : {}),
-            },
-          );
+          s.note(track, bar, beat, pitch + transpose, length, velocity * gain, {
+            ...(lyric ? { lyric } : {}),
+            ...(length >= 0.85 ? scoop(-80, 0.1) : {}),
+            ...(long && pitch >= 75
+              ? { vibrato: { rate: 5.8, depth: 32, delay: 0.28 } }
+              : {}),
+          });
         }
     };
     /** Backing singer: thirds under the held notes (octave below when asked). */
@@ -899,7 +894,12 @@ export const candyFault: DemoDefinition = {
         });
       });
     };
-    const arp = (bar: number, tones: readonly number[], gain: number, order: readonly number[]) =>
+    const arp = (
+      bar: number,
+      tones: readonly number[],
+      gain: number,
+      order: readonly number[],
+    ) =>
       order.forEach((index, i) =>
         s.note(
           "arp",
@@ -912,13 +912,32 @@ export const candyFault: DemoDefinition = {
       );
     const ARP_UP = [0, 1, 2, 3, 0, 1, 2, 3, 1, 2, 3, 2, 1, 2, 3, 2];
     const ARP_CASCADE = [3, 2, 1, 0, 3, 2, 1, 0, 3, 2, 1, 2, 3, 2, 1, 2];
-    const rolled = (track: string, bar: number, beat: number, pitches: readonly number[], length: number, velocity: number, spread = 0.035) =>
+    const rolled = (
+      track: string,
+      bar: number,
+      beat: number,
+      pitches: readonly number[],
+      length: number,
+      velocity: number,
+      spread = 0.035,
+    ) =>
       pitches.forEach((pitch, i) =>
-        s.note(track, bar, beat + i * spread, pitch, length - i * spread, velocity * (i === pitches.length - 1 ? 1.06 : 0.9)),
+        s.note(
+          track,
+          bar,
+          beat + i * spread,
+          pitch,
+          length - i * spread,
+          velocity * (i === pitches.length - 1 ? 1.06 : 0.9),
+        ),
       );
 
     /** Kick plus an 808 that locks to it: each hit sustains to the next. */
-    const kickBar = (b: number, grid: string, opts: { drop?: boolean; pops?: boolean } = {}) => {
+    const kickBar = (
+      b: number,
+      grid: string,
+      opts: { drop?: boolean; pops?: boolean } = {},
+    ) => {
       if (!grid) return;
       s.grid("kick", b, 36, grid);
       const root = H[PROG[b]!]!.root;
@@ -931,7 +950,8 @@ export const candyFault: DemoDefinition = {
         const lastHit = k === onsets.length - 1;
         // Pops: the last offbeat hit of a bar jumps an octave before a root change.
         const pop = opts.pops && lastHit && step >= 10 && next !== root;
-        const length = (end - step) * 0.25 - (lastHit && next !== root ? -0.02 : 0.06);
+        const length =
+          (end - step) * 0.25 - (lastHit && next !== root ? -0.02 : 0.06);
         const extra: Extra =
           k === 0 && opts.drop
             ? {
@@ -945,17 +965,38 @@ export const candyFault: DemoDefinition = {
               : pop
                 ? { glide: 0.05 }
                 : {};
-        s.note("sub", b, step * 0.25, pop ? root + 12 : root, length, Math.min(0.9, velocity * 0.95), extra);
+        s.note(
+          "sub",
+          b,
+          step * 0.25,
+          pop ? root + 12 : root,
+          length,
+          Math.min(0.9, velocity * 0.95),
+          extra,
+        );
       });
     };
 
     for (let b = 0; b < 56; b++) {
       const part = partOf(b);
       const h = H[PROG[b]!]!;
-      const inPart = b - [0, 4, 12, 16, 24, 32, 36, 44, 52][
-        ["boot", "verse", "lift", "chorus", "soft", "rebuild", "return", "over", "last"].indexOf(part)
-      ]!;
-      const chorusLike = part === "chorus" || part === "return" || part === "over";
+      const inPart =
+        b -
+        [0, 4, 12, 16, 24, 32, 36, 44, 52][
+          [
+            "boot",
+            "verse",
+            "lift",
+            "chorus",
+            "soft",
+            "rebuild",
+            "return",
+            "over",
+            "last",
+          ].indexOf(part)
+        ]!;
+      const chorusLike =
+        part === "chorus" || part === "return" || part === "over";
 
       // ── drums ─────────────────────────────────────────────────────────
       if (part === "boot" && b === 3) {
@@ -977,12 +1018,26 @@ export const candyFault: DemoDefinition = {
       if (part === "lift") {
         kickBar(b, KICK.lift![inPart]!, { pops: true });
         if (inPart < 2) {
-          s.grid("snap", b, 38, inPart ? "....8.......8.5." : "....8.......8...");
+          s.grid(
+            "snap",
+            b,
+            38,
+            inPart ? "....8.......8.5." : "....8.......8...",
+          );
           s.grid("snap", b, 39, "....6.......6...");
         } else if (inPart === 2) s.grid("snap", b, 38, "4.5.5.6.6.7.7.8.");
         else {
           s.grid("snap", b, 38, "5566778899......");
-          roll("snap", b, 2.5, 12, 0.125, [41, 41, 43, 43, 45, 45, 47, 47, 48, 48, 50, 50], 0.45, 0.95);
+          roll(
+            "snap",
+            b,
+            2.5,
+            12,
+            0.125,
+            [41, 41, 43, 43, 45, 45, 47, 47, 48, 48, 50, 50],
+            0.45,
+            0.95,
+          );
         }
         s.grid("hats", b, 42, "6363636363636363", 0.7 + inPart * 0.1);
         if (inPart === 3) roll("hats", b, 2, 8, 0.125, 42, 0.4, 0.8);
@@ -991,23 +1046,64 @@ export const candyFault: DemoDefinition = {
         const grids = part === "over" ? KICK.over! : KICK.chorus!;
         const last = inPart === 7;
         const dropout = part === "return" && inPart === 3;
-        kickBar(b, last ? "9...8...9......." : dropout ? "9...8..........." : grids[inPart % 4]!, {
-          pops: true,
-          drop: inPart === 0,
-        });
-        s.grid("snap", b, 38, dropout ? "....9..........." : "....9.......9...");
-        s.grid("snap", b, 39, dropout ? "....8..........." : "....8.......8...");
-        if (inPart % 4 === 3 && !last && !dropout) s.grid("snap", b, 38, "..............45");
-        if (dropout) roll("snap", b, 2.5, 6, 0.25, [45, 45, 47, 47, 48, 50], 0.45, 0.9);
-        if (inPart === 3 && part !== "return") roll("snap", b, 3.5, 8, 1 / 16, 38, 0.6, 0.18);
-        if (last && part === "chorus") roll("snap", b, 3, 8, 0.125, [50, 48, 47, 45, 43, 41, 41, 41], 0.8, 0.4);
-        if (last && part === "return") roll("snap", b, 2, 4, 0.25, 38, 0.6, 0.85);
-        if (last && part === "over") roll("snap", b, 2, 16, 0.125, 38, 0.35, 0.95);
-        if (inPart === 0) hit("hats", b, 0, 49, part === "chorus" ? 0.75 : 0.85, 2);
+        kickBar(
+          b,
+          last
+            ? "9...8...9......."
+            : dropout
+              ? "9...8..........."
+              : grids[inPart % 4]!,
+          {
+            pops: true,
+            drop: inPart === 0,
+          },
+        );
+        s.grid(
+          "snap",
+          b,
+          38,
+          dropout ? "....9..........." : "....9.......9...",
+        );
+        s.grid(
+          "snap",
+          b,
+          39,
+          dropout ? "....8..........." : "....8.......8...",
+        );
+        if (inPart % 4 === 3 && !last && !dropout)
+          s.grid("snap", b, 38, "..............45");
+        if (dropout)
+          roll("snap", b, 2.5, 6, 0.25, [45, 45, 47, 47, 48, 50], 0.45, 0.9);
+        if (inPart === 3 && part !== "return")
+          roll("snap", b, 3.5, 8, 1 / 16, 38, 0.6, 0.18);
+        if (last && part === "chorus")
+          roll(
+            "snap",
+            b,
+            3,
+            8,
+            0.125,
+            [50, 48, 47, 45, 43, 41, 41, 41],
+            0.8,
+            0.4,
+          );
+        if (last && part === "return")
+          roll("snap", b, 2, 4, 0.25, 38, 0.6, 0.85);
+        if (last && part === "over")
+          roll("snap", b, 2, 16, 0.125, 38, 0.35, 0.95);
+        if (inPart === 0)
+          hit("hats", b, 0, 49, part === "chorus" ? 0.75 : 0.85, 2);
         if (!dropout) {
           const drive = HATS_DRIVE[inPart % 4]!;
-          s.grid("hats", b, 42, last ? "8465846584658..." : drive, part === "over" ? 1.05 : 0.95);
-          const variant = (inPart + (part === "return" ? 1 : part === "over" ? 2 : 0)) % 4;
+          s.grid(
+            "hats",
+            b,
+            42,
+            last ? "8465846584658..." : drive,
+            part === "over" ? 1.05 : 0.95,
+          );
+          const variant =
+            (inPart + (part === "return" ? 1 : part === "over" ? 2 : 0)) % 4;
           if (inPart % 4 === 1)
             variant % 2
               ? roll("hats", b, 3.25, 6, 0.125, 42, 0.38, 0.78, [3])
@@ -1023,7 +1119,13 @@ export const candyFault: DemoDefinition = {
       if (part === "soft") {
         if (b === 24) hit("hats", b, 0, 49, 0.42, 2);
         if (b >= 28) {
-          s.grid("hats", b, 42, b === 31 ? "3.2.3.2.4.3.4.35" : "3.2.3.2.3.2.3.2.", 0.9);
+          s.grid(
+            "hats",
+            b,
+            42,
+            b === 31 ? "3.2.3.2.4.3.4.35" : "3.2.3.2.3.2.3.2.",
+            0.9,
+          );
           if (b === 29) roll("hats", b, 3, 6, 1 / 6, 42, 0.18, 0.4);
           s.grid("snap", b, 37, "........4.......");
           if (b === 31) roll("snap", b, 2, 8, 0.25, 38, 0.15, 0.62);
@@ -1032,12 +1134,55 @@ export const candyFault: DemoDefinition = {
       if (part === "rebuild") {
         const grid = KICK.rebuild![inPart]!;
         s.grid("kick", b, 36, grid);
-        s.note("sub", b, 0, h.root, inPart === 3 ? 2.9 : 3.95, 0.7, inPart > 0 && h.root !== H[PROG[b - 1]!]!.root ? { glide: 0.09 } : {});
-        if (inPart === 3) s.note("sub", b, 3, h.root + 12, 0.95, 0.62, { glide: 0.05, ...fall(-1200, 0.2) });
-        s.grid("snap", b, 38, ["....7.......7...", "....7...5...7.6.", "6.6.7.7.8.8.9.9.", "6677889999......"][inPart]!);
-        s.grid("snap", b, 39, inPart < 2 ? "....6.......6..." : "................");
-        if (inPart === 3) roll("snap", b, 2.5, 10, 0.125, [41, 41, 43, 43, 45, 45, 47, 48, 50, 50], 0.5, 0.95);
-        s.grid("hats", b, 42, inPart < 2 ? "6.4.6.4.6.4.6.4." : "6464646464646464", 0.8 + inPart * 0.08);
+        s.note(
+          "sub",
+          b,
+          0,
+          h.root,
+          inPart === 3 ? 2.9 : 3.95,
+          0.7,
+          inPart > 0 && h.root !== H[PROG[b - 1]!]!.root ? { glide: 0.09 } : {},
+        );
+        if (inPart === 3)
+          s.note("sub", b, 3, h.root + 12, 0.95, 0.62, {
+            glide: 0.05,
+            ...fall(-1200, 0.2),
+          });
+        s.grid(
+          "snap",
+          b,
+          38,
+          [
+            "....7.......7...",
+            "....7...5...7.6.",
+            "6.6.7.7.8.8.9.9.",
+            "6677889999......",
+          ][inPart]!,
+        );
+        s.grid(
+          "snap",
+          b,
+          39,
+          inPart < 2 ? "....6.......6..." : "................",
+        );
+        if (inPart === 3)
+          roll(
+            "snap",
+            b,
+            2.5,
+            10,
+            0.125,
+            [41, 41, 43, 43, 45, 45, 47, 48, 50, 50],
+            0.5,
+            0.95,
+          );
+        s.grid(
+          "hats",
+          b,
+          42,
+          inPart < 2 ? "6.4.6.4.6.4.6.4." : "6464646464646464",
+          0.8 + inPart * 0.08,
+        );
       }
       if (part === "last") {
         kickBar(b, KICK.last![inPart]!, {});
@@ -1051,7 +1196,15 @@ export const candyFault: DemoDefinition = {
       }
       if (part === "soft") {
         // Sub stays (pinned silence covers kick, hook and supersaw only).
-        s.note("sub", b, 0, h.root, 3.6, 0.38, b > 24 && h.root !== H[PROG[b - 1]!]!.root ? { glide: 0.12 } : {});
+        s.note(
+          "sub",
+          b,
+          0,
+          h.root,
+          3.6,
+          0.38,
+          b > 24 && h.root !== H[PROG[b - 1]!]!.root ? { glide: 0.12 } : {},
+        );
       }
 
       // ── harmony ───────────────────────────────────────────────────────
@@ -1062,17 +1215,43 @@ export const candyFault: DemoDefinition = {
         rolled("keys", b + 1, 1.5, h.keys.slice(1), 2.3, 0.38, 0.02);
       }
       if (part === "soft") {
-        rolled("keys", b, 0, [h.root + 12, ...h.keys], 2.4, b < 28 ? 0.6 : 0.56, 0.045);
+        rolled(
+          "keys",
+          b,
+          0,
+          [h.root + 12, ...h.keys],
+          2.4,
+          b < 28 ? 0.6 : 0.56,
+          0.045,
+        );
         rolled("keys", b, 2.5, h.keys.slice(1), 1.4, 0.42, 0.03);
       }
-      if (part === "last" && b < 55) rolled("keys", b, 0, h.keys, 3.85, 0.44 - inPart * 0.04);
+      if (part === "last" && b < 55)
+        rolled("keys", b, 0, h.keys, 3.85, 0.44 - inPart * 0.04);
       if (b === 55) rolled("keys", b, 0, [52, 56, 59, 63, 66], 3.9, 0.4, 0.05);
-      if ((part === "lift" || part === "rebuild" || chorusLike) && h.saw.length) {
+      if (
+        (part === "lift" || part === "rebuild" || chorusLike) &&
+        h.saw.length
+      ) {
         const top = part === "over" ? [h.saw[h.saw.length - 1]! + 12] : [];
-        s.chord("chords", b, 0, [...h.saw, ...top], part === "lift" || part === "rebuild" ? 3.9 : 3.8, part === "lift" ? 0.5 : 0.6);
+        s.chord(
+          "chords",
+          b,
+          0,
+          [...h.saw, ...top],
+          part === "lift" || part === "rebuild" ? 3.9 : 3.8,
+          part === "lift" ? 0.5 : 0.6,
+        );
         if (part === "return" || part === "over")
           for (const beat of [0.5, 1.5, 2.5, 3.5])
-            s.chord("chords", b, beat, h.saw.slice(2).map((p) => p + 12), 0.22, 0.42);
+            s.chord(
+              "chords",
+              b,
+              beat,
+              h.saw.slice(2).map((p) => p + 12),
+              0.22,
+              0.42,
+            );
       }
       if (b === 15) s.chord("chords", b, 2, H.B!.saw, 1.9, 0.5);
       if (b === 35) s.chord("chords", b, 0, H.B!.saw, 3, 0.62);
@@ -1080,17 +1259,37 @@ export const candyFault: DemoDefinition = {
       // ── chip arps: hint in the intro, second half of chorus one, then all ─
       if (b === 2 || b === 3) arp(b, h.arp, 0.45 + (b - 2) * 0.15, ARP_UP);
       if ((part === "chorus" && inPart >= 4) || part === "return")
-        arp(b, h.arp, part === "chorus" ? 0.7 : 0.8, inPart % 2 ? ARP_CASCADE : ARP_UP);
-      if (part === "over") arp(b, h.arp, 0.95, inPart % 2 ? ARP_CASCADE : ARP_UP);
+        arp(
+          b,
+          h.arp,
+          part === "chorus" ? 0.7 : 0.8,
+          inPart % 2 ? ARP_CASCADE : ARP_UP,
+        );
+      if (part === "over")
+        arp(b, h.arp, 0.95, inPart % 2 ? ARP_CASCADE : ARP_UP);
       if (part === "soft" && b >= 28) {
-        for (const [beat, index] of [[0.5, 3], [1.25, 2], [2, 1], [2.75, 2], [3.5, 3]] as const)
+        for (const [beat, index] of [
+          [0.5, 3],
+          [1.25, 2],
+          [2, 1],
+          [2.75, 2],
+          [3.5, 3],
+        ] as const)
           s.note("spark", b, beat, h.arp[index]!, 0.5, 0.28 + (b - 28) * 0.04);
       }
 
       // ── hook: identity motif in the intro, answers between sung lines ───
       if (part === "boot") {
         if (b % 2 === 0) hook(b, b === 2 ? MOTIF_IV : MOTIF, 0.72);
-        else hook(b, ANSWERS[b === 1 ? 0 : 1]!.map(([beat, pitch, length, velocity]) => [beat - 1.5, pitch, length, velocity] as const), 0.66);
+        else
+          hook(
+            b,
+            ANSWERS[b === 1 ? 0 : 1]!.map(
+              ([beat, pitch, length, velocity]) =>
+                [beat - 1.5, pitch, length, velocity] as const,
+            ),
+            0.66,
+          );
       }
       if (b === 9) hook(b, ANSWERS[0]!, 0.5);
       if (b === 11) hook(b, ANSWERS[1]!, 0.56);
@@ -1098,8 +1297,16 @@ export const candyFault: DemoDefinition = {
       if (chorusLike && (inPart === 1 || inPart === 5))
         hook(b, ANSWERS[inPart === 1 ? 0 : 2]!, part === "chorus" ? 0.9 : 1);
       if (chorusLike && inPart === 7)
-        hook(b, MOTIF_IV.map(([beat, pitch, length, velocity]) => [beat + 1, pitch, length, velocity] as const), part === "over" ? 1 : 0.85);
-      if (part === "rebuild" && inPart < 3) hook(b, ANSWERS[inPart === 2 ? 2 : inPart]!, 0.62 + inPart * 0.08);
+        hook(
+          b,
+          MOTIF_IV.map(
+            ([beat, pitch, length, velocity]) =>
+              [beat + 1, pitch, length, velocity] as const,
+          ),
+          part === "over" ? 1 : 0.85,
+        );
+      if (part === "rebuild" && inPart < 3)
+        hook(b, ANSWERS[inPart === 2 ? 2 : inPart]!, 0.62 + inPart * 0.08);
       if (b === 55) hook(b, MOTIF, 0.5);
 
       // ── chops: up-pixel answers and stutters ─────────────────────────────
@@ -1109,8 +1316,19 @@ export const candyFault: DemoDefinition = {
           [3, 83, 0.25, 0.62],
           [3.5, 85, 0.25, 0.58],
         ]);
-      if (b === 11) roll("chops", b, 2, 8, 0.25, [78, 80, 80, 83, 83, 85, 87, 88], 0.45, 0.7);
-      if (b === 15 || b === 35) roll("chops", b, 2.5, 4, 0.25, [83, 85, 87, 88], 0.5, 0.72);
+      if (b === 11)
+        roll(
+          "chops",
+          b,
+          2,
+          8,
+          0.25,
+          [78, 80, 80, 83, 83, 85, 87, 88],
+          0.45,
+          0.7,
+        );
+      if (b === 15 || b === 35)
+        roll("chops", b, 2.5, 4, 0.25, [83, 85, 87, 88], 0.5, 0.72);
       if (chorusLike && (inPart === 3 || inPart === 7)) {
         s.phrase("chops", b, [
           [2, 83, 0.25, 0.66],
@@ -1118,9 +1336,11 @@ export const candyFault: DemoDefinition = {
           [2.75, 80, 0.25, 0.62],
           [3.25, 78, 0.22, 0.6],
         ]);
-        if (part === "over") roll("chops", b, 3.5, 4, 0.125, [88, 88, 85, 83], 0.66, 0.45);
+        if (part === "over")
+          roll("chops", b, 3.5, 4, 0.125, [88, 88, 85, 83], 0.66, 0.45);
       }
-      if (part === "over" && inPart % 2 === 0) s.note("chops", b, 3.75, 88, 0.12, 0.42);
+      if (part === "over" && inPart % 2 === 0)
+        s.note("chops", b, 3.75, 88, 0.12, 0.42);
 
       // ── sparkle and tape ──────────────────────────────────────────────
       if ([0, 4, 12, 16, 24, 32, 36, 44, 52].includes(b))
@@ -1158,17 +1378,32 @@ export const candyFault: DemoDefinition = {
     s.note("tear", 42, 2, 48, 5, 0.6);
 
     // After the silent beat the overload and the outro lift a half step, E to F.
-    const LIFTED = new Set(["sub", "hook", "keys", "chords", "arp", "vocal", "harm", "chops", "spark"]);
+    const LIFTED = new Set([
+      "sub",
+      "hook",
+      "keys",
+      "chords",
+      "arp",
+      "vocal",
+      "harm",
+      "chops",
+      "spark",
+    ]);
     for (let i = 0; i < s.notes.length; i++) {
       const n = s.notes[i]!;
-      if (LIFTED.has(n.trackId!) && n.startTick! >= 44 * BAR) s.notes[i] = { ...n, pitch: n.pitch! + 1 };
+      if (LIFTED.has(n.trackId!) && n.startTick! >= 44 * BAR)
+        s.notes[i] = { ...n, pitch: n.pitch! + 1 };
     }
 
     // The 808 lets go for the last beat of the pre-chorus so the first drop lands.
     const suck = 15 * BAR + 3 * 480;
     for (let i = 0; i < s.notes.length; i++) {
       const n = s.notes[i]!;
-      if (n.trackId === "sub" && n.startTick! < suck && n.startTick! + n.durationTicks! > suck)
+      if (
+        n.trackId === "sub" &&
+        n.startTick! < suck &&
+        n.startTick! + n.durationTicks! > suck
+      )
         s.notes[i] = { ...n, durationTicks: suck - n.startTick! };
     }
 
