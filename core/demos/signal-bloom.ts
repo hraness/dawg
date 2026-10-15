@@ -408,6 +408,8 @@ export const signalBloom: DemoDefinition = {
     s.track(
       voice("kick", "Linn kick", "kit", 0.64, {
         kit: "synlinn",
+        // The Linn kick lives at 60-120 Hz; below 36 Hz is only rumble.
+        filter: { type: "hpf", cutoff: 36, resonance: 0 },
         fx: { duck: { orbit: 2, depth: 0.3, attack: 0.16 } },
         humanize: { timing: 2, velocity: 3, seed: 11 },
       }),
@@ -442,6 +444,7 @@ export const signalBloom: DemoDefinition = {
     );
     s.track(
       preset("bass", "Analog bass", "moog-bass", 0.5, {
+        filter: { type: "hpf", cutoff: 32, resonance: 0 },
         fx: orbit,
         humanize: { timing: 3, velocity: 4, length: 6, seed: 15 },
       }),
@@ -506,7 +509,8 @@ export const signalBloom: DemoDefinition = {
           jitter: 0.14,
           vib: 5,
           vibmod: 0.08,
-          ring: 0.15,
+          // A stronger singer's formant near 3 kHz cuts through the pads.
+          ring: 0.32,
         },
         reverb: { ...hall, mix: 0.16, predelay: 0.03 },
         delay: { beats: 0.75, feedback: 0.2, mix: 0.1, pingpong: true },
@@ -636,7 +640,18 @@ export const signalBloom: DemoDefinition = {
               { at: 0.14, cents: 0 },
             ],
           });
-        note(track, bar, beat, pitch, length, velocity * gain, extra);
+        // Unstressed syllables sit a hair behind the beat (about 9 ms) and
+        // the double trails the lead by about 17 ms, as a sung double does.
+        const lag = track === "vocal" ? (velocity < 0.62 ? 0.016 : 0) : 0.03;
+        note(
+          track,
+          bar,
+          beat + lag,
+          pitch,
+          length - lag,
+          velocity * gain,
+          extra,
+        );
       }
     };
     const chord = (
@@ -687,21 +702,31 @@ export const signalBloom: DemoDefinition = {
       0.6, 0.26, 0.44, 0.3, 0.56, 0.26, 0.44, 0.32, 0.6, 0.26, 0.44, 0.3, 0.56,
       0.28, 0.46, 0.36,
     ];
+    // Each 4-bar phrase leans forward: the hats grow a little bar by bar, an
+    // open hat lifts into the next phrase, and no hat plays under a crash.
+    const CRASH_BARS = new Set([8, 16, 20, 24, 28, 32, 40, 44, 48, 52, 56, 60]);
     const hats = (bar: number, mode: "8" | "16" | "open" | "soft") => {
+      const lean = 0.94 + (bar % 4) * 0.03,
+        lift = bar % 4 === 3 && mode !== "soft";
       for (let i = 0; i < 16; i++) {
         const offbeat8 = i % 4 === 2,
           beat = i / 4 + (i % 2 ? 0.025 : 0);
+        if (i === 0 && CRASH_BARS.has(bar)) continue;
+        if (lift && i >= 14) {
+          if (i === 14) note("hats", bar, beat, 46, 0.55, 0.58 * lean);
+          continue;
+        }
         if (mode === "8" && i % 2) {
           if (i === 15 && bar % 2) note("hats", bar, beat, 42, 0.1, 0.3);
           continue;
         }
         if (mode === "soft" && i % 2) continue;
         if (mode === "open" && offbeat8) {
-          note("hats", bar, beat, 46, 0.4, 0.5);
+          note("hats", bar, beat, 46, 0.4, 0.5 * lean);
           continue;
         }
         const scale = mode === "soft" ? 0.62 : mode === "8" ? 1.08 : 1;
-        note("hats", bar, beat, 42, 0.1, HAT_16[i]! * scale);
+        note("hats", bar, beat, 42, 0.1, HAT_16[i]! * scale * lean);
       }
     };
     const crash = (bar: number, velocity: number) =>
@@ -808,6 +833,9 @@ export const signalBloom: DemoDefinition = {
           ...(phraseEnd ? ([[3.5, 0.6]] as const) : []),
         ]);
         backbeat(b, [1, 3], true, part === "chorus" ? 1.05 : 1);
+        // Ghost strokes before the backbeat keep the machine breathing.
+        if (odd && !phraseEnd) note("snare", b, 2.75, 38, 0.1, 0.18);
+        if (b % 4 === 2) note("snare", b, 1.75, 38, 0.1, 0.16);
         hats(b, part === "post" && !odd ? "16" : "open");
         if (b % 4 === 0) crash(b, b === 20 || b === 48 ? 0.85 : 0.6);
         if (b === 27 || b === 55) toms(b, FILL_SHORT);
@@ -884,8 +912,18 @@ export const signalBloom: DemoDefinition = {
           note("bass", b, i / 2, bass + (i % 2 ? 12 : 0), 0.4, velocity);
         });
       } else if (part === "bridge") {
-        note("bass", b, 0, root, 3.3, b < 36 ? 0.62 : 0.74);
-        note("bass", b, 3.5, b === 39 ? A : root + 12, 0.4, b < 36 ? 0.5 : 0.6);
+        // "If the lights go out": the bass drops out for two bars.
+        if (b >= 34) {
+          note("bass", b, 0, root, 3.3, b < 36 ? 0.62 : 0.74);
+          note(
+            "bass",
+            b,
+            3.5,
+            b === 39 ? A : root + 12,
+            0.4,
+            b < 36 ? 0.5 : 0.6,
+          );
+        }
       } else if (b >= 60) {
         if (b < 62) note("bass", b, 0, root, 3.8, 0.74);
         else if (b === 62) note("bass", b, 0, A, 7.8, 0.7);
@@ -907,8 +945,8 @@ export const signalBloom: DemoDefinition = {
                   : 0.5
                 : part === "chorus"
                   ? b >= 48
-                    ? 0.7
-                    : 0.64
+                    ? 0.72
+                    : 0.6
                   : 0.58;
       if (part === "pre") {
         // Off-beat stabs build momentum under the climbing bass.
@@ -960,7 +998,9 @@ export const signalBloom: DemoDefinition = {
             : part === "pre"
               ? 0.44 + (b % 4) * 0.05
               : part === "chorus"
-                ? 0.5
+                ? b >= 48
+                  ? 0.56
+                  : 0.48
                 : part === "verse"
                   ? 0.36
                   : 0.5;
@@ -1066,12 +1106,14 @@ export const signalBloom: DemoDefinition = {
     sing(12, WINDOW_WIDE);
     sing(14, LIGHT_OUTSIDE);
     sing(15, FLICKER);
-    sing(15, COMING_THROUGH("I", "com", "ing"));
+    sing(17, COMING_THROUGH("I", "com", "ing"));
+    // The last chorus is sung a little harder than the first.
     for (const bar of [20, 48]) {
-      sing(bar, SIGNAL);
-      sing(bar + 2, INTO_THE_ROOM);
-      sing(bar + 4, SIGNAL);
-      sing(bar + 6, LIGHT_UP);
+      const push = bar === 48 ? 1.06 : 1;
+      sing(bar, SIGNAL, "vocal", push);
+      sing(bar + 2, INTO_THE_ROOM, "vocal", push);
+      sing(bar + 4, SIGNAL, "vocal", push);
+      sing(bar + 6, LIGHT_UP, "vocal", push);
     }
     sing(32, LIGHTS_GO_OUT);
     sing(34, FADES_TO_WHITE);
@@ -1080,7 +1122,7 @@ export const signalBloom: DemoDefinition = {
     sing(40, TURNS_TO_GOLD);
     sing(42, COLOR_I_HOLD);
     sing(43, FLICKER);
-    sing(43, COMING_THROUGH("now", "break", "ing"));
+    sing(45, COMING_THROUGH("now", "break", "ing"));
     // Bloom: the title phrase twice, the second reaching the top E.
     sing(56, [
       [0.5, 72, 0.4, 0.66, "let"],
@@ -1145,7 +1187,8 @@ export const signalBloom: DemoDefinition = {
       note("up", bar, at + 0.75, up, 0.32, 0.6);
     };
     for (const bar of [21, 25, 49, 53]) answer(bar, 67, 71);
-    for (const bar of [17, 45]) answer(bar, 64, 67, 1.75);
+    // Pre-chorus: the chops fill the breath between "line" and the pickup.
+    for (const bar of [17, 45]) answer(bar, 64, 67, 1.25);
     for (const bar of [28, 29, 30, 31, 56, 57, 58, 59]) {
       const [voicing] = harmonyAt(bar),
         top = Math.max(...voicing);
