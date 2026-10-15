@@ -1151,8 +1151,9 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
   ),
   // Modern Afrobeats: a bouncy kick (1, the "and" of 2, 3, with a pickup in
   // bar 2) rather than four on the floor, the 3+3+2 rim figure twice a
-  // bar, a clap on 4, a soft snare before beat 3, and shaker-like 16th
-  // hats that alternate loud and soft, lightly swung.
+  // bar, a clap on 4, a soft snare before beat 3, shaker-like 16th hats
+  // that alternate loud and soft, lightly swung, and a kick-and-snare
+  // pickup into the next four bars.
   drumPattern(
     "afrobeats",
     "Afrobeats / afro-pop",
@@ -1161,13 +1162,24 @@ export const DRUM_PATTERNS: readonly DrumPattern[] = Object.freeze([
     "syn808",
     0.08,
     [
-      grid("kick", "x.....x.x......." + "x.....x.x..x...."),
+      grid(
+        "kick",
+        "x.....x.x......." +
+          "x.....x.x..x...." +
+          "x.....x.x......." +
+          "x.....x.x..x..x.",
+      ),
       grid("rim", "x..x..x.x..x..x.", { velocity: 0.5, accent: 0.3 }),
       grid("clap", "............x...", { velocity: 0.62 }),
-      grid("snare", ".......x........" + ".......x.....x..", {
-        velocity: 0.3,
-      }),
-      grid("hat", "XxXxXxXxXxXxXxXx", { velocity: 0.36, accent: 0.4 }),
+      grid(
+        "snare",
+        ".......x........" +
+          ".......x.....x.." +
+          ".......x........" +
+          ".......x.....xxX",
+        { velocity: 0.3, accent: 0.4 },
+      ),
+      grid("hat", "XxXxXxXxXxXxXxXx", { velocity: 0.42, accent: 0.4 }),
     ],
   ),
   // Afro-Cuban bembe in 12/8 (each beat three triplet 8ths): the seven-
