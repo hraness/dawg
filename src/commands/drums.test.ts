@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { DRUM_VOICES, parseDrumVoice } from "../../core/drums.ts";
+import { parseDrumVoice } from "../../core/drums.ts";
 import {
   divisionBeats,
   expandRow,
   normalizeRhythmRow,
 } from "../../core/euclid.ts";
 import { synthKit } from "../../core/kits.ts";
+import { KIT_EXTRA_VOICES, rhythmVoicePitch } from "../../core/rhythm.ts";
 import { createScore } from "../../core/score.ts";
 import { pattern } from "../../core/sdk/v1.ts";
 import { renderScorePcm } from "../audio/wav.ts";
@@ -46,7 +47,9 @@ describe("pattern library", () => {
       for (const [index, spec] of entry.rows.entries()) {
         const { kind: _kind, ...fields } = spec;
         const row = normalizeRhythmRow(fields, `${entry.name}[${index}]`);
-        expect(parseDrumVoice(row.voice)).toBeDefined();
+        expect(
+          parseDrumVoice(row.voice) ?? KIT_EXTRA_VOICES[row.voice],
+        ).toBeDefined();
         // Every row plays something in one pass of its own length (a fill
         // row may sit in the last bar of a four-bar phrase).
         const passBeats =
@@ -112,12 +115,7 @@ describe("pattern library", () => {
       // Every voice of the pattern produced hits.
       const pitches = new Set(notes.map((note) => note.pitch));
       for (const row of entry.rows)
-        expect(
-          pitches.has(
-            DRUM_VOICES.find((v) => v.voice === parseDrumVoice(row.voice))!
-              .pitch,
-          ),
-        ).toBe(true);
+        expect(pitches.has(rhythmVoicePitch(drums, row.voice)!)).toBe(true);
       const { pcm } = renderScorePcm(next, { sampleRate: 8_000 });
       let peak = 0;
       for (const value of pcm) peak = Math.max(peak, Math.abs(value));
