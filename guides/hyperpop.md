@@ -10,7 +10,7 @@ barely move: a four-chord loop, often I–V–vi–IV, with one chord
 borrowed minor in the breakdown. The interest comes from which
 layers play, how they sit around the kick, and texture.
 
-- Sub with little attack, glide and soft harmonics; a quiet saw doubles it
+- Sub with little attack, glide and soft harmonics; a saw doubles it
 - Pads, stabs and upper layers duck about 12 dB under the kick
 - Chord stabs ride the off-beats at chord pitch; soft plucks up high
 - Loud bright hats carry the air; a muted, distorted snare
