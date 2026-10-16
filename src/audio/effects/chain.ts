@@ -2,7 +2,7 @@
  * The fixed per-track effects chain (`FX_CHAIN` in core/fx.ts):
  *
  *   filter → djf → autofilter → formant → vowel → crush → distort → stomp → head →
- *   cab → wobble → bloom → swell → tremolo →
+ *   cab → eq → wobble → bloom → swell → tremolo →
  *   compressor → pan → double → phaser → chorus → leslie → postgain →
  *   delay → reverb
  *
@@ -21,6 +21,7 @@ import {
   applyTrackFilter,
   applyVowel,
 } from "./filter.ts";
+import { applyEq } from "./eq.ts";
 import { applyFormant } from "./formant.ts";
 import { applyChorus, applyLeslie, applyPhaser } from "./modulation.ts";
 import { applyCab, applyHead, applyStomp } from "./rig/index.ts";
@@ -70,6 +71,7 @@ const MONO: Readonly<Partial<Record<FxName, MonoStage>>> = Object.freeze({
   stomp: applyStomp,
   head: applyHead,
   cab: applyCab,
+  eq: applyEq,
   wobble: applyWobble,
   bloom: applyBloom,
   swell: applySwell,

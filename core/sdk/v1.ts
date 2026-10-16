@@ -13825,6 +13825,44 @@ export type PatchNodeTable = {
       out: "a";
     };
   };
+  /** three-band tone shaping after the drive and amp: a low shelf, a peaking mid and a high shelf for air */
+  "fx.eq": {
+    main: "a";
+    params: {
+      /** low shelf gain (cut mud or boom, or add weight) (-24..12 dB, default 0) */
+      low?: number;
+      /** low shelf corner (20..1000 Hz, default 150) */
+      lowfreq?: number;
+      /** peaking mid gain, about an octave and a half wide (-24..12 dB, default 0) */
+      mid?: number;
+      /** peaking mid center (100..10000 Hz, default 1000) */
+      midfreq?: number;
+      /** high shelf gain (air above the corner, or darken) (-24..12 dB, default 0) */
+      high?: number;
+      /** high shelf corner (1000..20000 Hz, default 8000) */
+      highfreq?: number;
+    };
+    inputs: {
+      /** audio in */
+      in: "a";
+      /** low shelf gain (cut mud or boom, or add weight) */
+      low: "c";
+      /** low shelf corner */
+      lowfreq: "c";
+      /** peaking mid gain, about an octave and a half wide */
+      mid: "c";
+      /** peaking mid center */
+      midfreq: "c";
+      /** high shelf gain (air above the corner, or darken) */
+      high: "c";
+      /** high shelf corner */
+      highfreq: "c";
+    };
+    outputs: {
+      /** audio out */
+      out: "a";
+    };
+  };
   /** held tremolo arm: slow seeded pitch wow and flutter of the whole track */
   "fx.wobble": {
     main: "a";
@@ -15115,6 +15153,20 @@ export const PATCH_NODE_PORTS: Readonly<
       ["in", "a"],
       ["mic", "c", 0, 1, 0.3],
       ["mix", "c", 0, 1, 1],
+    ],
+    outputs: [["out", "a"]],
+  },
+  "fx.eq": {
+    rate: "global",
+    params: ["low", "lowfreq", "mid", "midfreq", "high", "highfreq"],
+    inputs: [
+      ["in", "a"],
+      ["low", "c", -24, 12, 0],
+      ["lowfreq", "c", 20, 1000, 150],
+      ["mid", "c", -24, 12, 0],
+      ["midfreq", "c", 100, 10000, 1000],
+      ["high", "c", -24, 12, 0],
+      ["highfreq", "c", 1000, 20000, 8000],
     ],
     outputs: [["out", "a"]],
   },

@@ -10,6 +10,7 @@ import { copperWire } from "./copper-wire.ts";
 import { lowTide } from "./low-tide.ts";
 import { amberRoom } from "./amber-room.ts";
 import { candyFault } from "./candy-fault.ts";
+import { softReboot } from "./soft-reboot.ts";
 export type { DemoInfo } from "./types.ts";
 
 const definitions = [
@@ -20,6 +21,7 @@ const definitions = [
   lowTide,
   amberRoom,
   candyFault,
+  softReboot,
 ] as const;
 export const DEMOS = Object.freeze(definitions.map(({ info }) => info));
 const templates = new Map<string, TrackScore>();

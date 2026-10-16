@@ -613,14 +613,18 @@ export class StemRenderer {
     const duckers: Ducker[] = [];
     for (const [trackId] of groups) {
       const settings = duckSettings(tracks.get(trackId));
-      if (settings && isTrackAudible(score, trackId))
+      if (settings && isTrackAudible(score, trackId)) {
+        const { hold, ...duck } = settings;
+        const spans = performed
+          .get(trackId)!
+          .map((note) => noteSpan(note, context));
         duckers.push({
           trackId,
-          ...settings,
-          onsets: performed
-            .get(trackId)!
-            .map((note) => noteSpan(note, context).start),
+          ...duck,
+          onsets: spans.map((span) => span.start),
+          ...(hold && { ends: spans.map((span) => span.start + span.length) }),
         });
+      }
     }
     const ducked = duckGains(
       [...groups.keys()].map((id) => ({ id, orbit: orbitOf(tracks.get(id)) })),
