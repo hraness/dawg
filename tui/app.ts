@@ -904,11 +904,9 @@ function paintPrompt(
         ? ui.overlay.toUpperCase()
         : view.play && !prompt.value
           ? "PLAY"
-          : view.tape && !prompt.value
-            ? "TAPE"
-            : view.patch && !prompt.value
-              ? "PATCH"
-              : undefined;
+          : view.patch && !prompt.value
+            ? "PATCH"
+            : undefined;
 
   // Top border with the mode pill and right-aligned status.
   buffer.set(0, top, box.tl, border);
@@ -981,18 +979,23 @@ function paintPrompt(
     // Seeded per session (tui/hints.ts): the words stay put while you
     // work and change between sessions, chosen by agent and song state.
     const score = view.score;
+    // TAPE leaves typing to the prompt: letters start a command there.
+    // PLAY and PATCH pass `/` to the prompt; menus and pickers filter on it.
+    const slashTypes = owner === "PLAY" || owner === "PATCH";
     const placeholder = owner
-      ? `${owner.toLowerCase()} has input · ctrl-g jump · ctrl-b back · F1 guide`
-      : placeholderHint({
-          seed: score.sessionId ?? "dawg",
-          agent: !view.agentOffline,
-          filled:
-            score.notes.length > 0 ||
-            (score.clips ?? []).length > 0 ||
-            (score.layers ?? []).some((layer) => layer.notes.length > 0),
-          drums: projectionFor(score).kind !== "pitch",
-          queue: mode === "queue",
-        });
+      ? `${owner.toLowerCase()} has input${slashTypes ? " · / type" : ""} · ctrl-g jump · ctrl-b back`
+      : view.tape
+        ? "type a command · space play · ? tape keys"
+        : placeholderHint({
+            seed: score.sessionId ?? "dawg",
+            agent: !view.agentOffline,
+            filled:
+              score.notes.length > 0 ||
+              (score.clips ?? []).length > 0 ||
+              (score.layers ?? []).some((layer) => layer.notes.length > 0),
+            drums: projectionFor(score).kind !== "pitch",
+            queue: mode === "queue",
+          });
     buffer.text(5, top + 1, truncate(placeholder, editorWidth - 1), faint);
   }
 
@@ -1008,7 +1011,7 @@ function paintPrompt(
       (action) => action.hint,
     ).join(" · ");
     const hints = owner
-      ? ` ${navigationHints} · F1 guide · esc cancel/back `
+      ? ` ${navigationHints} · esc cancel/back `
       : width >= 112
         ? ` enter send · ctrl-j newline · ${navigationHints} · ctrl-z undo · ctrl-o log `
         : width >= 80

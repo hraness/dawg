@@ -13,7 +13,7 @@ read, and playback needs no account. The agent is optional.
 
 ```text
  ▶ 121 BPM · 2.3 · bass        Bb dorian · opus-5.5 · gateway · rev 1 · ○ local
-  Jump ^G   Back ^B   Pause   Menu ^K   Keys ^P   Guide F1   ‹ Scene   Scene ›
+  Jump ^G   Back ^B   Pause   Menu ^K   Keys ^P   Guide   ‹ Scene   Scene ›
  ▏build         ▼                       ▏drop
                      ┃       ┃    ┃         ┃      ┃ ┃┃     ┃
    ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ▒ ┈ ┈ ┈ ┃ ┈ ┈▒┈ ┈ ┈ ┈ ┈┃┈ ┈ ┈ ┃ ┃┃┈ ┈ ┈┃┃ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈ ┈
@@ -84,8 +84,8 @@ pauses; Ctrl-Z undoes any step.
 Ctrl-G opens **Jump** from every editor: search for a track, scene, PLAY, TAPE,
 PATCH, knobs, sound, sample, parameter, guide, or command. Results say whether Enter opens a
 place or inserts a command for you to finish. Ctrl-B returns with the
-previous draft, cursor, search and selection. F1 opens guides over your
-current editor; Escape closes the guide and returns you there. Escape
+previous draft, cursor, search and selection. `/guide` (or F1, fn-F1 on
+most Mac keyboards) opens guides over your current editor; Escape closes the guide and returns you there. Escape
 first cancels local typing or a filter, then backs out, and keeps an
 unsubmitted prompt. Jump also includes Back and Home. Use those entries
 if your terminal reserves a shortcut (tmux commonly reserves Ctrl-B).
@@ -146,17 +146,17 @@ bun add -g @hraness/dawg
 Or install the release tarball from GitHub directly:
 
 ```sh
-bun add -g https://github.com/hraness/dawg/releases/download/v0.15.0/hraness-dawg-0.15.0.tgz
+bun add -g https://github.com/hraness/dawg/releases/download/v0.15.1/hraness-dawg-0.15.1.tgz
 dawg --help
 ```
 
 Each [release](https://github.com/hraness/dawg/releases) is immutable and ships the tarball, a `SHA256SUMS` file and a GitHub build attestation. To check a download before installing it:
 
 ```sh
-gh release download v0.15.0 --repo hraness/dawg
+gh release download v0.15.1 --repo hraness/dawg
 shasum -a 256 -c SHA256SUMS
-gh attestation verify hraness-dawg-0.15.0.tgz --repo hraness/dawg
-bun add -g "$PWD/hraness-dawg-0.15.0.tgz"
+gh attestation verify hraness-dawg-0.15.1.tgz --repo hraness/dawg
+bun add -g "$PWD/hraness-dawg-0.15.1.tgz"
 ```
 
 To run from source instead:
@@ -246,7 +246,7 @@ Type directly to fuzzy-search menu choices. Command suggestions appear as quiet,
 
 | Key                   | Action                                                                       |
 | --------------------- | ---------------------------------------------------------------------------- |
-| Ctrl-← / Ctrl-→       | previous / next scene                                                        |
+| Alt-← / Alt-→         | previous / next scene (empty prompt; Ctrl-← → stay with the OS)              |
 | Space (empty prompt)  | play / pause                                                                 |
 | Enter                 | send now (NOW) or run after the agent turn (NEXT)                            |
 | Shift-Enter, Ctrl-J   | newline                                                                      |
@@ -260,7 +260,7 @@ Type directly to fuzzy-search menu choices. Command suggestions appear as quiet,
 
 ## TAPE, knobs and panes
 
-Ctrl-T opens TAPE: every track across the bars, one row each, with sections and the loop bracket on top. Each key runs one typed command and echoes it on the prompt (`c` copies the range, `v` pastes it, `\` loops the section here), so the screen teaches the typed form. The same edits as commands: `loop 5-6`, `copy bass 5-6 to 7 x2`, `move bass 5-6 to 9`, `clear bass 5-6`, `reverse bass 5-6`, `bars insert 2 at 9`, `jump 5.3`, `section split chorus at 13`, `form print`. `knobs` turns four knobs (● ▲ ■ ◆) on the sound, `mix`, master, tempo or an effect. Several terminals can share one session as panes: `panes` lists them, `pane tape` turns this one into a tape pane, `pin` keeps the drawer on one parameter and `follow b` mirrors pane B. `undo` undoes this pane's last edit; `undo all` anyone's. `audio out <name>` and `audio in <name>` pick devices on this machine (`audio test` plays a tone; `dawg doctor` shows the choice). `/help arrange`, `/help panes` and `/guide tape` teach each of these.
+Ctrl-T opens TAPE: every track across the bars, one row each, with sections and the loop bracket on top. Typing still goes to the prompt, so you can run any command or question without leaving TAPE. Its keys and footer buttons each run one typed command and echo it on the prompt (`\` loops the section here, the copy button runs `copy bass 5-6`, paste runs `copy bass 5-6 to 7`), so the screen teaches the typed form. The same edits as commands: `loop 5-6`, `copy bass 5-6 to 7 x2`, `move bass 5-6 to 9`, `clear bass 5-6`, `reverse bass 5-6`, `bars insert 2 at 9`, `jump 5.3`, `section split chorus at 13`, `form print`. `knobs` turns four knobs (● ▲ ■ ◆) on the sound, `mix`, master, tempo or an effect. Several terminals can share one session as panes: `panes` lists them, `pane tape` turns this one into a tape pane, `pin` keeps the drawer on one parameter and `follow b` mirrors pane B. `undo` undoes this pane's last edit; `undo all` anyone's. `audio out <name>` and `audio in <name>` pick devices on this machine (`audio test` plays a tone; `dawg doctor` shows the choice). `/help arrange`, `/help panes` and `/guide tape` teach each of these.
 
 A NOW send runs ahead of work waiting as NEXT. Bracketed paste preserves multiline input.
 

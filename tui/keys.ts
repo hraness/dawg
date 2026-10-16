@@ -44,9 +44,13 @@ const PROMPT_SEQUENCES: Record<string, string> = {
   "\u001b[4~": "END",
   "\u0005": "END",
   "\u001b[3~": "DELETE",
+  // Word moves: Option-← → (the macOS gesture; ESC b / ESC f with Option
+  // as Meta) and Ctrl-← → where the desktop leaves them to the terminal.
   "\u001b[1;5D": "CTRL+LEFT",
+  "\u001b[1;3D": "CTRL+LEFT",
   "\u001bb": "CTRL+LEFT",
   "\u001b[1;5C": "CTRL+RIGHT",
+  "\u001b[1;3C": "CTRL+RIGHT",
   "\u001bf": "CTRL+RIGHT",
   "\u001b[1;5H": "CTRL+HOME",
   "\u001b[1;5F": "CTRL+END",

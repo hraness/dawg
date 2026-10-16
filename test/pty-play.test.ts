@@ -218,8 +218,19 @@ test.skipIf(!supported)(
         await t.until(() => t.vt.text().includes(seen), line);
       }
       await t.send("\u0014"); // Ctrl-T: TAPE
-      await t.until(() => t.vt.text().includes("r record"), "tape hint");
-      await t.send("r");
+      await t.until(() => t.vt.text().includes(" record "), "tape button");
+      {
+        // The footer button: on the keyboard `r` types into the prompt.
+        const y = t.vt
+          .lines()
+          .findIndex(
+            (line) => line.includes(" cut ") && line.includes(" paste "),
+          );
+        const x = t.vt.lines()[y]!.indexOf(" record ") + 2;
+        await t.send(
+          `\u001b[<0;${x + 1};${y + 1}M\u001b[<0;${x + 1};${y + 1}m`,
+        );
+      }
       await t.until(
         () => t.vt.text().includes("PLAY") && t.vt.text().includes("rec armed"),
         "TAPE r arms play mode",
@@ -242,7 +253,7 @@ test.skipIf(!supported)(
       await t.send("\u001b");
       await t.until(() => !t.vt.text().includes("PLAY MODE"), "left play");
       // Back on TAPE: space runs the transport and the reels turn a beat.
-      await t.until(() => t.vt.text().includes("r record"), "back on tape");
+      await t.until(() => t.vt.text().includes(" record "), "back on tape");
       const reel = () => t.vt.lines()[t.vt.findRow(" bar")]?.slice(0, 9) ?? "";
       expect(reel()).toContain("◐");
       await t.send(" ");

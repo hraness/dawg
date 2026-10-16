@@ -48,13 +48,19 @@ export const KEY_RESET = keys("x", "d", "\u001b[3~");
 export const KEY_COARSE_LEFT = keys("\u001b[1;2D", "{");
 export const KEY_COARSE_RIGHT = keys("\u001b[1;2C", "}");
 /** [ ] alt-← →: a fine step (skips detents). */
-export const KEY_FINE_LEFT = keys("\u001b[1;3D", "\u001b[1;5D", "\u001bb", "[");
-export const KEY_FINE_RIGHT = keys(
-  "\u001b[1;3C",
-  "\u001b[1;5C",
-  "\u001bf",
-  "]",
-);
+// Ctrl-← → stay out: macOS takes them to switch Spaces.
+export const KEY_FINE_LEFT = keys("\u001b[1;3D", "\u001bb", "[");
+export const KEY_FINE_RIGHT = keys("\u001b[1;3C", "\u001bf", "]");
+/**
+ * Alt-← →: the previous / next scene from an empty prompt. Terminals send
+ * `ESC [1;3D` or, with Option as Meta (Terminal.app's default), `ESC b`.
+ */
+export const KEY_SCENE_STEP: ReadonlyMap<string, 1 | -1> = new Map([
+  ["\u001b[1;3D", -1],
+  ["\u001bb", -1],
+  ["\u001b[1;3C", 1],
+  ["\u001bf", 1],
+]);
 export const KEY_PAGE_UP = keys("\u001b[5~");
 export const KEY_PAGE_DOWN = keys("\u001b[6~");
 export const KEY_HOME = keys("\u001b[H", "\u001bOH", "\u001b[1~");
@@ -194,7 +200,7 @@ export const NAVIGATION_KEYS: KeySection = {
         ? "Jump: places, tracks and commands"
         : "Back: restore draft and selection",
     ]),
-    ["F1", "guides · esc returns to the editor"],
+    ["/guide", "guides · esc returns"],
   ],
 };
 
@@ -209,6 +215,7 @@ export const KEYS = {
         ["ctrl-t", "TAPE: all tracks across the bars"],
         ["ctrl-k", `menu: ${MENU_ROOTS.length} sections · /menu <topic>`],
         ["space", "play / pause (empty prompt)"],
+        ["alt-← alt-→", "previous / next scene (empty prompt)"],
         ["/help", "what dawg can do · /help <topic> for more"],
       ],
     },
@@ -409,7 +416,8 @@ export const KEYS = {
     {
       title: "tape · every track across the bars (each key echoes its command)",
       rows: [
-        ["space", "play / pause from the playhead"],
+        ["type", "letters start a command in the prompt; tape stays up"],
+        ["space", "play / pause from the playhead (empty prompt)"],
         ["↑ ↓", "pick a knob: ● playhead ▲ loop ■ tempo ◆ volume"],
         ["← → ⇧", "turn it (⇧ coarse) · jump 5.3 · loop 5-7 · tempo 96"],
         [", .", "previous / next section · jump chorus"],
@@ -417,21 +425,16 @@ export const KEYS = {
         ["[ ]", "loop end a bar shorter / longer · loop 5-7"],
         ["{ }", "loop start a bar earlier / later · loop 4-7"],
         ["\\", "loop the section here; again: off · loop chorus"],
-        ["1-9 tab ⇧tab", "focus a row; tab/⇧tab next/previous · track drums"],
+        ["tab ⇧tab", "focus the next / previous row · track drums"],
         ["pgup pgdn", "jump eight track rows; wheel on labels scrolls tracks"],
-        ["c C", "copy the range (track / all) · copy bass 5-6"],
-        ["x X", "cut: copy, then clear · clear bass 5-6"],
-        ["v V", "paste at the playhead (V inserts) · copy bass 5-6 to 7"],
-        ["delete", "clear the range · clear bass 5-6"],
+        ["delete", "clear the range (fn-⌫ on a Mac) · clear bass 5-6"],
         ["~", "reverse the range · reverse bass 5-6"],
-        ["s S", "split / join the section here · section split verse at 3"],
-        ["h H", "mute / solo the track · mute bass · solo"],
-        ["r R", "record the loop in play, a pass an undo · keys record"],
-        ["m b", "click · stop"],
         ["- =", "zoom out / in (bar, beat, half beat a cell)"],
         ["enter", "the knob big in the drawer (reset there: x)"],
-        ["/", "type a command, staying on tape"],
         ["esc ctrl-t", "back home · tape"],
+        ["copy cut paste", "footer buttons: the range · copy bass 5-6 to 7"],
+        ["record", "footer button: the loop in play · keys record"],
+        ["M S", "row badges: mute / solo · mute bass · solo"],
       ],
     },
   ],

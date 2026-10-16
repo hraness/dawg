@@ -80,6 +80,23 @@ async function waitFor(
 const click = (x: number, y: number) =>
   `\u001b[<0;${x + 1};${y + 1}M\u001b[<0;${x + 1};${y + 1}m`;
 
+type Pty = Awaited<ReturnType<typeof launch>>;
+
+/**
+ * Click a TAPE footer button (`copy`, `cut`, `paste`, `record`): letters
+ * typed on the keyboard go to the prompt, so the gestures are buttons.
+ */
+async function tapeButton(t: Pty, label: string): Promise<void> {
+  const lines = t.vt.lines();
+  const y = lines.findIndex(
+    (line) => line.includes(" cut ") && line.includes(" paste "),
+  );
+  expect(y).toBeGreaterThan(0);
+  const x = lines[y]!.indexOf(` ${label} `);
+  expect(x).toBeGreaterThanOrEqual(0);
+  await t.send(click(x + 1, y));
+}
+
 test.skipIf(!supported)(
   "real PTY: dense arrangement controls, track scrolling and drafts survive resize",
   async () => {
@@ -135,10 +152,10 @@ test.skipIf(!supported)(
           () => t.vt.text().includes("mixer") || t.vt.text().includes("Mixer"),
           "mixer opens",
         );
-        for (let n = 0; n < 6 && !t.vt.text().includes("c copy"); n++)
+        for (let n = 0; n < 6 && !t.vt.text().includes(" paste "); n++)
           await t.type("\u001b", "close mixer");
         await t.until(
-          () => t.vt.text().includes("c copy"),
+          () => t.vt.text().includes(" paste "),
           "arrangement returns",
         );
       }
@@ -185,15 +202,32 @@ for (const [cols, rows] of [
         expect((await session(t.cwd))?.score.notes.length).toBe(2);
         expect(t.vt.lines()[0]).toMatch(/· bass\b/);
 
-        // Ctrl-T: TAPE replaces the highway; the hint row teaches keys.
+        // Ctrl-T: TAPE replaces the highway; the footer has the buttons.
         await t.type("\u0014", "tape opened");
         await t.until(() => t.vt.text().includes("range: bass"), "tape");
         const text = t.vt.text();
         expect(text).toContain("▼");
         expect(text).toContain("verse");
         expect(text).toContain("›bass");
-        expect(text).toContain("c copy");
+        expect(text).toContain(" paste ");
         expect(text).toContain("playhead");
+        expect(text).toContain("type a command");
+
+        // Letters type into the prompt, TAPE stays up, and backspace
+        // edits the draft instead of clearing bars.
+        await t.send("cx");
+        await t.until(
+          () => t.vt.lines().some((line) => /› cx\b/u.test(line)),
+          "letters type into the prompt",
+        );
+        expect(t.vt.text()).toContain("range: bass");
+        await t.send("\u007f\u007f\u007f");
+        await t.until(
+          () => t.vt.text().includes("type a command"),
+          "draft cleared",
+        );
+        await Bun.sleep(150);
+        expect((await session(t.cwd))?.score.notes.length).toBe(2);
 
         // `\` loops the section under the playhead, again turns the loop
         // off, and a third time loops it back (each echoed as typed).
@@ -222,8 +256,8 @@ for (const [cols, rows] of [
         await t.until(() => t.vt.text().includes("(loop)"), "loop range again");
         expect(t.vt.lines().some((line) => line.includes("]"))).toBe(true);
 
-        // `c` copies the loop range and fills the clipboard chip.
-        await t.send("c");
+        // The copy button copies the loop range and fills the clipboard chip.
+        await tapeButton(t, "copy");
         await t.until(
           () => t.vt.text().includes("copy bass 1-4"),
           "echo: copy",
@@ -239,8 +273,8 @@ for (const [cols, rows] of [
           "clipboard file",
         );
 
-        // `x` then `v` at the chorus: one move, the source bars empty.
-        await t.send("x");
+        // Cut, then paste at the chorus: one move, the source bars empty.
+        await tapeButton(t, "cut");
         await waitFor(
           async () => (await session(t.cwd))?.score.notes.length === 0,
           "cut clears",
@@ -249,7 +283,7 @@ for (const [cols, rows] of [
         await t.send(".");
         await t.until(() => t.vt.text().includes("jump chorus"), "echo: jump");
         await t.until(() => t.vt.text().includes("5.1"), "jump to the chorus");
-        await t.send("v");
+        await tapeButton(t, "paste");
         await t.until(
           () => t.vt.text().includes("move bass 1-4 to 5"),
           "echo: the paste after a cut folds into a move",
@@ -266,7 +300,7 @@ for (const [cols, rows] of [
           () => t.vt.text(),
         );
 
-        // Number keys pick tracks on TAPE; `?` lists the TAPE keys.
+        // `?` lists the TAPE keys.
         await t.send("?");
         await t.until(
           () => t.vt.text().includes("tape · every track"),
@@ -319,13 +353,57 @@ for (const [cols, rows] of [
         // Esc goes home: the highway is back, TAPE is gone.
         await t.send("\u001b");
         await t.until(() => !t.vt.text().includes("range: "), "home");
-        expect(t.vt.text()).not.toContain("c copy · x cut");
+        expect(t.vt.text()).not.toContain(" paste ");
       } finally {
         t.proc.kill();
       }
     },
     60_000,
   );
+
+// Ctrl-← → switch Spaces on macOS, so scenes step on Alt-← → (and the
+// ESC b / ESC f that Option-as-Meta terminals send).
+test.skipIf(!supported)(
+  "real PTY: alt-← → step scenes from an empty prompt",
+  async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "dawg-scenes-"));
+    await ensureSession(arrangementFixture().toJSON(), { workspace: cwd });
+    const t = await launch(120, 32, {}, ["--track", "layer-1"], cwd);
+    const head = () => t.vt.lines()[0] ?? "";
+    try {
+      await t.until(() => t.vt.text().includes(" NOW "), "prompt");
+      expect(t.vt.text()).toContain("Scene › alt-→");
+      await t.until(() => head().includes(" 1.1 "), "at bar 1");
+      await t.send("\u001b[1;3C");
+      await t.until(() => !head().includes(" 1.1 "), "next scene");
+      await t.send("\u001bb");
+      await t.until(() => head().includes(" 1.1 "), "previous scene");
+      await t.send("\u001bf");
+      await t.until(() => !head().includes(" 1.1 "), "next scene (meta)");
+      // With text in the prompt, Alt-← moves by word and leaves the scene.
+      await t.send("\u001bb");
+      await t.until(() => head().includes(" 1.1 "), "back to bar 1");
+      await t.send("ab");
+      await t.until(() => t.vt.text().includes("› ab"), "typed");
+      await t.send("\u001b[1;3D");
+      await t.send("x");
+      await t.until(() => t.vt.text().includes("› xab"), "word move");
+      expect(head()).toContain(" 1.1 ");
+      // TAPE takes Alt-← → for scenes too.
+      await t.send("\u001b[F\u007f\u007f\u007f");
+      await t.until(() => !t.vt.text().includes("› xab"), "cleared");
+      await t.send("\u0014");
+      await t.until(() => t.vt.text().includes("range: "), "tape");
+      await t.send("\u001b[1;3C");
+      await t.until(() => !head().includes(" 1.1 "), "next scene on TAPE");
+    } finally {
+      t.terminal.write("\u0003");
+      await t.proc.exited;
+      await rm(cwd, { recursive: true, force: true });
+    }
+  },
+  60_000,
+);
 
 // Colour and NO_COLOR: the ghost is a glyph, never only a dim colour.
 for (const env of [{}, { NO_COLOR: "1" }] as Record<string, string>[])
@@ -364,7 +442,7 @@ for (const env of [{}, { NO_COLOR: "1" }] as Record<string, string>[])
   );
 
 test.skipIf(!supported)(
-  "real PTY: TAPE tiles, inserts, splits, picks, mutes and undoes",
+  "real PTY: TAPE buttons tile, insert, mute and undo; tab focuses",
   async () => {
     const t = await launch(80, 24, {});
     const now = async () => (await session(t.cwd))!.score;
@@ -402,7 +480,7 @@ test.skipIf(!supported)(
           t.vt.text().includes("bar 1 (loop)"),
         "one-bar loop",
       );
-      await t.send("c");
+      await tapeButton(t, "copy");
       await t.until(
         () => t.vt.text().includes("clipboard: bass · 1 bar"),
         "chip",
@@ -411,15 +489,14 @@ test.skipIf(!supported)(
       // `v v` tiles: each paste lands after the last one.
       await t.send("\\"); // loop off, so the range is the bar under the head
       await t.until(() => !t.vt.text().includes("(loop)"), "loop off");
-      await t.send("1"); // bass is the first row (already focused)
       // shift-→ turns the playhead knob a bar: `jump 2`.
       await t.send("\u001b[1;2C");
       await t.until(() => t.vt.text().includes("jump 2"), "echo: jump 2");
       await t.until(() => /playhead 2\.1/.test(t.vt.text()), "at bar 2");
-      // Back to back, as a person types: the second `v` lands past the
-      // first even before its `jump` has run.
-      await t.send("v");
-      await t.send("v");
+      // Back to back, as fast as a person clicks: the second paste lands
+      // past the first even before its `jump` has run.
+      await tapeButton(t, "paste");
+      await tapeButton(t, "paste");
       await waitFor(
         async () => (await bassNotes()).join() === "0,1,2",
         "v v tiles bars 2 and 3",
@@ -434,8 +511,8 @@ test.skipIf(!supported)(
         () => t.vt.text(),
       );
 
-      // `V` inserts: bars after the playhead slide right.
-      await t.send("V");
+      // Insert: bars after the playhead slide right.
+      await tapeButton(t, "insert");
       await t.until(() => t.vt.text().includes(" insert"), "echo: insert");
       await waitFor(
         async () => (await now()).bars === 9,
@@ -443,49 +520,39 @@ test.skipIf(!supported)(
         () => t.vt.text(),
       );
 
-      // `s` splits the section under the playhead; `S` joins it back.
-      // The paste's own `jump` past the insert may still be queued, so `,`
-      // repeats until the playhead sits at the verse's start (a `,` there
-      // is a no-op note).
-      const atStart = () => /playhead 1\.1/.test(t.vt.text());
-      for (let i = 0; i < 20 && !atStart(); i += 1) {
-        await t.send(",");
-        await Bun.sleep(250);
-      }
-      await t.until(() => t.vt.text().includes("jump verse"), "echo: jump");
-      await t.until(atStart, "at bar 1");
-      await t.send("\u001b[1;2C");
-      await t.until(() => /playhead 2\.1/.test(t.vt.text()), "at bar 2 again");
-      await t.send("s");
-      await t.until(
-        () => t.vt.text().includes("section split verse"),
-        "echo: split",
-      );
-      await waitFor(
-        async () => ((await now()).sections ?? []).length === 2,
-        "two sections",
-        () => t.vt.text(),
-      );
-      await t.send("S");
-      await waitFor(
-        async () => ((await now()).sections ?? []).length === 1,
-        "joined",
-        () => t.vt.text(),
-      );
-
-      // `2` picks drums; `h` mutes it (echoed `mute drums`).
-      await t.send("2");
-      await t.until(() => t.vt.text().includes("›drums"), "drums focused");
-      await t.send("h");
-      await t.until(() => t.vt.text().includes("mute drums"), "echo: mute");
+      // The M badge on the drums row mutes drums, not the focused bass.
+      const header = t.vt.lines().find((line) => line.includes("MSAF"))!;
+      const badgeX = header.indexOf("MSAF");
+      const drumsY = t.vt.lines().findIndex((line) => /^ \d.drums/.test(line));
+      expect(badgeX).toBeGreaterThan(0);
+      expect(drumsY).toBeGreaterThan(0);
+      await t.send(click(badgeX, drumsY));
       await waitFor(
         async () =>
           (await now()).tracks.find((track) => track.id === "drums")?.muted ===
           true,
         "drums muted",
       );
-      await t.send("1");
-      await t.until(() => t.vt.text().includes("›bass"), "1 focuses bass");
+      expect(
+        (await now()).tracks.find((track) => track.id === "bass")?.muted,
+      ).not.toBe(true);
+      // The same badge unmutes drums again.
+      await t.send(click(badgeX, drumsY));
+      await waitFor(
+        async () =>
+          (await now()).tracks.find((track) => track.id === "drums")?.muted !==
+          true,
+        "drums unmuted",
+      );
+      // Tab moves the focus; a digit types into the prompt instead.
+      await t.send("\t");
+      await t.until(() => t.vt.text().includes("›drums"), "tab focuses drums");
+      await t.send("2");
+      await t.until(
+        () => t.vt.lines().some((line) => /› 2\b/u.test(line)),
+        "digit types",
+      );
+      expect(t.vt.text()).toContain("›drums");
     } finally {
       t.proc.kill();
     }

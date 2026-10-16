@@ -50,19 +50,19 @@ export function paintActions(
         role: "track",
       },
       {
-        label: "Guide F1",
-        compact: "Guide F1",
+        label: "Guide",
+        compact: "Guide",
         target: { kind: "command", command: "/guide" },
         role: "borderFocus",
       },
       {
-        label: "‹ Scene ^←",
+        label: "‹ Scene alt-←",
         compact: "‹ Scene",
         target: { kind: "scene-step", direction: -1 },
         role: "loopRule",
       },
       {
-        label: "Scene › ^→",
+        label: "Scene › alt-→",
         compact: "Scene ›",
         target: { kind: "scene-step", direction: 1 },
         role: "loopRule",

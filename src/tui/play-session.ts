@@ -492,7 +492,7 @@ export class PlaySession {
   }
 
   /**
-   * `keys record [replace|off]` and the r / R keys: arm recording, overdub
+   * `keys record [replace|off]` and TAPE's record button: arm recording, overdub
    * (additive) or replace (each pass erases the bars it crossed). With a
    * loop set, every pass over it is one commit, so one undo step (§4.7).
    * Replace refuses while another pane records this track (§12.4).

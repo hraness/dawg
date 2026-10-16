@@ -499,10 +499,12 @@ export function paintTape(
         key("+", "="),
       ],
       [
-        key(narrow ? "rec" : "r record", "r"),
-        key(narrow ? "copy" : "c copy", "c"),
-        key(narrow ? "cut" : "x cut", "x"),
-        key(narrow ? "paste" : "v paste", "v"),
+        // Buttons, not key hints: letters type into the prompt on TAPE.
+        key(narrow ? "rec" : "record", "r"),
+        key("copy", "c"),
+        key("cut", "x"),
+        key("paste", "v"),
+        ...(narrow ? [] : [key("insert", "V")]),
         key(narrow ? "loop" : "\\ loop", "\\", view.loop !== undefined),
         command("mix", "/mix"),
         command("sound", "/menu sound"),

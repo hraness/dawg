@@ -137,7 +137,8 @@ describe("menu commands parse", () => {
     expect(
       [...bad].map(([command, where]) => `${command}  ← ${where}`),
     ).toEqual([]);
-  });
+    // ~2 s alone; parsing 10k+ rows can pass 5 s on a loaded CI runner.
+  }, 30_000);
 
   test("every row runs the canonical verb, not a typed alias", () => {
     // alias key (`scale`, `track cycle`) → a command and its canonical form
