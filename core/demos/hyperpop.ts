@@ -91,16 +91,16 @@ export function swells(
 // ------------------------------------------------------------- sounds
 
 const orbit = { orbit: { orbit: 2 } } as const;
-const room = { mix: 0.14, size: 0.45, fade: 1.6, lowpass: 11000 };
-const hall = { mix: 0.24, size: 0.8, fade: 3.2, lowpass: 9000 };
+const room = { mix: 0.12, size: 0.45, fade: 1.5, lowpass: 7500 };
+const hall = { mix: 0.22, size: 0.8, fade: 3, lowpass: 6500 };
 
-/** Recovery of the pump in seconds: about half a beat, as measured. */
-const pump = (bpm: number, beats = 0.45) =>
+/** Recovery of the pump in seconds: a little over half a beat, as measured. */
+const pump = (bpm: number, beats = 0.55) =>
   Math.round(((beats * 60) / bpm) * 1000) / 1000;
 
 export const sounds = {
   /** The kick alone triggers the pump on orbit 2. */
-  kick: (bpm: number, kit = "syn909", depth = 0.72, level = 0.62) =>
+  kick: (bpm: number, kit = "syn909", depth = 0.86, level = 0.62) =>
     voice("kick", "Kick", "kit", level, {
       kit,
       // Trim the boom under 45 Hz; the weight belongs at 60-120 Hz.
@@ -122,9 +122,21 @@ export const sounds = {
     voice("hats", "Hats & clicks", "kit", level, {
       kit,
       pan: 0.12,
-      filter: { type: "hpf", cutoff: 500, resonance: 0 },
-      fx: { eq: { high: 5, highfreq: 7000 } },
-      humanize: { timing: 3, velocity: 6, seed: 32 },
+      filter: { type: "hpf", cutoff: 600, resonance: 0 },
+      // The hats carry the air; the references' drum stems hold far more
+      // energy above 6 kHz than a 606 at full track volume gives, so a light
+      // compressor adds makeup gain and a shelf brightens the top.
+      fx: {
+        compressor: {
+          threshold: -18,
+          ratio: 1.6,
+          attack: 0.002,
+          release: 0.08,
+          makeup: 7,
+        },
+        eq: { high: 8, highfreq: 8000 },
+      },
+      humanize: { timing: 5, velocity: 6, seed: 32 },
       ...extra,
     }),
   /** Water drops: a sine with an upward bend and a dotted-eighth echo. */
@@ -144,16 +156,17 @@ export const sounds = {
         decay: 0.4,
         sustain: 0.92,
         release: 0.16,
-        lpf: 520,
+        lpf: 900,
       },
       glide: { time: 0.12, mode: "legato" },
-      // Gentle drive puts harmonics in the bass band so small speakers hear it.
-      fx: { ...orbit, distort: { type: "soft", drive: 1.6, mix: 0.24 } },
+      // Drive puts second and third harmonics over the sine so small speakers
+      // hear the line; the low-pass keeps it under the chords.
+      fx: { ...orbit, distort: { type: "soft", drive: 3.2, mix: 0.5 } },
       ...extra,
     }),
-  /** A saw bass that swells in and lets go slowly. */
+  /** A saw bass that swells in and lets go slowly; also the sub's harmonics. */
   sawBass: (level = 0.36, extra: Partial<TrackInput> = {}) =>
-    voice("saw", "Ramp saw bass", "sawtooth", level, {
+    voice("saw", "Saw bass", "sawtooth", level, {
       synth: {
         attack: 0.09,
         decay: 0.5,
@@ -161,7 +174,7 @@ export const sounds = {
         release: 0.32,
         unison: 2,
         detune: 0.08,
-        lpf: 1400,
+        lpf: 1200,
       },
       glide: { time: 0.1, mode: "legato" },
       filter: { type: "hpf", cutoff: 70, resonance: 0 },
@@ -179,10 +192,10 @@ export const sounds = {
         unison: 6,
         detune: 0.16,
         spread: 0.9,
-        lpf: 4800,
+        lpf: 3000,
       },
-      filter: { type: "hpf", cutoff: 240, resonance: 0 },
-      fx: { ...orbit, eq: { mid: -2, midfreq: 500, high: 3, highfreq: 6000 } },
+      filter: { type: "hpf", cutoff: 130, resonance: 0 },
+      fx: { ...orbit, eq: { mid: -1.5, midfreq: 600, high: -2, highfreq: 5000 } },
       reverb: hall,
       ...extra,
     }),
@@ -198,15 +211,15 @@ export const sounds = {
         unison: 7,
         detune: 0.24,
         spread: 0.85,
-        lpf: 8000,
+        lpf: 5200,
       },
-      filter: { type: "hpf", cutoff: 320, resonance: 0 },
+      filter: { type: "hpf", cutoff: 200, resonance: 0 },
       fx: {
         ...orbit,
         distort: { type: "soft", drive: 1.5, mix: 0 },
-        eq: { high: 3, highfreq: 7000 },
+        eq: { high: -2, highfreq: 6000 },
       },
-      delay: { beats: 0.75, feedback: 0.24, mix: 0.12, pingpong: true },
+      delay: { beats: 0.75, feedback: 0.2, mix: 0.07, pingpong: true },
       reverb: room,
       ...extra,
     }),
@@ -216,8 +229,8 @@ export const sounds = {
       pan: -0.18,
       synth: { attack: 0.002, decay: 0.15, sustain: 0, release: 0.12 },
       filter: { type: "hpf", cutoff: 500, resonance: 0 },
-      fx: { ...orbit, eq: { high: 3, highfreq: 6000 } },
-      delay: { beats: 0.75, feedback: 0.36, mix: 0.26, pingpong: true },
+      fx: orbit,
+      delay: { beats: 0.75, feedback: 0.28, mix: 0.16, pingpong: true },
       reverb: room,
       ...extra,
     }),
@@ -235,7 +248,7 @@ export const sounds = {
     voice("strings", "Hall strings", "violins", level, {
       pan: -0.08,
       filter: { type: "hpf", cutoff: 260, resonance: 0 },
-      reverb: { mix: 0.46, size: 0.94, fade: 5.5, lowpass: 8500 },
+      reverb: { mix: 0.46, size: 0.94, fade: 5.5, lowpass: 6000 },
       ...extra,
     }),
   /** Hard saw lead: distorted, gliding, kept under the voice. */
@@ -364,9 +377,9 @@ export function chopTrack(
     fx: {
       ...orbit,
       crush: { bits: 16, coarse: 1, mix: 0 },
-      eq: { mid: 2, midfreq: 3200, high: 4, highfreq: 8000 },
+      eq: { mid: 2, midfreq: 3200, high: 3, highfreq: 8000 },
     },
-    delay: { beats: 0.5, feedback: 0.3, mix: 0.1, pingpong: true },
+    delay: { beats: 0.5, feedback: 0.28, mix: 0.07, pingpong: true },
     reverb: room,
     ...extra,
   });
@@ -407,8 +420,8 @@ export function vocalSynthTrack(
     },
     pan: 0.16,
     filter: { type: "hpf", cutoff: 300, resonance: 0 },
-    fx: { ...orbit, eq: { high: 4, highfreq: 7000 } },
-    delay: { beats: 0.75, feedback: 0.3, mix: 0.14, pingpong: true },
+    fx: { ...orbit, eq: { high: 3, highfreq: 7000 } },
+    delay: { beats: 0.75, feedback: 0.28, mix: 0.1, pingpong: true },
     reverb: hall,
     ...extra,
   });
@@ -440,12 +453,12 @@ const FAMILIES: Readonly<Record<DrumFamily, readonly Grid[]>> = {
     {
       kick: "9...8...9...8...",
       snare: "....7.......8...",
-      hat: "..63..63..64..63",
+      hat: "..74..74..75..74",
     },
     {
       kick: "9...8...9...8...",
       snare: "....7.......8...",
-      hat: "..63..63..64.363",
+      hat: "..74..74..75.474",
       rim: ".............3..",
     },
   ],
@@ -585,6 +598,23 @@ export function rhythm(
       opts.extra?.(i) ?? {},
     );
   });
+}
+
+/**
+ * A one-bar cell repeated bar after bar over [from, to): the chop riff as an
+ * instrument, the way the references loop a sliced phrase for a whole drop.
+ * Every `every`th bar (counted from `from`) runs `turn` instead when given.
+ */
+export function loop(
+  from: number,
+  to: number,
+  cell: (bar: number, i: number) => void,
+  turn?: (bar: number, i: number) => void,
+  every = 4,
+): void {
+  for (let bar = from, i = 0; bar < to; bar++, i++)
+    if (turn && i % every === every - 1) turn(bar, i);
+    else cell(bar, i);
 }
 
 /** A held chord (pads, strings, voice synth). */
