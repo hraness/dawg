@@ -265,10 +265,11 @@ const PATCH_EXPECTED = {
 };
 
 /** Recorded on 0.4.0's renderer (origin/main 45094a6). */
+// 0.16: one-shot exports run on for the longest delay's tail.
 const EXPECTED: Record<string, string> = {
   "busy loop": "553df4fc83006158",
-  "busy wav": "d084c81d011397ee",
+  "busy wav": "06f067530f77f4bf",
   "song cached edit": "f19cb1e763697b54",
   "song loop": "216a12871d92d052",
-  "song wav": "3b9398ab4d1bf7af",
+  "song wav": "ad4350b5d59656b9",
 };
