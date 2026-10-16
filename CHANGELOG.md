@@ -2,6 +2,29 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.16.0
+
+### Changed
+
+- **Three hyperpop songs.** The demo shelf is now three songs in one style, built from a study of how current hyperpop is produced. They share one kit and keep the harmony on a stable four-chord loop; the interest is in arrangement and texture. Soft Reboot (130 BPM, D) is four on the floor with a hard-saw solo. Low Battery (140 BPM, F) runs half time and trap with a ramped saw-bass drop. Glass Garden (136 BPM, A) puts a 3-3-2 kick under a gamelan cell, a broken beat and a house drop with open hats. Each opens without drums, puts chopped vocals alone over the kick before the other layers come in, and sidechains the pad, stabs, plucks and chops to the kick. Each also has a soft gliding sub, a muted distorted snare, water-drop and click percussion, hat-only stretches and short dropouts, and ends on several bars of delay and reverb.
+- **Sung hooks.** Each song is built on a new sung hook from the studio library, two lines plus three held syllables. The lines carry delay throws on their last words and hold the bed down while they sing. The syllables become stutters, repitched chops and a looped-vowel voice synth that plays the chords.
+- **The hyperpop style card** now reads 130–165 BPM (typically 145), with chopped vocals, sidechained pads and short dropouts.
+
+### Added
+
+- **Track EQ.** `fx eq` is a three-band EQ (low shelf, peaking mid, high shelf) after the amp and cab, with lanes `eq-low`, `eq-mid`, `eq-midfreq` and `eq-high` (SDK 1.40.0). `fx eq high 4` adds air for the cost of one filter.
+- **Held ducking.** `fx duck hold on` keeps the dip down until each ducking note ends, so a sung line can hold the bed under it.
+- **Three sung hooks in the studio library:** `stay-tonight`, `lights-out` and `all-i-need`. They are original lyrics and melodies sung by Kokoro-82M text to speech and retuned with the WORLD vocoder; no person was recorded. `scripts/vox/` regenerates them, and `guide hyperpop` walks through the techniques.
+
+### Fixed
+
+- **One-shot renders keep their delay tails.** A delay throw on the last bar now echoes out instead of being cut off.
+- **`dawg media` installs work.** The install commands for demucs and basic-pitch now pull in the dependencies those tools leave out. basic-pitch runs its ONNX model, because the default TensorFlow model fails to load under Keras 3.
+
+### Removed
+
+- **The seven 0.15 demos.** Candy Fault, Coil Driver, Velvet Circuit, Copper Wire, Low Tide, Amber Room and Signal Bloom are gone. Songs you saved from them keep loading.
+
 ## 0.15.1
 
 ### Changed

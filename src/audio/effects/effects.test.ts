@@ -12,6 +12,7 @@ import {
   applyTrackFilter,
   applyVowel,
 } from "./filter.ts";
+import { applyEq } from "./eq.ts";
 import { applyChorus, applyLeslie, applyPhaser } from "./modulation.ts";
 import { applyDelay, applyReverb } from "./space.ts";
 import type { EffectContext } from "./common.ts";
@@ -124,6 +125,24 @@ describe("filter", () => {
       return rms(b, RATE / 10);
     };
     expect(db(at("24db") / at("12db"))).toBeLessThan(-15);
+  });
+
+  test("eq: shelves and the peak move their bands by their gain", () => {
+    const run = (eq: Record<string, number>, hz: number) => {
+      const t = track({ fx: { eq } });
+      const b = mono(applyEq, t, "eq", sine(hz, 0.5));
+      return db(rms(b, RATE / 10) / rms(sine(hz, 0.5), RATE / 10));
+    };
+    // Air: +6 dB well above the corner, the body untouched.
+    expect(run({ high: 6 }, 16_000)).toBeCloseTo(6, 0);
+    expect(Math.abs(run({ high: 6 }, 300))).toBeLessThan(0.3);
+    // Boom cut below the corner, mids kept.
+    expect(run({ low: -9, lowfreq: 120 }, 40)).toBeCloseTo(-9, 0);
+    expect(Math.abs(run({ low: -9, lowfreq: 120 }, 2000))).toBeLessThan(0.3);
+    // A peak at its center, and nothing at 0 dB.
+    expect(run({ mid: -6, midfreq: 1000 }, 1000)).toBeCloseTo(-6, 0);
+    expect(Math.abs(run({ mid: -6, midfreq: 1000 }, 8000))).toBeLessThan(1);
+    expect(Math.abs(run({}, 5000))).toBeLessThan(1e-9);
   });
 
   test("djf: below 0.5 darkens, above 0.5 thins, 0.5 is transparent", () => {

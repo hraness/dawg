@@ -274,9 +274,27 @@ function oneShotSeconds(
   loopSeconds: number,
   samplerTail: number,
   reverbTail: number,
+  delayTail = 0,
 ): number {
   return (
-    loopSeconds + Math.max(ONE_SHOT_TAIL_SECONDS, samplerTail) + reverbTail
+    loopSeconds +
+    Math.max(ONE_SHOT_TAIL_SECONDS, samplerTail) +
+    reverbTail +
+    delayTail
+  );
+}
+
+/**
+ * Seconds the longest delay keeps echoing after the song, at the slowest
+ * tempo, so a throw on the last bar fades out instead of being cut.
+ */
+function oneShotDelayTail(score: TrackScore): number {
+  return Math.min(
+    MAX_LOOP_TAIL_SECONDS,
+    Math.max(
+      0,
+      ...score.tracks.map((track) => delayTailFor(track, slowestBpmOf(score))),
+    ),
   );
 }
 /** Loop renders fold at most this much tail back onto the loop start. */
@@ -470,6 +488,7 @@ export class StemRenderer {
       loopSecondsOf(score),
       Math.max(samplerTail, oneShotEngineTail(score)),
       reverbTail,
+      oneShotDelayTail(score),
     );
   }
 
@@ -535,6 +554,7 @@ export class StemRenderer {
           loopSeconds,
           Math.max(samplerTail, oneShotEngineTail(score)),
           reverbTail,
+          oneShotDelayTail(score),
         ),
       );
       frames = Math.max(1, Math.ceil(seconds * sampleRate));
@@ -593,14 +613,18 @@ export class StemRenderer {
     const duckers: Ducker[] = [];
     for (const [trackId] of groups) {
       const settings = duckSettings(tracks.get(trackId));
-      if (settings && isTrackAudible(score, trackId))
+      if (settings && isTrackAudible(score, trackId)) {
+        const { hold, ...duck } = settings;
+        const spans = performed
+          .get(trackId)!
+          .map((note) => noteSpan(note, context));
         duckers.push({
           trackId,
-          ...settings,
-          onsets: performed
-            .get(trackId)!
-            .map((note) => noteSpan(note, context).start),
+          ...duck,
+          onsets: spans.map((span) => span.start),
+          ...(hold && { ends: spans.map((span) => span.start + span.length) }),
         });
+      }
     }
     const ducked = duckGains(
       [...groups.keys()].map((id) => ({ id, orbit: orbitOf(tracks.get(id)) })),

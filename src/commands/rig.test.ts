@@ -35,9 +35,11 @@ describe("rig chain", () => {
     expect(at.every((index) => index >= 0)).toBe(true);
     expect(at[1]).toBe(at[0]! + 1);
     expect(at[2]).toBe(at[1]! + 1);
-    // Shoegaze (0.6.1) follows the cab, before tremolo; double after pan.
+    // The EQ (0.16) shapes the cab's output, then shoegaze (0.6.1) runs
+    // before tremolo; double after pan.
     const chain = FX_CHAIN as readonly string[];
-    expect(chain.slice(at[2]! + 1, at[2]! + 5)).toEqual([
+    expect(chain.slice(at[2]! + 1, at[2]! + 6)).toEqual([
+      "eq",
       "wobble",
       "bloom",
       "swell",

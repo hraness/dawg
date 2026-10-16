@@ -68,7 +68,7 @@ test.skipIf(!supported)(
     const t = await launch(100, 28, {});
     try {
       await t.settle();
-      await t.type("/demo signal-bloom\r");
+      await t.type("/demo glass-garden\r");
       expect(t.state()?.screen).toBe("tape");
       await t.send("/export cancelled.wav\r");
       await t.until(() => t.state()?.busy === true, "export started");
@@ -114,7 +114,7 @@ test.skipIf(!supported)(
     };
     try {
       await t.settle();
-      await t.type("/demo signal-bloom\r");
+      await t.type("/demo glass-garden\r");
       expect(t.state()?.screen).toBe("tape");
       await t.send("/export cancelled.wav\r/export queued.wav\r");
       await t.until(() => t.state()?.busy === true, "export started");

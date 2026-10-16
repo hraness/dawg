@@ -68,6 +68,27 @@ describe("orbit and duck", () => {
     expect(env[180 + 800]).toBe(0);
   });
 
+  test("hold keeps the dip down until the note ends, then recovers", () => {
+    const env = duckEnvelope(
+      {
+        trackId: "v",
+        target: 1,
+        depth: 1,
+        attack: 0.1,
+        onset: 0.01,
+        onsets: [100],
+        ends: [1_500],
+      },
+      3_000,
+      RATE,
+    );
+    expect(env[99]).toBe(0);
+    expect(env[1_000]).toBe(1);
+    expect(env[1_499]).toBe(1);
+    expect(env[1_500 + 400]!).toBeCloseTo(0.5, 2);
+    expect(env[1_500 + 801]).toBe(0);
+  });
+
   test("a ducker never ducks itself and only hits its target orbit", () => {
     const gains = duckGains(
       [

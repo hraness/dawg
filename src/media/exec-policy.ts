@@ -542,6 +542,10 @@ export const EXEC_POLICY: Readonly<Record<string, ToolPolicy>> = Object.freeze({
       "--multiple-pitch-bends": f0,
       "--midi-tempo": num,
       "--sonification-samplerate": num,
+      "--model-serialization": {
+        arity: 1,
+        role: ["onnx", "tflite", "coreml", "tf"],
+      },
     },
     refused: {
       "--model-path": "loads a model from an arbitrary path",

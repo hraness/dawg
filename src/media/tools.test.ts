@@ -600,7 +600,9 @@ describe("doctor", () => {
     expect(byName["demucs"]!.available).toBe(true);
     expect(byName["demucs"]!.command).toEqual(["uv", "tool", "run", "demucs"]);
     expect(byName["basic-pitch"]!.available).toBe(false);
-    expect(byName["basic-pitch"]!.install).toBe("uv tool install basic-pitch");
+    expect(byName["basic-pitch"]!.install).toBe(
+      "uv tool install basic-pitch --with onnxruntime --with 'setuptools<81' --with 'scipy<1.13'",
+    );
     expect(byName["uv"]!.install).toContain("astral.sh/uv/install.sh");
     const lines = formatDoctor(report);
     expect(lines[0]).toBe(

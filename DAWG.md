@@ -206,7 +206,7 @@ Seven more `AGENT_TOOLS` entries (`src/media/`) turn reference audio into materi
 - `make_wavetable {file, name, frames?, start?, end?, method?, smooth?, normalize?}`: reads the file (WAV directly, anything else through ffmpeg as 48 kHz mono, at most 10 minutes) and writes a float32 wavetable of `frames` (default 64, at most 256) 2048-sample frames with a `clm ` chunk to `tracks/<slug>/wavetables/<name>.wav`. See [Wavetables from audio](#wavetables-from-audio).
 - `transcribe_lyrics {file, lang?}`: whisper-cli on a 16 kHz mono copy, writing `<base>.lyrics.json` (segments with seconds) and `.lyrics.txt`. The `ggml-base.en.bin` model (about 141 MiB) is announced and then downloaded once into `~/.cache/dawg/whisper/`.
 
-**Backends.** When StemDeck answers `GET /api/health` at `DAWG_STEMDECK_URL` (default `http://127.0.0.1:8000`, no credentials or query allowed in the URL), downloads and stems go through its job API and the job id is kept in the sidecar so `analyze_audio` reuses StemDeck's beat grid. Otherwise dawg runs the binaries directly: `yt-dlp`, `ffmpeg`, `ffprobe`, `whisper-cli` (`brew install yt-dlp ffmpeg whisper-cpp`), and `demucs`/`basic-pitch` through `uv tool run` when `uv tool list` shows them (`uv tool install demucs`, `uv tool install basic-pitch`). demucs downloads its model on first run.
+**Backends.** When StemDeck answers `GET /api/health` at `DAWG_STEMDECK_URL` (default `http://127.0.0.1:8000`, no credentials or query allowed in the URL), downloads and stems go through its job API and the job id is kept in the sidecar so `analyze_audio` reuses StemDeck's beat grid. Otherwise dawg runs the binaries directly: `yt-dlp`, `ffmpeg`, `ffprobe`, `whisper-cli` (`brew install yt-dlp ffmpeg whisper-cpp`), and `demucs`/`basic-pitch` through `uv tool run` when `uv tool list` shows them (`uv tool install demucs --with numpy`, `uv tool install basic-pitch --with onnxruntime --with 'setuptools<81' --with 'scipy<1.13'`; dawg runs basic-pitch's ONNX model). demucs downloads its model on first run.
 
 **Bounds.** Every subprocess goes through the injectable `CommandRunner` with a per-tool timeout, 1 MiB of captured output, and SIGTERM then SIGKILL on Esc or abort. Helper output becomes throttled one-line progress (`demucs 42%`, `stemdeck separating 42%`) on the activity card through the `tool-progress` event. The turn deadline is paused while a media helper runs, so a 10 minute separation does not time out the turn; the other turn budgets still apply. WAVs read into memory are capped at 256 MiB. Input paths must stay inside the project. URLs are never logged with credentials. The drum classifier, beat-grid fitting, WAV codec and basic-pitch CSV parser are vendored from soundfish in `src/media/vendor/` with a header crediting it; tests stub every binary and StemDeck with `scriptedRunner`, fetch fixtures and a drum excerpt in `src/media/fixtures/`. `DAWG_LIVE_MEDIA=1 bun test src/media` adds one live ffprobe smoke test.
 
@@ -326,7 +326,7 @@ Score format. The score stays `track.loop/v1` with `version: 1`: every addition 
 Every track has one fixed effects chain (`FX_CHAIN` in `core/fx.ts`, DSP in `src/audio/effects/`):
 
 ```text
-filter → djf → autofilter → formant → vowel → crush → distort → stomp → head → cab → tremolo → compressor → pan → phaser → chorus → leslie → postgain → delay → reverb → [mix: orbit → duck]
+filter → djf → autofilter → formant → vowel → crush → distort → stomp → head → cab → eq → tremolo → compressor → pan → phaser → chorus → leslie → postgain → delay → reverb → [mix: orbit → duck]
 ```
 
 Stages before `pan` run on the track's mono voice sum; pan spreads it to stereo with the equal-power law; the rest run on the stereo pair. An effect that is off costs nothing. The core set — **filter, auto filter, distortion, tremolo, compressor, chorus, delay, reverb** — leads the Effects menu and the agent brief; dj filter, vowel, bitcrush, phaser, leslie, post gain, orbit and duck are under **more effects** for Strudel parity.
@@ -434,6 +434,7 @@ Parameters (**bold** effect = shown in the simple menu; Lane = automation lane):
 | duck           | depth               | 0..1                                                                              | 1       | `duckdepth`                                                    |                        |
 | duck           | attack              | 0.001..4 s                                                                        | 0.1     | `duckattack`, `duckatt`, `datt`                                |                        |
 | duck           | onset               | 0..0.5 s                                                                          | 0.003   | `duckonset`                                                    |                        |
+| duck           | hold                | on/off                                                                            | off     |                                                                |                        |
 
 Strudel mapping notes: Strudel's `lpf`/`hpf`/`bpf` each set a separate filter; dawg has one track filter whose `type` selects the response, so `lpf(800)` is `filter {type: "lpf", cutoff: 800}` and `lpq`/`hpq`/`bpq` map to `resonance`. `delay` in Strudel is the wet level (dawg `delay.mix`), `delaytime` is seconds (dawg `delay.time`; `beats` is the tempo-synced form), `delayfeedback` is `delay.feedback`. `room` is `reverb.mix`, `size`/`roomsize` is `reverb.size`, `roomfade`/`roomlp`/`roomdim` are `fade`/`lowpass`/`dim`. `distort` and `shape` are the distortion drive with `type: "shape"` for Strudel's `shape` curve; `crush` is bits and `coarse` is the sample-hold factor. `phaser`/`phaserdepth`/`phasercenter`/`phasersweep`, `tremolo*`, `leslie`/`lrate`/`lsize`, `postgain` and `compressor` keep their names. `orbit` groups tracks for `duckorbit`/`duckdepth`/`duckattack`/`duckonset` sidechaining; By default each track keeps its own delay and reverb; `fx orbit 2 shared on` makes the track send to its orbit's one shared delay and reverb, as Strudel orbits do (see **Orbit buses**). `iresponse`/`ir` is `reverb.ir`.
 
@@ -516,6 +517,17 @@ Rig presets gain `shoegaze glide dreampop swell ebow` (the `swell` rig is the sw
 | **double** | time   | 5..60 ms     | 22      |                |
 | **double** | drift  | 0..10 ms     | 3       |                |
 | **double** | width  | 0..1         | 0.6     |                |
+
+**Track EQ** (`src/audio/effects/eq.ts`, 0.16): `eq` is three bands on the mono voice after the amp and cab, an RBJ low shelf, a peaking mid about an octave and a half wide, and a high shelf. A band at 0 dB costs nothing, so `fx eq high 4` adds air for one filter. Gains and the mid center are automatable (`eq-low`, `eq-mid`, `eq-midfreq`, `eq-high`). `fx duck hold on` keeps a ducker's dip down until each of its notes ends, then recovers over `attack`: a sung line can hold the bed down for as long as it sings.
+
+| Effect | Param    | Range          | Default | Lane         |
+| ------ | -------- | -------------- | ------- | ------------ |
+| **eq** | low      | -24..12 dB     | 0       | `eq-low`     |
+| eq     | lowfreq  | 20..1000 Hz    | 150     |              |
+| **eq** | mid      | -24..12 dB     | 0       | `eq-mid`     |
+| eq     | midfreq  | 100..10000 Hz  | 1000    | `eq-midfreq` |
+| **eq** | high     | -24..12 dB     | 0       | `eq-high`    |
+| eq     | highfreq | 1000..20000 Hz | 8000    |              |
 
 ## Master and loudness
 
@@ -914,9 +926,9 @@ The organ models are dawg's own, from public descriptions of the tonewheel gener
 
 ### Offline studio library and demo songs
 
-`demo` opens seven original, fully editable songs: Candy Fault (hyperpop), Coil Driver (acid techno), Velvet Circuit (UK garage), Copper Wire (jungle), Low Tide (trip hop), Amber Room (neo soul) and Signal Bloom (synth pop). `demo search <words>` filters metadata; `demo info <id>` shows form, feature and mix notes. `demo <id>` replaces the composition in one undoable edit, pauses transport at the start and opens TAPE. Browsing is read-only. The agent exposes the same songs through `list_demos` and `load_demo`.
+`demo` opens three original, fully editable hyperpop songs: Soft Reboot (four-floor), Low Battery (half-time and trap) and Glass Garden (3-3-2 and open hats). They share one kit (core/demos/hyperpop.ts) and the techniques in `guide hyperpop`. `demo search <words>` filters metadata; `demo info <id>` shows form, feature and mix notes. `demo <id>` replaces the composition in one undoable edit, pauses transport at the start and opens TAPE. Browsing is read-only. The agent exposes the same songs through `list_demos` and `load_demo`.
 
-`sample library [query]` opens the bundled studio shelf; `sample preview <id>` listens while transport is paused; `sample use <id>` adds a hash-pinned sound without replacing an occupied instrument. `sample chop <id> [4|8|16]` creates a separate sampler with slices and editable notes. The eight original synthetic samples ship in the package, need no download, and include provenance and a CC0 dedication in `assets/samples/studio/`. Their registered `pack:studio/<id>` sources use the normal pack loader and agent `search_sounds` / `use_sound` tools. `guide demos` and `guide sample-library` explain the manual and agent routes. These are original compositions and machine voices, with no commercial song recordings or borrowed vocal performances.
+`sample library [query]` opens the bundled studio shelf; `sample preview <id>` listens while transport is paused; `sample use <id>` adds a hash-pinned sound without replacing an occupied instrument. `sample chop <id> [4|8|16]` creates a separate sampler with slices and editable notes. The eleven original synthetic samples ship in the package, need no download, and include provenance and a CC0 dedication in `assets/samples/studio/`. Their registered `pack:studio/<id>` sources use the normal pack loader and agent `search_sounds` / `use_sound` tools. `guide demos` and `guide sample-library` explain the manual and agent routes. These are original compositions and machine voices, with no commercial song recordings or borrowed vocal performances.
 
 A track whose instrument is `sampler(...)` plays audio files instead of a synth. Voices live in `tracks/<slug>/samples/` and `src` is relative to the track directory (`samples/kick.wav`); a project-relative `tracks/<slug>/samples/kick.wav` works too.
 

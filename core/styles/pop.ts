@@ -1290,10 +1290,10 @@ const MODERN: readonly StyleCard[] = [
   ),
   leaf(
     "hyperpop",
-    "hyperpop: maximal bubblegum-I-V-vi-IV over distorted 808s and trap rolls, 150-180 bpm, pitched-up bright formant vocals",
+    "hyperpop: stable bubblegum I-V-vi-IV under chopped, looped bright vocals; sidechained pads, gliding sub, trap or four-floor kits with short dropouts, 130-165 bpm",
     2019,
     {
-      tempo: { bpm: [140, 180], typical: 160 },
+      tempo: { bpm: [130, 165], typical: 145 },
       rhythm: {
         onsets: {
           kick: grid("x.....x...x...x."),

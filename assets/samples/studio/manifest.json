@@ -43,6 +43,21 @@
       "sha256": "5a57894a109dc4fd117cee9acd9ea15c48a61fcfd27a9ba262e852ef9cff2108",
       "seconds": 2,
       "bytes": 96044
+    },
+    "stay-tonight": {
+      "sha256": "d307feefc253325088ea38f091aa58fa0e6c81f82e5c0c96186358018cdc4ebc",
+      "seconds": 9.4615,
+      "bytes": 454196
+    },
+    "lights-out": {
+      "sha256": "130b0d29d7ddd0047294422e4c2d04fcc4875964501582a88ac0f59af4039810",
+      "seconds": 8.785708333333334,
+      "bytes": 421758
+    },
+    "all-i-need": {
+      "sha256": "52c373c3d830b7cd4004c782680582d942ed8eadb1ae4425a6736a4fac1ee8db",
+      "seconds": 9.044083333333333,
+      "bytes": 434160
     }
   }
 }

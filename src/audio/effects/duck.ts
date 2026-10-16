@@ -5,7 +5,9 @@
  * `fx.duck` dips its target orbit at each of its note onsets: the gain
  * falls to `1 - depth` over `onset` seconds and climbs back over `attack`
  * seconds (a new onset during the recovery dips again from where the gain
- * is). Several duckers on one orbit multiply. A ducker never ducks itself.
+ * is). With `hold`, the gain stays down until the note ends, then
+ * climbs back. Several duckers on one orbit multiply. A ducker never ducks
+ * itself.
  *
  * Ducking is a gain on finished stems, so it never invalidates a ducked
  * track's cached stem and costs nothing when no track ducks. The curve is
@@ -22,6 +24,8 @@ export type Ducker = Readonly<{
   onset: number;
   /** Note onsets in samples, any order. */
   onsets: readonly number[];
+  /** With `hold`: each onset's note end in samples, parallel to `onsets`. */
+  ends?: readonly number[];
 }>;
 
 /** The orbit a track plays on. */
@@ -33,7 +37,9 @@ export function orbitOf(track: Track | undefined): number {
 /** The track's duck settings without onsets, or undefined when it does not duck. */
 export function duckSettings(
   track: Track | undefined,
-): Omit<Ducker, "trackId" | "onsets"> | undefined {
+):
+  | (Omit<Ducker, "trackId" | "onsets" | "ends"> & { hold: boolean })
+  | undefined {
   const duck = track?.fx?.duck;
   if (!duck) return undefined;
   const number = (key: string, fallback: number) =>
@@ -43,6 +49,7 @@ export function duckSettings(
     depth: number("depth", 1),
     attack: number("attack", 0.1),
     onset: number("onset", 0.003),
+    hold: duck.hold === true,
   };
 }
 
@@ -58,13 +65,19 @@ export function duckEnvelope(
   loopFrames?: number,
 ): Float64Array {
   const marks = new Uint8Array(samples);
+  // With hold: the latest note end of the onsets at each mark.
+  const holds = ducker.ends ? new Float64Array(samples) : undefined;
   const repeats =
     loopFrames && loopFrames > 0 ? Math.ceil(samples / loopFrames) : 1;
-  for (const onset of ducker.onsets)
+  ducker.onsets.forEach((onset, which) => {
     for (let pass = 0; pass < repeats; pass += 1) {
-      const at = onset + pass * (loopFrames ?? 0);
-      if (at >= 0 && at < samples) marks[at] = 1;
+      const shift = pass * (loopFrames ?? 0);
+      const at = onset + shift;
+      if (at < 0 || at >= samples) continue;
+      marks[at] = 1;
+      if (holds) holds[at] = Math.max(holds[at]!, ducker.ends![which]! + shift);
     }
+  });
   const envelope = new Float64Array(samples);
   const riseSamples = Math.max(1, ducker.onset * sampleRate);
   const fallStep = 1 / Math.max(1, ducker.attack * sampleRate);
@@ -72,18 +85,21 @@ export function duckEnvelope(
   let rising = false;
   let riseFrom = 0;
   let riseAt = 0;
+  let heldTo = -1;
   for (let index = 0; index < samples; index += 1) {
     if (marks[index] === 1) {
       rising = true;
       riseFrom = level;
       riseAt = 0;
+      if (holds) heldTo = Math.max(heldTo, holds[index]!);
     }
     if (rising) {
       riseAt += 1;
       const progress = Math.min(1, riseAt / riseSamples);
       level = riseFrom + (1 - riseFrom) * progress;
       if (progress >= 1) rising = false;
-    } else if (level > 0) level = Math.max(0, level - fallStep);
+    } else if (index < heldTo) level = 1;
+    else if (level > 0) level = Math.max(0, level - fallStep);
     envelope[index] = level;
   }
   return envelope;

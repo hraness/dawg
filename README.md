@@ -97,16 +97,18 @@ to you. `style warehouse 4 3` loads four bars with seed 3, replacing the
 song in one undo step. Their style and artist listening cues describe
 rhythm and sound; the patterns are original. See [Styles](./DAWG.md#styles).
 
-For a complete song, type `demo`. Seven editable arrangements cover
-hyperpop, acid techno, UK garage, jungle, trip hop, neo soul and synth
-pop, each with production notes, named scenes, instruments, effects and
-automation. `demo candy-fault` loads one and opens TAPE; Space plays,
-Tab changes tracks, and `,` / `.` changes scenes. Loading is one undo step.
+For a complete song, type `demo`. Three editable hyperpop songs share
+one kit, with sung hooks, vocal chops, sidechained layers, dropouts and
+long echo endings. Each has production notes, named scenes, instruments,
+effects and automation; `guide hyperpop` explains the techniques.
+`demo soft-reboot` loads one and opens TAPE; Space plays, Tab changes
+tracks, and `,` / `.` changes scenes. Loading is one undo step.
 
-`sample library` opens eight original sounds that work offline, including
-synthetic vocal phrases, vowels, hits and a riser. Preview a sound with
-`sample preview hold-on`, add it with `sample use hold-on`, or create
-playable slices with `sample chop hold-on 4`. The same library is available
+`sample library` opens eleven original sounds that work offline,
+including three sung hooks, synthetic vocal phrases, vowels, hits and a
+riser. Preview a sound with `sample preview hold-on`, add it with
+`sample use hold-on`, or create playable slices with
+`sample chop stay-tonight 4`. The same library is available
 to the agent. See [Demo songs](./guides/demos.md) and
 [Sample library](./guides/sample-library.md).
 
@@ -144,17 +146,17 @@ bun add -g @hraness/dawg
 Or install the release tarball from GitHub directly:
 
 ```sh
-bun add -g https://github.com/hraness/dawg/releases/download/v0.15.1/hraness-dawg-0.15.1.tgz
+bun add -g https://github.com/hraness/dawg/releases/download/v0.16.0/hraness-dawg-0.16.0.tgz
 dawg --help
 ```
 
 Each [release](https://github.com/hraness/dawg/releases) is immutable and ships the tarball, a `SHA256SUMS` file and a GitHub build attestation. To check a download before installing it:
 
 ```sh
-gh release download v0.15.1 --repo hraness/dawg
+gh release download v0.16.0 --repo hraness/dawg
 shasum -a 256 -c SHA256SUMS
-gh attestation verify hraness-dawg-0.15.1.tgz --repo hraness/dawg
-bun add -g "$PWD/hraness-dawg-0.15.1.tgz"
+gh attestation verify hraness-dawg-0.16.0.tgz --repo hraness/dawg
+bun add -g "$PWD/hraness-dawg-0.16.0.tgz"
 ```
 
 To run from source instead:
