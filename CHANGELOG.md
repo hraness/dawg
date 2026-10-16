@@ -2,6 +2,15 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.17.0
+
+### Changed
+
+- **The three hyperpop songs are rearranged and remixed** after measuring them against a reference set of current hyperpop records (band balance, sidechain depth, the brightness of each stem, how much the chops repeat, how long the drums run). Each song now has its own form. Soft Reboot is club long-form: a drumless boot, eight bars of taps, then a forty-bar drum run whose layers rotate every eight bars before a sixteen-bar breakdown and a second run. Low Battery opens with twenty-four drumless bars of taps under the hook, runs thirty-two bars of half-time and trap, breaks down for twenty bars on strings and the voice synth, and powers down over ten. Glass Garden builds like a long ride: a glass-and-gamelan opening, sixteen bars of taps, sixteen of a light broken kick, and only then the full 3-3-2 kit, with a borrowed-chord breakdown and a twelve-bar glass fade.
+- **The kit sits like the records.** The drums come up and the bed comes down: the pad is a warm mid body, stabs play at chord pitch, plucks and gangsa are quieter with less delay, the hats are louder and brighter with a little makeup gain, and the pump under the kick is about 12 dB with a half-beat recovery. The sub now carries soft harmonics through a driven low-pass instead of a bare sine, and a quiet saw an octave up doubles it through the drops.
+- **The chops loop.** Each song repeats a one-bar chop cell bar after bar through its drum runs, with a turnaround every eighth bar, sitting back while a sung line plays. The stutter builds, tape-stops and ending chops stay.
+- **One borrowed chord per song.** Each breakdown swaps one chord of the loop for its minor (Soft Reboot G minor, Low Battery B-flat minor, Glass Garden D minor) and returns to the plain loop at the drop.
+
 ## 0.16.0
 
 ### Changed

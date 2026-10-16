@@ -102,8 +102,7 @@ const STAB_GRID = "..6..6....6..6..";
  * The solo (80-87) has the top line to itself.
  */
 const HOOK_BARS = [8, 12, 24, 32, 40, 48, 60, 64, 72, 88, 92] as const;
-const singing = (bar: number) =>
-  HOOK_BARS.some((b) => bar >= b && bar < b + 4);
+const singing = (bar: number) => HOOK_BARS.some((b) => bar >= b && bar < b + 4);
 /** The first stab of each half bar speaks, the answer sits back. */
 const STAB_ACCENTS = [1, 0.82, 0.94, 0.78] as const;
 /** Bars where the drums run without a break. */

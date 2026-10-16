@@ -106,8 +106,7 @@ const STAB_ACCENTS = [1, 0.8, 0.92, 0.78] as const;
  * quieter while a line sings. The solo (84-91) has the top line to itself.
  */
 const HOOK_BARS = [8, 12, 16, 20, 32, 40, 48, 60, 68, 76, 92] as const;
-const singing = (bar: number) =>
-  HOOK_BARS.some((b) => bar >= b && bar < b + 4);
+const singing = (bar: number) => HOOK_BARS.some((b) => bar >= b && bar < b + 4);
 /** Builds: a stutter bar, crushed chops and a noise sweep into each drop. */
 const BUILDS = [31, 47, 83] as const;
 /** Bars where the drums run without a break. */
@@ -390,7 +389,11 @@ export const lowBattery: DemoDefinition = {
         (bar >= 56 && bar < 84) ||
         bar >= 92;
       if (padded) hold(s, "pad", bar, 0, c.tones, 4, 0.44 + 0.03 * (bar % 4));
-      if (drumming(bar) && !(bar >= 24 && bar < 28) && !(bar >= 76 && bar < 80)) {
+      if (
+        drumming(bar) &&
+        !(bar >= 24 && bar < 28) &&
+        !(bar >= 76 && bar < 80)
+      ) {
         const lift = bar % 4 === 3 ? 1.1 : 1;
         let hitIndex = 0;
         [...STAB_GRID].forEach((hit, step) => {

@@ -195,7 +195,10 @@ export const sounds = {
         lpf: 3000,
       },
       filter: { type: "hpf", cutoff: 130, resonance: 0 },
-      fx: { ...orbit, eq: { mid: -1.5, midfreq: 600, high: -2, highfreq: 5000 } },
+      fx: {
+        ...orbit,
+        eq: { mid: -1.5, midfreq: 600, high: -2, highfreq: 5000 },
+      },
       reverb: hall,
       ...extra,
     }),
@@ -505,13 +508,13 @@ const FAMILIES: Readonly<Record<DrumFamily, readonly Grid[]>> = {
     {
       kick: "9..7...8..7..6..",
       snare: "....7.......8...",
-      hat: "4.3.4.3.4.3...3.",
+      hat: "6.4.6.4.6.4.4.4.",
       open: "............6...",
     },
     {
       kick: "9..7...8..7..6..",
       snare: "....7.......8..4",
-      hat: "4.3.4.3.4.3...3.",
+      hat: "6.4.6.4.6.4.4.44",
       open: "............6...",
       rim: "......3.........",
     },
@@ -520,12 +523,12 @@ const FAMILIES: Readonly<Record<DrumFamily, readonly Grid[]>> = {
     {
       kick: "8...76....7.....",
       snare: "....7.......8...",
-      hat: "4...4...4...4...",
+      hat: "6.3.6.3.6.3.6.3.",
     },
     {
       kick: "8...76....7...5.",
       snare: "....7..3....8...",
-      hat: "4...4...4.3.4...",
+      hat: "6.3.6.3.6.336.3.",
     },
   ],
   taps: [

@@ -6,17 +6,17 @@ order: 7
 ---
 
 The three demo songs share one kit and one approach. The chords
-barely move: a four-chord loop, often I–V–vi–IV. The interest
-comes from which layers play, how they sit around the kick, and
-texture.
+barely move: a four-chord loop, often I–V–vi–IV, with one chord
+borrowed minor in the breakdown. The interest comes from which
+layers play, how they sit around the kick, and texture.
 
-- Sub with little attack and glide; ramped saw bass for contrast
-- Pads, stabs and upper layers duck under the kick
-- Chord stabs ride the off-beats; soft plucks repeat up high
-- Hat-only stretches, then open hats; a muted, distorted snare
+- Sub with little attack, glide and soft harmonics; a quiet saw doubles it
+- Pads, stabs and upper layers duck about 12 dB under the kick
+- Chord stabs ride the off-beats at chord pitch; soft plucks up high
+- Loud bright hats carry the air; a muted, distorted snare
 - Clicks, drops and a gamelan-like upper-mid pattern
-- Vocal chops looped until they turn into a synth, echoes on the beat
-- Short dropouts every few bars; chops alone over the drums
+- A one-bar chop cell looped through the drums, a turnaround every eight
+- Long drum runs, one long breakdown, short dropouts every few bars
 - Glide and distortion on solo leads; long echo and reverb endings
 
 ## Ask

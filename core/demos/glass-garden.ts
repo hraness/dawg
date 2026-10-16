@@ -113,9 +113,10 @@ const STAB_ACCENTS = [1, 0.8, 0.92, 0.76] as const;
  * stretch and returns every eight bars of the drops; the chop cell loops
  * underneath, quieter while a line sings. Bars 88-91 belong to the lead.
  */
-const HOOK_BARS = [8, 12, 16, 20, 24, 32, 40, 48, 56, 68, 76, 84, 92, 96] as const;
-const singing = (bar: number) =>
-  HOOK_BARS.some((b) => bar >= b && bar < b + 4);
+const HOOK_BARS = [
+  8, 12, 16, 20, 24, 32, 40, 48, 56, 68, 76, 84, 92, 96,
+] as const;
+const singing = (bar: number) => HOOK_BARS.some((b) => bar >= b && bar < b + 4);
 /** Bars where the drums run without a break. */
 const DRUM_RUNS: readonly (readonly [from: number, to: number])[] = [
   [24, 64],
@@ -187,7 +188,22 @@ export const glassGarden: DemoDefinition = {
         },
       }),
     );
-    s.track(sounds.hats(1, "syn606"));
+    s.track(
+      sounds.hats(1, "syn606", {
+        // The 3-3-2 and broken grids hold fewer hats than the four-floor
+        // songs', so this kit gets a little more makeup to carry the air.
+        fx: {
+          compressor: {
+            threshold: -18,
+            ratio: 1.6,
+            attack: 0.002,
+            release: 0.08,
+            makeup: 9,
+          },
+          eq: { high: 8, highfreq: 8000 },
+        },
+      }),
+    );
     s.track(sounds.drops(0.22));
     s.track(sounds.sub(0.46));
     s.track(
@@ -242,25 +258,12 @@ export const glassGarden: DemoDefinition = {
       }),
     );
     s.track(
-      vocalTrack("all-i-need", 0.52, {
-        // The breathy take is already bright: less presence lift than the
-        // kit's, the same levelling and bed duck.
-        fx: {
-          eq: { mid: -1.5, midfreq: 3500, high: 2, highfreq: 9000 },
-          compressor: {
-            threshold: -24,
-            ratio: 4,
-            attack: 0.004,
-            release: 0.1,
-            makeup: 8,
-          },
-          duck: { orbit: 2, depth: 0.25, attack: 0.6, onset: 0.08, hold: true },
-        },
+      vocalTrack("all-i-need", 0.56, {
         // Throws catch the tails of "need" and "name", after their consonants,
         // so the echo repeats the vowel; the last "need" rings long.
         delayMixAutomation: merge(
           throws(
-            HOOK_BARS.map((b) => b + 3.125),
+            HOOK_BARS.flatMap((b) => [b + 0.65, b + 3.125]),
             0.04,
             0.34,
             1.25,
@@ -315,14 +318,14 @@ export const glassGarden: DemoDefinition = {
         drums(s, bar, "taps", 0.8, variant, ["rim"]);
       else if (scene.name === "Light drums" && into < 4)
         // Kick and hats only under the first chops.
-        drums(s, bar, "broken", 0.78, 0, ["kick", "hat"]);
+        drums(s, bar, "broken", 0.66, 0, ["kick", "hat"]);
       else if (scene.name === "Light drums")
         // The broken kick stays light under the hook; the snare joins late.
         drums(
           s,
           bar,
           "broken",
-          0.82,
+          0.7,
           variant,
           into < 8 ? ["kick", "hat", "rim"] : ["kick", "snare", "hat", "rim"],
         );
@@ -376,7 +379,9 @@ export const glassGarden: DemoDefinition = {
       // The octave hop stays under the pad (a fifth when it would reach it).
       const hop = bass + 12 <= 52 ? bass + 12 : bass + 7;
       if (mode === "held") {
-        s.note("sub", bar, 0, bass, 4.05, 0.7, { glide: 0.35 });
+        // Softer under the light drums, so the drop has somewhere to go.
+        const v = bar < 40 ? 0.56 : 0.7;
+        s.note("sub", bar, 0, bass, 4.05, v, { glide: 0.35 });
         return;
       }
       if (mode === "tresillo") {
@@ -462,7 +467,7 @@ export const glassGarden: DemoDefinition = {
     inBars(0, 100, (bar) => {
       if (bar % 2) return;
       if (!within(bar, [0, 8], [32, 40], [44, 56], [68, 72], [96, 100])) return;
-      const soft = bar < 8 || bar < 40 ? 0.75 : 1;
+      const soft = bar < 40 ? 0.82 : 1;
       for (const [beat, pitch] of GANGSA)
         s.note(
           "bells",
@@ -486,7 +491,7 @@ export const glassGarden: DemoDefinition = {
         velocity,
       );
     };
-    inBars(0, 24, (bar) => stringChord(bar, 4, 0.36 + 0.03 * (bar % 4)));
+    inBars(0, 24, (bar) => stringChord(bar, 4, 0.42 + 0.03 * (bar % 4)));
     inBars(64, 76, (bar) => stringChord(bar, 4, 0.42 + 0.03 * (bar % 4)));
     inBars(100, 104, (bar) => stringChord(bar, 4, 0.42));
     stringChord(104, 4, 0.44);
@@ -495,7 +500,7 @@ export const glassGarden: DemoDefinition = {
     inBars(0, 76, (bar) => {
       if (!(bar < 8 || bar >= 64)) return;
       const top = chordAt(bar).tones.map((t) => t + 12);
-      if (bar < 8) hold(s, "vsynth", bar, 0, top, 3.6, 0.48);
+      if (bar < 8) hold(s, "vsynth", bar, 0, top, 3.6, 0.56);
       else
         for (const [beat, len] of [
           [0, 1.25],
