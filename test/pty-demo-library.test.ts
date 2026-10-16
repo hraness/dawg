@@ -16,7 +16,7 @@ test.skipIf(!supported)(
       await t.until(() => t.vt.text().includes(" NOW "), "initial prompt");
       for (const input of ["keyboard", "mouse"] as const) {
         await t.type("/demos\r", "demo shelf");
-        await t.type("sigblm", "fuzzy demo search");
+        await t.type("glsgdn", "fuzzy demo search");
         await t.until(
           () => t.vt.text().includes("Glass Garden"),
           "matching demo",
