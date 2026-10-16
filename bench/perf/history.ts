@@ -22,7 +22,7 @@ export function historyReplay(runs = 5, sequential = false): Metric[] {
   });
   const results: Metric[] = [];
   for (const [id, target] of [
-    ["signal-bloom", createDemo("signal-bloom")],
+    ["glass-garden", createDemo("glass-garden")],
     ["dense-32x24", arrangementFixture(32, 24)],
   ] as const) {
     const operations = diffScores(empty, target);

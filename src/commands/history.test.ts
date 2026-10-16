@@ -53,7 +53,7 @@ describe("undo/redo history", () => {
     const empty = createScore({
       tracks: [{ id: "main", name: "main", instrument: "sine" }],
     });
-    const demo = createDemo("signal-bloom");
+    const demo = createDemo("glass-garden");
     const events = [
       {
         revision: 1,

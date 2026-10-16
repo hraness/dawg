@@ -11,14 +11,14 @@ test.skipIf(!supported)(
   "real PTY: loading a demo closes the shelf and shows its arrangement from home or TAPE",
   async () => {
     const t = await launch(60, 20, {}, []);
-    const tracks = createDemo("signal-bloom").tracks.length;
+    const tracks = createDemo("glass-garden").tracks.length;
     try {
       await t.until(() => t.vt.text().includes(" NOW "), "initial prompt");
       for (const input of ["keyboard", "mouse"] as const) {
         await t.type("/demos\r", "demo shelf");
         await t.type("sigblm", "fuzzy demo search");
         await t.until(
-          () => t.vt.text().includes("Signal Bloom"),
+          () => t.vt.text().includes("Glass Garden"),
           "matching demo",
         );
         await t.type("\r", "open demo actions");
@@ -62,7 +62,7 @@ test.skipIf(!supported)(
       );
     try {
       await t.until(() => t.state() !== undefined, "ready");
-      await t.type("/demo signal-bloom\r", "load demo");
+      await t.type("/demo glass-garden\r", "load demo");
       await t.until(() => t.state()?.screen === "tape", "arrangement");
       await t.type("/sample library\r", "sample shelf");
       await t.type("glas", "fuzzy query");
@@ -149,7 +149,7 @@ test.skipIf(!supported)(
                   type: "function",
                   function: {
                     name: "load_demo",
-                    arguments: JSON.stringify({ id: "signal-bloom" }),
+                    arguments: JSON.stringify({ id: "glass-garden" }),
                   },
                 },
               ],
@@ -193,7 +193,7 @@ test.skipIf(!supported)(
       expect(t.vt.lines()[0]).toContain("▶");
       const before = await loadSession<typeof original>(paths);
       await t.type(
-        "please load Signal Bloom from the demo library\r",
+        "please load Glass Garden from the demo library\r",
         "agent load",
       );
       await t.until(
@@ -202,9 +202,9 @@ test.skipIf(!supported)(
         10_000,
       );
       const after = await loadSession<typeof original>(paths);
-      expect(after.composition).toEqual(createDemo("signal-bloom").toJSON());
+      expect(after.composition).toEqual(createDemo("glass-garden").toJSON());
       expect(after.revision).toBe(before.revision + 1);
-      expect(t.state()?.track).toBe(createDemo("signal-bloom").tracks[0]!.id);
+      expect(t.state()?.track).toBe(createDemo("glass-garden").tracks[0]!.id);
       expect(t.vt.lines()[0]).not.toContain("▶");
       expect(t.vt.text()).toContain("c copy");
       expect(t.state()?.overlay).toBeNull();

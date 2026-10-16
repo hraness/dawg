@@ -31,7 +31,7 @@ describe("agent demo songs", () => {
     const plan = tool("list_demos").plan({}, context());
     if (plan.kind !== "action") throw new Error("expected read-only discovery");
     const result = JSON.parse((await plan.run({} as ActionContext)).content);
-    expect(result.demos).toHaveLength(7);
+    expect(result.demos).toHaveLength(3);
     expect(result.demos[0].mixNotes.length).toBeGreaterThan(0);
     expect(() => tool("list_demos").plan({ query: 7 }, context())).toThrow();
     expect(() =>
@@ -76,7 +76,7 @@ describe("agent demo songs", () => {
       {
         id: "load",
         name: "load_demo",
-        arguments: JSON.stringify({ id: "signal-bloom" }),
+        arguments: JSON.stringify({ id: "glass-garden" }),
       },
       {
         host,
@@ -91,7 +91,7 @@ describe("agent demo songs", () => {
       operations: [],
       baseRevision: 7,
     });
-    expect(score.toJSON()).toEqual(createDemo("signal-bloom").toJSON());
+    expect(score.toJSON()).toEqual(createDemo("glass-garden").toJSON());
   });
 
   test("a concurrent revision rejects replacement before reaching even a permissive host", async () => {
@@ -102,7 +102,7 @@ describe("agent demo songs", () => {
       {
         id: "load",
         name: "load_demo",
-        arguments: JSON.stringify({ id: "signal-bloom" }),
+        arguments: JSON.stringify({ id: "glass-garden" }),
       },
       {
         host: {

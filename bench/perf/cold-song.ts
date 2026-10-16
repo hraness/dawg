@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const [rootArg, id = "signal-bloom", mode = "playback"] = process.argv.slice(2);
+const [rootArg, id = "glass-garden", mode = "playback"] = process.argv.slice(2);
 if (mode !== "playback" && mode !== "export")
   throw new Error("mode must be playback or export");
 const root = resolve(rootArg ?? join(import.meta.dir, "../.."));

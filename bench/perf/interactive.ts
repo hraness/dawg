@@ -19,9 +19,9 @@ export async function interactiveInput(samples = 24): Promise<Metric[]> {
       .some((line) => line.includes(text));
   try {
     await session.until((screen) => screen.includes(" NOW "), "prompt");
-    session.send("/demo signal-bloom\r");
+    session.send("/demo glass-garden\r");
     await session.until(
-      (screen) => screen.includes("Signal Bloom"),
+      (screen) => screen.includes("Glass Garden"),
       "arranged demo",
     );
     const results: Metric[] = [];

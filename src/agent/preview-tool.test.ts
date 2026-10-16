@@ -74,7 +74,7 @@ describe("preview_sound", () => {
   test("whole-song loading cannot enter a track preview candidate", () => {
     expect(() =>
       tool.plan(
-        { changes: [{ tool: "load_demo", args: { id: "signal-bloom" } }] },
+        { changes: [{ tool: "load_demo", args: { id: "glass-garden" } }] },
         context(song),
       ),
     ).toThrow("load_demo cannot be previewed");
