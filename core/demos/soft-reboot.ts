@@ -35,13 +35,14 @@ const LOOP: readonly Chord[] = [
   { bass: 47, tones: [59, 62, 66] }, // Bm
   { bass: 43, tones: [59, 62, 67] }, // G
 ];
-// The breakdown borrows the minor four (G minor): the same loop, one colour
+// The breakdown turns the five minor (A minor): the same loop, one colour
 // darker, the way the references' loops carry one chord from outside the key.
+// The hook's held "night" is an A, so it sits on the borrowed chord's root.
 const BREAK_LOOP: readonly Chord[] = [
   LOOP[0]!,
-  LOOP[1]!,
+  { bass: 45, tones: [57, 60, 64] }, // Am
   LOOP[2]!,
-  { bass: 43, tones: [58, 62, 67] }, // Gm
+  LOOP[3]!,
 ];
 const chordAt = (bar: number) =>
   (bar >= 56 && bar < 72 ? BREAK_LOOP : LOOP)[bar % 4]!;
@@ -105,7 +106,7 @@ const HOOK_BARS = [8, 12, 24, 32, 40, 48, 60, 64, 72, 88, 92] as const;
 const singing = (bar: number) => HOOK_BARS.some((b) => bar >= b && bar < b + 4);
 /** The first stab of each half bar speaks, the answer sits back. */
 const STAB_ACCENTS = [1, 0.82, 0.94, 0.78] as const;
-/** Bars where the drums run without a break. */
+/** Bars where the drums run, a dropout or two aside. */
 const DRUM_RUNS: readonly (readonly [from: number, to: number])[] = [
   [16, 56],
   [72, 96],
@@ -148,9 +149,9 @@ export const softReboot: DemoDefinition = {
       "Afterglow 8",
     ],
     mixNotes: [
-      "Harmony stays on one loop (D A Bm G, a chord a bar); the breakdown swaps the G for G minor. The interest is in which layers play: the kick arrives at bar 16 with only the chops over it, then sub and stabs join, then the pad, plucks and gangsa, and the ride strips the pad back out before the breakdown.",
-      "Everything melodic except the strings and the sung lines sits on the kick's orbit, so it pumps about 12 dB and recovers in a little over half a beat. The sub has a soft 50 ms attack, slides between roots and is driven for harmonics.",
-      "The sung lines get quarter-note delay throws on their last word. The chop cell loops bar after bar with a turnaround every fourth bar; it stutters, jumps by note cents and crushes in the build bars. The ending lets the plucks, chops and strings ring into rising delay feedback and reverb for eight bars.",
+      "Harmony stays on one loop (D A Bm G, a chord a bar); the breakdown turns the A minor. The interest is in which layers play: the kick arrives at bar 16 with only the chops over it, then sub and stabs join, then the pad, plucks and gangsa, and the ride lets the pad go for its first eight bars.",
+      "Everything melodic except the strings and the sung lines sits on the kick's orbit, so it pumps hard (about 9 dB in the mix) and recovers in a little over half a beat. The sub has a soft 50 ms attack, slides between roots and is driven for harmonics.",
+      "The sung lines get quarter-note delay throws on their last word. The chop cell loops bar after bar with a turnaround every eighth bar; it stutters, jumps by note cents and crushes in the build bars. The ending lets the plucks, chops and strings ring into rising delay feedback and reverb for eight bars.",
     ],
   }),
   build() {
@@ -188,7 +189,8 @@ export const softReboot: DemoDefinition = {
     s.track(
       sounds.stabs(0.2, {
         fxAutomation: {
-          // Distortion fades in over each build bar, clean on the downbeat.
+          // Distortion fades in over the two bars into each drop, clean on
+          // the downbeat.
           "distort-mix": swells(0, 0.6, [
             [38, 40],
             [54, 56],
@@ -303,7 +305,7 @@ export const softReboot: DemoDefinition = {
       [54, 3.25, 86],
       [69, 2.75, 93],
       [70, 1.25, 88],
-      [71, 3.5, 90],
+      [71, 3.5, 91],
       [99, 0.5, 86],
       [100, 3.75, 93],
     ] as const)
@@ -392,7 +394,7 @@ export const softReboot: DemoDefinition = {
         velocity: bar >= 96 ? 0.8 : 1,
       });
     });
-    // Gangsa: the second half of each drop, and the ride's lift.
+    // Gangsa: the drops' lifts and the ride.
     inBars(28, 96, (bar) => {
       const on =
         (bar >= 32 && bar < 40) ||
@@ -472,15 +474,15 @@ export const softReboot: DemoDefinition = {
     loop(40, 55, cell, turn, 8);
     loop(72, 80, cell, turn, 8);
     loop(88, 95, cell, turn, 8);
-    // Stutter builds into each drop.
-    for (const bar of [23, 39, 55, 87]) {
+    // Stutter builds into each drop; the solo's dive is the build at 87.
+    for (const bar of [23, 39, 55]) {
       stutter(s, bar, 0, 0, 8, 0.25, 0.45, 0.8);
       stutter(s, bar, 2, 2, 8, 0.125, 0.5, 0.85, (i) => i * 100);
     }
-    // The last bar of the last drop: a tape-stop on the cell.
-    chop(s, 95, 0, 0, 0.5, 0.8);
-    chop(s, 95, 1, 1, 0.5, 0.75, { cents: 200 });
-    chop(s, 95, 2, 2, 2, 0.8, flick.dive(-1200, 0.3));
+    // The last bar of the last drop: a tape-stop on the cell, under line B.
+    chop(s, 95, 0, 0, 0.5, 0.55);
+    chop(s, 95, 1, 1, 0.5, 0.5, { cents: 200 });
+    chop(s, 95, 2, 2, 2, 0.55, flick.dive(-1200, 0.3));
     // The ending: one last "go" that the delay carries away.
     chop(s, 96, 0, 2, 2, 0.8, flick.fall(-500, 0.7));
     chop(s, 97, 2, 2, 1, 0.55, { cents: -500 });
@@ -552,13 +554,14 @@ export const softReboot: DemoDefinition = {
     const floor = ["kick", "snare", "hats", "sub", "saw"];
     dropout(s, 31, 3, 1, band);
     dropout(s, 35, 2, 2, [...floor, "stabs"]);
-    dropout(s, 39, 0, 4, [...floor, "pad", "pluck", "bells"]);
+    // The holes before a drop stop at beat 3 so the snare pickup speaks.
+    dropout(s, 39, 0, 3, [...floor, "pad", "pluck", "bells"]);
     dropout(s, 47, 3, 1, band);
     dropout(s, 51, 3.5, 0.5, floor);
-    dropout(s, 55, 2, 2, [...floor, "stabs", "bells"]);
+    dropout(s, 55, 2, 1, [...floor, "stabs", "bells"]);
     dropout(s, 79, 3, 1, band);
     dropout(s, 83, 3.5, 0.5, floor);
-    dropout(s, 87, 2, 2, [...floor, "stabs", "pad", "bells"]);
+    dropout(s, 87, 2, 1, [...floor, "stabs", "pad", "bells"]);
     dropout(s, 95, 2, 2, [...floor, "stabs", "pad", "pluck", "bells"]);
     return s.finish();
   },

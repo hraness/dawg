@@ -11,7 +11,7 @@ borrowed minor in the breakdown. The interest comes from which
 layers play, how they sit around the kick, and texture.
 
 - Sub with little attack, glide and soft harmonics; a saw doubles it
-- Pads, stabs and upper layers duck about 12 dB under the kick
+- Pads, stabs and upper layers duck hard under the kick
 - Chord stabs ride the off-beats at chord pitch; soft plucks up high
 - Loud bright hats carry the air; a muted, distorted snare
 - Clicks, drops and a gamelan-like upper-mid pattern

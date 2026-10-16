@@ -6,7 +6,7 @@
  */
 import { bundledSample, bundledSampleRef } from "../bundled-samples.ts";
 import type { AutomationPoint, NoteInput, TrackInput } from "../score.ts";
-import { BAR, Composer, TPB, voice } from "./build.ts";
+import { BAR, Composer, TPB, orbit, voice } from "./build.ts";
 
 type Extra = Partial<NoteInput>;
 type Bend = NonNullable<NoteInput["bend"]>;
@@ -90,7 +90,6 @@ export function swells(
 
 // ------------------------------------------------------------- sounds
 
-const orbit = { orbit: { orbit: 2 } } as const;
 const room = { mix: 0.12, size: 0.45, fade: 1.5, lowpass: 7500 };
 const hall = { mix: 0.22, size: 0.8, fade: 3, lowpass: 6500 };
 
@@ -118,7 +117,12 @@ export const sounds = {
       ...extra,
     }),
   /** Closed and open hats, rim clicks (37) for the computery taps. */
-  hats: (level = 0.5, kit = "syn606", extra: Partial<TrackInput> = {}) =>
+  hats: (
+    level = 0.5,
+    kit = "syn606",
+    extra: Partial<TrackInput> = {},
+    makeup = 7,
+  ) =>
     voice("hats", "Hats & clicks", "kit", level, {
       kit,
       pan: 0.12,
@@ -132,7 +136,7 @@ export const sounds = {
           ratio: 1.6,
           attack: 0.002,
           release: 0.08,
-          makeup: 7,
+          makeup,
         },
         eq: { high: 8, highfreq: 8000 },
       },
@@ -611,13 +615,13 @@ export function rhythm(
 export function loop(
   from: number,
   to: number,
-  cell: (bar: number, i: number) => void,
-  turn?: (bar: number, i: number) => void,
-  every = 4,
+  cell: (bar: number) => void,
+  turn?: (bar: number) => void,
+  every = 8,
 ): void {
   for (let bar = from, i = 0; bar < to; bar++, i++)
-    if (turn && i % every === every - 1) turn(bar, i);
-    else cell(bar, i);
+    if (turn && i % every === every - 1) turn(bar);
+    else cell(bar);
 }
 
 /** A held chord (pads, strings, voice synth). */

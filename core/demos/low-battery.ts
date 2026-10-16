@@ -35,12 +35,13 @@ const LOOP: readonly Chord[] = [
   { bass: 41, tones: [57, 60, 65] }, // F
   { bass: 36, tones: [55, 60, 64] }, // C
 ];
-// The breakdown borrows the minor four (Bb minor) for its plagal fall to F.
+// The breakdown turns the five minor (C minor), the dominant gone dark. The
+// hook's long "on" is a G, the chord's fifth; the gangsa bends its A to A-flat.
 const BREAK_LOOP: readonly Chord[] = [
   LOOP[0]!,
-  { bass: 46, tones: [58, 61, 65] }, // Bbm
+  LOOP[1]!,
   LOOP[2]!,
-  LOOP[3]!,
+  { bass: 36, tones: [55, 58, 63] }, // Cm
 ];
 const chordAt = (bar: number) =>
   (bar >= 56 && bar < 76 ? BREAK_LOOP : LOOP)[bar % 4]!;
@@ -98,7 +99,7 @@ const GANGSA: readonly (readonly [beat: number, pitch: number])[] = [
   [7.75, 69],
 ];
 // Stabs fall between the half-time kicks (steps 0, 7, 10) and the snare (8).
-const STAB_GRID = "...6..6....6..6.";
+const STAB_GRID = "...6..6....6.6..";
 const STAB_ACCENTS = [1, 0.8, 0.92, 0.78] as const;
 /**
  * The sung hook (line A, then B two bars later) carries the long intro and
@@ -109,7 +110,7 @@ const HOOK_BARS = [8, 12, 16, 20, 32, 40, 48, 60, 68, 76, 92] as const;
 const singing = (bar: number) => HOOK_BARS.some((b) => bar >= b && bar < b + 4);
 /** Builds: a stutter bar, crushed chops and a noise sweep into each drop. */
 const BUILDS = [31, 47, 83] as const;
-/** Bars where the drums run without a break. */
+/** Bars where the drums run, a dropout or two aside. */
 const DRUM_RUNS: readonly (readonly [from: number, to: number])[] = [
   [24, 56],
   [76, 100],
@@ -123,7 +124,7 @@ export const lowBattery: DemoDefinition = {
     title: "Low Battery",
     style: "Hyperpop",
     description:
-      "Half-time hyperpop in F at 140: a long drumless opening where the sung hook rides the looped-vowel voice synth, strings and bare hat taps for twenty-four bars, chopped vocals alone over a half-time kit, a trap-hat drop with syncopated stabs, a thirty-two-bar drum run, a twenty-bar breakdown on reverb strings and gangsa over a borrowed minor chord, a broken-beat return, a ramped saw-bass drop with a distorted hard-saw solo, and a ten-bar power-down that echoes out.",
+      "Half-time hyperpop in F at 140: a long drumless opening where the sung hook rides the looped-vowel voice synth, strings and bare hat taps for twenty-four bars (the last sixteen of them taps), chopped vocals alone over a half-time kit, a trap-hat drop with syncopated stabs, a thirty-two-bar drum run, a twenty-bar breakdown on reverb strings and gangsa over a borrowed minor chord, a broken-beat return, a ramped saw-bass drop with a distorted hard-saw solo, and a ten-bar power-down that echoes out.",
     tempoBpm: BPM,
     key: "F",
     bars: BARS,
@@ -133,7 +134,7 @@ export const lowBattery: DemoDefinition = {
       "a sung hook (two lines) plus three chop syllables from the studio-v1 lights-out sample",
       "a twenty-four-bar drumless opening: the hook over voice synth, strings and hat taps",
       "a one-bar chop cell looped under the drum runs, the chops as an instrument",
-      "chopped vocals alone over half-time drums before the bed comes in",
+      "chopped vocals and the sub alone over half-time drums before the bed comes in",
       "half-time, trap and broken drum families with hat rolls, rim clicks and open hats",
       "a ramped saw bass with glides in the saw drop and a soft, driven gliding sub elsewhere",
       "a hard-saw solo with octave scoops, wobble flicks, a tape-stop dive and automated distortion",
@@ -153,8 +154,8 @@ export const lowBattery: DemoDefinition = {
       "Power down 10",
     ],
     mixNotes: [
-      "The harmony never leaves one loop (Dm Bb F C, a chord a bar); the breakdown swaps the Bb for Bb minor. The song moves by layers: the kick arrives at bar 24 with only the chops over it, then sub and stabs, then the pad, plucks and trap hats.",
-      "Half time at 140 leaves room between the kicks for the stabs, which sit on the off-sixteenths around the kick and snare. Everything melodic except the strings and the sung lines pumps on the kick, about 12 dB.",
+      "The harmony never leaves one loop (Dm Bb F C, a chord a bar); the breakdown turns the C minor. The song moves by layers: the kick arrives at bar 24 with only the chops and the sub over it, then stabs, then the pad, plucks and trap hats.",
+      "Half time at 140 leaves room between the kicks for the stabs, which sit on the off-sixteenths around the kick and snare. Everything melodic except the strings and the sung lines pumps hard on the kick.",
       "The saw drop swaps the sub's single held roots for a saw bass that swells in on each note and slides between them, with its drive opening across the section. The solo's distortion climbs to its peak and pulls back.",
     ],
   }),
@@ -182,7 +183,7 @@ export const lowBattery: DemoDefinition = {
     s.track(sounds.drops(0.22));
     s.track(
       sounds.sub(0.46, {
-        // Under the saw bass the sub only holds the roots.
+        // Under the saw bass the sub sits back.
         volumeAutomation: steps([0, 1], [84, 0.78], [100, 1]),
       }),
     );
@@ -326,7 +327,7 @@ export const lowBattery: DemoDefinition = {
       [59, 2.75, 96],
       [63, 1.25, 91],
       [66, 3.5, 93],
-      [71, 0.5, 89],
+      [71, 0.5, 91],
       [73, 1.5, 93],
       [74, 3.25, 89],
       [103, 2.75, 96],
@@ -385,8 +386,7 @@ export const lowBattery: DemoDefinition = {
       const padded =
         (bar >= 4 && bar < 24) ||
         (bar >= 28 && bar < 48) ||
-        (bar >= 52 && bar < 56) ||
-        (bar >= 56 && bar < 84) ||
+        (bar >= 52 && bar < 84) ||
         bar >= 92;
       if (padded) hold(s, "pad", bar, 0, c.tones, 4, 0.44 + 0.03 * (bar % 4));
       if (
@@ -430,8 +430,12 @@ export const lowBattery: DemoDefinition = {
         (bar >= 64 && bar < 72) ||
         bar >= 92;
       if (!on || bar % 2) return;
-      for (const [beat, pitch] of GANGSA)
-        s.note("bells", bar, beat, pitch, 0.4, beat % 1 === 0 ? 0.6 : 0.45);
+      // The cell's second bar bends its A down to A-flat over C minor.
+      const minor = chordAt(bar + 1).tones[1] === 58;
+      for (const [beat, pitch] of GANGSA) {
+        const p = minor && beat >= 4 && pitch % 12 === 9 ? pitch - 1 : pitch;
+        s.note("bells", bar, beat, p, 0.4, beat % 1 === 0 ? 0.6 : 0.45);
+      }
     });
     // Strings: the opening, the breakdown and the ending, swelling.
     inBars(0, 101, (bar) => {
@@ -501,7 +505,7 @@ export const lowBattery: DemoDefinition = {
     loop(16, 24, (bar) => cell(bar), turn, 8);
     loop(24, 31, (bar) => cell(bar, bar >= 28 ? 200 : 0), turn, 8);
     loop(32, 47, cell, turn, 8);
-    loop(48, 55, cell, turn, 8);
+    loop(48, 56, cell, turn, 8);
     loop(80, 83, cell, turn, 8);
     loop(92, 99, cell, turn, 8);
     // Stutter builds into each drop.
@@ -584,11 +588,10 @@ export const lowBattery: DemoDefinition = {
     const floor = ["kick", "snare", "hats", "sub", "saw"];
     dropout(s, 39, 3, 1, band);
     dropout(s, 43, 2, 2, [...floor, "stabs"]);
-    dropout(s, 47, 0, 4, [...floor, "pad", "pluck", "bells"]);
+    // The holes before a drop stop at beat 3 so the snare pickup speaks.
+    dropout(s, 47, 0, 3, [...floor, "pad", "pluck", "bells"]);
     dropout(s, 51, 3.5, 0.5, floor);
-    dropout(s, 55, 2, 2, [...floor, "stabs", "bells"]);
-    // The return opens on drums, bass and pad under line A; the stabs and
-    // plucks come back with line B.
+    dropout(s, 55, 2, 1, [...floor, "stabs", "bells"]);
     dropout(s, 87, 3, 1, band);
     dropout(s, 91, 3.5, 0.5, floor);
     dropout(s, 95, 2, 2, [...floor, "stabs"]);

@@ -1,5 +1,5 @@
 /** Glass Garden: tresillo hyperpop with a gamelan shimmer and a breathy hook. */
-import { Composer } from "./build.ts";
+import { Composer, orbit } from "./build.ts";
 import {
   chop,
   chopTrack,
@@ -35,11 +35,11 @@ const LOOP: readonly Chord[] = [
   { bass: 40, tones: [56, 59, 64] }, // E
   { bass: 42, tones: [57, 61, 66] }, // F#m
 ];
-// The breakdown borrows the minor four (D minor) so its first fall to A is
-// plagal and dark, the one outside colour the references' loops tend to hold.
+// The breakdown turns the tonic minor (A minor), the one outside colour the
+// references' loops tend to hold. The hook's held "need" is an A, its root.
 const BREAK_LOOP: readonly Chord[] = [
-  { bass: 38, tones: [57, 62, 65] }, // Dm
-  LOOP[1]!,
+  LOOP[0]!,
+  { bass: 45, tones: [57, 60, 64] }, // Am
   LOOP[2]!,
   LOOP[3]!,
 ];
@@ -105,7 +105,7 @@ const GANGSA: readonly (readonly [beat: number, pitch: number])[] = [
 // Stabs push off the tresillo kick (0, 3, 7, 10, 13): never on a kick step.
 const TRES_STABS = "..6..6.....6..6.";
 // Over the house groove they sit between the kicks and the open hats.
-const HOUSE_STABS = ".6...6...6..6...";
+const HOUSE_STABS = ".6...6...6...6..";
 /** The first stab of each pair speaks, the answer sits back. */
 const STAB_ACCENTS = [1, 0.8, 0.92, 0.76] as const;
 /**
@@ -117,7 +117,7 @@ const HOOK_BARS = [
   8, 12, 16, 20, 24, 32, 40, 48, 56, 68, 76, 84, 92, 96,
 ] as const;
 const singing = (bar: number) => HOOK_BARS.some((b) => bar >= b && bar < b + 4);
-/** Bars where the drums run without a break. */
+/** Bars where the drums run, a dropout or two aside. */
 const DRUM_RUNS: readonly (readonly [from: number, to: number])[] = [
   [24, 64],
   [76, 100],
@@ -141,7 +141,7 @@ export const glassGarden: DemoDefinition = {
       "a breathy sung hook (two lines) plus need / name / oh chops from the studio-v1 all-i-need sample",
       "a forty-bar drum run that starts light (a broken kick under the hook) and only fills out at bar 40",
       "a one-bar chop cell looped under the drum runs, the chops as an instrument",
-      "chopped vocals alone over the first kicks before the bed comes in",
+      "the hook and its chops alone over the first kicks before the bed comes in",
       "four drum families: tresillo, broken, house open hats and bare hat taps",
       "a gangsa cell over the tresillo drops, trading the top register with 3-3-2 plucks",
       "a ramped saw bass with automated drive over the broken beat, and saw harmonics under the sub",
@@ -161,9 +161,9 @@ export const glassGarden: DemoDefinition = {
       "Glass fade 12",
     ],
     mixNotes: [
-      "Harmony never leaves the loop (D A E F#m, a chord a bar); the breakdown swaps the D for D minor. Contrast comes from the drums: a light broken kick under the hook for sixteen bars, tresillo for the drops, a broken beat over the saw bass, a house drop with open hats, and hat taps around the hook.",
-      "Pad, stabs, plucks, gangsa, sub, saw bass, chops, voice synth and lead pump on the kick's orbit, about 12 dB; the strings and the sung lines stay steady on top. The sub is soft, driven and slides; the saw bass swells in and its drive climbs across the broken section.",
-      "The sung lines throw a beat of delay on 'need' and 'name'. The chop cell loops bar after bar with a turnaround every eighth bar, repitched, stuttered and flicked, and crushes into each drop. The last twelve bars hold IV then I while delay feedback rises and reverb carries the hook out.",
+      "Harmony never leaves the loop (D A E F#m, a chord a bar); the breakdown turns the A minor. Contrast comes from the drums: a light broken kick under the hook for sixteen bars, tresillo for the drops, a broken beat over the saw bass, a house drop with open hats, and hat taps around the hook.",
+      "Pad, stabs, plucks, gangsa, sub, saw bass, chops, voice synth and lead pump hard on the kick's orbit; the strings and the sung lines stay steady on top. The sub is soft, driven and slides; the saw bass swells in and its drive climbs across the broken section.",
+      "The sung lines throw a beat of delay on 'need' and 'name'. The chop cell loops bar after bar with a turnaround every eighth bar, repitched, stuttered and flicked, and crushes into each drop. The ending settles on IV then I while delay feedback rises and reverb carries the hook out.",
     ],
   }),
   build() {
@@ -189,27 +189,16 @@ export const glassGarden: DemoDefinition = {
       }),
     );
     s.track(
-      sounds.hats(1, "syn606", {
-        // The 3-3-2 and broken grids hold fewer hats than the four-floor
-        // songs', so this kit gets a little more makeup to carry the air.
-        fx: {
-          compressor: {
-            threshold: -18,
-            ratio: 1.6,
-            attack: 0.002,
-            release: 0.08,
-            makeup: 9,
-          },
-          eq: { high: 8, highfreq: 8000 },
-        },
-      }),
+      // The 3-3-2 and broken grids hold fewer hats than the four-floor
+      // songs', so this kit gets a little more makeup to carry the air.
+      sounds.hats(1, "syn606", {}, 9),
     );
     s.track(sounds.drops(0.22));
     s.track(sounds.sub(0.46));
     s.track(
       sounds.sawBass(0.28, {
         fx: {
-          orbit: { orbit: 2 },
+          ...orbit,
           distort: { type: "soft", drive: 1.4, mix: 0.35 },
         },
         // Drive climbs through the broken section, then lets go.
@@ -226,9 +215,9 @@ export const glassGarden: DemoDefinition = {
     s.track(
       sounds.stabs(0.2, {
         fxAutomation: {
+          // Into the broken beat and the last drop, where stabs are playing.
           "distort-mix": swells(0, 0.55, [
-            [39, 40],
-            [75, 76],
+            [55, 56],
             [91, 92],
           ]),
         },
@@ -279,11 +268,13 @@ export const glassGarden: DemoDefinition = {
           "crush-bits": swells(16, 5, [
             [39, 40],
             [55, 56],
+            [75, 76],
             [91, 92],
           ]),
           "crush-mix": swells(0, 0.7, [
             [39, 40],
             [55, 56],
+            [75, 76],
             [91, 92],
           ]),
         },
@@ -355,7 +346,7 @@ export const glassGarden: DemoDefinition = {
       [17, 1.75, 88],
       [19, 3.5, 93],
       [22, 0.75, 90],
-      [65, 1.5, 85],
+      [65, 1.5, 88],
       [67, 3.25, 90],
       [70, 0.75, 93],
       [73, 2.5, 88],
@@ -425,9 +416,8 @@ export const glassGarden: DemoDefinition = {
     // ---------------------------------------------------------- chords
     inBars(0, 100, (bar) => {
       const c = chordAt(bar);
-      // The pad: the taps, the hook's bars of the light drums, the drops,
-      // the breakdown and the house drop; out for the first kicks.
-      if (within(bar, [12, 24], [28, 64], [64, 76], [76, 100]))
+      // The pad: the taps, then everything after the first four kick bars.
+      if (within(bar, [12, 24], [28, 100]))
         hold(s, "pad", bar, 0, c.tones, 4, 0.42 + 0.03 * (bar % 4));
       const grid = within(bar, [40, 64], [92, 100])
         ? TRES_STABS
@@ -462,11 +452,14 @@ export const glassGarden: DemoDefinition = {
         velocity: bar >= 100 ? 0.8 - (bar - 100) * 0.1 : 1,
       });
     });
-    // Gangsa: the glass intro, the light drums' second half, the tresillo
-    // drops' second halves and the end of the breakdown.
+    // Gangsa: the glass intro, the light drums' second half, the first drop
+    // from its lift, the breakdown's E and F#m bars and the last drop.
     inBars(0, 100, (bar) => {
       if (bar % 2) return;
-      if (!within(bar, [0, 8], [32, 40], [44, 56], [68, 72], [96, 100])) return;
+      if (
+        !within(bar, [0, 8], [32, 40], [44, 56], [70, 72], [74, 76], [96, 100])
+      )
+        return;
       const soft = bar < 40 ? 0.82 : 1;
       for (const [beat, pitch] of GANGSA)
         s.note(
@@ -559,14 +552,15 @@ export const glassGarden: DemoDefinition = {
     loop(92, 99, cell, turn, 8);
     // Stutter builds into each change of groove; "oh" climbs the A scale.
     const RISE = [0, 200, 400, 500, 700, 900, 1000, 1200] as const;
-    for (const bar of [39, 55, 75, 91]) {
+    // (The lead's dive is the build at 91.)
+    for (const bar of [39, 55, 75]) {
       stutter(s, bar, 0, 0, 8, 0.25, 0.45, 0.8);
       stutter(s, bar, 2, 2, 8, 0.125, 0.5, 0.85, (i) => RISE[i]!);
     }
     // The last bar of the drums: a tape-stop on the cell.
-    chop(s, 99, 0, 0, 0.5, 0.8);
-    chop(s, 99, 1, 1, 0.5, 0.75);
-    chop(s, 99, 2, 2, 2, 0.8, flick.dive(-1200, 0.3));
+    chop(s, 99, 0, 0, 0.5, 0.55);
+    chop(s, 99, 1, 1, 0.5, 0.5);
+    chop(s, 99, 2, 2, 2, 0.55, flick.dive(-1200, 0.3));
     // The ending: "oh" falls away, then "all I need" over IV to I.
     chop(s, 100, 0, 2, 2, 0.75, flick.fall(-500, 0.7));
     chop(s, 102, 2, 0, 1, 0.5, { cents: -500 });
@@ -614,11 +608,11 @@ export const glassGarden: DemoDefinition = {
     dropout(s, 35, 3, 1, ["kick", "hats", "pad", "pluck", "bells"]);
     dropout(s, 47, 3, 1, band);
     dropout(s, 51, 2, 2, [...floor, "stabs"]);
-    dropout(s, 55, 0, 4, band);
+    dropout(s, 55, 0, 3, band);
     dropout(s, 61, 2, 2, ["kick", "snare", "hats", "saw"]);
     dropout(s, 83, 3, 1, band);
     dropout(s, 87, 2, 2, [...floor, "stabs"]);
-    dropout(s, 91, 3.5, 0.5, floor);
+    dropout(s, 91, 2.5, 0.5, floor);
     dropout(s, 95, 3, 1, band);
     dropout(s, 99, 2, 2, [...floor, "stabs", "bells"]);
     return s.finish();
