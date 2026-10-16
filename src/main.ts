@@ -410,6 +410,7 @@ import {
   foldBase,
   knobNoun,
   tapeKey,
+  typesOnTape,
   tapeKnobs,
   type TapeContext,
 } from "./tui/tape-mode.ts";
@@ -470,6 +471,7 @@ import {
   ARROW_UP,
   closesKeys,
   HINTS,
+  KEY_SCENE_STEP,
   KEYS,
   keyLines,
   type KeySection,
@@ -655,7 +657,8 @@ Display options:
 
 Prompt:
   Enter submit · Shift-Enter newline · Alt-Enter next · Ctrl-Q now / next
-  Ctrl-G jump · Ctrl-B back · F1 guides · Esc cancel/back (draft retained)
+  Ctrl-G jump · Ctrl-B back · /guide guides · Esc cancel/back (draft retained)
+  Alt-Left / Alt-Right on an empty prompt step the scene
   Ctrl-Z undo · Ctrl-Y redo · Ctrl-O transcript · Ctrl-C exit
   Space on an empty prompt toggles playback
 
@@ -2646,11 +2649,10 @@ async function runInteractive(): Promise<void> {
         if (
           !tui.ui.overlay &&
           !tui.prompt.value &&
-          !tape.on &&
-          !patchView.on &&
-          (value === "\u001b[1;5D" || value === "\u001b[1;5C")
+          typeof value === "string" &&
+          KEY_SCENE_STEP.has(value)
         ) {
-          stepScene(value.endsWith("D") ? -1 : 1);
+          stepScene(KEY_SCENE_STEP.get(value)!);
           tick(true);
           continue;
         }
@@ -4007,7 +4009,7 @@ async function submit(prompt: string): Promise<string | Receipt> {
           candidate.id === parsed.trackId ||
           candidate.name.toLowerCase() === parsed.trackId,
       );
-      if (!target) return fail(`no track ${parsed.trackId}`);
+      if (!target) return fail(noTrack(parsed.trackId));
       const next = applyScoreOperation(score, {
         type: "updateTrack",
         trackId: target.id,
@@ -6782,7 +6784,7 @@ async function enterPlay(): Promise<Receipt> {
 }
 
 /**
- * `keys record [replace|off]` (op1-ux §4.7, r / R on TAPE): opens PLAY on
+ * `keys record [replace|off]` (op1-ux §4.7, TAPE's record button): opens PLAY on
  * the focused track and arms recording. With a loop set, every pass over
  * it commits once, so one undo step; esc goes back to TAPE.
  */
@@ -7109,6 +7111,8 @@ function tapeInput(value: string, fromPointer = false): boolean {
   if (tui.ui.overlay !== undefined || menu.open) return false;
   if (prompt.value.length > 0 && !fromPointer) return false;
   if (value === "/" || value === "\u0003") return false;
+  // Letters and digits start a command: the prompt owns them on TAPE.
+  if (!fromPointer && typesOnTape(value)) return false;
   // A key that types commands reduces from the score and playhead, which
   // queued commands have not changed yet: `[ [` pressed before the first
   // `loop` lands would both shrink the same loop. Such a key waits its turn
@@ -7204,9 +7208,9 @@ function applyTapeKey(
     return true;
   }
   if (knob.type === "handled") return true;
-  // Unmapped printable keys are swallowed (as in play mode); control keys
-  // (enter, ctrl-z, ctrl-k) keep their bindings.
-  return value.length === 1 && value >= " " && value !== "\u007f";
+  // Everything else reaches the prompt: unmapped printable keys type, and
+  // control keys (enter, ctrl-z, ctrl-k) keep their bindings.
+  return false;
 }
 
 /**
@@ -7292,7 +7296,7 @@ function tapeMouse(
     return [];
   }
   if (target.kind === "tape-clipboard") {
-    tapeInput("v");
+    tapeInput("v", true);
     return [];
   }
   return undefined;

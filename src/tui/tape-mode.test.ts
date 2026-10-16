@@ -16,6 +16,7 @@ import {
   rangeLine,
   tapeKey,
   tapeKnobs,
+  typesOnTape,
   typedRange,
   type TapeContext,
 } from "./tape-mode.ts";
@@ -64,7 +65,6 @@ describe("TAPE keys echo typed commands", () => {
   test("the range is the section under the playhead without a loop", () => {
     expect(rangeLine(context())).toBe("range: bass · bars 5–8 (chorus)");
     expect(commands(tapeKey(context(), "c"))).toEqual(["copy bass 5-8"]);
-    expect(commands(tapeKey(context(), "C"))).toEqual(["copy all 5-8"]);
   });
 
   test("the loop range wins over the section (score.loop)", () => {
@@ -75,7 +75,9 @@ describe("TAPE keys echo typed commands", () => {
       "clear bass 5-6",
     ]);
     expect(tapeKey(ctx, "x")).toMatchObject({ cut: true });
-    expect(commands(tapeKey(ctx, "\u007f"))).toEqual(["clear bass 5-6"]);
+    expect(commands(tapeKey(ctx, "\u001b[3~"))).toEqual(["clear bass 5-6"]);
+    // Backspace belongs to the prompt: it never clears bars.
+    expect(tapeKey(ctx, "\u007f")).toEqual({ type: "pass" });
     expect(commands(tapeKey(ctx, "~"))).toEqual(["reverse bass 5-6"]);
   });
 
@@ -117,27 +119,17 @@ describe("TAPE keys echo typed commands", () => {
     expect(tapeKey(edge, ">")).toMatchObject({ type: "note" });
   });
 
-  test("sections: , . jump, s S split and join", () => {
+  test("sections: , . jump", () => {
     expect(commands(tapeKey(context(), ","))).toEqual(["jump chorus"]);
     expect(commands(tapeKey(context({ beat: 2 }), "."))).toEqual([
       "jump chorus",
     ]);
     expect(tapeKey(context(), ".")).toMatchObject({ type: "note" });
-    expect(commands(tapeKey(context({ beat: 25 }), "s"))).toEqual([
-      "section split chorus at 7",
-    ]);
-    // In the chorus, `S` joins it onto the verse that ends where it starts
-    // (undoing an `s`); in the verse, the verse joins with the next.
-    expect(commands(tapeKey(context(), "S"))).toEqual(["section join verse"]);
-    expect(commands(tapeKey(context({ beat: 2 }), "S"))).toEqual([
-      "section join verse",
-    ]);
   });
 
-  test("number keys pick tracks, not knobs (§13)", () => {
-    expect(tapeKey(context(), "1")).toEqual({ type: "focus", row: 0 });
+  test("tab picks tracks; digits are the prompt's (§13)", () => {
     expect(tapeKey(context(), "\t")).toEqual({ type: "focus", row: 0 });
-    expect(tapeKey(context(), "9")).toMatchObject({ type: "note" });
+    expect(tapeKey(context(), "1")).toEqual({ type: "pass" });
     expect(focusCommand(song(), 0)).toBe("track drums");
   });
 
@@ -153,9 +145,10 @@ describe("TAPE keys echo typed commands", () => {
     expect(tapeKey(last, "\u001b[5~")).toEqual({ type: "focus", row: 23 });
   });
 
-  test("mute, solo, exit, zoom and pass-through", () => {
-    expect(commands(tapeKey(context(), "h"))).toEqual(["mute bass"]);
+  test("solo, exit, zoom and pass-through", () => {
     expect(commands(tapeKey(context(), "H"))).toEqual(["solo"]);
+    for (const key of ["h", "s", "m", "b", "C", "X", "R"])
+      expect(tapeKey(context(), key)).toEqual({ type: "pass" });
     expect(tapeKey(context(), "\u001b")).toEqual({ type: "exit" });
     expect(tapeKey(context(), "\u0014")).toEqual({ type: "exit" });
     expect(tapeKey(context(), "-")).toEqual({ type: "zoom", direction: -1 });
@@ -163,7 +156,7 @@ describe("TAPE keys echo typed commands", () => {
   });
 
   test("every command a key echoes parses as typed", () => {
-    const keys = "cCxX~\\<>[]{},.sShH".split("");
+    const keys = "cx~\\<>[]{},.H".split("");
     const contexts = [
       context(),
       context({ beat: 2 }),
@@ -173,7 +166,7 @@ describe("TAPE keys echo typed commands", () => {
       }),
     ];
     for (const ctx of contexts)
-      for (const key of [...keys, "v", "V", "\u007f"])
+      for (const key of [...keys, "v", "V", "r", "\u001b[3~"])
         for (const command of commands(tapeKey(ctx, key)))
           expect(commandParses(command, ctx.score), command).toBe(true);
   });
@@ -335,5 +328,16 @@ describe("form on the tape", () => {
     });
     expect(view.cellBars).toEqual([4, 5, 6, 7, 4, 5, 6, 7, 0, 1, 2, 3]);
     expect(view.passes?.slice(-4)).toEqual([-1, -1, -1, -1]);
+  });
+});
+
+describe("TAPE leaves typing to the prompt", () => {
+  test("letters and digits type; gesture keys stay on the timeline", () => {
+    for (const key of ["a", "c", "v", "H", "R", "1", "9", "é"])
+      expect(`${key}: ${typesOnTape(key)}`).toBe(`${key}: true`);
+    for (const key of [" ", "\\", ",", ".", "[", "]", "-", "=", "?", "~"])
+      expect(`${key}: ${typesOnTape(key)}`).toBe(`${key}: false`);
+    for (const key of ["\u001b", "\t", "\r", "\u007f", "\u001b[3~"])
+      expect(typesOnTape(key)).toBe(false);
   });
 });

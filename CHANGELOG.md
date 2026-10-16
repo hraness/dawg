@@ -2,6 +2,18 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.15.1
+
+### Changed
+
+- **Typing works on TAPE.** Letters, digits and Backspace always go to the prompt, so a command or question can be typed while TAPE is up. The prompt shows its cursor and says `type a command · space play · ? tape keys`. Space, arrows, Tab, Page Up/Down, Delete and the punctuation keys (`\` `,` `.` `[` `]` `{` `}` `<` `>` `-` `=` `~` `?`) still drive the timeline.
+- **Letter gestures moved to buttons.** Record, copy, cut, paste and a new insert button sit in the TAPE footer; the M and S badges mute and solo. Split and join, all-track copy and cut, replace-record, click and stop are typed commands now (`section split verse at 3`, `copy all 5-6`, `keys record replace`, `/click`, `stop`). Backspace on an empty prompt no longer clears bars.
+- **Scene steps use Alt-← and Alt-→.** macOS switches Spaces on Ctrl-← and Ctrl-→, so dawg no longer binds them. Alt-← and Alt-→ (and `ESC b` / `ESC f` where Option is Meta) step scenes on an empty prompt, TAPE and PATCH included, and move by word in the prompt. Fader fine steps keep Alt-← → and `[ ]` and drop Ctrl-← →. The shelf no longer advertises F1, which Mac keyboards send only with fn; `/guide` and Jump › Guides open the guides, and F1 still works.
+
+### Fixed
+
+- **The M badge mutes its own row.** `mute drums` mutes drums instead of the focused track.
+
 ## 0.15.0
 
 ### Changed

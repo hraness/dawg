@@ -9,6 +9,9 @@ import {
 import { SCORE_LIMITS } from "../../core/score.ts";
 import type { TrackSing } from "../../core/sing.ts";
 
+/** Words after `mute` that mean the focused track, not a track name. */
+const MUTE_FILLER = new Set(["it", "this", "that", "track", "please", "now"]);
+
 export { pitchToMidi };
 
 export type AgentOperation =
@@ -101,6 +104,19 @@ export function parsePrompt(prompt: string): AgentOperation | undefined {
       ...(resolveInstrumentWord(word)?.fx ? { word } : {}),
     };
   }
+  // `mute drums` names its track (TAPE's M badge on any row); a bare
+  // `mute`, `mute it` or `mute please` is the focused track. An unknown
+  // name (`mute everything`) fails with the track list, never muting the
+  // focused track by mistake.
+  const named = text.match(
+    /^(un)?(?:mute|silence)\s+([a-z0-9][a-z0-9._-]{0,63})$/,
+  );
+  if (named && !MUTE_FILLER.has(named[2]!))
+    return {
+      type: "track",
+      patch: { muted: named[1] === undefined },
+      trackId: named[2]!,
+    };
   if (/^(?:mute|silence)\b/.test(text))
     return { type: "track", patch: { muted: true } };
   if (/^(?:unmute|unsilence)\b/.test(text))

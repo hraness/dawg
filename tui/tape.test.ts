@@ -64,7 +64,7 @@ function view(cells = 16, extra: Partial<TapeView> = {}): TapeView {
     clipboard: "clipboard: bass · 2 bars",
     knobs,
     selected: 0,
-    hint: "c copy · x cut · v paste · \\ loop · ? keys",
+    hint: "type a command · space play · \\ loop · ? keys",
     ...extra,
   };
 }
@@ -137,7 +137,7 @@ describe("paintTape", () => {
       expect(rows[1]).toContain(" B");
       expect(lines.some((line) => line.includes("range: bass"))).toBe(true);
       expect(lines.some((line) => line.includes("clipboard: bass"))).toBe(true);
-      expect(lines.at(-1)).toContain("c copy");
+      expect(lines.at(-1)).toContain(" copy ");
       for (const line of lines) expect(line.length).toBe(width);
     });
   }

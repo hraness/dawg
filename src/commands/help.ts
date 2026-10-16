@@ -566,11 +566,12 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
     entries: [
       {
         command: "/tape [on|off]",
-        summary: "every track across the bars · c copy x cut v paste · ctrl-t",
+        summary: "every track across the bars · type commands · ctrl-t",
       },
       {
         command: "keys record [replace|off]",
-        summary: "record the loop in play · one undo step a pass · r R on tape",
+        summary:
+          "record the loop in play · one undo step a pass · record on tape",
       },
       {
         command: "loop <a>-<b> | <section> | next | prev | off",
@@ -695,7 +696,7 @@ export const HELP_SECTIONS: readonly HelpSection[] = [
         command: "help [topic]",
         summary: "start here · help <topic> · help all for everything",
       },
-      { command: "/guide [topic]", summary: "short how-to guides · F1" },
+      { command: "/guide [topic]", summary: "short how-to guides" },
     ],
   },
   {
@@ -820,7 +821,7 @@ export const HELP_GUIDE: readonly HelpSection[] = [
     group: "topics · help <topic>",
     entries: [
       ...TOPICS.map((id) => ({ command: id, summary: TOPIC_SUMMARY[id] })),
-      { command: "all", summary: "every command · /guide <topic> · F1" },
+      { command: "all", summary: "every command · /guide <topic>" },
     ],
   },
 ];
@@ -1245,7 +1246,7 @@ export const USAGE: Readonly<Record<string, string>> = {
   logout: "/logout [provider]",
   auth: "/auth [--check]",
   help: "help [topic] · help all · help sound|voice|effects|rhythm|chords|mix|arrange|project|keys|agent",
-  guide: "/guide [topic] · /guide voice · F1 · the same topics as help",
+  guide: "/guide [topic] · /guide voice · the same topics as help",
   fx: "fx <effect> <param> <value> | on | off | preset <name> · fx delay mix 0.3",
   patch:
     "patch new|load|add|set|wire|unwire|macro|knob|rate|rm|save|show|nodes|convert|detach … [--fx <name>] · patch add osc as tone · patch wire tone.out out.audio",
@@ -1304,7 +1305,7 @@ export const USAGE: Readonly<Record<string, string>> = {
     "master <unit> on|off|preset <name>|<param> <value> · master streaming|club|loud · master target -14 · master measure · master off",
   try: "/try <sound command> · /try fx reverb mix 0.6",
   play: "/play [on|off|degrees|in-key|chromatic] · ctrl-p play mode · i toggles degrees",
-  tape: "/tape [on|off] · ctrl-t · every track across the bars · c copy · x cut · v paste · \\ loop",
+  tape: "/tape [on|off] · ctrl-t · every track across the bars · space play · , . scene · \\ loop · typing stays in the prompt",
   meter:
     "meter <1..16> · meter 3 · meter 7/8 [at bar <n>] · meter remove bar <n> · meter clear",
   art: EXPRESSION_USAGE.art,

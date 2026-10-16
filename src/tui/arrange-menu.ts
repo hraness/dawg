@@ -226,9 +226,9 @@ export function arrangeNodes(context: MenuContext): MenuNode[] {
     kind: "action",
     label: "tape",
     command: "/tape",
-    help: "every track across the bars · c copy, x cut, v paste · ctrl-t",
+    help: "every track across the bars · copy, cut, paste buttons · ctrl-t",
   });
-  // §4.7: record the loop in PLAY, one undo step per pass (r / R on TAPE).
+  // §4.7: record the loop in PLAY, one undo step per pass (TAPE's record button).
   nodes.push({
     kind: "action",
     label: "record the loop",

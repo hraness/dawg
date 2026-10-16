@@ -87,3 +87,40 @@ describe("parsePrompt", () => {
     expect(parsePrompt("extend 257 bars")).toBeUndefined();
   });
 });
+
+describe("mute", () => {
+  test("a named track is muted where it is, the focus stays put", () => {
+    expect(parsePrompt("mute drums")).toEqual({
+      type: "track",
+      patch: { muted: true },
+      trackId: "drums",
+    });
+    expect(parsePrompt("unmute layer-2")).toEqual({
+      type: "track",
+      patch: { muted: false },
+      trackId: "layer-2",
+    });
+    expect(parsePrompt("mute")).toEqual({
+      type: "track",
+      patch: { muted: true },
+    });
+    expect(parsePrompt("mute it")).toEqual({
+      type: "track",
+      patch: { muted: true },
+    });
+  });
+
+  test("filler words mean the focused track; other words name one", () => {
+    for (const word of ["that", "please", "now", "track"])
+      expect(parsePrompt(`mute ${word}`)).toEqual({
+        type: "track",
+        patch: { muted: true },
+      });
+    // `mute everything` names no track: the app fails with the track list.
+    expect(parsePrompt("mute everything")).toEqual({
+      type: "track",
+      patch: { muted: true },
+      trackId: "everything",
+    });
+  });
+});
