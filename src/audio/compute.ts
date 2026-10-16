@@ -77,6 +77,7 @@ export class AudioCompute {
   private worker?: Bun.Worker;
   private nextId = 0;
   private disposed = false;
+  private workerOpen = false;
   private pending = new Map<
     number,
     { resolve(value: unknown): void; reject(error: Error): void }
@@ -286,6 +287,12 @@ export class AudioCompute {
         worker.addEventListener("close", () => {
           if (!this.disposed) this.dispose(new Error("audio worker closed"));
         });
+        // Bun 1.3 can segfault when a worker is terminated while its modules
+        // are still transpiling, so dispose waits for `open` to terminate.
+        worker.addEventListener("open", () => {
+          this.workerOpen = true;
+          if (this.disposed) worker.terminate();
+        });
         this.worker = worker;
       } catch (error) {
         this.dispose(error instanceof Error ? error : new Error(String(error)));
@@ -307,7 +314,7 @@ export class AudioCompute {
     if (this.disposed) return;
     this.disposed = true;
     this.signal?.removeEventListener("abort", this.abort);
-    this.worker?.terminate();
+    if (this.workerOpen) this.worker?.terminate();
     this.worker = undefined;
     this.handles = new WeakMap();
     for (const pending of this.pending.values()) pending.reject(error);

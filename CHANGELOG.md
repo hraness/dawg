@@ -13,6 +13,7 @@ All notable changes to dawg are recorded here. Versions follow [semantic version
 ### Fixed
 
 - **The M badge mutes its own row.** `mute drums` mutes drums instead of the focused track.
+- **Cancelling a render right after it starts no longer risks a crash.** An audio worker cancelled while still loading is terminated once it finishes loading, which avoids a Bun 1.3 segfault.
 
 ## 0.15.0
 
