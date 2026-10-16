@@ -122,7 +122,7 @@ export const glassGarden: DemoDefinition = {
       "a breathy sung hook (two lines) plus need / name / oh chops from the studio-v1 all-i-need sample",
       "chopped vocals alone over the tresillo kick before the bed comes in",
       "four drum families: tresillo, broken, house open hats and bare hat taps",
-      "a gangsa cell interlocking with 3-3-2 plucks in the upper register",
+      "a gangsa cell over the tresillo drops, trading the top register with 3-3-2 plucks",
       "a ramped saw bass with automated drive over the broken beat",
       "a restrained hard-saw lead with glides, scoops and a small wobble",
       "beat- to bar-long dropouts and a twelve-bar drumless breakdown",
@@ -236,15 +236,16 @@ export const glassGarden: DemoDefinition = {
           },
           duck: { orbit: 2, depth: 0.25, attack: 0.6, onset: 0.08, hold: true },
         },
-        // A beat of delay on "need" and "name"; the last "need" rings long.
+        // Throws catch the tails of "need" and "name", after their consonants,
+        // so the echo repeats the vowel; the last "need" rings long.
         delayMixAutomation: merge(
           throws(
-            HOOK_BARS.flatMap((b) => [b + 0.5, b + 2.375]),
+            HOOK_BARS.map((b) => b + 3.125),
             0.04,
             0.34,
             1.25,
           ),
-          ramps([92.49, 0.04], [92.5, 0.44], [96, 0.44]),
+          ramps([92.99, 0.04], [93, 0.44], [96, 0.44]),
         ),
         delayFeedbackAutomation: ramps([0, 0.38], [92, 0.38], [93, 0.58]),
       }),
@@ -290,7 +291,8 @@ export const glassGarden: DemoDefinition = {
       const last = into === scene.bars - 1;
       if (scene.name === "Chops & drums" && into < 4)
         // Kick and snare only under the first chops.
-        drums(s, bar, "tresillo", 0.95, 0, ["kick", "snare"]);
+        drums(s, bar, "tresillo", 0.82, 0, ["kick", "snare"]);
+      else if (scene.name === "Chops & drums") drums(s, bar, "tresillo", 0.88);
       else
         drums(s, bar, scene.drums, into < 2 ? 0.9 : 1, into % 4 === 3 ? 1 : 0);
       if (last && scene.drums !== "taps" && scene.drums !== "tresillo")
@@ -403,20 +405,21 @@ export const glassGarden: DemoDefinition = {
         );
       });
     });
-    // Plucks from bar 4; out for the chops-over-drums, the breakdown's start
-    // and the lead's bars.
-    inBars(4, 92, (bar) => {
-      if (within(bar, [16, 20], [48, 56], [72, 76])) return;
+    // Plucks from bar 8. They hand the top register to the gangsa in the
+    // tresillo drops and to the lead in its bars, and sit out the
+    // chops-over-drums and the breakdown's start.
+    inBars(8, 92, (bar) => {
+      if (within(bar, [16, 20], [28, 40], [48, 56], [72, 76], [80, 88])) return;
       rhythm(s, "pluck", bar, PLUCK_GRID, pluckNotes(chordAt(bar)), {
         hold: 1,
         velocity: bar >= 88 ? 0.8 - (bar - 88) * 0.1 : 1,
       });
     });
-    // Gangsa: the glass intro, the drops and the fade.
-    inBars(0, 90, (bar) => {
+    // Gangsa: the glass intro and the tresillo drops.
+    inBars(0, 88, (bar) => {
       if (bar % 2) return;
-      if (!within(bar, [0, 8], [28, 40], [60, 72], [80, 90])) return;
-      const soft = bar < 8 || bar >= 88 ? 0.75 : 1;
+      if (!within(bar, [0, 8], [28, 40], [80, 88])) return;
+      const soft = bar < 8 ? 0.75 : 1;
       for (const [beat, pitch] of GANGSA)
         s.note(
           "bells",
@@ -476,9 +479,19 @@ export const glassGarden: DemoDefinition = {
       chop(s, bar, 1.5, 1, 0.5, 0.75);
       chop(s, bar, 2.5, 2, 0.5, 0.8, flick.up(-300, 0.1));
       chop(s, bar, 3.25, 1, 0.5, 0.6);
-      stutter(s, bar + 1, 0, 2, 4, 0.25, 0.5, 0.8, (i) => i * 100);
+      stutter(
+        s,
+        bar + 1,
+        0,
+        2,
+        4,
+        0.25,
+        0.5,
+        0.8,
+        (i) => [0, 200, 400, 500][i]!,
+      );
       chop(s, bar + 1, 1, 0, 1.25, 0.75, flick.wobble(200, 6, 0.3));
-      chop(s, bar + 1, 2.75, 1, 0.5, 0.6, { cents: -300 });
+      chop(s, bar + 1, 2.75, 1, 0.5, 0.6, { cents: -400 });
       chop(s, bar + 1, 3.25, 2, 0.75, 0.7, flick.fall(-500, 0.6));
     };
     // Chops alone over the kick, then answering the hook in the drops.
@@ -486,10 +499,11 @@ export const glassGarden: DemoDefinition = {
       if (bar % 2 === 0) riff(bar);
     });
     for (const bar of RIFF_BARS) riff(bar);
-    // Stutter builds into each change of groove.
+    // Stutter builds into each change of groove; "oh" climbs the A scale.
+    const RISE = [0, 200, 400, 500, 700, 900, 1000, 1200] as const;
     for (const bar of [23, 39, 59, 79]) {
       stutter(s, bar, 0, 0, 8, 0.25, 0.45, 0.8);
-      stutter(s, bar, 2, 2, 8, 0.125, 0.5, 0.85, (i) => i * 100);
+      stutter(s, bar, 2, 2, 8, 0.125, 0.5, 0.85, (i) => RISE[i]!);
     }
     // The ending: "oh" falls away, then "all I need" over IV to I.
     chop(s, 88, 0, 2, 2, 0.75, flick.fall(-500, 0.7));

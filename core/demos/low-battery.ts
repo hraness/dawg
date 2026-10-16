@@ -25,7 +25,7 @@ import {
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
 const BPM = 140;
-const BARS = 98;
+const BARS = 96;
 
 // vi-IV-I-V in F, one chord a bar.
 const LOOP: readonly Chord[] = [
@@ -51,7 +51,7 @@ const SCENES: readonly Scene[] = [
   { name: "Saw drop", start: 52, bars: 16, drums: "half" },
   { name: "Hats only", start: 68, bars: 8, drums: "taps" },
   { name: "Last drop", start: 76, bars: 12, drums: "trap" },
-  { name: "Power down", start: 88, bars: 10, drums: "none" },
+  { name: "Power down", start: 88, bars: 8, drums: "none" },
 ];
 const sceneAt = (bar: number) =>
   SCENES.find((s) => bar >= s.start && bar < s.start + s.bars)!;
@@ -59,30 +59,34 @@ const inBars = (from: number, to: number, fn: (bar: number) => void) => {
   for (let bar = from; bar < to; bar++) fn(bar);
 };
 
-// The soft high figure: a 3-3-2 cell on chord tones two octaves up.
+// The soft high figure: a 3-3-2 cell falling over the chord tones, lifted
+// above the gangsa (C6 to Bb6).
 const PLUCK_GRID = "5..3..4.5..3..4.";
 const pluckNotes = (c: Chord) => {
-  const [a, b, d] = c.tones.map((t) => t + 24);
+  const [a, b, d] = c.tones
+    .map((t) => t + (t < 60 ? 36 : 24))
+    .sort((x, y) => x - y);
   return [d!, b!, a!, d!, b!, a!];
 };
-// Gangsa: an interlocking F-major pentatonic cell in the upper mids.
+// Gangsa: an interlocking F-major pentatonic cell in the upper mids, under
+// the plucks.
 const GANGSA: readonly (readonly [beat: number, pitch: number])[] = [
-  [0, 77],
-  [0.5, 79],
-  [0.75, 81],
-  [1.5, 84],
-  [2, 81],
-  [2.75, 79],
-  [3, 77],
-  [3.5, 79],
-  [4, 81],
-  [4.5, 84],
-  [4.75, 86],
-  [5.5, 84],
-  [6, 81],
-  [6.5, 79],
-  [7, 77],
-  [7.75, 74],
+  [0, 72],
+  [0.5, 74],
+  [0.75, 77],
+  [1.5, 79],
+  [2, 77],
+  [2.75, 74],
+  [3, 72],
+  [3.5, 74],
+  [4, 77],
+  [4.5, 79],
+  [4.75, 81],
+  [5.5, 79],
+  [6, 77],
+  [6.5, 74],
+  [7, 72],
+  [7.75, 69],
 ];
 // Stabs fall between the half-time kicks (steps 0, 7, 10) and the snare (8).
 const STAB_GRID = "...6..6....6..6.";
@@ -102,7 +106,7 @@ export const lowBattery: DemoDefinition = {
     title: "Low Battery",
     style: "Hyperpop",
     description:
-      "Half-time hyperpop in F at 140: a drumless low-power intro on the looped-vowel voice synth, bare clicks and hat taps under the sung hook, chopped vocals alone over a half-time kit, a trap-hat drop with syncopated stabs, a twelve-bar breakdown on reverb strings and gangsa, a ramped saw-bass drop with a distorted hard-saw solo, a hats-only stretch where the open hats come back, and a ten-bar power-down that echoes out.",
+      "Half-time hyperpop in F at 140: a drumless low-power intro on the looped-vowel voice synth, bare clicks and hat taps under the sung hook, chopped vocals alone over a half-time kit, a trap-hat drop with syncopated stabs, a twelve-bar breakdown on reverb strings and gangsa, a ramped saw-bass drop with a distorted hard-saw solo, a hats-only stretch where the open hats come back, and an eight-bar power-down that echoes out.",
     tempoBpm: BPM,
     key: "F",
     bars: BARS,
@@ -116,7 +120,7 @@ export const lowBattery: DemoDefinition = {
       "a hard-saw solo with octave scoops, wobble flicks, a tape-stop dive and automated distortion",
       "deep sidechain: pad, stabs, plucks, gangsa, bass and chops pump on the kick",
       "beat-long to bar-long dropouts and a twelve-bar drumless breakdown",
-      "a ten-bar ending where plucks, chops and strings ride out on delay and reverb",
+      "an eight-bar ending where plucks, chops and strings ride out on delay and reverb",
     ],
     arrangement: [
       "Low power 8",
@@ -127,7 +131,7 @@ export const lowBattery: DemoDefinition = {
       "Saw drop 16",
       "Hats only 8",
       "Last drop 12",
-      "Power down 10",
+      "Power down 8",
     ],
     mixNotes: [
       "The harmony never leaves one loop (Dm Bb F C, a chord a bar). The song moves by layers: the kick arrives at bar 16 with only the chops over it, then sub and stabs, then the pad, plucks and trap hats.",
@@ -188,7 +192,7 @@ export const lowBattery: DemoDefinition = {
       }),
     );
     s.track(
-      sounds.pluck(0.21, {
+      sounds.pluck(0.17, {
         delayFeedbackAutomation: ramps([0, 0.36], [88, 0.36], [91, 0.62]),
         delayMixAutomation: ramps([0, 0.26], [88, 0.26], [90, 0.42]),
       }),
@@ -198,7 +202,7 @@ export const lowBattery: DemoDefinition = {
       sounds.strings(0.3, {
         volumeAutomation: merge(
           steps([0, 0.85], [40, 1], [88, 1]),
-          ramps([91, 1], [97.9, 0]),
+          ramps([91, 1], [95.9, 0]),
         ),
       }),
     );
@@ -379,10 +383,14 @@ export const lowBattery: DemoDefinition = {
         velocity: bar >= 88 ? 0.8 : 1,
       });
     });
-    // Gangsa: the breakdown (around the hook), the saw drop and the end.
-    inBars(40, 88, (bar) => {
+    // Gangsa between the sung lines: the breakdown, the saw drop and the
+    // riffs of the last drop.
+    inBars(40, 84, (bar) => {
       const on =
-        (bar >= 40 && bar < 44) || (bar >= 48 && bar < 60) || bar >= 80;
+        (bar >= 40 && bar < 44) ||
+        (bar >= 48 && bar < 52) ||
+        (bar >= 56 && bar < 60) ||
+        bar >= 80;
       if (!on || bar % 2) return;
       for (const [beat, pitch] of GANGSA)
         s.note("bells", bar, beat, pitch, 0.4, beat % 1 === 0 ? 0.6 : 0.45);
@@ -530,6 +538,9 @@ export const lowBattery: DemoDefinition = {
     ]);
     dropout(s, 55, 3, 1, [...band, "saw"]);
     dropout(s, 63, 3.5, 0.5, ["kick", "snare", "hats", "sub", "saw"]);
+    // The last drop opens on drums, bass and pad under line A; the stabs and
+    // plucks come back with line B.
+    dropout(s, 76, 0, 8, ["stabs", "pluck"]);
     dropout(s, 79, 2, 2, ["kick", "snare", "hats", "sub", "stabs"]);
     dropout(s, 83, 3, 1, band);
     return s.finish();

@@ -520,14 +520,14 @@ Rig presets gain `shoegaze glide dreampop swell ebow` (the `swell` rig is the sw
 
 **Track EQ** (`src/audio/effects/eq.ts`, 0.16): `eq` is three bands on the mono voice after the amp and cab, an RBJ low shelf, a peaking mid about an octave and a half wide, and a high shelf. A band at 0 dB costs nothing, so `fx eq high 4` adds air for one filter. Gains and the mid center are automatable (`eq-low`, `eq-mid`, `eq-midfreq`, `eq-high`). `fx duck hold on` keeps a ducker's dip down until each of its notes ends, then recovers over `attack`: a sung line can hold the bed down for as long as it sings.
 
-| Effect  | Param    | Range          | Default | Lane         |
-| ------- | -------- | -------------- | ------- | ------------ |
-| **eq**  | low      | -24..12 dB     | 0       | `eq-low`     |
-| eq      | lowfreq  | 20..1000 Hz    | 150     |              |
-| **eq**  | mid      | -24..12 dB     | 0       | `eq-mid`     |
-| eq      | midfreq  | 100..10000 Hz  | 1000    | `eq-midfreq` |
-| **eq**  | high     | -24..12 dB     | 0       | `eq-high`    |
-| eq      | highfreq | 1000..20000 Hz | 8000    |              |
+| Effect | Param    | Range          | Default | Lane         |
+| ------ | -------- | -------------- | ------- | ------------ |
+| **eq** | low      | -24..12 dB     | 0       | `eq-low`     |
+| eq     | lowfreq  | 20..1000 Hz    | 150     |              |
+| **eq** | mid      | -24..12 dB     | 0       | `eq-mid`     |
+| eq     | midfreq  | 100..10000 Hz  | 1000    | `eq-midfreq` |
+| **eq** | high     | -24..12 dB     | 0       | `eq-high`    |
+| eq     | highfreq | 1000..20000 Hz | 8000    |              |
 
 ## Master and loudness
 
