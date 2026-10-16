@@ -38,7 +38,7 @@ test.skipIf(!supported)(
           () => t.vt.text().includes(`1/${tracks}`),
           "visible arrangement",
         );
-        expect(t.vt.text()).toContain("c copy");
+        expect(t.vt.text()).toContain(" paste ");
         expect(t.vt.text()).not.toContain("song notes");
         expect(t.vt.wrapsSinceClear).toBe(0);
         expect(t.vt.scrollsSinceClear).toBe(0);
@@ -206,7 +206,7 @@ test.skipIf(!supported)(
       expect(after.revision).toBe(before.revision + 1);
       expect(t.state()?.track).toBe(createDemo("signal-bloom").tracks[0]!.id);
       expect(t.vt.lines()[0]).not.toContain("▶");
-      expect(t.vt.text()).toContain("c copy");
+      expect(t.vt.text()).toContain(" paste ");
       expect(t.state()?.overlay).toBeNull();
       await t.type("\u001a", "undo demo");
       expect((await loadSession(paths)).composition).toEqual(

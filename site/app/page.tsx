@@ -121,7 +121,8 @@ const depths: readonly {
     title: "TAPE",
     body: (
       <>
-        <kbd>Ctrl-T</kbd>: copy, cut and loop bars with one key.
+        <kbd>Ctrl-T</kbd>: every track across the bars, with copy, cut and paste
+        buttons.
       </>
     ),
   },

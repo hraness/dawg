@@ -60,7 +60,18 @@ export type TapeAction =
 
 /** Compact editing actions; navigation has a separate visible shelf. */
 export const TAPE_HINT =
-  "r record · c copy · x cut · v paste · \\ loop · h mute · H solo · ? keys";
+  "type a command · space play · , . scene · \\ loop · ? keys";
+
+/**
+ * Keys that always type into the prompt on TAPE, even when it is empty:
+ * a letter or digit starts a command or a question, so the keyboard never
+ * loses the prompt to the timeline. The letter gestures (copy, cut,
+ * paste, record, mute, solo) stay on the footer buttons and the M/S
+ * badges, which run the same typed commands.
+ */
+export function typesOnTape(value: string): boolean {
+  return /^[\p{L}\p{N}]$/u.test(value);
+}
 
 /** `5-6` or `5`, as typed (1-based, ASCII hyphen). */
 export function typedRange(range: BarRange): string {
@@ -205,7 +216,11 @@ function paste(context: TapeContext, insert: boolean): TapeAction {
   };
 }
 
-/** One key on TAPE (the prompt is empty and no overlay is up). */
+/**
+ * One key on TAPE (the prompt is empty and no overlay is up). Letters and
+ * digits arrive here only from the footer buttons and badges; typed on
+ * the keyboard they go to the prompt (`typesOnTape`).
+ */
 export function tapeKey(context: TapeContext, value: string): TapeAction {
   const score = context.score;
   const bar = barOfBeat(score, context.beat);
@@ -252,55 +267,27 @@ export function tapeKey(context: TapeContext, value: string): TapeAction {
         ),
       };
     }
+    // c x v V r H: the footer buttons and the solo badge, never the
+    // keyboard (letters type into the prompt).
     case "c":
-    case "C":
-      return {
-        type: "run",
-        commands: [rangeVerb(context, "copy", value === "C")],
-      };
+      return { type: "run", commands: [rangeVerb(context, "copy", false)] };
     case "x":
-    case "X": {
-      const all = value === "X";
       return {
         type: "run",
         commands: [
-          rangeVerb(context, "copy", all),
-          rangeVerb(context, "clear", all),
+          rangeVerb(context, "copy", false),
+          rangeVerb(context, "clear", false),
         ],
         cut: true,
       };
-    }
     case "v":
     case "V":
       return paste(context, value === "V");
+    // Forward delete only: backspace on an empty prompt clears nothing.
     case "\u001b[3~":
-    case "\u007f":
       return { type: "run", commands: [rangeVerb(context, "clear", false)] };
     case "~":
       return { type: "run", commands: [rangeVerb(context, "reverse", false)] };
-    case "s":
-    case "S": {
-      const section = sectionAtBar(score, bar);
-      if (!section)
-        return {
-          type: "note",
-          message: "no section under the playhead · section add verse 1-4",
-        };
-      return {
-        type: "run",
-        commands: [
-          value === "s"
-            ? `section split ${section.name} at ${bar + 1}`
-            : `section join ${joinTarget(score, section).name}`,
-        ],
-      };
-    }
-    case "h":
-      if (!track) return { type: "pass" };
-      return {
-        type: "run",
-        commands: [`${track.muted ? "unmute" : "mute"} ${track.id}`],
-      };
     case "H":
       if (!track) return { type: "pass" };
       return {
@@ -308,10 +295,6 @@ export function tapeKey(context: TapeContext, value: string): TapeAction {
         // `solo` acts on the focused track, which is this row.
         commands: [track.solo ? "unsolo" : "solo"],
       };
-    case "m":
-      return { type: "run", commands: ["/click"] };
-    case "b":
-      return { type: "run", commands: ["stop"] };
     case ",":
     case ".": {
       // `.` the next section start after the playhead; `,` the last one
@@ -373,11 +356,9 @@ export function tapeKey(context: TapeContext, value: string): TapeAction {
         ? { type: "run", commands: [command] }
         : { type: "note", message: "loop · cannot move its start further" };
     }
-    // §4.7: r / R record the loop in PLAY, one undo step per pass.
+    // §4.7: record the loop in PLAY, one undo step per pass.
     case "r":
       return { type: "run", commands: ["keys record"] };
-    case "R":
-      return { type: "run", commands: ["keys record replace"] };
     case "\\": {
       if (loopRange(score)) return { type: "run", commands: ["loop off"] };
       const section = sectionAtBar(score, bar);
@@ -387,18 +368,8 @@ export function tapeKey(context: TapeContext, value: string): TapeAction {
       };
     }
     default:
-      break;
+      return { type: "pass" };
   }
-  if (/^[1-9]$/.test(value)) {
-    const row = Number(value) - 1;
-    if (row >= score.tracks.length)
-      return {
-        type: "note",
-        message: `no track ${value} · ${score.tracks.length} tracks`,
-      };
-    return { type: "focus", row };
-  }
-  return { type: "pass" };
 }
 
 /** `track drums`: the command a row focus runs. */
@@ -584,20 +555,4 @@ export function foldBase(before: TrackScore, now: TrackScore): TrackScore {
     loop: now.loop ?? null,
     loopSection: now.loop ? null : (now.loopSection ?? null),
   });
-}
-
-/**
- * `S` joins the section under the playhead with its neighbour: the one
- * that ends where it starts (undoing an `s`), else the one after it.
- * `section join <name>` joins a section with the next.
- */
-function joinTarget(
-  score: TrackScore,
-  section: NonNullable<ReturnType<typeof sectionAtBar>>,
-) {
-  const before = score.sections.find(
-    (item) =>
-      item !== section && item.startBar + item.bars === section.startBar,
-  );
-  return before ?? section;
 }
