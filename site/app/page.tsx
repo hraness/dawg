@@ -112,7 +112,8 @@ const depths: readonly {
     title: "Sample library",
     body: (
       <>
-        Eleven original sounds, including three sung hooks; <code>sample chop</code> slices one.
+        Eleven original sounds, including three sung hooks;{" "}
+        <code>sample chop</code> slices one.
       </>
     ),
     since: "0.12.0",
