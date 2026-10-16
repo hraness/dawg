@@ -1,6 +1,10 @@
-/** Original CC0 studio-v1 assets. Run `bun scripts/generate-studio-samples.ts`. */
+/**
+ * Original CC0 studio-v1 assets. Run `bun scripts/generate-studio-samples.ts`.
+ * The sung hooks (stay-tonight, lights-out, all-i-need) come from
+ * scripts/vox/phrases.py instead; their manifest entries are kept as they are.
+ */
 import { createHash } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createScore } from "../core/score.ts";
 import { renderSingTrack } from "../src/audio/sing/engine.ts";
 import { encodeWav } from "../src/audio/wav.ts";
@@ -146,8 +150,13 @@ await save(
       (t / 2) ** 2,
   ),
 );
+const previous = JSON.parse(
+  await readFile(new URL("manifest.json", destination), "utf8").catch(
+    () => "{}",
+  ),
+) as { samples?: typeof digest };
 await writeFile(
   new URL("manifest.json", destination),
-  `${JSON.stringify({ version: 1, license: "CC0-1.0", sampleRate, channels: 1, samples: digest }, null, 2)}\n`,
+  `${JSON.stringify({ version: 1, license: "CC0-1.0", sampleRate, channels: 1, samples: { ...previous.samples, ...digest } }, null, 2)}\n`,
 );
 console.log(JSON.stringify(digest, null, 2));

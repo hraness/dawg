@@ -18,6 +18,24 @@ const phraseSlices = (a: string, b: string) =>
   [a, b, a, b].map((name, i) =>
     Object.freeze({ name, begin: i / 4, end: (i + 1) / 4 }),
   );
+/**
+ * The sung hooks are five bars plus a half-beat lead at their tempo: line A
+ * on beats 0-8, line B on 8-16 and three held syllables at 16, 17.5 and 19.
+ * Each slice opens a quarter beat early so onset consonants land before the
+ * beat; trigger slices a quarter beat ahead of the downbeat.
+ */
+const hookSlices = (...chops: readonly [string, string, string]) => {
+  const at = (beats: number) => Math.round((beats / 20.5) * 1e5) / 1e5;
+  return [
+    { name: "line-a", begin: at(0.25), end: at(8.25) },
+    { name: "line-b", begin: at(8.25), end: at(16.25) },
+    ...chops.map((name, i) => ({
+      name,
+      begin: at(16.25 + 1.5 * i),
+      end: at(17.5 + 1.5 * i),
+    })),
+  ].map((slice) => Object.freeze(slice));
+};
 export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
   [
     {
@@ -115,6 +133,45 @@ export const BUNDLED_SAMPLES: readonly BundledSample[] = Object.freeze(
       sha256:
         "5a57894a109dc4fd117cee9acd9ea15c48a61fcfd27a9ba262e852ef9cff2108",
       slices: [],
+    },
+    {
+      id: "stay-tonight",
+      title: "Stay Tonight",
+      description:
+        "Original sung pop hook in D major at 130 BPM: two lines plus three held chop syllables.",
+      tags: ["vocal", "phrase", "hyperpop", "pop", "chop", "hook"],
+      root: 69,
+      seconds: 9.4615,
+      bpm: 130,
+      sha256:
+        "d307feefc253325088ea38f091aa58fa0e6c81f82e5c0c96186358018cdc4ebc",
+      slices: hookSlices("stay", "night", "go"),
+    },
+    {
+      id: "lights-out",
+      title: "Lights Out",
+      description:
+        "Original sung pop hook in F major at 140 BPM, a bright formant; two lines and three chops.",
+      tags: ["vocal", "phrase", "hyperpop", "pop", "chop", "hook"],
+      root: 69,
+      seconds: 8.785708333333334,
+      bpm: 140,
+      sha256:
+        "130b0d29d7ddd0047294422e4c2d04fcc4875964501582a88ac0f59af4039810",
+      slices: hookSlices("lights", "out", "on"),
+    },
+    {
+      id: "all-i-need",
+      title: "All I Need",
+      description:
+        "Original breathy sung pop hook in A major at 136 BPM; two lines and three chops.",
+      tags: ["vocal", "phrase", "hyperpop", "pop", "chop", "hook"],
+      root: 69,
+      seconds: 9.044083333333333,
+      bpm: 136,
+      sha256:
+        "52c373c3d830b7cd4004c782680582d942ed8eadb1ae4425a6736a4fac1ee8db",
+      slices: hookSlices("need", "name", "oh"),
     },
   ].map((sample) =>
     Object.freeze({

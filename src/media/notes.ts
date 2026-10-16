@@ -278,6 +278,10 @@ export async function transcribeNotes(
         [
           ...basicPitch,
           ...basicPitchParameterArguments(parameters),
+          // The ONNX model: the default TF saved model fails to load under
+          // Keras 3, and CoreML is absent from the uv tool environment.
+          "--model-serialization",
+          "onnx",
           outDir,
           wavPath,
           "--save-note-events",

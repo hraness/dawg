@@ -36,8 +36,11 @@ export const INSTALL_COMMANDS: Readonly<Record<MediaToolName, string>> = {
   ffprobe: "brew install yt-dlp ffmpeg whisper-cpp",
   "whisper-cli": "brew install yt-dlp ffmpeg whisper-cpp",
   uv: "curl -LsSf https://astral.sh/uv/install.sh | sh",
-  demucs: "uv tool install demucs",
-  "basic-pitch": "uv tool install basic-pitch",
+  // demucs leaves numpy undeclared; basic-pitch needs a model runtime and
+  // the pkg_resources that setuptools 81 removed and scipy 1.13 moved.
+  demucs: "uv tool install demucs --with numpy",
+  "basic-pitch":
+    "uv tool install basic-pitch --with onnxruntime --with 'setuptools<81' --with 'scipy<1.13'",
 };
 
 /** What each tool is for, in the doctor report. */
