@@ -74,9 +74,12 @@ test.skipIf(!supported)(
       const focus = t.state()?.track;
       const backgroundY = t.vt
         .lines()
-        .findIndex((line) => line.indexOf("Glass") > 100);
+        .findIndex((line) => line.indexOf("range:") > 100);
       expect(backgroundY).toBeGreaterThan(0);
-      await click(t.vt.lines()[backgroundY]!.indexOf("Glass") + 1, backgroundY);
+      await click(
+        t.vt.lines()[backgroundY]!.indexOf("range:") + 1,
+        backgroundY,
+      );
       expect(t.state()?.screen).toBe("tape");
       expect(t.state()?.overlay).toBe("picker");
       expect(t.state()?.track).toBe(focus);

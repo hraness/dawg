@@ -1,6 +1,6 @@
 # Sung hook generator
 
-`phrases.py` writes the three studio-v1 sung hooks (`stay-tonight`, `lights-out`, `all-i-need`) used by the hyperpop demos. `sing.py` does the singing:
+`songs.py` writes the three studio-v1 vocal books (`soft-reboot-vox`, `low-battery-vox`, `glass-garden-vox`) the hyperpop demos sing and chop; `phrases.py` writes the three earlier sung hooks (`stay-tonight`, `lights-out`, `all-i-need`). `sing.py` does the singing:
 
 1. [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) (Apache-2.0) speaks the original lyric with word timestamps.
 2. The WORLD vocoder (pyworld) analyses it and splits each word into syllables at energy valleys.
@@ -15,4 +15,4 @@ uv pip install --python .venv/bin/python kokoro==0.9.4 misaki==0.9.4 pyworld==0.
 .venv/bin/python -I scripts/vox/phrases.py /tmp/vox
 ```
 
-The first run downloads the Kokoro weights and voice packs from Hugging Face. Torch inference is not bit-exact across machines, so a regenerated file will not match the checked-in hashes. The hash-pinned WAVs in `assets/samples/studio/` are the canonical distribution. `phrases.py` prints, and saves as `slices.json`, the slice table that `core/bundled-samples.ts` reproduces with `hookSlices()`.
+The first run downloads the Kokoro weights and voice packs from Hugging Face. Torch inference is not bit-exact across machines, so a regenerated file will not match the checked-in hashes. The hash-pinned WAVs in `assets/samples/studio/` are the canonical distribution. `phrases.py` prints, and saves as `slices.json`, the slice table that `core/bundled-samples.ts` reproduces with `hookSlices()`. `songs.py <outdir> [id...]` renders each line, syllable and held vowel separately at its song's tempo, joins them and saves the named slices as `slices.json`; `core/bundled-samples.ts` lists those slices verbatim.

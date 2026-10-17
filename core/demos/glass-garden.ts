@@ -1,129 +1,388 @@
-/** Glass Garden: tresillo hyperpop with a gamelan shimmer and a breathy hook. */
-import { Composer, orbit } from "./build.ts";
+/**
+ * Glass Garden: bright, glassy hyperpop in A major at 128. Tresillo and
+ * broken-beat verses, FM bells and a syllable arp that blooms out of the
+ * vocal, a borrowed D minor that clouds every fourth bar, and a
+ * half-speed bridge where the voice is frozen into a grain pad.
+ */
+import { Composer } from "./build.ts";
 import {
-  chop,
-  chopTrack,
-  drop,
   dropout,
-  drums,
   flick,
-  hold,
-  line,
-  loop,
+  glitch,
+  kitTracks,
   merge,
+  patch,
   ramps,
-  rhythm,
-  sounds,
+  riserLane,
+  slot,
   steps,
   stutter,
-  swells,
   throws,
-  vocalSynthTrack,
-  vocalTrack,
+  trackOf,
+  writeSong,
+  type Book,
   type Chord,
-  type DrumFamily,
+  type SongSection,
 } from "./hyperpop.ts";
 import { demoInfo, type DemoDefinition } from "./types.ts";
 
-const BPM = 136;
-const BARS = 112;
+const BPM = 128;
 
-// IV-I-V-vi in A, one chord a bar: the hook's "need" lands on the tonic.
-const LOOP: readonly Chord[] = [
-  { bass: 38, tones: [57, 62, 66] }, // D
-  { bass: 45, tones: [57, 61, 64] }, // A
-  { bass: 40, tones: [56, 59, 64] }, // E
-  { bass: 42, tones: [57, 61, 66] }, // F#m
-];
-// The breakdown turns the tonic minor (A minor), the one outside colour the
-// references' loops tend to hold. The hook's held "need" is an A, its root.
-const BREAK_LOOP: readonly Chord[] = [
-  LOOP[0]!,
-  { bass: 45, tones: [57, 60, 64] }, // Am
-  LOOP[2]!,
-  LOOP[3]!,
-];
-const chordAt = (bar: number) =>
-  (bar >= 64 && bar < 76 ? BREAK_LOOP : LOOP)[bar % 4]!;
-
-type Scene = Readonly<{
-  name: string;
-  start: number;
-  bars: number;
-  drums: DrumFamily;
-}>;
-const SCENES: readonly Scene[] = [
-  { name: "Glass", start: 0, bars: 8, drums: "none" },
-  { name: "Taps", start: 8, bars: 16, drums: "taps" },
-  { name: "Light drums", start: 24, bars: 16, drums: "broken" },
-  { name: "Drop", start: 40, bars: 16, drums: "tresillo" },
-  { name: "Broken", start: 56, bars: 8, drums: "broken" },
-  { name: "Breakdown", start: 64, bars: 12, drums: "none" },
-  { name: "House drop", start: 76, bars: 16, drums: "house" },
-  { name: "Last drop", start: 92, bars: 8, drums: "tresillo" },
-  { name: "Glass fade", start: 100, bars: 12, drums: "none" },
-];
-const sceneAt = (bar: number) =>
-  SCENES.find((s) => bar >= s.start && bar < s.start + s.bars)!;
-const inBars = (from: number, to: number, fn: (bar: number) => void) => {
-  for (let bar = from; bar < to; bar++) fn(bar);
+const BOOK: Book = {
+  sample: "glass-garden-vox",
+  root: 69,
+  syllables: ["glass", "bloom", "gold", "grow", "ah", "ooh"],
+  ends: {
+    v1: 3,
+    v2: 3,
+    v3: 3,
+    v4: 3,
+    v5: 3,
+    v6: 3,
+    v7: 3,
+    v8: 3,
+    pre1: 2,
+    pre2: 2.5,
+    ch1: 3,
+    ch2: 2.5,
+    ch3: 4,
+  },
 };
-const within = (
-  bar: number,
-  ...spans: readonly (readonly [number, number])[]
-) => spans.some(([from, to]) => bar >= from && bar < to);
 
-// Plucks in 3-3-2 groups, echoing the tresillo kick an octave of air above.
-const PLUCK_GRID = "5..3..4.5..3..4.";
-const pluckNotes = (c: Chord) => {
-  const [a, b, d] = c.tones.map((t) => t + 24);
-  return [d!, b!, a!, d!, b!, a!];
-};
-/**
- * Gangsa: an interlocking A-pentatonic cell over two bars. The first bar
- * (D or E) leans on E, F# and B, which suit both; the second (A or F#m) on
- * A, C# and E.
- */
-const GANGSA: readonly (readonly [beat: number, pitch: number])[] = [
-  [0, 83],
-  [0.5, 78],
-  [0.75, 76],
-  [1.5, 78],
-  [2, 83],
-  [2.75, 78],
-  [3, 76],
-  [3.5, 78],
-  [4, 81],
-  [4.5, 85],
-  [4.75, 81],
-  [5.5, 76],
-  [6, 81],
-  [6.5, 85],
-  [7, 85],
-  [7.75, 81],
+const c = (bass: number, ...tones: number[]): Chord => ({ bass, tones });
+const A = c(45, 61, 64, 69);
+const E = c(40, 59, 64, 68);
+const Fsm = c(42, 61, 66, 69);
+const D = c(38, 62, 66, 69);
+const Dm = c(38, 62, 65, 69);
+const Bm = c(47, 62, 66, 71);
+const Csm = c(37, 61, 64, 68);
+const F = c(41, 60, 65, 69);
+const VERSE = [A, E, Fsm, Dm];
+const CHORUS = [D, E, Csm, Fsm];
+const PRE = [Bm, Csm, D, E];
+const BRIDGE = [F, Dm, A, E];
+
+const HOOK: readonly (readonly (readonly [number, number, number])[])[] = [
+  [
+    [0, 81, 0.4],
+    [0.5, 80, 0.25],
+    [0.75, 78, 0.25],
+    [1, 76, 0.75],
+    [2, 81, 0.25],
+    [2.25, 83, 0.25],
+    [2.5, 85, 1.25],
+  ],
+  [
+    [0, 83, 0.4],
+    [0.5, 80, 0.4],
+    [1, 76, 0.4],
+    [1.5, 80, 0.25],
+    [1.75, 83, 0.75],
+    [2.75, 88, 1],
+  ],
+  [
+    [0, 85, 0.25],
+    [0.25, 83, 0.25],
+    [0.5, 80, 0.5],
+    [1.25, 76, 0.5],
+    [2, 80, 0.25],
+    [2.25, 81, 0.25],
+    [2.5, 83, 0.75],
+    [3.25, 80, 0.5],
+  ],
+  [
+    [0, 81, 1.5],
+    [1.75, 78, 0.25],
+    [2, 81, 0.5],
+    [2.5, 85, 0.5],
+    [3, 88, 0.9],
+  ],
 ];
-// Stabs push off the tresillo kick (0, 3, 7, 10, 13): never on a kick step.
-const TRES_STABS = "..6..6.....6..6.";
-// Over the house groove they sit between the kicks and the open hats.
-const HOUSE_STABS = ".6...6...6...6..";
-/** The first stab of each pair speaks, the answer sits back. */
-const STAB_ACCENTS = [1, 0.8, 0.92, 0.76] as const;
-/**
- * The hook (line A, line B two bars later) rides the long light-drums
- * stretch and returns every eight bars of the drops; the chop cell loops
- * underneath, quieter while a line sings. Bars 88-91 belong to the lead.
- */
-const HOOK_BARS = [
-  8, 12, 16, 20, 24, 32, 40, 48, 56, 68, 76, 84, 92, 96,
-] as const;
-const singing = (bar: number) => HOOK_BARS.some((b) => bar >= b && bar < b + 4);
-/** Bars where the drums run, a dropout or two aside. */
-const DRUM_RUNS: readonly (readonly [from: number, to: number])[] = [
-  [24, 64],
-  [76, 100],
+
+// Bloom cells: syllables rising through the chord, scattering on the turn.
+// The hook's answer: the same contour a third higher, opening to the top F#.
+const ANSWER: readonly (readonly (readonly [number, number, number])[])[] = [
+  [
+    [0, 86, 0.4],
+    [0.5, 85, 0.25],
+    [0.75, 81, 0.25],
+    [1, 78, 0.5],
+    [1.75, 81, 0.25],
+    [2, 86, 0.25],
+    [2.25, 88, 0.25],
+    [2.5, 90, 1.25],
+  ],
+  [
+    [0, 88, 0.25],
+    [0.25, 83, 0.25],
+    [0.5, 80, 0.25],
+    [0.75, 83, 0.5],
+    [1.5, 88, 0.5],
+    [2.25, 85, 0.25],
+    [2.5, 83, 0.5],
+    [3.25, 80, 0.6],
+  ],
+  [
+    [0, 80, 0.25],
+    [0.25, 85, 0.25],
+    [0.5, 88, 0.5],
+    [1.25, 85, 0.25],
+    [1.5, 80, 0.5],
+    [2.25, 83, 0.25],
+    [2.5, 85, 0.75],
+    [3.5, 88, 0.4],
+  ],
+  [
+    [0, 85, 1],
+    [1.25, 81, 0.25],
+    [1.5, 78, 0.25],
+    [1.75, 81, 0.25],
+    [2, 85, 0.5],
+    [2.5, 90, 1.4],
+  ],
 ];
-const drumming = (bar: number) =>
-  DRUM_RUNS.some(([a, b]) => bar >= a && bar < b);
+// Verse 2 answers on new rhythms, falling where the first verse climbed.
+const RIFF_VERSE2 = [
+  "............4.6.",
+  "3..5..4.6...5...",
+  "............5.3.",
+  "4.5.6...7.6.5.4.",
+];
+const RIFF_VERSE = [
+  "............3.4.",
+  "5.....4.3.......",
+  "............4.5.",
+  "6...5...4.3.2...",
+];
+const RIFF_CHORUS = [
+  "3.4.5.3.4.5.6.4.",
+  "5.6.7.5.6.7.8.6.",
+  "3.4.5.3.4.5.6.4.",
+  "8.7.6.5.7.6.5.4.",
+];
+const RIFF_POST = [
+  "34567.5.4.3.4.5.",
+  "56789.7.6.5.6.7.",
+  "34567.5.4.3.4.5.",
+  "9.8.7.6.8.7.6.5-",
+];
+const RIFF_POST2 = [
+  "3.53.64.5.75.86.",
+  "4.64.75.6.86.97.",
+  "3.53.64.5.75.86.",
+  "9876876576546543",
+];
+const STABS = [
+  "8.....7...8..7..",
+  "..8..7..8.....7.",
+  "8.....7...8..7..",
+  "8..7..8..7..8.7.",
+];
+const STABS_POST = [
+  "8.7.8..7.8.7..8.",
+  ".8.7.8..7.8.8.7.",
+  "8.7.8..7.8.7..8.",
+  "8.8.7.7.8.8.7.78",
+];
+const BELLS = [
+  "7...6...5.......",
+  "8.....6.....5...",
+  "7...6...5.......",
+  "8...7...6...5...",
+];
+const BELLS_VERSE = [
+  "5.......4.......",
+  "........6...5...",
+  "5.......4.......",
+  "4...3...2...1...",
+];
+const ARP_16 = ["0246024602460246", "6420642064206420"];
+const ARP_SKIP = ["0.24.6.0.24.6.4.", "6.42.0.6.42.0.2."];
+
+const SECTIONS: readonly SongSection[] = [
+  {
+    kind: "intro",
+    name: "Seed",
+    bars: 4,
+    chords: VERSE,
+    drums: ["taps"],
+    energy: 0.75,
+    play: ["cloud", "bells"],
+    bells: BELLS_VERSE,
+  },
+  {
+    kind: "verse",
+    name: "Verse 1",
+    bars: 8,
+    chords: VERSE,
+    drums: ["broken", "tresillo"],
+    energy: 0.85,
+    play: ["sub", "bells", "riff", "pad"],
+    bells: BELLS_VERSE,
+    riff: RIFF_VERSE,
+    bass: ["9.....7.....7...", "9.....7...7....."],
+    lines: ["v1", null, "v2", null, "v3", null, "v4", null],
+  },
+  {
+    kind: "pre",
+    name: "Pre 1",
+    bars: 4,
+    chords: PRE,
+    drums: ["skip"],
+    energy: 0.85,
+    play: ["sub", "pad", "arp", "riff", "stabs"],
+    arp: ARP_SKIP,
+    stabs: ["8.......8.......", "8.....8.....8..."],
+    riff: RIFF_VERSE,
+    bass: ["9.......7......."],
+    lines: ["pre1", "pre2", null, null],
+  },
+  {
+    kind: "chorus",
+    name: "Chorus 1",
+    bars: 8,
+    chords: CHORUS,
+    drums: ["house", "tresillo"],
+    play: ["sub", "pad", "stabs", "arp", "riff", "cloud"],
+    stabs: STABS,
+    arp: ARP_SKIP,
+    riff: RIFF_CHORUS,
+    bass: ["9..7..7...7..7..", "9..7..7...7....."],
+    lines: ["ch1", null, "ch2", null, "ch1", null, "ch3", null],
+  },
+  {
+    kind: "post",
+    name: "Bloom 1",
+    bars: 4,
+    chords: CHORUS,
+    drums: ["four"],
+    play: ["sub", "stabs", "arp", "riff", "lead", "cloud"],
+    stabs: STABS_POST,
+    arp: ARP_16,
+    riff: RIFF_POST,
+    lead: HOOK,
+    bass: ["9..7..7...7..7..", "9..7..7.7..7..7."],
+  },
+  {
+    kind: "verse",
+    name: "Verse 2",
+    bars: 8,
+    chords: VERSE,
+    drums: ["tresillo", "skip"],
+    energy: 0.9,
+    play: ["sub", "arp", "riff", "pad", "bells"],
+    arp: ARP_SKIP,
+    bells: BELLS_VERSE,
+    riff: RIFF_VERSE2,
+    bass: ["9..7..7...7.....", "9..7..7...7..7.."],
+    lines: ["v5", null, "v6", null, "v7", null, "v8", null],
+  },
+  {
+    kind: "pre",
+    name: "Pre 2",
+    bars: 4,
+    chords: PRE,
+    drums: ["skip"],
+    energy: 0.9,
+    play: ["sub", "pad", "arp", "riff", "stabs"],
+    arp: ARP_SKIP,
+    stabs: STABS,
+    riff: RIFF_CHORUS,
+    bass: ["9.......7......."],
+    lines: ["pre1", "pre2", null, null],
+  },
+  {
+    kind: "chorus",
+    name: "Chorus 2",
+    bars: 8,
+    chords: CHORUS,
+    drums: ["house", "four"],
+    play: ["sub", "pad", "stabs", "arp", "riff", "cloud", "double"],
+    stabs: STABS,
+    arp: ARP_SKIP,
+    riff: RIFF_POST,
+    bass: ["9..7..7...7..7..", "9..7..7...7....."],
+    lines: ["ch1", null, "ch2", null, "ch1", null, "ch3", null],
+  },
+  {
+    kind: "post",
+    name: "Bloom 2",
+    bars: 8,
+    chords: CHORUS,
+    drums: ["tresillo", "four"],
+    play: ["sub", "stabs", "arp", "riff", "lead", "cloud", "growl"],
+    stabs: STABS_POST,
+    arp: ARP_SKIP,
+    riff: RIFF_POST2,
+    lead: [...HOOK, ...ANSWER],
+    voiceLead: true,
+    growl: ["2..2..2...2..2..", "2..2..3...3..2.."],
+    bass: ["9...............", "9.......9......."],
+  },
+  {
+    kind: "break",
+    name: "Greenhouse",
+    bars: 8,
+    chords: BRIDGE,
+    drums: ["none", "half"],
+    energy: 0.7,
+    play: ["pad", "cloud", "bells"],
+    bells: BELLS_VERSE,
+  },
+  {
+    kind: "build",
+    name: "Sunlight",
+    bars: 4,
+    chords: PRE,
+    drums: ["broken"],
+    energy: 0.9,
+    play: ["sub", "pad", "arp", "riff", "stabs"],
+    arp: ARP_SKIP,
+    riff: RIFF_CHORUS,
+    stabs: ["8...8...8...8...", "8.8.8.8.8.8.8.8."],
+    bass: ["9...9...9...9..."],
+  },
+  {
+    kind: "chorus",
+    name: "Last chorus",
+    bars: 8,
+    chords: CHORUS,
+    drums: ["house", "tresillo"],
+    play: ["sub", "pad", "stabs", "arp", "riff", "bells", "cloud", "double"],
+    stabs: STABS_POST,
+    arp: ARP_SKIP,
+    bells: BELLS,
+    riff: RIFF_POST2,
+    bass: ["9..7..7...7..7..", "9..7..7.7..7..7."],
+    lines: ["ch1", null, "ch2", null, "ch1", null, "ch3", null],
+  },
+  {
+    kind: "post",
+    name: "Last bloom",
+    bars: 4,
+    chords: CHORUS,
+    drums: ["four"],
+    play: ["sub", "stabs", "arp", "riff", "lead", "cloud", "bells"],
+    stabs: STABS_POST,
+    arp: ARP_16,
+    bells: BELLS,
+    riff: RIFF_POST2,
+    lead: ANSWER,
+    voiceLead: true,
+    bass: ["9..7..7...7..7..", "9..7..7.7..7..7."],
+  },
+  {
+    kind: "outro",
+    name: "Glass",
+    bars: 4,
+    chords: [D, A, Dm, A],
+    drums: ["none"],
+    play: ["pad", "cloud", "bells"],
+    bells: ["7...6...5.......", null, "5...4...3.......", null],
+  },
+];
+const BARS = SECTIONS.reduce((n, s) => n + s.bars, 0);
 
 export const glassGarden: DemoDefinition = {
   info: demoInfo({
@@ -131,490 +390,175 @@ export const glassGarden: DemoDefinition = {
     title: "Glass Garden",
     style: "Hyperpop",
     description:
-      "Tresillo hyperpop in A: a drumless gamelan-and-voice opening, sixteen bars of bare hat taps under the breathy sung hook, sixteen more over a light broken kick, then the full 3-3-2 kit for a pumping drop with stabs pushed off the kick, a broken-beat stretch on a ramped saw bass, a twelve-bar string breakdown over a borrowed minor chord, a house-hat drop with a restrained gliding lead, a last tresillo drop, and a twelve-bar glass fade.",
+      "Bright, glassy hyperpop in A major at 128: tresillo and broken-beat verses, FM bells and a syllable arp that blooms out of each sung line, a borrowed D minor clouding every fourth bar, and a greenhouse bridge where the voice freezes into a grain pad under a glitching vocal solo.",
     tempoBpm: BPM,
     key: "A",
     bars: BARS,
-    highlightBar: 40,
+    highlightBar: 48,
     trackId: "chops",
     features: [
-      "a breathy sung hook (two lines) plus need / name / oh chops from the studio-v1 all-i-need sample",
-      "a forty-bar drum run that starts light (a broken kick under the hook) and only fills out at bar 40",
-      "a one-bar chop cell looped under the drum runs, the chops as an instrument",
-      "the hook and its chops alone over the first kicks before the bed comes in",
-      "four drum families: tresillo, broken, house open hats and bare hat taps",
-      "a gangsa cell over the tresillo drops, trading the top register with 3-3-2 plucks",
-      "a ramped saw bass with automated drive over the broken beat, and saw harmonics under the sub",
-      "a restrained hard-saw lead with glides, scoops and a small wobble",
-      "beat- to bar-long dropouts and a twelve-bar drumless breakdown",
-      "a twelve-bar ending where the hook, plucks and strings ring out",
+      "an original vocal book: two verses, a pre-chorus and a soaring chorus",
+      "syllable arps that bloom up through the chord after every line",
+      "a borrowed D minor in the verse and an F-major bridge",
+      "tresillo, broken and two-step beats changing by phrase",
+      "a greenhouse bridge: frozen grain voice, glitching solo",
+      "stuttered chorus heads and reversed syllables into every section but the verses",
+      "vowel wavetable lead doubled by the looped voice",
+      "an octave-up chipmunk double on the second and last chorus",
     ],
-    arrangement: [
-      "Glass 8",
-      "Taps 16",
-      "Light drums 16",
-      "Drop 16",
-      "Broken 8",
-      "Breakdown 12",
-      "House drop 16",
-      "Last drop 8",
-      "Glass fade 12",
-    ],
+    arrangement: SECTIONS.map((s) => `${s.name} ${s.bars}`),
     mixNotes: [
-      "Harmony never leaves the loop (D A E F#m, a chord a bar); the breakdown turns the A minor. Contrast comes from the drums: a light broken kick under the hook for sixteen bars, tresillo for the drops, a broken beat over the saw bass, a house drop with open hats, and hat taps around the hook.",
-      "Pad, stabs, plucks, gangsa, sub, saw bass, chops, voice synth and lead pump hard on the kick's orbit; the strings and the sung lines stay steady on top. The sub is soft, driven and slides; the saw bass swells in and its drive climbs across the broken section.",
-      "The sung lines throw a beat of delay on 'need' and 'name'. The chop cell loops bar after bar with a turnaround every eighth bar, repitched, stuttered and flicked, and crushes into each drop. The ending settles on IV then I while delay feedback rises and reverb carries the hook out.",
+      "bells ring above the arp so the syllables fill the middle",
+      "delay throws open on the last word of every sung line",
+      "the chops' formant rises in the blooms and falls in the bridge",
+      "kick pumps the whole bed on orbit 2",
     ],
   }),
   build() {
-    const s = new Composer(glassGarden.info);
-    for (const { name, start, bars } of SCENES) s.section(name, start, bars);
+    const s = new Composer(this.info);
+    kitTracks(s, BOOK, {
+      bpm: BPM,
+      levels: { bells: 0.2, saw: 0.16, arp: 0.18, chops: 0.8, vgrain: 0.32 },
+    });
+    const song = writeSong(s, { book: BOOK, sections: SECTIONS });
+    const { at } = song;
+    const vox = trackOf(s, "vox");
 
-    s.track(sounds.kick(BPM, "syn909", 0.86, 0.6));
-    s.track(
-      sounds.snare(0.5, "lofi", {
-        fxAutomation: {
-          "distort-drive": ramps(
-            [24, 2.4],
-            [39, 3.2],
-            [40, 2.8],
-            [55, 4.6],
-            [56, 3],
-            [76, 2.8],
-            [91, 4.6],
-            [92, 3.4],
-            [100, 3.4],
-          ),
-        },
-      }),
+    // Seed: the voice grows out of a held vowel, syllables sprouting.
+    s.note("vlead", 0, 0, 69, 7.5, 0.5, flick.up(-1200, 0.4));
+    stutter(s, song, "s_glass", 2, 0, 8, 0.5, 700, 0.3, 0.6);
+    glitch(
+      s,
+      song,
+      BOOK,
+      3,
+      "0.1.2.3.4.5.6789",
+      ["glass", "bloom", "gold", "grow"],
+      0.55,
     );
-    s.track(
-      // The 3-3-2 and broken grids hold fewer hats than the four-floor
-      // songs', so this kit gets a little more makeup to carry the air.
-      sounds.hats(1, "syn606", {}, 9),
-    );
-    s.track(sounds.drops(0.22));
-    s.track(sounds.sub(0.46));
-    s.track(
-      sounds.sawBass(0.28, {
-        fx: {
-          ...orbit,
-          distort: { type: "soft", drive: 1.4, mix: 0.35 },
-        },
-        // Drive climbs through the broken section, then lets go.
-        fxAutomation: {
-          "distort-drive": ramps([56, 1.4], [63.9, 4], [64, 1.4]),
-        },
-      }),
-    );
-    s.track(
-      sounds.pad(0.15, {
-        volumeAutomation: steps([0, 0.8], [40, 1], [56, 0.85], [76, 1]),
-      }),
-    );
-    s.track(
-      sounds.stabs(0.2, {
-        fxAutomation: {
-          // Into the broken beat and the last drop, where stabs are playing.
-          "distort-mix": swells(0, 0.55, [
-            [55, 56],
-            [91, 92],
-          ]),
-        },
-      }),
-    );
-    s.track(
-      sounds.pluck(0.11, {
-        delayFeedbackAutomation: ramps([0, 0.28], [100, 0.28], [104, 0.64]),
-        delayMixAutomation: ramps([0, 0.16], [100, 0.16], [102, 0.44]),
-      }),
-    );
-    s.track(sounds.bells(0.11));
-    s.track(
-      sounds.strings(0.2, {
-        volumeAutomation: merge(
-          steps([0, 0.75], [64, 1], [76, 0.8], [100, 1]),
-          ramps([107, 1], [111.9, 0]),
-        ),
-      }),
-    );
-    s.track(
-      sounds.lead(0.2, {
-        fxAutomation: {
-          // A little grit that opens on the last phrase, then backs off.
-          "distort-drive": ramps([88, 1.4], [90, 2.2], [91.5, 3.4], [92, 1.6]),
-        },
-      }),
-    );
-    s.track(
-      vocalTrack("all-i-need", 0.56, {
-        // Throws catch the tails of "need" and "name", after their consonants,
-        // so the echo repeats the vowel; the last "need" rings long.
-        delayMixAutomation: merge(
-          throws(
-            HOOK_BARS.flatMap((b) => [b + 0.65, b + 3.125]),
-            0.04,
-            0.34,
-            1.25,
-          ),
-          ramps([104.99, 0.04], [105, 0.44], [108, 0.44]),
-        ),
-        delayFeedbackAutomation: ramps([0, 0.38], [104, 0.38], [105, 0.58]),
-      }),
-    );
-    s.track(
-      chopTrack("all-i-need", 0.4, {
-        fxAutomation: {
-          "crush-bits": swells(16, 5, [
-            [39, 40],
-            [55, 56],
-            [75, 76],
-            [91, 92],
-          ]),
-          "crush-mix": swells(0, 0.7, [
-            [39, 40],
-            [55, 56],
-            [75, 76],
-            [91, 92],
-          ]),
-        },
-        delayFeedbackAutomation: ramps([0, 0.28], [100, 0.28], [103, 0.6]),
-        delayMixAutomation: ramps([0, 0.07], [100, 0.07], [101, 0.38]),
-      }),
-    );
-    s.track(vocalSynthTrack("all-i-need", 2, 76, 0.22));
-    s.track(
-      sounds.sweep(0.1, {
-        filterAutomation: merge(
-          ...[
-            [36, 40],
-            [72, 76],
-            [88, 92],
-          ].map(([a, b]) =>
-            ramps([0, 500], [a!, 500], [b! - 0.01, 6500], [b!, 500]),
-          ),
-        ),
-      }),
-    );
-
-    // ----------------------------------------------------------- drums
-    inBars(0, BARS, (bar) => {
-      const scene = sceneAt(bar);
-      if (scene.drums === "none") return;
-      const into = bar - scene.start;
-      const last = into === scene.bars - 1;
-      const variant = into % 4 === 3 ? 1 : 0;
-      if (scene.name === "Taps" && into < 4)
-        // The first taps are rim clicks alone.
-        drums(s, bar, "taps", 0.8, variant, ["rim"]);
-      else if (scene.name === "Light drums" && into < 4)
-        // Kick and hats only under the first chops.
-        drums(s, bar, "broken", 0.66, 0, ["kick", "hat"]);
-      else if (scene.name === "Light drums")
-        // The broken kick stays light under the hook; the snare joins late.
-        drums(
-          s,
-          bar,
-          "broken",
-          0.7,
-          variant,
-          into < 8 ? ["kick", "hat", "rim"] : ["kick", "snare", "hat", "rim"],
-        );
-      else drums(s, bar, scene.drums, into < 2 ? 0.9 : 1, variant);
-      if (last && scene.drums !== "taps" && scene.drums !== "tresillo")
-        // A muted snare pickup into the next scene.
-        for (const [beat, v] of [
-          [3, 0.5],
-          [3.25, 0.6],
-          [3.5, 0.7],
-          [3.75, 0.85],
-        ] as const)
-          s.note("snare", bar, beat, 38, 0.1, v);
-    });
-    // Hat taps creep back under the end of the breakdown.
-    inBars(72, 76, (bar) => drums(s, bar, "taps", 0.66 + (bar - 72) * 0.08));
-    // Water drops over the glass intro, the taps, the breakdown and the fade.
-    for (const [bar, beat, pitch] of [
-      [2, 1.75, 88],
-      [3, 3.25, 93],
-      [5, 0.75, 90],
-      [6, 2.5, 85],
-      [7, 3.5, 93],
-      [9, 2.25, 88],
-      [11, 1.25, 93],
-      [14, 3.25, 90],
-      [17, 1.75, 88],
-      [19, 3.5, 93],
-      [22, 0.75, 90],
-      [65, 1.5, 88],
-      [67, 3.25, 90],
-      [70, 0.75, 93],
-      [73, 2.5, 88],
-      [101, 2.25, 90],
-      [103, 0.75, 93],
-      [105, 3.5, 88],
-    ] as const)
-      drop(s, bar, beat, pitch, 0.55);
-    // Noise sweeps under each build, tucked into the hats.
-    for (const [from, bars] of [
-      [36, 4],
-      [72, 4],
-      [88, 4],
-    ] as const)
-      s.note("sweep", from, 0, 60, bars * 4, 0.5);
-
-    // ------------------------------------------------------------ bass
-    const subBar = (bar: number, mode: "held" | "tresillo" | "house") => {
-      const { bass } = chordAt(bar);
-      const next = chordAt(bar + 1).bass;
-      // The octave hop stays under the pad (a fifth when it would reach it).
-      const hop = bass + 12 <= 52 ? bass + 12 : bass + 7;
-      if (mode === "held") {
-        // Softer under the light drums, so the drop has somewhere to go.
-        const v = bar < 40 ? 0.56 : 0.7;
-        s.note("sub", bar, 0, bass, 4.05, v, { glide: 0.35 });
-        return;
-      }
-      if (mode === "tresillo") {
-        // Follows the 3-3-2 kick, sliding between hits.
-        s.note("sub", bar, 0, bass, 1.7, 0.76, { glide: 0.15 });
-        s.note("sub", bar, 1.75, bass, 0.7, 0.66);
-        s.note("sub", bar, 2.5, hop, 0.7, 0.64, { glide: 0.08 });
-        s.note("sub", bar, 3.25, next, 0.8, 0.64, { glide: 0.14 });
-        return;
-      }
-      s.note("sub", bar, 0, bass, 2.55, 0.75, { glide: 0.2 });
-      s.note("sub", bar, 2.5, hop, 1, 0.62, { glide: 0.09 });
-      s.note("sub", bar, 3.5, next, 0.55, 0.62, { glide: 0.16 });
-    };
-    inBars(12, 40, (bar) => subBar(bar, "held"));
-    inBars(40, 56, (bar) => subBar(bar, "tresillo"));
-    inBars(56, 64, (bar) => subBar(bar, "held"));
-    inBars(68, 76, (bar) => subBar(bar, "held"));
-    inBars(76, 92, (bar) => subBar(bar, "house"));
-    inBars(92, 100, (bar) => subBar(bar, "tresillo"));
-    s.note("sub", 100, 0, 38, 6, 0.58, {
-      glide: 0.3,
-      ...flick.fall(-1200, 0.6),
-    });
-    // The saw: quiet harmonics over the sub through the full-kit bars, and
-    // the featured bass of the broken section, swelling in an octave up.
-    inBars(40, 100, (bar) => {
-      if (!drumming(bar)) return;
-      const { bass } = chordAt(bar);
-      const next = chordAt(bar + 1).bass;
-      const featured = bar >= 56 && bar < 64;
-      s.note("saw", bar, 0, bass + 12, 3.4, featured ? 0.72 : 0.4, {
-        glide: 0.2,
-      });
-      if (bar !== 63)
-        s.note("saw", bar, 3.5, next + 12, 0.5, featured ? 0.6 : 0.34, {
-          glide: 0.12,
-        });
-    });
-
-    // ---------------------------------------------------------- chords
-    inBars(0, 100, (bar) => {
-      const c = chordAt(bar);
-      // The pad: the taps, then everything after the first four kick bars.
-      if (within(bar, [12, 24], [28, 100]))
-        hold(s, "pad", bar, 0, c.tones, 4, 0.42 + 0.03 * (bar % 4));
-      const grid = within(bar, [40, 64], [92, 100])
-        ? TRES_STABS
-        : within(bar, [76, 92])
-          ? HOUSE_STABS
-          : undefined;
-      if (!grid) return;
-      const lift = bar % 4 === 3 ? 1.1 : 1;
-      let hitIndex = 0;
-      [...grid].forEach((hit, step) => {
-        if (hit === ".") return;
-        const accent = STAB_ACCENTS[hitIndex++ % STAB_ACCENTS.length]!;
-        hold(
-          s,
-          "stabs",
-          bar,
-          step / 4,
-          c.tones,
-          0.3,
-          (Number(hit) / 10) * accent * lift,
-        );
-      });
-    });
-    // Plucks from bar 8. They hand the top register to the gangsa in the
-    // tresillo drops and to the lead in its bars, and sit out the first kicks
-    // and the breakdown's start.
-    inBars(8, 104, (bar) => {
-      if (within(bar, [24, 28], [44, 56], [64, 68], [88, 92], [96, 100]))
-        return;
-      rhythm(s, "pluck", bar, PLUCK_GRID, pluckNotes(chordAt(bar)), {
-        hold: 1,
-        velocity: bar >= 100 ? 0.8 - (bar - 100) * 0.1 : 1,
-      });
-    });
-    // Gangsa: the glass intro, the light drums' second half, the first drop
-    // from its lift, the breakdown's E and F#m bars and the last drop.
-    inBars(0, 100, (bar) => {
-      if (bar % 2) return;
-      if (
-        !within(bar, [0, 8], [32, 40], [44, 56], [70, 72], [74, 76], [96, 100])
-      )
-        return;
-      const soft = bar < 40 ? 0.82 : 1;
-      for (const [beat, pitch] of GANGSA)
-        s.note(
-          "bells",
-          bar,
-          beat,
-          pitch,
-          0.4,
-          (beat % 1 === 0 ? 0.6 : 0.45) * soft,
-        );
-    });
-    // Strings: the opening, the breakdown and the ending, IV then I.
-    const stringChord = (bar: number, beats: number, velocity: number) => {
-      const c = chordAt(bar);
-      hold(
-        s,
-        "strings",
-        bar,
-        0,
-        [c.bass + (c.bass > 40 ? 12 : 24), ...c.tones.map((t) => t + 12)],
-        beats,
-        velocity,
-      );
-    };
-    inBars(0, 24, (bar) => stringChord(bar, 4, 0.42 + 0.03 * (bar % 4)));
-    inBars(64, 76, (bar) => stringChord(bar, 4, 0.42 + 0.03 * (bar % 4)));
-    inBars(100, 104, (bar) => stringChord(bar, 4, 0.42));
-    stringChord(104, 4, 0.44);
-    stringChord(105, 12, 0.42);
-    // The voice synth holds the opening chords and riffs the breakdown.
-    inBars(0, 76, (bar) => {
-      if (!(bar < 8 || bar >= 64)) return;
-      const top = chordAt(bar).tones.map((t) => t + 12);
-      if (bar < 8) hold(s, "vsynth", bar, 0, top, 3.6, 0.56);
-      else
-        for (const [beat, len] of [
-          [0, 1.25],
-          [1.5, 0.5],
-          [2.25, 0.5],
-          [2.75, 1],
-        ] as const)
-          hold(s, "vsynth", bar, beat, top, len * 0.9, 0.48);
-    });
-    hold(s, "vsynth", 104, 0, [69, 74, 78], 3.6, 0.38);
-    hold(s, "vsynth", 105, 0, [69, 73, 76], 10, 0.36);
-
-    // ----------------------------------------------------------- voice
-    line(s, 4, "a", 0.7);
-    for (const bar of HOOK_BARS) {
-      line(s, bar, "a");
-      line(s, bar + 2, "b");
+    // Verse answers.
+    for (const verse of ["Verse 1", "Verse 2"]) {
+      const bar = at(verse);
+      glitch(s, song, BOOK, bar + 3, "..3.4.5...4.3...", [
+        "bloom",
+        "grow",
+        "ah",
+      ]);
+      glitch(s, song, BOOK, bar + 7, "5.4.3.5.4.3.2-1-", [
+        "glass",
+        "gold",
+        "ooh",
+      ]);
     }
-    // The chop cell: need / need / name / oh / name in 3-3-2, one bar,
-    // looped. Over E the first "need" lifts a tone to B. Under a sung line
-    // it sits back.
-    const cell = (bar: number) => {
-      const v = singing(bar) ? 0.62 : 1;
-      const first = chordAt(bar).bass === 40 ? 200 : 0;
-      chop(s, bar, 0, 0, 0.5, 0.8 * v, first ? { cents: first } : {});
-      chop(s, bar, 0.75, 0, 0.5, 0.6 * v, { cents: -500 });
-      chop(s, bar, 1.5, 1, 0.5, 0.75 * v);
-      chop(s, bar, 2.5, 2, 0.5, 0.8 * v, flick.up(-300, 0.1));
-      chop(s, bar, 3.25, 1, 0.5, 0.6 * v);
-    };
-    // The turnaround: oh-oh-oh-oh climbing / need (wobble) / name / oh (fall).
-    const turn = (bar: number) => {
-      const v = singing(bar) ? 0.66 : 1;
+    // Blooms: a rising "ah" scatter on the turn of each phrase.
+    for (const name of ["Bloom 1", "Bloom 2", "Last bloom"]) {
+      const bar = at(name);
+      const bars = song.sectionAt(bar).bars;
       stutter(
         s,
-        bar,
-        0,
+        song,
+        "s_ah",
+        bar + (bars === 4 ? 1 : 3),
         2,
-        4,
+        8,
         0.25,
-        0.5 * v,
-        0.8 * v,
-        (i) => [0, 200, 400, 500][i]!,
+        1200,
+        0.45,
+        0.8,
       );
-      chop(s, bar, 1, 0, 1.25, 0.75 * v, flick.wobble(200, 6, 0.3));
-      chop(s, bar, 2.75, 1, 0.5, 0.6 * v, { cents: -400 });
-      chop(s, bar, 3.25, 2, 0.75, 0.7 * v, flick.fall(-500, 0.6));
-    };
-    // The cell enters under the second half of the taps, plays alone over
-    // the first kicks, then loops under the drum runs.
-    loop(16, 24, cell, turn, 8);
-    loop(24, 39, cell, turn, 8);
-    loop(40, 55, cell, turn, 8);
-    loop(56, 64, cell, turn, 8);
-    loop(76, 88, cell, turn, 8);
-    loop(92, 99, cell, turn, 8);
-    // Stutter builds into each change of groove; "oh" climbs the A scale.
-    const RISE = [0, 200, 400, 500, 700, 900, 1000, 1200] as const;
-    // (The lead's dive is the build at 91.)
-    for (const bar of [39, 55, 75]) {
-      stutter(s, bar, 0, 0, 8, 0.25, 0.45, 0.8);
-      stutter(s, bar, 2, 2, 8, 0.125, 0.5, 0.85, (i) => RISE[i]!);
+      glitch(
+        s,
+        song,
+        BOOK,
+        bar + bars - 1,
+        "9876543298765432",
+        ["gold", "glass"],
+        0.55,
+      );
     }
-    // The last bar of the drums: a tape-stop on the cell.
-    chop(s, 99, 0, 0, 0.5, 0.55);
-    chop(s, 99, 1, 1, 0.5, 0.5);
-    chop(s, 99, 2, 2, 2, 0.55, flick.dive(-1200, 0.3));
-    // The ending: "oh" falls away, then "all I need" over IV to I.
-    chop(s, 100, 0, 2, 2, 0.75, flick.fall(-500, 0.7));
-    chop(s, 102, 2, 0, 1, 0.5, { cents: -500 });
-    line(s, 104, "a", 0.72);
-
-    // ------------------------------------------------------------ lead
-    // A restrained four-bar answer to the hook in the house drop.
-    const lead: readonly (readonly [
-      bar: number,
-      beat: number,
-      pitch: number,
-      len: number,
-      extra?: Partial<Parameters<Composer["note"]>[6]>,
-    ])[] = [
-      [88, 0, 78, 1.5, flick.up(-200, 0.15)],
-      [88, 1.5, 76, 0.5, { glide: 0.05 }],
-      [88, 2, 74, 1.5, { glide: 0.08 }],
-      [88, 3.5, 76, 0.5, { glide: 0.05 }],
-      [89, 0, 81, 2.5, flick.wobble(100, 6, 0.4)],
-      [89, 2.5, 80, 0.5, { glide: 0.05 }],
-      [89, 3, 78, 1, { glide: 0.06 }],
-      [90, 0, 76, 1, flick.up(-500, 0.1)],
-      [90, 1, 80, 0.5, { glide: 0.04 }],
-      [90, 1.5, 83, 2, flick.wobble(150, 8, 0.3)],
-      [90, 3.5, 81, 0.5, { glide: 0.05 }],
-      [91, 0, 85, 2, { glide: 0.08 }],
-      [91, 2, 81, 2, flick.fall(-700, 0.6)],
+    // Greenhouse: the voice alone, frozen and glitching over F, Dm, A, E.
+    const gh = at("Greenhouse");
+    // "let it bloom and grow" lands on the A bars; the voice holds F, then A.
+    for (const bar of [gh + 2, gh + 6])
+      s.note("vox", bar, -0.25, slot(vox, "pre2"), 4.25, 0.7);
+    s.note("vlead", gh, 0, 65, 7.5, 0.5);
+    s.note("vlead", gh + 4, 0, 69, 7.5, 0.5);
+    const SOLO = [
+      "2.4.5.4.2..4.5..",
+      "3.5.6.5.3..5.6..",
+      "4.5.6.7.6.5.4.5.",
+      "6.7.8.9.8.7.6.5-",
     ];
-    for (const [bar, beat, pitch, len, extra] of lead)
-      s.note("lead", bar, beat, pitch, len, 0.66, extra ?? {});
-
-    // -------------------------------------------------------- dropouts
-    const band = [
+    for (let i = 4; i < 8; i++)
+      glitch(
+        s,
+        song,
+        BOOK,
+        gh + i,
+        SOLO[i - 4]!,
+        ["glass", "bloom", "ooh", "gold", "grow", "ah"],
+        0.6,
+      );
+    s.note("lead", gh + 7, 2, 81, 2, 0.6, flick.wobble(150, 8));
+    // A held breath before the last chorus.
+    const last = at("Last chorus");
+    dropout(s, last - 1, 3.5, 0.5, [
       "kick",
       "snare",
       "hats",
       "sub",
-      "saw",
-      "stabs",
       "pad",
-      "pluck",
+      "arp",
+      "chops",
+      "stabs",
       "bells",
-    ];
-    const floor = ["kick", "snare", "hats", "sub", "saw"];
-    dropout(s, 35, 3, 1, ["kick", "hats", "pad", "pluck", "bells"]);
-    dropout(s, 47, 3, 1, band);
-    dropout(s, 51, 2, 2, [...floor, "stabs"]);
-    dropout(s, 55, 0, 3, band);
-    dropout(s, 61, 2, 2, ["kick", "snare", "hats", "saw"]);
-    dropout(s, 83, 3, 1, band);
-    dropout(s, 87, 2, 2, [...floor, "stabs"]);
-    dropout(s, 91, 2.5, 0.5, floor);
-    dropout(s, 95, 3, 1, band);
-    dropout(s, 99, 2, 2, [...floor, "stabs", "bells"]);
+    ]);
+    const out = at("Glass");
+    s.note("vox", out, -0.25, slot(vox, "ch3"), 8.25, 0.6);
+    s.note("bells", out + 3, 0, 93, 4, 0.4, flick.dive(-1200, 0.6));
+
+    // ---------------------------------------------------------- lanes
+    patch(s, "vox", {
+      delayMixAutomation: throws(song.throwsAt, 0.06, 0.38, 1),
+    });
+    patch(s, "sweep", { filterAutomation: riserLane(song.builds) });
+    patch(s, "chops", {
+      fxAutomation: {
+        "formant-shift": steps(
+          [0, 0],
+          [at("Bloom 1"), 3],
+          [at("Verse 2"), 0],
+          [at("Bloom 2"), 3],
+          [gh, -2],
+          [at("Sunlight"), 0],
+          [at("Last bloom"), 3],
+          [out, 0],
+        ),
+        "crush-mix": steps([0, 0], [gh, 0.2], [gh + 8, 0]),
+      },
+    });
+    patch(s, "stut", {
+      fxAutomation: {
+        "crush-mix": ramps([0, 0], [gh + 4, 0], [gh + 7.9, 0.55], [gh + 8, 0]),
+      },
+    });
+    patch(s, "pad", {
+      filterAutomation: ramps(
+        [0, 1200],
+        [at("Pre 1"), 1800],
+        [at("Chorus 1") - 0.01, 4200],
+        [at("Chorus 1"), 3800],
+        [at("Verse 2"), 1800],
+        [at("Chorus 2"), 4200],
+        [gh, 1400],
+        [gh + 7.9, 2800],
+        [at("Sunlight"), 1600],
+        [last - 0.01, 5000],
+        [last, 4600],
+        [out, 2600],
+        [BARS, 700],
+      ),
+    });
     return s.finish();
   },
 };
