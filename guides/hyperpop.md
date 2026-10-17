@@ -5,21 +5,21 @@ parent: arrange
 order: 7
 ---
 
-The three hyperpop demos share one kit. The chords barely move; the
-interest comes from rhythm, texture and the voice as an instrument.
+One kit for three songs: seventh chords, a moving bass, whole
+sections without drums, and the voice as an instrument.
 
 - Six sung syllables on one keyed sampler in round robin: every chord
   tone of a riff sings the next syllable, answering each sung line
-- Stutters: a syllable or line head repeated in 16ths or 32nds, rising
-  in pitch into a chorus; reversed syllables swell into each section
+- Glitch bursts: twelve 32nd syllables over four octaves end a phrase;
+  line heads stutter into a chorus; reversed syllables swell in
 - A held vowel looped into a playable voice that doubles the lead,
   and the same vowel as a grain cloud locked to the chord
-- Delay throws open on the last word of each line; formant and
-  bitcrush automation on the chops through drops and breakdowns
+- Delay throws on each line's last word; formant and crush on the chops
 - Syncopated chord stabs with a pitch blip, pulse arps, FM bells
-- Drum families change by section: four-floor, half-time, trap,
-  tresillo, broken, two-step; a snare pickup into each section
-- Sub with glide; a growling filtered saw in the drops
+- Drums sit out whole sections; four-floor with a backbeat clap,
+  half-time bounce, tresillo; a snare pickup into each section
+- A bass line that glides like an 808 and pumps offbeat octaves; the
+  growl saw doubles it an octave up in the drops
 - One-beat dropouts, a tape-stop dive, a kickless breakdown
 
 ## Ask

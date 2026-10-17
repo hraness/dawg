@@ -50,18 +50,20 @@ const BOOK: Book = {
 };
 
 const c = (bass: number, ...tones: number[]): Chord => ({ bass, tones });
-const A = c(45, 61, 64, 69);
-const E = c(40, 59, 64, 68);
-const Fsm = c(42, 61, 66, 69);
-const D = c(38, 62, 66, 69);
-const Dm = c(38, 62, 65, 69);
-const Bm = c(47, 62, 66, 71);
-const Csm = c(37, 61, 64, 68);
-const F = c(41, 60, 65, 69);
+// Four-note voicings with sevenths and ninths; the stabs take the top three.
+const A = c(45, 59, 61, 64, 69);
+const E = c(40, 59, 64, 66, 68);
+const Fsm = c(42, 61, 64, 66, 69);
+const D = c(38, 61, 62, 66, 69);
+const Dm = c(38, 62, 64, 65, 69);
+const Bm = c(47, 61, 62, 66, 69);
+const Csm = c(37, 59, 61, 64, 68);
+const F = c(41, 60, 64, 65, 69);
 const VERSE = [A, E, Fsm, Dm];
 const CHORUS = [D, E, Csm, Fsm];
 const PRE = [Bm, Csm, D, E];
-const BRIDGE = [F, Dm, A, E];
+// The greenhouse borrows F and D minor twice, then turns to the chorus.
+const BRIDGE = [F, Dm, A, E, F, Dm, A, E, D, E, Csm, Fsm];
 
 const HOOK: readonly (readonly (readonly [number, number, number])[])[] = [
   [
@@ -142,19 +144,6 @@ const ANSWER: readonly (readonly (readonly [number, number, number])[])[] = [
     [2.5, 90, 1.4],
   ],
 ];
-// Verse 2 answers on new rhythms, falling where the first verse climbed.
-const RIFF_VERSE2 = [
-  "............4.6.",
-  "3..5..4.6...5...",
-  "............5.3.",
-  "4.5.6...7.6.5.4.",
-];
-const RIFF_VERSE = [
-  "............3.4.",
-  "5.....4.3.......",
-  "............4.5.",
-  "6...5...4.3.2...",
-];
 const RIFF_CHORUS = [
   "3.4.5.3.4.5.6.4.",
   "5.6.7.5.6.7.8.6.",
@@ -180,10 +169,10 @@ const STABS = [
   "8..7..8..7..8.7.",
 ];
 const STABS_POST = [
-  "8.7.8..7.8.7..8.",
-  ".8.7.8..7.8.8.7.",
-  "8.7.8..7.8.7..8.",
-  "8.8.7.7.8.8.7.78",
+  "8..7..8...7..8..",
+  ".8.7..8...8..7..",
+  "8..7..8...7..8..",
+  "8..7..8.7.8..7.8",
 ];
 const BELLS = [
   "7...6...5.......",
@@ -200,28 +189,39 @@ const BELLS_VERSE = [
 const ARP_16 = ["0246024602460246", "6420642064206420"];
 const ARP_SKIP = ["0.24.6.0.24.6.4.", "6.42.0.6.42.0.2."];
 
+// Bass lines (`bassLine` steps): held and gliding under the verses, an
+// offbeat octave pump under the choruses and blooms.
+const LINE_VERSE = ["0-------....2~0.", "0.......0...1~0."];
+const LINE_PRE = ["0.2.0.2~0.2.0.2.", "0.2.0.2.0.2.1~2."];
+const LINE_CHORUS = ["0.2...2~0...2..2", "0.2...2~0...1.2~"];
+const LINE_BLOOM = ["..2.0.2~0..2.0.2", "..2.0.2...2.1~2~"];
+const LINE_BLOOM2 = ["0.2..20.2~0.2.3~", "2.0..20.1.2.5~2~"];
+
 const SECTIONS: readonly SongSection[] = [
   {
     kind: "intro",
     name: "Seed",
-    bars: 4,
+    bars: 8,
     chords: VERSE,
-    drums: ["taps"],
+    drums: ["none"],
     energy: 0.75,
-    play: ["cloud", "bells"],
+    play: ["cloud", "bells", "pad"],
+    bursts: true,
     bells: BELLS_VERSE,
   },
   {
+    // The first verse floats on the pad and a held bass; the tresillo
+    // arrives halfway.
     kind: "verse",
     name: "Verse 1",
     bars: 8,
     chords: VERSE,
-    drums: ["broken", "tresillo"],
+    drums: ["none", "tresillo"],
     energy: 0.85,
-    play: ["sub", "bells", "riff", "pad"],
+    play: ["sub", "bells", "pad"],
+    bursts: true,
     bells: BELLS_VERSE,
-    riff: RIFF_VERSE,
-    bass: ["9.....7.....7...", "9.....7...7....."],
+    line: LINE_VERSE,
     lines: ["v1", null, "v2", null, "v3", null, "v4", null],
   },
   {
@@ -229,13 +229,12 @@ const SECTIONS: readonly SongSection[] = [
     name: "Pre 1",
     bars: 4,
     chords: PRE,
-    drums: ["skip"],
+    drums: ["none"],
     energy: 0.85,
-    play: ["sub", "pad", "arp", "riff", "stabs"],
+    play: ["sub", "pad", "arp", "stabs"],
     arp: ARP_SKIP,
     stabs: ["8.......8.......", "8.....8.....8..."],
-    riff: RIFF_VERSE,
-    bass: ["9.......7......."],
+    line: LINE_PRE,
     lines: ["pre1", "pre2", null, null],
   },
   {
@@ -243,12 +242,11 @@ const SECTIONS: readonly SongSection[] = [
     name: "Chorus 1",
     bars: 8,
     chords: CHORUS,
-    drums: ["house", "tresillo"],
-    play: ["sub", "pad", "stabs", "arp", "riff", "cloud"],
+    drums: ["euro", "tresillo"],
+    play: ["sub", "pad", "stabs"],
+    bursts: true,
     stabs: STABS,
-    arp: ARP_SKIP,
-    riff: RIFF_CHORUS,
-    bass: ["9..7..7...7..7..", "9..7..7...7....."],
+    line: LINE_CHORUS,
     lines: ["ch1", null, "ch2", null, "ch1", null, "ch3", null],
   },
   {
@@ -256,13 +254,13 @@ const SECTIONS: readonly SongSection[] = [
     name: "Bloom 1",
     bars: 4,
     chords: CHORUS,
-    drums: ["four"],
-    play: ["sub", "stabs", "arp", "riff", "lead", "cloud"],
+    drums: ["euro"],
+    play: ["sub", "stabs", "arp", "riff", "lead"],
     stabs: STABS_POST,
     arp: ARP_16,
     riff: RIFF_POST,
     lead: HOOK,
-    bass: ["9..7..7...7..7..", "9..7..7.7..7..7."],
+    line: LINE_BLOOM,
   },
   {
     kind: "verse",
@@ -271,11 +269,11 @@ const SECTIONS: readonly SongSection[] = [
     chords: VERSE,
     drums: ["tresillo", "skip"],
     energy: 0.9,
-    play: ["sub", "arp", "riff", "pad", "bells"],
+    play: ["sub", "arp", "pad", "bells"],
+    bursts: true,
     arp: ARP_SKIP,
     bells: BELLS_VERSE,
-    riff: RIFF_VERSE2,
-    bass: ["9..7..7...7.....", "9..7..7...7..7.."],
+    line: LINE_VERSE,
     lines: ["v5", null, "v6", null, "v7", null, "v8", null],
   },
   {
@@ -285,11 +283,10 @@ const SECTIONS: readonly SongSection[] = [
     chords: PRE,
     drums: ["skip"],
     energy: 0.9,
-    play: ["sub", "pad", "arp", "riff", "stabs"],
+    play: ["sub", "pad", "arp", "stabs"],
     arp: ARP_SKIP,
     stabs: STABS,
-    riff: RIFF_CHORUS,
-    bass: ["9.......7......."],
+    line: LINE_PRE,
     lines: ["pre1", "pre2", null, null],
   },
   {
@@ -297,12 +294,11 @@ const SECTIONS: readonly SongSection[] = [
     name: "Chorus 2",
     bars: 8,
     chords: CHORUS,
-    drums: ["house", "four"],
-    play: ["sub", "pad", "stabs", "arp", "riff", "cloud", "double"],
+    drums: ["euro"],
+    play: ["sub", "pad", "stabs", "riff", "double"],
     stabs: STABS,
-    arp: ARP_SKIP,
     riff: RIFF_POST,
-    bass: ["9..7..7...7..7..", "9..7..7...7....."],
+    line: LINE_CHORUS,
     lines: ["ch1", null, "ch2", null, "ch1", null, "ch3", null],
   },
   {
@@ -310,25 +306,32 @@ const SECTIONS: readonly SongSection[] = [
     name: "Bloom 2",
     bars: 8,
     chords: CHORUS,
-    drums: ["tresillo", "four"],
-    play: ["sub", "stabs", "arp", "riff", "lead", "cloud", "growl"],
+    drums: ["tresillo", "euro"],
+    play: ["sub", "stabs", "arp", "riff", "lead", "growl"],
     stabs: STABS_POST,
     arp: ARP_SKIP,
     riff: RIFF_POST2,
     lead: [...HOOK, ...ANSWER],
     voiceLead: true,
-    growl: ["2..2..2...2..2..", "2..2..3...3..2.."],
-    bass: ["9...............", "9.......9......."],
+    line: LINE_BLOOM2,
   },
   {
+    // Twelve drumless bars; the bass comes back for the turn home.
     kind: "break",
     name: "Greenhouse",
-    bars: 8,
+    bars: 12,
     chords: BRIDGE,
-    drums: ["none", "half"],
+    drums: ["none"],
     energy: 0.7,
-    play: ["pad", "cloud", "bells"],
+    play: ["sub", "pad", "cloud", "bells"],
     bells: BELLS_VERSE,
+    line: [
+      ...Array.from({ length: 8 }, () => null),
+      "0---------------",
+      "0---------------",
+      "0---------------",
+      "0-----------1~2.",
+    ],
   },
   {
     kind: "build",
@@ -341,44 +344,43 @@ const SECTIONS: readonly SongSection[] = [
     arp: ARP_SKIP,
     riff: RIFF_CHORUS,
     stabs: ["8...8...8...8...", "8.8.8.8.8.8.8.8."],
-    bass: ["9...9...9...9..."],
+    line: LINE_PRE,
   },
   {
     kind: "chorus",
     name: "Last chorus",
     bars: 8,
     chords: CHORUS,
-    drums: ["house", "tresillo"],
-    play: ["sub", "pad", "stabs", "arp", "riff", "bells", "cloud", "double"],
+    drums: ["euro", "tresillo"],
+    play: ["sub", "pad", "stabs", "riff", "bells", "double"],
     stabs: STABS_POST,
-    arp: ARP_SKIP,
     bells: BELLS,
     riff: RIFF_POST2,
-    bass: ["9..7..7...7..7..", "9..7..7.7..7..7."],
+    line: LINE_CHORUS,
     lines: ["ch1", null, "ch2", null, "ch1", null, "ch3", null],
   },
   {
     kind: "post",
     name: "Last bloom",
-    bars: 4,
+    bars: 8,
     chords: CHORUS,
-    drums: ["four"],
-    play: ["sub", "stabs", "arp", "riff", "lead", "cloud", "bells"],
+    drums: ["euro"],
+    play: ["sub", "growl", "stabs", "arp", "riff", "lead"],
     stabs: STABS_POST,
     arp: ARP_16,
-    bells: BELLS,
     riff: RIFF_POST2,
-    lead: ANSWER,
+    lead: [...ANSWER, ...HOOK],
     voiceLead: true,
-    bass: ["9..7..7...7..7..", "9..7..7.7..7..7."],
+    line: LINE_BLOOM2,
   },
   {
     kind: "outro",
     name: "Glass",
-    bars: 4,
+    bars: 6,
     chords: [D, A, Dm, A],
     drums: ["none"],
     play: ["pad", "cloud", "bells"],
+    bursts: true,
     bells: ["7...6...5.......", null, "5...4...3.......", null],
   },
 ];
@@ -390,17 +392,18 @@ export const glassGarden: DemoDefinition = {
     title: "Glass Garden",
     style: "Hyperpop",
     description:
-      "Bright, glassy hyperpop in A major at 128: tresillo and broken-beat verses, FM bells and a syllable arp that blooms out of each sung line, a borrowed D minor clouding every fourth bar, and a greenhouse bridge where the voice freezes into a grain pad under a glitching vocal solo.",
+      "Bright, glassy hyperpop in A major at 128: a drumless seed and first half-verse carried by the pad, the bells and the voice, tresillo verses closed by glitch bursts, blooms that pump an offbeat octave bass under a clap, a borrowed D minor clouding every fourth bar, and a twelve-bar greenhouse bridge where the voice freezes into a grain pad under a glitching vocal solo.",
     tempoBpm: BPM,
     key: "A",
     bars: BARS,
-    highlightBar: 48,
+    highlightBar: 52,
     trackId: "chops",
     features: [
       "an original vocal book: two verses, a pre-chorus and a soaring chorus",
       "syllable arps that bloom up through the chord after every line",
+      "an offbeat octave bass pumping under the blooms, held and gliding in the verses",
       "a borrowed D minor in the verse and an F-major bridge",
-      "tresillo, broken and two-step beats changing by phrase",
+      "long drumless stretches; tresillo, two-step and four-floor beats by phrase",
       "a greenhouse bridge: frozen grain voice, glitching solo",
       "stuttered chorus heads and reversed syllables into every section but the verses",
       "vowel wavetable lead doubled by the looped voice",
@@ -431,7 +434,7 @@ export const glassGarden: DemoDefinition = {
       s,
       song,
       BOOK,
-      3,
+      5,
       "0.1.2.3.4.5.6789",
       ["glass", "bloom", "gold", "grow"],
       0.55,
@@ -439,12 +442,12 @@ export const glassGarden: DemoDefinition = {
     // Verse answers.
     for (const verse of ["Verse 1", "Verse 2"]) {
       const bar = at(verse);
-      glitch(s, song, BOOK, bar + 3, "..3.4.5...4.3...", [
+      glitch(s, song, BOOK, bar + 1, "........3.4.5.4.", [
         "bloom",
         "grow",
         "ah",
       ]);
-      glitch(s, song, BOOK, bar + 7, "5.4.3.5.4.3.2-1-", [
+      glitch(s, song, BOOK, bar + 5, "......5.4.3.2-1-", [
         "glass",
         "gold",
         "ooh",
@@ -476,7 +479,8 @@ export const glassGarden: DemoDefinition = {
         0.55,
       );
     }
-    // Greenhouse: the voice alone, frozen and glitching over F, Dm, A, E.
+    // Greenhouse: the voice alone, frozen and glitching over F, Dm, A, E,
+    // then the chorus sung over the turn home.
     const gh = at("Greenhouse");
     // "let it bloom and grow" lands on the A bars; the voice holds F, then A.
     for (const bar of [gh + 2, gh + 6])
@@ -499,6 +503,8 @@ export const glassGarden: DemoDefinition = {
         ["glass", "bloom", "ooh", "gold", "grow", "ah"],
         0.6,
       );
+    s.note("vox", gh + 8, -0.25, slot(vox, "ch1"), 8.25, 0.7);
+    s.note("vox", gh + 10, -0.25, slot(vox, "ch3"), 8.25, 0.7);
     s.note("lead", gh + 7, 2, 81, 2, 0.6, flick.wobble(150, 8));
     // A held breath before the last chorus.
     const last = at("Last chorus");
@@ -551,7 +557,7 @@ export const glassGarden: DemoDefinition = {
         [at("Verse 2"), 1800],
         [at("Chorus 2"), 4200],
         [gh, 1400],
-        [gh + 7.9, 2800],
+        [gh + 11.9, 2800],
         [at("Sunlight"), 1600],
         [last - 0.01, 5000],
         [last, 4600],

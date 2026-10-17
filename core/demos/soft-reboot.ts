@@ -1,8 +1,9 @@
 /**
- * Soft Reboot: bright four-floor hyperpop in D. The voice is the lead
- * instrument: sung verses answered by chopped syllable riffs, a chorus that
- * stutters into itself, and post-chorus drops where the syllables, the
- * vowel lead and the voice lead play one hook together.
+ * Soft Reboot: bright four-floor hyperpop in D. It opens with the chorus
+ * sung alone over the pad; the verses bounce on a gliding bass line and
+ * close each phrase with a glitch burst of syllables; the choruses pump
+ * offbeat octaves under a clap on every backbeat; and the drops play one
+ * hook on the syllables, the vowel lead and the voice lead together.
  */
 import { Composer } from "./build.ts";
 import {
@@ -50,16 +51,21 @@ const BOOK: Book = {
 };
 
 const c = (bass: number, ...tones: number[]): Chord => ({ bass, tones });
-const D = c(38, 57, 62, 66);
-const G = c(43, 59, 62, 67);
-const A = c(45, 57, 61, 64);
-const Bm = c(47, 59, 62, 66);
-const Em = c(40, 59, 64, 67);
-const Gm = c(43, 58, 62, 67);
+// Four-note voicings with sevenths and ninths; the stabs take the top three.
+const D = c(38, 57, 62, 64, 66);
+const G = c(43, 59, 62, 66, 69);
+const A = c(45, 57, 61, 64, 71);
+const Bm = c(47, 57, 62, 66, 69);
+const Em = c(40, 59, 62, 66, 67);
+const Fsm = c(42, 57, 61, 64, 69);
+const Gm = c(43, 58, 62, 65, 67);
+const Bb = c(46, 58, 62, 65, 69);
 const VERSE = [Bm, G, D, A];
 const CHORUS = [G, A, Bm, D];
-const PRE = [G, A, Em, A];
-const BREAK = [G, Gm, D, A];
+const PRE = [Em, Fsm, G, A];
+// The breakdown borrows from D minor (G minor, B flat major seven) twice,
+// then turns back home under the last chorus line.
+const BREAK = [G, Gm, D, Bb, G, Gm, D, Bb, G, A, Bm, D];
 
 // The post-chorus hook, one phrase a bar over G A Bm D.
 const HOOK: readonly (readonly (readonly [number, number, number])[])[] = [
@@ -145,19 +151,8 @@ const HOOK_LAST = [
 ] as const;
 
 // Syllable riffs: syncopated chord tones with octave leaps (ladder rungs).
-const RIFF_VERSE = [
-  "..........4.5.3.",
-  "3..5..4.........",
-  "..........5.4.6.",
-  "6..5..3...3.4..5",
-];
-// Verse 2 answers on new rhythms, falling where the first verse climbed.
-const RIFF_VERSE2 = [
-  "............5.6.",
-  "3..4..6.5..3.4..",
-  "............6.4.",
-  "2..3..5.4.3...6-",
-];
+// The chops play the hook with the lead in the drops and answer the sung
+// chorus; the verses get glitch bursts at phrase ends instead.
 const RIFF_CHORUS = [
   "4..5..3.6..5.4..",
   ".3.5..6..5.3..4.",
@@ -176,52 +171,60 @@ const RIFF_DROP2 = [
   "4..6..4.7..6.877",
   "8-7-6-5-7.6.5.4.",
 ];
+// Stabs: syncopated, never on every 16th; the last bar of four pushes.
 const STABS = [
+  "8..6..7...6.....",
+  ".7.6..7...6..7..",
   "8..6..7...6..7.6",
-  ".7.6..7..6.7..6.",
-  "8..6..7..6..7.86",
-  "8.6.7..6.7..6.7.",
+  "8.....7..6..7.8.",
 ];
 const STABS_DROP = [
-  "8..7..8.7..7.8.7",
-  ".8.7.78..7.8..7.",
-  "8..7..8.7..7.877",
-  "8.7.8.7.8.78.8.8",
+  "8..7..8...7..8..",
+  ".8.7..8..7..8...",
+  "8..7..8...7..8.7",
+  "8.7..8..7.8.8.8.",
 ];
 const ARP_VERSE = ["0...2...1...3...", "0...2...1...4..."];
 const ARP_8 = ["0.2.4.2.1.3.5.3.", "0.2.4.5.4.2.1.2."];
-const ARP_16 = ["0242024213531353", "0242135324244242"];
-// Under a sung chorus the arp skips, leaving the 16ths to the riff.
-const ARP_SKIP = ["0.24.2.1.35.3.1.", "0.24.2.13.5.4.2."];
 const BELLS = [
   "4.....3.5...2...",
   "..3.4.....5...3.",
   "4.....3.5...6...",
   "5.4...3...2.....",
 ];
-const GROWL = ["2..2..1.2..2.3..", "2..2..1.2..3.2-1"];
+// Bass lines (`bassLine` steps). Verses bounce an 808 with glides; the
+// pre-choruses drive octaves; choruses pump offbeat octaves; drops move.
+const LINE_VERSE = ["0.....0.2~0...5~", "0.....0...1.2~0."];
+const LINE_VERSE2 = ["0..0....2~0...5~", "0.....0.1...2~1."];
+const LINE_PRE = ["0.2.0.2~0.2.0.2.", "0.2.0.2~0.2.1~2."];
+const LINE_CHORUS = ["0.2.0.2~0.2.0.2~", "0.2.0.2.0.2~1~2."];
+const LINE_DROP = ["0.20.20.2~0.2.1~", "0.20.20.2.01.2~3"];
+const LINE_DROP2 = ["0.2~0.20.1.2.3~2", "0.20.2~0.2.5.6~2"];
 
 const SECTIONS: readonly SongSection[] = [
   {
+    // No drums: the chorus is sung alone over the pad and the cloud, the
+    // syllables bursting between its lines.
     kind: "intro",
     name: "Boot",
-    bars: 4,
+    bars: 8,
     chords: CHORUS,
     drums: ["none"],
-    play: ["pad", "cloud", "riff"],
-    riff: RIFF_CHORUS,
+    play: ["pad", "cloud"],
+    bursts: true,
+    lines: [null, null, null, null, "ch1", null, "ch2", null],
   },
   {
     kind: "verse",
     name: "Verse 1",
     bars: 8,
     chords: VERSE,
-    drums: ["broken", "half"],
+    drums: ["taps", "bounce"],
     energy: 0.85,
-    play: ["sub", "arp", "riff", "cloud"],
+    play: ["sub", "arp"],
+    bursts: true,
     arp: ARP_VERSE,
-    riff: RIFF_VERSE,
-    bass: ["9.......7.......", "9.........7....."],
+    line: [null, null, null, null, ...LINE_VERSE, ...LINE_VERSE],
     lines: ["v1", null, "v2", null, "v3", null, "v4", null],
   },
   {
@@ -229,13 +232,12 @@ const SECTIONS: readonly SongSection[] = [
     name: "Pre 1",
     bars: 4,
     chords: PRE,
-    drums: ["four"],
-    energy: 0.8,
-    play: ["sub", "pad", "arp", "riff", "stabs"],
+    drums: ["none"],
+    energy: 0.75,
+    play: ["sub", "pad", "arp", "stabs"],
     arp: ARP_8,
-    riff: RIFF_VERSE,
     stabs: ["8.......7.......", "8.......7..7...."],
-    bass: ["9...9...9...9..."],
+    line: LINE_PRE,
     lines: ["pre1", "pre2", null, null],
   },
   {
@@ -243,12 +245,11 @@ const SECTIONS: readonly SongSection[] = [
     name: "Chorus 1",
     bars: 8,
     chords: CHORUS,
-    drums: ["four", "house"],
-    play: ["sub", "pad", "stabs", "arp", "riff", "cloud"],
+    drums: ["bounce", "euro"],
+    play: ["sub", "pad", "stabs"],
+    bursts: true,
     stabs: STABS,
-    arp: ARP_SKIP,
-    riff: RIFF_CHORUS,
-    bass: ["9.....7.....7...", "9.....7...7.7..."],
+    line: LINE_CHORUS,
     lines: ["ch1", null, "ch2", null, "ch1", null, "ch3", null],
   },
   {
@@ -256,27 +257,25 @@ const SECTIONS: readonly SongSection[] = [
     name: "Drop 1",
     bars: 8,
     chords: CHORUS,
-    drums: ["four"],
-    play: ["sub", "stabs", "lead", "riff", "cloud", "arp"],
+    drums: ["euro"],
+    play: ["sub", "stabs", "lead", "riff"],
     stabs: STABS_DROP,
     riff: RIFF_DROP,
-    arp: ["....0...........", "........0......."],
     lead: HOOK,
-    voiceLead: true,
-    bass: ["9..7..7...7..7..", "9..7..7...7..77."],
+    line: LINE_DROP,
   },
   {
     kind: "verse",
     name: "Verse 2",
     bars: 8,
     chords: VERSE,
-    drums: ["skip", "trap"],
+    drums: ["taps", "skip"],
     energy: 0.9,
-    play: ["sub", "bells", "riff", "cloud", "arp"],
+    play: ["sub", "bells", "arp"],
+    bursts: true,
     bells: BELLS,
-    riff: RIFF_VERSE2,
     arp: ["0.......2.......", "1.......3......."],
-    bass: ["9.....7...7.....", "9.........7..7.."],
+    line: LINE_VERSE2,
     lines: ["v5", null, "v6", null, "v7", null, "v8", null],
   },
   {
@@ -284,13 +283,12 @@ const SECTIONS: readonly SongSection[] = [
     name: "Pre 2",
     bars: 4,
     chords: PRE,
-    drums: ["four"],
-    energy: 0.85,
-    play: ["sub", "pad", "arp", "riff", "stabs"],
+    drums: ["euro"],
+    energy: 0.8,
+    play: ["sub", "pad", "arp", "stabs"],
     arp: ARP_8,
-    riff: RIFF_CHORUS,
     stabs: ["8..7....8..7....", "8..7..7.8..7..7."],
-    bass: ["9...9...9...9..."],
+    line: LINE_PRE,
     lines: ["pre1", "pre2", null, null],
   },
   {
@@ -298,12 +296,11 @@ const SECTIONS: readonly SongSection[] = [
     name: "Chorus 2",
     bars: 8,
     chords: CHORUS,
-    drums: ["house", "four"],
-    play: ["sub", "pad", "stabs", "arp", "riff", "cloud"],
+    drums: ["euro"],
+    play: ["sub", "pad", "stabs", "riff"],
     stabs: STABS,
-    arp: ARP_SKIP,
     riff: RIFF_DROP,
-    bass: ["9.....7.....7...", "9.....7...7.7..."],
+    line: LINE_CHORUS,
     lines: ["ch1", null, "ch2", null, "ch1", null, "ch3", null],
   },
   {
@@ -311,27 +308,35 @@ const SECTIONS: readonly SongSection[] = [
     name: "Drop 2",
     bars: 8,
     chords: CHORUS,
-    drums: ["tresillo", "four"],
-    play: ["sub", "growl", "stabs", "lead", "riff", "cloud"],
-    stabs: STABS,
+    drums: ["bounce", "euro"],
+    play: ["sub", "growl", "stabs", "lead", "riff"],
+    stabs: STABS_DROP,
     riff: RIFF_DROP2,
-    growl: GROWL,
     lead: HOOK_UP,
     voiceLead: true,
-    bass: ["9...............", "9.......9......."],
+    line: LINE_DROP2,
   },
   {
+    // Twelve drumless bars: the borrowed chords under the glitch-vox solo,
+    // the bass gone until the last four.
     kind: "break",
     name: "Breakdown",
-    bars: 8,
+    bars: 12,
     chords: BREAK,
     drums: ["none"],
-    play: ["pad", "cloud", "bells"],
+    play: ["sub", "pad", "cloud", "bells"],
     bells: [
       "4.......3.......",
       "........5.......",
       "4...............",
       "........",
+    ],
+    line: [
+      ...Array.from({ length: 8 }, () => null),
+      "0---------------",
+      "0---------------",
+      "0---------------",
+      "0-----------2~1.",
     ],
   },
   {
@@ -344,20 +349,19 @@ const SECTIONS: readonly SongSection[] = [
     play: ["sub", "pad", "arp", "riff"],
     arp: ARP_8,
     riff: RIFF_CHORUS,
-    bass: ["9...9...9...9..."],
+    line: LINE_PRE,
   },
   {
     kind: "chorus",
     name: "Last chorus",
     bars: 8,
     chords: CHORUS,
-    drums: ["four", "house"],
-    play: ["sub", "pad", "stabs", "arp", "riff", "cloud", "double", "bells"],
+    drums: ["euro"],
+    play: ["sub", "pad", "stabs", "riff", "double", "bells"],
     stabs: STABS_DROP,
-    arp: ARP_SKIP,
     bells: BELLS,
     riff: RIFF_DROP2,
-    bass: ["9.....7.....7...", "9.....7...7.7..."],
+    line: LINE_CHORUS,
     lines: ["ch1", null, "ch2", null, "ch1", null, "ch3", null],
   },
   {
@@ -365,15 +369,14 @@ const SECTIONS: readonly SongSection[] = [
     name: "Last drop",
     bars: 8,
     chords: CHORUS,
-    drums: ["four", "tresillo"],
-    play: ["sub", "growl", "stabs", "lead", "riff", "cloud", "arp"],
+    drums: ["euro", "bounce"],
+    play: ["sub", "growl", "stabs", "lead", "riff", "arp"],
     stabs: STABS_DROP,
     riff: RIFF_DROP2,
     arp: ARP_8,
-    growl: GROWL,
     lead: HOOK_LAST,
     voiceLead: true,
-    bass: ["9...............", "9.......9......."],
+    line: LINE_DROP2,
   },
   {
     kind: "outro",
@@ -381,17 +384,8 @@ const SECTIONS: readonly SongSection[] = [
     bars: 8,
     chords: CHORUS,
     drums: ["none"],
-    play: ["pad", "cloud", "riff"],
-    riff: [
-      RIFF_CHORUS[0]!,
-      null,
-      RIFF_CHORUS[1]!,
-      null,
-      "4...............",
-      null,
-      null,
-      null,
-    ],
+    play: ["pad", "cloud"],
+    bursts: true,
     lines: ["ch1", null, null, null, null, null, null, null],
   },
 ];
@@ -403,20 +397,23 @@ export const softReboot: DemoDefinition = {
     title: "Soft Reboot",
     style: "Hyperpop",
     description:
-      "Bright four-floor hyperpop in D at 140: two sung verses answered by chopped-syllable riffs, a chorus that stutters into itself, and drops where the vocal syllables, a vowel wavetable lead and a looped voice lead play one hook together.",
+      "Bright four-floor hyperpop in D at 140: the chorus sung alone over the pad to open, verses on a gliding bass line closed by glitch bursts of syllables, pumping octave-bass choruses, drops where the syllables, a vowel wavetable lead and a looped voice lead play one hook together, and a twelve-bar drumless breakdown.",
     tempoBpm: BPM,
     key: "D",
     bars: BARS,
-    highlightBar: 24,
+    highlightBar: 28,
     trackId: "chops",
     features: [
       "an original vocal book: two verses, a pre-chorus and three chorus lines",
       "syllable riffs on a keyed round-robin sampler, a new syllable every hit",
+      "glitch bursts: twelve 32nd-note syllables flying over four octaves",
+      "a bass line that glides in the verses and pumps octaves in the choruses",
+      "seventh and ninth chords, full in the pad and the top three in the stabs",
       "chorus heads stuttered on 16ths and 32nds into each chorus",
       "reversed syllables swelling into every section but the verses",
       "a vowel wavetable lead doubled by the looped voice",
       "pitch-zapped, filter-snapped supersaw stabs on syncopated grids",
-      "a glitch-vox solo over a borrowed G minor in the breakdown",
+      "a drumless breakdown over borrowed G minor and B flat, with a glitch-vox solo",
       "an octave-up chipmunk double on the last chorus",
     ],
     arrangement: SECTIONS.map((s) => `${s.name} ${s.bars}`),
@@ -440,11 +437,12 @@ export const softReboot: DemoDefinition = {
       const bar = at(name) + 3;
       stutter(s, song, "h_ch1", bar, 3, 4, 0.25, 0, 0.45, 0.7);
     }
-    // Verse answers: the glitch track trades a bar with the riff.
+    // Verse answers: after the first and third lines the glitch track
+    // answers on the syllables; bursts close the second and fourth.
     for (const verse of ["Verse 1", "Verse 2"]) {
       const bar = at(verse);
-      glitch(s, song, BOOK, bar + 3, "4.4.5.3.6...5.4.", ["back", "stay"]);
-      glitch(s, song, BOOK, bar + 7, "6.5.4.3.2.3.4.5.", [
+      glitch(s, song, BOOK, bar + 1, "........4.4.5.3.", ["back", "stay"]);
+      glitch(s, song, BOOK, bar + 5, "......6.5.4.3.5.", [
         "night",
         "oh",
         "yeah",
@@ -456,9 +454,9 @@ export const softReboot: DemoDefinition = {
       stutter(s, song, "s_yeah", bar + 3, 3, 8, 0.125, 1200, 0.4, 0.75);
       stutter(s, song, "s_stay", bar + 7, 2, 8, 0.25, -700, 0.7, 0.4);
     }
-    // Breakdown over G, Gm, D, A: the looped voice holds the borrowed B flat,
-    // the glitch-vox solo answers with syllables pitched to the chord and
-    // the crush opening, then the last chorus line is sung alone.
+    // Breakdown: the looped voice holds the borrowed B flat and F, the
+    // glitch-vox solo answers with syllables pitched to the chord and the
+    // crush opening, then the last chorus line is sung over the way home.
     const brk = at("Breakdown");
     const SOLO = [
       "3.3.4..5.3..6.5.",
@@ -480,12 +478,12 @@ export const softReboot: DemoDefinition = {
       [0, 62],
       [1, 58],
       [2, 62],
-      [3, 61],
+      [3, 65],
       [6, 62],
-      [7, 61],
+      [7, 65],
     ] as const)
       s.note("vlead", brk + bar, 0, pitch, 3.9, 0.52);
-    s.note("vox", brk + 6, -0.25, slot(trackOf(s, "vox"), "ch3"), 8.25, 0.7);
+    s.note("vox", brk + 10, -0.25, slot(trackOf(s, "vox"), "ch3"), 8.25, 0.7);
     // A silent beat before the last chorus, then the tape-stop at the end.
     const last = at("Last chorus");
     dropout(s, last - 1, 3, 1, [
@@ -548,7 +546,7 @@ export const softReboot: DemoDefinition = {
         [at("Verse 2"), 1800],
         [at("Chorus 2"), 3800],
         [brk, 900],
-        [brk + 7.9, 3200],
+        [brk + 11.9, 3200],
         [at("Last chorus"), 4400],
         [out, 3000],
         [BARS, 600],
