@@ -67,6 +67,8 @@ export class Composer {
   readonly notes: NoteInput[] = [];
   readonly tracks: TrackInput[] = [];
   readonly sections: Section[] = [];
+  /** Note ids stay unique after edits remove notes from the list. */
+  private serial = 0;
   constructor(readonly info: DemoInfo) {}
 
   track(track: TrackInput): this {
@@ -99,7 +101,7 @@ export class Composer {
     if (startTick < 0 || durationTicks <= 0)
       throw new Error(`demo note outside ${this.info.id}`);
     this.notes.push({
-      id: `${trackId}-${this.notes.length}`,
+      id: `${trackId}-${this.serial++}`,
       trackId,
       startTick,
       durationTicks,

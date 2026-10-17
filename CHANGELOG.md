@@ -2,6 +2,21 @@
 
 All notable changes to dawg are recorded here. Versions follow [semantic versioning](https://semver.org); releases are published as immutable GitHub Releases with a tarball, `SHA256SUMS` and a build provenance attestation.
 
+## 0.19.0
+
+### Changed
+
+- **The three hyperpop songs are reworked from measurements of two reference records** (tempo, form, drum and bass movement, chord density, stereo width and how the vocal is used; nothing was sampled or transcribed). Our songs had every layer playing in every bar, a held sine sub, two-note chord shells and the voice on about 85% of the time. The references leave whole sections without drums, move the bass in the mid range a dozen times a bar, voice four-note chords wide, and use the voice in two clear modes: a plain sung hook, and short glitch bursts across several octaves.
+- **Contrast.** Each song now has long drumless stretches. Soft Reboot opens with the chorus sung alone over the pad and has a twelve-bar drumless breakdown. Low Battery boots for eight drumless bars while a gliding 808 slides in. Glass Garden floats its seed and the first half of its first verse on the pad, the bells and the voice, and breaks down for twelve bars. Every first pre-chorus drops the drums so the chorus lands, and the first chorus is sung plainly over the pad and stabs, saving the syllable riffs for the drops and later choruses. The grain cloud now plays only in the intros, breakdowns and endings, so the voice is an event rather than a bed.
+- **A moving bass.** Sections now write bass lines, not just root hits: an 808 that glides between root, fifth and octave in the verses and slides an octave about once a bar everywhere, driving octaves into the choruses, and an offbeat octave pump under the choruses and drops that the kick ducks hard. The growl saw doubles the line an octave up in the later drops, so the bass sits around 250 Hz instead of 130 Hz and reads on small speakers.
+- **Richer chords.** Every chord is a four-note voicing with sevenths and ninths. The pad holds all four notes; the stabs play the top three, or the top two where the pad is already holding the chord. Soft Reboot's breakdown borrows G minor and B flat major seven before turning home under the last chorus line.
+- **Glitch bursts.** Twelve 32nd-note syllables flying over four octaves close each four-bar phrase of the verses, intros and first chorus where no line is still singing. The syllable riffs now answer the sung choruses and carry the drops, instead of playing under everything.
+- **Simpler drums.** There are two new drum families: a Eurodance four-floor with a clap layered on the backbeat and offbeat open hats, and a half-time bounce. The songs use these with tresillo, two-step and taps, and the stabs, the arp and the bells are panned wider.
+
+### Fixed
+
+- Demo note ids stay unique when a song removes notes for a dropout and then writes more on the same track.
+
 ## 0.18.0
 
 ### Changed

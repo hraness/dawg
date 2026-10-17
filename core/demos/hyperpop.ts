@@ -202,7 +202,7 @@ export const sounds = {
       filter: { type: "lpf", cutoff: 2400, resonance: 0.1 },
       fx: {
         ...orbit,
-        chorus: { rate: 0.4, depth: 0.5, mix: 0.35 },
+        chorus: { rate: 0.4, depth: 0.6, mix: 0.5 },
         eq: { low: -4, lowfreq: 220, mid: -1.5, midfreq: 600 },
       },
       reverb: hall,
@@ -236,7 +236,7 @@ export const sounds = {
       fx: {
         ...orbit,
         distort: { type: "soft", drive: 2.2, tone: 7000, mix: 0.3 },
-        chorus: { rate: 0.8, depth: 0.4, mix: 0.3 },
+        chorus: { rate: 0.8, depth: 0.55, mix: 0.45 },
         eq: { high: 1.5, highfreq: 7000 },
       },
       delay: { beats: 0.75, feedback: 0.22, mix: 0.08, pingpong: true },
@@ -246,7 +246,7 @@ export const sounds = {
   /** A narrow pulse arp with a filter blip, bouncing on a dotted echo. */
   arp: (level = 0.22, extra: Partial<TrackInput> = {}) =>
     voice("arp", "Pulse arp", "pulse", level, {
-      pan: -0.22,
+      pan: -0.35,
       synth: {
         attack: 0.001,
         decay: 0.11,
@@ -268,7 +268,7 @@ export const sounds = {
   /** FM bells: an inharmonic modulator that rings, then dies to a sine. */
   bells: (level = 0.2, extra: Partial<TrackInput> = {}) =>
     voice("bells", "FM bells", "sine", level, {
-      pan: 0.28,
+      pan: 0.35,
       synth: {
         attack: 0.001,
         decay: 0.7,
@@ -620,6 +620,8 @@ export function grainTrack(
 
 /** Drum families (see guides/hyperpop.md). */
 export type DrumFamily =
+  | "euro" // four-floor, a snare or clap on every beat, offbeat open hats
+  | "bounce" // half-time bounce: a syncopated kick around one snare
   | "four" // four-floor, offbeat 16th hat pairs
   | "house" // four-floor, offbeat open hats
   | "half" // half-time: snare on three
@@ -636,9 +638,39 @@ type Grid = Readonly<{
   hat?: string;
   open?: string;
   rim?: string;
+  clap?: string;
 }>;
 
 const FAMILIES: Readonly<Record<DrumFamily, readonly Grid[]>> = {
+  euro: [
+    {
+      kick: "9...8...9...8...",
+      snare: "....8.......8...",
+      clap: "....7.......7...",
+      open: "..7...7...7...7.",
+    },
+    {
+      kick: "9...8...9...8..5",
+      snare: "....8.......8.5.",
+      clap: "....7.......7...",
+      hat: "..........43....",
+      open: "..7...7...7...7.",
+    },
+  ],
+  bounce: [
+    {
+      kick: "9..7......8.....",
+      snare: "........8.......",
+      hat: "5.3.5.3.5.3.5.3.",
+      rim: "......3.......3.",
+    },
+    {
+      kick: "9..7......8..6..",
+      snare: "........8.....4.",
+      clap: "........6.......",
+      hat: "5.3.5.3.5.3.5334",
+    },
+  ],
   four: [
     {
       kick: "9...8...9...8...",
@@ -751,6 +783,7 @@ export function drums(
   if (g.hat) s.grid("hats", bar, 42, g.hat, energy);
   if (g.open) s.grid("hats", bar, 46, g.open, energy);
   if (g.rim) s.grid("hats", bar, 37, g.rim, energy);
+  if (g.clap) s.grid("snare", bar, 39, g.clap, energy);
 }
 
 /** A snare roll over the bar: quarters to eighths to 16ths to 32nds. */
@@ -758,6 +791,87 @@ export function roll(s: Composer, bar: number, from = 0.3, to = 0.85): void {
   const hits = [0, 1, 2, 2.5, 3, 3.25, 3.5, 3.625, 3.75, 3.875];
   hits.forEach((beat, i) =>
     s.note("snare", bar, beat, 38, 0.1, from + ((to - from) * i) / hits.length),
+  );
+}
+
+/**
+ * Bass-line steps above the bar's root: 0 root, 1 fifth, 2 octave, 3 the
+ * octave's fifth, 4 two octaves, 5 flat seventh, 6 fourth, 7 a tone below,
+ * 8 ninth.
+ */
+const BASS_STEPS = [0, 7, 12, 19, 24, 10, 5, -2, 14] as const;
+
+/**
+ * A moving bass bar: digits pick a `BASS_STEPS` step over `root`, `-` holds,
+ * `.` rests and `~` after a note slides it into the next one (an 808 glide).
+ * Returns whether the bar's last note slides into the next bar.
+ */
+export function bassLine(
+  s: Composer,
+  track: string,
+  bar: number,
+  seq: string,
+  root: number,
+  velocity = 0.85,
+  slideIn = false,
+): boolean {
+  const steps = [...seq];
+  let slide = slideIn;
+  steps.forEach((c, i) => {
+    const r = Number(c);
+    if (c === "." || c === "-" || c === "~" || !Number.isFinite(r)) return;
+    let length = 1;
+    while (steps[i + length] === "-") length++;
+    const slides = steps[i + length] === "~";
+    if (slides) length++;
+    const accent = i % 4 === 0 ? 1 : i % 2 === 0 ? 0.88 : 0.8;
+    s.note(
+      track,
+      bar,
+      i / 4,
+      root + BASS_STEPS[r]!,
+      Math.max(0.1, length / 4 - (slides ? 0 : 0.03)),
+      velocity * accent,
+      slide ? { glide: 0.09 } : {},
+    );
+    slide = slides;
+  });
+  return slide;
+}
+
+/**
+ * Glitch-burst shapes: twelve 32nds over a chord ladder that spans four
+ * octaves (rungs), so a burst flies past the singer's range in a beat and
+ * a half.
+ */
+const BURSTS: readonly (readonly number[])[] = [
+  [0, 2, 4, 6, 8, 10, 12, 14, 13, 15, 17, 19],
+  [19, 17, 15, 12, 14, 10, 8, 9, 5, 3, 1, 0],
+  [6, 13, 2, 16, 8, 1, 12, 4, 15, 7, 10, 18],
+  [10, 10, 10, 10, 12, 12, 12, 12, 15, 15, 17, 19],
+  [14, 7, 14, 7, 12, 5, 12, 5, 16, 9, 18, 11],
+];
+
+/** A glitch burst on the chops from `from`, shape `n` of `BURSTS`. */
+export function burst(
+  s: Composer,
+  bar: number,
+  chord: Chord,
+  n: number,
+  from = 2.5,
+  velocity = 0.8,
+): void {
+  const rungs = ladder(chord, 46, 98);
+  const shape = BURSTS[n % BURSTS.length]!;
+  shape.forEach((r, k) =>
+    s.note(
+      "chops",
+      bar,
+      from + k * 0.125,
+      rungs[Math.min(r, rungs.length - 1)]!,
+      0.1,
+      velocity * (0.6 + (0.4 * k) / shape.length),
+    ),
   );
 }
 
@@ -937,6 +1051,10 @@ export type SongSection = Readonly<{
   stabs?: Cells;
   /** Sub grids (16 digits; held to the next onset). */
   bass?: Cells;
+  /** Moving bass lines (`bassLine` steps); replaces `bass` where given. */
+  line?: Cells;
+  /** Glitch bursts on the chops close each four-bar phrase. */
+  bursts?: boolean;
   /** Growl-bass cells over the bass ladder (31-55). */
   growl?: Cells;
   /** A lead phrase per bar-cycle: [beat, pitch, beats] triples. */
@@ -1020,6 +1138,9 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
   const voxTrack = trackOf(s, "vox");
   const throwsAt: number[] = [];
   const builds: (readonly [number, number])[] = [];
+  let slideSub = false;
+  let slideSaw = false;
+  let bursts = 0;
 
   for (const p of placed) {
     s.section(p.name, p.start, p.bars);
@@ -1054,8 +1175,25 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
             s.note("snare", bar, beat, 38, 0.1, v * energy);
         }
       }
-      // Sub: held to the next onset, gliding when the root moves.
-      if (on("sub")) {
+      // A moving line on the sub, doubled an octave up on the growl bass
+      // where the section plays it; otherwise the sub holds to each onset,
+      // gliding when the root moves.
+      const line = cycle(p.line, i);
+      if (on("sub") && p.line) {
+        if (line) {
+          slideSub = bassLine(s, "sub", bar, line, chord.bass, 0.85, slideSub);
+          if (on("growl") && !p.growl)
+            slideSaw = bassLine(
+              s,
+              "saw",
+              bar,
+              line,
+              chord.bass + 12,
+              0.72,
+              slideSaw,
+            );
+        }
+      } else if (on("sub")) {
         const grid = cycle(p.bass, i) ?? "9...............";
         const onsets = [...grid].flatMap((c, k) => (c === "." ? [] : [k]));
         const prev = bar > 0 ? chordAt(bar - 1).bass : chord.bass;
@@ -1080,13 +1218,14 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
         hold(s, "vgrain", bar, 0, [chord.tones[0]! + 12], 4, 0.55);
       const stabGrid = cycle(p.stabs, i);
       if (on("stabs") && stabGrid)
-        // A two-note shell an octave up; the pad holds the full chord.
+        // The chord's top three tones an octave up; two where the pad
+        // already holds the whole chord.
         stab(
           s,
           "stabs",
           bar,
           stabGrid,
-          chord.tones.slice(0, 2).map((t) => t + 12),
+          chord.tones.slice(on("pad") ? -2 : -3).map((t) => t + 12),
         );
       // Where the lead and the chop riff both play, the arp sits out and the
       // chops drop a fourth, so the three never pile into one register.
@@ -1152,6 +1291,15 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
               lead: CHOP_LEAD,
             },
           );
+      }
+      // A glitch burst closes each phrase where no riff plays and no line
+      // is still singing at beat 2.5.
+      if (p.bursts && i % 4 === 3 && !(on("riff") && riff)) {
+        const singing = (p.lines ?? []).some(
+          (q, j) =>
+            q !== null && j <= i && (i - j) * 4 + 2.5 < book.ends[q] + 0.5,
+        );
+        if (!singing) burst(s, bar, chord, bursts++);
       }
     }
     // Section seams: a reversed syllable swells into each new section but a verse,
