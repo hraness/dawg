@@ -1296,7 +1296,8 @@ export function writeSong(s: Composer, plan: SongPlan): Song {
       // is still singing at beat 2.5.
       if (p.bursts && i % 4 === 3 && !(on("riff") && riff)) {
         const singing = (p.lines ?? []).some(
-          (q, j) => q !== null && j <= i && (i - j) * 4 + 2.5 < book.ends[q] + 0.5,
+          (q, j) =>
+            q !== null && j <= i && (i - j) * 4 + 2.5 < book.ends[q] + 0.5,
         );
         if (!singing) burst(s, bar, chord, bursts++);
       }
